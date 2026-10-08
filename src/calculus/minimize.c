@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>               /* clock() — C99, for the per-call deadline */
 
 #include "attr.h"
 #include "eval.h"
@@ -318,6 +319,18 @@ static Expr* mz_beval(Expr* e, int budget) {
                   (Expr*[]){ e, mk_int(budget),
                              expr_new_symbol(SYM_DollarAborted) }, 3);
     return eval_and_free(g);
+}
+
+/* Per-CALL deadline: a problem with many active-set probes must not cost
+ * budget × probes. Given the call start `t0` and the total `budget` (seconds;
+ * <= 0 = unlimited), return the seconds left to hand the NEXT probe: 0 means
+ * unlimited, a positive value is the remaining budget, and -1 means the deadline
+ * is spent (the caller declines). So the whole call is bounded by `budget`. */
+static int mz_rem_budget(clock_t t0, int budget) {
+    if (budget <= 0) return 0;                         /* unlimited */
+    double el = (double)(clock() - t0) / (double)CLOCKS_PER_SEC;
+    int rem = budget - (int)el;
+    return rem > 0 ? rem : -1;
 }
 
 /* Solve[system, {vars}, Reals], evaluated under the time budget — consumes
@@ -818,6 +831,7 @@ static Expr* mz_univar_piecewise(const Expr* f, Expr* x, const char* head, int b
     Expr** bp = NULL; size_t nbp = 0;
     Expr*** cand = NULL; size_t ncand = 0, candcap = 0;
     bool unbounded = false;
+    clock_t t0 = clock();                           /* per-call deadline anchor */
 
     /* Resolving every Abs (+1) must leave a polynomial — else an Abs wraps a
      * non-polynomial argument and the piecewise reduction does not apply. */
@@ -830,9 +844,10 @@ static Expr* mz_univar_piecewise(const Expr* f, Expr* x, const char* head, int b
     { Expr** raw = NULL; size_t nraw = 0, rawcap = 0; bool bad = false;
       for (size_t i = 0; i < nag && !bad; i++) {
         Expr* eqn = fn2(SYM_Equal, expr_copy(ag[i]), mk_int(0));
-        Expr* L = mz_solve_real(eqn, vars1, 1, budget);
+        int rem = mz_rem_budget(t0, budget);
+        Expr* L = (rem < 0) ? (expr_free(eqn), NULL) : mz_solve_real(eqn, vars1, 1, rem);
         Expr*** pts = NULL; size_t npts = 0;
-        if (!mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts)) bad = true;
+        if (!L || !mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts)) bad = true;
         expr_free(L);
         if (!bad) for (size_t p = 0; p < npts; p++) {
             if (nraw == rawcap) { rawcap = rawcap ? rawcap * 2 : 8;
@@ -904,9 +919,10 @@ static Expr* mz_univar_piecewise(const Expr* f, Expr* x, const char* head, int b
         if (deg >= 1) {           /* non-constant piece: add stationary points */
             Expr* fp = mz_deriv(piece, x);
             Expr* eqn = fn2(SYM_Equal, fp, mk_int(0));
-            Expr* L = mz_solve_real(eqn, vars1, 1, budget);
+            int rem = mz_rem_budget(t0, budget);
+            Expr* L = (rem < 0) ? (expr_free(eqn), NULL) : mz_solve_real(eqn, vars1, 1, rem);
             Expr*** pts = NULL; size_t npts = 0;
-            int ok = mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts);
+            int ok = L ? mz_parse_points(L, vars1, 1, vars1, 1, &pts, &npts) : 0;
             expr_free(L);
             if (!ok) { expr_free(piece); goto cleanup; }
             for (size_t p = 0; p < npts; p++)
@@ -1010,6 +1026,7 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
     bool constrained = (cons != NULL) && !mz_is_true(cons);
     bool kkt_all_clean = true;                    /* every active-set solve was clean */
     bool shortcut_proven = false;                 /* compact-region EVT certificate */
+    clock_t t0 = clock();                         /* per-call deadline anchor */
 
     if (!mz_poly_in_vars(f, vars, n)) return NULL;
 
@@ -1098,7 +1115,15 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         Expr* system = expr_new_function(expr_new_symbol(SYM_List), sys, si);
         free(sys);
 
-        Expr* L = mz_solve_real(system, allv, nall, budget);
+        int rem = mz_rem_budget(t0, budget);
+        if (rem < 0) {                          /* per-call deadline spent */
+            for (size_t c = 0; c < nact; c++) expr_free(lam[c]);
+            for (size_t j = 0; j < nall; j++) expr_free(allv[j]);
+            free(lam); free(allv); free(actz); free(actdz);
+            expr_free(system);
+            goto cleanup;                       /* incomplete enumeration: decline */
+        }
+        Expr* L = mz_solve_real(system, allv, nall, rem);
         Expr*** pp = NULL; size_t npp = 0;
         int ok = mz_parse_points(L, vars, n, allv, nall, &pp, &npp);
         expr_free(L);
@@ -1136,9 +1161,11 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
             sys[1 + j] = fn2(SYM_Equal, expr_copy(dzEQ[0][j]), mk_int(0));
         Expr* singsys = expr_new_function(expr_new_symbol(SYM_List), sys, nsys);
         free(sys);
-        Expr* Ls = mz_solve_real(singsys, vars, n, budget);
+        int rem = mz_rem_budget(t0, budget);
+        Expr* Ls = (rem < 0) ? (expr_free(singsys), NULL)
+                             : mz_solve_real(singsys, vars, n, rem);
         Expr*** sp = NULL; size_t nsp = 0;
-        int sing_clean = mz_parse_points(Ls, vars, n, vars, n, &sp, &nsp);
+        int sing_clean = Ls ? mz_parse_points(Ls, vars, n, vars, n, &sp, &nsp) : 0;
         expr_free(Ls);
         if (sing_clean) {
             for (size_t i = 0; i < nsp; i++) {
@@ -1147,7 +1174,8 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
                 cand[ncand++] = sp[i];
             }
             free(sp);                           /* rows moved into cand */
-            if (mz_bounded_region(EQ[0], vars, n, budget))
+            int rem2 = mz_rem_budget(t0, budget);
+            if (rem2 >= 0 && mz_bounded_region(EQ[0], vars, n, rem2))
                 shortcut_proven = true;
         }
     }
@@ -1159,7 +1187,8 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         if (mz_feasible_at(CL, vars, cand[i], n) == 1) feas[nfeas++] = cand[i];
 
     if (nfeas == 0) {
-        if (constrained && mz_region_empty(consN, vars, n, budget)) {
+        int reme = mz_rem_budget(t0, budget);
+        if (constrained && reme >= 0 && mz_region_empty(consN, vars, n, reme)) {
             mth_message(head, "infeas",
                     "The constraints are infeasible; the feasible region is empty.");
             result = mz_result_indet(mz_pos_inf(), vars, n);
@@ -1176,8 +1205,9 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
          * the extreme-value theorem; otherwise proved by Reduce, with radicals in
          * bestv cleared to a rational-coefficient system so an irrational optimum
          * is decidable. */
+        int remc = mz_rem_budget(t0, budget);
         int proven = shortcut_proven ? 1
-                   : mz_prove_lower_bound(CL, f, bestv, vars, n, budget);
+                   : (remc < 0 ? 0 : mz_prove_lower_bound(CL, f, bestv, vars, n, remc));
         if (!proven) { expr_free(bestv); goto cleanup; }
 
         /* Attainment: the minimising point must satisfy the ORIGINAL (strict)
@@ -1288,11 +1318,16 @@ static Expr* mz_integer_box(const Expr* f, const Expr* cons, Expr* const* vars,
     int64_t* hi = (int64_t*)malloc(sizeof(int64_t) * n);
     int64_t* cur = (int64_t*)malloc(sizeof(int64_t) * n);
     Expr* bestv = NULL; Expr** bestpt = NULL;
+    clock_t t0 = clock();                            /* deadline across all bounds */
     bool ok = true;
-    for (size_t i = 0; i < n && ok; i++)
-        if (!mz_cont_int_bound(vars[i], cons, vars, n, false, budget, &lo[i]) ||
-            !mz_cont_int_bound(vars[i], cons, vars, n, true,  budget, &hi[i]) ||
-            hi[i] < lo[i]) ok = false;
+    for (size_t i = 0; i < n && ok; i++) {
+        int r1 = mz_rem_budget(t0, budget);          /* remaining before the min */
+        if (r1 < 0 || !mz_cont_int_bound(vars[i], cons, vars, n, false, r1, &lo[i]))
+            { ok = false; break; }
+        int r2 = mz_rem_budget(t0, budget);          /* refreshed before the max */
+        if (r2 < 0 || !mz_cont_int_bound(vars[i], cons, vars, n, true, r2, &hi[i]) ||
+            hi[i] < lo[i]) { ok = false; break; }
+    }
     if (ok) { double sz = 1.0;
         for (size_t i = 0; i < n; i++) {
             sz *= (double)(hi[i] - lo[i] + 1);
@@ -1341,8 +1376,11 @@ static Expr* mz_integer_opt(const Expr* f, const Expr* cons, Expr* const* vars,
     (void)head;
     if (!cons || mz_is_true(cons)) return NULL;     /* unconstrained: unbounded */
     if (!mz_poly_in_vars(f, vars, n)) return NULL;
+    clock_t t0 = clock();
     Expr* r = mz_integer_solve(f, cons, vars, n, budget);
-    return r ? r : mz_integer_box(f, cons, vars, n, budget);
+    if (r) return r;
+    int rem = mz_rem_budget(t0, budget);            /* box shares the call budget */
+    return (rem < 0) ? NULL : mz_integer_box(f, cons, vars, n, rem);
 }
 
 /* ------------------------------------------------------------------ *
