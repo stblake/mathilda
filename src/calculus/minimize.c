@@ -581,6 +581,91 @@ static int mz_prove_lower_bound(const Expr* CL, const Expr* f, const Expr* bestv
 }
 
 /* ------------------------------------------------------------------ *
+ *  Radical / fractional-power OBJECTIVES and CONSTRAINTS (Tier 2a)     *
+ * ------------------------------------------------------------------ */
+
+/* Rewrite each radical Power[g, p/q] (q >= 2, g any expression) in an objective
+ * or constraint as u^p, adjoining the defining relations u^q == g_cleared and
+ * u >= 0 to the problem. Because u >= 0 and u^q == g together force g >= 0, the
+ * enlarged feasible region is exactly where the real principal branch is defined
+ * (Mathilda's Power[g, p/q] is complex for g < 0 at a non-integer exponent), so
+ * the value and the real domain are both preserved. Nested radicals in the base
+ * are cleared first and identical radicals are deduplicated (a shared variable),
+ * so the result is polynomial in the original vars ∪ the fresh u's. Unlike
+ * mz_clear_radicals (the certificate, which needs a provably-positive CONSTANT
+ * base for soundness) this accepts variable bases, because here the relations are
+ * ADDED to the problem rather than used to refute a bound. */
+static Expr* mz_rad_walk(const Expr* e, MzRadCtx* c) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (mz_is_sym(e->data.function.head, SYM_Power) &&
+        e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_FUNCTION &&
+            mz_is_sym(ex->data.function.head, SYM_Rational) &&
+            ex->data.function.arg_count == 2 &&
+            ex->data.function.args[0]->type == EXPR_INTEGER &&
+            ex->data.function.args[1]->type == EXPR_INTEGER) {
+            int64_t p = ex->data.function.args[0]->data.integer;
+            int64_t q = ex->data.function.args[1]->data.integer;
+            if (q >= 2) {
+                for (size_t i = 0; i < c->nrad; i++)
+                    if (expr_eq(e, c->node[i])) return expr_copy(c->val[i]);
+                Expr* gC = mz_rad_walk(e->data.function.args[0], c);  /* nested first */
+                Expr* u = mz_fresh_symbol();
+                mz_rad_push_def(c, fn2(SYM_Equal,
+                    fn2(SYM_Power, expr_copy(u), mk_int(q)), gC));      /* u^q == g */
+                mz_rad_push_def(c, fn2(SYM_GreaterEqual, expr_copy(u), mk_int(0)));
+                mz_rad_push_aux(c, expr_copy(u));
+                Expr* val = (p == 1) ? expr_copy(u)
+                                     : fn2(SYM_Power, expr_copy(u), mk_int(p));
+                expr_free(u);
+                mz_rad_push_pair(c, e, val);
+                return val;
+            }
+        }
+    }
+    size_t m = e->data.function.arg_count;
+    Expr* headC = mz_rad_walk(e->data.function.head, c);
+    Expr** a = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) a[i] = mz_rad_walk(e->data.function.args[i], c);
+    Expr* r = expr_new_function(headC, a, m);
+    free(a);
+    return r;
+}
+
+/* Drop the auxiliary-variable rules (u -> ...) from a {value, {rules}} result,
+ * leaving only the original problem variables. Consumes and rebuilds `result`. */
+static Expr* mz_strip_aux_rules(Expr* result, Expr* const* aux, size_t naux) {
+    if (!result || result->type != EXPR_FUNCTION ||
+        !mz_is_sym(result->data.function.head, SYM_List) ||
+        result->data.function.arg_count != 2) return result;
+    const Expr* value = result->data.function.args[0];
+    const Expr* rules = result->data.function.args[1];
+    if (!rules || rules->type != EXPR_FUNCTION ||
+        !mz_is_sym(rules->data.function.head, SYM_List)) return result;
+    size_t m = rules->data.function.arg_count;
+    Expr** keep = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+    size_t nk = 0;
+    for (size_t i = 0; i < m; i++) {
+        const Expr* rule = rules->data.function.args[i];
+        bool is_aux = false;
+        if (rule->type == EXPR_FUNCTION && rule->data.function.arg_count == 2 &&
+            rule->data.function.args[0]->type == EXPR_SYMBOL) {
+            const char* nm = rule->data.function.args[0]->data.symbol.name;
+            for (size_t k = 0; k < naux; k++)
+                if (nm == aux[k]->data.symbol.name) { is_aux = true; break; }
+        }
+        if (!is_aux) keep[nk++] = expr_copy((Expr*)rule);
+    }
+    Expr* newrules = expr_new_function(expr_new_symbol(SYM_List), keep, nk);
+    free(keep);
+    Expr* newval = expr_copy((Expr*)value);
+    expr_free(result);
+    return fn2(SYM_List, newval, newrules);
+}
+
+/* ------------------------------------------------------------------ *
  *  (a) Univariate unconstrained polynomial                            *
  * ------------------------------------------------------------------ */
 
@@ -1035,12 +1120,42 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
         result = mz_numeric_fallback(arg0, arg1, domname,
                                      &A[pos_end], argc - pos_end, is_max);
     } else if (domname == SYM_Reals) {
-        bool unconstrained = (cons == NULL);
-        if (unconstrained && n == 1)
-            result = mz_univar_poly(fobj, vars[0], head, budget);
-        else
-            result = mz_exact_poly(fobj, cons, vars, n, head, budget);
-        if (result && is_max) result = mz_negate_value(result);
+        /* Tier 2a: if the objective or constraints carry radicals / fractional
+         * powers, polynomialize by adjoining fresh real variables, solve the
+         * enlarged polynomial problem, then strip the auxiliary variables from
+         * the reported point. */
+        MzRadCtx rc = {0};
+        Expr* fpoly = mz_rad_walk(fobj, &rc);
+        Expr* cpoly = cons ? mz_rad_walk(cons, &rc) : NULL;
+        if (rc.naux > 0) {
+            size_t na = (cpoly ? 1u : 0u) + rc.ndefs;
+            Expr** parts = (Expr**)malloc(sizeof(Expr*) * (na ? na : 1));
+            size_t pi = 0;
+            if (cpoly) parts[pi++] = expr_copy(cpoly);
+            for (size_t k = 0; k < rc.ndefs; k++) parts[pi++] = expr_copy(rc.defs[k]);
+            Expr* cons2 = expr_new_function(expr_new_symbol(SYM_And), parts, pi);
+            free(parts);
+            size_t n2 = n + rc.naux;
+            Expr** vars2 = (Expr**)malloc(sizeof(Expr*) * n2);
+            for (size_t j = 0; j < n; j++)         vars2[j]     = expr_copy(vars[j]);
+            for (size_t k = 0; k < rc.naux; k++)   vars2[n + k] = expr_copy(rc.aux[k]);
+            result = mz_exact_poly(fpoly, cons2, vars2, n2, head, budget);
+            if (result) result = mz_strip_aux_rules(result, rc.aux, rc.naux);
+            if (result && is_max) result = mz_negate_value(result);
+            expr_free(cons2);
+            for (size_t j = 0; j < n2; j++) expr_free(vars2[j]);
+            free(vars2);
+        } else {
+            bool unconstrained = (cons == NULL);
+            if (unconstrained && n == 1)
+                result = mz_univar_poly(fobj, vars[0], head, budget);
+            else
+                result = mz_exact_poly(fobj, cons, vars, n, head, budget);
+            if (result && is_max) result = mz_negate_value(result);
+        }
+        expr_free(fpoly);
+        if (cpoly) expr_free(cpoly);
+        mz_rad_free(&rc);
     }
     /* Integers / Complexes with exact input: deferred — leave unevaluated. */
 

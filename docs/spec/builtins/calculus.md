@@ -4019,6 +4019,13 @@ exact result.
   candidate optimum to a rational-coefficient system (each `Sqrt`/root becomes a
   fresh variable with its defining relation), which the CAD can decide — so
   `Minimize[{x^2+y^2, (x-2)^2+(y-3)^2<=1}, {x,y}]` also returns `14 - 2 Sqrt[13]`.
+- **Radical / fractional-power objectives and constraints**, polynomialized by
+  adjoining a fresh real variable per radical (`Power[g, p/q]` -> `u^p` with
+  `u^q == g && u >= 0`, which also pins the real principal branch `g >= 0`), then
+  solved as the enlarged polynomial problem:
+  `Minimize[{Sqrt[x+Sqrt[x]]+Sqrt[x-Sqrt[x]], x>=1}, x]` -> `{Sqrt[2], {x->1}}`.
+  A fractional power that substitutes to a very high constraint degree (e.g.
+  `x^(2/3)` with `x^4+y^4<=1` -> `a^12+b^12`) is beyond the real CAD and declines.
 
 ### Deferred (declines, never guesses)
 
