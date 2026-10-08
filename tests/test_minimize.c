@@ -1,4 +1,4 @@
-/* Unit tests for Minimize / Maximize (src/numerical_calculus/minimize.c).
+/* Unit tests for Minimize / Maximize (src/calculus/minimize.c).
  *
  * Minimize is the EXACT (symbolic) global optimizer. Exact input yields exact
  * output; inexact input delegates to NMinimize. The engine is sound by
@@ -17,6 +17,11 @@
  *   - Inexact input -> numeric NMinimize fallback.
  *   - Sound declines: transcendental exact input, positive-dimensional minima,
  *     unbounded-constrained, bad arity.
+ *   - Robustness & scope expansion (v0.305-v0.310): internal time budget
+ *     (torus solves, no hang), compact-region + radical-cleared certificates
+ *     (irrational-algebraic optima), radical/fractional-power objectives, Abs /
+ *     piecewise objectives, bounded Integers-domain optimization, TimeConstraint
+ *     option, and the Minimize::natt message routing (Check[]-catchable).
  *   - Memory-hygiene smoke loop.
  *
  * Run binary directly: ./minimize_tests */
@@ -221,6 +226,88 @@ static void test_bad_arity(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 9. Robustness & scope expansion (v0.305 - v0.310), driven by a       */
+/*    20-problem stress suite. Each guards one new capability or one     */
+/*    deliberate decline against silently regressing.                    */
+/* ------------------------------------------------------------------ */
+
+/* v0.306 compact-region shortcut: an irrational-algebraic optimum on a circle
+ * (the Reduce certificate alone cannot compare against 14 - 2 Sqrt[13]). */
+static void test_circle_irrational(void) {
+    check_true("Simplify[First[Minimize[{x^2 + y^2, (x-2)^2 + (y-3)^2 == 1}, "
+               "{x, y}]] == 14 - 2 Sqrt[13]]");
+}
+
+/* v0.305 internal time budget: the torus case that used to hang 55 s+ now SOLVES
+ * (returns a finite {value, rules}) in bounded time. */
+static void test_torus_solves(void) {
+    check_eq("Head[Minimize[{x + y + z, (x^2 + y^2 + z^2 + 3)^2 == 16 (x^2 + y^2)}, "
+             "{x, y, z}]]", "List");
+}
+
+/* v0.307 radical-cleared certificate: irrational optimum under an inequality. */
+static void test_disk_inequality_irrational(void) {
+    check_true("Simplify[First[Minimize[{x^2 + y^2, (x-2)^2 + (y-3)^2 <= 1}, "
+               "{x, y}]] == 14 - 2 Sqrt[13]]");
+}
+
+/* v0.308 radical objective (well-formed {f, cons}, vars syntax), nested roots. */
+static void test_radical_objective(void) {
+    check_true("Simplify[First[Minimize[{Sqrt[x + Sqrt[x]] + Sqrt[x - Sqrt[x]], "
+               "x >= 1}, x]] == Sqrt[2]]");
+}
+
+/* v0.308 limitation: a fractional power whose substitution raises the constraint
+ * degree past the CAD (x^(2/3) with x^4 -> a^12) declines, never guesses. */
+static void test_fractional_power_declines(void) {
+    check_eq("Head[Minimize[{x^(2/3) + y^(2/3), x^4 + y^4 <= 1}, {x, y}, "
+             "TimeConstraint -> 2]]", "Minimize");
+}
+
+/* v0.309 univariate Abs / piecewise: the sum-of-abs weighted median. */
+static void test_abs_sum_median(void) {
+    check_eq("First[Minimize[Sum[Abs[x - i^2], {i, 1, 10}], x]]", "275");
+}
+
+/* v0.309 Abs piecewise with an interior stationary point of a piece. */
+static void test_abs_interior_min(void) {
+    check_eq("First[Minimize[x^2 + Abs[x - 2], x]]", "Rational[7, 4]");
+}
+
+/* v0.309 Abs objective unbounded below (read off an end piece). */
+static void test_abs_unbounded(void) {
+    check_true("Minimize[2 x + Abs[x], x] === {-Infinity, {x -> Indeterminate}}");
+}
+
+/* v0.310 equality (Diophantine) integer optimum over x^2 + y^2 == 25. */
+static void test_integer_equality(void) {
+    check_eq("First[Minimize[{x + y, x^2 + y^2 == 25}, {x, y}, Integers]]", "-7");
+}
+
+/* v0.310 bounded inequality integer program via box enumeration. */
+static void test_integer_box(void) {
+    check_eq("First[Minimize[{x^2 + y^2, x + y >= 3 && 0 <= x <= 5 && 0 <= y <= 5}, "
+             "{x, y}, Integers]]", "5");
+}
+
+/* v0.310 honest scope: an unbounded / hard Diophantine integer region declines. */
+static void test_integer_hard_declines(void) {
+    check_eq("Head[Minimize[{x^2 + y^2 + z^2, x^3 + y^3 + z^3 == 33}, {x, y, z}, "
+             "Integers, TimeConstraint -> 2]]", "Minimize");
+}
+
+/* Message routing: Minimize::natt is catchable by Check[] (hence suppressed by
+ * Quiet[]). A raw stderr write would make Check[] take the wrong branch. */
+static void test_message_routing_check(void) {
+    check_true("Check[Minimize[x^3, x], \"caught\"] === \"caught\"");
+}
+
+/* The TimeConstraint option is accepted and leaves an easy solve intact. */
+static void test_timeconstraint_option(void) {
+    check_eq("First[Minimize[x^2, x, TimeConstraint -> 5]]", "0");
+}
+
+/* ------------------------------------------------------------------ */
 /* 8. Memory smoke                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -285,6 +372,21 @@ int main(void) {
     TEST(test_transcendental_declines);
     TEST(test_unbounded_constrained_declines);
     TEST(test_bad_arity);
+
+    /* 9. Robustness & scope expansion (v0.305 - v0.310) */
+    TEST(test_circle_irrational);
+    TEST(test_torus_solves);
+    TEST(test_disk_inequality_irrational);
+    TEST(test_radical_objective);
+    TEST(test_fractional_power_declines);
+    TEST(test_abs_sum_median);
+    TEST(test_abs_interior_min);
+    TEST(test_abs_unbounded);
+    TEST(test_integer_equality);
+    TEST(test_integer_box);
+    TEST(test_integer_hard_declines);
+    TEST(test_message_routing_check);
+    TEST(test_timeconstraint_option);
 
     /* 8. Memory */
     TEST(test_memory_smoke);
