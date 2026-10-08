@@ -1,41 +1,62 @@
-# Fix: Minimize on positive-dimensional (flat-valley) minima — v0.312
+# Minimize campaign II — gaps from the 21–40 stress suite
 
-Target bug: `Minimize[(x y - 3)^2 + 1, {x, y}]` returns unevaluated; should be
-`{1, {x -> 3, y -> 1}}`. Root cause: positive-dimensional stationary variety →
-`Solve` returns a parametric branch → `mz_parse_points` rejects the whole
-result → zero candidates → silent `NULL`.
+Plan: `~/.claude/plans/here-are-20-more-flickering-tide.md`. Scope: everything
+achievable (6 phases). Each phase: implement → test → re-run 21–40 → version
+bump + tag → changelog + calculus.md → `make check-messages`/`check-c99`.
 
-## Steps
-- [x] 0. Build; premise check → **plan premise was WRONG**: `Solve` returns `Solve::nsdim` *unevaluated*, not a parametric branch. Pivoted to the QE route (anticipated in the plan).
-- [x] 1-3. (Superseded) Implemented `mz_qe_infimum` fallback instead of the salvage: `Reduce[ForAll[{vars}, f>=b],{b},Reals]` for the infimum + `FindInstance` witness, verified exactly. Wired in `mz_run` after `mz_exact_poly` declines (unconstrained).
-- [x] 4. Target case → `{1, {x->-1, y->-3}}` (f@pt=1, on x y=3); Maximize mirror `{-1,...}`; line valley `(x+y-2)^2`→`{0,...}`; the renamed `_solves` case → `{-5/4,...}`.
-- [x] 5. Saddle `x^2-y^2` → `{-Infinity,...}` (QE answers it); `x y` and 3-var decline (Reduce unevaluated — safe).
-- [x] 6. Full `tests/test_minimize.c` green; renamed `_declines`→`_solves`, added `test_flat_valley_hyperbola`, `test_positive_dim_unbounded`.
-- [x] 7. valgrind: QE path identical to 2+2 baseline (420/60/16 blocks) — zero new leaks.
-- [x] 8. `src/version.h`→v0.312 ($VersionNumber=0.312); calculus.md + changelog 2026-10-05.md + memory updated. check-messages green. Commit+tag: pending user go-ahead.
+Measured baseline (v0.312): 4 solved (22,27,35,38), 4 timeout (24,31,32,34),
+12 decline. Zero wrong answers.
 
-## Follow-up (same v0.312): algebraic-infimum flat valleys
-- Reported: `Minimize[(x y - 3)^4 - x y + 1, {x, y}]` still unevaluated. Infimum is
-  an algebraic `Root` ≈ -2.4725. QE (`Reduce[ForAll...]`) gives it fine, but the
-  v0.312 witness `FindInstance[f == Root, {x,y}, Reals]` returns unevaluated, and
-  `Solve[f_slice == Root]` yields a NESTED Root (Root-with-Root-coeffs) Mathilda
-  can't `N`/`Simplify`/`Element[_,Reals]` — so verification failed → decline.
-- Fix: `mz_qe_witness` second strategy = pin all-but-one var to a trial const and
-  recursively `mz_univar_poly` the univariate SLICE → clean single-Root minimiser
-  (`{x -> Root[4#^3-36#^2+108#-109,1], y -> 1}`), verified `rru_sign_compare==0`.
-  `mz_point_attains`/`mz_point_from_findinstance` helpers factored out.
-- Verified: user query → `{Root[256#^3+1536#^2+3072#+2075,1], {x->Root[...], y->1}}`
-  in 0.15s; sextic rational valley `{3,...}`; Maximize mirror; all prior cases;
-  full `tests/test_minimize.c` green (+`test_flat_valley_algebraic`); valgrind
-  identical to baseline (no new leaks); docs/changelog/memory updated.
+## Phases
+- [x] **P1 — Separable/additive decomposition (unconstrained)** → #24 SOLVED
+      (60s→16ms). `mz_separable_min` + `mz_unconstrained_min`. minimize_tests green.
+- [x] **P2 — General compact-region certificate skip** → #23 SOLVED (45ms), #34
+      SOLVED (0.43s, -8/243). Generalized Fritz-John singular enumeration
+      (`mz_add_singular_candidates`), single-probe `Resolve[Exists]` bounded check,
+      shortcut-before-certificate. minimize_tests green.
+- [x] **P3 — Equality-constraint variable elimination** → #31 SOLVED (60s→2ms).
+      `mz_eliminate_solve`: bare-var equality substitution + reconstruction.
+      minimize_tests green.
+- [x] **P4 — Rational-function objectives** → #21 SOLVED (24ms), trivial rationals
+      SOLVED; #40 soundly declines (boundary poles). `mz_rational_solve`:
+      w=p/q auxiliary-variable reformulation + strict-sign gate. minimize_tests green.
+- [x] **P5 — Integer: parametric Diophantine + coercive-integer** → #37 SOLVED
+      (0.53s, {3,{-1,1,1}}). `mz_integer_parametric` (family→ellipsoid box) +
+      `mz_strip_domain_element` (full-coverage Element→Integers; #25 mixed stays
+      declined, sound). minimize_tests green.
+- [x] **P6 — Constrained positive-dimensional QE (scaffold)** → settles
+      `Minimize[{x+y,x<=y^2}]` = -Infinity (was decline). `mz_qe_infimum(cons)` +
+      `mz_qe_witness(cons)` with attainment gate. #28/#36 stay declined (CAD/QE
+      engine can't eliminate yet); #33 declines fast at the non-poly gate.
 
-## Review
-Root cause: positive-dimensional (non-isolated) unconstrained minimum. `Solve[∇f==0]`
-is positive-dimensional → `Solve::nsdim`, so the critical-point method collects no
-candidate and the unconstrained path returned a silent NULL. Fix: a QE fallback
-(`mz_qe_infimum`) reads the global infimum off `Reduce[ForAll[...]]` and realises a
-verified witness with `FindInstance`. Additive, single-file (`minimize.c`) + the
-`mz_run` wire-in; soundness preserved by the existing Reduce oracle + exact witness
-verification. Bonus: unbounded-below cases (saddle) now report `-Infinity` instead of
-declining. Scope: unconstrained, 2-var within the CAD's regime; constrained /
-non-attained / 3-var remain safe declines.
+## Deferred (sound declines, out of scope): #25 mixed-integer, #29/#30/#39
+transcendental, #32 multivariate radical sum.
+
+## Review (v0.318, campaign complete)
+
+**Scorecard 21-40: 4→10 solved, 4→2 timeout, 12→8 decline, zero wrong answers.**
+- New solves: #21 (rational), #23 (Viviani compact), #24 (separable), #31
+  (elimination), #34 (compact simplex sextic), #37 (integer parametric). Plus
+  `{x+y,x<=y^2}` → -Infinity.
+- Remaining declines all sound: #25 mixed-int, #28/#36 (CAD/QE-blocked), #29/#30
+  transcendental, #33 multivariate Max/Abs, #39 transcendental const E, #40
+  rational boundary poles.
+- Remaining timeouts: #32 (multivariate radical sum, unchanged from baseline),
+  #26 (6-var paraboloid↔plane).
+- **Regression noted:** #26 went from a 9ms fast-decline to a ~60s slow-decline
+  (still sound/terminates). Cause: Phase 3 elimination (z→x²+y²) exposes a 5-var
+  residual whose internal Solve/Reduce probe overruns TimeConstraint — the
+  pre-existing "TimeConstrained can't interrupt tight C loops" limitation. Not a
+  correctness issue; flagged for the separate TimeConstrained-interruption fix.
+
+**Verification:** `tests/test_minimize.c` +8 campaign tests (each win + a decline
+soundness pin), all green. Build clean (gcc -O3 -Wall -Wextra, no warnings).
+`make check-messages` ✓, `make check-c99` ✓. valgrind: **0 leaks allocated in
+minimize.c**; ~20 extra blocks are the pre-existing rat_canon/CAD leak
+(tasks/flint_ratcanon_leak.md) exercised by the extra Reduce calls.
+
+**Docs:** `docs/spec/changelog/2026-10-05.md` (v0.313–v0.318 section),
+`docs/spec/builtins/calculus.md` (new capabilities + trimmed Deferred),
+`src/version.h` → 0.318.
+
+**Pending user go-ahead:** git commit + per-phase tags (v0.313–v0.318).

@@ -261,9 +261,11 @@ static void test_transcendental_declines(void) {
 }
 
 static void test_unbounded_constrained_declines(void) {
-    /* Unbounded below over the feasible region: general unboundedness needs QE
-     * (deferred), so this is left unevaluated rather than guessed. */
-    check_eq("Head[Minimize[{x + y, x <= y^2}, {x, y}]]", "Minimize");
+    /* Unbounded below over the feasible region: the constrained QE infimum path
+     * (Reduce[ForAll[{x,y}, x<=y^2 => x+y>=b]] === False) now settles this
+     * exactly as -Infinity rather than declining. */
+    check_true("Minimize[{x + y, x <= y^2}, {x, y}] === "
+               "{-Infinity, {x -> Indeterminate, y -> Indeterminate}}");
 }
 
 static void test_bad_arity(void) {
@@ -353,6 +355,73 @@ static void test_timeconstraint_option(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 9b. Campaign II (21-40 stress suite): new scope, each with a decline */
+/*     sibling that must stay unevaluated (soundness pin).              */
+/* ------------------------------------------------------------------ */
+
+/* Separable / additive decomposition (variable-disjoint unconstrained): the
+ * global min equals the sum of the univariate block minima. */
+static void test_separable_decomposition(void) {
+    check_true("Head[Minimize[(x^4 - 16 x^2 + 5 x) + (y^4 - 16 y^2 + 5 y), {x, y}]] === List");
+    check_true("Abs[N[First[Minimize[(x^4-16x^2+5x)+(y^4-16y^2+5y),{x,y}]]] "
+               "- 2 N[First[Minimize[x^4-16x^2+5x,x]]]] < 10^-6");
+}
+
+/* General compact-region shortcut: a rational optimum on a high-degree region
+ * (sextic over the simplex) that the Reduce certificate cannot decide. */
+static void test_compact_simplex_sextic(void) {
+    check_true("First[Minimize[{x^6 + y^6 + z^6 - x y z, x + y + z == 1, "
+               "x >= 0, y >= 0, z >= 0}, {x, y, z}]] == -8/243");
+}
+
+/* General compact-region shortcut: an irrational Root optimum on a compact
+ * sphere-cap-cylinder curve (two equalities). */
+static void test_compact_viviani(void) {
+    check_true("Head[Minimize[{x + y + z, x^2 + y^2 + z^2 == 4 && "
+               "(x - 1)^2 + y^2 == 1}, {x, y, z}]] === List");
+    check_true("Abs[N[First[Minimize[{x + y + z, x^2 + y^2 + z^2 == 4 && "
+               "(x - 1)^2 + y^2 == 1}, {x, y, z}]]] + 2.3009759965] < 10^-6");
+}
+
+/* Equality-constraint variable elimination: x==t, y==t^2, z==t^3 collapses to a
+ * univariate problem in t. */
+static void test_equality_elimination(void) {
+    check_true("Head[Minimize[{(x-1)^2 + (y-2)^2 + (z-3)^2, "
+               "x == t && y == t^2 && z == t^3}, {x, y, z, t}]] === List");
+    check_true("Abs[N[First[Minimize[{(x-1)^2+(y-2)^2+(z-3)^2, "
+               "x==t && y==t^2 && z==t^3}, {x,y,z,t}]]] - 0.1924713154] < 10^-6");
+}
+
+/* Rational-function objective: a positive-definite denominator reduces to a
+ * polynomial problem in w = p/q. */
+static void test_rational_objective(void) {
+    check_true("First[Minimize[{x^2 y^2 / (x^2 + y^2 + 1), x^2 + y^2 >= 1}, {x, y}]] == 0");
+    check_true("First[Minimize[x^2/(x^2 + 1), x]] == 0");
+}
+
+/* Rational objective whose denominator has indefinite sign on the closure
+ * (boundary poles): a sound decline. */
+static void test_rational_poles_decline(void) {
+    check_eq("Head[Minimize[{1/x + 1/y + 1/z, x + y + z == 1, x > 0, y > 0, z > 0}, "
+             "{x, y, z}, TimeConstraint -> 3]]", "Minimize");
+}
+
+/* Integers domain via the Element[{vars}, Integers] spelling AND an infinite
+ * parametric Diophantine family with a coercive objective. */
+static void test_integer_parametric(void) {
+    check_true("First[Minimize[{x^2 + y^2 + z^2, 5 x + 7 y + 11 z == 13, "
+               "Element[{x, y, z}, Integers]}, {x, y, z}]] == 3");
+}
+
+/* Mixed integer/continuous (only some variables declared integer) is out of
+ * scope and must decline, not be silently treated as all-integer. */
+static void test_mixed_integer_declines(void) {
+    check_eq("Head[Minimize[{x y - z w, x + y + z + w == 10, 0 <= x <= 5, "
+             "0 <= y <= 5, Element[{z, w}, Integers]}, {x, y, z, w}, "
+             "TimeConstraint -> 3]]", "Minimize");
+}
+
+/* ------------------------------------------------------------------ */
 /* 8. Memory smoke                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -435,6 +504,16 @@ int main(void) {
     TEST(test_integer_hard_declines);
     TEST(test_message_routing_check);
     TEST(test_timeconstraint_option);
+
+    /* 9b. Campaign II: 21-40 stress-suite scope + soundness pins */
+    TEST(test_separable_decomposition);
+    TEST(test_compact_simplex_sextic);
+    TEST(test_compact_viviani);
+    TEST(test_equality_elimination);
+    TEST(test_rational_objective);
+    TEST(test_rational_poles_decline);
+    TEST(test_integer_parametric);
+    TEST(test_mixed_integer_declines);
 
     /* 8. Memory */
     TEST(test_memory_smoke);

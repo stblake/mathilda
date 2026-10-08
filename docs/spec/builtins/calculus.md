@@ -4062,15 +4062,39 @@ exact result.
   a three-variable flat valley, or an infimum `Reduce` leaves unevaluated,
   declines.
 
+- **Separable (variable-disjoint) unconstrained objectives** are decomposed into
+  blocks and the block minima summed, so a flat additive objective (e.g. a
+  separable quartic sum) avoids the multivariate certificate entirely.
+- **Compact (bounded + closed) feasible regions of any shape.** When the closure
+  is provably bounded and the KKT + Fritz–John singular enumeration is complete,
+  the global minimum is the least candidate by the extreme-value theorem — no
+  lower-bound certificate — so an irrational `Root` optimum on a compact curve
+  (sphere ∩ cylinder) or a rational optimum on a high-degree region (a sextic
+  over the simplex) is decided.
+- **Equality-constraint variable elimination.** An equality pinning a variable to
+  an expression free of it is substituted out, reducing the dimension
+  (`x==t, y==t², z==t³` collapses a distance problem to a univariate one).
+- **Rational-function objectives** `p/q`, reformulated as
+  `Minimize[w, cons && p - w*q == 0 && q(>|<)0]` once `q`'s strict sign on the
+  closure is proved (a denominator of indefinite sign — boundary poles — declines).
+- **Integers domain via the `Element[{vars}, Integers]` spelling** (covering
+  every variable; a partial membership is mixed and declines), including an
+  infinite parametric Diophantine family with a coercive objective (bounded via
+  the ellipsoid `{Q <= B}`).
+- **Constrained general unboundedness / positive-dimensional minima via QE**
+  (`Reduce[ForAll[{vars}, cons ⇒ f >= b], {b}, Reals]`, with the witness verified
+  to both attain `b` and satisfy the constraints): the cases the real CAD can
+  decide — e.g. `Minimize[{x + y, x <= y^2}, {x, y}]` -> `-Infinity`.
+
 ### Deferred (declines, never guesses)
 
 Transcendental closed forms; parametric answers as `Piecewise` over symbolic
-parameters; **constrained** or **non-attained** positive-dimensional minimizer
-sets (the unconstrained attained case is handled above); general
-not-attained-under-constraints detection via quantifier elimination;
-**unbounded or mixed** integer / integer-programming optimisation;
-`MinValue`/`ArgMin`-style value-only heads; vector variables and vector
-inequalities.
+parameters; **mixed integer / continuous** optimisation and integer regions whose
+`Reduce`/`Solve` the engine cannot bound; **constrained positive-dimensional
+minimizer sets whose `Reduce[ForAll[…]]` the CAD/QE engine leaves unevaluated**
+(the decidable cases are handled above); `MinValue`/`ArgMin`-style value-only
+heads; vector variables and vector inequalities; unconstrained sums of
+multivariate radicals.
 
 ### Examples
 
