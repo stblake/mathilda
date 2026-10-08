@@ -4008,7 +4008,13 @@ exact result.
   chained `a <= g <= b`). Candidates come from KKT / active-set enumeration on
   the closure of the region; the optimum is confirmed by the Reduce lower-bound
   certificate and must be attained in the original (strict) region. Small
-  **linear programs** fall out as the degenerate case.
+  **linear programs** fall out as the degenerate case. For a pure single-equality
+  problem over a **compact** variety the certificate is replaced by an
+  extreme-value argument (the global optimum is the least of the enumerated
+  regular Lagrange points and the variety's singular points, once a rational ball
+  probe proves boundedness) — this solves **irrational-algebraic** optima such as
+  `Minimize[{x^2+y^2, (x-2)^2+(y-3)^2==1}, {x,y}]` -> `14 - 2 Sqrt[13]`, which the
+  Reduce certificate alone cannot decide.
 
 ### Deferred (declines, never guesses)
 

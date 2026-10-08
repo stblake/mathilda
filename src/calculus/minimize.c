@@ -388,6 +388,40 @@ static bool mz_region_empty(const Expr* cons, Expr* const* vars, size_t n,
     return r;
 }
 
+/* True iff Reduce proves the equality variety {g == 0} lies inside some ball
+ * Σ x_i^2 <= R^2 (rational R) — i.e. Reduce[g==0 && Σx_i^2 > R^2] === False for
+ * some R on a geometric ladder. Every coefficient is rational, so this stays in
+ * the CAD's supported regime (it never hits the algebraic-coefficient wall that
+ * stops the lower-bound certificate). Bounded + closed (an equality variety is
+ * closed) ⇒ compact. Each probe uses a small sub-budget so an unbounded variety
+ * (no R ever certifies) cannot run away. */
+static bool mz_bounded_region(const Expr* g, Expr* const* vars, size_t n,
+                              int budget) {
+    int sub = (budget > 0 && budget < 4) ? budget : 4;   /* per-probe cap */
+    Expr** sq = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t j = 0; j < n; j++)
+        sq[j] = fn2(SYM_Power, expr_copy(vars[j]), mk_int(2));
+    Expr* sumsq = expr_new_function(expr_new_symbol(SYM_Plus), sq, n);
+    free(sq);
+    Expr* geq = fn2(SYM_Equal, expr_copy((Expr*)g), mk_int(0));
+    bool bounded = false;
+    for (int e = 2; e <= 20 && !bounded; e += 2) {        /* R^2 = 2^2 .. 2^20 */
+        Expr* R2 = eval_and_free(fn2(SYM_Power, mk_int(2), mk_int(e)));
+        Expr* gt = fn2(SYM_Greater, expr_copy(sumsq), R2);
+        Expr* stmt = fn2(SYM_And, expr_copy(geq), gt);
+        mth_msg_suppress_push();
+        Expr* red = mz_beval(expr_new_function(expr_new_symbol(SYM_Reduce),
+            (Expr*[]){ stmt, mz_varlist(vars, n),
+                       expr_new_symbol(SYM_Reals) }, 3), sub);
+        mth_msg_suppress_pop();
+        if (mz_is_sym(red, SYM_False)) bounded = true;
+        expr_free(red);
+    }
+    expr_free(sumsq);
+    expr_free(geq);
+    return bounded;
+}
+
 /* Feasibility of a point in `cons`: 1 True, 0 False, -1 undecided. */
 static int mz_feasible_at(const Expr* cons, Expr* const* vars,
                           Expr* const* vals, size_t n) {
@@ -543,6 +577,8 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
     Expr* CL = NULL;
     Expr* consN = NULL;                           /* cons with Inequality chains split */
     bool constrained = (cons != NULL) && !mz_is_true(cons);
+    bool kkt_all_clean = true;                    /* every active-set solve was clean */
+    bool shortcut_proven = false;                 /* compact-region EVT certificate */
 
     if (!mz_poly_in_vars(f, vars, n)) return NULL;
 
@@ -639,13 +675,50 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         for (size_t j = 0; j < nall; j++) expr_free(allv[j]);
         free(lam); free(allv); free(actz); free(actdz);
 
-        if (!ok) continue;                      /* parametric/unclean subset: skip */
+        if (!ok) { kkt_all_clean = false; continue; }  /* parametric/unclean: skip */
         for (size_t i = 0; i < npp; i++) {
             if (ncand == candcap) { candcap = candcap ? candcap * 2 : 8;
                 cand = (Expr***)realloc(cand, sizeof(Expr**) * candcap); }
             cand[ncand++] = pp[i];
         }
         free(pp);                               /* rows moved into cand */
+    }
+
+    /* Compact-region extreme-value shortcut (pure single-equality case).
+     * For a smooth equality variety V = {g == 0}, every local extremum of f on
+     * V is either a REGULAR point (the KKT/Lagrange system, already solved
+     * above) or a SINGULAR point of V ({g == 0, ∇g == 0}) — Fritz–John. If V is
+     * compact (closed, since it is an equality set, + bounded, certified by a
+     * rational ball probe) then f attains its global minimum on V, and it is the
+     * least value over the enumerated regular ∪ singular candidates. In that
+     * case the Reduce lower-bound certificate below is REDUNDANT and is skipped
+     * (which also dodges the algebraic-coefficient wall that makes it decline on
+     * irrational optima). Soundness rests on the solvenlsys contract (a complete
+     * finite solution set or a decline — never a false empty set): the shortcut
+     * fires only when BOTH the regular and the singular solves are clean and the
+     * region is provably bounded; any gap falls through to the certificate. */
+    if (nin == 0 && neq == 1 && kkt_all_clean) {
+        size_t nsys = 1 + n;
+        Expr** sys = (Expr**)malloc(sizeof(Expr*) * nsys);
+        sys[0] = fn2(SYM_Equal, expr_copy(EQ[0]), mk_int(0));
+        for (size_t j = 0; j < n; j++)
+            sys[1 + j] = fn2(SYM_Equal, expr_copy(dzEQ[0][j]), mk_int(0));
+        Expr* singsys = expr_new_function(expr_new_symbol(SYM_List), sys, nsys);
+        free(sys);
+        Expr* Ls = mz_solve_real(singsys, vars, n, budget);
+        Expr*** sp = NULL; size_t nsp = 0;
+        int sing_clean = mz_parse_points(Ls, vars, n, vars, n, &sp, &nsp);
+        expr_free(Ls);
+        if (sing_clean) {
+            for (size_t i = 0; i < nsp; i++) {
+                if (ncand == candcap) { candcap = candcap ? candcap * 2 : 8;
+                    cand = (Expr***)realloc(cand, sizeof(Expr**) * candcap); }
+                cand[ncand++] = sp[i];
+            }
+            free(sp);                           /* rows moved into cand */
+            if (mz_bounded_region(EQ[0], vars, n, budget))
+                shortcut_proven = true;
+        }
     }
 
     /* Feasibility filter against the closure of the region. */
@@ -667,10 +740,16 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         Expr* bestv = NULL; size_t bi = 0;
         if (!mz_pick_min(f, vars, n, feas, nfeas, &bestv, &bi)) goto cleanup;
 
-        /* Global lower-bound certificate: closure(cons) ⇒ f >= bestv. */
-        Expr* ge = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy(bestv));
-        int proven = mz_entails(CL, ge, vars, n, budget);
-        expr_free(ge);
+        /* Global lower-bound certificate: closure(cons) ⇒ f >= bestv. Skipped
+         * when the compact-region shortcut already proved global optimality by
+         * the extreme-value theorem (the certificate would be redundant, and
+         * also often undecidable for an irrational bestv). */
+        int proven = shortcut_proven;
+        if (!proven) {
+            Expr* ge = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy(bestv));
+            proven = mz_entails(CL, ge, vars, n, budget);
+            expr_free(ge);
+        }
         if (!proven) { expr_free(bestv); goto cleanup; }
 
         /* Attainment: the minimising point must satisfy the ORIGINAL (strict)
