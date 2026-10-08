@@ -21,10 +21,18 @@
  *   (b) multivariate polynomial objective with isolated critical points;
  *   (c) polynomial objective under polynomial constraints over the Reals
  *       (KKT/active-set enumeration + a Reduce lower-bound certificate; small
- *       linear programs fall out as the degenerate case).
+ *       linear programs fall out as the degenerate case);
+ *   (d) unconstrained multivariate polynomial with a POSITIVE-DIMENSIONAL
+ *       (non-isolated) minimizer set — a flat valley the critical-point method
+ *       in (b) cannot resolve (Solve returns Solve::nsdim). The global infimum
+ *       is read directly off real quantifier elimination,
+ *       Reduce[ForAll[{vars}, f >= b], {b}, Reals], and a minimiser is realised
+ *       with FindInstance (mz_qe_infimum). An unbounded objective (Reduce ===
+ *       False) reports -Infinity; an un-attained infimum declines.
  * Deferred (declines, never guesses): transcendental closed forms, parametric
- * Piecewise answers, positive-dimensional minimizer sets, general unbounded/
- * not-attained via quantifier elimination, exact Integers/ILP optimisation.
+ * Piecewise answers, CONSTRAINED or non-attained positive-dimensional minima,
+ * general not-attained-under-constraints via quantifier elimination, exact
+ * Integers/ILP optimisation.
  *
  * Minimize/Maximize are Protected but NOT HoldAll (matching Mathematica): the
  * variables are unbound symbols that evaluate to themselves, so the objective
@@ -1252,6 +1260,228 @@ cleanup:
 }
 
 /* ------------------------------------------------------------------ *
+ *  Positive-dimensional / non-isolated unconstrained minima via QE     *
+ * ------------------------------------------------------------------ */
+
+/* 1 iff `pt` (an Expr*[n] point) is a real point with f(pt) == v, by exact
+ * comparison. rru_sign_compare returns 0 only for two equal REAL algebraic
+ * values; a complex coordinate makes f(pt) complex -> -2 (undecided) -> 0 here,
+ * so a non-real candidate is rejected. `pt` is borrowed. */
+static int mz_point_attains(const Expr* f, Expr* const* vars,
+                            Expr* const* pt, size_t n, const Expr* v) {
+    Expr* fv = mz_subst_eval(f, vars, pt, n);
+    int c = rru_sign_compare(fv, v);                  /* sign(f(pt) - v) */
+    expr_free(fv);
+    return c == 0;
+}
+
+/* Parse the first solution of a FindInstance result
+ * W = {{var -> val, ...}, ...} into a point row (Expr*[n], owned) when every
+ * coordinate is present, free of the vars, and the point attains v; else NULL. */
+static Expr** mz_point_from_findinstance(const Expr* W, const Expr* f,
+                                         Expr* const* vars, size_t n,
+                                         const Expr* v) {
+    if (!W || W->type != EXPR_FUNCTION ||
+        !mz_is_sym(W->data.function.head, SYM_List) ||
+        W->data.function.arg_count < 1) return NULL;
+    const Expr* sol = W->data.function.args[0];       /* {var -> val, ...} */
+    if (!sol || sol->type != EXPR_FUNCTION ||
+        !mz_is_sym(sol->data.function.head, SYM_List)) return NULL;
+    Expr** pt = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t j = 0; j < n; j++) pt[j] = NULL;
+    int ok = 1;
+    for (size_t j = 0; ok && j < n; j++) {
+        const Expr* val = NULL;
+        for (size_t r = 0; r < sol->data.function.arg_count; r++) {
+            const Expr* rule = sol->data.function.args[r];
+            if (rule->type == EXPR_FUNCTION &&
+                mz_is_sym(rule->data.function.head, SYM_Rule) &&
+                rule->data.function.arg_count == 2 &&
+                rule->data.function.args[0]->type == EXPR_SYMBOL &&
+                rule->data.function.args[0]->data.symbol.name ==
+                    vars[j]->data.symbol.name) { val = rule->data.function.args[1]; break; }
+        }
+        if (!val || mz_contains_var(val, vars, n)) ok = 0;
+        else pt[j] = expr_copy((Expr*)val);
+    }
+    if (ok && mz_point_attains(f, vars, pt, n, v)) return pt;
+    for (size_t j = 0; j < n; j++) if (pt[j]) expr_free(pt[j]);
+    free(pt);
+    return NULL;
+}
+
+/* Realise a minimiser attaining the infimum v — a real point with f == v. Two
+ * strategies, both verified by mz_point_attains before anything is returned:
+ *   (1) FindInstance[f == v, {vars}, Reals] — fast, and covers geometries a
+ *       single fixed slice would miss. Works when v is rational / a simple
+ *       surd.
+ *   (2) When v is an algebraic Root the whole minimiser LEVEL SET is
+ *       positive-dimensional, and the 2+-variable FindInstance (and Solve) run
+ *       into Solve::nsdim and decline. Pinning all but one variable to a trial
+ *       constant reduces it to a UNIVARIATE Solve[f == v, x_k, Reals] the Root
+ *       engine handles cleanly. A few trial constants per free variable are
+ *       tried; the first real root that attains v wins. (A pinned slice that
+ *       misses the level set — e.g. x = 0 collapsing x y to 0 — simply yields no
+ *       real root and the next trial is tried.)
+ * Returns a point row (Expr*[n], owned) or NULL (no real witness found within
+ * the remaining budget — an un-attained infimum or beyond reach: decline). */
+static Expr** mz_qe_witness(const Expr* f, Expr* const* vars, size_t n,
+                            const Expr* v, const char* head, clock_t t0, int budget) {
+    int rem = mz_rem_budget(t0, budget);
+    if (rem >= 0) {
+        Expr* eq = fn2(SYM_Equal, expr_copy((Expr*)f), expr_copy((Expr*)v));
+        mth_msg_suppress_push();
+        Expr* W = mz_beval(expr_new_function(expr_new_symbol(SYM_FindInstance),
+            (Expr*[]){ eq, mz_varlist(vars, n), expr_new_symbol(SYM_Reals) }, 3), rem);
+        mth_msg_suppress_pop();
+        Expr** pt = mz_point_from_findinstance(W, f, vars, n, v);
+        expr_free(W);
+        if (pt) return pt;
+    }
+
+    /* Fix-and-minimise fallback: pin every variable but one to a trial constant
+     * and recursively minimise the univariate polynomial restriction. The
+     * univariate optimiser returns a CLEAN algebraic minimiser (a single Root),
+     * not the nested Root that Solve[f_slice == v] would give — which Mathilda
+     * cannot zero-test — so the witness is verifiable. A slice that misses the
+     * global level set (its minimum exceeds v) or is unbounded simply fails the
+     * f(pt) == v check and the next trial is tried. */
+    static const long T[] = { 1, 2, 3, -1, -2, 5 };
+    const size_t NT = sizeof(T) / sizeof(T[0]);
+    for (size_t fr = 0; fr < n; fr++) {
+        for (size_t ti = 0; ti < NT; ti++) {
+            int remk = mz_rem_budget(t0, budget);
+            if (remk < 0) return NULL;                 /* deadline spent */
+            /* Pin every var != fr to T[ti], leaving vars[fr] free. */
+            Expr** ov   = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+            Expr** oval = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+            size_t nf = 0;
+            for (size_t j = 0; j < n; j++)
+                if (j != fr) { ov[nf] = expr_copy(vars[j]); oval[nf] = mk_int(T[ti]); nf++; }
+            Expr* fsub = nf ? mz_subst_eval(f, ov, oval, nf) : expr_copy((Expr*)f);
+            for (size_t j = 0; j < nf; j++) { expr_free(ov[j]); expr_free(oval[j]); }
+            free(ov); free(oval);
+            /* A constant slice cannot witness a non-constant infimum. */
+            if (!mz_contains_var(fsub, &vars[fr], 1)) { expr_free(fsub); continue; }
+
+            mth_msg_suppress_push();        /* an unbounded slice's natt is internal */
+            Expr* uni = mz_univar_poly(fsub, vars[fr], head, remk);
+            mth_msg_suppress_pop();
+            expr_free(fsub);
+
+            /* uni == {m, {x_fr -> x*}} with x* a clean algebraic minimiser. */
+            Expr* xstar = NULL;
+            if (uni && uni->type == EXPR_FUNCTION &&
+                mz_is_sym(uni->data.function.head, SYM_List) &&
+                uni->data.function.arg_count == 2) {
+                const Expr* rl = uni->data.function.args[1];
+                if (rl->type == EXPR_FUNCTION && rl->data.function.arg_count == 1 &&
+                    rl->data.function.args[0]->type == EXPR_FUNCTION &&
+                    mz_is_sym(rl->data.function.args[0]->data.function.head, SYM_Rule) &&
+                    rl->data.function.args[0]->data.function.arg_count == 2) {
+                    const Expr* val = rl->data.function.args[0]->data.function.args[1];
+                    if (val && !mz_is_sym(val, SYM_Indeterminate) &&
+                        !mz_contains_var(val, vars, n))
+                        xstar = expr_copy((Expr*)val);
+                }
+            }
+            if (uni) expr_free(uni);
+            if (!xstar) continue;
+
+            Expr** pt = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+            for (size_t j = 0; j < n; j++)
+                pt[j] = (j == fr) ? expr_copy(xstar) : mk_int(T[ti]);
+            expr_free(xstar);
+            if (mz_point_attains(f, vars, pt, n, v)) return pt;
+            for (size_t j = 0; j < n; j++) expr_free(pt[j]);
+            free(pt);
+        }
+    }
+    return NULL;
+}
+
+/* Global infimum of an UNCONSTRAINED polynomial f over the Reals, for the case
+ * the critical-point method (mz_exact_poly) found no isolated candidate — a
+ * positive-dimensional stationary variety, where Solve returns Solve::nsdim and
+ * declines (e.g. f = (x y - 3)^2 + 1, whose minimizer set is the whole hyperbola
+ * x y == 3). Real quantifier elimination is asked directly for the set of valid
+ * lower bounds  b:  Reduce[ForAll[{vars}, f >= b], {b}, Reals].
+ *   - b <= v  (equivalently v >= b, or any single bound relation pinning v):
+ *     v is the greatest lower bound, i.e. the infimum (possibly an algebraic
+ *     Root). Attainment is a SEPARATE question (the infimum is a valid lower
+ *     bound whether or not it is reached), so a real minimiser is realised by
+ *     mz_qe_witness: a point -> the verified {v, point}; no real point -> an
+ *     un-attained infimum, declined this release.
+ *   - False:  no b bounds f below -> f is unbounded below -> natt message and
+ *     {-Infinity, {x -> Indeterminate}} (mirroring the univariate tail theorem).
+ *   - anything else (unevaluated Reduce, a compound region, or v still mentioning
+ *     b or a problem variable):  decline (NULL).
+ * Soundness: v comes from the same Reduce/CAD oracle the lower-bound certificate
+ * already trusts, and the returned point is verified to attain it exactly
+ * (rru_sign_compare(f(point), v) == 0); any oracle "don't know" declines, never
+ * guesses. f must be polynomial in vars (semialgebraic) for the QE to be
+ * decidable — a non-polynomial objective declines at the gate. Maximize reaches
+ * this on -f (handled by the caller's is_max negation), so it is covered too.
+ * A per-call clock() deadline bounds the Reduce probe and the whole witness
+ * search by the TimeConstraint budget. */
+static Expr* mz_qe_infimum(const Expr* f, Expr* const* vars, size_t n,
+                           const char* head, int budget) {
+    if (!mz_poly_in_vars(f, vars, n)) return NULL;
+    clock_t t0 = clock();                             /* per-call deadline anchor */
+
+    /* R = Reduce[ForAll[{vars}, f >= b], {b}, Reals]. */
+    Expr* b = mz_fresh_symbol();
+    Expr* pred = fn2(SYM_GreaterEqual, expr_copy((Expr*)f), expr_copy(b));
+    Expr* fa = expr_new_function(expr_new_symbol(SYM_ForAll),
+                   (Expr*[]){ mz_varlist(vars, n), pred }, 2);
+    int rem0 = mz_rem_budget(t0, budget);
+    mth_msg_suppress_push();
+    Expr* R = (rem0 < 0) ? (expr_free(fa), (Expr*)NULL)
+            : mz_beval(expr_new_function(expr_new_symbol(SYM_Reduce),
+                (Expr*[]){ fa, mz_varlist(&b, 1), expr_new_symbol(SYM_Reals) }, 3), rem0);
+    mth_msg_suppress_pop();
+
+    /* Unbounded below: the set of valid lower bounds is empty. */
+    if (mz_is_sym(R, SYM_False)) {
+        expr_free(R); expr_free(b);
+        mth_message(head, "natt",
+                "The %s is not attained at any point satisfying the given "
+                "constraints.", mz_noun(head));
+        return mz_result_indet(mz_neg_inf(), vars, n);
+    }
+
+    /* Expect a single bound relation  b (<= | <) v  or  v (>= | >) b; take the
+     * side that is not b as the infimum v, requiring v free of b and the vars. */
+    Expr* v = NULL;
+    if (R && R->type == EXPR_FUNCTION && R->data.function.arg_count == 2 &&
+        R->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = R->data.function.head->data.symbol.name;
+        if (h == SYM_LessEqual || h == SYM_Less || h == SYM_Equal ||
+            h == SYM_GreaterEqual || h == SYM_Greater) {
+            const Expr* a0 = R->data.function.args[0];
+            const Expr* a1 = R->data.function.args[1];
+            const Expr* cand = NULL;
+            if (a0->type == EXPR_SYMBOL &&
+                a0->data.symbol.name == b->data.symbol.name)      cand = a1;
+            else if (a1->type == EXPR_SYMBOL &&
+                     a1->data.symbol.name == b->data.symbol.name)  cand = a0;
+            if (cand && !mz_contains_var(cand, &b, 1) &&
+                !mz_contains_var(cand, vars, n))
+                v = expr_copy((Expr*)cand);
+        }
+    }
+    expr_free(R);
+    expr_free(b);
+    if (!v) return NULL;                              /* compound/undecided: decline */
+
+    Expr** pt = mz_qe_witness(f, vars, n, v, head, t0, budget);
+    Expr* result = pt ? mz_result(expr_copy(v), vars, pt, n) : NULL;
+    if (pt) { for (size_t j = 0; j < n; j++) expr_free(pt[j]); free(pt); }
+    expr_free(v);
+    return result;      /* NULL = un-attained infimum / unclean witness: decline */
+}
+
+/* ------------------------------------------------------------------ *
  *  Exact Integers-domain optimisation over a finite integer set       *
  * ------------------------------------------------------------------ */
 
@@ -1526,8 +1756,14 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
             if (unconstrained && n == 1) {
                 result = mz_univar_piecewise(fobj, vars[0], head, budget);
                 if (!result) result = mz_univar_poly(fobj, vars[0], head, budget);
-            } else
+            } else {
                 result = mz_exact_poly(fobj, cons, vars, n, head, budget);
+                /* Positive-dimensional fallback: when the critical-point method
+                 * found no isolated candidate (a non-isolated minimizer set,
+                 * Solve::nsdim), read the infimum off real QE directly. */
+                if (!result && unconstrained)
+                    result = mz_qe_infimum(fobj, vars, n, head, budget);
+            }
             if (result && is_max) result = mz_negate_value(result);
         }
         expr_free(fpoly);

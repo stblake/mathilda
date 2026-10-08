@@ -4040,13 +4040,35 @@ exact result.
   0<=y<=5}, {x,y}, Integers]` -> `{5, {x->2, y->1}}`. An unbounded or
   undecidable integer region (e.g. `x^3+y^3+z^3==33`), an unconstrained integer
   objective, or a mixed integer/continuous problem declines.
+- **Unconstrained multivariate polynomials with a positive-dimensional
+  (non-isolated) minimizer set** — a flat valley where the minimum is achieved
+  along a whole curve or surface, so the gradient system has infinitely many
+  real solutions and the isolated-critical-point method above finds no candidate
+  (`Solve::nsdim`). The global infimum is read directly off real quantifier
+  elimination, `Reduce[ForAll[{vars}, f >= b], {b}, Reals]` (the infimum may be
+  an algebraic `Root`), and a minimiser is realised by one of two verified
+  strategies: `FindInstance[f == v, {vars}, Reals]` when `v` is rational / a
+  simple surd, otherwise by pinning all but one variable to a trial constant and
+  minimising the univariate polynomial slice (which yields a clean single-`Root`
+  minimiser, unlike `Solve[f == v]` whose nested `Root` the engine cannot
+  zero-test). The point is verified to attain `v` exactly.
+  `Minimize[(x y - 3)^2 + 1, {x, y}]` -> `{1, {x -> -1, y -> -3}}` (the value `1`
+  all along `x y == 3`); `Minimize[(x y - 3)^4 - x y + 1, {x, y}]` ->
+  `{Root[256 #^3 + 1536 #^2 + 3072 # + 2075 &, 1], {x -> Root[4 #^3 - 36 #^2 +
+  108 # - 109 &, 1], y -> 1}}` (an algebraic infimum);
+  `Minimize[(x^2 - 2 y)^2 - x^2 + 2 y - 1, {x, y}]` -> `{-5/4, {x -> 0, y ->
+  -1/4}}`. An objective unbounded below (QE returns `False`) reports `-Infinity`
+  with `Minimize::natt`. The query stays in the CAD's regime for two variables;
+  a three-variable flat valley, or an infimum `Reduce` leaves unevaluated,
+  declines.
 
 ### Deferred (declines, never guesses)
 
 Transcendental closed forms; parametric answers as `Piecewise` over symbolic
-parameters; positive-dimensional minimizer sets (e.g. a minimum achieved along
-a whole curve); general unbounded / not-attained detection via quantifier
-elimination; **unbounded or mixed** integer / integer-programming optimisation;
+parameters; **constrained** or **non-attained** positive-dimensional minimizer
+sets (the unconstrained attained case is handled above); general
+not-attained-under-constraints detection via quantifier elimination;
+**unbounded or mixed** integer / integer-programming optimisation;
 `MinValue`/`ArgMin`-style value-only heads; vector variables and vector
 inequalities.
 
@@ -4082,4 +4104,7 @@ Out[8]= {0, {x -> 0}}
 
 In[9]:= Minimize[2.5 x^2 - 3 x, x]         (* inexact input -> NMinimize *)
 Out[9]= {-0.9, {x -> 0.6}}
+
+In[10]:= Minimize[(x y - 3)^2 + 1, {x, y}]   (* flat valley along x y == 3 *)
+Out[10]= {1, {x -> -1, y -> -3}}
 ```

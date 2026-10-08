@@ -157,10 +157,55 @@ static void test_shifted_bowl_2d(void) {
              "List[0, List[Rule[x, 1], Rule[y, -2]]]");
 }
 
-static void test_positive_dimensional_declines(void) {
-    /* Minimizer set is the curve x^2 - 2y = 1/2 (positive-dimensional): sound
-     * decline, left unevaluated. */
-    check_eq("Head[Minimize[(x^2 - 2 y)^2 - x^2 + 2 y - 1, {x, y}]]", "Minimize");
+static void test_positive_dimensional_solves(void) {
+    /* Minimizer set is the curve x^2 - 2y = 1/2 (positive-dimensional): the
+     * critical-point method finds no isolated candidate (Solve::nsdim), so the
+     * infimum is read off real QE (Reduce[ForAll[...]]) and a minimiser is
+     * realised with FindInstance. f = u^2 - u - 1 with u = x^2 - 2y, min -5/4
+     * at u = 1/2. Assert the value and that the reported point attains it. */
+    check_true("First[Minimize[(x^2 - 2 y)^2 - x^2 + 2 y - 1, {x, y}]] == -5/4");
+    check_true("(((x^2 - 2 y)^2 - x^2 + 2 y - 1) /. "
+               "Last[Minimize[(x^2 - 2 y)^2 - x^2 + 2 y - 1, {x, y}]]) == -5/4");
+}
+
+static void test_flat_valley_hyperbola(void) {
+    /* The originally-reported case: f = (x y - 3)^2 + 1 is 1 everywhere on the
+     * hyperbola x y == 3 (a positive-dimensional minimum). Value 1, attained. */
+    check_true("First[Minimize[(x y - 3)^2 + 1, {x, y}]] == 1");
+    check_true("(((x y - 3)^2 + 1) /. Last[Minimize[(x y - 3)^2 + 1, {x, y}]]) == 1");
+    /* Line valley x + y == 2: min 0, attained. */
+    check_true("First[Minimize[(x + y - 2)^2, {x, y}]] == 0");
+    check_true("(((x + y - 2)^2) /. Last[Minimize[(x + y - 2)^2, {x, y}]]) == 0");
+}
+
+static void test_flat_valley_algebraic(void) {
+    /* Quartic flat valley: f = (x y - 3)^4 - x y + 1 is minimised along the
+     * hyperbola x y == 3 + 4^(-1/3). The infimum is an algebraic Root, so the
+     * witness is realised by minimizing a univariate slice (FindInstance can't
+     * instantiate the level set at an algebraic value). Assert the value
+     * numerically against -2 - (3/4) 2^(-2/3) and that the reported point
+     * attains it exactly. */
+    check_true("Module[{f = (x y - 3)^4 - x y + 1, r}, "
+               "r = Minimize[f, {x, y}]; "
+               "Simplify[(f /. Last[r]) - First[r]] == 0 && "
+               "Abs[N[First[r]] - (-2 - (3/4) 2^(-2/3))] < 10^-9]");
+    /* A sextic flat valley with a rational infimum (FindInstance path). */
+    check_eq("Minimize[(x y - 2)^6 + 3, {x, y}]",
+             "List[3, List[Rule[x, -1], Rule[y, -2]]]");
+}
+
+static void test_positive_dim_unbounded(void) {
+    /* Saddle x^2 - y^2: unbounded below along x==0 -> -Infinity, not attained.
+     * (The critical point (0,0) is a saddle, so mz_exact_poly declines and the
+     * QE fallback detects Reduce[ForAll[...]] === False.) */
+    check_eq("Minimize[x^2 - y^2, {x, y}]",
+             "List[Times[-1, Infinity], List[Rule[x, Indeterminate], "
+             "Rule[y, Indeterminate]]]");
+    /* Maximize of a flat valley that is unbounded above -> +Infinity. */
+    check_eq("Maximize[(x y - 3)^2 + 1, {x, y}]",
+             "List[Infinity, List[Rule[x, Indeterminate], Rule[y, Indeterminate]]]");
+    /* Maximize mirror of the hyperbola valley: finite max -1, attained. */
+    check_true("First[Maximize[-(x y - 3)^2 - 1, {x, y}]] == -1");
 }
 
 /* ------------------------------------------------------------------ */
@@ -356,7 +401,10 @@ int main(void) {
     /* 4. Multivariate unconstrained */
     TEST(test_bowl_2d);
     TEST(test_shifted_bowl_2d);
-    TEST(test_positive_dimensional_declines);
+    TEST(test_positive_dimensional_solves);
+    TEST(test_flat_valley_hyperbola);
+    TEST(test_flat_valley_algebraic);
+    TEST(test_positive_dim_unbounded);
 
     /* 5. Constrained */
     TEST(test_disk_linear);

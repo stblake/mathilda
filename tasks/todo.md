@@ -1,86 +1,41 @@
-# Task: Implement `Minimize` / `Maximize`
+# Fix: Minimize on positive-dimensional (flat-valley) minima — v0.312
 
-Plan: `/Users/user/.claude/plans/pasted-content-id-2dbb-we-should-golden-hopper.md`
-Scope: Tier 1 (exact univariate poly) + Tier 2 (multivariate unconstrained + constrained poly over Reals).
-Discipline: exact oracle backs every result; any "don't know" ⇒ decline (NULL). Inexact input ⇒ NMinimize.
+Target bug: `Minimize[(x y - 3)^2 + 1, {x, y}]` returns unevaluated; should be
+`{1, {x -> 3, y -> 1}}`. Root cause: positive-dimensional stationary variety →
+`Solve` returns a parametric branch → `mz_parse_points` rejects the whole
+result → zero candidates → silent `NULL`.
 
-## Phase 1 — Infra skeleton (build green)
-- [ ] Intern `SYM_Minimize` / `SYM_Maximize` in `src/sym_names.h` + `src/sym_names.c` (3 edits each)
-- [ ] Prototype `builtin_minimize` / `builtin_maximize` in `src/numerical_calculus/findmin.h`
-- [ ] New `src/numerical_calculus/minimize.c` — stub returning NULL
-- [ ] Register in `findmin_init()` with `ATTR_HOLDALL | ATTR_PROTECTED`
-- [ ] Docstrings in `src/info.c` (next to NMinimize)
-- [ ] Option tables in `src/options_builtin.c` (WorkingPrecision)
-- [ ] `tests/test_minimize.c` stub mirroring `test_nminimize.c`
-- [ ] `tests/CMakeLists.txt`: add minimize.c to COMMON_SRC + add_executable(minimize_tests)
-- [ ] `make -j` clean; minimize_tests builds
+## Steps
+- [x] 0. Build; premise check → **plan premise was WRONG**: `Solve` returns `Solve::nsdim` *unevaluated*, not a parametric branch. Pivoted to the QE route (anticipated in the plan).
+- [x] 1-3. (Superseded) Implemented `mz_qe_infimum` fallback instead of the salvage: `Reduce[ForAll[{vars}, f>=b],{b},Reals]` for the infimum + `FindInstance` witness, verified exactly. Wired in `mz_run` after `mz_exact_poly` declines (unconstrained).
+- [x] 4. Target case → `{1, {x->-1, y->-3}}` (f@pt=1, on x y=3); Maximize mirror `{-1,...}`; line valley `(x+y-2)^2`→`{0,...}`; the renamed `_solves` case → `{-5/4,...}`.
+- [x] 5. Saddle `x^2-y^2` → `{-Infinity,...}` (QE answers it); `x y` and 3-var decline (Reduce unevaluated — safe).
+- [x] 6. Full `tests/test_minimize.c` green; renamed `_declines`→`_solves`, added `test_flat_valley_hyperbola`, `test_positive_dim_unbounded`.
+- [x] 7. valgrind: QE path identical to 2+2 baseline (420/60/16 blocks) — zero new leaks.
+- [x] 8. `src/version.h`→v0.312 ($VersionNumber=0.312); calculus.md + changelog 2026-10-05.md + memory updated. check-messages green. Commit+tag: pending user go-ahead.
 
-## Phase 2 — Arg normalization + numeric fallback
-- [ ] `mz_normalize_args` (f / {f,cons}, vars, dom, options) reusing fm/nm parsers
-- [ ] inexact-input detection
-- [ ] `mz_numeric_fallback` → synthesize+eval `NMinimize[...]`
-- [ ] tests: inexact → numeric; unsupported exact → unevaluated
-
-## Phase 3 — Tier 1 (a) univariate polynomial
-- [ ] `mz_poly_tail` (degree parity + leading sign; bounded/unbounded/attainment)
-- [ ] `mz_univar_poly`: D → solvepoly → `mz_candidate_min` (rru_sign_compare)
-- [ ] `mz_result_exact / _unbounded` builders
-- [ ] univariate headline tests pass
-
-## Phase 4 — Maximize
-- [ ] `builtin_maximize` via `-f` negation + value negation + tag swap
-- [ ] max tests pass
-
-## Phase 5 — Tier 2 (b) multivariate unconstrained
-- [ ] gradient system via `Solve[{grad==0}, vars, Reals]` / reduce_zerodim; decline if positive-dimensional
-- [ ] `mz_entails(A,P,dom)` = eval `Reduce[A && !P]` == False
-- [ ] global lower-bound certificate
-- [ ] tests (isolated min passes; positive-dimensional declines)
-
-## Phase 6 — Tier 2 (c) constrained polynomial
-- [ ] KKT/active-set enumeration; closure of region
-- [ ] feasibility filter + candidate min + lower-bound certificate
-- [ ] `_infeasible` / `_notattained` outcomes
-- [ ] constrained headline tests pass
-
-## Phase 7 — Docs, release, verification
-- [ ] docs/spec/builtins/ (optimization doc) + docs/spec/changelog/2026-10-05.md
-- [ ] version bump 0.303 → 0.304 (src/version.h), commit note, tag v0.304
-- [ ] full test sweep + valgrind + check-messages + check-c99 + rebuild graph
+## Follow-up (same v0.312): algebraic-infimum flat valleys
+- Reported: `Minimize[(x y - 3)^4 - x y + 1, {x, y}]` still unevaluated. Infimum is
+  an algebraic `Root` ≈ -2.4725. QE (`Reduce[ForAll...]`) gives it fine, but the
+  v0.312 witness `FindInstance[f == Root, {x,y}, Reals]` returns unevaluated, and
+  `Solve[f_slice == Root]` yields a NESTED Root (Root-with-Root-coeffs) Mathilda
+  can't `N`/`Simplify`/`Element[_,Reals]` — so verification failed → decline.
+- Fix: `mz_qe_witness` second strategy = pin all-but-one var to a trial const and
+  recursively `mz_univar_poly` the univariate SLICE → clean single-Root minimiser
+  (`{x -> Root[4#^3-36#^2+108#-109,1], y -> 1}`), verified `rru_sign_compare==0`.
+  `mz_point_attains`/`mz_point_from_findinstance` helpers factored out.
+- Verified: user query → `{Root[256#^3+1536#^2+3072#+2075,1], {x->Root[...], y->1}}`
+  in 0.15s; sextic rational valley `{3,...}`; Maximize mirror; all prior cases;
+  full `tests/test_minimize.c` green (+`test_flat_valley_algebraic`); valgrind
+  identical to baseline (no new leaks); docs/changelog/memory updated.
 
 ## Review
-
-**Status: complete (v0.304). All 26 `minimize_tests` pass; `nminimize_tests` /
-`findmin_tests` still pass (no regression). Not yet committed (on `main`).**
-
-Delivered:
-- `Minimize` / `Maximize` builtins (`src/calculus/minimize.c` — a symbolic
-  *calculus* module, registered by `minimize_init()` from `core_init`),
-  Protected (non-Hold, faithful to Mathematica — deviated from the plan's
-  `HoldAll`, see note below). Symbols, docstrings, option tables, registration,
-  CMake, docs, changelog, version bump all wired.
-- Tier 1 (a): exact univariate polynomial + tail-theorem bounded/unbounded/
-  attainment.
-- Tier 2 (b)/(c): multivariate unconstrained (gradient + Reduce certificate)
-  and constrained polynomial over Reals (KKT/active-set + closure + certificate
-  + attainment), unified in `mz_exact_poly`; `Inequality` chains expanded; LPs
-  fall out as the degenerate case.
-- Numeric fallback to NMinimize for inexact input; exact-undecidable declines.
-- Infeasible -> `{Infinity, ...}`+`infeas`; unbounded -> `{-Infinity, ...}`+`natt`.
-
-Verified against every supported Mathematica example in the request (exact
-match), plus the deferred cases decline cleanly. check-messages / check-c99
-pass. Valgrind: `minimize.c` adds **zero** leaked bytes (420-block
-definitely-lost total is pre-existing one-time Solve/Reduce/FLINT init leakage,
-identical for `Print[1]` and for 55 Minimize calls).
-
-Design note / deviation from approved plan: the plan specified `ATTR_HOLDALL`;
-I used `ATTR_PROTECTED` only. Mathematica's real `Attributes[Minimize]` is
-`{Protected, ReadProtected}` (non-Hold), and the sibling `NMinimize` is
-deliberately non-Hold. Non-Hold is more faithful AND simpler: the exact engine
-receives already-evaluated symbolic args and works by substitution, needing no
-Block-binding. Documented in `findmin.c` and the changelog.
-
-Deferred (sound declines, next tiers): transcendental closed forms, parametric
-`Piecewise`, positive-dimensional minimizer sets, general unbounded/natt via QE,
-exact `Integers`/ILP, `MinValue`/`ArgMin`.
+Root cause: positive-dimensional (non-isolated) unconstrained minimum. `Solve[∇f==0]`
+is positive-dimensional → `Solve::nsdim`, so the critical-point method collects no
+candidate and the unconstrained path returned a silent NULL. Fix: a QE fallback
+(`mz_qe_infimum`) reads the global infimum off `Reduce[ForAll[...]]` and realises a
+verified witness with `FindInstance`. Additive, single-file (`minimize.c`) + the
+`mz_run` wire-in; soundness preserved by the existing Reduce oracle + exact witness
+verification. Bonus: unbounded-below cases (saddle) now report `-Infinity` instead of
+declining. Scope: unconstrained, 2-var within the CAD's regime; constrained /
+non-attained / 3-var remain safe declines.
