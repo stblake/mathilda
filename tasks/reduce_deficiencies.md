@@ -1,5 +1,41 @@
 # Reduce / CAD / QE deficiencies — seed for a future dev campaign
 
+## Campaign outcome (v0.319–v0.322) — most of this is now DONE
+A campaign landed four of the six items. Status:
+- **D1 + D2 — CLOSED (v0.319).** These were NOT a "fast-give-up vs route-through-QE"
+  problem; they were ONE root-cause correctness bug: 2-arg `Reduce[expr, Reals]`
+  (and the 1-arg form) misparsed the domain symbol as a *variable*. Fixed by
+  inferring the free variables and recognising a domain symbol in the last slot —
+  so the 2-arg form now runs the already-correct 3-arg engine (the D2 emptiness case
+  decides `False` directly; no `Exists`-QE routing needed).
+- **D6 — CLOSED (v0.320).** CAD is now preemptible by `TimeConstrained` via a
+  non-jumping `tc_deadline_passed()` polled at every CAD loop head, clean-returning
+  NULL (leak-free) on an expired deadline.
+- **D3 — PARTIALLY CLOSED (v0.321).** The QE seam now shares the Phase-6e
+  well-orientedness augment-retry with plain Reduce (it was strictly more fragile).
+  This does NOT move #28/#36 — they are walled by the qqbar algebraic-degree cap /
+  projection blow-up, NOT by nullification (see "remaining" below).
+- **D5 — CLOSED (v0.322).** New `reduce_sos.c`: an exact rational SOS/Positivstellensatz
+  emptiness certificate (numeric SDP guide + exact rational rounding + LDL^T verify,
+  with facial reduction for the interior-zero case). #34 and #40 now decide `False`;
+  `Minimize` picks them up via `mz_entails`.
+
+### Still open (the real frontier)
+- **D3 full — universal QE over a continuum** (`Reduce[ForAll[{vars}, Implies[cons,
+  f>=b]], {b}, Reals]`) for n>=3 / degree>=3 (#28, #36). Blocked by the qqbar
+  algebraic-degree cap and McCallum projection blow-up, not nullification. Needs a
+  higher CAD ceiling or a parametric-SOS (the SOS engine proves emptiness of a
+  decision region, not a universally-quantified bound over a continuum).
+- **D4 — `Max`/`Abs` under a quantifier** (#33): now a clean decline under D6 rather
+  than an abort, but still unsolved (epigraph still defeats the QE).
+- **D5 beyond the simplex**: the SOS certifier handles linear equality constraints
+  (eliminated by substitution) and interior rational zeros. Non-polytope regions,
+  nonlinear equalities, and irrational zeros still decline (soundly).
+
+---
+
+## Original seed (below) — kept for reference
+
 Surfaced while landing the `Minimize` campaign II (v0.313–v0.318). Every item
 below is **verified at the REPL** and is the reason a specific `Minimize` example
 stays declined or slow. Fixing these in `src/solve/` (`reduce_cad.c`,
