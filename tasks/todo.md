@@ -17,9 +17,11 @@ Full campaign: M1 + M2 + M3 + D5a + D5b. Land in order; each a tagged commit.
 - [x] fixed latent ifun-suppress leak across TC abort (tc_run_guarded saves/restores ifun depth)
 - [x] test_timeconstrained_preempt added (410 pass); corpus 174/174; groebner/core tests pass; bump v0.320
 
-## M3 — QE Phase-6e augment-retry  (partial D3)  → v0.321
-- [ ] extract `cad_build_augmented`; rewire reduce_cad_nvar + reduce_cad_qe
-- [ ] #28/#36 resolve; QE corpus unchanged; valgrind; tests; bump/tag
+## M3 — QE Phase-6e augment-retry  (partial D3)  → v0.321 ✅ DONE
+- [x] extracted `cad_build_augmented`; rewired reduce_cad_nvar + reduce_cad_qe
+- [x] no regression (410 tests, corpus 174/174, parametric QE works); leak-neutral (A/B valgrind)
+- [NOTE] #28/#36 NOT unblocked — walled by qqbar degree cap / projection, not nullification.
+        That wall is the D5 / further-D3 frontier (SOS certificate).
 
 ## D5a — Handelman exact-LP emptiness certificate  → v0.322
 - [ ] reduce_sos.{c,h}; refutation reduction; GBPoly + ideal reduction

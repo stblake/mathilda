@@ -1304,6 +1304,63 @@ static Expr* cad_region_expr(CADRegion* R, Expr** vv, int d, bool merge,
     return out;
 }
 
+/* Phase 6e well-orientedness: build the CAD tree, and on a positive-dimensional
+ * fibre nullification augment the projection (add the offending factor's
+ * coefficients w.r.t. its fibre variable to the level below, re-derive the lower
+ * stack) and retry.  The common case never nullifies, so it runs exactly one
+ * round and returns the same `root` a single cad_build would.  Bounded to a few
+ * rounds; a nullification that persists declines soundly (NULL).
+ *
+ * Shared by BOTH drivers (reduce_cad_nvar and the QE seam reduce_cad_qe): the
+ * augmentation is pure level-index arithmetic, so it is correct for the QE
+ * free-outermost variable layout too.  Owns the NullReport and the per-round
+ * cache (caches[]/caches_bad[], pre-sized to `d` by the caller): on SUCCESS the
+ * winning generation's caches are left populated for the caller's teardown to
+ * free; on DECLINE every generation's caches are freed and the slots NULLed (so
+ * the caller's `if (caches[i])` teardown no-ops), and nz.poly is freed on every
+ * exit.  `pstack` is the caller's, mutated in place and freed by the caller. */
+static CADRegion* cad_build_augmented(const RForm* F, Expr** vv, int d,
+                                      Expr** asg, Expr** asgdef, PolySet* pstack,
+                                      Expr*** caches, char** caches_bad) {
+    NullReport nz = { NULL, 0, false };
+    for (int round = 0; ; round++) {
+        for (int i = 0; i < d; i++) {
+            caches[i]     = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(Expr*)) : NULL;
+            caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
+        }
+        nz.hit = false;
+        CADRegion* root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad, &nz);
+        if (root) return root;                            /* success: caller frees caches */
+
+        /* free this generation's caches (sized to the current pstack) */
+        for (int i = 0; i < d; i++) {
+            if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); caches[i] = NULL; }
+            free(caches_bad[i]); caches_bad[i] = NULL;
+        }
+        if (!nz.hit || round >= 4) { if (nz.poly) expr_free(nz.poly); return NULL; }  /* hard decline / budget */
+        int tgt = nz.level - 1;                           /* level to refine */
+        if (tgt < 0) { expr_free(nz.poly); return NULL; }
+        /* add every coefficient of the nullified factor in vv[nz.level] to
+         * pstack[tgt] (the leading one already there dedups away). */
+        int dc = degree_in(nz.poly, vv[nz.level]);
+        bool aug_ok = true;
+        for (int k = 0; k <= dc && aug_ok; k++) {
+            Expr* co = eval_and_free(mkfun3(SYM_Coefficient, expr_copy(nz.poly),
+                                            expr_copy(vv[nz.level]), expr_new_integer(k)));
+            aug_ok = add_proj(co, &pstack[tgt].p, &pstack[tgt].n, &pstack[tgt].cap);
+            expr_free(co);
+        }
+        expr_free(nz.poly); nz.poly = NULL;
+        if (!aug_ok) return NULL;
+        /* re-derive pstack[tgt-1 .. 0] from the augmented level */
+        for (int k = tgt; k >= 1; k--) {
+            polyset_free(&pstack[k - 1]);
+            pstack[k - 1].p = NULL; pstack[k - 1].n = 0; pstack[k - 1].cap = 0;
+            if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) return NULL;
+        }
+    }
+}
+
 /* Driver for nu>=3 effective variables (vv[0..d-1] in the given order). */
 static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     PolySet* pstack = calloc((size_t)d, sizeof(PolySet));
@@ -1313,7 +1370,6 @@ static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     char** caches_bad = calloc((size_t)d, sizeof(char*));
     CADRegion* root = NULL;
     Expr* out = NULL;
-    NullReport nz = { NULL, 0, false };
 
     /* Gate + basis (pstack[d-1]): every atom a d-variate polynomial relation,
      * factored into the distinct-irreducible squarefree basis. */
@@ -1333,53 +1389,14 @@ static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     for (int k = d - 1; k >= 1; k--)
         if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) goto done;
 
-    /* Phase 6e: build, and on a positive-dimensional fibre nullification augment
-     * the projection (add the offending factor's coefficients w.r.t. its fibre
-     * variable to the level below, re-derive the lower stack) and retry.  The
-     * common case never nullifies, so it runs exactly one round.  Bounded by
-     * MAX_AUG; a nullification that persists declines soundly. */
-    for (int round = 0; ; round++) {
-        for (int i = 0; i < d; i++) {
-            caches[i]     = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(Expr*)) : NULL;
-            caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
-        }
-        nz.hit = false;
-        root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad, &nz);
-        if (root) break;                                  /* success */
-
-        /* free this generation's caches (sized to the current pstack) */
-        for (int i = 0; i < d; i++) {
-            if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); caches[i] = NULL; }
-            free(caches_bad[i]); caches_bad[i] = NULL;
-        }
-        if (!nz.hit || round >= 4) goto done;             /* hard decline / budget */
-        int tgt = nz.level - 1;                            /* level to refine */
-        if (tgt < 0) { expr_free(nz.poly); nz.poly = NULL; goto done; }
-        /* add every coefficient of the nullified factor in vv[nz.level] to
-         * pstack[tgt] (the leading one already there dedups away). */
-        int dc = degree_in(nz.poly, vv[nz.level]);
-        bool aug_ok = true;
-        for (int k = 0; k <= dc && aug_ok; k++) {
-            Expr* co = eval_and_free(mkfun3(SYM_Coefficient, expr_copy(nz.poly),
-                                            expr_copy(vv[nz.level]), expr_new_integer(k)));
-            aug_ok = add_proj(co, &pstack[tgt].p, &pstack[tgt].n, &pstack[tgt].cap);
-            expr_free(co);
-        }
-        expr_free(nz.poly); nz.poly = NULL;
-        if (!aug_ok) goto done;
-        /* re-derive pstack[tgt-1 .. 0] from the augmented level */
-        for (int k = tgt; k >= 1; k--) {
-            polyset_free(&pstack[k - 1]);
-            pstack[k - 1].p = NULL; pstack[k - 1].n = 0; pstack[k - 1].cap = 0;
-            if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) goto done;
-        }
-    }
+    /* Phase 6e build with well-orientedness augment-and-retry (shared helper). */
+    root = cad_build_augmented(F, vv, d, asg, asgdef, pstack, caches, caches_bad);
+    if (!root) goto done;
 
     out = cad_region_expr(root, vv, d, true, NULL, NULL, 0);
     out = eval_and_free(out);
 
 done:
-    if (nz.poly) expr_free(nz.poly);
     cad_region_free(root);
     for (int i = 0; i < d; i++) {
         if (caches[i]) { for (int j = 0; j < pstack[i].n; j++) if (caches[i][j]) expr_free(caches[i][j]); free(caches[i]); }
@@ -1514,12 +1531,12 @@ Expr* reduce_cad_qe(const RForm* F, Expr** freevars, int nfree,
     for (int k = d - 1; k >= 1; k--)
         if (!cad_project_out(&pstack[k], vv[k], &pstack[k - 1])) goto done;
 
-    for (int i = 0; i < d; i++) {
-        caches[i]     = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(Expr*)) : NULL;
-        caches_bad[i] = pstack[i].n ? calloc((size_t)pstack[i].n, sizeof(char)) : NULL;
-    }
-
-    root = cad_build(F, vv, d, 0, asg, asgdef, true, pstack, caches, caches_bad, NULL);  /* QE: no 6e augmentation */
+    /* Phase 6e build with well-orientedness augment-and-retry -- the SAME shared
+     * helper the plain-Reduce driver uses.  QE used to call cad_build once with
+     * no augmentation and so declined instantly on any positive-dimensional
+     * nullification; the free-outermost layout needs no special case because the
+     * augmentation is pure level-index arithmetic. */
+    root = cad_build_augmented(F, vv, d, asg, asgdef, pstack, caches, caches_bad);
     if (!root) goto done;
 
     /* Emit over the free-variable subspace; qe_region_expr COPIES the breakpoints,
