@@ -219,14 +219,19 @@ Out[8]= True
   drops the integer-digit penalty.
 - **`TransformationFunctions`** (default `Automatic`) — the functions applied to
   try to transform parts of `expr` (see [TransformationFunctions](#transformationfunctions)).
-- **`TimeConstraint`** (default `Infinity`) — a **per-sub-expression** wall-clock
-  budget in seconds. When the heuristic search for a sub-expression exceeds it,
-  the best form found so far for that sub-expression is returned instead of
-  continuing; sibling sub-expressions each get their own fresh budget (this is
-  *not* a single top-level bound). It is a synchronous check between search
-  steps, so it fails gracefully with no memory leak, but it does not interrupt a
-  single long-running kernel call. A list `{tLoc, ...}` uses `tLoc` as the
-  per-sub-expression budget. `Infinity` (the default) imposes no limit.
+- **`TimeConstraint`** (default `Infinity`) — a wall-clock budget in seconds.
+  A scalar `t` bounds the **whole call**: the budget is honoured on every path —
+  the heuristic search, the specialised rational/polynomial/log-exp pipelines
+  (including the SHAPE_RATIONAL input that dispatches straight to a pipeline),
+  the bottom-up descent, and the seed phase — so the entire `Simplify[expr, …]`
+  returns the best form found so far once `t` is exhausted. A list
+  `{tLoc, tTot}` additionally caps each individual sub-expression's search at
+  `tLoc` while the whole call is capped at `tTot` (matching `FullSimplify`); a
+  one-element `{tLoc}` sets the per-sub-expression budget only. The check is
+  synchronous between search steps, so it fails gracefully with no memory leak,
+  but it does **not** interrupt a single long-running kernel call mid-flight (a
+  pathological single `Together`/`Factor` is instead bounded by the poly engine's
+  own degree/size guards). `Infinity` (the default) imposes no limit.
 
 ```mathematica
 In[1]:= Simplify[1/(x - 1) + 1/(1 - x), TransformationFunctions -> {Together}]

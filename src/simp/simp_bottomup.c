@@ -133,6 +133,11 @@ Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
                            int depth) {
     if (!input) return NULL;
 
+    /* Whole-call TimeConstraint: bail with this subtree unchanged if the
+     * deadline has passed. Placed at the top of the recursive driver, so a
+     * single check bounds the entire descent -- every child re-enters here. */
+    if (simp_deadline_expired()) return expr_copy((Expr*)input);
+
     /* Atoms have no children. Without active assumptions every transform
      * is a no-op on a bare atom, so skip the entire candidate-set search
      * and return a copy. (assume_ctx_from_expr always returns non-NULL

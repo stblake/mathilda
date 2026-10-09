@@ -83,6 +83,19 @@ double simp_mono_seconds(void);
 double simp_current_time_budget(void);
 void   simp_set_time_budget(double seconds);
 
+/* Whole-call absolute TimeConstraint deadline (monotonic seconds; HUGE_VAL =
+ * no limit). Armed once by builtin_simplify and honoured on every heavy path
+ * (simp_dispatch, the pipelines, the bottom-up descent, the seed phase and the
+ * round loop), so a user-set budget bounds the ENTIRE call -- not just the
+ * round loop -- and the SHAPE_RATIONAL input that routes straight to
+ * simp_dispatch is covered too. simp_arm_call_deadline takes a relative budget
+ * and never relaxes an outer deadline; simp_set_call_deadline is the plain
+ * setter used for save/restore. Defined in simp_search.c. */
+double simp_call_deadline(void);
+void   simp_set_call_deadline(double abs_deadline);
+void   simp_arm_call_deadline(double seconds);
+bool   simp_deadline_expired(void);
+
 /* ------------------------------------------------------------------ */
 /* simp_assume.c -- cross-module helpers used by several rewriters     */
 /* ------------------------------------------------------------------ */

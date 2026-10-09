@@ -141,9 +141,9 @@ int main(void) {
     alarm(0);
 
     /* ------------------------------------------------------------------ */
-    /* Termination battery: 24 radical/rationalisation inputs that route   */
+    /* Termination battery: radical/rationalisation inputs that route      */
     /* through the Factor/pseudo_rem path. Bases a,b,c,u,v,w sort BEFORE x  */
-    /* (the actual trigger); y,z sort after. Each must finish under 5 s.    */
+    /* (the actual trigger); y,z sort after. Each forks under a 10 s bound. */
     /* ------------------------------------------------------------------ */
     const char* battery[] = {
         "Simplify[(x+Sqrt[u]) u^(-1/2)]",              /* the reported case */
@@ -261,6 +261,19 @@ int main(void) {
      * we only assert termination + non-abort. */
     expect_terminates("Simplify[(x+Sqrt[u]) u^(-1/2), TimeConstraint -> 0.0001]", 5);
     check_not_aborted("Simplify[(x+Sqrt[u]) u^(-1/2), TimeConstraint -> 0.0001]");
+
+    /* Whole-call {tLoc, tTot} form: the second element is now honoured as a
+     * total wall-clock cap for the entire Simplify call (previously discarded),
+     * matching FullSimplify's {tLoc, tTot}. A generous budget is transparent... */
+    check_eq("Simplify[(x+Sqrt[u]) u^(-1/2), TimeConstraint -> {5, 5}]",
+             "1 + x/Sqrt[u]");
+    /* ...and a tiny one bails gracefully, same as the scalar form. */
+    expect_terminates("Simplify[(x+Sqrt[u]) u^(-1/2), TimeConstraint -> {0.0001, 0.0001}]", 5);
+    check_not_aborted("Simplify[(x+Sqrt[u]) u^(-1/2), TimeConstraint -> {0.0001, 0.0001}]");
+    /* The whole-call deadline now also covers the SHAPE_RATIONAL dispatch path
+     * (previously bypassed simp_search's local window entirely): the option is
+     * accepted and the easy rational input still returns its canonical form. */
+    check_eq("Simplify[(x^2 - 1)/(x - 1), TimeConstraint -> 2]", "1 + x");
 
     if (failures) {
         fprintf(stderr, "\n%d Simplify-hang test(s) FAILED\n", failures);

@@ -79,6 +79,52 @@ static double g_simp_time_budget = HUGE_VAL;
 double simp_current_time_budget(void) { return g_simp_time_budget; }
 void   simp_set_time_budget(double seconds) { g_simp_time_budget = seconds; }
 
+/* Whole-call absolute deadline in monotonic seconds; HUGE_VAL == no limit.
+ * Unlike the per-subexpression budget above (which simp_search re-arms as a
+ * LOCAL window on every call, so a bottom-up walk of N nodes can cost up to
+ * N*budget), this is a single absolute instant armed ONCE by builtin_simplify
+ * and honoured on every heavy path -- simp_dispatch, the specialised pipelines,
+ * the bottom-up descent, the seed phase and the round loop. It is what makes a
+ * user-set TimeConstraint bound the ENTIRE call, including the SHAPE_RATIONAL
+ * input that routes straight to simp_dispatch and never touches simp_search's
+ * local window. Dynamically scoped: builtin_simplify saves the current value,
+ * tightens it for its own work, and restores it, so nested Simplify calls can
+ * only ever shorten (never relax) an outer deadline. */
+static double g_simp_call_deadline = HUGE_VAL;
+
+double simp_call_deadline(void) { return g_simp_call_deadline; }
+void   simp_set_call_deadline(double abs_deadline) {
+    g_simp_call_deadline = abs_deadline;
+}
+/* Arm from a RELATIVE budget (seconds from now), never relaxing an outer
+ * deadline already in force (the tighter of the two wins). */
+void simp_arm_call_deadline(double seconds) {
+    if (seconds > 0.0 && seconds < HUGE_VAL) {
+        double d = simp_mono_seconds() + seconds;
+        if (d < g_simp_call_deadline) g_simp_call_deadline = d;
+    }
+}
+bool simp_deadline_expired(void) {
+    return g_simp_call_deadline < HUGE_VAL &&
+           simp_mono_seconds() > g_simp_call_deadline;
+}
+
+/* Combined test used inside simp_search: expired if EITHER the local
+ * per-subexpression window (passed in) OR the whole-call deadline has passed.
+ * Reads the clock at most once. */
+static bool simp_past_deadline(double local_deadline) {
+    double now = -1.0;
+    if (local_deadline < HUGE_VAL) {
+        now = simp_mono_seconds();
+        if (now > local_deadline) return true;
+    }
+    if (g_simp_call_deadline < HUGE_VAL) {
+        if (now < 0.0) now = simp_mono_seconds();
+        if (now > g_simp_call_deadline) return true;
+    }
+    return false;
+}
+
 static const char* SIMP_TRANSFORMS[] = {
     "Together",
     "Cancel",
@@ -306,13 +352,42 @@ bool transform_can_fire(const char* name, const Expr* e,
 /* Score a candidate; if it beats the running best, replace best. The
  * candidate `c` is *borrowed* (caller still owns the source); `best` is
  * a slot the caller manages. */
-static void update_best(Expr** best, size_t* best_score, const Expr* c,
-                        const Expr* complexity_func) {
-    size_t s = score_with_func(c, complexity_func);
+/* Replace `best` with a copy of `c` when the PRE-COMPUTED score `s` beats the
+ * running best. Lets a caller that has already scored `c` (the common case in
+ * the round loop, where the same candidate is also tested against the parent
+ * score and a blow-up bound) avoid re-scoring it -- scoring is O(nodes) for the
+ * native scorer and a full evaluate() under a custom ComplexityFunction. */
+static void update_best_scored(Expr** best, size_t* best_score, const Expr* c,
+                               size_t s) {
     if (s < *best_score) {
         expr_free(*best);
         *best = expr_copy((Expr*)c);
         *best_score = s;
+    }
+}
+
+static void update_best(Expr** best, size_t* best_score, const Expr* c,
+                        const Expr* complexity_func) {
+    update_best_scored(best, best_score, c, score_with_func(c, complexity_func));
+}
+
+/* The common per-candidate-extra idiom in the round loop: score `x` once, let
+ * it update `best`, then keep it as a next-round seed unless it is unchanged
+ * from `seed` or scores strictly worse than the parent. Takes ownership of `x`
+ * (NULL tolerated). Folds five near-identical blocks (TrigRoundtrip,
+ * PythagSquareComplete, PythagReduce, HalfAngle, Radicals) into one call site
+ * and scores each candidate ONCE instead of twice. Behaviour is identical to
+ * the inlined `if eq free; else if score>parent free; else adopt`. */
+static void consider_candidate(Expr* x, const Expr* seed, size_t parent_score,
+                               CandSet* next, Expr** best, size_t* best_score,
+                               const Expr* complexity_func) {
+    if (!x) return;
+    size_t s = score_with_func(x, complexity_func);
+    update_best_scored(best, best_score, x, s);
+    if (expr_eq(x, seed) || s > parent_score) {
+        expr_free(x);
+    } else {
+        cs_add_or_free(next, x);
     }
 }
 
@@ -535,6 +610,7 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
                                       const AssumeCtx* ctx,
                                       const Expr* complexity_func) {
     (void)ctx;
+    if (simp_deadline_expired()) return expr_copy((Expr*)input);
     Expr* best = expr_copy((Expr*)input);
     size_t bs = score_with_func(best, complexity_func);
 
@@ -585,6 +661,7 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
 static Expr* simp_pipeline_rational(const Expr* input,
                                     const AssumeCtx* ctx,
                                     const Expr* complexity_func) {
+    if (simp_deadline_expired()) return expr_copy((Expr*)input);
     Expr* best = expr_copy((Expr*)input);
     size_t bs = score_with_func(best, complexity_func);
 
@@ -693,6 +770,7 @@ static Expr* simp_pipeline_rational(const Expr* input,
 static Expr* simp_pipeline_logexp(const Expr* input,
                                   const AssumeCtx* ctx,
                                   const Expr* complexity_func) {
+    if (simp_deadline_expired()) return expr_copy((Expr*)input);
     Expr* best = expr_copy((Expr*)input);
     size_t bs = score_with_func(best, complexity_func);
 
@@ -1130,6 +1208,11 @@ static Expr* simp_split_multiplicative(const Expr* input,
  * domain, and general inputs need the full machinery. */
 Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                            const Expr* complexity_func) {
+    /* Whole-call TimeConstraint: bail with the input unchanged if the deadline
+     * has passed. This is the one check that covers the SHAPE_RATIONAL input
+     * routed straight here from builtin_simplify (bypassing simp_search's local
+     * window) and every recursive dispatch below. */
+    if (simp_deadline_expired()) return expr_copy((Expr*)input);
     /* Universal Power-identity seeds: PrimeRebase and PowerOneify are
      * cheap, inert-by-default rewrites that benefit every pipeline
      * (POLYNOMIAL, RATIONAL, LOGEXP, TRIG, GENERAL alike).  Both are
@@ -1637,6 +1720,14 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         }
     }
 
+    /* TimeConstraint checkpoint, mid seed phase: the radical machinery that
+     * follows (Radicals, DenestSqrt, Cuberoot, Algebraic, Factorial) is the
+     * most expensive cluster of seed transforms, so bail here with the
+     * best-so-far (set by the cheaper seeds above) rather than entering it on
+     * an already-exhausted budget. */
+    if (simp_past_deadline(simp_deadline))
+        goto search_done;
+
     /* Radical product seed: collapses Sqrt[a]*Sqrt[b] -> Sqrt[a*b] for
      * positive integer a, b (and similarly for higher rational
      * exponents).  Inert on inputs without Power[+integer, Rational]
@@ -1838,15 +1929,17 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
      * they propagate as a new seed.
      */
     for (int round = 0; round < SIMP_ROUNDS; round++) {
-        /* TimeConstraint checkpoint: bail with the best-so-far if this
-         * subexpression's search has exhausted its budget (covers a slow
-         * seed phase too, since this runs before round 0's work). */
-        if (simp_deadline < HUGE_VAL && simp_mono_seconds() > simp_deadline)
+        /* TimeConstraint checkpoint: bail with the best-so-far if EITHER this
+         * subexpression's LOCAL budget OR the whole-call deadline has passed
+         * (covers a slow seed phase too, since this runs before round 0's
+         * work -- but the seed phase also checks between its heavy transforms
+         * so a single slow seed can bail before the round loop is reached). */
+        if (simp_past_deadline(simp_deadline))
             goto search_done;
         CandSet next;
         cs_init(&next);
         for (size_t i = 0; i < seeds.count; i++) {
-            if (simp_deadline < HUGE_VAL && simp_mono_seconds() > simp_deadline) {
+            if (simp_past_deadline(simp_deadline)) {
                 cs_free(&next);
                 goto search_done;
             }
@@ -1857,7 +1950,11 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                 if (!transform_can_fire(SIMP_TRANSFORMS[t], seed, ctx)) continue;
                 Expr* r = traced_call_unary(SIMP_TRANSFORMS[t], seed);
                 if (!r) continue;
-                update_best(&best, &best_score, r, complexity_func);
+                /* Score r ONCE; reused below for update_best, the propagation
+                 * gate, and the TrigExpand blow-up bound (r is not mutated by
+                 * the const chained passes in between). */
+                size_t rs = score_with_func(r, complexity_func);
+                update_best_scored(&best, &best_score, r, rs);
                 /* Chain a PythagReduce pass on the transform output so a
                  * candidate produced in the final round (e.g. FactorSquareFree
                  * surfacing Cos[x]^2 - 1 inside a product) still gets the
@@ -1911,7 +2008,7 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                 }
                 if (expr_eq(r, seed)) {
                     expr_free(r);
-                } else if (score_with_func(r, complexity_func) > parent_score) {
+                } else if (rs > parent_score) {
                     /* TrigExpand expands Sin[a+b]/Cos[a+b] into
                      * Sin[a]Cos[b]+Cos[a]Sin[b] etc., which usually grows
                      * the leaf count but surfaces radical products
@@ -1924,8 +2021,7 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                      * pathological blow-ups (Sin[a+b+c+d]) still get
                      * pruned. */
                     if (strcmp(SIMP_TRANSFORMS[t], "TrigExpand") == 0 &&
-                        score_with_func(r, complexity_func) <=
-                            2 * parent_score + 8) {
+                        rs <= 2 * parent_score + 8) {
                         cs_add_or_free(&next, r);
                     } else {
                         expr_free(r);
@@ -1936,83 +2032,35 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
             }
             /* Also try the trig roundtrip on each candidate. */
             if (transform_can_fire("TrigRoundtrip", seed, NULL)) {
-                Expr* tr = transform_trig_roundtrip(seed);
-                if (tr) {
-                    update_best(&best, &best_score, tr, complexity_func);
-                    if (expr_eq(tr, seed)) {
-                        expr_free(tr);
-                    } else if (score_with_func(tr, complexity_func) > parent_score) {
-                        expr_free(tr);
-                    } else {
-                        cs_add_or_free(&next, tr);
-                    }
-                }
+                consider_candidate(transform_trig_roundtrip(seed), seed,
+                                   parent_score, &next, &best, &best_score,
+                                   complexity_func);
             }
             /* Pythagorean square completion on each candidate. The Factor
              * transform run earlier may have produced (1 + 2 Sin Cos)^2;
              * this round step lets the rule fire on that intermediate. */
-            {
-                Expr* psc = transform_pythag_square_complete(seed);
-                if (psc) {
-                    update_best(&best, &best_score, psc, complexity_func);
-                    if (expr_eq(psc, seed)) {
-                        expr_free(psc);
-                    } else if (score_with_func(psc, complexity_func) > parent_score) {
-                        expr_free(psc);
-                    } else {
-                        cs_add_or_free(&next, psc);
-                    }
-                }
-            }
+            consider_candidate(transform_pythag_square_complete(seed), seed,
+                               parent_score, &next, &best, &best_score,
+                               complexity_func);
             /* Pythagorean reduction on each candidate (1 - Cos^2 -> Sin^2,
              * Cosh^2 - 1 -> Sinh^2, etc.). Strict leaf-count win when
              * matched. */
-            {
-                Expr* pr = transform_pythag_reduce(seed);
-                if (pr) {
-                    update_best(&best, &best_score, pr, complexity_func);
-                    if (expr_eq(pr, seed)) {
-                        expr_free(pr);
-                    } else if (score_with_func(pr, complexity_func) > parent_score) {
-                        expr_free(pr);
-                    } else {
-                        cs_add_or_free(&next, pr);
-                    }
-                }
-            }
+            consider_candidate(transform_pythag_reduce(seed), seed,
+                               parent_score, &next, &best, &best_score,
+                               complexity_func);
             /* Half-angle tangent / Tanh on each candidate. Lets Together
              * /Cancel intermediates (which can surface (1+Cos[x]) or
              * (1+Cosh[x]) factors after partial cancellation) feed into
              * the rule. */
-            {
-                Expr* ha = transform_halfangle(seed);
-                if (ha) {
-                    update_best(&best, &best_score, ha, complexity_func);
-                    if (expr_eq(ha, seed)) {
-                        expr_free(ha);
-                    } else if (score_with_func(ha, complexity_func) > parent_score) {
-                        expr_free(ha);
-                    } else {
-                        cs_add_or_free(&next, ha);
-                    }
-                }
-            }
+            consider_candidate(transform_halfangle(seed), seed,
+                               parent_score, &next, &best, &best_score,
+                               complexity_func);
             /* Radical product combine on each candidate. Together /
              * Cancel can surface fresh Sqrt[a]*Sqrt[b] products in their
              * output; this lets the combine fire on the intermediate. */
-            {
-                Expr* rd = simp_radicals(seed);
-                if (rd) {
-                    update_best(&best, &best_score, rd, complexity_func);
-                    if (expr_eq(rd, seed)) {
-                        expr_free(rd);
-                    } else if (score_with_func(rd, complexity_func) > parent_score) {
-                        expr_free(rd);
-                    } else {
-                        cs_add_or_free(&next, rd);
-                    }
-                }
-            }
+            consider_candidate(simp_radicals(seed), seed,
+                               parent_score, &next, &best, &best_score,
+                               complexity_func);
             /* Common-factor lift not applied per-candidate -- see comment
              * in seed phase above and the final-form polish in
              * builtin_simplify. */

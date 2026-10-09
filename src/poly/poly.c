@@ -4551,9 +4551,24 @@ Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x) {
     int iters = 0;
     Expr* R = expandedA;
 
+    /* Termination guard -- mirror pseudo_rem / exact_poly_div. A well-formed  */
+    /* pseudo-division step strictly decreases the degree of R in x (the       */
+    /* leading term cancels). If it ever fails to strictly decrease, the       */
+    /* generators are algebraically dependent (e.g. Sqrt[u] and u), so         */
+    /* get_coeff_expanded cannot extract a true leading coefficient, the       */
+    /* leading term never cancels, and the classic loop spins forever          */
+    /* re-expanding an ever-growing R. Break and hand the non-reduced R back:   */
+    /* the Resultant / Subresultant callers budget-check the degree between     */
+    /* calls and reject a non-decreasing result. Inert for well-formed inputs.  */
+    int prev_degR = -1;   /* -1 = no previous iteration yet */
+    bool stalled = false;
+
     while (true) {
         int degR = get_degree_poly(R, x);
         if (degR < dB || is_zero_poly(R)) break;
+
+        if (prev_degR >= 0 && degR >= prev_degR) { stalled = true; break; }
+        prev_degR = degR;
 
         Expr* lcR = get_coeff_expanded(R, x, degR);
         int d = degR - dB;
@@ -4574,7 +4589,9 @@ Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x) {
 
     /* Pad with extra lc(B) multiplications when an iteration step      */
     /* dropped the remainder degree by more than 1 (so we exited early).*/
-    if (iters < expected_iters) {
+    /* Skip the padding on a stall break: R is non-reduced there and    */
+    /* padding would mis-scale it; the caller discards it regardless.   */
+    if (!stalled && iters < expected_iters) {
         Expr* pad_pow = internal_power(
             (Expr*[]){expr_copy(lcB),
                       expr_new_integer(expected_iters - iters)}, 2);
@@ -5350,11 +5367,24 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
     Expr* lc = get_coeff(exp_m, main_var, d);
     
     Expr* curr_poly = expr_expand(poly);
-    
+
+    /* Termination guard: a well-formed monomial reduction shrinks the        */
+    /* polynomial toward its normal form, but over algebraically-dependent    */
+    /* generators a step can fail to make progress and re-expand curr_poly    */
+    /* without bound (same class as the pseudo_rem / exact_poly_div stalls).   */
+    /* Bound both the working size and the iteration count -- generous, so     */
+    /* inert for well-formed inputs; trips only on the degenerate non-progress */
+    /* case, returning the best-effort partial reduction.                      */
+    int64_t size_budget = subres_leaf_count(curr_poly) * 4;
+    if (size_budget < 10000) size_budget = 10000;
+    size_t iter_guard = 0;
+
     bool changed = true;
     while (changed) {
         changed = false;
-        
+        if (++iter_guard > (size_t)size_budget ||
+            subres_leaf_count(curr_poly) > size_budget * 8) break;
+
         size_t t_count = 0;
         Expr** terms = NULL;
         if (curr_poly->type == EXPR_FUNCTION && curr_poly->data.function.head->data.symbol.name == SYM_Plus) {

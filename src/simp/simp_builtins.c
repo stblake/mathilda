@@ -648,10 +648,10 @@ static bool has_compound_radicand(const Expr* e) {
 /* Parse a TimeConstraint option value into a per-subexpression budget in
  * seconds. Accepts a machine-real number (Integer/Real/BigInt/Rational),
  * Infinity / DirectedInfinity[1] (-> no limit), and a list {tLoc, ...} whose
- * first element is the per-subexpression budget (matching FullSimplify's tLoc;
- * there is deliberately NO whole-expression cap, per the "not on the entire
- * expression at the top level" contract). Anything else, or a non-positive
- * value, yields HUGE_VAL == "no limit" so the default path stays inert. */
+ * first element is the per-subexpression budget (matching FullSimplify's tLoc).
+ * Anything else, or a non-positive value, yields HUGE_VAL == "no limit" so the
+ * default path stays inert. The WHOLE-CALL cap is parsed separately by
+ * simp_parse_total_budget. */
 static double simp_parse_time_budget(const Expr* e) {
     if (!e) return HUGE_VAL;
     if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity)
@@ -662,6 +662,34 @@ static double simp_parse_time_budget(const Expr* e) {
         if (h == SYM_DirectedInfinity) return HUGE_VAL;   /* +Infinity */
         if (h == SYM_List && e->data.function.arg_count >= 1)
             return simp_parse_time_budget(e->data.function.args[0]);
+    }
+    double v;
+    if (common_machine_real_value(e, &v) && v > 0.0) return v;
+    return HUGE_VAL;
+}
+
+/* Parse a TimeConstraint option value into a WHOLE-CALL budget in seconds
+ * (HUGE_VAL == no cap). This bounds the entire Simplify call, closing the gap
+ * where a user-set budget was previously ignored on the SHAPE_RATIONAL
+ * dispatch path and during bottom-up descent.
+ *   scalar t          -> t          (the intuitive "bound the call to ~t")
+ *   {tLoc, tTot, ...}  -> tTot       (power-user form; matches FullSimplify)
+ *   {t}                -> t          (single-element list, treated like scalar)
+ *   Infinity           -> HUGE_VAL   (no cap, the default)
+ * Keeping the scalar form as a whole-call cap is the Mathematica-aligned
+ * reading and what makes "guarantee termination" hold for a user-set budget. */
+static double simp_parse_total_budget(const Expr* e) {
+    if (!e) return HUGE_VAL;
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity)
+        return HUGE_VAL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_DirectedInfinity) return HUGE_VAL;   /* +Infinity */
+        if (h == SYM_List && e->data.function.arg_count >= 1) {
+            size_t idx = e->data.function.arg_count >= 2 ? 1 : 0;
+            return simp_parse_total_budget(e->data.function.args[idx]);
+        }
     }
     double v;
     if (common_machine_real_value(e, &v) && v > 0.0) return v;
@@ -719,6 +747,10 @@ Expr* builtin_simplify(Expr* res) {
 
     /* Per-subexpression wall-clock budget (HUGE_VAL == no limit, the default). */
     double time_budget = simp_parse_time_budget(opt_timeconstraint);
+    /* Whole-call wall-clock cap (HUGE_VAL == no cap). Bounds the ENTIRE call,
+     * so a user-set TimeConstraint is honoured on every path -- including the
+     * SHAPE_RATIONAL dispatch route that bypasses simp_search's local window. */
+    double time_total = simp_parse_total_budget(opt_timeconstraint);
 
     /* Resolve TransformationFunctions into (use_builtin, user_funcs[]).
      *   Automatic             -> built-in pipeline only (the default).
@@ -889,6 +921,10 @@ Expr* builtin_simplify(Expr* res) {
      * budget-neutral. */
     double saved_time_budget = simp_current_time_budget();
     simp_set_time_budget(time_budget);
+    /* Arm the whole-call deadline too (save for restore; arm never relaxes an
+     * outer deadline, so a nested Simplify can only tighten it). */
+    double saved_call_deadline = simp_call_deadline();
+    simp_arm_call_deadline(time_total);
 
     Expr* best = NULL;
     if (use_builtin) {
@@ -1157,7 +1193,8 @@ Expr* builtin_simplify(Expr* res) {
 
     simp_memo_free(&memo);
     assume_ctx_free(ctx);
-    simp_set_time_budget(saved_time_budget);   /* restore dynamic scope */
+    simp_set_time_budget(saved_time_budget);     /* restore dynamic scope */
+    simp_set_call_deadline(saved_call_deadline); /* restore whole-call deadline */
     return best;
 }
 
