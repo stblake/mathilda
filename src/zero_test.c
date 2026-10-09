@@ -903,6 +903,20 @@ static double nonzero_threshold(double scale, long p_bits) {
  * the catastrophic-cancellation false negatives (e.g. Gamma identities). */
 #define ZT_OBVIOUS_NONZERO_BITS 12
 
+/* Operand scale above which a machine-precision "obvious non-zero" is NO LONGER
+ * trusted directly (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).  When the operands are
+ * astronomically large, a (1 - near-1) subtraction inside Tanh/Cosh/... loses
+ * far more than the 52-bit mantissa, so the rung-0 residual of a genuine
+ * cancellation ZERO can be a large fraction of scale (ratio well above the 2^-12
+ * gate above) — indistinguishable at machine precision from a true non-zero.  A
+ * residual at or above this scale that trips the obvious gate is therefore sent
+ * to the full MPFR ladder (decide_numeric_huge_scale) rather than fast-rejected.
+ * Set well below the real cancellation cases (Weierstrass antiderivative terms
+ * are 2^50-2^73; the #5 reproducers 2^375+) so they are caught with margin,
+ * while ordinary-scale computations (< 2^40 ~ 1e12) keep the byte-for-byte
+ * unchanged machine fast path. */
+#define ZT_HUGE_SCALE_BITS 40
+
 /* Numericalize at the given precision, returning a freshly allocated
  * Expr*. spec.bits == 53 means machine; anything else uses MPFR (if
  * available). Returns NULL on failure or when MPFR is not compiled in
@@ -1123,11 +1137,49 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
     return ZERO_TEST_TRUE;
 }
 
+/* Huge-scale deep-cancellation decision (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).
+ * Reached only when the operand scale is huge (>= 2^ZT_HUGE_SCALE_BITS) AND the
+ * rung-0 residual tripped the obvious-non-zero gate — a situation machine
+ * precision CANNOT adjudicate, because a genuine cancellation zero and a genuine
+ * small non-zero leave the SAME large residual until the artifact clears many
+ * rungs up (empirically: Cosh[14]^30 - (1-Tanh[14]^2)^-15 and that + 1 are
+ * bit-identical through 500 bits; they diverge only at the 1000-bit rung).  So
+ * we do NOT early-exit on the first shrink (the deep-zero exit in decide_numeric
+ * would misfire here): we climb the FULL ladder and let the residual's own trend
+ * decide.
+ *   - On the first PLATEAU (residual stops falling by >2x), the genuine value
+ *     has resolved at this rung: trust the rung's floor verdict (`rr`).  A huge
+ *     non-zero with no cancellation plateaus immediately at rung 1 and rejects
+ *     after a single extra MPFR evaluation.
+ *   - If the residual keeps shrinking to the TOP rung, trust that rung, whose
+ *     floor (~scale * 2^-(1000-30)) is finally tight enough to tell a true small
+ *     value (which plateaus just below it) from zero (which has fallen far past
+ *     it).
+ *   - If MPFR is unavailable, keep the lenient machine verdict (TRUE) — the same
+ *     fallback decide_numeric uses, and never worse than HEAD's wrong FALSE. */
+static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
+                                                double scale) {
+    double prev = mag0;
+    ZeroTestResult rr = ZERO_TEST_TRUE;
+    for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
+        double m = 0.0;
+        /* Reuse the machine-precision operand scale (precision-independent). */
+        rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
+                           scale > 0.0 ? scale : -1.0, NULL);
+        if (rr == ZERO_TEST_UNKNOWN) return ZERO_TEST_TRUE;  /* MPFR gone: lenient */
+        if (m >= prev * 0.5) return rr;   /* plateaued: value resolved, trust rung */
+        prev = m;
+    }
+    return rr;   /* shrank to the top-rung floor: trust its verdict */
+}
+
 /* Numeric Stage 2.  Strategy:
  *   1. Machine precision. A residual that is a non-trivial fraction of the
  *      operand scale (above the ZT_OBVIOUS_NONZERO_BITS gate) cannot be
  *      rounding noise and settles FALSE immediately — the fast path for typical
- *      non-zeros. A smaller residual is AMBIGUOUS: it may be a true zero whose
+ *      non-zeros (EXCEPT at huge operand scale, where machine precision is
+ *      untrustworthy — see decide_numeric_huge_scale). A smaller residual is
+ *      AMBIGUOUS: it may be a true zero whose
  *      cancellation runs deeper than machine precision, so we climb rather than
  *      reject it here.
  *   2. Climb the precision ladder and decide on the SHRINKAGE TREND. A true
@@ -1144,6 +1196,14 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
     ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
                                      out_overflow);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
+
+    /* Huge-scale deep-cancellation guard (#5): at an astronomically large
+     * operand scale, a machine residual above the obvious gate may be a
+     * catastrophic-cancellation artifact rather than a genuine value, so the
+     * fast reject below is NOT sound here — climb the full ladder instead. */
+    if (scale > 0.0 && scale >= ldexp(1.0, ZT_HUGE_SCALE_BITS) &&
+        mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
+        return decide_numeric_huge_scale(e, mag, scale);
 
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
         return ZERO_TEST_FALSE;
@@ -1214,8 +1274,15 @@ static ZeroTestResult screen_point(const Expr* e, bool* out_overflow) {
     ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
                                      out_overflow);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
-    if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
+    if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS)) {
+        /* Huge-scale deep-cancellation guard (#5): at an astronomically large
+         * operand scale the machine FALSE may be a catastrophic-cancellation
+         * artifact.  Don't settle the screen on it — return UNKNOWN so sz_trial
+         * escalates this point to the full ladder (decide_numeric ->
+         * decide_numeric_huge_scale), which climbs MPFR to adjudicate. */
+        if (scale >= ldexp(1.0, ZT_HUGE_SCALE_BITS)) return ZERO_TEST_UNKNOWN;
         return ZERO_TEST_FALSE;
+    }
     return ZERO_TEST_TRUE;
 }
 

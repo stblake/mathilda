@@ -1086,6 +1086,43 @@ static void test_decline_undefined_head_unchanged(void) {
     assert_pzq("PossibleZeroQ[UndefinedZQHead[x^2] + 1]", "True");
 }
 
+/* Group 20 — huge-scale deep-cancellation false-negative
+ * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).  An identically-zero expression whose two
+ * terms are astronomically large (Cosh[x]^(2k) and (1 - Tanh[x]^2)^(-k) are
+ * equal since 1 - Tanh^2 = Sech^2 = 1/Cosh^2) defeats the machine-precision
+ * screen: the (1 - near-1) subtraction inside Tanh loses far more than the
+ * 52-bit mantissa, so the rung-0 residual is a large fraction of scale — above
+ * the ZT_OBVIOUS_NONZERO_BITS gate — and the old decide_numeric / screen_point
+ * settled a decisive FALSE without climbing (a WRONG answer).  The fix climbs
+ * the full MPFR ladder at huge scale (decide_numeric_huge_scale) and trusts the
+ * residual's shrink/plateau trend, so the cancellation collapses and the verdict
+ * is TRUE. */
+static void test_huge_cancel_zero_is_true(void) {
+    assert_pzq("PossibleZeroQ[Cosh[27/2]^20 - (1 - Tanh[27/2]^2)^(-10)]", "True");
+    assert_pzq("PossibleZeroQ[Cosh[14]^30 - (1 - Tanh[14]^2)^(-15)]", "True");
+    assert_pzq("PossibleZeroQ[Cosh[15]^40 - (1 - Tanh[15]^2)^(-20)]", "True");
+    assert_pzq("PossibleZeroQ[Cosh[16]^20 - (1 - Tanh[16]^2)^(-10)]", "True");
+}
+static void test_huge_cancel_verdict_stable(void) {
+    /* Deterministic: climbing the fixed ladder is a pure function of the input. */
+    assert_pzq_stable("PossibleZeroQ[Cosh[14]^30 - (1 - Tanh[14]^2)^(-15)]", "True", 8);
+}
+static void test_huge_cancel_genuine_nonzero_stays_false(void) {
+    /* A genuine small non-zero whose huge terms cancel to a constant: the +1 is
+     * masked by the machine artifact until ~1000 bits, where it resolves above
+     * the top-rung floor and the verdict is correctly FALSE (NOT a wrong True). */
+    assert_pzq("PossibleZeroQ[Cosh[14]^30 - (1 - Tanh[14]^2)^(-15) + 1]", "False");
+    /* A genuine HUGE non-zero with no cancellation (a SUM) plateaus at the first
+     * MPFR rung and rejects after a single extra evaluation. */
+    assert_pzq("PossibleZeroQ[Cosh[14]^30 + (1 - Tanh[14]^2)^(-15)]", "False");
+}
+static void test_huge_cancel_preserves_normal_identities(void) {
+    /* Moderate-scale hyperbolic identities (below the huge gate) are unchanged. */
+    assert_pzq("PossibleZeroQ[1/(1 - Tanh[x]^2) - Cosh[x]^2]", "True");
+    assert_pzq("PossibleZeroQ[Sech[x]^(-2) - Cosh[x]^2]", "True");
+    assert_pzq("PossibleZeroQ[Cosh[x]^2 - Sinh[x]^2 - 1]", "True");
+}
+
 /* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
@@ -1280,6 +1317,11 @@ int main(void) {
     TEST(test_decline_verdict_stable);
     TEST(test_decline_preserves_true_identity);
     TEST(test_decline_undefined_head_unchanged);
+    /* Group 20 — huge-scale deep-cancellation false-negative */
+    TEST(test_huge_cancel_zero_is_true);
+    TEST(test_huge_cancel_verdict_stable);
+    TEST(test_huge_cancel_genuine_nonzero_stays_false);
+    TEST(test_huge_cancel_preserves_normal_identities);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;
