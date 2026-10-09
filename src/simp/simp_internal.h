@@ -206,6 +206,10 @@ Expr* transform_radical_canon(const Expr* e);
 
 Expr* transform_tan_addition(const Expr* e);
 
+/* The complementary-angle inverse-trig identities ArcSin[u]+ArcCos[u],
+ * ArcTan[u]+ArcCot[u], ArcSec[u]+ArcCsc[u] -> Pi/2. */
+Expr* transform_invtrig_complement(const Expr* e);
+
 /* ------------------------------------------------------------------ */
 /* simp_logexp_abs.c                                                  */
 /* ------------------------------------------------------------------ */

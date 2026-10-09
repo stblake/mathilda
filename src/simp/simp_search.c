@@ -1434,6 +1434,25 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         if (qq_pre) { expr_free(qq_pre); qq_pre = NULL; }
     }
 
+    /* Phase 0e: inverse-trig complementary-angle collapse.  ArcSin[u]+
+     * ArcCos[u], ArcTan[u]+ArcCot[u], ArcSec[u]+ArcCsc[u] -> Pi/2 are
+     * unconditional identities that replace a variable-bearing pair with
+     * a constant.  Anchor the search on the collapsed form (as with the
+     * Abs / Sqrt[_^2] pre-passes) so it is not lost to the leaf-count
+     * tiebreak: Pi/2 scores 5 (the Rational[1,2] digit penalty), so a
+     * scored seed ties on the bare pair and loses outright once the input
+     * carries extra terms (the pair + y: Pi/2+y scores 7 > 6).  The
+     * transform is inert (returns an equal copy) on inputs with no
+     * complementary pair. */
+    Expr* invc_pre = transform_invtrig_complement(input);
+    if (invc_pre && !expr_eq(invc_pre, input)) {
+        if (simp_debug_enabled())
+            simp_debug_log("InvtrigComplement", input, invc_pre, 0.0);
+        input = invc_pre;
+    } else {
+        if (invc_pre) { expr_free(invc_pre); invc_pre = NULL; }
+    }
+
     Expr* best = expr_copy((Expr*)input);
     size_t best_score = score_with_func(best, complexity_func);
 
@@ -2181,6 +2200,7 @@ search_done:
     if (sqsq_pre) expr_free(sqsq_pre);
     if (rr_pre) expr_free(rr_pre);
     if (qq_pre) expr_free(qq_pre);
+    if (invc_pre) expr_free(invc_pre);
     return best;
 }
 

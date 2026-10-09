@@ -331,7 +331,12 @@ static Expr* transform_halfangle_impl(const Expr* e) {
             /* Hyperbolic: (Cosh - 1) / Sinh -> Tanh[x/2] */
             "  (-1 + Cosh[x_]) Power[Sinh[x_], -1] r___ :> Tanh[x/2] r, "
             "  (-1 + Cosh[x_])^a_ Sinh[x_]^b_ r___ "
-            "    /; a + b === 0 :> Tanh[x/2]^a r "
+            "    /; a + b === 0 :> Tanh[x/2]^a r, "
+            /* Reciprocal-difference half-angle: Coth - Csch = (Cosh-1)/Sinh =
+             * Tanh[x/2].  TrigReduce leaves (Cosh-1) Csch split into this form,
+             * so recognise it directly (both sign orders inside the Plus). */
+            "  Coth[x_] - Csch[x_] + r___ :> Tanh[x/2] + r, "
+            "  Csch[x_] - Coth[x_] + r___ :> -Tanh[x/2] + r "
             "}");
     }
     if (!rules) return NULL;

@@ -48,6 +48,17 @@ void test_simplify_cyclotomic(void) {
                    "(2 x)/(1 + x^2)", 0);
 }
 
+/* Exact products of trig at rational multiples of Pi (denominator past the
+ * src/trig.c table at 12) fold via the qqbar root-of-unity path. */
+void test_simplify_trig_rational_pi_products(void) {
+    assert_eval_eq("Simplify[Sin[Pi/14] Sin[3 Pi/14] Sin[5 Pi/14] - 1/8]", "0", 0);
+    assert_eval_eq("Simplify[Cos[Pi/7] Cos[2 Pi/7] Cos[3 Pi/7] - 1/8]", "0", 0);
+    assert_eval_eq("Simplify[Tan[Pi/7] Tan[2 Pi/7] Tan[3 Pi/7] - Sqrt[7]]", "0", 0);
+    /* Known small-denominator values still hold; a non-identity stays non-zero. */
+    assert_eval_eq("Simplify[Cos[Pi/5] - (1 + Sqrt[5])/4]", "0", 0);
+    assert_eval_eq("Simplify[Sin[Pi/7] - Cos[Pi/7]]", "-Sqrt[2] Sin[3/28 Pi]", 0);
+}
+
 /* ---- Trigonometric ---- */
 
 void test_simplify_pythagorean(void) {
@@ -1345,6 +1356,7 @@ int main(void) {
     TEST(test_simplify_tan_z_compound_angle_factorisation);
     TEST(test_simplify_sqrt_half_sin_y_combination);
     TEST(test_simplify_cyclotomic);
+    TEST(test_simplify_trig_rational_pi_products);
 
     printf("All Simplify tests passed!\n");
     return 0;

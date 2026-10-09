@@ -19,6 +19,7 @@
 #include "qa.h"
 #include "qafactor.h"
 #include "simp_log.h"
+#include "flint_qqbar.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -696,6 +697,173 @@ static double simp_parse_total_budget(const Expr* e) {
     return HUGE_VAL;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Inverse-trig rational-angle combination zero test (Machin-like)          */
+/* ----------------------------------------------------------------------- */
+
+typedef enum { IA_ATAN, IA_ASIN, IA_ACOS } IAKind;
+
+/* Build e^{i * invtrig[a]} as an UNEVALUATED constant-algebraic Expr (so the
+ * Complex[0,1] and Sqrt structure survives for to_qqbar):
+ *   e^{i ArcTan a} = (1 + i a) / Sqrt[1 + a^2]
+ *   e^{i ArcSin a} = Sqrt[1 - a^2] + i a
+ *   e^{i ArcCos a} = a + i Sqrt[1 - a^2]
+ * matching the principal branches (ArcTan,ArcSin in (-pi/2,pi/2]; ArcCos in
+ * [0,pi]), so the exp product encodes the true signed angle sum. */
+static Expr* ia_imag_unit(void) {
+    return expr_new_function(expr_new_symbol(SYM_Complex),
+             (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+}
+static Expr* ia_sqrt_1pm_a2(const Expr* a, int plus) {
+    Expr* a2 = expr_new_function(expr_new_symbol(SYM_Power),
+                 (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(2) }, 2);
+    Expr* term = plus ? a2
+        : expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), a2 }, 2);
+    Expr* inside = expr_new_function(expr_new_symbol(SYM_Plus),
+                     (Expr*[]){ expr_new_integer(1), term }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ inside }, 1);
+}
+static Expr* ia_unit_expr(IAKind k, const Expr* a) {
+    if (k == IA_ATAN) {
+        Expr* num = expr_new_function(expr_new_symbol(SYM_Plus),
+                      (Expr*[]){ expr_new_integer(1),
+                        expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ ia_imag_unit(), expr_copy((Expr*)a) }, 2) }, 2);
+        Expr* invsq = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ ia_sqrt_1pm_a2(a, 1), expr_new_integer(-1) }, 2);
+        return expr_new_function(expr_new_symbol(SYM_Times),
+                 (Expr*[]){ num, invsq }, 2);
+    }
+    if (k == IA_ASIN) {
+        return expr_new_function(expr_new_symbol(SYM_Plus),
+                 (Expr*[]){ ia_sqrt_1pm_a2(a, 0),
+                   expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ ia_imag_unit(), expr_copy((Expr*)a) }, 2) }, 2);
+    }
+    /* IA_ACOS */
+    return expr_new_function(expr_new_symbol(SYM_Plus),
+             (Expr*[]){ expr_copy((Expr*)a),
+               expr_new_function(expr_new_symbol(SYM_Times),
+                 (Expr*[]){ ia_imag_unit(), ia_sqrt_1pm_a2(a, 0) }, 2) }, 2);
+}
+
+/* Split `term` into a numeric coefficient and the single non-numeric atom.
+ * Returns 0 if the term has no atom or more than one. coeff is owned. */
+static int ia_term_coeff_atom(const Expr* term, Expr** coeff, const Expr** atom) {
+    if (term->type == EXPR_FUNCTION && term->data.function.head->type == EXPR_SYMBOL &&
+        term->data.function.head->data.symbol.name == SYM_Times) {
+        size_t n = term->data.function.arg_count;
+        Expr* c = expr_new_integer(1);
+        const Expr* at = NULL;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* f = term->data.function.args[i];
+            if (f->type == EXPR_INTEGER || f->type == EXPR_BIGINT ||
+                (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                 f->data.function.head->data.symbol.name == SYM_Rational)) {
+                Expr* nc = expr_new_function(expr_new_symbol(SYM_Times),
+                             (Expr*[]){ c, expr_copy((Expr*)f) }, 2);
+                c = eval_and_free(nc);
+            } else if (!at) {
+                at = f;
+            } else { expr_free(c); return 0; }   /* two non-numeric factors */
+        }
+        if (!at) { expr_free(c); return 0; }
+        *coeff = c; *atom = at; return 1;
+    }
+    *coeff = expr_new_integer(1); *atom = term; return 1;
+}
+
+static int ia_is_integer(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT);
+}
+
+/* Returns 1 iff `e` is a Z-linear combination of ArcTan/ArcSin/ArcCos of
+ * constant arguments plus a rational multiple of Pi that is identically 0.
+ * EXACT certificate: e^{i e} == 1 (via the qqbar constant-algebraic engine),
+ * which proves e == 0 (mod 2 Pi); a numeric screen then selects the branch
+ * k = round(e / 2 Pi) and the identity holds only when k == 0.  The numeric
+ * step merely disambiguates the integer multiple (a discrete choice with a
+ * ~pi margin, far above double precision) -- the zero itself is certified
+ * algebraically, never by sampling. */
+static int simp_invtrig_combo_is_zero(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Plus) return 0;
+    size_t nt = e->data.function.arg_count;
+
+    /* W = product of e^{i * coeff * invtrig} times e^{i * piCoeff * Pi}. */
+    Expr* W = expr_new_integer(1);
+    Expr* piAccum = NULL;            /* sum of Pi coefficients (rational) */
+    int have_invtrig = 0, ok = 1;
+
+    for (size_t i = 0; i < nt && ok; i++) {
+        Expr* coeff = NULL; const Expr* atom = NULL;
+        if (!ia_term_coeff_atom(e->data.function.args[i], &coeff, &atom)) { ok = 0; break; }
+        if (atom->type == EXPR_SYMBOL && atom->data.symbol.name == SYM_Pi) {
+            piAccum = piAccum ? expr_new_function(expr_new_symbol(SYM_Plus),
+                                  (Expr*[]){ piAccum, coeff }, 2)
+                              : coeff;
+            continue;
+        }
+        IAKind k;
+        if (atom->type == EXPR_FUNCTION && atom->data.function.arg_count == 1 &&
+            atom->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = atom->data.function.head->data.symbol.name;
+            if      (h == SYM_ArcTan) k = IA_ATAN;
+            else if (h == SYM_ArcSin) k = IA_ASIN;
+            else if (h == SYM_ArcCos) k = IA_ACOS;
+            else { expr_free(coeff); ok = 0; break; }
+        } else { expr_free(coeff); ok = 0; break; }
+        if (!ia_is_integer(coeff)) { expr_free(coeff); ok = 0; break; }  /* integer coeff only */
+        have_invtrig = 1;
+        Expr* unit = ia_unit_expr(k, atom->data.function.args[0]);
+        Expr* powu = expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ unit, coeff }, 2);     /* consumes coeff */
+        W = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ W, powu }, 2);
+    }
+
+    if (ok && piAccum) {
+        /* e^{i piCoeff Pi} = Power[E, Times[Complex[0, piCoeff], Pi]] */
+        Expr* cplx = expr_new_function(expr_new_symbol(SYM_Complex),
+                       (Expr*[]){ expr_new_integer(0), piAccum }, 2);  /* consumes piAccum */
+        Expr* arg = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ cplx, expr_new_symbol(SYM_Pi) }, 2);
+        Expr* epi = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_new_symbol(SYM_E), arg }, 2);
+        W = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ W, epi }, 2);
+        piAccum = NULL;
+    } else if (piAccum) {
+        expr_free(piAccum); piAccum = NULL;
+    }
+
+    if (!ok || !have_invtrig) { expr_free(W); return 0; }
+
+    /* Exact: reduce W over the algebraic numbers; identity needs W == 1. */
+    int proven = 0;
+    Expr* Wval = flint_qqbar_canonical(W, QQBAR_METHOD_AUTOMATIC);
+    expr_free(W);
+    if (Wval) {
+        int is_one = (Wval->type == EXPR_INTEGER && Wval->data.integer == 1);
+        expr_free(Wval);
+        if (is_one) {
+            /* Branch selection: e == 2 Pi k; keep only k == 0.  N[e] has error
+             * ~1e-15 << pi, so round(N[e]/2pi) is the exact k. */
+            Expr* nv = eval_and_free(expr_new_function(expr_new_symbol("N"),
+                         (Expr*[]){ expr_copy((Expr*)e) }, 1));
+            double v;
+            if (nv && common_machine_real_value(nv, &v)) {
+                double twopi = 2.0 * acos(-1.0);
+                double kf = v / twopi;
+                long k = (long)(kf < 0 ? kf - 0.5 : kf + 0.5);   /* round */
+                if (k == 0 && (v > -0.5 && v < 0.5)) proven = 1;
+            }
+            if (nv) expr_free(nv);
+        }
+    }
+    return proven;
+}
+
 Expr* builtin_simplify(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1169,6 +1337,42 @@ Expr* builtin_simplify(Expr* res) {
         } else if (factored) {
             expr_free(factored);
         }
+    }
+
+    /* Constant-algebraic fold.  A variable-free expression built from Sin/Cos/
+     * Tan/... at rational multiples of Pi (together with radicals, roots of
+     * unity and Root objects) is an exact algebraic number.  The shape router
+     * sends a bare trig constant to simp_trig_rational, which never reaches
+     * simp_search's qqbar pre-pass, so the fold would otherwise be missed:
+     * Cos[Pi/7] Cos[2 Pi/7] Cos[3 Pi/7] - 1/8 -> 0, Tan[Pi/7] Tan[2 Pi/7]
+     * Tan[3 Pi/7] - Sqrt[7] -> 0.  Taken when no worse (<=, matching the
+     * pre-pass); flint_qqbar_reduce_coeffs is a no-op copy when nothing folds.
+     * (contains_variable is unusable here: it counts the Cos/Sin head symbol as
+     * a variable; is_constant_algebraic is the precise gate — 0 on any free
+     * variable, 1 on trig-at-rational-Pi / radicals / Root.) */
+    if (flint_qqbar_is_constant_algebraic(best)) {
+        Expr* q = flint_qqbar_reduce_coeffs(best, QQBAR_METHOD_AUTOMATIC);
+        if (q) q = eval_and_free(q);
+        if (q && !expr_eq(q, best) &&
+            score_with_func(q, opt_complexity)
+                <= score_with_func(best, opt_complexity)) {
+            expr_free(best);
+            best = q;
+        } else if (q) {
+            expr_free(q);
+        }
+    }
+
+    /* Inverse-trig rational-angle combination fold.  ArcTan/ArcSin/ArcCos of
+     * constants are transcendental (not constant-algebraic, so the qqbar fold
+     * above skips them), but a Z-combination that is identically a multiple of
+     * Pi is decided exactly via e^{i e} == 1.  Closes the Machin-type identity
+     * 4 ArcTan[1/5] - ArcTan[1/239] - Pi/4 -> 0 and ArcSin[3/5] + ArcSin[5/13]
+     * - ArcSin[56/65] -> 0.  simp_invtrig_combo_is_zero returns 1 only on a
+     * proven zero, so 0 (the simplest form) always wins. */
+    if (best->type == EXPR_FUNCTION && simp_invtrig_combo_is_zero(best)) {
+        expr_free(best);
+        best = expr_new_integer(0);
     }
     } else {
         /* TransformationFunctions -> {f1, ...} without Automatic: the

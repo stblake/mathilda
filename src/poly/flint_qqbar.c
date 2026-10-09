@@ -428,6 +428,46 @@ static int exp_arg_i_pi_rational(const Expr* exp, fmpq_t out) {
     return fmpq_from_expr(co->data.function.args[1], out);
 }
 
+/* If `arg` is a rational multiple r of Pi — Pi itself (r = 1) or
+ * Times[rational..., Pi] — set *out = r and return 1; else 0.  Used to
+ * evaluate Sin/Cos/Tan/Cot/Sec/Csc at a rational multiple of Pi through the
+ * root of unity zeta = exp(i pi r), extending the exact closed-form coverage
+ * past the src/trig.c tables (which stop at denominator 12) to every rational
+ * angle: Sin[Pi/7], Cos[3 Pi/7], Tan[Pi/14], ... become algebraic. */
+static int trig_arg_pi_rational(const Expr* arg, fmpq_t out) {
+    if (!arg) return 0;
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol.name == SYM_Pi) {
+        fmpq_set_si(out, 1, 1);
+        return 1;
+    }
+    if (!head_is(arg, "Times")) return 0;
+    size_t n = arg->data.function.arg_count;
+    int pi_seen = 0, ok = 1;
+    fmpq_t coeff, c; fmpq_init(coeff); fmpq_init(c);
+    fmpq_set_si(coeff, 1, 1);
+    for (size_t i = 0; i < n; i++) {
+        const Expr* f = arg->data.function.args[i];
+        if (f->type == EXPR_SYMBOL && f->data.symbol.name == SYM_Pi) {
+            if (pi_seen) { ok = 0; break; }   /* Pi^2 etc. is not a rational angle */
+            pi_seen = 1;
+            continue;
+        }
+        if (!fmpq_from_expr(f, c)) { ok = 0; break; }   /* non-rational factor */
+        fmpq_mul(coeff, coeff, c);
+    }
+    if (ok && pi_seen) fmpq_set(out, coeff);
+    else ok = 0;
+    fmpq_clear(coeff); fmpq_clear(c);
+    return ok;
+}
+
+/* Is `e` a circular trig head Sin/Cos/Tan/Cot/Sec/Csc of a single argument? */
+static int is_circular_trig_head(const Expr* e, size_t n) {
+    return n == 1 && (head_is(e, "Sin") || head_is(e, "Cos") ||
+                      head_is(e, "Tan") || head_is(e, "Cot") ||
+                      head_is(e, "Sec") || head_is(e, "Csc"));
+}
+
 static int to_qqbar(const Expr* e, qqbar_t out) {
     if (!e) return 0;
     if (e->type == EXPR_INTEGER) { qqbar_set_si(out, (slong)e->data.integer); return 1; }
@@ -574,6 +614,43 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
         fmpq_clear(c);
         if (ok) qqbar_set(out, acc);
         qqbar_clear(acc); qqbar_clear(g);
+        return ok;
+    }
+    if (is_circular_trig_head(e, n)) {
+        /* Sin/Cos/... of a rational multiple r of Pi, via zeta = exp(i pi r):
+         *   Cos[r Pi] = (zeta + zeta^-1)/2,  Sin[r Pi] = (zeta - zeta^-1)/(2 i),
+         * and Tan/Cot/Sec/Csc as the corresponding ratios (declining at a pole,
+         * e.g. Tan[Pi/2], where the needed Cos/Sin vanishes). */
+        fmpq_t r; fmpq_init(r);
+        int ok = 0;
+        if (trig_arg_pi_rational(e->data.function.args[0], r)) {
+            const fmpz* pn = fmpq_numref(r);
+            const fmpz* pd = fmpq_denref(r);
+            if (fmpz_fits_si(pn) && fmpz_fits_si(pd)) {
+                slong p = fmpz_get_si(pn);
+                ulong q = (ulong)fmpz_get_si(pd);
+                qqbar_t zeta, zinv, s, c, two_i;
+                qqbar_init(zeta); qqbar_init(zinv);
+                qqbar_init(s); qqbar_init(c); qqbar_init(two_i);
+                qqbar_exp_pi_i(zeta, p, q);               /* exp( i pi r) */
+                qqbar_exp_pi_i(zinv, -p, q);              /* exp(-i pi r) */
+                qqbar_add(c, zeta, zinv); qqbar_div_ui(c, c, 2);   /* Cos */
+                qqbar_sub(s, zeta, zinv);
+                qqbar_i(two_i); qqbar_mul_si(two_i, two_i, 2);     /* 2 i   */
+                qqbar_div(s, s, two_i);                            /* Sin   */
+                ok = 1;
+                if      (head_is(e, "Cos")) qqbar_set(out, c);
+                else if (head_is(e, "Sin")) qqbar_set(out, s);
+                else if (head_is(e, "Tan")) { if (qqbar_is_zero(c)) ok = 0; else qqbar_div(out, s, c); }
+                else if (head_is(e, "Cot")) { if (qqbar_is_zero(s)) ok = 0; else qqbar_div(out, c, s); }
+                else if (head_is(e, "Sec")) { if (qqbar_is_zero(c)) ok = 0; else qqbar_inv(out, c); }
+                else                        { if (qqbar_is_zero(s)) ok = 0; else qqbar_inv(out, s); } /* Csc */
+                if (ok && qqbar_degree(out) > QQBAR_DEGREE_CAP) ok = 0;
+                qqbar_clear(zeta); qqbar_clear(zinv);
+                qqbar_clear(s); qqbar_clear(c); qqbar_clear(two_i);
+            }
+        }
+        fmpq_clear(r);
         return ok;
     }
     if (head_is(e, "Root")) return root_object_to_qqbar(e, out);
@@ -1199,6 +1276,15 @@ int flint_qqbar_is_constant_algebraic(const Expr* e) {
     if ((head_is(e, "Re") || head_is(e, "Im") || head_is(e, "Abs") ||
          head_is(e, "Conjugate")) && n == 1)
         return flint_qqbar_is_constant_algebraic(e->data.function.args[0]);
+    if (is_circular_trig_head(e, n)) {
+        /* Sin/Cos/Tan/Cot/Sec/Csc of a rational multiple of Pi is algebraic
+         * (a root of unity combination).  Optimistic: a pole (Tan[Pi/2]) is
+         * caught by to_qqbar declining, so flint_qqbar_canonical returns NULL. */
+        fmpq_t r; fmpq_init(r);
+        int ok = trig_arg_pi_rational(e->data.function.args[0], r);
+        fmpq_clear(r);
+        return ok;
+    }
     if (head_is(e, "AlgebraicNumber") && n == 2) {
         /* AlgebraicNumber[gen, {rationals}]: gen constant-algebraic, coeffs rational. */
         if (!flint_qqbar_is_constant_algebraic(e->data.function.args[0])) return 0;

@@ -131,6 +131,55 @@ void test_fp1_no_regression(void) {
     assert_eval_eq("Simplify[Sin[x]^2 + Cos[x]^2]", "1", 0);
 }
 
+/* Constant (root-of-unity) phase angle-expansion: a circular trig head with an
+ * affine argument k x + c Pi (c rational) reduces through the exact zero test. */
+void test_tez_constant_phase(void) {
+    assert_eval_eq("Simplify[Tan[Pi/2 - x] - Cot[x]]", "0", 0);
+    assert_eval_eq("Simplify[Tan[x] + Tan[x + Pi/3] + Tan[x + 2 Pi/3] - 3 Tan[3 x]]", "0", 0);
+    assert_eval_eq("Simplify[Sin[x] Sin[Pi/3 - x] Sin[Pi/3 + x] - 1/4 Sin[3 x]]", "0", 0);
+    /* PossibleZeroQ must agree (previously returned a WRONG False). */
+    assert_eval_eq("PossibleZeroQ[Tan[Pi/2 - x] - Cot[x]]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[Tan[x] + Tan[x + Pi/3] + Tan[x + 2 Pi/3] - 3 Tan[3 x]]", "True", 0);
+    /* Soundness: genuine non-identities with a constant phase stay non-zero. */
+    assert_eval_eq("PossibleZeroQ[Tan[x + Pi/3] - Tan[x]]", "False", 0);
+    assert_eval_eq("PossibleZeroQ[Sin[x + Pi/5] - Cos[x]]", "False", 0);
+}
+
+/* Hyperbolic analogue: an affine IMAGINARY phase k x + i c Pi on a hyperbolic
+ * head (Cosh[i c Pi] = Cos[c Pi], Sinh[i c Pi] = i Sin[c Pi]). */
+void test_tez_hyperbolic_phase(void) {
+    assert_eval_eq("Simplify[Tanh[I Pi/2 - x] + Coth[x]]", "0", 0);
+    assert_eval_eq("Simplify[Tanh[x + I Pi] - Tanh[x]]", "0", 0);
+    assert_eval_eq("Simplify[Tanh[x] + Tanh[x + I Pi/3] + Tanh[x + 2 I Pi/3] - 3 Tanh[3 x]]", "0", 0);
+    /* Reciprocal-difference half-angle: Coth - Csch = Tanh[x/2]. */
+    assert_eval_eq("Simplify[Tanh[x/2] - (Cosh[x] - 1)/Sinh[x]]", "0", 0);
+    assert_eval_eq("Simplify[Coth[x] - Csch[x] - Tanh[x/2]]", "0", 0);
+    /* Soundness: not identities. */
+    assert_eval_eq("PossibleZeroQ[Tanh[x + I Pi/3] - Tanh[x]]", "False", 0);
+    assert_eval_eq("Simplify[Coth[x] + Csch[x] - Tanh[x/2]] === 0", "False", 0);
+}
+
+/* Representative hyperbolic structural identities (Osborn's rule: note the +
+ * signs in the Cosh addition and odd-power formulas). Guards the bulk of the
+ * hyperbolic stress corpus. */
+void test_tez_hyperbolic_structural(void) {
+    assert_eval_eq("Simplify[Cosh[x]^2 - Sinh[x]^2 - 1]", "0", 0);
+    assert_eval_eq("Simplify[Sech[x]^2 + Tanh[x]^2 - 1]", "0", 0);
+    assert_eval_eq("Simplify[Coth[x]^2 - Csch[x]^2 - 1]", "0", 0);
+    assert_eval_eq("Simplify[Sinh[2 x] - 2 Sinh[x] Cosh[x]]", "0", 0);
+    assert_eval_eq("Simplify[Cosh[2 x] - (Cosh[x]^2 + Sinh[x]^2)]", "0", 0);
+    assert_eval_eq("Simplify[Cosh[x + y] - (Cosh[x] Cosh[y] + Sinh[x] Sinh[y])]", "0", 0);
+    assert_eval_eq("Simplify[Tanh[x + y] - (Tanh[x] + Tanh[y])/(1 + Tanh[x] Tanh[y])]", "0", 0);
+    assert_eval_eq("Simplify[Sinh[3 x] - (3 Sinh[x] + 4 Sinh[x]^3)]", "0", 0);
+    assert_eval_eq("Simplify[Cosh[3 x] - (4 Cosh[x]^3 - 3 Cosh[x])]", "0", 0);
+    assert_eval_eq("Simplify[Sinh[x]^6 + Cosh[x]^6 - (15 Cosh[2 x] + Cosh[6 x])/16]", "0", 0);
+    assert_eval_eq("Simplify[(1 + Tanh[x/2]^2)/(1 - Tanh[x/2]^2) - Cosh[x]]", "0", 0);
+    assert_eval_eq("Simplify[Cosh[ArcSinh[x]] - Sqrt[1 + x^2]]", "0", 0);
+    assert_eval_eq("Simplify[Sinh[2 ArcSinh[x]] - 2 x Sqrt[1 + x^2]]", "0", 0);
+    assert_eval_eq("Simplify[Cosh[I x] - Cos[x]]", "0", 0);
+    assert_eval_eq("Simplify[Sinh[I x] - I Sin[x]]", "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -144,6 +193,9 @@ int main(void) {
     TEST(test_tez_small_cases_fast);
     TEST(test_fp1_log_reciprocal_squared);
     TEST(test_fp1_no_regression);
+    TEST(test_tez_constant_phase);
+    TEST(test_tez_hyperbolic_phase);
+    TEST(test_tez_hyperbolic_structural);
 
     printf("All trigexp_zero tests passed!\n");
     return 0;

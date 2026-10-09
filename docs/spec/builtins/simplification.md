@@ -74,10 +74,26 @@ canonical forms that the generic pipeline alone does not:
   exponent are combined inside a `Times`.
 - **Roots of unity** — `(-1)^(p/q)` and `E^(I p Pi/q)` atoms are reduced modulo
   the relevant cyclotomic polynomial.
+- **Exact trig at rational multiples of Pi** — `Sin`/`Cos`/`Tan`/`Cot`/`Sec`/`Csc`
+  of `r Pi` (`r` rational) is an algebraic number (built from the root of unity
+  `exp(I pi r)`), extending exact closed forms past the small-denominator tables.
+  A variable-free product or combination folds to its exact value:
+  `Cos[Pi/7] Cos[2 Pi/7] Cos[3 Pi/7] -> 1/8`,
+  `Tan[Pi/7] Tan[2 Pi/7] Tan[3 Pi/7] -> Sqrt[7]`, and `RootReduce[Sin[Pi/7]]`
+  is an exact `Root[...]`.
 - **Radical denesting** — `Sqrt[A + Sqrt[B]]` and cube-root towers collapse via
   the half-sum identity when the result is cleaner.
 - **Inverse trig / hyperbolic identities** — standard relations such as
-  `Sin[ArcCos[x]] == Sqrt[1 - x^2]` and `ArcSin[x] + ArcCos[x] == Pi/2` reduce.
+  `Sin[ArcCos[x]] == Sqrt[1 - x^2]` reduce, and the complementary-angle pairs
+  `ArcSin[x]+ArcCos[x]`, `ArcTan[x]+ArcCot[x]`, `ArcSec[x]+ArcCsc[x]` all fold to
+  `Pi/2`.
+- **Inverse-trig rational-angle combinations** — a `Z`-linear combination of
+  `ArcTan`/`ArcSin`/`ArcCos` of constants plus a rational multiple of `Pi` that
+  is identically zero is decided exactly: `exp(I e)` is built from the Euler
+  closed forms and proven to equal `1` over the algebraic numbers (so
+  `e == 0 mod 2 Pi`), with a numeric screen only selecting the `2 Pi` branch.
+  Machin-type identities reduce — `4 ArcTan[1/5] - ArcTan[1/239] - Pi/4 -> 0`,
+  `ArcSin[3/5] + ArcSin[5/13] - ArcSin[56/65] -> 0`.
 - **Logarithm simplification** — `Log` of a positive rational is decomposed over
   its prime factors, and linear combinations of logs are fused
   (`Sum c_i Log[a_i] -> Log[Prod a_i^c_i]`).
@@ -92,7 +108,17 @@ canonical forms that the generic pipeline alone does not:
   (`E^((1+I) x) = E^x E^(I x)`) — an exact `TrigToExp`-collapse fallback catches
   the identity: `Simplify[D[Integrate[x E^x Sin[x], x], x] - x E^x Sin[x]] -> 0`,
   and angle-addition identities such as
-  `Sin[x] Cos[y] + Cos[x] Sin[y] - Sin[x + y] -> 0` collapse too.
+  `Sin[x] Cos[y] + Cos[x] Sin[y] - Sin[x + y] -> 0` collapse too. A circular trig
+  head with an affine argument `k x + c Pi` (`c` rational) is handled by
+  expanding the constant phase out of the kernel (the `c Pi` part contributes
+  exact root-of-unity coefficients), so `Tan[Pi/2 - x] - Cot[x] -> 0`,
+  `Tan[x] + Tan[x + Pi/3] + Tan[x + 2 Pi/3] - 3 Tan[3 x] -> 0`, and
+  `Sin[x] Sin[Pi/3 - x] Sin[Pi/3 + x] - 1/4 Sin[3 x] -> 0` (and `PossibleZeroQ`
+  agrees). The same applies to a hyperbolic head with an affine *imaginary*
+  phase `k x + i c Pi` (`Cosh[i c Pi] = Cos[c Pi]`, `Sinh[i c Pi] = i Sin[c Pi]`
+  fold to the same root-of-unity coefficients), so `Tanh[x + I Pi] - Tanh[x]
+  -> 0`, `Tanh[I Pi/2 - x] + Coth[x] -> 0`, and `Tanh[x] + Tanh[x + I Pi/3] +
+  Tanh[x + 2 I Pi/3] - 3 Tanh[3 x] -> 0`.
 - **Trig / radical-trig rational normal form** — rational functions of trig and
   hyperbolic kernels are reduced to a canonical fraction modulo the Pythagorean
   ideal. A quadratic radical of a kernel (e.g. `Sqrt[Tan[x]]`, `Tan[x]^(3/2)`) is

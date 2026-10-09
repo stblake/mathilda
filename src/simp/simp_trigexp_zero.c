@@ -680,8 +680,7 @@ static void collect_kernel_vars(const Expr* e, NameSet* s) {
     for (size_t i = 0; i < n; i++) collect_kernel_vars(e->data.function.args[i], s);
 }
 
-TrigExpZeroResult trigexp_rational_is_zero(const Expr* e) {
-    if (!e) return TRIGEXP_ZERO_UNKNOWN;
+static TrigExpZeroResult decide_core(const Expr* e) {
     NameSet kv = {0};
     collect_kernel_vars(e, &kv);
     TrigExpZeroResult r = TRIGEXP_ZERO_UNKNOWN;
@@ -691,6 +690,207 @@ TrigExpZeroResult trigexp_rational_is_zero(const Expr* e) {
         expr_free(var);
     }
     nset_free(&kv);
+    return r;
+}
+
+/* ------------------------------------------------------------------ */
+/*  constant (root-of-unity) phase angle-expansion                    */
+/* ------------------------------------------------------------------ */
+
+/* classify_kernel only accepts an INTEGER multiple of the kernel variable, so a
+ * trig/hyperbolic head with an AFFINE argument — a circular head at k x + c Pi
+ * (Tan[x + Pi/3], Tan[Pi/2 - x]) or a hyperbolic head at k x + i c Pi
+ * (Tanh[x + I Pi], Tanh[I Pi/2 - x], the Tanh triple-sum) — is treated as an
+ * opaque independent generator and the grid declines, even on a true identity.
+ * As a fallback (only when the direct test declined) we rewrite each such head
+ * via its angle-addition formula, keeping the k x part as the kernel and leaving
+ * the constant trig/hyperbolic of the phase as exact coefficients: Sin[c Pi] /
+ * Cos[c Pi] (circular) and Cosh[i c Pi] = Cos[c Pi], Sinh[i c Pi] = i Sin[c Pi]
+ * (hyperbolic) all fold to Q(zeta) / i Q(zeta) algebraic numbers the grid's
+ * point evaluator decides via its Together residue path.  The rewrite is an
+ * exact identity, so it can only turn a declined case into a decided
+ * TRUE/FALSE -- never a false zero. */
+
+static Expr* ph_sin(Expr* a) { return mk_fn1(SYM_Sin, a); }
+static Expr* ph_cos(Expr* a) { return mk_fn1(SYM_Cos, a); }
+
+/* Sin[A + C] = Sin[A] Cos[C] + Cos[A] Sin[C] (A, C borrowed). */
+static Expr* addf_sin(const Expr* A, const Expr* C) {
+    return mk_fn2(SYM_Plus,
+        mk_fn2(SYM_Times, ph_sin(expr_copy((Expr*)A)), ph_cos(expr_copy((Expr*)C))),
+        mk_fn2(SYM_Times, ph_cos(expr_copy((Expr*)A)), ph_sin(expr_copy((Expr*)C))));
+}
+/* Cos[A + C] = Cos[A] Cos[C] - Sin[A] Sin[C]. */
+static Expr* addf_cos(const Expr* A, const Expr* C) {
+    return mk_fn2(SYM_Plus,
+        mk_fn2(SYM_Times, ph_cos(expr_copy((Expr*)A)), ph_cos(expr_copy((Expr*)C))),
+        mk_fn2(SYM_Times, mk_int(-1),
+            mk_fn2(SYM_Times, ph_sin(expr_copy((Expr*)A)), ph_sin(expr_copy((Expr*)C)))));
+}
+
+/* Hyperbolic analogues (note the + sign in the Cosh addition formula). For a
+ * constant phase C = i c Pi the evaluator folds Cosh[C] -> Cos[c Pi] and
+ * Sinh[C] -> i Sin[c Pi], exact Q(zeta) / i*Q(zeta) coefficients. */
+static Expr* ph_sinh(Expr* a) { return mk_fn1("Sinh", a); }
+static Expr* ph_cosh(Expr* a) { return mk_fn1("Cosh", a); }
+
+/* Sinh[A + C] = Sinh[A] Cosh[C] + Cosh[A] Sinh[C] (A, C borrowed). */
+static Expr* addf_sinh(const Expr* A, const Expr* C) {
+    return mk_fn2(SYM_Plus,
+        mk_fn2(SYM_Times, ph_sinh(expr_copy((Expr*)A)), ph_cosh(expr_copy((Expr*)C))),
+        mk_fn2(SYM_Times, ph_cosh(expr_copy((Expr*)A)), ph_sinh(expr_copy((Expr*)C))));
+}
+/* Cosh[A + C] = Cosh[A] Cosh[C] + Sinh[A] Sinh[C]. */
+static Expr* addf_cosh(const Expr* A, const Expr* C) {
+    return mk_fn2(SYM_Plus,
+        mk_fn2(SYM_Times, ph_cosh(expr_copy((Expr*)A)), ph_cosh(expr_copy((Expr*)C))),
+        mk_fn2(SYM_Times, ph_sinh(expr_copy((Expr*)A)), ph_sinh(expr_copy((Expr*)C))));
+}
+
+static Expr* make_plus(Expr** terms, size_t n) {
+    if (n == 0) return mk_int(0);
+    if (n == 1) return terms[0];
+    return expr_new_function(mk_sym(SYM_Plus), terms, n);
+}
+
+/* Is C/divisor a nonzero rational (Integer or Rational)? divisor is Pi for a
+ * circular phase, i Pi for a hyperbolic phase. */
+static bool is_rational_multiple_of(const Expr* C, const char* vn, Expr* divisor) {
+    if (!C || contains_named_symbol(C, vn)) { expr_free(divisor); return false; }
+    Expr* q = eval_and_free(mk_fn2(SYM_Times, expr_copy((Expr*)C),
+                                   mk_fn2(SYM_Power, divisor, mk_int(-1))));
+    bool ok = q && ((q->type == EXPR_INTEGER && q->data.integer != 0) ||
+                    (q->type == EXPR_FUNCTION && q->data.function.arg_count == 2 &&
+                     sym_is(q->data.function.head, SYM_Rational)));
+    if (q) expr_free(q);
+    return ok;
+}
+/* C a nonzero var-free rational multiple of Pi (circular constant phase). */
+static bool is_pi_rational_const(const Expr* C, const char* vn) {
+    return is_rational_multiple_of(C, vn, mk_sym(SYM_Pi));
+}
+/* C a nonzero var-free rational multiple of i Pi (hyperbolic constant phase:
+ * Cosh[C] and Sinh[C] then fold to exact Cos / i Sin of a rational angle). */
+static bool is_i_pi_rational_const(const Expr* C, const char* vn) {
+    return is_rational_multiple_of(C, vn,
+        mk_fn2(SYM_Times, mk_fn2(SYM_Complex, mk_int(0), mk_int(1)), mk_sym(SYM_Pi)));
+}
+
+/* Split `arg` = Plus[...] into var-dependent A and var-free C (both owned),
+ * returning true when both parts are nonempty.  The caller validates C per head
+ * family (rational multiple of Pi for circular, of i Pi for hyperbolic). */
+static bool split_affine_phase(const Expr* arg, const char* vn, Expr** A, Expr** C) {
+    if (!arg || arg->type != EXPR_FUNCTION ||
+        !sym_is(arg->data.function.head, SYM_Plus)) return false;
+    size_t n = arg->data.function.arg_count;
+    Expr** at = malloc(n * sizeof(Expr*));
+    Expr** ct = malloc(n * sizeof(Expr*));
+    size_t na = 0, nc = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* term = arg->data.function.args[i];
+        if (contains_named_symbol(term, vn)) at[na++] = expr_copy((Expr*)term);
+        else                                 ct[nc++] = expr_copy((Expr*)term);
+    }
+    if (na == 0 || nc == 0) {
+        for (size_t i = 0; i < na; i++) expr_free(at[i]);
+        for (size_t i = 0; i < nc; i++) expr_free(ct[i]);
+        free(at); free(ct);
+        return false;
+    }
+    *A = make_plus(at, na);
+    *C = make_plus(ct, nc);
+    free(at); free(ct);
+    return true;
+}
+
+typedef Expr* (*AddFormula)(const Expr*, const Expr*);
+
+static Expr* expand_pi_phase(const Expr* e, const char* vn) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (h && h->type == EXPR_SYMBOL && n == 1) {
+        const char* hn = h->data.symbol.name;
+        bool is_circ = sym_is(h, SYM_Sin) || sym_is(h, SYM_Cos) ||
+            strcmp(hn, "Tan") == 0 || strcmp(hn, "Cot") == 0 ||
+            strcmp(hn, "Sec") == 0 || strcmp(hn, "Csc") == 0;
+        bool is_hyp = strcmp(hn, "Sinh") == 0 || strcmp(hn, "Cosh") == 0 ||
+            strcmp(hn, "Tanh") == 0 || strcmp(hn, "Coth") == 0 ||
+            strcmp(hn, "Sech") == 0 || strcmp(hn, "Csch") == 0;
+        if (is_circ || is_hyp) {
+            Expr* A = NULL; Expr* C = NULL;
+            if (split_affine_phase(e->data.function.args[0], vn, &A, &C)) {
+                bool ok = (is_circ && is_pi_rational_const(C, vn)) ||
+                          (is_hyp && is_i_pi_rational_const(C, vn));
+                if (ok) {
+                    AddFormula sinf = is_circ ? addf_sin : addf_sinh;  /* sin-like */
+                    AddFormula cosf = is_circ ? addf_cos : addf_cosh;  /* cos-like */
+                    Expr* out = NULL;
+                    if (sym_is(h, SYM_Sin) || strcmp(hn, "Sinh") == 0)
+                        out = sinf(A, C);
+                    else if (sym_is(h, SYM_Cos) || strcmp(hn, "Cosh") == 0)
+                        out = cosf(A, C);
+                    else if (strcmp(hn, "Tan") == 0 || strcmp(hn, "Tanh") == 0)
+                        out = mk_fn2(SYM_Times, sinf(A, C),
+                                     mk_fn2(SYM_Power, cosf(A, C), mk_int(-1)));
+                    else if (strcmp(hn, "Cot") == 0 || strcmp(hn, "Coth") == 0)
+                        out = mk_fn2(SYM_Times, cosf(A, C),
+                                     mk_fn2(SYM_Power, sinf(A, C), mk_int(-1)));
+                    else if (strcmp(hn, "Sec") == 0 || strcmp(hn, "Sech") == 0)
+                        out = mk_fn2(SYM_Power, cosf(A, C), mk_int(-1));
+                    else /* Csc / Csch */
+                        out = mk_fn2(SYM_Power, sinf(A, C), mk_int(-1));
+                    expr_free(A); expr_free(C);
+                    return out;   /* A = k x stays a kernel; do not recurse */
+                }
+                expr_free(A); expr_free(C);
+            }
+        }
+    }
+    Expr* nh = expand_pi_phase(h, vn);
+    Expr** na = n ? malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++)
+        na[i] = expand_pi_phase(e->data.function.args[i], vn);
+    Expr* out = expr_new_function(nh, na, n);
+    if (na) free(na);
+    return out;
+}
+
+TrigExpZeroResult trigexp_rational_is_zero(const Expr* e) {
+    if (!e) return TRIGEXP_ZERO_UNKNOWN;
+    TrigExpZeroResult r = decide_core(e);
+    /* An AFFINE-argument circular trig head (Tan[x + Pi/3], Sin[Pi/3 - x], ...)
+     * is treated by decide_core as an INDEPENDENT opaque generator, so the
+     * relaxed problem can read nonzero and return a SPURIOUS FALSE on an input
+     * that is in fact identically zero — and callers (zero_test.c:2100) trust
+     * FALSE as definitive.  When the constant-phase expansion rewrites the form
+     * (an exact identity: expanded == e), its verdict over the proper kernels
+     * is authoritative, so adopt it whenever the direct test was not already a
+     * proven TRUE.  Unchanged on inputs with no constant phase (expansion is a
+     * no-op, expr_eq holds, r kept). */
+    if (r != TRIGEXP_ZERO_TRUE) {
+        NameSet kv = {0};
+        collect_kernel_vars(e, &kv);
+        if (kv.count == 1) {
+            Expr* ex0 = expand_pi_phase(e, kv.names[0]);
+            if (ex0) {
+                Expr* ex = eval_and_free(ex0);   /* fold Sin[Pi/3]->Sqrt[3]/2 etc. */
+                if (ex) {
+                    /* The exact-identity expansion may collapse all the way to
+                     * literal 0 under evaluation (e.g. Tan[Pi/2-x] -> Cos/Sin ->
+                     * Cot, cancelling Cot[x]); that is itself a proof.  Otherwise
+                     * decide over the now-integer-multiple kernels. */
+                    if (ex->type == EXPR_INTEGER && ex->data.integer == 0)
+                        r = TRIGEXP_ZERO_TRUE;
+                    else if (!expr_eq(ex, e))
+                        r = decide_core(ex);
+                    expr_free(ex);
+                }
+            }
+        }
+        nset_free(&kv);
+    }
     return r;
 }
 

@@ -390,3 +390,68 @@ Expr* transform_tan_addition(const Expr* e) {
     return simp_memo_wrap(e, "$TanAddition", transform_tan_addition_impl);
 }
 
+/* ----------------------------------------------------------------------- */
+/* InvtrigComplement: the complementary-angle identities                   */
+/*     ArcSin[u] + ArcCos[u] == Pi/2                                        */
+/*     ArcTan[u] + ArcCot[u] == Pi/2                                        */
+/*     ArcSec[u] + ArcCsc[u] == Pi/2                                        */
+/* ----------------------------------------------------------------------- */
+
+/* All three hold for every u under Mathematica's principal-value
+ * convention (Simplify reduces each). The trailing `r___` lets the pair
+ * cancel inside a larger Plus, so `ArcTan[x] + ArcCot[x] - Pi/2 -> 0` and
+ * the bare sums fold to Pi/2. Without this transform, ArcSin[u]+ArcCos[u]
+ * only collapsed by an *accidental* TrigToExp log cancellation (the two
+ * share the identical Log argument) -- ArcTan/ArcCot log into different
+ * arguments and never cancelled, so that pair was left unreduced. */
+static bool contains_invtrig_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* h = head->data.symbol.name;
+        if (h == SYM_ArcSin || h == SYM_ArcCos || h == SYM_ArcTan
+            || h == SYM_ArcCot || h == SYM_ArcSec || h == SYM_ArcCsc)
+            return true;
+    }
+    if (head && contains_invtrig_head(head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_invtrig_head(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+static Expr* transform_invtrig_complement_impl(const Expr* e) {
+    static Expr* rules = NULL;
+    if (!rules) {
+        rules = parse_expression(
+            "{ HoldPattern[ArcSin[u_] + ArcCos[u_] + r___] :> Pi/2 + r, "
+            "  HoldPattern[ArcTan[u_] + ArcCot[u_] + r___] :> Pi/2 + r, "
+            "  HoldPattern[ArcSec[u_] + ArcCsc[u_] + r___] :> Pi/2 + r }");
+    }
+    if (!rules) return NULL;
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    /* Every rule LHS needs an inverse-trig head; skip the ReplaceRepeated
+     * walk on inputs that have none. */
+    if (!contains_invtrig_head(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("InvtrigComplement", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
+    Expr* call = expr_new_function(
+        expr_new_symbol(SYM_ReplaceRepeated), args, 2);
+    Expr* out = eval_and_free(call);
+    if (dbg) simp_debug_log("InvtrigComplement", e, out,
+                            simp_debug_elapsed_ms(t0));
+    return out;
+}
+
+Expr* transform_invtrig_complement(const Expr* e) {
+    return simp_memo_wrap(e, "$InvtrigComplement",
+                          transform_invtrig_complement_impl);
+}
+

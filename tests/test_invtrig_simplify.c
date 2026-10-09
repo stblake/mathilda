@@ -254,6 +254,28 @@ void test_invtrig_arcsin_imag_two(void) {
     assert_eval_eq("ArcSin[2 I]", "I ArcSinh[2]", 0);
 }
 
+/* Complementary-angle identities ArcSin+ArcCos, ArcTan+ArcCot, ArcSec+ArcCsc
+ * fold to Pi/2 (and to 0 against -Pi/2). */
+void test_invtrig_complementary_pairs(void) {
+    assert_eval_eq("Simplify[ArcTan[x] + ArcCot[x] - Pi/2]", "0", 0);
+    assert_eval_eq("Simplify[ArcSin[x] + ArcCos[x] - Pi/2]", "0", 0);
+    assert_eval_eq("Simplify[ArcSec[x] + ArcCsc[x] - Pi/2]", "0", 0);
+    /* The bare sum collapses to the x-free constant Pi/2. */
+    assert_eval_eq("FreeQ[Simplify[ArcTan[x] + ArcCot[x]], x]", "True", 0);
+    /* Soundness: a non-complementary sum stays. */
+    assert_eval_eq("Simplify[2 ArcTan[x] + ArcCot[x]]", "ArcCot[x] + 2 ArcTan[x]", 0);
+}
+
+/* Machin-type and ArcSin rational-angle addition reduce exactly via e^{i e}. */
+void test_invtrig_rational_angle_addition(void) {
+    assert_eval_eq("Simplify[4 ArcTan[1/5] - ArcTan[1/239] - Pi/4]", "0", 0);
+    assert_eval_eq("Simplify[ArcSin[3/5] + ArcSin[5/13] - ArcSin[56/65]]", "0", 0);
+    assert_eval_eq("Simplify[2 ArcTan[1/2] - ArcTan[4/3]]", "0", 0);
+    assert_eval_eq("Simplify[ArcTan[1] - Pi/4]", "0", 0);
+    /* Soundness: not an identity (2 ArcTan[1/2] = ArcTan[4/3], not 3/4). */
+    assert_eval_eq("Simplify[2 ArcTan[1/2] - ArcTan[3/4]] === 0", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -314,6 +336,9 @@ int main(void) {
     /* Numeric collapses through the new folds. */
     TEST(test_invtrig_arccos_neg_half);
     TEST(test_invtrig_arcsin_imag_two);
+
+    TEST(test_invtrig_complementary_pairs);
+    TEST(test_invtrig_rational_angle_addition);
 
     printf("All inverse-trig Simplify tests passed!\n");
     return 0;
