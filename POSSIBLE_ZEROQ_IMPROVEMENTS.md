@@ -196,13 +196,32 @@ affected. Tests: `tests/test_zero_test.c` Group 17. See the 2026-09-21 changelog
 
 ---
 
-## 4. Special-function *magnitude-decline* residue defeats the sampler (`Gamma[x^2]+1` → `True`)
+## 4. Special-function *magnitude-decline* residue defeats the sampler (`PolyLog[2, x^2]+1` → `True`)
 
-**Status:** OPEN (deferred from the v0.208 overflow fix, which is scoped to the IEEE-overflow
-class only).
+**Status:** RESOLVED (2026-10-09, v0.323). Fixed in `src/zero_test.c` by broadening the
+Stage-3 re-draw class: a residue built only from numeric-function heads
+(`ATTR_NUMERICFUNCTION`) on numeric arguments — i.e. a value the evaluator *declined* for
+magnitude reasons, not a genuine symbolic residue — is now flagged re-drawable
+(`residue_is_numeric_decline` in `evaluate_rung`), so `sz_trial_shelled`'s magnitude-shell
+ladder shrinks the sample to a resolvable point exactly as it already does for an IEEE
+overflow. The old sampler aborted the whole test to `UNKNOWN → True` on the first declining
+point. Tests: `tests/test_zero_test.c` Group 19.
 
-**Minimal repro:** `PossibleZeroQ[Gamma[x^2] + 1]` returns `True`; `Gamma[x^2]+1` is nowhere
-zero. Same family as #2/#3 (a symbol-dependent magnitude defeats the numeric ladder), but the
+Note on the original `Gamma` example: it no longer reproduces, because `Gamma` was independently
+fixed to return a finite extended-range value (`N[Gamma[256.0]] = 3.35e504`) rather than
+declining to the head; huge values overflow a `double` and are already handled by the v0.208
+IEEE-overflow re-draw. The *mechanism* #4 describes is alive via `PolyLog` (the dilog engine
+declines for `|z| >~ 300`), which is the live repro the fix is verified against. The fix is
+generic over `ATTR_NUMERICFUNCTION` heads, so it also covers any future head that magnitude-
+declines. A residue that declines over the *entire* `|x| ≥ 1` sampled domain (e.g. a head with
+no finite real-argument window at all) is still unrescuable by the shell floor and remains an
+`UNKNOWN → True` heuristic limit; the right fix there is to make that head's `N[...]` evaluate
+(a special-functions change), not a `zero_test` one.
+
+_Original report (retained for context):_
+
+**Minimal repro (original):** `PossibleZeroQ[Gamma[x^2] + 1]` returned `True`; `Gamma[x^2]+1` is
+nowhere zero. Same family as #2/#3 (a symbol-dependent magnitude defeats the numeric ladder), but the
 failure mode is different from the IEEE-overflow one the v0.208 fix cures.
 
 **Diagnosis.** At a sampled `x` with `x^2 > ~171`, `N[Gamma[x^2]]` does not overflow to `±Inf`
@@ -231,7 +250,22 @@ residue as re-drawable in the sampler — but only alongside a fix for #5.
 
 ## 5. Machine-precision deep-cancellation false-negative in the Stage-3 *screen* phase
 
-**Status:** OPEN (pre-existing; surfaced while scoping the v0.208 fix).
+**Status:** OPEN — but NOT currently reproducing (re-investigated 2026-10-09 while fixing #4).
+A candidate fix was prototyped (gate the machine-precision fast-`FALSE` on a huge operand scale,
+confirming the non-zero at one MPFR rung before trusting it) and measured against a pre-change
+binary: it changed **no** verdict on the flagship Weierstrass round-trip, on a battery of
+synthetic huge-scale cancellation zeros (`1/(1-Tanh[x]^2)-Cosh[x]^2`, `Cosh[x]^2-Sinh[x]^2-1`,
+`Sech[x]^-2-Cosh[x]^2`), or on their genuine-non-zero controls — all already correct on `HEAD`.
+The deep-cancellation `FALSE` appears unreachable in practice: the Weierstrass form aborts on a
+pole/`Indeterminate` before reaching a bad point, and pole-free smooth functions keep full
+machine relative accuracy, so none leaves a residual large enough to trip the `2^-12` screen
+gate at a huge scale. The hardening was therefore **not shipped** (unverifiable on current
+inputs, and the fix for #4 does not re-expose it — its re-draw lands on moderate-magnitude
+points). If a reproducing case is found later, the prototype is the documented direction.
+
+_Original report (retained for context):_
+
+**Original status:** OPEN (pre-existing; surfaced while scoping the v0.208 fix).
 
 **Minimal repro:** the Weierstrass antiderivative round-trip
 `D[Integrate[Cosh[x] Cosh[2 x], x, Method -> "Weierstrass"] /. Floor[_] -> 0, x] -

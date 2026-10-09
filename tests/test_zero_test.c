@@ -1048,6 +1048,44 @@ static void test_overflow_unimplemented_head_unchanged(void) {
     assert_pzq("PossibleZeroQ[UndefinedZQHead[x] + 1]", "True");
 }
 
+/* Group 19 — numeric-function-head magnitude-decline re-draw
+ * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #4).  A numeric special function can DECLINE
+ * past its numeric window and return its own unevaluated head on numeric args
+ * (the live case is N[PolyLog[2, z]] for |z| >~ 300 -> PolyLog[2.0, z]).  That is
+ * a numeric coordinate the evaluator could compute at a smaller argument, not a
+ * symbolic residue — the old sampler treated it as undecidable and ABORTED the
+ * whole test to UNKNOWN -> True on the first such point, a wrong/flaky verdict
+ * for a nowhere-zero function.  The fix recognises a residue built only from
+ * ATTR_NUMERICFUNCTION heads on numeric args (residue_is_numeric_decline) and
+ * re-draws it from a smaller magnitude shell, exactly like an IEEE overflow, so a
+ * resolving point decides FALSE.  (Gamma, the backlog's original example, no
+ * longer declines — it returns a finite extended-range value that overflows a
+ * double and is already handled by the Group-18 overflow path.) */
+static void test_decline_polylog_nowhere_zero(void) {
+    /* PolyLog[2, x^2] + c is nowhere zero; at large sampled x the dilog declines,
+     * and the re-draw must reach a small-x point where it resolves to FALSE. */
+    assert_pzq("PossibleZeroQ[PolyLog[2, x^2] + 1]", "False");
+    assert_pzq("PossibleZeroQ[PolyLog[2, x^2] + 5]", "False");
+    assert_pzq("PossibleZeroQ[PolyLog[3, x^4] + 1]", "False");
+}
+static void test_decline_verdict_stable(void) {
+    /* Deterministic: the re-draw consumes a seeded stream, so the verdict is a
+     * pure function of the input (no draw-order flakiness). */
+    assert_pzq_stable("PossibleZeroQ[PolyLog[2, x^2] + 1]", "False", 8);
+}
+static void test_decline_preserves_true_identity(void) {
+    /* A genuine identity whose terms decline at large shells must still decide
+     * True: the re-draw finds a resolving shell (and here the structural stage
+     * cancels it outright). */
+    assert_pzq("PossibleZeroQ[PolyLog[2, x^2] - PolyLog[2, x^2]]", "True");
+}
+static void test_decline_undefined_head_unchanged(void) {
+    /* An undefined head carries NO ATTR_NUMERICFUNCTION, so it is NOT a magnitude
+     * decline: it stays a genuine residue and the trip-wire UNKNOWN -> True holds
+     * (same guarantee as Group 18, re-asserted against the broadened re-draw). */
+    assert_pzq("PossibleZeroQ[UndefinedZQHead[x^2] + 1]", "True");
+}
+
 /* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
@@ -1236,6 +1274,12 @@ int main(void) {
     TEST(test_overflow_verdict_stable);
     TEST(test_overflow_preserves_true_identities);
     TEST(test_overflow_unimplemented_head_unchanged);
+
+    /* Group 19 — numeric-function-head magnitude-decline re-draw */
+    TEST(test_decline_polylog_nowhere_zero);
+    TEST(test_decline_verdict_stable);
+    TEST(test_decline_preserves_true_identity);
+    TEST(test_decline_undefined_head_unchanged);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

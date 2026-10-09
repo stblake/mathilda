@@ -967,6 +967,39 @@ static bool is_pure_numeric(const Expr* e) {
     return false;
 }
 
+/* True iff `z` is a residue the evaluator declined to reduce to a number purely
+ * for MAGNITUDE / range reasons — not because any free symbol or unknown head
+ * survived. That is: every node is a pure-numeric leaf, or a function whose head
+ * is a NUMERIC FUNCTION (ATTR_NUMERICFUNCTION) applied to such residues. The
+ * live case is N[PolyLog[2, z]] for z beyond its numeric window (|z| >~ 300):
+ * the dilogarithm engine DECLINES and hands back the unevaluated head
+ * PolyLog[2.0, z] (POSSIBLE_ZEROQ_IMPROVEMENTS.md #4 — Gamma, the original
+ * example, no longer declines: it returns a finite extended-range value whose
+ * magnitude overflows a double and is already re-drawn by the IEEE-overflow
+ * path). Such a residue is a numeric coordinate the evaluator CAN compute at a
+ * smaller argument, so the Stage-3 sampler should re-draw it from a smaller
+ * magnitude shell (exactly like an IEEE overflow) rather than aborting the whole
+ * test to UNKNOWN -> True on the first such point. An UNDEFINED / purely symbolic
+ * head (e.g. UndefinedZQHead[x]) carries NO ATTR_NUMERICFUNCTION, so it is NOT a
+ * magnitude decline: it stays a genuine residue and the test still aborts to
+ * UNKNOWN (preserving the trip-wire that a truly undecidable input is assumed
+ * zero). */
+static bool residue_is_numeric_decline(const Expr* z) {
+    if (!z) return false;
+    if (is_pure_numeric(z)) return true;
+    if (z->type == EXPR_FUNCTION) {
+        const Expr* h = z->data.function.head;
+        if (!h || h->type != EXPR_SYMBOL) return false;
+        if (!(get_attributes(h->data.symbol.name) & ATTR_NUMERICFUNCTION))
+            return false;
+        for (size_t i = 0; i < z->data.function.arg_count; ++i)
+            if (!residue_is_numeric_decline(z->data.function.args[i]))
+                return false;
+        return true;
+    }
+    return false;
+}
+
 /* Build a NumericSpec for the given precision in bits. */
 static NumericSpec spec_at_bits(long bits) {
     if (bits <= 53) return numeric_machine_spec();
@@ -1045,7 +1078,20 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
         if (out_scale) *out_scale = 1.0;
         return ZERO_TEST_FALSE;
     }
-    if (!is_pure_numeric(z)) { expr_free(z); return ZERO_TEST_UNKNOWN; }
+    if (!is_pure_numeric(z)) {
+        /* A residue the evaluator declined to reduce. If it is a numeric
+         * function evaluated on numeric arguments that merely ran out of its
+         * numeric window (N[PolyLog[2, z]] -> PolyLog[2.0, z] for large |z|), it
+         * is re-drawable just like an IEEE overflow: flag it so the Stage-3 shell
+         * ladder shrinks the sample to a resolvable point
+         * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #4). A genuinely symbolic residue (an
+         * undefined head) is NOT flagged and aborts the test to UNKNOWN as
+         * before. */
+        bool redraw = residue_is_numeric_decline(z);
+        expr_free(z);
+        if (redraw && out_overflow) *out_overflow = true;
+        return ZERO_TEST_UNKNOWN;
+    }
     double mag = 0.0;
     bool ok = expr_abs_double(z, &mag);
     expr_free(z);
@@ -1634,12 +1680,14 @@ static bool expr_shares_symbol(const Expr* e, const SymPtrSet* set) {
  * NaN — evaluate_rung sets *overflow), re-draw the SAME trial from a successively
  * smaller |value| shell so the point falls back into range and becomes
  * informative. Returns the first DECISIVE (FALSE/TRUE) or non-overflow UNKNOWN
- * (symbolic residue / Indeterminate — left to the caller to abort on, exactly as
- * before this fix) verdict; if EVERY shell overflowed, returns UNKNOWN with
- * *overflow == true so the caller can SKIP the uninformative point instead of
- * aborting the whole test. Only the IEEE-overflow class is re-drawn — a symbolic
- * residue is NOT, so the sampler's behaviour on non-overflowing inputs (and its
- * draw stream) is byte-for-byte unchanged. */
+ * (genuine symbolic residue / Indeterminate — left to the caller to abort on,
+ * exactly as before this fix) verdict; if EVERY shell was re-drawable, returns
+ * UNKNOWN with *overflow == true so the caller can SKIP the uninformative point
+ * instead of aborting the whole test. Re-drawn points are the IEEE-overflow class
+ * AND a numeric-function-head magnitude decline (residue_is_numeric_decline, e.g.
+ * N[PolyLog[2, z]] for large |z| — #4); a genuinely symbolic residue (undefined head) is NOT
+ * re-drawn, so the sampler's behaviour (and its draw stream) on inputs that are
+ * neither out-of-range nor declined is byte-for-byte unchanged. */
 static ZeroTestResult sz_trial_shelled(const Expr* e, const char** syms,
                                        const SampleSpec* specs, size_t nsyms,
                                        bool screen, bool* overflow) {
@@ -1696,10 +1744,11 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
 
     /* Phase A — screen: many cheap machine-precision points catch
      * branch-dependent non-zeros. A single decisively non-zero point settles
-     * the whole test. An OVERFLOW point (out-of-range numeric coordinate) carries
+     * the whole test. A RE-DRAWABLE point (an out-of-range numeric coordinate, or
+     * a numeric-function-head magnitude decline such as N[PolyLog[2, z]], |z| large) carries
      * no information: it is re-drawn from a smaller shell and, failing that,
      * SKIPPED — never allowed to abort the test (which would collapse to a wrong
-     * True). Only a symbolic-residue / Indeterminate UNKNOWN aborts. */
+     * True). Only a genuinely symbolic residue / Indeterminate UNKNOWN aborts. */
     int screen_informative = 0;
     for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
         bool overflow = false;
