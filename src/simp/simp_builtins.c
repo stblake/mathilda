@@ -1293,6 +1293,121 @@ static int simp_invhyp_addition_is_zero(const Expr* e, const AssumeCtx* ctx) {
     return 1;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Constant complex-power fold: Power[c1, c2] -> Exp[c2 Log[c1]]            */
+/* ----------------------------------------------------------------------- */
+
+/* Soundness: z^w := Exp[w Log z] is the principal-power definition for z != 0,
+ * exactly how src/power.c treats powers everywhere (the Sqrt[I] special-value
+ * code agrees), so the fold introduces no branch inconsistency. We fold only
+ * variable-free numeric-constant Power nodes whose base is NOT a positive real
+ * (positive-real bases already evaluate, and their Exp form only reverts), then
+ * re-evaluate; the existing Log[I] -> I Pi/2, Log[-1] -> I Pi closed forms plus
+ * Exp[I q Pi] folding collapse I^I -> E^(-Pi/2), (-1)^I -> E^(-Pi), etc.
+ *
+ * The caller keeps the result ONLY on a whole-expression complexity win, which
+ * is essential: SimplifyCount[I^I] = 7 < SimplifyCount[E^(-Pi/2)] = 8, so a
+ * per-node gate would never fire, yet I^I - E^(-Pi/2) collapses to 0 (which
+ * wins) and a standalone I^I (whose fold scores worse) is correctly preserved.
+ * Non-collapsing or surd bases are idempotent under the fold ((-1)^(1/3) ->
+ * Exp[I Pi/3] -> (-1)^(1/3)), so they never change and are never replaced. */
+
+/* True iff e is a variable-free numeric constant: numeric literals, recognized
+ * numeric constant symbols (Pi/E/...), and arithmetic combinations thereof
+ * (Complex/Rational/Plus/Times/Power). Any free symbol or non-arithmetic head
+ * makes it false, so a passing (base, exp) is a genuine closed-form constant. */
+static bool cpow_numeric_constant(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        case EXPR_SYMBOL:
+            return is_real_constant_symbol(e->data.symbol.name)
+                || is_positive_constant_symbol(e->data.symbol.name);
+        case EXPR_FUNCTION: {
+            Expr* h = e->data.function.head;
+            if (!h || h->type != EXPR_SYMBOL) return false;
+            const char* hn = h->data.symbol.name;
+            if (hn != SYM_Complex && hn != SYM_Rational && hn != SYM_Plus
+                && hn != SYM_Times && hn != SYM_Power) return false;
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                if (!cpow_numeric_constant(e->data.function.args[i]))
+                    return false;
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+/* Bottom-up walk rewriting every eligible Power[c1, c2] -> Exp[c2 Log[c1]].
+ * Eligible: both c1, c2 variable-free numeric constants, c1 != E, and c1 is
+ * NOT a positive real and NOT zero (numeric_sign == -1 negative real, or == 2
+ * non-real/algebraic constant like I). *changed records whether anything fired.
+ * Caller owns the returned tree. */
+static Expr* const_cpow_fold_walk(const Expr* e, bool* changed) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = const_cpow_fold_walk(e->data.function.head, changed);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = const_cpow_fold_walk(e->data.function.args[i], changed);
+        }
+    }
+
+    if (new_head && new_head->type == EXPR_SYMBOL
+        && new_head->data.symbol.name == SYM_Power
+        && n == 2 && new_args && new_args[0] && new_args[1]) {
+        Expr* base = new_args[0];
+        Expr* exp_ = new_args[1];
+        bool base_is_E = base->type == EXPR_SYMBOL
+                         && base->data.symbol.name == SYM_E;
+        int bs = numeric_sign(base);  /* 1 pos-real, 0 zero, -1 neg-real, 2 other */
+        if (!base_is_E && (bs == -1 || bs == 2)
+            && cpow_numeric_constant(base) && cpow_numeric_constant(exp_)) {
+            /* Power[E, Times[exp, Log[base]]] = Exp[exp Log[base]]. */
+            Expr* logb = expr_new_function(
+                expr_new_symbol(SYM_Log), (Expr*[]){ base }, 1);
+            Expr* prod = expr_new_function(
+                expr_new_symbol(SYM_Times), (Expr*[]){ exp_, logb }, 2);
+            Expr* out = expr_new_function(
+                expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_new_symbol(SYM_E), prod }, 2);
+            free(new_args);        /* base, exp_ now owned by `out` */
+            expr_free(new_head);
+            *changed = true;
+            return out;
+        }
+    }
+
+    Expr* result = expr_new_function(new_head, new_args, n);
+    if (new_args) free(new_args);
+    return result;
+}
+
+/* Returns the folded+evaluated form of `e` (caller owns), or NULL when no
+ * eligible constant Power node was present (nothing to do). */
+static Expr* simp_const_cpow_fold(const Expr* e) {
+    bool changed = false;
+    Expr* walked = const_cpow_fold_walk(e, &changed);
+    if (!changed) {
+        if (walked) expr_free(walked);
+        return NULL;
+    }
+    Expr* result = eval_and_free(walked);
+    return result;
+}
+
 Expr* builtin_simplify(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1789,6 +1904,28 @@ Expr* builtin_simplify(Expr* res) {
             best = q;
         } else if (q) {
             expr_free(q);
+        }
+    }
+
+    /* Constant complex-power fold.  Power[c1, c2] with variable-free numeric
+     * constants and a non-positive-real base (I, -1, negative reals, ...)
+     * folds to its principal value Exp[c2 Log[c1]].  Closes I^I - E^(-Pi/2),
+     * (-1)^I - E^(-Pi), I^(2I) - E^(-Pi).  Scored at the WHOLE-expression level
+     * (strict win) -- mandatory, since SimplifyCount[I^I]=7 < SimplifyCount[
+     * E^(-Pi/2)]=8, so the collapse only pays off via the enclosing Plus going
+     * to 0; a standalone I^I scores worse folded and is left untouched, and
+     * surds like (-1)^(1/3) are idempotent under the fold. */
+    {
+        Expr* cp = simp_const_cpow_fold(best);
+        if (cp) {
+            if (!expr_eq(cp, best)
+                && score_with_func(cp, opt_complexity)
+                       < score_with_func(best, opt_complexity)) {
+                expr_free(best);
+                best = cp;
+            } else {
+                expr_free(cp);
+            }
         }
     }
 

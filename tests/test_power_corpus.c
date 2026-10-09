@@ -245,6 +245,24 @@ static void test_bigint_perfect_root(void) {
         "-1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000*I", 0);
 }
 
+/* Constant complex-power fold in Simplify: Power[c1, c2] -> Exp[c2 Log[c1]]
+ * for a variable-free non-positive-real base, kept only on a whole-expression
+ * complexity win. */
+void test_const_cpow_fold(void) {
+    /* Targets: principal-value identities that collapse to 0 / 1. */
+    assert_eval_eq("Simplify[I^I - Exp[-Pi/2]]", "0", 0);
+    assert_eval_eq("Simplify[2 I^I - 2 Exp[-Pi/2]]", "0", 0);
+    assert_eval_eq("Simplify[(-1)^I Exp[Pi]]", "1", 0);
+    assert_eval_eq("Simplify[I^(2 I) Exp[Pi]]", "1", 0);
+
+    /* Soundness / non-regression: must stay unchanged (the Exp form is not
+     * strictly simpler, or the base is a positive real, or a surd). */
+    assert_eval_eq("Simplify[2^I]", "2^I", 0);
+    assert_eval_eq("Simplify[I^I]", "I^I", 0);
+    assert_eval_eq("Simplify[(-1)^(1/3)]", "(-1)^(1/3)", 0);
+    assert_eval_eq("Simplify[(-8)^(1/3)]", "2 (-1)^(1/3)", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -258,6 +276,7 @@ int main(void) {
     TEST(test_power_of_times_power_factor_composes);
     TEST(test_power_nested_symbolic_compose);
     TEST(test_bigint_perfect_root);
+    TEST(test_const_cpow_fold);
 
     printf("All power_corpus tests passed!\n");
     return 0;

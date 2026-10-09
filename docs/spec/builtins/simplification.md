@@ -114,6 +114,18 @@ canonical forms that the generic pipeline alone does not:
 - **Logarithm simplification** — `Log` of a positive rational is decomposed over
   its prime factors, and linear combinations of logs are fused
   (`Sum c_i Log[a_i] -> Log[Prod a_i^c_i]`).
+- **Log-power symmetry under positivity** — `base^exp -> Exp[exp Log[base]]`
+  when the base and every single-arg `Log` argument in the exponent are provably
+  positive, exposing the symmetry `x^Log[y] = y^Log[x]` so it cancels
+  (`Simplify[x^Log[y] - y^Log[x], x>0 && y>0] -> 0`). Kept only on a strict
+  complexity win, so a standalone `x^Log[x]` is left unchanged; the two-sided
+  positivity gate is required — a one-sided assumption (only `y>0`) correctly
+  does **not** reduce, since the identity fails at `x<=0`.
+- **Constant complex powers** — a variable-free `Power[c1, c2]` whose base is not
+  a positive real folds to its principal value `Exp[c2 Log[c1]]`:
+  `Simplify[I^I - E^(-Pi/2)] -> 0`, `Simplify[(-1)^I E^Pi] -> 1`. Taken only on a
+  whole-expression complexity win, so `2^I`, standalone `I^I`, and surds such as
+  `(-1)^(1/3)` are preserved.
 - **Pythagorean completion and reduction** for trig and hyperbolic squares.
 - **Exact trig/exp zero-recognition** — a `Plus` that is a rational function of a
   single exponential kernel `t = E^(I x)` and is identically zero (canonically a

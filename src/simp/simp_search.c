@@ -332,6 +332,11 @@ bool transform_can_fire(const char* name, const Expr* e,
     if (strcmp(name, "SimpLogRules") == 0) {
         if (!contains_log(e)) return false;
     }
+    /* PowBaseToExp: needs both a Power and a Log to do anything; the
+     * positivity (prov_pos) checks are internal to the transform. */
+    if (strcmp(name, "PowBaseToExp") == 0) {
+        if (!contains_log(e) || !contains_power(e)) return false;
+    }
     /* Assumption rewriter: nothing fires without facts. */
     if (strcmp(name, "AssumptionRules") == 0) {
         if (!ctx_has_facts(ctx)) return false;
@@ -828,6 +833,17 @@ static Expr* simp_pipeline_logexp(const Expr* input,
             }
         }
         if (ar) expr_free(ar);
+    }
+
+    /* PowBaseToExp (assumption-gated): normalize base^exp -> Exp[exp Log[base]]
+     * under two-sided positivity so the hidden log-power symmetry
+     * x^Log[y] = y^Log[x] is exposed and the siblings cancel. Kept only on a
+     * strict complexity win (update_best), so a non-cancelling standalone
+     * power is left alone. Inert without positivity facts. */
+    if (ctx_has_facts(ctx) && transform_can_fire("PowBaseToExp", best, ctx)) {
+        Expr* pe = transform_powbase_to_exp_assuming(best, ctx);
+        if (pe) update_best(&best, &bs, pe, complexity_func);
+        if (pe) expr_free(pe);
     }
 
     /* Standard cleanup. */
@@ -1585,6 +1601,33 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         clock_t t0 = dbg ? clock() : 0;
         Expr* alt = call_unary_copy("ExpToTrig", input);
         if (dbg) simp_debug_log("ExpToTrigSeed", input, alt,
+                                simp_debug_elapsed_ms(t0));
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            size_t alt_score = score_with_func(alt, complexity_func);
+            size_t input_score = score_with_func(input, complexity_func);
+            if (alt_score <= 2 * input_score + 8) {
+                cs_add_or_free(&seeds, alt);
+            } else {
+                expr_free(alt);
+            }
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
+    /* PowBaseToExp seed (assumption-gated). Under positivity, rewrite
+     * base^exp -> Exp[exp Log[base]] so the hidden log-power symmetry
+     * x^Log[y] = y^Log[x] is exposed and cancels. Score-gate the seed
+     * propagation exactly like the ExpToTrig seed above: keep a win as the
+     * new best, forward only non-blown-up seeds. Run only with non-empty
+     * facts -- prov_pos on a free symbol is false, so it is inert without
+     * positivity assumptions and costs nothing on the common path. */
+    if (ctx_has_facts(ctx) && transform_can_fire("PowBaseToExp", input, ctx)) {
+        bool dbg = simp_debug_enabled();
+        clock_t t0 = dbg ? clock() : 0;
+        Expr* alt = transform_powbase_to_exp_assuming(input, ctx);
+        if (dbg) simp_debug_log("PowBaseToExp", input, alt,
                                 simp_debug_elapsed_ms(t0));
         if (alt && !expr_eq(alt, input)) {
             update_best(&best, &best_score, alt, complexity_func);

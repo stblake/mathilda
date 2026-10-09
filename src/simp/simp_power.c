@@ -783,3 +783,157 @@ Expr* transform_radical_canon(const Expr* e) {
     return simp_memo_wrap(e, "$RadicalCanon", transform_radical_canon_impl);
 }
 
+/* ----------------------------------------------------------------------- */
+/* PowBaseToExp: Power[base, exp] -> Exp[exp * Log[base]] under positivity */
+/* ----------------------------------------------------------------------- */
+
+/* Soundness: for base > 0, base^exp := Exp[exp * Log[base]] on the real
+ * principal branch, exactly, for ANY (even complex) exp -- this IS the
+ * definition of the principal power, with no branch cut.
+ *
+ * Why this is needed: Mathilda never normalizes a Power whose exponent
+ * carries a Log into Exp form, so the log-power symmetry stays hidden:
+ *     x^Log[y]  and  y^Log[x]   (both = Exp[Log[x] Log[y]] for x, y > 0)
+ * live in distinct Power buckets and never cancel. After rewriting both to
+ * Exp[exp Log[base]], the Orderless Times canonicalizes the exponent and the
+ * E^(c Log a) collapse in simplify_exp_log (src/power.c) reverts BOTH to the
+ * same canonical representative, so Plus folds x^Log[y] - y^Log[x] -> 0.
+ * That reversion is the cancellation mechanism, not a loop: the rewrite is
+ * idempotent on the canonical form (E^(Log x Log y) evaluates straight back
+ * to the same Power), a fixed point the seed framework drops via expr_eq.
+ *
+ * The TWO-SIDED gate is required for soundness. The individual rewrite needs
+ * only base > 0, but simplify_exp_log's unconditional reversion turns a Log
+ * ARGUMENT in the exponent back into a base (y^Log[x] -> ... -> x^Log[y]),
+ * which silently asserts x > 0. The identity x^Log[y] = y^Log[x] fails at
+ * x = 0 and for x < 0, so we additionally require prov_pos on every single-arg
+ * Log argument occurring in exp. Under a one-sided assumption (only y > 0) the
+ * gate then declines and the expression correctly stays unsimplified.
+ *
+ * Gate: base != E, exp contains at least one single-arg Log, prov_pos(base),
+ * and prov_pos(a) for every Log[a] in exp. Inert without positivity facts
+ * (prov_pos on a free symbol is false), so the seed site runs it only when the
+ * assumption set is non-empty. */
+
+/* True iff e contains at least one single-arg Log AND every single-arg Log[a]
+ * occurring in e has prov_pos(ctx, a). A Log of any other arity (e.g. a stray
+ * two-arg Log) makes us decline conservatively. *saw_log is set when a
+ * single-arg Log is seen with a provably-positive argument. */
+static bool powexp_log_args_positive(const Expr* e, const AssumeCtx* ctx,
+                                     bool* saw_log) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Log) {
+        if (e->data.function.arg_count != 1) return false;  /* conservative */
+        if (!prov_pos(ctx, e->data.function.args[0])) return false;
+        *saw_log = true;
+    }
+    if (!powexp_log_args_positive(head, ctx, saw_log)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (!powexp_log_args_positive(e->data.function.args[i], ctx, saw_log))
+            return false;
+    }
+    return true;
+}
+
+/* True iff a Power[base, exp] node anywhere in e passes the PowBaseToExp
+ * gate. Cheap structural pre-check so the common (nothing-to-do) case costs a
+ * single walk. */
+static bool has_powbase_to_exp(const Expr* e, const AssumeCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp_ = e->data.function.args[1];
+        bool base_is_E = base && base->type == EXPR_SYMBOL
+                         && base->data.symbol.name == SYM_E;
+        if (!base_is_E && prov_pos(ctx, base)) {
+            bool saw_log = false;
+            if (powexp_log_args_positive(exp_, ctx, &saw_log) && saw_log)
+                return true;
+        }
+    }
+    if (has_powbase_to_exp(head, ctx)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_powbase_to_exp(e->data.function.args[i], ctx)) return true;
+    }
+    return false;
+}
+
+static Expr* powbase_to_exp_walk(const Expr* e, const AssumeCtx* ctx) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = powbase_to_exp_walk(e->data.function.head, ctx);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = powbase_to_exp_walk(e->data.function.args[i], ctx);
+        }
+    }
+
+    if (new_head && new_head->type == EXPR_SYMBOL
+        && new_head->data.symbol.name == SYM_Power
+        && n == 2 && new_args && new_args[0] && new_args[1]) {
+        Expr* base = new_args[0];
+        Expr* exp_ = new_args[1];
+        bool base_is_E = base->type == EXPR_SYMBOL
+                         && base->data.symbol.name == SYM_E;
+        bool saw_log = false;
+        if (!base_is_E && prov_pos(ctx, base)
+            && powexp_log_args_positive(exp_, ctx, &saw_log) && saw_log) {
+            /* Build Power[E, Times[exp, Log[base]]] = Exp[exp Log[base]]. */
+            Expr* logbase = expr_new_function(
+                expr_new_symbol(SYM_Log), (Expr*[]){ base }, 1);
+            Expr* prod = expr_new_function(
+                expr_new_symbol(SYM_Times), (Expr*[]){ exp_, logbase }, 2);
+            Expr* out = expr_new_function(
+                expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_new_symbol(SYM_E), prod }, 2);
+            free(new_args);        /* base, exp_ now owned by `out` */
+            expr_free(new_head);
+            return out;
+        }
+    }
+
+    Expr* result = expr_new_function(new_head, new_args, n);
+    if (new_args) free(new_args);
+    return result;
+}
+
+static Expr* transform_powbase_to_exp_impl(const Expr* e,
+                                           const AssumeCtx* ctx) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    if (!has_powbase_to_exp(e, ctx)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("PowBaseToExp", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr* walked = powbase_to_exp_walk(e, ctx);
+    if (!walked) walked = expr_copy((Expr*)e);
+
+    /* Re-evaluate so the Orderless Times canonicalizes each Exp exponent and
+     * simplify_exp_log reverts to the shared canonical Power -- which is what
+     * lets x^Log[y] - y^Log[x] collapse to 0. */
+    Expr* result = eval_and_free(walked);
+    if (!result) result = expr_copy((Expr*)e);
+
+    if (dbg) simp_debug_log("PowBaseToExp", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+/* ctx-dependent (positivity), so no simp_memo_wrap (which keys on the input
+ * expression alone). Invoked at most once per seed phase and structurally
+ * cheap (single gated tree walk). */
+Expr* transform_powbase_to_exp_assuming(const Expr* e, const AssumeCtx* ctx) {
+    return transform_powbase_to_exp_impl(e, ctx);
+}
+

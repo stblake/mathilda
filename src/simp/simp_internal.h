@@ -211,6 +211,11 @@ Expr* transform_power_oneify(const Expr* e);
 Expr* transform_power_distribute(const Expr* e, const AssumeCtx* ctx);
 Expr* transform_radical_canon(const Expr* e);
 
+/* Assumption-gated power->exp normalization: Power[base, exp] -> Exp[exp Log[base]]
+ * when base > 0 and every single-arg Log[a] in exp has a > 0 (two-sided gate).
+ * Exposes the log-power symmetry x^Log[y] = y^Log[x] so it cancels. */
+Expr* transform_powbase_to_exp_assuming(const Expr* e, const AssumeCtx* ctx);
+
 /* ------------------------------------------------------------------ */
 /* simp_tan_add.c                                                     */
 /* ------------------------------------------------------------------ */

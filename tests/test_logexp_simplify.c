@@ -164,6 +164,43 @@ void test_pow_distrib_collapses(void) {
     assert_eval_eq("Simplify[(a/b)^c * b^c, a > 0 && b > 0]", "a^c", 0);
 }
 
+/* ---- Log-power symmetry: x^Log[y] = y^Log[x] (PowBaseToExp) ---- */
+
+void test_logpow_symmetry_both_positive(void) {
+    /* Both bases positive: base^exp -> Exp[exp Log[base]] exposes the
+     * symmetry (both become Exp[Log[x] Log[y]]) and the terms cancel. */
+    assert_eval_eq("Simplify[x^Log[y] - y^Log[x], x > 0 && y > 0]", "0", 0);
+}
+
+void test_logpow_symmetry_naming(void) {
+    /* Firing must not depend on variable naming/order. */
+    assert_eval_eq("Simplify[a^Log[b] - b^Log[a], a > 0 && b > 0]", "0", 0);
+}
+
+void test_logpow_symmetry_no_assumption(void) {
+    /* Without positivity the identity fails (x <= 0), so it must NOT fire. */
+    assert_eval_eq("Simplify[x^Log[y] - y^Log[x]]",
+                   "x^Log[y] - y^Log[x]", 0);
+}
+
+void test_logpow_symmetry_one_sided_y(void) {
+    /* Only y > 0: the two-sided gate still needs x > 0 (the reverted base x
+     * would otherwise be asserted positive, failing at x = 0 / x < 0). */
+    assert_eval_eq("Simplify[x^Log[y] - y^Log[x], y > 0]",
+                   "x^Log[y] - y^Log[x]", 0);
+}
+
+void test_logpow_symmetry_one_sided_x(void) {
+    assert_eval_eq("Simplify[x^Log[y] - y^Log[x], x > 0]",
+                   "x^Log[y] - y^Log[x]", 0);
+}
+
+void test_logpow_idempotent_standalone(void) {
+    /* A standalone x^Log[x] must not be force-rewritten into the larger
+     * Exp[Log[x]^2] form: the strict-score seed drops the worse candidate. */
+    assert_eval_eq("Simplify[x^Log[x], x > 0]", "x^Log[x]", 0);
+}
+
 /* ---- Log[Exp[...]] inverse pair ---- */
 
 void test_log_exp_positive(void) {
@@ -203,6 +240,13 @@ int main(void) {
     TEST(test_log_pow_plus_log_inv);
     TEST(test_log_difference_of_constant_factor);
     TEST(test_pow_distrib_collapses);
+
+    TEST(test_logpow_symmetry_both_positive);
+    TEST(test_logpow_symmetry_naming);
+    TEST(test_logpow_symmetry_no_assumption);
+    TEST(test_logpow_symmetry_one_sided_y);
+    TEST(test_logpow_symmetry_one_sided_x);
+    TEST(test_logpow_idempotent_standalone);
 
     TEST(test_log_exp_positive);
 
