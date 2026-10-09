@@ -268,6 +268,33 @@ static void test_domain_and_inferred_vars(void) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  M2 - CAD is preemptible by TimeConstrained (D6)                    *
+ *  A hard CAD over Reals used to ignore its TimeConstrained budget    *
+ *  (the C loops never polled the abort flag).  Now it yields; the     *
+ *  result must be SOUND: $Aborted, or the input left unevaluated --   *
+ *  never a wrong answer.  If the polls regress, this test HANGS       *
+ *  (caught by the suite timeout).                                     *
+ * ------------------------------------------------------------------ */
+static void test_timeconstrained_preempt(void) {
+    const char* in =
+        "TimeConstrained[Reduce[x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && "
+        "x^6 + y^6 + z^6 - x y z < -8/243, Reals], 1]";
+    Expr* e = parse_expression(in);
+    if (!e) { printf("FAIL: parse: %s\n", in); ASSERT(0); return; }
+    Expr* res = evaluate(e);
+    char* got = expr_to_string_fullform(res);
+    /* Sound outcomes only: the abort sentinel, the input left unevaluated, or --
+     * on a fast enough host that finishes within the budget -- the correct
+     * answer False.  Anything else (a non-False formula) would be wrong. */
+    bool ok = (strcmp(got, "$Aborted") == 0)
+           || (strncmp(got, "Reduce[", 7) == 0)
+           || (strcmp(got, "False") == 0);
+    if (!ok) { printf("FAIL: %s\n  unsound result: %s\n", in, got); free(got); expr_free(res); expr_free(e); ASSERT(0); return; }
+    printf("PASS: TimeConstrained preempts CAD -> %s\n", got);
+    free(got); expr_free(res); expr_free(e);
+}
+
+/* ------------------------------------------------------------------ *
  *  Phase 2 - univariate real sign diagram                            *
  * ------------------------------------------------------------------ */
 
@@ -1682,6 +1709,7 @@ int main(void) {
     TEST(test_equations);
     TEST(test_equations_decline);
     TEST(test_domain_and_inferred_vars);
+    TEST(test_timeconstrained_preempt);
     TEST(test_transcendental_log_exp);
     TEST(test_trig_pair);
     TEST(test_periodic_conj_region);

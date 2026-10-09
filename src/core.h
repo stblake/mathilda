@@ -92,6 +92,13 @@ Expr* builtin_time_constrained(Expr* res);
  * cooperatively. On those hosts, SIGPROF is the only mechanism, with
  * its usual portability caveats. */
 void tc_check_deadline(void);
+
+/* Non-jumping deadline query: true iff an active TimeConstrained deadline has
+ * already passed.  Unlike tc_check_deadline it never sets tc_timed_out and never
+ * siglongjmp's, so a heavy C routine can poll it and clean-return (freeing its
+ * locals) instead of being unwound mid-frame.  Always false outside a
+ * TimeConstrained scope. */
+bool tc_deadline_passed(void);
 /* Async-jump defer for a heavy, malloc-bound method run inside TimeConstrained:
  * bracket the work with push/pop so a timeout is taken at a safe point, not
  * mid-malloc.  tc_async_region_active is a re-entry guard (see core.c). */

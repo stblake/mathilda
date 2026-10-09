@@ -31,9 +31,23 @@
 
 #include "eval.h"
 #include "sym_names.h"
+#include "core.h"   /* tc_deadline_passed(): cooperative TimeConstrained preemption */
 
 #include <stdlib.h>
 #include <string.h>
+
+/* Cooperative TimeConstrained preemption.  The CAD is a nest of O(n^2) / doubly-
+ * exponential loops that between sub-evaluations never re-enter evaluate(), so a
+ * TimeConstrained signal/jump could only fire mid-frame and leak the PolySets /
+ * CADRegions / root arrays on the stack.  Instead each loop head polls CAD_POLL()
+ * at a throttled rate; on an expired deadline it clean-returns NULL through the
+ * function's OWN decline path (which frees every local), and the outer eval loop
+ * then takes the jump with nothing of the CAD left allocated.  CAD_POLL() reads
+ * the monotonic clock only once per 64 iterations and only inside a
+ * TimeConstrained scope (tc_deadline_passed() short-circuits to false otherwise),
+ * so an unconstrained Reduce runs exactly as before. */
+static unsigned cad_tc_tick = 0;
+#define CAD_POLL() (((cad_tc_tick++ & 63u) == 0) && tc_deadline_passed())
 
 /* Forward declarations for the shared fibre-isolation helper (defined once, used
  * by the 2-var lift_fiber and the n-var cad_leaf / cad_build). */
@@ -185,6 +199,7 @@ static bool add_proj(const Expr* poly, Expr*** a, int* n, int* cap) {
 static bool order_dedup(Expr** roots, int* fac, int nr, int* m) {
     if (nr < 2) { *m = (nr > 0) ? nr : 0; return true; }
     for (int i = 0; i < nr; i++) {
+        if (CAD_POLL()) return false;   /* deadline: nothing freed, caller frees roots[0..nr) */
         int mn = i;
         for (int j = i + 1; j < nr; j++) {
             int c = rru_sign_compare(roots[j], roots[mn]);
@@ -499,6 +514,7 @@ static bool lift_fiber(const RForm* F, const Expr* vx, const Expr* sx, bool is_p
     /* Isolate the fibre's real roots (with provenance) from the basis. */
     Expr** roots = NULL; int* fac = NULL; int nr = 0, cap = 0;
     for (int i = 0; i < nb; i++) {
+        if (CAD_POLL()) { fail = true; break; }
         bool nullified;
         if (!isolate_fiber_at(B[i], vy, vvv, aasg, adef, 1,
                               &roots, &nr, &cap, &fac, i, &nullified)) { fail = true; break; }
@@ -530,6 +546,7 @@ static bool lift_fiber(const RForm* F, const Expr* vx, const Expr* sx, bool is_p
     int ny = 2 * my + 1;
     int* yt = malloc((size_t)ny * sizeof(int));
     for (int idx = 0; idx < ny && !fail; idx++) {
+        if (CAD_POLL()) { fail = true; break; }
         Expr* sy;
         if (idx % 2 == 1) {
             sy = expr_copy(roots[(idx + 1) / 2 - 1]);
@@ -754,6 +771,7 @@ static bool cell_dead_n(const RForm* F, Expr** vv, Expr** asg, int i, int nu) {
  * projection body.  Returns false to bail on an unexpected round-trip shape. */
 static bool cad_project_out(const PolySet* in, const Expr* ve, PolySet* out) {
     for (int i = 0; i < in->n; i++) {
+        if (CAD_POLL()) return false;   /* deadline: caller frees `out` */
         int dv = degree_in(in->p[i], ve);
         if (dv <= 0) { if (!add_proj(in->p[i], &out->p, &out->n, &out->cap)) return false; continue; }
         Expr* disc = eval_and_free(mkfun2("Discriminant", expr_copy(in->p[i]), expr_copy((Expr*)ve)));
@@ -764,6 +782,7 @@ static bool cad_project_out(const PolySet* in, const Expr* ve, PolySet* out) {
     for (int i = 0; i < in->n; i++) {
         if (degree_in(in->p[i], ve) <= 0) continue;
         for (int j = i + 1; j < in->n; j++) {
+            if (CAD_POLL()) return false;   /* deadline: caller frees `out` */
             if (degree_in(in->p[j], ve) <= 0) continue;
             Expr* r = eval_and_free(mkfun3(SYM_Resultant, expr_copy(in->p[i]), expr_copy(in->p[j]), expr_copy((Expr*)ve)));
             bool okr = add_proj(r, &out->p, &out->n, &out->cap); expr_free(r); if (!okr) return false;
@@ -839,6 +858,7 @@ static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, Expr** asgdef
 
     Expr** roots = NULL; int* fac = NULL; int nr = 0, cap = 0;
     for (int i = 0; i < basis->n; i++) {
+        if (CAD_POLL()) { fail = true; break; }
         /* A factor free of the fibre variable contributes no fibre root; skip it
          * (it may vanish at an outer section without that being a McCallum
          * nullification -- only a fibre factor collapsing is). */
@@ -875,6 +895,7 @@ static bool cad_leaf(const RForm* F, Expr** vv, int d, Expr** asg, Expr** asgdef
     int ny = 2 * my + 1;
     int* yt = malloc((size_t)ny * sizeof(int));
     for (int idx = 0; idx < ny && !fail; idx++) {
+        if (CAD_POLL()) { fail = true; break; }
         Expr* sy;
         if (idx % 2 == 1) sy = expr_copy(roots[(idx + 1) / 2 - 1]);
         else {
@@ -1004,6 +1025,7 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level,
     PolySet* polys = &pstack[level];
     Expr** roots = NULL; int* fac = NULL; int nr = 0, cap = 0; bool fail = false;
     for (int j = 0; j < polys->n && !fail; j++) {
+        if (CAD_POLL()) { fail = true; break; }   /* deadline: cleanup below frees roots (R not yet allocated) */
         if (!contains_symbol(polys->p[j], vv[level]->data.symbol.name)) continue;
         bool nullified;
         if (!isolate_fiber_at(polys->p[j], vv[level], vv, asg, asgdef, level,
@@ -1044,6 +1066,7 @@ static CADRegion* cad_build(const RForm* F, Expr** vv, int d, int level,
 
     bool all_true = true, any = false;
     for (int idx = 0; idx <= 2 * m && !fail; idx++) {
+        if (CAD_POLL()) { fail = true; break; }   /* deadline: bail before asg[level] set; cleanup frees roots + R */
         bool is_section = (idx % 2 == 1);
         CADCell* cell; Expr* s; Expr* sdef = NULL;
         if (is_section) {
@@ -1297,6 +1320,7 @@ static Expr* reduce_cad_nvar(const RForm* F, Expr** vv, int d) {
     for (int c = 0; c < F->n; c++) {
         RConj* cj = F->c[c];
         for (int k = 0; k < cj->n; k++) {
+            if (CAD_POLL()) goto done;   /* deadline: done: frees everything allocated so far */
             RAtom* a = &cj->a[k];
             if (a->rel == R_ELEM || a->nonconst_denom) goto done;
             if (!is_poly_n(a->poly, vv, d)) goto done;
@@ -1477,6 +1501,7 @@ Expr* reduce_cad_qe(const RForm* F, Expr** freevars, int nfree,
     for (int c = 0; c < F->n; c++) {
         RConj* cj = F->c[c];
         for (int k = 0; k < cj->n; k++) {
+            if (CAD_POLL()) goto done;   /* deadline: done: frees everything allocated so far */
             RAtom* a = &cj->a[k];
             if (a->rel == R_ELEM || a->nonconst_denom) goto done;
             if (!is_poly_n(a->poly, vv, d)) goto done;
@@ -1571,6 +1596,7 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
     for (int c = 0; c < F->n; c++) {
         RConj* cj = F->c[c];
         for (int k = 0; k < cj->n; k++) {
+            if (CAD_POLL()) goto done;   /* deadline: done: frees B/px/bxr/cache/R/S */
             RAtom* a = &cj->a[k];
             if (a->rel == R_ELEM || a->nonconst_denom) goto done;
             if (!is_poly2(a->poly, vx, vy)) goto done;
@@ -1582,6 +1608,7 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
     /* Projection (eliminate vy): leading coefficient + discriminant per factor,
      * pairwise resultant, all factored; keep the distinct x-factors. */
     for (int i = 0; i < nb; i++) {
+        if (CAD_POLL()) goto done;
         int dy = degree_in(B[i], vy);
         if (dy <= 0) { if (!add_proj(B[i], &px, &npx, &pcap)) goto done; continue; }
         Expr* disc = eval_and_free(mkfun2("Discriminant", expr_copy(B[i]), expr_copy(vy)));
@@ -1592,6 +1619,7 @@ Expr* reduce_cad(const RForm* F, Expr** vars, int nv) {
     for (int i = 0; i < nb; i++) {
         if (degree_in(B[i], vy) <= 0) continue;
         for (int j = i + 1; j < nb; j++) {
+            if (CAD_POLL()) goto done;
             if (degree_in(B[j], vy) <= 0) continue;
             Expr* r = eval_and_free(mkfun3(SYM_Resultant, expr_copy(B[i]), expr_copy(B[j]), expr_copy(vy)));
             bool okr = add_proj(r, &px, &npx, &pcap); expr_free(r); if (!okr) goto done;

@@ -41,6 +41,14 @@ void mth_msg_ifun_suppress_pop(void) {
 
 int mth_msg_ifun_suppressed(void) { return g_ifun_suppress_depth > 0; }
 
+/* Save / restore the ifun-advisory depth across a TimeConstrained unwind, the
+ * same way mth_msg_suppress_depth_save/load guard the Quiet depth.  A timeout
+ * siglongjmp out of builtin_reduce (which pushes this depth, then grinds in the
+ * CAD) would otherwise skip its mth_msg_ifun_suppress_pop and leave Solve::ifun
+ * silenced for the rest of the session. */
+int  mth_msg_ifun_suppress_depth_save(void)  { return g_ifun_suppress_depth; }
+void mth_msg_ifun_suppress_depth_load(int d) { g_ifun_suppress_depth = d; }
+
 /* Message-fired counter (see message.h). */
 static unsigned long g_msg_fired = 0;
 void          mth_msg_note_fired(void)  { g_msg_fired++; }

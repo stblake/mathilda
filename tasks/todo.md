@@ -10,10 +10,12 @@ Full campaign: M1 + M2 + M3 + D5a + D5b. Land in order; each a tagged commit.
 - [x] REPL proof + regression pins; extended tests/test_reduce.c (409 pass, corpus 174/174)
 - [x] docs + changelog + bump v0.319; leak-clean (420 blocks == startup baseline)
 
-## M2 — TimeConstrained-preemptible CAD, leak-free  (D6)  → v0.320
-- [ ] `tc_deadline_passed()` non-jumping query (core.h/core.c)
-- [ ] `CAD_POLL()` at CAD loop heads → existing clean-return; reduce_cad.c #include core.h
-- [ ] REPL proof (TimeConstrained returns promptly; unbounded still works); valgrind; bump/tag
+## M2 — TimeConstrained-preemptible CAD, leak-free  (D6)  → v0.320 ✅ DONE
+- [x] `tc_deadline_passed()` non-jumping query (core.h/core.c)
+- [x] `CAD_POLL()` at CAD loop heads → existing clean-return; reduce_cad.c #include core.h
+- [x] REPL proof (D1 grind now returns $Aborted at 2.5s; normal CAD unchanged); valgrind clean (420 blocks)
+- [x] fixed latent ifun-suppress leak across TC abort (tc_run_guarded saves/restores ifun depth)
+- [x] test_timeconstrained_preempt added (410 pass); corpus 174/174; groebner/core tests pass; bump v0.320
 
 ## M3 — QE Phase-6e augment-retry  (partial D3)  → v0.321
 - [ ] extract `cad_build_augmented`; rewire reduce_cad_nvar + reduce_cad_qe

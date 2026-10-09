@@ -56,6 +56,10 @@ void mth_msg_suppress_depth_load(int d);
 void mth_msg_ifun_suppress_push(void);
 void mth_msg_ifun_suppress_pop(void);
 int  mth_msg_ifun_suppressed(void);
+/* Save/restore the ifun depth across a TimeConstrained unwind (see the Quiet
+ * pair above); builtin_reduce's push/pop can be skipped by a timeout siglongjmp. */
+int  mth_msg_ifun_suppress_depth_save(void);
+void mth_msg_ifun_suppress_depth_load(int d);
 
 /*
  * Message-fired counter.  Distinct from the suppression depth above: a message

@@ -4321,6 +4321,23 @@ void tc_check_deadline(void) {
     siglongjmp(tc_jmp_env, 1);
 }
 
+/* Non-jumping sibling of tc_check_deadline: report whether an active
+ * TimeConstrained deadline has already passed, WITHOUT setting tc_timed_out or
+ * siglongjmp'ing.  A heavy C routine (e.g. the CAD) polls this at its loop heads
+ * and clean-returns NULL through its own decline path -- freeing every local --
+ * instead of being unwound mid-frame by the signal/jump (which would leak those
+ * frames).  Returns false whenever no TimeConstrained is active, so a routine
+ * that polls it runs completely unbounded outside a TimeConstrained scope. */
+bool tc_deadline_passed(void) {
+    if (!tc_deadline_active) return false;
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return false;
+    if (now.tv_sec < tc_deadline.tv_sec) return false;
+    if (now.tv_sec == tc_deadline.tv_sec &&
+        now.tv_nsec < tc_deadline.tv_nsec) return false;
+    return true;
+}
+
 /* Portable "do not inline" hint.  GCC/Clang both define __GNUC__. */
 #if defined(__GNUC__)
 #  define TC_NOINLINE __attribute__((noinline))
@@ -4355,6 +4372,10 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
      * well-defined and -Wclobbered stays quiet. */
     volatile sig_atomic_t saved_defer  = tc_async_deferred;
     volatile int          saved_msgdep = mth_msg_suppress_depth_save();
+    /* The Solve::ifun advisory depth (builtin_reduce brackets its whole run with
+     * a push/pop) is a separate counter; a timeout unwinding out of Reduce's CAD
+     * would skip the pop and silence Solve::ifun session-wide without this. */
+    volatile int          saved_ifundep = mth_msg_ifun_suppress_depth_save();
     /* Block's dynamic-scope frames. Unlike the two counters above these cannot
      * simply be re-assigned: each frame owns the saved rule lists of its
      * locals, so the jump must DRAIN them, putting every symbol back. A Block
@@ -4372,6 +4393,7 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;
     mth_msg_suppress_depth_load(saved_msgdep);
+    mth_msg_ifun_suppress_depth_load(saved_ifundep);
     return result;
 }
 
