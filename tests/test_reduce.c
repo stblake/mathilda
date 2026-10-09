@@ -276,22 +276,48 @@ static void test_domain_and_inferred_vars(void) {
  *  (caught by the suite timeout).                                     *
  * ------------------------------------------------------------------ */
 static void test_timeconstrained_preempt(void) {
+    /* A NON-empty high-degree region on the simplex: the SOS stage declines it
+     * (it only proves emptiness), so the CAD runs and grinds -- TimeConstrained
+     * must preempt it.  The test completing at all proves preemption works (a
+     * regressed poll would hang until the suite timeout); and because the region
+     * is non-empty, a `False` result would be UNSOUND, so we assert against it. */
     const char* in =
         "TimeConstrained[Reduce[x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && "
-        "x^6 + y^6 + z^6 - x y z < -8/243, Reals], 1]";
+        "x^6 + y^6 + z^6 - x y z < 1/2, Reals], 1]";
     Expr* e = parse_expression(in);
     if (!e) { printf("FAIL: parse: %s\n", in); ASSERT(0); return; }
     Expr* res = evaluate(e);
     char* got = expr_to_string_fullform(res);
-    /* Sound outcomes only: the abort sentinel, the input left unevaluated, or --
-     * on a fast enough host that finishes within the budget -- the correct
-     * answer False.  Anything else (a non-False formula) would be wrong. */
-    bool ok = (strcmp(got, "$Aborted") == 0)
-           || (strncmp(got, "Reduce[", 7) == 0)
-           || (strcmp(got, "False") == 0);
-    if (!ok) { printf("FAIL: %s\n  unsound result: %s\n", in, got); free(got); expr_free(res); expr_free(e); ASSERT(0); return; }
-    printf("PASS: TimeConstrained preempts CAD -> %s\n", got);
+    bool ok = (strcmp(got, "False") != 0);   /* non-empty: False would be unsound */
+    if (!ok) { printf("FAIL: %s\n  unsound False on a non-empty region\n", in); free(got); expr_free(res); expr_free(e); ASSERT(0); return; }
+    printf("PASS: TimeConstrained preempts CAD -> %.24s...\n", got);
     free(got); expr_free(res); expr_free(e);
+}
+
+/* ------------------------------------------------------------------ *
+ *  D5 - Positivstellensatz / SOS emptiness certificate                *
+ *  Proves high-degree constrained regions empty (-> False) where the  *
+ *  CAD hits its algebraic-degree wall, via an exact rational SOS       *
+ *  certificate.  Needs LAPACK for the numeric guide.                  *
+ * ------------------------------------------------------------------ */
+static void test_sos_emptiness(void) {
+#ifdef USE_LAPACK
+    /* #34: x^6+y^6+z^6-xyz >= -8/243 on the simplex (equality at the centroid,
+     * an interior zero -> exact SOS with facial reduction). */
+    run_test("Reduce[x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && "
+             "x^6 + y^6 + z^6 - x y z < -8/243, Reals]", "False");
+    /* #40: xy+yz+zx >= 9xyz on the simplex (interior zero at the centroid). */
+    run_test("Reduce[x + y + z == 1 && x > 0 && y > 0 && z > 0 && "
+             "x y + x z + y z < 9 x y z, Reals]", "False");
+    /* strictly-positive on the simplex: x^2+y^2+z^2 >= 1/3 > 1/4. */
+    run_test("Reduce[x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && "
+             "x^2 + y^2 + z^2 < 1/4, Reals]", "False");
+    /* SOUNDNESS: a genuinely NON-empty region must NOT be reported False --
+     * the certifier declines and the solution set stands. */
+    run_not_contains("Reduce[x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && "
+                     "x^2 + y^2 + z^2 > 1/2, Reals]", "False");
+#endif
+    (void)0;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1710,6 +1736,7 @@ int main(void) {
     TEST(test_equations_decline);
     TEST(test_domain_and_inferred_vars);
     TEST(test_timeconstrained_preempt);
+    TEST(test_sos_emptiness);
     TEST(test_transcendental_log_exp);
     TEST(test_trig_pair);
     TEST(test_periodic_conj_region);

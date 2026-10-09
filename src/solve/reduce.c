@@ -20,6 +20,7 @@
 #include "reduce_int.h"
 #include "reduce_sys.h"
 #include "reduce_cad.h"
+#include "reduce_sos.h"
 #include "reduce_realfn.h"
 #include "reduce_realdiag.h"
 #include "reduce_qe.h"
@@ -837,6 +838,13 @@ static Expr* reduce_impl(Expr* res) {
              * (which CAD declines) is finally caught by reduce_zerodim: solve
              * the equations exactly and filter the inequalities. */
             out = reduce_fm(f, vlist, nv);
+            /* D5: a Positivstellensatz/SOS emptiness certificate runs BEFORE the
+             * CAD -- it fast-declines (NULL) on any shape that is not "polynomial
+             * constraints + a strict inequality", and otherwise proves the region
+             * empty (-> False) with an EXACT rational certificate.  It precedes
+             * reduce_cad because the high-degree cases it targets are exactly the
+             * ones on which the CAD grinds (it would never fall through in time). */
+            if (!out) out = reduce_sos(f, vlist, nv);
             if (!out) out = reduce_cad(f, vlist, nv);
             if (!out) out = reduce_zerodim(f, vlist, nv, true, &opts);
         }

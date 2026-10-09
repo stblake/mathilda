@@ -23,15 +23,18 @@ Full campaign: M1 + M2 + M3 + D5a + D5b. Land in order; each a tagged commit.
 - [NOTE] #28/#36 NOT unblocked — walled by qqbar degree cap / projection, not nullification.
         That wall is the D5 / further-D3 frontier (SOS certificate).
 
-## D5a — Handelman exact-LP emptiness certificate  → v0.322
-- [ ] reduce_sos.{c,h}; refutation reduction; GBPoly + ideal reduction
-- [ ] exact rational `{Ax=b,x>=0}` LP oracle (from reduce_fm core)
-- [ ] hook at reduce.c:737; tests; valgrind; bump/tag
-
-## D5b — SOS/Putinar numeric-guided + exact-verified  → v0.323
-- [ ] affine-subspace build; alternating-projection SDP guide (LAPACK)
-- [ ] rational rounding + exact correction + rational LDL^T PSD verify
-- [ ] #34/#40 → False; non-empty region not wrongly False; USE_LAPACK=0 degrades; bump/tag
+## D5 — SOS / Positivstellensatz emptiness certificate  → v0.322 ✅ DONE
+(Built as ONE unified SOS/Putinar engine — the SDP tier covers the strictly-positive
+polytope class too, so a separate Handelman-LP tier was unnecessary for the targets.)
+- [x] reduce_sos.{c,h}; refutation reduction (q<0 target, K={g>=0,h==0}); linear-eq elimination
+- [x] Putinar SOS assembly over exponent/mpq bookkeeping (GBPoly)
+- [x] numeric SDP (alternating projection, LAPACK dsyev/dgesv) + eigenvalue-floor interior
+- [x] numeric zero-find (penalty descent) → exact rational verify → facial reduction
+- [x] exact rational null-space rounding + exact LDL^T PSD verify (sound-or-decline)
+- [x] hook at reduce.c BEFORE cad; #34/#40 → False; strictly-pos → False
+- [x] SOUNDNESS: non-empty regions never False (sweep); Minimize #40 picks it up -> {0,centroid}
+- [x] leak-clean (success+decline == baseline); USE_LAPACK=0 degrades (clean stub); c99/messages gates
+- [x] tests (test_sos_emptiness, updated M2 preempt); docs + changelog; bump v0.322
 
 ## Close-out
 - [ ] update tasks/reduce_deficiencies.md (what closed / what remains)

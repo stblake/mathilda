@@ -1091,6 +1091,23 @@ is moot from inside `Reduce`. Genuine `Solve` diagnostics (`Solve::svars`,
   over the Reals is dropped, so `Reduce[x^2 + y^2 == 1 && x == 2, {x, y}] ->
   False`. `Solve` reuses the same engine for `Solve[eqns && ineqs, vars]`,
   returning the surviving branches as solution rule-lists.
+- **Sum-of-squares / Positivstellensatz emptiness certificate**
+  (`reduce_sos`, over Reals): when all the structural engines decline a
+  high-degree polynomial region, this proves it **empty** (`-> False`) by
+  certifying that one strict inequality `q < 0` contradicts the rest: it exhibits
+  a Putinar representation `q == σ₀ + Σ σ_i g_i` (modulo the equality ideal) with
+  each `σ` a sum of squares, so `q >= 0` on `{g_i >= 0, h_j == 0}`. The SOS Gram
+  matrices are found numerically (an SDP by alternating projection, with an
+  eigenvalue floor for a strictly-interior point and **facial reduction** through
+  a verified rational zero for the hard interior-zero case), then **rounded to
+  rationals and the identity + positive-semidefiniteness re-verified in exact
+  `mpq` arithmetic** — so only a certificate that checks out exactly returns
+  `False`; everything else declines (sound, never a wrong answer, never a solution
+  set). It runs ahead of the CAD because the high-degree cases it targets are the
+  ones the CAD grinds on. Examples (previously undecided, now `-> False`):
+  `Reduce[x+y+z==1 && x>=0 && y>=0 && z>=0 && x^6+y^6+z^6-x y z < -8/243, Reals]`
+  and `Reduce[x+y+z==1 && x>0 && y>0 && z>0 && x y+x z+y z < 9 x y z, Reals]`,
+  both with equality at the simplex centroid. Needs LAPACK (declines without it).
 - **Integers / Rationals domain**: reuses the `Solve[..., dom]` Diophantine engine
   and reformats its solution list into logical form -- an `Or` of `And`s of
   `var == value` atoms, with `Element[C[k], dom]` for a generated parameter.
