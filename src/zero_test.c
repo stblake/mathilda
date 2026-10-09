@@ -104,6 +104,16 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 #define ZT_SCREEN_SAMPLES  24
 #define ZT_CONFIRM_SAMPLES 4
 
+/* Region-conforming rejection sampling (coupling assumptions). When an
+ * assumption couples two free symbols (e.g. x > y) the per-symbol SampleSpec
+ * cannot encode it, so each drawn assignment is checked against the coupling
+ * facts and RE-DRAWN if it lands outside the assumed region. A half-measure
+ * region such as {x > y} conforms on ~1 in 2 draws, so this bound is reached
+ * only when the feasible region is tiny / empty (then the point is skipped and,
+ * if every point is unreachable, the test honestly returns UNKNOWN). 128 draws
+ * put the miss probability for a half-measure region at ~2^-128. */
+#define ZT_CONFORM_MAX_TRIES 128
+
 /* Sampling ranges for Stage 3. Samples are real rationals: numerator uniform
  * on [-2^NUMERATOR_BITS, 2^NUMERATOR_BITS], denominator on
  * [1, 2^DENOMINATOR_BITS].
@@ -1600,6 +1610,101 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
     return expr_copy((Expr*)e);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Region-conforming rejection sampling for coupling assumptions      */
+/* ------------------------------------------------------------------ */
+
+/* True if `h` names a DENSE (positive-measure) relation. These carve a
+ * half-space / interval, so a point can be rejection-sampled into the feasible
+ * region in O(1) expected draws. Equal is deliberately absent: it pins a
+ * MEASURE-ZERO variety the sampler can never hit, so a coupling equality keeps
+ * the fact_keeps_false_sound FALSE->UNKNOWN downgrade instead. */
+static bool is_dense_relation_head(const char* h) {
+    return h == SYM_Greater || h == SYM_GreaterEqual ||
+           h == SYM_Less    || h == SYM_LessEqual    ||
+           h == SYM_Inequality || h == SYM_Unequal;
+}
+
+/* Evaluate a 2-operand comparison on concrete doubles. An unrecognised
+ * operator (should not occur for the heads routed here) reports "does not
+ * hold" — a conservative reject. */
+static bool relation_true_binary(const char* h, double a, double b) {
+    if (h == SYM_Greater)      return a >  b;
+    if (h == SYM_GreaterEqual) return a >= b;
+    if (h == SYM_Less)         return a <  b;
+    if (h == SYM_LessEqual)    return a <= b;
+    if (h == SYM_Equal)        return a == b;
+    if (h == SYM_Unequal)      return a != b;
+    return false;
+}
+
+/* Collect the variables appearing in a relation fact's OPERANDS (skipping the
+ * operator symbols of an Inequality[a, op, b, op, c, ...], which sit at the
+ * odd indices and would otherwise be miscounted as free variables). */
+static void collect_relation_vars(const Expr* f, SymPtrSet* out) {
+    if (!f || f->type != EXPR_FUNCTION || !f->data.function.head ||
+        f->data.function.head->type != EXPR_SYMBOL) return;
+    const char* h = f->data.function.head->data.symbol.name;
+    size_t argc = f->data.function.arg_count;
+    if (h == SYM_Inequality) {
+        for (size_t i = 0; i < argc; i += 2)        /* operands at even indices */
+            collect_free(f->data.function.args[i], out);
+    } else {
+        for (size_t i = 0; i < argc; ++i)
+            collect_free(f->data.function.args[i], out);
+    }
+}
+
+/* True iff the fully-substituted (concrete) relation `fs` holds numerically.
+ * Operands are numericalised to doubles via bound_to_double; any operand that
+ * fails to numericalise (e.g. a symbol the draw did not ground), or an
+ * unrecognised shape, counts as NOT holding — a conservative reject (sampling
+ * a few points fewer is always sound; sampling outside the region is the bug
+ * this guards against). No Simplify, no evaluator re-entry. */
+static bool concrete_fact_holds(const Expr* fs) {
+    if (!fs || fs->type != EXPR_FUNCTION || !fs->data.function.head ||
+        fs->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = fs->data.function.head->data.symbol.name;
+    size_t argc = fs->data.function.arg_count;
+
+    if (h == SYM_Inequality) {
+        /* Inequality[x0, op1, x1, op2, x2, ...]: every (xi opi x{i+1}) must hold. */
+        if (argc < 3 || (argc % 2) == 0) return false;
+        double prev;
+        if (!bound_to_double(fs->data.function.args[0], &prev)) return false;
+        for (size_t i = 1; i + 1 < argc; i += 2) {
+            const Expr* op = fs->data.function.args[i];
+            if (!op || op->type != EXPR_SYMBOL) return false;
+            double cur;
+            if (!bound_to_double(fs->data.function.args[i + 1], &cur)) return false;
+            if (!relation_true_binary(op->data.symbol.name, prev, cur)) return false;
+            prev = cur;
+        }
+        return true;
+    }
+
+    if (argc == 2 && is_dense_relation_head(h)) {
+        double a, b;
+        if (!bound_to_double(fs->data.function.args[0], &a)) return false;
+        if (!bound_to_double(fs->data.function.args[1], &b)) return false;
+        return relation_true_binary(h, a, b);
+    }
+    return false;
+}
+
+/* True iff the drawn assignment (syms -> vals) satisfies EVERY coupling fact.
+ * Each fact is grounded with the drawn values and checked numerically. */
+static bool assignment_conforms(const Expr** facts, size_t nfacts,
+                                const char** syms, Expr** vals, size_t nsyms) {
+    for (size_t i = 0; i < nfacts; ++i) {
+        Expr* fs = substitute_symbols(facts[i], syms, vals, nsyms);
+        bool ok = concrete_fact_holds(fs);
+        expr_free(fs);
+        if (!ok) return false;
+    }
+    return true;
+}
+
 /* One Stage-3 trial: draw a fresh value for every free symbol, substitute it
  * into `e`, and return that point's verdict.
  *
@@ -1617,11 +1722,33 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
  *     reject cancellation-hidden small non-zeros. */
 static ZeroTestResult sz_trial(const Expr* e, const char** syms,
                                const SampleSpec* specs, size_t nsyms,
-                               bool screen, int num_bits, bool* out_overflow) {
+                               bool screen, int num_bits, bool* out_overflow,
+                               const Expr** conform_facts, size_t nconform,
+                               bool* out_skip) {
     if (out_overflow) *out_overflow = false;
+    if (out_skip) *out_skip = false;
     Expr** vals = malloc(sizeof(Expr*) * nsyms);
-    for (size_t i = 0; i < nsyms; ++i)
-        vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL, num_bits);
+
+    /* Draw an assignment. When coupling facts are present (nconform > 0),
+     * REJECT and re-draw any assignment outside the assumed region so only
+     * conforming points are ever tested — this is what lets the per-symbol
+     * sampler honour a cross-variable constraint such as x > y. When
+     * nconform == 0 this draws exactly once, consuming the RNG stream
+     * byte-for-byte as before (no behavioural change for non-coupling inputs). */
+    int tries = 0;
+    for (;;) {
+        for (size_t i = 0; i < nsyms; ++i)
+            vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL, num_bits);
+        if (nconform == 0 ||
+            assignment_conforms(conform_facts, nconform, syms, vals, nsyms))
+            break;
+        for (size_t i = 0; i < nsyms; ++i) expr_free(vals[i]);
+        if (++tries >= ZT_CONFORM_MAX_TRIES) {
+            free(vals);
+            if (out_skip) *out_skip = true;   /* region unreachable: skip point */
+            return ZERO_TEST_UNKNOWN;
+        }
+    }
 
     Expr* sub = substitute_symbols(e, syms, vals, nsyms);
 
@@ -1705,10 +1832,16 @@ static bool fact_keeps_false_sound(const Expr* f) {
         return false;          /* Element[compound, discrete] restricts */
     }
 
-    /* Inequalities carve out a full-measure region (half-space / interval), on
-     * which "identically zero" is the same property as everywhere: a FALSE
-     * ("not identically zero") stays sound even for a coupling bound (a > b)
-     * the per-symbol sampler ignores. Only EQUALITY drops to a lower dimension. */
+    /* A single-symbol inequality (x > 0, a < s < b) is folded into the per-symbol
+     * SampleSpec, so FALSE is sound. A COUPLING inequality (a > b) is NOT folded,
+     * but it is not downgraded here either: decide_schwartz_zippel_core
+     * rejection-samples it into its feasible region (conform_facts), so the draws
+     * lie INSIDE the region and FALSE stays sound. (The earlier rationale — "an
+     * inequality is full-measure, so identically-zero = zero-everywhere" — was
+     * WRONG for a piecewise head like Max[x,y], which is a different function off
+     * the region; the sampler must actually be confined to the region, which it
+     * now is.) Only EQUALITY drops to a measure-zero variety the sampler cannot
+     * hit, so a coupling equality is downgraded below. */
     if ((h == SYM_Greater || h == SYM_GreaterEqual || h == SYM_Less ||
          h == SYM_LessEqual) && argc == 2) return true;
     if (h == SYM_Inequality) return true;
@@ -1757,12 +1890,17 @@ static bool expr_shares_symbol(const Expr* e, const SymPtrSet* set) {
  * neither out-of-range nor declined is byte-for-byte unchanged. */
 static ZeroTestResult sz_trial_shelled(const Expr* e, const char** syms,
                                        const SampleSpec* specs, size_t nsyms,
-                                       bool screen, bool* overflow) {
+                                       bool screen, bool* overflow,
+                                       const Expr** conform_facts, size_t nconform,
+                                       bool* skip) {
     ZeroTestResult r = ZERO_TEST_UNKNOWN;
     for (int s = 0; s < ZT_OVERFLOW_SHELL_LEN; ++s) {
         *overflow = false;
+        if (skip) *skip = false;
         r = sz_trial(e, syms, specs, nsyms, screen,
-                     ZT_OVERFLOW_SHELL_BITS[s], overflow);
+                     ZT_OVERFLOW_SHELL_BITS[s], overflow,
+                     conform_facts, nconform, skip);
+        if (skip && *skip) return r;   /* region unreachable: smaller shells can't help */
         if (!(r == ZERO_TEST_UNKNOWN && *overflow)) return r;
     }
     return r;   /* all shells overflowed: UNKNOWN, *overflow == true */
@@ -1787,17 +1925,56 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
                 specs[i] = extract_spec(ctx, syms.items[i]);
     }
 
-    /* Soundness: if any ctx fact touching e's symbols couples variables or
-     * constrains a compound (a==b, a-b==0, Element[a+b,Integers], Or[...]),
-     * the per-symbol sampler cannot honour it, so a FALSE verdict from an
-     * unconstrained draw is not sound (the point may violate the assumption).
-     * Downgrade FALSE -> UNKNOWN in that case; TRUE stays valid. */
+    /* Classify every ctx fact touching e's symbols into one of three handlings,
+     * because the per-symbol SampleSpec can only express single-variable regions:
+     *
+     *  (a) A fact that restricts to a MEASURE-ZERO set the sampler cannot hit
+     *      (a==b, a-b==0, Element[a+b,Integers], Or[...]) — !fact_keeps_false_sound.
+     *      A "found a non-zero point" FALSE is then unsound, so we downgrade
+     *      FALSE -> UNKNOWN (false_untrusted). TRUE stays valid.
+     *
+     *  (b) A DENSE relation that COUPLES >= 2 of e's free symbols (x > y, the
+     *      half-space the per-symbol spec drops) and is fully groundable by the
+     *      draw — collected into conform_facts[]. The draw is rejection-sampled
+     *      into {fact holds} (sz_trial), so the points actually lie INSIDE the
+     *      assumed region and a FALSE is sound again. This is the fix for the
+     *      Max[x,y]-x under x>y class, where the old "inequalities keep FALSE
+     *      sound" shortcut was WRONG: a piecewise head is a different function
+     *      off the region, so sampling the whole space mis-reported it non-zero.
+     *
+     *  (c) A coupling dense relation that references a symbol NOT in e (cannot be
+     *      grounded by the draw, e.g. x > w with w absent from e): we cannot
+     *      rejection-sample it, so fall back to the sound downgrade (a).
+     *
+     * A single-symbol-vs-literal inequality (x > 0, a < s < b) shares < 2 of e's
+     * symbols, is already folded into the SampleSpec by extract_spec, and is left
+     * untouched here — so conform_facts stays empty and the draw stream is
+     * byte-for-byte unchanged for every non-coupling input. */
     bool false_untrusted = false;
-    if (ctx) {
-        for (size_t i = 0; i < ctx->count && !false_untrusted; ++i) {
+    const Expr** conform_facts = NULL;
+    size_t nconform = 0;
+    if (ctx && ctx->count) {
+        conform_facts = malloc(sizeof(Expr*) * ctx->count);
+        for (size_t i = 0; i < ctx->count; ++i) {
             const Expr* f = ctx->facts[i];
-            if (!fact_keeps_false_sound(f) && expr_shares_symbol(f, &syms))
-                false_untrusted = true;
+            if (!expr_shares_symbol(f, &syms)) continue;
+            if (!fact_keeps_false_sound(f)) { false_untrusted = true; continue; }  /* (a) */
+            if (f->type == EXPR_FUNCTION && f->data.function.head &&
+                f->data.function.head->type == EXPR_SYMBOL &&
+                is_dense_relation_head(f->data.function.head->data.symbol.name)) {
+                SymPtrSet fv; sps_init(&fv);
+                collect_relation_vars(f, &fv);
+                size_t shared = 0; bool grounded = true;
+                for (size_t k = 0; k < fv.count; ++k) {
+                    if (sps_contains(&syms, fv.items[k])) shared++;
+                    else grounded = false;
+                }
+                sps_free(&fv);
+                if (shared >= 2) {
+                    if (grounded && conform_facts) conform_facts[nconform++] = f;  /* (b) */
+                    else false_untrusted = true;                                   /* (c) */
+                }
+            }
         }
     }
 
@@ -1818,8 +1995,10 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
      * True). Only a genuinely symbolic residue / Indeterminate UNKNOWN aborts. */
     int screen_informative = 0;
     for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
-        bool overflow = false;
-        ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true, &overflow);
+        bool overflow = false, skip = false;
+        ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true,
+                                            &overflow, conform_facts, nconform, &skip);
+        if (skip) continue;                               /* off-region unreachable: skip */
         if (r == ZERO_TEST_FALSE)   { verdict = false_untrusted ? ZERO_TEST_UNKNOWN : ZERO_TEST_FALSE; goto done; }
         if (r == ZERO_TEST_UNKNOWN) {
             if (overflow) continue;                       /* uninformative: skip */
@@ -1838,8 +2017,10 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
      * already established the finite points are zero-ish, so verdict stays TRUE
      * (mirrors the MPFR-unavailable fallback in decide_numeric). */
     for (int trial = 0; trial < ZT_CONFIRM_SAMPLES; ++trial) {
-        bool overflow = false;
-        ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, false, &overflow);
+        bool overflow = false, skip = false;
+        ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, false,
+                                            &overflow, conform_facts, nconform, &skip);
+        if (skip) continue;                               /* off-region unreachable: skip */
         if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
         if (r == ZERO_TEST_UNKNOWN) {
             if (overflow) continue;                       /* uninformative: skip */
@@ -1850,6 +2031,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
 done:
     random_pop_seed();
     free(specs);
+    free((void*)conform_facts);
     sps_free(&syms);
     return verdict;
 }

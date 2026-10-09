@@ -202,6 +202,31 @@ void test_pzq_special_function_poles(void) {
                    "False", 0);
 }
 
+/* ---- Two-symbol coupling relations (region-conforming rejection sampling) --
+ * An assumption that couples two free symbols (x > y) cannot be folded into a
+ * per-symbol SampleSpec, so the sampler rejection-samples each draw into the
+ * feasible region. A piecewise head such as Max is then evaluated only on the
+ * branch the assumption selects: Max[x,y] - x is identically zero on {x > y}.
+ * The matching soundness obligation is that a genuine non-zero on that region
+ * (Max[x,y] - y = x - y > 0, or plain x - y) still returns False, i.e. the fix
+ * does NOT merely downgrade every coupling inequality to True. */
+void test_pzq_coupling_relations(void) {
+    /* Identities on the coupled region -> True. */
+    assert_eval_eq("PossibleZeroQ[Max[x, y] - x, Assumptions -> x > y]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[Max[x, y] - x, Assumptions -> x >= y]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[Min[x, y] - x, Assumptions -> x < y]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[Max[x, y] - y, Assumptions -> y > x]", "True", 0);
+    /* Genuine non-zeros on the coupled region -> False (no over-downgrade). */
+    assert_eval_eq("PossibleZeroQ[Max[x, y] - y, Assumptions -> x > y]", "False", 0);
+    assert_eval_eq("PossibleZeroQ[x - y, Assumptions -> x > y]", "False", 0);
+    assert_eval_eq("PossibleZeroQ[Max[x, y] - x, Assumptions -> x < y]", "False", 0);
+    /* Refine's Equal branch over a coupling inequality must stay False. */
+    assert_eval_eq("Refine[x == y, x > y]", "False", 0);
+    /* A coupling EQUALITY stays on the downgrade path (can't rejection-sample a
+     * measure-zero variety): a-b is zero on a==b -> True (UNKNOWN). */
+    assert_eval_eq("PossibleZeroQ[a - b, Assumptions -> a == b]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -219,6 +244,7 @@ int main(void) {
     TEST(test_pzq_threading);
     TEST(test_pzq_branch_cuts);
     TEST(test_pzq_special_function_poles);
+    TEST(test_pzq_coupling_relations);
 
     printf("All PossibleZeroQ assumptions tests passed!\n");
     return 0;

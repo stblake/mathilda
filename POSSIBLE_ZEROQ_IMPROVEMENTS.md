@@ -26,6 +26,21 @@ regression tests (`tests/test_zero_test.c`) are the permanent record.
   2026-09-26, v0.208 (IEEE-overflow re-draw in `evaluate_rung` /
   `sz_trial_shelled`; test Group 18; commit `7d87e186`). A residual *`Simplify`*
   deficiency from the same family remains open — see #2 below.
+- **#6 — two-symbol coupling inequality unsound `False`.** RESOLVED
+  2026-10-09, v0.325. `PossibleZeroQ[Max[x, y] - x, Assumptions -> x > y]`
+  returned `False` though it is identically `0` on `{x > y}`. The per-symbol
+  sampler drops a fact coupling two symbols, and `fact_keeps_false_sound`
+  wrongly kept `False` for every inequality (the "full-measure region" rationale
+  fails for a *piecewise* head like `Max`, a different function off the region).
+  Fix: region-conforming **rejection sampling** — a coupling dense relation
+  (`>`,`>=`,`<`,`<=`,`Inequality`,`Unequal`) over ≥2 of the expression's free
+  symbols is collected into `conform_facts`, and `sz_trial` re-draws any
+  assignment outside the feasible region (`assignment_conforms`, bounded by
+  `ZT_CONFORM_MAX_TRIES`) before testing the point. A coupling *equality*
+  (measure zero) keeps the `False → Unknown` downgrade. Engaged only when such a
+  coupling is present, so all other draw streams are byte-for-byte unchanged.
+  Test group `test_pzq_coupling_relations` in
+  `tests/test_possiblezeroq_assumptions.c`.
 - **#5 — huge-scale deep-cancellation screen false-negative.** RESOLVED
   2026-10-09, v0.324. At operand scale >= 2^`ZT_HUGE_SCALE_BITS` a
   machine-precision "obvious non-zero" is no longer trusted directly (a

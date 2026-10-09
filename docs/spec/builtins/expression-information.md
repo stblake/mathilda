@@ -316,11 +316,18 @@ real), a sign (`x > 0`, `x <= 0`), a finite range
 (`-Pi/2 <= theta <= Pi/2`, which also lifts the usual `|value| >= 1` shell so
 values near `0` are sampled), and real/imaginary-part constraints
 (`Re[z] > 0`, `Im[z] == 0`). Facts it does not model (`!=`, `||`) are ignored
-— a generic sample satisfies them almost surely. Correctness is
-soundness-only: the region may be under-sampled (over-restriction is always
-safe) but never over-sampled, so a genuine non-zero on the assumed region is
-still reported `False` (`PossibleZeroQ[Sin[n Pi] + 1, Assumptions ->
-Element[n, Integers]]` is `False`). Only a `True` verdict from the exact
+— a generic sample satisfies them almost surely. A fact that **couples two
+symbols with an inequality** (`x > y`) cannot be folded into any per-symbol
+region, so each drawn assignment is **rejection-sampled** into the feasible
+region — re-drawn until it satisfies the coupling — before the point is tested.
+This confines the sampler to the assumed half-space, so a piecewise identity
+such as `Max[x, y] - x` under `x > y` is recognised (`True`) while a genuine
+non-zero there (`Max[x, y] - y`, i.e. `x - y`) still reports `False`.
+Correctness is soundness-only: the region may be under-sampled
+(over-restriction is always safe) but never over-sampled, so a genuine non-zero
+on the assumed region is still reported `False`
+(`PossibleZeroQ[Sin[n Pi] + 1, Assumptions -> Element[n, Integers]]` is
+`False`). Only a `True` verdict from the exact
 `Q(x)` / trig-exp stages is trusted under assumptions — an unconditional
 `False` can be wrong on the restricted region (`Exp[2 Pi I k] - 1` is
 non-zero for continuous `k` yet zero for integer `k`), so constrained
@@ -331,14 +338,17 @@ integer → `ComplexInfinity`) is treated as a definite non-zero (`False`), not
 `Unknown` — an infinite value is never zero. A *cancellation* of infinities
 (`Gamma[x] - Gamma[x]` → `Indeterminate`) is not a pole and stays `True`.
 
-*Assumption limitations.* The per-symbol sampler cannot express (i) a relation
-*between two symbols* (`x >= y`, `x == y`), (ii) a constraint on a
-*subexpression* rather than a bare symbol or its `Re`/`Im` part
+*Assumption limitations.* Coupling *inequalities* between two symbols (`x > y`)
+are honoured by rejection sampling (above), but the per-symbol sampler still
+cannot express (i) a coupling *equality* (`x == y`, `a - b == 0`) — a
+measure-zero variety the sampler can never draw, so such a fact conservatively
+returns `True` (`Unknown`) rather than risking an unsound `False`, (ii) a
+constraint on a *subexpression* rather than a bare symbol or its `Re`/`Im` part
 (`Re[z^2] > 0`), or (iii) an identity in a special function whose value comes
 from an integer-order *auto-evaluation the sampler does not trigger*
 (`LegendreP`/`ChebyshevT`/`HermiteH` of a symbolic integer order — a
-pre-existing sampler property, `True` even without assumptions). In each of
-these the unmodelled fact is ignored, so the verdict falls back to the
+pre-existing sampler property, `True` even without assumptions). In cases (ii)
+and (iii) the unmodelled fact is ignored, so the verdict falls back to the
 unconstrained result.
 
 Attributes: `Protected` (**not** `Listable`). The first argument is threaded
