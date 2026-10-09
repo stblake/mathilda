@@ -40,5 +40,28 @@ polytope class too, so a separate Handelman-LP tier was unnecessary for the targ
 - [ ] update tasks/reduce_deficiencies.md (what closed / what remains)
 - [ ] rebuild code-review graph; tasks/lessons.md if any correction
 
-## Review
-_(to be filled as phases complete)_
+## Review (campaign complete — v0.319–v0.322)
+
+**Reframe:** D1+D2 were not what the seed doc assumed (fast-give-up vs route-through-QE)
+— they were ONE correctness bug: the 2-arg/1-arg `Reduce[expr, domain]` misparsed the
+domain symbol as a variable. Fixing the root cause (M1) subsumed both and was far simpler.
+
+**Delivered (each its own tagged commit):**
+- **v0.319 (M1)** — `Reduce[expr]` / `Reduce[expr, dom]` infer vars + detect domain → run
+  the correct 3-arg engine. Broad correctness win; closes D1+D2.
+- **v0.320 (M2)** — CAD preemptible by `TimeConstrained` (non-jumping `tc_deadline_passed`
+  + clean-return polls); closes D6. Also fixed a latent ifun-suppress leak across TC abort.
+- **v0.321 (M3)** — QE shares the Phase-6e augment-retry with plain Reduce; partial D3.
+- **v0.322 (D5)** — new `reduce_sos.c`: exact SOS/Positivstellensatz emptiness certificate
+  (numeric SDP + exact rational verify + facial reduction for interior zeros). #34/#40 →
+  False; Minimize picks them up.
+
+**Verification:** reduce_tests 414 pass, corpus 174/174, refine/minimize/solve/groebner/core
+pass. Leak-clean on all new paths (fixed-init 420-block baseline). Soundness swept (SOS
+never False on a non-empty region). check-messages / check-c99 clean. USE_LAPACK=0 degrades.
+
+**Open frontier** (documented in reduce_deficiencies.md): full-D3 universal QE over a
+continuum (#28/#36, qqbar-degree-cap wall), D4 Max/Abs under a quantifier, non-polytope SOS.
+
+**Not pushed** — commits + tags v0.319..v0.322 are LOCAL (push deferred per the
+outward-facing-action guard; `git push --follow-tags` when ready).
