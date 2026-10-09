@@ -106,6 +106,13 @@ bool fact_in_domain(const Expr* f, const Expr* x, const char* dom);
 bool is_positive_constant_symbol(const char* s);
 bool is_real_constant_symbol(const char* s);
 
+/* Reduce/CAD-backed assumption entailment (defined in simp_assume.c): the
+ * general prover that shifts bounds (x-1>=0 from x>1) and reasons about
+ * nonlinear coupling (x y<1 on a box), which the prov_* family cannot. Budgeted
+ * (variable cap) and used only on the decline branch of the cheap provers. */
+int assume_reduce_entails(const AssumeCtx* ctx, const Expr* pred);
+int assume_reduce_nonneg(const AssumeCtx* ctx, const Expr* e);
+
 bool prov_pos (const AssumeCtx* ctx, const Expr* x);
 bool prov_nn  (const AssumeCtx* ctx, const Expr* x);
 bool prov_neg (const AssumeCtx* ctx, const Expr* x);
@@ -139,6 +146,10 @@ Expr* transform_halfangle(const Expr* e);
 
 Expr* simp_radicals(const Expr* e);
 Expr* simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx);
+
+/* Assumption-gated radical-product combine: Sqrt[a] Sqrt[b] -> Sqrt[a b] (and
+ * a^(p/q) b^(p/q) -> (a b)^(p/q)) when every base is provably non-negative. */
+Expr* simp_radical_combine_assuming(const Expr* e, const AssumeCtx* ctx);
 
 /* Defined in simp_denest.c; used cross-module by simp_cuberoot.c. */
 bool is_sqrt(const Expr* e);

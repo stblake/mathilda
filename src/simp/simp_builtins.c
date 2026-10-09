@@ -864,6 +864,435 @@ static int simp_invtrig_combo_is_zero(const Expr* e) {
     return proven;
 }
 
+typedef enum { IH_ASINH, IH_ACOSH, IH_ATANH } IHKind;
+
+/* Build e^{ArcHyp[a]} as an UNEVALUATED constant-algebraic Expr (real, for real
+ * a in the function's domain):
+ *   e^{ArcSinh a} = a + Sqrt[1 + a^2]
+ *   e^{ArcCosh a} = a + Sqrt[a^2 - 1]        (a >= 1)
+ *   e^{ArcTanh a} = Sqrt[1 + a] / Sqrt[1 - a]  (|a| < 1)
+ * Since exp is strictly monotonic on R, a real combination c = sum ck ArcHyp[ak]
+ * is 0 iff e^c = 1 -- NO branch screen needed (unlike the circular case). */
+static Expr* ih_unit_expr(IHKind k, const Expr* a) {
+    if (k == IH_ASINH)
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_copy((Expr*)a), ia_sqrt_1pm_a2(a, 1) }, 2));
+    if (k == IH_ACOSH) {
+        Expr* a2m1 = expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(2) }, 2),
+                       expr_new_integer(-1) }, 2);
+        Expr* sq = expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ a2m1 }, 1);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_copy((Expr*)a), sq }, 2));
+    }
+    /* IH_ATANH: Sqrt[1+a] * Sqrt[1-a]^(-1) */
+    Expr* num = expr_new_function(expr_new_symbol(SYM_Sqrt),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_new_integer(1), expr_copy((Expr*)a) }, 2) }, 1);
+    Expr* den = expr_new_function(expr_new_symbol(SYM_Sqrt),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_new_integer(1),
+                      expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)a) }, 2) }, 2) }, 1);
+    Expr* deninv = expr_new_function(expr_new_symbol(SYM_Power),
+        (Expr*[]){ den, expr_new_integer(-1) }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ num, deninv }, 2));
+}
+
+/* Numeric domain screen: the argument `a` (a constant) lies in ArcHyp's real
+ * domain (ArcCosh: a>=1; ArcTanh: -1<a<1; ArcSinh: all).  A discrete check with
+ * margin -- it only confirms we are on the real branch (so e^c=1 <=> c=0); the
+ * zero itself is certified algebraically. */
+static int ih_arg_in_domain(IHKind k, const Expr* a) {
+    if (k == IH_ASINH) return 1;
+    Expr* nv = eval_and_free(expr_new_function(expr_new_symbol("N"),
+                   (Expr*[]){ expr_copy((Expr*)a) }, 1));
+    double v; int ok = 0;
+    if (nv && common_machine_real_value(nv, &v)) {
+        if (k == IH_ACOSH) ok = (v >= 1.0 - 1e-9);
+        else /* IH_ATANH */ ok = (v > -1.0 + 1e-9 && v < 1.0 - 1e-9);
+    }
+    if (nv) expr_free(nv);
+    return ok;
+}
+
+/* Returns 1 iff `e` is a Z-combination of ArcSinh/ArcCosh/ArcTanh of constant
+ * (real, in-domain) arguments that is identically 0.  EXACT: e^e == 1 over the
+ * algebraic numbers (exp injective on R, so no branch ambiguity). */
+static int simp_invhyp_combo_is_zero(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Plus) return 0;
+    size_t nt = e->data.function.arg_count;
+    Expr* W = expr_new_integer(1);
+    int have = 0, ok = 1;
+    for (size_t i = 0; i < nt && ok; i++) {
+        Expr* coeff = NULL; const Expr* atom = NULL;
+        if (!ia_term_coeff_atom(e->data.function.args[i], &coeff, &atom)) { ok = 0; break; }
+        IHKind k;
+        if (atom->type == EXPR_FUNCTION && atom->data.function.arg_count == 1 &&
+            atom->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = atom->data.function.head->data.symbol.name;
+            if      (strcmp(h, "ArcSinh") == 0) k = IH_ASINH;
+            else if (strcmp(h, "ArcCosh") == 0) k = IH_ACOSH;
+            else if (strcmp(h, "ArcTanh") == 0) k = IH_ATANH;
+            else { expr_free(coeff); ok = 0; break; }
+        } else { expr_free(coeff); ok = 0; break; }
+        if (!ia_is_integer(coeff) || !ih_arg_in_domain(k, atom->data.function.args[0])) {
+            expr_free(coeff); ok = 0; break;
+        }
+        have = 1;
+        Expr* unit = ih_unit_expr(k, atom->data.function.args[0]);
+        Expr* powu = expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ unit, coeff }, 2);
+        W = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ W, powu }, 2);
+    }
+    if (!ok || !have) { expr_free(W); return 0; }
+    int proven = 0;
+    Expr* Wval = flint_qqbar_canonical(W, QQBAR_METHOD_AUTOMATIC);
+    expr_free(W);
+    if (Wval) {
+        proven = (Wval->type == EXPR_INTEGER && Wval->data.integer == 1);
+        expr_free(Wval);
+    }
+    return proven;
+}
+
+/* Dispatcher: a constant inverse-function combination is zero (circular via
+ * the e^{i e}==1 certifier, hyperbolic via e^e==1). */
+static int simp_invfn_combo_is_zero(const Expr* e) {
+    return simp_invtrig_combo_is_zero(e) || simp_invhyp_combo_is_zero(e);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Phase 2: region-identity engine (derivative-constancy on a box)          */
+/* ----------------------------------------------------------------------- */
+/*
+ * Proves f(x1..xn) == 0 on the assumption region R, for f a combination of
+ * inverse trig/hyperbolic functions (the addition identities), by the theorem:
+ * if R is connected, f is continuous on R, grad f == 0 on R, and f(p)=0 for one
+ * p in R, then f == 0 on R.  Each hypothesis is discharged SOUNDLY:
+ *   - R connected: require R to be a BOX (every assumption constrains a single
+ *     variable) -- convex, hence connected;
+ *   - grad f == 0: each partial D[f,xi] is proven 0 by the exact Simplify zero
+ *     machinery (no sampling);
+ *   - f continuous on R: each inverse-function subterm's argument is verified by
+ *     Reduce/CAD entailment to stay in that function's real continuity domain
+ *     throughout R, so no branch cut is crossed;
+ *   - f(p)=0: a sample point p in R (FindInstance) yields a CONSTANT combination
+ *     certified 0 exactly by simp_invfn_combo_is_zero.
+ * Declines (0) on any failure; the result is never certified by sampling. */
+
+static const char* region_inv_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1 ||
+        !e->data.function.head || e->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (strcmp(h,"ArcTan")==0||strcmp(h,"ArcSin")==0||strcmp(h,"ArcCos")==0||
+        strcmp(h,"ArcCot")==0||strcmp(h,"ArcSinh")==0||strcmp(h,"ArcCosh")==0||
+        strcmp(h,"ArcTanh")==0||strcmp(h,"ArcCoth")==0) return h;
+    return NULL;
+}
+static void region_vars(const Expr* e, const Expr*** v, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_real_constant_symbol(e->data.symbol.name)) return;
+        for (size_t i=0;i<*n;i++) if ((*v)[i]->data.symbol.name==e->data.symbol.name) return;
+        if (*n==*cap){*cap=*cap?*cap*2:8;*v=realloc((void*)*v,*cap*sizeof(Expr*));}
+        (*v)[(*n)++]=e; return;
+    }
+    if (e->type==EXPR_FUNCTION)
+        for (size_t i=0;i<e->data.function.arg_count;i++)
+            region_vars(e->data.function.args[i],v,n,cap);
+}
+static size_t region_count_vars_in(const Expr* e, const Expr** vars, size_t nv) {
+    const Expr** seen=NULL; size_t ns=0, cap=0;
+    region_vars(e,&seen,&ns,&cap);
+    size_t c=0;
+    for (size_t i=0;i<nv;i++)
+        for (size_t j=0;j<ns;j++)
+            if (vars[i]->data.symbol.name==seen[j]->data.symbol.name){c++;break;}
+    free((void*)seen);
+    return c;
+}
+/* Is `e` a branch-sensitive node (an inverse trig/hyp, Log, Sqrt, or an
+ * even-root Power) whose continuity on R must be verified? */
+static bool region_branch_node(const Expr* e) {
+    if (region_inv_head(e)) return true;
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if ((strcmp(h,"Log")==0 || strcmp(h,"Sqrt")==0) && n == 1) return true;
+    if (strcmp(h,"Power")==0 && n == 2 && is_rational_literal(e->data.function.args[1])) {
+        const Expr* q = e->data.function.args[1]->data.function.args[1];
+        if (q->type == EXPR_INTEGER && q->data.integer != 1 && (q->data.integer % 2) == 0)
+            return true;   /* even root: real only for nonneg base */
+    }
+    return false;
+}
+static void region_collect_branch(const Expr* e, const Expr*** out, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (region_branch_node(e)) {
+        if (*n==*cap){*cap=*cap?*cap*2:8;*out=realloc((void*)*out,*cap*sizeof(Expr*));}
+        (*out)[(*n)++]=e;
+    }
+    if (e->type==EXPR_FUNCTION)
+        for (size_t i=0;i<e->data.function.arg_count;i++)
+            region_collect_branch(e->data.function.args[i],out,n,cap);
+}
+/* Continuity-domain predicate for a branch-sensitive node (owned), or NULL when
+ * it is continuous for all real inputs with no finiteness issue. */
+static Expr* region_domain_cond(const Expr* node) {
+    const char* head = node->data.function.head->data.symbol.name;
+    const Expr* g = node->data.function.args[0];
+    if (strcmp(head,"ArcTanh")==0 || strcmp(head,"ArcSin")==0 || strcmp(head,"ArcCos")==0) {
+        Expr* lo = expr_new_function(expr_new_symbol("Less"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)g) }, 2);
+        Expr* hi = expr_new_function(expr_new_symbol("Less"),
+            (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(1) }, 2);
+        return expr_new_function(expr_new_symbol("And"), (Expr*[]){ lo, hi }, 2);
+    }
+    if (strcmp(head,"ArcCosh")==0)
+        return expr_new_function(expr_new_symbol("Greater"),
+            (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(1) }, 2);
+    /* Log[g] and Sqrt[g] / even-root Power[g,_]: real-continuous for g > 0. */
+    if (strcmp(head,"Log")==0 || strcmp(head,"Sqrt")==0 || strcmp(head,"Power")==0)
+        return expr_new_function(expr_new_symbol("Greater"),
+            (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(0) }, 2);
+    /* ArcTan/ArcSinh/ArcCot/ArcCoth: continuous for all real g except poles of g;
+     * require Denominator[g] != 0 on R (trivial when g is polynomial). */
+    Expr* den = eval_and_free(expr_new_function(expr_new_symbol("Denominator"),
+                    (Expr*[]){ expr_copy((Expr*)g) }, 1));
+    if (den && (den->type == EXPR_INTEGER || den->type == EXPR_BIGINT)) { expr_free(den); return NULL; }
+    return expr_new_function(expr_new_symbol("Unequal"),
+        (Expr*[]){ den, expr_new_integer(0) }, 2);
+}
+static Expr* region_assum_conj(const AssumeCtx* ctx) {
+    if (!ctx || ctx->count==0) return expr_new_symbol("True");
+    Expr** k = calloc(ctx->count, sizeof(Expr*)); size_t nk=0;
+    for (size_t i=0;i<ctx->count;i++) k[nk++]=expr_copy(ctx->facts[i]);
+    Expr* out = (nk==1)?k[0]:expr_new_function(expr_new_symbol("And"),k,nk);
+    free(k); return out;
+}
+
+/* The engine fires only on a Plus whose TOP-LEVEL terms are each an inverse
+ * function, a Log (Cap A may convert ArcSinh->Log), or a variable-free constant
+ * -- the clean shape of an addition identity.  This both tightens the gate and,
+ * crucially, keeps the recursive Simplify calls (gradient, sample value) from
+ * re-entering: a gradient (rational), a constant (var-free), or a forward-of-
+ * inverse residual like Cosh[ArcCosh x + ...] all fail this shape, so no
+ * re-entrancy guard is needed (and none can leak across a TimeConstrained abort). */
+static bool region_shape_ok(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Plus) return false;
+    bool has_inv = false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* coeff = NULL; const Expr* atom = NULL;
+        if (!ia_term_coeff_atom(e->data.function.args[i], &coeff, &atom)) return false;
+        expr_free(coeff);
+        if (region_inv_head(atom)) { has_inv = true; continue; }
+        if (atom->type == EXPR_FUNCTION && atom->data.function.head->type == EXPR_SYMBOL &&
+            strcmp(atom->data.function.head->data.symbol.name, "Log") == 0 &&
+            atom->data.function.arg_count == 1) continue;
+        const Expr** sv = NULL; size_t ns = 0, cap = 0;
+        region_vars(atom, &sv, &ns, &cap);
+        free((void*)sv);
+        if (ns == 0) continue;            /* a variable-free constant term */
+        return false;                      /* anything else (Cosh[..], poly, ...) */
+    }
+    return has_inv;
+}
+
+static int simp_region_identity_is_zero(const Expr* e, const AssumeCtx* ctx) {
+    if (!ctx || ctx->count == 0 || ctx->inconsistent) return 0;
+    if (!region_shape_ok(e)) return 0;
+
+    const Expr** vars=NULL; size_t nv=0, vcap=0;
+    region_vars(e,&vars,&nv,&vcap);
+    if (nv == 0 || nv > 4) { free((void*)vars); return 0; }
+    for (size_t i=0;i<nv;i++) if (!prov_re(ctx, vars[i])) { free((void*)vars); return 0; }
+
+    /* Performance gate: the derivative of ArcSin/ArcCos/ArcSinh/ArcCosh is
+     * algebraic, and its multi-variable zero test (Sqrt of a 2-var expression)
+     * is not provable by the exact machinery and is costly -- so for >= 2
+     * variables with such a head present, decline here rather than grind on the
+     * gradient.  (Those addition identities are closed by the pointwise
+     * hyperbolic recognizer, or genuinely need a 2-var multi-radical test.)
+     * ArcTan/ArcTanh (rational derivative) and the 1-variable case are kept. */
+    if (nv >= 2) {
+        const Expr** br=NULL; size_t nb=0, bc=0;
+        region_collect_branch(e,&br,&nb,&bc);
+        int algebraic = 0;
+        for (size_t i=0;i<nb;i++) {
+            const char* h = region_inv_head(br[i]);
+            if (h && (strcmp(h,"ArcSin")==0||strcmp(h,"ArcCos")==0||
+                      strcmp(h,"ArcSinh")==0||strcmp(h,"ArcCosh")==0)) { algebraic = 1; break; }
+        }
+        free((void*)br);
+        if (algebraic) { free((void*)vars); return 0; }
+    }
+
+    /* Region must be a BOX: every relational fact constrains <= 1 of our vars. */
+    for (size_t i=0;i<ctx->count;i++)
+        if (ctx->facts[i]->type==EXPR_FUNCTION &&
+            region_count_vars_in(ctx->facts[i], vars, nv) >= 2) { free((void*)vars); return 0; }
+
+    /* Gradient: each partial D[e,xi] must prove to literal 0 under R. */
+    Expr* conj = region_assum_conj(ctx);
+    int grad_ok = 1;
+    for (size_t i=0;i<nv && grad_ok;i++) {
+        Expr* d = expr_new_function(expr_new_symbol(SYM_D),
+                    (Expr*[]){ expr_copy((Expr*)e), expr_copy((Expr*)vars[i]) }, 2);
+        Expr* simp = eval_and_free(expr_new_function(expr_new_symbol("Simplify"),
+                        (Expr*[]){ d, expr_copy(conj) }, 2));
+        if (!(simp && simp->type==EXPR_INTEGER && simp->data.integer==0)) grad_ok = 0;
+        if (simp) expr_free(simp);
+    }
+    if (!grad_ok) { expr_free(conj); free((void*)vars); return 0; }
+
+    /* Continuity: each branch-sensitive argument (inverse fn, Log, Sqrt, even
+     * root) stays in its real continuity domain throughout R, so e has no branch
+     * cut on the (connected) box. */
+    const Expr** br=NULL; size_t ni=0, icap=0;
+    region_collect_branch(e,&br,&ni,&icap);
+    int cont_ok = 1;
+    for (size_t i=0;i<ni && cont_ok;i++) {
+        Expr* cond = region_domain_cond(br[i]);
+        if (cond) { if (assume_reduce_entails(ctx, cond) != 1) cont_ok = 0; expr_free(cond); }
+    }
+    free((void*)br);
+    if (!cont_ok) { expr_free(conj); free((void*)vars); return 0; }
+
+    /* Sample point in R via FindInstance; certify the constant value is 0. */
+    Expr** vlist = malloc(nv*sizeof(Expr*));
+    for (size_t i=0;i<nv;i++) vlist[i]=expr_copy((Expr*)vars[i]);
+    free((void*)vars);
+    Expr* vl = expr_new_function(expr_new_symbol("List"), vlist, nv);
+    free(vlist);
+    Expr* fi = eval_and_free(expr_new_function(expr_new_symbol("FindInstance"),
+                   (Expr*[]){ conj, vl, expr_new_symbol("Reals") }, 3));
+    int proven = 0;
+    if (fi && fi->type==EXPR_FUNCTION && fi->data.function.head->type==EXPR_SYMBOL &&
+        fi->data.function.head->data.symbol.name==SYM_List &&
+        fi->data.function.arg_count >= 1) {
+        Expr* ep = eval_and_free(expr_new_function(expr_new_symbol("ReplaceAll"),
+                       (Expr*[]){ expr_copy((Expr*)e),
+                                  expr_copy(fi->data.function.args[0]) }, 2));
+        if (ep) {
+            /* ep is a CONSTANT combination: 0 directly, via the exact inverse-fn
+             * certifier, or (for Log-converted forms like ArcCosh[2]-Log[2+Sqrt3])
+             * via a recursive Simplify of the constant.  All exact, no sampling. */
+            if (ep->type==EXPR_INTEGER && ep->data.integer==0) proven = 1;
+            else if (simp_invfn_combo_is_zero(ep)) proven = 1;
+            else if (ep->type == EXPR_FUNCTION) {
+                Expr* s = eval_and_free(expr_new_function(expr_new_symbol("Simplify"),
+                              (Expr*[]){ expr_copy(ep) }, 1));
+                if (s && s->type==EXPR_INTEGER && s->data.integer==0) proven = 1;
+                if (s) expr_free(s);
+            }
+            expr_free(ep);
+        }
+    }
+    if (fi) expr_free(fi);
+    return proven;
+}
+
+/* Inverse-HYPERBOLIC addition identities on a region: ArcSinh[a]+ArcSinh[b] =
+ * ArcSinh[c], and likewise ArcCosh / ArcTanh.  Unlike the circular Sin/Cos case
+ * (2-to-1, needing a radical range condition Reduce cannot discharge), the
+ * hyperbolic forward functions are injective enough that the identity is
+ * POINTWISE once the INPUT arguments are in domain -- the target's domain
+ * follows automatically from c = F[theta] (Cosh>=1, Tanh in (-1,1)), and
+ * ArcF[F[theta]] = theta holds (no branch reflection: ArcSinh/ArcTanh are full
+ * inverses on R; ArcCosh[Cosh[theta]]=theta for theta>=0, and theta =
+ * ArcCosh[a]+ArcCosh[b] >= 0 automatically).  So NO connectedness, sample point,
+ * or radical range check is needed: verify F[theta] = c (algebraic) and the two
+ * input args lie in F's domain (a POLYNOMIAL condition Reduce handles). */
+static int simp_invhyp_addition_is_zero(const Expr* e, const AssumeCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Plus ||
+        e->data.function.arg_count != 3) return 0;
+    if (!ctx || ctx->count == 0 || ctx->inconsistent) return 0;
+
+    const char* arc = NULL; const Expr* args[3]; int sg[3];
+    for (size_t i = 0; i < 3; i++) {
+        Expr* coeff = NULL; const Expr* atom = NULL;
+        if (!ia_term_coeff_atom(e->data.function.args[i], &coeff, &atom)) return 0;
+        int s = 0;
+        if (coeff->type == EXPR_INTEGER && coeff->data.integer == 1) s = 1;
+        else if (coeff->type == EXPR_INTEGER && coeff->data.integer == -1) s = -1;
+        expr_free(coeff);
+        if (!s) return 0;
+        if (atom->type != EXPR_FUNCTION || atom->data.function.arg_count != 1 ||
+            atom->data.function.head->type != EXPR_SYMBOL) return 0;
+        const char* h = atom->data.function.head->data.symbol.name;
+        if (strcmp(h,"ArcSinh") && strcmp(h,"ArcCosh") && strcmp(h,"ArcTanh")) return 0;
+        if (!arc) arc = h; else if (strcmp(arc, h) != 0) return 0;
+        args[i] = atom->data.function.args[0]; sg[i] = s;
+    }
+    /* Exactly one term has the minority sign; the other two sum to theta. */
+    int sum = sg[0]+sg[1]+sg[2];
+    int maj = (sum > 0) ? 1 : -1, oddi = -1, nodd = 0;
+    for (int i = 0; i < 3; i++) if (sg[i] != maj) { oddi = i; nodd++; }
+    if (nodd != 1) return 0;
+    int ia = -1, ib = -1;
+    for (int i = 0; i < 3; i++) if (i != oddi) { if (ia < 0) ia = i; else ib = i; }
+
+    const char* Fh = (strcmp(arc,"ArcSinh")==0) ? "Sinh"
+                   : (strcmp(arc,"ArcCosh")==0) ? "Cosh" : "Tanh";
+
+    /* theta = ArcF[args[ia]] + ArcF[args[ib]]; step 1: F[theta] - c == 0. */
+    Expr* th = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+        expr_new_function(expr_new_symbol(arc), (Expr*[]){ expr_copy((Expr*)args[ia]) }, 1),
+        expr_new_function(expr_new_symbol(arc), (Expr*[]){ expr_copy((Expr*)args[ib]) }, 1) }, 2);
+    /* TrigExpand forces the forward-of-inverse expansion F[ArcF a + ArcF b] ->
+     * algebraic (e.g. Cosh[ArcCosh a + ArcCosh b] -> a b + Sqrt[a^2-1]Sqrt[b^2-1]),
+     * which the plain pipeline does not always reach under an assumption set. */
+    Expr* fexp = eval_and_free(expr_new_function(expr_new_symbol("TrigExpand"),
+                     (Expr*[]){ expr_new_function(expr_new_symbol(Fh), (Expr*[]){ th }, 1) }, 1));
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+        fexp,
+        expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)args[oddi]) }, 2) }, 2);
+    /* Use the assumptions: Cap A may have rewritten the target's radical form
+     * (Sqrt[a]Sqrt[b] -> Sqrt[a b]) under them, so matching needs them too. */
+    Expr* s1 = eval_and_free(expr_new_function(expr_new_symbol("Simplify"),
+                   (Expr*[]){ diff, region_assum_conj(ctx) }, 2));
+    int step1 = (s1 && s1->type == EXPR_INTEGER && s1->data.integer == 0);
+    if (s1) expr_free(s1);
+    if (!step1) return 0;
+
+    /* Domain of the two input args (a POLYNOMIAL condition): ArcCosh arg >= 1,
+     * ArcTanh arg in (-1,1); ArcSinh any real (require reality of free vars). */
+    for (int t = 0; t < 2; t++) {
+        const Expr* a = (t == 0) ? args[ia] : args[ib];
+        Expr* cond = NULL;
+        if (strcmp(arc,"ArcCosh") == 0)
+            cond = expr_new_function(expr_new_symbol("GreaterEqual"),
+                       (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(1) }, 2);
+        else if (strcmp(arc,"ArcTanh") == 0) {
+            Expr* lo = expr_new_function(expr_new_symbol("Less"),
+                (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)a) }, 2);
+            Expr* hi = expr_new_function(expr_new_symbol("Less"),
+                (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(1) }, 2);
+            cond = expr_new_function(expr_new_symbol("And"), (Expr*[]){ lo, hi }, 2);
+        }
+        if (cond) { int ent = assume_reduce_entails(ctx, cond); expr_free(cond); if (ent != 1) return 0; }
+        else { /* ArcSinh: require the argument's free symbols real. */
+            const Expr** sv=NULL; size_t ns=0, cap=0;
+            region_vars(a, &sv, &ns, &cap);
+            int allr = (ns > 0);
+            for (size_t i=0;i<ns;i++) if (!prov_re(ctx, sv[i])) { allr = 0; break; }
+            free((void*)sv);
+            if (!allr) return 0;
+        }
+    }
+    return 1;
+}
+
 Expr* builtin_simplify(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1370,7 +1799,22 @@ Expr* builtin_simplify(Expr* res) {
      * 4 ArcTan[1/5] - ArcTan[1/239] - Pi/4 -> 0 and ArcSin[3/5] + ArcSin[5/13]
      * - ArcSin[56/65] -> 0.  simp_invtrig_combo_is_zero returns 1 only on a
      * proven zero, so 0 (the simplest form) always wins. */
-    if (best->type == EXPR_FUNCTION && simp_invtrig_combo_is_zero(best)) {
+    if (best->type == EXPR_FUNCTION && simp_invfn_combo_is_zero(best)) {
+        expr_free(best);
+        best = expr_new_integer(0);
+    }
+
+    /* Region-identity fold: an inverse-function addition identity that holds on
+     * the assumption region (a box) is decided by the derivative-constancy
+     * engine -- grad == 0, branch-cut-free on the box (Reduce), value 0 at a
+     * sample point.  Only under assumptions; declines otherwise. */
+    /* Inverse-function identities on the assumption region: the cheap pointwise
+     * hyperbolic-addition recognizer (ArcSinh/ArcCosh/ArcTanh) first, then the
+     * general derivative-constancy region engine.  Both use region_shape_ok, so
+     * their recursive Simplify calls cannot re-enter (no guard needed). */
+    if (best->type == EXPR_FUNCTION && ctx && ctx->count > 0 &&
+        (simp_invhyp_addition_is_zero(best, ctx) ||
+         simp_region_identity_is_zero(best, ctx))) {
         expr_free(best);
         best = expr_new_integer(0);
     }

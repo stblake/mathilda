@@ -93,7 +93,24 @@ canonical forms that the generic pipeline alone does not:
   closed forms and proven to equal `1` over the algebraic numbers (so
   `e == 0 mod 2 Pi`), with a numeric screen only selecting the `2 Pi` branch.
   Machin-type identities reduce — `4 ArcTan[1/5] - ArcTan[1/239] - Pi/4 -> 0`,
-  `ArcSin[3/5] + ArcSin[5/13] - ArcSin[56/65] -> 0`.
+  `ArcSin[3/5] + ArcSin[5/13] - ArcSin[56/65] -> 0`. The hyperbolic constant
+  combinations (`ArcSinh`/`ArcCosh`/`ArcTanh`) reduce likewise via `e^e == 1`.
+- **Conditional identities under `Assumptions`** — identities true only on a
+  region/domain reduce when the assumptions establish it, via general machinery
+  (never ad-hoc), with a `Reduce`/CAD entailment bridge for the sign/domain
+  conditions the lightweight provers cannot settle:
+  - radical-product combine `Sqrt[a] Sqrt[b] -> Sqrt[a b]` when a base is
+    provably non-negative (`Simplify[Sqrt[x-1] Sqrt[x+1] - Sqrt[x^2-1], x>1] -> 0`);
+  - inverse-of-forward `ArcTanh[Tanh[x]] -> x` (`x in Reals`), the hyperbolic
+    analogue of `ArcTan[Tan[x]] -> x` on `-Pi/2 < x < Pi/2`;
+  - `Abs[z]^2` / `Re` / `Im` via `ComplexExpand` when the variables are real;
+  - inverse-function **addition** identities on a region, e.g.
+    `ArcTan[x]+ArcTan[y]-ArcTan[(x+y)/(1-x y)] -> 0` on `-1<x<1 && -1<y<1`, and the
+    `ArcTanh`/`ArcSinh`/`ArcCosh` analogues — decided by a derivative-constancy
+    engine (gradient `== 0`, branch-cut-free on the connected region by `Reduce`,
+    value `0` at a sample point) or a pointwise forward-function recognizer.
+    These are sound: nothing reduces without the region established (a wrong or
+    too-large region, e.g. crossing `x y = 1`, is left unchanged).
 - **Logarithm simplification** — `Log` of a positive rational is decomposed over
   its prime factors, and linear combinations of logs are fused
   (`Sum c_i Log[a_i] -> Log[Prod a_i^c_i]`).

@@ -1761,6 +1761,20 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         }
     }
 
+    /* Assumption-gated radical-product combine seed: Sqrt[a] Sqrt[b] ->
+     * Sqrt[a b] (symbolic bases) when each base is provably non-negative under
+     * the active assumptions.  Inert without assumptions.  Closes e.g.
+     * Sqrt[x-1] Sqrt[x+1] - Sqrt[x^2-1] under x > 1. */
+    if (ctx && ctx_has_facts(ctx)) {
+        Expr* alt = simp_radical_combine_assuming(input, ctx);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
     /* The common-factor lift is applied as a final-form polish after
      * simp_bottomup completes (see builtin_simplify), not as a search
      * seed. Wiring it into the round loop or the seed phase changes the

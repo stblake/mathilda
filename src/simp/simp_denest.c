@@ -231,6 +231,142 @@ Expr* simp_radicals(const Expr* e) {
 }
 
 /* ----------------------------------------------------------------------- */
+/* Assumption-gated radical-product combine: simp_radical_combine_assuming  */
+/* ----------------------------------------------------------------------- */
+/*
+ * Sqrt[a] Sqrt[b] -> Sqrt[a b] (generally a^(p/q) b^(p/q) -> (a b)^(p/q)) is
+ * branch-correct for the principal root exactly when the bases are not both on
+ * the negative-real cut.  Proving each base >= 0 (via `denest_is_nonneg`, which
+ * reads the active assumptions) is a sufficient, SOUND condition.  Unlike
+ * `simp_radicals` (positive-integer constant bases only, assumption-free), this
+ * combines SYMBOLIC bases under assumptions, e.g.
+ *     Simplify[Sqrt[x-1] Sqrt[x+1] - Sqrt[x^2-1], x > 1]  ->  0
+ * (and hence Sinh[ArcCosh[x]] - Sqrt[x^2-1], the ArcCosh<->Log identity).  It
+ * declines (leaves the product) whenever a base's sign is not provable.
+ */
+
+static bool denest_is_nonneg(const Expr* e, const AssumeCtx* ctx);  /* defined below */
+
+/* A principal-root factor Sqrt[base] (p/q = 1/2) or Power[base, Rational[p,q]]
+ * (q >= 2).  Sets *base (borrowed) and the exponent numerator/denominator. */
+static bool rc_root_pq(const Expr* e, const Expr** base, long* p, long* q) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t na = e->data.function.arg_count;
+    if (h == SYM_Sqrt && na == 1) { *base = e->data.function.args[0]; *p = 1; *q = 2; return true; }
+    if (h == SYM_Power && na == 2 && is_rational_literal(e->data.function.args[1])) {
+        const Expr* ex = e->data.function.args[1];
+        const Expr* pe = ex->data.function.args[0];
+        const Expr* qe = ex->data.function.args[1];
+        if (pe->type != EXPR_INTEGER || qe->type != EXPR_INTEGER) return false;
+        if (qe->data.integer == 1) return false;   /* an integer exponent */
+        *base = e->data.function.args[0]; *p = pe->data.integer; *q = qe->data.integer;
+        return true;
+    }
+    return false;
+}
+
+static Expr* rc_make_root(Expr* base /*owned*/, long p, long q) {
+    if (p == 1 && q == 2)
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ base }, 1));
+    Expr* rexp = expr_new_function(expr_new_symbol(SYM_Rational),
+                     (Expr*[]){ expr_new_integer(p), expr_new_integer(q) }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ base, rexp }, 2));
+}
+
+/* A base is combinable when provably non-negative: the cheap assumption prover
+ * first, then the Reduce/CAD entailment (which can shift bounds, e.g. x-1>=0
+ * from x>1, that denest_is_nonneg cannot). */
+static bool rc_base_nonneg(const Expr* base, const AssumeCtx* ctx) {
+    return denest_is_nonneg(base, ctx) || assume_reduce_nonneg(ctx, base);
+}
+
+/* Combine same-exponent provably-nonnegative root factors in a Times node. */
+static Expr* rc_combine_times(const Expr* tn, const AssumeCtx* ctx) {
+    size_t n = tn->data.function.arg_count;
+    if (n < 2) return NULL;
+    /* Cheap pre-scan: no combine is possible (and no Reduce call worth making)
+     * unless at least two root factors share an exponent. */
+    size_t nroots = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* b; long p, q;
+        if (rc_root_pq(tn->data.function.args[i], &b, &p, &q)) nroots++;
+    }
+    if (nroots < 2) return NULL;
+    bool* consumed = (bool*)calloc(n, sizeof(bool));
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t out = 0; bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        if (consumed[i]) continue;
+        const Expr* bi; long pi, qi;
+        if (!rc_root_pq(tn->data.function.args[i], &bi, &pi, &qi) ||
+            !rc_base_nonneg(bi, ctx)) {
+            new_args[out++] = expr_copy((Expr*)tn->data.function.args[i]);
+            consumed[i] = true; continue;
+        }
+        Expr* prod = expr_copy((Expr*)bi);
+        size_t group = 1;
+        for (size_t j = i + 1; j < n; j++) {
+            if (consumed[j]) continue;
+            const Expr* bj; long pj, qj;
+            if (!rc_root_pq(tn->data.function.args[j], &bj, &pj, &qj)) continue;
+            if (pj != pi || qj != qi || !rc_base_nonneg(bj, ctx)) continue;
+            prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ prod, expr_copy((Expr*)bj) }, 2));
+            consumed[j] = true; group++;
+        }
+        consumed[i] = true;
+        if (group >= 2) { new_args[out++] = rc_make_root(prod, pi, qi); changed = true; }
+        else { expr_free(prod); new_args[out++] = expr_copy((Expr*)tn->data.function.args[i]); }
+    }
+    free(consumed);
+    if (!changed) { for (size_t k = 0; k < out; k++) expr_free(new_args[k]); free(new_args); return NULL; }
+    Expr* rebuilt = expr_new_function(expr_new_symbol(SYM_Times), new_args, out);
+    free(new_args);
+    return eval_and_free(rebuilt);
+}
+
+static Expr* rc_walk(const Expr* e, const AssumeCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = NULL; bool any = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = rc_walk(e->data.function.args[i], ctx);
+        if (r) {
+            if (!new_args) { new_args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+                for (size_t j = 0; j < i; j++) new_args[j] = expr_copy(e->data.function.args[j]); }
+            new_args[i] = r; any = true;
+        } else if (new_args) new_args[i] = expr_copy(e->data.function.args[i]);
+    }
+    Expr* current = NULL;
+    if (any) {
+        Expr* rebuilt = expr_new_function(expr_copy(e->data.function.head), new_args, n);
+        free(new_args);
+        current = eval_and_free(rebuilt);
+    }
+    const Expr* target = current ? current : e;
+    if (target->type == EXPR_FUNCTION && target->data.function.head &&
+        target->data.function.head->type == EXPR_SYMBOL &&
+        target->data.function.head->data.symbol.name == SYM_Times) {
+        Expr* combined = rc_combine_times(target, ctx);
+        if (combined) { if (current) expr_free(current); return combined; }
+    }
+    return current;
+}
+
+Expr* simp_radical_combine_assuming(const Expr* e, const AssumeCtx* ctx) {
+    if (!ctx || ctx->count == 0 || !has_non_integer_power(e)) return expr_copy((Expr*)e);
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+    Expr* r = rc_walk(e, ctx);
+    Expr* out = r ? r : expr_copy((Expr*)e);
+    if (dbg) simp_debug_log("RadicalCombineAssuming", e, out, simp_debug_elapsed_ms(t0));
+    return out;
+}
+
+/* ----------------------------------------------------------------------- */
 /* Sqrt-of-Sqrt denesting: simp_denest_sqrt                                */
 /* ----------------------------------------------------------------------- */
 

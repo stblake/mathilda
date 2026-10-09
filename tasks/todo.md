@@ -1,82 +1,48 @@
-# Simplify trig stress-test gap closure
+# Conditional identities under Assumptions — general additions
 
 Plan: `~/.claude/plans/let-s-test-the-implementation-bright-knuth.md`
-Corpus: 101 entries; baseline 84/101 → 0.
+Rule: fully general + sound only; NO one-off hacks (false zeros are the worst outcome).
 
-## Tier A — structural
-- [x] **A2** inverse-trig complementary pairs (ArcSin+ArcCos, ArcTan+ArcCot, ArcSec+ArcCsc → π/2).
-      Phase-0e pre-pass in `simp_search.c` + `transform_invtrig_complement` in `simp_tan_add.c`.
-      Closes #74 (bonus: bare sums → π/2, `+y` too). Corpus 84 → **85**. Tests green.
-- [x] **A1** constant-phase (root-of-unity) angle-expansion fallback in `simp_trigexp_zero.c`
-      (`expand_pi_phase`), authoritative over a spurious opaque-FALSE. Closes #13, #97, #98
-      AND fixes a latent `PossibleZeroQ` wrong-answer bug (returned False for true identities).
-      Corpus **88/101**. All regression suites green; soft-fails proven pre-existing; valgrind clean.
+## Phase 1 — Class 1 (clean, reuse existing provers)
+- [ ] **B** inverse-of-forward family (`ArcTanh[Tanh[e]]->e` etc.) in
+      `simp_assume_rewrite.c`, gated `prov_re`/`prov_nn`. → hyp #92.
+- [ ] **D** whole-input ComplexExpand under reality in `simp_assume_rewrite.c`. → trig #83.
+- [ ] **A** radical-product combine `Sqrt[a]Sqrt[b]->Sqrt[ab]` under provable
+      nonneg (`denest_is_nonneg`), `simp_denest.c` + wire ctx in `simp_search.c`.
+      → hyp #66, #68; enables #74.
 
-## Tier B — algebraic-number
-- [x] **B1** trig at rational multiples of π → qqbar. `to_qqbar` + `is_constant_algebraic`
-      Sin/Cos/Tan/Cot/Sec/Csc-at-rational-π cases (`trig_arg_pi_rational`, roots of unity);
-      top-level constant-algebraic fold in `builtin_simplify` (trig consts bypass simp_search's
-      Phase-0d via the SHAPE_TRIG router). Closes #89, #90, #91. Corpus **91/101**. Bonus:
-      `RootReduce[Sin[Pi/7]]` now exact. All qqbar-consumer suites green; valgrind clean.
-- [x] **B2** inverse-trig rational-π addition. `simp_invtrig_combo_is_zero` (`simp_builtins.c`):
-      build `exp(i·e)` from Euler closed forms, prove `== 1` exactly via qqbar (e ≡ 0 mod 2π),
-      numeric screen selects branch k=round(e/2π), keep iff k==0. Closes #92, #94. Corpus **93/101**.
+## Phase 2 — Class 2 region engine (sound derivative-constancy)
+- [ ] Shared budgeted Reduce-entailment helper (from `refine.c`).
+- [ ] `simp_region_identity_is_zero(e,ctx)` new `simp_region_identity.c`:
+      ∇f≡0 (exact) + real box + Reduce branch-cut-domain entailment + exact
+      sample-point value via extended invtrig certifier. → #75/#76/#77 (trig+hyp).
+- [ ] extend `simp_invtrig_combo_is_zero` to ArcTanh/ArcSinh/ArcCosh constants.
+- [ ] #101 best-effort (trig square recognition + Reduce `Cos>=Sin` on 0<x<Pi/4).
 
-## Review (DONE — v0.327)
+## Cross-cutting
+- [ ] Assumption harness over both corpora; **adversarial soundness tests**
+      (no-assumption / wrong-region must NOT reduce; non-identities never certify).
+- [ ] No regression (corpora 93/101 & 85/93 bare; suites; check-messages/c99; valgrind).
+- [ ] version bump + changelog + docs; commit/tag.
 
-**Outcome: 84/101 → 93/101. All 9 genuine gaps closed; latent `PossibleZeroQ`
-wrong-answer bug (returned False for true affine-phase identities) fixed.**
+## Already pass under assumptions (verified): trig #100, hyp #93.
 
-Remaining 8 nonzero are all correct: typos #64 (`Tan-Sec+1`), #93 (`ArcTan[4/3]`);
-conditional #75/76/77/83/100/101 (need `Assumptions`; match Mathematica).
+## Review (DONE — v0.329)
 
-Files: `simp_tan_add.c` (A2 complement transform), `simp_search.c` (A2 Phase-0e
-pre-pass), `simp_trigexp_zero.c` (A1 `expand_pi_phase` + authoritative-over-FALSE),
-`flint_qqbar.c` (B1 trig-at-rational-π in `to_qqbar`/`is_constant_algebraic`),
-`simp_builtins.c` (B1 top-level constant-algebraic fold + B2 `simp_invtrig_combo_is_zero`).
+**Outcome: 11 of 14 conditionals now reduce under Assumptions, via general sound
+mechanisms (no hacks). Closed: #66,#68,#74 (radical combine), #92 (inverse-of-
+forward), #83 (ComplexExpand), #75 trig+hyp, #76 hyp, #77 hyp (region engine +
+hyperbolic-addition recognizer). + #100/#93 already. Residual: trig #76/#77
+(ArcSin/ArcCos addition — radical range inequality beyond Reduce), trig #101.**
 
-Verification: full corpus re-run; 22 regression suites green; the 4 soft-fails
-proven pre-existing via base A/B (identical set); valgrind clean on all tiers
-(no leak traces to new code); `make check-messages`/`check-c99` pass. Tests added:
-`test_tez_constant_phase`, `test_invtrig_complementary_pairs`,
-`test_invtrig_rational_angle_addition`, `test_simplify_trig_rational_pi_products`.
-Docs: `docs/spec/builtins/simplification.md` + changelog `2026-10-05.md`; version 0.327.
+Built: Reduce-entailment bridge (`simp_assume.c` assume_reduce_entails/_nonneg);
+radical-product combine (`simp_denest.c`); inverse-of-forward hyperbolic family
+(`simp_assume_rewrite.c`); region derivative-constancy engine + hyperbolic const
+& addition certifiers (`simp_builtins.c`). Reduce enters Simplify only on the
+decline branch, budgeted (var cap).
 
-Not committed/tagged (awaiting user).
-
-## Hyperbolic corpus (DONE — v0.328)
-
-**Outcome: generated the hyperbolic analogue (93 entries, Osborn's rule; exact-
-value/Machin sections omitted — no hyperbolic analogue). 85/93 reduce; the 8
-remaining are conditional (match Mathematica without `Assumptions`).**
-
-Found 3 of my own construction errors first (Osborn sign flips) via numeric
-verification: #12 `Cosh[iπ/2−x]=−i Sinh` (needed +), #13 `Tanh[iπ/2−x]=−Coth`
-(needed +), #58 `Sinh⁶+Cosh⁶=(15Cosh2x+Cosh6x)/16` (the (5+3Cos4x)/8 trig form
-has no hyperbolic analogue). Then 4 genuine gaps fixed:
-- #13/#16/#90 — hyperbolic heads with affine IMAGINARY phase `k x + i c Pi`:
-  extended `expand_pi_phase` (`simp_trigexp_zero.c`) with the hyperbolic addition
-  formula; `Cosh[icπ]=Cos[cπ]`, `Sinh[icπ]=i Sin[cπ]` fold to root-of-unity coeffs.
-- #29 — `Coth[x] - Csch[x] = Tanh[x/2]` reciprocal-difference half-angle rule
-  added to `HalfAngle` (`simp_trig_roundtrip.c`); TrigReduce leaves the
-  `(Cosh-1)/Sinh` form split as Coth−Csch.
-
-Conditional (correct, left bare; analogues of trig #75/76/77/100/101): #66/#68
-(`Sqrt[x-1]Sqrt[x+1]` vs `Sqrt[x²-1]`), #74 (ArcCosh↔Log), #75/76/77 (inverse-hyp
-addition), #92 (`ArcTanh[Tanh[x]]`), #93 (`Sqrt[e^{2x}]`; folds under `Reals`).
-
-Verified: trig corpus still 93/101 (no HalfAngle regression); 19 regression
-suites green; valgrind clean. Tests: `test_trigexp_zero.c::{test_tez_hyperbolic_phase,
-test_tez_hyperbolic_structural}`. Docs + changelog; version 0.328.
-
-## Cross-cutting (per step)
-- [ ] Re-run full corpus (scratchpad/corpus.m); 84 baseline must stay green.
-- [ ] Regression: `invtrig_simplify_tests simplify_tests trigrat_tests trigexp_zero_tests fullsimplify_corpus_tests`
-      + Risch diff-back consumers (zero_test.c, risch_util.c) for A1.
-- [ ] Add corpus regression fixture; valgrind new paths; version bump + changelog + docs/spec.
-
-## Notes
-- Corpus typos (Mathilda correct, report back): #64 (denom `Tan-Sec+1`), #93 (`ArcTan[4/3]`).
-- Correct refusals (no change): #75, #76, #77, #83, #100, #101.
-- Pre-existing soft-fail (NOT mine): `test_simplify_algebraic_u_power_extraction` expected
-  string `x^2^(3/2)` mis-parses (right-assoc ^); base binary gives identical output.
+Verified: both corpora bare unchanged (93/101, 85/93); 19 regression suites;
+14-case adversarial soundness (no false zeros — no-assum/wrong-region/non-identity
+all stay); valgrind clean; check-messages/check-c99. Tests:
+`test_invtrig_simplify.c::{test_simplify_under_assumptions,
+test_simplify_assumptions_soundness}`. Docs + changelog; version 0.329.

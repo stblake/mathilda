@@ -276,6 +276,42 @@ void test_invtrig_rational_angle_addition(void) {
     assert_eval_eq("Simplify[2 ArcTan[1/2] - ArcTan[3/4]] === 0", "False", 0);
 }
 
+/* Conditional identities that reduce ONLY under the right Assumptions, via the
+ * general assumption machinery (radical-product combine, inverse-of-forward,
+ * ComplexExpand-under-reality, the derivative-constancy region engine, and the
+ * pointwise hyperbolic-addition recognizer). */
+void test_simplify_under_assumptions(void) {
+    /* Radical-product combine (Reduce-backed sign proof). */
+    assert_eval_eq("Simplify[Sinh[ArcCosh[x]] - Sqrt[x^2-1], x>1]", "0", 0);
+    assert_eval_eq("Simplify[Tanh[ArcCosh[x]] - Sqrt[x^2-1]/x, x>1]", "0", 0);
+    /* Inverse-of-forward (hyperbolic family). */
+    assert_eval_eq("Simplify[ArcTanh[Tanh[x]] - x, Element[x, Reals]]", "0", 0);
+    /* ComplexExpand under reality. */
+    assert_eval_eq("Simplify[Abs[Sin[x + I y]]^2 - (Sin[x]^2 + Sinh[y]^2), Element[x|y, Reals]]", "0", 0);
+    /* Region engine (derivative-constancy) + hyperbolic-addition recognizer. */
+    assert_eval_eq("Simplify[ArcTan[x] + ArcTan[y] - ArcTan[(x+y)/(1-x y)], -1<x<1 && -1<y<1]", "0", 0);
+    assert_eval_eq("Simplify[ArcTanh[x] + ArcTanh[y] - ArcTanh[(x+y)/(1+x y)], -1<x<1 && -1<y<1]", "0", 0);
+    assert_eval_eq("Simplify[ArcSinh[x] + ArcSinh[y] - ArcSinh[x Sqrt[1+y^2] + y Sqrt[1+x^2]], Element[x|y, Reals]]", "0", 0);
+    assert_eval_eq("Simplify[ArcCosh[x] + ArcCosh[y] - ArcCosh[x y + Sqrt[x^2-1] Sqrt[y^2-1]], x>1 && y>1]", "0", 0);
+    assert_eval_eq("Simplify[ArcCosh[x] - ArcSinh[Sqrt[x^2-1]], x>1]", "0", 0);
+}
+
+/* SOUNDNESS: these must NEVER reduce to 0 (a false zero is a wrong answer). */
+void test_simplify_assumptions_soundness(void) {
+    /* No assumption. */
+    assert_eval_eq("Simplify[Sinh[ArcCosh[x]] - Sqrt[x^2-1]] === 0", "False", 0);
+    assert_eval_eq("Simplify[ArcTanh[Tanh[x]] - x] === 0", "False", 0);
+    assert_eval_eq("Simplify[ArcTan[x] + ArcTan[y] - ArcTan[(x+y)/(1-x y)]] === 0", "False", 0);
+    /* Wrong / too-large region (crosses x y = 1). */
+    assert_eval_eq("Simplify[ArcTan[x] + ArcTan[y] - ArcTan[(x+y)/(1-x y)], x>2 && y>2] === 0", "False", 0);
+    /* Both bases negative: radical combine unsound, must decline. */
+    assert_eval_eq("Simplify[Sqrt[x-1] Sqrt[x+1] - Sqrt[x^2-1], x<-1] === 0", "False", 0);
+    /* Genuine non-identities under plausible assumptions. */
+    assert_eval_eq("Simplify[ArcTan[x] + ArcTan[y] - ArcTan[x+y], -1<x<1 && -1<y<1] === 0", "False", 0);
+    assert_eval_eq("Simplify[ArcSinh[x] + ArcSinh[y] - ArcSinh[x+y], Element[x|y, Reals]] === 0", "False", 0);
+    assert_eval_eq("Simplify[ArcCosh[x] + ArcCosh[y] - ArcCosh[x y - Sqrt[x^2-1] Sqrt[y^2-1]], x>1 && y>1] === 0", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -339,6 +375,8 @@ int main(void) {
 
     TEST(test_invtrig_complementary_pairs);
     TEST(test_invtrig_rational_angle_addition);
+    TEST(test_simplify_under_assumptions);
+    TEST(test_simplify_assumptions_soundness);
 
     printf("All inverse-trig Simplify tests passed!\n");
     return 0;

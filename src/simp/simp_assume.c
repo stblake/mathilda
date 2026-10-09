@@ -919,3 +919,102 @@ bool assume_known_gt_expr(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
     return false;
 }
 
+
+/* ----------------------------------------------------------------------- */
+/* Reduce/CAD-backed assumption entailment                                 */
+/* ----------------------------------------------------------------------- */
+/*
+ * The hand-coded prov_* family cannot shift bounds (it proves x >= 0 under
+ * x > 0 but not x-1 >= 0 under x > 1) nor reason about nonlinear coupling
+ * (x y < 1 on a box).  This bridges Simplify's assumption path to the same
+ * Reduce/CAD entailment oracle that Refine uses: assumptions A entail predicate
+ * P iff `Reduce[A && !P, vars, Reals]` is unsatisfiable (literal False).
+ * Budgeted by a hard variable cap (CAD is doubly-exponential) so a wide input
+ * declines (-1) rather than hanging; used only on the decline branch of the
+ * cheap provers.  Shared by the radical-product combine and the region-identity
+ * engine.  SOUND: a `False` from Reduce is a proof, never a sample.
+ */
+#define AR_MAX_VARS 4
+
+static bool ar_sym_is(const Expr* e, const char* nm) {
+    return e && e->type == EXPR_SYMBOL &&
+        (e->data.symbol.name == nm || strcmp(e->data.symbol.name, nm) == 0);
+}
+static bool ar_relational_head(const Expr* f) {
+    if (!f || f->type != EXPR_FUNCTION || !f->data.function.head ||
+        f->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    return strcmp(h,"Less")==0 || strcmp(h,"Greater")==0 ||
+           strcmp(h,"LessEqual")==0 || strcmp(h,"GreaterEqual")==0 ||
+           strcmp(h,"Equal")==0 || strcmp(h,"Unequal")==0 ||
+           strcmp(h,"And")==0 || strcmp(h,"Or")==0 || strcmp(h,"Not")==0 ||
+           strcmp(h,"Inequality")==0;
+}
+static void ar_collect_vars(const Expr* e, const Expr*** v, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_real_constant_symbol(e->data.symbol.name)) return;
+        for (size_t i = 0; i < *n; i++)
+            if ((*v)[i]->data.symbol.name == e->data.symbol.name) return;
+        if (*n == *cap) { *cap = *cap ? *cap * 2 : 8; *v = realloc(*v, *cap * sizeof(Expr*)); }
+        (*v)[(*n)++] = e;
+        return;
+    }
+    if (e->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            ar_collect_vars(e->data.function.args[i], v, n, cap);
+}
+/* Reduce[stmt, vars, Reals] == False ?  `stmt` consumed. */
+static int ar_unsat(Expr* stmt) {
+    if (ar_sym_is(stmt, "False")) { expr_free(stmt); return 1; }
+    if (ar_sym_is(stmt, "True"))  { expr_free(stmt); return 0; }
+    const Expr** v = NULL; size_t nv = 0, cap = 0;
+    ar_collect_vars(stmt, &v, &nv, &cap);
+    if (nv == 0 || nv > AR_MAX_VARS) { free((void*)v); expr_free(stmt); return 0; }
+    Expr** vc = malloc(nv * sizeof(Expr*));
+    for (size_t i = 0; i < nv; i++) vc[i] = expr_copy((Expr*)v[i]);
+    free((void*)v);
+    Expr* varlist = expr_new_function(expr_new_symbol("List"), vc, nv);
+    free(vc);
+    Expr* call = expr_new_function(expr_new_symbol("Reduce"),
+        (Expr*[]){ stmt, varlist, expr_new_symbol("Reals") }, 3);
+    Expr* out = eval_and_free(call);
+    int unsat = ar_sym_is(out, "False");
+    if (out) expr_free(out);
+    return unsat;
+}
+static Expr* ar_conj(const AssumeCtx* ctx) {
+    if (!ctx || ctx->count == 0) return expr_new_symbol("True");
+    Expr** kept = calloc(ctx->count, sizeof(Expr*)); size_t nk = 0;
+    for (size_t i = 0; i < ctx->count; i++)
+        if (ar_relational_head(ctx->facts[i])) kept[nk++] = expr_copy(ctx->facts[i]);
+    Expr* out = (nk == 0) ? expr_new_symbol("True")
+              : (nk == 1) ? kept[0]
+              : expr_new_function(expr_new_symbol("And"), kept, nk);
+    free(kept);
+    return out;
+}
+
+/* 1 = assumptions entail pred; 0 = entail its negation; -1 = undecided. */
+int assume_reduce_entails(const AssumeCtx* ctx, const Expr* pred) {
+    if (!ctx || ctx->inconsistent) return -1;
+    Expr* A = ar_conj(ctx);
+    Expr* notP = eval_and_free(expr_new_function(expr_new_symbol("Not"),
+                     (Expr*[]){ expr_copy((Expr*)pred) }, 1));
+    Expr* s1 = expr_new_function(expr_new_symbol("And"),
+                   (Expr*[]){ expr_copy(A), notP }, 2);
+    if (ar_unsat(eval_and_free(s1))) { expr_free(A); return 1; }
+    Expr* s2 = expr_new_function(expr_new_symbol("And"),
+                   (Expr*[]){ A, expr_copy((Expr*)pred) }, 2);
+    if (ar_unsat(eval_and_free(s2))) return 0;   /* A consumed by s2 */
+    return -1;
+}
+
+/* 1 iff the assumptions entail `e >= 0`. */
+int assume_reduce_nonneg(const AssumeCtx* ctx, const Expr* e) {
+    Expr* pred = expr_new_function(expr_new_symbol("GreaterEqual"),
+                     (Expr*[]){ expr_copy((Expr*)e), expr_new_integer(0) }, 2);
+    int r = assume_reduce_entails(ctx, pred);
+    expr_free(pred);
+    return r == 1;
+}

@@ -378,6 +378,33 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             expr_free(pihalf); expr_free(neghalf); expr_free(u_re);
             if (ok) { Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out; }
         }
+
+        /* Inverse-of-forward for the hyperbolic family, mirroring ArcTan[Tan]
+         * above.  Sinh and Tanh are bijective on the reals (ArcSinh/ArcTanh are
+         * their real inverses), so ArcSinh[Sinh[e]] = ArcTanh[Tanh[e]] = e for
+         * real e.  Cosh is even with ArcCosh[Cosh[e]] = |e|, so = e for e >= 0,
+         * -e for e <= 0.  Each gate is an EXISTING prover; no new machinery. */
+        if ((strcmp(h, "ArcSinh") == 0 && sr_head(a0, "Sinh") &&
+             a0->data.function.arg_count == 1) ||
+            (strcmp(h, "ArcTanh") == 0 && sr_head(a0, "Tanh") &&
+             a0->data.function.arg_count == 1)) {
+            const Expr* inner = a0->data.function.args[0];
+            if (prov_re(ctx, inner)) {
+                Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out;
+            }
+        }
+        if (strcmp(h, "ArcCosh") == 0 && sr_head(a0, "Cosh") &&
+            a0->data.function.arg_count == 1) {
+            const Expr* inner = a0->data.function.args[0];
+            if (assume_known_nonneg(ctx, inner)) {
+                Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out;
+            }
+            if (assume_known_nonpos(ctx, inner)) {
+                Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)inner) }, 2));
+                expr_free(node); *changed = 1; return out;
+            }
+        }
     }
 
     /* Mod[a, m] -> r from an Element[(a + c)/m, Integers] fact. */
