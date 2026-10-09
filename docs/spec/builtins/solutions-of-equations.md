@@ -825,6 +825,14 @@ logical description of its solution set.
   `Reduce[-5 < 3 x + 7 <= 22, x]` solves as `Reduce[-5 < 3 x + 7 <= 22, x, Reals]`.
 - `Reduce[expr, vars, dom]`: reduce over `dom` (`Complexes`, `Reals`, `Integers`,
   or `Rationals`).
+- `Reduce[expr]`: the variables are **inferred** from `expr` (every free symbol,
+  excluding named constants such as `Pi`/`E`/`Degree`, domain symbols, and
+  reserved literals; listed alphabetically), so `Reduce[x^2 < 1]` is
+  `Reduce[x^2 < 1, {x}]`.
+- `Reduce[expr, dom]`: a domain symbol (`Reals`, `Complexes`, `Integers`,
+  `Rationals`) in the second slot is read as the **domain**, with the variables
+  inferred — so `Reduce[x^2 < 1, Reals]` is `Reduce[x^2 < 1, {x}, Reals]`. (A
+  non-domain symbol in the second slot is a variable, as before.)
 
 `expr` is a logical combination (`&&`, `||`, `!`, `Implies`, `Xor`, chained
 `Inequality`) of equations (`==`, `!=`) and inequalities (`<`, `<=`, `>`, `>=`).

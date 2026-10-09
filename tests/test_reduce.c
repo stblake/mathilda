@@ -203,12 +203,68 @@ static void test_equations_decline(void) {
     run_test("Reduce[x^2 == 4 && x^3 == 8, x]", "Equal[x, 2]");
     run_test("Reduce[x^2 == 4 || x == 5, x]",
              "Or[Equal[x, -2], Equal[x, 2], Equal[x, 5]]");
-    /* No variable argument. */
-    run_test("Reduce[x^2 == 4]", "Reduce[Equal[Power[x, 2], 4]]");
+    /* 1-arg form (M1): the variable is inferred, so this is Reduce[x^2==4, {x}]
+     * over the default Complexes domain. */
+    run_test("Reduce[x^2 == 4]", "Or[Equal[x, -2], Equal[x, 2]]");
     /* A single forward-trig equation is now solved (routed to Solve and rendered
      * as its complete periodic family), not echoed unevaluated. */
     run_contains("Reduce[Sin[x] == 0, x]", "Element[C[1], Integers]");
     run_not_contains("Reduce[Sin[x] == 0, x]", "Sin[x]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  M1 - domain-symbol detection + inferred variables                  *
+ *  (Reduce[expr], Reduce[expr, dom]).  The explicit-var 3-arg form    *
+ *  was always correct; these forms used to misparse the domain symbol *
+ *  as a variable and so returned unevaluated/wrong.                   *
+ * ------------------------------------------------------------------ */
+
+/* Evaluate two inputs and assert they produce identical FullForm. */
+static void run_same(const char* a, const char* b) {
+    Expr* ea = parse_expression(a); Expr* eb = parse_expression(b);
+    if (!ea || !eb) { printf("FAIL: parse: %s / %s\n", a, b); ASSERT(0); return; }
+    Expr* ra = evaluate(ea); Expr* rb = evaluate(eb);
+    char* ga = expr_to_string_fullform(ra); char* gb = expr_to_string_fullform(rb);
+    if (strcmp(ga, gb) != 0) {
+        printf("FAIL: %s  !==  %s\n  lhs: %s\n  rhs: %s\n", a, b, ga, gb);
+        free(ga); free(gb); expr_free(ra); expr_free(rb); expr_free(ea); expr_free(eb);
+        ASSERT(0); return;
+    }
+    printf("PASS(same): %s === %s -> %s\n", a, b, ga);
+    free(ga); free(gb); expr_free(ra); expr_free(rb); expr_free(ea); expr_free(eb);
+}
+
+static void test_domain_and_inferred_vars(void) {
+    /* 2-arg domain form: the domain symbol in the second slot is the domain,
+     * the variables are inferred -- identical to the 3-arg explicit form. */
+    run_test("Reduce[x^2 < 1, Reals]", "Inequality[-1, Less, x, Less, 1]");
+    run_test("Reduce[x^2 < 1, Integers]", "Equal[x, 0]");
+    run_test("Reduce[x^2 == 1, Complexes]", "Or[Equal[x, -1], Equal[x, 1]]");
+    run_same("Reduce[x^2 < 1, Reals]", "Reduce[x^2 < 1, {x}, Reals]");
+    run_same("Reduce[x^2 < 1, Integers]", "Reduce[x^2 < 1, {x}, Integers]");
+    run_same("Reduce[x^2 == 1, Complexes]", "Reduce[x^2 == 1, {x}, Complexes]");
+
+    /* 1-arg form: variables inferred, default domain (Complexes, or Reals when
+     * an ordering inequality is present). */
+    run_same("Reduce[x^2 < 1]", "Reduce[x^2 < 1, {x}]");
+    run_same("Reduce[x^2 == 4]", "Reduce[x^2 == 4, {x}]");
+
+    /* Inferred variables are sorted alphabetically, matching the explicit list. */
+    run_same("Reduce[x^2 + y^2 > 4]", "Reduce[x^2 + y^2 > 4, {x, y}]");
+
+    /* D2 (was the headline deficiency): a multivariate emptiness over Reals now
+     * decides via the 2-arg domain form exactly as the 3-arg form does. */
+    run_test("Reduce[x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && "
+             "x^2 + y^2 + z^2 > 4, Reals]", "False");
+
+    /* Constant statements still short-circuit (no inferable variable). */
+    run_test("Reduce[1 > 0, Reals]", "True");
+    run_test("Reduce[2 < 1]", "False");
+
+    /* Regression: a non-domain symbol in the second slot is still a VARIABLE,
+     * not a domain (unchanged behaviour). */
+    run_same("Reduce[x^2 < 1, x]", "Reduce[x^2 < 1, {x}]");
+    run_test("Reduce[x^2 < 1, foo]", "Reduce[Less[Power[x, 2], 1], foo]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1625,6 +1681,7 @@ int main(void) {
     TEST(test_decides_false);
     TEST(test_equations);
     TEST(test_equations_decline);
+    TEST(test_domain_and_inferred_vars);
     TEST(test_transcendental_log_exp);
     TEST(test_trig_pair);
     TEST(test_periodic_conj_region);

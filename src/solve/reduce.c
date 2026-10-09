@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "attr.h"
 #include "expr.h"
@@ -38,6 +39,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "simp_internal.h"   /* is_real_constant_symbol: exclude Pi/E/... from inferred vars */
 
 /* ------------------------------------------------------------------ *
  *  Small helpers                                                      *
@@ -413,6 +415,83 @@ static Expr** collect_vars(Expr* vars, int* nv_out) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  M1: domain detection + free-variable inference                     *
+ *                                                                     *
+ *  Reduce[expr], Reduce[expr, dom] and Reduce[expr, vars, dom] all    *
+ *  behave as in Mathematica: when the variable list is omitted the    *
+ *  free variables of `expr` are inferred, and a domain symbol in the  *
+ *  last positional slot is recognised as the domain (not a variable). *
+ * ------------------------------------------------------------------ */
+
+/* A domain symbol may legitimately occupy the last positional slot.
+ * Reals/Complexes/Integers/Rationals drive the per-domain engines; Booleans and
+ * Primes are protected symbols that can never be a user variable, so matching
+ * them here only prevents the misparse -- they then decline through the normal
+ * path exactly as the 3-arg form does. */
+static bool reduce_is_domain_symbol(const Expr* e) {
+    if (!e || e->type != EXPR_SYMBOL) return false;
+    const char* n = e->data.symbol.name;
+    return n == SYM_Reals || n == SYM_Complexes || n == SYM_Integers
+        || n == SYM_Rationals || n == SYM_Booleans || n == SYM_Primes;
+}
+
+/* True for a symbol that must never be collected as a solve variable: a named
+ * numeric constant (Pi, E, EulerGamma, Degree, ...), a domain symbol, or a
+ * reserved literal.  Mirrors the exclusion Mathematica applies when inferring
+ * the variables of a statement. */
+static bool reduce_excluded_var_sym(const char* n) {
+    return is_real_constant_symbol(n)
+        || n == SYM_Reals || n == SYM_Complexes || n == SYM_Integers
+        || n == SYM_Rationals || n == SYM_Booleans || n == SYM_Primes
+        || n == SYM_I || n == SYM_Infinity || n == SYM_ComplexInfinity
+        || n == SYM_Indeterminate || n == SYM_True || n == SYM_False;
+}
+
+/* DFS: append owned copies of the distinct solve-variable symbol leaves of `e`.
+ * Descends into function arguments only -- a call head (Plus, Sin, ...) is
+ * structural, never a variable.  Models refine.c's collect_bare_vars. */
+static void reduce_collect_free_vars(const Expr* e, Expr*** arr, int* n, int* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (reduce_excluded_var_sym(nm)) return;
+        for (int i = 0; i < *n; i++)
+            if ((*arr)[i]->data.symbol.name == nm) return;   /* dup (interned ptr) */
+        if (*n == *cap) {
+            *cap = *cap ? *cap * 2 : 8;
+            *arr = (Expr**)realloc(*arr, (size_t)*cap * sizeof(Expr*));
+        }
+        (*arr)[(*n)++] = expr_copy((Expr*)e);
+        return;
+    }
+    if (e->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            reduce_collect_free_vars(e->data.function.args[i], arr, n, cap);
+}
+
+/* Build an owned List[...] of the inferred solve variables of `expr`, sorted
+ * alphabetically for a deterministic order that matches the explicit var-list
+ * form.  Returns an empty List when `expr` has no free variable (a constant
+ * statement -- the caller's True/False short-circuit then decides it). */
+static Expr* reduce_infer_var_list(const Expr* expr) {
+    Expr** arr = NULL;
+    int n = 0, cap = 0;
+    reduce_collect_free_vars(expr, &arr, &n, &cap);
+    for (int i = 1; i < n; i++) {   /* insertion sort by symbol name */
+        Expr* key = arr[i];
+        int j = i - 1;
+        while (j >= 0 && strcmp(arr[j]->data.symbol.name, key->data.symbol.name) > 0) {
+            arr[j + 1] = arr[j];
+            j--;
+        }
+        arr[j + 1] = key;
+    }
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), arr, (size_t)n);
+    free(arr);   /* expr_new_function copied the array and adopted the elements */
+    return list;
+}
+
+/* ------------------------------------------------------------------ *
  *  builtin                                                            *
  * ------------------------------------------------------------------ */
 
@@ -435,7 +514,7 @@ Expr* builtin_reduce(Expr* res) {
 static Expr* reduce_impl(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2) return NULL;
+    if (argc < 1) return NULL;   /* M1: Reduce[expr] (1-arg) infers its variables */
 
     /* Peel trailing option Rules; the first non-option arg from the end marks
      * the end of the positional args (expr, vars, [dom]).  A trailing
@@ -456,7 +535,7 @@ static Expr* reduce_impl(Expr* res) {
         }
         break;
     }
-    if (pos_end < 2 || pos_end > 3) return NULL;
+    if (pos_end < 1 || pos_end > 3) return NULL;
 
     ReduceOpts opts;
     reduce_opts_default(&opts);
@@ -466,10 +545,33 @@ static Expr* reduce_impl(Expr* res) {
     }
 
     Expr* expr = res->data.function.args[0];
-    Expr* vars = res->data.function.args[1];
-    Expr* dom  = (pos_end >= 3) ? res->data.function.args[2] : NULL;
+    Expr* vars = NULL;
+    Expr* dom  = NULL;
+    /* M1: synthetic var-list inferred from `expr` when none was given.  Owned
+     * temporary -- freed on EVERY return path below that also frees owned_list. */
+    Expr* owned_vars = NULL;
 
-    if (!reduce_valid_vars(vars)) { warn_reduce_ivar(vars); return NULL; }
+    if (pos_end >= 3) {
+        /* Reduce[expr, vars, dom] -- explicit var list and domain (unchanged). */
+        vars = res->data.function.args[1];
+        dom  = res->data.function.args[2];
+    } else if (pos_end == 2) {
+        /* Reduce[expr, vars]  OR  Reduce[expr, dom]: a domain symbol in the
+         * second slot is the domain (infer vars); anything else is the vars. */
+        Expr* a1 = res->data.function.args[1];
+        if (reduce_is_domain_symbol(a1)) dom = a1;
+        else                             vars = a1;
+    }
+    /* pos_end == 1: Reduce[expr] -- vars inferred, dom defaulted (NULL). */
+
+    if (vars) {
+        if (!reduce_valid_vars(vars)) { warn_reduce_ivar(vars); return NULL; }
+    } else {
+        /* Infer the free variables.  An empty list (constant statement) flows
+         * through so the True/False short-circuits below still decide it. */
+        vars = owned_vars = reduce_infer_var_list(expr);
+        if (!vars) return NULL;   /* allocation failure only */
+    }
 
     /* A list of statements in the `expr` slot is their conjunction, exactly as
      * in Mathematica: Reduce[{e1, e2, ...}, vars] == Reduce[e1 && e2 && ..., vars].
@@ -492,8 +594,8 @@ static Expr* reduce_impl(Expr* res) {
 
     /* Reduce does not hold its args: `expr` arrives already evaluated, so a
      * decidable statement is frequently already True/False here. */
-    if (is_sym(expr, SYM_True))  { expr_free(owned_list); return expr_new_symbol(SYM_True); }
-    if (is_sym(expr, SYM_False)) { expr_free(owned_list); return expr_new_symbol(SYM_False); }
+    if (is_sym(expr, SYM_True))  { expr_free(owned_list); expr_free(owned_vars); return expr_new_symbol(SYM_True); }
+    if (is_sym(expr, SYM_False)) { expr_free(owned_list); expr_free(owned_vars); return expr_new_symbol(SYM_False); }
 
     /* Phase 7: a top-level Exists / ForAll makes this a quantifier-elimination
      * problem -- eliminate the bound variables and reduce over the remaining
@@ -502,6 +604,7 @@ static Expr* reduce_impl(Expr* res) {
     if (is_head(expr, SYM_Exists) || is_head(expr, SYM_ForAll)) {
         Expr* r = reduce_qe_dispatch(expr, dom);   /* borrows expr */
         expr_free(owned_list);
+        expr_free(owned_vars);
         return r;
     }
 
@@ -511,6 +614,7 @@ static Expr* reduce_impl(Expr* res) {
     if (opts.modulus) {
         Expr* r = reduce_modular(expr, vars, &opts);   /* borrows expr */
         expr_free(owned_list);
+        expr_free(owned_vars);
         return r;
     }
 
@@ -559,7 +663,7 @@ static Expr* reduce_impl(Expr* res) {
      * constant-atom simplifier. */
     bool ok = true;
     RForm* f = reduce_form_from_expr(expr, vlist, nv, &ok);
-    if (!ok) { rform_free(f); free(vlist); expr_free(owned_pre); expr_free(owned_list); return NULL; }
+    if (!ok) { rform_free(f); free(vlist); expr_free(owned_pre); expr_free(owned_list); expr_free(owned_vars); return NULL; }
 
     rform_simplify(f, vlist, nv);
 
@@ -742,6 +846,7 @@ static Expr* reduce_impl(Expr* res) {
     free(vlist);
     expr_free(owned_pre);
     expr_free(owned_list);
+    expr_free(owned_vars);
     return out;
 }
 
@@ -762,6 +867,13 @@ void reduce_init(void) {
         "\tReals when expr contains an ordering inequality (ordering is\n"
         "\tundefined over the complexes), so e.g. Reduce[-5 < 3x+7 <= 22, x]\n"
         "\tis solved over the Reals.\n"
+        "Reduce[expr]\n"
+        "\tInfers the variables from expr (all free symbols, excluding named\n"
+        "\tconstants such as Pi), so Reduce[x^2 < 1] is Reduce[x^2 < 1, {x}].\n"
+        "Reduce[expr, dom]\n"
+        "\tA domain symbol (Reals, Complexes, Integers, Rationals) in the\n"
+        "\tsecond slot infers the variables and reduces over dom, so\n"
+        "\tReduce[x^2 < 1, Reals] is Reduce[x^2 < 1, {x}, Reals].\n"
         "Reduce[expr, vars, dom]\n"
         "\tReduces over the domain dom: Complexes, Reals, Integers, or\n"
         "\tRationals.\n"
