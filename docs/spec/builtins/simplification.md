@@ -126,6 +126,26 @@ canonical forms that the generic pipeline alone does not:
   `Simplify[I^I - E^(-Pi/2)] -> 0`, `Simplify[(-1)^I E^Pi] -> 1`. Taken only on a
   whole-expression complexity win, so `2^I`, standalone `I^I`, and surds such as
   `(-1)^(1/3)` are preserved.
+- **Inverse-function logarithmic forms** — `ArcCos` joins `ArcSin`/`ArcSinh`/
+  `ArcTanh` in the `TrigToExp`/`ExpToTrig` table, so
+  `Log[x + I Sqrt[1-x^2]] = I ArcCos[x]` is recognised (principal-value general,
+  unconditional). `ArcCosh[u] = Log[u + Sqrt[u^2-1]]` is recognised **under
+  `u >= 1`** — the combined radical is branch-correct only there, so the gate is
+  mandatory (it is left unreduced for `u <= -1`).
+- **Range-gated inverse-of-direct trig** — `ArcSin[Sin[x]] -> x` on
+  `-Pi/2 <= x <= Pi/2`, `ArcCos[Cos[x]] -> x` on `0 <= x <= Pi`,
+  `ArcCot[Cot[x]] -> x` on `0 < x < Pi` (each inverse is a bijection from exactly
+  that strip; mirrors the existing `ArcTan[Tan[x]]`). Off-range inputs are left
+  unchanged.
+- **Root-of-unity periodicity under integer assumptions** — for integer `n`,
+  `E^(2 I Pi n + z) -> E^z`, `E^(I Pi n + z) -> (-1)^n E^z`, and
+  `(-1)^(k + n) -> (-1)^k (-1)^n`, so e.g. `E^(x + 2 I Pi n) - E^x -> 0` and
+  `Cos[n Pi] - E^(I n Pi) -> 0`.
+- **Branch-gated power of an exponential** — `(E^w)^r -> E^(r w)` when `Im[w]` is
+  provably in `(-Pi, Pi]` (so the principal `Log` recovers `w`), e.g.
+  `Sqrt[E^(2 I x)] -> E^(I x)` under `-Pi/2 < x < Pi/2`. This is the sound,
+  assumption-gated counterpart of `PowerExpand`'s unconditional collapse, so it
+  does **not** reduce off the strip.
 - **Pythagorean completion and reduction** for trig and hyperbolic squares.
 - **Exact trig/exp zero-recognition** — a `Plus` that is a rational function of a
   single exponential kernel `t = E^(I x)` and is identically zero (canonically a

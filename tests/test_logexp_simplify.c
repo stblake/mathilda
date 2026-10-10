@@ -210,6 +210,81 @@ void test_log_exp_positive(void) {
     assert_eval_eq("Simplify[Log[Exp[x]], x > 0]", "x", 0);
 }
 
+/* ---- Assumption-gated log/exp/trig identities (v0.331 campaign) ---- */
+
+/* T1: range-gated inverse-of-direct trig collapse. */
+void test_arcsin_sin_collapse(void) {
+    assert_eval_eq("Simplify[ArcSin[Sin[x]] - x, -Pi/2 <= x <= Pi/2]", "0", 0);
+}
+void test_arcsin_sin_no_assumption(void) {
+    /* Soundness: ArcSin[Sin[x]] != x off [-Pi/2, Pi/2]. */
+    assert_eval_eq("Simplify[ArcSin[Sin[x]] - x]", "-x + ArcSin[Sin[x]]", 0);
+}
+void test_arccos_cos_collapse(void) {
+    assert_eval_eq("Simplify[ArcCos[Cos[x]] - x, 0 <= x <= Pi]", "0", 0);
+}
+void test_arccos_cos_no_assumption(void) {
+    assert_eval_eq("Simplify[ArcCos[Cos[x]] - x]", "-x + ArcCos[Cos[x]]", 0);
+}
+void test_arccot_cot_collapse(void) {
+    assert_eval_eq("Simplify[ArcCot[Cot[x]] - x, 0 < x < Pi]", "0", 0);
+}
+
+/* T3a: ArcCos logarithmic form (unconditional, principal-value general). */
+void test_arccos_log_form_assumed(void) {
+    assert_eval_eq("Simplify[ArcCos[x] + I Log[x + I Sqrt[1 - x^2]], -1 <= x <= 1]", "0", 0);
+}
+void test_arccos_log_form_unconditional(void) {
+    /* The identity is principal-value general, so it reduces with no assumption. */
+    assert_eval_eq("Simplify[Log[x + I Sqrt[1 - x^2]] - I ArcCos[x]]", "0", 0);
+}
+
+/* T2: ArcCosh logarithmic form, gated x >= 1 (combined radical). */
+void test_arccosh_log_form(void) {
+    assert_eval_eq("Simplify[ArcCosh[x] - Log[x + Sqrt[x^2 - 1]], x >= 1]", "0", 0);
+}
+void test_arccosh_log_no_assumption(void) {
+    /* Soundness: Log[x+Sqrt[x^2-1]] != ArcCosh[x] off [1, inf). */
+    assert_eval_eq("Simplify[ArcCosh[x] - Log[x + Sqrt[x^2 - 1]]]",
+                   "ArcCosh[x] - Log[x + Sqrt[-1 + x^2]]", 0);
+}
+void test_arccosh_log_wrong_region(void) {
+    /* Soundness: residual is nonzero at x <= -1, so it must NOT reduce. */
+    assert_eval_eq("Simplify[ArcCosh[x] - Log[x + Sqrt[x^2 - 1]], x <= -1]",
+                   "ArcCosh[x] - Log[x + Sqrt[-1 + x^2]]", 0);
+}
+
+/* T4: Exp additive periodicity, gated n integer. */
+void test_exp_periodicity_sum(void) {
+    assert_eval_eq("Simplify[Exp[x + 2 I Pi n] - Exp[x], Element[n, Integers]]", "0", 0);
+}
+void test_exp_periodicity_no_integer(void) {
+    assert_eval_eq("Simplify[Exp[x + 2 I Pi n] - Exp[x]]",
+                   "-E^x + E^((2*I) Pi n + x)", 0);
+}
+
+/* T5: (-1)^(k+n) integer-exponent split; and the full Cos[nPi]-Exp[I n Pi]. */
+void test_neg_one_power_split(void) {
+    assert_eval_eq("Simplify[(-1)^(n + 1) + (-1)^n, Element[n, Integers]]", "0", 0);
+}
+void test_cos_minus_exp_integer(void) {
+    assert_eval_eq("Simplify[Cos[n Pi] - Exp[I n Pi], Element[n, Integers]]", "0", 0);
+}
+
+/* T6: branch-gated Sqrt[E^w] -> E^(w/2) on the principal strip. */
+void test_sqrt_exp_strip(void) {
+    assert_eval_eq("Simplify[Sqrt[Exp[2 I x]] - Exp[I x], -Pi/2 < x < Pi/2]", "0", 0);
+}
+void test_sqrt_exp_no_assumption(void) {
+    assert_eval_eq("Simplify[Sqrt[Exp[2 I x]] - Exp[I x]]",
+                   "-E^(I x) + Sqrt[E^((2*I) x)]", 0);
+}
+void test_sqrt_exp_outside_strip(void) {
+    /* Soundness: Sqrt[E^(2 I x)] = -E^(I x) off the strip, so no reduction. */
+    assert_eval_eq("Simplify[Sqrt[Exp[2 I x]] - Exp[I x], Pi < x < 2 Pi]",
+                   "-E^(I x) + Sqrt[E^((2*I) x)]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -249,6 +324,25 @@ int main(void) {
     TEST(test_logpow_idempotent_standalone);
 
     TEST(test_log_exp_positive);
+
+    /* v0.331 assumption-gated campaign */
+    TEST(test_arcsin_sin_collapse);
+    TEST(test_arcsin_sin_no_assumption);
+    TEST(test_arccos_cos_collapse);
+    TEST(test_arccos_cos_no_assumption);
+    TEST(test_arccot_cot_collapse);
+    TEST(test_arccos_log_form_assumed);
+    TEST(test_arccos_log_form_unconditional);
+    TEST(test_arccosh_log_form);
+    TEST(test_arccosh_log_no_assumption);
+    TEST(test_arccosh_log_wrong_region);
+    TEST(test_exp_periodicity_sum);
+    TEST(test_exp_periodicity_no_integer);
+    TEST(test_neg_one_power_split);
+    TEST(test_cos_minus_exp_integer);
+    TEST(test_sqrt_exp_strip);
+    TEST(test_sqrt_exp_no_assumption);
+    TEST(test_sqrt_exp_outside_strip);
 
     printf("All logexp Simplify tests passed!\n");
     return 0;

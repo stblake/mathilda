@@ -1145,6 +1145,7 @@ void trigsimp_init(void) {
         "Log[x_ + Sqrt[1 + x_^2]] :> ArcSinh[x], "
         "Log[x_ + Sqrt[-1 + x_] Sqrt[1 + x_]] :> ArcCosh[x], "
         "Log[(I) x_ + Sqrt[1 - x_^2]] :> (I) ArcSin[x], "
+        "Log[x_ + (I) Sqrt[1 - x_^2]] :> (I) ArcCos[x], "
         "Log[1/x_ + Sqrt[1 + 1/x_^2]] :> ArcCsch[x], "
         "Log[1/x_ + Sqrt[-1 + 1/x_] Sqrt[1 + 1/x_]] :> ArcSech[x], "
         "Log[(I)/x_ + Sqrt[1 - 1/x_^2]] :> (I) ArcCsc[x] "

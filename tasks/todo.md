@@ -1,48 +1,48 @@
-# Conditional identities under Assumptions — general additions
+# Simplify log-exp-under-Assumptions campaign (v0.331+)
 
-Plan: `~/.claude/plans/let-s-test-the-implementation-bright-knuth.md`
-Rule: fully general + sound only; NO one-off hacks (false zeros are the worst outcome).
+Goal: close the assumption-gated log/exp/trig gaps in the 50-expression stress corpus.
+Baseline 40/50. Tier-1 milestone 48/50, Tier-2 stretch 50/50. Fully general + sound;
+no `PossibleZeroQ` (0s come from exact transforms). Plan:
+`~/.claude/plans/similar-to-previous-campaigns-replicated-unicorn.md`.
 
-## Phase 1 — Class 1 (clean, reuse existing provers)
-- [ ] **B** inverse-of-forward family (`ArcTanh[Tanh[e]]->e` etc.) in
-      `simp_assume_rewrite.c`, gated `prov_re`/`prov_nn`. → hyp #92.
-- [ ] **D** whole-input ComplexExpand under reality in `simp_assume_rewrite.c`. → trig #83.
-- [ ] **A** radical-product combine `Sqrt[a]Sqrt[b]->Sqrt[ab]` under provable
-      nonneg (`denest_is_nonneg`), `simp_denest.c` + wire ctx in `simp_search.c`.
-      → hyp #66, #68; enables #74.
+## Done — Tier 1 (40/50 → 48/50), one coherent commit, v0.331
+- [x] T3a: `Log[x_ + I Sqrt[1-x_^2]] :> I ArcCos[x]` in `exp_to_trig_rules`
+      (`src/simp/trigsimp.c`). Unconditional, sound. Closes #32, #39.
+- [x] T1: `sr_proves_sle` helper + `ArcSin[Sin]`, `ArcCos[Cos]`, `ArcCot[Cot]`
+      range-gated collapse (`simp_assume_rewrite.c`). Closes #27, #28.
+- [x] T2: `ArcCosh[u] -> Log[u + Sqrt[u^2-1]]` gated u≥1 (`simp_assume_rewrite.c`).
+      Closes #35. (Combined radical unsound off [1,∞) → gate essential.)
+- [x] T4: Exp peel `E^(2 I Pi n + rest) :> E^rest` (+ odd `I Pi n` analogue),
+      integer bucket. Closes #45.
+- [x] T5: `Power[-1, Plus[k_Integer, n]] :> Power[-1,k] Power[-1,n]`, integer
+      bucket. Closes #50.
+- [x] T6: `Power[E^w, r] -> E^(r w)` gated `Im[w] ∈ (−π,π]` via Reduce oracle
+      (`simp_assume_rewrite.c`). Closes #25.
 
-## Phase 2 — Class 2 region engine (sound derivative-constancy)
-- [ ] Shared budgeted Reduce-entailment helper (from `refine.c`).
-- [ ] `simp_region_identity_is_zero(e,ctx)` new `simp_region_identity.c`:
-      ∇f≡0 (exact) + real box + Reduce branch-cut-domain entailment + exact
-      sample-point value via extended invtrig certifier. → #75/#76/#77 (trig+hyp).
-- [ ] extend `simp_invtrig_combo_is_zero` to ArcTanh/ArcSinh/ArcCosh constants.
-- [ ] #101 best-effort (trig square recognition + Reduce `Cos>=Sin` on 0<x<Pi/4).
+## Tier 2 — investigated, dropped to documented known-gap (no clean sound fix)
+- [~] T7 (#37) `Log[(1+Ix)/(1-Ix)] = 2I ArcTan[x]`: a search-adoption problem, not
+      a missing identity — `TrigReduce` already produces the split `Log[1+Ix] -
+      Log[1-Ix]` but the search won't adopt the higher-complexity split to let the
+      ArcTan rule fold it. Fix needs a seed/ordering change (broad blast radius).
+- [~] T8 (#30) `Log[1+E^(Ix)]` half-angle: a pattern-specific trusted rewrite,
+      not a general mechanism. Both documented in the v0.331 changelog.
 
-## Cross-cutting
-- [ ] Assumption harness over both corpora; **adversarial soundness tests**
-      (no-assumption / wrong-region must NOT reduce; non-identities never certify).
-- [ ] No regression (corpora 93/101 & 85/93 bare; suites; check-messages/c99; valgrind).
-- [ ] version bump + changelog + docs; commit/tag.
+## Verification — all green
+- [x] corpus `scratchpad/logexp_stress.m` → 48/50
+- [x] 17 new unit + soundness-control tests in `tests/test_logexp_simplify.c` pass
+- [x] 33 Simplify-adjacent suites pass (simp/fullsimplify/radical/trig/normalize/
+      series/refine/assuming/powerexpand/complexexpand/possiblezeroq/… ) — no regressions
+- [x] `make check-messages` green (BASELINE empty)
+- [x] valgrind: definitely/indirectly-lost identical to startup baseline → zero new leaks
+- [x] build clean under gcc-16 `-std=c99 -Wall -Wextra -Werror=...`
 
-## Already pass under assumptions (verified): trig #100, hyp #93.
-
-## Review (DONE — v0.329)
-
-**Outcome: 11 of 14 conditionals now reduce under Assumptions, via general sound
-mechanisms (no hacks). Closed: #66,#68,#74 (radical combine), #92 (inverse-of-
-forward), #83 (ComplexExpand), #75 trig+hyp, #76 hyp, #77 hyp (region engine +
-hyperbolic-addition recognizer). + #100/#93 already. Residual: trig #76/#77
-(ArcSin/ArcCos addition — radical range inequality beyond Reduce), trig #101.**
-
-Built: Reduce-entailment bridge (`simp_assume.c` assume_reduce_entails/_nonneg);
-radical-product combine (`simp_denest.c`); inverse-of-forward hyperbolic family
-(`simp_assume_rewrite.c`); region derivative-constancy engine + hyperbolic const
-& addition certifiers (`simp_builtins.c`). Reduce enters Simplify only on the
-decline branch, budgeted (var cap).
-
-Verified: both corpora bare unchanged (93/101, 85/93); 19 regression suites;
-14-case adversarial soundness (no false zeros — no-assum/wrong-region/non-identity
-all stay); valgrind clean; check-messages/check-c99. Tests:
-`test_invtrig_simplify.c::{test_simplify_under_assumptions,
-test_simplify_assumptions_soundness}`. Docs + changelog; version 0.329.
+## Review
+Eight exact, assumption-aware rewrites closed the tractable 8 of 10 corpus gaps,
+all in two files (`trigsimp.c` ExpToTrig table + `simp_assume_rewrite.c`). Design
+hinges confirmed by probing: Simplify's 0s come from exact transforms only (no
+PossibleZeroQ); every gated rule is paired with a soundness control (inert without
+its assumption, refuses the wrong region). The two unconditional rules (ArcCos log
+form, (−1)^(k+n) split) are principal-value general and verified numerically. The
+two remaining cases are a search-adoption issue (#37) and a pattern-specific
+identity (#30), deliberately left as documented known gaps rather than shipped as
+fragile/risky rewrites. v0.330 → v0.331.

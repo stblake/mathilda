@@ -167,6 +167,29 @@ static bool sr_proves_slt(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
     return false;
 }
 
+/* Does ctx prove the non-strict order A <= B by a direct inequality fact? A
+ * strict A < B also establishes A <= B, so this accepts both. Used to gate the
+ * closed-interval inverse-function collapses (e.g. ArcSin[Sin[x]] on
+ * [-Pi/2, Pi/2]), where the identity holds at the endpoints too. */
+static bool sr_proves_sle(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
+    if (!ctx) return false;
+    if (sr_proves_slt(ctx, A, B)) return true;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (f->type != EXPR_FUNCTION || !f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL ||
+            f->data.function.arg_count != 2) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        const Expr* x = f->data.function.args[0];
+        const Expr* y = f->data.function.args[1];
+        if (h == SYM_LessEqual && expr_eq((Expr*)x, (Expr*)A) && expr_eq((Expr*)y, (Expr*)B))
+            return true;
+        if (h == SYM_GreaterEqual && expr_eq((Expr*)x, (Expr*)B) && expr_eq((Expr*)y, (Expr*)A))
+            return true;
+    }
+    return false;
+}
+
 /* Tightest numeric bounds on the bare symbol `sym` from direct inequality
  * facts. Returns whether a lower / upper bound was found; *lo_strict indicates
  * a strict `>`. */
@@ -402,6 +425,106 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             if (assume_known_nonpos(ctx, inner)) {
                 Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)inner) }, 2));
+                expr_free(node); *changed = 1; return out;
+            }
+        }
+
+        /* Inverse-of-forward for the periodic circular family, mirroring
+         * ArcTan[Tan] above. Each principal inverse is a bijection from exactly
+         * one strip: ArcSin from Re in [-Pi/2, Pi/2], ArcCos from [0, Pi],
+         * ArcCot from (0, Pi). So ArcSin[Sin[e]] = e, ArcCos[Cos[e]] = e,
+         * ArcCot[Cot[e]] = e exactly when Re[e] (or e) lies in that strip. The
+         * trig ranges are closed (identity holds at the endpoints) -> sr_proves_sle;
+         * the ArcCot range is open (Cot singular at 0, Pi) -> sr_proves_slt. */
+        if ((strcmp(h, "ArcSin") == 0 && sr_head(a0, "Sin") &&
+             a0->data.function.arg_count == 1) ||
+            (strcmp(h, "ArcCos") == 0 && sr_head(a0, "Cos") &&
+             a0->data.function.arg_count == 1)) {
+            const Expr* inner = a0->data.function.args[0];
+            bool is_sin = (strcmp(h, "ArcSin") == 0);
+            Expr* lo = eval_and_free(parse_expression(is_sin ? "-Pi/2" : "0"));
+            Expr* hi = eval_and_free(parse_expression(is_sin ? "Pi/2" : "Pi"));
+            Expr* u_re = eval_and_free(expr_new_function(expr_new_symbol(SYM_Re),
+                             (Expr*[]){ expr_copy((Expr*)inner) }, 1));
+            bool ok = (sr_proves_sle(ctx, lo, u_re) && sr_proves_sle(ctx, u_re, hi)) ||
+                      (sr_proves_sle(ctx, lo, inner) && sr_proves_sle(ctx, inner, hi));
+            expr_free(lo); expr_free(hi); expr_free(u_re);
+            if (ok) { Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out; }
+        }
+        if (strcmp(h, "ArcCot") == 0 && sr_head(a0, "Cot") &&
+            a0->data.function.arg_count == 1) {
+            const Expr* inner = a0->data.function.args[0];
+            Expr* lo = eval_and_free(parse_expression("0"));
+            Expr* hi = eval_and_free(parse_expression("Pi"));
+            Expr* u_re = eval_and_free(expr_new_function(expr_new_symbol(SYM_Re),
+                             (Expr*[]){ expr_copy((Expr*)inner) }, 1));
+            bool ok = (sr_proves_slt(ctx, lo, u_re) && sr_proves_slt(ctx, u_re, hi)) ||
+                      (sr_proves_slt(ctx, lo, inner) && sr_proves_slt(ctx, inner, hi));
+            expr_free(lo); expr_free(hi); expr_free(u_re);
+            if (ok) { Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out; }
+        }
+
+        /* ArcCosh[u] -> Log[u + Sqrt[u^2 - 1]] when u >= 1. This is the principal
+         * -value identity, exact on [1, inf) but UNSOUND for u <= -1 (the combined
+         * radical Sqrt[u^2-1] sits on the wrong branch there), so the u >= 1 gate
+         * is essential. It exposes exactly the combined-radical Log form a user
+         * writes, so ArcCosh[u] - Log[u + Sqrt[u^2-1]] cancels. (ArcCosh[Cosh[e]]
+         * is handled sign-wise above; this fires for any other argument.) */
+        if (strcmp(h, "ArcCosh") == 0 && !sr_head(a0, "Cosh")) {
+            const Expr* u = a0;
+            Expr* um1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ expr_copy((Expr*)u), expr_new_integer(-1) }, 2));
+            bool ge1 = assume_known_nonneg(ctx, um1) || (assume_reduce_nonneg(ctx, um1) == 1);
+            expr_free(um1);
+            if (ge1) {
+                Expr* u2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_copy((Expr*)u), expr_new_integer(2) }, 2));
+                Expr* u2m1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                               (Expr*[]){ u2, expr_new_integer(-1) }, 2));
+                Expr* rad = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt),
+                               (Expr*[]){ u2m1 }, 1));
+                Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                               (Expr*[]){ expr_copy((Expr*)u), rad }, 2));
+                Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Log),
+                               (Expr*[]){ sum }, 1));
+                expr_free(node); *changed = 1; return out;
+            }
+        }
+    }
+
+    /* Power[Power[E, w], r] -> Power[E, r w] when Im[w] lies in (-Pi, Pi], the
+     * strip on which the principal Log recovers w, so (E^w)^r = E^(r w) for ANY
+     * exponent r (Sqrt included). This is the sound, branch-correct counterpart
+     * of PowerExpand's unconditional strip-ignoring collapse: e.g.
+     * Sqrt[E^(2 I x)] -> E^(I x) under -Pi/2 < x < Pi/2. The structural guard
+     * (base is a literal E-power) keeps the Reduce entailment call rare. */
+    if (strcmp(h, "Power") == 0 && nn == 2 && ctx) {
+        const Expr* base = node->data.function.args[0];
+        const Expr* r = node->data.function.args[1];
+        if (base->type == EXPR_FUNCTION && base->data.function.head &&
+            base->data.function.head->type == EXPR_SYMBOL &&
+            base->data.function.head->data.symbol.name == SYM_Power &&
+            base->data.function.arg_count == 2 &&
+            base->data.function.args[0]->type == EXPR_SYMBOL &&
+            base->data.function.args[0]->data.symbol.name == SYM_E) {
+            const Expr* w = base->data.function.args[1];
+            Expr* imw = expr_new_function(expr_new_symbol(SYM_Im),
+                            (Expr*[]){ expr_copy((Expr*)w) }, 1);
+            Expr* negpi = eval_and_free(parse_expression("-Pi"));
+            Expr* pi = eval_and_free(parse_expression("Pi"));
+            Expr* lo = expr_new_function(expr_new_symbol(SYM_Less),
+                           (Expr*[]){ negpi, expr_copy(imw) }, 2);
+            Expr* hi = expr_new_function(expr_new_symbol(SYM_LessEqual),
+                           (Expr*[]){ imw, pi }, 2);
+            Expr* pred = expr_new_function(expr_new_symbol(SYM_And),
+                             (Expr*[]){ lo, hi }, 2);
+            bool instrip = (assume_reduce_entails(ctx, pred) == 1);
+            expr_free(pred);
+            if (instrip) {
+                Expr* rw = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                               (Expr*[]){ expr_copy((Expr*)r), expr_copy((Expr*)w) }, 2));
+                Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_new_symbol(SYM_E), rw }, 2));
                 expr_free(node); *changed = 1; return out;
             }
         }
@@ -661,6 +784,11 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Tan[Pi %s] :> 0", n);
         SEP(); EMIT("Power[-1, Times[m_Integer /; EvenQ[m], %s]] :> 1", n);
         SEP(); EMIT("Power[Power[-1, %s], m_Integer /; EvenQ[m]] :> 1", n);
+        /* (-1)^(k + n) -> (-1)^k (-1)^n for integer n and any k: an integer
+         * additive shift in a (-1) exponent splits out so the sign factor can
+         * fold and cancel (e.g. (-1)^n + (-1)^(n+1) -> 0). Sound for integer k
+         * since (-1)^(k+r) = (-1)^k (-1)^r exactly. */
+        SEP(); EMIT("Power[-1, Plus[k_Integer, %s]] :> Power[-1, k] Power[-1, %s]", n, n);
         /* Shift identities: Cos[x + n Pi] -> (-1)^n Cos[x], likewise Sin, and
          * Tan[x + n Pi] -> Tan[x] (period Pi), for integer n. The rest___
          * absorbs the remaining Plus terms (Plus[] -> 0 gives the bare
@@ -668,6 +796,12 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Cos[Plus[Times[%s, Pi], rest___]] :> Power[-1, %s] Cos[Plus[rest]]", n, n);
         SEP(); EMIT("Sin[Plus[Times[%s, Pi], rest___]] :> Power[-1, %s] Sin[Plus[rest]]", n, n);
         SEP(); EMIT("Tan[Plus[Times[%s, Pi], rest___]] :> Tan[Plus[rest]]", n);
+        /* Exp periodicity for integer n: e^(2 I Pi n + rest) -> e^rest, and the
+         * odd-multiple e^(I Pi n + rest) -> (-1)^n e^rest. The evaluator keeps
+         * Exp[sum] fused and does not know n is an integer, so this peel must be
+         * assumption-gated here. */
+        SEP(); EMIT("Power[E, Plus[Times[2 I, Pi, %s], rest___]] :> Power[E, Plus[rest]]", n);
+        SEP(); EMIT("Power[E, Plus[Times[I, Pi, %s], rest___]] :> Power[-1, %s] Power[E, Plus[rest]]", n, n);
     }
 
     /* Even-exponent identities: (-1)^m = 1 when m is even, and the
