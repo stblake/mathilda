@@ -359,6 +359,25 @@ void test_conjugate_reflection_no_assumption_declines(void) {
     assert_eval_eq("Simplify[Conjugate[Tan[x + I y]] - Tan[x - I y]] === 0", "False", 0);
 }
 
+/* v0.338: Reduce-verified inverse-trig multiple-angle. */
+void test_invtrig_multiangle_arcsin_double(void) {
+    assert_eval_eq("Simplify[ArcSin[2 x Sqrt[1-x^2]] - 2 ArcSin[x], 0 < x < 1/2]", "0", 0);
+}
+void test_invtrig_multiangle_arccos_to_arcsin(void) {
+    assert_eval_eq("Simplify[ArcCos[1 - 2 x^2] - 2 ArcSin[x], 0 < x < 1/2]", "0", 0);
+}
+void test_invtrig_multiangle_arccos_to_arccos(void) {
+    assert_eval_eq("Simplify[ArcCos[2 x^2 - 1] - 2 ArcCos[x], 0 < x < 1/2]", "0", 0);
+}
+void test_invtrig_multiangle_wrong_region_declines(void) {
+    /* On x<0 the identity flips sign, so the +2 ArcSin candidate must not verify. */
+    assert_eval_eq("Simplify[ArcCos[1 - 2 x^2] - 2 ArcSin[x], -1/2 < x < 0] === 0", "False", 0);
+}
+void test_invtrig_multiangle_unbounded_declines(void) {
+    /* No two-sided bound -> Reduce cannot verify -> decline. */
+    assert_eval_eq("Simplify[ArcCos[1 - 2 x^2] - 2 ArcSin[x], Element[x, Reals]] === 0", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -437,6 +456,13 @@ int main(void) {
     TEST(test_conjugate_tan_reflection);
     TEST(test_conjugate_cot_sec_exp_reflection);
     TEST(test_conjugate_reflection_no_assumption_declines);
+
+    /* v0.338 Reduce-verified inverse-trig multiple-angle */
+    TEST(test_invtrig_multiangle_arcsin_double);
+    TEST(test_invtrig_multiangle_arccos_to_arcsin);
+    TEST(test_invtrig_multiangle_arccos_to_arccos);
+    TEST(test_invtrig_multiangle_wrong_region_declines);
+    TEST(test_invtrig_multiangle_unbounded_declines);
 
     printf("All inverse-trig Simplify tests passed!\n");
     return 0;

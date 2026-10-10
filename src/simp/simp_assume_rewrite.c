@@ -466,6 +466,61 @@ static Expr* invtrig_branch_reduce(const AssumeCtx* ctx, const char* arc,
     return res ? eval_and_free(res) : NULL;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Reduce-verified inverse-trig multiple-angle: ArcCos[1-2x^2] -> 2 ArcSin[x], */
+/* ArcCos[2x^2-1] -> Pi - 2 ArcCos[x] (= 2 ArcCos[x]), ArcSin[2x Sqrt[1-x^2]]  */
+/* -> 2 ArcSin[x], etc. The candidate is applied ONLY after Reduce proves the  */
+/* equality on the assumed region, so it is sound by construction regardless   */
+/* of which branch the region sits in.                                         */
+/* ----------------------------------------------------------------------- */
+
+/* coeff * InvH[x]  (+ Pi if pi_off). */
+static Expr* mk_scaled_inv(const char* invh, int coeff, int pi_off, const Expr* x) {
+    Expr* inv = expr_new_function(expr_new_symbol(invh),
+                    (Expr*[]){ expr_copy((Expr*)x) }, 1);
+    Expr* term = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(coeff), inv }, 2);
+    if (!pi_off) return term;
+    return expr_new_function(expr_new_symbol(SYM_Plus),
+               (Expr*[]){ expr_new_symbol("Pi"), term }, 2);
+}
+
+static Expr* invtrig_multiangle_reduce(const AssumeCtx* ctx, const char* arc,
+                                       const Expr* u) {
+    if (strcmp(arc, "ArcSin") != 0 && strcmp(arc, "ArcCos") != 0) return NULL;
+    /* Argument must be a polynomial/radical (Plus/Times/Power), not a trig or
+     * bare symbol -- the multiple-angle arguments 1-2x^2, 2x^2-1, 2x Sqrt[...]. */
+    if (!sr_head(u, "Plus") && !sr_head(u, "Times") && !sr_head(u, "Power"))
+        return NULL;
+    const Expr** syms = NULL; size_t ns = 0, cap = 0;
+    sr_collect_syms(u, &syms, &ns, &cap);
+    int one = (ns == 1);
+    const Expr* x = one ? syms[0] : NULL;
+    free(syms);
+    if (!one) return NULL;
+    bool hl = false, hu = false; double lo = 0, hi = 0;
+    sr_bounds_eval(ctx, x, &hl, &lo, &hu, &hi);
+    if (!hl || !hu) return NULL;             /* need a bounded region */
+
+    static const struct { const char* h; int c; int pi; } cand[4] = {
+        { "ArcSin", 2, 0 }, { "ArcSin", -2, 1 },
+        { "ArcCos", 2, 0 }, { "ArcCos", -2, 1 } };
+    Expr* arcu = expr_new_function(expr_new_symbol(arc),
+                     (Expr*[]){ expr_copy((Expr*)u) }, 1);
+    Expr* result = NULL;
+    for (int i = 0; i < 4 && !result; i++) {
+        Expr* c = mk_scaled_inv(cand[i].h, cand[i].c, cand[i].pi, x);
+        Expr* eq = expr_new_function(expr_new_symbol("Equal"),
+                       (Expr*[]){ expr_copy(arcu), expr_copy(c) }, 2);
+        int v = assume_reduce_entails(ctx, eq);   /* 1 iff A |= ArcF[u] == c */
+        expr_free(eq);
+        if (v == 1) result = eval_and_free(c);
+        else expr_free(c);
+    }
+    expr_free(arcu);
+    return result;
+}
+
 /* Bottom-up walk applying the structural assumption rewrites. Always returns a
  * freshly owned tree; sets *changed when any node was rewritten. */
 static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int* changed) {
@@ -747,6 +802,15 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
              (strcmp(h, "ArcCot") == 0 && sr_head(a0, "Cot"))) &&
             a0->data.function.arg_count == 1 && ctx) {
             Expr* out = invtrig_branch_reduce(ctx, h, a0->data.function.args[0]);
+            if (out) { expr_free(node); *changed = 1; return out; }
+        }
+
+        /* Reduce-verified inverse-trig multiple-angle: ArcCos[1-2x^2]->2ArcSin[x],
+         * ArcCos[2x^2-1]->Pi-2ArcSin[x] (= 2ArcCos[x]), ArcSin[2x Sqrt[1-x^2]]->
+         * 2ArcSin[x]. Applied only on a Reduce proof of the equality over the
+         * region, so sound on whichever branch the region occupies. */
+        if ((strcmp(h, "ArcSin") == 0 || strcmp(h, "ArcCos") == 0) && ctx) {
+            Expr* out = invtrig_multiangle_reduce(ctx, h, a0);
             if (out) { expr_free(node); *changed = 1; return out; }
         }
 
