@@ -9,7 +9,7 @@ Plan: `/Users/user/.claude/plans/similar-to-previous-campaigns-eager-glacier.md`
       DONE: 22→33/50 (cleared 11,12,17,18,19,28,41-45), sound, no regressions, leak-clean, tagged.
 - [x] **M2** (v0.333) Generalized `Sqrt[c·f²]→Sqrt[c]·Abs[f]` (Times radicand). DONE 33→35/50.
 - [x] **M3** (v0.334) Symbolic-integer π-periodicity `Sin[θ+kπ]→(-1)ᵏSin[θ]`. DONE 35→39/50.
-- [ ] **M4** (v0.335) Sqrt-local radicand prep (half-angle, 1±Cos[2x], Sec²−1). → 14,15,16,47
+- [x] **M4** (v0.335) Sqrt-local radicand prep (half-angle, 1±Cos[2x], Sec²−1). DONE 39→43/50.
 - [ ] **M5** (v0.336) Inverse-trig-of-trig branch reduction (containment + reflection). → 48,49,50
 - [ ] **M6** (v0.337) Conjugate Schwarz reflection `Conjugate[f[z]]→f[Conjugate[z]]`. → 3
 - [ ] **M7** (v0.338) Reduce-verified inverse multi-angle. → 28,29,30

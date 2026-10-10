@@ -312,6 +312,33 @@ void test_simplify_assumptions_soundness(void) {
     assert_eval_eq("Simplify[ArcCosh[x] + ArcCosh[y] - ArcCosh[x y - Sqrt[x^2-1] Sqrt[y^2-1]], x>1 && y>1] === 0", "False", 0);
 }
 
+/* v0.336: ArcF[F[x]] adjacent-branch / sub-interval reduction. */
+void test_invtrig_arccos_subinterval(void) {
+    /* (Pi/2,Pi) is inside [0,Pi] but not the literal bound fact. */
+    assert_eval_eq("Simplify[ArcCos[Cos[x]] - x, Pi/2 < x < Pi]", "0", 0);
+}
+void test_invtrig_arcsin_reflect(void) {
+    /* ArcSin[Sin[x]] = Pi - x on (Pi/2, Pi). */
+    assert_eval_eq("Simplify[ArcSin[Sin[x]] - (Pi - x), Pi/2 < x < Pi]", "0", 0);
+}
+void test_invtrig_arctan_reflect(void) {
+    /* ArcTan[Tan[x]] = x - Pi on (Pi/2, Pi). */
+    assert_eval_eq("Simplify[ArcTan[Tan[x]] - (x - Pi), Pi/2 < x < Pi]", "0", 0);
+}
+void test_invtrig_arccos_descending_branch(void) {
+    /* ArcCos[Cos[x]] = 2 Pi - x on (Pi, 2 Pi). */
+    assert_eval_eq("Simplify[ArcCos[Cos[x]] - (2 Pi - x), Pi < x < 3 Pi/2]", "0", 0);
+}
+void test_invtrig_arcsin_higher_branch(void) {
+    /* ArcSin[Sin[x]] = 3 Pi - x on (5Pi/2, 7Pi/2). */
+    assert_eval_eq("Simplify[ArcSin[Sin[x]] - (3 Pi - x), 5 Pi/2 < x < 7 Pi/2]", "0", 0);
+}
+void test_invtrig_branch_straddle_declines(void) {
+    /* Interval spanning a branch boundary must not reduce (soundness). */
+    assert_eval_eq("Simplify[ArcCos[Cos[x]] - x, 0 < x < 3 Pi/2] === 0", "False", 0);
+    assert_eval_eq("Simplify[ArcSin[Sin[x]] - x, 0 < x < Pi] === 0", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -377,6 +404,14 @@ int main(void) {
     TEST(test_invtrig_rational_angle_addition);
     TEST(test_simplify_under_assumptions);
     TEST(test_simplify_assumptions_soundness);
+
+    /* v0.336 ArcF[F[x]] adjacent-branch / sub-interval reduction */
+    TEST(test_invtrig_arccos_subinterval);
+    TEST(test_invtrig_arcsin_reflect);
+    TEST(test_invtrig_arctan_reflect);
+    TEST(test_invtrig_arccos_descending_branch);
+    TEST(test_invtrig_arcsin_higher_branch);
+    TEST(test_invtrig_branch_straddle_declines);
 
     printf("All inverse-trig Simplify tests passed!\n");
     return 0;

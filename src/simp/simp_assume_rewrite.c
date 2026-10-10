@@ -358,6 +358,114 @@ static Expr* trig_pi_shift_symbolic(const AssumeCtx* ctx, const char* h,
     return hcall;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Inverse-trig-of-trig adjacent-branch reduction: ArcSin[Sin[x]] -> Pi - x, */
+/* ArcTan[Tan[x]] -> x - Pi, ArcCos[Cos[x]] -> x (sub-interval) and the like, */
+/* when x's numeric interval lies in a single (possibly shifted) branch. The  */
+/* principal-range checks above only match a literal bound fact, so they miss */
+/* a sub-interval like Pi/2 < x < Pi (inside [0,Pi]) and every shifted branch.*/
+/* ----------------------------------------------------------------------- */
+
+/* Numeric value of a bound expression, numericalizing symbolic constants such
+ * as Pi/2 and Pi via N[] (sr_num only reads plain literals). */
+static bool sr_num_eval(const Expr* e, double* v) {
+    if (sr_num(e, v)) return true;
+    Expr* ne = eval_and_free(expr_new_function(expr_new_symbol("N"),
+                   (Expr*[]){ expr_copy((Expr*)e) }, 1));
+    if (!ne) return false;
+    bool ok = sr_num(ne, v);
+    if (!ok && ne->type == EXPR_REAL) { *v = ne->data.real; ok = true; }
+    expr_free(ne);
+    return ok;
+}
+
+/* Like sr_bounds but numericalizes symbolic bounds (Pi/2, Pi, ...). */
+static void sr_bounds_eval(const AssumeCtx* ctx, const Expr* sym,
+                           bool* has_lo, double* lo,
+                           bool* has_hi, double* hi) {
+    *has_lo = *has_hi = false;
+    if (!ctx) return;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (f->type != EXPR_FUNCTION || !f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL ||
+            f->data.function.arg_count != 2) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        const Expr* A = f->data.function.args[0];
+        const Expr* B = f->data.function.args[1];
+        double k; bool sym_left; int kind;
+        if (expr_eq((Expr*)A, (Expr*)sym) && sr_num_eval(B, &k)) sym_left = true;
+        else if (expr_eq((Expr*)B, (Expr*)sym) && sr_num_eval(A, &k)) sym_left = false;
+        else continue;
+        if (h == SYM_Less || h == SYM_LessEqual)
+            kind = sym_left ? +1 : -1;
+        else if (h == SYM_Greater || h == SYM_GreaterEqual)
+            kind = sym_left ? -1 : +1;
+        else continue;
+        if (kind < 0) { if (!*has_lo || k > *lo) { *has_lo = true; *lo = k; } }
+        else          { if (!*has_hi || k < *hi) { *has_hi = true; *hi = k; } }
+    }
+}
+
+/* Build e - k Pi (k integer), unevaluated. */
+static Expr* invtrig_e_minus_kpi(const Expr* e, long k) {
+    if (k == 0) return expr_copy((Expr*)e);
+    Expr* kpi = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer((int64_t)(-k)),
+                               expr_new_symbol("Pi") }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus),
+               (Expr*[]){ expr_copy((Expr*)e), kpi }, 2);
+}
+
+/* Reduce ArcF[F[inner]] with inner a bare symbol bounded to [lo, hi]. Returns a
+ * fresh reduced Expr, or NULL if the interval is not contained in one branch. */
+static Expr* invtrig_branch_reduce(const AssumeCtx* ctx, const char* arc,
+                                   const Expr* inner) {
+    if (inner->type != EXPR_SYMBOL) return NULL;
+    bool hl = false, hu = false; double lo = 0, hi = 0;
+    sr_bounds_eval(ctx, inner, &hl, &lo, &hu, &hi);
+    if (!hl || !hu) return NULL;            /* need a bounded interval */
+    const double PI = 3.14159265358979323846;
+    const double T = 1e-9;
+    Expr* res = NULL;
+
+    if (strcmp(arc, "ArcSin") == 0) {
+        /* ArcSin[Sin[x]] = (-1)^k (x - k Pi) on [k Pi - Pi/2, k Pi + Pi/2]. */
+        long k = lround((lo + hi) * 0.5 / PI);
+        if (lo >= k * PI - PI / 2 - T && hi <= k * PI + PI / 2 + T) {
+            Expr* emk = invtrig_e_minus_kpi(inner, k);
+            res = (k & 1) ? expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ expr_new_integer(-1), emk }, 2) : emk;
+        }
+    } else if (strcmp(arc, "ArcTan") == 0) {
+        /* ArcTan[Tan[x]] = x - k Pi on (k Pi - Pi/2, k Pi + Pi/2). */
+        long k = lround((lo + hi) * 0.5 / PI);
+        if (lo >= k * PI - PI / 2 - T && hi <= k * PI + PI / 2 + T)
+            res = invtrig_e_minus_kpi(inner, k);
+    } else if (strcmp(arc, "ArcCot") == 0) {
+        /* ArcCot[Cot[x]] = x - k Pi on (k Pi, (k+1) Pi). */
+        long k = (long)floor((lo + hi) * 0.5 / PI);
+        if (lo >= k * PI - T && hi <= (k + 1) * PI + T)
+            res = invtrig_e_minus_kpi(inner, k);
+    } else if (strcmp(arc, "ArcCos") == 0) {
+        /* ArcCos[Cos[x]] is even, period 2Pi: x - 2m Pi on [2m Pi,(2m+1)Pi];
+         * 2m Pi - x on [(2m-1)Pi, 2m Pi]. */
+        long seg = (long)floor((lo + hi) * 0.5 / PI);
+        if ((seg & 1) == 0) {                   /* ascending half, 2m = seg */
+            if (lo >= seg * PI - T && hi <= (seg + 1) * PI + T)
+                res = invtrig_e_minus_kpi(inner, seg);
+        } else {                                /* descending half, 2m = seg+1 */
+            long twom = seg + 1;
+            if (lo >= (twom - 1) * PI - T && hi <= twom * PI + T) {
+                Expr* emk = invtrig_e_minus_kpi(inner, twom);   /* x - 2m Pi */
+                res = expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_new_integer(-1), emk }, 2); /* 2m Pi - x */
+            }
+        }
+    }
+    return res ? eval_and_free(res) : NULL;
+}
+
 /* Bottom-up walk applying the structural assumption rewrites. Always returns a
  * freshly owned tree; sets *changed when any node was rewritten. */
 static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int* changed) {
@@ -583,6 +691,20 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                       (sr_proves_slt(ctx, lo, inner) && sr_proves_slt(ctx, inner, hi));
             expr_free(lo); expr_free(hi); expr_free(u_re);
             if (ok) { Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out; }
+        }
+
+        /* Adjacent-branch / sub-interval reduction for ArcF[F[x]] when x's
+         * numeric interval lies in a single (possibly shifted) branch. Runs
+         * after the principal-range checks above, which only match a literal
+         * bound fact (so e.g. ArcCos[Cos[x]] on Pi/2 < x < Pi, a sub-interval of
+         * [0,Pi], and ArcSin[Sin[x]] -> Pi - x on the k=1 branch fall here). */
+        if (((strcmp(h, "ArcSin") == 0 && sr_head(a0, "Sin")) ||
+             (strcmp(h, "ArcCos") == 0 && sr_head(a0, "Cos")) ||
+             (strcmp(h, "ArcTan") == 0 && sr_head(a0, "Tan")) ||
+             (strcmp(h, "ArcCot") == 0 && sr_head(a0, "Cot"))) &&
+            a0->data.function.arg_count == 1 && ctx) {
+            Expr* out = invtrig_branch_reduce(ctx, h, a0->data.function.args[0]);
+            if (out) { expr_free(node); *changed = 1; return out; }
         }
 
         /* ArcCosh[u] -> Log[u + Sqrt[u^2 - 1]] when u >= 1. This is the principal
