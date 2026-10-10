@@ -39,6 +39,7 @@
 #include "integrate_fresnel.h"
 #include "integrate_gammapower.h"
 #include "integrate_jeffrey.h"
+#include "integrate_linarg.h"
 #include "integrate_newton_leibniz.h"
 #include "integrate_symmetry.h"
 #include "integrate_beta.h"
@@ -299,6 +300,17 @@ static Expr* try_chebychev(Expr* f, Expr* x) {
  * complex-logarithm form. */
 static Expr* try_weierstrass(Expr* f, Expr* x) {
     return integrate_jeffrey_try(f, x);
+}
+
+/* Stage 1f-: linear-argument substitution, run just before Weierstrass.  A
+ * rational trig/hyperbolic integrand whose kernels all share one non-trivial
+ * linear argument a*x+b is reduced to the bare-argument integral via u = a*x+b,
+ * which the recursive cascade (Weierstrass itself, cleanly) then closes:
+ * Integrate[Sec[3x]^2, x] = Tan[3x]/3 rather than the degree-12 Tan[x/2] mess the
+ * always-x/2 Weierstrass substitution would produce.  Declines on everything
+ * else, so bare-argument and polynomial-trig integrands are untouched. */
+static Expr* try_linarg(Expr* f, Expr* x) {
+    return integrate_linarg_try(f, x);
 }
 
 /* Does the integrand contain a circular-trig kernel anywhere? */
@@ -1457,17 +1469,19 @@ MATHILDA_MAYBE_UNUSED static bool integrate_budget_spent(void) {
  * ---------------------------------------------------------------------- */
 typedef enum {
     IP_UNDEFINED = 0, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
-    IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_WEIERSTRASS,
-    IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_PMT, IP_GOURSAT, IP_PMS,
+    IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
+    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_PMT,
+    IP_GOURSAT, IP_PMS,
     IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
     "01 Undefined", "02 BronsteinRational", "03 LinearRadicals",
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
-    "07 Fresnel", "08 GammaPower", "09 Linearity", "10 Weierstrass",
-    "11 DerivativeDivides", "12 RischTranscendental", "13 CRCTable",
-    "14 ParallelMixedTower", "15 GoursatAlgebraic", "16 ParallelMixedSpecial"
+    "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
+    "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
+    "14 CRCTable", "15 ParallelMixedTower", "16 GoursatAlgebraic",
+    "17 ParallelMixedSpecial"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -1910,6 +1924,13 @@ Expr* builtin_integrate(Expr* res) {
              * clean additive antiderivative instead of a divergent/looping
              * tan-half-angle form.  Declines unless every term closes. */
             IP_STAGE(IP_LINEARITY,    try_linearity(effective_f, x));
+            /* Linear-argument substitution before Weierstrass: pull a shared
+             * non-trivial linear argument a*x+b out of a rational trig integrand
+             * (u = a*x+b) so the bare-argument form closes cleanly, instead of
+             * Weierstrass exploding Sec[3x]^2 into a degree-12 Tan[x/2] rational.
+             * Declines unless every x sits in a kernel of one such argument with
+             * a kernel in a denominator, so other integrands are untouched. */
+            IP_STAGE(IP_LINARG,       try_linarg(effective_f, x));
             IP_STAGE(IP_WEIERSTRASS,  try_weierstrass(effective_f, x));
             IP_STAGE(IP_DERIVDIVIDES, try_derivdivides(effective_f, x));
             /* Recursive transcendental Risch: correct by construction, adding

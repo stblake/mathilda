@@ -689,6 +689,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_fresnel.c
     ../src/calculus/integrate_gammapower.c
     ../src/calculus/integrate_jeffrey.c
+    ../src/calculus/integrate_linarg.c
     ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/integrate_symmetry.c
     ../src/calculus/integrate_beta.c
@@ -4624,6 +4625,25 @@ add_test(NAME dsolve_corpus_2_2_37_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2237.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+
+# M65 (Problems 3701-3800, our section 2.2.38 = upstream 2.1.38).  Goode & Annin
+# 4th ed., second-order-LINEAR dominated: 67 _linear, 18 _with_linear_symmetries,
+# 7 _missing_x, 6 _missing_y, 5 _Emden, 4 _exact, 2 _homogeneous, 1 _Gegenbauer --
+# higher-order constant-coefficient (UndeterminedCoefficients / VariationOfParameters),
+# Euler-Cauchy, abstract F(x) forcing, and a few Bessel/Legendre/Gegenbauer specials.
+# Landed 98 -> 99/100 on one general Integrate fix: a linear-argument substitution
+# stage (src/calculus/integrate_linarg.c) run just before Weierstrass -- a rational
+# trig integrand whose kernels share one non-trivial linear argument a*x+b is reduced
+# via u=a*x+b to the bare-argument integral the cascade closes cleanly, instead of
+# Weierstrass exploding Sec[3x]^2 into a degree-12 Tan[x/2] rational.  This made 3746
+# (y''+9y==18 Sec[3x]^3) solve in 0.4 s (was a >25 s timeout -> UNEVAL).  Baseline
+# argv3 = non-PASS count.  Residue 1 honest: 3764 (y'''+3y''+3y'+y==2 E^-x/(x^2+1),
+# sympy=False) solves correctly but cold DSolve is ~12.6 s, over the prelude's 8 s
+# wall -- a latency residue, same class as 2.2.32's 3161/3164/3165.
+add_test(NAME dsolve_corpus_2_2_38_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2238.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

@@ -1955,6 +1955,56 @@ closed form is right.
 
 Full per-case results: `reports/2.2.37.tsv`; bucketed report: `reports/2.2.37.md`.
 
+## Section 2.2.38 — "Problems 3701 to 3800" (Goode & Annin, 4th ed.)
+
+Corpus: `DE_examples_2238.m` — 100 records, **100 scalar (9 IVP) + 0 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.38,
+`Ch2.S1.SS38.htm`; the internal `2.2.38` name is kept for continuity — see
+`README.md`). Second-order-LINEAR dominated: 67 `_linear`, 18
+`_with_linear_symmetries`, 7 `_missing_x`, 6 `_missing_y`, 5 `_Emden`, 4 `_exact`,
+2 `_homogeneous`, 1 `_Gegenbauer` — higher-order constant-coefficient
+(UndeterminedCoefficients / VariationOfParameters), Euler–Cauchy, abstract `F(x)`
+forcing (3766–3769), and a few Bessel / Legendre / Gegenbauer specials — Mathilda's
+strong suit. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_38_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-10 (M65 baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL, 0 crash, 0 timeout. Non-PASS: 3746, 3764. |
+| 2026-10-10 (**M65**) | **99 / 100** | **99.0%** | **1** | **+1 (3746), 0 FAIL, 0 crash, 0 timeout**. One general `Integrate` fix (below). Gate baseline **1**. |
+
+**M65 fix — `Integrate` linear-argument substitution** (new stage
+`src/calculus/integrate_linarg.c`, run just before Weierstrass in the Automatic
+cascade). `3746` (`y'' + 9y == 18 Sec[3x]^3`) was a >25 s timeout (UNEVAL): its
+variation-of-parameters particular needs `∫ Sin[3x] Sec[3x]^3 dx` and
+`∫ Cos[3x] Sec[3x]^3 dx`, which are elementary (`Sec[3x]^2/6`, `Tan[3x]/3`) but
+*exploded* in the Jeffrey–Rich Weierstrass stage: it always substitutes
+`Tan[x/2]`, so a scaled argument like `Sec[3x]^2` is first multiple-angle expanded
+into a degree-12 rational in `Tan[x/2]`, and DSolve spun trying to simplify it.
+
+The new stage reduces a rational trig/hyperbolic integrand whose kernels all share
+one **non-trivial linear argument** `w = a·x + b` (`a` a non-zero number, `a ≠ 1`
+or `b ≠ 0`, with a kernel in a denominator) via `u = a·x + b` to the bare-argument
+integral `(1/a)·(Integrate[f(u), u] /. u → a·x+b)`, which the recursive cascade
+closes cleanly. It declines on bare arguments (trivial `w`) and polynomial trig
+(`Sin[2x]^3`, no denominator kernel), so existing outputs are untouched. `3746`
+now solves in **0.4 s** → `y = C[1] Cos[3x] − Cos[6x] Sec[3x] + C[2] Sin[3x]`.
+The fix is general: `Int[Sec[3x]^2] = Tan[3x]/3`, `Int[Csc[3x]^2] = −Cot[3x]/3`,
+`Int[Tan[2x]Sec[2x]^2] = Sec[2x]^2/4`, `Int[Sec[x+1]^2] = Tan[1+x]` are all cleaned
+(previously degree-12 `Tan[x/2]` rationals); and the definite Laplace–Bessel
+`∫₀^∞ e^(−c x) J₀(a x) dx` now closes to `ConditionalExpression[1/√(a²+c²),
+Re[c] > 0 ∧ a > 0]` (matching Mathematica), via a trig sub-integral in the
+integral-representation path.
+
+Residue (1, honest): **3764** (`y''' + 3y'' + 3y' + y == 2 e^{−x}/(x²+1)`,
+`sympy=False`) solves **correctly** — DSolve returns
+`y = (C[1] + C[2] x + C[3] x²) e^{−x} + e^{−x}(x + ArcTan[x](x²−1) − x Log[1+x²])`
+— but cold DSolve is ~12.6 s, over the prelude's 8 s wall, so the harness scores it
+UNEVAL by timeout. A latency residue, the same class as §2.2.32's 3161/3164/3165,
+not a missing capability.
+
+Full per-case results: `reports/2.2.38.tsv`; bucketed report: `reports/2.2.38.md`.
+
 ---
 
 ## Wave history
@@ -2495,3 +2545,24 @@ Full per-case results: `reports/2.2.37.tsv`; bucketed report: `reports/2.2.37.md
   the in-tree Bernoulli forms and the full corpus, 0 FAIL, no section regressed). Residue 2,
   honest: 3650 (Root-object homogeneous/Abel IVP whose `C[k]` does not fit), 3662 (solved, but its
   `Sqrt`-branch general solution is not confirmable by the numeric sampler). v0.266→0.267.
+- **M65 (2026-10-10)** — §2.2.38 (Problems 3701–3800, Goode & Annin 4th ed.) corpus wave,
+  **98 → 99/100, +1, 0 FAIL, 0 crash, 0 timeout**, per-case identical across two runs. New corpus
+  `DE_examples_2238.m` (upstream §2.1.38, `make check-corpus-indvar` green), gate
+  `dsolve_corpus_2_2_38_tests` at **1**. Second-order-linear dominated (67 `_linear`, 18
+  `_with_linear_symmetries`, 5 `_Emden`, …). ONE general `Integrate` fix: a new **linear-argument
+  substitution** stage (`src/calculus/integrate_linarg.c`), run just before Weierstrass in the
+  Automatic cascade. `3746` (`y''+9y == 18 Sec[3x]^3`) was a >25 s timeout → UNEVAL because its
+  VoP particular needs `∫ Sin[3x] Sec[3x]^3` / `∫ Cos[3x] Sec[3x]^3`, elementary but *exploded* by
+  the Jeffrey–Rich stage (it always substitutes `Tan[x/2]`, so `Sec[3x]^2` is multiple-angle
+  expanded into a degree-12 rational in `Tan[x/2]`). The new stage reduces any rational trig/hyp
+  integrand whose kernels share one non-trivial linear argument `a·x+b` (`a` a non-zero number,
+  `a≠1` or `b≠0`, kernel in a denominator) via `u=a·x+b` to the bare-argument integral the cascade
+  closes cleanly; declines on bare arguments and polynomial trig, so existing outputs are
+  untouched. `3746` now solves in 0.4 s. General: `Int[Sec[3x]^2]=Tan[3x]/3`,
+  `Int[Csc[3x]^2]=−Cot[3x]/3`, `Int[Sec[x+1]^2]=Tan[1+x]`; and the definite Laplace–Bessel
+  `∫₀^∞ e^{−c x} J₀(a x) dx` now closes to `ConditionalExpression[1/√(a²+c²), Re[c]>0 ∧ a>0]`
+  (matching Mathematica), via a trig sub-integral in the integral-representation path (the sole
+  behaviour change across the integrate/risch/trig/simp/CRC suites — `test_integrate_intrep`
+  updated from a decline to that value). No DSolve section regressed. Residue 1, honest: 3764
+  (`y'''+3y''+3y'+y == 2 e^{−x}/(x²+1)`, `sympy=False`) solves correctly but cold DSolve ~12.6 s,
+  over the 8 s wall — a latency residue (cf. §2.2.32's 3161/3164/3165). v0.340→0.341.

@@ -2716,6 +2716,50 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     but its `Sqrt`-branch general solution is not confirmable by the prelude's numeric sampler —
     a verification limitation, not a DSolve gap. v0.266→0.267.
 
+- **M65 — §2.2.38 corpus (Problems 3701–3800, Goode & Annin 4th ed.) + `Integrate`
+  linear-argument substitution.** ✅ DONE. The next hundred, measured end to end:
+  **98/100 → 99/100, 0 FAIL, 0 crash, 0 timeout**, per-case identical on two runs. New corpus
+  `DE_examples_2238.m` (upstream §2.1.38, 100 scalar records, 9 IVPs; `make check-corpus-indvar`
+  green); new gate `dsolve_corpus_2_2_38_tests` at baseline **1**; report
+  `DSolve_test_status/reports/2.2.38.md`. Second-order-linear dominated (67 `_linear`, 18
+  `_with_linear_symmetries`, 7 `_missing_x`, 6 `_missing_y`, 5 `_Emden`, 4 `_exact`, 1 `_Gegenbauer`):
+  higher-order constant-coefficient (UndeterminedCoefficients / VariationOfParameters), Euler–Cauchy,
+  abstract `F(x)` forcing, and a few Bessel/Legendre/Gegenbauer specials — Mathilda's strong suit,
+  hence the high baseline.
+  - **One general fix, in `Integrate`, diagnosed from inside the cascade.** `3746`
+    (`y'' + 9y == 18 Sec[3x]^3`) was a >25 s timeout → UNEVAL. Its variation-of-parameters
+    particular needs `∫ Sin[3x] Sec[3x]^3 dx` and `∫ Cos[3x] Sec[3x]^3 dx` — both elementary
+    (`Sec[3x]^2/6`, `Tan[3x]/3`) — but the Jeffrey–Rich Weierstrass stage always substitutes
+    `t = Tan[x/2]`, so a **scaled** argument like `Sec[3x]^2` is first multiple-angle expanded into
+    a degree-12 rational in `Tan[x/2]`; DSolve then spun trying to simplify it. The cascade order is
+    the cause: Weierstrass runs *before* the CRC table and derivative-divides, so it grabs the scaled
+    integrand and makes a mess the clean rules never get to answer.
+  - **The fix is a new cascade stage, not a change to Weierstrass** (`src/calculus/integrate_linarg.c`,
+    stage `IP_LINARG`, run immediately before Weierstrass). A rational trig/hyperbolic integrand
+    whose kernels all share one **non-trivial linear argument** `w = a·x + b` (`a` a non-zero number,
+    `a ≠ 1` or `b ≠ 0`, with a kernel in a denominator) is reduced via `u = a·x + b` to the
+    bare-argument integral `(1/a)·(Integrate[f(u), u] /. u → a·x+b)`, which the recursive cascade
+    closes cleanly (reusing the identical bare-argument machinery, so clean cases keep their spelling
+    by construction). It **declines** on a bare argument (trivial `w`), on polynomial trig
+    (`Sin[2x]^3`, no denominator kernel), and if the bare sub-integral does not close — so Weierstrass
+    still gets its turn and nothing else is touched. Leaving Weierstrass's internals alone was the
+    low-risk choice: the only behaviour change across the entire integrate / risch / trig / simp / CRC
+    suite was one *improvement* (below).
+  - *Measured wins, all differentiate-back verified:* `3746` now solves in **0.4 s**
+    (`y = C[1] Cos[3x] − Cos[6x] Sec[3x] + C[2] Sin[3x]`); `Int[Sec[3x]^2] = Tan[3x]/3`,
+    `Int[Csc[3x]^2] = −Cot[3x]/3`, `Int[Tan[2x]Sec[2x]^2] = Sec[2x]^2/4`, `Int[Sec[x+1]^2] = Tan[1+x]`
+    (previously degree-12 `Tan[x/2]` rationals). *Reach beyond trig:* the definite Laplace–Bessel
+    transform `∫₀^∞ e^{−c x} J₀(a x) dx` now closes to `ConditionalExpression[1/√(a²+c²),
+    Re[c] > 0 ∧ a > 0]` (matching Mathematica) where it had stayed unevaluated — the stage closes a
+    trig sub-integral inside the integral-representation path. `test_integrate_intrep` was updated
+    from a decline-assertion to that value (the sole test change; the previous decline encoded a
+    limitation, not a desired behaviour). No DSolve corpus section regressed.
+  - *Residue 1, honest:* `3764` (`y''' + 3y'' + 3y' + y == 2 e^{−x}/(x²+1)`, `sympy=False`) is solved
+    **correctly** — `y = (C[1] + C[2] x + C[3] x²) e^{−x} + e^{−x}(x + ArcTan[x](x²−1) − x Log[1+x²])`,
+    its integrals already clean — but cold DSolve is ~12.6 s, over the prelude's 8 s wall, so the
+    harness scores it UNEVAL by timeout. A latency residue, the same class as §2.2.32's 3161/3164/3165,
+    not a missing capability. v0.340→0.341.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

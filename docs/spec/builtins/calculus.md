@@ -1393,6 +1393,16 @@ monotonically down.
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
+    - *Automatic cascade only (no pinnable name):* immediately before Weierstrass,
+      a **linear-argument substitution** stage (`src/calculus/integrate_linarg.c`)
+      reduces a rational trig/hyperbolic integrand whose kernels all share one
+      non-trivial linear argument `a·x + b` (`a` a non-zero number, `a ≠ 1` or
+      `b ≠ 0`, with a kernel in a denominator) via `u = a·x + b` to the bare
+      integral `(1/a)·(Integrate[f(u), u] /. u -> a·x+b)`. Since Weierstrass always
+      substitutes `Tan[x/2]`, a scaled argument would otherwise be multiple-angle
+      expanded into a high-degree `Tan[x/2]` rational; this keeps `Integrate[Sec[3x]^2,
+      x] = Tan[3x]/3` clean. Declines on bare arguments and on polynomial trig (no
+      denominator kernel), so other integrands are untouched.
   - `"RischTranscendental"` — `Integrate\`RischTranscendental[f, x]`, the recursive
     transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
     A decision procedure over a differential transcendental tower.  (The parallel-Risch

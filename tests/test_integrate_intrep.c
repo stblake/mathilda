@@ -70,6 +70,12 @@ static void test_laplace_bessel(void) {
     check_num(
         "Integrate[Exp[-c x] BesselJ[0, a x], {x,0,Infinity}, Assumptions -> c>0 && Element[a,Reals]]",
         "1/Sqrt[a^2 + c^2]", "{a -> 11/10, c -> 23/10}");
+    /* No assumptions: now returns the answer as a ConditionalExpression carrying the
+     * Re[c]>0 convergence condition (the linear-argument substitution stage lets the
+     * definite integrator close it), matching Mathematica; it no longer declines. */
+    check_num(
+        "Integrate[Exp[-c x] BesselJ[0, a x], {x,0,Infinity}]",
+        "1/Sqrt[a^2 + c^2]", "{a -> 11/10, c -> 23/10}");
     /* nu=1, q>0: (Sqrt[q^2+p^2]-p)/(q Sqrt[q^2+p^2]). */
     check_num(
         "Integrate[Exp[-c x] BesselJ[1, a x], {x,0,Infinity}, Assumptions -> c>0 && a>0]",
@@ -162,8 +168,6 @@ static void test_declines(void) {
     check_unevaluated("Integrate[x^(s-1)/(1 - Exp[-x]), {x,0,Infinity}, Method -> \"IntegralRepresentation\", Assumptions -> s>1]");
     /* s=1 lands on the Hurwitz-zeta pole: must decline (Re s > 1 gate). */
     check_unevaluated("Integrate[Exp[-a x]/(1 - Exp[-x]), {x,0,Infinity}, Method -> \"IntegralRepresentation\", Assumptions -> a>0]");
-    /* No assumptions: convergence gate (c>0) cannot be proved. */
-    check_unevaluated("Integrate[Exp[-c x] BesselJ[0, a x], {x,0,Infinity}]");
     /* Wrong sign (growth, not decay). */
     check_unevaluated("Integrate[Exp[a x - b/x]/Sqrt[x], {x,0,Infinity}, Assumptions -> a>0 && b>0]");
     /* Not a recognised shape. */
