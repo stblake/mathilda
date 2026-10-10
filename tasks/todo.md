@@ -45,8 +45,14 @@ check-messages` / `check-c99` clean. valgrind: zero leaks trace to any new
 function. New regression + soundness tests in test_logexp_simplify.c (M1-M4) and
 test_invtrig_simplify.c (M5-M7).
 
-**Pre-existing issues surfaced (not fixed — out of scope, flag to user):**
-1. `Simplify[(a^p)^q, a>0]` → `a^(p q)` is UNSOUND (needs `p ∈ Reals`); the test
-   expects `(a^p)^q`. Masked by NDEBUG. Present at v0.331.
-2. `TrigToExp[Coth[x]]` / `ExpToTrig[TrigToExp[Coth[x]]]` sign-convention mismatch.
-3. `(x^2)^(3/2)` printer parenthesization vs a test's `x^2^(3/2)` expectation.
+**Pre-existing NDEBUG-masked issues surfaced AND FIXED (v0.339):**
+1. `Simplify[(a^p)^q, a>0]` → `a^(p q)` was UNSOUND (needs `p ∈ Reals`). FIXED:
+   replaced the two context-free string rules with a structural rule gated on
+   `prov_nn(base) && prov_re(inner_exp)`. Genuine code bug.
+2. `TrigToExp/ExpToTrig[Coth[x]]` — stale test golden values from an old sign-flip
+   bug since fixed in code; corrected the expectations (code was already right).
+3. `(x^2)^(3/2)` printer — test expected ambiguous `x^2^(3/2)` (reparses as
+   `x^(2√2)`); corrected the expectation (printer was already right).
+
+All three asserts were `-DNDEBUG`-elided, so they'd been failing silently; the
+14-suite sweep now shows 0 soft-FAILs (was 4).
