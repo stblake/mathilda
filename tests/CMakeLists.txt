@@ -690,6 +690,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_gammapower.c
     ../src/calculus/integrate_jeffrey.c
     ../src/calculus/integrate_linarg.c
+    ../src/calculus/integrate_logbyparts.c
     ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/integrate_symmetry.c
     ../src/calculus/integrate_beta.c
@@ -4644,6 +4645,23 @@ add_test(NAME dsolve_corpus_2_2_38_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2238.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
+# M66 (Problems 3801-3900, our section 2.2.39 = upstream 2.1.39).  Systems-heavy:
+# 92 constant-coefficient linear systems (53 2x2, 32 3x3, 7 4x4; a forced block
+# 3822/3870-3876, a few variable-coefficient) + 8 scalar 2nd-order linear
+# nonhomogeneous (VoP forcings Tan/Log, one variable-coefficient y''+x y).  Landed
+# 95 -> 96/100 on one general Integrate fix: a new LogByParts stage
+# (src/calculus/integrate_logbyparts.c) that recognises c Log[g] K with a
+# trig/hyperbolic cofactor and does one integration by parts, so the Log*trig
+# family closes to a Log*trig + SinIntegral/CosIntegral form instead of the
+# ~4.7-12 s ParallelMixedSpecial search.  This made 3805 (y''+4y==Log[x]) solve in
+# 0.35 s (was 9.4 s -> UNEVAL over the 8 s wall).  Baseline argv3 = non-PASS count.
+# Residue 4, all honest: 3804 (variable-coeff Airy-inhomogeneous), 3832/3891
+# (variable-coeff 2x2/3x3 systems), 3886 (cubic-Root 3x3 spectrum churn).
+add_test(NAME dsolve_corpus_2_2_39_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2239.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

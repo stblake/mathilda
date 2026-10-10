@@ -1,74 +1,59 @@
-# Fix passagemath aarch64-musl build break + warnings
+# DSolve corpus wave M66 — §2.2.39 (Problems 3801–3900)
 
-CI: passagemath build on `aarch64-alpine-linux-musl`, GCC 14.2.0.
-`make[3]: *** [src/print.o] Error 1`, `src/repl.o Error 1` — the build FAILS
-(not just warns). Plus six -Wall/-Wextra warning sites.
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-keen-hollerith.md`
 
-## Root causes
-- **ERROR (musl)**: musl declares `stdin/stdout/stderr` as `FILE *const`, so
-  `stdout = …` / `stderr = …` is a hard error. glibc and macOS make them
-  assignable, so this is invisible locally and to `make check-c99`.
-  - `src/print.c` (expr_to_string / _fullform / numberform_format_result_to_string)
-    swaps `stdout` to an `open_memstream` to capture its own output.
-  - `src/repl.c` (pipe_capture_begin/end) swaps `stdout`+`stderr` to capture a
-    script's output for the pipe protocol.
-- **WARNING / latent bug (aarch64)**: `src/graph/galg_matching.c` uses
-  `char* side` with sentinel `-1`; `char` is UNSIGNED on ARM, so `side[x] < 0`
-  is always false and `>= 0` always true — bipartite detection is broken on
-  aarch64 (flagged by -Wtype-limits).
-- **WARNINGS (all platforms)**: unhandled enum in a switch, three
-  misleading-indentation files, unused LAPACK-only locals.
+## Phase A — land & audit the corpus
+- [x] Fetch upstream §2.1.39 `Ch2.S1.SS39.htm` (browser-UA curl) → scratchpad
+- [x] Convert → `DSolve_test_status/DE_examples_2239.m` (label 2.2.39)
+- [x] `make check-corpus-indvar` green; eyeballed — clean
+- [x] 100 records; 8 scalar (0 IVP) + 92 systems (53 2×2, 32 3×3, 7 4×4)
 
-## Plan
-- [ ] print.h: expose a print-subsystem output sink (`mth_out`, push/pop).
-- [ ] print.c: route printf/putchar/fputs through the sink; capture helpers
-      push/pop the sink instead of assigning `stdout`.
-- [ ] numberform.c: route its `fputs(…, stdout)` through `mth_out()` (same
-      print subsystem, different TU).
-- [ ] repl.c: rewrite pipe capture as fd-level redirect (tmpfile + dup2),
-      portable on musl and a catch-all for all stdout/stderr.
-- [ ] galg_matching.c: `char` → `signed char` for `side` (fixes warning AND the
-      aarch64 correctness bug).
-- [ ] integrate.c: handle `METHOD_INTEGRAL_REP` (definite-only → leave
-      unevaluated) in the indefinite cascade switch.
-- [ ] ndsolve_common.c: scope `n/nrhs/info` inside `#ifdef USE_LAPACK`.
-- [ ] integrate_intrep.c / integrate_ramanujan.c / integrate_residue.c: split
-      `if (p) free(p); return …;` one-liners so the `return` isn't mis-guarded.
-- [ ] Add a `make check-c99` rule for stdin/stdout/stderr assignment (this class
-      is invisible on glibc/macOS).
-- [ ] version.h bump + changelog entry.
-- [ ] Verify: local gcc build clean, `make check-c99`, targeted recompiles.
+## Phase B — measure baseline
+- [x] Build `dsolve_corpus_tests`
+- [x] Baseline run → 95/100, 5 UNEVAL (3804,3805,3832,3886,3891), 0 FAIL/crash
+- [x] Non-PASS diagnosed from inside cascade (pinned methods, profiler)
+
+## Phase C — diagnose & fix (FAIL > crash > UNEVAL)
+- [x] Classified: 3805 = latency (Log·trig ∫ falls to PMS 9.4s); other 4 hard residues
+- [x] Fix: new `Integrate` LogByParts stage (`integrate_logbyparts.c`) — 3805 9.4→0.35s
+- [x] §2.2.39 → 96/100; integrate/risch suite (35) green, 0 regressions
+- [x] A/B kill-switch: 4 failing dsolve unit/stress tests are PRE-EXISTING on HEAD
+
+## Phase D — lock in & document
+- [x] Add `dsolve_corpus_2_2_39_tests` gate at baseline 4
+- [x] STATUS.md section + wave-history M66; DSOLVE_PLAN.md M66; README rows (37/38/39)
+- [x] Changelog `docs/spec/changelog/2026-10-05.md`; spec `calculus.md` LogByParts note
+- [x] Bump `src/version.h` → 0.343
+- [x] Targeted regression on VoP/trig/Log sections (19/25/27/32/34/35/36/38/39)
+- [x] Regenerate `reports/2.2.39.{tsv,md}` post-fix → 96/100, 4 non-PASS
+- [x] valgrind: new file in 0/31581 leak records, no invalid access; check-c99 ✓ / check-messages ✓
+- [ ] Commit + tag v0.343
 
 ## Review
 
-All items done; verified on GCC 16 (Homebrew), v0.342.
+**Result:** §2.2.39 (Problems 3801–3900) landed at **95 → 96/100, 0 FAIL, 0 crash**,
+gate `dsolve_corpus_2_2_39_tests` at baseline **4**.
 
-**Build break (the actual failure).**
-- print.{c,h}: added a print-subsystem sink (`mth_out`/`mth_out_push`/
-  `mth_out_pop`). print.c routes `printf`/`putchar` via file-local macros and
-  `fputs(…, MTH_POUT)`; the three capture helpers push the sink to a memstream
-  instead of assigning `stdout`. numberform.c's 15 `fputs(…, stdout)` now use
-  `mth_out()`.
-- repl.c + ffi/mathilda_ffi.c: pipe/notebook capture rewritten as fd-level
-  redirect (`tmpfile` + `dup`/`dup2`), portable on musl and a catch-all. ffi had
-  the *same* latent bug (CI died at print.o/repl.o before reaching it).
-- No `stdin/stdout/stderr` assignment remains tree-wide (grep + new gate).
+**One general fix:** new `Integrate` stage `LogByParts`
+(`src/calculus/integrate_logbyparts.c`) — recognises `c Log[g] K` with a
+trig/hyperbolic cofactor and does one integration by parts, closing the `Log·trig`
+family to `Log·trig + Si/Ci` instead of the ~4.7–12 s `ParallelMixedSpecial`
+search. `3805` (`y''+4y==Log[x]`): 9.4 s → 0.35 s. Placed after the cheap stages
+(cascade `if(!result)` short-circuit ⇒ sees only what they declined, perturbs
+nothing already fast) and before the heavy tail; recursive sub-integrals raise
+`g_integrate_no_special` so a non-closing residual declines fast; exact `Simplify`
+diff-back is the sole acceptance test.
 
-**Warnings.** integrate.c switch handles METHOD_INTEGRAL_REP; galg_matching.c
-`char`→`signed char` (also fixes the aarch64 bipartite correctness bug);
-ndsolve_common.c LAPACK locals scoped; three misleading-indentation files
-reformatted.
+**Regression-free (A/B kill-switch proven):** integrate/risch suite 35/35 green;
+every affected corpus section identical with/without the stage; valgrind — new
+file in 0 leak records, no invalid access.
 
-**New gate.** tools/check_c99_portability.py now flags assignment to a standard
-stream (invisible on glibc/macOS). `make check-c99` passes; self-tested to catch
-a planted `stdout = m;` with no false positives (old_stdout=, ==stdout, ->stdout,
-.stderr=).
+**Residue (4, honest hard classes):** 3804 (variable-coeff Airy-inhomogeneous),
+3832/3891 (variable-coeff 2×2/3×3 systems), 3886 (const-coeff 3×3, irreducible
+cubic-`Root` spectrum churn).
 
-**Verification.** Full tree builds warning-clean (USE_LAPACK on); ndsolve_common
-clean without USE_LAPACK (the CI config); galg clean under `-funsigned-char`
-(and old `char` confirmed to warn). Tests pass: print_tests, numberform_tests,
-graph_algos_tests, graph_tests. `-file` printing and NDJSON pipe capture
-(stdout stream + stderr message + multi-line) re-verified. check-messages OK.
-
-**Not done (left to the user, per "commit only when asked").** No git commit.
-When committing: message tag `; v0.342`, lightweight tag `v0.342` at that commit.
+**Pre-existing, NOT this wave (flagged for a drift-reconciliation pass):** gates
+`dsolve_corpus_2_2_19_tests` (8 vs stale baseline 5) and `_2_2_35_tests` (3 vs 2)
+have drifted across M40–M65; unit/stress `dsolve_tests`, `dsolve_m34/m62/m63_stress`
+are red on HEAD. All A/B-confirmed independent of M66; baselines left untouched
+(raising without root-cause could mask a real regression).

@@ -38,6 +38,7 @@
 #include "integrate_goursat.h"
 #include "integrate_fresnel.h"
 #include "integrate_gammapower.h"
+#include "integrate_logbyparts.h"
 #include "integrate_jeffrey.h"
 #include "integrate_linarg.h"
 #include "integrate_newton_leibniz.h"
@@ -523,6 +524,15 @@ static Expr* try_fresnel(Expr* f, Expr* x) {
  * (the general stages SEARCH for 12.9 s before declining on this shape). */
 static Expr* try_gammapower(Expr* f, Expr* x) {
     return integrate_gammapower_try(f, x);
+}
+
+/* c Log[g] K, K carrying a trig/hyperbolic kernel of x -> one integration by
+ * parts (Log[g] INT K - INT K'-log-weight), closing the Log*trig family to a
+ * Log*trig + SinIntegral/CosIntegral form instead of the ~3.8-12 s
+ * ParallelMixedSpecial search; see integrate_logbyparts.c.  Diff-back verified,
+ * so it declines (never emits a wrong form) on a mis-match. */
+static Expr* try_logbyparts(Expr* f, Expr* x) {
+    return integrate_logbyparts_try(f, x);
 }
 
 /* Stage 2: recursive transcendental Risch integrator.
@@ -1470,8 +1480,8 @@ MATHILDA_MAYBE_UNUSED static bool integrate_budget_spent(void) {
 typedef enum {
     IP_UNDEFINED = 0, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
-    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_PMT,
-    IP_GOURSAT, IP_PMS,
+    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_LOGBYPARTS,
+    IP_PMT, IP_GOURSAT, IP_PMS,
     IP_NSTAGES
 } IntegrateProfStage;
 
@@ -1480,8 +1490,8 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
-    "14 CRCTable", "15 ParallelMixedTower", "16 GoursatAlgebraic",
-    "17 ParallelMixedSpecial"
+    "14 CRCTable", "15 LogByParts", "16 ParallelMixedTower",
+    "17 GoursatAlgebraic", "18 ParallelMixedSpecial"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -1598,6 +1608,11 @@ static void ip_account(int stage, double t0, bool closed) {
 
 /* Speculative-integration suppression counter (see integrate.h). */
 int g_integrate_quiet = 0;
+
+/* Heavy-tail-stage suppression counter (see integrate.h).  Raised by LogByParts
+ * around its recursive sub-integrals so a non-closing reduction declines promptly
+ * instead of paying ParallelMixedTower/Special twice. */
+int g_integrate_no_special = 0;
 
 /* De-dup flag for the user-facing Integrate::nonelem diagnostic within ONE
  * top-level Integrate cascade.  Two cascade stages can each PROVE the same
@@ -1941,6 +1956,14 @@ Expr* builtin_integrate(Expr* res) {
              * ParallelMixedTower stage below subsumes both. */
             IP_STAGE(IP_RISCHTRANS,   try_rischtranscendental(effective_f, x));
             IP_STAGE(IP_CRCTABLE,     try_crctable(effective_f, x));
+            /* Log[g] times a trig/hyperbolic kernel -> one integration by parts.
+             * After the cheap elementary stages (the `if (!result)` short-circuit
+             * means it sees only integrands those declined) and before the
+             * grinding tower / special-function tail, so the Log*trig family --
+             * which otherwise costs ParallelMixedSpecial 3.8-12 s -- closes to a
+             * Log*trig + SinIntegral/CosIntegral form.  Diff-back verified;
+             * declines (cascade continues) on any mis-match. */
+            IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
              * cheaply rather than paying this stage's package load and search
@@ -1950,8 +1973,11 @@ Expr* builtin_integrate(Expr* res) {
              * tens of seconds before declining (e.g. 45s on
              * (t^4+2t^3-4)/(t^2 Sqrt[(t^2-1)(t^2-4)])) -- and closes nothing,
              * so the integrand goes straight to the Goursat stage that does.
-             * The explicit Method -> "ParallelMixedTower" is unaffected. */
-            if (!has_pseudoelliptic_radical(effective_f, x))
+             * The explicit Method -> "ParallelMixedTower" is unaffected.
+             * Also skipped when g_integrate_no_special is raised (a speculative
+             * sub-integral of LogByParts): a reduction that does not close at a
+             * cheap stage must decline promptly, not grind the tower. */
+            if (!g_integrate_no_special && !has_pseudoelliptic_radical(effective_f, x))
                 IP_STAGE(IP_PMT,      try_parallelmixedtower(effective_f, x));
             /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions to
              * genus-0 curves.  Runs last, after ParallelMixedTower: it is a
@@ -1964,8 +1990,10 @@ Expr* builtin_integrate(Expr* res) {
              * only spin before declining, so such an integrand reaches this
              * stage promptly.)  Still correct-by-construction (an internal
              * differentiate-back guard), so a decline here leaves the integral
-             * unevaluated rather than wrong. */
-            IP_STAGE(IP_GOURSAT,      try_goursat(effective_f, x));
+             * unevaluated rather than wrong.  Skipped under g_integrate_no_special
+             * (a LogByParts speculative sub-integral). */
+            if (!g_integrate_no_special)
+                IP_STAGE(IP_GOURSAT,  try_goursat(effective_f, x));
             /* ParallelMixedSpecial: the special-function stage, and the LAST
              * stage of the cascade.
              *
@@ -1986,8 +2014,12 @@ Expr* builtin_integrate(Expr* res) {
              * Complete answers only: the cascade calls the surface that returns
              * an antiderivative or declines, never the partial mode, so plain
              * Integrate[f, x] can no more return a half-solved
-             * `answer + Inactive[Integrate][remainder, x]` than it could before. */
-            IP_STAGE(IP_PMS,          try_parallelmixedspecial(effective_f, x, true));
+             * `answer + Inactive[Integrate][remainder, x]` than it could before.
+             * Skipped under g_integrate_no_special (a LogByParts speculative
+             * sub-integral): the whole point of the flag is to not pay this
+             * search twice. */
+            if (!g_integrate_no_special)
+                IP_STAGE(IP_PMS,      try_parallelmixedspecial(effective_f, x, true));
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);

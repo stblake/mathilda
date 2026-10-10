@@ -2760,6 +2760,49 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     harness scores it UNEVAL by timeout. A latency residue, the same class as §2.2.32's 3161/3164/3165,
     not a missing capability. v0.340→0.341.
 
+- **M66 — §2.2.39 corpus (Problems 3801–3900, Nasser Abbasi) + `Integrate` `Log·trig`
+  integration-by-parts stage.** ✅ DONE. The next hundred, measured end to end:
+  **95/100 → 96/100, 0 FAIL, 0 crash**. New corpus `DE_examples_2239.m` (upstream §2.1.39, 100
+  records — **8 scalar, 0 IVP, 92 systems**; `make check-corpus-indvar` green); new gate
+  `dsolve_corpus_2_2_39_tests` at baseline **4**; report `DSolve_test_status/reports/2.2.39.md`.
+  **Systems-heavy**: 92 constant-coefficient linear systems (53 2×2, 32 3×3, 7 4×4), including a
+  forced block 3822/3870–3876 (`E^{kt}` / trig / `t E^{3t}` forcing) and a few variable-coefficient
+  systems; the 8 scalars are second-order linear nonhomogeneous (VoP forcings `Tan`, `Log`, and a
+  variable-coefficient `y''+x y`) — the constant-coefficient system + VoP stack solves the bulk out
+  of the box, hence the high baseline.
+  - **One general fix, in `Integrate`, diagnosed from inside the cascade with the profiler.** `3805`
+    (`y'' + 4y == Log[x]`) was a latency UNEVAL: cold DSolve ~9.4 s, over the prelude's 8 s wall. Its
+    variation-of-parameters particular needs `∫ Log[x] Sin[2x] dx` and `∫ Log[x] Cos[2x] dx` — both
+    elementary (`CosIntegral`/`SinIntegral` forms) — but a `Log·trig` integrand is outside every cheap
+    cascade stage (`MATHILDA_INTEGRATE_PROFILE=1` shows DerivativeDivides / RischTranscendental /
+    CRCTable all decline) and falls through to the special-function stage `ParallelMixedSpecial`,
+    which closed each correctly but at ~4.7 s (the sibling `x³ Sin[x] Log[x]²` costs ~12 s there, per
+    an existing comment in `integrate.c`). The two slow searches were the whole ~9.4 s cost of the ODE.
+  - **The fix is a new cascade stage, `LogByParts`** (`src/calculus/integrate_logbyparts.c`, stage
+    `IP_LOGBYPARTS`), run after the cheap elementary stages and before the `ParallelMixedTower` /
+    `ParallelMixedSpecial` tail. It recognises `c Log[g(x)] K(x)` with exactly one `Log` factor, `K`
+    free of `Log` and carrying a trig/hyperbolic kernel of `x`, and does one integration by parts:
+    `∫ Log[g] K dx = Log[g] V − ∫ V (g'/g) dx`, `V = ∫ K dx`. On this family `V` is an elementary trig
+    antiderivative and `V (g'/g) = (trig)/x` closes to `Si`/`Ci`. The cascade's `if (!result)`
+    short-circuit means the stage only ever sees integrands the cheap stages declined — so no
+    already-fast integral is perturbed (it was the clean low-risk placement) — and its recursive
+    sub-integrals run with a new `g_integrate_no_special` counter raised, so a `Log·trig` case whose
+    IBP residual is itself non-elementary declines promptly rather than paying `ParallelMixedSpecial`
+    twice. Acceptance is an exact `Simplify` diff-back (the sole test, as in `integrate_gammapower.c`;
+    `Sinc[z]` from `D[SinIntegral[z]]` is rewritten to `Sin[z]/z` first), so a mis-recognition can
+    only decline, never emit a wrong closed form.
+  - *Measured wins, all differentiate-back verified:* `∫ Log[x] Sin[x]` **4.9 s → 0.10 s**
+    (`CosIntegral[x] − Cos[x] Log[x]`), `∫ Log[x] Sin[2x]` / `∫ Log[x] Cos[2x]` ~4.7 s → ~0.09 s
+    (identical forms to the previous `ParallelMixedSpecial` output), `DSolve[y''+4y==Log[x]]`
+    **9.4 s → 0.35 s** (`y = C[1] Cos[2x] − C[2] Sin[2x] + ¼(Log[x] − Cos[2x] CosIntegral[2x] −
+    Sin[2x] SinIntegral[2x])`). The full integrate/risch suite (35 tests) and every prior DSolve
+    corpus section are unchanged (0 regressions).
+  - *Residue 4, honest:* `3804` (`y'' + x y == Sin[x]`) is a variable-coefficient Airy-inhomogeneous
+    equation whose particular is non-elementary — DSolve declines instantly; `3832`/`3891` are
+    variable-coefficient 2×2 / 3×3 systems, outside the constant-coefficient system solver; `3886`
+    is a constant-coefficient 3×3 system with an irreducible cubic-`Root` spectrum (`l³−5l²+8l−8`),
+    the known spectrum-churn class (>45 s, cf. §2.2.23's 2289/2220). v0.342→0.343.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

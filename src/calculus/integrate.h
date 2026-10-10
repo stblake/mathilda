@@ -40,6 +40,20 @@ extern int g_integrate_depth;
  * report about the ODE the user actually typed. */
 extern int g_integrate_quiet;
 
+/* Suppression counter for the heavy TAIL stages of the Automatic cascade
+ * (ParallelMixedTower, GoursatAlgebraic, ParallelMixedSpecial).  When > 0, the
+ * cascade runs only its cheap, elementary stages and otherwise declines rather
+ * than paying the seconds-long tower / special-function search.  A stage that
+ * integrates a SUB-integrand speculatively — where "did not close cheaply" is a
+ * decline, not a reason to grind — brackets its recursive Integrate calls with
+ * g_integrate_no_special++/--, so a non-closing sub-integral returns promptly and
+ * the stage declines fast, letting the OUTER cascade (which the flag does not
+ * touch, being back to 0 there) take its own turn at the tail stages.  The
+ * LogByParts stage is the first such caller: its V = INT K and W = INT V*(g'/g)
+ * reductions close at a cheap stage on the Log*trig class it targets, and a case
+ * where they do not must not cost two passes through ParallelMixedSpecial. */
+extern int g_integrate_no_special;
+
 /* Emits the user-facing `Integrate::nonelem` diagnostic for the original
  * integrand `f` (in variable `x`), shared by every method that can PROVE the
  * integrand has no elementary antiderivative (RischTranscendental via its field

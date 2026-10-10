@@ -1184,6 +1184,27 @@ monotonically down.
   first, then one under `PowerExpand`, which quotients out that convention and nothing
   else.
 
+  **`Log` times a trig/hyperbolic kernel (as of v0.343).** A `LogByParts` stage sits
+  after the cheap elementary stages (`DerivativeDivides` / `RischTranscendental` /
+  `CRCTable`) and before the `ParallelMixedTower` / `ParallelMixedSpecial` tail:
+
+      Integrate[Log[g] K, x]  ==  Log[g] V - Integrate[V (g'/g), x],   V = Integrate[K, x]
+
+  for an integrand `c Log[g(x)] K(x)` with exactly one `Log` factor, `K` free of `Log`
+  and carrying a trig/hyperbolic kernel of `x`.  On this family `V` is an elementary trig
+  antiderivative and `V (g'/g) = (trig)/x` closes to `SinIntegral`/`CosIntegral`.  It
+  exists because a `Log·trig` integrand is outside every cheap stage and the special
+  stage *searches*: `Integrate[Log[x] Sin[x], x]` cost ~4.7 s to close (the sibling
+  `x^3 Sin[x] Log[x]^2` ~12 s), so `DSolve[y'' + 4y == Log[x], y, x]` — whose VoP
+  particular is exactly `Integrate[Log[x] Sin[2x], x]` and `Integrate[Log[x] Cos[2x], x]`
+  — took ~9.4 s; both integrals are now ~0.09 s and the ODE 0.35 s, the answer unchanged.
+  The cascade's "first non-`NULL` wins" rule means the stage only ever sees integrands the
+  cheap stages declined (nothing already-fast is perturbed), and its recursive
+  sub-integrals suppress the heavy tail (`g_integrate_no_special`) so a `Log·trig` case
+  whose by-parts residual is itself non-elementary declines promptly rather than searching
+  `ParallelMixedSpecial` twice.  Emitted only behind an exact `Simplify` differentiate-back
+  certificate (`Sinc[z]` from `D[SinIntegral[z]]` rewritten to `Sin[z]/z` first).
+
   **Execution order (as of v0.238):** `ParallelMixedSpecial` (item 14) is now the
   **last** stage, after Goursat.  It is the only stage that may answer with a
   *non-elementary* function — `ExpIntegralEi`, `Erf`, the elliptic family — and an

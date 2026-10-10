@@ -2007,6 +2007,63 @@ Full per-case results: `reports/2.2.38.tsv`; bucketed report: `reports/2.2.38.md
 
 ---
 
+## Section 2.2.39 — "Problems 3801 to 3900" (Nasser Abbasi)
+
+Corpus: `DE_examples_2239.m` — 100 records, **8 scalar (0 IVP) + 92 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.39,
+`Ch2.S1.SS39.htm`; the internal `2.2.39` name is kept for continuity — see
+`README.md`). **Systems-heavy**: 92 constant-coefficient linear systems
+(53 2×2, 32 3×3, 7 4×4), including a forced (nonhomogeneous) block 3822 / 3870–3876
+(`E^{kt}` / trig / `t E^{3t}` forcing) and a few variable-coefficient systems; the
+8 scalars are second-order linear nonhomogeneous (VoP forcings `Tan`, `Log`, and
+a variable-coefficient `y''+x y`). `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_39_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-10 (M66 baseline) | 95 / 100 | 95.0% | 5 | 0 FAIL, 0 crash. Non-PASS: 3804, 3805, 3832, 3886, 3891. |
+| 2026-10-10 (**M66**) | **96 / 100** | **96.0%** | **4** | **+1 (3805), 0 FAIL, 0 crash**. One general `Integrate` fix (below). Gate baseline **4**. |
+
+**M66 fix — `Integrate` LogByParts stage** (new file
+`src/calculus/integrate_logbyparts.c`, cascade stage `15 LogByParts`, run after
+the cheap elementary stages and before the `ParallelMixedTower`/`Special` tail).
+`3805` (`y'' + 4y == Log[x]`) was a latency UNEVAL: its variation-of-parameters
+particular needs `∫ Log[x] Sin[2x] dx` and `∫ Log[x] Cos[2x] dx`, both elementary
+(`CosIntegral`/`SinIntegral` forms), but a `Log·trig` integrand is outside every
+cheap cascade stage and fell through to `ParallelMixedSpecial`, which closed each
+correctly but in ~4.7 s (its sibling `x³ Sin[x] Log[x]²` costs ~12 s there), so
+cold `DSolve` was ~9.4 s — over the harness's 8 s wall.
+
+The new stage recognizes `c Log[g(x)] K(x)` with exactly one `Log` factor, `K`
+free of `Log` and carrying a trig/hyperbolic kernel of `x`, and does one
+integration by parts: `∫ Log[g] K dx = Log[g] V − ∫ V (g'/g) dx`, `V = ∫ K dx`.
+On this family `V` is an elementary trig antiderivative and `V (g'/g) = (trig)/x`
+closes to `Si`/`Ci`. The cascade's `if (!result)` short-circuit means the stage
+only ever sees integrands the cheap stages declined — so no already-fast integral
+is perturbed — and its recursive sub-integrals run with a new
+`g_integrate_no_special` counter raised, so a `Log·trig` case whose IBP residual is
+itself non-elementary declines promptly rather than paying `ParallelMixedSpecial`
+twice. **Acceptance is an exact `Simplify` diff-back** (the sole test, as in
+`integrate_gammapower.c`), so a mis-recognition can only decline, never emit a
+wrong form.
+
+*Measured, all diff-back verified:* `∫ Log[x] Sin[x]` **4.9 s → 0.10 s**
+(`CosIntegral[x] − Cos[x] Log[x]`), `∫ Log[x] Sin[2x]` / `∫ Log[x] Cos[2x]`
+~4.7 s → ~0.09 s (identical forms to the previous `ParallelMixedSpecial` output),
+`DSolve[y''+4y==Log[x]]` **9.4 s → 0.35 s**. Full integrate/risch suite (35 tests)
+and every prior DSolve corpus section unchanged (0 regressions).
+
+Residue (4, all honest hard classes): **3804** (`y''+x y==Sin[x]`,
+variable-coefficient Airy-inhomogeneous — non-elementary particular; DSolve
+declines instantly), **3832** / **3891** (variable-coefficient 2×2 / 3×3 systems —
+outside the constant-coefficient system solver), **3886** (constant-coefficient
+3×3 with an irreducible cubic-`Root` spectrum `l³−5l²+8l−8` — the known
+spectrum-churn class, >45 s; cf. §2.2.23's 2289/2220).
+
+Full per-case results: `reports/2.2.39.tsv`; bucketed report: `reports/2.2.39.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),
@@ -2566,3 +2623,39 @@ Full per-case results: `reports/2.2.38.tsv`; bucketed report: `reports/2.2.38.md
   updated from a decline to that value). No DSolve section regressed. Residue 1, honest: 3764
   (`y'''+3y''+3y'+y == 2 e^{−x}/(x²+1)`, `sympy=False`) solves correctly but cold DSolve ~12.6 s,
   over the 8 s wall — a latency residue (cf. §2.2.32's 3161/3164/3165). v0.340→0.341.
+
+- **M66 (2026-10-10)** — §2.2.39 (Problems 3801–3900, Nasser Abbasi) corpus wave,
+  **95 → 96/100, +1, 0 FAIL, 0 crash**. New corpus `DE_examples_2239.m` (upstream §2.1.39,
+  `make check-corpus-indvar` green), gate `dsolve_corpus_2_2_39_tests` at **4**. Systems-heavy:
+  92 constant-coefficient linear systems (53 2×2, 32 3×3, 7 4×4; a forced block 3822/3870–3876,
+  a few variable-coefficient) + 8 scalar second-order linear nonhomogeneous (VoP forcings `Tan`,
+  `Log`, a variable-coefficient `y''+x y`). ONE general `Integrate` fix: a new **LogByParts** stage
+  (`src/calculus/integrate_logbyparts.c`), run after the cheap elementary stages and before the
+  `ParallelMixedTower`/`Special` tail. `3805` (`y''+4y == Log[x]`) was a latency UNEVAL — cold
+  DSolve ~9.4 s over the 8 s wall — because its VoP particular needs `∫ Log[x] Sin[2x]` and
+  `∫ Log[x] Cos[2x]`, elementary (`CosIntegral`/`SinIntegral`) but outside every cheap stage, so
+  each fell through to `ParallelMixedSpecial` at ~4.7 s. The new stage recognises `c Log[g] K`
+  (exactly one `Log`, `K` free of `Log` with a trig/hyperbolic kernel of `x`) and does one
+  integration by parts `∫ Log[g] K = Log[g] V − ∫ V (g'/g)`, `V = ∫ K`, so `V` is an elementary
+  trig antiderivative and `V (g'/g) = (trig)/x` closes to `Si`/`Ci`. The `if (!result)`
+  short-circuit means it sees only integrands the cheap stages declined (nothing already-fast is
+  perturbed); recursive sub-integrals run with a new `g_integrate_no_special` counter raised so a
+  non-elementary IBP residual declines promptly instead of paying `ParallelMixedSpecial` twice;
+  acceptance is an exact `Simplify` diff-back, so a mis-recognition can only decline. Measured, all
+  verified: `∫ Log[x] Sin[x]` 4.9 s → 0.10 s, `∫ Log[x] Sin[2x]`/`Cos[2x]` ~4.7 s → ~0.09 s
+  (identical forms), `DSolve[y''+4y==Log[x]]` 9.4 s → 0.35 s. Integrate/risch suite (35 tests) and
+  every prior DSolve corpus section unchanged (0 regressions). Residue 4, all honest: 3804
+  (variable-coeff Airy-inhomogeneous), 3832/3891 (variable-coeff 2×2/3×3 systems), 3886
+  (constant-coeff 3×3, irreducible cubic-`Root` spectrum — spectrum-churn class). v0.342→0.343.
+  *Pre-existing drift, NOT this wave (each confirmed by an A/B kill-switch that makes the
+  LogByParts stage inert — identical result with and without it, so it is red on `HEAD`
+  independently of M66):* the gates `dsolve_corpus_2_2_19_tests` (now **8** non-PASS vs its stale
+  M39 baseline 5 — the failing set changed completely: 1823/1836/1876 improved, 1853/1858/1865/
+  1887/1893/1898 regressed) and `dsolve_corpus_2_2_35_tests` (**3** vs its M62 baseline 2) have
+  drifted across M40–M65 (likely the M62–M65 Integrate/Simplify changes, which did not re-run these
+  VoP-transcendental sections). Also red on `HEAD`: the unit/stress tests `dsolve_tests`
+  (SpecialFunctionForm spherical-Bessel, flaky under full-suite load), `dsolve_m34_stress`
+  (`(x³+2)y''+4xy'+y==0`, >15 s churn), `dsolve_m62_stress` (nonlinear 3rd-order exact),
+  `dsolve_m63_stress` (budget test, timing-sensitive). These baselines were left UNtouched: raising
+  a baseline without root-causing could mask a real correctness regression among the latency ones,
+  so they are flagged for a dedicated drift-reconciliation pass rather than silently re-based here.
