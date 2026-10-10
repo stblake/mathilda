@@ -381,6 +381,36 @@ void test_pi_period_half_multiple_declines(void) {
     assert_eval_eq("Simplify[Sin[x + n Pi/2], Element[n, Integers]]", "Sin[1/2 Pi n + x]", 0);
 }
 
+/* ---- v0.335: Sqrt-local radicand preparation (double/half-angle) ---- */
+void test_sqrt_double_angle_plus_q1(void) {
+    assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x]] - Sqrt[2] Cos[x], 0 < x < Pi/2]", "0", 0);
+}
+void test_sqrt_double_angle_plus_q2(void) {
+    /* Cos < 0 on (Pi/2, Pi): Sqrt[1+Cos[2x]] = Sqrt[2](-Cos[x]). */
+    assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x]] + Sqrt[2] Cos[x], Pi/2 < x < Pi]", "0", 0);
+}
+void test_sqrt_half_angle_sin(void) {
+    assert_eval_eq("Simplify[Sqrt[(1 - Cos[x])/2] - Sin[x/2], 0 < x < Pi/2]", "0", 0);
+}
+void test_sqrt_half_angle_cos(void) {
+    assert_eval_eq("Simplify[Sqrt[(1 + Cos[x])/2] - Cos[x/2], 0 < x < Pi/2]", "0", 0);
+}
+void test_sqrt_half_angle_wide_interval(void) {
+    /* x/2 in (0, Pi/2) over 0<x<Pi, so Sin[x/2] > 0. */
+    assert_eval_eq("Simplify[Sqrt[(1 - Cos[x])/2] - Sin[x/2], 0 < x < Pi]", "0", 0);
+}
+void test_sqrt_double_angle_real_abs(void) {
+    assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x]], Element[x, Reals]]", "Sqrt[2] Abs[Cos[x]]", 0);
+}
+void test_sqrt_double_angle_no_assumption_declines(void) {
+    assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x]]]", "Sqrt[1 + Cos[2 x]]", 0);
+}
+void test_sqrt_prepare_longer_plus_declines(void) {
+    /* 3-term Plus: the 2-element rule patterns do not match. */
+    assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x] + y], Element[x, Reals] && Element[y, Reals]]",
+                   "Sqrt[1 + Cos[2 x] + y]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -470,6 +500,16 @@ int main(void) {
     TEST(test_pi_period_tan_any);
     TEST(test_pi_period_no_integer_declines);
     TEST(test_pi_period_half_multiple_declines);
+
+    /* v0.335 Sqrt-local radicand preparation */
+    TEST(test_sqrt_double_angle_plus_q1);
+    TEST(test_sqrt_double_angle_plus_q2);
+    TEST(test_sqrt_half_angle_sin);
+    TEST(test_sqrt_half_angle_cos);
+    TEST(test_sqrt_half_angle_wide_interval);
+    TEST(test_sqrt_double_angle_real_abs);
+    TEST(test_sqrt_double_angle_no_assumption_declines);
+    TEST(test_sqrt_prepare_longer_plus_declines);
 
     printf("All logexp Simplify tests passed!\n");
     return 0;

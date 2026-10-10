@@ -732,9 +732,19 @@ static bool is_sqrt_of_times_with_square(const Expr* e) {
     return false;
 }
 
+/* True iff e is a Sqrt node Power[_, Rational[1,2]] (any radicand). */
+static bool is_sqrt_node(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2 &&
+        is_rational_half(e->data.function.args[1]);
+}
+
 bool contains_sqrt_of_square(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
-    if (is_sqrt_of_square(e) || is_sqrt_of_times_with_square(e)) return true;
+    if (is_sqrt_of_square(e) || is_sqrt_of_times_with_square(e) ||
+        is_sqrt_node(e)) return true;
     if (contains_sqrt_of_square(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_sqrt_of_square(e->data.function.args[i])) return true;
@@ -745,6 +755,38 @@ bool contains_sqrt_of_square(const Expr* e) {
 /* Rewrite Power[Power[base, 2], Rational[1, 2]] (= Sqrt[base^2]) when the
  * sign of `base` is determinable. Returns a fresh Expr on success, NULL
  * if nothing fires (so the outer caller can keep the unsimplified form). */
+/* Rewrite a Sqrt radicand toward a perfect square using the unconditional
+ * trig/hyperbolic power-reduction identities (double-angle, half-angle,
+ * reciprocal-Pythagorean). A no-op on a radicand that matches no shape -- in
+ * particular a 2-element Plus pattern never matches a longer Plus, so a
+ * non-square radicand like `1 + Cos[2x] + y` is left untouched. */
+static Expr* sqrt_prepare_radicand(const Expr* R) {
+    static Expr* rules = NULL;
+    if (!rules) {
+        rules = parse_expression(
+            "{ "
+            "  1 + Cos[2 u_] :> 2 Cos[u]^2, "
+            "  1 - Cos[2 u_] :> 2 Sin[u]^2, "
+            "  (1 + Cos[u_])/2 :> Cos[u/2]^2, "
+            "  (1 - Cos[u_])/2 :> Sin[u/2]^2, "
+            "  1 - Cos[u_]^2 :> Sin[u]^2, "
+            "  1 - Sin[u_]^2 :> Cos[u]^2, "
+            "  Sec[u_]^2 - 1 :> Tan[u]^2, "
+            "  Csc[u_]^2 - 1 :> Cot[u]^2, "
+            "  1 + Cosh[2 u_] :> 2 Cosh[u]^2, "
+            "  -1 + Cosh[2 u_] :> 2 Sinh[u]^2, "
+            "  (1 + Cosh[u_])/2 :> Cosh[u/2]^2, "
+            "  (-1 + Cosh[u_])/2 :> Sinh[u/2]^2, "
+            "  -1 + Cosh[u_]^2 :> Sinh[u]^2, "
+            "  1 + Sinh[u_]^2 :> Cosh[u]^2 "
+            "}");
+    }
+    if (!rules) return expr_copy((Expr*)R);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                     (Expr*[]){ expr_copy((Expr*)R), expr_copy(rules) }, 2);
+    return eval_and_free(call);
+}
+
 /* Resolve a single real squared base f from Sqrt[... f^2 ...]: f if f >= 0,
  * -f if f <= 0, else Abs[f]. Caller has already established prov_re(ctx, f). */
 static Expr* resolve_sqrt_square_base(const Expr* f, const AssumeCtx* ctx) {
@@ -828,6 +870,23 @@ static Expr* try_simp_sqrt_of_square(const Expr* sqrt_node, const AssumeCtx* ctx
         free(out_factors);
         return result;
     }
+
+    /* Trig-radicand preparation: rewrite the radicand toward a perfect square
+     * (double/half-angle, reciprocal-Pythagorean) and retry. Commit only if it
+     * actually became a square shape, so a non-square radicand is never
+     * disturbed. The retry hits the exact/Times branch above (never this one
+     * again, since the prepared node is now a square shape). */
+    if (is_sqrt_node(sqrt_node)) {
+        Expr* prepped_rad = sqrt_prepare_radicand(sqrt_node->data.function.args[0]);
+        Expr* prepped = expr_new_function(expr_new_symbol(SYM_Power),
+            (Expr*[]){ prepped_rad,
+                       expr_copy(sqrt_node->data.function.args[1]) }, 2);
+        Expr* out = NULL;
+        if (is_sqrt_of_square(prepped) || is_sqrt_of_times_with_square(prepped))
+            out = try_simp_sqrt_of_square(prepped, ctx);
+        expr_free(prepped);
+        if (out) return out;
+    }
     return NULL;
 }
 
@@ -855,7 +914,8 @@ static Expr* sqrt_of_square_walk(const Expr* e, const AssumeCtx* ctx) {
     }
     free(new_args);
     const Expr* candidate = this_form ? this_form : e;
-    if (is_sqrt_of_square(candidate) || is_sqrt_of_times_with_square(candidate)) {
+    if (is_sqrt_of_square(candidate) || is_sqrt_of_times_with_square(candidate) ||
+        is_sqrt_node(candidate)) {
         Expr* simp = try_simp_sqrt_of_square(candidate, ctx);
         if (simp) {
             if (this_form) expr_free(this_form);
