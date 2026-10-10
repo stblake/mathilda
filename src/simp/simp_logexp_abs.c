@@ -702,9 +702,39 @@ static bool is_sqrt_of_square(const Expr* e) {
     return inner_exp->type == EXPR_INTEGER && inner_exp->data.integer == 2;
 }
 
+/* True iff e is Power[f, 2] (a squared factor). */
+static bool is_square_factor(const Expr* f) {
+    return f && f->type == EXPR_FUNCTION && f->data.function.head &&
+        f->data.function.head->type == EXPR_SYMBOL &&
+        f->data.function.head->data.symbol.name == SYM_Power &&
+        f->data.function.arg_count == 2 &&
+        f->data.function.args[1]->type == EXPR_INTEGER &&
+        f->data.function.args[1]->data.integer == 2;
+}
+
+/* True iff e is Power[Times[..., Power[f, 2], ...], Rational[1, 2]], i.e.
+ * Sqrt[c * f^2 * ...] with at least one squared factor under the Times. Purely
+ * structural (reality of f is checked at the rewrite site); detects the case
+ * the exact is_sqrt_of_square gate misses because the radicand is a Times and
+ * not a bare Power[_, 2]. */
+static bool is_sqrt_of_times_with_square(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Power ||
+        e->data.function.arg_count != 2) return false;
+    if (!is_rational_half(e->data.function.args[1])) return false;
+    const Expr* rad = e->data.function.args[0];
+    if (rad->type != EXPR_FUNCTION || !rad->data.function.head ||
+        rad->data.function.head->type != EXPR_SYMBOL ||
+        rad->data.function.head->data.symbol.name != SYM_Times) return false;
+    for (size_t i = 0; i < rad->data.function.arg_count; i++)
+        if (is_square_factor(rad->data.function.args[i])) return true;
+    return false;
+}
+
 bool contains_sqrt_of_square(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
-    if (is_sqrt_of_square(e)) return true;
+    if (is_sqrt_of_square(e) || is_sqrt_of_times_with_square(e)) return true;
     if (contains_sqrt_of_square(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_sqrt_of_square(e->data.function.args[i])) return true;
@@ -715,26 +745,88 @@ bool contains_sqrt_of_square(const Expr* e) {
 /* Rewrite Power[Power[base, 2], Rational[1, 2]] (= Sqrt[base^2]) when the
  * sign of `base` is determinable. Returns a fresh Expr on success, NULL
  * if nothing fires (so the outer caller can keep the unsimplified form). */
-static Expr* try_simp_sqrt_of_square(const Expr* sqrt_node, const AssumeCtx* ctx) {
-    if (!is_sqrt_of_square(sqrt_node)) return NULL;
-    const Expr* base = sqrt_node->data.function.args[0]->data.function.args[0];
-    if (prov_nn(ctx, base) ||
-        (ctx_has_facts(ctx) && assume_sign_nonneg_deep(ctx, base))) {
-        /* base >= 0 → Sqrt[base^2] = base. */
-        return expr_copy((Expr*)base);
+/* Resolve a single real squared base f from Sqrt[... f^2 ...]: f if f >= 0,
+ * -f if f <= 0, else Abs[f]. Caller has already established prov_re(ctx, f). */
+static Expr* resolve_sqrt_square_base(const Expr* f, const AssumeCtx* ctx) {
+    if (prov_nn(ctx, f) || (ctx_has_facts(ctx) && assume_sign_nonneg_deep(ctx, f))) {
+        return expr_copy((Expr*)f);
     }
-    if (prov_np(ctx, base) ||
-        (ctx_has_facts(ctx) && assume_sign_nonpos_deep(ctx, base))) {
-        /* base <= 0 → Sqrt[base^2] = -base. */
-        Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)base) };
+    if (prov_np(ctx, f) || (ctx_has_facts(ctx) && assume_sign_nonpos_deep(ctx, f))) {
+        Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)f) };
         return expr_new_function(expr_new_symbol(SYM_Times), na, 2);
     }
-    if (prov_re(ctx, base)) {
-        /* base real but sign undetermined → Sqrt[base^2] = Abs[base].
-         * Downstream Abs simplification may reduce further (or stop here
-         * — Abs[real] is at least as canonical as Sqrt[real^2]). */
-        Expr* a[1] = { expr_copy((Expr*)base) };
-        return expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
+    Expr* a[1] = { expr_copy((Expr*)f) };
+    return expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
+}
+
+static Expr* try_simp_sqrt_of_square(const Expr* sqrt_node, const AssumeCtx* ctx) {
+    if (is_sqrt_of_square(sqrt_node)) {
+        const Expr* base = sqrt_node->data.function.args[0]->data.function.args[0];
+        if (prov_nn(ctx, base) ||
+            (ctx_has_facts(ctx) && assume_sign_nonneg_deep(ctx, base))) {
+            /* base >= 0 → Sqrt[base^2] = base. */
+            return expr_copy((Expr*)base);
+        }
+        if (prov_np(ctx, base) ||
+            (ctx_has_facts(ctx) && assume_sign_nonpos_deep(ctx, base))) {
+            /* base <= 0 → Sqrt[base^2] = -base. */
+            Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)base) };
+            return expr_new_function(expr_new_symbol(SYM_Times), na, 2);
+        }
+        if (prov_re(ctx, base)) {
+            /* base real but sign undetermined → Sqrt[base^2] = Abs[base]. */
+            Expr* a[1] = { expr_copy((Expr*)base) };
+            return expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
+        }
+        return NULL;
+    }
+
+    /* Sqrt[c * f1^2 * f2^2 * ...] = (prod resolve(fi)) * Sqrt[residual].
+     * For a REAL base f, f^2 >= 0, so the principal-root split
+     * Sqrt[f^2 * rest] = Abs[f] * Sqrt[rest] is sound for ANY sign of the
+     * residual `rest` (justified by the non-negative factor f^2). We pull out
+     * each real squared factor as resolve(fi) in {fi, -fi, Abs[fi]} and keep
+     * everything else (including a numeric coefficient c and any Power whose
+     * base is not provably real) under the Sqrt. */
+    if (is_sqrt_of_times_with_square(sqrt_node)) {
+        const Expr* rad = sqrt_node->data.function.args[0];
+        size_t n = rad->data.function.arg_count;
+        Expr** out_factors = (Expr**)calloc(n + 1, sizeof(Expr*));
+        Expr** residual = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+        size_t nout = 0, nres = 0;
+        bool extracted = false;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* f = rad->data.function.args[i];
+            const Expr* sqbase = is_square_factor(f) ? f->data.function.args[0] : NULL;
+            if (sqbase && prov_re(ctx, sqbase)) {
+                out_factors[nout++] = resolve_sqrt_square_base(sqbase, ctx);
+                extracted = true;
+            } else {
+                residual[nres++] = expr_copy((Expr*)f);
+            }
+        }
+        if (!extracted) {
+            for (size_t i = 0; i < nres; i++) expr_free(residual[i]);
+            for (size_t i = 0; i < nout; i++) expr_free(out_factors[i]);
+            free(residual); free(out_factors);
+            return NULL;
+        }
+        /* Rebuild Sqrt[residual] = Power[Times[residual...], Rational[1,2]]. */
+        if (nres > 0) {
+            Expr* radrest = (nres == 1)
+                ? residual[0]
+                : expr_new_function(expr_new_symbol(SYM_Times), residual, nres);
+            Expr* half[2] = { radrest,
+                expr_copy(sqrt_node->data.function.args[1]) /* Rational[1,2] */ };
+            out_factors[nout++] = expr_new_function(expr_new_symbol(SYM_Power),
+                                                    half, 2);
+        }
+        free(residual);
+        Expr* result = (nout == 1)
+            ? out_factors[0]
+            : expr_new_function(expr_new_symbol(SYM_Times), out_factors, nout);
+        free(out_factors);
+        return result;
     }
     return NULL;
 }
@@ -763,7 +855,7 @@ static Expr* sqrt_of_square_walk(const Expr* e, const AssumeCtx* ctx) {
     }
     free(new_args);
     const Expr* candidate = this_form ? this_form : e;
-    if (is_sqrt_of_square(candidate)) {
+    if (is_sqrt_of_square(candidate) || is_sqrt_of_times_with_square(candidate)) {
         Expr* simp = try_simp_sqrt_of_square(candidate, ctx);
         if (simp) {
             if (this_form) expr_free(this_form);

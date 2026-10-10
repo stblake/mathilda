@@ -5,8 +5,8 @@ Plan: `/Users/user/.claude/plans/similar-to-previous-campaigns-eager-glacier.md`
 
 ## Mechanisms (one commit each, bump + tag)
 
-- [ ] **M1** (v0.332) Sign oracle: `assume_sign_nonneg/nonpos_deep` → Reduce bridge + secant decomp.
-      Wire into `try_simp_abs` + `try_simp_sqrt_of_square`. → 11,12,17,19,41,42,43,44,45 (Abs)
+- [x] **M1** (v0.332) Sign oracle: `assume_sign_nonneg/nonpos_deep` → Reduce bridge + secant decomp.
+      DONE: 22→33/50 (cleared 11,12,17,18,19,28,41-45), sound, no regressions, leak-clean, tagged.
 - [ ] **M2** (v0.333) Generalized `Sqrt[c·f²]→Sqrt[c]·Abs[f]` (Times radicand). → 13,46
 - [ ] **M3** (v0.334) Symbolic-integer π-periodicity `Sin[θ+kπ]→(-1)ᵏSin[θ]`. → 34,35,38,39
 - [ ] **M4** (v0.335) Sqrt-local radicand prep (half-angle, 1±Cos[2x], Sec²−1). → 14,15,16,18,47

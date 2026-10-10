@@ -323,6 +323,35 @@ void test_abs_sin_half_bounded_declines(void) {
     assert_eval_eq("Simplify[Abs[Sin[x]], x > 0]", "Abs[Sin[x]]", 0);
 }
 
+/* ---- v0.333: generalized Sqrt[c f^2 ...] = Sqrt[c] Abs[f] extraction ---- */
+void test_sqrt_coeff_square_trig(void) {
+    /* Sqrt[2 Sin[x]^2] -> Sqrt[2] Sin[x] under 0<x<Pi/2. */
+    assert_eval_eq("Simplify[Sqrt[1 - Cos[2 x]] - Sqrt[2] Sin[x], 0 < x < Pi/2]", "0", 0);
+}
+void test_sqrt_coeff_square_trig_quadrant2(void) {
+    assert_eval_eq("Simplify[Sqrt[1 - Cos[2 x]] - Sqrt[2] Sin[x], Pi/2 < x < Pi]", "0", 0);
+}
+void test_sqrt_product_of_squares(void) {
+    /* Sqrt[Cos[x]^2 Sin[x]^2] -> Cos[x] Sin[x] on quadrant I. */
+    assert_eval_eq("Simplify[Sqrt[Cos[x]^2 Sin[x]^2] - Sin[x] Cos[x], 0 < x < Pi/2]", "0", 0);
+}
+void test_sqrt_coeff_square_composite_base(void) {
+    /* Deep sign on a composite base: x+1 > 0 under x>0. */
+    assert_eval_eq("Simplify[Sqrt[2 (x + 1)^2] - Sqrt[2] (x + 1), x > 0]", "0", 0);
+}
+void test_sqrt_coeff_square_real_abs(void) {
+    /* Sign undetermined but real -> Sqrt[2] Abs[Sin[x]]. */
+    assert_eval_eq("Simplify[Sqrt[2 Sin[x]^2], Element[x, Reals]]", "Sqrt[2] Abs[Sin[x]]", 0);
+}
+void test_sqrt_coeff_square_no_assumption_declines(void) {
+    /* Sin[x] not provably real -> no extraction. */
+    assert_eval_eq("Simplify[Sqrt[2 Sin[x]^2]]", "Sqrt[2 Sin[x]^2]", 0);
+}
+void test_sqrt_negative_coeff_square(void) {
+    /* c<0: Sqrt[-2 x^2] = I Sqrt[2] Abs[x] (split justified by x^2>=0). */
+    assert_eval_eq("Simplify[Sqrt[-2 x^2], Element[x, Reals]]", "I Sqrt[2] Abs[x]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -393,6 +422,15 @@ int main(void) {
     TEST(test_abs_sin_no_assumption_declines);
     TEST(test_abs_cos_sign_change_declines);
     TEST(test_abs_sin_half_bounded_declines);
+
+    /* v0.333 generalized Sqrt[c f^2] extraction */
+    TEST(test_sqrt_coeff_square_trig);
+    TEST(test_sqrt_coeff_square_trig_quadrant2);
+    TEST(test_sqrt_product_of_squares);
+    TEST(test_sqrt_coeff_square_composite_base);
+    TEST(test_sqrt_coeff_square_real_abs);
+    TEST(test_sqrt_coeff_square_no_assumption_declines);
+    TEST(test_sqrt_negative_coeff_square);
 
     printf("All logexp Simplify tests passed!\n");
     return 0;
