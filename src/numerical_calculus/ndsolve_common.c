@@ -456,8 +456,8 @@ NdIterFactor* nd_iter_factor(const NdOperator* op, size_t d, double coef,
 
 bool nd_iter_solve(NdIterFactor* F, double* b) {
     if (!F) return false;
-    int n = (int)F->d, nrhs = 1, info = 0;
 #ifdef USE_LAPACK
+    int n = (int)F->d, nrhs = 1, info = 0;
     if (F->mode == 0) {
         dgbtrs_("N", &n, &F->kl, &F->ku, &nrhs, F->ab, &F->ldab, F->ipiv, b, &n, &info);
         return info == 0;

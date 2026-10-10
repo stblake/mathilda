@@ -1319,12 +1319,16 @@ static bool rec_ibp(const Expr* K, const Expr* x, const Expr* sv,
     if (g_mellin_ibp_depth >= 6) return false;
     Expr* Kp = simp(dx(K, x));                               /* K' */
     if (!Kp || is_zero_now(Kp) || !contains_symbol(Kp, x)) {
-        if (Kp) expr_free(Kp); return false;
+        if (Kp) expr_free(Kp);
+        return false;
     }
     /* K' = C x^rho g  (single kernel, no bare Log[x] weight). */
     Expr *C = NULL, *rho = NULL; Expr* kernels[8]; size_t nk = 0; long kw = 0;
     if (!split_term(Kp, x, &C, &rho, kernels, &nk, 8, &kw) || nk != 1 || kw != 0) {
-        if (C) expr_free(C); if (rho) expr_free(rho); expr_free(Kp); return false;
+        if (C) expr_free(C);
+        if (rho) expr_free(rho);
+        expr_free(Kp);
+        return false;
     }
     /* rho >= -1: K has at worst a logarithmic singularity at 0 (no pole). */
     if (!prove_true(mk_fn2("GreaterEqual", cp(rho), mk_int(-1)), NULL)) {

@@ -188,6 +188,16 @@ INCLUDE_RE = re.compile(r"^\s*#\s*include\b")
 FTM_NAMES = ("_GNU_SOURCE", "_DEFAULT_SOURCE", "_BSD_SOURCE",
              "_POSIX_C_SOURCE", "_XOPEN_SOURCE")
 
+# Assignment to one of the standard streams, e.g. `stdout = mem;`.  musl libc
+# declares stdin/stdout/stderr as `FILE *const`, so this is a hard ERROR there;
+# glibc and macOS make them assignable lvalues, so it compiles clean locally and
+# breaks only the aarch64-musl (Alpine) build (and is invisible to the function
+# and constant scans above).  The `(?<![\w.])(?<!->)` mirror of CALL_RE keeps
+# `old_stdout = …` / `c->stdout = …` / `s.stderr = …` from matching, and the
+# `=(?!=)` tail excludes `==` comparisons.
+STREAM_ASSIGN_RE = re.compile(
+    r"(?<![\w.])(?<!->)\b(stdin|stdout|stderr)\s*=(?!=)")
+
 
 def strip_comments_and_strings(text):
     """Blank out comments and string/char literals.
@@ -340,6 +350,11 @@ def scan_wide_int_family(text):
     return sorted(sym for sym in WIDE_INT_FAMILY if WIDE_INT_RE[sym].search(text))
 
 
+def scan_stream_assigns(text):
+    """Return the sorted standard streams assigned to in `text` (musl: const)."""
+    return sorted(set(m.group(1) for m in STREAM_ASSIGN_RE.finditer(text)))
+
+
 def suggest(alternatives):
     """The feature-test macro we recommend for a symbol, as source lines."""
     if not alternatives:
@@ -360,6 +375,7 @@ def main():
 
     const_offenders, func_offenders, late_offenders = [], [], []
     wide_offenders = []
+    stream_offenders = []
 
     for path in source_files(repo_root):
         raw = read(repo_root, path)
@@ -385,8 +401,12 @@ def main():
                 if wide:
                     wide_offenders.append((path, wide))
 
+            streams = scan_stream_assigns(text)
+            if streams:
+                stream_offenders.append((path, streams))
+
     if not (const_offenders or func_offenders or late_offenders
-            or wide_offenders):
+            or wide_offenders or stream_offenders):
         return 0
 
     if const_offenders:
@@ -444,9 +464,24 @@ def main():
                                  % (sym, sym))
         sys.stderr.write("\n")
 
+    if stream_offenders:
+        sys.stderr.write(
+            "error: assignment to a standard stream (stdin/stdout/stderr).\n"
+            "       musl libc declares these `FILE *const`, so this is a hard\n"
+            "       ERROR on Alpine/aarch64-musl; glibc and macOS make them\n"
+            "       assignable, so it compiles clean locally and breaks only the\n"
+            "       musl package build. To capture output, route printing through\n"
+            "       a sink (print.c's mth_out()) or redirect the DESCRIPTOR with\n"
+            "       dup/dup2 (repl.c's pipe_capture), not by reassigning the\n"
+            "       stream:\n\n"
+        )
+        for path, syms in stream_offenders:
+            sys.stderr.write("  %s  (%s)\n" % (path, ", ".join(syms)))
+        sys.stderr.write("\n")
+
     total = len(set(p for p, _ in
                     const_offenders + func_offenders + late_offenders
-                    + wide_offenders))
+                    + wide_offenders + stream_offenders))
     sys.stderr.write("%d file(s) affected.\n" % total)
     return 1
 

@@ -369,7 +369,8 @@ static Expr* rec_lerch_hurwitz(Expr* f, Expr* x, Expr* as) {
     }
     if (dbad || ec != 1 || !glin) {
         expr_free(C); expr_free(rho); expr_free(A); expr_free(d0);
-        if (d1) expr_free(d1); return NULL;
+        if (d1) expr_free(d1);
+        return NULL;
     }
     /* h = c1 x (linear, zero constant); c = -c1 > 0 (decay). */
     Expr* h1 = coeff(h, x, 1), *h0 = coeff(h, x, 0);

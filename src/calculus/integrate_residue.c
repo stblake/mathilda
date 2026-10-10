@@ -1474,7 +1474,8 @@ static Expr* build_nonzero_inst(const Expr* f, const Expr* x) {
     free(conj); free(vs);
     Expr* fi = eval_take(mk_fn2("FindInstance", aug, vars));
     if (!fi || !head_name_is(fi, "List") || fi->data.function.arg_count < 1) {
-        if (fi) expr_free(fi); return NULL;
+        if (fi) expr_free(fi);
+        return NULL;
     }
     Expr* sol = fi->data.function.args[0];
     bool ok = head_name_is(sol, "List") && sol->data.function.arg_count == np;
@@ -2712,7 +2713,8 @@ static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b)
         if (deg) expr_free(deg);
         Expr* alpha = deg_ok ? poly_coeff(P, x, 1) : NULL;
         if (!deg_ok || !alpha || contains_symbol(alpha, x)) {
-            if (alpha) expr_free(alpha); expr_free(C); expr_free(P); bad = true; break;
+            if (alpha) expr_free(alpha);
+            expr_free(C); expr_free(P); bad = true; break;
         }
         Expr* pconst = poly_coeff(P, x, 0);
         if (pconst && !(pconst->type == EXPR_INTEGER && pconst->data.integer == 0))
@@ -3123,8 +3125,10 @@ static Expr* residue_family_beta(Expr* f, Expr* x, Expr* a, Expr* b) {
         bad = true;
     }
     if (bad || !alpha || !beta || !delta || !C) {
-        if (alpha) expr_free(alpha); if (beta) expr_free(beta);
-        if (delta) expr_free(delta); if (C) expr_free(C);
+        if (alpha) expr_free(alpha);
+        if (beta) expr_free(beta);
+        if (delta) expr_free(delta);
+        if (C) expr_free(C);
         return NULL;
     }
 

@@ -24,6 +24,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "ndarray.h"     /* is_packed_list / ndarray_to_nested_list */
+#include "print.h"       /* mth_out(): the print-subsystem output sink */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -496,11 +497,11 @@ static void nf_compute_field(NumberFormCtx* ctx) {
 /* emit                                                                */
 /* ------------------------------------------------------------------ */
 static void nf_emit_plain(const NFParts* p, const NumberFormCtx* ctx) {
-    fputs(p->sign, stdout);
-    fputs(p->intstr, stdout);
-    if (p->has_point) fputs(ctx->point, stdout);
-    fputs(p->fracstr, stdout);
-    if (p->sci) fputs(p->sci, stdout);
+    fputs(p->sign, mth_out());
+    fputs(p->intstr, mth_out());
+    if (p->has_point) fputs(ctx->point, mth_out());
+    fputs(p->fracstr, mth_out());
+    if (p->sci) fputs(p->sci, mth_out());
 }
 
 static void nf_emit_padded(const NFParts* p, const NumberFormCtx* ctx) {
@@ -514,18 +515,18 @@ static void nf_emit_padded(const NFParts* p, const NumberFormCtx* ctx) {
     if (left_pad < 0) left_pad = 0;
 
     if (ctx->sign_padding) {
-        fputs(p->sign, stdout);
-        for (int i = 0; i < left_pad; i++) fputs(ctx->pad_left, stdout);
+        fputs(p->sign, mth_out());
+        for (int i = 0; i < left_pad; i++) fputs(ctx->pad_left, mth_out());
     } else {
-        for (int i = 0; i < left_pad; i++) fputs(ctx->pad_left, stdout);
-        fputs(p->sign, stdout);
+        for (int i = 0; i < left_pad; i++) fputs(ctx->pad_left, mth_out());
+        fputs(p->sign, mth_out());
     }
-    fputs(p->intstr, stdout);
-    if (p->has_point) fputs(ctx->point, stdout);
-    fputs(p->fracstr, stdout);
+    fputs(p->intstr, mth_out());
+    if (p->has_point) fputs(ctx->point, mth_out());
+    fputs(p->fracstr, mth_out());
     if (rpad_on)
-        for (int i = 0; i < ctx->field_frac - p->fracdign; i++) fputs(ctx->pad_right, stdout);
-    if (p->sci) fputs(p->sci, stdout);
+        for (int i = 0; i < ctx->field_frac - p->fracdign; i++) fputs(ctx->pad_right, mth_out());
+    if (p->sci) fputs(p->sci, mth_out());
 }
 
 bool numberform_render_number(const Expr* e, const NumberFormCtx* ctx) {

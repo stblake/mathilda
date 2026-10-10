@@ -2047,10 +2047,11 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_SINPOW_MONO:
         case METHOD_OSC_POWER:
         case METHOD_RATIONAL_LOG:
+        case METHOD_INTEGRAL_REP:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
-             * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem"]; leave
-             * unevaluated. */
+             * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem" /
+             * "IntegralRepresentation"]; leave unevaluated. */
             break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */

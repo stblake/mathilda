@@ -706,10 +706,16 @@ static void pipe_emit_text(int id, const char* kind, const char* field,
  * mth_message_v to `stderr`. In pipe mode stdout IS the protocol channel,
  * so a Print used to land between protocol lines as raw text that the
  * front end discarded, and messages went to stderr, which it only logged.
- * For the length of each evaluation both streams are pointed at in-memory
- * buffers; afterwards the buffers are sent as "stream" and "message" lines
- * ahead of the statement's result. Pointing `stdout` elsewhere and back is
- * the same technique print.c already uses to render into a string.
+ * For the length of each evaluation both the stdout and stderr file
+ * DESCRIPTORS (1 and 2) are redirected to anonymous temp files; afterwards
+ * the captured bytes are sent as "stream" and "message" lines ahead of the
+ * statement's result.
+ *
+ * The redirect is at the descriptor level (dup2) rather than by reassigning
+ * `stdout`/`stderr`: those are `FILE *const` on musl libc and cannot be
+ * assigned (an earlier version did, and broke the aarch64-musl build).  The
+ * descriptor approach is also a stricter catch-all — it captures writes from
+ * any code or library that goes to fd 1/2, not only the FILE* handles.
  *
  * The cost is that output arrives when the statement finishes rather than
  * as it is printed, and that Print text and messages of ONE statement are
@@ -717,38 +723,62 @@ static void pipe_emit_text(int id, const char* kind, const char* field,
  * a writer thread on a pipe, which is not worth it for a notebook that
  * shows the cell's output at the end anyway.
  *
- * Windows has no open_memstream; there the streams are left alone.
+ * Windows has no fork/dup2 plumbing here; there the streams are left alone.
  * --------------------------------------------------------------------- */
 typedef struct {
-    FILE*  saved_out;
-    FILE*  saved_err;
-    FILE*  out;
-    FILE*  err;
-    char*  out_buf;
+    int    saved_out_fd;   /* dup() of fd 1, or -1 when capture is inactive */
+    int    saved_err_fd;   /* dup() of fd 2 */
+    FILE*  out_tmp;        /* anonymous temp file receiving redirected stdout */
+    FILE*  err_tmp;        /* ... stderr */
+    char*  out_buf;        /* captured bytes, filled on _end  */
     size_t out_len;
     char*  err_buf;
     size_t err_len;
 } PipeCapture;
 
+#ifndef _WIN32
+/* Read a temp file written via a redirected descriptor into a fresh heap
+ * buffer (NUL-terminated).  Returns NULL and *len==0 on empty/failure. */
+static char* pipe_slurp_tmp(FILE* f, size_t* len) {
+    *len = 0;
+    if (!f) return NULL;
+    if (fseek(f, 0, SEEK_END) != 0) return NULL;
+    long sz = ftell(f);
+    if (sz <= 0) { rewind(f); return NULL; }
+    rewind(f);
+    char* buf = malloc((size_t)sz + 1);
+    if (!buf) return NULL;
+    size_t got = fread(buf, 1, (size_t)sz, f);
+    buf[got] = '\0';
+    *len = got;
+    return buf;
+}
+#endif
+
 static void pipe_capture_begin(PipeCapture* c) {
     memset(c, 0, sizeof(*c));
+    c->saved_out_fd = -1;
+    c->saved_err_fd = -1;
 #ifndef _WIN32
     fflush(stdout);
     fflush(stderr);
-    c->out = open_memstream(&c->out_buf, &c->out_len);
-    c->err = open_memstream(&c->err_buf, &c->err_len);
-    if (!c->out || !c->err) {
-        if (c->out) fclose(c->out);
-        if (c->err) fclose(c->err);
-        free(c->out_buf);
-        free(c->err_buf);
-        memset(c, 0, sizeof(*c));
-        return;
-    }
-    c->saved_out = stdout;
-    c->saved_err = stderr;
-    stdout = c->out;
-    stderr = c->err;
+    c->out_tmp = tmpfile();
+    c->err_tmp = tmpfile();
+    if (!c->out_tmp || !c->err_tmp) goto fail;
+    /* Save the real descriptors, then point fd 1/2 at the temp files. */
+    c->saved_out_fd = dup(fileno(stdout));
+    c->saved_err_fd = dup(fileno(stderr));
+    if (c->saved_out_fd < 0 || c->saved_err_fd < 0) goto fail;
+    if (dup2(fileno(c->out_tmp), fileno(stdout)) < 0 ||
+        dup2(fileno(c->err_tmp), fileno(stderr)) < 0) goto fail;
+    return;
+fail:
+    /* Could not redirect: leave the streams alone so output still reaches the
+     * terminal, and mark the capture inactive. */
+    if (c->saved_out_fd >= 0) { close(c->saved_out_fd); c->saved_out_fd = -1; }
+    if (c->saved_err_fd >= 0) { close(c->saved_err_fd); c->saved_err_fd = -1; }
+    if (c->out_tmp) { fclose(c->out_tmp); c->out_tmp = NULL; }
+    if (c->err_tmp) { fclose(c->err_tmp); c->err_tmp = NULL; }
 #endif
 }
 
@@ -787,14 +817,26 @@ static void pipe_emit_messages(int id, const char* text) {
 
 #endif /* !_WIN32 */
 
-/* Restore the streams and send what was captured: Print text, then messages. */
+/* Restore the descriptors and send what was captured: Print text, then
+ * messages. */
 static void pipe_capture_end(PipeCapture* c, int id) {
 #ifndef _WIN32
-    if (!c->out) return;
-    stdout = c->saved_out;
-    stderr = c->saved_err;
-    fclose(c->out);   /* finalises out_buf / out_len */
-    fclose(c->err);
+    if (c->saved_out_fd < 0) return;   /* capture was inactive */
+    /* Flush the redirected FILE* buffers down to the temp files, then put the
+     * real descriptors back before reading/emitting (so emit writes to the
+     * real stdout). */
+    fflush(stdout);
+    fflush(stderr);
+    dup2(c->saved_out_fd, fileno(stdout));
+    dup2(c->saved_err_fd, fileno(stderr));
+    close(c->saved_out_fd);
+    close(c->saved_err_fd);
+
+    c->out_buf = pipe_slurp_tmp(c->out_tmp, &c->out_len);
+    c->err_buf = pipe_slurp_tmp(c->err_tmp, &c->err_len);
+    fclose(c->out_tmp);   /* removes the anonymous temp file */
+    fclose(c->err_tmp);
+
     if (c->out_buf && c->out_len > 0)
         pipe_emit_text(id, "stream", "text", c->out_buf, c->out_len);
     if (c->err_buf && c->err_len > 0)
@@ -802,6 +844,8 @@ static void pipe_capture_end(PipeCapture* c, int id) {
     free(c->out_buf);
     free(c->err_buf);
     memset(c, 0, sizeof(*c));
+    c->saved_out_fd = -1;
+    c->saved_err_fd = -1;
 #else
     (void)c; (void)id;
 #endif

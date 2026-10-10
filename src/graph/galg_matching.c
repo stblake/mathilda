@@ -87,8 +87,10 @@ static long gm_karp_sipser(const GalgUG* u, int* mate) {
 
 /* ---- Bipartiteness --------------------------------------------------------- */
 
-/* side[v] in {0,1}; returns 1 if bipartite. */
-static int gm_bipartite(const GalgUG* u, char* side, int* queue) {
+/* side[v] in {0,1}; returns 1 if bipartite.  `side` is signed char: the
+ * sentinel for "unvisited" is -1 and plain `char` is unsigned on ARM/aarch64,
+ * where `side[v] < 0` would be constant-false and break the traversal. */
+static int gm_bipartite(const GalgUG* u, signed char* side, int* queue) {
     int n = u->n;
     memset(side, -1, (size_t)n);
     for (int s = 0; s < n; s++) {
@@ -99,7 +101,7 @@ static int gm_bipartite(const GalgUG* u, char* side, int* queue) {
             int v = queue[h++];
             for (int j = u->off[v]; j < u->off[v + 1]; j++) {
                 int w = u->adj[j];
-                if (side[w] < 0) { side[w] = (char)(1 - side[v]); queue[t++] = w; }
+                if (side[w] < 0) { side[w] = (signed char)(1 - side[v]); queue[t++] = w; }
                 else if (side[w] == side[v]) return 0;
             }
         }
@@ -111,7 +113,7 @@ static int gm_bipartite(const GalgUG* u, char* side, int* queue) {
 
 #define GM_INF 0x3fffffff
 
-static long gm_hopcroft_karp(const GalgUG* u, const char* side, int* mate, long size) {
+static long gm_hopcroft_karp(const GalgUG* u, const signed char* side, int* mate, long size) {
     int n = u->n;
     int* dist = malloc((size_t)n * sizeof(int));
     int* queue = malloc((size_t)n * sizeof(int));
@@ -309,7 +311,7 @@ long galg_max_matching(const GalgUG* u, int* mate) {
     int n = u->n;
     long size = gm_karp_sipser(u, mate);
     if (size < 0 || n == 0) return size;
-    char* side = malloc((size_t)n);
+    signed char* side = malloc((size_t)n);
     int* queue = malloc((size_t)n * sizeof(int));
     if (!side || !queue) { free(side); free(queue); return -1; }
     int bip = gm_bipartite(u, side, queue);

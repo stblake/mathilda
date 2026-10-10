@@ -25,6 +25,26 @@
 
 #include <inttypes.h>
 
+/* ---------------------------------------------------------------------------
+ * Output sink.  Every output primitive in this file writes through g_print_sink
+ * (NULL => the real stdout).  The capture helpers below install an in-memory
+ * stream here so expr_to_string & friends collect printed output without
+ * reassigning `stdout`, which is a read-only (const) pointer on musl libc.
+ * `printf`/`putchar` are redefined as file-local macros so the ~190 existing
+ * call sites need no edit; fputs(…, stdout) sites use MTH_POUT explicitly.
+ * numberform.c, the one other printer in the print_standard path, writes to
+ * mth_out() (same sink) for the same reason.
+ * ------------------------------------------------------------------------- */
+static FILE* g_print_sink = NULL;          /* NULL => stdout */
+#define MTH_POUT (g_print_sink ? g_print_sink : stdout)
+
+FILE* mth_out(void) { return MTH_POUT; }
+FILE* mth_out_push(FILE* f) { FILE* prev = g_print_sink; g_print_sink = f; return prev; }
+void  mth_out_pop(FILE* prev) { g_print_sink = prev; }
+
+#define printf(...) fprintf(MTH_POUT, __VA_ARGS__)
+#define putchar(c)  putc((c), MTH_POUT)
+
 static void print_standard(Expr* e, int parent_prec);
 static void print_series_data(Expr* e, int parent_prec);
 static void print_tex(Expr* e, int parent_prec);
@@ -159,13 +179,13 @@ static int get_expr_prec(Expr* e) {
 static bool g_print_output_form = false;
 
 static void print_string_literal(const char* s) {
-    if (g_print_output_form) { fputs(s, stdout); return; }
+    if (g_print_output_form) { fputs(s, MTH_POUT); return; }
     putchar('"');
     for (const char* p = s; *p; p++) {
         switch (*p) {
-            case '\n': fputs("\\n", stdout); break;
-            case '\t': fputs("\\t", stdout); break;
-            case '\r': fputs("\\r", stdout); break;
+            case '\n': fputs("\\n", MTH_POUT); break;
+            case '\t': fputs("\\t", MTH_POUT); break;
+            case '\r': fputs("\\r", MTH_POUT); break;
             default:   putchar((unsigned char)*p); break;
         }
     }
@@ -393,7 +413,7 @@ static void print_standard(Expr* e, int parent_prec) {
             bool saved_of = g_print_output_form;
             g_print_output_form = true;
             for (size_t i = 0; i < list->data.function.arg_count; i++) {
-                if (i > 0 && sep) fputs(sep, stdout);
+                if (i > 0 && sep) fputs(sep, MTH_POUT);
                 print_standard(list->data.function.args[i], 0);
             }
             g_print_output_form = saved_of;
@@ -1041,22 +1061,17 @@ void expr_print(Expr* e) {
 }
 
 char* expr_to_string(Expr* e) {
-    // A bit of a hack: print to a memory buffer
+    // Print to a memory buffer by diverting the print sink to it.
     char* buffer = NULL;
     size_t len;
     FILE* stream = open_memstream(&buffer, &len);
     if (!stream) return NULL;
 
-    // Temporarily redirect stdout
-    FILE* old_stdout = stdout;
-    stdout = stream;
-    
+    FILE* prev = mth_out_push(stream);
     print_standard(e, 0);
-    
-    // Restore stdout and close stream
-    stdout = old_stdout;
+    mth_out_pop(prev);
     fclose(stream);
-    
+
     return buffer;
 }
 
@@ -1066,12 +1081,9 @@ char* expr_to_string_fullform(Expr* e) {
     FILE* stream = open_memstream(&buffer, &len);
     if (!stream) return NULL;
 
-    FILE* old_stdout = stdout;
-    stdout = stream;
-    
+    FILE* prev = mth_out_push(stream);
     expr_print_fullform(e);
-    
-    stdout = old_stdout;
+    mth_out_pop(prev);
     fclose(stream);
 
     return buffer;
@@ -1087,8 +1099,7 @@ char* numberform_format_result_to_string(const Expr* e) {
     FILE* stream = open_memstream(&buffer, &len);
     if (!stream) return NULL;
 
-    FILE* old_stdout = stdout;
-    stdout = stream;
+    FILE* prev = mth_out_push(stream);
 
     const NumberFormCtx* saved_ctx = g_numberform_ctx;
     bool saved_of = g_print_output_form;
@@ -1099,7 +1110,7 @@ char* numberform_format_result_to_string(const Expr* e) {
 
     g_print_output_form = saved_of;
     g_numberform_ctx = saved_ctx;
-    stdout = old_stdout;
+    mth_out_pop(prev);
     fclose(stream);
 
     return buffer;
