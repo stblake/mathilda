@@ -595,6 +595,49 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             }
         }
 
+        /* Schwarz reflection: Conjugate[H[z]] -> H[Conjugate[z]] for H entire or
+         * meromorphic with real Taylor coefficients (trig, hyperbolic, Exp), when
+         * every free symbol of z is real. ComplexExpand of a pole-bearing head
+         * (Tan, ...) yields a double-angle rational form that does NOT structurally
+         * match the single-angle form the round loop gives the sibling H[x - I y],
+         * so the difference would not cancel; the reflection produces the matching
+         * single-angle form directly. Runs BEFORE the generic ComplexExpand block
+         * below so it wins for this safe family. */
+        if (strcmp(h, "Conjugate") == 0 && a0->type == EXPR_FUNCTION &&
+            a0->data.function.head &&
+            a0->data.function.head->type == EXPR_SYMBOL &&
+            a0->data.function.arg_count == 1) {
+            const char* fh = a0->data.function.head->data.symbol.name;
+            bool reflect_safe =
+                strcmp(fh, "Sin") == 0  || strcmp(fh, "Cos") == 0  ||
+                strcmp(fh, "Tan") == 0  || strcmp(fh, "Cot") == 0  ||
+                strcmp(fh, "Sec") == 0  || strcmp(fh, "Csc") == 0  ||
+                strcmp(fh, "Sinh") == 0 || strcmp(fh, "Cosh") == 0 ||
+                strcmp(fh, "Tanh") == 0 || strcmp(fh, "Coth") == 0 ||
+                strcmp(fh, "Sech") == 0 || strcmp(fh, "Csch") == 0 ||
+                strcmp(fh, "Exp") == 0;
+            if (reflect_safe) {
+                const Expr* z = a0->data.function.args[0];
+                const Expr** syms = NULL; size_t ns = 0, cap = 0;
+                sr_collect_syms(z, &syms, &ns, &cap);
+                bool all_real = (ns > 0);
+                for (size_t i = 0; i < ns; i++)
+                    if (!prov_re(ctx, syms[i])) { all_real = false; break; }
+                free(syms);
+                if (all_real) {
+                    /* Conjugate[z] via ComplexExpand (z real symbols => conj). */
+                    Expr* cz = eval_and_free(expr_new_function(
+                        expr_new_symbol("ComplexExpand"),
+                        (Expr*[]){ expr_new_function(expr_new_symbol("Conjugate"),
+                            (Expr*[]){ expr_copy((Expr*)z) }, 1) }, 1));
+                    Expr* out = eval_and_free(expr_new_function(
+                        expr_copy(a0->data.function.head),
+                        (Expr*[]){ cz }, 1));
+                    expr_free(node); *changed = 1; return out;
+                }
+            }
+        }
+
         /* Re/Im/Conjugate/Arg/Abs of an expression whose every free symbol is
          * real: ComplexExpand assumes reality, so it yields the refined form
          * (e.g. Abs[a + b I] -> Sqrt[a^2 + b^2]). When ComplexExpand cannot

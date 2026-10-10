@@ -339,6 +339,26 @@ void test_invtrig_branch_straddle_declines(void) {
     assert_eval_eq("Simplify[ArcSin[Sin[x]] - x, 0 < x < Pi] === 0", "False", 0);
 }
 
+/* v0.337: Conjugate Schwarz reflection Conjugate[H[z]] -> H[Conjugate[z]]. */
+void test_conjugate_tan_reflection(void) {
+    assert_eval_eq("Simplify[Conjugate[Tan[x + I y]] - Tan[x - I y], "
+                   "Element[x, Reals] && Element[y, Reals]]", "0", 0);
+}
+void test_conjugate_cot_sec_exp_reflection(void) {
+    assert_eval_eq("Simplify[Conjugate[Cot[x + I y]] - Cot[x - I y], "
+                   "Element[x, Reals] && Element[y, Reals]]", "0", 0);
+    assert_eval_eq("Simplify[Conjugate[Sec[x + I y]] - Sec[x - I y], "
+                   "Element[x, Reals] && Element[y, Reals]]", "0", 0);
+    assert_eval_eq("Simplify[Conjugate[Exp[x + I y]] - Exp[x - I y], "
+                   "Element[x, Reals] && Element[y, Reals]]", "0", 0);
+    assert_eval_eq("Simplify[Conjugate[Sinh[x + I y]] - Sinh[x - I y], "
+                   "Element[x, Reals] && Element[y, Reals]]", "0", 0);
+}
+void test_conjugate_reflection_no_assumption_declines(void) {
+    /* Without reality of x, y the reflection must not fire. */
+    assert_eval_eq("Simplify[Conjugate[Tan[x + I y]] - Tan[x - I y]] === 0", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -412,6 +432,11 @@ int main(void) {
     TEST(test_invtrig_arccos_descending_branch);
     TEST(test_invtrig_arcsin_higher_branch);
     TEST(test_invtrig_branch_straddle_declines);
+
+    /* v0.337 Conjugate Schwarz reflection */
+    TEST(test_conjugate_tan_reflection);
+    TEST(test_conjugate_cot_sec_exp_reflection);
+    TEST(test_conjugate_reflection_no_assumption_declines);
 
     printf("All inverse-trig Simplify tests passed!\n");
     return 0;
