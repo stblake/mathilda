@@ -366,7 +366,20 @@ conjugate pairs `Gamma[1±I b] -> Pi b/Sinh[Pi b]` and
 Pi Sqrt[2]` and `FullSimplify[Gamma[1+I] Gamma[1-I]] -> Pi Csch[Pi]`), the error
 functions
 (`Erf[z] + Erfc[z] -> 1`), the dilogarithm (`PolyLog[2, z] + PolyLog[2, -z] ->
-PolyLog[2, z^2]/2`), and real radicals (`Surd[x, n]^n -> x`).
+PolyLog[2, z^2]/2`), real radicals (`Surd[x, n]^n -> x`), and the
+**logarithm of a trig/hyperbolic cofunction combination** — the real-log
+antiderivative (Gudermannian) family, which has no general algorithmic route and
+so lives here rather than in `Simplify`:
+`Log[Sec[x] ± Tan[x]] -> ± ArcTanh[Sin[x]]`,
+`Log[Csc[x] ± Cot[x]] -> ± ArcTanh[Cos[x]]`,
+`Log[Cosh[x] ± Sinh[x]] -> ± x`,
+`Log[Coth[x] ± Csch[x]] -> ± ArcCoth[Cosh[x]]`, and the half-angle forms
+`Log[Tan[x/2]] -> -ArcTanh[Cos[x]]`, `Log[Cot[x/2]] -> ArcTanh[Cos[x]]`,
+`Log[Tanh[x/2]] -> -ArcCoth[Cosh[x]]`, `Log[Coth[x/2]] -> ArcCoth[Cosh[x]]`. Each
+two-term rule is coefficient-tolerant for a provably-positive factor at either
+sign (`Log[2 Sec[x] - 2 Tan[x]] -> Log[2] - ArcTanh[Sin[x]]`), matching whichever
+factored or distributed form the pipeline produces; a symbolic or negative
+coefficient, or an unequal pair, is left untouched (no branch is crossed).
 
 **Options** (in addition to the positional assumption):
 - `ComplexityFunction -> f` — custom complexity measure (forwarded to `Simplify`).
@@ -403,6 +416,12 @@ Out[6]= 1/Gamma[a]
 
 In[7]:= FullSimplify[Gamma[x + 1]/Gamma[x], TimeConstraint -> {1, 5}]
 Out[7]= x
+
+In[8]:= FullSimplify[Log[Sec[x] + Tan[x]]]
+Out[8]= ArcTanh[Sin[x]]
+
+In[9]:= FullSimplify[Log[Coth[x] - Csch[x]]]
+Out[9]= -ArcCoth[Cosh[x]]
 ```
 
 First-cut limitations: the gamma recurrence matches a literal `+1` shift only

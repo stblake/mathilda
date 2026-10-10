@@ -76,6 +76,20 @@ int main(void) {
     /* Conversion rule (Pochhammer -> Gamma) enables a downstream cancellation. */
     chk("FullSimplify[Pochhammer[a, n]/Gamma[a+n]]", "1/Gamma[a]");
 
+    /* --- logexp.m: Log of trig/hyperbolic combinations collapse to a single
+     * inverse/linear form. These are a genuine FullSimplify gap -- Simplify
+     * leaves them untouched. --- */
+    chk("Simplify[Log[Sec[x] + Tan[x]]]", "Log[Sec[x] + Tan[x]]"); /* gap */
+    chk("FullSimplify[Log[Sec[x] + Tan[x]]]", "ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[Sec[x] - Tan[x]]]", "-ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[2 Sec[x] - 2 Tan[x]]]", "Log[2] - ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[Csc[x] + Cot[x]]]", "ArcTanh[Cos[x]]");
+    chk("FullSimplify[Log[Coth[x] + Csch[x]]]", "ArcCoth[Cosh[x]]");
+    chk("FullSimplify[Log[Tan[x/2]]]", "-ArcTanh[Cos[x]]");
+    /* Non-firing guards return the input unchanged (sound: no branch crossed). */
+    chk("FullSimplify[Log[2 Sec[x] + 3 Tan[x]]]", "Log[2 Sec[x] + 3 Tan[x]]");
+    chk("FullSimplify[Log[Sec[x] + Tan[y]]]", "Log[Sec[x] + Tan[y]]");
+
     /* --- >= Simplify: never worse on inputs Simplify already handles. --- */
     chk("FullSimplify[(x-1)(x+1)(x^2+1)+1]", "x^4");
     chk("FullSimplify[Sin[x]^2 + Cos[x]^2]", "1");

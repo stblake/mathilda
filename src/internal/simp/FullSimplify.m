@@ -78,6 +78,10 @@ ModuleFile[Erfc]       := "simp/transforms/erf.m";
 
 ModuleFile[Surd]       := "simp/transforms/powerradical.m";
 
+(* Log of trig/hyperbolic combinations (Gudermannian antiderivative family).
+   Every identity has Log on the left, so a single Log entry loads them all. *)
+ModuleFile[Log]        := "simp/transforms/logexp.m";
+
 (* ---------------------------------------------------------------------- *)
 (* Lazy library loading. Each library file is loaded at most once (guarded   *)
 (* both here and, defensively, by the C loader's load-once bookkeeping).     *)
