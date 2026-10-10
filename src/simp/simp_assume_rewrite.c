@@ -248,6 +248,116 @@ static void sr_collect_syms(const Expr* e, const Expr*** out, size_t* n, size_t*
     }
 }
 
+/* ----------------------------------------------------------------------- */
+/* Symbolic-integer Pi periodicity: Sin[t + k Pi] -> (-1)^k Sin[t], etc.,    */
+/* where k is a provable integer-linear combination (2n, 2n+1, ...) of       */
+/* integer-assumed symbols -- the cases the coefficient-1 string rules miss. */
+/* ----------------------------------------------------------------------- */
+
+/* True iff the symbol Pi appears anywhere in e. */
+static bool sr_mentions_pi(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "Pi") == 0;
+    if (e->type == EXPR_FUNCTION) {
+        if (sr_mentions_pi(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (sr_mentions_pi(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* If `term` is (integer)*Pi, return its integer coefficient k as a fresh Expr
+ * (caller owns); else NULL. Computed as k = term/Pi (evaluated): robust to any
+ * nesting/ordering of the Times. A term linear in Pi leaves a Pi-free quotient;
+ * anything else (no Pi, Pi^2, Pi inside a function) keeps Pi and is rejected,
+ * as is a non-integer quotient. */
+static Expr* pi_integer_coeff(const Expr* term, const AssumeCtx* ctx) {
+    if (!sr_mentions_pi(term)) return NULL;
+    Expr* piinv = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(-1) }, 2);
+    Expr* k = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                  (Expr*[]){ expr_copy((Expr*)term), piinv }, 2));
+    if (sr_mentions_pi(k)) { expr_free(k); return NULL; }  /* not linear in Pi */
+    if (prov_int(ctx, k)) return k;
+    expr_free(k);
+    return NULL;
+}
+
+/* Parity of a provable integer K: 0 even, 1 odd, -1 undetermined. */
+static int pi_parity(const AssumeCtx* ctx, const Expr* K) {
+    if (K->type == EXPR_INTEGER) return (int)(((K->data.integer % 2) + 2) % 2);
+    if (sr_head(K, "Plus")) {
+        int p = 0;
+        for (size_t i = 0; i < K->data.function.arg_count; i++) {
+            int pt = pi_parity(ctx, K->data.function.args[i]);
+            if (pt < 0) return -1;
+            p ^= pt;
+        }
+        return p;
+    }
+    if (prov_even(ctx, K)) return 0;
+    /* K odd  <=>  K-1 even. */
+    Expr* km1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy((Expr*)K), expr_new_integer(-1) }, 2));
+    int km1_even = prov_even(ctx, km1);
+    expr_free(km1);
+    return km1_even ? 1 : -1;
+}
+
+/* Reduce H[t + K Pi] for a trig head H, K a provable integer: Tan/Cot have
+ * period Pi (no sign); Sin/Cos/Sec/Csc flip sign with the parity of K. Returns
+ * a fresh Expr on success, NULL if there is no integer-Pi part or the parity
+ * cannot be determined. */
+static Expr* trig_pi_shift_symbolic(const AssumeCtx* ctx, const char* h,
+                                    const Expr* arg) {
+    bool is_tan_cot = (strcmp(h, "Tan") == 0 || strcmp(h, "Cot") == 0);
+    bool is_sin_cos_sec_csc = (strcmp(h, "Sin") == 0 || strcmp(h, "Cos") == 0 ||
+                               strcmp(h, "Sec") == 0 || strcmp(h, "Csc") == 0);
+    if (!is_tan_cot && !is_sin_cos_sec_csc) return NULL;
+
+    const Expr* single = arg;
+    size_t nt; const Expr* const* terms;
+    if (sr_head(arg, "Plus")) {
+        nt = arg->data.function.arg_count;
+        terms = (const Expr* const*)arg->data.function.args;
+    } else { nt = 1; terms = &single; }
+
+    Expr** kco = (Expr**)malloc(nt * sizeof(Expr*)); size_t nk = 0;
+    Expr** theta = (Expr**)malloc(nt * sizeof(Expr*)); size_t nth = 0;
+    for (size_t i = 0; i < nt; i++) {
+        Expr* k = pi_integer_coeff(terms[i], ctx);
+        if (k) kco[nk++] = k;
+        else theta[nth++] = expr_copy((Expr*)terms[i]);
+    }
+    if (nk == 0) {
+        for (size_t i = 0; i < nth; i++) expr_free(theta[i]);
+        free(kco); free(theta);
+        return NULL;
+    }
+
+    Expr* K = (nk == 1) ? kco[0]
+            : expr_new_function(expr_new_symbol(SYM_Plus), kco, nk);
+    free(kco);
+    K = eval_and_free(K);
+    int parity = is_tan_cot ? 0 : pi_parity(ctx, K);
+    expr_free(K);
+    if (parity < 0) {
+        for (size_t i = 0; i < nth; i++) expr_free(theta[i]);
+        free(theta);
+        return NULL;
+    }
+
+    Expr* th = (nth == 0) ? expr_new_integer(0)
+             : (nth == 1) ? theta[0]
+             : expr_new_function(expr_new_symbol(SYM_Plus), theta, nth);
+    free(theta);
+    Expr* hcall = expr_new_function(expr_new_symbol(h), (Expr*[]){ th }, 1);
+    if (parity == 1)
+        return expr_new_function(expr_new_symbol(SYM_Times),
+                   (Expr*[]){ expr_new_integer(-1), hcall }, 2);
+    return hcall;
+}
+
 /* Bottom-up walk applying the structural assumption rewrites. Always returns a
  * freshly owned tree; sets *changed when any node was rewritten. */
 static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int* changed) {
@@ -267,6 +377,17 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
 
     if (nn == 1) {
         Expr* a0 = node->data.function.args[0];
+
+        /* Symbolic-integer Pi periodicity: Sin[t + 2 n Pi] -> Sin[t],
+         * Sin[t + (2n+1) Pi] -> -Sin[t], Tan[t + n Pi] -> Tan[t], etc. The
+         * coefficient-1 string rules only match a bare Times[n, Pi]; this
+         * handles any integer-linear Pi coefficient (2n, 2n+1, ...). */
+        if ((strcmp(h, "Sin") == 0 || strcmp(h, "Cos") == 0 ||
+             strcmp(h, "Tan") == 0 || strcmp(h, "Cot") == 0 ||
+             strcmp(h, "Sec") == 0 || strcmp(h, "Csc") == 0) && ctx) {
+            Expr* out = trig_pi_shift_symbolic(ctx, h, a0);
+            if (out) { expr_free(node); *changed = 1; return out; }
+        }
 
         /* Integer-valued roundings of a provably-integer argument. */
         if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||

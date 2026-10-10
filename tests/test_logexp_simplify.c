@@ -352,6 +352,35 @@ void test_sqrt_negative_coeff_square(void) {
     assert_eval_eq("Simplify[Sqrt[-2 x^2], Element[x, Reals]]", "I Sqrt[2] Abs[x]", 0);
 }
 
+/* ---- v0.334: symbolic-integer Pi periodicity Sin[t + k Pi] = (-1)^k Sin[t] ---- */
+void test_pi_period_sin_even(void) {
+    assert_eval_eq("Simplify[Sin[x + 2 n Pi] - Sin[x], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_cos_even(void) {
+    assert_eval_eq("Simplify[Cos[x + 2 n Pi] - Cos[x], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_sin_odd(void) {
+    assert_eval_eq("Simplify[Sin[x + (2 n + 1) Pi] + Sin[x], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_cos_odd(void) {
+    assert_eval_eq("Simplify[Cos[x + (2 n + 1) Pi] + Cos[x], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_sin_4n(void) {
+    assert_eval_eq("Simplify[Sin[x + 4 n Pi] - Sin[x], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_tan_any(void) {
+    /* Tan has period Pi: Tan[x + 3 n Pi] = Tan[x] regardless of parity. */
+    assert_eval_eq("Simplify[Tan[x + 3 n Pi] - Tan[x], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_no_integer_declines(void) {
+    /* Without n integer, 2 n Pi is not an integer multiple of Pi. */
+    assert_eval_eq("Simplify[Sin[x + 2 n Pi]]", "Sin[2 Pi n + x]", 0);
+}
+void test_pi_period_half_multiple_declines(void) {
+    /* n Pi/2 is not an integer multiple of Pi. */
+    assert_eval_eq("Simplify[Sin[x + n Pi/2], Element[n, Integers]]", "Sin[1/2 Pi n + x]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -431,6 +460,16 @@ int main(void) {
     TEST(test_sqrt_coeff_square_real_abs);
     TEST(test_sqrt_coeff_square_no_assumption_declines);
     TEST(test_sqrt_negative_coeff_square);
+
+    /* v0.334 symbolic-integer Pi periodicity */
+    TEST(test_pi_period_sin_even);
+    TEST(test_pi_period_cos_even);
+    TEST(test_pi_period_sin_odd);
+    TEST(test_pi_period_cos_odd);
+    TEST(test_pi_period_sin_4n);
+    TEST(test_pi_period_tan_any);
+    TEST(test_pi_period_no_integer_declines);
+    TEST(test_pi_period_half_multiple_declines);
 
     printf("All logexp Simplify tests passed!\n");
     return 0;
