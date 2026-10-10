@@ -1018,3 +1018,127 @@ int assume_reduce_nonneg(const AssumeCtx* ctx, const Expr* e) {
     expr_free(pred);
     return r == 1;
 }
+
+/* ----------------------------------------------------------------------- */
+/* Deep sign oracle for the Abs / Sqrt resolution path                     */
+/* ----------------------------------------------------------------------- */
+/*
+ * assume_sign_{nonneg,nonpos}_deep decide the sign of an ARBITRARY expression
+ * g under the assumptions, by layering three strata:
+ *   1. the cheap prov_nn / prov_np provers (facts, Cosh, numerics);
+ *   2. a STRUCTURAL decomposition of the pole-bearing trig family -- the
+ *      Reduce region oracle declines Tan/Cot/Sec/Csc, and handing it a
+ *      Sin[u]/Cos[u] ratio is futile because the evaluator re-canonicalises
+ *      the ratio back to Tan[u]. So we compute the sign from the single-head
+ *      factors directly: sign(Sec)=sign(Cos), sign(Csc)=sign(Sin),
+ *      sign(Tan)=sign(Cot)=sign(Sin)*sign(Cos);
+ *   3. the Reduce/CAD bridge as the base case, which decides the pole-free
+ *      heads (Sin, Cos, and sums/products of them) on a bounded interval.
+ *
+ * Soundness: Abs needs only nonneg OR nonpos (never strict). Where a
+ * pole-bearing head is defined its reciprocal partner (Cos for Tan/Sec,
+ * Sin for Cot/Csc) is nonzero, so a Reduce proof of `Cos >= 0` on the region
+ * gives `Cos > 0` on the sub-domain where the head exists; at a pole both
+ * Abs[g] and +/-g are undefined, so the identity is never violated. An
+ * undecided sub-query makes the whole decomposition decline (over-restricting
+ * is always safe).
+ */
+
+/* Depth guard. The bridge builds Reduce[...] queries and Reduce may call
+ * Simplify on its branches; those nested calls are 1-argument (ctx == NULL,
+ * so the deep helpers are inert), but we bound the nesting explicitly as a
+ * safeguard. The secant decomposition adds at most one structural level
+ * (H[u] -> Sin[u]/Cos[u]), so a limit of 3 never clips a legitimate query. */
+static int g_sign_bridge_depth = 0;
+
+/* True iff `name` appears in some inequality fact -- i.e. the variable is
+ * actually constrained, so the bounded-region Reduce oracle has a chance.
+ * Avoids firing CAD on an unconstrained symbol where it would only decline. */
+static bool sym_in_some_inequality(const AssumeCtx* ctx, const char* name) {
+    for (size_t i = 0; i < ctx->count; i++)
+        if (fact_is_inequality(ctx->facts[i]) &&
+            expr_mentions_symbol(ctx->facts[i], name)) return true;
+    return false;
+}
+
+/* Every free (non-constant) symbol of e is mentioned in an inequality fact. */
+static bool sign_bridge_vars_bounded(const AssumeCtx* ctx, const Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_real_constant_symbol(e->data.symbol.name)) return true;
+        return sym_in_some_inequality(ctx, e->data.symbol.name);
+    }
+    if (e->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!sign_bridge_vars_bounded(ctx, e->data.function.args[i])) return false;
+    }
+    return true;
+}
+
+static bool sign_deep(const AssumeCtx* ctx, const Expr* g, bool want_nonneg) {
+    if (!g || !ctx || ctx->count == 0 || ctx->inconsistent) return false;
+
+    /* Stratum 1: cheap structural provers. */
+    if (want_nonneg) { if (prov_nn(ctx, g)) return true; }
+    else             { if (prov_np(ctx, g)) return true; }
+
+    if (g_sign_bridge_depth >= 3) return false;
+    g_sign_bridge_depth++;
+    bool result = false;
+
+    /* Stratum 2: pole-bearing trig decomposition into single-head factors. */
+    if (g->type == EXPR_FUNCTION && g->data.function.head &&
+        g->data.function.head->type == EXPR_SYMBOL &&
+        g->data.function.arg_count == 1) {
+        const char* h = g->data.function.head->data.symbol.name;
+        if (h == SYM_Sec || h == SYM_Csc || h == SYM_Tan || h == SYM_Cot) {
+            const Expr* u = g->data.function.args[0];
+            Expr* su = expr_new_function(expr_new_symbol(SYM_Sin),
+                           (Expr*[]){ expr_copy((Expr*)u) }, 1);
+            Expr* cu = expr_new_function(expr_new_symbol(SYM_Cos),
+                           (Expr*[]){ expr_copy((Expr*)u) }, 1);
+            if (h == SYM_Sec) {
+                result = sign_deep(ctx, cu, want_nonneg);
+            } else if (h == SYM_Csc) {
+                result = sign_deep(ctx, su, want_nonneg);
+            } else {  /* Tan or Cot: sign = sign(Sin) * sign(Cos) */
+                bool sn = sign_deep(ctx, su, true),  sp = sign_deep(ctx, su, false);
+                bool cn = sign_deep(ctx, cu, true),  cp = sign_deep(ctx, cu, false);
+                result = want_nonneg ? ((sn && cn) || (sp && cp))
+                                     : ((sn && cp) || (sp && cn));
+            }
+            expr_free(su); expr_free(cu);
+            g_sign_bridge_depth--;
+            return result;
+        }
+    }
+
+    /* Stratum 3: Reduce/CAD bridge, only when the variables are bounded.
+     * We prove g >= 0 by showing `A && g < 0` is unsatisfiable (and g <= 0 via
+     * `A && g > 0`). The DIRECT strict inequality is essential: the trig-region
+     * oracle only recognizes a bare `Sin[x] < 0`-shaped atom, and the negated
+     * form `Not[g >= 0]` (which assume_reduce_entails would build) does not
+     * canonicalize to `g < 0` here, so it falls through to a general Reduce
+     * path that returns a spurious `False` on a half-bounded or sign-changing
+     * region -- an unsound answer. A bounded region decides correctly; an
+     * unbounded one makes the oracle return unevaluated (never False), so the
+     * unsat test declines safely. */
+    if (sign_bridge_vars_bounded(ctx, g)) {
+        Expr* A = ar_conj(ctx);
+        Expr* rel = expr_new_function(
+            expr_new_symbol(want_nonneg ? "Less" : "Greater"),
+            (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(0) }, 2);
+        Expr* stmt = expr_new_function(expr_new_symbol("And"),
+                         (Expr*[]){ A, rel }, 2);
+        result = (ar_unsat(stmt) == 1);  /* ar_unsat consumes stmt */
+    }
+    g_sign_bridge_depth--;
+    return result;
+}
+
+bool assume_sign_nonneg_deep(const AssumeCtx* ctx, const Expr* g) {
+    return sign_deep(ctx, g, true);
+}
+bool assume_sign_nonpos_deep(const AssumeCtx* ctx, const Expr* g) {
+    return sign_deep(ctx, g, false);
+}

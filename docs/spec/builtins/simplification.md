@@ -248,6 +248,23 @@ operand-domain conditions follow from the assumption set. Per-symbol sign facts
 drive `Sqrt[x^2] -> x` / `-x` / `Abs[x]`, and integer facts drive the
 `Sin[n Pi] -> 0`, `Cos[n Pi] -> (-1)^n` family.
 
+A **deep sign oracle** extends `Abs[g] -> ±g` and `Sqrt[g^2] -> ±g` to an
+*arbitrary* real `g` whose sign is fixed on the assumed region — not just bare
+symbols. It layers the structural provers, a decomposition of the pole-bearing
+trig family (`sign[Tan] = sign[Sin] sign[Cos]`, `sign[Sec] = sign[Cos]`, …), and
+a sound Reduce/CAD base case (a sign is proved only when the opposite strict
+inequality is unsatisfiable on the region). It declines — leaving `Abs`/`Sqrt`
+intact — wherever the sign is not constant (e.g. `Abs[Cos[x]]` on `0 < x < Pi`,
+which flips at `Pi/2`, or an unbounded region).
+
+```mathematica
+In[1]:= Simplify[Abs[Sin[x]], 0 < x < Pi/2]
+Out[1]= Sin[x]
+
+In[2]:= Simplify[Abs[Tan[x]] + Tan[x], Pi/2 < x < Pi]
+Out[2]= 0
+```
+
 When no positional assumption and no `Assumptions` option are given, `Simplify`
 reads the current value of `$Assumptions`.
 

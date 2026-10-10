@@ -285,6 +285,44 @@ void test_sqrt_exp_outside_strip(void) {
                    "-E^(I x) + Sqrt[E^((2*I) x)]", 0);
 }
 
+/* ---- v0.332: deep sign oracle for Abs / Sqrt[_^2] under interval
+ * assumptions (Reduce/CAD bridge + pole-bearing trig decomposition) ---- */
+void test_abs_sin_quadrant1(void) {
+    assert_eval_eq("Simplify[Abs[Sin[x]] - Sin[x], 0 < x < Pi/2]", "0", 0);
+}
+void test_abs_cos_quadrant2(void) {
+    assert_eval_eq("Simplify[Abs[Cos[x]] + Cos[x], Pi/2 < x < Pi]", "0", 0);
+}
+void test_abs_tan_quadrant2(void) {
+    /* Tan is pole-bearing: resolved via sign(Tan)=sign(Sin)*sign(Cos). */
+    assert_eval_eq("Simplify[Abs[Tan[x]] + Tan[x], Pi/2 < x < Pi]", "0", 0);
+}
+void test_abs_sec_quadrant1(void) {
+    assert_eval_eq("Simplify[Abs[Sec[x]] - Sec[x], 0 < x < Pi/2]", "0", 0);
+}
+void test_abs_sum_sin_cos_quadrant1(void) {
+    assert_eval_eq("Simplify[Abs[Sin[x] + Cos[x]] - (Sin[x] + Cos[x]), 0 < x < Pi/2]", "0", 0);
+}
+void test_abs_poly_shifted_interval(void) {
+    /* x-2 < 0 on (0,1); the cheap provers can't shift the bound, Reduce can. */
+    assert_eval_eq("Simplify[Abs[x - 2] - (2 - x), 0 < x < 1]", "0", 0);
+}
+void test_sqrt_cos_squared_quadrant3(void) {
+    assert_eval_eq("Simplify[Sqrt[Cos[x]^2] + Cos[x], Pi < x < 3 Pi/2]", "0", 0);
+}
+/* Soundness: the oracle must DECLINE where the sign is not fixed. */
+void test_abs_sin_no_assumption_declines(void) {
+    assert_eval_eq("Simplify[Abs[Sin[x]]]", "Abs[Sin[x]]", 0);
+}
+void test_abs_cos_sign_change_declines(void) {
+    /* Cos flips sign at Pi/2 inside (0,Pi) -> no collapse. */
+    assert_eval_eq("Simplify[Abs[Cos[x]], 0 < x < Pi]", "Abs[Cos[x]]", 0);
+}
+void test_abs_sin_half_bounded_declines(void) {
+    /* x>0 is unbounded above: Sin sign not fixed -> no collapse. */
+    assert_eval_eq("Simplify[Abs[Sin[x]], x > 0]", "Abs[Sin[x]]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -343,6 +381,18 @@ int main(void) {
     TEST(test_sqrt_exp_strip);
     TEST(test_sqrt_exp_no_assumption);
     TEST(test_sqrt_exp_outside_strip);
+
+    /* v0.332 deep sign oracle */
+    TEST(test_abs_sin_quadrant1);
+    TEST(test_abs_cos_quadrant2);
+    TEST(test_abs_tan_quadrant2);
+    TEST(test_abs_sec_quadrant1);
+    TEST(test_abs_sum_sin_cos_quadrant1);
+    TEST(test_abs_poly_shifted_interval);
+    TEST(test_sqrt_cos_squared_quadrant3);
+    TEST(test_abs_sin_no_assumption_declines);
+    TEST(test_abs_cos_sign_change_declines);
+    TEST(test_abs_sin_half_bounded_declines);
 
     printf("All logexp Simplify tests passed!\n");
     return 0;

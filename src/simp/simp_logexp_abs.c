@@ -550,6 +550,21 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         return expr_new_function(expr_new_symbol(SYM_Times), na, 2);
     }
 
+    /* Deep sign oracle: resolve Abs[g] -> +/-g when the sign of an arbitrary
+     * trig/elementary g is decidable from the interval assumptions via the
+     * Reduce/CAD bridge (+ pole-bearing secant-family decomposition). This is
+     * what the cheap provers above miss for Abs[Sin[x]], Abs[Tan[x]],
+     * Abs[Sin[x]+Cos[x]], ... on a quadrant. */
+    if (ctx_has_facts(ctx)) {
+        if (assume_sign_nonneg_deep(ctx, arg)) {
+            return expr_copy((Expr*)arg);
+        }
+        if (assume_sign_nonpos_deep(ctx, arg)) {
+            Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)arg) };
+            return expr_new_function(expr_new_symbol(SYM_Times), na, 2);
+        }
+    }
+
     /* Cascading: Abs[x^y] -> Abs[x]^y if y is real. The integer-power
      * rule above handles n in Z; this generalises to any real y under
      * an Element[y, Reals] assumption. */
@@ -703,11 +718,13 @@ bool contains_sqrt_of_square(const Expr* e) {
 static Expr* try_simp_sqrt_of_square(const Expr* sqrt_node, const AssumeCtx* ctx) {
     if (!is_sqrt_of_square(sqrt_node)) return NULL;
     const Expr* base = sqrt_node->data.function.args[0]->data.function.args[0];
-    if (prov_nn(ctx, base)) {
+    if (prov_nn(ctx, base) ||
+        (ctx_has_facts(ctx) && assume_sign_nonneg_deep(ctx, base))) {
         /* base >= 0 → Sqrt[base^2] = base. */
         return expr_copy((Expr*)base);
     }
-    if (prov_np(ctx, base)) {
+    if (prov_np(ctx, base) ||
+        (ctx_has_facts(ctx) && assume_sign_nonpos_deep(ctx, base))) {
         /* base <= 0 → Sqrt[base^2] = -base. */
         Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)base) };
         return expr_new_function(expr_new_symbol(SYM_Times), na, 2);

@@ -113,6 +113,16 @@ bool is_real_constant_symbol(const char* s);
 int assume_reduce_entails(const AssumeCtx* ctx, const Expr* pred);
 int assume_reduce_nonneg(const AssumeCtx* ctx, const Expr* e);
 
+/* Deep sign oracle for an ARBITRARY expression g (not just a bare symbol):
+ * 1 iff the assumptions prove g >= 0 (resp. g <= 0). Layers the cheap prov_*
+ * provers, a structural decomposition of the pole-bearing trig family
+ * (sign(Tan)=sign(Sin)*sign(Cos), sign(Sec)=sign(Cos), ...), and the
+ * Reduce/CAD bridge as the base case. Gated to bounded variables and
+ * depth-guarded so the bridge's inner Reduce cannot re-enter it. Used on the
+ * Abs/Sqrt sign path only. SOUND (a Reduce False is a proof, never a sample). */
+bool assume_sign_nonneg_deep(const AssumeCtx* ctx, const Expr* g);
+bool assume_sign_nonpos_deep(const AssumeCtx* ctx, const Expr* g);
+
 bool prov_pos (const AssumeCtx* ctx, const Expr* x);
 bool prov_nn  (const AssumeCtx* ctx, const Expr* x);
 bool prov_neg (const AssumeCtx* ctx, const Expr* x);
