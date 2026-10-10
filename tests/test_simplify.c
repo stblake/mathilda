@@ -590,7 +590,7 @@ void test_simplify_algebraic_fractional_surd_arg(void) {
 void test_simplify_algebraic_u_power_extraction(void) {
     assert_eval_eq(
         "Simplify[(Sqrt[x^2] - 1/Sqrt[x^2])/x^2]",
-        "(-1 + x^2)/x^2^(3/2)", 0);
+        "(-1 + x^2)/(x^2)^(3/2)", 0);
 }
 
 /* ---- User-supplied regression battery (2026-05-04) ---- */

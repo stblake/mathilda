@@ -145,6 +145,12 @@ void test_power_of_power_no_real_inner(void) {
                    "(a^p)^q", 0);
 }
 
+void test_power_of_power_complex_inner_declines(void) {
+    /* Soundness: for a COMPLEX inner exponent the fold (a^p)^q -> a^(p q) is
+     * invalid even for a > 0 (Im[p Log a] can leave (-Pi, Pi]); must not fire. */
+    assert_eval_eq("Simplify[(a^(2 I))^q, a > 0]", "(a^(2*I))^q", 0);
+}
+
 /* ---- Composite cancellation cases enabled by the cascade ---- */
 
 void test_log_pow_plus_log_inv(void) {
@@ -437,6 +443,7 @@ int main(void) {
     TEST(test_power_of_power_real_inner);
     TEST(test_power_of_power_integer_inner);
     TEST(test_power_of_power_no_real_inner);
+    TEST(test_power_of_power_complex_inner_declines);
 
     TEST(test_log_pow_plus_log_inv);
     TEST(test_log_difference_of_constant_factor);

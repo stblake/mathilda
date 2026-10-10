@@ -880,6 +880,34 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         }
     }
 
+    /* Power[Power[b, p], q] -> Power[b, p q] when b >= 0 AND the inner exponent p
+     * is provably REAL. For a nonnegative real base, b^p is a nonnegative real,
+     * so the outer power meets no branch cut and (b^p)^q = b^(p q). The p-real
+     * requirement is essential and was the bug in the former string rules, which
+     * folded for ANY inner exponent: for complex p, Im[p Log b] can leave
+     * (-Pi, Pi], the principal Log of b^p no longer equals p Log b, and
+     * (b^p)^q != b^(p q) (e.g. a > 0 alone does NOT license (a^p)^q -> a^(p q)).
+     * The outer-integer case (sound for any base/inner exponent) is handled
+     * separately in simp_power.c. */
+    if (strcmp(h, "Power") == 0 && nn == 2 && ctx) {
+        const Expr* base = node->data.function.args[0];
+        const Expr* q = node->data.function.args[1];
+        if (base->type == EXPR_FUNCTION && base->data.function.head &&
+            base->data.function.head->type == EXPR_SYMBOL &&
+            base->data.function.head->data.symbol.name == SYM_Power &&
+            base->data.function.arg_count == 2) {
+            const Expr* b = base->data.function.args[0];
+            const Expr* p = base->data.function.args[1];
+            if (prov_nn(ctx, b) && prov_re(ctx, p)) {
+                Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                               (Expr*[]){ expr_copy((Expr*)p), expr_copy((Expr*)q) }, 2));
+                Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_copy((Expr*)b), pq }, 2));
+                expr_free(node); *changed = 1; return out;
+            }
+        }
+    }
+
     /* Mod[a, m] -> r from an Element[(a + c)/m, Integers] fact. */
     if (strcmp(h, "Mod") == 0 && nn == 2 && ctx) {
         Expr* a = node->data.function.args[0];
@@ -1049,9 +1077,10 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
          * sufficient assumption. The Plus arg list is canonical
          * (Plus[-1, Times[2, x^2]]). */
         SEP(); EMIT("ArcCosh[Plus[-1, Times[2, Power[%s, 2]]]] :> 2 ArcCosh[%s]", x, x);
-        /* General (x^m)^r -> x^(m r) for x > 0 and any m, r (covers
-         * (x^3)^(1/3) -> x and the like). */
-        SEP(); EMIT("Power[Power[%s, m_], r_] :> Power[%s, m r]", x, x);
+        /* NOTE: (x^p)^q -> x^(p q) for x > 0 is handled structurally in
+         * assume_structural_rewrite, which can require the inner exponent p to
+         * be provably REAL (a string rule here cannot see the assumptions and
+         * would fold for complex p too -- an unsound result). */
         /* x^p y^p -> (x y)^p for two positive bases x, y (any common
          * exponent p). Emitted once per unordered pair. */
         for (size_t j = i + 1; j < npos; j++) {
@@ -1183,7 +1212,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         if (sym_already_listed(negatives, nneg, x)) continue;
         SEP(); EMIT("Abs[%s] :> %s", x, x);
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> %s", x, x);
-        SEP(); EMIT("Power[Power[%s, m_], r_] :> Power[%s, m r]", x, x);
+        /* (x^p)^q -> x^(p q) handled structurally (needs p real); see above. */
         SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> %s Power[Times[rest], Rational[1, 2]]", x, x);
     }
 
