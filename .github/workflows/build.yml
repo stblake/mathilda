@@ -238,22 +238,16 @@ jobs:
           make -j4 lib USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
                    USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
           ls -l libmathilda.a libmathilda.dll libmathilda.dll.a
-          # --- TEMP DIAGNOSTIC (remove before merge): the export check below
-          # reports an empty export table; dump the raw truth to diagnose. ---
-          echo "===DIAG=== objdump -p Export Tables (raw):"
-          objdump -p libmathilda.dll | sed -n '/Export Tables/,/Import Tables/p' | head -200 || true
-          echo "===DIAG=== objdump -p lines matching mathilda_ffi:"
-          objdump -p libmathilda.dll 2>/dev/null | grep -i mathilda_ffi | head -40 || true
-          echo "===DIAG=== nm -g --defined-only, mathilda_ffi:"
-          nm -g --defined-only libmathilda.dll 2>/dev/null | grep -i mathilda_ffi | head -40 || true
-          echo "===DIAG=== mathilda_ffi.o symbol for mathilda_ffi_eval (is dllexport attached?):"
-          objdump -t src/ffi/mathilda_ffi.o 2>/dev/null | grep -i mathilda_ffi_eval || true
-          echo "===DIAG=== count total exported names (name-pointer table size):"
-          objdump -p libmathilda.dll 2>/dev/null | sed -n '/\[Ordinal\/Name Pointer\] Table/,/^$/p' | grep -cE '\[[[:space:]]*[0-9]+\]' || true
-          echo "===DIAG=== end"
+          # The DLL's authoritative export list is objdump -p's
+          # "[Ordinal/Name Pointer] Table". Each entry is
+          #   \t[   N] +base[   M]  HINT  symbolname
+          # so the symbol is the LAST field of every line carrying "+base[".
+          # (An earlier grep expected "] symbolname" directly and matched only
+          # the header word "Table" — this step had never run in CI before the
+          # compile was fixed, so the stale parser went unnoticed.)
           exports=$(objdump -p libmathilda.dll \
             | sed -n '/\[Ordinal\/Name Pointer\] Table/,/^$/p' \
-            | grep -oE '\] [A-Za-z_][A-Za-z0-9_]*' | sed 's/^\] //')
+            | awk '/[+]base\[/ {print $NF}')
           echo "$exports"
           echo "$exports" | grep -q '^mathilda_ffi_eval$' || {
             echo "::error::libmathilda.dll does not export mathilda_ffi_eval"
