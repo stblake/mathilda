@@ -207,12 +207,25 @@ static Expr* product_to_pair_list(Expr* fac) {
                                                   (Expr*[]){ mk_int(-1), numeric }, 2));
     }
 
-    /* Assemble {{numeric, 1}, {base_i, exp_i}, ...}. */
-    size_t total = n + 1;
+    /* Assemble {{numeric, 1}, {base_i, exp_i}, ...}.  A rational numeric
+     * factor p/q is listed as {p, 1}, {q, -1}, the {p, 1} dropped when p is
+     * 1: FactorList[-15/2 (x^2 - 1)] starts {{-15, 1}, {2, -1}, ...}. */
+    size_t total = n + 2;
     Expr** items = malloc(total * sizeof(Expr*));
-    items[0] = mk_list2(numeric, mk_int(1));
+    size_t k = 0;
+    if (head_name_is(numeric, SYM_Rational) && numeric->data.function.arg_count == 2) {
+        Expr* pn = expr_copy(numeric->data.function.args[0]);
+        Expr* qd = expr_copy(numeric->data.function.args[1]);
+        expr_free(numeric);
+        if (pn->type == EXPR_INTEGER && pn->data.integer == 1) expr_free(pn);
+        else items[k++] = mk_list2(pn, mk_int(1));
+        items[k++] = mk_list2(qd, mk_int(-1));
+    } else {
+        items[k++] = mk_list2(numeric, mk_int(1));
+    }
     for (size_t i = 0; i < n; i++)
-        items[i + 1] = mk_list2(bases[i], exps[i]);
+        items[k++] = mk_list2(bases[i], exps[i]);
+    total = k;
     free(bases);
     free(exps);
 
@@ -238,6 +251,20 @@ Expr* builtin_factorlist(Expr* res) {
     }
     if (last_bad) return factorlist_emit_nonopt(last_bad, 1, res);
     if (!factor_options_valid(res, "FactorList", 0)) return NULL;
+
+    /* FactorList does not thread: a list, an equation or a logical
+     * combination is one (unfactored) factor of itself. */
+    {
+        Expr* a0 = res->data.function.args[0];
+        if (a0->type == EXPR_FUNCTION && a0->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = a0->data.function.head->data.symbol.name;
+            if (h == SYM_List || h == SYM_Equal || h == SYM_Unequal || h == SYM_Less
+                || h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual
+                || h == SYM_And || h == SYM_Or || h == SYM_Not)
+                return expr_new_function(expr_new_symbol(SYM_List),
+                    (Expr*[]){ mk_list2(mk_int(1), mk_int(1)), mk_list2(expr_copy(a0), mk_int(1)) }, 2);
+        }
+    }
 
     /* (x + y)^(-3 + 3 e) lists as {(x + y)^e, 3}, {x + y, -3}: powers with a
      * symbolic exponent factor over their generators (expsplit.c), which come
@@ -348,6 +375,17 @@ Expr* builtin_factorsquarefreelist(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return NULL;  /* leave FactorSquareFreeList[] unevaluated */
     if (!factor_options_valid(res, "FactorSquareFreeList", 1)) return NULL;
+    {
+        Expr* a0 = res->data.function.args[0];
+        if (a0->type == EXPR_FUNCTION && a0->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = a0->data.function.head->data.symbol.name;
+            if (h == SYM_List || h == SYM_Equal || h == SYM_Unequal || h == SYM_Less
+                || h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual
+                || h == SYM_And || h == SYM_Or || h == SYM_Not)
+                return expr_new_function(expr_new_symbol(SYM_List),
+                    (Expr*[]){ mk_list2(mk_int(1), mk_int(1)), mk_list2(expr_copy(a0), mk_int(1)) }, 2);
+        }
+    }
 
     /* FactorSquareFree[poly, opts...] -- forward every argument verbatim. */
     Expr** fargs = malloc(argc * sizeof(Expr*));
@@ -376,10 +414,10 @@ Expr* builtin_factorsquarefreelist(Expr* res) {
 
 void factorlist_init(void) {
     symtab_add_builtin("FactorList", builtin_factorlist);
-    symtab_get_def("FactorList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_get_def("FactorList")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c. */
 
     symtab_add_builtin("FactorSquareFreeList", builtin_factorsquarefreelist);
-    symtab_get_def("FactorSquareFreeList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_get_def("FactorSquareFreeList")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c. */
 }

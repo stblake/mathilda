@@ -57,10 +57,10 @@ void test_fsfl_numeric_factor() {
           "{{2, 1}, {-1 + x, 1}, {1 + x, 2}}");
 }
 
-/* ---- Listable: threads element-wise over a list argument ---- */
+/* ---- Not Listable: a list argument is one factor of itself ---- */
 void test_fsfl_listable() {
     check("FactorSquareFreeList[{x^2-1, x^2+1}]",
-          "{{{1, 1}, {-1 + x^2, 1}}, {{1, 1}, {1 + x^2, 1}}}");
+          "{{1, 1}, {{-1 + x^2, 1 + x^2}, 1}}");
 }
 
 /* ---- Round-trip invariant: Times @@ Power @@@ FactorSquareFreeList[p] == p ----
@@ -105,8 +105,7 @@ void test_fsfl_extension() {
 
 /* ---- Attributes ---- */
 void test_fsfl_attributes() {
-    check("Attributes[FactorSquareFreeList]", "{Listable, Protected}");
-    check("MemberQ[Attributes[FactorSquareFreeList], Listable]", "True");
+    check("Attributes[FactorSquareFreeList]", "{Protected}");
     check("MemberQ[Attributes[FactorSquareFreeList], Protected]", "True");
 }
 

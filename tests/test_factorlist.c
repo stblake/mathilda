@@ -34,7 +34,10 @@ void test_factorlist_univariate() {
 /* ---- The overall numerical factor ---- */
 void test_factorlist_numeric_factor() {
     check("FactorList[2x^3+2x^2-2x-2]", "{{2, 1}, {-1 + x, 1}, {1 + x, 2}}");
-    check("FactorList[3/4 x^2 - 3/4]", "{{3/4, 1}, {-1 + x, 1}, {1 + x, 1}}");
+    /* a rational numerical factor p/q is listed as {p, 1}, {q, -1} */
+    check("FactorList[3/4 x^2 - 3/4]", "{{3, 1}, {4, -1}, {-1 + x, 1}, {1 + x, 1}}");
+    check("FactorList[x^2/3 - 1/3]", "{{3, -1}, {-1 + x, 1}, {1 + x, 1}}");
+    check("FactorList[-15/2]", "{{-15, 1}, {2, -1}}");
     check("FactorList[-x-1]", "{{-1, 1}, {1 + x, 1}}");   /* sign captured */
     /* Pure numbers: the whole expression is the numerical factor. */
     check("FactorList[6]", "{{6, 1}}");
@@ -87,8 +90,10 @@ void test_factorlist_roundtrip() {
 
 /* ---- Attributes ---- */
 void test_factorlist_attributes() {
-    check("Attributes[FactorList]", "{Listable, Protected}");
-    check("MemberQ[Attributes[FactorList], Listable]", "True");
+    /* not Listable: a list is one factor of itself */
+    check("Attributes[FactorList]", "{Protected}");
+    check("FactorList[{x^2 - 1, x}]", "{{1, 1}, {{-1 + x^2, x}, 1}}");
+    check("FactorList[x^2 - 1 == 0]", "{{1, 1}, {-1 + x^2 == 0, 1}}");
     check("MemberQ[Attributes[FactorList], Protected]", "True");
 }
 

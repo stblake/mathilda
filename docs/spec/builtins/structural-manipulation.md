@@ -1464,13 +1464,16 @@ Out[5]= (a + b) f[1] + (c + d) f[2]
 ```
 
 ## FactorSquareFree
-Pulls out any multiple factors in a polynomial using Yun's algorithm.
+Pulls out any multiple factors in a polynomial.
 - `FactorSquareFree[poly]`
 - `FactorSquareFree[poly, Extension -> None]` -- factor over Q (the default).
 - `FactorSquareFree[poly, Extension -> alpha]` -- decompose over Q(alpha) (`alpha` = `Sqrt[c]`, `c^(1/n)`, `I`, or a list of generators).
+- `FactorSquareFree[poly, Modulus -> p]` -- decompose over GF(p).
 
 **Features**:
-- `Listable`, `Protected`.
+- `Listable`, `Protected`.  `Options[FactorSquareFree]` is `{Extension -> None, Modulus -> 0, Trig -> False}`; any other option is `FactorSquareFree::optx` (in particular `GaussianIntegers`).
+- **FLINT** (v0.6061): a polynomial over Q, and each side of a rational function, decomposes through `fmpq_mpoly_factor_squarefree`, 65-340x faster than the classical Yun loop on expression trees (a 4-variable, 10920-term input: 102.7 s -> 0.57 s).  The numerical content stands in front, monomial factors are split out and each factor has a positive leading coefficient: `FactorSquareFree[x + 7 x^2 + 12 x^3]` is `x (1 + 7 x + 12 x^2)`, `FactorSquareFree[(x^2 - 1)^2/(x + 1)^3]` is `(-1 + x)^2/(1 + x)`.  The classical path below remains for builds without FLINT and for inputs FLINT declines.
+- `Modulus -> p` decomposes over GF(p) (`fmpz_mod_mpoly_factor_squarefree`): `FactorSquareFree[x^3 + x^2, Modulus -> 2]` is `x^2 (1 + x)`.
 - Automatically threads over lists, as well as equations, inequalities and logic functions.
 - Works on both univariate and multivariate polynomials.
 - Bigint coefficients (above 2^63) are coefficients, not variables: `FactorSquareFree[Expand[3^45 (1 + t)^2]]` gives `2954312706550833698643 (1 + t)^2` (v0.458; it used to come back unfactored).
@@ -1497,11 +1500,12 @@ Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
 Gives a list of the square-free factors of a polynomial together with their multiplicities.
 - `FactorSquareFreeList[poly]`
 - `FactorSquareFreeList[poly, Extension -> alpha]`
+- `FactorSquareFreeList[poly, Modulus -> p]`
 
 **Features**:
-- `Listable`, `Protected`.
-- A thin wrapper over `FactorSquareFree`: it decomposes via `FactorSquareFree[poly, opts...]` (the `Extension` option is forwarded verbatim) and splits the product into `{factor, exponent}` pairs.  The relationship to `FactorSquareFree` is exactly `FactorList`'s to `Factor`.
-- The first element is always the overall numerical factor `{c, 1}` — it is `{1, 1}` when there is no numerical factor.
+- `Protected` (not `Listable`, v0.6061: a list or an equation is one factor of itself, `{{1, 1}, {list, 1}}`).
+- A thin wrapper over `FactorSquareFree`: it decomposes via `FactorSquareFree[poly, opts...]` and splits the product into `{factor, exponent}` pairs.  Options are validated under its own name (`FactorSquareFreeList::optx`, `::modp`).  The relationship to `FactorSquareFree` is exactly `FactorList`'s to `Factor`.
+- The first element is the overall numerical factor `{c, 1}` — `{1, 1}` when there is none; a rational factor `p/q` is listed as `{p, 1}, {q, -1}`, as in `FactorList`.
 - Each square-free factor keeps its multiplicity; unlike `FactorList`, the factors are *not* further reduced to irreducibles (`x^2 - 1` stays whole rather than splitting into `(-1 + x)(1 + x)`).
 - `Times @@ Power @@@ FactorSquareFreeList[poly]` reconstructs `poly` (up to `FactorSquareFree`'s normal form).
 
@@ -1517,11 +1521,23 @@ Out[3]= {{1, 1}, {-Sqrt[2] + x, 2}}
 ```
 
 ## Factor
-Factors a polynomial over the integers.
-- `Factor[poly]`
+Factors a polynomial over the rationals, or over an algebraic extension or a finite field.
+- `Factor[poly]` -- over Q.
+- `Factor[poly, Extension -> alpha]` / `Extension -> {a1, ...}` / `Extension -> Automatic` -- over Q(alpha).
+- `Factor[poly, GaussianIntegers -> True]` -- over the Gaussian rationals Q(I).
+- `Factor[poly, Modulus -> p]` -- over GF(p), p prime.
+- `Factor[poly, Trig -> True]` -- accepted; no trigonometric rewriting is done.
 
 **Features**:
-- `Listable`, `Protected`.
+- `Listable`, `Protected`.  `Options[Factor]` is `{Extension -> None, GaussianIntegers -> False, Modulus -> 0, Trig -> False}`; `SetOptions` applies.
+- **Option handling** (v0.6061). Options are parsed once: every trailing argument must be a rule (`Factor::nonopt`) naming one of the four options (`Factor::optx`, e.g. `Method`, which `Factor` does not have); the first occurrence of an option wins.  A call whose options are all at their defaults (`Extension -> None`, `Modulus -> 0`, ...) is the plain form and takes every fast path; before, *any* option pushed a multivariate input onto the classical path (`Factor[x^99 - y^99, Extension -> None]`: over 100 s, now 4 ms).
+- **`Modulus -> p`** (v0.6061) factors over GF(p) through `fmpz_mod_mpoly_factor`, for a prime of any size and any number of variables: monic factors with coefficients in `[0, p)`, the leading coefficient in front.  `Factor[3 x^2 + 3, Modulus -> 5]` is `3 (2 + x) (3 + x)`, `Factor[x^4 - y^4, Modulus -> 3]` is `(x + y) (x + 2 y) (x^2 + y^2)`, `Factor[x^4 + 1, Modulus -> 18446744073709551629]` works past a machine word.  A rational coefficient `a/b` is `a b^-1 mod p`; a rational function factors its numerator and denominator; lists and relations thread; a product or power factors base by base, so `(1 + x)^32768 (1 + x + x^2)` is never expanded over Q.  `Modulus -> 0` or a symbolic value means Q and `-p` means `p`.  Messages: `Factor::modp` (not a prime, e.g. 9 or 1), `::bmod` (not an integer), `::mext` (with an extension), `::facim` (with `GaussianIntegers -> True` or a complex coefficient), `::nmod` (a coefficient denominator divisible by p), `Power::infy` (a denominator that vanishes mod p).  A non-polynomial input is returned unchanged.
+- **Fast entry** (v0.6061). A `Times` or an integer power factors base by base and multiplies back — factoring is multiplicative and equal factors merge — so `Factor[(x + 1)^500 (x - 1)^500]` takes 0.06 ms (1.44 s before, through the expansion) and `Factor[(x^2 - 1)/(x + 1)]` cancels to `-1 + x`.  A polynomial over Q in plain symbols goes straight to FLINT ahead of the pre-stage cascade.
+- **Cyclotomic splitting.** `c x^k (x^m ± 1)` factors into cyclotomic polynomials (`fmpz_poly_cyclotomic`) instead of a general factorisation: `x^2310 - 1` (33 factors) went from 2.9 s to milliseconds.
+- **Exponent bound.** A variable exponent of `2^20` or more is refused with `Factor::lrgexp`; it was read through an `int`, so `Factor[x^(2^32 + 2) + x^2 - 1]` returned `(-1 + x) (1 + x)`.  A large power of a sum is fine: `Factor[(x^2 - 1)^(2^31)]` is `(-1 + x)^2147483648 (1 + x)^2147483648`.
+- **Kernels as generators** (v0.6061). A numeric base under a symbolic exponent (`E^x`, `2^x`, `Pi^x`, `(-1)^n`) and a positive fractional power (`x^(1/3)`, `(1 + x^2)^(1/4)`, `Sqrt[2]`) are generators of their own: `Factor[E^x y - E^x]` is `E^x (-1 + y)`, `Factor[(Sqrt[2] x^2 - Sqrt[2])/(x - 1)]` is `Sqrt[2] (1 + x)`.  Treating a radical as independent of the other variables can miss a factorisation, never invent one.
+- **Rational functions** (v0.6061): each side of `Together`'s fraction goes to FLINT whatever its variable count.  A univariate side used to take the int64 Berlekamp-Zassenhaus path, which hung on `Factor[1/(x^43 - 1)]`, crashed on `Factor[1/(x^6001 + x + 1)]` and left wide-coefficient sides unfactored.
+- **Inexact input** is made exact, factored, and numericalised.  A coefficient below `1e-4` was rationalised to `0` (`Factor[x - 0.000001]` gave `x`), and a real of `2^63` or more sent the round trip into infinite recursion (a crash); both fixed in v0.6061.
 - **Gaussian-rational coefficients are fast** (v0.6051, issue #114). A
   multivariate polynomial with `I` in its coefficients is still factored over
   `Q(I)`, as in the reference (`Factor[Expand[(x + I)^2 (1 + y)]]` is
@@ -1533,7 +1549,7 @@ Factors a polynomial over the integers.
   or an `AlgebraicNumber`). And the FLINT zero test now accepts Gaussian
   coefficients by mapping `I` to a fresh generator, instead of recursing
   through the classical zero test.
-- **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — the conventional normalisation), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
+- **FLINT acceleration** (when built with FLINT): a univariate polynomial over Q is factored via `fmpz_poly_factor`, read in one pass (no coefficient extraction per degree), and a multivariate polynomial over Q via `fmpq_mpoly_factor`. This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. **Sign convention** (v0.6061): each irreducible factor has a positive *lexicographic* leading coefficient, the variables taken in canonical order (`a < A < aa < b < x < X < x1`, as `Sort` orders them) with the first most significant; the discarded signs fold into the content.  So `Factor[y^2 - x^2]` is `-(x - y)(x + y)` and `Factor[X^2 - a^2]` is `-((a - X)(a + X))` (it was `(-a + X)(a + X)` under a degree-lexicographic order with `strcmp`-sorted names). Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
 - **Gaussian-integer content** (v0.6018), as in the reference. A polynomial
   with Gaussian-integer coefficients, at least one not real, takes its
   content over Z[i]:
@@ -1556,8 +1572,7 @@ Factors a polynomial over the integers.
   together, as in the reference: `Factor[x^(2 + e) - x^e]` is
   `(-1 + x) x^e (1 + x)`, and `Factor[x^(1 + e) + x^(2 + e)]` is
   `x^(1 + e) (1 + x)`. A single power such as `(x + y)^(-3 + 3 e)` stays.
-- Uses exact root isolation (Rational Root Theorem limits) and binomial descents structured identically to Zassenhaus recombination, evaluating combinations exact and memory safe.
-- Threads natively across lists, logic structures, and numeric groupings perfectly.
+- Threads over lists, equations, inequalities and logical combinations.
 - Bivariate inputs whose leading coefficient (in some variable) is the constant `-1` are handled via Wang's leading-coefficient correction, Stage 1: the input is pre-negated to make it monic, the existing monic Hensel pipeline runs on `-P`, and the overall sign is absorbed into the highest-degree factor via `Expand`.  This unlocks inputs of shape `Factor[(1 - x^k)(x - y^m)]` (and similar non-monic cases with constant `±1` LC) that previously fell back to the legacy linear-trial-division loop.
 - Bivariate inputs whose leading coefficient (in some variable) is a non-unit integer constant `a` (with `|a| > 1`) are handled via Wang's leading-coefficient correction, Stage 2: the monic substitution `Q(x, y) = a^(d-1) · P(x/a, y)` makes the lift's input monic in x with integer coefficients.  After lifting `Q = G_1 · ... · G_r` via the existing pipeline, the true factors of `P` are recovered as `F_i = G_i(a·x, y) / cont_Z(G_i(a·x, y))`, where the integer content collects exactly the share of `a^(d-1)` redistributed into G_i by the substitution.  Stages 1 and 2 compose, so inputs with negative non-unit LC (e.g. `lc_x(P) = -6`) also enter the structured pipeline.  This unlocks inputs like `Factor[Expand[(2x+3y)(3x+5y)]]`, `Factor[2 a^2 - 5 a b + 3 b^2]`, and three-factor non-monic forms whose LCs are constant in y (or constant in x).
 - Bivariate inputs whose leading coefficient (in some variable) is a non-constant polynomial in the other variable are handled via Wang's leading-coefficient correction, Stage 3 (predicted-LC two-factor Hensel).  When `lc_x(P)(y) = A(y)`, Mathilda factors `A` over `Z[y]`, finds `α` with `A(α) = +1` so the squarefree univariate image `P(x, α)` factors into monic Z[x] pieces `u`, `v`, then enumerates distributions of `A`'s irreducible factors between two predicted leading coefficients `q_u, q_v` (with `q_u · q_v = A` and `q_u(α) = q_v(α) = +1`).  The Hensel iteration is modified so each `Δu` correction has its leading-x coefficient PINNED to the y^k coefficient of `q_u`, keeping `lc_x(U)(y) = q_u(y)` invariant across the lift.  This unlocks inputs like `Factor[Expand[(xy+1)(xy+2)]]`, `Factor[Expand[((y²+1)x+1)(x+3)]]`, `Factor[Expand[((y+1)x+1)((y+1)x+2)]]`.  MVP scope: r = 2 (two univariate factors), both monic, `|cont(A)| = 1`, and inputs with non-trivial monomial content fall through so `heuristic_factor`'s Phase 0 path produces the canonical fully-factored form.
@@ -1585,6 +1600,9 @@ Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
 In[6]:= Factor[x^4 + 1, Modulus -> 3]
 Out[6]= (2 + x + x^2) (2 + 2 x + x^2)
 
+In[6a]:= Factor[x^4 - y^4, Modulus -> 3]
+Out[6a]= (x + y) (x + 2 y) (x^2 + y^2)
+
 In[7]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
 Out[7]= (1 + Sqrt[2] x + x^2) (1 - Sqrt[2] x + x^2)
 
@@ -1599,17 +1617,18 @@ Gives a list of the irreducible factors of a polynomial together with their expo
 - `FactorList[poly]`
 - `FactorList[poly, GaussianIntegers -> True]`
 - `FactorList[poly, Extension -> {a1, a2, ...}]`
+- `FactorList[poly, Modulus -> p]`
 
 **Features**:
-- `Listable`, `Protected`.
-- A thin wrapper over `Factor`: it factors via `Factor[poly, opts...]` (options are forwarded verbatim) and splits the product into `{factor, exponent}` pairs.
+- `Protected`; not `Listable` (v0.6061): `FactorList[{x^2 - 1, x}]` is `{{1, 1}, {{-1 + x^2, x}, 1}}` and an equation is likewise one factor of itself.  `Options[FactorList]` is `Factor`'s.
+- A thin wrapper over `Factor`: it validates the options under its own name (`FactorList::optx`, `::modp`, ...; it used to wrap an unevaluated `Factor[...]` as a factor), factors via `Factor[poly, opts...]` and splits the product into `{factor, exponent}` pairs.
 - **A power with a symbolic exponent lists its generators** as the reference
   does: `FactorList[(x + y)^(-3 + 3 e)]` is
   `{{1, 1}, {(x + y)^e, 3}, {x + y, -3}}`, and `FactorList[x^(1 + e) y^(2 - e)]`
   is `{{1, 1}, {x^e, 1}, {y^e, -1}, {x, 1}, {y, 2}}`. The generators come right
   after the constant, in order of appearance, and the ordinary factors keep
   `FactorList`'s own order.
-- The first element is always the overall numerical factor `{c, 1}` — it is `{1, 1}` when there is no numerical factor.
+- The first element is the overall numerical factor `{c, 1}` — `{1, 1}` when there is none.  A rational factor `p/q` is listed as `{p, 1}, {q, -1}`, the `{p, 1}` dropped when `p` is 1 (v0.6061): `FactorList[-15/2 (x^2 - 1)]` is `{{-15, 1}, {2, -1}, {-1 + x, 1}, {1 + x, 1}}`, `FactorList[(x^2 - 1)/(6 x + 6)]` is `{{6, -1}, {-1 + x, 1}}`.
 - Every factor has a positive leading coefficient (lexicographic, as `CoefficientRules` orders terms), its sign going into the numerical factor: `FactorList[-x - 1]` is `{{-1, 1}, {1 + x, 1}}`, `FactorList[y - x]` is `{{-1, 1}, {x - y, 1}}`. Needed since `-(1 + x)` itself evaluates to `-1 - x` (v0.591).
 - Denominator factors of a rational function appear with negative exponents.
 - `Times @@ Power @@@ FactorList[poly]` reconstructs `poly` (up to `Factor`'s normal form).
@@ -1642,7 +1661,8 @@ not depend on a given set of variables.
   subsets `{x_1, ..., x_{n-1}}`, ..., `{x_1}`.
 
 **Features**:
-- `Protected`.
+- `Protected`.  `FactorTerms[poly, Modulus -> p]` reduces the coefficients mod p first (`FactorTerms[3 x + 6, Modulus -> 3]` is `0`).
+- The numerical factor is signed so the rest has a positive leading term (lexicographic, variables in canonical order): `FactorTerms[-6 x^2 - 12 x y]` is `-6 (x^2 + 2 x y)` (v0.6061).
 - Auto-threads over `List`, `Equal`, `Unequal`, `Less`, `LessEqual`,
   `Greater`, `GreaterEqual`, `And`, `Or`, `Not`, `Xor`.
 - Together-normalises rational inputs before extracting content from the
@@ -1706,6 +1726,7 @@ Lists the factors that `FactorTerms` would multiply together.
   faithful round-trip.
 - Variables in the second argument that do not actually appear in `poly`
   are filtered out, so the output never contains spurious trailing `1`s.
+- The numerical factor (v0.6061) is rational and signed: `FactorTermsList[-6 x^2 - 12 x y]` is `{-6, x^2 + 2 x y}`, `FactorTermsList[3/4 x + 3/2]` is `{3/4, 2 + x}` (the integer content of a denominator belongs to it: `FactorTermsList[(4 x + 4)/(6 y)]` is `{2/3, 1/y + x/y}`), and `FactorTermsList[0]` is `{1, 0}`.  A list argument is `General::poly`.  `Modulus -> p` reduces the coefficients first.
 
 ```mathematica
 In[1]:= FactorTermsList[3 + 6 x + 3 x^2]

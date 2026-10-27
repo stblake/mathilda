@@ -124,6 +124,26 @@ static void test_default_options_plain(void) {
           "Rule[Modulus, 0], Rule[Trig, False]]");
 }
 
+/* FactorTerms / FactorTermsList: Modulus, signed rational content, zero,
+ * and FactorList's rational numerical factor. */
+static void test_family_conventions(void) {
+    check("FactorTerms[3 x + 6, Modulus -> 3]", "0");
+    check("FactorTerms[2 x + 4, Modulus -> 5]", "Times[2, Plus[2, x]]");
+    check("FactorTermsList[-6 x^2 - 12 x y]",
+          "List[-6, Plus[Power[x, 2], Times[2, x, y]]]");
+    check("FactorTermsList[3/4 x + 3/2]", "List[Rational[3, 4], Plus[2, x]]");
+    check("FactorTermsList[-1/2 x - 1/3]", "List[Rational[-1, 6], Plus[2, Times[3, x]]]");
+    check("FactorTermsList[y - x]", "List[-1, Plus[x, Times[-1, y]]]");
+    check("FactorTermsList[0]", "List[1, 0]");
+    check("FactorTermsList[-3 x^2 y + 6 y, {x}]",
+          "List[-3, y, Plus[-2, Power[x, 2]]]");
+    check_msg("FactorTermsList[{2 x + 2, 3 x}]");          /* General::poly */
+    check("FactorList[-15/2 (x^2 - 1)]",
+          "List[List[-15, 1], List[2, -1], List[Plus[-1, x], 1], List[Plus[1, x], 1]]");
+    check("FactorList[(x^2 - 1)/(6 x + 6)]",
+          "List[List[6, -1], List[Plus[-1, x], 1]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -132,6 +152,7 @@ int main(void) {
     test_modulus();
     test_option_messages();
     test_default_options_plain();
+    test_family_conventions();
 
     if (failures) {
         printf("%d factor option test(s) FAILED\n", failures);

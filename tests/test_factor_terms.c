@@ -188,17 +188,16 @@ static void test_factorterms_threading(void) {
 /* Rational and complex coefficients.                                  */
 /* ------------------------------------------------------------------- */
 static void test_factorterms_rational_complex(void) {
-    /* Rational expression: numerator content extraction, denominator    */
-    /* survives in the residue.                                          */
+    /* Rational expression: numerator content extraction; the residue is */
+    /* the expanded quotient by the denominator.                         */
     run_full("FactorTermsList[7 x+(14 y+21)/z]",
-             "List[7, Times[Power[z, -1], Plus[3, Times[2, y], Times[x, z]]]]");
+             "List[7, Plus[x, Times[3, Power[z, -1]], Times[2, y, Power[z, -1]]]]");
     /* The product of the FactorTermsList elements should reproduce the */
     /* original (after Together).                                       */
     run_roundtrip("7 x+(14 y+21)/z");
 
-    /* Complex coefficients. Mathilda extracts the real integer GCD (5)   */
-    /* rather than Mathematica's Gaussian-integer GCD (5 I); both are    */
-    /* mathematically valid factorizations.                              */
+    /* Complex coefficients: the real integer GCD (5) is extracted rather */
+    /* than the Gaussian-integer GCD (5 I); both are valid factorizations. */
     run_full("FactorTermsList[5 I x^2+20 x I+10]",
              "List[5, Plus[2, Times[Complex[0, 4], x], Times[Complex[0, 1], Power[x, 2]]]]");
     run_roundtrip("5 I x^2+20 x I+10");
