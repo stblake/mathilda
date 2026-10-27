@@ -1160,10 +1160,18 @@ static bool expr_contains_radical(Expr* e) {
 /* Distribute-and-collect any radical-bearing coefficients in place, so they
  * stay compact (Sqrt[2]*(a+b Sqrt[2]) -> a Sqrt[2] + 2b) instead of nesting
  * deeper on every composition step (issue #41). Expand performs exactly the
- * distribution + like-radical collection that evaluation skips. */
+ * distribution + like-radical collection that evaluation skips.
+ *
+ * Symbolic coefficients nest the same way without any radical: composing
+ * E^(-x + x A Sqrt[w]/(A Sqrt[w] + w)) in w multiplied products of (x/A^k)
+ * terms unexpanded, and order 1 took 39 s (Gruntz on thesis 8.11 / 8.17, 160 s
+ * each).  So a coefficient past 128 leaves is expanded too: 2.2 s, and 3 s for
+ * both limits.  Not lower: at 64 the psi tower Exp[Exp[PolyGamma[0, PolyGamma[0,
+ * x]]]]/x stops declining in 0.6 s and answers (correctly) after 109 s of
+ * Expand. */
 static void so_normalize_radical_coefs(SeriesObj* s) {
     for (size_t i = 0; i < s->coef_count; i++) {
-        if (expr_contains_radical(s->coefs[i])) {
+        if (so_leaf_count(s->coefs[i]) > 128 || expr_contains_radical(s->coefs[i])) {
             Expr* e = s->coefs[i];
             s->coefs[i] = simp(mk_fn1("Expand", e));
         }
