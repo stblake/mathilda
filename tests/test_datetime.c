@@ -15,6 +15,7 @@
 #include "symtab.h"
 #include "core.h"
 #include "print.h"
+#include "test_utils.h"
 
 /* Wall-clock seconds from a monotonic source, for verifying Pause actually
  * waited and that SessionTime tracks elapsed time. */
@@ -481,6 +482,24 @@ void test_unixtime_attributes() {
     expr_free(e);
 }
 
+/* EchoTiming / Echo print a ">> ..." line and hand back the value unchanged. */
+void test_echo_timing() {
+    Expr* p = parse_expression("AbsoluteTiming[EchoTiming[Pause[0.05]; 7, \"t\"]]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    assert(e->type == EXPR_FUNCTION && e->data.function.arg_count == 2);
+    assert(e->data.function.args[0]->data.real >= 0.045);
+    assert(e->data.function.args[1]->type == EXPR_INTEGER);
+    assert(e->data.function.args[1]->data.integer == 7);
+    expr_free(e);
+
+    assert_eval_eq("EchoTiming[1 + 1]", "2", 0);
+    assert_eval_eq("Attributes[EchoTiming]", "{HoldFirst, Protected, SequenceHold}", 0);
+    assert_eval_eq("Echo[1 + 1]", "2", 0);
+    assert_eval_eq("Echo[{1, 2}, \"sq:\", #^2 &]", "{1, 2}", 0);
+    assert_eval_eq("Attributes[Echo]", "{Protected}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -527,6 +546,7 @@ int main() {
     test_time_unit();
     test_session_time_counts_pause();
     test_time_used_excludes_pause();
+    test_echo_timing();
     printf("All datetime tests passed!\n");
     symtab_clear();
     return 0;

@@ -186,7 +186,7 @@ static Expr* power_expand(Expr* base, int64_t exp) {
  * true upper bound for ANY expression, not just polynomials over Q. */
 typedef struct {
     double     terms;
-    struct KDeg { Expr* kernel; long deg; } *deg;
+    struct KDeg { Expr* kernel; uint64_t hash; long deg; } *deg;
     size_t     n, cap;
 } SizeEst;
 
@@ -194,14 +194,25 @@ static void se_free(SizeEst* s) { free(s->deg); s->deg = NULL; s->n = s->cap = 0
 
 /* Record degree `d` for `kernel`, combining with any existing entry via `f`
  * (fmax for Plus alternatives, addition for Times/Power products). */
-static void se_put(SizeEst* s, Expr* kernel, long d, long (*combine)(long, long)) {
+static void se_put_h(SizeEst* s, Expr* kernel, uint64_t h, long d, long (*combine)(long, long)) {
+    /* The memoized structural hash screens the linear scan, so only a true
+     * match (or a 64-bit collision) pays a deep expr_eq: a sum over many
+     * distinct kernels -- g[x[i], x[j]] products, issue #112 -- otherwise did a
+     * deep compare against every recorded kernel at every node. */
     for (size_t i = 0; i < s->n; i++) {
-        if (expr_eq(s->deg[i].kernel, kernel)) { s->deg[i].deg = combine(s->deg[i].deg, d); return; }
+        if (s->deg[i].hash == h && expr_eq(s->deg[i].kernel, kernel)) {
+            s->deg[i].deg = combine(s->deg[i].deg, d);
+            return;
+        }
     }
     if (s->n == s->cap) { s->cap = s->cap ? s->cap * 2 : 8; s->deg = realloc(s->deg, s->cap * sizeof(*s->deg)); }
     s->deg[s->n].kernel = kernel;
+    s->deg[s->n].hash = h;
     s->deg[s->n].deg = d;
     s->n++;
+}
+static void se_put(SizeEst* s, Expr* kernel, long d, long (*combine)(long, long)) {
+    se_put_h(s, kernel, expr_hash(kernel), d, combine);
 }
 static long comb_max(long a, long b) { return a > b ? a : b; }
 static long comb_add(long a, long b) { return a + b; }
@@ -224,7 +235,7 @@ static double se_power(const SizeEst* c, int64_t n, SizeEst* r, double cap) {
     for (double i = 1.0; i <= c->terms - 1.0 && multinom <= cap; i += 1.0)
         multinom *= (double)((double)n + i) / i;
     for (size_t j = 0; j < c->n; j++)
-        se_put(r, c->deg[j].kernel, (long)n * c->deg[j].deg, comb_max);
+        se_put_h(r, c->deg[j].kernel, c->deg[j].hash, (long)n * c->deg[j].deg, comb_max);
     double box = se_box(r, cap);
     return multinom < box ? multinom : box;
 }
@@ -262,7 +273,7 @@ static SizeEst estimate_terms(const Expr* e, double cap) {
         for (size_t i = 0; i < n; i++) {
             SizeEst c = estimate_terms(e->data.function.args[i], cap);
             sum += c.terms; if (sum > cap) sum = cap + 1.0;
-            for (size_t j = 0; j < c.n; j++) se_put(&r, c.deg[j].kernel, c.deg[j].deg, comb_max);
+            for (size_t j = 0; j < c.n; j++) se_put_h(&r, c.deg[j].kernel, c.deg[j].hash, c.deg[j].deg, comb_max);
             se_free(&c);
         }
         double box = se_box(&r, cap);
@@ -275,7 +286,7 @@ static SizeEst estimate_terms(const Expr* e, double cap) {
         for (size_t i = 0; i < n; i++) {
             SizeEst c = estimate_terms(e->data.function.args[i], cap);
             prod *= c.terms; if (prod > cap) prod = cap + 1.0;
-            for (size_t j = 0; j < c.n; j++) se_put(&r, c.deg[j].kernel, c.deg[j].deg, comb_add);
+            for (size_t j = 0; j < c.n; j++) se_put_h(&r, c.deg[j].kernel, c.deg[j].hash, c.deg[j].deg, comb_add);
             se_free(&c);
         }
         double box = se_box(&r, cap);
@@ -318,7 +329,19 @@ static double estimate_expand_terms(const Expr* e, double cap) {
  * recursive call so an oversized subexpression is handled consistently; because
  * Plus/Times absorb Overflow[], an oversized part collapses the whole tree to
  * Overflow[] in user-facing mode. */
+static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bounded);
+
 static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
+    return expr_expand_impl_b(e, patt, overflow_mode, /*bounded=*/false);
+}
+
+/* `bounded` is true when an enclosing Plus/Times/Power has already estimated
+ * the expansion within the ceiling.  A subexpression's estimate never exceeds
+ * its parent's (term counts and kernel degrees only grow going up the tree),
+ * so the recursion skips re-estimating: re-running estimate_terms at every
+ * level walked each subtree once per ancestor, half the cost of an Expand of a
+ * kernel product (issue #112).  FLINT is still tried at each level. */
+static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bounded) {
     if (!e) return NULL;
     if (patt && !expr_contains_patt(e, patt)) return expr_copy(e);
 
@@ -341,9 +364,13 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
      *     polynomial parts of a mixed expression via this same fast path on
      *     recursion. */
     double cap = overflow_mode ? EXPAND_OVERFLOW_CAP : EXPAND_FACTOR_CAP;
+    /* Plus/Times/Power children are inside this level's estimate; any other
+     * head is an opaque kernel to estimate_terms, so it bounds nothing below. */
+    bool child_bounded = false;
     if (patt == NULL &&
         (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0 || strcmp(head, "Power") == 0)) {
-        double est = estimate_expand_terms(e, cap);
+        double est = bounded ? 0.0 : estimate_expand_terms(e, cap);
+        child_bounded = est <= cap;
         if (est > cap) {
             if (overflow_mode)
                 return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
@@ -383,7 +410,7 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
     if (strcmp(head, "Plus") == 0) {
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            args[i] = expr_expand_impl(e->data.function.args[i], patt, overflow_mode);
+            args[i] = expr_expand_impl_b(e->data.function.args[i], patt, overflow_mode, child_bounded);
         }
         Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, e->data.function.arg_count));
         free(args);
@@ -408,7 +435,7 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
             if (patt && !expr_contains_patt(arg, patt)) {
                 freef[nf++] = expr_copy(arg);
             } else {
-                active[na++] = expr_expand_impl(arg, patt, overflow_mode);
+                active[na++] = expr_expand_impl_b(arg, patt, overflow_mode, child_bounded);
             }
         }
 
@@ -465,7 +492,7 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer > 0) {
             int64_t n = exp->data.integer;
-            Expr* exp_base = expr_expand_impl(base, patt, overflow_mode);
+            Expr* exp_base = expr_expand_impl_b(base, patt, overflow_mode, child_bounded);
             /* Reached only when the top-level FLINT fast path did not handle
              * this power (FLINT absent, a non-polynomial base, or a
              * pattern-restricted Expand).  Gate on the estimated result size and

@@ -559,6 +559,9 @@ Gives a sorted list of all distinct elements from one or more expressions.
 
 **Features**:
 - `Flat`, `OneIdentity`, `Protected`.
+- Without `SameTest`, duplicates are removed by hashing first and only the
+  distinct elements are sorted (v0.6052). This is O(total + unique log unique)
+  rather than a sort of every element.
 - All expressions must have the same head.
 - Result has the same head as the inputs.
 

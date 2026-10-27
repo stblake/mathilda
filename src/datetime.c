@@ -107,6 +107,25 @@ Expr* builtin_timing(Expr* res) {
     return final_res;
 }
 
+/* EchoTiming[expr] evaluates expr, prints ">> t" with the elapsed wall-clock
+ * seconds t (AbsoluteTiming's clock), and returns the value;
+ * EchoTiming[expr, label] prints ">> label t".  HoldFirst, so the label is
+ * evaluated as an ordinary argument. */
+Expr* builtin_echo_timing(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error("EchoTiming", argc, 1, 2);
+
+    double start = dt_wall_seconds();
+    Expr* evaluated = evaluate(res->data.function.args[0]);
+    double elapsed = dt_wall_seconds() - start;
+
+    Expr* t = expr_new_real(elapsed);
+    echo_print_line(argc == 2 ? res->data.function.args[1] : NULL, t);
+    expr_free(t);
+    return evaluated;
+}
+
 static int compare_doubles(const void* a, const void* b) {
     double arg1 = *(const double*)a;
     double arg2 = *(const double*)b;
@@ -981,6 +1000,7 @@ void datetime_init(void) {
 
     symtab_add_builtin("Timing", builtin_timing);
     symtab_add_builtin("AbsoluteTiming", builtin_absolute_timing);
+    symtab_add_builtin("EchoTiming", builtin_echo_timing);
     symtab_add_builtin("RepeatedTiming", builtin_repeated_timing);
     symtab_add_builtin("AbsoluteTime", builtin_absolute_time);
     symtab_add_builtin("DateList", builtin_date_list);

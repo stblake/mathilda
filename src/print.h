@@ -31,6 +31,8 @@ char* expr_to_string_outputform(Expr* e);   /* strings unquoted, as Print */
 Expr* series_data_to_display_expr(Expr* e);
 
 Expr* builtin_print(Expr* res);
+Expr* builtin_echo(Expr* res);
+void echo_print_line(Expr* label, Expr* value);
 Expr* builtin_fullform(Expr* res);
 Expr* builtin_inputform(Expr* res);
 Expr* builtin_texform(Expr* res);

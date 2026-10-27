@@ -1,3 +1,16 @@
+# GitHub issues #112 / #113 / #114 (2026-10-27)
+
+- [x] #113 Together on a denominator-free sum: expand (and re-evaluate) the combined numerator when lcm_den = 1 ;
+      Cancel's embedded-rational gate no longer walks into exponents (y^(1/(a-1)) is one generator) ; v0.6050
+- [x] #114 Factor over Q(I): factor_degree_one concludes irreducible when gcd(L, C) = 1 (indeterminate vars only) ;
+      Gaussian FLINT zero test (I -> tau, deg_tau <= 1) ; 63 s -> 26 ms ; v0.6051
+- [x] #112 rb_rec shares unchanged subtrees ; Expand estimates once (child bounded) + hash-screened kernel table ;
+      Union hash-dedupe then sort ; Cases `_h` head test ; Echo + EchoTiming ; v0.6052
+      n=14: generation 24.1 -> 18.8 s, Cases+Union 3.62 -> 0.88 s, MaxMemoryUsed 462 -> 224 MB (same machine, A/B)
+- [ ] #112 follow-up: FLINT expansion with opaque kernels as generators (exclude List/Interval/SeriesData/...)
+- [ ] Factor over Q(I), univariate: Factor[x^2 + 2 I x - 1] should be (I + x)^2 (pre-existing gap)
+- [ ] Cancel numerator form: Mathilda expands the quotient numerator ((1 + a) y -> y + a y); the reference keeps it
+
 # Test-suite drift: 42 failing registered tests (2026-10-26)
 
 Inventory (ctest on main at -O2; assert binaries re-run with NDEBUG so every FAIL prints): ~37 individual

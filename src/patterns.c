@@ -131,6 +131,21 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
 
     bool match_level = in_level_spec(e, current_level, min_l, max_l, heads);
 
+    /* `_h` against a compound node is a head comparison: skip the matcher and
+     * its MatchEnv allocation.  Cases[expr, _g, Infinity] visits every node of
+     * a large sum (issue #112), almost all of which fail this test.  Atoms and
+     * packed arrays (non-EXPR_FUNCTION) still go through match(). */
+    if (match_level && e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        pattern->type == EXPR_FUNCTION &&
+        pattern->data.function.head->type == EXPR_SYMBOL &&
+        pattern->data.function.head->data.symbol.name == SYM_Blank &&
+        pattern->data.function.arg_count == 1 &&
+        pattern->data.function.args[0]->type == EXPR_SYMBOL &&
+        pattern->data.function.args[0]->data.symbol.name !=
+            e->data.function.head->data.symbol.name)
+        match_level = false;
+
     if (match_level) {
         MatchEnv* env = env_new();
         if (match(e, pattern, env)) {

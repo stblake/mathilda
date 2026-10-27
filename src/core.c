@@ -797,6 +797,7 @@ void core_init(void) {
        Factorial2, FactorialPower, Binomial, PrimitiveRoot, PrimitiveRootList,
        MultiplicativeOrder) are registered by numbertheory_init() below. */
     symtab_add_builtin("Print", builtin_print);
+    symtab_add_builtin("Echo", builtin_echo);
     /* No front end, so a temporary print is an ordinary one (returns Null). */
     symtab_add_builtin("PrintTemporary", builtin_print);
     symtab_get_def("PrintTemporary")->attributes |= ATTR_PROTECTED;

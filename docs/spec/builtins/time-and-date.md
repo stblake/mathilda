@@ -37,6 +37,24 @@ Out[3]= 2
 The first element of the pair is the elapsed wall-clock time, which varies
 between runs; extract the reproducible result with `[[2]]`.
 
+
+## EchoTiming
+Evaluates `expr`, prints the elapsed wall-clock seconds as `>> t`, and returns
+the result.
+- `EchoTiming[expr]`
+- `EchoTiming[expr, label]` prints `>> label t`.
+
+**Features**:
+- `HoldFirst`, `Protected`, `SequenceHold`.
+- Uses the same monotonic clock as `AbsoluteTiming`. The line is printed
+  through `Print` (see `Echo`).
+
+```
+In[1]:= EchoTiming[Pause[0.1]; 7, "slept:"]
+>> slept: 0.100147
+Out[1]= 7
+```
+
 ## RepeatedTiming
 Evaluates `expr` repeatedly and returns a list of the average time in seconds used, together with the result obtained.
 - `RepeatedTiming[expr]`

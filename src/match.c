@@ -2548,7 +2548,35 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
                 temp_args[i]->data.function.head->data.symbol.name == SYM_Sequence;
             new_count += spliced[i] ? temp_args[i]->data.function.arg_count : 1;
         }
-        
+
+        /* Structural sharing: a subtree no binding reached comes back as the
+         * very nodes it started from (leaves are returned by expr_copy, a
+         * refcount bump), so share the original node instead of rebuilding
+         * it.  A rebuilt copy is not merely an allocation per node: it loses
+         * the evaluation stamp and cached hash, so the evaluator re-sorts and
+         * re-evaluates a large stored right-hand side on every application --
+         * res[n] := <135135-term sum> was rebuilt and re-canonicalised on each
+         * read (issue #112).  Sharing is the OwnValue path's long-standing
+         * behaviour (symtab apply_own_values returns expr_copy(replacement)). */
+        if (new_head == expr->data.function.head &&
+            new_count == expr->data.function.arg_count) {
+            bool unchanged = true;
+            for (size_t i = 0; i < expr->data.function.arg_count; i++) {
+                if (spliced[i] || temp_args[i] != expr->data.function.args[i]) {
+                    unchanged = false;
+                    break;
+                }
+            }
+            if (unchanged) {
+                for (size_t i = 0; i < expr->data.function.arg_count; i++)
+                    expr_free(temp_args[i]);
+                expr_free(new_head);
+                free(temp_args);
+                free(spliced);
+                return expr_copy(expr);
+            }
+        }
+
         Expr** final_args = malloc(sizeof(Expr*) * (new_count ? new_count : 1));
         size_t idx = 0;
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {

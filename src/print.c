@@ -24,6 +24,7 @@
 #include "message.h"
 #include "linear_boxes.h"   /* box control characters print as escapes */
 #include "utf8.h"
+#include "common.h"        /* builtin_arg_error */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -1498,6 +1499,44 @@ Expr* builtin_print(Expr* res) {
      * buffered, so this is a no-op there. */
     fflush(stdout);
     return expr_new_symbol(SYM_Null);
+}
+
+/* Print one Echo line, ">> label value" (or ">> value" when label is NULL),
+ * through Print itself so the rendering, flushing and output redirection are
+ * Print's.  Both arguments are borrowed.  Shared by Echo and EchoTiming. */
+void echo_print_line(Expr* label, Expr* value) {
+    Expr* parts[4];
+    size_t n = 0;
+    parts[n++] = expr_new_string(">> ");
+    if (label) {
+        parts[n++] = expr_copy(label);
+        parts[n++] = expr_new_string(" ");
+    }
+    parts[n++] = expr_copy(value);
+    Expr* call = expr_new_function(expr_new_symbol("Print"), parts, n);
+    Expr* r = builtin_print(call);
+    expr_free(r);
+    expr_free(call);
+}
+
+/* Echo[expr] prints ">> expr" and returns expr; Echo[expr, label] prints the
+ * label first; Echo[expr, label, f] prints f[expr] in place of expr (the
+ * returned value is still expr). */
+Expr* builtin_echo(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return builtin_arg_error("Echo", argc, 1, 3);
+    Expr* value = res->data.function.args[0];
+    Expr* label = argc >= 2 ? res->data.function.args[1] : NULL;
+    if (argc == 3) {
+        Expr* shown = eval_and_free(expr_new_function(
+            expr_copy(res->data.function.args[2]), (Expr*[]){ expr_copy(value) }, 1));
+        echo_print_line(label, shown);
+        expr_free(shown);
+    } else {
+        echo_print_line(label, value);
+    }
+    return expr_copy(value);
 }
 
 Expr* builtin_fullform(Expr* res) {

@@ -433,6 +433,33 @@ Expr* builtin_union(Expr* res) {
     
     if (total_count == 0) return expr_copy(first_list);
     
+    if (same_test == NULL) {
+        /* Default path: deduplicate through the hash set first, then sort only
+         * the distinct elements.  Sorting every element first cost
+         * O(total log total) expr_compare calls -- 946k elements reduced to 91
+         * in a Dirac-trace Cases[...] // Union (issue #112) -- where the hash
+         * pass is O(total) and the sort is O(unique log unique). */
+        Expr** uniq = malloc(sizeof(Expr*) * total_count);
+        size_t nu = 0;
+        HashTable* seen = ht_create(total_count + 1);
+        for (size_t i = 0; i < last_arg; i++) {
+            Expr* arg = res->data.function.args[i];
+            for (size_t j = 0; j < arg->data.function.arg_count; j++) {
+                Expr* e = arg->data.function.args[j];
+                if (!ht_find(seen, e)) {
+                    Expr* c = expr_copy(e);
+                    uniq[nu++] = c;
+                    ht_insert(seen, c, 0);
+                }
+            }
+        }
+        ht_free(seen, false);
+        qsort(uniq, nu, sizeof(Expr*), compare_expr_ptrs);
+        Expr* result = expr_new_function(expr_copy(common_head), uniq, nu);
+        free(uniq);
+        return result;
+    }
+
     Expr** all_args = malloc(sizeof(Expr*) * total_count);
     size_t idx = 0;
     for (size_t i = 0; i < last_arg; i++) {

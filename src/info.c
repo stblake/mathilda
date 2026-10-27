@@ -4975,6 +4975,8 @@ void info_init(void) {
 
     // Time and Date
     symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.\nTiming reports CPU time summed over threads; use AbsoluteTiming to measure elapsed time.");
+    symtab_set_docstring("EchoTiming", "EchoTiming[expr] evaluates expr, prints the elapsed wall-clock seconds as >> t, and returns the result.\nEchoTiming[expr, label] prints >> label t.");
+    symtab_set_docstring("Echo", "Echo[expr] prints >> expr and returns expr.\nEcho[expr, label] prints >> label expr.\nEcho[expr, label, f] prints >> label f[expr] and returns expr.");
     symtab_set_docstring("AbsoluteTiming", "AbsoluteTiming[expr] evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.");
     symtab_set_docstring("RepeatedTiming", "RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.\nRepeatedTiming[expr, t] does repeated evaluation for at least t seconds.");
     symtab_set_docstring("Pause", "Pause[n] pauses for at least n seconds.\nPause is accurate only down to a granularity of at least $TimeUnit seconds.\nThe time elapsed during the execution of Pause is counted in SessionTime and AbsoluteTiming, but not in TimeUsed or Timing.");

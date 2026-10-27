@@ -759,6 +759,25 @@ Plus[x, y]
 Out[2]= Null
 ```
 
+
+## Echo
+Prints `>> expr` and returns `expr`.
+- `Echo[expr]`
+- `Echo[expr, label]` prints `>> label expr`.
+- `Echo[expr, label, f]` prints `>> label f[expr]` and still returns `expr`.
+
+**Features**:
+- `Protected`.
+- Printed through `Print`, so the rendering and per-line flush are `Print`'s.
+- A call with 0 or more than 3 arguments emits `Echo::argb` and stays
+  unevaluated.
+
+```
+In[1]:= Echo[{1, 2}, "sq:", #^2 &]
+>> sq: {1, 4}
+Out[1]= {1, 2}
+```
+
 ## PrintTemporary
 `PrintTemporary[expr1, ...]` prints like `Print` and returns `Null`. Mathilda
 has no notebook front end that could remove the output afterwards, so it stays.

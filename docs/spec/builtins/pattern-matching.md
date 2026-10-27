@@ -81,6 +81,8 @@ Gives a list of elements that match a pattern.
   works in `Cases`, `Count`, `Position`, `DeleteCases`, `MemberQ` and `FreeQ`.
   Before v0.475 it matched nothing.
 - Defaults to level `{1}`.
+- A plain `_h` pattern is tested by comparing heads, skipping the matcher, on
+  every compound node of a level traversal (v0.6052).
 - Option `Heads -> True` includes heads of expressions.
 - Operates in depth-first post-order traversal.
 - `Cases[expr, p :> v /; test]` takes the guard as part of the match, as
