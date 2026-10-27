@@ -9,16 +9,10 @@
  * stored as a ZUPoly[] indexed by x-degree, where each entry is a
  * polynomial in y.
  *
- * Why a separate type from facpoly.c's `UPoly`?
- *   - `UPoly` uses 64-bit machine integers and is purpose-built for
- *     modular arithmetic in finite-field algorithms (Cantor-Zassenhaus
- *     EDF/DDF, Hensel lifting modulo p^k where p^k stays well below
- *     2^63).  Its coefficient growth is bounded by the modulus.
- *   - The bivariate Hensel lift operates over Z[y] with no modular
- *     bound, and coefficients can grow exponentially with the lift
- *     count (Mignotte bound ~2^deg * |P|_∞).  Silent 64-bit overflow
- *     here would produce wrong factorisations.  GMP eliminates that
- *     class of bugs.
+ * Also the coefficient type of the univariate Berlekamp-Zassenhaus
+ * factoriser (facpoly_bz_uni.inc), which keeps only its finite-field
+ * arithmetic (mod a word-size prime) in machine words and lifts and
+ * recombines over GMP coefficients, so no coefficient size can overflow.
  *
  * Memory:
  *   - All ZUPoly* are heap-allocated.  Use `zupoly_new` / `zupoly_zero`

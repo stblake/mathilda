@@ -189,13 +189,12 @@ static bool is_likely_irreducible_multivariate(Expr* P, Expr** vars,
                 continue;
             }
 
-            /* Skip alphas whose image has a BIGINT coefficient.
-             * `bz_factor_to_expr` cannot ingest such coefficients (its
-             * int64 UPoly substrate would silently return the input
-             * unchanged), and `count_nontrivial_factors` would then
-             * miscount the bare Plus as a single irreducible factor --
-             * a false "irreducible" confirmation.  See plans/FACTOR_PLAN.md
-             * §12.F6 for the trace. */
+            /* Skip alphas whose image has a BIGINT coefficient: this is a
+             * cheap probe, and a small-coefficient alpha confirms
+             * irreducibility as well at a fraction of the cost.  (Before
+             * bz_factor_to_expr moved to GMP coefficients such an image was
+             * returned unfactored -- a false "irreducible" confirmation; see
+             * plans/FACTOR_PLAN.md §12.F6.) */
             bool image_has_bigint = false;
             for (int i = 0; i <= deg_main; i++) {
                 Expr* c = get_coeff(image, main_var, i);

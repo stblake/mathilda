@@ -2273,6 +2273,12 @@ target_include_directories(factor_regressions_tests PRIVATE ../src)
 add_executable(factor_options_tests test_factor_options.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(factor_options_tests PRIVATE ../src)
 
+# Classical univariate factoriser over Z (facpoly_bz_uni.inc) and the
+# primitive classical GCD; runs in both the FLINT and the no-FLINT build.
+add_executable(factor_bz_classical_tests test_factor_bz_classical.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(factor_bz_classical_tests PRIVATE ../src)
+add_test(NAME factor_bz_classical_tests COMMAND factor_bz_classical_tests)
+
 add_executable(zupoly_tests test_zupoly.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(zupoly_tests PRIVATE ../src /usr/local/include)
 target_link_directories(zupoly_tests PRIVATE /usr/local/lib)

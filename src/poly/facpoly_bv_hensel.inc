@@ -19,12 +19,11 @@ static bool factor_via_bz_callback(const ZUPoly* image,
                                    void* user_data) {
     (void)user_data;
 
-    /* Bail when any image coefficient overflows int64.  The int64-based
-     * UPoly substrate inside `bz_factor_to_expr` cannot ingest such
-     * inputs and would silently return them unchanged, which the
-     * orchestrator above misreads as "image is irreducible" (a single
-     * Plus factor).  Returning false instead lets the orchestrator try
-     * the next alpha. See plans/FACTOR_PLAN.md §12.F6 for the Fateman trace. */
+    /* Bail when any image coefficient overflows int64.  bz_factor_to_expr
+     * is GMP-based and factors such images correctly, but a huge-coefficient
+     * image (alpha^200 in the Fateman trace, plans/FACTOR_PLAN.md §12.F6)
+     * is expensive to factor and the orchestrator does better trying the
+     * next alpha or the other variable, so these alphas are still skipped. */
     for (int i = 0; i <= image->deg; i++) {
         const mpz_t* ci = zupoly_getcoef(image, i);
         if (ci && !mpz_fits_slong_p(*ci)) return false;
@@ -883,8 +882,8 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
  * priority (MONIC > NEGATE > SCALE).  For inputs like the Fateman
  * benchmark `Expand[(x^200 + y^200 + 1)(x^200 - y + 1)]` the picker
  * prefers `x` (lc_x = +1, MONIC) but `P(x, alpha)` for any |alpha| ≥ 2
- * produces alpha^200 -- a 60-digit BIGINT that the int64 UPoly substrate
- * inside `bz_factor_to_expr` cannot ingest, so every alpha bails and the
+ * produces alpha^200 -- a 60-digit BIGINT image that the factor callback
+ * skips as too costly (see factor_via_bz_callback), so every alpha bails and the
  * orchestrator returns "no factorisation".  Picking `y` instead (lc_y =
  * -1, NEGATE) and evaluating at alpha_x = 0 yields a clean image
  * `(1-y)(1+y^200)` with ±1 coefficients that BZ handles fine.

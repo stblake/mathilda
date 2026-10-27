@@ -57,6 +57,8 @@
 #include "qaupoly.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "zupoly.h"
+#include <gmp.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -2610,6 +2612,70 @@ Expr* poly_content(Expr* A, Expr** vars, size_t var_count) {
     return g;
 }
 
+/* Integer content of an EXPANDED polynomial, computed in GMP: the gcd of
+ * the integer coefficients of its terms.  Writes 0 to `out` (meaning "do
+ * not normalise") when some term carries a non-integer numeric coefficient
+ * (rational, complex, real), since its content is then not an integer.
+ * Used by poly_gcd_internal: the generic content path (poly_content) reads
+ * integer content through a machine-integer helper that reports 1 for any
+ * coefficient beyond 64 bits, so without this the pseudo-remainder chain
+ * kept its entire integer content and the answer's coefficients exploded. */
+static void gcd_integer_content(const Expr* P, mpz_t out) {
+    mpz_set_ui(out, 0);
+    size_t n = 1;
+    const Expr* const* terms = &P;
+    if (P->type == EXPR_FUNCTION && P->data.function.head->type == EXPR_SYMBOL &&
+        P->data.function.head->data.symbol.name == SYM_Plus) {
+        n = P->data.function.arg_count;
+        terms = (const Expr* const*)P->data.function.args;
+    }
+    mpz_t c; mpz_init(c);
+    for (size_t i = 0; i < n; i++) {
+        const Expr* t = terms[i];
+        const Expr* num = NULL;
+        if (t->type == EXPR_INTEGER || t->type == EXPR_BIGINT) num = t;
+        else if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+                 t->data.function.head->data.symbol.name == SYM_Times &&
+                 t->data.function.arg_count > 0) {
+            const Expr* a0 = t->data.function.args[0];
+            if (a0->type == EXPR_INTEGER || a0->type == EXPR_BIGINT) num = a0;
+            else if (a0->type == EXPR_REAL || is_rational_like((Expr*)a0) ||
+                     (a0->type == EXPR_FUNCTION && a0->data.function.head->type == EXPR_SYMBOL &&
+                      a0->data.function.head->data.symbol.name == SYM_Complex)) {
+                mpz_set_ui(out, 0); mpz_clear(c); return;     /* non-integer coefficient */
+            }
+        } else if (t->type == EXPR_REAL || is_rational_like((Expr*)t) ||
+                   (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+                    t->data.function.head->data.symbol.name == SYM_Complex)) {
+            mpz_set_ui(out, 0); mpz_clear(c); return;
+        }
+        if (num) { expr_to_mpz(num, c); mpz_gcd(out, out, c); }
+        else mpz_set_ui(out, 1);                              /* coefficient 1 */
+        if (mpz_cmp_ui(out, 1) == 0) break;
+    }
+    mpz_clear(c);
+}
+
+/* P (expanded) divided by its GMP integer content; a fresh expression.
+ * P itself (copied) when the content is 0 or 1. */
+static Expr* gcd_strip_integer_content(Expr* P) {
+    mpz_t g; mpz_init(g);
+    gcd_integer_content(P, g);
+    Expr* r;
+    if (mpz_cmp_ui(g, 1) <= 0) {
+        r = expr_copy(P);
+    } else {
+        Expr* ge = mpz_fits_slong_p(g) ? expr_new_integer((int64_t)mpz_get_si(g))
+                                       : expr_new_bigint_from_mpz(g);
+        Expr* inv = internal_power((Expr*[]){ge, expr_new_integer(-1)}, 2);
+        Expr* t = internal_times((Expr*[]){inv, expr_copy(P)}, 2);
+        r = expr_expand(t);
+        expr_free(t);
+    }
+    mpz_clear(g);
+    return r;
+}
+
 /* Recursive multivariate gcd(A, B). `vars[k-1]` is the main variable; */
 /* coefficient gcds in K[vars[0..k-2]] are obtained by recursive       */
 /* descent. Outline:                                                   */
@@ -2660,6 +2726,25 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         if (fg) return fg;
     }
 #endif
+
+    /* Univariate over Z: the GMP subresultant gcd (zupoly_gcd) is exact,
+     * primitive up to the gcd of the integer contents, and has positive
+     * leading coefficient -- the same normal form as the PRS below, without
+     * its coefficient growth. */
+    if (var_count == 1) {
+        ZUPoly* za = expr_to_zupoly(A, vars[0]);
+        ZUPoly* zb = za ? expr_to_zupoly(B, vars[0]) : NULL;
+        if (za && zb) {
+            ZUPoly* zg = zupoly_gcd(za, zb);
+            Expr* r = zupoly_to_expr(zg, vars[0]);
+            zupoly_free(za); zupoly_free(zb); zupoly_free(zg);
+            Expr* re = expr_expand(r);
+            expr_free(r);
+            return re;
+        }
+        if (za) zupoly_free(za);
+        if (zb) zupoly_free(zb);
+    }
 
     /* Whether the PRS below needs its answer checked before it is trusted: see
      * the post-check at the end of this function. */
@@ -2748,6 +2833,12 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         V = exact_poly_div(R, contR, vars, var_count);
         if (!V) V = expr_copy(R);
         expr_free(R); expr_free(contR);
+        /* poly_content misses integer content beyond 64 bits: strip it in GMP. */
+        {
+            Expr* Vs = gcd_strip_integer_content(V);
+            expr_free(V);
+            V = Vs;
+        }
     }
     if (V) expr_free(V);
 
@@ -2777,7 +2868,14 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         expr_free(negU);
     }
     expr_free(lc);
-    
+    /* The answer is contGCD times the PRIMITIVE part of the last remainder:
+     * strip any integer content the remainder chain left behind. */
+    {
+        Expr* Us = gcd_strip_integer_content(U);
+        expr_free(U);
+        U = Us;
+    }
+
     Expr* res = internal_times((Expr*[]){expr_copy(contGCD), expr_copy(U)}, 2);
     expr_free(contGCD); expr_free(U);
     Expr* expanded_res = expr_expand(res);

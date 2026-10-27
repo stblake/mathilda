@@ -20,6 +20,7 @@
 #include "message.h"
 #include "numeric.h"
 #include "checked_int.h"      /* ci_mul_i64 / ci_sub_i64: upoly_div_exact_z */
+#include "core.h"             /* tc_deadline_passed(): bz_ddf / recombination */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
