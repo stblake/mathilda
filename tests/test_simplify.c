@@ -344,11 +344,12 @@ void test_simplify_cos_k_pi_to_even_symbolic_power(void) {
         "1", 0);
 }
 
-/* (Cos + Sin)^4 perfect-square completion: reaches Mathematica's form
- * via 1 + 2 Sin Cos -> (Sin + Cos)^2. */
+/* (Cos + Sin)^4 perfect-square completion via 1 + 2 Sin Cos -> (Sin + Cos)^2
+ * (LeafCount 7, against 18 for the TrigReduce form 1/2 (3 - Cos[4 x] +
+ * 4 Sin[2 x]) that a bulk regeneration had pinned in its place). */
 void test_simplify_cos_sin_fourth_power(void) {
     assert_eval_eq("Simplify[4 Sin[x]^2 Cos[x]^2 + 4 Sin[x] Cos[x] + 1]",
-                   "1/2 (3 - Cos[4 x] + 4 Sin[2 x])", 0);
+                   "(Cos[x] + Sin[x])^4", 0);
 }
 
 /* Primitive cube root of -1 satisfies z^2 - z + 1 = 0. */
