@@ -140,6 +140,25 @@ static void test_sign_convention(void) {
           "Power[Plus[Power[k, Rational[1, 2]], Times[-1, u]], 2]");
 }
 
+/* Kernels: a numeric base under a symbolic exponent (E^x, 2^x, (-1)^n) and
+ * a positive fractional power (x^(1/3), Sqrt[2]) are generators of their
+ * own; they were counted as numbers and the input came back unfactored. */
+static void test_kernel_generators(void) {
+    check("Factor[E^x y - E^x]", "Times[Power[E, x], Plus[-1, y]]");
+    check("Factor[2^x x^2 - 2^x]",
+          "Times[Power[2, x], Plus[-1, x], Plus[1, x]]");
+    check("Factor[(-1)^n x - (-1)^n]", "Times[Power[-1, n], Plus[-1, x]]");
+    check("Factor[x^n E^x - x^n]", "Times[Plus[-1, Power[E, x]], Power[x, n]]");
+    check("Factor[x^(1/3) y - x^(1/3) y^2]",
+          "Times[-1, Power[x, Rational[1, 3]], Plus[-1, y], y]");
+    check("Factor[Expand[(x^2 - 1) (1 + x^2)^(1/4)]]",
+          "Times[Plus[-1, x], Plus[1, x], Power[Plus[1, Power[x, 2]], Rational[1, 4]]]");
+    check("Factor[(Sqrt[2] x^2 - Sqrt[2])/(x - 1)]",
+          "Times[Power[2, Rational[1, 2]], Plus[1, x]]");
+    check("Factor[1 + x/Sqrt[a]]",
+          "Times[Power[a, Rational[-1, 2]], Plus[Power[a, Rational[1, 2]], x]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -151,6 +170,7 @@ int main(void) {
     test_factorsquarefree_conventions();
     test_fast_entry();
     test_sign_convention();
+    test_kernel_generators();
 
     if (failures) {
         printf("%d factor regression test(s) FAILED\n", failures);

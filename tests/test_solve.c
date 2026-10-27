@@ -464,7 +464,10 @@ static void test_trig_pair(void) {
     run_test("Length[Solve[Tanh[x + y] - Tanh[x - 2 y] == 0, y]]", "2");
     run_test("Length[Solve[Tan[x^2 + y] - Tan[x^2 - 2 y] == 0, y]]", "2");     /* higher mult */
     run_test("Length[Solve[Cosh[x + y] + Cosh[x - y] == 2, y]]", "2");         /* collapse */
-    run_test("Length[Solve[Tan[x + y] - Tan[x - 2 y] == 1, y]]", "8");         /* Engine 2 */
+    /* Engine 2.  The quartic in the root variable has no constant term; its
+     * root 0 gave two bogus families y = -I Log[+-Sqrt[0]].  Factor now treats
+     * E^(-2 I x) as a generator and splits that root off: 3 roots x 2 signs. */
+    run_test("Length[Solve[Tan[x + y] - Tan[x - 2 y] == 1, y]]", "6");
 
     /* Residuals verify (lenient, back-substitute one family at C[1]->1). */
     run_test("PossibleZeroQ[(Sin[x + y] - Sin[x - 2 y]) /. "

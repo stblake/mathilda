@@ -1309,13 +1309,29 @@ static void kern_collect_consts(const Expr* e, Expr*** vars, size_t* vc, size_t*
     if (kern_is_transc_const(e)) hit = e;
     else if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
              && e->data.function.head->data.symbol.name == SYM_Power
-             && e->data.function.arg_count == 2
-             && kern_is_transc_const(e->data.function.args[0])) {
+             && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
         const Expr* q = e->data.function.args[1];
-        if (q->type == EXPR_INTEGER) hit = e->data.function.args[0];
-        else if (q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL
-                 && q->data.function.head->data.symbol.name == SYM_Rational) hit = e;
-        else return;                            /* E^x etc.: a function kernel already */
+        /* positive only: x^(-1/2) is a denominator, which Together clears */
+        bool q_rational = q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL
+                       && q->data.function.head->data.symbol.name == SYM_Rational
+                       && q->data.function.arg_count == 2
+                       && q->data.function.args[0]->type == EXPR_INTEGER
+                       && q->data.function.args[0]->data.integer > 0;
+        bool b_numeric = expr_is_numeric_quantity(b);
+        if (kern_is_transc_const(b) && q->type == EXPR_INTEGER) hit = b;
+        /* E^x, 2^x, Pi^x, (-1)^n: a numeric base under a symbolic exponent.
+         * collect_variables counts them as numbers, so E^x y - E^x was left
+         * unfactored where it is E^x (-1 + y). */
+        else if (b_numeric && !expr_is_numeric_quantity(q)) hit = e;
+        /* x^(1/3), (1 + x^2)^(1/4), Sqrt[2], Sqrt[Pi]: a fractional power is
+         * an indeterminate of its own.  Treating it as independent of the
+         * other generators can only miss a factorisation, never invent one:
+         * any identity in the free variable survives substituting it back. */
+        else if (q_rational && !(b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
+                                 && b->data.function.head->data.symbol.name == SYM_Complex))
+            hit = e;
+        else if (q->type != EXPR_INTEGER) return;
     }
     if (hit) {
         for (size_t i = 0; i < *vc; i++) if (expr_eq((*vars)[i], (Expr*)hit)) return;
