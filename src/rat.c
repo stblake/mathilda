@@ -380,6 +380,11 @@ static bool has_embedded_rational_subterm(Expr* e) {
              * 1/2 = Power[2,-1]. Compound base means embedded rational. */
             if (base->type == EXPR_FUNCTION) return true;
         }
+        /* The exponent is never polynomial structure: y^(1/(a - 1)) is one
+         * opaque generator, exactly as y^k is, so a rational function in the
+         * exponent embeds nothing.  Recursing into it declined Cancel on
+         * (a^2 - 1) y^(1/(a - 1))/(a - 1), which PolynomialGCD reduces. */
+        return has_embedded_rational_subterm(base);
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (has_embedded_rational_subterm(e->data.function.args[i])) return true;
@@ -2022,6 +2027,25 @@ static Expr* together_recursive(Expr* e) {
 
             /* All quotients exact -- proceed with the standard combine. */
             Expr* combined_num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), new_nums, count));
+            /* Together's numerator is expanded: the summands combine through
+             * the field operations, so (-a - b) f[c] + (a + b) f[c] is 0 (issue
+             * #113).  With a real denominator the GCD division in
+             * cancel_recursive already expands and cancels the numerator; a sum
+             * with no denominators (lcm_den = 1) instead reached its den == 1
+             * early-out unexpanded and came back unchanged, so expand exactly
+             * that case.  (Expanding ahead of a real denominator's GCD division
+             * changes the form it cancels: x^(1/(a-1)) (a-1)^2 ... / ((a-1) a)
+             * no longer reduces once (a-1)^2 is multiplied out against the
+             * a-dependent kernel.) */
+            if (lcm_den->type == EXPR_INTEGER && lcm_den->data.integer == 1) {
+                /* expr_expand hands back an unevaluated tree (the FLINT path
+                 * emits Times[1, a]); re-evaluate to canonical form before the
+                 * cancel/GCD machinery reads it. */
+                Expr* expanded = eval_and_free(expr_expand(combined_num));
+                if (getenv("DBG_TOG") && !expr_eq(expanded, combined_num)) { char* a1 = expr_to_string(combined_num); char* a2 = expr_to_string(expanded); fprintf(stderr, "TOG %s\n  -> %s\n", a1, a2); free(a1); free(a2); }
+                expr_free(combined_num);
+                combined_num = expanded;
+            }
             Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(lcm_den), expr_new_integer(-1)}, 2));
             Expr* combined_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){combined_num, inv_den}, 2));
 

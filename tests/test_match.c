@@ -198,9 +198,13 @@ void test_match_condition_backtracks_into_nested() {
     /* a later ARGUMENT failing also re-splits the nested match */
     assert_eval_eq("MatchQ[h[z x^k, z], h[a_ f_, a_]]", "True", 0);
     assert_eval_eq("MatchQ[g[z x^k], g[a_ f_] /; FreeQ[{a, f}, z]]", "False", 0);
-    /* the integrand that used to spin: the constant factor pulls out */
+    /* the integrand that used to spin: the constant factor pulls out.  The
+     * power-rule denominator 1 + 1/(-1 + a) is combined by Cancel, which no
+     * longer declines on a generator whose EXPONENT is rational in a variable
+     * (y^(1/(a - 1)) is one opaque generator); the reference's form is
+     * ((-1 + a) x^(a/(-1 + a)))/a, the same antiderivative. */
     assert_eval_eq("Integrate[x^(1/(a-1)) y^(1/(a-1)), x]",
-                   "(x^(1 + 1/(-1 + a)) y^(1/(-1 + a)))/(1 + 1/(-1 + a))", 0);
+                   "(-x^(1 + 1/(-1 + a)) y^(1/(-1 + a)) + a x^(1 + 1/(-1 + a)) y^(1/(-1 + a)))/a", 0);
 }
 
 /* A Condition over a OneIdentity head with an Optional element: the subject

@@ -234,6 +234,27 @@ void test_together() {
              "Power[Plus[2, Times[-3, x], Power[x, 2]], -1]]");
 }
 
+/* Issue #113: a sum with no denominators still has its numerator expanded, so
+ * like terms hidden behind distinct coefficient forms cancel over any opaque
+ * kernel -- not only over symbols, which ratcanon happened to cover. */
+void test_together_no_denominator_kernels() {
+    run_test("Together[(-a - b) f[c] + (a + b) f[c]]", "0");
+    run_test("Together[(-a - b) c . d + (a + b) c . d]", "0");
+    run_test("Together[(-a - b) Sin[c] + (a + b) Sin[c]]", "0");
+    run_test("Together[(a + b)^2 f[c] - (a^2 + 2 a b + b^2) f[c]]", "0");
+    run_test("Together[(a + b) f[c] - a f[c]]", "Times[b, f[c]]");
+}
+
+/* A power whose EXPONENT is rational in a variable is one opaque generator:
+ * the embedded-rational soundness gate must not read 1/(a - 1) inside the
+ * exponent as a rational subterm of the polynomial. */
+void test_cancel_rational_exponent_generator() {
+    run_test("Cancel[(a^2 - 1) y^(1/(a - 1))/(a - 1)]",
+             "Plus[Power[y, Power[Plus[-1, a], -1]], Times[a, Power[y, Power[Plus[-1, a], -1]]]]");
+    run_test("Together[(a^2 y^(1/(a - 1)) - y^(1/(a - 1)))/(a - 1)]",
+             "Plus[Power[y, Power[Plus[-1, a], -1]], Times[a, Power[y, Power[Plus[-1, a], -1]]]]");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -249,6 +270,8 @@ int main() {
     TEST(test_together);
     TEST(test_together_algebraic_generator);
     TEST(test_together_cancel_kernels);
+    TEST(test_together_no_denominator_kernels);
+    TEST(test_cancel_rational_exponent_generator);
     printf("All rat tests passed!\n");
 
     return 0;

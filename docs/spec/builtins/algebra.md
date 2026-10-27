@@ -46,6 +46,11 @@ Cancels out common factors in the numerator and denominator of an expression.
 
 **Features**:
 - `Protected`, `Listable`.
+- **A power whose exponent depends on a variable is one generator**
+  (v0.6050). `y^(1/(a - 1))` is opaque exactly as `y^k` is, so the
+  embedded-rational soundness gate no longer reads the `1/(a - 1)` in its
+  exponent as a rational subterm: `Cancel[(a^2 - 1) y^(1/(a - 1))/(a - 1)]` is
+  `y^(1/(-1 + a)) + a y^(1/(-1 + a))`.
 - Threads over equations, inequalities, logic functions, and sums dynamically.
 - Evaluates greatest common divisors via polynomial GCD derivations avoiding extraneous expansions.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `Sqrt[y]`, `y^(1/3)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial cancellation in `g`, then substitutes back.
@@ -94,6 +99,11 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 
 **Features**:
 - `Protected`, `Listable`.
+- **A sum with no denominators is combined too** (v0.6050, issue #113).
+  The numerator of a denominator-free sum is expanded, so like terms with
+  different coefficient forms cancel over any kernel, not only over symbols:
+  `Together[(-a - b) f[c] + (a + b) f[c]]` and the `c.d` / `Sin[c]` forms are
+  `0`, and `Together[(a + b) f[c] - a f[c]]` is `b f[c]`.
 - Makes a sum of terms into a single rational function.
 - Never descends into held parts (`HoldForm[x]`, `Hold[...]`, any position its
   head holds): `Together[f[HoldForm[iso[1]]]]` is unchanged even when `iso[1]`
