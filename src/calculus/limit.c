@@ -1733,28 +1733,50 @@ static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx) {
 
     /* Build log_expr = Sum[log_contribution(factor)]. If f itself is a
      * Power head we treat it as a single-factor product. */
+    /* Only the x-dependent factors are log-reduced; the constant ones multiply
+     * the result afterwards.  Folding a constant in as Log[c] loses its sign:
+     * -E^E^x gave Log[-1] + E^x = I Pi + E^x, whose limit reads as Infinity,
+     * so Limit[-E^E^x] was Infinity, and E^(-E^x) (through its exponent) too. */
     Expr* log_expr = NULL;
+    Expr* cfac = mk_int(1);
     if (head_is(f, SYM_Times)) {
         log_expr = mk_int(0);
         for (size_t i = 0; i < f->data.function.arg_count; i++) {
-            log_expr = mk_fn2("Plus", log_expr,
-                              log_contribution(f->data.function.args[i]));
+            Expr* a = f->data.function.args[i];
+            if (free_of(a, ctx->x)) cfac = mk_times(cfac, expr_copy(a));
+            else log_expr = mk_fn2("Plus", log_expr, log_contribution(a));
         }
     } else {
         log_expr = log_contribution(f);
     }
+    cfac = simp(cfac);
     Expr* log_s = simp(log_expr);
 
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* lim_log = compute_limit(log_s, &sub);
     expr_free(log_s);
 
-    if (!lim_log) return NULL;
-    if (expr_contains(lim_log, ctx->x)) { expr_free(lim_log); return NULL; }
+    if (!lim_log) { expr_free(cfac); return NULL; }
+    if (expr_contains(lim_log, ctx->x)) { expr_free(lim_log); expr_free(cfac); return NULL; }
 
     Expr* out = exp_of_limit(lim_log);
     expr_free(lim_log);
-    return out;
+    if (!out) { expr_free(cfac); return NULL; }
+    /* An infinite result takes the constant's sign: Times leaves a symbolic
+     * positive constant beside Infinity unfolded (Sqrt[2 Pi] Infinity from
+     * Gamma[x]'s Stirling form), so ask Sign directly.  A constant of unknown
+     * or complex sign gives up rather than guess a direction. */
+    if (is_infinity_sym(out)) {
+        Expr* sg = simp(mk_fn1("Sign", cfac));          /* consumes cfac */
+        bool pos = sg->type == EXPR_INTEGER && sg->data.integer == 1;
+        bool neg = sg->type == EXPR_INTEGER && sg->data.integer == -1;
+        Expr* r = pos ? mk_sym("Infinity")
+                : neg ? simp(mk_times(mk_int(-1), mk_sym("Infinity")))
+                : NULL;
+        expr_free(sg); expr_free(out);
+        return r;
+    }
+    return simp(mk_times(cfac, out));
 }
 
 /* ---------------------------------------------------------------------- */

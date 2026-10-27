@@ -322,6 +322,20 @@ static void test_bessel_maxmin_bounded(void) {
 /* ----------------------------------------------------------------- */
 /* ArcTan / ArcCot with divergent inner argument                     */
 /* ----------------------------------------------------------------- */
+/* The log reduction of a power product used to fold a constant factor in as
+ * Log[c]: Log[-1] = I Pi beside a divergent log read as +Infinity, so every
+ * negative multiple of a divergent exponential came back +Infinity, and
+ * E^(-E^x) (whose exponent is such a product) came back Infinity, not 0. */
+static void test_signed_constant_times_exponential(void) {
+    check_equiv("Limit[-E^x, x -> Infinity]", "-Infinity");
+    check_equiv("Limit[-E^E^x, x -> Infinity]", "-Infinity");
+    check_equiv("Limit[-2 x^x, x -> Infinity]", "-Infinity");
+    check_equiv("Limit[E^(-E^x), x -> Infinity]", "0");
+    check_equiv("Limit[E^(E^x)/E^(E^x - E^(-E^(E^x))), x -> Infinity]", "1");
+    check_equiv("Limit[-2 (1 + 1/x)^x, x -> Infinity]", "-2 E");
+    check_equiv("Limit[-Gamma[x], x -> Infinity]", "-Infinity");
+}
+
 static void test_arctan_infinity(void) {
     check_equiv("Limit[ArcTan[x^2 - x^4], x -> Infinity]", "-Pi/2");
 
@@ -1057,6 +1071,7 @@ int main(void) {
     TEST(test_bounded_envelope);
     TEST(test_bessel_maxmin_bounded);
     TEST(test_arctan_infinity);
+    TEST(test_signed_constant_times_exponential);
     TEST(test_asymptotic_at_infinity);
     TEST(test_exp_indeterminate);
     TEST(test_power_zero_folding);
