@@ -1172,6 +1172,16 @@ void compiled_function_init(void) {
         "straight-line arithmetic + elementary-function subset; MachinePrecision "
         "(the default) keeps the machine path unchanged. \"BigIntegers\" -> True "
         "makes integer arithmetic exact (GMP) instead of int64.");
+    /* The head of the object Compile returns (an atom here: EXPR_COMPILED).
+     * Attributes as the reference's, less ReadProtected (dropped project-wide). */
+    SymbolDef* dc = symtab_get_def("CompiledFunction");
+    if (dc) dc->attributes |= ATTR_HOLDALL | ATTR_NHOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("CompiledFunction",
+        "CompiledFunction[{x, ...}, expr] is the object Compile[] returns: a "
+        "function of its parameters that runs expr as bytecode over machine "
+        "numbers, and through the interpreter for other arguments. Head gives "
+        "CompiledFunction and _CompiledFunction matches it; it is an atom "
+        "(AtomQ is True), so it has no parts beyond part 0.");
     symtab_add_builtin("CompileDiagnostics", builtin_compile_diagnostics);
     SymbolDef* dd = symtab_get_def("CompileDiagnostics");
     if (dd) dd->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

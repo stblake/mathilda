@@ -687,6 +687,7 @@ static bool blank_head_matches(Expr* expr, Expr* b_head) {
         case EXPR_SYMBOL:  return hn == SYM_Symbol;
         case EXPR_STRING:  return hn == SYM_String;
         case EXPR_SPARSE:  return hn == SYM_SparseArray;
+        case EXPR_COMPILED: return hn == SYM_CompiledFunction;
         default:           return false;
     }
 }

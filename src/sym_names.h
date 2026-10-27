@@ -419,6 +419,7 @@ extern const char* SYM_Log1p;
 extern const char* SYM_Log10;
 extern const char* SYM_Log2;
 extern const char* SYM_SparseArray;
+extern const char* SYM_CompiledFunction;
 extern const char* SYM_Band;
 extern const char* SYM_ArrayRules;
 extern const char* SYM_ArrayQ;

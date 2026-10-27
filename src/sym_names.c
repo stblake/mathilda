@@ -413,6 +413,7 @@ const char* SYM_Log1p = NULL;
 const char* SYM_Log10 = NULL;
 const char* SYM_Log2 = NULL;
 const char* SYM_SparseArray = NULL;
+const char* SYM_CompiledFunction = NULL;
 const char* SYM_Band = NULL;
 const char* SYM_ArrayRules = NULL;
 const char* SYM_ArrayQ = NULL;
@@ -1469,6 +1470,7 @@ void sym_names_init(void) {
     SYM_Log10                      = intern_symbol("Log10");
     SYM_Log2                       = intern_symbol("Log2");
     SYM_SparseArray                = intern_symbol("SparseArray");
+    SYM_CompiledFunction           = intern_symbol("CompiledFunction");
     SYM_Band                       = intern_symbol("Band");
     SYM_ArrayRules                 = intern_symbol("ArrayRules");
     SYM_ArrayQ                     = intern_symbol("ArrayQ");

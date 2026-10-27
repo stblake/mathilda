@@ -214,6 +214,18 @@ void test_cf_object_and_arity(void) {
     assert_eval_startswith("Compile[{{x, _Real}}, x][1.0, 2.0]", "CompiledFunction[{x}");
 }
 
+/* The object's head is CompiledFunction: Head, part 0 and a _CompiledFunction
+ * blank all see it (Head stayed unevaluated before v0.6060). */
+void test_cf_head(void) {
+    assert_eval_eq("Head[Compile[{{x, _Real}}, x^2]]", "CompiledFunction", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, x^2][[0]]", "CompiledFunction", 0);
+    assert_eval_eq("Head[Compile[{{x, _Real}}, x^2], h]", "h[CompiledFunction]", 0);
+    assert_eval_eq("MatchQ[Compile[{{x, _Real}}, x^2], _CompiledFunction]", "True", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, x^2] /. _CompiledFunction -> 0", "0", 0);
+    assert_eval_eq("MatchQ[Compile[{{x, _Real}}, x^2], _Function]", "False", 0);
+    assert_eval_eq("Attributes[CompiledFunction]", "{HoldAll, NHoldAll, Protected}", 0);
+}
+
 /* Array argspec: `{v, _Real, r}` declares a rank-r machine array, the same
  * spelling the Wolfram Language uses.  Until this landed the whole array engine
  * — fusion, any-rank, the reductions — was reachable only from C. */
@@ -1257,6 +1269,7 @@ int main(void) {
     TEST(test_cf_uncompilable_fallback);
     TEST(test_cf_procedural);
     TEST(test_cf_object_and_arity);
+    TEST(test_cf_head);
     TEST(test_cf_array_argspec);
     TEST(test_cf_part);
     TEST(test_cf_runtime_attributes);

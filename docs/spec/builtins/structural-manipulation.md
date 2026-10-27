@@ -85,6 +85,9 @@ Returns the top-level wrapper of an expression.
 **Features**:
 - For functions, returns the symbol or expression acting as the head.
 - For atoms, returns the symbolic type name: `Integer`, `Real`, `Rational`, `Complex`, `Symbol`, or `String`.
+- The raw objects return their own heads: `SparseArray`, `NDArray` (`List` for
+  a packed list), and `CompiledFunction` for the object `Compile` returns
+  (v0.6060; before, `Head` stayed unevaluated on it).
 
 ```mathematica
 In[1]:= Head[f[x]]

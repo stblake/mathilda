@@ -627,6 +627,13 @@ expression would.
 - **Attributes:** `HoldAll`, `Protected`. The body is compiled in its raw
   (unevaluated) form; the argument symbols stay local, so a global value for one
   of them does not leak in.
+- **The object** (v0.6060). `Head` gives `CompiledFunction`, so does part 0,
+  and `_CompiledFunction` matches it. The `CompiledFunction` symbol is
+  `HoldAll`, `NHoldAll` and `Protected`, as in the reference less
+  `ReadProtected`, which Mathilda does not have.
+  - **Deliberate difference.** The object is an atom (`AtomQ` is `True`). The
+    reference's is a normal expression with nine parts of bytecode data, which
+    Mathilda's opaque object does not have.
 - **Compilable subset** (shared with the internal engine behind NDSolve): full
   scalar arithmetic and comparisons, `Mod`/`Quotient`, integer/real/complex
   `Power`, all elementary functions and every special function that has a

@@ -605,6 +605,7 @@ Expr* expr_head(Expr* e) {
         case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
         case EXPR_STRING: return expr_new_symbol(SYM_String);
         case EXPR_SPARSE: return expr_new_symbol(SYM_SparseArray);
+        case EXPR_COMPILED: return expr_new_symbol(SYM_CompiledFunction);
         case EXPR_FUNCTION: return expr_copy(e->data.function.head);
         default: return NULL;
     }
