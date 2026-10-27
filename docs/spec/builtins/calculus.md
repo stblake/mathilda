@@ -3738,6 +3738,18 @@ each algorithm also exposed as a context-qualified builtin
 (`Sum`Polynomial`, `Sum`Geometric`, `Sum`Gosper`) — mirroring how
 `Integrate` exposes `Integrate`BronsteinRational`.  `Sum` is `HoldAll`.
 
+- **A finite numeric range of at most 10^6 terms is enumerated** (v0.6055),
+  as in the reference: the index takes each value and the body is evaluated
+  once per value. A closed form is tried first only for a longer range.
+  - **Why it matters.** The closed form evaluates the body at a symbolic
+    index, which is wrong for a body that takes the index apart.
+    `Sum[Length[Delete[{2, 3, 4}, m]], {m, 1, 3}]` was `9` and is `6`.
+  - **Forms.** Ordinary sums come out in the reference's form:
+    `Sum[x^i, {i, 0, 5}]` is `1 + x + x^2 + x^3 + x^4 + x^5`.
+  - **Single evaluation.** Each term is evaluated exactly once. The compiled
+    machine loop's inexactness probe is reused as the first term instead of
+    being recomputed.
+
 ### Forms
 
 - `Sum[f, {i, imax}]` — sum of `f` for `i` from `1` to `imax`.

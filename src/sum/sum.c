@@ -27,6 +27,7 @@
  */
 
 #include "sum.h"
+#include "checked_int.h"   /* ci_add_i64: integer index step */
 #include "sum_internal.h"   /* sum_body_has_opaque_index — shared with sum_gosper.c */
 #include "ndarray.h"   /* is_ndarray — see sum_body_is_array */
 #include "symtab.h"
@@ -47,6 +48,10 @@
 /* Upper bound on the number of terms a finite explicit expansion will add
  * before giving up (a runaway guard, not a correctness limit). */
 #define SUM_MAX_FINITE_TERMS 100000000LL
+/* Finite ranges up to this many terms are enumerated before any closed form is
+ * tried -- the reference's own switch point (it enumerates Sum[x^i, {i, 0, 10^6}]
+ * term by term and tries symbolic summation only beyond). */
+#define SUM_ENUMERATE_MAX 1000000.0
 
 /* Ceiling for the compiled machine fast path (sum_try_compiled).  Far above
  * SUM_MAX_FINITE_TERMS because the compiled accumulator allocates nothing per
@@ -259,9 +264,23 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
  * Exact value stepping mirrors Do: curr_e is advanced via Plus[curr_e, di]
  * while a synchronised double drives the termination test.
  */
+static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
+                                double min_val, double max_val, double di_val,
+                                bool is_real, Expr* first);
 static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
                           double min_val, double max_val, double di_val,
                           bool is_real) {
+    return expand_range_first(f, var, imin, imax, di, min_val, max_val, di_val,
+                              is_real, NULL);
+}
+
+/* expand_range with the body's value at the first index already computed (the
+ * compiled path's inexactness probe, owned here; NULL when none): each term is
+ * evaluated exactly once, as in the reference, so a summand with side effects
+ * runs once per index and a costly one is not paid for twice. */
+static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
+                                double min_val, double max_val, double di_val,
+                                bool is_real, Expr* first) {
     size_t cap = 16, count = 0;
     Expr** terms = malloc(sizeof(Expr*) * cap);
 
@@ -274,17 +293,30 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
                                val, max_val, di_val)) {
         if ((int64_t)count >= SUM_MAX_FINITE_TERMS) { overflow = true; break; }
 
-        Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-        iter_bind(var, i_val);
         if (count == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
-        terms[count++] = evaluate(f);
-        expr_free(i_val);
+        if (first) {
+            terms[count++] = first;
+            first = NULL;
+        } else {
+            Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
+            iter_bind(var, i_val);
+            terms[count++] = evaluate(f);
+            expr_free(i_val);
+        }
 
-        /* advance curr_e and val */
-        Expr* nargs[2] = { expr_copy(curr_e), expr_copy(di) };
-        Expr* nexpr = expr_new_function(expr_new_symbol(SYM_Plus), nargs, 2);
-        Expr* next_e = evaluate(nexpr);
-        expr_free(nexpr);
+        /* advance curr_e and val: machine integers add directly (the common
+         * case, once per term), anything else through Plus */
+        Expr* next_e = NULL;
+        int64_t nx;
+        if (curr_e->type == EXPR_INTEGER && di->type == EXPR_INTEGER &&
+            !ci_add_i64(curr_e->data.integer, di->data.integer, &nx)) {
+            next_e = expr_new_integer(nx);
+        } else {
+            Expr* nargs[2] = { expr_copy(curr_e), expr_copy(di) };
+            Expr* nexpr = expr_new_function(expr_new_symbol(SYM_Plus), nargs, 2);
+            next_e = evaluate(nexpr);
+            expr_free(nexpr);
+        }
         expr_free(curr_e);
         curr_e = next_e;
         /* Refresh `val` from the exact value -- a symbolic one (Pi + 1) through
@@ -293,6 +325,7 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
         if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
     }
     expr_free(curr_e);
+    expr_free(first);   /* unused only on an empty range */
     iter_spec_restore(var, saved);
 
     if (overflow) {
@@ -472,7 +505,8 @@ static bool sum_body_probe_inexact(const Expr* e) {
  */
 static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
                               double min_val, double max_val, double di_val,
-                              bool is_real) {
+                              bool is_real, Expr** probe_out) {
+    *probe_out = NULL;
     if (!autocompile_enabled() || s->var->type != EXPR_SYMBOL) return NULL;
 
     /* Empty range: let expand_range fold the exact identity 0 (a compiled loop
@@ -492,9 +526,11 @@ static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
     iter_bind(s->var, first_val);
     Expr* probe = evaluate(f);
     bool inexact = sum_body_probe_inexact(probe);
-    expr_free(probe);
     expr_free(first_val);
     iter_spec_restore(s->var, saved);
+    /* The probe IS the first term: hand it to the enumeration rather than
+     * evaluate the body at the first index a second time. */
+    *probe_out = probe;
     if (!inexact) return NULL;
 
     if (!is_real) {
@@ -623,7 +659,17 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         bool short_symbolic_lattice =
             nterms <= (double)SUM_ARRAY_EXPAND_MAX
             && (!expr_is_integer_like(s.imin) || !expr_is_integer_like(s.imax));
-        if (!is_real && di_val == 1.0 && min_val <= max_val
+        /* A finite range of at most SUM_ENUMERATE_MAX terms is enumerated, as
+         * the reference does ("i is assigned a sequence of values, with f
+         * evaluated for each"): the closed form evaluates the body at a
+         * SYMBOLIC index, which is wrong for a body that takes the index apart
+         * -- Sum[Length[Delete[{2, 3, 4}, m]], {m, 1, 3}] was 9 (it is 6),
+         * Sum[dt @@ Delete[list, m], ...] collapsed dt @@ Delete[list, m] to
+         * dt[list, m] -- and needlessly changes the form of an ordinary one:
+         * Sum[x^i, {i, 0, 5}] is 1 + x + ... + x^5, not (x^6 - 1)/(x - 1).
+         * Longer ranges keep the closed form first. */
+        bool enumerate_first = nterms <= (double)SUM_ENUMERATE_MAX;
+        if (!is_real && di_val == 1.0 && min_val <= max_val && !enumerate_first
             && !short_expensive_body && !index_pred_body && !short_symbolic_lattice
             && !short_opaque_index_body) {
             Rule* saved = iter_spec_shadow(s.var);
@@ -633,10 +679,11 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         }
         /* No closed form: before the slow evaluate()-per-term enumeration, try
          * the compiled machine loop for an inexact body (exact bodies decline). */
-        Expr* comp = sum_try_compiled(f, &s, min_val, max_val, di_val, is_real);
-        if (comp) { iter_spec_free(&s); return comp; }
-        Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
-                               min_val, max_val, di_val, is_real);
+        Expr* first = NULL;
+        Expr* comp = sum_try_compiled(f, &s, min_val, max_val, di_val, is_real, &first);
+        if (comp) { expr_free(first); iter_spec_free(&s); return comp; }
+        Expr* r = expand_range_first(f, s.var, s.imin, s.imax, s.di,
+                                     min_val, max_val, di_val, is_real, first);
         if (r) { iter_spec_free(&s); return r; }
         /* Span too large to enumerate.  For an ordinary body the closed form is
          * exact and worth trying; for an index-predicate body it would be WRONG,

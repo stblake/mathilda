@@ -262,19 +262,25 @@ static bool bink_const_is_real(const char* name) {
  * stable enough to assert on in a test. */
 typedef struct { const void* target; const char* name; } KernScan;
 
+/* Of several symbols carrying the same kernel, the alphabetically first is
+ * named, so the listing does not depend on the symbol table's bucket order. */
+static void kern_take(KernScan* s, const char* name) {
+    if (!s->name || strcmp(name, s->name) < 0) s->name = name;
+}
+
 static void kern_visit(const char* name, SymbolDef* d, void* user) {
     KernScan* s = (KernScan*)user;
-    if (s->name || !d) return;
+    if (!d) return;
     const NDUnaryKernel* u = (const NDUnaryKernel*)d->ndarray_unary_kernel;
     if (u && ((const void*)u == s->target
               || (const void*)u->cplx == s->target
-              || (const void*)u->real == s->target)) { s->name = name; return; }
+              || (const void*)u->real == s->target)) { kern_take(s, name); return; }
     const NDBinaryKernel* b = (const NDBinaryKernel*)d->ndarray_binary_kernel;
     if (b && ((const void*)b == s->target
-              || (const void*)b->cplx == s->target)) { s->name = name; return; }
+              || (const void*)b->cplx == s->target)) { kern_take(s, name); return; }
     const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
     if (k && ((const void*)k == s->target
-              || (const void*)k->cplx == s->target)) { s->name = name; return; }
+              || (const void*)k->cplx == s->target)) { kern_take(s, name); return; }
 }
 
 static const char* kernel_name(const void* target) {

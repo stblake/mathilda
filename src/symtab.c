@@ -10,18 +10,52 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define SYMTAB_SIZE 65535
+/* Bucket count: a power of two, doubled whenever the table holds more than
+ * twice as many nodes (symtab_grow).  Module mints a fresh symbol per local per
+ * call and never removes it, so a long session interns 10^5-10^6 names; a fixed
+ * 65535 buckets meant chains of dozens of cache-missing nodes on every new name
+ * (issue #112).  Nodes never move in memory, so SymbolDef pointers stay valid. */
+#define SYMTAB_INIT_SIZE 65536
 
 /* Phase 2: one table backs both interning and definition lookup. Each bucket
  * chains SymbolDef nodes directly (the old SymEntry indirection is gone). A node
  * exists as soon as its name is interned; `has_def` marks whether it carries a
  * real definition. */
-static SymbolDef* symtab[SYMTAB_SIZE] = {0};
+static SymbolDef** symtab = NULL;
+static size_t symtab_size = 0;      /* buckets: a power of two */
+static size_t symtab_nodes = 0;
 
-static unsigned int hash(const char* s) {
+static void symtab_alloc(void) {
+    if (symtab) return;
+    symtab_size = SYMTAB_INIT_SIZE;
+    symtab = calloc(symtab_size, sizeof(SymbolDef*));
+    if (!symtab) { fprintf(stderr, "Mathilda: out of memory (symbol table)\n"); abort(); }
+}
+
+/* Double the bucket array and relink every node by its stored hash. */
+static void symtab_grow(void) {
+    size_t ns = symtab_size * 2;
+    SymbolDef** nb = calloc(ns, sizeof(SymbolDef*));
+    if (!nb) return;                    /* keep the longer chains */
+    for (size_t i = 0; i < symtab_size; i++) {
+        SymbolDef* d = symtab[i];
+        while (d) {
+            SymbolDef* next = d->next;
+            size_t j = d->name_hash & (ns - 1);
+            d->next = nb[j];
+            nb[j] = d;
+            d = next;
+        }
+    }
+    free(symtab);
+    symtab = nb;
+    symtab_size = ns;
+}
+
+static unsigned int name_hash_full(const char* s) {
     unsigned int h = 5381;
     while (*s) h = ((h << 5) + h) + *s++;
-    return h % SYMTAB_SIZE;
+    return h;
 }
 
 static void free_rule_list(Rule* r) {
@@ -126,9 +160,12 @@ static void note_materialized(SymbolDef* d) {
 
 static SymbolDef* node_intern(const char* name, int materialize) {
     if (!name) return NULL;
-    unsigned int idx = hash(name);
+    symtab_alloc();
+    unsigned int h = name_hash_full(name);
+    size_t idx = h & (symtab_size - 1);
     for (SymbolDef* d = symtab[idx]; d; d = d->next) {
-        if (d->symbol_name == name || strcmp(d->symbol_name, name) == 0) {
+        if (d->symbol_name == name ||
+            (d->name_hash == h && strcmp(d->symbol_name, name) == 0)) {
             if (materialize) { note_materialized(d); d->has_def = 1; }
             return d;
         }
@@ -140,19 +177,23 @@ static SymbolDef* node_intern(const char* name, int materialize) {
     char* copy = malloc(len + 1);
     memcpy(copy, name, len + 1);
     d->symbol_name = copy;
+    d->name_hash = h;
     if (materialize) note_materialized(d);
     d->has_def = (uint8_t)(materialize ? 1 : 0);
     d->next = symtab[idx];
     symtab[idx] = d;
+    if (++symtab_nodes > 2 * symtab_size) symtab_grow();
     return d;
 }
 
 /* Non-creating find (any node, defined or interned-only). */
 static SymbolDef* node_find(const char* name) {
     if (!name) return NULL;
-    unsigned int idx = hash(name);
-    for (SymbolDef* d = symtab[idx]; d; d = d->next)
-        if (d->symbol_name == name || strcmp(d->symbol_name, name) == 0)
+    if (!symtab) return NULL;
+    unsigned int h = name_hash_full(name);
+    for (SymbolDef* d = symtab[h & (symtab_size - 1)]; d; d = d->next)
+        if (d->symbol_name == name ||
+            (d->name_hash == h && strcmp(d->symbol_name, name) == 0))
             return d;
     return NULL;
 }
@@ -172,7 +213,7 @@ void symtab_init(void) {
      * (populated by sym_names_init below) plus any live Expr point straight at
      * them, so a memset would strand those pointers. First call: table empty,
      * so this loop is a no-op. */
-    for (int i = 0; i < SYMTAB_SIZE; i++)
+    for (size_t i = 0; i < symtab_size; i++)
         for (SymbolDef* d = symtab[i]; d; d = d->next)
             reset_node_payload(d);
     /* Populate the SYM_* canonical-pointer cache so that any code path that
@@ -238,7 +279,7 @@ void intern_mark_mathilda(const char* name) {
 }
 
 void intern_mark_all_system(void) {
-    for (int i = 0; i < SYMTAB_SIZE; i++)
+    for (size_t i = 0; i < symtab_size; i++)
         for (SymbolDef* d = symtab[i]; d; d = d->next)
             d->is_system = 1;
 }
@@ -247,7 +288,7 @@ void intern_clear(void) {
     memset(g_intern_ptr_cache, 0, sizeof g_intern_ptr_cache);
     /* Full teardown: free every node, its payload, and its name string. Any
      * previously-returned interned pointer (including SYM_*) becomes invalid. */
-    for (int i = 0; i < SYMTAB_SIZE; i++) {
+    for (size_t i = 0; i < symtab_size; i++) {
         SymbolDef* d = symtab[i];
         while (d) {
             SymbolDef* next = d->next;
@@ -258,6 +299,7 @@ void intern_clear(void) {
         }
         symtab[i] = NULL;
     }
+    symtab_nodes = 0;
 }
 
 void symtab_add_builtin(const char* symbol_name, BuiltinFunc func) {
@@ -1932,7 +1974,7 @@ Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
 void symtab_for_each(void (*visit)(const char* name, SymbolDef* def,
                                    void* user), void* user) {
     if (!visit) return;
-    for (int i = 0; i < SYMTAB_SIZE; i++)
+    for (size_t i = 0; i < symtab_size; i++)
         for (SymbolDef* d = symtab[i]; d; d = d->next)
             if (d->has_def)   /* skip interned-only nodes: they are not "symbols" */
                 visit(d->symbol_name, d, user);
@@ -1943,7 +1985,7 @@ void symtab_clear(void) {
      * retained so SYM_* and any Expr created before the clear keep valid
      * pointers -- callers routinely clear between subtests and keep evaluating.
      * Use intern_clear() for a full teardown that also frees the name strings. */
-    for (int i = 0; i < SYMTAB_SIZE; i++)
+    for (size_t i = 0; i < symtab_size; i++)
         for (SymbolDef* d = symtab[i]; d; d = d->next)
             reset_node_payload(d);
 }

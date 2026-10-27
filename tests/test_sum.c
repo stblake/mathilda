@@ -96,6 +96,16 @@ int main(void) {
     core_init();
 
     /* ---- Stage 0: finite explicit expansion ---- */
+    /* A finite range is enumerated, as in the reference: the closed form
+     * evaluated the body at a SYMBOLIC index, wrong for a body that takes the
+     * index apart (v0.6055; values checked against the reference). */
+    check("Sum[Length[Delete[{2, 3, 4}, m]], {m, 1, 3}]", "6");
+    check("sdt[a_, b_] := 4; Sum[sdt @@ Delete[{2, 3, 4}, m], {m, 1, 3}]", "12");
+    check("Sum[(-1)^(m + 1) sdt @@ Delete[{2, 3, 4}, m], {m, 1, 3}]", "4");
+    check("Sum[x^i, {i, 0, 5}]", "1 + x + x^2 + x^3 + x^4 + x^5");
+    /* each term evaluated exactly once (the compiled path's probe is reused) */
+    check("scnt = 0; sh[k_] := (scnt++; k); Sum[sh[m], {m, 1, 3}]; scnt", "3");
+    check("scnt = 0; Sum[(-1)^m sh[m], {m, 1, 4}]; scnt", "4");
     /* Gosper's SolveAlways also solves for a PARAMETER of the summand (x -> -1
      * for Binomial[3, k] x^k); an antidifference valid at that value alone was
      * returned, so these were 0 and -x^3. */

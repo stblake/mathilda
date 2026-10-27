@@ -111,6 +111,11 @@ typedef struct SymbolDef {
      * (eval_clock_bump_binding); binding a symbol never so observed (an
      * iterator, a Module local) leaves them valid.  Cleared by that bump. */
     uint8_t  inert_observed;
+    /* Full 32-bit hash of symbol_name (the bucket is this mod the table size):
+     * a chain walk compares it before strcmp.  Module mints a fresh name per
+     * call, so a long session interns 10^5-10^6 symbols and every miss used to
+     * strcmp a whole chain (issue #112). */
+    uint32_t name_hash;
     char* docstring;
     /* Default option settings for this symbol, the DefaultValues-equivalent
      * backing Options[f] / SetOptions[f]. A List[Rule[name,val], ...] owned
