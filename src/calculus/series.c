@@ -7112,6 +7112,12 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
          * is deliberately NOT touched; only the emitted coefficients are cleaned. */
         if (ctx.assume) {
             for (size_t ci = 0; ci < s->coef_count; ci++) {
+                /* The positive-real Log/Power cascade first: the per-symbol
+                 * rules below do not reach a radical of a PRODUCT, so
+                 * Sqrt[a^2 b^2]/(2 a^2 b^2) stayed put under a, b > 0 while
+                 * the order-0 coefficient (computed by substitution) was a b. */
+                Expr* lx = apply_logexp_rules(s->coefs[ci], ctx.assume);
+                if (lx) { expr_free(s->coefs[ci]); s->coefs[ci] = lx; }
                 Expr* cleaned = apply_assumption_rules(s->coefs[ci], ctx.assume);
                 if (cleaned) {
                     expr_free(s->coefs[ci]);

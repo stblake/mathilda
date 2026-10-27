@@ -180,8 +180,19 @@ Expr* mathilda_run_file(const char* path, int* opened) {
 #define LM_RELPATH_MAX 256
 static char lm_loaded[LM_MAX_LOADED][LM_RELPATH_MAX];
 static int  lm_loaded_count = 0;
+static unsigned lm_loaded_gen = 0;   /* symtab_generation() the memo belongs to */
+
+/* The memo describes definitions in the CURRENT symbol table; a symtab_init
+ * since it was filled discarded them, so it is stale. */
+static void lm_sync_generation(void) {
+    if (lm_loaded_gen != symtab_generation()) {
+        lm_loaded_count = 0;
+        lm_loaded_gen = symtab_generation();
+    }
+}
 
 static int lm_already_loaded(const char* relpath) {
+    lm_sync_generation();
     for (int i = 0; i < lm_loaded_count; i++) {
         if (strcmp(lm_loaded[i], relpath) == 0) return 1;
     }
@@ -189,6 +200,7 @@ static int lm_already_loaded(const char* relpath) {
 }
 
 static void lm_mark_loaded(const char* relpath) {
+    lm_sync_generation();
     if (lm_loaded_count >= LM_MAX_LOADED) return; /* silently cap */
     size_t n = strlen(relpath);
     if (n >= LM_RELPATH_MAX) return;

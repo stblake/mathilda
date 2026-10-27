@@ -285,6 +285,8 @@ Expr* symtab_get_options(const char* symbol_name);
 
 // Add an OwnValue rule (e.g., x = 4)
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement);
+/* Count of symtab_init calls so far; a load-once memo keys itself on it. */
+unsigned symtab_generation(void);
 
 // Add a DownValue rule (e.g., f[x_] = x + 1)
 void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replacement);

@@ -157,7 +157,16 @@ static SymbolDef* node_find(const char* name) {
     return NULL;
 }
 
+/* Bumped by every symtab_init.  A load-once memo (LoadModule's, the lazily
+ * loaded Integrate packages') is valid only for the generation it was filled
+ * in: a re-initialised table has lost the definitions the load created, and a
+ * memo that survived it left those packages undefined -- their stage then
+ * handed back its own unevaluated entry call as an answer. */
+static unsigned g_symtab_generation = 0;
+unsigned symtab_generation(void) { return g_symtab_generation; }
+
 void symtab_init(void) {
+    g_symtab_generation++;
     /* Reset every existing node to interned-only rather than memset-ing the
      * bucket array: the array now owns the interned name strings, and SYM_*
      * (populated by sym_names_init below) plus any live Expr point straight at

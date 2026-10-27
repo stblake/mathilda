@@ -699,12 +699,12 @@ static Expr* try_logbyparts(Expr* f, Expr* x) {
  * unevaluated (Mathar corpus, the largest failure class).  The package accepts
  * a result only after a differentiation check; anything outside the class
  * returns $Failed and the cascade continues. */
-static bool pll_load_attempted = false;
+static unsigned pll_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool pll_load_succeeded = false;
 
 static Expr* try_polylogladder(Expr* f, Expr* x) {
-    if (!pll_load_attempted) {
-        pll_load_attempted = true;
+    if (pll_load_gen != symtab_generation()) {
+        pll_load_gen = symtab_generation();
         mth_msg_suppress_push();
         pll_load_succeeded = mathilda_load_module("PolyLogLadder.m") != 0;
         mth_msg_suppress_pop();
@@ -743,7 +743,7 @@ static Expr* try_polylogladder(Expr* f, Expr* x) {
  * BesselY[nu, x], x] used to come back unevaluated).  Exact by construction
  * and re-checked symbolically; anything else is $Failed and the cascade
  * continues.  Gated on a Bessel or Airy head, so it costs nothing elsewhere. */
-static bool hol_load_attempted = false;
+static unsigned hol_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool hol_load_succeeded = false;
 
 static bool hol_has_kernel(const Expr* e) {
@@ -764,8 +764,8 @@ static bool hol_has_kernel(const Expr* e) {
 
 static Expr* try_holonomic(Expr* f, Expr* x) {
     if (!hol_has_kernel(f)) return NULL;
-    if (!hol_load_attempted) {
-        hol_load_attempted = true;
+    if (hol_load_gen != symtab_generation()) {
+        hol_load_gen = symtab_generation();
         mth_msg_suppress_push();
         hol_load_succeeded = mathilda_load_module("Holonomic.m") != 0;
         mth_msg_suppress_pop();
@@ -801,13 +801,13 @@ static Expr* try_holonomic(Expr* f, Expr* x) {
  * functions keeps that form; this covers the ones that do not
  * (Integrate[BesselJ[1/3, x]^2, x], Integrate[BesselK[0, x], x], ...).
  * Exact by construction; anything outside the class is $Failed. */
-static bool bh_load_attempted = false;
+static unsigned bh_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool bh_load_succeeded = false;
 
 static Expr* try_besselhyper(Expr* f, Expr* x) {
     if (!hol_has_kernel(f)) return NULL;
-    if (!bh_load_attempted) {
-        bh_load_attempted = true;
+    if (bh_load_gen != symtab_generation()) {
+        bh_load_gen = symtab_generation();
         mth_msg_suppress_push();
         bh_load_succeeded = mathilda_load_module("BesselHyper.m") != 0;
         mth_msg_suppress_pop();
@@ -852,15 +852,15 @@ static Expr* try_rischtranscendental(Expr* f, Expr* x) {
  * (lazy) so unaffected sessions pay nothing for it. */
 #define MAX_CRC_DEPTH 256
 static int crc_depth = 0;
-static bool crc_load_attempted = false;
+static unsigned crc_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool crc_load_succeeded  = false;
 
 /* Load the CRC integral table lazily. Path resolution (mathilda_resolve_
  * internal) is CWD-independent and matches what LoadModule uses, so this works
  * from a relocated/installed binary as well as from the repo root or tests/. */
 static void crc_lazy_load(void) {
-    if (crc_load_attempted) return;
-    crc_load_attempted = true;
+    if (crc_load_gen == symtab_generation()) return;
+    crc_load_gen = symtab_generation();
 
     char path[2048];
     if (!mathilda_resolve_internal("CRCMathTablesIntegrals.m",
@@ -916,7 +916,7 @@ static Expr* try_crctable(Expr* f, Expr* x) {
  * language package in src/internal/mixed/ParallelMixed.m and loaded lazily on
  * first use exactly like the CRC table above -- sessions that never reach this
  * cascade stage pay nothing for it. */
-static bool pmt_load_attempted = false;
+static unsigned pmt_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool pmt_load_succeeded  = false;
 /* Async-jump defer (crash-safety inside TimeConstrained) + re-entry guard; see
  * core.c.  tc_async_region_active is non-zero while a heavy method is already
@@ -927,8 +927,8 @@ void tc_async_defer_pop(void);
 int  tc_async_region_active(void);
 
 static void pmt_lazy_load(void) {
-    if (pmt_load_attempted) return;
-    pmt_load_attempted = true;
+    if (pmt_load_gen == symtab_generation()) return;
+    pmt_load_gen = symtab_generation();
     /* mathilda_load_module rather than a bare mathilda_run_file: it carries a
      * load-once memo keyed on the relpath, which ParallelMixedSpecial.m also
      * loads Part II through.  Without the shared memo a session that reaches
@@ -1120,7 +1120,10 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
         (result->type == EXPR_FUNCTION &&
          result->data.function.head->type == EXPR_SYMBOL &&
          strcmp(result->data.function.head->data.symbol.name, "List") == 0) ||
-        pmt_leaks_symbol(result, f, x);
+        pmt_leaks_symbol(result, f, x) ||
+        /* the worker's own call left unevaluated (its package definitions are
+         * missing) is not an antiderivative */
+        result_contains_head(result, "ParallelMixed`ParallelIntegrateMixed");
     if (decline) {
         expr_free(result);
         return NULL;
@@ -1148,12 +1151,12 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
  * the package said -- an unverified pair included.  Nothing is invented here, so
  * the qualified-symbol surface still shows the package's own words, and
  * `Head[r] === List` remains the caller's test for "no answer". */
-static bool pms_load_attempted = false;
+static unsigned pms_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool pms_load_succeeded = false;
 
 static void pms_lazy_load(void) {
-    if (pms_load_attempted) return;
-    pms_load_attempted = true;
+    if (pms_load_gen == symtab_generation()) return;
+    pms_load_gen = symtab_generation();
     /* mathilda_load_module, not mathilda_run_file: the module has its own
      * load-once memo keyed on the relpath, and the special module loads Part II
      * through the same mechanism.  Going through the memo is what stops the
@@ -1321,7 +1324,10 @@ static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
         (result->type == EXPR_FUNCTION &&
          result->data.function.head->type == EXPR_SYMBOL &&
          result->data.function.head->data.symbol.name == SYM_List) ||
-        pmt_leaks_symbol(result, f, x);
+        pmt_leaks_symbol(result, f, x) ||
+        /* the worker's own call left unevaluated (its package definitions are
+         * missing) is not an antiderivative */
+        result_contains_head(result, "ParallelMixed`Private`IntegrateSurfaceSpecial");
     if (decline) {
         expr_free(result);
         return NULL;
@@ -1606,14 +1612,14 @@ static bool def_has_undefined_function(const Expr* e, const Expr* x) {
 /* Definite stage: Meijer G convolution (src/internal/MeijerConvolution.m),
  * loaded lazily.  Half-line (0, Infinity) only; any atom result (the package's
  * $Failed) or a surviving Integrate is a decline. */
-static bool mcv_load_attempted = false;
+static unsigned mcv_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool mcv_load_succeeded = false;
 
 static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
     if (!(b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0)) return NULL;
-    if (!mcv_load_attempted) {
-        mcv_load_attempted = true;
+    if (mcv_load_gen != symtab_generation()) {
+        mcv_load_gen = symtab_generation();
         mth_msg_suppress_push();
         mcv_load_succeeded = mathilda_load_module("MeijerConvolution.m") != 0;
         mth_msg_suppress_pop();
