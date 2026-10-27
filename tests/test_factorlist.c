@@ -62,9 +62,10 @@ void test_factorlist_rational() {
 void test_factorlist_options() {
     /* Extension -> I splits x^2 + 1 over the Gaussian integers. */
     check("FactorList[x^2+1, Extension->I]", "{{1, 1}, {-I + x, 1}, {I + x, 1}}");
-    /* Extension -> Sqrt[2]: algebraic factors (Mathilda's Factor normal form). */
+    /* Extension -> Sqrt[2]: each factor's generator term positive, the
+     * unit -1 in the constant (as the reference lists it). */
     check("FactorList[x^4-2, Extension->Sqrt[2]]",
-          "{{1, 1}, {-Sqrt[2] + x^2, 1}, {Sqrt[2] + x^2, 1}}");
+          "{{-1, 1}, {Sqrt[2] - x^2, 1}, {Sqrt[2] + x^2, 1}}");
 }
 
 /* ---- Non-polynomial expressions (Factor treats kernels as generators) ---- */

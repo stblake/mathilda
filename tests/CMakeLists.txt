@@ -770,6 +770,7 @@ set(COMMON_SRC
     ../src/common.c
     ../src/poly/zupoly.c
     ../src/poly/flint_bridge.c
+    ../src/poly/flint_trager.c
     ../src/poly/flint_qqbar.c
     ../src/poly/algebraicnumber.c
     ../src/poly/tonumberfield.c
@@ -2278,6 +2279,9 @@ target_include_directories(factor_options_tests PRIVATE ../src)
 add_executable(factor_bz_classical_tests test_factor_bz_classical.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(factor_bz_classical_tests PRIVATE ../src)
 add_test(NAME factor_bz_classical_tests COMMAND factor_bz_classical_tests)
+
+add_executable(factor_extension_tests test_factor_extension.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(factor_extension_tests PRIVATE ../src)
 
 add_executable(zupoly_tests test_zupoly.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(zupoly_tests PRIVATE ../src /usr/local/include)

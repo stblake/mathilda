@@ -54,6 +54,8 @@
 #include <flint/ulong_extras.h>  /* n_is_prime, n_invmod */
 #include <flint/fmpz_mod_mpoly_factor.h> /* Factor[..., Modulus -> p], any p */
 
+#include "flint_bridge_internal.h"  /* VarSet, FgRender, the fb_ surface */
+
 /* Process-lifetime fmpq_mpoly context cache, keyed by variable count, for the
  * ORD_LEX order (the one the Together/Cancel/Expand/CoefficientRules bridges use).
  * An fmpq_mpoly context is a read-only descriptor (number of variables + monomial
@@ -101,11 +103,7 @@ static const fmpq_mpoly_ctx_struct* bridge_ctx_lex(slong nvars) {
 /*  Variable set: the free symbols that become fmpq_mpoly generators.  */
 /* ------------------------------------------------------------------ */
 
-typedef struct {
-    char** names;
-    size_t count;
-    size_t cap;
-} VarSet;
+/* VarSet is declared in flint_bridge_internal.h. */
 
 static int varset_add(VarSet* vs, const char* name) {
     for (size_t i = 0; i < vs->count; i++)
@@ -820,7 +818,7 @@ Expr* flint_expand_polynomial_kernels(const Expr* e) {
 /*  generic Expand it replaces.                                          */
 /* ------------------------------------------------------------------ */
 
-#define FIELD_TAU_NAME "$MTHFieldExpandTau"
+/* FIELD_TAU_NAME is defined in flint_bridge_internal.h. */
 
 /* True iff `e` is the imaginary unit I == Complex[0, 1]. */
 static int expr_is_imag_unit(const Expr* e) {
@@ -6811,13 +6809,7 @@ static Expr* fg_subst_atoms(const Expr* e, Expr* const* atoms, Expr* const* imgs
  * which is why a single cube root comes back as a cube root.)  If the atoms
  * do not span -- a dependent or non-maximal set -- the struct stays `ready`
  * == 0 and the caller falls back to expanding in theta, still correct. */
-typedef struct {
-    int      ready;
-    slong    n;              /* [K:Q]                                     */
-    slong    nprod;          /* product-basis size (== n when usable)     */
-    fmpq_mat_t Pinv;         /* theta-coords -> product-basis coords      */
-    Expr**   prod;           /* nprod surface Exprs for the basis members */
-} FgRender;
+/* FgRender is declared in flint_bridge_internal.h. */
 
 static void fg_render_clear(FgRender* R) {
     if (!R) return;
@@ -6940,6 +6932,8 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
     }
     k = nsel;                       /* the basis walk runs over the SELECTION */
     atoms = satoms;
+    R->nsel = nsel;
+    for (size_t s = 0; s < nsel; s++) { R->sel_deg[s] = deg[s]; R->sel_atom[s] = satoms[s]; }
 
     /* columns of P: the theta-coordinates of each product-basis member */
     fmpq_mat_t P; fmpq_mat_init(P, n, n);
@@ -7293,6 +7287,63 @@ Expr* flint_polynomial_resultant(const Expr* a, const Expr* b, const Expr* var) 
 
 Expr* flint_polynomial_factor(const Expr* p) {
     return flint_multivariate_factor_impl(p, 0);
+}
+
+/* ---- the fb_ surface of flint_bridge_internal.h (for flint_trager.c) ---- */
+
+const fmpq_mpoly_ctx_struct* fb_ctx_lex(slong nvars) { return bridge_ctx_lex(nvars); }
+int  fb_collect_vars(const Expr* e, VarSet* vs) { return collect_vars(e, vs); }
+void fb_varset_free(VarSet* vs) { varset_free(vs); }
+int  fb_to_mpoly(const Expr* e, fmpq_mpoly_t out, const fmpq_mpoly_ctx_struct* ctx,
+                 const VarSet* vs) { return to_mpoly(e, out, ctx, vs); }
+int  fb_expr_to_fmpq(const Expr* e, fmpq_t out) { return field_expr_to_fmpq(e, out); }
+Expr* fb_fmpq_to_expr(const fmpq_t q) { return expr_from_fmpq_local(q); }
+int  fb_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* cap) {
+    return fg_collect_atoms(e, atoms, na, cap);
+}
+const Expr* fb_field_images(Expr* const* atoms, size_t na) { return fg_field_images(atoms, na); }
+Expr* fb_subst_atoms(const Expr* e, Expr* const* atoms, Expr* const* imgs, size_t na) {
+    return fg_subst_atoms(e, atoms, imgs, na);
+}
+Expr* fb_field_subst_tau(const Expr* e, int gaussian) { return field_subst_tau(e, gaussian); }
+int  fb_field_build_minpoly(fmpq_mpoly_t M, const Expr* mp, const fmpq_mpoly_ctx_struct* ctx,
+                            slong nvars, slong tau_idx) {
+    return field_build_minpoly(M, mp, ctx, nvars, tau_idx);
+}
+Expr* fb_field_mpoly_to_expr(const fmpq_mpoly_t R, const fmpq_mpoly_ctx_struct* ctx,
+                             const VarSet* vs, slong tau_idx, slong n, const Expr* theta) {
+    return field_mpoly_to_expr(R, ctx, vs, tau_idx, n, theta);
+}
+void  fb_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs, size_t k,
+                     const Expr* theta, slong n) { fg_render_init(R, atoms, imgs, k, theta, n); }
+void  fb_render_clear(FgRender* R) { fg_render_clear(R); }
+Expr* fb_render_tree(const Expr* e, const FgRender* R) { return fg_render_tree(e, R); }
+Expr* fb_expand_algnum(const Expr* e) { return fg_expand_algnum(e); }
+int  fb_field_mpoly_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
+                        const fmpq_mpoly_t M, const fmpq_mpoly_ctx_struct* ctx,
+                        const Expr* mp, slong ngens, slong tau_idx, slong n) {
+    (void)fg_stats_on();
+    return fg_modular_gcd(G, A, B, M, ctx, mp, ngens, tau_idx, n);
+}
+
+/* Q = A / G in Q[gens, tau]/(M) when G (monic in its LEX-leading gens-monomial)
+ * divides A.  {G, M} is a Groebner basis (coprime leading monomials), so the
+ * ideal remainder decides divisibility and the G-quotient is the answer. */
+int  fb_field_mpoly_divides(fmpq_mpoly_t Q, const fmpq_mpoly_t A, const fmpq_mpoly_t G,
+                            const fmpq_mpoly_t M, const fmpq_mpoly_ctx_struct* ctx) {
+    fmpq_mpoly_t q0, q1, rem;
+    fmpq_mpoly_init(q0, ctx); fmpq_mpoly_init(q1, ctx); fmpq_mpoly_init(rem, ctx);
+    fmpq_mpoly_struct* gens[2]; gens[0] = (fmpq_mpoly_struct*)G; gens[1] = (fmpq_mpoly_struct*)M;
+    fmpq_mpoly_struct* qs[2];   qs[0] = q0; qs[1] = q1;
+    fmpq_mpoly_divrem_ideal(qs, rem, A, gens, 2, ctx);
+    int z = fmpq_mpoly_is_zero(rem, ctx);
+    if (z && Q) {
+        fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+        fmpq_mpoly_divrem(t, Q, q0, M, ctx);       /* Q <- q0 mod M */
+        fmpq_mpoly_clear(t, ctx);
+    }
+    fmpq_mpoly_clear(q0, ctx); fmpq_mpoly_clear(q1, ctx); fmpq_mpoly_clear(rem, ctx);
+    return z;
 }
 
 Expr* flint_polynomial_factor_squarefree(const Expr* p) {

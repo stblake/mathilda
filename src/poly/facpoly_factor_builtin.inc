@@ -186,6 +186,192 @@ static Expr* factor_gaussian_content(const Expr* arg) {
     return out;
 }
 
+/* ---- factoring over an algebraic extension (flint_trager.c) ----------------
+ *
+ * Extension -> alpha | {alpha1, ...} | Automatic and GaussianIntegers -> True
+ * all name a number field K; flint_factor_over_field factors over K joined
+ * with the input's own algebraic coefficients, in any number of variables. */
+
+/* The generators the options name: every element of an Extension list (or the
+ * single value), Automatic and None dropped, and I for GaussianIntegers ->
+ * True.  Owned copies; *n receives the count. */
+static Expr** fext_gens(const FactorOpts* fo, size_t* n) {
+    size_t cap = 4, k = 0;
+    Expr** g = malloc(sizeof(Expr*) * cap);
+    const Expr* ext = fo->extension;
+    const Expr* const* items = &ext;
+    size_t ni = ext ? 1 : 0;
+    if (ext && ext->type == EXPR_FUNCTION && ext->data.function.head->type == EXPR_SYMBOL &&
+        ext->data.function.head->data.symbol.name == SYM_List) {
+        items = (const Expr* const*)ext->data.function.args;
+        ni = ext->data.function.arg_count;
+    }
+    for (size_t i = 0; i < ni + 1; i++) {
+        Expr* a;
+        if (i < ni) {
+            const Expr* it = items[i];
+            if (it->type == EXPR_SYMBOL &&
+                (it->data.symbol.name == SYM_Automatic || it->data.symbol.name == SYM_None)) continue;
+            a = expr_copy((Expr*)it);
+        } else {
+            if (!fo->gaussian) break;
+            a = expr_new_function(expr_new_symbol(SYM_Complex),
+                                  (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+        }
+        if (k == cap) { cap *= 2; g = realloc(g, sizeof(Expr*) * cap); }
+        g[k++] = a;
+    }
+    *n = k;
+    return g;
+}
+
+static void fext_gens_free(Expr** g, size_t n) {
+    for (size_t i = 0; i < n; i++) expr_free(g[i]);
+    free(g);
+}
+
+/* List[c, List[f, e], ...] (flint_factor_over_field) -> {{c, 1}, {f, e}, ...}.
+ * Consumes L. */
+static Expr* fext_to_pairs(Expr* L) {
+    size_t n = L->data.function.arg_count;
+    Expr** items = malloc(sizeof(Expr*) * n);
+    items[0] = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_copy(L->data.function.args[0]), expr_new_integer(1) }, 2);
+    for (size_t i = 1; i < n; i++) items[i] = expr_copy(L->data.function.args[i]);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    free(items);
+    expr_free(L);
+    return out;
+}
+
+/* The factored form over the extension, or NULL to decline (nothing algebraic
+ * in play, or not a polynomial / rational function the engine can take). */
+static Expr* fext_factor(const Expr* arg, Expr* const* gens, size_t ng) {
+    Expr* L = flint_factor_over_field(arg, gens, ng);
+    if (L) {
+        Expr* pairs = fext_to_pairs(L);
+        Expr* out = fo_pairs_to_product(pairs);
+        expr_free(pairs);
+        return out;
+    }
+    if (!factor_has_leftover_denominator(arg)) return NULL;
+    /* A rational function: each side of its reduced form on its own. */
+    Expr* tog = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                                                (Expr*[]){ expr_copy((Expr*)arg) }, 1));
+    Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator),
+                                                (Expr*[]){ expr_copy(tog) }, 1));
+    Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
+                                                (Expr*[]){ expr_copy(tog) }, 1));
+    expr_free(tog);
+    Expr* out = NULL;
+    if (!factor_has_leftover_denominator(num) && !factor_has_leftover_denominator(den) &&
+        !(den->type == EXPR_INTEGER && den->data.integer == 1)) {
+        Expr* fn = fext_factor(num, gens, ng);
+        Expr* fd = fext_factor(den, gens, ng);
+        if (fn || fd) {
+            if (!fn) fn = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+                                                          (Expr*[]){ expr_copy(num) }, 1));
+            if (!fd) fd = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+                                                          (Expr*[]){ expr_copy(den) }, 1));
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ fn, expr_new_function(expr_new_symbol(SYM_Power),
+                                                 (Expr*[]){ fd, expr_new_integer(-1) }, 2) }, 2));
+        }
+    }
+    expr_free(num); expr_free(den);
+    return out;
+}
+
+/* A relation or logical head Factor threads over (the arguments are factored
+ * one by one, the Inequality operator slots left alone). */
+static bool factor_threads_over(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_Less || h == SYM_Greater || h == SYM_Equal || h == SYM_Unequal ||
+           h == SYM_LessEqual || h == SYM_GreaterEqual || h == SYM_Inequality ||
+           h == SYM_And || h == SYM_Or;
+}
+
+/* head[a1, a2, ...] -> head[Factor[a1, opts], ...] for res = Factor[e, opts]. */
+static Expr* factor_thread_with_options(Expr* res) {
+    const Expr* e = res->data.function.args[0];
+    size_t n = e->data.function.arg_count, argc = res->data.function.arg_count;
+    bool ineq = e->data.function.head->data.symbol.name == SYM_Inequality;
+    Expr** na = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        if (ineq && (i & 1u)) { na[i] = expr_copy(e->data.function.args[i]); continue; }
+        Expr** fa = malloc(sizeof(Expr*) * argc);
+        fa[0] = expr_copy(e->data.function.args[i]);
+        for (size_t k = 1; k < argc; k++) fa[k] = expr_copy(res->data.function.args[k]);
+        na[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), fa, argc));
+        free(fa);
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), na, n);
+    free(na);
+    return eval_and_free(out);
+}
+
+/* FactorList[poly, opts] over the extension the options name: the pairs
+ * {{c, 1}, {f, e}, ...}, or NULL when the options name none or the engine
+ * declines (the caller then lists Factor's answer). */
+Expr* factor_extension_pairs(Expr* res, const char* head) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    const char* const allowed[] = { SYM_Extension, SYM_GaussianIntegers, SYM_Modulus, SYM_Trig, NULL };
+    FactorOpts fo;
+    if (!factor_parse_options(res, head, allowed, &fo)) return NULL;
+    Expr* out = NULL;
+    if (!fo.modulus && (fo.extension || fo.gaussian)) {
+        size_t ng = 0;
+        Expr** gens = fext_gens(&fo, &ng);
+        Expr* L = flint_factor_over_field(res->data.function.args[0], gens, ng);
+        if (L) out = fext_to_pairs(L);
+        fext_gens_free(gens, ng);
+    }
+    factor_opts_free(&fo);
+    return out;
+}
+
+/* Is every number in `e` a Gaussian rational, with no other algebraic number
+ * (radical, Root, ...) and no head beyond Plus, Times and integer Power? */
+static bool factor_has_only_gaussian_numbers(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_SYMBOL) return true;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Rational) return true;
+    if (h == SYM_Complex)
+        return e->data.function.arg_count == 2 &&
+               factor_has_only_gaussian_numbers(e->data.function.args[0]) &&
+               factor_has_only_gaussian_numbers(e->data.function.args[1]) &&
+               e->data.function.args[0]->type != EXPR_SYMBOL &&
+               e->data.function.args[1]->type != EXPR_SYMBOL;
+    if (h == SYM_Power) {
+        if (e->data.function.arg_count != 2 || e->data.function.args[1]->type != EXPR_INTEGER) return false;
+        return factor_has_only_gaussian_numbers(e->data.function.args[0]);
+    }
+    if (h != SYM_Plus && h != SYM_Times) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!factor_has_only_gaussian_numbers(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* Default Factor of a univariate polynomial with Gaussian-rational
+ * coefficients and no other algebraic number: over Q(i), as for the
+ * multivariate case (Factor[x^2 + 2 I x - 1] is (I + x)^2). */
+static Expr* factor_univariate_gaussian(const Expr* arg) {
+    if (!flint_trager_has_complex(arg) || !factor_has_only_gaussian_numbers(arg)) return NULL;
+    size_t nv = 0, vcap = 4;
+    Expr** vs = malloc(sizeof(Expr*) * vcap);
+    collect_variables((Expr*)arg, &vs, &nv, &vcap);
+    for (size_t k = 0; k < nv; k++) expr_free(vs[k]);
+    free(vs);
+    if (nv != 1) return NULL;
+    Expr* iu = expr_new_function(expr_new_symbol(SYM_Complex),
+                                 (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+    Expr* out = fext_factor(arg, &iu, 1);
+    expr_free(iu);
+    return out;
+}
+
 #ifdef USE_FLINT
 /* One side (numerator or denominator) of a reduced fraction through FLINT:
  * fmpz_poly for a univariate integer polynomial, fmpq_mpoly otherwise.  NULL
@@ -375,6 +561,18 @@ Expr* builtin_factor(Expr* res) {
      * The memo is bypassed for this branch: the cache key is the
      * polynomial alone, but the result depends on the extension too. */
     if (fo.extension || fo.gaussian) {
+        /* Relations and logical connectives thread, keeping the options. */
+        if (factor_threads_over(res->data.function.args[0]))
+            return factor_thread_with_options(res);
+        /* The FLINT engine: any number of variables, any number of
+         * generators, the input's own algebraic coefficients joined in. */
+        {
+            size_t ng = 0;
+            Expr** gens = fext_gens(&fo, &ng);
+            Expr* r = fext_factor(res->data.function.args[0], gens, ng);
+            fext_gens_free(gens, ng);
+            if (r) return r;
+        }
         /* GaussianIntegers -> True adds I to the extension. */
         Expr* gauss_ext = NULL;
         Expr* alpha_expr = (Expr*)fo.extension;
@@ -408,9 +606,15 @@ Expr* builtin_factor(Expr* res) {
             if (auto_tower && auto_tower->n == 1) {
                 alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
                 alpha_expr = alpha_auto;
+            } else if (auto_tower && auto_tower->n >= 2) {
+                /* Several generators: the whole tower, not just one. */
+                Expr** a = malloc(sizeof(Expr*) * (size_t)auto_tower->n);
+                for (int k = 0; k < auto_tower->n; k++) a[k] = expr_copy(auto_tower->alpha_renders[k]);
+                alpha_auto = expr_new_function(expr_new_symbol(SYM_List), a, (size_t)auto_tower->n);
+                free(a);
+                alpha_expr = alpha_auto;
             } else {
-                /* No detectable generator, or multi-generator tower.
-                 * Tier-1: fall through to plain Factor. */
+                /* No detectable generator: fall through to plain Factor. */
                 alpha_expr = NULL;
             }
         }
@@ -640,6 +844,17 @@ Expr* builtin_factor(Expr* res) {
                 expr_free(memo_key);
             }
             return final;
+        }
+    }
+
+    if (res->data.function.arg_count == 1) {
+        Expr* ug = factor_univariate_gaussian(arg);
+        if (ug) {
+            if (memo_key) {
+                factor_memo_put(memo, memo_key, ug);
+                expr_free(memo_key);
+            }
+            return ug;
         }
     }
 

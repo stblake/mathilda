@@ -16,6 +16,7 @@
 #include "deriv.h"
 #include "poly.h"
 #include "flint_bridge.h"
+#include "flint_trager.h"
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "sym_intern.h"
@@ -203,24 +204,42 @@ Expr* qaupoly_norm(const QAUPoly* f,
 
 /* ============================== Phase G4 ============================== */
 
+/* z <- v for a 64-bit v.  mpz_set_si takes a `long`, which is 32 bits on
+ * LLP64 (native Windows), so a 64-bit value goes through its magnitude. */
+static void qa_mpz_set_i64(mpz_t z, int64_t v) {
+    uint64_t m = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+    mpz_import(z, 1, 1, sizeof m, 0, 0, &m);
+    if (v < 0) mpz_neg(z, z);
+}
+
+/* An Integer / BigInt Expr into z (already initialised); false otherwise. */
+static bool qa_int_expr_to_mpz(const Expr* e, mpz_t z) {
+    if (e->type == EXPR_INTEGER) { qa_mpz_set_i64(z, e->data.integer); return true; }
+    if (e->type == EXPR_BIGINT)  { mpz_set(z, e->data.bigint); return true; }
+    return false;
+}
+
 /* Lift a rational/integer Expr coefficient to mpq_t.  Returns false
  * for non-numeric or non-Q-rational inputs (e.g. symbolic).  Handles
- * Integer, BigInt, and Rational[n, d] with small-int n/d. */
+ * Integer, BigInt, and Rational[n, d] with machine or big n and d. */
 static bool expr_coef_to_mpq(const Expr* e, mpq_t out) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) {
-        mpq_set_si(out, (long)e->data.integer, 1);
+    if (qa_int_expr_to_mpz(e, mpq_numref(out))) {
+        mpz_set_ui(mpq_denref(out), 1);
         return true;
     }
-    if (e->type == EXPR_BIGINT) {
-        mpq_set_z(out, e->data.bigint);
-        return true;
-    }
-    int64_t n, d;
-    if (is_rational((Expr*)e, &n, &d)) {
-        mpq_set_si(out, (long)n, (unsigned long)d);
-        mpq_canonicalize(out);
-        return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        mpz_t n, d; mpz_init(n); mpz_init(d);
+        bool ok = qa_int_expr_to_mpz(e->data.function.args[0], n) &&
+                  qa_int_expr_to_mpz(e->data.function.args[1], d) && mpz_sgn(d) != 0;
+        if (ok) {
+            mpq_set_num(out, n); mpq_set_den(out, d);
+            mpq_canonicalize(out);
+        }
+        mpz_clear(n); mpz_clear(d);
+        return ok;
     }
     return false;
 }
@@ -978,6 +997,30 @@ static Expr* expand_roots_of_unity_to_atomic_poly(const Expr* e,
  * Pass `c_base = 0` to skip this preprocessing (used when the
  * extension isn't a `Power[c, 1/q]` form — e.g. towers, nested
  * radicals). */
+/* Complex[a, b] -> a + b g for exact a, b; every other node copied. */
+static Expr* qa_split_complex(const Expr* e, const Expr* g) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex && n == 2) {
+        mpq_t a, b; mpq_init(a); mpq_init(b);
+        bool ok = expr_coef_to_mpq(e->data.function.args[0], a) &&
+                  expr_coef_to_mpq(e->data.function.args[1], b);
+        mpq_clear(a); mpq_clear(b);
+        if (ok) {
+            Expr* t = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy(e->data.function.args[1]), expr_copy((Expr*)g) }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Plus),
+                (Expr*[]){ expr_copy(e->data.function.args[0]), t }, 2);
+        }
+    }
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = qa_split_complex(e->data.function.args[i], g);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return r;
+}
+
 static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
                                               const Expr* var,
                                               const Expr* alpha_render,
@@ -1043,6 +1086,15 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
      * radical generators.  It remains needed for non-radical
      * extensions (Sqrt[I] / nested radicals) where `c_base_inferred`
      * was 0. */
+    /* Over Q(i), every Gaussian coefficient is a polynomial in the generator:
+     * Complex[a, b] -> a + b alpha.  The structural substitution below only
+     * matches Complex[0, 1] itself, so 2 I or 1 - I had stayed opaque and
+     * Factor[x^2 + 4, Extension -> I] came back unfactored. */
+    if (alpha_render && expr_is_imaginary_unit(alpha_render)) {
+        Expr* split = qa_split_complex(poly_expanded, alpha_sym);
+        expr_free(poly_expanded);
+        poly_expanded = split;
+    }
     Expr* poly_sub = alpha_render
         ? expr_subst(poly_expanded, alpha_render, alpha_sym)
         : expr_copy(poly_expanded);
@@ -1317,6 +1369,14 @@ Expr* qa_factor_with_extension(const Expr* poly,
                                const Expr* alpha_expr,
                                const Expr* var) {
     if (!poly || !alpha_expr || !var) return NULL;
+
+    /* The FLINT engine first: certified, and the norm-and-modular-GCD route
+     * is orders of magnitude faster than the Q(alpha)[x] Euclidean GCDs
+     * below at high degree (degree 40 over Q(2^(1/4)): 17 s -> 0.3 s). */
+    {
+        Expr* fr = flint_factor_over_field_product(poly, (Expr* const*)&alpha_expr, 1);
+        if (fr) return fr;
+    }
 
     Expr* alpha_render = NULL;
     QAExt* ext = qa_resolve_extension(alpha_expr, &alpha_render);
@@ -1722,6 +1782,10 @@ Expr* qa_factor_with_extension_tower(const Expr* poly,
     /* Single-element list reduces to G5. */
     if (n_alphas == 1) {
         return qa_factor_with_extension(poly, alpha_exprs[0], var);
+    }
+    {
+        Expr* fr = flint_factor_over_field_product(poly, alpha_exprs, (size_t)n_alphas);
+        if (fr) return fr;
     }
 
     QATower* t = qa_resolve_extension_tower(alpha_exprs, n_alphas);

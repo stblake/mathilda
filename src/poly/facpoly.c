@@ -16,6 +16,7 @@
 #include "sym_names.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "flint_trager.h"
 #include "print.h"
 #include "message.h"
 #include "numeric.h"

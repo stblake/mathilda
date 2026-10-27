@@ -16,6 +16,12 @@ void facpoly_init(void);
  * the call is well formed. */
 bool factor_options_valid(Expr* res, const char* head, int squarefree);
 
+/* FactorList over the number field the options of res = head[poly, opts...]
+ * name (Extension, GaussianIntegers): {{c, 1}, {f1, e1}, ...} with c an
+ * element of the field, or NULL when the options name no extension or the
+ * extension engine declines.  Messages for invalid options go out under head. */
+Expr* factor_extension_pairs(Expr* res, const char* head);
+
 /* Per-call Factor memo.
  *
  * `Simplify` runs the candidate-set search across many transforms,

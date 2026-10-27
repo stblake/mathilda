@@ -220,9 +220,10 @@ void test_apart_extension(void) {
      * we catch any future regressions in the algebraic-extension Apart
      * path. With the radical canonicalization in builtin_times, the
      * coefficient 1/2 * 1/Sqrt[2] (and Sqrt[2]/4) collapse to the unified
-     * 1/2^(3/2) form. */
+     * 1/2^(3/2) form.  The denominators are Factor's factors over Q(Sqrt[2]),
+     * whose generator term leads with a positive sign (Sqrt[2] - x). */
     run_eq("Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]",
-           "1/(2 Sqrt[2] (-Sqrt[2] + x)) - 1/(2 Sqrt[2] (Sqrt[2] + x))");
+           "-1/(2 Sqrt[2] (Sqrt[2] - x)) - 1/(2 Sqrt[2] (Sqrt[2] + x))");
 
     /* No-extension default: Apart[1/(x^2 - 2), x] returns the input
      * unchanged because the denominator is irreducible over Q. */

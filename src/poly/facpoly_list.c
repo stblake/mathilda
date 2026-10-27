@@ -351,6 +351,14 @@ Expr* builtin_factorlist(Expr* res) {
         }
     }
 
+    /* Over a number field the pairs come straight from the extension engine,
+     * whose unit normalisation (-x + Sqrt[2] y, with the -1 in the constant)
+     * the sign repair below would undo. */
+    if (argc >= 2) {
+        Expr* pairs = factor_extension_pairs(res, "FactorList");
+        if (pairs) return pairs;
+    }
+
     /* Factor[poly, opts...] -- forward every argument verbatim. */
     Expr** fargs = malloc(argc * sizeof(Expr*));
     for (size_t i = 0; i < argc; i++)

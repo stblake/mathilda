@@ -42,6 +42,7 @@
 #include "irrpolyq.h"
 #include "facpoly.h"
 #include "qafactor.h"
+#include "flint_trager.h"
 #include "poly.h"
 #include "eval.h"
 #include "expand.h"
@@ -569,7 +570,9 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
          * `expand_complex_to_i`'s docstring for why). */
         Expr* lifted = expand_complex_to_i(poly);
         Expr* i_sym  = expr_new_symbol(SYM_I);
-        if (v_count == 1) {
+        /* Over Q(i) in any number of variables (flint_trager.c). */
+        factored = flint_factor_over_field_product(poly, &i_sym, 1);
+        if (!factored && v_count == 1) {
             /* Direct call into qa_factor_with_extension bypasses the
              * public Factor entry point and, with it, the Together /
              * Numerator preprocessing that would re-canonicalise our

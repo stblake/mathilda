@@ -81,7 +81,7 @@ void test_fsf_extension() {
     /* Algebraic-coefficient input: x^2 - 2 Sqrt[2] x + 2 = (x - Sqrt[2])^2.
      * This genuinely needs the extension -- over Q it is not a rational poly. */
     check("FactorSquareFree[x^2 - 2 Sqrt[2] x + 2, Extension->Sqrt[2]]",
-          "(-Sqrt[2] + x)^2");
+          "(Sqrt[2] - x)^2");
     /* Square-free structure is field-independent for rational inputs, so an
      * extension leaves the answer unchanged. */
     check("FactorSquareFree[x^4-2, Extension->Sqrt[2]]", "-2 + x^4");
@@ -95,7 +95,7 @@ void test_fsf_extension() {
 /* ---- Extension option forwarded through FactorSquareFreeList ---- */
 void test_fsfl_extension() {
     check("FactorSquareFreeList[x^2 - 2 Sqrt[2] x + 2, Extension->Sqrt[2]]",
-          "{{1, 1}, {-Sqrt[2] + x, 2}}");
+          "{{1, 1}, {Sqrt[2] - x, 2}}");
     check("FactorSquareFreeList[x^4+2x^2+1, Extension->I]",
           "{{1, 1}, {1 + x^2, 2}}");
     /* Round-trip over the extension. */

@@ -533,25 +533,25 @@ static void assert_factor_eq_str(const char* input_src,
 /* x² − 2 over Q(√2) → (x − √2)(x + √2). */
 static void test_g5_x2_minus_2_qsqrt2(void) {
     assert_factor_eq_str("Factor[x^2 - 2, Extension -> Sqrt[2]]",
-                         "(x - Sqrt[2]) (x + Sqrt[2])");
+                         "-((Sqrt[2] - x) (Sqrt[2] + x))");
 }
 
 /* x⁴ + 1 over Q(√2) → (x² − √2 x + 1)(x² + √2 x + 1). */
 static void test_g5_x4_plus_1_qsqrt2(void) {
     assert_factor_eq_str("Factor[x^4 + 1, Extension -> Sqrt[2]]",
-                         "(x^2 - Sqrt[2] x + 1) (x^2 + Sqrt[2] x + 1)");
+                         "-((-1 + Sqrt[2] x - x^2) (1 + Sqrt[2] x + x^2))");
 }
 
 /* x⁴ − 5x² + 6 over Q(√2) → (x − √2)(x + √2)(x² − 3). */
 static void test_g5_x4_5x2_6_qsqrt2(void) {
     assert_factor_eq_str("Factor[x^4 - 5 x^2 + 6, Extension -> Sqrt[2]]",
-                         "(x - Sqrt[2]) (x + Sqrt[2]) (x^2 - 3)");
+                         "-((Sqrt[2] - x) (Sqrt[2] + x) (-3 + x^2))");
 }
 
 /* x³ − 2 over Q(∛2) → (x − ∛2)(x² + ∛2 x + ∛4). */
 static void test_g5_x3_minus_2_qcbrt2(void) {
     assert_factor_eq_str("Factor[x^3 - 2, Extension -> 2^(1/3)]",
-                         "(x - 2^(1/3)) (x^2 + 2^(1/3) x + 2^(2/3))");
+                         "-((2^(1/3) - x) (2^(2/3) + 2^(1/3) x + x^2))");
 }
 
 /* x² + 1 over Q(i) → (x − I)(x + I). */
@@ -581,7 +581,7 @@ static void test_g5_x4_plus_4_qi(void) {
 static void test_g5_x2_x_1_qsqrtm3(void) {
     assert_factor_eq_str(
         "Factor[x^2 + x + 1, Extension -> Sqrt[-3]]",
-        "(x + 1/2 - I Sqrt[3]/2) (x + 1/2 + I Sqrt[3]/2)");
+        "((-I + Sqrt[3] - 2 I x) (I + Sqrt[3] + 2 I x))/4");
 }
 
 /* α-bearing input: x² − 2√2 x + 2 = (x − √2)² over Q(√2).  Tests the
@@ -590,14 +590,14 @@ static void test_g5_x2_x_1_qsqrtm3(void) {
 static void test_g5_alpha_in_input(void) {
     assert_factor_eq_str(
         "Factor[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]",
-        "(x - Sqrt[2])^2");
+        "(Sqrt[2] - x)^2");
 }
 
 /* Repeated-factor input: (x² − 2)² over Q(√2) → (x − √2)²(x + √2)². */
 static void test_g5_repeated_factor_qsqrt2(void) {
     assert_factor_eq_str(
         "Factor[(x^2 - 2)^2, Extension -> Sqrt[2]]",
-        "(x - Sqrt[2])^2 (x + Sqrt[2])^2");
+        "(Sqrt[2] - x)^2 (Sqrt[2] + x)^2");
 }
 
 /* Irreducible over the supplied extension: x² − 3 over Q(√2)
@@ -621,8 +621,8 @@ static void test_g5_irreducible_in_qsqrt2(void) {
 static void test_g6_min_poly_sqrt2_sqrt3(void) {
     assert_factor_eq_str(
         "Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[2], Sqrt[3]}]",
-        "(x - Sqrt[2] - Sqrt[3]) (x - Sqrt[2] + Sqrt[3])"
-        " (x + Sqrt[2] - Sqrt[3]) (x + Sqrt[2] + Sqrt[3])");
+        "(Sqrt[2] - Sqrt[3] - x) (Sqrt[2] + Sqrt[3] - x)"
+        " (Sqrt[2] - Sqrt[3] + x) (Sqrt[2] + Sqrt[3] + x)");
 }
 
 /* Each individual generator must factor inside the compositum: x² − 2
@@ -630,7 +630,7 @@ static void test_g6_min_poly_sqrt2_sqrt3(void) {
 static void test_g6_x2_minus_2_q_sqrt2_sqrt3(void) {
     assert_factor_eq_str(
         "Factor[x^2 - 2, Extension -> {Sqrt[2], Sqrt[3]}]",
-        "(x - Sqrt[2]) (x + Sqrt[2])");
+        "-((Sqrt[2] - x) (Sqrt[2] + x))");
 }
 
 /* x² − 3 over Q(√2, √3) uses √3 alone — exercises α_2 recovery
@@ -638,7 +638,7 @@ static void test_g6_x2_minus_2_q_sqrt2_sqrt3(void) {
 static void test_g6_x2_minus_3_q_sqrt2_sqrt3(void) {
     assert_factor_eq_str(
         "Factor[x^2 - 3, Extension -> {Sqrt[2], Sqrt[3]}]",
-        "(x - Sqrt[3]) (x + Sqrt[3])");
+        "-((Sqrt[3] - x) (Sqrt[3] + x))");
 }
 
 /* Composite-radical coefficient: the input already carries the cross term
@@ -650,7 +650,9 @@ static void test_g6_composite_radical_coeff(void) {
     assert_factor_eq_str(
         "Factor[x^2 - (Sqrt[2] + Sqrt[3]) x + Sqrt[6], "
         "Extension -> {Sqrt[2], Sqrt[3]}]",
-        "(x - Sqrt[2]) (x - Sqrt[3])");
+        /* the reference spells it -((Sqrt[2] - x) (-Sqrt[3] + x)): the same
+         * product, the unit -1 placed differently */
+        "(Sqrt[2] - x) (Sqrt[3] - x)");
 }
 
 /* Same, over a different prime pair (Sqrt[15] = Sqrt[3] Sqrt[5]). */
@@ -658,61 +660,26 @@ static void test_g6_composite_radical_coeff_15(void) {
     assert_factor_eq_str(
         "Factor[x^2 - (Sqrt[3] + Sqrt[5]) x + Sqrt[15], "
         "Extension -> {Sqrt[3], Sqrt[5]}]",
-        "(x - Sqrt[3]) (x - Sqrt[5])");
+        "(Sqrt[3] - x) (Sqrt[5] - x)");
 }
 
 /* Generator-order independence: same compositum, swapped list order. */
 static void test_g6_order_independence(void) {
     assert_factor_eq_str(
         "Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[3], Sqrt[2]}]",
-        "(x - Sqrt[2] - Sqrt[3]) (x - Sqrt[2] + Sqrt[3])"
-        " (x + Sqrt[2] - Sqrt[3]) (x + Sqrt[2] + Sqrt[3])");
+        "(Sqrt[2] - Sqrt[3] - x) (Sqrt[2] + Sqrt[3] - x)"
+        " (Sqrt[2] - Sqrt[3] + x) (Sqrt[2] + Sqrt[3] + x)");
 }
 
 /* Mixed real+complex: x⁴ + 1 over Q(√2, I) factors completely into
- * 4 linear factors involving (±1 ± I)/√2 = ±(1±I)/Sqrt[2].  Mathilda
- * renders these as `(1/2 ± I/2) Sqrt[2]` (rationalised denominator). */
-/* Like assert_factor_eq_str, but compares the FullForm strings of two
- * already-evaluated expressions instead of round-tripping the expected
- * through parse + evaluate.  Some factorizations (notably the Q(Sqrt[2],I)
- * decomposition of x^4 + 1) lock into a representation that the parser's
- * Times-canonicalization rewrites away, so a parsed expected and the
- * Factor[] output cannot be brought into the same form by re-evaluation. */
-static void assert_factor_fullform_eq(const char* input_src,
-                                      const char* expected_fullform) {
-    Expr* in_parsed = parse_expression(input_src);
-    ASSERT(in_parsed != NULL);
-    Expr* actual = evaluate(in_parsed);
-    expr_free(in_parsed);
-    char* s_actual = expr_to_string_fullform(actual);
-    if (strcmp(s_actual, expected_fullform) != 0) {
-        fprintf(stderr, "FAIL: factor mismatch\n  Expected: %s\n  Actual:   %s\n",
-                expected_fullform, s_actual);
-    }
-    ASSERT(strcmp(s_actual, expected_fullform) == 0);
-    free(s_actual);
-    expr_free(actual);
-}
-
+ * 4 linear factors with roots (±1 ± I)/√2.  Each factor is normalised so
+ * its leading generator term (√2) has a positive rational coefficient:
+ * √2 - (1 + I) x, with the 1/4 in front. */
 static void test_g6_x4_plus_1_q_sqrt2_i(void) {
-    /* Roots of x^4 + 1 over Q(Sqrt[2], I) are (+/-1 +/- I)/Sqrt[2].  The
-     * Factor[] output lands in the split form below
-     *   (+/-1)/Sqrt[2]  +  (+/-I/2) Sqrt[2]  +  x
-     * which is equivalent to the older `Complex[+/-1, +/-1]/Sqrt[2] + x`
-     * single-coefficient form (the parser canonicalizes back to that on
-     * evaluate, but the factorizer's output goes through a different
-     * Times-construction path that does not).  Compare FullForms directly
-     * so any future canonicalization shift is caught explicitly. */
-    assert_factor_fullform_eq(
+    assert_factor_eq_str(
         "Factor[x^4 + 1, Extension -> {Sqrt[2], I}]",
-        "Times[Plus[Times[-1, Power[2, Rational[-1, 2]]], "
-                   "Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]], x], "
-              "Plus[Power[2, Rational[-1, 2]], "
-                   "Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]], x], "
-              "Plus[Times[-1, Power[2, Rational[-1, 2]]], "
-                   "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x], "
-              "Plus[Power[2, Rational[-1, 2]], "
-                   "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x]]");
+        "((Sqrt[2] - (1 + I) x) (Sqrt[2] - (1 - I) x)"
+        " (Sqrt[2] + (1 - I) x) (Sqrt[2] + (1 + I) x))/4");
 }
 
 /* α-bearing input: x² − 2 √3 x + 3 = (x − √3)² over Q(√2, √3).
@@ -722,7 +689,7 @@ static void test_g6_x4_plus_1_q_sqrt2_i(void) {
 static void test_g6_alpha_in_input(void) {
     assert_factor_eq_str(
         "Factor[x^2 - 2 Sqrt[3] x + 3, Extension -> {Sqrt[2], Sqrt[3]}]",
-        "(x - Sqrt[3])^2");
+        "(Sqrt[3] - x)^2");
 }
 
 /* Q-rational input: x² − 1 = (x − 1)(x + 1) factors entirely over Q,
@@ -745,7 +712,7 @@ static void test_g6_irreducible_in_q_sqrt2_sqrt3(void) {
 static void test_g6_single_element_list(void) {
     assert_factor_eq_str(
         "Factor[x^2 - 2, Extension -> {Sqrt[2]}]",
-        "(x - Sqrt[2]) (x + Sqrt[2])");
+        "-((Sqrt[2] - x) (Sqrt[2] + x))");
 }
 
 /* ============================== Phase G8 ============================== */
