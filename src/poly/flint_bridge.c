@@ -52,6 +52,7 @@
 #include <flint/fq_nmod.h>          /* F_p[t]/(m) -- one residue field        */
 #include <flint/fq_nmod_mpoly.h>    /* the multivariate GCD workhorse         */
 #include <flint/ulong_extras.h>  /* n_is_prime, n_invmod */
+#include <flint/fmpz_mod_mpoly_factor.h> /* Factor[..., Modulus -> p], any p */
 
 /* Process-lifetime fmpq_mpoly context cache, keyed by variable count, for the
  * ORD_LEX order (the one the Together/Cancel/Expand/CoefficientRules bridges use).
@@ -7649,11 +7650,189 @@ Expr* flint_nmod_poly_factor_list(const Expr* a, const Expr* x, unsigned long p)
     return out;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Factor / FactorSquareFree over GF(p): Modulus -> p                  */
+/* ------------------------------------------------------------------ */
+
+/* An fmpz_mod_mpoly as an Expr, coefficients as residues in [0, p). */
+static Expr* fmpz_mod_mpoly_to_expr(const fmpz_mod_mpoly_t P,
+                                    const fmpz_mod_mpoly_ctx_t ctx,
+                                    const VarSet* vs) {
+    slong len = fmpz_mod_mpoly_length(P, ctx);
+    if (len == 0) return expr_new_integer(0);
+    slong nv = (slong)vs->count;
+    ulong* exps = malloc(sizeof(ulong) * (size_t)(nv > 0 ? nv : 1));
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)len);
+    Expr** factors = malloc(sizeof(Expr*) * (size_t)(nv + 1));
+    if (!exps || !terms || !factors) {
+        free(exps); free(terms); free(factors);
+        return NULL;
+    }
+    fmpz_t c;
+    fmpz_init(c);
+    for (slong i = 0; i < len; i++) {
+        fmpz_mod_mpoly_get_term_coeff_fmpz(c, P, i, ctx);
+        fmpz_mod_mpoly_get_term_exp_ui(exps, P, i, ctx);
+        size_t nf = 0;
+        if (!fmpz_is_one(c) || nv == 0) {
+            fmpq_t q;
+            fmpq_init(q);
+            fmpz_set(fmpq_numref(q), c); fmpz_one(fmpq_denref(q));
+            factors[nf++] = expr_from_fmpq_local(q);
+            fmpq_clear(q);
+        }
+        for (slong v = 0; v < nv; v++) {
+            if (exps[v] == 0) continue;
+            Expr* var = expr_new_symbol(vs->names[v]);
+            factors[nf++] = exps[v] == 1 ? var
+                : expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ var, expr_new_integer((int64_t)exps[v]) }, 2);
+        }
+        terms[i] = nf == 0 ? expr_new_integer(1)
+                 : nf == 1 ? factors[0]
+                 : expr_new_function(expr_new_symbol(SYM_Times), factors, nf);
+    }
+    fmpz_clear(c);
+    free(exps);
+    free(factors);
+    Expr* out = len == 1 ? terms[0]
+              : expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)len);
+    free(terms);
+    return out;
+}
+
+/* Factor (or square-free factor, when `squarefree`) the polynomial `p` over
+ * GF(m), m prime, in FactorList's shape {{c, 1}, {f1, e1}, ...}: c in [0, m)
+ * and every fi monic in FLINT's degree-lexicographic order, coefficients in
+ * [0, m).  The polynomial is read over Q first, so a rational coefficient
+ * a/b is reduced to a * b^-1 mod m.  Any prime size goes through
+ * fmpz_mod_mpoly; that covers the univariate case as well.
+ *
+ * *status: 0 on success; 1 when `p` is not a polynomial over Q in symbol
+ * generators (the caller declines); 2 when a coefficient's denominator is
+ * divisible by m (the coefficient has no value mod m). */
+Expr* flint_modular_factor_list(const Expr* p, const Expr* modulus,
+                                int squarefree, int* status) {
+    *status = 1;
+    if (!p || !modulus || !expr_is_integer_like(modulus)) return NULL;
+
+    fmpz_t m;
+    fmpz_init(m);
+    if (!fmpz_from_int_expr(m, modulus) || fmpz_cmp_ui(m, 2) < 0) {
+        fmpz_clear(m);
+        return NULL;
+    }
+
+    VarSet vs;
+    memset(&vs, 0, sizeof vs);
+    if (!collect_vars(p, &vs)) { varset_free(&vs); fmpz_clear(m); return NULL; }
+    qsort(vs.names, vs.count, sizeof(char*), cmp_str);
+    slong nv = (slong)vs.count;
+
+    /* Read over Q.  A context with no variables is not allowed in every
+     * FLINT version, so a constant still gets one (unused) generator. */
+    fmpq_mpoly_ctx_t qctx;
+    fmpq_mpoly_ctx_init(qctx, nv > 0 ? nv : 1, ORD_DEGLEX);
+    fmpq_mpoly_t Q;
+    fmpq_mpoly_init(Q, qctx);
+    if (!to_mpoly(p, Q, qctx, &vs)) {
+        fmpq_mpoly_clear(Q, qctx);
+        fmpq_mpoly_ctx_clear(qctx);
+        varset_free(&vs);
+        fmpz_clear(m);
+        return NULL;
+    }
+
+    fmpz_mod_mpoly_ctx_t ctx;
+    fmpz_mod_mpoly_ctx_init(ctx, nv > 0 ? nv : 1, ORD_DEGLEX, m);
+    fmpz_mod_mpoly_t P;
+    fmpz_mod_mpoly_init(P, ctx);
+
+    /* Q = content * zpoly with content = num/den: each integer coefficient
+     * of zpoly is scaled by num * den^-1 mod m. */
+    int bad_den = 0;
+    {
+        fmpz_t num, den, inv, c;
+        fmpz_init(num); fmpz_init(den); fmpz_init(inv); fmpz_init(c);
+        fmpz_set(num, fmpq_numref(Q->content));
+        fmpz_set(den, fmpq_denref(Q->content));
+        fmpz_mod(den, den, m);
+        if (fmpz_is_zero(den) || !fmpz_invmod(inv, den, m)) {
+            bad_den = 1;
+        } else {
+            fmpz_mul(inv, inv, num);
+            fmpz_mod(inv, inv, m);
+            slong len = fmpz_mpoly_length(Q->zpoly, qctx->zctx);
+            ulong* exps = malloc(sizeof(ulong) * (size_t)(nv > 0 ? nv : 1));
+            for (slong i = 0; i < len; i++) {
+                fmpz_mpoly_get_term_coeff_fmpz(c, Q->zpoly, i, qctx->zctx);
+                fmpz_mpoly_get_term_exp_ui(exps, Q->zpoly, i, qctx->zctx);
+                fmpz_mul(c, c, inv);
+                fmpz_mod(c, c, m);
+                if (!fmpz_is_zero(c))
+                    fmpz_mod_mpoly_push_term_fmpz_ui(P, c, exps, ctx);
+            }
+            free(exps);
+            fmpz_mod_mpoly_sort_terms(P, ctx);
+            fmpz_mod_mpoly_combine_like_terms(P, ctx);
+        }
+        fmpz_clear(num); fmpz_clear(den); fmpz_clear(inv); fmpz_clear(c);
+    }
+
+    Expr* out = NULL;
+    if (bad_den) {
+        *status = 2;
+    } else if (fmpz_mod_mpoly_is_zero(P, ctx)) {
+        Expr* pair = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+        out = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ pair }, 1);
+        *status = 0;
+    } else {
+        fmpz_mod_mpoly_factor_t fac;
+        fmpz_mod_mpoly_factor_init(fac, ctx);
+        int ok = squarefree ? fmpz_mod_mpoly_factor_squarefree(fac, P, ctx)
+                            : fmpz_mod_mpoly_factor(fac, P, ctx);
+        if (ok) {
+            slong nf = fac->num;
+            Expr** pairs = malloc(sizeof(Expr*) * (size_t)(nf + 1));
+            fmpq_t cq;
+            fmpq_init(cq);
+            fmpz_set(fmpq_numref(cq), fac->constant); fmpz_one(fmpq_denref(cq));
+            pairs[0] = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ expr_from_fmpq_local(cq), expr_new_integer(1) }, 2);
+            fmpq_clear(cq);
+            for (slong i = 0; i < nf; i++) {
+                Expr* be = fmpz_mod_mpoly_to_expr(fac->poly + i, ctx, &vs);
+                pairs[i + 1] = expr_new_function(expr_new_symbol(SYM_List),
+                    (Expr*[]){ be, expr_new_integer((int64_t)fmpz_get_si(fac->exp + i)) }, 2);
+            }
+            out = expr_new_function(expr_new_symbol(SYM_List), pairs, (size_t)nf + 1);
+            free(pairs);
+            *status = 0;
+        }
+        fmpz_mod_mpoly_factor_clear(fac, ctx);
+    }
+
+    fmpz_mod_mpoly_clear(P, ctx);
+    fmpz_mod_mpoly_ctx_clear(ctx);
+    fmpq_mpoly_clear(Q, qctx);
+    fmpq_mpoly_ctx_clear(qctx);
+    varset_free(&vs);
+    fmpz_clear(m);
+    return out;
+}
+
 #else /* !USE_FLINT */
 
 int   flint_bridge_available(void) { return 0; }
 Expr* flint_nmod_poly_factor_list(const Expr* a, const Expr* x, unsigned long p) {
     (void)a; (void)x; (void)p; return NULL;
+}
+Expr* flint_modular_factor_list(const Expr* p, const Expr* modulus,
+                                int squarefree, int* status) {
+    (void)p; (void)modulus; (void)squarefree;
+    *status = 1;
+    return NULL;
 }
 Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
                              unsigned long p, int which) {

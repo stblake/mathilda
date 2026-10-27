@@ -695,6 +695,7 @@ extern const char* SYM_ToRadicals;
 extern const char* SYM_ToString;
 extern const char* SYM_Total;
 extern const char* SYM_TrialDivision;
+extern const char* SYM_Trig;
 extern const char* SYM_TrigExpand;
 extern const char* SYM_TrigFactor;
 extern const char* SYM_TrigReduce;

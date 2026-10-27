@@ -2,12 +2,19 @@
 #define FACPOLY_H
 
 #include "expr.h"
+#include <stdbool.h>
 
 Expr* builtin_factorsquarefree(Expr* res);
 Expr* builtin_factor(Expr* res);
 Expr* builtin_factorterms(Expr* res);
 Expr* builtin_factortermslist(Expr* res);
 void facpoly_init(void);
+
+/* Validate the options of res = head[expr, opts...] the way Factor
+ * (squarefree == 0) or FactorSquareFree (squarefree != 0) does, emitting
+ * head::nonopt / ::optx / ::modp / ::bmod / ::mext / ::facim.  True when
+ * the call is well formed. */
+bool factor_options_valid(Expr* res, const char* head, int squarefree);
 
 /* Per-call Factor memo.
  *

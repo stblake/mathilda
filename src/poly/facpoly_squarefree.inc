@@ -547,25 +547,20 @@ static Expr* factor_square_free_over_extension(Expr* res) {
 Expr* builtin_factorsquarefree(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
-    /* Parse a trailing Extension -> alpha option (mirrors builtin_factor).  Any
-     * trailing argument that is not an Extension rule leaves the call
-     * unevaluated (NULL), preserving the strict contract of the plain form. */
-    size_t argc = res->data.function.arg_count;
-    Expr* alpha_expr = NULL;  /* borrowed */
-    for (size_t i = 1; i < argc; i++) {
-        Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION
-            && opt->data.function.head
-            && opt->data.function.head->type == EXPR_SYMBOL
-            && (opt->data.function.head->data.symbol.name == SYM_Rule
-                || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
-            && opt->data.function.arg_count == 2
-            && opt->data.function.args[0]->type == EXPR_SYMBOL
-            && opt->data.function.args[0]->data.symbol.name == SYM_Extension) {
-            alpha_expr = opt->data.function.args[1];
-        } else {
-            return NULL;  /* unknown / non-option trailing argument */
-        }
+    /* Options: Extension and Modulus (see facpoly_options.inc). */
+    const char* const sqf_allowed[] = { SYM_Extension, SYM_Modulus, SYM_Trig, NULL };
+    FactorOpts fo;
+    if (!factor_parse_options(res, "FactorSquareFree", sqf_allowed, &fo)) return NULL;
+    if (fo.modulus) {
+        Expr* out = factor_modular("FactorSquareFree", res->data.function.args[0],
+                                   fo.modulus, 1);
+        factor_opts_free(&fo);
+        return out;
+    }
+    const Expr* alpha_expr = fo.extension;
+    if (!alpha_expr && res->data.function.arg_count >= 2) {
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorSquareFree),
+            (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1));
     }
 
     /* A *real* extension is anything but Extension -> None (Automatic and an

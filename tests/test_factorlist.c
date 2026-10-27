@@ -123,9 +123,11 @@ static void test_factorlist_modulus(void) {
     check("Factor[x^4 + 1, Modulus -> 2]", "(1 + x)^4");
     check("Factor[x^2 - 2, Modulus -> 7]", "(3 + x) (4 + x)");
 
-    /* declines, NOT an answer over Q */
-    check("Factor[x^2 + 1, Modulus -> 4]", "Factor[1 + x^2, Modulus -> 4]");
-    check("Factor[x y + 1, Modulus -> 5]", "Factor[1 + x y, Modulus -> 5]");
+    /* a composite modulus declines (Factor::modp), NOT an answer over Q */
+    check("Quiet[Factor[x^2 + 1, Modulus -> 4]]", "Factor[1 + x^2, Modulus -> 4]");
+    /* multivariate over GF(p) */
+    check("Factor[x y + 1, Modulus -> 5]", "1 + x y");
+    check("Factor[x^2 y^2 - 1, Modulus -> 5]", "(1 + x y) (4 + x y)");
 
     /* PolynomialGCD had the same hole, and PolynomialExtendedGCD did not:
      * with the same option the extended form already answered {2 + x, {0, 1}}

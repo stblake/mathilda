@@ -201,6 +201,26 @@ static Expr* factor_flint_side(Expr* p) {
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+    /* Options, parsed once.  Modulus -> p factors over GF(p) and is done
+     * here; a call whose options are all at their defaults is the plain
+     * one-argument form, re-dispatched so every fast path below applies
+     * (they are gated on the one-argument form). */
+    const char* const factor_allowed[] = { SYM_Extension, SYM_GaussianIntegers,
+                                           SYM_Modulus, SYM_Trig, NULL };
+    FactorOpts fo;
+    if (!factor_parse_options(res, "Factor", factor_allowed, &fo)) return NULL;
+    if (fo.modulus) {
+        Expr* out = factor_modular("Factor", res->data.function.args[0], fo.modulus, 0);
+        factor_opts_free(&fo);
+        return out;
+    }
+    if (!fo.extension && !fo.gaussian && res->data.function.arg_count >= 2) {
+        /* Trig -> True is accepted; the trigonometric rewriting it asks
+         * for is not done, and the ordinary factorisation is returned. */
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+            (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1));
+    }
+
     /* x^(2 + e) - x^e factors as (-1 + x) x^e (1 + x): powers with a symbolic
      * exponent factor over their generators b^t (expsplit.c), as in the
      * reference, and are put back together afterwards. */
@@ -217,64 +237,6 @@ Expr* builtin_factor(Expr* res) {
             Expr* out = f ? expsplit_restore(f, &st) : NULL;
             expsplit_free(&st);
             if (out) return out;
-        }
-    }
-
-    /* Modulus -> p asks for the factorisation in F_p[x], and it was being
-     * IGNORED -- the option was simply not recognised here, so the polynomial
-     * was factored over Q and the answer came back as if the option were absent:
-     *
-     *     Factor[x^2 + 1, Modulus -> 5]   gave  1 + x^2   (GF(5): (x+2)(x+3))
-     *     Factor[x^4 + 1, Modulus -> 2]   gave  1 + x^4   (GF(2): (1+x)^4)
-     *
-     * A silent wrong answer, and FactorList inherited it verbatim since it
-     * delegates here.  FLINT's nmod_poly_factor was already linked and in use;
-     * flint_nmod_poly_factor_list exposes it.  When the fast path declines -- a
-     * non-word-size or composite modulus, more than one variable, USE_FLINT=0 --
-     * the whole call declines (NULL, head unevaluated) rather than answering
-     * over Q, which is the one outcome that must not come back. */
-    {
-        size_t n = res->data.function.arg_count;
-        Expr* last = res->data.function.args[n - 1];
-        Expr* mod_p = NULL;
-        if (n >= 2 && last->type == EXPR_FUNCTION
-            && last->data.function.head->type == EXPR_SYMBOL
-            && last->data.function.head->data.symbol.name == SYM_Rule
-            && last->data.function.arg_count == 2
-            && last->data.function.args[0]->type == EXPR_SYMBOL
-            && last->data.function.args[0]->data.symbol.name == SYM_Modulus)
-            mod_p = last->data.function.args[1];
-
-        if (mod_p) {
-            if (n != 2 || mod_p->type != EXPR_INTEGER || mod_p->data.integer < 2)
-                return NULL;
-            Expr** vars = NULL; size_t nv = 0, cap = 0;
-            collect_variables(res->data.function.args[0], &vars, &nv, &cap);
-            Expr* x = (nv == 1) ? expr_copy(vars[0]) : NULL;
-            for (size_t i = 0; i < nv; i++) expr_free(vars[i]);
-            free(vars);
-            if (!x) return NULL;                       /* not univariate: decline */
-
-            Expr* fl = flint_nmod_poly_factor_list(res->data.function.args[0], x,
-                                                   (unsigned long)mod_p->data.integer);
-            expr_free(x);
-            if (!fl) return NULL;
-            /* {{c,1},{f1,e1},...}  ->  c f1^e1 ... */
-            size_t np = fl->data.function.arg_count;
-            Expr** terms = malloc(np * sizeof(Expr*));
-            if (!terms) { expr_free(fl); return NULL; }
-            for (size_t i = 0; i < np; i++) {
-                Expr* pr = fl->data.function.args[i];
-                Expr* base = expr_copy(pr->data.function.args[0]);
-                Expr* e    = pr->data.function.args[1];
-                terms[i] = (e->type == EXPR_INTEGER && e->data.integer == 1)
-                    ? base
-                    : internal_power((Expr*[]){ base, expr_copy(e) }, 2);
-            }
-            expr_free(fl);
-            Expr* prod = internal_times(terms, np);
-            free(terms);
-            return prod;
         }
     }
 
@@ -302,22 +264,29 @@ Expr* builtin_factor(Expr* res) {
      *
      * The memo is bypassed for this branch: the cache key is the
      * polynomial alone, but the result depends on the extension too. */
-    if (res->data.function.arg_count >= 2) {
-        Expr* alpha_expr = NULL;
-        for (size_t i = 1; i < res->data.function.arg_count; i++) {
-            Expr* opt = res->data.function.args[i];
-            if (opt->type == EXPR_FUNCTION
-                && opt->data.function.head
-                && opt->data.function.head->type == EXPR_SYMBOL
-                && (opt->data.function.head->data.symbol.name == SYM_Rule
-                    || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
-                && opt->data.function.arg_count == 2) {
-                Expr* lhs = opt->data.function.args[0];
-                Expr* rhs = opt->data.function.args[1];
-                if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Extension) {
-                    alpha_expr = rhs;
-                }
+    if (fo.extension || fo.gaussian) {
+        /* GaussianIntegers -> True adds I to the extension. */
+        Expr* gauss_ext = NULL;
+        Expr* alpha_expr = (Expr*)fo.extension;
+        if (fo.gaussian) {
+            Expr* ii = expr_new_function(expr_new_symbol(SYM_Complex),
+                                         (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+            if (!alpha_expr) {
+                gauss_ext = ii;
+            } else if (alpha_expr->type == EXPR_FUNCTION
+                       && alpha_expr->data.function.head->type == EXPR_SYMBOL
+                       && alpha_expr->data.function.head->data.symbol.name == SYM_List) {
+                size_t n = alpha_expr->data.function.arg_count;
+                Expr** a = malloc((n + 1) * sizeof(Expr*));
+                for (size_t k = 0; k < n; k++) a[k] = expr_copy(alpha_expr->data.function.args[k]);
+                a[n] = ii;
+                gauss_ext = expr_new_function(expr_new_symbol(SYM_List), a, n + 1);
+                free(a);
+            } else {
+                gauss_ext = expr_new_function(expr_new_symbol(SYM_List),
+                                              (Expr*[]){ expr_copy(alpha_expr), ii }, 2);
             }
+            alpha_expr = gauss_ext;
         }
         /* Auto-detect when the user passed Extension -> Automatic. */
         Expr* alpha_auto = NULL;
@@ -401,6 +370,7 @@ Expr* builtin_factor(Expr* res) {
                 if (result) {
                     if (alpha_auto) expr_free(alpha_auto);
                     if (auto_tower) qa_tower_free(auto_tower);
+                    if (gauss_ext) expr_free(gauss_ext);
                     return result;
                 }
                 /* Fall through to plain Factor on failure. */
@@ -409,9 +379,13 @@ Expr* builtin_factor(Expr* res) {
                 free(vars);
             }
         }
-        /* Cleanup auto-detect state before any fall-through to plain Factor. */
         if (alpha_auto) expr_free(alpha_auto);
         if (auto_tower) qa_tower_free(auto_tower);
+        if (gauss_ext) expr_free(gauss_ext);
+        /* Nothing factors over the extension that does not already factor
+         * over Q (or the extension engine declined): the plain form. */
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+            (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1));
     }
 
     /* Memo lookup: if a Simplify call has installed a Factor memo and

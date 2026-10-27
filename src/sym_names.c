@@ -686,6 +686,7 @@ const char* SYM_ToRadicals = NULL;
 const char* SYM_ToString = NULL;
 const char* SYM_Total = NULL;
 const char* SYM_TrialDivision = NULL;
+const char* SYM_Trig = NULL;
 const char* SYM_TrigExpand = NULL;
 const char* SYM_TrigFactor = NULL;
 const char* SYM_TrigReduce = NULL;
@@ -1745,6 +1746,7 @@ void sym_names_init(void) {
     SYM_ToString                   = intern_symbol("ToString");
     SYM_Total                      = intern_symbol("Total");
     SYM_TrialDivision              = intern_symbol("TrialDivision");
+    SYM_Trig                       = intern_symbol("Trig");
     SYM_TrigExpand                 = intern_symbol("TrigExpand");
     SYM_TrigFactor                 = intern_symbol("TrigFactor");
     SYM_TrigReduce                 = intern_symbol("TrigReduce");

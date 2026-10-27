@@ -24,6 +24,7 @@
  */
 
 #include "facpoly_list.h"
+#include "facpoly.h"
 #include "expsplit.h"
 
 #include "eval.h"
@@ -236,6 +237,7 @@ Expr* builtin_factorlist(Expr* res) {
             last_bad = res->data.function.args[i];
     }
     if (last_bad) return factorlist_emit_nonopt(last_bad, 1, res);
+    if (!factor_options_valid(res, "FactorList", 0)) return NULL;
 
     /* (x + y)^(-3 + 3 e) lists as {(x + y)^e, 3}, {x + y, -3}: powers with a
      * symbolic exponent factor over their generators (expsplit.c), which come
@@ -345,6 +347,7 @@ Expr* builtin_factorsquarefreelist(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return NULL;  /* leave FactorSquareFreeList[] unevaluated */
+    if (!factor_options_valid(res, "FactorSquareFreeList", 1)) return NULL;
 
     /* FactorSquareFree[poly, opts...] -- forward every argument verbatim. */
     Expr** fargs = malloc(argc * sizeof(Expr*));

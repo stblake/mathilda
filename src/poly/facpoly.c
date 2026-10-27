@@ -16,6 +16,8 @@
 #include "sym_names.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "print.h"
+#include "message.h"
 #include "checked_int.h"      /* ci_mul_i64 / ci_sub_i64: upoly_div_exact_z */
 #include <stdlib.h>
 #include <string.h>
@@ -97,6 +99,7 @@ static bool factor_has_leftover_denominator(const Expr* e) {
     return false;
 }
 
+#include "facpoly_options.inc"
 #include "facpoly_squarefree.inc"
 #include "facpoly_simple.inc"
 #include "facpoly_monomial_content.inc"

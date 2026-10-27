@@ -570,6 +570,12 @@ Expr* flint_nmod_poly_divrem(const Expr* a, const Expr* b, const Expr* x,
 /* flint_nmod_poly_factor_list: {{c,1},{f1,e1},...} over F_p, c the leading
  * coefficient and each fi monic irreducible; NULL if p is not a word-size prime,
  * the argument is not univariate in x over Z, or FLINT is absent. */
+/* Factor (squarefree != 0: square-free factor) a polynomial over GF(m), m a
+ * prime Integer Expr of any size, as {{c, 1}, {f1, e1}, ...} with c in [0, m)
+ * and monic factors.  *status: 0 ok, 1 not a polynomial (decline), 2 a
+ * coefficient denominator is divisible by m. */
+Expr* flint_modular_factor_list(const Expr* p, const Expr* modulus,
+                                int squarefree, int* status);
 Expr* flint_nmod_poly_factor_list(const Expr* a, const Expr* x, unsigned long p);
 Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x,
                            unsigned long p);

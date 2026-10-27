@@ -660,12 +660,32 @@ void options_register_defaults(void) {
         ob_add(&b, r_int("Modulus", 0));
         ob_commit(&b, poly_fns[i]);
     }
-    const char* rat_fns[] = { "Together", "Cancel", "Apart", "Factor" };
+    const char* rat_fns[] = { "Together", "Cancel", "Apart" };
     for (size_t i = 0; i < sizeof(rat_fns) / sizeof(rat_fns[0]); i++) {
         ob_init(&b);
         ob_add(&b, r_sym("Extension", "None"));
         ob_add(&b, r_int("Modulus", 0));
         ob_commit(&b, rat_fns[i]);
+    }
+
+    /* Factor family: Factor and FactorList take all four options, the
+     * square-free pair no GaussianIntegers, FactorTerms(List) no field. */
+    const char* fac_fns[] = { "Factor", "FactorList" };
+    for (size_t i = 0; i < sizeof(fac_fns) / sizeof(fac_fns[0]); i++) {
+        ob_init(&b);
+        ob_add(&b, r_sym("Extension", "None"));
+        ob_add(&b, r_sym("GaussianIntegers", "False"));
+        ob_add(&b, r_int("Modulus", 0));
+        ob_add(&b, r_sym("Trig", "False"));
+        ob_commit(&b, fac_fns[i]);
+    }
+    const char* sqf_fns[] = { "FactorSquareFree", "FactorSquareFreeList" };
+    for (size_t i = 0; i < sizeof(sqf_fns) / sizeof(sqf_fns[0]); i++) {
+        ob_init(&b);
+        ob_add(&b, r_sym("Extension", "None"));
+        ob_add(&b, r_int("Modulus", 0));
+        ob_add(&b, r_sym("Trig", "False"));
+        ob_commit(&b, sqf_fns[i]);
     }
 
     /* ---- Fitting / linear algebra ---- */
