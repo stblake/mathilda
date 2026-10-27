@@ -65,6 +65,12 @@ is shown equal (or the new behaviour shown right).
       Block[{$Assumptions = Element[a, Integers]}, Refine[e, Element[a, Integers]]] passes Refine a True and
       $Assumptions itself evaluates to True.  Only assumption-aware functions should consult it; check what relies
       on the current behaviour before changing it (Limit works around it, v0.6044)
+- [ ] Gruntz on Exp[Exp[PolyGamma[0, PolyGamma[0, x]]]]/x declines; with Series' coefficient-expansion threshold
+      at 64 leaves (series.c so_normalize_radical_coefs) it answers 1/Sqrt[E] (correct) but in 109 s of Expand; the
+      threshold is 128 for now.  A cheaper normal form than Expand for those coefficients would get both
+- [ ] Refine[Tan[x] > 0, 0 < x < Pi/2] stays unevaluated though Refine decides Sin[x] > 0 and Cos[x] > 0 there
+      (so Simplify[Log[Sin[x]] - Log[Tan[x]] - Log[Cos[x]], 0 < x < Pi/2] does not fuse); prov_pos derives Tan's
+      sign from Sin/Cos facts but not from a box on x
 - [ ] Root is HoldAll (src/root.c root_init), so its INDEX is never evaluated: k = 2; Root[#^2 - 2 &, k] and
       Table[Root[f, k], {k, 4}] stay symbolic.  Function holds its own body, so HoldFirst (or none) suffices
 - [ ] ClassifyPrime[T, c] does not terminate for a constant c (TowerSpecialPlaces now filters constants out;

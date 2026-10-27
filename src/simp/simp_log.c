@@ -14,6 +14,7 @@
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "arithmetic.h"
+#include "simp_internal.h"   /* assume_reduce_entails */
 #include <stdlib.h>
 #include <string.h>
 #include <gmp.h>
@@ -320,6 +321,30 @@ static Expr* pass_a_decompose(const Expr* e) {
  * Returns false when the term contains zero or multiple Log[..] factors,
  * or when any Log has the wrong arity.
  */
+/* a > 0 under ctx: the per-symbol test first, then the reduction-based
+ * entailment, which also decides a compound argument -- 1 - x and
+ * (1 + x)/(1 - x) under 0 < x < 1, which the per-symbol test cannot. */
+static bool log_arg_positive(const AssumeCtx* ctx, const Expr* a) {
+    if (assume_known_positive(ctx, a)) return true;
+    if (!ctx) return false;
+    if (prov_pos(ctx, a)) return true;      /* Refine's prover: Sin[x], Cos[x] on a box */
+    Expr* gt = expr_new_function(expr_new_symbol(SYM_Greater),
+                   (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(0) }, 2);
+    int r = assume_reduce_entails(ctx, gt);
+    if (r == 1) { expr_free(gt); return true; }
+    /* Last, Refine itself under the facts: it decides Sin[x] > 0 on
+     * 0 < x < Pi/2, which neither test above reaches. */
+    if (ctx->count == 0 || ctx->inconsistent) { expr_free(gt); return false; }
+    Expr** fs = (Expr**)malloc(sizeof(Expr*) * ctx->count);
+    for (size_t i = 0; i < ctx->count; i++) fs[i] = expr_copy(ctx->facts[i]);
+    Expr* conj = expr_new_function(expr_new_symbol(SYM_And), fs, ctx->count);
+    free(fs);
+    Expr* rf = eval_take(make_call2("Refine", gt, conj));
+    bool ok = rf && rf->type == EXPR_SYMBOL && rf->data.symbol.name == SYM_True;
+    if (rf) expr_free(rf);
+    return ok;
+}
+
 static bool extract_log_term(const Expr* term, Expr** coeff_out, Expr** arg_out) {
     if (is_log1(term)) {
         *coeff_out = expr_new_integer(1);
@@ -400,7 +425,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
         if (extract_log_term(t, &c, &a)) {
             coeffs[n_log] = c;
             args[n_log]   = a;
-            if (!assume_known_positive(ctx, a)) all_args_positive = false;
+            if (all_args_positive && !log_arg_positive(ctx, a)) all_args_positive = false;
             n_log++;
         } else {
             rest[n_rest++] = expr_copy(t);
@@ -416,12 +441,49 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
         return NULL;
     }
 
-    /* Build product: Product[args[i] ^ coeffs[i]]. */
+    /* Coefficients that are integer multiples r_i of the first, c: fuse
+     * c Log[Product[args^r_i]] rather than Log[Product[args^c_i]].
+     * Evaluation does not merge Sqrt[a] Sqrt[b], so 1/2 Log[1 - x] +
+     * 1/2 Log[(1 + x)/(1 - x)] fused to the unhelpful Log[Sqrt[1 - x]
+     * Sqrt[(1 + x)/(1 - x)]] and was rejected, where integer powers cancel to
+     * Log[1 + x].  The conditions are the same as for unit coefficients. */
+    Expr* common = expr_copy(coeffs[0]);
+    Expr** ratio = (Expr**)calloc(n_log, sizeof(Expr*));
+    for (size_t i = 0; i < n_log && common; i++) {
+        ratio[i] = eval_take(make_call2("Times", expr_copy(coeffs[i]),
+                       make_call2("Power", expr_copy(coeffs[0]), expr_new_integer(-1))));
+        if (!ratio[i] || ratio[i]->type != EXPR_INTEGER) { expr_free(common); common = NULL; }
+    }
+    /* A negative numeric common factor is flipped (with every ratio), so
+     * Log[2 x] - Log[x] stays Log[2] rather than -Log[1/2]. */
+    if (common) {
+        Expr* sg = eval_take(make_call1("Sign", expr_copy(common)));
+        bool neg = sg && sg->type == EXPR_INTEGER && sg->data.integer == -1;
+        if (sg) expr_free(sg);
+        if (neg) {
+            common = eval_take(make_call2("Times", expr_new_integer(-1), common));
+            for (size_t i = 0; i < n_log; i++)
+                ratio[i] = eval_take(make_call2("Times", expr_new_integer(-1), ratio[i]));
+        }
+    }
+    if (common && common->type == EXPR_INTEGER && common->data.integer == 1) {
+        expr_free(common); common = NULL;          /* already the plain form */
+    }
+
+    /* Build product: Product[args[i] ^ coeffs[i]] (or ^ r_i under common). */
     Expr** factors = (Expr**)calloc(n_log, sizeof(Expr*));
     for (size_t i = 0; i < n_log; i++) {
-        factors[i] = make_call2("Power", args[i], coeffs[i]);
+        if (common) {
+            factors[i] = make_call2("Power", args[i], ratio[i]);
+            ratio[i] = NULL;
+            expr_free(coeffs[i]);
+        } else {
+            factors[i] = make_call2("Power", args[i], coeffs[i]);
+        }
     }
-    /* args[] and coeffs[] are consumed by the Power factors above. */
+    for (size_t i = 0; i < n_log; i++) if (ratio[i]) expr_free(ratio[i]);
+    free(ratio);
+    /* args[] and coeffs[] are consumed by the factors above. */
     free(coeffs); free(args);
     Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, n_log);
     free(factors);
@@ -469,6 +531,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
 
     /* Build new Plus[Log[prod_eval], rest...] and evaluate. */
     Expr* fused_log = eval_take(make_call1("Log", prod_eval));
+    if (common) fused_log = eval_take(make_call2("Times", common, fused_log));
 
     Expr** all = (Expr**)calloc(n_rest + 1, sizeof(Expr*));
     all[0] = fused_log;
@@ -488,18 +551,34 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
     /* Decide whether to take the fusion.
      *
      *   - Provably positive args: accept any strict improvement.
-     *   - Otherwise: accept only when the result collapsed to a small
-     *     constant (leaf count <= 4) -- e.g. 0, Log[2], -2 x. This is
-     *     the safe gate that prevents speculative fusion from being
-     *     "wrong but smaller" on inputs whose log args might be
-     *     negative or complex. */
+     *   - Otherwise sum c_i Log[a_i] and the fused Log differ by 2 Pi I k for
+     *     an integer k that depends on the args' branches, so it is taken
+     *     only for a NUMERIC constant whose 30-digit difference is 0 -- that
+     *     decides k exactly.  The earlier gate ("the result collapsed to a
+     *     small constant") was unsound: Log[x] + Log[1/x] -> 0 fails on the
+     *     negative axis, and Log[-x] + Log[-1/x] -> 0 under x > 0 is 2 Pi I. */
     size_t old_score = simp_default_complexity(plus_expr);
     size_t new_score = simp_default_complexity(new_plus);
     bool take;
     if (all_args_positive) {
         take = new_score < old_score;
     } else {
-        take = new_score < old_score && is_small_constant(new_plus, 4);
+        take = false;
+        if (new_score < old_score && is_small_constant(new_plus, 4)) {
+            Expr* nq = eval_take(make_call1("NumericQ", expr_copy((Expr*)plus_expr)));
+            bool numeric = nq && nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+            if (nq) expr_free(nq);
+            if (numeric) {
+                Expr* d = eval_take(make_call2("N",
+                              make_call2("Plus", expr_copy((Expr*)plus_expr),
+                                  make_call2("Times", expr_new_integer(-1), expr_copy(new_plus))),
+                              expr_new_integer(30)));
+                Expr* z = eval_take(make_call1("Abs", d));
+                Expr* lt = eval_take(make_call2("Less", z, expr_new_integer(1)));
+                take = lt && lt->type == EXPR_SYMBOL && lt->data.symbol.name == SYM_True;
+                if (lt) expr_free(lt);
+            }
+        }
     }
     if (!take) {
         expr_free(new_plus);

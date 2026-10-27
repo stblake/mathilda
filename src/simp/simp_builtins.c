@@ -1192,6 +1192,45 @@ static int simp_region_identity_is_zero(const Expr* e, const AssumeCtx* ctx) {
                               (Expr*[]){ expr_copy(ep) }, 1));
                 if (s && s->type==EXPR_INTEGER && s->data.integer==0) proven = 1;
                 if (s) expr_free(s);
+                /* A mixed inverse-hyperbolic / Log constant, e.g. ArcTanh[1/4] -
+                 * 1/2 Log[5/3] from the sample x = 1/4 of 0 < x < 1/2: in log
+                 * form it is a rational combination of logs of positive
+                 * rationals, which the Log fuser decides exactly. */
+                /* Only when every Log argument in that form is a positive real:
+                 * ArcTan[c] becomes logs of COMPLEX numbers, where Log[a] +
+                 * Log[b] = Log[a b] fails, and fusing them proved the
+                 * Pi-valued ArcTan[3] + ArcTan[3] - ArcTan[-3/4] "zero". */
+                if (!proven) {
+                    Expr* lf = eval_and_free(expr_new_function(expr_new_symbol("TrigToExp"),
+                                   (Expr*[]){ expr_copy(ep) }, 1));
+                    Expr* ok = eval_and_free(expr_new_function(expr_new_symbol("And"),
+                        (Expr*[]){ expr_new_function(expr_new_symbol("FreeQ"),
+                                       (Expr*[]){ expr_copy(lf), expr_new_symbol("Complex") }, 2),
+                                   expr_new_function(expr_new_symbol("AllTrue"),
+                                       (Expr*[]){ expr_new_function(expr_new_symbol("Cases"),
+                                                      (Expr*[]){ expr_copy(lf),
+                                                          expr_new_function(expr_new_symbol("RuleDelayed"),
+                                                              (Expr*[]){ expr_new_function(expr_new_symbol("Log"),
+                                                                             (Expr*[]){ expr_new_function(expr_new_symbol("Pattern"),
+                                                                                 (Expr*[]){ expr_new_symbol("Simplify`a$"),
+                                                                                            expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1),
+                                                                         expr_new_symbol("Simplify`a$") }, 2),
+                                                          expr_new_symbol("Infinity") }, 3),
+                                                  expr_new_function(expr_new_symbol("Function"),
+                                                      (Expr*[]){ expr_new_function(expr_new_symbol("TrueQ"),
+                                                          (Expr*[]){ expr_new_function(expr_new_symbol("Greater"),
+                                                              (Expr*[]){ expr_new_function(expr_new_symbol("Slot"),
+                                                                             (Expr*[]){ expr_new_integer(1) }, 1),
+                                                                         expr_new_integer(0) }, 2) }, 1) }, 1) }, 2) }, 2));
+                    if (ok && ok->type == EXPR_SYMBOL && ok->data.symbol.name == SYM_True) {
+                        Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Simplify"),
+                                      (Expr*[]){ expr_copy(lf) }, 1));
+                        if (t && t->type==EXPR_INTEGER && t->data.integer==0) proven = 1;
+                        if (t) expr_free(t);
+                    }
+                    if (ok) expr_free(ok);
+                    expr_free(lf);
+                }
             }
             expr_free(ep);
         }

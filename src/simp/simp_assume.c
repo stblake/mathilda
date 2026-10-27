@@ -567,6 +567,18 @@ bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
         }
         /* Abs[x] >= 0; strictly > 0 only when x != 0, which we cannot prove
          * from sign alone, so fall back to nonneg here. */
+        /* Tan[u], Cot[u] > 0 when Sin[u] and Cos[u] are strictly of one sign
+         * (sign_deep has the non-strict version); Log[Tan[x]] needs it. */
+        if ((h == SYM_Tan || h == SYM_Cot) && n == 1) {
+            Expr* su = expr_new_function(expr_new_symbol(SYM_Sin),
+                           (Expr*[]){ expr_copy(a[0]) }, 1);
+            Expr* cu = expr_new_function(expr_new_symbol(SYM_Cos),
+                           (Expr*[]){ expr_copy(a[0]) }, 1);
+            bool r = (prov_pos(ctx, su) && prov_pos(ctx, cu)) ||
+                     (prov_neg(ctx, su) && prov_neg(ctx, cu));
+            expr_free(su); expr_free(cu);
+            if (r) return true;
+        }
         /* Cosh[real] >= 1 > 0. */
         if (h == SYM_Cosh && n == 1 && prov_re(ctx, a[0])) return true;
         /* Sech[real] in (0, 1] > 0. */
