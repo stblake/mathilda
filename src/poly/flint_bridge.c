@@ -1141,6 +1141,45 @@ static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
     }
 }
 
+/* Zero test of an EXPANDED polynomial with Gaussian-rational coefficients
+ * (a + b I), which the Q-only conversion declines.  Each Complex[a, b] becomes
+ * a + b tau for a fresh generator tau, so ex = A + tau B with A, B over Q, and
+ * ex == 0 over Q(I) iff A == B == 0 iff the tau-polynomial is zero -- provided
+ * tau occurs only to the first power, which the expansion guarantees (every
+ * power of I has been reduced numerically); a higher tau power, possible only
+ * inside an opaque structure, declines rather than ignore tau^2 = -1.  Without
+ * this, every gcd and exact division over Q(I) fell to the classical
+ * is_zero_poly_depth recursion, which re-expands at each of up to 32 variable
+ * levels (issue #114).  1 zero, 0 nonzero, -1 decline. */
+static int flint_mpoly_is_zero_gaussian(const Expr* ex) {
+    Expr* et = field_subst_tau(ex, 1);
+    if (!et) return -1;
+    size_t gc = 0, gcap = 16;
+    Expr** gens = malloc(sizeof(Expr*) * gcap);
+    if (!gens) { expr_free(et); return -1; }
+    collect_variables(et, &gens, &gc, &gcap);
+
+    slong tau_idx = -1;
+    for (size_t i = 0; i < gc; i++)
+        if (gens[i]->type == EXPR_SYMBOL &&
+            strcmp(gens[i]->data.symbol.name, FIELD_TAU_NAME) == 0) { tau_idx = (slong)i; break; }
+
+    int result = -1;
+    if (tau_idx >= 0) {
+        const fmpq_mpoly_ctx_struct* ctx = bridge_ctx_lex((slong)gc);
+        fmpq_mpoly_t P;
+        fmpq_mpoly_init(P, ctx);
+        if (to_mpoly_kernels(et, P, ctx, gens, (int)gc) &&
+            fmpq_mpoly_degree_si(P, tau_idx, ctx) <= 1)
+            result = fmpq_mpoly_is_zero(P, ctx) ? 1 : 0;
+        fmpq_mpoly_clear(P, ctx);
+    }
+    for (size_t i = 0; i < gc; i++) expr_free(gens[i]);
+    free(gens);
+    expr_free(et);
+    return result;
+}
+
 int flint_mpoly_is_zero(const Expr* e) {
     if (!e) return 1;   /* classical is_zero_poly_depth(NULL) == true */
 
@@ -1191,6 +1230,7 @@ int flint_mpoly_is_zero(const Expr* e) {
     /* ctx is a cached shared context: not cleared */
     for (size_t i = 0; i < gc; i++) expr_free(gens[i]);
     free(gens);
+    if (result < 0) result = flint_mpoly_is_zero_gaussian(ex);
     expr_free(ex);
     return result;
 }

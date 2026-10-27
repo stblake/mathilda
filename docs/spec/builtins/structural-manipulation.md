@@ -1502,6 +1502,17 @@ Factors a polynomial over the integers.
 
 **Features**:
 - `Listable`, `Protected`.
+- **Gaussian-rational coefficients are fast** (v0.6051, issue #114). A
+  multivariate polynomial with `I` in its coefficients is still factored over
+  `Q(I)`, as in the reference (`Factor[Expand[(x + I)^2 (1 + y)]]` is
+  `(I + x)^2 (1 + y)`), but FLINT's `fmpq_mpoly_factor` declines it, and the
+  classical path was slow: a 28-term, 30-kernel irreducible input took 63 s
+  and now takes 26 ms. Two changes did this. A polynomial of degree 1 in some
+  variable with coprime coefficients is concluded irreducible (Gauss's lemma),
+  provided every variable is a genuine indeterminate (not `Sqrt[3]`, a `Root`
+  or an `AlgebraicNumber`). And the FLINT zero test now accepts Gaussian
+  coefficients by mapping `I` to a fresh generator, instead of recursing
+  through the classical zero test.
 - **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — the conventional normalisation), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
 - **Gaussian-integer content** (v0.6018), as in the reference. A polynomial
   with Gaussian-integer coefficients, at least one not real, takes its

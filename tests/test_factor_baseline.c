@@ -301,6 +301,45 @@ static void test_factor_gaussian_content(void) {
                    "I (56 - 30 d + 3 d^2), I (a b - c d), {{4*I, 1}, {a - b, 1}}}", 0);
 }
 
+/* Issue #114: a multivariate polynomial with Gaussian coefficients is factored
+ * over Q(I) (FLINT declines it), and the classical path took 63 s on this
+ * irreducible 28-term, 30-kernel input.  Degree one in e[...] with coprime
+ * coefficients settles irreducibility at once (Gauss's lemma). */
+static const char* ISSUE114_POLY =
+        "I e[l[i2], l[i3], l[i6], l[i7]] p[l[i1, n], l[i5, n]] + 2 p[l[i2], l[i7]] p[l[i3], l[i6]] "
+        "p[l[i1, n], l[i5, n]] - 2 p[l[i2], l[i6]] p[l[i3], l[i7]] p[l[i1, n], l[i5, n]] + 2 i "
+        "e[l[i2], l[i3], l[i5], l[i7]] p[l[i1, n], l[i6, n]] - 2 p[l[i2], l[i7]] p[l[i3], l[i5]] "
+        "p[l[i1, n], l[i6, n]] + 2 p[l[i2], l[i5]] p[l[i3], l[i7]] p[l[i1, n], l[i6, n]] + I "
+        "e[l[i2], l[i3], l[i5], l[i6]] p[l[i1, n], l[i7, n]] + 2 p[l[i2], l[i6]] p[l[i3], l[i5]] "
+        "p[l[i1, n], l[i7, n]] - 2 p[l[i2], l[i5]] p[l[i3], l[i6]] p[l[i1, n], l[i7, n]] + I "
+        "e[l[i1], l[i3], l[i6], l[i7]] p[l[i2, n], l[i5, n]] - 2 p[l[i1], l[i7]] p[l[i3], l[i6]] "
+        "p[l[i2, n], l[i5, n]] + 2 p[l[i1], l[i6]] p[l[i3], l[i7]] p[l[i2, n], l[i5, n]] - 2 "
+        "p[l[i6], l[i7]] p[l[i1, 4 + n], l[i3, 4 + n]] p[l[i2, n], l[i5, n]] + I e[l[i1], l[i3], "
+        "l[i5], l[i7]] p[l[i2, n], l[i6, n]] + 2 p[l[i1], l[i7]] p[l[i3], l[i5]] p[l[i2, n], l[i6, "
+        "n]] - 2 p[l[i1], l[i5]] p[l[i3], l[i7]] p[l[i2, n], l[i6, n]] + 2 p[l[i5], l[i7]] p[l[i1, "
+        "4 + n], l[i3, 4 + n]] p[l[i2, n], l[i6, n]] + I e[l[i1], l[i3], l[i5], l[i6]] p[l[i2, n], "
+        "l[i7, n]] - 2 p[l[i1], l[i6]] p[l[i3], l[i5]] p[l[i2, n], l[i7, n]] + 2 p[l[i1], l[i5]] "
+        "p[l[i3], l[i6]] p[l[i2, n], l[i7, n]] - 2 p[l[i5], l[i6]] p[l[i1, 4 + n], l[i3, 4 + n]] "
+        "p[l[i2, n], l[i7, n]] + 2 p[l[i6], l[i7]] p[l[i1, n], l[i5, n]] p[l[i2, 4 + n], l[i3, 4 + "
+        "n]] - 2 p[l[i5], l[i7]] p[l[i1, n], l[i6, n]] p[l[i2, 4 + n], l[i3, 4 + n]] + 2 p[l[i5], "
+        "l[i6]] p[l[i1, n], l[i7, n]] p[l[i2, 4 + n], l[i3, 4 + n]] + I e[l[i1], l[i2], l[i6], "
+        "l[i7]] p[l[i3, n], l[i5, n]] + 2 p[l[i1], l[i7]] p[l[i2], l[i6]] p[l[i3, n], l[i5, n]] - 2"
+        " p[l[i1], l[i6]] p[l[i2], l[i7]] p[l[i3, n], l[i5, n]] + 2 p[l[i6], l[i7]] p[l[i1, 4 + n],"
+        " l[i2, 4 + n]] p[l[i3, n], l[i5, n]]";
+
+static void test_factor_gaussian_multivariate(void) {
+    char buf[8192];
+    snprintf(buf, sizeof buf, "Factor[%s] === %s", ISSUE114_POLY, ISSUE114_POLY);
+    eval_check(buf, "True", 2000.0);
+    /* factorable Gaussian products still factor over Q(I) */
+    assert_eval_eq("Factor[Expand[(x + I)^2 (y + 1)]]", "(I + x)^2 (1 + y)", 0);
+    assert_eval_eq("Factor[Expand[(x + I y) (x - 2 I z + y)]]", "(x + I y) (x + y - (2*I) z)", 0);
+    assert_eval_eq("Factor[Expand[(a + I b + f[c]) (a - I b + 2 g[d])]]",
+                   "(a + I b + f[c]) (a - I b + 2 g[d])", 0);
+    /* an algebraic constant is not an indeterminate: no degree-one shortcut */
+    assert_eval_eq("Factor[x^2 + Sqrt[3] x - 6]", "-6 + Sqrt[3] x + x^2", 0);
+}
+
 static void test_factor_kernels_are_opaque(void) {
     factor_kernel_case("x^2 BesselJ[-2/3, x]^2 + x BesselJ[1/3, x]^2 + 1");
     factor_kernel_case("x^2 Log[x]^2 + x Log[2 x]^2 + 1");
@@ -376,6 +415,7 @@ int main(void) {
     TEST(test_factor_trig_monomial);
     TEST(test_factor_trivariate_high_degree_squarefree);
     TEST(test_factor_kernels_are_opaque);
+    TEST(test_factor_gaussian_multivariate);
     TEST(test_factor_gaussian_content);
 
     printf("All baseline tests passed!\n");

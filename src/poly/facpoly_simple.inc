@@ -230,13 +230,45 @@ static Expr* factor_binomial(Expr* P) {
     return NULL;
 }
 
+/* True when every collected variable is a genuine indeterminate: a symbol
+ * or an opaque kernel f[...].  A Power (Sqrt[3], y^(1/2), 2^(1/3)), a Root or
+ * an AlgebraicNumber is an algebraic quantity that satisfies a relation the
+ * polynomial ring does not see, so a gcd computed with it as a free variable
+ * can be 1 while the true gcd is not: x^2 + s x - 6 with s = Sqrt[3] is linear
+ * in s with coprime coefficients, yet equals (x - Sqrt[3]) (x + 2 Sqrt[3]). */
+static bool factor_vars_all_indeterminate(Expr** vars, size_t v_count) {
+    for (size_t i = 0; i < v_count; i++) {
+        const Expr* v = vars[i];
+        if (v->type == EXPR_SYMBOL) continue;
+        if (v->type != EXPR_FUNCTION || v->data.function.head->type != EXPR_SYMBOL)
+            return false;
+        const char* h = v->data.function.head->data.symbol.name;
+        if (h == SYM_Power || h == SYM_Root || h == SYM_AlgebraicNumber)
+            return false;
+    }
+    return true;
+}
+
 static Expr* factor_degree_one(Expr* P, Expr** vars, size_t v_count) {
+    bool indeterminates = factor_vars_all_indeterminate(vars, v_count);
     for (size_t i = 0; i < v_count; i++) {
         int d = get_degree_poly(P, vars[i]);
         if (d == 1) {
             Expr* L = get_coeff(P, vars[i], 1);
             Expr* C = get_coeff(P, vars[i], 0);
             Expr* G = poly_gcd_internal(L, C, vars, v_count);
+            /* P = L v + C with gcd(L, C) = 1 is primitive in v and of degree 1,
+             * so it is irreducible (Gauss's lemma over the coefficient field,
+             * Q or Q(I)): any factorisation has a v-free factor dividing both
+             * L and C.  Conclude here instead of moving on to the next
+             * variable -- without it an irreducible multivariate polynomial
+             * the FLINT factoriser declines (Gaussian coefficients, issue
+             * #114) fell through to the variable-specialisation split, which
+             * re-factors O(n^2) sub-polynomials (63 s on 30 kernels). */
+            if (indeterminates && G->type == EXPR_INTEGER && G->data.integer == 1) {
+                expr_free(L); expr_free(C); expr_free(G);
+                return expr_copy(P);
+            }
             if (!(G->type == EXPR_INTEGER && G->data.integer == 1)) {
                 Expr* L_G = exact_poly_div(L, G, vars, v_count);
                 Expr* C_G = exact_poly_div(C, G, vars, v_count);
