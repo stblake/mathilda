@@ -1,5 +1,29 @@
 # Lessons learned
 
+## Factor review: field round trips and subagent claims (2026-10-27)
+
+- **Map a field element back with the generator the engine used, never an assumed
+  one.** The Gaussian Cancel fix wrote `I` as `AlgebraicNumber[I, {0, 1}]` and mapped
+  results back with `AlgebraicNumber[_, {a, b}] :> a + b I`. The field engine can
+  return its elements over another root of x^2 + 1, so imaginary parts silently
+  flipped sign and a ParallelMixedTower antiderivative stopped differentiating back.
+  The rule is `AlgebraicNumber[t_, {a_, b_}] :> a + b t`. Any round trip through a
+  representation change needs a numeric equivalence stress test (random inputs,
+  `Abs[N[(r - e) /. pts, 30]]`), not only exact-output unit tests.
+- **A "reduced" counter in a stress test catches a fix that never fires.** The
+  first Gaussian stress run reported 0 wrong answers, but it also reported 0
+  reductions: multivariate inputs declined in the narrow entry point I had called.
+  Count the effect as well as the errors.
+- **Verify a subagent's "fails on the base commit" claim against a base build.**
+  The extension worker reported `intrat_tests` as pre-existing; a worktree at the
+  base commit passed it, and the failure was mine (a FactorSquareFree sign change
+  surfacing in an ArcTan argument). Bisect regressions with one base worktree,
+  checking out each commit and rebuilding incrementally.
+- **A changed solution count is not automatically a regression.** Solve's
+  `Tan[x + y] - Tan[x - 2 y] == 1` went from 8 families to 6. Two of the old ones
+  came from the root 0 of a quartic with no constant term (`-I Log[Sqrt[0]]`), which
+  the new kernel-aware Factor split off. Read the solutions before restoring a count.
+
 ## Parser change => parser tests only; and soft-assert FAILs are silent (2026-10-19, issue #100)
 
 - Correction: I launched the full 555-binary suite (and a HEAD worktree for A/B

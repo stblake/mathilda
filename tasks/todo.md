@@ -1,3 +1,15 @@
+# Factor review, option parity, 4-engine shootout (2026-10-27)
+
+Plan: ~/.claude/plans/let-s-do-a-thorough-floofy-peach.md. Trig -> True is LOW priority (last, optional).
+
+- [ ] P0 benchmarks/99-factor-shootout (Mathilda / reference / PARI / Maxima [/ SymPy]), independent verification, baseline REPORT
+- [ ] P1 reviews + seeded stress drivers: (a+b) FLINT uni/multi bridges, (c) pre-stages, (d) Trager Extension, (e+f) no-FLINT fallback + FactorList/SquareFree/Terms family
+- [ ] P2 correctness fixes (each with a regression test first)
+- [ ] P3 options: single-pass parse, Factor::optx, Modulus (0 = Q, ::modp, any position, multivariate nmod/fmpz_mod), GaussianIntegers, multivariate Extension, forwarding in FactorList/FactorSquareFree/IrreduciblePolynomialQ
+- [ ] P4 performance from the shootout report (fast entry, single-pass conversion, direct result build, FLINT squarefree, Trager norm via resultant)
+- [ ] P5 docstrings, spec, changelog, version/tags, lessons + memory
+- [ ] (low) Trig -> True
+
 # Symbol table: outstanding items after v0.6057 (2026-10-27)
 
 Baseline (v0.6057, same machine; reference = local 14.0 kernel):
