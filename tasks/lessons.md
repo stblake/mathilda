@@ -4905,3 +4905,8 @@ v0.6034 added a visible-NDArray branch to Equal/Unequal and was pushed without
 `check-*` targets locally (c99, messages, packed-aware, menu-ids,
 pipe-protocol). The audit attributes code to the preceding `Expr* NAME(`
 definition, so a non-Expr* static helper is charged to the builtin above it.
+
+## 2026-10-27: test scope matches change size
+- A trivial fix (a missing `case` in `expr_head` / `blank_head_matches`) gets its own suite only (compiledfunction_tests,
+  patterns_tests). Do not run the full ctest, and never investigate an unrelated suite's flake (dsolve_tests under
+  -j10 load) mid-task. Note it in tasks/todo.md and move on.

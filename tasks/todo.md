@@ -18,6 +18,8 @@ Baseline (v0.6057, same machine; reference = local 14.0 kernel):
       escapes +49.6 -> +0.9 MB.  548/548 unit suites; 34 suites clean under ASan with MATHILDA_TEMP_SWEEP_EAGER=1
 - [x] C. #112 peak memory (v0.6059): result held 5.4 nodes/term (private Times head symbol + coefficient per term);
       one canonical node per SymbolDef + shared small ints [-256,1024]: peak 120 -> 94 MB (ref 102), gen 2.50 -> 2.29 s
+- [ ] dsolve_tests t_system_varcoeff flaked once under ctest -j10 (PossibleZeroQ got List[True, True]: DSolve answer shape
+      changed under load; 40/40 standalone OK). Not investigated -- timing/state dependent
 - [x] Head[CompiledFunction[...]] unevaluated, [[0]] and _CompiledFunction too: expr_head + blank_head_matches ; v0.6060
 - [x] Tests (test_modular.c reclamation cases, test_expr_sharing canonical nodes), docs, v0.6058 + v0.6059 tags
 
