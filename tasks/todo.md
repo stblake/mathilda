@@ -16,7 +16,7 @@
       structural bodies), probe reused as first term (body evaluated once per index), integer index step,
       symtab stored hashes + doubling table. Generation 4.7 -> ~3.2 s.
 - [x] Reclaim Module locals (v0.6056): +111,005 -> +9 symbols per trace, 548 -> 50 B per Module call
-- [ ] Rest of SYMBOL_TABLE_IMPROVEMENTS.md (lazy local names, single body copy, symbol ids, ordered iteration)
+- [x] Rest of SYMBOL_TABLE_IMPROVEMENTS.md (v0.6057): ordered iteration, single copy per changed path + stack buffers, single interning per local; symbol ids declined on measurements
 - [ ] Factor over Q(I), univariate: Factor[x^2 + 2 I x - 1] should be (I + x)^2 (pre-existing gap)
 - [ ] Cancel numerator form: Mathilda expands the quotient numerator ((1 + a) y -> y + a y); the reference keeps it
 

@@ -2538,8 +2538,15 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
          * it -- Unevaluated[Sequence[]] and HoldComplete[Sequence[], n] stay.
          * Splicing it here made Unevaluated[], so a Table whose body returns
          * Unevaluated[Sequence[]] gave {Unevaluated[], ...} instead of {}. */
-        Expr** temp_args = malloc(sizeof(Expr*) * expr->data.function.arg_count);
-        bool* spliced = malloc(sizeof(bool) * (expr->data.function.arg_count ? expr->data.function.arg_count : 1));
+        /* Small arities (nearly every node) use stack buffers: three heap
+         * allocations per node were most of a rule application's cost
+         * (f[x_, y___] := Module[...] applied in a loop, issue #112). */
+        enum { RB_STACK_N = 8 };
+        Expr* temp_stack[RB_STACK_N];
+        bool spliced_stack[RB_STACK_N];
+        size_t an = expr->data.function.arg_count;
+        Expr** temp_args = an <= RB_STACK_N ? temp_stack : malloc(sizeof(Expr*) * an);
+        bool* spliced = an <= RB_STACK_N ? spliced_stack : malloc(sizeof(bool) * (an ? an : 1));
         size_t new_count = 0;
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
             /* rb_rec, not replace_bindings: the danger set belongs to the whole
@@ -2576,13 +2583,15 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
                 for (size_t i = 0; i < expr->data.function.arg_count; i++)
                     expr_free(temp_args[i]);
                 expr_free(new_head);
-                free(temp_args);
-                free(spliced);
+                if (temp_args != temp_stack) free(temp_args);
+                if (spliced != spliced_stack) free(spliced);
                 return expr_copy(expr);
             }
         }
 
-        Expr** final_args = malloc(sizeof(Expr*) * (new_count ? new_count : 1));
+        Expr* final_stack[RB_STACK_N];
+        Expr** final_args = new_count <= RB_STACK_N ? final_stack
+                          : malloc(sizeof(Expr*) * (new_count ? new_count : 1));
         size_t idx = 0;
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
             if (spliced[i]) {
@@ -2594,11 +2603,11 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
                 final_args[idx++] = temp_args[i];
             }
         }
-        free(temp_args);
-        free(spliced);
-        
+        if (temp_args != temp_stack) free(temp_args);
+        if (spliced != spliced_stack) free(spliced);
+
         Expr* result = expr_new_function(new_head, final_args, new_count);
-        free(final_args);
+        if (final_args != final_stack) free(final_args);
         return result;
     }
     

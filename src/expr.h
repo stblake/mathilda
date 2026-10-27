@@ -230,6 +230,9 @@ typedef struct Expr {
 Expr* expr_new_integer(int64_t value);
 Expr* expr_new_real(double value);
 Expr* expr_new_symbol(const char* name);
+/* A symbol node for a SymbolDef already in hand (no interning lookup). */
+struct SymbolDef;
+Expr* expr_new_symbol_def(struct SymbolDef* d);
 Expr* expr_new_string(const char* str);
 Expr* expr_new_string_adopt(char* buf);              /* takes ownership of buf */
 Expr* expr_new_string_n(const char* s, size_t n);    /* copy of s[0, n) */

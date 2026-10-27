@@ -1,7 +1,11 @@
 # Symbol table improvements
 
-Status: proposal 1 (reclaiming Module locals) is implemented in v0.6056; see
-its section. The rest remain proposals. Written 2026-10-27 while reducing the
+Status: every proposal has been worked through.
+- **Done:** 1 (v0.6056); 2, 4 and 5 (v0.6057, in the form the evidence
+  supported).
+- **Declined, on measurements:** 3.
+
+Each section records the outcome. Written 2026-10-27 while reducing the
 per-call interpreter overhead of issue #112 (v0.6055). It records what the
 current design costs, measured, and the redesigns worth doing. A smaller,
 order-preserving change was already made and is described under
@@ -139,7 +143,29 @@ reference.
   - A new test: `Module[{x}, x]` survives while held and is reclaimed after
     `Clear`.
 
-### 2. Lazy names for `Module` locals
+### 2. Lazy names for `Module` locals — DONE in v0.6057 (reduced form)
+
+**Outcome.** Fully lazy names were not built: a local's name is needed by
+canonical ordering (`symbol_cmp`), hashing (`expr_hash` hashes the name
+bytes) and printing. So any local that enters an Orderless sum or product,
+a hash-keyed structure, or output would materialise its name anyway, and the
+laziness would add a deferred path to 4814 name reads for little saving.
+
+What was removed instead is the redundant interning. Creating a local hashed
+and walked its fresh name four times: a freshness check, `symtab_get_def`,
+`expr_new_symbol(buf)` (a stack buffer never hits the pointer cache), and
+`symtab_add_own_value(buf)`. `$ModuleNumber` was also re-interned from a
+string literal on every call. Now:
+- `symtab_intern_def` does one walk and reports "created";
+- `expr_new_symbol_def` builds the node from the `SymbolDef`;
+- `symtab_add_own_value_def` sets the value from the `SymbolDef`;
+- `$ModuleNumber` is updated through `SYM_DollarModuleNumber`.
+
+Measured: no change. Once v0.6055's growable table and v0.6056's
+reclamation kept the table small, interning was no longer a measurable
+cost. It is kept as the simpler code.
+
+The original proposal follows.
 
 Creating a local currently costs `snprintf` + intern + `calloc` + `strdup`. An
 alternative is anonymous `SymbolDef`s that are not entered into the name table
@@ -154,7 +180,27 @@ at all.
   `data.symbol.name` expecting a table-registered string. Every pointer
   comparison against `SYM_*` stays valid, because locals are never `SYM_*`.
 
-### 3. Integer symbol ids instead of `char*` identity
+### 3. Integer symbol ids instead of `char*` identity — DECLINED (measured)
+
+**Outcome.** Not done, because the precondition the proposal set ("only if
+profiles show string-keyed side tables mattering") does not hold.
+- **Symbol identity is already as cheap as ids.** It is an interned-pointer
+  compare, exactly the cost of comparing ids.
+- **The string costs that did show have been removed:**
+  - interner chain walks, by v0.6055;
+  - per-call re-interning, by item 2.
+- **The matcher's binding environment (`env_get`/`env_set`) is
+  pointer-first.** Its `strcmp` fallback, kept for the two literal keys
+  `$OptionsPattern$` and `$OptionsPatternHead$` and for regex group names, was
+  about 1.5% of a rule-application profile and usually exits at the first
+  character.
+- **The trade.** Converting 4814 `data.symbol.name` sites would add broad risk
+  for no measurable gain.
+
+**Revisit if** a profile shows a dense per-symbol side table (an array
+indexed by symbol) being needed.
+
+The original proposal follows.
 
 Identity by `char*` makes every "is this the same symbol" a pointer compare,
 which is cheap. But hashing needs the string, and any per-symbol side table
@@ -168,7 +214,28 @@ This is a large mechanical change, touching 4814 `data.symbol.name`
 sites (counted 2026-10-27). It is worth it only together with (2), and only if profiles show
 string-keyed side tables mattering.
 
-### 4. Copy the `Module` body once, not twice
+### 4. Copy the `Module` body once, not twice — DONE in v0.6057
+
+**Outcome.**
+- **No single pass.** Merging the rule substitution and the `Module` renaming
+  into one pass would be unsound: `Module` must rename when it is evaluated
+  (`$ModuleNumber`, nested scopes), not when the rule fires.
+- **Sharing instead.** `substitute_scoping` now shares every subtree no local
+  occurs in, including iterator specs and binding lists, as `replace_bindings`
+  has done since v0.6052. Each pass therefore copies only the paths that
+  change.
+- **Faster lookups.** Interned names are compared by pointer instead of
+  `strcmp`.
+- **The larger cost was allocation, not copying.** `rb_rec` and
+  `substitute_scoping` each made three, respectively one, heap allocations per
+  node. They now use stack buffers for arity up to 8, since
+  `expr_new_function` copies the array.
+- **Measured.**
+  - rule+`Module` loop: 2.60 → 1.81 µs per call (the reference: 2.27).
+  - Bare `Module`: 1.58 → 1.50 µs.
+  - The #112 skeleton: about 3.1 → 2.65 s for six runs.
+
+The original proposal follows.
 
 This is about the rule layer, not the table itself. Applying
 `diracTr[a_, rest___] := Module[...]` costs two copies:
@@ -181,7 +248,16 @@ since that tree is uniquely owned (`refcount == 1`) when fresh. Or one pass
 could do both substitutions, given a `MatchEnv` extended with the
 local → `local$N` renames.
 
-### 5. Insertion-ordered iteration
+### 5. Insertion-ordered iteration — DONE in v0.6057
+
+**Outcome.** Every `SymbolDef` sits on an intrusive doubly-linked
+insertion-order list (`ins_prev`/`ins_next`). Unlinking on reclamation is
+O(1). `symtab_for_each` and the other whole-table walks (init reset, clear,
+`intern_clear`, `intern_mark_all_system`) follow definition order,
+independent of the bucket array and its resizes. `disasm` keeps its
+alphabetical tie-break, which is harmless and deterministic either way.
+
+The original proposal follows.
 
 Anything that enumerates the table (`symtab_for_each`) sees bucket order,
 which v0.6055 changed and any future resize changes again.

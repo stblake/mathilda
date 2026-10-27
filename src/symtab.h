@@ -201,6 +201,12 @@ typedef struct SymbolDef {
      * dropped at every removal. NULL: not built. */
     struct LitIndex* lit_index;
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
+    /* Insertion order: every node is also on one doubly-linked list in the
+     * order it was first interned.  symtab_for_each and the whole-table walks
+     * follow it, so enumeration is definition order and does not change when
+     * the bucket array grows or a node is reclaimed (O(1) unlink). */
+    struct SymbolDef* ins_prev;
+    struct SymbolDef* ins_next;
 } SymbolDef;
 
 // Initialize the symbol table
@@ -247,6 +253,10 @@ const char* symtab_innermost_head(const Expr* e);
 SymbolDef* symtab_get_def(const char* symbol_name);
 /* The node for `name`, interned (not materialised) if new. */
 SymbolDef* intern_symbol_node(const char* name);
+/* symtab_get_def that also reports whether the name was new (*created). */
+SymbolDef* symtab_intern_def(const char* symbol_name, bool* created);
+/* symtab_add_own_value for a SymbolDef already in hand (no name lookup). */
+void symtab_add_own_value_def(SymbolDef* def, Expr* pattern, Expr* replacement);
 /* Module-local reclamation: mark a FRESH local (returns false and leaves the
  * symbol uncounted when the name already existed), and try to reclaim locals
  * at Module exit / in deferred sweeps.  See symtab.c. */

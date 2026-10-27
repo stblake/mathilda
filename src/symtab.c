@@ -24,6 +24,21 @@
 static SymbolDef** symtab = NULL;
 static size_t symtab_size = 0;      /* buckets: a power of two */
 static size_t symtab_nodes = 0;
+static SymbolDef* g_ins_head = NULL;   /* insertion-order list (see symtab.h) */
+static SymbolDef* g_ins_tail = NULL;
+
+static void ins_append(SymbolDef* d) {
+    d->ins_next = NULL;
+    d->ins_prev = g_ins_tail;
+    if (g_ins_tail) g_ins_tail->ins_next = d; else g_ins_head = d;
+    g_ins_tail = d;
+}
+
+static void ins_unlink(SymbolDef* d) {
+    if (d->ins_prev) d->ins_prev->ins_next = d->ins_next; else g_ins_head = d->ins_next;
+    if (d->ins_next) d->ins_next->ins_prev = d->ins_prev; else g_ins_tail = d->ins_prev;
+    d->ins_prev = d->ins_next = NULL;
+}
 
 static void symtab_alloc(void) {
     if (symtab) return;
@@ -158,7 +173,13 @@ static void note_materialized(SymbolDef* d) {
         d->is_system = 1;
 }
 
+static SymbolDef* node_intern_ex(const char* name, int materialize, bool* created);
 static SymbolDef* node_intern(const char* name, int materialize) {
+    return node_intern_ex(name, materialize, NULL);
+}
+
+static SymbolDef* node_intern_ex(const char* name, int materialize, bool* created) {
+    if (created) *created = false;
     if (!name) return NULL;
     symtab_alloc();
     unsigned int h = name_hash_full(name);
@@ -178,10 +199,12 @@ static SymbolDef* node_intern(const char* name, int materialize) {
     memcpy(copy, name, len + 1);
     d->symbol_name = copy;
     d->name_hash = h;
+    if (created) *created = true;
     if (materialize) note_materialized(d);
     d->has_def = (uint8_t)(materialize ? 1 : 0);
     d->next = symtab[idx];
     symtab[idx] = d;
+    ins_append(d);
     if (++symtab_nodes > 2 * symtab_size) symtab_grow();
     return d;
 }
@@ -213,9 +236,8 @@ void symtab_init(void) {
      * (populated by sym_names_init below) plus any live Expr point straight at
      * them, so a memset would strand those pointers. First call: table empty,
      * so this loop is a no-op. */
-    for (size_t i = 0; i < symtab_size; i++)
-        for (SymbolDef* d = symtab[i]; d; d = d->next)
-            reset_node_payload(d);
+    for (SymbolDef* d = g_ins_head; d; d = d->ins_next)
+        reset_node_payload(d);
     /* Populate the SYM_* canonical-pointer cache so that any code path that
      * compares e->data.symbol.name against SYM_* (match.c, eval.c, the arithmetic
      * heads, etc.) works as soon as the symtab is live -- not only after
@@ -270,6 +292,14 @@ SymbolDef* intern_symbol_node(const char* name) {
 const char* intern_symbol(const char* name) {
     SymbolDef* d = intern_symbol_node(name);
     return d ? d->symbol_name : NULL;
+}
+
+/* symtab_get_def that also reports whether the name was new: one hash and
+ * chain walk where a fresh-name check plus a lookup took two (Module). */
+SymbolDef* symtab_intern_def(const char* symbol_name, bool* created) {
+    SymbolDef* d = node_intern_ex(symbol_name, 1, created);
+    if (d) g_intern_ptr_cache[intern_ptr_slot(d->symbol_name)] = d;
+    return d;
 }
 
 /* ============================================================
@@ -393,6 +423,7 @@ static bool temp_try_reclaim(SymbolDef* d) {
         if (*pp == d) { *pp = d->next; break; }
     }
     if (symtab_nodes) symtab_nodes--;
+    ins_unlink(d);
     size_t slot = intern_ptr_slot(name);
     if (g_intern_ptr_cache[slot] == d) g_intern_ptr_cache[slot] = NULL;
     graveyard_keep(d->symbol_name);
@@ -460,9 +491,8 @@ void intern_mark_mathilda(const char* name) {
 }
 
 void intern_mark_all_system(void) {
-    for (size_t i = 0; i < symtab_size; i++)
-        for (SymbolDef* d = symtab[i]; d; d = d->next)
-            d->is_system = 1;
+    for (SymbolDef* d = g_ins_head; d; d = d->ins_next)
+        d->is_system = 1;
 }
 
 void intern_clear(void) {
@@ -474,17 +504,15 @@ void intern_clear(void) {
     g_graveyard_n = g_graveyard_cap = 0;
     /* Full teardown: free every node, its payload, and its name string. Any
      * previously-returned interned pointer (including SYM_*) becomes invalid. */
-    for (size_t i = 0; i < symtab_size; i++) {
-        SymbolDef* d = symtab[i];
-        while (d) {
-            SymbolDef* next = d->next;
-            reset_node_payload(d);
-            free(d->symbol_name);
-            free(d);
-            d = next;
-        }
-        symtab[i] = NULL;
+    for (SymbolDef* d = g_ins_head; d; ) {
+        SymbolDef* next = d->ins_next;
+        reset_node_payload(d);
+        free(d->symbol_name);
+        free(d);
+        d = next;
     }
+    g_ins_head = g_ins_tail = NULL;
+    if (symtab) memset(symtab, 0, sizeof(SymbolDef*) * symtab_size);
     symtab_nodes = 0;
 }
 
@@ -1797,6 +1825,11 @@ void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replace
     symtab_add_down_value_as(symbol_name, pattern, replacement, true);
 }
 
+void symtab_add_own_value_def(SymbolDef* def, Expr* pattern, Expr* replacement) {
+    add_rule_in(&def->own_values, pattern, replacement, false, NULL, def);
+    if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
+}
+
 void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
                              bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
@@ -2163,10 +2196,12 @@ Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
 void symtab_for_each(void (*visit)(const char* name, SymbolDef* def,
                                    void* user), void* user) {
     if (!visit) return;
-    for (size_t i = 0; i < symtab_size; i++)
-        for (SymbolDef* d = symtab[i]; d; d = d->next)
-            if (d->has_def)   /* skip interned-only nodes: they are not "symbols" */
-                visit(d->symbol_name, d, user);
+    /* Definition order (the insertion list), independent of bucket layout.
+     * A visitor must not reclaim nodes; a node interned during the walk is
+     * appended and visited too. */
+    for (SymbolDef* d = g_ins_head; d; d = d->ins_next)
+        if (d->has_def)   /* skip interned-only nodes: they are not "symbols" */
+            visit(d->symbol_name, d, user);
 }
 
 void symtab_clear(void) {
@@ -2174,9 +2209,8 @@ void symtab_clear(void) {
      * retained so SYM_* and any Expr created before the clear keep valid
      * pointers -- callers routinely clear between subtests and keep evaluating.
      * Use intern_clear() for a full teardown that also frees the name strings. */
-    for (size_t i = 0; i < symtab_size; i++)
-        for (SymbolDef* d = symtab[i]; d; d = d->next)
-            reset_node_payload(d);
+    for (SymbolDef* d = g_ins_head; d; d = d->ins_next)
+        reset_node_payload(d);
 }
 
 

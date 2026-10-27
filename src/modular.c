@@ -77,7 +77,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     if (e->type == EXPR_SYMBOL) {
         ScopingEnv* curr = env;
         while (curr) {
-            if (strcmp(e->data.symbol.name, curr->old_name) == 0) {
+            if (e->data.symbol.name == curr->old_name) {   /* interned */
                 return expr_copy(curr->replacement);
             }
             curr = curr->next;
@@ -140,7 +140,7 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
             for (ScopingEnv* curr = env; curr; curr = curr->next) {
                 bool shadowed = false;
                 for (size_t s = 0; s < nshadow; s++)
-                    if (strcmp(curr->old_name, shadow_buf[s]) == 0) { shadowed = true; break; }
+                    if (curr->old_name == shadow_buf[s]) { shadowed = true; break; }
                 if (!shadowed) {
                     ScopingEnv* node = malloc(sizeof(ScopingEnv));
                     node->old_name = curr->old_name;
@@ -153,7 +153,9 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
         }
     }
 
-    Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
+    Expr* args_stack[8];                 /* small arities: no heap buffer */
+    Expr** new_args = e->data.function.arg_count <= 8 ? args_stack
+                    : malloc(sizeof(Expr*) * e->data.function.arg_count);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         // Table: arg 0 is the body (substitute normally with the shadowed
         // env); args 1.. are iterator specs {var, lim...} where `var` is a
@@ -176,8 +178,16 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
                     nb[0] = expr_copy(it->data.function.args[0]);
                     for (size_t j = 1; j < na; j++)
                         nb[j] = substitute_scoping(it->data.function.args[j], filtered_env);
-                    Expr* lhead = expr_copy(it->data.function.head);
-                    new_args[i] = expr_new_function(lhead, nb, na);
+                    bool same = true;
+                    for (size_t j = 1; j < na && same; j++)
+                        same = nb[j] == it->data.function.args[j];
+                    if (same) {
+                        for (size_t j = 0; j < na; j++) expr_free(nb[j]);
+                        new_args[i] = expr_copy(it);
+                    } else {
+                        Expr* lhead = expr_copy(it->data.function.head);
+                        new_args[i] = expr_new_function(lhead, nb, na);
+                    }
                     free(nb);
                 } else {
                     new_args[i] = substitute_scoping(it, filtered_env);
@@ -210,17 +220,30 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
                         && (b->data.function.head->data.symbol.name == SYM_Set
                             || b->data.function.head->data.symbol.name == SYM_SetDelayed)
                         && b->data.function.arg_count == 2) {
-                        Expr* lhs = expr_copy(b->data.function.args[0]);
                         Expr* rhs = substitute_scoping(b->data.function.args[1], env);
-                        Expr* head_copy = expr_copy(b->data.function.head);
-                        Expr* bargs[2] = { lhs, rhs };
-                        new_b[bi] = expr_new_function(head_copy, bargs, 2);
+                        if (rhs == b->data.function.args[1]) {
+                            expr_free(rhs);
+                            new_b[bi] = expr_copy(b);
+                        } else {
+                            Expr* lhs = expr_copy(b->data.function.args[0]);
+                            Expr* head_copy = expr_copy(b->data.function.head);
+                            Expr* bargs[2] = { lhs, rhs };
+                            new_b[bi] = expr_new_function(head_copy, bargs, 2);
+                        }
                     } else {
                         new_b[bi] = expr_copy(b);
                     }
                 }
-                Expr* lhead_copy = expr_copy(vars_list->data.function.head);
-                new_args[i] = expr_new_function(lhead_copy, new_b, nb);
+                bool same = true;
+                for (size_t bi = 0; bi < nb && same; bi++)
+                    same = new_b[bi] == vars_list->data.function.args[bi];
+                if (same) {
+                    for (size_t bi = 0; bi < nb; bi++) expr_free(new_b[bi]);
+                    new_args[i] = expr_copy(vars_list);
+                } else {
+                    Expr* lhead_copy = expr_copy(vars_list->data.function.head);
+                    new_args[i] = expr_new_function(lhead_copy, new_b, nb);
+                }
                 free(new_b);
             } else {
                 new_args[i] = expr_copy(vars_list);
@@ -230,8 +253,23 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
         }
     }
     Expr* new_head = substitute_scoping(e->data.function.head, filtered_env);
-    Expr* res = expr_new_function(new_head, new_args, e->data.function.arg_count);
-    free(new_args);
+    /* Share a subtree no local occurs in: the node comes back as itself, as in
+     * replace_bindings, so applying f[x_] := Module[...] copies only the paths
+     * that change -- once by the rule's substitution, once by the renaming --
+     * instead of the whole body twice (and keeps the shared nodes' evaluation
+     * stamps and hashes). */
+    bool unchanged = new_head == e->data.function.head;
+    for (size_t i = 0; i < e->data.function.arg_count && unchanged; i++)
+        unchanged = new_args[i] == e->data.function.args[i];
+    Expr* res;
+    if (unchanged) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) expr_free(new_args[i]);
+        expr_free(new_head);
+        res = expr_copy(e);
+    } else {
+        res = expr_new_function(new_head, new_args, e->data.function.arg_count);
+    }
+    if (new_args != args_stack) free(new_args);
 
     if (filtered_env != env) {
         ScopingEnv* tmp = filtered_env;
@@ -572,7 +610,7 @@ Expr* builtin_module(Expr* res) {
     expr_free(mn_val_expr);
     int64_t current_mn = module_number++;
     Expr* next_mn = expr_new_integer(module_number);
-    symtab_add_own_value("$ModuleNumber", mn_sym, next_mn);
+    symtab_add_own_value(SYM_DollarModuleNumber, mn_sym, next_mn);   /* interned: no rehash */
     expr_free(mn_sym);
     expr_free(next_mn);
 
@@ -606,18 +644,21 @@ Expr* builtin_module(Expr* res) {
             /* Register the temporary symbol BEFORE any node names it, so every
              * node is counted (symtab_temp_begin).  A name that already exists
              * (a user's own x$123) is used but never counted or reclaimed. */
-            bool fresh = !symtab_name_interned(buf);   /* no node can name it yet */
-            SymbolDef* ld = symtab_get_def(buf);
+            /* One lookup per local: create-or-find, reporting freshness (a new
+             * name has no node yet), then build its node and value from the
+             * SymbolDef in hand rather than re-interning buf three times. */
+            bool fresh = false;
+            SymbolDef* ld = symtab_intern_def(buf, &fresh);
             ld->attributes |= ATTR_TEMPORARY;
             if (fresh && symtab_temp_begin(ld)) info[i].temp = ld;
 
             ScopingEnv* new_node = malloc(sizeof(ScopingEnv));
             new_node->old_name = orig_name;
-            new_node->replacement = expr_new_symbol(buf);
+            new_node->replacement = expr_new_symbol_def(ld);
             new_node->next = env;
             env = new_node;
             if (init_val) {
-                symtab_add_own_value(buf, new_node->replacement, init_val);
+                symtab_add_own_value_def(ld, new_node->replacement, init_val);
             }
         }
     }

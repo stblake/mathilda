@@ -236,6 +236,19 @@ Expr* expr_new_symbol(const char* name) {
     return e;
 }
 
+Expr* expr_new_symbol_def(SymbolDef* d) {
+    if (!d) return NULL;
+    Expr* e = expr_alloc_node();
+    if (!e) return NULL;
+    e->type = EXPR_SYMBOL;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.symbol.name = d->symbol_name;
+    e->data.symbol.def = d;              /* the def is known: cache it now */
+    if (d->module_temp) d->temp_nodes++;
+    return e;
+}
+
 // Create/allocate a new string expression.
 Expr* expr_new_string(const char* str) {
     Expr* e = expr_alloc_node();
