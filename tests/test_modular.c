@@ -254,6 +254,25 @@ void test_module_locals_reclaimed() {
     run_test("Length[Names[\"*\"]] - rcn0", "3");
     run_test("rkeep = 0", "0");       /* reclaimed when this statement ends */
     run_test("Length[Names[\"*\"]] - rcn0", "0");
+    /* escaped and dropped INSIDE one long evaluation: swept as the queue fills
+     * (it used to grow to all 40000 until the statement ended).  Count only
+     * Module locals (name$N): the statement also defines globals. */
+    run_test("rlocals[] := Length[Select[Names[\"*\"], "
+             "StringContainsQ[#, \"$\"] && !StringStartsQ[#, \"$\"] &]]; Null", "Null");
+    run_test("rcl0 = rlocals[]; Null", "Null");
+    run_test("(Do[rkeep = Module[{a, b = rck}, a + b], {rck, 20000}]; rlocals[] - rcl0 < 10000)",
+             "True");
+    run_test("rkeep = 0", "0");
+    run_test("rlocals[] - rcl0", "0");
+    /* a Compile parameter named only in the argspec stays alive with the
+     * CompiledFunction (its name is printed and bound by the fallback) */
+    run_test("rkeep = Module[{x}, Compile[{{x, _Real}}, 2.0]]; "
+             "Do[Module[{w}, w], {rck, 2000}]", "Null");
+    run_test("rlocals[] - rcl0", "1");
+    run_test("{rkeep[3.], StringTake[ToString[rkeep, InputForm], 20]}",
+             "List[2.0, \"CompiledFunction[{x$\"]");
+    run_test("rkeep = 0", "0");
+    run_test("rlocals[] - rcl0", "0");
 
     /* escapes that must keep working */
     run_test("rcnt = Module[{c = 0}, Function[c++]]; {rcnt[], rcnt[], rcnt[]}", "List[0, 1, 2]");
@@ -263,7 +282,7 @@ void test_module_locals_reclaimed() {
     run_test("Module[{a, b}, a = {b}; b = 2; a]", "List[2]");
     run_test("Module[{t}, ClearAttributes[t, Temporary]; rkept = t; t = 9]; rkept", "9");
     run_test("rfib[n_] := Module[{a = n}, If[a < 2, a, rfib[a - 1] + rfib[a - 2]]]; rfib[15]", "610");
-    run_test("Clear[rcn0, rck, rkeep, rcnt, rgx, rhx, rmk, rff, rkept, rfib]", "Null");
+    run_test("Clear[rlocals, rcl0, rcn0, rck, rkeep, rcnt, rgx, rhx, rmk, rff, rkept, rfib]", "Null");
 }
 
 int main() {

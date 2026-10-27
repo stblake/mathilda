@@ -25,7 +25,13 @@ Implements lexical scoping by creating unique local variables.
     #112 Dirac trace.
   - **When.** A local is removed at its `Module`'s exit, or, if it escaped
     (returned, stored, captured by a closure, a rule or an UpValue), when the
-    last outside reference is gone, checked as each top-level evaluation ends.
+    last outside reference is gone. That is checked as each top-level
+    evaluation ends, and also during a long evaluation once a few thousand
+    escaped locals are waiting (v0.6058). So a loop that stores and drops a
+    `Module` result or closure per iteration runs in bounded memory: 200,000
+    such iterations in one `Do` leave +0.9 MB, where they left +50 MB before.
+  - **Nothing is left behind** (v0.6058). The removed symbol's name is freed
+    too. Before, names were kept, at about 23 bytes per local.
   - **Exemptions.** A local whose `Temporary` attribute is cleared is kept, as
     is one created over a name that already existed.
 

@@ -137,6 +137,7 @@
 #include "funcprog.h"
 #include "sowreap.h"
 #include "match.h"
+#include "flint_num_bridge.h"   /* flint_cert_binding_clear (timeout unwind) */
 #include "print.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -5105,6 +5106,10 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     volatile int          saved_blkdep = mth_block_depth_save();
     /* Registered nesting counters (tc_register_unwind_counter), volatile like the
      * saved state above: -O3 does not keep a plain local intact across the jump. */
+    /* The rule head a `/;` guard resolves OptionValue against (a name: after a
+     * jump it would outlive the definition, possibly a reclaimed Module
+     * local's, that set it). */
+    const char* volatile saved_rule_head = match_get_rule_head();
     volatile int saved_ctr[TC_MAX_UNWIND_COUNTERS];
     volatile int n_ctr = tc_n_unwind_counters;
     for (int i = 0; i < n_ctr; i++) saved_ctr[i] = *tc_unwind_counters[i];
@@ -5115,6 +5120,8 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     } else {
         tc_body_live = 0;
         for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i];
+        match_set_rule_head(saved_rule_head);
+        flint_cert_binding_clear();
     }
     mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;

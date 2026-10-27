@@ -197,6 +197,10 @@ bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
  * (1 + Sqrt[2])^2 - 3 - 2 Sqrt[2], reports 2 (undecided) and callers decline.
  * Read-only; false without FLINT. */
 bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn);
+/* Drop flint_cert_eval_real's variable binding.  It never calls the evaluator,
+ * so no TimeConstrained body starts inside it: a timeout that jumps out of it
+ * leaves a binding nothing owns, which tc_run_guarded clears. */
+void flint_cert_binding_clear(void);
 
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */

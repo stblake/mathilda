@@ -3697,10 +3697,12 @@ static Expr* evaluate_core(Expr* e);
 
 Expr* evaluate(Expr* e) {
     Expr* r = evaluate_core(e);
-    /* Outermost evaluation finished: no evaluator frame holds a SymbolDef
-     * now, so Module locals that escaped and have since been dropped can be
-     * reclaimed (symtab_temp_sweep; a Module reclaims its own locals itself). */
+    /* Module locals that escaped and have since been dropped are reclaimed
+     * when the outermost evaluation ends, or here in a nested evaluation once
+     * enough have queued up (symtab.c, "Timing"; a Module reclaims its own
+     * locals itself). */
     if (eval_recursion_depth == 0) symtab_temp_sweep_if_queued();
+    else if (g_temp_pending_n >= g_temp_sweep_at) symtab_temp_sweep();
     return r;
 }
 

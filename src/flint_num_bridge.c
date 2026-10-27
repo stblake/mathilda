@@ -2170,6 +2170,8 @@ bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
     return any;
 }
 
+void flint_cert_binding_clear(void) { g_cert_var = NULL; g_cert_ball = NULL; }
+
 int flint_cert_eval_real(const Expr* e, const char* var, const arb_t xball,
                          arb_t out, slong prec) {
     if (!e) return 0;
@@ -2224,6 +2226,8 @@ void flint_num_bridge_init(void) {
 }
 
 #else /* !(USE_FLINT && USE_MPFR) */
+
+void flint_cert_binding_clear(void) {}
 
 bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
     (void)e; *re_sgn = *im_sgn = 2; return false;

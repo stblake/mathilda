@@ -1,3 +1,27 @@
+# Symbol table: outstanding items after v0.6057 (2026-10-27)
+
+Baseline (v0.6057, same machine; reference = local 14.0 kernel):
+| | Mathilda | reference |
+|---|---|---|
+| #112 generation n=14 | 2.42 s | 6.52 s |
+| Cases+Union | 0.39 s | 0.68 s |
+| peak (MaxMemoryUsed) | 125.7 MB | 101.8 MB |
+| skeleton n=14 | 0.51 s | 0.63 s |
+| Module loop 1e5 / rule+Module 1e5 | 0.147 / 0.169 s | 0.208 / 0.222 s |
+| 200k escaped-then-dropped locals inside ONE Do | +49.6 MB | +0.002 MB |
+| 200k closures (Module + Function) inside ONE Do | +41.4 MB | +0.002 MB |
+| 400k non-escaping locals (graveyard names) | +9.4 MB | ~0 |
+
+- [x] A. Free reclaimed locals' names (v0.6058): audit found CompiledFunction.arg_names (now pinned by a params
+      List), two globals a TimeConstrained unwind abandoned (restored in tc_run_guarded), the pack-diag table (copies)
+- [x] B. Nested sweeps (v0.6058): evaluate() sweeps once the queue reaches 4096 / 2x survivors; 200k in-loop
+      escapes +49.6 -> +0.9 MB.  548/548 unit suites; 34 suites clean under ASan with MATHILDA_TEMP_SWEEP_EAGER=1
+- [ ] C. #112 run time is already ahead of the reference on every row; remaining gap is peak memory
+      (126 vs 102 MB) -- find where it goes and close what is cheap
+- [ ] Found: Head[CompiledFunction[...]] stays unevaluated (pre-existing, not Module-related)
+- [ ] Tests (test_modular.c reclamation cases), docs (SYMBOL_TABLE_IMPROVEMENTS.md, scoping-constructs.md,
+      changelog), version bump + tag
+
 # GitHub issues #112 / #113 / #114 (2026-10-27)
 
 - [x] #113 Together on a denominator-free sum: expand (and re-evaluate) the combined numerator when lcm_den = 1 ;

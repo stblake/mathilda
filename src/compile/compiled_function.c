@@ -28,6 +28,11 @@ struct CompiledFunction {
     unsigned         refcount;   /* Expr copies share the payload */
     size_t           nargs;
     const char**     arg_names;  /* interned pointers (interner owns the chars) */
+    Expr*            params;     /* List of the parameter symbols: pins arg_names.
+                                  * A parameter that only the argspec mentions
+                                  * (Module[{x}, Compile[{x}, 2.0]]) has no other
+                                  * node, and a reclaimed Module local's name is
+                                  * freed with it. */
     CompileType*     arg_types;
     Expr*            body;       /* owned; interpreter fallback + printing */
     CompiledProgram* prog;       /* NULL if body is outside the compilable subset */
@@ -435,6 +440,14 @@ CompiledFunction* compiled_function_new(const Expr* argspec, const Expr* body,
     cf->nargs     = n;
     cf->arg_names = names;
     cf->arg_types = types;
+    {
+        Expr* stack[8];
+        Expr** ps = (n <= 8) ? stack : malloc(n * sizeof(Expr*));
+        if (!ps) { free(names); free(types); free(cf); return NULL; }
+        for (size_t i = 0; i < n; i++) ps[i] = expr_new_symbol(names[i]);
+        cf->params = expr_new_function(expr_new_symbol(SYM_List), ps, n);
+        if (ps != stack) free(ps);
+    }
     cf->body      = expr_copy((Expr*)body);
     /* NULL ⇒ fallback only.  COMPILE_FOLD_GLOBALS is deliberately NOT passed: a
      * Compile[] object outlives the scope that defined it, so folding a global's
@@ -454,6 +467,7 @@ void compiled_function_free(CompiledFunction* cf) {
     if (cf->refcount > 1) { cf->refcount--; return; }
     if (cf->prog) compiled_free(cf->prog);
     if (cf->body) expr_free(cf->body);
+    if (cf->params) expr_free(cf->params);
     free(cf->arg_names);
     free(cf->arg_types);
     free(cf);

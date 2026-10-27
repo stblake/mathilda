@@ -607,6 +607,8 @@ static bool guard_all_true(Expr* g) {
  * so a `/;` guard can resolve OptionValue like the rule's RHS does. */
 static const char* g_guard_rule_head = NULL;
 
+const char* match_get_rule_head(void) { return g_guard_rule_head; }
+
 const char* match_set_rule_head(const char* head) {
     const char* prev = g_guard_rule_head;
     g_guard_rule_head = head;

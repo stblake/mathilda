@@ -1309,7 +1309,8 @@ static void pack_mark_aware_heads(void) {
 #define PACK_DIAG_MAX_HEADS 256
 
 typedef struct {
-    const char* name;      /* interned, so a pointer compare identifies it */
+    const char* name;      /* a private copy: the head may be a Module local,
+                            * whose interned name is freed when it is reclaimed */
     uint64_t    calls;
     uint64_t    elements;
 } PackDiagEntry;
@@ -1363,14 +1364,16 @@ void pack_gate_report(const Expr* head, const Expr* arg) {
         n *= (size_t)arg->data.ndarray.dims[i];
 
     for (size_t i = 0; i < g_diag_n; i++) {
-        if (g_diag[i].name == name || strcmp(g_diag[i].name, name) == 0) {
+        if (strcmp(g_diag[i].name, name) == 0) {
             g_diag[i].calls++;
             g_diag[i].elements += (uint64_t)n;
             return;
         }
     }
     if (g_diag_n < PACK_DIAG_MAX_HEADS) {
-        g_diag[g_diag_n].name = name;
+        char* copy = mathilda_strdup(name);   /* process lifetime (exit summary) */
+        if (!copy) return;
+        g_diag[g_diag_n].name = copy;
         g_diag[g_diag_n].calls = 1;
         g_diag[g_diag_n].elements = (uint64_t)n;
         g_diag_n++;

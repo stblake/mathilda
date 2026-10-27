@@ -1,9 +1,12 @@
 # Symbol table improvements
 
-Status: every proposal has been worked through.
+Status: every proposal has been worked through, and so have the follow-ups
+the first round left open.
 - **Done:** 1 (v0.6056); 2, 4 and 5 (v0.6057, in the form the evidence
   supported).
 - **Declined, on measurements:** 3.
+- **Follow-ups:** names freed and long evaluations swept (v0.6058). See
+  [Follow-ups](#follow-ups-after-v06057).
 
 Each section records the outcome. Written 2026-10-27 while reducing the
 per-call interpreter overhead of issue #112 (v0.6055). It records what the
@@ -265,6 +268,62 @@ which v0.6055 changed and any future resize changes again.
   stable, meaningful order (definition order, as the reference's `Names` is
   not) for free.
 - That removes the need for consumers like `disasm` to impose their own order.
+
+## Follow-ups after v0.6057
+
+v0.6057 left three gaps against the reference. Each is listed with its
+outcome, all measured on the same machine against the local reference kernel.
+
+### F1. Free the reclaimed locals' names — DONE in v0.6058
+
+- **The gap.** v0.6056 kept every reclaimed name in a graveyard, in case
+  something held the raw pointer: about 23 B per local, so a session still grew
+  without bound, just slower.
+- **The audit.** Every long-lived holder of a raw symbol name or `SymbolDef*`
+  was checked. Nearly all hold an `Expr` (which keeps the local alive), copy
+  the string, or live for one call. Three could outlive the symbol, and each is
+  fixed:
+  - **`CompiledFunction.arg_names`.** A parameter named only in the argspec
+    has no node. It is now pinned by a `params` list of the parameter symbols.
+  - **`TimeConstrained` unwinds.** A timeout left two globals set by the frames
+    it abandoned: `match.c`'s `/;` rule head and `flint_num_bridge.c`'s
+    certified-evaluator variable. `tc_run_guarded` restores both.
+  - **The `MATHILDA_PACK_DIAG=gate` table** now copies the names it records.
+- **The change.** `temp_try_reclaim` frees the name with the node, and the
+  pointer-cache slot is cleared first.
+
+### F2. Sweep during a long evaluation — DONE in v0.6058
+
+- **The gap.** Escaped locals were retried only when the outermost evaluation
+  ended. A `Do` that stores and drops a `Module` result, or a closure, per
+  iteration kept every local until the loop finished: +49.6 MB per 200,000
+  iterations, against the reference's +0.002 MB.
+- **The change.** `evaluate()` also sweeps in a nested evaluation once the
+  queue reaches `g_temp_sweep_at`: 4096, then twice the survivors. Each held
+  local is re-walked an amortised O(1) times.
+- **Why it is safe.** The argument is the one that already covered the
+  `Module`-exit reclaim, which always ran mid-evaluation. A frame that reads a
+  local's `SymbolDef` or rule lists holds an expression naming it: the
+  evaluator's `res`, an iterator spec, a `Block`'s variable list. That node
+  lies outside the local's own rules, so the counts disagree and the local is
+  kept.
+  - The audit of this claim is dynamic. `MATHILDA_TEMP_SWEEP_EAGER=1` sweeps at
+    every `evaluate()` exit, and the scoping, rules, compile, `TimeConstrained`
+    and solver suites ran under AddressSanitizer with it on.
+
+| 200,000 iterations in one `Do` | v0.6057 | v0.6058 | reference |
+|---|---|---|---|
+| `l = Module[{a, b = k}, a + b]` | +49.6 MB | +0.9 MB | +0.002 MB |
+| `fs = mk[k]` (a closure) | +41.4 MB | +0.9 MB | +0.002 MB |
+| 400,000 non-escaping locals | +9.4 MB | +0.1 MB | ~0 |
+| #112 skeleton, memory left | +2.9 MB | +0.15 MB | +0.005 MB |
+
+### F3. #112 run time
+
+Mathilda is already ahead of the reference on every timed row: generation at
+n = 14 takes 2.4 s (reference 6.5 s), Cases + Union 0.39 s (0.68 s), the
+skeleton 0.51 s (0.63 s), a `Module` loop 0.15 s (0.21 s), and rule+`Module`
+0.17 s (0.22 s). The remaining gap was peak memory: 126 MB against 102 MB.
 
 ## Suggested plan for the session
 

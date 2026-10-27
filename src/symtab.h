@@ -267,6 +267,10 @@ void symtab_temp_release(SymbolDef* d);
 void symtab_temp_sweep(void);
 void symtab_temp_sweep_if_queued(void);
 extern unsigned long g_temp_dirty;
+/* Nested-sweep gate read by evaluate(): sweep when the queue of escaped locals
+ * reaches g_temp_sweep_at (doubling over the survivors of the last sweep). */
+extern size_t g_temp_pending_n;
+extern size_t g_temp_sweep_at;
 
 // Look up a symbol without creating one. Returns NULL if not present.
 // Used by the context resolver to test whether a qualified name exists.

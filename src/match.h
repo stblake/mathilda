@@ -37,6 +37,8 @@ bool match(Expr* expr, Expr* pattern, MatchEnv* env);
  * Condition guard can resolve OptionValue[...] against the rule's
  * OptionsPattern; returns the previous head for the caller to restore. */
 const char* match_set_rule_head(const char* head);
+/* The current rule head (saved/restored across a TimeConstrained unwind). */
+const char* match_get_rule_head(void);
 
 // Replace bound variables in expr with their values from env.
 // Returns a new expression (caller must free).
