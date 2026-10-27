@@ -59,6 +59,17 @@ static void assert_rm_diff_zero(const char* f) {
     assert_eval_eq(buf, "0", 0);
 }
 
+/* As assert_rm_diff_zero, verified under x > 0: for an antiderivative built
+ * on a log identity that holds on the reals but not on all of C, such as
+ * Log[x/(1 + x)] + Log[1 + x] = Log[x], whose difference Simplify must not
+ * call 0 unconditionally. */
+static void assert_rm_diff_zero_pos(const char* f) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "Simplify[D[Integrate`RischTranscendental[%s, x], x] - (%s), x > 0]", f, f);
+    assert_eval_eq(buf, "0", 0);
+}
+
 /* Assert the same via the Method-option surface form. */
 static void assert_rm_method_diff_zero(const char* f) {
     char buf[1024];
@@ -1059,8 +1070,8 @@ static void test_reported_bug_fixes(void) {
 
     /* In[2]/In[9]: Q-linearly DEPENDENT log generators collapse to Log[x]/x via
      * the log-combination fallback.  ∫ = Log[x]^2/2. */
-    assert_rm_diff_zero("(Log[x/(1 + x)] + Log[1 + x])/x");
-    assert_rm_diff_zero("(Log[x + 1] + Log[x/(x + 1)])/x");
+    assert_rm_diff_zero_pos("(Log[x/(1 + x)] + Log[1 + x])/x");
+    assert_rm_diff_zero_pos("(Log[x + 1] + Log[x/(x + 1)])/x");
 
     /* In[12]: polynomial * Log with an irreducible-quadratic argument — the
      * bottom-level ArcTan is admitted (was rejected as a foreign new log). */

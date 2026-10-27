@@ -5623,6 +5623,26 @@ add_executable(legendre_machine_tests test_legendre_machine.c $<TARGET_OBJECTS:m
 target_include_directories(legendre_machine_tests PRIVATE ../src)
 add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)
 
+# Every *_tests executable is a ctest test.  175 suites were built by every
+# `make` but had no add_test(), so neither ctest nor CI ever ran them -- and
+# they drifted unseen (Sum[Binomial[3, k] x^k, {k, 0, 3}] was 0, Limit[-E^x] was
+# Infinity).  Rather than list them, register every executable target named
+# *_tests that has no test yet; a new suite is then covered automatically.
+# Excluded: the corpus DRIVERS (invoked with arguments by the per-section tests
+# above) and EXCLUDE_FROM_ALL targets (deliberately not built by default).
+get_property(_mathilda_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_t IN LISTS _mathilda_targets)
+    if(_t MATCHES "_tests$" AND NOT TEST ${_t}
+       AND NOT _t STREQUAL "dsolve_corpus_tests"
+       AND NOT _t STREQUAL "mathar_corpus_tests")
+        get_target_property(_type ${_t} TYPE)
+        get_target_property(_exclude ${_t} EXCLUDE_FROM_ALL)
+        if(_type STREQUAL "EXECUTABLE" AND NOT _exclude)
+            add_test(NAME ${_t} COMMAND ${_t})
+        endif()
+    endif()
+endforeach()
+
 # CI tiers (.github/workflows/tests.yml).  Every push runs `ctest -LE nightly`;
 # the scheduled run takes everything.  A test goes in the nightly tier by NAME,
 # so a new suite is on the push tier unless it is named like the slow families:

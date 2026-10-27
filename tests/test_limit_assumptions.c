@@ -132,7 +132,8 @@ static void test_assumed_limit_stress(void) {
     assert_eval_eq("Simplify[(Limit[Sqrt[x^2 + a x] - x, x -> Infinity, Assumptions -> Element[a, Reals]]) - a/2]", "0", 0);
     assert_eval_eq("Simplify[(Limit[Sqrt[a x^2 + b]/x, x -> Infinity, Assumptions -> a > 0]) - Sqrt[a]]", "0", 0);
     assert_eval_eq("Simplify[(Limit[Sqrt[a x^2 + b]/x, x -> -Infinity, Assumptions -> a > 0]) - (-Sqrt[a])]", "0", 0);
-    assert_eval_eq("Simplify[(Limit[(a^x - b^x)/x, x -> 0, Assumptions -> a > 0 && b > 0]) - Log[a/b]]", "0", 0);
+    /* Log[a] - Log[b] = Log[a/b] needs the positivity too */
+    assert_eval_eq("Simplify[(Limit[(a^x - b^x)/x, x -> 0, Assumptions -> a > 0 && b > 0]) - Log[a/b], a > 0 && b > 0]", "0", 0);
     assert_eval_eq("Simplify[(Limit[(x^a - 1)/(x^b - 1), x -> 1, Assumptions -> b != 0 && Element[a, Reals]]) - a/b]", "0", 0);
     assert_eval_eq("Simplify[(Limit[Sqrt[x] (Sqrt[x + a] - Sqrt[x]), x -> Infinity, Assumptions -> Element[a, Reals]]) - a/2]", "0", 0);
     assert_eval_eq("Simplify[(Limit[1/(x^a + 1), x -> Infinity, Assumptions -> a > 0]) - 0]", "0", 0);

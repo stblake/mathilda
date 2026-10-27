@@ -391,7 +391,8 @@ make -j$(nproc)        # builds ./Mathilda; -std=c99 -O3, links -lreadline -lgmp
 cd tests
 mkdir -p build && cd build
 cmake .. && make -j$(nproc)
-for t in *_tests; do ./$t; done
+ctest -LE nightly -j4          # the unit suites: what CI runs on every push
+ctest -j4 --timeout 3600       # everything, adding the nightly tier
 
 valgrind --leak-check=full ./Mathilda
 
@@ -517,6 +518,26 @@ The makefile auto-discovers `src/*.c`. GMP-ECM is linked by default when the
 system library is present (`USE_ECM=1`, autodetected); install it with
 `brew install gmp-ecm` (macOS) or `sudo apt install libecm-dev` (Debian/Ubuntu),
 or build without it via `make USE_ECM=0`.
+
+### The CMake test suite and CI
+
+Every `*_tests` executable in `tests/CMakeLists.txt` is a ctest test. The end
+of that file registers each one that has no explicit `add_test`, so a new suite
+is covered without being listed; only the corpus drivers and `EXCLUDE_FROM_ALL`
+targets are left out. Until 2026-10-27, 175 suites were built and never run,
+and wrong answers accumulated in them unseen.
+
+Tests fall into two tiers by name. `*corpus*`, `*stress*` and the `bench_*`
+wall-clock gates carry the `nightly` label; everything else is a unit suite.
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml) runs:
+- **every push and PR:** `ctest -LE nightly` on Linux;
+- **daily, and on dispatch:** the full suite.
+
+A failed suite is rerun under gdb, so a crash leaves its last test name and a
+backtrace in the log. A manual dispatch can take a `filter` regex and
+`sanitize: true`, for an AddressSanitizer + UBSan build of just those suites.
+That is how the uninitialised frees in QRDecomposition and DSolve's
+first-order series, which only glibc's allocator exposed, were found.
 
 ### Performance regression gate
 

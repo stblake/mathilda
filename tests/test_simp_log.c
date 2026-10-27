@@ -57,20 +57,25 @@ void test_simp_log_change_of_base(void) {
 /* ---- Pass B: algebraic fuser (positive symbolic args) ---- */
 
 void test_simp_log_difference_of_squares(void) {
-    /* The fused product (x^2-y^2)/((x-y)(x+y)) -> 1 via Together,
-     * then Log[1] = 0. The fusion is taken under the "small constant"
-     * gate; no positivity assumption needed. */
-    assert_eval_eq("Simplify[Log[x^2 - y^2] - Log[x - y] - Log[x + y]]",
+    /* The fused product (x^2-y^2)/((x-y)(x+y)) -> 1 via Together, then
+     * Log[1] = 0 -- valid only where the logs' branches agree: at x = -2,
+     * y = 1 the difference is -2 Pi I.  So it needs the positivity, and
+     * without it the expression stays (it used to be "fused" to 0). */
+    assert_eval_eq("Simplify[Log[x^2 - y^2] - Log[x - y] - Log[x + y], x > y > 0]",
                    "0", 0);
+    assert_eval_eq("Simplify[Log[x^2 - y^2] - Log[x - y] - Log[x + y]] === 0",
+                   "False", 0);
 }
 
 void test_simp_log_perfect_square_trinomial(void) {
-    assert_eval_eq("Simplify[Log[x^2 + 2 x + 1] - 2 Log[x + 1]]",
+    /* -2 Pi I for x < -1, so only under x > -1 */
+    assert_eval_eq("Simplify[Log[x^2 + 2 x + 1] - 2 Log[x + 1], x > -1]",
                    "0", 0);
 }
 
 void test_simp_log_difference_of_cubes(void) {
-    assert_eval_eq("Simplify[Log[x^3 - 1] - Log[x - 1] - Log[x^2 + x + 1]]",
+    /* fails for x < 1 (Log[x - 1] picks up I Pi), so only under x > 1 */
+    assert_eval_eq("Simplify[Log[x^3 - 1] - Log[x - 1] - Log[x^2 + x + 1], x > 1]",
                    "0", 0);
 }
 
@@ -119,8 +124,9 @@ void test_simp_log_euler_complex_zero(void) {
 
 void test_simp_log_trig_complement(void) {
     /* Sin / (Tan * Cos) -> 1 via the evaluator's Trig auto-simplification;
-     * Log[1] = 0. */
-    assert_eval_eq("Simplify[Log[Sin[x]] - Log[Tan[x]] - Log[Cos[x]]]",
+     * Log[1] = 0 -- where all three are positive (at x = 3 Pi/4 the
+     * difference is -2 Pi I).  Tan[x] > 0 follows from the two sign facts. */
+    assert_eval_eq("Simplify[Log[Sin[x]] - Log[Tan[x]] - Log[Cos[x]], Sin[x] > 0 && Cos[x] > 0]",
                    "0", 0);
 }
 
