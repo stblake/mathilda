@@ -250,17 +250,198 @@ SymbolDef* symtab_lookup(const char* symbol_name) {
  * that happens to be reused with other contents can never hit.  Interned names
  * live until intern_clear, which empties the cache. */
 #define INTERN_PTR_CACHE 4096
-static const char* g_intern_ptr_cache[INTERN_PTR_CACHE];
+static SymbolDef* g_intern_ptr_cache[INTERN_PTR_CACHE];   /* keyed by symbol_name */
 static inline size_t intern_ptr_slot(const char* p) {
     return (size_t)(((uintptr_t)p >> 4) ^ ((uintptr_t)p >> 16)) & (INTERN_PTR_CACHE - 1);
 }
 
-const char* intern_symbol(const char* name) {
-    if (name && g_intern_ptr_cache[intern_ptr_slot(name)] == name) return name;
+/* The node for `name`, interning it if new (not materialised).  A pointer that
+ * is already canonical hits the cache without hashing the string. */
+SymbolDef* intern_symbol_node(const char* name) {
+    if (!name) return NULL;
+    SymbolDef* c = g_intern_ptr_cache[intern_ptr_slot(name)];
+    if (c && c->symbol_name == name) return c;
     SymbolDef* d = node_intern(name, 0);
     if (!d) return NULL;
-    g_intern_ptr_cache[intern_ptr_slot(d->symbol_name)] = d->symbol_name;
-    return d->symbol_name;
+    g_intern_ptr_cache[intern_ptr_slot(d->symbol_name)] = d;
+    return d;
+}
+
+const char* intern_symbol(const char* name) {
+    SymbolDef* d = intern_symbol_node(name);
+    return d ? d->symbol_name : NULL;
+}
+
+/* ============================================================
+ * Module-local reclamation
+ *
+ * Module mints a fresh symbol per local per call (x$123, Temporary).  The
+ * reference removes such a symbol once nothing refers to it; Mathilda used to
+ * keep every one for the whole session -- +111,005 symbols and +44 MB after a
+ * single issue #112 trace, and +548 bytes per Module call in general.
+ *
+ * Counting.  A local created by Module from a FRESH name is flagged
+ * module_temp; from then on every live Expr symbol node naming it caches its
+ * SymbolDef and is counted in temp_nodes (expr.c).  The references a symbol's
+ * OWN definitions make (x$1 = {x$1}, the own-value pattern itself) must not
+ * keep it alive, so a local is reclaimable when a walk of its own rule lists
+ * finds ALL temp_nodes of its nodes, each reached only through nodes with
+ * refcount 1.  A node under a shared parent may be reachable from outside, and
+ * a rule list detached by Block or an iterator is invisible to the walk; both
+ * leave the count unmatched and keep the symbol, which is the safe direction.
+ *
+ * Reclaiming frees the rule lists, unlinks the node and frees the SymbolDef.
+ * The NAME string is kept (in a graveyard freed by intern_clear): a stale raw
+ * name pointer can then never alias a later symbol's name.
+ *
+ * Timing.  Each local is tried at its own Module's exit -- safe, since no frame
+ * outside that call can hold it unless it escaped, and then it is not
+ * reclaimable.  One that escaped (returned, stored) is queued and retried when
+ * the outermost evaluation ends, never mid-evaluation, where a frame might hold
+ * a queued local's SymbolDef.
+ * MATHILDA_NO_TEMP_RECLAIM=1 disables reclamation (A/B switch).
+ * ============================================================ */
+
+static int temp_reclaim_enabled(void) {
+    static int on = -1;
+    if (on < 0) {
+        const char* v = getenv("MATHILDA_NO_TEMP_RECLAIM");
+        on = (v && v[0] && v[0] != '0') ? 0 : 1;
+    }
+    return on;
+}
+
+static char** g_name_graveyard = NULL;
+static size_t g_graveyard_n = 0, g_graveyard_cap = 0;
+
+static SymbolDef** g_temp_pending = NULL;
+static size_t g_temp_pending_n = 0, g_temp_pending_cap = 0;
+static size_t g_temp_queued_since_sweep = 0;
+unsigned long g_temp_dirty = 0;   /* nodes of queued locals freed since the last sweep */
+
+bool symtab_name_interned(const char* name) {
+    return node_find(name) != NULL;
+}
+
+bool symtab_temp_begin(SymbolDef* d) {
+    if (!d || !temp_reclaim_enabled()) return false;
+    d->module_temp = 1;
+    d->temp_nodes = 0;
+    d->temp_pending = 0;
+    return true;
+}
+
+/* Nodes naming `name` in `e`, counted into *found when reached through
+ * refcount-1 nodes only; false as soon as one sits under a shared node. */
+static bool temp_walk(const Expr* e, const char* name, bool exclusive, uint32_t* found) {
+    if (!e) return true;
+    bool excl = exclusive && e->refcount == 1;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol.name != name) return true;
+        if (!excl) return false;
+        (*found)++;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return true;
+    if (!temp_walk(e->data.function.head, name, excl, found)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!temp_walk(e->data.function.args[i], name, excl, found)) return false;
+    return true;
+}
+
+static bool temp_walk_rules(const Rule* r, const char* name, uint32_t* found) {
+    for (; r; r = r->next) {
+        if (!temp_walk(r->pattern, name, true, found)) return false;
+        if (!temp_walk(r->replacement, name, true, found)) return false;
+    }
+    return true;
+}
+
+static void graveyard_keep(char* name) {
+    if (g_graveyard_n == g_graveyard_cap) {
+        size_t c = g_graveyard_cap ? 2 * g_graveyard_cap : 1024;
+        char** a = realloc(g_name_graveyard, sizeof(char*) * c);
+        if (!a) return;                 /* unreachable but harmless: name leaks */
+        g_name_graveyard = a;
+        g_graveyard_cap = c;
+    }
+    g_name_graveyard[g_graveyard_n++] = name;
+}
+
+/* Reclaim `d` if nothing outside its own definitions refers to it. */
+static bool temp_try_reclaim(SymbolDef* d) {
+    if (!d->module_temp) return false;
+    uint32_t found = 0;
+    const char* name = d->symbol_name;
+    if (!temp_walk_rules(d->own_values, name, &found) ||
+        !temp_walk_rules(d->down_values, name, &found) ||
+        !temp_walk_rules(d->sub_values, name, &found) ||
+#if UP_VALUES
+        !temp_walk_rules(d->up_values, name, &found) ||
+#endif
+        !temp_walk_rules(d->n_values, name, &found) ||
+        !temp_walk_rules(d->format_values, name, &found) ||
+        !temp_walk(d->default_options, name, true, &found))
+        return false;
+    if (found != d->temp_nodes) return false;
+
+    /* Nothing outside refers to it: drop the definitions (their nodes go to 0),
+     * unlink and free the node; keep the name string. */
+    reset_node_payload(d);
+    size_t idx = d->name_hash & (symtab_size - 1);
+    for (SymbolDef** pp = &symtab[idx]; *pp; pp = &(*pp)->next) {
+        if (*pp == d) { *pp = d->next; break; }
+    }
+    if (symtab_nodes) symtab_nodes--;
+    size_t slot = intern_ptr_slot(name);
+    if (g_intern_ptr_cache[slot] == d) g_intern_ptr_cache[slot] = NULL;
+    graveyard_keep(d->symbol_name);
+    free(d);
+    return true;
+}
+
+void symtab_temp_sweep(void) {
+    size_t w = 0;
+    for (size_t i = 0; i < g_temp_pending_n; i++) {
+        SymbolDef* d = g_temp_pending[i];
+        if (d->module_temp && (d->attributes & ATTR_TEMPORARY) && temp_try_reclaim(d))
+            continue;
+        if (!d->module_temp || !(d->attributes & ATTR_TEMPORARY)) {
+            /* Temporary cleared by the user: keep it for good. */
+            d->temp_pending = 0;
+            continue;
+        }
+        g_temp_pending[w++] = d;
+    }
+    g_temp_pending_n = w;
+    g_temp_queued_since_sweep = 0;
+    g_temp_dirty = 0;
+}
+
+/* The top-level hook: sweep only when a local was queued, or a queued local
+ * lost a reference, since the last sweep -- a long-lived escaped local is not
+ * re-walked by statements that never touch it. */
+void symtab_temp_sweep_if_queued(void) {
+    if (g_temp_queued_since_sweep || g_temp_dirty) symtab_temp_sweep();
+}
+
+void symtab_temp_release(SymbolDef* d) {
+    if (!d || !d->module_temp || !temp_reclaim_enabled()) return;
+    if ((d->attributes & ATTR_TEMPORARY) && temp_try_reclaim(d)) return;
+    if (!d->temp_pending) {
+        if (g_temp_pending_n == g_temp_pending_cap) {
+            size_t c = g_temp_pending_cap ? 2 * g_temp_pending_cap : 256;
+            SymbolDef** a = realloc(g_temp_pending, sizeof(SymbolDef*) * c);
+            if (!a) return;             /* not queued: kept, as before */
+            g_temp_pending = a;
+            g_temp_pending_cap = c;
+        }
+        g_temp_pending[g_temp_pending_n++] = d;
+        d->temp_pending = 1;
+        g_temp_queued_since_sweep++;
+    }
+    /* No sweep here: an inner frame up the stack may hold another pending
+     * local's SymbolDef (a rule loop); sweeps run only at the top level. */
 }
 
 int intern_is_system(const char* name) {
@@ -286,6 +467,11 @@ void intern_mark_all_system(void) {
 
 void intern_clear(void) {
     memset(g_intern_ptr_cache, 0, sizeof g_intern_ptr_cache);
+    free(g_temp_pending); g_temp_pending = NULL;
+    g_temp_pending_n = g_temp_pending_cap = 0;
+    for (size_t i = 0; i < g_graveyard_n; i++) free(g_name_graveyard[i]);
+    free(g_name_graveyard); g_name_graveyard = NULL;
+    g_graveyard_n = g_graveyard_cap = 0;
     /* Full teardown: free every node, its payload, and its name string. Any
      * previously-returned interned pointer (including SYM_*) becomes invalid. */
     for (size_t i = 0; i < symtab_size; i++) {
@@ -1777,6 +1963,9 @@ static void alpha_rename(Expr* p, const char** names, int n) {
             if (p->data.symbol.name == names[i]) {
                 char buf[24];
                 snprintf(buf, sizeof(buf), "$Pat$%d", i);
+                if (p->data.symbol.def && p->data.symbol.def->module_temp &&
+                    p->data.symbol.def->temp_nodes > 0)
+                    p->data.symbol.def->temp_nodes--;   /* no longer names the local */
                 p->data.symbol.name = (char*)intern_symbol(buf);
                 p->data.symbol.def = NULL;   /* name changed: invalidate cached def */
                 break;

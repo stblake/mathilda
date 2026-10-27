@@ -3696,7 +3696,12 @@ Expr* eval_report_uncaught(Expr* e) {
 static Expr* evaluate_core(Expr* e);
 
 Expr* evaluate(Expr* e) {
-    return evaluate_core(e);
+    Expr* r = evaluate_core(e);
+    /* Outermost evaluation finished: no evaluator frame holds a SymbolDef
+     * now, so Module locals that escaped and have since been dropped can be
+     * reclaimed (symtab_temp_sweep; a Module reclaims its own locals itself). */
+    if (eval_recursion_depth == 0) symtab_temp_sweep_if_queued();
+    return r;
 }
 
 void eval_park_unwind(const Expr* r) {

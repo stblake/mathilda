@@ -579,6 +579,7 @@ Expr* builtin_module(Expr* res) {
     typedef struct {
         char* new_name;
         Expr* init_val;
+        SymbolDef* temp;   /* the fresh local, counted for reclamation; NULL if not */
     } VarInfo;
     VarInfo* info = calloc(var_count, sizeof(VarInfo));
 
@@ -602,14 +603,19 @@ Expr* builtin_module(Expr* res) {
             info[i].new_name = mathilda_strdup(buf);
             info[i].init_val = init_val;
 
+            /* Register the temporary symbol BEFORE any node names it, so every
+             * node is counted (symtab_temp_begin).  A name that already exists
+             * (a user's own x$123) is used but never counted or reclaimed. */
+            bool fresh = !symtab_name_interned(buf);   /* no node can name it yet */
+            SymbolDef* ld = symtab_get_def(buf);
+            ld->attributes |= ATTR_TEMPORARY;
+            if (fresh && symtab_temp_begin(ld)) info[i].temp = ld;
+
             ScopingEnv* new_node = malloc(sizeof(ScopingEnv));
             new_node->old_name = orig_name;
             new_node->replacement = expr_new_symbol(buf);
             new_node->next = env;
             env = new_node;
-
-            // Register temporary symbol
-            symtab_get_def(buf)->attributes |= ATTR_TEMPORARY;
             if (init_val) {
                 symtab_add_own_value(buf, new_node->replacement, init_val);
             }
@@ -645,6 +651,10 @@ Expr* builtin_module(Expr* res) {
         if (info[i].new_name) free(info[i].new_name);
         if (info[i].init_val) expr_free(info[i].init_val);
     }
+    /* Remove each local nothing refers to any more (the reference's Temporary
+     * semantics); one that escaped -- returned, stored -- is retried later. */
+    for (size_t i = 0; i < var_count; i++)
+        if (info[i].temp) symtab_temp_release(info[i].temp);
     free(info);
 
     return final_res;

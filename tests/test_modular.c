@@ -236,6 +236,36 @@ void test_slot_function_scoping() {
     run_test("Module[{x = 5}, Function[x, x + 1][10]]", "11");
 }
 
+/* Module locals are Temporary: removed once nothing refers to them, as in the
+ * reference.  They used to stay for the session (+548 bytes and a symbol per
+ * local per call; +111,005 symbols after one issue #112 trace).  A local that
+ * escapes -- into a closure, a rule, an UpValue, a held or returned value --
+ * must survive, and is reclaimed once that reference is gone. */
+void test_module_locals_reclaimed() {
+    run_test("rcn0 = 0; rck = 0; rkeep = 0; Null", "Null");
+    run_test("rcn0 = Length[Names[\"*\"]]; Null", "Null");
+    run_test("Do[Module[{a = rck, b}, a + 1], {rck, 1000}]", "Null");
+    run_test("Length[Names[\"*\"]] - rcn0", "0");
+    /* escaped, then dropped: reclaimed when the statement ends */
+    run_test("Do[Module[{a}, a], {rck, 1000}]", "Null");
+    run_test("Length[Names[\"*\"]] - rcn0", "0");
+    /* held: kept while referenced, reclaimed after */
+    run_test("rkeep = Table[Module[{a}, a], {3}]; Length[rkeep]", "3");
+    run_test("Length[Names[\"*\"]] - rcn0", "3");
+    run_test("rkeep = 0", "0");       /* reclaimed when this statement ends */
+    run_test("Length[Names[\"*\"]] - rcn0", "0");
+
+    /* escapes that must keep working */
+    run_test("rcnt = Module[{c = 0}, Function[c++]]; {rcnt[], rcnt[], rcnt[]}", "List[0, 1, 2]");
+    run_test("Module[{x}, rgx[y_] := x + y; x = 5]; rgx[1]", "6");
+    run_test("Module[{x}, x /: rhx[x] := 77; rhx[x]]", "77");
+    run_test("rmk[] := Module[{f}, f[x_] := x^3; f]; rff = rmk[]; rff[2]", "8");
+    run_test("Module[{a, b}, a = {b}; b = 2; a]", "List[2]");
+    run_test("Module[{t}, ClearAttributes[t, Temporary]; rkept = t; t = 9]; rkept", "9");
+    run_test("rfib[n_] := Module[{a = n}, If[a < 2, a, rfib[a - 1] + rfib[a - 2]]]; rfib[15]", "610");
+    run_test("Clear[rcn0, rck, rkeep, rcnt, rgx, rhx, rmk, rff, rkept, rfib]", "Null");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -244,6 +274,7 @@ int main() {
     TEST(test_module);
     TEST(test_with);
     TEST(test_slot_function_scoping);
+    TEST(test_module_locals_reclaimed);
     TEST(test_powermod);
     TEST(test_powermod_identities);
     TEST(test_powermod_bignum);

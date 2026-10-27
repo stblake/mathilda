@@ -4,6 +4,7 @@
 #include "sym_names.h"
 #include "ndarray.h"   /* ndt_elem_size for dtype-aware copy/eq/hash */
 #include "assoc_index.h" /* assoc_index_free — the cached Association key index */
+#include "symtab.h"      /* SymbolDef: Module-local node counting */
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
@@ -217,11 +218,20 @@ Expr* expr_new_symbol(const char* name) {
     e->type = EXPR_SYMBOL;
     e->refcount = 1;
     e->last_evaluated_at = 0;
-    e->data.symbol.name = (char*)intern_symbol(name);
-    e->data.symbol.def = NULL;   /* Phase 3b: resolved + cached lazily on first eval use */
-    if (!e->data.symbol.name) {
+    SymbolDef* d = intern_symbol_node(name);
+    if (!d) {
         free(e);
         return NULL;
+    }
+    e->data.symbol.name = d->symbol_name;
+    /* Phase 3b: the def is otherwise resolved + cached lazily on first eval
+     * use.  A Module local's is cached at once and the node counted, so the
+     * local can be reclaimed when its last node goes (symtab_temp_release). */
+    if (d->module_temp) {
+        e->data.symbol.def = d;
+        d->temp_nodes++;
+    } else {
+        e->data.symbol.def = NULL;
     }
     return e;
 }
@@ -528,6 +538,8 @@ Expr* expr_unshare(Expr* e) {
         case EXPR_SYMBOL:
             fresh->data.symbol.name = e->data.symbol.name;  /* interned */
             fresh->data.symbol.def = e->data.symbol.def;    /* same symbol: cache carries over */
+            if (fresh->data.symbol.def && fresh->data.symbol.def->module_temp)
+                fresh->data.symbol.def->temp_nodes++;       /* one more node names it */
             break;
         case EXPR_STRING:
             fresh->data.string = e->data.string ? mathilda_strdup(e->data.string) : NULL;
@@ -616,7 +628,15 @@ void expr_free(Expr* e) {
 
     switch (e->type) {
         case EXPR_SYMBOL:
-            /* data.symbol.name is interned (owned by sym_intern); never free. */
+            /* data.symbol.name is interned (owned by sym_intern); never free.
+             * A Module local's node count drops (its def is always cached). */
+            if (e->data.symbol.def && e->data.symbol.def->module_temp &&
+                e->data.symbol.def->temp_nodes > 0) {
+                e->data.symbol.def->temp_nodes--;
+                /* a queued (escaped) local lost a reference: it may now be
+                 * reclaimable at the next top-level sweep */
+                if (e->data.symbol.def->temp_pending) g_temp_dirty++;
+            }
             break;
         case EXPR_STRING:
             if (e->data.string) free(e->data.string);

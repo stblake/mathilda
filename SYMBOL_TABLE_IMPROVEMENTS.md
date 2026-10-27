@@ -1,6 +1,7 @@
 # Symbol table improvements
 
-Status: proposal, for a dedicated session. Written 2026-10-27 while reducing the
+Status: proposal 1 (reclaiming Module locals) is implemented in v0.6056; see
+its section. The rest remain proposals. Written 2026-10-27 while reducing the
 per-call interpreter overhead of issue #112 (v0.6055). It records what the
 current design costs, measured, and the redesigns worth doing. A smaller,
 order-preserving change was already made and is described under
@@ -72,7 +73,30 @@ The result was 12% off the skeleton. It does nothing about the growth itself.
 
 ## Proposals, in order of value
 
-### 1. Reclaim `Module` locals (Temporary semantics)
+### 1. Reclaim `Module` locals (Temporary semantics) — DONE in v0.6056
+
+How it was implemented (`src/symtab.c`, "Module-local reclamation"):
+- **Fresh names only.** `Module` flags a local `module_temp` only when its name
+  was never interned, so no uncounted node can exist.
+- **Counting.** Every node naming the local caches its `SymbolDef`;
+  `temp_nodes` counts live nodes, adjusted in `expr_new_symbol`,
+  `expr_unshare`, `alpha_rename` and `expr_free`.
+- **The reclaim test.** A local is reclaimed when a walk of its own rule lists
+  finds all of its nodes, each through refcount-1 parents. A shared parent, or
+  a rule list detached by `Block` or an iterator, keeps it.
+- **Timing.** A local is tried at its own `Module`'s exit. An escaped local is
+  queued and retried only when the outermost evaluation ends, and only if
+  something was queued or a queued local lost a node since the last sweep.
+  That restriction comes from the audit: a sweep in a nested frame could free
+  a `SymbolDef` that an outer rule loop is still reading.
+- **Names are kept.** Name strings go to a graveyard freed by `intern_clear`,
+  so no raw name pointer dangles or aliases a later symbol.
+- **Kill switch.** `MATHILDA_NO_TEMP_RECLAIM=1`.
+- **Result.** After the trace, +9 symbols and +2.7 MB, against +111,005 and
+  +44 MB before (the reference: +11). `Module` costs 50 B per call (the kept
+  name strings), down from 548. Clean under AddressSanitizer.
+
+The original proposal follows.
 
 This is the largest win: memory, interner working set, and fidelity to the
 reference.

@@ -18,6 +18,16 @@ Implements lexical scoping by creating unique local variables.
 - `HoldAll`, `Protected`.
 - Variables are renamed to `name$nnn` using `$ModuleNumber`.
 - Created symbols have the `Temporary` attribute.
+- **Temporary locals are removed once nothing refers to them** (v0.6056), as
+  in the reference.
+  - **Before.** Every local stayed for the session: about 550 bytes and one
+    symbol per local per call, and +111,005 symbols (+44 MB) after one issue
+    #112 Dirac trace.
+  - **When.** A local is removed at its `Module`'s exit, or, if it escaped
+    (returned, stored, captured by a closure, a rule or an UpValue), when the
+    last outside reference is gone, checked as each top-level evaluation ends.
+  - **Exemptions.** A local whose `Temporary` attribute is cleared is kept, as
+    is one created over a name that already existed.
 
 ```mathematica
 In[1]:= x = 1; Module[{x = 2}, x + 1]

@@ -116,6 +116,14 @@ typedef struct SymbolDef {
      * call, so a long session interns 10^5-10^6 symbols and every miss used to
      * strcmp a whole chain (issue #112). */
     uint32_t name_hash;
+    /* Module-local reclamation (symtab_temp_*).  module_temp: a fresh Module
+     * local, counted from birth -- every live Expr symbol node naming it caches
+     * this SymbolDef and is counted in temp_nodes (expr_new_symbol /
+     * expr_unshare / renames add, expr_free subtracts).  temp_pending: queued
+     * for a reclamation retry.  Never set for a pre-existing name. */
+    uint8_t  module_temp;
+    uint8_t  temp_pending;
+    uint32_t temp_nodes;
     char* docstring;
     /* Default option settings for this symbol, the DefaultValues-equivalent
      * backing Options[f] / SetOptions[f]. A List[Rule[name,val], ...] owned
@@ -237,6 +245,18 @@ const char* symtab_innermost_head(const Expr* e);
 
 // Get definition for a symbol, or create it if it doesn't exist
 SymbolDef* symtab_get_def(const char* symbol_name);
+/* The node for `name`, interned (not materialised) if new. */
+SymbolDef* intern_symbol_node(const char* name);
+/* Module-local reclamation: mark a FRESH local (returns false and leaves the
+ * symbol uncounted when the name already existed), and try to reclaim locals
+ * at Module exit / in deferred sweeps.  See symtab.c. */
+bool symtab_temp_begin(SymbolDef* d);
+/* Has `name` ever been interned (defined or merely mentioned)? */
+bool symtab_name_interned(const char* name);
+void symtab_temp_release(SymbolDef* d);
+void symtab_temp_sweep(void);
+void symtab_temp_sweep_if_queued(void);
+extern unsigned long g_temp_dirty;
 
 // Look up a symbol without creating one. Returns NULL if not present.
 // Used by the context resolver to test whether a qualified name exists.
