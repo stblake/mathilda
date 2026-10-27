@@ -57,6 +57,11 @@ Implements dynamic scoping by temporarily overriding symbol values.
 - `HoldAll`, `Protected`.
 - Affects only values, not names.
 - Restores original values and attributes after execution.
+- **The returned value is evaluated again once the symbols are restored**
+  (v0.6053), as in the reference: `x = 5; Block[{x}, x + y]` is `5 + y`, and
+  with `f[a_] := a^2`, `Block[{f}, f[3]]` is `9`. Before, the fixed-point stamp
+  made while the symbol was blocked survived the restore, so these came back
+  as `x + y` and `f[3]`.
 
 ## With
 Defines local constants by lexical substitution.

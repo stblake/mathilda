@@ -105,6 +105,12 @@ typedef struct SymbolDef {
      *               valid); intern_clear frees the node outright. */
     uint8_t  is_system;      /* 1: System`, 2: Mathilda` (Mathilda-only), 0: neither */
     uint8_t  has_def;
+    /* 1 once an INERT fixed point (eval.c) has been stamped relying on this
+     * symbol having no value and no rules -- as a leaf, or as the head of a
+     * call.  Giving the symbol an OwnValue must then invalidate those stamps
+     * (eval_clock_bump_binding); binding a symbol never so observed (an
+     * iterator, a Module local) leaves them valid.  Cleared by that bump. */
+    uint8_t  inert_observed;
     char* docstring;
     /* Default option settings for this symbol, the DefaultValues-equivalent
      * backing Options[f] / SetOptions[f]. A List[Rule[name,val], ...] owned

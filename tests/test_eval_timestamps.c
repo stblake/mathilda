@@ -97,7 +97,7 @@ static void test_evaluate_stamps_result(void) {
     expr_free(p);
 
     uint64_t clk = eval_clock_get();
-    ASSERT(r->last_evaluated_at == clk);
+    ASSERT(eval_node_stamp(r) == clk);   /* the field also carries the GROUND/INERT flags */
 
     expr_free(r);
 }
@@ -493,7 +493,7 @@ static void test_cached_subexpr_in_fresh_outer(void) {
     Expr* p_inner = parse_expression("Sin[Pi/4]");
     Expr* r_inner = evaluate(p_inner);
     expr_free(p_inner);
-    ASSERT(r_inner->last_evaluated_at == eval_clock_get());
+    ASSERT(eval_node_stamp(r_inner) == eval_clock_get());
 
     /* Now build Plus[r_inner, r_inner] manually. The new function
      * node has timestamp 0 (fresh), but its children are stamped. */
@@ -766,6 +766,42 @@ static void test_declining_call_reports_once(void) {
     eval_str_is("Clear[zm, zd, za, zr]", "Null");
 }
 
+/* INERT fixed points: a symbolic fixed point survives the binding of symbols
+ * it does not mention (an iterator, a Module local, a stored result), and is
+ * re-evaluated after anything it relied on changes -- a value or rule for a
+ * symbol it contains, a rule for Plus/Times/Power, an UpValue, an attribute,
+ * Block.  Expected forms checked against the reference. */
+static void test_inert_survives_unrelated_binding(void) {
+    eval_str_is("Clear[ie, ia, ib, ic, ik]; ie = Expand[(ia + ib + ic f[1])^4]; Length[ie]", "15");
+    Expr* sym = parse_expression("ie");
+    Expr* v1 = evaluate(sym);
+    eval_str_is("ik = 1; ik = 2; Sum[ik, {ik, 3}]", "6");
+    Expr* v2 = evaluate(sym);
+    ASSERT(v1 == v2);                 /* reused, not re-canonicalised */
+    eval_str_is("ia = 0; ie", "ib^4 + 4 ib^3 ic f[1] + 6 ib^2 ic^2 f[1]^2 + 4 ib ic^3 f[1]^3 + ic^4 f[1]^4");
+    expr_free(v1); expr_free(v2); expr_free(sym);
+    eval_str_is("Clear[ie, ia, ib, ic, ik]", "Null");
+}
+
+static void test_inert_invalidated_by_what_it_relies_on(void) {
+    eval_str_is("e1 = a + x f[x]; Do[e1, {3}]; x = 3; e1", "a + 3 f[3]");
+    eval_str_is("e2 = f[y] + 1; e2; f[z_] := z^2; e2", "1 + y^2");
+    eval_str_is("e3 = g[1] + h; e3; g[1] = 7; e3", "7 + h");
+    eval_str_is("e4 = g2[1] h; e4; Unprotect[Times]; Times[g2[1], h] := 99; Protect[Times]; e4", "99");
+    eval_str_is("Unprotect[Times]; Clear[Times]; Protect[Times]; t5 = k^2 + 1; Table[t5, {k, 3}]", "{2, 5, 10}");
+    eval_str_is("Sum[t5, {k, 3}]", "17");
+    eval_str_is("x7 = 5; Block[{x7}, x7 + y]", "5 + y");
+    eval_str_is("f7[a_] := a^2; Block[{f7}, f7[3]]", "9");
+    eval_str_is("e7 = p[u, 1] + 2; e7; u /: p[u, 1] := 9; e7", "11");
+    eval_str_is("e8 = q[b, a]; e8; SetAttributes[q, Orderless]; e8", "q[a, b]");
+    eval_str_is("e9 = w[1] + w[2]; e9; w[n_] := n; e9", "3");
+    eval_str_is("e11 = Module[{loc}, loc = c1 + c2; loc]; c1 = 10; e11", "10 + c2");
+    eval_str_is("res[1] = m1 + m2; Do[res[1], {2}]; m2 = -m1; res[1]", "0");
+    eval_str_is("e13 = z1^2 z2; e13; Unprotect[Power]; Power[z1, 2] := zz; Protect[Power]; e13", "z2 zz");
+    eval_str_is("Unprotect[Power]; Clear[Power]; Protect[Power]; e14 = {r1 + r2, r1}; e14; r1 = 4; e14", "{4 + r2, 4}");
+    eval_str_is("Clear[e1, e2, e3, e4, t5, x, x7, f, f7, g, g2, h, e7, u, p, e8, q, e9, w, e11, c1, c2, res, m1, m2, e13, z1, z2, zz, e14, r1, r2]", "Null");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -792,6 +828,8 @@ int main(void) {
     TEST(test_symbolic_valued_assoc_updates_after_set);
     TEST(test_set_value_evaluated_once);
     TEST(test_declining_call_reports_once);
+    TEST(test_inert_survives_unrelated_binding);
+    TEST(test_inert_invalidated_by_what_it_relies_on);
 
     printf("All eval-timestamp tests passed!\n");
     return 0;

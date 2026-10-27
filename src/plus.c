@@ -6,6 +6,7 @@
 #include "complex.h"
 #include "interval.h"
 #include "eval.h"
+#include "symtab.h"     /* symtab_up_value_count, Plus rule lists */
 #include "numeric.h"
 #include "sym_names.h"
 #include "series.h"
@@ -339,12 +340,27 @@ static Expr* add_numbers(Expr* a, Expr* b) {
     return NULL;
 }
 
-/* qsort comparator over Expr* (array of Expr pointers), delegating to the
- * canonical expr_compare. Used to canonically order builtin_plus's collapsed
- * output, so the evaluator can skip the generic ORDERLESS sort of the raw
- * (possibly huge) input — see the ORDERLESS block in eval.c. */
-static int plus_cmp_ptrs(const void* pa, const void* pb) {
-    return expr_compare(*(Expr* const*)pa, *(Expr* const*)pb);
+/* A term the evaluator could not change on a second pass over the sum: a
+ * machine integer, a rule-free non-System symbol, or an evaluated (reusable)
+ * call whose head is Times, Power or a rule-free non-System symbol.  Anything
+ * else -- a List or Association (Listable threading), a nested Plus (Flat), a
+ * SparseArray, Infinity, an inexact or series term, a raw unevaluated call --
+ * keeps the evaluator's confirming pass. */
+static bool plus_user_symbol(Expr* s) {
+    SymbolDef* d = s->data.symbol.def;
+    if (!d) { d = symtab_get_def(s->data.symbol.name); s->data.symbol.def = d; }
+    return d && !d->is_system && !d->builtin_func && !d->own_values &&
+           !d->down_values && !d->sub_values;
+}
+static bool plus_certifiable_term(Expr* t) {
+    if (t->type == EXPR_INTEGER) return true;
+    if (t->type == EXPR_SYMBOL) return plus_user_symbol(t);
+    if (t->type != EXPR_FUNCTION || t->data.function.head->type != EXPR_SYMBOL) return false;
+    Expr* h = t->data.function.head;
+    if (h->data.symbol.name != SYM_Times && h->data.symbol.name != SYM_Power &&
+        !plus_user_symbol(h))
+        return false;
+    return eval_node_reusable(t);
 }
 
 Expr* make_plus(Expr* a, Expr* b) {
@@ -706,6 +722,12 @@ Expr* builtin_plus(Expr* res) {
         Expr* base;
         Expr* coeff;
         bool temp_base;
+        /* The input term itself (borrowed from res) while it is the group's
+         * ONLY term; NULL once a like term merges in.  Emitted unchanged, so a
+         * term that collects with nothing keeps its evaluated node instead of
+         * being rebuilt as coeff * base -- an unevaluated copy the evaluator
+         * then re-evaluates (issue #112: 135135 Times terms per Plus). */
+        Expr* orig;
     } TermGroup;
     
     /* Collector buffers: for the overwhelmingly common small Plus (a handful
@@ -765,6 +787,7 @@ Expr* builtin_plus(Expr* res) {
                 groups[group_count].base = expr_copy(c);
                 groups[group_count].coeff = expr_new_integer(1);
                 groups[group_count].temp_base = true;
+                groups[group_count].orig = NULL;
                 group_count++;
                 expr_free(c);
                 if (is_temp_base && b != arg) expr_free(b);
@@ -813,11 +836,13 @@ Expr* builtin_plus(Expr* res) {
                     groups[group_count].base = base_copy;
                     groups[group_count].coeff = c;  /* take ownership */
                     groups[group_count].temp_base = is_temp_base;
+                    groups[group_count].orig = NULL;
                     group_count++;
                     continue;
                 }
                 expr_free(groups[found].coeff);
                 groups[found].coeff = next_c;
+                groups[found].orig = NULL;          /* merged: rebuild */
                 expr_free(c);
                 if (is_temp_base) expr_free(b);
                 if (is_overflow(groups[found].coeff)) {
@@ -840,6 +865,7 @@ Expr* builtin_plus(Expr* res) {
                 groups[group_count].base = b;
                 groups[group_count].coeff = c; // Already owned
                 groups[group_count].temp_base = is_temp_base;
+                groups[group_count].orig = arg;
                 group_count++;
             }
         }
@@ -875,6 +901,10 @@ Expr* builtin_plus(Expr* res) {
 
     for (size_t j = 0; j < group_count; j++) {
         if (groups[j].coeff->type == EXPR_INTEGER && groups[j].coeff->data.integer == 0) {
+            continue;
+        }
+        if (groups[j].orig) {
+            final_args[idx++] = expr_copy(groups[j].orig);
             continue;
         }
         if (groups[j].coeff->type == EXPR_INTEGER && groups[j].coeff->data.integer == 1) {
@@ -923,16 +953,26 @@ Expr* builtin_plus(Expr* res) {
          * comparisons into n. When the scan finds a descent it falls straight
          * through to qsort (with at most one wasted O(n) partial pass).
          * Mirrors the Orderless already-sorted fast path in evaluate_step. */
-        bool already_sorted = true;
-        for (size_t j = 1; orderless && j < idx; j++) {
-            if (plus_cmp_ptrs(&final_args[j - 1], &final_args[j]) > 0) {
-                already_sorted = false;
-                break;
-            }
-        }
-        if (!already_sorted)
-            expr_orderless_sort(final_args, idx);   /* memoized symbol sets */
+        /* expr_orderless_sort is adaptive: an already-sorted input costs it
+         * n - 1 comparisons, and k sorted runs merge in O(n log k). */
+        if (orderless)
+            expr_orderless_sort(final_args, idx);
         final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
+        /* Certify the result as a fixed point when a second evaluation could
+         * only re-derive it: every term is an atom or an evaluated fixed point
+         * (no group merged into a fresh coeff * base node), the terms are
+         * collected and canonically sorted, and no rule can fire -- Plus has no
+         * DownValues/SubValues and no UpValues exist anywhere.  Otherwise the
+         * evaluator's fixed-point loop re-ran this whole builtin on the result
+         * just to see it unchanged: a second grouping and order scan of every
+         * term (135135 of them per merge in issue #112). */
+        if (orderless && symtab_up_value_count == 0) {
+            SymbolDef* pd = symtab_get_def(SYM_Plus);
+            bool ok = pd && !pd->down_values && !pd->sub_values && !pd->own_values;
+            for (size_t j = 0; ok && j < idx; j++)
+                ok = plus_certifiable_term(final_args[j]);
+            if (ok) eval_mark_fixed_point(final_res);
+        }
     }
     if (heap_bufs) free(final_args);
     

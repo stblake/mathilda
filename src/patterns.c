@@ -141,10 +141,19 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
         pattern->data.function.head->type == EXPR_SYMBOL &&
         pattern->data.function.head->data.symbol.name == SYM_Blank &&
         pattern->data.function.arg_count == 1 &&
-        pattern->data.function.args[0]->type == EXPR_SYMBOL &&
-        pattern->data.function.args[0]->data.symbol.name !=
+        pattern->data.function.args[0]->type == EXPR_SYMBOL) {
+        if (pattern->data.function.args[0]->data.symbol.name !=
             e->data.function.head->data.symbol.name)
-        match_level = false;
+            return;                                   /* no match */
+        if (!replacement) {                           /* a match: the node itself */
+            if (*count >= *cap) {
+                *cap = (*cap == 0) ? 16 : (*cap * 2);
+                *results = realloc(*results, sizeof(Expr*) * (*cap));
+            }
+            (*results)[(*count)++] = expr_copy(e);
+            return;
+        }
+    }
 
     if (match_level) {
         MatchEnv* env = env_new();

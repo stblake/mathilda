@@ -113,8 +113,29 @@ void eval_reset_recursion_depth(int n) {
  * (set_attributes, add/remove_single_attribute). 64 bits is enough to
  * absorb roughly 2^64 mutations, far beyond any practical session. */
 static uint64_t g_eval_clock = 1;
+/* INERT fixed-point epoch: the clock value of the most recent mutation that
+ * could change the evaluation of an INERT node (see node_compute_inert).
+ * Every clock bump advances it -- conservatively, since a bump site may stand
+ * for any global change -- EXCEPT an OwnValue binding of a symbol no INERT
+ * stamp relied on (eval_clock_bump_binding), which is what an iterator or a
+ * Module local is. */
+static uint64_t g_inert_epoch = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
-void     eval_clock_bump(void) { g_eval_clock++; }
+void     eval_clock_bump(void) { g_eval_clock++; g_inert_epoch = g_eval_clock; }
+static inline bool ground_head_name(const char* n);
+static inline bool inert_builtin_head(const char* n);
+/* A binding or a DownValue for `def`: an INERT node can depend on it only if
+ * the node relied on `def` (flagged inert_observed) or `def` is one of the
+ * builtin heads an INERT node may carry, whose rules are not flagged. */
+void     eval_clock_bump_binding(SymbolDef* def) {
+    g_eval_clock++;
+    if (!def) { g_inert_epoch = g_eval_clock; return; }
+    if (def->inert_observed || inert_builtin_head(def->symbol_name) ||
+        ground_head_name(def->symbol_name)) {
+        g_inert_epoch = g_eval_clock;
+        def->inert_observed = 0;
+    }
+}
 
 /* --- Top-level evaluation id ----------------------------------------------
  * Bumped once at the entry of each OUTERMOST evaluate() call (i.e. once per
@@ -151,14 +172,21 @@ uint64_t eval_rule_epoch_get(void)  { return g_last_rule_change_clock; }
 /* Mark the CURRENT clock as a rule change (caller already bumped the clock). */
 void     eval_rule_epoch_mark(void) { g_last_rule_change_clock = g_eval_clock; }
 /* Bump the clock AND record it as a rule change (attribute/Protect sites). */
-void     eval_rule_epoch_bump(void) { g_eval_clock++; g_last_rule_change_clock = g_eval_clock; }
+void     eval_rule_epoch_bump(void) {
+    g_eval_clock++;
+    g_last_rule_change_clock = g_eval_clock;
+    g_inert_epoch = g_eval_clock;
+}
 
 /* The top bit of `last_evaluated_at` is a benign GROUND flag: the clock is a
  * monotone counter that will never reach 2^63, so this steals no range. The
  * low 63 bits remain the fixed-point stamp; every comparison against the eval
  * clock masks the flag off first. See is_ground_now() / node_compute_ground(). */
 #define EVAL_GROUND_BIT  (UINT64_C(1) << 63)
-#define EVAL_STAMP_MASK  (~EVAL_GROUND_BIT)
+/* Bit 62: the INERT flag (see node_compute_inert).  The clock never reaches
+ * 2^62 either. */
+#define EVAL_INERT_BIT   (UINT64_C(1) << 62)
+#define EVAL_STAMP_MASK  (~(EVAL_GROUND_BIT | EVAL_INERT_BIT))
 static inline uint64_t eval_stamp_of(const Expr* e) {
     return e->last_evaluated_at & EVAL_STAMP_MASK;
 }
@@ -171,10 +199,22 @@ static inline bool eval_ground_of(const Expr* e) {
 static inline bool eval_ground_valid(const Expr* e) {
     return eval_ground_of(e) && eval_stamp_of(e) >= g_last_rule_change_clock;
 }
+/* An INERT node is a valid fixed point while nothing it relied on has changed
+ * since it was stamped.  The global rule epoch is NOT consulted: a DownValue
+ * advances g_inert_epoch itself when it can matter (eval_clock_bump_binding),
+ * so storing a result -- res[14] = <135135-term sum> -- does not invalidate
+ * every INERT node, the stored value's own stamp included.  Attribute changes,
+ * Clear/Remove and every other conservative bump still advance it. */
+static inline bool eval_inert_valid(const Expr* e) {
+    if (!(e->last_evaluated_at & EVAL_INERT_BIT)) return false;
+    return eval_stamp_of(e) >= g_inert_epoch;
+}
 /* A FUNCTION node is a re-usable fixed point if it was stamped under the live
- * clock (exact hit) OR it is a still-valid ground node (survives OwnValue churn). */
+ * clock (exact hit) OR it is a still-valid ground node (survives OwnValue churn)
+ * OR a still-valid inert one (survives the churn of unrelated bindings). */
 static inline bool eval_fixed_point_reusable(const Expr* e) {
-    return eval_stamp_of(e) == g_eval_clock || eval_ground_valid(e);
+    return eval_stamp_of(e) == g_eval_clock || eval_ground_valid(e) ||
+           eval_inert_valid(e);
 }
 
 /* Public, mask-aware accessors for tests (the raw field now carries the flag). */
@@ -192,7 +232,9 @@ bool     eval_node_is_ground(const Expr* e) { return e ? eval_ground_of(e) : fal
  * global state, so we do not trust them. */
 static inline bool ground_head(const Expr* h) {
     if (!h || h->type != EXPR_SYMBOL) return false;
-    const char* n = h->data.symbol.name;
+    return ground_head_name(h->data.symbol.name);
+}
+static inline bool ground_head_name(const char* n) {
     return n == SYM_List || n == SYM_Association || n == SYM_Rule
         || n == SYM_RuleDelayed || n == SYM_Complex || n == SYM_Rational
         /* Graph values. DirectedEdge/UndirectedEdge are inert; Graph's builtin
@@ -230,6 +272,74 @@ static bool node_compute_ground(const Expr* e) {
     return true;
 }
 
+/* --- INERT fixed points ----------------------------------------------------
+ * GROUND covers literal data only.  A symbolic fixed point -- the 135135-term
+ * sum of g[x[i], x[j]] products a Dirac trace builds -- was re-canonicalised in
+ * full after EVERY iterator or Module-local binding, because any OwnValue write
+ * bumps the eval clock.  Its value cannot depend on such a binding unless the
+ * bound symbol occurs in it: INERT records exactly that.
+ *
+ * A FUNCTION fixed point is INERT when its head is a pure arithmetic or
+ * structural builtin (Plus, Times, Power, or a ground head) or a symbol with no
+ * value, rules or builtin at all, and every argument is a number, a string, a
+ * symbol with no value and no builtin, or a still-valid INERT/GROUND node.
+ * Plus/Times/Power read no mutable global state (the trig-canon suppression
+ * flag bumps the clock when it lifts).  Every symbol relied on -- leaf or head
+ * -- is flagged inert_observed; an OwnValue binding of a flagged symbol
+ * advances g_inert_epoch (eval_clock_bump_binding), and every other clock bump
+ * and every rule change advances it unconditionally, so a stale INERT stamp is
+ * never reused. */
+static inline bool inert_builtin_head(const char* n) {
+    return n == SYM_Plus || n == SYM_Times || n == SYM_Power;
+}
+static inline SymbolDef* inert_sym_def(Expr* s) {
+    SymbolDef* d = s->data.symbol.def;
+    if (!d) { d = symtab_get_def(s->data.symbol.name); s->data.symbol.def = d; }
+    return d;
+}
+/* A symbol with no definitions of any kind: evaluates to itself as a leaf and
+ * leaves a call it heads to the evaluator's generic argument processing. */
+static inline bool inert_bare_symbol(const SymbolDef* d) {
+    return d && !d->own_values && !d->down_values && !d->sub_values &&
+#if UP_VALUES
+           !d->up_values &&
+#endif
+           !d->builtin_func;
+}
+static inline bool is_inert_now(Expr* a) {
+    switch (a->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+            return true;
+        case EXPR_SYMBOL: {
+            SymbolDef* d = inert_sym_def(a);
+            if (!d || d->own_values || d->builtin_func) return false;
+            d->inert_observed = 1;
+            return true;
+        }
+        case EXPR_FUNCTION:
+            return eval_inert_valid(a) || eval_ground_valid(a);
+        default:
+            return false;
+    }
+}
+static bool node_compute_inert(Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    if (!inert_builtin_head(hn) && !ground_head(h)) {
+        SymbolDef* d = inert_sym_def(h);
+        if (!inert_bare_symbol(d)) return false;
+        d->inert_observed = 1;
+    }
+    size_t n = e->data.function.arg_count;
+    Expr* const* args = e->data.function.args;
+    for (size_t i = 0; i < n; i++) {
+        if (!args[i] || !is_inert_now(args[i])) return false;
+    }
+    return true;
+}
+
 /* Stamp a List-of-literals tree a builtin has just built as an evaluated
  * fixed point, so the evaluator's re-walk of the returned value is O(1)
  * instead of O(size). Bottom-up, exactly the stamp the fixed-point exit
@@ -261,6 +371,26 @@ static bool stamp_list_literal_rec(Expr* e) {
     }
     if (all) e->last_evaluated_at = g_eval_clock | EVAL_GROUND_BIT;
     return all;
+}
+
+bool eval_node_reusable(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_FUNCTION) return eval_fixed_point_reusable(e);
+    if (e->type == EXPR_SYMBOL) {
+        /* A symbol with a value is not final: a builtin may be called from C
+         * on raw arguments, not only by the evaluator on evaluated ones. */
+        SymbolDef* d = inert_sym_def((Expr*)e);
+        return d && !d->own_values;
+    }
+    return e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT ||
+           e->type == EXPR_STRING;
+}
+
+void eval_mark_fixed_point(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    uint64_t flag = node_compute_ground(e) ? EVAL_GROUND_BIT
+                  : node_compute_inert(e)  ? EVAL_INERT_BIT : 0;
+    e->last_evaluated_at = g_eval_clock | flag;
 }
 
 bool eval_stamp_list_literal(Expr* e) {
@@ -3771,8 +3901,9 @@ static Expr* evaluate_core(Expr* e) {
                  * whitelisted-constructor node over ground args -- so a later
                  * evaluate() can re-validate it as a fixed point even after the
                  * eval clock has churned (loop-invariant O(1) re-check). */
-                current->last_evaluated_at = g_eval_clock
-                    | (node_compute_ground(current) ? EVAL_GROUND_BIT : 0);
+                uint64_t flag = node_compute_ground(current) ? EVAL_GROUND_BIT
+                              : node_compute_inert(current)  ? EVAL_INERT_BIT : 0;
+                current->last_evaluated_at = g_eval_clock | flag;
             }
             eval_recursion_depth--;
             /* Trace: the last step didn't rewrite; drop its reassembled

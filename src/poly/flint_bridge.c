@@ -426,6 +426,7 @@ typedef struct {
     int have_alg;
     int have_complex;
     int conflict;        /* two distinct algebraic generators present */
+    int strict;          /* in: decline at the first non-polynomial node */
 } FieldScan;
 
 /* Locate the algebraic generator(s) of `e` without recursing into a generator
@@ -435,6 +436,22 @@ static void field_scan(const Expr* e, FieldScan* fs) {
     if (fs->conflict || !e) return;
     if (e->type != EXPR_FUNCTION) return;
     const char* h = fn_head_name(e);
+    /* `strict` (the field EXPANDERS): decline at the first node the expander
+     * cannot represent -- any head other than the polynomial and field-element
+     * ones, or a Power whose exponent is not a non-negative integer.  Their
+     * collect_vars step rejects exactly these, so walking the rest of the tree
+     * only to fail there is waste (a 10395-term sum of g[...] kernel products
+     * was scanned whole at every Expand level, issue #112).  Not for the
+     * Together/Cancel/GCD callers, which accept denominators and radicals.
+     * `conflict` doubles as the decline flag. */
+    if (fs->strict && h != SYM_AlgebraicNumber && h != SYM_Complex && h != SYM_Plus &&
+        h != SYM_Times && h != SYM_Rational &&
+        !(h == SYM_Power && e->data.function.arg_count == 2 &&
+          e->data.function.args[1]->type == EXPR_INTEGER &&
+          e->data.function.args[1]->data.integer >= 0)) {
+        fs->conflict = 1;
+        return;
+    }
     if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
         const Expr* g = e->data.function.args[0];
         if (!fs->have_alg) { fs->theta = g; fs->have_alg = 1; }
@@ -649,6 +666,7 @@ Expr* flint_expand_polynomial_field(const Expr* e) {
      * Complex is still substituted WITHIN a Gaussian field polynomial (theta == I
      * with AlgebraicNumber[I,..] also present), so the two forms mix cleanly. */
     FieldScan fs; memset(&fs, 0, sizeof fs);
+    fs.strict = 1;
     field_scan(e, &fs);
     if (fs.conflict || !fs.have_alg) return NULL;
 

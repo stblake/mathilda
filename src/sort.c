@@ -455,6 +455,37 @@ int expr_compare(const Expr* a, const Expr* b) {
     if (!a) return -1;
     if (!b) return 1;
 
+    /* Fast paths for the two commonest shapes, each the exact outcome of the
+     * general rules below:
+     *   - two machine integers: the numeric tier, by value;
+     *   - two calls with the SAME symbolic head that is not an arithmetic or
+     *     number head (Times, Plus, Power, Complex, Rational): no packed,
+     *     sparse, infinity or number tier applies, so it is step 6 directly
+     *     -- equal heads, then length, then the arguments in order.
+     * Sorting a large sum compares g[x[i], x[j]] kernels millions of times;
+     * each nested level used to walk the whole tier preamble. */
+    if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER)
+        return (a->data.integer > b->data.integer) - (a->data.integer < b->data.integer);
+    if (a->type == EXPR_FUNCTION && b->type == EXPR_FUNCTION) {
+        const Expr* ha = a->data.function.head;
+        const Expr* hb = b->data.function.head;
+        if (ha && hb && ha->type == EXPR_SYMBOL && hb->type == EXPR_SYMBOL &&
+            ha->data.symbol.name == hb->data.symbol.name) {
+            const char* h = ha->data.symbol.name;
+            if (h != SYM_Times && h != SYM_Plus && h != SYM_Power &&
+                h != SYM_Complex && h != SYM_Rational) {
+                size_t ac = a->data.function.arg_count;
+                size_t bc = b->data.function.arg_count;
+                if (ac != bc) return (ac < bc) ? -1 : 1;
+                for (size_t i = 0; i < ac; i++) {
+                    int c = expr_compare(a->data.function.args[i], b->data.function.args[i]);
+                    if (c != 0) return c;
+                }
+                return 0;
+            }
+        }
+    }
+
     /* 0. Packed lists order as the Lists they are, NOT in the NDArray tier at
      * step 5 below (which sorts after everything and treats dtype as identity).
      * Two packed lists of matching shape and element class compare straight off
@@ -621,10 +652,63 @@ static int sort_cmp_expr_ptrs(const void* a, const void* b) {
     return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
 }
 
-/* Canonically sort args[0..n) in place (the Orderless canonicalisation). */
+/* Canonically sort args[0..n) in place (the Orderless canonicalisation).
+ *
+ * Adaptive: one pass finds the maximal ascending runs, which are then merged
+ * pairwise, bottom-up -- O(n log r) comparisons for r runs instead of
+ * O(n log n).  Orderless input is very often a concatenation of sorted pieces:
+ * Plus of k canonical sums flattens to k sorted runs (13 runs of 10395 terms
+ * in the issue #112 Dirac trace), where a full qsort re-compared every term
+ * log2(135135) ~ 17 times.  A sorted input costs n - 1 comparisons; input with
+ * many short runs (r > n/8, i.e. effectively unordered) goes to qsort, whose
+ * constant factor is lower there.  Equal elements are expr_eq-equivalent under
+ * the canonical order, so stability is immaterial. */
 void expr_orderless_sort(Expr** args, size_t n) {
     if (!args || n < 2) return;
-    qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
+    size_t cap = 16, nr = 0;
+    size_t* runs = malloc(sizeof(size_t) * cap);
+    if (!runs) { qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs); return; }
+    runs[nr++] = 0;
+    bool unordered = false;                 /* too many runs: plain qsort */
+    for (size_t i = 1; i < n; i++) {
+        if (expr_compare(args[i - 1], args[i]) > 0) {
+            if (nr >= 2 && nr > n / 8) { unordered = true; break; }
+            if (nr == cap) {
+                size_t* r2 = realloc(runs, sizeof(size_t) * cap * 2);
+                if (!r2) { unordered = true; break; }
+                runs = r2; cap *= 2;
+            }
+            runs[nr++] = i;
+        }
+    }
+    if (!unordered && nr == 1) { free(runs); return; }
+    Expr** tmp = unordered ? NULL : malloc(sizeof(Expr*) * n);
+    if (!tmp) {
+        free(runs);
+        qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
+        return;
+    }
+    Expr** src = args;
+    Expr** dst = tmp;
+    while (nr > 1) {
+        size_t out = 0;
+        for (size_t k = 0; k < nr; k += 2) {
+            size_t lo = runs[k];
+            size_t mid = (k + 1 < nr) ? runs[k + 1] : n;
+            size_t hi = (k + 2 < nr) ? runs[k + 2] : n;
+            size_t i = lo, j = mid, o = lo;
+            while (i < mid && j < hi)
+                dst[o++] = (expr_compare(src[j], src[i]) < 0) ? src[j++] : src[i++];
+            while (i < mid) dst[o++] = src[i++];
+            while (j < hi)  dst[o++] = src[j++];
+            runs[out++] = lo;
+        }
+        nr = out;
+        Expr** t = src; src = dst; dst = t;
+    }
+    if (src != args) memcpy(args, src, sizeof(Expr*) * n);
+    free(tmp);
+    free(runs);
 }
 
 /* ==================================================================== */

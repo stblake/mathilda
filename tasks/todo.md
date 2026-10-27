@@ -7,6 +7,10 @@
 - [x] #112 rb_rec shares unchanged subtrees ; Expand estimates once (child bounded) + hash-screened kernel table ;
       Union hash-dedupe then sort ; Cases `_h` head test ; Echo + EchoTiming ; v0.6052
       n=14: generation 24.1 -> 18.8 s, Cases+Union 3.62 -> 0.88 s, MaxMemoryUsed 462 -> 224 MB (same machine, A/B)
+- [x] #112 round 2 (v0.6053): INERT fixed points (symbolic stamps survive unrelated bindings), Plus/Times
+      self-certified fixed points, adaptive run-merge Orderless sort, Times opaque fast path, Expand no-op for
+      expanded input, empty-env replace_bindings, Cases `_h` match, intern pointer cache, Block restore fix.
+      n=14 generation 18.5 -> 4.5 s, Cases+Union 0.84 -> 0.33 s (same machine A/B)
 - [ ] #112 follow-up: FLINT expansion with opaque kernels as generators (exclude List/Interval/SeriesData/...)
 - [ ] Factor over Q(I), univariate: Factor[x^2 + 2 I x - 1] should be (I + x)^2 (pre-existing gap)
 - [ ] Cancel numerator form: Mathilda expands the quotient numerator ((1 + a) y -> y + a y); the reference keeps it

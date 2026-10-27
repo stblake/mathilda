@@ -133,6 +133,10 @@ void eval_init(void);
  * never accidentally hit the cache on first evaluation. */
 uint64_t eval_clock_get(void);
 void     eval_clock_bump(void);
+/* Bump the eval clock for an OwnValue binding of `def`: INERT fixed points
+ * (eval.c) stay valid unless one of them relied on `def` being unbound. */
+struct SymbolDef;
+void     eval_clock_bump_binding(struct SymbolDef* def);
 
 /* Id of the current OUTERMOST evaluate() call: bumped once per user command /
  * script statement, and stable across all the nested evaluations and
@@ -162,6 +166,13 @@ void     eval_rule_epoch_bump(void);
  *   - eval_node_stamp():     the fixed-point stamp, flag masked off.
  *   - eval_node_is_ground(): true iff the GROUND flag is set. */
 uint64_t eval_node_stamp(const Expr* e);
+/* Would the evaluator reuse `e` as a fixed point right now (stamped under the
+ * live clock, or a still-valid GROUND/INERT node)?  Atoms and symbols: true. */
+bool     eval_node_reusable(const Expr* e);
+/* Stamp `e` as a fixed point under the live clock, with its GROUND/INERT flag.
+ * For a builtin that has PROVED its fresh result is one, so the evaluator does
+ * not run the builtin a second time only to confirm nothing changes. */
+void     eval_mark_fixed_point(Expr* e);
 bool     eval_node_is_ground(const Expr* e);
 
 /* For a builtin returning a freshly built tree of Lists over literal atoms

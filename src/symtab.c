@@ -201,9 +201,25 @@ SymbolDef* symtab_lookup(const char* symbol_name) {
  * a definition, so merely mentioning a symbol does not make it appear in
  * Names[]. These implement the sym_intern.h API over the unified table.
  * ============================================================ */
+/* Direct-mapped cache of CANONICAL interned pointers.  Most calls pass a name
+ * that is already the interned pointer (expr_new_symbol(SYM_Times), a copied
+ * symbol's name), and hashing + strcmp-probing it again was ~10% of a symbolic
+ * workload (issue #112).  Only pointers the table itself returned are stored,
+ * so a hit means `name` IS the canonical pointer: an arbitrary caller buffer
+ * that happens to be reused with other contents can never hit.  Interned names
+ * live until intern_clear, which empties the cache. */
+#define INTERN_PTR_CACHE 4096
+static const char* g_intern_ptr_cache[INTERN_PTR_CACHE];
+static inline size_t intern_ptr_slot(const char* p) {
+    return (size_t)(((uintptr_t)p >> 4) ^ ((uintptr_t)p >> 16)) & (INTERN_PTR_CACHE - 1);
+}
+
 const char* intern_symbol(const char* name) {
+    if (name && g_intern_ptr_cache[intern_ptr_slot(name)] == name) return name;
     SymbolDef* d = node_intern(name, 0);
-    return d ? d->symbol_name : NULL;
+    if (!d) return NULL;
+    g_intern_ptr_cache[intern_ptr_slot(d->symbol_name)] = d->symbol_name;
+    return d->symbol_name;
 }
 
 int intern_is_system(const char* name) {
@@ -228,6 +244,7 @@ void intern_mark_all_system(void) {
 }
 
 void intern_clear(void) {
+    memset(g_intern_ptr_cache, 0, sizeof g_intern_ptr_cache);
     /* Full teardown: free every node, its payload, and its name string. Any
      * previously-returned interned pointer (including SYM_*) becomes invalid. */
     for (int i = 0; i < SYMTAB_SIZE; i++) {
@@ -1372,14 +1389,18 @@ static LitIndex* litidx_get(SymbolDef* d) {
 }
 
 /* `owner`: the symbol whose DownValues `list` is, so its literal index is
- * used and kept; NULL for every other rule list. */
+ * used and kept; NULL for every other rule list.  `binding`: the symbol whose
+ * OwnValues `list` is, NULL for every other rule list. */
 static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool delayed,
-                        SymbolDef* owner) {
+                        SymbolDef* owner, SymbolDef* binding) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
      * eval clock. This invalidates every cached evaluation in one shot
-     * (conservative variant of EVAL_IMPROVEMENTS_PLAN §3.3). */
-    eval_clock_bump();
+     * (conservative variant of EVAL_IMPROVEMENTS_PLAN §3.3).  An OwnValue
+     * binding bumps the clock too, but invalidates the INERT fixed points
+     * only if one of them relied on this symbol being unbound (eval.c). */
+    if (binding) eval_clock_bump_binding(binding);
+    else         eval_clock_bump();
 
     /* §3.4 canonicalize the LHS before deriving any dispatch keys or
      * doing duplicate-rule detection. Held LHSs would otherwise sit in
@@ -1538,7 +1559,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
 }
 
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
-    add_rule_in(list, pattern, replacement, delayed, NULL);
+    add_rule_in(list, pattern, replacement, delayed, NULL, NULL);
 }
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
     symtab_add_own_value_as(symbol_name, pattern, replacement, false);
@@ -1551,7 +1572,7 @@ void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replace
 void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
                              bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
-    add_rule(&def->own_values, pattern, replacement, delayed);
+    add_rule_in(&def->own_values, pattern, replacement, delayed, NULL, def);
     /* An OwnValue binding is "soft": add_rule bumps only the eval clock, leaving
      * the rule epoch alone so a loop-invariant GROUND value survives an iterator
      * rebinding (the whole point of this path staying cheap). The one exception
@@ -1598,7 +1619,10 @@ void symtab_rule_free(Rule* r) {
 void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
                               bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
-    add_rule_in(&def->down_values, pattern, replacement, delayed, def);
+    /* `binding` = def: an INERT fixed point is invalidated only if it relied on
+     * this symbol (eval_clock_bump_binding); the rule epoch below still
+     * invalidates every GROUND node and every exact-clock stamp. */
+    add_rule_in(&def->down_values, pattern, replacement, delayed, def, def);
     /* A DownValue changes how this head evaluates -- advance the rule epoch so
      * any GROUND node that uses it as a head is re-checked (add_rule already
      * bumped the eval clock). */
@@ -2400,7 +2424,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                 else if (which == 3) symtab_format_value_count += added;
                 else                 symtab_n_value_count += added;
             } else {
-                add_rule_in(target, lhs, rhs, delayed, which == 1 ? def : NULL);
+                add_rule_in(target, lhs, rhs, delayed, which == 1 ? def : NULL, NULL);
             }
         }
     }

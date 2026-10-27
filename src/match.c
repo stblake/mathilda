@@ -2484,6 +2484,11 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger);
 
 Expr* replace_bindings(Expr* expr, MatchEnv* env) {
     if (!expr) return NULL;
+    /* No bindings: nothing to substitute, splice or rename, so the result is
+     * the expression itself.  A literal rule (res[14] = <135135-term sum>)
+     * otherwise walked its whole right-hand side on every application, only
+     * to share every node back (issue #112: 20 ms per read of res[12]). */
+    if (!env || env->count == 0) return expr_copy(expr);
     RbDanger danger;
     danger.env = env; danger.n = 0; danger.built = false;
     return rb_rec(expr, env, &danger);

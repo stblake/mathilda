@@ -13,6 +13,8 @@
 #include "checked_int.h"
 #include "flint_qqbar.h"
 #include "expand.h"       /* expr_expand: O4 exponent sums */
+#include "symtab.h"       /* SymbolDef: the opaque-factor fast path */
+#include "print.h"        /* expr_to_string_fullform: fast-path self-check */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -847,6 +849,100 @@ static Expr* o3_split_powers(Expr* const* args, size_t n) {
     return eval_and_free(r);
 }
 
+/* An opaque factor for the fast path below: a non-System symbol, or a call
+ * whose head is a non-System symbol with no builtin, no value and no
+ * NumericFunction attribute -- g[x[1], x[2]], f[a], c$12.  None of the
+ * collector's special passes (numbers, complex/interval/series/NDArray
+ * contagion, Infinity, radical fusion, numeric-base merging, trig ratios,
+ * AlgebraicNumber, O3/O4 power splitting) can act on such a factor with
+ * exponent 1: all of them key on System heads, Power, or numeric bases. */
+static bool times_opaque_factor(Expr* a) {
+    Expr* h;
+    if (a->type == EXPR_SYMBOL) h = a;
+    else if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL)
+        h = a->data.function.head;
+    else return false;
+    SymbolDef* d = h->data.symbol.def;
+    if (!d) { d = symtab_get_def(h->data.symbol.name); h->data.symbol.def = d; }
+    return d && !d->is_system && !d->builtin_func && !d->own_values &&
+           !(d->attributes & ATTR_NUMERICFUNCTION);
+}
+
+static int g_times_fast_off = 0;   /* differential self-check: run the full path */
+
+/* Product of machine-integer coefficients and DISTINCT opaque factors -- every
+ * term of a polynomial in kernels such as the issue #112 Dirac trace's
+ * -4 g[x[1], x[14]] ... g[x[13], x[2]].  The full collector costs ~2 us here,
+ * almost all of it passes that cannot fire; the answer is simply the folded
+ * coefficient followed by the canonically sorted factors.  Any other shape (a
+ * repeated factor, a zero, an overflowing coefficient, a Power, a number that
+ * is not a machine integer) returns NULL for the full path.
+ * MATHILDA_TIMES_FAST_CHECK=1 runs both paths and aborts on a mismatch. */
+static Expr* times_opaque_fast(Expr* res) {
+    size_t n = res->data.function.arg_count;
+    int64_t coef = 1;
+    size_t nf = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_INTEGER) {
+            if (a->data.integer == 0 || ci_mul_i64(coef, a->data.integer, &coef)) return NULL;
+        } else if (times_opaque_factor(a)) {
+            nf++;
+        } else {
+            return NULL;
+        }
+    }
+    if (nf == 0 || !(call_head_attributes(res) & ATTR_ORDERLESS)) return NULL;
+
+    Expr* stack_buf[16];
+    Expr** f = (nf + 1 <= 16) ? stack_buf : malloc(sizeof(Expr*) * (nf + 1));
+    size_t lead = (coef != 1) ? 1 : 0;      /* the coefficient sorts first */
+    if (lead) f[0] = expr_new_integer(coef);
+    Expr** fac = f + lead;
+    size_t j0 = 0;
+    for (size_t i = 0; i < n; i++)
+        if (res->data.function.args[i]->type != EXPR_INTEGER)
+            fac[j0++] = expr_copy(res->data.function.args[i]);
+    size_t k = lead + nf;
+    expr_orderless_sort(fac, nf);
+    for (size_t i = 1; i < nf; i++) {
+        if (expr_eq(fac[i - 1], fac[i])) {          /* x x -> x^2: full path */
+            for (size_t j = 0; j < k; j++) expr_free(f[j]);
+            if (f != stack_buf) free(f);
+            return NULL;
+        }
+    }
+    Expr* out = (k == 1) ? f[0] : expr_new_function(expr_new_symbol(SYM_Times), f, k);
+    if (f != stack_buf) free(f);
+    /* Certify a fresh product as a fixed point (as builtin_plus does) when a
+     * second evaluation could only re-derive it: every factor is evaluated and
+     * no rule can fire on Times. */
+    if (k > 1 && symtab_up_value_count == 0) {
+        SymbolDef* td = symtab_get_def(SYM_Times);
+        bool ok = td && !td->down_values && !td->sub_values && !td->own_values;
+        for (size_t i = 0; ok && i < k; i++)
+            ok = eval_node_reusable(out->data.function.args[i]);
+        if (ok) eval_mark_fixed_point(out);
+    }
+
+    static int check = -1;
+    if (check < 0) check = getenv("MATHILDA_TIMES_FAST_CHECK") ? 1 : 0;
+    if (check) {
+        g_times_fast_off++;               /* the whole check runs the full path */
+        Expr* slow = builtin_times(res);
+        Expr* slow_ev = slow ? evaluate(slow) : NULL;
+        Expr* fast_ev = evaluate(out);
+        g_times_fast_off--;
+        if (!slow_ev || !expr_eq(slow_ev, fast_ev)) {
+            char* a = expr_to_string_fullform(res);
+            fprintf(stderr, "MATHILDA_TIMES_FAST_CHECK mismatch on %s\n", a);
+            abort();
+        }
+        expr_free(slow); expr_free(slow_ev); expr_free(fast_ev);
+    }
+    return out;
+}
+
 Expr* builtin_times(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -873,6 +969,11 @@ Expr* builtin_times(Expr* res) {
             }
             if (!overflow) return expr_new_integer(acc);
         }
+    }
+
+    if (!g_times_fast_off) {
+        Expr* fast = times_opaque_fast(res);
+        if (fast) return fast;
     }
 
     /* AlgebraicNumber field multiplication: combine same-generator factors. Placed

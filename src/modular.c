@@ -764,6 +764,12 @@ static void blk_restore_frame(BlockFrame* f) {
         def->up_values = f->saved[i].old_up;
 #endif
         def->attributes  = f->saved[i].old_attrs;
+        /* Restored directly, behind add_rule's back, so invalidate: the value
+         * Block returns is evaluated again once its symbols are back, as in the
+         * reference -- x = 5; Block[{x}, x + y] is 5 + y and, with
+         * f[a_] := a^2, Block[{f}, f[3]] is 9.  A fixed point stamped while the
+         * symbol was blocked (x + y, f[3]) used to be reused unchanged. */
+        eval_rule_epoch_bump();
         free(f->saved[i].name);
     }
     free(f->saved);

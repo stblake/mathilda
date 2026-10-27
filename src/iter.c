@@ -384,6 +384,9 @@ void iter_spec_restore(Expr* var, Rule* saved_own) {
         r = next;
     }
     def->own_values = saved_own;
+    /* Giving the variable its outer value back is a binding, written directly:
+     * bump so no fixed point stamped while it was unbound is reused. */
+    if (saved_own) eval_clock_bump_binding(def);
 }
 
 /*

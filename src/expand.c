@@ -265,10 +265,10 @@ static SizeEst estimate_terms(const Expr* e, double cap) {
         ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
 
-    if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0)
+    if (h == SYM_Rational || h == SYM_Complex)
         return r;                                      /* numeric coefficient */
 
-    if (strcmp(h, "Plus") == 0) {
+    if (h == SYM_Plus) {
         double sum = 0.0;
         for (size_t i = 0; i < n; i++) {
             SizeEst c = estimate_terms(e->data.function.args[i], cap);
@@ -281,7 +281,7 @@ static SizeEst estimate_terms(const Expr* e, double cap) {
         return r;
     }
 
-    if (strcmp(h, "Times") == 0) {
+    if (h == SYM_Times) {
         double prod = 1.0;
         for (size_t i = 0; i < n; i++) {
             SizeEst c = estimate_terms(e->data.function.args[i], cap);
@@ -294,7 +294,7 @@ static SizeEst estimate_terms(const Expr* e, double cap) {
         return r;
     }
 
-    if (strcmp(h, "Power") == 0 && n == 2) {
+    if (h == SYM_Power && n == 2) {
         const Expr* ex = e->data.function.args[1];
         if (ex->type == EXPR_INTEGER && ex->data.integer > 0) {
             SizeEst c = estimate_terms(e->data.function.args[0], cap);
@@ -314,8 +314,45 @@ static SizeEst estimate_terms(const Expr* e, double cap) {
     return r;
 }
 
+/* The plain term-count bound, with no kernel-degree bookkeeping: a sum adds
+ * its terms' counts, a product multiplies them, base^n takes the multinomial
+ * count, and anything else is one term.  estimate_terms returns the minimum of
+ * this same count and a bounding box, so this is never below it -- when it fits
+ * under `cap`, so does the refined estimate, and the allocating walk is
+ * skipped.  Clamped at cap + 1. */
+static double quick_term_bound(const Expr* e, double cap) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return 1.0;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Plus) {
+        double sum = 0.0;
+        for (size_t i = 0; i < n && sum <= cap; i++)
+            sum += quick_term_bound(e->data.function.args[i], cap);
+        return sum > cap ? cap + 1.0 : sum;
+    }
+    if (h == SYM_Times) {
+        double prod = 1.0;
+        for (size_t i = 0; i < n && prod <= cap; i++)
+            prod *= quick_term_bound(e->data.function.args[i], cap);
+        return prod > cap ? cap + 1.0 : prod;
+    }
+    if (h == SYM_Power && n == 2) {
+        const Expr* x = e->data.function.args[1];
+        if (x->type != EXPR_INTEGER || x->data.integer <= 0) return 1.0;
+        double m = quick_term_bound(e->data.function.args[0], cap);
+        double multinom = 1.0;                    /* C(k + m - 1, m - 1) */
+        for (double i = 1.0; i <= m - 1.0 && multinom <= cap; i += 1.0)
+            multinom *= ((double)x->data.integer + i) / i;
+        return multinom > cap ? cap + 1.0 : multinom;
+    }
+    return 1.0;
+}
+
 /* Upper bound on the expanded monomial count of `e`, clamped at `cap`. */
 static double estimate_expand_terms(const Expr* e, double cap) {
+    double quick = quick_term_bound(e, cap);
+    if (quick <= cap) return quick;
     SizeEst s = estimate_terms(e, cap);
     double t = s.terms;
     se_free(&s);
@@ -341,6 +378,30 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
  * so the recursion skips re-estimating: re-running estimate_terms at every
  * level walked each subtree once per ancestor, half the cost of an Expand of a
  * kernel product (issue #112).  FLINT is still tried at each level. */
+/* A Times with nothing to distribute: no factor is a Plus or a positive
+ * integer power of one.  Expanding it would only multiply the factors back
+ * together.  Restricted to a node the evaluator has stamped as a fixed point,
+ * so it is already canonical: internal callers also hand raw trees (Times[1, a]
+ * from a FLINT conversion) that they rely on Expand to evaluate. */
+static bool times_already_expanded(const Expr* e) {
+    if (eval_node_stamp(e) == 0) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* f = e->data.function.args[i];
+        if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL) continue;
+        const char* h = f->data.function.head->data.symbol.name;
+        if (h == SYM_Plus) return false;
+        if (h == SYM_Power && f->data.function.arg_count == 2) {
+            const Expr* b = f->data.function.args[0];
+            const Expr* x = f->data.function.args[1];
+            if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+                b->data.function.head->data.symbol.name == SYM_Plus &&
+                x->type == EXPR_INTEGER && x->data.integer > 0)
+                return false;
+        }
+    }
+    return true;
+}
+
 static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bounded) {
     if (!e) return NULL;
     if (patt && !expr_contains_patt(e, patt)) return expr_copy(e);
@@ -348,6 +409,13 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
+
+    /* Already expanded: return the node itself, before the FLINT attempt and
+     * the classical re-multiplication.  Expanding an expanded sum used to
+     * rebuild every product term factor by factor (issue #112: ~6 Times
+     * evaluations per term of a 10395-term sum). */
+    if (patt == NULL && head == SYM_Times && times_already_expanded(e))
+        return expr_copy(e);
 
     /* Fast path: for a plain (single-argument) Expand of an arithmetic head,
      * size-check the result and hand the whole expansion to FLINT, which
@@ -368,7 +436,7 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
      * head is an opaque kernel to estimate_terms, so it bounds nothing below. */
     bool child_bounded = false;
     if (patt == NULL &&
-        (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0 || strcmp(head, "Power") == 0)) {
+        (head == SYM_Plus || head == SYM_Times || head == SYM_Power)) {
         double est = bounded ? 0.0 : estimate_expand_terms(e, cap);
         child_bounded = est <= cap;
         if (est > cap) {
@@ -389,11 +457,11 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
 
     // Thread over lists, equations, inequalities, logic. Inequality has
     // operator-symbol slots at odd indices that must be passed through.
-    if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 ||
-        strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 || strcmp(head, "GreaterEqual") == 0 ||
-        strcmp(head, "Inequality") == 0 ||
-        strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0) {
-        bool is_ineq = (strcmp(head, "Inequality") == 0);
+    if (head == SYM_List || head == SYM_Equal || head == SYM_Less ||
+        head == SYM_LessEqual || head == SYM_Greater || head == SYM_GreaterEqual ||
+        head == SYM_Inequality ||
+        head == SYM_And || head == SYM_Or || head == SYM_Not) {
+        bool is_ineq = (head == SYM_Inequality);
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (is_ineq && (i & 1u) == 1) {
@@ -407,17 +475,30 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
         return res;
     }
 
-    if (strcmp(head, "Plus") == 0) {
+    if (head == SYM_Plus) {
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             args[i] = expr_expand_impl_b(e->data.function.args[i], patt, overflow_mode, child_bounded);
+        }
+        /* Every term came back as itself: the sum is already expanded, so
+         * share it rather than re-evaluate an identical Plus (same fixed-point
+         * guard as times_already_expanded). */
+        if (eval_node_stamp(e) != 0) {
+            bool same = true;
+            for (size_t i = 0; i < e->data.function.arg_count && same; i++)
+                same = args[i] == e->data.function.args[i];
+            if (same) {
+                for (size_t i = 0; i < e->data.function.arg_count; i++) expr_free(args[i]);
+                free(args);
+                return expr_copy(e);
+            }
         }
         Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, e->data.function.arg_count));
         free(args);
         return res;
     }
 
-    if (strcmp(head, "Times") == 0) {
+    if (head == SYM_Times) {
         size_t count = e->data.function.arg_count;
         if (count == 0) return expr_new_integer(1);
 
@@ -487,7 +568,7 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
         return ret;
     }
 
-    if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer > 0) {
@@ -556,13 +637,13 @@ static bool is_negative_int_power(Expr* e) {
  * Or, Not, and Plus. (Plus is handled because the operations apply
  * per-summand.) */
 static bool is_thread_head(const char* head) {
-    return strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 ||
-           strcmp(head, "Unequal") == 0 || strcmp(head, "Less") == 0 ||
-           strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
-           strcmp(head, "GreaterEqual") == 0 || strcmp(head, "Inequality") == 0 ||
-           strcmp(head, "And") == 0 ||
-           strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0 ||
-           strcmp(head, "Plus") == 0;
+    return head == SYM_List || head == SYM_Equal ||
+           head == SYM_Unequal || head == SYM_Less ||
+           head == SYM_LessEqual || head == SYM_Greater ||
+           head == SYM_GreaterEqual || head == SYM_Inequality ||
+           head == SYM_And ||
+           head == SYM_Or || head == SYM_Not ||
+           head == SYM_Plus;
 }
 
 Expr* expr_expand_numerator(Expr* e) {
@@ -573,7 +654,7 @@ Expr* expr_expand_numerator(Expr* e) {
         ? e->data.function.head->data.symbol.name : "";
 
     if (is_thread_head(head)) {
-        bool is_ineq = (strcmp(head, "Inequality") == 0);
+        bool is_ineq = (head == SYM_Inequality);
         size_t n = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         for (size_t i = 0; i < n; i++) {
@@ -587,7 +668,7 @@ Expr* expr_expand_numerator(Expr* e) {
         return ret;
     }
 
-    if (strcmp(head, "Times") == 0) {
+    if (head == SYM_Times) {
         size_t n = e->data.function.arg_count;
         Expr** num_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         Expr** den_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
@@ -628,7 +709,7 @@ Expr* expr_expand_numerator(Expr* e) {
         return ret;
     }
 
-    if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
             /* Pure denominator: ExpandNumerator leaves it unchanged. */
@@ -649,7 +730,7 @@ Expr* expr_expand_denominator(Expr* e) {
         ? e->data.function.head->data.symbol.name : "";
 
     if (is_thread_head(head)) {
-        bool is_ineq = (strcmp(head, "Inequality") == 0);
+        bool is_ineq = (head == SYM_Inequality);
         size_t n = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         for (size_t i = 0; i < n; i++) {
@@ -663,7 +744,7 @@ Expr* expr_expand_denominator(Expr* e) {
         return ret;
     }
 
-    if (strcmp(head, "Times") == 0) {
+    if (head == SYM_Times) {
         size_t n = e->data.function.arg_count;
         Expr** num_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         Expr** den_pos = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
@@ -711,7 +792,7 @@ Expr* expr_expand_denominator(Expr* e) {
         return ret;
     }
 
-    if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
             int64_t k = -exp->data.integer;
@@ -755,7 +836,7 @@ static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
      * ExpandDenominator.  A surrounding Times later distributes the numerator
      * across the expanded denominator.  patt is honoured by the recursive guard
      * on the base (base free of patt returns unchanged). */
-    if (strcmp(head, "Power") == 0 && n == 2 &&
+    if (head == SYM_Power && n == 2 &&
         e->data.function.args[1]->type == EXPR_INTEGER &&
         e->data.function.args[1]->data.integer < 0) {
         Expr* base = e->data.function.args[0];
@@ -773,7 +854,7 @@ static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
     /* Bottom-up: ExpandAll the head and every argument, rebuild, then Expand
      * this level.  Inequality carries operator-symbol slots at odd indices that
      * must be passed through untouched. */
-    bool is_ineq = (strcmp(head, "Inequality") == 0);
+    bool is_ineq = (head == SYM_Inequality);
     /* Held positions are passed through: expanding inside HoldForm[x] would
      * rebuild and evaluate x; held parts stay untouched. */
     uint32_t hattr = (e->data.function.head->type == EXPR_SYMBOL)

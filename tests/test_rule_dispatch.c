@@ -347,8 +347,11 @@ static void test_literal_index(void) {
     t = eval_str("ClearAll[lf]; lf[x_] := g[x]; lf[1] = 10; lf[2] = 20; lf[1] =.; "
                  "lf[2] = 21; {lf[1], lf[2], lf[3], Length[DownValues[lf]]}");
     ASSERT_STR_EQ(t, "{g[1], 21, g[3], 2}"); free(t);
+    /* Block's value is evaluated again after lf's rules are restored, so the
+     * lf[2] left unevaluated inside becomes 21 (checked on 13.2 and 14; the
+     * earlier lf[2] was a stale fixed-point stamp surviving the restore). */
     t = eval_str("Block[{lf}, lf[1] = 99; {lf[1], lf[2]}]");
-    ASSERT_STR_EQ(t, "{99, lf[2]}"); free(t);
+    ASSERT_STR_EQ(t, "{99, 21}"); free(t);
     t = eval_str("{lf[1], lf[2]}"); ASSERT_STR_EQ(t, "{g[1], 21}"); free(t);
     t = eval_str("DownValues[lf] = {HoldPattern[lf[5]] :> 55, HoldPattern[lf[y_]] :> h[y]}; "
                  "lf[7] = 77; {lf[5], lf[7], lf[2]}");
