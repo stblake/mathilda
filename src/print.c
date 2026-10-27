@@ -35,6 +35,18 @@
 #include <inttypes.h>
 #include <math.h>
 
+/* -v as an Integer: v = INT64_MIN has no int64 negation, so it goes through
+ * GMP (it printed as --9223372036854775808). */
+static Expr* print_neg_int(int64_t v) {
+    if (v != INT64_MIN) return expr_new_integer(-v);
+    mpz_t z;
+    mpz_init_set_si(z, v);
+    mpz_neg(z, z);
+    Expr* e = expr_new_bigint_from_mpz(z);
+    mpz_clear(z);
+    return e;
+}
+
 /* ---------------------------------------------------------------------------
  * Output sink.  Every output primitive in this file writes through g_print_sink
  * (NULL => the real stdout).  The capture helpers below install an in-memory
@@ -702,7 +714,7 @@ static void print_standard(Expr* e, int parent_prec) {
             if (!im_neg) {
                 if (im->type == EXPR_INTEGER && im->data.integer < 0) {
                     im_neg = true;
-                    im_abs = expr_new_integer(-im->data.integer);
+                    im_abs = print_neg_int(im->data.integer);
                 } else if (im->type == EXPR_REAL && im->data.real < 0.0) {
                     im_neg = true;
                     im_abs = expr_new_real(-im->data.real);
@@ -735,7 +747,7 @@ static void print_standard(Expr* e, int parent_prec) {
             Expr* pos_exp = NULL;
             if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
                 is_negative = true;
-                pos_exp = expr_new_integer(-exp->data.integer);
+                pos_exp = print_neg_int(exp->data.integer);
             } else if (is_rational(exp, &n, &d) && n < 0) {
                 is_negative = true;
                 pos_exp = make_rational(-n, d);
@@ -808,7 +820,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     if (a0->data.integer == -1 && count > 1) {
                         lead_start = 1; /* drop the -1, emit only "-" */
                     } else {
-                        flipped_head = expr_new_integer(-a0->data.integer);
+                        flipped_head = print_neg_int(a0->data.integer);
                     }
                 } else if (a0->type == EXPR_REAL && a0->data.real < 0.0) {
                     flipped_sign = true;
@@ -826,7 +838,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     flipped_sign = true;
                     Expr* num = a0->data.function.args[0];
                     Expr* den = a0->data.function.args[1];
-                    Expr* rargs[2] = { expr_new_integer(-num->data.integer), expr_copy(den) };
+                    Expr* rargs[2] = { print_neg_int(num->data.integer), expr_copy(den) };
                     flipped_head = expr_new_function(expr_new_symbol(SYM_Rational), rargs, 2);
                 } else if (a0->type == EXPR_FUNCTION &&
                            a0->data.function.head->type == EXPR_SYMBOL &&
@@ -847,7 +859,7 @@ static void print_standard(Expr* e, int parent_prec) {
                         Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(1) };
                         flipped_head = expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
                     } else {
-                        Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(-im->data.integer) };
+                        Expr* cargs[2] = { expr_new_integer(0), print_neg_int(im->data.integer) };
                         flipped_head = expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
                     }
                 }
@@ -867,7 +879,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     Expr* pos_exp = NULL;
                     if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
                         is_neg = true;
-                        pos_exp = expr_new_integer(-exp->data.integer);
+                        pos_exp = print_neg_int(exp->data.integer);
                     } else if (is_rational(exp, &n, &d) && n < 0) {
                         is_neg = true;
                         pos_exp = make_rational(-n, d);
@@ -1041,7 +1053,7 @@ static void print_standard(Expr* e, int parent_prec) {
 
                 if (arg->type == EXPR_INTEGER && arg->data.integer < 0) {
                     is_negative = true;
-                    t_copy = expr_new_integer(-arg->data.integer);
+                    t_copy = print_neg_int(arg->data.integer);
                     to_print = t_copy;
                 } else if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0) {
                     is_negative = true;
@@ -1059,7 +1071,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             is_negative = true;
                             t_copy = expr_unshare(expr_copy(arg));
                             expr_free(t_copy->data.function.args[0]);
-                            t_copy->data.function.args[0] = expr_new_integer(-f_arg->data.integer);
+                            t_copy->data.function.args[0] = print_neg_int(f_arg->data.integer);
 
                             if (t_copy->data.function.args[0]->data.integer == 1 && t_copy->data.function.arg_count > 1) {
                                 Expr** new_args = malloc(sizeof(Expr*) * (t_copy->data.function.arg_count - 1));
@@ -1107,7 +1119,7 @@ static void print_standard(Expr* e, int parent_prec) {
                                 Expr* rat = expr_unshare(t_copy->data.function.args[0]);
                                 t_copy->data.function.args[0] = rat;
                                 expr_free(rat->data.function.args[0]);
-                                rat->data.function.args[0] = expr_new_integer(-num->data.integer);
+                                rat->data.function.args[0] = print_neg_int(num->data.integer);
                                 to_print = t_copy;
                             }
                         } else if (f_arg->type == EXPR_FUNCTION &&
@@ -1137,7 +1149,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             is_negative = true;
                             t_copy = expr_unshare(expr_copy(arg));
                             expr_free(t_copy->data.function.args[0]);
-                            t_copy->data.function.args[0] = expr_new_integer(-num->data.integer);
+                            t_copy->data.function.args[0] = print_neg_int(num->data.integer);
                             to_print = t_copy;
                         }
                     } else if (h == SYM_Complex && arg->data.function.arg_count == 2 &&
@@ -1478,6 +1490,7 @@ char* numberform_format_result_to_string(const Expr* e) {
 
 #include "symtab.h"
 
+
 Expr* builtin_print(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     /* No display rules here: a script's Print writes the raw expression, as
@@ -1585,7 +1598,7 @@ static int64_t abs_i64(int64_t v) { return v < 0 ? -v : v; }
 static bool series_extract_negative(Expr* x0, Expr** abs_out) {
     int64_t rn, rd;
     if (x0->type == EXPR_INTEGER && x0->data.integer < 0) {
-        *abs_out = expr_new_integer(-x0->data.integer); return true;
+        *abs_out = print_neg_int(x0->data.integer); return true;
     }
     if (x0->type == EXPR_BIGINT && mpz_sgn(x0->data.bigint) < 0) {
         *abs_out = negate_bigint(x0); return true;
@@ -1603,7 +1616,7 @@ static bool series_extract_negative(Expr* x0, Expr** abs_out) {
         Expr* f = x0->data.function.args[0];
         Expr* negf = NULL;
         if (f->type == EXPR_INTEGER && f->data.integer < 0)
-            negf = expr_new_integer(-f->data.integer);
+            negf = print_neg_int(f->data.integer);
         else if (f->type == EXPR_BIGINT && mpz_sgn(f->data.bigint) < 0)
             negf = negate_bigint(f);
         else if (f->type == EXPR_REAL && f->data.real < 0.0)
@@ -2032,7 +2045,7 @@ static void print_tex_args_parens(Expr* e, size_t start) {
 static bool tex_extract_negative(Expr* im, Expr** abs_out) {
     int64_t rn, rd;
     if (im->type == EXPR_INTEGER && im->data.integer < 0) {
-        *abs_out = expr_new_integer(-im->data.integer);
+        *abs_out = print_neg_int(im->data.integer);
         return true;
     }
     if (im->type == EXPR_REAL && im->data.real < 0.0) {
@@ -2165,7 +2178,7 @@ static void print_tex(Expr* e, int parent_prec) {
             bool exp_neg = false;
             Expr* pos_exp = NULL;
             if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
-                exp_neg = true; pos_exp = expr_new_integer(-exp->data.integer);
+                exp_neg = true; pos_exp = print_neg_int(exp->data.integer);
             } else if (is_rational(exp, &n, &d) && n < 0) {
                 exp_neg = true; pos_exp = make_rational(-n, d);
             } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
@@ -2222,7 +2235,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 if (a0->type == EXPR_INTEGER && a0->data.integer < 0) {
                     flipped_sign = true;
                     if (a0->data.integer == -1 && count > 1) lead_start = 1;
-                    else flipped_head = expr_new_integer(-a0->data.integer);
+                    else flipped_head = print_neg_int(a0->data.integer);
                 } else if (a0->type == EXPR_REAL && a0->data.real < 0.0) {
                     flipped_sign = true;
                     if (a0->data.real == -1.0 && count > 1) lead_start = 1;
@@ -2253,7 +2266,7 @@ static void print_tex(Expr* e, int parent_prec) {
                     Expr* pos_exp = NULL;
                     bool neg = false;
                     if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
-                        neg = true; pos_exp = expr_new_integer(-exp->data.integer);
+                        neg = true; pos_exp = print_neg_int(exp->data.integer);
                     } else if (is_rational(exp, &n, &d) && n < 0) {
                         neg = true; pos_exp = make_rational(-n, d);
                     } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
@@ -2327,7 +2340,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 Expr* owned = NULL;
 
                 if (arg->type == EXPR_INTEGER && arg->data.integer < 0) {
-                    is_neg = true; owned = expr_new_integer(-arg->data.integer); to_print = owned;
+                    is_neg = true; owned = print_neg_int(arg->data.integer); to_print = owned;
                 } else if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0) {
                     is_neg = true; owned = negate_bigint(arg); to_print = owned;
                 } else if (arg->type == EXPR_REAL && arg->data.real < 0.0) {
@@ -2340,7 +2353,7 @@ static void print_tex(Expr* e, int parent_prec) {
                         is_neg = true;
                         owned = expr_unshare(expr_copy(arg));
                         expr_free(owned->data.function.args[0]);
-                        owned->data.function.args[0] = expr_new_integer(-f0->data.integer);
+                        owned->data.function.args[0] = print_neg_int(f0->data.integer);
                         if (owned->data.function.args[0]->data.integer == 1 && owned->data.function.arg_count > 1) {
                             Expr** na = malloc(sizeof(Expr*) * (owned->data.function.arg_count - 1));
                             for (size_t k = 1; k < owned->data.function.arg_count; k++) na[k-1] = expr_copy(owned->data.function.args[k]);

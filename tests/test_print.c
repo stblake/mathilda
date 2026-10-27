@@ -67,6 +67,24 @@ void test_negative_bigint_in_plus() {
     expr_free(res2);
 }
 
+/* A coefficient of exactly INT64_MIN: its negation does not fit an int64,
+ * and the printer used to emit "--9223372036854775808". */
+void test_int64_min_coefficient() {
+    const char* in[3] = { "-9223372036854775808 x", "x - 9223372036854775808 y",
+                          "-9223372036854775808 (1 + x)" };
+    const char* out[3] = { "-9223372036854775808 x", "x - 9223372036854775808 y",
+                           "-9223372036854775808 (1 + x)" };
+    for (int i = 0; i < 3; i++) {
+        Expr* e = parse_expression(in[i]);
+        Expr* res = evaluate(e);
+        char* str = expr_to_string(res);
+        ASSERT_STR_EQ(out[i], str);
+        free(str);
+        expr_free(e);
+        expr_free(res);
+    }
+}
+
 void test_holdform() {
     Expr* e = parse_expression("HoldForm[1 + 1]");
     Expr* res = evaluate(e);
@@ -540,6 +558,7 @@ int main() {
     TEST(test_fullform_wrapper);
     TEST(test_inputform_wrapper);
     TEST(test_negative_bigint_in_plus);
+    TEST(test_int64_min_coefficient);
     TEST(test_holdform);
     TEST(test_series_latex);
     TEST(test_operator_latex);
