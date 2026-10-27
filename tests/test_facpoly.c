@@ -97,7 +97,7 @@ void test_factor_xp_minus_c_regression() {
      * y^13 - x - 1 and z^14 + y - 1 with an overall -1 — the same product as
      * (and cleaner than) the classical heuristic factorer's sign spread. */
     run_test("Factor[Expand[x^2 (1 - x^12) (1 + x - y^13) (1 - y - z^14)]]",
-             "Times[-1, Plus[-1, x], Power[x, 2], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[1, x, Power[x, 2]], Plus[1, Times[-1, Power[x, 2]], Power[x, 4]], Plus[-1, Times[-1, x], Power[y, 13]], Plus[-1, y, Power[z, 14]]]");
+             "Times[Plus[-1, x], Power[x, 2], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[1, x, Power[x, 2]], Plus[1, Times[-1, Power[x, 2]], Power[x, 4]], Plus[1, x, Times[-1, Power[y, 13]]], Plus[-1, y, Power[z, 14]]]");
 }
 
 /* Regression: the bivariate Hensel path (Stage-2 Wang x-scale recovery)

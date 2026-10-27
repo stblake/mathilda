@@ -198,6 +198,110 @@ static Expr* factor_flint_side(Expr* p) {
 }
 #endif
 
+/* An exponent at or past this bound on a variable is refused (Factor::lrgexp)
+ * rather than handed to a polynomial kernel: x^(2^32 + 2) used to be read
+ * through an int degree and silently lost its leading term. */
+#define FACTOR_MAX_EXPONENT ((int64_t)1 << 20)
+
+/* Sentinel return of factor_fast_entry: the call stays unevaluated. */
+static Expr factor_lrgexp_sentinel;
+#define FACTOR_LRGEXP (&factor_lrgexp_sentinel)
+
+/* 1 when `e` is a polynomial over Q in plain symbols: numbers (Integer,
+ * BigInt, Rational), symbols that are not numeric constants, and Plus /
+ * Times / nonnegative integer powers of those.  2 when it is, except that
+ * a variable carries an exponent of FACTOR_MAX_EXPONENT or more. */
+static int factor_plain_poly(const Expr* e) {
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_BIGINT:
+            return 1;
+        case EXPR_SYMBOL:
+            return expr_is_numeric_quantity(e) ? 0 : 1;
+        case EXPR_FUNCTION: {
+            const Expr* h = e->data.function.head;
+            if (h->type != EXPR_SYMBOL) return 0;
+            const char* hn = h->data.symbol.name;
+            size_t n = e->data.function.arg_count;
+            if (hn == SYM_Rational) return n == 2 ? 1 : 0;
+            if (hn == SYM_Power) {
+                if (n != 2) return 0;
+                const Expr* k = e->data.function.args[1];
+                if (k->type != EXPR_INTEGER || k->data.integer < 0) return 0;
+                int b = factor_plain_poly(e->data.function.args[0]);
+                if (b == 1 && e->data.function.args[0]->type == EXPR_SYMBOL
+                    && k->data.integer >= FACTOR_MAX_EXPONENT) return 2;
+                return b;
+            }
+            if (hn == SYM_Plus || hn == SYM_Times) {
+                int worst = 1;
+                for (size_t i = 0; i < n; i++) {
+                    int r = factor_plain_poly(e->data.function.args[i]);
+                    if (r == 0) return 0;
+                    if (r > worst) worst = r;
+                }
+                return worst;
+            }
+            return 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+/* Any variable raised to FACTOR_MAX_EXPONENT or more, anywhere in `e`. */
+static bool factor_has_large_exponent(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[1]->type == EXPR_INTEGER
+        && e->data.function.args[1]->data.integer >= FACTOR_MAX_EXPONENT)
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (factor_has_large_exponent(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The common cases, ahead of the stage cascade:
+ *  - a product or an integer power factors base by base -- factoring is
+ *    multiplicative, and equal factors merge in Times -- so (x + 1)^1000
+ *    (x - 1) is never expanded (3.4 s before, through the expansion);
+ *  - a plain polynomial goes straight to FLINT, skipping the scans and the
+ *    expansion of the pre-stages (the Gaussian-content stage alone expanded
+ *    every input).
+ * NULL to continue with the full cascade; FACTOR_LRGEXP when an exponent is
+ * out of bounds (message emitted). */
+static Expr* factor_fast_entry(Expr* arg) {
+    if (factor_has_large_exponent(arg)) {
+        mth_message("Factor", "lrgexp", "Exponent is out of bounds for function Factor.");
+        return FACTOR_LRGEXP;
+    }
+    if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
+        return NULL;
+    const char* h = arg->data.function.head->data.symbol.name;
+    size_t n = arg->data.function.arg_count;
+    if (h == SYM_Times || (h == SYM_Power && n == 2
+                           && arg->data.function.args[1]->type == EXPR_INTEGER)) {
+        size_t nb = h == SYM_Times ? n : 1;
+        Expr** parts = malloc(sizeof(Expr*) * (nb + 1));
+        for (size_t i = 0; i < nb; i++)
+            parts[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+                (Expr*[]){ expr_copy(arg->data.function.args[i]) }, 1));
+        Expr* out = h == SYM_Times
+            ? expr_new_function(expr_new_symbol(SYM_Times), parts, nb)
+            : expr_new_function(expr_new_symbol(SYM_Power),
+                  (Expr*[]){ parts[0], expr_copy(arg->data.function.args[1]) }, 2);
+        free(parts);
+        return eval_and_free(out);
+    }
+#ifdef USE_FLINT
+    if (h == SYM_Plus && factor_plain_poly(arg) == 1) return factor_flint_side(arg);
+#endif
+    return NULL;
+}
+
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -219,6 +323,12 @@ Expr* builtin_factor(Expr* res) {
          * for is not done, and the ordinary factorisation is returned. */
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
             (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1));
+    }
+
+    if (res->data.function.arg_count == 1) {
+        Expr* fast = factor_fast_entry(res->data.function.args[0]);
+        if (fast == FACTOR_LRGEXP) return NULL;
+        if (fast) return fast;
     }
 
     /* x^(2 + e) - x^e factors as (-1 + x) x^e (1 + x): powers with a symbolic

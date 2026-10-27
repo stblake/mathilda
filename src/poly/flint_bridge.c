@@ -132,6 +132,17 @@ static int cmp_str(const void* a, const void* b) {
     return strcmp(*(char* const*)a, *(char* const*)b);
 }
 
+/* Symbol names in the evaluator's canonical order (Sort[{X, x, a, x1}] is
+ * {a, x, X, x1}), for qsort over char* arrays. */
+static int cmp_sym_canonical(const void* a, const void* b) {
+    Expr* ea = expr_new_symbol(*(char* const*)a);
+    Expr* eb = expr_new_symbol(*(char* const*)b);
+    int r = expr_compare(ea, eb);
+    expr_free(ea);
+    expr_free(eb);
+    return r;
+}
+
 static int var_index(const VarSet* vs, const char* name) {
     for (size_t i = 0; i < vs->count; i++)
         if (strcmp(vs->names[i], name) == 0) return (int)i;
@@ -193,6 +204,75 @@ static int fmpz_from_int_expr(fmpz_t out, const Expr* e) {
     return 0;
 }
 
+/* Read `e` as a monomial c x1^k1 ... xn^kn over Q -- a number, a variable,
+ * a nonnegative integer power of a variable, or a Times of those -- into
+ * (c, exps), exps indexed like `vs`.  0 when `e` is anything else. */
+static int monomial_parse_into(const Expr* e, const VarSet* vs, fmpq_t c, ulong* exps) {
+    switch (e->type) {
+        case EXPR_INTEGER: {
+            fmpq_t t; fmpq_init(t);
+            fmpq_set_si(t, e->data.integer, 1);
+            fmpq_mul(c, c, t);
+            fmpq_clear(t);
+            return 1;
+        }
+        case EXPR_BIGINT: {
+            fmpz_t z; fmpz_init(z);
+            fmpz_set_mpz(z, e->data.bigint);
+            fmpq_mul_fmpz(c, c, z);
+            fmpz_clear(z);
+            return 1;
+        }
+        case EXPR_SYMBOL: {
+            int idx = var_index(vs, e->data.symbol.name);
+            if (idx < 0) return 0;
+            exps[idx] += 1;
+            return 1;
+        }
+        case EXPR_FUNCTION: {
+            const char* h = fn_head_name(e);
+            if (!h) return 0;
+            size_t n = e->data.function.arg_count;
+            if (h == SYM_Rational && n == 2) {
+                fmpq_t t; fmpq_init(t);
+                int ok = fmpz_from_int_expr(fmpq_numref(t), e->data.function.args[0]) &&
+                         fmpz_from_int_expr(fmpq_denref(t), e->data.function.args[1]) &&
+                         !fmpz_is_zero(fmpq_denref(t));
+                if (ok) {
+                    fmpq_canonicalise(t);
+                    fmpq_mul(c, c, t);
+                }
+                fmpq_clear(t);
+                return ok;
+            }
+            if (h == SYM_Power && n == 2) {
+                const Expr* b = e->data.function.args[0];
+                const Expr* k = e->data.function.args[1];
+                if (b->type != EXPR_SYMBOL || k->type != EXPR_INTEGER || k->data.integer < 0)
+                    return 0;
+                int idx = var_index(vs, b->data.symbol.name);
+                if (idx < 0) return 0;
+                exps[idx] += (ulong)k->data.integer;
+                return 1;
+            }
+            if (h == SYM_Times) {
+                for (size_t i = 0; i < n; i++)
+                    if (!monomial_parse_into(e->data.function.args[i], vs, c, exps)) return 0;
+                return 1;
+            }
+            return 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+static int monomial_parse(const Expr* e, const VarSet* vs, fmpq_t c, ulong* exps) {
+    fmpq_one(c);
+    memset(exps, 0, sizeof(ulong) * (vs->count > 0 ? vs->count : 1));
+    return monomial_parse_into(e, vs, c, exps);
+}
+
 static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                     const fmpq_mpoly_ctx_t ctx, const VarSet* vs) {
     switch (e->type) {
@@ -232,13 +312,38 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                 return 1;
             }
             if (strcmp(h, "Plus") == 0) {
+                /* Monomial summands are pushed unsorted and sorted once at
+                 * the end; adding them one at a time re-merged the growing
+                 * sum on every term, quadratic in its length (1.1 s for an
+                 * expanded 20k-term polynomial, against 2 ms this way).  The
+                 * few non-monomial summands are added in the ordinary way. */
                 fmpq_mpoly_zero(out, ctx);
                 fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
-                int ok = 1;
+                fmpq_mpoly_t rest; fmpq_mpoly_init(rest, ctx);
+                slong nv = (slong)vs->count;
+                ulong* exps = calloc((size_t)(nv > 0 ? nv : 1), sizeof(ulong));
+                fmpq_t c; fmpq_init(c);
+                int ok = exps != NULL, pushed = 0;
                 for (size_t i = 0; i < n && ok; i++) {
-                    ok = to_mpoly(e->data.function.args[i], t, ctx, vs);
-                    if (ok) fmpq_mpoly_add(out, out, t, ctx);
+                    const Expr* a = e->data.function.args[i];
+                    if (monomial_parse(a, vs, c, exps)) {
+                        if (!fmpq_is_zero(c)) {
+                            fmpq_mpoly_push_term_fmpq_ui(out, c, exps, ctx);
+                            pushed = 1;
+                        }
+                        continue;
+                    }
+                    ok = to_mpoly(a, t, ctx, vs);
+                    if (ok) fmpq_mpoly_add(rest, rest, t, ctx);
                 }
+                if (ok && pushed) {
+                    fmpq_mpoly_sort_terms(out, ctx);
+                    fmpq_mpoly_combine_like_terms(out, ctx);
+                }
+                if (ok) fmpq_mpoly_add(out, out, rest, ctx);
+                fmpq_clear(c);
+                free(exps);
+                fmpq_mpoly_clear(rest, ctx);
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
@@ -3174,10 +3279,6 @@ Expr* flint_tower_gcd(const Expr* a, const Expr* b) {
  * fmpq_mpoly_gcd is exact and the substitution is a field isomorphism.
  */
 
-/* Fresh transcendental standing in for sqrt(k). Chosen not to collide with any
- * user symbol (leading '$', internal-marker style). */
-#define PS_RADSYM "$flint$sqrtk$"
-
 /* Parse `e` as an integer or Rational[p,q]; returns 1 and writes p,q (q>0). */
 static int ps_as_ratio(const Expr* e, long* p, long* q) {
     if (e->type == EXPR_INTEGER) { *p = (long)e->data.integer; *q = 1; return 1; }
@@ -3250,7 +3351,10 @@ static void ps_detect(const Expr* e, PSDetect* st) {
 }
 
 /* Substitute the radical away: bare k -> S^2, Power[k, p/2] -> S^p,
- * Power[k, m] (integer m>=0) -> S^(2m). S = PS_RADSYM. Returns a fresh tree. */
+ * Power[k, m] (integer m>=0) -> S^(2m).  S is the symbol k itself: no bare k
+ * survives the substitution, so the name is free, and S then takes k's place
+ * in the canonical variable order (which decides factor signs: Factor[u^2 -
+ * 2 Sqrt[k] u + k] is (Sqrt[k] - u)^2).  Returns a fresh tree. */
 static Expr* ps_subst_in(const Expr* e, const char* kname) {
     switch (e->type) {
         case EXPR_INTEGER:
@@ -3258,7 +3362,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
             return expr_copy((Expr*)e);
         case EXPR_SYMBOL:
             if (strcmp(e->data.symbol.name, kname) == 0) {
-                Expr* pa[2] = { expr_new_symbol(PS_RADSYM), expr_new_integer(2) };
+                Expr* pa[2] = { expr_new_symbol(kname), expr_new_integer(2) };
                 return expr_new_function(expr_new_symbol("Power"), pa, 2);
             }
             return expr_copy((Expr*)e);
@@ -3270,8 +3374,8 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
                 long p, q;
                 if (ps_as_ratio(e->data.function.args[1], &p, &q)) {
                     long s_exp = (q == 1) ? 2 * p : p;   /* k^m -> S^(2m); k^(p/2) -> S^p */
-                    if (s_exp == 1) return expr_new_symbol(PS_RADSYM);
-                    Expr* pa[2] = { expr_new_symbol(PS_RADSYM), expr_new_integer(s_exp) };
+                    if (s_exp == 1) return expr_new_symbol(kname);
+                    Expr* pa[2] = { expr_new_symbol(kname), expr_new_integer(s_exp) };
                     return expr_new_function(expr_new_symbol("Power"), pa, 2);
                 }
             }
@@ -3289,7 +3393,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
     }
 }
 
-/* Readback: replace the fresh symbol S by Sqrt[k] = Power[k, 1/2]. The caller
+/* Readback: replace S (named k) by Sqrt[k] = Power[k, 1/2]. The caller
  * evaluates the result, folding S^2 -> k, S^3 -> k Sqrt[k], etc. */
 static Expr* ps_subst_out(const Expr* e, const char* kname) {
     switch (e->type) {
@@ -3297,7 +3401,7 @@ static Expr* ps_subst_out(const Expr* e, const char* kname) {
         case EXPR_BIGINT:
             return expr_copy((Expr*)e);
         case EXPR_SYMBOL:
-            if (strcmp(e->data.symbol.name, PS_RADSYM) == 0) {
+            if (strcmp(e->data.symbol.name, kname) == 0) {
                 Expr* ra[2] = { expr_new_integer(1), expr_new_integer(2) };
                 Expr* half = expr_new_function(expr_new_symbol("Rational"), ra, 2);
                 Expr* pa[2] = { expr_new_symbol(kname), half };
@@ -3427,13 +3531,14 @@ static Expr* flint_multivariate_factor_impl(const Expr* p, int squarefree) {
     memset(&vs, 0, sizeof vs);
     if (!collect_vars(p, &vs)) { varset_free(&vs); return NULL; }
     if (vs.count == 0) { varset_free(&vs); return NULL; }
-    qsort(vs.names, vs.count, sizeof(char*), cmp_str);
+    qsort(vs.names, vs.count, sizeof(char*), cmp_sym_canonical);
 
-    /* ORD_DEGLEX so that term 0 of each factor is its highest-total-degree
-     * (deglex tie-break) leading term — used below to normalise the factor's
-     * sign to Mathematica's positive-leading-coefficient convention. */
+    /* Variables in canonical order (a < A < aa < b < x < X < x1), the first
+     * one most significant, under ORD_LEX: term 0 of each factor is then its
+     * lexicographic leading term, whose coefficient is made positive below.
+     * Factor[X^2 - a^2] is -((a - X) (a + X)) by this rule. */
     fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_DEGLEX);
+    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
     fmpq_mpoly_t P;
     fmpq_mpoly_init(P, ctx);
     fmpq_mpoly_factor_t fac;
@@ -3462,10 +3567,9 @@ static Expr* flint_multivariate_factor_impl(const Expr* p, int squarefree) {
         for (slong i = 0; i < nf; i++) {
             fmpq_mpoly_factor_get_base(base, fac, i, ctx);
             slong e = fmpq_mpoly_factor_get_exp_si(fac, i, ctx);
-            /* Normalise the factor to a positive leading coefficient (highest
-             * total degree, deglex tie-break) — Mathematica's convention —
-             * folding the discarded -1 into the content (via (-1)^e) so the
-             * product is unchanged.  Avoids ugly forms like -(k - u^2). */
+            /* Normalise the factor to a positive leading coefficient (the
+             * lexicographic leading term), folding the discarded -1 into the
+             * content (via (-1)^e) so the product is unchanged. */
             if (fmpq_mpoly_length(base, ctx) > 0) {
                 fmpq_mpoly_get_term_coeff_fmpq(lc, base, 0, ctx);
                 if (fmpq_sgn(lc) < 0) {
@@ -7237,69 +7341,114 @@ static Expr* uni_poly_to_expr(const fmpz_poly_t f, const Expr* var) {
     return out;
 }
 
+/* x^m + s (s = +-1) as a product of cyclotomic polynomials, each irreducible
+ * over Q: x^m - 1 = prod_{d | m} Phi_d, x^m + 1 = prod_{d | 2m, d !| m} Phi_d.
+ * Appends the factors (exponent 1) to fac.  General factoring of x^2310 - 1
+ * takes seconds in van Hoeij recombination; this takes microseconds. */
+static void cyclotomic_binomial_factors(fmpz_poly_factor_t fac, ulong m, int s) {
+    ulong top = s < 0 ? m : 2 * m;
+    fmpz_poly_t phi;
+    fmpz_poly_init(phi);
+    for (ulong d = 1; d <= top; d++) {
+        if (top % d != 0) continue;
+        if (s > 0 && m % d == 0) continue;
+        fmpz_poly_cyclotomic(phi, d);
+        fmpz_poly_factor_insert(fac, phi, 1);
+    }
+    fmpz_poly_clear(phi);
+}
+
+/* Factor a univariate polynomial over Q: content (signed, rational) times
+ * primitive irreducible factors with positive leading coefficient.  The
+ * polynomial is read in one pass through to_mpoly -- powers are taken in
+ * FLINT, no expression is expanded and no coefficient extracted degree by
+ * degree (that cost ~105 of 139 ms on a dense degree-200 input). */
 static Expr* flint_univariate_factor(const Expr* P, const Expr* var) {
     if (!P || !var || var->type != EXPR_SYMBOL) return NULL;
-    /* Expand first: get_degree_poly counts Power[base,k] toward the degree only when
-     * base IS var, so an unexpanded Power[Plus[...],n] subterm (e.g. (5-3x)^2) reports
-     * degree 0 and silently caps the polynomial degree — dropping the leading
-     * coefficient and returning a wrong, lower-degree factorization.  get_coeff expands
-     * internally, but the degree bound must see the true expanded degree. */
-    Expr* expanded = expr_expand((Expr*)P);
-    int deg = get_degree_poly(expanded, (Expr*)var);
-    if (deg < 1) { expr_free(expanded); return NULL; }
+    VarSet vs;
+    memset(&vs, 0, sizeof vs);
+    if (!varset_add(&vs, var->data.symbol.name)) { varset_free(&vs); return NULL; }
 
-    fmpz_poly_t G;
-    fmpz_poly_init(G);
-    int ok = 1;
-    for (int i = 0; i <= deg && ok; i++) {
-        Expr* c = get_coeff(expanded, (Expr*)var, i);
-        if (c->type == EXPR_INTEGER) {
-            fmpz_poly_set_coeff_si(G, i, c->data.integer);
-        } else if (c->type == EXPR_BIGINT) {
-            fmpz_t z; fmpz_init(z);
-            fmpz_set_mpz(z, c->data.bigint);
-            fmpz_poly_set_coeff_fmpz(G, i, z);
-            fmpz_clear(z);
-        } else {
-            ok = 0;   /* Rational / symbolic coefficient -> classical path */
-        }
-        expr_free(c);
-    }
-
+    fmpq_mpoly_ctx_t ctx;
+    fmpq_mpoly_ctx_init(ctx, 1, ORD_LEX);
+    fmpq_mpoly_t Q;
+    fmpq_mpoly_init(Q, ctx);
     Expr* out = NULL;
-    if (ok && fmpz_poly_degree(G) >= 1) {
-        /* fmpz_poly_factor stores the signed content in fac->c and the
-         * primitive, positive-leading irreducible factors in fac->p[i] with
-         * multiplicities fac->exp[i] — exactly the classical convention. */
+    if (!to_mpoly(P, Q, ctx, &vs) || fmpq_mpoly_degree_si(Q, 0, ctx) < 1) goto done;
+
+    {
+        /* Q = content * zpoly, zpoly primitive with positive leading coefficient */
+        fmpz_poly_t G;
+        fmpz_poly_init(G);
+        slong len = fmpz_mpoly_length(Q->zpoly, ctx->zctx);
+        ulong ex;
+        fmpz_t c;
+        fmpz_init(c);
+        for (slong t = 0; t < len; t++) {
+            fmpz_mpoly_get_term_coeff_fmpz(c, Q->zpoly, t, ctx->zctx);
+            fmpz_mpoly_get_term_exp_ui(&ex, Q->zpoly, t, ctx->zctx);
+            fmpz_poly_set_coeff_fmpz(G, (slong)ex, c);
+        }
+        fmpz_clear(c);
+
         fmpz_poly_factor_t fac;
         fmpz_poly_factor_init(fac);
-        fmpz_poly_factor(fac, G);
+        slong n = fmpz_poly_degree(G);
+        slong k = 0;
+        while (fmpz_is_zero(G->coeffs + k)) k++;          /* x^k content */
+        int binomial = 0;
+        if (n > k) {
+            binomial = 1;
+            for (slong j = k + 1; j < n && binomial; j++)
+                if (!fmpz_is_zero(G->coeffs + j)) binomial = 0;
+            if (binomial && !fmpz_is_one(G->coeffs + n)) binomial = 0;
+            if (binomial && !fmpz_is_pm1(G->coeffs + k)) binomial = 0;
+        }
+        if (binomial) {
+            fmpz_one(&fac->c);
+            if (k > 0) {
+                fmpz_poly_t xv;
+                fmpz_poly_init(xv);
+                fmpz_poly_set_coeff_ui(xv, 1, 1);
+                fmpz_poly_factor_insert(fac, xv, k);
+                fmpz_poly_clear(xv);
+            }
+            cyclotomic_binomial_factors(fac, (ulong)(n - k),
+                                        fmpz_is_one(G->coeffs + k) ? 1 : -1);
+        } else {
+            fmpz_poly_factor(fac, G);
+        }
+
+        /* overall constant = content * (fac's own constant) */
+        fmpq_t cc;
+        fmpq_init(cc);
+        fmpq_set(cc, Q->content);
+        fmpq_mul_fmpz(cc, cc, &fac->c);
 
         size_t cap = (size_t)fac->num + 1;
         Expr** factors = malloc(sizeof(Expr*) * cap);
         size_t nt = 0;
-        if (!fmpz_is_one(&fac->c))
-            factors[nt++] = fz_to_expr(&fac->c);
+        if (!fmpq_is_one(cc)) factors[nt++] = expr_from_fmpq_local(cc);
+        fmpq_clear(cc);
         for (slong i = 0; i < fac->num; i++) {
             Expr* be = uni_poly_to_expr(fac->p + i, var);
             slong e = fac->exp[i];
-            if (e == 1) {
-                factors[nt++] = be;
-            } else {
-                factors[nt++] = expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){ be, expr_new_integer((int64_t)e) }, 2);
-            }
+            factors[nt++] = e == 1 ? be
+                : expr_new_function(expr_new_symbol("Power"),
+                      (Expr*[]){ be, expr_new_integer((int64_t)e) }, 2);
         }
         if (nt == 0)      out = expr_new_integer(1);
         else if (nt == 1) out = factors[0];
         else              out = expr_new_function(expr_new_symbol("Times"), factors, nt);
         free(factors);
-
         fmpz_poly_factor_clear(fac);
+        fmpz_poly_clear(G);
+        out = eval_and_free(out);
     }
-    fmpz_poly_clear(G);
-    if (out) out = eval_and_free(out);
-    expr_free(expanded);
+done:
+    fmpq_mpoly_clear(Q, ctx);
+    fmpq_mpoly_ctx_clear(ctx);
+    varset_free(&vs);
     return out;
 }
 

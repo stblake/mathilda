@@ -294,7 +294,7 @@ static void test_hensel_quadratic_y_in_two_factors(void) {
      * x - y^2 + 1 becomes -(y^2 - x - 1) with the sign pulled to a
      * leading -1. */
     expect_fullform("Factor[(x + y^2 - 1)(x - y^2 + 1)]",
-                    "Times[-1, Plus[-1, Times[-1, x], Power[y, 2]], Plus[-1, x, Power[y, 2]]]");
+                    "Times[Plus[1, x, Times[-1, Power[y, 2]]], Plus[-1, x, Power[y, 2]]]");
 }
 
 static void test_hensel_three_factor_lift(void) {

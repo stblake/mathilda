@@ -367,19 +367,17 @@ static void test_factor_kernels_are_opaque(void) {
  * Mathics in 100 ms; we're not at parity but we're no longer hung.
  *
  * Expected: x^2 * (z^13 - x^12) * (17 - 5y - z^14) * (z^4 + 3x^9 - y^13).
- * Each irreducible factor is normalised to a positive leading (highest-total-
- * degree) term, so the two factors whose top-degree term is negative are
- * emitted as their negated associates: (-17 + 5y + z^14) and
- * (-3x^9 + y^13 - z^4), with the two sign flips cancelling overall. */
+ * Each irreducible factor is normalised to a positive lexicographic leading
+ * term (variables in canonical order, x first), so (17 - 5y - z^14) is
+ * emitted as -17 + 5y + z^14 and (z^13 - x^12) as x^12 - z^13, the two sign
+ * flips cancelling overall. */
 static void test_factor_trivariate_high_degree_squarefree(void) {
     double ms = eval_check(
         "Factor[Expand[x^2 (z^13 - x^12) (z^4 + 3 x^9 - y^13) (17 - 5 y - z^14)]]",
-        "Times[Power[x, "
-        "2], "
-        "Plus[Times[-3, Power[x, 9]], Power[y, 13], "
-        "Times[-1, Power[z, 4]]], Plus[Times[-1, "
-        "Power[x, 12]], Power[z, 13]], Plus[-17, Times[5, y], Power[z, "
-        "14]]]",
+        "Times[Power[x, 2], "
+        "Plus[Times[3, Power[x, 9]], Times[-1, Power[y, 13]], Power[z, 4]], "
+        "Plus[Power[x, 12], Times[-1, Power[z, 13]]], "
+        "Plus[-17, Times[5, y], Power[z, 14]]]",
         5000.0);
     fprintf(stderr, "  trivariate user case: %.0f ms\n", ms);
 }
