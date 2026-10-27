@@ -159,6 +159,17 @@ static void test_kernel_generators(void) {
           "Times[Power[a, Rational[-1, 2]], Plus[Power[a, Rational[1, 2]], x]]");
 }
 
+/* Cancel / Together over Q(I): a Gaussian fraction is reduced in the number
+ * field, not with I as a free variable. */
+static void test_gaussian_cancel(void) {
+    check("Cancel[(x^2 + 1)/(x - I)]", "Plus[Complex[0, 1], x]");
+    check("Together[(x^2 + 1)/(x - I)]", "Plus[Complex[0, 1], x]");
+    check_true("With[{q = Expand[(x + 2 I)^3 (x^2 + I x + 3) (x^3 - 2 I + x)]}, "
+               "Cancel[Expand[-I x q]/q] === -I x]");
+    check("Cancel[Expand[(x + I y) (x - 1)]/Expand[(x + I y) (y + 2)]]",
+          "Times[Plus[-1, x], Power[Plus[2, y], -1]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -171,6 +182,7 @@ int main(void) {
     test_fast_entry();
     test_sign_convention();
     test_kernel_generators();
+    test_gaussian_cancel();
 
     if (failures) {
         printf("%d factor regression test(s) FAILED\n", failures);

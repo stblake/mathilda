@@ -9,6 +9,7 @@
 #include "expand.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "numeric.h"
 #include "options.h"
 #include "qafactor.h"
 #include "ratcanon.h"
@@ -1492,6 +1493,7 @@ static bool rat_has_algebraic_atom(const Expr* e) {
  * extension path — when no algebraic generator is present, the fraction is
  * already reduced (g = 1), or an exact division does not apply. */
 static Expr* flint_gaussian_cancel(const Expr* arg);   /* defined below */
+static Expr* rat_gaussian_field(const Expr* arg, const char* head);
 
 static Expr* flint_cancel_fraction(Expr* arg) {
     /* Genuine-algebraic parametric tower Q(params)(alpha_1..alpha_r): reduce the
@@ -1615,6 +1617,10 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
 #ifdef USE_FLINT
+    if (res->data.function.arg_count == 1 && !internal_args_contain_inexact(res)) {
+        Expr* gf = rat_gaussian_field(res->data.function.args[0], SYM_Cancel);
+        if (gf) return gf;
+    }
     /* Phase 2: unified field-structure dispatch first.  One classification, one
      * engine — proven math-equal to the cascade below across the corpus by the
      * shadow harness (MATHILDA_RATCANON=shadow).  Declines (NULL) fall through
@@ -2198,12 +2204,123 @@ static Expr* flint_gaussian_cancel(const Expr* arg) {
     return rat_gaussian_reduce(arg, flint_rational_cancel);
 }
 
+/* Gaussian rational functions over Q(I) proper.  rat_gaussian_reduce (above)
+ * maps I to a FREE variable t, so it cannot see that x - I divides x^2 + 1
+ * (t^2 = -1 is not imposed): Cancel[(x^2 + 1)/(x - I)] stayed unreduced, and
+ * a degree-8 Gaussian quotient -I x q/q came back as a 17-term fraction that
+ * stalled DSolve's verification.  Here every Gaussian constant a + b I is
+ * written over the number field Q(I) (AlgebraicNumber[I, {a, b}]) and the
+ * certified number-field reduction runs; its coefficients are mapped back. */
+/* Does head h occur anywhere in e? */
+static bool rat_has_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == h)
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_has_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
+static int rat_gaussian_field_active = 0;   /* re-entry guard */
+
+/* A rational function over Q(I) in plain symbols: numbers, symbols, and
+ * Plus / Times / integer powers of those -- no function kernels. */
+static bool rat_plain_gaussian(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return true;
+        case EXPR_SYMBOL: return !expr_is_numeric_quantity(e);
+        case EXPR_FUNCTION: {
+            const Expr* h = e->data.function.head;
+            if (h->type != EXPR_SYMBOL) return false;
+            const char* hn = h->data.symbol.name;
+            if (hn == SYM_Rational || hn == SYM_Complex) return true;
+            if (hn == SYM_Power)
+                return e->data.function.arg_count == 2
+                    && e->data.function.args[1]->type == EXPR_INTEGER
+                    && rat_plain_gaussian(e->data.function.args[0]);
+            if (hn == SYM_Plus || hn == SYM_Times) {
+                for (size_t i = 0; i < e->data.function.arg_count; i++)
+                    if (!rat_plain_gaussian(e->data.function.args[i])) return false;
+                return true;
+            }
+            return false;
+        }
+        default: return false;
+    }
+}
+
+static Expr* rat_gaussian_field(const Expr* arg, const char* head) {
+    if (rat_gaussian_field_active) return NULL;
+    if (!rat_contains_i(arg) || rat_i_inside_binder(arg)) return NULL;
+    Expr* alg_i = expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Complex),
+                       (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2),
+                   expr_new_function(expr_new_symbol(SYM_List),
+                       (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2) }, 2);
+    Expr* pa = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussA"), expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* pb = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussB"), expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* fwd = expr_new_function(expr_new_symbol(SYM_RuleDelayed),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Complex), (Expr*[]){ pa, pb }, 2),
+                   expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ expr_new_symbol("Rat$gaussA"),
+                                  expr_new_function(expr_new_symbol(SYM_Times),
+                                      (Expr*[]){ expr_new_symbol("Rat$gaussB"), alg_i }, 2) }, 2) }, 2);
+    Expr* e2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ expr_copy((Expr*)arg), fwd }, 2));
+    /* The whole Cancel / Together on the field form: its number-field paths
+     * (single- and multivariate) take it; the guard keeps the AlgebraicNumber
+     * generator, which itself contains I, from re-entering here. */
+    Expr* red = NULL;
+    if (e2) {
+        /* the number-field kernel itself first; then, for a plain Gaussian
+         * rational function it declined (the multivariate shapes), the
+         * whole operation on the field form */
+        red = (head == SYM_Cancel) ? flint_field_cancel(e2) : flint_field_together(e2);
+        if (!red && rat_plain_gaussian(arg)) {
+            rat_gaussian_field_active = 1;
+            red = eval_and_free(expr_new_function(expr_new_symbol(head), (Expr*[]){ e2 }, 1));
+            rat_gaussian_field_active = 0;
+        } else {
+            expr_free(e2);
+        }
+    }
+    if (!red) return NULL;
+    if (!rat_has_head(red, SYM_AlgebraicNumber)) { expr_free(red); return NULL; }   /* declined */
+    /* AlgebraicNumber[t, {a, b}] -> a + b t, with the generator t the field
+     * engine actually used (it may be another root of x^2 + 1 than I). */
+    Expr* qt = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussT"), expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* qa = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussA"), expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* qb = expr_new_function(expr_new_symbol(SYM_Pattern),
+        (Expr*[]){ expr_new_symbol("Rat$gaussB"), expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* bwd = expr_new_function(expr_new_symbol(SYM_RuleDelayed),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_AlgebraicNumber),
+                       (Expr*[]){ qt, expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ qa, qb }, 2) }, 2),
+                   expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ expr_new_symbol("Rat$gaussA"),
+                                  expr_new_function(expr_new_symbol(SYM_Times),
+                                      (Expr*[]){ expr_new_symbol("Rat$gaussB"),
+                                                 expr_new_symbol("Rat$gaussT") }, 2) }, 2) }, 2);
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ red, bwd }, 2));
+    if (out && rat_has_head(out, SYM_AlgebraicNumber)) { expr_free(out); return NULL; }
+    return out;
+}
+
 #endif
 
 static Expr* builtin_together_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
 #ifdef USE_FLINT
+    if (res->data.function.arg_count == 1 && !internal_args_contain_inexact(res)) {
+        Expr* gf = rat_gaussian_field(res->data.function.args[0], SYM_Together);
+        if (gf) return gf;
+    }
     /* Phase 2: unified field-structure dispatch first (see builtin_cancel_compute). */
     if (rat_canon_enabled() && !internal_args_contain_inexact(res)) {
         size_t rac = res->data.function.arg_count; bool raf = false;
