@@ -391,6 +391,312 @@ Expr* flint_expand_polynomial(const Expr* e) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Expand with opaque kernels as generators                          */
+/* ------------------------------------------------------------------ */
+
+/* collect_vars accepts only symbols, so a polynomial in kernels -- f[1],
+ * g[x[i], x[j]], Sin[x], Log[y] -- went to the generic term-by-term
+ * distributor: (f[1] + ... + f[6])^8 cost 12x the same polynomial in symbols.
+ * Here each maximal kernel node is a generator, found through a hash table
+ * (expr_hash + expr_eq), and the polynomial is expanded in packed arithmetic.
+ *
+ * Expand never looks inside a kernel, so the kernels need not be algebraically
+ * independent (unlike the GCD abstraction): expanding is distribution, and the
+ * caller evaluates the result, which applies every Times rule a product of
+ * kernels obeys (Sin[x] Csc[x] -> 1) exactly as on the classical path.  What
+ * must be excluded is a kernel whose MULTIPLICATION has its own semantics,
+ * which collecting k*k into k^2 before evaluation would bypass:
+ *   - heads with their own arithmetic or threading (List, Interval, SeriesData,
+ *     ConditionalExpression, DirectedInfinity, AlgebraicNumber, Root, ...):
+ *     only non-System heads and NumericFunction System heads are kernels;
+ *   - a head carrying UpValues (g /: g[a_] g[b_] := ... fires on g[1] g[1]
+ *     but not on g[1]^2);
+ *   - user rules for Plus, Times or Power (checked by the caller).
+ * Anything else outside Plus / Times / Power(n >= 0) / integers / rationals /
+ * symbols declines, as does a generator count above the context cache. */
+
+typedef struct {
+    Expr** gen;          /* generator nodes (symbols and kernels), borrowed */
+    uint64_t* gh;        /* their hashes */
+    size_t n, cap;
+    int64_t* slot;       /* open addressing: index into gen, -1 empty */
+    size_t scap;         /* power of two */
+} KxGens;
+
+static void kx_free(KxGens* g) { free(g->gen); free(g->gh); free(g->slot); }
+
+static int kx_rehash(KxGens* g, size_t scap) {
+    int64_t* s = malloc(sizeof(int64_t) * scap);
+    if (!s) return 0;
+    for (size_t i = 0; i < scap; i++) s[i] = -1;
+    for (size_t i = 0; i < g->n; i++) {
+        size_t k = (size_t)g->gh[i] & (scap - 1);
+        while (s[k] != -1) k = (k + 1) & (scap - 1);
+        s[k] = (int64_t)i;
+    }
+    free(g->slot);
+    g->slot = s; g->scap = scap;
+    return 1;
+}
+
+/* Index of `e` among the generators, adding it when `add`; -1 when absent
+ * (or on allocation failure). */
+static int64_t kx_index(KxGens* g, Expr* e, int add) {
+    uint64_t h = expr_hash(e);
+    if (g->scap) {
+        size_t k = (size_t)h & (g->scap - 1);
+        while (g->slot[k] != -1) {
+            int64_t i = g->slot[k];
+            if (g->gh[i] == h && expr_eq(g->gen[i], e)) return i;
+            k = (k + 1) & (g->scap - 1);
+        }
+    }
+    if (!add) return -1;
+    if (g->n == g->cap) {
+        size_t c = g->cap ? 2 * g->cap : 16;
+        Expr** a = realloc(g->gen, sizeof(Expr*) * c);
+        if (!a) return -1;
+        g->gen = a;
+        uint64_t* b = realloc(g->gh, sizeof(uint64_t) * c);
+        if (!b) return -1;
+        g->gh = b;
+        g->cap = c;
+    }
+    int64_t idx = (int64_t)g->n;
+    g->gen[g->n] = e; g->gh[g->n] = h; g->n++;
+    if (2 * g->n > g->scap)                         /* rehash inserts every entry */
+        return kx_rehash(g, g->scap ? 2 * g->scap : 64) ? idx : -1;
+    size_t k = (size_t)h & (g->scap - 1);
+    while (g->slot[k] != -1) k = (k + 1) & (g->scap - 1);
+    g->slot[k] = idx;
+    return idx;
+}
+
+static int kx_is_kernel(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return 0;
+    const Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return 0;           /* compound heads: classical */
+    const char* n = h->data.symbol.name;
+    if (n == SYM_Plus || n == SYM_Times || n == SYM_Power || n == SYM_Rational ||
+        n == SYM_Complex || n == SYM_List || n == SYM_Interval ||
+        n == SYM_SeriesData || n == SYM_ConditionalExpression ||
+        n == SYM_DirectedInfinity || n == SYM_AlgebraicNumber || n == SYM_Root ||
+        n == SYM_Overflow || n == SYM_Association || n == SYM_SparseArray)
+        return 0;
+    SymbolDef* d = h->data.symbol.def;
+    if (!d) d = symtab_get_def(n);
+    if (!d) return 0;
+#if UP_VALUES
+    if (d->up_values) return 0;
+#endif
+    if (d->is_system && !(d->attributes & ATTR_NUMERICFUNCTION)) return 0;
+    return 1;
+}
+
+/* Gather the generators; 0 when `e` is outside the representable shape.
+ * *nkern counts the kernel generators (the path is only worth taking with
+ * at least one -- a symbols-only input is flint_expand_polynomial's). */
+static int kx_collect(Expr* e, KxGens* g, size_t* nkern) {
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT:
+            return 1;
+        case EXPR_SYMBOL:
+            return kx_index(g, e, 1) >= 0;
+        case EXPR_FUNCTION: {
+            const Expr* h = e->data.function.head;
+            const char* n = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+            size_t na = e->data.function.arg_count;
+            if (n == SYM_Rational)
+                return na == 2 && e->data.function.args[0]->type == EXPR_INTEGER &&
+                       e->data.function.args[1]->type == EXPR_INTEGER;
+            if (n == SYM_Plus || n == SYM_Times) {
+                for (size_t i = 0; i < na; i++)
+                    if (!kx_collect(e->data.function.args[i], g, nkern)) return 0;
+                return 1;
+            }
+            if (n == SYM_Power) {
+                if (na != 2) return 0;
+                const Expr* x = e->data.function.args[1];
+                if (x->type != EXPR_INTEGER || x->data.integer < 0) return 0;
+                return kx_collect(e->data.function.args[0], g, nkern);
+            }
+            if (!kx_is_kernel(e)) return 0;
+            size_t before = g->n;
+            if (kx_index(g, e, 1) < 0) return 0;
+            if (g->n > before) (*nkern)++;
+            return 1;
+        }
+        default:
+            return 0;
+    }
+}
+
+/* A summand that is a monomial -- a rational coefficient times powers of
+ * generators -- straight into (c, exps).  0 when it is not one. */
+static int kx_monomial(Expr* e, KxGens* g, fmpq_t c, ulong* exps) {
+    int64_t i;
+    switch (e->type) {
+        case EXPR_INTEGER:
+            fmpq_mul_si(c, c, e->data.integer);
+            return 1;
+        case EXPR_BIGINT: {
+            fmpz_t z; fmpz_init(z); fmpz_set_mpz(z, e->data.bigint);
+            fmpq_mul_fmpz(c, c, z); fmpz_clear(z);
+            return 1;
+        }
+        case EXPR_SYMBOL:
+            if ((i = kx_index(g, e, 0)) < 0) return 0;
+            exps[i]++;
+            return 1;
+        case EXPR_FUNCTION: {
+            const Expr* h = e->data.function.head;
+            const char* n = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+            if (n == SYM_Rational) {
+                fmpq_t q; fmpq_init(q);
+                fmpz_set_si(fmpq_numref(q), e->data.function.args[0]->data.integer);
+                fmpz_set_si(fmpq_denref(q), e->data.function.args[1]->data.integer);
+                fmpq_canonicalise(q);
+                fmpq_mul(c, c, q); fmpq_clear(q);
+                return 1;
+            }
+            if (n == SYM_Times) {
+                for (size_t k = 0; k < e->data.function.arg_count; k++)
+                    if (!kx_monomial(e->data.function.args[k], g, c, exps)) return 0;
+                return 1;
+            }
+            if (n == SYM_Power) {
+                Expr* b = e->data.function.args[0];
+                if ((i = kx_index(g, b, 0)) < 0) return 0;   /* (a + b)^k: not a monomial */
+                exps[i] += (ulong)e->data.function.args[1]->data.integer;
+                return 1;
+            }
+            if (n == SYM_Plus) return 0;
+            if ((i = kx_index(g, e, 0)) < 0) return 0;
+            exps[i]++;
+            return 1;
+        }
+        default:
+            return 0;
+    }
+}
+
+static int kx_to_mpoly(Expr* e, fmpq_mpoly_t out, const fmpq_mpoly_ctx_struct* ctx, KxGens* g) {
+    slong nv = (slong)g->n;
+    const Expr* h = (e->type == EXPR_FUNCTION) ? e->data.function.head : NULL;
+    const char* n = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    if (n == SYM_Plus) {
+        /* Monomial summands are pushed and combined once -- adding them one by
+         * one into a growing sum is quadratic in the term count. */
+        ulong* exps = calloc((size_t)(nv > 0 ? nv : 1), sizeof(ulong));
+        if (!exps) return 0;
+        fmpq_t c; fmpq_init(c);
+        fmpq_mpoly_t rest, t;
+        fmpq_mpoly_init(rest, ctx); fmpq_mpoly_init(t, ctx);
+        fmpq_mpoly_zero(out, ctx);
+        int ok = 1;
+        for (size_t k = 0; k < e->data.function.arg_count && ok; k++) {
+            Expr* a = e->data.function.args[k];
+            fmpq_one(c);
+            memset(exps, 0, sizeof(ulong) * (size_t)(nv > 0 ? nv : 1));
+            if (kx_monomial(a, g, c, exps)) {
+                if (!fmpq_is_zero(c)) fmpq_mpoly_push_term_fmpq_ui(out, c, exps, ctx);
+            } else {
+                ok = kx_to_mpoly(a, t, ctx, g);
+                if (ok) fmpq_mpoly_add(rest, rest, t, ctx);
+            }
+        }
+        if (ok) {
+            fmpq_mpoly_sort_terms(out, ctx);
+            fmpq_mpoly_combine_like_terms(out, ctx);
+            fmpq_mpoly_add(out, out, rest, ctx);
+        }
+        fmpq_mpoly_clear(rest, ctx); fmpq_mpoly_clear(t, ctx);
+        fmpq_clear(c); free(exps);
+        return ok;
+    }
+    if (n == SYM_Times) {
+        fmpq_mpoly_one(out, ctx);
+        fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+        int ok = 1;
+        for (size_t k = 0; k < e->data.function.arg_count && ok; k++) {
+            ok = kx_to_mpoly(e->data.function.args[k], t, ctx, g);
+            if (ok) fmpq_mpoly_mul(out, out, t, ctx);
+        }
+        fmpq_mpoly_clear(t, ctx);
+        return ok;
+    }
+    if (n == SYM_Power) {
+        fmpq_mpoly_t b; fmpq_mpoly_init(b, ctx);
+        int ok = kx_to_mpoly(e->data.function.args[0], b, ctx, g);
+        if (ok) ok = fmpq_mpoly_pow_ui(out, b, (ulong)e->data.function.args[1]->data.integer, ctx);
+        fmpq_mpoly_clear(b, ctx);
+        return ok;
+    }
+    /* number, symbol, Rational or kernel: a monomial */
+    ulong* exps = calloc((size_t)(nv > 0 ? nv : 1), sizeof(ulong));
+    if (!exps) return 0;
+    fmpq_t c; fmpq_init(c); fmpq_one(c);
+    int ok = kx_monomial(e, g, c, exps);
+    fmpq_mpoly_zero(out, ctx);
+    if (ok && !fmpq_is_zero(c)) fmpq_mpoly_push_term_fmpq_ui(out, c, exps, ctx);
+    fmpq_clear(c); free(exps);
+    return ok;
+}
+
+/* P rendered with generator i as a copy of gens[i] (unevaluated tree, like
+ * mpoly_to_expr). */
+static Expr* kx_mpoly_to_expr(const fmpq_mpoly_t P, const fmpq_mpoly_ctx_struct* ctx, KxGens* g) {
+    slong len = fmpq_mpoly_length(P, ctx);
+    if (len == 0) return expr_new_integer(0);
+    slong nv = (slong)g->n;
+    ulong* exps = malloc(sizeof(ulong) * (size_t)(nv > 0 ? nv : 1));
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)len);
+    Expr** factors = malloc(sizeof(Expr*) * (size_t)(nv + 1));
+    if (!exps || !terms || !factors) { free(exps); free(terms); free(factors); return NULL; }
+    fmpq_t c; fmpq_init(c);
+    for (slong i = 0; i < len; i++) {
+        fmpq_mpoly_get_term_coeff_fmpq(c, P, i, ctx);
+        fmpq_mpoly_get_term_exp_ui(exps, P, i, ctx);
+        size_t nf = 0;
+        if (!fmpq_is_one(c) || nv == 0) factors[nf++] = expr_from_fmpq_local(c);
+        for (slong v = 0; v < nv; v++) {
+            if (exps[v] == 0) continue;
+            Expr* var = expr_copy(g->gen[v]);
+            if (exps[v] == 1) factors[nf++] = var;
+            else {
+                Expr* pa[2] = { var, expr_new_integer((int64_t)exps[v]) };
+                factors[nf++] = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
+            }
+        }
+        terms[i] = (nf == 1) ? factors[0]
+                 : (nf == 0) ? expr_new_integer(1)
+                 : expr_new_function(expr_new_symbol(SYM_Times), factors, nf);
+    }
+    fmpq_clear(c);
+    free(exps); free(factors);
+    Expr* r = (len == 1) ? terms[0] : expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)len);
+    free(terms);
+    return r;
+}
+
+Expr* flint_expand_polynomial_kernels(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    KxGens g; memset(&g, 0, sizeof g);
+    size_t nkern = 0;
+    if (!kx_collect((Expr*)e, &g, &nkern) || nkern == 0 || g.n > BRIDGE_CTX_LEX_CAP) {
+        kx_free(&g);
+        return NULL;
+    }
+    const fmpq_mpoly_ctx_struct* ctx = bridge_ctx_lex((slong)g.n);
+    fmpq_mpoly_t P; fmpq_mpoly_init(P, ctx);
+    Expr* out = NULL;
+    if (kx_to_mpoly((Expr*)e, P, ctx, &g)) out = kx_mpoly_to_expr(P, ctx, &g);
+    fmpq_mpoly_clear(P, ctx);
+    kx_free(&g);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Field-coefficient Expand: polynomials over a number field Q(theta)  */
 /*                                                                      */
 /*  The ParallelMixedTower assembly expands polynomials in the tower    */
@@ -7359,6 +7665,7 @@ Expr* flint_nmod_poly_xgcd(const Expr* a, const Expr* b, const Expr* x, unsigned
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_expand_polynomial(const Expr* e) { (void)e; return NULL; }
 Expr* flint_expand_polynomial_field(const Expr* e) { (void)e; return NULL; }
+Expr* flint_expand_polynomial_kernels(const Expr* e) { (void)e; return NULL; }
 int   flint_field_monomials(const Expr* poly, Expr* const* vars, int nvars,
                             int** exps_out, Expr*** coeffs_out, size_t* count_out) {
     (void)poly; (void)vars; (void)nvars;

@@ -1018,6 +1018,20 @@ Expands out products and positive integer powers in an expression.
   in a few hundredths of a second. Non-polynomial parts (transcendental heads,
   symbolic/fractional exponents, inexact coefficients) fall back to the generic
   binary-splitting distributor and repeated-squaring power expander.
+- **Opaque kernels are FLINT generators too** (v0.6054). A polynomial in
+  kernels such as `f[1]`, `g[x[i], x[j]]`, `Sin[x]` or `Log[y]` is expanded in
+  packed arithmetic, each distinct kernel one variable (found through a hash
+  table), and the result is evaluated, so products that `Times` rewrites
+  (`Sin[x] Csc[x]` is `1`) come out exactly as term-by-term distribution gives
+  them. Speed-ups: `(f[1] + ... + f[6])^8` takes 4.9 ms (was 78 ms), and
+  `(x + Sin[x] + g[y] + 1)^12` takes 1.4 ms (was 26 ms).
+  - **When it is used.** Only when sums are actually multiplied together (a
+    power of a sum, or two or more sum factors). Distributing one monomial over
+    an expanded sum stays on the classical path, which keeps canonical order.
+  - **What stays classical.** Heads with their own multiplication semantics:
+    System heads without `NumericFunction` (`List`, `Interval`, `SeriesData`,
+    `ConditionalExpression`, ...), a head with UpValues, user rules for
+    `Plus`/`Times`/`Power`, and inputs needing more than 128 generators.
 - In a **mixed product** — one where a non-polynomial factor (e.g. `Log[x]`)
   would otherwise force the whole product onto the generic path — the
   polynomial-over-`Q` factors are still multiplied together through FLINT, and

@@ -368,6 +368,58 @@ static double estimate_expand_terms(const Expr* e, double cap) {
  * Overflow[] in user-facing mode. */
 static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bounded);
 
+static bool is_plus_node(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Plus;
+}
+/* Does expanding `e` multiply sums together -- a power of a sum, or a product
+ * with two or more sum factors, anywhere in its Plus/Times/Power skeleton?
+ * Only then is the packed kernel expander worth its conversions: distributing
+ * one monomial over an already-expanded sum (g[a, b] * <10395 terms>, the Dirac
+ * trace's every step) is linear and the classical path keeps the terms in
+ * canonical order, where FLINT's output has to be re-sorted. */
+static bool expand_needs_multiplication(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Power && n == 2) {
+        const Expr* x = e->data.function.args[1];
+        if (!(x->type == EXPR_INTEGER && x->data.integer >= 1)) return false;
+        if (is_plus_node(e->data.function.args[0])) return x->data.integer >= 2;
+        return expand_needs_multiplication(e->data.function.args[0]);
+    }
+    if (h == SYM_Times) {
+        size_t sums = 0;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* f = e->data.function.args[i];
+            if (is_plus_node(f)) { if (++sums >= 2) return true; continue; }
+            if (expand_needs_multiplication(f)) return true;
+        }
+        return false;
+    }
+    if (h == SYM_Plus) {
+        for (size_t i = 0; i < n; i++)
+            if (expand_needs_multiplication(e->data.function.args[i])) return true;
+        return false;
+    }
+    return false;
+}
+
+/* No user DownValues/UpValues on Plus, Times or Power (Unprotect[Times];
+ * Times[a, b] := ...): the kernel expander collects products before any such
+ * rule could see them. */
+static bool expand_arith_heads_rule_free(void) {
+    const char* hs[3] = { SYM_Plus, SYM_Times, SYM_Power };
+    for (int i = 0; i < 3; i++) {
+        SymbolDef* d = symtab_get_def(hs[i]);
+        if (!d || d->down_values || d->sub_values) return false;
+#if UP_VALUES
+        if (d->up_values) return false;
+#endif
+    }
+    return true;
+}
+
 static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
     return expr_expand_impl_b(e, patt, overflow_mode, /*bounded=*/false);
 }
@@ -452,6 +504,15 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
              * distributing term-by-term through the evaluator. */
             Expr* fastf = flint_expand_polynomial_field(e);
             if (fastf) return fastf;
+            /* Opaque kernels (f[1], g[x[i], x[j]], Sin[x]) as generators: the
+             * whole expansion in packed arithmetic instead of term-by-term
+             * distribution.  Not under user rules for Plus/Times/Power, which
+             * the classical path applies product by product.  Evaluated here:
+             * internal callers got evaluated forms from the classical path. */
+            if (expand_needs_multiplication(e) && expand_arith_heads_rule_free()) {
+                Expr* fastk = flint_expand_polynomial_kernels(e);
+                if (fastk) return eval_and_free(fastk);
+            }
         }
     }
 

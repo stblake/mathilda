@@ -144,6 +144,37 @@ void test_expand_all() {
              "f[Plus[Times[a, c], Times[b, c], Times[a, d], Times[b, d]]]");
 }
 
+/* Opaque kernels as FLINT generators (v0.6054): the packed expansion must give
+ * exactly what term-by-term distribution gave, including products of kernels
+ * that Times rewrites on evaluation (Sin Csc -> 1, Tan Cos -> Sin), and must
+ * leave heads with their own multiplication (List, Interval) and kernels with
+ * UpValues to the classical path. */
+static void kexp_is(const char* in, const char* want) {
+    Expr* p = parse_expression(in);
+    Expr* r = evaluate(p);
+    char* got = expr_to_string(r);
+    if (strcmp(got, want) != 0)
+        printf("FAIL: %s\n  expected: %s\n  got:      %s\n", in, want, got);
+    ASSERT(strcmp(got, want) == 0);
+    free(got); expr_free(r); expr_free(p);
+}
+
+void test_expand_opaque_kernels() {
+    kexp_is("Expand[(Sin[x] + Cos[x])^2]", "Cos[x]^2 + 2 Cos[x] Sin[x] + Sin[x]^2");
+    kexp_is("Expand[(Sin[x] + Csc[x])^3]", "3 Csc[x] + Csc[x]^3 + 3 Sin[x] + Sin[x]^3");
+    kexp_is("Expand[(1 + Tan[x]) (1 - Tan[x])]", "1 - Tan[x]^2");
+    kexp_is("Expand[(a + Sin[x]) (a + Csc[x])]", "1 + a^2 + a Csc[x] + a Sin[x]");
+    kexp_is("Expand[(f[1] + f[2] + f[3])^2]", "f[1]^2 + 2 f[1] f[2] + f[2]^2 + 2 f[1] f[3] + 2 f[2] f[3] + f[3]^2");
+    kexp_is("Expand[(f[1] + 1/2 f[2] - 3)^2]", "9 - 6 f[1] + f[1]^2 - 3 f[2] + f[1] f[2] + 1/4 f[2]^2");
+    kexp_is("Expand[({f[1], f[2]} + f[3])^2]", "{f[1]^2 + 2 f[1] f[3] + f[3]^2, f[2]^2 + 2 f[2] f[3] + f[3]^2}");
+    kexp_is("Expand[(Interval[{1, 2}] + f[1])^2]", "f[1]^2 + Interval[{1, 4}] + f[1] Interval[{2, 4}]");
+    kexp_is("Expand[(E^x + Sin[x])^2]", "E^(2 x) + 2 E^x Sin[x] + Sin[x]^2");
+    /* an UpValue on a kernel's head keeps the product-by-product path */
+    kexp_is("kq /: kq[a_] kq[b_] := kqq[a, b]; Expand[(kq[1] + kq[2]) (kq[1] - kq[2])]",
+            "kqq[1, 1] - kqq[2, 2]");
+    kexp_is("Length[Expand[(f[1] + f[2] + f[3] + f[4] + f[5] + f[6])^8]]", "1287");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -151,6 +182,7 @@ int main() {
     TEST(test_expand);
     TEST(test_expand_flint_overflow);
     TEST(test_expand_all);
+    TEST(test_expand_opaque_kernels);
 
     printf("All expand tests passed!\n");
     return 0;

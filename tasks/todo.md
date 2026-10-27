@@ -11,7 +11,7 @@
       self-certified fixed points, adaptive run-merge Orderless sort, Times opaque fast path, Expand no-op for
       expanded input, empty-env replace_bindings, Cases `_h` match, intern pointer cache, Block restore fix.
       n=14 generation 18.5 -> 4.5 s, Cases+Union 0.84 -> 0.33 s (same machine A/B)
-- [ ] #112 follow-up: FLINT expansion with opaque kernels as generators (exclude List/Interval/SeriesData/...)
+- [x] #112 follow-up: FLINT expansion with opaque kernels as generators (v0.6054; gated on real multiplication)
 - [ ] Factor over Q(I), univariate: Factor[x^2 + 2 I x - 1] should be (I + x)^2 (pre-existing gap)
 - [ ] Cancel numerator form: Mathilda expands the quotient numerator ((1 + a) y -> y + a y); the reference keeps it
 

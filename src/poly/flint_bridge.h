@@ -88,6 +88,13 @@ Expr* flint_expand_polynomial(const Expr* e);
  * Returns NULL (caller falls back to the generic distributor) when `e` is not a
  * polynomial over a single such field, or without FLINT. */
 Expr* flint_expand_polynomial_field(const Expr* e);
+/* Expand a polynomial whose generators include opaque kernels (f[1],
+ * g[x[i], x[j]], Sin[x], ...) over Q, each maximal kernel a variable.  NULL
+ * when the input holds no kernel, a kernel with its own multiplication
+ * semantics (System non-NumericFunction heads, UpValues), anything outside
+ * Plus/Times/Power(n >= 0)/rationals/symbols, or more than 128 generators.
+ * The result is an unevaluated tree; the caller evaluates it. */
+Expr* flint_expand_polynomial_kernels(const Expr* e);
 
 /* Native field-coefficient CoefficientRules read-off.  For `poly` a polynomial
  * in the user variables vars[0..nvars) with coefficients in one number field
