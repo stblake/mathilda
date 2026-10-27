@@ -7936,6 +7936,56 @@ Expr* flint_modular_factor_list(const Expr* p, const Expr* modulus,
             (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
         out = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ pair }, 1);
         *status = 0;
+    } else if (nv == 1 && fmpz_abs_fits_ui(m)) {
+        /* Univariate, word-size prime: nmod_poly_factor (Cantor-Zassenhaus /
+         * Berlekamp in machine words) is several times faster than the
+         * generic multivariate route. */
+        ulong mu = fmpz_get_ui(m);
+        nmod_poly_t U;
+        nmod_poly_init(U, mu);
+        slong len = fmpz_mod_mpoly_length(P, ctx);
+        ulong ex;
+        fmpz_t c;
+        fmpz_init(c);
+        for (slong t = 0; t < len; t++) {
+            fmpz_mod_mpoly_get_term_coeff_fmpz(c, P, t, ctx);
+            fmpz_mod_mpoly_get_term_exp_ui(&ex, P, t, ctx);
+            nmod_poly_set_coeff_ui(U, (slong)ex, fmpz_get_ui(c));
+        }
+        fmpz_clear(c);
+        ulong lead = nmod_poly_lead(U)[0];
+        nmod_poly_make_monic(U, U);
+        nmod_poly_factor_t uf;
+        nmod_poly_factor_init(uf);
+        if (squarefree) nmod_poly_factor_squarefree(uf, U);
+        else            nmod_poly_factor(uf, U);     /* monic factors; lead apart */
+        Expr** pairs = malloc(sizeof(Expr*) * (size_t)(uf->num + 1));
+        pairs[0] = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_int64((int64_t)lead)),
+                       expr_new_integer(1) }, 2);
+        fmpz_mod_mpoly_t fpoly;
+        fmpz_mod_mpoly_init(fpoly, ctx);
+        for (slong i = 0; i < uf->num; i++) {
+            nmod_poly_struct* f = uf->p + i;
+            fmpz_mod_mpoly_zero(fpoly, ctx);
+            for (slong d = nmod_poly_degree(f); d >= 0; d--) {
+                ulong cv = nmod_poly_get_coeff_ui(f, d);
+                if (cv == 0) continue;
+                ulong e1 = (ulong)d;
+                fmpz_t cz; fmpz_init_set_ui(cz, cv);
+                fmpz_mod_mpoly_push_term_fmpz_ui(fpoly, cz, &e1, ctx);
+                fmpz_clear(cz);
+            }
+            Expr* be = fmpz_mod_mpoly_to_expr(fpoly, ctx, &vs);
+            pairs[i + 1] = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ be, expr_new_integer((int64_t)uf->exp[i]) }, 2);
+        }
+        fmpz_mod_mpoly_clear(fpoly, ctx);
+        out = expr_new_function(expr_new_symbol(SYM_List), pairs, (size_t)uf->num + 1);
+        free(pairs);
+        nmod_poly_factor_clear(uf);
+        nmod_poly_clear(U);
+        *status = 0;
     } else {
         fmpz_mod_mpoly_factor_t fac;
         fmpz_mod_mpoly_factor_init(fac, ctx);
