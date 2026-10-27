@@ -525,6 +525,7 @@ void intern_clear(void) {
     for (SymbolDef* d = g_ins_head; d; ) {
         SymbolDef* next = d->ins_next;
         reset_node_payload(d);
+        if (d->node) expr_free(d->node);   /* the canonical node's own reference */
         free(d->symbol_name);
         free(d);
         d = next;

@@ -59,9 +59,11 @@ static void test_pool_recycles_across_types(void) {
  * not just the top node. We free f[10, 20] and confirm the next batch of
  * allocations is drawn from exactly the freed nodes (order-independent). */
 static void test_pool_recycles_function_children(void) {
-    Expr* h  = expr_new_symbol("f");
-    Expr* a1 = expr_new_integer(10);
-    Expr* a2 = expr_new_integer(20);
+    /* Private atoms only: a symbol and a small integer are shared canonical
+     * nodes (expr.c), never recycled, so the head is a Real here. */
+    Expr* h  = expr_new_real(0.5);
+    Expr* a1 = expr_new_integer(100010);
+    Expr* a2 = expr_new_integer(100020);
     Expr* args[2] = { a1, a2 };
     Expr* f = expr_new_function(h, args, 2);
 
@@ -71,7 +73,7 @@ static void test_pool_recycles_function_children(void) {
     /* Next four allocations must all be recycled nodes from `freed`,
      * and must be four distinct pointers. */
     Expr* got[4];
-    for (int i = 0; i < 4; i++) got[i] = expr_new_integer(i);
+    for (int i = 0; i < 4; i++) got[i] = expr_new_integer(100000 + i);
 
     for (int i = 0; i < 4; i++) {
         int in_freed = 0;

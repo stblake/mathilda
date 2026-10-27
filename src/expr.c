@@ -179,8 +179,30 @@ static void expr_args_free(Expr** a, size_t len) {
     g_args_pool_size[len]++;
 }
 
+/* Small integers are shared: one immutable node per value in
+ * [EXPR_SMALLINT_MIN, EXPR_SMALLINT_MAX], made on first use and holding one
+ * reference of its own.  Integer nodes are never written after construction
+ * (a mutator unshares first), so sharing is invisible -- and coefficients,
+ * exponents and indices are mostly small, so a polynomial with 10^5 terms
+ * holds 10^5 pointers to a handful of nodes instead of 10^5 nodes. */
+#define EXPR_SMALLINT_MIN (-256)
+#define EXPR_SMALLINT_MAX 1024
+static Expr* g_smallint[EXPR_SMALLINT_MAX - EXPR_SMALLINT_MIN + 1];
+
 // Create/allocate a new integer expression.
 Expr* expr_new_integer(int64_t value) {
+    if (value >= EXPR_SMALLINT_MIN && value <= EXPR_SMALLINT_MAX) {
+        Expr** slot = &g_smallint[value - EXPR_SMALLINT_MIN];
+        if (*slot) { (*slot)->refcount++; return *slot; }
+        Expr* e = expr_alloc_node();
+        if (!e) return NULL;
+        e->type = EXPR_INTEGER;
+        e->refcount = 2;                 /* the cache's reference + the caller's */
+        e->last_evaluated_at = 0;
+        e->data.integer = value;
+        *slot = e;
+        return e;
+    }
     Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_INTEGER;
@@ -213,39 +235,36 @@ Expr* expr_new_real(double value) {
 // type for ABI stability, but the memory is owned by the interner and
 // must never be freed by Expr code.
 Expr* expr_new_symbol(const char* name) {
-    Expr* e = expr_alloc_node();
-    if (!e) return NULL;
-    e->type = EXPR_SYMBOL;
-    e->refcount = 1;
-    e->last_evaluated_at = 0;
-    SymbolDef* d = intern_symbol_node(name);
-    if (!d) {
-        free(e);
-        return NULL;
-    }
-    e->data.symbol.name = d->symbol_name;
-    /* Phase 3b: the def is otherwise resolved + cached lazily on first eval
-     * use.  A Module local's is cached at once and the node counted, so the
-     * local can be reclaimed when its last node goes (symtab_temp_release). */
-    if (d->module_temp) {
-        e->data.symbol.def = d;
-        d->temp_nodes++;
-    } else {
-        e->data.symbol.def = NULL;
-    }
-    return e;
+    return expr_new_symbol_def(intern_symbol_node(name));
 }
 
+/* The node for a symbol whose SymbolDef is in hand.  An ordinary symbol shares
+ * its canonical node (SymbolDef.node); a Module local gets a fresh node, with
+ * its def cached and the node counted, so the local can be reclaimed when its
+ * last node goes (symtab_temp_release). */
 Expr* expr_new_symbol_def(SymbolDef* d) {
     if (!d) return NULL;
+    if (!d->module_temp && d->node) {
+        d->node->refcount++;
+        return d->node;
+    }
     Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_SYMBOL;
-    e->refcount = 1;
     e->last_evaluated_at = 0;
     e->data.symbol.name = d->symbol_name;
-    e->data.symbol.def = d;              /* the def is known: cache it now */
-    if (d->module_temp) d->temp_nodes++;
+    if (d->module_temp) {
+        e->data.symbol.def = d;          /* cached at once: the node is counted */
+        e->refcount = 1;
+        d->temp_nodes++;
+    } else {
+        /* Left for the evaluator to resolve through symtab_get_def, which also
+         * marks a merely-interned symbol defined (True, Null, ... made by C
+         * code become Names entries on first evaluation, as before). */
+        e->data.symbol.def = NULL;
+        e->refcount = 2;                 /* the SymbolDef's reference + the caller's */
+        d->node = e;
+    }
     return e;
 }
 
@@ -637,7 +656,28 @@ void expr_free(Expr* e) {
         return;
     }
     /* refcount == 1 (or, defensively, 0 — should not happen, but treat
-     * as last reference). Physically free. */
+     * as last reference). Physically free -- unless this is a shared
+     * canonical node (a small integer's, a symbol's), whose owner holds a
+     * reference of its own: arriving here means 2^32 references wrapped the
+     * count, or an over-free.  Re-pin it rather than free a node every
+     * occurrence of the value points at.  Rare path: canonical nodes are
+     * almost never at refcount 1. */
+    if (e->type == EXPR_INTEGER) {
+        int64_t v = e->data.integer;
+        if (v >= EXPR_SMALLINT_MIN && v <= EXPR_SMALLINT_MAX &&
+            g_smallint[v - EXPR_SMALLINT_MIN] == e) {
+            e->refcount = 1u << 30;
+            return;
+        }
+    } else if (e->type == EXPR_SYMBOL &&
+               !(e->data.symbol.def && e->data.symbol.def->module_temp)) {
+        SymbolDef* d = e->data.symbol.def ? e->data.symbol.def
+                                          : symtab_lookup(e->data.symbol.name);
+        if (d && d->node == e) {
+            e->refcount = 1u << 30;
+            return;
+        }
+    }
 
     switch (e->type) {
         case EXPR_SYMBOL:

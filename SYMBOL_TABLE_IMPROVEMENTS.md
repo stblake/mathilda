@@ -5,7 +5,8 @@ the first round left open.
 - **Done:** 1 (v0.6056); 2, 4 and 5 (v0.6057, in the form the evidence
   supported).
 - **Declined, on measurements:** 3.
-- **Follow-ups:** names freed and long evaluations swept (v0.6058). See
+- **Follow-ups:** names freed and long evaluations swept (v0.6058), one shared
+  node per symbol and per small integer (v0.6059). See
   [Follow-ups](#follow-ups-after-v06057).
 
 Each section records the outcome. Written 2026-10-27 while reducing the
@@ -324,6 +325,16 @@ Mathilda is already ahead of the reference on every timed row: generation at
 n = 14 takes 2.4 s (reference 6.5 s), Cases + Union 0.39 s (0.68 s), the
 skeleton 0.51 s (0.63 s), a `Module` loop 0.15 s (0.21 s), and rule+`Module`
 0.17 s (0.22 s). The remaining gap was peak memory: 126 MB against 102 MB.
+
+**Closed in v0.6059.** The result held 5.4 nodes per term, including a
+private `Times` head-symbol node and a private coefficient node in every term.
+Two changes fix that:
+- Each `SymbolDef` now owns one canonical node (`SymbolDef.node`) that every
+  occurrence shares. Symbol nodes are immutable once shared, and `Module`
+  locals keep fresh, counted nodes.
+- Integers in [-256, 1024] share one node per value.
+
+Peak went 120 → 94.5 MB (the reference: 102 MB), and generation 2.50 → 2.29 s.
 
 ## Suggested plan for the session
 

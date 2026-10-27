@@ -16,11 +16,10 @@ Baseline (v0.6057, same machine; reference = local 14.0 kernel):
       List), two globals a TimeConstrained unwind abandoned (restored in tc_run_guarded), the pack-diag table (copies)
 - [x] B. Nested sweeps (v0.6058): evaluate() sweeps once the queue reaches 4096 / 2x survivors; 200k in-loop
       escapes +49.6 -> +0.9 MB.  548/548 unit suites; 34 suites clean under ASan with MATHILDA_TEMP_SWEEP_EAGER=1
-- [ ] C. #112 run time is already ahead of the reference on every row; remaining gap is peak memory
-      (126 vs 102 MB) -- find where it goes and close what is cheap
+- [x] C. #112 peak memory (v0.6059): result held 5.4 nodes/term (private Times head symbol + coefficient per term);
+      one canonical node per SymbolDef + shared small ints [-256,1024]: peak 120 -> 94 MB (ref 102), gen 2.50 -> 2.29 s
 - [ ] Found: Head[CompiledFunction[...]] stays unevaluated (pre-existing, not Module-related)
-- [ ] Tests (test_modular.c reclamation cases), docs (SYMBOL_TABLE_IMPROVEMENTS.md, scoping-constructs.md,
-      changelog), version bump + tag
+- [x] Tests (test_modular.c reclamation cases, test_expr_sharing canonical nodes), docs, v0.6058 + v0.6059 tags
 
 # GitHub issues #112 / #113 / #114 (2026-10-27)
 

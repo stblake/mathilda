@@ -124,6 +124,13 @@ typedef struct SymbolDef {
     uint8_t  module_temp;
     uint8_t  temp_pending;
     uint32_t temp_nodes;
+    /* The symbol's canonical Expr node, shared by every occurrence (made on
+     * first use by expr_new_symbol, holding one reference of its own).  A
+     * symbol node is immutable once shared -- a mutator unshares first -- so
+     * one node serves all: f[x], {x, x} and a million terms naming Times cost
+     * a pointer each, not a 56-byte node each.  NULL for a Module local, which
+     * gets a fresh, counted node per occurrence (temp_nodes). */
+    struct Expr* node;
     char* docstring;
     /* Default option settings for this symbol, the DefaultValues-equivalent
      * backing Options[f] / SetOptions[f]. A List[Rule[name,val], ...] owned

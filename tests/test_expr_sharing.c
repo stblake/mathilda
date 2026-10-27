@@ -27,7 +27,9 @@
 /* ------------------------------------------------------------------ */
 
 static void test_atom_refcount_inc_dec(void) {
-    Expr* a = expr_new_integer(42);
+    /* Outside the shared small-integer range ([-256, 1024], expr.c), so the
+     * node is private and its refcount exact. */
+    Expr* a = expr_new_integer(100042);
     ASSERT(a->refcount == 1);
 
     Expr* b = expr_copy(a);
@@ -45,9 +47,33 @@ static void test_atom_refcount_inc_dec(void) {
     expr_free(a);                  /* finally physically frees */
 }
 
+/* A symbol and a small integer have ONE canonical node, shared by every
+ * occurrence and never physically freed (expr.c): even a count driven down to
+ * 1 -- a wrapped 32-bit count, or an over-free -- re-pins it. */
+static void test_canonical_nodes_shared_and_pinned(void) {
+    Expr* a = expr_new_integer(5);
+    Expr* b = expr_new_integer(5);
+    ASSERT(a == b);
+    Expr* s = expr_new_symbol("Plus");
+    Expr* t = expr_new_symbol("Plus");
+    ASSERT(s == t);
+    ASSERT(s->data.symbol.def == NULL || s->data.symbol.def->node == s);
+
+    a->refcount = 1;               /* simulate a wrapped count */
+    expr_free(a);
+    ASSERT(a->type == EXPR_INTEGER && a->data.integer == 5 && a->refcount > 1);
+    ASSERT(expr_new_integer(5) == a);
+    s->refcount = 1;
+    expr_free(s);
+    ASSERT(s->type == EXPR_SYMBOL && s->refcount > 1);
+    ASSERT(expr_new_symbol("Plus") == s);
+}
+
 static void test_function_refcount_inc_dec(void) {
-    Expr* args[2] = { expr_new_integer(2), expr_new_integer(3) };
+    Expr* args[2] = { expr_new_integer(100002), expr_new_integer(100003) };
     Expr* f = expr_new_function(expr_new_symbol("Plus"), args, 2);
+    /* The head is Plus's canonical node, shared by every occurrence. */
+    unsigned head_rc = f->data.function.head->refcount;
     ASSERT(f->refcount == 1);
 
     Expr* g = expr_copy(f);
@@ -58,7 +84,7 @@ static void test_function_refcount_inc_dec(void) {
      * sharing the parent does NOT bump children's refcount. */
     ASSERT(f->data.function.args[0]->refcount == 1);
     ASSERT(f->data.function.args[1]->refcount == 1);
-    ASSERT(f->data.function.head->refcount == 1);
+    ASSERT(f->data.function.head->refcount == head_rc);
 
     expr_free(g);
     ASSERT(f->refcount == 1);
@@ -84,7 +110,7 @@ static void test_atom_share_pointer_identity(void) {
 /* ------------------------------------------------------------------ */
 
 static void test_unshare_unique_is_noop(void) {
-    Expr* a = expr_new_integer(7);
+    Expr* a = expr_new_integer(100007);
     ASSERT(a->refcount == 1);
     Expr* b = expr_unshare(a);
     ASSERT(b == a);                /* fast path: same pointer */
@@ -93,7 +119,7 @@ static void test_unshare_unique_is_noop(void) {
 }
 
 static void test_unshare_atom_creates_private(void) {
-    Expr* a = expr_new_integer(7);
+    Expr* a = expr_new_integer(100007);
     Expr* shared = expr_copy(a);   /* a->refcount == 2 */
     ASSERT(a->refcount == 2);
 
@@ -102,7 +128,7 @@ static void test_unshare_atom_creates_private(void) {
     Expr* priv = expr_unshare(shared);
     ASSERT(priv != a);             /* different node */
     ASSERT(priv->refcount == 1);
-    ASSERT(priv->data.integer == 7);
+    ASSERT(priv->data.integer == 100007);
     ASSERT(a->refcount == 1);      /* original now back to refcount 1 */
 
     expr_free(priv);
@@ -110,7 +136,7 @@ static void test_unshare_atom_creates_private(void) {
 }
 
 static void test_unshare_function_creates_private_args_array(void) {
-    Expr* args[2] = { expr_new_integer(10), expr_new_integer(20) };
+    Expr* args[2] = { expr_new_integer(100010), expr_new_integer(100020) };
     Expr* f = expr_new_function(expr_new_symbol("Plus"), args, 2);
 
     Expr* shared = expr_copy(f);   /* f->refcount == 2 */
@@ -134,7 +160,7 @@ static void test_unshare_function_creates_private_args_array(void) {
 
     /* f sees its original 10 unchanged. */
     ASSERT(f->data.function.args[0]->type == EXPR_INTEGER);
-    ASSERT(f->data.function.args[0]->data.integer == 10);
+    ASSERT(f->data.function.args[0]->data.integer == 100010);
 
     expr_free(priv);
     expr_free(f);
@@ -352,7 +378,8 @@ static unsigned int rrand(void) {
 
 static Expr* build_random_tree(int depth) {
     if (depth == 0 || (rrand() & 0x7) == 0) {
-        return expr_new_integer((int64_t)(rrand() % 1000));
+        /* outside the shared small-integer range: a private leaf */
+        return expr_new_integer((int64_t)(100000 + rrand() % 1000));
     }
     int n = 2 + (int)(rrand() % 3);  /* arity 2..4 */
     Expr** kids = malloc(sizeof(Expr*) * n);
@@ -484,6 +511,7 @@ int main(void) {
 
     /* 1. Refcount mechanics */
     TEST(test_atom_refcount_inc_dec);
+    TEST(test_canonical_nodes_shared_and_pinned);
     TEST(test_function_refcount_inc_dec);
     TEST(test_atom_share_pointer_identity);
 
