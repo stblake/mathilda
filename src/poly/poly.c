@@ -1628,46 +1628,78 @@ static bool is_negative(Expr* e) {
     return false;
 }
 
-static int64_t get_int_content(Expr* e) {
-    if (!e) return 1;
-    if (e->type == EXPR_INTEGER) return llabs(e->data.integer);
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol.name == SYM_Complex && e->data.function.arg_count == 2) {
-        return gcd(get_int_content(e->data.function.args[0]), get_int_content(e->data.function.args[1]));
+/* Non-negative integer content of `e`, in GMP: |n| for an integer (int64 or
+ * BigInt), the gcd of the parts of a Complex, the product over a Times, the
+ * gcd over a Plus, and 1 for anything else.  It was int64, so a BigInt
+ * counted as 1 and a product of contents could overflow: PolynomialLCM
+ * [7*10^18 x, 13 y] came back with a negative wrapped coefficient and
+ * PolynomialLCM[10^30 x, 3 x] dropped the 10^30. */
+static void get_int_content(const Expr* e, mpz_t out) {
+    if (!e) { mpz_set_ui(out, 1); return; }
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        expr_to_mpz(e, out);
+        mpz_abs(out, out);
+        return;
     }
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol.name == SYM_Times) {
-        int64_t c = 1;
-        for (size_t i=0; i<e->data.function.arg_count; i++) {
-            c *= get_int_content(e->data.function.args[i]);
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        size_t n = e->data.function.arg_count;
+        if (h == SYM_Complex && n == 2) {
+            mpz_t t; mpz_init(t);
+            get_int_content(e->data.function.args[0], out);
+            get_int_content(e->data.function.args[1], t);
+            mpz_gcd(out, out, t);
+            mpz_clear(t);
+            return;
         }
-        return c;
-    }
-    /* Plus content: GCD of summand contents.  Without this, the numG
-     * accumulation in builtin_polynomialgcd treats the entire Plus as
-     * a single non-numeric base with content 1, so e.g.
-     *   PolynomialGCD[4, 4 + 4 x]
-     * returned 1 instead of 4 -- and Cancel[4/(4+4x)] failed to
-     * reduce. */
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol.name == SYM_Plus) {
-        int64_t g = 0;  /* gcd-identity */
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            int64_t ci = get_int_content(e->data.function.args[i]);
-            g = gcd(g, ci);
-            if (g == 1) return 1;  /* short-circuit: cannot grow */
+        if (h == SYM_Times) {
+            mpz_t t; mpz_init(t);
+            mpz_set_ui(out, 1);
+            for (size_t i = 0; i < n; i++) {
+                get_int_content(e->data.function.args[i], t);
+                mpz_mul(out, out, t);
+            }
+            mpz_clear(t);
+            return;
         }
-        return g == 0 ? 1 : g;
+        /* Plus content: GCD of summand contents.  Without this, the numG
+         * accumulation in builtin_polynomialgcd treats the entire Plus as
+         * a single non-numeric base with content 1, so e.g.
+         *   PolynomialGCD[4, 4 + 4 x]
+         * returned 1 instead of 4 -- and Cancel[4/(4+4x)] failed to
+         * reduce. */
+        if (h == SYM_Plus) {
+            mpz_t t; mpz_init(t);
+            mpz_set_ui(out, 0);                     /* gcd identity */
+            for (size_t i = 0; i < n; i++) {
+                get_int_content(e->data.function.args[i], t);
+                mpz_gcd(out, out, t);
+                if (mpz_cmp_ui(out, 1) == 0) break; /* cannot shrink further */
+            }
+            mpz_clear(t);
+            if (mpz_sgn(out) == 0) mpz_set_ui(out, 1);
+            return;
+        }
     }
-    return 1;
+    mpz_set_ui(out, 1);
+}
+
+/* gcd (lcm when `want_lcm`) of the integer contents of a and b, as an
+ * Integer; 1 when it would be 0. */
+static Expr* number_content_combine(Expr* a, Expr* b, int want_lcm) {
+    mpz_t ca, cb;
+    mpz_init(ca); mpz_init(cb);
+    get_int_content(a, ca);
+    get_int_content(b, cb);
+    if (want_lcm) mpz_lcm(ca, ca, cb); else mpz_gcd(ca, ca, cb);
+    if (mpz_sgn(ca) == 0) mpz_set_ui(ca, 1);
+    Expr* r = expr_bigint_normalize(expr_new_bigint_from_mpz(ca));
+    mpz_clear(ca); mpz_clear(cb);
+    return r;
 }
 
 static Expr* my_number_gcd(Expr* a, Expr* b) {
-    int64_t ca = get_int_content(a);
-    int64_t cb = get_int_content(b);
-    int64_t g = gcd(ca, cb);
-    if (g == 0) g = 1;
-    return expr_new_integer(g);
+    return number_content_combine(a, b, 0);
 }
 
 /* Degree of `e` as a polynomial in `var`. Walks the expression tree   */
@@ -3272,22 +3304,26 @@ Expr* builtin_polynomialgcd(Expr* res) {
                      * factor twice.  Without this branch,
                      *   PolynomialGCD[4, 4 + 4 x]   returned 1
                      * (and Cancel[4/(4 + 4 x)] failed to reduce). */
-                    int64_t c = get_int_content(bps[i].data[j].base);
-                    if (c > 1) {
+                    mpz_t cz; mpz_init(cz);
+                    get_int_content(bps[i].data[j].base, cz);
+                    Expr* c = mpz_cmp_ui(cz, 1) > 0
+                        ? expr_bigint_normalize(expr_new_bigint_from_mpz(cz)) : NULL;
+                    mpz_clear(cz);
+                    if (c) {
                         Expr* base = bps[i].data[j].base;
                         size_t n = base->data.function.arg_count;
                         Expr** new_args = malloc(sizeof(Expr*) * n);
                         for (size_t k = 0; k < n; k++) {
                             new_args[k] = eval_and_free(internal_divide(
                                 (Expr*[]){expr_copy(base->data.function.args[k]),
-                                          expr_new_integer(c)}, 2));
+                                          expr_copy(c)}, 2));
                         }
                         Expr* prim = eval_and_free(expr_new_function(
                             expr_copy(base->data.function.head),
                             new_args, n));
                         free(new_args);
                         Expr* next = internal_times(
-                            (Expr*[]){num_i, expr_new_integer(c)}, 2);
+                            (Expr*[]){num_i, c}, 2);
                         num_i = next;
                         expr_free(bps[i].data[j].base);
                         bps[i].data[j].base = prim;
@@ -3457,11 +3493,7 @@ Expr* builtin_polynomialgcd(Expr* res) {
 }
 
 static Expr* my_number_lcm(Expr* a, Expr* b) {
-    int64_t ca = get_int_content(a);
-    int64_t cb = get_int_content(b);
-    int64_t l = lcm(ca, cb);
-    if (l == 0) l = 1;
-    return expr_new_integer(l);
+    return number_content_combine(a, b, 1);
 }
 
 /* PolynomialLCM[p1, p2, ...]                                          */

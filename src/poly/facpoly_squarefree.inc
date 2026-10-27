@@ -310,6 +310,44 @@ static Expr* factor_square_free_poly(Expr* P, Expr** vars, size_t var_count) {
     return final_res;
 }
 
+#ifdef USE_FLINT
+/* Square-free factorisation through FLINT (fmpq_mpoly_factor_squarefree): a
+ * polynomial directly, a rational function as Together's numerator over its
+ * denominator, each side decomposed on its own.  The classical Yun pipeline
+ * below runs GCDs on expression trees and was 65-340x slower.  NULL when
+ * either side is not a polynomial over Q in symbol generators. */
+static Expr* sqf_flint(Expr* e) {
+    Expr* direct = flint_polynomial_factor_squarefree(e);
+    if (direct) return direct;
+    if (!factor_has_leftover_denominator(e)) return NULL;
+
+    Expr* tog = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                                                (Expr*[]){expr_copy(e)}, 1));
+    Expr* num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator),
+                                                (Expr*[]){expr_copy(tog)}, 1));
+    Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
+                                                (Expr*[]){expr_copy(tog)}, 1));
+    expr_free(tog);
+    Expr* out = NULL;
+    if (!factor_has_leftover_denominator(num) && !factor_has_leftover_denominator(den)) {
+        Expr* fn = expr_is_integer_like(num) ? expr_copy(num)
+                                             : flint_polynomial_factor_squarefree(num);
+        Expr* fd = (fn && !expr_is_integer_like(den))
+                       ? flint_polynomial_factor_squarefree(den)
+                       : (fn ? expr_copy(den) : NULL);
+        if (fn && fd) {
+            out = eval_and_free(internal_divide((Expr*[]){fn, fd}, 2));
+        } else {
+            if (fn) expr_free(fn);
+            if (fd) expr_free(fd);
+        }
+    }
+    expr_free(num);
+    expr_free(den);
+    return out;
+}
+#endif
+
 static Expr* factor_square_free_dispatcher(Expr* e) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -339,6 +377,13 @@ static Expr* factor_square_free_dispatcher(Expr* e) {
         }
         return expr_copy(e);
     }
+
+#ifdef USE_FLINT
+    {
+        Expr* fl = sqf_flint(e);
+        if (fl) return fl;
+    }
+#endif
 
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);

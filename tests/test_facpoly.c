@@ -64,10 +64,10 @@ void test_factorsquarefree_f4_fastpath() {
     run_test("FactorSquareFree[Expand[(x + y)^2*(x - y)^2*(x*y - 1)]]",
              "Times[Plus[-1, Times[x, y]], Power[Plus[Power[x, 2], Times[-1, Power[y, 2]]], 2]]");
 
-    /* Three-variable squarefree input -- this is the kind of case
-     * the F4 fast path is targeting. */
+    /* Three-variable squarefree input: every factor is sign-normalised
+     * (positive leading coefficient) and the unit -1 is pulled out front. */
     run_test("FactorSquareFree[Expand[(1 - x^3)*(1 + y^4)*(1 + z^5)]]",
-             "Times[Plus[-1, Power[x, 3]], Plus[1, Power[y, 4]], Plus[-1, Times[-1, Power[z, 5]]]]");
+             "Times[-1, Plus[-1, Power[x, 3]], Plus[1, Power[y, 4]], Plus[1, Power[z, 5]]]");
 
     /* Repeated factor that is constant in the main variable (the
      * recursive content path catches it). */

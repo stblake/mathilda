@@ -231,7 +231,9 @@ static bool rationalize_default_double(double x, mpz_t out_n, mpz_t out_d) {
      * convergent whose "matching" comes entirely from double-precision
      * round-off rather than any genuine smallness of the next CF
      * coefficient — Mathematica's behaviour is to leave N[Pi] unchanged. */
-    const double k_max = 2.5e6;
+    /* The noise is relative to |x|, so the cap scales with it: a fixed
+     * 2.5e6 (right for |x| ~ 1) refused Rationalize[1.*^-8] -> 1/100000000. */
+    const double k_max = (ax > 0.0) ? sqrt(C / (DBL_EPSILON * ax)) : 2.5e6;
 
     /* CF state. h0/k0 = current convergent; h1/k1 = previous. */
     mpz_t h0, h1, k0, k1, h, k;
@@ -260,7 +262,10 @@ static bool rationalize_default_double(double x, mpz_t out_n, mpz_t out_d) {
         double h_d = mpz_get_d(h);
         if (k_d > k_max) break;
         double err = fabs(h_d / k_d - ax);
-        if (k_d > 0 && err < C / (k_d * k_d)) {
+        /* A zero convergent never stands for a nonzero x: for |x| < 1e-4
+         * the first convergent 0/1 meets the bound, and Rationalize
+         * [0.000001] (and with it Factor[x - 0.000001]) returned 0. */
+        if (k_d > 0 && h_d > 0 && err < C / (k_d * k_d)) {
             found = true;
             break;
         }
@@ -277,7 +282,7 @@ static bool rationalize_default_double(double x, mpz_t out_n, mpz_t out_d) {
             double k0d = mpz_get_d(k0);
             double h0d = mpz_get_d(h0);
             double err0 = fabs(h0d / k0d - ax);
-            if (k0d > 0 && err0 < C / (k0d * k0d)) {
+            if (k0d > 0 && h0d > 0 && err0 < C / (k0d * k0d)) {
                 mpz_set(h, h0);
                 mpz_set(k, k0);
                 found = true;
@@ -738,6 +743,14 @@ static Expr* force_rationalize_leaf(const Expr* e, long bits) {
             ok = internal_rationalize_double(xv, 0.0, RATIONALIZE_ZERO, n, d);
         }
     }
+    if (!ok && isfinite(xv) && fabs(xv) >= 9007199254740992.0) {
+        /* |x| >= 2^53: every such double is an integer, so it converts
+         * exactly.  Returning the Real unchanged sent the round-trip
+         * callers (Factor, Together, ...) back into themselves forever. */
+        mpz_init(n); mpz_init_set_ui(d, 1);
+        mpz_set_d(n, xv);
+        ok = true;
+    }
     if (!ok) return expr_copy((Expr*)e);
 
     Expr* out = expr_from_mpz_rational(n, d);
@@ -824,6 +837,13 @@ Expr* internal_rationalize_then_numericalize(Expr* res,
     Expr* clone = expr_new_function(expr_copy(res->data.function.head),
                                     new_args, n);
     free(new_args);
+
+    /* A leaf that could not be made exact would bring `core` straight back
+     * here with the same input: decline instead of recursing without end. */
+    if (internal_args_contain_inexact(clone)) {
+        expr_free(clone);
+        return NULL;
+    }
 
     /* Dispatch to the exact-arithmetic core on the rationalised clone.
      *

@@ -2267,6 +2267,9 @@ target_include_directories(factor_baseline_tests PRIVATE ../src)
 add_executable(factor_recombine_tests test_factor_recombine.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(factor_recombine_tests PRIVATE ../src)
 
+add_executable(factor_regressions_tests test_factor_regressions.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(factor_regressions_tests PRIVATE ../src)
+
 add_executable(zupoly_tests test_zupoly.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(zupoly_tests PRIVATE ../src /usr/local/include)
 target_link_directories(zupoly_tests PRIVATE /usr/local/lib)

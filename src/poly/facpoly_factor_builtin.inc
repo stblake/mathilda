@@ -186,6 +186,18 @@ static Expr* factor_gaussian_content(const Expr* arg) {
     return out;
 }
 
+#ifdef USE_FLINT
+/* One side (numerator or denominator) of a reduced fraction through FLINT:
+ * fmpz_poly for a univariate integer polynomial, fmpq_mpoly otherwise.  NULL
+ * when neither applies (not a polynomial over Q in symbol generators). */
+static Expr* factor_flint_side(Expr* p) {
+    if (p->type == EXPR_INTEGER || p->type == EXPR_BIGINT) return NULL;
+    Expr* r = flint_univariate_factor_auto(p);
+    if (!r) r = flint_polynomial_factor(p);
+    return r;
+}
+#endif
+
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -681,10 +693,15 @@ Expr* builtin_factor(Expr* res) {
      * classical FactorSquareFree / heuristic path below, where Together plus
      * the two FLINT factorisations take ~1 s (FeynCalc's FactorList2). Plain
      * single-argument form only, as for the fast path above. */
+    /* Each side is tried on its own, whatever its variable count: a
+     * univariate side used to take the int64 Berlekamp-Zassenhaus path
+     * below, which hangs (1/(x^43 - 1)), crashes (1/(x^6001 + x + 1)) or
+     * leaves the side unfactored once a coefficient outgrows a machine word. */
     Expr* flint_den = NULL;
-    if (res->data.function.arg_count == 1 && num_vc >= 2) {
-        f_num = flint_polynomial_factor(num);
-        if (f_num) flint_den = flint_polynomial_factor(den);
+    if (res->data.function.arg_count == 1) {
+        if (num_vc >= 1) f_num = factor_flint_side(num);
+        if (den_vc >= 1 || inside_simplify) flint_den = factor_flint_side(den);
+        if (!f_num && num_vc == 0) f_num = expr_copy(num);
     }
     if (f_num) {
         /* fall through to the denominator below with flint_den set */

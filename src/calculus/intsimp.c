@@ -686,6 +686,43 @@ Expr* intsimp_distribute_plus(Expr* e) {
  * canonical.  Walks the input expression top-down, rewriting just the
  * relevant heads.
  */
+/* Sign of the leading coefficient of the polynomial p under the
+ * lexicographic order, variables in canonical order: +1, -1, or 0 when p is
+ * not a polynomial with a rational leading coefficient. */
+static int it_lead_sign_rec(Expr* p, Expr** vars, size_t nv) {
+    if (nv == 0) {
+        int64_t n, d;
+        if (p->type == EXPR_BIGINT) return mpz_sgn(p->data.bigint);
+        if (is_rational(p, &n, &d)) return ((n > 0) == (d > 0)) ? (n != 0) : -1;
+        return 0;
+    }
+    int deg = get_degree_poly(p, vars[0]);
+    Expr* c = get_coeff(p, vars[0], deg);
+    int sg = it_lead_sign_rec(c, vars + 1, nv - 1);
+    expr_free(c);
+    return sg;
+}
+
+static int it_poly_lead_sign(Expr* arg) {
+    size_t vc = 0, vcap = 8;
+    Expr** vars = malloc(sizeof(Expr*) * vcap);
+    collect_variables(arg, &vars, &vc, &vcap);
+    int sg = 0;
+    if (vc > 0 && is_polynomial(arg, vars, vc)) {
+        bool plain = true;
+        for (size_t i = 0; i < vc; i++) if (vars[i]->type != EXPR_SYMBOL) plain = false;
+        if (plain) {
+            qsort(vars, vc, sizeof(Expr*), compare_expr_ptrs);
+            Expr* ex = expr_expand(arg);
+            sg = it_lead_sign_rec(ex, vars, vc);
+            expr_free(ex);
+        }
+    }
+    for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+    free(vars);
+    return sg;
+}
+
 Expr* intsimp_normalize_inverse_trig_signs(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
 
@@ -717,6 +754,22 @@ Expr* intsimp_normalize_inverse_trig_signs(Expr* e) {
                 stripped = eval_and_free(internal_times(rest, n - 1));
                 free(rest);
             }
+        }
+        /* A polynomial argument whose lexicographic leading coefficient is
+         * negative (variables in canonical order): ArcTan[1 - 2 x^2] is
+         * -ArcTan[-1 + 2 x^2].  Odd functions, so this is exact; it keeps
+         * the printed form independent of which factoriser produced the
+         * argument's orientation. */
+        if (!negative && arg->type == EXPR_FUNCTION
+            && arg->data.function.head->type == EXPR_SYMBOL
+            && arg->data.function.head->data.symbol.name == SYM_Plus
+            && it_poly_lead_sign(arg) < 0) {
+            negative = true;
+            stripped = eval_and_free(internal_times(
+                (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
+            Expr* ex = expr_expand(stripped);
+            expr_free(stripped);
+            stripped = ex;
         }
         if (negative && stripped) {
             Expr* inner = expr_new_function(
