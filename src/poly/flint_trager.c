@@ -672,7 +672,7 @@ static int tr_disabled(void) {
     return cached;
 }
 
-Expr* flint_factor_over_field(const Expr* poly, Expr* const* ext, size_t n_ext) {
+static Expr* tr_factor_core(const Expr* poly, Expr* const* ext, size_t n_ext) {
     if (!poly || tr_disabled()) return NULL;
     Expr** atoms = NULL; size_t natoms = 0, acap = 0;
     Expr* P = tr_split_complex(poly);
@@ -862,6 +862,79 @@ done:
 }
 
 /* {c, {f1, e1}, ...} -> c f1^e1 ... , evaluated. */
+/* A polynomial over Q (no algebraic constant of its own) is factored over Q
+ * first -- FLINT, with the cyclotomic split of x^n +- 1 -- and each
+ * irreducible factor over K separately: a factor irreducible over Q splits
+ * over K into conjugates, so the pieces are small Trager problems instead of
+ * one large one (x^120 - 1 over Q(i): 129 ms as one norm, a few ms by
+ * pieces).  Each piece is certified by tr_factor_core, so the product is the
+ * input exactly. */
+Expr* flint_factor_over_field(const Expr* poly, Expr* const* ext, size_t n_ext) {
+    if (!poly || tr_disabled()) return NULL;
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    int over_q = n_ext > 0 && fb_collect_vars(poly, &vs) && vs.count > 0;
+    fb_varset_free(&vs);
+    if (!over_q) return tr_factor_core(poly, ext, n_ext);
+
+    Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList),
+                                               (Expr*[]){ expr_copy((Expr*)poly) }, 1));
+    if (!fl || fl->type != EXPR_FUNCTION || fl->data.function.head->type != EXPR_SYMBOL
+        || fl->data.function.head->data.symbol.name != SYM_List) {
+        if (fl) expr_free(fl);
+        return tr_factor_core(poly, ext, n_ext);
+    }
+    size_t nq = fl->data.function.arg_count;
+    size_t cap = 8, nout = 0;
+    Expr** pairs = malloc(sizeof(Expr*) * cap);
+    Expr* unit = expr_new_integer(1);
+    int ok = 1;
+    for (size_t i = 0; i < nq && ok; i++) {
+        Expr* pr = fl->data.function.args[i];
+        Expr* f = pr->data.function.args[0];
+        Expr* e = pr->data.function.args[1];
+        if (expr_is_numeric_like(f)) {          /* numerical factor (or {q, -1}) */
+            unit = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ unit, expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ expr_copy(f), expr_copy(e) }, 2) }, 2));
+            continue;
+        }
+        Expr* L = tr_factor_core(f, ext, n_ext);
+        if (!L) {                               /* irreducible over K as well */
+            if (nout == cap) { cap *= 2; pairs = realloc(pairs, sizeof(Expr*) * cap); }
+            pairs[nout++] = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ expr_copy(f), expr_copy(e) }, 2);
+            continue;
+        }
+        /* L = List[c, List[g, k], ...]: f = c prod g^k, so f^e = c^e prod g^(k e) */
+        unit = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ unit, expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy(L->data.function.args[0]), expr_copy(e) }, 2) }, 2));
+        for (size_t j = 1; j < L->data.function.arg_count; j++) {
+            Expr* gk = L->data.function.args[j];
+            Expr* ke = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy(gk->data.function.args[1]), expr_copy(e) }, 2));
+            if (nout == cap) { cap *= 2; pairs = realloc(pairs, sizeof(Expr*) * cap); }
+            pairs[nout++] = expr_new_function(expr_new_symbol(SYM_List),
+                (Expr*[]){ expr_copy(gk->data.function.args[0]), ke }, 2);
+        }
+        expr_free(L);
+    }
+    expr_free(fl);
+    if (!ok) {
+        for (size_t i = 0; i < nout; i++) expr_free(pairs[i]);
+        free(pairs);
+        expr_free(unit);
+        return tr_factor_core(poly, ext, n_ext);
+    }
+    Expr** items = malloc(sizeof(Expr*) * (nout + 1));
+    items[0] = unit;
+    for (size_t i = 0; i < nout; i++) items[i + 1] = pairs[i];
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, nout + 1);
+    free(items);
+    free(pairs);
+    return out;
+}
+
 Expr* flint_factor_over_field_product(const Expr* poly, Expr* const* ext, size_t n_ext) {
     Expr* L = flint_factor_over_field(poly, ext, n_ext);
     if (!L) return NULL;
