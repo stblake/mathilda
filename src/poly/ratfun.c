@@ -97,6 +97,7 @@ typedef struct {
     int fail;               /* a gcd failed or a division by zero was met    */
     long splits;            /* factors split by a common gcd (rf_single)     */
     int inherit_flip;       /* rf_push marks the pushed factor flipped        */
+    int nest;               /* sums being converted around this one (0: top) */
 } RfCtx;
 
 static int rf_push_ptr(const Expr*** v, size_t* n, size_t* cap, const Expr* e) {
@@ -919,6 +920,62 @@ static int rf_sum_one_den(Rf* out, Rf* T, slong nt, slong td, const fmpz_t Lc, R
     return ok;
 }
 
+/* A cheap hash of a polynomial (its length and coefficient residues);
+ * equal polynomials hash equally. */
+static ulong rf_poly_hash(const fmpz_mpoly_struct* p) {
+    ulong h = (ulong)p->length * UWORD(0x9E3779B97F4A7C15);
+    for (slong i = 0; i < p->length; i++) {
+        h ^= fmpz_fdiv_ui(p->coeffs + i, UWORD(4294967291)) + UWORD(0x7F4A7C15) + (h << 6) + (h >> 2);
+    }
+    return h;
+}
+
+/* out = the product of the univariate elements V[0..n) (idx: a subset, or
+ * NULL), by a balanced tree: O(M(d) log n) instead of the O(d^2) of a running
+ * product. */
+static int ru_tree_product(fmpz_poly_t out, const RfVec* V, const slong* idx, slong n) {
+    if (n == 0) { fmpz_poly_one(out); return 1; }
+    fmpz_poly_struct* w = malloc((size_t)n * sizeof(fmpz_poly_struct));
+    if (!w) return 0;
+    for (slong i = 0; i < n; i++) {
+        fmpz_poly_init(w + i);
+        fmpz_poly_set(w + i, RUPc(RV(V, idx ? idx[i] : i)));
+    }
+    for (slong m = n; m > 1; m = (m + 1) / 2) {
+        for (slong i = 0; 2 * i < m; i++) {
+            if (2 * i + 1 < m) fmpz_poly_mul(w + i, w + 2 * i, w + 2 * i + 1);
+            else fmpz_poly_swap(w + i, w + 2 * i);
+        }
+        for (slong i = (m + 1) / 2; i < m; i++) fmpz_poly_zero(w + i);
+    }
+    fmpz_poly_swap(out, w);
+    for (slong i = 0; i < n; i++) fmpz_poly_clear(w + i);
+    free(w);
+    return 1;
+}
+
+/* 1 when the linear L = a x + b divides N, i.e. a^d N(-b/a) = 0 (d = deg N):
+ * one homogeneous Horner pass, all in Z. */
+static int ru_linear_divides(const fmpz_poly_struct* N, const fmpz_poly_struct* L) {
+    slong d = fmpz_poly_degree(N);
+    if (d < 1) return 0;
+    const fmpz* b = L->coeffs + 0;
+    const fmpz* a = L->coeffs + 1;
+    fmpz_t acc, ap, mb; fmpz_init(acc); fmpz_init(ap); fmpz_init(mb);
+    fmpz_neg(mb, b);
+    fmpz_set(acc, N->coeffs + d);
+    fmpz_set(ap, a);
+    int one = fmpz_is_one(a);
+    for (slong k = d - 1; k >= 0; k--) {
+        fmpz_mul(acc, acc, mb);
+        if (one) fmpz_add(acc, acc, N->coeffs + k);
+        else { fmpz_addmul(acc, N->coeffs + k, ap); fmpz_mul(ap, ap, a); }
+    }
+    int z = fmpz_is_zero(acc);
+    fmpz_clear(acc); fmpz_clear(ap); fmpz_clear(mb);
+    return z;
+}
+
 /* Sum regime: out = sum of the terms (consumed). */
 static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
     const fmpz_mpoly_ctx_struct* ctx = C->ctx;
@@ -936,8 +993,12 @@ static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
     rf_lcm_dens(Lc, T, nt);
     if (nden == 1) {
         /* the factored form makes the lone denominator squarefree too:
-         * Together[1/(x^2 + 2x + 1) + 1] -> (2 + 2x + x^2)/(1 + x)^2 */
-        ok = (!rf_factored_form() || rf_den_squarefree(&T[td], C)) &&
+         * Together[1/(x^2 + 2x + 1) + 1] -> (2 + 2x + x^2)/(1 + x)^2.
+         * Only the outermost sum's denominator reaches the answer: an inner
+         * sum's is either inverted into a numerator (a continued fraction
+         * x + 1/(1 + ...) did one discarded squarefree gcd per level) or
+         * split by the outer sum / rf_normal_form anyway. */
+        ok = (!rf_factored_form() || C->nest > 0 || rf_den_squarefree(&T[td], C)) &&
              rf_sum_one_den(out, T, nt, td, Lc, C);
         fmpz_clear(Lc);
         return ok && !C->fail;
@@ -955,6 +1016,7 @@ static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
     slong** tm = calloc((size_t)nt, sizeof(slong*));
     slong* tn = calloc((size_t)nt, sizeof(slong));
     fmpz_mpoly_struct** Dsrc = NULL;           /* borrowed: Dq[j] came from here */
+    ulong* Dh = NULL;                           /* rf_poly_hash(Dsrc[d]) */
     slong ndsrc = 0, cdsrc = 0;
     if (!tj || !tm || !tn) ok = 0;
     for (slong t = 0; t < nt && ok; t++) {
@@ -968,15 +1030,22 @@ static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
         for (slong i = 0; i < T[t].n && ok; i++) {
             if (T[t].f[i].e >= 0) continue;
             slong j = -1;
+            /* the hash rejects almost every unequal pair, so finding the
+             * distinct denominators of n summands is not n^2/2 full compares */
+            ulong h = rf_poly_hash(&T[t].f[i].p);
             for (slong d = 0; d < ndsrc; d++)
-                if (fmpz_mpoly_equal(Dsrc[d], &T[t].f[i].p, ctx)) { j = d; break; }
+                if (Dh[d] == h && fmpz_mpoly_equal(Dsrc[d], &T[t].f[i].p, ctx)) { j = d; break; }
             if (j < 0) {
                 if (ndsrc == cdsrc) {
                     slong nc = cdsrc ? 2 * cdsrc : 16;
                     fmpz_mpoly_struct** nd = realloc(Dsrc, (size_t)nc * sizeof(*nd));
                     if (!nd) { ok = 0; break; }
-                    Dsrc = nd; cdsrc = nc;
+                    Dsrc = nd;
+                    ulong* nh = realloc(Dh, (size_t)nc * sizeof(*nh));
+                    if (!nh) { ok = 0; break; }
+                    Dh = nh; cdsrc = nc;
                 }
+                Dh[ndsrc] = h;
                 Dsrc[ndsrc] = &T[t].f[i].p;
                 j = ndsrc++;
                 slong q = rv_push(&Dq);
@@ -988,7 +1057,7 @@ static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
             tn[t]++;
         }
     }
-    free(Dsrc);
+    free(Dsrc); free(Dh);
     slong nd = Dq.n;
 
     /* 4. gcd-free basis; S filters the coprime insertions when it is large */
@@ -999,14 +1068,19 @@ static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
     int small = 1;                      /* the shortcut pays for small factors only */
     for (slong j = 0; j < nd && small; j++)
         if (C->n == 1 && fmpz_poly_degree((fmpz_poly_struct*)RV(&Dq, j)) > 4) small = 0;
-    if (nd > 6 && C->n == 1 && small) {
+    int all_linear = 1;
+    for (slong j = 0; j < nd && all_linear; j++) all_linear = R.is_linear(RV(&Dq, j), &R);
+    if (all_linear) {
+        /* distinct primitive, normalised polynomials of degree 1 are
+         * irreducible and pairwise non-associate: coprime, nothing to compute */
+        coprime = 1;
+    } else if (nd > 6 && C->n == 1 && small) {
         /* One variable: the D_j are squarefree and distinct, so they are
          * pairwise coprime exactly when their product is squarefree -- one gcd
          * with the derivative instead of a gcd per insertion. */
         fmpz_poly_t Pp, Pd, G;
         fmpz_poly_init(Pp); fmpz_poly_init(Pd); fmpz_poly_init(G);
-        fmpz_poly_one(Pp);
-        for (slong j = 0; j < nd; j++) fmpz_poly_mul(Pp, Pp, (fmpz_poly_struct*)RV(&Dq, j));
+        ok = ru_tree_product(Pp, &Dq, NULL, nd);
         fmpz_poly_derivative(Pd, Pp);
         fmpz_poly_gcd(G, Pp, Pd);
         coprime = fmpz_poly_length(G) <= 1;
@@ -1226,11 +1300,23 @@ static int rf_sum(Rf* out, Rf* T, slong nt, RfCtx* C) {
             EM[i] = M[b];
         }
         int maybe = ok && !R.is_const(N, &R);
-        if (maybe) {
+        int lin = maybe && C->n == 1;
+        for (slong i = 0; i < E.n && lin; i++) lin = R.is_linear(RV(&E, i), &R);
+        if (lin) {
+            /* one variable, every element a x + b: something cancels exactly
+             * when N vanishes at some -b/a -- an evaluation per element, not a
+             * product of all of them and a gcd */
+            int hit = 0;
+            for (slong i = 0; i < E.n && !hit; i++) hit = ru_linear_divides(RUPc(N), RUPc(RV(&E, i)));
+            maybe = hit;
+        } else if (maybe) {
             /* one gcd with the squarefree denominator decides "nothing cancels" */
-            R.one(tmp, &R);
-            for (slong i = 0; i < E.n; i++) R.mul(tmp, tmp, RV(&E, i), &R);
-            if (!R.gcd(cof, N, tmp, &R)) { C->fail = 1; ok = 0; }
+            if (C->n == 1) ok = ru_tree_product(RUP(tmp), &E, NULL, E.n);
+            else {
+                R.one(tmp, &R);
+                for (slong i = 0; i < E.n; i++) R.mul(tmp, tmp, RV(&E, i), &R);
+            }
+            if (ok && !R.gcd(cof, N, tmp, &R)) { C->fail = 1; ok = 0; }
             maybe = ok && !R.is_const(cof, &R);
         }
         for (slong i = 0; i < E.n && ok && maybe; i++) {
@@ -1379,12 +1465,14 @@ static int rf_from_plus(const Expr* e, Rf* R, RfCtx* C) {
     if (!T) return 0;
     int ok = 1, poly = 1;
     slong done = 0;
+    C->nest++;                  /* a sum met inside a summand is an inner sum */
     for (slong t = 0; t < nt && ok; t++) {
         rf_init(&T[t]);
         done = t + 1;
         ok = rf_from_expr(e->data.function.args[t], &T[t], C);
         if (ok && !rf_is_poly(&T[t])) poly = 0;
     }
+    C->nest--;
     Rf S; rf_init(&S);
     if (ok) ok = poly ? rf_poly_sum(&S, T, nt, C) : rf_sum(&S, T, nt, C);
     if (ok) ok = rf_mul_into(R, &S, C);
