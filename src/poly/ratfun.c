@@ -68,6 +68,7 @@
 #include <flint/gr_poly.h>
 
 #include "eval.h"
+#include "symtab.h"
 #include "message.h"
 #include "print.h"
 #include "sym_names.h"
@@ -98,6 +99,7 @@ typedef struct {
     long splits;            /* factors split by a common gcd (rf_single)     */
     int inherit_flip;       /* rf_push marks the pushed factor flipped        */
     int nest;               /* sums being converted around this one (0: top) */
+    int normalised;         /* rf_push: p is already a stored (normalised) factor */
 } RfCtx;
 
 static int rf_push_ptr(const Expr*** v, size_t* n, size_t* cap, const Expr* e) {
@@ -372,7 +374,10 @@ static int rf_push(Rf* R, fmpz_mpoly_t p, slong e, RfCtx* C) {
         if (!ok) C->fail = 1;
         return ok;
     }
-    rf_normalise(p, g, ctx);
+    /* a factor moved from another Rf is primitive with a positive leading
+     * coefficient already (rf_push is the only place a factor is stored) */
+    if (C->normalised) fmpz_one(g);
+    else rf_normalise(p, g, ctx);
     int flip = fmpz_sgn(g) < 0 || C->inherit_flip;
     if (!fmpz_is_one(g)) rf_mul_fmpz_pow(R->c, g, e);
     fmpz_clear(g);
@@ -418,10 +423,12 @@ static int rf_mul_into(Rf* R, Rf* S, RfCtx* C) {
     if (R->n == 0) R->reduced = S->reduced;
     else if (S->n != 0) R->reduced = 0;
     fmpq_mul(R->c, R->c, S->c);
+    C->normalised = 1;
     for (slong i = 0; i < S->n && ok; i++) {
         C->inherit_flip = S->f[i].flip;
         ok = rf_push(R, &S->f[i].p, S->f[i].e, C);
     }
+    C->normalised = 0;
     C->inherit_flip = 0;
     rf_clear(S, C);
     rf_init(S);
@@ -463,6 +470,20 @@ static void rf_expand_side(fmpz_mpoly_t out, const Rf* R, int den, const RfCtx* 
     fmpz_mpoly_clear(t, C->ctx);
 }
 
+/* rf_expand_side in one variable, dense. */
+static void rf_expand_side_u(fmpz_poly_t out, const Rf* R, int den, const RfCtx* C) {
+    fmpz_poly_one(out);
+    fmpz_poly_t t; fmpz_poly_init(t);
+    for (slong i = 0; i < R->n; i++) {
+        slong e = den ? -R->f[i].e : R->f[i].e;
+        if (e <= 0) continue;
+        fmpz_mpoly_get_fmpz_poly(t, &R->f[i].p, 0, C->ctx);
+        if (e > 1) fmpz_poly_pow(t, t, (ulong)e);
+        fmpz_poly_mul(out, out, t);
+    }
+    fmpz_poly_clear(t);
+}
+
 static int rf_push_gen(Rf* R, slong v, slong e, RfCtx* C) {
     fmpz_mpoly_t g; fmpz_mpoly_init(g, C->ctx);
     fmpz_mpoly_gen(g, v, C->ctx);
@@ -482,6 +503,15 @@ static int rf_split_den_monomials(Rf* R, RfCtx* C) {
     int ok = 1;
     for (slong i = 0; i < R->n && ok; i++) {
         if (R->f[i].e >= 0 || rf_is_mono(&R->f[i].p)) continue;
+        /* a constant term (the last one, in lex order) rules out a monomial
+         * content without computing it */
+        {
+            const fmpz_mpoly_struct* f = &R->f[i].p;
+            fmpz_mpoly_get_term_exp_ui(ex, f, f->length - 1, ctx);
+            int has_const = 1;
+            for (slong v = 0; v < nv && has_const; v++) if (ex[v]) has_const = 0;
+            if (has_const) continue;
+        }
         fmpz_mpoly_term_content(m, &R->f[i].p, ctx);
         if (fmpz_mpoly_is_fmpz(m, ctx)) continue;
         fmpz_mpoly_get_term_exp_ui(ex, m, 0, ctx);
@@ -820,6 +850,18 @@ static int rf_den_squarefree(Rf* R, RfCtx* C) {
     for (slong i = R->n - 1; i >= 0 && ok; i--) {
         if (R->f[i].e >= 0 || rf_is_mono(&R->f[i].p)) continue;
         if (fmpz_mpoly_total_degree_si(&R->f[i].p, ctx) < 2) continue;
+        if (C->n == 1) {
+            /* one variable: gcd(p, p') = 1 settles the usual "already
+             * squarefree" case without the factorisation machinery */
+            fmpz_poly_t a, da, g;
+            fmpz_poly_init(a); fmpz_poly_init(da); fmpz_poly_init(g);
+            fmpz_mpoly_get_fmpz_poly(a, &R->f[i].p, 0, ctx);
+            fmpz_poly_derivative(da, a);
+            fmpz_poly_gcd(g, a, da);
+            int sqf = fmpz_poly_degree(g) < 1;
+            fmpz_poly_clear(a); fmpz_poly_clear(da); fmpz_poly_clear(g);
+            if (sqf) continue;
+        }
         fmpz_mpoly_factor_t sq;
         fmpz_mpoly_factor_init(sq, ctx);
         if (!fmpz_mpoly_factor_squarefree(sq, &R->f[i].p, ctx)) {
@@ -896,15 +938,45 @@ static int rf_sum_one_den(Rf* out, Rf* T, slong nt, slong td, const fmpz_t Lc, R
     fmpz_mpoly_t N, D, P;
     fmpz_mpoly_init(N, ctx); fmpz_mpoly_init(D, ctx); fmpz_mpoly_init(P, ctx);
     fmpz_t k; fmpz_init(k);
+    if (C->n == 1) {
+        /* one variable: the same on dense polynomials, which is several times
+         * cheaper per coefficient than the sparse multivariate type (each
+         * level of a continued fraction is one such sum) */
+        fmpz_poly_t Nu, Du, Pu;
+        fmpz_poly_init(Nu); fmpz_poly_init(Du); fmpz_poly_init(Pu);
+        rf_expand_side_u(Du, &T[td], 1, C);
+        for (slong t = 0; t < nt; t++) {
+            if (t == td || fmpq_is_zero(T[t].c)) continue;
+            fmpz_divexact(k, Lc, fmpq_denref(T[t].c));
+            fmpz_mul(k, k, fmpq_numref(T[t].c));
+            rf_expand_side_u(Pu, &T[t], 0, C);
+            fmpz_poly_scalar_addmul_fmpz(Nu, Pu, k);
+        }
+        fmpz_poly_mul(Nu, Nu, Du);
+        fmpz_divexact(k, Lc, fmpq_denref(T[td].c));
+        fmpz_mul(k, k, fmpq_numref(T[td].c));
+        rf_expand_side_u(Pu, &T[td], 0, C);
+        fmpz_poly_scalar_addmul_fmpz(Nu, Pu, k);
+        fmpz_mpoly_set_fmpz_poly(N, Nu, 0, ctx);
+        fmpz_poly_clear(Nu); fmpz_poly_clear(Du); fmpz_poly_clear(Pu);
+    } else {
     rf_expand_side(D, &T[td], 1, C);
+    /* N = (sum of the polynomial terms) D + num(td): the other terms are all
+     * polynomials, so they are added first and multiplied by D once */
     for (slong t = 0; t < nt; t++) {
-        if (fmpq_is_zero(T[t].c)) continue;
+        if (t == td || fmpq_is_zero(T[t].c)) continue;
         fmpz_divexact(k, Lc, fmpq_denref(T[t].c));
         fmpz_mul(k, k, fmpq_numref(T[t].c));
         rf_expand_side(P, &T[t], 0, C);
-        if (t != td) fmpz_mpoly_mul(P, P, D, ctx);
         fmpz_mpoly_scalar_mul_fmpz(P, P, k, ctx);
         fmpz_mpoly_add(N, N, P, ctx);
+    }
+    fmpz_mpoly_mul(N, N, D, ctx);
+    fmpz_divexact(k, Lc, fmpq_denref(T[td].c));
+    fmpz_mul(k, k, fmpq_numref(T[td].c));
+    rf_expand_side(P, &T[td], 0, C);
+    fmpz_mpoly_scalar_mul_fmpz(P, P, k, ctx);
+    fmpz_mpoly_add(N, N, P, ctx);
     }
     fmpq_one(out->c);
     fmpq_div_fmpz(out->c, out->c, Lc);
@@ -1636,6 +1708,116 @@ static Expr* rf_to_expr_raw(const Rf* R, const RfCtx* C, Expr* extra) {
     return r;
 }
 
+/* ---- the factored answer built canonical, without an evaluation ----------
+ *
+ * rf_to_expr_raw builds the answer and evaluates it, and the evaluation was a
+ * third of every call (91 of 245 us for a depth-32 continued fraction, 156 of
+ * 475 us for 50 summands): Plus and Times re-collect and re-sort terms the
+ * engine already holds distinct, and every node is visited again.  The pieces
+ * are canonical by construction -- distinct monomials, primitive factors with
+ * their generators split out -- so only the order is left to decide, and that
+ * is the order Plus and Times would give them (expr_orderless_sort, the sort
+ * they use).  Each node is then certified a fixed point, as builtin_plus and
+ * builtin_times certify theirs, so the evaluator does not re-run it.
+ *
+ * Declines (the evaluated path stays) when evaluation could do more than sort:
+ * an E^u generator (g^k is E^(k u)), an atom that is itself a power, an atom
+ * that is not a fixed point, or any rule on Plus, Times or Power.
+ * MATHILDA_RATFUN_DIRECT_CHECK=1 compares every answer with the evaluated one. */
+static int rf_direct_ok(const RfCtx* C) {
+    if (C->gidx >= 0 || symtab_up_value_count != 0) return 0;
+    const char* heads[] = { SYM_Plus, SYM_Times, SYM_Power };
+    for (int i = 0; i < 3; i++) {
+        SymbolDef* d = symtab_get_def(heads[i]);
+        if (!d || d->down_values || d->sub_values || d->own_values) return 0;
+    }
+    for (size_t v = 0; v < C->n; v++) {
+        const Expr* a = C->atom[v];
+        if (rf_head_is(a, SYM_Power) || rf_head_is(a, SYM_Times) || rf_head_is(a, SYM_Plus))
+            return 0;
+        if (!eval_node_reusable(a)) return 0;
+    }
+    return 1;
+}
+
+/* A fresh node, certified: its arguments are certified or atoms. */
+static Expr* rf_certified(Expr* e) { eval_mark_fixed_point(e); return e; }
+
+static Expr* rf_number_expr(const fmpq_t q) {
+    Expr* e = fb_fmpq_to_expr(q);
+    if (e->type == EXPR_FUNCTION) eval_mark_fixed_point(e);     /* Rational[p, q] */
+    return e;
+}
+
+/* p (sign `neg`) as a canonical Plus of canonical monomials. */
+static Expr* rf_poly_direct(const fmpz_mpoly_t p, int neg, const RfCtx* C) {
+    slong len = p->length;
+    if (len == 0) return expr_new_integer(0);
+    slong nv = (slong)C->n;
+    ulong* ex = malloc((size_t)nv * sizeof(ulong));
+    Expr** terms = malloc((size_t)len * sizeof(Expr*));
+    Expr** fs = malloc((size_t)(nv + 1) * sizeof(Expr*));
+    if (!ex || !terms || !fs) { free(ex); free(terms); free(fs); return NULL; }
+    fmpz_t cf; fmpz_init(cf);
+    for (slong i = 0; i < len; i++) {
+        fmpz_mpoly_get_term_exp_ui(ex, p, i, C->ctx);
+        if (neg) fmpz_neg(cf, p->coeffs + i); else fmpz_set(cf, p->coeffs + i);
+        size_t nf = 0;
+        int lead = !fmpz_is_one(cf);
+        if (lead) fs[nf++] = rf_fmpz_to_expr(cf);
+        for (slong v = 0; v < nv; v++) {
+            if (!ex[v]) continue;
+            Expr* a = rf_atom_expr(C, v);
+            fs[nf++] = ex[v] == 1 ? a
+                : rf_certified(expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ a, expr_new_integer((int64_t)ex[v]) }, 2));
+        }
+        /* the variables are distinct, so sorting them is all Times would do */
+        expr_orderless_sort(fs + lead, nf - (size_t)lead);
+        if (nf == 0) terms[i] = expr_new_integer(1);
+        else if (nf == 1) terms[i] = fs[0];
+        else terms[i] = rf_certified(expr_new_function(expr_new_symbol(SYM_Times), fs, nf));
+    }
+    fmpz_clear(cf);
+    Expr* r;
+    if (len == 1) r = terms[0];
+    else {
+        expr_orderless_sort(terms, (size_t)len);    /* distinct monomials */
+        r = rf_certified(expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)len));
+    }
+    free(ex); free(terms); free(fs);
+    return r;
+}
+
+/* The factored answer c * prod f_i^e_i, canonical and certified. */
+static Expr* rf_to_expr_direct(const Rf* R, const RfCtx* C) {
+    if (fmpq_is_zero(R->c)) return expr_new_integer(0);
+    slong absorb = rf_absorb_slot(R);
+    Expr** a = malloc((size_t)(R->n + 1) * sizeof(Expr*));
+    if (!a) return NULL;
+    size_t na = 0;
+    fmpq_t c; fmpq_init(c); fmpq_set(c, R->c);
+    if (absorb >= 0) fmpq_neg(c, c);
+    int lead = !fmpq_is_one(c);
+    if (lead) a[na++] = rf_number_expr(c);
+    fmpq_clear(c);
+    for (slong i = 0; i < R->n; i++) {
+        /* the absorbed -1 is distributed over that factor's terms, as Times
+         * does with -1 (1 + x) */
+        Expr* b = rf_poly_direct(&R->f[i].p, i == absorb, C);
+        if (!b) { for (size_t j = 0; j < na; j++) expr_free(a[j]); free(a); return NULL; }
+        a[na++] = R->f[i].e == 1 ? b
+            : rf_certified(expr_new_function(expr_new_symbol(SYM_Power),
+                  (Expr*[]){ b, expr_new_integer((int64_t)R->f[i].e) }, 2));
+    }
+    expr_orderless_sort(a + lead, na - (size_t)lead);
+    Expr* r = na == 0 ? expr_new_integer(1)
+            : na == 1 ? a[0]
+            : rf_certified(expr_new_function(expr_new_symbol(SYM_Times), a, na));
+    free(a);
+    return r;
+}
+
 int ratfun_factored_form(void) { return rf_factored_form(); }
 
 /* Classical form: (p * num) / (q * den), both sides expanded. */
@@ -1674,7 +1856,20 @@ static Expr* rf_to_expr_expanded(const Rf* R, const RfCtx* C) {
 
 static Expr* rf_to_expr(const Rf* R, const RfCtx* C) {
     if (!rf_factored_form()) return rf_to_expr_expanded(R, C);
-    return eval_and_free(rf_to_expr_raw(R, C, NULL));
+    static int check = -1;
+    if (check < 0) check = getenv("MATHILDA_RATFUN_DIRECT_CHECK") ? 1 : 0;
+    Expr* d = rf_direct_ok(C) ? rf_to_expr_direct(R, C) : NULL;
+    if (d && !check) return d;
+    Expr* r = eval_and_free(rf_to_expr_raw(R, C, NULL));
+    if (d) {
+        if (!expr_eq(d, r)) {
+            char* sd = expr_to_string(d); char* sr = expr_to_string(r);
+            fprintf(stderr, "RATFUN_DIRECT_MISMATCH direct=%s evaluated=%s\n", sd, sr);
+            free(sd); free(sr);
+        }
+        expr_free(d);
+    }
+    return r;
 }
 
 /* ------------------------------------------------------------------ */

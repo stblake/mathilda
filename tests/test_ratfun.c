@@ -81,6 +81,26 @@ void test_regressions(void) {
                 "(2 x)/((1 + 3 x) (-5 - 5 x + x^2)^2)");
 }
 
+/* The v0.6074-75 fast paths: the inner sums of a continued fraction skip the
+ * squarefree split, linear denominators skip the coprimality and cancellation
+ * gcds, and the factored answer is built canonical without an evaluation (an
+ * answer equal to its own re-evaluation, and to the evaluated build under
+ * MATHILDA_RATFUN_DIRECT_CHECK).  The depth-3 denominator's form is not pinned:
+ * a reference splits it against the deeper 1 + x as (1 + x)(3 + 2 x + x^2). */
+void test_fast_paths(void) {
+    assert_true("t = Together[Nest[x + 1/(1 + #) &, x, 3]]; "
+                "Denominator[t] === 3 + 5 x + 3 x^2 + x^3 || "
+                "Denominator[t] === (1 + x) (3 + 2 x + x^2)");
+    assert_true("t = Together[Nest[x + 1/(1 + #) &, x, 24]]; "
+                "(t - Nest[x + 1/(1 + #) &, x, 24] /. x -> 7/3) === 0 && "
+                "Exponent[Denominator[t], x] == 24");
+    assert_form("Together[Sum[1/(x - i), {i, 1, 4}] - 1/(x - 4)]",
+                "(11 - 12 x + 3 x^2)/((-3 + x) (-2 + x) (-1 + x))");
+    assert_form("Together[x/(x - 1) - 1/(x - 1) + 1/(x + 2)]", "(3 + x)/(2 + x)");
+    assert_true("t = Together[Sum[(i^2 + 1)/(x - i), {i, 1, 9}]]; t === ToExpression[ToString[t, InputForm]]");
+    assert_true("t = Together[a/(x + y) + b/(x - y) + 3/(2 x + 1)]; t === ToExpression[ToString[t, InputForm]]");
+}
+
 void test_apart_forms(void) {
     assert_form("Apart[1/((x + a) (x + b)), x]", "1/((-a + b) (a + x)) + 1/((a - b) (b + x))");
     assert_form("Apart[x^3/(x - a), x]", "a^2 + a x + x^2 + a^3/(-a + x)");
@@ -169,6 +189,7 @@ int main(void) {
     TEST(test_together_forms);
     TEST(test_cancel_forms);
     TEST(test_regressions);
+    TEST(test_fast_paths);
     TEST(test_apart_forms);
     TEST(test_modulus);
     TEST(test_options);
