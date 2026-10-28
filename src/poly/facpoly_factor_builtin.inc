@@ -393,6 +393,7 @@ static Expr* factor_flint_side(Expr* p) {
 static Expr factor_lrgexp_sentinel;
 #define FACTOR_LRGEXP (&factor_lrgexp_sentinel)
 
+#ifdef USE_FLINT     /* its one caller is the FLINT fast entry */
 /* 1 when `e` is a polynomial over Q in plain symbols: numbers (Integer,
  * BigInt, Rational), symbols that are not numeric constants, and Plus /
  * Times / nonnegative integer powers of those.  2 when it is, except that
@@ -434,6 +435,7 @@ static int factor_plain_poly(const Expr* e) {
             return 0;
     }
 }
+#endif
 
 /* Any variable raised to FACTOR_MAX_EXPONENT or more, anywhere in `e`. */
 static bool factor_has_large_exponent(const Expr* e) {
