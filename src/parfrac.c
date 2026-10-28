@@ -14,6 +14,7 @@
 #include "options.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "ratfun.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -50,6 +51,37 @@ static bool apart_has_symbolic_radical(const Expr* e) {
 
 Expr* builtin_apart(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Modulus -> p: partial fractions over GF(p) (one variable). */
+    {
+        mpz_t p; mpz_init(p);
+        Expr* stripped = NULL;
+        int mr = ratfun_modulus_option(res, SYM_Apart, p, &stripped);
+        Expr* out = NULL;
+        if (mr == 1) {
+            const Expr* e0 = res->data.function.args[0];
+            const Expr* v = NULL;
+            if (res->data.function.arg_count >= 3 || (res->data.function.arg_count == 2 &&
+                res->data.function.args[1]->type == EXPR_SYMBOL))
+                v = res->data.function.args[1];
+            if (v && v->type == EXPR_SYMBOL) out = ratfun_apart_mod(e0, v, p);
+            else if (!v) {
+                size_t vc = 0, vcap = 16;
+                Expr** vs = malloc(sizeof(Expr*) * vcap);
+                collect_variables((Expr*)e0, &vs, &vc, &vcap);
+                if (vc == 1) out = ratfun_apart_mod(e0, vs[0], p);
+                for (size_t i = 0; i < vc; i++) expr_free(vs[i]);
+                free(vs);
+            }
+        }
+        mpz_clear(p);
+        if (mr != 0) return out;
+        if (stripped) {
+            out = builtin_apart(stripped);
+            expr_free(stripped);
+            return out;
+        }
+    }
 
     /* Strip a trailing Extension -> α option, if any.  When present,
      * the option is propagated to the Factor[D, ...] call inside apart_impl
@@ -137,6 +169,37 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             Expr* ret = eval_and_free(expr_new_function(expr_copy(expr->data.function.head), args, expr->data.function.arg_count));
             free(args);
             return ret;
+        }
+    }
+
+    /* Factored rational-function engine (src/poly/ratfun.c): one conversion,
+     * partial fractions natively over Q or Q(params).  Declines (NULL) on
+     * algebraic coefficients, radicals and everything else outside
+     * Q(vars, kernels); those keep the path below.  MATHILDA_RATFUN=off
+     * bypasses it. */
+    if (!apart_alpha) {
+        static int en = -1;
+        if (en < 0) { const char* ev = getenv("MATHILDA_RATFUN"); en = !(ev && strcmp(ev, "off") == 0); }
+        Expr* v = NULL;
+        if (en && apart_argc == 2) v = expr_copy(res->data.function.args[1]);
+        else if (en) {
+            /* the variable the classical path picks: the last in canonical order */
+            size_t vc = 0, vcap = 16;
+            Expr** vs = malloc(sizeof(Expr*) * vcap);
+            collect_variables(expr, &vs, &vc, &vcap);
+            if (vc > 0) {
+                qsort(vs, vc, sizeof(Expr*), compare_expr_ptrs);
+                v = expr_copy(vs[vc - 1]);
+            }
+            for (size_t i = 0; i < vc; i++) expr_free(vs[i]);
+            free(vs);
+        }
+        if (v) {
+            Expr* rf = ratfun_apart(expr, v);
+            /* one variable over Q(i) / one number field */
+            if (!rf && v->type == EXPR_SYMBOL) rf = flint_field_apart(expr, v);
+            expr_free(v);
+            if (rf) return rf;
         }
     }
 

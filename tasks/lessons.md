@@ -1,5 +1,41 @@
 # Lessons learned
 
+## Together / Cancel / Apart engine: invariants, oracles, process hygiene (2026-10-28)
+
+- **An invariant enforced at one entry point is only as good as the paths that
+  bypass it.** `rf_push` normalises and merges every factor, and the code assumed
+  every monomial factor was a single generator. Two bugs were paths that skipped it:
+  the monomial split swapped the quotient into place, so `x^3 (2x-3)` sat next to
+  an unmerged `(3-2x)` and the single-term pass looped; and a split numerator left
+  `x^3` whole, which the mono-mono coprimality shortcut then treated as coprime to
+  `x`. Route every construction through the normalising push.
+- **The "old output" is not one engine.** Byte-comparing the new engine against
+  v0.6071 found differences that were the OLD system disagreeing with itself:
+  ratcanon expanded and sign-flipped Cancel terms, while the classical path
+  returned them untouched. Leaving an uncancelled term alone is the principled rule. Pick the
+  principled rule, then check it against the full suite. Don't chase the byte
+  form of whichever legacy path happened to fire.
+- **A wrapper that passes results through must accept the representation it
+  hands out.** Rendering bare-Gaussian results as `Complex` also changed the
+  output of `rat_gaussian_field`, which maps `I -> AlgebraicNumber` and requires
+  `AlgebraicNumber` back. It declined silently, and Cancel fell to an UNREDUCED
+  classical answer. Thread a flag ("the input was bare") instead of changing a
+  shared renderer.
+- **A pinned abstention can turn into an improvement.** `gruntz_stress` expected
+  `Limit[E^(E^(E^(x + E^-x)))/E^(E^(E^x)), ...]` to stay unevaluated, and the new
+  engine computes it. Derive the value (here infinity, from
+  e^x (e^(e^-x) - 1) -> 1) before moving the case into the evaluated tests.
+- **`pkill -f` takes a regex.** `pkill -f "st.m"` matched every process with
+  "st" + one character + "m" in its command line. Kill by PID (`$!`, `pgrep -f`
+  with an anchored, escaped pattern), never by a short loose pattern.
+- **`script -q /dev/null cmd` returns 0 whatever cmd returns** on macOS. A suite
+  A/B that keys on rc saw "0 nonzero" on both sides. Diff the `^FAIL` lines and the
+  completion line instead.
+- **A seeded stress test must check that it generated what it meant to.**
+  `Sum[..., {RandomInteger[...]}]` stays unevaluated (Sum holds its iterator), so
+  the "random rational functions" were inert `Sum` objects and every check
+  compared garbage. Print a few generated inputs before trusting the loop.
+
 ## Factor review: field round trips and subagent claims (2026-10-27)
 
 - **Map a field element back with the generator the engine used, never an assumed

@@ -55,6 +55,7 @@
 #include <flint/fmpz_mod_mpoly_factor.h> /* Factor[..., Modulus -> p], any p */
 
 #include "flint_bridge_internal.h"  /* VarSet, FgRender, the fb_ surface */
+#include "flint_trager.h"           /* flint_factor_over_field (Apart over K) */
 
 /* Process-lifetime fmpq_mpoly context cache, keyed by variable count, for the
  * ORD_LEX order (the one the Together/Cancel/Expand/CoefficientRules bridges use).
@@ -2783,6 +2784,48 @@ typedef enum { ABSOP_GCD, ABSOP_DIVEXACT } AbsOp;
  * algebraic extension Q(s) defined by `minpoly`, with `gs` mapping input atoms
  * to images in s and `cb` building Expr coefficients from the result. For
  * ABSOP_DIVEXACT, returns NULL when b does not divide a exactly. */
+static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
+                          const fmpq_mpoly_t M, const fmpq_mpoly_ctx_struct* ctx,
+                          const Expr* mp, slong ngens, slong tau_idx, slong n);
+
+/* gcd in K[x] (K = Q(s), s an algebraic INTEGER: monic integral minimal
+ * polynomial) by the certified modular engine, A and B in Q[x, s] (ctx2:
+ * gen0 = x, gen1 = s).  The Euclidean gr_poly gcd over the number field is
+ * fraction-based and its coefficients explode with the degree (a degree-62
+ * gcd over Q(Sqrt[2]) took 4 s); this one does not.  0 on decline. */
+static int absfield_modular_gcd(gr_poly_t GG, const fmpq_mpoly_t A, const fmpq_mpoly_t B,
+                                const fmpq_mpoly_ctx_t ctx2, const fmpq_poly_t minpoly,
+                                gr_ctx_t nf) {
+    slong n = fmpq_poly_degree(minpoly);
+    if (n < 1 || !fmpz_is_one(fmpq_poly_denref(minpoly)) ||
+        !fmpz_is_one(fmpq_poly_numref(minpoly) + n)) return 0;
+    Expr** cs = malloc((size_t)(n + 1) * sizeof(Expr*));
+    if (!cs) return 0;
+    mpz_t z; mpz_init(z);
+    for (slong i = 0; i <= n; i++) {
+        fmpz_get_mpz(z, fmpq_poly_numref(minpoly) + i);
+        cs[i] = expr_from_mpz_local(z);
+    }
+    mpz_clear(z);
+    Expr* mp = expr_new_function(expr_new_symbol("List"), cs, (size_t)(n + 1));
+    free(cs);
+    fmpq_mpoly_t M, Ar, Br, G, q;
+    fmpq_mpoly_init(M, ctx2); fmpq_mpoly_init(Ar, ctx2); fmpq_mpoly_init(Br, ctx2);
+    fmpq_mpoly_init(G, ctx2); fmpq_mpoly_init(q, ctx2);
+    int ok = field_build_minpoly(M, mp, ctx2, 2, 1);
+    if (ok) {
+        fmpq_mpoly_divrem(q, Ar, A, M, ctx2);           /* reduce mod M(s) */
+        fmpq_mpoly_divrem(q, Br, B, M, ctx2);
+        ok = !fmpq_mpoly_is_zero(Ar, ctx2) && !fmpq_mpoly_is_zero(Br, ctx2) &&
+             fg_modular_gcd(G, Ar, Br, M, ctx2, mp, 1, 1, n) &&
+             mpoly_gen_to_grpoly(G, ctx2, minpoly, nf, GG);
+    }
+    fmpq_mpoly_clear(M, ctx2); fmpq_mpoly_clear(Ar, ctx2); fmpq_mpoly_clear(Br, ctx2);
+    fmpq_mpoly_clear(G, ctx2); fmpq_mpoly_clear(q, ctx2);
+    expr_free(mp);
+    return ok;
+}
+
 static Expr* absfield_op_core(const Expr* a, const Expr* b, const char* xname,
                               const fmpq_poly_t minpoly, const GenSpec* gs,
                               CoefBuilder cb, const void* cdata, AbsOp op) {
@@ -2806,7 +2849,9 @@ static Expr* absfield_op_core(const Expr* a, const Expr* b, const char* xname,
         mpoly_gen_to_grpoly(A, ctx2, minpoly, nf, GA) &&
         mpoly_gen_to_grpoly(B, ctx2, minpoly, nf, GB)) {
         if (op == ABSOP_GCD) {
-            if (gr_poly_gcd(GG, GA, GB, nf) == GR_SUCCESS)
+            int big = gr_poly_length(GA, nf) > 12 && gr_poly_length(GB, nf) > 12;
+            if ((big && absfield_modular_gcd(GG, A, B, ctx2, minpoly, nf)) ||
+                gr_poly_gcd(GG, GA, GB, nf) == GR_SUCCESS)
                 out = grpoly_to_expr(GG, nf, my_nf, xname, cb, cdata);
         } else {  /* ABSOP_DIVEXACT: a / b, only if the remainder vanishes */
             gr_poly_t R;
@@ -4641,14 +4686,29 @@ Expr* flint_rational_cancel(const Expr* e) {
  * On success sets theta and gaussian and collects the free polynomial generators
  * (the tower variables) into `gens` (caller varset_free's).  Returns 0 (and
  * leaves `gens` empty) otherwise. */
+/* The theta of a bare Gaussian input (built once, never freed). */
+static const Expr* imag_unit_theta(void) {
+    static Expr* imag = NULL;
+    if (!imag) imag = expr_new_function(expr_new_symbol("Complex"),
+                          (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+    return imag;
+}
+
 static int field_frac_candidate(const Expr* e, const Expr** theta, int* gaussian,
                                 VarSet* gens) {
     memset(gens, 0, sizeof *gens);
     if (field_kernels_disabled()) return 0;
     FieldScan fs; memset(&fs, 0, sizeof fs);
     field_scan(e, &fs);
+    if (!fs.conflict && !fs.have_alg && fs.have_complex) {
+        /* bare Gaussian coefficients: the field is Q(i), theta = I (built once,
+         * never freed) -- no AlgebraicNumber round trip through ReplaceAll */
+        fs.theta = imag_unit_theta();
+        fs.have_alg = 1;
+    }
     if (fs.conflict || !fs.have_alg) return 0;
-    int g = expr_is_imag_unit(fs.theta);
+    /* 2: bare Gaussian (rendered back as Complex), 1: AlgebraicNumber[I, ..] */
+    int g = expr_is_imag_unit(fs.theta) ? (fs.theta == imag_unit_theta() ? 2 : 1) : 0;
     if (fs.have_complex && !g) return 0;             /* unsupported compositum */
     collect_all_symbols(e, gens);
     if (getenv("MATHILDA_FIELD_DIAG"))
@@ -4714,10 +4774,12 @@ static int field_theta_minpoly(const Expr* theta, fmpq_poly_t out) {
 typedef struct {
     nf_t nf;
     gr_ctx_t gr;
+    fmpq_poly_t mp;      /* theta's minimal polynomial */
     slong n;             /* [K:Q] */
     const Expr* theta;
     int gaussian;
     const char* xname;   /* the single generator symbol name */
+    int bare;            /* Gaussian input written with Complex: render Complex */
     int ready;
 } KxCtx;
 
@@ -4735,13 +4797,17 @@ static int kx_ctx_init(KxCtx* c, const Expr* theta, int gaussian, const char* xn
      * double-free at clear time. */
     nf_init(c->nf, mp);
     gr_ctx_init_nf(c->gr, mp);
-    c->theta = theta; c->gaussian = gaussian; c->xname = xname; c->ready = 1;
+    fmpq_poly_init(c->mp);
+    fmpq_poly_set(c->mp, mp);
+    c->theta = theta; c->gaussian = gaussian != 0; c->bare = gaussian == 2;
+    c->xname = xname; c->ready = 1;
     fmpq_poly_clear(mp);
     return 1;
 }
 
 static void kx_ctx_clear(KxCtx* c) {
     if (!c->ready) return;
+    fmpq_poly_clear(c->mp);
     gr_ctx_clear(c->gr);
     nf_clear(c->nf);
     c->ready = 0;
@@ -4800,11 +4866,51 @@ static void kx_rf_clear(KxCtx* c, KxRf* r) {
     gr_poly_clear(r->den, c->gr);
 }
 
+/* p in K[x] -> Q[x, tau] (gen0 = x, gen1 = tau), theta -> tau. */
+static void kx_grpoly_to_mpoly(KxCtx* c, fmpq_mpoly_t out, const gr_poly_t p,
+                               const fmpq_mpoly_ctx_t ctx2) {
+    fmpq_mpoly_zero(out, ctx2);
+    nf_elem_t co; nf_elem_init(co, c->nf);
+    fmpq_poly_t q; fmpq_poly_init(q);
+    fmpq_t v; fmpq_init(v);
+    ulong ex[2];
+    for (slong i = 0; i < gr_poly_length(p, c->gr); i++) {
+        if (gr_poly_get_coeff_scalar((gr_ptr)co, p, i, c->gr) != GR_SUCCESS) continue;
+        nf_elem_get_fmpq_poly(q, co, c->nf);
+        for (slong j = 0; j <= fmpq_poly_degree(q); j++) {
+            fmpq_poly_get_coeff_fmpq(v, q, j);
+            if (fmpq_is_zero(v)) continue;
+            ex[0] = (ulong)i; ex[1] = (ulong)j;
+            fmpq_mpoly_set_coeff_fmpq_ui(out, v, ex, ctx2);
+        }
+    }
+    fmpq_clear(v); fmpq_poly_clear(q); nf_elem_clear(co, c->nf);
+}
+
+/* gcd in K[x]: the certified modular engine for large operands (the
+ * fraction-based Euclidean gcd over the number field explodes with the
+ * degree), the Euclidean one otherwise or on its decline. */
+static int kx_gcd(KxCtx* c, gr_poly_t g, const gr_poly_t a, const gr_poly_t b) {
+    if (gr_poly_length(a, c->gr) > 12 && gr_poly_length(b, c->gr) > 12) {
+        fmpq_mpoly_ctx_t ctx2;
+        fmpq_mpoly_ctx_init(ctx2, 2, ORD_LEX);
+        fmpq_mpoly_t A, B;
+        fmpq_mpoly_init(A, ctx2); fmpq_mpoly_init(B, ctx2);
+        kx_grpoly_to_mpoly(c, A, a, ctx2);
+        kx_grpoly_to_mpoly(c, B, b, ctx2);
+        int ok = absfield_modular_gcd(g, A, B, ctx2, c->mp, c->gr);
+        fmpq_mpoly_clear(A, ctx2); fmpq_mpoly_clear(B, ctx2);
+        fmpq_mpoly_ctx_clear(ctx2);
+        if (ok) return 1;
+    }
+    return gr_poly_gcd(g, a, b, c->gr) == GR_SUCCESS;
+}
+
 /* Reduce num/den to lowest terms with a monic denominator.  1 on success. */
 static int kx_rf_reduce(KxCtx* c, KxRf* r) {
     if (gr_poly_is_zero(r->den, c->gr) == T_TRUE) return 0;    /* division by zero */
     gr_poly_t g; gr_poly_init(g, c->gr);
-    int ok = (gr_poly_gcd(g, r->num, r->den, c->gr) == GR_SUCCESS);
+    int ok = kx_gcd(c, g, r->num, r->den);
     if (ok && gr_poly_length(g, c->gr) > 1) {                  /* non-constant gcd */
         gr_poly_t q; gr_poly_init(q, c->gr);
         ok = (gr_poly_divexact(q, r->num, g, c->gr) == GR_SUCCESS);
@@ -4832,47 +4938,62 @@ static int kx_rf_reduce(KxCtx* c, KxRf* r) {
     return 1;
 }
 
+/* The arithmetic below is LAZY: num/den are not reduced after each operation
+ * (a gcd and two exact divisions per add/multiply made a sum of n fractions
+ * cost n gcds of growing degree); the caller reduces once at the end with
+ * kx_rf_reduce.  Equal and unit denominators are added without cross
+ * multiplication, so a polynomial sum stays a polynomial. */
+
+static int kx_poly_is_one(KxCtx* c, const gr_poly_t p) {
+    return gr_poly_is_one(p, c->gr) == T_TRUE;
+}
+
 /* dst = a + b   (dst must be distinct from a and b). */
 static int kx_rf_add(KxCtx* c, KxRf* dst, const KxRf* a, const KxRf* b) {
-    gr_poly_t t1, t2; gr_poly_init(t1, c->gr); gr_poly_init(t2, c->gr);
-    int ok = (gr_poly_mul(t1, a->num, b->den, c->gr) == GR_SUCCESS) &&
+    int ok;
+    if (gr_poly_equal(a->den, b->den, c->gr) == T_TRUE) {
+        ok = (gr_poly_add(dst->num, a->num, b->num, c->gr) == GR_SUCCESS) &&
+             (gr_poly_set(dst->den, a->den, c->gr) == GR_SUCCESS);
+    } else if (kx_poly_is_one(c, b->den)) {
+        gr_poly_t t; gr_poly_init(t, c->gr);
+        ok = (gr_poly_mul(t, b->num, a->den, c->gr) == GR_SUCCESS) &&
+             (gr_poly_add(dst->num, a->num, t, c->gr) == GR_SUCCESS) &&
+             (gr_poly_set(dst->den, a->den, c->gr) == GR_SUCCESS);
+        gr_poly_clear(t, c->gr);
+    } else if (kx_poly_is_one(c, a->den)) {
+        gr_poly_t t; gr_poly_init(t, c->gr);
+        ok = (gr_poly_mul(t, a->num, b->den, c->gr) == GR_SUCCESS) &&
+             (gr_poly_add(dst->num, t, b->num, c->gr) == GR_SUCCESS) &&
+             (gr_poly_set(dst->den, b->den, c->gr) == GR_SUCCESS);
+        gr_poly_clear(t, c->gr);
+    } else {
+        gr_poly_t t1, t2; gr_poly_init(t1, c->gr); gr_poly_init(t2, c->gr);
+        ok = (gr_poly_mul(t1, a->num, b->den, c->gr) == GR_SUCCESS) &&
              (gr_poly_mul(t2, b->num, a->den, c->gr) == GR_SUCCESS) &&
              (gr_poly_add(dst->num, t1, t2, c->gr) == GR_SUCCESS) &&
              (gr_poly_mul(dst->den, a->den, b->den, c->gr) == GR_SUCCESS);
-    gr_poly_clear(t1, c->gr); gr_poly_clear(t2, c->gr);
-    return ok && kx_rf_reduce(c, dst);
+        gr_poly_clear(t1, c->gr); gr_poly_clear(t2, c->gr);
+    }
+    return ok;
 }
 
 /* dst = a * b   (dst must be distinct from a and b). */
 static int kx_rf_mul(KxCtx* c, KxRf* dst, const KxRf* a, const KxRf* b) {
-    int ok = (gr_poly_mul(dst->num, a->num, b->num, c->gr) == GR_SUCCESS) &&
-             (gr_poly_mul(dst->den, a->den, b->den, c->gr) == GR_SUCCESS);
-    return ok && kx_rf_reduce(c, dst);
+    return (gr_poly_mul(dst->num, a->num, b->num, c->gr) == GR_SUCCESS) &&
+           (gr_poly_mul(dst->den, a->den, b->den, c->gr) == GR_SUCCESS);
 }
 
-/* dst = base^e for any integer e.  1 on success. */
+/* dst = base^e for any integer e (binary powering).  1 on success. */
 static int kx_rf_pow(KxCtx* c, KxRf* dst, const KxRf* base, long e) {
-    KxRf b; kx_rf_init(c, &b);
-    int ok;
+    const gr_poly_struct* n = base->num;
+    const gr_poly_struct* d = base->den;
     if (e < 0) {
-        if (gr_poly_is_zero(base->num, c->gr) == T_TRUE) { kx_rf_clear(c, &b); return 0; }
-        ok = (gr_poly_set(b.num, base->den, c->gr) == GR_SUCCESS) &&
-             (gr_poly_set(b.den, base->num, c->gr) == GR_SUCCESS) &&
-             kx_rf_reduce(c, &b);
+        if (gr_poly_is_zero(base->num, c->gr) == T_TRUE) return 0;
+        n = base->den; d = base->num;
         e = -e;
-    } else {
-        ok = (gr_poly_set(b.num, base->num, c->gr) == GR_SUCCESS) &&
-             (gr_poly_set(b.den, base->den, c->gr) == GR_SUCCESS);
     }
-    ok = ok && (gr_poly_one(dst->num, c->gr) == GR_SUCCESS) &&
-               (gr_poly_one(dst->den, c->gr) == GR_SUCCESS);   /* dst = 1 */
-    KxRf tmp; kx_rf_init(c, &tmp);
-    for (long i = 0; i < e && ok; i++) {
-        ok = kx_rf_mul(c, &tmp, dst, &b);
-        if (ok) { gr_poly_swap(dst->num, tmp.num, c->gr); gr_poly_swap(dst->den, tmp.den, c->gr); }
-    }
-    kx_rf_clear(c, &tmp); kx_rf_clear(c, &b);
-    return ok;
+    return (gr_poly_pow_ui(dst->num, n, (ulong)e, c->gr) == GR_SUCCESS) &&
+           (gr_poly_pow_ui(dst->den, d, (ulong)e, c->gr) == GR_SUCCESS);
 }
 
 /* Evaluate `e` as an element of K(x).  1 on success, 0 (decline) on any head or
@@ -4938,7 +5059,21 @@ static Expr* kx_poly_to_expr(KxCtx* c, const gr_poly_t p) {
         if (gr_poly_get_coeff_scalar((gr_ptr)co, p, i, c->gr) != GR_SUCCESS) continue;
         if (nf_elem_is_zero(co, c->nf)) continue;
         nf_elem_get_fmpq_poly(coords, co, c->nf);
-        Expr* coeff = field_group_coeff(coords, c->n, c->theta);
+        Expr* coeff;
+        if (c->bare) {
+            /* a + b I as an ordinary Gaussian number */
+            fmpq_t a, b; fmpq_init(a); fmpq_init(b);
+            fmpq_poly_get_coeff_fmpq(a, coords, 0);
+            fmpq_poly_get_coeff_fmpq(b, coords, 1);
+            coeff = fmpq_is_zero(b) ? expr_from_fmpq_local(a)
+                : expr_new_function(expr_new_symbol("Plus"),
+                      (Expr*[]){ expr_from_fmpq_local(a),
+                                 expr_new_function(expr_new_symbol("Times"),
+                                     (Expr*[]){ expr_from_fmpq_local(b),
+                                                expr_new_function(expr_new_symbol("Complex"),
+                                                    (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2) }, 2) }, 2);
+            fmpq_clear(a); fmpq_clear(b);
+        } else coeff = field_group_coeff(coords, c->n, c->theta);
         Expr* term;
         if (i == 0) {
             term = coeff;
@@ -4964,6 +5099,48 @@ static Expr* kx_poly_to_expr(KxCtx* c, const gr_poly_t p) {
     return r;
 }
 
+/* Scale num/den (den monic) by one rational so every coordinate of both is an
+ * integer and they share no integer content -- the classical num/den form:
+ * (-20 + 29 x + ...)/(17 + ... + 49 x^5), not (-20/49 + ...)/(17/49 + ... + x^5). */
+static int kx_rf_integral(KxCtx* c, KxRf* r) {
+    fmpz_t L, g; fmpz_init(L); fmpz_init(g);
+    fmpz_one(L);
+    nf_elem_t co; nf_elem_init(co, c->nf);
+    fmpq_poly_t q; fmpq_poly_init(q);
+    const gr_poly_struct* side[2] = { r->num, r->den };
+    for (int pass = 0; pass < 2; pass++)
+        for (int k = 0; k < 2; k++)
+            for (slong i = 0; i < gr_poly_length(side[k], c->gr); i++) {
+                if (gr_poly_get_coeff_scalar((gr_ptr)co, side[k], i, c->gr) != GR_SUCCESS) continue;
+                nf_elem_get_fmpq_poly(q, co, c->nf);
+                if (pass == 0) fmpz_lcm(L, L, fmpq_poly_denref(q));
+                else {
+                    /* the coordinates times L are integers: their content */
+                    fmpz_t t; fmpz_init(t);
+                    for (slong j = 0; j <= fmpq_poly_degree(q); j++) {
+                        fmpz_divexact(t, L, fmpq_poly_denref(q));
+                        fmpz_mul(t, t, fmpq_poly_numref(q) + j);
+                        fmpz_gcd(g, g, t);
+                    }
+                    fmpz_clear(t);
+                }
+            }
+    int ok = 1;
+    if (!fmpz_is_zero(g) && !(fmpz_is_one(L) && fmpz_is_one(g))) {
+        fmpq_t s; fmpq_init(s);
+        fmpq_set_fmpz_frac(s, L, g);
+        gr_ptr sc; GR_TMP_INIT(sc, c->gr);
+        ok = gr_set_fmpq(sc, s, c->gr) == GR_SUCCESS &&
+             gr_poly_mul_scalar(r->num, r->num, sc, c->gr) == GR_SUCCESS &&
+             gr_poly_mul_scalar(r->den, r->den, sc, c->gr) == GR_SUCCESS;
+        GR_TMP_CLEAR(sc, c->gr);
+        fmpq_clear(s);
+    }
+    fmpq_poly_clear(q); nf_elem_clear(co, c->nf);
+    fmpz_clear(L); fmpz_clear(g);
+    return ok;
+}
+
 /* Shared core for the field Together/Cancel: reduce `e` to a single num/den over
  * K(x) natively and return num*den^-1 (evaluator-canonicalised).  NULL on any
  * decline (not a univariate single-field fraction, or a gr failure). */
@@ -4982,7 +5159,7 @@ static Expr* flint_field_reduce_core(const Expr* e) {
 
     KxRf rf; kx_rf_init(&c, &rf);
     Expr* out = NULL;
-    if (kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf)) {
+    if (kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf) && kx_rf_integral(&c, &rf)) {
         Expr* num = kx_poly_to_expr(&c, rf.num);
         Expr* den = kx_poly_to_expr(&c, rf.den);
         Expr* r;
@@ -5010,6 +5187,107 @@ Expr* flint_field_cancel(const Expr* e) {
      * a single fraction (no denominator inside a Plus), matching flint_rational_cancel. */
     if (e && denom_inside_plus(e)) return NULL;
     return flint_field_reduce_core(e);
+}
+
+/* Partial fractions in x over K = Q(theta), one variable (Gaussian or
+ * AlgebraicNumber coefficients): reduce in K(x), factor the denominator over K
+ * (the Trager engine, flint_trager.c), then the CRT split and P-adic digits in
+ * gr_poly over the number field.  NULL (decline) when the input is not a
+ * single-variable K(x) fraction, the denominator has no algebraic coefficient
+ * (it is factored over Q then: Apart[I/(x^2 + 1)] stays), or any step fails. */
+Expr* flint_field_apart(const Expr* e, const Expr* var) {
+    if (!e || !var || var->type != EXPR_SYMBOL || !expr_has_denominator(e)) return NULL;
+    const Expr* theta = NULL; int gaussian = 0;
+    VarSet gens;
+    if (!field_frac_candidate(e, &theta, &gaussian, &gens)) { varset_free(&gens); return NULL; }
+    int one = gens.count == 1 && strcmp(gens.names[0], var->data.symbol.name) == 0;
+    varset_free(&gens);
+    if (!one) return NULL;
+    const char* xname = var->data.symbol.name;
+    KxCtx c;
+    if (!kx_ctx_init(&c, theta, gaussian, xname)) return NULL;
+    gr_ctx_struct* K = c.gr;
+    KxRf rf; kx_rf_init(&c, &rf);
+    Expr* out = NULL;
+    Expr* fl = NULL;
+    size_t nf = 0;
+    gr_poly_struct* P = NULL; gr_poly_struct* Pk = NULL; slong* ks = NULL;
+    gr_poly_t N, Qp, R, mi, g, s, t, B, cur, quo, rem, D;
+    gr_poly_init(N, K); gr_poly_init(Qp, K); gr_poly_init(R, K); gr_poly_init(mi, K);
+    gr_poly_init(g, K); gr_poly_init(s, K); gr_poly_init(t, K); gr_poly_init(B, K);
+    gr_poly_init(cur, K); gr_poly_init(quo, K); gr_poly_init(rem, K); gr_poly_init(D, K);
+    int ok = kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf) && gr_poly_length(rf.den, K) > 1;
+    if (ok) {
+        Expr* dexpr = eval_and_free(kx_poly_to_expr(&c, rf.den));
+        fl = flint_factor_over_field(dexpr, NULL, 0);
+        expr_free(dexpr);
+        ok = fl && fl->type == EXPR_FUNCTION && fl->data.function.arg_count >= 2;
+    }
+    if (ok) {
+        /* den = c0 * prod f_i^e_i: N' = num / c0, D' = prod f_i^e_i */
+        nf = fl->data.function.arg_count - 1;
+        P = malloc(nf * sizeof(gr_poly_struct)); Pk = malloc(nf * sizeof(gr_poly_struct));
+        ks = malloc(nf * sizeof(slong));
+        nf_elem_t c0; nf_elem_init(c0, c.nf);
+        ok = P && Pk && ks && kx_scalar(&c, fl->data.function.args[0], c0) && !nf_elem_is_zero(c0, c.nf);
+        if (ok) {
+            nf_elem_inv(c0, c0, c.nf);
+            ok = gr_poly_mul_scalar(N, rf.num, (gr_srcptr)c0, K) == GR_SUCCESS &&
+                 gr_poly_one(D, K) == GR_SUCCESS;
+        }
+        nf_elem_clear(c0, c.nf);
+        for (size_t i = 0; i < nf; i++) { gr_poly_init(P + i, K); gr_poly_init(Pk + i, K); }
+        for (size_t i = 0; i < nf && ok; i++) {
+            const Expr* pr = fl->data.function.args[i + 1];
+            ok = pr->type == EXPR_FUNCTION && pr->data.function.arg_count == 2 &&
+                 pr->data.function.args[1]->type == EXPR_INTEGER;
+            if (!ok) break;
+            ks[i] = (slong)pr->data.function.args[1]->data.integer;
+            KxRf f; kx_rf_init(&c, &f);
+            ok = kx_eval(&c, pr->data.function.args[0], &f) && kx_poly_is_one(&c, f.den) &&
+                 gr_poly_set(P + i, f.num, K) == GR_SUCCESS &&
+                 gr_poly_pow_ui(Pk + i, P + i, (ulong)ks[i], K) == GR_SUCCESS &&
+                 gr_poly_mul(D, D, Pk + i, K) == GR_SUCCESS;
+            kx_rf_clear(&c, &f);
+        }
+        ok = ok && gr_poly_divrem(Qp, R, N, D, K) == GR_SUCCESS;
+    }
+    size_t cap = 16, nt = 0;
+    Expr** terms = malloc(cap * sizeof(Expr*));
+    if (ok && gr_poly_length(Qp, K) > 0) terms[nt++] = kx_poly_to_expr(&c, Qp);
+    for (size_t i = 0; i < nf && ok; i++) {
+        int st = GR_SUCCESS;
+        st |= gr_poly_div(mi, D, Pk + i, K);
+        st |= MATHILDA_GR_POLY_XGCD(g, s, t, Pk + i, mi, K);    /* s Pk + t mi = 1 */
+        st |= gr_poly_mul(B, R, t, K);
+        st |= gr_poly_rem(B, B, Pk + i, K);
+        st |= gr_poly_set(cur, B, K);
+        if (st != GR_SUCCESS) { ok = 0; break; }
+        for (slong d = 0; d < ks[i] && ok; d++) {
+            if (gr_poly_divrem(quo, rem, cur, P + i, K) != GR_SUCCESS) { ok = 0; break; }
+            gr_poly_swap(cur, quo, K);
+            if (gr_poly_length(rem, K) == 0) continue;
+            Expr* den = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(fl->data.function.args[i + 1]->data.function.args[0]),
+                           expr_new_integer(-(int64_t)(ks[i] - d)) }, 2);
+            if (nt == cap) { cap *= 2; terms = realloc(terms, cap * sizeof(Expr*)); }
+            terms[nt++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ kx_poly_to_expr(&c, rem), den }, 2);
+        }
+    }
+    if (ok) out = nt == 0 ? expr_new_integer(0)
+                : eval_and_free(expr_new_function(expr_new_symbol("Plus"), terms, nt));
+    else for (size_t i = 0; i < nt; i++) expr_free(terms[i]);
+    free(terms);
+    if (P) for (size_t i = 0; i < nf; i++) { gr_poly_clear(P + i, K); gr_poly_clear(Pk + i, K); }
+    free(P); free(Pk); free(ks);
+    gr_poly_clear(N, K); gr_poly_clear(Qp, K); gr_poly_clear(R, K); gr_poly_clear(mi, K);
+    gr_poly_clear(g, K); gr_poly_clear(s, K); gr_poly_clear(t, K); gr_poly_clear(B, K);
+    gr_poly_clear(cur, K); gr_poly_clear(quo, K); gr_poly_clear(rem, K); gr_poly_clear(D, K);
+    if (fl) expr_free(fl);
+    kx_rf_clear(&c, &rf);
+    kx_ctx_clear(&c);
+    return out;
 }
 
 /*
@@ -7298,6 +7576,8 @@ int  fb_to_mpoly(const Expr* e, fmpq_mpoly_t out, const fmpq_mpoly_ctx_struct* c
                  const VarSet* vs) { return to_mpoly(e, out, ctx, vs); }
 int  fb_expr_to_fmpq(const Expr* e, fmpq_t out) { return field_expr_to_fmpq(e, out); }
 Expr* fb_fmpq_to_expr(const fmpq_t q) { return expr_from_fmpq_local(q); }
+int  fb_km_is_generic_kernel_head(const char* h) { return km_is_generic_kernel_head(h); }
+int  fb_km_is_inert_head_atom(const Expr* e) { return km_is_inert_head_atom(e); }
 int  fb_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* cap) {
     return fg_collect_atoms(e, atoms, na, cap);
 }
@@ -8116,6 +8396,7 @@ Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }
 Expr* flint_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_field_cancel(const Expr* e) { (void)e; return NULL; }
+Expr* flint_field_apart(const Expr* e, const Expr* var) { (void)e; (void)var; return NULL; }
 Expr* flint_field_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
                          const Expr* const* relations, int n_alg,

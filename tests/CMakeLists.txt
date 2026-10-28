@@ -788,6 +788,7 @@ set(COMMON_SRC
     ../src/poly/qaupoly.c
     ../src/poly/qafactor.c
     ../src/poly/ratcanon.c
+    ../src/poly/ratfun.c
     ../src/poly/rootofunity.c
     ../src/poly/squarefreeq.c
     ../src/poly/exponent.c
@@ -3125,6 +3126,9 @@ add_test(NAME matlstsq_tests COMMAND matlstsq_tests)
 
 add_executable(parfrac_tests test_parfrac.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(parfrac_tests PRIVATE ../src)
+
+add_executable(ratfun_tests test_ratfun.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ratfun_tests PRIVATE ../src)
 
 add_executable(contfrac_tests test_contfrac.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(contfrac_tests PRIVATE ../src)

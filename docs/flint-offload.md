@@ -105,12 +105,35 @@ predicate that decides when the fast path is *semantically* valid. When reusing
 a FLINT core across builtins, the correctness work is in that per-builtin gate,
 not the arithmetic.
 
+## Third worked example — one engine for Together, Cancel and Apart (v0.6072)
+
+`src/poly/ratfun.c` replaces the per-builtin `fmpz_mpoly_q` cores (still there
+as fallbacks) with a single *factored* representation, `c * prod p_i^e_i` over
+`fmpz_mpoly`. Because the factors survive, Together can build the least common
+denominator from a gcd-free basis instead of one large gcd. The basis also
+yields the factored-denominator output form at no cost. Apart is
+then the same conversion followed by `fmpz_mpoly_factor` and a CRT split, in
+`fmpq_poly` over Q or `gr_poly` over `fmpz_mpoly_q` over Q(params). That
+replaced the symbolic `RowReduce` (`Apart` with five parameters: 2.0 s → 1.8 ms).
+
+Two lessons carry over:
+
+- **Keep a structural invariant and enforce it at the one entry point.** Every
+  factor goes through `rf_push`, which normalises the factor and merges equal
+  factors, and every monomial factor is a single generator. Each of the two bugs
+  found was a path that bypassed it.
+- **Pick the ring per input.** A univariate input on `fmpz_mpoly` pays for heap
+  arithmetic it does not need. A small `RfRing` interface lets the combination
+  step run on dense `fmpz_poly` for one variable.
+
 ## More candidate sites (same tactic)
 
 - Any remaining `rt_eval1("Expand", …)` inside a loop over tower levels or
   Laurent powers.
-- `Apart` and `PolynomialGCD`/`Resultant`-heavy passes that still route through
-  the classical multivariate Euclid on high-degree inputs.
+- `PolynomialGCD`/`Resultant`-heavy passes that still route through the
+  classical multivariate Euclid on high-degree inputs.
+- Together/Cancel over a number field in more than one variable (the K(x)
+  engine is univariate; the multivariate case still goes through ratcanon).
 
 When adding one, follow the five steps above and keep the Expr path as the
 out-of-domain fallback.

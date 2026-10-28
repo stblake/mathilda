@@ -109,5 +109,12 @@ int  fb_field_mpoly_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly_t
 int  fb_field_mpoly_divides(fmpq_mpoly_t Q, const fmpq_mpoly_t A, const fmpq_mpoly_t G,
                             const fmpq_mpoly_t M, const fmpq_mpoly_ctx_struct* ctx);
 
+/* Kernel classification shared with the Together/Cancel kernel map: an
+ * independent transcendental kernel head (Log, the inverse trig/hyperbolic
+ * functions), and an inert user-head atom (x[3], Pair[..]) that behaves as an
+ * opaque polynomial variable. */
+int  fb_km_is_generic_kernel_head(const char* h);
+int  fb_km_is_inert_head_atom(const Expr* e);
+
 #endif /* USE_FLINT */
 #endif /* FLINT_BRIDGE_INTERNAL_H */

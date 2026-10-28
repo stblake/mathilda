@@ -43,9 +43,25 @@ Out[2]= 77
 Cancels out common factors in the numerator and denominator of an expression.
 - `Cancel[expr]`
 - `Cancel[expr, Extension -> alpha]`
+- `Cancel[expr, Modulus -> p]`
 
 **Features**:
 - `Protected`, `Listable`.
+- **Factored rational-function engine** (v0.6072, `src/poly/ratfun.c`). A
+  rational function over Q in symbols and transcendental kernels (`Log[u]`, the
+  inverse trig/hyperbolic functions, `E^(k u)`, inert heads `x[3]`) is converted
+  into FLINT once, as `c * prod p_i^e_i` with every `p_i` primitive, and reduced
+  there: the denominator factors are split into their monomial content and made
+  pairwise coprime, and each numerator factor is split against them by gcd.
+  The terms of a sum are cancelled one by one and not combined; a term with
+  nothing to cancel is returned unchanged. A univariate input runs on dense
+  `fmpz_poly`. Typically 3–70× faster than before: a degree-1000 gcd
+  88 ms → 1.2 ms, 6-variable sparse 21 ms → 5.8 ms. Algebraic constants (`I`,
+  `Sqrt[2]`), radicals, forward trig and inexact numbers keep the paths below.
+- **`Modulus -> p`** (v0.6072) cancels over the integers modulo a prime `p`.
+  `Modulus -> 0` is the default; a composite modulus is `Cancel::modp` and the
+  call stays unevaluated; a nonzero modulus with an `Extension` is
+  `Cancel::mext`.
 - **A power whose exponent depends on a variable is one generator**
   (v0.6050). `y^(1/(a - 1))` is opaque exactly as `y^k` is, so the
   embedded-rational soundness gate no longer reads the `1/(a - 1)` in its
@@ -96,9 +112,27 @@ Out[9]= (x + y)/(1 + x)
 Puts terms in a sum over a common denominator, and cancels factors in the result.
 - `Together[expr]`
 - `Together[expr, Extension -> alpha]`
+- `Together[expr, Modulus -> p]`
 
 **Features**:
 - `Protected`, `Listable`.
+- **Factored rational-function engine** (v0.6072, `src/poly/ratfun.c`). Over Q
+  in symbols and transcendental kernels, a sum of fractions is combined
+  natively: each term is reduced on its own, the denominator factors of all the
+  terms are split into monomial and squarefree parts, a gcd-free basis of them
+  gives the least common denominator, the numerator is expanded once
+  (a product tree when the denominators are disjoint), and one gcd against the
+  squarefree denominator settles whether anything cancels. A sum with a single
+  fractional term needs no gcd at all, which is what makes deeply nested
+  fractions cheap. `E^(k u)` kernels are powers of one generator `g = E^u`
+  oriented positively, so `Together[1 + E^(-x)]` is `E^(-x) (1 + E^x)`.
+  Before → after on the shootout corpus (`benchmarks/98-rational-shootout`):
+  200 linear summands 11.9 → 10.0 ms, nested depth 32 0.39 → 0.19 ms, 16
+  multivariate summands 136 → 91 ms, 17 Gaussian summands 44 → 0.48 ms.
+- **`Modulus -> p`** (v0.6072) combines and cancels over the integers modulo a
+  prime `p` (dense `fmpz_mod_poly` for one variable, `fmpz_mod_mpoly`
+  otherwise): `Together[1/(x - 1) + 1/(x + 1), Modulus -> 3]` is
+  `(2 x)/(2 + x^2)`. Messages as for `Cancel`.
 - **A sum with no denominators is combined too** (v0.6050, issue #113).
   The numerator of a denominator-free sum is expanded, so like terms with
   different coefficient forms cancel over any kernel, not only over symbols:
@@ -606,9 +640,30 @@ Gives the partial fraction decomposition of a rational expression.
 - `Apart[expr]`
 - `Apart[expr, var]`
 - `Apart[expr, var, Extension -> alpha]`
+- `Apart[expr, var, Modulus -> p]`
 
 **Features**:
 - `Protected`, `Listable`.
+- **Native partial fractions over Q and Q(params)** (v0.6072,
+  `src/poly/ratfun.c`). The input is converted once and reduced; the
+  denominator is factored with `fmpz_mpoly_factor` (an irreducible factor over
+  `Z[x, params]` of positive degree in `x` is irreducible over `Q(params)`);
+  factors free of `x` join the coefficient. With no parameters the
+  decomposition is a CRT split and a `p`-adic expansion in `fmpq_poly`; with
+  parameters, the same in `gr_poly` over `fmpz_mpoly_q` — replacing the
+  symbolic `RowReduce`, which grew exponentially with the parameter count:
+  `Apart[1/((x+a)(x+b)(x+c)(x+d)(x+f)), x]` 2.0 s → 1.6 ms (six parameters:
+  a 60 s timeout → 3 ms). The factors are
+  normalised to a positive leading coefficient in `var`, and each coefficient is
+  one fraction over the parameters with its denominator factored:
+  `Apart[x^3/(x - a), x]` is `a^2 + a x + x^2 + a^3/(-a + x)`,
+  `Apart[1/((x + a)(x + b)), x]` is `1/((-a + b) (a + x)) + 1/((a - b) (b + x))`.
+  One variable over Q(i) or a number field factors the denominator with the
+  Trager engine and decomposes in `gr_poly` over the field (10 Gaussian linear
+  factors 27 ms → 1.7 ms). `Extension` keeps the classical path.
+- **`Modulus -> p`** (v0.6072): partial fractions over the integers modulo a
+  prime, one variable (`fmpz_mod_poly` factor, CRT, digits):
+  `Apart[1/(x^3 - 1), x, Modulus -> 7]` is `6/(3 + x) + 3/(5 + x) + 5/(6 + x)`.
 - Writes `expr` as a polynomial in `var` together with a sum of ratios of polynomials with minimal denominators.
 - If `var` is not specified, intelligently selects the main polynomial variable natively.
 - **Algebraic-generator substitution.** When the input is a rational function of a radical or fractional power `g = u^(1/m)` (e.g. `Sqrt[x]`, `y^(1/3)`), the decomposition happens in `g`: the generator is substituted for a fresh symbol, `Apart` runs in that symbol, then `g` is back-substituted — so `Apart[1/((Sqrt[x]+2)(Sqrt[x]+3))]` gives `1/(2+Sqrt[x]) - 1/(3+Sqrt[x])`. The explicit two-argument form applies this too, but only when the radical is a genuine radical of `var` itself (`Apart[f[Sqrt[x]], x]`); a radical of any other symbol is left as an opaque constant in `var`.

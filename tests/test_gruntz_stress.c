@@ -280,11 +280,13 @@ static void test_stress_gamma_psi_growth(void) {
  * machinery: 3-level exp-tower cancellation, Gamma/psi *difference* asymptotics.
  * ========================================================================== */
 static void test_stress_honest_abstentions(void) {
-    /* Level-3 exp tower: the E^a balance of Family C blows up two levels down,
-     * needing a cancellation the mrv Series machinery does not reach here. */
+    /* (The level-3 exp tower E^(E^(E^(x + E^-x)))/E^(E^(E^x)) left this list at
+     * v0.6072: it is Infinity -- the exponent difference is
+     * e^(e^x) (e^(e^x (e^(e^-x) - 1)) - 1) ~ (e - 1) e^(e^x) -- and it is
+     * computed since the Together/Cancel engine of that version.) */
     assert_eval_startswith(
         "Limit[E^(E^(E^(x + E^-x)))/E^(E^(E^x)), x -> Infinity, Method -> \"Gruntz\"]",
-        "Limit[");
+        "Infinity");
     /* Gamma *difference* (thesis 8.28): needs Stirling expanded and cancelled to
      * an order beyond the dense-Series reach. */
     assert_eval_startswith(

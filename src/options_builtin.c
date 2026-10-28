@@ -665,6 +665,7 @@ void options_register_defaults(void) {
         ob_init(&b);
         ob_add(&b, r_sym("Extension", "None"));
         ob_add(&b, r_int("Modulus", 0));
+        ob_add(&b, r_sym("Trig", "False"));
         ob_commit(&b, rat_fns[i]);
     }
 

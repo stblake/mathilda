@@ -13,6 +13,7 @@
 #include "options.h"
 #include "qafactor.h"
 #include "ratcanon.h"
+#include "ratfun.h"
 #include "facpoly.h"
 #include "core.h"
 #include "print.h"
@@ -1603,6 +1604,19 @@ static Expr* flint_cancel_fraction(Expr* arg) {
  * forward declaration of flint_gaussian_together that used to sit here was
  * redundant: it is defined ahead of its sole caller and needed no prototype.) */
 #ifdef USE_FLINT
+static bool rat_has_head(const Expr* e, const char* h);
+
+/* MATHILDA_RATFUN=off bypasses the factored engine (src/poly/ratfun.c), for
+ * A/B comparison against the older paths. */
+static bool ratfun_enabled(void) {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = getenv("MATHILDA_RATFUN");
+        en = (e && strcmp(e, "off") == 0) ? 0 : 1;
+    }
+    return en;
+}
+
 static bool rat_canon_enabled(void) {
     static int en = -1;
     if (en < 0) {
@@ -1617,6 +1631,36 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
 #ifdef USE_FLINT
+    /* Modulus -> p: the whole computation over GF(p).  Modulus -> 0 is the
+     * default and is dropped before the rest of the dispatch. */
+    {
+        mpz_t p; mpz_init(p);
+        Expr* stripped = NULL;
+        int mr = ratfun_modulus_option(res, SYM_Cancel, p, &stripped);
+        Expr* out = NULL;
+        if (mr == 1) out = ratfun_cancel_mod(res->data.function.args[0], p);
+        mpz_clear(p);
+        if (mr != 0) return out;
+        if (stripped) {
+            out = builtin_cancel_compute(stripped);
+            expr_free(stripped);
+            return out;
+        }
+    }
+    /* Factored rational-function engine over Q (+ kernels): one conversion into
+     * FLINT, the answer with its factors kept.  Declines (NULL) on algebraic
+     * constants, radicals, trig, inexact input -- the paths below. */
+    if (res->data.function.arg_count == 1 && ratfun_enabled() &&
+        !internal_args_contain_inexact(res)) {
+        Expr* rf = ratfun_cancel(res->data.function.args[0]);
+        if (rf) return rf;
+        /* one variable over one number field (Gaussian Complex coefficients or
+         * AlgebraicNumber[theta, ..]): natively in K(x), no ReplaceAll round trip */
+        if (!rat_has_head(res->data.function.args[0], SYM_AlgebraicNumber)) {
+            rf = flint_field_cancel(res->data.function.args[0]);
+            if (rf) return rf;
+        }
+    }
     if (res->data.function.arg_count == 1 && !internal_args_contain_inexact(res)) {
         Expr* gf = rat_gaussian_field(res->data.function.args[0], SYM_Cancel);
         if (gf) return gf;
@@ -2317,6 +2361,32 @@ static Expr* builtin_together_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
 #ifdef USE_FLINT
+    /* Modulus -> p: the whole computation over GF(p).  Modulus -> 0 is the
+     * default and is dropped before the rest of the dispatch. */
+    {
+        mpz_t p; mpz_init(p);
+        Expr* stripped = NULL;
+        int mr = ratfun_modulus_option(res, SYM_Together, p, &stripped);
+        Expr* out = NULL;
+        if (mr == 1) out = ratfun_together_mod(res->data.function.args[0], p);
+        mpz_clear(p);
+        if (mr != 0) return out;
+        if (stripped) {
+            out = builtin_together_compute(stripped);
+            expr_free(stripped);
+            return out;
+        }
+    }
+    /* Factored rational-function engine first (see builtin_cancel_compute). */
+    if (res->data.function.arg_count == 1 && ratfun_enabled() &&
+        !internal_args_contain_inexact(res)) {
+        Expr* rf = ratfun_together(res->data.function.args[0]);
+        if (rf) return rf;
+        if (!rat_has_head(res->data.function.args[0], SYM_AlgebraicNumber)) {
+            rf = flint_field_together(res->data.function.args[0]);   /* see Cancel */
+            if (rf) return rf;
+        }
+    }
     if (res->data.function.arg_count == 1 && !internal_args_contain_inexact(res)) {
         Expr* gf = rat_gaussian_field(res->data.function.args[0], SYM_Together);
         if (gf) return gf;

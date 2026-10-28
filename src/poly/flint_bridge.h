@@ -418,6 +418,10 @@ Expr* flint_rational_cancel(const Expr* e);
 Expr* flint_field_together(const Expr* e);
 Expr* flint_field_cancel(const Expr* e);
 
+/* Apart[e, var] over one number field K (Gaussian or AlgebraicNumber
+ * coefficients), one variable; NULL to decline. */
+Expr* flint_field_apart(const Expr* e, const Expr* var);
+
 /*
  * FLINT-native partial fraction decomposition over Q. Given a proper rational
  * R / (C * prod_i bases[i]^{ks[i]}) with the bases[] the distinct irreducible

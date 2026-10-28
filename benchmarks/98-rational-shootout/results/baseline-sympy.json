@@ -1,0 +1,616 @@
+{
+ "tog-lin-1": {
+  "status": "OK",
+  "t": 0.491166678,
+  "count": 1,
+  "wall": 2.84
+ },
+ "tog-lin-2": {
+  "status": "OK",
+  "t": 10.974291184,
+  "count": 1,
+  "wall": 11.57
+ },
+ "tog-lin-3": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 86.47
+ },
+ "tog-lin-4": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 120.02
+ },
+ "tog-uni-1": {
+  "status": "OK",
+  "t": 0.136044387,
+  "count": 1,
+  "wall": 1.0
+ },
+ "tog-uni-2": {
+  "status": "OK",
+  "t": 10.037623114,
+  "count": 1,
+  "wall": 10.59
+ },
+ "tog-uni-3": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 107.84
+ },
+ "tog-uni-4": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 119.95
+ },
+ "tog-multi-1": {
+  "status": "OK",
+  "t": 0.90734964,
+  "count": 1,
+  "wall": 4.21
+ },
+ "tog-multi-2": {
+  "status": "OK",
+  "t": 33.343416004,
+  "count": 1,
+  "wall": 34.52
+ },
+ "tog-multi-3": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 120.03
+ },
+ "tog-multi-4": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 120.12
+ },
+ "tog-common-1": {
+  "status": "OK",
+  "t": 0.897649263,
+  "count": 1,
+  "wall": 4.12
+ },
+ "tog-common-2": {
+  "status": "OK",
+  "t": 17.42899658,
+  "count": 1,
+  "wall": 17.91
+ },
+ "tog-common-3": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 120.02
+ },
+ "tog-common-4": {
+  "status": "OK",
+  "t": 1.073224298,
+  "count": 1,
+  "wall": 4.8
+ },
+ "tog-common-5": {
+  "status": "OK",
+  "t": 23.069767384,
+  "count": 1,
+  "wall": 23.55
+ },
+ "tog-telescope-1": {
+  "status": "OK",
+  "t": 0.003614,
+  "count": 1,
+  "wall": 0.41
+ },
+ "tog-telescope-2": {
+  "status": "OK",
+  "t": 0.003655263,
+  "count": 1,
+  "wall": 0.47
+ },
+ "tog-telescope-3": {
+  "status": "OK",
+  "t": 0.003588704,
+  "count": 1,
+  "wall": 0.65
+ },
+ "tog-telescope-4": {
+  "status": "OK",
+  "t": 0.004378162,
+  "count": 1,
+  "wall": 0.39
+ },
+ "tog-telescope-5": {
+  "status": "OK",
+  "t": 0.004495596,
+  "count": 1,
+  "wall": 0.44
+ },
+ "tog-nested-1": {
+  "status": "OK",
+  "t": 0.04112069,
+  "count": 1,
+  "wall": 0.56
+ },
+ "tog-nested-2": {
+  "status": "OK",
+  "t": 0.239363738,
+  "count": 1,
+  "wall": 1.41
+ },
+ "tog-nested-3": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 120.01
+ },
+ "tog-nested-4": {
+  "status": "OK",
+  "t": 0.05405888,
+  "count": 1,
+  "wall": 0.61
+ },
+ "tog-nested-5": {
+  "status": "OK",
+  "t": 0.353202062,
+  "count": 1,
+  "wall": 1.85
+ },
+ "tog-kernel-1": {
+  "status": "OK",
+  "t": 0.036455744,
+  "count": 1,
+  "wall": 0.54
+ },
+ "tog-kernel-2": {
+  "status": "OK",
+  "t": 0.072534065,
+  "count": 1,
+  "wall": 0.71
+ },
+ "tog-kernel-3": {
+  "status": "OK",
+  "t": 0.752110769,
+  "count": 1,
+  "wall": 3.7
+ },
+ "tog-gauss-1": {
+  "status": "OK",
+  "t": 0.028565327,
+  "count": 1,
+  "wall": 0.51
+ },
+ "tog-gauss-2": {
+  "status": "OK",
+  "t": 0.139919242,
+  "count": 1,
+  "wall": 0.98
+ },
+ "tog-gauss-3": {
+  "status": "OK",
+  "t": 0.791943314,
+  "count": 1,
+  "wall": 3.63
+ },
+ "tog-mod-1": {
+  "status": "OK",
+  "t": 13.804606982,
+  "count": 1,
+  "wall": 20.11
+ },
+ "tog-mod-2": {
+  "status": "OK",
+  "t": 14.164273515,
+  "count": 1,
+  "wall": 21.44
+ },
+ "tog-mod-3": {
+  "status": "OK",
+  "t": 14.610062774,
+  "count": 1,
+  "wall": 21.86
+ },
+ "can-uni-1": {
+  "status": "OK",
+  "t": 0.078983254,
+  "count": 1,
+  "wall": 0.79
+ },
+ "can-uni-2": {
+  "status": "OK",
+  "t": 0.279819686,
+  "count": 1,
+  "wall": 1.8
+ },
+ "can-uni-3": {
+  "status": "OK",
+  "t": 2.164130101,
+  "count": 1,
+  "wall": 9.88
+ },
+ "can-uni-4": {
+  "status": "OK",
+  "t": 5.244494274,
+  "count": 1,
+  "wall": 7.24
+ },
+ "can-uni-big-1": {
+  "status": "OK",
+  "t": 0.03276207,
+  "count": 1,
+  "wall": 0.55
+ },
+ "can-uni-big-2": {
+  "status": "OK",
+  "t": 0.089849386,
+  "count": 1,
+  "wall": 0.87
+ },
+ "can-uni-big-3": {
+  "status": "OK",
+  "t": 0.223507897,
+  "count": 1,
+  "wall": 1.59
+ },
+ "can-multi-dense-1": {
+  "status": "OK",
+  "t": 0.171618701,
+  "count": 1,
+  "wall": 1.23
+ },
+ "can-multi-dense-2": {
+  "status": "OK",
+  "t": 0.331300845,
+  "count": 1,
+  "wall": 2.01
+ },
+ "can-multi-dense-3": {
+  "status": "OK",
+  "t": 0.691796896,
+  "count": 1,
+  "wall": 3.65
+ },
+ "can-multi-sparse-1": {
+  "status": "OK",
+  "t": 0.152764611,
+  "count": 1,
+  "wall": 1.11
+ },
+ "can-multi-sparse-2": {
+  "status": "OK",
+  "t": 0.5729372,
+  "count": 1,
+  "wall": 3.18
+ },
+ "can-multi-sparse-3": {
+  "status": "OK",
+  "t": 2.543769276,
+  "count": 1,
+  "wall": 12.23
+ },
+ "can-coprime-1": {
+  "status": "OK",
+  "t": 0.115920459,
+  "count": 1,
+  "wall": 1.05
+ },
+ "can-coprime-2": {
+  "status": "OK",
+  "t": 0.598603062,
+  "count": 1,
+  "wall": 3.62
+ },
+ "can-coprime-3": {
+  "status": "OK",
+  "t": 3.547545329,
+  "count": 1,
+  "wall": 17.95
+ },
+ "can-coprime-4": {
+  "status": "OK",
+  "t": 0.076747016,
+  "count": 1,
+  "wall": 0.82
+ },
+ "can-coprime-5": {
+  "status": "OK",
+  "t": 0.213829189,
+  "count": 1,
+  "wall": 1.55
+ },
+ "can-small-1": {
+  "status": "OK",
+  "t": 0.00219307,
+  "count": 1,
+  "wall": 0.4
+ },
+ "can-small-2": {
+  "status": "OK",
+  "t": 0.003887518,
+  "count": 1,
+  "wall": 0.39
+ },
+ "can-small-3": {
+  "status": "OK",
+  "t": 0.002532727,
+  "count": 1,
+  "wall": 0.39
+ },
+ "can-small-4": {
+  "status": "OK",
+  "t": 0.00310922,
+  "count": 1,
+  "wall": 0.39
+ },
+ "can-small-5": {
+  "status": "OK",
+  "t": 0.005241678,
+  "count": 1,
+  "wall": 0.41
+ },
+ "can-small-6": {
+  "status": "OK",
+  "t": 0.003741888,
+  "count": 1,
+  "wall": 0.4
+ },
+ "can-gauss-1": {
+  "status": "OK",
+  "t": 0.031924208,
+  "count": 1,
+  "wall": 0.62
+ },
+ "can-gauss-2": {
+  "status": "OK",
+  "t": 0.07184067,
+  "count": 1,
+  "wall": 0.74
+ },
+ "can-gauss-3": {
+  "status": "OK",
+  "t": 0.189630372,
+  "count": 1,
+  "wall": 1.32
+ },
+ "can-ext-1": {
+  "status": "OK",
+  "t": 0.023132019,
+  "count": 1,
+  "wall": 0.51
+ },
+ "can-ext-2": {
+  "status": "OK",
+  "t": 0.083071321,
+  "count": 1,
+  "wall": 0.77
+ },
+ "can-ext-3": {
+  "status": "OK",
+  "t": 0.438613487,
+  "count": 1,
+  "wall": 2.3
+ },
+ "can-mod-1": {
+  "status": "OK",
+  "t": 0.316457823,
+  "count": 1,
+  "wall": 3.03
+ },
+ "can-mod-2": {
+  "status": "OK",
+  "t": 0.325402532,
+  "count": 1,
+  "wall": 3.54
+ },
+ "can-mod-3": {
+  "status": "OK",
+  "t": 0.295543717,
+  "count": 1,
+  "wall": 3.44
+ },
+ "ap-lin-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-lin-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.44,
+  "answer": ""
+ },
+ "ap-lin-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.43,
+  "answer": ""
+ },
+ "ap-lin-4": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.47,
+  "answer": ""
+ },
+ "ap-mult-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.4,
+  "answer": ""
+ },
+ "ap-mult-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.4,
+  "answer": ""
+ },
+ "ap-mult-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.41,
+  "answer": ""
+ },
+ "ap-mult-4": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.45,
+  "answer": ""
+ },
+ "ap-irr-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-irr-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-irr-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.4,
+  "answer": ""
+ },
+ "ap-improper-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.38,
+  "answer": ""
+ },
+ "ap-improper-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.4,
+  "answer": ""
+ },
+ "ap-improper-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.43,
+  "answer": ""
+ },
+ "ap-param-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.38,
+  "answer": ""
+ },
+ "ap-param-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.38,
+  "answer": ""
+ },
+ "ap-param-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-param-4": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.44,
+  "answer": ""
+ },
+ "ap-param-5": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.46,
+  "answer": ""
+ },
+ "ap-param-6": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.38,
+  "answer": ""
+ },
+ "ap-param-content-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-param-content-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.4,
+  "answer": ""
+ },
+ "ap-param-content-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.45,
+  "answer": ""
+ },
+ "ap-gauss-1": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.43,
+  "answer": ""
+ },
+ "ap-gauss-2": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-gauss-3": {
+  "status": "ERROR",
+  "t": null,
+  "count": null,
+  "wall": 0.39,
+  "answer": ""
+ },
+ "ap-mod-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mod-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mod-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ }
+}

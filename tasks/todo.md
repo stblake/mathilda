@@ -1,3 +1,20 @@
+# Together / Cancel / Apart review, FLINT-native pipelines, 5-engine shootout (2026-10-28)
+
+Plan: ~/.claude/plans/similar-to-our-recent-declarative-turtle.md. Trig -> True is LOW priority (last, optional).
+
+- [x] P0 benchmarks/98-rational-shootout (Mathilda / reference / Maxima / SymPy / PARI), independent verification, baseline REPORT, per-stage profile
+- [x] P1 seeded stress driver tests/test_rational_stress.c + correctness fixes (Apart Q-loss, RowReduce shape, head checks; threading asymmetry; ratcanon vs Extension)
+- [x] P2a conversion layer (var hash, binary pow, Plus-as-polynomial, ctx cache, direct output)
+- [x] P2b Together/Cancel single classifier dispatch, no duplicate detector walks
+- [x] P2c Apart FLINT pipeline: Q (raw input), Q(params) via gr fmpz_mpoly_q, Gaussian/Extension via nf
+- [x] P2d options: Modulus for all three, messages, Trig -> False accepted (v0.6072); (low) Trig -> True still open
+- [ ] P2e FORM PARITY (user decision 2026-10-28: match the reference): Together/Cancel denominators as a product of a
+      gcd-free basis of the input denominator factors (not a full factorisation; a lone factor is left alone),
+      integer content in front of the denominator, numerator = content x expanded primitive part; Apart terms with the
+      content extracted ((-202 + 13 x)/(529 (5 + 3 x^2))).  Probe the rule in w3-style scripts first and re-baseline tests.
+- [ ] P3 perf from the report; guard Integrate/DSolve/Simplify corpora
+- [ ] P4 docstrings, spec, changelog, flint-offload.md, version/tags, lessons + memory
+
 # Factor review, option parity, 4-engine shootout (2026-10-27)
 
 Plan: ~/.claude/plans/let-s-do-a-thorough-floofy-peach.md. Trig -> True is LOW priority (last, optional).

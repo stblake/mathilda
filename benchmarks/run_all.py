@@ -120,7 +120,8 @@ EXP_RE = re.compile(r"^(\d{2,3})-(.+)$")
 # protocol this job joins by case label. bench-gap skips them -- otherwise it
 # would run a data module (e.g. registry.py) as an experiment half and report a
 # phantom, unpaired experiment.
-STANDALONE = {"97-special-functions", "98-factorinteger-shootout", "99-factor-shootout"}
+STANDALONE = {"97-special-functions", "98-factorinteger-shootout", "98-rational-shootout",
+              "99-factor-shootout"}
 
 
 def discover(only=None):
