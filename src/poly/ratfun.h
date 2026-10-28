@@ -33,6 +33,13 @@ Expr* ratfun_cancel(const Expr* e);
  * symbol of the input. */
 Expr* ratfun_apart(const Expr* e, const Expr* x);
 
+/* 1 when the answer is rendered in the factored form (the denominator as a
+ * product of its basis factors, the content in front): a user-level call of
+ * Together / Cancel / Apart.  A call from inside another builtin gets the
+ * expanded form its caller reads.  MATHILDA_TOGETHER_FORM=factored|expanded
+ * forces one form everywhere. */
+int ratfun_factored_form(void);
+
 /* The same over GF(p), for Modulus -> p (p a prime).  Apart: one variable. */
 Expr* ratfun_together_mod(const Expr* e, const mpz_t p);
 Expr* ratfun_cancel_mod(const Expr* e, const mpz_t p);

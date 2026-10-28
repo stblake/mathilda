@@ -2,6 +2,12 @@
  * test_ratfun.c -- the factored rational-function engine (src/poly/ratfun.c):
  * Together, Cancel and Apart over Q, Q(params) and GF(p).
  *
+ * The forms are those of a user-level call, which renders the factored form
+ * (an internal call from another builtin gets the expanded one; see
+ * test_internal_form).  Known differences kept on purpose: Apart's Modulus
+ * coefficients are residues (6/(3 + x), not 1/(6 (3 + x))); a Gaussian
+ * content is rational, not a Gaussian-integer gcd; Apart also takes Extension.
+ *
  * Three kinds of check:
  *   - exact output forms for the cases whose form is settled;
  *   - regressions found while the engine was written (a hang, an incomplete
@@ -45,11 +51,11 @@ static void assert_form(const char* input, const char* expected) {
 static void assert_true(const char* input) { assert_form(input, "True"); }
 
 void test_together_forms(void) {
-    assert_form("Together[1/x + 1/(x + 1)]", "(1 + 2 x)/(x + x^2)");
+    assert_form("Together[1/x + 1/(x + 1)]", "(1 + 2 x)/(x (1 + x))");
     assert_form("Together[x/2 + y/3]", "1/6 (3 x + 2 y)");
-    assert_form("Together[1/(2 x - 2) + 1/(3 x + 3)]", "(1 + 5 x)/(-6 + 6 x^2)");
+    assert_form("Together[1/(2 x - 2) + 1/(3 x + 3)]", "(1 + 5 x)/(6 (-1 + x) (1 + x))");
     assert_form("Together[a/(x y) + b/(x z)]", "(b y + a z)/(x y z)");
-    assert_form("Together[1/(1 + E^x) + Log[x]/(E^(2 x) - 1)]", "(-1 + E^x + Log[x])/(-1 + E^(2 x))");
+    assert_form("Together[1/(1 + E^x) + Log[x]/(E^(2 x) - 1)]", "(-1 + E^x + Log[x])/((-1 + E^x) (1 + E^x))");
     /* the generator is oriented positively: 1/E^x is a denominator */
     assert_form("Together[1 + E^(-x)]", "E^(-x) (1 + E^x)");
 }
@@ -61,7 +67,8 @@ void test_cancel_forms(void) {
     /* a term with nothing to cancel is left as it is (an E^(...) exponent
      * written 1/(1 - x^2) must not become -1/(-1 + x^2)) */
     assert_form("Cancel[-1 + E^x + 1/x + 1/(1 - x^2)]", "-1 + E^x + 1/x + 1/(1 - x^2)");
-    /* a nested sum of fractions is left to the classical path */
+    /* a nested sum of fractions is left to the classical path (which
+     * combines it; the factored engine would leave 1/(1 + 1/x) alone) */
     assert_form("Cancel[1/(1 + 1/x)]", "x/(1 + x)");
 }
 
@@ -71,7 +78,7 @@ void test_regressions(void) {
     assert_true("TimeConstrained[Together[(x + 4)/((3 x^3 - 2 x^4)^2 (3 - 2 x))], 10] =!= $Aborted");
     /* a monomial factor x^3 kept whole was treated as coprime to x */
     assert_form("Together[(6 x^4 + 2 x^3)/((5 x - x^3 + 5 x^2)^2 (3 x + 1)^2)]",
-                "(2 x)/(25 + 125 x + 165 x^2 + 35 x^3 - 29 x^4 + 3 x^5)");
+                "(2 x)/((1 + 3 x) (-5 - 5 x + x^2)^2)");
 }
 
 void test_apart_forms(void) {
@@ -88,34 +95,44 @@ void test_apart_forms(void) {
 }
 
 void test_modulus(void) {
-    assert_form("Together[1/(x - 1) + 1/(x + 1), Modulus -> 3]", "(2 x)/(2 + x^2)");
+    assert_form("Together[1/(x - 1) + 1/(x + 1), Modulus -> 3]", "(2 x)/((1 + x) (2 + x))");
     assert_form("Cancel[(x^2 - 1)/(x - 1), Modulus -> 2]", "1 + x");
     assert_form("Cancel[(x^7 - x)/(x^2 - x), Modulus -> 7]", "1 + x + x^2 + x^3 + x^4 + x^5");
     assert_form("Apart[1/(x^3 - 1), x, Modulus -> 7]", "6/(3 + x) + 3/(5 + x) + 5/(6 + x)");
-    assert_form("Together[1/(x - 1) + 1/(x + 1), Modulus -> 0]", "(2 x)/(-1 + x^2)");
+    assert_form("Together[1/(x - 1) + 1/(x + 1), Modulus -> 0]", "(2 x)/((-1 + x) (1 + x))");
     /* a composite modulus: Together::modp, the call stays unevaluated */
     assert_form("Quiet[Together[1/(x - 1) + 1/(x + 1), Modulus -> 4]]",
                 "Together[1/(-1 + x) + 1/(1 + x), Modulus -> 4]");
     assert_form("Check[Together[1/x, Modulus -> 4], failed]", "failed");
 }
 
+/* The same call from inside another builtin keeps the expanded form its
+ * internal callers read: Simplify's Together, Sum's, Apart's classical path. */
+void test_internal_form(void) {
+    assert_form("Together[1/(x - 1) + 1/(x + 1)]", "(2 x)/((-1 + x) (1 + x))");
+    assert_form("Map[Together, {1/(x - 1) + 1/(x + 1)}]", "{(2 x)/((-1 + x) (1 + x))}");
+    assert_form("Module[{t = Together[1/(x - 1) + 1/(x + 1)]}, t]", "(2 x)/((-1 + x) (1 + x))");
+    assert_form("Hold[Together[1/(x - 1) + 1/(x + 1)]] // ReleaseHold", "(2 x)/((-1 + x) (1 + x))");
+    assert_form("LerchPhi[2, -2, a]", "-6 + 4 a - a^2");
+}
+
 void test_options(void) {
     assert_form("Options[Together]", "{Extension -> None, Modulus -> 0, Trig -> False}");
     assert_form("Options[Apart]", "{Extension -> None, Modulus -> 0, Trig -> False}");
     /* the default settings are accepted (and dropped) */
-    assert_form("Together[1/x + 1/(x + 1), Trig -> False]", "(1 + 2 x)/(x + x^2)");
+    assert_form("Together[1/x + 1/(x + 1), Trig -> False]", "(1 + 2 x)/(x (1 + x))");
     assert_form("Apart[1/(x^2 - 1), x, Trig -> False, Modulus -> 0]", "1/(2 (-1 + x)) - 1/(2 (1 + x))");
     assert_form("Check[Cancel[x/(x - Sqrt[2]), Modulus -> 3, Extension -> Sqrt[2]], failed]", "failed");
 }
 
 void test_gaussian(void) {
-    assert_form("Together[1/(x - I) + 1/(x + I)]", "(2 x)/(1 + x^2)");
+    assert_form("Together[1/(x - I) + 1/(x + I)]", "(2 x)/((-I + x) (I + x))");
     assert_form("Cancel[(x^2 + 1)/(x^2 - 2 I x - 1)]", "(I + x)/(-I + x)");
     /* integral Gaussian coefficients, not a monic denominator */
     assert_form("Together[(-1 - I)/(x + 3/5 + I/5)]", "(-5 - 5*I)/(3 + I + 5 x)");
     assert_form("Apart[1/((x - I) (x + 2 I)), x]", "(-1/3*I)/(-I + x) + (1/3*I)/(2*I + x)");
-    /* a rational denominator stays unsplit over Q(i) */
-    assert_form("Apart[I/(x^2 + 1), x]", "I/(1 + x^2)");
+    /* Gaussian input: the denominator is factored over Q(i) */
+    assert_form("Apart[I/(x^2 + 1), x]", "1/(2 (-I + x)) - 1/(2 (I + x))");
     /* a degree-62 gcd over Q(Sqrt[2]): the modular field gcd, 4 s -> ms */
     assert_true("TimeConstrained[Cancel[Expand[(x^2 - 2) (x^60 + 3 x + 1)]/"
                 "Expand[(x - Sqrt[2]) (x^60 - 5 x^7 + 2)], Extension -> Automatic], 10] === "
@@ -155,6 +172,7 @@ int main(void) {
     TEST(test_apart_forms);
     TEST(test_modulus);
     TEST(test_options);
+    TEST(test_internal_form);
     TEST(test_gaussian);
     TEST(test_stress);
     if (g_failures) {

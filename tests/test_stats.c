@@ -438,7 +438,7 @@ void test_central_moment() {
     /* --- symbolic data --- */
     assert_eval_eq("Simplify[CentralMoment[{a,b},2]]", "1/4 (a - b)^2", 0);
     assert_eval_eq("Together[CentralMoment[{Pi,E,2},2]]",
-                   "1/9 (8 - 4 E + 2 E^2 - 4 Pi - 2 E Pi + 2 Pi^2)", 0);
+                   "2/9 (4 - 2 E + E^2 - 2 Pi - E Pi + Pi^2)", 0);
 
     /* --- matrix: columnwise moments --- */
     assert_eval_eq("CentralMoment[{{1,2},{3,4},{5,6}},2]", "{8/3, 8/3}", 0);

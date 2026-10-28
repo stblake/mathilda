@@ -192,22 +192,21 @@ void test_together_algebraic_generator() {
 void test_together_cancel_kernels() {
     /* Log[x] kernel: combines into one reduced fraction. */
     run_test("Together[1/(1 + Log[x]) + 1/(2 + Log[x])]",
-             "Times[Plus[3, Times[2, Log[x]]], Power[Plus[2, Times[3, Log[x]], Power[Log[x], 2]], -1]]");
+             "Times[Power[Plus[1, Log[x]], -1], Power[Plus[2, Log[x]], -1], Plus[3, Times[2, Log[x]]]]");
     /* Inverse-trig kernel: same handling as Log. */
     run_test("Together[1/(1 + ArcTan[x]) + 1/(2 + ArcTan[x])]",
-             "Times[Plus[3, Times[2, ArcTan[x]]], Power[Plus[2, Times[3, ArcTan[x]], Power[ArcTan[x], 2]], -1]]");
+             "Times[Power[Plus[1, ArcTan[x]], -1], Power[Plus[2, ArcTan[x]], -1], Plus[3, Times[2, ArcTan[x]]]]");
     /* Exp kernel: E^(k x) is treated as (E^x)^k, so the sum combines correctly
      * (the classical path left this uncombined — a latent bug now fixed). */
     run_test("Together[1/(1 + E^x) + 1/(2 + E^x)]",
-             "Times[Plus[3, Times[2, Power[E, x]]], Power[Plus[2, Times[3, Power[E, x]], Power[E, Times[2, x]]], -1]]");
+             "Times[Power[Plus[1, Power[E, x]], -1], Power[Plus[2, Power[E, x]], -1], Plus[3, Times[2, Power[E, x]]]]");
     /* Exp cross-power cancellation depends on E^(2x) = (E^x)^2. */
     run_test("Cancel[(E^(2 x) - 1)/(E^x - 1)]", "Plus[1, Power[E, x]]");
     run_test("Cancel[(Log[x]^2 - 1)/(Log[x] - 1)]", "Plus[1, Log[x]]");
     /* Nested independent Log kernels: Log[x] and Log[1+Log[x]] are distinct
      * generators. */
     run_test("Together[1/(1 + Log[1 + Log[x]]) + 1/Log[x]]",
-             "Times[Plus[1, Log[x], Log[Plus[1, Log[x]]]], "
-             "Power[Plus[Log[x], Times[Log[x], Log[Plus[1, Log[x]]]]], -1]]");
+             "Times[Power[Log[x], -1], Power[Plus[1, Log[Plus[1, Log[x]]]], -1], Plus[1, Log[x], Log[Plus[1, Log[x]]]]]");
     /* Trig kernels are declined to the classical path (1/Sin -> Csc form). */
     run_test("Together[1/(1 + Cos[x]) + 1/Sin[x]]",
              "Times[Power[Plus[1, Cos[x]], -1], Plus[1, Cot[x], Csc[x]]]");
@@ -216,17 +215,17 @@ void test_together_cancel_kernels() {
 void test_together() {
     run_test("Together[a/b + c/d]", "Times[Power[b, -1], Power[d, -1], Plus[Times[b, c], Times[a, d]]]");
     run_test("Together[x^2/(x^2 - 1) + x/(x^2 - 1)]", "Times[Power[Plus[-1, x], -1], x]");
-    run_test("Together[1/x + 1/(x + 1) + 1/(x + 2) + 1/(x + 3)]", "Times[Plus[6, Times[22, x], Times[18, Power[x, 2]], Times[4, Power[x, 3]]], Power[Plus[Times[6, x], Times[11, Power[x, 2]], Times[6, Power[x, 3]], Power[x, 4]], -1]]");
+    run_test("Together[1/x + 1/(x + 1) + 1/(x + 2) + 1/(x + 3)]", "Times[2, Power[x, -1], Power[Plus[1, x], -1], Power[Plus[2, x], -1], Power[Plus[3, x], -1], Plus[3, Times[11, x], Times[9, Power[x, 2]], Times[2, Power[x, 3]]]]");
     run_test("Together[x^2/(x - y) - x y/(x - y)]", "x");
-    run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Plus[1, Times[2, x]], Power[Plus[x, Power[x, 2]], -1]], Times[Plus[5, Times[2, x]], Power[Plus[6, Times[5, x], Power[x, 2]], -1]]]");
-    run_test("Together[(x - 1)/(x^2 - 1) + (x - 2)/(x^2 - 4)]", "Times[Plus[3, Times[2, x]], Power[Plus[2, Times[3, x], Power[x, 2]], -1]]");
+    run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Power[x, -1], Power[Plus[1, x], -1], Plus[1, Times[2, x]]], Times[Power[Plus[2, x], -1], Power[Plus[3, x], -1], Plus[5, Times[2, x]]]]");
+    run_test("Together[(x - 1)/(x^2 - 1) + (x - 2)/(x^2 - 4)]", "Times[Power[Plus[1, x], -1], Power[Plus[2, x], -1], Plus[3, Times[2, x]]]");
 
     /* Q(i) Gaussian rationals: the plain-Q FLINT fast path declines on I, so these
      * route through flint_gaussian_together (I -> t, plain-Q combine, t -> I) rather
      * than the classical multivariate-GCD combine that blows up super-exponentially
      * on complex-coefficient residuals (regression: Integrate[E^(-1/x^2)/x^2] hang). */
     run_test("Together[1/(x - I) + 1/(x + I)]",
-             "Times[2, x, Power[Plus[1, Power[x, 2]], -1]]");
+             "Times[2, x, Power[Plus[Complex[0, -1], x], -1], Power[Plus[Complex[0, 1], x], -1]]");
     /* Complex coefficient over a real denominator (the undetermined-coefficient shape). */
     run_test("Together[a/(x - 1) + I b/(x - 2)]",
              "Times[Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], "

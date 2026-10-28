@@ -111,6 +111,11 @@ typedef struct SymbolDef {
      * (eval_clock_bump_binding); binding a symbol never so observed (an
      * iterator, a Module local) leaves them valid.  Cleared by that bump. */
     uint8_t  inert_observed;
+    /* 1 for a builtin that only evaluates the code it is given (CompoundExpression,
+     * Module, If, Table, Map, ...): the evaluator does not count it in the
+     * builtin nesting depth (eval_builtin_depth), so a Together inside it is
+     * still a user-level call.  Internal, not an Attribute. */
+    uint8_t  eval_transparent;
     /* Full 32-bit hash of symbol_name (the bucket is this mod the table size):
      * a chain walk compares it before strcmp.  Module mints a fresh name per
      * call, so a long session interns 10^5-10^6 symbols and every miss used to

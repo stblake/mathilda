@@ -56,6 +56,7 @@
 
 #include "flint_bridge_internal.h"  /* VarSet, FgRender, the fb_ surface */
 #include "flint_trager.h"           /* flint_factor_over_field (Apart over K) */
+#include "ratfun.h"                 /* ratfun_factored_form */
 
 /* Process-lifetime fmpq_mpoly context cache, keyed by variable count, for the
  * ORD_LEX order (the one the Together/Cancel/Expand/CoefficientRules bridges use).
@@ -5141,6 +5142,180 @@ static int kx_rf_integral(KxCtx* c, KxRf* r) {
     return ok;
 }
 
+/* s with s*p integral (every coordinate an integer) and primitive. */
+static void kx_poly_integral_scale(KxCtx* c, const gr_poly_t p, fmpq_t s) {
+    fmpz_t L, g, t; fmpz_init(L); fmpz_init(g); fmpz_init(t);
+    fmpz_one(L);
+    nf_elem_t co; nf_elem_init(co, c->nf);
+    fmpq_poly_t q; fmpq_poly_init(q);
+    for (int pass = 0; pass < 2; pass++)
+        for (slong i = 0; i < gr_poly_length(p, c->gr); i++) {
+            if (gr_poly_get_coeff_scalar((gr_ptr)co, p, i, c->gr) != GR_SUCCESS) continue;
+            nf_elem_get_fmpq_poly(q, co, c->nf);
+            if (pass == 0) { fmpz_lcm(L, L, fmpq_poly_denref(q)); continue; }
+            for (slong j = 0; j <= fmpq_poly_degree(q); j++) {
+                fmpz_divexact(t, L, fmpq_poly_denref(q));
+                fmpz_mul(t, t, fmpq_poly_numref(q) + j);
+                fmpz_gcd(g, g, t);
+            }
+        }
+    if (fmpz_is_zero(g)) fmpz_one(g);
+    fmpq_set_fmpz_frac(s, L, g);
+    fmpq_poly_clear(q); nf_elem_clear(co, c->nf);
+    fmpz_clear(L); fmpz_clear(g); fmpz_clear(t);
+}
+
+static int kx_make_monic(KxCtx* c, gr_poly_t p) {
+    slong n = gr_poly_length(p, c->gr);
+    if (n < 1) return 0;
+    nf_elem_t lc; nf_elem_init(lc, c->nf);
+    int ok = gr_poly_get_coeff_scalar((gr_ptr)lc, p, n - 1, c->gr) == GR_SUCCESS &&
+             !nf_elem_is_zero(lc, c->nf);
+    if (ok) {
+        nf_elem_inv(lc, lc, c->nf);
+        ok = gr_poly_mul_scalar(p, p, (gr_srcptr)lc, c->gr) == GR_SUCCESS;
+    }
+    nf_elem_clear(lc, c->nf);
+    return ok;
+}
+
+/* The denominator factors written in `e` (bases of negative integer powers
+ * that are polynomials in x over K), monic, distinct; appended to *L. */
+static int kx_collect_dens(KxCtx* c, const Expr* e, gr_poly_struct** L, slong* n, slong* cap) {
+    if (e->type != EXPR_FUNCTION) return 1;
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER && e->data.function.args[1]->data.integer < 0) {
+        KxRf t; kx_rf_init(c, &t);
+        int ok = kx_eval(c, e->data.function.args[0], &t);
+        if (ok && kx_poly_is_one(c, t.den) && gr_poly_length(t.num, c->gr) > 1 && kx_make_monic(c, t.num)) {
+            int dup = 0;
+            for (slong i = 0; i < *n && !dup; i++) dup = gr_poly_equal(*L + i, t.num, c->gr) == T_TRUE;
+            if (!dup) {
+                if (*n == *cap) {
+                    *cap = *cap ? 2 * *cap : 8;
+                    *L = realloc(*L, (size_t)*cap * sizeof(gr_poly_struct));
+                }
+                gr_poly_init(*L + *n, c->gr);
+                gr_poly_swap(*L + *n, t.num, c->gr);
+                (*n)++;
+            }
+        }
+        kx_rf_clear(c, &t);
+        if (!ok) return 0;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!kx_collect_dens(c, e->data.function.args[i], L, n, cap)) return 0;
+    return 1;
+}
+
+/* The factored form over K: the reduced, monic denominator written over the
+ * gcd-free basis of the input's denominator factors -- Together[1/(x - I) +
+ * 1/(x + I)] is (2 x)/((-I + x) (I + x)).  Each factor and the numerator are
+ * scaled to integral coordinates, the scalars collected in front.  NULL when
+ * the denominator does not decompose over that basis (the expanded form is
+ * used then). */
+static Expr* kx_factored_expr(KxCtx* c, const Expr* e, KxRf* rf) {
+    gr_poly_struct* L = NULL; slong n = 0, cap = 0;
+    gr_poly_t g, q, r, D; gr_poly_init(g, c->gr); gr_poly_init(q, c->gr);
+    gr_poly_init(r, c->gr); gr_poly_init(D, c->gr);
+    int ok = kx_collect_dens(c, e, &L, &n, &cap) && n > 1;
+    /* refine to a gcd-free basis: split any pair with a common factor */
+    int again = ok;
+    while (again && ok) {
+        again = 0;
+        for (slong i = 0; i < n && !again && ok; i++)
+            for (slong j = i + 1; j < n && !again && ok; j++) {
+                if (!kx_gcd(c, g, L + i, L + j)) { ok = 0; break; }
+                if (gr_poly_length(g, c->gr) <= 1) continue;
+                ok = kx_make_monic(c, g);
+                gr_poly_struct parts[2];
+                for (int k = 0; k < 2 && ok; k++) {
+                    gr_poly_init(parts + k, c->gr);
+                    ok = gr_poly_divrem(parts + k, r, L + (k ? j : i), g, c->gr) == GR_SUCCESS &&
+                         gr_poly_length(r, c->gr) == 0;
+                }
+                if (!ok) { gr_poly_clear(parts, c->gr); gr_poly_clear(parts + 1, c->gr); break; }
+                /* L[i] := g; L[j] := L[i]/g; append L[j]/g (dropping units) */
+                gr_poly_swap(L + i, g, c->gr);
+                gr_poly_swap(L + j, parts + 0, c->gr);
+                if (n == cap) { cap = cap ? 2 * cap : 8; L = realloc(L, (size_t)cap * sizeof(gr_poly_struct)); }
+                gr_poly_init(L + n, c->gr);
+                gr_poly_swap(L + n, parts + 1, c->gr);
+                n++;
+                gr_poly_clear(parts, c->gr); gr_poly_clear(parts + 1, c->gr);
+                /* drop constants and duplicates */
+                for (slong k = 0; k < n; ) {
+                    int drop = gr_poly_length(L + k, c->gr) <= 1;
+                    for (slong m = 0; m < k && !drop; m++) drop = gr_poly_equal(L + m, L + k, c->gr) == T_TRUE;
+                    if (drop) { gr_poly_clear(L + k, c->gr); L[k] = L[n - 1]; n--; }
+                    else { if (gr_poly_length(L + k, c->gr) > 1) kx_make_monic(c, L + k); k++; }
+                }
+                again = 1;
+            }
+    }
+    slong* ex = ok ? calloc((size_t)(n ? n : 1), sizeof(slong)) : NULL;
+    if (ok) ok = ex && gr_poly_set(D, rf->den, c->gr) == GR_SUCCESS && kx_make_monic(c, D);
+    for (slong i = 0; i < n && ok; i++)
+        while (ok && gr_poly_length(D, c->gr) > 1) {
+            if (gr_poly_divrem(q, r, D, L + i, c->gr) != GR_SUCCESS) { ok = 0; break; }
+            if (gr_poly_length(r, c->gr) != 0) break;
+            gr_poly_swap(D, q, c->gr);
+            ex[i]++;
+        }
+    Expr* out = NULL;
+    int used = 0;
+    for (slong i = 0; i < n; i++) if (ex && ex[i]) used++;
+    if (ok && gr_poly_length(D, c->gr) == 1 && used > 1) {
+        /* value = num/den = num/(lc(den) prod b^e): the numerator scaled by
+         * 1/lc(den), every piece made integral, the scalars in front */
+        nf_elem_t lc; nf_elem_init(lc, c->nf);
+        slong dl = gr_poly_length(rf->den, c->gr);
+        gr_poly_t N; gr_poly_init(N, c->gr);
+        ok = gr_poly_get_coeff_scalar((gr_ptr)lc, rf->den, dl - 1, c->gr) == GR_SUCCESS &&
+             !nf_elem_is_zero(lc, c->nf);
+        if (ok) {
+            nf_elem_inv(lc, lc, c->nf);
+            ok = gr_poly_mul_scalar(N, rf->num, (gr_srcptr)lc, c->gr) == GR_SUCCESS;
+        }
+        fmpq_t s, k, ct; fmpq_init(s); fmpq_init(k); fmpq_init(ct);
+        fmpq_one(ct);
+        gr_ptr sc; GR_TMP_INIT(sc, c->gr);
+        size_t na = 0;
+        Expr** a = malloc((size_t)(n + 2) * sizeof(Expr*));
+        if (ok) {
+            kx_poly_integral_scale(c, N, s);
+            ok = gr_set_fmpq(sc, s, c->gr) == GR_SUCCESS && gr_poly_mul_scalar(N, N, sc, c->gr) == GR_SUCCESS;
+            fmpq_div(ct, ct, s);
+            a[na++] = kx_poly_to_expr(c, N);
+        }
+        for (slong i = 0; i < n && ok; i++) {
+            if (!ex[i]) continue;
+            kx_poly_integral_scale(c, L + i, s);
+            ok = gr_set_fmpq(sc, s, c->gr) == GR_SUCCESS &&
+                 gr_poly_mul_scalar(L + i, L + i, sc, c->gr) == GR_SUCCESS;
+            fmpq_pow_si(k, s, ex[i]);
+            fmpq_mul(ct, ct, k);
+            a[na++] = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ kx_poly_to_expr(c, L + i), expr_new_integer(-(int64_t)ex[i]) }, 2);
+        }
+        if (ok) {
+            if (!fmpq_is_one(ct)) a[na++] = expr_from_fmpq_local(ct);
+            out = eval_and_free(expr_new_function(expr_new_symbol("Times"), a, na));
+        } else for (size_t i = 0; i < na; i++) expr_free(a[i]);
+        free(a);
+        GR_TMP_CLEAR(sc, c->gr);
+        fmpq_clear(s); fmpq_clear(k); fmpq_clear(ct);
+        gr_poly_clear(N, c->gr);
+        nf_elem_clear(lc, c->nf);
+    }
+    free(ex);
+    for (slong i = 0; i < n; i++) gr_poly_clear(L + i, c->gr);
+    free(L);
+    gr_poly_clear(g, c->gr); gr_poly_clear(q, c->gr); gr_poly_clear(r, c->gr); gr_poly_clear(D, c->gr);
+    return out;
+}
+
 /* Shared core for the field Together/Cancel: reduce `e` to a single num/den over
  * K(x) natively and return num*den^-1 (evaluator-canonicalised).  NULL on any
  * decline (not a univariate single-field fraction, or a gr failure). */
@@ -5159,7 +5334,9 @@ static Expr* flint_field_reduce_core(const Expr* e) {
 
     KxRf rf; kx_rf_init(&c, &rf);
     Expr* out = NULL;
-    if (kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf) && kx_rf_integral(&c, &rf)) {
+    int evald = kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf);
+    if (evald && c.bare && ratfun_factored_form()) out = kx_factored_expr(&c, e, &rf);
+    if (!out && evald && kx_rf_integral(&c, &rf)) {
         Expr* num = kx_poly_to_expr(&c, rf.num);
         Expr* den = kx_poly_to_expr(&c, rf.den);
         Expr* r;
@@ -5218,8 +5395,12 @@ Expr* flint_field_apart(const Expr* e, const Expr* var) {
     gr_poly_init(cur, K); gr_poly_init(quo, K); gr_poly_init(rem, K); gr_poly_init(D, K);
     int ok = kx_eval(&c, e, &rf) && kx_rf_reduce(&c, &rf) && gr_poly_length(rf.den, K) > 1;
     if (ok) {
+        /* factor over K itself, even when the denominator alone is rational:
+         * Apart[I/(x^2 + 1), x] splits over Q(i) */
         Expr* dexpr = eval_and_free(kx_poly_to_expr(&c, rf.den));
-        fl = flint_factor_over_field(dexpr, NULL, 0);
+        Expr* gen = expr_copy((Expr*)theta);
+        fl = flint_factor_over_field(dexpr, &gen, 1);
+        expr_free(gen);
         expr_free(dexpr);
         ok = fl && fl->type == EXPR_FUNCTION && fl->data.function.arg_count >= 2;
     }

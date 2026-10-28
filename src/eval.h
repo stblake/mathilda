@@ -25,6 +25,16 @@ Expr* evaluate_step(Expr* e, bool* changed);
 // Full infinite evaluation loop (stops at fixed point)
 Expr* evaluate(Expr* e);
 
+/* The number of non-transparent C builtins currently executing: 0 at the top
+ * level, 1 inside a builtin called from user code (see eval_transparent in
+ * symtab.h).  The counter itself, for tc_register_unwind_counter. */
+int  eval_builtin_depth(void);
+/* The (interned) name of the head whose builtin the evaluator is running --
+ * the innermost dispatch; a C function calling another builtin directly does
+ * not change it. */
+const char* eval_dispatch_head(void);
+int* eval_builtin_depth_counter(void);
+
 /* Trace[expr] support (beads-planning-b3k). Evaluate `held_expr` to a fixed
  * point, recording each top-level rewrite, and return a freshly-owned flat
  * List of the intermediate expressions (Trace v1 semantics: {e0, ..., eN}, or

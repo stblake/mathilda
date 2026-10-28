@@ -1199,6 +1199,26 @@ void core_init(void) {
      * is self-documenting and self-protecting, and EndPackage[] leaves
      * FullSimplify` on $ContextPath so bare FullSimplify[...] resolves. */
     mathilda_load_module("simp/FullSimplify.m");
+
+    /* Builtins that only evaluate the code they are given do not count in the
+     * builtin nesting depth (eval_builtin_depth): Together[...] inside
+     * Module/If/Table/Map is a user-level call, inside Integrate it is not. */
+    static const char* const transparent[] = {
+        "CompoundExpression", "Module", "Block", "With", "If", "Which", "Switch",
+        "Do", "For", "While", "Table", "Map", "MapIndexed", "MapThread", "MapAt",
+        "Apply", "Scan", "Nest", "NestList", "NestWhile", "NestWhileList",
+        "FixedPoint", "FixedPointList", "Fold", "FoldList", "Select", "Array",
+        "Thread", "Outer", "Through", "Evaluate", "ReleaseHold", "Function",
+        "Print", "Echo", "EchoTiming", "Timing", "AbsoluteTiming", "RepeatedTiming",
+        "TimeConstrained", "MemoryConstrained", "Check", "Quiet", "Catch", "Reap",
+        "Sow", "Trace", "Hold", "HoldForm", "ParallelTable", "ParallelMap",
+        "ParallelEvaluate", "Set", "SetDelayed", "ReplaceAll", "ReplaceRepeated",
+        "Replace", "Last", "First", "Part", "List", NULL };
+    for (const char* const* n = transparent; *n; n++) {
+        SymbolDef* d = symtab_lookup(*n);
+        if (d) d->eval_transparent = 1;
+    }
+    tc_register_unwind_counter(eval_builtin_depth_counter());
 }
 
 Expr* builtin_compoundexpression(Expr* res) {

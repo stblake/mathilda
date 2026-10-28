@@ -449,6 +449,15 @@ static bool        g_tracing           = false; /* true only inside a Trace[]  *
  * the rule's own internal reductions are hidden, matching Mathematica (Range[10]
  * and x^{1..10} each appear as a single rewrite, not a decomposed one). */
 static int         g_trace_suppress    = 0;
+
+/* How many non-transparent C builtins are executing (see eval_transparent in
+ * symtab.h).  0 at the top level; 1 inside a builtin called from user code. */
+static int g_builtin_depth = 0;
+/* The head whose builtin the evaluator is running (innermost dispatch). */
+static const char* g_dispatch_head = NULL;
+int  eval_builtin_depth(void) { return g_builtin_depth; }
+const char* eval_dispatch_head(void) { return g_dispatch_head; }
+int* eval_builtin_depth_counter(void) { return &g_builtin_depth; }
 /* The recursion depth of the evaluate() frame whose current step came to rest
  * without any rewrite (set at evaluate_step_core's rest return, read by the
  * evaluate loop right after the step); -1 otherwise. */
@@ -3192,6 +3201,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                      * traced) above, before this bump. */
                     g_trace_suppress++;
                     unsigned long msg_before = mth_msg_fired_count();
+                    int opaque = !hdef->eval_transparent;
+                    g_builtin_depth += opaque;
+                    const char* outer_head = g_dispatch_head;
+                    g_dispatch_head = (res->type == EXPR_FUNCTION &&
+                                       res->data.function.head->type == EXPR_SYMBOL)
+                                    ? res->data.function.head->data.symbol.name : NULL;
                     Expr* ret = hdef->builtin_func(res);
                     /* 5a. Mixed exact/inexact numeric arguments. A numeric
                      * builtin that declined f[2., Sqrt[2]] is re-called once
@@ -3210,6 +3225,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                             expr_free(mixed);
                         }
                     }
+                    g_builtin_depth -= opaque;
+                    g_dispatch_head = outer_head;
                     g_trace_suppress--;
                     if (ret) {
                         /* No inf/nan may leak: a machine fast path that

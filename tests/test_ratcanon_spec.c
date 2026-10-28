@@ -68,39 +68,38 @@ static void proto_ok(const char* inner) {
 /* -------------------------------------------------------------------------- */
 
 static void test_plain_q(void) {
-    spec("Cancel[(1+x)/(1-x^2)]", "Times[-1, Power[Plus[-1, x], -1]]");
+    spec("Cancel[(1+x)/(1-x^2)]", "Power[Plus[1, Times[-1, x]], -1]");
     spec("Cancel[(x^2-1)/(x-1)]", "Plus[1, x]");
     spec("Cancel[(x^3-1)/(x-1)]", "Plus[1, x, Power[x, 2]]");
     spec("Cancel[(x^4-1)/(x^2-1)]", "Plus[1, Power[x, 2]]");
     spec("Cancel[(x^2+2x+1)/(x+1)]", "Plus[1, x]");
     spec("Cancel[(2 x^2+4x)/(x^2-4)]", "Times[2, Power[Plus[-2, x], -1], x]");
-    spec("Cancel[(6x^2-6)/(3x-3)]", "Plus[2, Times[2, x]]");
+    spec("Cancel[(6x^2-6)/(3x-3)]", "Times[2, Plus[1, x]]");
     spec("Cancel[(a x^2 - a)/(x-1)]", "Plus[a, Times[a, x]]");
     spec("Together[1/x+1/y]", "Times[Power[x, -1], Power[y, -1], Plus[x, y]]");
     spec("Together[x/(x+1)+1/(x+1)]", "1");
-    spec("Together[1/(x^2-1)+1/(x+1)]", "Times[x, Power[Plus[-1, Power[x, 2]], -1]]");
-    spec("Together[2/(x-1)-2/(x+1)]", "Times[4, Power[Plus[-1, Power[x, 2]], -1]]");
+    spec("Together[1/(x^2-1)+1/(x+1)]", "Times[Power[Plus[-1, x], -1], x, Power[Plus[1, x], -1]]");
+    spec("Together[2/(x-1)-2/(x+1)]", "Times[4, Power[Plus[-1, x], -1], Power[Plus[1, x], -1]]");
     spec("Together[1/(a+b)+1/(a-b)]",
-         "Times[2, a, Power[Plus[Power[a, 2], Times[-1, Power[b, 2]]], -1]]");
+         "Times[2, a, Power[Plus[a, Times[-1, b]], -1], Power[Plus[a, b], -1]]");
     spec("Together[b/(x-a)+b/(x+a)]",
-         "Times[-2, b, x, Power[Plus[Power[a, 2], Times[-1, Power[x, 2]]], -1]]");
+         "Times[-2, b, Power[Plus[a, Times[-1, x]], -1], x, Power[Plus[a, x], -1]]");
     spec("Together[a/(x-1)+b/(x-2)]",
-         "Times[Plus[Times[-2, a], Times[-1, b], Times[a, x], Times[b, x]], "
-         "Power[Plus[2, Times[-3, x], Power[x, 2]], -1]]");
+         "Times[Power[Plus[-2, x], -1], Power[Plus[-1, x], -1], Plus[Times[-2, a], Times[-1, b], Times[a, x], Times[b, x]]]");
 }
 
 static void test_transcendental(void) {
     spec("Together[1/(1+Log[x])+1/Log[x]]",
-         "Times[Plus[1, Times[2, Log[x]]], Power[Plus[Log[x], Power[Log[x], 2]], -1]]");
+         "Times[Power[Log[x], -1], Power[Plus[1, Log[x]], -1], Plus[1, Times[2, Log[x]]]]");
     spec("Cancel[(Log[x]^2-1)/(Log[x]-1)]", "Plus[1, Log[x]]");
     spec("Together[1/Log[x]-1/Log[y]]",
          "Times[Power[Log[x], -1], Power[Log[y], -1], Plus[Times[-1, Log[x]], Log[y]]]");
     spec("Together[1/(1+ArcTan[x])+1/ArcTan[x]]",
-         "Times[Plus[1, Times[2, ArcTan[x]]], Power[Plus[ArcTan[x], Power[ArcTan[x], 2]], -1]]");
+         "Times[Power[ArcTan[x], -1], Power[Plus[1, ArcTan[x]], -1], Plus[1, Times[2, ArcTan[x]]]]");
     spec("Together[(E^(2x)-1)/(E^x-1)]", "Plus[1, Power[E, x]]");
     spec("Cancel[(E^(2x)-1)/(E^x+1)]", "Plus[-1, Power[E, x]]");
     spec("Together[1/(E^x-1)+1/(E^x+1)]",
-         "Times[2, Power[E, x], Power[Plus[-1, Power[E, Times[2, x]]], -1]]");
+         "Times[2, Power[E, x], Power[Plus[-1, Power[E, x]], -1], Power[Plus[1, Power[E, x]], -1]]");
     /* Tan is a transcendental generator reduced via FLINT (one consistent sign
      * convention: leading-coefficient-positive denominator), so this is
      * -2/(-1+Tan^2), math-equal to the classical path's 2/(1-Tan^2). */
@@ -110,8 +109,8 @@ static void test_transcendental(void) {
 }
 
 static void test_gaussian(void) {
-    spec("Together[1/(x-I)+1/(x+I)]", "Times[2, x, Power[Plus[1, Power[x, 2]], -1]]");
-    spec("Together[1/(1-I x)+1/(1+I x)]", "Times[2, Power[Plus[1, Power[x, 2]], -1]]");
+    spec("Together[1/(x-I)+1/(x+I)]", "Times[2, x, Power[Plus[Complex[0, -1], x], -1], Power[Plus[Complex[0, 1], x], -1]]");
+    spec("Together[1/(1-I x)+1/(1+I x)]", "Times[2, Power[Plus[Complex[0, -1], x], -1], Power[Plus[Complex[0, 1], x], -1]]");
 }
 
 static void test_number_field(void) {

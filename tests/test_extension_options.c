@@ -302,7 +302,7 @@ void test_backward_compat(void) {
     /* These should match the existing rat_tests / parfrac_tests
      * expectations exactly — no behavioral drift on the default path. */
     run_eq("Cancel[(x^2 - 4)/(x - 2)]", "2 + x");
-    run_eq("Together[1/x + 1/(x + 1)]", "(1 + 2 x)/(x + x^2)");
+    run_eq("Together[1/x + 1/(x + 1)]", "(1 + 2 x)/(x (1 + x))");
     run_eq("PolynomialGCD[x^2 - 1, x - 1]", "-1 + x");
     run_eq("PolynomialLCM[x - 1, x + 1]", "(-1 + x) (1 + x)");
     run_eq("Apart[1/((x - 1) (x - 2)), x]", "1/(-2 + x) - 1/(-1 + x)");

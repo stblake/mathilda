@@ -96,6 +96,7 @@ typedef struct {
     const fmpz_mpoly_ctx_struct* ctx;   /* cached; never cleared here         */
     int fail;               /* a gcd failed or a division by zero was met    */
     long splits;            /* factors split by a common gcd (rf_single)     */
+    int inherit_flip;       /* rf_push marks the pushed factor flipped        */
 } RfCtx;
 
 static int rf_push_ptr(const Expr*** v, size_t* n, size_t* cap, const Expr* e) {
@@ -232,17 +233,27 @@ static void rf_ctx_clear(RfCtx* C) {
     C->gidx = -1;
 }
 
-/* MATHILDA_TOGETHER_FORM=factored renders the factored form (the denominator a
- * product of its gcd-free basis); the default renders the classical form, an
- * expanded numerator over an expanded denominator with the integer content
- * folded into each, which is what the internal callers read. */
+/* The answer form.  A user-level call (eval_builtin_depth() <= 1: Together
+ * itself is the only builtin running, possibly inside Module/Table/Map/...)
+ * gets the FACTORED form -- the denominator a product of its gcd-free basis,
+ * the numeric content in front.  A call made from inside another builtin
+ * (Integrate, Sum, Simplify, the Apart and DSolve machinery, ...) gets the
+ * classical form those callers were written against: an expanded numerator
+ * over an expanded denominator, the integer content folded into each.
+ * MATHILDA_TOGETHER_FORM=expanded (or =factored) forces one form everywhere. */
 static int rf_factored_form(void) {
     static int f = -1;
     if (f < 0) {
         const char* e = getenv("MATHILDA_TOGETHER_FORM");
-        f = (e && strcmp(e, "factored") == 0) ? 1 : 0;
+        f = !e ? 2 : strcmp(e, "factored") == 0 ? 1 : strcmp(e, "expanded") == 0 ? 0 : 2;
     }
-    return f;
+    if (f != 2) return f;
+    /* user level: the evaluator dispatched Together/Cancel/Apart itself (a C
+     * builtin calling builtin_together directly is internal) and no other
+     * builtin is running */
+    const char* h = eval_dispatch_head();
+    return eval_builtin_depth() <= 1 &&
+           (h == SYM_Together || h == SYM_Cancel || h == SYM_Apart);
 }
 
 /* Scan `e`, settle the exponential generator, order the variables.  With
@@ -299,13 +310,15 @@ static int rf_ctx_build(const Expr* e, RfCtx* C, const Expr* first) {
 /*  Rf: c * prod p_i^e_i                                               */
 /* ------------------------------------------------------------------ */
 
-typedef struct { fmpz_mpoly_struct p; slong e; } RfFac;
+/* `flip`: normalising the factor (or the one it was split from) negated it;
+ * the renderer may fold a leading -1 back into such a factor. */
+typedef struct { fmpz_mpoly_struct p; slong e; int flip; } RfFac;
 /* `reduced`: known to be in lowest terms (set by rf_single and rf_sum, kept
  * by powers and by multiplication with a constant), so a sum need not cancel
  * the term again. */
-typedef struct { fmpq_t c; RfFac* f; slong n, cap; int reduced; } Rf;
+typedef struct { fmpq_t c; RfFac* f; slong n, cap; int reduced; int cancelled; } Rf;
 
-static void rf_init(Rf* R) { fmpq_init(R->c); fmpq_one(R->c); R->f = NULL; R->n = R->cap = 0; R->reduced = 1; }
+static void rf_init(Rf* R) { fmpq_init(R->c); fmpq_one(R->c); R->f = NULL; R->n = R->cap = 0; R->reduced = 1; R->cancelled = 0; }
 
 static void rf_clear(Rf* R, const RfCtx* C) {
     for (slong i = 0; i < R->n; i++) fmpz_mpoly_clear(&R->f[i].p, C->ctx);
@@ -359,6 +372,7 @@ static int rf_push(Rf* R, fmpz_mpoly_t p, slong e, RfCtx* C) {
         return ok;
     }
     rf_normalise(p, g, ctx);
+    int flip = fmpz_sgn(g) < 0 || C->inherit_flip;
     if (!fmpz_is_one(g)) rf_mul_fmpz_pow(R->c, g, e);
     fmpz_clear(g);
     if (p->length == 1 && fmpz_mpoly_total_degree_si(p, ctx) > 1) {
@@ -392,6 +406,7 @@ static int rf_push(Rf* R, fmpz_mpoly_t p, slong e, RfCtx* C) {
     fmpz_mpoly_init(&R->f[R->n].p, ctx);
     fmpz_mpoly_swap(&R->f[R->n].p, p, ctx);
     R->f[R->n].e = e;
+    R->f[R->n].flip = flip;
     R->n++;
     return 1;
 }
@@ -402,7 +417,11 @@ static int rf_mul_into(Rf* R, Rf* S, RfCtx* C) {
     if (R->n == 0) R->reduced = S->reduced;
     else if (S->n != 0) R->reduced = 0;
     fmpq_mul(R->c, R->c, S->c);
-    for (slong i = 0; i < S->n && ok; i++) ok = rf_push(R, &S->f[i].p, S->f[i].e, C);
+    for (slong i = 0; i < S->n && ok; i++) {
+        C->inherit_flip = S->f[i].flip;
+        ok = rf_push(R, &S->f[i].p, S->f[i].e, C);
+    }
+    C->inherit_flip = 0;
     rf_clear(S, C);
     rf_init(S);
     return ok;
@@ -470,8 +489,11 @@ static int rf_split_den_monomials(Rf* R, RfCtx* C) {
         slong e = R->f[i].e;
         /* re-push the quotient so it merges with an equal factor: x^3 (2x-3)
          * from (3x^3 - 2x^4) next to a (3 - 2x) of its own */
+        int fl = R->f[i].flip;
         rf_remove(R, i, C);
+        C->inherit_flip = fl;
         ok = rf_push(R, q, e, C);
+        C->inherit_flip = 0;
         for (slong v = 0; v < nv && ok; v++)
             if (ex[v]) ok = rf_push_gen(R, v, e * (slong)ex[v], C);
         i = -1;                                    /* the list was reordered */
@@ -492,14 +514,19 @@ static int rf_gcd_nontrivial(fmpz_mpoly_t G, const fmpz_mpoly_t A, const fmpz_mp
 /* Replace factor i (p^e) by g^e (p/g)^e. */
 static int rf_split_factor(Rf* R, slong i, const fmpz_mpoly_t g, RfCtx* C) {
     C->splits++;
+    R->cancelled = 1;
     fmpz_mpoly_t q, gg;
     fmpz_mpoly_init(q, C->ctx); fmpz_mpoly_init(gg, C->ctx);
     int ok = fmpz_mpoly_divides(q, &R->f[i].p, g, C->ctx);
     if (ok) {
         slong e = R->f[i].e;
+        int fl = R->f[i].flip;
         fmpz_mpoly_set(gg, g, C->ctx);
         rf_remove(R, i, C);
-        ok = rf_push(R, q, e, C) && rf_push(R, gg, e, C);
+        C->inherit_flip = fl;                  /* the cofactor keeps the sign */
+        ok = rf_push(R, q, e, C);
+        C->inherit_flip = 0;
+        ok = ok && rf_push(R, gg, e, C);
     } else C->fail = 1;
     fmpz_mpoly_clear(q, C->ctx); fmpz_mpoly_clear(gg, C->ctx);
     return ok;
@@ -1470,17 +1497,25 @@ static Expr* rf_poly_to_expr(const fmpz_mpoly_t p, const RfCtx* C) {
     return r;
 }
 
-/* Index of the factor that absorbs a leading -1, or -1: the one non-monomial
- * numerator factor of exponent 1; else, with no non-monomial numerator factor,
- * the one non-monomial denominator factor of exponent -1. */
+/* Index of the factor that absorbs the -1 of the coefficient, or -1:
+ *  - c = -1/q: the one non-monomial numerator factor of exponent 1,
+ *    (-3 - 4x)/(3 ...), (4 - x - x^2)/(...);
+ *  - c = -1 exactly, no numerator factor at all: the one non-monomial
+ *    denominator factor of exponent -1, when its normalisation negated it or a
+ *    cancellation left it alone -- 1/(1 - x), (-x - 2)/(x^2 - 4) -> 1/(2 - x).
+ *    A sign from elsewhere stays in front: -y/(-4 + 3x + x^2), -1/3 1/((-2+x) x). */
 static slong rf_absorb_slot(const Rf* R) {
-    slong nn = 0, nd = 0, in = -1, id = -1;
+    if (!fmpz_equal_si(fmpq_numref(R->c), -1)) return -1;
+    slong nn = 0, nm = 0, nd = 0, in = -1, id = -1;
     for (slong i = 0; i < R->n; i++) {
+        if (R->f[i].e > 0 && rf_is_mono(&R->f[i].p)) { nm++; continue; }
         if (rf_is_mono(&R->f[i].p)) continue;
         if (R->f[i].e > 0) { nn++; in = i; } else { nd++; id = i; }
     }
     if (nn == 1) return R->f[in].e == 1 ? in : -1;
-    if (nn == 0 && nd == 1) return R->f[id].e == -1 ? id : -1;
+    if (nn == 0 && nm == 0 && nd == 1 && fmpz_is_one(fmpq_denref(R->c)) &&
+        R->f[id].e == -1 && (R->f[id].flip || R->cancelled))
+        return id;
     return -1;
 }
 
@@ -1489,15 +1524,13 @@ static slong rf_absorb_slot(const Rf* R) {
 static Expr* rf_to_expr_raw(const Rf* R, const RfCtx* C, Expr* extra) {
     if (fmpq_is_zero(R->c)) { if (extra) expr_free(extra); return expr_new_integer(0); }
     slong absorb = -1;
-    if (fmpz_equal_si(fmpq_numref(R->c), -1) && fmpz_is_one(fmpq_denref(R->c)))
-        absorb = rf_absorb_slot(R);
+    absorb = rf_absorb_slot(R);
     Expr** a = malloc((size_t)(R->n + 2) * sizeof(Expr*));
     size_t na = 0;
-    if (absorb < 0 && !fmpq_is_one(R->c)) {
-        fmpq_t c; fmpq_init(c); fmpq_set(c, R->c);
-        a[na++] = fb_fmpq_to_expr(c);
-        fmpq_clear(c);
-    }
+    fmpq_t c; fmpq_init(c); fmpq_set(c, R->c);
+    if (absorb >= 0) fmpq_neg(c, c);
+    if (!fmpq_is_one(c)) a[na++] = fb_fmpq_to_expr(c);
+    fmpq_clear(c);
     for (slong i = 0; i < R->n; i++) {
         Expr* b = rf_poly_to_expr(&R->f[i].p, C);
         if (i == absorb)
@@ -1514,6 +1547,8 @@ static Expr* rf_to_expr_raw(const Rf* R, const RfCtx* C, Expr* extra) {
     free(a);
     return r;
 }
+
+int ratfun_factored_form(void) { return rf_factored_form(); }
 
 /* Classical form: (p * num) / (q * den), both sides expanded. */
 static Expr* rf_to_expr_expanded(const Rf* R, const RfCtx* C) {
@@ -1569,6 +1604,10 @@ static int rf_has_den(const Expr* e) {
         if (x->type == EXPR_INTEGER && x->data.integer < 0 &&
             (b->type == EXPR_SYMBOL || b->type == EXPR_FUNCTION))
             return 1;
+        /* E^(-u): a denominator E^u (Together[1 + E^(-x)] = E^(-x) (1 + E^x)) */
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E && rf_expr_negative(x) &&
+            rf_factored_form())
+            return 1;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (rf_has_den(e->data.function.args[i])) return 1;
@@ -1579,9 +1618,12 @@ static int rf_has_den(const Expr* e) {
 static Expr* rf_normal_form(const Expr* e, RfCtx* C) {
     Rf R; rf_init(&R);
     Expr* out = NULL;
+    /* the factored form writes a single term's denominator squarefree too:
+     * Together[(x - 1)/(x^2 + 2x + 1)^2] is (-1 + x)/(1 + x)^4 */
     if (rf_from_expr(e, &R, C) &&
         (rf_head_is(e, SYM_Plus) ||
-         (R.reduced ? rf_split_den_monomials(&R, C) : rf_single(&R, C))) && !C->fail)
+         ((R.reduced ? rf_split_den_monomials(&R, C) : rf_single(&R, C)) &&
+          (!rf_factored_form() || rf_den_squarefree(&R, C)))) && !C->fail)
         out = rf_to_expr(&R, C);
     rf_clear(&R, C);
     return out;
@@ -1593,10 +1635,21 @@ Expr* ratfun_together(const Expr* e) {
     if (!rf_ctx_build(e, &C, NULL)) return NULL;
     /* Nothing to combine: a polynomial (or a product of them) is left as it
      * is, factored or expanded -- Together[(1 + x)^2 (2 + x)] stays. */
+    /* no denominator: a product stays as written (Together[(1 + x)^2 (2 + x)]),
+     * a sum goes to the expanding path so like terms combine
+     * (Together[(a + b) f[c] - a f[c]] = b f[c]) */
     Expr* out = rf_has_den(e) ? rf_normal_form(e, &C)
-              : rf_factored_form() ? expr_copy((Expr*)e) : NULL;
+              : (rf_factored_form() && !rf_head_is(e, SYM_Plus)) ? expr_copy((Expr*)e) : NULL;
     rf_ctx_clear(&C);
     return out;
+}
+
+/* A term that is a bare reciprocal power f^-k: the factored Cancel leaves it
+ * as written when nothing cancels -- Cancel[1/(2 + 2 x) + ...] keeps
+ * (2 + 2 x)^-1, while 4/(3 + 3 x)^2 becomes 4/(9 (1 + x)^2). */
+static int rf_lone_den(const Expr* t) {
+    return rf_head_is(t, SYM_Power) && t->data.function.arg_count == 2 &&
+           t->data.function.args[1]->type == EXPR_INTEGER && t->data.function.args[1]->data.integer < 0;
 }
 
 /* A sum carrying a denominator strictly inside `e` (below its top node). */
@@ -1642,7 +1695,9 @@ Expr* ratfun_cancel(const Expr* e) {
             long s0 = C.splits;
             a[k] = rf_has_den(t) ? rf_normal_form(t, &C) : expr_copy((Expr*)t);
             if (!a[k]) break;
-            if (C.splits == s0 && rf_has_den(t)) { expr_free(a[k]); a[k] = expr_copy((Expr*)t); }
+            if (C.splits == s0 && rf_has_den(t) && (!rf_factored_form() || rf_lone_den(t))) {
+                expr_free(a[k]); a[k] = expr_copy((Expr*)t);
+            }
         }
         if (k == n) out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), a, n));
         else for (size_t i = 0; i < k; i++) expr_free(a[i]);
@@ -1706,6 +1761,9 @@ static int rf_from_fmpq_poly(Rf* R, const fmpq_poly_t a, RfCtx* C) {
 
 /* One term coef / P^j in the output form.  `coef` is consumed. */
 static Expr* rf_apart_term(Rf* coef, const fmpz_mpoly_t P, slong j, const RfCtx* C) {
+    /* a coefficient -1/(b - a) is written 1/((-a + b) ...): its sign is the
+     * residue's own, so a lone parameter factor may take it back */
+    coef->cancelled = 1;
     Expr* den = expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ rf_poly_to_expr(P, C), expr_new_integer(-(int64_t)j) }, 2);
     return rf_to_expr_raw(coef, C, den);
@@ -1836,10 +1894,14 @@ static int rf_mul_kelt(Rf* R, const fmpz_mpoly_q_t q, ulong xpow,
         if (!fmpz_mpoly_factor(f, d, pctx)) ok = 0;
         else {
             fmpq_div_fmpz(R->c, R->c, f->constant);
+            /* a negative constant is the factors' own sign: 1/(b - a) is
+             * -1/(a - b), and may be written back as 1/(-a + b) */
+            C->inherit_flip = fmpz_sgn(f->constant) < 0;
             for (slong i = 0; i < f->num && ok; i++) {
                 rf_param_to_main(m, f->poly + i, 0, pctx, C, ex);
                 ok = rf_push(R, m, -fmpz_get_si(f->exp + i), C);
             }
+            C->inherit_flip = 0;
         }
         fmpz_mpoly_factor_clear(f, pctx);
     }
@@ -1932,7 +1994,8 @@ static Expr* rf_apart_k(const fmpz_mpoly_t Nm, const Rf* Kc, RfApFac* F, slong n
             ok = rf_push(&co, m, Kc->f[i].e, C);
             fmpz_mpoly_clear(m, C->ctx);
         }
-        ok = ok && rf_mul_kelt(&co, (fmpz_mpoly_q_struct*)c, (ulong)r, pctx, C, ex);
+        ok = ok && rf_mul_kelt(&co, (fmpz_mpoly_q_struct*)c, (ulong)r, pctx, C, ex) &&
+             rf_single(&co, C);          /* the constant times the coefficient, reduced */
         if (ok) {
             if (nt == cap) { cap *= 2; terms = realloc(terms, cap * sizeof(Expr*)); }
             terms[nt++] = rf_to_expr_raw(&co, C, NULL);
@@ -1961,7 +2024,8 @@ static Expr* rf_apart_k(const fmpz_mpoly_t Nm, const Rf* Kc, RfApFac* F, slong n
                 fmpz_mpoly_clear(m, C->ctx);
             }
             Rf an; rf_init(&an);
-            ok = ok && rf_from_kpoly(&an, rem, K, pctx, C, ex) && rf_mul_into(&co, &an, C);
+            ok = ok && rf_from_kpoly(&an, rem, K, pctx, C, ex) && rf_mul_into(&co, &an, C) &&
+                 rf_single(&co, C);
             rf_clear(&an, C);
             if (ok) {
                 if (nt == cap) { cap *= 2; terms = realloc(terms, cap * sizeof(Expr*)); }
@@ -2687,6 +2751,8 @@ int ratfun_modulus_option(const Expr* res, const char* head, mpz_t p, Expr** str
 }
 
 #else  /* !USE_FLINT */
+
+int ratfun_factored_form(void) { return 0; }
 
 int ratfun_modulus_option(const Expr* res, const char* head, mpz_t p, Expr** stripped) {
     (void)res; (void)head; (void)p; *stripped = NULL; return 0;

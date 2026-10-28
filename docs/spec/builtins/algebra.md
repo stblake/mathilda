@@ -129,10 +129,22 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
   Before → after on the shootout corpus (`benchmarks/98-rational-shootout`):
   200 linear summands 11.9 → 10.0 ms, nested depth 32 0.39 → 0.19 ms, 16
   multivariate summands 136 → 91 ms, 17 Gaussian summands 44 → 0.48 ms.
+- **Factored output form** (v0.6073). A call made at user level (the REPL, a
+  script, or inside `Module`/`Map`/`Table`/`If` and the other scoping and
+  functional heads) keeps the denominator as a product of its gcd-free basis
+  factors, with the numeric content in front:
+  `Together[1/(2 x - 2) + 1/(3 x + 3)]` is `(1 + 5 x)/(6 (-1 + x) (1 + x))`.
+  `Cancel` keeps factors the same way, and each `Apart` coefficient is one
+  fraction over a factored denominator. A call from inside another builtin
+  (Simplify, Integrate, Sum, ...) gets the expanded form, numerator over
+  expanded denominator, that its caller reads. `MATHILDA_TOGETHER_FORM=factored`
+  or `=expanded` forces one form everywhere. The level is tracked by an
+  evaluator counter of nested builtin calls that skips heads marked
+  `eval_transparent` (`src/core.c`).
 - **`Modulus -> p`** (v0.6072) combines and cancels over the integers modulo a
   prime `p` (dense `fmpz_mod_poly` for one variable, `fmpz_mod_mpoly`
   otherwise): `Together[1/(x - 1) + 1/(x + 1), Modulus -> 3]` is
-  `(2 x)/(2 + x^2)`. Messages as for `Cancel`.
+  `(2 x)/((1 + x) (2 + x))`. Messages as for `Cancel`.
 - **A sum with no denominators is combined too** (v0.6050, issue #113).
   The numerator of a denominator-free sum is expanded, so like terms with
   different coefficient forms cancel over any kernel, not only over symbols:
