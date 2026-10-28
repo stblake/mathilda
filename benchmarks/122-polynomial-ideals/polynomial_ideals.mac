@@ -1,0 +1,230 @@
+/* ==========================================================================
+   Experiment 122 -- polynomial gcds, lcms and ideals (Maxima column).
+
+   The same cases as polynomial_ideals.m, with the same labels and the same
+   exact integer checks.  gcd is core Maxima.  lcm is quotient(a, gcd(a, b)) * b
+   on the same core gcd: the functs package's lcm costs 28 s at degree 400 (and
+   does not finish the degree-1000 case), which would time the package rather
+   than the algorithm and spend the file's budget.  Groebner bases, division by a basis and elimination are the
+   grobner package (poly_reduced_grobner, poly_normal_form,
+   poly_elimination_ideal) over its integer coefficient ring, which is faster
+   than the default expression ring on every case here.  Modulus gcds and lcms
+   set `modulus`; the grobner package has no F_p coefficient ring, so the
+   Modulus Groebner cases are SKIP, as are the cylindrical decompositions
+   (Maxima has none).  Inputs are expanded outside the timing, as in the other
+   halves.
+   ========================================================================== */
+
+load("../harness.mac")$
+load(grobner)$
+
+require(["gcd", "lcm", "poly_reduced_grobner", "poly_normal_form",
+         "poly_elimination_ideal"])$
+
+poly_coefficient_ring : ring_of_integers$
+
+P : 32003$
+pt1(vs) := makelist(vs[i] = (2*i + 1)/(3*i + 5), i, 1, length(vs))$
+pt2(vs) := makelist(vs[i] = (3*i + 2)/(5*i + 7), i, 1, length(vs))$
+q1(vs) := makelist(vs[i] = i + 2, i, 1, length(vs))$
+q2(vs) := makelist(vs[i] = 2*i + 5, i, 1, length(vs))$
+ratio(g, vs) := subst(pt1(vs), g) / subst(pt2(vs), g)$
+ratioMod(g, vs) := mod(subst(q1(vs), g) * inv_mod(mod(subst(q2(vs), g), P), P), P)$
+polyChk(g, vs) := 10^40 * hipow(expand(g), vs[1]) + round(10^6 * ratio(g, vs))$
+polyChkMod(g, vs) := 10^12 * hipow(expand(g), vs[1]) + ratioMod(g, vs)$
+listChk(G, vs) := 10^40 * length(G) + round(10^6 * apply("+", map(lambda([g], ratio(g, vs)), G)))$
+
+cyclicSystem(v) := block([n : length(v)],
+  append(makelist(sum(product(v[mod(i + k - 1, n) + 1], k, 0, d - 1), i, 1, n), d, 1, n - 1),
+         [product(v[i], i, 1, n) - 1]))$
+katU(vs, i) := if abs(i) < length(vs) then vs[abs(i) + 1] else 0$
+katsuraSystem(vs) := block([n : length(vs) - 1],
+  append(makelist(expand(sum(katU(vs, l) * katU(vs, m - l), l, -n, n) - katU(vs, m)), m, 0, n - 1),
+         [sum(katU(vs, l), l, -n, n) - 1]))$
+
+/* gcd under `modulus` returns balanced residues; the check reads them back
+   with modulus off. */
+gcd2(a, b) := gcd(a, b)$
+lcm2(a, b) := quotient(a, gcd(a, b)) * b$
+modGcd(a, b) := block([r], modulus : P, r : gcd(a, b), modulus : false, r)$
+modLcm(a, b) := block([r], modulus : P, r : rat(lcm2(a, b)), modulus : false, ratdisrep(r))$
+
+xs : [x]$ v3 : [x, y, z]$ v6 : [x, y, z, u, v, w]$
+
+/* ---- PolynomialGCD ------------------------------------------------------- */
+
+sh100 : factorableUPoly(100, x)$
+g400a : expand(sh100 * denseUPoly(200, x))$
+g400b : expand(sh100 * (denseUPoly(199, x) + 1))$
+bench("PolynomialGCD, deg-400, deg-200 gcd", lambda([], gcd(g400a, g400b)))$
+check("PolynomialGCD, deg-400, deg-200 gcd", polyChk(gcd(g400a, g400b), xs))$
+
+sh250 : factorableUPoly(250, x)$
+g1000a : expand(sh250 * denseUPoly(500, x))$
+g1000b : expand(sh250 * (denseUPoly(499, x) + 1))$
+bench("PolynomialGCD, deg-1000, deg-500 gcd", lambda([], gcd(g1000a, g1000b)))$
+check("PolynomialGCD, deg-1000, deg-500 gcd", polyChk(gcd(g1000a, g1000b), xs))$
+
+cp1000a : expand(denseUPoly(1000, x))$
+cp1000b : expand(denseUPoly(999, x) + x^500 + 2)$
+bench("PolynomialGCD, deg-1000 coprime", lambda([], gcd(cp1000a, cp1000b)))$
+check("PolynomialGCD, deg-1000 coprime", polyChk(gcd(cp1000a, cp1000b), xs))$
+
+shBig : expand((10^50 + 3)*x^100 + denseUPoly(99, x))$
+big200a : expand(shBig * (denseUPoly(100, x) + 7^60))$
+big200b : expand(shBig * (denseUPoly(101, x) - 11^50))$
+bench("PolynomialGCD, deg-200, 60-digit coefficients", lambda([], gcd(big200a, big200b)))$
+check("PolynomialGCD, deg-200, 60-digit coefficients", polyChk(gcd(big200a, big200b), xs))$
+
+g2 : expand((x^2 + 3*x*y + y^3 + 1)^5)$
+bi40a : expand(g2 * (x - y^2 + 3)^8)$
+bi40b : expand(g2 * (x^3 + y + 5)^6)$
+bench("PolynomialGCD, dense bivariate, deg-15 gcd", lambda([], gcd(bi40a, bi40b)))$
+check("PolynomialGCD, dense bivariate, deg-15 gcd", polyChk(gcd(bi40a, bi40b), v3))$
+
+g3 : (1 + x + y + z)^6$
+tri6a : expand(g3 * (x + 2*y - z + 3)^4)$
+tri6b : expand(g3 * (x - y + 2*z + 1)^4)$
+bench("PolynomialGCD, dense trivariate, deg-6 gcd", lambda([], gcd(tri6a, tri6b)))$
+check("PolynomialGCD, dense trivariate, deg-6 gcd", polyChk(gcd(tri6a, tri6b), v3))$
+
+g6 : 1 + x*y^3 + z^2*u*v^4 + w^5 + x*w$
+sp6a : expand(g6^2 * (x^2 + z*v + 2) * (y*u + w^2 + 1))$
+sp6b : expand(g6^2 * (x*z + u^3 + 3) * (v*w + y^2 + 1))$
+bench("PolynomialGCD, sparse 6-variable", lambda([], gcd(sp6a, sp6b)))$
+check("PolynomialGCD, sparse 6-variable", polyChk(gcd(sp6a, sp6b), v6))$
+
+ps10 : makelist(expand((x^2 + y^2 + x*y + 1)^2 * (x + y + i)^3 * (x - i*y + 1)^2), i, 1, 10)$
+bench("PolynomialGCD, 10 bivariate arguments", lambda([], lreduce(gcd2, ps10)))$
+check("PolynomialGCD, 10 bivariate arguments", polyChk(lreduce(gcd2, ps10), v3))$
+
+bench("PolynomialGCD, Modulus 32003, deg-1000", lambda([], modGcd(g1000a, g1000b)))$
+check("PolynomialGCD, Modulus 32003, deg-1000", polyChkMod(modGcd(g1000a, g1000b), xs))$
+
+bench("PolynomialGCD, Modulus 32003, trivariate", lambda([], modGcd(tri6a, tri6b)))$
+check("PolynomialGCD, Modulus 32003, trivariate", polyChkMod(modGcd(tri6a, tri6b), v3))$
+
+/* ---- PolynomialLCM ------------------------------------------------------- */
+
+bench("PolynomialLCM, deg-400, deg-200 gcd", lambda([], lcm2(g400a, g400b)))$
+check("PolynomialLCM, deg-400, deg-200 gcd", polyChk(lcm2(g400a, g400b), xs))$
+
+bench("PolynomialLCM, deg-1000, deg-500 gcd", lambda([], lcm2(g1000a, g1000b)))$
+check("PolynomialLCM, deg-1000, deg-500 gcd", polyChk(lcm2(g1000a, g1000b), xs))$
+
+bench("PolynomialLCM, dense trivariate, deg-6 gcd", lambda([], lcm2(tri6a, tri6b)))$
+check("PolynomialLCM, dense trivariate, deg-6 gcd", polyChk(lcm2(tri6a, tri6b), v3))$
+
+bench("PolynomialLCM, sparse 6-variable", lambda([], lcm2(sp6a, sp6b)))$
+check("PolynomialLCM, sparse 6-variable", polyChk(lcm2(sp6a, sp6b), v6))$
+
+bench("PolynomialLCM, 10 bivariate arguments", lambda([], lreduce(lcm2, ps10)))$
+check("PolynomialLCM, 10 bivariate arguments", polyChk(lreduce(lcm2, ps10), v3))$
+
+bench("PolynomialLCM, Modulus 32003, trivariate", lambda([], modLcm(tri6a, tri6b)))$
+check("PolynomialLCM, Modulus 32003, trivariate", polyChkMod(modLcm(tri6a, tri6b), v3))$
+
+/* ---- PolynomialReduce ---------------------------------------------------- */
+
+c5v : [a1, a2, a3, a4, a5]$
+cyc5 : cyclicSystem(c5v)$
+poly_monomial_order : grevlex$
+cyc5drl : poly_reduced_grobner(cyc5, c5v)$
+fc5 : expand((a1 + 2*a2 + 3*a3 + 4*a4 + 5*a5 + 1)^7)$
+bench("PolynomialReduce, by the cyclic-5 DRL basis", lambda([], poly_normal_form(fc5, cyc5drl, c5v)))$
+check("PolynomialReduce, by the cyclic-5 DRL basis", polyChk(poly_normal_form(fc5, cyc5drl, c5v), c5v))$
+
+k4v : [k0, k1, k2, k3, k4]$
+kat4 : katsuraSystem(k4v)$
+kat4drl : poly_reduced_grobner(kat4, k4v)$
+fk4 : expand((k0 - 2*k1 + 3*k2 - k3 + 2*k4 + 1)^9)$
+bench("PolynomialReduce, by the katsura-4 DRL basis", lambda([], poly_normal_form(fk4, kat4drl, k4v)))$
+check("PolynomialReduce, by the katsura-4 DRL basis", polyChk(poly_normal_form(fk4, kat4drl, k4v), k4v))$
+
+sq3 : [x^2 + y + z - 1, x + y^2 + z - 1, x + y + z^2 - 1]$
+f3 : expand((x + 2*y + 3*z + 1)^14)$
+poly_monomial_order : lex$
+sq3lex : poly_reduced_grobner(sq3, v3)$
+bench("PolynomialReduce, by a 3-variable Lex basis", lambda([], poly_normal_form(f3, sq3lex, v3)))$
+check("PolynomialReduce, by a 3-variable Lex basis", polyChk(poly_normal_form(f3, sq3lex, v3), v3))$
+
+poly_monomial_order : grlex$
+sq3dl : poly_reduced_grobner(sq3, v3)$
+bench("PolynomialReduce, by a 3-variable DegLex basis", lambda([], poly_normal_form(f3, sq3dl, v3)))$
+check("PolynomialReduce, by a 3-variable DegLex basis", polyChk(poly_normal_form(f3, sq3dl, v3), v3))$
+
+/* ---- Eliminate (the elimination ideal, under lex) ------------------------- */
+
+poly_monomial_order : lex$
+
+bench("Eliminate, 2 variables from 3 quadratics", lambda([], poly_elimination_ideal(sq3, 2, [y, z, x])))$
+check("Eliminate, 2 variables from 3 quadratics", listChk(poly_elimination_ideal(sq3, 2, [y, z, x]), xs))$
+
+crv : [x - (t^3 - 3*t), y - (t^5 + t^2 - 1)]$
+bench("Eliminate, plane curve of degree 5", lambda([], poly_elimination_ideal(crv, 1, [t, x, y])))$
+check("Eliminate, plane curve of degree 5", listChk(poly_elimination_ideal(crv, 1, [t, x, y]), [x, y]))$
+
+srf : [x - s*t, y - (s^2 - t), z - (s + t^3)]$
+bench("Eliminate, parametric surface", lambda([], poly_elimination_ideal(srf, 2, [s, t, x, y, z])))$
+check("Eliminate, parametric surface", listChk(poly_elimination_ideal(srf, 2, [s, t, x, y, z]), v3))$
+
+chn : [x - (y^2 + z), y - (z^2 + w), z - (w^2 + 1), w^3 + x*w - 2]$
+bench("Eliminate, 3 variables from a 4-variable chain", lambda([], poly_elimination_ideal(chn, 3, [y, z, w, x])))$
+check("Eliminate, 3 variables from a 4-variable chain", listChk(poly_elimination_ideal(chn, 3, [y, z, w, x]), xs))$
+
+/* ---- no cylindrical decomposition in Maxima -------------------------------- */
+
+skip("CylindricalDecomposition, unit disc", "cylindrical decomposition")$
+skip("CylindricalDecomposition, two ellipses", "cylindrical decomposition")$
+skip("CylindricalDecomposition, quartic curve", "cylindrical decomposition")$
+skip("CylindricalDecomposition, ball and cylinder", "cylindrical decomposition")$
+skip("CylindricalDecomposition, Whitney umbrella in a ball", "cylindrical decomposition")$
+
+/* ---- GroebnerBasis ------------------------------------------------------- */
+
+bench("GroebnerBasis, 3-variable quadratics, Lex", lambda([], poly_reduced_grobner(sq3, v3)))$
+check("GroebnerBasis, 3-variable quadratics, Lex", listChk(poly_reduced_grobner(sq3, v3), v3))$
+
+poly_monomial_order : grevlex$
+bench("GroebnerBasis, cyclic-5, DRL", lambda([], poly_reduced_grobner(cyc5, c5v)))$
+check("GroebnerBasis, cyclic-5, DRL", listChk(poly_reduced_grobner(cyc5, c5v), c5v))$
+
+bench("GroebnerBasis, katsura-4, DRL", lambda([], poly_reduced_grobner(kat4, k4v)))$
+check("GroebnerBasis, katsura-4, DRL", listChk(poly_reduced_grobner(kat4, k4v), k4v))$
+
+poly_monomial_order : lex$
+pcrv : [x - t^3 + 3*t, y - t^5 - t^2 + 1]$
+bench("GroebnerBasis, elimination form, plane curve", lambda([], poly_elimination_ideal(pcrv, 1, [t, x, y])))$
+check("GroebnerBasis, elimination form, plane curve", listChk(poly_elimination_ideal(pcrv, 1, [t, x, y]), [x, y]))$
+
+skip("GroebnerBasis, cyclic-5, Modulus 32003", "groebner basis over F_p")$
+
+poly_monomial_order : grevlex$
+k5v : [k0, k1, k2, k3, k4, k5]$
+kat5 : katsuraSystem(k5v)$
+bench("GroebnerBasis, katsura-5, DRL", lambda([], poly_reduced_grobner(kat5, k5v)))$
+check("GroebnerBasis, katsura-5, DRL", listChk(poly_reduced_grobner(kat5, k5v), k5v))$
+
+poly_monomial_order : lex$
+benchOnce("GroebnerBasis, cyclic-5, Lex", lambda([], poly_reduced_grobner(cyc5, c5v)))$
+check("GroebnerBasis, cyclic-5, Lex", listChk(poly_reduced_grobner(cyc5, c5v), c5v))$
+
+skip("GroebnerBasis, cyclic-6, DRL, Modulus 32003", "groebner basis over F_p")$
+
+poly_monomial_order : grevlex$
+c6v : [b1, b2, b3, b4, b5, b6]$
+cyc6 : cyclicSystem(c6v)$
+benchOnce("GroebnerBasis, cyclic-6, DRL", lambda([], poly_reduced_grobner(cyc6, c6v)))$
+check("GroebnerBasis, cyclic-6, DRL", listChk(poly_reduced_grobner(cyc6, c6v), c6v))$
+
+poly_monomial_order : lex$
+benchOnce("GroebnerBasis, katsura-4, Lex", lambda([], poly_reduced_grobner(kat4, k4v)))$
+check("GroebnerBasis, katsura-4, Lex", listChk(poly_reduced_grobner(kat4, k4v), k4v))$
+
+poly_monomial_order : grevlex$
+k6v : [k0, k1, k2, k3, k4, k5, k6]$
+kat6 : katsuraSystem(k6v)$
+benchOnce("GroebnerBasis, katsura-6, DRL", lambda([], poly_reduced_grobner(kat6, k6v)))$
+check("GroebnerBasis, katsura-6, DRL", listChk(poly_reduced_grobner(kat6, k6v), k6v))$
+
+quit()$

@@ -198,9 +198,10 @@ def group_of(num):
     finding (RandomReal[{}, dims] returns unevaluated in Mathilda where
     Mathematica reads it as the default {0,1} range) is recorded in the changelog;
     a guard for it belongs in tests/, not in a timing job."""
-    if 1 <= num <= 10 or num == 121:
-        # 121 (rational functions at stress sizes) is group A by subject; the
-        # 1-10 block was full when it was added.
+    if 1 <= num <= 10 or num in (121, 122):
+        # 121 (rational functions) and 122 (polynomial gcds and ideals) at
+        # stress sizes are group A by subject; the 1-10 block was full when
+        # they were added.
         return "A symbolic (sympy)"
     if 11 <= num <= 20:
         return "B numeric libraries (scipy)"

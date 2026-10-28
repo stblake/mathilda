@@ -57,6 +57,7 @@
 #include "qaupoly.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "ratfun.h"
 #include "zupoly.h"
 #include <gmp.h>
 #include <string.h>
@@ -3108,6 +3109,13 @@ Expr* builtin_polynomialgcd(Expr* res) {
         Expr* mod_p = poly_modulus_option(res, &base_argc);
         if (mod_p) {
             if (base_argc == 0) return NULL;
+            /* Any number of variables and arguments, over GF(p) on nmod_mpoly
+             * (ratfun_gcd.inc); the univariate fold below is its fallback. */
+            if (base_argc >= 2 && mod_p->type == EXPR_INTEGER && mod_p->data.integer >= 2) {
+                Expr* g = ratfun_polynomial_gcd(res->data.function.args, base_argc,
+                                                (uint64_t)mod_p->data.integer);
+                if (g) return g;
+            }
             /* the GCD variable, inferred from the operands as Variables[] does */
             Expr** vars = NULL; size_t nv = 0, cap = 0;
             for (size_t i = 0; i < base_argc; i++)
@@ -3208,6 +3216,18 @@ Expr* builtin_polynomialgcd(Expr* res) {
         if (auto_tower && auto_tower->n == 1) {
             alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
             alpha = alpha_auto;
+        }
+    }
+
+    /* Every arity over Q[vars, kernels] in one FLINT context: one conversion
+     * per argument, the gcd folded natively, the answer rendered certified
+     * (ratfun_gcd.inc).  It declines algebraic and inexact coefficients, which
+     * the engines below take. */
+    if (!alpha && !auto_flag && poly_argc == res->data.function.arg_count && poly_argc >= 2) {
+        Expr* g = ratfun_polynomial_gcd(res->data.function.args, poly_argc, 0);
+        if (g) {
+            if (auto_tower) qa_tower_free(auto_tower);
+            return g;
         }
     }
 
@@ -3700,6 +3720,23 @@ static Expr* polynomiallcm_with_extension(Expr** argv, size_t argc,
 Expr* builtin_polynomiallcm(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+    /* Modulus -> p: the LCM over GF(p) (ratfun_gcd.inc).  When that declines
+     * the call stays unevaluated: the classical path below does not know the
+     * option and multiplied the Rule into the answer as a factor. */
+    {
+        size_t base_argc = 0;
+        Expr* mod_p = poly_modulus_option(res, &base_argc);
+        if (mod_p) {
+            if (base_argc == 0 || mod_p->type != EXPR_INTEGER || mod_p->data.integer < 2)
+                return NULL;
+            if (base_argc == 1)
+                return internal_polynomialmod((Expr*[]){ expr_copy(res->data.function.args[0]),
+                                                         expr_copy(mod_p) }, 2);
+            return ratfun_polynomial_lcm(res->data.function.args, base_argc,
+                                         (uint64_t)mod_p->data.integer);
+        }
+    }
+
     /* Strip a trailing Extension -> α option.  Extension -> Automatic
      * triggers extension_autodetect_args on the polynomial arguments. */
     size_t poly_argc = res->data.function.arg_count;
@@ -3713,6 +3750,16 @@ Expr* builtin_polynomiallcm(Expr* res) {
         if (auto_tower && auto_tower->n == 1) {
             alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
             alpha = alpha_auto;
+        }
+    }
+    /* Every arity over Q[vars, kernels] in one FLINT context, the classical
+     * fold's shape kept (ratfun_gcd.inc); algebraic and inexact coefficients
+     * go on to the paths below. */
+    if (!alpha && !auto_flag && poly_argc == res->data.function.arg_count && poly_argc >= 2) {
+        Expr* l = ratfun_polynomial_lcm(res->data.function.args, poly_argc, 0);
+        if (l) {
+            if (auto_tower) qa_tower_free(auto_tower);
+            return l;
         }
     }
     if (poly_argc != res->data.function.arg_count) {

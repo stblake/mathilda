@@ -1,0 +1,1178 @@
+{
+ "host": {
+  "date": "2026-10-28",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.6076 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/usr/local/opt/python@3.14/bin/python3.14",
+  "python_libs": "",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "gp": "[2, 17, 3] (/usr/local/bin/gp)",
+  "maxima": "Maxima 5.49.0 (/usr/local/bin/maxima)",
+  "runner_python": "3.14.7",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, deg-400, deg-200 gcd",
+   "times": {
+    "mathilda": 3.83,
+    "wolfram": 6.144,
+    "pari": 11.556,
+    "maxima": 229.943
+   },
+   "checks": {
+    "mathilda": "2000000000000000000000000000000000000050768",
+    "wolfram": "2000000000000000000000000000000000000050768",
+    "pari": "2000000000000000000000000000000000000050768",
+    "maxima": "2000000000000000000000000000000000000050768"
+   },
+   "ratio": 0.6233723958333334,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, deg-1000, deg-500 gcd",
+   "times": {
+    "mathilda": 28.387,
+    "wolfram": 42.29,
+    "pari": 76.5,
+    "maxima": 3717.647
+   },
+   "checks": {
+    "mathilda": "5000000000000000000000000000000000000000577",
+    "wolfram": "5000000000000000000000000000000000000000577",
+    "pari": "5000000000000000000000000000000000000000577",
+    "maxima": "5000000000000000000000000000000000000000577"
+   },
+   "ratio": 0.6712461574840388,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, deg-1000 coprime",
+   "times": {
+    "mathilda": 0.698,
+    "wolfram": 1.987,
+    "pari": 1.507,
+    "maxima": 26.136
+   },
+   "checks": {
+    "mathilda": "1000000",
+    "wolfram": "1000000",
+    "pari": "1000000",
+    "maxima": "1000000"
+   },
+   "ratio": 0.46317186463171867,
+   "note": "",
+   "best_other": "pari",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, deg-200, 60-digit coefficients",
+   "times": {
+    "mathilda": 0.666,
+    "wolfram": 1.309,
+    "pari": 1.961,
+    "maxima": 28.357
+   },
+   "checks": {
+    "mathilda": "1000000000000000000000000000000000000000027",
+    "wolfram": "1000000000000000000000000000000000000000027",
+    "pari": "1000000000000000000000000000000000000000027",
+    "maxima": "1000000000000000000000000000000000000000027"
+   },
+   "ratio": 0.5087853323147441,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, dense bivariate, deg-15 gcd",
+   "times": {
+    "mathilda": 0.715,
+    "wolfram": 2.172,
+    "pari": 244.0,
+    "maxima": 3.902
+   },
+   "checks": {
+    "mathilda": "100000000000000000000000000000000000716924",
+    "wolfram": "100000000000000000000000000000000000716924",
+    "pari": "100000000000000000000000000000000000716924",
+    "maxima": "100000000000000000000000000000000000716924"
+   },
+   "ratio": 0.3291896869244935,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, dense trivariate, deg-6 gcd",
+   "times": {
+    "mathilda": 0.872,
+    "wolfram": 2.222,
+    "pari": 25.75,
+    "maxima": 2.024
+   },
+   "checks": {
+    "mathilda": "60000000000000000000000000000000000863444",
+    "wolfram": "60000000000000000000000000000000000863444",
+    "pari": "60000000000000000000000000000000000863444",
+    "maxima": "60000000000000000000000000000000000863444"
+   },
+   "ratio": 0.4308300395256917,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, sparse 6-variable",
+   "times": {
+    "mathilda": 1.072,
+    "wolfram": 1.632,
+    "pari": 28.75,
+    "maxima": 1.007
+   },
+   "checks": {
+    "mathilda": "20000000000000000000000000000000000987742",
+    "wolfram": "20000000000000000000000000000000000987742",
+    "pari": "20000000000000000000000000000000000987742",
+    "maxima": "20000000000000000000000000000000000987742"
+   },
+   "ratio": 1.0645481628599802,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, 10 bivariate arguments",
+   "times": {
+    "mathilda": 1.278,
+    "wolfram": 1.678,
+    "pari": 0.472,
+    "maxima": 0.844
+   },
+   "checks": {
+    "mathilda": "40000000000000000000000000000000000909805",
+    "wolfram": "40000000000000000000000000000000000909805",
+    "pari": "40000000000000000000000000000000000909805",
+    "maxima": "40000000000000000000000000000000000909805"
+   },
+   "ratio": 2.707627118644068,
+   "note": "",
+   "best_other": "pari",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, Modulus 32003, deg-1000",
+   "times": {
+    "mathilda": 59.108,
+    "wolfram": 3.323,
+    "pari": 0.358,
+    "maxima": 163.119
+   },
+   "checks": {
+    "mathilda": "500000000001448",
+    "wolfram": "500000000001448",
+    "pari": "500000000001448",
+    "maxima": "500000000001448"
+   },
+   "ratio": 165.10614525139664,
+   "note": "",
+   "best_other": "pari",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, Modulus 32003, trivariate",
+   "times": {},
+   "checks": {
+    "mathilda": "Mod[PolynomialGCD[31668693849, 48268090000, Modulus -> 32003] PowerMod[PolynomialGCD[40247960080384, 93718508212224, Modulus -> 32003], -1, 32003], 32003]",
+    "wolfram": "6000000025915",
+    "pari": "6000000025915",
+    "maxima": "6000000025915"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=Mod[PolynomialGCD[31668693849, 48268090000, Modulus -> 32003] PowerMod[PolynomialGCD[40247960080384, 93718508212224, Modulus -> 32003], -1, 32003], 32003]; Maxima=6000000025915; PARI/GP=6000000025915; Mathematica=6000000025915",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialLCM, deg-400, deg-200 gcd",
+   "times": {
+    "mathilda": 370.019,
+    "wolfram": 8.166,
+    "pari": 13.625,
+    "maxima": 234.062
+   },
+   "checks": {
+    "mathilda": "5990000000000000000000000000000000000040088",
+    "wolfram": "5990000000000000000000000000000000000040088",
+    "pari": "5990000000000000000000000000000000000040088",
+    "maxima": "5990000000000000000000000000000000000040088"
+   },
+   "ratio": 45.3121479304433,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialLCM, deg-1000, deg-500 gcd",
+   "times": {
+    "mathilda": 2581.55,
+    "wolfram": 54.378,
+    "pari": 94.0,
+    "maxima": 3807.013
+   },
+   "checks": {
+    "mathilda": "14990000000000000000000000000000000000000456",
+    "wolfram": "14990000000000000000000000000000000000000456",
+    "pari": "14990000000000000000000000000000000000000456",
+    "maxima": "14990000000000000000000000000000000000000456"
+   },
+   "ratio": 47.47416234506602,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialLCM, dense trivariate, deg-6 gcd",
+   "times": {
+    "mathilda": 34.671,
+    "wolfram": 2.902,
+    "pari": 25.75,
+    "maxima": 2.245
+   },
+   "checks": {
+    "mathilda": "140000000000000000000000000000000000758014",
+    "wolfram": "140000000000000000000000000000000000758014",
+    "pari": "140000000000000000000000000000000000758014",
+    "maxima": "140000000000000000000000000000000000758014"
+   },
+   "ratio": 15.443652561247214,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialLCM, sparse 6-variable",
+   "times": {
+    "mathilda": 9.387,
+    "wolfram": 2.225,
+    "pari": 29.0,
+    "maxima": 1.143
+   },
+   "checks": {
+    "mathilda": "50000000000000000000000000000000000995709",
+    "wolfram": "50000000000000000000000000000000000995709",
+    "pari": "50000000000000000000000000000000000995709",
+    "maxima": "50000000000000000000000000000000000995709"
+   },
+   "ratio": 8.21259842519685,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialLCM, 10 bivariate arguments",
+   "times": {
+    "mathilda": 2790.88,
+    "wolfram": 7.779,
+    "pari": 6194.0,
+    "maxima": 28.245
+   },
+   "checks": {
+    "mathilda": "540000000000000000000000000000000001759937",
+    "wolfram": "540000000000000000000000000000000001759937",
+    "pari": "540000000000000000000000000000000001759937",
+    "maxima": "540000000000000000000000000000000001759937"
+   },
+   "ratio": 358.77105026353,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialLCM, Modulus 32003, trivariate",
+   "times": {},
+   "checks": {
+    "mathilda": "14000000000000 + Mod[316686938490000 PowerMod[7827463524393160704 (Modulus -> 32003), -1, 32003] (Modulus -> 32003), 32003]",
+    "wolfram": "14000000029707",
+    "pari": "14000000029707",
+    "maxima": "14000000029707"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=14000000000000 + Mod[316686938490000 PowerMod[7827463524393160704 (Modulus -> 32003), -1, 32003] (Modulus -> 32003), 32003]; Maxima=14000000029707; PARI/GP=14000000029707; Mathematica=14000000029707",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialReduce, by the cyclic-5 DRL basis",
+   "times": {
+    "mathilda": 111.606,
+    "wolfram": 20.8,
+    "maxima": 17.722
+   },
+   "checks": {
+    "mathilda": "1035188",
+    "wolfram": "1035188",
+    "maxima": "1035188"
+   },
+   "ratio": 6.297596208102922,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialReduce, by the katsura-4 DRL basis",
+   "times": {
+    "mathilda": 677.632,
+    "wolfram": 71.229,
+    "maxima": 178.831
+   },
+   "checks": {
+    "mathilda": "1090555",
+    "wolfram": "1090555",
+    "maxima": "1090555"
+   },
+   "ratio": 9.513428519282876,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialReduce, by a 3-variable Lex basis",
+   "times": {
+    "mathilda": 4.341,
+    "wolfram": 11.578,
+    "maxima": 13.627
+   },
+   "checks": {
+    "mathilda": "1000003",
+    "wolfram": "1000003",
+    "maxima": "1000003"
+   },
+   "ratio": 0.3749352219727069,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialReduce, by a 3-variable DegLex basis",
+   "times": {
+    "mathilda": 95.101,
+    "wolfram": 12.318,
+    "maxima": 14.749
+   },
+   "checks": {
+    "mathilda": "10000000000000000000000000000000000622335",
+    "wolfram": "10000000000000000000000000000000000622335",
+    "maxima": "10000000000000000000000000000000000622335"
+   },
+   "ratio": 7.720490339340802,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "Eliminate, 2 variables from 3 quadratics",
+   "times": {
+    "mathilda": 0.197,
+    "wolfram": 1.189,
+    "maxima": 0.084
+   },
+   "checks": {
+    "mathilda": "9999999999999999999999999999999981919643",
+    "wolfram": "9999999999999999999999999999999985354911",
+    "maxima": "9999999999999999999999999999999985354911"
+   },
+   "ratio": 2.3452380952380953,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "Eliminate, plane curve of degree 5",
+   "times": {
+    "mathilda": 0.791,
+    "wolfram": 1.519,
+    "maxima": 0.502
+   },
+   "checks": {
+    "mathilda": "10000000000000000000000000000000000997958",
+    "wolfram": "10000000000000000000000000000000000997958",
+    "maxima": "10000000000000000000000000000000000997958"
+   },
+   "ratio": 1.5756972111553786,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "Eliminate, parametric surface",
+   "times": {
+    "mathilda": 5.251,
+    "wolfram": 1.695,
+    "maxima": 1.962
+   },
+   "checks": {
+    "mathilda": "10000000000000000000000000000000000970276",
+    "wolfram": "10000000000000000000000000000000000970276",
+    "maxima": "10000000000000000000000000000000000970276"
+   },
+   "ratio": 3.0979351032448377,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "Eliminate, 3 variables from a 4-variable chain",
+   "times": {
+    "mathilda": 7.403,
+    "wolfram": 3.58,
+    "maxima": 0.861
+   },
+   "checks": {
+    "mathilda": "10000000000000000000000000000000000993637",
+    "wolfram": "10000000000000000000000000000000000993637",
+    "maxima": "10000000000000000000000000000000000993637"
+   },
+   "ratio": 8.59814169570267,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "CylindricalDecomposition, unit disc",
+   "times": {
+    "mathilda": 7.08,
+    "wolfram": 1.153
+   },
+   "checks": {
+    "mathilda": "2147077824256",
+    "wolfram": "2147077824256"
+   },
+   "ratio": 6.14050303555941,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "CylindricalDecomposition, two ellipses",
+   "times": {
+    "mathilda": 54.483,
+    "wolfram": 5.194
+   },
+   "checks": {
+    "mathilda": "7575371776",
+    "wolfram": "7575371776"
+   },
+   "ratio": 10.489603388525222,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "CylindricalDecomposition, quartic curve",
+   "times": {},
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "1664430344071"
+   },
+   "ratio": null,
+   "note": "check disagreement: Mathilda=0; Mathematica=1664430344071",
+   "klass": "CHECK-FAIL"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "CylindricalDecomposition, ball and cylinder",
+   "times": {
+    "mathilda": 32.025,
+    "wolfram": 3.018
+   },
+   "checks": {
+    "mathilda": "541599319941158216249901056",
+    "wolfram": "541599319941158216249901056"
+   },
+   "ratio": 10.611332007952287,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "CylindricalDecomposition, Whitney umbrella in a ball",
+   "times": {
+    "mathilda": 520.35,
+    "wolfram": 20.989
+   },
+   "checks": {
+    "mathilda": "15219586186721886208000",
+    "wolfram": "15219586186721886208000"
+   },
+   "ratio": 24.79155748249083,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, 3-variable quadratics, Lex",
+   "times": {
+    "mathilda": 0.143,
+    "wolfram": 0.639,
+    "maxima": 0.107
+   },
+   "checks": {
+    "mathilda": "40000000000000000000000000000000004800143",
+    "wolfram": "40000000000000000000000000000000004800143",
+    "maxima": "40000000000000000000000000000000004800143"
+   },
+   "ratio": 1.336448598130841,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, cyclic-5, DRL",
+   "times": {
+    "mathilda": 29.25,
+    "wolfram": 11.747,
+    "maxima": 16.21
+   },
+   "checks": {
+    "mathilda": "200000000000000000000000000000000028196971",
+    "wolfram": "200000000000000000000000000000000028196971",
+    "maxima": "200000000000000000000000000000000028196971"
+   },
+   "ratio": 2.4899974461564653,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, katsura-4, DRL",
+   "times": {
+    "mathilda": 14.592,
+    "wolfram": 4.821,
+    "maxima": 4.637
+   },
+   "checks": {
+    "mathilda": "130000000000000000000000000000000016767592",
+    "wolfram": "130000000000000000000000000000000016767592",
+    "maxima": "130000000000000000000000000000000016767592"
+   },
+   "ratio": 3.1468621953849474,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, elimination form, plane curve",
+   "times": {
+    "mathilda": 1.584,
+    "wolfram": 1.216,
+    "maxima": 0.48
+   },
+   "checks": {
+    "mathilda": "10000000000000000000000000000000000997958",
+    "wolfram": "10000000000000000000000000000000000997958",
+    "maxima": "10000000000000000000000000000000000997958"
+   },
+   "ratio": 3.3000000000000003,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, cyclic-5, Modulus 32003",
+   "times": {
+    "mathilda": 276.747,
+    "wolfram": 58.199
+   },
+   "checks": {
+    "mathilda": "11000000008566",
+    "wolfram": "11000000008566"
+   },
+   "ratio": 4.7551847969896395,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, katsura-5, DRL",
+   "times": {
+    "mathilda": 139.602,
+    "wolfram": 79.276,
+    "maxima": 59.619
+   },
+   "checks": {
+    "mathilda": "220000000000000000000000000000000025690361",
+    "wolfram": "220000000000000000000000000000000025690361",
+    "maxima": "220000000000000000000000000000000025690361"
+   },
+   "ratio": 2.3415689629145073,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, cyclic-5, Lex",
+   "times": {
+    "mathilda": 111.012,
+    "wolfram": 58.012,
+    "maxima": 22.401
+   },
+   "checks": {
+    "mathilda": "110000000000000000000000000000000011615871",
+    "wolfram": "110000000000000000000000000000000011615871",
+    "maxima": "110000000000000000000000000000000011615871"
+   },
+   "ratio": 4.9556716218025985,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, cyclic-6, DRL, Modulus 32003",
+   "times": {
+    "mathilda": 29297.8,
+    "wolfram": 192.81
+   },
+   "checks": {
+    "mathilda": "45000000016329",
+    "wolfram": "45000000016329"
+   },
+   "ratio": 151.9516622581816,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, cyclic-6, DRL",
+   "times": {
+    "wolfram": 249.672,
+    "maxima": 2852.366
+   },
+   "checks": {
+    "wolfram": "450000000000000000000000000000000061829063",
+    "maxima": "450000000000000000000000000000000061829063"
+   },
+   "ratio": null,
+   "note": "timed out",
+   "klass": "INCOMPLETE"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, katsura-4, Lex",
+   "times": {
+    "wolfram": 26.519,
+    "maxima": 60.616
+   },
+   "checks": {
+    "wolfram": "50000000000000000000000000000000010024990",
+    "maxima": "50000000000000000000000000000000010024990"
+   },
+   "ratio": null,
+   "note": "timed out",
+   "klass": "INCOMPLETE"
+  },
+  {
+   "experiment": "122-polynomial-ideals",
+   "group": "A symbolic (sympy)",
+   "label": "GroebnerBasis, katsura-6, DRL",
+   "times": {
+    "wolfram": 596.082,
+    "maxima": 3549.717
+   },
+   "checks": {
+    "wolfram": "410000000000000000000000000000000046652776",
+    "maxima": "410000000000000000000000000000000046652776"
+   },
+   "ratio": null,
+   "note": "timed out",
+   "klass": "INCOMPLETE"
+  }
+ ],
+ "requires": {
+  "PolynomialGCD": "present",
+  "PolynomialLCM": "present",
+  "PolynomialReduce": "present",
+  "Eliminate": "present",
+  "CylindricalDecomposition": "present",
+  "GroebnerBasis": "present",
+  "MonomialOrder": "absent"
+ },
+ "raw": {
+  "122-polynomial-ideals": {
+   "mathilda": {
+    "bench": {
+     "PolynomialGCD, deg-400, deg-200 gcd": 3.83,
+     "PolynomialGCD, deg-1000, deg-500 gcd": 28.387,
+     "PolynomialGCD, deg-1000 coprime": 0.698,
+     "PolynomialGCD, deg-200, 60-digit coefficients": 0.666,
+     "PolynomialGCD, dense bivariate, deg-15 gcd": 0.715,
+     "PolynomialGCD, dense trivariate, deg-6 gcd": 0.872,
+     "PolynomialGCD, sparse 6-variable": 1.072,
+     "PolynomialGCD, 10 bivariate arguments": 1.278,
+     "PolynomialGCD, Modulus 32003, deg-1000": 59.108,
+     "PolynomialGCD, Modulus 32003, trivariate": 0.06,
+     "PolynomialLCM, deg-400, deg-200 gcd": 370.019,
+     "PolynomialLCM, deg-1000, deg-500 gcd": 2581.55,
+     "PolynomialLCM, dense trivariate, deg-6 gcd": 34.671,
+     "PolynomialLCM, sparse 6-variable": 9.387,
+     "PolynomialLCM, 10 bivariate arguments": 2790.88,
+     "PolynomialLCM, Modulus 32003, trivariate": 43.112,
+     "PolynomialReduce, by the cyclic-5 DRL basis": 111.606,
+     "PolynomialReduce, by the katsura-4 DRL basis": 677.632,
+     "PolynomialReduce, by a 3-variable Lex basis": 4.341,
+     "PolynomialReduce, by a 3-variable DegLex basis": 95.101,
+     "Eliminate, 2 variables from 3 quadratics": 0.197,
+     "Eliminate, plane curve of degree 5": 0.791,
+     "Eliminate, parametric surface": 5.251,
+     "Eliminate, 3 variables from a 4-variable chain": 7.403,
+     "CylindricalDecomposition, unit disc": 7.08,
+     "CylindricalDecomposition, two ellipses": 54.483,
+     "CylindricalDecomposition, quartic curve": 39.49,
+     "CylindricalDecomposition, ball and cylinder": 32.025,
+     "CylindricalDecomposition, Whitney umbrella in a ball": 520.35,
+     "GroebnerBasis, 3-variable quadratics, Lex": 0.143,
+     "GroebnerBasis, cyclic-5, DRL": 29.25,
+     "GroebnerBasis, katsura-4, DRL": 14.592,
+     "GroebnerBasis, elimination form, plane curve": 1.584,
+     "GroebnerBasis, cyclic-5, Modulus 32003": 276.747,
+     "GroebnerBasis, katsura-5, DRL": 139.602,
+     "GroebnerBasis, cyclic-5, Lex": 111.012,
+     "GroebnerBasis, cyclic-6, DRL, Modulus 32003": 29297.8
+    },
+    "check": {
+     "PolynomialGCD, deg-400, deg-200 gcd": "2000000000000000000000000000000000000050768",
+     "PolynomialGCD, deg-1000, deg-500 gcd": "5000000000000000000000000000000000000000577",
+     "PolynomialGCD, deg-1000 coprime": "1000000",
+     "PolynomialGCD, deg-200, 60-digit coefficients": "1000000000000000000000000000000000000000027",
+     "PolynomialGCD, dense bivariate, deg-15 gcd": "100000000000000000000000000000000000716924",
+     "PolynomialGCD, dense trivariate, deg-6 gcd": "60000000000000000000000000000000000863444",
+     "PolynomialGCD, sparse 6-variable": "20000000000000000000000000000000000987742",
+     "PolynomialGCD, 10 bivariate arguments": "40000000000000000000000000000000000909805",
+     "PolynomialGCD, Modulus 32003, deg-1000": "500000000001448",
+     "PolynomialGCD, Modulus 32003, trivariate": "Mod[PolynomialGCD[31668693849, 48268090000, Modulus -> 32003] PowerMod[PolynomialGCD[40247960080384, 93718508212224, Modulus -> 32003], -1, 32003], 32003]",
+     "PolynomialLCM, deg-400, deg-200 gcd": "5990000000000000000000000000000000000040088",
+     "PolynomialLCM, deg-1000, deg-500 gcd": "14990000000000000000000000000000000000000456",
+     "PolynomialLCM, dense trivariate, deg-6 gcd": "140000000000000000000000000000000000758014",
+     "PolynomialLCM, sparse 6-variable": "50000000000000000000000000000000000995709",
+     "PolynomialLCM, 10 bivariate arguments": "540000000000000000000000000000000001759937",
+     "PolynomialLCM, Modulus 32003, trivariate": "14000000000000 + Mod[316686938490000 PowerMod[7827463524393160704 (Modulus -> 32003), -1, 32003] (Modulus -> 32003), 32003]",
+     "PolynomialReduce, by the cyclic-5 DRL basis": "1035188",
+     "PolynomialReduce, by the katsura-4 DRL basis": "1090555",
+     "PolynomialReduce, by a 3-variable Lex basis": "1000003",
+     "PolynomialReduce, by a 3-variable DegLex basis": "10000000000000000000000000000000000622335",
+     "Eliminate, 2 variables from 3 quadratics": "9999999999999999999999999999999981919643",
+     "Eliminate, plane curve of degree 5": "10000000000000000000000000000000000997958",
+     "Eliminate, parametric surface": "10000000000000000000000000000000000970276",
+     "Eliminate, 3 variables from a 4-variable chain": "10000000000000000000000000000000000993637",
+     "CylindricalDecomposition, unit disc": "2147077824256",
+     "CylindricalDecomposition, two ellipses": "7575371776",
+     "CylindricalDecomposition, quartic curve": "0",
+     "CylindricalDecomposition, ball and cylinder": "541599319941158216249901056",
+     "CylindricalDecomposition, Whitney umbrella in a ball": "15219586186721886208000",
+     "GroebnerBasis, 3-variable quadratics, Lex": "40000000000000000000000000000000004800143",
+     "GroebnerBasis, cyclic-5, DRL": "200000000000000000000000000000000028196971",
+     "GroebnerBasis, katsura-4, DRL": "130000000000000000000000000000000016767592",
+     "GroebnerBasis, elimination form, plane curve": "10000000000000000000000000000000000997958",
+     "GroebnerBasis, cyclic-5, Modulus 32003": "11000000008566",
+     "GroebnerBasis, katsura-5, DRL": "220000000000000000000000000000000025690361",
+     "GroebnerBasis, cyclic-5, Lex": "110000000000000000000000000000000011615871",
+     "GroebnerBasis, cyclic-6, DRL, Modulus 32003": "45000000016329"
+    },
+    "require": {
+     "PolynomialGCD": "present",
+     "PolynomialLCM": "present",
+     "PolynomialReduce": "present",
+     "Eliminate": "present",
+     "CylindricalDecomposition": "present",
+     "GroebnerBasis": "present",
+     "MonomialOrder": "absent"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": true,
+    "rc": null,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "PolynomialGCD, deg-400, deg-200 gcd": 6.144,
+     "PolynomialGCD, deg-1000, deg-500 gcd": 42.29,
+     "PolynomialGCD, deg-1000 coprime": 1.987,
+     "PolynomialGCD, deg-200, 60-digit coefficients": 1.309,
+     "PolynomialGCD, dense bivariate, deg-15 gcd": 2.172,
+     "PolynomialGCD, dense trivariate, deg-6 gcd": 2.222,
+     "PolynomialGCD, sparse 6-variable": 1.632,
+     "PolynomialGCD, 10 bivariate arguments": 1.678,
+     "PolynomialGCD, Modulus 32003, deg-1000": 3.323,
+     "PolynomialGCD, Modulus 32003, trivariate": 5.084,
+     "PolynomialLCM, deg-400, deg-200 gcd": 8.166,
+     "PolynomialLCM, deg-1000, deg-500 gcd": 54.378,
+     "PolynomialLCM, dense trivariate, deg-6 gcd": 2.902,
+     "PolynomialLCM, sparse 6-variable": 2.225,
+     "PolynomialLCM, 10 bivariate arguments": 7.779,
+     "PolynomialLCM, Modulus 32003, trivariate": 8.034,
+     "PolynomialReduce, by the cyclic-5 DRL basis": 20.8,
+     "PolynomialReduce, by the katsura-4 DRL basis": 71.229,
+     "PolynomialReduce, by a 3-variable Lex basis": 11.578,
+     "PolynomialReduce, by a 3-variable DegLex basis": 12.318,
+     "Eliminate, 2 variables from 3 quadratics": 1.189,
+     "Eliminate, plane curve of degree 5": 1.519,
+     "Eliminate, parametric surface": 1.695,
+     "Eliminate, 3 variables from a 4-variable chain": 3.58,
+     "CylindricalDecomposition, unit disc": 1.153,
+     "CylindricalDecomposition, two ellipses": 5.194,
+     "CylindricalDecomposition, quartic curve": 2.287,
+     "CylindricalDecomposition, ball and cylinder": 3.018,
+     "CylindricalDecomposition, Whitney umbrella in a ball": 20.989,
+     "GroebnerBasis, 3-variable quadratics, Lex": 0.639,
+     "GroebnerBasis, cyclic-5, DRL": 11.747,
+     "GroebnerBasis, katsura-4, DRL": 4.821,
+     "GroebnerBasis, elimination form, plane curve": 1.216,
+     "GroebnerBasis, cyclic-5, Modulus 32003": 58.199,
+     "GroebnerBasis, katsura-5, DRL": 79.276,
+     "GroebnerBasis, cyclic-5, Lex": 58.012,
+     "GroebnerBasis, cyclic-6, DRL, Modulus 32003": 192.81,
+     "GroebnerBasis, cyclic-6, DRL": 249.672,
+     "GroebnerBasis, katsura-4, Lex": 26.519,
+     "GroebnerBasis, katsura-6, DRL": 596.082
+    },
+    "check": {
+     "PolynomialGCD, deg-400, deg-200 gcd": "2000000000000000000000000000000000000050768",
+     "PolynomialGCD, deg-1000, deg-500 gcd": "5000000000000000000000000000000000000000577",
+     "PolynomialGCD, deg-1000 coprime": "1000000",
+     "PolynomialGCD, deg-200, 60-digit coefficients": "1000000000000000000000000000000000000000027",
+     "PolynomialGCD, dense bivariate, deg-15 gcd": "100000000000000000000000000000000000716924",
+     "PolynomialGCD, dense trivariate, deg-6 gcd": "60000000000000000000000000000000000863444",
+     "PolynomialGCD, sparse 6-variable": "20000000000000000000000000000000000987742",
+     "PolynomialGCD, 10 bivariate arguments": "40000000000000000000000000000000000909805",
+     "PolynomialGCD, Modulus 32003, deg-1000": "500000000001448",
+     "PolynomialGCD, Modulus 32003, trivariate": "6000000025915",
+     "PolynomialLCM, deg-400, deg-200 gcd": "5990000000000000000000000000000000000040088",
+     "PolynomialLCM, deg-1000, deg-500 gcd": "14990000000000000000000000000000000000000456",
+     "PolynomialLCM, dense trivariate, deg-6 gcd": "140000000000000000000000000000000000758014",
+     "PolynomialLCM, sparse 6-variable": "50000000000000000000000000000000000995709",
+     "PolynomialLCM, 10 bivariate arguments": "540000000000000000000000000000000001759937",
+     "PolynomialLCM, Modulus 32003, trivariate": "14000000029707",
+     "PolynomialReduce, by the cyclic-5 DRL basis": "1035188",
+     "PolynomialReduce, by the katsura-4 DRL basis": "1090555",
+     "PolynomialReduce, by a 3-variable Lex basis": "1000003",
+     "PolynomialReduce, by a 3-variable DegLex basis": "10000000000000000000000000000000000622335",
+     "Eliminate, 2 variables from 3 quadratics": "9999999999999999999999999999999985354911",
+     "Eliminate, plane curve of degree 5": "10000000000000000000000000000000000997958",
+     "Eliminate, parametric surface": "10000000000000000000000000000000000970276",
+     "Eliminate, 3 variables from a 4-variable chain": "10000000000000000000000000000000000993637",
+     "CylindricalDecomposition, unit disc": "2147077824256",
+     "CylindricalDecomposition, two ellipses": "7575371776",
+     "CylindricalDecomposition, quartic curve": "1664430344071",
+     "CylindricalDecomposition, ball and cylinder": "541599319941158216249901056",
+     "CylindricalDecomposition, Whitney umbrella in a ball": "15219586186721886208000",
+     "GroebnerBasis, 3-variable quadratics, Lex": "40000000000000000000000000000000004800143",
+     "GroebnerBasis, cyclic-5, DRL": "200000000000000000000000000000000028196971",
+     "GroebnerBasis, katsura-4, DRL": "130000000000000000000000000000000016767592",
+     "GroebnerBasis, elimination form, plane curve": "10000000000000000000000000000000000997958",
+     "GroebnerBasis, cyclic-5, Modulus 32003": "11000000008566",
+     "GroebnerBasis, katsura-5, DRL": "220000000000000000000000000000000025690361",
+     "GroebnerBasis, cyclic-5, Lex": "110000000000000000000000000000000011615871",
+     "GroebnerBasis, cyclic-6, DRL, Modulus 32003": "45000000016329",
+     "GroebnerBasis, cyclic-6, DRL": "450000000000000000000000000000000061829063",
+     "GroebnerBasis, katsura-4, Lex": "50000000000000000000000000000000010024990",
+     "GroebnerBasis, katsura-6, DRL": "410000000000000000000000000000000046652776"
+    },
+    "require": {
+     "PolynomialGCD": "present",
+     "PolynomialLCM": "present",
+     "PolynomialReduce": "present",
+     "Eliminate": "present",
+     "CylindricalDecomposition": "present",
+     "GroebnerBasis": "present",
+     "MonomialOrder": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "pari": {
+    "bench": {
+     "PolynomialGCD, deg-400, deg-200 gcd": 11.556,
+     "PolynomialGCD, deg-1000, deg-500 gcd": 76.5,
+     "PolynomialGCD, deg-1000 coprime": 1.507,
+     "PolynomialGCD, deg-200, 60-digit coefficients": 1.961,
+     "PolynomialGCD, dense bivariate, deg-15 gcd": 244.0,
+     "PolynomialGCD, dense trivariate, deg-6 gcd": 25.75,
+     "PolynomialGCD, sparse 6-variable": 28.75,
+     "PolynomialGCD, 10 bivariate arguments": 0.472,
+     "PolynomialGCD, Modulus 32003, deg-1000": 0.358,
+     "PolynomialGCD, Modulus 32003, trivariate": 25.75,
+     "PolynomialLCM, deg-400, deg-200 gcd": 13.625,
+     "PolynomialLCM, deg-1000, deg-500 gcd": 94.0,
+     "PolynomialLCM, dense trivariate, deg-6 gcd": 25.75,
+     "PolynomialLCM, sparse 6-variable": 29.0,
+     "PolynomialLCM, 10 bivariate arguments": 6194.0,
+     "PolynomialLCM, Modulus 32003, trivariate": 26.5
+    },
+    "check": {
+     "PolynomialGCD, deg-400, deg-200 gcd": "2000000000000000000000000000000000000050768",
+     "PolynomialGCD, deg-1000, deg-500 gcd": "5000000000000000000000000000000000000000577",
+     "PolynomialGCD, deg-1000 coprime": "1000000",
+     "PolynomialGCD, deg-200, 60-digit coefficients": "1000000000000000000000000000000000000000027",
+     "PolynomialGCD, dense bivariate, deg-15 gcd": "100000000000000000000000000000000000716924",
+     "PolynomialGCD, dense trivariate, deg-6 gcd": "60000000000000000000000000000000000863444",
+     "PolynomialGCD, sparse 6-variable": "20000000000000000000000000000000000987742",
+     "PolynomialGCD, 10 bivariate arguments": "40000000000000000000000000000000000909805",
+     "PolynomialGCD, Modulus 32003, deg-1000": "500000000001448",
+     "PolynomialGCD, Modulus 32003, trivariate": "6000000025915",
+     "PolynomialLCM, deg-400, deg-200 gcd": "5990000000000000000000000000000000000040088",
+     "PolynomialLCM, deg-1000, deg-500 gcd": "14990000000000000000000000000000000000000456",
+     "PolynomialLCM, dense trivariate, deg-6 gcd": "140000000000000000000000000000000000758014",
+     "PolynomialLCM, sparse 6-variable": "50000000000000000000000000000000000995709",
+     "PolynomialLCM, 10 bivariate arguments": "540000000000000000000000000000000001759937",
+     "PolynomialLCM, Modulus 32003, trivariate": "14000000029707"
+    },
+    "require": {
+     "gcd": "present",
+     "lcm": "present",
+     "poldegree": "present",
+     "substvec": "present"
+    },
+    "skip": {
+     "PolynomialReduce, by the cyclic-5 DRL basis": "multivariate division",
+     "PolynomialReduce, by the katsura-4 DRL basis": "multivariate division",
+     "PolynomialReduce, by a 3-variable Lex basis": "multivariate division",
+     "PolynomialReduce, by a 3-variable DegLex basis": "multivariate division",
+     "Eliminate, 2 variables from 3 quadratics": "elimination",
+     "Eliminate, plane curve of degree 5": "elimination",
+     "Eliminate, parametric surface": "elimination",
+     "Eliminate, 3 variables from a 4-variable chain": "elimination",
+     "CylindricalDecomposition, unit disc": "cylindrical decomposition",
+     "CylindricalDecomposition, two ellipses": "cylindrical decomposition",
+     "CylindricalDecomposition, quartic curve": "cylindrical decomposition",
+     "CylindricalDecomposition, ball and cylinder": "cylindrical decomposition",
+     "CylindricalDecomposition, Whitney umbrella in a ball": "cylindrical decomposition",
+     "GroebnerBasis, 3-variable quadratics, Lex": "groebner basis",
+     "GroebnerBasis, cyclic-5, DRL": "groebner basis",
+     "GroebnerBasis, katsura-4, DRL": "groebner basis",
+     "GroebnerBasis, elimination form, plane curve": "groebner basis",
+     "GroebnerBasis, cyclic-5, Modulus 32003": "groebner basis",
+     "GroebnerBasis, katsura-5, DRL": "groebner basis",
+     "GroebnerBasis, cyclic-5, Lex": "groebner basis",
+     "GroebnerBasis, cyclic-6, DRL, Modulus 32003": "groebner basis",
+     "GroebnerBasis, cyclic-6, DRL": "groebner basis",
+     "GroebnerBasis, katsura-4, Lex": "groebner basis",
+     "GroebnerBasis, katsura-6, DRL": "groebner basis"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "maxima": {
+    "bench": {
+     "PolynomialGCD, deg-400, deg-200 gcd": 229.943,
+     "PolynomialGCD, deg-1000, deg-500 gcd": 3717.647,
+     "PolynomialGCD, deg-1000 coprime": 26.136,
+     "PolynomialGCD, deg-200, 60-digit coefficients": 28.357,
+     "PolynomialGCD, dense bivariate, deg-15 gcd": 3.902,
+     "PolynomialGCD, dense trivariate, deg-6 gcd": 2.024,
+     "PolynomialGCD, sparse 6-variable": 1.007,
+     "PolynomialGCD, 10 bivariate arguments": 0.844,
+     "PolynomialGCD, Modulus 32003, deg-1000": 163.119,
+     "PolynomialGCD, Modulus 32003, trivariate": 113.575,
+     "PolynomialLCM, deg-400, deg-200 gcd": 234.062,
+     "PolynomialLCM, deg-1000, deg-500 gcd": 3807.013,
+     "PolynomialLCM, dense trivariate, deg-6 gcd": 2.245,
+     "PolynomialLCM, sparse 6-variable": 1.143,
+     "PolynomialLCM, 10 bivariate arguments": 28.245,
+     "PolynomialLCM, Modulus 32003, trivariate": 107.397,
+     "PolynomialReduce, by the cyclic-5 DRL basis": 17.722,
+     "PolynomialReduce, by the katsura-4 DRL basis": 178.831,
+     "PolynomialReduce, by a 3-variable Lex basis": 13.627,
+     "PolynomialReduce, by a 3-variable DegLex basis": 14.749,
+     "Eliminate, 2 variables from 3 quadratics": 0.084,
+     "Eliminate, plane curve of degree 5": 0.502,
+     "Eliminate, parametric surface": 1.962,
+     "Eliminate, 3 variables from a 4-variable chain": 0.861,
+     "GroebnerBasis, 3-variable quadratics, Lex": 0.107,
+     "GroebnerBasis, cyclic-5, DRL": 16.21,
+     "GroebnerBasis, katsura-4, DRL": 4.637,
+     "GroebnerBasis, elimination form, plane curve": 0.48,
+     "GroebnerBasis, katsura-5, DRL": 59.619,
+     "GroebnerBasis, cyclic-5, Lex": 22.401,
+     "GroebnerBasis, cyclic-6, DRL": 2852.366,
+     "GroebnerBasis, katsura-4, Lex": 60.616,
+     "GroebnerBasis, katsura-6, DRL": 3549.717
+    },
+    "check": {
+     "PolynomialGCD, deg-400, deg-200 gcd": "2000000000000000000000000000000000000050768",
+     "PolynomialGCD, deg-1000, deg-500 gcd": "5000000000000000000000000000000000000000577",
+     "PolynomialGCD, deg-1000 coprime": "1000000",
+     "PolynomialGCD, deg-200, 60-digit coefficients": "1000000000000000000000000000000000000000027",
+     "PolynomialGCD, dense bivariate, deg-15 gcd": "100000000000000000000000000000000000716924",
+     "PolynomialGCD, dense trivariate, deg-6 gcd": "60000000000000000000000000000000000863444",
+     "PolynomialGCD, sparse 6-variable": "20000000000000000000000000000000000987742",
+     "PolynomialGCD, 10 bivariate arguments": "40000000000000000000000000000000000909805",
+     "PolynomialGCD, Modulus 32003, deg-1000": "500000000001448",
+     "PolynomialGCD, Modulus 32003, trivariate": "6000000025915",
+     "PolynomialLCM, deg-400, deg-200 gcd": "5990000000000000000000000000000000000040088",
+     "PolynomialLCM, deg-1000, deg-500 gcd": "14990000000000000000000000000000000000000456",
+     "PolynomialLCM, dense trivariate, deg-6 gcd": "140000000000000000000000000000000000758014",
+     "PolynomialLCM, sparse 6-variable": "50000000000000000000000000000000000995709",
+     "PolynomialLCM, 10 bivariate arguments": "540000000000000000000000000000000001759937",
+     "PolynomialLCM, Modulus 32003, trivariate": "14000000029707",
+     "PolynomialReduce, by the cyclic-5 DRL basis": "1035188",
+     "PolynomialReduce, by the katsura-4 DRL basis": "1090555",
+     "PolynomialReduce, by a 3-variable Lex basis": "1000003",
+     "PolynomialReduce, by a 3-variable DegLex basis": "10000000000000000000000000000000000622335",
+     "Eliminate, 2 variables from 3 quadratics": "9999999999999999999999999999999985354911",
+     "Eliminate, plane curve of degree 5": "10000000000000000000000000000000000997958",
+     "Eliminate, parametric surface": "10000000000000000000000000000000000970276",
+     "Eliminate, 3 variables from a 4-variable chain": "10000000000000000000000000000000000993637",
+     "GroebnerBasis, 3-variable quadratics, Lex": "40000000000000000000000000000000004800143",
+     "GroebnerBasis, cyclic-5, DRL": "200000000000000000000000000000000028196971",
+     "GroebnerBasis, katsura-4, DRL": "130000000000000000000000000000000016767592",
+     "GroebnerBasis, elimination form, plane curve": "10000000000000000000000000000000000997958",
+     "GroebnerBasis, katsura-5, DRL": "220000000000000000000000000000000025690361",
+     "GroebnerBasis, cyclic-5, Lex": "110000000000000000000000000000000011615871",
+     "GroebnerBasis, cyclic-6, DRL": "450000000000000000000000000000000061829063",
+     "GroebnerBasis, katsura-4, Lex": "50000000000000000000000000000000010024990",
+     "GroebnerBasis, katsura-6, DRL": "410000000000000000000000000000000046652776"
+    },
+    "require": {
+     "gcd": "present",
+     "lcm": "present",
+     "poly_reduced_grobner": "present",
+     "poly_normal_form": "present",
+     "poly_elimination_ideal": "present"
+    },
+    "skip": {
+     "CylindricalDecomposition, unit disc": "cylindrical decomposition",
+     "CylindricalDecomposition, two ellipses": "cylindrical decomposition",
+     "CylindricalDecomposition, quartic curve": "cylindrical decomposition",
+     "CylindricalDecomposition, ball and cylinder": "cylindrical decomposition",
+     "CylindricalDecomposition, Whitney umbrella in a ball": "cylindrical decomposition",
+     "GroebnerBasis, cyclic-5, Modulus 32003": "groebner basis over F_p",
+     "GroebnerBasis, cyclic-6, DRL, Modulus 32003": "groebner basis over F_p"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 464.9051969051361,
+ "durations": {
+  "122-polynomial-ideals": 462.9287030696869
+ },
+ "partial": true,
+ "label_problems": [
+  [
+   "122-polynomial-ideals (.m vs pari)",
+   [],
+   [
+    "GroebnerBasis, cyclic-6, DRL",
+    "GroebnerBasis, katsura-4, Lex",
+    "GroebnerBasis, katsura-6, DRL"
+   ]
+  ],
+  [
+   "122-polynomial-ideals (.m vs maxima)",
+   [],
+   [
+    "GroebnerBasis, cyclic-6, DRL",
+    "GroebnerBasis, katsura-4, Lex",
+    "GroebnerBasis, katsura-6, DRL"
+   ]
+  ]
+ ]
+}

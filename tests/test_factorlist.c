@@ -142,8 +142,15 @@ static void test_factorlist_modulus(void) {
     check("PolynomialGCD[x^2 - 1, x - 1, Modulus -> 5]", "4 + x");
     check("PolynomialGCD[x^2 + 1, x + 1, Modulus -> 5]", "1");
     check("PolynomialGCD[x^3 - x, x^2 - x, x^2 + x, Modulus -> 5]", "x");
-    check("PolynomialGCD[x y + 1, x + 2, Modulus -> 5]",
-          "PolynomialGCD[1 + x y, 2 + x, Modulus -> 5]");
+    /* several variables over GF(p) (nmod_mpoly): x y + 1 at x = -2 is 1 - 2 y,
+     * so the two are coprime; the gcd is monic, its coefficients residues */
+    check("PolynomialGCD[x y + 1, x + 2, Modulus -> 5]", "1");
+    check("PolynomialGCD[x^2 + 2 x y + y^2, 3 x + 3 y, Modulus -> 7]", "x + y");
+    check("PolynomialGCD[(x + y)^5 (z + 1), (x + y)^3 (z - 1), Modulus -> 7]",
+          "x^3 + 3 x^2 y + 3 x y^2 + y^3");
+    /* PolynomialLCM knows the option too; it multiplied the Rule in before */
+    check("PolynomialLCM[x^2 - 1, x - 1, Modulus -> 5]", "4 + x^2");
+    check("PolynomialLCM[x y + 1, x + 2, Modulus -> 5]", "(2 + x) (1 + x y)");
 
     /* and none of this may disturb the ordinary, no-Modulus answers */
     check("Factor[x^4 - 1]", "(-1 + x) (1 + x) (1 + x^2)");

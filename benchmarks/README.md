@@ -237,8 +237,8 @@ benchmarks/
   run_all.py                the job
   NN-slug/slug.m            kernels only, 2 lines of preamble
   NN-slug/slug.py           kernels only, 2 lines of preamble
-  NNN-slug/slug.gp          the PARI/GP half (group F, and 121)
-  NN-slug/slug.mac          the Maxima half (01, 03, 10, 121)
+  NNN-slug/slug.gp          the PARI/GP half (group F, 121, 122)
+  NN-slug/slug.mac          the Maxima half (01, 03, 10, 121, 122)
 ```
 
 The existing corpus duplicates its reporting helpers into every file ("shared
@@ -479,7 +479,7 @@ belongs in `tests/`, not in a timing job.
 |---|---|---|
 | 120 | `sparse-arrays` | SparseArray construction, element-wise arithmetic and functions, access, dense ⇄ sparse against scipy.sparse |
 
-## Maxima column, and rational functions at stress sizes (121)
+## Maxima column, and rational functions and polynomial ideals at stress sizes (121, 122)
 
 Maxima runs any experiment with a `.mac` half, via
 `maxima --very-quiet -r 'batchload("<slug>.mac")$'` from the experiment folder
@@ -494,6 +494,8 @@ microseconds.
 | # | experiment | what it measures |
 |---|---|---|
 | 121 | `rational-functions` | Together, Cancel and Apart at stress sizes: 50 and 200 linear summands, 12 trivariate summands, a depth-32 continued fraction, gcds of degree 200 and 500 inside degree-400 and degree-1000 quotients, dense trivariate and sparse 6-variable gcds, Apart with 40 linear factors, multiplicity 10, 6 irreducible quadratics and 5 parameters. Group A by subject. Five columns: sympy (`cancel`, `apart`), Maxima (`ratsimp`, `partfrac`), PARI/GP (reduction on construction; Apart is SKIP). Checks are exact integers: the value at a rational point, plus the denominator degree for Together/Cancel. |
+
+| 122 | `polynomial-ideals` | PolynomialGCD and PolynomialLCM (univariate degree 400-1000, 60-digit coefficients, dense bi/trivariate, sparse 6-variable, 10 arguments, Modulus 32003), PolynomialReduce by reduced Groebner bases (cyclic-5 and katsura-4 DRL, 3-variable Lex and DegLex), Eliminate (principal elimination ideals: 3 quadratics, a degree-5 curve, a parametric surface, a 4-variable chain), CylindricalDecomposition (disc, two ellipses, a quartic, ball and cylinder, Whitney umbrella), GroebnerBasis (cyclic-5/6, katsura-4/5/6 in DRL and Lex, Modulus, the elimination form). Group A by subject. Columns: Maxima (`gcd`, `quotient(a, gcd)*b`, the grobner package over its integer ring), PARI/GP (`gcd`, `lcm`; everything else SKIP). Neither Maxima nor PARI has a CAD, and Maxima's grobner package has no F_p ring, so those cells are SKIP. Checks are exact integers and ignore normalisation: the degree plus the ratio of values at two rational points (mod p under Modulus), summed over a basis; CAD membership on a rational grid. No `.py` half. |
 
 The standalone `98-rational-shootout` is the wider study (98 cases, 26 families,
 independent verification of every answer); 121 is the slice of it the weekly job

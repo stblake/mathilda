@@ -18,6 +18,7 @@
 #ifndef MATHILDA_RATFUN_H
 #define MATHILDA_RATFUN_H
 
+#include <stdint.h>
 #include <gmp.h>
 #include "expr.h"
 
@@ -53,5 +54,19 @@ Expr* ratfun_apart_mod(const Expr* e, const Expr* x, const mpz_t p);
  * the call carries Modulus -> 0 or Trig -> False (the defaults), *stripped
  * (caller frees) is the call without them. */
 int ratfun_modulus_option(const Expr* res, const char* head, mpz_t p, Expr** stripped);
+
+/* PolynomialGCD / PolynomialLCM of a[0..n-1] (n >= 2), every argument a
+ * polynomial over Q in the atoms Together takes (symbols, kernels, E^(k u)).
+ * One context over all the arguments, each converted once; the gcd folds
+ * fmpz_mpoly_gcd (fmpz_poly_gcd in one variable) and stops at 1.
+ *   GCD: the expanded gcd times the gcd of the rational contents.
+ *   LCM: the fold of the classical path -- L <- (L/g) a_i or L (a_i/g),
+ *        whichever quotient has fewer terms -- as a product, 0 when an
+ *        argument is 0.
+ * p != 0 (a word-size prime): the same over GF(p); the gcd is monic and the
+ * coefficients are the residues 0..p-1.  NULL declines (a composite p, an
+ * input outside the domain, MATHILDA_POLYGCD_FLINT=off). */
+Expr* ratfun_polynomial_gcd(Expr* const* a, size_t n, uint64_t p);
+Expr* ratfun_polynomial_lcm(Expr* const* a, size_t n, uint64_t p);
 
 #endif /* MATHILDA_RATFUN_H */

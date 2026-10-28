@@ -95,6 +95,17 @@ void test_polynomialgcd() {
     run_test("PolynomialGCD[(t^2 - 1)/x, (t - 1)/x^2]", "Plus[-1, t]");
     run_test("PolynomialGCD[(x + y)/z, (x^2 - y^2)/z^2]", "Plus[x, y]");
     run_test("PolynomialGCD[6, 4]", "2");             /* numeric denominators unaffected */
+    /* One FLINT context over all the arguments (ratfun_gcd.inc): any arity,
+     * the content gcd of rationals, zeros, and the generators Together uses --
+     * E^(2x) and E^x share E^x, which the classical path could not see. */
+    run_test("PolynomialGCD[x/2 + 1/2, x/3 + 1/3]", "Plus[Rational[1, 6], Times[Rational[1, 6], x]]");
+    run_test("PolynomialGCD[6 x^2 y, 4 x y^3, 10 x^3 y^2]", "Times[2, x, y]");
+    run_test("PolynomialGCD[E^(2 x) - 1, E^x - 1]", "Plus[-1, Power[E, x]]");
+    run_test("PolynomialGCD[Log[x]^2 - 1, Log[x] + 1]", "Plus[1, Log[x]]");
+    run_test("PolynomialGCD[x^2 + y^2, 0]", "Plus[Power[x, 2], Power[y, 2]]");
+    run_test("PolynomialGCD[0, 0]", "0");
+    run_test("PolynomialGCD[(x+1)^3 (y-2), (x+1)^2 (y-2)^2, Expand[(x+1) (y-2) (x+y)]]",
+             "Plus[-2, Times[-2, x], y, Times[x, y]]");
 }
 
 void test_polynomiallcm() {
@@ -105,6 +116,12 @@ void test_polynomiallcm() {
     run_test("PolynomialLCM[x^2+2 x y+y^2, x^3+y^3]", "Times[Plus[x, y], Plus[Power[x, 3], Power[y, 3]]]");
     run_test("PolynomialLCM[x^2-1, x^3-1, x^4-1, x^5-1, x^6-1, x^7-1]", "Times[Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[-1, Power[x, 3]], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4], Power[x, 5], Power[x, 6]]]");
     run_test("PolynomialLCM[(x-1)(x-2)/(x-4), (x-1)/((x-4)(x-6))]", "Times[Power[Plus[-4, x], -1], Plus[-2, x], Plus[-1, x]]");
+    /* the classical fold's shape (the quotient with fewer terms is shown), any
+     * arity; an LCM with 0 is 0 (it was the other argument) */
+    run_test("PolynomialLCM[2 x + 2, 4 x - 4]", "Times[Plus[1, x], Plus[-4, Times[4, x]]]");
+    run_test("PolynomialLCM[6 x^2 y, 4 x y^3]", "Times[12, Power[x, 2], Power[y, 3]]");
+    run_test("PolynomialLCM[x^2 - 1, 0]", "0");
+    run_test("PolynomialLCM[E^(2 x) - 1, E^x + 1]", "Plus[-1, Power[E, Times[2, x]]]");
 }
 
 void test_polynomial_div_rem() {

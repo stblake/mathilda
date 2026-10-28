@@ -4590,12 +4590,14 @@ void info_init(void) {
         "Option Extension -> alpha computes the GCD over Q(alpha); Extension -> Automatic\n"
         "detects the extension from the operands. Coefficients in a number field are\n"
         "handled in either spelling, radical or AlgebraicNumber, in any number of\n"
-        "variables. The result is determined only up to a constant of the field.");
+        "variables. The result is determined only up to a constant of the field.\n"
+        "Modulus -> p (p prime) gives the monic GCD over GF(p), in any number of variables.");
     symtab_set_docstring("PolynomialLCM",
         "PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.\n"
         "Option Extension -> alpha computes the LCM over Q(alpha) via\n"
         "lcm(a, b) = a*b / PolynomialGCD[a, b, Extension -> alpha].\n"
-        "Default Extension -> None computes over the rationals.");
+        "Default Extension -> None computes over the rationals.\n"
+        "Modulus -> p (p prime) computes the LCM over GF(p).");
     symtab_set_docstring("PolynomialExtendedGCD", "PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.");
     symtab_set_docstring("PolynomialQuotient",
         "PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.\n"

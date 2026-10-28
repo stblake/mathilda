@@ -1770,10 +1770,14 @@ Out[5]= 7 (9 + 2 x + 5 x y + 3 y)
 Gives the greatest common divisor of the polynomials.
 - `PolynomialGCD[poly1, poly2, ...]`
 - `PolynomialGCD[poly1, poly2, ..., Extension -> alpha]`
+- `PolynomialGCD[poly1, poly2, ..., Modulus -> p]`
 
 **Features**:
 - `Protected`, `Listable`.
 - Handles univariate and multivariate polynomials.
+- **FLINT engine** (`src/poly/ratfun_gcd.inc`, v0.6077): any number of arguments over Q[vars, kernels] share ONE FLINT context (the atoms Together uses: symbols, `Log`/inverse-trig kernels, inert heads, and `E^(k u)` as powers of one generator, so `PolynomialGCD[E^(2x) - 1, E^x - 1]` is `-1 + E^x`). Each argument is converted once, the gcd folds `fmpz_mpoly_gcd` (`fmpz_poly_gcd` for one dense variable) and stops at 1, and the content is the `fmpq` gcd of the contents. The answer is the expanded gcd times that content, built canonical and certified. `MATHILDA_POLYGCD_FLINT=off` restores the classical path.
+- **`Modulus -> p`** (p prime): the monic gcd over GF(p) on `nmod_mpoly`, in any number of variables (formerly one variable only). A composite or symbolic modulus leaves the call unevaluated.
+- `PolynomialGCD[0, 0]` is `0`.
 - Treats algebraic numbers (like `I`) as independent variables or constants seamlessly during complex arithmetic evaluations.
 - Pre-extracts common factors before falling back to a full primitive Euclidean algorithm computation.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan): computes the GCD over `Q(alpha)` for `alpha` ∈ {`Sqrt[c]`, `c^(1/n)`, `I`} via lifting both inputs into the QAUPoly substrate (`src/poly/qaupoly.h`) and folding `qaupoly_gcd`. Extension support requires univariate inputs (after stripping the alpha-render symbol). Defaults `Extension -> None` and `Extension -> Automatic` work over the rationals and treat algebraic numbers as opaque variables. `Extension -> {alpha_1, ..., alpha_n}` (tower form) currently falls back to the no-extension path; tower-aware GCD is a Phase 0.5 follow-up.
@@ -1819,10 +1823,14 @@ Out[2]= {b + x, {-(1/(a (a - b))), 1/(a - b)}}
 Gives the least common multiple of the polynomials.
 - `PolynomialLCM[poly1, poly2, ...]`
 - `PolynomialLCM[poly1, poly2, ..., Extension -> alpha]`
+- `PolynomialLCM[poly1, poly2, ..., Modulus -> p]`
 
 **Features**:
 - `Protected`, `Listable`.
 - Handles univariate and multivariate polynomials.
+- **FLINT engine** (v0.6077), same context as `PolynomialGCD`. The shape is the classical fold's: L ← (L/g) aᵢ or L (aᵢ/g), whichever quotient has fewer terms (g including the rational content), kept as a product (`PolynomialLCM[2x + 2, 4x - 4]` is `(1 + x)(-4 + 4x)`). The running LCM is held as its shown factors and gcd(L, aᵢ) is taken factor by factor, so each gcd is the size of one argument rather than of the growing product.
+- An argument `0` gives `0`.
+- **`Modulus -> p`** (p prime): the LCM over GF(p), each factor reduced to its residues. Before v0.6077 the option was multiplied into the answer as a factor.
 - Treats algebraic numbers (like `I`) as independent variables or constants seamlessly during complex arithmetic evaluations.
 - Preserves explicit factored forms where possible.
 - **Option `Extension -> alpha`** computes the LCM over `Q(alpha)` via `lcm(a, b) = a*b / PolynomialGCD[a, b, Extension -> alpha]`, returning the monic, expanded form. Same scope and fallback as `PolynomialGCD`'s extension option.

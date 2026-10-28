@@ -1,3 +1,27 @@
+# Polynomial ideals on FLINT: GCD, LCM, GroebnerBasis, PolynomialReduce, Eliminate, CAD (2026-10-28)
+
+Plan: ~/.claude/plans/let-s-continue-our-performance-agile-creek.md
+
+- [ ] P0 benchmarks/122-polynomial-ideals (.m/.mac/.gp; four systems), baseline
+- [ ] P1 PolynomialGCD / PolynomialLCM: one FLINT front for every arity, Modulus multivariate (both heads),
+      zero arguments, E^(k u) generators; keep the LCM fold shape (fewer-term quotient)
+- [ ] P2 FLINT Groebner engine (fmpz_mpoly / nmod_mpoly, Gebauer-Moeller + sugar), gb_compute dispatcher used
+      by GroebnerBasis, Eliminate, Solve, NSolve, solvemod; Modulus with elimination variables
+- [ ] P3 PolynomialReduce on FLINT for Lex/DegLex/DegRevLex and Modulus; Eliminate on gb_compute
+- [ ] P4 CAD: Discriminant on FLINT, native McCallum projection, rational-fibre lifting on FLINT roots
+- [ ] P5 iterate on 122 until every row is ahead or explained
+- [ ] P6 docs, changelog, docstrings, versions/tags, lessons + memory
+
+Baseline wrong answers / gaps found by 122 (fix in the phase that owns them):
+- Eliminate[{x^2+y+z==1, x+y^2+z==1, x+y+z^2==1}, {y,z}] drops the factor x^2 (gb_poly_strip_monomial): the root
+  x = 0 (point (0,0,1)) is lost.  P3.
+- PolynomialLCM[x^2-1, x-1, Modulus->5] -> (-1+x^2)(Modulus->5): the option is multiplied in.  P1.
+- PolynomialLCM[p, 0] -> p (should be 0); PolynomialGCD[0, 0] -> 1 (should be 0).  P1.
+- PolynomialGCD[E^(2x)-1, E^x-1] -> 1 (should be -1+E^x).  P1.
+- PolynomialGCD / LCM with Modulus and several variables: unevaluated.  P1.
+- CylindricalDecomposition[x^4+y^4-3xy+x<1, {x,y}] unevaluated (degree-12 projection).  P4.
+- GroebnerBasis katsura-4 Lex does not finish in minutes (other systems 27-61 ms); cyclic-6 DRL > 60 s (0.24-2.9 s).  P2.
+
 # Together / Cancel / Apart review, FLINT-native pipelines, 5-engine shootout (2026-10-28)
 
 Plan: ~/.claude/plans/similar-to-our-recent-declarative-turtle.md. Trig -> True is LOW priority (last, optional).

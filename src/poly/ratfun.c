@@ -160,6 +160,12 @@ static int rf_scan(const Expr* e, RfCtx* C) {
         case EXPR_INTEGER: case EXPR_BIGINT:
             return 1;
         case EXPR_SYMBOL:
+            /* a variable met again (x in each of 1000 terms) is one pointer
+             * compare, not the bad-symbol strcmps */
+            for (size_t i = 0; i < C->n; i++)
+                if (C->atom[i] == e || (C->atom[i]->type == EXPR_SYMBOL &&
+                                        C->atom[i]->data.symbol.name == e->data.symbol.name))
+                    return 1;
             return rf_bad_symbol(e) ? 0 : rf_add_atom(C, e);
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
@@ -303,10 +309,13 @@ static ulong rf_deg_bound(const Expr* e, const RfCtx* C) {
     return 1;
 }
 
-static int rf_ctx_build(const Expr* e, RfCtx* C, const Expr* first) {
+/* The context of several expressions at once (PolynomialGCD's arguments):
+ * one atom set, one generator, one variable order. */
+static int rf_ctx_build_n(const Expr* const* es, size_t ne, RfCtx* C, const Expr* first) {
     memset(C, 0, sizeof *C);
     C->gidx = -1;
-    if (!rf_scan(e, C)) { rf_ctx_clear(C); return 0; }
+    for (size_t i = 0; i < ne; i++)
+        if (!rf_scan(es[i], C)) { rf_ctx_clear(C); return 0; }
     if (C->xn > 0) {
         /* A fundamental exponent u that every exponent is an integer multiple
          * of, taken from the kernels themselves. */
@@ -348,8 +357,13 @@ static int rf_ctx_build(const Expr* e, RfCtx* C, const Expr* first) {
         if (C->atom[i] == C->gexp) C->gidx = (slong)i;
     C->ctx = rf_ctx_for((slong)C->n);
     if (!C->ctx) { rf_ctx_clear(C); return 0; }
-    if (rf_deg_bound(e, C) > RF_MAX_DEG) { rf_ctx_clear(C); return 0; }
+    for (size_t i = 0; i < ne; i++)
+        if (rf_deg_bound(es[i], C) > RF_MAX_DEG) { rf_ctx_clear(C); return 0; }
     return 1;
+}
+
+static int rf_ctx_build(const Expr* e, RfCtx* C, const Expr* first) {
+    return rf_ctx_build_n(&e, 1, C, first);
 }
 
 /* ------------------------------------------------------------------ */
@@ -3498,9 +3512,14 @@ int ratfun_modulus_option(const Expr* res, const char* head, mpz_t p, Expr** str
     return 0;
 }
 
+#include "ratfun_gcd.inc"
+
 #else  /* !USE_FLINT */
 
 int ratfun_factored_form(void) { return 0; }
+
+Expr* ratfun_polynomial_gcd(Expr* const* a, size_t n, uint64_t p) { (void)a; (void)n; (void)p; return NULL; }
+Expr* ratfun_polynomial_lcm(Expr* const* a, size_t n, uint64_t p) { (void)a; (void)n; (void)p; return NULL; }
 
 int ratfun_modulus_option(const Expr* res, const char* head, mpz_t p, Expr** stripped) {
     (void)res; (void)head; (void)p; *stripped = NULL; return 0;

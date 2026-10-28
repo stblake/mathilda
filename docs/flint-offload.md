@@ -126,12 +126,30 @@ Two lessons carry over:
   arithmetic it does not need. A small `RfRing` interface lets the combination
   step run on dense `fmpz_poly` for one variable.
 
+## PolynomialGCD / PolynomialLCM (v0.6077)
+
+`src/poly/ratfun_gcd.inc` reuses the ratfun context for any number of
+arguments: one scan, one conversion per argument, a native fold, one certified
+render. Three lessons carry over:
+
+- **The render can cost more than the arithmetic.** Sorting a 500-term answer
+  with `expr_orderless_sort` was two thirds of a modular gcd. For symbol atoms
+  the canonical order of distinct monomials is a property of the exponent
+  vectors (ascending lex, last canonical variable most significant), so it is an
+  integer sort, checked against the evaluated form under
+  `MATHILDA_RATFUN_DIRECT_CHECK=1`.
+- **Do not take a gcd against a growing product.** An n-ary LCM held as its
+  factors needs gcd(F₁⋯F_k, a) = h₁⋯h_k with hⱼ = gcd(Fⱼ, a/(h₁⋯hⱼ₋₁)). Every
+  gcd is then the size of one argument, and the cofactor that remains is a/g.
+- **Dense and univariate means `fmpz_poly`.** Its gcd and its exact division
+  both beat `fmpz_mpoly`'s heap algorithms there.
+
 ## More candidate sites (same tactic)
 
 - Any remaining `rt_eval1("Expand", …)` inside a loop over tower levels or
   Laurent powers.
-- `PolynomialGCD`/`Resultant`-heavy passes that still route through the
-  classical multivariate Euclid on high-degree inputs.
+- `Resultant`/`Discriminant`-heavy passes that still route through the
+  classical subresultant PRS on high-degree inputs.
 - Together/Cancel over a number field in more than one variable (the K(x)
   engine is univariate; the multivariate case still goes through ratcanon).
 
