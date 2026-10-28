@@ -1,0 +1,1292 @@
+{
+ "host": {
+  "date": "2026-10-28",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.6073 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "/Users/user/Mathilda_dev/Mathilda/benchmarks/.venv/bin/python",
+  "python_libs": "3.14.7 2.5.2 1.18.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "gp": "[2, 17, 3] (/usr/local/bin/gp)",
+  "maxima": "Maxima 5.49.0 (/usr/local/bin/maxima)",
+  "runner_python": "3.14.7",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "01-integrate-rational",
+   "group": "A symbolic (sympy)",
+   "label": "integrate rational, squarefree deg 6",
+   "times": {
+    "mathilda": 1.272,
+    "wolfram": 37.97,
+    "python": 428.611,
+    "maxima": 0.255
+   },
+   "checks": {
+    "mathilda": "252355046",
+    "wolfram": "252355046",
+    "python": "252355046",
+    "maxima": "252355046"
+   },
+   "ratio": 4.988235294117647,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "01-integrate-rational",
+   "group": "A symbolic (sympy)",
+   "label": "integrate rational, repeated deg 4",
+   "times": {
+    "mathilda": 2.683,
+    "wolfram": 23.006,
+    "python": 120.794,
+    "maxima": 0.253
+   },
+   "checks": {
+    "mathilda": "26542632",
+    "wolfram": "26542632",
+    "python": "26542632",
+    "maxima": "26542632"
+   },
+   "ratio": 10.604743083003951,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "01-integrate-rational",
+   "group": "A symbolic (sympy)",
+   "label": "integrate rational, irreducible quartic",
+   "times": {
+    "mathilda": 1.616,
+    "wolfram": 4.397,
+    "python": 36.729,
+    "maxima": 0.164
+   },
+   "checks": {
+    "mathilda": "70221",
+    "wolfram": "70221",
+    "python": "70221",
+    "maxima": "70221"
+   },
+   "ratio": 9.853658536585366,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "01-integrate-rational",
+   "group": "A symbolic (sympy)",
+   "label": "integrate polynomial, deg 40",
+   "times": {
+    "mathilda": 0.257,
+    "wolfram": 0.189,
+    "python": 1.549,
+    "maxima": 0.153
+   },
+   "checks": {
+    "mathilda": "24416271",
+    "wolfram": "24416271",
+    "python": "24416271",
+    "maxima": "24416271"
+   },
+   "ratio": 1.6797385620915033,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "01-integrate-rational",
+   "group": "A symbolic (sympy)",
+   "label": "Apart, squarefree deg 8",
+   "times": {
+    "mathilda": 0.171,
+    "wolfram": 0.408,
+    "python": 34.604,
+    "maxima": 0.288
+   },
+   "checks": {
+    "mathilda": "182253578",
+    "wolfram": "182253578",
+    "python": "182253578",
+    "maxima": "182253578"
+   },
+   "ratio": 0.5937500000000001,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "01-integrate-rational",
+   "group": "A symbolic (sympy)",
+   "label": "Together, 8 summands",
+   "times": {
+    "mathilda": 0.073,
+    "wolfram": 0.503,
+    "python": 7.226,
+    "maxima": 0.201
+   },
+   "checks": {
+    "mathilda": "2161248",
+    "wolfram": "2161248",
+    "python": "2161248",
+    "maxima": "2161248"
+   },
+   "ratio": 0.36318407960199,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "03-simplify",
+   "group": "A symbolic (sympy)",
+   "label": "Simplify trig Pythagorean",
+   "times": {
+    "mathilda": 0.096,
+    "wolfram": 0.009,
+    "python": 14.18,
+    "maxima": 0.255
+   },
+   "checks": {
+    "mathilda": "1000000",
+    "wolfram": "1000000",
+    "python": "1000000",
+    "maxima": "1000000"
+   },
+   "ratio": 10.666666666666668,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "03-simplify",
+   "group": "A symbolic (sympy)",
+   "label": "Simplify quartic-to-Cos[4x]",
+   "times": {
+    "mathilda": 3.549,
+    "wolfram": 0.01,
+    "python": 28.247,
+    "maxima": 0.162
+   },
+   "checks": {
+    "mathilda": "235238",
+    "wolfram": "235238",
+    "python": "235238",
+    "maxima": "235238"
+   },
+   "ratio": 354.9,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "03-simplify",
+   "group": "A symbolic (sympy)",
+   "label": "Cancel removable singularity",
+   "times": {
+    "mathilda": 0.007,
+    "wolfram": 0.066,
+    "python": 1.094,
+    "maxima": 0.007
+   },
+   "checks": {
+    "mathilda": "9750000",
+    "wolfram": "9750000",
+    "python": "9750000",
+    "maxima": "9750000"
+   },
+   "ratio": 1.0,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "03-simplify",
+   "group": "A symbolic (sympy)",
+   "label": "FullSimplify nested radical",
+   "times": {
+    "mathilda": 0.744,
+    "wolfram": 0.009,
+    "python": 4.995,
+    "maxima": 0.047
+   },
+   "checks": {
+    "mathilda": "2414214",
+    "wolfram": "2414214",
+    "python": "2414214",
+    "maxima": "2414214"
+   },
+   "ratio": 82.66666666666667,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "03-simplify",
+   "group": "A symbolic (sympy)",
+   "label": "Simplify log-exp collapse",
+   "times": {
+    "mathilda": 0.218,
+    "wolfram": 0.009,
+    "python": 5.366,
+    "maxima": 0.006
+   },
+   "checks": {
+    "mathilda": "3500000",
+    "wolfram": "3500000",
+    "python": "3500000",
+    "maxima": "3500000"
+   },
+   "ratio": 36.333333333333336,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "03-simplify",
+   "group": "A symbolic (sympy)",
+   "label": "TrigReduce product of 4 sines",
+   "times": {
+    "mathilda": 0.844,
+    "wolfram": 0.496,
+    "python": 60.379,
+    "maxima": 0.118
+   },
+   "checks": {
+    "mathilda": "165475",
+    "wolfram": "165475",
+    "python": "165475",
+    "maxima": "165475"
+   },
+   "ratio": 7.152542372881356,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "10-polynomial-algebra",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, shared deg-20 factor",
+   "times": {
+    "mathilda": 0.154,
+    "wolfram": 0.218,
+    "python": 2.18,
+    "maxima": 1.371
+   },
+   "checks": {
+    "mathilda": "20",
+    "wolfram": "20",
+    "python": "20",
+    "maxima": "20"
+   },
+   "ratio": 0.7064220183486238,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "10-polynomial-algebra",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialGCD, coprime deg 40",
+   "times": {
+    "mathilda": 0.339,
+    "wolfram": 0.29,
+    "python": 1.132,
+    "maxima": 0.392
+   },
+   "checks": {
+    "mathilda": "0",
+    "wolfram": "0",
+    "python": "0",
+    "maxima": "0"
+   },
+   "ratio": 1.1689655172413795,
+   "note": "",
+   "best_other": "wolfram",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "10-polynomial-algebra",
+   "group": "A symbolic (sympy)",
+   "label": "Discriminant of deg 20",
+   "times": {
+    "mathilda": 5.155,
+    "wolfram": 0.22,
+    "python": 0.499,
+    "maxima": 0.065
+   },
+   "checks": {
+    "mathilda": "960365",
+    "wolfram": "960365",
+    "python": "960365",
+    "maxima": "960365"
+   },
+   "ratio": 79.3076923076923,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "10-polynomial-algebra",
+   "group": "A symbolic (sympy)",
+   "label": "Cancel deg-60 over deg-58",
+   "times": {
+    "mathilda": 0.253,
+    "wolfram": 3.139,
+    "python": 22.584,
+    "maxima": 1.929
+   },
+   "checks": {
+    "mathilda": "1157713",
+    "wolfram": "1157713",
+    "python": "1157713",
+    "maxima": "1157713"
+   },
+   "ratio": 0.13115603939865214,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "10-polynomial-algebra",
+   "group": "A symbolic (sympy)",
+   "label": "PolynomialQuotient deg 60 / deg 20",
+   "times": {
+    "mathilda": 0.092,
+    "wolfram": 0.616,
+    "python": 1.402,
+    "maxima": 0.166
+   },
+   "checks": {
+    "mathilda": "40",
+    "wolfram": "40",
+    "python": "40",
+    "maxima": "40"
+   },
+   "ratio": 0.5542168674698795,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "10-polynomial-algebra",
+   "group": "A symbolic (sympy)",
+   "label": "Expand (1+x)^400",
+   "times": {
+    "mathilda": 0.739,
+    "wolfram": 0.299,
+    "python": 0.01,
+    "maxima": 5.042
+   },
+   "checks": {
+    "mathilda": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120",
+    "wolfram": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120",
+    "python": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120",
+    "maxima": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120"
+   },
+   "ratio": 73.89999999999999,
+   "note": "",
+   "best_other": "python",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Together, 50 linear summands",
+   "times": {
+    "mathilda": 0.883,
+    "wolfram": 27.575,
+    "python": 8299.138,
+    "pari": 0.418,
+    "maxima": 14.26
+   },
+   "checks": {
+    "mathilda": "499999999999999999999999999999998681812683",
+    "wolfram": "499999999999999999999999999999998681812683",
+    "python": "499999999999999999999999999999998681812683",
+    "pari": "499999999999999999999999999999998681812683",
+    "maxima": "499999999999999999999999999999998681812683"
+   },
+   "ratio": 2.11244019138756,
+   "note": "",
+   "best_other": "pari",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Together, 200 linear summands",
+   "times": {
+    "mathilda": 7.859,
+    "wolfram": 1364.19,
+    "pari": 12.222,
+    "maxima": 754.633
+   },
+   "checks": {
+    "mathilda": "1999999999999999999999999999999999808294494",
+    "wolfram": "1999999999999999999999999999999999808294494",
+    "pari": "1999999999999999999999999999999999808294494",
+    "maxima": "1999999999999999999999999999999999808294494"
+   },
+   "ratio": 0.64302078219604,
+   "note": "",
+   "best_other": "pari",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Together, 12 trivariate summands",
+   "times": {
+    "mathilda": 8.751,
+    "wolfram": 47.368,
+    "python": 29752.902,
+    "pari": 19.0,
+    "maxima": 32.053
+   },
+   "checks": {
+    "mathilda": "119999999999999999999999999999999991846221",
+    "wolfram": "119999999999999999999999999999999991846221",
+    "python": "119999999999999999999999999999999991846221",
+    "pari": "119999999999999999999999999999999991846221",
+    "maxima": "119999999999999999999999999999999991846221"
+   },
+   "ratio": 0.46057894736842103,
+   "note": "",
+   "best_other": "pari",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Together, nested depth 32",
+   "times": {
+    "mathilda": 0.986,
+    "wolfram": 1.168,
+    "pari": 0.134,
+    "maxima": 0.071
+   },
+   "checks": {
+    "mathilda": "320000000000000000000000000000000001500000",
+    "wolfram": "320000000000000000000000000000000001500000",
+    "pari": "320000000000000000000000000000000001500000",
+    "maxima": "320000000000000000000000000000000001500000"
+   },
+   "ratio": 13.887323943661974,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "SLOWER"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Cancel deg-400, deg-200 gcd",
+   "times": {
+    "mathilda": 6.289,
+    "wolfram": 20.715,
+    "python": 851.757,
+    "pari": 16.0,
+    "maxima": 242.053
+   },
+   "checks": {
+    "mathilda": "1990000000000000000000000000000000001071885",
+    "wolfram": "1990000000000000000000000000000000001071885",
+    "python": "1990000000000000000000000000000000001071885",
+    "pari": "1990000000000000000000000000000000001071885",
+    "maxima": "1990000000000000000000000000000000001071885"
+   },
+   "ratio": 0.3930625,
+   "note": "",
+   "best_other": "pari",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Cancel deg-1000, deg-500 gcd",
+   "times": {
+    "mathilda": 49.25,
+    "wolfram": 116.756,
+    "python": 8302.165,
+    "pari": 105.0,
+    "maxima": 3958.531
+   },
+   "checks": {
+    "mathilda": "4990000000000000000000000000000000001042412",
+    "wolfram": "4990000000000000000000000000000000001042412",
+    "python": "4990000000000000000000000000000000001042412",
+    "pari": "4990000000000000000000000000000000001042412",
+    "maxima": "4990000000000000000000000000000000001042412"
+   },
+   "ratio": 0.46904761904761905,
+   "note": "",
+   "best_other": "pari",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Cancel dense trivariate, deg-6 gcd",
+   "times": {
+    "mathilda": 0.959,
+    "wolfram": 8.83,
+    "python": 415.61,
+    "pari": 10.3,
+    "maxima": 2.244
+   },
+   "checks": {
+    "mathilda": "40000000000000000000000000000000013490639",
+    "wolfram": "40000000000000000000000000000000013490639",
+    "python": "40000000000000000000000000000000013490639",
+    "pari": "40000000000000000000000000000000013490639",
+    "maxima": "40000000000000000000000000000000013490639"
+   },
+   "ratio": 0.427361853832442,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Cancel sparse 6-variable",
+   "times": {
+    "mathilda": 1.404,
+    "wolfram": 6.741,
+    "python": 216.503,
+    "pari": 5.368,
+    "maxima": 1.089
+   },
+   "checks": {
+    "mathilda": "10000000000000000000000000000000000988521",
+    "wolfram": "10000000000000000000000000000000000988521",
+    "python": "10000000000000000000000000000000000988521",
+    "pari": "10000000000000000000000000000000000988521",
+    "maxima": "10000000000000000000000000000000000988521"
+   },
+   "ratio": 1.2892561983471074,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Apart, 40 linear factors",
+   "times": {
+    "mathilda": 3.169,
+    "wolfram": 11.673,
+    "python": 1815.431,
+    "maxima": 9.588
+   },
+   "checks": {
+    "mathilda": "785295204708846619454691",
+    "wolfram": "785295204708846619454691",
+    "python": "785295204708846619454691",
+    "maxima": "785295204708846619454691"
+   },
+   "ratio": 0.3305173133083021,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Apart, multiplicity 10 and 10",
+   "times": {
+    "mathilda": 0.234,
+    "wolfram": 0.664,
+    "python": 200.919,
+    "maxima": 0.365
+   },
+   "checks": {
+    "mathilda": "1040837674286",
+    "wolfram": "1040837674286",
+    "python": "1040837674286",
+    "maxima": "1040837674286"
+   },
+   "ratio": 0.6410958904109589,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Apart, 6 irreducible quadratics",
+   "times": {
+    "mathilda": 0.183,
+    "wolfram": 0.727,
+    "python": 65.439,
+    "maxima": 0.27
+   },
+   "checks": {
+    "mathilda": "12965",
+    "wolfram": "12965",
+    "python": "12965",
+    "maxima": "12965"
+   },
+   "ratio": 0.6777777777777777,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "121-rational-functions",
+   "group": "A symbolic (sympy)",
+   "label": "Apart, 5 parameters",
+   "times": {
+    "mathilda": 1.951,
+    "wolfram": 2.817,
+    "python": 285.32,
+    "maxima": 2.631
+   },
+   "checks": {
+    "mathilda": "228365",
+    "wolfram": "228365",
+    "python": "228365",
+    "maxima": "228365"
+   },
+   "ratio": 0.7415431394906881,
+   "note": "",
+   "best_other": "maxima",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {
+  "Integrate": "present",
+  "Apart": "present",
+  "Together": "present",
+  "D": "present",
+  "Factor": "present",
+  "Simplify": "present",
+  "FullSimplify": "present",
+  "TrigReduce": "present",
+  "TrigExpand": "present",
+  "Cancel": "present",
+  "PowerExpand": "present",
+  "Expand": "present",
+  "PolynomialGCD": "present",
+  "PolynomialLCM": "present",
+  "Resultant": "present",
+  "Discriminant": "present",
+  "Exponent": "present",
+  "CoefficientList": "present",
+  "PolynomialQuotient": "present",
+  "PolynomialRemainder": "present",
+  "Subresultants": "present",
+  "Denominator": "present"
+ },
+ "raw": {
+  "01-integrate-rational": {
+   "mathilda": {
+    "bench": {
+     "integrate rational, squarefree deg 6": 1.272,
+     "integrate rational, repeated deg 4": 2.683,
+     "integrate rational, irreducible quartic": 1.616,
+     "integrate polynomial, deg 40": 0.257,
+     "Apart, squarefree deg 8": 0.171,
+     "Together, 8 summands": 0.073
+    },
+    "check": {
+     "integrate rational, squarefree deg 6": "252355046",
+     "integrate rational, repeated deg 4": "26542632",
+     "integrate rational, irreducible quartic": "70221",
+     "integrate polynomial, deg 40": "24416271",
+     "Apart, squarefree deg 8": "182253578",
+     "Together, 8 summands": "2161248"
+    },
+    "require": {
+     "Integrate": "present",
+     "Apart": "present",
+     "Together": "present",
+     "D": "present",
+     "Factor": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "integrate rational, squarefree deg 6": 37.97,
+     "integrate rational, repeated deg 4": 23.006,
+     "integrate rational, irreducible quartic": 4.397,
+     "integrate polynomial, deg 40": 0.189,
+     "Apart, squarefree deg 8": 0.408,
+     "Together, 8 summands": 0.503
+    },
+    "check": {
+     "integrate rational, squarefree deg 6": "252355046",
+     "integrate rational, repeated deg 4": "26542632",
+     "integrate rational, irreducible quartic": "70221",
+     "integrate polynomial, deg 40": "24416271",
+     "Apart, squarefree deg 8": "182253578",
+     "Together, 8 summands": "2161248"
+    },
+    "require": {
+     "Integrate": "present",
+     "Apart": "present",
+     "Together": "present",
+     "D": "present",
+     "Factor": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "integrate rational, squarefree deg 6": 428.611,
+     "integrate rational, repeated deg 4": 120.794,
+     "integrate rational, irreducible quartic": 36.729,
+     "integrate polynomial, deg 40": 1.549,
+     "Apart, squarefree deg 8": 34.604,
+     "Together, 8 summands": 7.226
+    },
+    "check": {
+     "integrate rational, squarefree deg 6": "252355046",
+     "integrate rational, repeated deg 4": "26542632",
+     "integrate rational, irreducible quartic": "70221",
+     "integrate polynomial, deg 40": "24416271",
+     "Apart, squarefree deg 8": "182253578",
+     "Together, 8 summands": "2161248"
+    },
+    "require": {
+     "sympy": "present",
+     "sympy:integrate": "present",
+     "sympy:apart": "present",
+     "sympy:together": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "maxima": {
+    "bench": {
+     "integrate rational, squarefree deg 6": 0.255,
+     "integrate rational, repeated deg 4": 0.253,
+     "integrate rational, irreducible quartic": 0.164,
+     "integrate polynomial, deg 40": 0.153,
+     "Apart, squarefree deg 8": 0.288,
+     "Together, 8 summands": 0.201
+    },
+    "check": {
+     "integrate rational, squarefree deg 6": "252355046",
+     "integrate rational, repeated deg 4": "26542632",
+     "integrate rational, irreducible quartic": "70221",
+     "integrate polynomial, deg 40": "24416271",
+     "Apart, squarefree deg 8": "182253578",
+     "Together, 8 summands": "2161248"
+    },
+    "require": {
+     "integrate": "present",
+     "partfrac": "present",
+     "ratsimp": "present",
+     "diff": "present",
+     "factor": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "03-simplify": {
+   "mathilda": {
+    "bench": {
+     "Simplify trig Pythagorean": 0.096,
+     "Simplify quartic-to-Cos[4x]": 3.549,
+     "Cancel removable singularity": 0.007,
+     "FullSimplify nested radical": 0.744,
+     "Simplify log-exp collapse": 0.218,
+     "TrigReduce product of 4 sines": 0.844
+    },
+    "check": {
+     "Simplify trig Pythagorean": "1000000",
+     "Simplify quartic-to-Cos[4x]": "235238",
+     "Cancel removable singularity": "9750000",
+     "FullSimplify nested radical": "2414214",
+     "Simplify log-exp collapse": "3500000",
+     "TrigReduce product of 4 sines": "165475"
+    },
+    "require": {
+     "Simplify": "present",
+     "FullSimplify": "present",
+     "TrigReduce": "present",
+     "TrigExpand": "present",
+     "Cancel": "present",
+     "PowerExpand": "present",
+     "Factor": "present",
+     "Expand": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "Simplify trig Pythagorean": 0.009,
+     "Simplify quartic-to-Cos[4x]": 0.01,
+     "Cancel removable singularity": 0.066,
+     "FullSimplify nested radical": 0.009,
+     "Simplify log-exp collapse": 0.009,
+     "TrigReduce product of 4 sines": 0.496
+    },
+    "check": {
+     "Simplify trig Pythagorean": "1000000",
+     "Simplify quartic-to-Cos[4x]": "235238",
+     "Cancel removable singularity": "9750000",
+     "FullSimplify nested radical": "2414214",
+     "Simplify log-exp collapse": "3500000",
+     "TrigReduce product of 4 sines": "165475"
+    },
+    "require": {
+     "Simplify": "present",
+     "FullSimplify": "present",
+     "TrigReduce": "present",
+     "TrigExpand": "present",
+     "Cancel": "present",
+     "PowerExpand": "present",
+     "Factor": "present",
+     "Expand": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "Simplify trig Pythagorean": 14.18,
+     "Simplify quartic-to-Cos[4x]": 28.247,
+     "Cancel removable singularity": 1.094,
+     "FullSimplify nested radical": 4.995,
+     "Simplify log-exp collapse": 5.366,
+     "TrigReduce product of 4 sines": 60.379
+    },
+    "check": {
+     "Simplify trig Pythagorean": "1000000",
+     "Simplify quartic-to-Cos[4x]": "235238",
+     "Cancel removable singularity": "9750000",
+     "FullSimplify nested radical": "2414214",
+     "Simplify log-exp collapse": "3500000",
+     "TrigReduce product of 4 sines": "165475"
+    },
+    "require": {
+     "sympy": "present",
+     "sympy:simplify": "present",
+     "sympy:cancel": "present",
+     "sympy:radsimp": "present",
+     "sympy:expand_trig": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "maxima": {
+    "bench": {
+     "Simplify trig Pythagorean": 0.255,
+     "Simplify quartic-to-Cos[4x]": 0.162,
+     "Cancel removable singularity": 0.007,
+     "FullSimplify nested radical": 0.047,
+     "Simplify log-exp collapse": 0.006,
+     "TrigReduce product of 4 sines": 0.118
+    },
+    "check": {
+     "Simplify trig Pythagorean": "1000000",
+     "Simplify quartic-to-Cos[4x]": "235238",
+     "Cancel removable singularity": "9750000",
+     "FullSimplify nested radical": "2414214",
+     "Simplify log-exp collapse": "3500000",
+     "TrigReduce product of 4 sines": "165475"
+    },
+    "require": {
+     "trigsimp": "present",
+     "trigreduce": "present",
+     "ratsimp": "present",
+     "sqrtdenest": "present",
+     "radcan": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "10-polynomial-algebra": {
+   "mathilda": {
+    "bench": {
+     "PolynomialGCD, shared deg-20 factor": 0.154,
+     "PolynomialGCD, coprime deg 40": 0.339,
+     "Discriminant of deg 20": 5.155,
+     "Cancel deg-60 over deg-58": 0.253,
+     "PolynomialQuotient deg 60 / deg 20": 0.092,
+     "Expand (1+x)^400": 0.739
+    },
+    "check": {
+     "PolynomialGCD, shared deg-20 factor": "20",
+     "PolynomialGCD, coprime deg 40": "0",
+     "Discriminant of deg 20": "960365",
+     "Cancel deg-60 over deg-58": "1157713",
+     "PolynomialQuotient deg 60 / deg 20": "40",
+     "Expand (1+x)^400": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120"
+    },
+    "require": {
+     "PolynomialGCD": "present",
+     "PolynomialLCM": "present",
+     "Resultant": "present",
+     "Discriminant": "present",
+     "Cancel": "present",
+     "Exponent": "present",
+     "CoefficientList": "present",
+     "PolynomialQuotient": "present",
+     "PolynomialRemainder": "present",
+     "Subresultants": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "PolynomialGCD, shared deg-20 factor": 0.218,
+     "PolynomialGCD, coprime deg 40": 0.29,
+     "Discriminant of deg 20": 0.22,
+     "Cancel deg-60 over deg-58": 3.139,
+     "PolynomialQuotient deg 60 / deg 20": 0.616,
+     "Expand (1+x)^400": 0.299
+    },
+    "check": {
+     "PolynomialGCD, shared deg-20 factor": "20",
+     "PolynomialGCD, coprime deg 40": "0",
+     "Discriminant of deg 20": "960365",
+     "Cancel deg-60 over deg-58": "1157713",
+     "PolynomialQuotient deg 60 / deg 20": "40",
+     "Expand (1+x)^400": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120"
+    },
+    "require": {
+     "PolynomialGCD": "present",
+     "PolynomialLCM": "present",
+     "Resultant": "present",
+     "Discriminant": "present",
+     "Cancel": "present",
+     "Exponent": "present",
+     "CoefficientList": "present",
+     "PolynomialQuotient": "present",
+     "PolynomialRemainder": "present",
+     "Subresultants": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "PolynomialGCD, shared deg-20 factor": 2.18,
+     "PolynomialGCD, coprime deg 40": 1.132,
+     "Discriminant of deg 20": 0.499,
+     "Cancel deg-60 over deg-58": 22.584,
+     "PolynomialQuotient deg 60 / deg 20": 1.402,
+     "Expand (1+x)^400": 0.01
+    },
+    "check": {
+     "PolynomialGCD, shared deg-20 factor": "20",
+     "PolynomialGCD, coprime deg 40": "0",
+     "Discriminant of deg 20": "960365",
+     "Cancel deg-60 over deg-58": "1157713",
+     "PolynomialQuotient deg 60 / deg 20": "40",
+     "Expand (1+x)^400": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120"
+    },
+    "require": {
+     "sympy": "present",
+     "sympy:gcd": "present",
+     "sympy:resultant": "present",
+     "sympy:discriminant": "present",
+     "sympy:cancel": "present",
+     "sympy:div": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "maxima": {
+    "bench": {
+     "PolynomialGCD, shared deg-20 factor": 1.371,
+     "PolynomialGCD, coprime deg 40": 0.392,
+     "Discriminant of deg 20": 0.065,
+     "Cancel deg-60 over deg-58": 1.929,
+     "PolynomialQuotient deg 60 / deg 20": 0.166,
+     "Expand (1+x)^400": 5.042
+    },
+    "check": {
+     "PolynomialGCD, shared deg-20 factor": "20",
+     "PolynomialGCD, coprime deg 40": "0",
+     "Discriminant of deg 20": "960365",
+     "Cancel deg-60 over deg-58": "1157713",
+     "PolynomialQuotient deg 60 / deg 20": "40",
+     "Expand (1+x)^400": "102952500135414432972975880320401986757210925381077648234849059575923332372651958598336595518976492951564048597506774120"
+    },
+    "require": {
+     "gcd": "present",
+     "resultant": "present",
+     "poly_discriminant": "present",
+     "ratsimp": "present",
+     "quotient": "present",
+     "expand": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  },
+  "121-rational-functions": {
+   "mathilda": {
+    "bench": {
+     "Together, 50 linear summands": 0.883,
+     "Together, 200 linear summands": 7.859,
+     "Together, 12 trivariate summands": 8.751,
+     "Together, nested depth 32": 0.986,
+     "Cancel deg-400, deg-200 gcd": 6.289,
+     "Cancel deg-1000, deg-500 gcd": 49.25,
+     "Cancel dense trivariate, deg-6 gcd": 0.959,
+     "Cancel sparse 6-variable": 1.404,
+     "Apart, 40 linear factors": 3.169,
+     "Apart, multiplicity 10 and 10": 0.234,
+     "Apart, 6 irreducible quadratics": 0.183,
+     "Apart, 5 parameters": 1.951
+    },
+    "check": {
+     "Together, 50 linear summands": "499999999999999999999999999999998681812683",
+     "Together, 200 linear summands": "1999999999999999999999999999999999808294494",
+     "Together, 12 trivariate summands": "119999999999999999999999999999999991846221",
+     "Together, nested depth 32": "320000000000000000000000000000000001500000",
+     "Cancel deg-400, deg-200 gcd": "1990000000000000000000000000000000001071885",
+     "Cancel deg-1000, deg-500 gcd": "4990000000000000000000000000000000001042412",
+     "Cancel dense trivariate, deg-6 gcd": "40000000000000000000000000000000013490639",
+     "Cancel sparse 6-variable": "10000000000000000000000000000000000988521",
+     "Apart, 40 linear factors": "785295204708846619454691",
+     "Apart, multiplicity 10 and 10": "1040837674286",
+     "Apart, 6 irreducible quadratics": "12965",
+     "Apart, 5 parameters": "228365"
+    },
+    "require": {
+     "Together": "present",
+     "Cancel": "present",
+     "Apart": "present",
+     "Denominator": "present",
+     "Exponent": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "wolfram": {
+    "bench": {
+     "Together, 50 linear summands": 27.575,
+     "Together, 200 linear summands": 1364.19,
+     "Together, 12 trivariate summands": 47.368,
+     "Together, nested depth 32": 1.168,
+     "Cancel deg-400, deg-200 gcd": 20.715,
+     "Cancel deg-1000, deg-500 gcd": 116.756,
+     "Cancel dense trivariate, deg-6 gcd": 8.83,
+     "Cancel sparse 6-variable": 6.741,
+     "Apart, 40 linear factors": 11.673,
+     "Apart, multiplicity 10 and 10": 0.664,
+     "Apart, 6 irreducible quadratics": 0.727,
+     "Apart, 5 parameters": 2.817
+    },
+    "check": {
+     "Together, 50 linear summands": "499999999999999999999999999999998681812683",
+     "Together, 200 linear summands": "1999999999999999999999999999999999808294494",
+     "Together, 12 trivariate summands": "119999999999999999999999999999999991846221",
+     "Together, nested depth 32": "320000000000000000000000000000000001500000",
+     "Cancel deg-400, deg-200 gcd": "1990000000000000000000000000000000001071885",
+     "Cancel deg-1000, deg-500 gcd": "4990000000000000000000000000000000001042412",
+     "Cancel dense trivariate, deg-6 gcd": "40000000000000000000000000000000013490639",
+     "Cancel sparse 6-variable": "10000000000000000000000000000000000988521",
+     "Apart, 40 linear factors": "785295204708846619454691",
+     "Apart, multiplicity 10 and 10": "1040837674286",
+     "Apart, 6 irreducible quadratics": "12965",
+     "Apart, 5 parameters": "228365"
+    },
+    "require": {
+     "Together": "present",
+     "Cancel": "present",
+     "Apart": "present",
+     "Denominator": "present",
+     "Exponent": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "bench": {
+     "Together, 50 linear summands": 8299.138,
+     "Together, 12 trivariate summands": 29752.902,
+     "Cancel deg-400, deg-200 gcd": 851.757,
+     "Cancel deg-1000, deg-500 gcd": 8302.165,
+     "Cancel dense trivariate, deg-6 gcd": 415.61,
+     "Cancel sparse 6-variable": 216.503,
+     "Apart, 40 linear factors": 1815.431,
+     "Apart, multiplicity 10 and 10": 200.919,
+     "Apart, 6 irreducible quadratics": 65.439,
+     "Apart, 5 parameters": 285.32
+    },
+    "check": {
+     "Together, 50 linear summands": "499999999999999999999999999999998681812683",
+     "Together, 12 trivariate summands": "119999999999999999999999999999999991846221",
+     "Cancel deg-400, deg-200 gcd": "1990000000000000000000000000000000001071885",
+     "Cancel deg-1000, deg-500 gcd": "4990000000000000000000000000000000001042412",
+     "Cancel dense trivariate, deg-6 gcd": "40000000000000000000000000000000013490639",
+     "Cancel sparse 6-variable": "10000000000000000000000000000000000988521",
+     "Apart, 40 linear factors": "785295204708846619454691",
+     "Apart, multiplicity 10 and 10": "1040837674286",
+     "Apart, 6 irreducible quadratics": "12965",
+     "Apart, 5 parameters": "228365"
+    },
+    "require": {
+     "sympy": "present",
+     "sympy:cancel": "present",
+     "sympy:apart": "present",
+     "sympy:together": "present"
+    },
+    "skip": {
+     "Together, 200 linear summands": "sympy:cancel (over 120 s cold)",
+     "Together, nested depth 32": "sympy:cancel (over 120 s cold)"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "pari": {
+    "bench": {
+     "Together, 50 linear summands": 0.418,
+     "Together, 200 linear summands": 12.222,
+     "Together, 12 trivariate summands": 19.0,
+     "Together, nested depth 32": 0.134,
+     "Cancel deg-400, deg-200 gcd": 16.0,
+     "Cancel deg-1000, deg-500 gcd": 105.0,
+     "Cancel dense trivariate, deg-6 gcd": 10.3,
+     "Cancel sparse 6-variable": 5.368
+    },
+    "check": {
+     "Together, 50 linear summands": "499999999999999999999999999999998681812683",
+     "Together, 200 linear summands": "1999999999999999999999999999999999808294494",
+     "Together, 12 trivariate summands": "119999999999999999999999999999999991846221",
+     "Together, nested depth 32": "320000000000000000000000000000000001500000",
+     "Cancel deg-400, deg-200 gcd": "1990000000000000000000000000000000001071885",
+     "Cancel deg-1000, deg-500 gcd": "4990000000000000000000000000000000001042412",
+     "Cancel dense trivariate, deg-6 gcd": "40000000000000000000000000000000013490639",
+     "Cancel sparse 6-variable": "10000000000000000000000000000000000988521"
+    },
+    "require": {
+     "sum": "present",
+     "denominator": "present",
+     "poldegree": "present",
+     "substvec": "present"
+    },
+    "skip": {
+     "Apart, 40 linear factors": "partial fractions",
+     "Apart, multiplicity 10 and 10": "partial fractions",
+     "Apart, 6 irreducible quadratics": "partial fractions",
+     "Apart, 5 parameters": "partial fractions"
+    },
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "maxima": {
+    "bench": {
+     "Together, 50 linear summands": 14.26,
+     "Together, 200 linear summands": 754.633,
+     "Together, 12 trivariate summands": 32.053,
+     "Together, nested depth 32": 0.071,
+     "Cancel deg-400, deg-200 gcd": 242.053,
+     "Cancel deg-1000, deg-500 gcd": 3958.531,
+     "Cancel dense trivariate, deg-6 gcd": 2.244,
+     "Cancel sparse 6-variable": 1.089,
+     "Apart, 40 linear factors": 9.588,
+     "Apart, multiplicity 10 and 10": 0.365,
+     "Apart, 6 irreducible quadratics": 0.27,
+     "Apart, 5 parameters": 2.631
+    },
+    "check": {
+     "Together, 50 linear summands": "499999999999999999999999999999998681812683",
+     "Together, 200 linear summands": "1999999999999999999999999999999999808294494",
+     "Together, 12 trivariate summands": "119999999999999999999999999999999991846221",
+     "Together, nested depth 32": "320000000000000000000000000000000001500000",
+     "Cancel deg-400, deg-200 gcd": "1990000000000000000000000000000000001071885",
+     "Cancel deg-1000, deg-500 gcd": "4990000000000000000000000000000000001042412",
+     "Cancel dense trivariate, deg-6 gcd": "40000000000000000000000000000000013490639",
+     "Cancel sparse 6-variable": "10000000000000000000000000000000000988521",
+     "Apart, 40 linear factors": "785295204708846619454691",
+     "Apart, multiplicity 10 and 10": "1040837674286",
+     "Apart, 6 irreducible quadratics": "12965",
+     "Apart, 5 parameters": "228365"
+    },
+    "require": {
+     "ratsimp": "present",
+     "partfrac": "present",
+     "denom": "present",
+     "hipow": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   }
+  }
+ },
+ "elapsed_s": 255.29940724372864,
+ "durations": {
+  "01-integrate-rational": 9.514519214630127,
+  "03-simplify": 6.450129985809326,
+  "10-polynomial-algebra": 5.911296606063843,
+  "121-rational-functions": 231.86463689804077
+ },
+ "partial": true,
+ "label_problems": []
+}

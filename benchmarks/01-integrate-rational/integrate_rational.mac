@@ -1,0 +1,53 @@
+/* ==========================================================================
+   Experiment 01 -- Symbolic integration of rational functions (Maxima column).
+
+   The same six kernels as integrate_rational.m, in the same order, with the
+   same labels and the same integer checks.
+
+       cd benchmarks/01-integrate-rational && maxima --very-quiet -b integrate_rational.mac
+
+   Maxima's integrate handles a rational integrand with partial fractions and
+   the Rothstein-Trager log part, as the other columns do; partfrac is Apart and
+   ratsimp is Together.  The check is the definite integral F(b) - F(a) at
+   exact endpoints, which is invariant under +C and under regrouping of the log
+   part (see the .m half).
+   ========================================================================== */
+
+load("../harness.mac")$
+
+require(["integrate", "partfrac", "ratsimp", "diff", "factor"])$
+
+defint(f, a, b) := block([F : integrate(f, x)],
+  round(10^6 * realpart(float(subst(b, x, F) - subst(a, x, F)))))$
+
+/* ---- 1. Squarefree denominator: partial fractions + log part ------------ */
+f6 : ratFn(6, x)$
+bench("integrate rational, squarefree deg 6", lambda([], integrate(f6, x)))$
+check("integrate rational, squarefree deg 6", defint(f6, 13/2, 15/2))$
+
+/* ---- 2. Repeated denominator factors: the Hermite reduction branch ------ */
+f4r : ratFnRepeated(4, x)$
+bench("integrate rational, repeated deg 4", lambda([], integrate(f4r, x)))$
+check("integrate rational, repeated deg 4", defint(f4r, 9/2, 11/2))$
+
+/* ---- 3. Irreducible denominator: no rational part, all logarithmic ------ */
+fq : 1/(x^4 + 1)$
+bench("integrate rational, irreducible quartic", lambda([], integrate(fq, x)))$
+check("integrate rational, irreducible quartic", defint(fq, 3/2, 5/2))$
+
+/* ---- 4. Polynomial integration: the trivial baseline -------------------- */
+p40 : denseUPoly(40, x)$
+bench("integrate polynomial, deg 40", lambda([], integrate(p40, x)))$
+check("integrate polynomial, deg 40", round(10^6 * float(subst(1, x, integrate(p40, x)))))$
+
+/* ---- 5. Partial fractions alone, without the integration ---------------- */
+f8 : ratFn(8, x)$
+bench("Apart, squarefree deg 8", lambda([], partfrac(f8, x)))$
+check("Apart, squarefree deg 8", round(10^6 * float(subst(19/2, x, partfrac(f8, x)))))$
+
+/* ---- 6. Together: the inverse direction -------------------------------- */
+bench("Together, 8 summands", lambda([], ratsimp(sum(1/(x - i), i, 1, 8))))$
+check("Together, 8 summands",
+  round(10^6 * float(subst(19/2, x, ratsimp(sum(1/(x - i), i, 1, 8))))))$
+
+quit()$

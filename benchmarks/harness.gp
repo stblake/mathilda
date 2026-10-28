@@ -42,6 +42,20 @@ bench(label, f, reps = BENCH_REPS) =
   printf("BENCH\t%s\t%.3f\n", label, best);
 }
 
+\\ Sub-millisecond cases outside group F: repeat each timed run until it spans
+\\ >= 100 ms of the ms clock and divide, so the case does not read 0.000.
+benchLoop(label, f, reps = BENCH_REPS) =
+{
+  my(t, n, best = -1.);
+  f();                                            \\ warm-up, untimed
+  for (i = 1, reps,
+    n = 0; t = getabstime();
+    until (getabstime() - t >= 100, f(); n++);
+    t = (getabstime() - t) / n;
+    if (best < 0 || t < best, best = t));
+  printf("BENCH\t%s\t%.3f\n", label, best);
+}
+
 \\ Single timed run, no warm-up: for cases already expensive on their own.
 benchOnce(label, f) =
 {

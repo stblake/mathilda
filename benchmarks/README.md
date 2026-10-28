@@ -1,7 +1,8 @@
 # `benchmarks/` — the weekly gap-driven benchmark job
 
-Thirty experiments, each a kept `.m`/`.py` pair, run in three systems and
-joined into a ranked report that names the week's dev work.
+Each experiment is a kept `.m`/`.py` pair (some also carry a `.gp` half for
+PARI/GP or a `.mac` half for Maxima), run in up to five systems and joined into
+a ranked report that names the week's dev work.
 
 The unit of measurement is a **case**: one named kernel, timed in every system
 and joined across them by its label. There are 186 of them.
@@ -9,7 +10,7 @@ and joined across them by its label. There are 186 of them.
 ## How to run it
 
 ```bash
-make bench-gap                     # the whole thing, 3 systems, ~20 min
+make bench-gap                     # the whole thing, every system present
 ```
 
 That is the only command you need weekly. It prints a live progress bar with a
@@ -97,13 +98,15 @@ Top to bottom, it answers four questions in order:
 4. **Absences and check failures** — capability gaps and unverifiable cases,
    never mixed into the speed numbers.
 
-The two median columns are the ones to read against each other. Behind
+The median columns are the ones to read against each other. Behind
 **Mathematica** is a gap against a *competitor* — same evaluation semantics, same
 automatic compilation — so it is an engineering gap. Behind **Python** is a gap
 against *the machine*: on the dense linear-algebra areas all three call the same
 Accelerate BLAS, so any spread is pure overhead. A case can read acceptably
 against one and badly against the other, and that difference is usually the
-finding.
+finding. **PARI/GP** (number theory, group F) and **Maxima** (symbolic algebra,
+the group A experiments that carry a `.mac` half) are open-source specialists:
+behind either is a gap against an established algorithm.
 
 A ratio whose baseline ran under 0.005 ms is rendered `>N×` with a footnote, not
 as a precise number: 0.001 ms is at clock resolution, so `6097090.0×` would imply
@@ -228,13 +231,14 @@ the fallback stays in the binary. This cost a full diagnosis pass to notice.
 
 ```
 benchmarks/
-  harness.m / harness.py / harness.gp   THE ONLY copy of bench / check / require
+  harness.m / .py / .gp / .mac   THE ONLY copy of bench / check / require
   data.m    / data.py       shared deterministic input generators
   crypto_data.{m,py,gp}     group F's shared LCG inputs and curve/group constants
   run_all.py                the job
   NN-slug/slug.m            kernels only, 2 lines of preamble
   NN-slug/slug.py           kernels only, 2 lines of preamble
-  NNN-slug/slug.gp          group F only: the PARI/GP half
+  NNN-slug/slug.gp          the PARI/GP half (group F, and 121)
+  NN-slug/slug.mac          the Maxima half (01, 03, 10, 121)
 ```
 
 The existing corpus duplicates its reporting helpers into every file ("shared
@@ -262,7 +266,7 @@ python3 integrate_rational.py             # works from anywhere
 
 ### The emit contract
 
-One tagged tab-separated line per case, identical in all three systems:
+One tagged tab-separated line per case, identical in every system:
 
 ```
 BENCH   <label>  <milliseconds>
@@ -474,6 +478,26 @@ belongs in `tests/`, not in a timing job.
 | # | experiment | what it measures |
 |---|---|---|
 | 120 | `sparse-arrays` | SparseArray construction, element-wise arithmetic and functions, access, dense ⇄ sparse against scipy.sparse |
+
+## Maxima column, and rational functions at stress sizes (121)
+
+Maxima runs any experiment with a `.mac` half, via
+`maxima --very-quiet -r 'batchload("<slug>.mac")$'` from the experiment folder
+(`BENCH_MAXIMA` overrides the binary; otherwise `maxima` on `PATH`). The halves
+load `../harness.mac`, which carries the emit contract and the `data.m`
+generators (`denseUPoly`, `factorableUPoly`, `ratFn`, `ratFnRepeated`). Each
+`.mac` header names the Maxima function used for each case (Maxima has no single
+`Simplify`, so `03` uses `trigsimp`, `trigreduce`, `sqrtdenest`, `radcan`).
+Sub-10 ms calls repeat until the batch spans 10 ms; Maxima's cheapest calls cost
+microseconds.
+
+| # | experiment | what it measures |
+|---|---|---|
+| 121 | `rational-functions` | Together, Cancel and Apart at stress sizes: 50 and 200 linear summands, 12 trivariate summands, a depth-32 continued fraction, gcds of degree 200 and 500 inside degree-400 and degree-1000 quotients, dense trivariate and sparse 6-variable gcds, Apart with 40 linear factors, multiplicity 10, 6 irreducible quadratics and 5 parameters. Group A by subject. Five columns: sympy (`cancel`, `apart`), Maxima (`ratsimp`, `partfrac`), PARI/GP (reduction on construction; Apart is SKIP). Checks are exact integers: the value at a rational point, plus the denominator degree for Together/Cancel. |
+
+The standalone `98-rational-shootout` is the wider study (98 cases, 26 families,
+independent verification of every answer); 121 is the slice of it the weekly job
+tracks.
 
 ## Reading a group A case correctly
 

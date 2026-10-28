@@ -1002,7 +1002,8 @@ check-fastpath-sweep:
 # (numpy/scipy/sympy/networkx) and — when wolframscript is installed — in
 # Mathematica, joins the rows by label, and writes a ranked report naming the
 # week's work: benchmarks/REPORT.md, benchmarks/ABSENT.md, and the raw rows to
-# benchmarks/results/<date>.json.
+# benchmarks/results/<date>.json. Experiments with a .gp / .mac half also run
+# in PARI/GP / Maxima.
 #
 # Distinct from the check-* gates above: those answer "did anything regress",
 # this answers "where is Mathilda behind, and is it behind because a kernel is

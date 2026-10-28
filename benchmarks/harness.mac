@@ -1,0 +1,77 @@
+/* ==========================================================================
+   benchmarks/harness.mac -- the Maxima twin of harness.m / harness.py / harness.gp.
+   ==========================================================================
+
+   Loaded by every .mac experiment as its first line:
+
+       load("../harness.mac")$
+
+   `load` resolves a relative path against the current directory; run_all.py
+   sets cwd to the experiment folder (as it does for the other halves) and runs
+
+       maxima --very-quiet -r 'batchload("<slug>.mac")$'
+
+   batchload, not `-b`: `-b` echoes every input line and its (%o) result, which
+   is harmless to the parser but buries the tagged lines.  By hand:
+
+       cd benchmarks/01-integrate-rational && maxima --very-quiet -b integrate_rational.mac
+
+   THE EMIT CONTRACT is identical to the other harnesses -- one tagged,
+   tab-separated line per case, joined across systems by <label>:
+
+       BENCH   <label>  <milliseconds>
+       CHECK   <label>  <value>
+       REQUIRE <head>   present|absent
+       SKIP    <label>  <head>
+
+   Timing: one untimed warm-up, then the MINIMUM of BENCH_REPS timed runs, wall
+   clock (elapsed_real_time), matching AbsoluteTiming / perf_counter /
+   getabstime on the other sides.  A run shorter than 10 ms is repeated until
+   the batch spans 10 ms and divided: Maxima's cheapest calls cost a few
+   microseconds, below what one clock read resolves reliably.
+
+   A case body is a nullary lambda, lambda([], ...), so the expression is not
+   evaluated at the call site.  Every experiment file must end with quit()$.
+
+   Checks are integers (or short lists of integers) so the text compares
+   exactly; `round` rounds a half to even, as Round and Python's round do.
+   ========================================================================== */
+
+display2d : false$
+linel : 1000000$
+BENCH_REPS : 3$
+TAB : ascii(9)$
+
+bench(label, f) := block([t0, n, dt, best : 1.0e30],
+  f(),                                              /* warm-up, untimed */
+  for k : 1 thru BENCH_REPS do (
+    n : 0,
+    t0 : elapsed_real_time(),
+    do (f(), n : n + 1, if elapsed_real_time() - t0 >= 0.01 then return(done)),
+    dt : (elapsed_real_time() - t0) / n,
+    if dt < best then best : dt),
+  printf(true, "BENCH~a~a~a~,3f~%", TAB, label, TAB, 1000.0 * best))$
+
+/* Single timed run, no warm-up: for cases already expensive on their own. */
+benchOnce(label, f) := block([t0 : elapsed_real_time()],
+  f(),
+  printf(true, "BENCH~a~a~a~,3f~%", TAB, label, TAB,
+         1000.0 * (elapsed_real_time() - t0)))$
+
+/* The value gate. */
+check(label, v) := printf(true, "CHECK~a~a~a~a~%", TAB, label, TAB, string(v))$
+
+/* Maxima ships what the group-A experiments ask of it (sqrtdenest is a
+   share package each experiment loads); `require` keeps the halves
+   symmetrical so the register reads the same. */
+require(heads) := for h in heads do printf(true, "REQUIRE~a~a~apresent~%", TAB, h, TAB)$
+
+/* A case Maxima cannot run the same way: the column is recorded as empty
+   rather than timing a non-equivalent computation. */
+skip(label, head) := printf(true, "SKIP~a~a~a~a~%", TAB, label, TAB, head)$
+
+/* The generators of data.m / data.py, same names, same polynomials. */
+denseUPoly(n, x) := sum(mod(k^2 + 3*k + 1, 17) * x^k, k, 0, n) + 1$
+factorableUPoly(k, x) := expand(product(x^2 + i*x + (i + 1), i, 1, k))$
+ratFn(n, x) := denseUPoly(n - 1, x) / product(x - i, i, 1, n)$
+ratFnRepeated(n, x) := denseUPoly(n, x) / product((x - i)^2, i, 1, n)$

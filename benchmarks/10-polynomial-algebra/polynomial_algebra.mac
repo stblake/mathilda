@@ -1,0 +1,36 @@
+/* ==========================================================================
+   Experiment 10 -- Polynomial algebra (Maxima column).
+
+   The same six kernels as polynomial_algebra.m, with the same labels and
+   checks: gcd, poly_discriminant, ratsimp (Cancel), quotient, expand.
+   ========================================================================== */
+
+load("../harness.mac")$
+
+require(["gcd", "resultant", "poly_discriminant", "ratsimp", "quotient", "expand"])$
+
+sh : factorableUPoly(10, x)$
+a1 : expand(sh * denseUPoly(40, x))$
+b1 : expand(sh * denseUPoly(38, x))$
+bench("PolynomialGCD, shared deg-20 factor", lambda([], gcd(a1, b1)))$
+check("PolynomialGCD, shared deg-20 factor", hipow(gcd(a1, b1), x))$
+
+c1 : denseUPoly(40, x)$
+c2 : denseUPoly(39, x) + 1$
+bench("PolynomialGCD, coprime deg 40", lambda([], gcd(c1, c2)))$
+check("PolynomialGCD, coprime deg 40", hipow(gcd(c1, c2), x))$
+
+d20 : denseUPoly(20, x)$
+bench("Discriminant of deg 20", lambda([], poly_discriminant(d20, x)))$
+check("Discriminant of deg 20", mod(poly_discriminant(d20, x), 1000003))$
+
+bench("Cancel deg-60 over deg-58", lambda([], ratsimp(a1/b1)))$
+check("Cancel deg-60 over deg-58", round(10^6 * float(subst(11/10, x, ratsimp(a1/b1)))))$
+
+bench("PolynomialQuotient deg 60 / deg 20", lambda([], quotient(a1, sh, x)))$
+check("PolynomialQuotient deg 60 / deg 20", hipow(quotient(a1, sh, x), x))$
+
+bench("Expand (1+x)^400", lambda([], expand((1 + x)^400)))$
+check("Expand (1+x)^400", coeff(expand((1 + x)^400), x, 200))$
+
+quit()$

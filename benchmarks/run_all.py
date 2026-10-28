@@ -2,7 +2,7 @@
 """
 run_all.py -- the weekly gap-driven benchmark job.
 
-    make bench-gap                       # everything, three systems
+    make bench-gap                       # everything, every system present
     python3 benchmarks/run_all.py --list
     python3 benchmarks/run_all.py --only 01,31 --timeout 60
     python3 benchmarks/run_all.py --system mathilda,python
@@ -14,6 +14,8 @@ Mathematica.  Joins the cases by label, classifies each one, and writes:
     REPORT.md                  ranked SLOWER cases + the coverage percentage
     ABSENT.md                  the absence register: what we do not have
     results/<YYYY-MM-DD>.json  every raw case plus the host/version block
+
+Experiments with a `.gp` or `.mac` half also run in PARI/GP or Maxima.
 
 WHY A JOB AND NOT ANOTHER WRITE-UP.  `docs/experiments/` holds twenty
 experiments as narrative, and `docs/experiments/run.sh` only prints the three
@@ -92,6 +94,18 @@ def find_gp():
 
 GP = find_gp()
 
+
+def find_maxima():
+    """Maxima, the fifth column -- the open-source CAS baseline for the symbolic
+    experiments, which carry a .mac half beside the .m and .py."""
+    env = os.environ.get("BENCH_MAXIMA")
+    if env:
+        return env if os.path.exists(env) else None
+    return shutil.which("maxima")
+
+
+MAXIMA = find_maxima()
+
 # A case is a finding once it is at least this many times the best other system.
 # 1.5 rather than 1.0 because run-to-run spread on large-working-set cases is
 # documented at +-20% in docs/experiments/README.md; 1.5 sits outside that.
@@ -102,8 +116,11 @@ SLOWER_AT = 1.5
 CHECK_RTOL = 1e-6
 
 SYSTEMS = ("mathilda", "wolfram", "python", "pari")
+SYSTEMS = SYSTEMS + ("maxima",)   # the .mac halves
 PRETTY = {"mathilda": "Mathilda", "wolfram": "Mathematica", "python": "Python",
-          "pari": "PARI/GP"}
+          "pari": "PARI/GP", "maxima": "Maxima"}
+# Every system Mathilda is compared against, in report-column order.
+BASELINES = tuple(s for s in SYSTEMS if s != "mathilda")
 
 
 # --------------------------------------------------------------------------
@@ -125,7 +142,7 @@ STANDALONE = {"97-special-functions", "98-factorinteger-shootout", "98-rational-
 
 
 def discover(only=None):
-    """Every benchmarks/NN-slug/ folder holding at least one .m, .py or .gp.
+    """Every benchmarks/NN-slug/ folder holding at least one .m, .py, .gp or .mac.
 
     Excludes STANDALONE studies, which carry an NN- name for shelving order but
     are not harness .m/.py pairs (they run their own sweep and write a PDF)."""
@@ -148,10 +165,11 @@ def discover(only=None):
         mfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".m")), None)
         pyfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".py")), None)
         gpfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".gp")), None)
-        if not mfile and not pyfile and not gpfile:
+        macfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".mac")), None)
+        if not mfile and not pyfile and not gpfile and not macfile:
             continue
         out.append({"num": num, "slug": slug, "name": name, "dir": d,
-                    "m": mfile, "py": pyfile, "gp": gpfile,
+                    "m": mfile, "py": pyfile, "gp": gpfile, "mac": macfile,
                     "group": group_of(int(num))})
     return out
 
@@ -180,7 +198,9 @@ def group_of(num):
     finding (RandomReal[{}, dims] returns unevaluated in Mathilda where
     Mathematica reads it as the default {0,1} range) is recorded in the changelog;
     a guard for it belongs in tests/, not in a timing job."""
-    if 1 <= num <= 10:
+    if 1 <= num <= 10 or num == 121:
+        # 121 (rational functions at stress sizes) is group A by subject; the
+        # 1-10 block was full when it was added.
         return "A symbolic (sympy)"
     if 11 <= num <= 20:
         return "B numeric libraries (scipy)"
@@ -278,7 +298,7 @@ class Progress:
         self.draw(boundary=True)
 
     def system(self, name):
-        """Which of the three systems is running. Redraws on a tty; in a log it
+        """Which system is running. Redraws on a tty; in a log it
         rides the heartbeat, since three extra lines per experiment would treble
         the noise for no information a heartbeat does not already carry."""
         self.sys_label = name
@@ -451,6 +471,12 @@ def run_one(system, exp, timeout, tick=None):
         # before its quit() exits instead of sitting at the interactive prompt
         # until the timeout.
         cmd = [GP, "-q", exp["gp"]]
+    elif system == "maxima":
+        if not exp.get("mac") or not MAXIMA:
+            return None
+        # batchload rather than -b: -b echoes every input line and its (%o)
+        # result.  The file ends with quit()$; stdin is closed as for gp.
+        cmd = [MAXIMA, "--very-quiet", "-r", 'batchload("%s")$' % exp["mac"]]
     else:
         if not exp["py"]:
             return None
@@ -539,7 +565,7 @@ def norm_text(s):
 def checks_agree(values):
     """True when every recorded check value matches the first.
 
-    Floats on relative error (the three systems do not round identically);
+    Floats on relative error (the systems do not round identically);
     everything else on normalised text.
     """
     vals = [v for v in values if v is not None and v != ""]
@@ -651,6 +677,17 @@ def gp_version():
         return "error: %s" % e
 
 
+def maxima_version():
+    if not MAXIMA:
+        return "absent"
+    try:
+        out = subprocess.run([MAXIMA, "--version"], capture_output=True,
+                             text=True, timeout=30).stdout
+        return "%s (%s)" % (out.strip(), MAXIMA)
+    except Exception as e:
+        return "error: %s" % e
+
+
 def host_block():
     def ver(mod):
         try:
@@ -710,6 +747,7 @@ def host_block():
         "python_libs": pyver,
         "wolframscript": WOLFRAM or "absent",
         "gp": gp_version(),
+        "maxima": maxima_version(),
         "runner_python": sys.version.split()[0],
         "local_versions": {m: ver(m) for m in
                            ("numpy", "scipy", "sympy", "mpmath", "numba",
@@ -853,6 +891,17 @@ def trend_section(rows, requires, prev):
     _, nabs, npct = coverage(requires)
 
     L = ["## Trend since %s" % pdate, ""]
+    # A ratio is against the fastest baseline present, so a baseline that is new
+    # since the previous run moves ratios without Mathilda changing at all.
+    had = {s for r in prev["rows"] for s in r.get("times", {})}
+    has = {s for r in rows for s in r.get("times", {})}
+    new_baselines = sorted(has - had - {"mathilda"})
+    if new_baselines:
+        L.append("_New baseline since %s: %s. A ratio is taken against the fastest "
+                 "baseline present, so cases where it is fastest moved for that "
+                 "reason alone._" % (pdate, ", ".join(PRETTY.get(s, s)
+                                                     for s in new_baselines)))
+        L.append("")
     L.append("| | then | now | Δ |")
     L.append("|---|---|---|---|")
     L.append("| coverage | %.1f%% | %.1f%% | %+.1f pp |" % (ppct, npct, npct - ppct))
@@ -929,6 +978,7 @@ def history_record(rows, requires, host, elapsed):
             "median_vs_wolfram": rel(gr, "wolfram"),
             "median_vs_python": rel(gr, "python"),
             "median_vs_pari": rel(gr, "pari"),
+            "median_vs_maxima": rel(gr, "maxima"),
         }
 
     commit = "unknown"
@@ -950,6 +1000,7 @@ def history_record(rows, requires, host, elapsed):
         "median_vs_wolfram": rel(rows, "wolfram"),
         "median_vs_python": rel(rows, "python"),
         "median_vs_pari": rel(rows, "pari"),
+        "median_vs_maxima": rel(rows, "maxima"),
         "groups": groups,
         "wall_min": round(elapsed / 60.0, 2),
         "missing_optional_deps": host.get("missing_optional_deps", []),
@@ -997,21 +1048,23 @@ def render_history_md(recs):
          "Medians, not means — one 600000× case would make a mean meaningless.",
          "",
          "| date | commit | cases | coverage | slower | ahead | absent | "
-         "incomplete | vs Mathematica | vs Python | wall |",
-         "|---|---|---|---|---|---|---|---|---|---|---|"]
+         "incomplete | " + " | ".join("vs %s" % PRETTY[b] for b in BASELINES)
+         + " | wall |",
+         "|---|---|---|---|---|---|---|---" + "|---" * len(BASELINES) + "|---|"]
 
     def r2(v):
         return ("%.2f×" % v) if isinstance(v, (int, float)) else "—"
 
     for rec in recs:
         c = rec.get("counts", {})
-        L.append("| %s | `%s` | %d | %.1f%% | %d | %d | %d | %d | %s | %s | %.1f min |"
+        L.append("| %s | `%s` | %d | %.1f%% | %d | %d | %d | %d | %s | %s | %s | %s | %.1f min |"
                  % (rec.get("date", "?"), rec.get("commit", "?"),
                     rec.get("cases", 0), rec.get("coverage_pct", 0.0),
                     c.get("SLOWER", 0), c.get("AHEAD", 0), c.get("ABSENT", 0),
                     c.get("INCOMPLETE", 0) + c.get("CHECK-FAIL", 0),
                     r2(rec.get("median_vs_wolfram")),
-                    r2(rec.get("median_vs_python")), rec.get("wall_min", 0.0)))
+                    r2(rec.get("median_vs_python")), r2(rec.get("median_vs_pari")),
+                    r2(rec.get("median_vs_maxima")), rec.get("wall_min", 0.0)))
     L.append("")
 
     if recs:
@@ -1022,14 +1075,15 @@ def render_history_md(recs):
                  "attention.")
         L.append("")
         areas = sorted({g for rec in recs for g in rec.get("groups", {})})
-        L.append("| date | " + " | ".join("%s<br>(vs W / vs Py)" % a for a in areas) + " |")
+        L.append("| date | " + " | ".join("%s<br>(vs W / Py / PARI / Max)" % a
+                                          for a in areas) + " |")
         L.append("|---" * (len(areas) + 1) + "|")
         for rec in recs:
             cells = []
             for a in areas:
                 g = rec.get("groups", {}).get(a, {})
-                cells.append("%s / %s" % (r2(g.get("median_vs_wolfram")),
-                                          r2(g.get("median_vs_python"))))
+                cells.append(" / ".join(r2(g.get("median_vs_" + b))
+                                        for b in BASELINES))
             L.append("| %s | %s |" % (rec.get("date", "?"), " | ".join(cells)))
         L.append("")
 
@@ -1077,8 +1131,9 @@ def write_report(path, rows, requires, host, exps, elapsed):
     if not slower:
         L.append("_No case is %.1f× or more behind its best baseline._" % SLOWER_AT)
     else:
-        L.append("| × behind | case | Mathilda | Mathematica | Python | PARI/GP | vs |")
-        L.append("|---|---|---|---|---|---|---|")
+        L.append("| × behind | case | Mathilda | %s | vs |"
+                 % " | ".join(PRETTY[b] for b in BASELINES))
+        L.append("|---|---|---" + "|---" * len(BASELINES) + "|---|")
         any_floored = False
         for r in slower:
             t = r["times"]
@@ -1086,10 +1141,10 @@ def write_report(path, rows, requires, host, exps, elapsed):
             bo = min(others) if others else None
             if bo is not None and bo < RATIO_FLOOR_MS:
                 any_floored = True
-            L.append("| %s | `%s` · %s | %s | %s | %s | %s | %s |" % (
+            L.append("| %s | `%s` · %s | %s | %s | %s |" % (
                 fmt_ratio(r["ratio"], bo), r["experiment"], r["label"],
-                ms(t.get("mathilda")), ms(t.get("wolfram")), ms(t.get("python")),
-                ms(t.get("pari")),
+                ms(t.get("mathilda")),
+                " | ".join(ms(t.get(b)) for b in BASELINES),
                 PRETTY.get(r.get("best_other"), "—")))
         if any_floored:
             L.append("")
@@ -1104,13 +1159,14 @@ def write_report(path, rows, requires, host, exps, elapsed):
     if not ahead:
         L.append("_None._")
     else:
-        L.append("| case | Mathilda | Mathematica | Python | PARI/GP | ratio |")
-        L.append("|---|---|---|---|---|---|")
+        L.append("| case | Mathilda | %s | ratio |"
+                 % " | ".join(PRETTY[b] for b in BASELINES))
+        L.append("|---|---" + "|---" * len(BASELINES) + "|---|")
         for r in ahead:
             t = r["times"]
-            L.append("| `%s` · %s | %s | %s | %s | %s | %s |" % (
+            L.append("| `%s` · %s | %s | %s | %s |" % (
                 r["experiment"], r["label"], ms(t.get("mathilda")),
-                ms(t.get("wolfram")), ms(t.get("python")), ms(t.get("pari")),
+                " | ".join(ms(t.get(b)) for b in BASELINES),
                 ("%.2f×" % r["ratio"]) if r["ratio"] else "—"))
     L.append("")
 
@@ -1135,8 +1191,8 @@ def write_report(path, rows, requires, host, exps, elapsed):
              "of 1.0 means the typical case in that area is at parity.")
     L.append("")
     L.append("| area | cases | slower | ahead | absent | incomplete | "
-             "median vs Mathematica | median vs Python | median vs PARI/GP |")
-    L.append("|---|---|---|---|---|---|---|---|---|")
+             + " | ".join("median vs %s" % PRETTY[b] for b in BASELINES) + " |")
+    L.append("|---|---|---|---|---|---" + "|---" * len(BASELINES) + "|")
 
     def _rel(gr, sysname):
         """Median of (Mathilda / that system) over cases where both timed."""
@@ -1149,16 +1205,14 @@ def write_report(path, rows, requires, host, exps, elapsed):
 
     for g in sorted({r["group"] for r in rows}):
         gr = [r for r in rows if r["group"] == g]
-        mw, mp, mg = _rel(gr, "wolfram"), _rel(gr, "python"), _rel(gr, "pari")
-        L.append("| %s | %d | %d | %d | %d | %d | %s | %s | %s |" % (
+        meds = [_rel(gr, b) for b in BASELINES]
+        L.append("| %s | %d | %d | %d | %d | %d | %s |" % (
             g, len(gr),
             sum(1 for r in gr if r["klass"] == "SLOWER"),
             sum(1 for r in gr if r["klass"] == "AHEAD"),
             sum(1 for r in gr if r["klass"] == "ABSENT"),
             sum(1 for r in gr if r["klass"] in ("INCOMPLETE", "CHECK-FAIL")),
-            ("%.2f×" % mw) if mw else "—",
-            ("%.2f×" % mp) if mp else "—",
-            ("%.2f×" % mg) if mg else "—"))
+            " | ".join(("%.2f×" % m) if m else "—" for m in meds)))
     L.append("")
     L.append("Read the two right-hand columns against each other. Behind "
              "Mathematica is a gap against a *competitor* — the same evaluation "
@@ -1168,6 +1222,10 @@ def write_report(path, rows, requires, host, exps, elapsed):
              "any spread there is pure overhead. A case can read acceptably "
              "against one and badly against the other, and that difference is "
              "usually the finding.")
+    L.append("")
+    L.append("PARI/GP (number theory) and Maxima (symbolic algebra) are "
+             "open-source specialists, run only where an experiment carries a "
+             "`.gp` or `.mac` half.")
     L.append("")
 
     L.append("### The worst area, by count")
@@ -1316,13 +1374,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", help="comma-separated experiment numbers or slugs")
-    ap.add_argument("--system", default="mathilda,wolfram,python,pari",
-                    help="comma-separated subset of mathilda,wolfram,python,pari")
+    ap.add_argument("--system", default=",".join(SYSTEMS),
+                    help="comma-separated subset of " + ",".join(SYSTEMS))
     ap.add_argument("--timeout", type=int, default=300,
                     help="per-file wall-clock seconds (default 300)")
     ap.add_argument("--list", action="store_true", help="list experiments and exit")
     ap.add_argument("--check-labels", action="store_true",
-                    help="fail if an experiment's .m and .py emit different labels")
+                    help="fail if an experiment's .m half and any other half emit "
+                         "different labels")
     ap.add_argument("--json", help="raw results path (default results/<date>.json)")
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="print a line per experiment and per system instead of "
@@ -1429,7 +1488,7 @@ def main():
                     all_requires[h] = state
 
         # Label-set agreement between the .m half and each other half.
-        for other in ("python", "pari"):
+        for other in ("python", "pari", "maxima"):
             if "mathilda" in runs and other in runs:
                 a = set(runs["mathilda"]["bench"]) | set(runs["mathilda"]["skip"])
                 b = set(runs[other]["bench"]) | set(runs[other]["skip"])
@@ -1501,7 +1560,7 @@ def main():
              if partial else ""), file=sys.stderr)
 
     if label_problems:
-        print("\nLABEL MISMATCH between the .m and the .py/.gp halves:",
+        print("\nLABEL MISMATCH between the .m and the .py/.gp/.mac halves:",
               file=sys.stderr)
         for name, onlym, onlypy in label_problems:
             print("  %s" % name, file=sys.stderr)

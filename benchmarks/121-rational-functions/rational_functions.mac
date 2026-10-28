@@ -1,0 +1,79 @@
+/* ==========================================================================
+   Experiment 121 -- Together, Cancel and Apart at stress sizes (Maxima column).
+
+   The same twelve kernels as rational_functions.m, with the same labels and
+   the same exact integer checks.  Together and Cancel are ratsimp, which puts
+   a sum over a common denominator in lowest terms; Apart is partfrac.
+   ========================================================================== */
+
+load("../harness.mac")$
+
+require(["ratsimp", "partfrac", "denom", "hipow"])$
+
+pts : [x = 11/10, y = 1/3, z = 2/7, u = 3/11, v = 5/13, w = 7/17,
+       a = 1/5, b = 2/9, c = 3/13, d = 5/19, f = 7/23]$
+chk(t) := 10^40 * hipow(expand(denom(t)), x) + round(10^6 * subst(pts, t))$
+chkA(t) := round(10^6 * subst(pts, t))$
+chkAx(t, x0) := round(10^6 * subst(x = x0, t))$
+
+/* ---- Together ------------------------------------------------------------ */
+
+tog50 : sum((i^2 + 1)/(x - i), i, 1, 50)$
+bench("Together, 50 linear summands", lambda([], ratsimp(tog50)))$
+check("Together, 50 linear summands", chk(ratsimp(tog50)))$
+
+tog200 : sum((i + 1)/(x - i), i, 1, 200)$
+bench("Together, 200 linear summands", lambda([], ratsimp(tog200)))$
+check("Together, 200 linear summands", chk(ratsimp(tog200)))$
+
+togMV : sum((x + i*y)/((x + i*y + z)*(y - i*z + 1)), i, 1, 12)$
+bench("Together, 12 trivariate summands", lambda([], ratsimp(togMV)))$
+check("Together, 12 trivariate summands", chk(ratsimp(togMV)))$
+
+nest32 : x$
+for k : 1 thru 32 do nest32 : x + 1/(1 + nest32)$
+bench("Together, nested depth 32", lambda([], ratsimp(nest32)))$
+check("Together, nested depth 32", chk(ratsimp(nest32)))$
+
+/* ---- Cancel -------------------------------------------------------------- */
+
+sh200 : factorableUPoly(100, x)$
+c400 : expand(sh200 * denseUPoly(200, x)) / expand(sh200 * (denseUPoly(199, x) + 1))$
+bench("Cancel deg-400, deg-200 gcd", lambda([], ratsimp(c400)))$
+check("Cancel deg-400, deg-200 gcd", chk(ratsimp(c400)))$
+
+sh500 : factorableUPoly(250, x)$
+c1000 : expand(sh500 * denseUPoly(500, x)) / expand(sh500 * (denseUPoly(499, x) + 1))$
+bench("Cancel deg-1000, deg-500 gcd", lambda([], ratsimp(c1000)))$
+check("Cancel deg-1000, deg-500 gcd", chk(ratsimp(c1000)))$
+
+g3 : (1 + x + y + z)^6$
+c3 : expand(g3 * (x + 2*y - z + 3)^4) / expand(g3 * (x - y + 2*z + 1)^4)$
+bench("Cancel dense trivariate, deg-6 gcd", lambda([], ratsimp(c3)))$
+check("Cancel dense trivariate, deg-6 gcd", chk(ratsimp(c3)))$
+
+g6 : 1 + x*y^3 + z^2*u*v^4 + w^5 + x*w$
+c6 : expand(g6^2 * (x^2 + z*v + 2) * (y*u + w^2 + 1))
+     / expand(g6^2 * (x*z + u^3 + 3) * (v*w + y^2 + 1))$
+bench("Cancel sparse 6-variable", lambda([], ratsimp(c6)))$
+check("Cancel sparse 6-variable", chk(ratsimp(c6)))$
+
+/* ---- Apart --------------------------------------------------------------- */
+
+ap40 : ratFn(40, x)$
+bench("Apart, 40 linear factors", lambda([], partfrac(ap40, x)))$
+check("Apart, 40 linear factors", chkAx(partfrac(ap40, x), 401/10))$
+
+apMult : (x^3 + 2*x + 5)/((x - 1)^10 * (x + 2)^10)$
+bench("Apart, multiplicity 10 and 10", lambda([], partfrac(apMult, x)))$
+check("Apart, multiplicity 10 and 10", chkA(partfrac(apMult, x)))$
+
+apQuad : denseUPoly(9, x)/product(x^2 + i, i, 1, 6)$
+bench("Apart, 6 irreducible quadratics", lambda([], partfrac(apQuad, x)))$
+check("Apart, 6 irreducible quadratics", chkA(partfrac(apQuad, x)))$
+
+apPar : 1/((x + a)*(x + b)*(x + c)*(x + d)*(x + f))$
+bench("Apart, 5 parameters", lambda([], partfrac(apPar, x)))$
+check("Apart, 5 parameters", chkA(partfrac(apPar, x)))$
+
+quit()$

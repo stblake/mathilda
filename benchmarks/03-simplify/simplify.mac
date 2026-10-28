@@ -1,0 +1,47 @@
+/* ==========================================================================
+   Experiment 03 -- Simplification (Maxima column).
+
+   The same six kernels as simplify.m, with the same labels and checks.  Maxima
+   has no single Simplify; each case uses the function a Maxima user reaches
+   for to do that job, and the check (the value at a point) confirms the
+   result is the same function:
+
+     trig Pythagorean   trigsimp
+     quartic-to-Cos[4x] ratsimp(trigreduce(.))   -- trigsimp leaves it as is
+     Cancel             ratsimp
+     nested radical     sqrtdenest
+     log-exp collapse   radcan
+     TrigReduce         trigreduce
+   ========================================================================== */
+
+load("../harness.mac")$
+
+require(["trigsimp", "trigreduce", "ratsimp", "sqrtdenest", "radcan"])$
+
+at(e, v) := round(10^6 * float(subst(v, x, e)))$
+
+t1 : sin(x)^2 + cos(x)^2$
+bench("Simplify trig Pythagorean", lambda([], trigsimp(t1)))$
+check("Simplify trig Pythagorean", at(trigsimp(t1), 1/3))$
+
+t2 : 8*sin(x)^4 - 8*sin(x)^2 + 1$
+bench("Simplify quartic-to-Cos[4x]", lambda([], ratsimp(trigreduce(t2))))$
+check("Simplify quartic-to-Cos[4x]", at(ratsimp(trigreduce(t2)), 1/3))$
+
+t3 : (x^3 - 1)/(x - 1)$
+bench("Cancel removable singularity", lambda([], ratsimp(t3)))$
+check("Cancel removable singularity", at(ratsimp(t3), 5/2))$
+
+t4 : sqrt(3 + 2*sqrt(2))$
+bench("FullSimplify nested radical", lambda([], sqrtdenest(t4)))$
+check("FullSimplify nested radical", round(10^6 * float(sqrtdenest(t4))))$
+
+t5 : log(exp(x)) + exp(log(x))$
+bench("Simplify log-exp collapse", lambda([], radcan(t5)))$
+check("Simplify log-exp collapse", at(radcan(t5), 7/4))$
+
+t6 : sin(x)*sin(2*x)*sin(3*x)*sin(4*x)$
+bench("TrigReduce product of 4 sines", lambda([], trigreduce(t6)))$
+check("TrigReduce product of 4 sines", at(trigreduce(t6), 1/3))$
+
+quit()$
