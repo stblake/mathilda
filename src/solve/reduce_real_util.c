@@ -56,6 +56,13 @@ int rru_sign_of(const Expr* e) {
 }
 
 int rru_sign_compare(const Expr* a, const Expr* b) {
+    if (expr_eq(a, b)) return 0;
+    /* a against b directly: each is converted on its own and the two are
+     * compared, never forming a - b, whose minimal polynomial has degree up to
+     * deg a * deg b (the factorisations of those differences were most of a
+     * three-variable decomposition's time).  The difference is the fallback. */
+    int r = flint_qqbar_compare(a, b);
+    if (r != -2) return r;
     Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Subtract),
         (Expr*[]){ expr_copy((Expr*)a), expr_copy((Expr*)b) }, 2));
     int s = rru_sign_of(diff);

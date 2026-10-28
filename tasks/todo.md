@@ -12,8 +12,9 @@ Plan: ~/.claude/plans/let-s-continue-our-performance-agile-creek.md
 - [x] P4 CAD (v0.6079): SOS witness exit, no bound Simplify, ball arithmetic before exact algebraic signs
       (the profile showed lifting, not projection, so Discriminant/native projection were not the lever;
       open: n-variable lift (umbrella 249 vs 21 ms), quartic declines at a degree-48 algebraic fibre)
-- [ ] P5 iterate on 122 until every row is ahead or explained
-- [ ] P6 docs, changelog, docstrings, versions/tags, lessons + memory
+- [x] P5 iterate on 122 (v0.6080): 37 AHEAD / 2 SLOWER / 1 CHECK-FAIL, ahead of Maxima and PARI on every case;
+      the three remaining rows are explained in benchmarks/122-polynomial-ideals/README.md
+- [x] P6 docs, changelog, docstrings, versions/tags (v0.6077-v0.6080), memory
 
 Open (outside this task): Solve's parametric Root bodies keep unevaluated `1 x` coefficients
 (Solve[w^3 + x^2 w^2 + x^4 - 4 w^2 == 0, w] -> Root[1 #1^3 + 1 #1^2 x^2 ...]).

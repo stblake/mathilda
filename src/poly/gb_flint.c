@@ -251,7 +251,9 @@ static slong gf_reducers(Gf* G, slong skip, int only_active) {
     return n;
 }
 
-/* The reducer whose leading monomial divides ex: the SHORTEST one.  Every
+/* The reducer whose leading monomial divides ex: one whose leading
+ * coefficient divides the term's (no scaling: cyclic-6 over Q 3.9 -> 3.0 s),
+ * else the SHORTEST one.  Every
  * basis element may reduce -- an element leaves the reducer set of the pair
  * criteria (`active`) when a later one's leading monomial divides its own,
  * but it is still in the ideal, and it is usually the shorter of the two
@@ -259,11 +261,16 @@ static slong gf_reducers(Gf* G, slong skip, int only_active) {
  * the remainders snowball (50 000 terms where ~270 suffice on a Lex basis of
  * two quintics).  The final tail reduction (`only_active`) uses the minimal
  * set, which the reduced basis is made of.  -1 when none divides. */
-static slong gf_divisor(const Gf* G, const ulong* ex, slong skip, int only_active) {
+static slong gf_divisor(const Gf* G, const ulong* ex, const fmpz_t coeff, slong skip, int only_active) {
     slong best = -1, nv = G->nv;
+    int best_unit = 0;
     for (slong k = 0; k < G->nb; k++) {
         if ((only_active && !G->active[k]) || k == skip || !gf_divides(G->lm + k * nv, ex, nv)) continue;
-        if (best < 0 || G->zb[k].length < G->zb[best].length) best = k;
+        /* a reducer whose leading coefficient divides the term's needs no
+         * scaling of the remainder (a = 1): preferred, then the shortest */
+        int unit = fmpz_divisible(coeff, G->zb[k].coeffs + 0);
+        if (best < 0 || unit > best_unit ||
+            (unit == best_unit && G->zb[k].length < G->zb[best].length)) { best = k; best_unit = unit; }
     }
     return best;
 }
@@ -295,7 +302,7 @@ static void gf_reduce_z(Gf* G, fmpz_mpoly_struct* h, slong skip, int only_active
         slong k, d = -1;
         for (k = 0; k < rest->length; k++) {
             fmpz_mpoly_get_term_exp_ui(ex, rest, k, Z);
-            if ((d = gf_divisor(G, ex, skip, only_active)) >= 0) break;
+            if ((d = gf_divisor(G, ex, rest->coeffs + k, skip, only_active)) >= 0) break;
         }
         for (slong i = 0; i < k; i++) {                    /* irreducible: done */
             fmpz_mpoly_get_term_exp_ui(me, rest, i, Z);

@@ -1341,12 +1341,39 @@ Expr* flint_qqbar_reduce_coeffs(const Expr* e, QQBarMethod method) {
     return out;
 }
 
+/* The exact conversions of the operands of the comparisons, memoised.  A sign
+ * diagram or a decomposition compares the same few algebraic numbers (its
+ * breakpoints, -Sqrt[Root[...]] and the like) against each other over and
+ * over, and each conversion of a compound one is a root extraction or a
+ * resultant plus a factorisation.  Direct-mapped by the structural hash; a
+ * conversion is a pure function of the expression, so an entry never goes
+ * stale.  Bare numbers are not worth an entry. */
+#define QQ_MEMO_SIZE 256
+typedef struct { uint64_t h; Expr* e; qqbar_struct q; int ok; } QqMemo;
+static QqMemo g_qq_memo[QQ_MEMO_SIZE];
+
+static int to_qqbar_memo(const Expr* e, qqbar_t out) {
+    if (e->type != EXPR_FUNCTION || head_is(e, "Rational")) return to_qqbar(e, out);
+    uint64_t h = expr_hash(e);
+    QqMemo* m = &g_qq_memo[h % QQ_MEMO_SIZE];
+    if (m->e && m->h == h && expr_eq(m->e, e)) {
+        if (m->ok) qqbar_set(out, &m->q);
+        return m->ok;
+    }
+    int ok = to_qqbar(e, out);
+    if (m->e) { expr_free(m->e); qqbar_clear(&m->q); }
+    m->h = h; m->e = expr_copy((Expr*)e); m->ok = ok;
+    qqbar_init(&m->q);
+    if (ok) qqbar_set(&m->q, out);
+    return ok;
+}
+
 int flint_qqbar_equal(const Expr* a, const Expr* b) {
     if (!flint_qqbar_is_constant_algebraic(a) || !flint_qqbar_is_constant_algebraic(b))
         return -1;
     qqbar_t qa, qb; qqbar_init(qa); qqbar_init(qb);
     int r = -1;
-    if (to_qqbar(a, qa) && to_qqbar(b, qb)) r = qqbar_equal(qa, qb) ? 1 : 0;
+    if (to_qqbar_memo(a, qa) && to_qqbar_memo(b, qb)) r = qqbar_equal(qa, qb) ? 1 : 0;
     qqbar_clear(qa); qqbar_clear(qb);
     return r;
 }
@@ -1451,7 +1478,7 @@ int flint_qqbar_compare(const Expr* a, const Expr* b) {
     }
     qqbar_t qa, qb; qqbar_init(qa); qqbar_init(qb);
     int r = -2;
-    if (to_qqbar(a, qa) && to_qqbar(b, qb) && qqbar_is_real(qa) && qqbar_is_real(qb))
+    if (to_qqbar_memo(a, qa) && to_qqbar_memo(b, qb) && qqbar_is_real(qa) && qqbar_is_real(qb))
         r = qqbar_cmp_re(qa, qb);
     qqbar_clear(qa); qqbar_clear(qb);
     return r;
