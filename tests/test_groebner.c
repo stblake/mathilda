@@ -650,24 +650,44 @@ static void test_parameter_variables_auto_main(void) {
         "True");
 }
 
-/* TimeConstrained must be able to abort an in-flight Buchberger run.
- * We use the issue-2 hanging input as the canonical pathological case
- * (lex coefficient blowup -- intractable without FGLM conversion). */
+/* TimeConstrained must be able to abort an in-flight Buchberger run: cyclic-7
+ * in DegreeReverseLexicographic over Q takes far longer than the budget.  The
+ * FLINT engine polls the deadline without unwinding, frees its state, and only
+ * then unwinds. */
 static void test_timeconstrained_aborts_buchberger(void) {
     check_eq(
         "TimeConstrained["
-        "  GroebnerBasis["
-        "    {x y^4 + y z^4 - 2 x^2 y - 3,"
-        "     y^4 + x y^2 z + x^2 - 2 x y + y^2 + z^2,"
-        "     -x^3 y^2 + x y z^3 + y^4 + x y^2 z - 2 x y},"
-        "    {x, y, z}],"
-        "  3]",
+        "  GroebnerBasis[{a + b + c + d + e + f + g,"
+        "    a b + b c + c d + d e + e f + f g + g a,"
+        "    a b c + b c d + c d e + d e f + e f g + f g a + g a b,"
+        "    a b c d + b c d e + c d e f + d e f g + e f g a + f g a b + g a b c,"
+        "    a b c d e + b c d e f + c d e f g + d e f g a + e f g a b + f g a b c + g a b c d,"
+        "    a b c d e f + b c d e f g + c d e f g a + d e f g a b + e f g a b c + f g a b c d"
+        "      + g a b c d e,"
+        "    a b c d e f g - 1}, {a, b, c, d, e, f, g},"
+        "    MonomialOrder -> DegreeReverseLexicographic],"
+        "  1]",
         "$Aborted");
 }
 
-/* The same pathological system terminates very quickly in
- * `DegreeReverseLexicographic` -- the recommended workaround for lex
- * coefficient blowup until an FGLM conversion is implemented. */
+/* The issue-2 system, whose Lex basis Buchberger could not reach (the
+ * coefficients exploded), now comes from its DRL basis by FGLM: zero-
+ * dimensional, a degree-54 eliminant in z, and the inputs reduce to 0. */
+static void test_hard_lex_input_by_fglm(void) {
+    check_eq(
+        "With[{g = GroebnerBasis["
+        "    {x y^4 + y z^4 - 2 x^2 y - 3,"
+        "     y^4 + x y^2 z + x^2 - 2 x y + y^2 + z^2,"
+        "     -x^3 y^2 + x y z^3 + y^4 + x y^2 z - 2 x y},"
+        "    {x, y, z}]},"
+        "  {Length[g], Exponent[g[[1]], z], Exponent[g[[2]], y],"
+        "   Mod[Coefficient[g[[1]], z, 10], 1000003],"
+        "   Union[Last /@ (PolynomialReduce[#, g, {x, y, z}] & /@"
+        "     {x y^4 + y z^4 - 2 x^2 y - 3, y^4 + x y^2 z + x^2 - 2 x y + y^2 + z^2,"
+        "      -x^3 y^2 + x y z^3 + y^4 + x y^2 z - 2 x y})]}]",
+        "List[3, 54, 1, 92728, List[0]]");
+}
+
 static void test_grevlex_handles_hard_lex_input(void) {
     /* We only assert that the result is a non-empty List; the exact
      * basis is long and not the point. */
@@ -678,6 +698,25 @@ static void test_grevlex_handles_hard_lex_input(void) {
         "     y^4 + x y^2 z + x^2 - 2 x y + y^2 + z^2,"
         "     -x^3 y^2 + x y z^3 + y^4 + x y^2 z - 2 x y},"
         "    {x, y, z}, MonomialOrder -> DegreeReverseLexicographic]] > 0");
+}
+
+/* The FLINT engine (DRL, DegLex, Lex direct and by FGLM, GF(p)) gives the
+ * classical engines' basis. */
+static void test_flint_engine_matches_classical(void) {
+    check_eq("GroebnerBasis[{a + b + c + d, a b + b c + c d + d a, a b c + b c d + c d a + d a b,"
+             " a b c d - 1}, {a, b, c, d}]",
+             "List[Plus[1, Times[-1, Power[c, 2], Power[d, 2]], Times[-1, Power[d, 4]],"
+             " Times[Power[c, 2], Power[d, 6]]], Plus[Times[-1, c], Times[-1, d],"
+             " Times[Power[c, 3], Power[d, 2]], Times[Power[c, 2], Power[d, 3]]],"
+             " Plus[Times[-1, b], Times[-1, d], Times[b, Power[d, 4]], Power[d, 5]],"
+             " Plus[Times[b, c], Times[-1, b, d], Times[c, d], Times[-2, Power[d, 2]],"
+             " Times[Power[c, 2], Power[d, 4]]], Plus[Power[b, 2], Times[2, b, d], Power[d, 2]],"
+             " Plus[a, b, c, d]]");
+    check_eq("GroebnerBasis[{x^2 + y + z - 1, x + y^2 + z - 1, x + y + z^2 - 1}, {x, y, z},"
+             " MonomialOrder -> DegreeLexicographic]",
+             "List[Plus[-1, x, y, Power[z, 2]], Plus[-1, x, Power[y, 2], z], Plus[-1, Power[x, 2], y, z]]");
+    check_eq("GroebnerBasis[{x^5 + y^4 + z^3 - 1, x^3 + y^3 + z^2 - 1}, {x, y, z}, Modulus -> 32003] // Length",
+             "8");
 }
 
 /* ------------------------------------------------------------------ */
@@ -739,7 +778,9 @@ int main(void) {
     TEST(test_modulus_composite_falls_back);
     TEST(test_parameter_variables_auto_main);
     TEST(test_timeconstrained_aborts_buchberger);
+    TEST(test_hard_lex_input_by_fglm);
     TEST(test_grevlex_handles_hard_lex_input);
+    TEST(test_flint_engine_matches_classical);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");

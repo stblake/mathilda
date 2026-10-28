@@ -2258,13 +2258,17 @@ Expr* builtin_eliminate(Expr* res) {
     free(elim_idx);
 
     /* ----- Strip extraneous monomial factors from each surviving poly -----
-     * After cross-multiplying through the algebraisation denominators
-     * the elimination ideal often contains a factor of a main variable
-     * (e.g. `u * (...)` where the `(...)` is the primitive form
-     * Mathematica reports).  Divide it out for cosmetic / downstream
-     * agreement.  Cheap: O(sum of term * n_vars). */
-    for (size_t i = 0; i < out_n; i++) {
-        gb_poly_strip_monomial(G[i]);
+     * After cross-multiplying through the algebraisation / kernel
+     * denominators the elimination ideal often contains a factor of a main
+     * variable (e.g. `u * (...)` where `(...)` is the primitive form).
+     * Divide it out -- but ONLY when a pre-pass rewrote the system: for a
+     * system that was polynomial as given, a monomial factor of the
+     * eliminant is a genuine component, and stripping it loses roots
+     * (x^2 (x-1)^2 (x^2+2x-1), the eliminant of {x^2+y+z == 1,
+     * x+y^2+z == 1, x+y+z^2 == 1} in x, came back without x^2: the point
+     * (0, 0, 1) was lost).  Cheap: O(sum of term * n_vars). */
+    if (alg.n > 0 || ker.n > 0 || fired_ifun) {
+        for (size_t i = 0; i < out_n; i++) gb_poly_strip_monomial(G[i]);
     }
 
     /* ----- Sentinels: empty -> True; contains constant -> False ----- */

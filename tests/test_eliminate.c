@@ -120,6 +120,17 @@ static void test_poly_system_eliminate_y_z(void) {
                    "Plus[Times[18, x], Times[28, Power[x, 3]]]]");
 }
 
+/* A monomial factor of the eliminant of a polynomial system is a genuine
+ * component: x^2 (x-1)^2 (x^2+2x-1) here, the point (0, 0, 1) among the
+ * solutions.  It was stripped (the strip is only for the factors the radical
+ * and kernel pre-passes introduce), so x = 0 was lost. */
+static void test_poly_system_keeps_monomial_factor(void) {
+    check_eq("Eliminate[{x^2 + y + z == 1, x + y^2 + z == 1, x + y + z^2 == 1}, {y, z}]",
+             "Equal[Plus[Times[4, Power[x, 3]], Power[x, 6]], "
+                   "Plus[Power[x, 2], Times[4, Power[x, 4]]]]");
+    check_eq("Eliminate[{x == t^2, y == t^3}, t]", "Equal[Power[y, 2], Power[x, 3]]");
+}
+
 /* ------------------------------------------------------------------ */
 /* 6. && form input is equivalent to {} form                           */
 /* ------------------------------------------------------------------ */
@@ -718,6 +729,7 @@ int main(void) {
     TEST(test_symmetric_functions);
     TEST(test_poly_system_eliminate_z);
     TEST(test_poly_system_eliminate_y_z);
+    TEST(test_poly_system_keeps_monomial_factor);
     TEST(test_and_form_equivalent);
     TEST(test_single_symbol_var_shorthand);
     TEST(test_resultant_incompatible);

@@ -18,6 +18,7 @@
  */
 
 #include "groebner.h"
+#include "gb_flint.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -1039,7 +1040,18 @@ void gb_finalize_basis(GBPoly** G, size_t* nG_io) {
     *nG_io = nG;
 }
 
+/* The classical engine: GMP rationals, the normal strategy. */
+static GBPoly** gb_buchberger_classic(GBPoly* const* F, size_t n, size_t* out_n);
+
+/* The FLINT engine (gb_flint.c) for the orders it has, else the classical
+ * one; the same reduced basis either way. */
 GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
+    GBPoly** G = NULL;
+    if (gb_flint_buchberger(F, n, &G, out_n)) return G;
+    return gb_buchberger_classic(F, n, out_n);
+}
+
+static GBPoly** gb_buchberger_classic(GBPoly* const* F, size_t n, size_t* out_n) {
     /* Filter zeros from input, copy the rest into the working basis. */
     GBPoly** G = NULL;
     size_t nG = 0, capG = 0;

@@ -2,12 +2,13 @@
 
 Plan: ~/.claude/plans/let-s-continue-our-performance-agile-creek.md
 
-- [ ] P0 benchmarks/122-polynomial-ideals (.m/.mac/.gp; four systems), baseline
-- [ ] P1 PolynomialGCD / PolynomialLCM: one FLINT front for every arity, Modulus multivariate (both heads),
+- [x] P0 benchmarks/122-polynomial-ideals (.m/.mac/.gp; four systems), baseline
+- [x] P1 PolynomialGCD / PolynomialLCM (v0.6077): one FLINT front for every arity, Modulus multivariate (both heads),
       zero arguments, E^(k u) generators; keep the LCM fold shape (fewer-term quotient)
-- [ ] P2 FLINT Groebner engine (fmpz_mpoly / nmod_mpoly, Gebauer-Moeller + sugar), gb_compute dispatcher used
+- [x] P2 FLINT Groebner engine (v0.6078; Lex over Q zero-dim by DRL -> certified modular FGLM) (fmpz_mpoly / nmod_mpoly, Gebauer-Moeller + sugar), gb_compute dispatcher used
       by GroebnerBasis, Eliminate, Solve, NSolve, solvemod; Modulus with elimination variables
-- [ ] P3 PolynomialReduce on FLINT for Lex/DegLex/DegRevLex and Modulus; Eliminate on gb_compute
+- [x] P3 PolynomialReduce on FLINT for Lex/DegLex/DegRevLex (v0.6078); Eliminate monomial-factor bug fixed
+      (Modulus PolynomialReduce stays on gfp_divmod: no benchmark row, deferred)
 - [ ] P4 CAD: Discriminant on FLINT, native McCallum projection, rational-fibre lifting on FLINT roots
 - [ ] P5 iterate on 122 until every row is ahead or explained
 - [ ] P6 docs, changelog, docstrings, versions/tags, lessons + memory

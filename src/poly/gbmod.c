@@ -11,6 +11,7 @@
  */
 
 #include "gbmod.h"
+#include "gb_flint.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -445,7 +446,30 @@ static void gfp_finalize_basis(GFpPoly** G, size_t* nG_io) {
     *nG_io = nG;
 }
 
+/* The FLINT engine on nmod_mpoly (gb_flint.c); 1 when it answered. */
+static int gfp_buchberger_flint(GFpPoly* const* F, size_t n, GFpPoly*** out, size_t* out_n) {
+    if (n == 0) return 0;
+    GBPoly** Z = malloc(n * sizeof(GBPoly*));
+    if (!Z) return 0;
+    for (size_t i = 0; i < n; i++) Z[i] = gbpoly_from_gfp(F[i]);
+    GBPoly** R = NULL; size_t nr = 0;
+    int ok = gb_flint_buchberger_mod(Z, n, F[0]->p, &R, &nr);
+    for (size_t i = 0; i < n; i++) gb_poly_free(Z[i]);
+    free(Z);
+    if (!ok) return 0;
+    GFpPoly** G = nr ? malloc(nr * sizeof(GFpPoly*)) : NULL;
+    for (size_t i = 0; i < nr; i++) G[i] = gfp_from_gbpoly(R[i], F[0]->order, F[0]->p);
+    gb_basis_free(R, nr);
+    *out = G;
+    *out_n = nr;
+    return 1;
+}
+
 GFpPoly** gfp_buchberger(GFpPoly* const* F, size_t n, size_t* out_n) {
+    {
+        GFpPoly** R = NULL;
+        if (gfp_buchberger_flint(F, n, &R, out_n)) return R;
+    }
     GFpPoly** G = NULL;
     size_t nG = 0, capG = 0;
     for (size_t i = 0; i < n; i++) {

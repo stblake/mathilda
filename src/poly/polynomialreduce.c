@@ -554,10 +554,17 @@ static Expr* pr_reduce_field(const Expr* poly, Expr* const* divs, int ndiv,
 
 static Expr* pr_reduce_rational(const Expr* polyN, Expr** divsN, int ndiv,
                                 Expr** mainvars, int k, const PROrder* ord) {
-    /* FLINT fast path: Lexicographic only (its variable/order convention is
-     * unambiguous; DegLex/DegRevLex are left to gb_divmod pending verification
-     * on a FLINT-enabled build). */
-    if (flint_bridge_available() && !ord->is_matrix && ord->flint_kind == 0) {
+    /* FLINT fast path (fmpq_mpoly_divrem_ideal): Lexicographic,
+     * DegreeLexicographic and DegreeReverseLexicographic, the variables in the
+     * user's order (index 0 most significant) -- the same division as
+     * gb_divmod: the largest term first, by the first divisor whose leading
+     * monomial divides it.  MATHILDA_POLYREDUCE_FLINT=off keeps gb_divmod. */
+    static int pr_flint = -1;
+    if (pr_flint < 0) {
+        const char* e = getenv("MATHILDA_POLYREDUCE_FLINT");
+        pr_flint = !(e && strcmp(e, "off") == 0);
+    }
+    if (pr_flint && flint_bridge_available() && ord->flint_kind >= 0) {   /* -1: a general matrix */
         Expr** quots = NULL; Expr* rem = NULL;
         if (flint_polynomial_reduce(polyN, (const Expr* const*)divsN, ndiv,
                                     (const Expr* const*)mainvars, k,

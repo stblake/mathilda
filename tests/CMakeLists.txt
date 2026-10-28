@@ -796,6 +796,7 @@ set(COMMON_SRC
     ../src/poly/expsplit.c
     ../src/poly/irrpolyq.c
     ../src/poly/gbmod.c
+    ../src/poly/gb_flint.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
     ../src/poly/groebnerwalk.c

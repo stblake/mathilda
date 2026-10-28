@@ -32,6 +32,7 @@
  */
 
 #include "groebner.h"
+#include "gb_flint.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -297,6 +298,14 @@ GBPoly** gb_groebner_walk(GBPoly* const* F, size_t n,
                           size_t* out_n) {
     if (n == 0) { *out_n = 0; return NULL; }
     int n_vars = F[0]->n_vars;
+
+    /* The FLINT engine computes the target order directly (sugar keeps Lex
+     * tractable); the walk remains for the orders it does not have. */
+    if (F[0]->order == target_order &&
+        (target_order != GB_ORDER_MATRIX || F[0]->wmat == target_wmat)) {
+        GBPoly** G = NULL;
+        if (gb_flint_buchberger(F, n, &G, out_n)) return G;
+    }
 
     /* Trivial cases: source cone == target cone, or a single variable
      * (all orders coincide).  Compute directly in the target order. */
