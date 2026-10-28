@@ -363,6 +363,31 @@ static bool sos_certify(Expr* q_e, Expr** g_e, int ng, Expr** rvars, int nrv) {
         g[i] = gb_from_expr(g_e[i], rvars, nrv, GB_ORDER_GREVLEX, 0, NULL);
         if (!g[i]) goto cleanup;
     }
+    /* A witness that the region is NOT empty ends it at once: a point with
+     * q < 0 and every g >= 0 contradicts the q >= 0 being certified.  Every
+     * nonempty region (a disc, a pair of ellipses: the ordinary
+     * CylindricalDecomposition input) used to pay for the whole numeric
+     * descent of sos_find_zero before declining to the CAD.  The sample is the
+     * origin and a fixed pseudo-random cloud in [-3, 3]^n. */
+    {
+        double* pt = malloc((size_t)nrv * sizeof(double));
+        unsigned seed = 2654435761u;
+        bool witness = false;
+        for (int k = 0; k < 64 && pt && !witness; k++) {
+            for (int i = 0; i < nrv; i++) {
+                if (k == 0) { pt[i] = 0.0; continue; }
+                seed = seed * 1103515245u + 12345u;
+                pt[i] = ((double)((seed >> 8) & 0xffff) / 65535.0) * 6.0 - 3.0;
+            }
+            if (sos_eval_d(q, pt) >= 0) continue;
+            bool inside = true;
+            for (int i = 0; i < ng && inside; i++) inside = sos_eval_d(g[i], pt) >= 0;
+            witness = inside;
+        }
+        free(pt);
+        if (witness) goto cleanup;
+    }
+
     D = gb_total_degree(q);
     if (D < 2) D = 2;
     if (D % 2) D++;

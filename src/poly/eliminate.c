@@ -1261,7 +1261,8 @@ static const char* kernel_fresh_name(const char* prefix, Expr** eqs,
 
 /* Reduce `Equal[a, b]` to the polynomial `a - b`.
  *
- * Pipeline:  Together  ->  Numerator  ->  Expand  ->  evaluate.
+ * Pipeline:  Together  ->  Numerator  ->  Expand  ->  evaluate (the first two
+ * only when a negative power is present).
  *
  * The Together+Numerator step clears any negative powers
  * (`Power[t, -1]`) introduced by the algebraisation pre-pass — the
@@ -1271,6 +1272,22 @@ static const char* kernel_fresh_name(const char* prefix, Expr** eqs,
  * idempotent: Together returns the polynomial unchanged and Numerator
  * is the identity.  We still Expand at the end to canonicalise to
  * `Plus[Times[...], ...]` form, which `expr_term` expects. */
+/* Any Power with a negative exponent (or a Rational coefficient's denominator
+ * does not count: it is a constant). */
+static bool has_negative_power(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* x = e->data.function.args[1];
+        if ((x->type == EXPR_INTEGER && x->data.integer < 0) ||
+            (x->type == EXPR_BIGINT && mpz_sgn(x->data.bigint) < 0))
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_negative_power(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* normalise_equation(const Expr* eq) {
     Expr* base;
     if (is_equal(eq) && eq->data.function.arg_count == 2) {
@@ -1280,8 +1297,14 @@ static Expr* normalise_equation(const Expr* eq) {
     } else {
         base = expr_copy((Expr*)eq);
     }
-    Expr* together = internal_together((Expr*[]){ base }, 1);
-    Expr* numer    = internal_numerator((Expr*[]){ together }, 1);
+    /* Together + Numerator only clears denominators: a polynomial (no negative
+     * power anywhere -- the usual input) skips them; they were most of a small
+     * Eliminate's time. */
+    Expr* numer = base;
+    if (has_negative_power(base)) {
+        Expr* together = internal_together((Expr*[]){ base }, 1);
+        numer = internal_numerator((Expr*[]){ together }, 1);
+    }
     Expr* expanded = internal_expand((Expr*[]){ numer }, 1);
     Expr* normalised = evaluate(expanded);
     expr_free(expanded);

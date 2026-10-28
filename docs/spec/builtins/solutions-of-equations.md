@@ -1711,6 +1711,19 @@ The closed unit-disk example above shows the boundary merge closing the outer ra
 (`-1 <= x <= 1`) for a closed region, while a strict region stays open. `Reduce`'s options
 (`Modulus`, `Cubics`, `Quartics`, `WorkingPrecision`, …) may be given and are forwarded.
 
+**Speed (v0.6079).**
+- The Positivstellensatz/SOS emptiness stage before the CAD gives up as soon as it
+  finds a point inside the region, since no emptiness certificate can exist then. The
+  sample is the origin plus a fixed cloud in [-3, 3]ⁿ. Every nonempty region used to
+  run its full numeric descent first: the unit disc went from 8.4 to 0.7 ms.
+- A fibre bound is the branch exactly as `Solve` gives it. The bounds are no longer
+  `Simplify`'d: that returned every one unchanged and was most of a two-variable
+  decomposition's time.
+- Every exact sign or order test (`flint_qqbar_compare`) first tries certified ball
+  arithmetic over the expression tree (rational leaves, sums, products, powers and
+  roots of positive balls, `Root` leaves). Only when the two balls overlap, or
+  realness cannot be shown, does it form the exact minimal polynomials.
+
 **Diagnostics / declines (sound — stays unevaluated).** As with `Reduce`, an undecidable sign
 or ordering (the real-algebraic oracle returning "unknown", or FLINT absent) makes
 `CylindricalDecomposition` return unevaluated rather than a wrong formula. It therefore

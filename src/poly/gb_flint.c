@@ -154,6 +154,10 @@ typedef struct {
     ulong* sugar;
     char* active;               /* still in the reducer set */
     slong nb, cap;
+    /* a work budget (0: none): gf_run gives up -- `over` -- past this many
+     * pairs or once a new element's coefficients exceed this many bits */
+    slong budget_pairs; flint_bitcnt_t budget_bits; int over;
+    int expired;                /* the deadline passed inside a reduction */
     GfPair* P;
     slong np, capp;
     /* GF(p) heap-division workspace: a pointer per reducer, the quotients */
@@ -283,7 +287,11 @@ static void gf_reduce_z(Gf* G, fmpz_mpoly_struct* h, slong skip, int only_active
     fmpz_mpoly_init(t, Z); fmpz_mpoly_init(mg, Z);
     fmpz_t a, b, c, one; fmpz_init(a); fmpz_init(b); fmpz_init(c); fmpz_init_set_ui(one, 1);
     fmpz_mpoly_swap(rest, h, Z);
+    slong steps = 0;
     while (rest->length) {
+        /* one normal form over Q can run for seconds; TimeConstrained must
+         * not wait for it (the caller sees `expired` and unwinds) */
+        if ((++steps & 63) == 0 && tc_deadline_passed()) { G->expired = 1; break; }
         slong k, d = -1;
         for (k = 0; k < rest->length; k++) {
             fmpz_mpoly_get_term_exp_ui(ex, rest, k, Z);
@@ -514,20 +522,28 @@ static int gf_run(Gf* G) {
     if (G->mod) nmod_mpoly_init(ms, G->M); else fmpz_mpoly_init(zs, G->Z);
     void* s = G->mod ? (void*)ms : (void*)zs;
     int ok = 1;
+    slong done_pairs = 0;
     while (G->np > 0) {
         if (tc_deadline_passed()) { ok = 0; break; }
+        if (G->budget_pairs && ++done_pairs > G->budget_pairs) { G->over = 1; ok = 0; break; }
         slong k = gf_pick(G);
         GfPair q = G->P[k];
         G->P[k] = G->P[--G->np];
         gf_spoly(G, s, q.i, q.j, q.lcm);
         flint_free(q.lcm);
         gf_reduce(G, s, -1, 0);
+        if (G->expired) { ok = 0; break; }
         if (!gf_is_zero(G, s)) {
             /* a reduction step m g can raise the degree past the pair's sugar
              * (not in a degree order, but in Lex); the sugar is at least the
              * remainder's own degree */
             ulong d = G->mod ? (ulong)nmod_mpoly_total_degree_si((nmod_mpoly_struct*)s, G->M)
                              : (ulong)fmpz_mpoly_total_degree_si((fmpz_mpoly_struct*)s, G->Z);
+            if (G->budget_bits && !G->mod) {
+                const fmpz_mpoly_struct* z = s;
+                slong b = _fmpz_vec_max_bits(z->coeffs, z->length);
+                if ((flint_bitcnt_t)(b < 0 ? -b : b) > G->budget_bits) { G->over = 1; ok = 0; break; }
+            }
             gf_add(G, s, d > q.sugar ? d : q.sugar);
         }
     }
@@ -659,16 +675,19 @@ static int gf_engine(Gf* G, GBPoly* const* F, size_t n, ulong p, slong** idx, sl
         ulong sugar = G->mod ? (ulong)nmod_mpoly_total_degree_si(mh, G->M)
                              : (ulong)fmpz_mpoly_total_degree_si(zh, G->Z);
         gf_reduce(G, h, -1, 0);
+        if (G->expired) { ok = 0; break; }
         if (gf_is_zero(G, h)) continue;
         gf_add(G, h, sugar);
     }
     if (G->mod) nmod_mpoly_clear(mh, G->M); else fmpz_mpoly_clear(zh, G->Z);
     if (ok) ok = gf_run(G);
+    if (ok) {
+        *idx = flint_malloc((size_t)(G->nb ? G->nb : 1) * sizeof(slong));
+        *nr = gf_final(G, *idx);
+        if (G->expired) { ok = 0; flint_free(*idx); *idx = NULL; *nr = 0; }
+    }
     *timed_out = !ok && tc_deadline_passed();
-    if (!ok) return 0;
-    *idx = flint_malloc((size_t)(G->nb ? G->nb : 1) * sizeof(slong));
-    *nr = gf_final(G, *idx);
-    return 1;
+    return ok;
 }
 
 static int gf_is_unit(const Gf* G, slong k) {
@@ -701,6 +720,8 @@ static int gf_is_unit(const Gf* G, slong k) {
  * Declines (the Lex engine runs directly) for a positive-dimensional ideal,
  * D > GF_FGLM_MAXD, or no agreement within GF_FGLM_PRIMES primes. */
 #define GF_FGLM_MAXD   600
+#define GF_LEX_BUDGET_PAIRS 64        /* the direct Lex attempt first (gf_basis) */
+#define GF_LEX_BUDGET_BITS  256
 #define GF_FGLM_PRIMES 400
 
 /* A set of exponent vectors with their indices (open addressing). */
@@ -976,9 +997,10 @@ static int gf_fglm(Gf* Dg, const slong* idx, slong ng, fmpz_mpoly_struct** out, 
     slong D = S.n;
     fmpz* num = _fmpz_vec_init(nv * D * D);
     fmpz* den = _fmpz_vec_init(nv * D);
-    int ok = gf_mult_matrices(Dg, idx, ng, &S, num, &den[0]);
+    int ok = gf_mult_matrices(Dg, idx, ng, &S, num, &den[0]) && !Dg->expired;
     ulong* Mp = ok ? flint_malloc((size_t)(nv * D * D) * sizeof(ulong)) : NULL;
     GfFglm ref; int have = 0;
+    memset(&ref, 0, sizeof ref);
     fmpz* crt = NULL; fmpz_t mod_prod; fmpz_init(mod_prod);
     fmpq* rec = NULL; int have_rec = 0, done = 0;
     slong ncoef = 0;
@@ -1067,10 +1089,11 @@ static int gf_fglm(Gf* Dg, const slong* idx, slong ng, fmpz_mpoly_struct** out, 
             fmpz_mpoly_t h; fmpz_mpoly_init(h, Dg->Z);
             fmpz_mpoly_set(h, B + k, Dg->Z);
             gf_reduce_z(Dg, h, -1, 1, NULL);
-            cert = fmpz_mpoly_is_zero(h, Dg->Z);
+            cert = !Dg->expired && fmpz_mpoly_is_zero(h, Dg->Z);
             fmpz_mpoly_clear(h, Dg->Z);
         }
         fmpq_mpoly_clear(Q, QC); fmpq_mpoly_ctx_clear(QC);
+        if (Dg->expired) ok = 0;
         if (cert) {
             /* primitive with a positive leading coefficient in Lex: the Lex
              * leading term is the relation's LM, coefficient positive after
@@ -1146,8 +1169,29 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
     int timed_out = 0;
     GBPoly** R = NULL;
     slong nr = 0;
-    /* Lex over Q in several variables: DRL first, then FGLM when the ideal is
-     * zero-dimensional */
+    /* Lex over Q in several variables.  A small system is cheapest computed
+     * directly; the run is given a work budget, and only when it is exceeded
+     * (the coefficient growth Lex suffers) does the basis come from the DRL
+     * basis by FGLM, for a zero-dimensional ideal. */
+    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
+        Gf L; gf_init(&L, 0, 0, f0->n_vars, ORD_LEX);
+        L.budget_pairs = GF_LEX_BUDGET_PAIRS; L.budget_bits = GF_LEX_BUDGET_BITS;
+        slong* idx = NULL;
+        int ok = gf_engine(&L, F, n, 0, &idx, &nr, &timed_out);
+        if (ok) {
+            int unit = 0;
+            for (slong i = 0; i < nr && !unit; i++) unit = gf_is_unit(&L, idx[i]);
+            if (unit) nr = 1;
+            R = malloc((size_t)(nr ? nr : 1) * sizeof(GBPoly*));
+            for (slong i = 0; i < nr; i++)
+                R[i] = unit ? gf_one_gbpoly(f0) : gf_to_gbpoly(&L, idx[i], f0);
+        }
+        flint_free(idx);
+        gf_clear(&L);
+        if (timed_out) tc_check_deadline();
+        if (ok) { *out = R; *out_n = (size_t)nr; return 1; }
+        R = NULL; nr = 0;
+    }
     if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
         Gf Dg; gf_init(&Dg, 0, 0, f0->n_vars, ORD_DEGREVLEX);
         slong* idx = NULL; slong nd = 0;

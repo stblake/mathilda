@@ -9,9 +9,14 @@ Plan: ~/.claude/plans/let-s-continue-our-performance-agile-creek.md
       by GroebnerBasis, Eliminate, Solve, NSolve, solvemod; Modulus with elimination variables
 - [x] P3 PolynomialReduce on FLINT for Lex/DegLex/DegRevLex (v0.6078); Eliminate monomial-factor bug fixed
       (Modulus PolynomialReduce stays on gfp_divmod: no benchmark row, deferred)
-- [ ] P4 CAD: Discriminant on FLINT, native McCallum projection, rational-fibre lifting on FLINT roots
+- [x] P4 CAD (v0.6079): SOS witness exit, no bound Simplify, ball arithmetic before exact algebraic signs
+      (the profile showed lifting, not projection, so Discriminant/native projection were not the lever;
+      open: n-variable lift (umbrella 249 vs 21 ms), quartic declines at a degree-48 algebraic fibre)
 - [ ] P5 iterate on 122 until every row is ahead or explained
 - [ ] P6 docs, changelog, docstrings, versions/tags, lessons + memory
+
+Open (outside this task): Solve's parametric Root bodies keep unevaluated `1 x` coefficients
+(Solve[w^3 + x^2 w^2 + x^4 - 4 w^2 == 0, w] -> Root[1 #1^3 + 1 #1^2 x^2 ...]).
 
 Baseline wrong answers / gaps found by 122 (fix in the phase that owns them):
 - Eliminate[{x^2+y+z==1, x+y^2+z==1, x+y+z^2==1}, {y,z}] drops the factor x^2 (gb_poly_strip_monomial): the root

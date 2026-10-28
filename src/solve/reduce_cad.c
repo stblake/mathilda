@@ -355,16 +355,18 @@ static Expr* symbolic_branch(Expr** B, int i, Expr** cache, char* cache_bad,
 }
 
 /* Emission bound for a fibre breakpoint: the numeric root (over a point base
- * cell, where vx is fixed) or the matched symbolic branch, Simplify'd for
- * readability (over an interval base cell).  NULL => caller bails. */
+ * cell, where vx is fixed) or the matched symbolic branch (over an interval
+ * base cell), as Solve gives it -- already in canonical radical form.  (A
+ * Simplify of every bound, "for readability", returned the branch unchanged on
+ * all 74 bounds of the Reduce suite and experiment 122, at 0.75-1 ms each: most
+ * of a two-variable decomposition's time.)  NULL => caller bails. */
 static Expr* bound_expr(bool point_xcell, Expr** B, int facj,
                         Expr** cache, char* cache_bad,
                         const Expr* vx, const Expr* sx,
                         const Expr* vy, const Expr* rt) {
     if (point_xcell) return expr_copy((Expr*)rt);
     Expr* br = symbolic_branch(B, facj, cache, cache_bad, vx, sx, vy, rt);
-    if (!br) return NULL;
-    return eval_and_free(mkfun1(SYM_Simplify, expr_copy(br)));
+    return br ? expr_copy(br) : NULL;
 }
 
 /* ------------------------------------------------------------------ *
@@ -823,14 +825,14 @@ static Expr* symbolic_branch_lvl(PolySet* polys, int fac, Expr** cache, char* ca
 
 /* Emission bound for a breakpoint at level i: the numeric root (when all outer
  * variables are fixed to sections, so the bound is a constant) or the matched
- * symbolic branch, Simplify'd.  NULL => caller bails.  Generalizes bound_expr. */
+ * symbolic branch.  NULL => caller bails.  Generalizes bound_expr. */
 static Expr* bound_expr_lvl(bool no_outer_sector, PolySet* polys, int fac,
                             Expr** cache, char* cache_bad,
                             Expr** vv, Expr** asg, int i, const Expr* rt) {
     if (no_outer_sector) return expr_copy((Expr*)rt);
     Expr* br = symbolic_branch_lvl(polys, fac, cache, cache_bad, vv, asg, i, rt);
     if (!br) return NULL;
-    return eval_and_free(mkfun1(SYM_Simplify, expr_copy(br)));
+    return expr_copy(br);                  /* as Solve gives it: see bound_expr */
 }
 
 /* Phase 6e (McCallum well-orientedness augmentation).  When a fibre factor

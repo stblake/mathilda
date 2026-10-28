@@ -25,6 +25,7 @@
 #include <flint/fmpq_poly.h>
 #include <flint/fmpz_mat.h>
 #include <flint/qqbar.h>
+#include <flint/arb.h>
 #include <flint/nf.h>
 #include <flint/nf_elem.h>
 
@@ -1350,9 +1351,104 @@ int flint_qqbar_equal(const Expr* a, const Expr* b) {
     return r;
 }
 
+/* A certified real enclosure of a constant algebraic expression, computed in
+ * ball arithmetic over the tree: 1 when e is PROVABLY real (rational leaves,
+ * sums and products of real parts, integer powers, roots and square roots of a
+ * strictly positive ball, a real qqbar for a Root[...] / AlgebraicNumber[...]
+ * leaf, whose exact form is cheap), 0 when realness cannot be
+ * certified this way (the caller then takes the exact path).  No minimal
+ * polynomial of a sum or product is ever formed. */
+static void qq_arb_pow_si(arb_t r, const arb_t b, slong k, slong prec) {
+    arb_pow_ui(r, b, (ulong)(k < 0 ? -k : k), prec);
+    if (k < 0) arb_inv(r, r, prec);
+}
+
+static int qq_arb_real(const Expr* e, arb_t out, slong prec) {
+    if (e->type == EXPR_INTEGER) { arb_set_si(out, (slong)e->data.integer); return 1; }
+    if (e->type == EXPR_BIGINT) {
+        fmpz_t z; fmpz_init(z); fmpz_set_mpz(z, e->data.bigint);
+        arb_set_fmpz(out, z); fmpz_clear(z); return 1;
+    }
+    if (e->type != EXPR_FUNCTION && e->type != EXPR_SYMBOL) return 0;
+    size_t n = e->type == EXPR_FUNCTION ? e->data.function.arg_count : 0;
+    if (head_is(e, "Rational") && n == 2) {
+        fmpq_t q; fmpq_init(q);
+        int ok = fmpq_from_expr(e, q);
+        if (ok) arb_set_fmpq(out, q, prec);
+        fmpq_clear(q);
+        return ok;
+    }
+    if ((head_is(e, "Plus") || head_is(e, "Times")) && n > 0) {
+        int plus = head_is(e, "Plus");
+        arb_t t; arb_init(t);
+        int ok = qq_arb_real(e->data.function.args[0], out, prec);
+        for (size_t i = 1; i < n && ok; i++) {
+            ok = qq_arb_real(e->data.function.args[i], t, prec);
+            if (ok) { if (plus) arb_add(out, out, t, prec); else arb_mul(out, out, t, prec); }
+        }
+        arb_clear(t);
+        return ok;
+    }
+    if ((head_is(e, "Power") && n == 2) || (head_is(e, "Sqrt") && n == 1)) {
+        const Expr* be = e->data.function.args[0];
+        if (be->type == EXPR_SYMBOL) return 0;                 /* E^..., not here */
+        arb_t b; arb_init(b);
+        int ok = qq_arb_real(be, b, prec);
+        if (ok && head_is(e, "Sqrt")) {
+            ok = arb_is_positive(b);
+            if (ok) arb_sqrt(out, b, prec);
+        } else if (ok) {
+            const Expr* xe = e->data.function.args[1];
+            fmpq_t ef; fmpq_init(ef);
+            if (xe->type == EXPR_INTEGER) {
+                ok = xe->data.integer >= 0 || !arb_contains_zero(b);
+                if (ok) qq_arb_pow_si(out, b, (slong)xe->data.integer, prec);
+            } else if (fmpq_from_expr(xe, ef) && fmpz_fits_si(fmpq_numref(ef)) &&
+                       fmpz_fits_si(fmpq_denref(ef))) {
+                /* the principal root of a positive real is the real root */
+                ok = arb_is_positive(b);
+                if (ok) {
+                    arb_root_ui(out, b, (ulong)fmpz_get_si(fmpq_denref(ef)), prec);
+                    qq_arb_pow_si(out, out, fmpz_get_si(fmpq_numref(ef)), prec);
+                }
+            } else ok = 0;
+            fmpq_clear(ef);
+        }
+        arb_clear(b);
+        return ok;
+    }
+    /* a Root[...] / AlgebraicNumber[...] leaf (or GoldenRatio): its exact form,
+     * which is cheap (Root conversions are cached), when it is real.  Anything
+     * else -- Re, Im, Abs, Complex -- is left to the exact path rather than
+     * converted twice. */
+    if (!(head_is(e, "Root") || head_is(e, "AlgebraicNumber") ||
+          (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_GoldenRatio)))
+        return 0;
+    qqbar_t q; qqbar_init(q);
+    int ok = to_qqbar(e, q) && qqbar_is_real(q);
+    if (ok) qqbar_get_arb(out, q, prec);
+    qqbar_clear(q);
+    return ok;
+}
+
 int flint_qqbar_compare(const Expr* a, const Expr* b) {
     if (!flint_qqbar_is_constant_algebraic(a) || !flint_qqbar_is_constant_algebraic(b))
         return -2;
+    /* Ball arithmetic first: two certified real enclosures that are disjoint
+     * decide the order without the exact minimal polynomials of a and b (the
+     * cost of every CAD sign test on nested radicals and Root objects).  Ties
+     * and unprovable realness take the exact path below. */
+    {
+        arb_t xa, xb; arb_init(xa); arb_init(xb);
+        int r = -2;
+        if (qq_arb_real(a, xa, 128) && qq_arb_real(b, xb, 128)) {
+            if (arb_lt(xa, xb)) r = -1;
+            else if (arb_gt(xa, xb)) r = 1;
+            else if (arb_is_exact(xa) && arb_is_exact(xb) && arb_equal(xa, xb)) r = 0;
+        }
+        arb_clear(xa); arb_clear(xb);
+        if (r != -2) return r;
+    }
     qqbar_t qa, qb; qqbar_init(qa); qqbar_init(qb);
     int r = -2;
     if (to_qqbar(a, qa) && to_qqbar(b, qb) && qqbar_is_real(qa) && qqbar_is_real(qb))
