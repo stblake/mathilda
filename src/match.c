@@ -345,6 +345,19 @@ static bool pat_is_literal(const Expr* p) {
     return true;
 }
 
+/* True when `p` is `_`, `_h`, `x_` or `x_h`: in an ordered, non-Flat head it
+ * takes exactly one argument and has a single way to match it. */
+static bool pat_is_blank_single(const Expr* p) {
+    if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL) return false;
+    if (p->data.function.head->data.symbol.name == SYM_Pattern) {
+        if (p->data.function.arg_count != 2 || p->data.function.args[0]->type != EXPR_SYMBOL)
+            return false;
+        p = p->data.function.args[1];
+        if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL) return false;
+    }
+    return p->data.function.head->data.symbol.name == SYM_Blank && p->data.function.arg_count <= 1;
+}
+
 /* ------------------------------------------------------------------
  *  Span analysis for elements of an ordered Flat call pattern
  *  (Dot, **, And, Or, StringJoin, a user head with only Flat).
@@ -1675,6 +1688,65 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         if (condition && !eval_guard_true(condition, env)) return false;
 
         return call_parent(env, parent);
+    }
+
+    /* Deterministic prefix, matched iteratively.  Each pattern element is
+     * otherwise matched with "the rest of this level" as its continuation, so
+     * the C stack -- and match_recursion_depth, bounded by $RecursionLimit --
+     * grows by one level PER ARGUMENT: MatchQ[e, e] failed for a 512-term sum
+     * (issue #116).  An element that can match in exactly one way never needs
+     * that continuation, because there is no alternative assignment to
+     * backtrack into, so a leading run of them is consumed in a loop:
+     *   - ordered, non-Flat head: a literal, `_`, `_h`, `x_` or `x_h` takes
+     *     exactly the next argument;
+     *   - Orderless head: a literal takes the FIRST equal argument, as the
+     *     lit_elem path below does (one candidate, no bindings).
+     * Only a leading run is taken, so the order in which the remaining
+     * elements enumerate their matches (ReplaceList) is unchanged. */
+    if (n_pats >= 2 && n_exprs > 0 && pat_head && pat_head->type == EXPR_SYMBOL
+        && (pat_is_blank_single(pats[0]) || pat_is_literal(pats[0]))) {
+        SymbolDef* hd = symtab_get_def(pat_head->data.symbol.name);
+        uint32_t at = hd ? hd->attributes : 0;
+        size_t saved = env->count;
+        if (!(at & (ATTR_FLAT | ATTR_ORDERLESS))) {
+            size_t i = 0;
+            while (i < n_pats && i < n_exprs
+                   && (pat_is_blank_single(pats[i]) || pat_is_literal(pats[i]))) {
+                if (!match_internal(exprs[i], pats[i], env, NULL)) {
+                    env_rollback(env, saved);
+                    return false;
+                }
+                i++;
+            }
+            bool r = match_args_internal(exprs + i, n_exprs - i, pats + i, n_pats - i, env,
+                                         condition, pat_head, total_pats, parent);
+            if (!r) env_rollback(env, saved);
+            return r;
+        }
+        if ((at & ATTR_ORDERLESS) && pat_is_literal(pats[0])) {
+            /* A literal headed by a Flat pattern head could equal a GROUP of
+             * arguments; leave that to the general path. */
+            Expr** rem = malloc(n_exprs * sizeof(Expr*));
+            memcpy(rem, exprs, n_exprs * sizeof(Expr*));
+            size_t m = n_exprs, j = 0;
+            while (j < n_pats && pat_is_literal(pats[j])
+                   && !(pats[j]->type == EXPR_FUNCTION && expr_eq(pats[j]->data.function.head, pat_head))) {
+                size_t idx = 0;
+                while (idx < m && !expr_eq(rem[idx], pats[j])) idx++;
+                if (idx == m) { free(rem); return false; }
+                memmove(rem + idx, rem + idx + 1, (m - idx - 1) * sizeof(Expr*));
+                m--;
+                j++;
+            }
+            if (j > 0) {
+                bool r = match_args_internal(rem, m, pats + j, n_pats - j, env,
+                                             condition, pat_head, total_pats, parent);
+                free(rem);
+                if (!r) env_rollback(env, saved);
+                return r;
+            }
+            free(rem);
+        }
     }
 
     /* PatternSequence[q1, ..., qm] as a pattern element expands in place to the

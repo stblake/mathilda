@@ -271,6 +271,42 @@ static void test_match_flat_orderless_no_subset_blowup(void) {
                    "{d + f[b, c], c + d + f[b], {2 y, 1}}", 0);
 }
 
+/* Issue #116: every pattern element used to be matched with "the rest of this
+ * level" as a continuation, so match depth grew per ARGUMENT and hit the
+ * $RecursionLimit guard at 512 arguments -- MatchQ[e, e] was False for a
+ * 512-term sum.  A leading run of elements with a single way to match
+ * (literals; _, x_, x_h in an ordered non-Flat head) is now consumed
+ * iteratively, at any width. */
+static void test_match_wide_call_no_depth_limit(void) {
+    assert_eval_eq("good = Sum[f[i], {i, 511}]; bad = good + f[512]; "
+                   "{MatchQ[good, good], MatchQ[bad, bad], MatchQ[bad, bad + f[513]]}",
+                   "{True, True, False}", 0);
+    assert_eval_eq("w = Array[x, 2000]; {MatchQ[Times @@ w, Times @@ w], MatchQ[g @@ w, g @@ w], "
+                   "MatchQ[g @@ Range[2000], g @@ Table[_Integer, 2000]], "
+                   "MatchQ[g @@ Range[2000], g @@ Append[Table[_, 1999], _String]], "
+                   "Replace[g @@ Range[2000], g[a_, b_, Sequence @@ Table[_, 1996], c_, d_] :> {a, b, c, d}]}",
+                   "{True, True, True, False, {1, 2, 1999, 2000}}", 0);
+    /* repeated names still constrain; leading literals keep enumeration order */
+    assert_eval_eq("{MatchQ[g[1, 1, 2], g[x_, x_, _]], MatchQ[g[1, 2, 2], g[x_, x_, _]], "
+                   "ReplaceList[o[a, b, c] /. o -> Plus, a + x_ + y_ :> {x, y}]}",
+                   "{True, False, {{b, c}, {c, b}}}", 0);
+}
+
+/* Issue #115: FreeQ also finds a Flat call form as a SUBSET of a longer call,
+ * as ReplaceAll does; MatchQ, MemberQ, Count and Cases stay whole-expression. */
+static void test_freeq_flat_subset(void) {
+    assert_eval_eq("e = a f[1] f[2]; {FreeQ[e, x_f y_f], FreeQ[e, x_f y_f, {0}], "
+                   "FreeQ[e, x_f y_f, {0, Infinity}], FreeQ[e, x_f y_f, {1}], "
+                   "MatchQ[e, x_f y_f], MemberQ[{e}, x_f y_f], Count[e, x_f y_f, {0}]}",
+                   "{False, False, False, True, False, False, 0}", 0);
+    assert_eval_eq("{FreeQ[a + b + c, a + b], FreeQ[a + b + c, a + d], FreeQ[d**a**b**c, a**b], "
+                   "FreeQ[d**a**b**c, b**a], FreeQ[a && b && c, a && c]}",
+                   "{False, True, False, True, True}", 0);
+    assert_eval_eq("{FreeQ[f[g[a]], a, Heads -> False], FreeQ[f[g[a]], g, Heads -> False], "
+                   "FreeQ[f[g[a]], g[a], {2, Infinity}], FreeQ[f[g[a]], a, {2, Infinity}]}",
+                   "{False, True, True, False}", 0);
+}
+
 int main() {
     symtab_init();
     TEST(test_match_basic);
@@ -286,6 +322,8 @@ int main() {
     TEST(test_match_flat_pattern_head_single_operand);
     TEST(test_match_flat_orderless_no_subset_blowup);
     TEST(test_timeconstrained_restores_dsolve_depth);
+    TEST(test_match_wide_call_no_depth_limit);
+    TEST(test_freeq_flat_subset);
     printf("All match tests passed!\n");
     return 0;
 }

@@ -1675,7 +1675,20 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
             env_free(env);
             return false; // Not free!
         }
+        /* FreeQ asks whether `form` occurs anywhere a rule could rewrite it, so
+         * a Flat call form also occurs as a SUBSET of a longer call on the same
+         * head, as for ReplaceAll: FreeQ[a f[1] f[2], x_f y_f] and FreeQ[d**a**b,
+         * a**b] are False (issue #115), while MatchQ stays a whole-expression
+         * test.  match_flat_leftover gates on the Flat attribute itself; the
+         * replacement is a placeholder, only success matters. */
         env_free(env);
+        env = env_new();                 /* the failed match left partial bindings */
+        Expr* rew = match_flat_leftover(expr, form, form, env);
+        env_free(env);
+        if (rew) {
+            expr_free(rew);
+            return false;
+        }
         /* A Rational / Complex number is an atom, but with Heads -> True its
          * head counts at the atom's own level, as in the reference:
          * FreeQ[I x, Complex] and FreeQ[f[1/2], Rational] are False, while
@@ -1738,9 +1751,12 @@ Expr* builtin_freeq(Expr* res) {
     Expr* form = res->data.function.args[1];
 
     LevelSpec spec = {0, 1000000, true}; // Default: {0, Infinity}, Heads -> True
-    if (res->data.function.arg_count >= 3) {
+    /* A Rule in the third slot is an option (Heads -> False), not a level spec. */
+    if (res->data.function.arg_count >= 3 && !is_rule2(res->data.function.args[2])) {
         Expr* ls = res->data.function.args[2];
-        spec = parse_level_spec(ls, 1, 1);
+        /* The strict parser takes Infinity in either slot of {n1, n2}; the
+         * lenient one read {0, Infinity} as its {1, 1} default. */
+        if (!parse_level_spec_strict(ls, &spec)) spec = parse_level_spec(ls, 1, 1);
         spec.heads = true;   /* FreeQ's Heads -> True default holds with a level spec too */
         if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
             // Already parsed by parse_level_spec

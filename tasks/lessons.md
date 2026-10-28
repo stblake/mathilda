@@ -5019,3 +5019,12 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - A trivial fix (a missing `case` in `expr_head` / `blank_head_matches`) gets its own suite only (compiledfunction_tests,
   patterns_tests). Do not run the full ctest, and never investigate an unrelated suite's flake (dsolve_tests under
   -j10 load) mid-task. Note it in tasks/todo.md and move on.
+
+## 2026-10-29 — Test scope for a matcher change (issues #115/#116)
+- Correction: I started a full `ctest` build for a pattern-matcher change; the user
+  said only the matcher suites are needed. Rule: for `src/match.c` / FreeQ /
+  MemberQ changes, build and run only `match_tests`, `match_extensive_tests`,
+  `patterns_tests`, `replace_tests`, `replaceat_tests`, `funcprog_through_tests`,
+  `freeq_memberq_tests`, plus `bench_match` -- `make <targets>`, never the whole tree.
+- `tests/` carries a stray in-source `CMakeCache.txt`; `cmake <src> -D...` from a new
+  dir silently reconfigures IT. Always use `cmake -S tests -B <dir>`.

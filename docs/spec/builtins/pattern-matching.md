@@ -1,5 +1,10 @@
 # Pattern Matching
 
+- **Width.** A call pattern may have any number of arguments: a leading run of
+  elements with one way to match (a literal; `_`, `_h`, `x_`, `x_h` in an ordered,
+  non-`Flat` head; a literal in an `Orderless` head) is matched in a loop, not one
+  continuation level per argument, so `$RecursionLimit` bounds nesting depth only.
+  Until v0.6081 `MatchQ[e, e]` was `False` for a sum of 512 or more terms (issue #116).
 - `_`: `Blank[]`.
 - `__`: `BlankSequence[]`.
 - `___`: `BlankNullSequence[]`.

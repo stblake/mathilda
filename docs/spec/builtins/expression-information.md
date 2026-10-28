@@ -1693,6 +1693,8 @@ Yields `True` if no subexpression in `expr` matches `form`, and yields `False` o
 - `Protected`.
 - By default, explores levels `{0, Infinity}` and option `Heads -> True` is enabled (with an explicit level spec too).
 - `form` can be a structural pattern.
+- A level spec takes `Infinity` in either slot (`{0, Infinity}`, `{2, Infinity}`), and a `Rule` in the third slot is an option, not a level spec: `FreeQ[f[g[a]], a, Heads -> False]` is `False` (v0.6081).
+- A `Flat` call form is also found as a **subset** of a longer call on the same head, as `ReplaceAll` would rewrite it: `FreeQ[a f[1] f[2], x_f y_f]`, `FreeQ[a + b + c, a + b]` and `FreeQ[d ** a ** b ** c, a ** b]` are `False`; an ordered `Flat` head needs a contiguous run (`FreeQ[a && b && c, a && c]` is `True`). `MatchQ`, `MemberQ`, `Count`, `Cases` and `Position` stay whole-expression tests (v0.6081, issue #115).
 - A `Rational` or `Complex` number is an atom whose head counts at the number's own level when heads are included, as in the reference: `FreeQ[I x, Complex]` and `FreeQ[f[1/2], Rational]` are `False`, `FreeQ[1/2, Rational, Heads -> False]` is `True`, and the number's parts are never visible (`FreeQ[f[1/2], 2]` is `True`). `MemberQ` with `Heads -> True` sees the head the same way. `Position`, `Count`, `Cases` and `DeleteCases` never see it (`Position[{I}, Complex]` is `{}`).
 
 ```mathematica
