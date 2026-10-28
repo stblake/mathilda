@@ -1,0 +1,590 @@
+{
+ "tog-lin-1": {
+  "status": "OK",
+  "t": 7.072135785007072e-05,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-lin-2": {
+  "status": "OK",
+  "t": 0.00042735042735042735,
+  "count": 1,
+  "wall": 0.35
+ },
+ "tog-lin-3": {
+  "status": "OK",
+  "t": 0.0020816326530612244,
+  "count": 1,
+  "wall": 0.37
+ },
+ "tog-lin-4": {
+  "status": "OK",
+  "t": 0.014428571428571428,
+  "count": 1,
+  "wall": 0.44
+ },
+ "tog-uni-1": {
+  "status": "OK",
+  "t": 3.117206982543641e-05,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-uni-2": {
+  "status": "OK",
+  "t": 0.0003278688524590164,
+  "count": 1,
+  "wall": 0.35
+ },
+ "tog-uni-3": {
+  "status": "OK",
+  "t": 0.002372093023255814,
+  "count": 1,
+  "wall": 0.4
+ },
+ "tog-uni-4": {
+  "status": "OK",
+  "t": 0.013875,
+  "count": 1,
+  "wall": 0.57
+ },
+ "tog-multi-1": {
+  "status": "OK",
+  "t": 0.0005208333333333333,
+  "count": 1,
+  "wall": 0.36
+ },
+ "tog-multi-2": {
+  "status": "OK",
+  "t": 0.00625,
+  "count": 1,
+  "wall": 0.51
+ },
+ "tog-multi-3": {
+  "status": "OK",
+  "t": 0.03075,
+  "count": 1,
+  "wall": 0.99
+ },
+ "tog-multi-4": {
+  "status": "OK",
+  "t": 0.099,
+  "count": 1,
+  "wall": 1.83
+ },
+ "tog-common-1": {
+  "status": "OK",
+  "t": 0.00011098779134295228,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-common-2": {
+  "status": "OK",
+  "t": 0.00046728971962616824,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-common-3": {
+  "status": "OK",
+  "t": 0.002325581395348837,
+  "count": 1,
+  "wall": 0.36
+ },
+ "tog-common-4": {
+  "status": "OK",
+  "t": 0.00030120481927710846,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-common-5": {
+  "status": "OK",
+  "t": 0.0009090909090909091,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-telescope-1": {
+  "status": "OK",
+  "t": 8.496176720475786e-05,
+  "count": 1,
+  "wall": 0.33
+ },
+ "tog-telescope-2": {
+  "status": "OK",
+  "t": 0.00034602076124567473,
+  "count": 1,
+  "wall": 0.35
+ },
+ "tog-telescope-3": {
+  "status": "OK",
+  "t": 0.0010309278350515464,
+  "count": 1,
+  "wall": 0.38
+ },
+ "tog-telescope-4": {
+  "status": "OK",
+  "t": 4.5045045045045046e-05,
+  "count": 1,
+  "wall": 0.33
+ },
+ "tog-telescope-5": {
+  "status": "OK",
+  "t": 0.00018281535648994517,
+  "count": 1,
+  "wall": 0.34
+ },
+ "tog-nested-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-nested-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-nested-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-nested-4": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-nested-5": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-kernel-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-kernel-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-kernel-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-gauss-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-gauss-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-gauss-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "tog-mod-1": {
+  "status": "OK",
+  "t": 0.0002127659574468085,
+  "count": 1,
+  "wall": 6.93
+ },
+ "tog-mod-2": {
+  "status": "OK",
+  "t": 0.0007092198581560284,
+  "count": 1,
+  "wall": 7.98
+ },
+ "tog-mod-3": {
+  "status": "OK",
+  "t": 0.0007518796992481203,
+  "count": 1,
+  "wall": 7.99
+ },
+ "can-uni-1": {
+  "status": "OK",
+  "t": 0.00030395136778115504,
+  "count": 1,
+  "wall": 0.34
+ },
+ "can-uni-2": {
+  "status": "OK",
+  "t": 0.0009174311926605505,
+  "count": 1,
+  "wall": 0.35
+ },
+ "can-uni-3": {
+  "status": "OK",
+  "t": 0.002061224489795918,
+  "count": 1,
+  "wall": 0.38
+ },
+ "can-uni-4": {
+  "status": "OK",
+  "t": 0.003961538461538462,
+  "count": 1,
+  "wall": 0.44
+ },
+ "can-uni-big-1": {
+  "status": "OK",
+  "t": 0.000273972602739726,
+  "count": 1,
+  "wall": 0.33
+ },
+ "can-uni-big-2": {
+  "status": "OK",
+  "t": 0.000641025641025641,
+  "count": 1,
+  "wall": 0.34
+ },
+ "can-uni-big-3": {
+  "status": "OK",
+  "t": 0.0013698630136986301,
+  "count": 1,
+  "wall": 0.35
+ },
+ "can-multi-dense-1": {
+  "status": "OK",
+  "t": 0.005,
+  "count": 1,
+  "wall": 0.35
+ },
+ "can-multi-dense-2": {
+  "status": "OK",
+  "t": 0.008,
+  "count": 1,
+  "wall": 0.37
+ },
+ "can-multi-dense-3": {
+  "status": "OK",
+  "t": 0.0106,
+  "count": 1,
+  "wall": 0.4
+ },
+ "can-multi-sparse-1": {
+  "status": "OK",
+  "t": 0.002702702702702703,
+  "count": 1,
+  "wall": 0.35
+ },
+ "can-multi-sparse-2": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 60.06
+ },
+ "can-multi-sparse-3": {
+  "status": "TIMEOUT",
+  "t": null,
+  "count": null,
+  "wall": 60.07
+ },
+ "can-coprime-1": {
+  "status": "OK",
+  "t": 0.00017301038062283736,
+  "count": 1,
+  "wall": 0.36
+ },
+ "can-coprime-2": {
+  "status": "OK",
+  "t": 0.0019056603773584906,
+  "count": 1,
+  "wall": 0.63
+ },
+ "can-coprime-3": {
+  "status": "OK",
+  "t": 0.007642857142857143,
+  "count": 1,
+  "wall": 1.93
+ },
+ "can-coprime-4": {
+  "status": "OK",
+  "t": 0.005611111111111111,
+  "count": 1,
+  "wall": 0.36
+ },
+ "can-coprime-5": {
+  "status": "OK",
+  "t": 0.377,
+  "count": 1,
+  "wall": 1.61
+ },
+ "can-small-1": {
+  "status": "OK",
+  "t": 1.3630477748245076e-06,
+  "count": 1,
+  "wall": 0.41
+ },
+ "can-small-2": {
+  "status": "OK",
+  "t": 1.986412935521036e-06,
+  "count": 1,
+  "wall": 0.38
+ },
+ "can-small-3": {
+  "status": "OK",
+  "t": 7.694083249980764e-06,
+  "count": 1,
+  "wall": 0.35
+ },
+ "can-small-4": {
+  "status": "OK",
+  "t": 1.7940759611761962e-06,
+  "count": 1,
+  "wall": 0.39
+ },
+ "can-small-5": {
+  "status": "OK",
+  "t": 7.3046018991964936e-06,
+  "count": 1,
+  "wall": 0.35
+ },
+ "can-small-6": {
+  "status": "OK",
+  "t": 2.1743384575242983e-06,
+  "count": 1,
+  "wall": 0.38
+ },
+ "can-gauss-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "can-gauss-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "can-gauss-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "can-ext-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "can-ext-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "can-ext-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "can-mod-1": {
+  "status": "OK",
+  "t": 0.00010799136069114471,
+  "count": 1,
+  "wall": 1.5
+ },
+ "can-mod-2": {
+  "status": "OK",
+  "t": 0.00010427528675703858,
+  "count": 1,
+  "wall": 2.07
+ },
+ "can-mod-3": {
+  "status": "OK",
+  "t": 0.0002564102564102564,
+  "count": 1,
+  "wall": 2.09
+ },
+ "ap-lin-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-lin-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-lin-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-lin-4": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mult-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mult-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mult-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mult-4": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-irr-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-irr-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-irr-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-improper-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-improper-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-improper-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-4": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-5": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-6": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-content-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-content-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-param-content-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-gauss-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-gauss-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-gauss-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mod-1": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mod-2": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ },
+ "ap-mod-3": {
+  "status": "SKIP",
+  "t": null,
+  "count": null,
+  "wall": 0.0
+ }
+}

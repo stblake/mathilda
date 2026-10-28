@@ -62,6 +62,7 @@
 #include <flint/fmpz_mod.h>
 #include <flint/fmpz_mod_poly.h>
 #include <flint/fmpz_mod_poly_factor.h>
+#include <flint/nmod_poly.h>
 #include <flint/fmpz_mod_mpoly.h>
 #include <flint/fmpz_mod_mpoly_factor.h>
 #include <flint/gr.h>
@@ -101,6 +102,12 @@ typedef struct {
     int nest;               /* sums being converted around this one (0: top) */
     int normalised;         /* rf_push: p is already a stored (normalised) factor */
 } RfCtx;
+
+/* The largest degree the engine takes.  Beyond it FLINT's gcds (which deflate
+ * to dense univariate arrays, even from fmpz_mpoly) and the dense shortcuts
+ * abort on memory: x^(2^61 - 1) is one term to fmpz_mpoly but 2^61
+ * coefficients to its gcd.  Such an input is declined to the other paths. */
+#define RF_MAX_DEG (WORD(1) << 22)
 
 static int rf_push_ptr(const Expr*** v, size_t* n, size_t* cap, const Expr* e) {
     if (*n == *cap) {
@@ -261,6 +268,41 @@ static int rf_factored_form(void) {
 
 /* Scan `e`, settle the exponential generator, order the variables.  With
  * `first` (Apart's variable) that atom is moved to index 0. */
+/* A bound on the degree of e in its variables (saturating): Plus takes the
+ * largest, Times the sum, b^k |k| deg b; an E^(k u) kernel counts |k|. */
+static ulong rf_deg_bound(const Expr* e, const RfCtx* C) {
+    const ulong SAT = UWORD(1) << 62;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL) return 0;
+    if (e->type != EXPR_FUNCTION) return 1;
+    if (rf_head_is(e, SYM_Rational)) return 0;
+    size_t n = e->data.function.arg_count;
+    if (rf_head_is(e, SYM_Plus) || rf_head_is(e, SYM_Times)) {
+        int plus = rf_head_is(e, SYM_Plus);
+        ulong acc = 0;
+        for (size_t i = 0; i < n; i++) {
+            ulong d = rf_deg_bound(e->data.function.args[i], C);
+            if (plus) { if (d > acc) acc = d; }
+            else acc = (acc > SAT - d) ? SAT : acc + d;
+        }
+        return acc;
+    }
+    if (rf_head_is(e, SYM_Power) && n == 2) {
+        const Expr* x = e->data.function.args[1];
+        if (x->type == EXPR_INTEGER) {
+            ulong k = x->data.integer < 0 ? (ulong)(-(x->data.integer + 1)) + 1 : (ulong)x->data.integer;
+            ulong d = rf_deg_bound(e->data.function.args[0], C);
+            return (d && k > SAT / d) ? SAT : k * d;
+        }
+        if (x->type == EXPR_BIGINT) return SAT;
+        for (size_t i = 0; i < C->xn; i++)
+            if (expr_eq(C->xk[i], e)) {
+                int64_t k = C->xpow ? C->xpow[i] : 1;
+                return k < 0 ? (ulong)(-(k + 1)) + 1 : (ulong)k;
+            }
+    }
+    return 1;
+}
+
 static int rf_ctx_build(const Expr* e, RfCtx* C, const Expr* first) {
     memset(C, 0, sizeof *C);
     C->gidx = -1;
@@ -306,6 +348,7 @@ static int rf_ctx_build(const Expr* e, RfCtx* C, const Expr* first) {
         if (C->atom[i] == C->gexp) C->gidx = (slong)i;
     C->ctx = rf_ctx_for((slong)C->n);
     if (!C->ctx) { rf_ctx_clear(C); return 0; }
+    if (rf_deg_bound(e, C) > RF_MAX_DEG) { rf_ctx_clear(C); return 0; }
     return 1;
 }
 
@@ -2491,6 +2534,12 @@ typedef struct {
     fmpz_mod_mpoly_ctx_t m;
     fmpz_mod_ctx_t z;
     fmpz_t p;
+    /* one variable: every polynomial that became a denominator while the
+     * input was read.  The answer's denominator divides their product, so its
+     * irreducible factors are those of these (usually small) pieces. */
+    fmpz_mod_poly_struct* dl;
+    slong dn, dcap;
+    int cancel;             /* reading a Cancel term (rfmu_fraction_expr) */
 } RfMod;
 
 static void rfm_init(RfMod* M, RfCtx* C, const fmpz_t p) {
@@ -2498,9 +2547,12 @@ static void rfm_init(RfMod* M, RfCtx* C, const fmpz_t p) {
     fmpz_init_set(M->p, p);
     fmpz_mod_mpoly_ctx_init(M->m, (slong)C->n, ORD_LEX, p);
     fmpz_mod_ctx_init(M->z, p);
+    M->dl = NULL; M->dn = M->dcap = 0; M->cancel = 0;
 }
 
 static void rfm_clear(RfMod* M) {
+    for (slong i = 0; i < M->dn; i++) fmpz_mod_poly_clear(M->dl + i, M->z);
+    free(M->dl);
     fmpz_mod_mpoly_ctx_clear(M->m);
     fmpz_mod_ctx_clear(M->z);
     fmpz_clear(M->p);
@@ -2742,6 +2794,221 @@ static int rfmu_monomial(const Expr* e, const RfCtx* C, fmpz_t c, slong* k) {
     return 0;
 }
 
+static void rfm_to_nmod(nmod_poly_t b, const fmpz_mod_poly_t a, const fmpz_mod_ctx_struct* z) {
+    fmpz_t c; fmpz_init(c);
+    nmod_poly_zero(b);
+    for (slong i = fmpz_mod_poly_degree(a, z); i >= 0; i--) {
+        fmpz_mod_poly_get_coeff_fmpz(c, a, i, z);
+        nmod_poly_set_coeff_ui(b, i, fmpz_get_ui(c));
+    }
+    fmpz_clear(c);
+}
+
+/* Record b as a piece of the denominator (rfm_den_basis reads them). */
+static void rfmu_note_den(RfMod* M, const fmpz_mod_poly_t b) {
+    if (M->dn < 0) return;                        /* gave up: too many pieces */
+    if (M->dn == M->dcap) {
+        slong nc = M->dcap ? 2 * M->dcap : 16;
+        fmpz_mod_poly_struct* nl = nc <= 4096 ? realloc(M->dl, (size_t)nc * sizeof(*nl)) : NULL;
+        if (!nl) {
+            for (slong i = 0; i < M->dn; i++) fmpz_mod_poly_clear(M->dl + i, M->z);
+            free(M->dl); M->dl = NULL; M->dn = -1; M->dcap = 0;
+            return;
+        }
+        M->dl = nl; M->dcap = nc;
+    }
+    fmpz_mod_poly_init(M->dl + M->dn, M->z);
+    fmpz_mod_poly_set(M->dl + M->dn, b, M->z);           /* as written; made monic later */
+    M->dn++;
+}
+
+/* g = gcd(a, b) for monic a, b, with the cheap exact cases first: two
+ * distinct linear polynomials are coprime, and x + c shares a factor with b
+ * exactly when b(-c) = 0. */
+static void rfm_pair_gcd(fmpz_mod_poly_t g, const fmpz_mod_poly_t a, const fmpz_mod_poly_t b, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    slong da = fmpz_mod_poly_degree(a, z), db = fmpz_mod_poly_degree(b, z);
+    if (da == 1 && db == 1) {
+        if (fmpz_mod_poly_equal(a, b, z)) fmpz_mod_poly_set(g, a, z); else fmpz_mod_poly_one(g, z);
+        return;
+    }
+    if (da == 1 || db == 1) {
+        const fmpz_mod_poly_struct* L = da == 1 ? a : b;
+        const fmpz_mod_poly_struct* P = da == 1 ? b : a;
+        fmpz_t r, v; fmpz_init(r); fmpz_init(v);
+        fmpz_mod_poly_get_coeff_fmpz(r, L, 0, z);
+        fmpz_mod_neg(r, r, z);
+        fmpz_mod_poly_evaluate_fmpz(v, P, r, z);
+        if (fmpz_is_zero(v)) fmpz_mod_poly_set(g, L, z); else fmpz_mod_poly_one(g, z);
+        fmpz_clear(r); fmpz_clear(v);
+        return;
+    }
+    /* the smaller dividing the larger is common here (the cancelled gcd and the
+     * piece it came from) and costs a short division, not a gcd */
+    {
+        const fmpz_mod_poly_struct* S = da <= db ? a : b;
+        const fmpz_mod_poly_struct* T = da <= db ? b : a;
+        fmpz_mod_poly_t q, r; fmpz_mod_poly_init(q, z); fmpz_mod_poly_init(r, z);
+        fmpz_mod_poly_divrem(q, r, T, S, z);
+        int divides = fmpz_mod_poly_is_zero(r, z);
+        fmpz_mod_poly_clear(q, z); fmpz_mod_poly_clear(r, z);
+        if (divides) { fmpz_mod_poly_set(g, S, z); return; }
+    }
+    fmpz_mod_poly_gcd(g, a, b, z);
+}
+
+static void rfm_insert_squarefree(fmpz_mod_poly_factor_t out, const fmpz_mod_poly_t f, slong e, RfMod* M);
+
+/* A basis element into out: one of the pieces as written stays whole, an
+ * element a split produced is made squarefree (the factored form over Q does
+ * the same): Cancel[(x + 2)/(x^3 + 4 x^2 + 5 x + 2), Modulus -> 7] is
+ * 1/(1 + x)^2, Cancel[(x + 2)/((x + 2) (x^2 + 2 x + 1)), ...] keeps the
+ * written x^2 + 2 x + 1. */
+static void rfm_basis_emit(fmpz_mod_poly_factor_t out, const fmpz_mod_poly_t f, slong e, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    int written = 0;
+    if (fmpz_mod_poly_degree(f, z) >= 2) {
+        fmpz_mod_poly_t m; fmpz_mod_poly_init(m, z);
+        for (slong i = 0; i < M->dn && !written; i++) {
+            if (fmpz_mod_poly_degree(M->dl + i, z) != fmpz_mod_poly_degree(f, z)) continue;
+            fmpz_mod_poly_make_monic(m, M->dl + i, z);
+            written = fmpz_mod_poly_equal(m, f, z);
+        }
+        fmpz_mod_poly_clear(m, z);
+    }
+    if (written) fmpz_mod_poly_factor_insert(out, f, e, z);
+    else rfm_insert_squarefree(out, f, e, M);
+}
+
+/* The denominator d (monic) written over the gcd-free basis of the recorded
+ * pieces and of G, the gcd that cancelled -- the factored form over Q,
+ * modulo p: Together[1/(x^2 + 3x + 2) + 1/(x^2 + 5x + 6)] has the basis
+ * x + 1, x + 2, x + 3; Cancel[(x^4 - 1)/(x^6 - 1)] splits x^6 - 1 by the
+ * cancelled x^2 - 1 and keeps 1 + x^2 + x^4 whole.  No factorisation: the
+ * full one cost 5 ms on 60 linear summands modulo 2^61 - 1 and was not the
+ * form anyway.  out gets (basis element, multiplicity) for the elements in d;
+ * 0 when the basis does not account for all of d. */
+static int rfm_den_basis(fmpz_mod_poly_factor_t out, const fmpz_mod_poly_t d,
+                         const fmpz_mod_poly_t G, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    fmpz_mod_poly_factor_t B; fmpz_mod_poly_factor_init(B, z);     /* the basis */
+    fmpz_mod_poly_struct* work = NULL; slong nw = 0, cw = 0;
+    fmpz_mod_poly_t g, q, r;
+    fmpz_mod_poly_init(g, z); fmpz_mod_poly_init(q, z); fmpz_mod_poly_init(r, z);
+    int ok = 1;
+    /* G splits a piece only where it holds a proper factor of it, which a
+     * linear piece cannot have: each non-linear piece b is preceded by
+     * gcd(b, G).  G whole would be peeled factor by factor against every
+     * linear piece -- 60 summands modulo 7 have a cancelled gcd of degree 53. */
+    fmpz_mod_poly_t gb, mb; fmpz_mod_poly_init(gb, z); fmpz_mod_poly_init(mb, z);
+    fmpz_mod_poly_t Gm; fmpz_mod_poly_init(Gm, z);
+    int haveG = fmpz_mod_poly_degree(G, z) > 0;
+    if (haveG) fmpz_mod_poly_make_monic(Gm, G, z);
+    for (slong i = 0; i < 2 * M->dn && ok; i++) {
+        const fmpz_mod_poly_struct* src;
+        if (i % 2 == 0) {
+            const fmpz_mod_poly_struct* b = M->dl + i / 2;
+            if (!haveG || fmpz_mod_poly_degree(b, z) < 2) continue;
+            fmpz_mod_poly_make_monic(mb, b, z);
+            rfm_pair_gcd(gb, mb, Gm, M);
+            if (fmpz_mod_poly_degree(gb, z) < 1 || fmpz_mod_poly_degree(gb, z) >= fmpz_mod_poly_degree(b, z)) continue;
+            src = gb;
+        } else src = M->dl + i / 2;
+        if (fmpz_mod_poly_degree(src, z) < 1) continue;
+        /* insert src: split it and the elements it meets until coprime */
+        if (nw == cw) { cw = cw ? 2 * cw : 16; work = realloc(work, (size_t)cw * sizeof(*work)); }
+        fmpz_mod_poly_init(work + nw, z);
+        fmpz_mod_poly_make_monic(work + nw, src, z); nw++;
+        while (nw > 0 && ok) {
+            fmpz_mod_poly_struct* w = work + nw - 1;
+            if (fmpz_mod_poly_degree(w, z) < 1) { fmpz_mod_poly_clear(w, z); nw--; continue; }
+            int placed = 0;
+            for (slong k = 0; k < B->num && !placed; k++) {
+                fmpz_mod_poly_struct* b = B->poly + k;
+                if (fmpz_mod_poly_equal(b, w, z)) { placed = 1; break; }
+                rfm_pair_gcd(g, b, w, M);
+                if (fmpz_mod_poly_degree(g, z) < 1) continue;
+                fmpz_mod_poly_make_monic(g, g, z);
+                /* b -> g, b/g and w/g go back to the work list */
+                fmpz_mod_poly_divrem(q, r, w, g, z);
+                fmpz_mod_poly_swap(w, q, z);                      /* w := w/g */
+                fmpz_mod_poly_divrem(q, r, b, g, z);
+                fmpz_mod_poly_swap(b, g, z);                      /* b := g   */
+                if (nw == cw) { cw = 2 * cw; work = realloc(work, (size_t)cw * sizeof(*work)); w = work + nw - 1; }
+                fmpz_mod_poly_init(work + nw, z);
+                fmpz_mod_poly_make_monic(work + nw, q, z); nw++;  /* old b / g */
+                placed = 2;
+            }
+            if (placed == 2) continue;                            /* re-examine the split pieces */
+            if (!placed) fmpz_mod_poly_factor_insert(B, w, 1, z);
+            fmpz_mod_poly_clear(work + nw - 1, z); nw--;
+        }
+    }
+    /* multiplicities in d; on a word-size p by nmod_poly (fmpz_mod arithmetic
+     * modulo 2^61 - 1 promotes every product to GMP) */
+    int word = fmpz_abs_fits_ui(M->p);
+    if (word) {
+        ulong pw = fmpz_get_ui(M->p);
+        nmod_poly_t nrest, nq, nr, nf;
+        nmod_poly_init(nrest, pw); nmod_poly_init(nq, pw); nmod_poly_init(nr, pw); nmod_poly_init(nf, pw);
+        rfm_to_nmod(nrest, d, z);
+        for (slong k = 0; k < B->num && nmod_poly_degree(nrest) > 0; k++) {
+            rfm_to_nmod(nf, B->poly + k, z);
+            slong e = 0;
+            while (nmod_poly_degree(nrest) >= nmod_poly_degree(nf)) {
+                nmod_poly_divrem(nq, nr, nrest, nf);
+                if (!nmod_poly_is_zero(nr)) break;
+                nmod_poly_swap(nrest, nq); e++;
+            }
+            if (e) rfm_basis_emit(out, B->poly + k, e, M);
+        }
+        ok = ok && nmod_poly_degree(nrest) == 0;
+        nmod_poly_clear(nrest); nmod_poly_clear(nq); nmod_poly_clear(nr); nmod_poly_clear(nf);
+    } else {
+        fmpz_mod_poly_t rest; fmpz_mod_poly_init(rest, z);
+        fmpz_mod_poly_set(rest, d, z);
+        for (slong k = 0; k < B->num && fmpz_mod_poly_degree(rest, z) > 0; k++) {
+            slong e = 0;
+            while (fmpz_mod_poly_degree(rest, z) >= fmpz_mod_poly_degree(B->poly + k, z)) {
+                fmpz_mod_poly_divrem(q, r, rest, B->poly + k, z);
+                if (!fmpz_mod_poly_is_zero(r, z)) break;
+                fmpz_mod_poly_swap(rest, q, z); e++;
+            }
+            if (e) rfm_basis_emit(out, B->poly + k, e, M);
+        }
+        ok = ok && fmpz_mod_poly_degree(rest, z) == 0;
+        fmpz_mod_poly_clear(rest, z);
+    }
+    for (slong i = 0; i < nw; i++) fmpz_mod_poly_clear(work + i, z);
+    free(work);
+    fmpz_mod_poly_clear(g, z); fmpz_mod_poly_clear(q, z); fmpz_mod_poly_clear(r, z);
+    fmpz_mod_poly_clear(gb, z); fmpz_mod_poly_clear(mb, z); fmpz_mod_poly_clear(Gm, z);
+    fmpz_mod_poly_factor_clear(B, z);
+    return ok;
+}
+
+static int rfmu_from_expr(const Expr* e, RfmU* out, RfMod* M);
+
+/* Record the factors of a product (or power) base b as separate pieces; the
+ * part of each that goes to the denominator when b is inverted is its
+ * numerator. */
+static int rfmu_note_base(const Expr* b, RfMod* M) {
+    if (b->type == EXPR_INTEGER || b->type == EXPR_BIGINT || rf_head_is(b, SYM_Rational)) return 1;
+    if (rf_head_is(b, SYM_Times)) {
+        for (size_t i = 0; i < b->data.function.arg_count; i++)
+            if (!rfmu_note_base(b->data.function.args[i], M)) return 0;
+        return 1;
+    }
+    if (rf_head_is(b, SYM_Power) && b->data.function.arg_count == 2 &&
+        b->data.function.args[1]->type == EXPR_INTEGER && b->data.function.args[1]->data.integer > 0)
+        return rfmu_note_base(b->data.function.args[0], M);
+    RfmU t; rfmu_init(&t, M);
+    int ok = rfmu_from_expr(b, &t, M);
+    if (ok && fmpz_mod_poly_degree(t.n, M->z) > 0) rfmu_note_den(M, t.n);
+    rfmu_clear(&t, M);
+    return ok;
+}
+
 static int rfmu_from_expr(const Expr* e, RfmU* out, RfMod* M) {
     const fmpz_mod_ctx_struct* z = M->z;
     RfCtx* C = M->C;
@@ -2829,6 +3096,12 @@ static int rfmu_from_expr(const Expr* e, RfmU* out, RfMod* M) {
                     if (fmpz_mod_poly_is_zero(out->n, z)) return 0;
                     fmpz_mod_poly_swap(out->n, out->d, z);
                     k = -k;
+                    /* the pieces of the denominator as written: each factor of
+                     * a product on its own, as the factored form over Q keeps
+                     * them -- 1/((x + 1)(x + 2)) has the pieces x + 1, x + 2 */
+                    if (rf_head_is(b, SYM_Times) || rf_head_is(b, SYM_Power)) {
+                        if (!rfmu_note_base(b, M)) return 0;
+                    } else if (fmpz_mod_poly_degree(out->d, z) > 0) rfmu_note_den(M, out->d);
                 }
                 fmpz_mod_poly_pow(out->n, out->n, (ulong)k, z);
                 fmpz_mod_poly_pow(out->d, out->d, (ulong)k, z);
@@ -2841,7 +3114,170 @@ static int rfmu_from_expr(const Expr* e, RfmU* out, RfMod* M) {
     }
 }
 
+static Expr* rfm_upoly_expr(const fmpz_mod_poly_t a, RfMod* M);
+
+/* Append f (monic) split into its squarefree parts, each with multiplicity
+ * e times its own: (1 + x)^2 for 1 + 2 x + x^2. */
+static void rfm_insert_squarefree(fmpz_mod_poly_factor_t out, const fmpz_mod_poly_t f, slong e, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    if (fmpz_mod_poly_degree(f, z) < 2) { fmpz_mod_poly_factor_insert(out, f, e, z); return; }
+    fmpz_mod_poly_t df, g; fmpz_mod_poly_init(df, z); fmpz_mod_poly_init(g, z);
+    fmpz_mod_poly_derivative(df, f, z);
+    fmpz_mod_poly_gcd(g, f, df, z);
+    int sqf = fmpz_mod_poly_degree(g, z) < 1;
+    fmpz_mod_poly_clear(df, z); fmpz_mod_poly_clear(g, z);
+    if (sqf) { fmpz_mod_poly_factor_insert(out, f, e, z); return; }
+    fmpz_mod_poly_factor_t sq; fmpz_mod_poly_factor_init(sq, z);
+    fmpz_mod_poly_factor_squarefree(sq, f, z);
+    for (slong i = 0; i < sq->num; i++) fmpz_mod_poly_factor_insert(out, sq->poly + i, e * sq->exp[i], z);
+    fmpz_mod_poly_factor_clear(sq, z);
+}
+
+/* The factored form in one variable, modulo p: the denominator monic, over
+ * the gcd-free basis of its pieces (rfm_den_basis); the numerator monic with
+ * the constant in front, 5 (6 + x + x^2)/((4 + x) (6 + x)^2); a polynomial
+ * answer expanded.  A Cancel term in which nothing cancelled and whose
+ * denominator is one piece keeps its form, the coefficients reduced:
+ * Cancel[(8 x + 1)/(x + 9), Modulus -> 7] is (1 + x)/(2 + x). */
+/* a (residues) as a canonical, certified Plus of c x^k. */
+static Expr* rfm_upoly_direct(const fmpz_mod_poly_t a, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    slong len = fmpz_mod_poly_length(a, z);
+    Expr** t = malloc((size_t)(len ? len : 1) * sizeof(Expr*));
+    size_t nt = 0;
+    fmpz_t c; fmpz_init(c);
+    for (slong k = 0; k < len; k++) {
+        fmpz_mod_poly_get_coeff_fmpz(c, a, k, z);
+        if (fmpz_is_zero(c)) continue;
+        Expr* xk = k == 0 ? NULL : k == 1 ? rf_atom_expr(M->C, 0)
+                 : rf_certified(expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ rf_atom_expr(M->C, 0), expr_new_integer((int64_t)k) }, 2));
+        if (!xk) t[nt++] = rf_fmpz_to_expr(c);
+        else if (fmpz_is_one(c)) t[nt++] = xk;
+        else t[nt++] = rf_certified(expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ rf_fmpz_to_expr(c), xk }, 2));
+    }
+    fmpz_clear(c);
+    Expr* r;
+    if (nt == 0) r = expr_new_integer(0);
+    else if (nt == 1) r = t[0];
+    else {
+        expr_orderless_sort(t, nt);
+        r = rf_certified(expr_new_function(expr_new_symbol(SYM_Plus), t, nt));
+    }
+    free(t);
+    return r;
+}
+
+/* lc * n * prod fa_i^-e_i: certified canonical (direct) or raw for evaluation. */
+static Expr* rfmu_assemble(const fmpz_t lc, const fmpz_mod_poly_t n, const fmpz_mod_poly_factor_t fa,
+                           int direct, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    Expr** a = malloc((size_t)(fa->num + 2) * sizeof(Expr*));
+    size_t na = 0;
+    int lead = !fmpz_is_one(lc);
+    if (lead) a[na++] = rf_fmpz_to_expr(lc);
+    Expr* (*poly)(const fmpz_mod_poly_t, RfMod*) = direct ? rfm_upoly_direct : rfm_upoly_expr;
+    if (fmpz_mod_poly_degree(n, z) > 0) a[na++] = poly(n, M);
+    for (slong i = 0; i < fa->num; i++) {
+        const fmpz_mod_poly_struct* f = fa->poly + i;
+        slong k = fmpz_mod_poly_degree(f, z), j = 0;
+        if (direct) {
+            /* a monomial element x^k (monic) is x^(-k e), not (x^k)^-e */
+            fmpz_t c; fmpz_init(c);
+            for (j = 0; j < k; j++) { fmpz_mod_poly_get_coeff_fmpz(c, f, j, z); if (!fmpz_is_zero(c)) break; }
+            fmpz_clear(c);
+        }
+        Expr* pw;
+        if (direct && k >= 1 && j == k)
+            pw = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ rf_atom_expr(M->C, 0), expr_new_integer(-(int64_t)(k * fa->exp[i])) }, 2);
+        else
+            pw = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ poly(f, M), expr_new_integer(-(int64_t)fa->exp[i]) }, 2);
+        a[na++] = direct ? rf_certified(pw) : pw;
+    }
+    Expr* r;
+    if (direct) expr_orderless_sort(a + lead, na - (size_t)lead);
+    if (na == 1) r = a[0];
+    else {
+        r = expr_new_function(expr_new_symbol(SYM_Times), a, na);
+        if (direct) rf_certified(r);
+    }
+    free(a);
+    return r;
+}
+
+static Expr* rfmu_fraction_expr(RfmU* u, const fmpz_mod_poly_t G, RfMod* M) {
+    const fmpz_mod_ctx_struct* z = M->z;
+    if (M->cancel && fmpz_mod_poly_degree(G, z) < 1 && M->dn == 1) {
+        /* the one piece b with u.d = b^k exactly */
+        const fmpz_mod_poly_struct* b = M->dl;
+        slong db = fmpz_mod_poly_degree(b, z), dd = fmpz_mod_poly_degree(u->d, z);
+        if (db > 0 && dd % db == 0) {
+            fmpz_mod_poly_t bk; fmpz_mod_poly_init(bk, z);
+            fmpz_mod_poly_pow(bk, b, (ulong)(dd / db), z);
+            int same = fmpz_mod_poly_equal(bk, u->d, z);
+            fmpz_mod_poly_clear(bk, z);
+            if (same) {
+                Expr* den = rfm_upoly_expr(b, M);
+                if (dd / db > 1)
+                    den = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ den, expr_new_integer((int64_t)(dd / db)) }, 2);
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ rfm_upoly_expr(u->n, M), expr_new_function(expr_new_symbol(SYM_Power),
+                                   (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2));
+            }
+        }
+    }
+    /* monic denominator; c = the numerator's leading coefficient */
+    fmpz_t lc; fmpz_init(lc);
+    fmpz_mod_poly_get_coeff_fmpz(lc, u->d, fmpz_mod_poly_degree(u->d, z), z);
+    fmpz_mod_inv(lc, lc, z);
+    fmpz_mod_poly_scalar_mul_fmpz(u->n, u->n, lc, z);
+    fmpz_mod_poly_scalar_mul_fmpz(u->d, u->d, lc, z);
+    fmpz_mod_poly_get_coeff_fmpz(lc, u->n, fmpz_mod_poly_degree(u->n, z), z);
+    fmpz_mod_poly_factor_t fa; fmpz_mod_poly_factor_init(fa, z);
+    if (M->dn <= 1) {
+        /* one piece b: the denominator is b/G (a produced factor, made
+         * squarefree), or b itself; no basis to build -- a Cancel of degree
+         * 220 over 218 has nothing to split but the gcd it already found */
+        if (fmpz_mod_poly_degree(G, z) > 0) rfm_insert_squarefree(fa, u->d, 1, M);
+        else fmpz_mod_poly_factor_insert(fa, u->d, 1, z);
+    } else if (!rfm_den_basis(fa, u->d, G, M)) {
+        fmpz_mod_poly_factor_clear(fa, z);
+        fmpz_mod_poly_factor_init(fa, z);
+        fmpz_mod_poly_factor_insert(fa, u->d, 1, z);      /* not accounted for: whole */
+    }
+    if (!fmpz_is_one(lc)) {
+        fmpz_t li; fmpz_init(li);
+        fmpz_mod_inv(li, lc, z);
+        fmpz_mod_poly_scalar_mul_fmpz(u->n, u->n, li, z);
+        fmpz_clear(li);
+    }
+    /* built canonical and certified when the evaluator could only sort it
+     * (rf_direct_ok); otherwise built raw and evaluated */
+    static int check = -1;
+    if (check < 0) check = getenv("MATHILDA_RATFUN_DIRECT_CHECK") ? 1 : 0;
+    Expr* d = rf_direct_ok(M->C) ? rfmu_assemble(lc, u->n, fa, 1, M) : NULL;
+    Expr* r = (d && !check) ? NULL : eval_and_free(rfmu_assemble(lc, u->n, fa, 0, M));
+    if (d && r) {
+        if (!expr_eq(d, r)) {
+            char* sd = expr_to_string(d); char* sr = expr_to_string(r);
+            fprintf(stderr, "RATFUN_DIRECT_MISMATCH direct=%s evaluated=%s\n", sd, sr);
+            free(sd); free(sr);
+        }
+        expr_free(d); d = NULL;
+    }
+    fmpz_mod_poly_factor_clear(fa, z);
+    fmpz_clear(lc);
+    return d ? d : r;
+}
+
 static Expr* rfm_normal_form(const Expr* e, RfMod* M) {
+    /* the pieces are per call: Cancel reads each term with the same M */
+    for (slong i = 0; i < M->dn; i++) fmpz_mod_poly_clear(M->dl + i, M->z);
+    M->dn = 0;
     if (M->C->n == 1 && M->C->gidx < 0) {
         RfmU u; rfmu_init(&u, M);
         Expr* out = NULL;
@@ -2853,13 +3289,17 @@ static Expr* rfm_normal_form(const Expr* e, RfMod* M) {
                 fmpz_mod_poly_div(u.n, u.n, g, M->z);
                 fmpz_mod_poly_div(u.d, u.d, g, M->z);
             }
+            if (rf_factored_form() && fmpz_mod_poly_degree(u.d, M->z) > 0) {
+                out = rfmu_fraction_expr(&u, g, M);
+            } else {
+                rfmq_t q; rfmq_init(q, M->m);
+                fmpz_mod_mpoly_set_fmpz_mod_poly(rfmq_numref(q), u.n, 0, M->m);
+                fmpz_mod_mpoly_set_fmpz_mod_poly(rfmq_denref(q), u.d, 0, M->m);
+                rfmq_canonicalise(q, M->m);
+                out = rfm_fraction_expr(q, M);
+                rfmq_clear(q, M->m);
+            }
             fmpz_mod_poly_clear(g, M->z);
-            rfmq_t q; rfmq_init(q, M->m);
-            fmpz_mod_mpoly_set_fmpz_mod_poly(rfmq_numref(q), u.n, 0, M->m);
-            fmpz_mod_mpoly_set_fmpz_mod_poly(rfmq_denref(q), u.d, 0, M->m);
-            rfmq_canonicalise(q, M->m);
-            out = rfm_fraction_expr(q, M);
-            rfmq_clear(q, M->m);
         }
         rfmu_clear(&u, M);
         return out;
@@ -2870,8 +3310,30 @@ static Expr* rfm_normal_form(const Expr* e, RfMod* M) {
     return out;
 }
 
+/* A number modulo p: its residue (Together[9, Modulus -> 7] is 2); a
+ * denominator that vanishes modulo p leaves it as written (1/7 modulo 7);
+ * NULL for a non-number. */
+static Expr* rfm_number_residue(const Expr* e, const mpz_t p) {
+    if (!(e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || rf_head_is(e, SYM_Rational))) return NULL;
+    fmpq_t q; fmpq_init(q);
+    fmpz_t P, r; fmpz_init(P); fmpz_init(r);
+    fmpz_set_mpz(P, p);
+    Expr* out = NULL;
+    if (fb_expr_to_fmpq(e, q)) {
+        fmpz_mod(r, fmpq_denref(q), P);
+        if (!fmpz_is_zero(r) && fmpz_invmod(r, r, P)) {
+            fmpz_mul(r, r, fmpq_numref(q));
+            fmpz_mod(r, r, P);
+            out = rf_fmpz_to_expr(r);
+        } else out = expr_copy((Expr*)e);
+    }
+    fmpz_clear(P); fmpz_clear(r); fmpq_clear(q);
+    return out;
+}
+
 Expr* ratfun_together_mod(const Expr* e, const mpz_t p) {
     if (!e) return NULL;
+    { Expr* r = rfm_number_residue(e, p); if (r) return r; }
     RfCtx C;
     if (!rf_ctx_build(e, &C, NULL)) return NULL;
     fmpz_t pz; fmpz_init(pz); fmpz_set_mpz(pz, p);
@@ -2884,6 +3346,7 @@ Expr* ratfun_together_mod(const Expr* e, const mpz_t p) {
 
 Expr* ratfun_cancel_mod(const Expr* e, const mpz_t p) {
     if (!e) return NULL;
+    { Expr* r = rfm_number_residue(e, p); if (r) return r; }
     RfCtx C;
     if (!rf_ctx_build(e, &C, NULL)) return NULL;
     fmpz_t pz; fmpz_init(pz); fmpz_set_mpz(pz, p);
@@ -2892,11 +3355,12 @@ Expr* ratfun_cancel_mod(const Expr* e, const mpz_t p) {
     if (rf_head_is(e, SYM_Plus)) {
         size_t n = e->data.function.arg_count, k = 0;
         Expr** a = malloc(n * sizeof(Expr*));
+        M.cancel = 1;
         for (; k < n; k++) if (!(a[k] = rfm_normal_form(e->data.function.args[k], &M))) break;
         if (k == n) out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), a, n));
         else for (size_t i = 0; i < k; i++) expr_free(a[i]);
         free(a);
-    } else out = rfm_normal_form(e, &M);
+    } else { M.cancel = 1; out = rfm_normal_form(e, &M); }
     rfm_clear(&M); fmpz_clear(pz);
     rf_ctx_clear(&C);
     return out;
@@ -2913,6 +3377,7 @@ static Expr* rfm_upoly_expr(const fmpz_mod_poly_t a, RfMod* M) {
 /* Apart over GF(p), one variable: factor the denominator, CRT, P-adic digits. */
 Expr* ratfun_apart_mod(const Expr* e, const Expr* x, const mpz_t p) {
     if (!e || !x || x->type != EXPR_SYMBOL) return NULL;
+    { Expr* r = rfm_number_residue(e, p); if (r) return r; }
     RfCtx C;
     if (!rf_ctx_build(e, &C, x)) return NULL;
     if (C.n != 1 || C.gidx == 0) { rf_ctx_clear(&C); return NULL; }

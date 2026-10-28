@@ -61,7 +61,10 @@ Cancels out common factors in the numerator and denominator of an expression.
 - **`Modulus -> p`** (v0.6072) cancels over the integers modulo a prime `p`.
   `Modulus -> 0` is the default; a composite modulus is `Cancel::modp` and the
   call stays unevaluated; a nonzero modulus with an `Extension` is
-  `Cancel::mext`.
+  `Cancel::mext`. One variable (v0.6076): `Cancel[(x^4 - 1)/(x^6 - 1), Modulus
+  -> 7]` is `(1 + x^2)/(1 + x^2 + x^4)`. A term with nothing to cancel and
+  one denominator factor keeps its form with the coefficients reduced:
+  `Cancel[(8 x + 1)/(x + 9), Modulus -> 7]` is `(1 + x)/(2 + x)`.
 - **A power whose exponent depends on a variable is one generator**
   (v0.6050). `y^(1/(a - 1))` is opaque exactly as `y^k` is, so the
   embedded-rational soundness gate no longer reads the `1/(a - 1)` in its
@@ -144,7 +147,18 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 - **`Modulus -> p`** (v0.6072) combines and cancels over the integers modulo a
   prime `p` (dense `fmpz_mod_poly` for one variable, `fmpz_mod_mpoly`
   otherwise): `Together[1/(x - 1) + 1/(x + 1), Modulus -> 3]` is
-  `(2 x)/((1 + x) (2 + x))`. Messages as for `Cancel`.
+  `(2 x)/((1 + x) (2 + x))`. Messages as for `Cancel`. In one variable the
+  factored form (v0.6076) is the factored form over Q, modulo `p`:
+  - the denominator is written over a gcd-free basis of the pieces as written,
+    refined by the gcd that cancelled, with no factorisation. Each basis
+    element is monic, and an element a split produced is made squarefree;
+  - the numerator is monic with the constant in front:
+    `Together[3/(2 x + 1) + 1/(x - 1)^2, Modulus -> 7]` is
+    `5 (6 + x + x^2)/((4 + x) (6 + x)^2)`;
+  - a number gives its residue: `Together[9, Modulus -> 7]` is `2`, and `1/7`
+    modulo 7 is left as written.
+
+  Several variables still factor the denominator modulo `p`.
 - **A sum with no denominators is combined too** (v0.6050, issue #113).
   The numerator of a denominator-free sum is expanded, so like terms with
   different coefficient forms cancel over any kernel, not only over symbols:

@@ -124,6 +124,27 @@ void test_modulus(void) {
     assert_form("Quiet[Together[1/(x - 1) + 1/(x + 1), Modulus -> 4]]",
                 "Together[1/(-1 + x) + 1/(1 + x), Modulus -> 4]");
     assert_form("Check[Together[1/x, Modulus -> 4], failed]", "failed");
+    /* the denominator's factors come from the input's pieces: 60 linear
+     * summands modulo 2^61 - 1 are not factored whole (5 ms -> 0.75 ms) */
+    assert_true("t = Together[Sum[i/(x + i), {i, 1, 12}], Modulus -> 2^61 - 1]; "
+                "Length[Denominator[t]] == 12 && Exponent[Numerator[t], x] == 11");
+    assert_form("Together[1/(x^2 + 3 x + 2) + 1/(x^2 + 5 x + 6), Modulus -> 7]", "2/((1 + x) (3 + x))");
+    /* the factored form over Q, modulo p: a gcd-free basis of the pieces as
+     * written, refined by what cancelled, never a full factorisation; a
+     * produced factor made squarefree; the numerator monic with the constant
+     * in front; a term with nothing to cancel left as written */
+    assert_form("Cancel[(x^4 - 1)/(x^6 - 1), Modulus -> 7]", "(1 + x^2)/(1 + x^2 + x^4)");
+    assert_form("Cancel[(x + 2)/(x^3 + 4 x^2 + 5 x + 2), Modulus -> 7]", "1/(1 + x)^2");
+    assert_form("Cancel[(x + 2)/((x + 2) (x^2 + 2 x + 1)), Modulus -> 7]", "1/(1 + 2 x + x^2)");
+    assert_form("Together[3/(2 x + 1) + 1/(x - 1)^2, Modulus -> 7]", "(5 (6 + x + x^2))/((4 + x) (6 + x)^2)");
+    assert_form("Cancel[(8 x + 1)/(x + 9), Modulus -> 7]", "(1 + x)/(2 + x)");
+    assert_form("Cancel[(3 x + 1)/(2 x^2 + 5), Modulus -> 7]", "(1 + 3 x)/(5 + 2 x^2)");
+    assert_form("{Together[9, Modulus -> 7], Cancel[1/3, Modulus -> 7], Together[1/7, Modulus -> 7], Apart[9, x, Modulus -> 7]}",
+                "{2, 5, 1/7, 2}");
+    /* a degree no dense array holds: declined, not an exhausted-memory abort
+     * inside FLINT's gcd */
+    assert_form("Together[1/(1 + x) + (x^(2^61 - 1) - x)/(x^2 - 1), Modulus -> 2^61 - 1]",
+                "Together[1/(1 + x) + (-x + x^2305843009213693951)/(-1 + x^2), Modulus -> 2305843009213693951]");
 }
 
 /* The same call from inside another builtin keeps the expanded form its
@@ -153,6 +174,9 @@ void test_gaussian(void) {
     assert_form("Apart[1/((x - I) (x + 2 I)), x]", "(-1/3*I)/(-I + x) + (1/3*I)/(2*I + x)");
     /* Gaussian input: the denominator is factored over Q(i) */
     assert_form("Apart[I/(x^2 + 1), x]", "1/(2 (-I + x)) - 1/(2 (I + x))");
+    /* linear Gaussian pieces are compared by an evaluation, not a gcd over Q(i) */
+    assert_form("Together[1/(x + I) + 2/(x + I)^2 + 1/(x^2 + 1) + 1/(x - 2 I)]",
+                "(-2 - I + (2 - 7*I) x + (3 - I) x^2 + 2 x^3)/((-I + x) (I + x)^2 (-2*I + x))");
     /* a degree-62 gcd over Q(Sqrt[2]): the modular field gcd, 4 s -> ms */
     assert_true("TimeConstrained[Cancel[Expand[(x^2 - 2) (x^60 + 3 x + 1)]/"
                 "Expand[(x - Sqrt[2]) (x^60 - 5 x^7 + 2)], Extension -> Automatic], 10] === "

@@ -5209,13 +5209,56 @@ static int kx_collect_dens(KxCtx* c, const Expr* e, gr_poly_struct** L, slong* n
     return 1;
 }
 
+/* g = gcd(A, B) for two distinct monic basis candidates, with the cheap exact
+ * cases first: two linear ones are coprime, and a linear x + a shares a factor
+ * with B exactly when B(-a) = 0 (then it is the gcd).  The Euclidean gcd over
+ * K, an inverse per step, was nearly all of a 17-summand Gaussian Together. */
+static int kx_pair_gcd(KxCtx* c, gr_poly_t g, const gr_poly_t A, const gr_poly_t B) {
+    slong la = gr_poly_length(A, c->gr), lb = gr_poly_length(B, c->gr);
+    if (la == 2 && lb == 2) return gr_poly_one(g, c->gr) == GR_SUCCESS;
+    if (la == 2 || lb == 2) {
+        const gr_poly_struct* L = la == 2 ? A : B;
+        const gr_poly_struct* P = la == 2 ? B : A;
+        gr_ptr root, val;
+        GR_TMP_INIT2(root, val, c->gr);
+        int ok = gr_poly_get_coeff_scalar(root, L, 0, c->gr) == GR_SUCCESS &&
+                 gr_neg(root, root, c->gr) == GR_SUCCESS &&
+                 gr_poly_evaluate(val, P, root, c->gr) == GR_SUCCESS;
+        if (ok) {
+            if (gr_is_zero(val, c->gr) == T_TRUE) ok = gr_poly_set(g, L, c->gr) == GR_SUCCESS;
+            else ok = gr_poly_one(g, c->gr) == GR_SUCCESS;
+        }
+        GR_TMP_CLEAR2(root, val, c->gr);
+        return ok;
+    }
+    return kx_gcd(c, g, A, B);
+}
+
 /* The factored form over K: the reduced, monic denominator written over the
  * gcd-free basis of the input's denominator factors -- Together[1/(x - I) +
  * 1/(x + I)] is (2 x)/((-I + x) (I + x)).  Each factor and the numerator are
  * scaled to integral coordinates, the scalars collected in front.  NULL when
  * the denominator does not decompose over that basis (the expanded form is
  * used then). */
+/* How many negative-power nodes e has, stopping at `stop` (kx_collect_dens
+ * reads exactly these). */
+static int kx_count_dens(const Expr* e, int stop) {
+    if (e->type != EXPR_FUNCTION) return 0;
+    const char* h = fn_head_name(e);
+    int k = 0;
+    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER && e->data.function.args[1]->data.integer < 0)
+        k = 1;
+    for (size_t i = 0; i < e->data.function.arg_count && k < stop; i++)
+        k += kx_count_dens(e->data.function.args[i], stop - k);
+    return k;
+}
+
 static Expr* kx_factored_expr(KxCtx* c, const Expr* e, KxRf* rf) {
+    /* a single denominator piece has no basis to write: decline before
+     * converting it again (a degree-65 Gaussian Cancel paid a second
+     * conversion of its denominator for nothing) */
+    if (kx_count_dens(e, 2) < 2) return NULL;
     gr_poly_struct* L = NULL; slong n = 0, cap = 0;
     gr_poly_t g, q, r, D; gr_poly_init(g, c->gr); gr_poly_init(q, c->gr);
     gr_poly_init(r, c->gr); gr_poly_init(D, c->gr);
@@ -5226,7 +5269,7 @@ static Expr* kx_factored_expr(KxCtx* c, const Expr* e, KxRf* rf) {
         again = 0;
         for (slong i = 0; i < n && !again && ok; i++)
             for (slong j = i + 1; j < n && !again && ok; j++) {
-                if (!kx_gcd(c, g, L + i, L + j)) { ok = 0; break; }
+                if (!kx_pair_gcd(c, g, L + i, L + j)) { ok = 0; break; }
                 if (gr_poly_length(g, c->gr) <= 1) continue;
                 ok = kx_make_monic(c, g);
                 gr_poly_struct parts[2];
@@ -5256,13 +5299,26 @@ static Expr* kx_factored_expr(KxCtx* c, const Expr* e, KxRf* rf) {
     }
     slong* ex = ok ? calloc((size_t)(n ? n : 1), sizeof(slong)) : NULL;
     if (ok) ok = ex && gr_poly_set(D, rf->den, c->gr) == GR_SUCCESS && kx_make_monic(c, D);
-    for (slong i = 0; i < n && ok; i++)
+    gr_ptr root, val;
+    GR_TMP_INIT2(root, val, c->gr);
+    for (slong i = 0; i < n && ok; i++) {
+        /* a linear element x + a divides D exactly when D(-a) = 0: test by
+         * evaluation, so the attempt that fails is not a division over K */
+        int lin = gr_poly_length(L + i, c->gr) == 2;
+        if (lin) ok = gr_poly_get_coeff_scalar(root, L + i, 0, c->gr) == GR_SUCCESS &&
+                      gr_neg(root, root, c->gr) == GR_SUCCESS;
         while (ok && gr_poly_length(D, c->gr) > 1) {
+            if (lin) {
+                if (gr_poly_evaluate(val, D, root, c->gr) != GR_SUCCESS) { ok = 0; break; }
+                if (gr_is_zero(val, c->gr) != T_TRUE) break;
+            }
             if (gr_poly_divrem(q, r, D, L + i, c->gr) != GR_SUCCESS) { ok = 0; break; }
             if (gr_poly_length(r, c->gr) != 0) break;
             gr_poly_swap(D, q, c->gr);
             ex[i]++;
         }
+    }
+    GR_TMP_CLEAR2(root, val, c->gr);
     Expr* out = NULL;
     int used = 0;
     for (slong i = 0; i < n; i++) if (ex && ex[i]) used++;

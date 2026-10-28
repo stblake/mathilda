@@ -14,6 +14,28 @@ Plan: ~/.claude/plans/similar-to-our-recent-declarative-turtle.md. Trig -> True 
       content extracted ((-202 + 13 x)/(529 (5 + 3 x^2))).  Probe the rule in w3-style scripts first and re-baseline tests.
 - [x] P3 perf from the report; guard Integrate/DSolve/Simplify corpora
 - [x] P4 docstrings, spec, changelog, flint-offload.md, version/tags, lessons + memory
+- [x] P5 factored form at user level by default (v0.6073); Maxima as a fifth weekly system + experiment 121 (stress sizes)
+- [x] P6 gaps from 121: inner-sum squarefree and linear-denominator gcds (v0.6074); canonical certified output,
+      dense one-variable sums (v0.6075)
+- [x] P7 regressions vs v0.6072 found by the closing shootout (tog-mod, can-mod, tog-gauss): Modulus one variable on
+      the gcd-free-basis form (no factorisation; matches the reference on 27/28 probes), numbers under Modulus,
+      Gaussian single-piece and linear-pair shortcuts, huge-degree abort declined (v0.6076)
+
+## Review (2026-10-28)
+
+- Versions v0.6072-v0.6075. A factored rational-function engine in FLINT (`src/poly/ratfun.c`), with Modulus for all
+  three heads, the factored output form at user level, and Apart over Q(params) natively.
+- Shootout (`benchmarks/98-rational-shootout`): Mathilda fastest or within 1.2x on every Cancel/Apart family over Q,
+  Extension, Gaussian and Modulus Together. Remaining gaps: small-input overhead (can-small, ap-param small,
+  tog-telescope) and nested fractions (2x Maxima).
+- Weekly job: Maxima column; experiment 121 has Mathilda ahead on 11 of 12, behind only on nested depth 32
+  (0.15 vs 0.071 ms).
+- Open:
+  - Trig -> True.
+  - The nested-fraction denominator form (a reference splits it against deeper denominators).
+  - Dense univariate factors throughout `Rf`, to close the nested gap.
+  - Cold sympy timing in the other group-A `.py` halves (flagged to the user).
+  - Modulus with several variables: still factors the denominator mod p; the reference's normalisation there.
 
 # Factor review, option parity, 4-engine shootout (2026-10-27)
 

@@ -1,5 +1,54 @@
 # Lessons learned
 
+## Together / Cancel / Apart, second half: where the time really went (2026-10-28)
+
+- **A new engine can be slower than the code it replaced on one shape.** On a
+  continued fraction the factored engine was 3x slower than `MATHILDA_RATFUN=off`,
+  because it made every inner sum's denominator squarefree (a gcd per level) and
+  then inverted that denominator into a numerator. Keep the kill switch and A/B
+  against it on each family. A "the old path was faster" row is a bug report.
+- **Ask which level's work reaches the answer.** Normalisation required by the
+  output form (squarefree, content) belongs at the outermost level only. A
+  `nest` counter in the context separates the top sum from the inner ones at no
+  cost.
+- **Measure the stages before optimising one.** Two plausible fixes (no
+  renormalisation of moved factors, one multiply per one-denominator sum)
+  changed nothing. Stage timers showed the output evaluation was a third of
+  every call, and the profile then showed FLINT's small allocations (via the
+  `tc_flint_*` wrappers) dominating the rest. `sample` cannot attribute a
+  deeply recursive call (the stack is truncated), so profile a shallow
+  instance (depth 8) that does the same work per level.
+- **Skipping the evaluator is safe only with a cross-check.** The canonical
+  direct build is sorted with the comparator Plus/Times use and certified with
+  `eval_mark_fixed_point`. Before relying on it, `MATHILDA_RATFUN_DIRECT_CHECK=1`
+  compared it with the evaluated build on every corpus (2130 direct answers, 0
+  differences), and a counter confirmed the direct path really ran. The build
+  declines where evaluation does more than sort (E^u generators, power atoms,
+  rules on Plus/Times/Power).
+- **sympy timings in a warm harness are cache hits.** `cancel` of 50 summands is
+  39 ms after a warm-up and 8.7 s cold. Clear the cache before each timed run.
+- **Re-run the whole shootout before closing, against the previous release.**
+  The per-family table against v0.6072 found three regressions that no
+  targeted timing had shown, all from a form change (v0.6073's factored output)
+  on paths the later perf work never touched.
+- **A slow form can also be a wrong form.** The Modulus regression came from
+  fully factoring the denominator mod p, and probing the reference showed it
+  never factors: it writes the same gcd-free basis as over Q. The fix that
+  matched the reference also removed the cost. Probe the reference before
+  optimising the work behind a form.
+- **On a loaded machine, compare binaries interleaved.** With load ~3, runs
+  minutes apart moved 10-40%. Alternating the v0.6072 and new binaries on the
+  same inputs (best of three each) gave stable ratios. Running the new binary
+  in both forms (`MATHILDA_TOGETHER_FORM=expanded`) separated the engine's
+  cost from the form's.
+- **A corpus generator can silently produce nothing.** `Sum[f, {n}]` (no
+  iterator variable) never evaluates, so a third of a random Modulus corpus
+  was unevaluated input in both binaries, and the byte A/B "passed". Check
+  that the inputs evaluated before trusting an A/B over them.
+- **A baseline you add can move every ratio.** Maxima in the weekly job made
+  some cases "slower" with no Mathilda change. The trend section now says so
+  when a baseline is new since the last run.
+
 ## Together / Cancel / Apart engine: invariants, oracles, process hygiene (2026-10-28)
 
 - **An invariant enforced at one entry point is only as good as the paths that
