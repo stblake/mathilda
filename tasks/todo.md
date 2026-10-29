@@ -1,3 +1,37 @@
+# Trager (simple radicals) + Kauers log heuristic as .m Integrate methods (2026-10-29)
+
+Plan: TRAGER_PLAN.md (copy of ~/.claude/plans/i-want-to-use-proud-sparrow.md)
+
+- [x] T1 TRAGER_PLAN.md + todo; probe Modulus support of polynomial builtins
+- [x] T2 Phase 0-1 port (Common, Validate, Reduce, Genus, Basis, Arithmetic) + test_trager_phase0, test_trager_basis_arith
+- [x] T3 Shift + Hermite + test_trager_shift_hermite
+- [x] T4 Residues + test_trager_residues
+- [x] T5 Normalize/HNF (field-generic), Divisor, PrincipalGen + suites
+- [x] T6 TorsionModP (Ch 6 §2-3) + test_trager_torsion
+- [x] T7 TragerLogTerms, KauersLogTerms, LogToArcTan, Reassemble, Pipeline, Surface + suites
+- [x] T8 integrate.c glue: Method -> "Trager" / "TragerKauers", docstrings, test_trager_integrate; version bump
+- [x] T9 FriCAS stress harness + corpus (nightly), triage, BASELINE
+- [x] T10 docs/spec calculus.md, changelog, review section, lessons
+
+### Review (v0.6082)
+- Design change from the plan (recorded in TRAGER_PLAN.md): the y^i components are integrated separately
+  ([T] Appendix A). Residue divisors are then exact two-generator ideals, so there is no branch-place hack.
+- Engines:
+  - Trager: Q-basis over a small splitting field, else per Galois orbit over Q[Z]/(q), with fallback to the
+    Q-basis construction.
+  - TragerKauers: Groebner heuristic, verified exactly by traces.
+- Tests:
+  - 9 unit suites, about 1,950 assertions, all pass, each under 60 s.
+  - FriCAS stress over 360 integrands: Trager 180 agree-elem / 132 agree-nonelem / 3 Mathilda-only /
+    0 FriCAS-only / 0 wrong / 0 disagree; Kauers 58 FriCAS-only, its baseline.
+- Fixed along the way:
+  - Definite integrals with an ArcTan-of-quotient antiderivative now go through the Newton-Leibniz jump guard.
+  - The LinearSolve FLINT-path leak.
+- Open:
+  - Large torsion powers over cubic or larger residue fields (1/((x-2)(x^3+1)^(1/3)), order 21).
+  - Genus >= 2 torsion searches for index 5/6 radicals: needs divisor reduction, [T] Ch 6 Sec 3.
+  - .m number-field arithmetic speed (an index-6 genus-0 case takes about 25 s).
+
 # Polynomial ideals on FLINT: GCD, LCM, GroebnerBasis, PolynomialReduce, Eliminate, CAD (2026-10-28)
 
 Plan: ~/.claude/plans/let-s-continue-our-performance-agile-creek.md

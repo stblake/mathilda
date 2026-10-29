@@ -148,6 +148,41 @@ static bool nl_has_arctrig_over_pole(const Expr* e, const Expr* x) {
     return false;
 }
 
+/* True iff `e` contains a Power with a negative exponent whose base depends on
+ * x: a denominator that can vanish on the real line. */
+static bool nl_has_x_denominator(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        bool neg = (ex->type == EXPR_INTEGER && ex->data.integer < 0) ||
+                   (head_name_is(ex, "Rational") && ex->data.function.arg_count == 2 &&
+                    ex->data.function.args[0]->type == EXPR_INTEGER &&
+                    ex->data.function.args[0]->data.integer < 0);
+        if (neg && contains_symbol(e->data.function.args[0], x)) return true;
+    }
+    if (nl_has_x_denominator(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_has_x_denominator(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* An ArcTan / ArcCot of a quotient over x, e.g. -ArcTan[Sqrt[1 - x^2]/x]: the
+ * form a complex logarithm takes in real form.  It jumps by Pi wherever the
+ * quotient's denominator crosses zero, so F(b) - F(a) is wrong when that
+ * happens inside (a, b) -- the antiderivative is only piecewise continuous.
+ * Same fingerprint class as nl_has_arctrig_over_pole: validate before trusting. */
+static bool nl_has_arctan_of_quotient(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if ((head_name_is(e, "ArcTan") || head_name_is(e, "ArcCot")) &&
+        e->data.function.arg_count == 1 &&
+        nl_has_x_denominator(e->data.function.args[0], x))
+        return true;
+    if (nl_has_arctan_of_quotient(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_has_arctan_of_quotient(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 /* -------------------------------------------------------------------------
  * Numeric classification of bounds / roots.
  * ---------------------------------------------------------------------- */
@@ -1246,6 +1281,7 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * radicand vanishes inside (a,b) all mean F could carry an uncorrected
      * branch jump and must be cross-checked. */
     bool F_triggers = nl_has_step_head(F, x) || nl_has_arctrig_over_pole(F, x)
+                      || nl_has_arctan_of_quotient(F, x)
                       || nl_find_radical_hazard(F, x, a, b)
                       || nl_has_exp_polylog(F, x);
     expr_free(F);

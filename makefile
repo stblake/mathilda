@@ -675,8 +675,9 @@ clean:
 # The Mathilda executable is NOT self-contained: its kernel is part C, part its
 # own language, and the `src/internal/` tree of `.m` bootstrap files is loaded
 # at RUNTIME (init.m/bessel.m/distributions.m at startup; simp/FullSimplify.m +
-# simp/transforms/*.m, CRCMathTablesIntegrals.m, and mixed/ParallelMixed.m
-# lazily). So an install must ship BOTH the binary and that module tree.
+# simp/transforms/*.m, CRCMathTablesIntegrals.m, mixed/ParallelMixed.m and
+# trager/Trager.m (+ siblings) lazily). So an install must ship BOTH the binary
+# and that module tree.
 #
 # We install into the FHS layout the loader already searches EXE-RELATIVE
 # (src/loadmodule.c: <exe>/../share/mathilda/internal/), so the result is

@@ -717,7 +717,10 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
             free(flat_m);
             free(flat_b);
             free(matrix);
-            return build_solution_tensor(fsol, c, trail_dims, trail_rank);
+            /* build_solution_tensor adopts the entries, not the array */
+            Expr* sol = build_solution_tensor(fsol, c, trail_dims, trail_rank);
+            free(fsol);
+            return sol;
         }
     }
 

@@ -1896,6 +1896,15 @@ monotonically down.
     - In the automatic cascade it runs right after `Holonomic`, gated on a Bessel head.
   - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
     Risch-Norman over a simple radical in a mixed transcendental tower).
+  - `"Trager"` — `Integrate\`Trager[f, x]`: Trager's algorithm (1984) for a rational
+    function of x and ONE radical `r(x)^(1/n)` with rational coefficients. It is a
+    decision procedure: an elementary antiderivative is found if one exists, and
+    otherwise `Integrate::nonelem` is issued with a proof. Written in Mathilda's own
+    language (`src/internal/trager/`). Not part of the Automatic cascade. See
+    `### Integrate\`Trager` below.
+  - `"TragerKauers"` — `Integrate\`TragerKauers[f, x]`: the same pipeline with the
+    logarithmic part found by Kauers' Groebner-basis heuristic (2008). It is faster
+    on many inputs but incomplete: it declines where the heuristic does not close.
   - `"ParallelMixedSpecial"` — `Integrate\`ParallelMixedSpecial[f, x]` (the same
     over a mixed tower with **special-function kernels**, so the answer may carry
     `ExpIntegralEi`, `LogIntegral`, `Erf`/`Erfc`/`Erfi`, the incomplete
@@ -3007,6 +3016,82 @@ Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
 `Protected`.
+
+### Integrate`Trager
+
+`Integrate[f, x, Method -> "Trager"]` (and the method symbol `Integrate\`Trager[f, x]`)
+integrates `f`, a rational function of `x` and powers of a single radical
+`r(x)^(1/n)`, with `r` in Q(x) and rational coefficients. Several powers of one
+radicand are merged: `Sqrt[x]` and `x^(1/3)` are powers of `x^(1/6)`.
+
+The method follows B. M. Trager, *Integration of Algebraic Functions* (MIT thesis,
+1984), restricted to simple radical extensions. It is implemented in Mathilda's own
+language in `src/internal/trager/` (one file per stage, every function with a
+`::usage` docstring) and loaded on first use.
+
+**Pipeline.**
+
+1. **Canonical form** `f = Sum a_i(x) yh^i`, where `yh = q r^(1/n)` and `yh^n = g` is
+   in Q[x].
+2. **Components.** `a_0` is integrated as a rational function. Each other component
+   `a_i yh^i` is integrated on its own curve `Y^m = G` with `Y = yh^i/s`. This curve
+   is absolutely irreducible, and every multiplicity is below `m` ([T] Appendix A:
+   `f` is elementary iff every component is).
+3. **Shift.** If the differential has a pole at infinity, infinity is moved to an
+   ordinary finite point by `x = a + 1/z`.
+4. **Hermite reduction** on the integral basis `w_i = Y^i/d_i`, which is diagonal for
+   d/dx and normal at infinity.
+5. **Two non-elementarity certificates.** A pole at infinity left in the remainder,
+   or a nonzero remainder with no residues, proves the integral is not elementary.
+6. **Residues.** They are the roots of `S(Z^m)`, where
+   `S(W) = Res_x(W E'^m - N^m G, Bp)`. From them the residue field K, a Q-basis of
+   the residues, and integer coordinates are computed.
+7. **Divisors.** One divisor per basis element, built as a product of the ideals
+   `(N Y - alpha E', Bp)` of the integral closure.
+8. **Torsion order and generator.** The order of each divisor class comes from its
+   orders modulo two primes of good reduction ([T] Ch 6 §2–3). If the prime-to-pq
+   parts disagree, or N·delta is not principal, the divisor is not torsion and the
+   integral is not elementary. Otherwise the generator `u` is the basis row that is
+   regular at infinity after normalising at infinity ([T] Ch 6 §1).
+9. **Exact check of the log part** in K(x)(Y). A nonzero difference is a holomorphic
+   differential and proves the integral is not elementary.
+10. **Reassembly.** The answer is rewritten in the user's radical (lowest powers),
+    turned into real form (complex log pairs become `ArcTan`), and checked with
+    `PossibleZeroQ[D[F, x] - f]`.
+
+**Results.** An antiderivative is returned only after it has been verified. The
+method symbol returns `{"not elementary", reason}` (also announced as
+`Integrate::nonelem`, which `Quiet` silences and `Check` catches) or
+`{"failed", reason}`. `Integrate` leaves both unevaluated.
+
+**Declines (no verdict):**
+
+- several radicands (a compositum);
+- transcendental functions;
+- algebraic or complex constants;
+- a residue field of degree above 32;
+- a torsion search past 400 over GF(p);
+- an internal invariant failure (a bug never becomes an answer or a false
+  certificate).
+
+**Examples.**
+
+| Integral | Result |
+|---|---|
+| `Integrate[1/Sqrt[x^2 + 1], x, Method -> "Trager"]` | `Log[x + Sqrt[1 + x^2]]` |
+| `Integrate[1/Sqrt[1 - x^2], x, Method -> "Trager"]` | `-ArcTan[Sqrt[1 - x^2]/x]` |
+| `Integrate[1/(x Sqrt[1 - x^3]), x, Method -> "Trager"]` (torsion order 3) | `1/3 Log[(-2 + x^3 + 2 Sqrt[1 - x^3])/x^3]` |
+| `Integrate[(x^4 + 1)^(-1/4), x, Method -> "Trager"]` (genus 3, torsion 4) | `1/4 Log[...] + 1/4 ArcTan[...]` |
+| `Integrate[x/Sqrt[1 - x^3], x, Method -> "Trager"]` | `Integrate::nonelem` (pole at infinity after Hermite) |
+| `Integrate[1/Sqrt[x^3 + 1], x, Method -> "Trager"]` | `Integrate::nonelem` (holomorphic remainder) |
+
+**`Method -> "TragerKauers"`** runs the same stages 1–6. For each irreducible factor
+`q` of the residue polynomial it then looks for the least `k` such that
+`<Y^m - G, Bp, N Y - Z E', q>^k` is principal modulo the curve and `q`
+(lexicographic Groebner bases). The logands give
+`(1/k) RootSum[q, # Log[p] &]`. The result is checked exactly by traces over
+Q[Z]/(q). Where the heuristic does not close (e.g. `(x^4 + 1)^(-1/4)`) the method
+declines. Its non-elementarity certificates come only from the shared stages 3–6.
 
 ### Integrate`CRCTable
 

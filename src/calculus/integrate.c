@@ -1132,6 +1132,83 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
 }
 
 /* ------------------------------------------------------------------------- *
+ * Methods: Trager and TragerKauers.
+ * ------------------------------------------------------------------------- *
+ * Trager's algorithm for algebraic functions over a simple radical extension
+ * (Trager 1984; Integrate[f, x, Method -> "Trager"]) and the same pipeline with
+ * Kauers' Groebner-basis heuristic for the logarithmic part (Kauers 2008;
+ * Method -> "TragerKauers").  Both are written in Mathilda's own language in
+ * src/internal/trager/ and loaded on first use.  The worker
+ * Trager`TragerIntegrate[f, x, engine] returns the antiderivative (verified
+ * exactly before it is returned), {"not elementary", reason} -- a proof -- or
+ * {"failed", reason}.  Neither method is part of the Automatic cascade. */
+static unsigned trager_load_gen = 0;   /* symtab_generation() of the attempt */
+static bool trager_load_succeeded = false;
+
+static void trager_lazy_load(void) {
+    if (trager_load_gen == symtab_generation()) return;
+    trager_load_gen = symtab_generation();
+    if (mathilda_load_module("trager/Trager.m")) {
+        trager_load_succeeded = true;
+        return;
+    }
+    mth_message("Integrate`Trager", "nofile",
+        "cannot locate src/internal/trager/Trager.m on disk.");
+}
+
+/* Shared body of the two method symbols: `engine` is "Trager" or "Kauers".
+ * Same async-defer / message-suppression discipline as the ParallelMixedTower
+ * symbol (see builtin_integrate_pmt); a {"not elementary", ...} certificate is
+ * announced as Integrate::nonelem after both regions are popped. */
+static Expr* integrate_trager_common(Expr* res, const char* engine) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (tc_async_region_active()) return NULL;   /* no nested heavy method */
+    trager_lazy_load();
+    if (!trager_load_succeeded) return NULL;
+
+    Expr* args[3] = { expr_copy(res->data.function.args[0]),
+                      expr_copy(res->data.function.args[1]),
+                      expr_new_string(engine) };
+    Expr* call = expr_new_function(expr_new_symbol("Trager`TragerIntegrate"), args, 3);
+    tc_async_defer_push();
+    mth_msg_suppress_push();
+    Expr* result = evaluate(call);
+    mth_msg_suppress_pop();
+    tc_async_defer_pop();
+    expr_free(call);
+    if (pmt_is_nonelementary_certificate(result))
+        integrate_announce_nonelementary(res->data.function.args[0],
+                                         res->data.function.args[1]);
+    return result;   /* antiderivative, or a {"not elementary"|"failed", reason} List */
+}
+
+static Expr* builtin_integrate_trager(Expr* res) {
+    return integrate_trager_common(res, "Trager");
+}
+
+static Expr* builtin_integrate_trager_kauers(Expr* res) {
+    return integrate_trager_common(res, "Kauers");
+}
+
+/* Method -> "Trager" / "TragerKauers" stage: decline (leave Integrate
+ * unevaluated) unless the method symbol returned an antiderivative. */
+static Expr* try_trager(Expr* f, Expr* x, const char* head) {
+    Expr* result = call_stage(head, f, x);
+    if (!result) return NULL;
+    bool decline =
+        result_is_unresolved(result, head) ||
+        (result->type == EXPR_FUNCTION &&
+         result->data.function.head->type == EXPR_SYMBOL &&
+         result->data.function.head->data.symbol.name == SYM_List) ||
+        result_contains_head(result, "Trager`TragerIntegrate");
+    if (decline) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
+/* ------------------------------------------------------------------------- *
  * Stage: ParallelMixedSpecial.
  * ------------------------------------------------------------------------- *
  * The SPECIAL-FUNCTION stage of the same parallel (Risch-Norman) method: the
@@ -1354,6 +1431,8 @@ typedef enum {
     METHOD_BESSEL_HYPERGEOMETRIC,
     METHOD_PARALLEL_MIXED_TOWER,
     METHOD_PARALLEL_MIXED_SPECIAL,
+    METHOD_TRAGER,           /* Trager's algorithm, simple radicals (src/internal/trager) */
+    METHOD_TRAGER_KAUERS,    /* the same with Kauers' log-part heuristic */
     METHOD_UNDEFINED,
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
@@ -1393,6 +1472,8 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "BesselHypergeometric") == 0) return METHOD_BESSEL_HYPERGEOMETRIC;
     if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
     if (strcmp(s, "ParallelMixedSpecial") == 0) return METHOD_PARALLEL_MIXED_SPECIAL;
+    if (strcmp(s, "Trager") == 0) return METHOD_TRAGER;
+    if (strcmp(s, "TragerKauers") == 0) return METHOD_TRAGER_KAUERS;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
     if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
@@ -2436,7 +2517,7 @@ Expr* builtin_integrate(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"NewtonLeibniz\", \"LineIntegral\".");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;
@@ -2697,6 +2778,12 @@ Expr* builtin_integrate(Expr* res) {
              * cascade's tight one (see PMS_CASCADE_BUDGET_SECONDS). */
             result = try_parallelmixedspecial(effective_f, x, false);
             break;
+        case METHOD_TRAGER:
+            result = try_trager(effective_f, x, "Integrate`Trager");
+            break;
+        case METHOD_TRAGER_KAUERS:
+            result = try_trager(effective_f, x, "Integrate`TragerKauers");
+            break;
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
             break;
@@ -2785,6 +2872,29 @@ void integrate_init(void) {
         "list that Integrate's cascade treats as a decline. When the method PROVES "
         "the integrand has no elementary antiderivative it issues Integrate::nonelem, "
         "as RischTranscendental does.");
+    /* The Trager / TragerKauers method symbols (lazy-load
+     * src/internal/trager/Trager.m). */
+    symtab_add_builtin("Integrate`Trager", builtin_integrate_trager);
+    symtab_get_def("Integrate`Trager")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`Trager",
+        "Integrate`Trager[f, x] integrates f, a rational function of x and powers of "
+        "a single radical r(x)^(1/n) with rational coefficients, by Trager's algorithm "
+        "for simple radical extensions (Trager 1984): Hermite reduction on an integral "
+        "basis, Rothstein-Trager residues, residue divisors as ideals, principal "
+        "generators by normalisation at infinity, and torsion orders by reduction "
+        "modulo two primes. It returns the antiderivative (verified exactly), "
+        "{\"not elementary\", reason} -- a proof, also announced as Integrate::nonelem "
+        "-- or {\"failed\", reason}.");
+    symtab_add_builtin("Integrate`TragerKauers", builtin_integrate_trager_kauers);
+    symtab_get_def("Integrate`TragerKauers")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`TragerKauers",
+        "Integrate`TragerKauers[f, x] is Integrate`Trager with the logarithmic part "
+        "found by Kauers' Groebner-basis heuristic (Kauers 2008): for each irreducible "
+        "factor of the residue polynomial, the least power of the residue ideal that is "
+        "principal modulo the curve gives the logand. Faster on many inputs but "
+        "incomplete: it returns {\"failed\", reason} where the heuristic does not "
+        "close. Non-elementarity certificates come only from the shared Hermite and "
+        "residue stages.");
     /* The ParallelMixedSpecial method symbol (lazy-loads
      * src/internal/ParallelMixedSpecial.m, which loads Part II itself). */
     symtab_add_builtin("Integrate`ParallelMixedSpecial", builtin_integrate_pms);
@@ -2828,6 +2938,9 @@ void integrate_init(void) {
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"ParallelMixedTower\" — Integrate`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II)\n"
         "  \"ParallelMixedSpecial\" — Integrate`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi)\n"
+        "  \"Trager\"             — Integrate`Trager (Trager 1984: complete algorithm for one radical r(x)^(1/n) over Q;\n"
+        "                          decides elementarity, torsion by reduction mod p; not in the Automatic cascade)\n"
+        "  \"TragerKauers\"       — Integrate`TragerKauers (the same with Kauers' 2008 Groebner heuristic for the log part)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
         "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"

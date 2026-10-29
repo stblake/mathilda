@@ -5647,6 +5647,54 @@ add_executable(legendre_machine_tests test_legendre_machine.c $<TARGET_OBJECTS:m
 target_include_directories(legendre_machine_tests PRIVATE ../src)
 add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)
 
+# Trager integration (src/internal/trager/): one suite per stage, all on the
+# push tier; the FriCAS comparison is the nightly trager_fricas_stress below.
+add_executable(trager_field_tests test_trager_field.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_field_tests PRIVATE ../src)
+add_test(NAME trager_field_tests COMMAND trager_field_tests)
+
+add_executable(trager_phase0_tests test_trager_phase0.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_phase0_tests PRIVATE ../src)
+add_test(NAME trager_phase0_tests COMMAND trager_phase0_tests)
+
+add_executable(trager_basis_arith_tests test_trager_basis_arith.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_basis_arith_tests PRIVATE ../src)
+add_test(NAME trager_basis_arith_tests COMMAND trager_basis_arith_tests)
+
+add_executable(trager_shift_hermite_tests test_trager_shift_hermite.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_shift_hermite_tests PRIVATE ../src)
+add_test(NAME trager_shift_hermite_tests COMMAND trager_shift_hermite_tests)
+
+add_executable(trager_residues_tests test_trager_residues.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_residues_tests PRIVATE ../src)
+add_test(NAME trager_residues_tests COMMAND trager_residues_tests)
+
+add_executable(trager_normalize_ideal_tests test_trager_normalize_ideal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_normalize_ideal_tests PRIVATE ../src)
+add_test(NAME trager_normalize_ideal_tests COMMAND trager_normalize_ideal_tests)
+
+add_executable(trager_torsion_tests test_trager_torsion.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_torsion_tests PRIVATE ../src)
+add_test(NAME trager_torsion_tests COMMAND trager_torsion_tests)
+
+add_executable(trager_logterms_tests test_trager_logterms.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_logterms_tests PRIVATE ../src)
+add_test(NAME trager_logterms_tests COMMAND trager_logterms_tests)
+
+add_executable(trager_integrate_tests test_trager_integrate.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_integrate_tests PRIVATE ../src)
+add_test(NAME trager_integrate_tests COMMAND trager_integrate_tests)
+
+# Nightly: Integrate[..., Method -> "Trager" / "TragerKauers"] against FriCAS on
+# a corpus of simple-radical integrands (tools/trager_fricas_stress.py). Skipped
+# (exit 0 with a note) when fricas or python3 is not installed.
+find_program(PYTHON3_EXE python3)
+if(PYTHON3_EXE)
+    add_test(NAME trager_fricas_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/trager_fricas_stress.py --check
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+endif()
+
 # Every *_tests executable is a ctest test.  175 suites were built by every
 # `make` but had no add_test(), so neither ctest nor CI ever ran them -- and
 # they drifted unseen (Sum[Binomial[3, k] x^k, {k, 0, 3}] was 0, Limit[-E^x] was

@@ -5028,3 +5028,18 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   `freeq_memberq_tests`, plus `bench_match` -- `make <targets>`, never the whole tree.
 - `tests/` carries a stray in-source `CMakeCache.txt`; `cmake <src> -D...` from a new
   dir silently reconfigures IT. Always use `cmake -S tests -B <dir>`.
+
+## 2026-10-29 — Trager port (.m): Mathilda-language pitfalls that cost debugging time
+
+- `{a[[i]], a[[j]]} = {a[[j]], a[[i]]}` is a SILENT NO-OP in Mathilda (no message); swap
+  with `a[[{i, j}]] = a[[{j, i}]]`. It made kRowEchelon/hnf throw kInvZero far from the cause.
+- `Module[{x = B["x"], d = Exponent[p, x]}, ...]`: initialisers see the OUTER x, not the
+  local being defined. Compute dependent locals in the body.
+- `SelectFirst[list, crit, throwSomething[]]` evaluates the default eagerly: it threw
+  before searching. Use a sentinel default and test afterwards.
+- `Return[...]` inside a nested `Module` returns only from the inner Module; the outer
+  function carried on with garbage. Split into separate functions instead.
+- `PossibleZeroQ` has false negatives on nested radicals (D of the (x^4+1)^(-1/4) answer,
+  zero to 100 digits): pair it with a high-precision numeric check rather than declining.
+- A top-level `r = ...` in a test script with `Trager`Private`` on $ContextPath binds the
+  private symbol `r` -- use distinctive names in tests.
