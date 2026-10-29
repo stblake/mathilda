@@ -142,11 +142,12 @@ static void test_predicates(void) {
     TR_EQ("rdeg[1/x - 1/x, x]", "-Infinity");
     TR_EQ("rdeg[x^4 + 1/x, x]", "4");
 
-    TR_EQ("{tragerOption[\"ShiftBound\"], tragerOption[\"HermiteMaxIter\"], tragerOption[\"MaxFieldDegree\"],"
-          " tragerOption[\"MaxTorsionSearch\"], tragerOption[\"MaxPrimes\"], tragerOption[\"KauersMaxPower\"]}",
-          "{64, 200, 32, 400, 200, 16}");
-    TR_TRUE("AllTrue[{\"ShiftBound\", \"HermiteMaxIter\", \"MaxFieldDegree\", \"MaxTorsionSearch\","
-            " \"MaxPrimes\", \"KauersMaxPower\"}, IntegerQ[tragerOption[#]] && tragerOption[#] > 0 &]");
+    TR_EQ("{tragerOption[\"KauersMaxPower\"], tragerOption[\"DirectPowerMaxOrder\"],"
+          " tragerOption[\"TorsionScreenPrimes\"], tragerOption[\"NativeKernels\"]}",
+          "{16, 12, 3, True}");
+    /* no limit on the problems the method decides: the former caps are gone */
+    TR_TRUE("NoneTrue[{\"ShiftBound\", \"HermiteMaxIter\", \"MaxFieldDegree\", \"MaxTorsionSearch\","
+            " \"MaxPrimes\"}, IntegerQ[tragerOption[#]] &]");
 }
 
 /* ---- Validate.m: radical detection --------------------------------------- */

@@ -34,18 +34,24 @@ integralAtInfinityQ::usage = "integralAtInfinityQ[F, B, a] is True when the func
 integralAtInfinityQ[F_Association, B_Association, a_List] :=
   AllTrue[Range[0, B["m"] - 1], infScaledOrder[F, B, a[[# + 1]], #] >= 0 &];
 
-shiftCurve::usage = "shiftCurve[c, m, G, x, z] moves infinity to a finite point for the component c(x) Y dx on Y^m = G(x). It picks the first a in 0, 1, -1, 2, -2, ... with G(a) != 0 and the denominator of c nonzero at a, substitutes x = a + 1/z and Y = Y1/z^k (k = Ceiling[M/m], M = deg G), and returns <|\"a\" -> a, \"k\" -> k, \"G\" -> Gz, \"c\" -> cz|>: the component is cz(z) Y1 dz on Y1^m = Gz(z) = z^(k m - M) z^M G(a + 1/z), again a reduced, absolutely irreducible curve of the same genus. The inverse substitution is z -> 1/(x - a), Y1 -> Y (x - a)^(-k).";
+shiftCurve::usage = "shiftCurve[c, m, G, x, z] moves infinity to a finite point for the component c(x) Y dx on Y^m = G(x). It picks the first a in 0, 1, -1, 2, -2, ... (no bound: firstOrdinaryInteger) with G(a) != 0 and the denominator of c nonzero at a, substitutes x = a + 1/z and Y = Y1/z^k (k = Ceiling[M/m], M = deg G), and returns <|\"a\" -> a, \"k\" -> k, \"G\" -> Gz, \"c\" -> cz|>: the component is cz(z) Y1 dz on Y1^m = Gz(z) = z^(k m - M) z^M G(a + 1/z), again a reduced, absolutely irreducible curve of the same genus. The inverse substitution is z -> 1/(x - a), Y1 -> Y (x - a)^(-k).";
 shiftCurve[c_, m_Integer, G_, x_Symbol, z_Symbol] := Module[
-  {den = Denominator[Together[c]], M = Exponent[G, x], a = None, k, Gz, cz, bound = tragerOption["ShiftBound"]},
-  Do[
-    If[(G /. x -> cand) =!= 0 && (den /. x -> cand) =!= 0, a = cand; Break[]],
-    {cand, Join[{0}, Flatten[Table[{i, -i}, {i, bound}]]]}];
-  If[a === None, throwDecline["no shift point found", <|"Bound" -> bound|>]];
+  {den = Denominator[Together[c]], M = Exponent[G, x], a, k, Gz, cz},
+  (* G and den have finitely many roots: the search 0, 1, -1, 2, ... ends *)
+  a = firstOrdinaryInteger[{G, den}, x];
   k = Ceiling[M/m];
   Gz = Expand[z^(k m - M) Expand[z^M (G /. x -> a + 1/z)]];
   (* dx = -dz/z^2 and Y = Y1 z^(-k) *)
   cz = Together[-(c /. x -> a + 1/z)/z^(k + 2)];
   <|"a" -> a, "k" -> k, "G" -> Gz, "c" -> cz|>];
+
+firstOrdinaryInteger::usage = "firstOrdinaryInteger[polys, x] is the first integer a in 0, 1, -1, 2, -2, ... at which no polynomial of the list polys (each nonzero) vanishes. It exists since each has finitely many roots; no bound is imposed.";
+firstOrdinaryInteger[polys_List, x_Symbol] := Module[{i = 0, a},
+  If[MemberQ[Expand[polys], 0], throwInternal["firstOrdinaryIntegerZeroPolynomial"]];
+  While[True,
+    a = If[i === 0, 0, If[OddQ[i], (i + 1)/2, -i/2]];
+    If[AllTrue[polys, (# /. x -> a) =!= 0 &], Return[a, Module]];
+    i++]];
 
 unshift::usage = "unshift[expr, sh, x, z, Y] maps an expression in z and the generator Y of the shifted curve back to x: z -> 1/(x - a), Y -> Y (x - a)^(-k), simultaneously.";
 unshift[expr_, sh_Association, x_Symbol, z_Symbol, Y_Symbol] :=

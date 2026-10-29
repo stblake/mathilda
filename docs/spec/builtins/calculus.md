@@ -3069,9 +3069,18 @@ language in `src/internal/trager/` (one file per stage, every function with a
      - With a single place, the reduced representative is unique, so its Hermite
        form is a canonical key.
    - **Order search.** The order modulo the smaller prime p is found by linear
-     steps, then baby-step giant-step over the Weil range. Modulo q the order must
-     be `n0 p^a q^b`, so the least a and b are found by multiplication, with no
-     second search.
+     steps, then baby-step giant-step with a bound multiplied by 16 until the order
+     turns up. The work is O(√order), and the Weil bound is only the theorem's
+     ceiling (exceeding it is an internal error). Modulo q the order must be
+     `n0 p^a q^b`: the q-free part a is read off `p^a (q^B c)` and then b off
+     `q^b (p^a c)`, in A + 2B multiplications.
+   - **Torsion screen.** Before N·delta is formed over the residue field, `N delta`
+     reduced at three further good primes must be principal. Reduction is a
+     homomorphism, so a nonzero class there proves that N·delta is not principal.
+     N is the only possible order, so that is a certificate of infinite order,
+     reached without characteristic-0 arithmetic. In characteristic 0 the heights
+     of a non-torsion class grow quadratically in N; the two genus-1 cases with
+     predicted order 21 went from over 240 s to 0.5 s.
    - **Large orders over the residue field.** For N above 12 with a rational root
      of G, N·delta is formed by doubling and adding in reduced form. Its generator
      is then a short product, which gives a sum of logarithms.
@@ -3079,6 +3088,15 @@ language in `src/internal/trager/` (one file per stage, every function with a
      contributes `(A^k, Y - phi_k)`, with `phi_k` the Hensel lift of the branch
      value, and its inverse `(A^k, H_k)/A^k`.
    - **Hermite forms** of ideal products are taken modulo the known determinant.
+   - **Native kernels.** The Hermite forms (with the ideal products and the
+     `idealReduce` step fused in), the Popov reduction, determinants and adjugates
+     (the inverse of an element), and division and gcds over Q(θ)[x] run in C on
+     FLINT's generic rings: ``FLINT`PolynomialHermiteForm``,
+     ``FLINT`PolynomialWeakPopovForm``, ``FLINT`PolynomialDetAdjugate``,
+     ``FLINT`PolynomialQuotientRemainder``, ``FLINT`PolynomialExtendedGCD`` and
+     ``FLINT`PolynomialFieldGCD`` ([FLINT context](flint.md)). The package routines
+     remain the reference: `tragerOption["NativeKernels"] = False` selects them.
+     A GF(p) class addition went from 0.2–0.7 s to a few milliseconds.
 9. **Exact check of the log part** in K(x)(Y). A nonzero difference is a holomorphic
    differential and proves the integral is not elementary.
 10. **Reassembly.** The answer is rewritten in the user's radical (lowest powers),
@@ -3090,13 +3108,21 @@ method symbol returns `{"not elementary", reason}` (also announced as
 `Integrate::nonelem`, which `Quiet` silences and `Check` catches) or
 `{"failed", reason}`. `Integrate` leaves both unevaluated.
 
+**No search is capped.** Shift points, good primes, torsion orders and residue
+fields are searched or built for as long as the problem needs. Every such loop
+provably ends: finitely many bad points, a positive density of good primes, the
+Weil bound, and a splitting field of finite degree. Large splitting fields that
+`ToNumberField` cannot build come from an algebraic tower (`residueFieldTower`).
+The tower adjoins one root of a nonlinear factor at a time, factors over the
+current field by Trager's norm method, and takes the primitive element
+`beta + c theta` of each new layer. A genuinely hard integral therefore takes
+longer instead of declining; a time limit is the caller's (`TimeConstrained`).
+
 **Declines (no verdict):**
 
 - several radicands (a compositum);
 - transcendental functions;
 - algebraic or complex constants;
-- a residue field of degree above 32;
-- a torsion search past 400 over GF(p);
 - an internal invariant failure (a bug never becomes an answer or a false
   certificate).
 

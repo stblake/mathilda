@@ -1064,6 +1064,12 @@ extern const char* SYM_FLINT_PolynomialGCD;   /* FLINT`PolynomialGCD[a,b] */
 extern const char* SYM_FLINT_Resultant;       /* FLINT`Resultant[a,b,x]   */
 extern const char* SYM_FLINT_Factor;          /* FLINT`Factor[p]          */
 extern const char* SYM_FLINT_FactorSquareFree;/* FLINT`FactorSquareFree[p]*/
+extern const char* SYM_FLINT_PolynomialHermiteForm;      /* FLINT`PolynomialHermiteForm[m,x,..]      */
+extern const char* SYM_FLINT_PolynomialDetAdjugate;      /* FLINT`PolynomialDetAdjugate[m,x,..]      */
+extern const char* SYM_FLINT_PolynomialWeakPopovForm;    /* FLINT`PolynomialWeakPopovForm[m,x,s,..]  */
+extern const char* SYM_FLINT_PolynomialQuotientRemainder;/* FLINT`PolynomialQuotientRemainder[a,b,x,..] */
+extern const char* SYM_FLINT_PolynomialExtendedGCD;      /* FLINT`PolynomialExtendedGCD[a,b,x,..]    */
+extern const char* SYM_FLINT_PolynomialFieldGCD;         /* FLINT`PolynomialFieldGCD[a,b,x,..]       */
 extern const char* SYM_FLINT_Det;             /* FLINT`Det[m]             */
 extern const char* SYM_FLINT_Inverse;         /* FLINT`Inverse[m]         */
 extern const char* SYM_FLINT_LinearSolve;     /* FLINT`LinearSolve[m,b]   */

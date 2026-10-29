@@ -97,7 +97,7 @@ static void define_helpers(void) {
         "tUnitQ[tF_, tB_, tI_] := idealEqualQ[tF, tB, tI, idealUnit[tB]];"
         "tInvOK[tF_, tB_, tI_] := tUnitQ[tF, tB, idealTimes[tF, tB, tI, idealInverse[tF, tB, tI]]];"
         "tAdjOK[tF_, tA_] := Module[{tn = Length[tA]},"
-        "  Map[kc[tF, #] &, tA . polyAdjugate[tF, tA], {2}] === kc[tF, Det[tA]] IdentityMatrix[tn]];"
+        "  Map[kc[tF, #] &, tA . polyAdjugate[tF, tA, x], {2}] === kc[tF, Det[tA]] IdentityMatrix[tn]];"
         /* proportional coordinate lists over F */
         "tPropQ[tF_, tu_, tv_] := Module[{ti = SelectFirst[Range[Length[tv]], tv[[#]] =!= 0 &], tl},"
         "  tl = rc[tF, tu[[ti]]/tv[[ti]]]; FreeQ[tl, x] && tl =!= 0 && afZeroQ[tF, tu - tl tv]];"
@@ -324,11 +324,11 @@ static void test_ideal_arith(void) {
 }
 
 static void test_polyAdjugate(void) {
-    TR_EQ("polyAdjugate[tQ, {{x + 1}}]", "{{1}}");
+    TR_EQ("polyAdjugate[tQ, {{x + 1}}, x]", "{{1}}");
     TR_TRUE("tAdjOK[tQ, {{x, 1}, {x^2, 3}}]");
     TR_TRUE("tAdjOK[tQ, {{x, 1, 2}, {0, x^2, 3}, {1, x, 1}}]");
     TR_TRUE("tAdjOK[tQ, {{x, 1, 2, 0}, {0, x^2, 3, 1}, {1, x, 1, x}, {x^3, 0, 0, 1}}]");
-    TR_TRUE("polyAdjugate[tQ, {{a1, b1}, {c1, d1}}] === {{d1, -b1}, {-c1, a1}}");
+    TR_TRUE("polyAdjugate[tQ, {{a1, b1}, {c1, d1}}, x] === {{d1, -b1}, {-c1, a1}}");
     TR_TRUE("tAdjOK[tN, {{t x, 1}, {x^2, t + 1}}]");
     TR_TRUE("tAdjOK[tN, {{t x, 1, 0}, {0, x - t, t}, {x^2, 0, 1 + t x}}]");
     TR_TRUE("tAdjOK[tG7, {{3 x, 1, 5}, {0, x^2, 6}, {1, 4 x, 1}}]");

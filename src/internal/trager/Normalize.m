@@ -30,7 +30,11 @@
 
 hnf::usage = "hnf[F, rows, x] is the Hermite normal form over F[x] of the K[x]-module spanned by the polynomial row vectors rows: an upper-triangular m x m matrix (m = number of columns) with monic diagonal and entries above each pivot of lower degree. The module must have full rank m; otherwise this is an internal error.";
 hnf[F_Association, rows0_List, x_Symbol] := Module[
-  {M = Map[kc[F, #] &, rows0, {2}], nr, nc, piv, a, b, eg, g, s, t, r1, r2, q, inv},
+  {M, nr, nc, piv, a, b, eg, g, s, t, r1, r2, q, inv, nat},
+  If[nativeQ[],
+    nat = FLINT`PolynomialHermiteForm[rows0, x, Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[nat]]];
+  M = Map[kc[F, #] &, rows0, {2}];
   nr = Length[M]; nc = Length[First[M]];
   If[nr < nc, throwInternal["hnfRankDeficient"]];
   Do[
@@ -60,8 +64,11 @@ hnf[F_Association, rows0_List, x_Symbol] := Module[
 
 hnfModDet::usage = "hnfModDet[F, rows, x, D] is hnf[F, rows, x] when D is a multiple of the determinant of the module spanned by rows (a full-rank lattice L contains D K[x]^m as soon as det L divides D, by the adjugate). The rows D e_k are adjoined and every non-pivot entry is reduced modulo D after each row operation, so entries stay of degree < deg D instead of growing through the elimination. The result is the same Hermite normal form.";
 hnfModDet[F_Association, rows0_List, x_Symbol, D_] := Module[
-  {m = Length[First[rows0]], Dm = kMonic[F, D, x], M, nr, piv, a, b, g, s, t, r1, r2, q, inv, red},
+  {m = Length[First[rows0]], Dm = kMonic[F, D, x], M, nr, piv, a, b, g, s, t, r1, r2, q, inv, red, nat},
   If[kDeg[F, Dm, x] <= 0, Return[hnf[F, rows0, x]]];
+  If[nativeQ[],
+    nat = FLINT`PolynomialHermiteForm[rows0, x, "DeterminantMultiple" -> Dm, Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[nat]]];
   red[row_, j_] := MapIndexed[If[First[#2] > j, kRem[F, #1, Dm, x], kc[F, #1]] &, row];
   M = Join[Map[kRem[F, #, Dm, x] &, rows0, {2}], Dm IdentityMatrix[m]];
   M = Map[kc[F, #] &, M, {2}];

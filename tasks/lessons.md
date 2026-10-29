@@ -5046,3 +5046,30 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - (2026-10-30) A scripted edit built `old = s[s.index(A):s.index(B)]` and then `s.replace(old, new)`: when B
   came before A the slice was EMPTY, and replacing "" inserted `new` between every character (TorsionModP.m
   grew to 370k lines). Always `assert s.count(old) == 1` -- including for computed slices.
+
+## 2026-10-30 — Trager slowdowns: profile first, no caps, and hand-computed expectations
+
+- Correction (user): "We shouldn't have any hard coded degree caps. If an integral is genuinely that difficult it
+  should just run and take longer, not give up heuristically." I had just proposed keeping `MaxFieldDegree = 32`
+  after measuring that 64 was slow. Rule: in a decision procedure a cap is a give-up, not a policy. Prove the loop
+  terminates (finitely many bad points, Chebotarev density, Weil bound, finite splitting field) and leave it
+  unbounded; turn "the search may be long" into a GROWING search (BSGS bound x16) so cost tracks the answer, not the
+  worst case. Strategy thresholds and presentation limits are fine; heuristic methods (Kauers) keep theirs.
+- The profile beat the notes: the open items said "order 21 needs faster class arithmetic over the residue field",
+  but a per-function DownValue timer (now tools/trager_profile.m) showed FactorList inside idealReduce (183 of 240 s)
+  and then that the class was NOT TORSION at all -- heights doubling per step. The fix was a cheap certificate
+  (N delta-bar != 0 at a further good prime), not faster arithmetic. Instrument before optimising.
+- Weak Popov forms are not unique: a native kernel replacing a reduction loop must replay the reference's pivot
+  choice (first clashing pair in Subsets order) to give identical results; Hermite forms are unique, so there
+  only the canonical shape matters.
+- `_gr_ctx_init_nf_from_ref` contexts still free the nf on `gr_ctx_clear` (FLINT 3.6): use `gr_ctx_init_nf` and a
+  separate `nf_t` with the same mu for conversions.
+- A gcd over a number field of high degree: never via xgcd cofactors (they dwarf the gcd), and not via the Euclidean
+  remainder sequence either (worse: 7 s -> 118 s on an S4 tower). Use the certified modular engine
+  (`fb_field_mpoly_gcd`, needs theta scaled to an algebraic integer).
+- Three of my hand-computed expected strings in test_flint_polymat.c were wrong and the kernel right (a GF(5)
+  Hermite form, a det-1 Popov reduction, the {H, den} result shape). When an expectation fails, re-derive it before
+  touching the code; prefer invariant checks (same module, adj.M = det I) plus the reference implementation over
+  hand-computed literals.
+- Every unit suite inherits `alarm(120)` from test_utils.h; a nightly suite that runs minutes must `alarm(0)` and
+  line-buffer stdout, or it dies with SIGALRM and an empty log (`| tail` then hides the exit code).

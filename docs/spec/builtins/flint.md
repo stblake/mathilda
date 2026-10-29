@@ -147,6 +147,116 @@ Out[1]= 1
 
 ---
 
+## Polynomial matrices over K[x]
+
+Exact operations on matrices of univariate polynomials over a field K, on FLINT's
+generic rings (`gr_poly`, `gr_mat`) with one implementation for three choices of K:
+
+| K | option | coefficients |
+|---|---|---|
+| Q | none | rationals |
+| GF(p), p a word-size prime | `Modulus -> p` | integers in `[0, p)` (a rational input `a/b` is `a b^-1 mod p`) |
+| Q(θ) = Q[t]/(μ), μ irreducible over Q | `Extension -> {t, μ}` | polynomials in `t` of degree < deg μ, reduced on input |
+
+Results are expanded polynomials in canonical form. A call stays unevaluated when
+it is out of scope: an entry that is not a polynomial in `x` (and `t`), a ragged or
+empty matrix, a rank-deficient module, a non-prime or oversized modulus, a reducible
+μ, or an unknown option. These routines are the kernels of the divisor-class
+arithmetic of `Integrate[f, x, Method -> "Trager"]` (`src/internal/trager/`). The
+package's own routines stay as the reference and fallback, selected by
+`tragerOption["NativeKernels"]`.
+
+## FLINT`PolynomialHermiteForm
+
+`` FLINT`PolynomialHermiteForm[m, x, opts] `` gives the Hermite normal form of the
+K[x]-module spanned by the rows of `m`. The form is upper triangular with monic
+pivots, every entry above a pivot has lower degree than the pivot, and zero rows are
+dropped. The module must have full column rank. The form is unique, so it identifies
+the module.
+
+| option | effect |
+|---|---|
+| `"DeterminantMultiple" -> D` | `D` is a multiple of the determinant of the module, so the module contains `D K[x]^n`; the rows `D e_k` are adjoined and entries are reduced modulo `D` during the elimination, which bounds their degrees. A constant `D` is ignored. |
+| `"Products" -> {gens, table}` | the module spanned by the products `r g` (`r` a row of `m`, `g` in `gens`) in the K[x]-algebra with basis `w_0..w_(n-1)` and `w_i w_j = f w_k`, `table[[i+1, j+1]] = {k, f}`: an ideal product formed inside the kernel. |
+| `"Denominator" -> den` | the fractional module `m/den` in lowest terms: returns `{H, den'}` with every factor of `den` *over the prime field* that divides all entries removed, and `den'` monic. Over Q(θ) a factor of `den` that splits over Q(θ) is not removed piecemeal. |
+
+```mathematica
+In[1]:= FLINT`PolynomialHermiteForm[{{x^2 + 1, x}, {x, 1 + x}}, x]
+Out[1]= {{1, -x^2}, {0, 1 + x + x^3}}
+
+In[2]:= FLINT`PolynomialHermiteForm[{{x^2 + t, t x}, {x, 1 + t}}, x, Extension -> {t, t^2 - 2}]
+Out[2]= {{1, -1/2 t x}, {0, 2 + t + x^2}}
+
+In[3]:= FLINT`PolynomialHermiteForm[{{x (x - 1), 0}, {0, x (x + 1)}}, x, "Denominator" -> x^2]
+Out[3]= {{{-1 + x, 0}, {0, 1 + x}}, x}
+```
+
+## FLINT`PolynomialDetAdjugate
+
+`` FLINT`PolynomialDetAdjugate[m, x, opts] `` gives `{det, adj}` for a square
+polynomial matrix over K[x], with `adj . m == det IdentityMatrix`. It takes the field
+options and `"Products"` as above; with `"Products" -> {{h}, table}` applied to an
+identity matrix, it gives the determinant (the norm) and adjugate of the
+multiplication matrix of `h`.
+
+```mathematica
+In[1]:= FLINT`PolynomialDetAdjugate[{{x^2 + 1, x}, {x, 1 + x}}, x]
+Out[1]= {1 + x + x^3, {{1 + x, -x}, {-x, 1 + x^2}}}
+```
+
+## FLINT`PolynomialWeakPopovForm
+
+`` FLINT`PolynomialWeakPopovForm[m, x, shifts, opts] `` reduces the rows of `m`
+without changing the module they span, until their leading columns are distinct.
+The leading column of a row is the one that maximises
+`k Exponent[e_j, x] + shifts[[j]]`, with `k` set by `"DegreeScale" -> k`
+(default 1); on a tie the first such column wins. While two rows share a leading
+column, the first such pair is taken and the row with the greater key loses its
+leading term to `x^s` times the other. The result therefore matches step for step
+the package's `reducedRows`, which uses it for the Riemann–Roch reduction of divisor
+classes.
+
+```mathematica
+In[1]:= FLINT`PolynomialWeakPopovForm[{{x, 1}, {1, x}}, x, {0, 5}, "DegreeScale" -> 2]
+Out[1]= {{x, 1}, {1 - x^2, 0}}
+```
+
+## FLINT`PolynomialQuotientRemainder
+
+`` FLINT`PolynomialQuotientRemainder[a, b, x, opts] `` gives `{q, r}` with
+`a == q b + r` and `Exponent[r, x] < Exponent[b, x]` over K[x].
+
+```mathematica
+In[1]:= FLINT`PolynomialQuotientRemainder[t^2 x, 1, x, Extension -> {t, t^2 - 2}]
+Out[1]= {2 x, 0}
+```
+
+## FLINT`PolynomialExtendedGCD
+
+`` FLINT`PolynomialExtendedGCD[a, b, x, opts] `` gives `{g, {s, t}}` with `g` the
+monic gcd over K[x] and `s a + t b == g`.
+
+```mathematica
+In[1]:= FLINT`PolynomialExtendedGCD[x^2 - 2, x - t, x, Extension -> {t, t^2 - 2}]
+Out[1]= {-t + x, {0, 1}}
+```
+
+## FLINT`PolynomialFieldGCD
+
+`` FLINT`PolynomialFieldGCD[a, b, x, opts] `` gives the monic gcd over K[x], without
+cofactors. Over Q(θ) it uses the certified modular algorithm of the field-gcd engine.
+θ is first scaled to an algebraic integer when μ is not integral. The Euclidean gcd
+over a number field is fraction-based, and its remainders' coefficients grow with
+the field degree. With this kernel, the splitting field of degree 36 built for a
+Trager residue polynomial took 14 s where the Euclidean route took 74 s.
+
+```mathematica
+In[1]:= FLINT`PolynomialFieldGCD[x^2 - 2, x^2 - t x, x, Extension -> {t, t^2 - 2}]
+Out[1]= -t + x
+```
+
+---
+
 ## Rigorous numerics
 
 Numeric evaluation of the zeta family, computed to the precision of the argument

@@ -771,6 +771,7 @@ set(COMMON_SRC
     ../src/poly/zupoly.c
     ../src/poly/flint_bridge.c
     ../src/poly/flint_trager.c
+    ../src/poly/flint_polymat.c
     ../src/poly/flint_qqbar.c
     ../src/poly/algebraicnumber.c
     ../src/poly/tonumberfield.c
@@ -5647,6 +5648,12 @@ add_executable(legendre_machine_tests test_legendre_machine.c $<TARGET_OBJECTS:m
 target_include_directories(legendre_machine_tests PRIVATE ../src)
 add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)
 
+# FLINT` polynomial-matrix kernels (src/poly/flint_polymat.c), checked against
+# the Trager package's own routines and against their defining invariants.
+add_executable(flint_polymat_tests test_flint_polymat.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(flint_polymat_tests PRIVATE ../src)
+add_test(NAME flint_polymat_tests COMMAND flint_polymat_tests)
+
 # Trager integration (src/internal/trager/): one suite per stage, all on the
 # push tier; the FriCAS comparison is the nightly trager_fricas_stress below.
 add_executable(trager_field_tests test_trager_field.c $<TARGET_OBJECTS:mathilda_common>)
@@ -5688,6 +5695,13 @@ add_test(NAME trager_logterms_tests COMMAND trager_logterms_tests)
 add_executable(trager_integrate_tests test_trager_integrate.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trager_integrate_tests PRIVATE ../src)
 add_test(NAME trager_integrate_tests COMMAND trager_integrate_tests)
+
+# Nightly (by name): the hard cases -- the former slow FriCAS-stress cases with
+# verdicts and time budgets, seeded elementary d/dx Log[p + q g^(1/m)], and a
+# degree-36 residue field built by the algebraic tower.
+add_executable(trager_torsion_stress_tests test_trager_torsion_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_torsion_stress_tests PRIVATE ../src)
+add_test(NAME trager_torsion_stress_tests COMMAND trager_torsion_stress_tests)
 
 # Nightly: Integrate[..., Method -> "Trager" / "TragerKauers"] against FriCAS on
 # a corpus of simple-radical integrands (tools/trager_fricas_stress.py). Skipped

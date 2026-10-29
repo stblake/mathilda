@@ -35,10 +35,14 @@ withFrameAlpha::usage = "withFrameAlpha[ctx] adds ctx[\"alpha\"]: a rational roo
 withFrameAlpha[ctx_Association] := If[KeyExistsQ[ctx, "alpha"], ctx,
   Join[ctx, <|"alpha" -> First[Join[frameRoots[fieldQ[], ctx["B"]["G"], ctx["B"]["m"], ctx["B"]["x"]], {None}]]|>]];
 
-generatorTerms::usage = "generatorTerms[ctx, spec, Nn] is a generator of Nn delta (delta the divisor spec, Nn >= 1) as a list {{e, u}, ...}, u elements of the working frame (coordinate lists), with div(Prod u^e) = Nn delta; $Failed when Nn delta is not principal. For Nn up to tragerOption[\"DirectPowerMaxOrder\"], or without a characteristic-0 frame root, the ideal of Nn delta is formed and tested directly ([T] Ch 6 Sec 1); for larger Nn with a frame root (ctx[\"alpha\"]) Nn delta is formed by doubling and adding in reduced form (Jacobian.m) and the generator is the product of the principal factors met.";
+generatorTerms::usage = "generatorTerms[ctx, spec, Nn] is a generator of Nn delta (delta the divisor spec, Nn >= 1) as a list {{e, u}, ...}, u elements of the working frame (coordinate lists), with div(Prod u^e) = Nn delta; $Failed when Nn delta is not principal (decided first by reduction at a few further good primes, torsionScreen, then over the residue field). For Nn up to tragerOption[\"DirectPowerMaxOrder\"], or without a characteristic-0 frame root, the ideal of Nn delta is formed and tested directly ([T] Ch 6 Sec 1); for larger Nn with a frame root (ctx[\"alpha\"]) Nn delta is formed by doubling and adding in reduced form (Jacobian.m) and the generator is the product of the principal factors met.";
 generatorTerms[ctx_Association, spec_Association, Nn_Integer] := Module[
   {F = ctx["F"], B = ctx["B"], x, fr, Jn, c1, cN, I, u, Yt = Unique["Yt"], Yw = Unique["Yw"]},
   x = B["x"];
+  (* N delta principal => N delta-bar principal at every good prime: refute  *)
+  (* it cheaply over GF(r) before paying for characteristic-0 arithmetic,    *)
+  (* whose heights grow quadratically in N when delta is not torsion.        *)
+  If[!torsionScreen[ctx, spec, Nn], Return[$Failed]];
   (* In characteristic 0 the direct ideal power (Hermite form modulo the     *)
   (* determinant) is cheap for moderate Nn, while reduced arithmetic pays    *)
   (* norms and adjugates over the residue field at every step: use the       *)
@@ -101,12 +105,7 @@ logPartResidual[F_Association, B_Association, r_List, logs_List] := Module[{us, 
 (* -------------------------------------------------------------------------- *)
 
 referencePoint::usage = "referencePoint[ctx] is a rational c with G(c) != 0 and E(c) != 0 in the working variable: the places over x = c are ordinary (unramified, outside the support of every residue divisor).";
-referencePoint[ctx_Association] := Module[{B = ctx["B"], x, cands, c},
-  x = B["x"];
-  cands = Join[{0}, Flatten[Table[{i, -i}, {i, tragerOption["ShiftBound"]}]]];
-  (* (SelectFirst's default argument is evaluated eagerly: test afterwards) *)
-  c = SelectFirst[cands, (B["G"] /. x -> #) =!= 0 && (ctx["E"] /. x -> #) =!= 0 &, None];
-  If[c === None, throwInternal["NoReferencePoint"], c]];
+referencePoint[ctx_Association] := firstOrdinaryInteger[{ctx["B"]["G"], ctx["E"]}, ctx["B"]["x"]];
 
 idealDegree::usage = "idealDegree[F, B, I] is the degree of the divisor of the integral ideal I (den = 1): the degree in x of the determinant of its Hermite form.";
 idealDegree[F_Association, B_Association, I_Association] :=

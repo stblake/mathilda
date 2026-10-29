@@ -40,6 +40,15 @@ fieldGF[p_Integer] := <|"Type" -> "GF", "p" -> p|>;
 fieldDegree::usage = "fieldDegree[F] is [F : prime field]: 1 for Q and GF(p), deg mu for Q(theta).";
 fieldDegree[F_Association] := If[F["Type"] === "NF", Exponent[F["mu"], F["t"]], 1];
 
+nativeOpts::usage = "nativeOpts[F] is the option list naming the field F to the FLINT` polynomial kernels (flint_polymat.c): {} for Q, {Modulus -> p} for GF(p), {Extension -> {t, mu}} for Q(theta).";
+nativeOpts[F_Association] := Switch[F["Type"],
+  "Q", {},
+  "GF", {Modulus -> F["p"]},
+  "NF", {Extension -> {F["t"], F["mu"]}}];
+
+nativeQ::usage = "nativeQ[] is True when the FLINT` polynomial kernels are to be tried first (tragerOption[\"NativeKernels\"]).";
+nativeQ[] := TrueQ[tragerOption["NativeKernels"]];
+
 (* -------------------------------------------------------------------------- *)
 (* Scalars and polynomials: canonical forms.                                  *)
 (* -------------------------------------------------------------------------- *)
@@ -91,10 +100,13 @@ kDivRem[F_Association, a_, b_, x_Symbol] := Switch[F["Type"],
          gfMod[PolynomialRemainder[gfMod[a, F["p"]], gfMod[b, F["p"]], x, Modulus -> F["p"]], F["p"]]},
   "NF", kDivRemNF[F, a, b, x]];
 
-kDivRemNF::usage = "kDivRemNF[F, a, b, x] is schoolbook long division over Q(theta); kDivRem dispatches to it.";
+kDivRemNF::usage = "kDivRemNF[F, a, b, x] is division with remainder over Q(theta): the FLINT` kernel when nativeQ[], else schoolbook long division; kDivRem dispatches to it.";
 kDivRemNF[F_Association, a_, b_, x_Symbol] := Module[
-  {r = kc[F, a], bb = kc[F, b], db, inv, q = 0, dr, term},
+  {r = kc[F, a], bb = kc[F, b], db, inv, q = 0, dr, term, nat},
   If[bb === 0, throwInternal["kDivRemByZero"]];
+  If[nativeQ[],
+    nat = FLINT`PolynomialQuotientRemainder[r, bb, x, Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[nat]]];
   db = Exponent[bb, x];
   inv = kInv[F, Coefficient[bb, x, db]];
   While[r =!= 0 && (dr = Exponent[r, x]) >= db,
@@ -130,9 +142,12 @@ kExtGCD[F_Association, a0_, b0_, x_Symbol] := Module[{a = kc[F, a0], b = kc[F, b
       {kc[F, g lc], kc[F, eg[[2, 1]] lc], kc[F, eg[[2, 2]] lc]},
     True, kExtGCDEuclid[F, a, b, x]]];
 
-kExtGCDEuclid::usage = "kExtGCDEuclid[F, a, b, x] is the extended Euclidean algorithm over any field F (used for Q(theta)).";
+kExtGCDEuclid::usage = "kExtGCDEuclid[F, a, b, x] is the extended Euclidean algorithm over any field F (used for Q(theta)): the FLINT` kernel when nativeQ[], else the package loop.";
 kExtGCDEuclid[F_Association, a_, b_, x_Symbol] := Module[
-  {r0 = kc[F, a], r1 = kc[F, b], s0 = 1, s1 = 0, t0 = 0, t1 = 1, q, r2, inv},
+  {r0 = kc[F, a], r1 = kc[F, b], s0 = 1, s1 = 0, t0 = 0, t1 = 1, q, r2, inv, nat},
+  If[nativeQ[],
+    nat = FLINT`PolynomialExtendedGCD[r0, r1, x, Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[{nat[[1]], nat[[2, 1]], nat[[2, 2]]}]]];
   While[r1 =!= 0,
     {q, r2} = kDivRem[F, r0, r1, x];
     {r0, r1} = {r1, r2};
@@ -141,8 +156,16 @@ kExtGCDEuclid[F_Association, a_, b_, x_Symbol] := Module[
   inv = kInv[F, kLC[F, r0, x]];
   {kc[F, r0 inv], kc[F, s0 inv], kc[F, t0 inv]}];
 
-kGCD::usage = "kGCD[F, a, b, x] is the monic gcd of a and b over F.";
-kGCD[F_Association, a_, b_, x_Symbol] := First[kExtGCD[F, a, b, x]];
+kGCD::usage = "kGCD[F, a, b, x] is the monic gcd of a and b over F. Over Q(theta), with the native kernels, the certified modular gcd (FLINT`PolynomialFieldGCD): the Euclidean remainders and Bezout cofactors over a field of high degree grow far larger than the gcd.";
+kGCD[F_Association, a_, b_, x_Symbol] := Module[{nat, p = kc[F, a], q = kc[F, b]},
+  If[F["Type"] === "NF" && nativeQ[],
+    (* one division first when the degrees differ: the modular gcd then works *)
+    (* on two polynomials of the smaller degree (2.4x on residue-field towers) *)
+    If[p =!= 0 && q =!= 0 && Exponent[p, x] < Exponent[q, x], {p, q} = {q, p}];
+    If[q =!= 0 && Exponent[p, x] > Exponent[q, x], {p, q} = {q, kRem[F, p, q, x]}];
+    nat = FLINT`PolynomialFieldGCD[p, q, x, Sequence @@ nativeOpts[F]];
+    If[Head[nat] =!= FLINT`PolynomialFieldGCD, Return[nat]]];
+  First[kExtGCD[F, a, b, x]]];
 
 kNorm::usage = "kNorm[F, p] is the norm of p from K[x] down to the prime-field polynomial ring: Resultant over t against mu for Q(theta), p itself for Q and GF(p).";
 kNorm[F_Association, p_] := If[F["Type"] === "NF",

@@ -193,6 +193,59 @@ static void test_classes_modp(void) {
     TR_EQ("orderModP[tjEx6, {1, -1}, goodPrime[tjEx6, 13]]", "3");
 }
 
+/* ------------------------- native kernels, the torsion screen, reductions */
+static void test_native_and_screen(void) {
+    /* the FLINT` kernels and the package routines give identical classes along
+     * a run of additions mod p (the canonical keys of the Hermite forms) */
+    TR_TRUE("Module[{gp = goodPrimes[tjP35, 3][[3]], fr, red, F, J, c, run, nat, ref},"
+            " {fr, red} = modPFrame[tjP35, gp]; F = fieldGF[gp[\"p\"]];"
+            " J = specFrameIdeal[F, fr, tjSP, red]; c = jacClass[F, fr[\"B\"], J[[1]], J[[2]]];"
+            " run[] := jacKey /@ NestList[jacAdd[F, fr[\"B\"], #, c] &, c, 10];"
+            " nat = run[];"
+            " tragerOption[\"NativeKernels\"] = False; ref = run[]; tragerOption[\"NativeKernels\"] = True;"
+            " nat === ref]");
+    /* ... and the same principal factors when tracked (characteristic 0) */
+    TR_TRUE("Module[{fr, J, c1, nat, ref},"
+            " fr = jacFrame[fieldQ[], 2, 1 - x^3, rc[fieldQ[], tjEx6[\"N\"]/tjEx6[\"E\"]], x, tjEx6[\"alpha\"]];"
+            " J = specFrameIdeal[fieldQ[], fr, tjS6, Identity];"
+            " c1 = jacClass[fieldQ[], fr[\"B\"], J[[1]], J[[2]], True];"
+            " nat = jacMultiple[fieldQ[], fr[\"B\"], c1, 3, True];"
+            " tragerOption[\"NativeKernels\"] = False;"
+            " ref = jacMultiple[fieldQ[], fr[\"B\"], c1, 3, True];"
+            " tragerOption[\"NativeKernels\"] = True;"
+            " jacZeroQ[nat] && jacKey[nat] === jacKey[ref] && nat[\"H\"] === ref[\"H\"]]");
+    /* twoGenerators succeeds on every class of a run (the former fixed pattern
+     * of coefficients failed on all of them over GF(p)) */
+    TR_TRUE("Module[{gp = goodPrimes[tjP35, 2][[2]], fr, red, F, J, c, cs},"
+            " {fr, red} = modPFrame[tjP35, gp]; F = fieldGF[gp[\"p\"]];"
+            " J = specFrameIdeal[F, fr, tjSP, red]; c = jacClass[F, fr[\"B\"], J[[1]], J[[2]]];"
+            " cs = Select[NestList[jacAdd[F, fr[\"B\"], #, c] &, c, 8], !jacZeroQ[#] &];"
+            " AllTrue[cs, twoGenerators[F, fr[\"B\"], #[\"J\"]] =!= None &]]");
+    /* torsionScreen: N delta-bar must vanish at further good primes.  (3, 5)
+     * on y^2 = x^3 - 2 has infinite order: 6 delta-bar is nonzero at one of
+     * them (orders 19, 9, 3 at the third to fifth good primes); Ex. 6 has
+     * order 3 and passes; genus 0 always passes */
+    TR_FALSE("torsionScreen[tjP35, tjSP, 6]");
+    TR_TRUE("torsionScreen[tjEx6, tjS6, 3]");
+    TR_FALSE("torsionScreen[tjEx6, tjS6, 2]");          /* 2 delta is not principal */
+    TR_TRUE("torsionScreen[<|\"genus\" -> 0|>, <||>, 5]");
+    /* generatorTerms refutes by the screen before characteristic-0 work */
+    TR_EQ("generatorTerms[tjP35, tjSP, 6]", "$Failed");
+    /* idealReduce over Q(theta) removes only factors over Q: x^2 - 2 splits as
+     * (x - t)(x + t) and x - t divides every entry, x^2 - 2 does not */
+    TR_TRUE("Module[{F = fieldNF[t, t^2 - 2, Sqrt[2]], I0 = <|\"M\" -> {{x - t, 0}, {0, x - t}}, \"den\" -> x^2 - 2|>, nat, ref},"
+            " nat = idealReduce[F, <|\"x\" -> x|>, I0];"
+            " tragerOption[\"NativeKernels\"] = False; ref = idealReduce[F, <|\"x\" -> x|>, I0];"
+            " tragerOption[\"NativeKernels\"] = True;"
+            " nat === ref && nat[\"den\"] === -2 + x^2]");
+    TR_TRUE("Module[{F = fieldNF[t, t^2 - 2, Sqrt[2]], r},"
+            " r = idealReduce[F, <|\"x\" -> x|>, <|\"M\" -> {{x^2 - 2, 0}, {0, t (x^2 - 2)}}, \"den\" -> x^3 - 2 x|>];"
+            " r[\"den\"] === x && r[\"M\"] === {{1, 0}, {0, 1}}]");
+    /* the mod-q confirmation of torsionOrderSpec, sequential (A + 2B steps):
+     * Ex. 6 keeps order 3; Bronstein Ex. 4 (genus 3) order 4 */
+    TR_EQ("torsionOrderSpec[tjEx6, tjS6]", "3");
+}
+
 /* ---------------------------------------------------- the place over alpha */
 static void test_place_ideal(void) {
     /* 1 - x^3 has the simple root 1: P^2 = (x - 1) O (totally ramified, m = 2) */
@@ -293,6 +346,7 @@ int main(void) {
     test_place_order_reduced_rows();
     test_classes_char0();
     test_classes_modp();
+    test_native_and_screen();
     test_place_ideal();
     test_generators();
     test_hensel_powers();

@@ -530,6 +530,41 @@ static void test_fixed_known_failures(void) {
     TR_ANTIDERIV("((2*x + 1)/(x + 3))^(1/6)", "Trager");
 }
 
+/* The slowdowns closed at v0.6084 (FLINT` polynomial-matrix kernels, the
+ * torsion screen, the algebraic residue-field tower, no search caps).  Each
+ * verdict comes with a time budget well above its measured time (0.2 - 5 s),
+ * so a regression to the former 60 - 240 s shows. */
+static void tr_timed_verdict(const char* f, const char* verdict, int seconds, const char* file, int line) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+             "Module[{tt, rr}, {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[%s, x], %d, $Aborted]];"
+             " ListQ[rr] && rr[[1]] === \"%s\" && tt < %d]", f, seconds, verdict, seconds);
+    tr_eq(buf, "True", file, line);
+}
+#define TR_TIMED_VERDICT(f, v, s) tr_timed_verdict((f), (v), (s), __FILE__, __LINE__)
+
+static void test_former_slowdowns(void) {
+    /* genus 1, cubic residue field, predicted order 21: the class is refuted at
+     * a third good prime (torsionScreen) instead of 21 delta being formed over
+     * the residue field (was > 240 s) */
+    TR_TIMED_VERDICT("1/((x - 2) (x^3 + 1)^(1/3))", "not elementary", 20);
+    TR_TIMED_VERDICT("x/((x - 2) (x^3 + 1)^(2/3))", "not elementary", 20);
+    /* ToNumberField gave up on the octic residue polynomial: the field of
+     * degree 16 is built as a tower (was a decline) */
+    TR_TIMED_VERDICT("1/((x^2 + 2) (x^3 + 1)^(1/4))", "not elementary", 40);
+    /* GF(p) torsion searches at primes 150 - 430 (were 60 - 110 s or timeouts) */
+    TR_TIMED_VERDICT("x^3/(x - 2) (x^2 + 1)^(1/6)", "not elementary", 30);
+    TR_TIMED_VERDICT("1/(x + 1) (x^3 - 2 x)^(1/4)", "not elementary", 30);
+    TR_TIMED_VERDICT("(x^2 - 1)/((x^2 + 1) (x^4 + 1)^(1/4))", "not elementary", 30);
+    TR_TIMED_VERDICT("(2 x - 1)/(x - 2) (x^2 + 1)^(-3/5)", "not elementary", 30);
+    /* elementary, formerly 1.4 - 4.2 s: verified antiderivatives */
+    TR_ANTIDERIV("1/(x^4 + 1)^(1/4)", "Trager");
+    TR_ANTIDERIV("1/x*(x^2 + 1)^(-1/6)", "Trager");
+    TR_ANTIDERIV("x^(-1)*(2*x^4 - 1)^(2/3)", "Trager");
+    TR_ANTIDERIV("x^3*(x^3 - 2*x)^(-2/3)", "Trager");
+    TR_ANTIDERIV("(x^2 + 2)/((x^2 + 1)*(x^3 + x)^(1/3))", "Trager");
+}
+
 int main(void) {
     tr_init();
     test_integrate_component();
@@ -542,6 +577,7 @@ int main(void) {
     test_definite_and_options();
     test_messages();
     test_fixed_known_failures();
+    test_former_slowdowns();
     if (getenv("TRAGER_KNOWN_FAIL")) known_failures_trager_integrate();
     printf("trager_integrate: %d assertions passed\n", tr_assertions);
     return 0;

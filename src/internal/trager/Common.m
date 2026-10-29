@@ -69,13 +69,10 @@ rdeg[r_, x_Symbol] := Module[{t = Together[r]},
   If[t === 0, -Infinity,
     Exponent[Numerator[t], x] - Exponent[Denominator[t], x]]];
 
-tragerOption::usage = "tragerOption[name] is the default value of an internal bound: \"ShiftBound\" (largest |a| tried for the shift x = a + 1/z), \"HermiteMaxIter\", \"MaxFieldDegree\" (largest residue field [K:Q] handled), \"MaxTorsionSearch\" (largest square root of the Weil bound searched over a finite field by baby-step giant-step), \"MaxPrimes\" (primes examined for good reduction), \"KauersMaxPower\" (largest ideal power tried by Kauers' heuristic), \"RealFormMaxLeaves\" and \"RealFormTime\" (size and time limits of the real-form presentation), \"DirectPowerMaxOrder\" (largest torsion order whose generator is found from the ideal power directly rather than by reduced class arithmetic).";
-tragerOption["ShiftBound"] = 64;
-tragerOption["HermiteMaxIter"] = 200;
-tragerOption["MaxFieldDegree"] = 32;
-tragerOption["MaxTorsionSearch"] = 400;
-tragerOption["MaxPrimes"] = 200;
+tragerOption::usage = "tragerOption[name] is the default value of an internal setting. None of them limits the problems the method decides: searches (shift points, good primes, torsion orders, residue fields) run as long as the problem needs. \"KauersMaxPower\" (largest ideal power tried by Kauers' heuristic, a heuristic method by definition), \"RealFormMaxLeaves\" and \"RealFormTime\" (size and time limits of the real-form presentation; the verified answer is returned either way), \"DirectPowerMaxOrder\" (largest torsion order whose generator is found from the ideal power directly rather than by reduced class arithmetic: a choice of method), \"TorsionScreenPrimes\" (extra good primes at which N delta-bar must vanish before the characteristic-0 principality test of N delta is attempted; a nonzero class there proves N delta is not principal), \"NativeKernels\" (True: Hermite forms, Popov forms, determinants/adjugates and Q(theta)[x] division and gcds go through the FLINT` polynomial-matrix kernels first, the package routines remaining the fallback; False: package routines only, the reference for tests and A/B timing).";
 tragerOption["KauersMaxPower"] = 16;
 tragerOption["RealFormMaxLeaves"] = 1500;
 tragerOption["RealFormTime"] = 5;
 tragerOption["DirectPowerMaxOrder"] = 12;
+tragerOption["NativeKernels"] = True;
+tragerOption["TorsionScreenPrimes"] = 3;

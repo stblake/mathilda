@@ -237,19 +237,10 @@ static void test_good_primes(void) {
     TR_TRUE("Module[{tqD = tqCtx[(2 x + 1)/(x^2 + x + 2), 2, x^3 + 2], gs},"
             " gs = catchTrager[goodPrimes[tqD, 2]];"
             " ListQ[gs] && Length[gs] == 2 && AllTrue[gs, IntegerQ[#[\"rho\"]] &]]");
-    /* Decline when MaxPrimes is exhausted (temporarily lower the bound) */
-    TR_TRUE("Module[{old = tragerOption[\"MaxPrimes\"], r0},"
-            " tragerOption[\"MaxPrimes\"] = 2;"
-            " r0 = catchTrager[goodPrimes[tqEx6, 2]];"
-            " tragerOption[\"MaxPrimes\"] = old;"
-            " MatchQ[r0, tragerFail[\"Decline\", \"no primes of good reduction found\", _]]]");
-    TR_EQ("tragerOption[\"MaxPrimes\"]", "200");   /* restored */
-    /* 3 tried (2 is skipped), 5 accepted: MaxPrimes = 2 suffices for one */
-    TR_TRUE("Module[{old = tragerOption[\"MaxPrimes\"], r0},"
-            " tragerOption[\"MaxPrimes\"] = 2;"
-            " r0 = catchTrager[goodPrimes[tqEx6, 1]];"
-            " tragerOption[\"MaxPrimes\"] = old;"
-            " (#[\"p\"] & /@ r0) === {5}]");
+    /* the search has no bound: 40 good primes, increasing, the first 5 */
+    TR_TRUE("Module[{gs = #[\"p\"] & /@ goodPrimes[tqEx6, 40]},"
+            " Length[gs] == 40 && OrderedQ[gs] && DuplicateFreeQ[gs] && First[gs] == 5 &&"
+            " AllTrue[gs, goodPrime[tqEx6, #] =!= None &]]");
 }
 
 /* ----------------------------------------------------------- orderModP */
@@ -277,13 +268,13 @@ static void test_order_mod_p(void) {
     TR_TRUE("AllTrue[goodPrimes[tqEx4, 3], orderModP[tqEx4, {1, -1}, #] === 4 &]");
     /* bounded by the Weil bound (1 + Sqrt[p])^(2 g) */
     TR_TRUE("AllTrue[goodPrimes[tqP35, 5], orderModP[tqP35, {1, -1}, #] <= N[(1 + Sqrt[#[\"p\"]])^2] &]");
-    /* MaxTorsionSearch exhausted -> Decline (order 3 > cap 2) */
-    TR_TRUE("Module[{old = tragerOption[\"MaxTorsionSearch\"], r0},"
-            " tragerOption[\"MaxTorsionSearch\"] = 1;"
-            " r0 = catchTrager[orderModP[tqEx6, {1, -1}, First[goodPrimes[tqEx6, 1]]]];"
-            " tragerOption[\"MaxTorsionSearch\"] = old;"
-            " MatchQ[r0, tragerFail[\"Decline\", _String, _Association]]]");
-    TR_EQ("tragerOption[\"MaxTorsionSearch\"]", "400");
+    /* the growing search: at a prime near 10^5 the order of (3, 5) mod p is
+     * far beyond the first bound (4096) and must equal the brute-force
+     * elliptic-curve order */
+    TR_TRUE("Module[{p = 100003, gp, o},"
+            " While[(gp = goodPrime[tqP35, p]) === None, p = NextPrime[p]];"
+            " o = orderModP[tqP35, tqP35[\"coeffs\"][[All, 1]], gp];"
+            " o > 4096 && o === tqEcOrd2[{3, 5}, 0, gp[\"p\"]]]");
 }
 
 /* ----------------------------------------------------------- torsionOrder */

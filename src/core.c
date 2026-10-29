@@ -984,6 +984,8 @@ void core_init(void) {
     flint_bridge_init();
     void flint_mat_bridge_init(void);
     flint_mat_bridge_init();
+    void flint_polymat_init(void);
+    flint_polymat_init();
     void flint_num_bridge_init(void);
     flint_num_bridge_init();
     void blas_bridge_init(void);

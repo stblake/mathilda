@@ -203,10 +203,27 @@ static void test_residueField(void) {
     tr_do("tRF7 = residueField[Z^3 - 1, Z, t]; True");
     TR_EQ("fieldDegree[tRF7[\"F\"]]", "2");
     TR_TRUE("tRootsInF[tRF7, Z^3 - 1] && tRootsNumeric[tRF7, Z^3 - 1] && tRootsDistinct[tRF7]");
-    /* a-priori bound: an irreducible nonic has crude bound 9! > 50000 */
-    TR_TRUE("catchTrager[residueField[Z^9 - Z - 1, Z, t]][[1 ;; 2]] === tragerFail[\"Decline\", \"residue field too large\"]");
-    TR_EQ("catchTrager[residueField[Z^9 - Z - 1, Z, t]][[3]][\"Bound\"]", "362880");
-    TR_TRUE("catchTrager[residueField[(Z^4 - Z - 1) (Z^5 - Z - 1) (Z^4 - 3 Z - 3), Z, t]][[1 ;; 2]] === tragerFail[\"Decline\", \"residue field too large\"]");
+    /* no degree limit: the splitting field of an S4 quartic (degree 24) by
+     * the algebraic tower, every root a root, all distinct */
+    tr_do("tRF8 = residueFieldTower[Z^4 - Z - 1, Z, t]; True");
+    TR_EQ("fieldDegree[tRF8[\"F\"]]", "24");
+    TR_TRUE("tRootsInF[tRF8, Z^4 - Z - 1] && tRootsNumeric[tRF8, Z^4 - Z - 1] && tRootsDistinct[tRF8]");
+    /* the octic of 1/((x^2 + 2)(x^3 + 1)^(1/4)), where ToNumberField gives up:
+     * Q(gamma, i, gamma') of degree 16 */
+    tr_do("tRF9 = residueField[Z^8 - Z^4/288 + 1/36864, Z, t]; True");
+    TR_EQ("fieldDegree[tRF9[\"F\"]]", "16");
+    TR_TRUE("tRootsInF[tRF9, Z^8 - Z^4/288 + 1/36864] && tRootsDistinct[tRF9]");
+    /* tower helpers: factoring over K (Trager's norm method), extension */
+    TR_TRUE("Module[{K = fieldNF[u, u^3 - 2, None], fs},"
+            " fs = factorOverField[K, Z^3 - 2, Z];"
+            " Sort[Exponent[#, Z] & /@ fs] === {1, 2} && kc[K, Times @@ fs - (Z^3 - 2)] === 0]");
+    TR_TRUE("Module[{K = fieldNF[u, u^2 + 3, None], fs},"
+            " fs = factorOverField[K, Z^2 + Z + 1, Z];"
+            " Exponent[#, Z] & /@ fs === {1, 1} && kc[K, Times @@ fs - (Z^2 + Z + 1)] === 0]");
+    TR_TRUE("Module[{K = fieldNF[u, u^3 - 2, None], h, K2},"
+            " h = SelectFirst[factorOverField[K, Z^3 - 2, Z], Exponent[#, Z] == 2 &];"
+            " K2 = extendFieldByRoot[K, h, Z];"
+            " fieldDegree[K2] === 6 && kc[K2, K2[\"embed\"]^3 - 2] === 0]");
 }
 
 static void test_qBasis(void) {

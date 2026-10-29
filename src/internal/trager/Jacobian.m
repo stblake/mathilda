@@ -101,7 +101,14 @@ leadingColumn[F_Association, Bt_Association, row_List] := Module[{t = Bt["x"], m
 
 reducedRows::usage = "reducedRows[F, Bt, rows] brings the basis rows (polynomial over F[t]) of a module to a form whose leading terms at P lie in pairwise distinct columns (a Popov form), by repeatedly cancelling the leading term of the row of lower order against a t-multiple of a row with the same leading column. The module is unchanged; afterwards the order at P of Sum p_i row_i is the least order of its terms. Returns the rows.";
 reducedRows[F_Association, Bt_Association, rows0_List] := Module[
-  {t = Bt["x"], R = rows0, n = Length[rows0], cols, ords, clash, i, j, lo, hi, s, f, it = 0, cap},
+  {t = Bt["x"], R = rows0, n = Length[rows0], cols, ords, clash, i, j, lo, hi, s, f, it = 0, cap, nat},
+  (* the order at P of c w_j is -(m deg c + shift_j), shift_j = -m deg d_j + j deg G: *)
+  (* the native kernel runs the same reduction on those shifted degrees            *)
+  If[nativeQ[],
+    nat = FLINT`PolynomialWeakPopovForm[rows0, t,
+      Table[-Bt["m"] Exponent[Bt["d"][[j + 1]], t] + j Bt["deg"], {j, 0, Bt["m"] - 1}],
+      "DegreeScale" -> Bt["m"], Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[nat]]];
   cap = 4 (Total[Exponent[#, t] & /@ Select[Flatten[rows0], # =!= 0 &]] + n) + 200;
   While[True,
     If[++it > cap, throwInternal["reducedRowsCap"]];
@@ -122,33 +129,50 @@ idealNormDegree::usage = "idealNormDegree[F, B, I] is the degree of the divisor 
 idealNormDegree[F_Association, B_Association, I_Association] :=
   kDeg[F, Times @@ Diagonal[I["M"]], B["x"]] - B["m"] kDeg[F, I["den"], B["x"]];
 
-elementInverse::usage = "elementInverse[F, B, h] is {num, den} with 1/h = num/den: num the first row of the adjugate of the multiplication matrix of h times the norm cofactor, den the norm of h over the prime field (h with polynomial coordinates).";
-elementInverse[F_Association, B_Association, h_List] := Module[{x = B["x"], M, det, adj1, nrm, cof},
-  M = Table[afTimesPoly[F, B, afUnit[B, k], h], {k, 0, B["m"] - 1}];
-  det = kc[F, Det[M]];
+elementInverse::usage = "elementInverse[F, B, h] is {num, den, det} with 1/h = num/den: num the first row of the adjugate of the multiplication matrix of h times the norm cofactor, den the norm of h over the prime field (h with polynomial coordinates), and det the determinant of the multiplication matrix of h (the norm of h down to F[x]).";
+elementInverse[F_Association, B_Association, h_List] := Module[{x = B["x"], M, det, adj1, nrm, cof, nat},
+  (* the multiplication matrix of h: rows w_k h, formed by the kernel itself *)
+  nat = If[nativeQ[], FLINT`PolynomialDetAdjugate[IdentityMatrix[B["m"]], x,
+    "Products" -> {{h}, B["mult"]}, Sequence @@ nativeOpts[F]], None];
+  If[ListQ[nat],
+    det = nat[[1]]; adj1 = nat[[2, 1]],
+    M = Table[afTimesPoly[F, B, afUnit[B, k], h], {k, 0, B["m"] - 1}];
+    det = kc[F, Det[M]];
+    adj1 = If[B["m"] === 1, {1}, Table[kc[F, (-1)^(1 + j) Det[Drop[M, {j}, {1}]]], {j, B["m"]}]]];
   If[det === 0, throwInternal["elementInverseZero"]];
-  adj1 = If[B["m"] === 1, {1}, Table[kc[F, (-1)^(1 + j) Det[Drop[M, {j}, {1}]]], {j, B["m"]}]];
   nrm = kMonic[F, kNorm[F, det], x];
-  cof = kExactQuo[F, nrm, det, x];
-  {kc[F, # cof] & /@ adj1, nrm}];
+  (* over a prime field the norm is det itself: the cofactor is a constant *)
+  cof = If[F["Type"] === "NF", kExactQuo[F, nrm, det, x], kInv[F, kLC[F, det, x]]];
+  {kc[F, # cof] & /@ adj1, nrm, det}];
 
-jacReduce::usage = "jacReduce[F, Bt, J, n] reduces the degree-0 divisor D = D_fin + n P, given J = I(-D_fin): it returns {Jnew, s, h} with D + div(h) = A - s P, A >= 0 of degree s, Jnew = I(-A) = h^(-1) J, and h (coordinates over F[t], divided by J's denominator) the element of greatest order at P in J.";
-jacReduce[F_Association, Bt_Association, J_Association, n_Integer] := Module[
-  {t = Bt["x"], rows, ords, best, h, s, inv, newRows, Jn},
+jacReduce::usage = "jacReduce[F, Bt, J, n, track] reduces the degree-0 divisor D = D_fin + n P, given J = I(-D_fin): it returns {Jnew, s, h} with D + div(h) = A - s P, A >= 0 of degree s, Jnew = I(-A) = h^(-1) J, and h (coordinates over F[t], divided by J's denominator) the element of greatest order at P in J (None unless track, default True).";
+jacReduce[F_Association, Bt_Association, J_Association, n_Integer, track_ : True] := Module[
+  {t = Bt["x"], rows, ords, best, h, s, inv, newRows, D, Jn},
   rows = reducedRows[F, Bt, J["M"]];
   ords = placeOrder[F, Bt, #, J["den"]] & /@ rows;
   best = First[Ordering[ords, -1]];
-  h = rc[F, #/J["den"]] & /@ rows[[best]];
+  (* h itself is needed only for the principal factors (track) *)
+  h = If[TrueQ[track], rc[F, #/J["den"]] & /@ rows[[best]], None];
   s = -ords[[best]] - n;
   If[s < 0, throwInternal["jacReduceNegativeDegree", <|"s" -> s|>]];
-  (* Jnew = h^(-1) J: rows of J times the adjugate of the polynomial part of h *)
+  (* Jnew = h^(-1) J: rows of J times the adjugate of the polynomial part of h. *)
+  (* With inv = nrm/h, Mult(h) Mult(inv) = nrm Id, so det Mult(inv) =          *)
+  (* nrm^m/det Mult(h), and the new numerator module has determinant          *)
+  (* det(J) nrm^m/det: the Hermite form is taken modulo it (entries of bounded *)
+  (* degree; over a number field plain hnf grows them through the elimination;*)
+  (* over GF(p) coefficients cannot grow and plain hnf is cheaper).           *)
   inv = elementInverse[F, Bt, kc[F, #] & /@ rows[[best]]];
-  newRows = afTimesPoly[F, Bt, #, inv[[1]]] & /@ J["M"];
-  Jn = idealReduce[F, Bt, <|"M" -> hnf[F, newRows, t], "den" -> inv[[2]]|>];
+  D = If[F["Type"] === "NF",
+    kc[F, (Times @@ Diagonal[J["M"]]) kExactQuo[F, kc[F, inv[[2]]^Bt["m"]], inv[[3]], t]], None];
+  Jn = nativeIdeal[F, Bt, J["M"], {inv[[1]]}, D, inv[[2]]];
+  If[Jn === None,
+    newRows = afTimesPoly[F, Bt, #, inv[[1]]] & /@ J["M"];
+    Jn = idealReduce[F, Bt, <|"M" -> If[D =!= None, hnfModDet[F, newRows, t, D], hnf[F, newRows, t]],
+      "den" -> inv[[2]]|>]];
   {Jn, s, h}];
 
 jacClass::usage = "jacClass[F, Bt, J, n, track] is the reduced class of the degree-0 divisor D_fin + n P with J = I(-D_fin): <|\"J\" -> I(-A), \"d\" -> deg A, \"H\" -> {{h, 1}} or {}|> (H kept when track is True).";
-jacClass[F_Association, Bt_Association, J_Association, n_Integer, track_ : False] := Module[{r = jacReduce[F, Bt, J, n]},
+jacClass[F_Association, Bt_Association, J_Association, n_Integer, track_ : False] := Module[{r = jacReduce[F, Bt, J, n, track]},
   <|"J" -> r[[1]], "d" -> r[[2]], "H" -> If[TrueQ[track], {{r[[3]], 1}}, {}]|>];
 
 jacWithGenerators::usage = "jacWithGenerators[F, Bt, c] adds to the class c a verified two-generator form of its J ideal (key \"gens\"), used by jacAdd when c is the second summand: worth it for an addend used repeatedly (the stepping in jacOrder).";
@@ -165,7 +189,7 @@ jacAdd[F_Association, Bt_Association, c1_Association, c2_Association, track_ : F
   g = Lookup[c2, "gens", None];
   J = If[g === None, idealTimes[F, Bt, c1["J"], c2["J"]],
     idealTimesGenerators[F, Bt, c1["J"], {g[[1]], c2["J"]["den"]}, g[[2]]]];
-  r = jacReduce[F, Bt, J, -(c1["d"] + c2["d"])];
+  r = jacReduce[F, Bt, J, -(c1["d"] + c2["d"]), track];
   H = If[TrueQ[track], mergeFactors[Join[c1["H"], c2["H"], {{r[[3]], 1}}]], {}];
   <|"J" -> r[[1]], "d" -> r[[2]], "H" -> H|>];
 

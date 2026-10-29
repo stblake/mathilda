@@ -19,10 +19,15 @@
 
 hermiteReduce::usage = "hermiteReduce[B, f] performs Hermite reduction over Q of the element f (coordinates on the basis B, rational functions of x). It returns <|\"Algebraic\" -> v, \"Remainder\" -> r|> with f = v' + r and r having a squarefree common denominator (both as coordinate lists).";
 hermiteReduce[B_Association, f0_List] := Module[
-  {F = fieldQ[], x = B["x"], m = B["m"], f = f0, v, D0, sq, V, j, U, k, Vp, Acoef, Bcoef, H, it = 0},
+  {F = fieldQ[], x = B["x"], m = B["m"], f = f0, v, D0, sq, V, j, U, k, Vp, Acoef, Bcoef, H, it = 0, maxit},
   v = afZero[B];
+  (* every step lowers the multiplicity of one squarefree factor of the     *)
+  (* initial denominator by one: Sum (e - 1) deg steps at most (an           *)
+  (* invariant derived from the input, not a limit)                         *)
+  maxit = 1 + Total[(#[[2]] - 1) Exponent[#[[1]], x] & /@
+    Select[Rest[FactorSquareFreeList[commonDenominator[f0, x]]], !FreeQ[#[[1]], x] &]];
   While[True,
-    If[++it > tragerOption["HermiteMaxIter"], throwInternal["HermiteIterationCap"]];
+    If[++it > maxit, throwInternal["HermiteIterationBound"]];
     D0 = commonDenominator[f, x];
     sq = Select[Rest[FactorSquareFreeList[D0]], !FreeQ[#[[1]], x] && #[[2]] >= 2 &];
     If[sq === {}, Break[]];

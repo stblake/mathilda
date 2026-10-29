@@ -28,6 +28,7 @@
    goursat (pseudo-elliptic classics); pseudo-elliptic-recip (substitution
    x + 1/x or x - 1/x reduces to genus 0); even-substitution (u = x^2);
    genus-hyper (y^2 = deg 1..8, genus 0..3); genus-super (y^3, y^5);
+   torsion-heavy (large residue fields and torsion orders);
    rational-radicand Sqrt[(x + 1)/(x - 1)] etc.; and the seeded section. *)
 
 TragerStressCorpus = {
@@ -287,6 +288,28 @@ TragerStressCorpus = {
   {"ratradicand-019", "rational-radicand", "((x^2 - 1)/(x^2 + 1))^(1/4)", ""},
   {"ratradicand-020", "rational-radicand", "Sqrt[(x^2 + 1)/x]/x", ""},
 
+  (* torsion-heavy: large residue fields and large predicted torsion orders (cubic
+     residue fields of genus-1 curves, octic residue polynomials, sextic radicals of
+     high genus) -- the cases the v0.6084 native kernels, torsion screen and
+     residue-field tower were built for *)
+  {"torsion-001", "torsion-heavy", "1/((x - 3)*(x^3 + 1)^(1/3))", ""},
+  {"torsion-002", "torsion-heavy", "x/((x - 3)*(x^3 + 1)^(2/3))", ""},
+  {"torsion-003", "torsion-heavy", "1/((x + 2)*(x^3 + 2)^(1/3))", ""},
+  {"torsion-004", "torsion-heavy", "1/((2*x - 1)*(x^3 - 1)^(1/3))", ""},
+  {"torsion-005", "torsion-heavy", "x/((x - 2)*(x^3 + 2)^(2/3))", ""},
+  {"torsion-006", "torsion-heavy", "1/((x^2 + 1)*(x^3 + 1)^(1/4))", ""},
+  {"torsion-007", "torsion-heavy", "1/((x^2 + 3)*(x^3 + 1)^(1/4))", ""},
+  {"torsion-008", "torsion-heavy", "x/((x^2 + 2)*(x^3 + 1)^(3/4))", ""},
+  {"torsion-009", "torsion-heavy", "(x^2 + 1)/x*(x^4 + 2)^(1/6)", ""},
+  {"torsion-010", "torsion-heavy", "(x^2 - 1)/x*(x^4 + 5)^(1/6)", ""},
+  {"torsion-011", "torsion-heavy", "1/((x^2 - 3)*(x^4 - 6*x^2 + 1)^(1/4))", ""},
+  {"torsion-012", "torsion-heavy", "1/((x^2 + 2)*(x^4 + 4)^(1/4))", ""},
+  {"torsion-013", "torsion-heavy", "(2*x + 1)/(-3*x^2 - 2*x + 1)*(x^2 - x + 3)^(1/4)", ""},
+  {"torsion-014", "torsion-heavy", "1/(2*x^2 + 3*x + 1)*(x^3 - x^2 + x + 1)^(-2/3)", ""},
+  {"torsion-015", "torsion-heavy", "x/(x + 2)*(x^2 + 3)^(1/5)", ""},
+  {"torsion-016", "torsion-heavy", "(x - 1)/(x + 1)*(x^2 + 2)^(2/5)", ""},
+  {"torsion-017", "torsion-heavy", "(-x^2 - x - 1)/(2*x + 3)*(x^4 + x^3 + 2*x^2 - x - 1)^(-5/6)", ""},
+  {"torsion-018", "torsion-heavy", "1/(x - 1)*(x^3 - 3*x)^(1/4)", ""},
   (* ---- BEGIN SEEDED SECTION: output of
          python3 tools/trager_fricas_stress.py --emit-random
        (seed 20261029; deriv-alg, deriv-log: expect elem; random: no expectation) ---- *)

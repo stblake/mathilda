@@ -85,7 +85,7 @@ reduceResidue::usage = "reduceResidue[F, a, p, rho] maps the element a of the re
 reduceResidue[F_Association, a_, p_Integer, rho_] :=
   gfMod[If[F["Type"] === "NF", kc[F, a] /. F["t"] -> rho, a], p];
 
-orderModP::usage = "orderModP[ctx, b, gp] is the order of the class of the divisor Sum_i b_i Delta(alpha_i) of the component ctx after reduction at the good prime gp = <|\"p\" -> p, \"rho\" -> rho|>: the least M >= 1 with M delta principal over GF(p). Throws a Decline past tragerOption[\"MaxTorsionSearch\"], and an internal error past the Weil bound (1 + Sqrt[p])^(2 genus).";
+orderModP::usage = "orderModP[ctx, b, gp] is the order of the class of the divisor Sum_i b_i Delta(alpha_i) of the component ctx after reduction at the good prime gp = <|\"p\" -> p, \"rho\" -> rho|>: the least M >= 1 with M delta principal over GF(p). An internal error past the Weil bound (1 + Sqrt[p])^(2 genus), which bounds the order (no other limit).";
 orderModP[ctx_Association, b_List, gp_Association] :=
   orderModPSpec[ctx, <|"res" -> ctx["residues"], "b" -> b, "ref" -> None|>, withFrameRoot[ctx, gp]];
 
@@ -100,29 +100,29 @@ residueCombinationBuilder::usage = "residueCombinationBuilder[ctx, b] is the ide
 residueCombinationBuilder[ctx_Association, b_List] := Function[{Fx, Bx, red},
   divisorIdeal[Fx, Bx, red /@ ctx["residues"], b, red[ctx["N"]], red[ctx["Ep"]], red[ctx["Bp"]]]];
 
-orderModPWith::usage = "orderModPWith[ctx, mk, gp] is the order over GF(p) of the divisor class whose ideal mk[F, B, red] builds: mk is called with the field GF(p), the reduced basis, and the reduction map red (residue-field generator -> rho, coefficients mod p). Same bounds as orderModP.";
+orderModPWith::usage = "orderModPWith[ctx, mk, gp] is the order over GF(p) of the divisor class whose ideal mk[F, B, red] builds: mk is called with the field GF(p), the reduced basis, and the reduction map red (residue-field generator -> rho, coefficients mod p). Same (theorem-only) bound as orderModP.";
 orderModPWith[ctx_Association, mk_, gp_Association] := Module[
-  {p = gp["p"], Fp, Bm, red, I, J, weil, cap, M = 1},
+  {p = gp["p"], Fp, Bm, red, I, J, weil, M = 1},
   Fp = fieldGF[p]; Bm = basisMod[ctx["B"], p];
   red = Function[e, reduceResidue[ctx["F"], e, p, gp["rho"]]];
   I = mk[Fp, Bm, red];
   weil = Floor[(1 + Sqrt[N[p]])^(2 ctx["genus"])] + 1;
-  cap = tragerOption["MaxTorsionSearch"];
   J = I;
   While[!principalQ[Fp, Bm, J],
     M++;
     If[M > weil, throwInternal["TorsionBeyondWeilBound", <|"p" -> p, "Bound" -> weil|>]];
-    If[M > cap, throwDecline["torsion order search bound reached", <|"p" -> p, "Bound" -> cap|>]];
     J = idealTimes[Fp, Bm, J, I]];
   M];
 
-goodPrimes::usage = "goodPrimes[ctx, k] is a list of k distinct good primes (as goodPrime records) for the component ctx, smallest first. Throws a Decline when fewer than k are found among the first tragerOption[\"MaxPrimes\"] primes.";
-goodPrimes[ctx_Association, k_Integer] := Module[{found = {}, p = 2, tried = 0, gp},
-  While[Length[found] < k && tried < tragerOption["MaxPrimes"],
-    p = NextPrime[p]; tried++;
+goodPrimes::usage = "goodPrimes[ctx, k] is a list of k distinct good primes (as goodPrime records) for the component ctx, smallest first. The search is unbounded: a positive density of primes is good (Chebotarev).";
+goodPrimes[ctx_Association, k_Integer] := Module[{found = {}, p = 2, gp},
+  (* All but finitely many primes have good reduction except for the root   *)
+  (* condition on the residue field, which a positive density of primes     *)
+  (* meets (Chebotarev): the search ends, and needs no bound.               *)
+  While[Length[found] < k,
+    p = NextPrime[p];
     gp = goodPrime[ctx, p];
     If[gp =!= None, AppendTo[found, gp]]];
-  If[Length[found] < k, throwDecline["no primes of good reduction found"]];
   found];
 
 torsionOrder::usage = "torsionOrder[ctx, b] is the only possible order N of the divisor class delta = Sum_i b_i Delta(alpha_i) of the component ctx, from its orders modulo two good primes ([T] Ch 6 Sec 3). It throws a NonElementary certificate when the prime-to-pq parts of the two orders differ (delta has infinite order). The caller must still test N delta for principality over the residue field: if that fails, delta has infinite order too.";
@@ -200,17 +200,24 @@ modPFrame[ctx_Association, gp_Association] := Module[{p = gp["p"], Fp, red, B = 
   c = rc[Fp, red[ctx["N"]]/red[ctx["E"]]];
   {jacFrame[Fp, B["m"], gfMod[B["G"], p], c, x, gp["a"]], red}];
 
-orderModPSpec::usage = "orderModPSpec[ctx, spec, gp] is the order over GF(p) of the class of the divisor spec, by reduced class arithmetic (Jacobian.m) in the reduced frame at gp (constant cost per class addition; jacOrder steps linearly, then baby-step giant-step). Within tragerOption[\"MaxTorsionSearch\"]^2 the whole Weil range (1 + Sqrt[p])^(2 genus) is searched and finding nothing is an internal error; past it only orders up to that square are searched (a Decline otherwise).";
-orderModPSpec[ctx_Association, spec_Association, gp_Association] := Module[{fr, red, Fp, Jn, c, weil},
+orderModPSpec::usage = "orderModPSpec[ctx, spec, gp] is the order over GF(p) of the class of the divisor spec, by reduced class arithmetic (Jacobian.m) in the reduced frame at gp (constant cost per class addition): baby-step giant-step with a bound grown geometrically until the order is found, so the cost is O(Sqrt[order]); exceeding the Weil bound (1 + Sqrt[p])^(2 genus) is an internal error. There is no other limit.";
+orderModPSpec[ctx_Association, spec_Association, gp_Association] := Module[{fr, red, Fp, Jn, c, weil, bound, r},
   {fr, red} = modPFrame[ctx, gp];
   Fp = fieldGF[gp["p"]];
   Jn = specFrameIdeal[Fp, fr, spec, red];
-  c = jacClass[Fp, fr["B"], Jn[[1]], Jn[[2]]];
+  c = jacWithGenerators[Fp, fr["B"], jacClass[Fp, fr["B"], Jn[[1]], Jn[[2]]]];
   weil = Floor[(1 + Sqrt[N[gp["p"]]])^(2 ctx["genus"])] + 1;
-  If[Sqrt[N[weil]] <= tragerOption["MaxTorsionSearch"],
-    Module[{r = catchTrager[jacOrder[Fp, fr["B"], c, weil]]},
-      If[tragerFailQ[r], throwInternal["TorsionBeyondWeilBound", <|"p" -> gp["p"]|>], r]],
-    jacOrder[Fp, fr["B"], c, tragerOption["MaxTorsionSearch"]^2]]];
+  (* Growing search: baby-step giant-step up to bound, the bound multiplied  *)
+  (* by 16 until the order is found.  The work is O(Sqrt[order]) -- the     *)
+  (* order, not the Weil bound, which is the theorem's ceiling only: past   *)
+  (* it the search is an internal error, never a decline.                   *)
+  bound = Min[4096, weil];
+  While[True,
+    r = catchTrager[jacOrderGens[Fp, fr["B"], c, bound]];
+    If[!tragerFailQ[r], Return[r, Module]];
+    If[r[[1]] =!= "Decline", Throw[r, "TragerFail"]];
+    If[bound >= weil, throwInternal["TorsionBeyondWeilBound", <|"p" -> gp["p"], "Bound" -> weil|>]];
+    bound = Min[16 bound, weil]]];
 
 torsionOrderSpec::usage = "torsionOrderSpec[ctx, spec] is torsionOrder for a divisor spec ([T] Ch 6 Sec 3). The order op modulo the smaller good prime p is searched (orderModPSpec); modulo q the order must then be n0 p^a q^b with n0 the prime-to-pq part of op, so the least a, b with p^a q^b n0 c = 0 are found by repeated multiplication (O(log) class operations, no second search). Mismatches are NonElementary certificates.";
 torsionOrderSpec[ctx_Association, spec_Association] := Module[
@@ -227,15 +234,20 @@ torsionOrderSpec[ctx_Association, spec_Association] := Module[
   weil = Floor[(1 + Sqrt[N[q]])^(2 ctx["genus"])] + 1;
   A = Floor[Log[p, weil]]; Bq = Floor[Log[q, weil]];
   cprime = If[n0p === 1, cq, jacMultiple[Fq, fr["B"], cq, n0p]];
-  (* least a, then least b, with p^a q^b c' = 0 (killed iff a >= a', b >= b') *)
-  Module[{xa = cprime, yb, a = 0, b},
-    While[oq === None && a <= A,
-      yb = xa; b = 0;
-      While[oq === None && b <= Bq,
-        If[jacZeroQ[yb], oq = n0p p^a q^b,
-          b++; If[b <= Bq, yb = jacMultiple[Fq, fr["B"], yb, q]]]];
-      a++;
-      If[oq === None && a <= A, xa = jacMultiple[Fq, fr["B"], xa, p]]]];
+  (* c' has order p^a' q^b' (if it is torsion of the predicted shape), and    *)
+  (* p^a q^b c' = 0 iff a >= a' and b >= b'.  So a' is the least a with        *)
+  (* p^a (q^Bq c') = 0 and then b' the least b with q^b (p^a' c') = 0: A + 2 Bq *)
+  (* multiplications instead of the (A + 1)(Bq + 1) of a joint search.         *)
+  Module[{yq = cprime, xa, a = 0, b = 0, ok = True},
+    Do[yq = jacMultiple[Fq, fr["B"], yq, q], {Bq}];
+    xa = yq;
+    While[!jacZeroQ[xa] && a < A, a++; xa = jacMultiple[Fq, fr["B"], xa, p]];
+    If[!jacZeroQ[xa], ok = False];
+    If[ok,
+      xa = cprime;
+      Do[xa = jacMultiple[Fq, fr["B"], xa, p], {a}];
+      While[!jacZeroQ[xa] && b < Bq, b++; xa = jacMultiple[Fq, fr["B"], xa, q]];
+      If[jacZeroQ[xa], oq = n0p p^a q^b]]];
   If[oq === None, throwNonElementary["residue divisor of infinite order: its orders modulo " <>
       ToString[p] <> " and " <> ToString[q] <> " disagree", <|"OrderModP" -> op, "Primes" -> {p, q}|>]];
   (* the prime-to-pq part modulo q must be all of n0p, not a proper divisor *)
@@ -247,3 +259,20 @@ torsionOrderSpec[ctx_Association, spec_Association] := Module[
   n0q = oq/(pPart[oq, p] pPart[oq, q]);
   If[n0p =!= n0q, throwInternal["TorsionPrimeToPQMismatch"]];
   n0p pPart[oq, p] pPart[op, q]];
+
+torsionScreen::usage = "torsionScreen[ctx, spec, Nn] is False when Nn delta (delta the divisor spec) is shown NOT principal by reduction: Nn times its class is nonzero over GF(r) at one of tragerOption[\"TorsionScreenPrimes\"] good primes r beyond the two that determined Nn. Reduction at a good prime is a homomorphism of divisor class groups, so Nn delta principal forces Nn delta-bar principal; a False is therefore a proof, and with Nn the only possible order (torsionOrderSpec) a proof that delta has infinite order. True means no prime refuted it (the characteristic-0 test still decides). Genus 0 is always True.";
+torsionScreen[ctx_Association, spec_Association, Nn_Integer] := Module[
+  {found, want, fr, red, Fr, Jn, c},
+  If[ctx["genus"] === 0, Return[True]];
+  want = 2 + tragerOption["TorsionScreenPrimes"];
+  (* the good primes in order, as goodPrimes picks them (the first two fixed Nn) *)
+  found = goodPrimes[ctx, want];
+  Catch[
+    Do[
+      {fr, red} = modPFrame[ctx, g];
+      Fr = fieldGF[g["p"]];
+      Jn = specFrameIdeal[Fr, fr, spec, red];
+      c = jacClass[Fr, fr["B"], Jn[[1]], Jn[[2]]];
+      If[!jacZeroQ[If[Nn === 1, c, jacMultiple[Fr, fr["B"], c, Nn]]], Throw[False, "torsionScreen"]],
+      {g, Drop[found, Min[2, Length[found]]]}];
+    True, "torsionScreen"]];

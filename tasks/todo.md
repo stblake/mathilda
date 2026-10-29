@@ -1,3 +1,20 @@
+# Trager: remaining slowdowns via FLINT` polynomial-matrix kernels (2026-10-30, v0.6084)
+
+Plan: ~/.claude/plans/let-s-look-into-and-happy-perlis.md
+
+- [x] P1 .m fixes: gcd idealReduce over NF, hnfModDet in jacReduce (NF), pseudo-random twoGenerators,
+      sequential mod-q check in torsionOrderSpec (A + 2B multiplications)
+- [x] P2 FLINT`PolynomialHermiteForm (DeterminantMultiple / Products / Denominator), DetAdjugate (Products),
+      WeakPopovForm, QuotientRemainder, ExtendedGCD, FieldGCD (modular over Q(theta)) + .m dispatch
+- [x] torsion screen (N delta-bar at 3 further good primes) -- closed the order-21 cases
+- [x] P3 residue-field tower (residueFieldTower / factorOverField / extendFieldByRoot)
+- [x] user correction: no search caps (MaxFieldDegree, crude cut-off, MaxTorsionSearch, MaxPrimes, ShiftBound,
+      HermiteMaxIter -> derived); growing BSGS
+- [x] P4 tools/trager_profile.m; conditional L-polynomial step NOT needed (max former-timeout time 23 s)
+- [x] P5 test_flint_polymat (push), trager_torsion_stress (nightly), suite extensions, corpus torsion-heavy,
+      leaks clean; FriCAS stress rerun
+- [x] P6 docs (flint.md, calculus.md), changelog, lessons, version 0.6084
+
 # Trager: reduced divisor classes and performance vs FriCAS (2026-10-30, v0.6083)
 
 - [x] Jacobian.m: single-place frame, Popov reduction, canonical keys, BSGS, compact generators

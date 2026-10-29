@@ -19,7 +19,7 @@
  *                       SAME genus (curveGenus); a 30-digit numeric check of
  *                       c(x) G(x)^(1/m) dx/dz = cz(z) Gz(z)^(1/m) at a real
  *                       point where both principal roots are real; the
- *                       "no shift point" decline
+ *                       unbounded shift-point search
  *   unshift             exact round trip against the forward substitution,
  *                       and the differential identity read backwards
  *   hermiteReduce       the invariant afD[v] + r == f exactly, squarefree
@@ -199,9 +199,9 @@ static void test_shiftCurve(void) {
     /* The z-factor of Gz is z^(k m - M), multiplicity < m. */
     TR_TRUE("Exponent[shiftCurve[x, 3, x^4 + 2, x, z][\"G\"], z, Min] === 2");
     TR_TRUE("Exponent[shiftCurve[1, 2, x^2 + 1, x, z][\"G\"], z, Min] === 0");
-    /* Decline when every candidate |a| <= 64 is a pole of c. */
-    TR_EQ("Head[catchTrager[shiftCurve[1/Product[x - i, {i, -64, 64}], 2, x^2 + 1, x, z]]]", "tragerFail");
-    TR_TRUE("catchTrager[shiftCurve[1/Product[x - i, {i, -64, 64}], 2, x^2 + 1, x, z]][[1 ;; 2]] === tragerFail[\"Decline\", \"no shift point found\"]");
+    /* No bound on the shift point: every |a| <= 64 is a pole of c, so a = 65. */
+    TR_EQ("shiftCurve[1/Product[x - i, {i, -64, 64}], 2, x^2 + 1, x, z][\"a\"]", "65");
+    TR_EQ("firstOrdinaryInteger[{x (x - 1) (x + 1) (x - 2)}, x]", "-2");
 }
 
 static void test_unshift(void) {

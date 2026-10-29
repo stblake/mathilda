@@ -75,10 +75,12 @@ henselRoot[F_Association, G_, m_Integer, phi0_, A_, k_Integer, x_Symbol] := Modu
   phi];
 
 idealTimesGenerators::usage = "idealTimesGenerators[F, B, I, {gens, den}, detJ] is the product of the ideal I with the ideal spanned by gens and divided by den: Hermite form of the products of I's rows with the generators (2m products for two generators instead of m^2). detJ, when given, is the determinant of the module spanned by gens; the Hermite form is then taken modulo det(I) detJ (hnfModDet).";
-idealTimesGenerators[F_Association, B_Association, I_Association, {gens_List, den_}, detJ_ : None] := Module[{x = B["x"], rows, dd, H},
-  rows = Flatten[Table[afTimesPoly[F, B, r, g], {r, I["M"]}, {g, gens}], 1];
+idealTimesGenerators[F_Association, B_Association, I_Association, {gens_List, den_}, detJ_ : None] := Module[{x = B["x"], rows, dd, H, nat},
   dd = kc[F, I["den"] den];
   dd = kc[F, dd kInv[F, kLC[F, dd, x]]];
+  nat = nativeIdeal[F, B, I["M"], gens, If[detJ === None, None, kc[F, (Times @@ Diagonal[I["M"]]) detJ]], dd];
+  If[nat =!= None, Return[nat]];
+  rows = Flatten[Table[afTimesPoly[F, B, r, g], {r, I["M"]}, {g, gens}], 1];
   (* With the determinant of the generator ideal known, det(I J) = det I det J *)
   (* bounds the module and the Hermite form is computed modulo it.            *)
   H = If[detJ === None, hnf[F, rows, x],
@@ -101,12 +103,23 @@ residueIdealGeneric[F_Association, B_Association, alpha_, N_, Ep_, Bp_] := Modul
   idealFromGenerators[F, B, {h, bp}]];
 
 idealTimes::usage = "idealTimes[F, B, I, J] is the product of the fractional ideals I and J.";
-idealTimes[F_Association, B_Association, I_Association, J_Association] := Module[{x = B["x"], rows, D},
-  rows = Flatten[Table[afTimesPoly[F, B, r, s], {r, I["M"]}, {s, J["M"]}], 1];
+idealTimes[F_Association, B_Association, I_Association, J_Association] := Module[{x = B["x"], rows, D, den, nat},
   (* det(I J) = det I det J for the numerator modules (norms are multiplicative *)
   (* in a Dedekind domain), so the Hermite form is taken modulo it.            *)
   D = kc[F, (Times @@ Diagonal[I["M"]]) (Times @@ Diagonal[J["M"]])];
-  idealReduce[F, B, <|"M" -> hnfModDet[F, rows, x, D], "den" -> kMonic[F, kc[F, I["den"] J["den"]], x] /. 0 -> 1|>]];
+  den = kMonic[F, kc[F, I["den"] J["den"]], x] /. 0 -> 1;
+  nat = nativeIdeal[F, B, I["M"], J["M"], D, den];
+  If[nat =!= None, Return[nat]];
+  rows = Flatten[Table[afTimesPoly[F, B, r, s], {r, I["M"]}, {s, J["M"]}], 1];
+  idealReduce[F, B, <|"M" -> hnfModDet[F, rows, x, D], "den" -> den|>]];
+
+nativeIdeal::usage = "nativeIdeal[F, B, rows, gens, D, den] is the ideal <|\"M\" -> H, \"den\" -> d|> of the module spanned by the products r g (r in rows, g in gens, both coordinate lists of integral elements) divided by den, in lowest terms -- one call of the FLINT` Hermite-form kernel (products by the multiplication table B[\"mult\"], elimination modulo D unless D is None, common factors of den removed) -- or None when the kernels are off or decline (the caller then runs the package routines). The products, the Hermite form and idealReduce of the package routines in one step, with the same result.";
+nativeIdeal[F_Association, B_Association, rows_List, gens_List, D_, den_] := Module[{r},
+  If[!nativeQ[], Return[None]];
+  r = FLINT`PolynomialHermiteForm[rows, B["x"], "Products" -> {gens, B["mult"]},
+    Sequence @@ If[D === None, {}, {"DeterminantMultiple" -> D}], "Denominator" -> den,
+    Sequence @@ nativeOpts[F]];
+  If[ListQ[r], <|"M" -> r[[1]], "den" -> r[[2]]|>, None]];
 
 idealPower::usage = "idealPower[F, B, I, k] is I^k for an integer k (k < 0 inverts first; k = 0 gives O).";
 idealPower[F_Association, B_Association, I_Association, k_Integer] := Module[{r, base, e},
@@ -129,7 +142,7 @@ idealInverse[F_Association, B_Association, I_Association] := Module[
       {r, I["M"]}], 1];
   H = hnf[F, cols, x];
   det = kc[F, Times @@ Table[H[[i, i]], {i, m}]];
-  adjT = Transpose[polyAdjugate[F, H]];
+  adjT = Transpose[polyAdjugate[F, H, x]];
   (* make the denominator a prime-field polynomial: det -> its norm *)
   nrm = kMonic[F, kNorm[F, det], x];
   If[F["Type"] === "NF", nrm = Expand[nrm]];
@@ -137,14 +150,20 @@ idealInverse[F_Association, B_Association, I_Association] := Module[
   rows = Map[kc[F, # cof I["den"]] &, adjT, {2}];
   idealReduce[F, B, <|"M" -> hnf[F, rows, x], "den" -> nrm|>]];
 
-polyAdjugate::usage = "polyAdjugate[F, H] is the adjugate of the square polynomial matrix H over F (cofactor expansion; H is small).";
-polyAdjugate[F_Association, H_List] := Module[{n = Length[H]},
+polyAdjugate::usage = "polyAdjugate[F, H, x] is the adjugate of the square polynomial matrix H over F[x] (the FLINT` kernel when nativeQ[], else cofactor expansion; H is small).";
+polyAdjugate[F_Association, H_List, x_Symbol] := Module[{n = Length[H], nat},
   If[n === 1, Return[{{1}}]];
+  If[nativeQ[],
+    nat = FLINT`PolynomialDetAdjugate[H, x, Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[nat[[2]]]]];
   Table[kc[F, (-1)^(i + j) Det[Drop[H, {j}, {i}]]], {i, n}, {j, n}]];
 
 idealReduce::usage = "idealReduce[F, B, I] removes from I = M/den every irreducible prime-field factor q of den that divides all entries of M, so that the representation stays small.";
-idealReduce[F_Association, B_Association, I_Association] := Module[{x = B["x"], M = I["M"], den = I["den"], facs, q, done, g},
+idealReduce[F_Association, B_Association, I_Association] := Module[{x = B["x"], M = I["M"], den = I["den"], g, nat},
   If[FreeQ[den, x], Return[<|"M" -> M, "den" -> den|>]];
+  If[nativeQ[],
+    nat = FLINT`PolynomialHermiteForm[M, x, "Denominator" -> den, Sequence @@ nativeOpts[F]];
+    If[ListQ[nat], Return[<|"M" -> nat[[1]], "den" -> nat[[2]]|>]]];
   (* Over Q and GF(p) the common factor of den and every entry is a gcd:     *)
   (* divide it out, repeatedly (a square in den may need two passes).        *)
   If[F["Type"] =!= "NF",
@@ -154,30 +173,45 @@ idealReduce[F_Association, B_Association, I_Association] := Module[{x = B["x"], 
       g = Fold[kGCD[F, #1, #2, x] &, den, Select[Flatten[M], # =!= 0 &]]];
     den = kMonic[F, den, x];
     Return[<|"M" -> hnf[F, M, x], "den" -> den|>]];
-  facs = First /@ Select[If[F["Type"] === "GF", FactorList[den, Modulus -> F["p"]], FactorList[den]], !FreeQ[#[[1]], x] &];
-  Do[
-    done = False;
-    While[!done,
-      If[kRem[F, den, q, x] === 0 && AllTrue[Flatten[M], kRem[F, #, q, x] === 0 &],
-        M = Map[kExactQuo[F, #, q, x] &, M, {2}]; den = kExactQuo[F, den, q, x],
-        done = True]],
-    {q, facs}];
+  (* Over Q(theta) the factors of den are over Q: a polynomial q over Q       *)
+  (* divides an entry e = Sum_k e_k(x) t^k exactly when it divides every       *)
+  (* t-coefficient e_k, so the common factor is a gcd over Q as well -- no     *)
+  (* factorisation of den (a norm, often of high degree with huge             *)
+  (* coefficients in the reduced class arithmetic).                           *)
+  g = commonDenFactor[F, den, M, x];
+  While[Exponent[g, x] > 0,
+    M = Map[kExactQuo[F, #, g, x] &, M, {2}]; den = Expand[Together[den/g]];
+    g = commonDenFactor[F, den, M, x]];
   den = kMonic[F, den, x];
   <|"M" -> hnf[F, M, x], "den" -> If[den === 0, throwInternal["idealZeroDen"], den]|>];
 
-twoGenerators::usage = "twoGenerators[F, B, I] is {{D w_0, r}, D}: two generators of the numerator module of I (D = its determinant, which lies in it by the adjugate, and r a pseudo-random F[x]-combination of its rows), checked to generate the module (a Hermite form modulo D); None when the first few choices of r fail. Products with I then cost 2m element products instead of m^2.";
+commonDenFactor::usage = "commonDenFactor[F, den, M, x] is the gcd over Q of the prime-field polynomial den and every t-coefficient of every entry of the matrix M over Q(theta): the largest factor of den dividing all entries.";
+commonDenFactor[F_Association, den_, M_List, x_Symbol] :=
+  Fold[PolynomialGCD, den,
+    Select[Flatten[If[# === 0, {}, CoefficientList[kc[F, #], F["t"]]] & /@ Flatten[M]], # =!= 0 &]];
+
+twoGenerators::usage = "twoGenerators[F, B, I] is {{D w_0, r}, D}: two generators of the numerator module of I (D = its determinant, which lies in it by the adjugate, and r a pseudo-random F[x]-combination of its rows), checked to generate the module (a Hermite form modulo D); None when the first eight choices of r fail. Products with I then cost 2m element products instead of m^2.";
 twoGenerators[F_Association, B_Association, I_Association] := Module[
   {x = B["x"], m = B["m"], D, rows, r, H, ok = None, tries = 0, coeffs},
   D = kMonic[F, kc[F, Times @@ Diagonal[I["M"]]], x];
   If[kDeg[F, D, x] <= 0, Return[{{afOne[B]}, 1}]];
-  While[ok === None && tries < 4,
+  (* r = Sum c_i rows_i with pseudo-random c_i: a fixed small pattern (the     *)
+  (* former Mod[., 7] coefficients) repeats over GF(p) and can stay inside a    *)
+  (* proper submodule on every try, which silently sent every class addition   *)
+  (* through the m^2-product idealTimes.  Linear terms in x from the second    *)
+  (* try on cover modules no constant combination generates with D.           *)
+  While[ok === None && tries < 8,
     tries++;
-    coeffs = Table[Mod[3 i^2 + 5 tries i + 1, 7] + If[tries > 2, i x, 0], {i, m}];
+    coeffs = Table[twoGenCoeff[i, tries, 0] + If[tries > 1, twoGenCoeff[i, tries, 1] x, 0], {i, m}];
     r = kc[F, #] & /@ Total[coeffs I["M"]];
     rows = Flatten[Table[afTimesPoly[F, B, afUnit[B, k], g], {g, {PadRight[{D}, m], r}}, {k, 0, m - 1}], 1];
     H = hnfModDet[F, rows, x, D];
     If[H === I["M"], ok = {{PadRight[{D}, m], r}, D}]];
   ok];
+
+twoGenCoeff::usage = "twoGenCoeff[i, try, k] is a deterministic pseudo-random integer in [-500001, 500001] (a polynomial hash of its arguments) used as a combination coefficient by twoGenerators.";
+twoGenCoeff[i_Integer, try_Integer, k_Integer] :=
+  Mod[7919 i^3 + 104729 try i + 31337 try^2 + 65537 k (i + try) + 17, 1000003] - 500001;
 
 idealEqualQ::usage = "idealEqualQ[F, B, I, J] is True when the fractional ideals I and J are equal (same Hermite form after scaling to a common denominator).";
 idealEqualQ[F_Association, B_Association, I_Association, J_Association] := Module[{x = B["x"]},
