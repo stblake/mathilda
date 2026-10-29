@@ -185,7 +185,22 @@ void test_piecewise() {
         {"Round[-Infinity]", "Times[-1, Infinity]"},
         {"IntegerPart[-Infinity]", "Times[-1, Infinity]"},
         {"FractionalPart[-Infinity]", "0"},
-        
+
+        /* Machine reals beyond int64: an exact bigint, not the -2^63 the
+         * (int64_t) cast of an out-of-range double gave (v0.6085). */
+        {"Floor[5.*^19]", "50000000000000000000"},
+        {"Ceiling[5.*^19]", "50000000000000000000"},
+        {"Round[5.*^19]", "50000000000000000000"},
+        {"IntegerPart[5.*^19]", "50000000000000000000"},
+        {"Floor[-5.*^19]", "-50000000000000000000"},
+        {"Floor[9.3*^18]", "9300000000000000000"},              /* just past 2^63 */
+        {"Floor[-9.223372036854775808*^18]", "-9223372036854775808"},  /* -2^63 fits */
+        {"Floor[9.2*^18]", "9200000000000000000"},              /* just below */
+        {"Floor[1.*^300] == 10^300", "False"},                  /* the double is not 10^300 ... */
+        {"Floor[1.*^300] == Floor[N[10^300]]", "True"},         /* ... but exact for itself */
+        {"Floor[2.^70]", "1180591620717411303424"},             /* 2^70 exactly */
+        {"Ceiling[-2.^64]", "-18446744073709551616"},
+
         {NULL, NULL}
     };
 

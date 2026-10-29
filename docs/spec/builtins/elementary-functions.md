@@ -612,6 +612,11 @@ it.
 - `Listable`.
 - Applied component-wise to `Complex` numbers.
 - `Round` rounds to the nearest even integer for ties.
+- A machine real whose result lies beyond ±2^63 gives the exact integer value of
+  the double (`Floor[5.*^19]` → `50000000000000000000`), the same as an
+  arbitrary-precision argument. The packed, `NDArray` and `Compile` forms agree. In
+  compiled code an out-of-range result falls back to the interpreter, and a
+  compiled `Round` also rounds ties to even.
 - `Floor[x, a]` returns the greatest multiple of `a` $\le x$.
 - **Exact real numeric arguments** that no leaf branch resolves (e.g. `Pi`, `E`, surds, and products such as `10000000 3^(2/3)` or `25000000000000000000 Pi`) are numericalized to MPFR at increasing precision and reduced to the exact integer. The result is only accepted once two successive precisions (starting at 256 bits, doubling to a 65536-bit cap) agree on the integer — an interval-style certification that never returns a wrong answer; a value that cannot be certified (or is not a pure real number) is left unevaluated. For `FractionalPart` the answer is kept exact as `x - IntegerPart[x]` (matching the reference).
 

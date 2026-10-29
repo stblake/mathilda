@@ -268,6 +268,10 @@ static void test_order_mod_p(void) {
     TR_TRUE("AllTrue[goodPrimes[tqEx4, 3], orderModP[tqEx4, {1, -1}, #] === 4 &]");
     /* bounded by the Weil bound (1 + Sqrt[p])^(2 g) */
     TR_TRUE("AllTrue[goodPrimes[tqP35, 5], orderModP[tqP35, {1, -1}, #] <= N[(1 + Sqrt[#[\"p\"]])^2] &]");
+    /* the Weil bound is exact at any genus (the machine-real form overflowed
+     * int64 at genus 7, p = 601, and made the search an internal error) */
+    TR_TRUE("weilBound[601, 7] === 26^14");
+    TR_TRUE("weilBound[601, 7] >= (1 + Sqrt[601.])^14 && weilBound[13, 1] === 25");
     /* the growing search: at a prime near 10^5 the order of (3, 5) mod p is
      * far beyond the first bound (4096) and must equal the brute-force
      * elliptic-curve order */

@@ -232,6 +232,20 @@ static bool int_partp(long long n, long long* out) {
     return false;
 }
 
+/* An integer-valued double to a machine integer: TRUE ON FAILURE (outside
+ * [-2^63, 2^63), or NaN), like the other checked helpers, so FLOOR_R & co.
+ * fall back to the interpreter -- which returns the exact bigint -- instead of
+ * the undefined cast (Floor[5.*^19] compiled to -2^63).  The wrapped value is
+ * still written for IF_NOCHK. */
+static bool real_to_int(double v, long long* out) {
+    if (v >= -9223372036854775808.0 && v < 9223372036854775808.0) {
+        *out = (long long)v;
+        return false;
+    }
+    *out = LLONG_MIN;
+    return true;
+}
+
 static bool int_partq(long long n, long long* out) {
     int64_t r;
     if (!partitions_q_i64((int64_t)n, &r)) return true;
@@ -1221,12 +1235,15 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
              * interpreter.  (The tile form VSIGN_R stays real — it feeds packed
              * float arrays, where the ND kernel's result dtype is real.) */
             OP(SIGN_R): RD.i = (RA.r > 0) - (RA.r < 0); NEXT();
-            OP(FLOOR_R): RD.i = (long long)floor(RA.r); NEXT();
+            OP(FLOOR_R): IOP(real_to_int(floor(RA.r), &RD.i));
             /* IntegerPart truncates TOWARD ZERO, which is not Floor for a
              * negative argument: IntegerPart[-1.5] is -1, Floor[-1.5] is -2. */
-            OP(TRUNC_R): RD.i = (long long)trunc(RA.r); NEXT();
-            OP(CEIL_R):  RD.i = (long long)ceil(RA.r); NEXT();
-            OP(ROUND_R): RD.i = (long long)llround(RA.r); NEXT();
+            OP(TRUNC_R): IOP(real_to_int(trunc(RA.r), &RD.i));
+            OP(CEIL_R):  IOP(real_to_int(ceil(RA.r), &RD.i));
+            /* Round is half-to-even (Round[2.5] = 2), as the interpreter and the
+             * vector arm: nearbyint in the default rounding mode, not llround,
+             * which rounds halves away from zero. */
+            OP(ROUND_R): IOP(real_to_int(nearbyint(RA.r), &RD.i));
             OP(RE_C): RD.r = creal(RA.z); NEXT();
             OP(IM_C): RD.r = cimag(RA.z); NEXT();
             OP(ARG_C): RD.r = carg(RA.z); NEXT();

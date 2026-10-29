@@ -34,6 +34,9 @@
 pPart::usage = "pPart[n, p] is the largest power of the prime p dividing the positive integer n.";
 pPart[n_Integer, p_Integer] := p^IntegerExponent[n, p];
 
+weilBound::usage = "weilBound[p, g] is an exact integer upper bound for the order of the divisor class group of degree 0 of a curve of genus g over GF(p): (2 + Floor[Sqrt[p]])^(2 g) >= (1 + Sqrt[p])^(2 g) (Weil). Exact, so it is right for every genus: the machine-real form overflowed int64 at genus 7.";
+weilBound[p_Integer, g_Integer] := (2 + Floor[Sqrt[p]])^(2 g);
+
 denominatorsPrimeToQ::usage = "denominatorsPrimeToQ[expr, p] is True when no rational number occurring in expr has a denominator divisible by p.";
 denominatorsPrimeToQ[expr_, p_Integer] :=
   AllTrue[Cases[{expr}, r_Rational :> Denominator[r], {0, Infinity}], Mod[#, p] =!= 0 &];
@@ -106,7 +109,7 @@ orderModPWith[ctx_Association, mk_, gp_Association] := Module[
   Fp = fieldGF[p]; Bm = basisMod[ctx["B"], p];
   red = Function[e, reduceResidue[ctx["F"], e, p, gp["rho"]]];
   I = mk[Fp, Bm, red];
-  weil = Floor[(1 + Sqrt[N[p]])^(2 ctx["genus"])] + 1;
+  weil = weilBound[p, ctx["genus"]];
   J = I;
   While[!principalQ[Fp, Bm, J],
     M++;
@@ -206,7 +209,7 @@ orderModPSpec[ctx_Association, spec_Association, gp_Association] := Module[{fr, 
   Fp = fieldGF[gp["p"]];
   Jn = specFrameIdeal[Fp, fr, spec, red];
   c = jacWithGenerators[Fp, fr["B"], jacClass[Fp, fr["B"], Jn[[1]], Jn[[2]]]];
-  weil = Floor[(1 + Sqrt[N[gp["p"]]])^(2 ctx["genus"])] + 1;
+  weil = weilBound[gp["p"], ctx["genus"]];
   (* Growing search: baby-step giant-step up to bound, the bound multiplied  *)
   (* by 16 until the order is found.  The work is O(Sqrt[order]) -- the     *)
   (* order, not the Weil bound, which is the theorem's ceiling only: past   *)
@@ -231,7 +234,7 @@ torsionOrderSpec[ctx_Association, spec_Association] := Module[
   Fq = fieldGF[q];
   Jn = specFrameIdeal[Fq, fr, spec, red];
   cq = jacClass[Fq, fr["B"], Jn[[1]], Jn[[2]]];
-  weil = Floor[(1 + Sqrt[N[q]])^(2 ctx["genus"])] + 1;
+  weil = weilBound[q, ctx["genus"]];
   A = Floor[Log[p, weil]]; Bq = Floor[Log[q, weil]];
   cprime = If[n0p === 1, cq, jacMultiple[Fq, fr["B"], cq, n0p]];
   (* c' has order p^a' q^b' (if it is torsion of the predicted shape), and    *)

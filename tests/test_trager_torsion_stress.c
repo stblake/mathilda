@@ -22,7 +22,9 @@ static void st_verdict(const char* f, const char* verdict, int budget, const cha
              "Module[{tt, rr}, {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[%s, x], %d, $Aborted]];"
              " If[ListQ[rr] && rr[[1]] === \"%s\" && tt < %d, True, {tt, rr}]]",
              f, budget, verdict, budget);
+    printf("  %-70s ", f); fflush(stdout);
     tr_eq(buf, "True", file, line);
+    printf("ok\n");
 }
 #define ST_NONELEM(f, b) st_verdict((f), "not elementary", (b), __FILE__, __LINE__)
 
@@ -34,7 +36,9 @@ static void st_elem(const char* f, int budget, const char* file, int line) {
              " If[!ListQ[rr] && rr =!= $Aborted && tt < %d &&"
              "   (d = D[rr, x] - (%s); TrueQ[PossibleZeroQ[d]] || numericZeroQ[d, x]), True, {tt, rr}]]",
              f, budget, budget, f);
+    printf("  %-70s ", f); fflush(stdout);
     tr_eq(buf, "True", file, line);
+    printf("ok\n");
 }
 #define ST_ELEM(f, b) st_elem((f), (b), __FILE__, __LINE__)
 
@@ -60,6 +64,7 @@ static void test_corpus_hard_cases(void) {
     ST_NONELEM("(-x^2 - 3*x - 3)/(2*x + 1)*(x^4 + 3*x^3 + 3*x^2 - 3*x - 2)^(-5/6)", 120); /* random-037 */
     ST_NONELEM("(-1)/(-3*x + 1)*(-2*x^4 - 2*x^3 + x^2 - x - 3)^(-3/4)", 60);/* random-038 */
     ST_NONELEM("1/((x - 2)*(x^3 + 1)^(1/3))", 60);                         /* order-21 screen */
+    ST_NONELEM("(x^2 + 1)/x*(x^4 + 2)^(1/6)", 60);                         /* torsion-009: genus 7, Weil bound > 2^63 */
     /* elementary, formerly 1.3 - 4.2 s */
     ST_ELEM("1/(x^4 + 1)^(1/4)", 60);                                      /* binom-032 */
     ST_ELEM("x^(-1)*(2*x^4 - 1)^(2/3)", 60);                               /* cheb-020 */
@@ -78,6 +83,7 @@ static void test_seeded_logs(void) {
             "   p = stRp[RandomInteger[{1, 3}]]; q = stRp[RandomInteger[{0, 2}]]; If[q === 0, q = 1];"
             "   f = Together[D[Log[p + q g^(1/m)], x]];"
             "   {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[f, x], 300, $Aborted]];"
+            "   Print[\"  seeded \", k, \" m=\", m, \" \", Round[tt, 0.01], \" s\"];"
             "   If[ListQ[rr] || rr === $Aborted ||"
             "      !(d = D[rr, x] - f; TrueQ[PossibleZeroQ[d]] || numericZeroQ[d, x]),"
             "     AppendTo[stBad, {k, m, g, p, q, tt, If[ListQ[rr], rr, Head[rr]]}]]],"

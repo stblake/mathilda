@@ -157,7 +157,19 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         else if (op == OP_INTPART) res = trunc(v);
         else if (op == OP_FRACPART) return expr_new_real(v - trunc(v));
 
-        return expr_new_integer((int64_t)res);
+        if (isnan(res)) return NULL;
+        /* |res| >= 2^63 does not fit int64_t: the cast was undefined and gave
+         * -2^63 (Floor[5.*^19] was -9223372036854775808).  An integer-valued
+         * double converts to mpz exactly. */
+        if (res >= -9223372036854775808.0 && res < 9223372036854775808.0)
+            return expr_new_integer((int64_t)res);
+        if (isinf(res)) return NULL;
+        mpz_t z;
+        mpz_init(z);
+        mpz_set_d(z, res);
+        Expr* big = expr_bigint_normalize(expr_new_bigint_from_mpz(z));
+        mpz_clear(z);
+        return big;
     }
 
 #ifdef USE_MPFR

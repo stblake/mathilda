@@ -2955,6 +2955,33 @@ int main(void) {
     parity_head("IntegerPart",      "IntegerPart[xq]",       2.5);
     parity_head("IntegerPart -",    "IntegerPart[xq]",      -2.5);
     parity_head("Floor -",          "Floor[xq]",            -2.5);
+    /* half-to-even like the interpreter (llround rounded 2.5 to 3), and an
+     * out-of-int64 result falls back to the interpreter's exact bigint */
+    {
+        const char* rq[] = { "2.5", "3.5", "-2.5", "0.5", "-0.5" };
+        const char* want[] = { "2", "4", "-2", "0", "0" };
+        for (int i = 0; i < 5; i++) {
+            char buf[160];
+            snprintf(buf, sizeof buf, "Compile[{{yq, _Real}}, Round[yq]][%s]", rq[i]);
+            Expr* e = parse_expression(buf);
+            Expr* v = evaluate(e);
+            char* s1 = expr_to_string(v);
+            if (strcmp(s1, want[i]) != 0) { printf("FAIL: compiled Round[%s] = %s, want %s\n", rq[i], s1, want[i]); failures++; }
+            else printf("ok:   compiled Round[%-5s] = %s\n", rq[i], s1);
+            free(s1); expr_free(v); expr_free(e);
+        }
+        const char* big[] = { "Floor", "Ceiling", "Round", "IntegerPart" };
+        for (int i = 0; i < 4; i++) {
+            char buf[160];
+            snprintf(buf, sizeof buf, "Compile[{{yq, _Real}}, %s[yq]][5.*^19] === 50000000000000000000", big[i]);
+            Expr* e = parse_expression(buf);
+            Expr* v = evaluate(e);
+            char* s1 = expr_to_string(v);
+            if (strcmp(s1, "True") != 0) { printf("FAIL: compiled %s[5.*^19] wrapped\n", big[i]); failures++; }
+            else printf("ok:   compiled %s[5.*^19] exact\n", big[i]);
+            free(s1); expr_free(v); expr_free(e);
+        }
+    }
     parity_head("FractionalPart",   "FractionalPart[xq]",    2.5);
     parity_head("FractionalPart -", "FractionalPart[xq]",   -2.5);
     parity_head("Quotient",         "Quotient[xq, 3.]",      5.5);
