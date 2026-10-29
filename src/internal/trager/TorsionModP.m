@@ -41,9 +41,9 @@ denominatorsPrimeToQ[expr_, p_Integer] :=
 nonzeroModQ::usage = "nonzeroModQ[c, p] is True when the rational number c is nonzero modulo p (p-integral by assumption).";
 nonzeroModQ[c_, p_Integer] := gfMod[c, p] =!= 0;
 
-goodPrime::usage = "goodPrime[ctx, p] tests the prime p for good reduction of the component data ctx (keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"Ep\", \"Bp\"). It returns <|\"p\" -> p, \"rho\" -> rho|> (rho the image of the residue-field generator, None over Q) or None.";
+goodPrime::usage = "goodPrime[ctx, p] tests the prime p for good reduction of the component data ctx (keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"Ep\", \"Bp\"). It returns <|\"p\" -> p, \"rho\" -> rho, \"a\" -> a|> (rho the image of the residue-field generator, None over Q; a the centre of the reduced frame mod p: the image of ctx[\"alpha\"] when given, else a root of G mod p of multiplicity prime to m) or None.";
 goodPrime[ctx_Association, p_Integer] := Module[
-  {B = ctx["B"], x, m, G, Gs, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, alphas},
+  {B = ctx["B"], x, m, G, Gs, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, alphas, a},
   x = B["x"]; m = B["m"]; G = B["G"];
   If[Mod[m, p] === 0, Return[None]];
   If[!denominatorsPrimeToQ[{G, ctx["N"], Ep, Bp, ctx["residues"], If[F["Type"] === "NF", F["mu"], 0]}, p], Return[None]];
@@ -67,14 +67,34 @@ goodPrime[ctx_Association, p_Integer] := Module[
     If[!denominatorsPrimeToQ[ctx["R"], p] ||
        !nonzeroModQ[Discriminant[ctx["R"], ctx["Z"]], p] ||
        !nonzeroModQ[ctx["R"] /. ctx["Z"] -> 0, p], Return[None]]];
-  <|"p" -> p, "rho" -> rho|>];
+  (* The reduced class arithmetic (Jacobian.m) needs a root a of G mod p of   *)
+  (* multiplicity prime to m -- the image of the characteristic-0 frame root  *)
+  (* when there is one, so that P reduces to P.  The ordinary point c of an   *)
+  (* R0 reference must stay ordinary.                                         *)
+  a = If[KeyExistsQ[ctx, "alpha"] && ctx["alpha"] =!= None,
+    With[{ab = gfMod[ctx["alpha"], p]},
+      If[GCD[rootMultiplicity[fieldGF[p], G, ab, x], m] === 1, ab, None]],
+    First[Join[frameRoots[fieldGF[p], G, m, x], {None}]]];
+  If[a === None, Return[None]];
+  If[KeyExistsQ[ctx, "refc"] && ctx["refc"] =!= None,
+    If[!nonzeroModQ[G /. x -> ctx["refc"], p] || !nonzeroModQ[ctx["E"] /. x -> ctx["refc"], p] ||
+       gfMod[a - ctx["refc"], p] === 0, Return[None]]];
+  <|"p" -> p, "rho" -> rho, "a" -> a|>];
 
 reduceResidue::usage = "reduceResidue[F, a, p, rho] maps the element a of the residue field F to GF(p), sending the generator t to rho.";
 reduceResidue[F_Association, a_, p_Integer, rho_] :=
   gfMod[If[F["Type"] === "NF", kc[F, a] /. F["t"] -> rho, a], p];
 
 orderModP::usage = "orderModP[ctx, b, gp] is the order of the class of the divisor Sum_i b_i Delta(alpha_i) of the component ctx after reduction at the good prime gp = <|\"p\" -> p, \"rho\" -> rho|>: the least M >= 1 with M delta principal over GF(p). Throws a Decline past tragerOption[\"MaxTorsionSearch\"], and an internal error past the Weil bound (1 + Sqrt[p])^(2 genus).";
-orderModP[ctx_Association, b_List, gp_Association] := orderModPWith[ctx, residueCombinationBuilder[ctx, b], gp];
+orderModP[ctx_Association, b_List, gp_Association] :=
+  orderModPSpec[ctx, <|"res" -> ctx["residues"], "b" -> b, "ref" -> None|>, withFrameRoot[ctx, gp]];
+
+withFrameRoot::usage = "withFrameRoot[ctx, gp] adds a frame centre to a good-prime record that lacks one.";
+withFrameRoot[ctx_Association, gp_Association] := Module[{rts},
+  If[KeyExistsQ[gp, "a"] && gp["a"] =!= None, Return[gp]];
+  rts = frameRoots[fieldGF[gp["p"]], ctx["B"]["G"], ctx["B"]["m"], ctx["B"]["x"]];
+  If[rts === {}, throwDecline["no frame root modulo " <> ToString[gp["p"]]]];
+  Join[gp, <|"a" -> First[rts]|>]];
 
 residueCombinationBuilder::usage = "residueCombinationBuilder[ctx, b] is the ideal builder (see orderModPWith) of the divisor Sum_i b_i Delta(alpha_i): a function of (F, B, red) returning the product of the residue ideals over F, every residue-field element and polynomial passed through red first.";
 residueCombinationBuilder[ctx_Association, b_List] := Function[{Fx, Bx, red},
@@ -106,7 +126,7 @@ goodPrimes[ctx_Association, k_Integer] := Module[{found = {}, p = 2, tried = 0, 
   found];
 
 torsionOrder::usage = "torsionOrder[ctx, b] is the only possible order N of the divisor class delta = Sum_i b_i Delta(alpha_i) of the component ctx, from its orders modulo two good primes ([T] Ch 6 Sec 3). It throws a NonElementary certificate when the prime-to-pq parts of the two orders differ (delta has infinite order). The caller must still test N delta for principality over the residue field: if that fails, delta has infinite order too.";
-torsionOrder[ctx_Association, b_List] := torsionOrderWith[ctx, residueCombinationBuilder[ctx, b]];
+torsionOrder[ctx_Association, b_List] := torsionOrderSpec[ctx, <|"res" -> ctx["residues"], "b" -> b, "ref" -> None|>];
 
 torsionOrderWith::usage = "torsionOrderWith[ctx, mk] is torsionOrder for the divisor whose ideal the builder mk constructs (see orderModPWith).";
 torsionOrderWith[ctx_Association, mk_] := Module[{gps, p, q, op, oq, n0p, n0q},
@@ -121,4 +141,109 @@ torsionOrderWith[ctx_Association, mk_] := Module[{gps, p, q, op, oq, n0p, n0q},
     throwNonElementary["residue divisor of infinite order: its orders modulo " <>
       ToString[p] <> " and " <> ToString[q] <> " disagree",
       <|"Orders" -> {op, oq}, "Primes" -> {p, q}|>]];
+  n0p pPart[oq, p] pPart[op, q]];
+
+(* -------------------------------------------------------------------------- *)
+(* Divisor specs and the reduced-class order search.                          *)
+(*                                                                            *)
+(* A divisor of the component is described independently of the frame by a  *)
+(* spec <|"res" -> {alpha_i}, "b" -> {b_i}, "ref" -> ref|>:                   *)
+(*     Sum_i b_i Delta(alpha_i) + (reference term),                           *)
+(* with ref None, {"Pinf", n} (n times the place over the characteristic-0    *)
+(* frame root ctx["alpha"]) or {"R0", c, n} (n times the m places over the    *)
+(* ordinary point x = c).  specFrameIdeal builds J = I(-D_fin) and the        *)
+(* coefficient of P in a reduced frame; specIdealX builds I(D) in the working *)
+(* frame (no Pinf term).                                                      *)
+(* -------------------------------------------------------------------------- *)
+
+specFrameIdeal::usage = "specFrameIdeal[F, fr, spec, red] is {J, n} for the divisor spec in the reduced frame fr over F: J = I(-D_fin) (the residues and the reference point passed through red) and n the coefficient of the frame's place P (the Pinf term). An R0 term at x = c is the divisor of the polynomial (a - c) t + 1 in the frame.";
+specFrameIdeal[F_Association, fr_Association, spec_Association, red_] := Module[
+  {Bt = fr["B"], t = fr["t"], J, n = 0, ref = spec["ref"], poly, e},
+  J = divisorIdeal[F, Bt, red /@ spec["res"], -spec["b"], fr["N"], fr["Ep"], fr["Bp"]];
+  Which[
+    ref === None, Null,
+    ref[[1]] === "Pinf", n = ref[[2]],
+    ref[[1]] === "R0",
+      poly = kc[F, (fr["a"] - red[ref[[2]]]) t + 1]; e = -ref[[3]];
+      J = If[e >= 0,
+        idealTimesGenerators[F, Bt, J, {{PadRight[{kc[F, poly^e]}, Bt["m"]]}, 1}],
+        idealReduce[F, Bt, <|"M" -> J["M"], "den" -> kMonic[F, kc[F, J["den"] poly^(-e)], t]|>]]];
+  {J, n}];
+
+specIdealX::usage = "specIdealX[ctx, spec] is the ideal I(D) of the divisor spec in the working frame over the residue field ctx[\"F\"]; a Pinf term is the place over x = ctx[\"alpha\"], a finite place here (placeIdealAt).";
+
+placeIdealAt::usage = "placeIdealAt[F, B, a] is the prime ideal of the single (totally ramified) place over x = a, a root of G of multiplicity e prime to m: generated by x - a and the uniformiser Y^s/(x - a)^r with s e - r m = 1 (0 < s < m), which is integral since Floor[s e/m] = r makes d_s/(x - a)^r a polynomial.";
+placeIdealAt[F_Association, B_Association, a_] := Module[{x = B["x"], m = B["m"], e, s0, r0, pi},
+  e = rootMultiplicity[F, B["G"], a, x];
+  If[e === 0 || GCD[e, m] =!= 1, throwInternal["placeIdealAtNotTotallyRamified"]];
+  s0 = SelectFirst[Range[1, m - 1], Mod[# e - 1, m] === 0 &];
+  r0 = (s0 e - 1)/m;
+  pi = ReplacePart[Table[0, {m}], s0 + 1 -> kExactQuo[F, B["d"][[s0 + 1]], kc[F, (x - a)^r0], x]];
+  idealFromGenerators[F, B, {PadRight[{kc[F, x - a]}, m], pi}]];
+specIdealX[ctx_Association, spec_Association] := Module[
+  {F = ctx["F"], B = ctx["B"], x, I, ref = spec["ref"], e},
+  x = B["x"];
+  I = divisorIdeal[F, B, spec["res"], spec["b"], ctx["N"], ctx["Ep"], ctx["Bp"]];
+  If[ref =!= None && ref[[1]] === "Pinf" && ref[[2]] =!= 0,
+    I = idealTimes[F, B, I, idealPower[F, B, placeIdealAt[F, B, ctx["alpha"]], ref[[2]]]]];
+  If[ref =!= None && ref[[1]] === "R0",
+    e = ref[[3]];
+    I = If[e >= 0,
+      idealTimesGenerators[F, B, I, {{PadRight[{kc[F, (x - ref[[2]])^e]}, B["m"]]}, 1}],
+      idealReduce[F, B, <|"M" -> I["M"], "den" -> kMonic[F, kc[F, I["den"] (x - ref[[2]])^(-e)], x]|>]]];
+  I];
+
+modPFrame::usage = "modPFrame[ctx, gp] is {frame, red}: the reduced frame over GF(p) of the component ctx at the good prime gp (centre gp[\"a\"]) and the reduction map red.";
+modPFrame[ctx_Association, gp_Association] := Module[{p = gp["p"], Fp, red, B = ctx["B"], x, c},
+  Fp = fieldGF[p]; x = B["x"];
+  red = Function[e, reduceResidue[ctx["F"], e, p, gp["rho"]]];
+  c = rc[Fp, red[ctx["N"]]/red[ctx["E"]]];
+  {jacFrame[Fp, B["m"], gfMod[B["G"], p], c, x, gp["a"]], red}];
+
+orderModPSpec::usage = "orderModPSpec[ctx, spec, gp] is the order over GF(p) of the class of the divisor spec, by reduced class arithmetic (Jacobian.m) in the reduced frame at gp (constant cost per class addition; jacOrder steps linearly, then baby-step giant-step). Within tragerOption[\"MaxTorsionSearch\"]^2 the whole Weil range (1 + Sqrt[p])^(2 genus) is searched and finding nothing is an internal error; past it only orders up to that square are searched (a Decline otherwise).";
+orderModPSpec[ctx_Association, spec_Association, gp_Association] := Module[{fr, red, Fp, Jn, c, weil},
+  {fr, red} = modPFrame[ctx, gp];
+  Fp = fieldGF[gp["p"]];
+  Jn = specFrameIdeal[Fp, fr, spec, red];
+  c = jacClass[Fp, fr["B"], Jn[[1]], Jn[[2]]];
+  weil = Floor[(1 + Sqrt[N[gp["p"]]])^(2 ctx["genus"])] + 1;
+  If[Sqrt[N[weil]] <= tragerOption["MaxTorsionSearch"],
+    Module[{r = catchTrager[jacOrder[Fp, fr["B"], c, weil]]},
+      If[tragerFailQ[r], throwInternal["TorsionBeyondWeilBound", <|"p" -> gp["p"]|>], r]],
+    jacOrder[Fp, fr["B"], c, tragerOption["MaxTorsionSearch"]^2]]];
+
+torsionOrderSpec::usage = "torsionOrderSpec[ctx, spec] is torsionOrder for a divisor spec ([T] Ch 6 Sec 3). The order op modulo the smaller good prime p is searched (orderModPSpec); modulo q the order must then be n0 p^a q^b with n0 the prime-to-pq part of op, so the least a, b with p^a q^b n0 c = 0 are found by repeated multiplication (O(log) class operations, no second search). Mismatches are NonElementary certificates.";
+torsionOrderSpec[ctx_Association, spec_Association] := Module[
+  {gps, p, q, op, oq = None, n0p, n0q, fr, red, Fq, Jn, cq, weil, A, Bq, cprime},
+  If[ctx["genus"] === 0, Return[1]];
+  gps = goodPrimes[ctx, 2];
+  {p, q} = #["p"] & /@ gps;
+  op = orderModPSpec[ctx, spec, gps[[1]]];
+  n0p = op/(pPart[op, p] pPart[op, q]);
+  {fr, red} = modPFrame[ctx, gps[[2]]];
+  Fq = fieldGF[q];
+  Jn = specFrameIdeal[Fq, fr, spec, red];
+  cq = jacClass[Fq, fr["B"], Jn[[1]], Jn[[2]]];
+  weil = Floor[(1 + Sqrt[N[q]])^(2 ctx["genus"])] + 1;
+  A = Floor[Log[p, weil]]; Bq = Floor[Log[q, weil]];
+  cprime = If[n0p === 1, cq, jacMultiple[Fq, fr["B"], cq, n0p]];
+  (* least a, then least b, with p^a q^b c' = 0 (killed iff a >= a', b >= b') *)
+  Module[{xa = cprime, yb, a = 0, b},
+    While[oq === None && a <= A,
+      yb = xa; b = 0;
+      While[oq === None && b <= Bq,
+        If[jacZeroQ[yb], oq = n0p p^a q^b,
+          b++; If[b <= Bq, yb = jacMultiple[Fq, fr["B"], yb, q]]]];
+      a++;
+      If[oq === None && a <= A, xa = jacMultiple[Fq, fr["B"], xa, p]]]];
+  If[oq === None, throwNonElementary["residue divisor of infinite order: its orders modulo " <>
+      ToString[p] <> " and " <> ToString[q] <> " disagree", <|"OrderModP" -> op, "Primes" -> {p, q}|>]];
+  (* the prime-to-pq part modulo q must be all of n0p, not a proper divisor *)
+  Do[
+    If[jacZeroQ[jacMultiple[Fq, fr["B"], cq, oq/r]],
+      throwNonElementary["residue divisor of infinite order: its orders modulo " <>
+        ToString[p] <> " and " <> ToString[q] <> " disagree", <|"OrderModP" -> op, "Primes" -> {p, q}|>]],
+    {r, If[n0p === 1, {}, First /@ FactorInteger[n0p]]}];
+  n0q = oq/(pPart[oq, p] pPart[oq, q]);
+  If[n0p =!= n0q, throwInternal["TorsionPrimeToPQMismatch"]];
   n0p pPart[oq, p] pPart[op, q]];

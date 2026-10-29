@@ -44,7 +44,7 @@ static void define_helpers(void) {
         "  her = hermiteReduce[B1, f0]; r0 = her[\"Remainder\"]; cr = Together[r0[[2]]];"
         "  num = Numerator[cr]; den = Denominator[cr];"
         "  rs = componentResidues[num, den, mm, B1[\"G\"], w0];"
-        "  Join[rs, <|\"B\" -> B1, \"genus\" -> curveGenus[mm, GG, x], \"N\" -> num,"
+        "  Join[rs, <|\"B\" -> B1, \"genus\" -> curveGenus[mm, GG, x], \"N\" -> num, \"E\" -> den,"
         "    \"Ep\" -> Expand[D[den, w0]], \"Ysym\" -> Unique[\"Yk\"]|>]]; True");
     free(r);
     r = tr_eval(
@@ -162,8 +162,11 @@ static void test_good_prime(void) {
     TR_EQ("goodPrime[tqQ4, 2]", "None");
     /* bad reduction of the curve: 1 - x^3 = (1 - x)^3 mod 3 */
     TR_EQ("goodPrime[tqEx6, 3]", "None");
-    /* good primes accepted, with rho = None over Q */
-    TR_TRUE("AllTrue[{5, 7, 11, 13, 17, 19, 23}, goodPrime[tqEx6, #] === <|\"p\" -> #, \"rho\" -> None|> &]");
+    /* good primes accepted, with rho = None over Q, and a frame centre a: a
+     * root of 1 - x^3 mod p (multiplicity 1, prime to m = 2) */
+    TR_TRUE("AllTrue[{5, 7, 11, 13, 17, 19, 23}, Module[{gp = goodPrime[tqEx6, #]},"
+            " AssociationQ[gp] && gp[\"p\"] === # && gp[\"rho\"] === None &&"
+            " Mod[1 - gp[\"a\"]^3, #] === 0] &]");
 
     /* p dividing a denominator: residues +-1/5 (otherwise identical to Ex. 6) */
     TR_TRUE("Module[{tqE = tqCtx[1/(5 x (1 - x^3)), 2, 1 - x^3]},"
@@ -175,7 +178,10 @@ static void test_good_prime(void) {
     TR_TRUE("Module[{tqB = tqCtx[1/((x + 1) (x^3 + x + 3)), 2, x^3 + x + 3]},"
             " Sort[tqB[\"residues\"]] === {-1, 1} &&"
             " goodPrime[tqB, 13] === None && goodPrime[tqB, 19] === None &&"
-            " AllTrue[{3, 5, 7, 11, 17, 23, 29}, goodPrime[tqB, #] =!= None &]]");
+            /* the other small primes are good exactly when x^3 + x + 3 has a
+             * root mod p (the reduced class arithmetic centres its frame there) */
+            " AllTrue[{3, 5, 7, 11, 17, 23, 29},"
+            "  (goodPrime[tqB, #] =!= None) === (Select[Range[0, # - 1], Function[r, Mod[r^3 + r + 3, #] == 0]] =!= {}) &]]");
 
     /* residue zero mod p: residues +-25 -> 5 rejected; disc(x^3 - 2) = -108
      * rejects 2 and 3; 7 .. 37 good */
@@ -208,7 +214,9 @@ static void test_good_prime(void) {
      * or not -- only the implication "accepted => (2/p) = 1" is asserted) */
     TR_TRUE("AllTrue[Prime[Range[4, 60]], goodPrime[tqSq2, #] === None || JacobiSymbol[2, #] === 1 &]");
     /* genus 0 contexts: every odd prime not dividing the data is good */
-    TR_TRUE("AllTrue[{3, 5, 7, 11, 13}, goodPrime[tqG0, #] =!= None &]");
+    /* accepted exactly when G has a root mod p for the reduced frame */
+    TR_TRUE("Module[{Gw = tqG0[\"B\"][\"G\"], w = tqG0[\"B\"][\"x\"]}, AllTrue[{3, 5, 7, 11, 13},"
+            " (goodPrime[tqG0, #] =!= None) === (Select[Range[0, # - 1], Function[r, Mod[Gw /. w -> r, #] == 0]] =!= {}) &]]");
 }
 
 /* ----------------------------------------------------------- goodPrimes */
@@ -271,7 +279,7 @@ static void test_order_mod_p(void) {
     TR_TRUE("AllTrue[goodPrimes[tqP35, 5], orderModP[tqP35, {1, -1}, #] <= N[(1 + Sqrt[#[\"p\"]])^2] &]");
     /* MaxTorsionSearch exhausted -> Decline (order 3 > cap 2) */
     TR_TRUE("Module[{old = tragerOption[\"MaxTorsionSearch\"], r0},"
-            " tragerOption[\"MaxTorsionSearch\"] = 2;"
+            " tragerOption[\"MaxTorsionSearch\"] = 1;"
             " r0 = catchTrager[orderModP[tqEx6, {1, -1}, First[goodPrimes[tqEx6, 1]]]];"
             " tragerOption[\"MaxTorsionSearch\"] = old;"
             " MatchQ[r0, tragerFail[\"Decline\", _String, _Association]]]");
@@ -299,7 +307,7 @@ static void test_torsion_order(void) {
     /* infinite order: (3, 5) on y^2 = x^3 - 2 (Nagell-Lutz) -> certificate */
     TR_TRUE("MatchQ[catchTrager[torsionOrder[tqP35, {1, -1}]], tragerFail[\"NonElementary\", _String, _Association]]");
     TR_TRUE("Module[{r0 = catchTrager[torsionOrder[tqP35, {1, -1}]]},"
-            " r0[[3]][\"Primes\"] === {7, 11} && r0[[3]][\"Orders\"] === {7, 6}]");
+            " r0[[3]][\"Primes\"] === {7, 11} && r0[[3]][\"OrderModP\"] === 7]");
     /* (1, 3) on y^2 = x^3 + 8 is of infinite order too: either the prime-to-pq
      * parts differ (certificate here) or the candidate N delta is not
      * principal (certificate in TragerLogTerms) -- never an order */

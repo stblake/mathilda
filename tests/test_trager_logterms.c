@@ -35,7 +35,7 @@ static void define_helpers(void) {
         "  her = hermiteReduce[B1, f0]; r0 = her[\"Remainder\"]; cr = Together[r0[[2]]];"
         "  num = Numerator[cr]; den = Denominator[cr];"
         "  rs = componentResidues[num, den, mm, B1[\"G\"], w0];"
-        "  Join[rs, <|\"B\" -> B1, \"genus\" -> curveGenus[mm, GG, x], \"N\" -> num,"
+        "  Join[rs, <|\"B\" -> B1, \"genus\" -> curveGenus[mm, GG, x], \"N\" -> num, \"E\" -> den,"
         "    \"Ep\" -> Expand[D[den, w0]], \"Ysym\" -> Unique[\"Yk\"], \"rem\" -> r0|>]]; True");
     free(r);
     /* Numeric trace check: Sum_{q(g)=0} g p'(g)/p(g) at (w0, Y0) vs the exact

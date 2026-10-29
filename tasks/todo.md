@@ -1,3 +1,13 @@
+# Trager: reduced divisor classes and performance vs FriCAS (2026-10-30, v0.6083)
+
+- [x] Jacobian.m: single-place frame, Popov reduction, canonical keys, BSGS, compact generators
+- [x] spec-based torsion (Pinf / R0 references), O(log) second-prime check
+- [x] Hensel-lifted residue powers, HNF mod det, two-generator addends, gcd idealReduce
+- [x] sum-form verification; real form with atom Together and machine sign sampling
+- [x] tests: test_trager_jacobian.c (79), suites updated; FriCAS stress rerun
+- Open: 10 stress timeouts (residue splitting fields of degree 6-20 force primes ~150-430);
+  1/((x-2)(x^3+1)^(1/3)) and x/((x-2)(x^3+1)^(2/3)) (genus 1, cubic residue field, order 21).
+
 # Trager (simple radicals) + Kauers log heuristic as .m Integrate methods (2026-10-29)
 
 Plan: TRAGER_PLAN.md (copy of ~/.claude/plans/i-want-to-use-proud-sparrow.md)

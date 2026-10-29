@@ -69,10 +69,13 @@ rdeg[r_, x_Symbol] := Module[{t = Together[r]},
   If[t === 0, -Infinity,
     Exponent[Numerator[t], x] - Exponent[Denominator[t], x]]];
 
-tragerOption::usage = "tragerOption[name] is the default value of an internal bound: \"ShiftBound\" (largest |a| tried for the shift x = a + 1/z), \"HermiteMaxIter\", \"MaxFieldDegree\" (largest residue field [K:Q] handled), \"MaxTorsionSearch\" (largest order searched over a finite field), \"MaxPrimes\" (primes examined for good reduction), \"KauersMaxPower\" (largest ideal power tried by Kauers' heuristic).";
+tragerOption::usage = "tragerOption[name] is the default value of an internal bound: \"ShiftBound\" (largest |a| tried for the shift x = a + 1/z), \"HermiteMaxIter\", \"MaxFieldDegree\" (largest residue field [K:Q] handled), \"MaxTorsionSearch\" (largest square root of the Weil bound searched over a finite field by baby-step giant-step), \"MaxPrimes\" (primes examined for good reduction), \"KauersMaxPower\" (largest ideal power tried by Kauers' heuristic), \"RealFormMaxLeaves\" and \"RealFormTime\" (size and time limits of the real-form presentation), \"DirectPowerMaxOrder\" (largest torsion order whose generator is found from the ideal power directly rather than by reduced class arithmetic).";
 tragerOption["ShiftBound"] = 64;
 tragerOption["HermiteMaxIter"] = 200;
 tragerOption["MaxFieldDegree"] = 32;
 tragerOption["MaxTorsionSearch"] = 400;
 tragerOption["MaxPrimes"] = 200;
 tragerOption["KauersMaxPower"] = 16;
+tragerOption["RealFormMaxLeaves"] = 1500;
+tragerOption["RealFormTime"] = 5;
+tragerOption["DirectPowerMaxOrder"] = 12;

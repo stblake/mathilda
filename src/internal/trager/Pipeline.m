@@ -65,28 +65,33 @@ integrateComponent[c_, x_Symbol, m_Integer, G_, method_String] := Module[
   <|"Algebraic" -> Together[vExpr], "Logs" -> logExprs, "Y" -> Y|>];
 
 tragerLogPart::usage = "tragerLogPart[ctx, r, Y] is the logarithmic part of the remainder r by Trager's construction, verified exactly, as log-term expressions in x and Y (Pipeline format). When the field of all residues is small (product of factorials of the factor degrees of R at most 8) the Q-basis construction runs first; otherwise, or when it declines, the per-orbit construction (TragerLogTerms.m); the Q-basis construction over the splitting field is the complete fallback when an orbit divisor is not torsion. A nonzero holomorphic difference proves non-elementarity ([T] p.71).";
-tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, smallField, attempt},
+tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, crude, basisFirst, attempt},
   degs = Exponent[#[[1]], Z] & /@ Select[FactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
-  (* The Q-basis construction gives the simplest logands, but over the      *)
-  (* splitting field of R; use it first only when that field is small      *)
-  (* (a crude bound: the product of the factorials of the factor degrees). *)
-  smallField = Times @@ (Factorial /@ degs) <= 8;
-  attempt = If[smallField,
+  crude = Times @@ (Factorial /@ degs);
+  (* Genus 0: every orbit divisor is principal, so one orbit at a time over  *)
+  (* Q[Z]/(q) always succeeds -- use the Q-basis construction first only for *)
+  (* a small multiquadratic residue field (simplest logands).  Positive      *)
+  (* genus: a single orbit divisor need not be torsion when the residues     *)
+  (* satisfy Q-linear relations (gamma, omega gamma, omega^2 gamma), so the  *)
+  (* complete Q-basis construction comes first unless the splitting field is *)
+  (* hopeless; the orbit construction is then the fallback.                  *)
+  basisFirst = If[ctx["genus"] === 0, Max[degs] <= 2 && crude <= 8, crude <= 5040];
+  attempt = If[basisFirst,
     catchTrager[tragerBasisLogPart[ctx, r, Y]],
     tragerFail["Decline", "skipped", <||>]];
   If[!tragerFailQ[attempt], Return[attempt]];
-  If[attempt[[1]] === "NonElementary", Throw[attempt, "TragerFail"]];
+  If[attempt[[1]] =!= "Decline", Throw[attempt, "TragerFail"]];
   If[Max[degs] > 1,
     attempt = tragerOrbitLogPart[ctx, r, Y];
     If[attempt =!= $Failed, Return[attempt]]];
-  If[smallField, Throw[tragerFail["Decline", "logarithmic part: no construction applies", <||>], "TragerFail"]];
+  If[basisFirst, Throw[tragerFail["Decline", "logarithmic part: no construction applies", <||>], "TragerFail"]];
   tragerBasisLogPart[ctx, r, Y]];
 
 tragerBasisLogPart::usage = "tragerBasisLogPart[ctx, r, Y] is the Q-basis construction (TragerLogTerms.m, tragerLogTerms) over the field of all residues, verified exactly; a nonzero holomorphic difference proves non-elementarity.";
 tragerBasisLogPart[ctx_Association, r_List, Y_Symbol] := Module[{B = ctx["B"], full, logs},
   full = Join[ctx, componentResidues[ctx["N"], ctx["E"], B["m"], B["G"], B["x"]]];
   logs = tragerLogTerms[full];
-  If[!afZeroQ[full["F"], logPartResidual[full["F"], B, r, logs]],
+  If[!afZeroQ[full["F"], logSumResidual[full["F"], B, r, logs]],
     throwNonElementary["the remainder minus the logarithmic part is a nonzero holomorphic differential"]];
   tragerLogExpressions[full["F"], B, logs, Y]];
 
@@ -181,8 +186,14 @@ evaluateRootSumBodies[e_] := e /. RootSum[q_, Function[b_]] :> Module[{s = Uniqu
   b1 = b /. Slot[1] -> s;
   With[{b2 = b1 /. s -> Slot[1]}, RootSum[q, Function[b2]]]];
 
-presentable::usage = "presentable[f, F, x] is the real form of the verified antiderivative F (LogToArcTan.m) when that passes antiderivativeQ, else F itself.";
-presentable[f_, Fx_, x_Symbol] := Module[{real = Quiet[realForm[Fx, x]]},
+presentable::usage = "presentable[f, F, x] is the real form of the verified antiderivative F (LogToArcTan.m) when that passes antiderivativeQ, else F itself. The real form is not attempted on answers above tragerOption[\"RealFormMaxLeaves\"] leaves and is given tragerOption[\"RealFormTime\"] seconds.";
+presentable[f_, Fx_, x_Symbol] := Module[{real},
+  (* The real form is presentation only (Fx is already verified): skip it on *)
+  (* large answers and bound its time, rather than spend minutes in Together *)
+  (* over nested radicals.                                                   *)
+  If[FreeQ[Fx, Complex] && FreeQ[Fx, RootSum], Return[Quiet[realForm[Fx, x]]]];
+  If[LeafCount[Fx] > tragerOption["RealFormMaxLeaves"], Return[Fx]];
+  real = TimeConstrained[Quiet[realForm[Fx, x]], tragerOption["RealFormTime"], Fx];
   If[real =!= Fx && antiderivativeQ[f, real, x], real, Fx]];
 
 spotCheck::usage = "spotCheck[f, F, x] confirms that D[F, x] = f: PossibleZeroQ[D[F, x] - f] first and, should it fail to recognise zero (it can, on nested radicals), agreement to 30 digits at four rational points with 60-digit arithmetic. The per-component results were already verified exactly in K(x)(Y), so this guards only the reassembly into the user's radical; a failure is an internal error (decline), never an answer.";

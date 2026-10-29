@@ -5043,3 +5043,6 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   zero to 100 digits): pair it with a high-precision numeric check rather than declining.
 - A top-level `r = ...` in a test script with `Trager`Private`` on $ContextPath binds the
   private symbol `r` -- use distinctive names in tests.
+- (2026-10-30) A scripted edit built `old = s[s.index(A):s.index(B)]` and then `s.replace(old, new)`: when B
+  came before A the slice was EMPTY, and replacing "" inserted `new` between every character (TorsionModP.m
+  grew to 370k lines). Always `assert s.count(old) == 1` -- including for computed slices.

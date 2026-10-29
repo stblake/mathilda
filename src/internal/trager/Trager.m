@@ -38,6 +38,8 @@
 (*                 infinity                               [T] Ch 2 Sec 3 p.27 *)
 (*   Ideal.m       fractional ideals = divisors           [T] Ch 5 Sec 3 p.59 *)
 (*   PrincipalGen.m principality test                     [T] Ch 6 Sec 1 p.64 *)
+(*   Jacobian.m    reduced divisor classes: constant-size class arithmetic   *)
+(*                 at a single rational place at infinity                    *)
 (*   TorsionModP.m order of a divisor class by reduction  [T] Ch 6 Sec 2-3    *)
 (*                 modulo two primes                          pp.66-70        *)
 (*   TragerLogTerms.m  logarithmic part, Trager's construction                *)
@@ -87,6 +89,7 @@ LoadModule["trager/Residues.m"];
 LoadModule["trager/Normalize.m"];
 LoadModule["trager/Ideal.m"];
 LoadModule["trager/PrincipalGen.m"];
+LoadModule["trager/Jacobian.m"];
 LoadModule["trager/TorsionModP.m"];
 LoadModule["trager/TragerLogTerms.m"];
 LoadModule["trager/KauersLogTerms.m"];

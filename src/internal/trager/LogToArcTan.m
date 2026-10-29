@@ -18,8 +18,14 @@
 (* rather than jointly and missed unpaired terms.)                            *)
 (* ========================================================================== *)
 
+togetherAtoms::usage = "togetherAtoms[e] is Together[e] with every radical (Power[_, _Rational]) first replaced by a fresh symbol and restored afterwards: the same result for expressions in which the radicals are independent atoms, computed by polynomial arithmetic.";
+togetherAtoms[e_] := Module[{atoms, rules},
+  atoms = DeleteDuplicates[Cases[e, Power[_, _Rational], {0, Infinity}]];
+  rules = Thread[atoms -> Table[Unique["ra"], {Length[atoms]}]];
+  Together[e /. rules] /. (Reverse /@ rules)];
+
 tidyLog::usage = "tidyLog[u, x] simplifies a logand u: Together, then the numeric content of numerator and denominator is dropped (Log[c u] - Log[u] is a constant).";
-tidyLog[u_, x_Symbol] := Module[{t = Together[u], num, den},
+tidyLog[u_, x_Symbol] := Module[{t = togetherAtoms[u], num, den},
   num = Numerator[t]; den = Denominator[t];
   num = dropNumericContent[num]; den = dropNumericContent[den];
   num/den];
@@ -37,14 +43,19 @@ expandRootSums[e_] := e /. RootSum[q_, body_] :> Module[{s = Unique["s"], rts},
     RootSum[q, body]]];
 
 complexSplit::usage = "complexSplit[e] is {re, im} with e = re + I im formally, treating every symbol and radical as real: I is replaced by a symbol ii, the numerator is reduced modulo ii^2 + 1 and the denominator rationalised by its conjugate.";
-complexSplit[e_] := Module[{ii = Unique["ii"], t, num, den, red, nr, ni, dr, di, d2},
+complexSplit[e_] := Module[{ii = Unique["ii"], t, num, den, red, nr, ni, dr, di, d2, atoms, rules, back},
   red[p_] := Expand[PolynomialRemainder[Expand[p], ii^2 + 1, ii]];
-  t = Together[e /. Complex[a_, b_] :> a + b ii];
+  (* Every radical (of x or of a number) is a real atom here: replace them by *)
+  (* symbols so that Together is plain polynomial arithmetic, then restore.  *)
+  atoms = DeleteDuplicates[Cases[e, Power[_, _Rational], {0, Infinity}]];
+  rules = Thread[atoms -> Table[Unique["ra"], {Length[atoms]}]];
+  back = Reverse /@ rules;
+  t = Together[(e /. rules) /. Complex[a_, b_] :> a + b ii];
   num = red[Numerator[t]]; den = red[Denominator[t]];
   {nr, ni} = {Coefficient[num, ii, 0], Coefficient[num, ii, 1]};
   {dr, di} = {Coefficient[den, ii, 0], Coefficient[den, ii, 1]};
   d2 = Expand[dr^2 + di^2];
-  {Together[(nr dr + ni di)/d2], Together[(ni dr - nr di)/d2]}];
+  {Together[(nr dr + ni di)/d2] /. back, Together[(ni dr - nr di)/d2] /. back}];
 
 realFormTerm::usage = "realFormTerm[c, u, x] is the formal real part of c Log[u] (see the file header): c1/2 Log[A^2 + B^2] - c2 ArcTan[B/A] with c = c1 + I c2, u = A + I B; terms free of I are returned as c Log[tidyLog[u]].";
 realFormTerm[c_, u_, x_Symbol] := Module[{c1, c2, A, B},
@@ -57,16 +68,18 @@ realFormTerm[c_, u_, x_Symbol] := Module[{c1, c2, A, B},
     True, c1/2 Log[tidyLog[A^2 + B^2, x]] + arcTanTerm[c2, A, B, x]]];
 
 arcTanTerm::usage = "arcTanTerm[c2, A, B, x] is -c2 ArcTan[B/A] up to an additive constant: either -c2 ArcTan[B/A] or c2 ArcTan[A/B], whichever quotient's denominator (in lowest terms) changes sign fewer times on a sample of the real line. The two differ by the piecewise constant c2 Pi/2 Sign[A B], so either is an antiderivative; the choice only keeps a definite integral's Newton-Leibniz evaluation away from spurious jumps.";
-arcTanTerm[c2_, A_, B_, x_Symbol] := Module[{ab = Together[A/B], ba = Together[B/A]},
+arcTanTerm[c2_, A_, B_, x_Symbol] := Module[{ab = togetherAtoms[A/B], ba = togetherAtoms[B/A]},
   (* ArcTan[f] jumps where f passes through infinity: where the denominator  *)
   (* of f (in lowest terms) changes sign, not where A or B do.               *)
   If[signChanges[Denominator[ab], x] < signChanges[Denominator[ba], x],
     c2 ArcTan[ab],
     -c2 ArcTan[ba]]];
 
-signChanges::usage = "signChanges[e, x] counts the sign changes of the real-valued expression e at 81 sample points of [-10, 10] (points where e is not a real number are skipped).";
-signChanges[e_, x_Symbol] := Module[{vals},
-  vals = Select[Table[Quiet[N[e /. x -> k/4 + 1/97]], {k, -40, 40}], NumberQ[#] && Im[#] == 0 && # != 0 &];
+signChanges::usage = "signChanges[e, x] counts the sign changes of the real-valued expression e at 15 sample points spread over [-10, 10] (denser near 0; points where e is not a real number are skipped). A heuristic for the ArcTan orientation only -- the answer is re-verified either way.";
+signChanges[e_, x_Symbol] := Module[{vals, pts = {-10, -5, -3, -2, -1, -1/2, -1/5, 1/97, 1/5, 1/2, 1, 2, 3, 5, 10} + 1/193},
+  (* machine numbers: substituting exact rationals into exact radicals is   *)
+  (* two orders of magnitude slower, and a sign needs no precision          *)
+  vals = Select[Quiet[N[e /. x -> N[#]]] & /@ pts, NumberQ[#] && Im[#] == 0 && # != 0 &];
   Count[Partition[Sign[Re[vals]], 2, 1], {a_, b_} /; a =!= b]];
 
 realForm::usage = "realForm[F, x] rewrites the antiderivative F (a sum of algebraic terms, coef Log[u] terms and RootSums) in real form: small RootSums are expanded, every coef Log[u] term with complex numbers is replaced by its formal real part, and the remaining terms are kept. It returns F unchanged when it has no complex numbers.";

@@ -44,6 +44,16 @@ afTimes[F_Association, B_Association, a_List, b_List] := Module[{m = B["m"], out
     {i, 0, m - 1}, {j, 0, m - 1}];
   afCanon[F, out]];
 
+afTimesPoly::usage = "afTimesPoly[F, B, a, b] is afTimes for elements with POLYNOMIAL coordinates (integral elements, e.g. rows of ideals): the multiplication factors being polynomials, the product is formed by expansion and one coefficient reduction per coordinate, without the rational-function normal form.";
+afTimesPoly[F_Association, B_Association, a_List, b_List] := Module[{m = B["m"], out, kf},
+  out = Table[0, {m}];
+  Do[
+    If[a[[i + 1]] =!= 0 && b[[j + 1]] =!= 0,
+      kf = B["mult"][[i + 1, j + 1]];
+      out[[kf[[1]] + 1]] += a[[i + 1]] b[[j + 1]] kf[[2]]],
+    {i, 0, m - 1}, {j, 0, m - 1}];
+  kc[F, #] & /@ out];
+
 afPower::usage = "afPower[F, B, a, k] is a^k for an integer k >= 0 (binary powering).";
 afPower[F_Association, B_Association, a_List, k_Integer?NonNegative] := Module[{r = afOne[B], base = a, e = k},
   While[e > 0,

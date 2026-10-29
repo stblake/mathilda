@@ -3046,6 +3046,13 @@ language in `src/internal/trager/` (one file per stage, every function with a
 6. **Residues.** They are the roots of `S(Z^m)`, where
    `S(W) = Res_x(W E'^m - N^m G, Bp)`. From them the residue field K, a Q-basis of
    the residues, and integer coordinates are computed.
+   - **Genus 0, or a large residue field:** cubic and higher factors of the residue
+     polynomial are handled one Galois orbit at a time, over `Q[Z]/(q)`. The divisor
+     is `Delta(gamma) - kappa P` (or `m Delta(gamma) - kappa (x - c)_0`), and the
+     answer is a `RootSum`.
+   - **Positive genus:** the complete Q-basis construction over the splitting field
+     comes first, because a single orbit divisor need not be torsion when the
+     residues satisfy Q-linear relations.
 7. **Divisors.** One divisor per basis element, built as a product of the ideals
    `(N Y - alpha E', Bp)` of the integral closure.
 8. **Torsion order and generator.** The order of each divisor class comes from its
@@ -3053,6 +3060,25 @@ language in `src/internal/trager/` (one file per stage, every function with a
    parts disagree, or N·delta is not principal, the divisor is not torsion and the
    integral is not elementary. Otherwise the generator `u` is the basis row that is
    regular at infinity after normalising at infinity ([T] Ch 6 §1).
+   - **Reduced class arithmetic** (`Jacobian.m`). Over GF(p), classes are kept in
+     reduced form, so a class addition has constant cost:
+     - The frame is centred at a root of G whose multiplicity is prime to m, so
+       infinity is one totally ramified place P of degree 1.
+     - Each class is `[A - deg(A) P]` with A effective of degree at most the genus,
+       found by Riemann–Roch through a Popov-reduced basis.
+     - With a single place, the reduced representative is unique, so its Hermite
+       form is a canonical key.
+   - **Order search.** The order modulo the smaller prime p is found by linear
+     steps, then baby-step giant-step over the Weil range. Modulo q the order must
+     be `n0 p^a q^b`, so the least a and b are found by multiplication, with no
+     second search.
+   - **Large orders over the residue field.** For N above 12 with a rational root
+     of G, N·delta is formed by doubling and adding in reduced form. Its generator
+     is then a short product, which gives a sum of logarithms.
+   - **Smaller N.** The ideal of N·delta is built in one step. Each residue
+     contributes `(A^k, Y - phi_k)`, with `phi_k` the Hensel lift of the branch
+     value, and its inverse `(A^k, H_k)/A^k`.
+   - **Hermite forms** of ideal products are taken modulo the known determinant.
 9. **Exact check of the log part** in K(x)(Y). A nonzero difference is a holomorphic
    differential and proves the integral is not elementary.
 10. **Reassembly.** The answer is rewritten in the user's radical (lowest powers),

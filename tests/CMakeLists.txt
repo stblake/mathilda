@@ -5677,6 +5677,10 @@ add_executable(trager_torsion_tests test_trager_torsion.c $<TARGET_OBJECTS:mathi
 target_include_directories(trager_torsion_tests PRIVATE ../src)
 add_test(NAME trager_torsion_tests COMMAND trager_torsion_tests)
 
+add_executable(trager_jacobian_tests test_trager_jacobian.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(trager_jacobian_tests PRIVATE ../src)
+add_test(NAME trager_jacobian_tests COMMAND trager_jacobian_tests)
+
 add_executable(trager_logterms_tests test_trager_logterms.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(trager_logterms_tests PRIVATE ../src)
 add_test(NAME trager_logterms_tests COMMAND trager_logterms_tests)
