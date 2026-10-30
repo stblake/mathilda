@@ -112,10 +112,10 @@ idealDegree[F_Association, B_Association, I_Association] :=
   Exponent[kc[F, Times @@ Table[I["M"][[i, i]], {i, B["m"]}]], B["x"]];
 
 scaleSpec::usage = "scaleSpec[spec, k] is the divisor spec of k times the divisor spec.";
-scaleSpec[spec_Association, k_Integer] := <|"res" -> spec["res"], "b" -> k spec["b"],
+scaleSpec[spec_Association, k_Integer] := Join[spec, <|"b" -> k spec["b"],
   "ref" -> Which[spec["ref"] === None, None,
                  spec["ref"][[1]] === "Pinf", {"Pinf", k spec["ref"][[2]]},
-                 True, {"R0", spec["ref"][[2]], k spec["ref"][[3]]}]|>;
+                 True, {"R0", spec["ref"][[2]], k spec["ref"][[3]]}]|>];
 
 combineGenerator::usage = "combineGenerator[F, B, terms] multiplies a compact generator {{e, u}, ...} (div(Prod u^e) = N delta) out into a single element {{1, U}} when Total[Abs[e]] <= 6, which gives one logarithm in the answer; a larger product (a large torsion order) is left as the list -- a sum of logarithms of small elements instead of one huge one.";
 combineGenerator[F_Association, B_Association, terms_List] := Module[{U = afOne[B], inv},

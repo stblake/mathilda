@@ -3074,6 +3074,22 @@ language in `src/internal/trager/` (one file per stage, every function with a
      ceiling (exceeding it is an internal error). Modulo q the order must be
      `n0 p^a q^b`: the q-free part a is read off `p^a (q^B c)` and then b off
      `q^b (p^a c)`, in A + 2B multiplications.
+   - **Trace-functional certificates** (`traceCertificate`, `Pipeline.m`). The
+     Q-basis construction needs the field of *all* residues, which can be
+     enormous (degree 36–64 in practice), but a proof of non-elementarity does
+     not. If the integral is elementary, `r = Σ c_j du_j/u_j`, and for every
+     Q-linear λ on the span of the residues,
+     `Σ_i λ(α_i) Δ(α_i) = Σ_j λ(c_j) div(u_j)` is torsion. For a residue γ and
+     `g ∈ Q(γ)`, `λ_g(α) = Tr(α g)` is unchanged by every automorphism fixing γ,
+     so it is constant on the roots of each factor `f_k` of R over Q(γ). Its
+     divisor `Σ_k λ_k Δ(f_k)` is therefore defined over Q(γ), whose degree is
+     that of a single factor of R. `Δ(f) = (Bp, Ep^d f(N Y/Ep))` is the divisor
+     of the places whose residue is a root of f. With g = γ^j, j = 0 … deg − 1
+     (one power can vanish when power sums of R do), each such divisor of
+     infinite order is a certificate. When none is found the full construction
+     follows. Examples: integrals that needed splitting fields of degree 36–64
+     (220 s to over 30 min) are certified in 0.06–0.15 s; one over a degree-12
+     field takes 18 s.
    - **Torsion screen.** Before N·delta is formed over the residue field, `N delta`
      reduced at three further good primes must be principal. Reduction is a
      homomorphism, so a nonzero class there proves that N·delta is not principal.

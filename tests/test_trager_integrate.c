@@ -557,6 +557,13 @@ static void test_former_slowdowns(void) {
     TR_TIMED_VERDICT("1/(x + 1) (x^3 - 2 x)^(1/4)", "not elementary", 30);
     TR_TIMED_VERDICT("(x^2 - 1)/((x^2 + 1) (x^4 + 1)^(1/4))", "not elementary", 30);
     TR_TIMED_VERDICT("(2 x - 1)/(x - 2) (x^2 + 1)^(-3/5)", "not elementary", 30);
+    /* splitting fields of degree 36 - 64 avoided: a trace functional of the
+     * residues certifies over the field of ONE residue (were 220 s - 30 min) */
+    TR_TIMED_VERDICT("2/(2 x^2 + 3 x + 2) (x^3 - 2 x^2 + x + 1)^(-2/3)", "not elementary", 10);
+    TR_TIMED_VERDICT("(2 x^2 - 1)/(2 x^2 - 3 x + 2) (-2 x^2 - 2 x + 1)^(-2/3)", "not elementary", 10);
+    TR_TIMED_VERDICT("(3 x + 1)/(x^2 - 2 x - 2) (x^3 + 2 x^2 - 1)^(1/3)", "not elementary", 10);
+    TR_TIMED_VERDICT("(2 x + 3)/(-3 x^2 - 2 x + 3) (x^2 - x + 2)^(1/4)", "not elementary", 10);
+    TR_TIMED_VERDICT("3/(-2 x^2 + 3 x - 3) (-3 x^2 + 2 x)^(1/4)", "not elementary", 10);
     /* elementary, formerly 1.4 - 4.2 s: verified antiderivatives */
     TR_ANTIDERIV("1/(x^4 + 1)^(1/4)", "Trager");
     TR_ANTIDERIV("1/x*(x^2 + 1)^(-1/6)", "Trager");

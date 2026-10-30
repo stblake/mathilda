@@ -9,7 +9,10 @@
  *      former 60-240 s fails the budget.
  *   2. Seeded random integrands d/dx Log[p + q g^(1/m)] (m = 2..6): elementary
  *      by construction, so the method must return a verified antiderivative --
- *      a certificate or a decline would be a wrong answer or a lost one.
+ *      a certificate or a decline would be a wrong answer or a lost one.  A
+ *      correctness check: the budget (1500 s) is generous because for m = 5, 6
+ *      the answers reach 10^5 leaves and take 350 - 700 s (v0.6086), almost all
+ *      of it in the generator over the residue field in characteristic 0.
  *   3. Residue fields with no degree limit: the degree-36 splitting field of a
  *      sextic of the shape Z^6 + a Z^3 + b, built by the algebraic tower.
  */
@@ -65,6 +68,7 @@ static void test_corpus_hard_cases(void) {
     ST_NONELEM("(-1)/(-3*x + 1)*(-2*x^4 - 2*x^3 + x^2 - x - 3)^(-3/4)", 60);/* random-038 */
     ST_NONELEM("1/((x - 2)*(x^3 + 1)^(1/3))", 60);                         /* order-21 screen */
     ST_NONELEM("(x^2 + 1)/x*(x^4 + 2)^(1/6)", 60);                         /* torsion-009: genus 7, Weil bound > 2^63 */
+    ST_NONELEM("(-3*x^2 - 3*x)/(-2*x^2 + 2*x - 1)*(-2*x^4 + 3*x^3 - 3*x^2 + 3*x + 2)^(-5/6)", 120); /* random-010: trace functional over a degree-12 field */
     /* elementary, formerly 1.3 - 4.2 s */
     ST_ELEM("1/(x^4 + 1)^(1/4)", 60);                                      /* binom-032 */
     ST_ELEM("x^(-1)*(2*x^4 - 1)^(2/3)", 60);                               /* cheb-020 */
@@ -82,7 +86,7 @@ static void test_seeded_logs(void) {
             "   g = stRp[RandomInteger[{2, 4}]]; If[Exponent[g, x] < 1, g = x^2 + 1];"
             "   p = stRp[RandomInteger[{1, 3}]]; q = stRp[RandomInteger[{0, 2}]]; If[q === 0, q = 1];"
             "   f = Together[D[Log[p + q g^(1/m)], x]];"
-            "   {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[f, x], 300, $Aborted]];"
+            "   {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[f, x], 1500, $Aborted]];"
             "   Print[\"  seeded \", k, \" m=\", m, \" \", Round[tt, 0.01], \" s\"];"
             "   If[ListQ[rr] || rr === $Aborted ||"
             "      !(d = D[rr, x] - f; TrueQ[PossibleZeroQ[d]] || numericZeroQ[d, x]),"

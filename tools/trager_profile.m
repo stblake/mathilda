@@ -23,7 +23,7 @@ trProfFunctions = {
   "integrateComponent", "hermiteReduce", "componentResidues", "residueField",
   "residueFieldTower", "factorOverField", "tragerLogPart", "tragerBasisLogPart",
   "tragerOrbitLogTerms", "tragerLogTerms", "torsionOrderSpec", "orderModPSpec",
-  "torsionScreen", "generatorTerms", "principalGenerator", "logSumResidual",
+  "torsionScreen", "traceCertificate", "traceDivisorTest", "factorIdeal", "generatorTerms", "principalGenerator", "logSumResidual",
   "jacAdd", "jacReduce", "jacMultiple", "reducedRows", "elementInverse",
   "idealTimes", "idealTimesGenerators", "nativeIdeal", "idealReduce",
   "divisorIdeal", "specIdealX", "hnf", "hnfModDet", "kGCD", "kExtGCD",

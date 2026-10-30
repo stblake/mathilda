@@ -334,6 +334,38 @@ static void test_torsion_order(void) {
     TR_EQ("torsionOrder[tqCtx[1/(x - 2), 2, x^3 + 4 x], {1, -1}]", "2");
 }
 
+/* -------------------------------------------- trace-functional certificates */
+static void test_trace_certificates(void) {
+    /* kTrace: the trace of the multiplication map */
+    TR_EQ("kTrace[fieldNF[t, t^2 - 2, None], 3 + 5 t]", "6");
+    TR_EQ("kTrace[fieldNF[t, t^3 - 2, None], t^3]", "6");          /* t^3 = 2 */
+    TR_EQ("kTrace[fieldNF[t, t^3 - t - 1, None], t^2]", "2");     /* p2 = e1^2 - 2 e2 = 2 */
+    TR_EQ("kTrace[fieldQ[], 7/2]", "7/2");
+    /* factorIdeal, independently: Delta(f) for rational residues is the
+     * product of the single-residue ideals (Ex. 6 has residues +1, -1) */
+    TR_TRUE("Module[{F = fieldQ[], B = tqEx6[\"B\"], Nn = tqEx6[\"N\"], Ep = tqEx6[\"Ep\"], Bp = tqEx6[\"Bp\"], i1, i2},"
+            " i1 = residueIdeal[F, B, 1, Nn, Ep, Bp]; i2 = residueIdeal[F, B, -1, Nn, Ep, Bp];"
+            " idealEqualQ[F, B, factorIdeal[F, B, Zt - 1, Nn, Ep, Bp, Zt], i1] &&"
+            " idealEqualQ[F, B, factorIdeal[F, B, Zt^2 - 1, Nn, Ep, Bp, Zt], idealTimes[F, B, i1, i2]]]");
+    /* ... and over Q(Sqrt[2]) for (1, Sqrt[2]) on y^2 = x^3 + 1: the factor
+     * Z^2 - (residue)^2 against the two conjugate residue ideals */
+    TR_TRUE("Module[{F = tqSq2[\"F\"], B = tqSq2[\"B\"], a = tqSq2[\"residues\"], Nn = tqSq2[\"N\"],"
+            "  Ep = tqSq2[\"Ep\"], Bp = tqSq2[\"Bp\"], f},"
+            " f = kc[F, Expand[(Zt - a[[1]]) (Zt - a[[2]])]];"
+            " idealEqualQ[F, B, factorIdeal[F, B, f, Nn, Ep, Bp, Zt],"
+            "  idealTimes[F, B, residueIdeal[F, B, a[[1]], Nn, Ep, Bp], residueIdeal[F, B, a[[2]], Nn, Ep, Bp]]]]");
+    /* the "facs" spec form builds the same divisor as the "res" form */
+    TR_TRUE("Module[{F = fieldQ[], B = tqEx6[\"B\"]},"
+            " idealEqualQ[F, B,"
+            "  specIdealX[tqEx6, <|\"facs\" -> {Zt - 1, Zt + 1}, \"Z\" -> Zt, \"b\" -> {2, -1}, \"ref\" -> None|>],"
+            "  specIdealX[tqEx6, <|\"res\" -> {1, -1}, \"b\" -> {2, -1}, \"ref\" -> None|>]]]");
+    /* no verdict on an elementary integral (Ex. 6, torsion of order 3) ... */
+    TR_TRUE("catchTrager[traceCertificate[tqEx6]] === Null");
+    TR_TRUE("catchTrager[traceCertificate[tqP23]] === Null");         /* (2, 3): order 6, elementary */
+    /* ... and a certificate on the non-torsion point (3, 5) of y^2 = x^3 - 2 */
+    TR_TRUE("MatchQ[catchTrager[traceCertificate[tqP35]], tragerFail[\"NonElementary\", _String, ___]]");
+}
+
 int main(void) {
     tr_init();
     define_helpers();
@@ -345,6 +377,7 @@ int main(void) {
     test_good_primes();
     test_order_mod_p();
     test_torsion_order();
+    test_trace_certificates();
     printf("trager_torsion: %d assertions passed\n", tr_assertions);
     return 0;
 }

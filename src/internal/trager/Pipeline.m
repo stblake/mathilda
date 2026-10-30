@@ -76,6 +76,10 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
   (* complete Q-basis construction comes first unless the splitting field is *)
   (* hopeless; the orbit construction is then the fallback.                  *)
   basisFirst = If[ctx["genus"] === 0, Max[degs] <= 2 && crude <= 8, crude <= 5040];
+  (* A certificate first when the field of all residues may be larger than   *)
+  (* that of one residue: trace functionals live over Q(gamma) (it throws a  *)
+  (* NonElementary certificate, or returns without a verdict).               *)
+  If[ctx["genus"] =!= 0 && crude > Max[degs], traceCertificate[ctx]];
   attempt = If[basisFirst,
     catchTrager[tragerBasisLogPart[ctx, r, Y]],
     tragerFail["Decline", "skipped", <||>]];
@@ -86,6 +90,44 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
     If[attempt =!= $Failed, Return[attempt]]];
   If[basisFirst, Throw[tragerFail["Decline", "logarithmic part: no construction applies", <||>], "TragerFail"]];
   tragerBasisLogPart[ctx, r, Y]];
+
+traceCertificate::usage = "traceCertificate[ctx] looks for a proof of non-elementarity that needs only the field Q(gamma) of ONE residue gamma, not the field of all of them. If the integral is elementary, r = Sum c_j du_j/u_j, and for every Q-linear lambda on the span of the residues Sum_i lambda(alpha_i) Delta(alpha_i) = Sum_j lambda(c_j) div(u_j) is a torsion divisor. lambda_gamma(alpha) = Tr(alpha gamma) is Q-linear and constant on the roots of each irreducible factor f_k of R over Q(gamma), so its divisor Sum_k lambda_k Delta(f_k) is defined over Q(gamma), of degree deg q instead of that of the splitting field. A residue gamma is taken from each irreducible factor q of R in turn; when its divisor is shown of infinite order (orders modulo two primes disagree, or the only possible order N fails torsionScreen) a NonElementary certificate is thrown. Otherwise (all lambda_gamma torsion, or zero) it returns Null without a verdict and the full construction follows.";
+traceCertificate[ctx_Association] := Module[{Z = ctx["Z"], qs},
+  qs = SortBy[Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[FactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
+    Exponent[#, Z] &];
+  Do[traceCertificateAt[ctx, q, qs], {q, qs}]];
+
+traceCertificateAt::usage = "traceCertificateAt[ctx, q, qs] is one step of traceCertificate: gamma a root of q (rational, or the generator of Q[t]/(q)), and the factors f_k of every q' in qs over Q(gamma). For each g = gamma^j (j = 0 .. deg q - 1) the functional lambda_g(alpha) = Tr(alpha g) is constant on the roots of f_k, lambda_k = Tr_{Q(gamma)/Q}(g s_k)/(deg q deg f_k) (s_k the root sum of f_k: the mean of the conjugates of alpha g, Tr_{K/Q} up to a common factor); g ranges over a basis of Q(gamma) because one power can vanish identically (power sums of R that are zero). Each nonzero lambda, up to proportionality, is scaled to integers and its divisor Sum_k lambda_k Delta(f_k) tested for torsion over Q(gamma).";
+traceCertificateAt[ctx_Association, q_, qs_List] := Module[
+  {Z = ctx["Z"], t = Unique["tg"], K, gamma, n, facs, lams, octx},
+  n = Exponent[q, Z];
+  If[n === 1,
+    K = fieldQ[]; gamma = -Coefficient[q, Z, 0]; facs = qs,
+    K = fieldNF[t, q /. Z -> t, None]; gamma = t;
+    facs = Join @@ (factorOverField[K, #, Z] & /@ qs)];
+  lams = Table[
+    Table[With[{d = Exponent[f, Z]}, kTrace[K, gamma^j (-Coefficient[f, Z, d - 1])]/(n d)], {f, facs}],
+    {j, 0, n - 1}];
+  (* integral primitive representatives, zero and proportional ones dropped *)
+  lams = DeleteDuplicates[Select[
+    (With[{v = # LCM @@ (Denominator /@ #)}, v/(GCD @@ v) Sign[First[Select[v, # =!= 0 &]]]] &) /@
+      Select[lams, !AllTrue[#, # === 0 &] &], True &]];
+  octx = Join[ctx, <|"F" -> K, "residues" -> {}, "refc" -> None, "facs" -> facs|>];
+  Do[traceDivisorTest[octx, <|"facs" -> facs, "Z" -> Z, "b" -> b, "ref" -> None|>, n], {b, lams}]];
+
+traceDivisorTest::usage = "traceDivisorTest[octx, spec, n] tests the divisor spec of a trace functional for torsion over the field octx[\"F\"] (degree n): a NonElementary certificate when its orders modulo two good primes disagree (torsionOrderSpec) or its only possible order N is refuted at a further good prime (torsionScreen); Null without a verdict otherwise. An internal error is passed on.";
+traceDivisorTest[octx_Association, spec_Association, n_Integer] := Module[{r},
+  r = catchTrager[Module[{Nn = torsionOrderSpec[octx, spec]}, {Nn, torsionScreen[octx, spec, Nn]}]];
+  Which[
+    tragerFailQ[r] && r[[1]] === "NonElementary",
+      throwNonElementary["a trace functional of the residues gives a divisor of infinite order over Q(gamma), deg " <>
+        ToString[n] <> " (" <> r[[2]] <> ")", r[[3]]],
+    tragerFailQ[r] && r[[1]] === "Internal", Throw[r, "TragerFail"],
+    tragerFailQ[r], Null,                 (* a decline: no verdict, carry on *)
+    r[[2]] === False,
+      throwNonElementary["a trace functional of the residues gives a divisor of infinite order over Q(gamma), deg " <>
+        ToString[n] <> ": its only possible order " <> ToString[r[[1]]] <> " is refuted at a further good prime"],
+    True, Null]];
 
 tragerBasisLogPart::usage = "tragerBasisLogPart[ctx, r, Y] is the Q-basis construction (TragerLogTerms.m, tragerLogTerms) over the field of all residues, verified exactly; a nonzero holomorphic difference proves non-elementarity.";
 tragerBasisLogPart[ctx_Association, r_List, Y_Symbol] := Module[{B = ctx["B"], full, logs},

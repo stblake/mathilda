@@ -167,6 +167,10 @@ kGCD[F_Association, a_, b_, x_Symbol] := Module[{nat, p = kc[F, a], q = kc[F, b]
     If[Head[nat] =!= FLINT`PolynomialFieldGCD, Return[nat]]];
   First[kExtGCD[F, a, b, x]]];
 
+kTrace::usage = "kTrace[F, a] is the trace of the element a of F down to the prime field: the trace of multiplication by a on the power basis 1, t, ..., t^(n-1) of Q(theta); a itself over Q and GF(p).";
+kTrace[F_Association, a_] := If[F["Type"] =!= "NF", kc[F, a],
+  Module[{t = F["t"]}, Sum[Coefficient[kc[F, a t^i], t, i], {i, 0, fieldDegree[F] - 1}]]];
+
 kNorm::usage = "kNorm[F, p] is the norm of p from K[x] down to the prime-field polynomial ring: Resultant over t against mu for Q(theta), p itself for Q and GF(p).";
 kNorm[F_Association, p_] := If[F["Type"] === "NF",
   Expand[Resultant[kc[F, p], F["mu"], F["t"]]], kc[F, p]];
