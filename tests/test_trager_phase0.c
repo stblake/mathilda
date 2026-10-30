@@ -187,7 +187,9 @@ static void test_detect(void) {
     DECLINE_REASON("I Sqrt[x]", "coefficients outside Q");
     DECLINE_REASON("Sqrt[x + I]", "coefficients outside Q");
     DECLINE_REASON("Sqrt[2] Sqrt[x]", "algebraic constant in the integrand (coefficients must be rational)");
-    DECLINE_REASON("x + 3^(1/3)", "algebraic constant in the integrand (coefficients must be rational)");
+    /* x + 3^(1/3) has no radical in x: a rational function over Q(3^(1/3)),
+     * routed to the rational integrator since v0.6094 (detectRadical -> None) */
+    DECLINE_REASON("Sqrt[x] + 3^(1/3)", "algebraic constant in the integrand (coefficients must be rational)");
     DECLINE_REASON("Sqrt[1 + Sqrt[x]]", "nested radicals");
     DECLINE_REASON("(x + x^(1/3))^(1/2)", "nested radicals");
     DECLINE_REASON("Sqrt[x] + Sqrt[x + 1]", "more than one radicand (a radical compositum)");

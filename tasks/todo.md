@@ -9,7 +9,7 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
 - [x] P1b PMT gate on positive evidence (fac local, Hold/Temporary, reclim Check, C overflow flag)
 - [x] P1c FLINT qqbar zero^(-n) guard + FLINT throw hook (no kernel abort)
 - [x] P2a complex-point verification in harnesses (ddi_stress; trager_fricas_stress still TODO)
-- [~] P2b drop branch-cut acceptance DONE (v0.6093 PZQ gate, x in Complexes); back-substitution in the integrand's own radicals TODO (recover declined coverage)
+- [~] P2b drop branch-cut acceptance DONE (v0.6093 PZQ gate, x in Complexes); own-radical fallback DONE v0.6096 (+32 PMT); TODO: answers whose intermediate radicand lies ON its cut across a real interval are numerically fragile (multrad_0-ii-inst) -- prefer forms off the cut
 - [ ] P2c power-free radicands before choosing m
 - [x] P2d PossibleZeroQ is the sole verifier (PZQ deep-cancellation fixed v0.6091, harness PZQ-only; Trager/PMT internal numeric fallbacks still to remove): triage 77 PZQ=False verified answers (24 Trager, 53 PMT), fix PZQ per
       class, then remove numeric fallbacks (Trager spotCheck/numericZeroQ, PMT branchUnit, harness numeric acceptance)

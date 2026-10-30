@@ -146,38 +146,38 @@ negatives. Both are in the fix plan below.
 # Results
 
 <!-- BEGIN GENERATED -->
-Run of 2026-10-30 21:05:12: **803 integrands** (207 with symbolic parameters, 596 over Q), per-method timeout 120 s, FriCAS timeout 120 s, wall time 76 min; ParallelMixedTower re-run on 803 cases (33 min); ParallelMixedTower re-run on 55 cases (2 min); ParallelMixedTower re-run on 803 cases (38 min); ParallelMixedTower, Trager re-run on 803 cases (44 min); ParallelMixedTower re-run on 2 cases (0 min); ParallelMixedTower re-run on 2 cases (0 min).
+Run of 2026-10-30 23:10:42: **803 integrands** (207 with symbolic parameters, 596 over Q), per-method timeout 120 s, FriCAS timeout 120 s, wall time 76 min; ParallelMixedTower re-run on 803 cases (33 min); ParallelMixedTower re-run on 55 cases (2 min); ParallelMixedTower re-run on 803 cases (38 min); ParallelMixedTower, Trager re-run on 803 cases (44 min); ParallelMixedTower re-run on 2 cases (0 min); ParallelMixedTower re-run on 2 cases (0 min); Trager, ParallelMixedTower re-run on 803 cases (44 min); Trager, ParallelMixedTower re-run on 18 cases (2 min); ParallelMixedTower re-run on 803 cases (39 min); ParallelMixedTower re-run on 2 cases (0 min).
 
 ### Headline
 
 |  | Trager | ParallelMixedTower | FriCAS |
 |---|---|---|---|
-| verified antiderivative | 339 | 226 | 482 |
+| verified antiderivative | 351 | 260 | 482 |
 | proved non-elementary | 15 | 21 | 46 |
-| declined | 446 | 361 | 0 |
-| timeout | 3 | 195 | 253 |
+| declined | 433 | 323 | 0 |
+| timeout | 4 | 199 | 253 |
 | error / crash | 0 | 0 | 21 |
 | wrong answer | 0 | 0 | 1 |
 | right on part of the real line only (branch) | 0 | 0 | 0 |
 | correct, but PossibleZeroQ cannot confirm it (PZQ-FN) | 0 | 0 | 0 |
 | answer not verifiable in budget | 0 | 0 | 0 |
 
-Of the **646** integrands the book states are elementary: Trager solves **282**, ParallelMixedTower solves **200**, FriCAS **419**, either Mathilda method **356**.
+Of the **646** integrands the book states are elementary: Trager solves **294**, ParallelMixedTower solves **223**, FriCAS **419**, either Mathilda method **369**.
 
-- over Q (no parameters) (596): Trager solved 339, decided 354; ParallelMixedTower solved 208, decided 229; FriCAS solved 359.
-- with symbolic parameters (207): Trager solved 0, decided 0; ParallelMixedTower solved 18, decided 18; FriCAS solved 123.
+- over Q (no parameters) (596): Trager solved 351, decided 366; ParallelMixedTower solved 239, decided 260; FriCAS solved 359.
+- with symbolic parameters (207): Trager solved 0, decided 0; ParallelMixedTower solved 21, decided 21; FriCAS solved 123.
 
 ### Classification against FriCAS and the book
 
 | class | Trager | ParallelMixedTower |
 |---|---:|---:|
-| agree elem | 225 | 192 |
-| Mathilda only | 114 | 33 |
+| agree elem | 238 | 223 |
+| Mathilda only | 113 | 36 |
 | agree non-elem | 9 | 15 |
 | non-elem unconf. | 6 | 6 |
-| FriCAS only | 257 | 289 |
-| neither | 190 | 156 |
-| timeout | 2 | 111 |
+| FriCAS only | 244 | 258 |
+| neither | 190 | 152 |
+| timeout | 3 | 112 |
 | book conflict | 0 | 1 |
 
 ### Per chapter
@@ -186,40 +186,40 @@ Cells are *verified antiderivatives / proved non-elementary / declined / timeout
 
 | chapter | n | book elem | Trager | ParallelMixedTower | FriCAS (elem/non) |
 |---|---:|---:|---|---|---|
-| warmup | 73 | 73 | 35 / 0 / 37 / 1 | 48 / 0 / 14 / 11 | 73 / 0 |
-| laurent_poly_subst | 60 | 60 | 43 / 0 / 17 / 0 | 15 / 0 / 14 / 31 | 42 / 0 |
+| warmup | 73 | 73 | 46 / 0 / 26 / 1 | 51 / 0 / 11 / 11 | 73 / 0 |
+| laurent_poly_subst | 60 | 60 | 43 / 0 / 17 / 0 | 16 / 0 / 13 / 31 | 42 / 0 |
 | rational_subs | 32 | 32 | 27 / 0 / 5 / 0 | 13 / 0 / 5 / 14 | 16 / 0 |
-| gunther | 33 | 29 | 21 / 4 / 8 / 0 | 7 / 4 / 14 / 8 | 26 / 0 |
-| power_expand | 6 | 6 | 5 / 0 / 1 / 0 | 0 / 0 / 5 / 1 | 6 / 0 |
+| gunther | 33 | 29 | 21 / 4 / 8 / 0 | 7 / 4 / 11 / 11 | 26 / 0 |
+| power_expand | 6 | 6 | 5 / 0 / 1 / 0 | 4 / 0 / 1 / 1 | 6 / 0 |
 | generalised_gunther | 88 | 80 | 66 / 2 / 20 / 0 | 14 / 0 / 16 / 58 | 19 / 2 |
-| chebychev | 87 | 51 | 3 / 7 / 77 / 0 | 16 / 8 / 50 / 13 | 32 / 32 |
+| chebychev | 87 | 51 | 3 / 7 / 77 / 0 | 18 / 8 / 48 / 13 | 32 / 32 |
 | inverse_function | 18 | 10 | 0 / 0 / 18 / 0 | 2 / 5 / 10 / 1 | 6 / 5 |
-| product_rule | 21 | 21 | 19 / 0 / 2 / 0 | 15 / 0 / 6 / 0 | 21 / 0 |
+| product_rule | 21 | 21 | 19 / 0 / 2 / 0 | 20 / 0 / 1 / 0 | 21 / 0 |
 | log_term | 16 | 16 | 16 / 0 / 0 / 0 | 15 / 0 / 1 / 0 | 16 / 0 |
 | realis | 22 | 7 | 17 / 2 / 3 / 0 | 9 / 2 / 10 / 1 | 18 / 0 |
-| nested_radicals | 161 | 159 | 0 / 0 / 161 / 0 | 20 / 1 / 121 / 19 | 86 / 2 |
-| multiple_radicals | 55 | 34 | 0 / 0 / 55 / 0 | 6 / 0 / 42 / 7 | 40 / 2 |
-| euler | 22 | 22 | 10 / 0 / 11 / 1 | 6 / 0 / 9 / 7 | 13 / 0 |
-| timofeev | 23 | 7 | 19 / 0 / 4 / 0 | 8 / 0 / 10 / 5 | 23 / 0 |
-| potpourri | 43 | 7 | 31 / 0 / 12 / 0 | 19 / 0 / 18 / 6 | 27 / 0 |
+| nested_radicals | 161 | 159 | 0 / 0 / 161 / 0 | 27 / 1 / 113 / 20 | 86 / 2 |
+| multiple_radicals | 55 | 34 | 0 / 0 / 55 / 0 | 12 / 0 / 36 / 7 | 40 / 2 |
+| euler | 22 | 22 | 11 / 0 / 10 / 1 | 6 / 0 / 9 / 7 | 13 / 0 |
+| timofeev | 23 | 7 | 19 / 0 / 4 / 0 | 13 / 0 / 5 / 5 | 23 / 0 |
+| potpourri | 43 | 7 | 31 / 0 / 12 / 0 | 20 / 0 / 17 / 6 | 27 / 0 |
 | mult_piecewise | 1 | 0 | 0 / 0 / 1 / 0 | 0 / 0 / 1 / 0 | 0 / 0 |
-| danger_zone | 20 | 18 | 18 / 0 / 1 / 1 | 1 / 0 / 9 / 10 | 4 / 0 |
+| danger_zone | 20 | 18 | 17 / 0 / 1 / 2 | 1 / 0 / 9 / 10 | 4 / 0 |
 | multiple_methods | 4 | 0 | 2 / 0 / 2 / 0 | 1 / 0 / 1 / 2 | 0 / 0 |
-| introduction | 18 | 14 | 7 / 0 / 11 / 0 | 11 / 1 / 5 / 1 | 14 / 3 |
+| introduction | 18 | 14 | 8 / 0 / 10 / 0 | 11 / 1 / 5 / 1 | 14 / 3 |
 
 ### Timing (seconds, cases each system answered — antiderivative or proof)
 
 | system | answered | median | mean | max |
 |---|---:|---:|---:|---:|
-| Trager | 354 | 0.833 | 2.309 | 116.91 |
-| ParallelMixedTower | 247 | 0.267 | 3.990 | 114.94 |
+| Trager | 366 | 0.645 | 1.778 | 34.87 |
+| ParallelMixedTower | 281 | 0.278 | 4.598 | 119.14 |
 | FriCAS | 528 | 0.200 | 2.452 | 90.90 |
 
-On the 142 integrands both methods solve, median LeafCount of the antiderivative: Trager 137, ParallelMixedTower 122.
+On the 169 integrands both methods solve, median LeafCount of the antiderivative: Trager 118, ParallelMixedTower 97.
 
 ### Why each method declines
 
-**Trager** (446 declines)
+**Trager** (433 declines)
 
 | reason | count |
 |---|---:|
@@ -227,21 +227,20 @@ On the 142 integrands both methods solve, median LeafCount of the antiderivative
 | radicand is not a rational function over Q | 109 |
 | transcendental function in the integrand | 52 |
 | more than one radicand (a radical compositum) | 51 |
-| no radical in the integrand (a rational function) | 11 |
-| algebraic constant in the integrand (coefficients must be rational) | 8 |
 | integrand is not a rational function of x and the radical over Q | 6 |
+| algebraic constant in the integrand (coefficients must be rational) | 6 |
 | integrand is not algebraic over Q(x) | 2 |
 
-**ParallelMixedTower** (361 declines)
+**ParallelMixedTower** (323 declines)
 
 | reason | count |
 |---|---:|
 | tower construction failed | 151 |
-| verification failed | 94 |
+| verification failed | 60 |
 | no solution within bounds | 47 |
-| needs torsion realisation (milestone iii) | 33 |
+| needs torsion realisation (milestone iii) | 30 |
 | partially ramified branch prime | 15 |
-| residue class lost | 10 |
+| residue class lost | 9 |
 | certificate withheld | 5 |
 | internal | 4 |
 | deep residue sheet undecided | 2 |
@@ -276,7 +275,7 @@ None.
 
 None.
 
-### Timeouts (198)
+### Timeouts (203)
 
 | id | method | integrand | book ref | detail |
 |-----------|------|------------------|---------|--------------|
@@ -345,6 +344,9 @@ None.
 | gunther\-prob\_gunther\_5\-i | PMT | x/\(\(x\^3\+8\)\*Sqrt\[x\^3\-1\]\) | Problem 5 \(i\) | FriCAS ELEM; book elem |
 | gunther\-prob\_gunther\_5\-ii\-pp | PMT | x/\(\(x\^3\+4\)\*Sqrt\[x\^3\+1\]\) | Problem 5 \(ii\) upper signs | FriCAS ELEM; book elem |
 | gunther\-prob\_gunther\_5\-ii\-mm | PMT | x/\(\(x\^3\-4\)\*Sqrt\[x\^3\-1\]\) | Problem 5 \(ii\) lower signs | FriCAS ELEM; book elem |
+| gunther\-prob\_gunther\_5\-iii\-pp | PMT | x\^3/\(\(x\^6\+4\)\*Sqrt\[x\^6\+1\]\) | Problem 5 \(iii\) upper signs, from \(ii\) b… | FriCAS ELEM; book elem |
+| gunther\-prob\_gunther\_5\-iii\-mm | PMT | x\^3/\(\(x\^6\-4\)\*Sqrt\[x\^6\-1\]\) | Problem 5 \(iii\) lower signs, from \(ii\) b… | FriCAS ELEM; book elem |
+| gunther\-prob\_gunther\_5\-iv\-pm | PMT | x\^3/\(\(x\^6\+8\)\*Sqrt\[x\^6\-1\]\) | Problem 5 \(iv\) x\^6\+8 with x\^6\-1, from \(i… | FriCAS ELEM; book elem |
 | power\_expand\-power\_expand\_2\-ii | PMT | 1/\(x\^20\-3\*x\^16\+2\*x\^12\+2\*x\^8\-3\*x\^4\+1\)\^\(1/4\) | Problem 2 \(ii\) | FriCAS ELEM; book elem |
 | generalised\_gunther\-intro\-1 | PMT | \(2\*x\^2\-1\)/\(\(x\^2\-1\)\*\(3\*x\^2\-1\)\*\(2\*x\^3\-x\)\^\(1/3\)\) | Chapter intro worked example \(solved\) | FriCAS TIMEOUT; book elem |
 | generalised\_gunther\-prob\_gg\_1\-main | PMT | \(2\*x\^2\+1\)/\(\(x\^2\+1\)\*\(3\*x\^2\+1\)\*\(2\*x\^3\-x\)\^\(1/3\)\) | Problem gg1 \(unlabelled, 1st of chapter\) | FriCAS TIMEOUT; book elem |
@@ -422,6 +424,7 @@ None.
 | nested\-nested\_3\-i\-inst | PMT | \(2/x\^3\+3\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(i\), n=\-3; inst a=2, b=… | FriCAS TIMEOUT; book elem |
 | nested\-nested\_3\-iii | PMT | \(a\*x\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(iii\), n=1 | FriCAS TIMEOUT; book elem |
 | nested\-nested\_3\-iii\-inst | PMT | \(2\*x\+3\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(iii\), n=1; inst a=2, b… | FriCAS TIMEOUT; book elem |
+| nested\-nested\_4\-ex1\-inst | PMT | \(2/x\^4\+3\*x\^\(4/3\)\)\^\(1/4\) | Problem nested\_4, solution example 1 \(n=… | FriCAS TIMEOUT; book elem |
 | nested\-nested\_6\-i | PMT | Sqrt\[d\*x\^2\+c\*x\^2/Sqrt\[a/x\+b\]\]/Sqrt\[a/x\+b\] | Problem nested\_6 \(i\) | FriCAS ELEM; book elem |
 | nested\-nested\_6\-ii | PMT | Sqrt\[a/x\+b\]/Sqrt\[d\*x\^2\+c\*x\^2/Sqrt\[a/x\+b\]\] | Problem nested\_6 \(ii\) | FriCAS ELEM; book elem |
 | nested\-nested\_6\-iii | PMT | Sqrt\[a/x\+b\]\*Sqrt\[d\*x\^2\+c\*x\^2/Sqrt\[a/x\+b\]\] | Problem nested\_6 \(iii\) | FriCAS ELEM; book elem |
@@ -474,12 +477,13 @@ None.
 | danger\-d1\-iv\-m | PMT | x\^2/\(\(x\^4\+4\)\*\(x\^2\-1\)\^\(1/4\)\) | Danger zone problem 1 \(iv\), x\^2\-1; book … | FriCAS TIMEOUT; book elem |
 | danger\-d1\-v\-p | Trager | 1/\(\(x\+1\)\*\(1\-5\*x\^2\)\^\(1/5\)\) | Danger zone problem 1 \(v\), x\+1 | FriCAS ERROR; book elem |
 | danger\-d1\-v\-p | PMT | 1/\(\(x\+1\)\*\(1\-5\*x\^2\)\^\(1/5\)\) | Danger zone problem 1 \(v\), x\+1 | FriCAS ERROR; book elem |
+| danger\-d1\-v\-m | Trager | 1/\(\(x\-1\)\*\(1\-5\*x\^2\)\^\(1/5\)\) | Danger zone problem 1 \(v\), x\-1 | FriCAS ERROR; book elem |
 | danger\-d1\-v\-m | PMT | 1/\(\(x\-1\)\*\(1\-5\*x\^2\)\^\(1/5\)\) | Danger zone problem 1 \(v\), x\-1 | FriCAS ERROR; book elem |
 | multmeth\-m1 | PMT | \(a\^3\*x\^3\-b\^3\)\^\(1/3\)/\(a\*x\+b\) | Multiple methods problem 1 \[4\] | FriCAS ERROR; book ? |
 | multmeth\-m1\-inst | PMT | \(2\^3\*x\^3\-3\^3\)\^\(1/3\)/\(2\*x\+3\) | Multiple methods problem 1 \[4\]; inst a=2… | FriCAS TIMEOUT; book ? |
 | intro\-multiple\_approaches\-1 | PMT | 1/\(\(x\-1\)\*Sqrt\[x\^2\+b\*x\+c\]\) | Introduction, Multiple Approaches to Int… | FriCAS ELEM; book elem |
 
-### Elementary per book or FriCAS, but declined (696)
+### Elementary per book or FriCAS, but declined (646)
 
 | id | method | integrand | book ref | detail |
 |-----------|------|------------------|---------|--------------|
@@ -488,21 +492,10 @@ None.
 | warmup\-prob\_warmup\_2b\-minus\-n2 | PMT | \(\(2\*2\+1\)\*x\+1\)/\(\(x\^2\-1\)\*Sqrt\[\(x\-1\)\*\(x\^2\-1\)\^2\-1\]\) | Problem 0.2b Realis lower sign n=2 | \{"needs torsion realisation \(milestone iii\)", \{\{\-1 \+ x, \{\-3\*I, 3\*I\}\}, \{1 \+ x, \{\-2\*I, 2\*I\}\}\}\} |
 | warmup\-prob\_warmup\_2b\-plus\-n3 | PMT | \(\(2\*3\+1\)\*x\-1\)/\(\(x\^2\-1\)\*Sqrt\[\(x\+1\)\*\(x\^2\-1\)\^3\-1\]\) | Problem 0.2b Realis upper sign n=3 | \{"needs torsion realisation \(milestone iii\)", \{\{\-1 \+ x, \{\-3\*I, 3\*I\}\}, \{1 \+ x, \{\-4\*I, 4\*I\}\}\}\} |
 | warmup\-prob\_warmup\_2b\-minus\-n3 | PMT | \(\(2\*3\+1\)\*x\+1\)/\(\(x\^2\-1\)\*Sqrt\[\(x\-1\)\*\(x\^2\-1\)\^3\-1\]\) | Problem 0.2b Realis lower sign n=3 | \{"needs torsion realisation \(milestone iii\)", \{\{\-1 \+ Sqrt\[x\], \{\-4\*I, 4\*I\}\}, \{1 \+ Sqrt\[x\], \{4\*I, \-4\*I\}\}, \{1 \+ x… |
-| warmup\-prob\_warmup\_2c\-i | Trager | 1/\(1\-x\^3\) | Problem 0.2c \(i\) rational | \{"failed", "no radical in the integrand \(a rational function\)"\} |
-| warmup\-prob\_warmup\_2c\-ii | Trager | 1/\(x\^4\+1\) | Problem 0.2c \(ii\) rational | \{"failed", "no radical in the integrand \(a rational function\)"\} |
 | warmup\-prob\_warmup\_2c\-iii | Trager | x\^4/\(x\^6\-b\^6\) | Problem 0.2c \(iii\) rational | \{"failed", "integrand is not algebraic over Q\(x\)"\} |
-| warmup\-prob\_warmup\_2c\-iii\-inst | Trager | x\^4/\(x\^6\-3\^6\) | Problem 0.2c \(iii\) rational instantiated… | \{"failed", "no radical in the integrand \(a rational function\)"\} |
 | warmup\-prob\_warmup\_2c\-iv | Trager | \(x\^4\+a\)/\(x\^4\+b\)\^2 | Problem 0.2c \(iv\) rational | \{"failed", "integrand is not algebraic over Q\(x\)"\} |
-| warmup\-prob\_warmup\_2c\-iv\-inst | Trager | \(x\^4\+2\)/\(x\^4\+3\)\^2 | Problem 0.2c \(iv\) rational instantiated … | \{"failed", "no radical in the integrand \(a rational function\)"\} |
-| warmup\-prob\_warmup\_2cc\-i | Trager | x/\(x\^8\+1\) | Problem 1.2cc \(i\) rational | \{"failed", "no radical in the integrand \(a rational function\)"\} |
 | warmup\-prob\_warmup\_2cc\-i | PMT | x/\(x\^8\+1\) | Problem 1.2cc \(i\) rational | \{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", 1 \+ x\^8, \(\-1/8… |
-| warmup\-prob\_warmup\_2cc\-ii | Trager | x\^2/\(x\^4\+x\^2\+1\) | Problem 1.2cc \(ii\) rational | \{"failed", "no radical in the integrand \(a rational function\)"\} |
-| warmup\-prob\_warmup\_2cc\-iii | Trager | \(x\^2\+2\*x\)/\(x\^4\+2\*x\^2\+4\*x\+2\) | Problem 1.2cc \(iii\) rational | \{"failed", "no radical in the integrand \(a rational function\)"\} |
-| warmup\-prob\_warmup\_2cc\-iv | Trager | x\^2/\(x\^6\-3\*x\^4\+4\*x\^2\-2\) | Problem 1.2cc \(iv\) rational | \{"failed", "no radical in the integrand \(a rational function\)"\} |
-| warmup\-prob\_warmup\_2d | Trager | \(x\^6\+\(3\-2\*Sqrt\[2\]\)\*x\^4\+\(12\*Sqrt\[2\]\-17\)\*x\^2\+70\*Sqrt\[2\]\-99\)/\(x\^8\+\(8\-8\*Sqrt\[2\]\)\*x\^6\+\(78\-56\*Sq… | Problem 1.2d rational over Q\(Sqrt\[2\]\) | \{"failed", "algebraic constant in the integrand \(coefficients must be rational\)"\} |
-| warmup\-prob\_warmup\_2e | Trager | \(189\*x\^5\+945\*x\^4\+1131\*x\^3\-147\*x\^2\-110\*x\-28\)/\(9\*x\^6\+54\*x\^5\+74\*x\^4\-14\*x\^3\+25\*x\^2\-8\*x\+4\) | Problem 2.2e \(and 2.2f\) Lazard\-Rioboo\-Tr… | \{"failed", "no radical in the integrand \(a rational function\)"\} |
 | warmup\-prob\_warmup\_2e | PMT | \(189\*x\^5\+945\*x\^4\+1131\*x\^3\-147\*x\^2\-110\*x\-28\)/\(9\*x\^6\+54\*x\^5\+74\*x\^4\-14\*x\^3\+25\*x\^2\-8\*x\+4\) | Problem 2.2e \(and 2.2f\) Lazard\-Rioboo\-Tr… | \{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", 4 \- 8 x \+ 25 x… |
-| warmup\-prob\_warmup\_2g | Trager | \(\(1\+Sqrt\[3\]\)\*x\^2\-4\*Sqrt\[3\]\+4\)/\(\(9\+5\*Sqrt\[3\]\)\*x\^4\+24\*x\^2\-80\*Sqrt\[3\]\+144\) | Problem 1.2g rational over Q\(Sqrt\[3\]\) | \{"failed", "algebraic constant in the integrand \(coefficients must be rational\)"\} |
 | warmup\-prob\_warmup\_3\-i | Trager | \(x\^2\-a\)/\(Sqrt\[x\+1\]\+b\) | Problem 0.3 \(i\) Q\(x,\(ax\+b\)\^\(m/n\)\) | \{"failed", "integrand is not a rational function of x and the radical over Q"\} |
 | warmup\-prob\_warmup\_3\-ii | Trager | \(\(a\*x\+b\)\^\(1/3\)\+c\)/\(\(a\*x\+b\)\^\(1/3\)\+d\) | Problem 0.3 \(ii\) Q\(x,\(ax\+b\)\^\(m/n\)\) | \{"failed", "radicand is not a rational function over Q"\} |
 | warmup\-prob\_warmup\_3\-iii | Trager | \(Sqrt\[a\*x\+b\]\+a\)/\(\(a\*x\+b\)\^\(1/4\)\+b\) | Problem 0.3 \(iii\) Q\(x,\(ax\+b\)\^\(m/n\)\) | \{"failed", "radicand is not a rational function over Q"\} |
@@ -522,13 +515,10 @@ None.
 | warmup\-prob\_warmup\_5 | Trager | \(\(a\*x\+b\)\^\(2/3\)\+1\)/\(\(a\*x\+b\)\^\(1/2\)\+\(a\*x\+b\)\^\(1/4\)\) | Problem 0.5 multiple radicals of ax\+b | \{"failed", "radicand is not a rational function over Q"\} |
 | warmup\-prob\_warmup\_7 | Trager | \(\(x\-5\)\*\(3\*x\-1\)\^\(5/2\)\)/\(\(x\+2\)\*\(8\-7\*x\)\^\(3/2\)\) | Problem 0.7 two linear square roots | \{"failed", "more than one radicand \(a radical compositum\)"\} |
 | warmup\-prob\_warmup\_7 | PMT | \(\(x\-5\)\*\(3\*x\-1\)\^\(5/2\)\)/\(\(x\+2\)\*\(8\-7\*x\)\^\(3/2\)\) | Problem 0.7 two linear square roots | \{"failed", "no solution within bounds", \{5\}\} |
-| warmup\-prob\_warmup\_8 | PMT | Sqrt\[\(1\-x\)/\(1\+x\)\] | Problem 0.8 \(iii\) Stewart | \{"failed", "verification failed"\} |
 | warmup\-prob\_warmup\_10\-i | Trager | 1/\(1\-Sin\[x\]\) | Problem 0.10 \(i\) tangent half\-angle | \{"failed", "transcendental function in the integrand"\} |
 | warmup\-prob\_warmup\_10\-ii | Trager | \(Sin\[x\]\-1\)/\(Sin\[x\]\+Cos\[x\]\) | Problem 0.10 \(ii\) tangent half\-angle | \{"failed", "transcendental function in the integrand"\} |
 | warmup\-prob\_warmup\_10\-iii | Trager | \(1/Cos\[x\]\-Cos\[x\]/Sin\[x\]\)/\(Cos\[x\]\-Sin\[x\]\+1\) | Problem 0.10 \(iii\) tangent half\-angle, s… | \{"failed", "transcendental function in the integrand"\} |
-| warmup\-prob\_warmup\_11\-i | PMT | x\*Sqrt\[\(x\-2\)/\(3\-x\)\] | Problem 0.11 \(i\) | \{"failed", "verification failed"\} |
 | warmup\-prob\_warmup\_11\-ii | PMT | 1/\(x\*\(x/\(1\-x\)\)\^\(3/2\)\) | Problem 0.11 \(ii\) | \{"failed", "verification failed"\} |
-| warmup\-prob\_warmup\_11\-iii | PMT | x\^2\*Sqrt\[\(x\-3\)/\(x\-2\)\] | Problem 0.11 \(iii\) | \{"failed", "verification failed"\} |
 | warmup\-prob\_warmup\_13\-iii | Trager | 1/\(x\*Sqrt\[a\*x\^2\+b\*x\+c\]\) | Problem 1.13 \(iii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | warmup\-prob\_warmup\_14\-ii | Trager | \(\(Exp\[x\]\-Exp\[\-x\]\)/2\)/\(1\+\(Exp\[x\]\-Exp\[\-x\]\)/2\) | Problem 1.14 \(ii\) sinh\(x\)/\(1\+sinh\(x\)\), s… | \{"failed", "transcendental function in the integrand"\} |
 | warmup\-prob\_warmup\_14\-iii | Trager | 1/\(\(\(Exp\[x\]\+Exp\[\-x\]\)/2\)\^3\-\(\(Exp\[x\]\+Exp\[\-x\]\)/2\)\) | Problem 1.14 \(iii\) 1/\(cosh\(x\)\^3\-cosh\(x\)\)… | \{"failed", "transcendental function in the integrand"\} |
@@ -560,7 +550,6 @@ None.
 | laurent\_poly\_subst\-prob\_laurent\_sub\_14b\-… | Trager | \(x\^3\+4\*b\)/\(\(x\^3\+b\)\*\(a\*x\^4\-x\^3\-b\)\^\(1/4\)\) | Problem 14b \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | laurent\_poly\_subst\-prob\_laurent\_sub\_16\-i | PMT | \(\(x\^2\+1\)/\(x\*\(x\^2\-1\)\)\)\*Sqrt\[\(x\^2\-x\-1\)/\(x\^2\+x\-1\)\] | Problem 16 \(i\) | \{"needs torsion realisation \(milestone iii\)", \{\{\-1 \+ x, \{\-I, I\}\}, \{1 \+ x, \{I, \-I\}\}\}\} |
 | laurent\_poly\_subst\-prob\_laurent\_sub\_16\-i… | Trager | \(\(a\*x\^2\-b\)/\(x\*\(a\*x\^2\+b\)\)\)\*Sqrt\[\(a\*x\^2\-c\*x\+b\)/\(a\*x\^2\+c\*x\+b\)\] | Problem 16 \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
-| laurent\_poly\_subst\-prob\_laurent\_sub\_16\-i… | PMT | \(\(2\*x\^2\-3\)/\(x\*\(2\*x\^2\+3\)\)\)\*Sqrt\[\(2\*x\^2\-5\*x\+3\)/\(2\*x\^2\+5\*x\+3\)\] | Problem 16 \(ii\) instantiated a=2,b=3,c=5 | \{"failed", "verification failed"\} |
 | laurent\_poly\_subst\-prob\_laurent\_sub\_17\-i | PMT | \(\(2\*x\^3\-1\)/\(x\*\(x\^3\+1\)\)\)\*Sqrt\[\(x\^6\+2\*x\^3\-x\^2\+1\)/\(x\^6\+2\*x\^3\+x\^2\+1\)\] | Problem 17 \(i\) | \{"needs torsion realisation \(milestone iii\)", \{\{x, \{\-1, 1\}\}, \{1 \+ x, \{I, \-I\}\}, \{1 \- x \+ x\^2, \{I, \-I, \-I, I\}\}\}\} |
 | laurent\_poly\_subst\-prob\_laurent\_sub\_17\-i… | Trager | \(\(2\*a\*x\^3\+b\)\*\(a\^2\*x\^6\-2\*a\*b\*x\^3\-a\*b\*x\^2\+b\^2\)\)/\(x\*\(a\*x\^3\-b\)\*\(a\^2\*x\^6\-2\*a\*b\*x\^3\+x\^2\+b\^2\)\)\*Sq… | Problem 17 \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | laurent\_poly\_subst\-prob\_laurent\_sub\_17\-i… | PMT | \(\(2\*2\*x\^3\+3\)\*\(2\^2\*x\^6\-2\*2\*3\*x\^3\-2\*3\*x\^2\+3\^2\)\)/\(x\*\(2\*x\^3\-3\)\*\(2\^2\*x\^6\-2\*2\*3\*x\^3\+x\^2\+3\^2\)\)\*Sq… | Problem 17 \(ii\) instantiated a=2,b=3,c=5 | \{"needs torsion realisation \(milestone iii\)", \{\{x, \{\-1, 1\}\}, \{\-3 \+ 2 x\^3, \{\-6\*I, 6\*I, 6\*I, \-6\*I, 6\*I, \-6\*I\}\}\}\} |
@@ -593,16 +582,9 @@ None.
 | gunther\-prob\_gunther\_3\-v\-inst | PMT | \(4\*7\*x\^5\+3\)/\(\(2\*7\*x\^5\-5\*x\-2\*3\)\*Sqrt\[7\*x\^6\-3\*x\]\) | Problem 3 \(v\) instantiated a=2,b=3,c=5,d… | \{"failed", "verification failed"\} |
 | gunther\-prob\_gunther\_3\-vi | Trager | \(x\^2\-1\)/\(\(x\^2\+1\)\*Sqrt\[a\*x\^4\+b\*x\^3\+c\*x\^2\+b\*x\+a\]\) | Problem 3 \(vi\) | \{"failed", "radicand is not a rational function over Q"\} |
 | gunther\-prob\_gunther\_4 | Trager | \(2\*a\*x\^4\+4\*a\*x\^3\-b\*x\+b\-2\*c\)/\(\(a\*x\^4\+x\^2\+\(b\+2\)\*x\+c\+1\)\*Sqrt\[a\*x\^4\+b\*x\+c\]\) | Problem 4 | \{"failed", "radicand is not a rational function over Q"\} |
-| gunther\-prob\_gunther\_5\-iii\-pp | PMT | x\^3/\(\(x\^6\+4\)\*Sqrt\[x\^6\+1\]\) | Problem 5 \(iii\) upper signs, from \(ii\) b… | \{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", 4 \+ x\^6, \(\-1/1… |
-| gunther\-prob\_gunther\_5\-iii\-mm | PMT | x\^3/\(\(x\^6\-4\)\*Sqrt\[x\^6\-1\]\) | Problem 5 \(iii\) lower signs, from \(ii\) b… | \{"needs torsion realisation \(milestone iii\)", \{\{\-2 \+ x\^3, \{Root\[\-1 \+ 20155392 \#1\^6 \&, 2\], Root\[\-1 \+ 20155392 \#… |
-| gunther\-prob\_gunther\_5\-iv\-pm | PMT | x\^3/\(\(x\^6\+8\)\*Sqrt\[x\^6\-1\]\) | Problem 5 \(iv\) x\^6\+8 with x\^6\-1, from \(i… | \{"needs torsion realisation \(milestone iii\)", \{\{2 \+ x\^2, \{1/36\*I, \-1/36\*I, 1/36\*I, \-1/36\*I\}\}, \{4 \- 2 x\^2 \+ x\^4… |
 | gunther\-prob\_gunther\_5\-iv\-mp | PMT | x\^3/\(\(x\^6\-8\)\*Sqrt\[x\^6\+1\]\) | Problem 5 \(iv\) x\^6\-8 with x\^6\+1, from \(i… | \{"needs torsion realisation \(milestone iii\)", \{\{\-2 \+ x\^2, \{1/36, \-1/36, 1/36, \-1/36\}\}, \{4 \+ 2 x\^2 \+ x\^4, \{1/64… |
-| power\_expand\-intro | PMT | Sqrt\[x\^6\+9\*x\^5\+16\*x\^4\-27\*x\^3\-36\*x\^2\-11\*x\-1\] | Section introduction example | \{"failed", "verification failed"\} |
 | power\_expand\-power\_expand\_1\-i | PMT | Sqrt\[4\*x\^3\-3\*x\-1\]/x | Problem 1 \(i\) | \{"failed", "verification failed"\} |
-| power\_expand\-power\_expand\_1\-ii | PMT | Sqrt\[x\^6\-x\^5\-3\*x\^4\+2\*x\^3\+3\*x\^2\-x\-1\] | Problem 1 \(ii\) | \{"failed", "verification failed"\} |
-| power\_expand\-power\_expand\_2\-i | PMT | x/\(x\^8\+5\*x\^6\+6\*x\^4\-4\*x\^2\-8\)\^\(1/3\) | Problem 2 \(i\) | \{"failed", "verification failed"\} |
 | power\_expand\-power\_expand\_3 | Trager | Sqrt\[x\]/Sqrt\[x\^3\+x\^2\-x\-1\] | Problem 3 \(iii\) AXIOM example | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| power\_expand\-power\_expand\_3 | PMT | Sqrt\[x\]/Sqrt\[x\^3\+x\^2\-x\-1\] | Problem 3 \(iii\) AXIOM example | \{"failed", "verification failed"\} |
 | generalised\_gunther\-prob\_gg\_2\-ii | Trager | \(x\-2\*a\+b\)/\(\(x\^2\+\(a\*b\^2\-2\*b\)\*x\+b\^2\-a\^2\*b\^2\)\*\(\(x\-a\)\*\(x\-b\)\)\^\(1/3\)\) | Problem gg2 \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | generalised\_gunther\-prob\_gg\_3\-main | Trager | \(a\*x\^2\+2\*b\*x\+3\*c\)/\(\(x\^3\+a\*x\^2\+b\*x\+c\)\*\(a\*x\^2\+b\*x\+c\)\^\(1/3\)\) | Problem gg3 \(difficulty ?; elem by u=x/\(… | \{"failed", "radicand is not a rational function over Q"\} |
 | generalised\_gunther\-prob\_gg\_6\-i | Trager | \(x\+a\)\^2/\(\(x\+b\)\*\(2\*x\^4\+4\*\(a\+b\)\*x\^3\+6\*\(a\^2\+b\^2\)\*x\^2\+4\*\(a\^3\+b\^3\)\*x\+a\^4\+b\^4\)\^\(3/4\)\) | Problem gg6 \(i\) | \{"failed", "radicand is not a rational function over Q"\} |
@@ -661,10 +643,8 @@ None.
 | chebychev\-chebychev\_3\-x\-inst | Trager | x\^\(3/2\)/Sqrt\[2/Sqrt\[x\]\+3\] | Problem chebychev\_3 \(x\) \(expect by book … | \{"failed", "nested radicals"\} |
 | chebychev\-chebychev\_3b\-v | Trager | Sqrt\[Tan\[x\]\] | Problem chebychev\_3b \(v\) | \{"failed", "transcendental function in the integrand"\} |
 | chebychev\-chebychev\_3b\-vi | Trager | Sqrt\[\(\(Exp\[x\]\-Exp\[\-x\]\)/\(Exp\[x\]\+Exp\[\-x\]\)\)\] | Problem chebychev\_3b \(vi\) tanh via Exp | \{"failed", "transcendental function in the integrand"\} |
-| chebychev\-chebychev\_3b\-vi | PMT | Sqrt\[\(\(Exp\[x\]\-Exp\[\-x\]\)/\(Exp\[x\]\+Exp\[\-x\]\)\)\] | Problem chebychev\_3b \(vi\) tanh via Exp | \{"failed", "verification failed"\} |
 | chebychev\-chebychev\_3b\-vii | Trager | Sqrt\[Cos\[x\]/Sin\[x\]\] | Problem chebychev\_3b \(vii\) cot as Cos/Si… | \{"failed", "transcendental function in the integrand"\} |
 | chebychev\-chebychev\_3b\-viii | Trager | Sqrt\[\(\(Exp\[x\]\+Exp\[\-x\]\)/\(Exp\[x\]\-Exp\[\-x\]\)\)\] | Problem chebychev\_3b \(viii\) coth via Exp | \{"failed", "transcendental function in the integrand"\} |
-| chebychev\-chebychev\_3b\-viii | PMT | Sqrt\[\(\(Exp\[x\]\+Exp\[\-x\]\)/\(Exp\[x\]\-Exp\[\-x\]\)\)\] | Problem chebychev\_3b \(viii\) coth via Exp | \{"failed", "verification failed"\} |
 | chebychev\-chebychev\_3c\-iii\_n2 | Trager | 1/\(Tan\[x\]\)\^\(1/2\) | Problem chebychev\_3c \(iii\) 1/tan\^\(1/n\) n… | \{"failed", "transcendental function in the integrand"\} |
 | chebychev\-chebychev\_3c\-vi\_n2 | Trager | \(Tan\[x\]\)\^\(1/2\) | Problem chebychev\_3c \(vi\) 1/cot\^\(1/n\)=ta… | \{"failed", "transcendental function in the integrand"\} |
 | chebychev\-chebychev\_3c\-iii\_n3 | Trager | 1/\(Tan\[x\]\)\^\(1/3\) | Problem chebychev\_3c \(iii\) 1/tan\^\(1/n\) n… | \{"failed", "transcendental function in the integrand"\} |
@@ -732,12 +712,7 @@ None.
 | inverse\_function\-inverse\_function\_3\-vi | Trager | Log\[\(1\+x\^2\)/\(1\-x\^2\)\]/2 | Problem inverse\_function\_3 \(vi\) ArcTanh\(… | \{"failed", "transcendental function in the integrand"\} |
 | product\_rule\-product\_rule\_2\-iv | Trager | \(a\*x\^5\-5\*a\*c\*x\^3\+2\*b\*x\^2\+2\*b\*c\)/\(\(x\^2\-c\)\^2\*Sqrt\[a\*x\^3\-b\]\) | Problem product\_rule\_2 \(iv\) \(solved, 2x … | \{"failed", "radicand is not a rational function over Q"\} |
 | product\_rule\-product\_rule\_5\-i | PMT | x\^2\*\(x\^4\-2\)/\(x\^4\-1\)\*Sqrt\[x\^2/\(x\^4\-1\)\] | Problem product\_rule\_5 \(i\) \(solved\) | \{"failed", "verification failed"\} |
-| product\_rule\-product\_rule\_5\-ii | PMT | \(3\*x\^4\-2\*x\^2\-3\)/\(x\^4\*\(x\^2\+1\)\^2\)\*Sqrt\[\(x\^2\+1\)/\(x\^2\-1\)\] | Problem product\_rule\_5 \(ii\) | \{"failed", "verification failed"\} |
-| product\_rule\-product\_rule\_5\-iii | PMT | \(4\*x\^3\-5\*x\^2\-8\*x\+1\)/\(x\^2\+1\)\^3\*Sqrt\[\(x\^2\+1\)/\(x\^2\-x\-1\)\] | Problem product\_rule\_5 \(iii\) | \{"failed", "verification failed"\} |
-| product\_rule\-product\_rule\_5\-iv | PMT | x\^2\*\(x\^8\+2\*x\^4\-1\)/\(x\^4\+1\)\^2\*\(\(x\^4\+1\)/\(x\^4\-1\)\)\^\(1/4\) | Problem product\_rule\_5 \(iv\) | \{"failed", "verification failed"\} |
 | product\_rule\-product\_rule\_5\-v | Trager | \(9\*x\^9\-14\*b\*x\^6\-a\*x\^3\-4\*a\*b\)/\(x\^3\*\(x\^6\+a\)\^2\)\*\(\(x\^6\+a\)/\(x\^3\-b\)\)\^\(1/6\) | Problem product\_rule\_5 \(v\) | \{"failed", "radicand is not a rational function over Q"\} |
-| product\_rule\-product\_rule\_5\-v | PMT | \(9\*x\^9\-14\*b\*x\^6\-a\*x\^3\-4\*a\*b\)/\(x\^3\*\(x\^6\+a\)\^2\)\*\(\(x\^6\+a\)/\(x\^3\-b\)\)\^\(1/6\) | Problem product\_rule\_5 \(v\) | \{"failed", "verification failed"\} |
-| product\_rule\-product\_rule\_5\-v\-inst | PMT | \(9\*x\^9\-14\*3\*x\^6\-2\*x\^3\-4\*2\*3\)/\(x\^3\*\(x\^6\+2\)\^2\)\*\(\(x\^6\+2\)/\(x\^3\-3\)\)\^\(1/6\) | Problem product\_rule\_5 \(v\) instantiated … | \{"failed", "verification failed"\} |
 | log\_term\-log\_term\_prob\_7\-main | PMT | \(29\*x\^2\+18\*x\-3\)/Sqrt\[x\^6\+4\*x\^5\+6\*x\^4\-12\*x\^3\+33\*x\^2\-16\*x\] | Problem log\_term\_prob\_7 Schultz | \{"failed", "verification failed"\} |
 | realis\-prob\_realis\_1\-i | PMT | \(x\^2\-1\)/\(\(x\^2\-2\)\*\(x\^2\+1\)\*Sqrt\[3\-x\^4\]\) | Problem prob\_realis\_1 \(i\) | \{"needs torsion realisation \(milestone iii\)", \{\{\-2 \+ x\^2, \{\(1/6\*I\)/Sqrt\[2\], \(\-1/6\*I\)/Sqrt\[2\], \(\-1/6\*I\)/Sqrt\[2\]… |
 | realis\-prob\_realis\_1\-iii | Trager | \(3\*b\*x\^4\+a\)/\(\(b\*c\*x\^6\+a\*c\*x\^2\+d\)\*Sqrt\[b\*x\^4\+a\]\) | Problem prob\_realis\_1 \(iii\) | \{"failed", "radicand is not a rational function over Q"\} |
@@ -761,15 +736,12 @@ None.
 | nested\-nested\_1\-ii | Trager | Sqrt\[a\*x\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(ii\), n=1 | \{"failed", "nested radicals"\} |
 | nested\-nested\_1\-ii | PMT | Sqrt\[a\*x\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(ii\), n=1 | \{"failed", "verification failed"\} |
 | nested\-nested\_1\-ii\-inst | Trager | Sqrt\[2\*x\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(ii\), n=1; inst a=2, b=… | \{"failed", "nested radicals"\} |
-| nested\-nested\_1\-ii\-inst | PMT | Sqrt\[2\*x\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(ii\), n=1; inst a=2, b=… | \{"failed", "verification failed"\} |
 | nested\-nested\_1\-iii | Trager | Sqrt\[a\*x\^2\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iii\), n=2 | \{"failed", "nested radicals"\} |
 | nested\-nested\_1\-iii | PMT | Sqrt\[a\*x\^2\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iii\), n=2 | \{"failed", "verification failed"\} |
 | nested\-nested\_1\-iii\-inst | Trager | Sqrt\[2\*x\^2\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iii\), n=2; inst a=2, b… | \{"failed", "nested radicals"\} |
 | nested\-nested\_1\-iii\-inst | PMT | Sqrt\[2\*x\^2\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iii\), n=2; inst a=2, b… | \{"failed", "verification failed"\} |
 | nested\-nested\_1\-iv | Trager | Sqrt\[a\*x\^3\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iv\), n=3 | \{"failed", "nested radicals"\} |
-| nested\-nested\_1\-iv | PMT | Sqrt\[a\*x\^3\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iv\), n=3 | \{"failed", "verification failed"\} |
 | nested\-nested\_1\-iv\-inst | Trager | Sqrt\[2\*x\^3\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iv\), n=3; inst a=2, b=… | \{"failed", "nested radicals"\} |
-| nested\-nested\_1\-iv\-inst | PMT | Sqrt\[2\*x\^3\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iv\), n=3; inst a=2, b=… | \{"failed", "verification failed"\} |
 | nested\-nested\_1\-v | Trager | Sqrt\[a\*x\^4\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(v\), n=4 | \{"failed", "nested radicals"\} |
 | nested\-nested\_1\-v | PMT | Sqrt\[a\*x\^4\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(v\), n=4 | \{"failed", "no solution within bounds", \{12\}\} |
 | nested\-nested\_1\-v\-inst | Trager | Sqrt\[2\*x\^4\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(v\), n=4; inst a=2, b=3 | \{"failed", "nested radicals"\} |
@@ -791,7 +763,6 @@ None.
 | nested\-nested\_2\-n3\-inst | Trager | Sqrt\[2\*x\^3\+3\*x\^4/Sqrt\[x\]\] | Problem nested\_2, n=3 \(algebraic for all… | \{"failed", "nested radicals"\} |
 | nested\-nested\_2\-n3\-inst | PMT | Sqrt\[2\*x\^3\+3\*x\^4/Sqrt\[x\]\] | Problem nested\_2, n=3 \(algebraic for all… | \{"failed", "verification failed"\} |
 | nested\-nested\_3\-i | Trager | \(a/x\^3\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(i\), n=\-3 | \{"failed", "nested radicals"\} |
-| nested\-nested\_3\-i | PMT | \(a/x\^3\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(i\), n=\-3 | \{"failed", "verification failed"\} |
 | nested\-nested\_3\-i\-inst | Trager | \(2/x\^3\+3\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(i\), n=\-3; inst a=2, b=… | \{"failed", "nested radicals"\} |
 | nested\-nested\_3\-ii | Trager | \(a\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(ii\), n=0 | \{"failed", "nested radicals"\} |
 | nested\-nested\_3\-ii | PMT | \(a\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(ii\), n=0 | \{"failed", "internal: solution does not verify"\} |
@@ -805,11 +776,9 @@ None.
 | nested\-nested\_3\-v | Trager | \(a\*x\^3\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(v\), n=3 | \{"failed", "nested radicals"\} |
 | nested\-nested\_3\-v | PMT | \(a\*x\^3\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(v\), n=3 | \{"failed", "internal: solution does not verify"\} |
 | nested\-nested\_3\-v\-inst | Trager | \(2\*x\^3\+3\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(v\), n=3; inst a=2, b=3 | \{"failed", "nested radicals"\} |
-| nested\-nested\_3\-v\-inst | PMT | \(2\*x\^3\+3\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(v\), n=3; inst a=2, b=3 | \{"failed", "verification failed"\} |
 | nested\-nested\_4\-ex1 | Trager | \(a/x\^4\+b\*x\^\(4/3\)\)\^\(1/4\) | Problem nested\_4, solution example 1 \(n=… | \{"failed", "nested radicals"\} |
 | nested\-nested\_4\-ex1 | PMT | \(a/x\^4\+b\*x\^\(4/3\)\)\^\(1/4\) | Problem nested\_4, solution example 1 \(n=… | \{"needs torsion realisation \(milestone iii\)", \{\{x\^\(1/3\), \{\-3 a\^\(1/4\)\}\}, \{x\^\(1/3\), \{\-\(3\*I\) a\^\(1/4\)\}\}, \{x\^\(1/3\),… |
 | nested\-nested\_4\-ex1\-inst | Trager | \(2/x\^4\+3\*x\^\(4/3\)\)\^\(1/4\) | Problem nested\_4, solution example 1 \(n=… | \{"failed", "nested radicals"\} |
-| nested\-nested\_4\-ex1\-inst | PMT | \(2/x\^4\+3\*x\^\(4/3\)\)\^\(1/4\) | Problem nested\_4, solution example 1 \(n=… | \{"needs torsion realisation \(milestone iii\)", \{\{x\^\(1/3\), \{\-3 2\^\(1/4\)\}\}, \{x\^\(1/3\), \{\-\(3\*I\) 2\^\(1/4\)\}\}, \{x\^\(1/3\),… |
 | nested\-nested\_4\-ex2 | Trager | \(a\*x\^3\+b\*x\^\(16/3\)\)\^\(1/4\) | Problem nested\_4, solution example 2 \(n=… | \{"failed", "nested radicals"\} |
 | nested\-nested\_4\-ex2 | PMT | \(a\*x\^3\+b\*x\^\(16/3\)\)\^\(1/4\) | Problem nested\_4, solution example 2 \(n=… | \{"failed", "no solution within bounds", \{28\}\} |
 | nested\-nested\_4\-ex2\-inst | Trager | \(2\*x\^3\+3\*x\^\(16/3\)\)\^\(1/4\) | Problem nested\_4, solution example 2 \(n=… | \{"failed", "nested radicals"\} |
@@ -919,7 +888,6 @@ None.
 | nested\-nested\_12\-i | Trager | Sqrt\[a\^2\*x\^2\+b\]/\(a\*x\-Sqrt\[a\^2\*x\^2\+b\]\)\^\(1/3\) | Problem nested\_12 \(i\) | \{"failed", "nested radicals"\} |
 | nested\-nested\_12\-i | PMT | Sqrt\[a\^2\*x\^2\+b\]/\(a\*x\-Sqrt\[a\^2\*x\^2\+b\]\)\^\(1/3\) | Problem nested\_12 \(i\) | \{"failed", "tower construction failed", Sqrt\[b \+ a\^2 x\^2\]/\(a x \- Sqrt\[b \+ a\^2 x\^2\]\)\^\(1/3\)\} |
 | nested\-nested\_12\-i\-inst | Trager | Sqrt\[2\^2\*x\^2\+3\]/\(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\) | Problem nested\_12 \(i\); inst a=2, b=3 | \{"failed", "nested radicals"\} |
-| nested\-nested\_12\-i\-inst | PMT | Sqrt\[2\^2\*x\^2\+3\]/\(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\) | Problem nested\_12 \(i\); inst a=2, b=3 | \{"failed", "verification failed"\} |
 | nested\-nested\_12\-ii | Trager | \(a\*x\-Sqrt\[a\^2\*x\^2\+b\]\)\^\(1/3\)/\(x\*Sqrt\[a\^2\*x\^2\+b\]\) | Problem nested\_12 \(ii\) | \{"failed", "nested radicals"\} |
 | nested\-nested\_12\-ii | PMT | \(a\*x\-Sqrt\[a\^2\*x\^2\+b\]\)\^\(1/3\)/\(x\*Sqrt\[a\^2\*x\^2\+b\]\) | Problem nested\_12 \(ii\) | \{"failed", "tower construction failed", \(a x \- Sqrt\[b \+ a\^2 x\^2\]\)\^\(1/3\)/\(x Sqrt\[b \+ a\^2 x\^2\]\)\} |
 | nested\-nested\_12\-ii\-inst | Trager | \(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\)/\(x\*Sqrt\[2\^2\*x\^2\+3\]\) | Problem nested\_12 \(ii\); inst a=2, b=3 | \{"failed", "nested radicals"\} |
@@ -929,7 +897,6 @@ None.
 | nested\-nested\_12\-iv | Trager | \(a\^2\*x\^2\-b\)/\(\(a\^2\*x\^2\+b\)\*\(a\*x\-Sqrt\[a\^2\*x\^2\+b\]\)\^\(1/3\)\) | Problem nested\_12 \(iv\) | \{"failed", "nested radicals"\} |
 | nested\-nested\_12\-iv | PMT | \(a\^2\*x\^2\-b\)/\(\(a\^2\*x\^2\+b\)\*\(a\*x\-Sqrt\[a\^2\*x\^2\+b\]\)\^\(1/3\)\) | Problem nested\_12 \(iv\) | \{"failed", "tower construction failed", \(\-b \+ a\^2 x\^2\)/\(\(b \+ a\^2 x\^2\) \(a x \- Sqrt\[b \+ a\^2 x\^2\]\)\^\(1/3\)\)\} |
 | nested\-nested\_12\-iv\-inst | Trager | \(2\^2\*x\^2\-3\)/\(\(2\^2\*x\^2\+3\)\*\(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\)\) | Problem nested\_12 \(iv\); inst a=2, b=3 | \{"failed", "nested radicals"\} |
-| nested\-nested\_12\-iv\-inst | PMT | \(2\^2\*x\^2\-3\)/\(\(2\^2\*x\^2\+3\)\*\(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\)\) | Problem nested\_12 \(iv\); inst a=2, b=3 | \{"failed", "verification failed"\} |
 | nested\-nested\_13\-i | Trager | x\*Sqrt\[a\*x\^2\-b\]/Sqrt\[\(c\*x\*Sqrt\[a\*x\^2\-b\]\-a\*x\^2\+b\)\] | Problem nested\_13 \(i\) | \{"failed", "nested radicals"\} |
 | nested\-nested\_13\-i | PMT | x\*Sqrt\[a\*x\^2\-b\]/Sqrt\[\(c\*x\*Sqrt\[a\*x\^2\-b\]\-a\*x\^2\+b\)\] | Problem nested\_13 \(i\) | \{"failed", "tower construction failed", \(x Sqrt\[\-b \+ a x\^2\]\)/Sqrt\[b \- a x\^2 \+ c x Sqrt\[\-b \+ a x\^2\]\]\} |
 | nested\-nested\_13\-i\-inst | Trager | x\*Sqrt\[2\*x\^2\-3\]/Sqrt\[\(5\*x\*Sqrt\[2\*x\^2\-3\]\-2\*x\^2\+3\)\] | Problem nested\_13 \(i\); inst a=2, b=3, c=… | \{"failed", "nested radicals"\} |
@@ -1032,7 +999,6 @@ None.
 | nested\-nested\_19\-xiii | Trager | \(1\+Sqrt\[x\^8\+1\]/x\^4\)\^\(1/4\) | Problem nested\_19 \(xiii\) | \{"failed", "nested radicals"\} |
 | nested\-nested\_19\-xiii | PMT | \(1\+Sqrt\[x\^8\+1\]/x\^4\)\^\(1/4\) | Problem nested\_19 \(xiii\) | \{"failed", "tower construction failed", \(1 \+ Sqrt\[1 \+ x\^8\]/x\^4\)\^\(1/4\)\} |
 | multrad\-intro\-1 | Trager | \(x\^4\-12\)/\(\(x\^4\-8\*x\^2\+12\)\*Sqrt\[x\^2\-4\]\*Sqrt\[x\^2\-3\]\) | Section intro example \(solved, \-ArcTanh\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| multrad\-intro\-1 | PMT | \(x\^4\-12\)/\(\(x\^4\-8\*x\^2\+12\)\*Sqrt\[x\^2\-4\]\*Sqrt\[x\^2\-3\]\) | Section intro example \(solved, \-ArcTanh\) | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_0\-i | Trager | \(x\^4\-a\*b\)/\(\(d\*x\^4\-\(a\*d\+b\*d\-c\)\*x\^2\+a\*b\*d\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_0 \(i\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_0\-i | PMT | \(x\^4\-a\*b\)/\(\(d\*x\^4\-\(a\*d\+b\*d\-c\)\*x\^2\+a\*b\*d\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_0 \(i\) | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_0\-i\-inst | Trager | \(x\^4\-2\*3\)/\(\(7\*x\^4\-\(2\*7\+3\*7\-5\)\*x\^2\+2\*3\*7\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_0 \(i\); inst a=… | \{"failed", "more than one radicand \(a radical compositum\)"\} |
@@ -1063,12 +1029,9 @@ None.
 | multrad\-multiple\_radicals\_1\-iv | PMT | 1/\(Sqrt\[a\^2\*x\^2\+b\^2\]\*Sqrt\[b\^4\-a\^4\*x\^4\]\) | Problem multiple\_radicals\_1 \(iv\) | \{"failed", "tower construction failed", 1/\(Sqrt\[b\^2 \+ a\^2 x\^2\] Sqrt\[b\^4 \- a\^4 x\^4\]\)\} |
 | multrad\-multiple\_radicals\_1\-iv\-inst | Trager | 1/\(Sqrt\[2\^2\*x\^2\+3\^2\]\*Sqrt\[3\^4\-2\^4\*x\^4\]\) | Problem multiple\_radicals\_1 \(iv\); inst a… | \{"failed", "more than one radicand \(a radical compositum\)"\} |
 | multrad\-multiple\_radicals\_2\-i | Trager | \(x\^4\+2\)/\(\(x\^4\-2\)\*Sqrt\[x\^2\-1\]\*Sqrt\[x\^2\+2\]\) | Problem multiple\_radicals\_2 \(i\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| multrad\-multiple\_radicals\_2\-i | PMT | \(x\^4\+2\)/\(\(x\^4\-2\)\*Sqrt\[x\^2\-1\]\*Sqrt\[x\^2\+2\]\) | Problem multiple\_radicals\_2 \(i\) | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_2\-ii | Trager | \(x\^4\-2\)\*Sqrt\[x\^2\+1\]\*Sqrt\[x\^2\+2\]/\(x\^2\*\(x\^4\+2\*x\^2\+2\)\) | Problem multiple\_radicals\_2 \(ii\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| multrad\-multiple\_radicals\_2\-ii | PMT | \(x\^4\-2\)\*Sqrt\[x\^2\+1\]\*Sqrt\[x\^2\+2\]/\(x\^2\*\(x\^4\+2\*x\^2\+2\)\) | Problem multiple\_radicals\_2 \(ii\) | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_2\-iii | Trager | \(x\^4\+2\*a\*x\^2\-a\*b\)\*Sqrt\[x\^2\+a\]/\(\(x\^4\-\(b\+1\)\*x\^2\-a\)\*\(x\^4\+\(1\-b\)\*x\^2\+a\)\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_2 \(iii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_2\-iii\-inst | Trager | \(x\^4\+2\*2\*x\^2\-2\*3\)\*Sqrt\[x\^2\+2\]/\(\(x\^4\-\(3\+1\)\*x\^2\-2\)\*\(x\^4\+\(1\-3\)\*x\^2\+2\)\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_2 \(iii\); inst … | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| multrad\-multiple\_radicals\_2\-iii\-inst | PMT | \(x\^4\+2\*2\*x\^2\-2\*3\)\*Sqrt\[x\^2\+2\]/\(\(x\^4\-\(3\+1\)\*x\^2\-2\)\*\(x\^4\+\(1\-3\)\*x\^2\+2\)\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_2 \(iii\); inst … | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_2\-iv | Trager | \(3\*x\^8\+\(a\-b\)\*x\^4\+a\*b\)\*Sqrt\[x\^4\+a\]\*Sqrt\[x\^4\-b\]/\(\(x\^8\+\(a\-b\)\*x\^4\+x\^2\-a\*b\)\*\(x\^8\+\(a\-b\)\*x\^4\-x\^2\-… | Problem multiple\_radicals\_2 \(iv\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_2\-iv | PMT | \(3\*x\^8\+\(a\-b\)\*x\^4\+a\*b\)\*Sqrt\[x\^4\+a\]\*Sqrt\[x\^4\-b\]/\(\(x\^8\+\(a\-b\)\*x\^4\+x\^2\-a\*b\)\*\(x\^8\+\(a\-b\)\*x\^4\-x\^2\-… | Problem multiple\_radicals\_2 \(iv\) | \{"failed", "tower construction failed", \(Sqrt\[a \+ x\^4\] Sqrt\[\-b \+ x\^4\] \(a b \+ \(a \- b\) x\^4 \+ 3 x\^8\)\)/\(\(\-a b \- x\^… |
 | multrad\-multiple\_radicals\_2\-iv\-inst | Trager | \(3\*x\^8\+\(2\-3\)\*x\^4\+2\*3\)\*Sqrt\[x\^4\+2\]\*Sqrt\[x\^4\-3\]/\(\(x\^8\+\(2\-3\)\*x\^4\+x\^2\-2\*3\)\*\(x\^8\+\(2\-3\)\*x\^4\-x\^2\-… | Problem multiple\_radicals\_2 \(iv\); inst a… | \{"failed", "more than one radicand \(a radical compositum\)"\} |
@@ -1080,10 +1043,8 @@ None.
 | multrad\-multiple\_radicals\_3\-ii | Trager | \(x\^2\-2\*a\*x\+a\*b\+a\*c\-b\*c\)/\(\(x\^2\-\(b\+c\+1\)\*x\+a\+b\*c\)\*Sqrt\[x\-a\]\*Sqrt\[x\-b\]\*Sqrt\[x\-c\]\) | Problem multiple\_radicals\_3 \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_3\-ii | PMT | \(x\^2\-2\*a\*x\+a\*b\+a\*c\-b\*c\)/\(\(x\^2\-\(b\+c\+1\)\*x\+a\+b\*c\)\*Sqrt\[x\-a\]\*Sqrt\[x\-b\]\*Sqrt\[x\-c\]\) | Problem multiple\_radicals\_3 \(ii\) | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_3\-ii\-inst | Trager | \(x\^2\-2\*2\*x\+2\*3\+2\*5\-3\*5\)/\(\(x\^2\-\(3\+5\+1\)\*x\+2\+3\*5\)\*Sqrt\[x\-2\]\*Sqrt\[x\-3\]\*Sqrt\[x\-5\]\) | Problem multiple\_radicals\_3 \(ii\); inst a… | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| multrad\-multiple\_radicals\_3\-ii\-inst | PMT | \(x\^2\-2\*2\*x\+2\*3\+2\*5\-3\*5\)/\(\(x\^2\-\(3\+5\+1\)\*x\+2\+3\*5\)\*Sqrt\[x\-2\]\*Sqrt\[x\-3\]\*Sqrt\[x\-5\]\) | Problem multiple\_radicals\_3 \(ii\); inst a… | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_3\-iii | Trager | \(x\^2\-2\*b\*x\+a\*b\-a\*c\+b\*c\)\*Sqrt\[x\-b\]/\(\(x\^2\-\(a\+c\-1\)\*x\-b\+a\*c\)\*\(x\^2\-\(a\+c\+1\)\*x\+b\+a\*c\)\*Sqrt\[x\-a\]\*S… | Problem multiple\_radicals\_3 \(iii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_3\-iii\-inst | Trager | \(x\^2\-2\*3\*x\+2\*3\-2\*5\+3\*5\)\*Sqrt\[x\-3\]/\(\(x\^2\-\(2\+5\-1\)\*x\-3\+2\*5\)\*\(x\^2\-\(2\+5\+1\)\*x\+3\+2\*5\)\*Sqrt\[x\-2\]\*S… | Problem multiple\_radicals\_3 \(iii\); inst … | \{"failed", "more than one radicand \(a radical compositum\)"\} |
-| multrad\-multiple\_radicals\_3\-iii\-inst | PMT | \(x\^2\-2\*3\*x\+2\*3\-2\*5\+3\*5\)\*Sqrt\[x\-3\]/\(\(x\^2\-\(2\+5\-1\)\*x\-3\+2\*5\)\*\(x\^2\-\(2\+5\+1\)\*x\+3\+2\*5\)\*Sqrt\[x\-2\]\*S… | Problem multiple\_radicals\_3 \(iii\); inst … | \{"failed", "verification failed"\} |
 | multrad\-multiple\_radicals\_4\-i | Trager | Sqrt\[1\-x\]\*Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\] | Problem multiple\_radicals\_4 \(i\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
 | multrad\-multiple\_radicals\_4\-i | PMT | Sqrt\[1\-x\]\*Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\] | Problem multiple\_radicals\_4 \(i\) | \{"needs torsion realisation \(milestone iii\)", \{\{1 \+ \(\-1 \+ Sqrt\[1 \- x\]\)\^2/\(\-1 \+ Sqrt\[1 \+ x\]\)\^2, \{5/4, \-5/4, \-5/… |
 | multrad\-multiple\_radicals\_4\-ii | Trager | Sqrt\[b\-a\*x\]\*Sqrt\[a\*x\+b\]\*Sqrt\[b\^4\-a\^4\*x\^4\] | Problem multiple\_radicals\_4 \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
@@ -1126,18 +1087,12 @@ None.
 | euler\-prob\_euler\_outrageous\_6\-ii | PMT | 1/\(\(a\^2\*x\^4\+b\)\*Sqrt\[Sqrt\[a\^2\*x\^4\+b\]\-a\*x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(ii\) | \{"failed", "tower construction failed", 1/\(\(b \+ a\^2 x\^4\) Sqrt\[\-a x\^2 \+ Sqrt\[b \+ a\^2 x\^4\]\]\)\} |
 | euler\-prob\_euler\_outrageous\_6\-ii\-inst | Trager | 1/\(\(2\^2\*x\^4\+3\)\*Sqrt\[Sqrt\[2\^2\*x\^4\+3\]\-2\*x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(ii\); in… | \{"failed", "nested radicals"\} |
 | euler\-prob\_euler\_outrageous\_6\-ii\-inst | PMT | 1/\(\(2\^2\*x\^4\+3\)\*Sqrt\[Sqrt\[2\^2\*x\^4\+3\]\-2\*x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(ii\); in… | \{"failed", "tower construction failed", 1/\(\(3 \+ 4 x\^4\) Sqrt\[\-2 x\^2 \+ Sqrt\[3 \+ 4 x\^4\]\]\)\} |
-| euler\-prob\_euler\_outrageous\_6\-iii\-n1 | Trager | 1/\(\(x\^2\+1\)\*Sqrt\[\(x\^2\+1\)\-x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(iii\), n… | \{"failed", "no radical in the integrand \(a rational function\)"\} |
 | euler\-prob\_euler\_outrageous\_6\-iii\-n2 | Trager | 1/\(\(x\^4\+1\)\*Sqrt\[\(x\^4\+1\)\^\(1/2\)\-x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(iii\), n… | \{"failed", "nested radicals"\} |
 | euler\-prob\_euler\_outrageous\_6\-iii\-n2 | PMT | 1/\(\(x\^4\+1\)\*Sqrt\[\(x\^4\+1\)\^\(1/2\)\-x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(iii\), n… | \{"failed", "tower construction failed", 1/\(\(1 \+ x\^4\) Sqrt\[\-x\^2 \+ Sqrt\[1 \+ x\^4\]\]\)\} |
 | euler\-prob\_euler\_outrageous\_6\-iii\-n3 | Trager | 1/\(\(x\^6\+1\)\*Sqrt\[\(x\^6\+1\)\^\(1/3\)\-x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(iii\), n… | \{"failed", "nested radicals"\} |
 | euler\-prob\_euler\_outrageous\_6\-iii\-n3 | PMT | 1/\(\(x\^6\+1\)\*Sqrt\[\(x\^6\+1\)\^\(1/3\)\-x\^2\]\) | Problem prob\_euler\_outrageous\_6 \(iii\), n… | \{"failed", "tower construction failed", 1/\(\(1 \+ x\^6\) Sqrt\[\-x\^2 \+ \(1 \+ x\^6\)\^\(1/3\)\]\)\} |
-| timofeev\-timofeev\_1\-i | PMT | 1/\(\(x\+1\)\^2\*\(x\-1\)\^4\)\^\(1/3\) | Problem timofeev\_1 \(i\) | \{"failed", "verification failed"\} |
-| timofeev\-timofeev\_1\-ii | PMT | 1/\(\(x\-1\)\^3\*\(x\+2\)\^5\)\^\(1/4\) | Problem timofeev\_1 \(ii\) | \{"failed", "verification failed"\} |
-| timofeev\-timofeev\_1\-iii | PMT | 1/\(\(x\+1\)\^2\*\(x\-1\)\^7\)\^\(1/3\) | Problem timofeev\_1 \(iii\) | \{"failed", "verification failed"\} |
-| timofeev\-timofeev\_1\-v | PMT | \(x\+1/x\)/Sqrt\[\(x\+1\)\^3\*\(x\-2\)\] | Problem timofeev\_1 \(v\) | \{"failed", "verification failed"\} |
 | timofeev\-timofeev\_1\-vii | PMT | 1/Sqrt\[\(x\^3\-5\*x\^2\+3\*x\+9\)\] | Problem timofeev\_1 \(vii\) | \{"failed", "verification failed"\} |
 | timofeev\-timofeev\_1\-viii | PMT | 1/Sqrt\[\(x\^3\-5\*x\^2\+3\*x\+9\)\^3\] | Problem timofeev\_1 \(viii\) | \{"failed", "verification failed"\} |
-| timofeev\-timofeev\_1\-x | PMT | 1/\(\(x\^3\-5\*x\^2\+3\*x\+9\)\^2\)\^\(1/3\) | Problem timofeev\_1 \(x\) | \{"failed", "verification failed"\} |
 | timofeev\-timofeev\_1\-xi | PMT | 1/\(\(x\^3\-5\*x\^2\+3\*x\+9\)\^4\)\^\(1/3\) | Problem timofeev\_1 \(xi\) | \{"failed", "verification failed"\} |
 | timofeev\-timofeev\_3\-i | Trager | Sqrt\[x\-5\]\*Sqrt\[x\+3\]/\(\(x\-1\)\*\(x\^2\-25\)\) | Problem timofeev\_3 \(i\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
 | timofeev\-timofeev\_3\-ii | Trager | x\^2\*Sqrt\[x\+1\]\*\(1\-x\^2\)\^\(1/4\)/\(Sqrt\[1\-x\]\*\(Sqrt\[1\-x\]\-Sqrt\[x\+1\]\)\) | Problem timofeev\_3 \(ii\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
@@ -1176,7 +1131,6 @@ None.
 | intro\-can\_cannot\-4 | Trager | ArcTan\[x\]/Sqrt\[x\] | Introduction, Integrals that Can and Can… | \{"failed", "transcendental function in the integrand"\} |
 | intro\-validity\-2 | Trager | \(x\^8\-1\)/\(\(x\^8\-a\*x\^4\+1\)\*Sqrt\[x\^4\-1\]\) | Introduction, Validity of Solutions, par… | \{"failed", "integrand is not a rational function of x and the radical over Q"\} |
 | intro\-validity\-2 | PMT | \(x\^8\-1\)/\(\(x\^8\-a\*x\^4\+1\)\*Sqrt\[x\^4\-1\]\) | Introduction, Validity of Solutions, par… | \{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", \-1 \+ a x\^4 \- x… |
-| intro\-log\-1 | Trager | 1/x | Introduction, integral of 1/x section | \{"failed", "no radical in the integrand \(a rational function\)"\} |
 | intro\-multiple\_approaches\-1 | Trager | 1/\(\(x\-1\)\*Sqrt\[x\^2\+b\*x\+c\]\) | Introduction, Multiple Approaches to Int… | \{"failed", "radicand is not a rational function over Q"\} |
 | intro\-further\-schultz | PMT | \(29\*x\^2\+18\*x\-3\)/Sqrt\[x\^6\+4\*x\^5\+6\*x\^4\-12\*x\^3\+33\*x\^2\-16\*x\] | Introduction, Further Reading: Schultz p… | \{"failed", "verification failed"\} |
 

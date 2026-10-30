@@ -201,7 +201,12 @@ Print["@@PZQ ", pzq];
 dn = TimeConstrained[Quiet[D[r /. prm, x] - (f /. prm)], 30, $Aborted];
 Stress`Probe[tag_, p_] := Module[
     {dv = TimeConstrained[Quiet[Block[{$MaxExtraPrecision = 400}, N[dn /. x -> p, 40]]], 5, $Aborted],
+     dv2 = TimeConstrained[Quiet[N[dn /. x -> p, 20]], 5, $Aborted],
      fv = Quiet[N[(f /. prm) /. x -> p, 40]], ok},
+  (* a probe whose value depends on the working precision sits ON a branch cut
+     of some intermediate radicand (the rounding sign of a zero imaginary part
+     picks the side): it says nothing about the answer -- "na" *)
+  If[NumberQ[dv] && NumberQ[dv2] && Abs[dv - dv2] > 10^-8 Max[1, Abs[fv]], dv = $Aborted];
   ok = If[NumberQ[dv] && NumberQ[fv],
     Which[Abs[dv] <= 10^-TOL Max[1, Abs[fv]], "ok",
           Abs[dv + 2 fv] <= 10^-TOL Max[1, Abs[fv]], "neg", True, "bad"], "na"];

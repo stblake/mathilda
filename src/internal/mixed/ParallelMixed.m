@@ -2317,7 +2317,8 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
    tnew, ap, Da, base, r, mm, g, coef, rest, u, Dbase, pos, k = 0, fpair, rad, eulerStep, gq, a2, b2, c2, alpha, w, gw, yw, Dwp,
    trigStep, rootNormalize, trigC, wSurface, g0e, y0e, rcoef, sf, noRadical, sample, record, signFix, x0, icoef, toTuple, degs,
    structQ = TrueQ[OptionValue["StructureTheorem"]], btVerbose = TrueQ[OptionValue["Verbose"]], registry = {}, stHead, rel,
-   stCoeffs, stConst, stVal, stFrac, stK, stR, stD, stI, stEta, tp, stSub, Dtp, stKind, stArg},
+   stCoeffs, stConst, stVal, stFrac, stK, stR, stD, stI, stEta, tp, stSub, Dtp, stKind, stArg,
+   ownRad = <||>, ownMixed = False},
   (* registry: {generator, "exp" | "log", argument} for the exponential and
      logarithmic generators, their arguments in the current symbols *)
   Y = Unique["Y"];
@@ -2611,7 +2612,29 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
         expr = expr /. c -> tnew,
       Power[_, _Rational],
         With[{nrm = rootNormalize[c[[1]], c[[2]]]},
-          If[nrm =!= c, expr = expr /. c -> nrm; Continue[]]];
+          If[nrm =!= c,
+            (* The integrand's own radical c = A sf^e (e = +-1/mr, A rational,
+               signs chosen at ONE sample point) holds only where the principal
+               branches agree.  Record Yown = c/A (or A/c): Yown^mr = sf EXACTLY,
+               so it is a legitimate value of the formal radical, and on the
+               integrand's own branch everywhere.  If it is the only source of
+               this radicand, the surface is written back through it (below)
+               instead of the principal sf^(1/mr) -- an answer valid for all
+               complex x, not just near the sample point. *)
+            With[{rts = Cases[{nrm}, Power[b_, e_Rational] /; ! FreeQ[b, Alternatives @@ Join[gens, {Y}]] :> {b, e}, {0, Infinity}]},
+              If[Length[DeleteDuplicates[rts]] == 1 && MemberQ[{1, -1}, Numerator[c[[2]]]] &&
+                 Numerator[rts[[1, 2]]] == Numerator[c[[2]]] && Denominator[rts[[1, 2]]] == Denominator[c[[2]]],
+                With[{key = {Expand[rts[[1, 1]]], Denominator[c[[2]]]},
+                      A = Cancel[nrm/Power[rts[[1, 1]], rts[[1, 2]]]]},
+                  If[FreeQ[A, Power[_, _Rational]],
+                    With[{own = If[Numerator[c[[2]]] == 1, c/A, A/c]},
+                      (* two different radicals rewritten to one radicand: their own
+                         roots may sit on different branches -- keep the principal one *)
+                      If[KeyExistsQ[ownRad, key] && ownRad[key] =!= own, ownMixed = True];
+                      ownRad[key] = own]]],
+                (* a radicand rewritten from a source we cannot track *)
+                Scan[(ownMixed = True) &, rts]]];
+            expr = expr /. c -> nrm; Continue[]]];
         {base, r} = List @@ c; mm = Denominator[r];          (* the degree of this root *)
         (* flattenable root: base = coef g + rest, coef constant, rest free of g  (Lemma 3.2) *)
         g = SelectFirst[gens, PolynomialQ[base, #] && Exponent[base, #] == 1 && FreeQ[base, Y] &&
@@ -2655,7 +2678,15 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
       If[fs =!= {}, Message[BuildTower::function, First[fs]], Message[BuildTower::residual, expr]]];
     Throw[$Failed, "build"]];
   fpair = FromY[T, expr, Y];
-  If[q =!= None, AppendTo[back, Y -> q^(1/m)]];
+  If[q =!= None,
+    AppendTo[back, Y -> q^(1/m)];
+    (* the integrand's own radical when it is the single source of q (above):
+       an ALTERNATIVE back-substitution, tried by the caller when the principal
+       one does not verify.  Carried as an inert rule (OwnRadicalRule never occurs
+       in an expression) so the return shape {T, fpair, back, Y} is unchanged. *)
+    With[{own = Lookup[ownRad, Key[{Expand[q], m}], None]},
+      If[own =!= None && ! ownMixed && Length[ownRad] == 1,
+        AppendTo[back, OwnRadicalRule -> (Y -> own)]]]];
   {T, fpair, back, Y}];
 
 (* ParallelIntegrateMixed[integrand, x, opts]  -- the surface entry point.
@@ -2697,7 +2728,7 @@ XPowerReduce[f_, x_Symbol] := Catch[
       {k, {6, 5, 4, 3, 2}}];
     None], "xpow"];
 
-ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, integrand = integrand0},
+ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, ownR, integrand = integrand0},
   (* u = x^k first: the reduced integrand, if solved and verified for all
      complex x, is the answer; otherwise the normal path runs *)
   red = XPowerReduce[integrand0, x];
@@ -2722,6 +2753,8 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
     Print["  integrand: ", fpair]];
   res = ParallelIntegrateMixed[fpair, T, "Bounds" -> OptionValue["Bounds"], "Verbose" -> OptionValue["Verbose"],
                                 "SplitSpecials" -> OptionValue["SplitSpecials"]];
+  ownR = Cases[back, (OwnRadicalRule -> r_) :> r];
+  back = DeleteCases[back, OwnRadicalRule -> _];
   If[ListQ[res], Return[res //. back]];
   surf = res //. back;
   If[TrueQ[$PMDebug], Print["  surface: ", InputForm[surf]]];
@@ -2764,6 +2797,18 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
      otherwise.  Soundness is untouched: the conjugate is just one more CANDIDATE
      and is accepted only on the same evidence as the original -- D[cand] exactly
      +-f (or +-I f) at every finite real sample. *)
+  (* Second candidate: the integrand's OWN radical for the formal y (BuildTower,
+     when one radical is the only source of q).  The principal Sqrt[q] can sit on
+     the other branch in a region, so the surface fails there while the same
+     surface written through the integrand's radical holds for all complex x
+     (Sqrt[(1-x)/(1+x)] -> y = (1+x) Sqrt[(1-x)/(1+x)], not Sqrt[1-x^2]).  The
+     pair form spells y as q^(1/m); those powers become Y again first.  Only
+     accepted on the same PossibleZeroQ evidence. *)
+  If[(fac === 0 || FreeQ[{1, -1, I, -I}, fac]) && ownR =!= {} && T["q"] =!= None,
+    With[{surfO = (res /. Power[b_, e_Rational] /; Denominator[e] == T["m"] && Expand[b - T["q"]] === 0 :>
+                     Y^(e T["m"])) //. Prepend[DeleteCases[back, Y -> _], First[ownR]]},
+      With[{facO = branchUnit[surfO]},
+        If[MemberQ[{1, -1, I, -I}, facO], fac = facO; surf = surfO]]]];
   If[fac === 0 || FreeQ[{1, -1, I, -I}, fac],
     If[FreeQ[surf, _Complex], Return[{"failed", "verification failed"}]];
     surfC = surf /. Complex[re_, im_] :> Complex[re, -im];

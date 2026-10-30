@@ -1479,6 +1479,21 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
  * note): complex samples cross branch cuts and inflate special functions,
  * which manufactures cancellation/branch false negatives for genuine
  * real-line identities. */
+/* Sign stratification for the Stage-3 screen.  When g_zt_sign_pattern >= 0,
+ * the sign of symbol number g_zt_sym_index is bit g_zt_sym_index of the pattern
+ * (screen trial t uses pattern t), so the first 2^n screen points visit every
+ * orthant of n symbols.  An answer wrong only where a > 0, b > 0 and
+ * x^2 < Min[a, b] lives in one orthant that independent random signs reach
+ * rarely -- 96 random-sign screen points still missed it.  -1 = random signs. */
+static int g_zt_sign_pattern = -1;
+static int g_zt_sym_index = 0;
+
+static bool zt_negative_draw(void) {
+    if (g_zt_sign_pattern >= 0 && g_zt_sym_index < 30)
+        return ((g_zt_sign_pattern >> g_zt_sym_index) & 1) != 0;
+    return draw_int_range(0, 1) != 0;
+}
+
 /* A magnitude log-uniform on [2^-3, 2^num_bits] (see sample_random_value for
  * why: every scale, including |v| < 1, must be sampled). */
 static double zt_log_uniform_magnitude(int num_bits) {
@@ -1513,7 +1528,7 @@ static Expr* sample_random_value(int num_bits) {
      * overflow. */
     double val = zt_log_uniform_magnitude(num_bits);
     (void)num_bound; (void)den_bound;
-    if (draw_int_range(0, 1)) val = -val;
+    if (zt_negative_draw()) val = -val;
     return expr_new_real(val);
 }
 
@@ -1607,7 +1622,7 @@ static double sample_channel(const Channel* c, bool integer, int num_bits) {
         v = zt_log_uniform_magnitude(num_bits);
     }
     if (c->sign < 0) v = -v;
-    else if (c->sign == 0 && draw_int_range(0, 1)) v = -v;
+    else if (c->sign == 0 && zt_negative_draw()) v = -v;
     return v;
 }
 
@@ -1942,6 +1957,7 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms,
     int tries = 0;
     for (;;) {
         for (size_t i = 0; i < nsyms; ++i) {
+            g_zt_sym_index = (int)i;
             vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL, num_bits);
         }
         if (nconform == 0 ||
@@ -2208,8 +2224,17 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
      * SKIPPED — never allowed to abort the test (which would collapse to a wrong
      * True). Only a genuinely symbolic residue / Indeterminate UNKNOWN aborts. */
     int screen_informative = 0;
-    for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
+    /* More free symbols, more conditions a failing region can hide behind: an
+     * antiderivative wrong only where a > 0, b > 0 and x^2 < Min[a, b] is hit by
+     * ~2.5% of independent draws, and 24 points missed it about half the time.
+     * The screen is machine precision only, so it scales with the symbol count
+     * (24 per symbol, at most 96 points). */
+    int screen_n = ZT_SCREEN_SAMPLES * (syms.count > 1 ? (int)syms.count : 1);
+    if (screen_n > 4 * ZT_SCREEN_SAMPLES) screen_n = 4 * ZT_SCREEN_SAMPLES;
+    int saved_pattern = g_zt_sign_pattern;
+    for (int trial = 0; trial < screen_n; ++trial) {
         bool overflow = false, skip = false;
+        g_zt_sign_pattern = trial;      /* orthant stratification (see zt_negative_draw) */
         ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true,
                                             &overflow, conform_facts, nconform, &skip);
         if (skip) continue;                               /* off-region unreachable: skip */
@@ -2220,6 +2245,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
         }
         ++screen_informative;                             /* TRUE: informative zero-ish point */
     }
+    g_zt_sign_pattern = saved_pattern;   /* confirm phase: random signs */
     /* Every screen point overflowed out of range — no informative evidence at
      * all — so the identity cannot be affirmed: return UNKNOWN honestly. */
     if (screen_informative == 0) { verdict = ZERO_TEST_UNKNOWN; goto done; }
@@ -2243,6 +2269,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
     }
 
 done:
+    g_zt_sign_pattern = saved_pattern;
     random_pop_seed();
     free(specs);
     free((void*)conform_facts);
