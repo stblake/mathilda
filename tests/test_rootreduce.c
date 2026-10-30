@@ -353,6 +353,10 @@ static void test_qqbar_zero_negative_power(void) {
 
 #ifdef USE_FLINT
 #include <flint/flint.h>
+#endif
+/* flint_set_throw (the hook behind FLINT::exc) arrived in FLINT 3.3. */
+#if defined(USE_FLINT) && defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30300
+#define TEST_FLINT_THROW_HOOK 1
 /* Test-only builtin: raise a FLINT exception from inside an evaluation. */
 static Expr* builtin_test_flint_throw(Expr* res) {
     (void)res;
@@ -365,7 +369,7 @@ static Expr* builtin_test_flint_throw(Expr* res) {
  * FLINT's default abort(): a TimeConstrained body takes its fail branch, a
  * top-level evaluation becomes $Aborted, and the kernel lives on. */
 static void test_flint_exception_recovery(void) {
-#ifdef USE_FLINT
+#ifdef TEST_FLINT_THROW_HOOK
     symtab_add_builtin("TestFlintThrow", builtin_test_flint_throw);
     check("Quiet[TimeConstrained[1 + TestFlintThrow[], 100, \"recovered\"]]", "\"recovered\"");
     check("Quiet[TestFlintThrow[]]", "$Aborted");
