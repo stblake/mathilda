@@ -5023,7 +5023,10 @@ static void tc_flint_deallocate(void* ptr) {
  * before any GMP/MPFR/FLINT use.  The wrappers delegate to the same
  * malloc/realloc/free the defaults used, so memory allocated before this call is
  * still freed correctly. */
-#ifdef USE_FLINT
+/* flint_set_throw arrived in FLINT 3.3; older releases (Ubuntu 24.04 ships 3.0.1)
+ * keep the default print-and-abort behaviour. */
+#if defined(USE_FLINT) && defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30300
+#define MATHILDA_FLINT_SET_THROW 1
 static void tc_flint_throw(flint_err_t exc, const char* fmt, va_list ap);   /* below */
 #endif
 void tc_install_alloc_guard(void) {
@@ -5035,7 +5038,9 @@ void tc_install_alloc_guard(void) {
 #ifdef USE_FLINT
     __flint_set_memory_functions(tc_flint_allocate, tc_flint_calloc,
                                  tc_flint_reallocate, tc_flint_deallocate);
+#ifdef MATHILDA_FLINT_SET_THROW
     flint_set_throw(tc_flint_throw);
+#endif
 #endif
 }
 
@@ -5201,7 +5206,7 @@ static void tc_fault_report(void) {
     if (requiet) mth_msg_suppress_pop();
 }
 
-#ifdef USE_FLINT
+#ifdef MATHILDA_FLINT_SET_THROW
 static void tc_flint_throw(flint_err_t exc, const char* fmt, va_list ap) {
     (void)exc;
     if (tc_body_live && tc_on_main_thread()) {
