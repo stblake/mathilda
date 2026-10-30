@@ -2094,6 +2094,29 @@ static void test_series_ivar_decline(void) {
 }
 
 /* Subtraction composes Plus[a, Times[-1,b]]; identical series cancel to 0. */
+/* A pole of order k >= 7 used to consume the fixed internal pad (each order
+ * of pole costs one order of relative precision through so_inv / so_mul), and
+ * the short series came back with its O-term BELOW the requested order --
+ * silently, so SeriesCoefficient read a missing e^-1 coefficient as 0 and
+ * ParallelMixedTower certified Sqrt[1-x] Sqrt[1+x] Sqrt[1-x^4] non-elementary.
+ * Every case here must reach exactly the requested O-term. */
+static void test_series_high_order_pole_precision(void) {
+    setup_full();
+    assert_outputform("Series[Sqrt[(1 + e)^2 + e^6]/(e^7 (1 + e)), {e, 0, 0}]",
+                      "1/e^7 + 1/(2 e) - 1 + O[e]^1");
+    assert_fullform("Series[Sqrt[(1 + e)^2 + e^6]/(e^7 (1 + e)), {e, 0, 3}][[5]]", "4");
+    assert_fullform("Series[Sqrt[(1 + e)^2 + e^6]/(e^7 (1 + e)), {e, 0, 6}][[5]]", "7");
+    assert_fullform("Series[Exp[e]/e^14, {e, 0, 0}][[5]]", "1");
+    assert_fullform("SeriesCoefficient[Exp[e]/e^14, {e, 0, -1}]", "Rational[1, 6227020800]");
+    assert_fullform("SeriesCoefficient[Sqrt[1 + e]/e^20, {e, 0, -1}] == Binomial[1/2, 19]", "True");
+    /* the residue that decided the false certificate (w = I is an order-9 pole) */
+    assert_fullform(
+        "SeriesCoefficient[((1 - 12 w^2 + 38 w^4 - 12 w^6 + w^8)/(1 + w^2)^6 * "
+        "4 (-1 - 2 w + w^2) (-1 + 2 w + w^2)/(1 + 3 w^2 + 3 w^4 + w^6) * "
+        "Sqrt[1 + 20 w^2 - 26 w^4 + 20 w^6 + w^8]) /. w -> I + e, {e, 0, -1}]",
+        "Rational[-5, 4]");
+}
+
 static void test_series_subtract(void) {
     setup_full();
     assert_fullform(
@@ -2661,6 +2684,7 @@ int main(void) {
     TEST(test_series_arguments_are_evaluated);
     TEST(test_series_ivar_decline);
     TEST(test_series_subtract);
+    TEST(test_series_high_order_pole_precision);
     TEST(test_series_plus_real_contagion);
     TEST(test_series_plus_mpfr);
 

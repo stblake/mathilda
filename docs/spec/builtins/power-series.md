@@ -182,6 +182,17 @@ Expansions where the inner series diverges at the expansion point (e.g. `Series[
 
 **Internal padding for symbolic expansion points**: The engine computes series at a padded internal order (user order + 12 by default) so that intermediate Laurent/Puiseux operations don't lose accuracy. When the expansion point `x0` is not a literal number, padding is capped at 2 — at a symbolic point the series coefficients are themselves symbolic expressions (e.g. `Cosh[a]`, `Sinh[a]`), and the `O(N^2)` convolution inside `so_inv`/`so_div` would otherwise spin indefinitely on exponentially growing expression trees. This makes cases like `Series[Coth[x], {x, a, 1}]`, `Series[Tanh[x], {x, a, 1}]`, `Series[Sec[x], {x, a, 1}]`, and `Series[1/Cosh[x], {x, a, 1}]` terminate in milliseconds.
 
+**Requested order is guaranteed at a numeric expansion point** (v0.6088).
+- **Why it was needed.** The pad of 12 was a guess. Every order of pole that flows through `so_inv`/`so_mul` costs
+  one order of relative precision: an `Apart`-merged denominator such as `e^7 + e^8`, or `1/e^k` squared up by
+  `so_pow_int`. So a pole of order ≥ 7 used up the pad, and the expansion came back short of the requested O-term.
+- **What went wrong.** `Series[Sqrt[(1+e)^2+e^6]/(e^7 (1+e)), {e,0,0}]` gave `1/e^7 + O[e]^-1`, and
+  `SeriesCoefficient` read the missing `e^-1` coefficient as 0.
+- **The fix.** `do_series_single` now measures any shortfall and re-expands with the pad widened by exactly that
+  much, for at most 4 rounds. The symbolic-centre pad stays tight on purpose; `residue.c` compensates there.
+- **A related fix.** The single-term branch of `so_inv` no longer overstates the precision of a truncated monomial:
+  its O-term moves to `order - 2 nmin`.
+
 **Constant inputs**: If `f` is free of the expansion variable (e.g. `Series[0, {x, 0, 4}]`, `Series[Sin[y], {x, 0, 4}]`, `Series[a + b^2, {x, 0, 3}]`), `Series` returns `f` verbatim instead of wrapping it in a trivial `SeriesData`.
 
 **Symbolic prefactors**: A factor of `x^alpha` with `alpha` symbolic (non-integer, non-rational) is pulled outside the expansion so the remaining body is expanded as an ordinary power series. For example, `Series[x^a Exp[x], {x, 0, 5}]` returns `x^a (1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120 + O[x]^6)` — a `Times[Power[x, a], SeriesData[...]]` at the expression level, so the `SeriesData` pretty-printer still renders the body and the outer `Times` decorates it with the symbolic prefactor.

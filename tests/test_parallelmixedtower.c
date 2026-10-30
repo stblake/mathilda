@@ -224,6 +224,17 @@ static void test_method_split_specials(void) {
         "{True, True}");
 }
 
+/* False certificates through Series: at an order-9 (resp. 7) pole the deep
+ * residues came back {0, 0, 0, 0} from a Series that stopped short of the
+ * e^-1 term, and the holomorphic-remainder argument then "proved" these
+ * elementary integrands non-elementary.  (1-x^2) Sqrt[1+x^2] on the reals. */
+static void test_no_false_certificate_series_precision(void) {
+    assert_eval("Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[1 - x] Sqrt[x + 1] Sqrt[1 - x^4], x]][[1]] =!= \"not elementary\"",
+                "True");
+    assert_eval("Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[x + 1] Sqrt[1 - x^4]/Sqrt[1 - x], x]][[1]] =!= \"not elementary\"",
+                "True");
+}
+
 static void test_method_declines_cleanly(void) {
     /* Genuinely non-elementary: the Method form must DECLINE, leaving Integrate
      * unevaluated so the cascade / caller sees no answer (not a wrong one). */
@@ -498,6 +509,7 @@ void test_parallelmixedtower(void) {
     TEST(test_method_real_form);
     TEST(test_method_split_specials);
     TEST(test_method_declines_cleanly);
+    TEST(test_no_false_certificate_series_precision);
     TEST(test_method_certifies_nonelementary);
     TEST(test_nonelem_warning_emitted);
     TEST(test_soundness_fixes);

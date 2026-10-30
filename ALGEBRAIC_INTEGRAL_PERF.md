@@ -146,15 +146,15 @@ negatives. Both are in the fix plan below.
 # Results
 
 <!-- BEGIN GENERATED -->
-Run of 2026-10-30 15:43:22: **803 integrands** (207 with symbolic parameters, 596 over Q), per-method timeout 120 s, FriCAS timeout 120 s, wall time 76 min; ParallelMixedTower re-run on 803 cases (33 min).
+Run of 2026-10-30 15:54:26: **803 integrands** (207 with symbolic parameters, 596 over Q), per-method timeout 120 s, FriCAS timeout 120 s, wall time 76 min; ParallelMixedTower re-run on 803 cases (33 min); ParallelMixedTower re-run on 55 cases (2 min).
 
 ### Headline
 
 |  | Trager | ParallelMixedTower | FriCAS |
 |---|---|---|---|
 | verified antiderivative | 338 | 298 | 482 |
-| proved non-elementary | 15 | 22 | 46 |
-| declined | 446 | 268 | 0 |
+| proved non-elementary | 15 | 20 | 46 |
+| declined | 446 | 270 | 0 |
 | timeout | 4 | 201 | 253 |
 | error / crash | 0 | 1 | 21 |
 | wrong answer | 0 | 8 | 1 |
@@ -163,7 +163,7 @@ Run of 2026-10-30 15:43:22: **803 integrands** (207 with symbolic parameters, 59
 
 Of the **646** integrands the book states are elementary: Trager solves **281**, ParallelMixedTower solves **258**, FriCAS **419**, either Mathilda method **381**.
 
-- over Q (no parameters) (596): Trager solved 338, decided 353; ParallelMixedTower solved 269, decided 291; FriCAS solved 359.
+- over Q (no parameters) (596): Trager solved 338, decided 353; ParallelMixedTower solved 269, decided 289; FriCAS solved 359.
 - with symbolic parameters (207): Trager solved 0, decided 0; ParallelMixedTower solved 29, decided 29; FriCAS solved 123.
 
 ### Classification against FriCAS and the book
@@ -174,13 +174,12 @@ Of the **646** integrands the book states are elementary: Trager solves **281**,
 | Mathilda only | 113 | 40 |
 | agree non-elem | 9 | 14 |
 | non-elem unconf. | 6 | 6 |
-| FriCAS only | 257 | 210 |
+| FriCAS only | 257 | 212 |
 | neither | 190 | 142 |
 | timeout | 3 | 117 |
 | error | 0 | 1 |
 | WRONG | 0 | 8 |
 | wrong branch on part of R | 0 | 5 |
-| DISAGREE | 0 | 2 |
 | book conflict | 0 | 1 |
 
 ### Per chapter
@@ -201,7 +200,7 @@ Cells are *verified antiderivatives / proved non-elementary / declined / timeout
 | log_term | 16 | 16 | 16 / 0 / 0 / 0 | 16 / 0 / 0 / 0 | 16 / 0 |
 | realis | 22 | 7 | 17 / 2 / 3 / 0 | 11 / 2 / 8 / 1 | 18 / 0 |
 | nested_radicals | 161 | 159 | 0 / 0 / 161 / 0 | 40 / 1 / 98 / 22 | 86 / 2 |
-| multiple_radicals | 55 | 34 | 0 / 0 / 55 / 0 | 9 / 2 / 26 / 15 | 40 / 2 |
+| multiple_radicals | 55 | 34 | 0 / 0 / 55 / 0 | 9 / 0 / 28 / 15 | 40 / 2 |
 | euler | 22 | 22 | 10 / 0 / 11 / 1 | 6 / 0 / 9 / 7 | 13 / 0 |
 | timofeev | 23 | 7 | 19 / 0 / 4 / 0 | 15 / 0 / 3 / 5 | 23 / 0 |
 | potpourri | 43 | 7 | 31 / 0 / 12 / 0 | 22 / 0 / 13 / 6 | 27 / 0 |
@@ -215,7 +214,7 @@ Cells are *verified antiderivatives / proved non-elementary / declined / timeout
 | system | answered | median | mean | max |
 |---|---:|---:|---:|---:|
 | Trager | 353 | 0.644 | 1.774 | 31.42 |
-| ParallelMixedTower | 320 | 0.273 | 3.227 | 119.55 |
+| ParallelMixedTower | 318 | 0.259 | 3.239 | 119.55 |
 | FriCAS | 528 | 0.200 | 2.452 | 90.90 |
 
 On the 185 integrands both methods solve, median LeafCount of the antiderivative: Trager 118, ParallelMixedTower 101.
@@ -235,13 +234,13 @@ On the 185 integrands both methods solve, median LeafCount of the antiderivative
 | integrand is not a rational function of x and the radical over Q | 6 |
 | integrand is not algebraic over Q(x) | 2 |
 
-**ParallelMixedTower** (268 declines)
+**ParallelMixedTower** (270 declines)
 
 | reason | count |
 |---|---:|
 | tower construction failed | 151 |
 | no solution within bounds | 46 |
-| needs torsion realisation (milestone iii) | 29 |
+| needs torsion realisation (milestone iii) | 31 |
 | partially ramified branch prime | 15 |
 | residue class lost | 10 |
 | verification failed | 6 |
@@ -276,12 +275,9 @@ On the 185 integrands both methods solve, median LeafCount of the antiderivative
 
 None.
 
-### Disagreements (proved non-elementary, but FriCAS or the book has an antiderivative) (2)
+### Disagreements (proved non-elementary, but FriCAS or the book has an antiderivative) (0)
 
-| id | method | integrand | book ref | detail |
-|-----------|------|------------------|---------|--------------|
-| multrad\-multiple\_radicals\_4\-i | PMT | Sqrt\[1\-x\]\*Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\] | Problem multiple\_radicals\_4 \(i\) | \{"not elementary", "holomorphic remainder: residual second\-kind differential is not exact \(every bound in forc… |
-| multrad\-multiple\_radicals\_4\-iii | PMT | Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\]/Sqrt\[1\-x\] | Problem multiple\_radicals\_4 \(iii\) | \{"not elementary", "holomorphic remainder: residual second\-kind differential is not exact \(every bound in forc… |
+None.
 
 ### Book conflicts (verified antiderivative where the book says non-elementary) (1)
 
@@ -505,7 +501,7 @@ None.
 | multmeth\-m2\-inst | PMT | \(2\*x\+3\)/\(\(2\-x\^2\)\*\(x\^2\-1\)\^\(1/4\)\) | Multiple methods problem 2; inst a=2, b=… | FriCAS TIMEOUT; book ? |
 | intro\-multiple\_approaches\-1 | PMT | 1/\(\(x\-1\)\*Sqrt\[x\^2\+b\*x\+c\]\) | Introduction, Multiple Approaches to Int… | FriCAS ELEM; book elem |
 
-### Elementary per book or FriCAS, but declined (606)
+### Elementary per book or FriCAS, but declined (608)
 
 | id | method | integrand | book ref | detail |
 |-----------|------|------------------|---------|--------------|
@@ -1034,11 +1030,13 @@ None.
 | multrad\-multiple\_radicals\_3\-iii | Trager | \(x\^2\-2\*b\*x\+a\*b\-a\*c\+b\*c\)\*Sqrt\[x\-b\]/\(\(x\^2\-\(a\+c\-1\)\*x\-b\+a\*c\)\*\(x\^2\-\(a\+c\+1\)\*x\+b\+a\*c\)\*Sqrt\[x\-a\]\*S… | Problem multiple\_radicals\_3 \(iii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_3\-iii\-inst | Trager | \(x\^2\-2\*3\*x\+2\*3\-2\*5\+3\*5\)\*Sqrt\[x\-3\]/\(\(x\^2\-\(2\+5\-1\)\*x\-3\+2\*5\)\*\(x\^2\-\(2\+5\+1\)\*x\+3\+2\*5\)\*Sqrt\[x\-2\]\*S… | Problem multiple\_radicals\_3 \(iii\); inst … | \{"failed", "more than one radicand \(a radical compositum\)"\} |
 | multrad\-multiple\_radicals\_4\-i | Trager | Sqrt\[1\-x\]\*Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\] | Problem multiple\_radicals\_4 \(i\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
+| multrad\-multiple\_radicals\_4\-i | PMT | Sqrt\[1\-x\]\*Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\] | Problem multiple\_radicals\_4 \(i\) | \{"needs torsion realisation \(milestone iii\)", \{\{1 \+ \(\-1 \+ Sqrt\[1 \- x\]\)\^2/\(\-1 \+ Sqrt\[1 \+ x\]\)\^2, \{5/4, \-5/4, \-5/… |
 | multrad\-multiple\_radicals\_4\-ii | Trager | Sqrt\[b\-a\*x\]\*Sqrt\[a\*x\+b\]\*Sqrt\[b\^4\-a\^4\*x\^4\] | Problem multiple\_radicals\_4 \(ii\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_4\-ii | PMT | Sqrt\[b\-a\*x\]\*Sqrt\[a\*x\+b\]\*Sqrt\[b\^4\-a\^4\*x\^4\] | Problem multiple\_radicals\_4 \(ii\) | \{"failed", "tower construction failed", Sqrt\[b \- a x\] Sqrt\[b \+ a x\] Sqrt\[b\^4 \- a\^4 x\^4\]\} |
 | multrad\-multiple\_radicals\_4\-ii\-inst | Trager | Sqrt\[3\-2\*x\]\*Sqrt\[2\*x\+3\]\*Sqrt\[3\^4\-2\^4\*x\^4\] | Problem multiple\_radicals\_4 \(ii\); inst a… | \{"failed", "more than one radicand \(a radical compositum\)"\} |
 | multrad\-multiple\_radicals\_4\-ii\-inst | PMT | Sqrt\[3\-2\*x\]\*Sqrt\[2\*x\+3\]\*Sqrt\[3\^4\-2\^4\*x\^4\] | Problem multiple\_radicals\_4 \(ii\); inst a… | \{"failed", "tower construction failed", Sqrt\[3 \- 2 x\] Sqrt\[3 \+ 2 x\] Sqrt\[81 \- 16 x\^4\]\} |
 | multrad\-multiple\_radicals\_4\-iii | Trager | Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\]/Sqrt\[1\-x\] | Problem multiple\_radicals\_4 \(iii\) | \{"failed", "more than one radicand \(a radical compositum\)"\} |
+| multrad\-multiple\_radicals\_4\-iii | PMT | Sqrt\[x\+1\]\*Sqrt\[1\-x\^4\]/Sqrt\[1\-x\] | Problem multiple\_radicals\_4 \(iii\) | \{"needs torsion realisation \(milestone iii\)", \{\{1 \+ \(\-1 \+ Sqrt\[1 \- x\]\)\^2/\(\-1 \+ Sqrt\[1 \+ x\]\)\^2, \{1, \-1, \-1, 1\}\}… |
 | multrad\-multiple\_radicals\_4\-iv | Trager | Sqrt\[a\*x\+b\]\*Sqrt\[b\^4\-a\^4\*x\^4\]/Sqrt\[b\-a\*x\] | Problem multiple\_radicals\_4 \(iv\) | \{"failed", "radicand is not a rational function over Q"\} |
 | multrad\-multiple\_radicals\_4\-iv | PMT | Sqrt\[a\*x\+b\]\*Sqrt\[b\^4\-a\^4\*x\^4\]/Sqrt\[b\-a\*x\] | Problem multiple\_radicals\_4 \(iv\) | \{"failed", "tower construction failed", \(Sqrt\[b \+ a x\] Sqrt\[b\^4 \- a\^4 x\^4\]\)/Sqrt\[b \- a x\]\} |
 | multrad\-multiple\_radicals\_4\-iv\-inst | Trager | Sqrt\[2\*x\+3\]\*Sqrt\[3\^4\-2\^4\*x\^4\]/Sqrt\[3\-2\*x\] | Problem multiple\_radicals\_4 \(iv\); inst a… | \{"failed", "more than one radicand \(a radical compositum\)"\} |

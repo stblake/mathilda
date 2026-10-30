@@ -5,7 +5,7 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
 
 - [x] P0 baseline report ALGEBRAIC_INTEGRAL_PERF.md/.pdf (PMT rerun, reclassify), commit v0.6087
       (PMT budgets off on explicit Method, eulerStep Return-in-With fix, harness/corpus/report)
-- [ ] P1a Series: fixed pad loses k orders at a k-th order pole, short result returned silently (series.c)
+- [x] P1a Series: fixed pad loses k orders at a k-th order pole, short result returned silently (series.c)
 - [ ] P1b PMT gate on positive evidence (fac local, Hold/Temporary, reclim Check, C overflow flag)
 - [ ] P1c FLINT qqbar zero^(-n) guard + FLINT throw hook (no kernel abort)
 - [ ] P2a complex-point verification in harnesses

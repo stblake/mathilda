@@ -750,11 +750,14 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
     SeriesObj* a = so_copy_trimmed(a_in);
     if (a->coef_count == 0) { so_free(a); return NULL; }
 
-    /* Exact single-term inversion: 1/(c * (x-x0)^nmin) = (1/c) * (x-x0)^{-nmin}
-     * and its accuracy is whatever the input's was. */
+    /* Single-term inversion: 1/(c (x-x0)^nmin) = (1/c) (x-x0)^-nmin.  The
+     * RELATIVE accuracy carries over (order - nmin terms past the leading
+     * one), so the O-term moves to -nmin + (order - nmin), as in the general
+     * branch below.  Keeping a->order overstated the precision of a
+     * truncated monomial whenever nmin != 0. */
     if (so_nonzero_count(a) == 1) {
         Expr* inv_c = simp(mk_power(expr_copy(a->coefs[0]), expr_new_integer(-1)));
-        SeriesObj* r = so_alloc(a->x, a->x0, -a->nmin, a->order, a->den);
+        SeriesObj* r = so_alloc(a->x, a->x0, -a->nmin, a->order - 2 * a->nmin, a->den);
         if (r->coef_count > 0) so_set_coef(r, 0, inv_c);
         else expr_free(inv_c);
         so_free(a);
@@ -7043,17 +7046,46 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * tight pad only in the residues that actually need it. */
     bool x0_is_numeric = expr_is_numeric_like(x0_use);
     int64_t pad = x0_is_numeric ? 12 : 2;
-    int64_t internal_order = order + pad;
 
-    SeriesCtx ctx = {
-        x_use, x0_use, internal_order, order,
-        /* allow_branch_wrap */ true,
-        /* pending_add_const  */ NULL,
-        /* pending_log_coef   */ NULL,
-        /* pending_discriminator */ NULL,
-        /* assume */ assume,
-    };
-    SeriesObj* s = series_expand(f_use, &ctx);
+    /* The pad is a guess: every order of pole that flows through so_inv /
+     * so_mul (an Apart-merged denominator e^7 + e^8, 1/e^k squared up by
+     * so_pow_int) costs one order of relative precision, so a pole of order
+     * k >= 7 consumes the whole pad and the expansion comes back SHORT of the
+     * requested O-term.  Returning it short was a silent precision loss:
+     * Series[Sqrt[(1+e)^2+e^6]/(e^7 (1+e)), {e,0,0}] gave 1/e^7 + O[e]^-1
+     * and SeriesCoefficient read the missing e^-1 coefficient as 0 -- a
+     * zero residue that made ParallelMixedTower certify an elementary
+     * integral non-elementary.  So measure the shortfall and re-expand with
+     * the pad widened by exactly that much.  Numeric centres only: the tight
+     * symbolic-centre pad is deliberate (see above; residue.c compensates
+     * there).  The loop is bounded by rounds, not by order -- each round
+     * adds the measured deficit, which is finite for a fixed input. */
+    SeriesObj* s = NULL;
+    int64_t internal_order = order + pad;
+    SeriesCtx ctx;
+    for (int round = 0; ; round++) {
+        SeriesCtx c0 = {
+            x_use, x0_use, internal_order, order,
+            /* allow_branch_wrap */ true,
+            /* pending_add_const  */ NULL,
+            /* pending_log_coef   */ NULL,
+            /* pending_discriminator */ NULL,
+            /* assume */ assume,
+        };
+        ctx = c0;
+        s = series_expand(f_use, &ctx);
+        if (!s || !x0_is_numeric || leading_only || round >= 4) break;
+        int64_t want = target_exp_n * s->den + 1;           /* numerator units */
+        if (s->order >= want) break;
+        int64_t deficit = (want - s->order + s->den - 1) / s->den;  /* exponent units */
+        if (deficit <= 0) break;
+        if (ctx.pending_add_const) { expr_free(ctx.pending_add_const); ctx.pending_add_const = NULL; }
+        if (ctx.pending_log_coef) { expr_free(ctx.pending_log_coef); ctx.pending_log_coef = NULL; }
+        if (ctx.pending_discriminator) { expr_free(ctx.pending_discriminator); ctx.pending_discriminator = NULL; }
+        so_free(s);
+        s = NULL;
+        internal_order += deficit;
+    }
     Expr* result = NULL;
     if (s) {
         /* Scan for leading-term extension in the rule form: find the first
