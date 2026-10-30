@@ -3046,7 +3046,10 @@ integrates `f`, a rational function of `x` and powers of a single radical
 radicand are merged: `Sqrt[x]` and `x^(1/3)` are powers of `x^(1/6)`. An
 integrand with no radical (a rational function, over Q or over a number field
 `Q(Sqrt[2], ...)`) is integrated as a rational function and verified (v0.6094);
-it used to decline. Every answer must satisfy
+it used to decline. When `f = x^(k-1) g(x^k)` syntactically (k = 2..6), `g` is
+integrated in `u` and `G(x^k)/k` returned (v0.6095) -- an exact identity, valid for
+all complex x, that lowers the radical's degree or merges what looked like several
+radicals into one (ParallelMixedTower applies the same pre-pass). Every answer must satisfy
 `PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]]` (v0.6093).
 
 The method follows B. M. Trager, *Integration of Algebraic Functions* (MIT thesis,

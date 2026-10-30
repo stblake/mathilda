@@ -13,7 +13,7 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
 - [ ] P2c power-free radicands before choosing m
 - [x] P2d PossibleZeroQ is the sole verifier (PZQ deep-cancellation fixed v0.6091, harness PZQ-only; Trager/PMT internal numeric fallbacks still to remove): triage 77 PZQ=False verified answers (24 Trager, 53 PMT), fix PZQ per
       class, then remove numeric fallbacks (Trager spotCheck/numericZeroQ, PMT branchUnit, harness numeric acceptance)
-- [ ] P3a u = x^k pre-pass   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
+- [x] P3a u = x^k pre-pass (v0.6095; 0 corpus gain alone)   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
 - [ ] P3d PMT timeouts: $PMProfile, fix dominant stages algorithmically
 - [x] P4a Trager routing (rational/number-field rational done v0.6094; radical + algebraic constant needs NF constant field -> with P4b)  - [ ] P4b Trager over Q(params)  - [ ] P4c Trager timeouts
 - [ ] final full rerun, before/after report, PDF

@@ -248,8 +248,10 @@ static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
                 "ParallelMixed`Private`VanishingDenominator[___] := ParallelMixed`Private`boom[0]; 0", "0");
-    assert_eval("Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[x^2 + 1]/x, x]]",
-                "{\"failed\", \"internal error: $RecursionLimit exceeded\"}");
+    /* the direct package call: a failure tuple (the reason depends on where the
+     * degraded evaluation stops -- since v0.6095 the u = x^2 sub-call overflows
+     * first and the 45 s backstop ends the run); never an answer */
+    assert_eval("First[Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[x^2 + 1]/x, x]]]", "\"failed\"");
     assert_eval("Quiet[Integrate`ParallelMixedTower[Sqrt[x^2 + 1]/x, x]]",
                 "{\"failed\", \"internal error: $RecursionLimit exceeded\"}");
     assert_eval("Head[Quiet[Integrate[Sqrt[x^2 + 1]/x, x, Method -> \"ParallelMixedTower\"]]]",

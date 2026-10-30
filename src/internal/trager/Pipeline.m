@@ -194,10 +194,33 @@ TragerIntegrate[f_, x_Symbol, method_String : "Trager"] := Module[{r},
   r = catchTrager[tragerIntegrateBody[f, x, method]];
   If[tragerFailQ[r], failToList[r], r]];
 
+xPowerReduce::usage = "xPowerReduce[f, x] is {k, g, u} when f = x^(k-1) g(x^k) syntactically for some k in 6..2 (f/x^(k-1) mentions x only through powers x^(j k)), so that Integrate[f, x] = G(x^k)/k with G' = g: an exact identity, valid for all complex x since u = x^k is entire. None otherwise.";
+xPowerReduce[f_, x_Symbol] := Catch[
+  Module[{u = Unique["u"], e, rule},
+    Do[
+      rule = Power[x, p_Integer /; Mod[p, k] == 0] :> u^(p/k);
+      e = f/x^(k - 1);
+      (* only an integrand with a radical in x: a rational one (1/x -> 1/u
+         -> 1/v ...) would reduce forever, and gains nothing.  With a radical
+         each step divides the radicand's exponents by k, so it terminates *)
+      If[!FreeQ[e, x] && !FreeQ[e, Power[b_, _Rational] /; !FreeQ[b, x]] &&
+         FreeQ[e /. rule, x], Throw[{k, e /. rule, u}, "xpow"]],
+      {k, {6, 5, 4, 3, 2}}];
+    None], "xpow"];
+
 tragerIntegrateBody::usage = "tragerIntegrateBody[f, x, method] is the body of TragerIntegrate: it throws instead of returning failure lists.";
 tragerIntegrateBody[f_, x_Symbol, method_String] := Module[
   {cf, n, g, yh, yexpr, coeffs, total, cc, res, Yexpr, rho, part},
   If[!MemberQ[{"Trager", "Kauers"}, method], throwDecline["unknown method " <> method]];
+  (* u = x^k: integrate g(u) and substitute back, when f = x^(k-1) g(x^k); the
+     reduced integrand has a radical of lower degree, or one radical where f
+     looked like several.  On failure the normal path runs. *)
+  With[{red = xPowerReduce[f, x]},
+    If[red =!= None,
+      With[{r = catchTrager[tragerIntegrateBody[red[[2]], red[[3]], method]]},
+        If[!tragerFailQ[r],
+          With[{F = (r /. red[[3]] -> x^red[[1]])/red[[1]]},   (* no Together: it can merge radicals across branches *)
+            If[antiderivativeQ[f, F, x], Return[F, Module]]]]]]];
   cf = canonicalForm[f, x];
   n = cf["n"]; coeffs = cf["coeffs"];
   (* no radical: a rational function over Q or a number field -- the rational

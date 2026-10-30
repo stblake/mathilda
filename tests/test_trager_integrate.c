@@ -405,7 +405,9 @@ static void test_end_to_end(void) {
     /* [B] Ex. 6: exactly one logarithm with coefficient 1/3 */
     TR_TRUE("Module[{F0 = Integrate[1/(x Sqrt[1 - x^3]), x, Method -> \"Trager\"]}, MatchQ[F0, Rational[1, 3] Log[_]]]");
     /* [B] Ex. 4: 1/4 Log[...] */
-    TR_TRUE("Module[{F0 = Integrate[1/(x Sqrt[x^8 + 1]), x, Method -> \"Trager\"]}, MatchQ[F0, Rational[1, 4] Log[_]]]");
+    /* (since v0.6095 via u = x^4: 1/(u Sqrt[u^2 + 1]) -- still exactly one logarithm,
+     * 1/8 Log[(2 + x^8 - 2 Sqrt[1 + x^8])/x^8]) */
+    TR_TRUE("Module[{F0 = Integrate[1/(x Sqrt[x^8 + 1]), x, Method -> \"Trager\"]}, MatchQ[F0, _Rational Log[_]]]");
     /* answers are real (ArcTan, no I) for real integrands where possible */
     TR_TRUE("FreeQ[Integrate[1/Sqrt[1 - x^2], x, Method -> \"Trager\"], Complex]");
     TR_TRUE("FreeQ[Integrate[(x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1]), x, Method -> \"Trager\"], Complex]");

@@ -2679,7 +2679,37 @@ VanishingDenominator[fpair_, back_, x_] := Module[{den, vals, v},
     {c, fpair}];
   None];
 
-ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, integrand = integrand0},
+(* XPowerReduce[f, x]: {k, g, u} when f = x^(k-1) g(x^k) syntactically (f/x^(k-1)
+   mentions x only through powers x^(j k)), k = 6..2, else None.  Then
+   Integrate[f, x] = G(x^k)/k with G' = g -- an exact identity, valid for all
+   complex x (u = x^k is entire), and g has a radical of lower degree or a
+   single radical where f looked like several. *)
+XPowerReduce[f_, x_Symbol] := Catch[
+  Module[{u = Unique["u"], e, rule},
+    Do[
+      rule = Power[x, p_Integer /; Mod[p, k] == 0] :> u^(p/k);
+      e = f/x^(k - 1);
+      (* only an integrand with a radical in x: a rational one (1/x -> 1/u
+         -> 1/v ...) would reduce forever, and gains nothing.  With a radical
+         each step divides the radicand's exponents by k, so it terminates *)
+      If[!FreeQ[e, x] && !FreeQ[e, Power[b_, _Rational] /; !FreeQ[b, x]] &&
+         FreeQ[e /. rule, x], Throw[{k, e /. rule, u}, "xpow"]],
+      {k, {6, 5, 4, 3, 2}}];
+    None], "xpow"];
+
+ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, integrand = integrand0},
+  (* u = x^k first: the reduced integrand, if solved and verified for all
+     complex x, is the answer; otherwise the normal path runs *)
+  red = XPowerReduce[integrand0, x];
+  If[red =!= None,
+    With[{g = ParallelIntegrateMixed[red[[2]], red[[3]], opts]},
+      (* an internal error in the sub-call (a recursion overflow leaves the
+         evaluator degraded for the rest of this evaluation) ends this one too *)
+      If[MatchQ[g, {"failed", s_String /; StringStartsQ[s, "internal error"], ___}], Return[g, Module]];
+      If[!ListQ[g] && FreeQ[g, ParallelIntegrateMixed],
+        With[{F = (g /. red[[3]] -> x^red[[1]])/red[[1]]},
+          If[TrueQ[Quiet[PossibleZeroQ[D[F, x] - integrand0, Assumptions -> Element[x, Complexes]]]],
+            Return[F, Module]]]]]];
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
   bt = Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"];
   If[bt === $Failed || ! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", integrand}]];
