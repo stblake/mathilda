@@ -192,11 +192,15 @@ static void test_method_real_form(void) {
     /* the arctangent argument is a polynomial in the radical (YQuot): the surface layer
      * rewrites the positive powers of the radical only, and a radical in a denominator
      * was read on the principal branch -- wrong wherever Tan[x] < 0 (Charlwood P5) */
+    /* Since v0.6093 the answer must hold for ALL complex x.  The Tan[x] surface
+     * reads Sqrt[Cos^4 + Cos^2 + 1] as Cos^2 Sqrt[3 + 3 Tan^2 + Tan^4], true only
+     * where Cos[x]^2 >= 0 (the real line), so the method now declines; whatever
+     * it returns must verify for all complex x (a declined List passes). */
     assert_eval(
-        "f = Cos[x]^2/Sqrt[Cos[x]^4 + Cos[x]^2 + 1]; r = Integrate`ParallelMixedTower[f, x];"
-        " {FreeQ[r, Complex], Abs[N[(D[r, x] - f) /. x -> 2, 25]] < 10^-15,"
-        "  Abs[N[(D[r, x] - f) /. x -> 1/3, 25]] < 10^-15}",
-        "{True, True, True}");
+        "f = Cos[x]^2/Sqrt[Cos[x]^4 + Cos[x]^2 + 1]; r = Quiet[Integrate`ParallelMixedTower[f, x]];"
+        " If[ListQ[r], First[r] =!= \"not elementary\","
+        "   FreeQ[r, Complex] && TrueQ[PossibleZeroQ[D[r, x] - f, Assumptions -> Element[x, Complexes]]]]",
+        "True");
     /* two nested-radical fields in one session (Charlwood P4 then A40): the module
      * canonicalises with CanRaw, not with the field detour of Can, whose back-conversion
      * once returned a Dot[{}, Inverse[{}], {}] coefficient here */
@@ -412,8 +416,11 @@ static void test_no_false_certificate_curve_free(void) {
         { "Exp[2 x]/(1 + Exp[x])",        "7/5" },
         { "Exp[x]/(1 + Exp[x] + Exp[2 x])", "7/5" },
         { "1/(Exp[x] - Exp[-x])",         "7/5" },
-        { "Log[x^2]/Log[x]",              "7/5" },
     };
+    /* Log[x^2]/Log[x] is 2 only for Re x > 0: 2 x is not an antiderivative for
+     * all complex x, so since v0.6093 (PossibleZeroQ gate) the method DECLINES --
+     * the point of this test is that it must never CERTIFY non-elementarity. */
+    assert_eval("First[Quiet[Integrate`ParallelMixedTower[Log[x^2]/Log[x], x]]] =!= \"not elementary\"", "True");
     for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
         char buf[768];
         snprintf(buf, sizeof buf,

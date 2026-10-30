@@ -1507,7 +1507,13 @@ monotonically down.
      method runs until it decides, and any limit is the caller's own
      `TimeConstrained`.  Every explicit answer is therefore verified to completion
      (an exhausted verify budget used to accept the antiderivative as the
-     principal branch unverified).  Acceptance is on positive evidence only
+     principal branch unverified).  **Every answer is an antiderivative for
+     all complex x** (v0.6093), decided by `PossibleZeroQ[D[F, x] - u f]` alone
+     for one global unit `u ∈ {1, -1, I, -I}` (the other root of `y^2 = q`, or
+     `Sqrt[q] = I Sqrt[-q]`); a surface whose sign flips between regions is
+     declined (it used to be accepted, after numeric sampling, as "the
+     principal-branch answer, valid on each real component"), and so is a
+     verification that exhausts its budget.  Acceptance is on positive evidence only
      (v0.6089): a verified unit factor, dependence on x, no `Hold`, and no escaped
      Module local (a `Temporary` symbol other than a `Function`'s bound variable).
      A `$RecursionLimit` overflow inside the method, which does not abort but

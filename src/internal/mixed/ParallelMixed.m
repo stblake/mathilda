@@ -2695,105 +2695,29 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
   If[ListQ[res], Return[res //. back]];
   surf = res //. back;
   If[TrueQ[$PMDebug], Print["  surface: ", InputForm[surf]]];
-  (* Verify-or-decline soundness gate, with branch resolution.  A returned
-     antiderivative MUST satisfy D[surf] == integrand on the integrand's real
-     domain, checked numerically at REAL in-domain points (the discipline of the
-     external corpus).  But the parallel method integrates over y^2 = q and maps
-     the formal radical back as the PRINCIPAL Sqrt[q], so the surface can be the
-     true antiderivative only up to the branch of that radical:
-       - a global sign (D[surf] == -integrand everywhere): the decomposition took
-         the other root of y^2 = q, and -surf is the antiderivative (A11); or
-       - a sign that flips across a branch cut of the radicand on the real line
-         (D[surf] == +integrand on one component, == -integrand on the next --
-         e.g. Sqrt[1-Sin^6] == |Cos| Sqrt[...], A34): then no single elementary
-         expression is a global antiderivative and surf is the conventional
-         principal-branch answer, valid on each connected component.
-     Pin the branch numerically: sgn = +1/-1 chooses surf/-surf; sgn = 0 declines.
-     Soundness is preserved -- acceptance requires D[surf] to equal EXACTLY
-     +integrand or -integrand (to 1e-12) at every finite real sample; a genuinely
-     wrong surface gives a residual that is neither, and is still rejected.
-     (verify-timeout: accept as principal branch rather than reject a
-     likely-correct but large answer.) *)
+  (* Verify-or-decline soundness gate.  An answer must be an antiderivative for
+     ALL complex x, and PossibleZeroQ alone decides it (no numeric sampling: a
+     correct answer it cannot confirm is a PossibleZeroQ bug).  The parallel
+     method integrates over y^2 = q and maps the formal radical back as the
+     principal Sqrt[q], so the surface may be the antiderivative up to ONE
+     global unit u (D[surf] == u f): the other root of y^2 = q (u = -1, A11), or
+     Sqrt[q] = I Sqrt[-q] (u = +-I, A35); then surf/u is the answer.  A sign that
+     flips between regions -- right on one real component, wrong on the next --
+     is NOT an antiderivative and declines (it used to be accepted as "the
+     principal-branch answer, valid on each component": 79 such answers on the
+     DDI corpus were wrong somewhere on the real line or in C).  A verification
+     that runs out of budget declines too (it used to accept unverified). *)
   branchUnit[surf0_] := TimeConstrained[
-    Quiet[Module[{cand, pts, dv, fv, fvals, keep, tol = 10^-12, units, gu, u, dsurf, params, prules, integrand = integrand0},
-      (* free parameters (symbols other than x: a, b, ...) take fixed generic rational
-         values for the numeric check, as the corpus runners do; a wrong surface is wrong
-         at generic values too *)
-      params = Complement[DeleteDuplicates[Cases[{integrand}, s_Symbol /; ! NumericQ[s] && s =!= None, {0, Infinity}]], {x}];
-      prules = Thread[params -> Take[{5/7, 11/13, 3/2, 7/3, 13/5, 17/11, 19/7}, Min[Length[params], 7]]];
-      integrand = integrand /. prules;
-      dsurf = D[surf0, x] /. prules;   (* differentiate once, reused at every sample below *)
-      (* A dense fixed spread of positive rationals, not just the original 11
-         anchors.  The sparse grid could be silently passed by a wrong,
-         over-complete surface that happened to agree at those 11 points (a
-         reverted A40 over-completion was wrong only off-grid, e.g. at x = 1/4;
-         A19's non-deterministic S'-unit selection could produce an r wrong off
-         the anchors).  The error of such a surface is a rational function that
-         agrees with the integrand only at its finitely many zeros, so a denser
-         grid of varied-denominator points rejects it.  The set is FIXED, so the
-         gate stays deterministic and has no RNG side effect on the caller's
-         random state (SeedRandom is global and BlockRandom is unavailable).
-         Soundness is unchanged: more samples can only reject more wrong
-         surfaces, never a correct one -- each kept point still tests
-         D[surf] == u f EXACTLY (to tol).  Hoisting D[surf,x] out of the map
-         makes this denser gate net-faster than the old 11-point one, which
-         re-differentiated surf once per point. *)
-      cand = {1/2, 1/3, 2/3, 1/5, 4/5, 2, 3, 3/2, 5/2, 7/3, 1/7,
-              1/4, 3/4, 1/6, 5/6, 2/7, 5/7, 6/7, 3/8, 5/8, 7/8,
-              2/9, 4/9, 7/9, 3/11, 7/11, 9/11, 5/13, 11/13,
-              4/3, 5/4, 7/4, 9/7};
-      (* the integrand is evaluated ONCE per candidate: the selection test and
-         the comparison value are the same number, and evaluating it twice was
-         the larger half of this gate's cost (33 points at 30 digits). *)
-      fvals = Select[{#, N[integrand /. x -> #, 30]} & /@ cand,
-        NumericQ[#[[2]]] && Abs[Im[#[[2]]]] < 10^-10 && Abs[#[[2]]] < 10^12 &];
-      (* An integrand that is COMPLEX-VALUED on the whole real line -- ArcSin of
-         something bigger than 1, say -- has no real domain to select, but the
-         real axis is still the right place to compare: surface and integrand are
-         read on the same principal branches there, and a sample point off the
-         axis can put them on opposite sides of a cut and make a correct surface
-         look wrong.  So drop only the REALITY requirement first and keep the
-         real points; fall through to genuinely complex points only if the
-         integrand is not even defined on the axis.  (#34 of the 312-case corpus,
-         ArcSin[Sqrt[x+1]]/Sqrt[x], is decided entirely here.) *)
-      If[fvals === {},
-        fvals = Select[{#, N[integrand /. x -> #, 30]} & /@ cand,
-          NumericQ[#[[2]]] && Abs[#[[2]]] < 10^12 &]];
-      If[fvals === {},                                                   (* complex fallback *)
-        fvals = {#, N[integrand /. x -> #, 30]} & /@ {7/13 + 5 I/11, 4/9 - 3 I/7, 2/7 + 3 I/5}];
-      pts = fvals[[All, 1]]; fv = fvals[[All, 2]];
-      (* the exact rational sample point, NOT N[pt, 30]: feeding 30-digit reals
-         into D[surf] keeps every intermediate in MPFR, which looked cheaper on
-         an isolated surface (85 ms -> 31-65 ms for the 33 points) and is a net
-         LOSS over the suite (+0.95 s, A12 295 -> 423 ms) -- the exact
-         substitution collapses whole subtrees to rationals that the MPFR walk
-         has to carry as full-precision numbers instead. *)
-      dv = (N[dsurf /. x -> #, 30]) & /@ pts;
-      keep = Select[Range[Length[pts]],
-        NumericQ[dv[[#]]] && NumericQ[fv[[#]]] && Abs[dv[[#]]] < 10^12 && Abs[fv[[#]]] < 10^12 &];
-      (* The exact unit u with D[surf] == u f.  The formal radical y (y^2 = q) is
-         mapped back as the PRINCIPAL Sqrt[q], so surf can be the true
-         antiderivative up to a fourth root of unity: 1 or -1 for a real radical
-         (the global-sign case A11, and the other root of y^2=q); and +-I when q
-         is negative on the domain, where Sqrt[q] = I Sqrt[-q] leaves surf off by
-         a factor of I (Charlwood A35).  Then D[surf/u] == f and surf/u =
-         Conjugate[u] surf is the antiderivative.  Soundness: acceptance requires
-         D[surf] to equal EXACTLY u f (to 1e-12) at every finite real sample for a
-         single unit u; a genuinely wrong surface matches none. *)
-      units = {1, -1, I, -I};
-      If[TrueQ[$PMDebug], Print["  gate: params ", prules, " pts ", pts[[keep]], " D[surf] ", dv[[keep]], " f ", fv[[keep]]]];
-      gu = None;   (* the global unit u with D[surf] == u f, if any (# = keep index) *)
-      Do[If[AllTrue[keep, Abs[dv[[#]] - u fv[[#]]] < tol &], gu = u; Break[]], {u, units}];
-      Which[
-        keep === {}, 0,                                     (* no usable sample *)
-        gu =!= None, 1/gu,                                  (* global unit u: surf/u *)
-        AllTrue[keep, Abs[dv[[#]] - fv[[#]]] < tol || Abs[dv[[#]] + fv[[#]]] < tol &],
-          (* branch cut: D[surf] = +-f exactly at every point -> principal-branch
-             answer, signed to match the sample nearest the origin *)
-          With[{anchor = keep[[First[Ordering[Abs[N[pts[[keep]], 30]]]]]]},
-           If[Abs[dv[[anchor]] - fv[[anchor]]] < tol, 1, -1]],
-        True, 0]]],                                          (* not a unit multiple: wrong answer *)
-    $ParallelMixedVerifyBudget, 1];
+    Quiet[Module[{dsurf = D[surf0, x]},
+      If[TrueQ[$PMDebug], Print["  gate: PossibleZeroQ[D[surf] - u f, x in Complexes], u in {1, -1, I, -I}"]];
+      Catch[
+        (* Assumptions -> x in Complexes: PossibleZeroQ samples x at complex
+           points, so an answer right on the real line but wrong off it (a
+           branch cut crossed near the axis) is rejected too *)
+        Scan[If[TrueQ[PossibleZeroQ[dsurf - # integrand0, Assumptions -> Element[x, Complexes]]],
+               Throw[1/#, "unit"]] &, {1, -1, I, -I}];
+        0, "unit"]]],
+    $ParallelMixedVerifyBudget, 0];
   fac = branchUnit[surf];                 (* a Module local: a stale global
                                               value must never pass the gate *)
   (* Second embedding of the constant field.  The ansatz is solved over Q(i) (or

@@ -189,14 +189,14 @@ def mathilda_points(mbin, cases, tmpdir):
         c["points"] = res.get(c["id"]) or tfs.CANDIDATES[:3]
 
 
-# The verdict is PossibleZeroQ[D[F, x] - f] ALONE (an antiderivative is
-# "valid for all complex x" exactly when that difference is identically zero).
+# The verdict is PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]]
+# ALONE: "valid for all complex x", so x is sampled at complex points as well.
 # The numeric probes below never accept an answer: they only DIAGNOSE one that
 # PossibleZeroQ did not confirm -- zero at every real and complex sample means a
 # PossibleZeroQ false negative (PZQ-FN, a PossibleZeroQ bug), +f/-f or
 # real-only agreement means a branch error (BRANCH), anything else WRONG.
 VERIFY_TMPL = r"""
-pzq = TimeConstrained[Quiet[PossibleZeroQ[D[r, x] - f]], 60, $Aborted];
+pzq = TimeConstrained[Quiet[PossibleZeroQ[D[r, x] - f, Assumptions -> Element[x, Complexes]]], 60, $Aborted];
 Print["@@PZQ ", pzq];
 dn = TimeConstrained[Quiet[D[r /. prm, x] - (f /. prm)], 30, $Aborted];
 Stress`Probe[tag_, p_] := Module[

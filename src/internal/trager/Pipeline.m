@@ -242,6 +242,6 @@ spotCheck::usage = "spotCheck[f, F, x] confirms that D[F, x] = f by PossibleZero
 spotCheck[f_, Fx_, x_Symbol] := If[antiderivativeQ[f, Fx, x], True,
   throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> Fx|>]];
 
-antiderivativeQ::usage = "antiderivativeQ[f, F, x] is True when PossibleZeroQ[D[F, x] - f] is True.";
-antiderivativeQ[f_, Fx_, x_Symbol] := TrueQ[Quiet[PossibleZeroQ[D[Fx, x] - f]]];
+antiderivativeQ::usage = "antiderivativeQ[f, F, x] is True when PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]] is True: F must be an antiderivative for all complex x, so x is sampled at complex points too.";
+antiderivativeQ[f_, Fx_, x_Symbol] := TrueQ[Quiet[PossibleZeroQ[D[Fx, x] - f, Assumptions -> Element[x, Complexes]]]];
 

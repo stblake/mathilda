@@ -199,13 +199,22 @@ static void test_tangent_tower_kernels(void) {
  * used to fall back to genuinely complex sample points, where a branch cut puts
  * surface and integrand on opposite sides and neither embedding verifies. */
 static void test_second_embedding_branch(void) {
-    assert_solves("ArcSin[Sqrt[x + 1]]/Sqrt[x]", "7/5");
-    /* and Part II alone, which is where the gate lives */
+    /* Since v0.6093 an answer must be an antiderivative for ALL complex x, by
+     * PossibleZeroQ.  Neither embedding's surface is one: 2 Sqrt[x] ArcSin[Sqrt[1+x]]
+     * + 2 I Sqrt[1+x] is right only where Sqrt[x]/Sqrt[-x] = I (residual non-zero at
+     * x = -1/2, -3, 1/3 + I).  The globally valid antiderivative is
+     * 2 Sqrt[x] ArcSin[Sqrt[x+1]] - 2 Sqrt[x] Sqrt[x+1]/Sqrt[-x] (a locally
+     * constant factor), which the method cannot yet write; so it must DECLINE,
+     * never certify, and anything it does return must verify. */
     assert_true_msg(
-        "Module[{r = Integrate`ParallelMixedTower[ArcSin[Sqrt[x + 1]]/Sqrt[x], x]},"
-        " Head[r] =!= List && "
-        " Abs[N[(D[r, x] - ArcSin[Sqrt[x + 1]]/Sqrt[x]) /. x -> 9/4, 30]] < 10^-20]",
-        "Part II verifies the second-embedding surface");
+        "Module[{r = Quiet[Integrate`ParallelMixedTower[ArcSin[Sqrt[x + 1]]/Sqrt[x], x]]},"
+        " If[ListQ[r], First[r] =!= \"not elementary\","
+        "   TrueQ[PossibleZeroQ[D[r, x] - ArcSin[Sqrt[x + 1]]/Sqrt[x]]]]]",
+        "Part II never returns a surface that is wrong somewhere in C");
+    assert_true_msg(
+        "PossibleZeroQ[D[2 Sqrt[x] ArcSin[Sqrt[x + 1]] - 2 Sqrt[x] Sqrt[x + 1]/Sqrt[-x], x]"
+        " - ArcSin[Sqrt[x + 1]]/Sqrt[x]]",
+        "the globally valid antiderivative verifies (target for the method)");
 }
 
 /* The floor: an integrand the stage still cannot close must decline HONESTLY --

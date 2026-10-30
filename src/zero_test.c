@@ -1479,24 +1479,40 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
  * note): complex samples cross branch cuts and inflate special functions,
  * which manufactures cancellation/branch false negatives for genuine
  * real-line identities. */
+/* A magnitude log-uniform on [2^-3, 2^num_bits] (see sample_random_value for
+ * why: every scale, including |v| < 1, must be sampled). */
+static double zt_log_uniform_magnitude(int num_bits) {
+    const double lo = -3.0, hi = (double)num_bits;
+    int64_t steps = (int64_t)1 << ZT_DENOMINATOR_BITS;
+    int64_t k = draw_int_range(0, steps - 1);
+    return exp2(lo + (hi - lo) * ((double)k + 0.5) / (double)steps);
+}
+
 static Expr* sample_random_value(int num_bits) {
     int64_t num_bound = (int64_t)1 << num_bits;
     int64_t den_bound = (int64_t)1 << ZT_DENOMINATOR_BITS;
 
-    /* Sample magnitude is bounded BELOW by 1 (an integer part in [1, num_bound])
-     * plus a full-granularity fractional part for a rich distinct-value set.
-     * Keeping |value| >= 1 is essential for polynomial/algebraic identity
-     * testing: a sample drawn from (-1, 1) drives a high-degree monomial
-     * (u^2, u^3, ...) far below the operand-magnitude scale, so a GENUINE
-     * non-zero such as Sqrt[2] u^3 collapses into the rounding-noise band and is
-     * misread as an identity (Schwartz-Zippel false positive).  An analytic
-     * identity that holds on [1, num_bound] holds everywhere it is analytic
-     * (identity theorem), so excluding the small-magnitude shell loses no
-     * decision power while removing the false-zero failure mode.  The numerator
-     * magnitude stays moderate (<= ~num_bound) to avoid overflowing Exp/Gamma. */
-    int64_t whole  = draw_int_range(1, num_bound);
-    int64_t frac_n = draw_int_range(0, den_bound - 1);
-    double  val    = (double)whole + (double)frac_n / (double)den_bound;
+    /* Sample magnitude is LOG-UNIFORM on [2^-3, 2^num_bits]: every scale gets
+     * the same weight, both signs equally.
+     *
+     * It used to be bounded below by 1 (an integer part in [1, num_bound]),
+     * on the identity theorem: "an analytic identity that holds on [1, 64]
+     * holds everywhere".  That is false for principal-branch expressions,
+     * which are only PIECEWISE analytic: -Sqrt[x^4 - 1]/(x^3 + x^5) is an
+     * antiderivative of Sqrt[(x^2+1)/(x^2-1)] (3x^4 - 2x^2 - 3)/(x^4 (x^2+1)^2)
+     * for |x| > 1 and of its NEGATIVE for |x| < 1, and PossibleZeroQ said True
+     * (a false positive: 19 wrong ParallelMixedTower answers of the DDI corpus
+     * passed).  A uniform draw also left a failing interval like [-3.3, -0.4]
+     * unsampled about half the time.
+     *
+     * The floor 1/8 (not 0) keeps the guard the old floor stood for: a draw
+     * near 0 drives a high-degree monomial (Sqrt[2] u^7) into the rounding band
+     * and misreads a genuine non-zero as an identity.  Such a non-zero is still
+     * caught by the large-magnitude draws, and any single non-zero point decides
+     * FALSE.  The upper bound stays moderate (<= 2^num_bits) so Exp/Gamma do not
+     * overflow. */
+    double val = zt_log_uniform_magnitude(num_bits);
+    (void)num_bound; (void)den_bound;
     if (draw_int_range(0, 1)) val = -val;
     return expr_new_real(val);
 }
@@ -1523,7 +1539,7 @@ typedef enum { SDOM_REAL, SDOM_INT, SDOM_CPLX } SampleDomain;
 
 /* One draw channel — a real value, or the real / imaginary part of a complex
  * value.  `sign` is -1 / 0 / +1; strict vs. non-strict is irrelevant because
- * the unconstrained magnitude draw keeps |v| >= 1 and so never lands on 0.
+ * the unconstrained magnitude draw keeps |v| >= 1/8 and so never lands on 0.
  * A finite two-sided [lo, hi] range takes precedence and disables the |v|>=1
  * shell (a range such as (-1, 1) lies entirely inside it, and theta near 0
  * must be sampleable). */
@@ -1581,16 +1597,14 @@ static double sample_channel(const Channel* c, bool integer, int num_bits) {
         }
         return lo + (hi - lo) * draw_unit();
     }
-    /* Unconstrained magnitude: |v| >= 1, moderate, sign-honoured. */
+    /* Unconstrained magnitude: moderate, sign-honoured; integers on [1, 2^b],
+     * reals log-uniform on [1/8, 2^b] (as sample_random_value). */
     int64_t num_bound = (int64_t)1 << num_bits;
     double v;
     if (integer) {
         v = (double)draw_int_range(1, num_bound);
     } else {
-        int64_t den_bound = (int64_t)1 << ZT_DENOMINATOR_BITS;
-        int64_t whole  = draw_int_range(1, num_bound);
-        int64_t frac_n = draw_int_range(0, den_bound - 1);
-        v = (double)whole + (double)frac_n / (double)den_bound;
+        v = zt_log_uniform_magnitude(num_bits);
     }
     if (c->sign < 0) v = -v;
     else if (c->sign == 0 && draw_int_range(0, 1)) v = -v;
@@ -1606,6 +1620,16 @@ static Expr* sample_random_value_spec(const SampleSpec* spec, int num_bits) {
     if (spec->domain == SDOM_CPLX) {
         double re = sample_channel(&spec->val, false, num_bits);
         double im = sample_channel(&spec->im, false, num_bits);
+        /* The real line is part of C, and a measure-zero part that random
+         * complex draws never reach: an antiderivative that fails only on a
+         * real-axis branch cut (Sqrt[(1-x)/(1+x)] on x < -1, where the integrand
+         * is defined) must be caught too.  So a third of the draws are real,
+         * unless Im is constrained (an explicit Im fact keeps its channel). */
+        /* (a plain Real, not Complex[re, 0.]: a signed zero would put the point
+         *  just beside the cut, where the identity still holds) */
+        if (!spec->im.has_lo && !spec->im.has_hi && spec->im.sign == 0 &&
+            draw_int_range(0, 2) == 0)
+            return expr_new_real(re);
         Expr* parts[2] = { expr_new_real(re), expr_new_real(im) };
         return expr_new_function(expr_new_symbol(SYM_Complex), parts, 2);
     }
@@ -1917,8 +1941,9 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms,
      * byte-for-byte as before (no behavioural change for non-coupling inputs). */
     int tries = 0;
     for (;;) {
-        for (size_t i = 0; i < nsyms; ++i)
+        for (size_t i = 0; i < nsyms; ++i) {
             vals[i] = sample_random_value_spec(specs ? &specs[i] : NULL, num_bits);
+        }
         if (nconform == 0 ||
             assignment_conforms(conform_facts, nconform, syms, vals, nsyms))
             break;

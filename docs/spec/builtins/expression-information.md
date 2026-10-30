@@ -325,7 +325,23 @@ Pipeline (each stage exits early on a definite verdict):
      `False`.
 4. **Schwartz–Zippel** — for inputs with free symbols, substitute
    random **real** samples of moderate magnitude and recurse into the
-   numeric stage, in two phases. A *screen* phase evaluates many points
+   numeric stage, in two phases.
+   **Sample distribution** (v0.6093):
+   - **Magnitudes are log-uniform on [1/8, 64], both signs.**
+   - **Why the old floor of 1 was wrong.** It rested on "an identity on
+     [1, 64] holds everywhere", which is false for principal-branch
+     expressions, since they are only piecewise analytic.
+     `-Sqrt[x^4 - 1]/(x^3 + x^5)` differentiates to the integrand for
+     |x| > 1 and to its negative for |x| < 1, and PossibleZeroQ called that
+     zero.
+   - **Why uniform draws were wrong.** They missed a failing interval like
+     [-3.3, -0.4] half the time.
+   - **Why the floor is 1/8 and not 0.** It keeps a genuine high-degree
+     monomial out of the rounding band.
+   **For all complex x:** `PossibleZeroQ[e, Assumptions -> Element[x,
+   Complexes]]` samples `x` at complex points. This is the test the
+   algebraic integrators (Trager, ParallelMixedTower) and the DDI stress
+   harness apply: an antiderivative must hold off the real axis as well. A *screen* phase evaluates many points
    at machine precision only; any point that is *obviously* non-zero
    settles the test as `False` cheaply. This catches expressions that
    are identically zero on one real-analytic branch but non-zero on an
