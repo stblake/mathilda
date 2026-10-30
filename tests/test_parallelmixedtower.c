@@ -232,6 +232,18 @@ static void test_method_declines_cleanly(void) {
     /* The cascade must not spend this stage on a pure rational function -- the
      * gate skips it, and Integrate falls through to BronsteinRational. */
     assert_eval("Integrate[1/(1 + x^2), x]", "ArcTan[x]");
+    /* A second radical over a conic y^2 = 2 g^2 + 3 with an irrational leading
+     * square root AND no rational point.  The Euler step's decline sat in a
+     * Return inside a With, which exits only the With: the step went on with its
+     * derivation unassigned, overflowed $RecursionLimit, and the method returned
+     * the unassigned local ParallelMixed`Private`r$NNN as the antiderivative --
+     * also through the default Integrate cascade (56 cases of the DDI corpus). */
+    assert_eval(
+        "Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7], x]][[1;;2]]",
+        "{\"failed\", \"tower construction failed\"}");
+    assert_eval(
+        "Head[Quiet[Integrate[Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7], x, Method -> \"ParallelMixedTower\"]]]",
+        "Integrate");
 }
 
 static void test_method_certifies_nonelementary(void) {

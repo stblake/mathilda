@@ -95,12 +95,19 @@ BuildTower::radical3 = "The derivative of `1` needs Sqrt[`2`], but the tower has
 BuildTower::radicand = "The radicand `1` is not a squarefree polynomial in the generators.";
 BuildTower::residual = "Could not reduce the integrand to a rational function of the generators and y: `1`.";
 
-(* The two wall-clock budgets are exported (public, ParallelMixed`) so a caller can
+(* The wall-clock budgets are exported (public, ParallelMixed`) so a caller can
    raise them by their short names -- the stress harnesses do, and
-   src/calculus/integrate.c Blocks $SpecialTimeBudget for the Automatic cascade.
-   $SpecialTimeBudget belongs to ParallelMixedSpecial.m, which is loaded into
-   ParallelMixed`Private` and so has no public section of its own. *)
-$ParallelMixedTimeBudget::usage = "$ParallelMixedTimeBudget is the wall-clock budget in seconds (default 45) for one ParallelIntegrateMixed solve; past it the solve declines with {\"failed\", \"time budget exceeded\"}.";
+   src/calculus/integrate.c Blocks them: $SpecialTimeBudget down for the Automatic
+   cascade, and the three ParallelMixedTower budgets to Infinity for an explicit
+   Method -> "ParallelMixedTower" (or Integrate`ParallelMixedTower) request, which
+   then runs until it decides or the caller's own TimeConstrained fires.  The
+   defaults are backstops for the cascade and internal callers only.
+   $SpecialTimeBudget belongs to ParallelMixedSpecial.m and $RewriteBudget to
+   logrewrite.m, both loaded into ParallelMixed`Private`; declaring them here makes
+   their short names resolve to the public symbols. *)
+$ParallelMixedTimeBudget::usage = "$ParallelMixedTimeBudget is the wall-clock budget in seconds (default 45) for one ParallelIntegrateMixed solve; past it the solve declines with {\"failed\", \"time budget exceeded\"}. Infinity for an explicit Method -> \"ParallelMixedTower\" request.";
+$ParallelMixedVerifyBudget::usage = "$ParallelMixedVerifyBudget is the wall-clock budget in seconds (default 15) for the numeric verification of one ParallelIntegrateMixed antiderivative; past it the antiderivative is accepted as the principal-branch answer. Infinity for an explicit Method -> \"ParallelMixedTower\" request.";
+$RewriteBudget::usage = "$RewriteBudget is the wall-clock budget in seconds (default 30) for rewriting the logarithmic part of a ParallelIntegrateMixed antiderivative in real form; past it the complex logarithms are kept. Infinity for an explicit Method -> \"ParallelMixedTower\" request.";
 $SpecialTimeBudget::usage = "$SpecialTimeBudget is the wall-clock budget in seconds (default 45) for one special-function-stage solve (IntegrateSurfaceSpecial); the Automatic Integrate cascade scopes it down to 10 s.";
 Undecided;
 
@@ -2333,12 +2340,21 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
      (alpha^2 = a), so that g = (w^2 - c)/(b - 2 alpha w) and y are rational
      in the new generator w and the curve disappears; the pending radical is
      then re-examined over Q(w).  The parametric form of Lemma 3.2. *)
-  eulerStep[] := Module[{},
+  eulerStep[] := Module[{pt = None},
     If[m != 2, Return[False]];                       (* a conic y^2 = q only *)
     gq = SelectFirst[gens, PolynomialQ[q, #] && Exponent[q, #] == 2 && FreeQ[CoefficientList[q, #], Alternatives @@ gens] &, None];
     If[gq === None, Return[False]];
     {c2, b2, a2} = PadRight[CoefficientList[q, gq], 3];
     alpha = Sqrt[a2];
+    (* The no-rational-point decline is decided HERE, at the top level of this
+       Module: a Return[False] inside the With below exits only the With, so
+       eulerStep went on with Dwp unassigned, made Dwp = Cancel[Dwp[[1]] + ...]
+       self-referential, overflowed $RecursionLimit, and the integrator returned
+       the unassigned local r$NNN as an "antiderivative" (Sqrt[2 x^2 + 3] /
+       Sqrt[5/x^2 + 7]: y^2 = 2 g^2 + 3 has no rational point) *)
+    If[! MatchQ[alpha, _Integer | _Rational],
+      pt = RationalPoint[q, gq];
+      If[pt === None, Return[False]]];
     w = Unique["w"];
     If[MatchQ[alpha, _Integer | _Rational],
       (* Euler's first substitution through the point at infinity, in the form
@@ -2350,12 +2366,10 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
       Dwp = TowerD[T, {alpha gq, 1}];                             (* D(y + alpha g) as a pair *)
       wSurface = Sqrt[q] + alpha gq,
       (* otherwise through a rational point (g0, y0): y = y0 + w (g - g0) *)
-      With[{pt = RationalPoint[q, gq]},
-        If[pt === None, Return[False]];
-        {g0e, y0e} = pt;
+      ({g0e, y0e} = pt;
         gw = Cancel[(2 y0e w - (a2 + w^2) g0e - b2)/(a2 - w^2)]; yw = Cancel[y0e + w (gw - g0e)];
         Dwp = Pscale[1/(gq - g0e)^2, Padd[Pscale[gq - g0e, T["Dy"]], Pscale[-1, Pmul[{-y0e, 1}, derivs[[Position[gens, gq][[1, 1]]]], q]]]];
-        wSurface = (Sqrt[q] - y0e)/(gq - g0e)]];
+        wSurface = (Sqrt[q] - y0e)/(gq - g0e))];
     Dwp = Cancel[(Dwp[[1]] + Dwp[[2]] Y) /. {Y -> yw, gq -> gw}];
     derivs = Cancel[(#[[1]] + #[[2]] Y) /. {Y -> yw, gq -> gw}] & /@ derivs;
     derivs = {#, 0} & /@ derivs;
@@ -2779,7 +2793,7 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
           With[{anchor = keep[[First[Ordering[Abs[N[pts[[keep]], 30]]]]]]},
            If[Abs[dv[[anchor]] - fv[[anchor]]] < tol, 1, -1]],
         True, 0]]],                                          (* not a unit multiple: wrong answer *)
-    15, 1];
+    $ParallelMixedVerifyBudget, 1];
   fac = branchUnit[surf];
   (* Second embedding of the constant field.  The ansatz is solved over Q(i) (or
      a number field containing it), and NOTHING in the linear algebra chooses
@@ -2812,8 +2826,11 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
    (interactive Integrate has no timeout of its own).  Set above the slowest
    legitimate solve observed on the stress corpus (~34 s) with headroom; it is a
    backstop, not a per-stage guard -- deterministic ansatz-size / number-field
-   degree caps are follow-up work.  Overridable by the caller if needed. *)
+   degree caps are follow-up work.  Overridable by the caller if needed; an
+   explicit Method -> "ParallelMixedTower" request Blocks all three budgets to
+   Infinity (src/calculus/integrate.c, builtin_integrate_pmt). *)
 $ParallelMixedTimeBudget = 45;
+$ParallelMixedVerifyBudget = 15;
 
 (* "StructureTheorem" -> True is the DEFAULT here, unlike Options[BuildTower],
    and it is a soundness requirement rather than a refinement.  Without it

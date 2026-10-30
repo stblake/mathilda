@@ -1495,9 +1495,19 @@ monotonically down.
      antiderivative is faithful at negative and complex arguments too, not merely
      on the integrand's real domain; the branch-unsafe split is still used where it
      is genuinely needed to lower the genus of a higher-degree radicand.  A
-     non-elementary case, a
-     not-yet-ported case, or a run exceeding an internal wall-clock budget all
-     decline cleanly (never a wrong answer, never an unbounded hang).
+     non-elementary case or a
+     not-yet-ported case declines cleanly (never a wrong answer).  Time budgets
+     (v0.6087): in the Automatic cascade three wall-clock backstops apply --
+     `ParallelMixed`$ParallelMixedTimeBudget` (45 s, the solve; past it
+     `{"failed", "time budget exceeded"}`), `$ParallelMixedVerifyBudget` (15 s,
+     the numeric verification) and `$RewriteBudget` (30 s, the real-form rewrite
+     of the logarithms) -- so the stage can never hang an interactive
+     `Integrate`.  An explicit `Method -> "ParallelMixedTower"` (or
+     `Integrate\`ParallelMixedTower[f, x]`) Blocks all three to `Infinity`: the
+     method runs until it decides, and any limit is the caller's own
+     `TimeConstrained`.  Every explicit answer is therefore verified to completion
+     (an exhausted verify budget used to accept the antiderivative as the
+     principal branch unverified).
      Cascade-gated to skip pure rational functions (BronsteinRational's job)
      and, as of v0.191, pseudo-elliptic `F/R^p` integrands (a fractional power
      of a degree-≥3 polynomial), which are the following Goursat stage's

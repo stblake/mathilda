@@ -978,12 +978,31 @@ static bool pmt_is_nonelementary_certificate(const Expr* r) {
  * -- just cleanly.  tc_async_region_active doubles as the single re-entry guard
  * through which both the direct call and the cascade stage pass.  Both the defer
  * count and the message-suppression depth are save/restored by tc_run_guarded,
- * so a timeout unwinding through here leaves neither stuck. */
+ * so a timeout unwinding through here leaves neither stuck.
+ *
+ * Time budgets.  The package carries three wall-clock backstops
+ * ($ParallelMixedTimeBudget 45 s for the solve, $ParallelMixedVerifyBudget 15 s
+ * for the numeric verification, $RewriteBudget 30 s for the real-form rewrite of
+ * the logarithms).  They exist for the Automatic cascade, which runs this stage
+ * on integrands nobody chose for it and must get out of the way.  An explicit
+ * request -- Method -> "ParallelMixedTower" or the qualified symbol -- is a
+ * deliberate request for the full decision, so all three are Blocked to
+ * Infinity: the method runs until it answers, declines on its own terms, or the
+ * caller's TimeConstrained fires.  (An exhausted verify budget ACCEPTED the
+ * antiderivative unverified as the principal branch; unbounded, every explicit
+ * answer is verified to completion.)  The cascade arms pmt_in_cascade, consumed
+ * here exactly like pms_in_cascade (see its comment), so an unwind out of a
+ * cascade call cannot hand the backstops to the next explicit call or vice versa. */
+static int pmt_in_cascade = 0;
+
 static Expr* builtin_integrate_pmt(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     if (tc_async_region_active()) return NULL;   /* no self re-entry / nested heavy method */
     pmt_lazy_load();
     if (!pmt_load_succeeded) return NULL;
+
+    int cascade = pmt_in_cascade;
+    pmt_in_cascade = 0;            /* consume; see pms_in_cascade */
 
     tc_async_defer_push();
     /* Suppress the package's own diagnostics (BuildTower::function on an
@@ -991,8 +1010,34 @@ static Expr* builtin_integrate_pmt(Expr* res) {
      * user.  The fired-counter that the package's internal Check reads still
      * advances while suppressed, so its failure detection is unaffected. */
     mth_msg_suppress_push();
-    Expr* result = call_stage("ParallelMixed`ParallelIntegrateMixed",
-                              res->data.function.args[0], res->data.function.args[1]);
+    Expr* result;
+    if (cascade) {
+        result = call_stage("ParallelMixed`ParallelIntegrateMixed",
+                            res->data.function.args[0], res->data.function.args[1]);
+    } else {
+        /* Block[{$ParallelMixedTimeBudget = Infinity, $ParallelMixedVerifyBudget
+         * = Infinity, $RewriteBudget = Infinity}, worker[f, x]] -- Block so the
+         * backstops are restored on every exit path, including a TimeConstrained
+         * unwind; fully qualified, since a misspelt context would bind a
+         * different symbol and silently leave the backstop in force. */
+        static const char* const budgets[] = {
+            "ParallelMixed`$ParallelMixedTimeBudget",
+            "ParallelMixed`$ParallelMixedVerifyBudget",
+            "ParallelMixed`$RewriteBudget" };
+        Expr* binds[3];
+        for (int i = 0; i < 3; i++)
+            binds[i] = expr_new_function(expr_new_symbol(SYM_Set),
+                (Expr*[]){ expr_new_symbol(budgets[i]), expr_new_symbol(SYM_Infinity) }, 2);
+        Expr* call = expr_new_function(
+            expr_new_symbol("ParallelMixed`ParallelIntegrateMixed"),
+            (Expr*[]){ expr_copy(res->data.function.args[0]),
+                       expr_copy(res->data.function.args[1]) }, 2);
+        Expr* locals = expr_new_function(expr_new_symbol(SYM_List), binds, 3);
+        Expr* blk = expr_new_function(expr_new_symbol(SYM_Block),
+                                      (Expr*[]){ locals, call }, 2);
+        result = evaluate(blk);
+        expr_free(blk);
+    }
     mth_msg_suppress_pop();
     tc_async_defer_pop();
     /* A {"not elementary", ...} certificate is the package's PROOF that no
@@ -1106,11 +1151,13 @@ static bool pmt_leaks_symbol(const Expr* r, const Expr* f, const Expr* x) {
  * tower-build failure) or a List (a certificate {"not elementary", ...} or a
  * failure tuple {"failed", ...}); an antiderivative is never a bare List.  An
  * unresolved head means the .m worker never loaded. */
-static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
+static Expr* try_parallelmixedtower(Expr* f, Expr* x, bool cascade) {
     /* Skip pure rational functions -- BronsteinRational owns them (see above). */
     if (pmt_is_rational_structure(f)) return NULL;
     if (pmt_has_foreign_kernel(f, x)) return NULL;   /* outside the elementary class */
+    pmt_in_cascade = cascade;   /* consumed by builtin_integrate_pmt: backstop budgets */
     Expr* result = call_stage("Integrate`ParallelMixedTower", f, x);
+    pmt_in_cascade = 0;         /* the builtin may have declined before consuming it */
     if (!result) return NULL;
 
     bool decline =
@@ -2682,7 +2729,7 @@ Expr* builtin_integrate(Expr* res) {
              * sub-integral of LogByParts): a reduction that does not close at a
              * cheap stage must decline promptly, not grind the tower. */
             if (!g_integrate_no_special && !has_pseudoelliptic_radical(effective_f, x))
-                IP_STAGE(IP_PMT,      try_parallelmixedtower(effective_f, x));
+                IP_STAGE(IP_PMT,      try_parallelmixedtower(effective_f, x, true));
             /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions to
              * genus-0 curves.  Runs last, after ParallelMixedTower: it is a
              * specialist for pseudo-elliptic F/R^p (p in {1/2,1/3,2/3,1/4,3/4})
@@ -2771,7 +2818,8 @@ Expr* builtin_integrate(Expr* res) {
             result = try_besselhyper(effective_f, x);
             break;
         case METHOD_PARALLEL_MIXED_TOWER:
-            result = try_parallelmixedtower(effective_f, x);
+            /* Explicit request: no internal time budgets (builtin_integrate_pmt). */
+            result = try_parallelmixedtower(effective_f, x, false);
             break;
         case METHOD_PARALLEL_MIXED_SPECIAL:
             /* Explicit request: the package's full $SpecialTimeBudget, not the
@@ -2871,7 +2919,9 @@ void integrate_init(void) {
         "Extensions II). It returns the antiderivative, or $Failed / a certificate "
         "list that Integrate's cascade treats as a decline. When the method PROVES "
         "the integrand has no elementary antiderivative it issues Integrate::nonelem, "
-        "as RischTranscendental does.");
+        "as RischTranscendental does. Called directly (or via Method -> "
+        "\"ParallelMixedTower\") it has no internal time budget; the Automatic "
+        "cascade bounds it by $ParallelMixedTimeBudget.");
     /* The Trager / TragerKauers method symbols (lazy-load
      * src/internal/trager/Trager.m). */
     symtab_add_builtin("Integrate`Trager", builtin_integrate_trager);

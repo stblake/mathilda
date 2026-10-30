@@ -1,3 +1,24 @@
+# DDI Vol. 1 stress test: fix every bug/deficiency found (2026-10-30, v0.6087+)
+
+Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md
+Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no PMT time caps.
+
+- [x] P0 baseline report ALGEBRAIC_INTEGRAL_PERF.md/.pdf (PMT rerun, reclassify), commit v0.6087
+      (PMT budgets off on explicit Method, eulerStep Return-in-With fix, harness/corpus/report)
+- [ ] P1a Series: fixed pad loses k orders at a k-th order pole, short result returned silently (series.c)
+- [ ] P1b PMT gate on positive evidence (fac local, Hold/Temporary, reclim Check, C overflow flag)
+- [ ] P1c FLINT qqbar zero^(-n) guard + FLINT throw hook (no kernel abort)
+- [ ] P2a complex-point verification in harnesses
+- [ ] P2b PMT back-substitution in the integrand's own radicals; drop branch-cut acceptance
+- [ ] P2c power-free radicands before choosing m
+- [ ] P2d PossibleZeroQ is the sole verifier: triage 77 PZQ=False verified answers (24 Trager, 53 PMT), fix PZQ per
+      class, then remove numeric fallbacks (Trager spotCheck/numericZeroQ, PMT branchUnit, harness numeric acceptance)
+- [ ] P3a u = x^k pre-pass   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
+- [ ] P3d PMT timeouts: $PMProfile, fix dominant stages algorithmically
+- [ ] P4a Trager routing (rational, algebraic constants)  - [ ] P4b Trager over Q(params)  - [ ] P4c Trager timeouts
+- [ ] final full rerun, before/after report, PDF
+- Follow-up plan: Trager for general algebraic function fields (nested / multiple radicals)
+
 # Trager: remaining slowdowns via FLINT` polynomial-matrix kernels (2026-10-30, v0.6084)
 
 Plan: ~/.claude/plans/let-s-look-into-and-happy-perlis.md

@@ -5073,3 +5073,4 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   hand-computed literals.
 - Every unit suite inherits `alarm(120)` from test_utils.h; a nightly suite that runs minutes must `alarm(0)` and
   line-buffer stdout, or it dies with SIGALRM and an empty log (`| tail` then hides the exit code).
+- 2026-10-30 (DDI stress review): user: PossibleZeroQ must be robust enough that verification needs no numeric fallback; a PZQ failure on a correct answer means improve PossibleZeroQ. Rule: no numeric acceptance paths (spotCheck/numericZeroQ/branchUnit sampling); numerics only to triage.
