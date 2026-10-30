@@ -3713,7 +3713,22 @@ Expr* eval_report_uncaught(Expr* e) {
 
 static Expr* evaluate_core(Expr* e);
 
+/* The outermost evaluate() runs under a recovery point (core.c,
+ * tc_evaluate_fault_guarded) so that a FLINT exception anywhere below aborts
+ * this evaluation with FLINT::exc and $Aborted, instead of FLINT's default
+ * abort() killing the kernel.  One sigsetjmp per top-level evaluation; the
+ * flag stops the guarded re-entry (which is itself at depth 0) from nesting. */
+static bool g_fault_guard_active = false;
+
 Expr* evaluate(Expr* e) {
+    if (eval_recursion_depth == 0 && !g_fault_guard_active && e) {
+        g_fault_guard_active = true;
+        bool faulted = false;
+        Expr* g = tc_evaluate_fault_guarded(e, &faulted);
+        g_fault_guard_active = false;
+        if (g) return g;
+        return expr_new_symbol(SYM_DollarAborted);
+    }
     Expr* r = evaluate_core(e);
     /* Module locals that escaped and have since been dropped are reclaimed
      * when the outermost evaluation ends, or here in a nested evaluation once

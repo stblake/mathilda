@@ -995,6 +995,20 @@ static bool pmt_is_nonelementary_certificate(const Expr* r) {
  * cascade call cannot hand the backstops to the next explicit call or vice versa. */
 static int pmt_in_cascade = 0;
 
+/* Evaluate a heavy method's package call (borrowed) under a recovery point:
+ * a FLINT exception raised inside (FLINT::exc) becomes the failure tuple
+ * {"failed", "internal error: FLINT exception"} -- a decline, so the cascade
+ * moves on -- instead of aborting the whole top-level evaluation. */
+static Expr* integrate_method_eval_guarded(Expr* call) {
+    bool faulted = false;
+    Expr* r = tc_evaluate_fault_guarded(call, &faulted);
+    if (r) return r;
+    return expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_new_string("failed"),
+                   expr_new_string(faulted ? "internal error: FLINT exception"
+                                           : "internal error: evaluation abandoned") }, 2);
+}
+
 static Expr* builtin_integrate_pmt(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     if (tc_async_region_active()) return NULL;   /* no self re-entry / nested heavy method */
@@ -1013,8 +1027,12 @@ static Expr* builtin_integrate_pmt(Expr* res) {
     bool overflow_before = eval_overflow_fired();
     Expr* result;
     if (cascade) {
-        result = call_stage("ParallelMixed`ParallelIntegrateMixed",
-                            res->data.function.args[0], res->data.function.args[1]);
+        Expr* call = expr_new_function(
+            expr_new_symbol("ParallelMixed`ParallelIntegrateMixed"),
+            (Expr*[]){ expr_copy(res->data.function.args[0]),
+                       expr_copy(res->data.function.args[1]) }, 2);
+        result = integrate_method_eval_guarded(call);
+        expr_free(call);
     } else {
         /* Block[{$ParallelMixedTimeBudget = Infinity, $ParallelMixedVerifyBudget
          * = Infinity, $RewriteBudget = Infinity}, worker[f, x]] -- Block so the
@@ -1036,7 +1054,7 @@ static Expr* builtin_integrate_pmt(Expr* res) {
         Expr* locals = expr_new_function(expr_new_symbol(SYM_List), binds, 3);
         Expr* blk = expr_new_function(expr_new_symbol(SYM_Block),
                                       (Expr*[]){ locals, call }, 2);
-        result = evaluate(blk);
+        result = integrate_method_eval_guarded(blk);
         expr_free(blk);
     }
     mth_msg_suppress_pop();
@@ -1261,7 +1279,7 @@ static Expr* integrate_trager_common(Expr* res, const char* engine) {
     Expr* call = expr_new_function(expr_new_symbol("Trager`TragerIntegrate"), args, 3);
     tc_async_defer_push();
     mth_msg_suppress_push();
-    Expr* result = evaluate(call);
+    Expr* result = integrate_method_eval_guarded(call);
     mth_msg_suppress_pop();
     tc_async_defer_pop();
     expr_free(call);

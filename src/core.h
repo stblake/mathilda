@@ -131,6 +131,11 @@ int  tc_async_region_active(void);
  * leak the lock and trap the next allocation). Call once, before any GMP use;
  * core_init() does this first. */
 void tc_install_alloc_guard(void);
+/* Evaluate `body` (borrowed) under a recovery point with no timer: a FLINT
+ * exception raised inside returns NULL with *faulted = true (and FLINT::exc
+ * reported) instead of aborting the process.  Transparent to the timeout of an
+ * enclosing TimeConstrained. */
+Expr* tc_evaluate_fault_guarded(Expr* body, bool* faulted);
 
 // Initialize core builtins
 void core_init(void);

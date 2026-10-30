@@ -78,6 +78,17 @@ Evaluates `expr`, generating an interrupt to abort the evaluation if it has not 
 - Returns `$Aborted` if the budget is exhausted and no `failexpr` is provided.
 - Returns the (then-evaluated) value of `failexpr` if the budget is exhausted and the three-argument form is used. `failexpr` is **not** evaluated when the body completes in time.
 - `TimeConstrained[expr, Infinity]` imposes no time constraint.
+- **A FLINT exception aborts like a timeout** (v0.6090).
+  - **What happens.** FLINT reports an internal error (for example `qqbar_pow_fmpq: division by zero`) through
+    `flint_throw`, whose default is `abort()`. Mathilda installs a handler (`tc_flint_throw`, `src/core.c`) that
+    unwinds to the innermost recovery point instead and reports `FLINT::exc`, honouring the `Quiet` in force where
+    FLINT threw. `Check` sees the message.
+  - **Inside `TimeConstrained`:** the body is abandoned and the call returns `failexpr` or `$Aborted`.
+  - **Outside it:** every top-level evaluation runs under a fault-only recovery point (`tc_evaluate_fault_guarded`;
+    no signal-mask save, no measurable cost), so the input evaluates to `$Aborted` and the kernel carries on.
+  - **In heavy methods:** `Integrate`'s Trager and ParallelMixedTower method stages evaluate under their own recovery
+    point, so a fault there is a decline and the cascade continues.
+  - **Where it cannot apply:** off the main thread there is no recovery point, and FLINT's default applies.
 - Zero, negative, or non-numeric (NaN) time budgets abort immediately without evaluating `expr`; the abort path still produces `$Aborted` (or `failexpr` for the 3-argument form).
 - **The budget is elapsed time** (v0.463): the deadline is one `CLOCK_MONOTONIC` instant, `now + t`. Two layers enforce it. (1) A cooperative check once per evaluator rewrite step, at heavy-kernel loop heads (`tc_deadline_passed`), and in `Pause`, which sleeps no further than the deadline. (2) On POSIX, an `ITIMER_PROF`/`SIGPROF` timer that preempts a long C builtin which never returns to the evaluator. That timer counts process CPU time summed over threads, so it serves only as a *wake-up*: its handler compares the monotonic clock with the deadline and, when woken early (N busy threads accrue CPU N times faster than wall time), re-arms for the remainder. Threaded `FactorInteger` regions (QS, ECM, p±1, BlakeRationalBaseDescent) poll the deadline from their workers — GMP-ECM through its `stop_asap` hook — and the main thread takes the timeout as the region ends.
 - Before v0.463 the CPU timer *was* the budget. Threaded ECM/QS runs therefore aborted 10–16× early in elapsed time: `TimeConstrained[FactorInteger`ECM[NextPrime[3 10^29] NextPrime[7 10^29]], 3]` gave `$Aborted` after 0.3 s. Time spent idle was not charged either: `TimeConstrained[Pause[5], 1]` slept the full 5 s and returned `Null`. Both now stop at the budget.

@@ -16,6 +16,7 @@
 #include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
 #include "eval.h"
+#include <stdarg.h>    /* tc_flint_throw: the FLINT exception hook */
 #include "message.h"    /* message_init(): Quiet / Check / Message */
 #include "dialog.h"     /* dialog_init(): Dialog */
 #include "permutations.h" /* permutations_init(): Cycles, PermutationGroup */
@@ -4787,10 +4788,16 @@ Expr* builtin_symbol(Expr* res) {
 typedef jmp_buf    tc_jmp_t;
 #define TC_SETJMP(env)   setjmp(env)
 #define TC_LONGJMP(env)  longjmp((env), 1)
+#define TC_SETJMP_NOMASK(env) setjmp(env)
 #else
 typedef sigjmp_buf tc_jmp_t;
 #define TC_SETJMP(env)   sigsetjmp((env), 1)
 #define TC_LONGJMP(env)  siglongjmp((env), 1)
+/* No signal-mask save: a recovery point for SYNCHRONOUS faults only (a FLINT
+ * exception).  Saving the mask costs a sigprocmask system call -- ~1.3 us on
+ * every top-level evaluation.  A timeout that lands in such a frame is forwarded
+ * at once to its TimeConstrained's own (mask-saving) frame, which restores it. */
+#define TC_SETJMP_NOMASK(env) sigsetjmp((env), 0)
 #endif
 static tc_jmp_t    tc_jmp_env;
 static volatile sig_atomic_t tc_timed_out = 0;
@@ -5016,6 +5023,9 @@ static void tc_flint_deallocate(void* ptr) {
  * before any GMP/MPFR/FLINT use.  The wrappers delegate to the same
  * malloc/realloc/free the defaults used, so memory allocated before this call is
  * still freed correctly. */
+#ifdef USE_FLINT
+static void tc_flint_throw(flint_err_t exc, const char* fmt, va_list ap);   /* below */
+#endif
 void tc_install_alloc_guard(void) {
 #ifdef MATHILDA_THREADS
     tc_main_thread = pthread_self();
@@ -5025,6 +5035,7 @@ void tc_install_alloc_guard(void) {
 #ifdef USE_FLINT
     __flint_set_memory_functions(tc_flint_allocate, tc_flint_calloc,
                                  tc_flint_reallocate, tc_flint_deallocate);
+    flint_set_throw(tc_flint_throw);
 #endif
 }
 
@@ -5106,7 +5117,7 @@ void tc_register_unwind_counter(int* counter) {
         tc_unwind_counters[tc_n_unwind_counters++] = counter;
 }
 
-static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
+static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
     Expr* volatile result = NULL;
     /* Transient per-body state a timeout siglongjmp would otherwise abandon --
      * the async-jump-defer count (tc_async_deferred) and the message-suppression
@@ -5135,21 +5146,107 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     volatile int saved_ctr[TC_MAX_UNWIND_COUNTERS];
     volatile int n_ctr = tc_n_unwind_counters;
     for (int i = 0; i < n_ctr; i++) saved_ctr[i] = *tc_unwind_counters[i];
-    if (TC_SETJMP(tc_jmp_env) == 0) {
-        tc_body_live = 1;
-        result = evaluate(body);
-        tc_body_live = 0;
+#define TC_GUARDED_RUN() do { \
+        tc_body_live = 1; \
+        result = evaluate(body); \
+        tc_body_live = 0; } while (0)
+#define TC_GUARDED_UNWOUND() do { \
+        tc_body_live = 0; \
+        for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i]; \
+        match_set_rule_head(saved_rule_head); \
+        flint_cert_binding_clear(); } while (0)
+    /* setjmp may only be a whole controlling expression (C99 7.13.1.1), so the
+     * two modes are two branches rather than one conditional call */
+    if (savemask) {
+        if (TC_SETJMP(tc_jmp_env) == 0) TC_GUARDED_RUN(); else TC_GUARDED_UNWOUND();
     } else {
-        tc_body_live = 0;
-        for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i];
-        match_set_rule_head(saved_rule_head);
-        flint_cert_binding_clear();
+        if (TC_SETJMP_NOMASK(tc_jmp_env) == 0) TC_GUARDED_RUN(); else TC_GUARDED_UNWOUND();
     }
+#undef TC_GUARDED_RUN
+#undef TC_GUARDED_UNWOUND
     mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;
     mth_msg_suppress_depth_load(saved_msgdep);
     mth_msg_ifun_suppress_depth_load(saved_ifundep);
     return result;
+}
+
+static Expr* tc_run_guarded(Expr* body) { return tc_run_guarded_mode(body, 1); }
+
+/* ---- FLINT exceptions -------------------------------------------------------
+ * FLINT reports an internal error (qqbar_pow_fmpq: division by zero, a
+ * non-invertible modulus, ...) through flint_throw, whose default prints and
+ * calls abort() -- killing the whole kernel for what is, to the user, one
+ * failed builtin.  tc_flint_throw instead takes the innermost recovery point:
+ * every TimeConstrained body and every tc_evaluate_fault_guarded region
+ * (the top-level evaluate, the Integrate method probes) is a tc_run_guarded
+ * frame, so the jump lands exactly where a timeout would, with the same state
+ * restoration.  The jump is synchronous (FLINT itself called us, no signal and
+ * no allocator lock in between), so the async-safety concerns of the SIGPROF
+ * path do not arise.  Off the main thread, or with no live region, there is
+ * nowhere to go and FLINT's default behaviour is kept. */
+static volatile sig_atomic_t tc_fault_pending = 0;
+static volatile sig_atomic_t tc_fault_muted = 0;   /* Quiet in force AT THE THROW */
+static char tc_fault_msg[512];
+
+/* Reported after the unwind, where an enclosing Quiet may already have been
+ * popped -- so the mute is the one captured when FLINT threw. */
+static void tc_fault_report(void) {
+    /* re-establish the Quiet of the throw site (exactly as a message emitted
+     * there would have been: silent, yet still visible to Check) */
+    int requiet = tc_fault_muted && !mth_msg_suppressed();
+    if (requiet) mth_msg_suppress_push();
+    mth_message("FLINT", "exc", "FLINT raised an exception: %s; the computation was abandoned.",
+                tc_fault_msg);
+    if (requiet) mth_msg_suppress_pop();
+}
+
+#ifdef USE_FLINT
+static void tc_flint_throw(flint_err_t exc, const char* fmt, va_list ap) {
+    (void)exc;
+    if (tc_body_live && tc_on_main_thread()) {
+        vsnprintf(tc_fault_msg, sizeof tc_fault_msg, fmt, ap);
+        size_t n = strlen(tc_fault_msg);
+        while (n > 0 && (tc_fault_msg[n - 1] == '\n' || tc_fault_msg[n - 1] == ' '))
+            tc_fault_msg[--n] = '\0';
+        tc_fault_muted = mth_msg_suppressed() ? 1 : 0;
+        tc_fault_pending = 1;
+        TC_LONGJMP(tc_jmp_env);
+    }
+    fputs("FLINT exception: ", stderr);
+    vfprintf(stderr, fmt, ap);
+    fflush(stderr);
+    abort();
+}
+#endif
+
+/* Evaluate `body` (borrowed) with a recovery point but no timer.  Returns the
+ * result, or NULL with *faulted set when a FLINT exception was raised inside
+ * (reported as FLINT::exc).  A timeout of an ENCLOSING TimeConstrained that
+ * lands in this frame is passed on to that TimeConstrained's own frame, so the
+ * region is transparent to timeouts. */
+Expr* tc_evaluate_fault_guarded(Expr* body, bool* faulted) {
+    *faulted = false;
+    tc_jmp_t saved_jmp_env;
+    memcpy(&saved_jmp_env, &tc_jmp_env, sizeof(saved_jmp_env));
+    volatile sig_atomic_t saved_body_live = tc_body_live;
+    int saved_depth = eval_get_recursion_depth();
+    Expr* result = tc_run_guarded_mode(body, 0);
+    memcpy(&tc_jmp_env, &saved_jmp_env, sizeof(saved_jmp_env));
+    tc_body_live = saved_body_live;
+    if (result) return result;
+    if (tc_fault_pending) {
+        tc_fault_pending = 0;
+        eval_reset_recursion_depth(saved_depth);
+        tc_fault_report();
+        *faulted = true;
+        return NULL;
+    }
+    if (tc_timed_out && saved_body_live && tc_on_main_thread()) {
+        eval_reset_recursion_depth(saved_depth);
+        TC_LONGJMP(tc_jmp_env);           /* continue the enclosing timeout's unwind */
+    }
+    return NULL;
 }
 
 /* Returns:
@@ -5327,6 +5424,11 @@ Expr* builtin_time_constrained(Expr* res) {
 #endif /* !_WIN32 */
 
     bool aborted_here = (tc_timed_out != 0);
+    if (tc_fault_pending && !result) {   /* a FLINT exception, not a timeout */
+        tc_fault_pending = 0;
+        tc_fault_report();
+        aborted_here = true;
+    }
     tc_timed_out = saved_timed_out;
 
     /* If we longjmp'd out of evaluate(), the matching depth decrements

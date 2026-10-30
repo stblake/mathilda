@@ -7,7 +7,7 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
       (PMT budgets off on explicit Method, eulerStep Return-in-With fix, harness/corpus/report)
 - [x] P1a Series: fixed pad loses k orders at a k-th order pole, short result returned silently (series.c)
 - [x] P1b PMT gate on positive evidence (fac local, Hold/Temporary, reclim Check, C overflow flag)
-- [ ] P1c FLINT qqbar zero^(-n) guard + FLINT throw hook (no kernel abort)
+- [x] P1c FLINT qqbar zero^(-n) guard + FLINT throw hook (no kernel abort)
 - [ ] P2a complex-point verification in harnesses
 - [ ] P2b PMT back-substitution in the integrand's own radicals; drop branch-cut acceptance
 - [ ] P2c power-free radicands before choosing m

@@ -304,6 +304,17 @@ static slong wl_root_index(const qqbar_t x) {
 /*  Expr -> qqbar (recursive field arithmetic)                         */
 /* ------------------------------------------------------------------ */
 
+/* True iff e is a negative Rational[p, q] (the exponent of a fractional power). */
+static int is_negative_rational_expr(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return 0;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "Rational") != 0) return 0;
+    const Expr* p = e->data.function.args[0];
+    if (p->type == EXPR_INTEGER) return p->data.integer < 0;
+    if (p->type == EXPR_BIGINT) return mpz_sgn(p->data.bigint) < 0;
+    return 0;
+}
+
 static int to_qqbar(const Expr* e, qqbar_t out);
 
 /* Root[Function[...], k] -> the k-th root (WL order) of the body polynomial. */
@@ -540,6 +551,14 @@ static int to_qqbar(const Expr* e, qqbar_t out) {
         }
         qqbar_t base; qqbar_init(base);
         int ok = to_qqbar(be, base);
+        /* A base that is zero -- possibly only after simplification, like
+         * Sqrt[2]^2 - 2 -- raised to a negative power is not an algebraic
+         * number (ComplexInfinity): decline before FLINT throws
+         * "qqbar_pow_fmpq: division by zero". */
+        if (ok && qqbar_is_zero(base) &&
+            ((xe->type == EXPR_INTEGER && xe->data.integer < 0) ||
+             (xe->type != EXPR_INTEGER && is_negative_rational_expr(xe))))
+            ok = 0;
         if (ok) {
             if (xe->type == EXPR_INTEGER) {
                 qqbar_pow_si(out, base, (slong)xe->data.integer);

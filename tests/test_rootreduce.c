@@ -341,6 +341,40 @@ static void test_qqbar_methods(void) {
           "RootReduce[aa, Method -> \"Recursive\"]", "True");
 }
 
+/* A zero base -- here only after expansion, (Sqrt[2]+Sqrt[3])^2 - 5 - 2 Sqrt[6] --
+ * raised to a negative power is not an algebraic number.  to_qqbar used to hand
+ * it to qqbar_pow_si, and FLINT's "qqbar_pow_fmpq: division by zero" exception
+ * aborted the whole kernel (found by ParallelMixedTower on a DDI integrand). */
+static void test_qqbar_zero_negative_power(void) {
+    check("Quiet[RootReduce[((Sqrt[2] + Sqrt[3])^2 - 5 - 2 Sqrt[6])^(-1)]]", "ComplexInfinity");
+    check("Quiet[RootReduce[((Sqrt[2] + Sqrt[3])^2 - 5 - 2 Sqrt[6])^(-3/2)]]", "ComplexInfinity");
+    check("Head[Quiet[ToNumberField[1 + ((Sqrt[2] + Sqrt[3])^2 - 5 - 2 Sqrt[6])^(-2)]]]", "ToNumberField");
+}
+
+#ifdef USE_FLINT
+#include <flint/flint.h>
+/* Test-only builtin: raise a FLINT exception from inside an evaluation. */
+static Expr* builtin_test_flint_throw(Expr* res) {
+    (void)res;
+    flint_throw(FLINT_ERROR, "synthetic test exception\n");
+    return NULL;   /* not reached */
+}
+#endif
+
+/* Any FLINT exception lands at the innermost recovery point instead of
+ * FLINT's default abort(): a TimeConstrained body takes its fail branch, a
+ * top-level evaluation becomes $Aborted, and the kernel lives on. */
+static void test_flint_exception_recovery(void) {
+#ifdef USE_FLINT
+    symtab_add_builtin("TestFlintThrow", builtin_test_flint_throw);
+    check("Quiet[TimeConstrained[1 + TestFlintThrow[], 100, \"recovered\"]]", "\"recovered\"");
+    check("Quiet[TestFlintThrow[]]", "$Aborted");
+    check("Quiet[TestFlintThrow[]]; 2 + 2", "$Aborted");
+    check("2 + 2", "4");
+    check("Quiet[Check[TimeConstrained[TestFlintThrow[], 100], \"msg\", {FLINT::exc}]]", "\"msg\"");
+#endif
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -361,6 +395,8 @@ int main(void) {
     test_rootreduce_rule();
     test_qqbar_argx();
     test_qqbar_methods();
+    test_qqbar_zero_negative_power();
+    test_flint_exception_recovery();
 
     printf("All RootReduce / algebraic-field tests passed.\n");
     return 0;
