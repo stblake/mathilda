@@ -238,19 +238,10 @@ presentable[f_, Fx_, x_Symbol] := Module[{real},
   real = TimeConstrained[Quiet[realForm[Fx, x]], tragerOption["RealFormTime"], Fx];
   If[real =!= Fx && antiderivativeQ[f, real, x], real, Fx]];
 
-spotCheck::usage = "spotCheck[f, F, x] confirms that D[F, x] = f: PossibleZeroQ[D[F, x] - f] first and, should it fail to recognise zero (it can, on nested radicals), agreement to 30 digits at four rational points with 60-digit arithmetic. The per-component results were already verified exactly in K(x)(Y), so this guards only the reassembly into the user's radical; a failure is an internal error (decline), never an answer.";
+spotCheck::usage = "spotCheck[f, F, x] confirms that D[F, x] = f by PossibleZeroQ[D[F, x] - f] alone -- no numeric fallback: a correct answer PossibleZeroQ cannot confirm is a PossibleZeroQ bug, fixed there (v0.6091). The per-component results were already verified exactly in K(x)(Y), so this guards the reassembly into the user's radical; a failure is an internal error (decline), never an answer.";
 spotCheck[f_, Fx_, x_Symbol] := If[antiderivativeQ[f, Fx, x], True,
   throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> Fx|>]];
 
-numericZeroQ::usage = "numericZeroQ[d, x] is True when |d| < 10^-30 (1 + scale) at four or more rational points where d evaluates to a number at 60 digits (points where it does not are skipped).";
-numericZeroQ[d_, x_Symbol] := Module[{pts = {37/23, 113/71, 5/17, 29/7, -11/13, -41/19, 61/97, 7/3}, ok = 0, bad = False, v},
-  Do[
-    v = Quiet[N[d /. x -> p0, 60]];
-    If[NumberQ[v], If[Abs[v] > 10^-30, bad = True, ok++]],
-    {p0, pts}];
-  !bad && ok >= 4];
-
-antiderivativeQ::usage = "antiderivativeQ[f, F, x] is True when D[F, x] - f is zero by PossibleZeroQ or, failing that, by numericZeroQ.";
-antiderivativeQ[f_, Fx_, x_Symbol] := Module[{d = D[Fx, x] - f},
-  TrueQ[Quiet[PossibleZeroQ[d]]] || numericZeroQ[d, x]];
+antiderivativeQ::usage = "antiderivativeQ[f, F, x] is True when PossibleZeroQ[D[F, x] - f] is True.";
+antiderivativeQ[f_, Fx_, x_Symbol] := TrueQ[Quiet[PossibleZeroQ[D[Fx, x] - f]]];
 

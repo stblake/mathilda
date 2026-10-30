@@ -7,7 +7,7 @@
  * Pipeline functions covered: integrateComponent, integrateCurve,
  * rationalIntegral, componentExpression, reduceRadicalPowers, fieldValue,
  * tragerLogExpressions, TragerIntegrateCurve, TragerIntegrate,
- * tragerIntegrateBody, spotCheck, numericZeroQ, antiderivativeQ, presentable.
+ * tragerIntegrateBody, spotCheck, antiderivativeQ, presentable.
  *
  * Correctness of every antiderivative is asserted by differentiation
  * (TR_ANTIDERIV: PossibleZeroQ[D[F, x] - f]).  For the answers on which
@@ -194,22 +194,15 @@ static void test_assembly_helpers(void) {
 }
 
 static void test_checks(void) {
-    /* numericZeroQ */
-    TR_TRUE("numericZeroQ[0, x]");
-    TR_TRUE("numericZeroQ[10^-40, x]");
-    TR_FALSE("numericZeroQ[10^-20, x]");
-    TR_FALSE("numericZeroQ[Sqrt[x^2] - x, x]");                    /* nonzero at negative points */
-    TR_TRUE("numericZeroQ[((1 + x^4)^(1/4))^4 - 1 - x^4, x]");
-    TR_TRUE("numericZeroQ[Sqrt[2 + Sqrt[3]] - (Sqrt[6] + Sqrt[2])/2, x]");   /* denesting identity */
-    TR_TRUE("numericZeroQ[If[x > 1, 0, Indeterminate], x]");       /* exactly 4 numeric points */
-    TR_FALSE("numericZeroQ[If[x > 2, 0, Indeterminate], x]");      /* only 2 */
-    TR_FALSE("numericZeroQ[Sin[x] - x, x]");
+    /* antiderivativeQ is PossibleZeroQ alone (no numeric fallback, v0.6092) */
+    TR_TRUE("antiderivativeQ[(1 + x^4)^(-1/4), 1/4 ArcTan[(-2 x^3 (1 + x^4)^(1/4) + 2 x (1 + x^4)^(3/4))/(1 + 2 x^4 - 2 x^2 Sqrt[1 + x^4])] + 1/4 Log[1 + 2 x^4 + 2 x^3 (1 + x^4)^(1/4) + 2 x^2 Sqrt[1 + x^4] + 2 x (1 + x^4)^(3/4)], x]");
+    TR_FALSE("antiderivativeQ[1/Sqrt[x^2], Sqrt[x^2], x]");
     /* antiderivativeQ */
     TR_TRUE("antiderivativeQ[1/Sqrt[x^2 + 1], Log[x + Sqrt[x^2 + 1]], x]");
     TR_TRUE("antiderivativeQ[1/Sqrt[x^2 + 1], ArcSinh[x] + 7, x]");
     TR_FALSE("antiderivativeQ[1/Sqrt[x^2 + 1], Log[x + Sqrt[x^2 + 1]] + x/10^20, x]");
     TR_FALSE("antiderivativeQ[1/Sqrt[x^2 + 1], Log[x - Sqrt[x^2 + 1]], x]");
-    /* the (1 + x^4)^(-1/4) answer: numericZeroQ rescues PossibleZeroQ */
+    /* the (1 + x^4)^(-1/4) answer: PossibleZeroQ confirms it on its own (v0.6091) */
     TR_TRUE("Module[{f0 = (x^4 + 1)^(-1/4), F0}, F0 = TragerIntegrate[f0, x, \"Trager\"];"
             " !ListQ[F0] && antiderivativeQ[f0, F0, x]]");
     /* spotCheck: True or an Internal failure, never False */

@@ -37,7 +37,7 @@ static void st_elem(const char* f, int budget, const char* file, int line) {
     snprintf(buf, sizeof buf,
              "Module[{tt, rr, d}, {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[%s, x], %d, $Aborted]];"
              " If[!ListQ[rr] && rr =!= $Aborted && tt < %d &&"
-             "   (d = D[rr, x] - (%s); TrueQ[PossibleZeroQ[d]] || numericZeroQ[d, x]), True, {tt, rr}]]",
+             "   (d = D[rr, x] - (%s); TrueQ[PossibleZeroQ[d]]), True, {tt, rr}]]",
              f, budget, budget, f);
     printf("  %-70s ", f); fflush(stdout);
     tr_eq(buf, "True", file, line);
@@ -89,7 +89,7 @@ static void test_seeded_logs(void) {
             "   {tt, rr} = AbsoluteTiming[TimeConstrained[TragerIntegrate[f, x], 1500, $Aborted]];"
             "   Print[\"  seeded \", k, \" m=\", m, \" \", Round[tt, 0.01], \" s\"];"
             "   If[ListQ[rr] || rr === $Aborted ||"
-            "      !(d = D[rr, x] - f; TrueQ[PossibleZeroQ[d]] || numericZeroQ[d, x]),"
+            "      !(d = D[rr, x] - f; TrueQ[PossibleZeroQ[d]]),"
             "     AppendTo[stBad, {k, m, g, p, q, tt, If[ListQ[rr], rr, Head[rr]]}]]],"
             " {k, 40}];"
             "If[stBad === {}, True, stBad]");
