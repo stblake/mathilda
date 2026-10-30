@@ -1153,6 +1153,27 @@ static void test_huge_cancel_machine_point_exact_climb(void) {
  * misread them as identities; the identity theorem only licenses real samples
  * for holomorphic expressions.  A symbol under Conjugate/Re/Im/Abs/Arg/Sign is
  * now drawn at complex points unless an assumption fact constrains it. */
+/* Deep cancellation BELOW the top-level operand scale.  The residual of
+ * D[F] - f for a correct Trager antiderivative of 1/(x^4+1)^(1/4) cancels inside
+ * its Log argument at negative x (terms of order x^4 summing to ~1): the
+ * machine residual landed above the obvious-non-zero gate, and a denominator
+ * cancelling to exactly 0.0 read as a pole -- both "decisive" FALSEs for an
+ * exact zero.  A machine non-zero now has to survive the precision ladder
+ * (two agreeing MPFR rungs), and a machine infinity is re-evaluated higher. */
+static void test_deep_cancellation_zero_is_true(void) {
+    assert_pzq("PossibleZeroQ[D[1/4 ArcTan[(-2 x^3 (1 + x^4)^(1/4) + 2 x (1 + x^4)^(3/4))/"
+               "(1 + 2 x^4 - 2 x^2 Sqrt[1 + x^4])] + 1/4 Log[1 + 2 x^4 + 2 x^3 (1 + x^4)^(1/4) + "
+               "2 x^2 Sqrt[1 + x^4] + 2 x (1 + x^4)^(3/4)], x] - 1/(x^4 + 1)^(1/4)]", "True");
+    /* genuine non-zeros of the same shape stay False */
+    assert_pzq("PossibleZeroQ[D[1/4 ArcTan[(-2 x^3 (1 + x^4)^(1/4) + 2 x (1 + x^4)^(3/4))/"
+               "(1 + 2 x^4 - 2 x^2 Sqrt[1 + x^4])] + 1/4 Log[1 + 2 x^4 + 2 x^3 (1 + x^4)^(1/4) + "
+               "2 x^2 Sqrt[1 + x^4] + 2 x (1 + x^4)^(3/4)], x] - 1/(x^4 + 1)^(1/4) + 1/10^8]", "False");
+    assert_pzq("PossibleZeroQ[Gamma[-x^2 - 1 + x^2]]", "False");     /* a genuine pole */
+    /* a principal-branch identity that FAILS on the real cut x < -1 stays False:
+     * on the cut the principal values are part of "zero for all complex x" */
+    assert_pzq("PossibleZeroQ[Sqrt[(1 - x)/(1 + x)] (1 + x) - Sqrt[1 - x^2]]", "False");
+}
+
 static void test_nonholomorphic_conjugate_minus_x(void) {
     assert_pzq("PossibleZeroQ[Conjugate[x] - x]", "False");
 }
@@ -1372,6 +1393,7 @@ int main(void) {
     TEST(test_huge_cancel_preserves_normal_identities);
     TEST(test_huge_cancel_machine_point_exact_climb);
     /* Group 21 — non-holomorphic heads sampled at complex points */
+    TEST(test_deep_cancellation_zero_is_true);
     TEST(test_nonholomorphic_conjugate_minus_x);
     TEST(test_nonholomorphic_re_minus_x);
     TEST(test_nonholomorphic_genuine_identities);

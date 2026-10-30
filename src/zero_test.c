@@ -1122,10 +1122,19 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
         /* A pole: definitively non-zero. Report an infinite residual so every
          * caller's "obvious non-zero" gate settles it FALSE.  (A symbolic
          * Infinity/ComplexInfinity is left decisive on purpose — it is NOT the
-         * IEEE-overflow class handled below.  A machine-precision rounding
-         * artifact that produces a *symbolic* pole is rare and out of scope for
-         * this overflow fix.) */
+         * IEEE-overflow class handled below.)
+         * EXCEPT a machine-precision one: a denominator that cancels to exactly
+         * 0.0 in doubles (a degree-30 polynomial in a Trager Log argument at
+         * x = -60.7) also numericalizes to ComplexInfinity, and read as a pole it
+         * made PossibleZeroQ reject a correct antiderivative.  A genuine pole is
+         * still a pole at every precision; a cancellation artifact turns finite
+         * once the precision outruns the cancellation (x = -31.35 needs the
+         * 1000-bit rung), so each rung but the last defers to the next. */
         expr_free(z);
+        for (int i = 0; i + 1 < PRECISION_LADDER_LEN; ++i)
+            if (PRECISION_LADDER[i] >= bits || (i == 0 && bits <= 53))
+                return evaluate_rung_core(e, PRECISION_LADDER[i + 1], out_mag, out_scale,
+                                          in_scale, out_overflow);
         *out_mag = INFINITY;
         if (out_scale) *out_scale = 1.0;
         return ZERO_TEST_FALSE;
@@ -1316,6 +1325,40 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
  *      NOT be rejected by a high rung's tiny threshold; they fall back to the
  *      lenient machine verdict. This is what stops the cancellation false
  *      negatives the previous absolute-threshold loop produced. */
+/* A machine-precision residual above the obvious-non-zero gate is measured
+ * against the TOP-LEVEL operand scale, but cancellation can run deeper than the
+ * top level: in D[F] of 1/4 Log[1 + 2x^4 + 2x^3 y + 2x^2 Sqrt[1+x^4] + 2x y^3]
+ * (y = (1+x^4)^(1/4)) the Log argument cancels to ~x^0 from terms of order x^4
+ * at negative x, and the machine residual of an exact zero lands far above the
+ * gate -- a "decisive" FALSE that made PossibleZeroQ reject correct Trager
+ * antiderivatives.  A genuine non-zero keeps its value when the precision is
+ * raised; cancellation noise does not.  So the machine verdict is resolved up
+ * the ladder: two consecutive rungs that AGREE (to 2^-20 relative) settle a
+ * stable non-zero (FALSE); a residual that collapses below the deep-zero floor
+ * is a cancellation-hidden zero (TRUE); a residual that never stabilises keeps
+ * the old machine verdict (FALSE), as does an unavailable MPFR path. */
+static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, double scale) {
+    double prev = mag;
+    for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
+        double m = 0.0;
+        ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
+                                          scale > 0.0 ? scale : -1.0, NULL);
+        /* an undecidable rung (Indeterminate from a still-cancelling 0 * Infinity,
+         * or MPFR unavailable) says nothing: try the next one */
+        if (rr == ZERO_TEST_UNKNOWN) continue;
+        if (scale > 0.0 && m < scale * ldexp(1.0, -ZT_DEEP_ZERO_BITS)) return ZERO_TEST_TRUE;
+        /* agreement is evidence only between two MPFR rungs: a cancellation
+         * artifact can survive unchanged from machine precision to 200 bits and
+         * clear only at 1000 (x = -39.45 in a Trager Log argument: 6.98, 6.98,
+         * then 2e-207), so the machine residual never vouches for itself */
+        if (i >= 2 && fabs(m - prev) <= prev * ldexp(1.0, -20)) return ZERO_TEST_FALSE;
+        prev = m;
+    }
+    /* never two agreeing rungs: a residual that collapsed by 2^60 or more from
+     * its machine value over the ladder was cancellation noise all along */
+    return prev < mag * ldexp(1.0, -60) ? ZERO_TEST_TRUE : ZERO_TEST_FALSE;
+}
+
 static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
     double mag = 0.0, scale = 1.0;
     ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
@@ -1331,7 +1374,7 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
         return decide_numeric_huge_scale(e, mag, scale);
 
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
-        return ZERO_TEST_FALSE;
+        return zt_resolve_machine_nonzero(e, mag, scale);
 
     double prev_mag = mag;
     bool honored = false;
@@ -1406,7 +1449,8 @@ static ZeroTestResult screen_point(const Expr* e, bool* out_overflow) {
          * escalates this point to the full ladder (decide_numeric ->
          * decide_numeric_huge_scale), which climbs MPFR to adjudicate. */
         if (scale >= ldexp(1.0, ZT_HUGE_SCALE_BITS)) return ZERO_TEST_UNKNOWN;
-        return ZERO_TEST_FALSE;
+        /* Deep cancellation below the top-level scale: confirm up the ladder. */
+        return zt_resolve_machine_nonzero(e, mag, scale);
     }
     return ZERO_TEST_TRUE;
 }
@@ -1827,6 +1871,20 @@ static bool assignment_conforms(const Expr** facts, size_t nfacts,
     return true;
 }
 
+/* The verdict of one substituted point (screen or full ladder). */
+static ZeroTestResult zt_point_verdict(const Expr* sub, bool screen, bool* out_overflow) {
+    ZeroTestResult r = decide_structural(sub);
+    if (r == ZERO_TEST_UNKNOWN) {
+        if (screen) {
+            r = screen_point(sub, out_overflow);
+            if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub, out_overflow);
+        } else {
+            r = decide_numeric(sub, out_overflow);
+        }
+    }
+    return r;
+}
+
 /* One Stage-3 trial: draw a fresh value for every free symbol, substitute it
  * into `e`, and return that point's verdict.
  *
@@ -1876,15 +1934,7 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms,
 
     ZeroTestResult r = ZERO_TEST_UNKNOWN;
     if (sub) {
-        r = decide_structural(sub);
-        if (r == ZERO_TEST_UNKNOWN) {
-            if (screen) {
-                r = screen_point(sub, out_overflow);
-                if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub, out_overflow);
-            } else {
-                r = decide_numeric(sub, out_overflow);
-            }
-        }
+        r = zt_point_verdict(sub, screen, out_overflow);
         expr_free(sub);
     }
 

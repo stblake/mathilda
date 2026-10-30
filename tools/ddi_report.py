@@ -22,13 +22,13 @@ import statistics
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BEGIN, END = "<!-- BEGIN GENERATED -->", "<!-- END GENERATED -->"
 CLASSES = ("AGREE-ELEM", "MATHILDA-ONLY", "AGREE-NONELEM", "NONELEM-UNCONFIRMED",
-           "FRICAS-ONLY", "NEITHER", "TIMEOUT", "ERROR", "WRONG", "BRANCH", "UNVERIFIED",
+           "FRICAS-ONLY", "NEITHER", "TIMEOUT", "ERROR", "WRONG", "BRANCH", "PZQ-FN", "UNVERIFIED",
            "DISAGREE", "BOOK-CONFLICT")
 SHORT = {"AGREE-ELEM": "agree elem", "MATHILDA-ONLY": "Mathilda only",
          "AGREE-NONELEM": "agree non-elem", "NONELEM-UNCONFIRMED": "non-elem unconf.",
          "FRICAS-ONLY": "FriCAS only", "NEITHER": "neither", "TIMEOUT": "timeout",
          "ERROR": "error", "WRONG": "WRONG", "BRANCH": "wrong branch on part of R",
-         "UNVERIFIED": "unverified", "DISAGREE": "DISAGREE",
+         "PZQ-FN": "PossibleZeroQ false negative", "UNVERIFIED": "unverified", "DISAGREE": "DISAGREE",
          "BOOK-CONFLICT": "book conflict"}
 
 
@@ -104,6 +104,8 @@ def generate(d):
     frow("wrong answer", lambda m: m["status"] == "WRONG", lambda f: f["status"] == "BAD")
     frow("right on part of the real line only (branch)", lambda m: m["status"] == "BRANCH",
          lambda f: False)
+    frow("correct, but PossibleZeroQ cannot confirm it (PZQ-FN)",
+         lambda m: m["status"] == "PZQ-FN", lambda f: False)
     frow("answer not verifiable in budget", lambda m: m["status"] == "UNVERIFIED",
          lambda f: False)
     A("")
@@ -213,6 +215,9 @@ def generate(d):
     listing("Right on part of the real line only (D[F] = f on one interval, -f on another)",
             lambda c, r: r["status"] == "BRANCH",
             lambda c, r: f"{r.get('detail')}; points {r.get('numeric')}")
+    listing("Correct answers PossibleZeroQ cannot confirm (PossibleZeroQ bugs)",
+            lambda c, r: r["status"] == "PZQ-FN",
+            lambda c, r: f"{r.get('detail')}; F = {r.get('result')}")
     listing("Antiderivatives not verifiable within the budget", lambda c, r: r["status"] == "UNVERIFIED",
             lambda c, r: f"{r.get('detail')}; {r.get('result')}")
     listing("Disagreements (proved non-elementary, but FriCAS or the book has an "

@@ -306,6 +306,23 @@ Pipeline (each stage exits early on a definite verdict):
    without climbing the remaining (500/1000-bit) rungs — a decisive
    speed-up on large antiderivative round-trips (tens of thousands of
    leaves) that leaves every verdict unchanged.
+   **A machine-precision "obvious non-zero" is confirmed up the ladder**
+   (v0.6091). The gate measures the machine residual against the *top-level*
+   operand scale, but cancellation can run deeper: in a Trager
+   antiderivative's `Log[1 + 2x^4 + 2x^3 y + …]` the argument cancels at
+   negative `x`, so an exact zero leaves a large machine residual, or a
+   denominator rounds to exactly `0.0` and reads as a pole. Now:
+   - **A machine non-zero** stands only once two consecutive **MPFR** rungs
+     agree (to 2^-20 relative). The machine rung never vouches for itself,
+     because an artifact can survive unchanged to 200 bits.
+   - **A residual that falls below the deep-zero floor**, or drops by 2^60
+     over the ladder, is a zero.
+   - **A machine-precision infinity** defers to the next rung. A genuine pole
+     is infinite at every rung and stays `False`.
+   - **Points on a real-axis branch cut are evidence** like any other. The
+     principal values there count, so an identity that fails only on a cut,
+     such as `Sqrt[(1 - x)/(1 + x)] (1 + x) - Sqrt[1 - x^2]` on `x < -1`, is
+     `False`.
 4. **Schwartz–Zippel** — for inputs with free symbols, substitute
    random **real** samples of moderate magnitude and recurse into the
    numeric stage, in two phases. A *screen* phase evaluates many points

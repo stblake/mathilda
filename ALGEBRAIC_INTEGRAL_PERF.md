@@ -152,34 +152,35 @@ Run of 2026-10-30 15:54:26: **803 integrands** (207 with symbolic parameters, 59
 
 |  | Trager | ParallelMixedTower | FriCAS |
 |---|---|---|---|
-| verified antiderivative | 338 | 298 | 482 |
+| verified antiderivative | 338 | 232 | 482 |
 | proved non-elementary | 15 | 20 | 46 |
 | declined | 446 | 270 | 0 |
 | timeout | 4 | 201 | 253 |
 | error / crash | 0 | 1 | 21 |
-| wrong answer | 0 | 8 | 1 |
-| right on part of the real line only (branch) | 0 | 5 | 0 |
+| wrong answer | 0 | 29 | 1 |
+| right on part of the real line only (branch) | 0 | 50 | 0 |
+| correct, but PossibleZeroQ cannot confirm it (PZQ-FN) | 0 | 0 | 0 |
 | answer not verifiable in budget | 0 | 0 | 0 |
 
-Of the **646** integrands the book states are elementary: Trager solves **281**, ParallelMixedTower solves **258**, FriCAS **419**, either Mathilda method **381**.
+Of the **646** integrands the book states are elementary: Trager solves **281**, ParallelMixedTower solves **204**, FriCAS **419**, either Mathilda method **356**.
 
-- over Q (no parameters) (596): Trager solved 338, decided 353; ParallelMixedTower solved 269, decided 289; FriCAS solved 359.
-- with symbolic parameters (207): Trager solved 0, decided 0; ParallelMixedTower solved 29, decided 29; FriCAS solved 123.
+- over Q (no parameters) (596): Trager solved 338, decided 353; ParallelMixedTower solved 214, decided 234; FriCAS solved 359.
+- with symbolic parameters (207): Trager solved 0, decided 0; ParallelMixedTower solved 18, decided 18; FriCAS solved 123.
 
 ### Classification against FriCAS and the book
 
 | class | Trager | ParallelMixedTower |
 |---|---:|---:|
-| agree elem | 225 | 257 |
-| Mathilda only | 113 | 40 |
+| agree elem | 225 | 199 |
+| Mathilda only | 113 | 32 |
 | agree non-elem | 9 | 14 |
 | non-elem unconf. | 6 | 6 |
 | FriCAS only | 257 | 212 |
 | neither | 190 | 142 |
 | timeout | 3 | 117 |
 | error | 0 | 1 |
-| WRONG | 0 | 8 |
-| wrong branch on part of R | 0 | 5 |
+| WRONG | 0 | 29 |
+| wrong branch on part of R | 0 | 50 |
 | book conflict | 0 | 1 |
 
 ### Per chapter
@@ -188,36 +189,36 @@ Cells are *verified antiderivatives / proved non-elementary / declined / timeout
 
 | chapter | n | book elem | Trager | ParallelMixedTower | FriCAS (elem/non) |
 |---|---:|---:|---|---|---|
-| warmup | 73 | 73 | 35 / 0 / 37 / 1 | 53 / 0 / 9 / 11 | 73 / 0 |
-| laurent_poly_subst | 60 | 60 | 43 / 0 / 17 / 0 | 20 / 0 / 9 / 31 | 42 / 0 |
-| rational_subs | 32 | 32 | 27 / 0 / 5 / 0 | 15 / 0 / 3 / 14 | 16 / 0 |
-| gunther | 33 | 29 | 21 / 4 / 8 / 0 | 14 / 4 / 7 / 8 | 26 / 0 |
-| power_expand | 6 | 6 | 5 / 0 / 1 / 0 | 5 / 0 / 0 / 1 | 6 / 0 |
-| generalised_gunther | 88 | 80 | 66 / 2 / 20 / 0 | 19 / 0 / 11 / 58 | 19 / 2 |
-| chebychev | 87 | 51 | 3 / 7 / 77 / 0 | 17 / 7 / 47 / 16 | 32 / 32 |
+| warmup | 73 | 73 | 35 / 0 / 37 / 1 | 48 / 0 / 9 / 12 | 73 / 0 |
+| laurent_poly_subst | 60 | 60 | 43 / 0 / 17 / 0 | 15 / 0 / 9 / 33 | 42 / 0 |
+| rational_subs | 32 | 32 | 27 / 0 / 5 / 0 | 13 / 0 / 3 / 14 | 16 / 0 |
+| gunther | 33 | 29 | 21 / 4 / 8 / 0 | 10 / 4 / 7 / 8 | 26 / 0 |
+| power_expand | 6 | 6 | 5 / 0 / 1 / 0 | 0 / 0 / 0 / 4 | 6 / 0 |
+| generalised_gunther | 88 | 80 | 66 / 2 / 20 / 0 | 14 / 0 / 11 / 63 | 19 / 2 |
+| chebychev | 87 | 51 | 3 / 7 / 77 / 0 | 16 / 7 / 47 / 16 | 32 / 32 |
 | inverse_function | 18 | 10 | 0 / 0 / 18 / 0 | 2 / 5 / 10 / 1 | 6 / 5 |
-| product_rule | 21 | 21 | 19 / 0 / 2 / 0 | 21 / 0 / 0 / 0 | 21 / 0 |
-| log_term | 16 | 16 | 16 / 0 / 0 / 0 | 16 / 0 / 0 / 0 | 16 / 0 |
-| realis | 22 | 7 | 17 / 2 / 3 / 0 | 11 / 2 / 8 / 1 | 18 / 0 |
-| nested_radicals | 161 | 159 | 0 / 0 / 161 / 0 | 40 / 1 / 98 / 22 | 86 / 2 |
-| multiple_radicals | 55 | 34 | 0 / 0 / 55 / 0 | 9 / 0 / 28 / 15 | 40 / 2 |
+| product_rule | 21 | 21 | 19 / 0 / 2 / 0 | 15 / 0 / 0 / 3 | 21 / 0 |
+| log_term | 16 | 16 | 16 / 0 / 0 / 0 | 15 / 0 / 0 / 0 | 16 / 0 |
+| realis | 22 | 7 | 17 / 2 / 3 / 0 | 9 / 2 / 8 / 3 | 18 / 0 |
+| nested_radicals | 161 | 159 | 0 / 0 / 161 / 0 | 21 / 1 / 98 / 32 | 86 / 2 |
+| multiple_radicals | 55 | 34 | 0 / 0 / 55 / 0 | 7 / 0 / 28 / 7 | 40 / 2 |
 | euler | 22 | 22 | 10 / 0 / 11 / 1 | 6 / 0 / 9 / 7 | 13 / 0 |
-| timofeev | 23 | 7 | 19 / 0 / 4 / 0 | 15 / 0 / 3 / 5 | 23 / 0 |
-| potpourri | 43 | 7 | 31 / 0 / 12 / 0 | 22 / 0 / 13 / 6 | 27 / 0 |
+| timofeev | 23 | 7 | 19 / 0 / 4 / 0 | 9 / 0 / 3 / 7 | 23 / 0 |
+| potpourri | 43 | 7 | 31 / 0 / 12 / 0 | 20 / 0 / 13 / 7 | 27 / 0 |
 | mult_piecewise | 1 | 0 | 0 / 0 / 1 / 0 | 0 / 0 / 1 / 0 | 0 / 0 |
 | danger_zone | 20 | 18 | 17 / 0 / 1 / 2 | 1 / 0 / 9 / 10 | 4 / 0 |
 | multiple_methods | 4 | 0 | 2 / 0 / 2 / 0 | 0 / 0 / 1 / 3 | 0 / 0 |
-| introduction | 18 | 14 | 7 / 0 / 11 / 0 | 12 / 1 / 4 / 1 | 14 / 3 |
+| introduction | 18 | 14 | 7 / 0 / 11 / 0 | 11 / 1 / 4 / 1 | 14 / 3 |
 
 ### Timing (seconds, cases each system answered — antiderivative or proof)
 
 | system | answered | median | mean | max |
 |---|---:|---:|---:|---:|
 | Trager | 353 | 0.644 | 1.774 | 31.42 |
-| ParallelMixedTower | 318 | 0.259 | 3.239 | 119.55 |
+| ParallelMixedTower | 252 | 0.268 | 2.635 | 119.55 |
 | FriCAS | 528 | 0.200 | 2.452 | 90.90 |
 
-On the 185 integrands both methods solve, median LeafCount of the antiderivative: Trager 118, ParallelMixedTower 101.
+On the 146 integrands both methods solve, median LeafCount of the antiderivative: Trager 126, ParallelMixedTower 116.
 
 ### Why each method declines
 
@@ -248,28 +249,98 @@ On the 185 integrands both methods solve, median LeafCount of the antiderivative
 | internal | 4 |
 | deep residue sheet undecided | 2 |
 
-### Wrong answers (failed derivative check) (8)
+### Wrong answers (failed derivative check) (29)
 
 | id | method | integrand | book ref | detail |
 |-----------|------|------------------|---------|--------------|
-| multrad\-intro\-1 | PMT | \(x\^4\-12\)/\(\(x\^4\-8\*x\^2\+12\)\*Sqrt\[x\^2\-4\]\*Sqrt\[x\^2\-3\]\) | Section intro example \(solved, \-ArcTanh\) | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '9.812729'\], \['13/5', 'neg', '5.783089'\], \['11/3',… |
-| multrad\-multiple\_radicals\_0\-i | PMT | \(x\^4\-a\*b\)/\(\(d\*x\^4\-\(a\*d\+b\*d\-c\)\*x\^2\+a\*b\*d\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_0 \(i\) | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '0.3868618'\], \['13/5', 'neg', '0.2779431'\], \['11/3… |
-| multrad\-multiple\_radicals\_0\-i\-inst | PMT | \(x\^4\-2\*3\)/\(\(7\*x\^4\-\(2\*7\+3\*7\-5\)\*x\^2\+2\*3\*7\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_0 \(i\); inst a=… | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '0.1891279'\], \['13/5', 'neg', '0.1179702'\], \['11/3… |
-| multrad\-multiple\_radicals\_0\-ii | PMT | \(x\^4\-a\*b\)/\(\(x\^4\+a\*b\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_0 \(ii\) | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '0.4375095'\], \['13/5', 'neg', '0.346314'\], \['11/3'… |
-| multrad\-multiple\_radicals\_0\-ii\-inst | PMT | \(x\^4\-2\*3\)/\(\(x\^4\+2\*3\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_0 \(ii\); inst a… | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '0.4571958'\], \['13/5', 'neg', '0.3630166'\], \['11/3… |
-| multrad\-multiple\_radicals\_0\-iv | PMT | \(x\^4\-a\*b\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]/\(x\^2\*\(d\*x\^4\+\(c\-a\*d\-b\*d\)\*x\^2\+a\*b\*d\)\) | Problem multiple\_radicals\_0 \(iv\) | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '1.058826'\], \['13/5', 'neg', '1.101532'\], \['11/3',… |
-| multrad\-multiple\_radicals\_0\-iv\-inst | PMT | \(x\^4\-2\*3\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]/\(x\^2\*\(7\*x\^4\+\(5\-2\*7\-3\*7\)\*x\^2\+2\*3\*7\)\) | Problem multiple\_radicals\_0 \(iv\); inst a… | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '0.2924838'\], \['13/5', 'neg', '0.312335'\], \['11/3'… |
-| multrad\-multiple\_radicals\_3\-ii | PMT | \(x\^2\-2\*a\*x\+a\*b\+a\*c\-b\*c\)/\(\(x\^2\-\(b\+c\+1\)\*x\+a\+b\*c\)\*Sqrt\[x\-a\]\*Sqrt\[x\-b\]\*Sqrt\[x\-c\]\) | Problem multiple\_radicals\_3 \(ii\) | D\[F\] = \-f at every sample \(global sign\) num=\[\['7/3', 'neg', '5.160072'\], \['13/5', 'neg', '8.15654'\], \['11/3', … |
+| warmup\-prob\_warmup\_2b\-minus\-n1 | PMT | \(\(2\*1\+1\)\*x\+1\)/\(\(x\^2\-1\)\*Sqrt\[\(x\-1\)\*\(x\^2\-1\)\^1\-1\]\) | Problem 0.2b Realis lower sign n=1 | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['7/3', 'ok', '0.0'\], \['13/5… |
+| laurent\_poly\_subst\-prob\_laurent\_sub\_13\-i… | PMT | \(2\*x\^2\+3\)/\(\(2\*x\^2\-3\)\*Sqrt\[2\*x\^3\+3\*x\^2\-3\*x\]\) | Problem 13 \(i\) instantiated a=2,b=3 | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| laurent\_poly\_subst\-prob\_laurent\_sub\_16\-i… | PMT | \(\(2\*x\^2\-3\)/\(x\*\(2\*x\^2\+3\)\)\)\*Sqrt\[\(2\*x\^2\-5\*x\+3\)/\(2\*x\^2\+5\*x\+3\)\] | Problem 16 \(ii\) instantiated a=2,b=3,c=5 | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['3/7', 'ok', '0.0'\], \['7/3'… |
+| power\_expand\-intro | PMT | Sqrt\[x\^6\+9\*x\^5\+16\*x\^4\-27\*x\^3\-36\*x\^2\-11\*x\-1\] | Section introduction example | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['7/3', 'ok', '0.0'\], \['13/5… |
+| power\_expand\-power\_expand\_1\-ii | PMT | Sqrt\[x\^6\-x\^5\-3\*x\^4\+2\*x\^3\+3\*x\^2\-x\-1\] | Problem 1 \(ii\) | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['7/3', 'ok', '0.0'\], \['13/5… |
+| power\_expand\-power\_expand\_2\-i | PMT | x/\(x\^8\+5\*x\^6\+6\*x\^4\-4\*x\^2\-8\)\^\(1/3\) | Problem 2 \(i\) | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['13/5… |
+| generalised\_gunther\-prob\_gg\_7\-x | PMT | \(3\*x\+1\)/\(\(3\*x\-1\)\*\(x\^3\-x\)\^\(1/3\)\) | Problem gg7 \(x\) cube roots of cubics | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| generalised\_gunther\-prob\_gg\_7\-xi | PMT | \(x\-1\)\*\(3\*x\+1\)/\(\(3\*x\-1\)\*\(x\^3\-x\)\^\(2/3\)\) | Problem gg7 \(xi\) cube roots of cubics | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| generalised\_gunther\-prob\_gg\_7\-xii | PMT | \(x\-1\)\^2\*\(3\*x\+1\)/\(x\*\(x\+1\)\*\(3\*x\-1\)\*\(x\^3\-x\)\^\(1/3\)\) | Problem gg7 \(xii\) cube roots of cubics | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| generalised\_gunther\-prob\_gg\_7\-xiii | PMT | x\*\(x\+1\)\*\(3\*x\+1\)/\(\(x\-1\)\*\(3\*x\-1\)\*\(x\^3\-x\)\^\(2/3\)\) | Problem gg7 \(xiii\) cube roots of cubics | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| generalised\_gunther\-prob\_gg\_7\-xiv | PMT | x\*\(x\+1\)\*\(3\*x\+1\)/\(\(x\-1\)\^2\*\(3\*x\-1\)\*\(x\^3\-x\)\^\(1/3\)\) | Problem gg7 \(xiv\) cube roots of cubics | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| product\_rule\-product\_rule\_5\-ii | PMT | \(3\*x\^4\-2\*x\^2\-3\)/\(x\^4\*\(x\^2\+1\)\^2\)\*Sqrt\[\(x\^2\+1\)/\(x\^2\-1\)\] | Problem product\_rule\_5 \(ii\) | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| product\_rule\-product\_rule\_5\-iii | PMT | \(4\*x\^3\-5\*x\^2\-8\*x\+1\)/\(x\^2\+1\)\^3\*Sqrt\[\(x\^2\+1\)/\(x\^2\-x\-1\)\] | Problem product\_rule\_5 \(iii\) | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['7/3', 'ok', '0.0'\], \['13/5… |
+| product\_rule\-product\_rule\_5\-iv | PMT | x\^2\*\(x\^8\+2\*x\^4\-1\)/\(x\^4\+1\)\^2\*\(\(x\^4\+1\)/\(x\^4\-1\)\)\^\(1/4\) | Problem product\_rule\_5 \(iv\) | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| realis\-prob\_realis\_2\-ii | PMT | \(3\*x\+1\)/\(\(x\^2\-1\)\*Sqrt\[x\^3\-x\^2\-x\]\) | Problem prob\_realis\_2 \(ii\) \(elem: 2\*ArcT… | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['7/3', 'ok', '0.0'\], \['13/5… |
+| realis\-prob\_realis\_2\-v\_lower\_n1 | PMT | \(3\*x\+1\)/\(\(x\^2\-1\)\*Sqrt\[\(x\-1\)\*\(x\^2\-1\)\^1\-1\]\) | Problem prob\_realis\_2 \(v\) n=1, lower sig… | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['7/3', 'ok', '0.0'\], \['13/5… |
+| nested\-nested\_2\-n3\-inst | PMT | Sqrt\[2\*x\^3\+3\*x\^4/Sqrt\[x\]\] | Problem nested\_2, n=3 \(algebraic for all… | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['3/7', 'ok', '0.0'\], \['5/4'… |
+| nested\-nested\_3\-i | PMT | \(a/x\^3\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(i\), n=\-3 | PossibleZeroQ False; real ooobbbbbboooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_3\-iv | PMT | \(a\*x\^2\+b\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(iv\), n=2 | PossibleZeroQ False; real ooobbbbbboooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_3\-iv\-inst | PMT | \(2\*x\^2\+3\*x\*Sqrt\[x\]\)\^\(1/3\) | Problem nested\_3 \(iv\), n=2; inst a=2, b=… | PossibleZeroQ False; real ooobbbbbboooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_6\-i\-inst | PMT | Sqrt\[7\*x\^2\+5\*x\^2/Sqrt\[2/x\+3\]\]/Sqrt\[2/x\+3\] | Problem nested\_6 \(i\); inst a=2, b=3, c=5… | PossibleZeroQ False; real ooobbbbbboooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_6\-ii\-inst | PMT | Sqrt\[2/x\+3\]/Sqrt\[7\*x\^2\+5\*x\^2/Sqrt\[2/x\+3\]\] | Problem nested\_6 \(ii\); inst a=2, b=3, c=… | PossibleZeroQ False; real ooobbbbbboooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_6\-iii\-inst | PMT | Sqrt\[2/x\+3\]\*Sqrt\[7\*x\^2\+5\*x\^2/Sqrt\[2/x\+3\]\] | Problem nested\_6 \(iii\); inst a=2, b=3, c… | PossibleZeroQ False; real ooobbbbbboooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_6\-iv\-inst | PMT | 1/\(Sqrt\[2/x\+3\]\*Sqrt\[7\*x\^2\+5\*x\^2/Sqrt\[2/x\+3\]\]\) | Problem nested\_6 \(iv\); inst a=2, b=3, c=… | PossibleZeroQ False; real ooobbbbbbooooooo, complex obo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/3… |
+| nested\-nested\_12\-i\-inst | PMT | Sqrt\[2\^2\*x\^2\+3\]/\(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\) | Problem nested\_12 \(i\); inst a=2, b=3 | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['3/7', 'ok', '0.0'\], \['5/4'… |
+| nested\-nested\_12\-iv\-inst | PMT | \(2\^2\*x\^2\-3\)/\(\(2\^2\*x\^2\+3\)\*\(2\*x\-Sqrt\[2\^2\*x\^2\+3\]\)\^\(1/3\)\) | Problem nested\_12 \(iv\); inst a=2, b=3 | PossibleZeroQ True but numerically nonzero \(a PossibleZeroQ false positive?\) num=\[\['3/7', 'ok', '0.0'\], \['5/4'… |
+| timofeev\-timofeev\_1\-x | PMT | 1/\(\(x\^3\-5\*x\^2\+3\*x\+9\)\^2\)\^\(1/3\) | Problem timofeev\_1 \(x\) | PossibleZeroQ False; real oooooooooooobbbb, complex ooo num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/3… |
+| timofeev\-timofeev\_1\-xi | PMT | 1/\(\(x\^3\-5\*x\^2\+3\*x\+9\)\^4\)\^\(1/3\) | Problem timofeev\_1 \(xi\) | PossibleZeroQ False; real ooobbbboooooooooo, complex obb num=\[\['3/7', 'ok', '0.0'\], \['5/4', 'ok', '0.0'\], \['7/… |
+| potpourri\-p7\-iv | PMT | 1/\(81\*x\^4\-135\*x\^3\+54\*x\^2\+12\*x\-8\)\^\(1/3\) | Potpourri problem 7 \(iv\) | PossibleZeroQ False; real ooobbbbbbbooooooo, complex bbo num=\[\['5/4', 'ok', '0.0'\], \['7/3', 'ok', '0.0'\], \['13… |
 
-### Right on part of the real line only (D[F] = f on one interval, -f on another) (5)
+### Right on part of the real line only (D[F] = f on one interval, -f on another) (50)
 
 | id | method | integrand | book ref | detail |
 |-----------|------|------------------|---------|--------------|
-| multrad\-multiple\_radicals\_3\-i\-inst | PMT | \(x\^2\-2\*2\*x\+2\*3\+2\*5\-3\*5\)\*Sqrt\[x\-3\]\*Sqrt\[x\-5\]/\(\(x\^2\-\(3\+5\-1\)\*x\+3\*5\-2\)\*\(x\-2\)\^\(3/2\)\) | Problem multiple\_radicals\_3 \(i\); inst a=… | D\[F\] = f at 1 point\(s\), \-f at 2; points \[\['23/3', 'ok', '0.0'\], \['3/7', 'neg', '0.1813736'\], \['5/4', 'neg', '3… |
-| multrad\-multiple\_radicals\_3\-ii\-inst | PMT | \(x\^2\-2\*2\*x\+2\*3\+2\*5\-3\*5\)/\(\(x\^2\-\(3\+5\+1\)\*x\+2\+3\*5\)\*Sqrt\[x\-2\]\*Sqrt\[x\-3\]\*Sqrt\[x\-5\]\) | Problem multiple\_radicals\_3 \(ii\); inst a… | D\[F\] = f at 1 point\(s\), \-f at 2; points \[\['23/3', 'ok', '0.0'\], \['3/7', 'neg', '0.01852804'\], \['5/4', 'neg', '… |
-| multrad\-multiple\_radicals\_3\-iii\-inst | PMT | \(x\^2\-2\*3\*x\+2\*3\-2\*5\+3\*5\)\*Sqrt\[x\-3\]/\(\(x\^2\-\(2\+5\-1\)\*x\-3\+2\*5\)\*\(x\^2\-\(2\+5\+1\)\*x\+3\+2\*5\)\*Sqrt\[x\-2\]\*S… | Problem multiple\_radicals\_3 \(iii\); inst … | D\[F\] = f at 1 point\(s\), \-f at 2; points \[\['23/3', 'ok', '0.0'\], \['3/7', 'neg', '0.2290425'\], \['5/4', 'neg', '1… |
-| potpourri\-p7\-ii | PMT | 1/\(\(x\+1\)\*\(x\^4\-x\^2\-2\*x\+2\)\^\(3/2\)\) | Potpourri problem 7 \(ii\) | D\[F\] = f at 1 point\(s\), \-f at 2; points \[\['3/7', 'ok', '0.0'\], \['5/4', 'neg', '3.811096'\], \['7/3', 'neg', '0.0… |
-| potpourri\-p8\-i | PMT | Sqrt\[1\-x\^2\]/Sqrt\[1\-Sqrt\[1\-x\^2\]\] | Potpourri problem 8 \(nested radicals\) \(i… | D\[F\] = f at 2 point\(s\), \-f at 1; points \[\['3/7', 'ok', '0.0'\], \['2/9', 'ok', '0.0'\], \['\-1/3', 'neg', '7.884789… |
+| warmup\-prob\_warmup\_8 | PMT | Sqrt\[\(1\-x\)/\(1\+x\)\] | Problem 0.8 \(iii\) Stewart | PossibleZeroQ False; real ooonnnnooooooooo, complex ooo \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['2/9… |
+| warmup\-prob\_warmup\_11\-i | PMT | x\*Sqrt\[\(x\-2\)/\(3\-x\)\] | Problem 0.11 \(i\) | PossibleZeroQ False; real ooooooooooooonnnn, complex ooo \(o=ok n=\-f b=bad\); points \[\['7/3', 'ok', '0.0'\], \['13… |
+| warmup\-prob\_warmup\_11\-ii | PMT | 1/\(x\*\(x/\(1\-x\)\)\^\(3/2\)\) | Problem 0.11 \(ii\) | PossibleZeroQ False; real ooooooooooonnnnnn, complex ooo \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['2/… |
+| warmup\-prob\_warmup\_11\-iii | PMT | x\^2\*Sqrt\[\(x\-3\)/\(x\-2\)\] | Problem 0.11 \(iii\) | PossibleZeroQ False; real oooooooooooonnnnn, complex ooo \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| laurent\_poly\_subst\-prob\_laurent\_sub\_5\-i | PMT | \(\(x\^5\+1\)\*\(4\*x\^5\-1\)\)/\(x\*\(x\^5\-a\*x\+1\)\*Sqrt\[x\^6\+x\]\) | Problem 5 \(i\) | PossibleZeroQ False; real ooonnnnoooooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| laurent\_poly\_subst\-prob\_laurent\_sub\_5\-ii | PMT | \(\(x\^5\-1\)\*\(4\*x\^5\+1\)\)/\(x\*\(x\^5\-a\*x\-1\)\*Sqrt\[x\^6\-x\]\) | Problem 5 \(ii\) | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| laurent\_poly\_subst\-prob\_laurent\_sub\_13\-i… | PMT | \(\(4\*x\+3\)\*Sqrt\[2\*x\^4\-2\*x\^2\-x\]\)/\(\(2\*x\+1\)\*\(x\^3\+2\*x\+1\)\) | Problem 13 \(iv\) | PossibleZeroQ False; real ooonnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/3… |
+| rational\_subs\-prob\_rational\_sub\_3\-i | PMT | \(\(2\*x\^2\-2\*x\-1\)\*Sqrt\[x\^4\+x\]\)/\(2\*x\-1\)\^3 | Problem 3 \(i\) | PossibleZeroQ False; real ooonnnnoooooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| rational\_subs\-prob\_rational\_sub\_3\-ii\-ins… | PMT | \(\(2\*x\^2\-2\*3\*x\-3\)\*Sqrt\[2\*\(x\^2\+x\)\*\(2\*x\^2\-2\*x\+2\*3\)\]\)/\(2\*\(3\-2\*x\)\*\(2\*x\-3\)\^2\) | Problem 3 \(ii\) instantiated a=2,b=3 | PossibleZeroQ False; real ooonnnnoooooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| gunther\-prob\_gunther\_1\-i | PMT | x/\(\(2\*x\^3\-1\)\*Sqrt\[x\^4\-x\]\) | Problem 1 \(i\) | PossibleZeroQ False; real ooonnnnnnoooooooo, complex nno \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| gunther\-prob\_gunther\_3\-iv\-inst | PMT | \(2\*x\^2\+3\)/\(\(2\*x\^2\-3\)\*Sqrt\[2\*x\^3\+5\*x\^2\-3\*x\]\) | Problem 3 \(iv\) instantiated a=2,b=3,c=5 | PossibleZeroQ False; real ooonnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/3',… |
+| gunther\-prob\_gunther\_3\-v | PMT | \(4\*d\*x\^5\+b\)/\(\(a\*d\*x\^5\-c\*x\-a\*b\)\*Sqrt\[d\*x\^6\-b\*x\]\) | Problem 3 \(v\) | PossibleZeroQ False; real ooonnnnnnoooooooo, complex no \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/3… |
+| gunther\-prob\_gunther\_3\-v\-inst | PMT | \(4\*7\*x\^5\+3\)/\(\(2\*7\*x\^5\-5\*x\-2\*3\)\*Sqrt\[7\*x\^6\-3\*x\]\) | Problem 3 \(v\) instantiated a=2,b=3,c=5,d… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex n \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/3'… |
+| power\_expand\-power\_expand\_1\-i | PMT | Sqrt\[4\*x\^3\-3\*x\-1\]/x | Problem 1 \(i\) | PossibleZeroQ False; real ooonnnnoooooooooo, complex nno \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| power\_expand\-power\_expand\_3 | PMT | Sqrt\[x\]/Sqrt\[x\^3\+x\^2\-x\-1\] | Problem 3 \(iii\) AXIOM example | PossibleZeroQ False; real ooonnnnoooooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| chebychev\-chebychev\_3b\-viii | PMT | Sqrt\[\(\(Exp\[x\]\+Exp\[\-x\]\)/\(Exp\[x\]\-Exp\[\-x\]\)\)\] | Problem chebychev\_3b \(viii\) coth via Exp | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ooo \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| product\_rule\-product\_rule\_5\-i | PMT | x\^2\*\(x\^4\-2\)/\(x\^4\-1\)\*Sqrt\[x\^2/\(x\^4\-1\)\] | Problem product\_rule\_5 \(i\) \(solved\) | PossibleZeroQ False; real ooonnnnoonnoooooo, complex no \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/3… |
+| product\_rule\-product\_rule\_5\-v | PMT | \(9\*x\^9\-14\*b\*x\^6\-a\*x\^3\-4\*a\*b\)/\(x\^3\*\(x\^6\+a\)\^2\)\*\(\(x\^6\+a\)/\(x\^3\-b\)\)\^\(1/6\) | Problem product\_rule\_5 \(v\) | PossibleZeroQ False; real ooonnnnnnnnoooooo, complex bnb \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| product\_rule\-product\_rule\_5\-v\-inst | PMT | \(9\*x\^9\-14\*3\*x\^6\-2\*x\^3\-4\*2\*3\)/\(x\^3\*\(x\^6\+2\)\^2\)\*\(\(x\^6\+2\)/\(x\^3\-3\)\)\^\(1/6\) | Problem product\_rule\_5 \(v\) instantiated … | PossibleZeroQ False; real ooonnnnnnnnnooooo, complex bnb \(o=ok n=\-f b=bad\); points \[\['7/3', 'ok', '0.0'\], \['13… |
+| log\_term\-log\_term\_prob\_7\-main | PMT | \(29\*x\^2\+18\*x\-3\)/Sqrt\[x\^6\+4\*x\^5\+6\*x\^4\-12\*x\^3\+33\*x\^2\-16\*x\] | Problem log\_term\_prob\_7 Schultz | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| nested\-nested\_1\-iii | PMT | Sqrt\[a\*x\^2\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iii\), n=2 | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_1\-iii\-inst | PMT | Sqrt\[2\*x\^2\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iii\), n=2; inst a=2, b… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_1\-iv | PMT | Sqrt\[a\*x\^3\+b\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iv\), n=3 | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_1\-iv\-inst | PMT | Sqrt\[2\*x\^3\+3\*x\^2\*Sqrt\[x\]\] | Problem nested\_1 \(iv\), n=3; inst a=2, b=… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_2\-n1 | PMT | Sqrt\[a\*x\+b\*x\^2/Sqrt\[x\]\] | Problem nested\_2, n=1 \(algebraic for all… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_2\-n1\-inst | PMT | Sqrt\[2\*x\+3\*x\^2/Sqrt\[x\]\] | Problem nested\_2, n=1 \(algebraic for all… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_2\-n2 | PMT | Sqrt\[a\*x\^2\+b\*x\^3/Sqrt\[x\]\] | Problem nested\_2, n=2 \(algebraic for all… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_2\-n2\-inst | PMT | Sqrt\[2\*x\^2\+3\*x\^3/Sqrt\[x\]\] | Problem nested\_2, n=2 \(algebraic for all… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| nested\-nested\_2\-n3 | PMT | Sqrt\[a\*x\^3\+b\*x\^4/Sqrt\[x\]\] | Problem nested\_2, n=3 \(algebraic for all… | PossibleZeroQ False; real ooooooooooooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| multrad\-intro\-1 | PMT | \(x\^4\-12\)/\(\(x\^4\-8\*x\^2\+12\)\*Sqrt\[x\^2\-4\]\*Sqrt\[x\^2\-3\]\) | Section intro example \(solved, \-ArcTanh\) | PossibleZeroQ False; real nnnoooooooonnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '9.812729'\],… |
+| multrad\-multiple\_radicals\_0\-i | PMT | \(x\^4\-a\*b\)/\(\(d\*x\^4\-\(a\*d\+b\*d\-c\)\*x\^2\+a\*b\*d\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_0 \(i\) | PossibleZeroQ False; real nnnoooooooonnnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '0.3868618'… |
+| multrad\-multiple\_radicals\_0\-i\-inst | PMT | \(x\^4\-2\*3\)/\(\(7\*x\^4\-\(2\*7\+3\*7\-5\)\*x\^2\+2\*3\*7\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_0 \(i\); inst a=… | PossibleZeroQ False; real nnnooooooooonnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '0.1891279'… |
+| multrad\-multiple\_radicals\_0\-ii | PMT | \(x\^4\-a\*b\)/\(\(x\^4\+a\*b\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]\) | Problem multiple\_radicals\_0 \(ii\) | PossibleZeroQ False; real nnnooooooonnnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '0.4375095'\]… |
+| multrad\-multiple\_radicals\_0\-ii\-inst | PMT | \(x\^4\-2\*3\)/\(\(x\^4\+2\*3\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_0 \(ii\); inst a… | PossibleZeroQ False; real nnnooooooonnnnn, complex on \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '0.4571958'\], … |
+| multrad\-multiple\_radicals\_0\-iv | PMT | \(x\^4\-a\*b\)\*Sqrt\[x\^2\-a\]\*Sqrt\[x\^2\-b\]/\(x\^2\*\(d\*x\^4\+\(c\-a\*d\-b\*d\)\*x\^2\+a\*b\*d\)\) | Problem multiple\_radicals\_0 \(iv\) | PossibleZeroQ False; real nnnooooooonnnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '1.058826'\],… |
+| multrad\-multiple\_radicals\_0\-iv\-inst | PMT | \(x\^4\-2\*3\)\*Sqrt\[x\^2\-2\]\*Sqrt\[x\^2\-3\]/\(x\^2\*\(7\*x\^4\+\(5\-2\*7\-3\*7\)\*x\^2\+2\*3\*7\)\) | Problem multiple\_radicals\_0 \(iv\); inst a… | PossibleZeroQ False; real nnnooooooooonnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '0.2924838'… |
+| multrad\-multiple\_radicals\_2\-i | PMT | \(x\^4\+2\)/\(\(x\^4\-2\)\*Sqrt\[x\^2\-1\]\*Sqrt\[x\^2\+2\]\) | Problem multiple\_radicals\_2 \(i\) | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| multrad\-multiple\_radicals\_2\-iii\-inst | PMT | \(x\^4\+2\*2\*x\^2\-2\*3\)\*Sqrt\[x\^2\+2\]/\(\(x\^4\-\(3\+1\)\*x\^2\-2\)\*\(x\^4\+\(1\-3\)\*x\^2\+2\)\*Sqrt\[x\^2\-3\]\) | Problem multiple\_radicals\_2 \(iii\); inst … | PossibleZeroQ False; real ooonnnnnnoooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['7/3', 'ok', '0.0'\], \['13/5… |
+| multrad\-multiple\_radicals\_3\-i\-inst | PMT | \(x\^2\-2\*2\*x\+2\*3\+2\*5\-3\*5\)\*Sqrt\[x\-3\]\*Sqrt\[x\-5\]/\(\(x\^2\-\(3\+5\-1\)\*x\+3\*5\-2\)\*\(x\-2\)\^\(3/2\)\) | Problem multiple\_radicals\_3 \(i\); inst a=… | PossibleZeroQ False; real onnnnnnnnnnnnoooo, complex nnn \(o=ok n=\-f b=bad\); points \[\['23/3', 'ok', '0.0'\], \['3… |
+| multrad\-multiple\_radicals\_3\-ii | PMT | \(x\^2\-2\*a\*x\+a\*b\+a\*c\-b\*c\)/\(\(x\^2\-\(b\+c\+1\)\*x\+a\+b\*c\)\*Sqrt\[x\-a\]\*Sqrt\[x\-b\]\*Sqrt\[x\-c\]\) | Problem multiple\_radicals\_3 \(ii\) | PossibleZeroQ False; real nnnooooooooonnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['7/3', 'neg', '5.160072'\]… |
+| multrad\-multiple\_radicals\_3\-ii\-inst | PMT | \(x\^2\-2\*2\*x\+2\*3\+2\*5\-3\*5\)/\(\(x\^2\-\(3\+5\+1\)\*x\+2\+3\*5\)\*Sqrt\[x\-2\]\*Sqrt\[x\-3\]\*Sqrt\[x\-5\]\) | Problem multiple\_radicals\_3 \(ii\); inst a… | PossibleZeroQ False; real onnnnnnnnnnnnooo, complex nnn \(o=ok n=\-f b=bad\); points \[\['23/3', 'ok', '0.0'\], \['3/… |
+| multrad\-multiple\_radicals\_3\-iii\-inst | PMT | \(x\^2\-2\*3\*x\+2\*3\-2\*5\+3\*5\)\*Sqrt\[x\-3\]/\(\(x\^2\-\(2\+5\-1\)\*x\-3\+2\*5\)\*\(x\^2\-\(2\+5\+1\)\*x\+3\+2\*5\)\*Sqrt\[x\-2\]\*S… | Problem multiple\_radicals\_3 \(iii\); inst … | PossibleZeroQ False; real onnnnnnnnnnnooooo, complex nnn \(o=ok n=\-f b=bad\); points \[\['23/3', 'ok', '0.0'\], \['3… |
+| timofeev\-timofeev\_1\-ii | PMT | 1/\(\(x\-1\)\^3\*\(x\+2\)\^5\)\^\(1/4\) | Problem timofeev\_1 \(ii\) | PossibleZeroQ False; real ooonnnooooooooooo, complex obo \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| timofeev\-timofeev\_1\-v | PMT | \(x\+1/x\)/Sqrt\[\(x\+1\)\^3\*\(x\-2\)\] | Problem timofeev\_1 \(v\) | PossibleZeroQ False; real ooonnnnooooooooo, complex ooo \(o=ok n=\-f b=bad\); points \[\['7/3', 'ok', '0.0'\], \['13/… |
+| timofeev\-timofeev\_1\-vii | PMT | 1/Sqrt\[\(x\^3\-5\*x\^2\+3\*x\+9\)\] | Problem timofeev\_1 \(vii\) | PossibleZeroQ False; real ooooooooooooonnnn, complex ooo \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| timofeev\-timofeev\_1\-viii | PMT | 1/Sqrt\[\(x\^3\-5\*x\^2\+3\*x\+9\)\^3\] | Problem timofeev\_1 \(viii\) | PossibleZeroQ False; real ooonnnnoooooonnnn, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| potpourri\-p6\-i | PMT | Sqrt\[x\^4\-x\] | Potpourri problem 6 \(i\) | PossibleZeroQ False; real ooonnnnnnoooooooo, complex nno \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+| potpourri\-p7\-ii | PMT | 1/\(\(x\+1\)\*\(x\^4\-x\^2\-2\*x\+2\)\^\(3/2\)\) | Potpourri problem 7 \(ii\) | PossibleZeroQ False; real onnoooooooonnnnnn, complex oon \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['5/… |
+| potpourri\-p8\-i | PMT | Sqrt\[1\-x\^2\]/Sqrt\[1\-Sqrt\[1\-x\^2\]\] | Potpourri problem 8 \(nested radicals\) \(i… | PossibleZeroQ False; real oonnnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['3/7', 'ok', '0.0'\], \['2/… |
+| intro\-further\-schultz | PMT | \(29\*x\^2\+18\*x\-3\)/Sqrt\[x\^6\+4\*x\^5\+6\*x\^4\-12\*x\^3\+33\*x\^2\-16\*x\] | Introduction, Further Reading: Schultz p… | PossibleZeroQ False; real ooonnnnnnoooooooo, complex ono \(o=ok n=\-f b=bad\); points \[\['5/4', 'ok', '0.0'\], \['7/… |
+
+### Correct answers PossibleZeroQ cannot confirm (PossibleZeroQ bugs) (0)
+
+None.
 
 ### Antiderivatives not verifiable within the budget (0)
 

@@ -8,10 +8,10 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
 - [x] P1a Series: fixed pad loses k orders at a k-th order pole, short result returned silently (series.c)
 - [x] P1b PMT gate on positive evidence (fac local, Hold/Temporary, reclim Check, C overflow flag)
 - [x] P1c FLINT qqbar zero^(-n) guard + FLINT throw hook (no kernel abort)
-- [ ] P2a complex-point verification in harnesses
+- [x] P2a complex-point verification in harnesses (ddi_stress; trager_fricas_stress still TODO)
 - [ ] P2b PMT back-substitution in the integrand's own radicals; drop branch-cut acceptance
 - [ ] P2c power-free radicands before choosing m
-- [ ] P2d PossibleZeroQ is the sole verifier: triage 77 PZQ=False verified answers (24 Trager, 53 PMT), fix PZQ per
+- [~] P2d PossibleZeroQ is the sole verifier (PZQ deep-cancellation fixed v0.6091, harness PZQ-only; Trager/PMT internal numeric fallbacks still to remove): triage 77 PZQ=False verified answers (24 Trager, 53 PMT), fix PZQ per
       class, then remove numeric fallbacks (Trager spotCheck/numericZeroQ, PMT branchUnit, harness numeric acceptance)
 - [ ] P3a u = x^k pre-pass   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
 - [ ] P3d PMT timeouts: $PMProfile, fix dominant stages algorithmically

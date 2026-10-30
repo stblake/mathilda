@@ -189,6 +189,33 @@ def mathilda_points(mbin, cases, tmpdir):
         c["points"] = res.get(c["id"]) or tfs.CANDIDATES[:3]
 
 
+# The verdict is PossibleZeroQ[D[F, x] - f] ALONE (an antiderivative is
+# "valid for all complex x" exactly when that difference is identically zero).
+# The numeric probes below never accept an answer: they only DIAGNOSE one that
+# PossibleZeroQ did not confirm -- zero at every real and complex sample means a
+# PossibleZeroQ false negative (PZQ-FN, a PossibleZeroQ bug), +f/-f or
+# real-only agreement means a branch error (BRANCH), anything else WRONG.
+VERIFY_TMPL = r"""
+pzq = TimeConstrained[Quiet[PossibleZeroQ[D[r, x] - f]], 60, $Aborted];
+Print["@@PZQ ", pzq];
+dn = TimeConstrained[Quiet[D[r /. prm, x] - (f /. prm)], 30, $Aborted];
+Stress`Probe[tag_, p_] := Module[
+    {dv = TimeConstrained[Quiet[Block[{$MaxExtraPrecision = 400}, N[dn /. x -> p, 40]]], 5, $Aborted],
+     fv = Quiet[N[(f /. prm) /. x -> p, 40]], ok},
+  ok = If[NumberQ[dv] && NumberQ[fv],
+    Which[Abs[dv] <= 10^-TOL Max[1, Abs[fv]], "ok",
+          Abs[dv + 2 fv] <= 10^-TOL Max[1, Abs[fv]], "neg", True, "bad"], "na"];
+  Print[tag, " ", InputForm[p], " ", ok, " ", InputForm[If[NumberQ[dv], N[Abs[dv], 6], dv]]]];
+Scan[Stress`Probe["@@NUM", #] &, pts];
+(* a fixed spread across the real line, so every real component is probed --
+   including intervals where f is complex-valued (on a branch cut): there the
+   principal values are part of "valid for all complex x" *)
+Scan[If[Quiet[With[{v = N[(f /. prm) /. x -> #, 30]}, NumberQ[v] && Abs[v] < 10^8]],
+        Stress`Probe["@@NUM", #]] &,
+  {-40, -7, -3, -3/2, -1/2, -1/7, 1/5, 3/4, 5/4, 5/2, 7/2, 9/2, 10, 40}];
+Scan[Stress`Probe["@@CNUM", #] &, CPTS];
+"""
+
 RUN_TMPL = r"""
 f = (INTEGRAND);
 pts = POINTS;
@@ -203,28 +230,72 @@ status = Which[
   !FreeQ[r, Integrate | WORKER], "unevaluated",
   True, "elem"];
 Print["@@STATUS ", status];
-If[status === "elem",
-  (* numeric check first, on the antiderivative with the parameters already
-     instantiated (differentiating the symbolic answer and substituting later
-     can exhaust the process budget on large parametric answers); "neg" marks
-     D[F] = -f exactly, the signature of a radical read on the wrong branch *)
-  dn = TimeConstrained[Quiet[D[r /. prm, x] - (f /. prm)], 30, $Aborted];
-  Do[
-    Module[{dv = TimeConstrained[Quiet[N[dn /. x -> p, 40]], 15, $Aborted],
-            fv = Quiet[N[(f /. prm) /. x -> p, 40]], ok},
-      ok = If[NumberQ[dv] && NumberQ[fv],
-        Which[Abs[dv] <= 10^-TOL Max[1, Abs[fv]], "ok",
-              Abs[dv + 2 fv] <= 10^-TOL Max[1, Abs[fv]], "neg", True, "bad"], "na"];
-      Print["@@NUM ", InputForm[p], " ", ok, " ",
-        InputForm[If[NumberQ[dv], N[Abs[dv], 6], dv]]]],
-    {p, pts}];
-  Print["@@PZQ ", TimeConstrained[Quiet[PossibleZeroQ[D[r, x] - f]], 30, $Aborted]]];
+If[status === "elem", VERIFY];
 Print["@@DONE"];
 """
 
+REVERIFY_TMPL = r"""
+f = (INTEGRAND);
+pts = POINTS;
+prm = PRM;
+r = (RESULT);
+VERIFY
+Print["@@DONE"];
+"""
+
+# Complex sample points, off both axes (principal branches of the answer and
+# of the integrand are compared there, which real points alone cannot do).
+COMPLEX_POINTS = ("3/7 + 2/5 I", "-5/4 + 3/7 I", "7/3 - 4/9 I")
+
+
+def verify_body(tmpl):
+    return (tmpl.replace("VERIFY", VERIFY_TMPL)
+            .replace("CPTS", "{" + ", ".join(COMPLEX_POINTS) + "}"))
+
+
+def verdict(out, rec):
+    """Fill rec[status/detail/pzq/numeric/cnumeric] from a verify transcript."""
+    def grab(tag):
+        m = re.search(rf"^@@{tag} (.*)$", out, re.M)
+        return m.group(1).strip() if m else None
+    pzq = grab("PZQ")
+    nums = re.findall(r"^@@NUM (\S+) (ok|bad|neg|na) (.*)$", out, re.M)
+    cnums = re.findall(r"^@@CNUM (.+?) (ok|bad|neg|na) (\S+)$", out, re.M)
+    rec["pzq"] = pzq
+    rec["numeric"] = [list(n) for n in nums]
+    rec["cnumeric"] = [list(n) for n in cnums]
+    st = [n[1] for n in nums]
+    cst = [n[1] for n in cnums]
+    rec.pop("detail", None)
+    if pzq == "True":
+        if "bad" in st or "neg" in st or "bad" in cst or "neg" in cst:
+            rec["status"] = "WRONG"
+            rec["detail"] = "PossibleZeroQ True but numerically nonzero (a PossibleZeroQ false positive?)"
+        else:
+            rec["status"] = "ELEM"
+        return rec
+    real_ok = st.count("ok") >= 2 and not ({"bad", "neg"} & set(st))
+    cplx_ok = cst.count("ok") >= 2 and not ({"bad", "neg"} & set(cst))
+    why = "timed out" if pzq == "$Aborted" else str(pzq)
+    if real_ok and cplx_ok:
+        rec["status"] = "PZQ-FN"
+        rec["detail"] = f"PossibleZeroQ {why}, zero at every real and complex sample"
+    elif "neg" in st or "neg" in cst or real_ok:
+        rec["status"] = "BRANCH"
+        rec["detail"] = (f"PossibleZeroQ {why}; real {''.join(x[0] for x in st)}, "
+                         f"complex {''.join(x[0] for x in cst)} (o=ok n=-f b=bad)")
+    elif not st and not cst:
+        rec["status"] = "UNVERIFIED"
+        rec["detail"] = f"PossibleZeroQ {why}, no numeric sample"
+    else:
+        rec["status"] = "WRONG"
+        rec["detail"] = (f"PossibleZeroQ {why}; real {''.join(x[0] for x in st)}, "
+                         f"complex {''.join(x[0] for x in cst)}")
+    return rec
+
 
 def run_mathilda(mbin, case, method, timeout, tmpdir):
-    body = (RUN_TMPL.replace("INTEGRAND", case["f"])
+    body = (verify_body(RUN_TMPL).replace("INTEGRAND", case["f"])
             .replace("POINTS", "{" + ", ".join(case["points"]) + "}")
             .replace("PRM", subst_rules(case))
             .replace("WORKER", "Integrate`" + method)
@@ -257,34 +328,7 @@ def run_mathilda(mbin, case, method, timeout, tmpdir):
     elif st == "not elementary":
         rec.update(status="NONELEM", detail=rec["result"])
     elif st == "elem":
-        pzq = grab("PZQ")
-        nums = re.findall(r"^@@NUM (\S+) (ok|bad|neg|na) (.*)$", out, re.M)
-        rec["pzq"] = pzq
-        rec["numeric"] = [list(n) for n in nums]
-        bad = any(n[1] == "bad" for n in nums)
-        okn = sum(n[1] == "ok" for n in nums)
-        negn = sum(n[1] == "neg" for n in nums)
-        if bad:
-            rec["status"] = "WRONG"
-        elif negn and okn:
-            # D[F] = +f on part of the real domain and -f on the rest: a
-            # principal-branch answer that is wrong on some real interval
-            rec["status"] = "BRANCH"
-            rec["detail"] = "D[F] = f at %d point(s), -f at %d" % (okn, negn)
-        elif negn:
-            rec["status"] = "WRONG"
-            rec["detail"] = "D[F] = -f at every sample (global sign)"
-        elif okn == len(nums) and okn >= 2:
-            rec["status"] = "ELEM"
-            if pzq == "False":
-                rec["detail"] = "PossibleZeroQ[D[F, x] - f] is False, numeric check passes"
-        elif pzq == "True":
-            rec["status"] = "ELEM"
-            rec["detail"] = "verified by PossibleZeroQ only (numeric check incomplete)"
-        else:
-            rec["status"] = "UNVERIFIED"
-            rec["detail"] = ("could not be verified (PossibleZeroQ %s, %d/%d points)"
-                             % (pzq, okn, len(nums)))
+        verdict(out, rec)
     else:   # "failed", "unevaluated", or any other worker verdict string
         rec.update(status="DECLINE", detail=rec["result"])
     return rec
@@ -402,7 +446,7 @@ CLASSES = ("AGREE-ELEM", "AGREE-NONELEM", "MATHILDA-ONLY", "FRICAS-ONLY",
 def classify(m, fr, expect):
     ms, fs = m["status"], fr["status"]
     f_elem = fs == "ELEM"
-    if ms in ("WRONG", "BRANCH", "UNVERIFIED"):
+    if ms in ("WRONG", "BRANCH", "UNVERIFIED", "PZQ-FN"):
         return ms
     if ms == "NONELEM":
         if f_elem or expect == "elem":
@@ -418,6 +462,47 @@ def classify(m, fr, expect):
     if ms == "DECLINE":
         return "NEITHER"
     return ms
+
+
+def reverify(mbin, corpus, out, methods, filt, jobs):
+    """Re-run ONLY the verification of every stored Mathilda antiderivative
+    (status ELEM / WRONG / BRANCH / UNVERIFIED / PZQ-FN) of `methods`, in place:
+    the integrators are not called, so a change to the verifier (or to
+    PossibleZeroQ) is re-measured in minutes."""
+    d = json.load(open(out))
+    pts = {c["id"]: c for c in load_corpus(corpus)}
+    tmpdir = tempfile.mkdtemp(prefix="ddi_reverify_")
+    todo = [(c, m) for c in d["cases"] for m in methods
+            if (not filt or re.search(filt, c["id"] + " " + c["family"]))
+            and c["methods"].get(m, {}).get("status") in
+            ("ELEM", "WRONG", "BRANCH", "UNVERIFIED", "PZQ-FN")
+            and c["methods"][m].get("result")]
+    if todo:
+        need = {c["id"] for c, _ in todo if c["id"] in pts}
+        mathilda_points(mbin, [pts[i] for i in sorted(need)], tmpdir)
+
+    def work(job):
+        c, m = job
+        rec = c["methods"][m]
+        case = pts.get(c["id"], c)
+        body = (verify_body(REVERIFY_TMPL).replace("INTEGRAND", case["f"])
+                .replace("POINTS", "{" + ", ".join(case.get("points") or c.get("points") or []) + "}")
+                .replace("PRM", subst_rules(case))
+                .replace("RESULT", rec["result"]).replace("TOL", str(TOL_EXP)))
+        path = os.path.join(tmpdir, f"{c['id']}_{m}_rv.m")
+        tfs.mathilda_script(path, body)
+        o, _e, _rc, _w, to = tfs.run_proc([mbin, "-file", path], VERIFY_BUDGET + 60)
+        if re.search(r"^@@PZQ ", o, re.M):
+            verdict(o, rec)          # the verdict; unfinished probes only thin the diagnosis
+        else:
+            rec.update(status="UNVERIFIED", detail="PossibleZeroQ did not finish")
+        return c["id"], m, rec["status"]
+    with cf.ThreadPoolExecutor(jobs) as ex:
+        for i, (cid, m, st) in enumerate(ex.map(work, todo)):
+            print(f"[{i + 1}/{len(todo)}] {cid} {m}: {st}", file=sys.stderr, flush=True)
+    with open(out, "w") as fh:
+        json.dump(d, fh, indent=1)
+    reclassify(corpus, out)
 
 
 def reclassify(corpus, out):
@@ -453,6 +538,9 @@ def main():
                     help="re-run only --methods (and FriCAS unless --no-fricas) on the "
                          "selected cases and splice the results into the existing --out "
                          "report, keeping every other column and case")
+    ap.add_argument("--reverify", action="store_true",
+                    help="run no integrator: re-verify every stored antiderivative of "
+                         "--methods in --out (after a change to the verifier or to PossibleZeroQ)")
     ap.add_argument("--reclassify", action="store_true",
                     help="run nothing: re-read expect values from --corpus, re-apply the "
                          "FriCAS special-function rule to the stored answers, and "
@@ -461,6 +549,10 @@ def main():
 
     if args.reclassify:
         reclassify(args.corpus, args.out)
+        return
+    if args.reverify:
+        reverify(tfs.find_mathilda(), args.corpus, args.out,
+                 [m for m in args.methods.split(",") if m], args.filter, args.jobs)
         return
     cases = load_corpus(args.corpus)
     if args.filter:
