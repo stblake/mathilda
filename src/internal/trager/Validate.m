@@ -29,10 +29,13 @@ detectRadical[f_, x_Symbol] := Module[{pows, bases, b0, exps, n},
     throwDecline["transcendental function in the integrand"]];
   If[!FreeQ[f, Complex] || !FreeQ[f, _Real],
     throwDecline["coefficients outside Q"]];
+  pows = radicalPowers[f, x];
+  (* no radical in x: a rational function, over Q or over a number field Q(theta)
+     (algebraic constants are fine there -- canonicalForm routes it to the
+     rational integrator) *)
+  If[pows === {}, Return[None]];
   If[!FreeQ[f, Power[c_, _Rational] /; FreeQ[c, x]],
     throwDecline["algebraic constant in the integrand (coefficients must be rational)"]];
-  pows = radicalPowers[f, x];
-  If[pows === {}, Return[None]];
   If[!FreeQ[First /@ pows, Power[_, _Rational]],
     throwDecline["nested radicals"]];
   (* Normalise each base; a base that is the reciprocal of another base is    *)
@@ -80,7 +83,7 @@ canonicalForm::usage = "canonicalForm[f, x] validates the integrand f and return
 canonicalForm[f_, x_Symbol] := Module[{rad, b, n, p, q, g, y, yh, fy, t, num, den, numC, denInv, coeffs},
   rad = detectRadical[f, x];
   If[rad === None,
-    If[!rationalFunctionQ[f, x], throwDecline["integrand is not algebraic over Q(x)"]];
+    If[!algebraicRationalFunctionQ[f, x], throwDecline["integrand is not algebraic over Q(x)"]];
     Return[<|"x" -> x, "b" -> 1, "n" -> 1, "q" -> 1, "g" -> 1, "y" -> None, "coeffs" -> {Together[f]}|>]];
   b = rad["b"]; n = rad["n"];
   p = Numerator[Together[b]]; q = Denominator[Together[b]];

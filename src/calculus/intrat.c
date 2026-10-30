@@ -747,9 +747,45 @@ static Expr* intrat_derivative_recognition(Expr* num, Expr* den, Expr* x) {
  * factorisation as `Times[c, Power[p1, k1], Power[p2, k2], ...]`
  * (or a single Power[]/atomic factor).  We walk that structure,
  * grouping factors by multiplicity. */
+/* True iff e carries a radical constant: Power[c, r] with c a number (no
+ * symbol) and r a non-integer rational -- Sqrt[2], 3^(1/3), ... */
+static bool intrat_has_radical_constant(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* r = e->data.function.args[1];
+        bool num_base = b->type == EXPR_INTEGER || b->type == EXPR_BIGINT ||
+            (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+             b->data.function.head->data.symbol.name == SYM_Rational);
+        bool frac_exp = r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+             r->data.function.head->data.symbol.name == SYM_Rational;
+        if (num_base && frac_exp) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_has_radical_constant(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* intrat_squarefree_list(Expr* p) {
-    /* Run FactorSquareFree first. */
-    Expr* fs = internal_factorsquarefree((Expr*[]){expr_copy(p)}, 1);
+    /* Run FactorSquareFree first.  Over a number field (radical constants in
+     * the coefficients) the plain call treats Sqrt[2] as an independent
+     * indeterminate and misses repeated factors: the Rothstein-Trager
+     * resultant (99 - 70 Sqrt[2]) (16 t^2 - 1)^2 of
+     * (x^2 - 3 + 2 Sqrt[2])/(x^4 + (2 - 4 Sqrt[2]) x^2 + 17 - 12 Sqrt[2])
+     * came back as one "squarefree" quartic, and LogToReal divided by its zero
+     * discriminant (Integrate answered Indeterminate).  Extension -> Automatic
+     * factors over the field the coefficients generate. */
+    Expr* fs;
+    if (intrat_has_radical_constant(p)) {
+        Expr* opt = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol("Extension"), expr_new_symbol(SYM_Automatic) }, 2);
+        fs = expr_new_function(expr_new_symbol("FactorSquareFree"),
+            (Expr*[]){ expr_copy(p), opt }, 2);
+    } else {
+        fs = internal_factorsquarefree((Expr*[]){expr_copy(p)}, 1);
+    }
     Expr* fs_eval = evaluate(fs);
     expr_free(fs);
     if (!fs_eval) return NULL;

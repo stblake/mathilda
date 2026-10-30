@@ -200,7 +200,12 @@ tragerIntegrateBody[f_, x_Symbol, method_String] := Module[
   If[!MemberQ[{"Trager", "Kauers"}, method], throwDecline["unknown method " <> method]];
   cf = canonicalForm[f, x];
   n = cf["n"]; coeffs = cf["coeffs"];
-  If[n === 1, throwDecline["no radical in the integrand (a rational function)"]];
+  (* no radical: a rational function over Q or a number field -- the rational
+     integrator's answer, verified like every other one *)
+  If[n === 1,
+    total = rationalIntegral[coeffs[[1]], x];
+    spotCheck[f, total, x];
+    Return[total]];
   g = cf["g"]; yh = cf["y"]; yexpr = radicalExpression[cf];
   total = rationalIntegral[coeffs[[1]], x];
   Do[

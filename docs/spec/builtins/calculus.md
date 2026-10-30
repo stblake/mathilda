@@ -3043,7 +3043,11 @@ Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `Integrate[f, x, Method -> "Trager"]` (and the method symbol `Integrate\`Trager[f, x]`)
 integrates `f`, a rational function of `x` and powers of a single radical
 `r(x)^(1/n)`, with `r` in Q(x) and rational coefficients. Several powers of one
-radicand are merged: `Sqrt[x]` and `x^(1/3)` are powers of `x^(1/6)`.
+radicand are merged: `Sqrt[x]` and `x^(1/3)` are powers of `x^(1/6)`. An
+integrand with no radical (a rational function, over Q or over a number field
+`Q(Sqrt[2], ...)`) is integrated as a rational function and verified (v0.6094);
+it used to decline. Every answer must satisfy
+`PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]]` (v0.6093).
 
 The method follows B. M. Trager, *Integration of Algebraic Functions* (MIT thesis,
 1984), restricted to simple radical extensions. It is implemented in Mathilda's own

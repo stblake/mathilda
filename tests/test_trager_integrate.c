@@ -197,6 +197,12 @@ static void test_checks(void) {
     /* antiderivativeQ is PossibleZeroQ alone (no numeric fallback, v0.6092) */
     TR_TRUE("antiderivativeQ[(1 + x^4)^(-1/4), 1/4 ArcTan[(-2 x^3 (1 + x^4)^(1/4) + 2 x (1 + x^4)^(3/4))/(1 + 2 x^4 - 2 x^2 Sqrt[1 + x^4])] + 1/4 Log[1 + 2 x^4 + 2 x^3 (1 + x^4)^(1/4) + 2 x^2 Sqrt[1 + x^4] + 2 x (1 + x^4)^(3/4)], x]");
     TR_FALSE("antiderivativeQ[1/Sqrt[x^2], Sqrt[x^2], x]");
+    /* no radical: a rational function over Q or a number field is integrated
+     * (it used to decline), and the answer is verified like any other */
+    TR_TRUE("Module[{f = 1/(x^4 + 1), r}, r = TragerIntegrate[f, x]; !ListQ[r] && antiderivativeQ[f, r, x]]");
+    TR_TRUE("Module[{f = ((1 + Sqrt[3]) x^2 - 4 Sqrt[3] + 4)/((9 + 5 Sqrt[3]) x^4 + 24 x^2 - 80 Sqrt[3] + 144), r},"
+            " r = TragerIntegrate[f, x]; !ListQ[r] && antiderivativeQ[f, r, x]]");
+    TR_TRUE("ListQ[TragerIntegrate[Sqrt[2] x/Sqrt[x^2 + 1], x]]");   /* radical + algebraic constant: still out of scope */
     /* antiderivativeQ */
     TR_TRUE("antiderivativeQ[1/Sqrt[x^2 + 1], Log[x + Sqrt[x^2 + 1]], x]");
     TR_TRUE("antiderivativeQ[1/Sqrt[x^2 + 1], ArcSinh[x] + 7, x]");
@@ -226,7 +232,7 @@ static void test_public_entry_points(void) {
     TR_EQ("TragerIntegrate[1/Sqrt[x^2 + 1], x, \"Trager\"]", "Log[x + Sqrt[1 + x^2]]");
     TR_TRUE("TrueQ[PossibleZeroQ[D[TragerIntegrate[1/Sqrt[x^2 + 1], x, \"Kauers\"], x] - 1/Sqrt[x^2 + 1]]]");
     TR_TRUE("TragerIntegrate[1/Sqrt[x^2 + 1], x, \"Foo\"] === {\"failed\", \"unknown method Foo\"}");
-    TR_TRUE("TragerIntegrate[1/(x^2 + 1), x] === {\"failed\", \"no radical in the integrand (a rational function)\"}");
+    TR_TRUE("TragerIntegrate[1/(x^2 + 1), x] === ArcTan[x]");   /* a rational function is integrated (v0.6094) */
     TR_TRUE("TragerIntegrate[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("TragerIntegrate[x/Sqrt[1 - x^3], x] === {\"not elementary\", \"the Hermite remainder has a pole at infinity\"}");
     TR_TRUE("MatchQ[TragerIntegrate[(x^4 + 1)^(-1/4), x, \"Kauers\"], {\"failed\", _String}]");
@@ -352,8 +358,6 @@ static const char* const declines[] = {
     "Sin[x] Sqrt[x]",
     "Sqrt[x^2 + a]",                  /* parameter */
     "x^Pi",
-    "x^2",                            /* rational: no radical */
-    "1/(x^2 + 1)",
     "Log[x] Sqrt[x]",
     "Sqrt[x] + (x + 1)^(1/3)",
     NULL
@@ -419,7 +423,8 @@ static void test_qualified_symbols(void) {
     TR_TRUE("Integrate`TragerKauers[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[(x^4 + 1)^(-1/4), x] === {\"failed\", \"Kauers' heuristic: no principal power of the residue ideal\"}");
     TR_TRUE("Integrate`Trager[Sqrt[x] + Sqrt[x + 1], x] === {\"failed\", \"more than one radicand (a radical compositum)\"}");
-    TR_TRUE("Integrate`Trager[x^2, x] === {\"failed\", \"no radical in the integrand (a rational function)\"}");
+    TR_TRUE("Integrate`Trager[x^2, x] === x^3/3");   /* rational: integrated, not declined (v0.6094) */
+    TR_TRUE("Integrate`Trager[1/(x^2 + 1), x] === ArcTan[x]");
     TR_TRUE("MatchQ[Integrate`Trager[5/((x - 3) Sqrt[x^3 - 2]), x], {\"not elementary\", s_String /; StringContainsQ[s, \"infinite order\"]}]");
     TR_EQ("Integrate`Trager[1/Sqrt[x^2 + 1], x]", "Log[x + Sqrt[1 + x^2]]");
     TR_EQ("Integrate`TragerKauers[x/Sqrt[x^2 + 1], x]", "Sqrt[1 + x^2]");

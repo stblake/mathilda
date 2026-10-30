@@ -729,6 +729,33 @@ static void test_closed_nth_root_nonic_plus(void) {
  * part's discriminant 16 c[2] read as sign-unknown and the complex-pair branch's
  * Sqrt[-16 c[2]] = 4 I Sqrt[c[2]] collapsed the ArcTanh contribution to 0:
  * Integrate[1/(c[2] - x^2), x] was 0. */
+/* Number-field coefficients whose Rothstein-Trager resultant has a REPEATED
+ * factor hidden by an algebraic content: (99 - 70 Sqrt[2]) (16 t^2 - 1)^2.
+ * FactorSquareFree without Extension treated Sqrt[2] as an indeterminate, the
+ * quartic went to LogToReal as if squarefree, and Integrate answered
+ * Indeterminate (DDI Vol. 1, warmup problem 2d). */
+static void assert_integral_pzq(const char* integrand) {
+    /* number-field coefficients: Together/Cancel cannot reduce the radical
+     * identities, PossibleZeroQ decides */
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Module[{r = Integrate[%s, x]}, FreeQ[r, Integrate | Indeterminate] && PossibleZeroQ[D[r, x] - (%s)]]",
+        integrand, integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "True") != 0) printf("FAIL: Integrate[%s, x] not verified\n", integrand);
+    ASSERT_STR_EQ(got, "True");
+    free(got); expr_free(e); expr_free(res);
+}
+
+static void test_number_field_repeated_residues(void) {
+    assert_integral_pzq("(x^2 - 3 + 2 Sqrt[2])/(x^4 + (2 - 4 Sqrt[2]) x^2 + 17 - 12 Sqrt[2])");
+    assert_integral_pzq("(x^6 + (3 - 2 Sqrt[2]) x^4 + (12 Sqrt[2] - 17) x^2 + 70 Sqrt[2] - 99)/"
+                        "(x^8 + (8 - 8 Sqrt[2]) x^6 + (78 - 56 Sqrt[2]) x^4 + (328 - 232 Sqrt[2]) x^2 - 408 Sqrt[2] + 577)");
+    assert_integral_pzq("((1 + Sqrt[3]) x^2 - 4 Sqrt[3] + 4)/((9 + 5 Sqrt[3]) x^4 + 24 x^2 - 80 Sqrt[3] + 144)");
+}
+
 static void test_opaque_parameter_log_part(void) {
     assert_integral_correct("1/(c[2] - x^2)");
     assert_integral_correct("1/(C[2] - x^2)");
@@ -799,6 +826,7 @@ int main(void) {
     TEST(test_closed_nth_root_octic_plus);
     TEST(test_closed_nth_root_nonic_plus);
     TEST(test_opaque_parameter_log_part);
+    TEST(test_number_field_repeated_residues);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

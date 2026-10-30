@@ -15,7 +15,7 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
       class, then remove numeric fallbacks (Trager spotCheck/numericZeroQ, PMT branchUnit, harness numeric acceptance)
 - [ ] P3a u = x^k pre-pass   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
 - [ ] P3d PMT timeouts: $PMProfile, fix dominant stages algorithmically
-- [ ] P4a Trager routing (rational, algebraic constants)  - [ ] P4b Trager over Q(params)  - [ ] P4c Trager timeouts
+- [x] P4a Trager routing (rational/number-field rational done v0.6094; radical + algebraic constant needs NF constant field -> with P4b)  - [ ] P4b Trager over Q(params)  - [ ] P4c Trager timeouts
 - [ ] final full rerun, before/after report, PDF
 - Follow-up plan: Trager for general algebraic function fields (nested / multiple radicals)
 
