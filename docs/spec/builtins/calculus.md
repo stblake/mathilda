@@ -1507,7 +1507,12 @@ monotonically down.
      method runs until it decides, and any limit is the caller's own
      `TimeConstrained`.  Every explicit answer is therefore verified to completion
      (an exhausted verify budget used to accept the antiderivative as the
-     principal branch unverified).
+     principal branch unverified).  Acceptance is on positive evidence only
+     (v0.6089): a verified unit factor, dependence on x, no `Hold`, and no escaped
+     Module local (a `Temporary` symbol other than a `Function`'s bound variable).
+     A `$RecursionLimit` overflow inside the method, which does not abort but
+     degrades evaluation, gives `{"failed", "internal error: $RecursionLimit
+     exceeded"}` -- never an answer or a certificate.
      Cascade-gated to skip pure rational functions (BronsteinRational's job)
      and, as of v0.191, pseudo-elliptic `F/R^p` integrands (a fractional power
      of a degree-≥3 polynomial), which are the following Goursat stage's

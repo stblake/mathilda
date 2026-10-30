@@ -1010,6 +1010,7 @@ static Expr* builtin_integrate_pmt(Expr* res) {
      * user.  The fired-counter that the package's internal Check reads still
      * advances while suppressed, so its failure detection is unaffected. */
     mth_msg_suppress_push();
+    bool overflow_before = eval_overflow_fired();
     Expr* result;
     if (cascade) {
         result = call_stage("ParallelMixed`ParallelIntegrateMixed",
@@ -1040,6 +1041,18 @@ static Expr* builtin_integrate_pmt(Expr* res) {
     }
     mth_msg_suppress_pop();
     tc_async_defer_pop();
+    /* A $RecursionLimit overflow inside the package does not abort: it leaves
+     * every enclosing loop in a one-rewrite degraded mode, in which the
+     * package's own decline branches can be skipped.  Nothing produced in that
+     * state is evidence of anything -- neither an antiderivative nor a
+     * certificate -- so it becomes a failure tuple (a List: the cascade and
+     * the Method stage treat it as a decline). */
+    if (!overflow_before && eval_overflow_fired()) {
+        if (result) expr_free(result);
+        result = expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_new_string("failed"),
+                       expr_new_string("internal error: $RecursionLimit exceeded") }, 2);
+    }
     /* A {"not elementary", ...} certificate is the package's PROOF that no
      * elementary antiderivative exists -- report it Mathematica-style, exactly
      * as RischTranscendental does for its own field decision.  Emitted after the
@@ -1129,20 +1142,49 @@ static bool pmt_has_foreign_kernel(const Expr* e, const Expr* x) {
 
 /* True iff `r` mentions a user-level symbol that occurs in neither `f` nor `x`
  * -- a variable leaked out of an internal substitution.  System symbols (Pi, E,
- * I, builtin heads) are exempt. */
-static bool pmt_leaks_symbol(const Expr* r, const Expr* f, const Expr* x) {
+ * I, builtin heads) are exempt, and so are the bound variables of a Function
+ * (RootSum[Function[z, ...], ...]); a Module local (Temporary) is NOT exempt
+ * anywhere else, since an attribute alone once let the unassigned
+ * ParallelMixed`Private`r$NNN through as the "antiderivative". */
+#define PMT_MAX_BOUND 32
+static bool pmt_leaks_symbol_b(const Expr* r, const Expr* f, const Expr* x,
+                               const Expr** bound, int nb) {
     if (!r) return false;
     if (r->type == EXPR_SYMBOL) {
+        for (int i = 0; i < nb; i++)
+            if (expr_eq((Expr*)r, (Expr*)bound[i])) return false;
         if (pmt_depends(f, r) || expr_eq((Expr*)r, (Expr*)x)) return false;
         SymbolDef* d = symtab_lookup(r->data.symbol.name);
+        if (d && (d->module_temp || (d->attributes & ATTR_TEMPORARY))) return true;
         if (d && (d->is_system || d->builtin_func || d->attributes)) return false;
         return true;
     }
     if (r->type != EXPR_FUNCTION) return false;
-    if (pmt_leaks_symbol(r->data.function.head, f, x)) return true;
+    const Expr* h = r->data.function.head;
+    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Function") == 0 &&
+        r->data.function.arg_count >= 2) {
+        /* Function[v, body] / Function[{v1, ...}, body]: v is bound in body */
+        const Expr* v = r->data.function.args[0];
+        const Expr* nbound[PMT_MAX_BOUND];
+        int n = nb < PMT_MAX_BOUND ? nb : PMT_MAX_BOUND;
+        for (int i = 0; i < n; i++) nbound[i] = bound[i];
+        if (v->type == EXPR_SYMBOL && n < PMT_MAX_BOUND) nbound[n++] = v;
+        else if (v->type == EXPR_FUNCTION)
+            for (size_t i = 0; i < v->data.function.arg_count && n < PMT_MAX_BOUND; i++)
+                if (v->data.function.args[i]->type == EXPR_SYMBOL)
+                    nbound[n++] = v->data.function.args[i];
+        for (size_t i = 1; i < r->data.function.arg_count; i++)
+            if (pmt_leaks_symbol_b(r->data.function.args[i], f, x, nbound, n)) return true;
+        return false;
+    }
+    if (pmt_leaks_symbol_b(h, f, x, bound, nb)) return true;
     for (size_t i = 0; i < r->data.function.arg_count; i++)
-        if (pmt_leaks_symbol(r->data.function.args[i], f, x)) return true;
+        if (pmt_leaks_symbol_b(r->data.function.args[i], f, x, bound, nb)) return true;
     return false;
+}
+
+static bool pmt_leaks_symbol(const Expr* r, const Expr* f, const Expr* x) {
+    return pmt_leaks_symbol_b(r, f, x, NULL, 0);
 }
 
 /* Automatic-cascade / Method -> "ParallelMixedTower" stage: evaluate the method

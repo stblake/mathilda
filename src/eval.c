@@ -89,6 +89,7 @@ static uint64_t g_pack_gate_ticks = 0;
 
 int  eval_get_recursion_limit(void) { return eval_recursion_limit; }
 int  eval_get_recursion_depth(void) { return eval_recursion_depth; }
+bool eval_overflow_fired(void) { return eval_overflow; }
 void eval_set_recursion_limit(int n) {
     eval_recursion_limit = (n >= MIN_RECURSION_LIMIT) ? n : DEFAULT_RECURSION_LIMIT;
 }

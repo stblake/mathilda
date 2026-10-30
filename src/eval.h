@@ -108,6 +108,11 @@ Expr* eval_report_uncaught(Expr* e);
 int  eval_get_recursion_limit(void);
 void eval_set_recursion_limit(int n);
 int  eval_get_recursion_depth(void);
+/* True once a $RecursionLimit overflow has fired in the current top-level
+ * evaluation (the sticky flag that degrades every enclosing fixed-point loop
+ * to one rewrite).  A caller that runs a heavy sub-evaluation reads it before
+ * and after to tell whether its result was produced in that degraded mode. */
+bool eval_overflow_fired(void);
 
 /* Force the internal recursion-depth counter back to `n`, clearing the
  * sticky overflow flag.  Intended ONLY for siglongjmp-based unwinds

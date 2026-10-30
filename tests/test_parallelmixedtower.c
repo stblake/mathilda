@@ -235,6 +235,23 @@ static void test_no_false_certificate_series_precision(void) {
                 "True");
 }
 
+/* Run LAST: it replaces a package helper.  A $RecursionLimit overflow does not
+ * abort -- the evaluator Holds the call and degrades every enclosing loop to one
+ * rewrite -- so nothing produced while one fired may be returned as an answer
+ * or a certificate.  Force a real overflow inside the 2-arg entry and require a
+ * failure tuple from the package, the qualified symbol and the Method form. */
+static void test_recursion_overflow_declines(void) {
+    assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
+                "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
+                "ParallelMixed`Private`VanishingDenominator[___] := ParallelMixed`Private`boom[0]; 0", "0");
+    assert_eval("Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[x^2 + 1]/x, x]]",
+                "{\"failed\", \"internal error: $RecursionLimit exceeded\"}");
+    assert_eval("Quiet[Integrate`ParallelMixedTower[Sqrt[x^2 + 1]/x, x]]",
+                "{\"failed\", \"internal error: $RecursionLimit exceeded\"}");
+    assert_eval("Head[Quiet[Integrate[Sqrt[x^2 + 1]/x, x, Method -> \"ParallelMixedTower\"]]]",
+                "Integrate");
+}
+
 static void test_method_declines_cleanly(void) {
     /* Genuinely non-elementary: the Method form must DECLINE, leaving Integrate
      * unevaluated so the cascade / caller sees no answer (not a wrong one). */
@@ -516,6 +533,7 @@ void test_parallelmixedtower(void) {
     TEST(test_no_false_certificate_curve_free);
     TEST(test_certifies_curve_free_nonelementary);
     TEST(test_nontorsion_divisor_certificate);
+    TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");
 }

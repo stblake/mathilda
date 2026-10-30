@@ -2679,7 +2679,7 @@ VanishingDenominator[fpair_, back_, x_] := Module[{den, vals, v},
     {c, fpair}];
   None];
 
-ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, integrand = integrand0},
+ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, integrand = integrand0},
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
   bt = Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"];
   If[bt === $Failed || ! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", integrand}]];
@@ -2794,7 +2794,8 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
            If[Abs[dv[[anchor]] - fv[[anchor]]] < tol, 1, -1]],
         True, 0]]],                                          (* not a unit multiple: wrong answer *)
     $ParallelMixedVerifyBudget, 1];
-  fac = branchUnit[surf];
+  fac = branchUnit[surf];                 (* a Module local: a stale global
+                                              value must never pass the gate *)
   (* Second embedding of the constant field.  The ansatz is solved over Q(i) (or
      a number field containing it), and NOTHING in the linear algebra chooses
      between the two embeddings i -> +-i: both give a solution, and only one of
@@ -2816,7 +2817,27 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
     If[fac === 0 || FreeQ[{1, -1, I, -I}, fac], Return[{"failed", "verification failed"}]];
     surf = surfC];
   If[fac =!= 1, surf = fac surf];
-  surf],
+  (* Accept only on POSITIVE evidence.  A $RecursionLimit overflow does not
+     abort: the evaluator wraps the overflowing call in Hold and stops every
+     enclosing fixed-point loop after one rewrite, so the decline branches
+     above can be skipped and whatever is in surf falls out -- once the
+     unassigned Module local r$NNN of the pair form.  So the answer must be
+     verified (a unit fac), depend on x unless f is zero, carry no Hold, and
+     contain no Temporary symbol (a Module local that escaped its scope).
+     The C caller (builtin_integrate_pmt) independently declines any result
+     produced while an overflow fired. *)
+  If[TrueQ[MemberQ[{1, -1, I, -I}, fac]] &&
+     (! FreeQ[surf, x] || TrueQ[PossibleZeroQ[integrand0]]) &&
+     FreeQ[surf, Hold] &&
+     ! AnyTrue[Complement[
+                  DeleteDuplicates[Cases[{surf}, _Symbol, {0, Infinity}, Heads -> True]],
+                  (* the bound variable of a Function (RootSum[Function[z, ...], ...])
+                     is a Temporary symbol legitimately *)
+                  Flatten[Cases[{surf}, Function[v_, __] :> v, {0, Infinity}, Heads -> True]]],
+                MemberQ[Attributes[#], Temporary] &],
+    surf,
+    {"failed", "verification failed"}]],
+  {"failed", "internal error: $RecursionLimit exceeded"}, {$RecursionLimit::reclim}],
   $ParallelMixedTimeBudget, {"failed", "time budget exceeded"}];
 
 (* Robustness backstop: a few integrands drive an internal stage (split-specials
@@ -2871,8 +2892,10 @@ TransConsts[exprs_, gens_] := Union[Join[
 (* the pair-form entry point.  No non-elementarity certificate is issued when the coefficient
    field has transcendental constants (parameters, E, Pi, Log[2]): the unit and S'-unit
    searches are complete over a number field only *)
-ParallelIntegrateMixed[f00_List, T0_Association, opts : OptionsPattern[]] := Module[{trans, r},
+ParallelIntegrateMixed[f00_List, T0_Association, opts : OptionsPattern[]] := Module[{trans, r = {"failed", "internal error: no result"}},
   trans = TransConsts[{f00, T0["derivs"], T0["q"]}, T0["gens"]];
+  (* r starts as a failure tuple, so an interrupted assignment can never
+     return the bare local r$NNN *)
   r = iParallelIntegrateMixed[f00, T0, opts];
   If[trans =!= {} && ListQ[r] && r[[1]] === "not elementary",
     {"failed", "certificate withheld: transcendental constants in the coefficient field", trans, r}, r]];
