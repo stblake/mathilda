@@ -212,7 +212,9 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
         nf_init(F->nf, F->mu);
         gr_ctx_init_nf(F->K, F->mu);
     } else if (F->kind == PM_GF) {
-        if (gr_ctx_init_nmod(F->K, F->p) != GR_SUCCESS) { fb_varset_free(&F->vs); return 0; }
+        /* p is a checked prime >= 2.  gr_ctx_init_nmod returns void before FLINT
+         * 3.3 and int (failing only for p == 0) after, so its result is unused. */
+        gr_ctx_init_nmod(F->K, F->p);
     } else {
         gr_ctx_init_fmpq(F->K);
     }
