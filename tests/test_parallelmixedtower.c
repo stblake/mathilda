@@ -244,6 +244,29 @@ static void test_no_false_certificate_series_precision(void) {
  * rewrite -- so nothing produced while one fired may be returned as an answer
  * or a certificate.  Force a real overflow inside the 2-arg entry and require a
  * failure tuple from the package, the qualified symbol and the Method form. */
+/* A root nested on a conic: BuildTower parametrises the conic BEFORE it
+ * normalises the outer root.  Splitting a generator factor off the outer base
+ * first (Sqrt[x (x + y)] -> Sqrt[x] Sqrt[x + y]) flattened x = u^2 and made the
+ * conic a quartic in u, so the outer root demanded a second radical and the
+ * tower was never built.  The Euler step also takes a parametric square root of
+ * the leading (or constant) coefficient: Sqrt[a^2] -> a, Sqrt[b^2] -> b. */
+static void test_euler_before_root_split(void) {
+    const char *cases[] = {
+        "Sqrt[x^2 + x Sqrt[x^2 - 1]]/(x Sqrt[x^2 - 1])",      /* DDI potpourri p8 (v) */
+        "Sqrt[Sqrt[a^2 x^2 + b] + a x]",                      /* nested 15 (i): Sqrt[a^2] */
+        "Sqrt[Sqrt[a x^2 + b^2] + b]",                        /* nested 14 (i): point (0, b) */
+        "Sqrt[a x + Sqrt[a^2 x^2 + b x + c]]/((b x + c) Sqrt[a^2 x^2 + b x + c])",
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", cases[i]);
+        assert_eval(buf, "True");
+    }
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -542,6 +565,7 @@ void test_parallelmixedtower(void) {
     TEST(test_no_false_certificate_curve_free);
     TEST(test_certifies_curve_free_nonelementary);
     TEST(test_nontorsion_divisor_certificate);
+    TEST(test_euler_before_root_split);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

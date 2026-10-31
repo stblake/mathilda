@@ -1494,7 +1494,14 @@ monotonically down.
      (`Sqrt[a b] = Sqrt[a] Sqrt[b]` holds only for `a, b > 0`), so the
      antiderivative is faithful at negative and complex arguments too, not merely
      on the integrand's real domain; the branch-unsafe split is still used where it
-     is genuinely needed to lower the genus of a higher-degree radicand.  A
+     is genuinely needed to lower the genus of a higher-degree radicand.  A root
+     nested on the tower's conic `y^2 = q` (v0.6097: `Sqrt[x^2 + x Sqrt[x^2 - 1]]`,
+     `Sqrt[Sqrt[a^2 x^2 + b] + a x]`) parametrises the conic **first** (Euler's
+     substitution), so the nested root becomes the single radical over `Q(w)`;
+     splitting a generator factor off its base first had flattened `x = u^2` and
+     turned the conic into a quartic.  The Euler step takes the square root of a
+     parametric leading or constant coefficient (`Sqrt[a^2] -> a`,
+     `Sqrt[(a + b)^2] -> a + b`; only `alpha^2 = a2` matters, not a sign).  A
      non-elementary case or a
      not-yet-ported case declines cleanly (never a wrong answer).  Time budgets
      (v0.6087): in the Automatic cascade three wall-clock backstops apply --

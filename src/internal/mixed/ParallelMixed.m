@@ -1046,9 +1046,19 @@ QuarticToCubic[T_, f_] := Module[{gens = T["gens"], q = T["q"], g, p, r, s, TT, 
 (* RationalPoint[q, g]
    A rational point {g0, y0} on the conic y^2 = q(g), searching small
    integers and fractions; None if none is found in that range.            *)
+(* RationalSqrt[e]: an r rational in the parameters with r^2 = e, or None.
+   Sqrt[a^2] stays unevaluated (it is |a| only for real a), but any square
+   root serves where only r^2 = e matters -- the Euler substitution
+   y = -alpha g + w needs alpha^2 = a, not a sign. *)
+RationalSqrt[e_] := If[MatchQ[e, _Integer | _Rational],
+  If[e >= 0 && MatchQ[Sqrt[e], _Integer | _Rational], Sqrt[e], None],
+  With[{r = PowerExpand[Sqrt[Factor[e]]]},
+    If[FreeQ[r, Power[_, _Rational] | Complex] && Together[r^2 - e] === 0, r, None]]];
+SetAttributes[RationalSqrt, Listable];
+
 RationalPoint[q_, g_] := Module[{v, y0},
-  Do[v = q /. g -> g0; y0 = Sqrt[v];
-    If[v >= 0 && MatchQ[y0, _Integer | _Rational], Return[{g0, y0}, Module]],
+  Do[v = q /. g -> g0; y0 = RationalSqrt[v];
+    If[y0 =!= None, Return[{g0, y0}, Module]],
     {g0, DeleteDuplicates[Flatten[Table[{num/den, -num/den}, {num, 0, 12}, {den, 1, 3}]]]}];
   None];
 
@@ -2346,18 +2356,18 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
     gq = SelectFirst[gens, PolynomialQ[q, #] && Exponent[q, #] == 2 && FreeQ[CoefficientList[q, #], Alternatives @@ gens] &, None];
     If[gq === None, Return[False]];
     {c2, b2, a2} = PadRight[CoefficientList[q, gq], 3];
-    alpha = Sqrt[a2];
+    alpha = RationalSqrt[a2];
     (* The no-rational-point decline is decided HERE, at the top level of this
        Module: a Return[False] inside the With below exits only the With, so
        eulerStep went on with Dwp unassigned, made Dwp = Cancel[Dwp[[1]] + ...]
        self-referential, overflowed $RecursionLimit, and the integrator returned
        the unassigned local r$NNN as an "antiderivative" (Sqrt[2 x^2 + 3] /
        Sqrt[5/x^2 + 7]: y^2 = 2 g^2 + 3 has no rational point) *)
-    If[! MatchQ[alpha, _Integer | _Rational],
+    If[alpha === None,
       pt = RationalPoint[q, gq];
       If[pt === None, Return[False]]];
     w = Unique["w"];
-    If[MatchQ[alpha, _Integer | _Rational],
+    If[alpha =!= None,
       (* Euler's first substitution through the point at infinity, in the form
          y = -alpha g + w, i.e. w = y + alpha g: the LARGE root, positive for
          large positive g, so that the formal normalisations Sqrt[P/w^2] =
@@ -2611,6 +2621,14 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
         record[tnew, (c /. PMExp -> Exp) /. Y -> q^(1/m)];
         expr = expr /. c -> tnew,
       Power[_, _Rational],
+        (* a root nested on the tower's conic y^2 = q: parametrise the conic
+           FIRST.  rootNormalize would otherwise split a generator factor off
+           the base (Sqrt[x (2 x + y)] -> Sqrt[x] Sqrt[2 x + y]) and flatten it
+           (x = u^2), turning the conic into a quartic in u that no Euler step
+           can rationalise -- and the pending root then demanded a second
+           radical.  After the step everything is rational in w and the root is
+           re-examined over Q(w) as the tower's single radical. *)
+        If[q =!= None && ! FreeQ[c[[1]], Y] && eulerStep[], Continue[]];
         With[{nrm = rootNormalize[c[[1]], c[[2]]]},
           If[nrm =!= c,
             (* The integrand's own radical c = A sf^e (e = +-1/mr, A rational,
