@@ -221,6 +221,19 @@ tragerIntegrateBody[f_, x_Symbol, method_String] := Module[
         If[!tragerFailQ[r],
           With[{F = (r /. red[[3]] -> x^red[[1]])/red[[1]]},   (* no Together: it can merge radicals across branches *)
             If[antiderivativeQ[f, F, x], Return[F, Module]]]]]]];
+  (* several flat radicands (a compositum, which canonicalForm declines): the
+     Kummer split writes f = Sum g M and each piece goes through one radical
+     (src/internal/mixed/KummerRadicals.m); a piece alone in its class and
+     proven non-elementary certifies f *)
+  With[{ks = If[Length[DeleteDuplicates[Together[First[#]] & /@ radicalPowers[f, x]]] >= 2, KummerSplit[f, x], None]},
+    If[ks =!= None,
+      With[{kr = KummerIntegrate[ks, f, x,
+                   {Function[h, With[{r = catchTrager[tragerIntegrateBody[h, x, method]]},
+                                   If[tragerFailQ[r], failToList[r], r]]]}]},
+        Switch[kr,
+          {"not elementary", __}, throwNonElementary["Kummer piece: " <> kr[[2]]],
+          {"failed", __}, Null,
+          _, Return[kr, Module]]]]];
   cf = canonicalForm[f, x];
   n = cf["n"]; coeffs = cf["coeffs"];
   (* no radical: a rational function over Q or a number field -- the rational

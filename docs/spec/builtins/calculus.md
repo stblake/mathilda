@@ -1506,7 +1506,15 @@ monotonically down.
      split into Kummer pieces `g M` (`M` a radical monomial, one per class modulo
      `C(x)^*`), each integrated through one radical `P` with `M = kappa P`
      (`kappa` a locally constant root of unity) and written back through `M`; a
-     piece proven non-elementary certifies the whole integrand.  When the
+     piece proven non-elementary certifies the whole integrand.  Since v0.6103
+     the split lives in `src/internal/mixed/KummerRadicals.m`, shared with
+     `Method -> "Trager"` (which integrated one radical only and declined a
+     compositum): each piece goes to Trager first -- complete for one radical over
+     Q, it certifies m >= 3 pieces this method cannot -- and the split runs before
+     the tower (Euler towers over a compositum could reach a genus-3 curve where
+     the split leaves `(x^2 - 1) Sqrt[1 + x^2]`); the pieces return to this method
+     when the tower cannot be built.  Two different monomials in one Kummer class
+     are separate pieces, and a non-elementary piece there is no certificate.  When the
      principal surface fails the gate, the surface written through the
      integrand's **own radicals** is tried (v0.6102: every back rule -- the
      simple radical, each flattened root, a conic's radical behind an Euler

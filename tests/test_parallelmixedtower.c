@@ -302,9 +302,10 @@ static void test_kummer_split_flat_radicals(void) {
     assert_eval("First[Quiet[ParallelMixed`ParallelIntegrateMixed["
                 "(x^3 - 1)^(1/3) (x^3 + 1)^(1/3) x^2/(x^6 - 1), x]]]", "\"not elementary\"");
     /* two different monomials in one class (they differ by a sign that changes
-     * across the plane) are not split */
-    assert_eval("ParallelMixed`Private`KummerSplit[x/(Sqrt[x - 1] Sqrt[x + 1]) + Sqrt[x^2 - 1], x]",
-                "None");
+     * across the plane) stay separate pieces, neither alone in its class: a
+     * non-elementary piece there is no certificate */
+    assert_eval("Last /@ KummerRadicals`KummerSplit[x/(Sqrt[x - 1] Sqrt[x + 1]) + Sqrt[x^2 - 1], x]",
+                "{False, False}");
 }
 
 /* DDI multiple_radicals_0 (i): the answer through the Euler parameter of
@@ -363,6 +364,31 @@ static void test_own_radical_back_substitution(void) {
                  "Assumptions -> Element[x, Complexes]]]]]", cases[i]);
         assert_eval(buf, "True");
     }
+}
+
+/* Kummer pieces go to Trager first (complete for one radical over Q), then to
+ * this method; the split runs before the tower, which could build an Euler
+ * tower over the compositum and reach a genus-3 curve. */
+static void test_kummer_pieces_through_trager(void) {
+    const char *cases[] = {
+        "Sqrt[1 - x] Sqrt[x + 1] Sqrt[1 - x^4]",                          /* multiple radicals 4 (i) */
+        "(2 x^3 + 1) Sqrt[x^3 - 1]/(x (x^3 - x - 1) Sqrt[x + 1] Sqrt[x^2 - x - 1])",  /* 6 (ii) */
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", cases[i]);
+        assert_eval(buf, "True");
+    }
+    /* one piece, m = 3: Trager's divisor of infinite order certifies it (this
+     * method has no non-torsion certificate for m >= 3) */
+    assert_eval("First[Quiet[Integrate`ParallelMixedTower[(2 x^3 + 3)^(1/3)/(5 x^6 + 7)^(1/3), x]]]",
+                "\"not elementary\"");
+    /* and through Trager's own surface */
+    assert_eval("First[Quiet[Integrate`Trager[(2 x^3 + 3)^(1/3)/(5 x^6 + 7)^(1/3), x]]]",
+                "\"not elementary\"");
 }
 
 static void test_recursion_overflow_declines(void) {
@@ -675,6 +701,7 @@ void test_parallelmixedtower(void) {
     TEST(test_complex_screen_catches_real_slice_cut);
     TEST(test_parametric_lcm_in_linear_solve);
     TEST(test_own_radical_back_substitution);
+    TEST(test_kummer_pieces_through_trager);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

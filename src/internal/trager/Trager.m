@@ -59,7 +59,8 @@
 (* closure, exactly.                                                          *)
 (* ========================================================================== *)
 
-BeginPackage["Trager`", {"Mathilda`"}];
+LoadModule["mixed/KummerRadicals.m"];   (* KummerSplit, KummerIntegrate: products of flat radicals *)
+BeginPackage["Trager`", {"Mathilda`", "KummerRadicals`"}];
 
 TragerIntegrate::usage = "TragerIntegrate[f, x, method] integrates f, a rational function of x and powers of a single radical r(x)^(1/n) with rational coefficients, by Trager's algorithm for simple radical extensions. method is \"Trager\" (the complete algorithm: divisors, principal generators, torsion orders by reduction modulo primes) or \"Kauers\" (Kauers' Groebner-basis heuristic for the logarithmic part). It returns
   an antiderivative                    -- verified exactly before it is returned;

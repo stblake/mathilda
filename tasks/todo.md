@@ -4,7 +4,7 @@ Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md (supersedes 
 
 - [x] W1 PolynomialLCM with parameter-rational coefficients (poly.c) -- 5 "solution does not verify" (v0.6101, +5)
 - [x] W2 own-radical back-substitution for every back rule (generators, Euler w, Y, nested) -- 38 "verification failed" (v0.6102, +35)
-- [ ] W3 radical merge (MergeKummerMonomial; Trager detectRadical; KummerSplit same-class monomials)
+- [x] W3 shared KummerRadicals.m; Trager splits composita; PMT pieces via Trager first (v0.6103, Trager +47, PMT +17); book conflict: multiple_radicals_0 (vi)
 - [ ] W4 SubstituteToAlgebraic pre-pass (Sin/Cos/Exp/Sqrt x/Log/ArcTan kernels; conic in x^k; AlgebraicPoint Euler)
 - [ ] W5 parameter constant field in PMT (conic path; specialise-then-lift logands)
 - [ ] W6 general-genus torsion realisation via Trager adapter

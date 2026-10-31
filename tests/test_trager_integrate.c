@@ -236,7 +236,11 @@ static void test_public_entry_points(void) {
     TR_TRUE("TragerIntegrate[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("TragerIntegrate[x/Sqrt[1 - x^3], x] === {\"not elementary\", \"the Hermite remainder has a pole at infinity\"}");
     TR_TRUE("MatchQ[TragerIntegrate[(x^4 + 1)^(-1/4), x, \"Kauers\"], {\"failed\", _String}]");
-    TR_TRUE("MatchQ[TragerIntegrate[Sqrt[x] + Sqrt[x + 1], x], {\"failed\", _String}]");
+    /* several radicands: the Kummer split integrates each through one radical
+     * (v0.6103; it declined "a radical compositum") */
+    TR_TRUE("TrueQ[PossibleZeroQ[D[TragerIntegrate[Sqrt[x] + Sqrt[x + 1], x], x] - Sqrt[x] - Sqrt[x + 1], "
+            "Assumptions -> Element[x, Complexes]]]");
+    TR_TRUE("First[TragerIntegrate[(2 x^3 + 3)^(1/3)/(5 x^6 + 7)^(1/3), x]] === \"not elementary\"");
     /* tragerIntegrateBody throws instead */
     TR_TRUE("MatchQ[catchTrager[tragerIntegrateBody[1/Sqrt[x^3 + 1], x, \"Trager\"]], tragerFail[\"NonElementary\", _, _]]");
     TR_TRUE("MatchQ[catchTrager[tragerIntegrateBody[1/Sqrt[x^2 + 1], x, \"Bar\"]], tragerFail[\"Decline\", \"unknown method Bar\", _]]");
@@ -352,14 +356,13 @@ static const char* const nonelem_trager_only[] = {
 
 /* Out of scope: declined silently (no certificate, no message). */
 static const char* const declines[] = {
-    "Sqrt[x] + Sqrt[x + 1]",          /* compositum */
+    "Sqrt[x] + Sqrt[x + a]",          /* compositum over Q(a): the Kummer pieces decline */
     "Exp[x]/Sqrt[x]",
     "Sqrt[2] x^(1/2)",                /* algebraic constant */
     "Sin[x] Sqrt[x]",
     "Sqrt[x^2 + a]",                  /* parameter */
     "x^Pi",
     "Log[x] Sqrt[x]",
-    "Sqrt[x] + (x + 1)^(1/3)",
     NULL
 };
 
@@ -424,7 +427,7 @@ static void test_qualified_symbols(void) {
     TR_TRUE("Integrate`Trager[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[(x^4 + 1)^(-1/4), x] === {\"failed\", \"Kauers' heuristic: no principal power of the residue ideal\"}");
-    TR_TRUE("Integrate`Trager[Sqrt[x] + Sqrt[x + 1], x] === {\"failed\", \"more than one radicand (a radical compositum)\"}");
+    TR_TRUE("MatchQ[Integrate`Trager[Sqrt[x] + Sqrt[x + a], x], {\"failed\", _String}]");   /* the Kummer pieces lie over Q(a) */
     TR_TRUE("Integrate`Trager[x^2, x] === x^3/3");   /* rational: integrated, not declined (v0.6094) */
     TR_TRUE("Integrate`Trager[1/(x^2 + 1), x] === ArcTan[x]");
     TR_TRUE("MatchQ[Integrate`Trager[5/((x - 3) Sqrt[x^3 - 2]), x], {\"not elementary\", s_String /; StringContainsQ[s, \"infinite order\"]}]");
