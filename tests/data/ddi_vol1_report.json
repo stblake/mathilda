@@ -49698,13 +49698,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.478,
-     "time": 0.4492300000274554,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 12}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 12}}",
-     "class": "NEITHER"
+     "wall": 0.062,
+     "time": 0.03978400002233684,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -49737,13 +49737,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.25,
-     "time": 0.22199200000613928,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 6}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 6}}",
-     "class": "NEITHER"
+     "wall": 0.061,
+     "time": 0.03922400006558746,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -49776,13 +49776,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.197,
-     "time": 0.16803199995774776,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 2}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 2}}",
-     "class": "NEITHER"
+     "wall": 0.064,
+     "time": 0.040787999983876944,
+     "result": "{\"not elementary\", \"the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -49815,13 +49815,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.108,
-     "time": 0.07961999997496605,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 2}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 2}}",
-     "class": "NEITHER"
+     "wall": 0.065,
+     "time": 0.038511999999172986,
+     "result": "{\"not elementary\", \"the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -50019,10 +50019,10 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 2.212,
-     "time": 0.11652300006244332,
-     "result": "x + ArcTan[E^(2 x) - Sqrt[(-E^(-x) + E^x)/(E^(-x) + E^x)] (1 + E^(2 x))] - 1/2 Log[2 E^(4 x) - 2 E^(2 x) Sqrt[(-E^(-x) + E^x)/(E^(-x) + E^x)] (1 + E^(2 x))]",
-     "leaves": 99,
+     "wall": 4.342,
+     "time": 0.28620800003409386,
+     "result": "1/2 ArcTan[1/(Sqrt[(-1 + E^(2 x))/(1 + E^(2 x))] + E^(2 x) Sqrt[(-1 + E^(2 x))/(1 + E^(2 x))])] + 1/2 Log[-E^(2 x) - Sqrt[(-1 + E^(2 x))/(1 + E^(2 x))] - E^(2 x) Sqrt[(-1 + E^(2 x))/(1 + E^(2 x))]]",
+     "leaves": 121,
      "pzq": "True",
      "numeric": [
       [
@@ -50061,7 +50061,32 @@
        "0.0"
       ],
       [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
        "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
        "ok",
        "0.0"
       ],
@@ -50071,7 +50096,17 @@
        "0.0"
       ],
       [
-       "3/4",
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
        "ok",
        "0.0"
       ],
@@ -50102,8 +50137,8 @@
       ],
       [
        "40",
-       "na",
-       "$Aborted"
+       "ok",
+       "0.0"
       ]
      ],
      "cnumeric": [
@@ -50119,6 +50154,41 @@
       ],
       [
        "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
        "ok",
        "0.0"
       ]
@@ -50317,10 +50387,10 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 2.352,
-     "time": 0.19574800005648285,
-     "result": "x - ArcTan[E^(2 x) - Sqrt[(E^(-x) + E^x)/(-E^(-x) + E^x)] (-1 + E^(2 x))] - 1/2 Log[2 E^(4 x) - 2 E^(2 x) Sqrt[(E^(-x) + E^x)/(-E^(-x) + E^x)] (-1 + E^(2 x))]",
-     "leaves": 101,
+     "wall": 4.377,
+     "time": 0.2546640000073239,
+     "result": "-1/2 ArcTan[1/(-Sqrt[(1 + E^(2 x))/(-1 + E^(2 x))] + E^(2 x) Sqrt[(1 + E^(2 x))/(-1 + E^(2 x))])] + 1/2 Log[-E^(2 x) + Sqrt[(1 + E^(2 x))/(-1 + E^(2 x))] - E^(2 x) Sqrt[(1 + E^(2 x))/(-1 + E^(2 x))]]",
+     "leaves": 121,
      "pzq": "True",
      "numeric": [
       [
@@ -50359,9 +50429,24 @@
        "0.0"
       ],
       [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
        "-1/2",
        "ok",
        "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "1.019619e-458"
       ],
       [
        "-1/7",
@@ -50369,12 +50454,37 @@
        "0.0"
       ],
       [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
        "1/5",
+       "ok",
+       "4.248412e-460"
+      ],
+      [
+       "1/3",
        "ok",
        "0.0"
       ],
       [
        "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
        "ok",
        "0.0"
       ],
@@ -50424,6 +50534,36 @@
        "7/3 - 4/9*I",
        "ok",
        "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
       ]
      ],
      "status": "ELEM",
@@ -50460,13 +50600,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.336,
-     "time": 0.3081529999617487,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 8}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 8}}",
-     "class": "NEITHER"
+     "wall": 0.062,
+     "time": 0.03910399996675551,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -50499,13 +50639,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.193,
-     "time": 0.16594899992924184,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "class": "NEITHER"
+     "wall": 0.059,
+     "time": 0.037265999941155314,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -50682,13 +50822,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.471,
-     "time": 0.44358500000089407,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 12}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 12}}",
-     "class": "NEITHER"
+     "wall": 0.061,
+     "time": 0.03755300003103912,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -50721,13 +50861,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.244,
-     "time": 0.21533999999519438,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 6}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 6}}",
-     "class": "NEITHER"
+     "wall": 0.066,
+     "time": 0.04107999999541789,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -50914,13 +51054,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 120.037,
-     "time": 120.00008699996397,
-     "result": "$Aborted",
-     "leaves": 1,
-     "status": "TIMEOUT",
-     "detail": "TimeConstrained",
-     "class": "TIMEOUT"
+     "wall": 0.08,
+     "time": 0.057231999933719635,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -50953,13 +51093,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 4.309,
-     "time": 4.2721769999479875,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "class": "NEITHER"
+     "wall": 0.078,
+     "time": 0.055723999976180494,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51136,13 +51276,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 120.037,
-     "time": 120.0000819999259,
-     "result": "$Aborted",
-     "leaves": 1,
-     "status": "TIMEOUT",
-     "detail": "TimeConstrained",
-     "class": "TIMEOUT"
+     "wall": 0.068,
+     "time": 0.04675899993162602,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51175,13 +51315,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 5.683,
-     "time": 5.652438999968581,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 6}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 6}}",
-     "class": "NEITHER"
+     "wall": 0.072,
+     "time": 0.05086299998220056,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder has a pole at infinity\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51524,13 +51664,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.196,
-     "time": 0.16627600009087473,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "class": "NEITHER"
+     "wall": 0.062,
+     "time": 0.03848300001118332,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51563,13 +51703,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.346,
-     "time": 0.3173539999406785,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 8}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 8}}",
-     "class": "NEITHER"
+     "wall": 0.06,
+     "time": 0.037563999998383224,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51602,13 +51742,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.105,
-     "time": 0.07562700007110834,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "class": "NEITHER"
+     "wall": 0.059,
+     "time": 0.03565500001423061,
+     "result": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51641,13 +51781,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.189,
-     "time": 0.16083399998024106,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "class": "NEITHER"
+     "wall": 0.056,
+     "time": 0.035053999978117645,
+     "result": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51758,13 +51898,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 4.541,
-     "time": 4.511018000077456,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "class": "NEITHER"
+     "wall": 0.077,
+     "time": 0.054945999989286065,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51797,13 +51937,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 1.101,
-     "time": 1.0727819999447092,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 4}}",
-     "class": "NEITHER"
+     "wall": 0.079,
+     "time": 0.05750900006387383,
+     "result": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"Kummer piece: the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51836,13 +51976,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 67.337,
-     "time": 67.29735200002324,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "class": "NEITHER"
+     "wall": 0.058,
+     "time": 0.0371549999108538,
+     "result": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -51875,13 +52015,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 60.665,
-     "time": 60.62594800000079,
-     "result": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {1, 0}}",
-     "class": "NEITHER"
+     "wall": 0.059,
+     "time": 0.03846000006888062,
+     "result": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "leaves": 3,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -55808,13 +55948,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.082,
-     "time": 0.05488900002092123,
-     "result": "{\"failed\", \"no solution within bounds\", {4, 3}}",
+     "wall": 0.071,
+     "time": 0.04928999999538064,
+     "result": "{\"not elementary\", \"no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))\", {3, 1}}",
      "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {4, 3}}",
-     "class": "NEITHER"
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))\", {3, 1}}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -80328,13 +80468,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.057,
-     "time": 0.029208000050857663,
-     "result": "{\"failed\", \"tower construction failed\", Sqrt[x^2 + Sqrt[1 + x^4]]/((1 + x)^2 Sqrt[1 + x^4])}",
-     "leaves": 35,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", Sqrt[x^2 + Sqrt[1 + x^4]]/((1 + x)^2 Sqrt[1 + x^4])}",
-     "class": "NEITHER"
+     "wall": 120.024,
+     "time": 120.00024099997245,
+     "result": "$Aborted",
+     "leaves": 1,
+     "status": "TIMEOUT",
+     "detail": "TimeConstrained",
+     "class": "TIMEOUT"
     }
    }
   },
@@ -80372,8 +80512,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.059,
-     "time": 0.030657000024802983,
+     "wall": 0.364,
+     "time": 0.3412639999296516,
      "result": "{\"failed\", \"tower construction failed\", Sqrt[a x^2 + Sqrt[b + a^2 x^4]]/((d + c x)^2 Sqrt[b + a^2 x^4])}",
      "leaves": 47,
      "status": "DECLINE",
@@ -80411,13 +80551,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.06,
-     "time": 0.028959000017493963,
-     "result": "{\"failed\", \"tower construction failed\", Sqrt[2 x^2 + Sqrt[3 + 4 x^4]]/((7 + 5 x)^2 Sqrt[3 + 4 x^4])}",
-     "leaves": 43,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", Sqrt[2 x^2 + Sqrt[3 + 4 x^4]]/((7 + 5 x)^2 Sqrt[3 + 4 x^4])}",
-     "class": "NEITHER"
+     "wall": 120.425,
+     "time": 120.39999599999283,
+     "result": "$Aborted",
+     "leaves": 1,
+     "status": "TIMEOUT",
+     "detail": "TimeConstrained",
+     "class": "TIMEOUT"
     }
    }
   },
@@ -80468,8 +80608,8 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.06,
-     "time": 0.03153299994301051,
+     "wall": 0.152,
+     "time": 0.13013499998487532,
      "result": "{\"failed\", \"tower construction failed\", Sqrt[a x^2 + Sqrt[b + a^2 x^4]]}",
      "leaves": 26,
      "status": "DECLINE",
@@ -80518,8 +80658,8 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.057,
-     "time": 0.029500999953597784,
+     "wall": 0.187,
+     "time": 0.16667199996300042,
      "result": "{\"failed\", \"tower construction failed\", Sqrt[2 x^2 + Sqrt[3 + 4 x^4]]}",
      "leaves": 24,
      "status": "DECLINE",
@@ -80560,8 +80700,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.059,
-     "time": 0.03127099992707372,
+     "wall": 0.087,
+     "time": 0.06568300002254546,
      "result": "{\"failed\", \"tower construction failed\", (b + a^2 x^4)^2/((-b + a^2 x^4)^2 Sqrt[a x^2 + Sqrt[b + a^2 x^4]])}",
      "leaves": 51,
      "status": "DECLINE",
@@ -80599,8 +80739,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.058,
-     "time": 0.030048999935388565,
+     "wall": 0.55,
+     "time": 0.5293410000158474,
      "result": "{\"failed\", \"tower construction failed\", (3 + 4 x^4)^2/((-3 + 4 x^4)^2 Sqrt[2 x^2 + Sqrt[3 + 4 x^4]])}",
      "leaves": 43,
      "status": "DECLINE",
@@ -80641,8 +80781,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.065,
-     "time": 0.03252599993720651,
+     "wall": 0.388,
+     "time": 0.3640649999724701,
      "result": "{\"failed\", \"tower construction failed\", (-b + x^4)/((b + x^4) Sqrt[-b + a^2 x^4] Sqrt[a x^2 + Sqrt[-b + a^2 x^4]])}",
      "leaves": 58,
      "status": "DECLINE",
@@ -80680,8 +80820,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.06,
-     "time": 0.031181000056676567,
+     "wall": 0.429,
+     "time": 0.4070060000522062,
      "result": "{\"failed\", \"tower construction failed\", (-3 + x^4)/((3 + x^4) Sqrt[-3 + 4 x^4] Sqrt[2 x^2 + Sqrt[-3 + 4 x^4]])}",
      "leaves": 48,
      "status": "DECLINE",
@@ -88102,13 +88242,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.058,
-     "time": 0.02902500005438924,
-     "result": "{\"failed\", \"tower construction failed\", 1/Sqrt[x^4 + x^2 Sqrt[4 + x^4]]}",
-     "leaves": 24,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", 1/Sqrt[x^4 + x^2 Sqrt[4 + x^4]]}",
-     "class": "NEITHER"
+     "wall": 15.661,
+     "time": 0.36189200007356703,
+     "result": "((16 - 8 (x^2 + Sqrt[4 + x^4])^2 + (x^2 + Sqrt[4 + x^4])^4) (1/Sqrt[x^2 + Sqrt[4 + x^4]] + Log[(2048 Sqrt[x^2 + Sqrt[4 + x^4]] - 128 Root[4096 + #1^4 &, 4] + 64 (x^2 + Sqrt[4 + x^4]) Root[4096 + #1^4 &, 4] - 2 Root[4096 + #1^4 &, 4]^3 + (x^2 + Sqrt[4 + x^4]) Root[4096 + #1^4 &, 4]^3)/(2 + x^2 + Sqrt[4 + x^4])] (-1/32 Root[4096 + #1^4 &, 4] - 1/2048 Root[4096 + #1^4 &, 4]^3) + Log[(2048 Sqrt[x^2 + Sqrt[4 + x^4]] + 128 Root[4096 + #1^4 &, 4] + 64 (x^2 + Sqrt[4 + x^4]) Root[4096 + #1^4 &, 4] - 2 Root[4096 + #1^4 &, 4]^3 - (x^2 + Sqrt[4 + x^4]) Root[4096 + #1^4 &, 4]^3)/(-2 + x^2 + Sqrt[4 + x^4])] (-1/32 Root[4096 + #1^4 &, 4] + 1/2048 Root[4096 + #1^4 &, 4]^3)))/(2 x Sqrt[x^2 + Sqrt[4 + x^4]] (-4 + (x^2 + Sqrt[4 + x^4])^2) Sqrt[(-4 + (x^2 + Sqrt[4 + x^4])^2)^2/(4 (x^2 + Sqrt[4 + x^4])^2) + ((-4 + (x^2 + Sqrt[4 + x^4])^2) (4 + (x^2 + Sqrt[4 + x^4])^2))/(4 (x^2 + Sqrt[4 + x^4])^2)])",
+     "leaves": 474,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -88141,8 +88460,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.061,
-     "time": 0.029831000021658838,
+     "wall": 0.253,
+     "time": 0.2318200001027435,
      "result": "{\"failed\", \"tower construction failed\", Sqrt[1/x^4 - Sqrt[1 + 4 x^4]/x^4]}",
      "leaves": 27,
      "status": "DECLINE",
@@ -88180,8 +88499,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.058,
-     "time": 0.029026999953202903,
+     "wall": 4.169,
+     "time": 4.146225000033155,
      "result": "{\"failed\", \"tower construction failed\", (Sqrt[2] x^3 - Sqrt[-1 + 2 x^6])^(1/3)}",
      "leaves": 30,
      "status": "DECLINE",
@@ -88219,8 +88538,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.058,
-     "time": 0.03064999997150153,
+     "wall": 4.402,
+     "time": 4.377908999915235,
      "result": "{\"failed\", \"tower construction failed\", (Sqrt[2]/x^3 - Sqrt[2 - x^6]/x^3)^(1/3)}",
      "leaves": 33,
      "status": "DECLINE",
@@ -88258,13 +88577,187 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.058,
-     "time": 0.029845000011846423,
-     "result": "{\"failed\", \"tower construction failed\", (x^3 + Sqrt[-1 + x^6])^(1/3)}",
-     "leaves": 20,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", (x^3 + Sqrt[-1 + x^6])^(1/3)}",
-     "class": "NEITHER"
+     "wall": 20.198,
+     "time": 0.9090040000155568,
+     "result": "((1 + 2 (x^3 + Sqrt[-1 + x^6])^2 + (x^3 + Sqrt[-1 + x^6])^4) ((-1 + (x^3 + Sqrt[-1 + x^6])^2)/(2 (x^3 + Sqrt[-1 + x^6])) + (1 + (x^3 + Sqrt[-1 + x^6])^2)/(2 (x^3 + Sqrt[-1 + x^6])))^(1/3) (1/2 (4 + 4 (x^3 + Sqrt[-1 + x^6])^2)^(1/3) + RootSum[1/54 + #1^3 &, Log[(4 + 4 (x^3 + Sqrt[-1 + x^6])^2)^(1/3) + 6 #1] #1 &]))/(2 x^2 (x^3 + Sqrt[-1 + x^6]) (1 + (x^3 + Sqrt[-1 + x^6])^2) (4 (1 + (x^3 + Sqrt[-1 + x^6])^2))^(1/3))",
+     "leaves": 246,
+     "pzq": "True",
+     "numeric": [
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "13/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "na",
+       "Indeterminate"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -88336,13 +88829,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.059,
-     "time": 0.030848999973386526,
-     "result": "{\"failed\", \"tower construction failed\", (1 + x^3 + Sqrt[2 x^3 + x^6])^(1/3)}",
-     "leaves": 25,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", (1 + x^3 + Sqrt[2 x^3 + x^6])^(1/3)}",
-     "class": "NEITHER"
+     "wall": 28.753,
+     "time": 1.5452580000273883,
+     "result": "((x^3 + Sqrt[2 x^3 + x^6])^2 (1 + (x^3 + Sqrt[2 x^3 + x^6])^2/(2 + 2 (x^3 + Sqrt[2 x^3 + x^6])) + (2 (x^3 + Sqrt[2 x^3 + x^6]) + (x^3 + Sqrt[2 x^3 + x^6])^2)/(2 + 2 (x^3 + Sqrt[2 x^3 + x^6])))^(1/3) (1/4 (4 (x^3 + Sqrt[2 x^3 + x^6])^2)^(1/3) + RootSum[1/54 + #1^3 &, Log[(2 (x^3 + Sqrt[2 x^3 + x^6]) - 3 (4 (x^3 + Sqrt[2 x^3 + x^6])^2)^(2/3) #1)/(2 (x^3 + Sqrt[2 x^3 + x^6]))] #1 &]))/(x^2 (4 (x^3 + Sqrt[2 x^3 + x^6])^2)^(1/3) (1 + x^3 + Sqrt[2 x^3 + x^6]))",
+     "leaves": 297,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "2.124206e-460"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "5.098094e-459"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "6.797459e-459"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "1.019619e-458"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "1.699365e-459"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -88414,13 +89086,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.057,
-     "time": 0.028678999980911613,
-     "result": "{\"failed\", \"tower construction failed\", (x^3 - Sqrt[4 + x^6])^(1/3)}",
-     "leaves": 22,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", (x^3 - Sqrt[4 + x^6])^(1/3)}",
-     "class": "NEITHER"
+     "wall": 60.114,
+     "time": 2.7193529999349266,
+     "result": "((16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4) ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(1/3))/(4 x^2 (x^3 + Sqrt[4 + x^6]) (-4 + (x^3 + Sqrt[4 + x^6])^2)) + 1/708588 Log[(385826166 (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4)^2 ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(2/3))/(x^4 (-4 + (x^3 + Sqrt[4 + x^6])^2)^2) - (6022998 (x^3 + Sqrt[4 + x^6]) (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4) ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(1/3) Root[57395628 + #1^6 &, 2])/(x^2 (-4 + (x^3 + Sqrt[4 + x^6])^2)) - 1784592 Root[57395628 + #1^6 &, 2]^2 - 5012604 (x^3 + Sqrt[4 + x^6])^2 Root[57395628 + #1^6 &, 2]^2 - (75816 (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4)^2 ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(2/3) Root[57395628 + #1^6 &, 2]^3)/(x^4 (-4 + (x^3 + Sqrt[4 + x^6])^2)^2) + (11691 (x^3 + Sqrt[4 + x^6]) (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4) ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(1/3) Root[57395628 + #1^6 &, 2]^4)/(x^2 (-4 + (x^3 + Sqrt[4 + x^6])^2)) + 3464 Root[57395628 + #1^6 &, 2]^5 - 1350 (x^3 + Sqrt[4 + x^6])^2 Root[57395628 + #1^6 &, 2]^5] Root[57395628 + #1^6 &, 2]^4 + Log[(385826166 (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4)^2 ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(2/3))/(x^4 (-4 + (x^3 + Sqrt[4 + x^6])^2)^2) - (79716150 (x^3 + Sqrt[4 + x^6]) (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4) ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(1/3) Root[57395628 + #1^6 &, 2])/(x^2 (-4 + (x^3 + Sqrt[4 + x^6])^2)) - 21835008 Root[57395628 + #1^6 &, 2]^2 + 11363652 (x^3 + Sqrt[4 + x^6])^2 Root[57395628 + #1^6 &, 2]^2 + (75816 (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4)^2 ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(2/3) Root[57395628 + #1^6 &, 2]^3)/(x^4 (-4 + (x^3 + Sqrt[4 + x^6])^2)^2) - (5157 (x^3 + Sqrt[4 + x^6]) (16 - 8 (x^3 + Sqrt[4 + x^6])^2 + (x^3 + Sqrt[4 + x^6])^4) ((-4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])) - (4 + (x^3 + Sqrt[4 + x^6])^2)/(2 (x^3 + Sqrt[4 + x^6])))^(1/3) Root[57395628 + #1^6 &, 2]^4)/(x^2 (-4 + (x^3 + Sqrt[4 + x^6])^2)) + 1936 Root[57395628 + #1^6 &, 2]^5 - 102 (x^3 + Sqrt[4 + x^6])^2 Root[57395628 + #1^6 &, 2]^5] (-1/108 Root[57395628 + #1^6 &, 2] - 1/1417176 Root[57395628 + #1^6 &, 2]^4)",
+     "leaves": 1568,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -88453,13 +89304,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.06,
-     "time": 0.03151200001593679,
-     "result": "{\"failed\", \"tower construction failed\", (1/x^3 - Sqrt[1 + 4 x^6]/x^3)^(1/3)}",
-     "leaves": 27,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", (1/x^3 - Sqrt[1 + 4 x^6]/x^3)^(1/3)}",
-     "class": "NEITHER"
+     "wall": 91.61,
+     "time": 3.464045000029728,
+     "result": "((-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4) ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(1/3))/(4 x^2 (2 x^3 + Sqrt[1 + 4 x^6]) (1 + 2 x^3 + Sqrt[1 + 4 x^6])^2) + 1/708588 Log[(-(481485546 (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4)^2 ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(2/3))/(x^4 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^4) - (47711592 (2 x^3 + Sqrt[1 + 4 x^6]) (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4) ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(1/3) Root[57395628 + #1^6 &, 2])/(x^2 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^2) + 1767096 (2 x^3 + Sqrt[1 + 4 x^6]) Root[57395628 + #1^6 &, 2]^2 + 14031792 (2 x^3 + Sqrt[1 + 4 x^6])^2 Root[57395628 + #1^6 &, 2]^2 + 1767096 (2 x^3 + Sqrt[1 + 4 x^6])^3 Root[57395628 + #1^6 &, 2]^2 + (60993 (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4)^2 ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(2/3) Root[57395628 + #1^6 &, 2]^3)/(x^4 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^4) + (21708 (2 x^3 + Sqrt[1 + 4 x^6]) (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4) ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(1/3) Root[57395628 + #1^6 &, 2]^4)/(x^2 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^2) - 804 (2 x^3 + Sqrt[1 + 4 x^6]) Root[57395628 + #1^6 &, 2]^5 + 4024 (2 x^3 + Sqrt[1 + 4 x^6])^2 Root[57395628 + #1^6 &, 2]^5 - 804 (2 x^3 + Sqrt[1 + 4 x^6])^3 Root[57395628 + #1^6 &, 2]^5)/(2 x^3 + Sqrt[1 + 4 x^6] + 2 (2 x^3 + Sqrt[1 + 4 x^6])^2 + (2 x^3 + Sqrt[1 + 4 x^6])^3)] Root[57395628 + #1^6 &, 2]^4 + Log[(-(481485546 (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4)^2 ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(2/3))/(x^4 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^4) - (166281984 (2 x^3 + Sqrt[1 + 4 x^6]) (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4) ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(1/3) Root[57395628 + #1^6 &, 2])/(x^2 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^2) + 4391496 (2 x^3 + Sqrt[1 + 4 x^6]) Root[57395628 + #1^6 &, 2]^2 - 33417360 (2 x^3 + Sqrt[1 + 4 x^6])^2 Root[57395628 + #1^6 &, 2]^2 + 4391496 (2 x^3 + Sqrt[1 + 4 x^6])^3 Root[57395628 + #1^6 &, 2]^2 - (60993 (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4)^2 ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(2/3) Root[57395628 + #1^6 &, 2]^3)/(x^4 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^4) - (5400 (2 x^3 + Sqrt[1 + 4 x^6]) (-1 - 2 (2 x^3 + Sqrt[1 + 4 x^6]) + 2 (2 x^3 + Sqrt[1 + 4 x^6])^3 + (2 x^3 + Sqrt[1 + 4 x^6])^4) ((4 (2 x^3 + Sqrt[1 + 4 x^6]))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2) - (2 (1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))/(-1 + (2 x^3 + Sqrt[1 + 4 x^6])^2))^(1/3) Root[57395628 + #1^6 &, 2]^4)/(x^2 (1 + 2 x^3 + Sqrt[1 + 4 x^6])^2) - 604 (2 x^3 + Sqrt[1 + 4 x^6]) Root[57395628 + #1^6 &, 2]^5 + 408 (2 x^3 + Sqrt[1 + 4 x^6])^2 Root[57395628 + #1^6 &, 2]^5 - 604 (2 x^3 + Sqrt[1 + 4 x^6])^3 Root[57395628 + #1^6 &, 2]^5)/(2 x^3 + Sqrt[1 + 4 x^6] + 2 (2 x^3 + Sqrt[1 + 4 x^6])^2 + (2 x^3 + Sqrt[1 + 4 x^6])^3)] (-1/108 Root[57395628 + #1^6 &, 2] - 1/1417176 Root[57395628 + #1^6 &, 2]^4)",
+     "leaves": 2316,
+     "pzq": "True",
+     "numeric": [
+      [
+       "-1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -88531,13 +89561,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.063,
-     "time": 0.031574000022374094,
-     "result": "{\"failed\", \"tower construction failed\", (1 - Sqrt[8 x^4 + x^8]/x^4)^(1/4)}",
-     "leaves": 27,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", (1 - Sqrt[8 x^4 + x^8]/x^4)^(1/4)}",
-     "class": "NEITHER"
+     "wall": 107.768,
+     "time": 4.063432999886572,
+     "result": "((x^4 + Sqrt[8 x^4 + x^8])^2 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/(x^3 (8 + 2 (x^4 + Sqrt[8 x^4 + x^8]))) - 1/4 ArcTan[(512 + 512 (x^4 + Sqrt[8 x^4 + x^8]) + 160 (x^4 + Sqrt[8 x^4 + x^8])^2 + 16 (x^4 + Sqrt[8 x^4 + x^8])^3 - (8 (x^4 + Sqrt[8 x^4 + x^8])^4 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 - (2 (x^4 + Sqrt[8 x^4 + x^8])^5 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 - ((x^4 + Sqrt[8 x^4 + x^8])^6 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(3/4))/x^9)/(512 + 512 (x^4 + Sqrt[8 x^4 + x^8]) + 160 (x^4 + Sqrt[8 x^4 + x^8])^2 + 16 (x^4 + Sqrt[8 x^4 + x^8])^3 + (128 (x^4 + Sqrt[8 x^4 + x^8])^2 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (64 (x^4 + Sqrt[8 x^4 + x^8])^3 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (8 (x^4 + Sqrt[8 x^4 + x^8])^4 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (8 (x^4 + Sqrt[8 x^4 + x^8])^4 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (2 (x^4 + Sqrt[8 x^4 + x^8])^5 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6)] + 1/4 ArcTan[(-512 - 512 (x^4 + Sqrt[8 x^4 + x^8]) - 160 (x^4 + Sqrt[8 x^4 + x^8])^2 - 16 (x^4 + Sqrt[8 x^4 + x^8])^3 + (8 (x^4 + Sqrt[8 x^4 + x^8])^4 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (2 (x^4 + Sqrt[8 x^4 + x^8])^5 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + ((x^4 + Sqrt[8 x^4 + x^8])^6 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(3/4))/x^9)/(512 + 512 (x^4 + Sqrt[8 x^4 + x^8]) + 160 (x^4 + Sqrt[8 x^4 + x^8])^2 + 16 (x^4 + Sqrt[8 x^4 + x^8])^3 + (128 (x^4 + Sqrt[8 x^4 + x^8])^2 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (64 (x^4 + Sqrt[8 x^4 + x^8])^3 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (8 (x^4 + Sqrt[8 x^4 + x^8])^4 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (8 (x^4 + Sqrt[8 x^4 + x^8])^4 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (2 (x^4 + Sqrt[8 x^4 + x^8])^5 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6)] + 1/4 Log[(8192 + 8192 (x^4 + Sqrt[8 x^4 + x^8]) + 3072 (x^4 + Sqrt[8 x^4 + x^8])^2 + 512 (x^4 + Sqrt[8 x^4 + x^8])^3 + 32 (x^4 + Sqrt[8 x^4 + x^8])^4 + (2048 (x^4 + Sqrt[8 x^4 + x^8])^2 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (3072 (x^4 + Sqrt[8 x^4 + x^8])^3 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (1792 (x^4 + Sqrt[8 x^4 + x^8])^4 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (512 (x^4 + Sqrt[8 x^4 + x^8])^5 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (72 (x^4 + Sqrt[8 x^4 + x^8])^6 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (4 (x^4 + Sqrt[8 x^4 + x^8])^7 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(1/4))/x^3 + (256 (x^4 + Sqrt[8 x^4 + x^8])^4 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (256 (x^4 + Sqrt[8 x^4 + x^8])^5 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (96 (x^4 + Sqrt[8 x^4 + x^8])^6 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (16 (x^4 + Sqrt[8 x^4 + x^8])^7 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + ((x^4 + Sqrt[8 x^4 + x^8])^8 Sqrt[1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2])/x^6 + (16 (x^4 + Sqrt[8 x^4 + x^8])^6 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(3/4))/x^9 + (8 (x^4 + Sqrt[8 x^4 + x^8])^7 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(3/4))/x^9 + ((x^4 + Sqrt[8 x^4 + x^8])^8 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(3/4))/x^9 + ((x^4 + Sqrt[8 x^4 + x^8])^10 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(5/4))/(4 x^15) + ((x^4 + Sqrt[8 x^4 + x^8])^11 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(5/4))/(16 x^15) + ((x^4 + Sqrt[8 x^4 + x^8])^12 (1 - (8 (x^4 + Sqrt[8 x^4 + x^8]) + (x^4 + Sqrt[8 x^4 + x^8])^2)/(x^4 + Sqrt[8 x^4 + x^8])^2)^(3/2))/(64 x^18))/(256 + 256 (x^4 + Sqrt[8 x^4 + x^8]) + 96 (x^4 + Sqrt[8 x^4 + x^8])^2 + 16 (x^4 + Sqrt[8 x^4 + x^8])^3 + (x^4 + Sqrt[8 x^4 + x^8])^4)]",
+     "leaves": 3528,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -88570,13 +89779,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.059,
-     "time": 0.02986500004772097,
-     "result": "{\"failed\", \"tower construction failed\", (1 + Sqrt[1 + x^8]/x^4)^(1/4)}",
-     "leaves": 22,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", (1 + Sqrt[1 + x^8]/x^4)^(1/4)}",
-     "class": "NEITHER"
+     "wall": 25.915,
+     "time": 0.4664259999990463,
+     "result": "((1 - 4 (x^4 + Sqrt[1 + x^8])^2 + 6 (x^4 + Sqrt[1 + x^8])^4 - 4 (x^4 + Sqrt[1 + x^8])^6 + (x^4 + Sqrt[1 + x^8])^8) (1 + (1 + (x^4 + Sqrt[1 + x^8])^2)/(-1 + (x^4 + Sqrt[1 + x^8])^2))^(1/4) ((x^4 + Sqrt[1 + x^8])^(1/4) - 1/2 ArcTan[(x^4 + Sqrt[1 + x^8])^(1/4)] + 1/4 Log[1 - (x^4 + Sqrt[1 + x^8])^(1/4)] - 1/4 Log[1 + (x^4 + Sqrt[1 + x^8])^(1/4)] + RootSum[1/256 + #1^4 &, Log[1 + 64 (x^4 + Sqrt[1 + x^8])^(1/4) #1^3] #1 &]))/(2 x^3 (x^4 + Sqrt[1 + x^8])^(5/4) (-1 + (x^4 + Sqrt[1 + x^8])^2)^3)",
+     "leaves": 284,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -106661,13 +108049,187 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.059,
-     "time": 0.030273000011220574,
-     "result": "{\"failed\", \"tower construction failed\", 1/((1 + x^4) Sqrt[-x^2 + Sqrt[1 + x^4]])}",
-     "leaves": 30,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", 1/((1 + x^4) Sqrt[-x^2 + Sqrt[1 + x^4]])}",
-     "class": "FRICAS-ONLY"
+     "wall": 7.031,
+     "time": 0.2926060000900179,
+     "result": "1/2 ArcTan[1/2 (-(3 x (x^2 + Sqrt[1 + x^4]) Sqrt[-(-1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4])) + (1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4]))])/(-1 + (x^2 + Sqrt[1 + x^4])^2) + (x (x^2 + Sqrt[1 + x^4])^3 Sqrt[-(-1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4])) + (1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4]))])/(-1 + (x^2 + Sqrt[1 + x^4])^2))]",
+     "leaves": 235,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "AGREE-ELEM"
     }
    }
   },
@@ -106703,8 +108265,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.059,
-     "time": 0.030966000049374998,
+     "wall": 6.606,
+     "time": 6.579245000029914,
      "result": "{\"failed\", \"tower construction failed\", 1/((b + a^2 x^4) Sqrt[-a x^2 + Sqrt[b + a^2 x^4]])}",
      "leaves": 39,
      "status": "DECLINE",
@@ -106753,8 +108315,8 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.058,
-     "time": 0.02921300008893013,
+     "wall": 0.186,
+     "time": 0.15524200000800192,
      "result": "{\"failed\", \"tower construction failed\", 1/((3 + 4 x^4) Sqrt[-2 x^2 + Sqrt[3 + 4 x^4]])}",
      "leaves": 34,
      "status": "DECLINE",
@@ -107061,13 +108623,187 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.057,
-     "time": 0.028942000004462898,
-     "result": "{\"failed\", \"tower construction failed\", 1/((1 + x^4) Sqrt[-x^2 + Sqrt[1 + x^4]])}",
-     "leaves": 30,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", 1/((1 + x^4) Sqrt[-x^2 + Sqrt[1 + x^4]])}",
-     "class": "FRICAS-ONLY"
+     "wall": 7.226,
+     "time": 0.2824879999971017,
+     "result": "1/2 ArcTan[1/2 (-(3 x (x^2 + Sqrt[1 + x^4]) Sqrt[-(-1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4])) + (1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4]))])/(-1 + (x^2 + Sqrt[1 + x^4])^2) + (x (x^2 + Sqrt[1 + x^4])^3 Sqrt[-(-1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4])) + (1 + (x^2 + Sqrt[1 + x^4])^2)/(2 (x^2 + Sqrt[1 + x^4]))])/(-1 + (x^2 + Sqrt[1 + x^4])^2))]",
+     "leaves": 235,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "AGREE-ELEM"
     }
    }
   },
@@ -119398,13 +121134,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.055,
-     "time": 0.02795299992430955,
-     "result": "{\"failed\", \"tower construction failed\", Sqrt[-x^2 + Sqrt[1 - x^4]]/x^2}",
-     "leaves": 28,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", Sqrt[-x^2 + Sqrt[1 - x^4]]/x^2}",
-     "class": "NEITHER"
+     "wall": 144.347,
+     "time": 5.920783999958076,
+     "result": "-Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)]/x + Log[(-(9757066184884224 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)])/x^3 - (18542164090814464 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)])/x^5 + (9757066184884224 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)])/x^7 - 18659485417472 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7] + (78030965833728 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^2 + (417294727512064 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^4 - (78030965833728 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^6 - (18659485417472 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^8 - (3156800962560 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^2)/x^3 + (2856153251840 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^2)/x^5 + (3156800962560 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^2)/x^7 + 8078229504 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3 + (72670511104 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^2 + (32245809152 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^4 - (72670511104 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^6 + (8078229504 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^8 - (660602880 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^4)/x^3 + (597688320 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^4)/x^5 + (660602880 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^4)/x^7 + 2188288 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5 + (14655488 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^2 - (1325056 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^4 - (14655488 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^6 + (2188288 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^8 - (43008 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^6)/x^3 + (38912 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^6)/x^5 + (43008 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^6)/x^7 + 137 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7 + (812 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^2 - (294 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^4 - (812 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^6 + (137 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^8)/(1 + (2 (-1 + Sqrt[1 - x^4])^2)/x^4 + (-1 + Sqrt[1 - x^4])^4/x^8)] (-107/22304 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7] - 1639/2192572416 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3 - 155/2245194153984 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5 - 7/4598157627359232 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7) + Log[(-(1107483087077376 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)])/x^3 - (57159211481563136 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)])/x^5 + (1107483087077376 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)])/x^7 - 59776817954816 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7] - (471999725961216 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^2 - (107124000555008 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^4 + (471999725961216 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^6 - (59776817954816 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7])/x^8 + (6708202045440 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^2)/x^3 - (6069325660160 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^2)/x^5 - (6708202045440 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^2)/x^7 + 16038494208 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3 - (31396462592 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^2 - (287331844096 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^4 + (31396462592 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^6 + (16038494208 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3)/x^8 + (1403781120 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^4)/x^3 - (1270087680 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^4)/x^5 - (1403781120 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^4)/x^7 + 3161344 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5 + (6354944 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^2 - (31548928 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^4 - (6354944 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^6 + (3161344 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5)/x^8 + (91392 (-1 + Sqrt[1 - x^4]) Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^6)/x^3 - (82688 (-1 + Sqrt[1 - x^4])^2 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^6)/x^5 - (91392 (-1 + Sqrt[1 - x^4])^3 Sqrt[(2 (-1 + Sqrt[1 - x^4]))/(x^2 (1 + (-1 + Sqrt[1 - x^4])^2/x^4)) + (1 - (-1 + Sqrt[1 - x^4])^2/x^4)/(1 + (-1 + Sqrt[1 - x^4])^2/x^4)] Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^6)/x^7 + 104 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7 + (329 (-1 + Sqrt[1 - x^4]) Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^2 - (798 (-1 + Sqrt[1 - x^4])^2 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^4 - (329 (-1 + Sqrt[1 - x^4])^3 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^6 + (104 (-1 + Sqrt[1 - x^4])^4 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)/x^8)/(1 + (2 (-1 + Sqrt[1 - x^4])^2)/x^4 + (-1 + Sqrt[1 - x^4])^4/x^8)] (159/89216 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7] + 1639/1096286208 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^3 + 155/1122597076992 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^5 + 7/2299078813679616 Root[1271035441709056 + 42949672960 #1^2 + 109051904 #1^4 + 20480 #1^6 + #1^8 &, 7]^7)",
+     "leaves": 5428,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "2/9",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/11",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "na",
+       "Indeterminate"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "-3 - 5/2*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "na",
+       "$Aborted"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "na",
+       "$Aborted"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -124160,13 +126075,192 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.055,
-     "time": 0.027837000088766217,
-     "result": "{\"failed\", \"tower construction failed\", Sqrt[-2 + x^2 - Sqrt[4 + x^4]]}",
-     "leaves": 23,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"tower construction failed\", Sqrt[-2 + x^2 - Sqrt[4 + x^4]]}",
-     "class": "NEITHER"
+     "wall": 14.599,
+     "time": 0.28717599995434284,
+     "result": "((-2 + x^2 + Sqrt[4 + x^4]) Sqrt[-2 + (-4 + (x^2 + Sqrt[4 + x^4])^2)/(2 (x^2 + Sqrt[4 + x^4])) - (4 + (x^2 + Sqrt[4 + x^4])^2)/(2 (x^2 + Sqrt[4 + x^4]))] ((Sqrt[2 - x^2 - Sqrt[4 + x^4]] + Sqrt[2 - x^2 - Sqrt[4 + x^4]] (x^2 + Sqrt[4 + x^4]))/(x^2 + Sqrt[4 + x^4]) - Log[(-4 Sqrt[2] + 4 Sqrt[2 - x^2 - Sqrt[4 + x^4]] + Sqrt[2] (x^2 + Sqrt[4 + x^4]))/(x^2 + Sqrt[4 + x^4])]/(2 Sqrt[2])))/(2 x Sqrt[2 - x^2 - Sqrt[4 + x^4]])",
+     "leaves": 274,
+     "pzq": "True",
+     "numeric": [
+      [
+       "3/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3",
+       "ok",
+       "4.248412e-459"
+      ],
+      [
+       "-40",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3",
+       "ok",
+       "4.248412e-459"
+      ],
+      [
+       "-3/2",
+       "ok",
+       "8.496824e-460"
+      ],
+      [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/7",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2",
+       "ok",
+       "2.549047e-459"
+      ],
+      [
+       "7/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "40",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "cnumeric": [
+      [
+       "3/7 + 2/5*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-5/4 + 3/7*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "0.0"
+      ]
+     ],
+     "status": "ELEM",
+     "class": "MATHILDA-ONLY"
     }
    }
   },
@@ -124834,8 +126928,8 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.142,
-     "time": 0.0485140000237152,
+     "wall": 0.231,
+     "time": 0.06741500005591661,
      "result": "-Sqrt[x] + ArcTan[Sqrt[x]] + x ArcTan[Sqrt[x]]",
      "leaves": 22,
      "pzq": "True",
@@ -124876,7 +126970,17 @@
        "0.0"
       ],
       [
+       "-6/5",
+       "ok",
+       "1.699365e-459"
+      ],
+      [
        "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
        "ok",
        "0.0"
       ],
@@ -124886,12 +126990,37 @@
        "0.0"
       ],
       [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
        "1/5",
        "ok",
        "0.0"
       ],
       [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
        "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
        "ok",
        "0.0"
       ],
@@ -124939,6 +127068,36 @@
       ],
       [
        "7/3 - 4/9*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
        "ok",
        "0.0"
       ]
@@ -124988,8 +127147,8 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.333,
-     "time": 0.05317299999296665,
+     "wall": 0.626,
+     "time": 0.06641199998557568,
      "result": "Log[1 + Tan[Sqrt[x]]^2]",
      "leaves": 11,
      "pzq": "True",
@@ -125030,7 +127189,22 @@
        "0.0"
       ],
       [
+       "-6/5",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
        "-1/2",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-1/5",
        "ok",
        "0.0"
       ],
@@ -125040,12 +127214,37 @@
        "0.0"
       ],
       [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
        "1/5",
        "ok",
        "0.0"
       ],
       [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
        "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
        "ok",
        "0.0"
       ],
@@ -125095,6 +127294,26 @@
        "7/3 - 4/9*I",
        "ok",
        "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "9/10 - 5/6*I",
+       "ok",
+       "8.496824e-460"
       ]
      ],
      "status": "ELEM",
@@ -125142,8 +127361,8 @@
      "class": "FRICAS-ONLY"
     },
     "ParallelMixedTower": {
-     "wall": 0.569,
-     "time": 0.13880600000265986,
+     "wall": 1.032,
+     "time": 0.15948500006925315,
      "result": "-2 Sqrt[2] ArcTan[1 + Sqrt[2] Sqrt[x]] - Sqrt[2] ArcTan[x] + 2 Sqrt[x] ArcTan[x] - Log[1 - Sqrt[2] Sqrt[x] + x]/Sqrt[2] + Log[1 + Sqrt[2] Sqrt[x] + x]/Sqrt[2]",
      "leaves": 84,
      "pzq": "True",
@@ -125179,6 +127398,11 @@
        "0.0"
       ],
       [
+       "-1",
+       "ok",
+       "0.0"
+      ],
+      [
        "-1/2",
        "ok",
        "0.0"
@@ -125189,12 +127413,37 @@
        "0.0"
       ],
       [
+       "-1/27",
+       "ok",
+       "0.0"
+      ],
+      [
+       "1/23",
+       "ok",
+       "0.0"
+      ],
+      [
        "1/5",
        "ok",
        "0.0"
       ],
       [
+       "1/3",
+       "ok",
+       "0.0"
+      ],
+      [
        "3/4",
+       "ok",
+       "0.0"
+      ],
+      [
+       "11/10",
+       "ok",
+       "0.0"
+      ],
+      [
+       "6/5",
        "ok",
        "0.0"
       ],
@@ -125234,6 +127483,36 @@
        "-5/4 + 3/7*I",
        "ok",
        "0.0"
+      ],
+      [
+       "1/9 - 3/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-2/9 - 1/8*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "5/2 + 7/3*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-3 - 5/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "3/2 - 7/2*I",
+       "ok",
+       "0.0"
+      ],
+      [
+       "-7/4 + 13/4*I",
+       "ok",
+       "0.0"
       ]
      ],
      "status": "ELEM",
@@ -125271,13 +127550,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.153,
-     "time": 0.12457099999301136,
-     "result": "{\"failed\", \"no solution within bounds\", {5, 3}}",
-     "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {5, 3}}",
-     "class": "NEITHER"
+     "wall": 0.092,
+     "time": 0.06750400003511459,
+     "result": "{\"not elementary\", 1 + (1 + I x)/(1 - I x), 1/(2 Sqrt[ArcTan[x]])}",
+     "leaves": 31,
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", 1 + (1 + I x)/(1 - I x), 1/(2 Sqrt[ArcTan[x]])}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -125322,13 +127601,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.125,
-     "time": 0.09543099999427795,
-     "result": "{\"failed\", \"no solution within bounds\", {2, 4}}",
+     "wall": 0.097,
+     "time": 0.06704999995417893,
+     "result": "{\"not elementary\", \"no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))\", {2, 0}}",
      "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {2, 4}}",
-     "class": "NEITHER"
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))\", {2, 0}}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -125361,13 +127640,13 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.145,
-     "time": 0.116152000031434,
-     "result": "{\"failed\", \"no solution within bounds\", {3, 4}}",
+     "wall": 0.099,
+     "time": 0.07089500001166016,
+     "result": "{\"not elementary\", \"no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))\", {3, 0}}",
      "leaves": 6,
-     "status": "DECLINE",
-     "detail": "{\"failed\", \"no solution within bounds\", {3, 4}}",
-     "class": "NEITHER"
+     "status": "NONELEM",
+     "detail": "{\"not elementary\", \"no solution at proved bounds with a complete logand set and a residue-free residual (Proposition 9.2(b))\", {3, 0}}",
+     "class": "AGREE-NONELEM"
     }
    }
   },
@@ -125400,8 +127679,8 @@
      "class": "NEITHER"
     },
     "ParallelMixedTower": {
-     "wall": 0.067,
-     "time": 0.03713599999900907,
+     "wall": 0.081,
+     "time": 0.054924000054597855,
      "result": "{\"not elementary\", ArcTan[x], Sqrt[x] + x^(5/2)}",
      "leaves": 15,
      "status": "NONELEM",

@@ -2776,6 +2776,102 @@ XPowerReduce[f_, x_Symbol] := Catch[
       {k, {6, 5, 4, 3, 2}}];
     None], "xpow"];
 
+(* KernelSubstitution[f, x]: {g, u, back} for a change of variable that turns a
+   radical of a transcendental kernel into a simpler integrand g in u, else None:
+     u = E^x        f rational in E^(k x) (k integer, hyperbolic functions
+                    rewritten): g = f(u)/u
+     u = Sin x      f rational in Sin x, Cos x with every radical free of Cos:
+                    g = f(u, y)/y, y = Sqrt[1 - u^2] standing for Cos x
+     u = Cos x      likewise, g = -f(y, u)/y with y standing for Sin x
+     x = u^k        x only through roots x^(j/k) inside a transcendental
+                    function (Tan[Sqrt[x]]): g = f(u^k) k u^(k-1)
+     x = E^u        a radical of Log[x]: g = f(E^u) E^u
+     x = Tan u      a radical of ArcTan[x]: g = f(Tan u) (1 + Tan[u]^2), Tan in
+                    exponential form (the tower handles E^(2 I u) cleanly)
+   back maps an antiderivative in u to one in x.  Each substitution is a
+   differential-field isomorphism (D_x <-> u' D_u, u' in the image field), so
+   Liouville's form transfers both ways: a certificate for g certifies f, and
+   an answer for g maps to one for f -- verified by the caller with
+   PossibleZeroQ over complex x.  The formal y is mapped back to Cos x (Sin x),
+   never to Sqrt[1 - Sin[x]^2], so no branch is chosen. *)
+KernelSubstitution[f_, x_Symbol] := Module[{u = Unique["u"], radQ, fe, g, fs, s, c, bases, yv, k, e},
+  radQ[h_] := ! FreeQ[f, Power[b_, _Rational] /; ! FreeQ[b, h]];
+  If[! radQ[x], Return[None]];
+  (* u = E^x *)
+  fe = If[FreeQ[f, Alternatives @@ HypHeads | Tanh | Coth], f, TrigToExp[f]];
+  If[! FreeQ[fe, Power[E, _]] && radQ[E],
+    g = fe /. Power[E, k_Integer x] :> u^k /. Power[E, x] -> u;
+    If[FreeQ[g, x], Return[{g/u, u, Function[G, G /. u -> E^x]}]]];
+  (* u = Sin x or Cos x *)
+  If[! FreeQ[f, (Alternatives @@ TrigHeads | Tan | Cot)[x]],
+    fs = f /. {Tan[x] -> s/c, Cot[x] -> c/s, Sec[x] -> 1/c, Csc[x] -> 1/s, Sin[x] -> s, Cos[x] -> c};
+    bases = Cases[{fs}, Power[b_, _Rational] /; ! FreeQ[b, s | c] :> b, Infinity];
+    yv = Sqrt[1 - u^2];
+    If[FreeQ[fs, x] && bases =!= {},
+      Which[
+        FreeQ[bases, c],
+          Return[{(fs /. {s -> u, c -> yv})/yv, u,
+                  Function[G, G /. Power[b_, ex_] /; Expand[b - (1 - u^2)] === 0 :> Cos[x]^(2 ex) /. u -> Sin[x]]}],
+        FreeQ[bases, s],
+          Return[{-(fs /. {c -> u, s -> yv})/yv, u,
+                  Function[G, G /. Power[b_, ex_] /; Expand[b - (1 - u^2)] === 0 :> Sin[x]^(2 ex) /. u -> Cos[x]]}]]]];
+  (* x = u^k: x inside a transcendental function, only through roots *)
+  If[! FreeQ[f, h_[a_] /; MemberQ[Join[GenHeads, TrigHeads, HypHeads], h] && ! FreeQ[a, x]],
+    k = LCM @@ Append[Denominator /@ Cases[{f}, Power[x, r_Rational] :> r, Infinity], 1];
+    If[k > 1,
+      g = f /. Power[x, r_Rational] :> u^(r k);
+      If[FreeQ[g /. x -> u^k, Power[_?(! FreeQ[#, u] &), _Rational]] && FreeQ[g, Power[x, _Rational]],
+        Return[{(g /. x -> u^k) k u^(k - 1), u, Function[G, G /. u -> x^(1/k)]}]]]];
+  (* x = E^u *)
+  If[radQ[Log[x]],
+    g = f /. Log[x] -> u /. x -> E^u;
+    If[FreeQ[g, x], Return[{g E^u, u, Function[G, G /. Power[E, e_] :> x^Cancel[e/u] /; FreeQ[Cancel[e/u], u] /. u -> Log[x]]}]]];
+  (* x = Tan u *)
+  If[radQ[ArcTan[x]],
+    g = f /. ArcTan[x] -> u /. x -> Tan[u];
+    If[FreeQ[g, x],
+      g = Together[(g (1 + Tan[u]^2)) /. Tan[u] -> -I (E^(2 I u) - 1)/(E^(2 I u) + 1)];
+      Return[{g, u, Function[G, G /. Power[E, e_] :> ((1 + I x)/(1 - I x))^Cancel[e/(2 I u)] /; FreeQ[Cancel[e/(2 I u)], u] /. u -> ArcTan[x]]}]]];
+  None];
+
+(* ConicPowerSubstitution[f, x]: {g, w, back} when f holds a root nested over
+   Sqrt[Q(x^k)], Q quadratic in X = x^k (k >= 2) -- Sqrt[x^2 + Sqrt[x^4 + 1]],
+   (x^3 + Sqrt[x^6 - 1])^(1/3) -- else None.  The tower's Euler step only
+   parametrises a conic in a generator; here the conic is in x^k.  Its Euler
+   parameter w (y = Sqrt[Q], w = y + alpha X when alpha^2 is Q's leading
+   coefficient, else w = (y - y0)/(X - X0) through a rational point) makes X and
+   y rational in w, and x = t with t^k = X(w): every radical of f becomes a
+   flat radical over Q(w), which the tower or the Kummer split takes.
+   g = f(t, y(w)) dt/dw.  C(x, y) = C(w, t) with D_x <-> (dw/dx) D_w, so a
+   certificate transfers and an answer maps back (t -> x, w -> w(x)), verified
+   by the caller over complex x. *)
+ConicPowerSubstitution[f_, x_Symbol] := Module[{cands, b, k, X = Unique["X"], Q, c0, c1, c2, alpha, pt, w = Unique["w"],
+    Xw, yw, t, g, wx, own},
+  cands = DeleteDuplicates[Cases[{f}, Power[b_, e_Rational] /; Denominator[e] == 2 && PolynomialQ[b, x] &&
+      ! FreeQ[f, Power[B_, _Rational] /; ! FreeQ[B, Power[b, e]]] :> b, Infinity]];
+  Do[
+    k = Exponent[b, x]/2;      (* Q quadratic in X = x^k: every exponent a multiple of k *)
+    If[! IntegerQ[k] || k < 2 || ! AllTrue[Exponent[#, x] & /@ If[Head[Expand[b]] === Plus, List @@ Expand[b], {Expand[b]}], Divisible[#, k] &],
+      Continue[]];
+    Q = Expand[b] /. x -> X^(1/k);
+    If[! PolynomialQ[Q, X] || Exponent[Q, X] != 2, Continue[]];
+    {c0, c1, c2} = PadRight[CoefficientList[Q, X], 3];
+    alpha = RationalSqrt[c2];
+    pt = If[alpha === None, RationalPoint[Q, X], None];
+    If[alpha === None && pt === None, Continue[]];
+    own = Sqrt[b];
+    If[alpha =!= None,
+      Xw = Together[(w^2 - c0)/(c1 + 2 alpha w)]; yw = Together[w - alpha Xw]; wx = own + alpha x^k,
+      Xw = Together[(2 pt[[2]] w - (c2 + w^2) pt[[1]] - c1)/(c2 - w^2)]; yw = Together[pt[[2]] + w (Xw - pt[[1]])];
+      wx = (own - pt[[2]])/(x^k - pt[[1]])];
+    t = Power[Xw, 1/k];
+    g = (f /. Power[bb_, e_] /; Expand[bb - b] === 0 :> yw^(2 e)) /. x -> t;
+    If[! FreeQ[g, x], Continue[]];
+    Return[{g D[t, w], w,
+      Function[G, (G /. Power[bb_, e_Rational] /; Together[bb - Xw] === 0 :> x^(e k)) /. w -> wx]}, Module],
+    {b, cands}];
+  None];
+
 (* ---------------------------------------------- products of flat radicals *)
 (* the integrators a Kummer piece (one radical) is offered to: Trager first --
    complete for a radical over Q, it decides the pieces whose curves this
@@ -2801,6 +2897,23 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
         With[{F = (g /. red[[3]] -> x^red[[1]])/red[[1]]},
           If[TrueQ[Quiet[PossibleZeroQ[D[F, x] - integrand0, Assumptions -> Element[x, Complexes]]]],
             Return[F, Module]]]]]];
+  (* a radical of a transcendental kernel: change the variable (Sqrt[Sin[x]] ->
+     Sqrt[u]/Sqrt[1 - u^2]); an algebraic image goes to Trager first.  A
+     certificate for the image certifies f; an answer maps back and is verified *)
+  If[! TrueQ[$inKernelSub],
+    Do[With[{ks = sub[integrand0, x]},
+      If[ks =!= None,
+        With[{r = Block[{$inKernelSub = True},
+                    Catch[Scan[Function[integ, With[{ri = integ[ks[[1]]]},
+                        If[! MatchQ[ri, {"failed", ___}], Throw[ri, "ksub"]]]],
+                      kummerIntegrators[ks[[2]], opts]]; {"failed", "kernel substitution"}, "ksub"]]},
+          If[MatchQ[r, {"not elementary", ___}], Return[ks[[3]][r], Module]];   (* read in x *)
+          If[MatchQ[r, {"failed", s_String /; StringStartsQ[s, "internal error"], ___}], Return[r, Module]];
+          If[! ListQ[r] && FreeQ[r, ParallelIntegrateMixed],
+            With[{F = ks[[3]][r]},
+              If[FreeQ[F, ks[[2]]] && TrueQ[Quiet[PossibleZeroQ[D[F, x] - integrand0, Assumptions -> Element[x, Complexes]]]],
+                Return[F, Module]]]]]]],
+      {sub, {KernelSubstitution, ConicPowerSubstitution}}]];
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
   (* BuildTower::radicals is quiet: several flat radicands go to the Kummer split
      below, and an honest failure says so in the returned tuple *)
@@ -2809,12 +2922,14 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
      (Sqrt[1 - x] Sqrt[1 + x] Sqrt[1 - x^4] is (x^2 - 1) Sqrt[1 + x^2] up to a
      sign, while the tower reaches a genus-3 curve); when the split declines,
      the tower runs *)
-  (* Through Trager only at this point: a piece this method would solve over
-     Q(a, b) can hang before the tower is tried (multiple radicals 0 (i)); the
-     pieces come back to this method below, when the tower cannot be built *)
+  (* With parameters, through Trager only at this point: a piece this method
+     would solve over Q(a, b) can hang before the tower is tried (multiple
+     radicals 0 (i)); the pieces come back to this method below, when the tower
+     cannot be built *)
   ks = KummerSplit[integrand, x];
   If[ks =!= None,
-    With[{kr = KummerIntegrate[ks, integrand, x, Take[kummerIntegrators[x, opts], 1]]},
+    With[{kr = KummerIntegrate[ks, integrand, x,
+                 If[TransConsts[{integrand}, {x}] === {}, kummerIntegrators[x, opts], Take[kummerIntegrators[x, opts], 1]]]},
       If[! MatchQ[kr, {"failed", ___}], Return[kr, Module]]]];
   bt = Quiet[Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"],
              {BuildTower::radicals}];

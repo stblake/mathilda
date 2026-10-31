@@ -391,6 +391,37 @@ static void test_kummer_pieces_through_trager(void) {
                 "\"not elementary\"");
 }
 
+/* A radical of a transcendental kernel: the change of variable (u = Sin x,
+ * y = Cos x; u = E^x; x = u^2; x = E^u; x = Tan u) is a differential-field
+ * isomorphism, so a certificate for the algebraic or simpler image certifies
+ * the integrand; an answer maps back and is verified in x.  A root nested over
+ * a conic in X = x^k is parametrised by that conic's Euler parameter. */
+static void test_kernel_and_conic_power_substitution(void) {
+    const char *nonelem[] = {
+        "Sqrt[Sin[x]]", "Cos[x]^(1/3)", "(1/((Exp[x] + Exp[-x])/2))^(1/3)",
+        "Tan[Sqrt[x]]", "Sqrt[Log[x]]", "Sqrt[ArcTan[x]]",
+    };
+    for (size_t i = 0; i < sizeof nonelem / sizeof nonelem[0]; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf, "First[Quiet[Integrate`ParallelMixedTower[%s, x]]]", nonelem[i]);
+        assert_eval(buf, "\"not elementary\"");
+    }
+    const char *elem[] = {
+        "Cos[x] Sqrt[Sin[x]]",                                    /* the back map y -> Cos x */
+        "(x^3 + Sqrt[x^6 - 1])^(1/3)",                            /* DDI nested 19 (v) */
+        "1/((x^4 + 1) Sqrt[Sqrt[x^4 + 1] - x^2])",                /* euler outrageous 6 (i) */
+        "Sqrt[-x^2 + Sqrt[1 - x^4]]/x^2",                         /* potpourri p8 (ii): a rational point */
+    };
+    for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", elem[i]);
+        assert_eval(buf, "True");
+    }
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -467,11 +498,12 @@ static void test_nonelem_warning_emitted(void) {
         "Integrate[Exp[x^2], x, Method -> \"ParallelMixedTower\"]",
         "Integrate::nonelem"));
     /* An inconclusive {"failed", ...} give-up must still stay SILENT: failure of
-     * the parallel method proves nothing about elementarity.  Sqrt[Log[x]]
-     * declines with {"failed", "no solution within bounds", {4, 3}} at every
-     * rung of the retry ladder, so the certificate is never reached. */
+     * the parallel method proves nothing about elementarity.  Sqrt[x Log[x]]
+     * declines with {"failed", "no solution within bounds", {4, 2}}, so the
+     * certificate is never reached.  (Sqrt[Log[x]] was this exemplar until
+     * v0.6105, when x = E^u made it Sqrt[u] E^u, which is certified.) */
     ASSERT(!eval_stderr_contains(
-        "Integrate[Sqrt[Log[x]], x, Method -> \"ParallelMixedTower\"]",
+        "Integrate[Sqrt[x Log[x]], x, Method -> \"ParallelMixedTower\"]",
         "Integrate::nonelem"));
     /* Integrate::nonelem now routes through the funnel: Quiet[] suppresses the
      * print (it was a deliberate raw fprintf before this migration). */
@@ -490,8 +522,9 @@ static void test_soundness_fixes(void) {
      * {"failed", ...} tuple, not return 0.  Root cause was OptionValue[
      * "SpecialExponent"] leaking (Options[iPIM] undefined) -> symbolic bound ->
      * 0-equation trivial solve -> a bogus 0 antiderivative. */
+    /* (since v0.6105 a certificate, through x = E^u: never a bogus answer) */
     assert_eval(
-        "MatchQ[Integrate`ParallelMixedTower[Sqrt[Log[x]], x], {\"failed\", ___}]",
+        "MatchQ[Integrate`ParallelMixedTower[Sqrt[Log[x]], x], {\"not elementary\", ___}]",
         "True");
     /* Fix 1 (F2): the same leak baked an unevaluated OptionValue[...] into the
      * answer for Tan[Sqrt[x]]/Sqrt[x].  Now: no OptionValue in the result, and it
@@ -702,6 +735,7 @@ void test_parallelmixedtower(void) {
     TEST(test_parametric_lcm_in_linear_solve);
     TEST(test_own_radical_back_substitution);
     TEST(test_kummer_pieces_through_trager);
+    TEST(test_kernel_and_conic_power_substitution);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

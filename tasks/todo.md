@@ -5,7 +5,8 @@ Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md (supersedes 
 - [x] W1 PolynomialLCM with parameter-rational coefficients (poly.c) -- 5 "solution does not verify" (v0.6101, +5)
 - [x] W2 own-radical back-substitution for every back rule (generators, Euler w, Y, nested) -- 38 "verification failed" (v0.6102, +35)
 - [x] W3 shared KummerRadicals.m; Trager splits composita; PMT pieces via Trager first (v0.6103, Trager +47, PMT +17); book conflict: multiple_radicals_0 (vi)
-- [ ] W4 SubstituteToAlgebraic pre-pass (Sin/Cos/Exp/Sqrt x/Log/ArcTan kernels; conic in x^k; AlgebraicPoint Euler)
+- [x] W4 kernel + conic-in-x^k substitution pre-pass (v0.6105, +35: 23 certificates, 12 answers); PZQ real-band screen v0.6104
+  - [ ] AlgebraicPoint Euler (nested 13/17); nested 11 (x^4 conic with a pending outer root) still times out
 - [ ] W5 parameter constant field in PMT (conic path; specialise-then-lift logands)
 - [ ] W6 general-genus torsion realisation via Trager adapter
 - [ ] W7 timeouts ($PMProfile; Trager P4c)
