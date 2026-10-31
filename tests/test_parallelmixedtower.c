@@ -339,6 +339,32 @@ static void test_parametric_lcm_in_linear_solve(void) {
     }
 }
 
+/* Every back rule is offered on the integrand's own branch, not only the top
+ * radical: a flattened root (Sqrt[2 x^2 + 3 x^2 Sqrt[x]] = x Sqrt[2 + 3 Sqrt[x]]
+ * with the sign of x chosen at one point), a radical after an Euler step
+ * (recorded in its original form: its image Sqrt[R(w)] has R(w(x)) = x^2 - 3,
+ * on the cut for real |x| < 2), and a nested pair over a conic (the Euler
+ * parameter written through Y, so the inner root's own rule reaches it).  All
+ * 38 such DDI declines were right on one region and -f (or a cube root of
+ * unity times f) on another. */
+static void test_own_radical_back_substitution(void) {
+    const char *cases[] = {
+        "Sqrt[2 x^2 + 3 x^2 Sqrt[x]]",                                   /* nested 1 (iii) */
+        "(2 x^2 + 3 x Sqrt[x])^(1/3)",                                   /* nested 3 (iv) */
+        "(x^4 - 12)/((x^4 - 8 x^2 + 12) Sqrt[x^2 - 4] Sqrt[x^2 - 3])",    /* multiple radicals intro 1 */
+        "1/(Sqrt[2/x + 3] Sqrt[7 x^2 + 5 x^2/Sqrt[2/x + 3]])",           /* nested 6 (iv) */
+        "Sqrt[5 x^2 - x Sqrt[2 x^2 - 3 x]]/(x^4 Sqrt[2 x^2 - 3 x])",     /* potpourri p9 (ii) */
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", cases[i]);
+        assert_eval(buf, "True");
+    }
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -648,6 +674,7 @@ void test_parallelmixedtower(void) {
     TEST(test_kummer_split_flat_radicals);
     TEST(test_complex_screen_catches_real_slice_cut);
     TEST(test_parametric_lcm_in_linear_solve);
+    TEST(test_own_radical_back_substitution);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

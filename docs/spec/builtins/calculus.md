@@ -1506,7 +1506,14 @@ monotonically down.
      split into Kummer pieces `g M` (`M` a radical monomial, one per class modulo
      `C(x)^*`), each integrated through one radical `P` with `M = kappa P`
      (`kappa` a locally constant root of unity) and written back through `M`; a
-     piece proven non-elementary certifies the whole integrand.  A
+     piece proven non-elementary certifies the whole integrand.  When the
+     principal surface fails the gate, the surface written through the
+     integrand's **own radicals** is tried (v0.6102: every back rule -- the
+     simple radical, each flattened root, a conic's radical behind an Euler
+     step -- whose radicand came from one integrand radical `c = A b^(1/k)` is
+     read as `c/A`, which is `b^(1/k)` on the integrand's branch everywhere; a
+     radical behind an Euler step is recorded in its original form, since its
+     image `Sqrt[R(w)]` can sit exactly on the cut over a real interval).  A
      non-elementary case or a
      not-yet-ported case declines cleanly (never a wrong answer).  Time budgets
      (v0.6087): in the Automatic cascade three wall-clock backstops apply --

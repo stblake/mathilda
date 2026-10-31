@@ -2328,7 +2328,7 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
    trigStep, rootNormalize, trigC, wSurface, g0e, y0e, rcoef, sf, noRadical, sample, record, signFix, x0, icoef, toTuple, degs,
    structQ = TrueQ[OptionValue["StructureTheorem"]], btVerbose = TrueQ[OptionValue["Verbose"]], registry = {}, stHead, rel,
    stCoeffs, stConst, stVal, stFrac, stK, stR, stD, stI, stEta, tp, stSub, Dtp, stKind, stArg,
-   ownRad = <||>, ownMixed = False},
+   ownRad = <||>, ownMixed = <||>, origRad = <||>},
   (* registry: {generator, "exp" | "log", argument} for the exponential and
      logarithmic generators, their arguments in the current symbols *)
   Y = Unique["Y"];
@@ -2375,12 +2375,12 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
          negative there and flip the sign of the result) *)
       gw = Cancel[(w^2 - c2)/(b2 + 2 alpha w)]; yw = Cancel[w - alpha gw];
       Dwp = TowerD[T, {alpha gq, 1}];                             (* D(y + alpha g) as a pair *)
-      wSurface = Sqrt[q] + alpha gq,
+      wSurface = Y + alpha gq,
       (* otherwise through a rational point (g0, y0): y = y0 + w (g - g0) *)
       ({g0e, y0e} = pt;
         gw = Cancel[(2 y0e w - (a2 + w^2) g0e - b2)/(a2 - w^2)]; yw = Cancel[y0e + w (gw - g0e)];
         Dwp = Pscale[1/(gq - g0e)^2, Padd[Pscale[gq - g0e, T["Dy"]], Pscale[-1, Pmul[{-y0e, 1}, derivs[[Position[gens, gq][[1, 1]]]], q]]]];
-        wSurface = (Sqrt[q] - y0e)/(gq - g0e))];
+        wSurface = (Y - y0e)/(gq - g0e))];
     Dwp = Cancel[(Dwp[[1]] + Dwp[[2]] Y) /. {Y -> yw, gq -> gw}];
     derivs = Cancel[(#[[1]] + #[[2]] Y) /. {Y -> yw, gq -> gw}] & /@ derivs;
     derivs = {#, 0} & /@ derivs;
@@ -2390,8 +2390,22 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
        Log[g + Y]): record what Y was, then retire the symbol so that a later
        radical cannot be mistaken for it *)
     AppendTo[back, Y -> Sqrt[q]];
+    (* w is written through the radical's symbol Y, not Sqrt[q]: the back rule
+       Y -> Sqrt[q] above then reaches it, and so does an own-radical rule for Y
+       (a nested root over this conic needs the inner root on the integrand's
+       branch too) *)
     AppendTo[back, w -> wSurface];
-    record[w, wSurface]; sample = KeyDrop[sample, Y];
+    record[w, wSurface /. Y -> Sqrt[q]]; sample = KeyDrop[sample, Y];
+    (* every other root over g is rewritten in w; remember what each one was.
+       Recorded as the integrand's own radical (rootNormalize below), the image
+       Sqrt[R(w)] is right but fragile: R(w(x)) = x^2 - 3 exactly, which is
+       negative real on a real interval -- ON the cut, where any numeric
+       evaluation lands on either side (DDI multiple radicals intro 1).  The
+       original Sqrt[x^2 - 3] is the same function without that hazard. *)
+    With[{rads = DeleteDuplicates[Cases[{expr /. RadRules[q, Y, m]}, Power[b_, _Rational] /; ! FreeQ[b, gq], Infinity]]},
+      (* kept through the symbol Y (retired below with its back rule, and its own
+         rule if any), so the inner root also reads on the integrand's branch *)
+      Scan[(origRad[# /. {Y -> yw, gq -> gw}] = #) &, rads]];
     expr = (expr /. RadRules[q, Y, m]) /. {Y -> yw, gq -> gw};
     registry = {#[[1]], #[[2]], (#[[3]] /. RadRules[q, Y, m]) /. {Y -> yw, gq -> gw}} & /@ registry;
     q = None; Y = Unique["Y"]; T = Tower[gens, derivs, q, m];
@@ -2645,13 +2659,14 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
                 With[{key = {Expand[rts[[1, 1]]], Denominator[c[[2]]]},
                       A = Cancel[nrm/Power[rts[[1, 1]], rts[[1, 2]]]]},
                   If[FreeQ[A, Power[_, _Rational]],
-                    With[{own = If[Numerator[c[[2]]] == 1, c/A, A/c]},
+                    With[{own = With[{c0 = FixedPoint[Lookup[origRad, Key[#], #] &, c, 8]},
+                                  If[Numerator[c[[2]]] == 1, c0/A, A/c0]]},
                       (* two different radicals rewritten to one radicand: their own
                          roots may sit on different branches -- keep the principal one *)
-                      If[KeyExistsQ[ownRad, key] && ownRad[key] =!= own, ownMixed = True];
+                      If[KeyExistsQ[ownRad, key] && ownRad[key] =!= own, ownMixed[key] = True];
                       ownRad[key] = own]]],
                 (* a radicand rewritten from a source we cannot track *)
-                Scan[(ownMixed = True) &, rts]]];
+                Scan[(ownMixed[{Expand[#[[1]]], Denominator[#[[2]]]}] = True) &, rts]]];
             expr = expr /. c -> nrm; Continue[]]];
         {base, r} = List @@ c; mm = Denominator[r];          (* the degree of this root *)
         (* flattenable root: base = coef g + rest, coef constant, rest free of g  (Lemma 3.2) *)
@@ -2697,14 +2712,28 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
     Throw[$Failed, "build"]];
   fpair = FromY[T, expr, Y];
   If[q =!= None,
-    AppendTo[back, Y -> q^(1/m)];
-    (* the integrand's own radical when it is the single source of q (above):
-       an ALTERNATIVE back-substitution, tried by the caller when the principal
-       one does not verify.  Carried as an inert rule (OwnRadicalRule never occurs
-       in an expression) so the return shape {T, fpair, back, Y} is unchanged. *)
-    With[{own = Lookup[ownRad, Key[{Expand[q], m}], None]},
-      If[own =!= None && ! ownMixed && Length[ownRad] == 1,
-        AppendTo[back, OwnRadicalRule -> (Y -> own)]]]];
+    AppendTo[back, Y -> q^(1/m)]];
+  (* The integrand's own radicals: an ALTERNATIVE back-substitution, tried by
+     the caller when the principal one does not verify.  Every back rule
+     s -> b^(1/k) -- the simple radical Y -> q^(1/m), a flattened root
+     u -> base^(1/mm), a conic's retired Y -> Sqrt[q] -- whose radicand b was
+     rewritten from exactly one radical of the integrand (rootNormalize above:
+     c = A b^(+-1/k), own = c/A or A/c, own^k = b exactly) gets s -> own: the
+     same value of the formal root, on the integrand's own branch everywhere.
+     A key reached from two different radicals, or from one we cannot track,
+     keeps the principal root.  The rules are carried as inert
+     OwnRadicalRule -> rule entries (OwnRadicalRule never occurs in an
+     expression), so the return shape {T, fpair, back, Y} is unchanged.  Before
+     v0.6102 only the top Y was covered, and only when it was the sole tracked
+     radicand: a flattened root (Sqrt[2 x^2 + 3 x^2 Sqrt[x]] -> x Sqrt[2 + 3 Sqrt[x]])
+     or a radical after an Euler step came back on the principal branch and the
+     surface failed the gate in a region (38 DDI declines). *)
+  Scan[Function[rule,
+      If[MatchQ[rule[[2]], Power[_, rr_Rational /; Numerator[rr] == 1]],
+        With[{key = {Expand[rule[[2, 1]]], Denominator[rule[[2, 2]]]}},
+          If[KeyExistsQ[ownRad, key] && ! TrueQ[ownMixed[key]],
+            AppendTo[back, OwnRadicalRule -> (rule[[1]] -> ownRad[key])]]]]],
+    Cases[back, HoldPattern[_Symbol -> _]]];
   {T, fpair, back, Y}];
 
 (* ParallelIntegrateMixed[integrand, x, opts]  -- the surface entry point.
@@ -2910,11 +2939,20 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
      (Sqrt[(1-x)/(1+x)] -> y = (1+x) Sqrt[(1-x)/(1+x)], not Sqrt[1-x^2]).  The
      pair form spells y as q^(1/m); those powers become Y again first.  Only
      accepted on the same PossibleZeroQ evidence. *)
-  If[(fac === 0 || FreeQ[{1, -1, I, -I}, fac]) && ownR =!= {} && T["q"] =!= None,
-    With[{surfO = (res /. Power[b_, e_Rational] /; Denominator[e] == T["m"] && Expand[b - T["q"]] === 0 :>
-                     Y^(e T["m"])) //. Prepend[DeleteCases[back, Y -> _], First[ownR]]},
-      With[{facO = branchUnit[surfO]},
-        If[MemberQ[{1, -1, I, -I}, facO], fac = facO; surf = surfO]]]];
+  (* Candidates: every own rule at once (a nested pair needs the inner and the
+     outer root on their own branches together), then each one alone. *)
+  If[(fac === 0 || FreeQ[{1, -1, I, -I}, fac]) && ownR =!= {},
+    (* q^(e/m) -> Y^(e m) by an evaluated Rule list: a RuleDelayed right-hand side
+       lands unevaluated inside a held Function body (RootSum), where the back
+       rules can no longer reach the symbol *)
+    With[{res0 = If[T["q"] === None, res,
+                   With[{pw = DeleteDuplicates[Cases[{res}, Power[b_, e_Rational] /; Denominator[e] == T["m"] && Expand[b - T["q"]] === 0, Infinity]]},
+                     res /. Thread[pw -> (Y^(#[[2]] T["m"]) & /@ pw)]]]},
+      Catch[Scan[Function[rs,
+          With[{surfO = res0 //. Join[rs, DeleteCases[back, (Alternatives @@ rs[[All, 1]]) -> _]]},
+            With[{facO = branchUnit[surfO]},
+              If[MemberQ[{1, -1, I, -I}, facO], fac = facO; surf = surfO; Throw[True, "own"]]]]],
+        DeleteDuplicates[Prepend[List /@ ownR, ownR]]], "own"]]];
   If[fac === 0 || FreeQ[{1, -1, I, -I}, fac],
     If[FreeQ[surf, _Complex], Return[{"failed", "verification failed"}]];
     surfC = surf /. Complex[re_, im_] :> Complex[re, -im];
