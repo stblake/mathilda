@@ -267,6 +267,18 @@ static void test_euler_before_root_split(void) {
     }
 }
 
+/* The u = x^k pre-pass integrates g(u) in a Unique["u"], which is Temporary;
+ * the acceptance gate rejected every answer holding a Temporary symbol (an
+ * escaped Module local), the integration variable included, so the sub-answer
+ * was always dropped and the full curve y^2 = 14 x^4 + 31 x^2 + 15 (genus 1)
+ * declined on bounds. */
+static void test_xpower_subcall_variable_accepted(void) {
+    assert_eval("With[{f = x Sqrt[15 + 31 x^2 + 14 x^4]/(5 + 7 x^2)}, "
+                "With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                "Assumptions -> Element[x, Complexes]]]]]", "True");
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -566,6 +578,7 @@ void test_parallelmixedtower(void) {
     TEST(test_certifies_curve_free_nonelementary);
     TEST(test_nontorsion_divisor_certificate);
     TEST(test_euler_before_root_split);
+    TEST(test_xpower_subcall_variable_accepted);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

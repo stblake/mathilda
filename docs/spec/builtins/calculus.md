@@ -1522,7 +1522,8 @@ monotonically down.
      principal-branch answer, valid on each real component"), and so is a
      verification that exhausts its budget.  Acceptance is on positive evidence only
      (v0.6089): a verified unit factor, dependence on x, no `Hold`, and no escaped
-     Module local (a `Temporary` symbol other than a `Function`'s bound variable).
+     Module local (a `Temporary` symbol other than a `Function`'s bound variable or
+     the integration variable, which the u = x^k pre-pass names with `Unique`; v0.6098).
      A `$RecursionLimit` overflow inside the method, which does not abort but
      degrades evaluation, gives `{"failed", "internal error: $RecursionLimit
      exceeded"}` -- never an answer or a certificate.

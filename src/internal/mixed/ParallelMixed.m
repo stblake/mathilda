@@ -2850,7 +2850,11 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
                   DeleteDuplicates[Cases[{surf}, _Symbol, {0, Infinity}, Heads -> True]],
                   (* the bound variable of a Function (RootSum[Function[z, ...], ...])
                      is a Temporary symbol legitimately *)
-                  Flatten[Cases[{surf}, Function[v_, __] :> v, {0, Infinity}, Heads -> True]]],
+                  Flatten[Cases[{surf}, Function[v_, __] :> v, {0, Infinity}, Heads -> True]],
+                  (* the integration variable is the caller's: the u = x^k
+                     pre-pass integrates in a Unique["u"], which is Temporary,
+                     and every such sub-answer used to be rejected here *)
+                  {x}],
                 MemberQ[Attributes[#], Temporary] &],
     surf,
     {"failed", "verification failed"}]],
