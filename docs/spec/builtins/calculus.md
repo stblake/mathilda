@@ -1501,7 +1501,12 @@ monotonically down.
      splitting a generator factor off its base first had flattened `x = u^2` and
      turned the conic into a quartic.  The Euler step takes the square root of a
      parametric leading or constant coefficient (`Sqrt[a^2] -> a`,
-     `Sqrt[(a + b)^2] -> a + b`; only `alpha^2 = a2` matters, not a sign).  A
+     `Sqrt[(a + b)^2] -> a + b`; only `alpha^2 = a2` matters, not a sign).
+     Several flat radicands the tower cannot fold into one radical (v0.6099) are
+     split into Kummer pieces `g M` (`M` a radical monomial, one per class modulo
+     `C(x)^*`), each integrated through one radical `P` with `M = kappa P`
+     (`kappa` a locally constant root of unity) and written back through `M`; a
+     piece proven non-elementary certifies the whole integrand.  A
      non-elementary case or a
      not-yet-ported case declines cleanly (never a wrong answer).  Time budgets
      (v0.6087): in the Automatic cascade three wall-clock backstops apply --

@@ -279,6 +279,34 @@ static void test_xpower_subcall_variable_accepted(void) {
                 "Assumptions -> Element[x, Complexes]]]]]", "True");
 }
 
+/* Several flat radicands (a radical compositum) that BuildTower cannot fold
+ * into one radical: the integrand is split into Kummer pieces g M, M a radical
+ * monomial, one per class modulo C(x)^*, and each piece is integrated through
+ * one radical P (M = kappa P, kappa a locally constant root of unity). */
+static void test_kummer_split_flat_radicals(void) {
+    const char *cases[] = {
+        "Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7]",        /* DDI chebychev 5 (i): one class */
+        "x^(3/2) Sqrt[x + 1] + Sqrt[x]/x",         /* two classes */
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", cases[i]);
+        assert_eval(buf, "True");
+    }
+    /* a piece proven non-elementary certifies the whole integrand: here the one
+     * piece is x^2 (x^6 - 1)^(-2/3), i.e. (1/3) Int (u^2 - 1)^(-2/3) du, which
+     * fails all three Chebyshev conditions */
+    assert_eval("First[Quiet[ParallelMixed`ParallelIntegrateMixed["
+                "(x^3 - 1)^(1/3) (x^3 + 1)^(1/3) x^2/(x^6 - 1), x]]]", "\"not elementary\"");
+    /* two different monomials in one class (they differ by a sign that changes
+     * across the plane) are not split */
+    assert_eval("ParallelMixed`Private`KummerSplit[x/(Sqrt[x - 1] Sqrt[x + 1]) + Sqrt[x^2 - 1], x]",
+                "None");
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -307,12 +335,18 @@ static void test_method_declines_cleanly(void) {
      * derivation unassigned, overflowed $RecursionLimit, and the method returned
      * the unassigned local ParallelMixed`Private`r$NNN as the antiderivative --
      * also through the default Integrate cascade (56 cases of the DDI corpus). */
+    /* Since v0.6099 the Kummer split integrates it (one class, through
+     * x Sqrt[(2 x^2 + 3) (7 x^2 + 5)]/(7 x^2 + 5)); the guard is that the
+     * answer is a verified antiderivative, never a leaked local. */
     assert_eval(
-        "Quiet[ParallelMixed`ParallelIntegrateMixed[Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7], x]][[1;;2]]",
-        "{\"failed\", \"tower construction failed\"}");
+        "With[{f = Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7]}, With[{F = Quiet[ParallelMixed`ParallelIntegrateMixed[f, x]]}, "
+        "!ListQ[F] && FreeQ[F, _Symbol?(MemberQ[Attributes[#], Temporary] &)] && "
+        "TrueQ[PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]]]]]",
+        "True");
     assert_eval(
-        "Head[Quiet[Integrate[Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7], x, Method -> \"ParallelMixedTower\"]]]",
-        "Integrate");
+        "FreeQ[Quiet[Integrate[Sqrt[2 x^2 + 3]/Sqrt[5/x^2 + 7], x, Method -> \"ParallelMixedTower\"]], "
+        "_Symbol?(MemberQ[Attributes[#], Temporary] &) | Integrate]",
+        "True");
 }
 
 static void test_method_certifies_nonelementary(void) {
@@ -579,6 +613,7 @@ void test_parallelmixedtower(void) {
     TEST(test_nontorsion_divisor_certificate);
     TEST(test_euler_before_root_split);
     TEST(test_xpower_subcall_variable_accepted);
+    TEST(test_kummer_split_flat_radicals);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

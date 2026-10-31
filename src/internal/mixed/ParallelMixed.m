@@ -2746,6 +2746,87 @@ XPowerReduce[f_, x_Symbol] := Catch[
       {k, {6, 5, 4, 3, 2}}];
     None], "xpow"];
 
+(* ---------------------------------------------- products of flat radicals *)
+(* KummerSplit[f, x]
+   f rational in x and flat radicals b^e (b rational in x, free of radicals).  Each
+   radicand b becomes one symbol s_b = b^(1/q_b), q_b the lcm of its exponents'
+   denominators (b^(k/q) = (b^(1/q))^k exactly for the principal power), so f is
+   rational in x and the s_b.  The class of a monomial prod s_b^n_b is its
+   exponent vector over the irreducible factors p of the radicands, mod 1: two
+   monomials are in one class iff their quotient is in C(x) up to a locally
+   constant root of unity (squarefree coprime p are multiplicatively independent
+   modulo m-th powers in C(x)).  Returns {{M, g}, ...} with f = Sum g M, g
+   rational, the M radical monomials (1 for the rational part) in pairwise
+   distinct classes; None when f has fewer than two radicands, a nested radical,
+   a radical sum in the denominator, or two different monomials in one class. *)
+KummerSplit[f_, x_Symbol] := Module[{pows, bases, qs, syms, rules, facs, vecs, g, num, den, dmono, terms, n, mono, key, res = <||>},
+  pows = DeleteDuplicates[Cases[{f}, Power[b_, e_Rational] /; ! FreeQ[b, x], {0, Infinity}]];
+  bases = DeleteDuplicates[pows[[All, 1]]];
+  If[Length[bases] < 2, Return[None]];
+  If[AnyTrue[bases, ! FreeQ[#, Power[_?(! FreeQ[#, x] &), _Rational]] &], Return[None]];
+  qs = (LCM @@ Denominator[Cases[pows, Power[#, e_] :> e]]) & /@ bases;
+  syms = Table[Unique["s"], {Length[bases]}];
+  rules = Flatten[MapThread[{Power[#1, e_Rational] :> #3^(e #2)} &, {bases, qs, syms}]];
+  g = Together[f /. rules];
+  If[! FreeQ[g, Power[_?(! FreeQ[#, x] &), _Rational]], Return[None]];
+  facs = DeleteDuplicates[Select[Flatten[(First /@ Rest[FactorList[#]]) & /@
+            Flatten[{Numerator[Together[#]], Denominator[Together[#]]} & /@ bases]], ! FreeQ[#, x] &]];
+  vecs = MapThread[Function[{b, q}, With[{t = Together[b]},
+      (KummerMult[Numerator[t], #, x] - KummerMult[Denominator[t], #, x])/q & /@ facs]], {bases, qs}];
+  num = Expand[Numerator[g]]; den = Denominator[g];
+  dmono = Times @@ (#^Exponent[den, #] & /@ syms);
+  den = Cancel[den/dmono];
+  If[! FreeQ[den, Alternatives @@ syms], Return[None]];
+  terms = If[Head[num] === Plus, List @@ num, {num}];
+  Do[n = Exponent[t, #] - Exponent[dmono, #] & /@ syms;
+    mono = Times @@ (syms^n);
+    key = Mod[n . vecs, 1];
+    If[KeyExistsQ[res, key],
+      If[res[key][[1]] =!= mono, Return[None, Module]];
+      res[key] = {mono, res[key][[2]] + t/Times @@ (syms^(n + (Exponent[dmono, #] & /@ syms)))},
+      res[key] = {mono, t/Times @@ (syms^(n + (Exponent[dmono, #] & /@ syms)))}],
+    {t, terms}];
+  {#[[1]] /. Thread[syms -> MapThread[#1^(1/#2) &, {bases, qs}]], Together[#[[2]]/den]} & /@ Values[res]];
+
+(* the multiplicity of the irreducible factor p in the polynomial r *)
+KummerMult[r_, p_, x_] := Module[{k = 0, t = r},
+  While[Together[PolynomialRemainder[t, p, x]] === 0, t = PolynomialQuotient[t, p, x]; k++]; k];
+
+(* PowerFreeRoot[R, L]: R^(1/L) as sq sf^(1/L)/den, num den^(L-1) = sq^L sf with
+   sf L-th-power-free: equal to R^(1/L) up to a locally constant root of unity,
+   and in the form whose structure (x^(k-1) g(x^k), a conic) the tower sees.
+   Returns {root, sf, sq/den}. *)
+PowerFreeRoot[R_, L_] := Module[{num = Numerator[Together[R]], den = Denominator[Together[R]], sq = 1, sf = 1},
+  Do[sq *= fc[[1]]^Quotient[fc[[2]], L]; sf *= fc[[1]]^Mod[fc[[2]], L],
+    {fc, FactorSquareFreeList[Expand[num den^(L - 1)]]}];
+  {sq sf^(1/L)/den, sf, sq/den}];
+
+(* KummerIntegrate[pieces, f, x, opts]
+   Integrates f = Sum g M piece by piece.  For a piece, L is the least integer
+   with M^L = R rational, and g P with P = PowerFreeRoot[R, L] (one radical) is
+   integrated; M = kappa P with kappa a locally constant L-th root of unity, so
+   an antiderivative F_P of g P becomes one of g M written through M (sf^(1/L) ->
+   M/A, exact since (M/A)^L = sf), else as (M/P) F_P.  A piece proven
+   non-elementary makes f non-elementary: the projection onto the piece's Kummer
+   character commutes with D and keeps Liouville's form.  The sum is verified
+   against f by PossibleZeroQ over complex x like every answer. *)
+KummerIntegrate[pieces_, f_, x_Symbol, opts___] := Module[{total = 0, M, g, L, R, pf, P, r, F},
+  Do[{M, g} = piece;
+    L = LCM @@ Append[Denominator /@ Cases[{M}, Power[_, e_Rational] :> e, {0, Infinity}], 1];
+    R = Together[M^L];
+    If[! FreeQ[R, Power[_?(! FreeQ[#, x] &), _Rational]], Return[{"failed", "tower construction failed"}, Module]];
+    pf = If[L == 1, {R, 1, R}, PowerFreeRoot[R, L]];
+    P = pf[[1]];
+    r = ParallelIntegrateMixed[g P, x, opts];
+    If[ListQ[r] || ! FreeQ[r, ParallelIntegrateMixed], Return[r, Module]];
+    F = SelectFirst[
+      {r, r /. Power[s_, e_Rational] /; Together[s - pf[[2]]] === 0 :> (M/pf[[3]])^(e L), (M/P) r},
+      TrueQ[Quiet[PossibleZeroQ[D[#, x] - g M, Assumptions -> Element[x, Complexes]]]] &, None];
+    If[F === None, Return[{"failed", "verification failed"}, Module]];
+    total += F,
+    {piece, pieces}];
+  total];
+
 ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, ownR, integrand = integrand0},
   (* u = x^k first: the reduced integrand, if solved and verified for all
      complex x, is the answer; otherwise the normal path runs *)
@@ -2760,8 +2841,15 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
           If[TrueQ[Quiet[PossibleZeroQ[D[F, x] - integrand0, Assumptions -> Element[x, Complexes]]]],
             Return[F, Module]]]]]];
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
-  bt = Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"];
-  If[bt === $Failed || ! ListQ[bt] || Length[bt] != 4, Return[{"failed", "tower construction failed", integrand}]];
+  (* BuildTower::radicals is quiet: several flat radicands go to the Kummer split
+     below, and an honest failure says so in the returned tuple *)
+  bt = Quiet[Catch[BuildTower[integrand, x, "StructureTheorem" -> OptionValue["StructureTheorem"], "Verbose" -> OptionValue["Verbose"]], "build"],
+             {BuildTower::radicals}];
+  If[bt === $Failed || ! ListQ[bt] || Length[bt] != 4,
+    (* several flat radicands: integrate the Kummer pieces, each one radical *)
+    With[{ks = KummerSplit[integrand, x]},
+      If[ks =!= None, Return[KummerIntegrate[ks, integrand, x, opts], Module]]];
+    Return[{"failed", "tower construction failed", integrand}]];
   {T, fpair, back, Y} = bt;
   den = VanishingDenominator[fpair, back, x];
   If[den =!= None, Return[{"failed", "integrand undefined: a denominator vanishes identically (dependent generators)", den}]];
