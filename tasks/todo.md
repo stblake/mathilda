@@ -1,3 +1,18 @@
+# DDI Vol. 1: close the remaining 292 open cases (2026-10-31, from v0.6100)
+
+Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md (supersedes the P-items below where they overlap)
+
+- [ ] W1 PolynomialLCM with parameter-rational coefficients (poly.c) -- 5 "solution does not verify"
+- [ ] W2 own-radical back-substitution for every back rule (generators, Euler w, Y, nested) -- 38 "verification failed"
+- [ ] W3 radical merge (MergeKummerMonomial; Trager detectRadical; KummerSplit same-class monomials)
+- [ ] W4 SubstituteToAlgebraic pre-pass (Sin/Cos/Exp/Sqrt x/Log/ArcTan kernels; conic in x^k; AlgebraicPoint Euler)
+- [ ] W5 parameter constant field in PMT (conic path; specialise-then-lift logands)
+- [ ] W6 general-genus torsion realisation via Trager adapter
+- [ ] W7 timeouts ($PMProfile; Trager P4c)
+- [ ] W8 Trager over Q(params) (after W5, by what remains)
+- [ ] W9 general curves (separate plan)
+- [ ] W10 full rerun with FriCAS, report before/after, PDF, review
+
 # DDI Vol. 1 stress test: fix every bug/deficiency found (2026-10-30, v0.6087+)
 
 Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md

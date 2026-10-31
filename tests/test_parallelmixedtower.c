@@ -321,6 +321,24 @@ static void test_complex_screen_catches_real_slice_cut(void) {
                 "True");
 }
 
+/* PolynomialLCM[1, b/a + x^3] stayed unevaluated, and the linear solve over
+ * Q(a, b) read it as a nonzero residual: five DDI cube-root integrals with
+ * parameters declined "internal: solution does not verify". */
+static void test_parametric_lcm_in_linear_solve(void) {
+    const char *cases[] = {
+        "(a + b x Sqrt[x])^(1/3)",               /* DDI nested 3 (ii) */
+        "1/(a x^3 + b)^(1/3)",                   /* DDI chebychev 3 (v) */
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", cases[i]);
+        assert_eval(buf, "True");
+    }
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -629,6 +647,7 @@ void test_parallelmixedtower(void) {
     TEST(test_xpower_subcall_variable_accepted);
     TEST(test_kummer_split_flat_radicals);
     TEST(test_complex_screen_catches_real_slice_cut);
+    TEST(test_parametric_lcm_in_linear_solve);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

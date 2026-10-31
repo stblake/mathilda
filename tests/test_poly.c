@@ -122,6 +122,12 @@ void test_polynomiallcm() {
     run_test("PolynomialLCM[6 x^2 y, 4 x y^3]", "Times[12, Power[x, 2], Power[y, 3]]");
     run_test("PolynomialLCM[x^2 - 1, 0]", "0");
     run_test("PolynomialLCM[E^(2 x) - 1, E^x + 1]", "Plus[-1, Power[E, Times[2, x]]]");
+    /* coefficients rational in a parameter: LCM(numerators)/GCD(denominators)
+     * after Together (they stayed unevaluated) */
+    run_test("PolynomialLCM[1, b/a + x^3]", "Plus[b, Times[a, Power[x, 3]]]");
+    run_test("PolynomialLCM[x, b/a + x]", "Times[x, Plus[b, Times[a, x]]]");
+    run_test("PolynomialLCM[b/a + x, b/a + x]", "Plus[Times[Power[a, -1], b], x]");
+    run_test("PolynomialLCM[x^2/a - 1/a, x/b - 1/b]", "Plus[-1, Power[x, 2]]");
 }
 
 void test_polynomial_div_rem() {

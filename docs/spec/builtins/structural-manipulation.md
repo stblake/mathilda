@@ -1830,6 +1830,7 @@ Gives the least common multiple of the polynomials.
 - Handles univariate and multivariate polynomials.
 - **FLINT engine** (v0.6077), same context as `PolynomialGCD`. The shape is the classical fold's: L ← (L/g) aᵢ or L (aᵢ/g), whichever quotient has fewer terms (g including the rational content), kept as a product (`PolynomialLCM[2x + 2, 4x - 4]` is `(1 + x)(-4 + 4x)`). The running LCM is held as its shown factors and gcd(L, aᵢ) is taken factor by factor, so each gcd is the size of one argument rather than of the growing product.
 - An argument `0` gives `0`.
+- **Coefficients rational in a parameter** (v0.6101): when every other path declines and an argument has a symbolic denominator (`b/a + x^3`), the LCM is LCM(numerators)/GCD(denominators) after `Together` -- `PolynomialLCM[1, b/a + x^3]` is `b + a x^3`, `PolynomialLCM[x^2/a - 1/a, x/b - 1/b]` is `x^2 - 1`. Such calls stayed unevaluated before.
 - **`Modulus -> p`** (p prime): the LCM over GF(p), each factor reduced to its residues. Before v0.6077 the option was multiplied into the answer as a factor.
 - Treats algebraic numbers (like `I`) as independent variables or constants seamlessly during complex arithmetic evaluations.
 - Preserves explicit factored forms where possible.

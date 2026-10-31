@@ -3717,7 +3717,91 @@ static Expr* polynomiallcm_with_extension(Expr** argv, size_t argc,
     return result;
 }
 
+/* A plain polynomial: numbers and symbols under Plus, Times and Power with a
+ * non-negative integer exponent (the numerator or denominator of a Together). */
+static bool lcm_plain_polynomial(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return e->type != EXPR_STRING;
+    if (e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Rational || h == SYM_Complex) return true;
+    if (h == SYM_Power)
+        return e->data.function.arg_count == 2
+            && e->data.function.args[1]->type == EXPR_INTEGER
+            && e->data.function.args[1]->data.integer >= 0
+            && lcm_plain_polynomial(e->data.function.args[0]);
+    if (h != SYM_Plus && h != SYM_Times) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!lcm_plain_polynomial(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* PolynomialLCM of rational functions whose denominators hold symbols
+ * (b/a + x^3, a coefficient rational in a parameter): with p_i = n_i/d_i
+ * after Together, the LCM is LCM(n_i)/GCD(d_i) -- the convention of the
+ * reference system (PolynomialLCM[1, b/a + x^3] = b + a x^3, and
+ * PolynomialLCM[b/a + x, b/a + x] = (b + a x)/a).  NULL when every
+ * denominator is a number (the paths below handle those) or a numerator or
+ * denominator is not a plain polynomial.  Before this, such a call stayed
+ * unevaluated, and ParallelMixedTower's linear solve over Q(a, b) read the
+ * unevaluated LCM as a nonzero residual ("solution does not verify"). */
+static bool lcm_has_symbolic_denominator(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER
+        && e->data.function.args[1]->data.integer < 0
+        && !is_number(e->data.function.args[0])) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (lcm_has_symbolic_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* polynomiallcm_symbolic_denominators(Expr** args, size_t n) {
+    bool any = false;
+    for (size_t i = 0; i < n && !any; i++) any = lcm_has_symbolic_denominator(args[i]);
+    if (!any) return NULL;
+    Expr** nums = calloc(n, sizeof(Expr*));
+    Expr** dens = calloc(n, sizeof(Expr*));
+    bool symbolic = false, plain = true;
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = internal_together((Expr*[]){ expr_copy(args[i]) }, 1);
+        dens[i] = internal_denominator((Expr*[]){ expr_copy(t) }, 1);
+        nums[i] = internal_numerator((Expr*[]){ t }, 1);
+        if (!is_number(dens[i])) symbolic = true;
+        if (!lcm_plain_polynomial(nums[i]) || !lcm_plain_polynomial(dens[i])) plain = false;
+    }
+    Expr* result = NULL;
+    if (symbolic && plain) {
+        Expr* l = internal_polynomiallcm(nums, n);           /* consumes nums[i] */
+        Expr* g = internal_polynomialgcd(dens, n);           /* consumes dens[i] */
+        result = internal_times((Expr*[]){ l, internal_power((Expr*[]){ g, expr_new_integer(-1) }, 2) }, 2);
+    } else {
+        for (size_t i = 0; i < n; i++) { expr_free(nums[i]); expr_free(dens[i]); }
+    }
+    free(nums);
+    free(dens);
+    return result;
+}
+
+static Expr* polynomiallcm_core(Expr* res);
+
 Expr* builtin_polynomiallcm(Expr* res) {
+    Expr* r = polynomiallcm_core(res);
+    if (r) return r;
+    /* every path declined: coefficients rational in a parameter (no options) */
+    size_t n = res->type == EXPR_FUNCTION ? res->data.function.arg_count : 0;
+    for (size_t i = 0; i < n; i++)
+        if (res->data.function.args[i]->type == EXPR_FUNCTION
+            && res->data.function.args[i]->data.function.head->type == EXPR_SYMBOL
+            && (res->data.function.args[i]->data.function.head->data.symbol.name == SYM_Rule
+                || res->data.function.args[i]->data.function.head->data.symbol.name == SYM_RuleDelayed))
+            return NULL;
+    if (n < 2 || internal_args_contain_inexact(res)) return NULL;
+    return polynomiallcm_symbolic_denominators(res->data.function.args, n);
+}
+
+static Expr* polynomiallcm_core(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
     /* Modulus -> p: the LCM over GF(p) (ratfun_gcd.inc).  When that declines
