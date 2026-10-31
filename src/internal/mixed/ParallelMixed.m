@@ -434,6 +434,15 @@ ClassifyPrime0[T_, p_] := Module[{branch, eta, pi, special},
    with r = Sqrt[q(rho)] simplified by PowerExpand (the sign convention of
    SymPy's positive symbols).  For m = 1 the third entry is None.  Returns
    None if p has no such generator direction.                               *)
+(* RadFactor[e]: every radical of a non-numeric radicand rewritten with the radicand
+   factored, so a root over Q(params) comes out in the form the residues take:
+   Solve gives 1/2 (-2 s - Sqrt[4 (1 + b) + 4 s^2]), which is -s - Sqrt[1 + b + s^2],
+   and a logand w - rho with the unfactored radical never cancels against a residue
+   1/Sqrt[1 + b + s^2] in the residual.  Numeric radicals and Root objects are left
+   alone (RootReduce handles those). *)
+RadFactor[e_] := If[FreeQ[e, Power[r_, _Rational] /; ! NumericQ[r]], e,
+  Expand[e /. Power[r_, k_Rational] /; ! NumericQ[r] && ! FreeQ[r, Plus] :> Power[Factor[r], k]]];
+
 PointsOver[T_, p_] := Module[{gens = T["gens"], g, cl, roots, qbar, r, pts},
  Catch[
   Do[g = gens[[i]];
@@ -442,8 +451,14 @@ PointsOver[T_, p_] := Module[{gens = T["gens"], g, cl, roots, qbar, r, pts},
        (Exponent[p, g] <= 2 || FreeQ[CoefficientList[p, g], Alternatives @@ gens]),
       (* degree 3-4: only with constant coefficients (roots in radicals); a
          cubic/quartic prime with generator-dependent coefficients goes through
-         the residue field instead (ResidueClasses), as in parallel_mixed.py *)
-      roots = g /. Solve[p == 0, g];
+         the residue field instead (ResidueClasses), as in parallel_mixed.py.
+         Over Q(params) a cubic or quartic whose roots come out as nested radicals
+         (Sqrt[-3 b - Sqrt[32 b^2]/2], with Sqrt[b^2] not b for every b) goes there too:
+         those never cancel in the residual; a binomial g^4 + b keeps its roots (-b)^(1/4) *)
+      roots = RadFactor /@ (g /. Solve[p == 0, g]);
+      If[Exponent[p, g] >= 3 && TransConsts[{p}, gens] =!= {} &&
+         ! FreeQ[roots, Power[u_, _Rational] /; ! NumericQ[u] && ! FreeQ[u, Power[_, _Rational]]],
+        Throw[None, "pts"]];
       pts = {};
       Do[If[T["q"] === None, AppendTo[pts, {g, rho, None}],
           qbar = Can[T["q"] /. g -> rho];
@@ -614,8 +629,13 @@ VanishOrder[T_, u_, pt_, Y_] := Module[{g, rho, yv, eps, e, ub, k = 0, q = T["q"
 DeepResidues[T_, f_, p_, pts_, Y_] := Module[{g = T["gens"][[1]], e, out = {}, eps, floc, m = T["m"], r, yser},
   Do[If[m == 2,
       eps = SheetSign[T, pt];
-      If[eps === None, AppendTo[out, Undecided]; Continue[]];
-      floc = (f[[1]] + f[[2]] eps Sqrt[T["q"] /. g -> pt[[2]] + e]) /. g -> pt[[2]] + e,
+      (* a sheet value over Q(params) (yv = 2 a where Sqrt[q(rho)] = 2 Sqrt[a^2]) is not
+         +-Sqrt[q(rho)] for every a, but y = yv Sqrt[q(g)/q(rho)] is the branch through
+         yv at an unramified place (q(rho) != 0), analytic in g - rho *)
+      floc = If[eps === None,
+        If[IsZero[T["q"] /. g -> pt[[2]]], AppendTo[out, Undecided]; Continue[]];
+        (f[[1]] + f[[2]] pt[[3]] Sqrt[Together[(T["q"] /. g -> pt[[2]] + e)/(T["q"] /. g -> pt[[2]])]]) /. g -> pt[[2]] + e,
+        (f[[1]] + f[[2]] eps Sqrt[T["q"] /. g -> pt[[2]] + e]) /. g -> pt[[2]] + e],
       (* m >= 3: the sheet y = eps q(rho)^(1/m), eps a root of unity *)
       r = MRoot[T["q"] /. g -> pt[[2]], m];
       eps = RRad[pt[[3]]/r];
@@ -1073,6 +1093,20 @@ AlgebraicPoint[q_, g_] := Module[{best = None, bv = None, v},
     If[! MatchQ[v, _Integer | _Rational] || v == 0, Continue[]];
     If[bv === None || (v > 0 && (bv < 0 || v < bv)) || (v < 0 && bv < 0 && -v < -bv), best = {g0, Sqrt[v]}; bv = v],
     {g0, {0, 1, -1, 2, -2, 1/2, -1/2, 3, -3}}];
+  If[best === None, best = ParametricPoint[q, g]];
+  best];
+
+(* ParametricPoint[q, g]
+   With parameters in the coefficients of q (q(g0) is a non-numeric rational function of
+   them), the first small rational g0 with q(g0) not identically zero gives the point
+   {g0, Sqrt[q(g0)]} over Q(params)(Sqrt[q(g0)]); the fewest-leaves value is preferred.
+   Over that field the parametrised tower is again transcendental, and only the identity
+   of the antiderivative (checked by PossibleZeroQ) is claimed, never a certificate. *)
+ParametricPoint[q_, g_] := Module[{best = None, bl = Infinity, v},
+  Do[v = Factor[Together[q /. g -> g0]];
+    If[NumericQ[v] || Together[v] === 0, Continue[]];
+    If[LeafCount[v] < bl, best = {g0, Sqrt[v]}; bl = LeafCount[v]],
+    {g0, {0, 1, -1, 2, -2}}];
   best];
 
 (* AlgPolesQ[f, g]: does a denominator of the pair f have an irreducible factor of
@@ -1196,6 +1230,35 @@ ModP[expr_, p_, g_] := Module[{e = Together[expr], nr, dr, di},
 
 Monic[P_, g_] := Collect[Expand[P/Coefficient[P, g, Exponent[P, g]]], g, RRad];
 
+(* ExtGCD[p, h, g]
+   The gcd in K(s)[g] when the operands carry exactly one square root s = Sqrt[v] of a
+   non-numeric radicand (a residue value -Sqrt[-b c^2]/(2 b c^2) over Q(b, c)):
+   PolynomialGCD with Extension -> Automatic detects numeric extensions only, and
+   returned 1, losing the residue class.  s is an indeterminate with s^2 = v; every
+   coefficient is kept reduced to A + B s with A, B in K (the denominator rationalised
+   by its conjugate), which is canonical while v is not a square in K, so the
+   Euclidean remainder sequence terminates exactly.  Any root of s^2 = v serves: the
+   result is mapped back through s -> Sqrt[v].  Other operands go to PolynomialGCD. *)
+ExtGCD[p_, h_, g_] := Module[{rads, v, s, red, normP, toS, a, b, r},
+  rads = Union[Cases[{p, h}, Power[rr_, k_Rational] /; ! NumericQ[rr] && Denominator[k] == 2 :> rr, {0, Infinity}]];
+  If[Length[rads] =!= 1 || ! FreeQ[{p, h}, Power[rr_, k_Rational] /; ! NumericQ[rr] && Denominator[k] =!= 2],
+    Return[PolynomialGCD[p, h, Extension -> Automatic]]];
+  v = rads[[1]]; s = Unique["s"];
+  toS[e_] := e /. Power[v, k_Rational] :> s^(2 k);
+  red[e_] := Module[{t = Together[e], n, d, d0, d1, den},
+    n = PolynomialRemainder[Expand[Numerator[t]], s^2 - v, s];
+    d = PolynomialRemainder[Expand[Denominator[t]], s^2 - v, s];
+    d0 = Coefficient[d, s, 0]; d1 = Coefficient[d, s, 1];
+    n = PolynomialRemainder[Expand[n (d0 - d1 s)], s^2 - v, s];
+    den = Expand[d0^2 - d1^2 v];
+    Together[Coefficient[n, s, 0]/den] + Together[Coefficient[n, s, 1]/den] s];
+  normP[P_] := Module[{cl = CoefficientList[Expand[Together[P]] /. Power[s, k_Integer] /; k >= 2 :> v^Quotient[k, 2] s^Mod[k, 2], g]},
+    Expand[Sum[red[cl[[i]]] g^(i - 1), {i, Length[cl]}]]];
+  a = normP[toS[p]]; b = normP[toS[h]];
+  If[a === 0, Return[If[b === 0, 0, b /. s -> Sqrt[v]]]];
+  While[b =!= 0, r = normP[PolynomialRemainder[a, b, g]]; a = b; b = r];
+  If[FreeQ[a, g], 1, normP[a/Coefficient[a, g, Exponent[a, g]]] /. s -> Sqrt[v]]];
+
 (* InFieldQ[a, gs]: is the algebraic number a in the number field Q(gs)?  By
    the degree of the field generated by gs with and without a.            *)
 InFieldQ[a_, gs_] := Module[{g0 = Select[RR /@ gs, ! MatchQ[#, _Integer | _Rational] &], deg},
@@ -1256,7 +1319,7 @@ ResidueClasses[T_, p_, tp_, Y_, verbose_: False] := Catch[Module[
          (RootSumLogand, in the caller); the gcd over Q(c) is not attempted (Mathilda's
          PolynomialGCD with Extension -> Automatic returns 1 for a Root object) *)
       If[Head[c] === Root, hasRoot = True; Continue[]];
-      pc = Monic[PolynomialGCD[p, Collect[Expand[tau0 - c], g, RRad], Extension -> Automatic], g];
+      pc = Monic[ExtGCD[p, Collect[Expand[tau0 - c], g, RRad], g], g];
       If[Exponent[pc, g] < 1, Throw[{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", p, c}, "rc"]];
       AppendTo[principal, {c, pc}];
       Continue[]];
@@ -1275,7 +1338,7 @@ ResidueClasses[T_, p_, tp_, Y_, verbose_: False] := Catch[Module[
         {sh, SheetsOver[T, g, pc, taus, c]}];
       Continue[]];
     EE = Collect[Expand[tau1^2 q - (c - tau0)^2], g, RRad];
-    pc = Monic[PolynomialGCD[p, EE, Extension -> Automatic], g];
+    pc = Monic[ExtGCD[p, EE, g], g];
     If[Exponent[pc, g] < 1, Throw[{"failed", "residue class lost: no places over the prime for a root of the residue polynomial", p, c}, "rc"]];
     t1 = PolynomialRemainder[tau1, pc, g];
     p2 = Monic[PolynomialGCD[pc, t1, Extension -> Automatic], g];
@@ -3110,11 +3173,13 @@ iParallelIntegrateMixed[f00_List, T0_Association, opts : OptionsPattern[Parallel
   (* 0. a single generator g over the curve with Dg = r(g) != 1 -- a flattened
         root (Lemma 3.2) or the parameter of a parametrised conic -- is rescaled
         to d/dg (Lemma 3.4): int f dx = int (f/r) dg with the same antiderivative,
-        and the tower is the setting of Part I (exact bounds, Prop. 9.2(b)) *)
-  If[Length[T["gens"]] == 1 && T["q"] =!= None,
+        and the tower is the setting of Part I (exact bounds, Prop. 9.2(b)).  A single
+        transcendental generator (q = None, the parameter w of a conic parametrised over
+        Q(params)) is rescaled the same way: int f dx becomes a rational integral in w *)
+  If[Length[T["gens"]] == 1,
     g0 = T["gens"][[1]]; r0 = T["derivs"][[1, 1]];
     If[r0 =!= 1 && MatchQ[Rest[T["derivs"][[1]]], {0 ...}] && RationalFunctionQ[r0, {g0}] &&
-        Complement[Cases[{r0}, _Symbol, Infinity], {g0}] === {},
+        Complement[Cases[{r0}, _Symbol, Infinity], Join[{g0}, TransConsts[{r0}, {g0}]]] === {},
       If[OptionValue["Verbose"], Print["  single generator ", g0, " with D", g0, " = ", r0, ": rescaled to d/d", g0, " (Lemma 3.4)"]];
       f0 = Can[#/r0] & /@ f0;
       T = Tower[{g0}, {{1}}, T["q"], T["m"]]]];
@@ -3126,8 +3191,11 @@ iParallelIntegrateMixed[f00_List, T0_Association, opts : OptionsPattern[Parallel
          variable is parametrised away FIRST (through a rational point, else a point over a
          quadratic field): the places over such a prime carry residues in nested radicals,
          while the parametrised tower is transcendental over the constants; with rational
-         poles only the curve is analysed first, as in the flagship traces of Section 10 *)
-  If[isConic && OptionValue["Bounds"] === None && AlgPolesQ[f0, gq],
+         poles only the curve is analysed first, as in the flagship traces of Section 10.
+         A conic over Q(params) goes this way too: the unit and S'-unit searches over the
+         curve assume number-field constants, while over Q(params)(w) everything is a
+         question about rational functions of w *)
+  If[isConic && OptionValue["Bounds"] === None && (AlgPolesQ[f0, gq] || TransConsts[{f0, T["q"]}, T["gens"]] =!= {}),
     res = ConicToLine[T, f0];
     If[res =!= None,
       {T2, f2, back, rational} = res;

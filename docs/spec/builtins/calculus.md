@@ -1515,6 +1515,17 @@ monotonically down.
      the split leaves `(x^2 - 1) Sqrt[1 + x^2]`); the pieces return to this method
      when the tower cannot be built.  Two different monomials in one Kummer class
      are separate pieces, and a non-elementary piece there is no certificate.
+     **Conics over Q(params)** (v0.6106): a conic radicand with parameters in
+     its coefficients (`Sqrt[a x^2 + b x + c]`) is parametrised before any
+     analysis over the curve, through a point `{g0, Sqrt[q(g0)]}` over
+     `Q(params)(Sqrt[q(g0)])` when no rational point exists; the single
+     generator `w` is rescaled to `d/dw` (Lemma 3.4, now also with no curve), so
+     the integral is a rational one in `w`, done with the radicals of the
+     parameters as indeterminates (quadratic pole primes only are solved for
+     their roots, radicands factored; higher-degree primes and residue values
+     like `Sqrt[-b c^2]/(2 b c^2)` go through the residue field, with the gcd
+     over `K(s)`, `s^2 = v`, taken by `ExtGCD`).  Only an answer verified by
+     `PossibleZeroQ` is returned; no certificate is issued over `Q(params)`.
      **Substitution pre-pass** (v0.6105): a radical of a transcendental kernel
      changes the variable -- `u = Sin x` with `y = Cos x` as the algebraic
      generator (`Sqrt[Sin[x]] -> Sqrt[u]/Sqrt[1 - u^2]`), `u = E^x` for

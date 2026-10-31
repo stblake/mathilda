@@ -422,6 +422,33 @@ static void test_kernel_and_conic_power_substitution(void) {
     }
 }
 
+/* W5: a conic over Q(params) is parametrised through a point over Q(params)(Sqrt[q(g0)])
+ * before any analysis over the curve, the single generator w is rescaled to d/dw, and the
+ * rational integral in w is done with the radicals of the parameters as indeterminates:
+ * PolynomialLCM, the roots of a quadratic pole prime (radicands factored), and the gcd that
+ * splits a prime by a residue value Sqrt[-b c^2]/(2 b c^2) (ExtGCD).  Each declined, hung or
+ * failed to verify before. */
+static void test_parametric_conic(void) {
+    const char *elem[] = {
+        "1/Sqrt[a x^2 + b x + c]",
+        "Sqrt[a x^2 + b x + c]/x^2",                              /* DDI warmup 4 (iii) */
+        "x^2 Sqrt[a x^2 + b x + c]",                              /* warmup 4 (iv) */
+        "1/((x - 1) Sqrt[x^2 + b x + c])",                        /* intro, multiple approaches 1 */
+        "1/((2 b c/a x^2 + c) Sqrt[a + b x^2])",                  /* gg 10 (n2): a quartic pole prime */
+    };
+    for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                 "FreeQ[F, Integrate] && TrueQ[PossibleZeroQ[D[F, x] - f, "
+                 "Assumptions -> Element[x, Complexes]]]]]", elem[i]);
+        assert_eval(buf, "True");
+    }
+    /* the residue-class gcd over Q(b, c)(Sqrt[-b c^2]) */
+    assert_eval("Expand[ParallelMixed`Private`ExtGCD[b^2 + 6 b w^2 + w^4, "
+                "w^2 + b - 2 Sqrt[-b c^2] w/c, w]] === Expand[w^2 + b - 2 Sqrt[-b c^2] w/c]", "True");
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -736,6 +763,7 @@ void test_parallelmixedtower(void) {
     TEST(test_own_radical_back_substitution);
     TEST(test_kummer_pieces_through_trager);
     TEST(test_kernel_and_conic_power_substitution);
+    TEST(test_parametric_conic);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

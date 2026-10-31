@@ -128,6 +128,11 @@ void test_polynomiallcm() {
     run_test("PolynomialLCM[x, b/a + x]", "Times[x, Plus[b, Times[a, x]]]");
     run_test("PolynomialLCM[b/a + x, b/a + x]", "Plus[Times[Power[a, -1], b], x]");
     run_test("PolynomialLCM[x^2/a - 1/a, x/b - 1/b]", "Plus[-1, Power[x, 2]]");
+    /* a radical of a parameter in a coefficient is an indeterminate of its own
+     * (it stayed unevaluated: collect_variables read Sqrt[c] as c) */
+    run_test("PolynomialLCM[-3 + 2 Sqrt[c] w, 1]", "Plus[-3, Times[2, Power[c, Rational[1, 2]], w]]");
+    run_test("PolynomialLCM[-3 + 2 Sqrt[c] w, w]", "Times[w, Plus[-3, Times[2, Power[c, Rational[1, 2]], w]]]");
+    run_test("PolynomialLCM[Sqrt[c] w + 1, (Sqrt[c] w + 1) w]", "Times[w, Plus[1, Times[Power[c, Rational[1, 2]], w]]]");
 }
 
 void test_polynomial_div_rem() {

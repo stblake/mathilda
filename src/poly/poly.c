@@ -3786,6 +3786,42 @@ static Expr* polynomiallcm_symbolic_denominators(Expr** args, size_t n) {
 
 static Expr* polynomiallcm_core(Expr* res);
 
+/* PolynomialLCM with a fractional power of a non-numeric base, or another
+ * opaque kernel, in a coefficient (-3 + 2 Sqrt[c] w, the Euler parameter of a
+ * conic over Q(a, b, c)): every path above declines it, since collect_variables
+ * reads Sqrt[c] as the variable c.  The kernel is an indeterminate of its own,
+ * as PolynomialGCD and Factor treat it: map each kernel to a fresh symbol
+ * (poly_kernels_to_symbols, one map over all the arguments), take the LCM
+ * there, and map back.  Independence can only miss a common factor, never
+ * invent one.  NULL when there is no kernel or the mapped call declines too.
+ * Before this the call stayed unevaluated, and ParallelMixedTower's prime
+ * loop over Q(params)(Sqrt[c])(w) stalled on the unevaluated head. */
+static Expr* polynomiallcm_kernels(Expr* res, size_t n) {
+    Expr** cp = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) cp[i] = expr_copy(res->data.function.args[i]);
+    Expr* lst = expr_new_function(expr_new_symbol("List"), cp, n);
+    free(cp);
+    PolyKernelMap map;
+    Expr* fwd = poly_kernels_to_symbols(lst, &map);
+    expr_free(lst);
+    if (!fwd) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("PolynomialLCM"),
+                                   fwd->data.function.args, fwd->data.function.arg_count);
+    fwd->data.function.arg_count = 0;               /* args adopted by call */
+    expr_free(fwd);
+    Expr* l = polynomiallcm_core(call);
+    if (!l) l = polynomiallcm_symbolic_denominators(call->data.function.args,
+                                                    call->data.function.arg_count);
+    expr_free(call);
+    Expr* out = NULL;
+    if (l) {
+        out = eval_and_free(poly_symbols_to_kernels(l, &map));
+        expr_free(l);
+    }
+    poly_kernel_map_free(&map);
+    return out;
+}
+
 Expr* builtin_polynomiallcm(Expr* res) {
     Expr* r = polynomiallcm_core(res);
     if (r) return r;
@@ -3798,7 +3834,9 @@ Expr* builtin_polynomiallcm(Expr* res) {
                 || res->data.function.args[i]->data.function.head->data.symbol.name == SYM_RuleDelayed))
             return NULL;
     if (n < 2 || internal_args_contain_inexact(res)) return NULL;
-    return polynomiallcm_symbolic_denominators(res->data.function.args, n);
+    r = polynomiallcm_symbolic_denominators(res->data.function.args, n);
+    if (r) return r;
+    return polynomiallcm_kernels(res, n);
 }
 
 static Expr* polynomiallcm_core(Expr* res) {
