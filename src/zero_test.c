@@ -1497,6 +1497,13 @@ static int g_zt_sym_index = 0;
  * trial draws them real, 0 = complex, -1 = a random third real (the
  * confirm phase and every non-screen draw). */
 static int g_zt_cplx_real = -1;
+/* Magnitude band of a real visit of the complex-domain screen (-1: none).
+ * The real draws are otherwise log-uniform on [1/8, 2^b], so a failure on a
+ * short real segment -- (0, 1), where both radicands of a Kummer monomial are
+ * negative and sit on their cuts -- was hit by ~1 real draw in 4, and an
+ * orthant's 8 real visits missed it ~12% of the time.  Band k of 4 pins the
+ * magnitude to [1/8, 1/2), [1/2, 1), [1, 2) or [2, 2^b]. */
+static int g_zt_cplx_band = -1;
 
 static bool zt_negative_draw(void) {
     if (g_zt_sign_pattern >= 0 && g_zt_sym_index < 30)
@@ -1507,7 +1514,14 @@ static bool zt_negative_draw(void) {
 /* A magnitude log-uniform on [2^-3, 2^num_bits] (see sample_random_value for
  * why: every scale, including |v| < 1, must be sampled). */
 static double zt_log_uniform_magnitude(int num_bits) {
-    const double lo = -3.0, hi = (double)num_bits;
+    double lo = -3.0, hi = (double)num_bits;
+    if (g_zt_cplx_band >= 0) {
+        static const double band_lo[4] = { -3.0, -1.0, 0.0, 1.0 };
+        static const double band_hi[3] = { -1.0, 0.0, 1.0 };
+        lo = band_lo[g_zt_cplx_band & 3];
+        if ((g_zt_cplx_band & 3) < 3) hi = band_hi[g_zt_cplx_band & 3];
+        if (hi < lo) hi = lo;
+    }
     int64_t steps = (int64_t)1 << ZT_DENOMINATOR_BITS;
     int64_t k = draw_int_range(0, steps - 1);
     return exp2(lo + (hi - lo) * ((double)k + 0.5) / (double)steps);
@@ -1643,8 +1657,15 @@ static Expr* sample_random_value_spec(const SampleSpec* spec, int num_bits) {
     if (spec->domain == SDOM_INT)
         return expr_new_integer((int64_t)sample_channel(&spec->val, true, num_bits));
     if (spec->domain == SDOM_CPLX) {
+        bool real_visit = !spec->im.has_lo && !spec->im.has_hi && spec->im.sign == 0 &&
+            (g_zt_cplx_real >= 0 ? g_zt_cplx_real == 1 : draw_int_range(0, 2) == 0);
+        /* a real visit of the screen draws its magnitude from its band */
+        int saved_band = g_zt_cplx_band;
+        if (!real_visit) g_zt_cplx_band = -1;
         double re = sample_channel(&spec->val, false, num_bits);
+        g_zt_cplx_band = -1;
         double im = sample_channel(&spec->im, false, num_bits);
+        g_zt_cplx_band = saved_band;
         /* The real line is part of C, and a measure-zero part that random
          * complex draws never reach: an antiderivative that fails only on a
          * real-axis branch cut (Sqrt[(1-x)/(1+x)] on x < -1, where the integrand
@@ -1652,8 +1673,7 @@ static Expr* sample_random_value_spec(const SampleSpec* spec, int num_bits) {
          * unless Im is constrained (an explicit Im fact keeps its channel). */
         /* (a plain Real, not Complex[re, 0.]: a signed zero would put the point
          *  just beside the cut, where the identity still holds) */
-        if (!spec->im.has_lo && !spec->im.has_hi && spec->im.sign == 0 &&
-            (g_zt_cplx_real >= 0 ? g_zt_cplx_real == 1 : draw_int_range(0, 2) == 0))
+        if (real_visit)
             return expr_new_real(re);
         Expr* parts[2] = { expr_new_real(re), expr_new_real(im) };
         return expr_new_function(expr_new_symbol(SYM_Complex), parts, 2);
@@ -2264,7 +2284,10 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
     for (int trial = 0; trial < screen_n; ++trial) {
         bool overflow = false, skip = false;
         g_zt_sign_pattern = trial;      /* orthant stratification (see zt_negative_draw) */
-        if (cplx_bits >= 0) g_zt_cplx_real = ((trial >> cplx_bits) & 1) == 0;
+        if (cplx_bits >= 0) {
+            g_zt_cplx_real = ((trial >> cplx_bits) & 1) == 0;
+            g_zt_cplx_band = g_zt_cplx_real ? (trial >> (cplx_bits + 1)) & 3 : -1;
+        }
         ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true,
                                             &overflow, conform_facts, nconform, &skip);
         if (skip) continue;                               /* off-region unreachable: skip */
@@ -2277,6 +2300,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
     }
     g_zt_sign_pattern = saved_pattern;   /* confirm phase: random signs */
     g_zt_cplx_real = saved_cplx_real;
+    g_zt_cplx_band = -1;
     /* Every screen point overflowed out of range — no informative evidence at
      * all — so the identity cannot be affirmed: return UNKNOWN honestly. */
     if (screen_informative == 0) { verdict = ZERO_TEST_UNKNOWN; goto done; }
@@ -2302,6 +2326,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
 done:
     g_zt_sign_pattern = saved_pattern;
     g_zt_cplx_real = saved_cplx_real;
+    g_zt_cplx_band = -1;
     random_pop_seed();
     free(specs);
     free((void*)conform_facts);

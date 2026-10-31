@@ -347,7 +347,10 @@ Pipeline (each stage exits early on a definite verdict):
    every other visit with the complex-domain symbols real (v0.6100; at most
    2048 machine-precision points): a failure on a real-axis branch cut that
    lives in one orthant, e.g. only where `a, b, c, d > 0` and on part of
-   `x^2 < a`, is otherwise drawn about once per orthant and missed. A
+   `x^2 < a`, is otherwise drawn about once per orthant and missed. The
+   real visits cycle through four magnitude bands, `[1/8, 1/2)`, `[1/2, 1)`,
+   `[1, 2)` and `[2, 2^b]` (v0.6104), so a failure on a short real segment
+   such as `0 < x < 1` is always sampled. A
    real-domain test keeps its 24-per-symbol screen. A *screen* phase evaluates many points
    at machine precision only; any point that is *obviously* non-zero
    settles the test as `False` cheaply. This catches expressions that

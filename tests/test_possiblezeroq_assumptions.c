@@ -131,6 +131,17 @@ void test_pzq_soundness_false(void) {
     assert_eval_eq("PossibleZeroQ[Sqrt[x^2] - x, Assumptions -> x < 0]", "False", 0);
     assert_eval_eq("PossibleZeroQ[Arg[x], Assumptions -> x < 0]", "False", 0);
     assert_eval_eq("PossibleZeroQ[Re[z], Assumptions -> Element[z, Complexes]]", "False", 0);
+    /* Zero off the real axis, nonzero on the real segment 0 < w < 1, where both
+     * radicands of M sit on their cuts (M = i P there, M = P elsewhere): the
+     * screen's real draws were log-uniform on [1/8, 2^b] and missed (0, 1) for
+     * ~12% of symbol names (the seed follows the expression).  Its real visits
+     * now cycle through magnitude bands, two of them inside (0, 1). */
+    assert_eval_eq("Union[Table[With[{v = Symbol[\"w\" <> ToString[k]]}, PossibleZeroQ["
+                   "D[v^(1/4) - ArcTan[v^(1/4)]/2 + Log[1 - v^(1/4)]/4 - Log[1 + v^(1/4)]/4 + "
+                   "RootSum[1/256 + #1^4 &, Log[1 + 64 v^(1/4) #1^3] #1 &], v] - "
+                   "(1 + v^2)/(8 v^2) (1 + (1 + v^2)/(-1 + v^2))^(1/4)/((-1 + v^2)/(2 v))^(3/4), "
+                   "Assumptions -> Element[v, Complexes]]], {k, 100, 160}]]",
+                   "{False}", 0);
 }
 
 /* ---- No-assumption path is unchanged ---------------------------------- */
