@@ -1516,20 +1516,16 @@ monotonically down.
      when the tower cannot be built.  Two different monomials in one Kummer class
      are separate pieces, and a non-elementary piece there is no certificate.
      **Substitution pre-pass** (v0.6105): a radical of a transcendental kernel
-     changes the variable --  with  as the algebraic
-     generator (),  for
-     hyperbolic and exponential radicals,  for , 
-     for radicals of ,  (exponential form) for radicals of
-      -- and a root nested over a conic in 
-     () is parametrised by that conic's Euler
-     parameter 22:57  up 6 days, 23:42, 3 users, load averages: 5.59 5.38 4.66
-USER       TTY      FROM    LOGIN@  IDLE WHAT
-user       console  -      Sat23   6days -
-user       s001     -      Sat23    5:23 caffeinate -i -t 300
-user       s002     -      Sat23    5:57 ./Mathilda, with  a flat radical over .  Each
+     changes the variable -- `u = Sin x` with `y = Cos x` as the algebraic
+     generator (`Sqrt[Sin[x]] -> Sqrt[u]/Sqrt[1 - u^2]`), `u = E^x` for
+     hyperbolic and exponential radicals, `x = u^k` for `Tan[Sqrt[x]]`, `x = E^u`
+     for radicals of `Log[x]`, `x = Tan[u]` (exponential form) for radicals of
+     `ArcTan[x]` -- and a root nested over a conic in `X = x^k`
+     (`(x^3 + Sqrt[x^6 - 1])^(1/3)`) is parametrised by that conic's Euler
+     parameter `w`, with `x = X(w)^(1/k)` a flat radical over `Q(w)`.  Each
      substitution is a differential-field isomorphism, so a certificate for the
      image (Trager first when it is algebraic) certifies the integrand; an answer
-     maps back (, never ) and is verified in .  When the
+     maps back (`y -> Cos[x]`, never `Sqrt[1 - Sin[x]^2]`) and is verified in `x`.  When the
      principal surface fails the gate, the surface written through the
      integrand's **own radicals** is tried (v0.6102: every back rule -- the
      simple radical, each flattened root, a conic's radical behind an Euler
