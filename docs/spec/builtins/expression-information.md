@@ -341,7 +341,14 @@ Pipeline (each stage exits early on a definite verdict):
    **For all complex x:** `PossibleZeroQ[e, Assumptions -> Element[x,
    Complexes]]` samples `x` at complex points. This is the test the
    algebraic integrators (Trager, ParallelMixedTower) and the DDI stress
-   harness apply: an antiderivative must hold off the real axis as well. A *screen* phase evaluates many points
+   harness apply: an antiderivative must hold off the real axis as well.
+   The real axis is part of C and random complex draws never reach it, so
+   such a test visits every sign orthant of the symbols at least 16 times,
+   every other visit with the complex-domain symbols real (v0.6100; at most
+   2048 machine-precision points): a failure on a real-axis branch cut that
+   lives in one orthant, e.g. only where `a, b, c, d > 0` and on part of
+   `x^2 < a`, is otherwise drawn about once per orthant and missed. A
+   real-domain test keeps its 24-per-symbol screen. A *screen* phase evaluates many points
    at machine precision only; any point that is *obviously* non-zero
    settles the test as `False` cheaply. This catches expressions that
    are identically zero on one real-analytic branch but non-zero on an

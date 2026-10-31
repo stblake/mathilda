@@ -307,6 +307,20 @@ static void test_kummer_split_flat_radicals(void) {
                 "None");
 }
 
+/* DDI multiple_radicals_0 (i): the answer through the Euler parameter of
+ * Sqrt[x^2 - a] was -f on parts of x^2 < a when a, b, c, d > 0 -- a real-axis
+ * cut in 2 sign orthants of 32 -- and PossibleZeroQ over complex x missed it
+ * (about one real draw per orthant).  The complex-domain screen now visits
+ * each orthant 16 times, half of them real: the gate declines, or answers
+ * with an antiderivative right at those points. */
+static void test_complex_screen_catches_real_slice_cut(void) {
+    assert_eval("With[{f = (x^4 - a b)/((d x^4 - (a d + b d - c) x^2 + a b d) Sqrt[x^2 - a] Sqrt[x^2 - b])}, "
+                "With[{F = Integrate[f, x, Method -> \"ParallelMixedTower\"]}, "
+                "!FreeQ[F, Integrate] || AllTrue[{1/5, -1/2, -1}, "
+                "Abs[N[(D[F, x] - f) /. {a -> 3/2, b -> 5/3, c -> 7/4, d -> 9/5} /. x -> #, 30]] < 10^-15 &]]]",
+                "True");
+}
+
 static void test_recursion_overflow_declines(void) {
     assert_eval("ParallelMixed`Private`boom[n_] := 1 + ParallelMixed`Private`boom[n + 1]; "
                 "ClearAll[ParallelMixed`Private`VanishingDenominator]; "
@@ -614,6 +628,7 @@ void test_parallelmixedtower(void) {
     TEST(test_euler_before_root_split);
     TEST(test_xpower_subcall_variable_accepted);
     TEST(test_kummer_split_flat_radicals);
+    TEST(test_complex_screen_catches_real_slice_cut);
     TEST(test_recursion_overflow_declines);   /* last: redefines a package helper */
 
     printf("All ParallelMixedTower tests passed!\n");

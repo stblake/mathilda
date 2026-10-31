@@ -217,7 +217,7 @@ Scan[Stress`Probe["@@NUM", #] &, pts];
    principal values are part of "valid for all complex x" *)
 Scan[If[Quiet[With[{v = N[(f /. prm) /. x -> #, 30]}, NumberQ[v] && Abs[v] < 10^8]],
         Stress`Probe["@@NUM", #]] &,
-  {-40, -7, -3, -3/2, -1/2, -1/7, 1/5, 3/4, 5/4, 5/2, 7/2, 9/2, 10, 40}];
+  {-40, -7, -3, -3/2, -6/5, -1, -1/2, -1/5, -1/7, -1/27, 1/23, 1/5, 1/3, 3/4, 11/10, 6/5, 5/4, 5/2, 7/2, 9/2, 10, 40}];
 Scan[Stress`Probe["@@CNUM", #] &, CPTS];
 """
 
@@ -250,7 +250,11 @@ Print["@@DONE"];
 
 # Complex sample points, off both axes (principal branches of the answer and
 # of the integrand are compared there, which real points alone cannot do).
-COMPLEX_POINTS = ("3/7 + 2/5 I", "-5/4 + 3/7 I", "7/3 - 4/9 I")
+# a diagnostic only (PossibleZeroQ decides): enough points that a PZQ-FN label
+# means "zero wherever we looked", not "zero at three points" -- an answer of
+# ParallelMixedTower wrong on ~10% of the complex plane passed all three
+COMPLEX_POINTS = ("3/7 + 2/5 I", "-5/4 + 3/7 I", "7/3 - 4/9 I", "1/9 - 3/2 I", "-2/9 - 1/8 I",
+                  "5/2 + 7/3 I", "-3 - 5/2 I", "3/2 - 7/2 I", "-7/4 + 13/4 I", "9/10 - 5/6 I")
 
 
 def verify_body(tmpl):

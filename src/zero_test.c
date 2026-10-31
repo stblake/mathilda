@@ -100,6 +100,12 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
  * cancellation-hidden small non-zeros (the classic Schwartz–Zippel guarantee:
  * false-positive <= (degree/|S|)^k for k laddered samples). */
 #define ZT_SCREEN_SAMPLES  24
+/* Complex-domain screens (Assumptions -> Element[x, Complexes]): every sign
+ * orthant of the symbols is visited at least this many times, half of the
+ * visits with the complex-domain symbols on the real line, up to
+ * ZT_CPLX_SCREEN_MAX points (see decide_schwartz_zippel_core). */
+#define ZT_CPLX_ORTHANT_VISITS 16
+#define ZT_CPLX_SCREEN_MAX     2048
 #define ZT_CONFIRM_SAMPLES 4
 
 /* Region-conforming rejection sampling (coupling assumptions). When an
@@ -1487,6 +1493,10 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
  * rarely -- 96 random-sign screen points still missed it.  -1 = random signs. */
 static int g_zt_sign_pattern = -1;
 static int g_zt_sym_index = 0;
+/* Real-axis schedule for complex-domain symbols in the screen: 1 = this
+ * trial draws them real, 0 = complex, -1 = a random third real (the
+ * confirm phase and every non-screen draw). */
+static int g_zt_cplx_real = -1;
 
 static bool zt_negative_draw(void) {
     if (g_zt_sign_pattern >= 0 && g_zt_sym_index < 30)
@@ -1643,7 +1653,7 @@ static Expr* sample_random_value_spec(const SampleSpec* spec, int num_bits) {
         /* (a plain Real, not Complex[re, 0.]: a signed zero would put the point
          *  just beside the cut, where the identity still holds) */
         if (!spec->im.has_lo && !spec->im.has_hi && spec->im.sign == 0 &&
-            draw_int_range(0, 2) == 0)
+            (g_zt_cplx_real >= 0 ? g_zt_cplx_real == 1 : draw_int_range(0, 2) == 0))
             return expr_new_real(re);
         Expr* parts[2] = { expr_new_real(re), expr_new_real(im) };
         return expr_new_function(expr_new_symbol(SYM_Complex), parts, 2);
@@ -2231,10 +2241,30 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
      * (24 per symbol, at most 96 points). */
     int screen_n = ZT_SCREEN_SAMPLES * (syms.count > 1 ? (int)syms.count : 1);
     if (screen_n > 4 * ZT_SCREEN_SAMPLES) screen_n = 4 * ZT_SCREEN_SAMPLES;
+    /* Complex domain (the antiderivative verifiers ask for validity for all
+     * complex x): a failure confined to a real-axis cut lives on the real slice
+     * of ONE orthant of the symbols -- an answer of ParallelMixedTower for
+     * (x^4 - a b)/((d x^4 - (a d + b d - c) x^2 + a b d) Sqrt[x^2 - a] Sqrt[x^2 - b])
+     * is -f on parts of x^2 < a when a, b, c, d > 0: 2 orthants of 32, ~15% of
+     * their real points, so ~1 real draw per orthant missed it 3 times in 4.
+     * Each orthant is visited ZT_CPLX_ORTHANT_VISITS times, every other visit
+     * with the complex-domain symbols real.  The screen is machine precision
+     * (~0.5 ms a point), and only complex-domain tests pay for it. */
+    int cplx_bits = -1;
+    if (specs)
+        for (size_t i = 0; i < syms.count; ++i)
+            if (specs[i].domain == SDOM_CPLX) { cplx_bits = syms.count < 7 ? (int)syms.count : 7; break; }
+    if (cplx_bits >= 0) {
+        int n_cplx = ZT_CPLX_ORTHANT_VISITS << cplx_bits;
+        if (n_cplx > ZT_CPLX_SCREEN_MAX) n_cplx = ZT_CPLX_SCREEN_MAX;
+        if (n_cplx > screen_n) screen_n = n_cplx;
+    }
     int saved_pattern = g_zt_sign_pattern;
+    int saved_cplx_real = g_zt_cplx_real;
     for (int trial = 0; trial < screen_n; ++trial) {
         bool overflow = false, skip = false;
         g_zt_sign_pattern = trial;      /* orthant stratification (see zt_negative_draw) */
+        if (cplx_bits >= 0) g_zt_cplx_real = ((trial >> cplx_bits) & 1) == 0;
         ZeroTestResult r = sz_trial_shelled(e, syms.items, specs, syms.count, true,
                                             &overflow, conform_facts, nconform, &skip);
         if (skip) continue;                               /* off-region unreachable: skip */
@@ -2246,6 +2276,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
         ++screen_informative;                             /* TRUE: informative zero-ish point */
     }
     g_zt_sign_pattern = saved_pattern;   /* confirm phase: random signs */
+    g_zt_cplx_real = saved_cplx_real;
     /* Every screen point overflowed out of range — no informative evidence at
      * all — so the identity cannot be affirmed: return UNKNOWN honestly. */
     if (screen_informative == 0) { verdict = ZERO_TEST_UNKNOWN; goto done; }
@@ -2270,6 +2301,7 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
 
 done:
     g_zt_sign_pattern = saved_pattern;
+    g_zt_cplx_real = saved_cplx_real;
     random_pop_seed();
     free(specs);
     free((void*)conform_facts);

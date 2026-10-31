@@ -13,8 +13,14 @@ Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no 
 - [ ] P2c power-free radicands before choosing m
 - [x] P2d PossibleZeroQ is the sole verifier (PZQ deep-cancellation fixed v0.6091, harness PZQ-only; Trager/PMT internal numeric fallbacks still to remove): triage 77 PZQ=False verified answers (24 Trager, 53 PMT), fix PZQ per
       class, then remove numeric fallbacks (Trager spotCheck/numericZeroQ, PMT branchUnit, harness numeric acceptance)
-- [x] P3a u = x^k pre-pass (v0.6095; 0 corpus gain alone)   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
+- [x] P3a u = x^k pre-pass (v0.6095; its sub-answers were all rejected by the Temporary gate until v0.6098: +5)   - [ ] P3b eulerStep AlgebraicPoint fallback   - [ ] P3c partial ramification (if needed)
 - [ ] P3d PMT timeouts: $PMProfile, fix dominant stages algorithmically
+- [x] "tower construction failed" (151 DDI declines, all BuildTower::radicals): 70 root-on-conic, 41 flat products, 40 other nested
+  - [x] v0.6097 Euler step before rootNormalize's generator split + RationalSqrt for parametric conics: 56 towers build, +19
+  - [x] v0.6099 KummerSplit / KummerIntegrate for flat radical products: 22 of 41 decided (21 + 1 certificate)
+  - [ ] nested 13/17: conic without rational point -> P3b (algebraic point in eulerStep)
+  - [ ] parametric pieces declining "no solution within bounds" (chebychev 5 params, nested 10 params) -> P3d bounds
+  - [ ] 40 roots nested on non-conics (x^4 + 1 inner): general curve, the Trager Phase-5 plan
 - [x] P4a Trager routing (rational/number-field rational done v0.6094; radical + algebraic constant needs NF constant field -> with P4b)  - [ ] P4b Trager over Q(params)  - [ ] P4c Trager timeouts
 - [ ] final full rerun, before/after report, PDF
 - Follow-up plan: Trager for general algebraic function fields (nested / multiple radicals)
