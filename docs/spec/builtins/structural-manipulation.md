@@ -2108,12 +2108,18 @@ not a genuine floating-point Buchberger run.
 
 `CoefficientDomain -> RationalFunctions` computes the basis over the field
 Q(params), where the parameters (the non-main symbols) are units.  The
-ring basis over Q[params][main vars] is autoreduced — generators whose
-main leading monomial is a multiple of another's are dropped — yielding
-the (typically smaller) field basis; coefficients are kept as primitive
-integer polynomials in the parameters.  Honoured in the plain form only
-(no elimination block) and equivalent to `Rationals` when there are no
-parameters.
+ring basis over Q[params][main vars] is computed under a block order (lex
+on the main variables, then degree-reverse-lex on the parameters; full lex
+on all of them cost over a minute on a 4-unknown, 4-parameter system that
+now takes ~0.1 s) and interreduced over Q(params) with FLINT
+rational-function coefficients (`fmpz_mpoly_q`, each generator monic):
+generators whose main leading monomial is a multiple of another's drop
+out.  Each generator is then cleared of denominators and divided by its
+content in Z[params], so `Q x2 - p1 Q` is reported as `-p1 + x2`.  Until
+v0.6127 the reduction was a fraction-free pseudo-division that scaled only
+half of each polynomial, which could leave a parameter-only "generator"
+(a false unit ideal).  Honoured in the plain form only (no elimination
+block) and equivalent to `Rationals` when there are no parameters.
 
 ```mathematica
 In[1]:= GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]

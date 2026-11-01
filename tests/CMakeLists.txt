@@ -3432,6 +3432,14 @@ else()
     target_link_libraries(exponent_generators_tests gmp m)
 endif()
 
+add_executable(parametric_solve_tests test_parametric_solve.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(parametric_solve_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(parametric_solve_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(parametric_solve_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 

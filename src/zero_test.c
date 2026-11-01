@@ -55,6 +55,8 @@
 #include "simp_trigexp_zero.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "sym_intern.h"   /* intern_symbol: PossibleZeroQ opaque-atom symbols */
+#include <stdio.h>
 
 #include <gmp.h>
 #include <math.h>
@@ -2508,6 +2510,75 @@ static Expr* pzq_bool(ZeroTestResult r) {
     return expr_new_symbol(r == ZERO_TEST_FALSE ? SYM_False : SYM_True);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Opaque atoms for the PossibleZeroQ builtin.                        *
+ *                                                                     *
+ *  The sampler substitutes numbers for symbols only, so an inert call  *
+ *  -- f[a], C[1], a package's Pair[Momentum[p], Momentum[q]] -- stays  *
+ *  symbolic at every point, the test ends UNKNOWN, and the builtin     *
+ *  reported True: PossibleZeroQ[f[a]] was True and FeynCalc accepted a *
+ *  momentum shift that changes a propagator.  The reference treats     *
+ *  such a call as an independent quantity, so the builtin abstracts    *
+ *  each distinct maximal one to a fresh symbol (equal calls share it,  *
+ *  so f[a] - f[a] stays True) and samples that.  A call is opaque when *
+ *  its head is not a symbol (Derivative[1][f][x]) or names neither a   *
+ *  builtin nor a NumericFunction.  Only the builtin does this:         *
+ *  zero_test_decide's internal callers read UNKNOWN as UNKNOWN.        *
+ * ------------------------------------------------------------------ */
+
+typedef struct { Expr** from; Expr** to; size_t n, cap; } PzqAtoms;
+
+static bool pzq_opaque_call(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return true;
+    const char* nm = h->data.symbol.name;
+    if (nm == SYM_Complex || nm == SYM_Rational) return false;
+    SymbolDef* d = symtab_lookup(nm);
+    if (!d) return true;
+    return d->builtin_func == NULL && !(d->attributes & ATTR_NUMERICFUNCTION);
+}
+
+/* Owned copy of `e` with every opaque call replaced; NULL if none. */
+static Expr* pzq_abstract(const Expr* e, PzqAtoms* at) {
+    if (e->type != EXPR_FUNCTION) return NULL;
+    if (pzq_opaque_call(e)) {
+        for (size_t i = 0; i < at->n; i++)
+            if (expr_eq(at->from[i], (Expr*)e)) return expr_copy(at->to[i]);
+        if (at->n == at->cap) {
+            at->cap = at->cap ? at->cap * 2 : 8;
+            at->from = (Expr**)realloc(at->from, at->cap * sizeof(Expr*));
+            at->to = (Expr**)realloc(at->to, at->cap * sizeof(Expr*));
+        }
+        char name[64];
+        snprintf(name, sizeof name, "PossibleZeroQ`Private`atom%zu", at->n + 1);
+        at->from[at->n] = expr_copy((Expr*)e);
+        at->to[at->n] = expr_new_symbol(intern_symbol(name));
+        at->n++;
+        return expr_copy(at->to[at->n - 1]);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = pzq_abstract(e->data.function.args[i], at);
+        if (r && !args) {
+            args = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < i; j++) args[j] = expr_copy(e->data.function.args[j]);
+        }
+        if (args) args[i] = r ? r : expr_copy(e->data.function.args[i]);
+    }
+    if (!args) return NULL;
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
+static void pzq_atoms_free(PzqAtoms* at) {
+    for (size_t i = 0; i < at->n; i++) { expr_free(at->from[i]); expr_free(at->to[i]); }
+    free(at->from);
+    free(at->to);
+}
+
 Expr* builtin_possible_zero_q(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2579,15 +2650,27 @@ Expr* builtin_possible_zero_q(Expr* res) {
             effective = dollar;
     }
 
-    if (assumption_is_trivial(effective)) {
-        expr_free(effective);
-        return pzq_bool(zero_test_decide(arg));   /* legacy path, no ctx */
+    /* Opaque calls become fresh symbols, in the expression and in the
+     * assumptions alike (f[a] > 0 must still constrain the atom). */
+    PzqAtoms atoms = { NULL, NULL, 0, 0 };
+    Expr* abstracted = pzq_abstract(arg, &atoms);
+    Expr* target = abstracted ? abstracted : arg;
+    if (abstracted && effective) {
+        Expr* ea = pzq_abstract(effective, &atoms);
+        if (ea) { expr_free(effective); effective = ea; }
     }
 
-    AssumeCtx* ctx = assume_ctx_from_expr(effective);
+    ZeroTestResult r;
+    if (assumption_is_trivial(effective)) {
+        r = zero_test_decide(target);              /* legacy path, no ctx */
+    } else {
+        AssumeCtx* ctx = assume_ctx_from_expr(effective);
+        r = zero_test_decide_assuming(target, ctx);
+        assume_ctx_free(ctx);                      /* safe no-op if ctx == NULL */
+    }
     expr_free(effective);
-    ZeroTestResult r = zero_test_decide_assuming(arg, ctx);
-    assume_ctx_free(ctx);                          /* safe no-op if ctx == NULL */
+    if (abstracted) expr_free(abstracted);
+    pzq_atoms_free(&atoms);
     return pzq_bool(r);
 }
 

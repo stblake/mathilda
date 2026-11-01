@@ -369,7 +369,13 @@ Out[1]= <|"a" -> 1, "b" -> 2|>
 
 In[2]:= AssociationThread[{"a", "b"} -> {1, 2}]
 Out[2]= <|"a" -> 1, "b" -> 2|>
+
+In[3]:= AssociationThread[{a, b, c} -> True]
+Out[3]= <|a -> True, b -> True, c -> True|>
 ```
+
+A value that is not a list is given to every key. Lists of different lengths
+emit `AssociationThread::idim` and leave the call unevaluated.
 
 ## Counts
 Tallies each distinct element of a list, giving `<|element -> count, ...|>`.

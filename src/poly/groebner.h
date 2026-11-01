@@ -226,6 +226,11 @@ GBPoly** gb_strong_buchberger(GBPoly* const* F, size_t n, size_t* out_n);
  * (field-redundant) generators are compacted out and *nG is updated; each
  * survivor is primitive over Z. */
 void gb_rational_function_reduce(GBPoly** G, size_t* nG, int n_main);
+/* The coefficients of `p` over its first `n_main` (main) variables: one
+ * fresh polynomial in the trailing parameter slots per distinct main
+ * monomial (main exponents zeroed), in term order.  *n_out receives the
+ * count; the caller frees each entry and the array. */
+GBPoly** gb_main_coefficients(const GBPoly* p, int n_main, size_t* n_out);
 
 /* Turn a generating set that is already a Gröbner basis under G[0]'s
  * order into the canonical reduced basis: interreduce, reduce to a fixed

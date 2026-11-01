@@ -19,6 +19,8 @@
 #include "attr.h"
 #include "common.h"
 #include "eval.h"
+#include "print.h"     /* expr_to_string: AssociationThread::idim */
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #include <stdlib.h>
 #include <string.h>
@@ -782,14 +784,24 @@ Expr* builtin_associationthread(Expr* res) {
     } else {
         return NULL;
     }
-    if (!head_is(keys, SYM_List) || !head_is(vals, SYM_List)) return NULL;
+    if (!head_is(keys, SYM_List)) return NULL;
     size_t n = keys->data.function.arg_count;
-    if (n != vals->data.function.arg_count) return NULL;
+    /* A non-List value is given to every key: AssociationThread[{a, b} -> 1]
+     * is <|a -> 1, b -> 1|>. */
+    bool scalar = !head_is(vals, SYM_List);
+    if (!scalar && n != vals->data.function.arg_count) {
+        char* ks = expr_to_string(keys);
+        char* vs = expr_to_string(vals);
+        mth_message("AssociationThread", "idim", "%s and %s must have the same length.",
+                    ks ? ks : "?", vs ? vs : "?");
+        free(ks); free(vs);
+        return NULL;
+    }
 
     Expr** rules = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++)
         rules[i] = make_rule(expr_copy(keys->data.function.args[i]),
-                             expr_copy(vals->data.function.args[i]));
+                             expr_copy(scalar ? vals : vals->data.function.args[i]));
     Expr* assoc = assoc_from_rules(rules, n);
     for (size_t i = 0; i < n; i++) expr_free(rules[i]);
     free(rules);
@@ -1731,7 +1743,8 @@ void assoc_init(void) {
     symtab_get_def("AssociationThread")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("AssociationThread",
         "AssociationThread[{k...}, {v...}]  |  AssociationThread[keys -> values]\n"
-        "\tBuilds <|k1 -> v1, ...|> from parallel key and value lists.");
+        "\tBuilds <|k1 -> v1, ...|> from parallel key and value lists;\n"
+        "\ta non-list value is given to every key.");
 
     symtab_add_builtin("Counts", builtin_counts);
     symtab_get_def("Counts")->attributes |= ATTR_PROTECTED;

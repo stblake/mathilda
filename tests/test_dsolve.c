@@ -1266,12 +1266,15 @@ static void check_method(const char* method, const char* eqn, const char* residu
  * the ODE `ode_of_b` (written with b, D[b,x], D[b,{x,2}]) is O[x]^k.  Going through
  * the body directly is required because Derivative[k][Function[{x}, SeriesData]] is
  * not reduced by the evaluator. */
+/* The residual of a truncated series is a SeriesData that vanishes to its
+ * order; Normal turns that into 0 (PossibleZeroQ of the SeriesData itself is
+ * False in the reference, as for any unevaluated head). */
 static void check_series(const char* method, const char* eqn, const char* ode_of_b) {
     char buf[900];
     snprintf(buf, sizeof(buf), "Head[%s[%s, y, x]]", method, eqn);
     check_form(buf, "List");
     snprintf(buf, sizeof(buf),
-             "PossibleZeroQ[Module[{b = y[x] /. %s[%s, y, x][[1]]}, %s]]", method, eqn, ode_of_b);
+             "PossibleZeroQ[Normal[Module[{b = y[x] /. %s[%s, y, x][[1]]}, %s]]]", method, eqn, ode_of_b);
     check_true(buf);
 }
 
@@ -1420,8 +1423,8 @@ static void t_powerseries_auto(void) {
     check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y, x]]", "DSolve");
     /* ... while Method -> "PowerSeries" still gives the series on request */
     check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y, x, Method -> \"PowerSeries\"]]", "List");
-    check_true("PossibleZeroQ[Module[{b = y[x] /. DSolve[y''[x] + Sin[x] y[x] == 0, y, x, "
-               "Method -> \"PowerSeries\"][[1]]}, D[b,{x,2}] + Sin[x] b]]");
+    check_true("PossibleZeroQ[Normal[Module[{b = y[x] /. DSolve[y''[x] + Sin[x] y[x] == 0, y, x, "
+               "Method -> \"PowerSeries\"][[1]]}, D[b,{x,2}] + Sin[x] b]]]");
 }
 static void t_frobenius_regsing_distinct(void) {
     /* 4 x y'' + 2 y' + y == 0: regular singular, roots 0 & 1/2 (cos/sin of Sqrt[x]) */

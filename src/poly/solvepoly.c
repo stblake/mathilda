@@ -1650,8 +1650,12 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
     SolList sl; sl_init(&sl);
 
     bool used_fast = false;
-    if (d == 2 && has_param_symbol(poly, var)) {
-        /* A quadratic over Q(params) is factored first.  The quadratic
+    if (d >= 2 && has_param_symbol(poly, var)) {
+        /* A polynomial over Q(params) is factored first.  Any degree: a
+         * quartic like (d^2 - q1^2)(d^2 - (2 l2 + q1)^2), expanded, went to
+         * the biquadratic formula and came back as nested radicals of the
+         * parameters where the reference gives d -> +-q1, +-(2 l2 + q1).
+         * The quadratic case shows why it matters: the quadratic
          * formula on a(1 + 3c + 2c^2) gives (-3a -+ Sqrt[a^2])/(4a): each
          * root is -1 or -1/2 depending on the branch of Sqrt[a^2], and a
          * caller that substitutes one root at a time (the triangular
@@ -1670,8 +1674,8 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
                 const Expr* fi = fac->data.function.args[i];
                 if (has_param_symbol(fi, var) && !expr_contains_var(fi, var))
                     useful = true;                    /* symbolic content */
-                else if (expr_contains_var(fi, var) && get_degree_poly((Expr*)fi, var) < 2)
-                    useful = true;                    /* a linear factor  */
+                else if (expr_contains_var(fi, var) && get_degree_poly((Expr*)fi, var) < d)
+                    useful = true;                    /* a proper factor  */
             }
         } else if (fac->type == EXPR_FUNCTION
                    && fac->data.function.head->type == EXPR_SYMBOL

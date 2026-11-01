@@ -239,6 +239,16 @@ is fast but not always exact — it may produce a small number of
 one-sided false positives on identities that hold only on a measure-
 zero subset of the complex plane.
 
+**Inert calls are variables.** Before the pipeline runs, the builtin
+replaces each distinct maximal subexpression whose head is not a symbol
+(`Derivative[1][f][x]`) or names neither a builtin nor a `NumericFunction`
+(`f[a]`, `C[1]`, a package's `Pair[...]`) with a fresh symbol, in the
+expression and in the assumptions alike, and samples that symbol like any
+other. So `PossibleZeroQ[f[a]]` and `PossibleZeroQ[C[1] - 1]` are `False`
+and `PossibleZeroQ[f[a] - f[a]]` is `True`, as in the reference; until
+v0.6127 such a call was never sampled and the test reported `True`. The
+internal `zero_test_decide` used by the solvers is unchanged.
+
 Pipeline (each stage exits early on a definite verdict):
 
 0. **Exponential-combining normalisation** — when `expr` carries a

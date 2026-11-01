@@ -75,9 +75,6 @@
  * could still explode; when this is exceeded we treat the search as
  * incomplete (return NULL) rather than emit a truncated set. */
 #define NL_MAX_SOLS   4096
-/* Maximum distinct free parameters before the RationalFunctions-coefficient
- * Gröbner computation is declined; its cost grows fast in the parameters. */
-#define NL_MAX_PARAMS 3
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand (same conventions as solvelinsys.c). *
@@ -164,6 +161,7 @@ typedef struct {
     const SolvePolyOpts* opts;     /* Cubics / Quartics passthrough           */
     Expr** sols; int nsol, solcap; /* accumulated solution tuples (owned)     */
     bool   incomplete;             /* a live branch could not be resolved     */
+    bool   parametric;             /* coefficients in Q(params): Cancel roots */
 } NlCtx;
 
 /* Verify a complete assignment (`assigned` = List of Rule[var, val]) by
@@ -299,6 +297,15 @@ static void nl_rec(NlCtx* c, Expr* assigned, int depth) {
             if (rule->type != EXPR_FUNCTION || rule->data.function.arg_count != 2)
                 continue;
             Expr* val = rule->data.function.args[1];
+            /* Over Q(params) a back-substituted root is a rational function
+             * whose numerator and denominator share parameter factors (the
+             * generator's coefficients were evaluated at the higher roots);
+             * cancel them so the next level, and the answer, see the
+             * reduced form ((p1 p4 q1 + p4^2 q1 + ...)/(p1 q1 + ...) is p4). */
+            Expr* cval = c->parametric
+                ? eval_and_free(internal_cancel((Expr*[]){ expr_copy(val) }, 1))
+                : NULL;
+            if (cval) val = cval;
 
             size_t na = assigned->data.function.arg_count;
             Expr** na2 = (Expr**)malloc(sizeof(Expr*) * (na + 1));
@@ -309,6 +316,7 @@ static void nl_rec(NlCtx* c, Expr* assigned, int depth) {
             free(na2);
             nl_rec(c, na_list, depth + 1);
             expr_free(na_list);
+            if (cval) expr_free(cval);
         }
     }
     expr_free(roots);
@@ -326,8 +334,9 @@ static void nl_rec(NlCtx* c, Expr* assigned, int depth) {
 static Expr* run_nl_search(Expr** orig, Expr** dens, int norig,
                            Expr** gbE, int ngb, Expr** var_arr, int nvar,
                            Expr* dom, bool reals_only, bool integers_only,
-                           const SolvePolyOpts* opts) {
+                           const SolvePolyOpts* opts, bool parametric) {
     NlCtx c;
+    c.parametric = parametric;
     c.orig = orig; c.norig = norig;
     c.dens = dens;
     c.gb = gbE; c.ngb = ngb;
@@ -374,28 +383,23 @@ static bool nl_is_known_constant(const char* s) {
         || s == SYM_Null;
 }
 
-/* Collect distinct free-parameter symbol names (interned pointers) from the
- * OPERANDS of `e` into params[0..*np-1], capped at `cap`.  Function heads are
- * structural (Plus/Times/Power/...) and never parameters, so they are skipped.
- * Returns false once more than `cap` distinct parameters are seen. */
-static bool nl_collect_params(const Expr* e, Expr** var_arr, int n,
-                              const char** params, int* np, int cap) {
-    if (!e) return true;
+/* True iff the OPERANDS of `e` mention a free parameter: a symbol that is
+ * neither a solve variable nor a known constant.  Function heads are
+ * structural (Plus/Times/Power/...) and never parameters, so they are
+ * skipped.  There is no cap on how many: the Q(params) Gröbner engine is
+ * the decision procedure, and declining above an arbitrary count left
+ * ordinary momentum-routing systems (four parameters) unevaluated. */
+static bool nl_has_param(const Expr* e, Expr** var_arr, int n) {
+    if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
         const char* s = e->data.symbol.name;
-        if (nl_is_solve_var(s, var_arr, n) || nl_is_known_constant(s)) return true;
-        for (int i = 0; i < *np; i++) if (params[i] == s) return true;
-        if (*np >= cap) return false;
-        params[(*np)++] = s;
-        return true;
+        return !nl_is_solve_var(s, var_arr, n) && !nl_is_known_constant(s);
     }
     if (e->type == EXPR_FUNCTION) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            if (!nl_collect_params(e->data.function.args[i], var_arr, n,
-                                   params, np, cap))
-                return false;
+            if (nl_has_param(e->data.function.args[i], var_arr, n)) return true;
     }
-    return true;
+    return false;
 }
 
 /* True iff `g` is free of every solve variable. */
@@ -464,7 +468,7 @@ static Expr* solve_parametric_system(Expr** orig, Expr** dens, int norig,
      * `incomplete` flag guards systems that are positive-dimensional in the
      * variables, so a false `{}` can never be emitted. */
     Expr* out = run_nl_search(orig, dens, norig, gbE, (int)ng, var_arr, n,
-                              dom, reals_only, integers_only, opts);
+                              dom, reals_only, integers_only, opts, true);
     expr_free(gb_res);
     return out;
 }
@@ -578,19 +582,15 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
      * a known constant is a parameter that belongs in the coefficient field.
      * gb_from_expr and the machine walk below carry only rational coefficients,
      * so route these through the RationalFunctions-coefficient Gröbner engine
-     * instead.  More than NL_MAX_PARAMS distinct parameters -> decline. */
+     * instead. */
     {
-        const char* params[NL_MAX_PARAMS + 1];
-        int np = 0; bool within_cap = true;
-        for (int i = 0; i < norig && within_cap; i++)
-            within_cap = nl_collect_params(orig[i], var_arr, n, params, &np,
-                                           NL_MAX_PARAMS + 1);
-        if (np > 0) {
-            Expr* out = (within_cap && np <= NL_MAX_PARAMS)
-                ? solve_parametric_system(orig, dens, norig, var_arr, n, vars,
-                                          dom, reals_only, integers_only,
-                                          &local_opts)
-                : NULL;
+        bool has_param = false;
+        for (int i = 0; i < norig && !has_param; i++)
+            has_param = nl_has_param(orig[i], var_arr, n);
+        if (has_param) {
+            Expr* out = solve_parametric_system(orig, dens, norig, var_arr, n, vars,
+                                                dom, reals_only, integers_only,
+                                                &local_opts);
             for (int k = 0; k < norig; k++) { expr_free(orig[k]); if (dens[k]) expr_free(dens[k]); }
             free(orig); free(dens);
             return out;
@@ -684,7 +684,7 @@ Expr* solvenlsys_solve_nonlinear_system(Expr* equations,
     gb_basis_free(G, nG);
 
     Expr* out = run_nl_search(orig, dens, norig, gbE, (int)nG, var_arr, n,
-                              dom, reals_only, integers_only, &local_opts);
+                              dom, reals_only, integers_only, &local_opts, false);
 
     for (size_t i = 0; i < nG; i++) expr_free(gbE[i]);
     free(gbE);

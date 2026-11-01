@@ -734,6 +734,36 @@ Expr* builtin_groebner_basis(Expr* res) {
         }
     }
 
+    /* CoefficientDomain -> RationalFunctions: only the main variables carry
+     * the order over Q(params), so the ring basis need only use a BLOCK order
+     * main >> params -- lex on the main variables, then degree-reverse-lex
+     * on the parameters -- not lex on all of them.  Terms sharing a main
+     * monomial stay contiguous (the field leading term comes first), which
+     * is all gb_rational_function_reduce relies on, and the parameter block
+     * no longer pays for lex: a 5-equation momentum-routing system in 4
+     * unknowns and 4 parameters took over a minute under full lex and takes
+     * ~0.1 s under the block order. */
+    if (!wmat_ptr && opt.domain == GB_DOM_RATIONAL_FUNCTIONS && n_params > 0
+        && n_elim == 0) {
+        int nv = (int)n_vars, nm = (int)n_main, np = (int)n_params;
+        int rows = nm + np;
+        wmat_buf = (int64_t*)calloc((size_t)rows * (size_t)nv, sizeof(int64_t));
+        for (int r = 0; r < nm; r++) wmat_buf[(size_t)r * nv + r] = 1;
+        for (int c = nm; c < nv; c++) wmat_buf[(size_t)nm * nv + c] = 1;
+        for (int k = 1; k < np; k++)               /* -e_last, ..., -e_(second) */
+            wmat_buf[(size_t)(nm + k) * nv + (nv - k)] = -1;
+        if (gb_wmat_validate(wmat_buf, rows, nv)) {
+            wmat_storage.n_rows = rows;
+            wmat_storage.n_vars = nv;
+            wmat_storage.w = wmat_buf;
+            wmat_ptr = &wmat_storage;
+            use_order = GB_ORDER_MATRIX;
+        } else {
+            free(wmat_buf);
+            wmat_buf = NULL;
+        }
+    }
+
     /* Convert each input polynomial. */
     GBPoly** F = (GBPoly**)malloc(sizeof(GBPoly*) * n_polys);
     size_t nF = 0;
@@ -850,9 +880,10 @@ Expr* builtin_groebner_basis(Expr* res) {
         G = gb_buchberger(F, nF, &out_n);
     }
 
-    /* The weight matrix is no longer needed: the returned basis only feeds
-     * gb_to_expr (which reads exponents/coefficients, not the order). */
-    free(wmat_buf);
+    /* The weight matrix is still read by the RationalFunctions reduction
+     * below (it orders the pseudo-reduction's products), so it is freed
+     * after that; the rest of the path only feeds gb_to_expr, which reads
+     * exponents and coefficients, not the order. */
 
     /* Free input working set. */
     for (size_t i = 0; i < nF; i++) gb_poly_free(F[i]);
@@ -897,6 +928,8 @@ Expr* builtin_groebner_basis(Expr* res) {
         int n_field_main = (int)(n_vars - n_params);
         gb_rational_function_reduce(G, &out_n, n_field_main);
     }
+    free(wmat_buf);
+    wmat_buf = NULL;
 
     /* If the basis collapses to {<non-zero constant>} -> {1}.  Over the
      * integers a constant generator c means the ideal is c*Z[x] (not <1>
@@ -943,6 +976,35 @@ Expr* builtin_groebner_basis(Expr* res) {
             items[i] = gb_to_expr(G[i], all_vars);
         }
 #endif
+    } else if (opt.domain == GB_DOM_RATIONAL_FUNCTIONS && n_params > 0
+               && n_elim == 0) {
+        /* Over Q(params) a parameter polynomial is a unit: divide each
+         * generator by the GCD of its coefficients over the main variables,
+         * so Q x2 - p1 Q is reported as x2 - p1 (as the reference does). */
+        for (size_t i = 0; i < out_n; i++) {
+            items[i] = gb_to_expr(G[i], all_vars);
+            size_t nc = 0;
+            GBPoly** cs = gb_main_coefficients(G[i], (int)n_main, &nc);
+            Expr** ce = (Expr**)malloc(sizeof(Expr*) * (nc ? nc : 1));
+            for (size_t c = 0; c < nc; c++) {
+                ce[c] = gb_to_expr(cs[c], all_vars);
+                gb_poly_free(cs[c]);
+            }
+            free(cs);
+            Expr* g = (nc > 1) ? eval_and_free(internal_polynomialgcd(ce, nc))
+                               : (nc == 1 ? ce[0] : NULL);
+            free(ce);
+            if (g && !(g->type == EXPR_INTEGER || g->type == EXPR_BIGINT
+                       || (g->type == EXPR_FUNCTION && g->data.function.head->type == EXPR_SYMBOL
+                           && g->data.function.head->data.symbol.name == SYM_Rational))) {
+                Expr* q = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ items[i], expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ g, expr_new_integer(-1) }, 2) }, 2);
+                items[i] = eval_and_free(internal_cancel((Expr*[]){ eval_and_free(q) }, 1));
+            } else if (g) {
+                expr_free(g);
+            }
+        }
     } else {
         for (size_t i = 0; i < out_n; i++) {
             items[i] = gb_to_expr(G[i], all_vars);

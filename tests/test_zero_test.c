@@ -1043,9 +1043,10 @@ static void test_overflow_preserves_true_identities(void) {
     assert_pzq("PossibleZeroQ[D[Erfi[x], x] - 2/Sqrt[Pi] E^(x^2)]", "True");
 }
 static void test_overflow_unimplemented_head_unchanged(void) {
-    /* A genuinely unimplemented head is a symbolic residue (NOT overflow): it is
-     * not re-drawn, so the trip-wire UNKNOWN -> True behaviour is preserved. */
-    assert_pzq("PossibleZeroQ[UndefinedZQHead[x] + 1]", "True");
+    /* A genuinely unimplemented head is a symbolic residue (NOT overflow).  The
+     * builtin abstracts it to a fresh symbol (v0.6127), so it is sampled like
+     * any variable and the answer is the reference's False. */
+    assert_pzq("PossibleZeroQ[UndefinedZQHead[x] + 1]", "False");
 }
 
 /* Group 19 — numeric-function-head magnitude-decline re-draw
@@ -1081,9 +1082,9 @@ static void test_decline_preserves_true_identity(void) {
 }
 static void test_decline_undefined_head_unchanged(void) {
     /* An undefined head carries NO ATTR_NUMERICFUNCTION, so it is NOT a magnitude
-     * decline: it stays a genuine residue and the trip-wire UNKNOWN -> True holds
-     * (same guarantee as Group 18, re-asserted against the broadened re-draw). */
-    assert_pzq("PossibleZeroQ[UndefinedZQHead[x^2] + 1]", "True");
+     * decline; the builtin abstracts it to a fresh symbol (v0.6127), giving the
+     * reference's False. */
+    assert_pzq("PossibleZeroQ[UndefinedZQHead[x^2] + 1]", "False");
 }
 
 /* Group 20 — huge-scale deep-cancellation false-negative

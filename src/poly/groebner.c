@@ -29,6 +29,13 @@
 #include "expr.h"
 #include "sym_names.h"
 
+#ifdef USE_FLINT
+#include <flint/flint.h>
+#include <flint/fmpz.h>
+#include <flint/fmpz_mpoly.h>
+#include <flint/fmpz_mpoly_q.h>
+#endif
+
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                   */
 /* ------------------------------------------------------------------ */
@@ -1466,6 +1473,33 @@ static GBPoly* gb_lead_group(const GBPoly* p, int n_main) {
     return out;
 }
 
+/* Divide `a` and `b` by the same positive rational so that their joint
+ * coefficients are integers with content 1.  No sign normalisation: the
+ * two are the halves of one polynomial and must stay in proportion. */
+static void gb_poly_pair_strip_content(GBPoly* a, GBPoly* b) {
+    GBPoly* ps[2] = { a, b };
+    mpz_t lcm, g;
+    mpz_init_set_ui(lcm, 1);
+    mpz_init_set_ui(g, 0);
+    for (int k = 0; k < 2; k++)
+        for (size_t i = 0; i < ps[k]->n_terms; i++)
+            mpz_lcm(lcm, lcm, mpq_denref(ps[k]->coefs[i]));
+    for (int k = 0; k < 2; k++)
+        for (size_t i = 0; i < ps[k]->n_terms; i++) {
+            if (mpz_cmp_ui(lcm, 1) != 0) {
+                mpz_mul(mpq_numref(ps[k]->coefs[i]), mpq_numref(ps[k]->coefs[i]), lcm);
+                mpq_canonicalize(ps[k]->coefs[i]);
+            }
+            mpz_gcd(g, g, mpq_numref(ps[k]->coefs[i]));
+        }
+    if (mpz_cmp_ui(g, 1) > 0)
+        for (int k = 0; k < 2; k++)
+            for (size_t i = 0; i < ps[k]->n_terms; i++)
+                mpz_divexact(mpq_numref(ps[k]->coefs[i]), mpq_numref(ps[k]->coefs[i]), g);
+    mpz_clear(lcm);
+    mpz_clear(g);
+}
+
 /* Full field reduction of `f` modulo the non-NULL members of
  * basis[0..n-1].  Returns a fresh remainder (possibly zero); coefficients
  * are kept primitive over Z. */
@@ -1506,7 +1540,16 @@ static GBPoly* gb_field_reduce(const GBPoly* f, GBPoly* const* basis,
         GBPoly* tmp = gb_poly_mul(lcr, basis[gi]);
         GBPoly* t2  = gb_poly_mul_by_monomial(tmp, qexp, one);
         GBPoly* nr  = gb_poly_sub(t1, t2);
-        gb_poly_make_primitive_z(nr);
+        /* The retired part must be scaled with the remainder: done + r stays
+         * proportional to f (over Q(params)) only if both carry lc_main(g).
+         * Scaling r alone -- or stripping its content or sign on its own --
+         * leaves a "remainder" outside the ideal, which surfaced as spurious
+         * parameter-only generators (a false unit ideal over Q(params)). */
+        if (!gb_poly_is_zero(done)) {
+            GBPoly* nd = gb_poly_mul(lcg, done);
+            gb_poly_free(done); done = nd;
+        }
+        gb_poly_pair_strip_content(done, nr);
         gb_poly_free(lcg); gb_poly_free(lcr);
         gb_poly_free(t1);  gb_poly_free(tmp); gb_poly_free(t2);
         gb_poly_free(r); r = nr;
@@ -1517,11 +1560,316 @@ static GBPoly* gb_field_reduce(const GBPoly* f, GBPoly* const* basis,
     return done;
 }
 
+GBPoly** gb_main_coefficients(const GBPoly* p, int n_main, size_t* n_out) {
+    GBPoly** out = (GBPoly**)malloc(sizeof(GBPoly*) * (p->n_terms ? p->n_terms : 1));
+    size_t k = 0;
+    int* row = (int*)malloc(sizeof(int) * (size_t)p->n_vars);
+    size_t i = 0;
+    while (i < p->n_terms) {
+        /* Under lex with the parameters last, the terms sharing a main
+         * monomial are contiguous. */
+        const int* lead = gb_exp_at((GBPoly*)p, i);
+        GBPoly* c = gb_poly_new(p->n_vars, p->order, p->elim_pivot);
+        c->wmat = p->wmat;
+        size_t j = i;
+        for (; j < p->n_terms; j++) {
+            const int* e = gb_exp_at((GBPoly*)p, j);
+            bool same = true;
+            for (int v = 0; v < n_main; v++) if (e[v] != lead[v]) { same = false; break; }
+            if (!same) break;
+            for (int v = 0; v < p->n_vars; v++) row[v] = (v < n_main) ? 0 : e[v];
+            gb_poly_push_term(c, row, p->coefs[j]);
+        }
+        gb_poly_normalize(c);
+        out[k++] = c;
+        i = j;
+    }
+    free(row);
+    *n_out = k;
+    return out;
+}
+
+#ifdef USE_FLINT
+/* ------------------------------------------------------------------ *
+ *  The same autoreduction with coefficients in Q(params) proper.       *
+ *                                                                     *
+ *  A field polynomial is a list of (main monomial, coefficient) terms  *
+ *  in descending main order, each coefficient a canonical FLINT        *
+ *  fmpz_mpoly_q over the parameters, and every generator is kept       *
+ *  monic.  The fraction-free pseudo-reduction below multiplies both    *
+ *  halves of a polynomial by a parameter polynomial at every step and  *
+ *  can only strip INTEGER content, so on a parametric system the       *
+ *  coefficients grow without bound (a 5-equation momentum-routing      *
+ *  system in 4 unknowns and 4 parameters never finished); here each    *
+ *  coefficient is a reduced fraction throughout.  The main order is    *
+ *  lex on the main exponents: both orders the RationalFunctions path   *
+ *  uses (lex on everything, and the main >> params block order) put    *
+ *  the main variables first, lexicographically.                        *
+ * ------------------------------------------------------------------ */
+
+typedef struct {
+    int* mexp;                 /* n * n_main main exponents              */
+    fmpz_mpoly_q_struct* c;    /* n coefficients                         */
+    size_t n, cap;
+} RfPoly;
+
+static int rf_cmp(const int* a, const int* b, int nm) {     /* lex; > 0: a > b */
+    for (int v = 0; v < nm; v++) if (a[v] != b[v]) return a[v] > b[v] ? 1 : -1;
+    return 0;
+}
+
+static void rf_init(RfPoly* p) { p->mexp = NULL; p->c = NULL; p->n = p->cap = 0; }
+
+static void rf_clear(RfPoly* p, const fmpz_mpoly_ctx_t ctx) {
+    for (size_t i = 0; i < p->n; i++) fmpz_mpoly_q_clear(p->c + i, ctx);
+    free(p->mexp);
+    free(p->c);
+    rf_init(p);
+}
+
+/* Append a term (copies the coefficient). */
+static void rf_push(RfPoly* p, const int* e, const fmpz_mpoly_q_t c, int nm,
+                    const fmpz_mpoly_ctx_t ctx) {
+    if (p->n == p->cap) {
+        p->cap = p->cap ? 2 * p->cap : 8;
+        p->mexp = (int*)realloc(p->mexp, p->cap * (size_t)(nm ? nm : 1) * sizeof(int));
+        p->c = (fmpz_mpoly_q_struct*)realloc(p->c, p->cap * sizeof(fmpz_mpoly_q_struct));
+    }
+    memcpy(p->mexp + p->n * (size_t)nm, e, (size_t)nm * sizeof(int));
+    fmpz_mpoly_q_init(p->c + p->n, ctx);
+    fmpz_mpoly_q_set(p->c + p->n, c, ctx);
+    p->n++;
+}
+
+/* GBPoly (the terms of one main monomial contiguous) -> RfPoly. */
+static void rf_from_gbpoly(RfPoly* out, const GBPoly* g, int nm,
+                           const fmpz_mpoly_ctx_t ctx) {
+    int np = g->n_vars - nm;
+    ulong* ex = (ulong*)malloc(sizeof(ulong) * (size_t)(np ? np : 1));
+    fmpz_t k;
+    fmpz_init(k);
+    mpz_t L, t;
+    mpz_init(L);
+    mpz_init(t);
+    fmpz_mpoly_q_t c;
+    fmpz_mpoly_q_init(c, ctx);
+    rf_init(out);
+    size_t i = 0;
+    while (i < g->n_terms) {
+        const int* lead = gb_exp_at(g, i);
+        size_t j = i;
+        mpz_set_ui(L, 1);
+        while (j < g->n_terms && rf_cmp(gb_exp_at(g, j), lead, nm) == 0) {
+            mpz_lcm(L, L, mpq_denref(g->coefs[j]));
+            j++;
+        }
+        fmpz_mpoly_zero(fmpz_mpoly_q_numref(c), ctx);
+        for (size_t u = i; u < j; u++) {
+            const int* e = gb_exp_at(g, u);
+            for (int v = 0; v < np; v++) ex[v] = (ulong)e[nm + v];
+            mpz_divexact(t, L, mpq_denref(g->coefs[u]));
+            mpz_mul(t, t, mpq_numref(g->coefs[u]));
+            fmpz_set_mpz(k, t);
+            fmpz_mpoly_push_term_fmpz_ui(fmpz_mpoly_q_numref(c), k, ex, ctx);
+        }
+        fmpz_mpoly_sort_terms(fmpz_mpoly_q_numref(c), ctx);
+        fmpz_mpoly_combine_like_terms(fmpz_mpoly_q_numref(c), ctx);
+        fmpz_set_mpz(k, L);
+        fmpz_mpoly_set_fmpz(fmpz_mpoly_q_denref(c), k, ctx);
+        fmpz_mpoly_q_canonicalise(c, ctx);
+        if (!fmpz_mpoly_q_is_zero(c, ctx)) rf_push(out, lead, c, nm, ctx);
+        i = j;
+    }
+    fmpz_mpoly_q_clear(c, ctx);
+    mpz_clear(L);
+    mpz_clear(t);
+    fmpz_clear(k);
+    free(ex);
+}
+
+static void rf_make_monic(RfPoly* p, const fmpz_mpoly_ctx_t ctx) {
+    if (p->n == 0) return;
+    fmpz_mpoly_q_t inv;
+    fmpz_mpoly_q_init(inv, ctx);
+    fmpz_mpoly_q_inv(inv, p->c + 0, ctx);
+    for (size_t i = 0; i < p->n; i++) fmpz_mpoly_q_mul(p->c + i, p->c + i, inv, ctx);
+    fmpz_mpoly_q_clear(inv, ctx);
+}
+
+/* r := r - q x^s g, cancelling r's term at index `at`: r's terms before
+ * `at` are larger than anything the product contributes and are kept. */
+static void rf_sub_mul(RfPoly* r, size_t at, const fmpz_mpoly_q_t q, const int* s,
+                       const RfPoly* g, int nm, const fmpz_mpoly_ctx_t ctx) {
+    RfPoly out;
+    rf_init(&out);
+    int* e = (int*)malloc(sizeof(int) * (size_t)(nm ? nm : 1));
+    fmpz_mpoly_q_t t;
+    fmpz_mpoly_q_init(t, ctx);
+    for (size_t i = 0; i < at; i++) rf_push(&out, r->mexp + i * (size_t)nm, r->c + i, nm, ctx);
+    size_t a = at, b = 0;
+    while (a < r->n || b < g->n) {
+        int cmp;
+        if (b < g->n)
+            for (int v = 0; v < nm; v++) e[v] = g->mexp[b * (size_t)nm + v] + s[v];
+        if (a >= r->n) cmp = -1;
+        else if (b >= g->n) cmp = 1;
+        else cmp = rf_cmp(r->mexp + a * (size_t)nm, e, nm);
+        if (cmp > 0) {
+            rf_push(&out, r->mexp + a * (size_t)nm, r->c + a, nm, ctx);
+            a++;
+        } else {
+            fmpz_mpoly_q_mul(t, q, g->c + b, ctx);
+            fmpz_mpoly_q_neg(t, t, ctx);
+            if (cmp == 0) { fmpz_mpoly_q_add(t, t, r->c + a, ctx); a++; }
+            if (!fmpz_mpoly_q_is_zero(t, ctx)) rf_push(&out, e, t, nm, ctx);
+            b++;
+        }
+    }
+    fmpz_mpoly_q_clear(t, ctx);
+    free(e);
+    rf_clear(r, ctx);
+    *r = out;
+}
+
+/* Fully reduce `r` modulo the non-empty members of B other than B[skip]
+ * (all monic), in place.  True iff a reduction step was taken. */
+static bool rf_reduce(RfPoly* r, RfPoly* B, size_t nB, size_t skip, int nm,
+                      const fmpz_mpoly_ctx_t ctx) {
+    bool changed = false;
+    int* s = (int*)malloc(sizeof(int) * (size_t)(nm ? nm : 1));
+    fmpz_mpoly_q_t q;
+    fmpz_mpoly_q_init(q, ctx);
+    size_t i = 0;
+    while (i < r->n) {
+        const int* m = r->mexp + i * (size_t)nm;
+        size_t gi = nB;
+        for (size_t k = 0; k < nB && gi == nB; k++) {
+            if (k == skip || B[k].n == 0) continue;
+            bool div = true;
+            for (int v = 0; v < nm && div; v++) if (B[k].mexp[v] > m[v]) div = false;
+            if (div) gi = k;
+        }
+        if (gi == nB) { i++; continue; }
+        for (int v = 0; v < nm; v++) s[v] = m[v] - B[gi].mexp[v];
+        fmpz_mpoly_q_set(q, r->c + i, ctx);              /* B[gi] is monic */
+        rf_sub_mul(r, i, q, s, B + gi, nm, ctx);
+        changed = true;
+    }
+    fmpz_mpoly_q_clear(q, ctx);
+    free(s);
+    return changed;
+}
+
+/* RfPoly -> GBPoly with integer coefficients, primitive over Z[params]. */
+static GBPoly* rf_to_gbpoly(const RfPoly* p, const GBPoly* like, int nm,
+                            const fmpz_mpoly_ctx_t ctx) {
+    int nv = like->n_vars, np = nv - nm;
+    fmpz_mpoly_t D, g, tmp, cnt;
+    fmpz_mpoly_init(D, ctx);
+    fmpz_mpoly_init(g, ctx);
+    fmpz_mpoly_init(tmp, ctx);
+    fmpz_mpoly_init(cnt, ctx);
+    fmpz_mpoly_one(D, ctx);
+    for (size_t i = 0; i < p->n; i++) {                  /* D = lcm of the dens */
+        const fmpz_mpoly_struct* d = fmpz_mpoly_q_denref(p->c + i);
+        fmpz_mpoly_gcd(g, D, d, ctx);
+        fmpz_mpoly_mul(tmp, D, d, ctx);
+        fmpz_mpoly_divides(D, tmp, g, ctx);
+    }
+    fmpz_mpoly_struct* nums = (fmpz_mpoly_struct*)malloc(sizeof(fmpz_mpoly_struct) * (p->n ? p->n : 1));
+    fmpz_mpoly_zero(cnt, ctx);
+    for (size_t i = 0; i < p->n; i++) {
+        fmpz_mpoly_init(nums + i, ctx);
+        fmpz_mpoly_divides(tmp, D, fmpz_mpoly_q_denref(p->c + i), ctx);
+        fmpz_mpoly_mul(nums + i, fmpz_mpoly_q_numref(p->c + i), tmp, ctx);
+        fmpz_mpoly_gcd(cnt, cnt, nums + i, ctx);         /* content in Z[params] */
+    }
+    GBPoly* r = gb_poly_new(nv, like->order, like->elim_pivot);
+    if (like->wmat) gb_poly_set_wmat(r, like->wmat);
+    int* ie = (int*)malloc(sizeof(int) * (size_t)nv);
+    ulong* ex = (ulong*)malloc(sizeof(ulong) * (size_t)(np ? np : 1));
+    fmpz_t cf;
+    fmpz_init(cf);
+    mpq_t c;
+    mpq_init(c);
+    for (size_t i = 0; i < p->n; i++) {
+        if (!fmpz_mpoly_is_zero(cnt, ctx)) fmpz_mpoly_divides(nums + i, nums + i, cnt, ctx);
+        for (int v = 0; v < nm; v++) ie[v] = p->mexp[i * (size_t)nm + v];
+        slong len = fmpz_mpoly_length(nums + i, ctx);
+        for (slong t = 0; t < len; t++) {
+            fmpz_mpoly_get_term_exp_ui(ex, nums + i, t, ctx);
+            fmpz_mpoly_get_term_coeff_fmpz(cf, nums + i, t, ctx);
+            for (int v = 0; v < np; v++) ie[nm + v] = (int)ex[v];
+            fmpz_get_mpz(mpq_numref(c), cf);
+            mpz_set_ui(mpq_denref(c), 1);
+            gb_poly_push_term(r, ie, c);
+        }
+        fmpz_mpoly_clear(nums + i, ctx);
+    }
+    free(nums);
+    mpq_clear(c);
+    fmpz_clear(cf);
+    free(ie);
+    free(ex);
+    fmpz_mpoly_clear(D, ctx);
+    fmpz_mpoly_clear(g, ctx);
+    fmpz_mpoly_clear(tmp, ctx);
+    fmpz_mpoly_clear(cnt, ctx);
+    gb_poly_normalize(r);
+    gb_poly_make_primitive_z(r);
+    return r;
+}
+
+static bool gb_rational_function_reduce_flint(GBPoly** G, size_t* nG, int n_main) {
+    if (*nG == 0) return true;
+    int nv = G[0]->n_vars, np = nv - n_main;
+    if (np <= 0) return false;
+    fmpz_mpoly_ctx_t ctx;
+    fmpz_mpoly_ctx_init(ctx, np, ORD_LEX);
+    size_t n = *nG;
+    RfPoly* B = (RfPoly*)malloc(sizeof(RfPoly) * n);
+    for (size_t i = 0; i < n; i++) {
+        rf_from_gbpoly(B + i, G[i], n_main, ctx);
+        rf_make_monic(B + i, ctx);
+    }
+    /* Interreduce to a fixed point: each generator modulo the others.  A
+     * generator reduced to zero drops out (its main leading monomial was
+     * a multiple of another's). */
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (size_t i = 0; i < n; i++) {
+            if (B[i].n == 0) continue;
+            if (rf_reduce(B + i, B, n, i, n_main, ctx)) {
+                rf_make_monic(B + i, ctx);
+                changed = true;
+            }
+        }
+    }
+    GBPoly* like = G[0];
+    GBPoly** out = (GBPoly**)malloc(sizeof(GBPoly*) * n);
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++)
+        if (B[i].n) out[k++] = rf_to_gbpoly(B + i, like, n_main, ctx);
+    for (size_t i = 0; i < n; i++) rf_clear(B + i, ctx);
+    free(B);
+    for (size_t i = 0; i < n; i++) gb_poly_free(G[i]);
+    for (size_t i = 0; i < k; i++) G[i] = out[i];
+    free(out);
+    *nG = k;
+    fmpz_mpoly_ctx_clear(ctx);
+    return true;
+}
+#endif /* USE_FLINT */
+
 /* Autoreduce the ring basis G[0..*nG-1] into a Gröbner basis over the
  * field Q(params)[mainvars], in place.  `n_main` is the number of leading
  * (field) variables; the trailing slots are parameters.  NULL entries are
  * compacted away and *nG updated; each survivor is primitive over Z. */
 void gb_rational_function_reduce(GBPoly** G, size_t* nG, int n_main) {
+#ifdef USE_FLINT
+    if (gb_rational_function_reduce_flint(G, nG, n_main)) return;
+#endif
     /* Fixed-point autoreduction with a generous safety cap. */
     for (int pass = 0; pass < 1000; pass++) {
         bool changed = false;

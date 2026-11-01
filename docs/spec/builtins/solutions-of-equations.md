@@ -7,6 +7,14 @@ The equation solver and its supporting machinery: `Solve`, `Reduce`, the quantif
 Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars]`: Solve `expr` for `vars` over the complex numbers (default).
 - `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
+- `Solve[expr]` and `Solve[expr, {}]`: solve for every variable `expr`
+  mentions.  A variable is a maximal non-numeric subexpression not built by
+  a numeric function: `Sin[x] == a` contributes `x` and `a`, an inert call
+  `f[a]` is itself a variable, named constants are not.  The variables are
+  sorted canonically (`Solve[{f[a] + b == 1, b == 2}, {}]` is
+  `{{b -> 2, f[a] -> -1}}`).  A system with no variable is `{{}}` when every
+  statement is `True` (including `Solve[{}, {}]`) and `{}` when one is
+  `False`.
 
 **Features**:
 - `Protected`.  Uses the standard attribute set -- arguments are
@@ -1976,6 +1984,14 @@ its context-qualified name.
 - `Protected`.
 - `eqns` may be a single `Equal[lhs, rhs]`, `And[Equal[...], ...]`, or
   `List[Equal[...], ...]`.  `vars` must be a `List` of distinct symbols.
+- **Parametric systems** (any free symbol besides the variables) take the
+  Gröbner basis over Q(params) (`CoefficientDomain -> RationalFunctions`),
+  with no limit on the number of parameters (it was three until v0.6127, so
+  a momentum-routing system in four momenta stayed unevaluated), and each
+  back-substituted root is `Cancel`-ed.  The univariate solver factors a
+  polynomial with symbolic coefficients before any radical formula, at
+  every degree, so `(d^2 - q1^2)(d^2 - (2 l2 + q1)^2)` expanded gives
+  `d -> +-q1, +-(2 l2 + q1)` rather than nested radicals.
 - Each equation `lhs == rhs` is put over a common denominator (`Together`); the
   **`Numerator`** is taken as the polynomial equation and a non-constant
   **`Denominator`** is recorded so denominators clear for rational systems

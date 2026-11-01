@@ -45,6 +45,7 @@
 #include "symtab.h"
 #include "zero_test.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "simp_internal.h"   /* is_real_constant_symbol: Pi/E/... are never implicit vars */
 
 /* ------------------------------------------------------------------ *
  *  Option parsing.                                                    *
@@ -240,6 +241,93 @@ static bool is_valid_solve_vars(const Expr* vars) {
         return true;
     }
     return !is_numeric_literal(vars);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Implicit variables: Solve[eqns] and Solve[eqns, {}].               *
+ *                                                                     *
+ *  An omitted or empty variable list means "solve for every variable  *
+ *  the system mentions".  A variable is a maximal non-numeric          *
+ *  subexpression that is not built by a numeric function: the walk    *
+ *  descends through relations, logical connectives, lists and heads    *
+ *  carrying NumericFunction (Plus, Times, Power, Sin, ...), so          *
+ *  Sin[x] == a contributes x and a, while an inert call f[a] is itself  *
+ *  a variable.  Named constants (Pi, E, I, ...) are never variables.   *
+ *  The list is sorted canonically, which is the order the reference    *
+ *  reports the rules in ({{b -> 2, f[a] -> -1}}).                       *
+ * ------------------------------------------------------------------ */
+
+static bool solve_implicit_descends(const char* h) {
+    if (h == SYM_List || h == SYM_And || h == SYM_Or || h == SYM_Not
+        || h == SYM_Equal || h == SYM_Unequal || h == SYM_Less
+        || h == SYM_Greater || h == SYM_LessEqual || h == SYM_GreaterEqual)
+        return true;
+    SymbolDef* d = symtab_lookup(h);
+    return d && (d->attributes & ATTR_NUMERICFUNCTION);
+}
+
+static void solve_implicit_collect(const Expr* e, Expr*** arr, size_t* n, size_t* cap) {
+    if (!e || is_numeric_literal(e)) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (is_real_constant_symbol(nm) || nm == SYM_I || nm == SYM_True
+            || nm == SYM_False || nm == SYM_Infinity || nm == SYM_ComplexInfinity
+            || nm == SYM_Indeterminate)
+            return;
+    } else if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+               && solve_implicit_descends(e->data.function.head->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            solve_implicit_collect(e->data.function.args[i], arr, n, cap);
+        return;
+    } else if (e->type != EXPR_FUNCTION) {
+        return;
+    }
+    for (size_t i = 0; i < *n; i++)
+        if (expr_eq((*arr)[i], e)) return;
+    if (*n == *cap) {
+        *cap = *cap ? *cap * 2 : 8;
+        *arr = (Expr**)realloc(*arr, *cap * sizeof(Expr*));
+    }
+    (*arr)[(*n)++] = expr_copy((Expr*)e);
+}
+
+static int solve_implicit_cmp(const void* a, const void* b) {
+    return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
+}
+
+/* Decide a system with no variable: {{}} if every statement is True
+ * (including the empty system), {} if any is False, NULL otherwise. */
+static Expr* solve_constant_system(const Expr* eqns) {
+    bool all_true = true;
+    size_t n = 1;
+    const Expr* const* items = &eqns;
+    if (eqns->type == EXPR_FUNCTION && eqns->data.function.head->type == EXPR_SYMBOL
+        && (eqns->data.function.head->data.symbol.name == SYM_List
+            || eqns->data.function.head->data.symbol.name == SYM_And)) {
+        n = eqns->data.function.arg_count;
+        items = (const Expr* const*)eqns->data.function.args;
+    }
+    for (size_t i = 0; i < n; i++) {
+        const Expr* it = items[i];
+        if (it->type == EXPR_SYMBOL && it->data.symbol.name == SYM_False)
+            return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        if (!(it->type == EXPR_SYMBOL && it->data.symbol.name == SYM_True))
+            all_true = false;
+    }
+    if (!all_true) return NULL;
+    Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    return expr_new_function(expr_new_symbol(SYM_List), &empty, 1);
+}
+
+/* Owned List of the implicit variables of `eqns` (possibly empty). */
+static Expr* solve_implicit_vars(const Expr* eqns) {
+    Expr** arr = NULL;
+    size_t n = 0, cap = 0;
+    solve_implicit_collect(eqns, &arr, &n, &cap);
+    if (n > 1) qsort(arr, n, sizeof(Expr*), solve_implicit_cmp);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), arr, n);
+    free(arr);   /* expr_new_function copied the array and adopted the elements */
+    return list;
 }
 
 /* ------------------------------------------------------------------ *
@@ -817,7 +905,7 @@ static Expr* try_single_eq_multivar(Expr* equation, Expr* vars_list,
 Expr* builtin_solve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2) return NULL;
+    if (argc < 1) return NULL;
 
     /* Walk trailing args, peeling options.  Position of first option
      * = end of positional args. */
@@ -844,6 +932,36 @@ Expr* builtin_solve(Expr* res) {
             }
         }
         break;
+    }
+
+    /* Solve[eqns] and Solve[eqns, {}] solve for every variable the system
+     * mentions: rewrite to the explicit form and let the evaluator run it.
+     * A system with no variable at all (Solve[{}, {}], Solve[{2 == 2}]) is
+     * decided outright: {{}} when every statement is True, {} when one is
+     * False, unevaluated otherwise. */
+    if (pos_end >= 1) {
+        Expr* v1 = (pos_end >= 2) ? res->data.function.args[1] : NULL;
+        bool implicit = (pos_end == 1)
+            || (v1->type == EXPR_FUNCTION && v1->data.function.head->type == EXPR_SYMBOL
+                && v1->data.function.head->data.symbol.name == SYM_List
+                && v1->data.function.arg_count == 0);
+        if (implicit) {
+            Expr* vars_list = solve_implicit_vars(res->data.function.args[0]);
+            if (vars_list->data.function.arg_count == 0) {
+                expr_free(vars_list);
+                return solve_constant_system(res->data.function.args[0]);
+            }
+            size_t skip = (pos_end == 1) ? 1 : 2;
+            size_t nargs = argc - skip + 2;
+            Expr** na = (Expr**)malloc(nargs * sizeof(Expr*));
+            na[0] = expr_copy(res->data.function.args[0]);
+            na[1] = vars_list;
+            for (size_t i = skip; i < argc; i++)
+                na[2 + i - skip] = expr_copy(res->data.function.args[i]);
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), na, nargs);
+            free(na);
+            return call;
+        }
     }
 
     /* Positional args: expr [, vars [, dom]] */
@@ -1246,6 +1364,8 @@ void solve_init(void) {
         "Solve[expr, vars]\n"
         "\tAttempts to solve the equation or system expr for the\n"
         "\tvariables vars.\n"
+        "Solve[expr]  |  Solve[expr, {}]\n"
+        "\tSolves for every variable expr mentions.\n"
         "Solve[expr, vars, dom]\n"
         "\tSolves over the domain dom.  Default Complexes; Reals filters\n"
         "\tdown to real roots via per-degree discriminant and sign tests;\n"

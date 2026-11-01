@@ -434,8 +434,10 @@ static void test_transcendental_log_exp(void) {
              "ConditionalExpression[a_, b_] :> a, "
              "PossibleZeroQ[(Exp[3 t] - x Exp[t] - C[1]) /. #] &]", "True");
     run_test("Length[Solve[Exp[t] + C[1] Exp[-t] == x, t]]", "2");
+    /* The answer holds for integer C[2] only (its condition): check it at
+     * C[2] = 0.  PossibleZeroQ samples C[2] as a generic number. */
     run_test("AllTrue[Solve[Exp[t] + C[1] Exp[-t] == x, t] /. "
-             "ConditionalExpression[a_, b_] :> a, "
+             "ConditionalExpression[a_, b_] :> (a /. C[2] -> 0), "
              "PossibleZeroQ[(Exp[t] + C[1] Exp[-t] - x) /. #] &]", "True");
     run_test("Length[Solve[Exp[Sqrt[t]] Exp[x] == C[1], t]]", "1");
     run_test("Length[Solve[Exp[a t] Exp[b t]/Exp[c t + d] == C[1], t]]", "1");
