@@ -259,6 +259,30 @@ static void test_exact_inputs_stay_exact(void) {
     assert_eval_eq("Factor[x^2 - 1]", "(-1 + x) (1 + x)", 0);
 }
 
+/* ------------------------------------------------------------------------
+ *  Kernels survive the round trip verbatim (issue #119)
+ *
+ *  The numericalise step must touch coefficients only: a kernel the input
+ *  wrote with exact arguments, c[1] or x[-2 + g], is an indeterminate, and
+ *  c[1.0] is a different one.  A kernel written with inexact arguments comes
+ *  back as written, not as the f[1/2] the exact core saw.
+ * ---------------------------------------------------------------------- */
+
+static void test_kernel_args_not_numericalised(void) {
+    assert_eval_eq("Factor[a .4 + c[1] + d]", "0.2 (2.0 a + 5.0 d + 5.0 c[1])", 0);
+    assert_eval_eq("Factor[(x[-1] - x[-2 + g])*0.1 + (-x[-3 + g] + x[-4 + g])]",
+                   "0.1 (x[-1] + 10.0 x[-4 + g] - 10.0 x[-3 + g] - 1.0 x[-2 + g])", 0);
+    assert_eval_eq("Factor[0.5 x f[1/2] + Sin[2] y]", "0.5 (1.81859 y + x f[1/2])", 0);
+    assert_eval_eq("Together[1/c[1] + 0.5/x]", "(0.5 (2.0 x + c[1]))/(x c[1])", 0);
+    assert_eval_eq("Cancel[(x^2 - 1.0)/(x - 1) + c[2]]", "1.0 + x + c[2]", 0);
+    assert_eval_eq("Simplify[2.0 g[1] + g[1]]", "3.0 g[1]", 0);
+    assert_eval_eq("Limit[(Sin[0.5 x] + c[1] x)/x, x -> 0]", "0.5 + c[1]", 0);
+}
+
+static void test_kernel_inexact_args_restored(void) {
+    assert_eval_eq("Factor[x f[0.5] + 2.0 x]", "x (2.0 + f[0.5])", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -293,6 +317,8 @@ int main(void) {
 
     /* Pass-through */
     TEST(test_exact_inputs_stay_exact);
+    TEST(test_kernel_args_not_numericalised);
+    TEST(test_kernel_inexact_args_restored);
 
     printf("All inexact_dispatch tests passed.\n");
     return 0;

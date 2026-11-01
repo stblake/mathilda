@@ -818,6 +818,141 @@ Expr* internal_force_rationalize(const Expr* e) {
     return internal_force_rationalize_bits(e, 0);
 }
 
+/* ------------------------------------------------------------------------
+ *  Opaque kernels in the round trip.
+ *
+ *  The final numericalise of the round trip must turn the *coefficients* of
+ *  the exact answer back into machine numbers -- and nothing else.  A kernel
+ *  the input carried verbatim, c[1] or x[-2 + g], is an indeterminate to the
+ *  exact core, and numericalising it gave c[1.0] and x[-1.0]: a different
+ *  symbol, so Factor[0.4 a + c[1] + d] silently changed what it was
+ *  factoring.  So each such kernel K of the input is recorded with its
+ *  rationalised form K' (the form the core saw and hands back); in the exact
+ *  result every K' is parked behind a placeholder symbol across the
+ *  numericalise, and then replaced by the original K.  This also gives back
+ *  f[0.5] where the input had it, rather than the f[1/2] the core saw.
+ *
+ *  A kernel is a compound with a symbolic head other than the arithmetic
+ *  and structural heads the walk descends through, and which is not itself a
+ *  numeric quantity: Sin[2] or Sqrt[2] still numericalise to 0.909..,
+ *  1.414.., as the coefficients they are.
+ * ---------------------------------------------------------------------- */
+typedef struct {
+    Expr** orig;    /* the input's kernel, verbatim                       */
+    Expr** exact;   /* its rationalised form, as the core sees it         */
+    Expr** ph;      /* placeholder symbol parked in its place             */
+    size_t n, cap;
+} RnKernels;
+
+/* Heads the kernel walk descends through rather than treats as kernels. */
+static bool rn_is_structural_head(const char* h) {
+    return h == SYM_Plus || h == SYM_Times || h == SYM_Power || h == SYM_List
+        || h == SYM_Complex || h == SYM_Rational
+        || h == SYM_Rule || h == SYM_RuleDelayed
+        || h == SYM_Equal || h == SYM_Unequal || h == SYM_Less
+        || h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual
+        || h == SYM_And || h == SYM_Or || h == SYM_Not;
+}
+
+static void rn_collect_kernels(const Expr* e, RnKernels* k) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL || is_hold_head_sym(h)) return;
+    if (rn_is_structural_head(h->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            rn_collect_kernels(e->data.function.args[i], k);
+        return;
+    }
+    if (is_numeric_quantity(e)) return;
+    for (size_t i = 0; i < k->n; i++)
+        if (expr_eq((Expr*)e, k->orig[i])) return;
+    Expr* ex = internal_force_rationalize(e);
+    /* Two distinct inputs that rationalise alike (f[0.5], f[1/2]) cannot
+     * both be restored from one exact form: drop the ambiguous key. */
+    for (size_t i = 0; i < k->n; i++) {
+        if (expr_eq(ex, k->exact[i])) {
+            expr_free(ex);
+            expr_free(k->orig[i]); expr_free(k->exact[i]);
+            k->orig[i] = k->exact[i] = NULL;
+            return;
+        }
+    }
+    if (k->n == k->cap) {
+        k->cap = k->cap ? 2 * k->cap : 8;
+        k->orig  = realloc(k->orig,  sizeof(Expr*) * k->cap);
+        k->exact = realloc(k->exact, sizeof(Expr*) * k->cap);
+        k->ph    = realloc(k->ph,    sizeof(Expr*) * k->cap);
+    }
+    char buf[48];
+    snprintf(buf, sizeof buf, "RationalizeKernel$%zu", k->n);
+    k->orig[k->n]  = expr_copy((Expr*)e);
+    k->exact[k->n] = ex;
+    k->ph[k->n]    = expr_new_symbol(buf);
+    k->n++;
+}
+
+static void rn_kernels_free(RnKernels* k) {
+    for (size_t i = 0; i < k->n; i++) {
+        expr_free(k->orig[i]); expr_free(k->exact[i]); expr_free(k->ph[i]);
+    }
+    free(k->orig); free(k->exact); free(k->ph);
+}
+
+/* Does `e` mention one of the placeholder names?  Then parking would be
+ * ambiguous, and the caller keeps the plain round trip. */
+static bool rn_mentions_placeholder(const Expr* e, const RnKernels* k) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < k->n; i++)
+            if (e->data.symbol.name == k->ph[i]->data.symbol.name) return true;
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (rn_mentions_placeholder(e->data.function.head, k)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rn_mentions_placeholder(e->data.function.args[i], k)) return true;
+    return false;
+}
+
+/* Replace (outermost first) each `from[i]` occurring in `e` by `to[i]`.
+ * Structural only; the caller evaluates. */
+static Expr* rn_swap(const Expr* e, Expr** from, Expr** to, size_t n, bool* hit) {
+    for (size_t i = 0; i < n; i++) {
+        if (from[i] && expr_eq((Expr*)e, from[i])) { *hit = true; return expr_copy(to[i]); }
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t m = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++)
+        args[i] = rn_swap(e->data.function.args[i], from, to, n, hit);
+    Expr* r = expr_new_function(rn_swap(e->data.function.head, from, to, n, hit), args, m);
+    free(args);
+    return r;
+}
+
+/* Numericalise an exact round-trip result, keeping the input's kernels as
+ * they were written (see the block comment above). */
+static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Expr* res) {
+    RnKernels k = {0};
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        rn_collect_kernels(res->data.function.args[i], &k);
+
+    Expr* out = NULL;
+    if (k.n > 0 && !rn_mentions_placeholder(exact_result, &k)) {
+        bool hit = false;
+        Expr* parked = rn_swap(exact_result, k.exact, k.ph, k.n, &hit);
+        if (hit) {
+            Expr* num = numericalize(parked, numeric_machine_spec());
+            bool back = false;
+            out = eval_and_free(rn_swap(num, k.ph, k.orig, k.n, &back));
+            expr_free(num);
+        }
+        expr_free(parked);
+    }
+    rn_kernels_free(&k);
+    return out ? out : numericalize((Expr*)exact_result, numeric_machine_spec());
+}
+
 Expr* internal_rationalize_then_numericalize(Expr* res,
                                              Expr* (*core)(Expr*)) {
     if (!res || res->type != EXPR_FUNCTION || !core) return NULL;
@@ -861,7 +996,7 @@ Expr* internal_rationalize_then_numericalize(Expr* res,
 
     /* Round-trip the exact result back to numeric so callers see
      * inexact-in / inexact-out. */
-    Expr* numeric = numericalize(exact_result, numeric_machine_spec());
+    Expr* numeric = rn_numericalize_keeping_kernels(exact_result, res);
     expr_free(exact_result);
     expr_free(clone);
     return numeric;
