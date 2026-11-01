@@ -15,7 +15,8 @@ Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch
 - [x] P1.x dependency-recorded fixed points + no-fire memo (Pair: 98k dispatches over 106 distinct exprs) -- micro 0.30x -> 0.66x
 - [x] full ctest + corpus per-dir correctness + timing after the evaluator round (v0.6119): pass set identical
       (13214), corpus 0.414x -> 0.734x, total compute 1740 s -> 419 s (ref 272 s), wall 1540 s -> 377 s at --jobs 10
-- [ ] integrate the system-wide strcmp -> SYM_ sweep (agent worktree)
+- [x] system-wide strcmp -> SYM_ sweep: 1137 sites / 113 files (v0.6120); corpus geomean 1.07x on a quiet machine
+- [ ] decide: 30 Global-named literals kept as strcmp (FractionBox, SqrtBox, PositiveIntegers, CompositeQ, ...)
 - [ ] P1.2 pattern predicates per stored rule (pat_is_literal / pat_has_optional ~8%)
 - [ ] re-profile: what dominates now (sunF, paveReduce, contractLC are the worst micro ratios)
 - [ ] P2 cliffs from TIMING.md worst files (FCFeynmanRegularizeDivergence 0.015x, ...)

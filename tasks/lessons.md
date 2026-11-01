@@ -1,5 +1,27 @@
 # Lessons learned
 
+## A local performance fix is a pattern: apply it system-wide (2026-11-02)
+
+- **Correction.** I replaced the `strcmp` fallback in the match environment
+  with interned-pointer compares, then went back to FeynCalc profiling. The
+  user: "The replacement of a strcmp with a SYM_ name should be done system
+  wide, where appropriate."
+- **Rule.** When a fix removes a cost through a mechanism the codebase already
+  has (the interned `SYM_*` pointers, the cached `symbol.def`), grep for every
+  other instance of the same shape in the same session. Change those that are
+  provably equivalent, and list the ones left alone with a reason. The sweep
+  found 1137 more sites in 113 files.
+- **How.** For a mechanical sweep this broad, use one subagent in a worktree.
+  Exclude the files being edited concurrently. Give it an explicit provenance
+  rule: convert only where the string provably holds an interned name. It
+  reports what it skipped and why. Review the skip list for semantic decisions
+  (here: interning a Global-named literal early would make it System).
+- **Pointer-only key contracts need their tests swept too.** Making
+  `env_get` / `env_set` pointer-only broke two unit suites that passed string
+  literals. The ctest binaries had been built before the change, so the full
+  run missed it. Rebuild the suites after any contract change, before
+  committing.
+
 ## Together / Cancel / Apart, second half: where the time really went (2026-10-28)
 
 - **A new engine can be slower than the code it replaced on one shape.** On a
