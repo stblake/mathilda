@@ -5682,6 +5682,18 @@ typedef struct {
     long  Q;           /* index: gen = base^(1/Q), gen^Q = base              */
     Expr* base_exp;    /* Expand[radicand], owned (NULL for a root of unity) */
     int   genuine;     /* radicand carries a free symbol (the new regime)    */
+    /* ga_prepare only (all zero / NULL for the plain ga_walk users): */
+    int   elim;        /* bare-symbol radicand s: s -> gen^Q everywhere, and
+                        * gen is a transcendental PARAMETER, not algebraic  */
+    Expr* rad;         /* relation right-hand side: the radicand with inner
+                        * radicals / eliminated symbols substituted (and
+                        * scaled, see `scale`) -- a polynomial, owned        */
+    Expr* base_orig;   /* the radicand as the input first spelled it, used to
+                        * read the radical back (ga_prepare only), owned   */
+    Expr* scale;       /* generator-free denominator D of the substituted
+                        * radicand N/D: the generator then stands for
+                        * D*base^(1/Q), whose Q-th power N*D^(Q-1) is a
+                        * polynomial (monic relation), owned, or NULL       */
     char  name[24];    /* fresh generator symbol, never leaks into output    */
 } GAGen;
 
@@ -5689,11 +5701,17 @@ typedef struct {
     GAGen gens[GENALG_MAXGEN];
     int   ngen;
     int   bad;         /* out-of-scope construct (inexact real, > MAXGEN, …) */
+    int   eliminate;   /* mark bare-symbol radicands for elimination         */
+    int   prep;        /* ga_prepare: keep each radicand's input spelling    */
 } GADetect;
 
 static void ga_free(GADetect* st) {
-    for (int i = 0; i < st->ngen; i++)
+    for (int i = 0; i < st->ngen; i++) {
         if (st->gens[i].base_exp) { expr_free(st->gens[i].base_exp); st->gens[i].base_exp = NULL; }
+        if (st->gens[i].rad)      { expr_free(st->gens[i].rad);      st->gens[i].rad = NULL; }
+        if (st->gens[i].scale)    { expr_free(st->gens[i].scale);    st->gens[i].scale = NULL; }
+        if (st->gens[i].base_orig) { expr_free(st->gens[i].base_orig); st->gens[i].base_orig = NULL; }
+    }
 }
 
 /* Expand[base] -> canonical radicand, so two printed forms of the same
@@ -5705,10 +5723,19 @@ static Expr* ga_expand(const Expr* base) {
     return eval_and_free(call);
 }
 
+/* A built-in constant (Pi, E, GoldenRatio, ...) or any protected symbol is never
+ * eliminated: E in particular also heads exponentials E^x, whose non-integer
+ * exponent the substitution s -> gen^Q could not carry. */
+static int ga_is_reserved_symbol(const char* name) {
+    SymbolDef* d = symtab_lookup(name);
+    return d && (d->attributes & (ATTR_CONSTANT | ATTR_PROTECTED));
+}
+
 /* Find an existing generator (root of unity: the single omega; algebraic: same
  * expanded radicand) and merge its index via lcm, or add a new one. Takes
  * ownership of base_exp (freed on merge/failure). Returns the generator index. */
-static int ga_find_or_add(GADetect* st, int is_rou, long q, Expr* base_exp) {
+static int ga_find_or_add(GADetect* st, int is_rou, long q, Expr* base_exp,
+                          const Expr* base) {
     for (int i = 0; i < st->ngen; i++) {
         if (is_rou && st->gens[i].is_rou) {
             st->gens[i].Q = lcm_l(st->gens[i].Q, q);
@@ -5728,12 +5755,18 @@ static int ga_find_or_add(GADetect* st, int is_rou, long q, Expr* base_exp) {
     st->gens[i].Q        = q;
     st->gens[i].base_exp = base_exp;
     st->gens[i].genuine  = 0;
+    st->gens[i].elim     = 0;
+    st->gens[i].rad      = NULL;
+    st->gens[i].scale    = NULL;
+    st->gens[i].base_orig = (st->prep && base) ? expr_copy((Expr*)base) : NULL;
     snprintf(st->gens[i].name, sizeof st->gens[i].name, "$galg%d$", i);
     if (!is_rou && base_exp) {
         VarSet tmp; memset(&tmp, 0, sizeof tmp);
         collect_all_symbols(base_exp, &tmp);
         st->gens[i].genuine = (tmp.count > 0);
         varset_free(&tmp);
+        st->gens[i].elim = st->eliminate && base_exp->type == EXPR_SYMBOL &&
+                           !ga_is_reserved_symbol(base_exp->data.symbol.name);
     }
     return i;
 }
@@ -5753,12 +5786,12 @@ static void ga_walk(const Expr* e, GADetect* st) {
         long p, q;
         if (ps_as_ratio(exp, &p, &q) && q >= 2) {
             if (base->type == EXPR_INTEGER && base->data.integer == -1) {
-                ga_find_or_add(st, 1, q, NULL);          /* root of unity */
+                ga_find_or_add(st, 1, q, NULL, NULL);    /* root of unity */
                 return;                                  /* constant base */
             }
             Expr* be = ga_expand(base);
             if (!be) { st->bad = 1; return; }
-            ga_find_or_add(st, 0, q, be);                /* takes ownership of be */
+            ga_find_or_add(st, 0, q, be, base);          /* takes ownership of be */
             ga_walk(base, st);                           /* nested radicals */
             return;
         }
@@ -5782,9 +5815,39 @@ static int ga_has_candidate(const Expr* e) {
     return 0;
 }
 
+/* Generator index of the radical Power[base, _] (root of unity: the omega;
+ * otherwise the generator with the same expanded radicand), or -1. */
+static int ga_lookup(const Expr* base, const GADetect* st) {
+    if (base->type == EXPR_INTEGER && base->data.integer == -1) {
+        for (int i = 0; i < st->ngen; i++)
+            if (st->gens[i].is_rou) return i;
+        return -1;
+    }
+    int gi = -1;
+    Expr* be = ga_expand(base);
+    if (be) {
+        for (int i = 0; i < st->ngen; i++)
+            if (!st->gens[i].is_rou && st->gens[i].base_exp &&
+                expr_eq(st->gens[i].base_exp, be)) { gi = i; break; }
+        expr_free(be);
+    }
+    return gi;
+}
+
 /* Replace each radical / root of unity by the matching generator raised to the
- * corresponding power: Power[base, p/q] -> gen^(p * Q/q), (-1)^(p/q) -> omega^…. */
+ * corresponding power: Power[base, p/q] -> gen^(p * Q/q), (-1)^(p/q) -> omega^….
+ * Under elimination a bare radicand symbol s also becomes gen^Q, and a scaled
+ * generator (gen = D base^(1/Q)) enters as (gen / D)^k. */
 static Expr* ga_subst_in(const Expr* e, const GADetect* st) {
+    if (e->type == EXPR_SYMBOL) {
+        for (int i = 0; i < st->ngen; i++)
+            if (st->gens[i].elim &&
+                strcmp(st->gens[i].base_exp->data.symbol.name, e->data.symbol.name) == 0) {
+                Expr* pa[2] = { expr_new_symbol(st->gens[i].name), expr_new_integer(st->gens[i].Q) };
+                return expr_new_function(expr_new_symbol("Power"), pa, 2);
+            }
+        return expr_copy((Expr*)e);
+    }
     if (e->type == EXPR_FUNCTION) {
         const char* h = fn_head_name(e);
         if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
@@ -5792,58 +5855,35 @@ static Expr* ga_subst_in(const Expr* e, const GADetect* st) {
             const Expr* exp  = e->data.function.args[1];
             long p, q;
             if (ps_as_ratio(exp, &p, &q) && q >= 2) {
-                int gi = -1;
-                if (base->type == EXPR_INTEGER && base->data.integer == -1) {
-                    for (int i = 0; i < st->ngen; i++)
-                        if (st->gens[i].is_rou) { gi = i; break; }
-                } else {
-                    Expr* be = ga_expand(base);
-                    if (be) {
-                        for (int i = 0; i < st->ngen; i++)
-                            if (!st->gens[i].is_rou && st->gens[i].base_exp &&
-                                expr_eq(st->gens[i].base_exp, be)) { gi = i; break; }
-                        expr_free(be);
-                    }
-                }
+                int gi = ga_lookup(base, st);
                 if (gi >= 0) {
                     long ge = p * (st->gens[gi].Q / q);
                     Expr* g = expr_new_symbol(st->gens[gi].name);
-                    if (ge == 1) return g;
-                    Expr* pa[2] = { g, expr_new_integer(ge) };
-                    return expr_new_function(expr_new_symbol("Power"), pa, 2);
+                    if (ge != 1) {
+                        Expr* pa[2] = { g, expr_new_integer(ge) };
+                        g = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                    }
+                    if (st->gens[gi].scale) {
+                        Expr* da[2] = { expr_copy(st->gens[gi].scale), expr_new_integer(-ge) };
+                        Expr* ta[2] = { g, expr_new_function(expr_new_symbol("Power"), da, 2) };
+                        g = expr_new_function(expr_new_symbol("Times"), ta, 2);
+                    }
+                    return g;
                 }
             }
         }
         size_t n = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
         for (size_t i = 0; i < n; i++) args[i] = ga_subst_in(e->data.function.args[i], st);
-        Expr* head = ga_subst_in(e->data.function.head, st);
+        /* A symbol head (Plus, f, ...) is a head, never a radicand variable. */
+        Expr* head = (e->data.function.head->type == EXPR_SYMBOL)
+                         ? expr_copy(e->data.function.head)
+                         : ga_subst_in(e->data.function.head, st);
         Expr* r = expr_new_function(head, args, n);
         free(args);
         return r;
     }
     return expr_copy((Expr*)e);
-}
-
-/* Minimal-polynomial divisor gen^Q - radicand as an fmpz_mpoly (monic in gen).
- * Fails (0) when the radicand is not an integer-coefficient polynomial in the
- * field variables (rational coefficient, nested radical, …) — the caller then
- * falls through to its classical path. */
-static int ga_build_radical_relation(fmpz_mpoly_t B, slong genvar, long Q,
-                                     const Expr* base_exp,
-                                     const fmpz_mpoly_ctx_t mctx, const VarSet* fvars) {
-    fmpz_mpoly_q_t bq; fmpz_mpoly_q_init(bq, mctx);
-    int ok = expr_to_mpolyq(base_exp, bq, mctx, fvars);
-    if (ok) { fmpz_mpoly_q_canonicalise(bq, mctx); ok = fmpz_mpoly_is_one(fmpz_mpoly_q_denref(bq), mctx); }
-    if (ok) {
-        fmpz_mpoly_t gp; fmpz_mpoly_init(gp, mctx);
-        fmpz_mpoly_gen(gp, genvar, mctx);
-        fmpz_mpoly_pow_ui(gp, gp, (ulong)Q, mctx);
-        fmpz_mpoly_sub(B, gp, fmpz_mpoly_q_numref(bq), mctx);
-        fmpz_mpoly_clear(gp, mctx);
-    }
-    fmpz_mpoly_q_clear(bq, mctx);
-    return ok;
 }
 
 /* Cyclotomic minimal polynomial Phi_N(gen) as an fmpz_mpoly (monic in gen). */
@@ -5868,6 +5908,282 @@ static int ga_build_cyclotomic_relation(fmpz_mpoly_t B, slong genvar, long N,
     return 1;
 }
 
+/* Degree of generator i over Q(params): radical -> Q; root of unity ->
+ * deg Phi_{2Q} = eulerphi(2Q). */
+static long ga_gen_dim(const GAGen* g) {
+    if (!g->is_rou) return g->Q;
+    fmpz_poly_t cy; fmpz_poly_init(cy);
+    fmpz_poly_cyclotomic(cy, (ulong)(2 * g->Q));
+    long d = (long)fmpz_poly_degree(cy);
+    fmpz_poly_clear(cy);
+    return d < 1 ? 1 : d;
+}
+
+/* Radical / root-of-unity Expr for generator i (used when reading the
+ * canonical form back out): radical -> base^(1/Q), root of unity -> (-1)^(1/Q). */
+static Expr* ga_radical_of(const GAGen* g) {
+    Expr* base = g->is_rou ? expr_new_integer(-1)
+               : expr_copy(g->base_orig ? g->base_orig : g->base_exp);
+    Expr* ex   = expr_new_function(expr_new_symbol("Rational"),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(g->Q) }, 2);
+    return expr_new_function(expr_new_symbol("Power"), (Expr*[]){ base, ex }, 2);
+}
+
+/* Replace every generator symbol ($galgN$) in `e` by its radical form. With
+ * `use_scale`, a scaled generator h reads back as D * radical (D itself read
+ * back); without, as the plain radical (the caller has folded D in already). */
+static Expr* ga_subst_back_ex(const Expr* e, const GADetect* st, int use_scale) {
+    if (e->type == EXPR_SYMBOL) {
+        for (int i = 0; i < st->ngen; i++)
+            if (strcmp(e->data.symbol.name, st->gens[i].name) == 0) {
+                Expr* r = ga_radical_of(&st->gens[i]);
+                if (use_scale && st->gens[i].scale) {
+                    Expr* d = ga_subst_back_ex(st->gens[i].scale, st, use_scale);
+                    r = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ d, r }, 2);
+                }
+                return r;
+            }
+        return expr_copy((Expr*)e);
+    }
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) args[i] = ga_subst_back_ex(e->data.function.args[i], st, use_scale);
+        Expr* head = ga_subst_back_ex(e->data.function.head, st, use_scale);
+        Expr* r = expr_new_function(head, args, n);
+        free(args);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+
+static Expr* ga_subst_back(const Expr* e, const GADetect* st) {
+    return ga_subst_back_ex(e, st, 1);
+}
+
+/* Bitmask of the generators whose radicals occur directly in `e` (a radical's
+ * own radicand is that generator's business, so it is not entered). */
+static void ga_refs(const Expr* e, const GADetect* st, unsigned* mask) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        long p, q;
+        if (ps_as_ratio(e->data.function.args[1], &p, &q) && q >= 2) {
+            int gi = ga_lookup(e->data.function.args[0], st);
+            if (gi >= 0) { *mask |= 1u << gi; return; }
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ga_refs(e->data.function.args[i], st, mask);
+}
+
+/* Build gen i's relation right-hand side from its radicand, every inner
+ * generator already final (scale known). The substituted radicand is put over
+ * one denominator; a generator-free denominator D (parameters only) rescales the
+ * generator to D*base^(1/Q), whose relation (D g)^Q = N D^(Q-1) is monic.
+ * Returns 0 when the radicand is not rational in the field variables, or its
+ * denominator involves an algebraic generator. */
+static int ga_build_rhs(GADetect* st, int i) {
+    GAGen* g = &st->gens[i];
+    Expr* r = ga_subst_in(g->base_exp, st);
+    VarSet vs; memset(&vs, 0, sizeof vs);
+    collect_all_symbols(r, &vs);
+    fmpz_mpoly_ctx_t c;
+    fmpz_mpoly_ctx_init(c, (slong)(vs.count > 0 ? vs.count : 1), ORD_LEX);
+    fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, c);
+    int ok = expr_to_mpolyq(r, q, c, &vs);
+    if (ok) {
+        fmpz_mpoly_q_canonicalise(q, c);
+        const fmpz_mpoly_struct* D = fmpz_mpoly_q_denref(q);
+        if (fmpz_mpoly_is_one(D, c)) {
+            g->rad = r; r = NULL;
+        } else {
+            /* the denominator must be free of the algebraic generators */
+            for (size_t v = 0; v < vs.count && ok; v++) {
+                if (fmpz_mpoly_degree_si(D, (slong)v, c) <= 0) continue;
+                for (int j = 0; j < st->ngen; j++)
+                    if (!st->gens[j].elim && strcmp(vs.names[v], st->gens[j].name) == 0) { ok = 0; break; }
+            }
+            if (ok) {
+                fmpz_mpoly_t t; fmpz_mpoly_init(t, c);
+                fmpz_mpoly_pow_ui(t, D, (ulong)(g->Q - 1), c);
+                fmpz_mpoly_mul(t, t, fmpz_mpoly_q_numref(q), c);
+                g->scale = fmpz_mpoly_to_expr(D, c, &vs);
+                g->rad   = fmpz_mpoly_to_expr(t, c, &vs);
+                fmpz_mpoly_clear(t, c);
+            }
+        }
+    }
+    fmpz_mpoly_q_clear(q, c);
+    fmpz_mpoly_ctx_clear(c);
+    varset_free(&vs);
+    if (r) expr_free(r);
+    return ok;
+}
+
+/*
+ * The field K = Q(params)(alg gens) prepared for reduction, shared by the zero
+ * test and the canonical form:
+ *   - bare-symbol radicands s (s^(p/q)) are ELIMINATED: s -> t^L, L the lcm of
+ *     their indices, with t a transcendental parameter. Exact on every branch,
+ *     (s^(1/L))^k = s^(k/L) for integer k, and it costs no basis dimension;
+ *   - every other radical is an algebraic generator g with the monic relation
+ *     g^Q - rad, rad its radicand written in the inner generators (nested
+ *     towers) and rescaled when rational;
+ *   - generators are ordered OUTER FIRST as the leading LEX variables, so each
+ *     relation's leading term is g^Q and the triangular set is a Groebner basis
+ *     (pairwise-coprime leading monomials).
+ */
+typedef struct {
+    GADetect st;
+    int    nalg;                       /* algebraic generators = LEX slots */
+    int    slot_gen[GENALG_MAXGEN];    /* generator index of slot s        */
+    long   dims[GENALG_MAXGEN], stride[GENALG_MAXGEN], total;
+    Expr*  ebar;                       /* input in generator symbols       */
+    VarSet fvars;                      /* slot names, then the parameters  */
+    VarSet params;                     /* sorted parameters                */
+    int    nparam;
+    fmpz_mpoly_ctx_t mctx;
+    fmpz_mpoly_struct B[GENALG_MAXGEN];/* relation of slot s               */
+    int    live;                       /* mctx and B initialised           */
+} GAPrep;
+
+static void ga_release(GAPrep* P) {
+    if (P->live) {
+        for (int s = 0; s < P->nalg; s++) fmpz_mpoly_clear(&P->B[s], P->mctx);
+        fmpz_mpoly_ctx_clear(P->mctx);
+    }
+    varset_free(&P->fvars);
+    varset_free(&P->params);
+    if (P->ebar) expr_free(P->ebar);
+    ga_free(&P->st);
+    memset(P, 0, sizeof *P);
+}
+
+/* Prepare `e` (see GAPrep). `maxdim` caps the algebraic dimension prod d_s;
+ * `require_genuine` requires a radical with a free symbol in its radicand;
+ * `eliminate` turns bare-symbol radicands into parameters.
+ * Returns 1 on success; on 0 the caller still calls ga_release. */
+static int ga_prepare(const Expr* e, long maxdim, int require_genuine,
+                      int eliminate, GAPrep* P) {
+    memset(P, 0, sizeof *P);
+    if (!e || !ga_has_candidate(e)) return 0;
+    GADetect* st = &P->st;
+    st->eliminate = eliminate;
+    st->prep = 1;
+    ga_walk(e, st);
+    if (st->bad || st->ngen == 0) return 0;
+    if (require_genuine) {
+        int genuine = 0;
+        for (int i = 0; i < st->ngen; i++) if (st->gens[i].genuine) genuine = 1;
+        if (!genuine) return 0;
+    }
+
+    /* Topological order, inner radicands first (Kahn). */
+    unsigned deps[GENALG_MAXGEN];
+    int done[GENALG_MAXGEN], order[GENALG_MAXGEN], no = 0;
+    for (int i = 0; i < st->ngen; i++) {
+        deps[i] = 0; done[i] = 0;
+        if (!st->gens[i].elim && !st->gens[i].is_rou)
+            ga_refs(st->gens[i].base_exp, st, &deps[i]);
+        deps[i] &= ~(1u << i);
+        for (int j = 0; j < st->ngen; j++)      /* parameters and omega: no order */
+            if (st->gens[j].elim || st->gens[j].is_rou) deps[i] &= ~(1u << j);
+        /* A nested CONSTANT radical (Sqrt[5 + 2 Sqrt[6]]) may have a reducible
+         * relation (5 + 2 Sqrt[6] = (Sqrt[2] + Sqrt[3])^2), where the normal
+         * form is not canonical; constant algebraic numbers belong to qqbar. */
+        if (deps[i] && !st->gens[i].genuine) return 0;
+    }
+    for (int i = 0; i < st->ngen; i++)
+        if (st->gens[i].elim) done[i] = 1;
+    for (int progress = 1; progress; ) {
+        progress = 0;
+        for (int i = 0; i < st->ngen; i++) {
+            if (done[i]) continue;
+            int ready = 1;
+            for (int j = 0; j < st->ngen; j++)
+                if ((deps[i] & (1u << j)) && !done[j]) { ready = 0; break; }
+            if (!ready) continue;
+            if (!st->gens[i].is_rou && !ga_build_rhs(st, i)) return 0;
+            done[i] = 1; order[no++] = i; progress = 1;
+        }
+    }
+    for (int i = 0; i < st->ngen; i++) if (!done[i]) return 0;   /* cycle */
+
+    P->nalg = no;
+    P->total = 1;
+    for (int s = 0; s < no; s++) {
+        P->slot_gen[s] = order[no - 1 - s];                     /* outer first */
+        P->dims[s] = ga_gen_dim(&st->gens[P->slot_gen[s]]);
+        if (P->dims[s] < 1) return 0;
+        P->total *= P->dims[s];
+        if (P->total > maxdim) return 0;
+    }
+    if (no > 0) {
+        P->stride[no - 1] = 1;
+        for (int s = no - 2; s >= 0; s--) P->stride[s] = P->stride[s + 1] * P->dims[s + 1];
+    }
+
+    P->ebar = ga_subst_in(e, st);
+
+    for (int s = 0; s < no; s++) varset_add(&P->fvars, st->gens[P->slot_gen[s]].name);
+    VarSet all; memset(&all, 0, sizeof all);
+    collect_all_symbols(P->ebar, &all);
+    for (int s = 0; s < no; s++)
+        if (st->gens[P->slot_gen[s]].rad) collect_all_symbols(st->gens[P->slot_gen[s]].rad, &all);
+    for (size_t i = 0; i < all.count; i++)
+        if (var_index(&P->fvars, all.names[i]) < 0) varset_add(&P->params, all.names[i]);
+    varset_free(&all);
+    if (P->params.count > 1)
+        qsort(P->params.names, P->params.count, sizeof(char*), cmp_str);
+    P->nparam = (int)P->params.count;
+    for (int i = 0; i < P->nparam; i++) varset_add(&P->fvars, P->params.names[i]);
+    if (P->fvars.count == 0) return 0;
+
+    fmpz_mpoly_ctx_init(P->mctx, (slong)P->fvars.count, ORD_LEX);
+    for (int s = 0; s < no; s++) fmpz_mpoly_init(&P->B[s], P->mctx);
+    P->live = 1;
+
+    for (int s = 0; s < no; s++) {
+        const GAGen* g = &st->gens[P->slot_gen[s]];
+        if (g->is_rou) {
+            ga_build_cyclotomic_relation(&P->B[s], (slong)s, 2 * g->Q, P->mctx);
+            continue;
+        }
+        fmpz_mpoly_q_t rq; fmpz_mpoly_q_init(rq, P->mctx);
+        int ok = expr_to_mpolyq(g->rad, rq, P->mctx, &P->fvars);
+        if (ok) {
+            fmpz_mpoly_q_canonicalise(rq, P->mctx);
+            ok = fmpz_mpoly_is_one(fmpz_mpoly_q_denref(rq), P->mctx);
+        }
+        if (ok) {
+            fmpz_mpoly_t gp; fmpz_mpoly_init(gp, P->mctx);
+            fmpz_mpoly_gen(gp, (slong)s, P->mctx);
+            fmpz_mpoly_pow_ui(gp, gp, (ulong)g->Q, P->mctx);
+            fmpz_mpoly_sub(&P->B[s], gp, fmpz_mpoly_q_numref(rq), P->mctx);
+            fmpz_mpoly_clear(gp, P->mctx);
+        }
+        fmpz_mpoly_q_clear(rq, P->mctx);
+        if (!ok) return 0;
+    }
+    return 1;
+}
+
+/* R = normal form of A modulo the relation ideal. */
+static void ga_reduce(fmpz_mpoly_t R, const fmpz_mpoly_t A, const GAPrep* P) {
+    if (P->nalg == 0) { fmpz_mpoly_set(R, A, P->mctx); return; }
+    const fmpz_mpoly_struct* Bset[GENALG_MAXGEN];
+    fmpz_mpoly_struct Qb[GENALG_MAXGEN];
+    fmpz_mpoly_struct* Qset[GENALG_MAXGEN];
+    for (int s = 0; s < P->nalg; s++) {
+        Bset[s] = &P->B[s];
+        fmpz_mpoly_init(&Qb[s], P->mctx);
+        Qset[s] = &Qb[s];
+    }
+    fmpz_mpoly_divrem_ideal(Qset, R, A, (fmpz_mpoly_struct* const*)Bset, P->nalg, P->mctx);
+    for (int s = 0; s < P->nalg; s++) fmpz_mpoly_clear(&Qb[s], P->mctx);
+}
+
 /*
  * Reduce a whole rational expression `e` over a genuine-algebraic parametric
  * tower K = Q(params)(alpha_1..alpha_r). Returns the integer 0 when `e` is
@@ -5877,79 +6193,26 @@ static int ga_build_cyclotomic_relation(fmpz_mpoly_t B, slong genvar, long N,
  * add the ability to reach 0, never worsen existing output. Never mutates `e`.
  */
 Expr* flint_algebraic_field_normalize(const Expr* e) {
-    if (!e || !ga_has_candidate(e)) return NULL;
-
-    GADetect st; memset(&st, 0, sizeof st);
-    ga_walk(e, &st);
-    int genuine = 0;
-    for (int i = 0; i < st.ngen; i++) if (st.gens[i].genuine) genuine = 1;
-    if (st.bad || st.ngen == 0 || !genuine) { ga_free(&st); return NULL; }
-
-    Expr* ebar = ga_subst_in(e, &st);
-
-    /* Variable set: generators first (leading LEX), then the parameters. The
-     * parameters are the free symbols of the substituted expression AND of every
-     * radicand -- a radicand can carry a parameter (e.g. k in k^(1/3)) that the
-     * substitution removes from `ebar` but the relation gen^Q - radicand still
-     * needs. */
-    VarSet fvars; memset(&fvars, 0, sizeof fvars);
-    for (int i = 0; i < st.ngen; i++) varset_add(&fvars, st.gens[i].name);
-    VarSet all; memset(&all, 0, sizeof all);
-    collect_all_symbols(ebar, &all);
-    for (int i = 0; i < st.ngen; i++)
-        if (st.gens[i].base_exp) collect_all_symbols(st.gens[i].base_exp, &all);
-    VarSet params; memset(&params, 0, sizeof params);
-    for (size_t i = 0; i < all.count; i++)
-        if (var_index(&fvars, all.names[i]) < 0) varset_add(&params, all.names[i]);
-    qsort(params.names, params.count, sizeof(char*), cmp_str);
-    for (size_t i = 0; i < params.count; i++) varset_add(&fvars, params.names[i]);
-    varset_free(&params);
-    varset_free(&all);
-
-    fmpz_mpoly_ctx_t mctx;
-    fmpz_mpoly_ctx_init(mctx, (slong)fvars.count, ORD_LEX);
-    fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, mctx);
+    GAPrep P;
+    if (!ga_prepare(e, LONG_MAX, 1, 1, &P)) { ga_release(&P); return NULL; }
 
     Expr* out = NULL;
-    if (expr_to_mpolyq(ebar, q, mctx, &fvars)) {
-        fmpz_mpoly_q_canonicalise(q, mctx);
-        fmpz_mpoly_struct* B = malloc(sizeof(fmpz_mpoly_struct) * (size_t)st.ngen);
-        fmpz_mpoly_struct* Qb = malloc(sizeof(fmpz_mpoly_struct) * (size_t)st.ngen);
-        for (int i = 0; i < st.ngen; i++) { fmpz_mpoly_init(&B[i], mctx); fmpz_mpoly_init(&Qb[i], mctx); }
-        int okB = 1;
-        for (int i = 0; i < st.ngen && okB; i++) {
-            if (st.gens[i].is_rou)
-                okB = ga_build_cyclotomic_relation(&B[i], (slong)i, 2 * st.gens[i].Q, mctx);
-            else
-                okB = ga_build_radical_relation(&B[i], (slong)i, st.gens[i].Q,
-                                                st.gens[i].base_exp, mctx, &fvars);
+    fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, P.mctx);
+    if (expr_to_mpolyq(P.ebar, q, P.mctx, &P.fvars)) {
+        fmpz_mpoly_q_canonicalise(q, P.mctx);
+        fmpz_mpoly_t R, RD; fmpz_mpoly_init(R, P.mctx); fmpz_mpoly_init(RD, P.mctx);
+        ga_reduce(R, fmpz_mpoly_q_numref(q), &P);
+        /* Reduce the denominator too: report 0 only for a genuine 0 with a
+         * non-vanishing denominator, never a 0/0 (a denominator that is a
+         * non-zero free-variable polynomial but vanishes in the field). */
+        if (fmpz_mpoly_is_zero(R, P.mctx)) {
+            ga_reduce(RD, fmpz_mpoly_q_denref(q), &P);
+            if (!fmpz_mpoly_is_zero(RD, P.mctx)) out = expr_new_integer(0);
         }
-        if (okB) {
-            const fmpz_mpoly_struct* Bset[GENALG_MAXGEN];
-            fmpz_mpoly_struct* Qset[GENALG_MAXGEN];
-            for (int i = 0; i < st.ngen; i++) { Bset[i] = &B[i]; Qset[i] = &Qb[i]; }
-            fmpz_mpoly_t R, RD; fmpz_mpoly_init(R, mctx); fmpz_mpoly_init(RD, mctx);
-            fmpz_mpoly_divrem_ideal(Qset, R, fmpz_mpoly_q_numref(q),
-                                    (fmpz_mpoly_struct* const*)Bset, st.ngen, mctx);
-            /* Reduce the denominator too: report 0 only for a genuine 0 with a
-             * non-vanishing denominator, never a 0/0 (a denominator that is a
-             * non-zero free-variable polynomial but vanishes in the field). */
-            if (fmpz_mpoly_is_zero(R, mctx)) {
-                fmpz_mpoly_divrem_ideal(Qset, RD, fmpz_mpoly_q_denref(q),
-                                        (fmpz_mpoly_struct* const*)Bset, st.ngen, mctx);
-                if (!fmpz_mpoly_is_zero(RD, mctx)) out = expr_new_integer(0);
-            }
-            fmpz_mpoly_clear(R, mctx); fmpz_mpoly_clear(RD, mctx);
-        }
-        for (int i = 0; i < st.ngen; i++) { fmpz_mpoly_clear(&B[i], mctx); fmpz_mpoly_clear(&Qb[i], mctx); }
-        free(B); free(Qb);
+        fmpz_mpoly_clear(R, P.mctx); fmpz_mpoly_clear(RD, P.mctx);
     }
-
-    fmpz_mpoly_q_clear(q, mctx);
-    fmpz_mpoly_ctx_clear(mctx);
-    varset_free(&fvars);
-    expr_free(ebar);
-    ga_free(&st);
+    fmpz_mpoly_q_clear(q, P.mctx);
+    ga_release(&P);
     return out;
 }
 
@@ -6085,46 +6348,6 @@ Expr* flint_tower_reduce(const Expr* frac,
 /*  and complete when the minimal polynomials are irreducible.         */
 /* ================================================================== */
 
-/* Degree of generator i over Q(params): radical -> Q; root of unity ->
- * deg Phi_{2Q} = eulerphi(2Q). */
-static long ga_gen_dim(const GAGen* g) {
-    if (!g->is_rou) return g->Q;
-    fmpz_poly_t cy; fmpz_poly_init(cy);
-    fmpz_poly_cyclotomic(cy, (ulong)(2 * g->Q));
-    long d = (long)fmpz_poly_degree(cy);
-    fmpz_poly_clear(cy);
-    return d < 1 ? 1 : d;
-}
-
-/* Radical / root-of-unity Expr for generator i (used when reading the
- * canonical form back out): radical -> base^(1/Q), root of unity -> (-1)^(1/Q). */
-static Expr* ga_radical_of(const GAGen* g) {
-    Expr* base = g->is_rou ? expr_new_integer(-1) : expr_copy(g->base_exp);
-    Expr* ex   = expr_new_function(expr_new_symbol("Rational"),
-                    (Expr*[]){ expr_new_integer(1), expr_new_integer(g->Q) }, 2);
-    return expr_new_function(expr_new_symbol("Power"), (Expr*[]){ base, ex }, 2);
-}
-
-/* Replace every generator symbol ($galgN$) in `e` by its radical form. */
-static Expr* ga_subst_back(const Expr* e, const GADetect* st) {
-    if (e->type == EXPR_SYMBOL) {
-        for (int i = 0; i < st->ngen; i++)
-            if (strcmp(e->data.symbol.name, st->gens[i].name) == 0)
-                return ga_radical_of(&st->gens[i]);
-        return expr_copy((Expr*)e);
-    }
-    if (e->type == EXPR_FUNCTION) {
-        size_t n = e->data.function.arg_count;
-        Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
-        for (size_t i = 0; i < n; i++) args[i] = ga_subst_back(e->data.function.args[i], st);
-        Expr* head = ga_subst_back(e->data.function.head, st);
-        Expr* r = expr_new_function(head, args, n);
-        free(args);
-        return r;
-    }
-    return expr_copy((Expr*)e);
-}
-
 /* Accumulate the reduced polynomial R (already normal form mod I) into a
  * coordinate array `coords[total]` of Z[params] polynomials, indexed by the
  * mixed-radix combination of the generator exponents (via `stride`,`dims`). */
@@ -6157,238 +6380,300 @@ static void ga_extract_coords(const fmpz_mpoly_t R, const fmpz_mpoly_ctx_t mctx,
 }
 
 /*
- * Canonical (rationalised) form of a rational expression `e` over the
- * genuine-algebraic tower K: returns N/D reduced so the denominator is free of
- * every radical/root-of-unity generator (denominator rationalised), else NULL
- * when `e` carries no algebraic generator, is out of scope, is a genuine 0/0, or
- * the multiplication map is singular (a reducible minimal polynomial — outside
- * the completeness guarantee). Never mutates `e`. This is the RootReduce engine.
+ * 1/Dc as an Expr, with every generator-free radicand B_s that divides Dc pulled
+ * out as Power[base_s, -m] -- the SAME base Expr the radical base_s^(1/Q) is read
+ * back with, so the evaluator merges g^k B^(-m) into base^(k/Q - m)
+ * (y^3/(1+x^4) -> (1+x^4)^(-1/4)). The remaining cofactor, still in generator
+ * symbols, becomes Power[rest, -1]. NULL when Dc == 1. Consumes Dc's value.
  */
-Expr* flint_algebraic_field_canonical(const Expr* e) {
-    if (!e || !ga_has_candidate(e)) return NULL;
-
-    GADetect st; memset(&st, 0, sizeof st);
-    ga_walk(e, &st);
-    if (st.bad || st.ngen == 0) { ga_free(&st); return NULL; }
-
-    long dims[GENALG_MAXGEN], stride[GENALG_MAXGEN], total = 1;
-    for (int i = 0; i < st.ngen; i++) {
-        dims[i] = ga_gen_dim(&st.gens[i]);
-        if (dims[i] < 1) { ga_free(&st); return NULL; }
+static Expr* ga_den_factor(fmpz_mpoly_t Dc, const fmpz_mpoly_ctx_t pctx,
+                           const VarSet* pvars, const GAPrep* P, int* den_elim) {
+    Expr* fac[GENALG_MAXGEN + 1];
+    size_t nf = 0;
+    fmpz_mpoly_t Bp, t; fmpz_mpoly_init(Bp, pctx); fmpz_mpoly_init(t, pctx);
+    for (int s = 0; s < P->nalg; s++) {
+        const GAGen* g = &P->st.gens[P->slot_gen[s]];
+        if (g->is_rou || g->scale || !g->rad) continue;
+        fmpz_mpoly_q_t bq; fmpz_mpoly_q_init(bq, pctx);
+        int ok = expr_to_mpolyq(g->rad, bq, pctx, pvars);   /* fails on inner gens */
+        if (ok) {
+            fmpz_mpoly_q_canonicalise(bq, pctx);
+            ok = fmpz_mpoly_is_one(fmpz_mpoly_q_denref(bq), pctx) &&
+                 !fmpz_mpoly_is_fmpz(fmpz_mpoly_q_numref(bq), pctx);
+            if (ok) fmpz_mpoly_set(Bp, fmpz_mpoly_q_numref(bq), pctx);
+        }
+        fmpz_mpoly_q_clear(bq, pctx);
+        if (!ok) continue;
+        long m = 0;
+        while (!fmpz_mpoly_is_one(Dc, pctx) && fmpz_mpoly_divides(t, Dc, Bp, pctx)) {
+            fmpz_mpoly_swap(Dc, t, pctx);
+            m++;
+        }
+        if (m > 0)
+            fac[nf++] = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(g->base_orig ? g->base_orig : g->base_exp),
+                           expr_new_integer(-m) }, 2);
     }
-    for (int i = 0; i < st.ngen; i++) {
-        total *= dims[i];
-        if (total > 256) { ga_free(&st); return NULL; }   /* dimension cap */
-    }
-    stride[st.ngen - 1] = 1;
-    for (int i = st.ngen - 2; i >= 0; i--) stride[i] = stride[i + 1] * dims[i + 1];
+    fmpz_mpoly_clear(Bp, pctx); fmpz_mpoly_clear(t, pctx);
+    /* Does the cofactor still carry an eliminated radical s^(1/L)? */
+    if (den_elim)
+        for (size_t v = 0; v < pvars->count; v++) {
+            if (fmpz_mpoly_degree_si(Dc, (slong)v, pctx) <= 0) continue;
+            for (int i = 0; i < P->st.ngen; i++)
+                if (P->st.gens[i].elim && strcmp(P->st.gens[i].name, pvars->names[v]) == 0)
+                    *den_elim = 1;
+        }
+    if (!fmpz_mpoly_is_one(Dc, pctx))
+        fac[nf++] = expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ fmpz_mpoly_to_expr(Dc, pctx, pvars), expr_new_integer(-1) }, 2);
+    if (nf == 0) return NULL;
+    if (nf == 1) return fac[0];
+    return expr_new_function(expr_new_symbol("Times"), fac, nf);
+}
 
-    Expr* ebar = ga_subst_in(e, &st);
+/* The parameter part of a generator-free polynomial A in mctx, as a pctx poly. */
+static void ga_params_part(fmpz_mpoly_t out, const fmpz_mpoly_t A, const GAPrep* P,
+                           const fmpz_mpoly_ctx_t pctx) {
+    fmpz_mpoly_zero(out, pctx);
+    fmpz_mpoly_struct one; fmpz_mpoly_init(&one, pctx);
+    long dims1[GENALG_MAXGEN], stride0[GENALG_MAXGEN];
+    for (int s = 0; s < P->nalg; s++) { dims1[s] = 1; stride0[s] = 0; }
+    ga_extract_coords(A, P->mctx, P->nalg, P->nparam, dims1, stride0, pctx, &one);
+    fmpz_mpoly_swap(out, &one, pctx);
+    fmpz_mpoly_clear(&one, pctx);
+}
 
-    /* fvars = generators first (leading LEX), then sorted parameters. */
-    VarSet fvars; memset(&fvars, 0, sizeof fvars);
-    for (int i = 0; i < st.ngen; i++) varset_add(&fvars, st.gens[i].name);
-    VarSet all; memset(&all, 0, sizeof all);
-    collect_all_symbols(ebar, &all);
-    for (int i = 0; i < st.ngen; i++)
-        if (st.gens[i].base_exp) collect_all_symbols(st.gens[i].base_exp, &all);
-    VarSet params; memset(&params, 0, sizeof params);
-    for (size_t i = 0; i < all.count; i++)
-        if (var_index(&fvars, all.names[i]) < 0) varset_add(&params, all.names[i]);
-    qsort(params.names, params.count, sizeof(char*), cmp_str);
-    int nparam = (int)params.count;
-    for (int i = 0; i < nparam; i++) varset_add(&fvars, params.names[i]);
+/*
+ * Canonical (rationalised) form of a rational expression `e` over the
+ * algebraic tower K (see GAPrep): returns N/D reduced so the denominator is free
+ * of every radical/root-of-unity generator (denominator rationalised), else NULL
+ * when `e` carries no radical, is out of scope, is a genuine 0/0, the algebraic
+ * dimension exceeds `maxdim`, or the multiplication map is singular (a reducible
+ * minimal polynomial — outside the completeness guarantee). Never mutates `e`.
+ */
+static Expr* ga_canonical(const Expr* e, long maxdim, int eliminate, int* den_elim) {
+    GAPrep P;
+    if (!ga_prepare(e, maxdim, 0, eliminate, &P)) { ga_release(&P); return NULL; }
+    const int nalg = P.nalg, nparam = P.nparam;
+    const long total = P.total;
 
-    fmpz_mpoly_ctx_t mctx;
-    fmpz_mpoly_ctx_init(mctx, (slong)fvars.count, ORD_LEX);
     fmpz_mpoly_ctx_t pctx;
     fmpz_mpoly_ctx_init(pctx, (slong)(nparam > 0 ? nparam : 1), ORD_LEX);
+    VarSet pvars; memset(&pvars, 0, sizeof pvars);
+    for (int p = 0; p < nparam; p++) varset_add(&pvars, P.params.names[p]);
 
-    fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, mctx);
+    fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, P.mctx);
     Expr* out = NULL;
 
-    if (expr_to_mpolyq(ebar, q, mctx, &fvars)) {
-        fmpz_mpoly_q_canonicalise(q, mctx);
-        fmpz_mpoly_struct* B  = malloc(sizeof(fmpz_mpoly_struct) * (size_t)st.ngen);
-        fmpz_mpoly_struct* Qb = malloc(sizeof(fmpz_mpoly_struct) * (size_t)st.ngen);
-        for (int i = 0; i < st.ngen; i++) { fmpz_mpoly_init(&B[i], mctx); fmpz_mpoly_init(&Qb[i], mctx); }
-        int okB = 1;
-        for (int i = 0; i < st.ngen && okB; i++) {
-            if (st.gens[i].is_rou)
-                okB = ga_build_cyclotomic_relation(&B[i], (slong)i, 2 * st.gens[i].Q, mctx);
-            else
-                okB = ga_build_radical_relation(&B[i], (slong)i, st.gens[i].Q,
-                                                st.gens[i].base_exp, mctx, &fvars);
-        }
-        if (okB) {
-            const fmpz_mpoly_struct* Bset[GENALG_MAXGEN];
-            fmpz_mpoly_struct* Qset[GENALG_MAXGEN];
-            for (int i = 0; i < st.ngen; i++) { Bset[i] = &B[i]; Qset[i] = &Qb[i]; }
+    if (expr_to_mpolyq(P.ebar, q, P.mctx, &P.fvars)) {
+        fmpz_mpoly_q_canonicalise(q, P.mctx);
+        fmpz_mpoly_t numR, denR;
+        fmpz_mpoly_init(numR, P.mctx); fmpz_mpoly_init(denR, P.mctx);
+        ga_reduce(numR, fmpz_mpoly_q_numref(q), &P);
+        ga_reduce(denR, fmpz_mpoly_q_denref(q), &P);
 
-            fmpz_mpoly_t numR, denR;
-            fmpz_mpoly_init(numR, mctx); fmpz_mpoly_init(denR, mctx);
-            fmpz_mpoly_divrem_ideal(Qset, numR, fmpz_mpoly_q_numref(q),
-                                    (fmpz_mpoly_struct* const*)Bset, st.ngen, mctx);
-            fmpz_mpoly_divrem_ideal(Qset, denR, fmpz_mpoly_q_denref(q),
-                                    (fmpz_mpoly_struct* const*)Bset, st.ngen, mctx);
+        if (fmpz_mpoly_is_zero(denR, P.mctx)) {
+            /* genuine 0/0 in the field: leave alone */
+        } else if (fmpz_mpoly_is_zero(numR, P.mctx)) {
+            out = expr_new_integer(0);
+        } else {
+            int den_has_gen = 0;
+            for (int s = 0; s < nalg; s++)
+                if (fmpz_mpoly_degree_si(denR, (slong)s, P.mctx) > 0) { den_has_gen = 1; break; }
 
-            if (fmpz_mpoly_is_zero(denR, mctx)) {
-                /* genuine 0/0 in the field: leave alone */
-            } else if (fmpz_mpoly_is_zero(numR, mctx)) {
-                out = expr_new_integer(0);
+            /* The answer as coordinates over the monomial basis: coords[j] /
+             * Dc, all in Z[params]. */
+            fmpz_mpoly_t Dc; fmpz_mpoly_init(Dc, pctx);
+            fmpz_mpoly_struct* coords = malloc(sizeof(fmpz_mpoly_struct) * (size_t)total);
+            for (long r = 0; r < total; r++) fmpz_mpoly_init(&coords[r], pctx);
+            int have = 0;
+
+            if (!den_has_gen) {
+                /* already rationalised */
+                ga_extract_coords(numR, P.mctx, nalg, nparam, P.dims, P.stride, pctx, coords);
+                ga_params_part(Dc, denR, &P, pctx);
+                have = 1;
             } else {
-                int den_has_gen = 0;
-                for (int i = 0; i < st.ngen; i++)
-                    if (fmpz_mpoly_degree_si(denR, (slong)i, mctx) > 0) { den_has_gen = 1; break; }
-                if (!den_has_gen) {
-                    /* already rationalised: render numR/denR and substitute radicals back. */
-                    Expr* ne = fmpz_mpoly_to_expr(numR, mctx, &fvars);
-                    Expr* frac;
-                    if (fmpz_mpoly_is_one(denR, mctx)) {
-                        frac = ne;
-                    } else {
-                        Expr* de = fmpz_mpoly_to_expr(denR, mctx, &fvars);
-                        frac = expr_new_function(expr_new_symbol("Times"),
-                            (Expr*[]){ ne, expr_new_function(expr_new_symbol("Power"),
-                                (Expr*[]){ de, expr_new_integer(-1) }, 2) }, 2);
+                /* Invert denR in K: solve M_denR . x = coords(numR). */
+                gr_ctx_t fld; gr_ctx_init_fmpz_mpoly_q(fld, (slong)(nparam > 0 ? nparam : 1), ORD_LEX);
+                gr_mat_t M, X, RHS;
+                gr_mat_init(M,   (slong)total, (slong)total, fld);
+                gr_mat_init(X,   (slong)total, 1, fld);
+                gr_mat_init(RHS, (slong)total, 1, fld);
+
+                /* RHS column = coords(numR) */
+                ga_extract_coords(numR, P.mctx, nalg, nparam, P.dims, P.stride, pctx, coords);
+                for (long r = 0; r < total; r++) {
+                    fmpz_mpoly_q_struct* ent = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(RHS, r, 0, fld);
+                    fmpz_mpoly_set(fmpz_mpoly_q_numref(ent), &coords[r], pctx);
+                    fmpz_mpoly_one(fmpz_mpoly_q_denref(ent), pctx);
+                    fmpz_mpoly_zero(&coords[r], pctx);
+                }
+                /* Column j of M = coords(denR * basis_j) reduced mod I. */
+                for (long j = 0; j < total; j++) {
+                    fmpz_mpoly_t bj; fmpz_mpoly_init(bj, P.mctx);
+                    fmpz_mpoly_one(bj, P.mctx);
+                    for (int s = 0; s < nalg; s++) {
+                        long es = (j / P.stride[s]) % P.dims[s];
+                        if (es) {
+                            fmpz_mpoly_t gp; fmpz_mpoly_init(gp, P.mctx);
+                            fmpz_mpoly_gen(gp, (slong)s, P.mctx);
+                            fmpz_mpoly_pow_ui(gp, gp, (ulong)es, P.mctx);
+                            fmpz_mpoly_mul(bj, bj, gp, P.mctx);
+                            fmpz_mpoly_clear(gp, P.mctx);
+                        }
                     }
-                    Expr* back = ga_subst_back(frac, &st);
-                    expr_free(frac);
-                    out = eval_and_free(back);
-                } else {
-                    /* Invert denR in K: solve M_denR . x = coords(numR). */
-                    gr_ctx_t fld; gr_ctx_init_fmpz_mpoly_q(fld, (slong)(nparam > 0 ? nparam : 1), ORD_LEX);
-                    gr_mat_t M, X, RHS;
-                    gr_mat_init(M,   (slong)total, (slong)total, fld);
-                    gr_mat_init(X,   (slong)total, 1, fld);
-                    gr_mat_init(RHS, (slong)total, 1, fld);
-
-                    fmpz_mpoly_struct* coords = malloc(sizeof(fmpz_mpoly_struct) * (size_t)total);
-                    for (long r = 0; r < total; r++) fmpz_mpoly_init(&coords[r], pctx);
-
-                    /* RHS column = coords(numR) */
-                    ga_extract_coords(numR, mctx, st.ngen, nparam, dims, stride, pctx, coords);
+                    fmpz_mpoly_t prod, R; fmpz_mpoly_init(prod, P.mctx); fmpz_mpoly_init(R, P.mctx);
+                    fmpz_mpoly_mul(prod, denR, bj, P.mctx);
+                    ga_reduce(R, prod, &P);
+                    for (long r = 0; r < total; r++) fmpz_mpoly_zero(&coords[r], pctx);
+                    ga_extract_coords(R, P.mctx, nalg, nparam, P.dims, P.stride, pctx, coords);
                     for (long r = 0; r < total; r++) {
-                        fmpz_mpoly_q_struct* ent = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(RHS, r, 0, fld);
+                        fmpz_mpoly_q_struct* ent = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(M, r, j, fld);
                         fmpz_mpoly_set(fmpz_mpoly_q_numref(ent), &coords[r], pctx);
                         fmpz_mpoly_one(fmpz_mpoly_q_denref(ent), pctx);
-                        fmpz_mpoly_zero(&coords[r], pctx);
                     }
-                    /* Column j of M = coords(denR * basis_j) reduced mod I. */
+                    fmpz_mpoly_clear(bj, P.mctx); fmpz_mpoly_clear(prod, P.mctx); fmpz_mpoly_clear(R, P.mctx);
+                }
+
+                if (gr_mat_nonsingular_solve(X, M, RHS, fld) == GR_SUCCESS) {
+                    /* Common denominator Dc = lcm of the solution-coordinate
+                     * denominators, so the canonical form comes out as ONE
+                     * rationalised fraction (a reduced polynomial in the
+                     * radicals over a generator-free denominator) rather than
+                     * a sum of fractions. lcm(a,b) = a * (b / gcd(a,b)). */
+                    fmpz_mpoly_t gg, tt;
+                    fmpz_mpoly_init(gg, pctx); fmpz_mpoly_init(tt, pctx);
+                    fmpz_mpoly_one(Dc, pctx);
                     for (long j = 0; j < total; j++) {
-                        fmpz_mpoly_t bj; fmpz_mpoly_init(bj, mctx);
-                        fmpz_mpoly_one(bj, mctx);
-                        for (int i = 0; i < st.ngen; i++) {
-                            long ei = (j / stride[i]) % dims[i];
-                            if (ei) {
-                                fmpz_mpoly_t gp; fmpz_mpoly_init(gp, mctx);
-                                fmpz_mpoly_gen(gp, (slong)i, mctx);
-                                fmpz_mpoly_pow_ui(gp, gp, (ulong)ei, mctx);
-                                fmpz_mpoly_mul(bj, bj, gp, mctx);
-                                fmpz_mpoly_clear(gp, mctx);
-                            }
-                        }
-                        fmpz_mpoly_t prod, R; fmpz_mpoly_init(prod, mctx); fmpz_mpoly_init(R, mctx);
-                        fmpz_mpoly_mul(prod, denR, bj, mctx);
-                        fmpz_mpoly_divrem_ideal(Qset, R, prod,
-                                                (fmpz_mpoly_struct* const*)Bset, st.ngen, mctx);
-                        for (long r = 0; r < total; r++) fmpz_mpoly_zero(&coords[r], pctx);
-                        ga_extract_coords(R, mctx, st.ngen, nparam, dims, stride, pctx, coords);
-                        for (long r = 0; r < total; r++) {
-                            fmpz_mpoly_q_struct* ent = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(M, r, j, fld);
-                            fmpz_mpoly_set(fmpz_mpoly_q_numref(ent), &coords[r], pctx);
-                            fmpz_mpoly_one(fmpz_mpoly_q_denref(ent), pctx);
-                        }
-                        fmpz_mpoly_clear(bj, mctx); fmpz_mpoly_clear(prod, mctx); fmpz_mpoly_clear(R, mctx);
+                        fmpz_mpoly_q_struct* xj = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(X, j, 0, fld);
+                        if (fmpz_mpoly_is_zero(fmpz_mpoly_q_numref(xj), pctx)) continue;
+                        const fmpz_mpoly_struct* dj = fmpz_mpoly_q_denref(xj);
+                        if (fmpz_mpoly_is_one(dj, pctx)) continue;
+                        fmpz_mpoly_gcd(gg, Dc, dj, pctx);
+                        fmpz_mpoly_divides(tt, dj, gg, pctx);   /* tt = dj / gcd */
+                        fmpz_mpoly_mul(Dc, Dc, tt, pctx);       /* Dc = lcm(Dc, dj) */
                     }
-
-                    if (gr_mat_nonsingular_solve(X, M, RHS, fld) == GR_SUCCESS) {
-                        VarSet pvars; memset(&pvars, 0, sizeof pvars);
-                        for (int p = 0; p < nparam; p++) varset_add(&pvars, params.names[p]);
-
-                        /* Common denominator Dc = lcm of the solution-coordinate
-                         * denominators, so the canonical form comes out as ONE
-                         * rationalised fraction (a reduced polynomial in the
-                         * radicals over a generator-free denominator) rather than
-                         * a sum of fractions. lcm(a,b) = a * (b / gcd(a,b)). */
-                        fmpz_mpoly_t Dc, gg, tt;
-                        fmpz_mpoly_init(Dc, pctx); fmpz_mpoly_init(gg, pctx); fmpz_mpoly_init(tt, pctx);
-                        fmpz_mpoly_one(Dc, pctx);
-                        for (long j = 0; j < total; j++) {
-                            fmpz_mpoly_q_struct* xj = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(X, j, 0, fld);
-                            if (fmpz_mpoly_is_zero(fmpz_mpoly_q_numref(xj), pctx)) continue;
-                            const fmpz_mpoly_struct* dj = fmpz_mpoly_q_denref(xj);
-                            if (fmpz_mpoly_is_one(dj, pctx)) continue;
-                            fmpz_mpoly_gcd(gg, Dc, dj, pctx);
-                            fmpz_mpoly_divides(tt, dj, gg, pctx);   /* tt = dj / gcd */
-                            fmpz_mpoly_mul(Dc, Dc, tt, pctx);       /* Dc = lcm(Dc, dj) */
+                    /* scaled numerator coefficient = num_j * (Dc / den_j), exact. */
+                    for (long j = 0; j < total; j++) {
+                        fmpz_mpoly_q_struct* xj = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(X, j, 0, fld);
+                        if (fmpz_mpoly_is_zero(fmpz_mpoly_q_numref(xj), pctx)) {
+                            fmpz_mpoly_zero(&coords[j], pctx);
+                            continue;
                         }
-
-                        Expr** terms = malloc(sizeof(Expr*) * (size_t)total);
-                        size_t nt = 0;
-                        for (long j = 0; j < total; j++) {
-                            fmpz_mpoly_q_struct* xj = (fmpz_mpoly_q_struct*)gr_mat_entry_ptr(X, j, 0, fld);
-                            if (fmpz_mpoly_is_zero(fmpz_mpoly_q_numref(xj), pctx)) continue;
-                            /* scaled numerator coefficient = num_j * (Dc / den_j), exact. */
-                            fmpz_mpoly_t scaled; fmpz_mpoly_init(scaled, pctx);
-                            fmpz_mpoly_divides(tt, Dc, fmpz_mpoly_q_denref(xj), pctx);
-                            fmpz_mpoly_mul(scaled, fmpz_mpoly_q_numref(xj), tt, pctx);
-                            Expr* coeffe = fmpz_mpoly_to_expr(scaled, pctx, &pvars);
-                            fmpz_mpoly_clear(scaled, pctx);
-                            Expr* mon = NULL;
-                            for (int i = 0; i < st.ngen; i++) {
-                                long ei = (j / stride[i]) % dims[i];
-                                if (!ei) continue;
-                                Expr* gp = (ei == 1) ? expr_new_symbol(st.gens[i].name)
-                                    : expr_new_function(expr_new_symbol("Power"),
-                                        (Expr*[]){ expr_new_symbol(st.gens[i].name), expr_new_integer(ei) }, 2);
-                                mon = mon ? expr_new_function(expr_new_symbol("Times"), (Expr*[]){ mon, gp }, 2) : gp;
-                            }
-                            terms[nt++] = mon ? expr_new_function(expr_new_symbol("Times"),
-                                                    (Expr*[]){ coeffe, mon }, 2)
-                                              : coeffe;
-                        }
-                        Expr* numer = (nt == 0) ? expr_new_integer(0)
-                                   : (nt == 1) ? terms[0]
-                                   : expr_new_function(expr_new_symbol("Plus"), terms, nt);
-                        free(terms);
-                        Expr* frac;
-                        if (fmpz_mpoly_is_one(Dc, pctx)) {
-                            frac = numer;
-                        } else {
-                            Expr* denE = fmpz_mpoly_to_expr(Dc, pctx, &pvars);
-                            frac = expr_new_function(expr_new_symbol("Times"),
-                                (Expr*[]){ numer, expr_new_function(expr_new_symbol("Power"),
-                                    (Expr*[]){ denE, expr_new_integer(-1) }, 2) }, 2);
-                        }
-                        Expr* back = ga_subst_back(frac, &st);
-                        expr_free(frac);
-                        out = eval_and_free(back);
-                        fmpz_mpoly_clear(Dc, pctx); fmpz_mpoly_clear(gg, pctx); fmpz_mpoly_clear(tt, pctx);
-                        varset_free(&pvars);
+                        fmpz_mpoly_divides(tt, Dc, fmpz_mpoly_q_denref(xj), pctx);
+                        fmpz_mpoly_mul(&coords[j], fmpz_mpoly_q_numref(xj), tt, pctx);
                     }
+                    fmpz_mpoly_clear(gg, pctx); fmpz_mpoly_clear(tt, pctx);
+                    have = 1;
+                }
 
-                    for (long r = 0; r < total; r++) fmpz_mpoly_clear(&coords[r], pctx);
-                    free(coords);
-                    gr_mat_clear(M, fld); gr_mat_clear(X, fld); gr_mat_clear(RHS, fld);
-                    gr_ctx_clear(fld);
+                gr_mat_clear(M, fld); gr_mat_clear(X, fld); gr_mat_clear(RHS, fld);
+                gr_ctx_clear(fld);
+            }
+
+            if (have) {
+                /* A scaled generator h = D g reads back as the plain radical g:
+                 * fold D^e into each coefficient, then cancel the content the
+                 * coefficients share with Dc (which the h-coordinates hide). */
+                for (int s = 0; s < nalg; s++) {
+                    const GAGen* g = &P.st.gens[P.slot_gen[s]];
+                    if (!g->scale) continue;
+                    fmpz_mpoly_q_t dq; fmpz_mpoly_q_init(dq, pctx);
+                    if (expr_to_mpolyq(g->scale, dq, pctx, &pvars) &&
+                        fmpz_mpoly_is_one(fmpz_mpoly_q_denref(dq), pctx)) {
+                        fmpz_mpoly_t dp; fmpz_mpoly_init(dp, pctx);
+                        for (long j = 0; j < total; j++) {
+                            long es = (j / P.stride[s]) % P.dims[s];
+                            if (!es || fmpz_mpoly_is_zero(&coords[j], pctx)) continue;
+                            fmpz_mpoly_pow_ui(dp, fmpz_mpoly_q_numref(dq), (ulong)es, pctx);
+                            fmpz_mpoly_mul(&coords[j], &coords[j], dp, pctx);
+                        }
+                        fmpz_mpoly_clear(dp, pctx);
+                    } else {
+                        have = 0;   /* cannot happen: ga_build_rhs made D a polynomial */
+                    }
+                    fmpz_mpoly_q_clear(dq, pctx);
                 }
             }
-            fmpz_mpoly_clear(numR, mctx); fmpz_mpoly_clear(denR, mctx);
+            if (have) {
+                fmpz_mpoly_t G; fmpz_mpoly_init(G, pctx);
+                fmpz_mpoly_set(G, Dc, pctx);
+                for (long j = 0; j < total && !fmpz_mpoly_is_one(G, pctx); j++)
+                    if (!fmpz_mpoly_is_zero(&coords[j], pctx))
+                        fmpz_mpoly_gcd(G, G, &coords[j], pctx);
+                if (!fmpz_mpoly_is_one(G, pctx) && !fmpz_mpoly_is_zero(G, pctx)) {
+                    fmpz_mpoly_divides(Dc, Dc, G, pctx);
+                    for (long j = 0; j < total; j++)
+                        if (!fmpz_mpoly_is_zero(&coords[j], pctx))
+                            fmpz_mpoly_divides(&coords[j], &coords[j], G, pctx);
+                }
+                fmpz_mpoly_clear(G, pctx);
+
+                Expr** terms = malloc(sizeof(Expr*) * (size_t)total);
+                size_t nt = 0;
+                for (long j = 0; j < total; j++) {
+                    if (fmpz_mpoly_is_zero(&coords[j], pctx)) continue;
+                    Expr* coeffe = fmpz_mpoly_to_expr(&coords[j], pctx, &pvars);
+                    Expr* mon = NULL;
+                    for (int s = 0; s < nalg; s++) {
+                        long es = (j / P.stride[s]) % P.dims[s];
+                        if (!es) continue;
+                        const char* gname = P.st.gens[P.slot_gen[s]].name;
+                        Expr* gp = (es == 1) ? expr_new_symbol(gname)
+                            : expr_new_function(expr_new_symbol("Power"),
+                                (Expr*[]){ expr_new_symbol(gname), expr_new_integer(es) }, 2);
+                        mon = mon ? expr_new_function(expr_new_symbol("Times"), (Expr*[]){ mon, gp }, 2) : gp;
+                    }
+                    terms[nt++] = mon ? expr_new_function(expr_new_symbol("Times"),
+                                            (Expr*[]){ coeffe, mon }, 2)
+                                      : coeffe;
+                }
+                Expr* numer = (nt == 0) ? expr_new_integer(0)
+                            : (nt == 1) ? terms[0]
+                            : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+                free(terms);
+
+                Expr* df = ga_den_factor(Dc, pctx, &pvars, &P, den_elim);
+                Expr* frac = df ? expr_new_function(expr_new_symbol("Times"),
+                                      (Expr*[]){ numer, df }, 2)
+                                : numer;
+                Expr* back = ga_subst_back_ex(frac, &P.st, 0);
+                expr_free(frac);
+                out = eval_and_free(back);
+            }
+            for (long r = 0; r < total; r++) fmpz_mpoly_clear(&coords[r], pctx);
+            free(coords);
+            fmpz_mpoly_clear(Dc, pctx);
         }
-        for (int i = 0; i < st.ngen; i++) { fmpz_mpoly_clear(&B[i], mctx); fmpz_mpoly_clear(&Qb[i], mctx); }
-        free(B); free(Qb);
+        fmpz_mpoly_clear(numR, P.mctx); fmpz_mpoly_clear(denR, P.mctx);
     }
 
-    fmpz_mpoly_q_clear(q, mctx);
+    fmpz_mpoly_q_clear(q, P.mctx);
+    varset_free(&pvars);
     fmpz_mpoly_ctx_clear(pctx);
-    fmpz_mpoly_ctx_clear(mctx);
-    varset_free(&fvars);
-    varset_free(&params);
-    varset_free(&all);
-    expr_free(ebar);
-    ga_free(&st);
+    ga_release(&P);
     return out;
+}
+
+/* Simplify's entry: eliminated radicals may stay in the denominator when that
+ * is the smaller form (1/(1 + x^(1/3)) is already canonical over Q(x^(1/3))). */
+Expr* flint_algebraic_field_canonical_capped(const Expr* e, long maxdim) {
+    return ga_canonical(e, maxdim, 1, NULL);
+}
+
+/* RootReduce's entry: the denominator must come out radical-free. Elimination
+ * keeps the solve small; when an eliminated radical s^(1/L) is left in the
+ * denominator cofactor, redo the reduction with s^(1/L) as an algebraic
+ * generator over Q(s), which rationalises it. */
+Expr* flint_algebraic_field_canonical(const Expr* e) {
+    int den_elim = 0;
+    Expr* r = ga_canonical(e, 256, 1, &den_elim);
+    if (r && den_elim) {
+        Expr* r2 = ga_canonical(e, 256, 0, NULL);
+        if (r2) { expr_free(r); r = r2; }
+    }
+    return r;
 }
 
 /*
@@ -9028,6 +9313,7 @@ int   flint_is_polynomial_over_q(const Expr* e) { (void)e; return 0; }
 int   flint_mpoly_is_zero(const Expr* e) { (void)e; return -1; }
 Expr* flint_algebraic_field_normalize(const Expr* e) { (void)e; return NULL; }
 Expr* flint_algebraic_field_canonical(const Expr* e) { (void)e; return NULL; }
+Expr* flint_algebraic_field_canonical_capped(const Expr* e, long maxdim) { (void)e; (void)maxdim; return NULL; }
 Expr* flint_algebraic_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_rational_cancel(const Expr* e) { (void)e; return NULL; }

@@ -261,6 +261,21 @@ space, multiplication by the denominator is a linear map (products reduced modul
 the generators' minimal-polynomial ideal via `fmpz_mpoly_divrem_ideal`), and
 inverting it with a solve over `Q(params)` (`gr_mat` over `fmpz_mpoly_q`)
 rationalises the denominator to `Norm_{K/Q(params)}(D)`. No numeric zero oracle.
+The field is prepared so the solve stays small and general (v0.6117):
+- A **bare-symbol radicand** (`x^(1/6)`, `Sqrt[x]`, `a^(14/3)`) is eliminated:
+  `x -> t^L` (L the lcm of its indices) with `t` a transcendental parameter. This is
+  exact on every branch, since `(x^(1/L))^k = x^(k/L)` for integer k, and costs no
+  basis dimension.
+- **Nested radicands** (`(b + a Sqrt[x])^(1/3)`, `Sqrt[1 + Sqrt[1 + x^2]]`) are
+  written in the inner generators. The generators are ordered outer-first as the
+  leading LEX variables, so the triangular relations remain a Groebner basis.
+- A **rational radicand** `N/D` (D free of generators) rescales its generator to
+  `D N/D^(1/Q)`, whose relation is monic.
+- **Radicand factors of the rationalised denominator are absorbed** back into the
+  radicals, so `y^3/(1+x^4)` reads back as `1/(1 + x^4)^(1/4)`.
+- Example: `RootReduce[D[Integrate[x^(4/3)/(a Sqrt[x] + b)^(2/3), x], x]]` is
+  `x^(4/3)/(b + a Sqrt[x])^(2/3)`.
+- Non-identities stay non-zero: `Sqrt[x y] - Sqrt[x] Sqrt[y]` and `Sqrt[x^2] - x`.
 
 **Polynomials / rational functions with algebraic-number coefficients** — when
 the input is not itself a constant algebraic number nor a variable-radicand

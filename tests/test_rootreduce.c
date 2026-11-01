@@ -379,6 +379,50 @@ static void test_flint_exception_recovery(void) {
 #endif
 }
 
+/* Assert eval(input) is NOT the integer 0 (a non-identity must never collapse). */
+static void check_nonzero(const char* input) {
+    Expr* e = eval_str(input);
+    if (e->type == EXPR_INTEGER && e->data.integer == 0) {
+        fprintf(stderr, "FAIL: %s collapsed to 0 (not an identity)\n", input);
+        exit(1);
+    }
+    expr_free(e);
+}
+
+/* Bare-symbol radicands are eliminated (x -> t^L, t a transcendental
+ * parameter), nested radicands are written in the inner generators, rational
+ * radicands rescale their generator, and generator-free radicand factors of the
+ * denominator are absorbed back into the radicals. */
+static void test_rootreduce_function_field(void) {
+    /* symbol elimination: x^(1/3), a^(1/3) cost no dimension */
+    check("RootReduce[(x - pa)/(x^(1/3) - pa^(1/3))]",
+          "pa^(2/3) + pa^(1/3) x^(1/3) + x^(2/3)");
+    check("RootReduce[(x - 1)/(Sqrt[x] - 1)]", "1 + Sqrt[x]");
+    /* the Trager antiderivative's derivative: one radical, absorbed denominator */
+    check("RootReduce[(2 x + 2 x^5 + (1 + x^4)^(1/4) + 2 x^4 (1 + x^4)^(1/4) + "
+          "2 x^3 Sqrt[1 + x^4] + 2 x^2 (1 + x^4)^(3/4))/(2 x^2 + 2 x^6 + "
+          "2 x (1 + x^4)^(1/4) + 2 x^5 (1 + x^4)^(1/4) + Sqrt[1 + x^4] + "
+          "2 x^4 Sqrt[1 + x^4] + 2 x^3 (1 + x^4)^(3/4))]",
+          "1/(1 + x^4)^(1/4)");
+    /* radicand with an inner radical of a symbol, constants Sqrt[3], a^(1/3) */
+    check("RootReduce[D[Integrate[x^(4/3)/(pa Sqrt[x] + pb)^(2/3), x], x]]",
+          "x^(4/3)/(pb + pa Sqrt[x])^(2/3)");
+    /* nested tower */
+    check("RootReduce[Sqrt[1 + Sqrt[1 + x^2]]^2 - Sqrt[1 + x^2]]", "1");
+    check_preserves("1/(1 + Sqrt[1 + Sqrt[1 + x^2]])");
+    check_preserves("(x + Sqrt[1 + Sqrt[x]])/(1 - Sqrt[1 + Sqrt[x]])");
+    /* rational radicand */
+    check("RootReduce[Sqrt[1 + 1/x]^2]", "1 + 1/x");
+    check_preserves("1/Sqrt[1 + 1/x]");
+    check_preserves("Sqrt[1 + 1/x] (1 + Sqrt[1 + 1/x])");
+    /* non-identities stay non-zero */
+    check_nonzero("RootReduce[Sqrt[x y] - Sqrt[x] Sqrt[y]]");
+    check_nonzero("RootReduce[Sqrt[x^2] - x]");
+    check_nonzero("RootReduce[Sqrt[(1 + x)/x] Sqrt[x/(1 + x)] - 1]");
+    check_nonzero("RootReduce[(x^3)^(1/3) - x]");
+    printf("  function field (elimination / nesting / absorption) OK\n");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -401,6 +445,7 @@ int main(void) {
     test_qqbar_methods();
     test_qqbar_zero_negative_power();
     test_flint_exception_recovery();
+    test_rootreduce_function_field();
 
     printf("All RootReduce / algebraic-field tests passed.\n");
     return 0;

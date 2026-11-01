@@ -37,6 +37,7 @@
 #include "simp_internal.h"
 #include "radrat.h"
 #include "poly.h"
+#include "flint_bridge.h"
 
 /* leaf count (heads included), matching the simp scoring convention. */
 static int64_t rr_leaves(const Expr* e) { return leaf_count_internal((Expr*)e, true); }
@@ -614,4 +615,71 @@ Expr* simp_radical_rational(const Expr* input,
         return NULL;
     }
     return best;
+}
+
+/* ===================================================================== */
+/*  simp_algebraic_field -- canonical form over the algebraic function   */
+/*  field (see radrat.h).                                                */
+/* ===================================================================== */
+
+/* Simplify-side caps: the canonical form solves a total x total linear system
+ * over Q(params), so keep the algebraic dimension and the input small enough
+ * that a decline costs milliseconds. Bare-symbol radicands (x^(1/6)) cost no
+ * dimension, so this admits towers like Sqrt[3], (b + a Sqrt[x])^(1/3). */
+#define AF_MAX_DIM    64
+#define AF_MAX_LEAVES 20000
+
+/* True when `e` holds a radical Power[B, p/q] (q > 1) whose base has a symbol. */
+static bool af_has_symbolic_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* base; int64_t q;
+    if (rr_parse_radical(e, &base, &q) && rr_has_symbol(base)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (af_has_symbolic_radical(e->data.function.args[i])) return true;
+    return false;
+}
+
+Expr* simp_algebraic_field(const Expr* input,
+                           const AssumeCtx* ctx,
+                           const Expr* complexity_func) {
+    if (!input || input->type != EXPR_FUNCTION) return NULL;
+    if (!af_has_symbolic_radical(input)) return NULL;
+    if (rr_leaves(input) > AF_MAX_LEAVES) return NULL;
+
+    Expr* r = flint_algebraic_field_canonical_capped(input, AF_MAX_DIM);
+    if (!r) return NULL;
+    /* The dual presentation 1/canonical(1/r) writes the radicals into the
+     * denominator instead ((1 - x) Sqrt[u]/x  vs  (1 + x)/(x Sqrt[u]) for
+     * u = (1 + x)/(1 - x)); keep whichever scores lower, r on a tie. */
+    if (rr_has_symbol(r)) {
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy(r), expr_new_integer(-1) }, 2));
+        Expr* ci = flint_algebraic_field_canonical_capped(inv, AF_MAX_DIM);
+        expr_free(inv);
+        if (ci) {
+            Expr* dual = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ ci, expr_new_integer(-1) }, 2));
+            if (score_with_func(dual, complexity_func) < score_with_func(r, complexity_func)) {
+                expr_free(r);
+                r = dual;
+            } else {
+                expr_free(dual);
+            }
+        }
+    }
+
+    size_t s_in = score_with_func((Expr*)input, complexity_func);
+    if (score_with_func(r, complexity_func) >= s_in) { expr_free(r); return NULL; }
+
+    /* The canonical form is a reduced numerator over a generator-free
+     * denominator; give the rest of the dispatcher one pass over it (Factor of
+     * that numerator, say). It is a fixed point of this pass, so the re-entry
+     * stops here and the strict gate keeps the better of the two. */
+    Expr* r2 = simp_dispatch(r, ctx, complexity_func);
+    if (r2 && score_with_func(r2, complexity_func) < score_with_func(r, complexity_func)) {
+        expr_free(r);
+        return r2;
+    }
+    if (r2) expr_free(r2);
+    return r;
 }

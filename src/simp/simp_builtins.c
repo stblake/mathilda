@@ -1,5 +1,6 @@
 #include "simp.h"
 #include "simp_internal.h"
+#include "radrat.h"
 #include "simp_trigexp_zero.h"
 #include "arithmetic.h"
 #include "attr.h"
@@ -2029,6 +2030,24 @@ static Expr* builtin_simplify_core(Expr* res) {
          * numerator zero-test — a genuine symbolic decision, no sampling.
          * Declines cheaply (NULL) on non-vanishing / non-single-kernel inputs,
          * so the general search below runs unchanged for everything else. */
+    } else if ((best = simp_algebraic_field(expr, ctx, opt_complexity)) != NULL) {
+        /* Algebraic-function-field fast path. A rational function of radicals
+         * (any number, with parameters and nesting) gets its canonical form
+         * over the field the radicals generate: rationalised by one linear
+         * solve, radicand factors absorbed back into the radicals. This is how
+         * D[Integrate[f, x], x] of an algebraic f returns to f in milliseconds,
+         * BEFORE the per-subnode descent re-simplifies every internal node.
+         * NULL unless strictly simpler, so everything else falls through. The
+         * canonical form ignores assumptions, so polish it with the
+         * (assumption-aware) bottom-up pass and keep the better of the two. */
+        Expr* polished = simp_bottomup(best, ctx, opt_complexity, &memo, 0);
+        if (polished && score_with_func(polished, opt_complexity)
+                            < score_with_func(best, opt_complexity)) {
+            expr_free(best);
+            best = polished;
+        } else if (polished) {
+            expr_free(polished);
+        }
     } else {
         /* Top-level algebraic-rational fast path. When the input is a
          * Plus over a multi-generator algebraic-number tower (e.g. the

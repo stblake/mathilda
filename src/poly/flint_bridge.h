@@ -479,6 +479,16 @@ Expr* flint_algebraic_field_normalize(const Expr* e);
 Expr* flint_algebraic_field_canonical(const Expr* e);
 
 /*
+ * flint_algebraic_field_canonical with a cap on the algebraic dimension of K
+ * (the product of the generator degrees; the plain entry point uses 256).
+ * Bare-symbol radicands (x^(p/q)) cost no dimension: x -> t^L is substituted and
+ * t is a transcendental parameter. Unlike the plain entry point, such a radical
+ * may remain in the denominator (1/(1 + x^(1/3)) is returned as is). Simplify
+ * uses this with a tighter cap.
+ */
+Expr* flint_algebraic_field_canonical_capped(const Expr* e, long maxdim);
+
+/*
  * Combine an expression over the tower into a single fraction with the radicals
  * treated as free kernels (WL-faithful Together/Cancel — keeps radicals in the
  * denominator, does NOT rationalise): each Power[base, p/q] becomes gen^p and

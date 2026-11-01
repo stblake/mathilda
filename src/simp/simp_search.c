@@ -1331,6 +1331,14 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
      * relations.  Returns NULL when fewer than two positive radical
      * bases are present or the reduction does not strictly improve the
      * input, so every other case falls through unchanged. */
+    /* Canonical form over the algebraic function field of the radicals
+     * (rationalised denominator, radicand factors absorbed back): a decision
+     * procedure for radical-rational identities, any number of radicals,
+     * parameters and nesting. NULL unless it strictly improves the input. */
+    {
+        Expr* af = simp_algebraic_field(input, ctx, complexity_func);
+        if (af) return af;
+    }
     {
         Expr* rr = simp_radical_rational(input, ctx, complexity_func);
         if (rr) return rr;

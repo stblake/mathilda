@@ -302,6 +302,21 @@ canonical forms that the generic pipeline alone does not:
   `Csc = 1/Sin`) are handled too: the inverse odd-generator powers the relation
   injects are cleared before the denominator is rationalised, so
   `Simplify[Cot[x]/Sqrt[Cot[x]]] -> Sqrt[Cot[x]]`.
+- **Algebraic-function-field canonical form** (v0.6117, `simp_algebraic_field`
+  in `src/simp/radrat.c`) — a rational function of radicals with a symbolic radicand
+  gets the `RootReduce` canonical form over the field its radicals generate (any
+  number of radicals, parameters and nesting levels; see `RootReduce` in
+  `algebra.md`). The denominator is rationalised by one linear solve over
+  `Q(params)`, and radicand factors are absorbed back into the radicals. The pass
+  runs as a top-level fast path, before the per-subnode descent, and in
+  `simp_dispatch`. Its result is adopted only when the score strictly improves, and
+  it is then polished by the assumption-aware bottom-up pass. It returns a
+  re-differentiated algebraic antiderivative to its integrand in milliseconds:
+  `Simplify[D[Integrate[1/(x^4 + 1)^(1/4), x, Method -> "Trager"], x]] ->
+  1/(1 + x^4)^(1/4)` (3 ms; was left as an unreduced quotient), and
+  `Simplify[D[Integrate[x^(4/3)/(a Sqrt[x] + b)^(2/3), x], x]] ->
+  x^(4/3)/(b + a Sqrt[x])^(2/3)` (5 ms; was unreduced). Algebraic dimension is
+  capped at 64 and input size at 20000 leaves.
 - **Multi-generator radical rational normal form** — a rational function of two
   or more distinct radical bases (e.g. `a^(1/3)` and `(a+b x)^(1/3)`) is reduced
   in the quotient ring `K[g_1, ..., g_n] / <g_k^{q_k} - base_k>`: each base is

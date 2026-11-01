@@ -269,6 +269,32 @@ void test_radical_integrand_recovery_sqrt_quadratic(void) {
         "Sqrt[-1 - x + x^2]/x", 0);
 }
 
+/* Algebraic-function-field canonical form (simp_algebraic_field): Simplify of a
+ * re-differentiated algebraic antiderivative returns the integrand. */
+static void test_radical_function_field_roundtrips(void) {
+    check_eval_eq("Simplify[D[Integrate[1/(x^4 + 1)^(1/4), x, Method -> \"Trager\"], x]]",
+                  "1/(1 + x^4)^(1/4)");
+    check_eval_eq("Simplify[D[Integrate[1/(x^4 + 1)^(1/4), x, Method -> \"ParallelMixedTower\"], x]]",
+                  "1/(1 + x^4)^(1/4)");
+    check_eval_eq("Simplify[D[Integrate[x^(4/3)/(a Sqrt[x] + b)^(2/3), x], x]]",
+                  "x^(4/3)/(b + a Sqrt[x])^(2/3)");
+    check_eval_eq("Simplify[D[Integrate[1/(x^3 (a + b x)^(1/3)), x], x]]",
+                  "1/(x^3 (a + b x)^(1/3))");
+    check_eval_eq("Simplify[D[Integrate[x/(1 + x^3)^(1/3), x], x]]",
+                  "x/(1 + x^3)^(1/3)");
+    check_eval_eq("Simplify[D[Integrate[Sqrt[x]/(1 + x^(1/3)), x], x]]",
+                  "Sqrt[x]/(1 + x^(1/3))");
+    check_eval_eq("Simplify[D[Integrate[Sqrt[1 + Sqrt[1 - x]], x], x]]",
+                  "Sqrt[1 + Sqrt[1 - x]]");
+    check_eval_eq("Simplify[(x - a)/(x^(1/3) - a^(1/3))]",
+                  "a^(2/3) + a^(1/3) x^(1/3) + x^(2/3)");
+    /* soundness: branch-dependent non-identities are left alone */
+    check_eval_eq("Simplify[Sqrt[x y] - Sqrt[x] Sqrt[y]]", "-Sqrt[x] Sqrt[y] + Sqrt[x y]");
+    check_eval_eq("Simplify[Sqrt[x^2] - x]", "-x + Sqrt[x^2]");
+    /* assumptions still apply to the canonical form */
+    check_eval_eq("Simplify[Sqrt[x^2] + (x^2 - 1)/(x - 1), x > 0]", "1 + 2 x");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -295,6 +321,9 @@ int main(void) {
     /* Phase 3. */
     TEST(test_radical_case4_cuberoot_denest);
     TEST(test_radical_case5_sum_of_cuberoot_conjugates);
+
+    /* Algebraic function field. */
+    TEST(test_radical_function_field_roundtrips);
 
     if (g_failures > 0) {
         fprintf(stderr, "\n%d radical_simplify test(s) FAILED.\n", g_failures);
