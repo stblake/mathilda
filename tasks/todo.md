@@ -1,18 +1,49 @@
-# DDI Vol. 1: close the remaining 292 open cases (2026-10-31, from v0.6100)
+# DDI Vol. 1: close the remaining open cases (2026-10-31, from v0.6100; updated 2026-11-01 at v0.6112)
 
 Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md (supersedes the P-items below where they overlap)
+Standing rules: valid for all complex x; PossibleZeroQ over Complexes is the only verifier (a PZQ false negative = fix PZQ);
+no time caps on an explicit Method; one commit + tag per fix; don't edit ParallelMixed.m or rebuild ./Mathilda during a corpus run.
+
+**Where we stand (v0.6112, tests/data/ddi_vol1_report.json):** Trager or PMT decides 664 of 803 (FriCAS 528); PMT 564, Trager 415;
+0 wrong. Known conflicts: inverse_function_3 (iii) BOOK-CONFLICT, multiple_radicals_0 (vi)-inst DISAGREE (FriCAS's "NONELEM" is an unevaluated return).
+**139 open:** 71 PMT declines + 68 timeouts; book says 122 elem, 5 nonelem, 12 unlabelled; FriCAS decides 54 of them (50 ELEM), times out on 83.
+90 are parametric, 64 of which have a decided -inst twin. By family: nested_radicals 71, generalised_gunther 16, chebychev 10,
+inverse_function 8, euler 8, multiple_radicals 6, laurent_poly_subst 5, rational_subs 5, other 10.
 
 - [x] W1 PolynomialLCM with parameter-rational coefficients (poly.c) -- 5 "solution does not verify" (v0.6101, +5)
 - [x] W2 own-radical back-substitution for every back rule (generators, Euler w, Y, nested) -- 38 "verification failed" (v0.6102, +35)
 - [x] W3 shared KummerRadicals.m; Trager splits composita; PMT pieces via Trager first (v0.6103, Trager +47, PMT +17); book conflict: multiple_radicals_0 (vi)
 - [x] W4 kernel + conic-in-x^k substitution pre-pass (v0.6105, +35: 23 certificates, 12 answers); PZQ real-band screen v0.6104
-  - [ ] AlgebraicPoint Euler (nested 13/17); nested 11 (x^4 conic with a pending outer root) still times out
-- [ ] W5 parameter constant field in PMT (conic path; specialise-then-lift logands)
-- [ ] W6 general-genus torsion realisation via Trager adapter
-- [ ] W7 timeouts ($PMProfile; Trager P4c)
-- [ ] W8 Trager over Q(params) (after W5, by what remains)
-- [ ] W9 general curves (separate plan)
-- [ ] W10 full rerun with FriCAS, report before/after, PDF, review
+  - [ ] AlgebraicPoint in eulerStep for a conic with no rational point (nested 13/17; old P3b)
+  - [ ] nested 11 (x^4 conic with a pending outer root) still times out
+- [x] W5 parameter constant field in PMT -- conic path v0.6106 (+30), FLINT RowReduce over Q(params)(radicals) v0.6107-08,
+      parametric Solve fix v0.6109, norm-search logands over Q(params) v0.6110 (+34), PZQ machine screen in doubles v0.6111,
+      monomial / two-point Kummer substitutions v0.6112 (+74). 490 -> 564 PMT since v0.6105.
+  - [ ] 52 parametric timeouts left: profile (m = 4 Together blow-up in the ansatz, multmeth-m1, gg_*, nested_*) -- folds into W7
+  - [ ] 17 "no solution within bounds" (chebychev 5, nested 10 parametric pieces): bounds / generic ansatz over Q(params)
+  - [ ] 6 "certificate withheld: transcendental constants": a generic non-elementarity proof over Q(params) (needs every bound proved generically)
+  - [ ] 4 "residue class lost: no places over the prime for a root of the residue" (parametric residues)
+- [ ] W6 general-genus torsion realisation via a Trager adapter (5 "needs torsion realisation (milestone iii)" + 1 partially ramified prime);
+      PMT {p, pts, taus} -> Trager divisor -> torsionOrder/jacOrder/principalGenerator -> log terms
+- [ ] W7 timeouts: $PMProfile flag timing each iPIM stage; group the 68 timeouts (52 parametric, 16 numeric: nested 9 (i)-(v)-inst,
+      nested 3/10/11/12/14/17/19, inverse_function 2 (v), timofeev 3 (v)) by dominant stage and fix by algorithm; Trager P4c (2 timeouts)
+- [ ] W8 Trager over Q(params) (47 Trager declines "radicand is not a rational function over Q"; 6 "algebraic constant in the integrand")
+- [ ] W9 general curves: primitive element + integral basis for F(x, y) = 0 (38 PMT "tower construction failed", 80 Trager "nested radicals":
+      roots nested over non-conics such as Sqrt[x^4 + 1] inner; inverse_function 2, chebychev 2) -- separate plan
+- [ ] W10 close-out: full rerun with FriCAS; regenerate ALGEBRAIC_INTEGRAL_PERF.md (tools/ddi_report.py) with before/after vs v0.6087
+      and v0.6100 plus the Mathilda-vs-FriCAS timing table; build and send the PDF; review section here; memory update
+      (PMT parameter field, substitution pre-pass, two-point Kummer)
+
+Carried over from the earlier stress-test list (below), still open:
+- [ ] P2b answers whose intermediate radicand lies ON its cut across a real interval are numerically fragile (multrad_0-ii-inst): prefer forms off the cut
+- [ ] P2c power-free radicands before choosing m
+- [ ] P2d remove the internal numeric fallbacks now that PZQ is the sole verifier (Trager spotCheck/numericZeroQ, PMT branchUnit)
+- [ ] P2a complex-point verification in tools/trager_fricas_stress
+- [ ] P3c partial ramification (if W6 does not cover it)
+
+Housekeeping:
+- [ ] ctest -LE nightly: two failures predating this work (mixed_numericalize_tests, match_exhaustive_observe) -- triage
+- [ ] MEMORY.md is over its size limit (24.7 KB of 24.4 KB): shorten index lines
 
 # DDI Vol. 1 stress test: fix every bug/deficiency found (2026-10-30, v0.6087+)
 
