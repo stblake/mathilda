@@ -71,7 +71,7 @@ static bool d_is_call1(Expr* e, const char* head_sym, Expr* var) {
 static bool d_is_eulerphi(Expr* e, Expr* var) {
     if (e->type != EXPR_FUNCTION) return false;
     Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "EulerPhi") != 0) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_EulerPhi) return false;
     if (e->data.function.arg_count != 1) return false;
     return expr_eq(e->data.function.args[0], var);
 }

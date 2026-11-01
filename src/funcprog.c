@@ -1499,7 +1499,7 @@ static Expr* all_any_none_true(Expr* res, int mode) {
     if (is_ndarray(coll) && coll->data.ndarray.dtype == NDT_BOOL &&
         test->type == EXPR_SYMBOL &&
         (test->data.symbol.name == SYM_Identity ||
-         strcmp(test->data.symbol.name, "TrueQ") == 0)) {
+         test->data.symbol.name == SYM_TrueQ)) {
         size_t n = ndarray_size(coll);
         const unsigned char* b = (const unsigned char*)coll->data.ndarray.data;
         if (mode == 0) {                    /* AllTrue: every byte set? */

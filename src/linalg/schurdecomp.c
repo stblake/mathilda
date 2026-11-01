@@ -53,8 +53,8 @@
 static bool schur_parse_bool(const Expr* rhs, bool* out) {
     if (rhs->type != EXPR_SYMBOL) return false;
     const char* s = rhs->data.symbol.name;
-    if (strcmp(s, "True")  == 0) { *out = true;  return true; }
-    if (strcmp(s, "False") == 0) { *out = false; return true; }
+    if (s == SYM_True) { *out = true;  return true; }
+    if (s == SYM_False) { *out = false; return true; }
     return false;
 }
 

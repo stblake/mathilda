@@ -33,7 +33,7 @@ static bool emit_list_thread(Ctx* c, const Expr* lhs, Val val) {
             ins(c, OP_MOVE, (uint32_t)vreg, (uint32_t)cp.reg, 0, z);
             if (cp.reg != val.reg) c->temp_top--;   /* free the coercion temp */
         } else if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL
-                   && strcmp(t->data.function.head->data.symbol.name, "List") == 0) {
+                   && t->data.function.head->data.symbol.name == SYM_List) {
             if (!emit_list_thread(c, t, val)) return false;
         } else {
             c->ok = false; return false;         /* not a compilable target */
@@ -62,7 +62,7 @@ static bool sym_named(const Expr* e, const char* name) {
  * so the whole Switch bails rather than guess a runtime match. */
 static bool is_blank_pat(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Blank") == 0
+        && e->data.function.head->data.symbol.name == SYM_Blank
         && e->data.function.arg_count == 0;
 }
 /* Fold one rung value's type into the running result type.  A NULL value is the
@@ -112,11 +112,11 @@ bool collect_ladder(Ctx* c, const char* h, Expr** A, size_t na,
         if (na < 1 || na > 2) return false;
         const Expr* cl = A[0];
         if (cl->type != EXPR_FUNCTION || cl->data.function.head->type != EXPR_SYMBOL
-            || strcmp(cl->data.function.head->data.symbol.name, "List") != 0) return false;
+            || cl->data.function.head->data.symbol.name != SYM_List) return false;
         for (size_t i = 0; i < cl->data.function.arg_count; i++) {
             const Expr* pr = cl->data.function.args[i];
             if (pr->type != EXPR_FUNCTION || pr->data.function.head->type != EXPR_SYMBOL
-                || strcmp(pr->data.function.head->data.symbol.name, "List") != 0
+                || pr->data.function.head->data.symbol.name != SYM_List
                 || pr->data.function.arg_count != 2) return false;
             const Expr* val = pr->data.function.args[0];
             const Expr* cond = pr->data.function.args[1];
@@ -331,7 +331,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
     if ((strcmp(h, "With") == 0 || strcmp(h, "Module") == 0) && na == 2) {
         const Expr* L = A[0];
         if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
-            || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+            || L->data.function.head->data.symbol.name != SYM_List
             || L->data.function.arg_count == 0
             || (int)(c->nscope + L->data.function.arg_count) > CTX_MAX_SCOPE) { c->ok = false; return -1; }
         size_t nl = L->data.function.arg_count;
@@ -347,7 +347,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             const char* vname = NULL; const Expr* init = NULL;
             if (spec->type == EXPR_SYMBOL) vname = spec->data.symbol.name;
             else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
-                     && strcmp(spec->data.function.head->data.symbol.name, "Set") == 0
+                     && spec->data.function.head->data.symbol.name == SYM_Set
                      && spec->data.function.arg_count == 2
                      && spec->data.function.args[0]->type == EXPR_SYMBOL) {
                 vname = spec->data.function.args[0]->data.symbol.name; init = spec->data.function.args[1];
@@ -439,7 +439,7 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
          * semantics do anyway. */
         if (kind >= 0 && !IC_UNARY(kind) && na == 2 && A[0]->type == EXPR_FUNCTION
             && A[0]->data.function.head->type == EXPR_SYMBOL
-            && strcmp(A[0]->data.function.head->data.symbol.name, "Part") == 0
+            && A[0]->data.function.head->data.symbol.name == SYM_Part
             && A[0]->data.function.arg_count >= 2) {
             const Expr* pt = A[0];
             const Expr* const* S = (const Expr* const*)pt->data.function.args;
@@ -525,9 +525,9 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
          * not a Wolfram form. */
         if (kind == 0 && na == 2 && A[0]->type == EXPR_FUNCTION
             && A[0]->data.function.head->type == EXPR_SYMBOL
-            && strcmp(A[0]->data.function.head->data.symbol.name, "List") == 0) {
+            && A[0]->data.function.head->data.symbol.name == SYM_List) {
             if (A[1]->type == EXPR_FUNCTION && A[1]->data.function.head->type == EXPR_SYMBOL
-                && strcmp(A[1]->data.function.head->data.symbol.name, "List") == 0) {
+                && A[1]->data.function.head->data.symbol.name == SYM_List) {
                 c->ok = false; return -1;            /* destructuring -> interpreter */
             }
             Val val; if (!emit(c, A[1], &val)) return -1;

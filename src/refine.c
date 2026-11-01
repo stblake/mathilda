@@ -311,7 +311,7 @@ static Expr* refine_decide_predicate(const Expr* P, const AssumeCtx* ctx,
 
     /* Element[x, dom]: assumption-aware domain membership (compound x handled
      * inside element_decide via prov_re/prov_int). */
-    if (strcmp(h, "Element") == 0 && P->data.function.arg_count == 2) {
+    if (h == SYM_Element && P->data.function.arg_count == 2) {
         const Expr* x   = P->data.function.args[0];
         const Expr* dom = P->data.function.args[1];
         if (dom->type == EXPR_SYMBOL) {
@@ -325,9 +325,9 @@ static Expr* refine_decide_predicate(const Expr* P, const AssumeCtx* ctx,
     /* Equal / Unequal: decide via the assumption-aware zero test on the
      * difference, then fall back to Reduce over the complexes (an equation is
      * not restricted to the reals). */
-    if ((strcmp(h, "Equal") == 0 || strcmp(h, "Unequal") == 0) &&
+    if ((h == SYM_Equal || h == SYM_Unequal) &&
         P->data.function.arg_count == 2) {
-        int is_eq = (strcmp(h, "Equal") == 0);
+        int is_eq = (h == SYM_Equal);
         Expr* lhs = P->data.function.args[0];
         Expr* rhs = P->data.function.args[1];
         Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
@@ -508,7 +508,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
     if (!h) return rebuilt;
 
     /* Sign[p] -> +/-1 ; Abs[p] -> +/-p. */
-    if ((strcmp(h, "Sign") == 0 || strcmp(h, "Abs") == 0) &&
+    if ((h == SYM_Sign || h == SYM_Abs) &&
         rebuilt->data.function.arg_count == 1) {
         const Expr* p = rebuilt->data.function.args[0];
         if (p->type == EXPR_FUNCTION) {          /* only worth a CAD run for compound p */
@@ -516,7 +516,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
             if (s != 0) {
                 *changed = 1;
                 Expr* out;
-                if (strcmp(h, "Sign") == 0) {
+                if (h == SYM_Sign) {
                     out = expr_new_integer(s);
                 } else if (s > 0) {
                     out = expr_copy((Expr*)p);
@@ -535,7 +535,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
      * same basis as the Abs/Sqrt collapses above); a complex argument leaves
      * deep_sign == 0 and Arg untouched.  Collapses the keyhole residue forms
      * (e.g. Arg[-a] with a > 0 -> Pi, which closes Log[x]/(x^2-a^2) PV). */
-    if (strcmp(h, "Arg") == 0 && rebuilt->data.function.arg_count == 1) {
+    if (h == SYM_Arg && rebuilt->data.function.arg_count == 1) {
         const Expr* p = rebuilt->data.function.args[0];
         if (p->type == EXPR_FUNCTION) {          /* only worth a CAD run for compound p */
             int s = deep_sign(p, Aconj, b);
@@ -744,7 +744,7 @@ Expr* builtin_refine(Expr* res) {
 
     /* (1) Predicate expression -> try to decide True/False. */
     const char* eh = head_name(expr);
-    if (eh && (strcmp(eh, "Element") == 0 || is_relational_head(eh))) {
+    if (eh && (eh == SYM_Element || is_relational_head(eh))) {
         result = refine_decide_predicate(expr, ctx, Aconj, &bud);
     }
 

@@ -247,7 +247,7 @@ static bool mp_root_of_unity_order(const Expr* exp, long* q_out) {
     bool ok = true;
     for (size_t i = 0; i < nf && ok; i++) {
         const Expr* f = fac[i];
-        if (f->type == EXPR_SYMBOL && strcmp(f->data.symbol.name, "Pi") == 0) {
+        if (f->type == EXPR_SYMBOL && f->data.symbol.name == SYM_Pi) {
             pi++;
         } else if (f->type == EXPR_INTEGER) {
             mpq_set_si(t, f->data.integer, 1); mpq_mul(rat, rat, t);
@@ -305,9 +305,9 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
     size_t na = e->data.function.arg_count;
     Expr* const* A = e->data.function.args;
 
-    if (strcmp(h, "Rational") == 0) return expr_copy((Expr*)e);
+    if (h == SYM_Rational) return expr_copy((Expr*)e);
 
-    if (strcmp(h, "Complex") == 0 && na == 2) {
+    if (h == SYM_Complex && na == 2) {
         /* a + b*I, with a, b exact rationals. */
         if (!expr_is_numeric_like(A[0]) || !expr_is_numeric_like(A[1])) {
             c->failed = true; return NULL;
@@ -319,7 +319,7 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
                 expr_copy((Expr*)A[1]), expr_new_symbol(inm) }, 2) }, 2);
     }
 
-    if ((strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) && na >= 1) {
+    if ((h == SYM_Plus || h == SYM_Times) && na >= 1) {
         Expr** vals = malloc(sizeof(Expr*) * na);
         for (size_t i = 0; i < na; i++) {
             vals[i] = mp_walk(A[i], c);
@@ -335,17 +335,17 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
         return r;
     }
 
-    if (strcmp(h, "Sqrt") == 0 && na == 1) {
+    if (h == SYM_Sqrt && na == 1) {
         Expr* B = mp_walk(A[0], c);
         if (c->failed) return NULL;
         return mp_make_radical(B, 1, 2, c);
     }
 
-    if (strcmp(h, "Power") == 0 && na == 2) {
+    if (h == SYM_Power && na == 2) {
         const Expr* base = A[0];
         const Expr* exp  = A[1];
 
-        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0) {
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
             long q;
             if (mp_root_of_unity_order(exp, &q)) {
                 char* nm = mp_fresh_name(c);
@@ -401,7 +401,7 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
         c->failed = true; return NULL;
     }
 
-    if (strcmp(h, "Root") == 0 && na >= 1) {
+    if (h == SYM_Root && na >= 1) {
         const Expr* fn = A[0];
         if (!head_is(fn, "Function")) { c->failed = true; return NULL; }
         size_t fnn = fn->data.function.arg_count;
@@ -686,7 +686,7 @@ Expr* builtin_minimalpolynomial(Expr* res) {
         if ((head_is(a, "Rule") || head_is(a, "RuleDelayed")) &&
             a->data.function.arg_count == 2 &&
             a->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(a->data.function.args[0]->data.symbol.name, "Extension") == 0) {
+            a->data.function.args[0]->data.symbol.name == SYM_Extension) {
             ext = a->data.function.args[1];
         } else if (npos < 3) {
             pos[npos++] = args[i];

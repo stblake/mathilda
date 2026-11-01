@@ -937,9 +937,9 @@ static int simp_invhyp_combo_is_zero(const Expr* e) {
         if (atom->type == EXPR_FUNCTION && atom->data.function.arg_count == 1 &&
             atom->data.function.head->type == EXPR_SYMBOL) {
             const char* h = atom->data.function.head->data.symbol.name;
-            if      (strcmp(h, "ArcSinh") == 0) k = IH_ASINH;
-            else if (strcmp(h, "ArcCosh") == 0) k = IH_ACOSH;
-            else if (strcmp(h, "ArcTanh") == 0) k = IH_ATANH;
+            if      (h == SYM_ArcSinh) k = IH_ASINH;
+            else if (h == SYM_ArcCosh) k = IH_ACOSH;
+            else if (h == SYM_ArcTanh) k = IH_ATANH;
             else { expr_free(coeff); ok = 0; break; }
         } else { expr_free(coeff); ok = 0; break; }
         if (!ia_is_integer(coeff) || !ih_arg_in_domain(k, atom->data.function.args[0])) {
@@ -991,9 +991,9 @@ static const char* region_inv_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 1 ||
         !e->data.function.head || e->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* h = e->data.function.head->data.symbol.name;
-    if (strcmp(h,"ArcTan")==0||strcmp(h,"ArcSin")==0||strcmp(h,"ArcCos")==0||
-        strcmp(h,"ArcCot")==0||strcmp(h,"ArcSinh")==0||strcmp(h,"ArcCosh")==0||
-        strcmp(h,"ArcTanh")==0||strcmp(h,"ArcCoth")==0) return h;
+    if (h == SYM_ArcTan||h == SYM_ArcSin||h == SYM_ArcCos||
+        h == SYM_ArcCot||h == SYM_ArcSinh||h == SYM_ArcCosh||
+        h == SYM_ArcTanh||h == SYM_ArcCoth) return h;
     return NULL;
 }
 static void region_vars(const Expr* e, const Expr*** v, size_t* n, size_t* cap) {
@@ -1026,8 +1026,8 @@ static bool region_branch_node(const Expr* e) {
         e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
     size_t n = e->data.function.arg_count;
-    if ((strcmp(h,"Log")==0 || strcmp(h,"Sqrt")==0) && n == 1) return true;
-    if (strcmp(h,"Power")==0 && n == 2 && is_rational_literal(e->data.function.args[1])) {
+    if ((h == SYM_Log || h == SYM_Sqrt) && n == 1) return true;
+    if (h == SYM_Power && n == 2 && is_rational_literal(e->data.function.args[1])) {
         const Expr* q = e->data.function.args[1]->data.function.args[1];
         if (q->type == EXPR_INTEGER && q->data.integer != 1 && (q->data.integer % 2) == 0)
             return true;   /* even root: real only for nonneg base */
@@ -1049,18 +1049,18 @@ static void region_collect_branch(const Expr* e, const Expr*** out, size_t* n, s
 static Expr* region_domain_cond(const Expr* node) {
     const char* head = node->data.function.head->data.symbol.name;
     const Expr* g = node->data.function.args[0];
-    if (strcmp(head,"ArcTanh")==0 || strcmp(head,"ArcSin")==0 || strcmp(head,"ArcCos")==0) {
+    if (head == SYM_ArcTanh || head == SYM_ArcSin || head == SYM_ArcCos) {
         Expr* lo = expr_new_function(expr_new_symbol("Less"),
             (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)g) }, 2);
         Expr* hi = expr_new_function(expr_new_symbol("Less"),
             (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(1) }, 2);
         return expr_new_function(expr_new_symbol("And"), (Expr*[]){ lo, hi }, 2);
     }
-    if (strcmp(head,"ArcCosh")==0)
+    if (head == SYM_ArcCosh)
         return expr_new_function(expr_new_symbol("Greater"),
             (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(1) }, 2);
     /* Log[g] and Sqrt[g] / even-root Power[g,_]: real-continuous for g > 0. */
-    if (strcmp(head,"Log")==0 || strcmp(head,"Sqrt")==0 || strcmp(head,"Power")==0)
+    if (head == SYM_Log || head == SYM_Sqrt || head == SYM_Power)
         return expr_new_function(expr_new_symbol("Greater"),
             (Expr*[]){ expr_copy((Expr*)g), expr_new_integer(0) }, 2);
     /* ArcTan/ArcSinh/ArcCot/ArcCoth: continuous for all real g except poles of g;
@@ -1096,7 +1096,7 @@ static bool region_shape_ok(const Expr* e) {
         expr_free(coeff);
         if (region_inv_head(atom)) { has_inv = true; continue; }
         if (atom->type == EXPR_FUNCTION && atom->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(atom->data.function.head->data.symbol.name, "Log") == 0 &&
+            atom->data.function.head->data.symbol.name == SYM_Log &&
             atom->data.function.arg_count == 1) continue;
         const Expr** sv = NULL; size_t ns = 0, cap = 0;
         region_vars(atom, &sv, &ns, &cap);
@@ -1129,8 +1129,8 @@ static int simp_region_identity_is_zero(const Expr* e, const AssumeCtx* ctx) {
         int algebraic = 0;
         for (size_t i=0;i<nb;i++) {
             const char* h = region_inv_head(br[i]);
-            if (h && (strcmp(h,"ArcSin")==0||strcmp(h,"ArcCos")==0||
-                      strcmp(h,"ArcSinh")==0||strcmp(h,"ArcCosh")==0)) { algebraic = 1; break; }
+            if (h && (h == SYM_ArcSin||h == SYM_ArcCos||
+                      h == SYM_ArcSinh||h == SYM_ArcCosh)) { algebraic = 1; break; }
         }
         free((void*)br);
         if (algebraic) { free((void*)vars); return 0; }
@@ -1282,8 +1282,8 @@ static int simp_invhyp_addition_is_zero(const Expr* e, const AssumeCtx* ctx) {
     int ia = -1, ib = -1;
     for (int i = 0; i < 3; i++) if (i != oddi) { if (ia < 0) ia = i; else ib = i; }
 
-    const char* Fh = (strcmp(arc,"ArcSinh")==0) ? "Sinh"
-                   : (strcmp(arc,"ArcCosh")==0) ? "Cosh" : "Tanh";
+    const char* Fh = (arc == SYM_ArcSinh) ? "Sinh"
+                   : (arc == SYM_ArcCosh) ? "Cosh" : "Tanh";
 
     /* theta = ArcF[args[ia]] + ArcF[args[ib]]; step 1: F[theta] - c == 0. */
     Expr* th = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
@@ -1311,10 +1311,10 @@ static int simp_invhyp_addition_is_zero(const Expr* e, const AssumeCtx* ctx) {
     for (int t = 0; t < 2; t++) {
         const Expr* a = (t == 0) ? args[ia] : args[ib];
         Expr* cond = NULL;
-        if (strcmp(arc,"ArcCosh") == 0)
+        if (arc == SYM_ArcCosh)
             cond = expr_new_function(expr_new_symbol("GreaterEqual"),
                        (Expr*[]){ expr_copy((Expr*)a), expr_new_integer(1) }, 2);
-        else if (strcmp(arc,"ArcTanh") == 0) {
+        else if (arc == SYM_ArcTanh) {
             Expr* lo = expr_new_function(expr_new_symbol("Less"),
                 (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)a) }, 2);
             Expr* hi = expr_new_function(expr_new_symbol("Less"),
@@ -1457,11 +1457,11 @@ static bool simp_has_rounding_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
-        if (strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
-            strcmp(h, "Round") == 0 || strcmp(h, "IntegerPart") == 0 ||
-            strcmp(h, "FractionalPart") == 0 || strcmp(h, "Mod") == 0 ||
-            strcmp(h, "Quotient") == 0 || strcmp(h, "GCD") == 0 ||
-            strcmp(h, "LCM") == 0 || strcmp(h, "LegendreP") == 0)
+        if (h == SYM_Floor || h == SYM_Ceiling ||
+            h == SYM_Round || h == SYM_IntegerPart ||
+            h == SYM_FractionalPart || h == SYM_Mod ||
+            h == SYM_Quotient || h == SYM_GCD ||
+            h == SYM_LCM || h == SYM_LegendreP)
             return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)

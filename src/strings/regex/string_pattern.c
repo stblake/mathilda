@@ -194,10 +194,10 @@ static long nonneg_int(const Expr* e) {
 static const char* predicate_class(const Expr* f) {
     if (f->type != EXPR_SYMBOL) return NULL;
     const char* name = f->data.symbol.name;
-    if (strcmp(name, "LetterQ") == 0)    return "[[:alpha:]]";
-    if (strcmp(name, "DigitQ") == 0)     return "[0-9]";
-    if (strcmp(name, "UpperCaseQ") == 0) return "[[:upper:]]";
-    if (strcmp(name, "LowerCaseQ") == 0) return "[[:lower:]]";
+    if (name == SYM_LetterQ)    return "[[:alpha:]]";
+    if (name == SYM_DigitQ)     return "[0-9]";
+    if (name == SYM_UpperCaseQ) return "[[:upper:]]";
+    if (name == SYM_LowerCaseQ) return "[[:lower:]]";
     return NULL;
 }
 

@@ -377,7 +377,7 @@ static bool read_size(const Expr* e, size_t* w, size_t* h)
     }
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
         e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol.name, "List") == 0) {
+        e->data.function.head->data.symbol.name == SYM_List) {
         const Expr* a = e->data.function.args[0];
         const Expr* b = e->data.function.args[1];
         if (a && b && a->type == EXPR_INTEGER && b->type == EXPR_INTEGER &&

@@ -310,7 +310,7 @@ Expr* builtin_integrate_series(Expr* res) {
             (opt->data.function.head->data.symbol.name == SYM_Rule ||
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
+            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Assumptions) {
                 as = opt->data.function.args[1];
                 continue;
             }

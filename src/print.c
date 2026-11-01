@@ -2017,16 +2017,16 @@ static bool tex_trig_lookup(const char* h, const char** tex, bool* inv) {
 /* Maps a named head to a TeX symbol when the function is to be rendered
  * like f(x). Returns NULL if the head should use its default name. */
 static const char* tex_function_name(const char* h) {
-    if (strcmp(h, "Log") == 0)      return "\\log ";
-    if (strcmp(h, "Exp") == 0)      return "\\exp ";
-    if (strcmp(h, "Sqrt") == 0)     return NULL; /* handled via \sqrt{} */
-    if (strcmp(h, "Abs") == 0)      return NULL; /* handled via |...|  */
-    if (strcmp(h, "Floor") == 0)    return NULL; /* handled via \lfloor */
-    if (strcmp(h, "Ceiling") == 0)  return NULL; /* handled via \lceil  */
-    if (strcmp(h, "Gamma") == 0)    return "\\Gamma ";
-    if (strcmp(h, "Re") == 0)       return "\\Re ";
-    if (strcmp(h, "Im") == 0)       return "\\Im ";
-    if (strcmp(h, "Conjugate") == 0)return NULL; /* handled via \overline */
+    if (h == SYM_Log)      return "\\log ";
+    if (h == SYM_Exp)      return "\\exp ";
+    if (h == SYM_Sqrt)     return NULL; /* handled via \sqrt{} */
+    if (h == SYM_Abs)      return NULL; /* handled via |...|  */
+    if (h == SYM_Floor)    return NULL; /* handled via \lfloor */
+    if (h == SYM_Ceiling)  return NULL; /* handled via \lceil  */
+    if (h == SYM_Gamma)    return "\\Gamma ";
+    if (h == SYM_Re)       return "\\Re ";
+    if (h == SYM_Im)       return "\\Im ";
+    if (h == SYM_Conjugate)return NULL; /* handled via \overline */
     return NULL;
 }
 

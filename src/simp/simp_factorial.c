@@ -724,8 +724,8 @@ static int simp_fact_count_like(const Expr* e) {
     int c = 0;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
-        if (strcmp(h, "Factorial") == 0 || strcmp(h, "Gamma") == 0 ||
-            strcmp(h, "Pochhammer") == 0 || strcmp(h, "Binomial") == 0) c++;
+        if (h == SYM_Factorial || h == SYM_Gamma ||
+            h == SYM_Pochhammer || h == SYM_Binomial) c++;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         c += simp_fact_count_like(e->data.function.args[i]);
@@ -751,11 +751,11 @@ static Expr* simp_fact_to_factorial(const Expr* e) {
     const char* h = node->data.function.head->data.symbol.name;
     size_t nn = node->data.function.arg_count;
     Expr* out = NULL;
-    if (strcmp(h, "Gamma") == 0 && nn == 1) {
+    if (h == SYM_Gamma && nn == 1) {
         Expr* zm1 = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
             (Expr*[]){ expr_copy(node->data.function.args[0]), expr_new_integer(-1) }, 2));
         out = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){ zm1 }, 1);
-    } else if (strcmp(h, "Pochhammer") == 0 && nn == 2) {
+    } else if (h == SYM_Pochhammer && nn == 2) {
         Expr* A = node->data.function.args[0];
         Expr* M = node->data.function.args[1];
         Expr* num = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){
@@ -767,7 +767,7 @@ static Expr* simp_fact_to_factorial(const Expr* e) {
         out = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ num,
             expr_new_function(expr_new_symbol("Power"),
                 (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2);
-    } else if (strcmp(h, "Binomial") == 0 && nn == 2) {
+    } else if (h == SYM_Binomial && nn == 2) {
         Expr* P = node->data.function.args[0];
         Expr* Q = node->data.function.args[1];
         Expr* fp = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){ expr_copy(P) }, 1);
@@ -797,7 +797,7 @@ static Expr* simp_fact_to_gamma(const Expr* e) {
     Expr* node = expr_new_function(expr_copy(e->data.function.head), a, n);
     free(a);
     if (node->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(node->data.function.head->data.symbol.name, "Factorial") == 0 &&
+        node->data.function.head->data.symbol.name == SYM_Factorial &&
         node->data.function.arg_count == 1) {
         Expr* zp1 = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
             (Expr*[]){ expr_copy(node->data.function.args[0]), expr_new_integer(1) }, 2));

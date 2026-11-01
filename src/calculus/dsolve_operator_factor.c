@@ -113,7 +113,7 @@ static Expr* extract_applied(Expr* r, const char* zfun) {
 static void of_scan_const(const Expr* e, int* mx) {
     if (!e || e->type != EXPR_FUNCTION) return;
     Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "C") == 0
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C
         && e->data.function.arg_count == 1
         && e->data.function.args[0]->type == EXPR_INTEGER) {
         int idx = (int)e->data.function.args[0]->data.integer;

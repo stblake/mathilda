@@ -671,16 +671,16 @@ Expr* builtin_squarefreeq(Expr* res) {
         }
         const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
-        if (name == SYM_GaussianIntegers || strcmp(name, "GaussianIntegers") == 0) {
+        if (name == SYM_GaussianIntegers || name == SYM_GaussianIntegers) {
             if (is_sym_eq(val, "True")) gaussian_setting = 1;
             else if (is_sym_eq(val, "False")) gaussian_setting = -1;
             else if (is_sym_eq(val, "Automatic")) gaussian_setting = 0;
             else { if (free_vars) free(vars); return sqfree_emit_par(opt); }
-        } else if (name == SYM_Modulus || strcmp(name, "Modulus") == 0) {
+        } else if (name == SYM_Modulus || name == SYM_Modulus) {
             bool zero = (val->type == EXPR_INTEGER && val->data.integer == 0) ||
                         (val->type == EXPR_BIGINT && mpz_sgn(val->data.bigint) == 0);
             if (!zero) modulus = opt;
-        } else if (strcmp(name, "Extension") == 0) {
+        } else if (name == SYM_Extension) {
             if (free_vars) free(vars);
             return NULL;
         } else {

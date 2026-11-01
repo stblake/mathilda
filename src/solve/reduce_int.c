@@ -27,7 +27,7 @@ static bool is_head(const Expr* e, const char* name) {
 static void collect_params(const Expr* e, Expr*** list, int* n) {
     if (!e || e->type != EXPR_FUNCTION) return;
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "C") == 0) {
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C) {
         for (int i = 0; i < *n; i++) if (expr_eq((*list)[i], e)) return;
         *list = realloc(*list, (size_t)(*n + 1) * sizeof(Expr*));
         (*list)[(*n)++] = expr_copy((Expr*)e);
@@ -45,7 +45,7 @@ static Expr* rename_param_head(const Expr* e, const char* head) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "C") == 0
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C
         && e->data.function.arg_count == 1) {
         return expr_new_function(expr_new_symbol(head),
             (Expr*[]){ expr_copy(e->data.function.args[0]) }, 1);

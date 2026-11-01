@@ -258,20 +258,20 @@ static bool free_of(Expr* e, Expr* target) { return !expr_contains(e, target); }
  * builtin exists, because plain substitution would silently pick one
  * side's value at a jump and produce a wrong-looking "clean" answer. */
 static bool is_discontinuous_head(const char* name) {
-    return strcmp(name, "Floor") == 0
-        || strcmp(name, "Ceiling") == 0
-        || strcmp(name, "Round") == 0
-        || strcmp(name, "FractionalPart") == 0
-        || strcmp(name, "IntegerPart") == 0
-        || strcmp(name, "Sign") == 0
-        || strcmp(name, "UnitStep") == 0
-        || strcmp(name, "HeavisideTheta") == 0
-        || strcmp(name, "KroneckerDelta") == 0
-        || strcmp(name, "DiscreteDelta") == 0
-        || strcmp(name, "Piecewise") == 0
-        || strcmp(name, "Boole") == 0
-        || strcmp(name, "Mod") == 0
-        || strcmp(name, "Quotient") == 0;
+    return name == SYM_Floor
+        || name == SYM_Ceiling
+        || name == SYM_Round
+        || name == SYM_FractionalPart
+        || name == SYM_IntegerPart
+        || name == SYM_Sign
+        || name == SYM_UnitStep
+        || name == SYM_HeavisideTheta
+        || name == SYM_KroneckerDelta
+        || name == SYM_DiscreteDelta
+        || name == SYM_Piecewise
+        || name == SYM_Boole
+        || name == SYM_Mod
+        || name == SYM_Quotient;
 }
 
 static bool is_known_head_symbol(const char* name) {
@@ -3797,11 +3797,11 @@ static Expr* try_step_function_onesided(Expr* f, LimitCtx* ctx) {
     if (f->data.function.head->type != EXPR_SYMBOL) return NULL;
     if (f->data.function.arg_count != 1) return NULL;
     const char* hn = f->data.function.head->data.symbol.name;
-    bool is_floor = strcmp(hn, "Floor") == 0;
-    bool is_ceil  = strcmp(hn, "Ceiling") == 0;
-    bool is_round = strcmp(hn, "Round") == 0;
-    bool is_frac  = strcmp(hn, "FractionalPart") == 0;
-    bool is_ipart = strcmp(hn, "IntegerPart") == 0;
+    bool is_floor = hn == SYM_Floor;
+    bool is_ceil  = hn == SYM_Ceiling;
+    bool is_round = hn == SYM_Round;
+    bool is_frac  = hn == SYM_FractionalPart;
+    bool is_ipart = hn == SYM_IntegerPart;
     if (!(is_floor || is_ceil || is_round || is_frac || is_ipart)) return NULL;
 
     Expr* g = f->data.function.args[0];
@@ -4298,11 +4298,11 @@ static bool assumption_abs_compare(Expr* a, Expr** out_expr, int* out_op,
 
     int op;
     bool can_swap = false;
-    if (!strcmp(head_name, "Less"))           { op = -1; can_swap = true; }
-    else if (!strcmp(head_name, "LessEqual")) { op = -2; can_swap = true; }
-    else if (!strcmp(head_name, "Greater"))   { op = +1; can_swap = true; }
-    else if (!strcmp(head_name, "GreaterEqual")) { op = +2; can_swap = true; }
-    else if (!strcmp(head_name, "Equal"))     { op = 0;  can_swap = true; }
+    if (head_name == SYM_Less)           { op = -1; can_swap = true; }
+    else if (head_name == SYM_LessEqual) { op = -2; can_swap = true; }
+    else if (head_name == SYM_Greater)   { op = +1; can_swap = true; }
+    else if (head_name == SYM_GreaterEqual) { op = +2; can_swap = true; }
+    else if (head_name == SYM_Equal)     { op = 0;  can_swap = true; }
     else return false;
 
     Expr* lhs = a->data.function.args[0];

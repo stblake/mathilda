@@ -160,12 +160,12 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
         if (!pm_is_head(r, "Rule") || r->data.function.arg_count != 2) return 0;
         const Expr* k = r->data.function.args[0];
         const Expr* v = r->data.function.args[1];
-        if (k->type == EXPR_SYMBOL && strcmp(k->data.symbol.name, "Modulus") == 0) {
+        if (k->type == EXPR_SYMBOL && k->data.symbol.name == SYM_Modulus) {
             if (v->type != EXPR_INTEGER) return 0;
             if (v->data.integer == 0) continue;          /* Modulus -> 0: over Q */
             if (v->data.integer < 2 || !n_is_prime((ulong)v->data.integer)) return 0;
             F->kind = PM_GF; F->p = (ulong)v->data.integer;
-        } else if (k->type == EXPR_SYMBOL && strcmp(k->data.symbol.name, "Extension") == 0) {
+        } else if (k->type == EXPR_SYMBOL && k->data.symbol.name == SYM_Extension) {
             if (!pm_is_head(v, "List") || v->data.function.arg_count != 2) return 0;
             ext = v;
         } else if (k->type == EXPR_STRING && xo &&

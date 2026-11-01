@@ -233,37 +233,37 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
     #define SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1() \
         make_times(SQRT_OF(X_PLUS_K(-1)), SQRT_OF(X_PLUS_K(1)))
 
-    if (strcmp(outer, "Sinh") == 0 && strcmp(inner, "ArcCosh") == 0) {
+    if (strcmp(outer, "Sinh") == 0 && inner == SYM_ArcCosh) {
         return SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1();
     }
-    if (strcmp(outer, "Cosh") == 0 && strcmp(inner, "ArcSinh") == 0) {
+    if (strcmp(outer, "Cosh") == 0 && inner == SYM_ArcSinh) {
         return SQRT_OF(ONE_PLUS_X_SQ());
     }
-    if (strcmp(outer, "Sinh") == 0 && strcmp(inner, "ArcTanh") == 0) {
+    if (strcmp(outer, "Sinh") == 0 && inner == SYM_ArcTanh) {
         Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
         Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
         return make_times(expr_copy(x), inv);
     }
-    if (strcmp(outer, "Cosh") == 0 && strcmp(inner, "ArcTanh") == 0) {
+    if (strcmp(outer, "Cosh") == 0 && inner == SYM_ArcTanh) {
         Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
     }
-    if (strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcSinh") == 0) {
+    if (strcmp(outer, "Tanh") == 0 && inner == SYM_ArcSinh) {
         Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
         Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
         return make_times(expr_copy(x), inv);
     }
-    if (strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcCosh") == 0) {
+    if (strcmp(outer, "Tanh") == 0 && inner == SYM_ArcCosh) {
         Expr* num = SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1();
         Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
         return make_times(num, inv_x);
     }
-    if ((strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcCoth") == 0) ||
-        (strcmp(outer, "Coth") == 0 && strcmp(inner, "ArcTanh") == 0)) {
+    if ((strcmp(outer, "Tanh") == 0 && inner == SYM_ArcCoth) ||
+        (strcmp(outer, "Coth") == 0 && inner == SYM_ArcTanh)) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
     }

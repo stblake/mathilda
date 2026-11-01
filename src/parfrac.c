@@ -143,10 +143,10 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     // Check if it's an equation, inequality, list, or logical function to thread over
     if (expr->type == EXPR_FUNCTION) {
         const char* head = expr->data.function.head->type == EXPR_SYMBOL ? expr->data.function.head->data.symbol.name : "";
-        if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 ||
-            strcmp(head, "Less") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
-            strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 ||
-            strcmp(head, "Not") == 0) {
+        if (head == SYM_List || head == SYM_Equal || head == SYM_Unequal ||
+            head == SYM_Less || head == SYM_LessEqual || head == SYM_Greater ||
+            head == SYM_GreaterEqual || head == SYM_And || head == SYM_Or ||
+            head == SYM_Not) {
             Expr** args = malloc(sizeof(Expr*) * expr->data.function.arg_count);
             for (size_t i = 0; i < expr->data.function.arg_count; i++) {
                 /* Build Apart[args[i], var?, Extension -> α?]. */

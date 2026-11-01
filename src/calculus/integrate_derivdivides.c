@@ -358,7 +358,7 @@ static Expr* dd_eval_bounded(Expr* call) {
         (Expr*[]){ call, expr_new_real(left), expr_new_symbol("$Aborted") }, 3);
     Expr* out = eval_take(guarded);                   /* consumes guarded */
     if (out && out->type == EXPR_SYMBOL
-        && strcmp(out->data.symbol.name, "$Aborted") == 0) {
+        && out->data.symbol.name == SYM_DollarAborted) {
         expr_free(out);
         return NULL;
     }

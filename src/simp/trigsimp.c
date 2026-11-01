@@ -246,19 +246,19 @@ Expr* builtin_trigtoexp(Expr* res) {
  * equations, inequalities, and logic functions.
  */
 static int trigexpand_threads_over(const char* name) {
-    return strcmp(name, "Equal") == 0 ||
-           strcmp(name, "Unequal") == 0 ||
-           strcmp(name, "Less") == 0 ||
-           strcmp(name, "LessEqual") == 0 ||
-           strcmp(name, "Greater") == 0 ||
-           strcmp(name, "GreaterEqual") == 0 ||
-           strcmp(name, "SameQ") == 0 ||
-           strcmp(name, "UnsameQ") == 0 ||
-           strcmp(name, "And") == 0 ||
-           strcmp(name, "Or") == 0 ||
-           strcmp(name, "Not") == 0 ||
-           strcmp(name, "Xor") == 0 ||
-           strcmp(name, "Implies") == 0;
+    return name == SYM_Equal ||
+           name == SYM_Unequal ||
+           name == SYM_Less ||
+           name == SYM_LessEqual ||
+           name == SYM_Greater ||
+           name == SYM_GreaterEqual ||
+           name == SYM_SameQ ||
+           name == SYM_UnsameQ ||
+           name == SYM_And ||
+           name == SYM_Or ||
+           name == SYM_Not ||
+           name == SYM_Xor ||
+           name == SYM_Implies;
 }
 
 /*
@@ -280,10 +280,10 @@ typedef struct {
 } TrigSquareList;
 
 static int trig_pair_kind(const char* name) {
-    if (strcmp(name, "Sin") == 0)  return 0;
-    if (strcmp(name, "Cos") == 0)  return 1;
-    if (strcmp(name, "Sinh") == 0) return 2;
-    if (strcmp(name, "Cosh") == 0) return 3;
+    if (name == SYM_Sin)  return 0;
+    if (name == SYM_Cos)  return 1;
+    if (name == SYM_Sinh) return 2;
+    if (name == SYM_Cosh) return 3;
     return -1;
 }
 
@@ -731,12 +731,12 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
 /* Names of the unary trig / hyperbolic atoms that TrigFactor and
  * TrigExpand operate on. */
 static bool is_trig_head(const char* h) {
-    return strcmp(h, "Sin") == 0 || strcmp(h, "Cos") == 0 ||
-           strcmp(h, "Tan") == 0 || strcmp(h, "Cot") == 0 ||
-           strcmp(h, "Sec") == 0 || strcmp(h, "Csc") == 0 ||
-           strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
-           strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0 ||
-           strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0;
+    return h == SYM_Sin || h == SYM_Cos ||
+           h == SYM_Tan || h == SYM_Cot ||
+           h == SYM_Sec || h == SYM_Csc ||
+           h == SYM_Sinh || h == SYM_Cosh ||
+           h == SYM_Tanh || h == SYM_Coth ||
+           h == SYM_Sech || h == SYM_Csch;
 }
 
 /* True if `e` is a unary trig atom: Sin[arg], Cos[arg], etc. */

@@ -257,7 +257,7 @@ static void sr_collect_syms(const Expr* e, const Expr*** out, size_t* n, size_t*
 /* True iff the symbol Pi appears anywhere in e. */
 static bool sr_mentions_pi(const Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "Pi") == 0;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_Pi;
     if (e->type == EXPR_FUNCTION) {
         if (sr_mentions_pi(e->data.function.head)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -541,9 +541,9 @@ static Expr* exp_ipi_coeff(const Expr* ex) {
  * cannot be determined. */
 static Expr* trig_pi_shift_symbolic(const AssumeCtx* ctx, const char* h,
                                     const Expr* arg) {
-    bool is_tan_cot = (strcmp(h, "Tan") == 0 || strcmp(h, "Cot") == 0);
-    bool is_sin_cos_sec_csc = (strcmp(h, "Sin") == 0 || strcmp(h, "Cos") == 0 ||
-                               strcmp(h, "Sec") == 0 || strcmp(h, "Csc") == 0);
+    bool is_tan_cot = (h == SYM_Tan || h == SYM_Cot);
+    bool is_sin_cos_sec_csc = (h == SYM_Sin || h == SYM_Cos ||
+                               h == SYM_Sec || h == SYM_Csc);
     if (!is_tan_cot && !is_sin_cos_sec_csc) return NULL;
 
     const Expr* single = arg;
@@ -618,9 +618,9 @@ static Expr* pi_i_integer_coeff(const Expr* term, const AssumeCtx* ctx) {
  * success, NULL if there is no integer-Pi-I part or the parity is undetermined. */
 static Expr* hyp_pi_i_shift_symbolic(const AssumeCtx* ctx, const char* h,
                                      const Expr* arg) {
-    bool is_tanh_coth = (strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0);
-    bool is_sign_flipping = (strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
-                             strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0);
+    bool is_tanh_coth = (h == SYM_Tanh || h == SYM_Coth);
+    bool is_sign_flipping = (h == SYM_Sinh || h == SYM_Cosh ||
+                             h == SYM_Sech || h == SYM_Csch);
     if (!is_tanh_coth && !is_sign_flipping) return NULL;
 
     const Expr* single = arg;
@@ -737,7 +737,7 @@ static Expr* invtrig_branch_reduce(const AssumeCtx* ctx, const char* arc,
     const double T = 1e-9;
     Expr* res = NULL;
 
-    if (strcmp(arc, "ArcSin") == 0) {
+    if (arc == SYM_ArcSin) {
         /* ArcSin[Sin[x]] = (-1)^k (x - k Pi) on [k Pi - Pi/2, k Pi + Pi/2]. */
         long k = lround((lo + hi) * 0.5 / PI);
         if (lo >= k * PI - PI / 2 - T && hi <= k * PI + PI / 2 + T) {
@@ -745,17 +745,17 @@ static Expr* invtrig_branch_reduce(const AssumeCtx* ctx, const char* arc,
             res = (k & 1) ? expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){ expr_new_integer(-1), emk }, 2) : emk;
         }
-    } else if (strcmp(arc, "ArcTan") == 0) {
+    } else if (arc == SYM_ArcTan) {
         /* ArcTan[Tan[x]] = x - k Pi on (k Pi - Pi/2, k Pi + Pi/2). */
         long k = lround((lo + hi) * 0.5 / PI);
         if (lo >= k * PI - PI / 2 - T && hi <= k * PI + PI / 2 + T)
             res = invtrig_e_minus_kpi(inner, k);
-    } else if (strcmp(arc, "ArcCot") == 0) {
+    } else if (arc == SYM_ArcCot) {
         /* ArcCot[Cot[x]] = x - k Pi on (k Pi, (k+1) Pi). */
         long k = (long)floor((lo + hi) * 0.5 / PI);
         if (lo >= k * PI - T && hi <= (k + 1) * PI + T)
             res = invtrig_e_minus_kpi(inner, k);
-    } else if (strcmp(arc, "ArcCos") == 0) {
+    } else if (arc == SYM_ArcCos) {
         /* ArcCos[Cos[x]] is even, period 2Pi: x - 2m Pi on [2m Pi,(2m+1)Pi];
          * 2m Pi - x on [(2m-1)Pi, 2m Pi]. */
         long seg = (long)floor((lo + hi) * 0.5 / PI);
@@ -795,7 +795,7 @@ static Expr* mk_scaled_inv(const char* invh, int coeff, int pi_off, const Expr* 
 
 static Expr* invtrig_multiangle_reduce(const AssumeCtx* ctx, const char* arc,
                                        const Expr* u) {
-    if (strcmp(arc, "ArcSin") != 0 && strcmp(arc, "ArcCos") != 0) return NULL;
+    if (arc != SYM_ArcSin && arc != SYM_ArcCos) return NULL;
     /* Argument must be a polynomial/radical (Plus/Times/Power), not a trig or
      * bare symbol -- the multiple-angle arguments 1-2x^2, 2x^2-1, 2x Sqrt[...]. */
     if (!sr_head(u, "Plus") && !sr_head(u, "Times") && !sr_head(u, "Power"))
@@ -853,9 +853,9 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * Sin[t + (2n+1) Pi] -> -Sin[t], Tan[t + n Pi] -> Tan[t], etc. The
          * coefficient-1 string rules only match a bare Times[n, Pi]; this
          * handles any integer-linear Pi coefficient (2n, 2n+1, ...). */
-        if ((strcmp(h, "Sin") == 0 || strcmp(h, "Cos") == 0 ||
-             strcmp(h, "Tan") == 0 || strcmp(h, "Cot") == 0 ||
-             strcmp(h, "Sec") == 0 || strcmp(h, "Csc") == 0) && ctx) {
+        if ((h == SYM_Sin || h == SYM_Cos ||
+             h == SYM_Tan || h == SYM_Cot ||
+             h == SYM_Sec || h == SYM_Csc) && ctx) {
             Expr* out = trig_pi_shift_symbolic(ctx, h, a0);
             if (out) { expr_free(node); *changed = 1; return out; }
         }
@@ -863,27 +863,27 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         /* Imaginary-period shift for the hyperbolic family: Sinh[t + 2 n Pi I]
          * -> Sinh[t], Tanh[t + n Pi I] -> Tanh[t], etc. (period 2 Pi I for
          * Sinh/Cosh/Sech/Csch, Pi I for Tanh/Coth). */
-        if ((strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
-             strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0 ||
-             strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0) && ctx) {
+        if ((h == SYM_Sinh || h == SYM_Cosh ||
+             h == SYM_Tanh || h == SYM_Coth ||
+             h == SYM_Sech || h == SYM_Csch) && ctx) {
             Expr* out = hyp_pi_i_shift_symbolic(ctx, h, a0);
             if (out) { expr_free(node); *changed = 1; return out; }
         }
 
         /* Integer-valued roundings of a provably-integer argument. */
-        if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
-             strcmp(h, "Round") == 0 || strcmp(h, "IntegerPart") == 0) &&
+        if ((h == SYM_Floor || h == SYM_Ceiling ||
+             h == SYM_Round || h == SYM_IntegerPart) &&
             assume_known_integer(ctx, a0)) {
             Expr* out = expr_copy(a0); expr_free(node); *changed = 1; return out;
         }
-        if (strcmp(h, "FractionalPart") == 0 && assume_known_integer(ctx, a0)) {
+        if (h == SYM_FractionalPart && assume_known_integer(ctx, a0)) {
             expr_free(node); *changed = 1; return expr_new_integer(0);
         }
 
         /* Double factorial of an even integer argument: (2q)!! = 2^q q!,
          * gated on q = arg/2 being a provable integer (so it declines for a
          * generic/odd argument). The odd case is handled elsewhere. */
-        if (strcmp(h, "Factorial2") == 0 && ctx) {
+        if (h == SYM_Factorial2 && ctx) {
             Expr* half = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){ expr_copy(a0),
                            expr_new_function(expr_new_symbol(SYM_Rational),
@@ -905,8 +905,8 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * the provably-integer part k out of a sum argument. Sound for any
          * integer k; fires only when there is both an integer part and a
          * non-integer remainder. */
-        if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
-             strcmp(h, "Round") == 0 || strcmp(h, "FractionalPart") == 0) &&
+        if ((h == SYM_Floor || h == SYM_Ceiling ||
+             h == SYM_Round || h == SYM_FractionalPart) &&
             ctx && sr_head(a0, "Plus")) {
             size_t na = a0->data.function.arg_count;
             Expr** kp = (Expr**)malloc(na * sizeof(Expr*)); size_t nkp = 0;
@@ -923,7 +923,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                         : expr_new_function(expr_new_symbol(SYM_Plus), tp, ntp);
                 free(kp); free(tp);
                 Expr* out;
-                if (strcmp(h, "FractionalPart") == 0) {
+                if (h == SYM_FractionalPart) {
                     expr_free(K);
                     out = expr_new_function(expr_new_symbol("FractionalPart"),
                               (Expr*[]){ T }, 1);
@@ -948,7 +948,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * definition of floor-division; the Mod residue is reduced by the
          * Mod rules below (iterated by the Simplify confluence post-pass), so
          * e.g. Floor[n/2] + Ceiling[n/2] -> n. */
-        if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0) && ctx) {
+        if ((h == SYM_Floor || h == SYM_Ceiling) && ctx) {
             Expr* den = eval_and_free(expr_new_function(
                             expr_new_symbol("Denominator"),
                             (Expr*[]){ expr_copy(a0) }, 1));
@@ -956,7 +956,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                 Expr* P = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                               (Expr*[]){ expr_copy(a0), expr_copy(den) }, 2));
                 if (prov_int(ctx, P)) {
-                    bool is_floor = (strcmp(h, "Floor") == 0);
+                    bool is_floor = (h == SYM_Floor);
                     /* residue argument: P (Floor) or -P (Ceiling) */
                     Expr* resarg = is_floor ? expr_copy(P)
                         : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
@@ -986,18 +986,18 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         }
 
         /* Ceiling[x] / Floor[x] pinned to a single integer by numeric bounds. */
-        if ((strcmp(h, "Ceiling") == 0 || strcmp(h, "Floor") == 0) &&
+        if ((h == SYM_Ceiling || h == SYM_Floor) &&
             a0->type == EXPR_SYMBOL) {
             bool hl, hu, ls = false, us = false; double lo = 0, hi = 0;
             sr_bounds(ctx, a0, &hl, &lo, &ls, &hu, &hi, &us);
-            if (strcmp(h, "Ceiling") == 0 && hu && hl) {
+            if (h == SYM_Ceiling && hu && hl) {
                 long c = (long)ceil(hi);
                 if ((double)c >= hi &&                       /* s <= c */
                     (lo > (double)(c - 1) || (lo == (double)(c - 1) && ls))) { /* s > c-1 */
                     expr_free(node); *changed = 1; return expr_new_integer(c);
                 }
             }
-            if (strcmp(h, "Floor") == 0 && hl && hu) {
+            if (h == SYM_Floor && hl && hu) {
                 long fl = (long)floor(lo);
                 if ((double)fl <= lo &&                      /* s >= f */
                     (hi < (double)(fl + 1) || (hi == (double)(fl + 1) && us))) { /* s < f+1 */
@@ -1007,7 +1007,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         }
 
         /* FractionalPart[a] from a Mod[a,1] fact plus the sign of a. */
-        if (strcmp(h, "FractionalPart") == 0 && a0->type == EXPR_SYMBOL && ctx) {
+        if (h == SYM_FractionalPart && a0->type == EXPR_SYMBOL && ctx) {
             for (size_t i = 0; i < ctx->count; i++) {
                 const Expr* f = ctx->facts[i];
                 if (!fact_is_function(f, "Equal", 2)) continue;
@@ -1038,7 +1038,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * c).  prov_pos already descends Times/Power, so a^2, 2a, 1/a^2, ... are
          * recognised as positive under a > 0.  Fixes the Arg[...]-laden keyhole
          * forms (e.g. Log[x]/(x^2+a^2), x/Sinh[a x]). */
-        if (strcmp(h, "Arg") == 0 && ctx) {
+        if (h == SYM_Arg && ctx) {
             if (assume_known_positive(ctx, a0)) {
                 expr_free(node); *changed = 1; return expr_new_integer(0);
             }
@@ -1081,19 +1081,19 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * so the difference would not cancel; the reflection produces the matching
          * single-angle form directly. Runs BEFORE the generic ComplexExpand block
          * below so it wins for this safe family. */
-        if (strcmp(h, "Conjugate") == 0 && a0->type == EXPR_FUNCTION &&
+        if (h == SYM_Conjugate && a0->type == EXPR_FUNCTION &&
             a0->data.function.head &&
             a0->data.function.head->type == EXPR_SYMBOL &&
             a0->data.function.arg_count == 1) {
             const char* fh = a0->data.function.head->data.symbol.name;
             bool reflect_safe =
-                strcmp(fh, "Sin") == 0  || strcmp(fh, "Cos") == 0  ||
-                strcmp(fh, "Tan") == 0  || strcmp(fh, "Cot") == 0  ||
-                strcmp(fh, "Sec") == 0  || strcmp(fh, "Csc") == 0  ||
-                strcmp(fh, "Sinh") == 0 || strcmp(fh, "Cosh") == 0 ||
-                strcmp(fh, "Tanh") == 0 || strcmp(fh, "Coth") == 0 ||
-                strcmp(fh, "Sech") == 0 || strcmp(fh, "Csch") == 0 ||
-                strcmp(fh, "Exp") == 0;
+                fh == SYM_Sin  || fh == SYM_Cos  ||
+                fh == SYM_Tan  || fh == SYM_Cot  ||
+                fh == SYM_Sec  || fh == SYM_Csc  ||
+                fh == SYM_Sinh || fh == SYM_Cosh ||
+                fh == SYM_Tanh || fh == SYM_Coth ||
+                fh == SYM_Sech || fh == SYM_Csch ||
+                fh == SYM_Exp;
             if (reflect_safe) {
                 const Expr* z = a0->data.function.args[0];
                 const Expr** syms = NULL; size_t ns = 0, cap = 0;
@@ -1127,8 +1127,8 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * where the assumptions make Log[b] itself real.  This is what turns the
          * principal value Re[-I Pi - Log[a] + Log[b]] (a, b > 0) into
          * Log[b] - Log[a] instead of (Log[b^2] - Log[a^2])/2. */
-        if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0) && ctx) {
-            bool is_re = strcmp(h, "Re") == 0;
+        if ((h == SYM_Re || h == SYM_Im) && ctx) {
+            bool is_re = h == SYM_Re;
             if (prov_re(ctx, a0)) {
                 Expr* out = is_re ? expr_copy(a0) : expr_new_integer(0);
                 expr_free(node); *changed = 1; return out;
@@ -1170,9 +1170,9 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                 free(re); free(rest);
             }
         }
-        if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 ||
-             strcmp(h, "Conjugate") == 0 || strcmp(h, "Arg") == 0 ||
-             strcmp(h, "Abs") == 0)) {
+        if ((h == SYM_Re || h == SYM_Im ||
+             h == SYM_Conjugate || h == SYM_Arg ||
+             h == SYM_Abs)) {
             const Expr** syms = NULL; size_t ns = 0, cap = 0;
             sr_collect_syms(a0, &syms, &ns, &cap);
             bool all_real = (ns > 0);
@@ -1188,7 +1188,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         }
 
         /* ArcTan[Tan[e]] -> e when Re[e] (or e itself) lies in (-Pi/2, Pi/2). */
-        if (strcmp(h, "ArcTan") == 0 && sr_head(a0, "Tan") &&
+        if (h == SYM_ArcTan && sr_head(a0, "Tan") &&
             a0->data.function.arg_count == 1) {
             const Expr* inner = a0->data.function.args[0];
             Expr* pihalf = eval_and_free(parse_expression("Pi/2"));
@@ -1208,13 +1208,13 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * -e for e <= 0.  Each gate is an EXISTING prover; no new machinery. */
         /* Sinh/Tanh and their reciprocals Csch/Coth are odd bijections of the
          * reals (Csch/Coth on R\{0}), so Arc[.][.[e]] = e for real e. */
-        if ((strcmp(h, "ArcSinh") == 0 && sr_head(a0, "Sinh") &&
+        if ((h == SYM_ArcSinh && sr_head(a0, "Sinh") &&
              a0->data.function.arg_count == 1) ||
-            (strcmp(h, "ArcTanh") == 0 && sr_head(a0, "Tanh") &&
+            (h == SYM_ArcTanh && sr_head(a0, "Tanh") &&
              a0->data.function.arg_count == 1) ||
-            (strcmp(h, "ArcCsch") == 0 && sr_head(a0, "Csch") &&
+            (h == SYM_ArcCsch && sr_head(a0, "Csch") &&
              a0->data.function.arg_count == 1) ||
-            (strcmp(h, "ArcCoth") == 0 && sr_head(a0, "Coth") &&
+            (h == SYM_ArcCoth && sr_head(a0, "Coth") &&
              a0->data.function.arg_count == 1)) {
             const Expr* inner = a0->data.function.args[0];
             if (prov_re(ctx, inner)) {
@@ -1223,9 +1223,9 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         }
         /* Cosh is even with ArcCosh range [0,inf); Sech is even with ArcSech
          * range [0,inf).  So Arc[.][.[e]] = |e| = e for e >= 0, -e for e <= 0. */
-        if ((strcmp(h, "ArcCosh") == 0 && sr_head(a0, "Cosh") &&
+        if ((h == SYM_ArcCosh && sr_head(a0, "Cosh") &&
              a0->data.function.arg_count == 1) ||
-            (strcmp(h, "ArcSech") == 0 && sr_head(a0, "Sech") &&
+            (h == SYM_ArcSech && sr_head(a0, "Sech") &&
              a0->data.function.arg_count == 1)) {
             const Expr* inner = a0->data.function.args[0];
             if (assume_known_nonneg(ctx, inner)) {
@@ -1245,12 +1245,12 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * ArcCot[Cot[e]] = e exactly when Re[e] (or e) lies in that strip. The
          * trig ranges are closed (identity holds at the endpoints) -> sr_proves_sle;
          * the ArcCot range is open (Cot singular at 0, Pi) -> sr_proves_slt. */
-        if ((strcmp(h, "ArcSin") == 0 && sr_head(a0, "Sin") &&
+        if ((h == SYM_ArcSin && sr_head(a0, "Sin") &&
              a0->data.function.arg_count == 1) ||
-            (strcmp(h, "ArcCos") == 0 && sr_head(a0, "Cos") &&
+            (h == SYM_ArcCos && sr_head(a0, "Cos") &&
              a0->data.function.arg_count == 1)) {
             const Expr* inner = a0->data.function.args[0];
-            bool is_sin = (strcmp(h, "ArcSin") == 0);
+            bool is_sin = (h == SYM_ArcSin);
             Expr* lo = eval_and_free(parse_expression(is_sin ? "-Pi/2" : "0"));
             Expr* hi = eval_and_free(parse_expression(is_sin ? "Pi/2" : "Pi"));
             Expr* u_re = eval_and_free(expr_new_function(expr_new_symbol(SYM_Re),
@@ -1260,7 +1260,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             expr_free(lo); expr_free(hi); expr_free(u_re);
             if (ok) { Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out; }
         }
-        if (strcmp(h, "ArcCot") == 0 && sr_head(a0, "Cot") &&
+        if (h == SYM_ArcCot && sr_head(a0, "Cot") &&
             a0->data.function.arg_count == 1) {
             const Expr* inner = a0->data.function.args[0];
             Expr* lo = eval_and_free(parse_expression("0"));
@@ -1278,10 +1278,10 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * after the principal-range checks above, which only match a literal
          * bound fact (so e.g. ArcCos[Cos[x]] on Pi/2 < x < Pi, a sub-interval of
          * [0,Pi], and ArcSin[Sin[x]] -> Pi - x on the k=1 branch fall here). */
-        if (((strcmp(h, "ArcSin") == 0 && sr_head(a0, "Sin")) ||
-             (strcmp(h, "ArcCos") == 0 && sr_head(a0, "Cos")) ||
-             (strcmp(h, "ArcTan") == 0 && sr_head(a0, "Tan")) ||
-             (strcmp(h, "ArcCot") == 0 && sr_head(a0, "Cot"))) &&
+        if (((h == SYM_ArcSin && sr_head(a0, "Sin")) ||
+             (h == SYM_ArcCos && sr_head(a0, "Cos")) ||
+             (h == SYM_ArcTan && sr_head(a0, "Tan")) ||
+             (h == SYM_ArcCot && sr_head(a0, "Cot"))) &&
             a0->data.function.arg_count == 1 && ctx) {
             Expr* out = invtrig_branch_reduce(ctx, h, a0->data.function.args[0]);
             if (out) { expr_free(node); *changed = 1; return out; }
@@ -1291,7 +1291,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * ArcCos[2x^2-1]->Pi-2ArcSin[x] (= 2ArcCos[x]), ArcSin[2x Sqrt[1-x^2]]->
          * 2ArcSin[x]. Applied only on a Reduce proof of the equality over the
          * region, so sound on whichever branch the region occupies. */
-        if ((strcmp(h, "ArcSin") == 0 || strcmp(h, "ArcCos") == 0) && ctx) {
+        if ((h == SYM_ArcSin || h == SYM_ArcCos) && ctx) {
             Expr* out = invtrig_multiangle_reduce(ctx, h, a0);
             if (out) { expr_free(node); *changed = 1; return out; }
         }
@@ -1302,7 +1302,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * is essential. It exposes exactly the combined-radical Log form a user
          * writes, so ArcCosh[u] - Log[u + Sqrt[u^2-1]] cancels. (ArcCosh[Cosh[e]]
          * is handled sign-wise above; this fires for any other argument.) */
-        if (strcmp(h, "ArcCosh") == 0 && !sr_head(a0, "Cosh")) {
+        if (h == SYM_ArcCosh && !sr_head(a0, "Cosh")) {
             const Expr* u = a0;
             Expr* um1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                             (Expr*[]){ expr_copy((Expr*)u), expr_new_integer(-1) }, 2));
@@ -1330,7 +1330,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
      * of PowerExpand's unconditional strip-ignoring collapse: e.g.
      * Sqrt[E^(2 I x)] -> E^(I x) under -Pi/2 < x < Pi/2. The structural guard
      * (base is a literal E-power) keeps the Reduce entailment call rare. */
-    if (strcmp(h, "Power") == 0 && nn == 2 && ctx) {
+    if (h == SYM_Power && nn == 2 && ctx) {
         const Expr* base = node->data.function.args[0];
         const Expr* r = node->data.function.args[1];
         if (base->type == EXPR_FUNCTION && base->data.function.head &&
@@ -1371,7 +1371,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
      * (b^p)^q != b^(p q) (e.g. a > 0 alone does NOT license (a^p)^q -> a^(p q)).
      * The outer-integer case (sound for any base/inner exponent) is handled
      * separately in simp_power.c. */
-    if (strcmp(h, "Power") == 0 && nn == 2 && ctx) {
+    if (h == SYM_Power && nn == 2 && ctx) {
         const Expr* base = node->data.function.args[0];
         const Expr* q = node->data.function.args[1];
         if (base->type == EXPR_FUNCTION && base->data.function.head &&
@@ -1392,7 +1392,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
 
     /* Root-of-unity power: (-1)^E, I^E, (-I)^E, E^(I Pi X) under integer
      * assumptions, reduced by canon_neg1_pow. All route to (-1)^Y. */
-    if (strcmp(h, "Power") == 0 && nn == 2 && ctx) {
+    if (h == SYM_Power && nn == 2 && ctx) {
         const Expr* base = node->data.function.args[0];
         const Expr* ex   = node->data.function.args[1];
         Expr* Y = NULL;
@@ -1427,7 +1427,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
      *   Mod[P, 2] -> Mod[R, 2] where R is the Boolean-ring reduction of P
      *                          (parity-preserving; e.g. Mod[n^2,2] -> Mod[n,2],
      *                           Mod[-n,2] -> Mod[n,2]). */
-    if (strcmp(h, "Mod") == 0 && nn == 2 && ctx) {
+    if (h == SYM_Mod && nn == 2 && ctx) {
         Expr* c = node->data.function.args[0];
         Expr* m = node->data.function.args[1];
         if (prov_int(ctx, c) && prov_int(ctx, m)) {
@@ -1453,7 +1453,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
     }
 
     /* Mod[a, m] -> r from an Element[(a + c)/m, Integers] fact. */
-    if (strcmp(h, "Mod") == 0 && nn == 2 && ctx) {
+    if (h == SYM_Mod && nn == 2 && ctx) {
         Expr* a = node->data.function.args[0];
         Expr* m = node->data.function.args[1];
         if (m->type == EXPR_INTEGER && m->data.integer > 0) {
@@ -1482,7 +1482,7 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
 
     /* LegendreP[n, -1] -> (-1)^n for integer n (P_n(1)=1 is unconditional and
      * handled in the evaluator; at x=-1 the closed form needs n integer). */
-    if (strcmp(h, "LegendreP") == 0 && nn == 2 && ctx) {
+    if (h == SYM_LegendreP && nn == 2 && ctx) {
         Expr* n_e = node->data.function.args[0];
         Expr* x_e = node->data.function.args[1];
         if (x_e->type == EXPR_INTEGER && x_e->data.integer == -1 &&
@@ -1496,11 +1496,11 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
     /* Symbolic GCD/LCM of provable integers:
      *   GCD[a,a] = LCM[a,a] = Abs[a],  GCD[a,1] = 1,  LCM[a,1] = Abs[a],
      *   GCD[a,b] = 1 when |a-b| = 1 (consecutive integers are coprime). */
-    if ((strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0) && nn == 2 && ctx) {
+    if ((h == SYM_GCD || h == SYM_LCM) && nn == 2 && ctx) {
         Expr* a = node->data.function.args[0];
         Expr* b = node->data.function.args[1];
         if (prov_int(ctx, a) && prov_int(ctx, b)) {
-            bool isgcd = (strcmp(h, "GCD") == 0);
+            bool isgcd = (h == SYM_GCD);
             bool a1 = (a->type == EXPR_INTEGER && a->data.integer == 1);
             bool b1 = (b->type == EXPR_INTEGER && b->data.integer == 1);
             Expr* out = NULL;

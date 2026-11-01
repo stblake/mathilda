@@ -1,6 +1,7 @@
 
 #include "test_utils.h"
 #include "match.h"
+#include "sym_intern.h"   /* env keys are interned names */
 #include "expr.h"
 #include "parse.h"
 #include "symtab.h"
@@ -60,8 +61,8 @@ void test_match_extensive_named_patterns() {
     Expr* e = parse_or_die("f[1, 2]");
     Expr* p = parse_or_die("f[x_, y_]");
     ASSERT(match(e, p, env) == true);
-    ASSERT(expr_eq(env_get(env, "x"), parse_or_die("1")));
-    ASSERT(expr_eq(env_get(env, "y"), parse_or_die("2")));
+    ASSERT(expr_eq(env_get(env, intern_symbol("x")), parse_or_die("1")));
+    ASSERT(expr_eq(env_get(env, intern_symbol("y")), parse_or_die("2")));
     expr_free(e); expr_free(p); env_free(env);
 
     env = env_new();
@@ -140,12 +141,12 @@ void test_match_extensive_named_sequences() {
     
     printf("  Checking x...\n");
     Expr* expected_x = parse_or_die("1");
-    ASSERT(expr_eq(env_get(env, "x"), expected_x));
+    ASSERT(expr_eq(env_get(env, intern_symbol("x")), expected_x));
     expr_free(expected_x);
     
     printf("  Checking y...\n");
     // y should be Sequence[2, 3]
-    Expr* val_y = env_get(env, "y");
+    Expr* val_y = env_get(env, intern_symbol("y"));
     ASSERT(val_y != NULL);
     printf("  y found in env, type=%d\n", val_y->type);
     ASSERT(val_y->type == EXPR_FUNCTION && strcmp(val_y->data.function.head->data.symbol.name, "Sequence") == 0);

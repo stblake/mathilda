@@ -216,7 +216,7 @@ static bool entry_to_cplx(Expr* e, cplx_t* out) {
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out = c_make(mpfr_get_d(e->data.mpfr, MPFR_RNDN), 0); return true; }
 #endif
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, "I") == 0) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) {
         *out = c_make(0.0, 1.0);
         return true;
     }

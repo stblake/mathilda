@@ -414,11 +414,11 @@ static bool sum_body_is_expensive(const Expr* f) {
  * definite (index-oblivious) value for a SYMBOLIC one -- EvenQ[k]/PrimeQ[k]/
  * IntegerQ[k] fold to False, SquareFreeQ[k] to True. */
 static bool sum_head_is_index_predicate(const char* h) {
-    return strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0
-        || strcmp(h, "PrimeQ") == 0 || strcmp(h, "CompositeQ") == 0
-        || strcmp(h, "PrimePowerQ") == 0 || strcmp(h, "IntegerQ") == 0
-        || strcmp(h, "SquareFreeQ") == 0 || strcmp(h, "CoprimeQ") == 0
-        || strcmp(h, "Divisible") == 0;
+    return h == SYM_EvenQ || h == SYM_OddQ
+        || h == SYM_PrimeQ || strcmp(h, "CompositeQ") == 0
+        || h == SYM_PrimePowerQ || h == SYM_IntegerQ
+        || h == SYM_SquareFreeQ || h == SYM_CoprimeQ
+        || h == SYM_Divisible;
 }
 
 static bool expr_mentions_symbol(const Expr* e, const char* name) {
@@ -454,7 +454,7 @@ static bool sum_body_has_index_predicate(const Expr* e, const char* ivar) {
      * opaque object -- D[a^2, {a, b}[[j]]] folds to 0 -- so the closed form
      * is of a different summand.  Enumerate, as Mathematica does. */
     if (e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Part") == 0) {
+        && e->data.function.head->data.symbol.name == SYM_Part) {
         for (size_t i = 1; i < e->data.function.arg_count; i++)
             if (expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
     }

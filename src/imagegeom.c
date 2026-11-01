@@ -148,7 +148,7 @@ static bool rs_parse_option(Expr* o, Resample* out) {
     if (!lhs || lhs->type != EXPR_SYMBOL
         || strcmp(lhs->data.symbol.name, "Resampling") != 0) return false;
     Expr* rhs = o->data.function.args[1];
-    if (rhs && rhs->type == EXPR_SYMBOL && strcmp(rhs->data.symbol.name, "Automatic") == 0) {
+    if (rhs && rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
         *out = RS_AUTO; return true;
     }
     if (!rhs || rhs->type != EXPR_STRING) return false;
@@ -491,10 +491,10 @@ static void rot_free_run(const double* src, double* dst, size_t w, size_t h, siz
 static double rot_side_angle(const Expr* e) {
     if (!e || e->type != EXPR_SYMBOL || !e->data.symbol.name) return -1.0;
     const char* n = e->data.symbol.name;
-    if (strcmp(n, "Right") == 0)  return 0.0;
-    if (strcmp(n, "Top") == 0)    return M_PI / 2.0;
-    if (strcmp(n, "Left") == 0)   return M_PI;
-    if (strcmp(n, "Bottom") == 0) return 1.5 * M_PI;
+    if (n == SYM_Right)  return 0.0;
+    if (n == SYM_Top)    return M_PI / 2.0;
+    if (n == SYM_Left)   return M_PI;
+    if (n == SYM_Bottom) return 1.5 * M_PI;
     return -1.0;
 }
 
@@ -627,8 +627,8 @@ static int reflect_side_axis(const Expr* sd) {
     if (!sd || sd->type != EXPR_SYMBOL) return -1;
     const char* n = sd->data.symbol.name;
     if (!n) return -1;
-    if (strcmp(n, "Top") == 0 || strcmp(n, "Bottom") == 0) return 1;
-    if (strcmp(n, "Left") == 0 || strcmp(n, "Right") == 0) return 2;
+    if (n == SYM_Top || n == SYM_Bottom) return 1;
+    if (n == SYM_Left || n == SYM_Right) return 2;
     if (strcmp(n, "Front") == 0 || strcmp(n, "Back") == 0) return 0;
     return -1;
 }

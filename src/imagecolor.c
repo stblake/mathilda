@@ -16,6 +16,7 @@
 #include "attr.h"
 #include "image.h"
 #include "imagecolor.h"
+#include "sym_names.h"
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -40,13 +41,13 @@ static bool read_colour(const Expr* e, double rgb[3])
         size_t n = e->data.function.arg_count;
         double v[3];
         size_t i;
-        if ((strcmp(head, "GrayLevel") == 0 || strcmp(head, "Graylevel") == 0) && n >= 1) {
+        if ((head == SYM_GrayLevel || strcmp(head, "Graylevel") == 0) && n >= 1) {
             const Expr* a = e->data.function.args[0];
             if (a->type == EXPR_INTEGER)   { rgb[0] = rgb[1] = rgb[2] = (double)a->data.integer; return true; }
             if (a->type == EXPR_REAL)      { rgb[0] = rgb[1] = rgb[2] = a->data.real; return true; }
             return false;
         }
-        if ((strcmp(head, "RGBColor") == 0 || strcmp(head, "List") == 0) && n >= 3) {
+        if ((head == SYM_RGBColor || head == SYM_List) && n >= 3) {
             for (i = 0; i < 3; i++) {
                 const Expr* a = e->data.function.args[i];
                 if (a->type == EXPR_INTEGER)  v[i] = (double)a->data.integer;
@@ -58,7 +59,7 @@ static bool read_colour(const Expr* e, double rgb[3])
         }
         /* RGBColor[grey] is not a thing, but GrayLevel-like one-argument colour heads are common
          * enough that a single component is read as grey rather than declined. */
-        if (strcmp(head, "RGBColor") == 0 && n == 1) {
+        if (head == SYM_RGBColor && n == 1) {
             const Expr* a = e->data.function.args[0];
             if (a->type == EXPR_REAL) { rgb[0] = rgb[1] = rgb[2] = a->data.real; return true; }
         }
@@ -82,10 +83,10 @@ static size_t read_rules(const Expr* e, double (*from)[3], double (*to)[3], size
         e->data.function.head->type != EXPR_SYMBOL) return 0;
     {
         const char* head = e->data.function.head->data.symbol.name;
-        if (strcmp(head, "Rule") == 0) {
+        if (head == SYM_Rule) {
             items[0] = e;
             n = 1;
-        } else if (strcmp(head, "List") == 0) {
+        } else if (head == SYM_List) {
             n = e->data.function.arg_count;
             if (n == 0 || n > 64) return 0;
             for (i = 0; i < n; i++) items[i] = e->data.function.args[i];
@@ -98,7 +99,7 @@ static size_t read_rules(const Expr* e, double (*from)[3], double (*to)[3], size
         const Expr* r = items[i];
         if (!r || r->type != EXPR_FUNCTION || !r->data.function.head ||
             r->data.function.head->type != EXPR_SYMBOL ||
-            strcmp(r->data.function.head->data.symbol.name, "Rule") != 0 ||
+            r->data.function.head->data.symbol.name != SYM_Rule ||
             r->data.function.arg_count != 2) return 0;
         if (!read_colour(r->data.function.args[0], from[i])) return 0;
         if (!read_colour(r->data.function.args[1], to[i])) return 0;

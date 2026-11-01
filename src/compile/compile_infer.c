@@ -178,8 +178,8 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         CompileType st; if (scope_find(c, nm, &st, NULL) >= 0) { *out = st; return true; }
         int k = arg_find(c, nm);
         if (k >= 0) { *out = c->arg_types[k]; return true; }
-        if (strcmp(nm, "True") == 0 || strcmp(nm, "False") == 0) { *out = CT_BOOL; return true; }
-        if (strcmp(nm, "I") == 0) { *out = CT_COMPLEX; return true; }
+        if (nm == SYM_True || nm == SYM_False) { *out = CT_BOOL; return true; }
+        if (nm == SYM_I) { *out = CT_COMPLEX; return true; }
         double cv; if (named_const(nm, &cv)) { *out = CT_REAL; return true; }
         Slot gi; CompileType gt;
         if (global_const(c, nm, &gi, &gt)) { *out = gt; return true; }
@@ -208,15 +208,15 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     { CompileType at; if (try_infer_assoc(c, h, A, na, &at)) { *out = at; return true; } }
     CompileType ta, tb;
     #define IT(idx, dst) do { if (!infer_type(c, A[idx], &dst)) return false; } while (0)
-    if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+    if (h == SYM_Plus || h == SYM_Times) {
         if (na == 0) { *out = CT_INT; return true; }
         IT(0, ta); for (size_t i = 1; i < na; i++) { IT(i, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; }
         *out = ta; return true;
     }
-    if (strcmp(h, "Subtract") == 0 && na == 2) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; *out = ta; return true; }
-    if (strcmp(h, "Minus") == 0 && na == 1)    { IT(0, ta); if (ta == CT_BOOL) return false; *out = ta; return true; }
-    if (strcmp(h, "Divide") == 0 && na == 2)   { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true; }
-    if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) {
+    if (h == SYM_Subtract && na == 2) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; *out = ta; return true; }
+    if (h == SYM_Minus && na == 1)    { IT(0, ta); if (ta == CT_BOOL) return false; *out = ta; return true; }
+    if (h == SYM_Divide && na == 2)   { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0) return false; if (ta < CT_REAL) ta = CT_REAL; *out = ta; return true; }
+    if ((h == SYM_Mod || h == SYM_Quotient) && na == 2) {
         IT(0, ta); IT(1, tb);
         /* An array operand is the registered binary kernel's business.  Both
          * heads have exact int64 arms and no complex one, so this branch used
@@ -244,7 +244,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         return false;
     }
-    if (strcmp(h, "Power") == 0 && na == 2) {
+    if (h == SYM_Power && na == 2) {
         IT(0, ta);
         if (A[1]->type == EXPR_INTEGER) {
             CompileType el = elem_of(ta);
@@ -269,12 +269,12 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return true;
     }
     uint16_t or_, oc_;
-    if (na == 1 && (unary_math(h, &or_, &oc_) || strcmp(h, "Tanh") == 0)) {
+    if (na == 1 && (unary_math(h, &or_, &oc_) || h == SYM_Tanh)) {
         IT(0, ta);
         *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
         return true;
     }
-    if (strcmp(h, "Log") == 0 && na == 2) {
+    if (h == SYM_Log && na == 2) {
         IT(0, ta); IT(1, tb); ta = num_common(ta, tb);
         if ((int)ta < 0) return false;
         *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
@@ -286,7 +286,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * delegated to the ND layer (which decides the result dtype itself), and
      * becomes a wrong answer the moment a fused loop allocates the output buffer
      * from this type instead. */
-    if (strcmp(h, "Abs") == 0 && na == 1) {
+    if (h == SYM_Abs && na == 1) {
         IT(0, ta);
         if (CT_IS_ARRAY(ta)) {
             CompileType el = CT_ELEM(ta) == CT_COMPLEX ? CT_REAL : CT_ELEM(ta);
@@ -310,14 +310,14 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     /* Sign of a real is the INTEGER -1, 0 or 1 — `Sign[-2.5]` is `-1`, not
      * `-1.` — so the result type is CT_INT, not the argument's type.  Sign of a
      * complex is z/|z|, which is genuinely complex. */
-    if (strcmp(h, "Sign") == 0 && na == 1) {
+    if (h == SYM_Sign && na == 1) {
         IT(0, ta);
         if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
         *out = (ta == CT_COMPLEX) ? CT_COMPLEX : CT_INT;
         return true;
     }
-    if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 || strcmp(h, "Round") == 0
-         || strcmp(h, "IntegerPart") == 0) && na == 1) {
+    if ((h == SYM_Floor || h == SYM_Ceiling || h == SYM_Round
+         || h == SYM_IntegerPart) && na == 1) {
         IT(0, ta);
         /* The ARRAY case used to `return false` here, so a narrowing head could
          * only ever be a whole compiled body and never a subexpression:
@@ -326,7 +326,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
          * — the same answer emit_arr_unary reaches. */
         if (CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
         *out = CT_INT; return true; }
-    if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 || strcmp(h, "Arg") == 0) && na == 1) {
+    if ((h == SYM_Re || h == SYM_Im || h == SYM_Arg) && na == 1) {
         IT(0, ta);
         if (ta == CT_BOOL) return false;
         /* Over the integers all three stay integral: Re is the value, Im is 0,
@@ -336,20 +336,20 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         return true;
     }
     /* FractionalPart of an integer is the Integer 0, not 0. */
-    if (strcmp(h, "FractionalPart") == 0 && na == 1) {
+    if (h == SYM_FractionalPart && na == 1) {
         IT(0, ta);
         if (ta == CT_INT) { *out = CT_INT; return true; }
         if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false;
         *out = ta; return true;
     }
-    if (strcmp(h, "Conjugate") == 0 && na == 1) { IT(0, ta); *out = ta; return true; }
-    if (strcmp(h, "HypergeometricPFQ") == 0 && na == 3) {
+    if (h == SYM_Conjugate && na == 1) { IT(0, ta); *out = ta; return true; }
+    if (h == SYM_HypergeometricPFQ && na == 3) {
         const Expr* la = A[0];
         const Expr* lb = A[1];
         if (la->type != EXPR_FUNCTION || la->data.function.head->type != EXPR_SYMBOL
-            || strcmp(la->data.function.head->data.symbol.name, "List") != 0
+            || la->data.function.head->data.symbol.name != SYM_List
             || lb->type != EXPR_FUNCTION || lb->data.function.head->type != EXPR_SYMBOL
-            || strcmp(lb->data.function.head->data.symbol.name, "List") != 0) return false;
+            || lb->data.function.head->data.symbol.name != SYM_List) return false;
         size_t np = la->data.function.arg_count, nq = lb->data.function.arg_count;
         if (np + nq + 2 > KERNN_MAX_OPERANDS) return false;
         for (size_t i = 0; i < np; i++) {
@@ -376,7 +376,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * real only for a real character at real s -- decidable at compile time
      * only from literal labels, so anything else is typed Complex (a Real slot
      * would make every complex-character call bail to the interpreter). */
-    if (strcmp(h, "DirichletL") == 0 && na == 3) {
+    if (h == SYM_DirichletL && na == 3) {
         CompileType tk, tj, ts;
         IT(0, tk); IT(1, tj); IT(2, ts);
         if (CT_IS_ARRAY(tk) || CT_IS_ARRAY(tj) || tk == CT_BOOL || tj == CT_BOOL
@@ -391,18 +391,18 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     /* MeijerG: parameter Lists of scalars, z scalar -- or a real/complex ARRAY,
      * over which MeijerG threads (the fused loop then feeds z as a tile; see
      * the emitter). Complex anywhere -> complex. */
-    if (strcmp(h, "MeijerG") == 0 && (na == 3 || na == 4)) {
+    if (h == SYM_MeijerG && (na == 3 || na == 4)) {
         size_t cnt = 0;
         bool cx = false;
         for (int s = 0; s < 2; s++) {
             const Expr* L = A[s];
             if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
-                || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+                || L->data.function.head->data.symbol.name != SYM_List
                 || L->data.function.arg_count != 2) return false;
             for (int t = 0; t < 2; t++) {
                 const Expr* G = L->data.function.args[t];
                 if (G->type != EXPR_FUNCTION || G->data.function.head->type != EXPR_SYMBOL
-                    || strcmp(G->data.function.head->data.symbol.name, "List") != 0) return false;
+                    || G->data.function.head->data.symbol.name != SYM_List) return false;
                 for (size_t i = 0; i < G->data.function.arg_count; i++) {
                     CompileType ty;
                     if (!infer_type(c, G->data.function.args[i], &ty) || CT_IS_ARRAY(ty)
@@ -430,7 +430,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = (cx || tz == CT_COMPLEX) ? CT_COMPLEX : CT_REAL;
         return true;
     }
-    if (strcmp(h, "Boole") == 0 && na == 1) {
+    if (h == SYM_Boole && na == 1) {
         /* Boole[b]: a truth value -> the exact Integer 1/0.  Only a Boolean
          * operand lowers -- the interpreter leaves Boole[5] unevaluated, so a
          * numeric operand must bail rather than answer.  A rank-1 bool array
@@ -441,8 +441,8 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (ta != CT_BOOL) return false;
         *out = CT_INT; return true;
     }
-    if (na == 1 && (strcmp(h, "Positive") == 0 || strcmp(h, "Negative") == 0
-                    || strcmp(h, "NonNegative") == 0 || strcmp(h, "NonPositive") == 0)) {
+    if (na == 1 && (h == SYM_Positive || h == SYM_Negative
+                    || h == SYM_NonNegative || h == SYM_NonPositive)) {
         /* The sign predicates: a compare against zero for a real or integer
          * operand (see emit_logic); a rank-1 array applies that per element
          * into a bool buffer, as the interpreter's buffer path answers. */
@@ -451,7 +451,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (ta != CT_INT && ta != CT_REAL) return false;
         *out = CT_BOOL; return true;
     }
-    if (strcmp(h, "UnitStep") == 0 && na >= 1) {
+    if (h == SYM_UnitStep && na >= 1) {
         /* One array argument is the kernel's business, not the product-of-
          * comparisons lowering below: UnitStep's kernel is narrowing-only (no
          * real and no complex arm at all), so before this the array form had
@@ -460,7 +460,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
     }
-    if (strcmp(h, "Unitize") == 0 && (na == 1 || na == 2)) {
+    if (h == SYM_Unitize && (na == 1 || na == 2)) {
         /* Unitize answers with an exact Integer 0/1 (Unitize[2.5] is 1, not
          * 1.), so CT_INT. One array argument routes to the narrowing kernel;
          * Unitize[v, dx] maps the scalar lowering over a rank-1 buffer. The
@@ -484,7 +484,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (ta == CT_BOOL) return false;
         *out = CT_INT; return true;
     }
-    if (strcmp(h, "UnitBox") == 0 && na == 1) {
+    if (h == SYM_UnitBox && na == 1) {
         /* Single-argument box, matching the interpreter (multi-arg UnitBox is
          * left unevaluated there). An array argument routes to the narrowing
          * kernel; a scalar lowers to the pair of comparisons in the emitter and
@@ -494,7 +494,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
         *out = CT_INT; return true;                    /* UnitBox[0.5] is 1, not 1. */
     }
-    if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
+    if (h == SYM_Chop && (na == 1 || na == 2)) {
         IT(0, ta);
         /* A rank-1 array maps the scalar lowering over the buffer (see emit). */
         if (CT_IS_ARRAY(ta))
@@ -511,20 +511,20 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = ta;   /* CT_INT -> identity; CT_REAL -> Real */
         return true;
     }
-    if (strcmp(h, "Clip") == 0 && na == 1) {          /* default bounds {-1, 1} */
+    if (h == SYM_Clip && na == 1) {          /* default bounds {-1, 1} */
         IT(0, ta);
         if (CT_IS_ARRAY(ta))
             return CT_RANK(ta) == 1 ? infer_elem_over_array(c, h, A, na, out) : false;
         if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
         *out = CT_REAL; return true;
     }
-    if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
+    if ((h == SYM_Clip || h == SYM_Rescale) && na == 2) {
         /* A rank-1 array first arg maps the scalar lowering over the buffer. */
         { CompileType ta0; if (infer_type(c, A[0], &ta0) && CT_IS_ARRAY(ta0))
             return CT_RANK(ta0) == 1 ? infer_elem_over_array(c, h, A, na, out) : false; }
         const Expr* bnd = A[1];
         if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
-            || strcmp(bnd->data.function.head->data.symbol.name, "List") != 0
+            || bnd->data.function.head->data.symbol.name != SYM_List
             || bnd->data.function.arg_count != 2) return false;
         IT(0, ta);
         CompileType tl, tu;
@@ -553,7 +553,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * `Max[v]` happened to be rejected downstream, which is why nothing had
      * noticed: the wrong answer needed the head to appear inside a larger
      * expression.  Found by tools/compile_coverage.py on 2026-08-02. */
-    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na >= 2) {
+    if ((h == SYM_Max || h == SYM_Min) && na >= 2) {
         IT(0, ta);
         if (CT_IS_ARRAY(ta)) return false;
         for (size_t i = 1; i < na; i++) {
@@ -564,12 +564,12 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         *out = ta; return true;
     }
-    if ((strcmp(h, "Max") == 0 || strcmp(h, "Min") == 0) && na == 1) {
+    if ((h == SYM_Max || h == SYM_Min) && na == 1) {
         IT(0, ta);
         if (!CT_IS_ARRAY(ta)) { *out = ta; return true; }   /* Max[x] is x */
         /* falls through to the delegated-reduction block below */
     }
-    if (strcmp(h, "ArcTan") == 0) {
+    if (h == SYM_ArcTan) {
         if (na == 1) {
             IT(0, ta);
             *out = arr_like(ta, elem_of(ta) == CT_COMPLEX ? CT_COMPLEX : CT_REAL);
@@ -583,25 +583,25 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         return false;
     }
-    if (na == 2 && (!strcmp(h, "Less") || !strcmp(h, "LessEqual") || !strcmp(h, "Greater") || !strcmp(h, "GreaterEqual") || !strcmp(h, "Equal") || !strcmp(h, "Unequal"))) { *out = CT_BOOL; return true; }
+    if (na == 2 && (h == SYM_Less || h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual || h == SYM_Equal || h == SYM_Unequal)) { *out = CT_BOOL; return true; }
     /* Order[a,b] is the canonical comparison {1,0,-1}: always the INTEGER, like
      * Sign.  Only ordered scalars (Integer/Real, unified) compile; complex,
      * boolean and array args fall back to the interpreter. */
-    if (na == 2 && !strcmp(h, "Order")) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX || CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
-    if (!strcmp(h, "And") || !strcmp(h, "Or") || !strcmp(h, "Xor") || !strcmp(h, "Not")) { *out = CT_BOOL; return true; }
-    if (strcmp(h, "If") == 0 && na == 3) {
+    if (na == 2 && h == SYM_Order) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX || CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
+    if (h == SYM_And || h == SYM_Or || h == SYM_Xor || h == SYM_Not) { *out = CT_BOOL; return true; }
+    if (h == SYM_If && na == 3) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
         if (tt == te) { *out = tt; return true; }
         *out = num_common(tt, te); return (int)*out >= 0;
     }
     /* Which / Switch / Piecewise: the ladder's result type, computed the same way
      * emit_ctrl does (shared collect_ladder), so the two cannot disagree. */
-    if (strcmp(h, "Which") == 0 || strcmp(h, "Switch") == 0 || strcmp(h, "Piecewise") == 0) {
+    if (h == SYM_Which || h == SYM_Switch || h == SYM_Piecewise) {
         int nr; bool hd; CompileType rt;
         if (!collect_ladder(c, h, A, na, NULL, &nr, &hd, &rt) || CT_IS_ARRAY(rt)) return false;
         *out = rt; return true;
     }
-    if ((strcmp(h, "Sum") == 0 || strcmp(h, "Product") == 0) && na == 2) {
+    if ((h == SYM_Sum || h == SYM_Product) && na == 2) {
         LoopSpec s;
         /* s.var != NULL: the interpreter's Sum/Product reject a bare count
          * ({n}), so the compiled path must reject it too — only Do accepts it. */
@@ -614,11 +614,11 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (!okT || T == CT_BOOL) return false;
         *out = T; return true;
     }
-    if (strcmp(h, "CompoundExpression") == 0 && na >= 1) return infer_type(c, A[na - 1], out);
-    if ((strcmp(h, "With") == 0 || strcmp(h, "Module") == 0) && na == 2) {
+    if (h == SYM_CompoundExpression && na >= 1) return infer_type(c, A[na - 1], out);
+    if ((h == SYM_With || h == SYM_Module) && na == 2) {
         const Expr* L = A[0];
         if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
-            || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+            || L->data.function.head->data.symbol.name != SYM_List
             || L->data.function.arg_count == 0
             || (int)(c->nscope + L->data.function.arg_count) > CTX_MAX_SCOPE) return false;
         int pushed = 0;
@@ -627,7 +627,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             const char* vname = NULL; CompileType vt = CT_REAL;
             if (spec->type == EXPR_SYMBOL) vname = spec->data.symbol.name;
             else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
-                     && strcmp(spec->data.function.head->data.symbol.name, "Set") == 0
+                     && spec->data.function.head->data.symbol.name == SYM_Set
                      && spec->data.function.arg_count == 2 && spec->data.function.args[0]->type == EXPR_SYMBOL) {
                 vname = spec->data.function.args[0]->data.symbol.name;
                 if (!infer_type(c, spec->data.function.args[1], &vt)) { c->nscope -= pushed; return false; }
@@ -638,8 +638,8 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         bool okb = infer_type(c, A[1], out);
         c->nscope -= pushed; return okb;
     }
-    if ((!strcmp(h, "Set") || !strcmp(h, "AddTo") || !strcmp(h, "SubtractFrom")
-         || !strcmp(h, "TimesBy") || !strcmp(h, "DivideBy")) && na == 2
+    if ((h == SYM_Set || h == SYM_AddTo || h == SYM_SubtractFrom
+         || h == SYM_TimesBy || h == SYM_DivideBy) && na == 2
         && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }
@@ -647,21 +647,21 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * emit_list_thread broadcasts to each target). A List RHS (destructuring) or
      * an array RHS is not lowered -- report non-compilable so the whole body
      * bails to the interpreter, matching emit_ctrl. */
-    if (!strcmp(h, "Set") && na == 2 && A[0]->type == EXPR_FUNCTION
+    if (h == SYM_Set && na == 2 && A[0]->type == EXPR_FUNCTION
         && A[0]->data.function.head->type == EXPR_SYMBOL
-        && !strcmp(A[0]->data.function.head->data.symbol.name, "List")) {
+        && A[0]->data.function.head->data.symbol.name == SYM_List) {
         if (A[1]->type == EXPR_FUNCTION && A[1]->data.function.head->type == EXPR_SYMBOL
-            && !strcmp(A[1]->data.function.head->data.symbol.name, "List")) return false;
+            && A[1]->data.function.head->data.symbol.name == SYM_List) return false;
         CompileType vt;
         if (!infer_type(c, A[1], &vt) || CT_IS_ARRAY(vt)) return false;
         *out = vt; return true;
     }
-    if ((!strcmp(h, "Increment") || !strcmp(h, "Decrement")) && na == 1 && A[0]->type == EXPR_SYMBOL) {
+    if ((h == SYM_Increment || h == SYM_Decrement) && na == 1 && A[0]->type == EXPR_SYMBOL) {
         CompileType vt; if (scope_find(c, A[0]->data.symbol.name, &vt, NULL) < 0) return false; *out = vt; return true;
     }
-    if ((!strcmp(h, "Do") && na >= 2) || (!strcmp(h, "While") && na == 2) || (!strcmp(h, "For") && na == 4)
-        || (!strcmp(h, "If") && na == 2)) { *out = CT_INT; return true; }
-    if (!strcmp(h, "Nest") && na == 3) {
+    if ((h == SYM_Do && na >= 2) || (h == SYM_While && na == 2) || (h == SYM_For && na == 4)
+        || (h == SYM_If && na == 2)) { *out = CT_INT; return true; }
+    if (h == SYM_Nest && na == 3) {
         FnSpec s; CompileType tn, tx;
         if (!fn_resolve(A[0], 1, &s) || !infer_type(c, A[2], &tn) || tn != CT_INT
             || !infer_type(c, A[1], &tx)) return false;
@@ -700,21 +700,21 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     /* Select / TakeWhile / LengthWhile / All-, Any-, NoneTrue — one predicate
      * loop; see the emit-side block. */
-    if (na == 2 && (!strcmp(h, "Select") || !strcmp(h, "TakeWhile")
-                    || !strcmp(h, "LengthWhile") || !strcmp(h, "AllTrue")
-                    || !strcmp(h, "AnyTrue") || !strcmp(h, "NoneTrue"))) {
+    if (na == 2 && (h == SYM_Select || h == SYM_TakeWhile
+                    || h == SYM_LengthWhile || h == SYM_AllTrue
+                    || h == SYM_AnyTrue || h == SYM_NoneTrue)) {
         FnSpec s; if (!fn_resolve(A[1], 1, &s)) return false;
         CompileType el = vec_elem_type(c, A[0]);
         if ((int)el < 0) return false;
         CompileType tb;
         if (!infer_apply(c, &s, &el, 1, &tb) || tb != CT_BOOL) return false;
-        if (!strcmp(h, "Select") || !strcmp(h, "TakeWhile")) *out = CT_ARRAY(el, 1);
-        else if (!strcmp(h, "LengthWhile"))                  *out = CT_INT;
+        if (h == SYM_Select || h == SYM_TakeWhile) *out = CT_ARRAY(el, 1);
+        else if (h == SYM_LengthWhile)                  *out = CT_INT;
         else                                                 *out = CT_BOOL;
         return true;
     }
     /* First[v] / Last[v] are v[[1]] and v[[-1]]. */
-    if ((!strcmp(h, "First") || !strcmp(h, "Last")) && na == 1) {
+    if ((h == SYM_First || h == SYM_Last) && na == 1) {
         IT(0, ta);
         if (!CT_IS_ARRAY(ta)) return false;
         *out = CT_RANK(ta) == 1 ? CT_ELEM(ta) : CT_ARRAY(CT_ELEM(ta), CT_RANK(ta) - 1);
@@ -722,7 +722,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     /* Map / Scan over a rank-1 array — see the emit-side block for why the
      * result element type must equal the source's. */
-    if ((!strcmp(h, "Map") || !strcmp(h, "Scan")) && na == 2) {
+    if ((h == SYM_Map || h == SYM_Scan) && na == 2) {
         bool scan = h[0] == 'S';
         FnSpec s; if (!fn_resolve(A[0], 1, &s)) return false;
         CompileType el = vec_elem_type(c, A[1]);
@@ -735,7 +735,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     /* Fold[f, x0, v] / Fold[f, v]: the accumulator's widening fixed point with
      * the element type held fixed. */
-    if (!strcmp(h, "Fold") && (na == 2 || na == 3)) {
+    if (h == SYM_Fold && (na == 2 || na == 3)) {
         FnSpec s; if (!fn_resolve(A[0], 2, &s)) return false;
         CompileType el = vec_elem_type(c, A[na - 1]);
         if ((int)el < 0) return false;
@@ -746,8 +746,8 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = (CompileType)tfp; return true;
     }
     /* NestList / FoldList — see the emit-side block for the element-type rule. */
-    if ((!strcmp(h, "NestList") && na == 3)
-        || (!strcmp(h, "FoldList") && (na == 2 || na == 3))) {
+    if ((h == SYM_NestList && na == 3)
+        || (h == SYM_FoldList && (na == 2 || na == 3))) {
         bool nest = h[0] == 'N';
         FnSpec s; if (!fn_resolve(A[0], nest ? 1 : 2, &s)) return false;
         CompileType T;
@@ -771,8 +771,8 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = CT_ARRAY(T, 1); return true;
     }
     /* FixedPointList / NestWhileList — a BUILT history, so Real/Complex only. */
-    if ((!strcmp(h, "FixedPointList") && na >= 2 && na <= 4)
-        || (!strcmp(h, "NestWhileList") && na == 3)) {
+    if ((h == SYM_FixedPointList && na >= 2 && na <= 4)
+        || (h == SYM_NestWhileList && na == 3)) {
         bool fp = h[0] == 'F';
         FnSpec s, ss, ts; const Expr *mx = NULL, *st = NULL;
         if (!fn_resolve(A[0], 1, &s)) return false;
@@ -794,7 +794,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (!fp && (!infer_apply(c, &ts, &T, 1, &tb) || tb != CT_BOOL)) return false;
         *out = CT_ARRAY(T, 1); return true;
     }
-    if (!strcmp(h, "FixedPoint") && na >= 2 && na <= 4) {
+    if (h == SYM_FixedPoint && na >= 2 && na <= 4) {
         FnSpec s; const Expr *mx, *st;
         if (!fn_resolve(A[0], 1, &s) || !fp_opts(A, na, 2, &mx, &st)) return false;
         CompileType tn;
@@ -809,7 +809,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         *out = (CompileType)tfp; return true;
     }
-    if (!strcmp(h, "NestWhile") && na == 3) {
+    if (h == SYM_NestWhile && na == 3) {
         FnSpec s, ts; CompileType tx, tb;
         if (!fn_resolve(A[0], 1, &s) || !fn_resolve(A[2], 1, &ts)
             || !infer_type(c, A[1], &tx)) return false;
@@ -824,7 +824,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * stays an array, with the rank counted the way build_axis_selector counts
      * it: a spec keeps its axis, a scalar subscript drops it, and axes past the
      * last subscript are implicit Alls and survive. */
-    if (strcmp(h, "Part") == 0 && na >= 2) {
+    if (h == SYM_Part && na >= 2) {
         IT(0, ta);
         if (!CT_IS_ARRAY(ta) || (int)(na - 1) > CT_RANK(ta)) return false;
         if (part_is_scalar_indexed(c, ta, (const Expr* const*)A + 1, na - 1)) {
@@ -836,20 +836,20 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = CT_ARRAY(CT_ELEM(ta), keep);
         return true;
     }
-    if (strcmp(h, "ConstantArray") == 0 && na == 2) {
+    if (h == SYM_ConstantArray && na == 2) {
         int rank; CompileType elem;
         if (!const_array_shape(c, (const Expr* const*)A, &rank, &elem)) return false;
         *out = CT_ARRAY(elem, rank); return true;
     }
     /* Range[hi] / Range[lo, hi] / Range[lo, hi, di] — see the emit-side block. */
-    if (strcmp(h, "Range") == 0 && na >= 1 && na <= 3) {
+    if (h == SYM_Range && na >= 1 && na <= 3) {
         LoopSpec s;
         if (!range_spec(c, A, na, &s)) return false;
         *out = CT_ARRAY(CT_INT, 1); return true;
     }
     /* Table[body, spec...] — see the emit-side block for why the iterators must
      * be integer-bounded and the element type Real or Complex. */
-    if (strcmp(h, "Table") == 0 && na >= 2 && (int)na - 1 <= CT_MAX_RANK) {
+    if (h == SYM_Table && na >= 2 && (int)na - 1 <= CT_MAX_RANK) {
         int rank = (int)na - 1;
         LoopSpec sp[CT_MAX_RANK];
         for (int j = 0; j < rank; j++)
@@ -870,7 +870,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
 
     /* array -> scalar reductions (M3a): the only way an array type re-enters
      * the scalar lattice, so these must be inferable inside If/Sum/... */
-    if ((strcmp(h, "Total") == 0 || strcmp(h, "Length") == 0) && na == 1) {
+    if ((h == SYM_Total || h == SYM_Length) && na == 1) {
         IT(0, ta);
         if (!CT_IS_ARRAY(ta) || (h[0] == 'T' && CT_RANK(ta) != 1)) return false;
         *out = (h[0] == 'L') ? CT_INT : CT_ELEM(ta);
@@ -878,7 +878,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     /* Norm[array, p] two-arg form (V_NORM): valid literal p over a real array
      * operand -> Real.  The bare Norm[array] is the reduction below. */
-    if (strcmp(h, "Norm") == 0 && na == 2) {
+    if (h == SYM_Norm && na == 2) {
         CompileType ta; IT(0, ta);
         double immr;
         if (!nd_norm2_encode(A[1], ta, &immr)) return false;
@@ -918,7 +918,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
                  * anywhere -> KERNN_C. */
                 bool any_c = false;            /* complex argument -> KERNN_C */
                 int rank = 0;
-                bool last_only = strcmp(h, "MeijerG") == 0 || strcmp(h, "DirichletL") == 0;
+                bool last_only = h == SYM_MeijerG || h == SYM_DirichletL;
                 for (size_t i = 0; i < na; i++) {
                     CompileType t;
                     if (!infer_type(c, A[i], &t) || t == CT_BOOL) return false;

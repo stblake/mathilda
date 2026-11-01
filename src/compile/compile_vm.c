@@ -342,7 +342,7 @@ static bool vm_num_pair(const Expr* e, double* re, double* im) {
     if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer;  *im = 0.0; return true; }
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0) {
+        && e->data.function.head->data.symbol.name == SYM_Complex) {
         double ar, ai, br, bi;
         if (vm_num_pair(e->data.function.args[0], &ar, &ai)
             && vm_num_pair(e->data.function.args[1], &br, &bi)) {

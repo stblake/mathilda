@@ -296,10 +296,10 @@ static bool res_elementary_lograt(const Expr* e) {
     const Expr* h = e->data.function.head;
     if (h->type != EXPR_SYMBOL) return false;
     const char* hn = h->data.symbol.name;
-    if (!(strcmp(hn, "Plus") == 0 || strcmp(hn, "Times") == 0 ||
-          strcmp(hn, "Power") == 0 || strcmp(hn, "Log") == 0 ||
-          strcmp(hn, "Rational") == 0 || strcmp(hn, "Complex") == 0)) return false;
-    if (strcmp(hn, "Power") == 0 && e->data.function.arg_count == 2 &&
+    if (!(hn == SYM_Plus || hn == SYM_Times ||
+          hn == SYM_Power || hn == SYM_Log ||
+          hn == SYM_Rational || hn == SYM_Complex)) return false;
+    if (hn == SYM_Power && e->data.function.arg_count == 2 &&
         e->data.function.args[1]->type != EXPR_INTEGER) return false;  /* radical / sym exp */
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (!res_elementary_lograt(e->data.function.args[i])) return false;
@@ -1571,8 +1571,8 @@ static void bound_apply(ParamBound* pb, size_t np, const char* var, double c, in
  * and the other a numeric constant tightens that parameter's interval. */
 static void relation_apply(ParamBound* pb, size_t np, const char* op,
                            Expr* L, Expr* R) {
-    bool lt = (strcmp(op, "Less") == 0 || strcmp(op, "LessEqual") == 0);
-    bool gt = (strcmp(op, "Greater") == 0 || strcmp(op, "GreaterEqual") == 0);
+    bool lt = (op == SYM_Less || op == SYM_LessEqual);
+    bool gt = (op == SYM_Greater || op == SYM_GreaterEqual);
     if (!lt && !gt) return;
     double c;
     if (L->type == EXPR_SYMBOL && numeric_double(R, &c))
@@ -1589,11 +1589,11 @@ static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
     if (fact->data.function.head->type != EXPR_SYMBOL) return;
     const char* h = fact->data.function.head->data.symbol.name;
     size_t ac = fact->data.function.arg_count;
-    if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
+    if (h == SYM_And || h == SYM_List) {
         for (size_t i = 0; i < ac; i++) absorb_fact(pb, np, fact->data.function.args[i]);
         return;
     }
-    if (strcmp(h, "Inequality") == 0 && ac >= 3) {
+    if (h == SYM_Inequality && ac >= 3) {
         /* e0 op1 e1 op2 e2 ...: each (e_{2i}, op_{2i+1}, e_{2i+2}) is a relation. */
         for (size_t i = 0; i + 2 < ac; i += 2) {
             Expr* opsym = fact->data.function.args[i + 1];

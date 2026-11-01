@@ -149,18 +149,18 @@ static bool classify_kernel(const Expr* e, const Expr* var,
     if (!hyp) {
         if (sym_is(h, SYM_Sin))          k = K_SIN;
         else if (sym_is(h, SYM_Cos))     k = K_COS;
-        else if (strcmp(hn, "Tan") == 0) k = K_TAN;
-        else if (strcmp(hn, "Cot") == 0) k = K_COT;
-        else if (strcmp(hn, "Sec") == 0) k = K_SEC;
-        else if (strcmp(hn, "Csc") == 0) k = K_CSC;
+        else if (hn == SYM_Tan) k = K_TAN;
+        else if (hn == SYM_Cot) k = K_COT;
+        else if (hn == SYM_Sec) k = K_SEC;
+        else if (hn == SYM_Csc) k = K_CSC;
         else return false;
     } else {
-        if (strcmp(hn, "Sinh") == 0)      k = K_SINH;
-        else if (strcmp(hn, "Cosh") == 0) k = K_COSH;
-        else if (strcmp(hn, "Tanh") == 0) k = K_TANH;
-        else if (strcmp(hn, "Coth") == 0) k = K_COTH;
-        else if (strcmp(hn, "Sech") == 0) k = K_SECH;
-        else if (strcmp(hn, "Csch") == 0) k = K_CSCH;
+        if (hn == SYM_Sinh)      k = K_SINH;
+        else if (hn == SYM_Cosh) k = K_COSH;
+        else if (hn == SYM_Tanh) k = K_TANH;
+        else if (hn == SYM_Coth) k = K_COTH;
+        else if (hn == SYM_Sech) k = K_SECH;
+        else if (hn == SYM_Csch) k = K_CSCH;
         else return false;
     }
     if (n != 1) return false;
@@ -234,11 +234,11 @@ static bool kernel_like_commensurate(const Expr* e, const Expr* var, bool hyp) {
     } else {
         const char* nm = h->data.symbol.name;
         bool trig = sym_is(h, SYM_Sin) || sym_is(h, SYM_Cos) ||
-            strcmp(nm,"Tan")==0  || strcmp(nm,"Cot")==0  ||
-            strcmp(nm,"Sec")==0  || strcmp(nm,"Csc")==0  ||
-            strcmp(nm,"Sinh")==0 || strcmp(nm,"Cosh")==0 ||
-            strcmp(nm,"Tanh")==0 || strcmp(nm,"Coth")==0 ||
-            strcmp(nm,"Sech")==0 || strcmp(nm,"Csch")==0;
+            nm == SYM_Tan  || nm == SYM_Cot  ||
+            nm == SYM_Sec  || nm == SYM_Csc  ||
+            nm == SYM_Sinh || nm == SYM_Cosh ||
+            nm == SYM_Tanh || nm == SYM_Coth ||
+            nm == SYM_Sech || nm == SYM_Csch;
         if (!trig || n != 1) return false;
         arg = e->data.function.args[0];
     }
@@ -668,11 +668,11 @@ static void collect_kernel_vars(const Expr* e, NameSet* s) {
     size_t n = e->data.function.arg_count;
     bool trig = h && h->type == EXPR_SYMBOL &&
         (sym_is(h, SYM_Sin) || sym_is(h, SYM_Cos) ||
-         strcmp(h->data.symbol.name, "Tan") == 0 || strcmp(h->data.symbol.name, "Cot") == 0 ||
-         strcmp(h->data.symbol.name, "Sec") == 0 || strcmp(h->data.symbol.name, "Csc") == 0 ||
-         strcmp(h->data.symbol.name, "Sinh") == 0 || strcmp(h->data.symbol.name, "Cosh") == 0 ||
-         strcmp(h->data.symbol.name, "Tanh") == 0 || strcmp(h->data.symbol.name, "Coth") == 0 ||
-         strcmp(h->data.symbol.name, "Sech") == 0 || strcmp(h->data.symbol.name, "Csch") == 0);
+         h->data.symbol.name == SYM_Tan || h->data.symbol.name == SYM_Cot ||
+         h->data.symbol.name == SYM_Sec || h->data.symbol.name == SYM_Csc ||
+         h->data.symbol.name == SYM_Sinh || h->data.symbol.name == SYM_Cosh ||
+         h->data.symbol.name == SYM_Tanh || h->data.symbol.name == SYM_Coth ||
+         h->data.symbol.name == SYM_Sech || h->data.symbol.name == SYM_Csch);
     if (trig && n == 1) collect_leaf_syms(e->data.function.args[0], s);
     else if (sym_is(h, SYM_Exp) && n == 1) collect_leaf_syms(e->data.function.args[0], s);
     else if (sym_is(h, SYM_Power) && n == 2 && sym_is(e->data.function.args[0], SYM_E))
@@ -813,11 +813,11 @@ static Expr* expand_pi_phase(const Expr* e, const char* vn) {
     if (h && h->type == EXPR_SYMBOL && n == 1) {
         const char* hn = h->data.symbol.name;
         bool is_circ = sym_is(h, SYM_Sin) || sym_is(h, SYM_Cos) ||
-            strcmp(hn, "Tan") == 0 || strcmp(hn, "Cot") == 0 ||
-            strcmp(hn, "Sec") == 0 || strcmp(hn, "Csc") == 0;
-        bool is_hyp = strcmp(hn, "Sinh") == 0 || strcmp(hn, "Cosh") == 0 ||
-            strcmp(hn, "Tanh") == 0 || strcmp(hn, "Coth") == 0 ||
-            strcmp(hn, "Sech") == 0 || strcmp(hn, "Csch") == 0;
+            hn == SYM_Tan || hn == SYM_Cot ||
+            hn == SYM_Sec || hn == SYM_Csc;
+        bool is_hyp = hn == SYM_Sinh || hn == SYM_Cosh ||
+            hn == SYM_Tanh || hn == SYM_Coth ||
+            hn == SYM_Sech || hn == SYM_Csch;
         if (is_circ || is_hyp) {
             Expr* A = NULL; Expr* C = NULL;
             /* A multiple of a sum (Sin[2 (Pi/2 + x)], Cot[x - 2 (2 x - 3/2 Pi)])
@@ -838,17 +838,17 @@ static Expr* expand_pi_phase(const Expr* e, const char* vn) {
                     AddFormula sinf = is_circ ? addf_sin : addf_sinh;  /* sin-like */
                     AddFormula cosf = is_circ ? addf_cos : addf_cosh;  /* cos-like */
                     Expr* out = NULL;
-                    if (sym_is(h, SYM_Sin) || strcmp(hn, "Sinh") == 0)
+                    if (sym_is(h, SYM_Sin) || hn == SYM_Sinh)
                         out = sinf(A, C);
-                    else if (sym_is(h, SYM_Cos) || strcmp(hn, "Cosh") == 0)
+                    else if (sym_is(h, SYM_Cos) || hn == SYM_Cosh)
                         out = cosf(A, C);
-                    else if (strcmp(hn, "Tan") == 0 || strcmp(hn, "Tanh") == 0)
+                    else if (hn == SYM_Tan || hn == SYM_Tanh)
                         out = mk_fn2(SYM_Times, sinf(A, C),
                                      mk_fn2(SYM_Power, cosf(A, C), mk_int(-1)));
-                    else if (strcmp(hn, "Cot") == 0 || strcmp(hn, "Coth") == 0)
+                    else if (hn == SYM_Cot || hn == SYM_Coth)
                         out = mk_fn2(SYM_Times, cosf(A, C),
                                      mk_fn2(SYM_Power, sinf(A, C), mk_int(-1)));
-                    else if (strcmp(hn, "Sec") == 0 || strcmp(hn, "Sech") == 0)
+                    else if (hn == SYM_Sec || hn == SYM_Sech)
                         out = mk_fn2(SYM_Power, cosf(A, C), mk_int(-1));
                     else /* Csc / Csch */
                         out = mk_fn2(SYM_Power, sinf(A, C), mk_int(-1));

@@ -1753,12 +1753,12 @@ static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
             const Expr* dom = f->data.function.args[1];
             if (!dom || dom->type != EXPR_SYMBOL) continue;
             const char* dn = dom->data.symbol.name;
-            if      (strcmp(dn, "Integers") == 0)            seen_int = true;
+            if      (dn == SYM_Integers)            seen_int = true;
             else if (strcmp(dn, "PositiveIntegers") == 0)    { seen_int = true; ch_bare.has_lo = true; ch_bare.lo = 0.0; }
             else if (strcmp(dn, "NonnegativeIntegers") == 0) { seen_int = true; ch_bare.has_lo = true; ch_bare.lo = 0.0; }
             else if (strcmp(dn, "NegativeIntegers") == 0)    { seen_int = true; ch_bare.has_hi = true; ch_bare.hi = 0.0; }
             else if (strcmp(dn, "NonpositiveIntegers") == 0) { seen_int = true; ch_bare.has_hi = true; ch_bare.hi = 0.0; }
-            else if (strcmp(dn, "Complexes") == 0)           seen_cplx = true;
+            else if (dn == SYM_Complexes)           seen_cplx = true;
             /* Reals / Rationals / Algebraics confirm the REAL default. */
             continue;
         }
@@ -2064,7 +2064,7 @@ static bool fact_keeps_false_sound(const Expr* f) {
     const char* h = f->data.function.head->data.symbol.name;
     size_t argc = f->data.function.arg_count;
 
-    if (strcmp(h, "Unequal") == 0) return true;
+    if (h == SYM_Unequal) return true;
 
     if (h == SYM_Element && argc == 2) {
         const Expr* x = f->data.function.args[0];
@@ -2072,8 +2072,8 @@ static bool fact_keeps_false_sound(const Expr* f) {
         if (is_single_symbol_operand(x)) return true;
         if (d && d->type == EXPR_SYMBOL) {
             const char* dn = d->data.symbol.name;
-            if (strcmp(dn, "Reals") == 0 || strcmp(dn, "Rationals") == 0 ||
-                strcmp(dn, "Algebraics") == 0 || strcmp(dn, "Complexes") == 0)
+            if (dn == SYM_Reals || dn == SYM_Rationals ||
+                dn == SYM_Algebraics || dn == SYM_Complexes)
                 return true;   /* dense in the sampled space: never excludes */
         }
         return false;          /* Element[compound, discrete] restricts */

@@ -312,11 +312,11 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
  * enumerate to 8.  A finite range with such a body must enumerate.  (Kept in step
  * with the identical helpers in src/sum/sum.c.) */
 static bool prod_head_is_index_predicate(const char* h) {
-    return strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0
-        || strcmp(h, "PrimeQ") == 0 || strcmp(h, "CompositeQ") == 0
-        || strcmp(h, "PrimePowerQ") == 0 || strcmp(h, "IntegerQ") == 0
-        || strcmp(h, "SquareFreeQ") == 0 || strcmp(h, "CoprimeQ") == 0
-        || strcmp(h, "Divisible") == 0;
+    return h == SYM_EvenQ || h == SYM_OddQ
+        || h == SYM_PrimeQ || strcmp(h, "CompositeQ") == 0
+        || h == SYM_PrimePowerQ || h == SYM_IntegerQ
+        || h == SYM_SquareFreeQ || h == SYM_CoprimeQ
+        || h == SYM_Divisible;
 }
 
 static bool prod_expr_mentions_symbol(const Expr* e, const char* name) {
@@ -339,7 +339,7 @@ static bool prod_body_has_index_predicate(const Expr* e, const char* ivar) {
     /* The index as a Part position: at a symbolic j the Part stays opaque
      * (D[a^2 b, {a, b}[[j]]] folds to 0), so enumerate -- as for Sum. */
     if (e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Part") == 0) {
+        && e->data.function.head->data.symbol.name == SYM_Part) {
         for (size_t i = 1; i < e->data.function.arg_count; i++)
             if (prod_expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
     }

@@ -668,12 +668,12 @@ Expr* builtin_irreduciblepolynomialq(Expr* res) {
         const char* name = opt->data.function.args[0]->data.symbol.name;
         Expr* val = opt->data.function.args[1];
 
-        if (name == SYM_GaussianIntegers || strcmp(name, "GaussianIntegers") == 0) {
+        if (name == SYM_GaussianIntegers || name == SYM_GaussianIntegers) {
             if (is_sym_eq(val, "True"))       gaussian_setting = 1;
             else if (is_sym_eq(val, "False")) gaussian_setting = -1;
             else if (is_sym_eq(val, "Automatic")) gaussian_setting = 0;
             else last_bad = opt;
-        } else if (name == SYM_Extension || strcmp(name, "Extension") == 0) {
+        } else if (name == SYM_Extension || name == SYM_Extension) {
             if (is_sym_eq(val, "None")) {
                 ext_mode = EXT_MODE_NONE;
                 alpha_expr = NULL;

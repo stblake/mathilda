@@ -215,8 +215,8 @@ static bool is_definitely_zero(Expr* e) {
 static bool parse_bool_value(Expr* rhs, bool* out) {
     if (rhs->type != EXPR_SYMBOL) return false;
     const char* s = rhs->data.symbol.name;
-    if (strcmp(s, "True")  == 0) { *out = true;  return true; }
-    if (strcmp(s, "False") == 0) { *out = false; return true; }
+    if (s == SYM_True) { *out = true;  return true; }
+    if (s == SYM_False) { *out = false; return true; }
     return false;
 }
 
@@ -515,7 +515,7 @@ static Expr* build_q_from_Q(Expr** Q_flat, int n, int rank,
  * Conjugate when assembling q from the orthonormal column buffer Q. */
 static bool has_complex_content(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Complex) return true;

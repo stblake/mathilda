@@ -742,7 +742,7 @@ static char* label_string(const Expr* v) {
     /* Style[x, ...]: compared by name, since Style has no SYM_ constant. */
     if (v->type == EXPR_FUNCTION && v->data.function.arg_count >= 1
         && v->data.function.head->type == EXPR_SYMBOL
-        && strcmp(v->data.function.head->data.symbol.name, "Style") == 0)
+        && v->data.function.head->data.symbol.name == SYM_Style)
         return label_string(v->data.function.args[0]);
     return expr_to_string((Expr*)v);
 }

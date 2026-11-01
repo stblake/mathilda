@@ -47,6 +47,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "numeric.h"
+#include "../sym_names.h"
 
 #include <gmp.h>
 #include <stdbool.h>
@@ -86,7 +87,7 @@ static bool contains_inexact(const Expr* e) {
 #endif
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol.name, "Complex") == 0) {
+        e->data.function.head->data.symbol.name == SYM_Complex) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (contains_inexact(e->data.function.args[i])) return true;
         }

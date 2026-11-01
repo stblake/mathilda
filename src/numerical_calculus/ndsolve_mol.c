@@ -416,10 +416,10 @@ static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
 /* True if `e` involves the imaginary unit (a Complex[...] node or symbol I). */
 bool nd_has_imaginary(const Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
     if (e->type == EXPR_FUNCTION) {
         const Expr* h = e->data.function.head;
-        if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Complex") == 0) return true;
+        if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Complex) return true;
         if (nd_has_imaginary(h)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (nd_has_imaginary(e->data.function.args[i])) return true;

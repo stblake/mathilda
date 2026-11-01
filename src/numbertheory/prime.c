@@ -97,7 +97,7 @@ Expr* builtin_primepi(Expr* res) {
         const char* name = lhs->type == EXPR_SYMBOL ? lhs->data.symbol.name : NULL;
         if (name == SYM_Method) {
             if (!prime_parse_method(rhs, &method)) return NULL;
-        } else if (!(name && strcmp(name, "ProgressReporting") == 0)) {
+        } else if (!(name && name == SYM_ProgressReporting)) {
             char* kname = expr_to_string(lhs);
             char* call = expr_to_string(res);
             mth_message_gated(g_arith_warnings_muted, "PrimePi", "optx",

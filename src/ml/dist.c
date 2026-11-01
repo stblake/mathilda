@@ -225,9 +225,9 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
     size_t argc = e->data.function.arg_count;
     double im = 0.0;
 
-    if (strcmp(hn, "LearnedDistribution") == 0) return ml_read_learned(e, d, owned);
+    if (hn == SYM_LearnedDistribution) return ml_read_learned(e, d, owned);
 
-    if (strcmp(hn, "NormalDistribution") == 0) {
+    if (hn == SYM_NormalDistribution) {
         d->kind = ML_D_NORMAL; d->dim = 1;
         if (argc == 0) { d->a = 0.0; d->b = 1.0; return true; }   /* the standard normal */
         if (argc != 2) return false;
@@ -237,7 +237,7 @@ static bool ml_read_dist(Expr* e, MlDist* d, double** owned) {
          * returning NaNs that propagate silently through a whole sample. */
         return d->b > 0.0;
     }
-    if (strcmp(hn, "UniformDistribution") == 0) {
+    if (hn == SYM_UniformDistribution) {
         d->kind = ML_D_UNIFORM; d->dim = 1;
         if (argc == 0) { d->a = 0.0; d->b = 1.0; return true; }
         if (argc != 1) return false;
@@ -358,7 +358,7 @@ static bool ct_pdf(Expr* dist, Expr* xe, double* out) {
         return false;
     Expr* h = dist->data.function.head;
     if (!h || h->type != EXPR_SYMBOL
-        || strcmp(h->data.symbol.name, "LearnedDistribution") != 0) return false;
+        || h->data.symbol.name != SYM_LearnedDistribution) return false;
     Expr* m = dist->data.function.args[0];
     if (!m || m->type != EXPR_STRING
         || strcmp(m->data.string, "ContingencyTable") != 0) return false;

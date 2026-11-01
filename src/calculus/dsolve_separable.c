@@ -311,7 +311,7 @@ static void sep_collect_log_args(const Expr* e, Expr** args, size_t* n, size_t c
     if (!e || e->type != EXPR_FUNCTION || *n >= cap) return;
     Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL
-        && strcmp(head->data.symbol.name, "Log") == 0
+        && head->data.symbol.name == SYM_Log
         && e->data.function.arg_count == 1) {
         Expr* a = e->data.function.args[0];
         for (size_t i = 0; i < *n; i++) if (expr_eq(args[i], a)) return;

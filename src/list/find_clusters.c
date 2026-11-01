@@ -68,6 +68,7 @@
 #include "gmm.h"       /* src/ml -- the EM fit, shared with LearnDistribution */
 #include "distance.h"
 #include "../ndarray.h"   /* is_ndarray, ndarray_to_nested_list */
+#include "../sym_names.h"
 
 #include <math.h>       /* isnan, fabs, exp, sqrt, log -- all C99 */
 
@@ -357,9 +358,9 @@ static bool fc_is_point_head(Expr* e) {
     Expr* h = e->data.function.head;
     if (h->type != EXPR_SYMBOL) return false;
     const char* nm = h->data.symbol.name;
-    return strcmp(nm, "List") == 0 || strcmp(nm, "RGBColor") == 0 ||
-           strcmp(nm, "GrayLevel") == 0 || strcmp(nm, "Hue") == 0 ||
-           strcmp(nm, "CMYKColor") == 0;
+    return nm == SYM_List || nm == SYM_RGBColor ||
+           nm == SYM_GrayLevel || nm == SYM_Hue ||
+           nm == SYM_CMYKColor;
 }
 
 /* Exact equality of two whole points. Component-wise through the exact
@@ -2461,9 +2462,9 @@ static bool fc_parse_distance_function(Expr* rhs, FcOpts* o) {
     if (rhs->type == EXPR_SYMBOL) {
         const char* s = rhs->data.symbol.name;
         if (s == SYM_Automatic)                              { o->dist = FC_DIST_AUTOMATIC;        return true; }
-        if (strcmp(s, "EuclideanDistance") == 0)             { o->dist = FC_DIST_EUCLIDEAN;        return true; }
-        if (strcmp(s, "SquaredEuclideanDistance") == 0)      { o->dist = FC_DIST_SQUAREDEUCLIDEAN; return true; }
-        if (strcmp(s, "ManhattanDistance") == 0)             { o->dist = FC_DIST_MANHATTAN;        return true; }
+        if (s == SYM_EuclideanDistance)             { o->dist = FC_DIST_EUCLIDEAN;        return true; }
+        if (s == SYM_SquaredEuclideanDistance)      { o->dist = FC_DIST_SQUAREDEUCLIDEAN; return true; }
+        if (s == SYM_ManhattanDistance)             { o->dist = FC_DIST_MANHATTAN;        return true; }
     }
     return false;
 }

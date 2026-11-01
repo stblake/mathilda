@@ -60,7 +60,7 @@ bool simp_eq_head_sym(const Expr* e, const char* name);
 bool simp_contains_root_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol.name, "Root") == 0)
+        e->data.function.head->data.symbol.name == SYM_Root)
         return true;
     if (simp_contains_root_head(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)

@@ -60,7 +60,7 @@ static Expr* hg_expand_binomial(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Binomial") == 0 && n == 2) {
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Binomial && n == 2) {
         Expr* a = hg_expand_binomial(e->data.function.args[0]);
         Expr* b = hg_expand_binomial(e->data.function.args[1]);
         Expr* amb = expr_new_function(expr_new_symbol(SYM_Plus),

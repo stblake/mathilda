@@ -329,7 +329,7 @@ static bool sv_is_zero(Expr* e) {
  * Drives the choice between Hermitian and Euclidean inner products. */
 static bool sv_has_complex_content(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, "I") == 0;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Complex) return true;
@@ -359,8 +359,8 @@ static bool sv_leaf_is_numeric(Expr* e) {
             if (e->data.function.head->type == EXPR_SYMBOL
                 && e->data.function.arg_count == 2) {
                 const char* h = e->data.function.head->data.symbol.name;
-                if (h == SYM_Rational || strcmp(h, "Rational") == 0
-                    || h == SYM_Complex  || strcmp(h, "Complex")  == 0) {
+                if (h == SYM_Rational || h == SYM_Rational
+                    || h == SYM_Complex  || h == SYM_Complex) {
                     return sv_leaf_is_numeric(e->data.function.args[0])
                         && sv_leaf_is_numeric(e->data.function.args[1]);
                 }
@@ -1271,7 +1271,7 @@ static bool sv_below_tol(Expr* e, Expr* tol) {
     Expr* cmp = eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Less), (Expr*[]){lhs, rhs}, 2));
     bool below = (cmp->type == EXPR_SYMBOL
-                  && strcmp(cmp->data.symbol.name, "True") == 0);
+                  && cmp->data.symbol.name == SYM_True);
     expr_free(cmp);
     return below;
 }

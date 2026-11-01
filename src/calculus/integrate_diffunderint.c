@@ -157,7 +157,7 @@ static bool contains_gaussian_exp(const Expr* e, const Expr* x) {
         arg = e->data.function.args[0];
     else if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
-        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E)
             arg = e->data.function.args[1];
     }
     if (arg && contains_symbol(arg, x) && has_nonlinear_x_power(arg, x))
@@ -444,7 +444,7 @@ static size_t collect_params(const Expr* e, const Expr* x, ParamBound* pb,
     if (!e) return n;
     if (e->type == EXPR_SYMBOL) {
         if (e->data.symbol.name == x->data.symbol.name) return n;
-        if (strcmp(e->data.symbol.name, "I") == 0) return n;
+        if (e->data.symbol.name == SYM_I) return n;
         for (size_t i = 0; i < n; i++)
             if (pb[i].sym == e->data.symbol.name) return n;
         double tmp;
@@ -482,8 +482,8 @@ static Expr* strip_re_im(Expr* e) {
 
 static void relation_apply(ParamBound* pb, size_t np, const char* op,
                            Expr* L, Expr* R) {
-    bool lt = (strcmp(op, "Less") == 0 || strcmp(op, "LessEqual") == 0);
-    bool gt = (strcmp(op, "Greater") == 0 || strcmp(op, "GreaterEqual") == 0);
+    bool lt = (op == SYM_Less || op == SYM_LessEqual);
+    bool gt = (op == SYM_Greater || op == SYM_GreaterEqual);
     if (!lt && !gt) return;
     L = strip_re_im(L);
     R = strip_re_im(R);
@@ -501,11 +501,11 @@ static void absorb_fact(ParamBound* pb, size_t np, Expr* fact) {
     if (fact->data.function.head->type != EXPR_SYMBOL) return;
     const char* h = fact->data.function.head->data.symbol.name;
     size_t ac = fact->data.function.arg_count;
-    if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
+    if (h == SYM_And || h == SYM_List) {
         for (size_t i = 0; i < ac; i++) absorb_fact(pb, np, fact->data.function.args[i]);
         return;
     }
-    if (strcmp(h, "Inequality") == 0 && ac >= 3) {
+    if (h == SYM_Inequality && ac >= 3) {
         for (size_t i = 0; i + 2 < ac; i += 2) {
             Expr* opsym = fact->data.function.args[i + 1];
             if (opsym->type != EXPR_SYMBOL) continue;
@@ -566,7 +566,7 @@ static bool is_zero_expr(const Expr* a) {
 /* b == +Infinity (symbol Infinity or DirectedInfinity[1]) */
 static bool is_pos_inf(const Expr* b) {
     if (!b) return false;
-    if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0) return true;
+    if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_Infinity) return true;
     if (head_name_is(b, "DirectedInfinity") && b->data.function.arg_count == 1) {
         Expr* d = b->data.function.args[0];
         return d->type == EXPR_INTEGER && d->data.integer == 1;
@@ -701,7 +701,7 @@ static Expr* laplace_halfline(const Expr* g, const Expr* x,
                 ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0)
+                     F->data.function.args[0]->data.symbol.name == SYM_E)
                 ea = F->data.function.args[1];
             if (ea) { saw_exp = true;
                       exparg = mk_fn2("Plus", exparg, expr_copy((Expr*)ea)); }
@@ -812,7 +812,7 @@ static Expr* laplace_sinc_halfline(const Expr* g, const Expr* x,
             if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0) ea = F->data.function.args[1];
+                     F->data.function.args[0]->data.symbol.name == SYM_E) ea = F->data.function.args[1];
             if (ea) { saw_exp = true; exparg = mk_fn2("Plus", exparg, expr_copy((Expr*)ea)); }
             else    { rest = mk_fn2("Times", rest, expr_copy(F)); }
         }
@@ -1155,7 +1155,7 @@ static Expr* gaussian_halfline(const Expr* g, const Expr* x,
             if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0) ea = F->data.function.args[1];
+                     F->data.function.args[0]->data.symbol.name == SYM_E) ea = F->data.function.args[1];
             if (ea) { if (exparg) multi_exp = true; else exparg = expr_copy((Expr*)ea); continue; }
             if ((head_name_is(F, "Cos") || head_name_is(F, "Sin")) &&
                 F->data.function.arg_count == 1 && contains_symbol(F->data.function.args[0], x)) {
@@ -1244,7 +1244,7 @@ static Expr* integrate_gaussian_param(const Expr* J, const Expr* p) {
             if (head_name_is(F, "Exp") && F->data.function.arg_count == 1) ea = F->data.function.args[0];
             else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                      F->data.function.args[0]->type == EXPR_SYMBOL &&
-                     strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0) ea = F->data.function.args[1];
+                     F->data.function.args[0]->data.symbol.name == SYM_E) ea = F->data.function.args[1];
             if (ea) { if (exparg) multi_exp = true; else exparg = expr_copy((Expr*)ea); continue; }
             rest = t_mul(rest, expr_copy(F));
         }
@@ -1941,7 +1941,7 @@ static bool is_primitive_atom(const Expr* F, const Expr* x) {
     if (!F || F->type != EXPR_FUNCTION || !contains_symbol(F, x)) return false;
     if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
         F->data.function.args[0]->type == EXPR_SYMBOL &&
-        strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0)
+        F->data.function.args[0]->data.symbol.name == SYM_E)
         return true;                                   /* Exp[arg] as Power[E,arg] */
     if (F->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = F->data.function.head->data.symbol.name;
@@ -2173,7 +2173,7 @@ static bool detect_selfsimilar_ode(const Expr* f, const Expr* g, const Expr* x,
         arg = f->data.function.args[0];
     else if (head_name_is(f, "Power") && f->data.function.arg_count == 2 &&
              f->data.function.args[0]->type == EXPR_SYMBOL &&
-             strcmp(f->data.function.args[0]->data.symbol.name, "E") == 0)
+             f->data.function.args[0]->data.symbol.name == SYM_E)
         arg = f->data.function.args[1];
     if (!arg || !contains_symbol(arg, x)) return false;
 
@@ -2296,7 +2296,7 @@ static Expr* stage_linear_ode(const Expr* f, const Expr* g, const Expr* x,
  * ---------------------------------------------------------------------- */
 /* True iff `e` is the symbol True / False. */
 static bool dui_is_bool(const Expr* e, bool v) {
-    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, v ? "True" : "False") == 0;
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == (v ? SYM_True : SYM_False);
 }
 
 /* The verified closed form I under the inner integral's convergence condition
@@ -2672,7 +2672,7 @@ static bool is_gamma_shape(const Expr* h, const Expr* x,
             ea = F->data.function.args[0];
         else if (head_name_is(F, "Power") && F->data.function.arg_count == 2 &&
                  F->data.function.args[0]->type == EXPR_SYMBOL &&
-                 strcmp(F->data.function.args[0]->data.symbol.name, "E") == 0)
+                 F->data.function.args[0]->data.symbol.name == SYM_E)
             ea = F->data.function.args[1];
         if (ea) {
             Expr* c2 = ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)ea), expr_copy((Expr*)x), mk_int(2)));
@@ -2876,7 +2876,7 @@ Expr* builtin_integrate_diffunderint(Expr* res) {
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL &&
-                strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
+                lhs->data.symbol.name == SYM_Assumptions) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }

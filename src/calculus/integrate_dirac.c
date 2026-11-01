@@ -4,6 +4,7 @@
 #include "integrate_dirac.h"
 #include "expr.h"
 #include "eval.h"
+#include "../sym_names.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -66,15 +67,15 @@ static bool free_of(const Expr* e, const char* name) {
  * symbolic constant like Pi (so Sign[Pi] would read as undecided). */
 static int classify_sign(const Expr* diff) {
     Expr* z = eval_take(mk_fn2("Equal", cp(diff), expr_new_integer(0)));
-    bool iszero = (z->type == EXPR_SYMBOL && strcmp(z->data.symbol.name, "True") == 0);
+    bool iszero = (z->type == EXPR_SYMBOL && z->data.symbol.name == SYM_True);
     expr_free(z);
     if (iszero) return 0;
     Expr* p = eval_take(mk_fn1("Positive", cp(diff)));
-    bool pos = (p->type == EXPR_SYMBOL && strcmp(p->data.symbol.name, "True") == 0);
+    bool pos = (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_True);
     expr_free(p);
     if (pos) return 1;
     Expr* ng = eval_take(mk_fn1("Negative", cp(diff)));
-    bool neg = (ng->type == EXPR_SYMBOL && strcmp(ng->data.symbol.name, "True") == 0);
+    bool neg = (ng->type == EXPR_SYMBOL && ng->data.symbol.name == SYM_True);
     expr_free(ng);
     if (neg) return -1;
     return 2;

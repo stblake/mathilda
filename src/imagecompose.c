@@ -21,6 +21,7 @@
 #include "attr.h"
 #include "image.h"
 #include "imagecompose.h"
+#include "sym_names.h"
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -89,7 +90,7 @@ static bool as_pair(const Expr* e, double* a, double* b)
 {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
     if (!e->data.function.head || e->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(e->data.function.head->data.symbol.name, "List") != 0) return false;
+        e->data.function.head->data.symbol.name != SYM_List) return false;
     return as_double(e->data.function.args[0], a) && as_double(e->data.function.args[1], b);
 }
 
@@ -261,7 +262,7 @@ static Expr* builtin_imagecompose(Expr* res)
     second = arg(res, 1);
     if (second && second->type == EXPR_FUNCTION && second->data.function.arg_count == 2 &&
         second->data.function.head && second->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(second->data.function.head->data.symbol.name, "List") == 0 &&
+        second->data.function.head->data.symbol.name == SYM_List &&
         as_double(second->data.function.args[1], &opacity)) {
         if (!img_read(second->data.function.args[0], &over)) { img_free(&base); return NULL; }
         if (opacity < 0.0 || opacity > 1.0) { img_free(&base); img_free(&over); return NULL; }
@@ -344,7 +345,7 @@ static Expr* builtin_imageassemble(Expr* res)
     grid = arg(res, 0);
     if (!grid || grid->type != EXPR_FUNCTION || !grid->data.function.head ||
         grid->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(grid->data.function.head->data.symbol.name, "List") != 0 ||
+        grid->data.function.head->data.symbol.name != SYM_List ||
         grid->data.function.arg_count == 0)
         return NULL;
 
@@ -365,7 +366,7 @@ static Expr* builtin_imageassemble(Expr* res)
             const Expr* row = grid->data.function.args[i];
             if (!row || row->type != EXPR_FUNCTION || !row->data.function.head ||
                 row->data.function.head->type != EXPR_SYMBOL ||
-                strcmp(row->data.function.head->data.symbol.name, "List") != 0)
+                row->data.function.head->data.symbol.name != SYM_List)
                 return NULL;
             if (row->data.function.arg_count > cols) cols = row->data.function.arg_count;
         }

@@ -2619,9 +2619,9 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
              * ordinary single-arg head under assumptions pays nothing. The probe
              * mutes arithmetic warnings (a pole in our substitution is not the
              * user's) and has_infinity rejects an argument that blows up at x0. */
-            bool sign_head = (strcmp(head, "Abs") == 0 ||
-                              strcmp(head, "Sign") == 0 ||
-                              strcmp(head, "UnitStep") == 0);
+            bool sign_head = (head == SYM_Abs ||
+                              head == SYM_Sign ||
+                              head == SYM_UnitStep);
             if (sign_head && !argpos && !argneg) {
                 arith_warnings_mute_push();
                 Expr* arg0 = eval_and_free(replace_all_of(arg, ctx->x, ctx->x0));
@@ -2643,7 +2643,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 }
                 expr_free(arg0);
             }
-            if (strcmp(head, "Abs") == 0) {
+            if (head == SYM_Abs) {
                 if (argpos) return series_expand_nested(arg, ctx);
                 if (argneg) {
                     Expr* neg = simp(mk_times(expr_new_integer(-1), expr_copy(arg)));
@@ -2651,9 +2651,9 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     expr_free(neg);
                     return r;
                 }
-            } else if (strcmp(head, "Sign") == 0 || strcmp(head, "UnitStep") == 0) {
+            } else if (head == SYM_Sign || head == SYM_UnitStep) {
                 /* Sign: +1 / -1; UnitStep: 1 / 0. */
-                bool is_sign = (strcmp(head, "Sign") == 0);
+                bool is_sign = (head == SYM_Sign);
                 if (argpos || argneg) {
                     int64_t v = argpos ? 1 : (is_sign ? -1 : 0);
                     Expr* c = expr_new_integer(v);
@@ -2661,7 +2661,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     expr_free(c);
                     return r;
                 }
-            } else if (strcmp(head, "Conjugate") == 0) {
+            } else if (head == SYM_Conjugate) {
                 if (assume_known_real(ctx->assume, arg))
                     return series_expand_nested(arg, ctx);
             }
@@ -2670,7 +2670,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
          * principal +g root regardless of assumptions, so resolve the sign
          * here when g's sign is known (mirrors the Abs kernel above). Only
          * fires for a provably-signed g, so Sqrt[g^2] = ±g holds identically. */
-        if (ctx->assume && head && strcmp(head, "Power") == 0 &&
+        if (ctx->assume && head && head == SYM_Power &&
             e->data.function.arg_count == 2) {
             Expr* b  = e->data.function.args[0];
             Expr* ex = e->data.function.args[1];
@@ -2694,7 +2694,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             }
         }
         /* ---- Plus ---- */
-        if (head && strcmp(head, "Plus") == 0) {
+        if (head && head == SYM_Plus) {
             SeriesObj* acc = NULL;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 SeriesObj* t = series_expand_nested(e->data.function.args[i], ctx);
@@ -2706,7 +2706,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             return acc;
         }
         /* ---- Times ---- */
-        if (head && strcmp(head, "Times") == 0) {
+        if (head && head == SYM_Times) {
             SeriesObj* acc = NULL;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 SeriesObj* t = series_expand_nested(e->data.function.args[i], ctx);
@@ -2718,7 +2718,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             return acc;
         }
         /* ---- Power ---- */
-        if (head && strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (head && head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
             Expr* exp  = e->data.function.args[1];
             bool base_has_x = !expr_free_of(base, ctx->x);
@@ -2776,7 +2776,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             return r;
         }
         /* ---- Log[x]-at-x=0 symbolic coefficient ---- */
-        if (head && strcmp(head, "Log") == 0 && e->data.function.arg_count == 1) {
+        if (head && head == SYM_Log && e->data.function.arg_count == 1) {
             Expr* arg = e->data.function.args[0];
             /* Log[c*(x-x0)^r * (1+u)] = r*Log[x-x0] + Log[c] + Log[1+u].
              * For x0 = 0 and arg = x, this is Log[x] -- keep symbolic. */
@@ -2855,7 +2855,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
         }
         /* ---- Zeta[x]: custom expansions about x0 = 1 (Laurent, introducing
          * the Stieltjes constants) and x0 = 0 (low-order Taylor). ---- */
-        if (head && strcmp(head, "Zeta") == 0 && e->data.function.arg_count == 1 &&
+        if (head && head == SYM_Zeta && e->data.function.arg_count == 1 &&
             expr_eq(e->data.function.args[0], ctx->x)) {
             SeriesObj* z = series_zeta_at(ctx);
             if (z) return z;
@@ -2873,9 +2873,9 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
          * integer cannot build an enormous product).  The product / sum rules
          * then yield the Laurent series: Gamma[s] at 0 -> 1/s - EulerGamma + ...,
          * PolyGamma[s] at 0 -> -1/s - EulerGamma + ... ---- */
-        if (head && (strcmp(head, "Gamma") == 0 || strcmp(head, "PolyGamma") == 0) &&
+        if (head && (head == SYM_Gamma || head == SYM_PolyGamma) &&
             (e->data.function.arg_count == 1 || e->data.function.arg_count == 2)) {
-            bool is_gamma = strcmp(head, "Gamma") == 0;
+            bool is_gamma = head == SYM_Gamma;
             Expr* m = NULL;                    /* PolyGamma order (borrowed) */
             Expr* u = NULL;                    /* argument (borrowed) */
             if (is_gamma && e->data.function.arg_count == 1) {
@@ -2931,7 +2931,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 }
             }
         }
-        if (head && strcmp(head, "Beta") == 0 && e->data.function.arg_count == 2 &&
+        if (head && head == SYM_Beta && e->data.function.arg_count == 2 &&
             !expr_free_of(e, ctx->x)) {
             Expr* A = e->data.function.args[0];
             Expr* B = e->data.function.args[1];
@@ -2970,26 +2970,26 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             SeriesObj* inner = series_expand_nested(e->data.function.args[0], ctx);
             if (!inner) return NULL;
             SeriesObj* r = NULL;
-            if (strcmp(head, "Exp") == 0)       r = so_apply_exp(inner);
-            else if (strcmp(head, "Sin") == 0)  r = so_apply_sin_or_cos(inner, true);
-            else if (strcmp(head, "Cos") == 0)  r = so_apply_sin_or_cos(inner, false);
-            else if (strcmp(head, "Sinh") == 0) r = so_apply_sinh_or_cosh(inner, true);
-            else if (strcmp(head, "Cosh") == 0) r = so_apply_sinh_or_cosh(inner, false);
-            else if (strcmp(head, "Tan") == 0) {
+            if (head == SYM_Exp)       r = so_apply_exp(inner);
+            else if (head == SYM_Sin)  r = so_apply_sin_or_cos(inner, true);
+            else if (head == SYM_Cos)  r = so_apply_sin_or_cos(inner, false);
+            else if (head == SYM_Sinh) r = so_apply_sinh_or_cosh(inner, true);
+            else if (head == SYM_Cosh) r = so_apply_sinh_or_cosh(inner, false);
+            else if (head == SYM_Tan) {
                 SeriesObj* sn = so_apply_sin_or_cos(inner, true);
                 SeriesObj* cs = so_apply_sin_or_cos(inner, false);
                 if (sn && cs) r = so_div(sn, cs);
                 if (sn) so_free(sn);
                 if (cs) so_free(cs);
-            } else if (strcmp(head, "Tanh") == 0) {
+            } else if (head == SYM_Tanh) {
                 SeriesObj* sn = so_apply_sinh_or_cosh(inner, true);
                 SeriesObj* cs = so_apply_sinh_or_cosh(inner, false);
                 if (sn && cs) r = so_div(sn, cs);
                 if (sn) so_free(sn);
                 if (cs) so_free(cs);
-            } else if (strcmp(head, "Log") == 0) {
+            } else if (head == SYM_Log) {
                 r = so_apply_log(inner);
-            } else if (strcmp(head, "ArcTan")  == 0) {
+            } else if (head == SYM_ArcTan) {
                 r = so_apply_kernel_at_zero("ArcTan", inner);
                 if (!r) {
                     int sc = so_branch_point_imag_sign(inner);
@@ -3040,23 +3040,23 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     }
                 }
             }
-            else if (strcmp(head, "SinIntegral") == 0) {
+            else if (head == SYM_SinIntegral) {
                 /* Si is entire and odd (Si(0)=0), analytic at u=0 like ArcTan. */
                 r = so_apply_kernel_at_zero("SinIntegral", inner);
             }
-            else if (strcmp(head, "SinhIntegral") == 0) {
+            else if (head == SYM_SinhIntegral) {
                 /* Shi is entire and odd (Shi(0)=0), analytic at u=0 like Si. */
                 r = so_apply_kernel_at_zero("SinhIntegral", inner);
             }
-            else if (strcmp(head, "FresnelC") == 0) {
+            else if (head == SYM_FresnelC) {
                 /* FresnelC is entire and odd (C(0)=0), analytic at u=0. */
                 r = so_apply_kernel_at_zero("FresnelC", inner);
             }
-            else if (strcmp(head, "FresnelS") == 0) {
+            else if (head == SYM_FresnelS) {
                 /* FresnelS is entire and odd (S(0)=0), analytic at u=0. */
                 r = so_apply_kernel_at_zero("FresnelS", inner);
             }
-            else if (strcmp(head, "ArcTanh") == 0) {
+            else if (head == SYM_ArcTanh) {
                 r = so_apply_kernel_at_zero("ArcTanh", inner);
                 /* Branch points at ±1 first; then the at-infinity rewrite. */
                 if (!r) {
@@ -3095,7 +3095,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     }
                 }
             }
-            else if (strcmp(head, "EllipticK") == 0 || strcmp(head, "EllipticE") == 0) {
+            else if (head == SYM_EllipticK || head == SYM_EllipticE) {
                 /* The COMPLETE integrals only: the incomplete spellings are
                  * EllipticE[phi, m] and EllipticF[phi, m], which have two
                  * arguments and never reach this single-argument chain. The
@@ -3107,14 +3107,14 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                  * m = 0 where the m-derivative is 0/0). */
                 r = so_apply_kernel_at_zero(head, inner);
             }
-            else if (strcmp(head, "ArcSin")  == 0) {
+            else if (head == SYM_ArcSin) {
                 r = so_apply_kernel_at_zero("ArcSin", inner);
                 if (!r) {
                     int sc = so_branch_point_sign(inner);
                     if (sc != 0) r = so_apply_arc_branch_point(inner, sc, true, ctx->target_order, ctx);
                 }
             }
-            else if (strcmp(head, "ArcSinh") == 0) {
+            else if (head == SYM_ArcSinh) {
                 r = so_apply_kernel_at_zero("ArcSinh", inner);
                 /* Branch points at ±I (new): square-root Puiseux series. */
                 if (!r) {
@@ -3140,14 +3140,14 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     expr_free(rewrite);
                 }
             }
-            else if (strcmp(head, "ArcCos")  == 0) {
+            else if (head == SYM_ArcCos) {
                 r = so_apply_arccos(inner);
                 if (!r) {
                     int sc = so_branch_point_sign(inner);
                     if (sc != 0) r = so_apply_arc_branch_point(inner, sc, false, ctx->target_order, ctx);
                 }
             }
-            else if (strcmp(head, "ArcCosh") == 0) {
+            else if (head == SYM_ArcCosh) {
                 r = so_apply_arccosh(inner);
                 /* Branch points at ±1 (new): square-root Puiseux series. */
                 if (!r) {
@@ -3171,7 +3171,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     expr_free(rewrite);
                 }
             }
-            else if (strcmp(head, "ArcCot")  == 0) {
+            else if (head == SYM_ArcCot) {
                 r = so_apply_arccot(inner);
                 /* Branch points at ±I: logarithmic series. */
                 if (!r) {
@@ -3185,7 +3185,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     if (inv) { r = so_apply_kernel_at_zero("ArcTan", inv); so_free(inv); }
                 }
             }
-            else if (strcmp(head, "ArcCoth") == 0) {
+            else if (head == SYM_ArcCoth) {
                 r = so_apply_arccoth(inner);
                 /* Branch points at ±1: logarithmic series. */
                 if (!r) {
@@ -3744,15 +3744,15 @@ Expr* builtin_normal(Expr* res) {
 static AssumeCtx* series_effective_assumptions(Expr* assm_option) {
     Expr* effective;
     if (assm_option && !(assm_option->type == EXPR_SYMBOL &&
-                         strcmp(assm_option->data.symbol.name, "Automatic") == 0)) {
+                         assm_option->data.symbol.name == SYM_Automatic)) {
         effective = eval_and_free(expr_copy(assm_option));   /* held option: evaluate */
     } else {
         effective = read_dollar_assumptions();               /* owned; True when unset */
     }
     if (!effective) return NULL;
     if (effective->type == EXPR_SYMBOL &&
-        (strcmp(effective->data.symbol.name, "True") == 0 ||
-         strcmp(effective->data.symbol.name, "Automatic") == 0)) {
+        (effective->data.symbol.name == SYM_True ||
+         effective->data.symbol.name == SYM_Automatic)) {
         expr_free(effective);
         return NULL;
     }
@@ -7271,7 +7271,7 @@ Expr* builtin_series(Expr* res) {
         Expr* s = raw[i];
         if (has_symbol_head(s, "Rule") && s->data.function.arg_count == 2 &&
             s->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(s->data.function.args[0]->data.symbol.name, "Assumptions") == 0) {
+            s->data.function.args[0]->data.symbol.name == SYM_Assumptions) {
             assm = s->data.function.args[1];
             continue;
         }

@@ -906,7 +906,7 @@ Expr* builtin_replace_repeated(Expr* res) {
     for (size_t i = 0; defs && defs->type == EXPR_FUNCTION && i < defs->data.function.arg_count; i++) {
         Expr* o = defs->data.function.args[i];
         if (is_rule(o) && o->data.function.arg_count == 2 && o->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(o->data.function.args[0]->data.symbol.name, "MaxIterations") == 0 &&
+            o->data.function.args[0]->data.symbol.name == SYM_MaxIterations &&
             !rr_max_iterations(o->data.function.args[1], &max_scans))
             return NULL;
     }
@@ -914,7 +914,7 @@ Expr* builtin_replace_repeated(Expr* res) {
         Expr* o = res->data.function.args[2];
         if (!is_rule(o) || o->data.function.arg_count != 2 ||
             o->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
-        if (strcmp(o->data.function.args[0]->data.symbol.name, "MaxIterations") != 0) {
+        if (o->data.function.args[0]->data.symbol.name != SYM_MaxIterations) {
             char* shown = expr_to_string_outputform(res);
             mth_message("ReplaceRepeated", "optx", "Unknown option %s in %s.",
                         o->data.function.args[0]->data.symbol.name, shown ? shown : "");

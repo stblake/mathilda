@@ -51,6 +51,7 @@
 #include "sf_machine_hyper.h" /* sf_machine_hyperu_c */
 #include "sf_scalar.h"       /* sf_machine_scalar_args, sf_machine_leaf */
 #include "symtab.h"
+#include "../sym_names.h"
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -99,8 +100,8 @@ static bool hu_is_number(const Expr* e) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        (strcmp(e->data.function.head->data.symbol.name, "Rational") == 0 ||
-         strcmp(e->data.function.head->data.symbol.name, "Complex") == 0)) {
+        (e->data.function.head->data.symbol.name == SYM_Rational ||
+         e->data.function.head->data.symbol.name == SYM_Complex)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (!hu_is_number(e->data.function.args[i])) return false;
         return true;

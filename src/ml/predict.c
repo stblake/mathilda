@@ -441,20 +441,20 @@ bool ml_model_apply_probe(Expr* head) {
     Expr* hh = head->data.function.head;
     if (!hh || hh->type != EXPR_SYMBOL) return false;
     const char* n = hh->data.symbol.name;
-    return strcmp(n, "PredictorFunction") == 0
-        || strcmp(n, "DimensionReducerFunction") == 0
-        || strcmp(n, "ClassifierFunction") == 0;
+    return n == SYM_PredictorFunction
+        || n == SYM_DimensionReducerFunction
+        || n == SYM_ClassifierFunction;
 }
 
 Expr* ml_model_apply(Expr* head, Expr** args, size_t argc) {
     if (!head || head->type != EXPR_FUNCTION) return NULL;
     Expr* hh = head->data.function.head;
     if (!hh || hh->type != EXPR_SYMBOL) return NULL;
-    if (strcmp(hh->data.symbol.name, "DimensionReducerFunction") == 0)
+    if (hh->data.symbol.name == SYM_DimensionReducerFunction)
         return ml_reducer_apply(head, args, argc);
-    if (strcmp(hh->data.symbol.name, "ClassifierFunction") == 0)
+    if (hh->data.symbol.name == SYM_ClassifierFunction)
         return ml_classifier_apply(head, args, argc);
-    if (strcmp(hh->data.symbol.name, "PredictorFunction") != 0) return NULL;
+    if (hh->data.symbol.name != SYM_PredictorFunction) return NULL;
     if (head->data.function.arg_count != 4 || argc != 1) return NULL;
 
     Expr* mname = head->data.function.args[0];

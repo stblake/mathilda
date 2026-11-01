@@ -728,7 +728,7 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
          * antiderivative hang. Skip it (do NOT recurse into its Slot-poly body,
          * which would mine 1+#1^4 for a bogus variable). The Root stays inside
          * coefficients, where field arithmetic handles it. */
-        if (strcmp(head, "Root") == 0) return;
+        if (head == SYM_Root) return;
         /* AlgebraicNumber[theta, {c0, c1, ...}] is the same thing in coordinate
          * form: a CONSTANT of the number field Q(theta), not a variable. The
          * Root rationale applies verbatim, and one worse besides -- Plus/Times
@@ -740,12 +740,12 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
          * (x + a y)(x + 1) and (x + a y)(x + 2) came back as the SECOND OPERAND.
          * Do not recurse into theta either -- it is the field's label, not a
          * subexpression of the coefficient. */
-        if (strcmp(head, "AlgebraicNumber") == 0) return;
-        if (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0 || strcmp(head, "List") == 0) {
+        if (head == SYM_AlgebraicNumber) return;
+        if (head == SYM_Plus || head == SYM_Times || head == SYM_List) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) collect_variables(e->data.function.args[i], vars_ptr, count, capacity);
             return;
         }
-        if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
             if (is_number(base)) return;
             if (e->data.function.args[1]->type == EXPR_INTEGER || is_rational(e->data.function.args[1], NULL, NULL)) {
@@ -782,8 +782,8 @@ static bool expr_has_field_constant(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     const char* head = (e->data.function.head->type == EXPR_SYMBOL)
                      ? e->data.function.head->data.symbol.name : "";
-    if (strcmp(head, "Root") == 0 || strcmp(head, "AlgebraicNumber") == 0) return true;
-    if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (head == SYM_Root || head == SYM_AlgebraicNumber) return true;
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* ex   = e->data.function.args[1];
         if (is_number((Expr*)base) && ex->type != EXPR_INTEGER &&
@@ -886,8 +886,8 @@ bool poly_is_binding_operator(const Expr* e) {
         hn == SYM_Hold || hn == SYM_HoldForm || hn == SYM_HoldComplete ||
         hn == SYM_Unevaluated || hn == SYM_Inactive || hn == SYM_DSolve)
         return true;
-    return strcmp(hn, "Dt") == 0 || strcmp(hn, "Limit") == 0 ||
-           strcmp(hn, "Series") == 0;
+    return hn == SYM_Dt || hn == SYM_Limit ||
+           hn == SYM_Series;
 }
 
 /* Opaque analytic-kernel heads: Log / (inverse) circular & hyperbolic. A radical
@@ -1472,14 +1472,14 @@ bool is_polynomial(Expr* e, Expr** vars, size_t var_count) {
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL) ? e->data.function.head->data.symbol.name : "";
         
-        if (strcmp(head, "Plus") == 0 || strcmp(head, "Times") == 0) {
+        if (head == SYM_Plus || head == SYM_Times) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (!is_polynomial(e->data.function.args[i], vars, var_count)) return false;
             }
             return true;
         }
         
-        if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
             Expr* exp = e->data.function.args[1];
             
@@ -1787,7 +1787,7 @@ static bool head_is_algebraicnumber(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "AlgebraicNumber") == 0
+        && e->data.function.head->data.symbol.name == SYM_AlgebraicNumber
         && e->data.function.arg_count >= 1;
 }
 
@@ -3068,7 +3068,7 @@ static bool pg_is_constant(const Expr* e) {
 static bool pg_has_negpow(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Power") == 0
+        && e->data.function.head->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         const Expr* ex = e->data.function.args[1];
         if (ex->type == EXPR_INTEGER && ex->data.integer < 0) return true;
@@ -3172,7 +3172,7 @@ Expr* builtin_polynomialgcd(Expr* res) {
                 /* leave a trailing option (Extension -> a, a Rule) untouched */
                 if (arg->type == EXPR_FUNCTION
                     && arg->data.function.head->type == EXPR_SYMBOL
-                    && strcmp(arg->data.function.head->data.symbol.name, "Rule") == 0) {
+                    && arg->data.function.head->data.symbol.name == SYM_Rule) {
                     cleared[i] = expr_copy(arg);
                     continue;
                 }
@@ -6175,10 +6175,10 @@ Expr* builtin_polynomialmod(Expr* res) {
     
     if (expr->type == EXPR_FUNCTION) {
         const char* head = expr->data.function.head->type == EXPR_SYMBOL ? expr->data.function.head->data.symbol.name : "";
-        if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 ||
-            strcmp(head, "Less") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 || 
-            strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 || 
-            strcmp(head, "Not") == 0) {
+        if (head == SYM_List || head == SYM_Equal || head == SYM_Unequal ||
+            head == SYM_Less || head == SYM_LessEqual || head == SYM_Greater || 
+            head == SYM_GreaterEqual || head == SYM_And || head == SYM_Or || 
+            head == SYM_Not) {
             Expr** args = malloc(sizeof(Expr*) * expr->data.function.arg_count);
             for (size_t i = 0; i < expr->data.function.arg_count; i++) {
                 Expr* ap_args[] = {expr_copy(expr->data.function.args[i]), expr_copy(m)};

@@ -123,7 +123,7 @@ static long leaf_count(const Expr* e) {
 static size_t collect_gamma_args(const Expr* e, const Expr** args, size_t n, size_t cap) {
     if (!e || e->type != EXPR_FUNCTION) return n;
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Gamma") == 0 &&
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Gamma &&
         e->data.function.arg_count == 1) {
         const Expr* z = e->data.function.args[0];
         bool seen = false;
@@ -237,7 +237,7 @@ static bool is_zero_now(const Expr* e) {
 /* Consuming: Simplify[pred] (optionally with assumptions) is the symbol True. */
 static bool prove_true(Expr* pred, Expr* as) {
     Expr* v = as ? ev2("Simplify", pred, cp(as)) : ev1("Simplify", pred);
-    bool t = v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "True") == 0;
+    bool t = v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
     if (v) expr_free(v);
     return t;
 }
@@ -245,7 +245,7 @@ static bool prove_true(Expr* pred, Expr* as) {
  * Simplify leaves as the bare predicate.  Consumes pred. */
 static bool prove_ref(Expr* pred, Expr* as) {
     Expr* v = as ? ev2("Refine", pred, cp(as)) : ev1("Refine", pred);
-    bool t = v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "True") == 0;
+    bool t = v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
     if (v) expr_free(v);
     return t;
 }
@@ -277,7 +277,7 @@ static bool is_zero_expr(const Expr* a) {
 /* b == +Infinity (symbol Infinity or DirectedInfinity[1]) */
 static bool is_pos_inf(const Expr* b) {
     if (!b) return false;
-    if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0) return true;
+    if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_Infinity) return true;
     if (head_name_is(b, "DirectedInfinity") && b->data.function.arg_count == 1) {
         Expr* d = b->data.function.args[0];
         return d->type == EXPR_INTEGER && d->data.integer == 1;
@@ -321,7 +321,7 @@ static Expr* exp_exponent(const Expr* K) {
         return K->data.function.args[0];
     if (head_name_is(K, "Power") && K->data.function.arg_count == 2) {
         Expr* base = K->data.function.args[0];
-        if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
+        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E)
             return K->data.function.args[1];
     }
     return NULL;
@@ -756,9 +756,9 @@ static bool num_dbl(const Expr* e, double* out) {
 /* Tighten `iv` by one binary relation.  `op` is a comparison head; the relation
  * is (sym op c) when sym_on_left, else (c op sym). */
 static void iv_tighten(Iv* iv, const char* op, double c, bool sym_on_left) {
-    bool lt = (strcmp(op, "Less") == 0 || strcmp(op, "LessEqual") == 0);
-    bool gt = (strcmp(op, "Greater") == 0 || strcmp(op, "GreaterEqual") == 0);
-    bool strict = (strcmp(op, "Less") == 0 || strcmp(op, "Greater") == 0);
+    bool lt = (op == SYM_Less || op == SYM_LessEqual);
+    bool gt = (op == SYM_Greater || op == SYM_GreaterEqual);
+    bool strict = (op == SYM_Less || op == SYM_Greater);
     if (!lt && !gt) return;
     bool upper = sym_on_left ? lt : gt;              /* sym < c => c bounds above */
     if (upper) {
@@ -780,7 +780,7 @@ static Iv sym_bound(const Expr* fact, const char* sym) {
     if (head->type != EXPR_SYMBOL) return iv;
     const char* h = head->data.symbol.name;
     size_t ac = fact->data.function.arg_count;
-    if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
+    if (h == SYM_And || h == SYM_List) {
         for (size_t i = 0; i < ac; i++) {
             Iv sub = sym_bound(fact->data.function.args[i], sym);
             if (sub.lo > iv.lo) { iv.lo = sub.lo; iv.lo_open = sub.lo_open; }
@@ -790,7 +790,7 @@ static Iv sym_bound(const Expr* fact, const char* sym) {
         }
         return iv;
     }
-    if (strcmp(h, "Inequality") == 0 && ac >= 3) {
+    if (h == SYM_Inequality && ac >= 3) {
         for (size_t i = 0; i + 2 < ac; i += 2) {
             Expr* L = fact->data.function.args[i];
             Expr* opE = fact->data.function.args[i + 1];
@@ -2058,7 +2058,7 @@ static Expr* frullani_resolve_boundary(Expr* val, Expr* assumptions) {
     Expr* dir = NULL;
     if (head_name_is(ex, "DirectedInfinity") && ex->data.function.arg_count == 1) {
         dir = ex->data.function.args[0];   /* E^DirectedInfinity[dir] */
-    } else if (ex->type == EXPR_SYMBOL && strcmp(ex->data.symbol.name, "Infinity") == 0) {
+    } else if (ex->type == EXPR_SYMBOL && ex->data.symbol.name == SYM_Infinity) {
         dir = ex;                            /* E^(+Infinity) => dir > 0 */
     }
     if (!dir) return val;
@@ -2106,7 +2106,7 @@ static Expr* frullani_boundary(const Expr* t, const Expr* x, const Expr* point,
      * a single trig factor of a linear real argument, so Cos[k x]^2 (mean 1/2,
      * head Power) and Cosh (k imaginary, sign not provable) do not match. */
     if (point->type == EXPR_SYMBOL &&
-        strcmp(point->data.symbol.name, "Infinity") == 0) {
+        point->data.symbol.name == SYM_Infinity) {
         Expr* facs[32];
         size_t nf = collect_factors((Expr*)t, facs, 32, 0);
         Expr* F = NULL; bool many = false;
@@ -2955,7 +2955,7 @@ Expr* builtin_integrate_ramanujan(Expr* res) {
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL &&
-                strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
+                lhs->data.symbol.name == SYM_Assumptions) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }
@@ -2987,7 +2987,7 @@ static bool half_line_parse(Expr* res, Expr** f, Expr** x, Expr** a, Expr** b,
             (opt->data.function.head->data.symbol.name == SYM_Rule ||
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
+            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Assumptions) {
                 *assumptions = opt->data.function.args[1];
                 continue;
             }

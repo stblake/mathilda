@@ -295,7 +295,7 @@ static void ft_extract_vars(Expr* var_arg, Expr*** S_out, size_t* S_count_out) {
 /* the two functions to recurse with.                                   */
 static Expr* ft_thread(Expr* compound, Expr* var_arg, const char* fname) {
     bool is_ineq = (compound->data.function.head->type == EXPR_SYMBOL
-                    && strcmp(compound->data.function.head->data.symbol.name, "Inequality") == 0);
+                    && compound->data.function.head->data.symbol.name == SYM_Inequality);
     size_t n = compound->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {

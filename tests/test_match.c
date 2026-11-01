@@ -1,5 +1,6 @@
 #include "test_utils.h"
 #include "match.h"
+#include "sym_intern.h"   /* env keys are interned names */
 #include "expr.h"
 #include "parse.h"
 #include "symtab.h"
@@ -60,7 +61,7 @@ void test_match_pattern() {
     Expr* p1 = parse_or_die("f[Pattern[x, Blank[]]]"); // f[x_]
     ASSERT(match(e1, p1, env) == true);
     
-    Expr* val = env_get(env, "x");
+    Expr* val = env_get(env, intern_symbol("x"));
     ASSERT(val != NULL);
     ASSERT(val->type == EXPR_INTEGER && val->data.integer == 42);
     
@@ -108,7 +109,7 @@ void test_match_deeply_nested() {
     Expr* p = parse_or_die("f[g[h[i[j[Pattern[x, Blank[]]]]]]]");
     ASSERT(match(e, p, env) == true);
     
-    Expr* val = env_get(env, "x");
+    Expr* val = env_get(env, intern_symbol("x"));
     ASSERT(val != NULL);
     
     Expr* expected = parse_or_die("k[42]");
@@ -124,16 +125,16 @@ void test_match_multiple_bindings() {
     Expr* p = parse_or_die("f[Pattern[a, Blank[]], g[Pattern[b, Blank[]], Pattern[c, Blank[]]], Pattern[d, Blank[]]]");
     ASSERT(match(e, p, env) == true);
     
-    Expr* val_a = env_get(env, "a");
+    Expr* val_a = env_get(env, intern_symbol("a"));
     ASSERT(val_a != NULL && val_a->type == EXPR_INTEGER && val_a->data.integer == 1);
     
-    Expr* val_b = env_get(env, "b");
+    Expr* val_b = env_get(env, intern_symbol("b"));
     ASSERT(val_b != NULL && val_b->type == EXPR_INTEGER && val_b->data.integer == 2);
     
-    Expr* val_c = env_get(env, "c");
+    Expr* val_c = env_get(env, intern_symbol("c"));
     ASSERT(val_c != NULL && val_c->type == EXPR_INTEGER && val_c->data.integer == 3);
     
-    Expr* val_d = env_get(env, "d");
+    Expr* val_d = env_get(env, intern_symbol("d"));
     ASSERT(val_d != NULL);
     Expr* expected_d = parse_or_die("h[4, 5, 6]");
     ASSERT(expr_eq(val_d, expected_d));

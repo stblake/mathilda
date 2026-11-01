@@ -55,7 +55,7 @@ static bool lz_transc_of_y(const Expr* e, const char* yname) {
         /* Exp[...] is Power[E, arg]; catch a y in the exponent */
         if (n == SYM_Power && e->data.function.arg_count == 2) {
             const Expr* base = e->data.function.args[0];
-            if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E
                 && ds_contains(e->data.function.args[1], yname)) return true;
         }
     }
@@ -92,8 +92,8 @@ static bool lz_has_arc_of_u(const Expr* e, const char* usym) {
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
         const char* n = h->data.symbol.name;
-        if ((strcmp(n, "ArcSin") == 0 || strcmp(n, "ArcCos") == 0 ||
-             strcmp(n, "ArcTan") == 0))
+        if ((n == SYM_ArcSin || n == SYM_ArcCos ||
+             n == SYM_ArcTan))
             for (size_t k = 0; k < e->data.function.arg_count; k++)
                 if (ds_contains(e->data.function.args[k], usym)) return true;
     }
@@ -122,11 +122,11 @@ static bool lz_has_kernel(const Expr* e, int kind, const char* y, const char* x)
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
         const char* n = h->data.symbol.name;
-        if (kind == 0 && strcmp(n, "Log") == 0 && ds_contains(e->data.function.args[0], y))
+        if (kind == 0 && n == SYM_Log && ds_contains(e->data.function.args[0], y))
             return true;
         if (kind == 1 && n == SYM_Power && e->data.function.arg_count == 2) {
             const Expr* b = e->data.function.args[0];
-            if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "E") == 0
+            if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E
                 && ds_contains(e->data.function.args[1], y)) return true;
         }
         if (kind == 2) {

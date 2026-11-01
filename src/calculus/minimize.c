@@ -1872,7 +1872,7 @@ static Expr* mz_integer_box(const Expr* f, const Expr* cons, Expr* const* vars,
 static void mz_collect_params(const Expr* e, Expr*** arr, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol.name, "C") == 0 &&
+        e->data.function.head->data.symbol.name == SYM_C &&
         e->data.function.arg_count == 1) {
         for (size_t i = 0; i < *n; i++) if (expr_eq(e, (*arr)[i])) return;
         if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;

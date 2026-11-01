@@ -112,8 +112,8 @@ static bool hn_numericizable(const Expr* e) {
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
             if (h->type == EXPR_SYMBOL &&
-                (strcmp(h->data.symbol.name, "Rational") == 0 ||
-                 strcmp(h->data.symbol.name, "Complex") == 0)) {
+                (h->data.symbol.name == SYM_Rational ||
+                 h->data.symbol.name == SYM_Complex)) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     if (!hn_numericizable(e->data.function.args[i])) return false;
                 return true;

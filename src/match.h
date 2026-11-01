@@ -23,10 +23,12 @@ MatchEnv* env_new(void);
 // Free the match environment (does not free the Expr* values, they are typically shared or cloned by the user)
 void env_free(MatchEnv* env);
 
-// Add a binding to the environment
+/* Add a binding to the environment.  `symbol` MUST be an interned name (a
+ * symbol node's name, a SYM_* pointer, or intern_symbol(...)): keys are
+ * compared by pointer, so a string literal never matches. */
 void env_set(MatchEnv* env, const char* symbol, Expr* value);
 
-// Get a binding from the environment, returns NULL if not found
+/* The binding of the interned name `symbol`, or NULL (see env_set). */
 Expr* env_get(MatchEnv* env, const char* symbol);
 
 // Match an expression against a pattern. Returns true if match succeeds,

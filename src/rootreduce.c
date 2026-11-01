@@ -105,7 +105,7 @@ static QQBarMethod parse_method(const Expr* res, int* bad) {
         const Expr* a = res->data.function.args[i];
         if (!is_option_rule(a)) continue;
         const Expr* lhs = a->data.function.args[0];
-        if (strcmp(lhs->data.symbol.name, "Method") != 0) continue;
+        if (lhs->data.symbol.name != SYM_Method) continue;
         const Expr* v = a->data.function.args[1];
         const char* s = (v->type == EXPR_STRING) ? v->data.string
                       : (v->type == EXPR_SYMBOL) ? v->data.symbol.name : NULL;
@@ -160,16 +160,16 @@ static Expr* thread_relational(const Expr* arg) {
     if (n == 2) {
         const Expr* a = arg->data.function.args[0];
         const Expr* b = arg->data.function.args[1];
-        if (strcmp(h, "Equal") == 0 || strcmp(h, "Unequal") == 0) {
+        if (h == SYM_Equal || h == SYM_Unequal) {
             int r = flint_qqbar_equal(a, b);      /* 1 eq, 0 neq, -1 undecided */
-            if (r >= 0) return bool_expr(strcmp(h, "Equal") == 0 ? (r == 1) : (r == 0));
+            if (r >= 0) return bool_expr(h == SYM_Equal ? (r == 1) : (r == 0));
         } else {
             int c = flint_qqbar_compare(a, b);    /* sign(a-b) or -2 undecided */
             if (c != -2) {
-                int val = strcmp(h, "Less") == 0        ? (c < 0)
-                        : strcmp(h, "LessEqual") == 0    ? (c <= 0)
-                        : strcmp(h, "Greater") == 0      ? (c > 0)
-                        : strcmp(h, "GreaterEqual") == 0 ? (c >= 0) : 0;
+                int val = h == SYM_Less        ? (c < 0)
+                        : h == SYM_LessEqual    ? (c <= 0)
+                        : h == SYM_Greater      ? (c > 0)
+                        : h == SYM_GreaterEqual ? (c >= 0) : 0;
                 return bool_expr(val);
             }
         }

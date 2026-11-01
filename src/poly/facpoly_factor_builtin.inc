@@ -603,7 +603,7 @@ Expr* builtin_factor(Expr* res) {
         QATower* auto_tower = NULL;
         if (alpha_expr && alpha_expr->type == EXPR_SYMBOL
             && alpha_expr->data.symbol.name
-            && strcmp(alpha_expr->data.symbol.name, "Automatic") == 0) {
+            && alpha_expr->data.symbol.name == SYM_Automatic) {
             auto_tower = extension_autodetect(res->data.function.args[0]);
             if (auto_tower && auto_tower->n == 1) {
                 alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
@@ -624,7 +624,7 @@ Expr* builtin_factor(Expr* res) {
          * sentinel (None or Automatic-with-no-detect). */
         if (alpha_expr && alpha_expr->type == EXPR_SYMBOL
             && alpha_expr->data.symbol.name
-            && strcmp(alpha_expr->data.symbol.name, "None") == 0) {
+            && alpha_expr->data.symbol.name == SYM_None) {
             alpha_expr = NULL;
         }
         if (alpha_expr) {

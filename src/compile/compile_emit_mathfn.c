@@ -173,9 +173,9 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         const Expr* la = A[0];
         const Expr* lb = A[1];
         if (la->type != EXPR_FUNCTION || la->data.function.head->type != EXPR_SYMBOL
-            || strcmp(la->data.function.head->data.symbol.name, "List") != 0
+            || la->data.function.head->data.symbol.name != SYM_List
             || lb->type != EXPR_FUNCTION || lb->data.function.head->type != EXPR_SYMBOL
-            || strcmp(lb->data.function.head->data.symbol.name, "List") != 0)
+            || lb->data.function.head->data.symbol.name != SYM_List)
             { c->ok = false; return -1; }
         size_t np = la->data.function.arg_count, nq = lb->data.function.arg_count;
         if (np + nq + 2 > KERNN_MAX_OPERANDS) { c->ok = false; return -1; }   /* KERNN operand cap */
@@ -288,12 +288,12 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         for (int s = 0; s < 2; s++) {
             const Expr* L = A[s];
             if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
-                || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+                || L->data.function.head->data.symbol.name != SYM_List
                 || L->data.function.arg_count != 2) { c->ok = false; return -1; }
             for (int t = 0; t < 2; t++) {
                 const Expr* I2 = L->data.function.args[t];
                 if (I2->type != EXPR_FUNCTION || I2->data.function.head->type != EXPR_SYMBOL
-                    || strcmp(I2->data.function.head->data.symbol.name, "List") != 0)
+                    || I2->data.function.head->data.symbol.name != SYM_List)
                     { c->ok = false; return -1; }
                 g[2 * s + t] = I2;
             }
@@ -608,7 +608,7 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
           } }
         const Expr* bnd = A[1];
         if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
-            || strcmp(bnd->data.function.head->data.symbol.name, "List") != 0
+            || bnd->data.function.head->data.symbol.name != SYM_List
             || bnd->data.function.arg_count != 2) { c->ok = false; return -1; }
         CompileType tx, tl, tu;
         if (!infer_type(c, A[0], &tx) || !infer_type(c, bnd->data.function.args[0], &tl)

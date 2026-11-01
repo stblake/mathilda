@@ -18,7 +18,7 @@
 static int is_list(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol.name, "List") == 0;
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
 static int is_symbol_named(const Expr* e, const char* name) {

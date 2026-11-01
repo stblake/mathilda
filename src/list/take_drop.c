@@ -2,6 +2,7 @@
 #include "take_drop.h"
 #include "ndarray.h"
 #include "ndstruct.h"
+#include "../sym_names.h"
 
 bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t* out_count) {
     int64_t m = 0, n = 0, s = 1;
@@ -29,7 +30,7 @@ bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t
         }
     } else if (spec->type == EXPR_FUNCTION) {
         const char* head = spec->data.function.head->type == EXPR_SYMBOL ? spec->data.function.head->data.symbol.name : "";
-        if (strcmp(head, "UpTo") == 0 && spec->data.function.arg_count == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
+        if (head == SYM_UpTo && spec->data.function.arg_count == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
             int64_t k = spec->data.function.args[0]->data.integer;
             if (k >= 0) {
                 m = 1;
@@ -39,7 +40,7 @@ bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t
                 if (m < 1) m = 1;
                 n = len;
             }
-        } else if (strcmp(head, "List") == 0) {
+        } else if (head == SYM_List) {
             size_t count = spec->data.function.arg_count;
             if (count >= 1 && count <= 3) {
                 if (spec->data.function.args[0]->type != EXPR_INTEGER) return false;

@@ -47,7 +47,7 @@ static Expr* sum_exponent(Expr* expo, Expr* var, Expr* imin, Expr* imax,
     /* If Sum could not close the exponent series, fall through. */
     if (r && r->type == EXPR_FUNCTION
           && r->data.function.head->type == EXPR_SYMBOL
-          && strcmp(r->data.function.head->data.symbol.name, "Sum") == 0) {
+          && r->data.function.head->data.symbol.name == SYM_Sum) {
         expr_free(r);
         return NULL;
     }

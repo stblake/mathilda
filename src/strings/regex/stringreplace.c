@@ -185,7 +185,7 @@ static int sr_meta_opt(const Expr* e, const char* head, int* meta) {
          e->data.function.head->data.symbol.name != SYM_RuleDelayed))
         return 0;
     const Expr* k = e->data.function.args[0];
-    if (k->type != EXPR_SYMBOL || strcmp(k->data.symbol.name, "MetaCharacters") != 0) return 0;
+    if (k->type != EXPR_SYMBOL || k->data.symbol.name != SYM_MetaCharacters) return 0;
     const Expr* v = e->data.function.args[1];
     if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_None)      *meta = SR_META_NONE;
     else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) *meta = SR_META_AUTO;

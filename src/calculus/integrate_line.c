@@ -401,7 +401,7 @@ static bool has_branch_over_x(const Expr* e, const Expr* x) {
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
         if (is_branch_head(h) && contains_symbol(e, x)) return true;
-        if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (h == SYM_Power && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
             Expr* exp  = e->data.function.args[1];
             if (contains_symbol(base, x)) {
@@ -485,9 +485,9 @@ static Expr* line_term_delta(Expr* term, Expr* x, Expr* a, Expr* b) {
     if (!is_affine_in(u, x)) { expr_free(coeff); return NULL; }
 
     Expr* delta = NULL;
-    if (strcmp(h, "Log") == 0) {
+    if (h == SYM_Log) {
         delta = line_log_ratio(u, x, a, b);
-    } else if (strcmp(h, "ArcTan") == 0) {
+    } else if (h == SYM_ArcTan) {
         /* ArcTan[u] = (1/(2I)) ( Log[1+I u] - Log[1-I u] ), 1 +/- I u affine.
          * delta = (-I/2)( Log[(1+I u_b)/(1+I u_a)] - Log[(1-I u_b)/(1-I u_a)] ). */
         Expr* iu = mk_fn2("Times", mk_sym(SYM_I), expr_copy(u));
@@ -511,7 +511,7 @@ static Expr* line_term_delta(Expr* term, Expr* x, Expr* a, Expr* b) {
             if (lp) expr_free(lp);
             if (lm) expr_free(lm);
         }
-    } else if (strcmp(h, "ArcTanh") == 0) {
+    } else if (h == SYM_ArcTanh) {
         /* ArcTanh[u] = (1/2)( Log[1+u] - Log[1-u] ), 1 +/- u affine.
          * delta = (1/2)( Log[(1+u_b)/(1+u_a)] - Log[(1-u_b)/(1-u_a)] ). */
         Expr* up = eval_take(mk_fn2("Plus", expr_new_integer(1), expr_copy(u)));

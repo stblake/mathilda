@@ -277,7 +277,7 @@ bool image_info(const Expr* e, size_t* width, size_t* height,
                 size_t* channels, ImgType* type) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
     const Expr* hd = e->data.function.head;
-    if (!hd || hd->type != EXPR_SYMBOL || strcmp(hd->data.symbol.name, "Image") != 0)
+    if (!hd || hd->type != EXPR_SYMBOL || hd->data.symbol.name != SYM_Image)
         return false;
     const Expr* ty = e->data.function.args[1];
     if (!ty || ty->type != EXPR_STRING) return false;
@@ -1010,7 +1010,7 @@ bool image3d_info(const Expr* e, size_t* width, size_t* height, size_t* depth,
                   size_t* channels, ImgType* type) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
     const Expr* hd = e->data.function.head;
-    if (!hd || hd->type != EXPR_SYMBOL || strcmp(hd->data.symbol.name, "Image3D") != 0)
+    if (!hd || hd->type != EXPR_SYMBOL || hd->data.symbol.name != SYM_Image3D)
         return false;
     const Expr* ty = e->data.function.args[1];
     if (!ty || ty->type != EXPR_STRING) return false;
@@ -1414,9 +1414,9 @@ char* image_to_json(const Expr* e) {
     size_t w = 0, h = 0, d = 0, c = 0, slice = 0;
     double* buf = NULL;
     bool vol = false;
-    if (strcmp(head, "Image") == 0) {
+    if (head == SYM_Image) {
         if (!image_load((Expr*)e, &w, &h, &c, &buf)) return NULL;
-    } else if (strcmp(head, "Image3D") == 0) {
+    } else if (head == SYM_Image3D) {
         if (!image3d_load((Expr*)e, &w, &h, &d, &c, &buf)) return NULL;
         vol = true;
         slice = d / 2;

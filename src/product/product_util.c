@@ -30,7 +30,7 @@ Expr* prod_factor(Expr* e) {
     /* If Factor came back unevaluated (head Factor), keep the input form. */
     if (r && r->type == EXPR_FUNCTION
           && r->data.function.head->type == EXPR_SYMBOL
-          && strcmp(r->data.function.head->data.symbol.name, "Factor") == 0) {
+          && r->data.function.head->data.symbol.name == SYM_Factor) {
         expr_free(r);
         return expr_copy(e);
     }
@@ -40,7 +40,7 @@ Expr* prod_factor(Expr* e) {
 bool prod_free_of(Expr* e, Expr* var) {
     Expr* args[2] = { expr_copy(e), expr_copy(var) };
     Expr* r = prod_eval("FreeQ", args, 2);
-    bool yes = (r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0);
+    bool yes = (r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
     if (r) expr_free(r);
     return yes;
 }

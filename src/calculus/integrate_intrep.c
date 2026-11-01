@@ -505,7 +505,7 @@ Expr* builtin_integrate_intrep(Expr* res) {
             (opt->data.function.head->data.symbol.name == SYM_Rule ||
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
             opt->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(opt->data.function.args[0]->data.symbol.name, "Assumptions") == 0) {
+            opt->data.function.args[0]->data.symbol.name == SYM_Assumptions) {
             as = opt->data.function.args[1]; continue;
         }
         return NULL;

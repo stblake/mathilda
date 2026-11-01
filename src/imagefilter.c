@@ -2325,8 +2325,8 @@ static Expr* builtin_morphologicalcomponents(Expr* res) {
         if (!lhs || lhs->type != EXPR_SYMBOL
             || strcmp(lhs->data.symbol.name, "CornerNeighbors") != 0) return NULL;
         if (!rhs || rhs->type != EXPR_SYMBOL) return NULL;
-        if (strcmp(rhs->data.symbol.name, "True") == 0) corners = true;
-        else if (strcmp(rhs->data.symbol.name, "False") == 0) corners = false;
+        if (rhs->data.symbol.name == SYM_True) corners = true;
+        else if (rhs->data.symbol.name == SYM_False) corners = false;
         else return NULL;
     }
 
@@ -3640,7 +3640,7 @@ static Expr* builtin_imagecorners(Expr* res) {
      * line here. An explicit option beats the positional form. */
     if (nopt && (ngiven || argc < 5)) {
         if (nopt->type == EXPR_SYMBOL && nopt->data.symbol.name
-            && strcmp(nopt->data.symbol.name, "Infinity") == 0) {
+            && nopt->data.symbol.name == SYM_Infinity) {
             maxn = 0;
         } else {
             double nv = 0.0, iv = 0.0;

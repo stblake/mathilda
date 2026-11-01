@@ -687,7 +687,7 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
      * integration, matching Mathematica's TeXForm (c_1, c_2, ...) and the
      * CLI TeX renderer (print.c). A single-character subscript stays bare;
      * anything longer is braced so LaTeX groups the whole subscript. */
-    if (!b->std && strcmp(hname, "C") == 0 && argc == 1) {
+    if (!b->std && hname == SYM_C && argc == 1) {
         const Expr* sub = args[0];
         int bare = (sub->type == EXPR_INTEGER
                     && sub->data.integer >= 0 && sub->data.integer <= 9)
@@ -862,7 +862,7 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
     }
 
     /* ---- Binomial[n, k] ---- */
-    if (!b->std && strcmp(hname, "Binomial") == 0 && argc == 2) {
+    if (!b->std && hname == SYM_Binomial && argc == 2) {
         lb_cat(b, "\\binom{");
         to_latex_prec(b, args[0], PREC_ATOM);
         lb_cat(b, "}{");
@@ -933,7 +933,7 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
     }
 
     /* ---- Limit[f, x->a] ---- */
-    if (strcmp(hname, "Limit") == 0 && argc >= 2) {
+    if (hname == SYM_Limit && argc >= 2) {
         const Expr* rule = args[1];
         lb_cat(b, "\\lim_{");
         if (head_is(rule, SYM_Rule) && rule->data.function.arg_count == 2) {

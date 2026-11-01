@@ -377,7 +377,7 @@ Expr* gd_finish(GDPrims* P, const double* bb, double pw, double ph,
         const Expr* a = res->data.function.args[i];
         if (!is_rule(a) || a->data.function.args[0]->type != EXPR_SYMBOL) continue;
         const char* nm = a->data.function.args[0]->data.symbol.name;
-        bool skip = strcmp(nm, "ImageSize") == 0;
+        bool skip = nm == SYM_ImageSize;
         for (const char* const* c = consumed; !skip && c && *c; c++)
             if (strcmp(nm, *c) == 0) skip = true;
         if (!skip) ga[k++] = expr_copy((Expr*)a);

@@ -725,7 +725,7 @@ bool prov_int(const AssumeCtx* ctx, const Expr* x) {
              h == SYM_Round || h == SYM_IntegerPart)) return true;
         /* Mod[a,b] / Quotient[a,b] of integers are integers. */
         if (n == 2 && prov_int(ctx, a[0]) && prov_int(ctx, a[1]) &&
-            (strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0)) return true;
+            (h == SYM_Mod || h == SYM_Quotient)) return true;
     }
     return false;
 }
@@ -990,11 +990,11 @@ static bool ar_relational_head(const Expr* f) {
     if (!f || f->type != EXPR_FUNCTION || !f->data.function.head ||
         f->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = f->data.function.head->data.symbol.name;
-    return strcmp(h,"Less")==0 || strcmp(h,"Greater")==0 ||
-           strcmp(h,"LessEqual")==0 || strcmp(h,"GreaterEqual")==0 ||
-           strcmp(h,"Equal")==0 || strcmp(h,"Unequal")==0 ||
-           strcmp(h,"And")==0 || strcmp(h,"Or")==0 || strcmp(h,"Not")==0 ||
-           strcmp(h,"Inequality")==0;
+    return h == SYM_Less || h == SYM_Greater ||
+           h == SYM_LessEqual || h == SYM_GreaterEqual ||
+           h == SYM_Equal || h == SYM_Unequal ||
+           h == SYM_And || h == SYM_Or || h == SYM_Not ||
+           h == SYM_Inequality;
 }
 static void ar_collect_vars(const Expr* e, const Expr*** v, size_t* n, size_t* cap) {
     if (!e) return;

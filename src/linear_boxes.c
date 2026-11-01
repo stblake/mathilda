@@ -20,6 +20,7 @@
 #include "expr.h"
 #include "print.h"
 #include "utf8.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -131,13 +132,13 @@ static bool box_to_text(const Expr* b, Buf* out) {
     size_t n = b->data.function.arg_count;
     Expr* const* A = b->data.function.args;
     const char* fn = NULL;
-    if (strcmp(h, "SuperscriptBox") == 0 && n == 2) fn = "Power";
-    else if (strcmp(h, "SubscriptBox") == 0 && n == 2) fn = "Subscript";
+    if (h == SYM_SuperscriptBox && n == 2) fn = "Power";
+    else if (h == SYM_SubscriptBox && n == 2) fn = "Subscript";
     else if (strcmp(h, "FractionBox") == 0 && n == 2) fn = "Divide";
     else if (strcmp(h, "SqrtBox") == 0 && n == 1) fn = "Sqrt";
-    else if (strcmp(h, "OverscriptBox") == 0 && n == 2) fn = "Overscript";
+    else if (h == SYM_OverscriptBox && n == 2) fn = "Overscript";
     else if (strcmp(h, "UnderscriptBox") == 0 && n == 2) fn = "Underscript";
-    else if (strcmp(h, "SubsuperscriptBox") == 0 && n == 3) fn = "Subsuperscript";
+    else if (h == SYM_SubsuperscriptBox && n == 3) fn = "Subsuperscript";
     if (fn) {
         buf_str(out, fn);
         buf_str(out, "[");
@@ -150,14 +151,14 @@ static bool box_to_text(const Expr* b, Buf* out) {
         buf_str(out, "]");
         return true;
     }
-    if (strcmp(h, "RowBox") == 0 && n == 1 && A[0]->type == EXPR_FUNCTION) {
+    if (h == SYM_RowBox && n == 1 && A[0]->type == EXPR_FUNCTION) {
         for (size_t i = 0; i < A[0]->data.function.arg_count; i++)
             if (!box_to_text(A[0]->data.function.args[i], out)) return false;
         return true;
     }
     /* Wrappers that display their first argument. */
     if (n >= 1 && (strcmp(h, "FormBox") == 0 || strcmp(h, "StyleBox") == 0 ||
-                   strcmp(h, "TagBox") == 0 || strcmp(h, "AdjustmentBox") == 0))
+                   h == SYM_TagBox || strcmp(h, "AdjustmentBox") == 0))
         return box_to_text(A[0], out);
     /* InterpretationBox[boxes, expr, ...] stands for expr. */
     if (strcmp(h, "InterpretationBox") == 0 && n >= 2) {

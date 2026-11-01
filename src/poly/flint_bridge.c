@@ -173,15 +173,15 @@ static int collect_vars(const Expr* e, VarSet* vs) {
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) return 0;
-            if (strcmp(h, "Rational") == 0) return 1; /* numeric coefficient */
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Rational) return 1; /* numeric coefficient */
+            if (h == SYM_Power) {
                 if (e->data.function.arg_count != 2) return 0;
                 const Expr* base = e->data.function.args[0];
                 const Expr* exp  = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return 0;
                 return collect_vars(base, vs);
             }
-            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+            if (h == SYM_Plus || h == SYM_Times) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     if (!collect_vars(e->data.function.args[i], vs)) return 0;
                 return 1;
@@ -298,7 +298,7 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
 
-            if (strcmp(h, "Rational") == 0) {
+            if (h == SYM_Rational) {
                 if (n != 2) return 0;
                 fmpq_t c; fmpq_init(c);
                 if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
@@ -311,7 +311,7 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                 fmpq_clear(c);
                 return 1;
             }
-            if (strcmp(h, "Plus") == 0) {
+            if (h == SYM_Plus) {
                 /* Monomial summands are pushed unsorted and sorted once at
                  * the end; adding them one at a time re-merged the growing
                  * sum on every term, quadratic in its length (1.1 s for an
@@ -347,7 +347,7 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
-            if (strcmp(h, "Times") == 0) {
+            if (h == SYM_Times) {
                 fmpq_mpoly_one(out, ctx);
                 fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
                 int ok = 1;
@@ -358,7 +358,7 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (n != 2) return 0;
                 const Expr* exp = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return 0;
@@ -826,7 +826,7 @@ Expr* flint_expand_polynomial_kernels(const Expr* e) {
 static int expr_is_imag_unit(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
-    if (!h || strcmp(h, "Complex") != 0 || e->data.function.arg_count != 2) return 0;
+    if (!h || h != SYM_Complex || e->data.function.arg_count != 2) return 0;
     const Expr* re = e->data.function.args[0];
     const Expr* im = e->data.function.args[1];
     return re->type == EXPR_INTEGER && re->data.integer == 0 &&
@@ -864,13 +864,13 @@ static void field_scan(const Expr* e, FieldScan* fs) {
         fs->conflict = 1;
         return;
     }
-    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_AlgebraicNumber && e->data.function.arg_count == 2) {
         const Expr* g = e->data.function.args[0];
         if (!fs->have_alg) { fs->theta = g; fs->have_alg = 1; }
         else if (!expr_eq(g, fs->theta)) fs->conflict = 1;
         return;
     }
-    if (h && strcmp(h, "Complex") == 0) { fs->have_complex = 1; return; }
+    if (h && h == SYM_Complex) { fs->have_complex = 1; return; }
     field_scan(e->data.function.head, fs);
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         field_scan(e->data.function.args[i], fs);
@@ -915,9 +915,9 @@ static Expr* field_subst_tau(const Expr* e, int gaussian) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2)
+    if (h && h == SYM_AlgebraicNumber && e->data.function.arg_count == 2)
         return field_tau_from_coords(e->data.function.args[1]);
-    if (h && strcmp(h, "Complex") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_Complex && e->data.function.arg_count == 2) {
         if (!gaussian) return NULL;
         Expr* bt[2] = { expr_copy(e->data.function.args[1]), expr_new_symbol(FIELD_TAU_NAME) };
         Expr* pa[2] = { expr_copy(e->data.function.args[0]),
@@ -1516,7 +1516,7 @@ static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
 
-            if (strcmp(h, "Rational") == 0) {
+            if (h == SYM_Rational) {
                 if (n != 2) return 0;
                 fmpq_t c; fmpq_init(c);
                 if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
@@ -1529,7 +1529,7 @@ static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
                 fmpq_clear(c);
                 return 1;
             }
-            if (strcmp(h, "Plus") == 0) {
+            if (h == SYM_Plus) {
                 fmpq_mpoly_zero(out, ctx);
                 fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
                 int ok = 1;
@@ -1540,7 +1540,7 @@ static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
-            if (strcmp(h, "Times") == 0) {
+            if (h == SYM_Times) {
                 fmpq_mpoly_one(out, ctx);
                 fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
                 int ok = 1;
@@ -1551,7 +1551,7 @@ static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (n != 2) return 0;
                 const Expr* exp = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return 0;
@@ -1689,8 +1689,8 @@ static bool is_kernel_node(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     const char* h = fn_head_name(e);
     if (!h) return true;                       /* a compound head, f[a][b] */
-    return strcmp(h, "Plus") != 0 && strcmp(h, "Times") != 0 && strcmp(h, "Power") != 0 &&
-           strcmp(h, "Rational") != 0 && strcmp(h, "Complex") != 0;
+    return h != SYM_Plus && h != SYM_Times && h != SYM_Power &&
+           h != SYM_Rational && h != SYM_Complex;
 }
 
 /* A copy of e with every kernel node replaced by its private symbol; NULL on
@@ -1996,7 +1996,7 @@ static int expr_accum_fmpq_poly(const Expr* e, const char* xname, fmpq_poly_t ou
             const char* h = fn_head_name(e);
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
-            if (strcmp(h, "Rational") == 0) {
+            if (h == SYM_Rational) {
                 if (n != 2) return 0;
                 fmpq_t c; fmpq_init(c);
                 if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
@@ -2008,7 +2008,7 @@ static int expr_accum_fmpq_poly(const Expr* e, const char* xname, fmpq_poly_t ou
                 fmpq_clear(c);
                 return 1;
             }
-            if (strcmp(h, "Plus") == 0) {
+            if (h == SYM_Plus) {
                 fmpq_poly_zero(out);
                 fmpq_poly_t t; fmpq_poly_init(t);
                 int ok = 1;
@@ -2019,7 +2019,7 @@ static int expr_accum_fmpq_poly(const Expr* e, const char* xname, fmpq_poly_t ou
                 fmpq_poly_clear(t);
                 return ok;
             }
-            if (strcmp(h, "Times") == 0) {
+            if (h == SYM_Times) {
                 fmpq_poly_one(out);
                 fmpq_poly_t t; fmpq_poly_init(t);
                 int ok = 1;
@@ -2030,7 +2030,7 @@ static int expr_accum_fmpq_poly(const Expr* e, const char* xname, fmpq_poly_t ou
                 fmpq_poly_clear(t);
                 return ok;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (n != 2) return 0;
                 const Expr* ex = e->data.function.args[1];
                 if (ex->type != EXPR_INTEGER || ex->data.integer < 0) return 0;
@@ -2070,7 +2070,7 @@ static int expr_to_fmpq_ratfunc(const Expr* e, const char* xname,
                                 fmpq_poly_t num, fmpq_poly_t den) {
     if (e->type == EXPR_FUNCTION) {
         const char* h = fn_head_name(e);
-        if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (h && h == SYM_Power && e->data.function.arg_count == 2) {
             const Expr* ex = e->data.function.args[1];
             if (ex->type == EXPR_INTEGER && ex->data.integer < 0) {
                 fmpq_poly_t b; fmpq_poly_init(b);
@@ -2081,7 +2081,7 @@ static int expr_to_fmpq_ratfunc(const Expr* e, const char* xname,
                 return ok;
             }
         }
-        if (h && strcmp(h, "Times") == 0) {
+        if (h && h == SYM_Times) {
             fmpq_poly_set_si(num, 1); fmpq_poly_set_si(den, 1);
             fmpq_poly_t tn, td; fmpq_poly_init(tn); fmpq_poly_init(td);
             int ok = 1;
@@ -2092,7 +2092,7 @@ static int expr_to_fmpq_ratfunc(const Expr* e, const char* xname,
             fmpq_poly_clear(tn); fmpq_poly_clear(td);
             return ok;
         }
-        if (h && strcmp(h, "Plus") == 0) {
+        if (h && h == SYM_Plus) {
             fmpq_poly_zero(num); fmpq_poly_set_si(den, 1);
             fmpq_poly_t tn, td, p1, p2; fmpq_poly_init(tn); fmpq_poly_init(td);
             fmpq_poly_init(p1); fmpq_poly_init(p2);
@@ -2457,13 +2457,13 @@ static int is_perfect_square_l(long n) {
 static int is_sqrt_int(const Expr* e, long* out) {
     if (e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
-    if (!h || strcmp(h, "Power") != 0 || e->data.function.arg_count != 2) return 0;
+    if (!h || h != SYM_Power || e->data.function.arg_count != 2) return 0;
     const Expr* base = e->data.function.args[0];
     const Expr* exp  = e->data.function.args[1];
     if (base->type != EXPR_INTEGER || base->data.integer <= 0) return 0;
     if (exp->type != EXPR_FUNCTION) return 0;
     const char* eh = fn_head_name(exp);
-    if (!eh || strcmp(eh, "Rational") != 0 || exp->data.function.arg_count != 2) return 0;
+    if (!eh || eh != SYM_Rational || exp->data.function.arg_count != 2) return 0;
     const Expr* en = exp->data.function.args[0];
     const Expr* ed = exp->data.function.args[1];
     if (en->type == EXPR_INTEGER && en->data.integer == 1 &&
@@ -2487,7 +2487,7 @@ static void nf_detect(const Expr* e, NFDetect* st) {
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) { st->other = 1; return; }
-            if (strcmp(h, "Rational") == 0) return;
+            if (h == SYM_Rational) return;
             long k;
             if (is_sqrt_int(e, &k)) {
                 if (is_perfect_square_l(k)) { st->other = 1; return; }
@@ -2495,14 +2495,14 @@ static void nf_detect(const Expr* e, NFDetect* st) {
                 else if (st->d != k) st->multi_d = 1;
                 return;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (e->data.function.arg_count != 2) { st->other = 1; return; }
                 const Expr* exp = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) { st->other = 1; return; }
                 nf_detect(e->data.function.args[0], st);
                 return;
             }
-            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+            if (h == SYM_Plus || h == SYM_Times) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     nf_detect(e->data.function.args[i], st);
                 return;
@@ -2577,7 +2577,7 @@ static int to_mpoly_gen(const Expr* e, fmpq_mpoly_t out,
             const char* h = fn_head_name(e);
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
-            if (strcmp(h, "Rational") == 0) {
+            if (h == SYM_Rational) {
                 if (n != 2) return 0;
                 fmpq_t c; fmpq_init(c);
                 if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
@@ -2589,7 +2589,7 @@ static int to_mpoly_gen(const Expr* e, fmpq_mpoly_t out,
                 fmpq_clear(c);
                 return 1;
             }
-            if (strcmp(h, "Plus") == 0) {
+            if (h == SYM_Plus) {
                 fmpq_mpoly_zero(out, ctx);
                 fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
                 int ok = 1;
@@ -2600,7 +2600,7 @@ static int to_mpoly_gen(const Expr* e, fmpq_mpoly_t out,
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
-            if (strcmp(h, "Times") == 0) {
+            if (h == SYM_Times) {
                 fmpq_mpoly_one(out, ctx);
                 fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
                 int ok = 1;
@@ -2611,7 +2611,7 @@ static int to_mpoly_gen(const Expr* e, fmpq_mpoly_t out,
                 fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (n != 2) return 0;
                 const Expr* exp = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return 0;
@@ -2930,13 +2930,13 @@ static long lcm_l(long a, long b) {
 static int as_root_of_unity(const Expr* e, long* p, long* q) {
     if (e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
-    if (!h || strcmp(h, "Power") != 0 || e->data.function.arg_count != 2) return 0;
+    if (!h || h != SYM_Power || e->data.function.arg_count != 2) return 0;
     const Expr* base = e->data.function.args[0];
     const Expr* exp  = e->data.function.args[1];
     if (!(base->type == EXPR_INTEGER && base->data.integer == -1)) return 0;
     if (exp->type != EXPR_FUNCTION) return 0;
     const char* eh = fn_head_name(exp);
-    if (!eh || strcmp(eh, "Rational") != 0 || exp->data.function.arg_count != 2) return 0;
+    if (!eh || eh != SYM_Rational || exp->data.function.arg_count != 2) return 0;
     const Expr* en = exp->data.function.args[0];
     const Expr* ed = exp->data.function.args[1];
     if (en->type != EXPR_INTEGER || ed->type != EXPR_INTEGER || ed->data.integer < 2) return 0;
@@ -2984,15 +2984,15 @@ static void cyc_detect(const Expr* e, CycDetect* st) {
                 st->Q = st->Q ? lcm_l(st->Q, q) : q;
                 return;
             }
-            if (strcmp(h, "Rational") == 0) return;
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Rational) return;
+            if (h == SYM_Power) {
                 if (e->data.function.arg_count != 2) { st->other = 1; return; }
                 const Expr* exp = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) { st->other = 1; return; }
                 cyc_detect(e->data.function.args[0], st);
                 return;
             }
-            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+            if (h == SYM_Plus || h == SYM_Times) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     cyc_detect(e->data.function.args[i], st);
                 return;
@@ -3078,15 +3078,15 @@ static void tower_detect(const Expr* e, TowerDetect* st) {
                 return;
             }
             if (as_root_of_unity(e, &p, &q)) { st->other = 1; return; }  /* not pure radical */
-            if (strcmp(h, "Rational") == 0) return;
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Rational) return;
+            if (h == SYM_Power) {
                 if (e->data.function.arg_count != 2) { st->other = 1; return; }
                 const Expr* exp = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER || exp->data.integer < 0) { st->other = 1; return; }
                 tower_detect(e->data.function.args[0], st);
                 return;
             }
-            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+            if (h == SYM_Plus || h == SYM_Times) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     tower_detect(e->data.function.args[i], st);
                 return;
@@ -3328,7 +3328,7 @@ static int ps_as_ratio(const Expr* e, long* p, long* q) {
     if (e->type == EXPR_INTEGER) { *p = (long)e->data.integer; *q = 1; return 1; }
     if (e->type == EXPR_FUNCTION) {
         const char* h = fn_head_name(e);
-        if (h && strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
+        if (h && h == SYM_Rational && e->data.function.arg_count == 2) {
             const Expr* n = e->data.function.args[0];
             const Expr* d = e->data.function.args[1];
             if (n->type == EXPR_INTEGER && d->type == EXPR_INTEGER && d->data.integer > 0) {
@@ -3360,8 +3360,8 @@ static void ps_detect(const Expr* e, PSDetect* st) {
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) { st->bad = 1; return; }
-            if (strcmp(h, "Rational") == 0) return;
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Rational) return;
+            if (h == SYM_Power) {
                 if (e->data.function.arg_count != 2) { st->bad = 1; return; }
                 const Expr* base = e->data.function.args[0];
                 const Expr* exp  = e->data.function.args[1];
@@ -3380,7 +3380,7 @@ static void ps_detect(const Expr* e, PSDetect* st) {
                 st->has_sqrt = 1;
                 return;
             }
-            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+            if (h == SYM_Plus || h == SYM_Times) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++)
                     ps_detect(e->data.function.args[i], st);
                 return;
@@ -3412,7 +3412,7 @@ static Expr* ps_subst_in(const Expr* e, const char* kname) {
             return expr_copy((Expr*)e);
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
-            if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
+            if (h && h == SYM_Power && e->data.function.arg_count == 2 &&
                 e->data.function.args[0]->type == EXPR_SYMBOL &&
                 strcmp(e->data.function.args[0]->data.symbol.name, kname) == 0) {
                 long p, q;
@@ -3729,7 +3729,7 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
             const char* h = fn_head_name(e);
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
-            if (strcmp(h, "Rational") == 0) {
+            if (h == SYM_Rational) {
                 if (n != 2) return 0;
                 fmpq_t c; fmpq_init(c);
                 if (!fmpz_from_int_expr(fmpq_numref(c), e->data.function.args[0]) ||
@@ -3741,7 +3741,7 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
                 fmpq_clear(c);
                 return 1;
             }
-            if (strcmp(h, "Plus") == 0) {
+            if (h == SYM_Plus) {
                 fmpz_mpoly_q_zero(out, mctx);
                 fmpz_mpoly_q_t t; fmpz_mpoly_q_init(t, mctx);
                 int ok = 1;
@@ -3752,7 +3752,7 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
                 fmpz_mpoly_q_clear(t, mctx);
                 return ok;
             }
-            if (strcmp(h, "Times") == 0) {
+            if (h == SYM_Times) {
                 fmpz_mpoly_q_one(out, mctx);
                 fmpz_mpoly_q_t t; fmpz_mpoly_q_init(t, mctx);
                 int ok = 1;
@@ -3763,7 +3763,7 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
                 fmpz_mpoly_q_clear(t, mctx);
                 return ok;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (n != 2) return 0;
                 const Expr* base = e->data.function.args[0];
                 const Expr* exp  = e->data.function.args[1];
@@ -4217,13 +4217,13 @@ Expr* flint_parametric_field_normalize(const Expr* e) {
  * product/polynomial is left factored, so flint_rational_together declines it. */
 static int expr_has_denominator(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
-    if (fn_head_name(e) && strcmp(fn_head_name(e), "Power") == 0 &&
+    if (fn_head_name(e) && fn_head_name(e) == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* ex   = e->data.function.args[1];
         int neg = (ex->type == EXPR_INTEGER && ex->data.integer < 0);
         if (!neg && ex->type == EXPR_FUNCTION && fn_head_name(ex) &&
-            strcmp(fn_head_name(ex), "Rational") == 0 && ex->data.function.arg_count == 2 &&
+            fn_head_name(ex) == SYM_Rational && ex->data.function.arg_count == 2 &&
             ex->data.function.args[0]->type == EXPR_INTEGER &&
             ex->data.function.args[0]->data.integer < 0)
             neg = 1;
@@ -4367,15 +4367,15 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck,
             const char* h = fn_head_name(e);
             if (!h) return 0;
             size_t n = e->data.function.arg_count;
-            if (strcmp(h, "Rational") == 0) return 1;            /* rational constant */
-            if (strcmp(h, "Complex") == 0)                       /* i, a+b i (const) */
+            if (h == SYM_Rational) return 1;            /* rational constant */
+            if (h == SYM_Complex)                       /* i, a+b i (const) */
                 return epl_push_unique(ck, e);
-            if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+            if (h == SYM_Plus || h == SYM_Times) {
                 for (size_t i = 0; i < n; i++)
                     if (!km_walk(e->data.function.args[i], gk, xk, ck, ok)) return 0;
                 return 1;
             }
-            if (strcmp(h, "Power") == 0) {
+            if (h == SYM_Power) {
                 if (n != 2) return 0;
                 const Expr* base = e->data.function.args[0];
                 const Expr* ex   = e->data.function.args[1];
@@ -4384,11 +4384,11 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck,
                 /* non-integer exponent: E^e is an exponential kernel; an integer
                  * base to a rational power (Sqrt[d], d^(p/q), (-1)^(p/q)) is an
                  * algebraic-number constant. */
-                if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
+                if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E)
                     return epl_push_unique(xk, e);
                 if ((base->type == EXPR_INTEGER || base->type == EXPR_BIGINT) &&
                     ex->type == EXPR_FUNCTION && fn_head_name(ex) &&
-                    strcmp(fn_head_name(ex), "Rational") == 0)
+                    fn_head_name(ex) == SYM_Rational)
                     return epl_push_unique(ck, e);
                 return 0;                                        /* Sqrt[x], a^x, … */
             }
@@ -4657,7 +4657,7 @@ Expr* flint_rational_together(const Expr* e) {
 static int denom_inside_plus(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Plus") == 0 && expr_has_denominator(e)) return 1;
+    if (h && h == SYM_Plus && expr_has_denominator(e)) return 1;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (denom_inside_plus(e->data.function.args[i])) return 1;
     return 0;
@@ -4740,7 +4740,7 @@ static int field_expr_to_fmpq(const Expr* e, fmpq_t out) {
     }
     if (e->type == EXPR_FUNCTION) {
         const char* h = fn_head_name(e);
-        if (h && strcmp(h, "Rational") == 0 && e->data.function.arg_count == 2) {
+        if (h && h == SYM_Rational && e->data.function.arg_count == 2) {
             fmpz_t nz, dz; fmpz_init(nz); fmpz_init(dz);
             int ok = fmpz_from_int_expr(nz, e->data.function.args[0]) &&
                      fmpz_from_int_expr(dz, e->data.function.args[1]);
@@ -4825,7 +4825,7 @@ static int kx_scalar(KxCtx* c, const Expr* e, nf_elem_t out) {
         ok = 1;
     } else if (e->type == EXPR_FUNCTION) {
         const char* h = fn_head_name(e);
-        if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2 &&
+        if (h && h == SYM_AlgebraicNumber && e->data.function.arg_count == 2 &&
             expr_eq(e->data.function.args[0], (Expr*)c->theta)) {
             const Expr* coords = e->data.function.args[1];
             if (coords->type == EXPR_FUNCTION) {
@@ -4836,7 +4836,7 @@ static int kx_scalar(KxCtx* c, const Expr* e, nf_elem_t out) {
                     else ok = 0;
                 }
             }
-        } else if (h && strcmp(h, "Complex") == 0 && c->gaussian &&
+        } else if (h && h == SYM_Complex && c->gaussian &&
                    e->data.function.arg_count == 2) {
             /* a + b I, theta == I (minpoly x^2+1) -> coords {a, b} */
             fmpq_t b; fmpq_init(b);
@@ -5020,7 +5020,7 @@ static int kx_eval(KxCtx* c, const Expr* e, KxRf* dst) {
     const char* h = fn_head_name(e);
     if (!h) return 0;
 
-    if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+    if (h == SYM_Plus || h == SYM_Times) {
         int is_plus = (h[0] == 'P');
         /* dst = 0 (Plus identity) or 1 (Times identity) */
         int ok = (gr_poly_zero(dst->num, c->gr) == GR_SUCCESS) &&
@@ -5036,7 +5036,7 @@ static int kx_eval(KxCtx* c, const Expr* e, KxRf* dst) {
         kx_rf_clear(c, &term); kx_rf_clear(c, &acc);
         return ok;
     }
-    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* ex = e->data.function.args[1];
         if (ex->type != EXPR_INTEGER) return 0;
         KxRf base; kx_rf_init(c, &base);
@@ -5184,7 +5184,7 @@ static int kx_make_monic(KxCtx* c, gr_poly_t p) {
 static int kx_collect_dens(KxCtx* c, const Expr* e, gr_poly_struct** L, slong* n, slong* cap) {
     if (e->type != EXPR_FUNCTION) return 1;
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
+    if (h && h == SYM_Power && e->data.function.arg_count == 2 &&
         e->data.function.args[1]->type == EXPR_INTEGER && e->data.function.args[1]->data.integer < 0) {
         KxRf t; kx_rf_init(c, &t);
         int ok = kx_eval(c, e->data.function.args[0], &t);
@@ -5246,7 +5246,7 @@ static int kx_count_dens(const Expr* e, int stop) {
     if (e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
     int k = 0;
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2 &&
+    if (h && h == SYM_Power && e->data.function.arg_count == 2 &&
         e->data.function.args[1]->type == EXPR_INTEGER && e->data.function.args[1]->data.integer < 0)
         k = 1;
     for (size_t i = 0; i < e->data.function.arg_count && k < stop; i++)
@@ -5780,7 +5780,7 @@ static void ga_walk(const Expr* e, GADetect* st) {
 #endif
     if (e->type != EXPR_FUNCTION) return;   /* integers / symbols / strings: fine */
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
         long p, q;
@@ -5805,7 +5805,7 @@ static void ga_walk(const Expr* e, GADetect* st) {
 static int ga_has_candidate(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_Power && e->data.function.arg_count == 2) {
         long p, q;
         if (ps_as_ratio(e->data.function.args[1], &p, &q) && q >= 2) return 1;
     }
@@ -5850,7 +5850,7 @@ static Expr* ga_subst_in(const Expr* e, const GADetect* st) {
     }
     if (e->type == EXPR_FUNCTION) {
         const char* h = fn_head_name(e);
-        if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (h && h == SYM_Power && e->data.function.arg_count == 2) {
             const Expr* base = e->data.function.args[0];
             const Expr* exp  = e->data.function.args[1];
             long p, q;
@@ -5966,7 +5966,7 @@ static Expr* ga_subst_back(const Expr* e, const GADetect* st) {
 static void ga_refs(const Expr* e, const GADetect* st, unsigned* mask) {
     if (!e || e->type != EXPR_FUNCTION) return;
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_Power && e->data.function.arg_count == 2) {
         long p, q;
         if (ps_as_ratio(e->data.function.args[1], &p, &q) && q >= 2) {
             int gi = ga_lookup(e->data.function.args[0], st);
@@ -7405,13 +7405,13 @@ static int fg_maybe_algebraic(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     const char* h = fn_head_name(e);
     if (!h) return 0;
-    if (strcmp(h, "Root") == 0 || strcmp(h, "AlgebraicNumber") == 0 ||
-        strcmp(h, "Complex") == 0) return 1;
-    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h == SYM_Root || h == SYM_AlgebraicNumber ||
+        h == SYM_Complex) return 1;
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* b = e->data.function.args[0];
         const Expr* x = e->data.function.args[1];
         int xrat = (x->type == EXPR_FUNCTION && fn_head_name(x) &&
-                    strcmp(fn_head_name(x), "Rational") == 0);
+                    fn_head_name(x) == SYM_Rational);
         /* Sqrt[2], 2^(1/3), and the nested Sqrt[1 + Sqrt[2]] — but NOT Sqrt[k],
          * whose base carries a symbol and which is a parametric regime. */
         return xrat && fg_symbol_free(b);
@@ -7445,7 +7445,7 @@ static void fg_count_syms(const Expr* e, const char** seen, size_t* n, size_t wa
     const char* h = fn_head_name(e);
     /* theta is the field's label and the coordinates are rationals: neither
      * contributes a polynomial variable (mirrors collect_variables). */
-    if (h && (strcmp(h, "AlgebraicNumber") == 0 || strcmp(h, "Root") == 0)) return;
+    if (h && (h == SYM_AlgebraicNumber || h == SYM_Root)) return;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         fg_count_syms(e->data.function.args[i], seen, n, want);
 }
@@ -7488,13 +7488,13 @@ static int fg_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* ca
     }
     const char* h = fn_head_name(e);
     if (!h) return 0;
-    if (strcmp(h, "Rational") == 0) return 1;
-    if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
+    if (h == SYM_Rational) return 1;
+    if (h == SYM_Plus || h == SYM_Times) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (!fg_collect_atoms(e->data.function.args[i], atoms, na, cap)) return 0;
         return 1;
     }
-    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* ex = e->data.function.args[1];
         if (ex->type == EXPR_INTEGER && ex->data.integer >= 0)
             return fg_collect_atoms(e->data.function.args[0], atoms, na, cap);
@@ -7705,7 +7705,7 @@ static void fg_render_init(FgRender* R, Expr* const* atoms, Expr* const* imgs,
         fmpq_poly_t p; fmpq_poly_init(p);
         const Expr* im = imgs[i];
         if (im->type == EXPR_FUNCTION && fn_head_name(im) &&
-            strcmp(fn_head_name(im), "AlgebraicNumber") == 0 &&
+            fn_head_name(im) == SYM_AlgebraicNumber &&
             im->data.function.arg_count == 2) {
             const Expr* co = im->data.function.args[1];
             for (size_t j = 0; j < co->data.function.arg_count; j++) {
@@ -7811,7 +7811,7 @@ static Expr* fg_render_coords(const FgRender* R, const Expr* coords) {
 static Expr* fg_render_tree(const Expr* e, const FgRender* R) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_AlgebraicNumber && e->data.function.arg_count == 2) {
         Expr* r = fg_render_coords(R, e->data.function.args[1]);
         if (r) return r;
     }
@@ -7828,7 +7828,7 @@ static Expr* fg_render_tree(const Expr* e, const FgRender* R) {
 static Expr* fg_expand_algnum(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "AlgebraicNumber") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_AlgebraicNumber && e->data.function.arg_count == 2) {
         const Expr* th = e->data.function.args[0];
         const Expr* co = e->data.function.args[1];
         if (co->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
@@ -8950,7 +8950,7 @@ static int64_t mmr_mof(const MmrCtx* X, const char* name) {
 }
 
 static int mmr_is_rational(const Expr* x) {
-    return x->type == EXPR_FUNCTION && fn_head_name(x) && strcmp(fn_head_name(x), "Rational") == 0
+    return x->type == EXPR_FUNCTION && fn_head_name(x) && fn_head_name(x) == SYM_Rational
         && x->data.function.arg_count == 2
         && x->data.function.args[0]->type == EXPR_INTEGER
         && x->data.function.args[1]->type == EXPR_INTEGER;
@@ -8973,7 +8973,7 @@ static int mmr_scan(const Expr* e, MmrCtx* X) {
     }
     if (e->type != EXPR_FUNCTION) return 1;
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2
+    if (h && h == SYM_Power && e->data.function.arg_count == 2
         && mmr_is_rational(e->data.function.args[1])) {
         const Expr* b = e->data.function.args[0];
         int64_t q = e->data.function.args[1]->data.function.args[1]->data.integer;
@@ -9016,7 +9016,7 @@ static Expr* mmr_lift(const Expr* e, const MmrCtx* X) {
     }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const char* h = fn_head_name(e);
-    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h && h == SYM_Power && e->data.function.arg_count == 2) {
         const Expr* b = e->data.function.args[0];
         const Expr* x = e->data.function.args[1];
         if (mmr_is_rational(x)) {

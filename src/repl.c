@@ -984,7 +984,7 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
         && evaluated->data.function.head
         && evaluated->data.function.head->type == EXPR_SYMBOL) {
         const char* ih = evaluated->data.function.head->data.symbol.name;
-        if (ih && (strcmp(ih, "Image") == 0 || strcmp(ih, "Image3D") == 0)) {
+        if (ih && (ih == SYM_Image || ih == SYM_Image3D)) {
             char* ijson = image_to_json(evaluated);
             if (ijson) {
                 expr_free(evaluated);

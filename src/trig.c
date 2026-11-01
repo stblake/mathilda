@@ -281,9 +281,9 @@ static Expr* try_simp_forward_of_inverse(const char* outer, Expr* arg) {
     if (!arg->data.function.head ||
         arg->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* inner = arg->data.function.head->data.symbol.name;
-    int g = strcmp(inner, "ArcSin") == 0 ? 0 : strcmp(inner, "ArcCos") == 0 ? 1
-          : strcmp(inner, "ArcTan") == 0 ? 2 : strcmp(inner, "ArcCot") == 0 ? 3
-          : strcmp(inner, "ArcSec") == 0 ? 4 : strcmp(inner, "ArcCsc") == 0 ? 5 : -1;
+    int g = inner == SYM_ArcSin ? 0 : inner == SYM_ArcCos ? 1
+          : inner == SYM_ArcTan ? 2 : inner == SYM_ArcCot ? 3
+          : inner == SYM_ArcSec ? 4 : inner == SYM_ArcCsc ? 5 : -1;
     if (g < 0) return NULL;
     int f = strcmp(outer, "Sin") == 0 ? 0 : strcmp(outer, "Cos") == 0 ? 1
           : strcmp(outer, "Tan") == 0 ? 2 : strcmp(outer, "Cot") == 0 ? 3

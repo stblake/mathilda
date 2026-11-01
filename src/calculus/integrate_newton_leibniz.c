@@ -283,7 +283,7 @@ static NLClass nl_classify(double rv, Expr* a, Expr* b) {
 static bool nl_refine_true(Expr* pred, Expr* as) {
     Expr* inner = as ? mk_fn2("Refine", pred, expr_copy(as)) : mk_fn1("Refine", pred);
     Expr* r = eval_take(mk_fn1("Quiet", inner));
-    bool t = r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0;
+    bool t = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
     if (r) expr_free(r);
     return t;
 }
@@ -390,7 +390,7 @@ static const Expr* nl_integer_param_of(const Expr* cond) {
     if (!cond || cond->type != EXPR_FUNCTION) return NULL;
     if (head_name_is(cond, "Element") && cond->data.function.arg_count == 2) {
         Expr* dom = cond->data.function.args[1];
-        if (dom->type == EXPR_SYMBOL && strcmp(dom->data.symbol.name, "Integers") == 0)
+        if (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Integers)
             return cond->data.function.args[0];
     }
     for (size_t i = 0; i < cond->data.function.arg_count; i++) {
@@ -1144,7 +1144,7 @@ static bool nl_arg_has_exp_of_x(const Expr* e, const Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (head_name_is(e, "Power") && e->data.function.arg_count == 2 &&
         e->data.function.args[0]->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.args[0]->data.symbol.name, "E") == 0 &&
+        e->data.function.args[0]->data.symbol.name == SYM_E &&
         contains_symbol(e->data.function.args[1], (Expr*)x)) return true;
     if (head_name_is(e, "Exp") && contains_symbol(e, (Expr*)x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)

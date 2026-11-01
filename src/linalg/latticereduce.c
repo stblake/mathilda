@@ -208,7 +208,7 @@ static bool entry_to_grat(Expr* e, GRat* z) {
         mpq_set_ui(z->im, 0, 1);
         return true;
     }
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, "I") == 0) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_I) {
         mpq_set_ui(z->re, 0, 1);
         mpq_set_si(z->im, 1, 1);
         return true;
@@ -685,8 +685,8 @@ static int finv_user_zerotest(Expr* fn, Expr* residual) {
     Expr* r = eval_and_free(call);
     int verdict = -1;
     if (r && r->type == EXPR_SYMBOL) {
-        if (strcmp(r->data.symbol.name, "True") == 0) verdict = 1;
-        else if (strcmp(r->data.symbol.name, "False") == 0) verdict = 0;
+        if (r->data.symbol.name == SYM_True) verdict = 1;
+        else if (r->data.symbol.name == SYM_False) verdict = 0;
     }
     expr_free(r);
     return verdict;
@@ -729,7 +729,7 @@ Expr* builtin_findintegernullvector(Expr* res) {
                 wp_bits = numeric_digits_to_bits(digits);
                 if (wp_bits < 8) wp_bits = 8;
             }
-        } else if (strcmp(opt, "ZeroTest") == 0) {
+        } else if (opt == SYM_ZeroTest) {
             if (!(val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Automatic))
                 zerotest_fn = val;
         } else {

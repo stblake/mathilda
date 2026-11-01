@@ -143,9 +143,9 @@ static int rf_head_is(const Expr* e, const char* sym) {
 /* Symbols that are not variables of a rational function. */
 static int rf_bad_symbol(const Expr* e) {
     const char* s = e->data.symbol.name;
-    return strcmp(s, "Infinity") == 0 || strcmp(s, "ComplexInfinity") == 0 ||
-           strcmp(s, "Indeterminate") == 0 || strcmp(s, "I") == 0 ||
-           strcmp(s, "Null") == 0 || strcmp(s, "True") == 0 || strcmp(s, "False") == 0 ||
+    return s == SYM_Infinity || s == SYM_ComplexInfinity ||
+           s == SYM_Indeterminate || s == SYM_I ||
+           s == SYM_Null || s == SYM_True || s == SYM_False ||
            strncmp(s, "$flk", 4) == 0 || strncmp(s, "~flk", 4) == 0;
 }
 

@@ -225,7 +225,7 @@ static bool fold_into_inequality(Expr** left, const char* op_name, Expr* right) 
     if (extend_inequality(l, op_name, right)) return true;
     if (l->type != EXPR_FUNCTION || l->data.function.head->type != EXPR_SYMBOL) return false;
     const char* inner = l->data.function.head->data.symbol.name;
-    if (!is_chain_compare_head(inner) && strcmp(inner, "Unequal") != 0) return false;
+    if (!is_chain_compare_head(inner) && inner != SYM_Unequal) return false;
     size_t k = l->data.function.arg_count;
     if (k < 2) return false;
     size_t n = 2 * k + 1;

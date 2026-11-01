@@ -321,7 +321,7 @@ static Expr* ds_normalize_derivs(const Expr* e) {
 static void ds_collect_consts(const Expr* e, Expr*** list, size_t* n) {
     if (!e || e->type != EXPR_FUNCTION) return;
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "C") == 0
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C
         && e->data.function.arg_count == 1) {
         for (size_t i = 0; i < *n; i++) if (expr_eq((*list)[i], e)) return;
         *list = realloc(*list, (*n + 1) * sizeof(Expr*));
@@ -339,7 +339,7 @@ Expr* ds_rename_param(const Expr* e, const char* head) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "C") == 0
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_C
         && e->data.function.arg_count == 1)
         return expr_new_function(expr_new_symbol(head),
             (Expr*[]){ ds_rename_param(e->data.function.args[0], head) }, 1);
@@ -566,7 +566,7 @@ static bool ds_residual_is_distributional(const Expr* e) {
     if (hd->type == EXPR_SYMBOL) {
         const char* hn = hd->data.symbol.name;
         if (hn == SYM_HeavisideTheta || hn == SYM_UnitStep || hn == SYM_Piecewise
-            || strcmp(hn, "DiracDelta") == 0) return true;
+            || hn == SYM_DiracDelta) return true;
         if (hn == SYM_Integrate && e->data.function.arg_count >= 2 &&
             e->data.function.args[1]->type == EXPR_FUNCTION &&
             e->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&

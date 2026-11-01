@@ -718,7 +718,7 @@ Expr* builtin_filenamejoin(Expr* res) {
         Expr* key = a->data.function.args[0];
         Expr* val = a->data.function.args[1];
         if (key->type != EXPR_SYMBOL ||
-            strcmp(key->data.symbol.name, "OperatingSystem") != 0) return NULL;
+            key->data.symbol.name != SYM_OperatingSystem) return NULL;
         if (val->type != EXPR_STRING) return NULL;
         if (strcmp(val->data.string, "Windows") == 0) {
             sep = '\\'; windows = 1;
@@ -893,7 +893,7 @@ Expr* builtin_filenamesplit(Expr* res) {
         Expr* key = a->data.function.args[0];
         Expr* val = a->data.function.args[1];
         if (key->type != EXPR_SYMBOL ||
-            strcmp(key->data.symbol.name, "OperatingSystem") != 0) return NULL;
+            key->data.symbol.name != SYM_OperatingSystem) return NULL;
         if (val->type != EXPR_STRING) return NULL;
         if (strcmp(val->data.string, "Windows") == 0) {
             windows = 1;

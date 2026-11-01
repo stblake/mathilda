@@ -70,6 +70,7 @@
 #include "numeric_complex.h" /* ncpx toolkit */
 #include "sf_machine.h"      /* sf_machine_laguerre_l[_assoc][_c] */
 #include "symtab.h"
+#include "../sym_names.h"
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -156,8 +157,8 @@ static bool lag_is_number(const Expr* e) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        (strcmp(e->data.function.head->data.symbol.name, "Rational") == 0 ||
-         strcmp(e->data.function.head->data.symbol.name, "Complex") == 0)) {
+        (e->data.function.head->data.symbol.name == SYM_Rational ||
+         e->data.function.head->data.symbol.name == SYM_Complex)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (!lag_is_number(e->data.function.args[i])) return false;
         return true;
@@ -178,7 +179,7 @@ static bool lag_mpq_from_expr(const Expr* e, mpq_t out) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol.name, "Rational") == 0 &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
         e->data.function.arg_count == 2) {
         mpz_t num, den;
         mpz_init(num); mpz_init(den);

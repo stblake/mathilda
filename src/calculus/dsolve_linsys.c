@@ -115,10 +115,10 @@ static void linsys_body_kind(const Expr* e, bool* has_exp, bool* has_trig) {
         const char* n = h->data.symbol.name;
         if (n == SYM_Power && e->data.function.arg_count == 2) {
             const Expr* base = e->data.function.args[0];
-            if (base->type == EXPR_SYMBOL && strcmp(base->data.symbol.name, "E") == 0)
+            if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E)
                 *has_exp = true;
-        } else if (strcmp(n, "Cos") == 0 || strcmp(n, "Sin") == 0 ||
-                   strcmp(n, "Cosh") == 0 || strcmp(n, "Sinh") == 0) {
+        } else if (n == SYM_Cos || n == SYM_Sin ||
+                   n == SYM_Cosh || n == SYM_Sinh) {
             *has_trig = true;
         }
     }

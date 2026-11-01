@@ -25,6 +25,7 @@
 #include "../fourier.h"            /* fourier_compile / inverse_fourier_compile, DCT/DST */
 #include "../ndinteger.h"
 #include "../list/setops.h"         /* IntersectingQ / DuplicateFreeQ */          /* ndint_powermod */
+#include "../sym_names.h"
 #include <string.h>
 #include <stddef.h>
 #include <math.h>     /* INFINITY / NAN — the V_NORM p encoding */
@@ -349,7 +350,7 @@ bool nd_norm2_encode(const Expr* p, CompileType ta, double* imm_r) {
     if (rank != 1 && rank != 2) return false;
     if (!p) return false;
     if (p->type == EXPR_SYMBOL && p->data.symbol.name
-        && strcmp(p->data.symbol.name, "Infinity") == 0) { *imm_r = INFINITY; return true; }
+        && p->data.symbol.name == SYM_Infinity) { *imm_r = INFINITY; return true; }
     if (p->type == EXPR_STRING && p->data.string
         && strcmp(p->data.string, "Frobenius") == 0) {
         if (rank != 2) return false;                    /* ndla rank-1 rejects a string p */

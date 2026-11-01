@@ -82,10 +82,10 @@ static bool rr_real_base(const Expr* e) {
         case EXPR_INTEGER:
         case EXPR_REAL:
         case EXPR_BIGINT:  return true;
-        case EXPR_SYMBOL:  return strcmp(e->data.symbol.name, "I") != 0;
+        case EXPR_SYMBOL:  return e->data.symbol.name != SYM_I;
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
-            if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Complex") == 0)
+            if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Complex)
                 return false;
             if (!rr_real_base(h)) return false;
             for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -103,7 +103,7 @@ static bool rr_real_base(const Expr* e) {
 static bool rr_parse_radical(const Expr* e, const Expr** base, int64_t* q) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "Power") != 0) return false;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     int64_t p, qq;
     if (!is_rational(e->data.function.args[1], &p, &qq)) return false;
@@ -229,7 +229,7 @@ static void rr_collect_varnames(const Expr* e, const char*** set, int* n, int* c
 static bool rr_has_nonpoly_gen_power(const Expr* e, const RRGen* gens, int n) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Power") == 0
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
         && e->data.function.arg_count == 2) {
         const Expr* b = e->data.function.args[0];
         const Expr* ex = e->data.function.args[1];

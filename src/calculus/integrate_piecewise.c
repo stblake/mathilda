@@ -276,9 +276,9 @@ static void collect_condition_boundaries(const Expr* cond, const Expr* x,
     if (!cond || cond->type != EXPR_FUNCTION) return;
     const char* h = cond->data.function.head->type == EXPR_SYMBOL
                       ? cond->data.function.head->data.symbol.name : "";
-    if ((strcmp(h, "Less") == 0 || strcmp(h, "LessEqual") == 0 ||
-         strcmp(h, "Greater") == 0 || strcmp(h, "GreaterEqual") == 0 ||
-         strcmp(h, "Equal") == 0 || strcmp(h, "Unequal") == 0) &&
+    if ((h == SYM_Less || h == SYM_LessEqual ||
+         h == SYM_Greater || h == SYM_GreaterEqual ||
+         h == SYM_Equal || h == SYM_Unequal) &&
         cond->data.function.arg_count == 2) {
         Expr* diff = mk_fn2("Plus", cp(cond->data.function.args[0]),
                             neg_of(cp(cond->data.function.args[1])));
@@ -301,11 +301,11 @@ static void collect_breakpoints(const Expr* e, const Expr* x, const Expr* a,
     const char* h = e->data.function.head->type == EXPR_SYMBOL
                       ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
-    if ((strcmp(h, "Abs") == 0 || strcmp(h, "Sign") == 0 ||
-         strcmp(h, "HeavisideTheta") == 0 || strcmp(h, "UnitStep") == 0) &&
+    if ((h == SYM_Abs || h == SYM_Sign ||
+         h == SYM_HeavisideTheta || h == SYM_UnitStep) &&
         n == 1 && contains_symbol(e->data.function.args[0], x)) {
         solve_roots(e->data.function.args[0], x, a, b, s);
-    } else if ((strcmp(h, "Min") == 0 || strcmp(h, "Max") == 0) && n >= 2) {
+    } else if ((h == SYM_Min || h == SYM_Max) && n >= 2) {
         for (size_t i = 0; i < n; i++)
             for (size_t j = i + 1; j < n; j++) {
                 Expr* d = mk_fn2("Plus", cp(e->data.function.args[i]),
@@ -313,7 +313,7 @@ static void collect_breakpoints(const Expr* e, const Expr* x, const Expr* a,
                 if (contains_symbol(d, x)) solve_roots(d, x, a, b, s);
                 expr_free(d);
             }
-    } else if (strcmp(h, "Piecewise") == 0 && n >= 1 &&
+    } else if (h == SYM_Piecewise && n >= 1 &&
                head_name_is(e->data.function.args[0], "List")) {
         Expr* clauses = e->data.function.args[0];
         for (size_t i = 0; i < clauses->data.function.arg_count; i++) {
@@ -335,10 +335,10 @@ static bool has_branch_head(const Expr* e, const Expr* x) {
     const char* h = e->data.function.head->type == EXPR_SYMBOL
                       ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
-    if ((strcmp(h, "Abs") == 0 || strcmp(h, "Sign") == 0 ||
-         strcmp(h, "HeavisideTheta") == 0 || strcmp(h, "UnitStep") == 0 ||
-         strcmp(h, "Min") == 0 || strcmp(h, "Max") == 0 ||
-         strcmp(h, "Piecewise") == 0) && contains_symbol(e, x))
+    if ((h == SYM_Abs || h == SYM_Sign ||
+         h == SYM_HeavisideTheta || h == SYM_UnitStep ||
+         h == SYM_Min || h == SYM_Max ||
+         h == SYM_Piecewise) && contains_symbol(e, x))
         return true;
     if (has_branch_head(e->data.function.head, x)) return true;
     for (size_t i = 0; i < n; i++)
@@ -425,9 +425,9 @@ static Expr* resolve_unary(const char* h, Expr* g, const Expr* x,
                    : refine_true(mk_fn2("Less", cp(gm), expr_new_integer(0)), as);
     expr_free(gm);
     if (!pos && !neg) { expr_free(g); *ok = false; return NULL; }
-    if (strcmp(h, "Abs") == 0) return pos ? g : neg_of(g);
+    if (h == SYM_Abs) return pos ? g : neg_of(g);
     expr_free(g);
-    if (strcmp(h, "Sign") == 0) return expr_new_integer(pos ? 1 : -1);
+    if (h == SYM_Sign) return expr_new_integer(pos ? 1 : -1);
     /* HeavisideTheta / UnitStep */
     return expr_new_integer(pos ? 1 : 0);
 }
@@ -463,16 +463,16 @@ static Expr* resolve_at(const Expr* e, const Expr* x, const Expr* m,
                       ? e->data.function.head->data.symbol.name : "";
     size_t n = e->data.function.arg_count;
 
-    if ((strcmp(h, "Abs") == 0 || strcmp(h, "Sign") == 0 ||
-         strcmp(h, "HeavisideTheta") == 0 || strcmp(h, "UnitStep") == 0) &&
+    if ((h == SYM_Abs || h == SYM_Sign ||
+         h == SYM_HeavisideTheta || h == SYM_UnitStep) &&
         n == 1 && contains_symbol(e->data.function.args[0], x)) {
         Expr* g = resolve_at(e->data.function.args[0], x, m, as, ok);
         if (!*ok) { if (g) expr_free(g); return NULL; }
         return resolve_unary(h, g, x, m, as, ok);
     }
-    if ((strcmp(h, "Min") == 0 || strcmp(h, "Max") == 0) && n >= 1 &&
+    if ((h == SYM_Min || h == SYM_Max) && n >= 1 &&
         contains_symbol(e, x)) {
-        bool want_max = (strcmp(h, "Max") == 0);
+        bool want_max = (h == SYM_Max);
         size_t best = 0;
         for (size_t j = 1; j < n; j++) {
             int c = cmp_at(e->data.function.args[j], e->data.function.args[best],
@@ -482,7 +482,7 @@ static Expr* resolve_at(const Expr* e, const Expr* x, const Expr* m,
         }
         return resolve_at(e->data.function.args[best], x, m, as, ok);
     }
-    if (strcmp(h, "Piecewise") == 0 && n >= 1 &&
+    if (h == SYM_Piecewise && n >= 1 &&
         head_name_is(e->data.function.args[0], "List")) {
         return resolve_piecewise(e, x, m, as, ok);
     }
@@ -854,7 +854,7 @@ Expr* builtin_integrate_piecewise(Expr* res) {
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
             if (lhs->type == EXPR_SYMBOL &&
-                strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
+                lhs->data.symbol.name == SYM_Assumptions) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }

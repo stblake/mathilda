@@ -502,7 +502,6 @@ extern const char* SYM_EnvOptionsPattern;
 extern const char* SYM_EnvOptionsPatternHead;
 /* The failure sentinel of a scoped rule condition (symtab.c). */
 extern const char* SYM_ScopedConditionFail;
-extern const char* SYM_TrueQ;
 extern const char* SYM_Options;
 extern const char* SYM_OptionValue;
 extern const char* SYM_SetOptions;
@@ -1159,6 +1158,65 @@ extern const char* SYM_NumberSigns;
 extern const char* SYM_ScientificNotationThreshold;
 extern const char* SYM_SignPadding;
 extern const char* SYM_DefaultPrintPrecision;
+
+/* Names compared by identity in place of strcmp against a literal across
+ * the image, box, string-predicate, functional-programming, ML and
+ * calculus modules.  Each was already interned (and so flagged System`)
+ * at startup, so caching the pointer here changes no behaviour. */
+extern const char* SYM_AddTo;
+extern const char* SYM_AllTrue;
+extern const char* SYM_AnyTrue;
+extern const char* SYM_C;
+extern const char* SYM_DigitQ;
+extern const char* SYM_DiracDelta;
+extern const char* SYM_DivideBy;
+extern const char* SYM_Dt;
+extern const char* SYM_EuclideanDistance;
+extern const char* SYM_EulerPhi;
+extern const char* SYM_EvenQ;
+extern const char* SYM_First;
+extern const char* SYM_FixedPoint;
+extern const char* SYM_FixedPointList;
+extern const char* SYM_Fold;
+extern const char* SYM_FoldList;
+extern const char* SYM_GCD;
+extern const char* SYM_Image;
+extern const char* SYM_Image3D;
+extern const char* SYM_IntegerQ;
+extern const char* SYM_LCM;
+extern const char* SYM_Last;
+extern const char* SYM_Length;
+extern const char* SYM_LengthWhile;
+extern const char* SYM_LetterQ;
+extern const char* SYM_LowerCaseQ;
+extern const char* SYM_ManhattanDistance;
+extern const char* SYM_MetaCharacters;
+extern const char* SYM_Minus;
+extern const char* SYM_Nest;
+extern const char* SYM_NestList;
+extern const char* SYM_NestWhile;
+extern const char* SYM_NestWhileList;
+extern const char* SYM_NoneTrue;
+extern const char* SYM_NormalDistribution;
+extern const char* SYM_OddQ;
+extern const char* SYM_OperatingSystem;
+extern const char* SYM_OverscriptBox;
+extern const char* SYM_PrimeQ;
+extern const char* SYM_ProgressReporting;
+extern const char* SYM_RowBox;
+extern const char* SYM_Select;
+extern const char* SYM_Series;
+extern const char* SYM_SquaredEuclideanDistance;
+extern const char* SYM_SubscriptBox;
+extern const char* SYM_SubsuperscriptBox;
+extern const char* SYM_SubtractFrom;
+extern const char* SYM_SuperscriptBox;
+extern const char* SYM_TagBox;
+extern const char* SYM_TakeWhile;
+extern const char* SYM_TimesBy;
+extern const char* SYM_TrueQ;
+extern const char* SYM_UniformDistribution;
+extern const char* SYM_UpperCaseQ;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*

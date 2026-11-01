@@ -98,5 +98,6 @@ Detailed feature-addition and bug-fix notes, organized by week (Mon – Sun, key
 | 2026-10-12 → 2026-10-18 | [`changelog/2026-10-12.md`](docs/spec/changelog/2026-10-12.md) |
 | 2026-10-19 → 2026-10-25 | [`changelog/2026-10-19.md`](docs/spec/changelog/2026-10-19.md) |
 | 2026-10-26 → 2026-11-01 | [`changelog/2026-10-26.md`](docs/spec/changelog/2026-10-26.md) |
+| 2026-11-02 → 2026-11-08 | [`changelog/2026-11-02.md`](docs/spec/changelog/2026-11-02.md) |
 
 New entries land in the file for the current week (use the Monday-date of that week as the filename, format `YYYY-MM-DD.md`). When a change touches a built-in's documented behavior, the corresponding `docs/spec/builtins/*.md` file is updated as well; the changelog records the rationale and timing.

@@ -642,7 +642,7 @@ static bool parse_definite(Expr* res, Expr** f, Expr** x, Expr** a, Expr** b,
             (opt->data.function.head->data.symbol.name == SYM_Rule ||
              opt->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = opt->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "Assumptions") == 0) {
+            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Assumptions) {
                 *assumptions = opt->data.function.args[1];
                 continue;
             }
@@ -880,7 +880,7 @@ Expr* integrate_raabe_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions)
                  (a->type == EXPR_REAL && a->data.real > 0.0);
     if (!t_pos && assumptions) {
         Expr* q = eval_take(mk_fn2("Refine", mk_fn2("Greater", cp(a), mk_int(0)), cp(assumptions)));
-        t_pos = q && q->type == EXPR_SYMBOL && strcmp(q->data.symbol.name, "True") == 0;
+        t_pos = q && q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
         if (q) expr_free(q);
     }
     if (!t_pos) { expr_free(half_log2pi); return NULL; }

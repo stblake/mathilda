@@ -1487,12 +1487,12 @@ static bool is_semitractable_head(const Expr* e, const char** hn_out) {
      * (BesselJ/BesselY are OSCILLATORY -- Cos/Sin[z] envelopes -- so the mrv
      *  engine cannot expand them; they are deliberately excluded.) */
     if (e->data.function.arg_count == 2) {
-        if (strcmp(hn, "PolyGamma") == 0) {
+        if (hn == SYM_PolyGamma) {
             Expr* mo = e->data.function.args[0];
             if (mo->type == EXPR_INTEGER && mo->data.integer >= 0) { *hn_out = hn; return true; }
             return false;
         }
-        if (strcmp(hn, "BesselK") == 0 || strcmp(hn, "BesselI") == 0) {
+        if (hn == SYM_BesselK || hn == SYM_BesselI) {
             *hn_out = hn; return true;
         }
         return false;
@@ -1508,16 +1508,16 @@ static bool is_semitractable_head(const Expr* e, const char** hn_out) {
      * cancellations it appears in drove the exact multivariate zero test
      * (is_zero_poly) to exponential cost; with the FLINT-backed zero test that
      * bottleneck is gone, so Gamma is admitted again. */
-    if (strcmp(hn, "Erf") == 0 || strcmp(hn, "Erfc") == 0 ||
-        strcmp(hn, "ExpIntegralEi") == 0 || strcmp(hn, "LogGamma") == 0 ||
-        strcmp(hn, "Gamma") == 0) {
+    if (hn == SYM_Erf || hn == SYM_Erfc ||
+        hn == SYM_ExpIntegralEi || hn == SYM_LogGamma ||
+        hn == SYM_Gamma) {
         *hn_out = hn; return true;
     }
     /* Zeta[z] at +oo collapses onto its Dirichlet head 1 + 2^-z + 3^-z + ...,
      * a truncated exp-log sum the mrv engine expands and cancels natively (its
      * Series-at-Infinity hook emits exactly that). Only +oo is admitted; at -oo
      * Zeta grows/hits the trivial zeros, so isolation leaves it alone. */
-    if (strcmp(hn, "Zeta") == 0) { *hn_out = hn; return true; }
+    if (hn == SYM_Zeta) { *hn_out = hn; return true; }
     return false;
 }
 
@@ -1577,9 +1577,9 @@ static Expr* asymptotic_expansion_2arg(const char* head, const Expr* order,
 static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
     const char* hn;
     if (is_semitractable_head(e, &hn)) {
-        bool is_polygamma = (strcmp(hn, "PolyGamma") == 0);
-        bool is_zeta = (strcmp(hn, "Zeta") == 0);
-        bool is_bessel2 = (strcmp(hn, "BesselK") == 0 || strcmp(hn, "BesselI") == 0);
+        bool is_polygamma = (hn == SYM_PolyGamma);
+        bool is_zeta = (hn == SYM_Zeta);
+        bool is_bessel2 = (hn == SYM_BesselK || hn == SYM_BesselI);
         bool two_arg = is_polygamma || is_bessel2;   /* order in slot 0 */
         size_t argslot = two_arg ? 1 : 0;            /* asymptotic arg slot */
         Expr* g2 = isolate_semitractable(e->data.function.args[argslot], x, nterms);
@@ -1595,7 +1595,7 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
         }
         if (L) expr_free(L);
 
-        bool is_loggamma = (strcmp(hn, "LogGamma") == 0);
+        bool is_loggamma = (hn == SYM_LogGamma);
 
         if (cls == 1) {
             if (two_arg) {
@@ -1606,7 +1606,7 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
                 expr_free(g2);
                 return simp(r);
             }
-            if (strcmp(hn, "Gamma") == 0) {
+            if (hn == SYM_Gamma) {
                 /* Gamma[g] = Exp[LogGamma[g]]: build the additive Stirling tower
                  * from LogGamma's cheap series and wrap it in Exp, giving the
                  * mrv engine an explicit exp-log head to expand and cancel. */
@@ -1619,7 +1619,7 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
             return simp(r);
         }
         if (cls == -1 && !is_loggamma && !two_arg && !is_zeta) {
-            if (strcmp(hn, "ExpIntegralEi") == 0) {
+            if (hn == SYM_ExpIntegralEi) {
                 /* Ei's asymptotic series E^y(1/y+1/y^2+...) is valid for
                  * y -> -oo as well (E^y -> 0). */
                 Expr* r = asymptotic_expansion(hn, g2, nterms);
@@ -1632,7 +1632,7 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
             Expr* r  = asymptotic_expansion(hn, ng, nterms);
             expr_free(ng);
             expr_free(g2);
-            return (strcmp(hn, "Erf") == 0)
+            return (hn == SYM_Erf)
                  ? simp(mk_neg(r))
                  : simp(mk_plus(mk_int(2), mk_neg(r)));
         }
@@ -1730,8 +1730,8 @@ static Expr* resolve_maxmin(const Expr* e, const Expr* x, int* failed) {
         args[i] = resolve_maxmin(e->data.function.args[i], x, failed);
 
     const Expr* h = e->data.function.head;
-    bool is_max = (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Max") == 0);
-    bool is_min = (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Min") == 0);
+    bool is_max = (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Max);
+    bool is_min = (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Min);
 
     if ((is_max || is_min) && n >= 1) {
         expr_free(head);

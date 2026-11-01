@@ -81,18 +81,18 @@ void simp_memo_put(SimpMemo* m, const Expr* key, const Expr* value) {
  * semantics; Function captures named slots; Hold* are explicitly
  * preserved by the user. */
 static bool simp_skip_recursion_head(const char* h) {
-    return strcmp(h, "Hold") == 0 ||
-           strcmp(h, "HoldForm") == 0 ||
-           strcmp(h, "HoldComplete") == 0 ||
-           strcmp(h, "HoldPattern") == 0 ||
-           strcmp(h, "Unevaluated") == 0 ||
-           strcmp(h, "Pattern") == 0 ||
-           strcmp(h, "Blank") == 0 ||
-           strcmp(h, "BlankSequence") == 0 ||
-           strcmp(h, "BlankNullSequence") == 0 ||
-           strcmp(h, "Function") == 0 ||
-           strcmp(h, "Slot") == 0 ||
-           strcmp(h, "SlotSequence") == 0;
+    return h == SYM_Hold ||
+           h == SYM_HoldForm ||
+           h == SYM_HoldComplete ||
+           h == SYM_HoldPattern ||
+           h == SYM_Unevaluated ||
+           h == SYM_Pattern ||
+           h == SYM_Blank ||
+           h == SYM_BlankSequence ||
+           h == SYM_BlankNullSequence ||
+           h == SYM_Function ||
+           h == SYM_Slot ||
+           h == SYM_SlotSequence;
 }
 
 /* Heads whose evaluator-level Hold attributes mean we must not descend

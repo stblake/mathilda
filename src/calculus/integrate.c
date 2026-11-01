@@ -751,10 +751,10 @@ static bool hol_has_kernel(const Expr* e) {
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
         const char* n = h->data.symbol.name;
-        if (strcmp(n, "BesselJ") == 0 || strcmp(n, "BesselY") == 0 ||
-            strcmp(n, "BesselI") == 0 || strcmp(n, "BesselK") == 0 ||
-            strcmp(n, "AiryAi") == 0 || strcmp(n, "AiryBi") == 0 ||
-            strcmp(n, "AiryAiPrime") == 0 || strcmp(n, "AiryBiPrime") == 0)
+        if (n == SYM_BesselJ || n == SYM_BesselY ||
+            n == SYM_BesselI || n == SYM_BesselK ||
+            n == SYM_AiryAi || n == SYM_AiryBi ||
+            n == SYM_AiryAiPrime || n == SYM_AiryBiPrime)
             return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
@@ -873,7 +873,7 @@ static void crc_lazy_load(void) {
     int opened = 0;
     Expr* res = mathilda_run_file(path, &opened);
     bool failed = res && res->type == EXPR_SYMBOL
-                      && strcmp(res->data.symbol.name, "$Failed") == 0;
+                      && res->data.symbol.name == SYM_DollarFailed;
     if (res) expr_free(res);
     if (opened && !failed) crc_load_succeeded = true;
 }
@@ -1179,7 +1179,7 @@ static bool pmt_leaks_symbol_b(const Expr* r, const Expr* f, const Expr* x,
     }
     if (r->type != EXPR_FUNCTION) return false;
     const Expr* h = r->data.function.head;
-    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Function") == 0 &&
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Function &&
         r->data.function.arg_count >= 2) {
         /* Function[v, body] / Function[{v1, ...}, body]: v is bound in body */
         const Expr* v = r->data.function.args[0];
@@ -1223,10 +1223,10 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x, bool cascade) {
     bool decline =
         result_is_unresolved(result, "Integrate`ParallelMixedTower") ||
         (result->type == EXPR_SYMBOL &&
-         strcmp(result->data.symbol.name, "$Failed") == 0) ||
+         result->data.symbol.name == SYM_DollarFailed) ||
         (result->type == EXPR_FUNCTION &&
          result->data.function.head->type == EXPR_SYMBOL &&
-         strcmp(result->data.function.head->data.symbol.name, "List") == 0) ||
+         result->data.function.head->data.symbol.name == SYM_List) ||
         pmt_leaks_symbol(result, f, x) ||
         /* the worker's own call left unevaluated (its package definitions are
          * missing) is not an antiderivative */
@@ -1503,8 +1503,8 @@ static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
     bool decline =
         result_is_unresolved(result, "Integrate`ParallelMixedSpecial") ||
         (result->type == EXPR_SYMBOL &&
-         (strcmp(result->data.symbol.name, "$Failed") == 0 ||
-          strcmp(result->data.symbol.name, "$Aborted") == 0)) ||
+         (result->data.symbol.name == SYM_DollarFailed ||
+          result->data.symbol.name == SYM_DollarAborted)) ||
         (result->type == EXPR_FUNCTION &&
          result->data.function.head->type == EXPR_SYMBOL &&
          result->data.function.head->data.symbol.name == SYM_List) ||
@@ -1805,7 +1805,7 @@ static bool mcv_load_succeeded = false;
 
 static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
-    if (!(b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0)) return NULL;
+    if (!(b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_Infinity)) return NULL;
     if (mcv_load_gen != symtab_generation()) {
         mcv_load_gen = symtab_generation();
         mth_msg_suppress_push();

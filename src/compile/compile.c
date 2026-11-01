@@ -735,7 +735,7 @@ bool literal(const Expr* e, Slot* imm, CompileType* type) {
     if (is_rational(e, &nn, &dd)) { imm->r = (double)nn / (double)dd; *type = CT_REAL; return true; }
     /* Complex[re, im] with numeric parts */
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Complex") == 0
+        && e->data.function.head->data.symbol.name == SYM_Complex
         && e->data.function.arg_count == 2) {
         Slot ra, ia; CompileType ta, ti;
         if (literal(e->data.function.args[0], &ra, &ta) &&
@@ -1099,7 +1099,7 @@ bool loop_spec_parse(const Expr* spec, LoopSpec* out) {
     out->var = NULL; out->lo = NULL; out->hi = NULL; out->di = 1;
     if (!spec) return false;
     if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL
-        || strcmp(spec->data.function.head->data.symbol.name, "List") != 0) {
+        || spec->data.function.head->data.symbol.name != SYM_List) {
         out->hi = spec;                                     /* bare count: Do[body, n] */
         return true;
     }
@@ -1488,14 +1488,14 @@ int fuse_listable(Ctx* c, const Expr* e) {
     const char* h = e->data.function.head->data.symbol.name;
     /* DirichletL threads over s only: the labels k, j must stay scalar (the
      * emitter broadcasts them into the n-ary kernel's run). */
-    if (strcmp(h, "DirichletL") == 0 && e->data.function.arg_count == 3) {
+    if (h == SYM_DirichletL && e->data.function.arg_count == 3) {
         for (size_t i = 0; i < 2; i++)
             if (fuse_listable(c, e->data.function.args[i]) != 0) return -1;
         return 1;
     }
     /* MeijerG is not Listable (its parameters ARE lists) but threads over z,
      * its third argument: fusible when z is the only array-valued argument. */
-    if (strcmp(h, "MeijerG") == 0
+    if (h == SYM_MeijerG
         && (e->data.function.arg_count == 3 || e->data.function.arg_count == 4)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (i != 2 && fuse_listable(c, e->data.function.args[i]) != 0) return -1;
@@ -1515,7 +1515,7 @@ int fuse_listable(Ctx* c, const Expr* e) {
      * binary kernel because its lowering is the arithmetic identity
      * Log[x]/Log[b], so the interpreter evaluates it array-by-array too (it
      * returns an NDArray). */
-    if (narr >= 2 && e->data.function.arg_count == 2 && strcmp(h, "Log") != 0) {
+    if (narr >= 2 && e->data.function.arg_count == 2 && h != SYM_Log) {
         SymbolDef* d = symtab_lookup(h);
         if (d && d->ndarray_binary_kernel) return -1;
     }
@@ -1533,7 +1533,7 @@ static bool try_fuse(Ctx* c, const Expr* e, Val* out) {
     const Expr* body = e;
     bool reduce = false;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "Total") == 0
+        && e->data.function.head->data.symbol.name == SYM_Total
         && e->data.function.arg_count == 1) {
         CompileType it;
         if (infer_type(c, e->data.function.args[0], &it)
@@ -1830,10 +1830,10 @@ bool emit_iter_count(Ctx* c, const LoopSpec* s, int rlo, int dst) {
 bool stmt_valued_head(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
-    return strcmp(h, "Do") == 0 || strcmp(h, "While") == 0
-        || strcmp(h, "For") == 0 || strcmp(h, "Scan") == 0
+    return h == SYM_Do || h == SYM_While
+        || h == SYM_For || h == SYM_Scan
         /* If[c, t] answers Null when c is False; the compiled form answers 0. */
-        || (strcmp(h, "If") == 0 && e->data.function.arg_count == 2);
+        || (h == SYM_If && e->data.function.arg_count == 2);
 }
 
 /* SameQ opcode for an accumulator type.
@@ -2039,9 +2039,9 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
         /* An argument array is borrowed from the caller, so anything derived
          * from it takes the caller's kind: NOT built. */
         if (k >= 0) { c->argdep[k] = 1; out->reg = k; out->tmp = false; out->type = c->arg_types[k]; out->built = false; return true; }
-        if (strcmp(nm, "True") == 0)  { imm.i = 1; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
-        if (strcmp(nm, "False") == 0) { imm.i = 0; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
-        if (strcmp(nm, "I") == 0)     { imm.z = I; *out = emit_const(c, imm, CT_COMPLEX); return c->ok; }
+        if (nm == SYM_True)  { imm.i = 1; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
+        if (nm == SYM_False) { imm.i = 0; *out = emit_const(c, imm, CT_BOOL); return c->ok; }
+        if (nm == SYM_I)     { imm.z = I; *out = emit_const(c, imm, CT_COMPLEX); return c->ok; }
         double cv;
         if (named_const(nm, &cv)) { imm.r = cv; *out = emit_const(c, imm, CT_REAL); return c->ok; }
         CompileType gt;
@@ -2291,7 +2291,7 @@ static bool cse_eligible(Ctx* c, const Expr* e, int* nodes) {
         const char* nm = e->data.symbol.name;
         if (nm_get(&c->map, nm) >= 0) return true;          /* an argument */
         double cv;
-        if (strcmp(nm, "I") == 0 || named_const(nm, &cv)) return true;
+        if (nm == SYM_I || named_const(nm, &cv)) return true;
         return false;                    /* loop var, local, or free symbol */
     }
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;

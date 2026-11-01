@@ -12,6 +12,7 @@
 #include "../arithmetic.h"       /* is_rational, expr_new_* */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx, numeric_mpfr_* — the managed containers */
+#include "../sym_names.h"
 #endif
 #include <math.h>
 #include <string.h>
@@ -137,11 +138,11 @@ bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e) {
 }
 /* A named real constant (Pi, E, ...) at working precision. */
 static bool mgd_mpfr_from_const(mpfr_ptr m, const char* nm) {
-    if (strcmp(nm, "Pi") == 0)         { mpfr_const_pi(m, MPFR_RNDN); return true; }
-    if (strcmp(nm, "E") == 0)          { mpfr_set_ui(m, 1, MPFR_RNDN); mpfr_exp(m, m, MPFR_RNDN); return true; }
-    if (strcmp(nm, "EulerGamma") == 0) { mpfr_const_euler(m, MPFR_RNDN); return true; }
-    if (strcmp(nm, "Catalan") == 0)    { mpfr_const_catalan(m, MPFR_RNDN); return true; }
-    if (strcmp(nm, "Degree") == 0)     { mpfr_const_pi(m, MPFR_RNDN); mpfr_div_ui(m, m, 180, MPFR_RNDN); return true; }
+    if (nm == SYM_Pi)         { mpfr_const_pi(m, MPFR_RNDN); return true; }
+    if (nm == SYM_E)          { mpfr_set_ui(m, 1, MPFR_RNDN); mpfr_exp(m, m, MPFR_RNDN); return true; }
+    if (nm == SYM_EulerGamma) { mpfr_const_euler(m, MPFR_RNDN); return true; }
+    if (nm == SYM_Catalan)    { mpfr_const_catalan(m, MPFR_RNDN); return true; }
+    if (nm == SYM_Degree)     { mpfr_const_pi(m, MPFR_RNDN); mpfr_div_ui(m, m, 180, MPFR_RNDN); return true; }
     return false;
 }
 static int mgd_new_mpfr_const_expr(Ctx* c, const Expr* lit) {
@@ -195,32 +196,32 @@ static Val mgd_to_complex(Ctx* c, Val v) {
 
 /* Real elementary-function head -> mpfr unary function pointer, or NULL. */
 static const void* mgd_real_unary_fn(const char* h) {
-    if (strcmp(h, "Sqrt") == 0) return (const void*)mpfr_sqrt;
-    if (strcmp(h, "Exp")  == 0) return (const void*)mpfr_exp;
-    if (strcmp(h, "Log")  == 0) return (const void*)mpfr_log;
-    if (strcmp(h, "Sin")  == 0) return (const void*)mpfr_sin;
-    if (strcmp(h, "Cos")  == 0) return (const void*)mpfr_cos;
-    if (strcmp(h, "Tan")  == 0) return (const void*)mpfr_tan;
-    if (strcmp(h, "Sinh") == 0) return (const void*)mpfr_sinh;
-    if (strcmp(h, "Cosh") == 0) return (const void*)mpfr_cosh;
-    if (strcmp(h, "Tanh") == 0) return (const void*)mpfr_tanh;
-    if (strcmp(h, "ArcSin") == 0) return (const void*)mpfr_asin;
-    if (strcmp(h, "ArcCos") == 0) return (const void*)mpfr_acos;
-    if (strcmp(h, "ArcTan") == 0) return (const void*)mpfr_atan;
-    if (strcmp(h, "Abs")  == 0) return (const void*)mpfr_abs;
+    if (h == SYM_Sqrt) return (const void*)mpfr_sqrt;
+    if (h == SYM_Exp) return (const void*)mpfr_exp;
+    if (h == SYM_Log) return (const void*)mpfr_log;
+    if (h == SYM_Sin) return (const void*)mpfr_sin;
+    if (h == SYM_Cos) return (const void*)mpfr_cos;
+    if (h == SYM_Tan) return (const void*)mpfr_tan;
+    if (h == SYM_Sinh) return (const void*)mpfr_sinh;
+    if (h == SYM_Cosh) return (const void*)mpfr_cosh;
+    if (h == SYM_Tanh) return (const void*)mpfr_tanh;
+    if (h == SYM_ArcSin) return (const void*)mpfr_asin;
+    if (h == SYM_ArcCos) return (const void*)mpfr_acos;
+    if (h == SYM_ArcTan) return (const void*)mpfr_atan;
+    if (h == SYM_Abs) return (const void*)mpfr_abs;
     return NULL;
 }
 /* Complex elementary-function head -> MG_CUN selector, or -1.  The result of Abs
  * is real, reported via `*to_real`. */
 static int mgd_complex_unary_sel(const char* h, bool* to_real) {
     *to_real = false;
-    if (strcmp(h, "Exp")  == 0) return MGC_EXP;
-    if (strcmp(h, "Log")  == 0) return MGC_LOG;
-    if (strcmp(h, "Sin")  == 0) return MGC_SIN;
-    if (strcmp(h, "Cos")  == 0) return MGC_COS;
-    if (strcmp(h, "Sqrt") == 0) return MGC_SQRT;
-    if (strcmp(h, "Abs")  == 0) { *to_real = true; return MGC_ABS; }
-    if (strcmp(h, "Arg")  == 0) { *to_real = true; return MGC_ARG; }
+    if (h == SYM_Exp) return MGC_EXP;
+    if (h == SYM_Log) return MGC_LOG;
+    if (h == SYM_Sin) return MGC_SIN;
+    if (h == SYM_Cos) return MGC_COS;
+    if (h == SYM_Sqrt) return MGC_SQRT;
+    if (h == SYM_Abs) { *to_real = true; return MGC_ABS; }
+    if (h == SYM_Arg) { *to_real = true; return MGC_ARG; }
     return -1;
 }
 
@@ -292,7 +293,7 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
     size_t n = e->data.function.arg_count;
 
     /* Complex[re, im] literal (both parts numeric) */
-    if (strcmp(h, "Complex") == 0 && n == 2) {
+    if (h == SYM_Complex && n == 2) {
         int cst = mgd_new_ncpx_const(c, a[0], a[1]);
         if (cst < 0) return false;
         Val v = { cst, true, CT_BIGCOMPLEX, false }; *out = v; return true;
@@ -304,7 +305,7 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
         Val v = { cst, true, CT_BIGREAL, false }; *out = v; return true;
     } }
 
-    if (strcmp(h, "Plus") == 0 && n >= 1) {
+    if (h == SYM_Plus && n >= 1) {
         Val acc; if (!emit_mgd_real(c, a[0], &acc)) return false;
         for (size_t i = 1; i < n; i++) {
             Val v; if (!emit_mgd_real(c, a[i], &v)) return false;
@@ -312,7 +313,7 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
         }
         *out = acc; return c->ok;
     }
-    if (strcmp(h, "Times") == 0 && n >= 1) {
+    if (h == SYM_Times && n >= 1) {
         Val acc; if (!emit_mgd_real(c, a[0], &acc)) return false;
         for (size_t i = 1; i < n; i++) {
             Val v; if (!emit_mgd_real(c, a[i], &v)) return false;
@@ -320,22 +321,22 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
         }
         *out = acc; return c->ok;
     }
-    if (strcmp(h, "Subtract") == 0 && n == 2) {
+    if (h == SYM_Subtract && n == 2) {
         Val x, y; if (!emit_mgd_real(c, a[0], &x) || !emit_mgd_real(c, a[1], &y)) return false;
         *out = mgd_bin(c, x, y, (const void*)mpfr_sub, MGC_SUB); return c->ok;
     }
-    if (strcmp(h, "Divide") == 0 && n == 2) {
+    if (h == SYM_Divide && n == 2) {
         Val x, y; if (!emit_mgd_real(c, a[0], &x) || !emit_mgd_real(c, a[1], &y)) return false;
         *out = mgd_bin(c, x, y, (const void*)mpfr_div, MGC_DIV); return c->ok;
     }
-    if (strcmp(h, "Power") == 0 && n == 2) {
+    if (h == SYM_Power && n == 2) {
         Val base; if (!emit_mgd_real(c, a[0], &base)) return false;
         long ni;
         if (mgd_small_int(a[1], &ni)) { *out = mgd_powi(c, base, ni); return c->ok; }
         Val ex; if (!emit_mgd_real(c, a[1], &ex)) return false;
         *out = mgd_bin(c, base, ex, (const void*)mpfr_pow, MGC_POW); return c->ok;
     }
-    if (strcmp(h, "Minus") == 0 && n == 1) {
+    if (h == SYM_Minus && n == 1) {
         Val x; if (!emit_mgd_real(c, a[0], &x)) return false;
         if (x.type == CT_BIGCOMPLEX) {
             Slot k; memset(&k, 0, sizeof k); k.i = MGC_NEG;
@@ -397,7 +398,7 @@ static bool emit_mgd_int(Ctx* c, const Expr* e, Val* out) {
     Expr* const* a = e->data.function.args;
     size_t n = e->data.function.arg_count;
 
-    if ((strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) && n >= 1) {
+    if ((h == SYM_Plus || h == SYM_Times) && n >= 1) {
         uint16_t op = (h[0] == 'P') ? OP_MG_ZADD : OP_MG_ZMUL;
         Val acc; if (!emit_mgd_int(c, a[0], &acc)) return false;
         for (size_t i = 1; i < n; i++) {
@@ -409,21 +410,21 @@ static bool emit_mgd_int(Ctx* c, const Expr* e, Val* out) {
         }
         *out = acc; return c->ok;
     }
-    if (strcmp(h, "Subtract") == 0 && n == 2) {
+    if (h == SYM_Subtract && n == 2) {
         Val x, y; if (!emit_mgd_int(c, a[0], &x) || !emit_mgd_int(c, a[1], &y)) return false;
         Slot z; memset(&z, 0, sizeof z);
         int dst = alloc_mgd(c, CT_BIGINT);
         ins(c, OP_MG_ZSUB, (uint32_t)dst, (uint32_t)x.reg, (uint32_t)y.reg, z);
         Val r = { dst, true, CT_BIGINT, false }; *out = r; return c->ok;
     }
-    if (strcmp(h, "Minus") == 0 && n == 1) {
+    if (h == SYM_Minus && n == 1) {
         Val x; if (!emit_mgd_int(c, a[0], &x)) return false;
         Slot z; memset(&z, 0, sizeof z);
         int dst = alloc_mgd(c, CT_BIGINT);
         ins(c, OP_MG_ZNEG, (uint32_t)dst, (uint32_t)x.reg, 0, z);
         Val r = { dst, true, CT_BIGINT, false }; *out = r; return c->ok;
     }
-    if (strcmp(h, "Power") == 0 && n == 2) {
+    if (h == SYM_Power && n == 2) {
         long ni;
         if (!mgd_small_int(a[1], &ni) || ni < 0) return false;   /* negative -> Rational */
         Val base; if (!emit_mgd_int(c, a[0], &base)) return false;

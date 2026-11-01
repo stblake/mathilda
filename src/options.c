@@ -47,10 +47,10 @@ const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
                 && lhs->data.symbol.name == SYM_Extension) {
                 bool is_none      = (rhs && rhs->type == EXPR_SYMBOL
                                      && rhs->data.symbol.name
-                                     && strcmp(rhs->data.symbol.name, "None") == 0);
+                                     && rhs->data.symbol.name == SYM_None);
                 bool is_automatic = (rhs && rhs->type == EXPR_SYMBOL
                                      && rhs->data.symbol.name
-                                     && strcmp(rhs->data.symbol.name, "Automatic") == 0);
+                                     && rhs->data.symbol.name == SYM_Automatic);
                 if (!seen_rule) {
                     /* Rightmost setting wins. */
                     if (is_automatic) {
@@ -85,7 +85,7 @@ static bool opt_rule_parts(const Expr* e, const char** name, const Expr** value)
     const Expr* hd = e->data.function.head;
     if (hd->type != EXPR_SYMBOL) return false;
     const char* hn = hd->data.symbol.name;
-    if (!hn || (strcmp(hn, "Rule") != 0 && strcmp(hn, "RuleDelayed") != 0)) return false;
+    if (!hn || (hn != SYM_Rule && hn != SYM_RuleDelayed)) return false;
     if (e->data.function.arg_count != 2) return false;
     const Expr* lhs = e->data.function.args[0];
     if (!lhs || lhs->type != EXPR_SYMBOL) return false;

@@ -13,6 +13,7 @@
 #include "numarray.h"
 #include "ndarray.h"
 #include "pack.h"     /* pack_g_any_created: arm the gate for packed-list results */
+#include "../sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,7 +40,7 @@ bool na_read_scalar(const Expr* e, double* re, double* im)
             const Expr* h = e->data.function.head;
             if (h && h->type == EXPR_SYMBOL && e->data.function.arg_count == 2) {
                 const char* name = h->data.symbol.name;
-                if (strcmp(name, "Rational") == 0) {
+                if (name == SYM_Rational) {
                     double p, q, d;
                     if (na_read_scalar(e->data.function.args[0], &p, &d)
                         && na_read_scalar(e->data.function.args[1], &q, &d)
@@ -49,7 +50,7 @@ bool na_read_scalar(const Expr* e, double* re, double* im)
                     }
                     return false;
                 }
-                if (strcmp(name, "Complex") == 0) {
+                if (name == SYM_Complex) {
                     double r, i, d;
                     if (na_read_scalar(e->data.function.args[0], &r, &d)
                         && na_read_scalar(e->data.function.args[1], &i, &d)) {
@@ -76,7 +77,7 @@ static bool na_is_list(const Expr* e)
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol.name, "List") == 0;
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* Store (re, im) at logical element index `lin` into a flat buffer, honouring

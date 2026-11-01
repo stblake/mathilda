@@ -308,7 +308,7 @@ static slong wl_root_index(const qqbar_t x) {
 static int is_negative_rational_expr(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return 0;
     const Expr* h = e->data.function.head;
-    if (h->type != EXPR_SYMBOL || strcmp(h->data.symbol.name, "Rational") != 0) return 0;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Rational) return 0;
     const Expr* p = e->data.function.args[0];
     if (p->type == EXPR_INTEGER) return p->data.integer < 0;
     if (p->type == EXPR_BIGINT) return mpz_sgn(p->data.bigint) < 0;

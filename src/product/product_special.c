@@ -38,7 +38,7 @@ static bool is_k_pow_k(const Expr* f, const Expr* var) {
 static bool is_gamma_k(const Expr* f, const Expr* var) {
     return f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
-        && strcmp(f->data.function.head->data.symbol.name, "Gamma") == 0
+        && f->data.function.head->data.symbol.name == SYM_Gamma
         && f->data.function.arg_count == 1
         && f->data.function.args[0]->type == EXPR_SYMBOL
         && f->data.function.args[0]->data.symbol.name == var->data.symbol.name;

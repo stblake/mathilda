@@ -306,63 +306,63 @@ static Expr* cx_inverse_to_log(const char* head, Expr* w) {
     #define SQRT(e) (mk_pow((e), mk_half()))
     #define RECIP(e)(mk_pow((e), mk_int(-1)))
     Expr* out = NULL;
-    if (strcmp(head, "ArcSin") == 0) {
+    if (head == SYM_ArcSin) {
         /* -I Log[I w + Sqrt[1 - w^2]] */
         Expr* inner = mk_fn2("Plus", mk_fn2("Times", mk_I(), W),
                              SQRT(mk_fn2("Plus", mk_int(1), NEG(mk_pow(W, mk_int(2))))));
         out = mk_fn2("Times", NEG(mk_I()), mk_fn1("Log", inner));
-    } else if (strcmp(head, "ArcCos") == 0) {
+    } else if (head == SYM_ArcCos) {
         /* Pi/2 + I Log[I w + Sqrt[1 - w^2]] */
         Expr* inner = mk_fn2("Plus", mk_fn2("Times", mk_I(), W),
                              SQRT(mk_fn2("Plus", mk_int(1), NEG(mk_pow(W, mk_int(2))))));
         out = mk_fn2("Plus", mk_fn2("Times", mk_half(), mk_sym("Pi")),
                      mk_fn2("Times", mk_I(), mk_fn1("Log", inner)));
-    } else if (strcmp(head, "ArcTan") == 0) {
+    } else if (head == SYM_ArcTan) {
         /* (I/2)(Log[1 - I w] - Log[1 + I w]) */
         Expr* la = mk_fn1("Log", mk_fn2("Plus", mk_int(1), NEG(mk_fn2("Times", mk_I(), W))));
         Expr* lb = mk_fn1("Log", mk_fn2("Plus", mk_int(1), mk_fn2("Times", mk_I(), W)));
         out = mk_fn2("Times", mk_fn2("Times", mk_I(), mk_half()),
                      mk_fn2("Plus", la, NEG(lb)));
-    } else if (strcmp(head, "ArcCot") == 0) {
+    } else if (head == SYM_ArcCot) {
         /* (I/2)(Log[1 - I/w] - Log[1 + I/w]) */
         Expr* la = mk_fn1("Log", mk_fn2("Plus", mk_int(1), NEG(mk_fn2("Times", mk_I(), RECIP(W)))));
         Expr* lb = mk_fn1("Log", mk_fn2("Plus", mk_int(1), mk_fn2("Times", mk_I(), RECIP(W))));
         out = mk_fn2("Times", mk_fn2("Times", mk_I(), mk_half()),
                      mk_fn2("Plus", la, NEG(lb)));
-    } else if (strcmp(head, "ArcCsc") == 0) {
+    } else if (head == SYM_ArcCsc) {
         /* ArcSin[1/w] = -I Log[I/w + Sqrt[1 - 1/w^2]] */
         Expr* inner = mk_fn2("Plus", mk_fn2("Times", mk_I(), RECIP(W)),
                              SQRT(mk_fn2("Plus", mk_int(1), NEG(mk_pow(RECIP(W), mk_int(2))))));
         out = mk_fn2("Times", NEG(mk_I()), mk_fn1("Log", inner));
-    } else if (strcmp(head, "ArcSec") == 0) {
+    } else if (head == SYM_ArcSec) {
         /* ArcCos[1/w] = Pi/2 + I Log[I/w + Sqrt[1 - 1/w^2]] */
         Expr* inner = mk_fn2("Plus", mk_fn2("Times", mk_I(), RECIP(W)),
                              SQRT(mk_fn2("Plus", mk_int(1), NEG(mk_pow(RECIP(W), mk_int(2))))));
         out = mk_fn2("Plus", mk_fn2("Times", mk_half(), mk_sym("Pi")),
                      mk_fn2("Times", mk_I(), mk_fn1("Log", inner)));
-    } else if (strcmp(head, "ArcSinh") == 0) {
+    } else if (head == SYM_ArcSinh) {
         /* Log[w + Sqrt[1 + w^2]] */
         out = mk_fn1("Log", mk_fn2("Plus", W, SQRT(mk_fn2("Plus", mk_int(1), mk_pow(W, mk_int(2))))));
-    } else if (strcmp(head, "ArcCosh") == 0) {
+    } else if (head == SYM_ArcCosh) {
         /* Log[w + Sqrt[w - 1] Sqrt[w + 1]] */
         Expr* rad = mk_fn2("Times", SQRT(mk_fn2("Plus", W, mk_int(-1))),
                            SQRT(mk_fn2("Plus", W, mk_int(1))));
         out = mk_fn1("Log", mk_fn2("Plus", W, rad));
-    } else if (strcmp(head, "ArcCsch") == 0) {
+    } else if (head == SYM_ArcCsch) {
         /* ArcSinh[1/w] = Log[1/w + Sqrt[1 + 1/w^2]] */
         out = mk_fn1("Log", mk_fn2("Plus", RECIP(W),
                      SQRT(mk_fn2("Plus", mk_int(1), mk_pow(RECIP(W), mk_int(2))))));
-    } else if (strcmp(head, "ArcTanh") == 0) {
+    } else if (head == SYM_ArcTanh) {
         /* (1/2)(Log[1 + w] - Log[1 - w]) */
         Expr* la = mk_fn1("Log", mk_fn2("Plus", mk_int(1), W));
         Expr* lb = mk_fn1("Log", mk_fn2("Plus", mk_int(1), NEG(W)));
         out = mk_fn2("Times", mk_half(), mk_fn2("Plus", la, NEG(lb)));
-    } else if (strcmp(head, "ArcCoth") == 0) {
+    } else if (head == SYM_ArcCoth) {
         /* (1/2)(Log[1 + 1/w] - Log[1 - 1/w]) */
         Expr* la = mk_fn1("Log", mk_fn2("Plus", mk_int(1), RECIP(W)));
         Expr* lb = mk_fn1("Log", mk_fn2("Plus", mk_int(1), NEG(RECIP(W))));
         out = mk_fn2("Times", mk_half(), mk_fn2("Plus", la, NEG(lb)));
-    } else if (strcmp(head, "ArcSech") == 0) {
+    } else if (head == SYM_ArcSech) {
         /* ArcCosh[1/w] = Log[1/w + Sqrt[1/w - 1] Sqrt[1/w + 1]] */
         Expr* rad = mk_fn2("Times", SQRT(mk_fn2("Plus", RECIP(W), mk_int(-1))),
                            SQRT(mk_fn2("Plus", RECIP(W), mk_int(1))));
@@ -566,7 +566,7 @@ static void cx_decompose(const Expr* e, const CxCtx* ctx, Expr** re, Expr** im) 
     }
 
     /* Exp[z] = Power[E, z] normally, but handle a literal Exp head too. */
-    if (strcmp(h, "Exp") == 0 && nargs == 1) {
+    if (h == SYM_Exp && nargs == 1) {
         Expr *u, *v;
         cx_decompose(args[0], ctx, &u, &v);
         Expr* mod = ev(mk_fn1("Exp", expr_copy(u)));
@@ -823,7 +823,7 @@ static Expr* cx_expand_thread(const Expr* arg, const CxCtx* ctx) {
             free(out);
             Expr* evd = ev(rebuilt);
             /* For relations, try to collapse to True/False. */
-            if (!is_list && (strcmp(h, "Equal") == 0 || strcmp(h, "Unequal") == 0)) {
+            if (!is_list && (h == SYM_Equal || h == SYM_Unequal)) {
                 Expr* simp = ev(mk_fn1("Simplify", expr_copy(evd)));
                 if (simp->type == EXPR_SYMBOL &&
                     (simp->data.symbol.name == SYM_True || simp->data.symbol.name == SYM_False)) {
@@ -856,7 +856,7 @@ Expr* builtin_complex_expand(Expr* res) {
             (a->data.function.head->data.symbol.name == SYM_Rule ||
              a->data.function.head->data.symbol.name == SYM_RuleDelayed)) {
             Expr* lhs = a->data.function.args[0];
-            if (lhs->type == EXPR_SYMBOL && strcmp(lhs->data.symbol.name, "TargetFunctions") == 0) {
+            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_TargetFunctions) {
                 Expr* rhs = a->data.function.args[1];
                 /* Detect Conjugate / {Abs,Arg}; default Re,Im otherwise. */
                 bool has_conj = false, has_abs = false, has_arg = false;
@@ -866,9 +866,9 @@ Expr* builtin_complex_expand(Expr* res) {
                 for (size_t j = 0; j < ni; j++) {
                     if (items[j]->type == EXPR_SYMBOL) {
                         const char* nm = items[j]->data.symbol.name;
-                        if (strcmp(nm, "Conjugate") == 0) has_conj = true;
-                        else if (strcmp(nm, "Abs") == 0) has_abs = true;
-                        else if (strcmp(nm, "Arg") == 0) has_arg = true;
+                        if (nm == SYM_Conjugate) has_conj = true;
+                        else if (nm == SYM_Abs) has_abs = true;
+                        else if (nm == SYM_Arg) has_arg = true;
                     }
                 }
                 if (has_conj) target = TF_CONJUGATE;

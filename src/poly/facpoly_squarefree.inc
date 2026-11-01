@@ -15,13 +15,13 @@ static Expr* poly_deriv(Expr* p, Expr* x) {
 
     if (p->type == EXPR_FUNCTION) {
         const char* head = p->data.function.head->type == EXPR_SYMBOL ? p->data.function.head->data.symbol.name : "";
-        if (strcmp(head, "Plus") == 0) {
+        if (head == SYM_Plus) {
             Expr** args = malloc(sizeof(Expr*) * p->data.function.arg_count);
             for (size_t i=0; i<p->data.function.arg_count; i++) args[i] = poly_deriv(p->data.function.args[i], x);
             Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), args, p->data.function.arg_count));
             free(args);
             return res;
-        } else if (strcmp(head, "Times") == 0) {
+        } else if (head == SYM_Times) {
             size_t count = p->data.function.arg_count;
             Expr** sum_args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
@@ -36,7 +36,7 @@ static Expr* poly_deriv(Expr* p, Expr* x) {
             Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), sum_args, count));
             free(sum_args);
             return res;
-        } else if (strcmp(head, "Power") == 0 && p->data.function.arg_count == 2) {
+        } else if (head == SYM_Power && p->data.function.arg_count == 2) {
             Expr* base = p->data.function.args[0];
             Expr* exp = p->data.function.args[1];
             if (!contains_any_symbol_from(exp, x)) {
@@ -354,9 +354,9 @@ static Expr* factor_square_free_dispatcher(Expr* e) {
 
     const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol.name : "";
 
-    if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 || 
-        strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 || strcmp(head, "GreaterEqual") == 0 ||
-        strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0) {
+    if (head == SYM_List || head == SYM_Equal || head == SYM_Less || 
+        head == SYM_LessEqual || head == SYM_Greater || head == SYM_GreaterEqual ||
+        head == SYM_And || head == SYM_Or || head == SYM_Not) {
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) args[i] = factor_square_free_dispatcher(e->data.function.args[i]);
         Expr* res = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, e->data.function.arg_count));
@@ -364,7 +364,7 @@ static Expr* factor_square_free_dispatcher(Expr* e) {
         return res;
     }
 
-    if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER || is_rational(exp, NULL, NULL)) {
@@ -424,7 +424,7 @@ static bool sqf_is_number_literal(const Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
         e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
-        if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0) return true;
+        if (h == SYM_Rational || h == SYM_Complex) return true;
     }
     return false;
 }
@@ -460,7 +460,7 @@ static Expr* factor_square_free_over_extension(Expr* res) {
 
     bool fac_is_times = (fac->type == EXPR_FUNCTION && fac->data.function.head &&
                          fac->data.function.head->type == EXPR_SYMBOL &&
-                         strcmp(fac->data.function.head->data.symbol.name, "Times") == 0);
+                         fac->data.function.head->data.symbol.name == SYM_Times);
     size_t nfac = fac_is_times ? fac->data.function.arg_count : 1;
     Expr** faclist = fac_is_times ? fac->data.function.args : &fac;
 
@@ -475,7 +475,7 @@ static Expr* factor_square_free_over_extension(Expr* res) {
         long mult;
         if (f->type == EXPR_FUNCTION && f->data.function.head &&
             f->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(f->data.function.head->data.symbol.name, "Power") == 0 &&
+            f->data.function.head->data.symbol.name == SYM_Power &&
             f->data.function.arg_count == 2 &&
             f->data.function.args[1]->type == EXPR_INTEGER) {
             base = expr_copy(f->data.function.args[0]);
@@ -568,7 +568,7 @@ Expr* builtin_factorsquarefree(Expr* res) {
      * autodetect / over-Q fall-back when no generator applies). */
     bool real_ext = alpha_expr &&
         !(alpha_expr->type == EXPR_SYMBOL && alpha_expr->data.symbol.name
-          && strcmp(alpha_expr->data.symbol.name, "None") == 0);
+          && alpha_expr->data.symbol.name == SYM_None);
 
     if (real_ext) {
         Expr* out = factor_square_free_over_extension(res);

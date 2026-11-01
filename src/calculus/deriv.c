@@ -224,34 +224,34 @@ static bool is_dt_constant_symbol(const Expr* e) {
  */
 static Expr* elementary_fprime(const char* name, Expr* g) {
     /* --- trigonometric --- */
-    if (!strcmp(name, "Sin")) return mk_fn1("Cos", expr_copy(g));
-    if (!strcmp(name, "Cos")) return mk_neg(mk_fn1("Sin", expr_copy(g)));
-    if (!strcmp(name, "Tan")) return mk_fn2("Power", mk_fn1("Sec", expr_copy(g)), mk_int(2));
-    if (!strcmp(name, "Cot")) return mk_neg(mk_fn2("Power", mk_fn1("Csc", expr_copy(g)), mk_int(2)));
-    if (!strcmp(name, "Sec")) return mk_fn2("Times", mk_fn1("Sec", expr_copy(g)), mk_fn1("Tan", expr_copy(g)));
-    if (!strcmp(name, "Csc")) return mk_neg(mk_fn2("Times", mk_fn1("Csc", expr_copy(g)), mk_fn1("Cot", expr_copy(g))));
+    if (name == SYM_Sin) return mk_fn1("Cos", expr_copy(g));
+    if (name == SYM_Cos) return mk_neg(mk_fn1("Sin", expr_copy(g)));
+    if (name == SYM_Tan) return mk_fn2("Power", mk_fn1("Sec", expr_copy(g)), mk_int(2));
+    if (name == SYM_Cot) return mk_neg(mk_fn2("Power", mk_fn1("Csc", expr_copy(g)), mk_int(2)));
+    if (name == SYM_Sec) return mk_fn2("Times", mk_fn1("Sec", expr_copy(g)), mk_fn1("Tan", expr_copy(g)));
+    if (name == SYM_Csc) return mk_neg(mk_fn2("Times", mk_fn1("Csc", expr_copy(g)), mk_fn1("Cot", expr_copy(g))));
 
     /* --- inverse trigonometric --- */
     /* D[ArcSin[g], g] = 1 / Sqrt[1 - g^2]; we encode 1/Sqrt[u] as Power[u, -1/2]. */
-    if (!strcmp(name, "ArcSin")) {
+    if (name == SYM_ArcSin) {
         Expr* one_minus_g2 = mk_fn2("Plus", mk_int(1),
                                     mk_neg(mk_fn2("Power", expr_copy(g), mk_int(2))));
         return mk_fn2("Power", mk_fn1("Sqrt", one_minus_g2), mk_int(-1));
     }
-    if (!strcmp(name, "ArcCos")) {
+    if (name == SYM_ArcCos) {
         Expr* one_minus_g2 = mk_fn2("Plus", mk_int(1),
                                     mk_neg(mk_fn2("Power", expr_copy(g), mk_int(2))));
         return mk_neg(mk_fn2("Power", mk_fn1("Sqrt", one_minus_g2), mk_int(-1)));
     }
-    if (!strcmp(name, "ArcTan")) {
+    if (name == SYM_ArcTan) {
         Expr* one_plus_g2 = mk_fn2("Plus", mk_int(1), mk_fn2("Power", expr_copy(g), mk_int(2)));
         return mk_fn2("Power", one_plus_g2, mk_int(-1));
     }
-    if (!strcmp(name, "ArcCot")) {
+    if (name == SYM_ArcCot) {
         Expr* one_plus_g2 = mk_fn2("Plus", mk_int(1), mk_fn2("Power", expr_copy(g), mk_int(2)));
         return mk_neg(mk_fn2("Power", one_plus_g2, mk_int(-1)));
     }
-    if (!strcmp(name, "ArcSec")) {
+    if (name == SYM_ArcSec) {
         /* 1 / (g^2 * Sqrt[1 - 1/g^2]) */
         Expr* g2 = mk_fn2("Power", expr_copy(g), mk_int(2));
         Expr* inv_g2 = mk_fn2("Power", expr_copy(g), mk_int(-2));
@@ -259,7 +259,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         Expr* denom = mk_fn2("Times", g2, mk_fn1("Sqrt", radicand));
         return mk_fn2("Power", denom, mk_int(-1));
     }
-    if (!strcmp(name, "ArcCsc")) {
+    if (name == SYM_ArcCsc) {
         Expr* g2 = mk_fn2("Power", expr_copy(g), mk_int(2));
         Expr* inv_g2 = mk_fn2("Power", expr_copy(g), mk_int(-2));
         Expr* radicand = mk_fn2("Plus", mk_int(1), mk_neg(inv_g2));
@@ -268,38 +268,38 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- hyperbolic --- */
-    if (!strcmp(name, "Sinh")) return mk_fn1("Cosh", expr_copy(g));
-    if (!strcmp(name, "Cosh")) return mk_fn1("Sinh", expr_copy(g));
-    if (!strcmp(name, "Tanh")) return mk_fn2("Power", mk_fn1("Sech", expr_copy(g)), mk_int(2));
-    if (!strcmp(name, "Coth")) return mk_neg(mk_fn2("Power", mk_fn1("Csch", expr_copy(g)), mk_int(2)));
-    if (!strcmp(name, "Sech")) return mk_neg(mk_fn2("Times", mk_fn1("Sech", expr_copy(g)), mk_fn1("Tanh", expr_copy(g))));
-    if (!strcmp(name, "Csch")) return mk_neg(mk_fn2("Times", mk_fn1("Csch", expr_copy(g)), mk_fn1("Coth", expr_copy(g))));
+    if (name == SYM_Sinh) return mk_fn1("Cosh", expr_copy(g));
+    if (name == SYM_Cosh) return mk_fn1("Sinh", expr_copy(g));
+    if (name == SYM_Tanh) return mk_fn2("Power", mk_fn1("Sech", expr_copy(g)), mk_int(2));
+    if (name == SYM_Coth) return mk_neg(mk_fn2("Power", mk_fn1("Csch", expr_copy(g)), mk_int(2)));
+    if (name == SYM_Sech) return mk_neg(mk_fn2("Times", mk_fn1("Sech", expr_copy(g)), mk_fn1("Tanh", expr_copy(g))));
+    if (name == SYM_Csch) return mk_neg(mk_fn2("Times", mk_fn1("Csch", expr_copy(g)), mk_fn1("Coth", expr_copy(g))));
 
     /* --- inverse hyperbolic --- */
-    if (!strcmp(name, "ArcSinh")) {
+    if (name == SYM_ArcSinh) {
         Expr* radicand = mk_fn2("Plus", mk_int(1), mk_fn2("Power", expr_copy(g), mk_int(2)));
         return mk_fn2("Power", mk_fn1("Sqrt", radicand), mk_int(-1));
     }
-    if (!strcmp(name, "ArcCosh")) {
+    if (name == SYM_ArcCosh) {
         Expr* radicand = mk_fn2("Plus", mk_fn2("Power", expr_copy(g), mk_int(2)), mk_int(-1));
         return mk_fn2("Power", mk_fn1("Sqrt", radicand), mk_int(-1));
     }
-    if (!strcmp(name, "ArcTanh")) {
+    if (name == SYM_ArcTanh) {
         Expr* denom = mk_fn2("Plus", mk_int(1), mk_neg(mk_fn2("Power", expr_copy(g), mk_int(2))));
         return mk_fn2("Power", denom, mk_int(-1));
     }
-    if (!strcmp(name, "ArcCoth")) {
+    if (name == SYM_ArcCoth) {
         Expr* denom = mk_fn2("Plus", mk_int(1), mk_neg(mk_fn2("Power", expr_copy(g), mk_int(2))));
         return mk_fn2("Power", denom, mk_int(-1));
     }
-    if (!strcmp(name, "ArcSech")) {
+    if (name == SYM_ArcSech) {
         Expr* g2 = mk_fn2("Power", expr_copy(g), mk_int(2));
         Expr* inv_g2 = mk_fn2("Power", expr_copy(g), mk_int(-2));
         Expr* radicand = mk_fn2("Plus", inv_g2, mk_int(-1));
         Expr* denom = mk_fn2("Times", g2, mk_fn1("Sqrt", radicand));
         return mk_neg(mk_fn2("Power", denom, mk_int(-1)));
     }
-    if (!strcmp(name, "ArcCsch")) {
+    if (name == SYM_ArcCsch) {
         Expr* g2 = mk_fn2("Power", expr_copy(g), mk_int(2));
         Expr* inv_g2 = mk_fn2("Power", expr_copy(g), mk_int(-2));
         Expr* radicand = mk_fn2("Plus", mk_int(1), inv_g2);
@@ -308,27 +308,27 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- Airy Ai: d/dg AiryAi[g] = AiryAiPrime[g]. --- */
-    if (!strcmp(name, "AiryAi")) {
+    if (name == SYM_AiryAi) {
         return mk_fn1("AiryAiPrime", expr_copy(g));
     }
 
     /* --- Airy Ai': d/dg AiryAiPrime[g] = g AiryAi[g]  (from Ai'' = z Ai). --- */
-    if (!strcmp(name, "AiryAiPrime")) {
+    if (name == SYM_AiryAiPrime) {
         return mk_fn2("Times", expr_copy(g), mk_fn1("AiryAi", expr_copy(g)));
     }
 
     /* --- Airy Bi: d/dg AiryBi[g] = AiryBiPrime[g]. --- */
-    if (!strcmp(name, "AiryBi")) {
+    if (name == SYM_AiryBi) {
         return mk_fn1("AiryBiPrime", expr_copy(g));
     }
 
     /* --- Airy Bi': d/dg AiryBiPrime[g] = g AiryBi[g]  (from Bi'' = z Bi). --- */
-    if (!strcmp(name, "AiryBiPrime")) {
+    if (name == SYM_AiryBiPrime) {
         return mk_fn2("Times", expr_copy(g), mk_fn1("AiryBi", expr_copy(g)));
     }
 
     /* --- Lambert W: d/dg ProductLog[g] = ProductLog[g] / (g (1 + ProductLog[g])). --- */
-    if (!strcmp(name, "ProductLog")) {
+    if (name == SYM_ProductLog) {
         Expr* w = mk_fn1("ProductLog", expr_copy(g));
         Expr* one_plus_w = mk_fn2("Plus", mk_int(1), w);
         Expr* denom = mk_fn2("Times", expr_copy(g), one_plus_w);
@@ -337,40 +337,40 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- sine integral: d/dg SinIntegral[g] = Sinc[g] = Sin[g]/g. --- */
-    if (!strcmp(name, "SinIntegral")) {
+    if (name == SYM_SinIntegral) {
         return mk_fn1("Sinc", expr_copy(g));
     }
 
     /* --- cosine integral: d/dg CosIntegral[g] = Cos[g]/g. --- */
-    if (!strcmp(name, "CosIntegral")) {
+    if (name == SYM_CosIntegral) {
         return mk_fn2("Times", mk_fn1("Cos", expr_copy(g)),
                       mk_fn2("Power", expr_copy(g), mk_int(-1)));
     }
 
     /* --- hyperbolic sine integral: d/dg SinhIntegral[g] = Sinh[g]/g.
      *     (No Sinhc builtin, so emit Sinh[g]/g directly.) --- */
-    if (!strcmp(name, "SinhIntegral")) {
+    if (name == SYM_SinhIntegral) {
         return mk_fn2("Times", mk_fn1("Sinh", expr_copy(g)),
                       mk_fn2("Power", expr_copy(g), mk_int(-1)));
     }
 
     /* --- hyperbolic cosine integral: d/dg CoshIntegral[g] = Cosh[g]/g. --- */
-    if (!strcmp(name, "CoshIntegral")) {
+    if (name == SYM_CoshIntegral) {
         return mk_fn2("Times", mk_fn1("Cosh", expr_copy(g)),
                       mk_fn2("Power", expr_copy(g), mk_int(-1)));
     }
 
     /* --- Fresnel integrals: d/dg FresnelC[g] = Cos[Pi g^2/2],
      *     d/dg FresnelS[g] = Sin[Pi g^2/2]. (Pi g^2/2 as Times[1/2, Pi, g^2].) */
-    if (!strcmp(name, "FresnelC") || !strcmp(name, "FresnelS")) {
+    if (name == SYM_FresnelC || name == SYM_FresnelS) {
         Expr* half = mk_fn2("Power", mk_int(2), mk_int(-1));   /* 1/2 */
         Expr* g2   = mk_fn2("Power", expr_copy(g), mk_int(2));
         Expr* arg  = mk_fn2("Times", half, mk_fn2("Times", mk_sym("Pi"), g2));
-        return mk_fn1(!strcmp(name, "FresnelC") ? "Cos" : "Sin", arg);
+        return mk_fn1(name == SYM_FresnelC ? "Cos" : "Sin", arg);
     }
 
     /* --- cardinal sine: d/dg Sinc[g] = Cos[g]/g - Sin[g]/g^2. --- */
-    if (!strcmp(name, "Sinc")) {
+    if (name == SYM_Sinc) {
         Expr* t1 = mk_fn2("Times", mk_fn1("Cos", expr_copy(g)),
                           mk_fn2("Power", expr_copy(g), mk_int(-1)));
         Expr* t2 = mk_neg(mk_fn2("Times", mk_fn1("Sin", expr_copy(g)),
@@ -384,7 +384,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
      *   d/dm EllipticE[m] = (EllipticE[m] - EllipticK[m]) / (2 m)
      * Only the one-argument spellings reach this table, so EllipticE[phi, m]
      * (and EllipticF, EllipticPi) are handled in the multi-argument block. --- */
-    if (!strcmp(name, "EllipticK")) {
+    if (name == SYM_EllipticK) {
         Expr* one_minus_m = mk_fn2("Plus", mk_int(1), mk_neg(expr_copy(g)));
         Expr* num = mk_fn2("Plus", mk_fn1("EllipticE", expr_copy(g)),
                         mk_neg(mk_fn2("Times", expr_copy(one_minus_m),
@@ -393,7 +393,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
                            one_minus_m);
         return mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
     }
-    if (!strcmp(name, "EllipticE")) {
+    if (name == SYM_EllipticE) {
         Expr* num = mk_fn2("Plus", mk_fn1("EllipticE", expr_copy(g)),
                         mk_neg(mk_fn1("EllipticK", expr_copy(g))));
         Expr* den = mk_fn2("Times", mk_int(2), expr_copy(g));
@@ -401,7 +401,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- error function: d/dg Erf[g] = (2/Sqrt[Pi]) E^(-g^2). --- */
-    if (!strcmp(name, "Erf")) {
+    if (name == SYM_Erf) {
         Expr* coeff = mk_fn2("Times", mk_int(2),
                              mk_fn2("Power", mk_fn1("Sqrt", mk_sym("Pi")), mk_int(-1)));
         Expr* gaussian = mk_fn1("Exp",
@@ -410,7 +410,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- imaginary error function: d/dg Erfi[g] = (2/Sqrt[Pi]) E^(g^2). --- */
-    if (!strcmp(name, "Erfi")) {
+    if (name == SYM_Erfi) {
         Expr* coeff = mk_fn2("Times", mk_int(2),
                              mk_fn2("Power", mk_fn1("Sqrt", mk_sym("Pi")), mk_int(-1)));
         Expr* gaussian = mk_fn1("Exp",
@@ -421,10 +421,10 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     /* --- Heaviside step: d/dg HeavisideTheta[g] = DiracDelta[g].  Needed so a
      * Green's-function / impulse solution differentiates cleanly (e.g. the IC
      * fit of a causal impulse response), matching Mathematica. --- */
-    if (!strcmp(name, "HeavisideTheta")) return mk_fn1("DiracDelta", expr_copy(g));
+    if (name == SYM_HeavisideTheta) return mk_fn1("DiracDelta", expr_copy(g));
 
     /* --- complementary error function: d/dg Erfc[g] = -(2/Sqrt[Pi]) E^(-g^2). --- */
-    if (!strcmp(name, "Erfc")) {
+    if (name == SYM_Erfc) {
         Expr* coeff = mk_fn2("Times", mk_int(-2),
                              mk_fn2("Power", mk_fn1("Sqrt", mk_sym("Pi")), mk_int(-1)));
         Expr* gaussian = mk_fn1("Exp",
@@ -433,7 +433,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- inverse error function: d/dg InverseErf[g] = (Sqrt[Pi]/2) E^(InverseErf[g]^2). --- */
-    if (!strcmp(name, "InverseErf")) {
+    if (name == SYM_InverseErf) {
         Expr* coeff = mk_fn2("Times", mk_fn1("Sqrt", mk_sym("Pi")),
                              mk_fn2("Power", mk_int(2), mk_int(-1)));
         Expr* sq = mk_fn2("Power", mk_fn1("InverseErf", expr_copy(g)), mk_int(2));
@@ -442,7 +442,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
 
     /* --- inverse complementary error function:
      *     d/dg InverseErfc[g] = -(Sqrt[Pi]/2) E^(InverseErfc[g]^2). --- */
-    if (!strcmp(name, "InverseErfc")) {
+    if (name == SYM_InverseErfc) {
         Expr* coeff = mk_fn2("Times", mk_int(-1),
                              mk_fn2("Times", mk_fn1("Sqrt", mk_sym("Pi")),
                                     mk_fn2("Power", mk_int(2), mk_int(-1))));
@@ -451,20 +451,20 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     }
 
     /* --- exponential integral: d/dg ExpIntegralEi[g] = E^g / g. --- */
-    if (!strcmp(name, "ExpIntegralEi")) {
+    if (name == SYM_ExpIntegralEi) {
         return mk_fn2("Times", mk_fn1("Exp", expr_copy(g)),
                       mk_fn2("Power", expr_copy(g), mk_int(-1)));
     }
 
     /* --- logarithmic integral: d/dg LogIntegral[g] = 1 / Log[g]. --- */
-    if (!strcmp(name, "LogIntegral")) {
+    if (name == SYM_LogIntegral) {
         return mk_fn2("Power", mk_fn1("Log", expr_copy(g)), mk_int(-1));
     }
 
     /* --- exp/log and sqrt --- */
-    if (!strcmp(name, "Exp")) return mk_fn1("Exp", expr_copy(g));
-    if (!strcmp(name, "Log")) return mk_fn2("Power", expr_copy(g), mk_int(-1));
-    if (!strcmp(name, "Sqrt")) {
+    if (name == SYM_Exp) return mk_fn1("Exp", expr_copy(g));
+    if (name == SYM_Log) return mk_fn2("Power", expr_copy(g), mk_int(-1));
+    if (name == SYM_Sqrt) {
         /* d/dg Sqrt[g] = 1/(2 Sqrt[g]) */
         return mk_fn2("Power", mk_fn2("Times", mk_int(2), mk_fn1("Sqrt", expr_copy(g))), mk_int(-1));
     }
@@ -473,7 +473,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
      *   d/dn Fibonacci[n] = (1/Sqrt[5]) GoldenRatio^-n
      *       (GoldenRatio^(2 n) Log[GoldenRatio] + Cos[n Pi] Log[GoldenRatio]
      *        + Pi Sin[n Pi]). */
-    if (!strcmp(name, "Fibonacci")) {
+    if (name == SYM_Fibonacci) {
         Expr* logphi = mk_fn1("Log", mk_sym("GoldenRatio"));
         Expr* t1 = mk_fn2("Times",
                           mk_fn2("Power", mk_sym("GoldenRatio"),
@@ -497,7 +497,7 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
     /* --- LucasL number: derivative w.r.t. its single argument. ---
      *   d/dn LucasL[n] = GoldenRatio^-n (GoldenRatio^(2 n) Log[GoldenRatio]
      *       - Cos[n Pi] Log[GoldenRatio] - Pi Sin[n Pi]). */
-    if (!strcmp(name, "LucasL")) {
+    if (name == SYM_LucasL) {
         Expr* logphi = mk_fn1("Log", mk_sym("GoldenRatio"));
         Expr* t1 = mk_fn2("Times",
                           mk_fn2("Power", mk_sym("GoldenRatio"),

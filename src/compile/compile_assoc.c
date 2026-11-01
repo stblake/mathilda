@@ -94,8 +94,8 @@ typedef struct {
  * `KeyDrop[p, k]` / `Counts[v]` may itself be the operand of another association
  * op (composition). */
 static bool assoc_producer_head(const char* h, size_t na) {
-    if ((strcmp(h, "KeyDrop") == 0 || strcmp(h, "KeyTake") == 0) && na == 2) return true;
-    if (strcmp(h, "Counts") == 0 && na == 1) return true;
+    if ((h == SYM_KeyDrop || h == SYM_KeyTake) && na == 2) return true;
+    if (h == SYM_Counts && na == 1) return true;
     return false;
 }
 

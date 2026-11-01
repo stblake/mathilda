@@ -1172,7 +1172,7 @@ Expr* interval_thread_call(Expr* res) {
     bool bad = !deriv ||
         (deriv->type == EXPR_FUNCTION && deriv->data.function.head->type == EXPR_SYMBOL &&
          deriv->data.function.head->data.symbol.name &&
-         strcmp(deriv->data.function.head->data.symbol.name, "D") == 0);
+         deriv->data.function.head->data.symbol.name == SYM_D);
 
     /* SELF-REFERENTIAL derivative: decline, and do it here rather than relying
      * on the depth guard.

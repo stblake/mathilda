@@ -103,11 +103,11 @@ static bool is_head(const Expr* e, const char* h) {
 }
 
 static bool is_thread_head(const char* h) {
-    return strcmp(h, "List") == 0 || strcmp(h, "Equal") == 0 ||
-           strcmp(h, "Unequal") == 0 || strcmp(h, "Less") == 0 ||
-           strcmp(h, "LessEqual") == 0 || strcmp(h, "Greater") == 0 ||
-           strcmp(h, "GreaterEqual") == 0 || strcmp(h, "Inequality") == 0 ||
-           strcmp(h, "And") == 0 || strcmp(h, "Or") == 0 || strcmp(h, "Not") == 0;
+    return h == SYM_List || h == SYM_Equal ||
+           h == SYM_Unequal || h == SYM_Less ||
+           h == SYM_LessEqual || h == SYM_Greater ||
+           h == SYM_GreaterEqual || h == SYM_Inequality ||
+           h == SYM_And || h == SYM_Or || h == SYM_Not;
 }
 
 /* True if e mentions any of the restriction variables (or if unrestricted). */
@@ -323,7 +323,7 @@ static bool pe_apply_rule(Expr* e, const PECtx* ctx,
     size_t ac = e->data.function.arg_count;
 
     /* ---- Power ---- */
-    if (strcmp(h, "Power") == 0 && ac == 2) {
+    if (h == SYM_Power && ac == 2) {
         Expr* base = a[0];
         Expr* exp  = a[1];
         if (is_head(base, "Times")) {                 /* (z1..zn)^c */
@@ -347,7 +347,7 @@ static bool pe_apply_rule(Expr* e, const PECtx* ctx,
     }
 
     /* ---- Log ---- */
-    if (strcmp(h, "Log") == 0 && ac == 1) {
+    if (h == SYM_Log && ac == 1) {
         Expr* arg = a[0];
         if (is_head(arg, "Power") && arg->data.function.arg_count == 2) {
             if (!var_gate(arg, ctx)) return false;     /* Log[a^b] */
@@ -371,7 +371,7 @@ static bool pe_apply_rule(Expr* e, const PECtx* ctx,
     }
 
     /* ---- Arg ---- */
-    if (strcmp(h, "Arg") == 0 && ac == 1) {
+    if (h == SYM_Arg && ac == 1) {
         Expr* arg = a[0];
         if (is_head(arg, "Times")) {
             if (!var_gate(arg, ctx)) return false;
@@ -392,7 +392,7 @@ static bool pe_apply_rule(Expr* e, const PECtx* ctx,
             a[0]->data.function.arg_count == 1) {
             Expr* x = a[0]->data.function.args[0];
             if (!var_gate(x, ctx)) return false;
-            if (ctx->mode != PE_AUTOMATIC && strcmp(h, "ArcTan") == 0)
+            if (ctx->mode != PE_AUTOMATIC && h == SYM_ArcTan)
                 *main = arctan_tan_universal(x);
             else
                 *main = expr_copy(x);                  /* principal branch */
@@ -415,7 +415,7 @@ static Expr* pe_rec(Expr* e, const PECtx* ctx) {
 
     /* Thread over lists / equations / inequalities / logic. */
     if (is_thread_head(h)) {
-        bool is_ineq = (strcmp(h, "Inequality") == 0);
+        bool is_ineq = (h == SYM_Inequality);
         size_t n = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) {
@@ -489,19 +489,19 @@ static void pe_var_bounds(const Expr* v, const PECtx* ctx,
 
         /* Binary comparison: op[lhs, rhs]. */
         if (f->data.function.arg_count == 2 &&
-            (strcmp(fh,"Less")==0 || strcmp(fh,"LessEqual")==0 ||
-             strcmp(fh,"Greater")==0 || strcmp(fh,"GreaterEqual")==0)) {
+            (fh == SYM_Less || fh == SYM_LessEqual ||
+             fh == SYM_Greater || fh == SYM_GreaterEqual)) {
             Expr* L = f->data.function.args[0];
             Expr* R = f->data.function.args[1];
             double num;
             if (expr_eq(L,(Expr*)v) && pe_to_double(R,&num)) {     /* v op num */
-                if (strcmp(fh,"Less")==0 || strcmp(fh,"LessEqual")==0) {
+                if (fh == SYM_Less || fh == SYM_LessEqual) {
                     if (!*hashi || num < *hi) { *hi=num; *hashi=true; }
                 } else {
                     if (!*haslo || num > *lo) { *lo=num; *haslo=true; }
                 }
             } else if (expr_eq(R,(Expr*)v) && pe_to_double(L,&num)) { /* num op v */
-                if (strcmp(fh,"Less")==0 || strcmp(fh,"LessEqual")==0) {
+                if (fh == SYM_Less || fh == SYM_LessEqual) {
                     if (!*haslo || num > *lo) { *lo=num; *haslo=true; }
                 } else {
                     if (!*hashi || num < *hi) { *hi=num; *hashi=true; }
@@ -511,7 +511,7 @@ static void pe_var_bounds(const Expr* v, const PECtx* ctx,
         }
 
         /* Inequality chain: Inequality[e0, op0, e1, op1, e2, ...]. */
-        if (strcmp(fh,"Inequality")==0 && (f->data.function.arg_count & 1u)) {
+        if (fh == SYM_Inequality && (f->data.function.arg_count & 1u)) {
             size_t na = f->data.function.arg_count;
             for (size_t k = 0; k + 2 < na; k += 2) {
                 Expr* L  = f->data.function.args[k];
@@ -519,7 +519,7 @@ static void pe_var_bounds(const Expr* v, const PECtx* ctx,
                 Expr* R  = f->data.function.args[k+2];
                 const char* o = (op->type==EXPR_SYMBOL)? op->data.symbol.name : "";
                 double num;
-                bool lessop = (strcmp(o,"Less")==0 || strcmp(o,"LessEqual")==0);
+                bool lessop = (o == SYM_Less || o == SYM_LessEqual);
                 if (expr_eq(L,(Expr*)v) && pe_to_double(R,&num)) {       /* v < num */
                     if (lessop) { if (!*hashi || num<*hi){*hi=num;*hashi=true;} }
                     else        { if (!*haslo || num>*lo){*lo=num;*haslo=true;} }
@@ -714,7 +714,7 @@ static Expr* pe_reduce_ipi(Expr* e) {
 
     if (is_head(e2, "Power") && e2->data.function.arg_count == 2 &&
         e2->data.function.args[0]->type == EXPR_SYMBOL &&
-        strcmp(e2->data.function.args[0]->data.symbol.name, "E") == 0) {
+        e2->data.function.args[0]->data.symbol.name == SYM_E) {
         Expr* X = e2->data.function.args[1];
         Expr* ratio = eval_and_free(
             fn2("Times", expr_copy(X),
@@ -735,19 +735,19 @@ static Expr* pe_refine(Expr* e, const PECtx* ctx) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     const char* h = head_name(e);
 
-    if (strcmp(h, "Arg") == 0 && e->data.function.arg_count == 1) {
+    if (h == SYM_Arg && e->data.function.arg_count == 1) {
         Expr* inner = pe_refine(e->data.function.args[0], ctx);
         Expr* r = pe_arg_under(inner, ctx);
         expr_free(inner);
         return r;
     }
-    if (strcmp(h, "Im") == 0 && e->data.function.arg_count == 1) {
+    if (h == SYM_Im && e->data.function.arg_count == 1) {
         Expr* inner = pe_refine(e->data.function.args[0], ctx);
         Expr* r = pe_im_under(inner, ctx);
         expr_free(inner);
         return r;
     }
-    if (strcmp(h, "Floor") == 0 && e->data.function.arg_count == 1) {
+    if (h == SYM_Floor && e->data.function.arg_count == 1) {
         Expr* inner = pe_refine(e->data.function.args[0], ctx);
         Expr* k = pe_floor_const(inner, ctx);
         if (k) { expr_free(inner); return k; }
@@ -812,9 +812,9 @@ Expr* builtin_powerexpand(Expr* res) {
     /* Assumptions option. Automatic keeps the default behaviour; True emits
      * the universal formulas; anything else triggers refinement. */
     bool is_automatic = (!assum) ||
-        (assum->type == EXPR_SYMBOL && strcmp(assum->data.symbol.name, "Automatic") == 0);
+        (assum->type == EXPR_SYMBOL && assum->data.symbol.name == SYM_Automatic);
     bool is_true = (assum && assum->type == EXPR_SYMBOL &&
-                    strcmp(assum->data.symbol.name, "True") == 0);
+                    assum->data.symbol.name == SYM_True);
     if (!is_automatic) ctx.mode = is_true ? PE_TRUE : PE_ASSUME;
 
     if (ctx.mode == PE_ASSUME) ctx.ctx = assume_ctx_from_expr(assum);
