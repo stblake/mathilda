@@ -105,7 +105,7 @@ def run_shard(sh, binary, timeout, shard_timeout):
             n = 2
             while key in results:          # an id repeated across groups
                 key, n = f"{f[2]}#{n}", n + 1
-            results[key] = (f[1], f[3] if len(f) > 3 else "")
+            results[key] = (f[1], micros_to_secs(f[3]) if len(f) > 3 else "")
         elif f[0] == "FCD" and len(f) >= 2:
             details.setdefault(f[1], f[2:])
         elif line == "FCEND":
@@ -126,6 +126,116 @@ def run_shard(sh, binary, timeout, shard_timeout):
     return {"shard": sh, "results": results, "details": details, "ended": ended, "unused": unused,
             "rc": rc, "secs": time.time() - t0, "msgs": msgs,
             "tail": "\n".join(out.splitlines()[-5:])}
+
+
+def micros_to_secs(field):
+    """The driver reports integer microseconds; the tsv carries seconds."""
+    try:
+        return f"{int(field) / 1e6:.4f}"
+    except ValueError:
+        return field
+
+
+def id_files(dirs):
+    """(dir, id) -> .test file, for results from a per-dir run (file "*")."""
+    out = {}
+    for lab, mt, td in drivers(dirs, False):
+        for sh in shards(lab, mt, td, set()):
+            for i in sh["ids"]:
+                out.setdefault((lab, i), sh["file"])
+    return out
+
+
+def read_results(rdir):
+    """{(dir, id): (verdict, seconds, file)} from a results directory."""
+    out = {}
+    for f in sorted(os.listdir(rdir)) if os.path.isdir(rdir) else []:
+        if not f.endswith(".tsv"):
+            continue
+        lab = f[:-4]
+        for line in open(os.path.join(rdir, f), encoding="utf-8").read().splitlines()[1:]:
+            c = line.split("\t")
+            if len(c) >= 4:
+                try:
+                    secs = float(c[2])
+                except ValueError:
+                    secs = 0.0
+                out[(lab, c[0])] = (c[1], secs, c[3])
+    return out
+
+
+def timing_report(mine_dir, ref_dir, dirs, out_path, floor=1e-3):
+    """Speed of this kernel against a reference run (both from the same harness).
+
+    The headline is the geometric mean, over .test files, of T_ref / T_mine,
+    counting only ids that PASS in both runs: a wrong answer is not timed.
+    Each file's total is floored at `floor` seconds on both sides, so a file
+    of trivial tests reads as parity rather than as noise.  > 1 means this
+    kernel is faster."""
+    import math
+    mine, ref = read_results(mine_dir), read_results(ref_dir)
+    files = id_files(dirs)
+    both = [k for k in mine if k in ref and mine[k][0] == "PASS" and ref[k][0] == "PASS"]
+    per_file = collections.defaultdict(lambda: [0.0, 0.0, 0])
+    per_dir = collections.defaultdict(lambda: [0.0, 0.0, 0])
+    for k in both:
+        fn = files.get(k, mine[k][2])
+        for agg in (per_file[(k[0], fn)], per_dir[k[0]]):
+            agg[0] += mine[k][1]
+            agg[1] += ref[k][1]
+            agg[2] += 1
+    def ratio(m, r):
+        return max(r, floor) / max(m, floor)
+    lines = []
+    w = lines.append
+    logs = [math.log(ratio(m, r)) for m, r, _ in per_file.values()]
+    gm = math.exp(sum(logs) / len(logs)) if logs else float("nan")
+    tm = sum(v[0] for v in per_dir.values())
+    tr = sum(v[1] for v in per_dir.values())
+    def show(d):
+        r = os.path.relpath(d, REPO)
+        return d if r.startswith("..") else r
+    w(f"# FeynCalc timing: {show(mine_dir)} vs {show(ref_dir)}")
+    w("")
+    w(f"Speed-up = T_ref / T_mine (> 1: this kernel is faster); ids passing in both: {len(both)}, "
+      f"files: {len(per_file)}.")
+    w("")
+    w(f"- **geomean over files: {gm:.3f}x**")
+    w(f"- total compute: mine {tm:.1f} s, ref {tr:.1f} s, ratio {ratio(tm, tr):.3f}x")
+    w("")
+    w("| directory | ids | mine s | ref s | speed-up |")
+    w("|---|---:|---:|---:|---:|")
+    for d in sorted(per_dir):
+        m, r, n = per_dir[d]
+        w(f"| {d} | {n} | {m:.2f} | {r:.2f} | {ratio(m, r):.3f}x |")
+    rows = [(k, v) for k, v in per_file.items()]
+    w("")
+    w("## Worst 30 files by speed-up")
+    w("")
+    w("| file | ids | mine s | ref s | speed-up |")
+    w("|---|---:|---:|---:|---:|")
+    for (d, fn), (m, r, n) in sorted(rows, key=lambda kv: ratio(kv[1][0], kv[1][1]))[:30]:
+        w(f"| {d}/{fn} | {n} | {m:.3f} | {r:.3f} | {ratio(m, r):.3f}x |")
+    w("")
+    w("## Top 30 files by this kernel's time")
+    w("")
+    w("| file | ids | mine s | ref s | speed-up |")
+    w("|---|---:|---:|---:|---:|")
+    for (d, fn), (m, r, n) in sorted(rows, key=lambda kv: -kv[1][0])[:30]:
+        w(f"| {d}/{fn} | {n} | {m:.3f} | {r:.3f} | {ratio(m, r):.3f}x |")
+    w("")
+    w("## Top 30 ids by this kernel's time (any verdict)")
+    w("")
+    w("| id | verdict | mine s | ref verdict | ref s |")
+    w("|---|---|---:|---|---:|")
+    for k in sorted(mine, key=lambda k: -mine[k][1])[:30]:
+        rv = ref.get(k, ("-", 0.0))
+        w(f"| {k[0]}/{k[1]} | {mine[k][0]} | {mine[k][1]:.3f} | {rv[0]} | {rv[1]:.3f} |")
+    text = "\n".join(lines) + "\n"
+    with open(out_path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    print("\n".join(lines[:12 + len(per_dir)]))
+    print(f"timing report written to {os.path.relpath(out_path, REPO)}")
 
 
 def load_baseline():
@@ -155,12 +265,23 @@ def main():
     ap.add_argument("--update-baseline", action="store_true")
     ap.add_argument("--triage", action="store_true", help="print verdict and message histograms")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--compare-timing", metavar="REF_DIR",
+                    help="after the run, compare per-test times against a reference results "
+                         "directory (e.g. a --per-dir wolframscript run); writes harness/TIMING.md")
+    ap.add_argument("--report-only", action="store_true",
+                    help="with --compare-timing: skip the run, compare the existing --results-dir")
     a = ap.parse_args()
 
     if not os.path.isdir(TESTS):
         print("check-feyncalc: packages/feyncalc not present -- skipped")
         return 0
     dirs = a.dir or UNIT_DIRS
+    if a.report_only:
+        if not a.compare_timing:
+            print("check-feyncalc: --report-only needs --compare-timing")
+            return 2
+        timing_report(a.results_dir, a.compare_timing, dirs, os.path.join(HARNESS, "TIMING.md"))
+        return 0
     work = [s for (lab, mt, td) in drivers(dirs, a.integration)
             for s in shards(lab, mt, td, set(a.file or []), a.per_dir)]
     if not work:
@@ -222,6 +343,10 @@ def main():
             print("\nshards without FCEND:")
             for r in crashed:
                 print(f"  {r['shard']['label']}/{r['shard']['file']} rc={r['rc']}: {r['tail'][-300:]}")
+
+    if a.compare_timing:
+        print()
+        timing_report(a.results_dir, a.compare_timing, dirs, os.path.join(HARNESS, "TIMING.md"))
 
     # Ratchet.
     now_pass = {(lab, i) for lab, res in per.items() for i, v in res.items() if v[0] == "PASS"}

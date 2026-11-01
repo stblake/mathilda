@@ -8,7 +8,7 @@
 (*                                                                    *)
 (* Normally driven by tools/check_feyncalc.py.  Prints one line per   *)
 (* test on stdout:                                                    *)
-(*   FC <TAB> verdict <TAB> id <TAB> seconds                          *)
+(*   FC <TAB> verdict <TAB> id <TAB> micros                           *)
 (* verdict: PASS, FAIL (wrong value), MSG (right value, unexpected    *)
 (* messages), ABORT, TIMEOUT, SKIP (typesetting: out of scope).       *)
 (* A non-pass is followed by a detail line                            *)
@@ -55,8 +55,10 @@ flat[e_, n_: 400] := Module[{s = ToString[e, InputForm]},
 msgString[l_List] := StringRiffle[ToString /@ l, ","];
 msgString[_] := "";
 
+(* The time goes out as integer microseconds: the same digits in both kernels,
+   whatever their Real printing; check_feyncalc.py converts it to seconds. *)
 emit[verdict_, id_, secs_] :=
-  WriteString["stdout", "FC\t", verdict, "\t", id, "\t", ToString[NumberForm[secs, {6, 2}]], "\n"];
+  WriteString["stdout", "FC\t", verdict, "\t", id, "\t", ToString[Round[10^6 secs]], "\n"];
 detail[id_, got_, exp_, msgs_] :=
   WriteString["stdout", "FCD\t", id, "\t", got, "\t", exp, "\t", msgString[msgs], "\n"];
 

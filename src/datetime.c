@@ -370,8 +370,14 @@ Expr* builtin_absolute_time(Expr* res) {
     size_t argc = res->data.function.arg_count;
 
     if (argc == 0) {
-        time_t now = time(NULL);
-        if (now == (time_t)-1) return NULL;
+        /* Sub-second wall clock.  The calendar fields below carry whole
+         * seconds, so the fraction is added back at the end: timing code takes
+         * AbsoluteTime[] - t0, and whole seconds quantised every such
+         * measurement to an integer. */
+        double wall = mth_wall_seconds();
+        time_t now = (time_t)floor(wall);
+        double frac = wall - floor(wall);
+        if (!(frac >= 0.0 && frac < 1.0)) frac = 0.0;
         struct tm lt;
         struct tm* lp = localtime(&now);
         if (!lp) return NULL;
@@ -388,7 +394,7 @@ Expr* builtin_absolute_time(Expr* res) {
         double total = (double)days * 86400.0
                      + (double)h * 3600.0
                      + (double)mi * 60.0
-                     + (double)s;
+                     + (double)s + frac;
         return expr_new_real(total);
     }
 

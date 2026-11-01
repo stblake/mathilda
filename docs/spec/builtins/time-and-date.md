@@ -119,7 +119,7 @@ Out[5]= {0.300412, $Aborted}
 
 ## AbsoluteTime
 Gives the total number of seconds since the beginning of January 1, 1900.
-- `AbsoluteTime[]` -- current wall-clock time, in the local time zone.
+- `AbsoluteTime[]` -- current wall-clock time, in the local time zone, as a machine real with sub-second resolution (so `AbsoluteTime[] - t0` times a computation).
 - `AbsoluteTime[date]` -- absolute time corresponding to the given date specification.
 
 **Supported date specifications**:
