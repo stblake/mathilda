@@ -3,6 +3,8 @@
 #include "eval.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "message.h"
+#include "print.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -293,88 +295,116 @@ static void unique_sync_module_number(void) {
     expr_free(val);
 }
 
-/* A Unique name-prefix source: a Symbol contributes its name, a String its
- * characters; Unique[] (no source) uses "$". Anything else -> NULL. */
-static const char* unique_prefix_of(Expr* e) {
-    if (!e) return "$";
-    if (e->type == EXPR_SYMBOL) return e->data.symbol.name;
-    if (e->type == EXPR_STRING) return e->data.string;
-    return NULL;
+
+/* Counter for the "$"-less names of Unique["x"] / Unique[] (x12, $13). It is
+ * deliberately separate from $ModuleNumber, which numbers only the x$nnn names
+ * that Module and Unique[x] produce. */
+static int64_t unique_string_number = 1;
+
+/* One Unique source: the name prefix plus which counter numbers it. */
+typedef struct {
+    const char* prefix;
+    bool dollar;   /* Symbol source: name x$nnn from $ModuleNumber; else xnnn */
+} UniqueSrc;
+
+/* Classify a Unique source. A Symbol contributes its name and the x$nnn form;
+ * a String its characters and the xnnn form. Anything else -> false. */
+static bool unique_source_of(Expr* e, UniqueSrc* out) {
+    if (e->type == EXPR_SYMBOL) { out->prefix = e->data.symbol.name; out->dollar = true; return true; }
+    if (e->type == EXPR_STRING) { out->prefix = e->data.string;      out->dollar = false; return true; }
+    return false;
 }
 
-/* Build a batch of fresh symbols, one per prefix, all sharing a single counter
- * value chosen so that none of prefix<n> already names a symbol -- guaranteeing
- * the whole batch is fresh and distinct (distinct prefixes, or distinct via the
- * uniqueness scan). Each is registered Temporary. Returns count on success, or
- * -1 if any prefix is unusable (caller then returns NULL to leave unevaluated).
- * out[] must have room for `count` Expr*. */
-static int unique_make_batch(const char** prefixes, size_t count, Expr** out) {
+/* Build a batch of fresh symbols, one per source. Every source of one kind
+ * starts from that kind's current counter value n; a name that already exists
+ * (including one made earlier in this batch) advances that element's suffix
+ * until it is fresh. So Unique[{a, b}] is {a$n, b$n} but Unique[{a, a}] is
+ * {a$n, a$(n+1)}, and the counter then moves past the largest suffix used.
+ * Each symbol is registered Temporary. out[] must have room for `count`. */
+static void unique_make_batch(const UniqueSrc* srcs, size_t count, Expr** out) {
     char buf[512];
+    int64_t base_mod = module_number, base_str = unique_string_number;
+    int64_t next_mod = base_mod, next_str = base_str;
+    bool any_mod = false;
     for (size_t i = 0; i < count; i++) {
-        if (!prefixes[i]) return -1;
-    }
-    /* Advance the shared counter until this value is clear for every prefix. */
-    for (;;) {
-        int64_t n = module_number;
-        bool clash = false;
-        for (size_t i = 0; i < count && !clash; i++) {
-            snprintf(buf, sizeof(buf), "%s%lld", prefixes[i], (long long)n);
-            if (symtab_lookup(buf) != NULL) clash = true;
+        int64_t n = srcs[i].dollar ? base_mod : base_str;
+        for (;; n++) {
+            snprintf(buf, sizeof(buf), srcs[i].dollar ? "%s$%lld" : "%s%lld",
+                     srcs[i].prefix, (long long)n);
+            if (symtab_lookup(buf) == NULL) break;
         }
-        if (!clash) break;
-        module_number++;
-    }
-    int64_t n = module_number++;
-    for (size_t i = 0; i < count; i++) {
-        snprintf(buf, sizeof(buf), "%s%lld", prefixes[i], (long long)n);
         out[i] = expr_new_symbol(buf);
         symtab_get_def(buf)->attributes |= ATTR_TEMPORARY;
+        if (srcs[i].dollar) { any_mod = true; if (n + 1 > next_mod) next_mod = n + 1; }
+        else if (n + 1 > next_str) next_str = n + 1;
     }
-    unique_sync_module_number();
-    return (int)count;
+    unique_string_number = next_str;
+    if (any_mod) {
+        module_number = next_mod;
+        unique_sync_module_number();
+    }
+}
+
+/* Unique::usym -- the argument is neither a symbol nor a name string. */
+static void unique_usym(Expr* bad) {
+    char* str = expr_to_string(bad);
+    mth_message("Unique", "usym", "%s is not a symbol or a valid symbol name.", str ? str : "?");
+    free(str);
 }
 
 /* Unique[] / Unique["x"] / Unique[x] / Unique[{a, b, ...}] -- generate one or
- * more fresh, never-before-used symbols with the Temporary attribute, drawing
- * their numeric suffix from the shared $ModuleNumber counter. A list argument
- * yields a list of symbols sharing one suffix (Wolfram behaviour). */
+ * more fresh, never-before-used symbols with the Temporary attribute.
+ * Unique[x] gives x$nnn numbered by $ModuleNumber (the Module convention);
+ * Unique["x"] gives xnnn and Unique[] gives $nnn, numbered by their own
+ * counter. A list gives one fresh symbol per element (see unique_make_batch). */
 Expr* builtin_unique(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 
     /* Unique[] -> a single "$"<n> symbol. */
     if (argc == 0) {
-        const char* pfx = "$";
+        UniqueSrc src = { "$", false };
         Expr* out[1];
-        if (unique_make_batch(&pfx, 1, out) < 0) return NULL;
+        unique_make_batch(&src, 1, out);
         return out[0];
     }
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* $ModuleNumber may have been reassigned by the user; honour it, as
+     * Module does. */
+    Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
+    Expr* mn = evaluate(mn_sym);
+    if (mn->type == EXPR_INTEGER) module_number = mn->data.integer;
+    expr_free(mn);
+    expr_free(mn_sym);
+
     /* Unique[{a, b, ...}] -> list of fresh symbols, one per element. */
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
         && arg->data.function.head->data.symbol.name == SYM_List) {
         size_t n = arg->data.function.arg_count;
-        const char** prefixes = malloc(n * sizeof(char*));
+        UniqueSrc* srcs = malloc((n ? n : 1) * sizeof(UniqueSrc));
         for (size_t i = 0; i < n; i++) {
-            prefixes[i] = unique_prefix_of(arg->data.function.args[i]);
+            if (!unique_source_of(arg->data.function.args[i], &srcs[i])) {
+                unique_usym(arg->data.function.args[i]);
+                free(srcs);
+                return NULL;
+            }
         }
-        Expr** syms = malloc(n * sizeof(Expr*));
-        int made = unique_make_batch(prefixes, n, syms);
-        free(prefixes);
-        if (made < 0) { free(syms); return NULL; }
         Expr* list = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
-        for (size_t i = 0; i < n; i++) list->data.function.args[i] = syms[i];
-        free(syms);
+        unique_make_batch(srcs, n, list->data.function.args);
+        free(srcs);
         return list;
     }
 
     /* Unique["x"] / Unique[x] -> one fresh symbol. */
-    const char* pfx = unique_prefix_of(arg);
-    if (!pfx) return NULL;
+    UniqueSrc src;
+    if (!unique_source_of(arg, &src)) {
+        unique_usym(arg);
+        return NULL;
+    }
     Expr* out[1];
-    if (unique_make_batch(&pfx, 1, out) < 0) return NULL;
+    unique_make_batch(&src, 1, out);
     return out[0];
 }
 
@@ -557,19 +587,11 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger) {
             if (strcmp(locals[i], danger[d]) == 0) { clash[nclash++] = locals[i]; break; }
     if (nclash == 0) return NULL;
 
-    /* A fresh symbol per colliding local: prefix "L$" so unique_make_batch
-     * mints "L$<n>", matching Module's own naming. */
-    char* store[64]; const char* prefixes[64];
-    for (size_t i = 0; i < nclash; i++) {
-        size_t len = strlen(clash[i]);
-        char* p = malloc(len + 2);
-        memcpy(p, clash[i], len); p[len] = '$'; p[len + 1] = '\0';
-        store[i] = p; prefixes[i] = p;
-    }
+    /* A fresh L$<n> per colliding local, matching Module's own naming. */
+    UniqueSrc srcs[64];
+    for (size_t i = 0; i < nclash; i++) { srcs[i].prefix = clash[i]; srcs[i].dollar = true; }
     Expr* fresh[64];
-    int made = unique_make_batch(prefixes, nclash, fresh);
-    for (size_t i = 0; i < nclash; i++) free(store[i]);
-    if (made < 0) return NULL;
+    unique_make_batch(srcs, nclash, fresh);
 
     ScopingEnv* ren = NULL;
     for (size_t i = 0; i < nclash; i++) {

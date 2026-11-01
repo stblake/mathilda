@@ -169,6 +169,38 @@ static void test_symbol_is_protected(void) {
     assert_eval_eq("MemberQ[Attributes[Symbol], Protected]", "True", 0);
 }
 
+/* Unique (issue #117).  A symbol source gives x$nnn numbered
+ * by $ModuleNumber; repeated sources in one list get distinct suffixes, while
+ * distinct sources share one; a string source gives xnnn with no "$". */
+static void test_unique_symbol_source_dollar_form(void) {
+    assert_eval_eq("$ModuleNumber = 300; {Unique[uq], $ModuleNumber}", "{uq$300, 301}", 0);
+}
+
+static void test_unique_list_repeated_source_distinct(void) {
+    assert_eval_eq("$ModuleNumber = 100; Unique[{uq, uq}]", "{uq$100, uq$101}", 0);
+    assert_eval_eq("$ModuleNumber", "102", 0);
+}
+
+static void test_unique_list_distinct_sources_share_suffix(void) {
+    assert_eval_eq("$ModuleNumber = 200; Unique[{uq, vq}]", "{uq$200, vq$200}", 0);
+}
+
+static void test_unique_string_source_no_dollar(void) {
+    assert_eval_eq("StringMatchQ[SymbolName[Unique[\"sq\"]], \"sq\" ~~ DigitCharacter..]", "True", 0);
+    assert_eval_eq("StringMatchQ[SymbolName[Unique[]], \"$\" ~~ DigitCharacter..]", "True", 0);
+    /* the string counter is not $ModuleNumber */
+    assert_eval_eq("$ModuleNumber = 400; Unique[\"sq\"]; $ModuleNumber", "400", 0);
+}
+
+static void test_unique_bad_argument(void) {
+    assert_eval_eq("Quiet[Unique[1]]", "Unique[1]", 0);
+    assert_eval_eq("Check[Unique[{a, {b}}], failed]", "failed", 0);
+}
+
+static void test_unique_still_temporary(void) {
+    assert_eval_eq("MemberQ[Attributes[Evaluate[Unique[uq]]], Temporary]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -197,6 +229,12 @@ int main(void) {
     TEST(test_symbol_with_dollar);
 
     TEST(test_symbol_is_protected);
+    TEST(test_unique_symbol_source_dollar_form);
+    TEST(test_unique_list_repeated_source_distinct);
+    TEST(test_unique_list_distinct_sources_share_suffix);
+    TEST(test_unique_string_source_no_dollar);
+    TEST(test_unique_bad_argument);
+    TEST(test_unique_still_temporary);
 
     printf("All Symbol tests passed.\n");
     return 0;

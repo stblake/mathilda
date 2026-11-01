@@ -95,21 +95,27 @@ Out[1]= 25
 
 ## Unique
 Generates fresh symbols that have never been used before.
-- `Unique[]` — a new symbol named `$nnn`.
-- `Unique["x"]` or `Unique[x]` — a new symbol whose name is the prefix `x`
-  followed by a number (`x1`, `x2`, …).
-- `Unique[{x, y, ...}]` — a list of fresh symbols, all sharing one number.
+- `Unique[x]` — a new symbol `x$nnn`, numbered by `$ModuleNumber` (the same
+  counter and the same form `Module` uses for its locals).
+- `Unique["x"]` — a new symbol `xnnn`, with no `$`.
+- `Unique[]` — a new symbol `$nnn`.
+- `Unique[{x, y, ...}]` — a list of fresh symbols, one per element.
 
 **Features**:
 - `Protected`.
-- The numeric suffix is drawn from the shared `$ModuleNumber` counter (the same
-  source `Module` uses), advanced until the generated name is unused, so every
-  result is genuinely fresh and distinct.
+- Every suffix is advanced until the generated name is unused. In a list,
+  distinct sources share one number (`{a$5, b$5}`), while a repeated source gets
+  a new number each time (`Unique[{a, a}]` is `{a$5, a$6}`); `$ModuleNumber` then
+  moves past the largest number used.
+- `Unique["x"]` and `Unique[]` draw from their own counter, not `$ModuleNumber`.
+- A user assignment to `$ModuleNumber` is honoured, as for `Module`.
+- An argument that is neither a symbol nor a string emits `Unique::usym` and is
+  left unevaluated.
 - Created symbols have the `Temporary` attribute.
 
 ```mathematica
-In[1]:= {Unique[], Unique["x"], Unique[{a, b}]}
-Out[1]= {$1, x2, {a3, b3}}
+In[1]:= {Unique[a], Unique[{a, a}], Unique[{a, b}], Unique["x"], Unique[]}
+Out[1]= {a$1, {a$2, a$3}, {a$4, b$4}, x1, $2}
 ```
 
 ## Scoping and pure functions
