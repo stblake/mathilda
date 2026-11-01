@@ -128,15 +128,45 @@ uint64_t eval_clock_get(void) { return g_eval_clock; }
  * dependency frames of failed dispatches: [4] certified, [5] tainted,
  * [6] the clock moved, [7] a rule fired. */
 uint64_t g_epoch_counts[8];
+/* Why frames were tainted (MATHILDA_DISPATCH_STATS): [0] an impure builtin,
+ * [1] a reused exact-clock stamp, [2] a message, [3] a write to a symbol a
+ * Block inside the frame scoped, seen by a frame nested in that Block. */
+uint64_t g_dep_taint_why[4];
 void     eval_clock_bump(void) { g_eval_clock++; g_inert_epoch = g_eval_clock; g_epoch_counts[0]++; }
 static inline bool ground_head_name(const char* n);
 static inline bool inert_builtin_head(const char* n);
 /* A binding or a DownValue for `def`: an INERT node can depend on it only if
  * the node relied on `def` (flagged inert_observed) or `def` is one of the
  * builtin heads an INERT node may carry, whose rules are not flagged. */
+/* ---- Frame-scoped bindings ------------------------------------------------
+ * A dispatch frame (dependency-recorded fixed points, below) is clean only if
+ * the clock did not move in it: a binding made during the frame could change
+ * what the frame read.  A Block entered INSIDE the frame is the exception: it
+ * puts the symbols it scopes back before the frame ends, so evaluating the
+ * same call again starts from the same state and makes the same bindings.
+ * FeynCalc's FCI -- in the DiracChain rule's condition -- assigns Block
+ * locals; every failed DiracChain dispatch was tainted, and an evaluated chain
+ * re-ran that condition each time it was wrapped (18x the reference's FCI
+ * calls in Chisholm).  Such a symbol carries dep_scoped = s, the frame depth at
+ * the Block's entry; a clock bump for it is counted, per depth d <= s, in
+ * g_dep_scoped_bumps[d], and a frame at depth d discounts those.  Frames deeper
+ * than s were opened inside the Block and do see the binding: a Set to the
+ * symbol taints them (g_dep_taint_above), and their clock check counts it. */
+enum { DEP_SCOPED_CAP = 64 };
+static uint64_t g_dep_scoped_bumps[DEP_SCOPED_CAP + 1];
+int32_t g_dep_taint_above = INT32_MAX;
+
+static inline void dep_scoped_bump(const SymbolDef* def) {
+    int32_t s = def->dep_scoped;
+    if (s <= 0) return;
+    if (s > DEP_SCOPED_CAP) s = DEP_SCOPED_CAP;
+    for (int32_t d = 1; d <= s; d++) g_dep_scoped_bumps[d]++;
+}
+
 void     eval_clock_bump_binding(SymbolDef* def) {
     g_eval_clock++;
     if (!def) { g_inert_epoch = g_eval_clock; g_epoch_counts[1]++; return; }
+    dep_scoped_bump(def);
     /* A TENTATIVE mark (1) is only ever held by a dispatch frame still open,
      * and this bump moves the clock, which fails every open frame: no
      * certificate can come to rest on it, so only a committed mark counts. */
@@ -508,7 +538,19 @@ static bool node_compute_inert(Expr* e) {
     }
     size_t n = e->data.function.arg_count;
     Expr* const* args = e->data.function.args;
+    /* An argument the head holds is never evaluated, so the node's being a
+     * fixed point does not depend on it: lhs :> DiracGamma[7], a rule list
+     * FeynCalc's FCI keeps, was never INERT because its held right-hand side
+     * carries no stamp -- and reusing it tainted every dispatch frame that
+     * read it.  (Evaluate[...] in a held slot is gone by the fixed point.) */
+    uint32_t at = get_attributes_def(inert_sym_def(h));
+    bool hold_first = (at & (ATTR_HOLDFIRST | ATTR_HOLDALL | ATTR_HOLDALLCOMPLETE)) != 0;
+    bool hold_rest  = (at & (ATTR_HOLDREST | ATTR_HOLDALL | ATTR_HOLDALLCOMPLETE)) != 0;
     for (size_t i = 0; i < n; i++) {
+        if (i == 0 ? hold_first : hold_rest) {
+            if (!args[i]) return false;
+            continue;
+        }
         if (!args[i] || !is_inert_now(args[i])) return false;
     }
     return true;
@@ -3300,15 +3342,20 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     g_dep_cert_clock = g_eval_clock;
                 }
                 bool dep_outer_taint = false;
-                uint64_t dep_clock0 = 0;
+                int32_t dep_outer_above = INT32_MAX;
+                uint64_t dep_clock0 = 0, dep_scoped0 = 0;
                 size_t dep_outer_log0 = 0;
                 unsigned long dep_msgs0 = 0;
                 if (dep_frame) {
                     dep_msgs0 = mth_msg_fired_count();
                     dep_outer_taint = g_eval_dep_taint;
+                    dep_outer_above = g_dep_taint_above;
                     g_eval_dep_taint = false;
+                    g_dep_taint_above = INT32_MAX;
                     g_eval_dep_depth++;
                     dep_clock0 = g_eval_clock;
+                    if (g_eval_dep_depth <= DEP_SCOPED_CAP)
+                        dep_scoped0 = g_dep_scoped_bumps[g_eval_dep_depth];
                     dep_outer_log0 = g_dep_frame_log0;
                     g_dep_frame_log0 = g_dep_log_n;
                 }
@@ -3336,11 +3383,19 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 if (dep_frame) {
                     /* A message a builtin emitted from C is an effect a reused
                      * verdict would no longer produce. */
-                    if (mth_msg_fired_count() != dep_msgs0) g_eval_dep_taint = true;
-                    bool clean = !g_eval_dep_taint && g_eval_clock == dep_clock0;
-                    g_epoch_counts[(up || down) ? 7 : clean ? 4 : g_eval_dep_taint ? 5 : 6]++;
+                    if (mth_msg_fired_count() != dep_msgs0) { g_eval_dep_taint = true; g_dep_taint_why[2]++; }
+                    /* Bindings of symbols a Block inside this frame scoped
+                     * moved the clock too, invisibly here (frame-scoped
+                     * bindings, above). */
+                    uint64_t dep_invisible = g_eval_dep_depth <= DEP_SCOPED_CAP
+                        ? g_dep_scoped_bumps[g_eval_dep_depth] - dep_scoped0 : 0;
+                    bool dep_tainted = g_eval_dep_taint || g_eval_dep_depth > g_dep_taint_above;
+                    if (!g_eval_dep_taint && dep_tainted) g_dep_taint_why[3]++;
+                    bool clean = !dep_tainted && g_eval_clock - dep_clock0 == dep_invisible;
+                    g_epoch_counts[(up || down) ? 7 : clean ? 4 : dep_tainted ? 5 : 6]++;
                     g_eval_dep_depth--;
                     g_eval_dep_taint = dep_outer_taint || g_eval_dep_taint;
+                    if (dep_outer_above < g_dep_taint_above) g_dep_taint_above = dep_outer_above;
                     if (!up && !down && clean) {
                         g_dep_cert_node = res;
                         g_dep_cert_clock = g_eval_clock;
@@ -3427,8 +3482,22 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                                        res->data.function.head->type == EXPR_SYMBOL)
                                     ? res->data.function.head->data.symbol.name : NULL;
                     if (g_eval_dep_depth && !hdef->eval_pure) {
-                        g_eval_dep_taint = true;
-                        { extern void dispatch_stats_taint(SymbolDef*); dispatch_stats_taint(hdef); }
+                        /* x = v or x := v on a symbol a Block in an open frame
+                         * scoped: only the frames inside that Block see it. */
+                        int32_t scoped = 0;
+                        if ((hdef->symbol_name == SYM_Set || hdef->symbol_name == SYM_SetDelayed) &&
+                            res->type == EXPR_FUNCTION && res->data.function.arg_count == 2 &&
+                            res->data.function.args[0]->type == EXPR_SYMBOL) {
+                            SymbolDef* td = symtab_node_def(res->data.function.args[0]);
+                            if (td) scoped = td->dep_scoped;
+                        }
+                        if (scoped > 0) {
+                            if (scoped < g_dep_taint_above) g_dep_taint_above = scoped;
+                        } else {
+                            g_eval_dep_taint = true;
+                            g_dep_taint_why[0]++;
+                            { extern void dispatch_stats_taint(SymbolDef*); dispatch_stats_taint(hdef); }
+                        }
                     }
                     Expr* ret = hdef->builtin_func(res);
                     /* 5a. Mixed exact/inexact numeric arguments. A numeric
@@ -3991,8 +4060,10 @@ static Expr* evaluate_core(Expr* e) {
     if (e->type == EXPR_FUNCTION && eval_fixed_point_reusable(e)) {
         /* An exact-clock stamp is valid for this clock only: a certificate
          * relying on it could outlive it (see dependency-recorded fixed points). */
-        if (g_eval_dep_depth && !eval_inert_valid(e) && !eval_ground_valid(e))
+        if (g_eval_dep_depth && !eval_inert_valid(e) && !eval_ground_valid(e)) {
             g_eval_dep_taint = true;
+            g_dep_taint_why[1]++;
+        }
         return expr_copy(e);
     }
 
@@ -4068,8 +4139,10 @@ static Expr* evaluate_core(Expr* e) {
          * (a stamp is set only on a clean fixed-point exit and is invalidated by
          * any symbol-table mutation via the clock), so this is a pure speedup. */
         if (current->type == EXPR_FUNCTION && eval_fixed_point_reusable(current)) {
-            if (g_eval_dep_depth && !eval_inert_valid(current) && !eval_ground_valid(current))
+            if (g_eval_dep_depth && !eval_inert_valid(current) && !eval_ground_valid(current)) {
                 g_eval_dep_taint = true;
+                g_dep_taint_why[1]++;
+            }
             eval_recursion_depth--;
             if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
             if (is_top_level) current = eval_report_uncaught(current);

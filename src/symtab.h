@@ -66,6 +66,11 @@ typedef struct Rule {
      * no variable-length argument, its argument count (arity -1 = any).
      * Dispatch skips a rule whose keys no assignment of the input's arguments
      * satisfies (see rule_slot_keys_reject). */
+    /* The pattern's own head when it is a plain symbol (HoldPattern, /; and ?
+     * looked through), else NULL.  For a DownValue it is the defined symbol;
+     * an UpValue keyed on g with pattern Set[g[a_], c_] can only match a Set
+     * call, so its dispatch skips every other enclosing head at once. */
+    const char* outer_head;
 #define RULE_SLOT_KEYS 4
 #define RULE_SLOT_HEADS 3
     uint8_t nslot_keys;
@@ -136,6 +141,12 @@ typedef struct SymbolDef {
      * (eval.c), so a frame can tell a mark of its own from an enclosing
      * frame's.  Meaningful only while inert_observed == 1. */
     uint32_t dep_log_idx;
+    /* >0 while a Block entered inside dispatch frame number dep_scoped (the
+     * frame depth then, g_eval_dep_depth) scopes this symbol: its bindings
+     * are put back when that Block exits, before those frames end, so the
+     * frames at depth <= dep_scoped never see them (eval.c, "frame-scoped
+     * bindings").  Saved and restored by Block like the values themselves. */
+    int32_t  dep_scoped;
     /* Calls on this head known to fire no rule (eval.c, "no-fire memo"):
      * NULL until the first certificate; freed with the definitions. */
     struct NoFireMemo* nofire;
@@ -305,12 +316,21 @@ SymbolDef* symtab_get_def(const char* symbol_name);
  * flag can watch (an impure builtin, a reused exact-clock stamp) taints it. */
 extern int    g_eval_dep_depth;
 extern bool   g_eval_dep_taint;
+/* Frames deeper than this are tainted (a write to a symbol a Block scoped at
+ * that depth: invisible to the frames enclosing the Block, not to those inside
+ * it).  INT32_MAX: none. */
+extern int32_t g_dep_taint_above;
 extern size_t g_dep_frame_log0;            /* the innermost frame's first entry */
 void eval_dep_note_slow(SymbolDef* d);     /* logs a tentative mark */
 /* Record that the innermost dispatch frame read `d`: a mark not yet committed
  * (0), or a tentative one an enclosing frame logged, is logged in this
  * frame's range so that this frame's certificate commits it. */
 static inline void eval_dep_note(SymbolDef* d) {
+    /* A symbol a Block inside the innermost frame scoped holds a value that
+     * frame computed itself (frame-scoped bindings, eval.c): no dependency.
+     * Recording it made the next Block's binding of FeynCalc's FCI locals
+     * advance the INERT epoch, 3 global invalidations per FCI call. */
+    if (d && d->dep_scoped >= g_eval_dep_depth && d->dep_scoped > 0) return;
     if (g_eval_dep_depth && d &&
         (d->inert_observed == 0 ||
          (d->inert_observed == 1 && d->dep_log_idx < g_dep_frame_log0)))

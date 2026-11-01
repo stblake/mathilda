@@ -111,6 +111,24 @@ static void test_numeric_coefficient_pattern_is_linear(void) {
     ASSERT_MSG(secs < 2.0, "numeric-coefficient Plus pattern took %.2f s", secs);
 }
 
+/* ---- UpValue dispatch: outer head and slot keys ------------------- */
+
+static void test_upvalue_outer_head(void) {
+    /* An UpValue pattern's own head must be the enclosing call's; a pattern
+     * construct at the top (u | v)[...] or f_[...] keys nothing. */
+    run("g /: Set[g[a_], c_] := (gs[a] = c); g[1] = 5;"
+        "h /: (u | v)[h[x_]] := {x};"
+        "SetAttributes[oo, Orderless]; m /: oo[m[x_], n_Integer] := x + n;"
+        "q /: f_[q[x_]] := {f, x};"
+        "z /: z[x_] + z[y_] := z[x + y]");
+    assert_eval_eq("gs[1]", "5", 0);
+    assert_eval_eq("{u[h[2]], v[h[3]], w[h[4]]}", "{{2}, {3}, w[h[4]]}", 0);
+    assert_eval_eq("oo[7, m[1]]", "8", 0);
+    assert_eval_eq("r[q[1]]", "{r, 1}", 0);
+    assert_eval_eq("z[1] + z[2] + a", "a + z[3]", 0);
+    assert_eval_eq("Times[2, g[3]]", "2 g[3]", 0);
+}
+
 /* ---- OptionValue injection shares untouched subtrees --------------- */
 
 static void test_optionvalue_injection(void) {
@@ -168,6 +186,7 @@ int main(void) {
     TEST(test_orderless_times_slot);
     TEST(test_no_group_for_foreign_call);
     TEST(test_numeric_coefficient_pattern_is_linear);
+    TEST(test_upvalue_outer_head);
     TEST(test_optionvalue_injection);
     TEST(test_freeq_simple_forms);
 

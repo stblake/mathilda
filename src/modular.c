@@ -760,6 +760,7 @@ typedef struct BlockSavedVar {
     Rule*    old_up;
 #endif
     uint32_t old_attrs;
+    int32_t  old_dep_scoped;
 } BlockSavedVar;
 
 typedef struct BlockFrame {
@@ -857,6 +858,7 @@ static void blk_restore_frame(BlockFrame* f) {
          * eval_bump_definition_swap): an INERT x + y relied on x being unbound
          * and flagged it, so it goes; an unrelated INERT or GROUND node stays. */
         if (values_changed || attrs_changed) eval_bump_definition_swap(def, attrs_changed);
+        def->dep_scoped = f->saved[i].old_dep_scoped;    /* after the bump: still scoped */
         free(f->saved[i].name);
     }
     free(f->saved);
@@ -913,6 +915,10 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
             frame->saved[i].old_own   = def->own_values;
             frame->saved[i].old_down  = def->down_values;
             frame->saved[i].old_attrs = def->attributes;
+            /* Inside a dispatch frame, the frames open now enclose this Block:
+             * what it writes to the symbol is gone again before they end. */
+            frame->saved[i].old_dep_scoped = def->dep_scoped;
+            if (g_eval_dep_depth > 0) def->dep_scoped = g_eval_dep_depth;
             bool had_values = def->own_values || def->down_values;
             def->own_values  = NULL;   /* the body sees the symbol unset ... */
             def->down_values = NULL;   /* ... in BOTH rule lists */

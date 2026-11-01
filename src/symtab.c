@@ -1965,6 +1965,22 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
     new_rule->literal = literal ? 1 : 0;
     new_rule->nonlinear = pattern_is_nonlinear(canon) ? 1 : 0;
     rule_set_slot_keys(new_rule, canon);
+    {
+        const Expr* op = strip_pattern_wrappers(canon);
+        const char* oh = (op && op->type == EXPR_FUNCTION && op->data.function.head &&
+                          op->data.function.head->type == EXPR_SYMBOL)
+                             ? op->data.function.head->data.symbol.name : NULL;
+        /* A pattern construct at the top, (f | g)[...] aside, matches calls
+         * on other heads: no key then. */
+        if (oh == SYM_Alternatives || oh == SYM_Pattern || oh == SYM_Optional ||
+            oh == SYM_Blank || oh == SYM_BlankSequence || oh == SYM_BlankNullSequence ||
+            oh == SYM_Except || oh == SYM_Repeated || oh == SYM_RepeatedNull ||
+            oh == SYM_Verbatim || oh == SYM_Longest || oh == SYM_Shortest ||
+            oh == SYM_PatternSequence || oh == SYM_OrderlessPatternSequence ||
+            oh == SYM_KeyValuePattern || oh == SYM_OptionsPattern)
+            oh = NULL;
+        new_rule->outer_head = oh;
+    }
     new_rule->next = NULL;
 
     /* Insert before the first stored rule that is strictly more general (it
@@ -2515,6 +2531,11 @@ static void dstat_report(void) {
             "rule fired %llu\n",
             (unsigned long long)g_epoch_counts[4], (unsigned long long)g_epoch_counts[5],
             (unsigned long long)g_epoch_counts[6], (unsigned long long)g_epoch_counts[7]);
+    extern uint64_t g_dep_taint_why[4];
+    fprintf(stderr, "taints: impure builtin %llu, reused exact-clock stamp %llu, message %llu, "
+            "nested write to a Block-scoped symbol %llu\n",
+            (unsigned long long)g_dep_taint_why[0], (unsigned long long)g_dep_taint_why[1],
+            (unsigned long long)g_dep_taint_why[2], (unsigned long long)g_dep_taint_why[3]);
     free(g_dstat);
     g_dstat = NULL;
     free(g_dseen);
@@ -2772,6 +2793,8 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
     const bool enclosing_flat =
         expr->data.function.head->type == EXPR_SYMBOL &&
         (get_attributes_def(symtab_node_def(expr->data.function.head)) & ATTR_FLAT) != 0;
+    const char* enclosing_head = expr->data.function.head->type == EXPR_SYMBOL
+                                     ? expr->data.function.head->data.symbol.name : NULL;
     DispatchStat* ds = g_dstat_on ? dstat_slot(def, 'U') : NULL;   /* -1: first use, initialise */
     if (ds) { ds->calls++; if (dstat_first_sight(def, expr)) ds->distinct++; }
 
@@ -2789,6 +2812,13 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
         if (!orderless && !enclosing_flat && rule->first_arg_head_canon && input_first_head &&
             rule->first_arg_head_canon != input_first_head)
             continue;
+        /* The pattern's own head must be the enclosing call's: SPD's
+         * SPD[a_, b_] = c_ UpValue was tried inside every Times, Plus and
+         * Power holding an SPD (FeynCalc: ~4000 failed matches per
+         * PaVeReduce).  Then the per-slot shape keys, as for DownValues. */
+        if (rule->outer_head && enclosing_head && rule->outer_head != enclosing_head)
+            continue;
+        if (!enclosing_flat && rule_slot_keys_reject(rule, expr, orderless)) continue;
 
         if (ds) ds->tries++;
         MatchEnv* env = env_new();

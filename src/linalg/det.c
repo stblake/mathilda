@@ -14,31 +14,84 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
 
-Expr* laplace_det(Expr** flat, int original_n, int n, int row, int* cols) {
+/* Minor memo for one top-level expansion.  Rows are consumed in order, so a
+ * minor is fixed by the set of columns it keeps: a bitmask (original_n <= 32).
+ * Cofactor expansion recomputed every minor once per path to it -- n! work --
+ * and a symbolic 10x10 block-diagonal matrix (FeynCalc's FCFeynmanPrepare
+ * check) took 1.6-4 s; with the memo a dense n x n costs n 2^n products, and
+ * an exact-zero entry skips its minor altogether. */
+typedef struct { uint32_t* keys; Expr** vals; size_t cap, n; } LapMemo;
+
+static Expr** lap_slot(LapMemo* m, uint32_t key) {
+    size_t i = ((size_t)key * 2654435761u) & (m->cap - 1);
+    while (m->vals[i] && m->keys[i] != key) i = (i + 1) & (m->cap - 1);
+    m->keys[i] = key;
+    return &m->vals[i];
+}
+
+static void lap_grow(LapMemo* m) {
+    LapMemo g = { calloc(m->cap * 2, sizeof(uint32_t)), calloc(m->cap * 2, sizeof(Expr*)), m->cap * 2, m->n };
+    for (size_t i = 0; i < m->cap; i++)
+        if (m->vals[i]) *lap_slot(&g, m->keys[i]) = m->vals[i];
+    free(m->keys); free(m->vals);
+    *m = g;
+}
+
+static bool lap_is_zero(const Expr* e) {
+    return e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
+static Expr* laplace_rec(Expr** flat, int original_n, int n, int row, int* cols, LapMemo* memo) {
     if (n == 1) {
         return expr_copy(flat[row * original_n + cols[0]]);
     }
+    uint32_t key = 0;
+    if (memo) {
+        for (int j = 0; j < n; j++) key |= (uint32_t)1 << cols[j];
+        Expr** hit = lap_slot(memo, key);
+        if (*hit) return expr_copy(*hit);
+    }
     Expr** sum_args = malloc(sizeof(Expr*) * n);
+    int* new_cols = malloc(sizeof(int) * (n - 1));
+    size_t m = 0;
     for (int i = 0; i < n; i++) {
-        int* new_cols = malloc(sizeof(int) * (n - 1));
+        Expr* elem = flat[row * original_n + cols[i]];
+        if (lap_is_zero(elem)) continue;          /* 0 * minor: skip the minor */
         for (int j = 0, k = 0; j < n; j++) {
             if (j != i) new_cols[k++] = cols[j];
         }
-        Expr* minor_det = laplace_det(flat, original_n, n - 1, row + 1, new_cols);
-        free(new_cols);
-        Expr* elem = flat[row * original_n + cols[i]];
+        Expr* minor_det = laplace_rec(flat, original_n, n - 1, row + 1, new_cols, memo);
         if (i % 2 != 0) {
             Expr* t_args[3] = { expr_new_integer(-1), expr_copy(elem), minor_det };
-            sum_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 3));
+            sum_args[m++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 3));
         } else {
             Expr* t_args[2] = { expr_copy(elem), minor_det };
-            sum_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
+            sum_args[m++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
         }
     }
-    Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, n));
+    free(new_cols);
+    Expr* res = (m == 0) ? expr_new_integer(0)
+              : eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, m));
     free(sum_args);
+    if (memo) {
+        if (2 * (memo->n + 1) > memo->cap) lap_grow(memo);
+        *lap_slot(memo, key) = expr_copy(res);
+        memo->n++;
+    }
     return res;
+}
+
+Expr* laplace_det(Expr** flat, int original_n, int n, int row, int* cols) {
+    if (n < 4 || original_n > 32) return laplace_rec(flat, original_n, n, row, cols, NULL);
+    LapMemo memo = { calloc(64, sizeof(uint32_t)), calloc(64, sizeof(Expr*)), 64, 0 };
+    Expr* r = laplace_rec(flat, original_n, n, row, cols, &memo);
+    for (size_t i = 0; i < memo.cap; i++)
+        if (memo.vals[i]) expr_free(memo.vals[i]);
+    free(memo.keys); free(memo.vals);
+    return r;
 }
 
 Expr* builtin_det(Expr* res) {

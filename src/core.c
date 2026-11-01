@@ -1254,7 +1254,15 @@ void core_init(void) {
         "Dot",
         /* read a head's options only through symtab_get_options, which records
          * the head as a dependency (symtab_set_options invalidates) */
-        "OptionValue", "Options", NULL };
+        "OptionValue", "Options",
+        /* Dispatch[rules] and With substitute and nothing else.  Block saves
+         * the values it scopes and restores them on exit, so the body's result
+         * depends only on what the body itself reads -- recorded through
+         * evaluate() as for any other expression.  (FeynCalc's FCI, in the
+         * DiracChain rule's condition, uses both: every failed dispatch was
+         * tainted, and an already-evaluated chain re-ran the condition on each
+         * wrap -- 18x as many FCI calls as the reference in Chisholm.) */
+        "Dispatch", "With", "Block", NULL };
     for (const char* const* n = pure; *n; n++) {
         SymbolDef* d = symtab_lookup(*n);
         if (d) d->eval_pure = 1;

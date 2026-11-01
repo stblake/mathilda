@@ -29,6 +29,11 @@ Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch
 - [ ] Together pulls generator content like the reference: x^e (1 + 2 x)/(1 + x)
 - [x] P2 OptionValue injection rebuilt every bound argument (fresh nodes, no stamps): path copy (v0.6123);
       DummyIndexFreeQ-ID5 2.8 -> 0.88 s (ref 1.27), corpus 1.157x -> 1.296x, total 257 -> 206 s
+- [x] P2 (v0.6124) Block/Dispatch/With pure + frame-scoped Block bindings + held args out of INERT (FCI in DiracChain's condition);
+      UpValue outer-head key (SPD Set upvalues); Det minor memo. Corpus 1.296x -> 1.443x, total 206 -> 188 s
+- [ ] Inverse output form: num/den kept as quotient (v0.6125 candidate)
+- [ ] AbsoluteTime/N taint frames (FCPrint timing inside scoped-condition bodies); Module not pure (ModuleNumber)
+- [ ] OptionValue::nodef not emitted for an unknown option
 - [ ] memoized NonCommFreeQ repeat call on a 50k-term sum ~5 ms vs 20 us (literal DownValue lookup: hash + deep compare)
 - [ ] FCFeynmanFindDivergences-ID16/ID20 flip between runs of one binary (random primes): find the wrong decision
 - [ ] P2 TdecGrc-ID3 TIMEOUT (ref 29 s); FCFeynmanProjectiveQ-ID2 1.05 s vs 0.04

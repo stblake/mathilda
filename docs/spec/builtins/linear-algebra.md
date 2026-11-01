@@ -625,6 +625,7 @@ Gives the determinant of a square matrix.
 **Features**:
 - `Protected`.
 - Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
+- **Symbolic matrices** (v0.6124) use cofactor expansion with each minor memoised by its column set, and the minor of an exact-zero entry is skipped. A dense n×n costs n·2ⁿ products instead of n!, and a sparse one far fewer. A 10×10 symbolic diagonal matrix went from 1.6 s to 41 µs. Answers are unchanged.
 - Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
 - **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
 - **Packed/NDArray fast path** (machine reals): the LU factorisation runs through LAPACK `dgetrf` / `zgetrf` (in-house partial-pivot `double` LU as fallback).

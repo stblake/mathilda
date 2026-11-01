@@ -808,6 +808,30 @@ static void test_inert_invalidated_by_what_it_relies_on(void) {
  * settles the call, churns the clock with unrelated bindings (the Do
  * iterator), changes one dependency, and checks the call is re-decided. */
 static void test_dep_certified_call_invalidated_by_its_dependencies(void) {
+    /* Frame-scoped bindings (eval.c): a Block entered inside the frame is
+     * self-contained -- its locals' bindings neither taint the certificate
+     * nor become dependencies -- but what flows in from outside still does. */
+    eval_str_is("gA = 1; fA[x_] /; Block[{t}, t = gA; t > 5] := yes; eA = {fA[1]}; Do[eA, {2}]; "
+                "gA = 10; eA", "{yes}");
+    eval_str_is("xB = 5; fB[a_] /; Block[{xB = a}, xB > 3] := yes; eB = {fB[1], fB[4]}; "
+                "Do[eB, {2}]; {eB, xB}", "{{fB[1], yes}, 5}");
+    /* a frame nested INSIDE the Block writes the Block's local: it sees that
+     * write, so it is re-run each time */
+    eval_str_is("kC[y_] /; Block[{cC = 0}, innerC[y]; cC == 1] := fired; "
+                "innerC[z_] /; (cC = cC + 1; False) := 0; {kC[1], kC[1], kC[1]}",
+                "{fired, fired, fired}");
+    /* the Block's initial value reads the global it shadows */
+    eval_str_is("sD = 1; mD[x_] /; Block[{sD = sD + x}, sD > 10] := big; eD = {mD[3]}; "
+                "Do[eD, {2}]; sD = 9; eD", "{big}");
+    eval_str_is("kG[x_] /; Block[{wG}, wG[1] = x; wG[1] === q] := hit; eG = {kG[1], kG[q]}; "
+                "Do[eG, {2}]; eG", "{kG[1], hit}");
+    /* a write to a global next to the Block local still taints */
+    eval_str_is("cntH = 0; kH[x_] /; Block[{tH}, tH = x; cntH = cntH + 1; False] := 0; "
+                "kH[1]; kH[1]; kH[1]; cntH", "3");
+    /* held arguments do not enter an INERT verdict, and are not frozen by it */
+    eval_str_is("f5[b_] := c5; rE = (a :> f5[b]); eE = {rE}; Do[eE, {2}]; f5[b_] := d5; "
+                "{eE, a /. eE}", "{{a :> f5[b]}, d5}");
+    eval_str_is("v6 = 1; h6 = Hold[v6]; eF = {h6}; Do[eF, {2}]; v6 = 2; ReleaseHold[eF]", "{2}");
     /* a global a rule condition reads */
     eval_str_is("fl1 = True; k1[x_] := 0 /; !TrueQ[fl1]; e1 = {k1[2]}; Do[e1, {i, 3}]; fl1 = False; e1",
                 "{0}");
