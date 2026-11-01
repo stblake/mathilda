@@ -31,11 +31,11 @@ Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch
       DummyIndexFreeQ-ID5 2.8 -> 0.88 s (ref 1.27), corpus 1.157x -> 1.296x, total 257 -> 206 s
 - [x] P2 (v0.6124) Block/Dispatch/With pure + frame-scoped Block bindings + held args out of INERT (FCI in DiracChain's condition);
       UpValue outer-head key (SPD Set upvalues); Det minor memo. Corpus 1.296x -> 1.443x, total 206 -> 188 s
-- [ ] Inverse output form: num/den kept as quotient (v0.6125 candidate)
+- [x] Inverse: num/den kept as quotient; small exact matrices via memoised adjugate (v0.6125); corpus 1.456x, total 184 s
 - [ ] AbsoluteTime/N taint frames (FCPrint timing inside scoped-condition bodies); Module not pure (ModuleNumber)
 - [ ] OptionValue::nodef not emitted for an unknown option
 - [ ] memoized NonCommFreeQ repeat call on a 50k-term sum ~5 ms vs 20 us (literal DownValue lookup: hash + deep compare)
-- [ ] FCFeynmanFindDivergences-ID16/ID20 flip between runs of one binary (random primes): find the wrong decision
+- [ ] FCFeynmanFindDivergences-ID16/ID19/ID20 flip between runs of one binary (random primes): find the wrong decision
 - [ ] P2 TdecGrc-ID3 TIMEOUT (ref 29 s); FCFeynmanProjectiveQ-ID2 1.05 s vs 0.04
 
 # DDI Vol. 1: close the remaining open cases (2026-10-31, from v0.6100; updated 2026-11-01 at v0.6112)

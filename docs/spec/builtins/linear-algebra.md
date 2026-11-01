@@ -835,6 +835,7 @@ Gives the inverse of a square matrix.
 
 **Features**:
 - `Protected`.
+- **Symbolic matrices** (v0.6125). An exact matrix of order 6 or less that is not all-rational uses the adjugate over `Det`'s memoised cofactor expansion by default; an inexact matrix keeps `DivisionFreeRowReduction`. Each entry stays a quotient `num/den`, as in the reference, so `Inverse[{{a + b, c}, {c, d + e}}][[1, 1]]` is `(d + e)/(-c^2 + a d + b d + a e + b e)` instead of a sum of two fractions. A 3×3 with linear entries went from 0.13 s and LeafCount 33,264 to 8 ms and 3,753 (the reference gives 1,433).
 - Works on both symbolic and numerical matrices.
 - For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.
 - Issues `Inverse::sing` warning and returns unevaluated if the matrix is singular.

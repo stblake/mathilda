@@ -264,11 +264,14 @@ static Expr* inverse_divfree(Expr* arg, int n) {
                 Expr* inv_den = eval_and_free(expr_new_function(
                     expr_new_symbol(SYM_Power),
                     (Expr*[]){new_den, expr_new_integer(-1)}, 2));
-                Expr* final_val = eval_and_free(expr_new_function(
+                /* num/den as a quotient, as the reference writes it:
+                 * expanding it spread the numerator over the denominator,
+                 * (d + e)/(...) became d/(...) + e/(...), and a 3x3 inverse
+                 * with linear entries grew 23x (LeafCount 33264 vs 1433;
+                 * FeynCalc's FCFeynmanPrepare check then carried it). */
+                matrix[i * cols + j] = eval_and_free(expr_new_function(
                     expr_new_symbol(SYM_Times),
                     (Expr*[]){new_num, inv_den}, 2));
-                matrix[i * cols + j] = expr_expand(final_val);
-                expr_free(final_val);
             }
             expr_free(num_val);
             expr_free(den_val);
@@ -451,6 +454,20 @@ static Expr* inverse_onestep(Expr* arg, int n) {
  * ------------------------------------------------------------------ */
     #undef ONESTEP_ONE
     #undef ONESTEP_ZERO
+
+/* Any inexact number (machine or arbitrary-precision real) in e? */
+static bool inv_has_inexact(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_NDARRAY) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (inv_has_inexact(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (inv_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
 
 static Expr* inverse_cofactor(Expr* arg, int n) {
     Expr** flat = malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
@@ -638,6 +655,13 @@ Expr* builtin_inverse(Expr* res) {
      * Until that is fixed, Inverse of a large Real matrix relies on being packed
      * and reaching LAPACK; with $AutoArrayPacking = False it can still overflow
      * the stack at n >= 90. */
+    /* A small exact symbolic matrix: the adjugate over Det's memoised
+     * cofactor expansion is n 2^n products per minor, while the fraction-free
+     * elimination pays a polynomial GCD and division per entry -- 0.12 s
+     * against 9 ms for FeynCalc's 3x3 Feynman-parameter matrix, the same
+     * answer.  Inexact entries keep DivisionFreeRowReduction (see above). */
+    if (method == MATSOL_AUTOMATIC && n <= 6 && !inv_has_inexact(arg))
+        return inverse_cofactor(arg, n);
     switch (method) {
         case MATSOL_AUTOMATIC:
         case MATSOL_DIVFREE:    return inverse_divfree(arg, n);
