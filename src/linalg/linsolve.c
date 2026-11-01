@@ -43,6 +43,7 @@
 #include "expand.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
+#include "flint_bridge.h"
 #include "flint_qqbar.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
@@ -167,6 +168,18 @@ static Expr* rowreduce_divfree(Expr* arg) {
             for (int i = 0; i < m * n; i++) expr_free(matrix[i]);
             free(matrix);
             return frref;
+        }
+    }
+    /* Rational functions of symbols (Q(t1..tk)): the same fraction-free
+     * elimination natively on fmpz_mpoly -- the evaluator-level loop below
+     * pays several Expr round trips per cell update and does not finish on
+     * the ~3,000-term entries of a parametric ansatz system. */
+    {
+        Expr* prref = flint_mpoly_mat_rref(matrix, m, n);
+        if (prref) {
+            for (int i = 0; i < m * n; i++) expr_free(matrix[i]);
+            free(matrix);
+            return prref;
         }
     }
 

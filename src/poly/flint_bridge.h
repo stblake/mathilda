@@ -615,6 +615,13 @@ int       tcre_deriv(TowerCRE* t, int a, const char* varname);
 int       tcre_is_zero(TowerCRE* t, int h);
 int       tcre_equal(TowerCRE* t, int a, int b);
 
+/* Reduced row echelon form of an r x c matrix (row-major `flat`) whose entries
+ * are rational functions over Q of at least one symbol: fraction-free
+ * Gauss-Jordan on fmpz_mpoly, rendered as a List-of-Lists Expr the caller owns.
+ * NULL when an entry is out of that grammar or names a numeric constant (Pi,
+ * GoldenRatio), or FLINT is absent.  Does not take ownership of `flat`. */
+Expr* flint_mpoly_mat_rref(Expr** flat, int r, int c);
+
 /* Registers the M1 scaffolding builtin(s). Called from core_init(). */
 void flint_bridge_init(void);
 

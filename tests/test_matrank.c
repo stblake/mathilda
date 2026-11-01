@@ -410,6 +410,30 @@ static void test_matrank_symbolic_radicals(void) {
     run_test(buf, "List[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]");
 }
 
+/* The native RREF over Q(t)(radicals) (flint_mpoly_mat_rref): a radical of a
+ * symbol, and a radical of a compound base made free by eliminating a variable
+ * it is linear in, agree with the classical elimination (forced by ZeroTest);
+ * Sqrt[2] and Sqrt[a^2 + b^2] (no linear variable) stay on the classical path. */
+static void test_rowreduce_native_radicals(void) {
+    const char* ms[] = {
+        "{{Sqrt[c], 1, a}, {c, b, 2}}",
+        "{{Sqrt[a + b], 1, a}, {b, Sqrt[a + b] c, 2}}",
+        "{{Sqrt[a x^2 + b], x, 1}, {1, Sqrt[a x^2 + b], a}}",
+        "{{(a + b)^(1/3), 1, 0}, {1, (a + b)^(2/3), 1}}",
+        "{{Sqrt[c], Sqrt[(a - 1) b^2 + c], 1}, {c, a, b}, {1, Sqrt[c], (a - 1) b^2 + c}}",
+        "{{Sqrt[a^2 + b^2], 1}, {1, a}}",
+        "{{Sqrt[2] x, 1, 3}, {1, x, Sqrt[2]}}",
+    };
+    char buf[1024];
+    for (size_t i = 0; i < sizeof ms / sizeof ms[0]; i++) {
+        snprintf(buf, sizeof buf,
+                 "Union[Flatten[Together[RowReduce[%s] - RowReduce[%s, ZeroTest -> (Together[#] === 0 &)]]]]",
+                 ms[i], ms[i]);
+        run_test(buf, "List[0]");
+    }
+    run_test("RowReduce[{{Sqrt[c], c}, {c, c^(3/2)}}]", "List[List[1, Power[c, Rational[1, 2]]], List[0, 0]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -430,6 +454,7 @@ int main(void) {
     TEST(test_matrank_rational_full);
     TEST(test_matrank_rational_dep);
     TEST(test_matrank_symbolic_radicals);
+    TEST(test_rowreduce_native_radicals);
     TEST(test_matrank_4x4_rank3);
     TEST(test_matrank_bigint);
     TEST(test_matrank_bigint_indep);

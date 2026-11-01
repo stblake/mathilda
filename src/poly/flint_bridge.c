@@ -8589,6 +8589,406 @@ Expr* flint_modular_factor_list(const Expr* p, const Expr* modulus,
     return out;
 }
 
+/* ------------------------------------------------------------------ *
+ * Reduced row echelon form over Q(t1..tk)(radicals), natively.
+ *
+ * RowReduce's division-free elimination (rowreduce_divfree, linsolve.c) does
+ * every cell update through the evaluator: two Times, a Plus, an Expand and an
+ * exact division per cell, each crossing the Expr tree.  On the systems of
+ * ParallelMixedTower's parametric ansatz (17 x 6 over Q(a, b, c)(Sqrt[c],
+ * Sqrt[(a - 1) b^2 + c]), entries of ~200 terms over a 21-term denominator)
+ * that never finished.  Here the same fraction-free Gauss-Jordan runs on
+ * fmpz_mpoly, over a PURELY TRANSCENDENTAL field the entries' field is mapped
+ * onto:
+ *   - a radical of a symbol, s^(p/q): s stands for its own m-th root (m the lcm
+ *     of s's exponent denominators), s -> s^m, s^(p/q) -> s^(p m/q).  Faithful,
+ *     because s is a free generator, so s^(1/m) is one too;
+ *   - a radical of a compound base B, B^(p/q): a fresh generator g with
+ *     g^m = B, made free by eliminating a variable v in which B is linear,
+ *     B = kappa v + B0: v -> (g^m - B0)/kappa.  Q(.., v, ..)(B^(1/m)) and
+ *     Q(.., g, ..) without v are the same field (v is rational in g and back),
+ *     so every value, and the RREF, is preserved;
+ *   - a radical of a number (Sqrt[2]) or a numeric-constant symbol (Pi,
+ *     GoldenRatio) is not free -- g = Sqrt[2] keeps g^2 = 2, which a free
+ *     variable forgets -- and declines, as does a compound base with no
+ *     variable to eliminate.
+ * Then:
+ *   1. each row is brought into Z[t] by its denominators' lcm and its integer
+ *      content (scaling a row by a nonzero field element leaves the RREF);
+ *   2. Bareiss elimination above and below each pivot, the pivot the first row
+ *      at or after r with a nonzero entry in the column (the classical order),
+ *      every update (p a_ij - a_ic a_rj) / P divided exactly by fmpz_mpoly_divides
+ *      (an inexact division would be a bug, and declines);
+ *   3. each pivot row divided by its leading entry, in lowest terms
+ *      (fmpz_mpoly_q), mapped back (s -> s^(1/m), g -> B^(1/m), in one
+ *      simultaneous ReplaceAll) and rendered as Expand[num den^-1], the
+ *      classical path's form.
+ * The RREF is unique, so the values are the classical path's.  At least one
+ * symbol must be present (Q itself is flint_mat_rref's).  NULL otherwise, and
+ * the caller's classical path runs.  Does not take ownership of `flat`.
+ * ------------------------------------------------------------------ */
+#define MMR_MAXB 8
+
+typedef struct {
+    VarSet vs;                      /* every symbol, plus the fresh generators */
+    int64_t* m; size_t mcap;        /* m[i]: radical index of vs.names[i] (1 = none) */
+    Expr* cb[MMR_MAXB];             /* compound radical bases (original form) */
+    int64_t cm[MMR_MAXB];           /* their radical indices */
+    char cg[MMR_MAXB][24];          /* their fresh generator names */
+    const char* cv[MMR_MAXB];       /* the variable each one eliminates */
+    Expr* crep[MMR_MAXB];           /* that variable's value, in lifted form */
+    size_t ncb;
+    int lifting;                    /* 0 while scanning B itself for kappa / B0 */
+} MmrCtx;
+
+static int64_t mmr_lcm(int64_t a, int64_t b) {
+    int64_t g = a, t = b;
+    while (t) { int64_t u = g % t; g = t; t = u; }
+    return a / g * b;
+}
+
+static int64_t* mmr_mslot(MmrCtx* X, const char* name) {
+    varset_add(&X->vs, name);
+    size_t k = (size_t)var_index(&X->vs, name);
+    while (X->mcap <= k) {
+        size_t nc = X->mcap ? X->mcap * 2 : 8;
+        X->m = realloc(X->m, sizeof(int64_t) * nc);
+        for (size_t t = X->mcap; t < nc; t++) X->m[t] = 1;
+        X->mcap = nc;
+    }
+    return &X->m[k];
+}
+
+static int64_t mmr_mof(const MmrCtx* X, const char* name) {
+    int k = var_index(&X->vs, name);
+    return (k < 0 || (size_t)k >= X->mcap) ? 1 : X->m[k];
+}
+
+static int mmr_is_rational(const Expr* x) {
+    return x->type == EXPR_FUNCTION && fn_head_name(x) && strcmp(fn_head_name(x), "Rational") == 0
+        && x->data.function.arg_count == 2
+        && x->data.function.args[0]->type == EXPR_INTEGER
+        && x->data.function.args[1]->type == EXPR_INTEGER;
+}
+
+static int mmr_has_symbol(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return 1;
+    if (e->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (mmr_has_symbol(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/* collect symbols, radical indices and compound bases; 0 = out of scope */
+static int mmr_scan(const Expr* e, MmrCtx* X) {
+    if (e->type == EXPR_SYMBOL) {
+        if (expr_is_numeric_quantity(e)) return 0;
+        mmr_mslot(X, e->data.symbol.name);
+        return 1;
+    }
+    if (e->type != EXPR_FUNCTION) return 1;
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2
+        && mmr_is_rational(e->data.function.args[1])) {
+        const Expr* b = e->data.function.args[0];
+        int64_t q = e->data.function.args[1]->data.function.args[1]->data.integer;
+        if (q <= 0 || q > 64) return 0;
+        if (b->type == EXPR_SYMBOL) {
+            if (expr_is_numeric_quantity(b)) return 0;
+            int64_t* mp = mmr_mslot(X, b->data.symbol.name);
+            *mp = mmr_lcm(*mp, q);
+            return 1;
+        }
+        if (!mmr_has_symbol(b)) return 0;          /* Sqrt[2]: not free */
+        size_t k = 0;
+        while (k < X->ncb && !expr_eq((Expr*)b, X->cb[k])) k++;
+        if (k == X->ncb) {
+            if (X->ncb == MMR_MAXB) return 0;
+            X->cb[k] = expr_copy((Expr*)b); X->cm[k] = 1; X->ncb++;
+        }
+        X->cm[k] = mmr_lcm(X->cm[k], q);
+        /* B's own symbols are symbols of the field; a radical inside B declines
+         * in the lift below (expr_to_mpolyq sees a fractional power) */
+        return mmr_scan(b, X);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!mmr_scan(e->data.function.args[i], X)) return 0;
+    return 1;
+}
+
+static Expr* mmr_pow(Expr* b, int64_t k) {
+    return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){b, expr_new_integer(k)}, 2);
+}
+
+/* the map into the transcendental field (see the header comment) */
+static Expr* mmr_lift(const Expr* e, const MmrCtx* X) {
+    if (e->type == EXPR_SYMBOL) {
+        if (X->lifting)
+            for (size_t k = 0; k < X->ncb; k++)
+                if (X->cv[k] && strcmp(X->cv[k], e->data.symbol.name) == 0) return expr_copy(X->crep[k]);
+        int64_t m = mmr_mof(X, e->data.symbol.name);
+        return m == 1 ? expr_copy((Expr*)e) : mmr_pow(expr_copy((Expr*)e), m);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* h = fn_head_name(e);
+    if (h && strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* x = e->data.function.args[1];
+        if (mmr_is_rational(x)) {
+            int64_t p = x->data.function.args[0]->data.integer, q = x->data.function.args[1]->data.integer;
+            if (b->type == EXPR_SYMBOL)
+                return mmr_pow(expr_copy((Expr*)b), p * (mmr_mof(X, b->data.symbol.name) / q));
+            for (size_t k = 0; k < X->ncb; k++)
+                if (expr_eq((Expr*)b, X->cb[k]))
+                    return mmr_pow(expr_new_symbol(X->cg[k]), p * (X->cm[k] / q));
+            return expr_copy((Expr*)e);            /* declines in expr_to_mpolyq */
+        }
+        if (b->type == EXPR_SYMBOL && x->type == EXPR_INTEGER) {
+            Expr* lb = mmr_lift(b, X);
+            return mmr_pow(lb, x->data.integer);
+        }
+    }
+    size_t na = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (na ? na : 1));
+    for (size_t i = 0; i < na; i++) args[i] = mmr_lift(e->data.function.args[i], X);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, na);
+    free(args);
+    return r;
+}
+
+/* For each compound base B pick a variable v with B = kappa v + B0 (degree 1,
+ * m(v) = 1, absent from the other compound bases) and record
+ * v -> (g^m - B0)/kappa in lifted form.  0 when some B has no such v. */
+static int mmr_eliminate(MmrCtx* X) {
+    if (X->ncb == 0) return 1;
+    VarSet* vs = &X->vs;
+    fmpz_mpoly_ctx_t ctx;
+    fmpz_mpoly_ctx_init(ctx, (slong)vs->count, ORD_LEX);
+    fmpz_mpoly_q_t* B = malloc(sizeof(fmpz_mpoly_q_t) * X->ncb);
+    int ok = 1;
+    X->lifting = 0;
+    for (size_t k = 0; k < X->ncb; k++) {
+        fmpz_mpoly_q_init(B[k], ctx);
+        Expr* bl = mmr_lift(X->cb[k], X);
+        if (!expr_to_mpolyq(bl, B[k], ctx, vs) || !fmpz_mpoly_is_one(fmpz_mpoly_q_denref(B[k]), ctx)) ok = 0;
+        expr_free(bl);
+    }
+    fmpz_mpoly_t kap, b0; fmpz_mpoly_init(kap, ctx); fmpz_mpoly_init(b0, ctx);
+    for (size_t k = 0; k < X->ncb && ok; k++) {
+        const fmpz_mpoly_struct* nb = fmpz_mpoly_q_numref(B[k]);
+        int found = -1;
+        for (size_t i = 0; i < vs->count && found < 0; i++) {
+            if (X->m[i] != 1 || fmpz_mpoly_degree_si(nb, (slong)i, ctx) != 1) continue;
+            int used = 0;
+            for (size_t j = 0; j < X->ncb; j++) {
+                if (j != k && fmpz_mpoly_degree_si(fmpz_mpoly_q_numref(B[j]), (slong)i, ctx) > 0) used = 1;
+                if (j < k && X->cv[j] && strcmp(X->cv[j], vs->names[i]) == 0) used = 1;
+            }
+            if (!used) found = (int)i;
+        }
+        if (found < 0) { ok = 0; break; }
+        slong vi = found; ulong e1 = 1, e0 = 0;
+        fmpz_mpoly_get_coeff_vars_ui(kap, nb, &vi, &e1, 1, ctx);
+        fmpz_mpoly_get_coeff_vars_ui(b0, nb, &vi, &e0, 1, ctx);
+        snprintf(X->cg[k], sizeof X->cg[k], "mmr$g%zu", k + 1);
+        X->cv[k] = vs->names[found];
+        Expr* num = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+            mmr_pow(expr_new_symbol(X->cg[k]), X->cm[k]),
+            expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1),
+                fmpz_mpoly_to_expr(b0, ctx, vs)}, 2)}, 2);
+        X->crep[k] = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){num,
+            mmr_pow(fmpz_mpoly_to_expr(kap, ctx, vs), -1)}, 2);
+    }
+    fmpz_mpoly_clear(kap, ctx); fmpz_mpoly_clear(b0, ctx);
+    for (size_t k = 0; k < X->ncb; k++) fmpz_mpoly_q_clear(B[k], ctx);
+    free(B);
+    fmpz_mpoly_ctx_clear(ctx);
+    X->lifting = 1;
+    return ok;
+}
+
+/* the inverse map on a rendered polynomial, as one simultaneous ReplaceAll */
+static Expr* mmr_lower(Expr* e, const MmrCtx* X) {
+    const VarSet* vs = &X->vs;
+    Expr** rules = malloc(sizeof(Expr*) * (vs->count + X->ncb + 1));
+    size_t nr = 0;
+    for (size_t i = 0; i < vs->count; i++) {
+        int64_t m = mmr_mof(X, vs->names[i]);
+        if (m == 1) continue;
+        rules[nr++] = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){
+            expr_new_symbol(vs->names[i]),
+            expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_new_symbol(vs->names[i]),
+                expr_new_function(expr_new_symbol(SYM_Rational),
+                    (Expr*[]){expr_new_integer(1), expr_new_integer(m)}, 2)}, 2)}, 2);
+    }
+    for (size_t k = 0; k < X->ncb; k++)
+        rules[nr++] = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){
+            expr_new_symbol(X->cg[k]),
+            expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(X->cb[k]),
+                expr_new_function(expr_new_symbol(SYM_Rational),
+                    (Expr*[]){expr_new_integer(1), expr_new_integer(X->cm[k])}, 2)}, 2)}, 2);
+    if (nr == 0) { free(rules); return e; }
+    Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, nr);
+    free(rules);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll), (Expr*[]){e, rl}, 2));
+}
+
+static void mmr_free(MmrCtx* X) {
+    for (size_t k = 0; k < X->ncb; k++) { expr_free(X->cb[k]); if (X->crep[k]) expr_free(X->crep[k]); }
+    free(X->m);
+    varset_free(&X->vs);
+}
+
+Expr* flint_mpoly_mat_rref(Expr** flat, int r, int c) {
+    if (r <= 0 || c <= 0) return NULL;
+    size_t mn = (size_t)r * (size_t)c;
+    MmrCtx X;
+    memset(&X, 0, sizeof X);
+    X.lifting = 1;
+    for (size_t k = 0; k < mn; k++)
+        if (!mmr_scan(flat[k], &X)) { mmr_free(&X); return NULL; }
+    if (X.vs.count == 0) { mmr_free(&X); return NULL; }
+    if (!mmr_eliminate(&X)) { mmr_free(&X); return NULL; }
+    for (size_t k = 0; k < X.ncb; k++) mmr_mslot(&X, X.cg[k]);
+    /* the variable order: names sorted, indices re-keyed with them */
+    {
+        size_t n = X.vs.count;
+        char** names0 = malloc(sizeof(char*) * n);
+        int64_t* m0 = malloc(sizeof(int64_t) * n);
+        for (size_t i = 0; i < n; i++) { names0[i] = X.vs.names[i]; m0[i] = i < X.mcap ? X.m[i] : 1; }
+        qsort(X.vs.names, n, sizeof(char*), cmp_str);
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j < n; j++)
+                if (X.vs.names[i] == names0[j]) { X.m[i] = m0[j]; break; }
+        free(names0); free(m0);
+    }
+    Expr** lifted = malloc(sizeof(Expr*) * mn);
+    for (size_t k = 0; k < mn; k++) lifted[k] = mmr_lift(flat[k], &X);
+
+    fmpz_mpoly_ctx_t ctx;
+    fmpz_mpoly_ctx_init(ctx, (slong)X.vs.count, ORD_LEX);
+    fmpz_mpoly_struct* A = malloc(sizeof(fmpz_mpoly_struct) * mn);
+    for (size_t k = 0; k < mn; k++) fmpz_mpoly_init(A + k, ctx);
+    Expr* out = NULL;
+    int ok = 1;
+
+    /* 1. rows into Z[t] */
+    {
+        fmpz_mpoly_t L, g, t; fmpz_mpoly_init(L, ctx); fmpz_mpoly_init(g, ctx); fmpz_mpoly_init(t, ctx);
+        fmpz_mpoly_q_struct* row = malloc(sizeof(fmpz_mpoly_q_struct) * (size_t)c);
+        for (int j = 0; j < c; j++) fmpz_mpoly_q_init(row + j, ctx);
+        for (int i = 0; i < r && ok; i++) {
+            fmpz_mpoly_one(L, ctx);
+            for (int j = 0; j < c && ok; j++) {
+                if (!expr_to_mpolyq(lifted[(size_t)i * c + j], row + j, ctx, &X.vs)) { ok = 0; break; }
+                fmpz_mpoly_q_canonicalise(row + j, ctx);
+                /* L = lcm(L, den) = L den / gcd(L, den) */
+                fmpz_mpoly_gcd(g, L, fmpz_mpoly_q_denref(row + j), ctx);
+                fmpz_mpoly_mul(t, L, fmpz_mpoly_q_denref(row + j), ctx);
+                if (!fmpz_mpoly_divides(L, t, g, ctx)) ok = 0;
+            }
+            for (int j = 0; j < c && ok; j++) {
+                fmpz_mpoly_struct* a = A + (size_t)i * c + j;
+                if (!fmpz_mpoly_divides(t, L, fmpz_mpoly_q_denref(row + j), ctx)) { ok = 0; break; }
+                fmpz_mpoly_mul(a, fmpz_mpoly_q_numref(row + j), t, ctx);
+            }
+            if (ok) {   /* the row's integer content */
+                fmpz_t ct, cj; fmpz_init(ct); fmpz_init(cj);
+                for (int j = 0; j < c; j++) {
+                    fmpz_mpoly_struct* a = A + (size_t)i * c + j;
+                    if (a->length == 0) continue;
+                    _fmpz_vec_content(cj, a->coeffs, a->length);
+                    fmpz_gcd(ct, ct, cj);
+                }
+                if (fmpz_cmp_ui(ct, 1) > 0)
+                    for (int j = 0; j < c; j++)
+                        fmpz_mpoly_scalar_divexact_fmpz(A + (size_t)i * c + j, A + (size_t)i * c + j, ct, ctx);
+                fmpz_clear(ct); fmpz_clear(cj);
+            }
+        }
+        for (int j = 0; j < c; j++) fmpz_mpoly_q_clear(row + j, ctx);
+        free(row);
+        fmpz_mpoly_clear(L, ctx); fmpz_mpoly_clear(g, ctx); fmpz_mpoly_clear(t, ctx);
+    }
+
+    /* 2. fraction-free Gauss-Jordan */
+    if (ok) {
+        fmpz_mpoly_t P, t1, t2;
+        fmpz_mpoly_init(P, ctx); fmpz_mpoly_init(t1, ctx); fmpz_mpoly_init(t2, ctx);
+        fmpz_mpoly_one(P, ctx);
+        int rr = 0;
+        for (int col = 0; col < c && rr < r && ok; col++) {
+            int piv = -1;
+            for (int i = rr; i < r; i++)
+                if (!fmpz_mpoly_is_zero(A + (size_t)i * c + col, ctx)) { piv = i; break; }
+            if (piv < 0) continue;
+            if (piv != rr)
+                for (int j = 0; j < c; j++)
+                    fmpz_mpoly_swap(A + (size_t)rr * c + j, A + (size_t)piv * c + j, ctx);
+            fmpz_mpoly_struct* p = A + (size_t)rr * c + col;
+            for (int i = 0; i < r && ok; i++) {
+                if (i == rr) continue;
+                fmpz_mpoly_struct* aic = A + (size_t)i * c + col;
+                for (int j = 0; j < c && ok; j++) {
+                    if (j == col) continue;
+                    fmpz_mpoly_struct* aij = A + (size_t)i * c + j;
+                    fmpz_mpoly_mul(t1, p, aij, ctx);
+                    if (!fmpz_mpoly_is_zero(aic, ctx)) {
+                        fmpz_mpoly_mul(t2, aic, A + (size_t)rr * c + j, ctx);
+                        fmpz_mpoly_sub(t1, t1, t2, ctx);
+                    }
+                    if (!fmpz_mpoly_divides(aij, t1, P, ctx)) ok = 0;
+                }
+                fmpz_mpoly_zero(aic, ctx);
+            }
+            fmpz_mpoly_set(P, p, ctx);
+            rr++;
+        }
+        fmpz_mpoly_clear(P, ctx); fmpz_mpoly_clear(t1, ctx); fmpz_mpoly_clear(t2, ctx);
+    }
+
+    /* 3. normalise the pivot rows, map back and render */
+    if (ok) {
+        Expr** rows = malloc(sizeof(Expr*) * (size_t)r);
+        fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, ctx);
+        for (int i = 0; i < r; i++) {
+            Expr** cells = malloc(sizeof(Expr*) * (size_t)c);
+            int lead = -1;
+            for (int j = 0; j < c; j++) {
+                fmpz_mpoly_struct* a = A + (size_t)i * c + j;
+                if (fmpz_mpoly_is_zero(a, ctx)) { cells[j] = expr_new_integer(0); continue; }
+                if (lead < 0) { lead = j; cells[j] = expr_new_integer(1); continue; }
+                fmpz_mpoly_set(fmpz_mpoly_q_numref(q), a, ctx);
+                fmpz_mpoly_set(fmpz_mpoly_q_denref(q), A + (size_t)i * c + lead, ctx);
+                fmpz_mpoly_q_canonicalise(q, ctx);
+                Expr* num = mmr_lower(fmpz_mpoly_to_expr(fmpz_mpoly_q_numref(q), ctx, &X.vs), &X);
+                if (fmpz_mpoly_is_one(fmpz_mpoly_q_denref(q), ctx)) {
+                    cells[j] = expr_expand(num);
+                    expr_free(num);
+                    continue;
+                }
+                Expr* den = mmr_lower(fmpz_mpoly_to_expr(fmpz_mpoly_q_denref(q), ctx, &X.vs), &X);
+                Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                    num, eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){den, expr_new_integer(-1)}, 2))}, 2));
+                cells[j] = expr_expand(v);
+                expr_free(v);
+            }
+            rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)c);
+            free(cells);
+        }
+        fmpz_mpoly_q_clear(q, ctx);
+        out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)r);
+        free(rows);
+    }
+
+    for (size_t k = 0; k < mn; k++) { fmpz_mpoly_clear(A + k, ctx); expr_free(lifted[k]); }
+    free(A); free(lifted);
+    fmpz_mpoly_ctx_clear(ctx);
+    mmr_free(&X);
+    return out;
+}
+
 #else /* !USE_FLINT */
 
 int   flint_bridge_available(void) { return 0; }
@@ -8679,6 +9079,8 @@ int       tcre_div(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; retur
 int       tcre_deriv(TowerCRE* t, int a, const char* v) { (void)t; (void)a; (void)v; return -1; }
 int       tcre_is_zero(TowerCRE* t, int h) { (void)t; (void)h; return -1; }
 int       tcre_equal(TowerCRE* t, int a, int b) { (void)t; (void)a; (void)b; return -1; }
+
+Expr* flint_mpoly_mat_rref(Expr** flat, int r, int c) { (void)flat; (void)r; (void)c; return NULL; }
 
 void  flint_bridge_init(void) { /* no FLINT: nothing to register */ }
 
