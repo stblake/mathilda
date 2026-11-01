@@ -1089,13 +1089,25 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
         if (!inner_is_wrapper
             && inner_pat->type == EXPR_FUNCTION && expr->type == EXPR_FUNCTION) {
             size_t saved_env_count = env->count;
-            if (match_internal(expr->data.function.head, inner_pat->data.function.head, env, NULL)) {
-                bool res = match_args_internal(expr->data.function.args, expr->data.function.arg_count,
-                                     inner_pat->data.function.args, inner_pat->data.function.arg_count, env, cond, inner_pat->data.function.head, inner_pat->data.function.arg_count, parent);
-                if (!res) env_rollback(env, saved_env_count);
-                return res;
-            }
+            /* The arguments (and the guard) are the head match's continuation:
+             * a head with patterns of its own -- a SubValue LHS
+             * R[n_, k_][i___, mm:(_Integer)..][a_List] /; cond -- must retry its
+             * other assignments when the guard fails, not commit to the first. */
+            ParentMatch args_frame = { expr->data.function.args, expr->data.function.arg_count,
+                                       inner_pat->data.function.args, inner_pat->data.function.arg_count,
+                                       cond, inner_pat->data.function.head,
+                                       inner_pat->data.function.arg_count, parent };
+            if (match_internal(expr->data.function.head, inner_pat->data.function.head, env, &args_frame))
+                return true;
             env_rollback(env, saved_env_count);
+            /* A head that matched with no workable arguments is final, as is a
+             * mismatch -- unless the inner head is OneIdentity (below). */
+            bool head_ok = false;
+            if (head_is_oneidentity(inner_pat->data.function.head)) {
+                head_ok = match_internal(expr->data.function.head, inner_pat->data.function.head, env, NULL);
+                env_rollback(env, saved_env_count);
+            }
+            if (head_ok) return false;
             /* A head mismatch is final -- unless the inner head is OneIdentity,
              * where f[p1, ..., pn] can still match a lone non-f subject through
              * an Optional's default (h[g] against Times[a_., h[b_]] as a -> 1).
@@ -1261,12 +1273,14 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
                 return false;
             case EXPR_FUNCTION: {
                 size_t saved_env_count = env->count;
-                if (match_internal(expr->data.function.head, pattern->data.function.head, env, NULL)) {
-                    if (match_args_internal(expr->data.function.args, expr->data.function.arg_count,
-                                   pattern->data.function.args, pattern->data.function.arg_count, env, NULL, pattern->data.function.head, pattern->data.function.arg_count, parent)) {
-                        return true;
-                    }
-                }
+                /* Arguments as the head match's continuation, so a patterned
+                 * head (f[n_][i___, j__]) backtracks when they fail. */
+                ParentMatch args_frame = { expr->data.function.args, expr->data.function.arg_count,
+                                           pattern->data.function.args, pattern->data.function.arg_count,
+                                           NULL, pattern->data.function.head,
+                                           pattern->data.function.arg_count, parent };
+                if (match_internal(expr->data.function.head, pattern->data.function.head, env, &args_frame))
+                    return true;
                 env_rollback(env, saved_env_count);
                 break;
             }

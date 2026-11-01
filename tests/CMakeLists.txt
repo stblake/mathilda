@@ -3440,6 +3440,14 @@ else()
     target_link_libraries(parametric_solve_tests gmp m)
 endif()
 
+add_executable(patterned_head_backtrack_tests test_patterned_head_backtrack.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(patterned_head_backtrack_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(patterned_head_backtrack_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(patterned_head_backtrack_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 
