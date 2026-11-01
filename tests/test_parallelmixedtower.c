@@ -443,6 +443,17 @@ static void test_parametric_conic(void) {
         /* the same under x = u^2; the answer goes back through Sqrt[a^2 x^3 + b^2 x]/Sqrt[x]
          * (the integrand's own radical with Sqrt[x] principal), gunther 2 (ii) */
         "(a x - b)/((a x + b) Sqrt[a^2 x^3 + b^2 x])",
+        /* two branch points (laurent sub 8 (i)), and x = 1/w then w^3 g(w^4)
+         * (chebychev 3 (vii)) */
+        "(a x^4 + b x^3)^(1/4)",
+        "x^4/(a x^4 + b)^(5/4)",
+        /* x = u^5 (x^(p/5) -> u^p), then u^3 g(u^4): chebychev 3 (viii) */
+        "x^(4/5) (a/x^(4/5) + b)^(5/4)",
+        /* two branch points: psi^3 = c^u (x - al)/(x - be), chebychev 5 (vii) */
+        "(a/x + b)^(1/3) (c/x + d)^(2/3)",
+        /* x = u^6, x = 1/w, w^3 -> u: one finite branch point, 1/(u^5 (a + b u)^(2/3))
+         * is rational in psi^3 = a + b u (chebychev 1 (iii)) */
+        "x^(4/3)/(a Sqrt[x] + b)^(2/3)",
     };
     for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
         char buf[1024];

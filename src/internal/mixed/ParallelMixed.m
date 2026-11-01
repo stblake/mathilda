@@ -2953,6 +2953,138 @@ KernelSubstitution[f_, x_Symbol] := Module[{u = Unique["u"], radQ, fe, g, fs, s,
    g = f(t, y(w)) dt/dw.  C(x, y) = C(w, t) with D_x <-> (dw/dx) D_w, so a
    certificate transfers and an answer maps back (t -> x, w -> w(x)), verified
    by the caller over complex x. *)
+(* ------------------------------------------------- monomial substitutions *)
+(* Changes of variable x = u^k, x = 1/w and the two-point Kummer parameter psi,
+   for integrands with a root of degree >= 3 (square roots stay with the conic
+   and Euler machinery, which they reach first).  Each is literal both ways, so no
+   branch is chosen, and each is a differential-field isomorphism: a certificate
+   for the image certifies f, and an answer maps back exactly.  The caller
+   verifies the mapped answer by PossibleZeroQ over complex x. *)
+
+(* RadNormalize[g, w]: a radicand B = w^s B0(w) with s/q an integer (q the root's
+   degree) is written w^(s e) B0^e.  Returns {g', nrm}; RadNormBack reads B0^(1/q)
+   as the literal B^(1/q) w^(-s/q), the same value of the formal root (both have
+   q-th power B0), so the answer comes back through the integrand's own radical.
+   The back replacements are evaluated Rules built from the subexpressions found:
+   a RuleDelayed right-hand side lands unevaluated inside a held Function body
+   (RootSum), where w would still be a Module's local symbol. *)
+RadNormalize[g_, w_] := Module[{nrm = {}, h},
+  h = g /. Power[b_, e_Rational] /; ! FreeQ[b, w] :> Module[{B = Together[b], sh, B0},
+      sh = Exponent[Numerator[B], w, Min] - Exponent[Denominator[B], w, Min];
+      B0 = Together[B w^(-sh)];
+      If[sh =!= 0 && IntegerQ[sh/Denominator[e]],
+        AppendTo[nrm, {B0, Denominator[e], b, sh}]; w^(sh e) Power[B0, e],
+        Power[b, e]]];
+  {h, DeleteDuplicates[nrm]}];
+RadNormBack[G_, nrm_, w_] := Module[{H = G, pw},
+  Do[With[{B0 = n[[1]], q = n[[2]], bl = n[[3]], sh = n[[4]]},
+      pw = DeleteDuplicates[Cases[{H}, Power[bb_, e_Rational] /; ! FreeQ[bb, w] && Together[bb - B0] === 0, {0, Infinity}]];
+      H = H /. Thread[pw -> ((Power[bl, 1/q] w^(-sh/q))^(#[[2]] q) & /@ pw)]],
+    {n, nrm}];
+  H];
+
+(* TwoPointKummer[f, x]: f = R(x) P, P a product of radicals with
+   P^q = c (x - al)^n1 (x - be)^n2 prod (x - ga)^(q m), n1 + n2 = q r,
+   gcd(n1, q) = 1, all over Q(params): a curve with two branch points, so genus 0.
+   With Q = P/((x - be)^r prod (x - ga)^m), M = (x - al)/(x - be) and
+   u n1 + v q = 1, psi = Q^u M^v has psi^q = c^u M, and Q = c^v psi^n1 exactly
+   (Q^q = c M^n1), so x = (al - be M)/(1 - M) and P are rational in psi.
+   (a/x + b)^(1/3) (c/x + d)^(2/3), (a x^4 + b x^3)^(1/4), and after x = u^k
+   (a u + b)^(2/3)/(c u + d)^(2/3).  One finite branch point is the same
+   with the other at infinity: P^q = c (x - al)^n1 prod (x - ga)^(q m) takes
+   M = x - al, so 1/(u^5 (a + b u)^(2/3)) becomes rational.  None otherwise. *)
+TwoPointKummer[f_, x_Symbol] := Catch[Module[{psi = Unique["p"], fac, rad, R, q, Plit, nd, c = 1, lin = <||>, S,
+    al, be, n1, n2, r, rest, uv, M, X, Ppsi, g, one},
+  fac = If[Head[f] === Times, List @@ f, {f}];
+  rad = Select[fac, MatchQ[#, Power[b_, e_Rational] /; ! FreeQ[b, x]] &];
+  If[rad === {}, Throw[None, "tpk"]];
+  R = Times @@ Select[fac, ! MatchQ[#, Power[b_, e_Rational] /; ! FreeQ[b, x]] &];
+  If[! RationalFunctionQ[R, {x}], Throw[None, "tpk"]];
+  q = LCM @@ (Denominator[#[[2]]] & /@ rad);
+  If[q < 3, Throw[None, "tpk"]];
+  Plit = Times @@ rad;
+  nd = Together[Times @@ (#[[1]]^(#[[2]] q) & /@ rad)];
+  If[! RationalFunctionQ[nd, {x}], Throw[None, "tpk"]];
+  Do[With[{part = ps[[1]], sg = ps[[2]]},
+      Do[With[{p = pm[[1]], m = sg pm[[2]]},
+          Which[FreeQ[p, x], c = c p^m,
+            PolynomialQ[p, x] && Exponent[p, x] == 1,
+              With[{lc = Coefficient[p, x, 1]},
+                c = c lc^m;
+                With[{rt = Together[-(p /. x -> 0)/lc]}, lin[rt] = Lookup[lin, Key[rt], 0] + m]],
+            True, Throw[None, "tpk"]]],
+        {pm, FactorList[part]}]],
+    {ps, {{Numerator[nd], 1}, {Denominator[nd], -1}}}];
+  S = Select[Normal[lin], Mod[#[[2]], q] != 0 &];
+  one = Length[S] == 1;
+  If[! MemberQ[{1, 2}, Length[S]], Throw[None, "tpk"]];
+  If[one, {{al, n1}} = List @@@ S; r = 0,
+    {{al, n1}, {be, n2}} = List @@@ S;
+    If[Mod[n1 + n2, q] != 0, Throw[None, "tpk"]];
+    r = (n1 + n2)/q];
+  If[GCD[n1, q] != 1, Throw[None, "tpk"]];
+  rest = Times @@ ((x - #[[1]])^(#[[2]]/q) & /@ (List @@@ Select[Normal[lin], Mod[#[[2]], q] == 0 &]));
+  uv = ExtendedGCD[n1, q][[2]];                       (* u n1 + v q = 1 *)
+  M = psi^q c^(-uv[[1]]);
+  X = If[one, al + M, Together[(al - be M)/(1 - M)]];
+  Ppsi = c^uv[[2]] psi^n1 If[one, 1, (X - be)^r] (rest /. x -> X);
+  g = Together[(R /. x -> X) Ppsi D[X, psi]];
+  (* the rational part of an answer in psi is combined into one fraction before
+     psi is replaced: each term would otherwise carry its own copy of the radical
+     expression for psi, and the PossibleZeroQ gate pays for every copy (for
+     (a x^(1/3) + b)^(5/3)/(c x^(1/3) + d)^(2/3), a 41k-leaf residual and 39 s,
+     against 14k and 13 s) *)
+  With[{psix = If[one, (Plit/rest)^uv[[1]] (x - al)^uv[[2]],
+                  (Plit/((x - be)^r rest))^uv[[1]] ((x - al)/(x - be))^uv[[2]]]},
+    {g, psi, Function[G, With[{ts = If[Head[G] === Plus, List @@ G, {G}]},
+       (Together[Total[Select[ts, FreeQ[#, Log | ArcTan | ArcTanh | RootSum | Function] &]]] +
+        Total[Select[ts, ! FreeQ[#, Log | ArcTan | ArcTanh | RootSum | Function] &]]) /. psi -> psix]]}]], "tpk"];
+
+(* MonomialSubstitution[f, x]: x = u^k when a power x^(p/k) sits inside a radicand
+   (x^(p/k) -> u^p exactly: the principal x^(p/k) is (x^(1/k))^p), then the
+   two-point Kummer parameter, the reduction by u = w^k, or x = 1/w -- a binomial
+   radical of Chebyshev's third kind is a linear (or x^k-reducible) one at the
+   other end of the line: (a x^4 + b x^3)^(1/4) -> (a + b w)^(1/4)/w^3,
+   x^4/(a x^4 + b)^(5/4) -> w^3 g(w^4).  Returns {g, var, back} or None. *)
+MonomialSubstitution[f_, x_Symbol] := Catch[Module[{own, k, u, f1, v, n1, b1, rads, tk, w, g, n2, b2, done, doneR, tidy, monoQ},
+  If[FreeQ[f, Power[b_, e_Rational] /; ! FreeQ[b, x] && Denominator[e] >= 3], Throw[None, "ms"]];
+  If[XPowerReduce[f, x] =!= None, Throw[None, "ms"]];
+  own = Cases[{f}, Power[b0_, _Rational] /; ! FreeQ[b0, x] :> b0, {0, Infinity}];
+  (* radicands back in f's own spelling: Together-equal bases are the same value *)
+  tidy = Function[H, With[{pw = DeleteDuplicates[Cases[{H}, Power[bb_, e_Rational] /; ! FreeQ[bb, x] && AnyTrue[own, Function[o, Together[o - bb] === 0]], {0, Infinity}]]},
+    H /. Thread[pw -> (Power[SelectFirst[own, Function[o, Together[o - #[[1]]] === 0]], #[[2]]] & /@ pw)]]];
+  done[g0_, var_, bk_] := Throw[{g0, var, Function[G, tidy[bk[G]]]}, "ms"];
+  (* an image u = var^j reduces is handed on reduced and, where the reduced
+     radical has one or two branch points, rational: the caller's own path
+     would otherwise meet 1/(u^5 (a + b u)^(2/3)) with the substitutions off *)
+  doneR[g0_, var_, bk_] := With[{xr = XPowerReduce[g0, var]},
+    If[xr =!= None, With[{tk2 = TwoPointKummer[xr[[2]], xr[[3]]]},
+      If[tk2 =!= None, done[tk2[[1]]/xr[[1]], tk2[[2]],
+        Function[G, bk[tk2[[3]][G] /. xr[[3]] -> var^xr[[1]]]]]]]];
+    done[g0, var, bk]];
+  (* stage 1: x = u^k *)
+  k = LCM @@ Prepend[Cases[{f}, Power[x, e_Rational] :> Denominator[e], {0, Infinity}], 1];
+  If[k > 1,
+    u = Unique["u"];
+    {f1, n1} = RadNormalize[(f /. Power[x, e_Rational] :> u^(e k) /. x -> u^k) k u^(k - 1), u];
+    v = u; b1 = With[{xr = x^(1/k)}, Function[G, RadNormBack[G, n1, u] /. u -> xr]],
+    f1 = f; v = x; b1 = Identity];
+  rads = DeleteDuplicates[Cases[{f1}, Power[b_, e_Rational] /; ! FreeQ[b, v] :> Together[b], {0, Infinity}]];
+  If[rads === {} || ! AllTrue[rads, RationalFunctionQ[#, {v}] &], Throw[None, "ms"]];
+  tk = TwoPointKummer[f1, v];
+  If[tk =!= None, done[tk[[1]], tk[[2]], Function[G, b1[tk[[3]][G]]]]];
+  If[k > 1 && XPowerReduce[f1, v] =!= None, doneR[f1, v, b1]];
+  (* stage 2: v = 1/w *)
+  w = Unique["w"];
+  {g, n2} = RadNormalize[(f1 /. v -> 1/w) (-1/w^2), w];
+  b2 = Function[G, RadNormBack[G, n2, w] /. w -> 1/v];
+  tk = TwoPointKummer[g, w];
+  If[tk =!= None, done[tk[[1]], tk[[2]], Function[G, b1[b2[tk[[3]][G]]]]]];
+  monoQ = AnyTrue[rads, Function[b, With[{nd = {Numerator[b], Denominator[b]}},
+            AnyTrue[nd, Exponent[#, v] >= 1 && (# /. v -> 0) === 0 &] || Exponent[nd[[2]], v] >= 1 && Exponent[nd[[1]], v] <= Exponent[nd[[2]], v]]]];
+  If[monoQ || XPowerReduce[Together[g], w] =!= None, doneR[Together[g], w, Function[G, b1[b2[G]]]]];
+  None], "ms"];
+
 ConicPowerSubstitution[f_, x_Symbol] := Module[{cands, b, k, X = Unique["X"], Q, c0, c1, c2, alpha, pt, w = Unique["w"],
     Xw, yw, t, g, wx, own},
   cands = DeleteDuplicates[Cases[{f}, Power[b_, e_Rational] /; Denominator[e] == 2 && PolynomialQ[b, x] &&
@@ -2987,6 +3119,10 @@ ConicPowerSubstitution[f_, x_Symbol] := Module[{cands, b, k, X = Unique["X"], Q,
    then this method.  The package worker is called directly (loaded at most
    once): the Integrate`Trager surface declines inside another method's time
    region. *)
+(* the rational integrator, as a Kummer-style integrator for a rational image *)
+RationalImageIntegrate[x_] := Function[h, With[{r = Quiet[Integrate[h, x, Method -> "BronsteinRational"]]},
+  If[FreeQ[r, Integrate], r, {"failed", "rational integration declined"}]]];
+
 kummerIntegrators[x_, opts___] := {
   Function[h, If[TrueQ[LoadModule["trager/Trager.m"]],
     Quiet[Trager`TragerIntegrate[h, x, "Trager"]], {"failed", "Trager unavailable"}]],
@@ -3014,14 +3150,19 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
         With[{r = Block[{$inKernelSub = True},
                     Catch[Scan[Function[integ, With[{ri = integ[ks[[1]]]},
                         If[! MatchQ[ri, {"failed", ___}], Throw[ri, "ksub"]]]],
-                      kummerIntegrators[ks[[2]], opts]]; {"failed", "kernel substitution"}, "ksub"]]},
+                      (* a rational image (the two-point Kummer parameter) goes to
+                         the rational integrator first: complete, and over Q(params)
+                         it splits 1/(b d^2 - p^3) where the curve analysis stalls *)
+                      If[RationalFunctionQ[ks[[1]], {ks[[2]]}],
+                        Prepend[kummerIntegrators[ks[[2]], opts], RationalImageIntegrate[ks[[2]]]],
+                        kummerIntegrators[ks[[2]], opts]]]; {"failed", "kernel substitution"}, "ksub"]]},
           If[MatchQ[r, {"not elementary", ___}], Return[ks[[3]][r], Module]];   (* read in x *)
           If[MatchQ[r, {"failed", s_String /; StringStartsQ[s, "internal error"], ___}], Return[r, Module]];
           If[! ListQ[r] && FreeQ[r, ParallelIntegrateMixed],
             With[{F = ks[[3]][r]},
               If[FreeQ[F, ks[[2]]] && TrueQ[Quiet[PossibleZeroQ[D[F, x] - integrand0, Assumptions -> Element[x, Complexes]]]],
                 Return[F, Module]]]]]]],
-      {sub, {KernelSubstitution, ConicPowerSubstitution}}]];
+      {sub, {KernelSubstitution, ConicPowerSubstitution, MonomialSubstitution}}]];
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
   (* BuildTower::radicals is quiet: several flat radicands go to the Kummer split
      below, and an honest failure says so in the returned tuple *)

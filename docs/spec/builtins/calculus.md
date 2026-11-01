@@ -1547,6 +1547,27 @@ monotonically down.
      rewrites still finds its own root:
      `(a x - b)/((a x + b) Sqrt[a^2 x^3 + b^2 x])` comes back through
      `Sqrt[a^2 x^3 + b^2 x]/Sqrt[x]`.
+     **Monomial and two-point Kummer substitutions** (v0.6112), for a root of
+     degree >= 3 with rational radicands; each is literal both ways, so no
+     branch is chosen:
+     - x = u^k when a power x^(p/k) sits inside a radicand (x^(p/k) -> u^p is
+       exact for principal powers);
+     - the two-point Kummer parameter. When f = R(x) P with
+       P^q = c (x - al)^n1 (x - be)^n2 prod (x - ga)^(q m), n1 + n2 = q r and
+       gcd(n1, q) = 1 (two branch points, genus 0), psi = Q^u M^v (Bezout
+       u n1 + v q = 1) satisfies psi^q = c^u M exactly, so x and P are
+       rational in psi. One finite branch point is the same with the other at
+       infinity (M = x - al): 1/(u^5 (a + b u)^(2/3)) is rational in psi. An
+       image that u = w^j reduces is reduced and offered this parameter before
+       it is handed on. The rational image goes to `BronsteinRational` first;
+     - x = 1/w, then u = w^k. A radicand B(1/w) = w^s B0(w) is written
+       w^(s e) B0^e, and the back map reads B0^(1/q) as the literal radical
+       times w^(-s/q).
+
+     Answers come back through the integrand's own radicals. Examples:
+     `(a/x + b)^(1/3) (c/x + d)^(2/3)`, `x^(4/5) (a/x^(4/5) + b)^(5/4)`,
+     `(a Sqrt[x] + b)^(2/3)/(c Sqrt[x] + d)^(2/3)`, `(a x^4 + b x^3)^(1/4)`,
+     `x^4/(a x^4 + b)^(5/4)`, `x^(4/3)/(a Sqrt[x] + b)^(2/3)`.
      **Substitution pre-pass** (v0.6105): a radical of a transcendental kernel
      changes the variable -- `u = Sin x` with `y = Cos x` as the algebraic
      generator (`Sqrt[Sin[x]] -> Sqrt[u]/Sqrt[1 - u^2]`), `u = E^x` for
