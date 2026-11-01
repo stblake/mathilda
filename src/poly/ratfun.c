@@ -2300,8 +2300,8 @@ static Expr* rf_apart_k(const fmpz_mpoly_t Nm, const Rf* Kc, RfApFac* F, slong n
     gr_poly_init(N, K); gr_poly_init(D, K); gr_poly_init(Qp, K); gr_poly_init(Rm, K);
     gr_poly_init(mi, K); gr_poly_init(g, K); gr_poly_init(s, K); gr_poly_init(t, K);
     gr_poly_init(Bi, K); gr_poly_init(cur, K); gr_poly_init(quot, K); gr_poly_init(rem, K);
-    gr_poly_struct* P = malloc((size_t)nf * sizeof(gr_poly_struct));
-    gr_poly_struct* Pk = malloc((size_t)nf * sizeof(gr_poly_struct));
+    gr_poly_struct* P = malloc((size_t)(nf ? nf : 1) * sizeof(gr_poly_struct));
+    gr_poly_struct* Pk = malloc((size_t)(nf ? nf : 1) * sizeof(gr_poly_struct));
     int ok = P && Pk && ex;
     slong ninit = 0;
     int st = GR_SUCCESS;
@@ -2447,8 +2447,14 @@ Expr* ratfun_apart(const Expr* e, const Expr* x) {
         }
         fmpz_mpoly_factor_clear(fa, C.ctx);
     }
-    if (ok && nf > 0) {
-        if (C.n == 1) {
+    /* No x-factor in the denominator: over Q that is a plain polynomial,
+     * which the classical path already presents.  Over Q(params) the answer
+     * is the polynomial in x with coefficients in Q(params) -- the
+     * polynomial-part loop of rf_apart_k with D = 1.  Without this, the
+     * classical path put Apart[1/((x - 1) (x + 2)) + y] (a polynomial in y)
+     * over one expanded denominator and split the numerator term by term. */
+    if (ok && (nf > 0 || C.n > 1)) {
+        if (nf > 0 && C.n == 1) {
             out = rf_apart_q(N, Kc.c, F, nf, &C);
         } else {
             out = rf_apart_k(N, &Kc, F, nf, &C);

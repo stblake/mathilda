@@ -194,6 +194,29 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             for (size_t i = 0; i < vc; i++) expr_free(vs[i]);
             free(vs);
         }
+        /* An auto-picked kernel variable (y[3], Sin[z], Log[x]): the engine
+         * takes symbol generators only, so map every kernel to a fresh
+         * symbol, decompose in the one standing for v, and map back.  The
+         * fresh names keep the kernels' canonical order, so v's symbol is
+         * still the last variable. */
+        if (v && v->type != EXPR_SYMBOL && apart_argc == 1) {
+            PolyKernelMap km;
+            Expr* ks = poly_kernels_to_symbols(expr, &km);
+            Expr* rf = NULL;
+            if (ks) {
+                for (size_t i = 0; i < km.n; i++) {
+                    if (expr_eq(km.kern[i], v)) { rf = ratfun_apart(ks, km.sym[i]); break; }
+                }
+                if (rf) {
+                    Expr* back = eval_and_free(poly_symbols_to_kernels(rf, &km));
+                    expr_free(rf);
+                    rf = back;
+                }
+                expr_free(ks);
+                poly_kernel_map_free(&km);
+            }
+            if (rf) { expr_free(v); return rf; }
+        }
         if (v) {
             Expr* rf = ratfun_apart(expr, v);
             /* one variable over Q(i) / one number field */

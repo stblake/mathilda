@@ -687,6 +687,15 @@ Gives the partial fraction decomposition of a rational expression.
   One variable over Q(i) or a number field factors the denominator with the
   Trager engine and decomposes in `gr_poly` over the field (10 Gaussian linear
   factors 27 ms → 1.7 ms). `Extension` keeps the classical path.
+- **`Apart[expr]` picks the last variable** in canonical order, as the reference
+  does. When the denominator is free of it, the answer is a polynomial in that
+  variable with coefficients in Q(params), each kept as one factored fraction
+  (v0.6115): `Apart[1/((x - 1) (x + 2)) + y]` is `1/((-1 + x) (2 + x)) + y`.
+  It used to be spread over the expanded denominator, term by term. The
+  variable may be a kernel (`y[3]`, `Sin[z]`, `Log[x]`); it is mapped to a
+  fresh symbol for the decomposition, so
+  `Apart[1/((Sin[z] - 1) (Sin[z] + 1))]` is
+  `1/(2 (-1 + Sin[z])) - 1/(2 (1 + Sin[z]))`.
 - **`Modulus -> p`** (v0.6072): partial fractions over the integers modulo a
   prime, one variable (`fmpz_mod_poly` factor, CRT, digits):
   `Apart[1/(x^3 - 1), x, Modulus -> 7]` is `6/(3 + x) + 3/(5 + x) + 5/(6 + x)`.

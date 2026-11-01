@@ -198,6 +198,25 @@ void test_apart_radical_of_variable(void) {
                       "1/((3 + x) (2 + Sqrt[y]))");
 }
 
+/* The auto-picked variable (the last in canonical order) can leave the
+ * denominator free of it: then the answer is the polynomial in that variable
+ * with coefficients in Q(params), and an x-only fraction is a coefficient
+ * kept as written -- not spread over an expanded common denominator.  A
+ * kernel (y[3], Sin[z], Log[x]) can be that variable too. */
+static void test_apart_variable_free_denominator(void) {
+    assert_eval_eq("Apart[1/((x - 1) (x + 2)) + y]", "1/((-1 + x) (2 + x)) + y", 0);
+    assert_eval_eq("Apart[y/((x - 1) (x + 2))]", "y/((-1 + x) (2 + x))", 0);
+    assert_eval_eq("Apart[1/((x - 1) (x + 2)) + y[3]]", "1/((-1 + x) (2 + x)) + y[3]", 0);
+    assert_eval_eq("Apart[1/((x - 1) (x + 2)) + Sin[z]]", "1/((-1 + x) (2 + x)) + Sin[z]", 0);
+    assert_eval_eq("Apart[x/((x - 1) (x + 2)) + Log[x]]", "x/((-1 + x) (2 + x)) + Log[x]", 0);
+    assert_eval_eq("Apart[1/((Sin[z] - 1) (Sin[z] + 1))]",
+                   "1/(2 (-1 + Sin[z])) - 1/(2 (1 + Sin[z]))", 0);
+    assert_eval_eq("Apart[1/((y[3] - 1) (y[3] + 2)) + x]",
+                   "x + 1/(3 (-1 + y[3])) - 1/(3 (2 + y[3]))", 0);
+    assert_eval_eq("Apart[1.0/((x - 1) (x + 2)) + y[3]]",
+                   "1/((-1.0 + x) (2.0 + x)) + y[3]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -209,6 +228,7 @@ int main(void) {
     TEST(test_apart_multivariate_decline);
     TEST(test_apart_edge_cases);
     TEST(test_apart_radical_of_variable);
+    TEST(test_apart_variable_free_denominator);
     printf("All parfrac tests passed!\n");
     return 0;
 }
