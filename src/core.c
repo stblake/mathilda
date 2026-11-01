@@ -1221,6 +1221,44 @@ void core_init(void) {
         SymbolDef* d = symtab_lookup(*n);
         if (d) d->eval_transparent = 1;
     }
+
+    /* Builtins whose result is a function of their arguments alone -- they read
+     * no symbol value, option or other global state except through evaluate()
+     * (eval_pure; see "dependency-recorded fixed points" in eval.c).  A rule
+     * condition calling only these lets its head's failed dispatch be certified
+     * as a fixed point.  This list is the correctness crux: a builtin that reads
+     * a global from C (N and $MaxExtraPrecision, Simplify and $Assumptions,
+     * OptionValue, ToString's FormatValues, DownValues, the numeric comparisons)
+     * must NOT be here, or a stale fixed point could outlive that global. */
+    static const char* const pure[] = {
+        "List", "Length", "Head", "AtomQ", "NumberQ", "IntegerQ", "StringQ",
+        "ListQ", "TrueQ", "OptionQ", "FreeQ", "MemberQ", "MatchQ", "SameQ",
+        "UnsameQ", "Not", "And", "Or", "If", "Which", "Switch",
+        "CompoundExpression", "Plus", "Times", "Power", "Part", "First", "Last",
+        "Rest", "Most", "Take", "Drop", "Append", "Prepend", "Join", "Flatten",
+        "Union", "Intersection", "Complement", "Reverse", "Select", "Cases",
+        "DeleteCases", "Position", "Count", "Map", "Apply", "Thread", "Function",
+        "Hold", "HoldForm", "Evaluate", "Sequence", "Rule", "RuleDelayed",
+        "ReplaceAll", "Replace", "Alternatives", "EvenQ", "OddQ", "Depth",
+        "LeafCount", "Range", "Sort", "Total", "NumericQ", "Positive", "Negative",
+        "NonNegative", "NonPositive", "Abs", "Sign", "Mod", "Quotient", "Floor",
+        "Ceiling", "Round", "Max", "Min", "OrderedQ", "Rational", "Complex",
+        /* numeric comparisons read $MaxExtraPrecision only through
+         * symtab_get_own_values, which records it */
+        "Equal", "Unequal", "Less", "Greater", "LessEqual", "GreaterEqual",
+        "Identity", "ReleaseHold", "ReplaceRepeated", "FixedPoint", "Nest",
+        "NestList", "Fold", "FoldList", "MapThread", "MapIndexed", "Expand",
+        "Through", "Composition", "Xor", "Implies", "Signature", "Tally",
+        "DeleteDuplicates", "Partition", "Transpose", "Subsets", "Permutations",
+        "Exponent", "Coefficient", "Numerator", "Denominator", "Variables",
+        "Dot",
+        /* read a head's options only through symtab_get_options, which records
+         * the head as a dependency (symtab_set_options invalidates) */
+        "OptionValue", "Options", NULL };
+    for (const char* const* n = pure; *n; n++) {
+        SymbolDef* d = symtab_lookup(*n);
+        if (d) d->eval_pure = 1;
+    }
     tc_register_unwind_counter(eval_builtin_depth_counter());
 }
 
@@ -1665,10 +1703,8 @@ Expr* builtin_dimensions(Expr* res) {
  * that ReleaseHold should strip.
  */
 static bool is_hold_head(const char* name) {
-    return (strcmp(name, "Hold") == 0 ||
-            strcmp(name, "HoldForm") == 0 ||
-            strcmp(name, "HoldPattern") == 0 ||
-            strcmp(name, "HoldComplete") == 0);
+    return name == SYM_Hold || name == SYM_HoldForm ||
+           name == SYM_HoldPattern || name == SYM_HoldComplete;
 }
 
 /*
@@ -4461,7 +4497,7 @@ Expr* builtin_tostring(Expr* res) {
                                           (Expr*[]){ expr_copy(expr) }, 1);
         str = expr_to_string(wrapper);
         expr_free(wrapper);
-    } else if (strcmp(form_name, "StandardForm") == 0) {
+    } else if (form_name == SYM_StandardForm) {
         str = expr_to_string(expr);
     } else {
         return NULL;
@@ -4566,7 +4602,7 @@ Expr* builtin_toexpression(Expr* res) {
         const char* form_name = form_arg->data.symbol.name;
         if (form_name != SYM_InputForm
             && form_name != SYM_FullForm
-            && strcmp(form_name, "StandardForm") != 0) {
+            && form_name != SYM_StandardForm) {
             return NULL;
         }
     }

@@ -105,17 +105,35 @@ typedef struct SymbolDef {
      *               valid); intern_clear frees the node outright. */
     uint8_t  is_system;      /* 1: System`, 2: Mathilda` (Mathilda-only), 0: neither */
     uint8_t  has_def;
-    /* 1 once an INERT fixed point (eval.c) has been stamped relying on this
-     * symbol having no value and no rules -- as a leaf, or as the head of a
-     * call.  Giving the symbol an OwnValue must then invalidate those stamps
-     * (eval_clock_bump_binding); binding a symbol never so observed (an
-     * iterator, a Module local) leaves them valid.  Cleared by that bump. */
+    /* Nonzero once an INERT fixed point (eval.c) has been stamped relying on
+     * this symbol -- its having no value and no rules, as a leaf or a head, or
+     * (dependency-recorded fixed points) its value or rules as a failed
+     * dispatch read them.  Changing the symbol must then invalidate those
+     * stamps (eval_clock_bump_binding); binding a symbol never so observed (an
+     * iterator, a Module local) leaves them valid.  Cleared by that bump.
+     * 2: a stamp relies on it.  1: TENTATIVE -- read inside a dispatch frame
+     * that has not certified anything yet; logged, and cleared again if no
+     * certificate ends up relying on it (eval_dep_note). */
     uint8_t  inert_observed;
+    /* Position of the symbol's latest tentative entry in the dependency log
+     * (eval.c), so a frame can tell a mark of its own from an enclosing
+     * frame's.  Meaningful only while inert_observed == 1. */
+    uint32_t dep_log_idx;
+    /* Calls on this head known to fire no rule (eval.c, "no-fire memo"):
+     * NULL until the first certificate; freed with the definitions. */
+    struct NoFireMemo* nofire;
     /* 1 for a builtin that only evaluates the code it is given (CompoundExpression,
      * Module, If, Table, Map, ...): the evaluator does not count it in the
      * builtin nesting depth (eval_builtin_depth), so a Together inside it is
      * still a user-level call.  Internal, not an Attribute. */
     uint8_t  eval_transparent;
+    /* 1 for a builtin whose result is a function of its (evaluated) arguments
+     * alone: it reads no symbol value, option, attribute or other global state
+     * except through evaluate() -- structural predicates, arithmetic, list
+     * operations, control flow.  A rule condition that calls only such
+     * builtins lets the head's failed dispatch be certified as a fixed point
+     * (see eval.c, "dependency-recorded fixed points").  Internal. */
+    uint8_t  eval_pure;
     /* Full 32-bit hash of symbol_name (the bucket is this mod the table size):
      * a chain walk compares it before strcmp.  Module mints a fresh name per
      * call, so a long session interns 10^5-10^6 symbols and every miss used to
@@ -263,6 +281,45 @@ const char* symtab_innermost_head(const Expr* e);
 
 // Get definition for a symbol, or create it if it doesn't exist
 SymbolDef* symtab_get_def(const char* symbol_name);
+/* Dependency recording (eval.c, "dependency-recorded fixed points").  While a
+ * user head's rules are being tried and fail, every definition the attempt
+ * consults is flagged inert_observed -- so a later change to it invalidates a
+ * fixed point certified from that attempt -- and anything that reads state no
+ * flag can watch (an impure builtin, a reused exact-clock stamp) taints it. */
+extern int    g_eval_dep_depth;
+extern bool   g_eval_dep_taint;
+extern size_t g_dep_frame_log0;            /* the innermost frame's first entry */
+void eval_dep_note_slow(SymbolDef* d);     /* logs a tentative mark */
+/* Record that the innermost dispatch frame read `d`: a mark not yet committed
+ * (0), or a tentative one an enclosing frame logged, is logged in this
+ * frame's range so that this frame's certificate commits it. */
+static inline void eval_dep_note(SymbolDef* d) {
+    if (g_eval_dep_depth && d &&
+        (d->inert_observed == 0 ||
+         (d->inert_observed == 1 && d->dep_log_idx < g_dep_frame_log0)))
+        eval_dep_note_slow(d);
+}
+/* `d` is about to be freed (Module-local reclamation): drop it from the log. */
+void eval_dep_forget(SymbolDef* d);
+/* Release `d`'s no-fire memo (its definitions are being dropped). */
+void eval_nofire_free(SymbolDef* d);
+static inline void eval_dep_taint(void) {
+    if (g_eval_dep_depth) g_eval_dep_taint = true;
+}
+
+/* The definition a symbol node names, through the def pointer the node caches
+ * (resolved and stored on first touch).  The pattern the evaluator uses for
+ * call heads: SymbolDef nodes are stable, so the cache stays valid across
+ * redefinition, and writing it on a shared node is benign metadata.  Use it
+ * instead of symtab_get_def(sym->data.symbol.name) wherever the Expr is in
+ * hand: that call hashes the whole name on every use, which the matcher was
+ * paying once per candidate match attempt. */
+static inline SymbolDef* symtab_node_def(const Expr* sym) {
+    Expr* s = (Expr*)sym;
+    SymbolDef* d = s->data.symbol.def;
+    if (!d) { d = symtab_get_def(s->data.symbol.name); s->data.symbol.def = d; }
+    return d;
+}
 /* The node for `name`, interned (not materialised) if new. */
 SymbolDef* intern_symbol_node(const char* name);
 /* symtab_get_def that also reports whether the name was new (*created). */

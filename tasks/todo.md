@@ -1,3 +1,25 @@
+# FeynCalc speed campaign: Mathilda >= 10x the reference kernel (from 2026-11-01, v0.6117)
+
+Plan: ~/.claude/plans/let-s-continue-our-dev-tranquil-bentley.md
+Metric: the geometric mean, over .test files, of T_ref / T_mine, for ids passing in both runs.
+Both kernels run per-dir with `python3 tools/check_feyncalc.py --per-dir --compare-timing <wl dir>`
+(writes packages/feyncalc/harness/TIMING.md). Quick loop: `python3 tools/feyncalc/bench_fc.py --ref-cache <saved>`.
+Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch resets), and `sample <pid>`.
+
+- [x] P0.1 AbsoluteTime[] sub-second (it quantised every harness timing to whole seconds) -- v0.6118
+- [x] P0.2 harness microsecond timing + --compare-timing / TIMING.md; bench_fc.m/.py -- v0.6118
+- [x] P0.3 reference timing run (WL 281 s wall, 100%); baseline v0.6117: corpus 0.414x (files), micro 0.30x
+- [x] P1.1 matcher by-pointer def/attribute lookups (symtab_node_def) -- 15-20%
+- [x] P1.3 Orderless scratch once per call -- 15-25%
+- [x] P1.x Block restore/entry precise invalidation (was a global epoch reset per Block exit)
+- [x] P1.x dependency-recorded fixed points + no-fire memo (Pair: 98k dispatches over 106 distinct exprs) -- micro 0.30x -> 0.66x
+- [x] full ctest + corpus per-dir correctness + timing after the evaluator round (v0.6119): pass set identical
+      (13214), corpus 0.414x -> 0.734x, total compute 1740 s -> 419 s (ref 272 s), wall 1540 s -> 377 s at --jobs 10
+- [ ] integrate the system-wide strcmp -> SYM_ sweep (agent worktree)
+- [ ] P1.2 pattern predicates per stored rule (pat_is_literal / pat_has_optional ~8%)
+- [ ] re-profile: what dominates now (sunF, paveReduce, contractLC are the worst micro ratios)
+- [ ] P2 cliffs from TIMING.md worst files (FCFeynmanRegularizeDivergence 0.015x, ...)
+
 # DDI Vol. 1: close the remaining open cases (2026-10-31, from v0.6100; updated 2026-11-01 at v0.6112)
 
 Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md (supersedes the P-items below where they overlap)

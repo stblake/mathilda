@@ -66,15 +66,17 @@ MatchEnv* env_new(void) {
 }
 
 /* KEY OWNERSHIP: env BORROWS the symbol-name pointer, it does not own it.
- * Every env_set caller passes either an interned symbol name (permanent, owned
- * by the interner) or a string literal ("$OptionsPattern$") -- both outlive any
- * MatchEnv, which is per-match-attempt. So the key is stored directly with no
- * strdup, and env_free / env_rollback never free it. That removes one malloc +
- * one free per binding (millions in recursive rewriting), on top of the struct
- * pool above. Comparison is pointer-first (interned keys hit immediately -- the
- * hot path, since the matcher and replace_bindings both pass
- * sym->data.symbol.name) with a strcmp fallback so the literal callers, whose
- * pointer differs per translation unit, still match correctly. */
+ * Every env_set / env_get caller passes an INTERNED name -- a symbol node's
+ * name, or SYM_EnvOptionsPattern / SYM_EnvOptionsPatternHead for the
+ * OptionsPattern bookkeeping -- which outlives any MatchEnv (per match
+ * attempt). So the key is stored directly with no strdup, and env_free /
+ * env_rollback never free it. That removes one malloc + one free per binding
+ * (millions in recursive rewriting), on top of the struct pool above.
+ * Comparison is by pointer alone. A strcmp fallback for string-literal keys
+ * made every MISS -- the common case in replace_bindings, which looks up each
+ * symbol of a right-hand side -- compare whole names, and FeynCalc's share a
+ * 30-character context prefix (FeynCalc`SharedObjects`Private`x). A new
+ * caller must intern its key (intern_symbol), never pass a literal. */
 void env_free(MatchEnv* env) {
     if (!env) return;
     for (size_t i = 0; i < env->count; i++)
@@ -91,7 +93,7 @@ void env_free(MatchEnv* env) {
 
 void env_set(MatchEnv* env, const char* symbol, Expr* value) {
     for (size_t i = 0; i < env->count; i++) {
-        if (env->symbols[i] == symbol || strcmp(env->symbols[i], symbol) == 0) {
+        if (env->symbols[i] == symbol) {
             expr_free(env->values[i]);
             env->values[i] = expr_copy(value);
             return;
@@ -116,7 +118,7 @@ static void env_rollback(MatchEnv* env, size_t saved_count) {
 
 Expr* env_get(MatchEnv* env, const char* symbol) {
     for (size_t i = 0; i < env->count; i++) {
-        if (env->symbols[i] == symbol || strcmp(env->symbols[i], symbol) == 0) {
+        if (env->symbols[i] == symbol) {
             return env->values[i];
         }
     }
@@ -318,7 +320,7 @@ static bool flat_elem_rejects_group(const Expr* p, const char* flat_head) {
         || h == SYM_RepeatedNull || h == SYM_Except || h == SYM_Verbatim
         || h == SYM_PatternSequence || h == SYM_OptionsPattern)
         return false;
-    SymbolDef* d = symtab_get_def(h);
+    SymbolDef* d = symtab_node_def(hd);
     return !(d && (d->attributes & ATTR_ONEIDENTITY));
 }
 
@@ -408,7 +410,8 @@ static bool flat_elem_single_span(Expr* p, const char* flat_head) {
         h == SYM_Verbatim || h == SYM_OptionsPattern ||
         h == SYM_PatternSequence || h == SYM_OrderlessPatternSequence)
         return false;
-    if ((get_attributes(h) & ATTR_ONEIDENTITY) && p->data.function.arg_count == 1)
+    if ((get_attributes_def(symtab_node_def(hd)) & ATTR_ONEIDENTITY) &&
+        p->data.function.arg_count == 1)
         return false;
     return true;
 }
@@ -451,7 +454,8 @@ static const char* flat_anchor_head(Expr* anchor) {
     if (a->type != EXPR_FUNCTION || !a->data.function.head ||
         a->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* h = a->data.function.head->data.symbol.name;
-    if ((get_attributes(h) & ATTR_ONEIDENTITY) || pat_contains_head(a, SYM_Optional, NULL))
+    if ((get_attributes_def(symtab_node_def(a->data.function.head)) & ATTR_ONEIDENTITY) ||
+        pat_contains_head(a, SYM_Optional, NULL))
         return NULL;
     return h;
 }
@@ -541,7 +545,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
  * does not grow (deep-nesting cases sit close to the C stack limit). */
 static bool head_is_oneidentity(const Expr* h) {
     return h->type == EXPR_SYMBOL &&
-           (get_attributes(h->data.symbol.name) & ATTR_ONEIDENTITY);
+           (get_attributes_def(symtab_node_def(h)) & ATTR_ONEIDENTITY);
 }
 
 static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
@@ -634,10 +638,10 @@ static bool eval_guard_true(Expr* guard, MatchEnv* env) {
      * exactly as the RHS does: `f[x_, OptionsPattern[]] := x /; OptionValue[o] == 1`
      * stores the condition in the pattern, so it is evaluated here, before
      * the RHS is ever built. */
-    Expr* opts = g_guard_rule_head ? env_get(env, "$OptionsPattern$") : NULL;
+    Expr* opts = g_guard_rule_head ? env_get(env, SYM_EnvOptionsPattern) : NULL;
     if (opts) {
         const char* head = g_guard_rule_head;
-        Expr* oh = env_get(env, "$OptionsPatternHead$");
+        Expr* oh = env_get(env, SYM_EnvOptionsPatternHead);
         if (oh && oh->type == EXPR_SYMBOL) head = oh->data.symbol.name;
         Expr* resolved = optionvalue_inject_context(expanded, head, opts);
         expr_free(expanded);
@@ -1283,7 +1287,7 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
      * f[] under Flat; and f[a] gets one match from the ordinary path above,
      * not a second one through f[f[a]]. */
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL) {
-        SymbolDef* def = symtab_get_def(pattern->data.function.head->data.symbol.name);
+        SymbolDef* def = symtab_node_def(pattern->data.function.head);
         bool any_optional = false;
         if (def && (def->attributes & ATTR_ONEIDENTITY)) {
             for (size_t i = 0; i < pattern->data.function.arg_count && !any_optional; i++)
@@ -1634,7 +1638,7 @@ static bool opt_match_prefix(Expr** exprs, size_t take, size_t n_exprs, Expr** p
             Expr* optlist = expr_new_function(expr_new_symbol(SYM_List), items, cnt + nd);
             free(items);
             size_t saved = env->count;
-            env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
+            env_set(env, SYM_EnvOptionsPattern, optlist);  /* env_set copies value */
             expr_free(optlist);
             /* If the pattern is OptionsPattern[s] (a target symbol), record s so
              * OptionValue resolves an unpassed option's DEFAULT against s's
@@ -1643,7 +1647,7 @@ static bool opt_match_prefix(Expr** exprs, size_t take, size_t n_exprs, Expr** p
             if (opt_pat->data.function.arg_count >= 1
                 && opt_pat->data.function.args[0]->type == EXPR_SYMBOL) {
                 Expr* tgt = expr_copy(opt_pat->data.function.args[0]);
-                env_set(env, "$OptionsPatternHead$", tgt);
+                env_set(env, SYM_EnvOptionsPatternHead, tgt);
                 expr_free(tgt);
             }
             /* If the OptionsPattern was named (opts : OptionsPattern[]), also
@@ -1705,7 +1709,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
      * elements enumerate their matches (ReplaceList) is unchanged. */
     if (n_pats >= 2 && n_exprs > 0 && pat_head && pat_head->type == EXPR_SYMBOL
         && (pat_is_blank_single(pats[0]) || pat_is_literal(pats[0]))) {
-        SymbolDef* hd = symtab_get_def(pat_head->data.symbol.name);
+        SymbolDef* hd = symtab_node_def(pat_head);
         uint32_t at = hd ? hd->attributes : 0;
         size_t saved = env->count;
         if (!(at & (ATTR_FLAT | ATTR_ORDERLESS))) {
@@ -1844,7 +1848,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
      * index would shift under reordering. */
     Expr* reorder_storage[MATCH_REORDER_CAP];
     if (n_pats >= 2 && pat_head && pat_head->type == EXPR_SYMBOL) {
-        SymbolDef* hd = symtab_get_def(pat_head->data.symbol.name);
+        SymbolDef* hd = symtab_node_def(pat_head);
         if (hd && (hd->attributes & ATTR_ORDERLESS)) {
             bool any_opt = false, need = false, seen_seq = false;
             for (size_t i = 0; i < n_pats; i++) {
@@ -2039,7 +2043,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     /* OptionsPattern[]: consume the remaining option arguments (each a
      * Rule/RuleDelayed with a symbol/string name, or a List of such rules),
      * flatten them, and bind the collected options under the reserved key
-     * "$OptionsPattern$" so OptionValue can resolve them when the rule fires.
+     * SYM_EnvOptionsPattern so OptionValue can resolve them when the rule fires.
      * It is the least-specific, variable-arity slot, so it greedily takes the
      * whole trailing option run; any remaining non-option argument makes this
      * rule fail to match (e.g. f[OptionsPattern[]] does not match f[x]). */
@@ -2117,7 +2121,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     bool is_orderless = false;
     bool is_flat = false;
     if (pat_head && pat_head->type == EXPR_SYMBOL) {
-        SymbolDef* def = symtab_get_def(pat_head->data.symbol.name);
+        SymbolDef* def = symtab_node_def(pat_head);
         if (def) {
             if (def->attributes & ATTR_FLAT) is_flat = true;
             if (def->attributes & ATTR_ORDERLESS) is_orderless = true;
@@ -2185,7 +2189,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 && inner_hn != SYM_PatternTest && inner_hn != SYM_Optional
                 && inner_hn != SYM_Shortest && inner_hn != SYM_Longest
                 && inner_hn != SYM_Repeated && inner_hn != SYM_RepeatedNull) {
-                SymbolDef* idef = symtab_get_def(inner_hn);
+                SymbolDef* idef = symtab_node_def(inner_p->data.function.head);
                 bool has_oid = idef && (idef->attributes & ATTR_ONEIDENTITY);
                 /* OneIdentity lets a group be absorbed by a one-argument
                  * pattern, or through defaults -- Power[y_, n_.] takes the
@@ -2267,6 +2271,17 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         }
     }
 
+    /* Orderless scratch: the subset (k elements), the remainder (n - k) and the
+     * index combination (k ints) of every span and every combination tried by
+     * the loop below fit in ONE block of n_exprs pointers + n_exprs ints.  Each
+     * combination's recursion has returned before the next combination is
+     * extracted, so the block is reused throughout; it is allocated once per
+     * call instead of three times per combination (that malloc/free pair was
+     * the largest single cost of matching a Times/Plus pattern). */
+    Expr** oscratch = NULL;
+    if (is_orderless && min_k <= max_k && n_exprs > 0)
+        oscratch = malloc(n_exprs * (sizeof(Expr*) + sizeof(int)));
+
     if (min_k <= max_k) {
         for (size_t step = 0; step <= max_k - min_k; step++) {
             size_t k = is_longest ? (max_k - step) : (min_k + step);
@@ -2276,10 +2291,10 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             /* comb (the index combination) is only consumed by extract_subset
              * and advanced by next_combination -- both Orderless-only below.
              * For an ordered head the consumed run is always the prefix, so skip
-             * allocating and filling it entirely. */
+             * filling it entirely. */
             int* comb = NULL;
             if (k > 0 && is_orderless) {
-                comb = malloc(k * sizeof(int));
+                comb = (int*)(oscratch + n_exprs);
                 for (int i = 0; i < (int)k; i++) comb[i] = i;
             }
 
@@ -2311,20 +2326,18 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
              * read-only here (type checks, and expr_copy into seq_val/matched_val)
              * and in the recursive callee, so sharing is safe. `_owned` holds the
              * heap copies to free; they stay NULL in the borrow case, so the
-             * free sites below are no-ops. Only the Orderless path still copies. */
+             * Only the Orderless path copies, into the per-call oscratch. */
             Expr** subset = NULL;
             Expr** remainder = NULL;
-            Expr** subset_owned = NULL;
-            Expr** remainder_owned = NULL;
             if (!is_orderless) {
                 subset = exprs;                 /* only [0..k-1] are read */
                 remainder = exprs + k;          /* contiguous suffix */
             } else {
-                if (k > 0 && need_subset) subset_owned = malloc(k * sizeof(Expr*));
-                if (n_exprs - k > 0) remainder_owned = malloc((n_exprs - k) * sizeof(Expr*));
-                extract_subset(exprs, n_exprs, comb, (int)k, subset_owned, remainder_owned);
-                subset = subset_owned;
-                remainder = remainder_owned;
+                Expr** subset_buf = (k > 0 && need_subset) ? oscratch : NULL;
+                Expr** remainder_buf = (n_exprs - k > 0) ? oscratch + k : NULL;
+                extract_subset(exprs, n_exprs, comb, (int)k, subset_buf, remainder_buf);
+                subset = subset_buf;
+                remainder = remainder_buf;
             }
 
             size_t saved_env = env->count;
@@ -2381,9 +2394,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                                           is_orderless ? NULL : pat_head, seq_commit, &sc)
                         : seq_commit(env, &sc);
                     if (done) {
-                        if (subset_owned) free(subset_owned);
-                        if (remainder_owned) free(remainder_owned);
-                        if (comb) free(comb);
+                        free(oscratch);
                         return true;
                     }
                 }
@@ -2435,7 +2446,9 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                         ParentMatch cont = { remainder, n_exprs - k, pats + 1, n_pats - 1,
                                              condition, pat_head, total_pats, parent };
                         if (match_internal(matched_val, inner_p, env, &cont)) {
-                            expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
+                            expr_free(matched_val);
+                            free(oscratch);
+                            return true;
                         }
                     }
                     env_rollback(env, saved_env_inner);
@@ -2445,14 +2458,11 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             }
 
             env_rollback(env, saved_env);
-            if (subset_owned) free(subset_owned);
-            if (remainder_owned) free(remainder_owned);
 
         } while (is_orderless && !lit_done && next_combination(comb, n_exprs, (int)k));
-        
-        if (comb) free(comb);
         }
     }
+    free(oscratch);
 
     if (is_optional && !is_shortest) {
         size_t saved_env_count = env->count;
@@ -2925,7 +2935,7 @@ Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv
     size_t n = expr->data.function.arg_count;
     if (pat_arity < 1 || n <= pat_arity) return NULL;
     /* (c) only now, the attribute lookup: the head must actually be Flat */
-    uint32_t attrs = get_attributes(flat_head);
+    uint32_t attrs = get_attributes_def(symtab_node_def(headnode));
     if (!(attrs & ATTR_FLAT)) return NULL;
     /* (d) an Orderless head with a free trailing catcher cannot gain a match */
     if ((attrs & ATTR_ORDERLESS) && flat_has_free_rest(pattern, inner, replacement))

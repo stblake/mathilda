@@ -138,6 +138,7 @@ static void litidx_drop(SymbolDef* d);
 
 static void reset_node_payload(SymbolDef* d) {
     litidx_drop(d);
+    eval_nofire_free(d);
     free_rule_list(d->own_values);   d->own_values = NULL;
     free_rule_list(d->down_values);  d->down_values = NULL;
     free_rule_list(d->sub_values);   d->sub_values = NULL;
@@ -433,6 +434,7 @@ static bool temp_try_reclaim(SymbolDef* d) {
 
     /* Nothing outside refers to it: drop the definitions (their nodes go to 0),
      * unlink and free the node and its name. */
+    if (d->inert_observed == 1) eval_dep_forget(d);
     reset_node_payload(d);
     size_t idx = d->name_hash & (symtab_size - 1);
     for (SymbolDef** pp = &symtab[idx]; *pp; pp = &(*pp)->next) {
@@ -615,10 +617,14 @@ void symtab_set_options(const char* symbol_name, Expr* list) {
     SymbolDef* def = symtab_get_def(symbol_name);
     if (def->default_options) expr_free(def->default_options);
     def->default_options = list;
+    /* Options[f] = ... / SetOptions change what OptionValue reads: a change of
+     * f's definitions, invalidating what relied on them (eval.c). */
+    eval_clock_bump_binding(def);
 }
 
 Expr* symtab_get_options(const char* symbol_name) {
     SymbolDef* def = symtab_lookup(symbol_name);
+    eval_dep_note(def);              /* OptionValue / Options read f's options */
     return def ? def->default_options : NULL;
 }
 
@@ -1235,10 +1241,10 @@ static Expr* scoped_condition_rewrite(Expr* rhs) {
     }
     Expr* cond = *slot;
     if (!head_sym_is(cond, SYM_Condition, 2)) return root;
-    Expr* tq = expr_new_function(expr_new_symbol("TrueQ"),
+    Expr* tq = expr_new_function(expr_new_symbol(SYM_TrueQ),
                                  (Expr*[]){ expr_copy(cond->data.function.args[1]) }, 1);
     Expr* ifargs[3] = { tq, expr_copy(cond->data.function.args[0]),
-                        expr_new_symbol("$ScopedConditionFail$") };
+                        expr_new_symbol(SYM_ScopedConditionFail) };
     Expr* iff = expr_new_function(expr_new_symbol(SYM_If), ifargs, 3);
     expr_free(cond);
     *slot = iff;
@@ -1252,7 +1258,7 @@ static Expr* try_scoped_condition(Expr* bound) {
     Expr* rw = scoped_condition_rewrite(bound);
     Expr* v = evaluate(rw);
     expr_free(rw);
-    if (v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "$ScopedConditionFail$") == 0) {
+    if (v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_ScopedConditionFail) {
         expr_free(v);
         return NULL;
     }
@@ -2185,16 +2191,17 @@ bool symtab_remove_matching_sub_value(const char* symbol_name, const Expr* lhs) 
  * OptionValue resolved and a scoped guard tested, or NULL. */
 Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
     if (!def || !def->sub_values || !expr || expr->type != EXPR_FUNCTION) return NULL;
+    eval_dep_note(def);
     for (Rule* rule = def->sub_values; rule; rule = rule->next) {
         MatchEnv* env = env_new();
         const char* prev_head = match_set_rule_head(def->symbol_name);
         Expr* result = match(expr, rule->pattern, env) ? replace_bindings(rule->replacement, env) : NULL;
         match_set_rule_head(prev_head);
         if (!result) { env_free(env); continue; }
-        Expr* opts = env_get(env, "$OptionsPattern$");
+        Expr* opts = env_get(env, SYM_EnvOptionsPattern);
         if (opts) {
             const char* hs = def->symbol_name;
-            Expr* oh = env_get(env, "$OptionsPatternHead$");
+            Expr* oh = env_get(env, SYM_EnvOptionsPatternHead);
             if (oh && oh->type == EXPR_SYMBOL) hs = oh->data.symbol.name;
             Expr* resolved = optionvalue_inject_context(result, hs, opts);
             expr_free(result);
@@ -2235,6 +2242,7 @@ void symtab_clear(void) {
 
 Rule* symtab_get_own_values(const char* symbol_name) {
     SymbolDef* d = node_find(symbol_name);
+    eval_dep_note(d);       /* a global read from C ($MaxExtraPrecision, ...) */
     return d ? d->own_values : NULL;
 }
 
@@ -2266,9 +2274,112 @@ static const char* input_arg_head_canon(const Expr* arg) {
 /* Phase 3a: def-threaded entry point. The evaluator resolves the head's def
  * once per evaluate_step and passes it here, so DownValue dispatch does not
  * re-hash the head. `def` must be the definition of `expr`'s (symbol) head. */
+/* ------------------------------------------------------------------
+ * MATHILDA_DISPATCH_STATS=1: per-symbol rule-dispatch counters, printed to
+ * stderr at exit, largest number of match attempts first.  For each symbol
+ * carrying DownValues or UpValues: how often its rules were consulted
+ * (calls), how many candidate rules reached the matcher after the dispatch
+ * filters (tries), and how many fired (hits).  tries/calls is the cost the
+ * filters failed to remove; it names the head whose rule index is worth
+ * improving.  Off by default: one predictable branch per consultation.
+ * ------------------------------------------------------------------ */
+typedef struct { SymbolDef* d; char kind; uint64_t calls, tries, hits, distinct; } DispatchStat;
+enum { DSTAT_CAP = 8192 };
+static DispatchStat* g_dstat = NULL;
+/* Set of (def, structural hash) seen, for the distinct-expression count. */
+enum { DSEEN_CAP = 1 << 21 };
+static uint64_t* g_dseen = NULL;
+static bool dstat_first_sight(SymbolDef* d, Expr* e) {
+    if (!g_dseen) g_dseen = calloc(DSEEN_CAP, sizeof(uint64_t));
+    if (!g_dseen) return false;
+    uint64_t k = (expr_hash(e) * 0x9E3779B97F4A7C15ull) ^ (uint64_t)(uintptr_t)d;
+    if (!k) k = 1;
+    size_t h = (size_t)(k >> 11) & (DSEEN_CAP - 1);
+    for (size_t probe = 0; probe < 64; probe++, h = (h + 1) & (DSEEN_CAP - 1)) {
+        if (g_dseen[h] == k) return false;
+        if (!g_dseen[h]) { g_dseen[h] = k; return true; }
+    }
+    return false;
+}
+static int g_dstat_on = -1;
+
+static void dstat_report(void) {
+    if (!g_dstat) return;
+    size_t n = 0;
+    for (size_t i = 0; i < DSTAT_CAP; i++) if (g_dstat[i].d) g_dstat[n++] = g_dstat[i];
+    for (size_t i = 1; i < n; i++) {               /* insertion sort, by tries */
+        DispatchStat t = g_dstat[i];
+        size_t j = i;
+        uint64_t kt = (t.kind == 'B' || t.kind == 'T') ? t.calls : t.tries;
+        while (j > 0 && ((g_dstat[j - 1].kind == 'B' || g_dstat[j - 1].kind == 'T') ? g_dstat[j - 1].calls : g_dstat[j - 1].tries) < kt) {
+            g_dstat[j] = g_dstat[j - 1]; j--;
+        }
+        g_dstat[j] = t;
+    }
+    uint64_t tot = 0;
+    for (size_t i = 0; i < n; i++) tot += g_dstat[i].tries;
+    fprintf(stderr, "dispatch stats: %llu match attempts (distinct: different expressions "
+            "among the calls)\n%-40s %4s %12s %12s %12s %12s %8s\n",
+            (unsigned long long)tot, "symbol", "kind", "calls", "distinct", "tries", "hits", "try/call");
+    for (size_t i = 0; i < n && i < 60; i++) {
+        DispatchStat* x = &g_dstat[i];
+        fprintf(stderr, "%-40s %4c %12llu %12llu %12llu %12llu %8.1f\n", x->d->symbol_name, x->kind,
+                (unsigned long long)x->calls, (unsigned long long)x->distinct, (unsigned long long)x->tries,
+                (unsigned long long)x->hits, x->calls ? (double)x->tries / (double)x->calls : 0.0);
+    }
+    extern uint64_t g_epoch_counts[8];
+    fprintf(stderr, "INERT epoch advances: clock_bump %llu, observed binding %llu, "
+            "rule_epoch_bump %llu; bindings that kept it %llu\n",
+            (unsigned long long)g_epoch_counts[0], (unsigned long long)g_epoch_counts[1],
+            (unsigned long long)g_epoch_counts[3], (unsigned long long)g_epoch_counts[2]);
+    fprintf(stderr, "dependency frames: certified %llu, tainted %llu, clock moved %llu, "
+            "rule fired %llu\n",
+            (unsigned long long)g_epoch_counts[4], (unsigned long long)g_epoch_counts[5],
+            (unsigned long long)g_epoch_counts[6], (unsigned long long)g_epoch_counts[7]);
+    free(g_dstat);
+    g_dstat = NULL;
+    free(g_dseen);
+    g_dseen = NULL;
+}
+
+/* The counter slot for (def, kind), or NULL when stats are off (or full). */
+static DispatchStat* dstat_slot(SymbolDef* d, char kind) {
+    if (g_dstat_on < 0) {
+        const char* v = getenv("MATHILDA_DISPATCH_STATS");
+        g_dstat_on = (v && *v && strcmp(v, "0") != 0);
+        if (g_dstat_on) {
+            g_dstat = calloc(DSTAT_CAP, sizeof(DispatchStat));
+            if (!g_dstat) g_dstat_on = 0;
+            else atexit(dstat_report);
+        }
+    }
+    if (!g_dstat_on || !g_dstat) return NULL;
+    size_t h = (((uintptr_t)d >> 4) * 31u + (size_t)kind) & (DSTAT_CAP - 1);
+    for (size_t probe = 0; probe < DSTAT_CAP; probe++, h = (h + 1) & (DSTAT_CAP - 1)) {
+        if (g_dstat[h].d == d && g_dstat[h].kind == kind) return &g_dstat[h];
+        if (!g_dstat[h].d) { g_dstat[h].d = d; g_dstat[h].kind = kind; return &g_dstat[h]; }
+    }
+    return NULL;
+}
+
+/* A builtin `d` that tainted a dependency frame (kind 'T'). */
+void dispatch_stats_taint(SymbolDef* d) {
+    DispatchStat* ds = g_dstat_on ? dstat_slot(d, 'T') : NULL;
+    if (ds) ds->calls++;
+}
+
+/* An OwnValue binding of `d` that advanced the INERT epoch (kind 'B'). */
+void dispatch_stats_epoch_advance(SymbolDef* d) {
+    DispatchStat* ds = g_dstat_on ? dstat_slot(d, 'B') : NULL;
+    if (ds) ds->calls++;
+}
+
 Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
     if (!def || !expr || expr->type != EXPR_FUNCTION) return NULL;
     if (!def->down_values) return NULL;
+    eval_dep_note(def);
+    DispatchStat* ds = g_dstat_on ? dstat_slot(def, 'D') : NULL;   /* -1: first use, initialise */
+    if (ds) { ds->calls++; if (dstat_first_sight(def, expr)) ds->distinct++; }
 
     /* §3.5 dispatch filter: pre-compute the input's shape once, then
      * compare against each rule's cached key before invoking the
@@ -2323,6 +2434,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
             continue;
         }
 
+        if (ds) ds->tries++;
         MatchEnv* env = env_new();
         /* Phase 1 stays inline (identical to the pre-feature fast path); only a
          * failed match falls through to Flat-head leftover matching (Phase 2). */
@@ -2333,10 +2445,10 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
         match_set_rule_head(prev_head);
         if (result && rule->scoped_cond) {
             /* Resolve OptionValue first (below), then test the scoped guard. */
-            Expr* opts0 = env_get(env, "$OptionsPattern$");
+            Expr* opts0 = env_get(env, SYM_EnvOptionsPattern);
             if (opts0) {
                 const char* hs = def->symbol_name;
-                Expr* oh = env_get(env, "$OptionsPatternHead$");
+                Expr* oh = env_get(env, SYM_EnvOptionsPatternHead);
                 if (oh && oh->type == EXPR_SYMBOL) hs = oh->data.symbol.name;
                 Expr* resolved = optionvalue_inject_context(result, hs, opts0);
                 expr_free(result);
@@ -2353,13 +2465,13 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
              * context-dependent OptionValue[...] nodes in the RHS into explicit
              * OptionValue[head, opts, name] form so they resolve against the
              * supplied options and the head's defaults. */
-            Expr* opts = env_get(env, "$OptionsPattern$");
+            Expr* opts = env_get(env, SYM_EnvOptionsPattern);
             if (opts) {
                 /* OptionsPattern[s] resolves an unpassed option's default
                  * against s's Options (A9); a bare OptionsPattern[] falls back
                  * to the enclosing definition's own head. */
                 const char* head_sym = def->symbol_name;
-                Expr* optpat_head = env_get(env, "$OptionsPatternHead$");
+                Expr* optpat_head = env_get(env, SYM_EnvOptionsPatternHead);
                 if (optpat_head && optpat_head->type == EXPR_SYMBOL)
                     head_sym = optpat_head->data.symbol.name;
                 Expr* resolved =
@@ -2368,6 +2480,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
                 result = resolved;
             }
             env_free(env);
+            if (ds) ds->hits++;
             return rule_result(rule, result, def->symbol_name);
         }
         env_free(env);
@@ -2397,6 +2510,7 @@ Expr* apply_own_values(Expr* expr) {
         def = symtab_get_def(expr->data.symbol.name);
         expr->data.symbol.def = def;
     }
+    eval_dep_note(def);              /* a value, or its absence, was read */
     Rule* rule = def->own_values;
     while (rule) {
         /* Fast path for the ubiquitous `x = value` OwnValue: the pattern is a
@@ -2465,6 +2579,7 @@ Rule* symtab_get_up_values(const char* symbol_name) {
  * NULL. `expr` is borrowed. */
 static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless) {
     if (!def || !def->up_values) return NULL;
+    eval_dep_note(def);
 
     const int32_t input_arity = (int32_t)expr->data.function.arg_count;
     const char* input_first_head =
@@ -2474,7 +2589,9 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
      * so the arity key is a lower bound and the matched run can sit anywhere. */
     const bool enclosing_flat =
         expr->data.function.head->type == EXPR_SYMBOL &&
-        (get_attributes(expr->data.function.head->data.symbol.name) & ATTR_FLAT) != 0;
+        (get_attributes_def(symtab_node_def(expr->data.function.head)) & ATTR_FLAT) != 0;
+    DispatchStat* ds = g_dstat_on ? dstat_slot(def, 'U') : NULL;   /* -1: first use, initialise */
+    if (ds) { ds->calls++; if (dstat_first_sight(def, expr)) ds->distinct++; }
 
     for (Rule* rule = def->up_values; rule; rule = rule->next) {
         if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity &&
@@ -2491,6 +2608,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
             rule->first_arg_head_canon != input_first_head)
             continue;
 
+        if (ds) ds->tries++;
         MatchEnv* env = env_new();
         /* Phase 1 inline (unchanged fast path); failed match -> Flat leftover. */
         const char* prev_head = match_set_rule_head(
@@ -2508,14 +2626,14 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
             continue;
         }
         if (result) {
-            Expr* opts = env_get(env, "$OptionsPattern$");
+            Expr* opts = env_get(env, SYM_EnvOptionsPattern);
             if (opts) {
                 /* For an upvalue, OptionsPattern[]'s enclosing head is `expr`'s
                  * head (the outer call), not the tag `def` we are keyed on. */
                 const char* head_sym = def->symbol_name;
                 Expr* eh = expr->data.function.head;
                 if (eh && eh->type == EXPR_SYMBOL) head_sym = eh->data.symbol.name;
-                Expr* optpat_head = env_get(env, "$OptionsPatternHead$");
+                Expr* optpat_head = env_get(env, SYM_EnvOptionsPatternHead);
                 if (optpat_head && optpat_head->type == EXPR_SYMBOL)
                     head_sym = optpat_head->data.symbol.name;
                 Expr* resolved = optionvalue_inject_context(result, head_sym, opts);
@@ -2523,6 +2641,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
                 result = resolved;
             }
             env_free(env);
+            if (ds) ds->hits++;
             return rule_result(rule, result, def->symbol_name);
         }
         env_free(env);
@@ -2593,7 +2712,7 @@ static Expr* apply_up_values_core(Expr* expr) {
      * and the Plus/Times builtin re-sorts its args immediately afterwards; do not
      * rely on `expr` keeping its original argument order across this call. */
     bool orderless = expr->data.function.head->type == EXPR_SYMBOL &&
-        (get_attributes(expr->data.function.head->data.symbol.name) & ATTR_ORDERLESS) != 0;
+        (get_attributes_def(symtab_node_def(expr->data.function.head)) & ATTR_ORDERLESS) != 0;
     if (orderless && expr->data.function.arg_count > 1) {
         expr_orderless_sort(expr->data.function.args, expr->data.function.arg_count);
         expr_invalidate_hash(expr);

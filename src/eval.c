@@ -122,7 +122,13 @@ static uint64_t g_eval_clock = 1;
  * Module local is. */
 static uint64_t g_inert_epoch = 1;
 uint64_t eval_clock_get(void) { return g_eval_clock; }
-void     eval_clock_bump(void) { g_eval_clock++; g_inert_epoch = g_eval_clock; }
+/* How often each kind of bump advanced the INERT epoch (MATHILDA_DISPATCH_STATS
+ * prints them): [0] eval_clock_bump, [1] a binding of an observed symbol,
+ * [2] a binding that left the epoch alone, [3] eval_rule_epoch_bump; and the
+ * dependency frames of failed dispatches: [4] certified, [5] tainted,
+ * [6] the clock moved, [7] a rule fired. */
+uint64_t g_epoch_counts[8];
+void     eval_clock_bump(void) { g_eval_clock++; g_inert_epoch = g_eval_clock; g_epoch_counts[0]++; }
 static inline bool ground_head_name(const char* n);
 static inline bool inert_builtin_head(const char* n);
 /* A binding or a DownValue for `def`: an INERT node can depend on it only if
@@ -130,11 +136,18 @@ static inline bool inert_builtin_head(const char* n);
  * builtin heads an INERT node may carry, whose rules are not flagged. */
 void     eval_clock_bump_binding(SymbolDef* def) {
     g_eval_clock++;
-    if (!def) { g_inert_epoch = g_eval_clock; return; }
-    if (def->inert_observed || inert_builtin_head(def->symbol_name) ||
+    if (!def) { g_inert_epoch = g_eval_clock; g_epoch_counts[1]++; return; }
+    /* A TENTATIVE mark (1) is only ever held by a dispatch frame still open,
+     * and this bump moves the clock, which fails every open frame: no
+     * certificate can come to rest on it, so only a committed mark counts. */
+    if (def->inert_observed == 2 || inert_builtin_head(def->symbol_name) ||
         ground_head_name(def->symbol_name)) {
         g_inert_epoch = g_eval_clock;
         def->inert_observed = 0;
+        g_epoch_counts[1]++;
+        { extern void dispatch_stats_epoch_advance(SymbolDef*); dispatch_stats_epoch_advance(def); }
+    } else {
+        g_epoch_counts[2]++;
     }
 }
 
@@ -174,9 +187,29 @@ uint64_t eval_rule_epoch_get(void)  { return g_last_rule_change_clock; }
 void     eval_rule_epoch_mark(void) { g_last_rule_change_clock = g_eval_clock; }
 /* Bump the clock AND record it as a rule change (attribute/Protect sites). */
 void     eval_rule_epoch_bump(void) {
+    g_epoch_counts[3]++;
     g_eval_clock++;
     g_last_rule_change_clock = g_eval_clock;
     g_inert_epoch = g_eval_clock;
+}
+
+/* A definition swapped wholesale behind add_rule's back -- Block localising a
+ * symbol on entry and putting its values back on exit.  That is a change of
+ * `def`'s own/down/up values (and, when `attrs_changed`, its attributes), and
+ * nothing else, so it invalidates exactly what such a change can reach:
+ *   - every exact-clock stamp (the clock is bumped);
+ *   - INERT stamps only if one relied on `def` (eval_clock_bump_binding);
+ *   - GROUND stamps only if `def` is one of the six constructor heads a GROUND
+ *     node is built from -- nothing else can change a GROUND node's value;
+ *   - an attribute change stays a global rule change, as at every other
+ *     attribute site.
+ * Advancing the global rule epoch instead (the old Block restore) reset every
+ * cached fixed point in the session on every Block exit: FeynCalc exits ~50k
+ * Blocks in a single TID call and re-ran each Pair's 36 rules ~900 times. */
+void eval_bump_definition_swap(SymbolDef* def, bool attrs_changed) {
+    if (attrs_changed || !def) { eval_rule_epoch_bump(); return; }
+    eval_clock_bump_binding(def);
+    if (ground_head_name(def->symbol_name)) g_last_rule_change_clock = g_eval_clock;
 }
 
 /* The top bit of `last_evaluated_at` is a benign GROUND flag: the clock is a
@@ -293,6 +326,139 @@ static bool node_compute_ground(const Expr* e) {
 static inline bool inert_builtin_head(const char* n) {
     return n == SYM_Plus || n == SYM_Times || n == SYM_Power;
 }
+
+/* ---- Dependency-recorded fixed points -------------------------------------
+ * A call f[args] on a head with rules, none of which fires, is a fixed point
+ * whose verdict depends on f's rules, on the arguments, and on whatever the
+ * failed attempts consulted -- the definitions and values the rule conditions
+ * read.  It is certified INERT like a rule-free call when:
+ *   - every argument is INERT (or GROUND) or a leaf, as for any INERT node;
+ *   - while its UpValues and DownValues were tried (one "frame"), every
+ *     definition consulted -- dispatched on, or a value read -- was flagged
+ *     inert_observed (eval_dep_note), so changing any of them later advances
+ *     the INERT epoch (eval_clock_bump_binding) and kills the stamp;
+ *   - nothing in the frame read state no flag watches: every builtin called is
+ *     eval_pure, no exact-clock stamp was reused (its validity is the clock's,
+ *     not a flag's), and the clock did not move (no binding, no definition);
+ *   - nothing touched the node between that dispatch and its fixed-point stamp
+ *     (g_dep_cert names the node and the clock it was certified at).
+ * Attribute changes and every conservative clock bump advance the INERT epoch
+ * unconditionally, as for any INERT node.  Stricter than the reference, which
+ * reuses such a result even when only a condition's global changed (and needs
+ * Update[] for it); here that change invalidates it.
+ *
+ * Why: FeynCalc evaluates Pair[Momentum[p, D], Momentum[q, D]] ~1000 times per
+ * distinct expression, and each evaluation tried 36 Pair rules and 2 x 11
+ * Momentum rules that never fire -- 90% of all match attempts in a TID call. */
+int  g_eval_dep_depth = 0;
+bool g_eval_dep_taint = false;
+/* Tentative marks.  A frame's whole evaluation feeds the dependency set -- a
+ * scoped condition (lhs := body /; cond) evaluates the rule's entire body to
+ * reach its guard -- but most frames end with a rule firing, and then nothing
+ * relies on what they read.  Marking all of it for good made every later
+ * binding of a FeynCalc Block local (flowcontrol, tmp, ...) advance the INERT
+ * epoch: 49k advances in one TID call.  So a symbol read inside a frame is
+ * marked 1 and logged in that frame's range [g_dep_frame_log0, n) -- again,
+ * if an enclosing frame logged it first.  A certificate commits its own
+ * frame's range (1 -> 2); a frame that issues none leaves its range to the
+ * enclosing frame, whose own certificate covers it (its verdict rests on the
+ * nested evaluation); when the outermost frame ends, every mark still 1 is
+ * cleared. */
+static SymbolDef** g_dep_log = NULL;
+static size_t      g_dep_log_n = 0, g_dep_log_cap = 0;
+size_t             g_dep_frame_log0 = 0;
+
+void eval_dep_note_slow(SymbolDef* d) {
+    if (g_dep_log_n == g_dep_log_cap) {
+        size_t c = g_dep_log_cap ? 2 * g_dep_log_cap : 256;
+        SymbolDef** a = realloc(g_dep_log, c * sizeof(SymbolDef*));
+        if (!a) { d->inert_observed = 2; return; }    /* unlogged: keep for good */
+        g_dep_log = a;
+        g_dep_log_cap = c;
+    }
+    d->inert_observed = 1;
+    d->dep_log_idx = (uint32_t)g_dep_log_n;
+    g_dep_log[g_dep_log_n++] = d;
+}
+
+void eval_dep_forget(SymbolDef* d) {
+    for (size_t i = 0; i < g_dep_log_n; i++)
+        if (g_dep_log[i] == d) g_dep_log[i] = NULL;
+}
+
+/* ---- No-fire memo ---------------------------------------------------------
+ * A certificate says "no rule of f fires on the call E", resting on the
+ * dependencies its frame committed.  The same E is very often rebuilt as a
+ * FRESH node -- a rule's right-hand side, a ReplaceAll result -- which carries
+ * no stamp, so the INERT check cannot see it was settled: 37k of the 98k Pair
+ * dispatches in a TID call were on fresh nodes.  The memo keeps the certified
+ * calls per head, direct-mapped by structural hash; a hit on an equal call
+ * stands for the dispatch itself (same structure, same bindings, same
+ * conditions), valid while the INERT epoch has not moved past the entry -- the
+ * same validity, and the same dependencies, as the certificate's own stamp.
+ * Holding a key is a refcount bump on the node already built. */
+enum { NOFIRE_SLOTS = 64 };
+typedef struct NoFireMemo {
+    Expr*    key[NOFIRE_SLOTS];
+    uint64_t stamp[NOFIRE_SLOTS];
+} NoFireMemo;
+
+void eval_nofire_free(SymbolDef* d) {
+    if (!d || !d->nofire) return;
+    for (size_t i = 0; i < NOFIRE_SLOTS; i++) if (d->nofire->key[i]) expr_free(d->nofire->key[i]);
+    free(d->nofire);
+    d->nofire = NULL;
+}
+
+static bool nofire_hit(SymbolDef* d, Expr* e) {
+    NoFireMemo* m = d->nofire;
+    if (!m) return false;
+    size_t s = (size_t)(expr_hash(e) % NOFIRE_SLOTS);
+    Expr* k = m->key[s];
+    return k && m->stamp[s] >= g_inert_epoch && (k == e || expr_eq(k, e));
+}
+
+static void nofire_store(SymbolDef* d, Expr* e) {
+    if (!d->nofire) {
+        d->nofire = calloc(1, sizeof(NoFireMemo));
+        if (!d->nofire) return;
+    }
+    size_t s = (size_t)(expr_hash(e) % NOFIRE_SLOTS);
+    if (d->nofire->key[s]) expr_free(d->nofire->key[s]);
+    d->nofire->key[s] = expr_copy(e);
+    d->nofire->stamp[s] = g_eval_clock;
+    d->inert_observed = 2;          /* a new rule for d must invalidate the entry */
+}
+
+/* A certificate was issued: commit what its frame read. */
+static void dep_log_commit(size_t from) {
+    for (size_t i = from; i < g_dep_log_n; i++)
+        if (g_dep_log[i] && g_dep_log[i]->inert_observed == 1) g_dep_log[i]->inert_observed = 2;
+}
+
+/* The outermost frame ended: clear the marks no certificate committed. */
+static void dep_log_release(void) {
+    for (size_t i = 0; i < g_dep_log_n; i++)
+        if (g_dep_log[i] && g_dep_log[i]->inert_observed == 1) g_dep_log[i]->inert_observed = 0;
+    g_dep_log_n = 0;
+}
+static const Expr* g_dep_cert_node = NULL;
+static uint64_t    g_dep_cert_clock = 0;
+/* A user head whose failed dispatch may be certified: rules, no builtin, no
+ * OwnValue (a valued head is not left alone by the evaluator). */
+static int g_dep_cert_off = -1;     /* MATHILDA_NO_DEP_CERT=1: A/B kill switch */
+static inline bool dep_cert_head(const SymbolDef* d) {
+    if (g_dep_cert_off < 0) {
+        const char* v = getenv("MATHILDA_NO_DEP_CERT");
+        g_dep_cert_off = (v && *v && strcmp(v, "0") != 0);
+    }
+    return !g_dep_cert_off && d && !d->builtin_func && !d->own_values &&
+           (d->down_values || d->sub_values
+#if UP_VALUES
+            || d->up_values
+#endif
+           );
+}
 static inline SymbolDef* inert_sym_def(Expr* s) {
     SymbolDef* d = s->data.symbol.def;
     if (!d) { d = symtab_get_def(s->data.symbol.name); s->data.symbol.def = d; }
@@ -312,9 +478,14 @@ static inline bool is_inert_now(Expr* a) {
         case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
             return true;
         case EXPR_SYMBOL: {
+            /* A leaf's builtin never runs -- a bare symbol evaluates only
+             * through its OwnValues -- so a Protected builtin symbol (D as
+             * FeynCalc's dimension, Pi) is as inert as a rule-free one:
+             * changing it at all takes Unprotect, which advances the epoch. */
             SymbolDef* d = inert_sym_def(a);
-            if (!d || d->own_values || d->builtin_func) return false;
-            d->inert_observed = 1;
+            if (!d || d->own_values ||
+                (d->builtin_func && !(d->attributes & ATTR_PROTECTED))) return false;
+            d->inert_observed = 2;   /* committed: a stamp relies on it */
             return true;
         }
         case EXPR_FUNCTION:
@@ -330,8 +501,10 @@ static bool node_compute_inert(Expr* e) {
     const char* hn = h->data.symbol.name;
     if (!inert_builtin_head(hn) && !ground_head(h)) {
         SymbolDef* d = inert_sym_def(h);
-        if (!inert_bare_symbol(d)) return false;
-        d->inert_observed = 1;
+        if (!inert_bare_symbol(d) &&
+            !(e == g_dep_cert_node && g_dep_cert_clock == g_eval_clock && dep_cert_head(d)))
+            return false;
+        d->inert_observed = 2;   /* committed: a stamp relies on it */
     }
     size_t n = e->data.function.arg_count;
     Expr* const* args = e->data.function.args;
@@ -1618,7 +1791,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * limit reflects the value the user expects to see when they read
          * the symbol back. If validation fails, the OwnValue is rolled back
          * to the current C-side limit. */
-        if (strcmp(lhs->data.symbol.name, "$RecursionLimit") == 0) {
+        if (lhs->data.symbol.name == SYM_DollarRecursionLimit) {
             Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
             sync_recursion_limit_from_value(probe);
             expr_free(probe);
@@ -3114,6 +3287,33 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                  * symbols (which is most builtin-bearing heads) are
                  * unaffected because apply_assignment refuses to install
                  * DownValues on a Protected target. */
+                /* A user head's failed dispatch is recorded so it can be
+                 * certified as a fixed point (dependency-recorded fixed
+                 * points, above node_compute_inert). */
+                bool dep_frame = dep_cert_head(hdef);
+                const bool nofire = dep_frame && !hold_all_complete && nofire_hit(hdef, res);
+                if (nofire) {
+                    /* Settled before, nothing it read has changed since: the
+                     * dispatch would fire nothing.  Certify this node too. */
+                    dep_frame = false;
+                    g_dep_cert_node = res;
+                    g_dep_cert_clock = g_eval_clock;
+                }
+                bool dep_outer_taint = false;
+                uint64_t dep_clock0 = 0;
+                size_t dep_outer_log0 = 0;
+                unsigned long dep_msgs0 = 0;
+                if (dep_frame) {
+                    dep_msgs0 = mth_msg_fired_count();
+                    dep_outer_taint = g_eval_dep_taint;
+                    g_eval_dep_taint = false;
+                    g_eval_dep_depth++;
+                    dep_clock0 = g_eval_clock;
+                    dep_outer_log0 = g_dep_frame_log0;
+                    g_dep_frame_log0 = g_dep_log_n;
+                }
+                Expr* up = NULL;
+                if (!nofire) {
 #if UP_VALUES
                 /* 3b. UpValues fire BEFORE the enclosing head's DownValues and
                  * builtin (Withoff). HoldAllComplete suppresses them; HoldAll does
@@ -3128,15 +3328,33 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                      * returns NULL (no rule fired). That is intentional and safe --
                      * the Plus/Times builtin re-sorts below -- but it means res's
                      * argument order must not be relied on after this call. */
-                    Expr* up = apply_up_values(res);
-                    if (up) {
-                        expr_free(res);
-                        *changed = true; /* UpValue rule fired */
-                        return up;
-                    }
+                    up = apply_up_values(res);
                 }
 #endif
-                Expr* down = apply_down_values_def(hdef, res);
+                }
+                Expr* down = (up || nofire) ? NULL : apply_down_values_def(hdef, res);
+                if (dep_frame) {
+                    /* A message a builtin emitted from C is an effect a reused
+                     * verdict would no longer produce. */
+                    if (mth_msg_fired_count() != dep_msgs0) g_eval_dep_taint = true;
+                    bool clean = !g_eval_dep_taint && g_eval_clock == dep_clock0;
+                    g_epoch_counts[(up || down) ? 7 : clean ? 4 : g_eval_dep_taint ? 5 : 6]++;
+                    g_eval_dep_depth--;
+                    g_eval_dep_taint = dep_outer_taint || g_eval_dep_taint;
+                    if (!up && !down && clean) {
+                        g_dep_cert_node = res;
+                        g_dep_cert_clock = g_eval_clock;
+                        dep_log_commit(g_dep_frame_log0);
+                        if (!hold_all_complete) nofire_store(hdef, res);
+                    }
+                    g_dep_frame_log0 = dep_outer_log0;
+                    if (g_eval_dep_depth == 0) dep_log_release();
+                }
+                if (up) {
+                    expr_free(res);
+                    *changed = true; /* UpValue rule fired */
+                    return up;
+                }
                 if (down) {
                     expr_free(res);
                     *changed = true; /* DownValue rule fired */
@@ -3208,6 +3426,10 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     g_dispatch_head = (res->type == EXPR_FUNCTION &&
                                        res->data.function.head->type == EXPR_SYMBOL)
                                     ? res->data.function.head->data.symbol.name : NULL;
+                    if (g_eval_dep_depth && !hdef->eval_pure) {
+                        g_eval_dep_taint = true;
+                        { extern void dispatch_stats_taint(SymbolDef*); dispatch_stats_taint(hdef); }
+                    }
                     Expr* ret = hdef->builtin_func(res);
                     /* 5a. Mixed exact/inexact numeric arguments. A numeric
                      * builtin that declined f[2., Sqrt[2]] is re-called once
@@ -3615,6 +3837,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     expr_free(pa);
                     *changed = true;
                     post_gated = true;
+                    if (g_dep_cert_node == res) g_dep_cert_node = NULL;
                     g_pack_gate_ticks++;
                 }
             }
@@ -3766,6 +3989,10 @@ static Expr* evaluate_core(Expr* e) {
      * the common atom path and because atoms are never expensive to
      * "re-evaluate" anyway. */
     if (e->type == EXPR_FUNCTION && eval_fixed_point_reusable(e)) {
+        /* An exact-clock stamp is valid for this clock only: a certificate
+         * relying on it could outlive it (see dependency-recorded fixed points). */
+        if (g_eval_dep_depth && !eval_inert_valid(e) && !eval_ground_valid(e))
+            g_eval_dep_taint = true;
         return expr_copy(e);
     }
 
@@ -3841,6 +4068,8 @@ static Expr* evaluate_core(Expr* e) {
          * (a stamp is set only on a clean fixed-point exit and is invalidated by
          * any symbol-table mutation via the clock), so this is a pure speedup. */
         if (current->type == EXPR_FUNCTION && eval_fixed_point_reusable(current)) {
+            if (g_eval_dep_depth && !eval_inert_valid(current) && !eval_ground_valid(current))
+                g_eval_dep_taint = true;
             eval_recursion_depth--;
             if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
             if (is_top_level) current = eval_report_uncaught(current);
@@ -3927,6 +4156,10 @@ static Expr* evaluate_core(Expr* e) {
             next = NULL;
         }
         if (is_fixed_point) {
+            /* The step's result is equal to `current` (that is what a fixed
+             * point is) and the clock has not moved, so a dependency
+             * certificate issued for it holds for the node kept. */
+            if (next && g_dep_cert_node == next) g_dep_cert_node = current;
             expr_free(next);
             /* M3 phase-3: stamp the fully-evaluated result with the
              * current clock so a subsequent evaluate(current) hits the

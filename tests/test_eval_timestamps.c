@@ -802,6 +802,61 @@ static void test_inert_invalidated_by_what_it_relies_on(void) {
     eval_str_is("Clear[e1, e2, e3, e4, t5, x, x7, f, f7, g, g2, h, e7, u, p, e8, q, e9, w, e11, c1, c2, res, m1, m2, e13, z1, z2, zz, e14, r1, r2]", "Null");
 }
 
+/* Dependency-recorded fixed points (eval.c): a call on a head WITH rules,
+ * none of which fired, is certified -- stamped INERT and entered in the head's
+ * no-fire memo -- resting on what its failed dispatch read.  Each scenario
+ * settles the call, churns the clock with unrelated bindings (the Do
+ * iterator), changes one dependency, and checks the call is re-decided. */
+static void test_dep_certified_call_invalidated_by_its_dependencies(void) {
+    /* a global a rule condition reads */
+    eval_str_is("fl1 = True; k1[x_] := 0 /; !TrueQ[fl1]; e1 = {k1[2]}; Do[e1, {i, 3}]; fl1 = False; e1",
+                "{0}");
+    /* a user function a condition calls, given a new rule */
+    eval_str_is("g2[x_] := 0 /; TrueQ[dt2[x]]; e2 = {g2[a]}; Do[e2, {i, 3}]; dt2[a] = True; e2", "{0}");
+    /* the same call rebuilt fresh: the no-fire memo must not outlive it */
+    eval_str_is("g3[x_] := 0 /; TrueQ[dt3[x]]; Do[g3[a], {i, 3}]; dt3[a] = True; g3[a]", "0");
+    /* a new rule on the head itself */
+    eval_str_is("h4[x_, 1] := 0; e4 = {h4[a, b]}; Do[e4, {i, 3}]; h4[a, b] = 5; e4", "{5}");
+    /* Block on a condition's global, and its restore */
+    eval_str_is("fl5 = True; k5[x_] := 0 /; !TrueQ[fl5]; e5 = {k5[2]}; Do[e5, {i, 2}]; "
+                "{Block[{fl5 = False}, e5], e5}", "{{0}, {k5[2]}}");
+    /* an option a condition reads (OptionValue is not pure: never certified) */
+    eval_str_is("Options[o6] = {opt6 -> False}; k6[x_] := 0 /; OptionValue[o6, opt6]; e6 = {k6[1]}; "
+                "Do[e6, {i, 2}]; SetOptions[o6, opt6 -> True]; e6", "{0}");
+    /* an UpValue given later to an argument */
+    eval_str_is("k8[x_, 1] := 0; e8 = {k8[u8]}; Do[e8, {i, 2}]; u8 /: k8[u8] := 7; e8", "{7}");
+    /* an attribute change on the head */
+    eval_str_is("k9[1, x_] := x; e9 = {k9[a, 1]}; Do[e9, {i, 2}]; SetAttributes[k9, Orderless]; e9", "{a}");
+    /* a condition with a side effect is re-run every time (never memoised) */
+    eval_str_is("cnt10 = 0; k10[x_] := 0 /; (cnt10++; False); k10[1]; k10[1]; k10[1]; cnt10", "3");
+    /* a condition binding Module locals (reclaimed mid-frame) */
+    eval_str_is("k11[x_] := 0 /; Module[{t}, t = x; t === q11]; Table[k11[i], {i, 3}]",
+                "{k11[1], k11[2], k11[3]}");
+    /* a global read by a rule that FIRES inside the condition */
+    eval_str_is("dt13[x_] := TrueQ[gl13]; k13[x_] := 0 /; dt13[x]; e13 = {k13[1]}; Do[e13, {i, 2}]; "
+                "gl13 = True; e13", "{0}");
+    /* a global an enclosing frame read first and a nested certificate relies
+     * on: the nested certificate must commit it although the enclosing frame,
+     * whose rule fires, does not */
+    eval_str_is("in14[x_] := 0 /; TrueQ[gl14]; out14[x_] := (gl14; in14[x]) /; True; "
+                "e14 = {out14[1]}; Do[e14, {i, 2}]; gl14 = True; e14", "{0}");
+    /* a Default the matcher reads from C */
+    eval_str_is("f15[x_, y_.] := {x, y}; e15 = {f15[a]}; Do[e15, {i, 2}]; Default[f15] = 3; e15",
+                "{{a, 3}}");
+    /* a comparison against a global */
+    eval_str_is("lim17 = 5; k17[x_] := 0 /; x > lim17; e17 = {k17[3]}; Do[e17, {i, 2}]; lim17 = 1; e17",
+                "{0}");
+    /* a condition emitting a message is never reused: Check sees it each time */
+    eval_str_is("k16[x_] := 0 /; (1/0; False); {Check[k16[1], c1], Check[k16[1], c2]}", "{c1, c2}");
+    /* a Block dummy given a value inside: its restore is a change */
+    eval_str_is("e18 = {q18 + dd18}; {Block[{dd18}, dd18 = 2; e18], e18}", "{{2 + q18}, {dd18 + q18}}");
+    /* a Block dummy given none: nothing to invalidate, nothing stale */
+    eval_str_is("e19 = {q19 dd19}; Do[Block[{dd19}, e19 /. dd19 -> 1], {3}]; e19", "{dd19 q19}");
+    eval_str_is("Clear[lim17, k17, e17, k16, e18, q18, dd18, e19, q19, dd19]", "Null");
+    eval_str_is("Clear[fl1, k1, e1, g2, dt2, e2, g3, dt3, h4, e4, fl5, k5, e5, o6, k6, e6, k8, u8, e8, "
+                "k9, e9, cnt10, k10, k11, dt13, gl13, k13, e13, in14, gl14, out14, e14, f15, e15]", "Null");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -830,6 +885,7 @@ int main(void) {
     TEST(test_declining_call_reports_once);
     TEST(test_inert_survives_unrelated_binding);
     TEST(test_inert_invalidated_by_what_it_relies_on);
+    TEST(test_dep_certified_call_invalidated_by_its_dependencies);
 
     printf("All eval-timestamp tests passed!\n");
     return 0;

@@ -152,6 +152,10 @@ void     eval_clock_bump(void);
  * (eval.c) stay valid unless one of them relied on `def` being unbound. */
 struct SymbolDef;
 void     eval_clock_bump_binding(struct SymbolDef* def);
+/* A definition's value lists swapped wholesale (Block's localise / restore):
+ * invalidate what a change of `def`'s values (and, if `attrs_changed`, its
+ * attributes) can reach, and no more.  See eval.c. */
+void     eval_bump_definition_swap(struct SymbolDef* def, bool attrs_changed);
 
 /* Id of the current OUTERMOST evaluate() call: bumped once per user command /
  * script statement, and stable across all the nested evaluations and

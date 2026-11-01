@@ -824,6 +824,16 @@ static void blk_restore_frame(BlockFrame* f) {
     for (size_t i = 0; i < f->count; i++) {
         if (!f->saved[i].name) continue;
         SymbolDef* def = symtab_get_def(f->saved[i].name);
+        /* Did the symbol's values change at all?  Not when it had none before
+         * and was given none inside -- the dummy of `Block[{dum}, f[a dum] /.
+         * dum -> 1]`, which FeynCalc's SelectFree runs per call.  Restoring
+         * such a symbol changes nothing, and invalidating for it reset every
+         * INERT stamp an expression mentioning the dummy had flagged it in. */
+        bool values_changed = def->own_values || def->down_values ||
+                              f->saved[i].old_own || f->saved[i].old_down;
+#if UP_VALUES
+        if (def->up_values || f->saved[i].old_up) values_changed = true;
+#endif
         blk_free_rules(def->own_values);
         blk_free_rules(def->down_values);
         def->own_values  = f->saved[i].old_own;
@@ -836,13 +846,17 @@ static void blk_restore_frame(BlockFrame* f) {
           symtab_up_value_count = (symtab_up_value_count >= k) ? symtab_up_value_count - k : 0; }
         def->up_values = f->saved[i].old_up;
 #endif
+        bool attrs_changed = def->attributes != f->saved[i].old_attrs;
         def->attributes  = f->saved[i].old_attrs;
         /* Restored directly, behind add_rule's back, so invalidate: the value
          * Block returns is evaluated again once its symbols are back, as in the
          * reference -- x = 5; Block[{x}, x + y] is 5 + y and, with
          * f[a_] := a^2, Block[{f}, f[3]] is 9.  A fixed point stamped while the
-         * symbol was blocked (x + y, f[3]) used to be reused unchanged. */
-        eval_rule_epoch_bump();
+         * symbol was blocked (x + y, f[3]) used to be reused unchanged.  Only
+         * stamps that can depend on this symbol are invalidated (see
+         * eval_bump_definition_swap): an INERT x + y relied on x being unbound
+         * and flagged it, so it goes; an unrelated INERT or GROUND node stays. */
+        if (values_changed || attrs_changed) eval_bump_definition_swap(def, attrs_changed);
         free(f->saved[i].name);
     }
     free(f->saved);
@@ -899,6 +913,7 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
             frame->saved[i].old_own   = def->own_values;
             frame->saved[i].old_down  = def->down_values;
             frame->saved[i].old_attrs = def->attributes;
+            bool had_values = def->own_values || def->down_values;
             def->own_values  = NULL;   /* the body sees the symbol unset ... */
             def->down_values = NULL;   /* ... in BOTH rule lists */
 #if UP_VALUES
@@ -906,8 +921,15 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
              * homeless, not freed) -- the count gate is conservative, so an
              * over-count merely skips the early-out, never a real rule. */
             frame->saved[i].old_up = def->up_values;
+            if (def->up_values) had_values = true;
             def->up_values = NULL;
 #endif
+            /* Unsetting the symbol is a change of its values too: a fixed point
+             * stamped while they were in force may not be one with the symbol
+             * unset -- k[x_] := 0 /; !TrueQ[flag] with flag = True leaves k[2]
+             * final, but not inside Block[{flag}, ...].  Nothing changes for a
+             * symbol that had no values. */
+            if (had_values) eval_bump_definition_swap(def, false);
 
             if (init_val) {
                 symtab_add_own_value(name, (v->type == EXPR_SYMBOL ? v : v->data.function.args[0]), init_val);

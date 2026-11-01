@@ -14,7 +14,11 @@ Expr* get_default_value(Expr* pat_head, int pos, int total_pats) {
      * fallback anyway. Skip the evaluations entirely. This matters
      * because the matcher invokes get_default_value once per Optional
      * pattern (`x_.`) attempt, and each evaluate call is non-trivial. */
-    SymbolDef* def_sym = symtab_get_def("Default");
+    /* The interned-pointer cache, not a by-name lookup: this runs per attempt.
+     * Reading Default's rules (or their absence) from C is a dependency of a
+     * failed match the evaluator cannot see, so note it. */
+    SymbolDef* def_sym = intern_symbol_node(SYM_Default);
+    eval_dep_note(def_sym);
     if (!def_sym || def_sym->down_values == NULL) {
         if (hn == SYM_Plus) return expr_new_integer(0);
         if (hn == SYM_Times || hn == SYM_Power) return expr_new_integer(1);

@@ -496,6 +496,13 @@ extern const char* SYM_NumericFunction;
 extern const char* SYM_OneIdentity;
 extern const char* SYM_Optional;
 extern const char* SYM_OptionsPattern;
+/* MatchEnv keys under which an OptionsPattern match records its options and
+ * its head (not symbols a user can write: the '$' at both ends). */
+extern const char* SYM_EnvOptionsPattern;
+extern const char* SYM_EnvOptionsPatternHead;
+/* The failure sentinel of a scoped rule condition (symtab.c). */
+extern const char* SYM_ScopedConditionFail;
+extern const char* SYM_TrueQ;
 extern const char* SYM_Options;
 extern const char* SYM_OptionValue;
 extern const char* SYM_SetOptions;
