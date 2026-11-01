@@ -967,7 +967,9 @@ static double nonzero_threshold(double scale, long p_bits) {
  * and an MPFR rung is requested. */
 static Expr* numericalize_at(const Expr* e, long bits) {
     if (bits <= 53) {
-        return numericalize(e, numeric_machine_spec());
+        /* the machine rung screens: a doubtful point climbs the MPFR rungs,
+         * so it runs in doubles, without N's working-precision raise */
+        return numericalize_machine_unplanned(e);
     }
 #ifdef USE_MPFR
     NumericSpec s; s.mode = NUMERIC_MODE_MPFR; s.bits = bits;
@@ -1086,7 +1088,9 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
         e->data.function.head->data.symbol.name == SYM_Plus) {
         double sum = 0.0;
         for (size_t i = 0; i < e->data.function.arg_count; ++i) {
-            Expr* n = numericalize(e->data.function.args[i], spec);
+            Expr* n = spec.mode == NUMERIC_MODE_MACHINE
+                    ? numericalize_machine_unplanned(e->data.function.args[i])
+                    : numericalize(e->data.function.args[i], spec);
             if (n) {
                 double m = 0.0;
                 if (expr_abs_double(n, &m) && isfinite(m)) sum += m;

@@ -132,6 +132,8 @@ static inline bool numeric_spec_caps_inexact(NumericSpec spec) {
  *
  * Ownership: returned Expr* is owned by the caller. */
 Expr* numericalize(const Expr* e, NumericSpec spec);
+/* Machine precision without the working-precision plan (for screening; see numeric.c). */
+Expr* numericalize_machine_unplanned(const Expr* e);
 
 /* Look up a named constant (Pi, E, …). Returns true and fills *out if the
  * symbol is a recognized numeric constant; false otherwise. Exposed so the

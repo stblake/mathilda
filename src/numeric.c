@@ -1922,6 +1922,25 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
     return r;
 }
 
+/* numericalize_machine_unplanned: machine-precision numericalization WITHOUT
+ * the working-precision plan.  numericalize raises a machine request to MPFR
+ * when an exact leaf could lose accuracy in conversion (any non-dyadic rational
+ * |q| >= 2: 10/3 lifts the whole evaluation to ~119 bits), which is what N
+ * promises.  A caller that only screens -- PossibleZeroQ's machine rung, whose
+ * threshold is relative (2^-12) and which escalates any doubtful point up its
+ * own MPFR ladder -- pays ~10x for nothing: on a 10k-leaf antiderivative
+ * residual, 85 ms a point against a few. */
+Expr* numericalize_machine_unplanned(const Expr* e) {
+    int saved = g_n_held_depth;
+    bool saved_contagion = g_n_contagion;
+    g_n_held_depth = 0;
+    g_n_contagion = false;
+    Expr* r = numericalize_rec(e, numeric_machine_spec());
+    g_n_held_depth = saved;
+    g_n_contagion = saved_contagion;
+    return r;
+}
+
 /* numericalize for an exact operand of an inexact Plus / Times: as above,
  * but with g_n_contagion on for the duration. */
 static Expr* numericalize_contagion(const Expr* e, NumericSpec spec) {

@@ -358,7 +358,13 @@ Pipeline (each stage exits early on a definite verdict):
    adjacent one (e.g. `D[2 Sqrt[1 - Cos[x]], x] - Sqrt[1 + Cos[x]]`,
    zero on `(0, π)` but not `(π, 2π)`) — more sample *points*, spread
    across many periods of the moderate-magnitude range, defeat the
-   coincidence. A *confirm* phase then climbs the full precision ladder
+   coincidence. The machine rung evaluates in hardware doubles, without the
+   working-precision raise that `N` applies to an expression with a
+   non-dyadic rational coefficient such as `10/3`. That raise sent every
+   screen point through ~119-bit MPFR, 85 ms a point on a 10k-leaf
+   antiderivative residual. A doubtful point still climbs the MPFR rungs, so
+   the screen loses nothing (v0.6111): 10 s -> 1 s, and with
+   `Assumptions -> Element[x, Complexes]` (512 points) 60 s -> 7 s. A *confirm* phase then climbs the full precision ladder
    on a few points to reject cancellation-hidden small non-zeros before
    declaring an identity.
 
