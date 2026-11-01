@@ -340,6 +340,36 @@ static bool is_constant_positive_factor(const Expr* x) {
     return false;
 }
 
+/* A factor (B) may split off: a positive constant, or -- under assumptions --
+ * a factor provably positive (la or la^4 given la > 0).  (a b)^c = a^c b^c
+ * holds for any b and c once a > 0; without the assumed case
+ * Simplify[(-la^4)^s la^(-4 s), Assumptions -> la > 0] stayed as it was
+ * where the reference gives (-1)^s, and FeynCalc's projectivity check (a
+ * scaling variable surviving Simplify) failed whenever its random primes
+ * made the F polynomial negative -- FCFeynmanFindDivergences then reported
+ * divergent regions that are not there. */
+static bool split_positive_factor(const AssumeCtx* ctx, const Expr* x) {
+    if (is_constant_positive_factor(x)) return true;
+    return ctx && prov_pos(ctx, x);
+}
+
+/* c^e for a split-off positive factor c.  An assumed-positive power b^p
+ * (b > 0, p real) goes straight to b^(p e): left as (b^p)^e, the evaluation
+ * that follows merges it back with the rest -- (-1)^s (la^4)^s is (-la^4)^s
+ * again -- before la^(4 s) can cancel against la^(-4 s). */
+static Expr* split_factor_power(const AssumeCtx* ctx, const Expr* c, Expr* e) {
+    if (ctx && c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+        c->data.function.head->data.symbol.name == SYM_Power && c->data.function.arg_count == 2 &&
+        prov_pos(ctx, c->data.function.args[0]) && prov_re(ctx, c->data.function.args[1])) {
+        Expr* ta[2] = { expr_copy(c->data.function.args[1]), expr_copy(e) };
+        Expr* pa[2] = { expr_copy(c->data.function.args[0]),
+                        expr_new_function(expr_new_symbol(SYM_Times), ta, 2) };
+        return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
+    }
+    Expr* pa[2] = { expr_copy((Expr*)c), expr_copy(e) };
+    return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
+}
+
 /* Cheap structural gate for shape (A). */
 static bool has_distributable_power(const Expr* e, const AssumeCtx* ctx) {
     if (!e || e->type != EXPR_FUNCTION) return false;
@@ -358,7 +388,7 @@ static bool has_distributable_power(const Expr* e, const AssumeCtx* ctx) {
             && base->data.function.arg_count > 0) {
             /* (B) any constant-positive factor? */
             for (size_t i = 0; i < base->data.function.arg_count; i++) {
-                if (is_constant_positive_factor(base->data.function.args[i]))
+                if (split_positive_factor(ctx, base->data.function.args[i]))
                     return true;
             }
             /* (C) integer exponent triggers full distribute */
@@ -451,7 +481,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
         /* (B) split off constant-positive factors. */
         size_t pos_count = 0;
         for (size_t i = 0; i < bn; i++) {
-            if (is_constant_positive_factor(ba[i])) pos_count++;
+            if (split_positive_factor(ctx, ba[i])) pos_count++;
         }
         if (pos_count > 0 && pos_count < bn) {
             /* Split: pos_count Power[ci, e] factors + Power[Times[rest], e] */
@@ -461,10 +491,8 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
             Expr** rest = (Expr**)malloc(sizeof(Expr*) * rest_n);
             size_t rest_i = 0;
             for (size_t i = 0; i < bn; i++) {
-                if (is_constant_positive_factor(ba[i])) {
-                    Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
-                    out[out_i++] = expr_new_function(
-                        expr_new_symbol(SYM_Power), pa, 2);
+                if (split_positive_factor(ctx, ba[i])) {
+                    out[out_i++] = split_factor_power(ctx, ba[i], exp_);
                 } else {
                     rest[rest_i++] = expr_copy(ba[i]);
                 }

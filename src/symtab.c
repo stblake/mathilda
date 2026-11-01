@@ -1456,6 +1456,21 @@ static bool mentions_return(const Expr* e) {
     return false;
 }
 
+static bool mentions_optionvalue(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_OptionValue;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (mentions_optionvalue(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (mentions_optionvalue(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Rule.ov_tmpl, computed on first use. */
+static bool rule_mentions_optionvalue(Rule* rule) {
+    if (rule->ov_tmpl < 0) rule->ov_tmpl = mentions_optionvalue(rule->replacement) ? 1 : 0;
+    return rule->ov_tmpl == 1;
+}
+
 /* The value of applying `rule` of `head` when its rewrite is `result`: for a
  * rule whose right-hand side mentions Return, the result is evaluated here and
  * a top-level Return[v] (or Return[v, head]) yields v, Return[] Null -- the
@@ -1904,6 +1919,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
                     expr_free(dup->replacement);
                     dup->replacement = expr_copy(replacement);
                     dup->has_return = mentions_return(replacement);
+                    dup->ov_tmpl = -1;
                     dup->delayed = delayed;
                     expr_free(canon);
                     return;
@@ -1923,6 +1939,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
             curr->has_return = mentions_return(replacement);
+            curr->ov_tmpl = -1;
             curr->delayed = delayed;
             expr_free(canon);
             if (key) expr_free(key);
@@ -1945,6 +1962,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
             curr->has_return = mentions_return(replacement);
+            curr->ov_tmpl = -1;
             curr->delayed = delayed;
             expr_free(key);
             return;
@@ -1962,6 +1980,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
     new_rule->delayed = delayed;
     new_rule->scoped_cond = scoped;
     new_rule->has_return = mentions_return(replacement);
+    new_rule->ov_tmpl = -1;
     new_rule->literal = literal ? 1 : 0;
     new_rule->nonlinear = pattern_is_nonlinear(canon) ? 1 : 0;
     rule_set_slot_keys(new_rule, canon);
@@ -2394,7 +2413,7 @@ Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
         match_set_rule_head(prev_head);
         if (!result) { env_free(env); continue; }
         Expr* opts = env_get(env, SYM_EnvOptionsPattern);
-        if (opts) {
+        if (opts && rule_mentions_optionvalue(rule)) {
             const char* hs = def->symbol_name;
             Expr* oh = env_get(env, SYM_EnvOptionsPatternHead);
             if (oh && oh->type == EXPR_SYMBOL) hs = oh->data.symbol.name;
@@ -2649,7 +2668,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
         if (result && rule->scoped_cond) {
             /* Resolve OptionValue first (below), then test the scoped guard. */
             Expr* opts0 = env_get(env, SYM_EnvOptionsPattern);
-            if (opts0) {
+            if (opts0 && rule_mentions_optionvalue(rule)) {
                 const char* hs = def->symbol_name;
                 Expr* oh = env_get(env, SYM_EnvOptionsPatternHead);
                 if (oh && oh->type == EXPR_SYMBOL) hs = oh->data.symbol.name;
@@ -2669,7 +2688,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
              * OptionValue[head, opts, name] form so they resolve against the
              * supplied options and the head's defaults. */
             Expr* opts = env_get(env, SYM_EnvOptionsPattern);
-            if (opts) {
+            if (opts && rule_mentions_optionvalue(rule)) {
                 /* OptionsPattern[s] resolves an unpassed option's default
                  * against s's Options (A9); a bare OptionsPattern[] falls back
                  * to the enclosing definition's own head. */
@@ -2839,7 +2858,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
         }
         if (result) {
             Expr* opts = env_get(env, SYM_EnvOptionsPattern);
-            if (opts) {
+            if (opts && rule_mentions_optionvalue(rule)) {
                 /* For an upvalue, OptionsPattern[]'s enclosing head is `expr`'s
                  * head (the outer call), not the tag `def` we are keyed on. */
                 const char* head_sym = def->symbol_name;

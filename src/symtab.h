@@ -71,6 +71,13 @@ typedef struct Rule {
      * an UpValue keyed on g with pattern Set[g[a_], c_] can only match a Set
      * call, so its dispatch skips every other enclosing head at once. */
     const char* outer_head;
+    /* Does the replacement mention OptionValue?  -1 not yet known (computed
+     * on the first OptionsPattern match), 0 no, 1 yes.  Without one there is
+     * nothing to resolve, and the substituted result -- arguments included --
+     * need not be walked (an OptionValue inside an argument is the caller's,
+     * not the definition's: fo[x_, OptionsPattern[]] := {x} leaves
+     * fo[Hold[OptionValue[aa]]] as {Hold[OptionValue[aa]]}, as the reference). */
+    int8_t ov_tmpl;
 #define RULE_SLOT_KEYS 4
 #define RULE_SLOT_HEADS 3
     uint8_t nslot_keys;

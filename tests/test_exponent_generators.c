@@ -44,11 +44,26 @@ static void test_prime_rebase(void) {
     ASSERT_MSG(secs < 0.5, "Simplify with a 16-digit power base took %.2f s", secs);
 }
 
+static void test_assumed_positive_power_split(void) {
+    /* (a b)^c = a^c b^c for a > 0 by assumption (simp_power.c): FeynCalc's
+     * projectivity check depended on it whenever its random primes made the
+     * F polynomial negative (FCFeynmanFindDivergences then listed regions
+     * that are not divergent). Reference values. */
+    assert_eval_eq("Simplify[(-la^4)^s la^(-4 s), Assumptions -> la > 0]", "(-1)^s", 0);
+    assert_eval_eq("Simplify[(-5 la^4)^s la^(-4 s), Assumptions -> la > 0]", "(-5)^s", 0);
+    assert_eval_eq("Simplify[(-la^4 x)^s la^(-4 s), Assumptions -> la > 0]", "(-x)^s", 0);
+    assert_eval_eq("Simplify[(la x)^s la^(-s), Assumptions -> la > 0]", "x^s", 0);
+    assert_eval_eq("Simplify[(-la)^s la^(-s), Assumptions -> la > 0]", "(-1)^s", 0);
+    /* not positive by assumption: no split */
+    assert_eval_eq("Simplify[(-la^4)^s la^(-4 s)]", "la^(-4 s) (-la^4)^s", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_together_exponent_generators);
     TEST(test_prime_rebase);
+    TEST(test_assumed_positive_power_split);
     printf("All exponent-generator / prime-rebase tests passed.\n");
     return 0;
 }

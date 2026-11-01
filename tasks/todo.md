@@ -35,7 +35,9 @@ Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch
 - [ ] AbsoluteTime/N taint frames (FCPrint timing inside scoped-condition bodies); Module not pure (ModuleNumber)
 - [ ] OptionValue::nodef not emitted for an unknown option
 - [ ] memoized NonCommFreeQ repeat call on a 50k-term sum ~5 ms vs 20 us (literal DownValue lookup: hash + deep compare)
-- [ ] FCFeynmanFindDivergences-ID16/ID19/ID20 flip between runs of one binary (random primes): find the wrong decision
+- [x] FindDivergences flake = Simplify not splitting (a b)^c for assumed-positive a (v0.6126); +3 never-passing ids
+- [ ] Refine[(-la^4)^s, la > 0] -> (-1)^s la^(4 s); FullSimplify same split
+- [ ] OptionValue in bound args still rewritten when the template mentions OptionValue (inject into template before binding)
 - [ ] P2 TdecGrc-ID3 TIMEOUT (ref 29 s); FCFeynmanProjectiveQ-ID2 1.05 s vs 0.04
 
 # DDI Vol. 1: close the remaining open cases (2026-10-31, from v0.6100; updated 2026-11-01 at v0.6112)
