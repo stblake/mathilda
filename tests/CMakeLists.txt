@@ -3416,6 +3416,14 @@ else()
     target_link_libraries(condition_downvalue_tests gmp m)
 endif()
 
+add_executable(dispatch_slot_keys_tests test_dispatch_slot_keys.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dispatch_slot_keys_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(dispatch_slot_keys_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(dispatch_slot_keys_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 

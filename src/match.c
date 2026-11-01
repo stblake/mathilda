@@ -304,24 +304,21 @@ static bool pat_has_optional(Expr* p) {
     return false;
 }
 
-/* True when `p` can never match a group `flat_head[x1, ..., xk]` (k >= 2): a
- * literal atom, or a call on a fixed symbol head other than `flat_head` that is
- * neither a pattern construct nor OneIdentity (so no default can collapse it). */
-static bool flat_elem_rejects_group(const Expr* p, const char* flat_head) {
-    if (p->type != EXPR_FUNCTION) return true;
-    const Expr* hd = p->data.function.head;
-    if (hd->type != EXPR_SYMBOL) return false;
-    const char* h = hd->data.symbol.name;
-    if (h == flat_head
-        || h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence
-        || h == SYM_Pattern || h == SYM_HoldPattern || h == SYM_Alternatives
-        || h == SYM_Condition || h == SYM_PatternTest || h == SYM_Optional
-        || h == SYM_Shortest || h == SYM_Longest || h == SYM_Repeated
-        || h == SYM_RepeatedNull || h == SYM_Except || h == SYM_Verbatim
-        || h == SYM_PatternSequence || h == SYM_OptionsPattern)
-        return false;
-    SymbolDef* d = symtab_node_def(hd);
-    return !(d && (d->attributes & ATTR_ONEIDENTITY));
+/* pat_has_optional, restricted to an Optional WITHOUT its own default (x_.):
+ * only that one reads get_default_value at its position.  x_:0 carries its
+ * default, so moving it does not change what it binds. */
+static bool pat_has_positional_optional(Expr* p) {
+    Expr* cur = p;
+    while (cur && cur->type == EXPR_FUNCTION && cur->data.function.head
+           && cur->data.function.head->type == EXPR_SYMBOL
+           && cur->data.function.arg_count >= 1) {
+        const char* h = cur->data.function.head->data.symbol.name;
+        if (h == SYM_Optional) return cur->data.function.arg_count == 1;
+        if (h == SYM_Pattern && cur->data.function.arg_count == 2) cur = cur->data.function.args[1];
+        else if (h == SYM_Shortest || h == SYM_Longest) cur = cur->data.function.args[0];
+        else break;
+    }
+    return false;
 }
 
 /* True when `p` contains no pattern construct at any depth (heads included),
@@ -387,8 +384,8 @@ static bool pat_is_blank_single(const Expr* p) {
 /* True when pattern element `p` (an argument of a `flat_head` call pattern) can
  * only ever match exactly ONE operand -- never a group, never zero.  Mirrors
  * the matcher's own Flat-element span pruning in match_args_internal: a literal
- * atom, or a call whose head is neither `flat_head` nor a pattern construct and
- * which cannot OneIdentity-absorb a group.  Conservative: false when unsure.
+ * atom, or a call whose head is neither `flat_head` nor a pattern construct.
+ * Conservative: false when unsure.
  * PatternSequence / OrderlessPatternSequence are spliced or reordered by the
  * matcher rather than matched against one operand, so they are excluded. */
 static bool flat_elem_single_span(Expr* p, const char* flat_head) {
@@ -410,10 +407,7 @@ static bool flat_elem_single_span(Expr* p, const char* flat_head) {
         h == SYM_Verbatim || h == SYM_OptionsPattern ||
         h == SYM_PatternSequence || h == SYM_OrderlessPatternSequence)
         return false;
-    if ((get_attributes_def(symtab_node_def(hd)) & ATTR_ONEIDENTITY) &&
-        p->data.function.arg_count == 1)
-        return false;
-    return true;
+    return true;      /* OneIdentity never lets it take a group: see below */
 }
 
 /* True when `p` contains (at any depth, heads included) a call whose head is
@@ -1298,8 +1292,21 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
          * one f[...] operand), so the f[f[...]] reading would only repeat that
          * match: ReplaceList[a + x, x_. + y_ :> ...] lists {0, a + x} once. */
         if (any_optional && (def->attributes & ATTR_FLAT) && expr->type == EXPR_FUNCTION
-            && expr_eq(expr->data.function.head, pattern->data.function.head))
-            any_optional = false;
+            && expr_eq(expr->data.function.head, pattern->data.function.head)) {
+            /* ...unless the one element left once the defaults are taken is a
+             * call on another head, which the ordinary path never offers a
+             * group: x_. y_^n_. against 2 x has the reading y -> 2 x only
+             * through f[f[...]] (with x_. and n_. defaulted). */
+            size_t n_req = 0;
+            Expr* req = NULL;
+            for (size_t i = 0; i < pattern->data.function.arg_count; i++)
+                if (!pat_has_optional(pattern->data.function.args[i])) {
+                    n_req++;
+                    req = pattern->data.function.args[i];
+                }
+            if (!(n_req == 1 && flat_elem_single_span(req, pattern->data.function.head->data.symbol.name)))
+                any_optional = false;
+        }
         if (any_optional) {
             size_t saved_env_count = env->count;
             Expr* args[1] = { expr };
@@ -1844,16 +1851,22 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
      * Simplify hung.)  Pattern-element order is semantically irrelevant for an
      * Orderless head, so stably move the variable-length sequence blanks to
      * the end; the fixed elements then prune first (O(n) instead of O(2^n)).
-     * Skipped when any element carries an Optional positional default, whose
-     * index would shift under reordering. */
+     * Under a Flat head a plain blank (x_, x_:0) also takes a group, and so
+     * enumerates subsets like x__: it moves too, behind every element that
+     * takes exactly one operand (Plus[n_?NumberQ o1_., o2_:0] sorts o2_ first
+     * and enumerated every subset of a sum for it).  Skipped when any element
+     * carries an Optional positional default (x_.), whose index would shift
+     * under reordering; x_:0 carries its own. */
     Expr* reorder_storage[MATCH_REORDER_CAP];
     if (n_pats >= 2 && pat_head && pat_head->type == EXPR_SYMBOL) {
         SymbolDef* hd = symtab_node_def(pat_head);
         if (hd && (hd->attributes & ATTR_ORDERLESS)) {
+            const char* flat_hn = (hd->attributes & ATTR_FLAT) ? pat_head->data.symbol.name : NULL;
+#define MATCH_LATE(q) (pat_is_variable_seq(q) || (flat_hn && !flat_elem_single_span((q), flat_hn)))
             bool any_opt = false, need = false, seen_seq = false;
             for (size_t i = 0; i < n_pats; i++) {
-                if (pat_has_optional(pats[i])) { any_opt = true; break; }
-                if (pat_is_variable_seq(pats[i])) seen_seq = true;
+                if (pat_has_positional_optional(pats[i])) { any_opt = true; break; }
+                if (MATCH_LATE(pats[i])) seen_seq = true;
                 else if (seen_seq) need = true;  /* fixed element after a blank */
             }
             if (!any_opt && need) {
@@ -1873,9 +1886,9 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 }
                 size_t w = 0;
                 for (size_t i = 0; i < n_pats; i++)
-                    if (!pat_is_variable_seq(pats[i])) dst[w++] = pats[i];
+                    if (!MATCH_LATE(pats[i])) dst[w++] = pats[i];
                 for (size_t i = 0; i < n_pats; i++)
-                    if (pat_is_variable_seq(pats[i])) dst[w++] = pats[i];
+                    if (MATCH_LATE(pats[i])) dst[w++] = pats[i];
                 if (heap) {
                     bool r = match_args_internal(exprs, n_exprs, heap, n_pats, env,
                                                  condition, pat_head, total_pats, parent);
@@ -1886,6 +1899,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             }
         }
     }
+#undef MATCH_LATE
 
     Expr* p = pats[0];
 
@@ -2169,11 +2183,8 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
          * is neither pat_head's symbol nor a pattern-construct head that
          * may match anything, then no constructed
          * Function[pat_head, subset...] (k > 1) can ever match it -- it
-         * would fail at the head check. The only exception is when
-         * inner_p's head has OneIdentity AND has exactly one pattern arg
-         * (e.g., Plus[a_]), in which case ONEIDENTITY lets the
-         * constructed multi-factor value be absorbed into that single
-         * arg. Without this guard the orderless+Flat enumeration is
+         * would fail at the head check, and OneIdentity does not make
+         * one (see below). Without this guard the orderless+Flat enumeration is
          * exponential in the factor count even though k > 1 cannot
          * succeed -- dominates Simplify on multi-factor trig products. */
         if (inner_p && inner_p->type == EXPR_FUNCTION
@@ -2189,37 +2200,15 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 && inner_hn != SYM_PatternTest && inner_hn != SYM_Optional
                 && inner_hn != SYM_Shortest && inner_hn != SYM_Longest
                 && inner_hn != SYM_Repeated && inner_hn != SYM_RepeatedNull) {
-                SymbolDef* idef = symtab_node_def(inner_p->data.function.head);
-                bool has_oid = idef && (idef->attributes & ATTR_ONEIDENTITY);
-                /* OneIdentity lets a group be absorbed by a one-argument
-                 * pattern, or through defaults -- Power[y_, n_.] takes the
-                 * group 2 x as y with n -> 1 -- so keep the group spans then. */
-                bool oid_can_absorb = has_oid
-                    && inner_p->data.function.arg_count == 1;
-                for (size_t ai = 0; has_oid && !oid_can_absorb
-                                    && ai < inner_p->data.function.arg_count; ai++)
-                    oid_can_absorb = pat_has_optional(inner_p->data.function.args[ai]);
-                /* Through defaults, the group is absorbed by what is left once
-                 * every optional argument takes its default: nothing, or one
-                 * argument that may itself match pat_head[...].  Two or more
-                 * required arguments keep inner_p's own head, and a required
-                 * call on a fixed non-OneIdentity head (Cosh[a_] in
-                 * c_. Cosh[a_]) cannot equal the group -- without this a sum of
-                 * coefficient-times-Cosh terms enumerated every subset. */
-                if (oid_can_absorb && inner_p->data.function.arg_count > 1) {
-                    size_t n_req = 0;
-                    Expr* req = NULL;
-                    for (size_t ai = 0; ai < inner_p->data.function.arg_count; ai++)
-                        if (!pat_has_optional(inner_p->data.function.args[ai])) {
-                            n_req++;
-                            req = inner_p->data.function.args[ai];
-                        }
-                    if (n_req >= 2 || (req && flat_elem_rejects_group(req, pat_head->data.symbol.name)))
-                        oid_can_absorb = false;
-                }
-                if (!oid_can_absorb) {
-                    max_k = (n_exprs > 0) ? 1 : 0;
-                }
+                /* A call on another head matches ONE operand, never a group
+                 * pat_head[subset]: not even when that head is OneIdentity and
+                 * its other arguments have defaults.  In the reference
+                 * MatchQ[2 x y, y_^n_. x] is False and ReplaceList[a + b + c,
+                 * n_ o1_. + o2_ :> ...] binds n to a, b or c alone; offering the
+                 * group spans gave those extra matches and made the pattern
+                 * n_?NumberQ o1_. + o2_:0 exponential in the length of the sum
+                 * (FeynCalc's DotSimplify: 4 s on a 16-term sum). */
+                max_k = (n_exprs > 0) ? 1 : 0;
             }
         } else if (inner_p && inner_p->type == EXPR_FUNCTION &&
                    inner_p->data.function.head &&
@@ -2242,6 +2231,12 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
              * the Pythagorean rule `1 - Cos[x_]^2 + r___`, whose literal `1`
              * element otherwise drove a 2^n subset scan over a large sum. */
             max_k = (n_exprs > 0) ? 1 : 0;
+        }
+        /* The last element must consume every remaining operand, as for a
+         * trailing sequence blank above: only k = n_exprs can succeed. */
+        if (n_pats == 1) {
+            if (n_exprs >= min_k && n_exprs <= max_k) min_k = max_k = n_exprs;
+            else { min_k = 1; max_k = 0; }
         }
     } else {
         min_k = 1;

@@ -278,6 +278,8 @@ Out[5]= x ** op[3] ** y ** op[7]
 
 **v0.6032 (cost).** A failing rule on a wide Flat, Orderless sum no longer tries every subset of its operands. An Optional-coefficient element such as `c_. Cosh[a_]` takes only a single operand when its required part, a call on a fixed non-OneIdentity head, cannot equal a group. The leftover retry is skipped when the pattern already ends in a free `r___` that no condition reads. Matches are unchanged; 30-term sums are linear rather than exponential.
 
+**v0.6121 (semantics and cost).** Under a Flat head, an element that is a call on another head takes exactly one operand, never a group of them, whether or not that head is OneIdentity and has defaulted arguments. This is the reference behaviour: `MatchQ[2 x y, y_^n_. x]` is `False` (it was `True`), and `ReplaceList[a + b + c, n_ o1_. + o2_ :> {n, o1, o2}]` binds `n` to `a`, `b` or `c` alone. The whole subject is still reached through the defaults: `ReplaceList[2 x, x_. y_^n_. :> {x, y, n}]` includes `{1, 2 x, 1}`. In an Orderless Flat pattern, a plain blank such as `o2_` or `o2_:0` is matched after the elements that take one operand, as `x__` already was. Together these make `n_?NumberQ o1_. + o2_:0` linear in the length of the sum; it had been about 3ⁿ (20 s at 14 terms). DownValue dispatch also keys every leading argument slot by its possible heads and call arity, and keys all slots of an Orderless head by assignment. A rule that cannot fit is skipped without running the matcher.
+
 ## Replace
 Applies a rule or list of rules to transform an expression.
 - `Replace[expr, rules]`: Applies rules to the entire expression.

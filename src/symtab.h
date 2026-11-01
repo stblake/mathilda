@@ -57,6 +57,23 @@ typedef struct Rule {
      * general than another pattern). */
     uint8_t literal;
     uint8_t nonlinear;
+    /* §3.5 per-argument shape keys, a wider sieve than first_arg_head_canon:
+     * one RuleSlotKey per leading fixed-length argument slot of the pattern
+     * (up to RULE_SLOT_KEYS; all slots when the head is Orderless, which then
+     * needs a fixed arity).  A slot's key is the set of heads a matching
+     * argument can have (nheads 0 = any; Alternatives and pattern-named
+     * heads, (a:h1|h2)[...], give several) and, when the slot is a call with
+     * no variable-length argument, its argument count (arity -1 = any).
+     * Dispatch skips a rule whose keys no assignment of the input's arguments
+     * satisfies (see rule_slot_keys_reject). */
+#define RULE_SLOT_KEYS 4
+#define RULE_SLOT_HEADS 3
+    uint8_t nslot_keys;
+    struct RuleSlotKey {
+        const char* heads[RULE_SLOT_HEADS];
+        int8_t nheads;
+        int8_t arity;
+    } slot_keys[RULE_SLOT_KEYS];
     struct Rule* next;
 } Rule;
 

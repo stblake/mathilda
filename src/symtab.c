@@ -735,7 +735,25 @@ static bool pattern_arg_is_optional(const Expr* p) {
  * this pattern slot must have. Returns NULL when the slot is wildcard
  * with respect to head (Blank[], _, anything sequence-like, or anything
  * we are not willing to specialize on). */
+/* True when the slot, under its transparent wrappers, is Verbatim[q]: it then
+ * matches the pattern object q literally, so q's shape is not the key. */
+static bool slot_is_verbatim(const Expr* p) {
+    for (const Expr* w = p; w && w->type == EXPR_FUNCTION && w->data.function.head &&
+                            w->data.function.head->type == EXPR_SYMBOL &&
+                            w->data.function.arg_count >= 1;
+         w = w->data.function.args[0]) {
+        const char* wh = w->data.function.head->data.symbol.name;
+        if (wh == SYM_Verbatim) return true;
+        if (wh != SYM_HoldPattern && wh != SYM_Condition && wh != SYM_PatternTest) return false;
+    }
+    return false;
+}
+
 static const char* pattern_arg_head_canon(const Expr* p) {
+    /* Verbatim[q] matches the pattern object q itself (head Blank, Pattern,
+     * ...), not what q describes: v[Verbatim[_Integer]] := 1 was keyed
+     * "Integer" and never fired for v[_Integer]. */
+    if (slot_is_verbatim(p)) return NULL;
     p = strip_pattern_wrappers(p);
     if (!p) return NULL;
 
@@ -839,6 +857,166 @@ static const char* pattern_first_arg_head(const Expr* pattern) {
      * arg" of the input might end up bound to the sequence. Be safe. */
     if (slot_is_variable_length(pattern->data.function.args[0])) return NULL;
     return pattern_arg_head_canon(pattern->data.function.args[0]);
+}
+
+/* §3.5 per-slot shape keys (Rule.slot_keys).  A key only ever narrows what
+ * the head test of first_arg_head_canon already trusts: an argument matched
+ * by a call pattern h[...] (no Optional argument) has head h, one matched by
+ * _h has head h, a literal atom has its own head. */
+typedef struct RuleSlotKey RuleSlotKey;
+
+static void slot_key_any(RuleSlotKey* k) { k->nheads = 0; k->arity = -1; }
+
+static bool slot_key_add_head(RuleSlotKey* k, const char* h) {
+    for (int i = 0; i < k->nheads; i++)
+        if (k->heads[i] == h) return true;
+    if (k->nheads >= RULE_SLOT_HEADS) return false;
+    k->heads[k->nheads++] = h;
+    return true;
+}
+
+/* The heads a call pattern's non-symbol head admits: (a:h1|h2)[...] and
+ * (h1|h2)[...].  False when it admits an open set (a blank, say). */
+static bool pattern_head_set(const Expr* h, RuleSlotKey* k) {
+    if (!h) return false;
+    if (h->type == EXPR_SYMBOL) return slot_key_add_head(k, intern_symbol(h->data.symbol.name));
+    if (h->type != EXPR_FUNCTION || !h->data.function.head ||
+        h->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hh = h->data.function.head->data.symbol.name;
+    size_t ac = h->data.function.arg_count;
+    if (hh == SYM_Pattern && ac == 2) return pattern_head_set(h->data.function.args[1], k);
+    if (hh == SYM_Alternatives && ac >= 1) {
+        for (size_t i = 0; i < ac; i++)
+            if (!pattern_head_set(h->data.function.args[i], k)) return false;
+        return true;
+    }
+    return false;
+}
+
+static void pattern_slot_key(const Expr* p, RuleSlotKey* k) {
+    slot_key_any(k);
+    if (slot_is_verbatim(p)) return;     /* see pattern_arg_head_canon */
+    p = strip_pattern_wrappers(p);
+    if (!p) return;
+    const char* ph = (p->type == EXPR_FUNCTION && p->data.function.head &&
+                      p->data.function.head->type == EXPR_SYMBOL)
+                         ? p->data.function.head->data.symbol.name : NULL;
+    size_t ac = p->type == EXPR_FUNCTION ? p->data.function.arg_count : 0;
+    if (ph == SYM_Pattern && ac == 2) { pattern_slot_key(p->data.function.args[1], k); return; }
+    if (ph == SYM_Alternatives && ac >= 1) {
+        /* Union of the branches' head sets; an arity only if all agree. */
+        for (size_t i = 0; i < ac; i++) {
+            RuleSlotKey b;
+            pattern_slot_key(p->data.function.args[i], &b);
+            if (b.nheads == 0) { slot_key_any(k); return; }
+            for (int j = 0; j < b.nheads; j++)
+                if (!slot_key_add_head(k, b.heads[j])) { slot_key_any(k); return; }
+            if (i == 0) k->arity = b.arity;
+            else if (k->arity != b.arity) k->arity = -1;
+        }
+        return;
+    }
+    if (p->type != EXPR_FUNCTION) {
+        const char* h = pattern_arg_head_canon(p);    /* literal atom */
+        if (h) slot_key_add_head(k, h);
+        return;
+    }
+    bool call;    /* p is a call pattern h[...], not a blank or a pattern construct */
+    if (ph) {
+        const char* h = pattern_arg_head_canon(p);
+        if (!h) return;
+        slot_key_add_head(k, h);
+        call = ph != SYM_Blank && h == intern_symbol(ph);
+    } else {
+        /* (a:h1|h2)[...]: the head is itself a pattern. */
+        for (size_t i = 0; i < ac; i++)
+            if (pattern_arg_is_optional(p->data.function.args[i])) return;
+        if (!pattern_head_set(p->data.function.head, k)) { slot_key_any(k); return; }
+        call = true;
+    }
+    if (!call) return;
+    for (size_t i = 0; i < ac; i++)
+        if (slot_is_variable_length(p->data.function.args[i])) return;
+    if (ac <= 127) k->arity = (int8_t)ac;
+}
+
+/* Fill rule->slot_keys from the canonical pattern: the leading slots before
+ * the first variable-length one, at most RULE_SLOT_KEYS.  A slot that keys
+ * nothing ends the run only when no later slot is keyed. */
+static void rule_set_slot_keys(Rule* r, const Expr* canon) {
+    r->nslot_keys = 0;
+    const Expr* p = strip_pattern_wrappers(canon);
+    if (!p || p->type != EXPR_FUNCTION) return;
+    size_t ac = p->data.function.arg_count;
+    uint8_t n = 0, last = 0;
+    for (size_t i = 0; i < ac && i < RULE_SLOT_KEYS; i++) {
+        if (slot_is_variable_length(p->data.function.args[i])) break;
+        pattern_slot_key(p->data.function.args[i], &r->slot_keys[n]);
+        n++;
+        if (r->slot_keys[n - 1].nheads) last = n;
+    }
+    r->nslot_keys = last;
+}
+
+/* Does the input argument fit slot key k?  Unknown shapes (an NDArray, an
+ * arbitrary-precision real, a non-symbol head) always fit. */
+static bool slot_key_admits(const RuleSlotKey* k, const Expr* arg) {
+    if (k->nheads == 0) return true;
+    const char* ih;
+    switch (arg->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: ih = SYM_Integer; break;
+        case EXPR_REAL:   ih = SYM_Real; break;
+        case EXPR_STRING: ih = SYM_String; break;
+        case EXPR_SYMBOL: ih = SYM_Symbol; break;
+        case EXPR_FUNCTION:
+            if (!arg->data.function.head || arg->data.function.head->type != EXPR_SYMBOL)
+                return true;
+            ih = arg->data.function.head->data.symbol.name;
+            break;
+        default: return true;
+    }
+    int i = 0;
+    while (i < k->nheads && k->heads[i] != ih) i++;
+    if (i == k->nheads) return false;
+    if (k->arity >= 0 && arg->type == EXPR_FUNCTION &&
+        arg->data.function.arg_count != (size_t)k->arity) {
+        /* A Flat head regroups its arguments, so its count proves nothing. */
+        SymbolDef* d = symtab_node_def(arg->data.function.head);
+        return d && (d->attributes & ATTR_FLAT);
+    }
+    return true;
+}
+
+/* Orderless heads: is there an assignment of distinct input arguments to the
+ * keyed slots?  (n <= RULE_SLOT_KEYS, so plain backtracking.) */
+static bool slot_keys_assign(const Rule* r, Expr* const* args, size_t n,
+                             int slot, unsigned used) {
+    if (slot == r->nslot_keys) return true;
+    for (size_t j = 0; j < n; j++) {
+        if (used & (1u << j)) continue;
+        if (slot_key_admits(&r->slot_keys[slot], args[j]) &&
+            slot_keys_assign(r, args, n, slot + 1, used | (1u << j)))
+            return true;
+    }
+    return false;
+}
+
+/* True when the rule's slot keys prove it cannot match `expr` (whose head is
+ * the rule's head, neither Flat nor -- unless `orderless` -- Orderless). */
+static bool rule_slot_keys_reject(const Rule* r, const Expr* expr, bool orderless) {
+    if (!r->nslot_keys) return false;
+    size_t n = expr->data.function.arg_count;
+    Expr* const* args = expr->data.function.args;
+    if (orderless) {
+        /* Every slot keyed by position is a slot of a fixed-arity pattern
+         * only when the arity is known and small; otherwise do not judge. */
+        if (r->dispatch_arity < 0 || (size_t)r->dispatch_arity != n || n > RULE_SLOT_KEYS)
+            return false;
+        return !slot_keys_assign(r, args, n, 0, 0);
+    }
+    for (size_t i = 0; i < r->nslot_keys && i < n; i++)
+        if (!slot_key_admits(&r->slot_keys[i], args[i])) return true;
+    return false;
 }
 
 /* §3.6 specificity score. Computed recursively over the pattern tree.
@@ -1786,6 +1964,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
     new_rule->has_return = mentions_return(replacement);
     new_rule->literal = literal ? 1 : 0;
     new_rule->nonlinear = pattern_is_nonlinear(canon) ? 1 : 0;
+    rule_set_slot_keys(new_rule, canon);
     new_rule->next = NULL;
 
     /* Insert before the first stored rule that is strictly more general (it
@@ -2433,6 +2612,9 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
             rule->first_arg_head_canon != input_first_head) {
             continue;
         }
+        /* Per-slot shape keys: every keyed argument's head (and call arity),
+         * by position, or for an Orderless head by some assignment. */
+        if (!down_flat && rule_slot_keys_reject(rule, expr, down_relaxed)) continue;
 
         if (ds) ds->tries++;
         MatchEnv* env = env_new();

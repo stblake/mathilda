@@ -1656,8 +1656,95 @@ Expr* builtin_through(Expr* res) {
 
 /* ------------------- FreeQ ------------------- */
 
+/* FreeQ fast path.  A form that is an atom (symbol, integer, string), a blank
+ * _h on a non-atomic head h, or an Alternatives of those can only match a
+ * node equal to one of the atoms or headed by one of the h -- no bindings, no
+ * Flat regrouping -- so at the default levels the search is a walk comparing
+ * interned pointers, not a matcher call (and a Flat-leftover retry) at every
+ * node.  FeynCalc's FreeQ2[x, {h1, h2, ...}] is FreeQ[x, h1 | h2 | ...]. */
+enum { FREEQ_SIMPLE_CAP = 32 };
+typedef struct {
+    const Expr* atoms[FREEQ_SIMPLE_CAP]; size_t n_atoms;
+    const char* heads[FREEQ_SIMPLE_CAP]; size_t n_heads;
+} FreeqSimple;
+
+static bool freeq_simple_add(FreeqSimple* fs, const Expr* f) {
+    if (f->type == EXPR_SYMBOL || f->type == EXPR_INTEGER ||
+        f->type == EXPR_BIGINT || f->type == EXPR_STRING) {
+        if (fs->n_atoms >= FREEQ_SIMPLE_CAP) return false;
+        fs->atoms[fs->n_atoms++] = f;
+        return true;
+    }
+    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    if (h == SYM_Alternatives) {
+        for (size_t i = 0; i < f->data.function.arg_count; i++)
+            if (!freeq_simple_add(fs, f->data.function.args[i])) return false;
+        return true;
+    }
+    if (h == SYM_Blank && f->data.function.arg_count == 1 &&
+        f->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* b = f->data.function.args[0]->data.symbol.name;
+        /* Heads that atoms (or a packed buffer) answer to: leave to the matcher. */
+        if (b == SYM_Integer || b == SYM_Real || b == SYM_String || b == SYM_Symbol ||
+            b == SYM_Rational || b == SYM_Complex || b == SYM_List ||
+            b == SYM_SparseArray || b == SYM_CompiledFunction)
+            return false;
+        if (fs->n_heads >= FREEQ_SIMPLE_CAP) return false;
+        fs->heads[fs->n_heads++] = b;
+        return true;
+    }
+    return false;
+}
+
+static bool freeq_simple_hit(const FreeqSimple* fs, const Expr* e) {
+    for (size_t i = 0; i < fs->n_atoms; i++) {
+        const Expr* a = fs->atoms[i];
+        if (a->type == EXPR_SYMBOL) {
+            if (e->type == EXPR_SYMBOL && e->data.symbol.name == a->data.symbol.name) return true;
+        } else if (e->type != EXPR_SYMBOL && e->type != EXPR_FUNCTION && expr_eq(e, a)) {
+            return true;
+        }
+    }
+    if (fs->n_heads && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        for (size_t i = 0; i < fs->n_heads; i++)
+            if (fs->heads[i] == h) return true;
+    }
+    return false;
+}
+
+/* 1: free, 0: not free, -1: a node this walk does not model (an NDArray, a
+ * sparse array, an arbitrary-precision real...): ask the general walk. */
+static int freeq_simple_walk(const FreeqSimple* fs, const Expr* e, bool heads) {
+    if (e->type != EXPR_FUNCTION) {
+        if (e->type != EXPR_SYMBOL && e->type != EXPR_INTEGER && e->type != EXPR_BIGINT &&
+            e->type != EXPR_STRING && e->type != EXPR_REAL)
+            return -1;
+        return freeq_simple_hit(fs, e) ? 0 : 1;
+    }
+    if (freeq_simple_hit(fs, e)) return 0;
+    const Expr* hd = e->data.function.head;
+    /* Rational / Complex are atoms: only their head is visible (Heads -> True). */
+    if (hd->type == EXPR_SYMBOL &&
+        (hd->data.symbol.name == SYM_Rational || hd->data.symbol.name == SYM_Complex))
+        return (heads && freeq_simple_hit(fs, hd)) ? 0 : 1;
+    if (heads) {
+        int r = freeq_simple_walk(fs, hd, heads);
+        if (r != 1) return r;
+    }
+    bool assoc = assoc_is_wellformed((Expr*)e);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int r = freeq_simple_walk(fs, struct_part((Expr*)e, i, assoc), heads);
+        if (r != 1) return r;
+    }
+    return 1;
+}
+
 static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelSpec spec) {
-    int64_t d = get_depth(expr);
+    /* Depth only enters through a negative level bound: computing it at every
+     * node walked each subtree once per ancestor. */
+    int64_t d = (spec.min < 0 || spec.max < 0) ? get_depth(expr) : 0;
     bool should_check = false;
     
     if (spec.min == -1 && spec.max == -1) {
@@ -1786,6 +1873,14 @@ Expr* builtin_freeq(Expr* res) {
         }
     }
 
+    if (spec.min == 0 && spec.max == 1000000) {
+        FreeqSimple fs;
+        fs.n_atoms = fs.n_heads = 0;
+        if (freeq_simple_add(&fs, form)) {
+            int r = freeq_simple_walk(&fs, expr, spec.heads);
+            if (r >= 0) return expr_new_symbol(r ? SYM_True : SYM_False);
+        }
+    }
     if (freeq_at_level(expr, form, 0, spec)) {
         return expr_new_symbol(SYM_True);
     } else {
