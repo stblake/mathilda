@@ -443,6 +443,26 @@ ClassifyPrime0[T_, p_] := Module[{branch, eta, pi, special},
 RadFactor[e_] := If[FreeQ[e, Power[r_, _Rational] /; ! NumericQ[r]], e,
   Expand[e /. Power[r_, k_Rational] /; ! NumericQ[r] && ! FreeQ[r, Plus] :> Power[Factor[r], k]]];
 
+(* OwnKey[b, back, k]: the key of the radical b^(1/k) in BuildTower's own-radical
+   table -- the radicand written in the original variables (the plain back rules
+   applied), so it does not depend on when in the build it was recorded. *)
+OwnKey[b_, back_, k_] := {Expand[Together[b //. back]], k};
+
+(* ParamRad[e]: a constant over Q(params) with every radical in the convention
+   MRoot already uses for the y-values (PowerExpand on the factored radicand:
+   Sqrt[-2 a b] -> I Sqrt[2] Sqrt[a] Sqrt[b], Sqrt[-b/a] -> I Sqrt[b]/Sqrt[a]).
+   Constants that come out of separate Solve calls -- a place x = Sqrt[-b/a], a
+   norm coefficient Sqrt[-2 a b], a y-value Sqrt[2] b -- then live in one field
+   Q(params)(Sqrt[a], Sqrt[b], ...): a relation between them (here
+   Sqrt[-2 a b] Sqrt[-b/a] = -Sqrt[2] b) is an identity there, where between the
+   principal radicals it held only in part of parameter space and no zero test
+   could decide it.  An answer written in these generators satisfies every
+   relation they do, so it is an antiderivative for all parameter values, and the
+   PossibleZeroQ gate checks it.  For constants only: e must be free of the tower
+   generators (PowerExpand would split a radical of x).                      *)
+ParamRad[e_] := If[FreeQ[e, Power[r_, _Rational] /; ! NumericQ[r]], e,
+  Together[e /. Power[r_, k_Rational] /; ! NumericQ[r] :> PowerExpand[Power[Factor[r], k]]]];
+
 PointsOver[T_, p_] := Module[{gens = T["gens"], g, cl, roots, qbar, r, pts},
  Catch[
   Do[g = gens[[i]];
@@ -456,6 +476,7 @@ PointsOver[T_, p_] := Module[{gens = T["gens"], g, cl, roots, qbar, r, pts},
          (Sqrt[-3 b - Sqrt[32 b^2]/2], with Sqrt[b^2] not b for every b) goes there too:
          those never cancel in the residual; a binomial g^4 + b keeps its roots (-b)^(1/4) *)
       roots = RadFactor /@ (g /. Solve[p == 0, g]);
+      roots = If[FreeQ[#, Alternatives @@ gens], ParamRad[#], #] & /@ roots;
       If[Exponent[p, g] >= 3 && TransConsts[{p}, gens] =!= {} &&
          ! FreeQ[roots, Power[u_, _Rational] /; ! NumericQ[u] && ! FreeQ[u, Power[_, _Rational]]],
         Throw[None, "pts"]];
@@ -551,21 +572,30 @@ RRad[e_] := If[NumericQ[e], With[{r = Quiet[ComplexExpand[ToRadicals[RootReduce[
    degree db <= dbmax, 1 <= k <= kmax (Algorithm 3(c)).  Returns a list of
    {a, b, c, k}.  Different solutions vanish on different subsets of the
    places over p, so the realisation tries them all.                        *)
-NormSearchAll[q_, p_, g_, kmax_: 2, dbmax_: 2] := Module[{dq, dp, out = {}, da, ac, bc, c, a, b, eq, sols},
+NormSearchAll[q_, p_, g_, kmax_: 2, dbmax_: 2] :=
+  Join @@ Flatten[Table[NormSearchShape[q, p, g, k, db], {k, 1, kmax}, {db, 0, dbmax}], 1];
+
+(* NormSearchShape[q, p, g, k, db]: the solutions of one shape, so a caller that
+   needs only the first working one (RealisePoints) can stop there: over Q(params)
+   the shape k = 2, db = 2 of (a x^2 - b)/((a x^2 + b) Sqrt[a^2 x^4 + b^2]) costs
+   Solve 62 s and is never reached once k = 2, db = 0 realises the residues. *)
+NormSearchShape[q_, p_, g_, k_, db_] := Module[{dq, dp, out = {}, da, ac, bc, c, a, b, eq, sols},
   dq = Exponent[q, g]; dp = Exponent[p, g];
-  Do[da = Quotient[Max[dq + 2 db, k dp] + 1, 2];
-    ac = Table[na[i], {i, 0, da}]; bc = Table[nb[i], {i, 0, db - 1}]; c = nc;
-    a = ac . g^Range[0, da];
-    b = If[db == 0, 1, bc . g^Range[0, db - 1] + g^db];
-    eq = Expand[a^2 - q b^2 - c p^k];
-    sols = Quiet[Solve[Thread[CoefficientList[eq, g] == 0], Join[ac, bc, {c}]]];
-    Do[With[{aa = Collect[Expand[a /. s], g, RR], bb = Collect[Expand[b /. s], g, RR], cc = RR[c /. s]},
-        (* coefficients RootReduced: nested radicals from Solve would otherwise
-           defeat the extension-field arithmetic of the linear system *)
-        If[cc =!= 0 && FreeQ[aa, Alternatives @@ Join[ac, bc, {c}]] && NumericQ[cc],
-          AppendTo[out, {aa, bb, cc, k}]]],
-      {s, sols}],
-    {k, 1, kmax}, {db, 0, dbmax}];
+  da = Quotient[Max[dq + 2 db, k dp] + 1, 2];
+  ac = Table[na[i], {i, 0, da}]; bc = Table[nb[i], {i, 0, db - 1}]; c = nc;
+  a = ac . g^Range[0, da];
+  b = If[db == 0, 1, bc . g^Range[0, db - 1] + g^db];
+  eq = Expand[a^2 - q b^2 - c p^k];
+  sols = Quiet[Solve[Thread[CoefficientList[eq, g] == 0], Join[ac, bc, {c}]]];
+  If[! ListQ[sols], sols = {}];                  (* Solve declined: no solutions known *)
+  Do[With[{aa = Collect[Expand[a /. s], g, RR @* ParamRad], bb = Collect[Expand[b /. s], g, RR @* ParamRad], cc = RR[ParamRad[c /. s]]},
+      (* coefficients RootReduced: nested radicals from Solve would otherwise
+         defeat the extension-field arithmetic of the linear system.  Over
+         Q(params) the norm constant c is a function of the parameters: it
+         only has to be free of the unknowns (and of g). *)
+      If[cc =!= 0 && FreeQ[{aa, bb, cc}, Alternatives @@ Join[ac, bc, {c}]] && FreeQ[cc, g],
+        AppendTo[out, {aa, bb, cc, k}]]],
+    {s, sols}];
   out];
 
 (* SheetSign[T, pt]
@@ -612,11 +642,14 @@ VanishOrderNorm[a0_, b0_, q_, g_, rho_, yv_] := Module[{a = a0, b = b0, k = 0, N
 VanishOrder[T_, u_, pt_, Y_] := Module[{g, rho, yv, eps, e, ub, k = 0, q = T["q"], qrho},
   {g, rho, yv} = pt;
   If[! FreeQ[rho, Alternatives @@ T["gens"]] || ! FreeQ[q, Alternatives @@ DeleteCases[T["gens"], g]], Return[1]];
-  eps = SheetSign[T, pt];
-  If[eps === None, Return[1]];
+  (* the norm route reads the place off yv itself and needs no sheet sign: over
+     Q(params) yv is in MRoot's convention (Sqrt[2] b at q(rho) = 2 b^2), which
+     the principal Sqrt[2 b^2] matches with neither sign *)
   If[T["m"] == 2 && PolynomialQ[q, g] && PolynomialQ[u[[1]], g] && PolynomialQ[u[[2]], g],
     qrho = Can[q /. g -> rho];
     If[! IsZero[qrho], Return[VanishOrderNorm[u[[1]], u[[2]], q, g, rho, yv]]]];
+  eps = SheetSign[T, pt];
+  If[eps === None, Return[1]];
   ub = (u[[1]] + u[[2]] eps Sqrt[q /. g -> rho + e]) /. g -> rho + e;
   While[k < 8 && IsZero[SeriesCoefficient[ub, {e, 0, k}]], k++];
   k];
@@ -1492,7 +1525,7 @@ RealisePoints[T_, p_, pts_, taus_, Y_, verbose_: False] := Catch[Module[{g, out,
     If[ok,
       If[verbose, Do[Print["      norm factor ", o[[2, 1]], " + (", o[[2, 2]], ")*y (N = ", c, "*(", p, ")^", k, "): coefficient ", o[[1]]], {o, out}]];
       Throw[out, "realise"]],
-    {sol, NormSearchAll[T["q"], p, g]}];
+    {kk, 1, 2}, {dd, 0, 2}, {sol, NormSearchShape[T["q"], p, g, kk, dd]}];   (* NormSearchAll, shape by shape *)
   None], "realise"];
 
 (* VinftyResidue[T, f, Y]
@@ -2717,20 +2750,32 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
                this radicand, the surface is written back through it (below)
                instead of the principal sf^(1/mr) -- an answer valid for all
                complex x, not just near the sample point. *)
-            With[{rts = Cases[{nrm}, Power[b_, e_Rational] /; ! FreeQ[b, Alternatives @@ Join[gens, {Y}]] :> {b, e}, {0, Infinity}]},
-              If[Length[DeleteDuplicates[rts]] == 1 && MemberQ[{1, -1}, Numerator[c[[2]]]] &&
-                 Numerator[rts[[1, 2]]] == Numerator[c[[2]]] && Denominator[rts[[1, 2]]] == Denominator[c[[2]]],
-                With[{key = {Expand[rts[[1, 1]]], Denominator[c[[2]]]},
-                      A = Cancel[nrm/Power[rts[[1, 1]], rts[[1, 2]]]]},
+            (* nrm = A b1^e1 ... bn^en may carry several radicals (Sqrt[x (a^2 x^2 + b^2)]
+               -> Sqrt[x] Sqrt[a^2 x^2 + b^2]).  For each j, c/(A prod_{i != j} bi^ei) is
+               the integrand's own value of bj^ej with the OTHER roots principal: its
+               k-th power is bj^(k ej) exactly.  Each is a separate candidate (the
+               caller tries them one at a time).  Keys are radicands in the original
+               variables (the plain back rules applied), so a radicand that a later
+               flattening rewrites (a^2 x^2 + b^2 -> b^2 + a^2 u^4 under x = u^2)
+               still finds its own root. *)
+            With[{rts = DeleteDuplicates[Cases[{nrm}, Power[b_, e_Rational] /; ! FreeQ[b, Alternatives @@ Join[gens, {Y}]] :> {b, e}, {0, Infinity}]],
+                  bk = Cases[back, HoldPattern[_Symbol -> _]]},
+              If[rts =!= {} && MemberQ[{1, -1}, Numerator[c[[2]]]] &&
+                 AllTrue[rts, MemberQ[{1, -1}, Numerator[#[[2]]]] && Denominator[#[[2]]] == Denominator[c[[2]]] &] &&
+                 (Length[rts] == 1 || FreeQ[nrm, Y]),
+                With[{A = Cancel[nrm/(Times @@ (Power @@@ rts))],
+                      c0 = FixedPoint[Lookup[origRad, Key[#], #] &, c, 8]},
                   If[FreeQ[A, Power[_, _Rational]],
-                    With[{own = With[{c0 = FixedPoint[Lookup[origRad, Key[#], #] &, c, 8]},
-                                  If[Numerator[c[[2]]] == 1, c0/A, A/c0]]},
-                      (* two different radicals rewritten to one radicand: their own
-                         roots may sit on different branches -- keep the principal one *)
-                      If[KeyExistsQ[ownRad, key] && ownRad[key] =!= own, ownMixed[key] = True];
-                      ownRad[key] = own]]],
+                    Do[With[{key = OwnKey[rt[[1]], bk, Denominator[c[[2]]]],
+                             val = c0/(A Times @@ (Power @@@ DeleteCases[rts, rt]))},
+                        With[{own = If[Numerator[rt[[2]]] == 1, val, 1/val]},
+                          (* two different radicals rewritten to one radicand: their own
+                             roots may sit on different branches -- keep the principal one *)
+                          If[KeyExistsQ[ownRad, key] && ownRad[key] =!= own, ownMixed[key] = True];
+                          ownRad[key] = own]],
+                      {rt, rts}]]],
                 (* a radicand rewritten from a source we cannot track *)
-                Scan[(ownMixed[{Expand[#[[1]]], Denominator[#[[2]]]}] = True) &, rts]]];
+                Scan[(ownMixed[OwnKey[#[[1]], bk, Denominator[#[[2]]]]] = True) &, rts]]];
             expr = expr /. c -> nrm; Continue[]]];
         {base, r} = List @@ c; mm = Denominator[r];          (* the degree of this root *)
         (* flattenable root: base = coef g + rest, coef constant, rest free of g  (Lemma 3.2) *)
@@ -2794,7 +2839,7 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
      surface failed the gate in a region (38 DDI declines). *)
   Scan[Function[rule,
       If[MatchQ[rule[[2]], Power[_, rr_Rational /; Numerator[rr] == 1]],
-        With[{key = {Expand[rule[[2, 1]]], Denominator[rule[[2, 2]]]}},
+        With[{key = OwnKey[rule[[2, 1]], Cases[back, HoldPattern[_Symbol -> _]], Denominator[rule[[2, 2]]]]},
           If[KeyExistsQ[ownRad, key] && ! TrueQ[ownMixed[key]],
             AppendTo[back, OwnRadicalRule -> (rule[[1]] -> ownRad[key])]]]]],
     Cases[back, HoldPattern[_Symbol -> _]]];
@@ -3072,7 +3117,10 @@ ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeCo
           With[{surfO = res0 //. Join[rs, DeleteCases[back, (Alternatives @@ rs[[All, 1]]) -> _]]},
             With[{facO = branchUnit[surfO]},
               If[MemberQ[{1, -1, I, -I}, facO], fac = facO; surf = surfO; Throw[True, "own"]]]]],
-        DeleteDuplicates[Prepend[List /@ ownR, ownR]]], "own"]]];
+        (* the top radical's own root first: with x = u^2 that is u -> Sqrt[x],
+           Y -> Sqrt[a^2 x^3 + b^2 x]/Sqrt[x], where u's own root drags a nested
+           principal Sqrt[b^2 + a^2 u^4] into the answer *)
+        DeleteDuplicates[Prepend[List /@ SortBy[ownR, If[#[[1]] === Y, 0, 1] &], ownR]]], "own"]]];
   If[fac === 0 || FreeQ[{1, -1, I, -I}, fac],
     If[FreeQ[surf, _Complex], Return[{"failed", "verification failed"}]];
     surfC = surf /. Complex[re_, im_] :> Complex[re, -im];

@@ -1526,6 +1526,27 @@ monotonically down.
      like `Sqrt[-b c^2]/(2 b c^2)` go through the residue field, with the gcd
      over `K(s)`, `s^2 = v`, taken by `ExtGCD`).  Only an answer verified by
      `PossibleZeroQ` is returned; no certificate is issued over `Q(params)`.
+     **Norm-search logands over Q(params)** (v0.6110): the units u = a + b y
+     with N(u) = c p^k may have coefficients and norm constant in
+     `Q(params)` (before, only a numeric c was kept). Every radical of a
+     parameter is written in one convention, `PowerExpand` on the factored
+     radicand (the one the y-values of places already used):
+     `Sqrt[-2 a b] -> I Sqrt[2] Sqrt[a] Sqrt[b]`. Then constants that come out
+     of separate `Solve` calls lie in one field `Q(params)(Sqrt[a], Sqrt[b], ...)`,
+     and a relation between them is an identity there rather than true in only
+     part of parameter space. The vanishing order of a unit at an unramified
+     place is read from its norm, without the sheet sign against the principal
+     root. Shapes (k, db) are searched lazily, stopping at the first unit that
+     realises the residues. `(a x^2 - b)/((a x^2 + b) Sqrt[a^2 x^4 + b^2])` is
+     answered in 1 s:
+     `I/(2 Sqrt[2] Sqrt[a] Sqrt[b]) (Log[-I Sqrt[2] Sqrt[a] Sqrt[b] x - y] - Log[-I Sqrt[2] Sqrt[a] Sqrt[b] x + y])`.
+     When one radical of the integrand normalises to several
+     (`Sqrt[x (a^2 x^2 + b^2)] -> Sqrt[x] Sqrt[a^2 x^2 + b^2]`), each gets its own
+     own-radical candidate with the others principal. The keys are taken on
+     radicands in the original variables, so a radicand that a later flattening
+     rewrites still finds its own root:
+     `(a x - b)/((a x + b) Sqrt[a^2 x^3 + b^2 x])` comes back through
+     `Sqrt[a^2 x^3 + b^2 x]/Sqrt[x]`.
      **Substitution pre-pass** (v0.6105): a radical of a transcendental kernel
      changes the variable -- `u = Sin x` with `y = Cos x` as the algebraic
      generator (`Sqrt[Sin[x]] -> Sqrt[u]/Sqrt[1 - u^2]`), `u = E^x` for

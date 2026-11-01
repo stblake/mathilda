@@ -437,6 +437,12 @@ static void test_parametric_conic(void) {
         "1/((2 b c/a x^2 + c) Sqrt[a + b x^2])",                  /* gg 10 (n2): a quartic pole prime */
         "(a x^2 + b x + c)^(3/2)/x^2",                            /* warmup 4 (v): RowReduce over Sqrt[c] */
         "1/((x + b)^2 (a x^2 + b x + c)^(3/2))",                  /* warmup 4 (ix): native RREF over Sqrt[(a - 1) b^2 + c] */
+        /* a norm-search logand over Q(a, b): u = -I Sqrt[2] Sqrt[a] Sqrt[b] x + y,
+         * N(u) = -(a x^2 + b)^2 (laurent sub 1 / euler outrageous 5) */
+        "(a x^2 - b)/((a x^2 + b) Sqrt[a^2 x^4 + b^2])",
+        /* the same under x = u^2; the answer goes back through Sqrt[a^2 x^3 + b^2 x]/Sqrt[x]
+         * (the integrand's own radical with Sqrt[x] principal), gunther 2 (ii) */
+        "(a x - b)/((a x + b) Sqrt[a^2 x^3 + b^2 x])",
     };
     for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
         char buf[1024];
