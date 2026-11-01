@@ -111,6 +111,26 @@ static void test_numeric_coefficient_pattern_is_linear(void) {
     ASSERT_MSG(secs < 2.0, "numeric-coefficient Plus pattern took %.2f s", secs);
 }
 
+/* ---- OptionValue injection shares untouched subtrees --------------- */
+
+static void test_optionvalue_injection(void) {
+    /* Only the path to each OptionValue is rebuilt (options_builtin.c); the
+     * bound arguments are shared, so a big argument keeps its fixed-point
+     * stamps.  Resolution must still reach every depth, the head, and a guard. */
+    run("Options[ov] = {a -> 1, b -> 2};"
+        "ov[x_, OptionsPattern[]] := {x, OptionValue[a], g[h[OptionValue[b]]], OptionValue[ov, b]};"
+        "ow[x_, OptionsPattern[ov]] := OptionValue[a][x];"
+        "oc[x_, OptionsPattern[ov]] := x /; OptionValue[a] === 3");
+    assert_eval_eq("ov[k[1, 2], a -> 5]", "{k[1, 2], 5, g[h[2]], 2}", 0);
+    assert_eval_eq("ov[k[1, 2]]", "{k[1, 2], 1, g[h[2]], 2}", 0);
+    assert_eval_eq("ow[q, a -> s]", "s[q]", 0);
+    assert_eval_eq("{oc[1, a -> 3], oc[1]}", "{1, oc[1]}", 0);
+    clock_t t0 = clock();
+    run("bigx = Sum[c[i] f[i], {i, 20000}]; Do[ov[bigx], {20}]");
+    double secs = (double)(clock() - t0) / CLOCKS_PER_SEC;
+    ASSERT_MSG(secs < 3.0, "OptionsPattern call on a 20000-term argument took %.2f s", secs);
+}
+
 /* ---- 3. FreeQ fast path ------------------------------------------ */
 
 static void test_freeq_simple_forms(void) {
@@ -148,6 +168,7 @@ int main(void) {
     TEST(test_orderless_times_slot);
     TEST(test_no_group_for_foreign_call);
     TEST(test_numeric_coefficient_pattern_is_linear);
+    TEST(test_optionvalue_injection);
     TEST(test_freeq_simple_forms);
 
     printf("All dispatch slot-key / Flat-span / FreeQ tests passed.\n");

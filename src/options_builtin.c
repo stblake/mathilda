@@ -325,11 +325,16 @@ Expr* builtin_optionvalue(Expr* res) {
 
 /* Functional rewrite of OptionValue nodes inside a fired rule's RHS. Returns a
  * NEW tree; the input is never mutated (replace_bindings output may share
- * refcounted nodes with the stored rule template). */
-Expr* optionvalue_inject_context(const Expr* e, const char* head_sym,
-                                 const Expr* opts) {
-    if (!e) return NULL;
-    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+ * refcounted nodes with the stored rule template).
+ *
+ * Only the path down to each OptionValue is rebuilt; every other subtree is
+ * shared by reference.  Rebuilding all of it copied the arguments bound into
+ * the body too -- a 50,000-term sum passed to f[x_, OptionsPattern[]] was
+ * re-created node by node on every call, and the fresh nodes, carrying no
+ * fixed-point stamps, were all evaluated again (FeynCalc's FCTraceExpand:
+ * 0.17 s per call on such a sum). */
+static Expr* ov_inject_rec(const Expr* e, const char* head_sym, const Expr* opts) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;          /* unchanged */
 
     const Expr* h = e->data.function.head;
     size_t n = e->data.function.arg_count;
@@ -351,14 +356,34 @@ Expr* optionvalue_inject_context(const Expr* e, const char* head_sym,
         return r;
     }
 
-    /* Rebuild this node, recursing into head and every argument. */
-    Expr* new_head = optionvalue_inject_context(h, head_sym, opts);
-    Expr** na = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+    Expr* new_head = ov_inject_rec(h, head_sym, opts);
+    Expr** na = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* ai = ov_inject_rec(e->data.function.args[i], head_sym, opts);
+        if (!ai) continue;
+        if (!na) {
+            na = malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < n; j++) na[j] = NULL;
+        }
+        na[i] = ai;
+    }
+    if (!new_head && !na) return NULL;
+    if (!na && n > 0) {
+        na = malloc(sizeof(Expr*) * n);
+        for (size_t j = 0; j < n; j++) na[j] = NULL;
+    }
     for (size_t i = 0; i < n; i++)
-        na[i] = optionvalue_inject_context(e->data.function.args[i], head_sym, opts);
-    Expr* r = expr_new_function(new_head, na, n);
+        if (!na[i]) na[i] = expr_copy(e->data.function.args[i]);
+    Expr* r = expr_new_function(new_head ? new_head : expr_copy((Expr*)h), na, n);
     if (na) free(na);
     return r;
+}
+
+Expr* optionvalue_inject_context(const Expr* e, const char* head_sym,
+                                 const Expr* opts) {
+    if (!e) return NULL;
+    Expr* r = ov_inject_rec(e, head_sym, opts);
+    return r ? r : expr_copy((Expr*)e);
 }
 
 /* ====================================================================

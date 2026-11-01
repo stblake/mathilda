@@ -27,7 +27,9 @@ Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch
       Together/Cancel exponent generators when exponents differ by an integer. RegularizeDivergence-ID2 6.5 s -> 6.5 ms
 - [ ] Together[1/(x^e - 1) + 1/(x^e + 1)] left uncombined (reference: 2 x^e/((-1 + x^e)(1 + x^e)))
 - [ ] Together pulls generator content like the reference: x^e (1 + 2 x)/(1 + x)
-- [ ] P2 DummyIndexFreeQ-ID5/6 still 2.8 s vs 1.3 s: FCTraceExpand 0.66 vs 0.04 s, memoized NonCommFreeQ repeat 9.5 ms vs 20 us
+- [x] P2 OptionValue injection rebuilt every bound argument (fresh nodes, no stamps): path copy (v0.6123);
+      DummyIndexFreeQ-ID5 2.8 -> 0.88 s (ref 1.27), corpus 1.157x -> 1.296x, total 257 -> 206 s
+- [ ] memoized NonCommFreeQ repeat call on a 50k-term sum ~5 ms vs 20 us (literal DownValue lookup: hash + deep compare)
 - [ ] FCFeynmanFindDivergences-ID16/ID20 flip between runs of one binary (random primes): find the wrong decision
 - [ ] P2 TdecGrc-ID3 TIMEOUT (ref 29 s); FCFeynmanProjectiveQ-ID2 1.05 s vs 0.04
 
