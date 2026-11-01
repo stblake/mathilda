@@ -435,6 +435,7 @@ static void test_parametric_conic(void) {
         "x^2 Sqrt[a x^2 + b x + c]",                              /* warmup 4 (iv) */
         "1/((x - 1) Sqrt[x^2 + b x + c])",                        /* intro, multiple approaches 1 */
         "1/((2 b c/a x^2 + c) Sqrt[a + b x^2])",                  /* gg 10 (n2): a quartic pole prime */
+        "(a x^2 + b x + c)^(3/2)/x^2",                            /* warmup 4 (v): RowReduce over Sqrt[c] */
     };
     for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
         char buf[1024];

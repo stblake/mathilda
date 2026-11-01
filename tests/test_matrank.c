@@ -389,6 +389,27 @@ static void test_matrank_docstring(void) {
     printf("  PASS: Information[MatrixRank] evaluated\n");
 }
 
+/* Radical entries over Q(a, b, c)(Sqrt[c]): the ansatz system of a
+ * ParallelMixedTower integral over a parametric conic.  Bareiss elimination
+ * divides c^2 by Sqrt[c]; exact_poly_div saw c, Sqrt[c] and c^(3/2) as three
+ * independent generators, missed the quotient, and the unreduced fraction it
+ * fell back to defeated the pivot zero tests (rank 7 and 8, NullSpace empty).
+ * The true ranks are 6 and 6 (checked at random rational a, b, c). */
+static const char* RADICAL_AUG = "{{-10 Sqrt[c], 3 b, 4 a Sqrt[c], 2 a b, 6 a^2 Sqrt[c], -5 a^2 b, 0, 1/4 a b^4 - 30 a^2 b^2 c - 40 a^3 c^2}, {4 b, 8 a Sqrt[c], 0, 4 a^2 Sqrt[c], -4 a^2 b, 0, 0, 17 a^2 b^3 Sqrt[c] + 28 a^3 b c^(3/2)}, {12 a Sqrt[c], -2 a b, 2 a^2 Sqrt[c], -3 a^2 b, 0, 0, 0, -9/4 a^2 b^4 - 6 a^3 b^2 c + 6 a^4 c^2}, {-4 a b, 0, -2 a^2 b, 0, 0, 0, 0, -3 a^3 b^3 Sqrt[c] + 2 a^4 b c^(3/2)}, {-2 a^2 Sqrt[c], -a^2 b, 0, 0, 0, 0, 0, 3/4 a^3 b^4 - 2 a^5 c^2}, {0, -8 Sqrt[c], 2 b, 0, 4 a b, 8 a^2 Sqrt[c], -6 a^2 b, -9 a b^3 Sqrt[c]}, {0, 0, -6 Sqrt[c], b, -4 a Sqrt[c], 6 a b, 10 a^2 Sqrt[c], 5/4 b^4 + 30 a b^2 c + 40 a^2 c^2}, {0, 0, 0, -4 Sqrt[c], 0, -8 a Sqrt[c], 8 a b, -5 b^3 Sqrt[c] - 28 a b c^(3/2)}, {0, 0, 0, 0, -2 Sqrt[c], -b, -12 a Sqrt[c], 6 b^2 c - 6 a c^2}, {0, 0, 0, 0, 0, 0, 2 Sqrt[c], 2 c^2}, {0, 0, 0, 0, 0, 0, -2 b, -2 b c^(3/2)}}";
+
+static void test_matrank_symbolic_radicals(void) {
+    char buf[8192];
+    snprintf(buf, sizeof buf, "MatrixRank[%s]", RADICAL_AUG);
+    assert_rank_eq(buf, 6);
+    snprintf(buf, sizeof buf, "MatrixRank[%s[[All, 1 ;; 7]]]", RADICAL_AUG);
+    assert_rank_eq(buf, 6);
+    snprintf(buf, sizeof buf, "Length[NullSpace[%s]]", RADICAL_AUG);
+    assert_rank_eq(buf, 2);
+    snprintf(buf, sizeof buf, "Together[%s[[All, 1 ;; 7]] . LinearSolve[%s[[All, 1 ;; 7]], %s[[All, 8]]] - %s[[All, 8]]]",
+             RADICAL_AUG, RADICAL_AUG, RADICAL_AUG, RADICAL_AUG);
+    run_test(buf, "List[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -408,6 +429,7 @@ int main(void) {
     TEST(test_matrank_diag);
     TEST(test_matrank_rational_full);
     TEST(test_matrank_rational_dep);
+    TEST(test_matrank_symbolic_radicals);
     TEST(test_matrank_4x4_rank3);
     TEST(test_matrank_bigint);
     TEST(test_matrank_bigint_indep);
