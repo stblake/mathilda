@@ -205,6 +205,30 @@ static void test_linear_regression(void) {
              "List[List[Rule[x, 2], Rule[y, 1]]]");
 }
 
+/* A quadratic over Q(params) is factored before the formula.  On
+ * a^2 b^3 (1 + 3c + 2c^2) the formula gave (-3a^2b^3 -+ Sqrt[a^4 b^6])/(4a^2b^3),
+ * each -1 or -1/2 only by the branch of the square root, and the
+ * triangular search then took n2 = 0 on both branches: the norm system
+ * below (from ParallelMixedTower's NormSearchAll) came back {}. */
+static void test_parametric_square_discriminant(void) {
+    run_test("Solve[a^2 b^3 (1 + 3 c + 2 c^2) == 0, c]",
+             "List[List[Rule[c, -1]], List[Rule[c, Rational[-1, 2]]]]");
+    run_test("Solve[a + (2 a + b) c + 2 b c^2 == 0, c]",
+             "List[List[Rule[c, Rational[-1, 2]]], List[Rule[c, Times[-1, a, Power[b, -1]]]]]");
+    run_test("Solve[{n0^2 == b^2 (1 + c), 2 n0 n1 == 0, n1^2 + 2 n0 n2 == 2 a b c, "
+             "2 n1 n2 == 0, n2^2 == a^2 (1 + c)}, {n0, n1, n2, c}]",
+             "List[List[Rule[n0, 0], Rule[n1, Times[Rational[-1, 2], Power[Times[-8, a, b], Rational[1, 2]]]], Rule[n2, 0], Rule[c, -1]], "
+             "List[Rule[n0, 0], Rule[n1, Times[Rational[1, 2], Power[Times[-8, a, b], Rational[1, 2]]]], Rule[n2, 0], Rule[c, -1]], "
+             "List[Rule[n0, Times[Rational[-1, 4], Power[a, -1], Power[Times[8, Power[a, 2]], Rational[1, 2]], b]], Rule[n1, 0], "
+             "Rule[n2, Times[Rational[1, 4], Power[Times[8, Power[a, 2]], Rational[1, 2]]]], Rule[c, Rational[-1, 2]]], "
+             "List[Rule[n0, Times[Rational[1, 4], Power[a, -1], Power[Times[8, Power[a, 2]], Rational[1, 2]], b]], Rule[n1, 0], "
+             "Rule[n2, Times[Rational[-1, 4], Power[Times[8, Power[a, 2]], Rational[1, 2]]]], Rule[c, Rational[-1, 2]]]]");
+    /* irreducible over Q(a, b, c): the formula, unchanged */
+    run_test("Solve[a x^2 + b x + c == 0, x]",
+             "List[List[Rule[x, Times[Rational[1, 2], Power[a, -1], Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, a, c]], Rational[1, 2]]]]]]], "
+             "List[Rule[x, Times[Rational[1, 2], Power[a, -1], Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], Rational[1, 2]]]]]]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -224,6 +248,7 @@ int main(void) {
     test_non_polynomial();
     test_unexpanded_two_circles();
     test_unexpanded_product();
+    test_parametric_square_discriminant();
     test_parametric_system();
     test_linear_regression();
 

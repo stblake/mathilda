@@ -2007,6 +2007,17 @@ its context-qualified name.
   is reserved for `Reduce`.  No `ConditionalExpression` nondegeneracy guards are
   emitted (matching `Solve`, not `Reduce`).  More than three distinct parameters
   declines.
+- **Parametric quadratics are factored first.** A univariate quadratic whose
+  coefficients carry a parameter goes through `Factor` over `Q(parameters)`
+  before the quadratic formula, so content comes off and a discriminant that is a
+  square in `Q(parameters)` splits: `Solve[a^2 b^3 (1 + 3 c + 2 c^2) == 0, c]` is
+  `{{c -> -1}, {c -> -1/2}}`, not `(-3 a^2 b^3 -+ Sqrt[a^4 b^6])/(4 a^2 b^3)`, and
+  `Solve[a + (2 a + b) c + 2 b c^2 == 0, c]` is `{{c -> -1/2}, {c -> -a/b}}`. The
+  formula's two roots are -1 and -1/2 only as a set: which is which depends on the
+  branch of `Sqrt[a^4 b^6]`. The triangular search substitutes one root at a time,
+  saw a coefficient it could not prove zero, and lost solutions, so a consistent
+  system came back `{}` (before v0.6109). An irreducible quadratic still goes
+  through the formula.
 - A lexicographic Gröbner basis is computed via the Gröbner walk
   (`gb_groebner_walk`).  For a zero-dimensional ideal this basis is
   triangular: the univariate generator in the last variable is solved with

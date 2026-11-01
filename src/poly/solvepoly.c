@@ -833,6 +833,17 @@ static bool expr_contains_var(const Expr* e, const Expr* var) {
     return false;
 }
 
+/* True iff `e` has a symbol operand other than `var` -- a parameter (or a
+ * named constant) in the coefficients.  Heads are structural and skipped. */
+static bool has_param_symbol(const Expr* e, const Expr* var) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name != var->data.symbol.name;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_param_symbol(e->data.function.args[i], var)) return true;
+    return false;
+}
+
 /* Polynomial decomposition (Maxima `polydecomp` / `solve-by-
  * decomposition`), m = 2 inner-degree case.  When a monic polynomial
  * of even degree n >= 4 admits a decomposition f(x) = g(h(x)) with
@@ -1639,7 +1650,41 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
     SolList sl; sl_init(&sl);
 
     bool used_fast = false;
-    if (d == 1 || d == 2) {
+    if (d == 2 && has_param_symbol(poly, var)) {
+        /* A quadratic over Q(params) is factored first.  The quadratic
+         * formula on a(1 + 3c + 2c^2) gives (-3a -+ Sqrt[a^2])/(4a): each
+         * root is -1 or -1/2 depending on the branch of Sqrt[a^2], and a
+         * caller that substitutes one root at a time (the triangular
+         * system solver) then sees a coefficient it cannot prove zero and
+         * loses the solution.  Factor removes the content and splits a
+         * discriminant that is a square in Q(params), so the roots are
+         * rational functions of the parameters.  The factored form is used
+         * only when factoring did something (a split, or symbolic content);
+         * an irreducible primitive quadratic keeps its own form. */
+        Expr* fac = internal_factor((Expr*[]){ expr_copy(poly) }, 1);
+        bool useful = false;
+        if (fac->type == EXPR_FUNCTION
+            && fac->data.function.head->type == EXPR_SYMBOL
+            && fac->data.function.head->data.symbol.name == SYM_Times) {
+            for (size_t i = 0; i < fac->data.function.arg_count; i++) {
+                const Expr* fi = fac->data.function.args[i];
+                if (has_param_symbol(fi, var) && !expr_contains_var(fi, var))
+                    useful = true;                    /* symbolic content */
+                else if (expr_contains_var(fi, var) && get_degree_poly((Expr*)fi, var) < 2)
+                    useful = true;                    /* a linear factor  */
+            }
+        } else if (fac->type == EXPR_FUNCTION
+                   && fac->data.function.head->type == EXPR_SYMBOL
+                   && fac->data.function.head->data.symbol.name == SYM_Power) {
+            useful = true;                            /* a square         */
+        }
+        bool ok = useful
+            ? walk_product(fac, var, reals_only, opts, dom, 1, &sl)
+            : handle_factor(poly, var, reals_only, opts, dom, 1, &sl);
+        expr_free(fac);
+        if (!ok) { sl_free(&sl); expr_free(poly); return NULL; }
+        used_fast = true;
+    } else if (d == 1 || d == 2) {
         if (!handle_factor(poly, var, reals_only, opts, dom, 1, &sl)) {
             sl_free(&sl); expr_free(poly); return NULL;
         }
