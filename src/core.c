@@ -2846,6 +2846,7 @@ Expr* builtin_stringq(Expr* res) {
 }
 
 static bool is_numeric_quantity(Expr* e);
+static bool root_algebraic_is_numeric(const Expr* e);
 
 /* An argument of a NumericFunction head that keeps the call numeric: a numeric
  * quantity, or a List (nested to any depth) of them -- the parameter lists of
@@ -2894,7 +2895,8 @@ static bool is_numeric_quantity(Expr* e) {
 
             /* Transcendental Root[{f, x0}] is a numeric constant (N certifies
              * and refines it); its held Function body is not an argument. */
-            if (head_name == SYM_Root) return root_trans_is_object(e);
+            if (head_name == SYM_Root)
+                return root_trans_is_object(e) || root_algebraic_is_numeric(e);
 
             SymbolDef* def = symtab_get_def(head_name);
             if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
@@ -2905,6 +2907,54 @@ static bool is_numeric_quantity(Expr* e) {
             }
         }
         return false;
+    }
+    return false;
+}
+
+/* Polynomial body of an algebraic Root: built from the variable (#1, or the
+ * Function's declared parameter) and numeric quantities with Plus, Times and
+ * Power. */
+static bool root_body_numeric(const Expr* e, const Expr* var) {
+    if (var ? expr_eq((Expr*)e, (Expr*)var)
+            : (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+               && e->data.function.head->data.symbol.name == SYM_Slot
+               && e->data.function.arg_count == 1
+               && e->data.function.args[0]->type == EXPR_INTEGER
+               && e->data.function.args[0]->data.integer == 1))
+        return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Plus || h == SYM_Times || h == SYM_Power) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!root_body_numeric(e->data.function.args[i], var)) return false;
+            return true;
+        }
+    }
+    return is_numeric_quantity((Expr*)e);
+}
+
+/* Algebraic Root[f, k] (k a positive integer, f a pure function whose body is
+ * a polynomial with numeric coefficients) is a numeric constant, as in the
+ * reference: NumericQ[Root[-1 + 6 #1 + 22 #1^2 + 16 #1^3 &, 2]] is True.  It
+ * used to be False, so Equal, which numericalises only numeric quantities,
+ * could not compare a Root against a number (Minimize's Lagrange candidates). */
+static bool root_algebraic_is_numeric(const Expr* e) {
+    if (e->data.function.arg_count < 2) return false;
+    const Expr* f = e->data.function.args[0];
+    const Expr* k = e->data.function.args[1];
+    if (k->type != EXPR_INTEGER || k->data.integer < 1) return false;
+    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL
+        || f->data.function.head->data.symbol.name != SYM_Function) return false;
+    if (f->data.function.arg_count == 1)
+        return root_body_numeric(f->data.function.args[0], NULL);
+    if (f->data.function.arg_count == 2) {
+        const Expr* v = f->data.function.args[0];
+        if (v->type == EXPR_FUNCTION && v->data.function.arg_count == 1
+            && v->data.function.head->type == EXPR_SYMBOL
+            && v->data.function.head->data.symbol.name == SYM_List)
+            v = v->data.function.args[0];
+        if (v->type != EXPR_SYMBOL) return false;
+        return root_body_numeric(f->data.function.args[1], v);
     }
     return false;
 }

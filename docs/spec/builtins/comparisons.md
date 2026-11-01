@@ -62,6 +62,12 @@ Tests whether two (or more) expressions are mathematically equal.
   (`NumericQ`), so a free symbol still stays symbolic (`x == 0`).
 - For symbolic arguments that cannot be decided, the expression is returned
   unevaluated (`x == y`).
+- A side is numericalised for the value comparison only when it is a numeric
+  quantity (`NumericQ`), as in the reference (v0.6129). `N` maps into the
+  arguments of an inert call, so `ff[5] == x` used to evaluate `ff[5.]` and
+  fire a definition on real arguments; FeynCalc's `GA[5.]` guard printed
+  `GA::noint` inside every `... == x` test. `Unequal`, `Less` and the other
+  comparisons share the same fallback.
 - Two associations are equal when their entries agree in order, with identical
   keys and `Equal` values: `<|a -> 1|> == <|a -> 1.|>` is `True`,
   `<|a -> 1, b -> 2|> == <|b -> 2, a -> 1|>` is `False`. `Unequal` uses the

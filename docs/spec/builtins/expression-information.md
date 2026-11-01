@@ -232,6 +232,15 @@ In[5]:= fd[x_] := x^2; FullForm[Definition[fd]]   (* display only *)
 Out[5]= Definition[fd]
 ```
 
+## NumericQ
+`NumericQ[expr]` is `True` when `expr` is a numeric quantity: a number, a
+named numeric constant (`Pi`, `E`, ...), or a `NumericFunction` head applied
+to numeric quantities (`Sqrt[2] + Sin[1]`). Also numeric: `AlgebraicNumber`
+objects, transcendental `Root[{f, x0}]`, and (since v0.6129) algebraic
+`Root[f, k]` whose pure-function body is a polynomial with numeric
+coefficients, as in the reference: `NumericQ[Root[-1 + 6 #1 + 22 #1^2 +
+16 #1^3 &, 2]]` is `True`, `NumericQ[Root[#1^2 - a &, 1]]` is `False`.
+
 ## PossibleZeroQ
 Hybrid symbolic-numeric test for whether `expr` is identically zero.
 The general problem is undecidable (Richardson 1968); `PossibleZeroQ`

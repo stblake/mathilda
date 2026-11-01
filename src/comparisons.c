@@ -45,7 +45,12 @@ static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, 
      * that aren't raw numeric literals but have a definite real value.
      * If numericalize can't reduce the expression to a real number, we
      * leave it as unevaluated for the caller. The result is treated as
-     * inexact so comparisons use the floating-point tolerance branch. */
+     * inexact so comparisons use the floating-point tolerance branch.
+     * Only a numeric quantity is numericalised: N maps into the arguments
+     * of an inert call, so ff[5] == x evaluated ff[5.] -- firing a
+     * definition the reference never reaches (FeynCalc's GA[5.] guard
+     * printed GA::noint inside every `... == x` test). */
+    if (!expr_is_numeric_quantity(e)) return false;
     Expr* approx = numericalize(e, numeric_machine_spec());
     if (!approx) return false;
     bool ok = false;
