@@ -1010,7 +1010,8 @@ static bool pl_int_value(const Expr* e, long* out) {
     }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR && mpfr_integer_p(e->data.mpfr) &&
-        mpfr_cmpabs_ui(e->data.mpfr, 1000000) < 0) {
+        mpfr_cmp_si(e->data.mpfr, 1000000) < 0 &&
+        mpfr_cmp_si(e->data.mpfr, -1000000) > 0) {  /* |x| < 1000000; mpfr_cmpabs_ui is MPFR >= 4.1 */
         *out = mpfr_get_si(e->data.mpfr, MPFR_RNDN);
         return true;
     }

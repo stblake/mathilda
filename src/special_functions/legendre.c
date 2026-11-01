@@ -1017,7 +1017,8 @@ static bool leg_type_label(const Expr* e, int64_t* out) {
     }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR && mpfr_integer_p(e->data.mpfr) &&
-        mpfr_cmpabs_ui(e->data.mpfr, 8) < 0) {
+        mpfr_cmp_si(e->data.mpfr, 8) < 0 &&
+        mpfr_cmp_si(e->data.mpfr, -8) > 0) {  /* |x| < 8; mpfr_cmpabs_ui is MPFR >= 4.1 */
         *out = (int64_t)mpfr_get_si(e->data.mpfr, MPFR_RNDN);
         return true;
     }
