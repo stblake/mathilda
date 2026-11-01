@@ -61,30 +61,33 @@
 
 /* If n is a perfect prime power p^k with k >= 2, set *p_out = p,
  * *k_out = k and return true.  Otherwise return false (n is < 4, prime,
- * or has at least two distinct prime factors).  Trial division up to
- * sqrt(n); since Mathilda's prime-base inputs are typically small literals
- * (4, 8, 9, 16, 25, 27, 32, 49, ...), this is microseconds-cheap. */
+ * or has at least two distinct prime factors). */
 static bool prime_rebase_check(int64_t n, int64_t* p_out, int64_t* k_out) {
     if (n < 4) return false;
-    int64_t p;
-    if ((n & 1) == 0) {
-        p = 2;
-    } else {
-        for (p = 3; ; p += 2) {
-            if (p > n / p) return false;  /* n is prime */
-            if (n % p == 0) break;
+    /* n = p^k (k >= 2) iff, for the LARGEST k with an exact integer k-th
+     * root r, r is prime: that r is no perfect power itself (64 = 2^6, not
+     * 8^2).  Exact roots and a primality test cost microseconds at any size;
+     * the trial division this replaces ran to sqrt(n) -- 33M divisions for a
+     * 16-digit base, every Simplify pass, on FeynCalc's numeric zero checks. */
+    mpz_t m, r;
+    mpz_init(m);
+    mpz_init(r);
+    uint64_t un = (uint64_t)n;
+    mpz_import(m, 1, 1, sizeof un, 0, 0, &un);   /* no 64-bit long on LLP64 */
+    bool ok = false;
+    for (unsigned long k = 63; k >= 2; k--) {
+        if (mpz_root(r, m, k)) {
+            if (mpz_probab_prime_p(r, 30) > 0) {
+                *p_out = (int64_t)mpz_get_ui(r);   /* r <= sqrt(n) < 2^32 */
+                *k_out = (int64_t)k;
+                ok = true;
+            }
+            break;
         }
     }
-    int64_t k = 0;
-    int64_t m = n;
-    while (m > 1 && (m % p) == 0) {
-        m /= p;
-        k++;
-    }
-    if (m != 1 || k < 2) return false;
-    *p_out = p;
-    *k_out = k;
-    return true;
+    mpz_clear(m);
+    mpz_clear(r);
+    return ok;
 }
 
 /* Returns true if e contains any Power[c, _] with c an EXPR_INTEGER >= 4

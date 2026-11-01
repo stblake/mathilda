@@ -18,6 +18,7 @@
 #include "core.h"
 #include "print.h"
 #include "rat_internal.h"
+#include "expsplit.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -2611,6 +2612,106 @@ static Expr* builtin_together_compute(Expr* res) {
  * beyond the cap the normalisation is left as-is (a correct, if unsimplified,
  * result), which keeps the process alive instead of crashing.  The cap is far
  * above any genuine nesting depth. */
+/* Powers with a symbolic exponent as polynomial generators (expsplit.c, as
+ * in Factor): b^(n + k t) is b^n (b^t)^k.  Taken as opaque atoms, x^(-2 e)
+ * and x^(-1 - 2 e) share no factor, so Together[2 x^(-2 e) - 2 x x^(-1 - 2 e)]
+ * combined over the "LCM" x^(1 + 4 e) instead of giving 0 (FeynCalc's
+ * FactorList2 check then sent Simplify into seconds of search).
+ *
+ * Only that situation is changed: two powers of one base whose exponents
+ * differ by a nonzero integer (exp_offset_pair), and only when the result over
+ * the generators is strictly smaller.  Otherwise the opaque reading stands --
+ * the reference keeps Cancel[x^(n - 1)/(1 + x^n)] as it is and the factored
+ * denominator (-1 + E^x) (1 + E^x) of a sum over E^x and E^(2 x). */
+static void exp_split_offset(const Expr* p, Expr** rest, Expr** off) {
+    *off = NULL;
+    *rest = NULL;
+    if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+        p->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t n = p->data.function.arg_count, k = 0;
+        Expr** a = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) {
+            Expr* t = p->data.function.args[i];
+            if (!*off && (t->type == EXPR_INTEGER || t->type == EXPR_BIGINT)) *off = t;
+            else a[k++] = expr_copy(t);
+        }
+        *rest = (k == 1) ? a[0] : expr_new_function(expr_new_symbol(SYM_Plus), a, k);
+        free(a);
+        return;
+    }
+    *rest = expr_copy((Expr*)p);
+}
+
+typedef struct { const Expr* base; Expr* rest; const Expr* off; } ExpOffRec;
+
+static bool exp_offset_scan(const Expr* e, ExpOffRec** recs, size_t* n, size_t* cap) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* p = e->data.function.args[1];
+        if (!expr_is_numeric_like((Expr*)p)) {
+            Expr* rest; Expr* off;
+            exp_split_offset(p, &rest, &off);
+            for (size_t i = 0; i < *n; i++) {
+                ExpOffRec* r = &(*recs)[i];
+                if (expr_eq((Expr*)r->base, (Expr*)b) && expr_eq(r->rest, rest) &&
+                    !((r->off == NULL && off == NULL) ||
+                      (r->off && off && expr_eq((Expr*)r->off, off)))) {
+                    expr_free(rest);
+                    return true;
+                }
+            }
+            if (*n == *cap) {
+                *cap = *cap ? 2 * *cap : 8;
+                *recs = realloc(*recs, *cap * sizeof(ExpOffRec));
+            }
+            (*recs)[(*n)++] = (ExpOffRec){ b, rest, off };
+        }
+    }
+    if (exp_offset_scan(e->data.function.head, recs, n, cap)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (exp_offset_scan(e->data.function.args[i], recs, n, cap)) return true;
+    return false;
+}
+
+/* True when two powers of one base have exponents differing by an integer. */
+static bool exp_offset_pair(const Expr* e) {
+    ExpOffRec* recs = NULL;
+    size_t n = 0, cap = 0;
+    bool hit = exp_offset_scan(e, &recs, &n, &cap);
+    for (size_t i = 0; i < n; i++) expr_free(recs[i].rest);
+    free(recs);
+    return hit;
+}
+
+/* `head` applied over the exponent generators, or NULL (see above). */
+static Expr* rat_over_exponent_generators(Expr* res, const char* head) {
+    if (res->data.function.arg_count < 1 || !exp_offset_pair(res->data.function.args[0]))
+        return NULL;
+    ExpSplitTab st = {0};
+    Expr* split = expsplit_abstract(res->data.function.args[0], &st);
+    if (!split) return NULL;
+    size_t n = res->data.function.arg_count;
+    Expr** fa = malloc(n * sizeof(Expr*));
+    fa[0] = split;
+    for (size_t i = 1; i < n; i++) fa[i] = expr_copy(res->data.function.args[i]);
+    Expr* f = eval_and_free(expr_new_function(expr_new_symbol(head), fa, n));
+    free(fa);
+    Expr* out = f ? expsplit_restore(f, &st) : NULL;
+    expsplit_free(&st);
+    return out;
+}
+
+/* The generator result when it is strictly smaller than `plain`. */
+static Expr* rat_prefer_smaller(Expr* plain, Expr* gen) {
+    if (!gen) return plain;
+    if (!plain) return gen;
+    if (leaf_count_internal(gen, true) < leaf_count_internal(plain, true)) { expr_free(plain); return gen; }
+    expr_free(gen);
+    return plain;
+}
+
 #define RAT_TOGETHER_CANCEL_MAX_DEPTH 400
 static int rat_together_cancel_depth = 0;
 
@@ -2623,7 +2724,8 @@ Expr* builtin_cancel(Expr* res) {
         if (hit) return expr_copy((Expr*)hit);
     }
     rat_together_cancel_depth++;
-    Expr* out = builtin_cancel_compute(res);
+    Expr* gen = rat_over_exponent_generators(res, SYM_Cancel);
+    Expr* out = rat_prefer_smaller(builtin_cancel_compute(res), gen);
     rat_together_cancel_depth--;
     if (out && memo) factor_memo_store(memo, res, out);
     return out;
@@ -2639,7 +2741,8 @@ Expr* builtin_together(Expr* res) {
         if (hit) return expr_copy((Expr*)hit);
     }
     rat_together_cancel_depth++;
-    Expr* out = builtin_together_compute(res);
+    Expr* gen = rat_over_exponent_generators(res, SYM_Together);
+    Expr* out = rat_prefer_smaller(builtin_together_compute(res), gen);
     rat_together_cancel_depth--;
     /* Under Extension -> Automatic, canonicalise the denominator sign of a
      * fractional result so its leading term is positive — Wolfram's Together

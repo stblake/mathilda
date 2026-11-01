@@ -119,6 +119,7 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 
 **Features**:
 - `Protected`, `Listable`.
+- **Powers whose exponents differ by an integer** (v0.6122). When two powers of one base have exponents that differ by a nonzero integer, `Together` and `Cancel` read them as `Factor` does: `b^(n + k t)` is `b^n (b^t)^k`. So `Together[2 x^(-2 e) - 2 x x^(-1 - 2 e)]` is `0` and `Together[2^n + 2^(n + 1)]` is `3 2^n`. The result is kept only if it is strictly smaller than the result with each power taken as an opaque atom, so `Cancel[x^(n - 1)/(1 + x^n)]` is returned unchanged, as in the reference.
 - **Factored rational-function engine** (v0.6072, `src/poly/ratfun.c`). Over Q
   in symbols and transcendental kernels, a sum of fractions is combined
   natively: each term is reduced on its own, the denominator factors of all the

@@ -3424,6 +3424,14 @@ else()
     target_link_libraries(dispatch_slot_keys_tests gmp m)
 endif()
 
+add_executable(exponent_generators_tests test_exponent_generators.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(exponent_generators_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(exponent_generators_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(exponent_generators_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 

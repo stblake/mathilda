@@ -23,7 +23,10 @@ Profiling: `MATHILDA_DISPATCH_STATS=1` (per-head dispatch, distinct exprs, epoch
       no foreign-call group spans under Flat (Contract-ID23 9.9 -> 0.49 s, ref 0.45; MatchQ[2 x y, y_^n_. x] now False),
       FreeQ pointer walk for atom/_h/Alternatives forms;
       corpus 1.072x -> 1.157x (total 315 -> 261 s, ref 272 s), micro warm 1.00x -> 1.09x
-- [ ] P2 Simplify[2 (5 + 7 s)^(-2 e) - (10 + 14 s) (5 + 7 s)^(-1 - 2 e)] -> 0 (FactorList2 Check; RegularizeDivergence-ID2 3-6 s)
+- [x] P2 FactorList2 Check (v0.6122): prime-power trial division in Simplify (33M divisions/pass) -> exact roots;
+      Together/Cancel exponent generators when exponents differ by an integer. RegularizeDivergence-ID2 6.5 s -> 6.5 ms
+- [ ] Together[1/(x^e - 1) + 1/(x^e + 1)] left uncombined (reference: 2 x^e/((-1 + x^e)(1 + x^e)))
+- [ ] Together pulls generator content like the reference: x^e (1 + 2 x)/(1 + x)
 - [ ] P2 DummyIndexFreeQ-ID5/6 still 2.8 s vs 1.3 s: FCTraceExpand 0.66 vs 0.04 s, memoized NonCommFreeQ repeat 9.5 ms vs 20 us
 - [ ] FCFeynmanFindDivergences-ID16/ID20 flip between runs of one binary (random primes): find the wrong decision
 - [ ] P2 TdecGrc-ID3 TIMEOUT (ref 29 s); FCFeynmanProjectiveQ-ID2 1.05 s vs 0.04
