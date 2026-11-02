@@ -1,4 +1,5 @@
 #include "facpoly.h"
+#include "common.h"           /* alg_thread_call: Factor threads into Rule/relations */
 #include "poly.h"
 #include "eval.h"
 #include "expand.h"

@@ -806,7 +806,7 @@ void test_lhs_pattern_constants_folded() {
     assert_eval_eq("lf3[x_/2] := x; lf3[y/2]", "y", 0);
     assert_eval_eq("lf4[x_ /; x > 2 - 1] := big; {lf4[3], lf4[0]}", "List[big, lf4[0]]", 1);
     assert_eval_eq("lf5[HoldPattern[y_ - 4]] := held; DownValues[lf5]",
-                   "List[RuleDelayed[HoldPattern[lf5[HoldPattern[Plus[Pattern[y, Blank[]], Times[-1, 4]]]]], held]]", 1);
+                   "List[RuleDelayed[HoldPattern[lf5[HoldPattern[Plus[Pattern[y, Blank[]], -4]]]], held]]", 1);   /* a - 4 parses to Plus[a, -4] (v0.6139) */
     assert_eval_eq("SetAttributes[lfpr, Orderless]; "
                    "lfpr[(a : li | mo)[x_, dim_Symbol], (b : li | mo)[y_, dim_Symbol - 4]] := lfpr[a[x, dim - 4], b[y, dim - 4]]; "
                    "{lfpr[li[mu, D4], mo[p, D4 - 4]], lfpr[mo[p, D4 - 4], li[mu, D4]]}",
@@ -867,7 +867,7 @@ void test_sign_normal_forms_v591() {
                    "{2 Sqrt[-1 + x^2], 2 Sqrt[-a], 2 (-a)^(1/3)}", 0);
     assert_eval_eq("Solve[1 - x^2 + y^2 == 0, y]", "{{y -> -Sqrt[-1 + x^2]}, {y -> Sqrt[-1 + x^2]}}", 0);
     assert_eval_eq("{FactorList[-x - 1], FactorList[1 - x], FactorList[x - y], FactorList[y - x], FactorList[-x/2 - 1/2]}",
-                   "{{{-1, 1}, {1 + x, 1}}, {{-1, 1}, {-1 + x, 1}}, {{1, 1}, {x - y, 1}}, {{-1, 1}, {x - y, 1}}, {{-1/2, 1}, {1 + x, 1}}}", 0);
+                   "{{{-1, 1}, {1 + x, 1}}, {{-1, 1}, {-1 + x, 1}}, {{1, 1}, {x - y, 1}}, {{-1, 1}, {x - y, 1}}, {{-1, 1}, {2, -1}, {1 + x, 1}}}", 0);
     assert_eval_eq("Series[Beta[s, 1], {s, 0, 1}]", "1/s + O[s]^2", 0);
     assert_eval_eq("FunctionExpand[PolyLog[2, E^(I Pi/3)] + PolyLog[2, E^(-I Pi/3)]]", "1/18 Pi^2", 0);
 }

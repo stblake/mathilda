@@ -436,7 +436,7 @@ static void test_algebraic_hyperbolic(void) {
     GRUNTZ("Sqrt[x^2 + x] - Sqrt[x^2 + 1]", "1/2");
     GRUNTZ("Coth[x] - 1", "0");
     GRUNTZ("x (Tanh[x] - 1)", "0");
-    GRUNTZ("x - Log[Cosh[x]]", "-Log[1/2]");   /* Cosh[x] ~ E^x/2 -> Log[2] */
+    GRUNTZ("x - Log[Cosh[x]]", "Log[2]");   /* Cosh[x] ~ E^x/2 -> Log[2] */
     GRUNTZ("E^(-x) (Cosh[x] + Sinh[x])", "1");
 }
 

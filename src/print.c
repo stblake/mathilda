@@ -1294,7 +1294,11 @@ static void print_standard(Expr* e, int parent_prec) {
                                 for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
                                     new_args[k-1] = expr_copy(t_copy->data.function.args[k]);
                                 }
-                                Expr* new_times = expr_new_function(expr_new_symbol(SYM_Times), new_args, t_copy->data.function.arg_count - 1);
+                                /* one factor left (-1*1 -> 1): print it bare, not as
+                                 * the one-argument Times[1] InputForm prints empty */
+                                Expr* new_times = (t_copy->data.function.arg_count == 2)
+                                    ? new_args[0]
+                                    : expr_new_function(expr_new_symbol(SYM_Times), new_args, t_copy->data.function.arg_count - 1);
                                 expr_free(t_copy);
                                 t_copy = new_times;
                                 free(new_args);
@@ -1313,7 +1317,11 @@ static void print_standard(Expr* e, int parent_prec) {
                                 for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
                                     new_args[k-1] = expr_copy(t_copy->data.function.args[k]);
                                 }
-                                Expr* new_times = expr_new_function(expr_new_symbol(SYM_Times), new_args, t_copy->data.function.arg_count - 1);
+                                /* one factor left (-1*1 -> 1): print it bare, not as
+                                 * the one-argument Times[1] InputForm prints empty */
+                                Expr* new_times = (t_copy->data.function.arg_count == 2)
+                                    ? new_args[0]
+                                    : expr_new_function(expr_new_symbol(SYM_Times), new_args, t_copy->data.function.arg_count - 1);
                                 expr_free(t_copy);
                                 t_copy = new_times;
                                 free(new_args);

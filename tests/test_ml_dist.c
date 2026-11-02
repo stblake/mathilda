@@ -205,8 +205,8 @@ static void test_bic_picks_the_component_count_from_the_data(void) {
     assert_eval_eq("FullForm[LearnDistribution[" BIMODAL ", "
                    "Method -> \"GaussianMixture\"]]",
                    "LearnedDistribution[\"GaussianMixture\", "
-                   "List[List[0.5, 0.5], List[1.0], List[0.37666666666666665`], "
-                   "List[11.0], List[0.37666666666666665`]], 1, 2]", 0);   /* FullForm: every digit */
+                   "List[List[0.5, 0.5], List[1.0], List[0.37666666666666665], "
+                   "List[11.0], List[0.37666666666666665]], 1, 2]", 0);   /* FullForm: every digit */
 }
 
 static void test_one_component_mixture_relates_exactly_to_the_multinormal(void) {

@@ -1752,8 +1752,14 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
             should_check = true;
         }
     } else {
-        should_check = (current_level >= spec.min && current_level <= spec.max) ||
-                       (-d >= spec.min && -d <= spec.max);
+        /* Each bound on its own scale: a non-negative bound against the level,
+         * a negative one against -depth ({0, 1} is levels 0..1, {1, -1}
+         * every part but the leaves).  The old (level in range) || (-depth in
+         * range) let every node through {0, n}, depth being 0 there:
+         * FreeQ[{f[0], 2}, 0, {0, 1}] was False. */
+        bool lo = spec.min >= 0 ? current_level >= spec.min : -d >= spec.min;
+        bool hi = spec.max >= 0 ? current_level <= spec.max : -d <= spec.max;
+        should_check = lo && hi;
     }
 
     if (should_check) {

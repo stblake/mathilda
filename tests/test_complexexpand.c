@@ -42,7 +42,7 @@ void test_cx_trig(void) {
                    "Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + (I Sinh[2 y])/(Cos[2 x] + Cosh[2 y])", 0);
     /* A complex variable given via the second argument. */
     assert_eval_eq("ComplexExpand[Cosh[x + I y] + Tanh[z], {z}]",
-                   "Cos[y] Cosh[x] + (I Sin[2 Im[z]])/(Cos[2 Im[z]] + Cosh[2 Re[z]]) + I Sin[y] Sinh[x] + Sinh[2 Re[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]])", 0);
+                   "Cos[y] Cosh[x] + I (Sin[2 Im[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]]) + Sin[y] Sinh[x]) + Sinh[2 Re[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]])", 0);
     /* Single complex variable given bare (not in a list). */
     assert_eval_eq("ComplexExpand[Sin[x], x]",
                    "Cosh[Im[x]] Sin[Re[x]] + I Cos[Re[x]] Sinh[Im[x]]", 0);
@@ -174,7 +174,7 @@ void test_cx_threading(void) {
 /* ------------------------------------------------------------------ */
 void test_cx_multivar(void) {
     assert_eval_eq("ComplexExpand[Sin[x] Exp[y], {x, y}]",
-                   "E^Re[y] Cos[Im[y]] Cosh[Im[x]] Sin[Re[x]] + I E^Re[y] Cosh[Im[x]] Sin[Im[y]] Sin[Re[x]] + I E^Re[y] Cos[Im[y]] Cos[Re[x]] Sinh[Im[x]] - E^Re[y] Cos[Re[x]] Sin[Im[y]] Sinh[Im[x]]", 0);
+                   "E^Re[y] Cos[Im[y]] Cosh[Im[x]] Sin[Re[x]] - E^Re[y] Cos[Re[x]] Sin[Im[y]] Sinh[Im[x]] + I (E^Re[y] Cosh[Im[x]] Sin[Im[y]] Sin[Re[x]] + E^Re[y] Cos[Im[y]] Cos[Re[x]] Sinh[Im[x]])", 0);
 }
 
 /* ------------------------------------------------------------------ */

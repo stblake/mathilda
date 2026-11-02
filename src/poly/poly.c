@@ -39,6 +39,7 @@
 
 #include "internal.h"
 #include "poly.h"
+#include "common.h"
 #include "expsplit.h"
 #include "expand.h"
 #include "eval.h"
@@ -1511,6 +1512,56 @@ Expr* builtin_polynomialq(Expr* res) {
     bool poly = is_polynomial(res->data.function.args[0], vars, var_count);
     if (free_vars) free(vars);
     return expr_new_symbol(poly ? "True" : "False");
+}
+
+/* Internal`RationalFunctionQ[expr, vars] -- is expr a rational function of
+ * vars?  Read as the reference reads it: expr is built from Plus, Times and
+ * integer Powers whose leaves are either one of vars or free of every one of
+ * them (Sin[x] is a coefficient for D; Sqrt[D], D^2.5, 2^D, f[D], a List or an
+ * equation are not rational in D).  vars is one expression or a List; a
+ * variable may be compound (Sin[x]), so "free of" is subexpression freeness,
+ * heads included.  FeynCalc's PaVeLimitTo4 checks its D-dependent prefactors
+ * this way. */
+static bool rfq_free_of(const Expr* e, const Expr* v) {
+    if (expr_eq((Expr*)e, (Expr*)v)) return false;
+    if (e->type != EXPR_FUNCTION) return true;
+    if (!rfq_free_of(e->data.function.head, v)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!rfq_free_of(e->data.function.args[i], v)) return false;
+    return true;
+}
+
+static bool rfq_rational(const Expr* e, Expr* const* vars, size_t nv) {
+    bool free_all = true;
+    for (size_t i = 0; i < nv; i++) {
+        if (expr_eq((Expr*)e, vars[i])) return true;
+        if (free_all && !rfq_free_of(e, vars[i])) free_all = false;
+    }
+    if (free_all) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Plus) || head_is(e, SYM_Times)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!rfq_rational(e->data.function.args[i], vars, nv)) return false;
+        return true;
+    }
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type != EXPR_INTEGER && ex->type != EXPR_BIGINT) return false;
+        return rfq_rational(e->data.function.args[0], vars, nv);
+    }
+    return false;
+}
+
+static Expr* builtin_rationalfunctionq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2) return builtin_arg_error("Internal`RationalFunctionQ", argc, 2, 2);
+    Expr* v = res->data.function.args[1];
+    Expr* const* vars = &res->data.function.args[1];
+    size_t nv = 1;
+    if (head_is(v, SYM_List)) { vars = v->data.function.args; nv = v->data.function.arg_count; }
+    return expr_new_symbol(rfq_rational(res->data.function.args[0], vars, nv)
+                           ? SYM_True : SYM_False);
 }
 
 /* ------------------------------------------------------------------ */
@@ -6387,6 +6438,12 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
 void poly_init(void) {
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
     symtab_get_def("PolynomialQ")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Internal`RationalFunctionQ", builtin_rationalfunctionq);
+    symtab_get_def("Internal`RationalFunctionQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Internal`RationalFunctionQ",
+        "Internal`RationalFunctionQ[expr, vars] gives True if expr is a rational "
+        "function of vars (a variable or a list): built from Plus, Times and integer "
+        "powers of the variables and of subexpressions free of them.");
     symtab_add_builtin("Variables", builtin_variables);
     symtab_get_def("Variables")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Coefficient", builtin_coefficient);

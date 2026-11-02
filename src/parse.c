@@ -2371,7 +2371,29 @@ infix_loop:
             /* a - b c is Plus[a, Times[-1, b, c]]: the -1 joins a bare product
              * operand, while a - (b c) keeps Times[-1, Times[b, c]]. */
             Expr* neg_right;
-            if (right_chain && strcmp(right_chain, "Times") == 0 && right->type == EXPR_FUNCTION &&
+            /* a - 1 is Plus[a, -1], a - 2.5 Plus[a, -2.5]: a numeric literal is
+             * negated in place, as the reference parses it (a held a^2 - 1 is
+             * Plus[a^2, -1], not Plus[a^2, Times[-1, 1]]). */
+            /* Fresh nodes, never a write through `right`: literals are shared. */
+            if (right->type == EXPR_INTEGER && right->data.integer != INT64_MIN) {
+                neg_right = expr_new_integer(-right->data.integer);
+                expr_free(right);
+            } else if (right->type == EXPR_BIGINT) {
+                mpz_t t; mpz_init(t);
+                mpz_neg(t, right->data.bigint);
+                neg_right = expr_new_bigint_from_mpz(t);
+                mpz_clear(t);
+                expr_free(right);
+            } else if (right->type == EXPR_REAL) {
+                neg_right = expr_new_real(right->data.real != 0.0 ? -right->data.real : 0.0);
+                expr_free(right);
+#ifdef USE_MPFR
+            } else if (right->type == EXPR_MPFR) {
+                neg_right = expr_new_mpfr_bits(mpfr_get_prec(right->data.mpfr));
+                mpfr_neg(neg_right->data.mpfr, right->data.mpfr, MPFR_RNDN);
+                expr_free(right);
+#endif
+            } else if (right_chain && strcmp(right_chain, "Times") == 0 && right->type == EXPR_FUNCTION &&
                 right->data.function.head->type == EXPR_SYMBOL &&
                 right->data.function.head->data.symbol.name == SYM_Times) {
                 size_t rn = right->data.function.arg_count;

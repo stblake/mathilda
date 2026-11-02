@@ -251,6 +251,13 @@ static bool group_text(const char* p, const char* end, Buf* out) {
             continue;
         }
         if (c) return false;
+        /* "\ " is a space token in box text (p^\ 2 is RowBox[{p, ^, " ", 2}],
+         * which reads as p^2): lower it to a plain space. */
+        if (*p == '\\' && p + 1 < end && p[1] == ' ') {
+            buf_add(out, " ", 1);
+            p += 2;
+            continue;
+        }
         if (*p == '"') {
             const char* e = skip_string(p);
             if (!e || e > end) return false;

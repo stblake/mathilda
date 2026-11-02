@@ -238,6 +238,15 @@ In[5]:= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1] /. x -> 5
 Out[5]= 3/4
 ```
 
+## Not
+Logical negation.
+- `Not[e]`, `!e`
+
+**Features**:
+- `Protected`.
+- `Not[True]` is `False`, `Not[False]` is `True`.
+- **Written negations** (v0.6139), as the reference writes them. `!!a` is `a`, and a two-argument relation flips: `!(x == 0)` is `x != 0`, `!(x != 0)` is `x == 0`, `!(x < 1)` is `x >= 1`, `!(x > 1)` is `x <= 1`. `!Element[x, d]` is `NotElement[x, d]`. A chain (`x == y == z`, `x < y < z`) and a connective (`!(a && b)`) stay under `Not`.
+
 ## Xor
 Logical exclusive OR.
 - `Xor[e1, e2, ...]`: Yields `True` when an **odd** number of the `ei` are `True`.

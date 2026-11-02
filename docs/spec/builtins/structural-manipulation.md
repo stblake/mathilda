@@ -1921,6 +1921,8 @@ Tests whether an expression is a polynomial in one or more variables.
 - Constants (expressions free of the specified variables) are polynomials of degree 0.
 - `Power[base, exp]` is a polynomial if `exp` is a non-negative integer and `base` is a polynomial.
 
+**`` Internal`RationalFunctionQ ``** (v0.6139). `` Internal`RationalFunctionQ[expr, vars] `` is `True` when `expr` is a rational function of `vars` (one variable or a list). That means it is built from `Plus`, `Times` and integer powers of the variables and of subexpressions free of them. `Sin[x]` is a coefficient for `D`; `Sqrt[D]`, `D^2.5`, `2^D`, `f[D]`, a list or an equation are not rational in `D`. A variable may be compound. Called with one argument it gives `::argr` and stays unevaluated. FeynCalc's `PaVeLimitTo4` checks its `D`-dependent prefactors with it.
+
 ```mathematica
 In[1]:= PolynomialQ[x^3 - 2x/y + 3x z, x]
 Out[1]= True

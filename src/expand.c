@@ -1,3 +1,4 @@
+#include "common.h"      /* alg_thread_call */
 #include "expand.h"
 #include "eval.h"
 #include "symtab.h"
@@ -677,6 +678,12 @@ Expr* expr_expand(Expr* e) {
  * in memory yields Overflow[]. */
 Expr* builtin_expand(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
+    /* Expand[x -> (a + b)^2] is x -> a^2 + 2 a b + b^2: a Rule, relation or
+     * logical connective threads, as in the reference. */
+    {
+        Expr* t = alg_thread_call(res);
+        if (t) return t;
+    }
     Expr* patt = NULL;
     if (res->data.function.arg_count == 2) patt = res->data.function.args[1];
     Expr* ret = expr_expand_impl(res->data.function.args[0], patt, /*overflow_mode=*/true);
@@ -704,6 +711,7 @@ static bool is_thread_head(const char* head) {
            head == SYM_GreaterEqual || head == SYM_Inequality ||
            head == SYM_And ||
            head == SYM_Or || head == SYM_Not ||
+           head == SYM_Xor || head == SYM_Implies || head == SYM_Rule ||
            head == SYM_Plus;
 }
 

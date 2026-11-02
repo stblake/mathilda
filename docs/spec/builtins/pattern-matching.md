@@ -9,6 +9,10 @@
 - `__`: `BlankSequence[]`.
 - `___`: `BlankNullSequence[]`.
 - `x_`: `Pattern[x, _]`.
+- A literal symbol in a pattern is literal even when a pattern variable of the
+  same name is bound (v0.6139): `{i, b}` matches `{b_, b}` with `b -> i`, and
+  `{i, i}` does not, as in the reference. The literal used to be read as the
+  binding, so FeynCalc's `FV[a, b_] FV[q, b_] + FV[b, c_] FV[q, c_]` never matched.
 - `_h`: Matches expression with head `h`. Head-typed blanks cover the atomic
   numeric heads too: `_Rational` matches `1/2` (`Rational[1, 2]`), `_Complex`
   matches `3 + 4 I` (`Complex[3, 4]`), and `_Integer` matches an arbitrary-size

@@ -114,7 +114,8 @@ static bool ft_is_threading_head(const char* head) {
            strcmp(head, "Greater") == 0 || strcmp(head, "GreaterEqual") == 0 ||
            strcmp(head, "Inequality") == 0 ||
            strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 ||
-           strcmp(head, "Not") == 0 || strcmp(head, "Xor") == 0;
+           strcmp(head, "Not") == 0 || strcmp(head, "Xor") == 0 ||
+           strcmp(head, "Implies") == 0 || strcmp(head, "Rule") == 0;
 }
 
 /* Sign of the leading coefficient of the (expanded) polynomial `p` under

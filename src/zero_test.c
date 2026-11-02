@@ -2542,6 +2542,13 @@ static bool pzq_opaque_call(const Expr* e) {
 /* Owned copy of `e` with every opaque call replaced; NULL if none. */
 static Expr* pzq_abstract(const Expr* e, PzqAtoms* at) {
     if (e->type != EXPR_FUNCTION) return NULL;
+    /* A pure function is code, not an independent quantity: Function has no
+     * builtin (the evaluator applies it), so it read as opaque and
+     * RootSum[1/256 + #^4 &, Log[1 + 64 v^(1/4) #] # &] lost its v.  Kept
+     * whole, body included (its slots are not variables either). */
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Function)
+        return NULL;
     if (pzq_opaque_call(e)) {
         for (size_t i = 0; i < at->n; i++)
             if (expr_eq(at->from[i], (Expr*)e)) return expr_copy(at->to[i]);

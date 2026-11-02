@@ -16,6 +16,33 @@ Expr* builtin_not(Expr* res) {
         if (arg->data.symbol.name == SYM_True) return expr_new_symbol(SYM_False);
         if (arg->data.symbol.name == SYM_False) return expr_new_symbol(SYM_True);
     }
+    /* The negation the reference writes directly: !!a is a, a two-argument
+     * relation flips (!(x == 0) is x != 0, !(x < 1) is x >= 1) and
+     * !Element[x, d] is NotElement[x, d].  A chain (x == y == z, x < y < z)
+     * stays under Not. */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = arg->data.function.head->data.symbol.name;
+        size_t n = arg->data.function.arg_count;
+        if (h == SYM_Not && n == 1) {
+            Expr* inner = arg->data.function.args[0];
+            arg->data.function.args[0] = NULL;
+            return inner;
+        }
+        const char* flip = NULL;
+        if (n == 2) {
+            if (h == SYM_Equal) flip = SYM_Unequal;
+            else if (h == SYM_Unequal) flip = SYM_Equal;
+            else if (h == SYM_Less) flip = SYM_GreaterEqual;
+            else if (h == SYM_GreaterEqual) flip = SYM_Less;
+            else if (h == SYM_Greater) flip = SYM_LessEqual;
+            else if (h == SYM_LessEqual) flip = SYM_Greater;
+            else if (h == SYM_Element) flip = SYM_NotElement;
+        }
+        if (flip)
+            return expr_new_function(expr_new_symbol(flip),
+                (Expr*[]){ expr_copy(arg->data.function.args[0]),
+                           expr_copy(arg->data.function.args[1]) }, 2);
+    }
     return NULL;
 }
 
@@ -326,6 +353,10 @@ void boolean_init(void) {
     symtab_add_builtin("And", builtin_and);
     symtab_add_builtin("Or", builtin_or);
     symtab_add_builtin("Not", builtin_not);
+    symtab_set_docstring("Not",
+        "Not[e] (!e) is the logical negation of e: Not[True] is False, !!a is a, a "
+        "two-argument relation flips (!(x == 0) is x != 0, !(x < 1) is x >= 1) and "
+        "!Element[x, d] is NotElement[x, d].");
     symtab_add_builtin("Xor", builtin_xor);
     symtab_add_builtin("Equivalent", builtin_equivalent);
     symtab_add_builtin("Implies", builtin_implies);

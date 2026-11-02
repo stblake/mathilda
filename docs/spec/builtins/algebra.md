@@ -119,6 +119,8 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 
 **Features**:
 - `Protected`, `Listable`.
+- **Threading** (v0.6139). `Together`, `Cancel`, `Apart`, `Factor`, `FactorTerms`, `Expand`, `ExpandNumerator` and `ExpandDenominator` thread into a `Rule`, a relation (`Equal`, `Less`, ..., with `Inequality`'s operator slots kept) and a logical connective (`And`, `Or`, `Not`, `Xor`, `Implies`), as the reference does. So `Factor[x -> a^2 - 1]` is `x -> (-1 + a) (1 + a)`, and `Factor[Together[{m -> (3 a + 3 a z)/(8 n^2)}]]` is `{m -> (3 a (1 + z))/(8 n^2)}`. FeynCalc's `Factor2` relies on this, over `FCMatchSolve`'s rules. `RuleDelayed` is not threaded. The inner calls run at the caller's builtin depth, as Listable threading does, so a user-level call keeps its user-level form.
+- **Integer content of a polynomial** (v0.6139). At user level, a sum with no denominator has its integer content pulled out, as in the reference: `Together[2 a + 2 b]` is `2 (a + b)`, `Together[2 - 2 x]` is `-2 (-1 + x)`, while `Together[-a - b]` and `Together[x (1 + x) + 2 x]` (`3 x + x^2`) are unchanged.
 - **User level** (v0.6137). The factored answer form (denominator a product
   of its gcd-free basis, content in front) is given to a call the user makes;
   a call from inside another builtin gets the expanded form its callers were

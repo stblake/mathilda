@@ -2718,6 +2718,12 @@ static int rat_together_cancel_depth = 0;
 Expr* builtin_cancel(Expr* res) {
     if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
         return expr_copy(res);
+    /* A Rule, relation or logical connective threads, as in the reference
+     * (the Inequality operator slots kept). */
+    {
+        Expr* t = alg_thread_call(res);
+        if (t) return t;
+    }
     FactorMemo* memo = factor_memo_active();
     if (memo) {
         const Expr* hit = factor_memo_lookup(memo, res);
@@ -2735,6 +2741,12 @@ Expr* builtin_cancel(Expr* res) {
 Expr* builtin_together(Expr* res) {
     if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
         return expr_copy(res);
+    /* A Rule, relation or logical connective threads, as in the reference
+     * (the Inequality operator slots kept). */
+    {
+        Expr* t = alg_thread_call(res);
+        if (t) return t;
+    }
     FactorMemo* memo = factor_memo_active();
     if (memo) {
         const Expr* hit = factor_memo_lookup(memo, res);

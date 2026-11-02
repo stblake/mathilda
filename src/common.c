@@ -6,6 +6,7 @@
 #include "rationalize.h"
 #include "sym_names.h"   /* SYM_Rule / SYM_RuleDelayed / SYM_Method */
 #include "message.h"
+#include "eval.h"      /* eval_and_free: alg_thread_call */
 #include "print.h"     /* expr_to_string for the ::normal message */     /* mth_message: route arg-count errors through Quiet/Check */
 
 #include <stdio.h>
@@ -49,6 +50,45 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
                 head, got, got_s, min, max);
     }
     return NULL;
+}
+
+bool alg_thread_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_Rule || h == SYM_Equal || h == SYM_Unequal || h == SYM_Less ||
+           h == SYM_Greater || h == SYM_LessEqual || h == SYM_GreaterEqual ||
+           h == SYM_Inequality || h == SYM_And || h == SYM_Or || h == SYM_Not ||
+           h == SYM_Xor || h == SYM_Implies;
+}
+
+Expr* alg_thread_call(const Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    const Expr* e = res->data.function.args[0];
+    if (!alg_thread_head(e)) return NULL;
+    size_t n = e->data.function.arg_count, argc = res->data.function.arg_count;
+    bool ineq = e->data.function.head->data.symbol.name == SYM_Inequality;
+    /* Threading is transparent, as Listable threading is: the inner calls run
+     * at the caller's builtin depth, so a user-level Together[x -> ...] still
+     * answers in its user-level form.  (The counter is registered with the
+     * TimeConstrained unwind, which restores it on an abort.) */
+    int* depth = eval_builtin_depth_counter();
+    int saved = *depth;
+    if (*depth > 0) (*depth)--;
+    Expr** na = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        if (ineq && (i & 1u)) { na[i] = expr_copy(e->data.function.args[i]); continue; }
+        Expr** fa = malloc(sizeof(Expr*) * argc);
+        fa[0] = expr_copy(e->data.function.args[i]);
+        for (size_t k = 1; k < argc; k++) fa[k] = expr_copy(res->data.function.args[k]);
+        na[i] = eval_and_free(expr_new_function(expr_copy(res->data.function.head), fa, argc));
+        free(fa);
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), na, n);
+    free(na);
+    out = eval_and_free(out);
+    *depth = saved;
+    return out;
 }
 
 Expr* builtin_normal_error(const char* head, const Expr* call, int pos) {

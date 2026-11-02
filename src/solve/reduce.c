@@ -68,6 +68,36 @@ static bool reduce_contains_var(const Expr* e, const Expr* var) {
     return false;
 }
 
+/* A real numeric constant: an integer, Rational or machine/MPFR real. */
+static bool reduce_real_number(const Expr* e) {
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL ||
+           (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_Rational);
+}
+
+/* Is e of the form c var + d with real numeric c != 0, d (so an ordering
+ * relation on it pins var real)? */
+static bool reduce_real_linear_in(const Expr* e, const Expr* var) {
+    if (expr_eq((Expr*)e, (Expr*)var)) return true;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Times && n == 2)
+        return reduce_real_number(e->data.function.args[0]) &&
+               expr_eq(e->data.function.args[1], (Expr*)var);
+    if (h == SYM_Plus) {
+        bool has_var = false;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* t = e->data.function.args[i];
+            if (reduce_real_number(t)) continue;
+            if (has_var || !reduce_real_linear_in(t, var)) return false;
+            has_var = true;
+        }
+        return has_var;
+    }
+    return false;
+}
+
 /* True iff `e` contains a Log[g(var)] or an exponential b^g(var) (var-free
  * base b, so Exp = E^g and general a^t) somewhere.  This is exactly the
  * Log/Exp surface this feature targets; it deliberately excludes forward-trig
@@ -914,6 +944,26 @@ static Expr* reduce_impl(Expr* res) {
          * Mathematica.  Equations and Unequal (!=) remain over the default
          * Complexes. */
         bool default_reals = force_reals;
+        /* An explicit Complexes domain where every variable is pinned real is
+         * a real problem: an ordering inequality asserts its value real, so an
+         * atom linear in one variable alone (x > 0, 2 x + 1 <= 3) makes that
+         * variable real, and x > 0 && y < 0 && x == y is False, as in the
+         * reference.  x^2 < 1 or x + y > 0 pin nothing (x = I satisfies the
+         * first), so those stay on the Complexes path. */
+        if (!default_reals && dom && dom->type == EXPR_SYMBOL &&
+            dom->data.symbol.name == SYM_Complexes) {
+            bool all_ordered = nv > 0;
+            for (int v = 0; v < nv && all_ordered; v++) {
+                bool seen = false;
+                for (int i = 0; i < f->n && !seen; i++)
+                    for (int k = 0; k < f->c[i]->n && !seen; k++)
+                        if ((f->c[i]->a[k].rel == R_LT || f->c[i]->a[k].rel == R_LE) &&
+                            reduce_real_linear_in(f->c[i]->a[k].poly, vlist[v]))
+                            seen = true;
+                all_ordered = seen;
+            }
+            if (all_ordered) default_reals = true;
+        }
         if (dom == NULL && !default_reals) {
             for (int i = 0; i < f->n && !default_reals; i++)
                 for (int k = 0; k < f->c[i]->n; k++)

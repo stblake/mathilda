@@ -282,35 +282,6 @@ static Expr* fext_factor(const Expr* arg, Expr* const* gens, size_t ng) {
     return out;
 }
 
-/* A relation or logical head Factor threads over (the arguments are factored
- * one by one, the Inequality operator slots left alone). */
-static bool factor_threads_over(const Expr* e) {
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = e->data.function.head->data.symbol.name;
-    return h == SYM_Less || h == SYM_Greater || h == SYM_Equal || h == SYM_Unequal ||
-           h == SYM_LessEqual || h == SYM_GreaterEqual || h == SYM_Inequality ||
-           h == SYM_And || h == SYM_Or;
-}
-
-/* head[a1, a2, ...] -> head[Factor[a1, opts], ...] for res = Factor[e, opts]. */
-static Expr* factor_thread_with_options(Expr* res) {
-    const Expr* e = res->data.function.args[0];
-    size_t n = e->data.function.arg_count, argc = res->data.function.arg_count;
-    bool ineq = e->data.function.head->data.symbol.name == SYM_Inequality;
-    Expr** na = malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) {
-        if (ineq && (i & 1u)) { na[i] = expr_copy(e->data.function.args[i]); continue; }
-        Expr** fa = malloc(sizeof(Expr*) * argc);
-        fa[0] = expr_copy(e->data.function.args[i]);
-        for (size_t k = 1; k < argc; k++) fa[k] = expr_copy(res->data.function.args[k]);
-        na[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), fa, argc));
-        free(fa);
-    }
-    Expr* out = expr_new_function(expr_copy(e->data.function.head), na, n);
-    free(na);
-    return eval_and_free(out);
-}
-
 /* FactorList[poly, opts] over the extension the options name: the pairs
  * {{c, 1}, {f, e}, ...}, or NULL when the options name none or the engine
  * declines (the caller then lists Factor's answer). */
@@ -702,6 +673,13 @@ Expr* builtin_factor(Expr* res) {
 static Expr* builtin_factor_core(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+    /* A Rule, relation or logical connective threads, keeping the options:
+     * Factor[x -> a^2 - 1] is x -> (-1 + a) (1 + a), as in the reference. */
+    {
+        Expr* t = alg_thread_call(res);
+        if (t) return t;
+    }
+
     /* Options, parsed once.  Modulus -> p factors over GF(p) and is done
      * here; a call whose options are all at their defaults is the plain
      * one-argument form, re-dispatched so every fast path below applies
@@ -772,9 +750,6 @@ static Expr* builtin_factor_core(Expr* res) {
      * The memo is bypassed for this branch: the cache key is the
      * polynomial alone, but the result depends on the extension too. */
     if (fo.extension || fo.gaussian) {
-        /* Relations and logical connectives thread, keeping the options. */
-        if (factor_threads_over(res->data.function.args[0]))
-            return factor_thread_with_options(res);
         /* The FLINT engine: any number of variables, any number of
          * generators, the input's own algebraic coefficients joined in. */
         {
@@ -937,59 +912,6 @@ static Expr* builtin_factor_core(Expr* res) {
         return internal_rationalize_then_numericalize(res, builtin_factor);
     }
 
-    /* Thread over logic / comparison heads (Less, Greater, Equal,
-     * LessEqual, GreaterEqual, Inequality, And, Or). Mathematica applies
-     * Factor elementwise inside these structures, e.g.,
-     *   Factor[1 < 1+2x+x^2+1/(1+x) < 2]
-     * yields Inequality[1, Less, factored, Less, 2].  We thread by
-     * recursively invoking Factor on each comparison argument, then
-     * rebuilding the same head with the factored subterms.
-     * ATTR_LISTABLE on Factor handles the List case automatically;
-     * this hand-threading covers the comparison / logic heads it
-     * doesn't reach.  For Inequality specifically, operator-symbol
-     * slots (odd indices) are passed through verbatim. */
-    {
-        Expr* arg0 = res->data.function.args[0];
-        if (arg0->type == EXPR_FUNCTION
-            && arg0->data.function.head
-            && arg0->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = arg0->data.function.head->data.symbol.name;
-            if (h == SYM_Less ||
-                h == SYM_Greater ||
-                h == SYM_Equal ||
-                h == SYM_Unequal ||
-                h == SYM_LessEqual ||
-                h == SYM_GreaterEqual ||
-                h == SYM_Inequality ||
-                h == SYM_And ||
-                h == SYM_Or) {
-                bool is_ineq = (h == SYM_Inequality);
-                size_t n = arg0->data.function.arg_count;
-                Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
-                for (size_t i = 0; i < n; i++) {
-                    if (is_ineq && (i & 1u) == 1) {
-                        /* Operator-symbol slot: copy through unchanged. */
-                        new_args[i] = expr_copy(arg0->data.function.args[i]);
-                        continue;
-                    }
-                    Expr* sub_call = expr_new_function(
-                        expr_new_symbol("Factor"),
-                        (Expr*[]){expr_copy(arg0->data.function.args[i])}, 1);
-                    new_args[i] = evaluate(sub_call);
-                    expr_free(sub_call);
-                }
-                Expr* result = expr_new_function(expr_copy(arg0->data.function.head),
-                                                 new_args, n);
-                free(new_args);
-                Expr* evaluated = eval_and_free(result);
-                if (memo_key) {
-                    factor_memo_put(memo, memo_key, evaluated);
-                    expr_free(memo_key);
-                }
-                return evaluated;
-            }
-        }
-    }
 
     Expr* arg = res->data.function.args[0];
 

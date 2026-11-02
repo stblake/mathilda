@@ -1750,7 +1750,123 @@ static Expr* simp_numeric_power_basis(const Expr* e, ExpSplitTab* tab) {
 
 static Expr* builtin_simplify_core(Expr* res);
 
+/* ------------------------------------------------------------------ */
+/*  Equations among the assumptions                                    */
+/* ------------------------------------------------------------------ */
+
+/* Simplify[e, p == q] uses the equation, as the reference does:
+ * Simplify[x[1] + x[2], x[1] + x[2] == 1] is 1, Simplify[x^2 + y, x == y] is
+ * y (1 + y).  For each variable of the polynomial equations, e is reduced
+ * modulo them with that variable eliminated first (PolynomialReduce's
+ * remainder), the remainder is simplified, and the simplest candidate wins
+ * only if it is no more complex than the plain result -- a tie goes to
+ * the reduced form, as in the reference (Simplify[x[1] (a
+ * x[1] + b x[2]), x[1] + x[2] == 1] stays).  FeynCalc's FCFeynmanPrepare
+ * reduces its Feynman parameters this way (Reduce -> True). */
+static void simp_collect_equations(const Expr* a, Expr*** eqs, size_t* n, size_t* cap) {
+    if (!a || a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL) return;
+    const char* h = a->data.function.head->data.symbol.name;
+    if (h == SYM_And || h == SYM_List) {
+        for (size_t i = 0; i < a->data.function.arg_count; i++)
+            simp_collect_equations(a->data.function.args[i], eqs, n, cap);
+        return;
+    }
+    if (h == SYM_Equal && a->data.function.arg_count == 2) {
+        if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *eqs = realloc(*eqs, sizeof(Expr*) * *cap); }
+        (*eqs)[(*n)++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_copy(a->data.function.args[0]),
+                       expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy(a->data.function.args[1]) }, 2) }, 2));
+    }
+}
+
+static Expr* simp_reduce_by_equations(Expr* out, const Expr* assum) {
+    Expr** eqs = NULL; size_t ne = 0, cap = 0;
+    simp_collect_equations(assum, &eqs, &ne, &cap);
+    if (ne == 0) { free(eqs); return out; }
+    if (out->type == EXPR_FUNCTION && head_is(out, SYM_List)) {
+        for (size_t i = 0; i < out->data.function.arg_count; i++)
+            out->data.function.args[i] = simp_reduce_by_equations(out->data.function.args[i], assum);
+        for (size_t i = 0; i < ne; i++) expr_free(eqs[i]);
+        free(eqs);
+        return out;
+    }
+    Expr** ea = malloc(sizeof(Expr*) * ne);
+    for (size_t i = 0; i < ne; i++) ea[i] = expr_copy(eqs[i]);
+    Expr* eqlist = expr_new_function(expr_new_symbol(SYM_List), ea, ne);
+    free(ea);
+    Expr* vars = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                                                 (Expr*[]){ expr_copy(eqlist) }, 1));
+    bool poly = true;
+    for (size_t i = 0; i < ne && poly; i++) {
+        Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                                                   (Expr*[]){ expr_copy(eqs[i]), expr_copy(vars) }, 2));
+        poly = pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
+        expr_free(pq);
+    }
+    if (poly && vars->type == EXPR_FUNCTION && vars->data.function.arg_count > 0) {
+        size_t best_score = simp_default_complexity(out);
+        Expr* best = NULL;
+        size_t nv = vars->data.function.arg_count;
+        for (size_t k = 0; k < nv; k++) {
+            Expr** order = malloc(sizeof(Expr*) * nv);
+            order[0] = expr_copy(vars->data.function.args[k]);
+            for (size_t j = 0, m = 1; j < nv; j++) if (j != k) order[m++] = expr_copy(vars->data.function.args[j]);
+            Expr* ol = expr_new_function(expr_new_symbol(SYM_List), order, nv);
+            free(order);
+            Expr* pr = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialReduce),
+                           (Expr*[]){ expr_copy(out), expr_copy(eqlist), ol }, 3));
+            if (pr->type == EXPR_FUNCTION && head_is(pr, SYM_List) && pr->data.function.arg_count == 2) {
+                Expr* rem = eval_and_free(expr_new_function(expr_new_symbol(SYM_Simplify),
+                                (Expr*[]){ expr_copy(pr->data.function.args[1]) }, 1));
+                size_t sc = simp_default_complexity(rem);
+                if (best ? sc < best_score : sc <= best_score) { if (best) expr_free(best); best = rem; best_score = sc; }
+                else expr_free(rem);
+            }
+            expr_free(pr);
+        }
+        if (best) { expr_free(out); out = best; }
+    }
+    expr_free(vars);
+    expr_free(eqlist);
+    for (size_t i = 0; i < ne; i++) expr_free(eqs[i]);
+    free(eqs);
+    return out;
+}
+
+/* The assumptions a Simplify call carries: its positional second argument
+ * and an Assumptions -> option (borrowed). */
+static const Expr* simp_call_assumptions(const Expr* res, const Expr** opt) {
+    const Expr* pos = NULL;
+    *opt = NULL;
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (is_rule_with_lhs((Expr*)a, "Assumptions")) *opt = a->data.function.args[1];
+        else if (!pos && !(a->type == EXPR_FUNCTION && (head_is((Expr*)a, SYM_Rule) || head_is((Expr*)a, SYM_RuleDelayed))))
+            pos = a;
+    }
+    return pos;
+}
+
+static Expr* builtin_simplify_inner(Expr* res);
+
 Expr* builtin_simplify(Expr* res) {
+    Expr* out = builtin_simplify_inner(res);
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
+        const Expr* opt = NULL;
+        const Expr* pos = simp_call_assumptions(res, &opt);
+        if (pos || opt) {
+            bool had = out != NULL;
+            if (!out) out = expr_copy(res->data.function.args[0]);
+            if (pos) out = simp_reduce_by_equations(out, pos);
+            if (opt) out = simp_reduce_by_equations(out, opt);
+            if (!had && expr_eq(out, res->data.function.args[0])) { expr_free(out); out = NULL; }
+        }
+    }
+    return out;
+}
+
+static Expr* builtin_simplify_inner(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     Expr* pre = simp_normalize_exponents(res->data.function.args[0]);
     ExpSplitTab nbtab = {0};

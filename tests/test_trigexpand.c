@@ -152,7 +152,7 @@ void test_trigexpand_threads_over_logic(void) {
     assert_eval_eq("TrigExpand[Sin[2x]==0 && Cos[x+y]==1]",
                    "2 Cos[x] Sin[x] == 0 && Cos[x] Cos[y] - Sin[x] Sin[y] == 1", 0);
     assert_eval_eq("TrigExpand[Not[Sin[2x]==0]]",
-                   "Not[2 Cos[x] Sin[x] == 0]", 0);
+                   "2 Cos[x] Sin[x] != 0", 0);   /* Not[e == 0] is e != 0 (v0.6139) */
 }
 
 void test_trigexpand_nested(void) {

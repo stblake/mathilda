@@ -54,6 +54,7 @@
 
 #include "simp.h"           /* AssumeCtx, assume_ctx_*, assume_known_*, read_dollar_assumptions, apply_assumption_rules */
 #include "simp_internal.h"  /* is_rule_with_lhs, element_decide, prov_*, is_real_constant_symbol, simp time budget */
+#include "numeric.h"          /* expr_is_numeric_quantity */
 #include "zero_test.h"      /* zero_test_decide_assuming, ZeroTestResult */
 #include "reduce.h"         /* builtin_reduce (via evaluate of Reduce[...]) */
 
@@ -247,7 +248,11 @@ static int reduce_is_unsat(Expr* stmt, const char* domain, RefineBudget* b) {
     Expr* rargs[3] = { stmt, varlist, expr_new_symbol(domain) };
     Expr* call = expr_new_function(expr_new_symbol("Reduce"), rargs, 3);
     b->calls_left--;
+    /* An internal probe: whatever Reduce or the Solve under it reports
+     * (Solve::svars on a > b && a == b over the complexes) stays silent. */
+    mth_msg_suppress_push();
     Expr* out = evaluate(call);
+    mth_msg_suppress_pop();
     expr_free(call);
 
     int unsat = is_false_sym(out);     /* only a literal False proves unsatisfiability */
@@ -336,7 +341,16 @@ static Expr* refine_decide_predicate(const Expr* P, const AssumeCtx* ctx,
                            (Expr*[]){ expr_new_integer(-1), expr_copy(rhs) }, 2) }, 2));
         ZeroTestResult z = zero_test_decide_assuming(diff, ctx);
         if (z == ZERO_TEST_TRUE)  { expr_free(diff); return bool_sym(is_eq ? 1 : 0); }
-        if (z == ZERO_TEST_FALSE) { expr_free(diff); return bool_sym(is_eq ? 0 : 1); }
+        /* A non-zero verdict says the difference is not identically zero on
+         * the assumed region, which decides the equation only when the
+         * difference is a constant: m == a is not False, merely not an
+         * identity (the reference leaves it alone).  A symbolic difference
+         * goes on to the Reduce entailment, which does decide x == -1 under
+         * x > 0. */
+        if (z == ZERO_TEST_FALSE && expr_is_numeric_quantity(diff)) {
+            expr_free(diff);
+            return bool_sym(is_eq ? 0 : 1);
+        }
         /* Undecided by the zero test: try to prove the difference is exactly
          * zero by rewriting it under the (equality) assumptions -- the same
          * substitution engine that turns Refine[a - b, a == b] into 0. Every
@@ -353,6 +367,14 @@ static Expr* refine_decide_predicate(const Expr* P, const AssumeCtx* ctx,
         int r = reduce_entail_predicate(Aconj, P, "Complexes", b);
         if (r == 1) return bool_sym(1);
         if (r == 0) return bool_sym(0);
+        /* Both sides real under the assumptions (an inequality assumption
+         * makes its variables real: a > b, x > 0 && y < 0): the equation lives
+         * on the reals, where Reduce decides a == b and x^2 == -1. */
+        if (prov_re(ctx, lhs) && prov_re(ctx, rhs)) {
+            r = reduce_entail_predicate(Aconj, P, "Reals", b);
+            if (r == 1) return bool_sym(1);
+            if (r == 0) return bool_sym(0);
+        }
         return NULL;
     }
 

@@ -122,6 +122,8 @@ display. FeynCalc's tests write powers and fractions this way:
 - Mathilda has no box language, so a group is lowered to InputForm text and
   parsed (`src/linear_boxes.c`).
   - Plain text is copied, and a nested `\( X \)` becomes `( X )`.
+  - `\ ` (a backslash and a space) is a space token in box text and is lowered
+    to a space (v0.6139): `\(3  p^\ 2\)` reads as `3 p^2`, as in the reference.
   - `SuperscriptBox[a, b]` becomes `a^b`, `SubscriptBox` becomes
     `Subscript`, `FractionBox[a, b]` becomes `a/b`, and `SqrtBox[a]`
     becomes `Sqrt[a]`. `OverscriptBox`, `UnderscriptBox` and

@@ -623,7 +623,7 @@ void test_parse_dots() {
     assert_parse_eq("x / .1", "Times[x, Power[0.1, -1]]");
     assert_parse_eq("x * .1", "Times[x, 0.1]");
     assert_parse_eq("x + .1", "Plus[x, 0.1]");
-    assert_parse_eq("x - .1", "Plus[x, Times[-1, 0.1]]");
+    assert_parse_eq("x - .1", "Plus[x, -0.1]");   /* a literal is negated in place, as the reference */
     assert_parse_eq("x ^ .1", "Power[x, 0.1]");
     assert_parse_eq("x .1", "Times[x, 0.1]");
     // Let me check what `x .1` parses as in my code!
@@ -1433,6 +1433,10 @@ static void test_linear_box_syntax(void) {
     assert_eval_eq("{ToExpression[\"\\!\\(x + y\\)\"], ToExpression[\"\\(x\\)\"]}", "List[Plus[x, y], x]", 1);
     /* the same syntax directly in source */
     assert_eval_eq("\\!\\(\\*SuperscriptBox[\\(q\\), \\(3\\)]\\) + 1", "Plus[1, Power[q, 3]]", 1);
+    /* "\\ " is a space token in box text (FeynCalc's PaVeDenner-ID7) */
+    assert_eval_eq("ToExpression[\"\\!\\(\\*FractionBox[\\(1\\), \\(3  p^\\\\ 2\\)]\\)\"]",
+                   "Times[Rational[1, 3], Power[p, -2]]", 1);
+    assert_eval_eq("ToExpression[\"\\!\\(a\\\\ b\\)\"]", "Times[a, b]", 1);
 }
 
 /* ToExpression of a non-string, as the reference treats it. */

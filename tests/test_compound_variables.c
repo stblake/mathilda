@@ -24,7 +24,7 @@
 
 static void test_series_compound_variable(void) {
     assert_eval_eq("Series[f[g[q]], {g[q], 0, 2}] // InputForm",
-                   "SeriesData[g[q], 0, {f[0], Derivative[1][f][0], 1/2 Derivative[2][f][0]}, 0, 3, 1]", 0);
+                   "SeriesData[g[q], 0, {f[0], Derivative[1][f][0], Derivative[2][f][0]/2}, 0, 3, 1]", 0);
     assert_eval_eq("Series[Exp[a[1]], {a[1], 0, 3}] // InputForm",
                    "SeriesData[a[1], 0, {1, 1, 1/2, 1/6}, 0, 4, 1]", 0);
     assert_eval_eq("Series[h[x] + x, {h[x], 0, 1}] // InputForm",

@@ -842,6 +842,7 @@ logical description of its solution set.
   `Reduce[-5 < 3 x + 7 <= 22, x]` solves as `Reduce[-5 < 3 x + 7 <= 22, x, Reals]`.
 - `Reduce[expr, vars, dom]`: reduce over `dom` (`Complexes`, `Reals`, `Integers`,
   or `Rationals`).
+- **Variables pinned real over `Complexes`** (v0.6139). An ordering inequality asserts that its value is real. So an atom linear in one variable alone (`x > 0`, `2 x + 1 <= 3`) makes that variable real. When every variable is pinned that way, the statement is reduced over the reals: `Reduce[x > 0 && y < 0 && x == y, {x, y}, Complexes]` is `False`, as in the reference. `x^2 < 1` and `x + y > 0` pin nothing (`x = I` satisfies the first) and stay on the complex path.
 - `Reduce[expr]`: the variables are **inferred** from `expr` (every free symbol,
   excluding named constants such as `Pi`/`E`/`Degree`, domain symbols, and
   reserved literals; listed alphabetically), so `Reduce[x^2 < 1]` is

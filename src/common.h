@@ -78,6 +78,17 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max);
  * Sort[x], Union[x], Split[x], .... Borrows `call`. */
 Expr* builtin_normal_error(const char* head, const Expr* call, int pos);
 
+/* The heads the algebraic transformations (Factor, Expand, Cancel, Apart,
+ * Together, ...) thread over, as the reference does: a Rule, the relations
+ * (Equal, Less, ..., Inequality) and the logical connectives (And, Or, Not,
+ * Xor, Implies).  RuleDelayed is not among them. */
+bool alg_thread_head(const Expr* e);
+
+/* For res = F[e, rest...] with e headed by one of those: head[F[e1, rest...],
+ * F[e2, rest...], ...], evaluated (Inequality's operator slots are copied
+ * through).  NULL when e is not threadable. */
+Expr* alg_thread_call(const Expr* res);
+
 /* Result of common_scan_inexact.
  *
  *   has_inexact: true iff `e` contains any inexact numeric leaf

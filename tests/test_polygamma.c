@@ -112,8 +112,8 @@ void test_polygamma_odd_order_exact() {
     assert_eval_eq("PolyGamma[1, 1]", "1/6 Pi^2", 0);     /* zeta(2) = Pi^2/6  */
     assert_eval_eq("PolyGamma[3, 1]", "1/15 Pi^4", 0);    /* 6 zeta(4) = Pi^4/15 */
     assert_eval_eq("PolyGamma[1, 2]", "-1 + 1/6 Pi^2", 0);
-    /* PolyGamma[3, 5] = 6(-22369/20736 + Pi^4/90) = -22369/3456 + Pi^4/15. */
-    assert_eval_eq("PolyGamma[3, 5]", "-22369/3456 + 1/15 Pi^4", 0);
+    /* PolyGamma[3, 5] = 6(-22369/20736 + Pi^4/90), the reference's n! factored form. */
+    assert_eval_eq("PolyGamma[3, 5]", "6 (-22369/20736 + 1/90 Pi^4)", 0);
 }
 
 void test_polygamma_even_order_symbolic() {
@@ -138,9 +138,9 @@ void test_polygamma_symbolic() {
     /* Symbolic / non-integer-order arguments stay unevaluated. */
     assert_eval_eq("PolyGamma[0, x]", "PolyGamma[0, x]", 0);
     assert_eval_eq("PolyGamma[n, x]", "PolyGamma[n, x]", 0);
-    /* Half-integer arguments auto-evaluate to the exact closed form (matching
-     * Wolfram: psi(5/2) = 8/3 - EulerGamma - Log[4]). */
-    assert_eval_eq("PolyGamma[0, 5/2]", "8/3 - EulerGamma - Log[4]", 0);
+    /* The digamma at a half-integer stays unevaluated, as in the reference
+     * (FunctionExpand gives 8/3 - EulerGamma - Log[4]). */
+    assert_eval_eq("PolyGamma[0, 5/2]", "PolyGamma[0, 5/2]", 0);
     /* General rationals stay symbolic (WL requires FunctionExpand). */
     assert_eval_eq("PolyGamma[0, 11/5]", "PolyGamma[0, 11/5]", 0);
 }

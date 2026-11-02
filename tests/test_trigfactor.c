@@ -166,8 +166,9 @@ void test_trigfactor_threads_over_logic(void) {
         "TrigFactor[Sin[a]Cos[b]+Cos[a]Sin[b]==0 && Cos[x]^2-Sin[x]^2==1]",
         "Sin[a + b] == 0 && Cos[2 x] == 1", 0);
     assert_eval_eq(
-        "TrigFactor[Not[2 Sin[x] Cos[x] == 0]]",
-        "Not[Sin[2 x] == 0]", 0);
+        /* Not of an equation is Unequal before TrigFactor sees it (v0.6139) */
+        "TrigFactor[Not[Sin[a]Cos[b]+Cos[a]Sin[b] == 0]]",
+        "Sin[a + b] != 0", 0);
 }
 
 void test_trigfactor_trigexpand_inverse(void) {

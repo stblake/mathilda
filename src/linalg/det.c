@@ -7,6 +7,8 @@
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "eval.h"
+#include "internal.h"   /* internal_expand: Det answers expanded */
+#include "common.h"     /* head_is */
 #include "print.h"
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
@@ -94,6 +96,32 @@ Expr* laplace_det(Expr** flat, int original_n, int n, int row, int* cols) {
     return r;
 }
 
+/* Does e contain a Plus anywhere? */
+static bool det_contains_plus(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Plus)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (det_contains_plus(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Does e carry a negative power of a sum -- a denominator Expand would
+ * distribute every numerator over? (1/k, c/b and 1/Sin[x] do not count.) */
+static bool det_has_sum_denominator(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* x = e->data.function.args[1];
+        bool neg = (x->type == EXPR_INTEGER && x->data.integer < 0) ||
+                   (x->type == EXPR_BIGINT && mpz_sgn(x->data.bigint) < 0) ||
+                   (head_is(x, SYM_Rational) && x->data.function.args[0]->type == EXPR_INTEGER &&
+                    x->data.function.args[0]->data.integer < 0);
+        if (neg && det_contains_plus(e->data.function.args[0])) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (det_has_sum_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_det(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_det(res);
@@ -159,5 +187,18 @@ Expr* builtin_det(Expr* res) {
     for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
     free(flat);
 
+    /* The reference's Det of a symbolic matrix is the expanded polynomial
+     * (Det[{{a, b, c}, ...}] is -(c e g) + b f g + ..., Det[{{a + b, c},
+     * {d, e}}] is -(c d) + a e + b e); the cofactor expansion leaves it
+     * nested, and FeynCalc's EpsContract squares an Eps through Det with no
+     * Expand after it.  A matrix with a sum in a denominator keeps the
+     * cofactor form: Expand distributes every numerator over it, and a 6x6
+     * matrix of rational functions overflows (Together reduces the nested
+     * form at no such cost).  Only Det itself expands: laplace_det's other callers
+     * (Cross, the adjugate in Inverse) keep their forms. */
+    if (det_val && det_val->type == EXPR_FUNCTION && !det_has_sum_denominator(arg)) {
+        Expr* ex = eval_and_free(internal_expand((Expr*[]){ det_val }, 1));
+        det_val = ex;
+    }
     return det_val;
 }

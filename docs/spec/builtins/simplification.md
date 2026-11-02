@@ -14,6 +14,8 @@ returns the simplest form it finds.
   the candidate of minimum complexity.
 - `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
 
+**Polynomial equations among the assumptions** (v0.6139). Each polynomial equation in the assumptions (positional or `Assumptions ->`) reduces the result. For each variable order, Simplify takes the `PolynomialReduce` remainder against the equations and simplifies it. A candidate is kept when it is no more complex than the plain answer, or strictly less complex for later orders. `Simplify[x[1] + x[2], x[1] + x[2] == 1]` is `1`, and `Simplify[x^2 + y, x == y]` is `y (1 + y)`, as in the reference.
+
 **Exponent and argument normal form** (v0.6007), applied before and after
 the search:
 - A compound exponent, or a compound argument of an ordinary head, that equals
@@ -662,6 +664,8 @@ Gives the form an expression would take if its symbols satisfied the assumptions
   were replaced by explicit values satisfying `assum`.
 - `Refine[expr]` — uses the default assumptions from any enclosing `Assuming`
   construct (`$Assumptions`).
+
+**Equations** (v0.6139). A symbolic equation is not falsified because its two sides differ: `Refine[m == a]` and `Refine[m == Sqrt[a^2]]` stay as they are, as in the reference (they were `False`). The zero test's non-zero verdict decides an equation only when the difference is a constant (`Refine[Sqrt[2] == 1]` is `False`). Otherwise the Reduce entailment decides. When an inequality assumption makes both sides real, it decides over the reals: `Refine[a == b, a > b]` and `Refine[x^2 == -1, x > 0]` are `False`. The Reduce probe is silent.
 
 **Options**:
 - `Assumptions` (default `$Assumptions`) — default assumptions to append to

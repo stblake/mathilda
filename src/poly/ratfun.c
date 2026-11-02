@@ -1990,7 +1990,9 @@ Expr* ratfun_together(const Expr* e) {
      * a sum goes to the expanding path so like terms combine
      * (Together[(a + b) f[c] - a f[c]] = b f[c]) */
     Expr* out = rf_has_den(e) ? rf_normal_form(e, &C)
-              : (rf_factored_form() && !rf_head_is(e, SYM_Plus)) ? expr_copy((Expr*)e) : NULL;
+              : !rf_factored_form() ? NULL
+              : !rf_head_is(e, SYM_Plus) ? expr_copy((Expr*)e)
+              : rf_normal_form(e, &C);
     rf_ctx_clear(&C);
     return out;
 }

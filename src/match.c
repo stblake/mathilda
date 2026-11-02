@@ -1234,15 +1234,13 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
             case EXPR_REAL:
                 if (expr->data.real == pattern->data.real) return call_parent(env, parent);
                 return false;
-            case EXPR_SYMBOL: {
-                Expr* bound = env_get(env, pattern->data.symbol.name);
-                if (bound) {
-                    if (expr_eq(expr, bound)) return call_parent(env, parent);
-                    return false;
-                }
+            case EXPR_SYMBOL:
+                /* A literal symbol is literal even when a pattern variable of
+                 * the same name is bound: {i, b} matches {b_, b} (b_ -> i), as
+                 * in the reference.  FeynCalc writes FV[a, b_] FV[q, b_] +
+                 * FV[b, c_] ... and the literal b used to be read as i. */
                 if (strcmp(expr->data.symbol.name, pattern->data.symbol.name) == 0) return call_parent(env, parent);
                 return false;
-            }
             case EXPR_STRING:
                 if (strcmp(expr->data.string, pattern->data.string) == 0) return call_parent(env, parent);
                 return false;

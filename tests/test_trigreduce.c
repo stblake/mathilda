@@ -199,7 +199,7 @@ void test_trigreduce_threads_over_logic(void) {
         "TrigReduce[4 Sin[x]^4 == 1 && 2 Cos[x]^2 >= 1]",
         "1/2 (3 - 4 Cos[2 x] + Cos[4 x]) == 1 && 1 + Cos[2 x] >= 1", 0);
     assert_eval_eq("TrigReduce[Not[2 Sin[x]^2 == 0]]",
-                   "Not[1 - Cos[2 x] == 0]", 0);
+                   "1 - Cos[2 x] != 0", 0);   /* Not[e == 0] is e != 0 (v0.6139) */
 }
 
 /* Compound argument: Sin[x + y]^2 reduces with the doubled-angle

@@ -1,3 +1,4 @@
+#include "common.h"      /* alg_thread_call */
 #include "expr.h"
 #include "pack.h"
 #include "symtab.h"
@@ -193,6 +194,12 @@ static Expr* apart_compound_variable(Expr* res) {
 
 Expr* builtin_apart(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    /* A Rule, relation or logical connective threads, as in the reference
+     * (Apart[x -> 1/(a (a + 1)), a] is x -> 1/a - 1/(1 + a)). */
+    {
+        Expr* t = alg_thread_call(res);
+        if (t) return t;
+    }
 
     {
         Expr* ar = apart_compound_variable(res);

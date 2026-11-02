@@ -1770,6 +1770,7 @@ Yields `True` if no subexpression in `expr` matches `form`, and yields `False` o
 **Features**:
 - `Protected`.
 - By default, explores levels `{0, Infinity}` and option `Heads -> True` is enabled (with an explicit level spec too).
+- A level spec reads each bound on its own scale: a non-negative bound against the level, a negative one against minus the depth (v0.6139). `FreeQ[{f[0], 2}, 0, {0, 1}]` is `True`, as in the reference. Every node used to pass a `{0, n}` spec.
 - `form` can be a structural pattern.
 - A level spec takes `Infinity` in either slot (`{0, Infinity}`, `{2, Infinity}`), and a `Rule` in the third slot is an option, not a level spec: `FreeQ[f[g[a]], a, Heads -> False]` is `False` (v0.6081).
 - A `Flat` call form is also found as a **subset** of a longer call on the same head, as `ReplaceAll` would rewrite it: `FreeQ[a f[1] f[2], x_f y_f]`, `FreeQ[a + b + c, a + b]` and `FreeQ[d ** a ** b ** c, a ** b]` are `False`; an ordered `Flat` head needs a contiguous run (`FreeQ[a && b && c, a && c]` is `True`). `MatchQ`, `MemberQ`, `Count`, `Cases` and `Position` stay whole-expression tests (v0.6081, issue #115).
