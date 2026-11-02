@@ -17,8 +17,7 @@ analysis, and a `Compile[]` bytecode compiler over transparently packed arrays.
 The kernel is about 580,000 lines of C99 across 850 source files, plus 14,000
 lines of Mathilda's own language for the rule-based parts of the library. It
 exposes more than 1,250 built-in symbols and is checked by over 600 C unit-test
-suites. Big-number arithmetic uses GMP, MPFR and (optionally) FLINT. The name
-honours David Stoutemyer's PICOMATH-80.
+suites. Big-number arithmetic uses GMP, MPFR and (optionally) FLINT. 
 
 ## A taste of Mathilda
 
