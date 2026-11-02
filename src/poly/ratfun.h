@@ -25,6 +25,10 @@
 /* Together[e]: combine every sum of fractions over its least common
  * denominator and cancel. */
 Expr* ratfun_together(const Expr* e);
+/* Together in the user-level FACTORED form (the denominator a product of its
+ * gcd-free basis, numeric content in front) whoever calls it: Solve's roots
+ * are written this way, as the reference's. NULL when Together declines. */
+Expr* ratfun_together_factored(const Expr* e);
 
 /* Cancel[e]: cancel common factors in each term of a top-level sum (the terms
  * are not combined); nested sums of fractions are combined. */

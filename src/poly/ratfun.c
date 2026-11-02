@@ -257,7 +257,11 @@ static void rf_ctx_clear(RfCtx* C) {
  * classical form those callers were written against: an expanded numerator
  * over an expanded denominator, the integer content folded into each.
  * MATHILDA_TOGETHER_FORM=expanded (or =factored) forces one form everywhere. */
+/* >0 while ratfun_together_factored runs: the factored form on request. */
+static int g_rf_force_factored = 0;
+
 static int rf_factored_form(void) {
+    if (g_rf_force_factored > 0) return 1;
     static int f = -1;
     if (f < 0) {
         const char* e = getenv("MATHILDA_TOGETHER_FORM");
@@ -1876,6 +1880,13 @@ static Expr* rf_to_expr_direct(const Rf* R, const RfCtx* C) {
 }
 
 int ratfun_factored_form(void) { return rf_factored_form(); }
+
+Expr* ratfun_together_factored(const Expr* e) {
+    g_rf_force_factored++;
+    Expr* r = ratfun_together(e);
+    g_rf_force_factored--;
+    return r;
+}
 
 /* Classical form: (p * num) / (q * den), both sides expanded. */
 static Expr* rf_to_expr_expanded(const Rf* R, const RfCtx* C) {

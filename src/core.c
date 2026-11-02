@@ -13,6 +13,7 @@
 #endif
 
 #include "core.h"
+#include "poly/solvepoly.h"   /* roots-of-unity counter for the TC unwind registry */
 #include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
 #include "eval.h"
@@ -1216,7 +1217,10 @@ void core_init(void) {
         "TimeConstrained", "MemoryConstrained", "Check", "Quiet", "Catch", "Reap",
         "Sow", "Trace", "Hold", "HoldForm", "ParallelTable", "ParallelMap",
         "ParallelEvaluate", "Set", "SetDelayed", "ReplaceAll", "ReplaceRepeated",
-        "Replace", "Last", "First", "Part", "List", NULL };
+        "Replace", "Last", "First", "Part", "List",
+        /* code runners: a script read by Get / -file, a string evaluated by
+         * ToExpression, and the abort guards are the user's level too */
+        "Get", "ToExpression", "CheckAbort", "AbortProtect", "WithCleanup", NULL };
     for (const char* const* n = transparent; *n; n++) {
         SymbolDef* d = symtab_lookup(*n);
         if (d) d->eval_transparent = 1;
@@ -1268,6 +1272,7 @@ void core_init(void) {
         if (d) d->eval_pure = 1;
     }
     tc_register_unwind_counter(eval_builtin_depth_counter());
+    tc_register_unwind_counter(solvepoly_roots_of_unity_off_counter());
 }
 
 Expr* builtin_compoundexpression(Expr* res) {

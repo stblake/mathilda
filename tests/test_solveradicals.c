@@ -152,9 +152,9 @@ static void test_parametric_nongen(void) {
  * VERIFY_UNKNOWN (keep + Solve::nongen) for a free-parameter residual without
  * calling Simplify.  If this ever regresses it will hang, not misreport. */
 static void test_hang_parametric_rational_radical(void) {
+    /* the reference's form of the root, q^4 x^2/(1 + q^2)^2 (v0.6137) */
     run_test("Solve[Sqrt[t]/(x - Sqrt[t]) == q^2, t]",
-             "List[List[Rule[t, Times[-1, Power[q, 4], "
-             "Power[Plus[-1, Times[-2, Power[q, 2]], Times[-1, Power[q, 4]]], -1], "
+             "List[List[Rule[t, Times[Power[q, 4], Power[Plus[1, Power[q, 2]], -2], "
              "Power[x, 2]]]]]");
 }
 

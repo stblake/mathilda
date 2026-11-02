@@ -49,4 +49,7 @@ Expr* builtin_solve_polynomial_equality(Expr* res);
 /* Register the qualified builtin in the symbol table.  Idempotent. */
 void solvepoly_init(void);
 
+/* Counter disabling Solve's roots-of-unity form (FindInstance raises it). */
+int* solvepoly_roots_of_unity_off_counter(void);
+
 #endif /* SOLVEPOLY_H */

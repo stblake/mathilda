@@ -414,11 +414,12 @@ static void test_inverse_exp(void) {
  * for the Root/branch-heavy cases the corpus ladder cannot certify). */
 static void test_transcendental_log_exp(void) {
     /* Linear log: Log[2t] - Log[t+x] fuses to Log[2t/(t+x)], peels, solves
-     * linear -> t = E^C1 x / (2 - E^C1), on the principal Log strip. */
+     * linear -> t = -E^C1 x / (-2 + E^C1) (the reference's form of the root),
+     * on the principal Log strip. */
     run_test("Solve[Log[2 t] - Log[x + t] == C[1], t]",
              "List[List[Rule[t, ConditionalExpression["
-               "Times[Power[E, C[1]], "
-                     "Power[Plus[2, Times[-1, Power[E, C[1]]]], -1], x], "
+               "Times[-1, Power[E, C[1]], "
+                     "Power[Plus[-2, Power[E, C[1]]], -1], x], "
                "Inequality[Times[-1, Pi], Less, Im[C[1]], LessEqual, Pi]]]]]");
 
     /* Counts across the technique groups (deterministic). */

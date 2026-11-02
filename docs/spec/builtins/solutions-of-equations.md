@@ -7,6 +7,13 @@ The equation solver and its supporting machinery: `Solve`, `Reduce`, the quantif
 Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars]`: Solve `expr` for `vars` over the complex numbers (default).
 - `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
+- **Root forms, as the reference (v0.6137).** The roots of a cyclotomic
+  polynomial are written as roots of unity: `Solve[z^2 + z + 1 == 0, z]` is
+  `{{z -> -(-1)^(1/3)}, {z -> (-1)^(2/3)}}`, `z^4 + 1` gives `+-(-1)^(1/4)`,
+  `+-(-1)^(3/4)` (`FindInstance` keeps radicals, as the reference's does).
+  A linear root with symbolic coefficients is put `Together`:
+  `Solve[(1 - 4 x)(1 + 3 y) == 0, x]` is `{{x -> 1/4}}`,
+  `Solve[2 (1 + y) x == 1, x]` is `{{x -> 1/(2 (1 + y))}}`.
 - `Solve[expr]` and `Solve[expr, {}]`: solve for every variable `expr`
   mentions.  A variable is a maximal non-numeric subexpression not built by
   a numeric function: `Sin[x] == a` contributes `x` and `a`, an inert call

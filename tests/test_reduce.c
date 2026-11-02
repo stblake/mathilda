@@ -1537,11 +1537,13 @@ static void test_cylindrical_decomposition(void) {
  * `cond && var == value` conjuncts.  Log fuses (simp_log_fuse_all in
  * solveinv), Exp gathers / substitutes u = Exp[t]. */
 static void test_transcendental_log_exp(void) {
-    /* Linear log: single solution with the principal-Log strip condition. */
+    /* Linear log: single solution with the principal-Log strip condition.
+     * The root is written as Solve writes it (v0.6137).  Not the reference's
+     * answer, which splits the x == 0 case off as a disjunction. */
     run_test("Reduce[Log[2 t] - Log[x + t] == C[1], t]",
              "And[Inequality[Times[-1, Pi], Less, Im[C[1]], LessEqual, Pi], "
-             "Equal[t, Times[Power[E, C[1]], "
-                          "Power[Plus[2, Times[-1, Power[E, C[1]]]], -1], x]]]");
+             "Equal[t, Times[-1, Power[E, C[1]], "
+                          "Power[Plus[-2, Power[E, C[1]]], -1], x]]]");
 
     /* Polynomial in Exp[t]: two 2 Pi I C[1] periodic families. */
     run_test("Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t]",

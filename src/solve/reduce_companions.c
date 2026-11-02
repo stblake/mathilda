@@ -32,6 +32,7 @@
 #include "eval.h"
 #include "attr.h"
 #include "symtab.h"
+#include "solvepoly.h"   /* roots-of-unity form off inside FindInstance */
 #include "sym_names.h"
 #include "message.h"           /* mth_msg_suppress_push/pop: quiet internal probes */
 #include "reduce_real_util.h"   /* rru_rational_between, rru_sign_of, rru_approx_double */
@@ -2352,7 +2353,17 @@ static void fi_warn_optx(const Expr* opt) {
 static Expr* fi_run_search(Expr* expr, Expr* vars, Expr* dom, long nWanted,
                            Expr* modulus, Expr** V, int nv);
 
+static Expr* builtin_find_instance_core(Expr* res);
+
 Expr* builtin_find_instance(Expr* res) {
+    int* off = solvepoly_roots_of_unity_off_counter();
+    (*off)++;
+    Expr* r = builtin_find_instance_core(res);
+    (*off)--;
+    return r;
+}
+
+static Expr* builtin_find_instance_core(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;

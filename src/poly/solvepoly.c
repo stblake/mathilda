@@ -33,6 +33,11 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "zero_test.h"
+#include "ratfun.h"     /* ratfun_together_factored: linear roots */
+#ifdef USE_FLINT
+#include <flint/fmpz.h>
+#include <flint/fmpz_poly.h>
+#endif
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand.                                     *
@@ -185,9 +190,38 @@ static void sl_free(SolList* sl) {
  * ------------------------------------------------------------------ */
 
 /* a*x + b == 0  →  x = -b/a */
+/* True when `e` is a quotient whose denominator is a sum (a rational
+ * function the coefficients' common factors can cancel in). */
+static bool has_sum_denominator(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Power && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER && e->data.function.args[1]->data.integer < 0) {
+        const Expr* b = e->data.function.args[0];
+        return b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
+            && b->data.function.head->data.symbol.name == SYM_Plus;
+    }
+    if (h == SYM_Times)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (has_sum_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* solve_linear(Expr* a, Expr* b) {
-    return eval_and_free(mk_fn2("Times", mk_neg(expr_copy(b)),
-                                          mk_inv(expr_copy(a))));
+    Expr* r = eval_and_free(mk_fn2("Times", mk_neg(expr_copy(b)),
+                                            mk_inv(expr_copy(a))));
+    /* -b/a with symbolic coefficients is put Together, as the reference's
+     * Solve writes it: (1 - 4 x)(1 + 3 y) == 0 in x is x -> 1/4, not
+     * (-1 - 3 y)/(-4 - 12 y), and 2 (1 + y) x == 1 gives 1/(2 (1 + y))
+     * (FeynCalc's Factor3 builds factors from these roots). */
+    if (has_sum_denominator(r)) {
+        /* Together's user-level factored form, which a call from inside
+         * Solve would not get by default (it returns the expanded one) */
+        Expr* c = ratfun_together_factored(r);
+        if (c) c = eval_and_free(c);
+        if (c) { expr_free(r); r = c; }
+    }
+    return r;
 }
 
 /* a*x^2 + b*x + c == 0.  Discriminant-aware in Reals. */
@@ -1062,11 +1096,92 @@ static bool is_nquadratic(Expr* poly, Expr* var, int d,
  *  Per-factor dispatcher.                                             *
  * ------------------------------------------------------------------ */
 
+#ifdef USE_FLINT
+/* n when `f` (a polynomial in var) is +-Phi_n, the n-th cyclotomic
+ * polynomial, with integer coefficients; 0 otherwise. */
+static ulong solve_cyclotomic_index(Expr* f, Expr* var) {
+    int d = get_degree_poly(f, var);
+    if (d < 1 || d > 4096) return 0;
+    fmpz_poly_t p;
+    fmpz_poly_init(p);
+    bool ok = true;
+    for (int k = 0; k <= d && ok; k++) {
+        Expr* c = get_coeff(f, var, k);
+        if (!c) { ok = false; break; }
+        if (c->type == EXPR_INTEGER) fmpz_poly_set_coeff_si(p, k, (slong)c->data.integer);
+        else if (c->type == EXPR_BIGINT) { fmpz_t z; fmpz_init(z); fmpz_set_mpz(z, c->data.bigint);
+                                            fmpz_poly_set_coeff_fmpz(p, k, z); fmpz_clear(z); }
+        else ok = false;
+        expr_free(c);
+    }
+    ulong n = 0;
+    if (ok) {
+        if (fmpz_sgn(fmpz_poly_lead(p)) < 0) fmpz_poly_neg(p, p);
+        n = fmpz_poly_is_cyclotomic(p);
+    }
+    fmpz_poly_clear(p);
+    return n;
+}
+
+/* Roots of unity, as the reference writes them: when every irreducible
+ * factor of the integer polynomial g is cyclotomic, its roots are
+ * (-1)^(2k/n) for k coprime to n, which evaluate to the canonical
+ * +-(-1)^(p/q) (z^2 + z + 1: -(-1)^(1/3), (-1)^(2/3); z^4 + 1:
+ * +-(-1)^(1/4), +-(-1)^(3/4)), rather than the quadratic formula's
+ * (-1 +- I Sqrt[3])/2 or nested radicals.  False (nothing pushed) when g
+ * has a non-cyclotomic factor or is not an integer polynomial. */
+/* >0 while FindInstance runs: the reference's FindInstance writes a root of
+ * unity in radicals ((-1 - I Sqrt[3])/2), its Solve and Reduce as
+ * (-1)^(p/q).  Registered with TimeConstrained's unwind counters. */
+static int g_rou_off = 0;
+int* solvepoly_roots_of_unity_off_counter(void) { return &g_rou_off; }
+
+static bool solve_roots_of_unity(Expr* g, Expr* var, bool reals_only, int64_t mult, SolList* sl) {
+    if (g_rou_off > 0) return false;
+    Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList),
+                                               (Expr*[]){ expr_copy(g) }, 1));
+    if (!fl || fl->type != EXPR_FUNCTION || fl->data.function.arg_count < 2) { if (fl) expr_free(fl); return false; }
+    size_t nf = fl->data.function.arg_count;
+    ulong* ns = malloc(sizeof(ulong) * nf);
+    int64_t* es = malloc(sizeof(int64_t) * nf);
+    bool all = true;
+    for (size_t i = 1; i < nf && all; i++) {
+        Expr* pr = fl->data.function.args[i];
+        if (pr->type != EXPR_FUNCTION || pr->data.function.arg_count != 2
+            || pr->data.function.args[1]->type != EXPR_INTEGER) { all = false; break; }
+        ns[i] = solve_cyclotomic_index(pr->data.function.args[0], var);
+        es[i] = pr->data.function.args[1]->data.integer;
+        if (ns[i] == 0) all = false;
+    }
+    if (all) {
+        for (size_t i = 1; i < nf; i++) {
+            ulong n = ns[i];
+            for (ulong k = 1; k <= n; k++) {
+                ulong a = k, b = n;
+                while (b) { ulong t = a % b; a = b; b = t; }
+                if (a != 1) continue;
+                if (reals_only && n > 2) continue;
+                Expr* root = eval_and_free(mk_fn2("Power", mk_int(-1),
+                                 eval_and_free(mk_fn2("Rational", mk_int((int64_t)(2 * k)), mk_int((int64_t)n)))));
+                sl_push_with_mult(sl, root, mult * es[i]);
+            }
+        }
+    }
+    free(ns); free(es);
+    expr_free(fl);
+    return all;
+}
+#endif
+
 static bool handle_factor(Expr* g, Expr* var, bool reals_only,
                           const SolvePolyOpts* opts, Expr* dom,
                           int64_t mult, SolList* sl) {
     int dg = get_degree_poly(g, var);
     if (dg <= 0) return true;
+
+#ifdef USE_FLINT
+    if (dg >= 2 && solve_roots_of_unity(g, var, reals_only, mult, sl)) return true;
+#endif
 
     if (dg == 1) {
         Expr* a = get_coeff(g, var, 1);

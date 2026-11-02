@@ -15,6 +15,7 @@
 #include "qafactor.h"
 #include "flint_bridge.h"
 #include "ratfun.h"
+#include "sym_intern.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -49,8 +50,168 @@ static bool apart_has_symbolic_radical(const Expr* e) {
     return false;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Radical coefficients                                               */
+/* ------------------------------------------------------------------ */
+
+/* A denominator already split over radicals keeps its factors, as in the
+ * reference: Apart[c/((z - (-1)^(1/3)) (z + (-1)^(1/3)) ...), z] is a sum of
+ * linear terms over Q((-1)^(1/3)), and Apart[1/((z - Sqrt[2])(z + Sqrt[2])), z]
+ * splits in two.  The rational engine expands the denominator over Q and
+ * refactors it, merging the factors back (1/(-2 + z^2)).  Each radical atom
+ * -- a number to a non-integer rational power -- is replaced by a fresh
+ * symbol, the expression is apart-ed as if the radicals were parameters, and
+ * they are put back: a partial-fraction identity in independent symbols
+ * stays one under any substitution that keeps its denominators nonzero. */
+typedef struct { Expr** from; Expr** to; size_t n, cap; } ApRad;
+
+static bool ap_is_radical(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_Power || e->data.function.arg_count != 2)
+        return false;
+    const Expr* b = e->data.function.args[0];
+    const Expr* x = e->data.function.args[1];
+    bool num_base = b->type == EXPR_INTEGER || b->type == EXPR_BIGINT
+        || (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
+            && b->data.function.head->data.symbol.name == SYM_Rational);
+    bool frac_exp = x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL
+        && x->data.function.head->data.symbol.name == SYM_Rational;
+    return num_base && frac_exp;
+}
+
+static Expr* ap_abstract(const Expr* e, ApRad* t) {
+    if (ap_is_radical(e)) {
+        for (size_t i = 0; i < t->n; i++)
+            if (expr_eq(t->from[i], (Expr*)e)) return expr_copy(t->to[i]);
+        if (t->n == t->cap) {
+            t->cap = t->cap ? 2 * t->cap : 8;
+            t->from = realloc(t->from, sizeof(Expr*) * t->cap);
+            t->to = realloc(t->to, sizeof(Expr*) * t->cap);
+        }
+        char name[48];
+        snprintf(name, sizeof name, "Apart`Private`r%zu", t->n + 1);
+        t->from[t->n] = expr_copy((Expr*)e);
+        t->to[t->n] = expr_new_symbol(intern_symbol(name));
+        return expr_copy(t->to[t->n++]);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = ap_abstract(e->data.function.args[i], t);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+static Expr* ap_restore(const Expr* e, const ApRad* t) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < t->n; i++)
+            if (t->to[i]->data.symbol.name == e->data.symbol.name) return expr_copy(t->from[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = ap_restore(e->data.function.args[i], t);
+    Expr* out = expr_new_function(ap_restore(e->data.function.head, t), a, n);
+    free(a);
+    return out;
+}
+
+/* Apart[expr, x] with radicals in a denominator of two or more x-factors:
+ * the result, or NULL to take the ordinary path. */
+static Expr* apart_with_radical_coefficients(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* x = res->data.function.args[1];
+    if (x->type != EXPR_SYMBOL) return NULL;
+    Expr* den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator),
+                                                (Expr*[]){ expr_copy(res->data.function.args[0]) }, 1));
+    size_t nx = 0;
+    bool any_rad = false;
+    if (den->type == EXPR_FUNCTION && den->data.function.head->type == EXPR_SYMBOL
+        && den->data.function.head->data.symbol.name == SYM_Times) {
+        for (size_t i = 0; i < den->data.function.arg_count; i++)
+            if (contains_any_symbol_from(den->data.function.args[i], x)) nx++;
+    }
+    ApRad t = { NULL, NULL, 0, 0 };
+    Expr* abs = NULL;
+    if (nx >= 2) {
+        abs = ap_abstract(res->data.function.args[0], &t);
+        any_rad = t.n > 0;
+    }
+    expr_free(den);
+    Expr* out = NULL;
+    if (any_rad) {
+        Expr* call = expr_new_function(expr_new_symbol(SYM_Apart), (Expr*[]){ abs, expr_copy(x) }, 2);
+        abs = NULL;
+        Expr* r = eval_and_free(call);
+        if (!(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+              && r->data.function.head->data.symbol.name == SYM_Apart))
+            out = eval_and_free(ap_restore(r, &t));
+        expr_free(r);
+    }
+    if (abs) expr_free(abs);
+    for (size_t i = 0; i < t.n; i++) { expr_free(t.from[i]); expr_free(t.to[i]); }
+    free(t.from); free(t.to);
+    return out;
+}
+
+/* Apart[expr, v] for a compound variable v (x[3], as FeynCalc's Feynman
+ * parameters): v is replaced by a fresh symbol, decomposed, and put back, as
+ * the reference treats it.  NULL when v is a symbol or the call declines. */
+static Expr* apart_compound_variable(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* v = res->data.function.args[1];
+    if (v->type != EXPR_FUNCTION) return NULL;
+    if (v->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = v->data.function.head->data.symbol.name;
+        if (h == SYM_Rule || h == SYM_RuleDelayed || h == SYM_Plus || h == SYM_Times
+            || h == SYM_Power || h == SYM_List) return NULL;
+    }
+    ApRad t = { NULL, NULL, 0, 0 };
+    t.cap = 1;
+    t.from = malloc(sizeof(Expr*)); t.to = malloc(sizeof(Expr*));
+    t.from[0] = expr_copy(v);
+    t.to[0] = expr_new_symbol(intern_symbol("Apart`Private`v"));
+    t.n = 1;
+    /* structural substitution of v */
+    Expr* body = res->data.function.args[0];
+    Expr* sub = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                    (Expr*[]){ expr_copy(body),
+                               expr_new_function(expr_new_symbol(SYM_Rule),
+                                   (Expr*[]){ expr_copy(v), expr_copy(t.to[0]) }, 2) }, 2));
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Apart),
+                                              (Expr*[]){ sub, expr_copy(t.to[0]) }, 2));
+    Expr* out = NULL;
+    if (!(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+          && r->data.function.head->data.symbol.name == SYM_Apart))
+        out = eval_and_free(ap_restore(r, &t));
+    expr_free(r);
+    expr_free(t.from[0]); expr_free(t.to[0]); free(t.from); free(t.to);
+    return out;
+}
+
 Expr* builtin_apart(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    {
+        Expr* ar = apart_compound_variable(res);
+        if (ar) return ar;
+    }
+    /* Apart[expr, x] with expr free of x is expr, as in the reference
+     * (Apart[(a + b)/(c d), y] is not split into a/(c d) + b/(c d)). */
+    if (res->data.function.arg_count == 2) {
+        Expr* x = res->data.function.args[1];
+        if (x->type == EXPR_SYMBOL && !contains_any_symbol_from(res->data.function.args[0], x)) {
+            Expr* e0 = res->data.function.args[0];
+            res->data.function.args[0] = NULL;
+            return e0;
+        }
+    }
+    {
+        Expr* ar = apart_with_radical_coefficients(res);
+        if (ar) return ar;
+    }
 
     /* Modulus -> p: partial fractions over GF(p) (one variable). */
     {

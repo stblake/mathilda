@@ -119,6 +119,13 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 
 **Features**:
 - `Protected`, `Listable`.
+- **User level** (v0.6137). The factored answer form (denominator a product
+  of its gcd-free basis, content in front) is given to a call the user makes;
+  a call from inside another builtin gets the expanded form its callers were
+  written against. Code runners count as the user's level: besides
+  `Module`/`Map`/`Table`/..., now `Get` (a script), `ToExpression`,
+  `CheckAbort`, `AbortProtect` and `WithCleanup`, so a package or test driver
+  read with `Get` sees the same `Together` as the REPL.
 - **Powers whose exponents differ by an integer** (v0.6122). When two powers of one base have exponents that differ by a nonzero integer, `Together` and `Cancel` read them as `Factor` does: `b^(n + k t)` is `b^n (b^t)^k`. So `Together[2 x^(-2 e) - 2 x x^(-1 - 2 e)]` is `0` and `Together[2^n + 2^(n + 1)]` is `3 2^n`. The result is kept only if it is strictly smaller than the result with each power taken as an opaque atom, so `Cancel[x^(n - 1)/(1 + x^n)]` is returned unchanged, as in the reference.
 - **Factored rational-function engine** (v0.6072, `src/poly/ratfun.c`). Over Q
   in symbols and transcendental kernels, a sum of fractions is combined
@@ -686,6 +693,12 @@ Gives the partial fraction decomposition of a rational expression.
 
 **Features**:
 - `Protected`, `Listable`.
+- **As the reference, v0.6137:** a denominator already split over radicals
+  keeps its factors (`Apart[1/((z - Sqrt[2]) (z + Sqrt[2])), z]` is a sum of
+  two terms; the radicals are treated as parameters and put back); a compound
+  variable is decomposed in (`Apart[g[x[3]]/(x[3]^2 - 1), x[3]]` is
+  `g[x[3]]/(2 (-1 + x[3])) - g[x[3]]/(2 (1 + x[3]))`); an expression free of
+  the variable is returned as it is (`Apart[(a + b)/(c d), y]`).
 - **Native partial fractions over Q and Q(params)** (v0.6072,
   `src/poly/ratfun.c`). The input is converted once and reduced; the
   denominator is factored with `fmpz_mpoly_factor` (an irreducible factor over
