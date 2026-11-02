@@ -3908,3 +3908,16 @@ when any `xi` is negative (or 0) and 1 when all are positive, and drops its
 positive arguments otherwise (`HeavisideTheta[1, x] = HeavisideTheta[x]`);
 `DiracDelta[x1, x2, ...]` is 0 as soon as one `xi` is nonzero. Mixed exact and
 inexact arguments (`HeavisideTheta[1., Sqrt[2]]`) decide by sign like any other.
+
+**DiracDelta normal form** (v0.6140), per argument, as the reference writes it:
+- **Sign.** An argument with more terms of coefficient exactly -1 than of exactly 1
+  (numbers aside) is negated: `DiracDelta[1 - x1 - x2]` is `DiracDelta[-1 + x1 + x2]`
+  and `DiracDelta[-Sin[x]]` is `DiracDelta[Sin[x]]`. `DiracDelta[a - b]`,
+  `DiracDelta[-a + b]` and `DiracDelta[1 - 2 x]` stay, and so does an inexact
+  argument (`DiracDelta[1.5 - x]`).
+- **Scale.** A numeric factor comes out as 1/|c|: `DiracDelta[2 x]` is
+  `DiracDelta[x]/2`, `DiracDelta[2.5 x]` is `0.4 DiracDelta[x]`,
+  `DiracDelta[4 x + 6 y]` is `DiracDelta[2 x + 3 y]/2` (the rational gcd of an exact
+  sum, constants included), and `DiracDelta[2 x, y]` is `DiracDelta[x, y]/2`.
+- `HeavisideTheta` is not normalised (`HeavisideTheta[-x]` stays). FeynCalc's
+  `FCFeynmanParameterJoin` writes its delta function in this form.

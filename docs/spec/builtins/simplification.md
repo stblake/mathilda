@@ -14,6 +14,8 @@ returns the simplest form it finds.
   the candidate of minimum complexity.
 - `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
 
+**A number factor may distribute** (v0.6140). The multiplicative splitter simplifies variable-disjoint factors separately. When the only thing it splits off is a number other than ±1, sitting in front of a product with a sum factor, the whole product is simplified as well and kept when strictly simpler. So `Simplify[(a + 3 b)/(3 b)]` is `1 + a/(3 b)`, as in the reference (it was `(3 + a/b)/3`), while `4 (-1 + z^2)/(z (1 + z^2))` keeps its 4 in front.
+
 **Polynomial equations among the assumptions** (v0.6139). Each polynomial equation in the assumptions (positional or `Assumptions ->`) reduces the result. For each variable order, Simplify takes the `PolynomialReduce` remainder against the equations and simplifies it. A candidate is kept when it is no more complex than the plain answer, or strictly less complex for later orders. `Simplify[x[1] + x[2], x[1] + x[2] == 1]` is `1`, and `Simplify[x^2 + y, x == y]` is `y (1 + y)`, as in the reference.
 
 **Exponent and argument normal form** (v0.6007), applied before and after

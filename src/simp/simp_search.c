@@ -1115,7 +1115,7 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
  *     -> Tan[z] * simp_dispatch[Cos[x] Cos[y] Sec[x+y] (Tan[x]+Tan[y])]
  *     -> Tan[z] Tan[x+y]
  */
-static Expr* simp_split_multiplicative(const Expr* input,
+static Expr* simp_split_multiplicative_impl(const Expr* input,
                                        const AssumeCtx* ctx,
                                        const Expr* complexity_func) {
     if (!input || input->type != EXPR_FUNCTION) return NULL;
@@ -1217,6 +1217,77 @@ static Expr* simp_split_multiplicative(const Expr* input,
     free(results);
 
     return prod;
+}
+
+static bool split_is_number(const Expr* f) {
+    return f->type == EXPR_INTEGER || f->type == EXPR_BIGINT || f->type == EXPR_REAL ||
+           head_is(f, SYM_Rational) || head_is(f, SYM_Complex);
+}
+
+/* Do the non-number factors of the Times `e` form one variable component? */
+static bool split_rest_connected(const Expr* e) {
+    size_t n = e->data.function.arg_count;
+    SplitSymSet* sets = (SplitSymSet*)calloc(n, sizeof(SplitSymSet));
+    int* parent = (int*)malloc(n * sizeof(int));
+    for (size_t i = 0; i < n; i++) {
+        split_symset_init(&sets[i]);
+        if (!split_is_number(e->data.function.args[i]))
+            split_collect_addend_symbols(e->data.function.args[i], &sets[i]);
+        parent[i] = (int)i;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (sets[i].count == 0) continue;
+        for (size_t j = i + 1; j < n; j++)
+            if (sets[j].count && split_symset_intersects(&sets[i], &sets[j]))
+                split_uf_union(parent, (int)i, (int)j);
+    }
+    int root = -1;
+    bool one = true;
+    for (size_t i = 0; i < n && one; i++) {
+        if (sets[i].count == 0) continue;
+        int r = split_uf_find(parent, (int)i);
+        if (root < 0) root = r; else if (r != root) one = false;
+    }
+    for (size_t i = 0; i < n; i++) split_symset_free(&sets[i]);
+    free(sets); free(parent);
+    return one && root >= 0;
+}
+
+/* The input whose dispatch must not split (set while it is simplified whole). */
+static const Expr* g_split_whole = NULL;
+
+/* When the split only lifts number factors off one variable component, the
+ * number may distribute over a sum, so the whole product is simplified too
+ * and kept when strictly simpler: Simplify[(a + 3 b)/(3 b)] is 1 + a/(3 b) as
+ * in the reference (the split gave (3 + a/b)/3), while
+ * 4 (-1 + z^2)/(z (1 + z^2)) keeps its 4 in front. */
+static Expr* simp_split_multiplicative(const Expr* input, const AssumeCtx* ctx,
+                                       const Expr* complexity_func) {
+    if (input == g_split_whole) return NULL;
+    Expr* split = simp_split_multiplicative_impl(input, ctx, complexity_func);
+    if (!split) return NULL;
+    /* Only a number other than +-1 can distribute, and only over a sum
+     * factor; anything else keeps the plain split (a -1 on every negated
+     * term would otherwise double the work at each level). */
+    bool has_number = false, has_sum = false;
+    for (size_t i = 0; i < input->data.function.arg_count; i++) {
+        const Expr* f = input->data.function.args[i];
+        if (split_is_number(f) &&
+            !(f->type == EXPR_INTEGER && (f->data.integer == 1 || f->data.integer == -1)))
+            has_number = true;
+        if (head_is(f, SYM_Plus)) has_sum = true;
+    }
+    if (!has_number || !has_sum || !split_rest_connected(input)) return split;
+    const Expr* saved = g_split_whole;
+    g_split_whole = input;
+    Expr* whole = simp_dispatch(input, ctx, complexity_func);
+    g_split_whole = saved;
+    if (whole && score_with_func(whole, complexity_func) < score_with_func(split, complexity_func)) {
+        expr_free(split);
+        return whole;
+    }
+    if (whole) expr_free(whole);
+    return split;
 }
 
 /* simp_dispatch is the public entry point. It runs the shape classifier

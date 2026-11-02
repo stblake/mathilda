@@ -3544,6 +3544,14 @@ else()
     target_link_libraries(thread_not_refine_tests gmp m)
 endif()
 
+add_executable(diracdelta_normal_tests test_diracdelta_normal.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(diracdelta_normal_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(diracdelta_normal_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(diracdelta_normal_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 

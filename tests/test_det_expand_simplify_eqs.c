@@ -33,11 +33,21 @@ static void test_simplify_with_equations(void) {
                    "x[1] (a x[1] + b x[2])", 0);
 }
 
+/* A number factor is simplified with the factors it can distribute over
+ * (v0.6140): the multiplicative splitter used to lift 1/3 out of
+ * (a + 3 b)/(3 b) and answer (3 + a/b)/3.  FeynCalc's FCFactorOut. */
+static void test_simplify_number_factor(void) {
+    assert_eval_eq("{Simplify[(a + 3 b)/(3 b)], Simplify[(a + 2 b)/(2 b)], Simplify[(a + b)/(2 b)], "
+                   "Simplify[(a + 3 b)/b], Simplify[(4 (-1 + z^2))/(z (1 + z^2))]}",
+                   "{1 + a/(3 b), 1 + a/(2 b), (a + b)/(2 b), 3 + a/b, (4 (-1 + z^2))/(z + z^3)}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_det_expanded);
     TEST(test_simplify_with_equations);
+    TEST(test_simplify_number_factor);
     printf("All Det / equational Simplify tests passed.\n");
     return 0;
 }

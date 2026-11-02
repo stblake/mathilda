@@ -378,7 +378,7 @@ static void test_mellin(void) {
 static void test_mellin_symbolic_exponent(void) {
     /* Integrate[x^a/(x+1)^3, -1<a<2] = Pi a (1-a)/(2 Sin[Pi a]). */
     check_eq("Integrate[x^a/(x+1)^3, {x, 0, Infinity}, Assumptions -> -1 < a < 2, "
-             "Method -> \"Residue\"]", "1/2 (-1 + a) a Pi Csc[(1 + a) Pi]");
+             "Method -> \"Residue\"]", "-1/2 (-1 + a) a Pi Csc[a Pi]");   /* the reference's form (v0.6140) */
     check_eq("Chop[N[(Integrate[x^a/(x+1)^3, {x, 0, Infinity}, Assumptions -> -1 < a < 2, "
              "Method -> \"Residue\"] - Pi a (1 - a)/(2 Sin[Pi a])) /. a -> 1/2]]", "0");
 }
