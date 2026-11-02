@@ -38,11 +38,21 @@ static void test_patterned_head_in_matchq(void) {
     assert_eval_eq("MatchQ[f[a, b][c], f[x__, y_][z_] /; Length[{x}] == 1]", "True", 0);
 }
 
+static void test_holdpattern_sequence_width(void) {
+    /* HoldPattern is transparent to an argument's width (v0.6137), as in the
+     * reference: FeynCalc's FCMellinJoin checks {HoldPattern[(...)..]}. */
+    assert_eval_eq("MatchQ[{{1}, {1}}, {HoldPattern[({1} | {-1}) ..]}]", "True", 0);
+    assert_eval_eq("MatchQ[{1, 1}, {HoldPattern[1 ..]}]", "True", 0);
+    assert_eval_eq("MatchQ[{1, 2}, {HoldPattern[__]}]", "True", 0);
+    assert_eval_eq("MatchQ[{1, 2}, {HoldPattern[_]}]", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_subvalue_guard_backtracks);
     TEST(test_patterned_head_in_matchq);
+    TEST(test_holdpattern_sequence_width);
     printf("All patterned-head backtracking tests passed.\n");
     return 0;
 }

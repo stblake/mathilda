@@ -1706,7 +1706,33 @@ static bool opt_match_prefix(Expr** exprs, size_t take, size_t n_exprs, Expr** p
 }
 
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent) {
-    
+
+    /* HoldPattern is transparent to matching, including for the width of an
+     * argument: {HoldPattern[({1} | {-1})..]} matches {{1}, {1}} and
+     * {HoldPattern[__]} matches {1, 2}, as in the reference (FeynCalc's
+     * FCMellinJoin checks its eta signs that way).  Unwrapped into a
+     * temporary array; every continuation runs inside the recursive call. */
+    for (size_t i = 0; i < n_pats; i++) {
+        Expr* pi = pats[i];
+        if (pi->type == EXPR_FUNCTION && pi->data.function.head->type == EXPR_SYMBOL
+            && pi->data.function.head->data.symbol.name == SYM_HoldPattern
+            && pi->data.function.arg_count == 1) {
+            Expr** np = malloc(sizeof(Expr*) * n_pats);
+            for (size_t j = 0; j < n_pats; j++) {
+                Expr* pj = pats[j];
+                while (pj->type == EXPR_FUNCTION && pj->data.function.head->type == EXPR_SYMBOL
+                       && pj->data.function.head->data.symbol.name == SYM_HoldPattern
+                       && pj->data.function.arg_count == 1)
+                    pj = pj->data.function.args[0];
+                np[j] = pj;
+            }
+            bool r = match_args_internal(exprs, n_exprs, np, n_pats, env, condition,
+                                         pat_head, total_pats, parent);
+            free(np);
+            return r;
+        }
+    }
+
     if (n_pats == 0) {
         if (n_exprs != 0) return false;
 

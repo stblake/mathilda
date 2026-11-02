@@ -1043,7 +1043,7 @@ Keeps a pattern expression in unevaluated form while still allowing it to act as
 
 **Features**:
 - Attributes: `{HoldAll, Protected}`.
-- `HoldPattern[p]` is equivalent to `p` in the pattern matcher; the matcher transparently unwraps a single-argument `HoldPattern` before matching.
+- `HoldPattern[p]` is equivalent to `p` in the pattern matcher; the matcher transparently unwraps a single-argument `HoldPattern` before matching, including for the width of an argument (v0.6137): `{HoldPattern[__]}` matches `{1, 2}` and `{HoldPattern[({1} | {-1})..]}` matches `{{1}, {1}}`, as in the reference.
 - Useful on the left-hand side of rules and assignments, because those positions are normally evaluated before being used for matching. Wrapping in `HoldPattern` stops that evaluation and preserves the literal pattern shape.
 - `HoldPattern` is removed by one layer of `ReleaseHold`.
 
