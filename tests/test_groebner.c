@@ -431,10 +431,10 @@ static void test_deglex_honoured(void) {
 /* ------------------------------------------------------------------ */
 
 static void test_non_polynomial_unevaluated(void) {
-    /* Sin[x] is not a polynomial in x; stays unevaluated. */
+    /* Sin[x] is not a polynomial in x: it is an indeterminate of its own
+     * (v0.6132), as in the reference: {-1 + Sin[x]^2, x + Sin[x]}. */
     check_eq("GroebnerBasis[{Sin[x] + x, x^2 - 1}, {x}]",
-             "GroebnerBasis[List[Plus[x, Sin[x]], Plus[-1, Power[x, 2]]], "
-                          "List[x]]");
+             "List[Plus[-1, Power[Sin[x], 2]], Plus[x, Sin[x]]]");
 }
 
 static void test_parametric_coeffs_in_q_of_a(void) {

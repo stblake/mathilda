@@ -29,6 +29,8 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"   /* expr_is_numeric_quantity: generalised atoms */
+#include "sym_intern.h"
 
 /* ------------------------------------------------------------------ */
 /*  Diagnostic helpers                                                 */
@@ -473,9 +475,112 @@ static int64_t* parse_weight_matrix(const Expr* v, int* rows, int* cols) {
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  Generalised variables and coefficients                             */
+/* ------------------------------------------------------------------ */
+
+/* The polynomial engines read symbols only, so an indexed variable x[1] or a
+ * compound coefficient SPD[p, p] left GroebnerBasis unevaluated (FeynCalc's
+ * FCLoopSingularityStructure calls it on Feynman parameters x[i]).  As the
+ * reference does, any maximal subexpression that is not a polynomial
+ * operation -- not Plus, not Times, not an integer Power, not List/Rule (the
+ * argument structure) and not a numeric quantity -- is an indeterminate: it is
+ * replaced by a fresh symbol throughout the call, the basis is computed, and
+ * the substitution reversed. */
+typedef struct { Expr** from; Expr** to; size_t n, cap; } GbAtoms;
+
+static bool gb_structural_head(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Plus || h == SYM_Times || h == SYM_List || h == SYM_Rule
+        || h == SYM_RuleDelayed || h == SYM_Equal || h == SYM_Rational || h == SYM_Complex)
+        return true;
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* x = e->data.function.args[1];
+        return x->type == EXPR_INTEGER;
+    }
+    return false;
+}
+
+static Expr* gb_abstract(const Expr* e, GbAtoms* at) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (!gb_structural_head(e)) {
+        if (expr_is_numeric_quantity(e)) return expr_copy((Expr*)e);
+        for (size_t i = 0; i < at->n; i++)
+            if (expr_eq(at->from[i], (Expr*)e)) return expr_copy(at->to[i]);
+        if (at->n == at->cap) {
+            at->cap = at->cap ? at->cap * 2 : 8;
+            at->from = (Expr**)realloc(at->from, at->cap * sizeof(Expr*));
+            at->to = (Expr**)realloc(at->to, at->cap * sizeof(Expr*));
+        }
+        char name[64];
+        snprintf(name, sizeof name, "GroebnerBasis`Private`v%zu", at->n + 1);
+        at->from[at->n] = expr_copy((Expr*)e);
+        at->to[at->n] = expr_new_symbol(intern_symbol(name));
+        return expr_copy(at->to[at->n++]);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = gb_abstract(e->data.function.args[i], at);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
+static Expr* gb_restore(const Expr* e, const GbAtoms* at) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < at->n; i++)
+            if (at->to[i]->data.symbol.name == e->data.symbol.name) return expr_copy(at->from[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = gb_restore(e->data.function.args[i], at);
+    Expr* out = expr_new_function(gb_restore(e->data.function.head, at), args, n);
+    free(args);
+    return out;
+}
+
+/* Abstract the positional arguments (polynomials, variables, eliminated
+ * variables); options stay as written.  Owned result, or NULL when there is
+ * nothing to abstract or the substituted call declines. */
+static Expr* gb_with_generalised_atoms(Expr* res, Expr* (*self)(Expr*)) {
+    size_t argc = res->data.function.arg_count;
+    GbAtoms at = { NULL, NULL, 0, 0 };
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * argc);
+    for (size_t i = 0; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        bool option = a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && (a->data.function.head->data.symbol.name == SYM_Rule
+                || a->data.function.head->data.symbol.name == SYM_RuleDelayed);
+        args[i] = (i < 3 && !option) ? gb_abstract(a, &at) : expr_copy(a);
+    }
+    Expr* out = NULL;
+    if (at.n > 0) {
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), args, argc);
+        Expr* r = self(call);
+        if (r) {
+            out = eval_and_free(gb_restore(r, &at));
+            expr_free(r);
+        }
+        expr_free(call);
+    } else {
+        for (size_t i = 0; i < argc; i++) expr_free(args[i]);
+    }
+    free(args);
+    for (size_t i = 0; i < at.n; i++) { expr_free(at.from[i]); expr_free(at.to[i]); }
+    free(at.from); free(at.to);
+    return out;
+}
+
 Expr* builtin_groebner_basis(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    if (argc >= 1) {
+        Expr* ga = gb_with_generalised_atoms(res, builtin_groebner_basis);
+        if (ga) return ga;
+    }
     if (argc == 0) {
         mth_message("GroebnerBasis", "argt", "GroebnerBasis called with 0 arguments; 2 or 3 expected.");
         return NULL;

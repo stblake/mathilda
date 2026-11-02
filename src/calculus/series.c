@@ -37,6 +37,7 @@
 #include "rationalize.h"
 #include "sym_names.h"
 #include "ndarray.h"
+#include "numeric.h"       /* expr_is_numeric_quantity: compound expansion variables */
 #include "simp.h"          /* AssumeCtx + assume_known_* / apply_assumption_rules:
                             * assumption-aware sign-of-x and coefficient cleanup. */
 #include "simp_internal.h" /* assume_reduce_entails: deep sign of a compound
@@ -7217,8 +7218,96 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     return result;
 }
 
+/* A compound expansion variable -- g[q], a[1], Log[y], Derivative[1][f][x] --
+ * is accepted as the reference accepts it: anything that is not a numeric
+ * quantity and not built by Plus, Times or Power (x^2 and x + y stay
+ * Series::ivar).  Like D, the variable is treated as an independent symbol:
+ * every occurrence in the body and the spec is replaced by a fresh symbol, the
+ * expansion runs on that, and the variable is put back into the result
+ * (SeriesData[g[q], 0, {f[0], f'[0], f''[0]/2}, 0, 3, 1]).  Returns the
+ * result, or NULL when no spec has a compound variable or the expansion of
+ * the substituted call declines. */
+static bool series_compound_var_ok(const Expr* v) {
+    if (v->type != EXPR_FUNCTION) return false;
+    if (v->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = v->data.function.head->data.symbol.name;
+        if (h == SYM_Plus || h == SYM_Times || h == SYM_Power) return false;
+    }
+    return !expr_is_numeric_quantity(v);
+}
+
+/* Structural substitution (no evaluation): an owned copy of `e` with every
+ * subexpression equal to `from` replaced by `to`. */
+static Expr* series_subst_structural(const Expr* e, const Expr* from, const Expr* to) {
+    if (expr_eq((Expr*)e, (Expr*)from)) return expr_copy((Expr*)to);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        args[i] = series_subst_structural(e->data.function.args[i], from, to);
+    Expr* h = series_subst_structural(e->data.function.head, from, to);
+    Expr* out = expr_new_function(h, args, n);
+    free(args);
+    return out;
+}
+
+static Expr* series_with_compound_vars(Expr* res, Expr* (*self)(Expr*)) {
+    size_t n = res->data.function.arg_count;
+    Expr* call = NULL;                 /* rewritten call, once one is needed */
+    Expr** froms = NULL; Expr** tos = NULL; size_t nsub = 0;
+    for (size_t i = 1; i < n; i++) {
+        Expr* sp = (call ? call : res)->data.function.args[i];
+        if (sp->type != EXPR_FUNCTION) continue;
+        size_t ac = sp->data.function.arg_count;
+        bool is_spec = (has_symbol_head(sp, "List") && ac >= 2) ||
+                       (has_symbol_head(sp, "Rule") && ac == 2);
+        if (!is_spec || !series_compound_var_ok(sp->data.function.args[0])) continue;
+        char name[64];
+        snprintf(name, sizeof name, "Series`Private`var%zu", nsub + 1);
+        Expr* sym = mk_symbol(name);
+        Expr* var = expr_copy(sp->data.function.args[0]);
+        Expr* src = call ? call : res;
+        Expr* next = series_subst_structural(src, var, sym);
+        if (call) expr_free(call);
+        call = next;
+        froms = (Expr**)realloc(froms, sizeof(Expr*) * (nsub + 1));
+        tos = (Expr**)realloc(tos, sizeof(Expr*) * (nsub + 1));
+        froms[nsub] = sym; tos[nsub] = var; nsub++;
+    }
+    if (!call) return NULL;
+    Expr* out = NULL;
+    /* The body's arguments are evaluated afresh on the substituted symbol
+     * (f[s] may evaluate differently than f[g[q]] did), then the expansion
+     * runs; putting the variable back is structural, then one evaluation. */
+    Expr* ev = eval_and_free(expr_copy(call));
+    if (ev->type == EXPR_FUNCTION && expr_eq(ev->data.function.head, res->data.function.head)) {
+        expr_free(ev);
+        out = NULL;
+    } else {
+        out = ev;
+    }
+    if (out) {
+        for (size_t k = 0; k < nsub; k++) {
+            Expr* back = series_subst_structural(out, froms[k], tos[k]);
+            expr_free(out);
+            out = back;
+        }
+        out = eval_and_free(out);
+    }
+    (void)self;
+    expr_free(call);
+    for (size_t k = 0; k < nsub; k++) { expr_free(froms[k]); expr_free(tos[k]); }
+    free(froms); free(tos);
+    return out;
+}
+
 Expr* builtin_series(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+
+    {
+        Expr* cv = series_with_compound_vars(res, builtin_series);
+        if (cv) return cv;
+    }
 
     /* The expansion variable must be a symbol (see series_spec_vars_ok). This
      * must precede every other branch: each of them reads the spec. */
@@ -7351,6 +7440,10 @@ Expr* builtin_series(Expr* res) {
  * is not produced. */
 Expr* builtin_seriescoefficient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    {
+        Expr* cv = series_with_compound_vars(res, builtin_seriescoefficient);
+        if (cv) return cv;
+    }
 
     /* Same variable check as Series (series_spec_vars_ok). It must come before
      * the symbolic-index special cases below, which match on the raw spec: with
