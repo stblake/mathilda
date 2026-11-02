@@ -854,6 +854,32 @@ static bool rn_is_structural_head(const char* h) {
         || h == SYM_And || h == SYM_Or || h == SYM_Not;
 }
 
+/* Does `e` carry an inexact number as a *coefficient* -- outside every
+ * kernel?  The walk descends the same structural heads as the kernel
+ * collector; a numeric quantity (Sin[2.], 1.5) is a coefficient and is
+ * scanned whole, while any other compound (f[1.], x[0.5]) is an
+ * indeterminate whose inner numbers the exact core never computes with. */
+static bool rn_coefficient_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return internal_contains_inexact(e);
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL || is_hold_head_sym(h))
+        return internal_contains_inexact(e);
+    if (rn_is_structural_head(h->data.symbol.name)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (rn_coefficient_inexact(e->data.function.args[i])) return true;
+        return false;
+    }
+    return is_numeric_quantity(e) && internal_contains_inexact(e);
+}
+
+bool internal_args_contain_inexact_coefficient(const Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        if (rn_coefficient_inexact(res->data.function.args[i])) return true;
+    return false;
+}
+
 static void rn_collect_kernels(const Expr* e, RnKernels* k) {
     if (!e || e->type != EXPR_FUNCTION) return;
     const Expr* h = e->data.function.head;

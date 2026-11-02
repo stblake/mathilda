@@ -907,7 +907,7 @@ static Expr* builtin_factor_core(Expr* res) {
      * integer (rational) coefficients; route inexact inputs through the
      * standard rationalise / numericalise round-trip.  We don't cache
      * inexact results -- they go through their own evaluation path. */
-    if (internal_args_contain_inexact(res)) {
+    if (internal_args_contain_inexact_coefficient(res)) {
         if (memo_key) expr_free(memo_key);
         return internal_rationalize_then_numericalize(res, builtin_factor);
     }

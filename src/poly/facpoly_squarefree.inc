@@ -589,7 +589,7 @@ Expr* builtin_factorsquarefree(Expr* res) {
 
     /* The square-free factorisation pipeline (PolynomialGCD against the
      * derivative) requires rational coefficients. */
-    if (internal_args_contain_inexact(res)) {
+    if (internal_args_contain_inexact_coefficient(res)) {
         return internal_rationalize_then_numericalize(res, builtin_factorsquarefree);
     }
 

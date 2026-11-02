@@ -1944,7 +1944,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
     /* Inexact coefficients block the rational-arithmetic cancellation
      * machinery (e.g. (x^2/9 - y^2/25.) — the 25. defeats Polynomial GCD).
      * Force-rationalise on the way in, numericalise on the way out. */
-    if (internal_args_contain_inexact(res)) {
+    if (internal_args_contain_inexact_coefficient(res)) {
         return internal_rationalize_then_numericalize(res, builtin_cancel);
     }
 
@@ -2549,7 +2549,7 @@ static Expr* builtin_together_compute(Expr* res) {
 
     /* Inexact coefficients can't be combined by exact polynomial-LCM
      * machinery; rationalise inputs, run, then re-numericalise. */
-    if (internal_args_contain_inexact(res)) {
+    if (internal_args_contain_inexact_coefficient(res)) {
         return internal_rationalize_then_numericalize(res, builtin_together);
     }
 

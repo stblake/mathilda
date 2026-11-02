@@ -627,6 +627,16 @@ static void ca_set(Expr* arr, const int* idx, int rank, Expr* val) {
     expr_free(val);
 }
 
+/* The constant term of `e` when no variable is named: `e` itself, reduced by
+ * the modulus and expanded exactly as build_monomials treats a polynomial. */
+static Expr* ca_constant(Expr* e, Expr* modulus) {
+    Expr* reduced = modulus ? internal_polynomialmod(
+        (Expr*[]){ expr_copy(e), expr_copy(modulus) }, 2) : NULL;
+    Expr* out = expr_expand(reduced ? reduced : e);
+    if (reduced) expr_free(reduced);
+    return out ? out : expr_copy(e);
+}
+
 Expr* builtin_coefficientarrays(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -678,7 +688,39 @@ Expr* builtin_coefficientarrays(Expr* res) {
     int k;
     Expr* owned = NULL;
     Expr** vars = resolve_vars(polys, vars_arg, &k, &owned);
-    if (k <= 0) {
+
+    /* No variables (CoefficientArrays[p, {}], or a constant input): every term
+     * is the constant term, so the answer is the single degree-0 element --
+     * the expanded scalar {p} for one polynomial, the constant vector as a
+     * rank-1 SparseArray for a system (the shape the k > 0 path gives its
+     * first element). Handled here because the monomial builders and the
+     * order matrices are written for k >= 1. */
+    if (k == 0) {
+        Expr* el = NULL;
+        if (!is_system) {
+            el = ca_constant(polys, modulus);
+        } else {
+            int64_t dim = (int64_t)m;
+            SpCoo c0;
+            sp_coo_init(&c0, 1, &dim, SPV_EXPR);
+            bool pushed = true;
+            for (size_t i = 0; i < m && pushed; i++) {
+                int64_t at = (int64_t)i;
+                pushed = sp_coo_push_expr(&c0, &at,
+                             ca_constant(eqs[i], modulus));
+            }
+            SparseArray* sa = NULL;
+            if (pushed) sa = sp_coo_finish(&c0, expr_new_integer(0), true);
+            else        sp_coo_free(&c0);
+            if (sa) el = sp_to_expr(sa);
+        }
+        free(eqs); free(vars);
+        if (owned) expr_free(owned);
+        if (unpacked) expr_free(unpacked);
+        return el ? expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ el }, 1)
+                  : NULL;
+    }
+    if (k < 0) {
         free(eqs); free(vars);
         if (owned) expr_free(owned);
         if (unpacked) expr_free(unpacked);

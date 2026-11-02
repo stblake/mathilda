@@ -3453,7 +3453,7 @@ Expr* builtin_polynomialgcd(Expr* res) {
      * Force-rationalise the inputs, run the exact algorithm, and
      * numericalise the result so the caller observes inexact-in /
      * inexact-out semantics. */
-    if (internal_args_contain_inexact(res)) {
+    if (internal_args_contain_inexact_coefficient(res)) {
         return internal_rationalize_then_numericalize(res, builtin_polynomialgcd);
     }
 

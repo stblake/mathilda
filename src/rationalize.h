@@ -94,6 +94,12 @@ bool internal_contains_inexact(const Expr* e);
  * non-FUNCTION input or one with no args. */
 bool internal_args_contain_inexact(const Expr* res);
 
+/* Like internal_args_contain_inexact, but an inexact number counts only
+ * as a coefficient: one inside an opaque kernel (f[1.], x[0.5]) does not,
+ * since the polynomial algebra treats the kernel as an indeterminate.
+ * Factor[f[1.] x + f[1.]] is then f[1.] (1 + x), with exact 1s. */
+bool internal_args_contain_inexact_coefficient(const Expr* res);
+
 /* Force-rationalisation: convert every inexact leaf in `e` to a rational
  * so the downstream exact-arithmetic algorithms can run. Functionally
  * close to `Rationalize[expr, 0]` but with two pragmatic differences
