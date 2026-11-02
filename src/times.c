@@ -1305,12 +1305,72 @@ Expr* builtin_times(Expr* res) {
     if (heap_bufs) free(slot_group);
     if (heap_bufs) free(slot_hash);
 
+    /* A factor equal to the base of another power joins it, as in the
+     * reference: m^2 (m^2)^(-1 + D/2) is (m^2)^(D/2), Sqrt[m^2] m^2 is
+     * (m^2)^(3/2).  The grouping above keys m^2 as (m, 2) and (m^2)^a as
+     * (m^2, a), so the two never met.  Only exact equality merges
+     * (m^4 Sqrt[m^2] stays), and only bases that are themselves powers are
+     * examined, so ordinary products pay one scan. */
+    if (group_count >= 2) {
+        bool any_power_base = false;
+        for (size_t gi = 0; gi < group_count && !any_power_base; gi++) {
+            Expr* gb = groups[gi].base;
+            any_power_base = gb->type == EXPR_FUNCTION && gb->data.function.head->type == EXPR_SYMBOL
+                && gb->data.function.head->data.symbol.name == SYM_Power
+                && gb->data.function.arg_count == 2;
+        }
+        if (any_power_base) {
+            for (size_t j = 0; j < group_count; j++) {
+                Expr* bj = groups[j].base;
+                if (!(bj->type == EXPR_FUNCTION && bj->data.function.head->type == EXPR_SYMBOL
+                      && bj->data.function.head->data.symbol.name == SYM_Power
+                      && bj->data.function.arg_count == 2)) continue;
+                for (size_t i = 0; i < group_count; i++) {
+                    if (i == j) continue;
+                    if (!expr_eq(groups[i].base, bj->data.function.args[0])
+                        || !expr_eq(groups[i].exponent, bj->data.function.args[1])) continue;
+                    /* groups[i] is the whole factor bj, to the first power */
+                    Expr* ne = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                   (Expr*[]){ groups[j].exponent, expr_new_integer(1) }, 2));
+                    groups[j].exponent = ne;
+                    expr_free(groups[i].base);
+                    expr_free(groups[i].exponent);
+                    for (size_t k = i + 1; k < group_count; k++) groups[k - 1] = groups[k];
+                    group_count--;
+                    if (i < j) j--;
+                    break;
+                }
+            }
+        }
+    }
+
     if (num_prod->type == EXPR_INTEGER && num_prod->data.integer == 0) {
         if (complex_val) expr_free(complex_val);
         if (interval_val) expr_free(interval_val);   /* 0 * Interval -> 0 */
         for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
         if (heap_bufs) free(groups);
         return num_prod;
+    }
+    /* An inexact zero absorbs symbolic factors, as in the reference:
+     * 0. d is 0., 0. (d y) is 0.  (A factor that is an infinity keeps the
+     * product, which the Indeterminate handling elsewhere decides.) */
+    if (num_prod->type == EXPR_REAL && num_prod->data.real == 0.0
+        && !complex_val && !interval_val && group_count > 0) {
+        bool has_inf = false;
+        for (size_t j = 0; j < group_count && !has_inf; j++) {
+            Expr* gb = groups[j].base;
+            has_inf = (gb->type == EXPR_SYMBOL
+                       && (gb->data.symbol.name == SYM_Infinity
+                           || gb->data.symbol.name == SYM_ComplexInfinity
+                           || gb->data.symbol.name == SYM_Indeterminate))
+                   || (gb->type == EXPR_FUNCTION && gb->data.function.head->type == EXPR_SYMBOL
+                       && gb->data.function.head->data.symbol.name == SYM_DirectedInfinity);
+        }
+        if (!has_inf) {
+            for (size_t j = 0; j < group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
+            if (heap_bufs) free(groups);
+            return num_prod;
+        }
     }
 
     /* Radical canonicalization: for each Power[b, q] group with b a positive

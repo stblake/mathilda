@@ -3496,6 +3496,14 @@ else()
     target_link_libraries(d_multilinear_tests gmp m)
 endif()
 
+add_executable(times_power_base_tests test_times_power_base.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(times_power_base_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(times_power_base_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(times_power_base_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 
