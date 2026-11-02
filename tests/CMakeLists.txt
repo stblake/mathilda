@@ -3488,6 +3488,14 @@ else()
     target_link_libraries(inputform_layout_tests gmp m)
 endif()
 
+add_executable(d_multilinear_tests test_d_multilinear.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(d_multilinear_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(d_multilinear_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(d_multilinear_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 

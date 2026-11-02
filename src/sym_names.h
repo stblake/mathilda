@@ -657,6 +657,7 @@ extern const char* SYM_OpenRead;
 extern const char* SYM_OpenWrite;
 extern const char* SYM_OpenAppend;
 extern const char* SYM_Close;
+extern const char* SYM_Cross;
 extern const char* SYM_Streams;
 extern const char* SYM_StreamPosition;
 extern const char* SYM_SetStreamPosition;

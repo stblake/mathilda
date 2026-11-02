@@ -651,6 +651,7 @@ const char* SYM_OpenRead = NULL;
 const char* SYM_OpenWrite = NULL;
 const char* SYM_OpenAppend = NULL;
 const char* SYM_Close = NULL;
+const char* SYM_Cross = NULL;
 const char* SYM_Streams = NULL;
 const char* SYM_StreamPosition = NULL;
 const char* SYM_SetStreamPosition = NULL;
@@ -1768,6 +1769,7 @@ void sym_names_init(void) {
     SYM_OpenWrite                  = intern_symbol("OpenWrite");
     SYM_OpenAppend                 = intern_symbol("OpenAppend");
     SYM_Close                      = intern_symbol("Close");
+    SYM_Cross                      = intern_symbol("Cross");
     SYM_Streams                    = intern_symbol("Streams");
     SYM_StreamPosition             = intern_symbol("StreamPosition");
     SYM_SetStreamPosition          = intern_symbol("SetStreamPosition");

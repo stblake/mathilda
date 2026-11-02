@@ -655,7 +655,7 @@ Gives the vector cross product of its arguments.
 - `Protected`.
 - Returns the cross product or totally antisymmetric product of $n-1$ vectors of length $n$.
 - Works for symbolic and numerical inputs.
-- Outputs `Cross::nonn1` error message if inputs are not equal-length vectors or if the number of arguments is not one less than their length.
+- Outputs `Cross::nonn1` if list arguments are not equal-length vectors or if the number of arguments is not one less than their length. A non-list argument (`Cross[a[x], b[x]]`) leaves the call unevaluated silently, as in the reference (v0.6134).
 
 ```mathematica
 In[1]:= Cross[{1, 2, -1}, {-1, 1, 0}]

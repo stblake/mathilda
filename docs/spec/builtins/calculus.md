@@ -23,6 +23,11 @@ Partial derivative.
 - `D[f, x, y, ...]` -- mixed partial derivative, equivalent to
   `D[D[f, x], y, ...]`.
 - `D[f, {x, n}, {y, m}, ...]` -- mixed multiple partial derivative.
+- **Products that are not `Times`** (v0.6134). `Dot`, `NonCommutativeMultiply` and `Cross`
+  are differentiated by the product rule with the factor order kept, as in the reference:
+  `D[a[x] . b[x], x]` is `a[x] . b'[x] + a'[x] . b[x]`, and a factor free of `x`
+  contributes no term (`D[a . b[x], x]` is `a . b'[x]`). Other heads take the chain rule
+  (`D[h[a[x], b[x]], x]` gives `Derivative[0, 1][h]` and `Derivative[1, 0][h]` terms).
 - `D[f, {{x1, ..., xN}}]` -- gradient: the vector
   `{D[f, x1], ..., D[f, xN]}` for scalar `f`. For a list `f`, gives
   the Jacobian (one gradient row per component of `f`).

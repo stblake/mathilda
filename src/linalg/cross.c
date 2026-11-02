@@ -25,8 +25,9 @@ Expr* builtin_cross(Expr* res) {
     for (size_t i = 0; i < m; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL || arg->data.function.head->data.symbol.name != SYM_List) {
-            valid = false;
-            break;
+            /* A symbolic argument (Cross[a[x], b[x]]) is no error: the call
+             * stays unevaluated silently, as in the reference. */
+            return NULL;
         }
         if (arg->data.function.arg_count != n) {
             valid = false;

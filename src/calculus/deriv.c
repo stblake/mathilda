@@ -797,6 +797,29 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fnN_adopt("Plus", ts, n);
         }
 
+        /* --- Dot, NonCommutativeMultiply, Cross: multilinear, so the
+         * product rule keeps the factor order:
+         *     d/dx a.b = a'.b + a.b'
+         * (the generic chain rule gave Derivative[1, 0][Dot][a, b] a', as
+         * the reference never does; FeynCalc's FunctionalD/FeynRule
+         * differentiate DOT products of fields).  A factor whose
+         * derivative is 0 contributes no term (D[a . b[x], x] = a . b'[x]). */
+        if ((h == SYM_Dot || h == SYM_NonCommutativeMultiply || h == SYM_Cross) && n >= 1) {
+            Expr** ts = malloc(sizeof(Expr*) * n);
+            size_t nt = 0;
+            for (size_t i = 0; i < n; i++) {
+                Expr* di = deriv_of(args[i], x, nonconsts);
+                if (is_lit_zero(di)) { expr_free(di); continue; }
+                Expr** fs = malloc(sizeof(Expr*) * n);
+                for (size_t j = 0; j < n; j++)
+                    fs[j] = (i == j) ? di : expr_copy(args[j]);
+                ts[nt++] = mk_fnN_adopt(h, fs, n);
+            }
+            if (nt == 0) { free(ts); return mk_int(0); }
+            if (nt == 1) { Expr* t = ts[0]; free(ts); return t; }
+            return mk_fnN_adopt("Plus", ts, nt);
+        }
+
         /* --- Power: d/dx f^g = f^(g-1) * (g*f' + f*Log[f]*g'). ---
          *
          * When g turns out to be independent of x we collapse to the
