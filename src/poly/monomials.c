@@ -44,6 +44,8 @@
 #include "flint_bridge.h" /* flint_field_monomials — field-coefficient fast path */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "pack.h"      /* pack_unpack: materialise a visible NDArray argument */
+#include "print.h"     /* expr_to_string: the ::poly message argument */
+#include "eval.h"      /* eval_and_free: drive the equation rewrite */
 
 #include <stdlib.h>
 #include <string.h>
@@ -657,6 +659,59 @@ Expr* builtin_coefficientarrays(Expr* res) {
     if (npos < 1 || npos > 2) return NULL;
 
     Expr* polys = args[0];
+
+    /* Equations: lhs == rhs is the polynomial lhs - rhs, so the arrays of a
+     * linear system {A.x == b} are {-b, A}.  Rewrite and hand the call back to
+     * the evaluator.  A relation that is not an equation (x < 2) is not a
+     * polynomial: say so and stay unevaluated.  Without this an equation was
+     * read as a variable-free constant -- a silently wrong {SparseArray[eqns]}. */
+    {
+        size_t ne = is_list_head(polys) ? polys->data.function.arg_count : 1;
+        bool has_eq = false;
+        for (size_t i = 0; i < ne; i++) {
+            Expr* q = is_list_head(polys) ? polys->data.function.args[i] : polys;
+            if (q->type != EXPR_FUNCTION || q->data.function.head->type != EXPR_SYMBOL)
+                continue;
+            const char* h = q->data.function.head->data.symbol.name;
+            if (h == SYM_Equal && q->data.function.arg_count == 2) { has_eq = true; continue; }
+            if (h == SYM_Equal || h == SYM_Unequal || h == SYM_Less ||
+                h == SYM_LessEqual || h == SYM_Greater || h == SYM_GreaterEqual) {
+                char* qs = expr_to_string(q);
+                mth_message("CoefficientArrays", "poly", "%s is not a polynomial.", qs ? qs : "");
+                free(qs);
+                return NULL;
+            }
+        }
+        if (has_eq) {
+            Expr* rw = expr_copy(res);
+            Expr** slot = &rw->data.function.args[0];
+            size_t n2 = is_list_head(*slot) ? (*slot)->data.function.arg_count : 1;
+            for (size_t i = 0; i < n2; i++) {
+                Expr** qp = is_list_head(*slot) ? &(*slot)->data.function.args[i] : slot;
+                Expr* q = *qp;
+                if (q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL &&
+                    q->data.function.head->data.symbol.name == SYM_Equal &&
+                    q->data.function.arg_count == 2) {
+                    Expr* lhs = expr_copy(q->data.function.args[0]);
+                    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(q->data.function.args[1]) }, 2);
+                    *qp = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ lhs, neg }, 2);
+                    expr_free(q);
+                }
+            }
+            /* Evaluated here, not handed back: a builtin result with the same
+             * head is not re-driven to a fixed point, so `c = CoefficientArrays
+             * [eqns, vars]` would store the rewritten call itself. */
+            Expr* out = eval_and_free(rw);
+            if (out && out->type == EXPR_FUNCTION &&
+                out->data.function.head->type == EXPR_SYMBOL &&
+                strcmp(out->data.function.head->data.symbol.name, "CoefficientArrays") == 0) {
+                expr_free(out);   /* the rewritten system also declined */
+                return NULL;
+            }
+            return out;
+        }
+    }
 
     /* A VISIBLE NDArray is a system of constant polynomials, so materialise it
      * and go on. The transparency gate never touches a visible NDArray (only a

@@ -3025,6 +3025,44 @@ static int numeric_real_sign(Expr* arg, int* sign) {
     return kind;
 }
 
+/* Sign of an infinite quantity, for the four sign predicates.  Infinity is the
+ * bare symbol, a scaled one is Times[c, Infinity] (so -Infinity is
+ * Times[-1, Infinity]) and DirectedInfinity[d] may also appear.  The predicate
+ * is decided by the direction c / d, with numeric_real_sign's convention:
+ *   1  -> real direction, *sign set to -1 or +1
+ *   0  -> non-real direction (I Infinity): every predicate is False
+ *  -1  -> ComplexInfinity / DirectedInfinity[] or an undecidable direction:
+ *         leave the predicate unevaluated
+ *  -2  -> arg is not an infinite quantity at all (use the finite path). */
+static int infinite_real_sign(Expr* arg, int* sign) {
+    if (arg->type == EXPR_SYMBOL) {
+        if (arg->data.symbol.name == SYM_Infinity) { *sign = 1; return 1; }
+        if (arg->data.symbol.name == SYM_ComplexInfinity) return -1;
+        return -2;
+    }
+    if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
+        return -2;
+    const char* h = arg->data.function.head->data.symbol.name;
+    Expr* dir = NULL;
+    if (h == SYM_DirectedInfinity) {
+        if (arg->data.function.arg_count == 0) return -1;
+        if (arg->data.function.arg_count != 1) return -2;
+        dir = arg->data.function.args[0];
+    } else if (h == SYM_Times && arg->data.function.arg_count == 2) {
+        Expr* a0 = arg->data.function.args[0];
+        Expr* a1 = arg->data.function.args[1];
+        if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Infinity) dir = a0;
+        else if (a0->type == EXPR_SYMBOL && a0->data.symbol.name == SYM_Infinity) dir = a1;
+        else return -2;
+    } else {
+        return -2;
+    }
+    if (!is_numeric_quantity(dir)) return -1;
+    int kind = numeric_real_sign(dir, sign);
+    if (kind == 1 && *sign == 0) return -1;   /* 0 Infinity: not a direction */
+    return kind;
+}
+
 /* Positive[x] gives True when x is a real positive number, False when x is a
  * manifestly non-positive numeric quantity (negative, zero, or a non-real
  * complex value). Non-numeric arguments are left unevaluated so symbolic
@@ -3050,11 +3088,14 @@ Expr* builtin_positive(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
-    if (!is_numeric_quantity(arg)) return NULL;
-
+    /* Infinite quantities are decided by their direction; otherwise only
+     * decide for numeric quantities -- symbolic arguments stay unevaluated. */
     int sign;
-    int kind = numeric_real_sign(arg, &sign);
+    int kind = infinite_real_sign(arg, &sign);
+    if (kind == -2) {
+        if (!is_numeric_quantity(arg)) return NULL;
+        kind = numeric_real_sign(arg, &sign);
+    }
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
     if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign > 0 ? "True" : "False");
@@ -3080,11 +3121,14 @@ Expr* builtin_negative(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
-    if (!is_numeric_quantity(arg)) return NULL;
-
+    /* Infinite quantities are decided by their direction; otherwise only
+     * decide for numeric quantities -- symbolic arguments stay unevaluated. */
     int sign;
-    int kind = numeric_real_sign(arg, &sign);
+    int kind = infinite_real_sign(arg, &sign);
+    if (kind == -2) {
+        if (!is_numeric_quantity(arg)) return NULL;
+        kind = numeric_real_sign(arg, &sign);
+    }
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
     if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign < 0 ? "True" : "False");
@@ -3113,11 +3157,14 @@ Expr* builtin_nonnegative(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
-    if (!is_numeric_quantity(arg)) return NULL;
-
+    /* Infinite quantities are decided by their direction; otherwise only
+     * decide for numeric quantities -- symbolic arguments stay unevaluated. */
     int sign;
-    int kind = numeric_real_sign(arg, &sign);
+    int kind = infinite_real_sign(arg, &sign);
+    if (kind == -2) {
+        if (!is_numeric_quantity(arg)) return NULL;
+        kind = numeric_real_sign(arg, &sign);
+    }
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
     if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign >= 0 ? "True" : "False");
@@ -3146,11 +3193,14 @@ Expr* builtin_nonpositive(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
-    if (!is_numeric_quantity(arg)) return NULL;
-
+    /* Infinite quantities are decided by their direction; otherwise only
+     * decide for numeric quantities -- symbolic arguments stay unevaluated. */
     int sign;
-    int kind = numeric_real_sign(arg, &sign);
+    int kind = infinite_real_sign(arg, &sign);
+    if (kind == -2) {
+        if (!is_numeric_quantity(arg)) return NULL;
+        kind = numeric_real_sign(arg, &sign);
+    }
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
     if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign <= 0 ? "True" : "False");

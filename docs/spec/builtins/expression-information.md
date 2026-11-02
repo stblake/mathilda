@@ -658,6 +658,11 @@ Predicates for testing lists and their structures.
 - Exact integers, rationals, and bigints are decided exactly; reals (machine and
   arbitrary-precision MPFR), symbolic constants, and numeric functions are
   classified by their machine-precision numeric value.
+- **Infinite quantities** are decided by their direction (v0.6144):
+  `Positive[Infinity]`, `Positive[2 Infinity]` and `Negative[-Infinity]` are
+  `True`; `Positive[-Infinity]` and `Positive[I Infinity]` are `False`;
+  `Positive[ComplexInfinity]` stays unevaluated. `Negative`, `NonNegative` and
+  `NonPositive` follow the same rule.
 - Attributes: `Listable`, `Protected` — `Positive` threads element-wise over
   lists.
 

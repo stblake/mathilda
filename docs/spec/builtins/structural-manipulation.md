@@ -1383,6 +1383,10 @@ Gives the coefficient arrays of a polynomial or polynomial system, grouped by to
   variables in non-decreasing order (upper-triangular, not symmetric); a system
   carries the equation index as the leading axis, so `{b, m} = CoefficientArrays[eqs, vars]`
   is the constant vector and the coefficient matrix of a linear system.
+- **Equations** `lhs == rhs` are read as the polynomial `lhs - rhs` (v0.6144), so
+  for `eqns = {2 x + 3 y + 4 z == 5, ...}`, `{b, m} = CoefficientArrays[eqns, {x, y, z}]`
+  gives `b = {-5, ...}` and `LinearSolve[m, -b]` solves the system. Any other
+  relation (`x < 2`, `x != 1`) is `CoefficientArrays::poly` and stays unevaluated.
 - **Every array element is a `SparseArray`** with background `0`;
   the constant term of a single polynomial is a scalar. Storage follows the number of
   terms, not `k^d`. `Normal` gives the dense arrays; `Part`, `Dot`, `Map`, `Transpose`

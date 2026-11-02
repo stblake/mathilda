@@ -4461,7 +4461,11 @@ void info_init(void) {
         "\tgives the coefficient of (x - x0)^k in the power-series expansion of f\n"
         "\tabout x = x0. Works for a concrete integer index k and a finite expansion\n"
         "point, for any f that Series can expand. Protected; the expansion variable\n"
-        "\tmust evaluate to a symbol.");
+        "\tmust evaluate to a symbol.\n"
+        "SeriesCoefficient[series, n]\n"
+        "\tgives the coefficient of (x - x0)^n in an existing SeriesData: 0 below the\n"
+        "\tfirst term, Indeterminate at or past the O-term. {n1, n2, ...} indexes a\n"
+        "\tnested multivariate series.");
     symtab_set_docstring("Normal",
         "Normal[expr]\n"
         "\tconverts expr to a normal expression. If expr is a SeriesData object, the\n"

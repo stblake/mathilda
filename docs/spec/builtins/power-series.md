@@ -301,8 +301,18 @@ Out[4]= {a, 0, b, 0}
 ## SeriesCoefficient
 Gives the coefficient of `(x - x0)^k` in the power-series expansion of `f`.
 - `SeriesCoefficient[f, {x, x0, k}]`
+- `SeriesCoefficient[series, n]`: the coefficient of `(x - x0)^n` in an existing
+  `SeriesData`; `SeriesCoefficient[series, {n1, n2, ...}]` for a nested
+  (multivariate) series (v0.6144).
 
 **Features**:
+- On a `SeriesData` the coefficient is read directly: `0` below the first term
+  or off the series' exponent grid (an integer `n` in a Puiseux series in
+  `x^(1/2)`), `Indeterminate` at or past the `O`-term.
+  `SeriesCoefficient[Series[Exp[Sin[x]], {x, 0, 10}], 8]` is `31/5760`, and `11`
+  gives `Indeterminate`. A plain expression with a bare index
+  (`SeriesCoefficient[x + x^2, 2]`) is not a series and stays unevaluated, as
+  in the reference.
 - `Protected` only; the arguments are evaluated and the expansion variable must be
   a symbol (see `Series` above — the same `ivar` decline applies, under the head
   `SeriesCoefficient`).

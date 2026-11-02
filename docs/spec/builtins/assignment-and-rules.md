@@ -19,6 +19,14 @@
   `HoldPattern` (also under a guard, `HoldPattern[f[x_]] /; c := ...`, or with
   one inside); `HoldPattern[s] = v` is an OwnValue of `s`. Before v0.591 the
   rule silently landed on `HoldPattern`.
+- **List destructuring.** `{a, b} = {1, 2}` assigns element by element and
+  `{a, b} = c` threads `c` to each target. Lists of different lengths are
+  `Set::shape` ("Lists {a, b} and {1} are not the same shape.") and nothing is
+  assigned; the value of the `Set` is the evaluated right side, and of a
+  `SetDelayed`, `$Failed` (v0.6144; it previously stayed unevaluated in
+  silence). A mismatch nested inside a List is reported the same way. Here the
+  reference still binds the siblings matched before the mismatch; Mathilda binds
+  none of them.
 - **Protected targets.** Assigning to a protected symbol is `Set::wrsym`
   ("Symbol Pi is Protected."); a rule for a protected tag is `Set::write`
   ("Tag Sin in Sin[x] is Protected."), as in the reference.

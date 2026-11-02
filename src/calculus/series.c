@@ -7438,8 +7438,82 @@ Expr* builtin_series(Expr* res) {
  * SeriesData, e.g. the asymptotic expansions at Infinity) and non-integer
  * indices are left unevaluated. The symbolic-index general term (a Piecewise)
  * is not produced. */
+/* Read an exponent that is an integer or a small Rational into num/den. */
+static bool sd_exponent(const Expr* e, int64_t* num, int64_t* den) {
+    if (e->type == EXPR_INTEGER) { *num = e->data.integer; *den = 1; return true; }
+    if (has_symbol_head((Expr*)e, "Rational") && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_INTEGER &&
+        e->data.function.args[1]->type == EXPR_INTEGER &&
+        e->data.function.args[1]->data.integer > 0) {
+        *num = e->data.function.args[0]->data.integer;
+        *den = e->data.function.args[1]->data.integer;
+        return true;
+    }
+    return false;
+}
+
+/* SeriesCoefficient[SeriesData[x, x0, {c...}, nmin, nmax, den], n]: the
+ * coefficient of (x - x0)^n read straight out of an existing series.  n may be
+ * a single exponent, or a List {n1, n2, ...} for a nested (multivariate)
+ * series, consumed outermost variable first.  The coefficient is 0 below the
+ * first term and for an exponent off the series' den-grid, and Indeterminate
+ * at or past the O-term -- the series carries no information there.  Returns
+ * a fresh value, or NULL to leave the call unevaluated. */
+static Expr* sd_coefficient(const Expr* sd, const Expr* const* idx, size_t nidx) {
+    if (nidx == 0) return expr_copy((Expr*)sd);
+    if (!has_symbol_head((Expr*)sd, "SeriesData") || sd->data.function.arg_count != 6)
+        return NULL;
+    const Expr* coefs = sd->data.function.args[2];
+    const Expr* nminE = sd->data.function.args[3];
+    const Expr* nmaxE = sd->data.function.args[4];
+    const Expr* denE  = sd->data.function.args[5];
+    if (!has_symbol_head((Expr*)coefs, "List") || nminE->type != EXPR_INTEGER ||
+        nmaxE->type != EXPR_INTEGER || denE->type != EXPR_INTEGER ||
+        denE->data.integer <= 0)
+        return NULL;
+    int64_t pn, pd;
+    if (!sd_exponent(idx[0], &pn, &pd)) return NULL;
+    int64_t den = denE->data.integer;
+    /* Grid position of x^(pn/pd) is pn*den/pd; off the grid -> no term. */
+    if (pn > INT64_MAX / den || pn < INT64_MIN / den) return NULL;
+    int64_t scaled = pn * den;
+    if (scaled % pd != 0) return expr_new_integer(0);
+    int64_t g = scaled / pd;
+    if (g >= nmaxE->data.integer) return expr_new_symbol(SYM_Indeterminate);
+    int64_t j = g - nminE->data.integer;
+    if (j < 0 || (size_t)j >= coefs->data.function.arg_count)
+        return expr_new_integer(0);
+    const Expr* c = coefs->data.function.args[(size_t)j];
+    if (nidx == 1) return expr_copy((Expr*)c);
+    /* A further index into a coefficient free of the inner variable: only its
+     * constant term is nonzero. */
+    if (!has_symbol_head((Expr*)c, "SeriesData")) {
+        for (size_t i = 1; i < nidx; i++) {
+            int64_t a, b;
+            if (!sd_exponent(idx[i], &a, &b)) return NULL;
+            if (a != 0) return expr_new_integer(0);
+        }
+        return expr_copy((Expr*)c);
+    }
+    return sd_coefficient(c, idx + 1, nidx - 1);
+}
+
 Expr* builtin_seriescoefficient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+
+    /* SeriesCoefficient[series, n] / [series, {n1, n2, ...}]: read the
+     * coefficient out of an already-computed SeriesData. */
+    {
+        Expr* f0 = res->data.function.args[0];
+        Expr* n0 = res->data.function.args[1];
+        if (has_symbol_head(f0, "SeriesData")) {
+            if (has_symbol_head(n0, "List") && n0->data.function.arg_count >= 1)
+                return sd_coefficient(f0, (const Expr* const*)n0->data.function.args,
+                                      n0->data.function.arg_count);
+            if (!has_symbol_head(n0, "List"))
+                return sd_coefficient(f0, (const Expr* const*)&n0, 1);
+        }
+    }
     {
         Expr* cv = series_with_compound_vars(res, builtin_seriescoefficient);
         if (cv) return cv;

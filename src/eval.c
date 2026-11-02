@@ -1666,6 +1666,42 @@ static bool is_n_target(const Expr* e) {
  * unchanged, and still return true so the caller yields the RHS, matching
  * Mathematica semantics.
  */
+/* Set when a List destructuring {a, b} = {1} failed on a length mismatch (the
+ * Set::shape case).  The assignment then evaluates to the right side (Set) or
+ * $Failed (SetDelayed) rather than staying unevaluated; any element bound
+ * before the mismatch -- the a of {a, {b, c}} = {1, {2}} -- stays bound. */
+static bool g_set_shape_error = false;
+
+/* Find the first List-vs-List length mismatch in a destructuring target and
+ * report it as Set::shape (SetDelayed::shape), naming the innermost pair as the
+ * reference does.  Returns true when one was reported.  Unlike the reference,
+ * a nested mismatch binds nothing: the pre-flight rejects the whole target, so
+ * no sibling is left half-assigned. */
+static bool report_set_shape(Expr* lhs, Expr* rhs, bool is_delayed) {
+    if (!lhs || !rhs || lhs->type != EXPR_FUNCTION || rhs->type != EXPR_FUNCTION ||
+        lhs->data.function.head->type != EXPR_SYMBOL ||
+        rhs->data.function.head->type != EXPR_SYMBOL ||
+        lhs->data.function.head->data.symbol.name != SYM_List ||
+        rhs->data.function.head->data.symbol.name != SYM_List)
+        return false;
+    size_t n = lhs->data.function.arg_count;
+    if (n == rhs->data.function.arg_count) {
+        for (size_t i = 0; i < n; i++)
+            if (report_set_shape(lhs->data.function.args[i],
+                                 rhs->data.function.args[i], is_delayed))
+                return true;
+        return false;
+    }
+    char* ls = expr_to_string(lhs);
+    char* rs = expr_to_string(rhs);
+    mth_message(is_delayed ? "SetDelayed" : "Set", "shape",
+                "Lists %s and %s are not the same shape.",
+                ls ? ls : "", rs ? rs : "");
+    free(ls); free(rs);
+    g_set_shape_error = true;
+    return true;
+}
+
 static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     /* Options[sym] = {name -> value, ...} redefines the symbol's default
      * option settings. Intercepted before the Protected guard below because
@@ -1883,11 +1919,14 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         bool all_ok = true;
         size_t n = lhs->data.function.arg_count;
         if (rhs_is_list && n != rhs_ds->data.function.arg_count) {
-            all_ok = false;                         /* length mismatch: leave unevaluated */
+            report_set_shape(lhs, rhs_ds, is_delayed);   /* Set::shape */
+            all_ok = false;
         } else {
             for (size_t i = 0; i < n; i++) {
                 Expr* rhs_i = rhs_is_list ? rhs_ds->data.function.args[i] : rhs_ds;
                 if (!is_assignable_lhs(lhs->data.function.args[i], rhs_i)) {
+                    if (!g_set_shape_error)
+                        report_set_shape(lhs->data.function.args[i], rhs_i, is_delayed);
                     all_ok = false;
                     break;
                 }
@@ -3577,6 +3616,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     bool free_target = false;
                     Expr* target_lhs = build_assignment_target(lhs, &free_target);
 
+                    g_set_shape_error = false;
                     if (apply_assignment(target_lhs, rhs, is_delayed)) {
                         /* The value of x = rhs is rhs, already evaluated as this
                          * step's argument. It needs another evaluation only if
@@ -3597,6 +3637,16 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         return ret;
                     }
                     if (free_target) expr_free(target_lhs);
+                    if (g_set_shape_error) {
+                        /* Set::shape already reported: the value is the
+                         * (evaluated) right side, $Failed for SetDelayed. */
+                        g_set_shape_error = false;
+                        Expr* ret = is_delayed ? expr_new_symbol(SYM_DollarFailed)
+                                               : expr_copy(rhs);
+                        expr_free(res);
+                        *changed = true;
+                        return ret;
+                    }
                 }
 #if UP_VALUES
                 /* 6b. UpSet / UpSetDelayed (lhs ^= / ^:= rhs). Same shape as Set
