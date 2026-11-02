@@ -313,11 +313,11 @@ static void test_arithmetic(void) {
     chk_if("SparseArray[{1 -> 1}, 2] + 1 + x",
            "SparseArray[Automatic, {2}, 1 + x, {1, {{0, 1}, {{1}}}, {2 + x}}]");
     chk_if("SparseArray[{1 -> a, 2 -> b}, 3] * SparseArray[{2 -> c, 3 -> d}, 3]",
-           "SparseArray[Automatic, {3}, 0, {1, {{0, 1}, {{2}}}, {b c}}]");
+           "SparseArray[Automatic, {3}, 0, {1, {{0, 1}, {{2}}}, {b*c}}]");
     chk_if("SparseArray[{1 -> a}, 3] * SparseArray[{2 -> c}, 3, 1]",
            "SparseArray[Automatic, {3}, 0, {1, {{0, 2}, {{1}, {2}}}, {a, 0}}]");
     chk_if("SparseArray[{1 -> a, 2 -> b}, 3] * SparseArray[{2 -> c, 3 -> d}, 3, 1]",
-           "SparseArray[Automatic, {3}, 0, {1, {{0, 3}, {{1}, {2}, {3}}}, {a, b c, 0}}]");
+           "SparseArray[Automatic, {3}, 0, {1, {{0, 3}, {{1}, {2}, {3}}}, {a, b*c, 0}}]");
     chk_if("SparseArray[{1 -> 1, 2 -> -1}, 2] + SparseArray[{1 -> -1}, 2]",
            "SparseArray[Automatic, {2}, 0, {1, {{0, 2}, {{1}, {2}}}, {0, -1}}]");
     chk_if("SparseArray[{1 -> 1}, 2] + SparseArray[{2 -> 1}, 2, 1]",

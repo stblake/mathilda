@@ -158,7 +158,11 @@ static Expr* put_common(Expr* res, const char* mode, const char* who) {
      * zero times — leaving an empty file in "w" mode and leaving the
      * file untouched (besides creating it if absent) in "a" mode. */
     for (size_t i = 0; i + 1 < argc; i++) {
-        char* s = expr_to_string(res->data.function.args[i]);
+        /* Put writes InputForm, as the reference: a/100 + 5*x, (x*y)/2 */
+        Expr* inner = expr_copy(res->data.function.args[i]);
+        Expr* w = expr_new_function(expr_new_symbol(SYM_InputForm), &inner, 1);
+        char* s = expr_to_string(w);
+        expr_free(w);
         if (s) {
             fputs(s, fp);
             free(s);

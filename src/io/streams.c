@@ -394,7 +394,17 @@ Expr* builtin_write(Expr* res) {
     size_t argc = res->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
         Expr* e = res->data.function.args[i];
-        char* str = s->borrowed ? expr_to_string_outputform(e) : expr_to_string(e);
+        /* A file stream writes InputForm, its default FormatType in the
+         * reference (Write[f, 1/100 a + 5 x] writes "a/100 + 5*x"). */
+        char* str;
+        if (s->borrowed) {
+            str = expr_to_string_outputform(e);
+        } else {
+            Expr* inner = expr_copy(e);
+            Expr* w = expr_new_function(expr_new_symbol(SYM_InputForm), &inner, 1);
+            str = expr_to_string(w);
+            expr_free(w);
+        }
         if (str) { fputs(str, s->fp); free(str); }
     }
     fputc('\n', s->fp);

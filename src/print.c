@@ -173,7 +173,9 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_Power) {
         if (e->data.function.arg_count == 2) {
             Expr* exp = e->data.function.args[1];
-            if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return 5000;
+            /* InputForm writes x^(-k), a power (x^(-1) as the reference) */
+            if (exp->type == EXPR_INTEGER && exp->data.integer < 0)
+                return g_inputform_depth > 0 ? 6500 : 5000;
             int64_t n, d;
             if (is_rational(exp, &n, &d) && n < 0) return 5000;
             if (exp->type == EXPR_REAL && exp->data.real < 0.0) return 5000;
@@ -526,6 +528,188 @@ static void fold_rational_coeff_into_den(Expr** num, size_t* nnum,
     expr_free(r);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Times under InputForm                                              */
+/* ------------------------------------------------------------------ */
+
+/* The reference's InputForm of a product (ToString[1/100 a + 5 x, InputForm]
+ * is "a/100 + 5*x"):
+ *   - factors joined by an explicit "*";
+ *   - a rational coefficient p/q goes over the denominator, the numerator
+ *     parenthesised when it is a product or signed: x/2, (3*x)/4, (-3*x)/4,
+ *     Pi/4, (a + b)/2, (a*b)/(c*d);
+ *   - a lone reciprocal with an integer exponent reads as a power: x^(-1),
+ *     -x^(-1), x^(-2) (2/x, a/b and 1/Sqrt[x] keep the quotient);
+ *   - a negated product is -(a*b), a negated single factor -x, and a signed
+ *     coefficient -2*x. */
+static void print_factor_list(Expr** f, size_t n, bool paren_if_many) {
+    bool paren = paren_if_many && n > 1;
+    if (paren) printf("(");
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0) printf("*");
+        print_standard(f[i], 4500);
+    }
+    if (paren) printf(")");
+}
+
+/* The factors after the coefficient, printed as InputForm prints a product
+ * with no coefficient: a*b, x/y, 1/(x*y), x^(-1).  `wrap` parenthesises a
+ * product or quotient of more than one factor (after a unary minus). */
+static void print_mpz(const mpz_t z) {
+    char* t = mpz_get_str(NULL, 10, z);
+    printf("%s", t);
+    free(t);
+}
+
+static void print_inputform_rest(Expr** num, size_t nn, Expr** den, size_t nd,
+                                 bool den_int_power, int wrap) {
+    if (nn == 0 && nd == 1 && den_int_power && wrap != 2) {   /* x^(-k) */
+        Expr* b = den[0];
+        Expr* base = b; Expr* ex = NULL;
+        if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
+            && b->data.function.head->data.symbol.name == SYM_Power) {
+            base = b->data.function.args[0]; ex = b->data.function.args[1];
+        }
+        print_standard(base, 6501);
+        printf("^(-");
+        if (ex) print_standard(ex, 0); else printf("1");
+        printf(")");
+        return;
+    }
+    if (nd == 0) {
+        bool paren = wrap && nn > 1;
+        if (paren) printf("(");
+        print_factor_list(num, nn, false);
+        if (paren) printf(")");
+        return;
+    }
+    /* wrap == 1: around every quotient (after "-"); wrap == 2: only a
+     * product (after "-1/q*", where a quotient stays bare) */
+    bool paren = wrap == 1;
+    if (paren) printf("(");
+    if (nn == 0) printf("1");
+    else print_factor_list(num, nn, true);
+    printf("/");
+    if (nd > 1) print_factor_list(den, nd, true);
+    else print_standard(den[0], 5001);
+    if (paren) printf(")");
+}
+
+static void print_times_inputform(Expr* e) {
+    size_t count = e->data.function.arg_count;
+    mpz_t pn, pd;
+    mpz_init_set_si(pn, 1);
+    mpz_init_set_si(pd, 1);
+    Expr* coef_other = NULL;                 /* a Real or Complex coefficient */
+    Expr** num = malloc(sizeof(Expr*) * (count + 1));
+    Expr** den = malloc(sizeof(Expr*) * (count + 1));
+    size_t nn = 0, nd = 0;
+    bool den_int_power = true;               /* every denominator exponent an integer */
+    for (size_t i = 0; i < count; i++) {
+        Expr* a = e->data.function.args[i];
+        int64_t rn, rd;
+        if (i == 0 && a->type == EXPR_INTEGER) { mpz_set_si(pn, a->data.integer); continue; }
+        if (i == 0 && a->type == EXPR_BIGINT) { mpz_set(pn, a->data.bigint); continue; }
+        if (i == 0 && is_rational(a, &rn, &rd)) { mpz_set_si(pn, rn); mpz_set_si(pd, rd); continue; }
+        if (i == 0 && (a->type == EXPR_REAL
+                       || (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+                           && a->data.function.head->data.symbol.name == SYM_Complex))) {
+            coef_other = a; continue;
+        }
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol.name == SYM_Power
+            && a->data.function.arg_count == 2) {
+            Expr* x = a->data.function.args[1];
+            int64_t xn, xd;
+            if (x->type == EXPR_INTEGER && x->data.integer < 0) {
+                den[nd++] = x->data.integer == -1 ? expr_copy(a->data.function.args[0])
+                    : expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ expr_copy(a->data.function.args[0]),
+                                     print_neg_int(x->data.integer) }, 2);
+                continue;
+            }
+            if (is_rational(x, &xn, &xd) && xn < 0) {
+                den[nd++] = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(a->data.function.args[0]), make_rational(-xn, xd) }, 2);
+                den_int_power = false;
+                continue;
+            }
+        }
+        num[nn++] = expr_copy(a);
+    }
+    bool neg = mpz_sgn(pn) < 0;
+    if (neg) mpz_neg(pn, pn);
+    bool p_one = mpz_cmp_ui(pn, 1) == 0, q_one = mpz_cmp_ui(pd, 1) == 0;
+
+    if (coef_other) {
+        /* (2*I)*Pi, (I/2)*x, 1.5*x */
+        print_standard(coef_other, 4500);
+        if (nn + nd > 0) { printf("*"); print_inputform_rest(num, nn, den, nd, den_int_power, 2); }
+    } else if (p_one && q_one) {
+        /* coefficient +-1: x^(-1), a*b, -x, -(a*b), -(1/(x*y)) */
+        bool single = (nd == 0 && nn == 1) || (nn == 0 && nd == 1 && den_int_power);
+        if (neg) printf("-");
+        print_inputform_rest(num, nn, den, nd, den_int_power, neg && !single ? 1 : 0);
+    } else if (neg && p_one) {
+        /* -1/q*rest: -1/2*a, -1/2*(a*b), -1/2*x/y, -1/2*1/x^2 */
+        printf("-1/");
+        print_mpz(pd);
+        printf("*");
+        print_inputform_rest(num, nn, den, nd, den_int_power, 2);
+    } else {
+        /* (p*num)/(q*den) with the sign inside the numerator */
+        size_t k = (p_one && nn > 0) ? 0 : 1;
+        bool np = (k + nn) > 1 && (nd > 0 || !q_one);
+        if (np) printf("(");
+        if (neg) printf("-");
+        if (k) print_mpz(pn);
+        for (size_t i = 0; i < nn; i++) {
+            if (k || i > 0) printf("*");
+            print_standard(num[i], 4500);
+        }
+        if (np) printf(")");
+        if (!q_one || nd > 0) {
+            printf("/");
+            size_t m = (q_one ? 0 : 1) + nd;
+            if (m > 1) printf("(");
+            if (!q_one) print_mpz(pd);
+            for (size_t i = 0; i < nd; i++) {
+                if (!q_one || i > 0) printf("*");
+                print_standard(den[i], m > 1 ? 4500 : 5001);
+            }
+            if (m > 1) printf(")");
+        }
+    }
+    for (size_t i = 0; i < nn; i++) expr_free(num[i]);
+    for (size_t i = 0; i < nd; i++) expr_free(den[i]);
+    free(num); free(den);
+    mpz_clear(pn); mpz_clear(pd);
+}
+
+/* InputForm of a Complex whose imaginary part is a non-integer rational p/q,
+ * as the reference writes it: I/2, (2*I)/3, -1/2*I, (-2*I)/3, and with a real
+ * part 1/2 + I/3, 1/2 - I/2.  False (nothing printed) for other shapes. */
+static bool print_complex_rational_im_inputform(Expr* e) {
+    Expr* re = e->data.function.args[0];
+    Expr* im = e->data.function.args[1];
+    int64_t p, q;
+    if (!is_rational(im, &p, &q) || q == 1) return false;
+    bool re_zero = re->type == EXPR_INTEGER && re->data.integer == 0;
+    if (!re_zero && re->type != EXPR_INTEGER && !is_rational(re, &(int64_t){0}, &(int64_t){0}))
+        return false;
+    bool neg = p < 0;
+    int64_t ap = neg ? -p : p;
+    if (!re_zero) {
+        print_standard(re, 3500);
+        printf(neg ? " - " : " + ");
+        neg = false;
+    }
+    if (neg && ap == 1) { printf("-1/%lld*I", (long long)q); return true; }
+    if (ap == 1) printf("I/%lld", (long long)q);
+    else printf("(%s%lld*I)/%lld", neg ? "-" : "", (long long)ap, (long long)q);
+    return true;
+}
+
 static void print_standard(Expr* e, int parent_prec) {
     if (!e) { printf("Null"); return; }
     /* Format[...] display rules. A rewrite is itself displayed (and so
@@ -701,6 +885,11 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("/");
             print_standard(e->data.function.args[1], 5000);
         }
+        else if (head == SYM_Complex && e->data.function.arg_count == 2
+                 && g_inputform_depth > 0
+                 && print_complex_rational_im_inputform(e)) {
+            /* printed */
+        }
         else if (head == SYM_Complex && e->data.function.arg_count == 2) {
             Expr* re = e->data.function.args[0];
             Expr* im = e->data.function.args[1];
@@ -756,7 +945,14 @@ static void print_standard(Expr* e, int parent_prec) {
                 pos_exp = expr_new_real(-exp->data.real);
             }
 
-            if (is_negative) {
+            if (is_negative && g_inputform_depth > 0 && exp->type == EXPR_INTEGER) {
+                /* InputForm: x^(-1), x^(-2), as the reference writes them */
+                print_standard(e->data.function.args[0], 6501);
+                printf("^(");
+                print_standard(exp, 0);
+                printf(")");
+                if (pos_exp) expr_free(pos_exp);
+            } else if (is_negative) {
                 /* The denominator is the RIGHT operand of a left-associative
                  * `/`, so it is printed one level above Divide (5001): a
                  * base that itself prints as a quotient (Power[x, -1],
@@ -801,6 +997,9 @@ static void print_standard(Expr* e, int parent_prec) {
                 printf("^");
                 print_standard(e->data.function.args[1], 6500);
             }
+        }
+        else if (head == SYM_Times && g_inputform_depth > 0) {
+            print_times_inputform(e);
         }
         else if (head == SYM_Times) {
             size_t count = e->data.function.arg_count;
@@ -1173,6 +1372,12 @@ static void print_standard(Expr* e, int parent_prec) {
                     } else {
                         printf(" + ");
                     }
+                } else if (g_inputform_depth > 0 && arg->type == EXPR_FUNCTION
+                           && arg->data.function.head->type == EXPR_SYMBOL
+                           && arg->data.function.head->data.symbol.name == SYM_Times) {
+                    /* InputForm: a leading product keeps its own sign
+                     * (-1/2*a - b, -(a*b) + c*d, as the reference) */
+                    to_print = arg;
                 } else {
                     if (is_negative) {
                         printf("-");

@@ -123,9 +123,9 @@ static void test_boxed(void) {
     chk("SparseArray[{{1,1}->2},{2,2}] . {x, y}", "{2 x, 0}");
     chk("SparseArray[{{1,1}->x},{2,2}] . {1, 2}", "{x, 0}");
     chk_if("s . SparseArray[{{1,1}->x}, {3,3}]",
-           "SparseArray[Automatic, {3, 3}, 0, {1, {{0, 1, 1, 1}, {{1}}}, {2 x}}]");
+           "SparseArray[Automatic, {3, 3}, 0, {1, {{0, 1, 1, 1}, {{1}}}, {2*x}}]");
     chk_if("SparseArray[{{1,1}->x},{2,2}] . SparseArray[{{1,1}->y},{2,2}]",
-           "SparseArray[Automatic, {2, 2}, 0, {1, {{0, 1, 1}, {{1}}}, {x y}}]");
+           "SparseArray[Automatic, {2, 2}, 0, {1, {{0, 1, 1}, {{1}}}, {x*y}}]");
     chk("SparseArray[{1->1+I},2] . {1, 0}", "1 + I");
     chk("SparseArray[{{1,1}->2^62, {1,2}->2^62},{2,2}] . {1, 1}", "{9223372036854775808, 0}");
     chk_if("SparseArray[{{1,1}->2^62, {1,2}->2^62},{2,2}] . SparseArray[{{1,1}->2^62, {1,2}->2^62},{2,2}]",

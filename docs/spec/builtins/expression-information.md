@@ -1216,7 +1216,15 @@ Out[3]= {a, b, b, b, c}
 ```
 
 ## InputForm
-- `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
+- `InputForm[expr]` causes `expr` to be printed in a form suitable for input.
+- **Layout of products** (v0.6133), as the reference writes it: factors are joined by an explicit
+  `*` (`a*b`, `2*x`); a rational coefficient goes over the denominator (`x/2`, `(3*x)/4`,
+  `(-3*x)/4`, `Pi/4`, `(a + b)/2`, `(a*b)/(c*d)`); a `-1/q` coefficient is written `-1/q*rest`
+  (`-1/2*a`, `-1/2*(a*b)`); a lone reciprocal with an integer exponent is a power (`x^(-1)`,
+  `-x^(-1)`, `x^(-2)`) while `2/x`, `a/b` and `1/Sqrt[x]` keep the quotient; a negated product is
+  `-(a*b)`; a rational imaginary part is `I/2`, `(2*I)/3`, `-1/2*I`. `ToString[1/100 a + 5 x,
+  InputForm]` is `"a/100 + 5*x"`. Until v0.6133 InputForm printed the standard layout
+  (`1/100 a + 5 x`). The standard output form is unchanged.
 - In the notebook front end, `InputForm` (and `FullForm`, `TeXForm`, `NumberForm`) suppresses
   typesetting and shows the printed text as code. Typesetting offers only the two typeset
   notations (`StandardForm`, `TraditionalForm`), so it has nothing to render these in; the kernel
