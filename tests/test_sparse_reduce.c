@@ -109,7 +109,7 @@ static void test_mean_variance(void) {
     chk("Variance[S]", "{1/3, 1/3, 4}");
     chk("StandardDeviation[S]", "{1/Sqrt[3], 1/Sqrt[3], 2}");
     chk_if("Variance[SparseArray[{1->1.5},4]]", "0.5625");
-    chk_if("Variance[SparseArray[{{1,1}->1,{2,2}->1.0},{3,2}]]", "{1/3, 0.33333333333333337`}");
+    chk_if("Variance[SparseArray[{{1,1}->1,{2,2}->1.0},{3,2}]]", "{1/3, 0.33333333333333337}");
     chk("StandardDeviation[SparseArray[{1->1},4]]", "1/2");
     chk_true("Abs[StandardDeviation[N[V]] - StandardDeviation[Normal[N[V]]]] < 10^-15");
 }

@@ -452,6 +452,18 @@ Expr* builtin_log(Expr* res) {
             if (k) return k;
         }
 
+        // A positive machine real in a numeric base is the double quotient
+        // log(z)/log(b), as the reference computes it
+        // (Log[10, 0.0081967...] = -2.086359830674748, Log[2, z] is not
+        // log2): the symbolic rewrite below numericalises Log[z] Log[b]^-1
+        // and rounds one ulp away.
+        if (z->type == EXPR_REAL && z->data.real > 0.0
+            && ((b->type == EXPR_INTEGER && b->data.integer > 1)
+                || (b->type == EXPR_REAL && b->data.real > 0.0 && b->data.real != 1.0))) {
+            double lb = log(b->type == EXPR_INTEGER ? (double)b->data.integer : b->data.real);
+            return expr_new_real(log(z->data.real) / lb);
+        }
+
         // Default rewrite: Log[b, z] -> Log[z] / Log[b]
         Expr* num_args[1] = { expr_copy(z) };
         Expr* den_args[1] = { expr_copy(b) };

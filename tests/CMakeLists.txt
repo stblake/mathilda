@@ -3504,6 +3504,14 @@ else()
     target_link_libraries(times_power_base_tests gmp m)
 endif()
 
+add_executable(numeric_literals_log_tests test_numeric_literals_log.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_literals_log_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(numeric_literals_log_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(numeric_literals_log_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 

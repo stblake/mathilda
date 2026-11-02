@@ -1223,7 +1223,9 @@ Out[3]= {a, b, b, b, c}
   (`-1/2*a`, `-1/2*(a*b)`); a lone reciprocal with an integer exponent is a power (`x^(-1)`,
   `-x^(-1)`, `x^(-2)`) while `2/x`, `a/b` and `1/Sqrt[x]` keep the quotient; a negated product is
   `-(a*b)`; a rational imaginary part is `I/2`, `(2*I)/3`, `-1/2*I`. `ToString[1/100 a + 5 x,
-  InputForm]` is `"a/100 + 5*x"`. Until v0.6133 InputForm printed the standard layout
+  InputForm]` is `"a/100 + 5*x"`. A machine real prints as its shortest round-trip digits
+  with no precision mark (`-0.30102999566398114`), which reads back as a machine real (v0.6136).
+  Until v0.6133 InputForm printed the standard layout
   (`1/100 a + 5 x`). The standard output form is unchanged.
 - In the notebook front end, `InputForm` (and `FullForm`, `TeXForm`, `NumberForm`) suppresses
   typesetting and shows the printed text as code. Typesetting offers only the two typeset

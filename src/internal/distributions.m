@@ -30,3 +30,8 @@ HeavisideTheta[x_, y__] /; AnyTrue[{x, y}, TrueQ[Negative[#]] || TrueQ[# == 0] &
 HeavisideTheta[x_, y__] /; AllTrue[{x, y}, TrueQ[Positive[#]] &] := 1;
 HeavisideTheta[a___, p_?Positive, b___] /; Length[{a, b}] > 0 := HeavisideTheta[a, b];
 DiracDelta[x_, y__] /; AnyTrue[{x, y}, TrueQ[Positive[#]] || TrueQ[Negative[#]] &] := 0;
+
+(* Attributes as in the reference: Listable (FeynCalc's FCLoopFindSectors
+ * reads sectors as HeavisideTheta[pows - 1/2] over a list), Orderless,
+ * Protected.  Set last, so the rules above are installed first. *)
+SetAttributes[{HeavisideTheta, DiracDelta}, {Listable, Orderless, Protected}];

@@ -11,10 +11,14 @@ the user typed.
 - **Integer / BigInt** — literals with no `.`, `e`, `E`, or `*^`.
   Digit-count drives the choice between `EXPR_INTEGER` (`int64_t`) and
   `EXPR_BIGINT` (GMP).
-- **`EXPR_REAL`** — real literals whose **implied precision** is at
-  most `MachinePrecision` (≈ 15.95 decimal digits).
-- **`EXPR_MPFR`** (arbitrary precision) — real literals whose implied
-  precision exceeds `MachinePrecision`. The MPFR bit count is
+- **`EXPR_REAL`** — real literals of at most **17 significant digits**
+  (enough to name every double), counted in the literal text with leading
+  zeros excluded, as in the reference: `Precision[1.2887955878011237]` and
+  `Precision[9.9999999999999999]` are `MachinePrecision` (v0.6136; the cut
+  used to be an implied precision of 15.95 digits, so 17-digit literals
+  were arbitrary precision).
+- **`EXPR_MPFR`** (arbitrary precision) — real literals of 18 or more
+  significant digits (`1.00000000000000001`). The MPFR bit count is
   `ceil(implied_precision × log2(10))` and the literal text is fed
   directly to `mpfr_set_str`, so no precision is lost via a double
   round-trip.
@@ -1682,6 +1686,9 @@ instead treats variables matching any of the `xi` (which may be patterns) as
   `Log`, the circular and hyperbolic functions and their inverses (rewritten
   through their logarithmic forms), and the `Re`/`Im`/`Abs`/`Arg`/
   `Conjugate`/`Sign`/`ReIm` heads.
+- The result is written `re + I im` with each part expanded and `I` kept
+  outside the imaginary part, as in the reference (v0.6136):
+  `ComplexExpand[(1 + 2 I) x + (3 + 4 I) y]` is `x + 3 y + I (2 x + 4 y)`.
 - Option `TargetFunctions` selects the output basis:
   `-> {Re, Im}` (default, Cartesian), `-> {Abs, Arg}` (polar), or
   `-> Conjugate`.

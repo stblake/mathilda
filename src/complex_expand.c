@@ -805,8 +805,15 @@ static Expr* cx_expand_one(const Expr* arg, const CxCtx* ctx) {
 
     Expr *re, *im;
     cx_decompose(arg, ctx, &re, &im);
-    Expr* combined = mk_fn2("Plus", re, mk_fn2("Times", mk_I(), im));
-    return ev(mk_fn1("Expand", combined));
+    /* re + I im with each part expanded on its own and I kept outside the
+     * imaginary part, as the reference writes it:
+     * ComplexExpand[(1 + 2 I) x + (3 + 4 I) y] is x + 3 y + I (2 x + 4 y).
+     * Expanding the whole sum distributed I back into the terms and
+     * recombined them into (1 + 2 I) x. */
+    Expr* er = ev(mk_fn1("Expand", re));
+    Expr* ei = ev(mk_fn1("Expand", im));
+    if (cx_is_zero(ei) && !(ei->type == EXPR_REAL)) { expr_free(ei); return er; }
+    return ev(mk_fn2("Plus", er, mk_fn2("Times", mk_I(), ei)));
 }
 
 /* Recursively thread over List and relation/logic heads, else expand. */

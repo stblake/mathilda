@@ -721,13 +721,26 @@ static Expr* parse_number(ParserState* s) {
             memcpy(mstr, mantissa_start, mlen);
             mstr[mlen] = '\0';
             double mval = strtod(mstr, NULL);
+            /* significant digits of the literal text (leading zeros do not
+             * count): strtod may round 9.9999999999999999 up to 10. */
+            int sig = 0;
+            bool lead = true;
+            for (const char* c = mstr; *c; c++) {
+                if (!isdigit((unsigned char)*c)) continue;
+                if (lead && *c == '0') continue;
+                lead = false;
+                sig++;
+            }
             if (mheap) free(mheap);
-            if (isfinite(mval) && mval != 0.0) {
+            if (isfinite(mval) && mval != 0.0 && sig >= 18) {
                 double implied = (double)frac_digits + log10(fabs(mval));
-                /* MachinePrecision threshold; derived from DBL_MANT_DIG
-                 * via numeric.h so the parser tracks the platform's float
-                 * representation. */
-                if (implied > NUMERIC_MACHINE_PRECISION_DIGITS) {
+                /* A literal of up to 17 significant digits -- enough to
+                 * name every double -- is a machine real, as in the
+                 * reference (Precision[1.2887955878011237] is
+                 * MachinePrecision); 18 or more make it arbitrary precision
+                 * (Precision[1.00000000000000001] is 17.), at the implied
+                 * precision. */
+                if (implied > 0.0) {
                     mpfr_bits = (long)ceil(implied * 3.3219280948873626);
                     if (mpfr_bits < 2) mpfr_bits = 2;
                 }

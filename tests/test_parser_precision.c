@@ -156,8 +156,9 @@ static void test_basic_machine_precision_negative(void) {
 
 #ifdef USE_MPFR
 static void test_promotes_to_mpfr_basic(void) {
-    /* 16-digit fraction of 1.x — implied prec ≈ 16 → MPFR. */
-    assert_parses_as_mpfr("1.2345678901234567");
+    /* 18 significant digits → MPFR (17 or fewer is a machine real, as in
+     * the reference: v0.6135). */
+    assert_parses_as_mpfr("1.23456789012345678");
     /* 18 fractional digits — implied ≈ 18.09 → MPFR. */
     assert_parses_as_mpfr("3.141592653589793238");
     /* 25-digit literal — implied ≈ 24.09 → MPFR. */
@@ -168,7 +169,7 @@ static void test_promotes_to_mpfr_basic(void) {
 }
 
 static void test_promotes_to_mpfr_negative(void) {
-    assert_parses_as_mpfr("-1.2345678901234567");
+    assert_parses_as_mpfr("-1.23456789012345678");
     assert_parses_as_mpfr("-3.141592653589793238462643383279");
 }
 
@@ -192,7 +193,9 @@ static void test_promotes_to_mpfr_small_magnitude(void) {
 #endif
 
 /* ------------------------------------------------------------------------
- *  C.  Threshold boundary (MachinePrecision ≈ 15.95 digits)
+ *  C.  Threshold boundary: up to 17 significant digits is a machine real,
+ *      18 or more arbitrary precision (the reference's rule, v0.6135; the
+ *      cut used to be 15.95 implied digits)
  * ---------------------------------------------------------------------- */
 
 #ifdef USE_MPFR
@@ -201,14 +204,19 @@ static void test_threshold_boundary(void) {
     assert_parses_as_real("1.23456789012345");
     /* implied ≈ 15.30 → REAL (just under). */
     assert_parses_as_real("1.234567890123456");
-    /* implied ≈ 16.30 → MPFR (just over). */
-    assert_parses_as_mpfr("1.2345678901234567");
+    /* 17 significant digits → REAL (Precision[1.2345678901234567] is
+     * MachinePrecision in the reference). */
+    assert_parses_as_real("1.2345678901234567");
+    /* 18 significant digits → MPFR. */
+    assert_parses_as_mpfr("1.00000000000000001");
     /* Borderline near magnitude ~10: implied ≈ 13.95 → REAL. */
     assert_parses_as_real("9.99999999999998");        /* 14 frac, log10≈1 */
     /* Mantissa 9.99... with 15 frac digits → implied ≈ 15.95-ish → REAL. */
     assert_parses_as_real("9.99999999999999");
-    /* 16 frac digits with leading 9 → implied ≈ 16.95 → MPFR. */
-    assert_parses_as_mpfr("9.999999999999999");
+    /* 16 and 17 significant digits with leading 9 → REAL (strtod rounds
+     * the second to 10; the digit count is read from the text). */
+    assert_parses_as_real("9.999999999999999");
+    assert_parses_as_real("9.9999999999999999");
 }
 #endif
 

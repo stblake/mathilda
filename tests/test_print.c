@@ -451,10 +451,10 @@ void test_texform_fraction_parenthesisation() {
 void test_inputform_real_roundtrip() {
     static const struct { const char* in; const char* out; } cases[] = {
         {"ToString[{-1.8954942670339809, 2.123456789123, 0.1, 3.}, InputForm]",
-         "{-1.8954942670339809, 2.123456789123, 0.1, 3.0}"},
+         "{-1.895494267033981, 2.123456789123, 0.1, 3.0}"},
         {"ToString[{N[Pi], 1/3., 1.5*^-5, 6.02*^23}, InputForm]",
          "{3.141592653589793, 0.3333333333333333, 1.5*^-5, 6.02*^23}"},
-        {"ToString[1.5000000000000002`*^-5, InputForm]", "1.5000000000000002`*^-5"},
+        {"ToString[0.33333333333333337, InputForm]", "0.33333333333333337"},
         {"With[{v = {N[Pi], 1/3., 0.1, 1.2345678901234567*^-5, 2.^70, N[E]^-40}}, "
          "ToExpression[ToString[v, InputForm]] === v]", "True"},
         {"1.5*^-5 == 0.000015 && 6.02*^23 === 6.02`*^23 && 6.02*^23 == 6.02*10^23", "True"},

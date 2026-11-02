@@ -335,10 +335,9 @@ static void print_function_fullform(Expr* e) {
 
 /* InputForm/FullForm text of a machine real: the shortest decimal that reads
  * back to the same double, so the printed form re-parses to the same value
- * (OutputForm's %g keeps six digits and does not).  The parser makes a
- * literal of 17+ significant digits arbitrary precision, so a 17-digit
- * mantissa carries Mathematica's machine-precision mark "`".  Exponents use
- * the input syntax *^. */
+ * (OutputForm's %g keeps six digits and does not).  At most 17 significant
+ * digits, which the parser reads as a machine real.  Exponents use the
+ * input syntax *^. */
 static void print_real_roundtrip(double d) {
     char buf[64];
     if (d == 0.0) d = 0.0;   /* a negative zero prints as 0.0 (it compares equal) */
@@ -359,7 +358,9 @@ static void print_real_roundtrip(double d) {
         snprintf(mant, sizeof(mant), "%s", buf);
     }
     if (!strchr(mant, '.')) strcat(mant, ".0");   /* Mathilda writes 3.0, not 3. */
-    printf("%s%s%s", mant, digits >= 17 ? "`" : "", expo);
+    /* No precision mark: a literal of up to 17 significant digits reads
+     * back as a machine real (parse.c), as in the reference. */
+    printf("%s%s", mant, expo);
 }
 
 void expr_print_fullform(Expr* e) {
@@ -641,10 +642,26 @@ static void print_times_inputform(Expr* e) {
     if (neg) mpz_neg(pn, pn);
     bool p_one = mpz_cmp_ui(pn, 1) == 0, q_one = mpz_cmp_ui(pd, 1) == 0;
 
-    if (coef_other) {
+    if (coef_other && coef_other->type == EXPR_REAL && nd > 0) {
+        /* a real coefficient is part of the numerator: (1.5*x)/y, 2.5/x */
+        bool np = nn > 0;
+        if (np) printf("(");
+        print_standard(coef_other, 4500);
+        for (size_t i = 0; i < nn; i++) { printf("*"); print_standard(num[i], 4500); }
+        if (np) printf(")");
+        printf("/");
+        if (nd > 1) print_factor_list(den, nd, true);
+        else print_standard(den[0], 5001);
+    } else if (coef_other) {
         /* (2*I)*Pi, (I/2)*x, 1.5*x */
         print_standard(coef_other, 4500);
-        if (nn + nd > 0) { printf("*"); print_inputform_rest(num, nn, den, nd, den_int_power, 2); }
+        if (nn + nd > 0) {
+            printf("*");
+            /* a product after the coefficient is not parenthesised
+             * ((2*I)*a*b, 0.1*d*x), a quotient keeps its form */
+            if (nd == 0) print_factor_list(num, nn, false);
+            else print_inputform_rest(num, nn, den, nd, den_int_power, 2);
+        }
     } else if (p_one && q_one) {
         /* coefficient +-1: x^(-1), a*b, -x, -(a*b), -(1/(x*y)) */
         bool single = (nd == 0 && nn == 1) || (nn == 0 && nd == 1 && den_int_power);

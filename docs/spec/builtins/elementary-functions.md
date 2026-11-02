@@ -76,7 +76,10 @@ Out[4]= 1/4*Pi
   rationals that are integer powers of one common rational, the result is the
   exact rational ratio of those powers: `Log[2, 8] = 3`, `Log[4, 8] = 3/2`,
   `Log[8, 2] = 1/3`, `Log[10, 1/100] = -2`, `Log[1/2, 8] = -3`,
-  `Log[10, 10^30] = 30` (BigInts included). Otherwise `Log[z]/Log[b]`.
+  `Log[10, 10^30] = 30` (BigInts included). A positive machine real `z` in a
+  numeric base is the double quotient `log(z)/log(b)`, bit for bit as the
+  reference (`Log[10, 0.0081967...] = -2.086359830674748`; v0.6136).
+  Otherwise `Log[z]/Log[b]`.
 
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
 inexact zero (ambiguous direction in floating point), matching the reference:
