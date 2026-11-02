@@ -128,14 +128,14 @@ static void test_monomial_user_reported_case(void) {
     /* The user's reported regression: 3 a^2 b - 3 b - b^3.
      * Pre-Phase-0 returned the input unchanged (also slowly). */
     expect_fullform("Factor[3 a^2 b - 3 b - b^3]",
-                    "Times[b, Plus[-3, Times[3, Power[a, 2]], Times[-1, Power[b, 2]]]]");
+                    "Times[-1, b, Plus[3, Times[-3, Power[a, 2]], Power[b, 2]]]");
 }
 
 static void test_monomial_trig_atoms(void) {
     /* 3 Cos[x]^2 Sin[x] - 3 Sin[x] - Sin[x]^3 -> Sin[x] (3 Cos^2 - 3 - Sin^2).
      * This is the inner-loop case for Simplify[Sin[x]^3 + Sin[3 x] - 3 Sin[x]]. */
     expect_fullform("Factor[3 Cos[x]^2 Sin[x] - 3 Sin[x] - Sin[x]^3]",
-                    "Times[Sin[x], Plus[-3, Times[3, Power[Cos[x], 2]], Times[-1, Power[Sin[x], 2]]]]");
+                    "Times[-1, Sin[x], Plus[3, Times[-3, Power[Cos[x], 2]], Power[Sin[x], 2]]]");
 }
 
 static void test_monomial_three_variables(void) {

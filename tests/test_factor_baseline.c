@@ -261,7 +261,7 @@ static void test_simplify_sin2x_over_sinx(void) {
 static void test_factor_monomial_cube(void) {
     double ms = eval_check(
         "Factor[3 a^2 b - 3 b - b^3]",
-        "Times[b, Plus[-3, Times[3, Power[a, 2]], Times[-1, Power[b, 2]]]]",
+        "Times[-1, b, Plus[3, Times[-3, Power[a, 2]], Power[b, 2]]]",
         100.0);
     fprintf(stderr, "  3a^2 b - 3b - b^3: %.0f ms\n", ms);
 }
@@ -270,8 +270,10 @@ static void test_factor_monomial_cube(void) {
 static void test_factor_trig_monomial(void) {
     double ms = eval_check(
         "Factor[3 Cos[x]^2 Sin[x] - 3 Sin[x] - Sin[x]^3]",
-        "Times[Sin[x], Plus[-3, Times[3, Power[Cos[x], 2]], "
-                          "Times[-1, Power[Sin[x], 2]]]]",
+        /* reference value: the leading coefficient (in Sin[x], the first
+         * variable to appear) is positive, the sign in the content */
+        "Times[-1, Sin[x], Plus[3, Times[-3, Power[Cos[x], 2]], "
+                          "Power[Sin[x], 2]]]",
         100.0);
     fprintf(stderr, "  trig monomial: %.0f ms\n", ms);
 }

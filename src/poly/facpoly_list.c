@@ -238,7 +238,64 @@ static Expr* product_to_pair_list(Expr* fac) {
 /* Entry point                                                           */
 /* ===================================================================== */
 
+/* The reference's sign convention, as in Factor: every listed polynomial
+ * factor has a positive leading coefficient, lex in the order the input's
+ * variables first appear, the sign carried by the constant entry
+ * (FactorList[-2 a c + 2 b] = {{2, 1}, {b - a c, 1}}). */
+static Expr* factorlist_normalise_signs(Expr* r, const Expr* input) {
+    if (!r || r->type != EXPR_FUNCTION || r->data.function.head->type != EXPR_SYMBOL
+        || r->data.function.head->data.symbol.name != SYM_List
+        || r->data.function.arg_count < 2) return r;
+    size_t n = r->data.function.arg_count;
+    Expr* c0 = r->data.function.args[0];
+    if (c0->type != EXPR_FUNCTION || c0->data.function.arg_count != 2
+        || !expr_is_numeric_like(c0->data.function.args[0])) return r;
+    int flips = 0;
+    Expr** items = malloc(sizeof(Expr*) * n);
+    items[0] = NULL;
+    for (size_t i = 1; i < n; i++) {
+        Expr* pr = r->data.function.args[i];
+        items[i] = NULL;
+        if (pr->type != EXPR_FUNCTION || pr->data.function.arg_count != 2) continue;
+        Expr* f = pr->data.function.args[0];
+        Expr* e = pr->data.function.args[1];
+        if (!(f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL
+              && f->data.function.head->data.symbol.name == SYM_Plus)) continue;
+        if (e->type != EXPR_INTEGER) continue;
+        if (facpoly_lead_sign_in(f, input) < 0) {
+            Expr* neg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ mk_int(-1), expr_copy(f) }, 2));
+            items[i] = mk_list2(neg, expr_copy(e));
+            if (e->data.integer % 2 != 0) flips++;
+        }
+    }
+    if (flips == 0) {
+        bool any = false;
+        for (size_t i = 1; i < n; i++) if (items[i]) any = true;
+        if (!any) { free(items); return r; }
+    }
+    Expr* c = expr_copy(c0->data.function.args[0]);
+    if (flips % 2) c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                     (Expr*[]){ mk_int(-1), c }, 2));
+    items[0] = mk_list2(c, expr_copy(c0->data.function.args[1]));
+    for (size_t i = 1; i < n; i++)
+        if (!items[i]) items[i] = expr_copy(r->data.function.args[i]);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
+    free(items);
+    expr_free(r);
+    return out;
+}
+
+static Expr* builtin_factorlist_core(Expr* res);
+
 Expr* builtin_factorlist(Expr* res) {
+    Expr* r = builtin_factorlist_core(res);
+    const Expr* input = (res && res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1)
+        ? res->data.function.args[0] : NULL;
+    return factorlist_normalise_signs(r, input);
+}
+
+static Expr* builtin_factorlist_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc == 0) return factorlist_emit_argx(0);

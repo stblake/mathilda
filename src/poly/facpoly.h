@@ -6,6 +6,9 @@
 
 Expr* builtin_factorsquarefree(Expr* res);
 Expr* builtin_factor(Expr* res);
+/* Sign (+1/-1, 0 if unreadable) of polynomial f's leading coefficient, lex in
+ * the order its variables first appear in `input` (Factor's sign convention). */
+int facpoly_lead_sign_in(const Expr* f, const Expr* input);
 Expr* builtin_factorterms(Expr* res);
 Expr* builtin_factortermslist(Expr* res);
 void facpoly_init(void);

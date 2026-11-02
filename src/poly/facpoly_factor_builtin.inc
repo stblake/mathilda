@@ -490,7 +490,216 @@ static Expr* factor_fast_entry(Expr* arg) {
     return NULL;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Sign convention of the factors                                     */
+/* ------------------------------------------------------------------ */
+
+/* The reference writes every factor with a positive leading coefficient,
+ * "leading" meaning lexicographic over the factor's variables in canonical
+ * order, the first variable most significant, and puts the sign into the
+ * numeric content: Factor[(1 - 4 x)(1 + 3 y)] = -((-1 + 4 x)(1 + 3 y)),
+ * Factor[(3 - D) s] = -((-3 + D) s), Factor[12 - 16 eps] = -4 (-3 + 4 eps).
+ * A lone irreducible factor of unit content keeps the form it came in
+ * (Factor[1 - x] = 1 - x, Factor[-a - b] = -a - b). */
+
+/* Sign of the lex-leading coefficient of polynomial `f`: +1, -1, or 0 when
+ * it cannot be read (a coefficient that is not a real number, a term that is
+ * not a monomial in the variables). */
+/* The variables of `e` in order of first appearance, depth first through
+ * Plus, Times and integer powers of its canonical form -- the order the
+ * reference's Variables[] reports and its Factor ranks them in
+ * (Factor[-2 a c + 2 b] = 2 (b - a c): b comes first in b - a c). */
+typedef struct { Expr** v; size_t n, cap; } FactorVarOrder;
+
+static void factor_collect_order(const Expr* e, FactorVarOrder* o) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL
+        || e->type == EXPR_STRING) return;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_Plus || h == SYM_Times) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                factor_collect_order(e->data.function.args[i], o);
+            return;
+        }
+        if (h == SYM_Power && e->data.function.arg_count == 2
+            && e->data.function.args[1]->type == EXPR_INTEGER) {
+            factor_collect_order(e->data.function.args[0], o);
+            return;
+        }
+        if (h == SYM_Rational || h == SYM_Complex) return;
+    }
+    if (expr_is_numeric_quantity(e)) return;
+    for (size_t i = 0; i < o->n; i++) if (expr_eq(o->v[i], (Expr*)e)) return;
+    if (o->n == o->cap) {
+        o->cap = o->cap ? 2 * o->cap : 8;
+        o->v = realloc(o->v, sizeof(Expr*) * o->cap);
+    }
+    o->v[o->n++] = (Expr*)e;                      /* borrowed */
+}
+
+static int factor_lead_sign(const Expr* f, const FactorVarOrder* order) {
+    /* the factor's own variables, ranked by the input's order; one that the
+     * input does not show (it can't, but be safe) goes last */
+    FactorVarOrder own = { NULL, 0, 0 };
+    factor_collect_order(f, &own);
+    size_t nv = own.n;
+    if (nv == 0) { free(own.v); return 0; }
+    Expr** vars = malloc(sizeof(Expr*) * nv);
+    size_t k = 0;
+    for (size_t i = 0; i < order->n; i++)
+        for (size_t j = 0; j < own.n; j++)
+            if (own.v[j] && expr_eq(order->v[i], own.v[j])) { vars[k++] = own.v[j]; own.v[j] = NULL; }
+    for (size_t j = 0; j < own.n; j++) if (own.v[j]) vars[k++] = own.v[j];
+    free(own.v);
+    Expr* ex = eval_and_free(internal_expand((Expr*[]){ expr_copy((Expr*)f) }, 1));
+    size_t nt = 1;
+    Expr* const* terms = &ex;
+    if (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL
+        && ex->data.function.head->data.symbol.name == SYM_Plus) {
+        nt = ex->data.function.arg_count;
+        terms = ex->data.function.args;
+    }
+    int64_t* best = calloc(nv, sizeof(int64_t));
+    int64_t* cur = calloc(nv, sizeof(int64_t));
+    int sign = 0;
+    bool have = false, ok = true;
+    for (size_t t = 0; t < nt && ok; t++) {
+        const Expr* term = terms[t];
+        size_t nf = 1;
+        const Expr* const* fs = &term;
+        if (term->type == EXPR_FUNCTION && term->data.function.head->type == EXPR_SYMBOL
+            && term->data.function.head->data.symbol.name == SYM_Times) {
+            nf = term->data.function.arg_count;
+            fs = (const Expr* const*)term->data.function.args;
+        }
+        for (size_t v = 0; v < nv; v++) cur[v] = 0;
+        int s = 1;
+        for (size_t i = 0; i < nf && ok; i++) {
+            const Expr* x = fs[i];
+            const Expr* base = x;
+            int64_t e = 1;
+            if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL
+                && x->data.function.head->data.symbol.name == SYM_Power
+                && x->data.function.arg_count == 2
+                && x->data.function.args[1]->type == EXPR_INTEGER) {
+                base = x->data.function.args[0];
+                e = x->data.function.args[1]->data.integer;
+            }
+            size_t v = 0;
+            while (v < nv && !expr_eq((Expr*)base, vars[v])) v++;
+            if (v < nv) { cur[v] += e; continue; }
+            /* a rational or real coefficient; anything else declines */
+            bool rat = x->type == EXPR_INTEGER || x->type == EXPR_BIGINT || x->type == EXPR_REAL
+                || (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL
+                    && x->data.function.head->data.symbol.name == SYM_Rational);
+            int sg = rat ? expr_numeric_sign((Expr*)x) : 0;
+            if (sg == 0) ok = false;
+            else s *= sg;
+        }
+        if (!ok) break;
+        bool greater = !have;
+        for (size_t v = 0; v < nv && !greater; v++) {
+            if (cur[v] != best[v]) { greater = cur[v] > best[v]; break; }
+        }
+        if (greater) {
+            for (size_t v = 0; v < nv; v++) best[v] = cur[v];
+            sign = s; have = true;
+        }
+    }
+    free(best); free(cur); free(vars);
+    expr_free(ex);
+    return ok ? sign : 0;
+}
+
+/* Is `e` a Plus that depends on some non-numeric atom (a polynomial factor)? */
+static bool factor_is_poly_factor(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Plus
+        && !expr_is_numeric_quantity(e);
+}
+
+static Expr* factor_normalise_signs(Expr* r, const Expr* input) {
+    if (!r) return r;
+    size_t nf = 1;
+    Expr* const* fs = &r;
+    bool is_times = r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+        && r->data.function.head->data.symbol.name == SYM_Times;
+    if (is_times) { nf = r->data.function.arg_count; fs = r->data.function.args; }
+    /* the lone-irreducible case: one polynomial factor to the first power,
+     * unit numeric content */
+    size_t npoly = 0, npow1 = 0;
+    bool unit = true;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* x = fs[i];
+        if (factor_is_poly_factor(x)) { npoly++; npow1++; continue; }
+        if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL
+            && x->data.function.head->data.symbol.name == SYM_Power
+            && factor_is_poly_factor(x->data.function.args[0])) { npoly++; continue; }
+        if (expr_is_numeric_quantity(x)) {
+            if (!(x->type == EXPR_INTEGER && (x->data.integer == 1 || x->data.integer == -1)))
+                unit = false;
+        } else {
+            unit = false;                          /* a monomial factor */
+        }
+    }
+    if (npoly == 0 || (npoly == 1 && npow1 == 1 && unit)) return r;
+
+    FactorVarOrder order = { NULL, 0, 0 };
+    if (input) factor_collect_order(input, &order);
+    Expr** out = malloc(sizeof(Expr*) * (nf + 1));
+    size_t no = 0;
+    int flips = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* x = fs[i];
+        Expr* base = x; Expr* ex = NULL;
+        if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL
+            && x->data.function.head->data.symbol.name == SYM_Power
+            && x->data.function.args[1]->type == EXPR_INTEGER) {
+            base = x->data.function.args[0]; ex = x->data.function.args[1];
+        }
+        if (factor_is_poly_factor(base) && factor_lead_sign(base, &order) < 0) {
+            Expr* neg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_new_integer(-1), expr_copy(base) }, 2));
+            if (ex) {
+                if (ex->data.integer % 2 != 0) flips++;
+                out[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                                (Expr*[]){ neg, expr_copy(ex) }, 2);
+            } else {
+                flips++;
+                out[no++] = neg;
+            }
+        } else {
+            out[no++] = expr_copy(x);
+        }
+    }
+    free(order.v);
+    if (flips % 2) out[no++] = expr_new_integer(-1);
+    Expr* nr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), out, no));
+    free(out);
+    expr_free(r);
+    return nr;
+}
+
+/* Sign of `f`'s leading coefficient in the variable order of `input` (see
+ * factor_collect_order); 0 when it cannot be read.  FactorList's. */
+int facpoly_lead_sign_in(const Expr* f, const Expr* input) {
+    FactorVarOrder order = { NULL, 0, 0 };
+    if (input) factor_collect_order(input, &order);
+    int s = factor_lead_sign(f, &order);
+    free(order.v);
+    return s;
+}
+
+static Expr* builtin_factor_core(Expr* res);
+
 Expr* builtin_factor(Expr* res) {
+    Expr* r = builtin_factor_core(res);
+    const Expr* input = (res && res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1)
+        ? res->data.function.args[0] : NULL;
+    return factor_normalise_signs(r, input);
+}
+
+static Expr* builtin_factor_core(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
     /* Options, parsed once.  Modulus -> p factors over GF(p) and is done
