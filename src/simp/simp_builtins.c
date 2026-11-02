@@ -1731,6 +1731,7 @@ static Expr* nb_rebuild(const Expr* e, const NbList* B) {
 
 /* e with its numeric powers over one coprime basis, each b^t of the basis
  * abstracted to a generator symbol (expsplit.c) BEFORE anything evaluates --
+ * only the numeric-base powers: symbolic ones stay for the core --
  * evaluated, the equal-exponent merge would fold 2^(1 - 2 e) 48603329^(1 - 2 e)
  * back into 97206658^(1 - 2 e) -- or NULL when no base splits.  The caller
  * simplifies the result and restores it through *tab. */
@@ -1740,7 +1741,10 @@ static Expr* simp_numeric_power_basis(const Expr* e, ExpSplitTab* tab) {
     Expr* out = NULL;
     if (L.n >= 2 && nb_refine(&L)) {
         Expr* r = nb_rebuild(e, &L);
-        out = expsplit_abstract(r, tab);
+        /* Numeric bases only: a symbolic power such as (la^2)^ep must reach
+         * the core whole, where the assumption power rules can split it
+         * (la > 0: la^(2 ep)); abstracted, it never would. */
+        out = expsplit_abstract_numeric(r, tab);
         expr_free(r);
     }
     for (size_t k = 0; k < L.n; k++) mpz_clear(L.v[k]);

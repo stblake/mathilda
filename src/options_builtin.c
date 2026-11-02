@@ -197,30 +197,35 @@ Expr* builtin_options(Expr* res) {
 
 /* ---------- SetOptions ---------- */
 
-Expr* builtin_setoptions(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t n = res->data.function.arg_count;
-    if (n < 1) return NULL;
+/* Append the option rules of one SetOptions argument to *rv: a rule, or a
+ * (nested) list of rules -- SetOptions[s, {a -> 1, b -> 2}].  False on
+ * anything else. */
+static bool so_collect_rules(const Expr* a, const Expr*** rv, size_t* rn, size_t* rcap) {
+    if (is_option_rule(a)) {
+        if (*rn == *rcap) { *rcap = *rcap ? 2 * *rcap : 8; *rv = realloc(*rv, sizeof(Expr*) * *rcap); }
+        (*rv)[(*rn)++] = a;
+        return true;
+    }
+    if (is_list(a)) {
+        for (size_t i = 0; i < a->data.function.arg_count; i++)
+            if (!so_collect_rules(a->data.function.args[i], rv, rn, rcap)) return false;
+        return true;
+    }
+    return false;
+}
 
-    Expr* sobj = res->data.function.args[0];
-    if (sobj->type != EXPR_SYMBOL) return NULL;
-    const char* sym = sobj->data.symbol.name;
-
+/* Set the rules r[0..rn) on symbol sym and return its new Options[sym], or
+ * NULL (and leave it unchanged) when a rule names an option it lacks. */
+static Expr* so_set_one(const char* sym, const Expr** r, size_t rn) {
     /* Working copy of the current options as a flat vector of rule copies. */
     Expr* cur = symtab_get_options(sym);
     size_t cn = is_list(cur) ? cur->data.function.arg_count : 0;
-    Expr** work = malloc(sizeof(Expr*) * (cn + n)); /* cn existing + up to n-1 new */
+    Expr** work = malloc(sizeof(Expr*) * (cn ? cn : 1));
     size_t wn = 0;
     for (size_t i = 0; i < cn; i++) work[wn++] = expr_copy(cur->data.function.args[i]);
 
-    for (size_t i = 1; i < n; i++) {
-        Expr* r = res->data.function.args[i];
-        if (!is_option_rule(r)) {                 /* malformed argument */
-            for (size_t j = 0; j < wn; j++) expr_free(work[j]);
-            free(work);
-            return NULL;
-        }
-        Expr* nm = r->data.function.args[0];
+    for (size_t i = 0; i < rn; i++) {
+        Expr* nm = r[i]->data.function.args[0];
         size_t idx = (size_t)-1;
         for (size_t j = 0; j < wn; j++) {
             if (opt_name_eq(work[j]->data.function.args[0], nm)) { idx = j; break; }
@@ -233,14 +238,58 @@ Expr* builtin_setoptions(Expr* res) {
             return NULL;
         }
         expr_free(work[idx]);
-        work[idx] = expr_copy(r);                 /* preserve position, take new value */
+        work[idx] = expr_copy((Expr*)r[i]);       /* preserve position, take new value */
     }
 
     Expr* newlist = list_from(work, wn);
     free(work);
     symtab_set_options(sym, newlist);             /* store (ownership transferred) */
     eval_clock_bump();                            /* options changed: drop eval cache */
-    return expr_copy(symtab_get_options(sym));    /* return the new Options[s] */
+    return expr_copy(symtab_get_options(sym));    /* the new Options[s] */
+}
+
+/* SetOptions[s, r1, r2, ...], SetOptions[s, {r1, r2, ...}], and
+ * SetOptions[{s1, s2, ...}, rules] -- the last sets the rules on every
+ * symbol and returns the list of their new Options, as the reference does
+ * (FeynCalc: SetOptions[{B1, B00, B11}, BReduce -> False]). */
+Expr* builtin_setoptions(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n < 1) return NULL;
+
+    Expr* sobj = res->data.function.args[0];
+    if (sobj->type != EXPR_SYMBOL && !is_list(sobj)) return NULL;
+    if (is_list(sobj)) {
+        for (size_t i = 0; i < sobj->data.function.arg_count; i++)
+            if (sobj->data.function.args[i]->type != EXPR_SYMBOL) return NULL;
+    }
+
+    const Expr** r = NULL;
+    size_t rn = 0, rcap = 0;
+    for (size_t i = 1; i < n; i++) {
+        if (!so_collect_rules(res->data.function.args[i], &r, &rn, &rcap)) {   /* malformed argument */
+            free(r);
+            return NULL;
+        }
+    }
+
+    Expr* out;
+    if (sobj->type == EXPR_SYMBOL) {
+        out = so_set_one(sobj->data.symbol.name, r, rn);
+    } else {
+        size_t m = sobj->data.function.arg_count;
+        Expr** items = malloc(sizeof(Expr*) * (m ? m : 1));
+        bool ok = true;
+        for (size_t i = 0; i < m; i++) {
+            items[i] = so_set_one(sobj->data.function.args[i]->data.symbol.name, r, rn);
+            if (!items[i]) { ok = false; items[i] = expr_new_symbol(SYM_Null); }
+        }
+        out = list_from(items, m);
+        free(items);
+        if (!ok) { expr_free(out); out = NULL; }
+    }
+    free(r);
+    return out;
 }
 
 /* ---------- OptionValue ---------- */

@@ -58,12 +58,25 @@ static void test_assumed_positive_power_split(void) {
     assert_eval_eq("Simplify[(-la^4)^s la^(-4 s)]", "la^(-4 s) (-la^4)^s", 0);
 }
 
+static void test_numeric_basis_keeps_symbolic_powers(void) {
+    /* The numeric-power-basis pre-pass (4 = 2^2 here) abstracts only the
+     * numeric-base powers: (la^2)^ep reaches the core whole, so the la > 0
+     * rules still split it. Abstracted, la survived and FeynCalc's
+     * FCFeynmanProjectiveQ reported spurious divergent regions
+     * (FCFeynmanFindDivergences ID2/3). Reference values. */
+    assert_eval_eq("Simplify[4^ep (la^2)^ep + 2^(2 ep) (la^2)^ep, Assumptions -> la > 0]",
+                   "2^(1 + 2 ep) la^(2 ep)", 0);
+    assert_eval_eq("Simplify[6^ep (la^2)^ep - 2^ep 3^ep la^(2 ep), Assumptions -> la > 0]", "0", 0);
+    assert_eval_eq("Simplify[4^ep (la^2)^ep + 2^(2 ep) (la^2)^ep]", "2^(1 + 2 ep) (la^2)^ep", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_together_exponent_generators);
     TEST(test_prime_rebase);
     TEST(test_assumed_positive_power_split);
+    TEST(test_numeric_basis_keeps_symbolic_powers);
     printf("All exponent-generator / prime-rebase tests passed.\n");
     return 0;
 }

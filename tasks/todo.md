@@ -903,13 +903,31 @@ Module-scoping leak on `Integrate[BesselJ[0,x]^3, x]` in a later cascade stage
 
 ## FeynCalc remaining correctness gaps (2026-11-02)
 Plan: packages/feyncalc/FEYNCALC_REMAINING_GAPS.md (195 tests, clusters G1-G13).
-- [ ] G1 Solve empty system / momentum shifts
-- [ ] G6 PaVeReduce
-- [ ] G5 GA::noint
-- [ ] G4 PowerExpand/FunctionExpand, G9 Series var, G11 GroebnerBasis option
-- [ ] G2 Factor sign convention, G3 InputForm printer
-- [ ] G7 G8 G10 G12 triage
-- [ ] G13 singletons
+- [x] G1 Solve empty system / momentum shifts ; v0.6127
+- [x] G6 PaVeReduce ; v0.6128
+- [x] G5 GA::noint ; v0.6129
+- [x] G4 PowerExpand/FunctionExpand, G9 Series var, G11 GroebnerBasis option ; v0.6130-31
+- [x] G2 Factor sign convention, G3 InputForm printer ; v0.6132-33
+- [x] G10 FeynRule/FunctionalD ; v0.6134; G8 mostly closed (v0.6136-39)
+- [x] v0.6145 round 12: FindDivergences ID2/3 (Simplify numeric-basis pre-pass kept (la^2)^ep abstracted), SetOptions on symbol lists (PaVe BReduce), Together compound-arg atoms (NPointTo4Point), pure-function body sharing (Isolate 0.11x -> 0.52x); 13368, superset
+- [ ] G7 Feynman parametrisation -- bisected 2026-11-03 (scratchpad g7a/g7b), causes:
+  - [ ] F Power: perfect-power integer base under a symbolic exponent (4^(D/2) -> 2^D, 12^(D/2) -> 2^D 3^(D/2), (1/4)^e -> 4^-e) -- Parametrize ID10/11 (power.c)
+  - [ ] C Together splits the integer part of a symbolic exponent on a non-sign-normal base ((b - a)^(-1 + n) -> -(-a + b)^n/(a - b)) -- Parametrize ID26 (rat.c)
+  - [ ] A Simplify[e, sum == 1]: per-subterm/coefficient reduction, compared before the stronger plain Simplify wins -- Prepare ID11/13/14 (simp_reduce_by_equations)
+  - [ ] B nested Collect with simplified coefficients (x1 x2 + ... -> x4 (x3 + x5) + x1 (...) + x2 (...); m + s x - s x^2 -> m - s (-1 + x) x) -- Parametrize ID6/20 (simp_search.c try_collect_per_variable)
+  - [ ] H factor a common base with integer-differing exponents (x^(a - 1) + x^a -> x^(-1 + a) (1 + x)), also Together -- Parametrize ID44/10
+  - [ ] E fold a monomial into a power of the same product -- Parametrize ID9 (simp_power.c)
+  - [ ] D Legendre duplication on shifted Gamma ratios over-applied (Simplify[Gamma[-2+2e]/Gamma[-2+e]] stays in the reference) -- Parametrize ID11
+  - [ ] AddScalingParameter-ID6: Simplify finds a strictly simpler form than the reference (simp_split_multiplicative) -- goes with the tie-breaking item
+- [ ] With does not rename a Function's bound variable captured from its value: With[{v = 1 + y}, Function[y, {y, v}]][2] is {2, 3} (reference {2, 1 + y})
+- [ ] InputForm of a pure function: the reference prints "a + #1 & " (trailing space)
+- [ ] purefunc: application still walks the whole body (~2 ms for a 120k-node bound value vs the reference's 12 us); a cached "contains Slot/names" summary would make it O(1)
+- [ ] Simplify tie-breaking (FCDiffEqChangeVariables x3, Factor3-ID10)
+- [ ] G12 SU(N) (SUNSimplify ID23/83/84, SharedObjectsBehavior-ID201)
+- [ ] G8 leftovers: Collect2-ID30, FCSchoutenBruteForce-ID5
+- [ ] G13 singletons (see FEYNCALC_REMAINING_GAPS.md)
+- [ ] FortranForm/CForm printer (Write2 ID1-3, 5-7)
+- [ ] v0.6144 per-dir corpus + timing refresh; raise BASELINE_PASS.txt
 
 # Repository cleanup + README (2026-11-02, docs only, no bump)
 

@@ -18,6 +18,10 @@ typedef struct {
  * (evaluated), or NULL when e has none.  Fills t. */
 Expr* expsplit_abstract(const Expr* e, ExpSplitTab* t);
 
+/* As expsplit_abstract, but only powers with a numeric base (2^t, (1/3)^t)
+ * become generators; x^t and (la^2)^t stay whole. */
+Expr* expsplit_abstract_numeric(const Expr* e, ExpSplitTab* t);
+
 /* Map the generators back (K^k -> b^(k t)); consumes e, evaluates. */
 Expr* expsplit_restore(Expr* e, const ExpSplitTab* t);
 

@@ -118,14 +118,17 @@ static Expr* split_power(const Expr* b, const Expr* p, ExpSplitTab* t, bool all)
     return r;
 }
 
-static Expr* abstract_rec(const Expr* e, ExpSplitTab* t) {
+/* numeric_only: split only powers whose base is a number (b^t with b in Q),
+ * leaving x^t whole for the caller's own power rules. */
+static Expr* abstract_rec(const Expr* e, ExpSplitTab* t, bool numeric_only) {
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
     Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
-    for (size_t i = 0; i < n; i++) a[i] = abstract_rec(e->data.function.args[i], t);
+    for (size_t i = 0; i < n; i++) a[i] = abstract_rec(e->data.function.args[i], t, numeric_only);
     Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
     free(a);
-    if (is_head(r, SYM_Power) && r->data.function.arg_count == 2) {
+    if (is_head(r, SYM_Power) && r->data.function.arg_count == 2 &&
+        (!numeric_only || expr_is_numeric_like(r->data.function.args[0]))) {
         const Expr* p = r->data.function.args[1];
         if (!expr_is_numeric_like(p)) {
             Expr* s = split_power(r->data.function.args[0], p, t, true);
@@ -135,10 +138,11 @@ static Expr* abstract_rec(const Expr* e, ExpSplitTab* t) {
     return r;
 }
 
-static bool has_splittable(const Expr* e) {
+static bool has_splittable(const Expr* e, bool numeric_only) {
     if (e->type != EXPR_FUNCTION) return false;
     if (is_head(e, SYM_Power) && e->data.function.arg_count == 2 &&
-        !expr_is_numeric_like(e->data.function.args[1])) {
+        !expr_is_numeric_like(e->data.function.args[1]) &&
+        (!numeric_only || expr_is_numeric_like(e->data.function.args[0]))) {
         ExpSplitTab t = {0};
         Expr* s = split_power(e->data.function.args[0], e->data.function.args[1], &t, false);
         bool yes = s != NULL;
@@ -147,16 +151,24 @@ static bool has_splittable(const Expr* e) {
         if (yes) return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (has_splittable(e->data.function.args[i])) return true;
+        if (has_splittable(e->data.function.args[i], numeric_only)) return true;
     return false;
 }
 
-Expr* expsplit_abstract(const Expr* e, ExpSplitTab* t) {
+static Expr* abstract_top(const Expr* e, ExpSplitTab* t, bool numeric_only) {
     static int off = -1;                 /* MATHILDA_NO_EXPSPLIT: A/B kill switch */
     if (off < 0) off = getenv("MATHILDA_NO_EXPSPLIT") != NULL;
     if (off) return NULL;
-    if (!has_splittable(e)) return NULL;
-    return eval_and_free(abstract_rec(e, t));
+    if (!has_splittable(e, numeric_only)) return NULL;
+    return eval_and_free(abstract_rec(e, t, numeric_only));
+}
+
+Expr* expsplit_abstract(const Expr* e, ExpSplitTab* t) {
+    return abstract_top(e, t, false);
+}
+
+Expr* expsplit_abstract_numeric(const Expr* e, ExpSplitTab* t) {
+    return abstract_top(e, t, true);
 }
 
 int expsplit_index(const ExpSplitTab* t, const Expr* e) {

@@ -4328,29 +4328,32 @@ static int km_is_generic_kernel_head(const char* h) {
  * opaque polynomial variable (collect_variables), exactly like a symbol.  The
  * head is a symbol with no C builtin (so no evaluator canonicalisation such as
  * 1/Sin -> Csc can make the readback diverge), the node is not a numeric
- * constant (an algebraic relation would be lost), and every argument is an atom
- * or, recursively, another such node: no Plus/Times/Power inside, so the
- * classical path's descent into the arguments (together_recursive maps over
- * them) has nothing to combine and substituting the whole node is
+ * constant (an algebraic relation would be lost), and no fresh-symbol
+ * ($flk/~flk) occurs anywhere inside.  Its arguments may be anything --
+ * f[q + 1], FAD[{q, m}, p + q] -- since Together, like the reference, leaves
+ * function arguments alone (v0.6021): substituting the whole node is
  * output-identical.  Without this, a rational function in indexed variables
  * x[1..n] fell to the classical multivariate Euclid: Together over x[1..7] and
- * two symbols at total degree ~10 took ~29 s, against ~0.1 s here. */
+ * two symbols at total degree ~10 took ~29 s, against ~0.1 s here; with
+ * compound arguments (FeynCalc's FAD[..., p1 + q]) a 4x4 cofactor sum took
+ * 0.3 s against 0.01 s. */
+static int km_has_fresh_symbol(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return strncmp(e->data.symbol.name, "$flk", 4) == 0 ||
+               strncmp(e->data.symbol.name, "~flk", 4) == 0;
+    if (e->type != EXPR_FUNCTION) return 0;
+    if (km_has_fresh_symbol(e->data.function.head)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (km_has_fresh_symbol(e->data.function.args[i])) return 1;
+    return 0;
+}
+
 static int km_is_inert_head_atom(const Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
         return 0;
     SymbolDef* def = symtab_lookup(e->data.function.head->data.symbol.name);
     if (def && def->builtin_func) return 0;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        const Expr* a = e->data.function.args[i];
-        if (a->type == EXPR_INTEGER || a->type == EXPR_BIGINT || a->type == EXPR_STRING)
-            continue;
-        if (a->type == EXPR_SYMBOL) {
-            if (strncmp(a->data.symbol.name, "$flk", 4) == 0 ||
-                strncmp(a->data.symbol.name, "~flk", 4) == 0) return 0;
-            continue;
-        }
-        if (!km_is_inert_head_atom(a)) return 0;
-    }
+    if (km_has_fresh_symbol(e)) return 0;
     return !expr_is_numeric_quantity(e);
 }
 

@@ -114,6 +114,51 @@ static void named_slot_message(Expr* fn, const char* name, Expr** args, size_t a
     free(fs);
 }
 
+/* Copy-on-write substitution over the children of e: sub(child) is called on
+ * the head and every argument, and a new node is built only when one of them
+ * came back as a different pointer (expr_copy is a refcount bump, so an
+ * unchanged child is returned as itself).  Otherwise e itself is shared --
+ * with no allocation on the way -- keeping its fixed-point stamps: a fresh
+ * node would carry none, so a large slot-free subtree of the body (a
+ * 10,000-term sum a pattern bound into (# === x) &) would be evaluated again
+ * on every application, as in FeynCalc's Isolate. */
+typedef Expr* (*SubstFn)(Expr* e, void* ctx);
+
+static Expr* subst_children(Expr* e, SubstFn sub, void* ctx) {
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = sub(e->data.function.head, ctx);
+    Expr** new_args = NULL;
+    if (new_head != e->data.function.head) {
+        new_args = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t j = 0; j < n; j++) new_args[j] = NULL;
+    }
+    for (size_t i = 0; i < n; i++) {
+        Expr* c = sub(e->data.function.args[i], ctx);
+        if (!new_args) {
+            if (c == e->data.function.args[i]) { expr_free(c); continue; }
+            new_args = malloc(sizeof(Expr*) * (n ? n : 1));
+            for (size_t j = 0; j < n; j++) new_args[j] = NULL;
+        }
+        new_args[i] = c;
+    }
+    if (!new_args) {                     /* nothing below changed */
+        expr_free(new_head);
+        return expr_copy(e);
+    }
+    for (size_t j = 0; j < n; j++)
+        if (!new_args[j]) new_args[j] = expr_copy(e->data.function.args[j]);
+    Expr* res = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return res;
+}
+
+typedef struct { Expr** args; size_t arg_count; Expr* fn; } SlotCtx;
+static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn);
+static Expr* slots_sub(Expr* e, void* ctx) {
+    SlotCtx* c = ctx;
+    return substitute_slots(e, c->args, c->arg_count, c->fn);
+}
+
 /* `fn` is the Function being applied (for diagnostics only; may be NULL). */
 static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn) {
     if (!e) return NULL;
@@ -173,14 +218,8 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count, Expr* fn) 
         }
         
         // Standard recursion for other functions
-        Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            new_args[i] = substitute_slots(e->data.function.args[i], args, arg_count, fn);
-        }
-        Expr* new_head = substitute_slots(e->data.function.head, args, arg_count, fn);
-        Expr* res = expr_new_function(new_head, new_args, e->data.function.arg_count);
-        free(new_args);
-        return res;
+        SlotCtx c = { args, arg_count, fn };
+        return subst_children(e, slots_sub, &c);
     }
     
     return expr_copy(e);
@@ -233,12 +272,22 @@ static int function_binds_name(Expr* fn, const char* name) {
  * The returned expression is freshly allocated; the caller owns it and
  * `vals` is not consumed (copies are made as needed).
  */
+typedef struct { char** names; Expr** vals; size_t count; } NameCtx;
+static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count);
+static Expr* names_sub(Expr* e, void* ctx) {
+    NameCtx* c = ctx;
+    return substitute_names(e, c->names, c->vals, c->count);
+}
+
 static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) {
     if (!e) return NULL;
 
     if (e->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < count; i++) {
-            if (names[i] && strcmp(e->data.symbol.name, names[i]) == 0) {
+            const char* nm = e->data.symbol.name;
+            /* names are interned, so the pointer test decides almost always;
+             * the first-character guard keeps the fallback strcmp rare */
+            if (names[i] && (names[i] == nm || (names[i][0] == nm[0] && strcmp(nm, names[i]) == 0))) {
                 return expr_copy(vals[i]);
             }
         }
@@ -276,13 +325,8 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
             }
         }
 
-        Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            new_args[i] = substitute_names(e->data.function.args[i], use_names, use_vals, use_count);
-        }
-        Expr* new_head = substitute_names(e->data.function.head, use_names, use_vals, use_count);
-        Expr* res = expr_new_function(new_head, new_args, e->data.function.arg_count);
-        free(new_args);
+        NameCtx c = { use_names, use_vals, use_count };
+        Expr* res = subst_children(e, names_sub, &c);
         free(alloc_names);
         free(alloc_vals);
         return res;

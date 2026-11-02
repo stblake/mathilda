@@ -3730,7 +3730,9 @@ void info_init(void) {
         "\tto Options[f] to redefine all default options at once.");
     symtab_set_docstring("SetOptions",
         "SetOptions[s, name -> value, ...] sets default options for the symbol\n"
-        "\ts and returns the new Options[s].  It can change Protected symbols,\n"
+        "\ts and returns the new Options[s]; the rules may also come as a list.\n"
+        "SetOptions[{s1, s2, ...}, rules] sets them on every symbol and returns\n"
+        "\tthe list of the new options.  It can change Protected symbols,\n"
         "\tand only changes existing options -- an unknown name raises\n"
         "\tSetOptions::optnf.  Use AppendTo[Options[s], ...] to add one.");
     symtab_set_docstring("OptionValue",

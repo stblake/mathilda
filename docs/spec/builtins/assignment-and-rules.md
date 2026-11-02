@@ -698,6 +698,10 @@ and user symbols.
   **add** an option — an unknown name raises
   `SetOptions::optnf` and leaves the call unevaluated. Use
   `AppendTo[Options[s], name -> value]` (or `PrependTo`) to add one.
+- `SetOptions[s, {name -> value, ...}]` takes the rules as a list, and
+  `SetOptions[{s1, s2, ...}, rules]` sets them on every symbol in the list and
+  returns the list of their new options:
+  `SetOptions[{g, h}, opt -> False]` is `{{opt -> False, o2 -> 1}, {opt -> False}}`.
 - `OptionValue[name]`, `OptionValue[f, name]`, `OptionValue[f, opts, name]`,
   `OptionValue[f, opts, name, Hold]`: resolve a single option value from the
   explicit rules `opts` first, then the defaults derived from `f` (a symbol, a
