@@ -4433,9 +4433,9 @@ else()
     target_link_libraries(intrat_corpus_tests gmp m)
 endif()
 add_test(NAME intrat_corpus_tests
-         COMMAND intrat_corpus_tests ../IntegrateRationalTests.m)
+         COMMAND intrat_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
-         COMMAND intrat_corpus_tests ../IntegrateRationalInlineCases.m)
+         COMMAND intrat_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/IntegrateRationalInlineCases.m)
 
 # Form-invariant stress corpus for Solve[].  Loads solve_corpus.m (a
 # List of {label, eqn, vars, dom, expectedCount, note} records) held,
@@ -4452,7 +4452,7 @@ else()
     target_link_libraries(solve_corpus_tests gmp m)
 endif()
 add_test(NAME solve_corpus_tests
-         COMMAND solve_corpus_tests ../solve_corpus.m ../solve_check_prelude.m)
+         COMMAND solve_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/solve_corpus.m ${CMAKE_CURRENT_SOURCE_DIR}/solve_check_prelude.m)
 
 # Self-verifying stress corpus for DSolve[].  The whole subsystem lives in
 # ../DSolve_test_status/ (corpora DE_examples_N.m, the harness, the verifier
@@ -5425,7 +5425,7 @@ else()
     target_link_libraries(reduce_corpus_tests gmp m)
 endif()
 add_test(NAME reduce_corpus_tests
-         COMMAND reduce_corpus_tests ../reduce_corpus.m ../reduce_check_prelude.m)
+         COMMAND reduce_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/reduce_corpus.m ${CMAKE_CURRENT_SOURCE_DIR}/reduce_check_prelude.m)
 
 # Comprehensive corpus runner for the CRC integral table.  Loads
 # CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per
@@ -5440,7 +5440,7 @@ else()
     target_link_libraries(crc_corpus_tests gmp m)
 endif()
 add_test(NAME crc_corpus_tests
-         COMMAND crc_corpus_tests ../CRCIntegralsCorpus.m)
+         COMMAND crc_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/CRCIntegralsCorpus.m)
 
 # Singular / FTC-boundary definite-integral stress corpus.  Loads
 # SingularDefiniteIntegralsCorpus.m (50 {Hold[integral], Hold[expected],
@@ -5457,7 +5457,7 @@ else()
     target_link_libraries(singular_definite_corpus_tests gmp m)
 endif()
 add_test(NAME singular_definite_corpus_tests
-         COMMAND singular_definite_corpus_tests ../SingularDefiniteIntegralsCorpus.m)
+         COMMAND singular_definite_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/SingularDefiniteIntegralsCorpus.m)
 
 # Second, harder definite-integral stress battery (Frullani, Mellin, hyperbolic,
 # Cauchy PV, polylog / Gamma-Zeta).  Same fork + per-case-timeout harness.
@@ -5470,7 +5470,7 @@ else()
     target_link_libraries(extreme_definite_corpus_tests gmp m)
 endif()
 add_test(NAME extreme_definite_corpus_tests
-         COMMAND extreme_definite_corpus_tests ../ExtremeDefiniteIntegralsCorpus.m)
+         COMMAND extreme_definite_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/ExtremeDefiniteIntegralsCorpus.m)
 
 # MSE "simple techniques" definite-integral campaign (General King reflection;
 # series term-by-term on [0,1]; Feynman on a present parameter).  Same fork +
@@ -5484,7 +5484,7 @@ else()
     target_link_libraries(mse_trick_corpus_tests gmp m)
 endif()
 add_test(NAME mse_trick_corpus_tests
-         COMMAND mse_trick_corpus_tests ../MseTrickIntegralsCorpus.m)
+         COMMAND mse_trick_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/MseTrickIntegralsCorpus.m)
 
 # Integrals mined from R. J. Mathar, "Yet Another Table of Integrals"
 # (arXiv:1207.5845) by tools/mathar/ -- every reference value checked by a
@@ -5503,9 +5503,9 @@ else()
     target_link_libraries(mathar_corpus_tests gmp m)
 endif()
 add_test(NAME mathar_definite_corpus_tests
-         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 100 194)
+         COMMAND mathar_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/MatharDefiniteIntegralsCorpus.m 100 194)
 add_test(NAME mathar_indefinite_corpus_tests
-         COMMAND mathar_corpus_tests ../MatharIndefiniteIntegralsCorpus.m 80 97)
+         COMMAND mathar_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/MatharIndefiniteIntegralsCorpus.m 80 97)
 
 # Root-cause regression tests for the bugs the Mathar corpus exposed (series
 # ArcTan sign, bigint FactorSquareFree, unverified squarefree factorization,
@@ -5576,7 +5576,7 @@ else()
     target_link_libraries(principal_value_corpus_tests gmp m)
 endif()
 add_test(NAME principal_value_corpus_tests
-         COMMAND principal_value_corpus_tests ../PrincipalValueIntegralsCorpus.m)
+         COMMAND principal_value_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/PrincipalValueIntegralsCorpus.m)
 
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)
@@ -5722,7 +5722,7 @@ else()
     target_link_libraries(fullsimplify_corpus_tests gmp m)
 endif()
 add_test(NAME fullsimplify_corpus_tests
-         COMMAND fullsimplify_corpus_tests ../fullsimplify_corpus.m)
+         COMMAND fullsimplify_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/fullsimplify_corpus.m)
 
 # Pattern-matcher conformance + robustness stress corpus. Loads
 # tests/match_stress_corpus.m ({inputString, expected} pairs) and checks each
@@ -5740,15 +5740,15 @@ else()
     target_link_libraries(match_stress_corpus_tests gmp m)
 endif()
 add_test(NAME match_stress_corpus_tests
-         COMMAND match_stress_corpus_tests ../match_stress_corpus.m)
+         COMMAND match_stress_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/match_stress_corpus.m)
 # Exhaustive corpus: every pattern construct crossed with a shared subject set,
 # expected values computed by the reference kernel (regenerate with
 # tools/gen_match_exhaustive_corpus.py). The gate must pass in full; the
 # observe corpus holds the known, annotated divergences and is report-only.
 add_test(NAME match_exhaustive_corpus_tests
-         COMMAND match_stress_corpus_tests ../match_exhaustive_corpus.m)
+         COMMAND match_stress_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/match_exhaustive_corpus.m)
 add_test(NAME match_exhaustive_observe
-         COMMAND match_stress_corpus_tests ../match_exhaustive_observe.m --observe)
+         COMMAND match_stress_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/match_exhaustive_observe.m --observe)
 
 # ratcanon SPEC: canonical output-form contract for the Together/Cancel rewrite
 # (RATCANON_REWRITE_PLAN.md). Pins the WL-faithful forms + prototype correctness.

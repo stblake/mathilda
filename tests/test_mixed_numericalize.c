@@ -124,10 +124,11 @@ static void test_rational_compare(void) {
 /* ---- HeavisideTheta / DiracDelta with several arguments ---- */
 static void test_distributions(void) {
     /* The HeavisideTheta / DiracDelta rules live in src/internal/distributions.m,
-     * which the REPL loads at startup and this harness does not. */
-    check("If[FileExistsQ[\"../../src/internal/distributions.m\"], "
-          "Get[\"../../src/internal/distributions.m\"], "
-          "Get[\"src/internal/distributions.m\"]]; 0", "0");
+     * which the REPL loads at startup and this harness does not. The suite
+     * runs from tests/ or tests/build/, so search upward as test_load_init_m. */
+    check("Get[SelectFirst[{\"src\", \"../src\", \"../../src\", \"../../../src\"}, "
+          "FileExistsQ[# <> \"/internal/distributions.m\"] &] <> "
+          "\"/internal/distributions.m\"]; 0", "0");
     check("{HeavisideTheta[1, 2], HeavisideTheta[1, -2, x], HeavisideTheta[1., Sqrt[2]], "
           "HeavisideTheta[1, x], DiracDelta[1, x], DiracDelta[0., Pi], DiracDelta[x, y]}",
           "{1, 0, 1, HeavisideTheta[x], 0, 0, DiracDelta[x, y]}");

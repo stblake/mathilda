@@ -84,8 +84,10 @@ Carried over from the earlier stress-test list (below), still open:
 - [ ] P3c partial ramification (if W6 does not cover it)
 
 Housekeeping:
-- [ ] ctest -LE nightly: two failures predating this work (mixed_numericalize_tests, match_exhaustive_observe) -- triage
-- [ ] MEMORY.md is over its size limit (24.7 KB of 24.4 KB): shorten index lines
+- [x] ctest -LE nightly: two failures predating this work (mixed_numericalize_tests, match_exhaustive_observe) -- triage
+  (2026-11-02: both were cwd-relative .m paths assuming tests/build/; fixed in the test + absolute corpus paths for all 14 CMake corpus args; 4/4 pass via ctest)
+- [x] MEMORY.md is over its size limit (24.7 KB of 24.4 KB): shorten index lines
+  (2026-11-02: 26.5 KB -> 22.3 KB; five tooling lines moved to memory/index_tooling_verification.md)
 
 # DDI Vol. 1 stress test: fix every bug/deficiency found (2026-10-30, v0.6087+)
 
@@ -898,3 +900,13 @@ Pre-existing, not from this change: `integrate_risch_transcendental_tests`
 fails on `x*2.71828^(-x)` (closed by ParallelMixedTower); a 64-byte
 Module-scoping leak on `Integrate[BesselJ[0,x]^3, x]` in a later cascade stage
 (both Bessel stages pinned are clean).
+
+## FeynCalc remaining correctness gaps (2026-11-02)
+Plan: packages/feyncalc/FEYNCALC_REMAINING_GAPS.md (195 tests, clusters G1-G13).
+- [ ] G1 Solve empty system / momentum shifts
+- [ ] G6 PaVeReduce
+- [ ] G5 GA::noint
+- [ ] G4 PowerExpand/FunctionExpand, G9 Series var, G11 GroebnerBasis option
+- [ ] G2 Factor sign convention, G3 InputForm printer
+- [ ] G7 G8 G10 G12 triage
+- [ ] G13 singletons
