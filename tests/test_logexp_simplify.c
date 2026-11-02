@@ -387,6 +387,26 @@ void test_pi_period_half_multiple_declines(void) {
     assert_eval_eq("Simplify[Sin[x + n Pi/2], Element[n, Integers]]", "Sin[1/2 n Pi + x]", 0);
 }
 
+/* ---- v0.6142: an integer part inside a factored Pi coefficient ---- */
+/* (n - 1/2) Pi has a non-integer coefficient, but it splits as n Pi - Pi/2. */
+void test_pi_period_factored_half_cos(void) {
+    assert_eval_eq("Refine[Cos[(n - 1/2) Pi], Element[n, Integers]]", "0", 0);
+    assert_eval_eq("Simplify[Cos[(n - 1/2) Pi], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_factored_half_sin(void) {
+    assert_eval_eq("Refine[Sin[(2 n + 1) Pi/2], Element[n, Integers]]", "(-1)^n", 0);
+    assert_eval_eq("Refine[Cos[(2 n + 1) Pi/2], Element[n, Integers]]", "0", 0);
+}
+void test_pi_period_factored_third(void) {
+    assert_eval_eq("Refine[Sin[(n + 1/3) Pi], Element[n, Integers]]", "(-1)^n Sqrt[3]/2", 0);
+    assert_eval_eq("Refine[Tan[(n + 1/4) Pi], Element[n, Integers]]", "1", 0);
+}
+void test_pi_period_factored_declines(void) {
+    /* no integer part (n/2 + 1/2 is not split), or n not an integer */
+    assert_eval_eq("Refine[Sin[(n/2 + 1/2) Pi], Element[n, Integers]]", "Sin[(1/2 + n/2) Pi]", 0);
+    assert_eval_eq("Refine[Cos[(n - 1/2) Pi], Element[n, Reals]]", "Cos[(-1/2 + n) Pi]", 0);
+}
+
 /* ---- v0.335: Sqrt-local radicand preparation (double/half-angle) ---- */
 void test_sqrt_double_angle_plus_q1(void) {
     assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x]] - Sqrt[2] Cos[x], 0 < x < Pi/2]", "0", 0);
@@ -507,6 +527,10 @@ int main(void) {
     TEST(test_pi_period_tan_any);
     TEST(test_pi_period_no_integer_declines);
     TEST(test_pi_period_half_multiple_declines);
+    TEST(test_pi_period_factored_half_cos);
+    TEST(test_pi_period_factored_half_sin);
+    TEST(test_pi_period_factored_third);
+    TEST(test_pi_period_factored_declines);
 
     /* v0.335 Sqrt-local radicand preparation */
     TEST(test_sqrt_double_angle_plus_q1);

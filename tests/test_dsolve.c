@@ -3196,8 +3196,10 @@ static void t_m61_elementary_particular_unchanged(void) {
  * able to undo the inertness; guard both. */
 static void t_m61_inactive_ftc_contract(void) {
     check_true("D[Inactive[Integrate][f[x], x], x] === f[x]");
-    check_true("Module[{s = DSolve[x y''[x] + 3 y'[x] - y[x] == x, y, x]}, "
-               "Head[s] === List && !FreeQ[Activate[s], Integrate]]");
+    /* (x y'' + 3 y' - y == x, the original witness, now closes in Bessel form --
+     * a correct particular, residual 0 -- so it no longer exercises the inert path.) */
+    check_true("Module[{s = DSolve[x y''[x] + y'[x] - 2 y[x] x == x^2, y, x]}, "
+               "Head[s] === List && !FreeQ[s, Inactive] && !FreeQ[Activate[s], Integrate]]");
 }
 
 /* The autonomous reduction's stage-1 constant is determined exactly by the point

@@ -244,7 +244,11 @@ canonical forms that the generic pipeline alone does not:
 - **Pi-periodicity with a compound integer coefficient** — `Sin[K Pi] -> 0`,
   `Cos[K Pi] -> (-1)^K`, and the shift `Sin[t + K Pi] -> (-1)^K Sin[t]` fire for
   any provably-integer `K` (not only a bare symbol), so e.g.
-  `Sin[(n+m) Pi] -> 0` and `Cos[(n+m) Pi] - (-1)^(n+m) -> 0`. The emitted
+  `Sin[(n+m) Pi] -> 0` and `Cos[(n+m) Pi] - (-1)^(n+m) -> 0`. A factored
+  coefficient that is not itself an integer is split into its integer part and
+  a residual (v0.6142): `Cos[(n - 1/2) Pi] -> 0`, `Sin[(2n+1) Pi/2] -> (-1)^n`,
+  `Sin[(n + 1/3) Pi] -> (-1)^n Sqrt[3]/2`, `Sin[(n + x) Pi] -> (-1)^n Sin[Pi x]`;
+  `(n/2 + 1/2) Pi`, with no integer term, is left alone. The emitted
   `(-1)^K` is then canonicalised by the root-of-unity reducer above. Also
   `E^(2 I Pi n + z) -> E^z` and `E^(I Pi n + z) -> (-1)^n E^z`.
 - **Symbolic GCD/LCM and orthogonal-polynomial values under integer

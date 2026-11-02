@@ -283,6 +283,48 @@ static Expr* pi_integer_coeff(const Expr* term, const AssumeCtx* ctx) {
     return NULL;
 }
 
+/* Split a term c*Pi whose coefficient c is linear in Pi but not itself a
+ * provable integer -- (n - 1/2) Pi, (2 n + 1) Pi/2 -- into an integer part and
+ * a residual: Expand[c] is scanned term by term, the provably-integer terms sum
+ * to K (returned, caller owns) and the remaining terms, times Pi, go to *rest.
+ * So (n - 1/2) Pi gives K = n and *rest = -Pi/2, letting the caller reduce
+ * Cos[(n - 1/2) Pi] = (-1)^n Cos[-Pi/2] = 0. Returns NULL (and leaves *rest
+ * unset) when c mentions Pi or Expand[c] has no integer term. */
+static Expr* pi_integer_part_split(const Expr* term, const AssumeCtx* ctx,
+                                   Expr** rest) {
+    if (!sr_mentions_pi(term)) return NULL;
+    Expr* piinv = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(-1) }, 2);
+    Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                  (Expr*[]){ expr_copy((Expr*)term), piinv }, 2));
+    if (sr_mentions_pi(c)) { expr_free(c); return NULL; }
+    c = eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                          (Expr*[]){ c }, 1));
+    if (!sr_head(c, "Plus")) { expr_free(c); return NULL; }  /* one term: not split */
+
+    size_t n = c->data.function.arg_count;
+    Expr** ints = (Expr**)malloc(n * sizeof(Expr*)); size_t ni = 0;
+    Expr** others = (Expr**)malloc(n * sizeof(Expr*)); size_t no = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = expr_copy(c->data.function.args[i]);
+        if (prov_int(ctx, t)) ints[ni++] = t;
+        else others[no++] = t;
+    }
+    expr_free(c);
+    if (ni == 0 || no == 0) {   /* no integer part, or c was an integer after all */
+        for (size_t i = 0; i < ni; i++) expr_free(ints[i]);
+        for (size_t i = 0; i < no; i++) expr_free(others[i]);
+        free(ints); free(others);
+        return NULL;
+    }
+    Expr* K = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ints, ni));
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Plus), others, no);
+    free(ints); free(others);       /* elements adopted, arrays copied */
+    *rest = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ r, expr_new_symbol("Pi") }, 2));
+    return K;
+}
+
 /* Parity of a provable integer K: 0 even, 1 odd, -1 undetermined. */
 static int pi_parity(const AssumeCtx* ctx, const Expr* K) {
     if (K->type == EXPR_INTEGER) return (int)(((K->data.integer % 2) + 2) % 2);
@@ -553,11 +595,16 @@ static Expr* trig_pi_shift_symbolic(const AssumeCtx* ctx, const char* h,
         terms = (const Expr* const*)arg->data.function.args;
     } else { nt = 1; terms = &single; }
 
+    /* Each term contributes at most one integer coefficient and one residual
+     * (the split below), so 2*nt bounds both arrays. */
     Expr** kco = (Expr**)malloc(nt * sizeof(Expr*)); size_t nk = 0;
-    Expr** theta = (Expr**)malloc(nt * sizeof(Expr*)); size_t nth = 0;
+    Expr** theta = (Expr**)malloc(2 * nt * sizeof(Expr*)); size_t nth = 0;
     for (size_t i = 0; i < nt; i++) {
         Expr* k = pi_integer_coeff(terms[i], ctx);
-        if (k) kco[nk++] = k;
+        if (k) { kco[nk++] = k; continue; }
+        Expr* rest = NULL;
+        k = pi_integer_part_split(terms[i], ctx, &rest);
+        if (k) { kco[nk++] = k; theta[nth++] = rest; }
         else theta[nth++] = expr_copy((Expr*)terms[i]);
     }
     if (nk == 0) {

@@ -33,6 +33,28 @@ static Expr* powneg1(Expr* base) {
                              (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
 
+/* An (n-1)-th root r of f, i.e. any r with r^(n-1) == f.  The scaling y = u/r
+ * needs only that identity (then r'/r = f'/((n-1) f) for every such r), so the
+ * principal root f^(1/(n-1)) is not required -- and is the wrong choice when f
+ * is a perfect power: (x^2)^(1/2) = Sqrt[x^2] turns C = h r into
+ * Sqrt[x^2]/x, a sign that is constant only on each half-line, where r = x
+ * gives the genuinely autonomous u' = u^3 + 1.  So take PowerExpand of the
+ * principal root when it is an EXACT root (r^(n-1) - f expands to 0), else the
+ * principal root itself.  f, nm1 borrowed; returns a fresh Expr. */
+static Expr* chini_root(const Expr* f, const Expr* nm1) {
+    Expr* r0 = eval_and_free(ds_call2(SYM_Power, expr_copy((Expr*)f),
+                                      powneg1(expr_copy((Expr*)nm1))));
+    Expr* r = eval_and_free(ds_call1("PowerExpand", expr_copy(r0)));
+    Expr* chk = eval_and_free(ds_call1("Expand", ds_call2(SYM_Subtract,
+                    ds_call2(SYM_Power, expr_copy(r), expr_copy((Expr*)nm1)),
+                    expr_copy((Expr*)f))));
+    bool exact = ds_is_structural_zero(chk);
+    expr_free(chk);
+    if (exact) { expr_free(r0); return r; }
+    expr_free(r);
+    return r0;
+}
+
 /* Reduction (a) — reduce to autonomous.  The scaling y = f^(-1/(n-1)) u makes
  * the y^n coefficient 1, giving u' = u^n + B u + C with B = g + f'/((n-1) f),
  * C = h f^(1/(n-1)); when B, C are free of x this is autonomous (separable) and
@@ -41,8 +63,8 @@ static Expr* powneg1(Expr* base) {
 static Expr* chini_reduce_autonomous(const Expr* f, const Expr* g, const Expr* h,
                                      const Expr* nexp, const Expr* nm1,
                                      const Expr* yvar_expr, const char* xvar) {
-    /* fpow = f^(1/(n-1)) = 1/phi;  u_expr = yvar * fpow */
-    Expr* fpow = eval_and_free(ds_call2(SYM_Power, expr_copy((Expr*)f), powneg1(expr_copy((Expr*)nm1))));
+    /* fpow = an (n-1)-th root of f = 1/phi;  u_expr = yvar * fpow */
+    Expr* fpow = chini_root(f, nm1);
     Expr* u_expr = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)yvar_expr), expr_copy(fpow)));
 
     /* B = g + f'/((n-1) f) */
