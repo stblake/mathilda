@@ -47,7 +47,7 @@ Out[4]= x >= 0
 
 reduce_qe.c
 
-Quantifier elimination for `Reduce` (REDUCE_PLAN.md, Phase 7): the front-end
+Quantifier elimination for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 7): the front-end
 
 ```text
 for the `Exists`, `ForAll` and `Resolve` heads.  See reduce_qe.h for the shape

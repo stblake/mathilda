@@ -1,7 +1,7 @@
 /*
  * reduce.c
  *
- * `Reduce` -- front-end and dispatch skeleton (REDUCE_PLAN.md, Phase 0).
+ * `Reduce` -- front-end and dispatch skeleton (docs/notes/REDUCE_PLAN.md, Phase 0).
  *
  * Mirrors builtin_solve's argument handling: positional `expr [, vars [, dom]]`,
  * a Solve::ivar-style bad-variable diagnostic, and a True/False short-circuit.

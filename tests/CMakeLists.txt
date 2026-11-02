@@ -4462,7 +4462,7 @@ add_test(NAME solve_corpus_tests
 # each explicit branch (systems skipped -- scalar-first campaign).  It is a
 # PROGRESS DASHBOARD: a per-section test fails only when non-PASS scalar cases
 # exceed the baseline passed as argv[3] (each method-wave lowers it, tracked in
-# DSolve_test_status/STATUS.md).  See DSOLVE_PLAN.md and tasks/todo.md.
+# DSolve_test_status/STATUS.md).  See docs/notes/DSOLVE_PLAN.md and tasks/todo.md.
 add_executable(dsolve_corpus_tests ../DSolve_test_status/test_dsolve_corpus.c
                $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(dsolve_corpus_tests PRIVATE

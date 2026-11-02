@@ -1,7 +1,7 @@
 # DSolve corpus status
 
 Scoreboard for `DSolve` against the 12000.org *Solving ODEs* corpora. **Update
-after every method-wave** (see `README.md` and `../DSOLVE_PLAN.md` M15+). The
+after every method-wave** (see `README.md` and `../docs/notes/DSOLVE_PLAN.md` M15+). The
 `ctest` gate for each section is the *baseline* (argv[3] in
 `tests/CMakeLists.txt`) — the checked-in non-PASS high-water mark; every wave
 must lower it.
@@ -14,7 +14,7 @@ FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 > pinned-only). Every section's PASS count that rested on those shapes dropped (and 7 masked wrong
 > answers went with the `ds_free_of` fix); gate baselines were raised by exactly the attributable
 > delta, measured same-machine against HEAD. The per-record list of newly-unsolved ODEs is in
-> `../DSOLVE_PLAN.md` M68 — that is the work queue for genuine closed forms.
+> `../docs/notes/DSOLVE_PLAN.md` M68 — that is the work queue for genuine closed forms.
 
 ---
 
@@ -43,7 +43,7 @@ Corpus: `DE_examples_2.m` — 1204 records (1000 scalar + 204 systems).
 | 2026-09-30 (**M60**) | **634 / 1204 total** | — | **570** | **+29 net (605 → 634), 0 FAIL** — measured against a fresh same-day baseline of 605/599 (the checked-in M59 row of 595 had drifted +10 on intervening non-DSolve work). **+30 gained, 1 lost.** Three mechanisms: new `DSolve\`GeneralizedAiry` (the n-th order pure-power potential `u^(n) == A x^m u` → `x^j ₀F_{n−1}`, reached through a depression gauge, symbolic `A`/`m` supported); `OperatorFactor` lifted to **order 2 + forcing** (Kovacic owns order 2's tidy answers, but its Case-1 residue was falling through to a truncated Frobenius series even when `DFactor` could find the factor — which is also what unblocks the order-3 peel's own quotient); and the **adjoint/left-factor peel**, the classical Beke order-(n−1) right factor, plus a generalised Bessel row `Q = A x^m + B x^(-2)`. Bucket attribution: **`3rd_high_linear` 42 → 64 (+22)**, `2nd_linear` 243 → 249 (+6), `1st_solvable_for_yx` +1, `Emden_Fowler` +1; the single loss (342) is a first-order *nonlinear* ODE that `OperatorFactor` declines in 0.4 ms and which solves in 5.25 s standalone — the documented 8 s timing cluster. Also three pre-existing latency root-causes fixed (unsimplified `Exp[-(Log[x]+…)]` trailing integrand: 3.98 s **and a failure** vs 0.015 s; symbolic `C[k]` in the algebraic integrator: 2.06 s vs 0.011 s; unbounded ansatz width and a speculative double-pole order: a failing search 60.2 s → 0.72 s) — 2.1.2-250 went from a >120 s non-answer to a 2.6 s solve. Measurement deterministic across two full runs. Gate baseline **619 → 580** (570 + 10 margin). |
 | 2026-09-30 (**M61**) | **621 / 1204 total** | — | **583** | **+5 net vs HEAD on the same machine** (616 → 621 PASS; 9 gained, 4 lost), **0 FAIL**, crashes 3 → 1. Not a §2.1.2-targeted wave — these are side-effects of the M61 §2.2.34 fixes (the inert VoP particular, the nonlinear-in-`y` Clairaut, the `NthAlgebraic` bound, the parametric-verify cancellation). The 4 losses (233/342/591/856) all solve in **3–5 s on BOTH binaries**, i.e. the documented 8 s timing-boundary cluster flipping under fork load — verified by an isolated A/B, and M61 is not the slower of the two on any of them. **Gate left at 580, deliberately:** it is **already red on main** (HEAD measures **588** non-PASS on this machine), so M61 reduces the overshoot from 8 to 3 but cannot honestly claim 580. Raising it would hide pre-existing drift. This wave also found and fixed one real regression of its own before landing — an ungated `Together` in the parametric verify cost 2.1.2-980 6 s → 51 s; the master run was the only thing that caught it. |
 | 2026-10-02 (**M62**) | **635 / 1204 total** | — | **569** | **+21 net, ZERO cases lost, 0 FAIL**, measured same-machine against a HEAD worktree binary (HEAD 614 PASS / 590 non-PASS on the same run pair); timeouts 8 → 4, crashes 2 → 1. Not a §2.1.2-targeted wave — the gain is almost entirely the global `TimeConstrained` fix (nesting now CLAMPS instead of refunding, so a budget is finally an upper bound): 2.1.2-225 is the shape of it, declined by both binaries but in 7.48 s against HEAD's **48 s** under a `TimeConstrained[…, 8]`. The surviving crash is the documented intermittent macOS libmalloc/GMP-lock SIGILL the `siglongjmp` abort carries (HEAD crashed too, on a different case; neither reproduces in isolation over three trials); note the clamp makes SIGPROF-driven aborts land where the child `alarm(20)` used to, so that pre-existing hazard is exercised more often. Gate baseline **580 → 578** (569 + 9 margin for the documented 8 s timing cluster) — it was **red on main at 590** before this wave. |
-| 2026-10-12 (**M68**, Nasser's v0.354 report) | **460 / 1204 total** | — | **744** | **Deliberate contract change, 0 FAIL.** An automatic `DSolve` no longer returns a truncated series or a `y'`-carrying first integral (both opt-in via `Method ->`), and the `ds_free_of` decay fix removed wrong closed forms. Same-machine A/B vs HEAD (631 PASS / 573 non-PASS): every P→U re-classified on the HEAD binary — the §2.1.2 losses are series and first-integral answers, the corpora-wide count is 337 series + 22 first integrals + 7 masked WRONG answers; 15 U→P. All newly-unsolved records are the work list in `DSOLVE_PLAN.md` M68. Gate baseline **578 → 749** (raised by exactly the attributable +171; the pre-existing −5 drift stays visible). |
+| 2026-10-12 (**M68**, Nasser's v0.354 report) | **460 / 1204 total** | — | **744** | **Deliberate contract change, 0 FAIL.** An automatic `DSolve` no longer returns a truncated series or a `y'`-carrying first integral (both opt-in via `Method ->`), and the `ds_free_of` decay fix removed wrong closed forms. Same-machine A/B vs HEAD (631 PASS / 573 non-PASS): every P→U re-classified on the HEAD binary — the §2.1.2 losses are series and first-integral answers, the corpora-wide count is 337 series + 22 first integrals + 7 masked WRONG answers; 15 U→P. All newly-unsolved records are the work list in `docs/notes/DSOLVE_PLAN.md` M68. Gate baseline **578 → 749** (raised by exactly the attributable +171; the pre-existing −5 drift stays visible). |
 
 ### Gap by bucket (baseline, ranked)
 
@@ -649,7 +649,7 @@ homogeneous-degree-0 rational (solved as homogeneous), plus two solvable-for-y/x
 - `1157` `y'==(a y+b)/(c y+d)` with `a` the independent variable — an Abel equation of the second
   kind (the M13-deferred `[_Abel]` class).
 
-These three are the documented "solvable-for-y/x + Abel" gap (`DSOLVE_PLAN.md` M13 / M28 residue);
+These three are the documented "solvable-for-y/x + Abel" gap (`docs/notes/DSOLVE_PLAN.md` M13 / M28 residue);
 a general generalised-d'Alembert method was prototyped and confirmed to close none of them, so it is
 deferred to its own milestone rather than half-built here.
 
@@ -2679,7 +2679,7 @@ guard does not cover these sites.
   size → restricted to P==0 for 0 regressions.
 - **M20 (2026-09-08)** — first-order symmetry gap Stage 1: `PolynomialShiftSubstitution`
   (`dsolve_polyshift.c`), the radical `[F(x),G(x)]`-symmetry sub-cluster. §2.1.2
-  432/1000 (+6). See DSOLVE_PLAN.md M20 and the §2.1.2 block above.
+  432/1000 (+6). See docs/notes/DSOLVE_PLAN.md M20 and the §2.1.2 block above.
 - **M21 (2026-09-08)** — §2.2.1 corpus (Problems 1–100), first IVP-carrying section.
   IC verification in the harness; 3 solver fixes. **96/100 (+10, 0 FAIL).** See §2.2.1 block.
 - **M22 (2026-09-08)** — §2.2.2 corpus (Problems 101–200). Homogeneous-correctness /

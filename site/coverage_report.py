@@ -11,7 +11,7 @@ A page is "EllipticF-grade" when all three hand-authored layers exist:
 This reads the *generated* tree under site/docs/documentation/ (the state of
 the last `make docs`) plus the overlay/impl source dirs, and prints a
 per-category table of (pages, overlay, impl, examples, EllipticF-grade). It is
-the progress metric for BUILTIN_DOCUMENTATION_OVERHAUL.md.
+the progress metric for docs/notes/BUILTIN_DOCUMENTATION_OVERHAUL.md.
 
 Usage:
   python3 site/coverage_report.py                 # full per-category table

@@ -206,7 +206,7 @@ Tauri Rust layer (src-tauri/src/)
 Mathilda C binary (../Mathilda)
 ```
 
-See docs/frontend-research.md for the full design rationale.
+See docs/notes/frontend-research.md for the full design rationale.
 
 ### Evaluating a cell
 

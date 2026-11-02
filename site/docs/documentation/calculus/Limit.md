@@ -196,7 +196,7 @@ Out[34]= Limit[f[x], x -> 0]
 
 ============================================================================ limit.c -- Symbolic limits for Mathilda. ============================================================================
 
-Implements the Mathematica-style Limit built-in per the pipeline sketched in plans/limit_candidate_spec.md. The architecture is a layered dispatcher; each layer either resolves the limit and short-circuits or passes the problem down to the next layer:
+Implements the Mathematica-style Limit built-in per the pipeline sketched in docs/notes/plans/limit_candidate_spec.md. The architecture is a layered dispatcher; each layer either resolves the limit and short-circuits or passes the problem down to the next layer:
 
 ```text
     Layer 0 -- Interface normalization (three calling forms, Direction).

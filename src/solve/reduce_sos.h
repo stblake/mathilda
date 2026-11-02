@@ -3,7 +3,7 @@
 
 /*
  * reduce_sos.c -- Positivstellensatz / sum-of-squares emptiness certificate for
- * `Reduce[..., Reals]` (REDUCE_PLAN.md, D5).
+ * `Reduce[..., Reals]` (docs/notes/REDUCE_PLAN.md, D5).
  *
  * A LAST-RESORT stage: when the Fourier-Motzkin / CAD / zero-dimensional engines
  * all decline a real conjunction, this tries to PROVE the region empty by

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 ddi_report.py -- render tests/data/ddi_vol1_report.json (written by
-tools/ddi_stress.py) as the data sections of ALGEBRAIC_INTEGRAL_PERF.md.
+tools/ddi_stress.py) as the data sections of docs/notes/ALGEBRAIC_INTEGRAL_PERF.md.
 
 Every number in the generated tables is computed from the JSON; the prose
 (analysis, gap list) lives in a hand-written header/footer which this tool
 splices around the generated block:
 
-    python3 tools/ddi_report.py [--json J] [--md ALGEBRAIC_INTEGRAL_PERF.md]
+    python3 tools/ddi_report.py [--json J] [--md docs/notes/ALGEBRAIC_INTEGRAL_PERF.md]
 
 The generated block sits between the markers
     <!-- BEGIN GENERATED -->  and  <!-- END GENERATED -->
@@ -242,7 +242,7 @@ def generate(d):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default=os.path.join(REPO, "tests", "data", "ddi_vol1_report.json"))
-    ap.add_argument("--md", default=os.path.join(REPO, "ALGEBRAIC_INTEGRAL_PERF.md"))
+    ap.add_argument("--md", default=os.path.join(REPO, "docs/notes/ALGEBRAIC_INTEGRAL_PERF.md"))
     args = ap.parse_args()
     d = json.load(open(args.json))
     gen = generate(d)

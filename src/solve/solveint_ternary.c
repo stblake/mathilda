@@ -4,7 +4,7 @@
  * Part of the Solve[..., Integers] engine; split out of solveint.c.
  * See solveint_internal.h for the shared SICtx/SearchState substrate.
  *
- * Tier 2 E of SOLVE_INTEGERS.md: the homogeneous ternary quadratic /
+ * Tier 2 E of docs/notes/SOLVE_INTEGERS.md: the homogeneous ternary quadratic /
  * Legendre solver.  For a single homogeneous diagonal degree-2 equation in
  * exactly 3 variables over an unbounded domain, decide solvability RIGOROUSLY
  * (Legendre's theorem, a proof -- not a bounded search) and either

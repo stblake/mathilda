@@ -2,7 +2,7 @@
  * reduce_form.c
  *
  * The DNF logical normal-form algebra for `Reduce` (see reduce_form.h and
- * REDUCE_PLAN.md).  This file owns the RAtom / RConj / RForm data structures,
+ * docs/notes/REDUCE_PLAN.md).  This file owns the RAtom / RConj / RForm data structures,
  * their memory management, the And/Or/Not combinators, the constant-atom
  * simplifier, and emission back to a Mathematica-form Expr.  Atom
  * canonicalisation and input parsing live in reduce_atom.c.

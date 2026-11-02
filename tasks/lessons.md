@@ -3600,7 +3600,7 @@ Two lessons from strengthening `src/solve/solverad.c`:
    kept only the verify fix. **How to apply:** several DSolve inversions are built
    on solverad's decline SET; widening what solverad attempts silently reroutes
    them — gate any such change and re-run `dsolve_tests` (t_homogeneous_algebraic)
-   as the tripwire. Full write-up: `SOLVERAD_IMPROVEMENTS.md`.
+   as the tripwire. Full write-up: `docs/notes/SOLVERAD_IMPROVEMENTS.md`.
 
 ## M12 — nonlinear 2nd-order Lie symmetry (`DSolve`SecondOrderSymmetry`, dsolve_lie2.c)
 

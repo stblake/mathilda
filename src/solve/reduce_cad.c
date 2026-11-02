@@ -2,7 +2,7 @@
  * reduce_cad.c
  *
  * Cylindrical Algebraic Decomposition over the reals for `Reduce`
- * (REDUCE_PLAN.md, Phase 6).  See reduce_cad.h for the shape of the method.
+ * (docs/notes/REDUCE_PLAN.md, Phase 6).  See reduce_cad.h for the shape of the method.
  *
  * This pass implements the 2-variable case (after pruning variables that appear
  * in no atom).  Variables are (vx, vy) in the given order; vy is eliminated
@@ -1411,7 +1411,8 @@ done:
 }
 
 /* ------------------------------------------------------------------ *
- *  Quantifier-elimination seam (REDUCE_PLAN.md, Phase 7, Case B)       *
+ *  Quantifier-elimination seam                                       *
+ *  (docs/notes/REDUCE_PLAN.md, Phase 7, Case B)                      *
  * ------------------------------------------------------------------ */
 
 /* The Exists/ForAll verdict of one CAD cell over its bound-variable subtree.

@@ -341,7 +341,7 @@ static void test_integrator_endtoend(void) {
      *
      * Tightened from `FreeQ[Integrate[E^(Log[x]^2), x], Integrate] === False`,
      * which forbade ANY answer from the whole cascade, in v0.238. Once the
-     * iterator-capture defect was fixed (MATHILDA_DIVERGENCES.md A18: Do, Sum and
+     * iterator-capture defect was fixed (docs/notes/MATHILDA_DIVERGENCES.md A18: Do, Sum and
      * Product bound their iterator by name, silently replacing a caller's
      * same-named symbol with a loop index), DerivativeDivides' substitution search
      * finds the fold u = Log[x] it had been missing, and the base-field Cherry erf

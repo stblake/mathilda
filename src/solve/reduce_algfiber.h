@@ -1,7 +1,7 @@
 /*
  * reduce_algfiber.h
  *
- * Real-algebraic-coefficient fibre isolation for `Reduce`'s CAD (REDUCE_PLAN.md,
+ * Real-algebraic-coefficient fibre isolation for `Reduce`'s CAD (docs/notes/REDUCE_PLAN.md,
  * Phase 6b).  The n-variable CAD lifts a cell by substituting the outer sample
  * point into a projection factor and isolating the resulting univariate's real
  * roots.  When an outer coordinate is an IRRATIONAL algebraic number (a section

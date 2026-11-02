@@ -1,7 +1,7 @@
 /*
  * reduce_univar.h
  *
- * Univariate real sign-diagram engine for `Reduce` (REDUCE_PLAN.md, Phase 2).
+ * Univariate real sign-diagram engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 2).
  *
  * Solves an arbitrary logical combination (a DNF RForm) of polynomial equations
  * and inequalities in a single variable over the reals.  The method is the

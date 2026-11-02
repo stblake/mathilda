@@ -21,7 +21,7 @@ static bool factor_via_bz_callback(const ZUPoly* image,
 
     /* Bail when any image coefficient overflows int64.  bz_factor_to_expr
      * is GMP-based and factors such images correctly, but a huge-coefficient
-     * image (alpha^200 in the Fateman trace, plans/FACTOR_PLAN.md §12.F6)
+     * image (alpha^200 in the Fateman trace, docs/notes/plans/FACTOR_PLAN.md §12.F6)
      * is expensive to factor and the orchestrator does better trying the
      * next alpha or the other variable, so these alphas are still skipped. */
     for (int i = 0; i <= image->deg; i++) {

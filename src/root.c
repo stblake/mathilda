@@ -485,7 +485,7 @@ Expr* root_make_rootsum(Expr* bvar, Expr* poly, Expr* body) {
  * `rs` is not a two-Function RootSum or the degree can't be read.  Used by N to
  * sum a RootSum over its (numericalised) roots -- this is what makes
  * N[RootSum[Function[z, z^3+z+1], Function[z, z Log[x-z]]] /. x->1/3, 30]
- * evaluate (MATHILDA_DIVERGENCES.md A12, numeric path).  Caller owns the
+ * evaluate (docs/notes/MATHILDA_DIVERGENCES.md A12, numeric path).  Caller owns the
  * result. */
 Expr* rootsum_expand_over_roots(const Expr* rs) {
     if (!rs || rs->type != EXPR_FUNCTION

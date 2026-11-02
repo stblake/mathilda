@@ -107,7 +107,7 @@ That is the case for doing phase 3 before the remaining decomposition work.
 
 **Fixed 2026-07-30** — this was the worst result in the document at 40× and 80×,
 and is now within 1.15×/1.30×. Three causes, in order of size
-([plan phase 1.1](../../plans/HPC_IMPROVEMENT_PLAN.md)):
+([plan phase 1.1](../notes/plans/HPC_IMPROVEMENT_PLAN.md)):
 
 1. **`Fourier` was not packed-aware.** `fourier.c` has had a complete NDArray
    fast path all along, but the transparency gate materialised the buffer into
@@ -207,7 +207,7 @@ single `UnitStep` over 10⁷ elements. It could not be given an ordinary real
 kernel, because it answers with *exact Integers* (`UnitStep[{-1., 1.}]` is
 `{0, 1}`, not `{0., 1.}`) and a float64-closed kernel would change an element's
 head. A **narrowing** category — real in, `NDT_INT64` out — was added
-([plan phase 2](../../plans/HPC_IMPROVEMENT_PLAN.md)) and `UnitStep` is now 113×
+([plan phase 2](../notes/plans/HPC_IMPROVEMENT_PLAN.md)) and `UnitStep` is now 113×
 faster (44 ms), with `Floor`, `Ceiling`, `Round`, `IntegerPart` and `Sign` off
 `NOT_AWARE` as well.
 
@@ -378,7 +378,7 @@ it reads `list->args[i]`, so a packed buffer had to be materialised into one
 and compared `Expr` nodes. Over 10⁶ packed int64 that measured 147 ms against
 **96 ms for the identical data held as a plain `List`** — the packed
 representation was a net loss, which is the failure mode
-[N3](../../plans/HPC_IMPROVEMENT_PLAN.md) exists to make visible.
+[N3](../notes/plans/HPC_IMPROVEMENT_PLAN.md) exists to make visible.
 
 `ndred_tally` keys on the machine word instead. The instructive part was sizing
 the table: for *n* elements the obvious capacity is 2n, and at 10⁷ that is a
@@ -989,7 +989,7 @@ The largest items:
 ## 14. Seventh round — the register worked through (2026-08-01)
 
 Not a sweep: this round has no new probes at all. It works the sixth sweep's
-gap register (§13, and `plans/HPC_IMPROVEMENT_PLAN.md` §11) top-down, and is
+gap register (§13, and `docs/notes/plans/HPC_IMPROVEMENT_PLAN.md` §11) top-down, and is
 recorded here because *what the register got wrong* is more useful than what it
 got right.
 
@@ -1726,7 +1726,7 @@ gap-driven kernel set — is [`benchmarks/`](../../benchmarks/) (`make bench-gap
 
 ## See also
 
-- [`plans/HPC_IMPROVEMENT_PLAN.md`](../../plans/HPC_IMPROVEMENT_PLAN.md) — the
+- [`docs/notes/plans/HPC_IMPROVEMENT_PLAN.md`](../notes/plans/HPC_IMPROVEMENT_PLAN.md) — the
   plan to close every gap in §10, sequenced by value and risk.
 - [`compile.md`](compile.md) — the compiler's design and milestones.
 - [`COMPILE_EXAMPLE.md`](../compile_example/COMPILE_EXAMPLE.md) — one HPC problem

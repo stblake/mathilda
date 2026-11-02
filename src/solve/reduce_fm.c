@@ -1,7 +1,7 @@
 /*
  * reduce_fm.c
  *
- * Fourier-Motzkin elimination for linear real systems (REDUCE_PLAN.md, Phase 3).
+ * Fourier-Motzkin elimination for linear real systems (docs/notes/REDUCE_PLAN.md, Phase 3).
  * See reduce_fm.h.  Coefficient vectors are exact rational Exprs; all arithmetic
  * reuses the evaluator (Plus/Times/Coefficient) so no separate rational library
  * plumbing is needed.

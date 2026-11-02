@@ -709,7 +709,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * body over the roots of p.  RootSum is HoldAll and often has no closed
      * rational form (a Log logand, an (x + t) denominator), so N sums it
      * directly: expand to Plus[body[Root[p, k]], ...] and numericalise that,
-     * reusing the Root numeric backend.  (MATHILDA_DIVERGENCES.md A12.) */
+     * reusing the Root numeric backend.  (docs/notes/MATHILDA_DIVERGENCES.md A12.) */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_RootSum) {

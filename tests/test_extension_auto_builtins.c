@@ -119,7 +119,7 @@ static void test_pgcd_sqrt2_explicit_vs_auto(void) {
 
 /* A14b: PolynomialGCD over a Root[]-object extension.  Extension ->
  * Automatic must detect the Root generator and equal the explicit
- * Extension -> Root[...] form (MATHILDA_DIVERGENCES.md A14b).  Before the
+ * Extension -> Root[...] form (docs/notes/MATHILDA_DIVERGENCES.md A14b).  Before the
  * fix, a Root generator was unrecognised and the gcd collapsed to the
  * trivial 1. */
 static void test_pgcd_root_extension_auto_vs_explicit(void) {

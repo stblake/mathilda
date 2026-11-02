@@ -7,7 +7,7 @@
  * equations and inequalities) of the solution set over a domain (Complexes,
  * Reals, Integers, Rationals).
  *
- * Architecture and phased roadmap: REDUCE_PLAN.md.  This is the Phase-0
+ * Architecture and phased roadmap: docs/notes/REDUCE_PLAN.md.  This is the Phase-0
  * front-end: it parses arguments like Solve, normalises the input into the
  * internal DNF layer (reduce_form.h), and returns True/False when the statement
  * decides; the per-domain solving engines are wired in later phases.

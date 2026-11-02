@@ -1,7 +1,7 @@
 /*
  * reduce_sys.c
  *
- * Parametric linear-system engine for `Reduce` (REDUCE_PLAN.md, Phase 4).
+ * Parametric linear-system engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 4).
  * See reduce_sys.h.  Coefficients are rational-function Exprs; arithmetic and
  * simplification reuse the evaluator (Plus/Times/Together/Coefficient/Solve).
  */

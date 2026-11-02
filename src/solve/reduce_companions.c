@@ -1,7 +1,7 @@
 /*
  * reduce_companions.c
  *
- * Companion builtins for `Reduce` (REDUCE_PLAN.md, Phase 8).  v1: LogicalExpand
+ * Companion builtins for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 8).  v1: LogicalExpand
  * + a minimal NotElement head.
  *
  * LogicalExpand distributes a logical statement to disjunctive normal form (an
@@ -410,7 +410,7 @@ Expr* builtin_not_element(Expr* res) {
 }
 
 /* ================================================================== *
- *  FindInstance  (REDUCE_PLAN.md, Phase 8)                            *
+ *  FindInstance  (docs/notes/REDUCE_PLAN.md, Phase 8)                 *
  *                                                                     *
  *  Find up to n witness points that make `expr` True over a domain,   *
  *  returned in Solve's form: {{x->v1, ...}, ...}, or {} when the set  *
@@ -2584,7 +2584,7 @@ static Expr* fi_run_search(Expr* expr, Expr* vars, Expr* dom, long nWanted,
 }
 
 /* ================================================================== *
- *  CylindricalDecomposition (REDUCE_PLAN.md, Phase 8)                  *
+ *  CylindricalDecomposition (docs/notes/REDUCE_PLAN.md, Phase 8)       *
  *                                                                     *
  *  CylindricalDecomposition[expr, vars] gives a cylindrical algebraic *
  *  decomposition of the REAL solution set of `expr` -- a              *

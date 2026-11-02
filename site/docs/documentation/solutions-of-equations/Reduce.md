@@ -166,7 +166,7 @@ Out[19]= Reduce[x^2 + y^2 == 1, {x, y}]
 reduce.c
 
 ```text
-`Reduce` -- front-end and dispatch skeleton (REDUCE_PLAN.md, Phase 0).
+`Reduce` -- front-end and dispatch skeleton (docs/notes/REDUCE_PLAN.md, Phase 0).
 ```
 
 Mirrors builtin_solve's argument handling: positional `expr [, vars [, dom]]`, a Solve::ivar-style bad-variable diagnostic, and a True/False short-circuit. The input logical combination is normalised into the internal DNF layer (reduce_form.h); Phase 0 returns True/False when the statement decides and

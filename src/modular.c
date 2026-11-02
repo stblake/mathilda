@@ -35,7 +35,7 @@ typedef struct ScopingEnv {
  * iterator specs after it, each binding its first element. Table, Do, Sum and
  * Product are structurally identical here and bind their iterator the same way,
  * so capture-avoidance must treat them alike. Only Table used to be listed,
- * which is exactly MATHILDA_DIVERGENCES.md A18: `g[v_] := Module[{s = 0},
+ * which is exactly docs/notes/MATHILDA_DIVERGENCES.md A18: `g[v_] := Module[{s = 0},
  * Do[s += v, {k, 2}]; s]; g[k]` gave 3 where Mathematica gives 2 k, because the
  * caller's `k` was injected into a body whose `Do` then bound it. Sum and
  * Product had it too (`Sum[v, {k, 2}]` → 3, `Product` → 2). */
@@ -418,7 +418,7 @@ Expr* builtin_unique(Expr* res) {
  *   g[v_] := Module[{e = 1}, v + e];  g[e + 1]   gave 3, must give 2 + e.
  * The fix renames every colliding local to a fresh symbol *before* the binding
  * is substituted, so the injected symbol and the (renamed) local stay distinct.
- * See MATHILDA_DIVERGENCES.md A11.
+ * See docs/notes/MATHILDA_DIVERGENCES.md A11.
  * ------------------------------------------------------------------------ */
 
 /* True when `e` is a scoping construct that actually binds names.

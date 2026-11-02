@@ -159,7 +159,7 @@ Items 1, 2 and 3 are design changes with measured payoffs. Items 4 and 7 are
 the two that appear most often. Items 5, 6, 8, 9 and 10 are self-contained
 kernel work with no open question attached.
 
-`plans/HPC_IMPROVEMENT_PLAN.md` sequences these by value and risk; Phase 10
+`docs/notes/plans/HPC_IMPROVEMENT_PLAN.md` sequences these by value and risk; Phase 10
 carries the fifth sweep's share.
 
 ## The one finding that recurs
@@ -223,5 +223,5 @@ above `PACK_MIN_ELEMENTS`, and every form each path must *decline* is included.
   three-system table across all benchmarks.
 - [`docs/design/compile.md`](../design/compile.md) — the compiler's design.
 - [`docs/design/packed_arrays.md`](../design/packed_arrays.md) — the packing model.
-- [`plans/HPC_IMPROVEMENT_PLAN.md`](../../plans/HPC_IMPROVEMENT_PLAN.md) — what
+- [`docs/notes/plans/HPC_IMPROVEMENT_PLAN.md`](../notes/plans/HPC_IMPROVEMENT_PLAN.md) — what
   each sweep left open.

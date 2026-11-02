@@ -1,7 +1,7 @@
 /*
  * dsolve_abel_air.c — DSolve`AbelAIR (Abel-2nd-kind / rational-in-y scaling reduction).
  *
- * A down payment on the full Abel Invariant Rational method (DSOLVE_PLAN.md M13,
+ * A down payment on the full Abel Invariant Rational method (docs/notes/DSOLVE_PLAN.md M13,
  * previously deferred).  It closes the Abel-2nd-kind and rational-in-y first-order
  * ODEs whose right-hand side, after Together, is
  *

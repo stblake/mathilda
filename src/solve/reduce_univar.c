@@ -1,7 +1,7 @@
 /*
  * reduce_univar.c
  *
- * Univariate real sign-diagram engine for `Reduce` (REDUCE_PLAN.md, Phase 2).
+ * Univariate real sign-diagram engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 2).
  * See reduce_univar.h for the algorithm.  The exact sign oracle, rational sample
  * selection, polynomial test, and Solve-based real-root isolation live in the
  * shared reduce_real_util.{c,h} (also used by the multivariate CAD); this file

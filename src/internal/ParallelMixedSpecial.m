@@ -27,7 +27,7 @@
        string as f's docstring, so ?name works on them.
      * Part II is loaded through LoadModule rather than the original's
        Get[FileNameJoin[{DirectoryName[$InputFileName], ...}]] -- $InputFileName
-       and DirectoryName are not implemented (MATHILDA_DIVERGENCES.md A22), and
+       and DirectoryName are not implemented (docs/notes/MATHILDA_DIVERGENCES.md A22), and
        LoadModule additionally carries the load-once memo that stops the 217 KB
        Part II file being evaluated twice in one session.
 

@@ -1,2 +1,0 @@
-python-pptx>=0.6
-PyYAML>=6.0

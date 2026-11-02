@@ -9,7 +9,7 @@
  * contract as the Integrate methods.
  *
  * Phase 1 (this file's scope) covers ordinary differential equations; PDEs are
- * Phase 2.  See DSOLVE_PLAN.md for the full method catalog.
+ * Phase 2.  See docs/notes/DSOLVE_PLAN.md for the full method catalog.
  */
 #ifndef MATHILDA_DSOLVE_H
 #define MATHILDA_DSOLVE_H

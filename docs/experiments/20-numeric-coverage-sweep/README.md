@@ -310,4 +310,4 @@ both.
 - [`numeric_coverage_sweep.py`](numeric_coverage_sweep.py) — the same algorithms in
   NumPy/SciPy
 - [`docs/design/performance.md`](../../design/performance.md) — the combined table
-- [`plans/HPC_IMPROVEMENT_PLAN.md`](../../../plans/HPC_IMPROVEMENT_PLAN.md)
+- [`docs/notes/plans/HPC_IMPROVEMENT_PLAN.md`](../../notes/plans/HPC_IMPROVEMENT_PLAN.md)

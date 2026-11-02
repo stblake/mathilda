@@ -1,7 +1,7 @@
 /*
  * reduce_eq.c
  *
- * Complete univariate equation engine for `Reduce` (REDUCE_PLAN.md, Phase 1).
+ * Complete univariate equation engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 1).
  * See reduce_eq.h for the algorithm.  Everything numeric is done by reusing the
  * existing Expr-level builtins (Exponent, Coefficient, Expand, Solve) rather
  * than reimplementing polynomial arithmetic.

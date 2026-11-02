@@ -9,7 +9,7 @@ idiomatic "associate a rule with the operand, not the operator" pattern (modular
 arithmetic `mod/: mod[a_,p_] + mod[b_,p_] := …`, symbolic properties
 `area[square] ^= s^2`, per-symbol databases `rate[chf] ^= 0.812`). The subsystem is
 confirmed **fully greenfield** — no stubs anywhere in the tree (only prose in
-`plans/EVAL_IMPROVEMENTS_PLAN.md` marking it "intentionally not implemented").
+`docs/notes/plans/EVAL_IMPROVEMENTS_PLAN.md` marking it "intentionally not implemented").
 
 This is a **trial**: every change is gated behind `#if UP_VALUES` so the feature can be
 compiled out to exactly today's behaviour. The goal is a faithful, highly-efficient,

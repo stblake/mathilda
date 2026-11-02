@@ -4,7 +4,7 @@ Cross-session dashboard for `DSolve` development against Nasser Abbasi's
 *Solving ODEs* corpora (<https://12000.org/my_notes/solving_ODE/current_version/>).
 Each section there lists ODEs that Maple **and** Mathematica solve; we track how
 many `DSolve` currently solves and drive that number to parity, one general
-method-wave at a time (see `../DSOLVE_PLAN.md`, milestones M15+).
+method-wave at a time (see `../docs/notes/DSOLVE_PLAN.md`, milestones M15+).
 
 The point of this folder: **pick up DSolve development between sessions with a
 clear, self-contained context** — the corpora, the self-verifying harness, and a
@@ -134,7 +134,7 @@ converter picks the table by `\begin{array}` density, not by id.
 
 **Internal names keep the old spelling** (`DE_examples_2234.m`, labels `"2.2.34-3301"`, ctest
 `dsolve_corpus_2_2_34_tests`) for continuity with the thirty-three checked-in sections and every
-`DSOLVE_PLAN.md` milestone; adopting upstream's new numbers would collide head-on with our
+`docs/notes/DSOLVE_PLAN.md` milestone; adopting upstream's new numbers would collide head-on with our
 long-established "§2.1.2". So: **our §2.2.N is upstream §2.1.N, and our §2.1.2 is upstream §2.2.2.**
 
 **Byte-identity is no longer the converter's regression test.** Upstream also reformatted its own

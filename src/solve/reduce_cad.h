@@ -1,7 +1,7 @@
 /*
  * reduce_cad.h
  *
- * Multivariate real-inequality engine for `Reduce` (REDUCE_PLAN.md, Phase 6):
+ * Multivariate real-inequality engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 6):
  * a Cylindrical Algebraic Decomposition over the reals.
  *
  * McCallum projection eliminates the last listed variable first, so the output

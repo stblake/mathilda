@@ -781,7 +781,7 @@ at a point off a step's breakpoint reads the step's derivative
 `Piecewise[{{Indeterminate, u == 0}}, 0]` as its generic value `0`, so the fitted
 constants carry no `Indeterminate` residue.
 
-Methods implemented so far (first-order family; see `DSOLVE_PLAN.md` for the full
+Methods implemented so far (first-order family; see `docs/notes/DSOLVE_PLAN.md` for the full
 roadmap):
 
 | Method | Solves |
@@ -1047,7 +1047,7 @@ Options: `GeneratedParameters` (constant head, default `C`), `Assumptions`,
 `Integrate[f, x]` is the public entry point for the rational-function
 integrator implemented in `src/calculus/integrate.c` (System dispatcher) and
 `src/calculus/intrat.c` (algorithm package).  Phase 1 of the
-`IntegrateRational.m` port (see `plans/INTEGRATE_PLAN.md`) closes the
+`IntegrateRational.m` port (see `docs/notes/plans/INTEGRATE_PLAN.md`) closes the
 following classes of integrand:
 
 A **list integrand** threads element-wise: `Integrate[{f1, ..., fn}, spec...]`
@@ -1129,7 +1129,7 @@ inputs (used by `DSolve`'s Green's-function solutions of impulse-forced ODEs).
   linear denominator `L(t) = c₁ t + c₀` (pole `ρ = −c₀/c₁`), so an `(x + t)`
   denominator closes too.  `N[RootSum[…]]` sums the body over the numericalized
   roots, so a `Log` logand or other non-rational body evaluates numerically
-  (MATHILDA_DIVERGENCES.md A12).
+  (docs/notes/MATHILDA_DIVERGENCES.md A12).
 - **Phase 8c — NaiveLogPart wired as universal LogToReal fallback** —
   the closure preference becomes
     1. `IntRationalLogPart -> LogToReal` (real elementary form),
@@ -3990,7 +3990,7 @@ Out[2]= {Sqrt[2] + x, 0}
 
 Polynomial-remainder chain in `K(coeffs)[x]`, used by the
 Lazard-Rioboo-Trager log-part computation in the
-`Integrate`` package (Phase 2 of `plans/INTEGRATE_PLAN.md`).
+`Integrate`` package (Phase 2 of `docs/notes/plans/INTEGRATE_PLAN.md`).
 
 - `SubresultantPolynomialRemainders[a, b, x]` gives the chain
   `{a, b, R_2, R_3, ...}` obtained by iterating pseudo-remainder

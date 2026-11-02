@@ -281,7 +281,7 @@ right thing by reporting the answer unverified rather than claiming it. And
 **#109 / #110 timeouts at 120 s** — the two third-kind elliptic cases needing the
 mod-p non-torsion certificate, which take 45 s / 43 s in Python and 42.9 s in
 Maxima. That is the GF(p) Jacobian performance gap already in
-`MATHILDA_DIVERGENCES.md` §C (512 s against Python's 0.8 s on a genus-4
+`docs/notes/MATHILDA_DIVERGENCES.md` §C (512 s against Python's 0.8 s on a genus-4
 certificate).
 
 **Speed, like for like.** Mathilda's summed 313.8 s is not comparable to the
@@ -332,9 +332,9 @@ statement about 247 cases, not 312.
 
 ## Phase 6 — the certificate (v0.241): 247 → 295 of 312
 
-Work item 1 of `MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md`, done. Full write-up in
+Work item 1 of `docs/notes/MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md`, done. Full write-up in
 `docs/spec/changelog/2026-09-28.md` (v0.241); the divergence in
-`MATHILDA_DIVERGENCES.md` §F12; the lesson in `tasks/lessons.md`.
+`docs/notes/MATHILDA_DIVERGENCES.md` §F12; the lesson in `tasks/lessons.md`.
 
 **Result.** 312-case corpus, `TIMEOUT=120 WORKERS=6`, scored by the shared
 `stress_judge.py`: **295 PASS / 14 HONEST / 2 WEAK / 1 FAIL**, zero false
@@ -436,7 +436,7 @@ divider, so it needs its own corpus run.
   use `python3.11`. `OUT=` / `REPORT=` redirect outputs; `stress_mathilda_v0239.json.bak`
   and `stress_mathilda_base0240.json` are kept beside the result as baselines.
 - A change to Part II's **verify gate** or to `Can` must be A/B'd against a pristine
-  worktree, not against the table in `MATHILDA_DIVERGENCES.md` §E — that table was
+  worktree, not against the table in `docs/notes/MATHILDA_DIVERGENCES.md` §E — that table was
   from build 0.174 and is seven versions of accumulated progress out of date. §E has
   now been re-recorded at v0.244.
 - `integrate_newton_leibniz_tests` sits at **62.4 s** of its 120 s `alarm()`, up from

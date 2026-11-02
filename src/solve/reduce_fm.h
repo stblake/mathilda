@@ -1,7 +1,7 @@
 /*
  * reduce_fm.h
  *
- * Linear real-arithmetic engine for `Reduce` (REDUCE_PLAN.md, Phase 3).
+ * Linear real-arithmetic engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 3).
  *
  * Solves a multivariate system of LINEAR equations and inequalities over the
  * reals by Fourier-Motzkin elimination: variables are projected out one at a

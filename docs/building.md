@@ -1,11 +1,269 @@
 # Building Mathilda
 
-This document covers building the Mathilda C backend and the Tauri desktop
-frontend on macOS, Linux, and Windows.
+This document covers the Mathilda **kernel** — the `Mathilda` executable and the
+embeddable `libmathilda` — on macOS, Linux and Windows: dependencies, build
+flags, installation, and embedding. The optional **desktop app** (a Tauri front
+end that runs the kernel as a sidecar) is covered in
+[Desktop app](#desktop-app-tauri), and common problems in
+[Troubleshooting](#troubleshooting).
 
 ---
 
-## Prerequisites (all platforms)
+## Kernel
+
+### Dependencies
+
+| Library | Package (Debian / Homebrew) | Status |
+|---------|-----------------------------|--------|
+| GCC | `build-essential` / `gcc` | **required** — the build rejects Apple/LLVM clang, which hides the glibc-portability warnings the Linux CI gates on |
+| GMP | `libgmp-dev` / `gmp` | **required** — arbitrary-precision integers |
+| MPFR | `libmpfr-dev` / `mpfr` | on by default — arbitrary-precision reals (`USE_MPFR=0` to omit) |
+| GNU Readline | `libreadline-dev` / `readline` | auto-detected — REPL line editing, history, multi-line input |
+| FLINT ≥ 3.0 | `libflint-dev` / `flint` | optional — fast, rigorous polynomial arithmetic over ℚ and number fields, rigorous `acb` numerics |
+| GMP-ECM | `libecm-dev` / `gmp-ecm` | optional — Elliptic Curve Method factorization |
+| LAPACK / BLAS | `liblapacke-dev libopenblas-dev` / *(Accelerate, built in)* | optional — machine-precision linear algebra |
+| FFTW ≥ 3 | `libfftw3-dev` / `fftw` | optional — fast `Fourier`/`FourierDCT`/`FourierDST` (naive O(n²) otherwise) |
+| PCRE2 | `libpcre2-dev` / `pcre2` | optional — `RegularExpression` and the regex string functions |
+| Raylib ≥ 4.0 | `libraylib-dev` / `raylib` | optional — interactive plot windows (text placeholder otherwise) |
+| CMake | `cmake` / `cmake` | only for the test suite |
+
+Every optional backend is auto-detected and **degrades gracefully** when absent.
+POSIX threads (used to parallelise packed-array kernels) need no extra package.
+
+**macOS (Homebrew):**
+
+```bash
+brew install gcc gmp mpfr readline cmake
+brew install flint gmp-ecm fftw pcre2 raylib      # optional
+```
+
+LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
+**Accelerate** framework.
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt install build-essential libgmp-dev libmpfr-dev libreadline-dev cmake
+sudo apt install libflint-dev libecm-dev liblapacke-dev libopenblas-dev \
+                 libfftw3-dev libpcre2-dev libraylib-dev   # optional
+```
+
+**Fedora / RHEL:** `gmp-devel`, `mpfr-devel`, `readline-devel`, `flint-devel`
+(≥ 3.0), `gmp-ecm-devel`, `lapack-devel` + `lapacke-devel` (BLAS via FlexiBLAS,
+detected automatically), `fftw-devel`, `pcre2-devel`, plus `cmake`.
+
+> **FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that merged
+> ANTIC for number-field arithmetic). Distributions that only package FLINT 2.x —
+> e.g. Ubuntu 22.04 or Debian Bullseye — are detected as too old and the build
+> falls back to `USE_FLINT=0`. See [Troubleshooting](#troubleshooting) for
+> `tools/install-flint.sh` and the conda-forge route.
+
+**Windows (MSYS2):** Mathilda builds as a native Windows executable
+(`Mathilda.exe`) with the MSYS2 GCC toolchain — no WSL or Cygwin needed.
+
+1. Install [MSYS2](https://www.msys2.org/) (default location `C:\msys64`).
+2. Open the **MSYS2 UCRT64** shell and install the toolchain and libraries:
+
+   ```bash
+   pacman -Syu                        # update MSYS2 first (may ask you to reopen the shell)
+   pacman -S --needed git make \
+     mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gmp \
+     mingw-w64-ucrt-x86_64-mpfr mingw-w64-ucrt-x86_64-pkgconf
+   pacman -S --needed mingw-w64-ucrt-x86_64-cmake      # optional: test suite
+   ```
+
+   This is the configuration the Windows CI job builds and smoke-tests on every
+   push. The older **MINGW64** environment works too (use the
+   `mingw-w64-x86_64-` package prefix). CLANG64/CLANGARM64 are unsupported.
+
+MPFR is on by default and, unlike the auto-detected backends, does not degrade
+gracefully: install it, or build with `USE_MPFR=0`. Some features are reduced
+on Windows:
+
+* **GNU Readline** isn't available under MinGW and is compiled out
+  automatically; the REPL works without line editing, history or multi-line
+  continuation.
+* **Threads** are off (`USE_THREADS=0`), so packed-array kernels run on one core.
+* **`TimeConstrained`** is cooperative only: the evaluator loop (and the
+  deadline polls in heavy kernels) enforce the budget, but a single long-running
+  C builtin that never returns to the loop cannot be interrupted. Timing,
+  `Pause` and memory reporting all work (via `src/mtime.c` and `src/meminfo.c`).
+* **Optional backends** (FLINT, LAPACK, ECM, FFTW, PCRE2, Raylib) are switched
+  off in the recommended build below, because CI doesn't test them on Windows.
+
+### Building
+
+The `makefile` auto-discovers `src/**/*.c` and links `./Mathilda`
+(`-std=c99 -O3`):
+
+```bash
+make -j$(nproc)
+./Mathilda                       # interactive REPL
+./Mathilda -file script.m        # run a script, printing only what it Prints
+./Mathilda --help                # all options
+```
+
+Disable optional backends for a leaner binary, e.g.
+`make -j$(nproc) USE_LAPACK=0 USE_GRAPHICS=0`. On Windows, from the UCRT64 shell,
+use the flags the CI job uses:
+
+```bash
+make -j4 USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
+         USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
+./Mathilda.exe
+```
+
+### Build flags reference
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `USE_MPFR` | `1` | Arbitrary-precision reals: `N[expr, prec]`, `Precision`/`Accuracy`, precision literals. `USE_MPFR=0` disables them (with a runtime warning). |
+| `USE_FLINT` | `1` | FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics. Auto-detected via `pkg-config` with a ≥ 3.0 floor; falls back to the classical (slower but still rigorous) path. |
+| `USE_LAPACK` | `1` | Machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack` + a CBLAS on Linux. Falls back to the pure-C path. |
+| `USE_ECM` | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; auto-disabled when not found. |
+| `USE_FFTW` | `1` | FFTW-backed `Fourier`/`FourierDCT`/`FourierDST`. Auto-detected via `pkg-config fftw3`; falls back to a naive O(n²) transform. |
+| `USE_REGEX` | `1` | PCRE2-backed `RegularExpression`, `StringMatchQ`, `StringCases`, `StringReplace`, `StringSplit`. Auto-detected via `pkg-config libpcre2-8`; those heads warn and stay unevaluated without it. |
+| `USE_THREADS` | `1` | POSIX-thread parallelism for element-wise packed-array kernels on large arrays. Off on Windows. |
+| `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib, auto-detected via `pkg-config raylib`. Without it, `Plot`/`Show`/… print a text placeholder. |
+| `USE_READLINE` | `1` | GNU Readline for the REPL. Auto-detected; off on Windows. On macOS the makefile prefers Homebrew's GNU Readline over Apple's libedit shim, which cannot edit multi-line input. |
+| `HOMEBREW=<prefix>` | auto (`brew --prefix`) | Homebrew prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths for the optional dependencies above. Auto-detected with `brew --prefix`, so the Apple-Silicon `/opt/homebrew`, the Intel `/usr/local`, a Linuxbrew prefix, and any custom install all work without editing the makefile. Pass it explicitly to force a prefix, or **opt out of all Homebrew discovery** with `HOMEBREW=` (empty) or `HOMEBREW=/nonexisting`. Honoured identically by the makefile and the CMake test build. |
+| `SYSTEM_PREFIX=<prefix>` | `/usr/local` (empty on Windows) | Conventional site prefix whose `include` and `lib` directories (when they exist) are added to the compile/link lines and to the GMP-ECM and LAPACK probes. Empty by default on native Windows, where MSYS2's `/usr` is the Cygwin runtime tree. Opt out with `SYSTEM_PREFIX=` (empty). `/usr/include` itself is never added. |
+| `EXTRA_LIBS="…"` | empty | Extra link libraries, e.g. a BLAS the probe does not know. |
+
+`HOMEBREW` and `SYSTEM_PREFIX` are read from the command line or the environment (`make HOMEBREW=/opt/homebrew`,
+`export HOMEBREW=`); the CMake test build also accepts `-DHOMEBREW=...`. A packager building
+against a private prefix can pass `HOMEBREW= SYSTEM_PREFIX=` so that the makefile searches only
+the paths it is given (`CFLAGS`, `pkg-config`). `make print-flags` prints the fully expanded
+compile and link flags.
+
+### Installing
+
+**The `Mathilda` executable is not self-contained.** Its kernel is written partly
+in C and partly in its own language: a tree of `.m` bootstrap modules under
+`src/internal/` is loaded *at runtime* — some at startup, some lazily on first
+use. Copy the binary alone and it will start, but `Simplify`/`FullSimplify`, the
+CRC integral table behind `Integrate`, the Bessel and distribution rules, and the
+`ParallelMixedTower` integration method will all be missing (you'll see a
+`LoadModule::nofile` diagnostic on stderr). An install must therefore provide the
+runtime module tree (the whole `src/internal/` directory) and the shared
+libraries the binary was linked against.
+
+#### `make install` (recommended)
+
+```bash
+make                                   # build (PREFIX optional here — see note)
+sudo make install PREFIX=/usr/local    # install binary + module tree under PREFIX
+```
+
+| What | Where |
+|------|-------|
+| the `Mathilda` executable | `$(PREFIX)/bin/Mathilda` |
+| the runtime `.m` module tree | `$(PREFIX)/share/mathilda/internal/` |
+| the embedding C API header | `$(PREFIX)/include/mathilda_ffi.h` |
+| the static kernel library | `$(PREFIX)/lib/libmathilda.a` |
+| the shared kernel library | `$(PREFIX)/lib/libmathilda.so.0` + `libmathilda.so` (macOS: `libmathilda.0.dylib` + `libmathilda.dylib`; Windows: `bin/libmathilda.dll` + `lib/libmathilda.dll.a`) |
+| the pkg-config file | `$(PREFIX)/lib/pkgconfig/mathilda.pc` |
+
+The binary locates its modules **relative to its own path**
+(`<bindir>/../share/mathilda/internal/`), so the install is **relocatable** and
+needs no environment variable. `PREFIX` on the **build** line only bakes in a
+compile-time absolute fallback (`-DMATHILDA_PREFIX`) for environments where the
+executable can't determine its own location; `PREFIX` on the **install** line is
+what chooses the destination. The standard GNU variables are honoured for
+packaging:
+
+```bash
+make install DESTDIR=/tmp/stage PREFIX=/usr    # staged install (Debian, SageMath, …)
+make install prefix=/opt/mathilda              # or override bindir=/… datadir=/… directly
+make uninstall PREFIX=/usr/local               # remove everything `make install` put there
+```
+
+Because resolution is exe-relative, `DESTDIR` staging bakes in no absolute path.
+
+#### How the binary finds its modules
+
+`src/loadmodule.c` searches these locations in order (first hit wins):
+
+1. **`$MATHILDA_HOME`** — point a binary at any module tree:
+   `MATHILDA_HOME=/opt/app/share/mathilda/internal ./Mathilda`.
+2. **`<exe>/src/internal/`** — running straight from a build tree (the repo root).
+3. **`<exe>/../share/mathilda/internal/`** — the layout `make install` creates.
+   The same path is also tried relative to the *shared library* holding the
+   kernel, so an installed `libmathilda` loaded into any host finds its modules.
+4. **compile-time `-DMATHILDA_PREFIX`** — `<prefix>/share/mathilda/internal/`,
+   baked in when you build with `make PREFIX=…`.
+
+#### Manual install
+
+```bash
+mkdir -p /opt/app/bin /opt/app/share/mathilda
+cp Mathilda /opt/app/bin/
+cp -R src/internal /opt/app/share/mathilda/internal
+/opt/app/bin/Mathilda          # finds ../share/mathilda/internal automatically
+```
+
+Or skip the layout entirely and set `MATHILDA_HOME` to wherever you placed
+`src/internal`.
+
+#### Shared libraries
+
+The binary is dynamically linked against every backend detected at build time, so
+the **target machine needs those same libraries** (`ldd ./Mathilda` on Linux,
+`otool -L ./Mathilda` on macOS):
+
+* **Always:** GMP, MPFR, GNU Readline, plus the C runtime.
+* **When detected at build:** FLINT, GMP-ECM, PCRE2, FFTW, Raylib, LAPACK/BLAS.
+  Turn optional backends off for fewer dependencies
+  (e.g. `make USE_GRAPHICS=0 USE_FFTW=0 USE_ECM=0`).
+* **Linux / macOS:** install the *runtime* packages on the target — the
+  `-dev`/`-devel` headers are only needed to build. Accelerate ships with macOS.
+* **Windows:** put the DLLs `Mathilda.exe` depends on (GMP, MPFR, the GCC
+  runtime, …) beside the executable or on `PATH` (`C:\msys64\ucrt64\bin`, or
+  `C:\msys64\mingw64\bin` for a MinGW64 build); `ldd ./Mathilda.exe` in the
+  MSYS2 shell lists them. The desktop app bundles the sidecar and its DLLs.
+
+### Embedding library (libmathilda)
+
+The kernel can run **in-process** in another program (a Python/Cython extension,
+a Jupyter kernel, a mobile app). The same objects, minus `repl.o`, build a
+library behind the small C API in `src/ffi/mathilda_ffi.h`:
+`mathilda_ffi_init`, `mathilda_ffi_eval` / `_eval_latex` / `_eval_json` /
+`_eval_cell`, `mathilda_ffi_free`, and a few editor helpers.
+
+```bash
+make lib                     # libmathilda.a + the shared library, in the tree
+make install prefix=/opt/m   # also installs include/mathilda_ffi.h, lib/libmathilda.*,
+                             #   lib/pkgconfig/mathilda.pc
+make check-install           # install to a scratch prefix and link C hosts against it
+```
+
+| Platform | Shared library | Notes |
+|----------|----------------|-------|
+| Linux    | `libmathilda.so.0` (soname) + `libmathilda.so` | linked `-Wl,--no-undefined` |
+| macOS    | `libmathilda.0.dylib` + `libmathilda.dylib` | `@rpath` id in the tree; `make install` rewrites it to the absolute path and re-signs |
+| Windows  | `libmathilda.dll` + import lib `libmathilda.dll.a` | DLL goes to `bin/` |
+
+The trailing `0` is `SHLIB_ABI` in the makefile. It tracks the C ABI of
+`mathilda_ffi.h`, not `$VersionNumber`, so bump it only for an incompatible change
+to that header. Every object is compiled `-fPIC -fvisibility=hidden` (except on
+Windows). That lets the static archive link into a Python extension module, and
+it limits the shared library's exports to the `MATHILDA_FFI_API` functions. On
+Windows the `__declspec(dllexport)` in the header does the same job.
+
+A static consumer gets its link line from `pkg-config --static --libs mathilda`
+(the dependencies detected at build time). It also has to call
+`mathilda_ffi_set_home()` with `pkg-config --variable=internaldir mathilda`. The
+shared library finds its module tree relative to its own location.
+
+---
+
+## Desktop app (Tauri)
+
+The desktop app wraps the kernel as a sidecar process (it talks to it over the
+NDJSON pipe protocol), so first install the kernel dependencies above, then the
+Tauri toolchain below.
+
+### Prerequisites (all platforms)
 
 - **Rust toolchain** — install via [rustup.rs](https://rustup.rs/)
 - **Node.js 18+** — for the Tauri frontend
@@ -13,9 +271,9 @@ frontend on macOS, Linux, and Windows.
 
 ---
 
-## macOS
+### macOS
 
-### Dependencies
+#### Dependencies
 
 ```bash
 brew install gmp readline
@@ -30,7 +288,7 @@ brew install gmp-ecm
 brew install raylib
 ```
 
-### Build
+#### Build
 
 ```bash
 # 1. Build the Mathilda sidecar and install it into the Tauri bundle
@@ -45,9 +303,9 @@ The `.app` bundle is in `frontend/src-tauri/target/release/bundle/macos/`.
 
 ---
 
-## Linux (Ubuntu 22.04+ / Debian Bookworm+)
+### Linux (Ubuntu 22.04+ / Debian Bookworm+)
 
-### Dependencies
+#### Dependencies
 
 ```bash
 sudo apt-get update
@@ -85,7 +343,7 @@ cargo install tauri-cli
 > Note: Ubuntu 20.04 ships `libwebkit2gtk-4.0`, which is incompatible with
 > Tauri v2. Ubuntu 22.04 or newer is required.
 
-### Build
+#### Build
 
 ```bash
 cd frontend
@@ -98,13 +356,13 @@ The `.deb` and `.AppImage` are in `frontend/src-tauri/target/release/bundle/`.
 
 ---
 
-## Windows (MSYS2 + MinGW64)
+### Windows (MSYS2 + MinGW64)
 
 Mathilda uses GNU make and GCC. The recommended Windows build environment is
 **MSYS2** with the MinGW64 toolchain. The Tauri side uses the standard Windows
 Rust/MSVC toolchain.
 
-### Dependencies
+#### Dependencies
 
 1. Install [MSYS2](https://www.msys2.org/) (default path `C:\msys64`).
 
@@ -146,7 +404,7 @@ Rust/MSVC toolchain.
    ```
    This lets `make`, `gcc`, and `pkg-config` work from PowerShell/CMD.
 
-### Build the C backend (PowerShell or CMD)
+#### Build the C backend (PowerShell or CMD)
 
 ```powershell
 # From the repo root — GNU make from MSYS2 must be on PATH
@@ -169,7 +427,7 @@ output-capture omissions — the kernel is otherwise fully functional. Timing
 `MaxMemoryUsed`) all work, via `QueryPerformanceCounter` / `Sleep` /
 `GetProcessMemoryInfo` in `src/mtime.c` and `src/meminfo.c`.
 
-### Install the sidecar and package the app
+#### Install the sidecar and package the app
 
 ```powershell
 cd frontend
@@ -181,53 +439,7 @@ The `.msi` installer is in `frontend\src-tauri\target\release\bundle\msi\`.
 
 ---
 
-## C backend only (no Tauri frontend)
-
-```bash
-make USE_ECM=0 -j$(nproc)   # macOS/Linux
-./Mathilda                   # interactive REPL
-./Mathilda -file script.m    # run a .m file as a script, then exit
-```
-
-On Windows (MinGW64):
-```bash
-make USE_ECM=0 USE_READLINE=0 -j4
-./Mathilda.exe
-```
-
-### Embedding library (libmathilda)
-
-The same objects, minus `repl.o`, also build an in-process kernel behind the C
-API in `src/ffi/mathilda_ffi.h`:
-
-```bash
-make lib                     # libmathilda.a + the shared library, in the tree
-make install prefix=/opt/m   # also installs include/mathilda_ffi.h, lib/libmathilda.*,
-                             #   lib/pkgconfig/mathilda.pc
-make check-install           # install to a scratch prefix and link C hosts against it
-```
-
-| Platform | Shared library | Notes |
-|----------|----------------|-------|
-| Linux    | `libmathilda.so.0` (soname) + `libmathilda.so` | linked `-Wl,--no-undefined` |
-| macOS    | `libmathilda.0.dylib` + `libmathilda.dylib` | `@rpath` id in the tree; `make install` rewrites it to the absolute path and re-signs |
-| Windows  | `libmathilda.dll` + import lib `libmathilda.dll.a` | DLL goes to `bin/` |
-
-The trailing `0` is `SHLIB_ABI` in the makefile. It tracks the C ABI of
-`mathilda_ffi.h`, not `$VersionNumber`, so bump it only for an incompatible change
-to that header. Every object is compiled `-fPIC -fvisibility=hidden` (except on
-Windows). That lets the static archive link into a Python extension module, and
-it limits the shared library's exports to the `MATHILDA_FFI_API` functions. On
-Windows the `__declspec(dllexport)` in the header does the same job.
-
-A static consumer gets its link line from `pkg-config --static --libs mathilda`
-(the dependencies detected at build time). It also has to call
-`mathilda_ffi_set_home()` with `pkg-config --variable=internaldir mathilda`. The
-shared library finds its module tree relative to its own location.
-
----
-
-## Dev Mode (all platforms)
+### Dev Mode (all platforms)
 
 ```bash
 cd frontend
@@ -235,28 +447,6 @@ cd frontend
 npm install
 cargo tauri dev
 ```
-
----
-
-## Build flags reference
-
-| Flag | Default | Effect |
-|------|---------|--------|
-| `USE_ECM=0` | `1` | Disable GMP-ECM factorization. When `1`, the build autodetects the system GMP-ECM library (`gmp-ecm` / `libecm-dev`) via a compile-link probe and links `-lecm`; auto-disabled when it is not found. |
-| `USE_MPFR=0` | `1` | Disable MPFR arbitrary-precision reals |
-| `USE_FLINT=0` | `1` | Disable FLINT (≥ 3.0) kernels (falls back to the classical algebraic-extension GCD/Factor and non-FLINT numerics). Auto-disabled when FLINT ≥ 3.0 is not found by `pkg-config`. |
-| `USE_READLINE=0` | `1` | Disable GNU Readline (required on Windows; auto-detected) |
-| `USE_GRAPHICS=0` | `1` | Disable Raylib 2D graphics engine |
-| `USE_LAPACK=0` | `1` | Disable BLAS/LAPACK linear-algebra kernels |
-| `HOMEBREW=<prefix>` | auto (`brew --prefix`) | Homebrew prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths for the optional dependencies above. Auto-detected with `brew --prefix`, so the Apple-Silicon `/opt/homebrew`, the Intel `/usr/local`, a Linuxbrew prefix, and any custom install all work without editing the makefile. Pass it explicitly to force a prefix, or **opt out of all Homebrew discovery** with `HOMEBREW=` (empty) or `HOMEBREW=/nonexisting`. Honoured identically by the makefile and the CMake test build. |
-
-| `SYSTEM_PREFIX=<prefix>` | `/usr/local` (empty on Windows) | Conventional site prefix whose `include` and `lib` directories (when they exist) are added to the compile/link lines and to the GMP-ECM and LAPACK probes. Empty by default on native Windows, where MSYS2's `/usr` is the Cygwin runtime tree. Opt out with `SYSTEM_PREFIX=` (empty). `/usr/include` itself is never added. |
-
-`HOMEBREW` and `SYSTEM_PREFIX` are read from the command line or the environment (`make HOMEBREW=/opt/homebrew`,
-`export HOMEBREW=`); the CMake test build also accepts `-DHOMEBREW=...`. A packager building
-against a private prefix can pass `HOMEBREW= SYSTEM_PREFIX=` so that the makefile searches only
-the paths it is given (`CFLAGS`, `pkg-config`). `make print-flags` prints the fully expanded
-compile and link flags.
 
 ---
 

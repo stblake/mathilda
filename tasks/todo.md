@@ -72,7 +72,7 @@ inverse_function 8, euler 8, multiple_radicals 6, laurent_poly_subst 5, rational
 - [ ] W8 Trager over Q(params) (47 Trager declines "radicand is not a rational function over Q"; 6 "algebraic constant in the integrand")
 - [ ] W9 general curves: primitive element + integral basis for F(x, y) = 0 (38 PMT "tower construction failed", 80 Trager "nested radicals":
       roots nested over non-conics such as Sqrt[x^4 + 1] inner; inverse_function 2, chebychev 2) -- separate plan
-- [ ] W10 close-out: full rerun with FriCAS; regenerate ALGEBRAIC_INTEGRAL_PERF.md (tools/ddi_report.py) with before/after vs v0.6087
+- [ ] W10 close-out: full rerun with FriCAS; regenerate docs/notes/ALGEBRAIC_INTEGRAL_PERF.md (tools/ddi_report.py) with before/after vs v0.6087
       and v0.6100 plus the Mathilda-vs-FriCAS timing table; build and send the PDF; review section here; memory update
       (PMT parameter field, substitution pre-pass, two-point Kummer)
 
@@ -94,7 +94,7 @@ Housekeeping:
 Plan: ~/.claude/plans/let-s-stress-test-both-synchronous-valiant.md
 Standard: antiderivatives valid for ALL complex x; one commit + tag per fix; no PMT time caps.
 
-- [x] P0 baseline report ALGEBRAIC_INTEGRAL_PERF.md/.pdf (PMT rerun, reclassify), commit v0.6087
+- [x] P0 baseline report docs/notes/ALGEBRAIC_INTEGRAL_PERF.md/.pdf (PMT rerun, reclassify), commit v0.6087
       (PMT budgets off on explicit Method, eulerStep Return-in-With fix, harness/corpus/report)
 - [x] P1a Series: fixed pad loses k orders at a k-th order pole, short result returned silently (series.c)
 - [x] P1b PMT gate on positive evidence (fac local, Hold/Temporary, reclim Check, C overflow flag)
@@ -145,9 +145,9 @@ Plan: ~/.claude/plans/let-s-look-into-and-happy-perlis.md
 
 # Trager (simple radicals) + Kauers log heuristic as .m Integrate methods (2026-10-29)
 
-Plan: TRAGER_PLAN.md (copy of ~/.claude/plans/i-want-to-use-proud-sparrow.md)
+Plan: docs/notes/TRAGER_PLAN.md (copy of ~/.claude/plans/i-want-to-use-proud-sparrow.md)
 
-- [x] T1 TRAGER_PLAN.md + todo; probe Modulus support of polynomial builtins
+- [x] T1 docs/notes/TRAGER_PLAN.md + todo; probe Modulus support of polynomial builtins
 - [x] T2 Phase 0-1 port (Common, Validate, Reduce, Genus, Basis, Arithmetic) + test_trager_phase0, test_trager_basis_arith
 - [x] T3 Shift + Hermite + test_trager_shift_hermite
 - [x] T4 Residues + test_trager_residues
@@ -159,7 +159,7 @@ Plan: TRAGER_PLAN.md (copy of ~/.claude/plans/i-want-to-use-proud-sparrow.md)
 - [x] T10 docs/spec calculus.md, changelog, review section, lessons
 
 ### Review (v0.6082)
-- Design change from the plan (recorded in TRAGER_PLAN.md): the y^i components are integrated separately
+- Design change from the plan (recorded in docs/notes/TRAGER_PLAN.md): the y^i components are integrated separately
   ([T] Appendix A). Residue divisors are then exact two-generator ideals, so there is no branch-place hack.
 - Engines:
   - Trager: Q-basis over a small splitting field, else per Galois orbit over Q[Z]/(q), with fallback to the
@@ -302,7 +302,7 @@ Baseline (v0.6057, same machine; reference = local 14.0 kernel):
       structural bodies), probe reused as first term (body evaluated once per index), integer index step,
       symtab stored hashes + doubling table. Generation 4.7 -> ~3.2 s.
 - [x] Reclaim Module locals (v0.6056): +111,005 -> +9 symbols per trace, 548 -> 50 B per Module call
-- [x] Rest of SYMBOL_TABLE_IMPROVEMENTS.md (v0.6057): ordered iteration, single copy per changed path + stack buffers, single interning per local; symbol ids declined on measurements
+- [x] Rest of docs/notes/SYMBOL_TABLE_IMPROVEMENTS.md (v0.6057): ordered iteration, single copy per changed path + stack buffers, single interning per local; symbol ids declined on measurements
 - [ ] Factor over Q(I), univariate: Factor[x^2 + 2 I x - 1] should be (I + x)^2 (pre-existing gap)
 - [ ] Cancel numerator form: Mathilda expands the quotient numerator ((1 + a) y -> y + a y); the reference keeps it
 
@@ -910,3 +910,14 @@ Plan: packages/feyncalc/FEYNCALC_REMAINING_GAPS.md (195 tests, clusters G1-G13).
 - [ ] G2 Factor sign convention, G3 InputForm printer
 - [ ] G7 G8 G10 G12 triage
 - [ ] G13 singletons
+
+# Repository cleanup + README (2026-11-02, docs only, no bump)
+
+Plan: ~/.claude/plans/snappy-sprouting-pie.md
+
+- [x] Move root plans/notes, plans/, reports/, thoughts/ -> docs/notes/; blogs/ -> docs/blog/; rewrite refs (149 files)
+- [x] Untrack generic AI-tool scaffolding + worktree gitlinks; remove dead makefile_tests, run_lldb.sh, load.m, *.bak, repo-map.md
+- [x] .gitignore reorganised; local PDFs -> ignored papers/; git status clean
+- [x] README rewrite (verified example session), CONTRIBUTING.md, docs/building.md restructure, docs/notes/README.md
+- [x] Changelog entry
+- [x] Verify: build, check-c99/messages/compile-coverage, link check clean; ctest -LE nightly: all pass except dsolve_tests (EigenvalueProblem y'[0]==0,y[Pi]==0 check) -- pre-existing, the diff changes no code

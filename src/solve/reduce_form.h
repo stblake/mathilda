@@ -1,7 +1,7 @@
 /*
  * reduce_form.h
  *
- * Internal logical normal-form layer for `Reduce` (REDUCE_PLAN.md §"Internal
+ * Internal logical normal-form layer for `Reduce` (docs/notes/REDUCE_PLAN.md §"Internal
  * solution normal form").  Reduce's engines all *produce* a disjunction of
  * cell-conjunctions, and a real Reduce result is overwhelmingly a top-level
  * `Or` of `And`s -- so the working representation is DNF:

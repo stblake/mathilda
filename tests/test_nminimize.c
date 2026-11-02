@@ -158,7 +158,7 @@ static void test_returned_point_feasible(void) {
  * regresses toward the guarantee without tracking the exact achieved value.
  * Each fails against a pre-fix binary (1.99990 >= 2 - 1e-9 is False) and passes
  * after. A feasibility test that passes both before and after a feasibility fix
- * is not testing anything. See NMINIMIZE_FEASIBILITY_BUG.md. */
+ * is not testing anything. See docs/notes/NMINIMIZE_FEASIBILITY_BUG.md. */
 static void test_returned_point_feasible_two_sided(void) {
     /* Inequality: the returned point must actually reach the constraint
      * boundary, not stop 1e-4 short of it. */
@@ -1587,7 +1587,7 @@ static void test_fixed_charge_flow(void) {
  * is that when no candidate meets NM_FEAS_RETURN, nm_better_return ranks purely
  * by violation and discards objective guidance, the same degeneration a tight
  * RANKING threshold caused in test_minimax_chebyshev. See
- * NMINIMIZE_FEASIBILITY_BUG.md, "CORRECTION + OPEN REGRESSION".
+ * docs/notes/NMINIMIZE_FEASIBILITY_BUG.md, "CORRECTION + OPEN REGRESSION".
  *
  * This assertion should be revisited, and ideally reverted to checking a finite
  * optimum, once that is resolved.
@@ -1595,7 +1595,7 @@ static void test_fixed_charge_flow(void) {
  * The underlying limitation — Mathilda's mixed-integer path reaches only ~1e-3
  * per-constraint feasibility on coupled flow-conservation equalities, against
  * ~4e-12 for purely continuous problems — is real, is unchanged by this ticket,
- * and is recorded as follow-up in NMINIMIZE_FEASIBILITY_BUG.md. When that path
+ * and is recorded as follow-up in docs/notes/NMINIMIZE_FEASIBILITY_BUG.md. When that path
  * improves, this assertion should flip back to checking a finite optimum. */
 
 /* 2026-09-28 regressions. */

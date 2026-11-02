@@ -1,7 +1,7 @@
 /*
  * reduce_int.c
  *
- * Integer / Rationals domain for `Reduce` (REDUCE_PLAN.md, Phase 5).  See
+ * Integer / Rationals domain for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 5).  See
  * reduce_int.h.  Reuses `Solve[..., dom]` for the heavy lifting and reformats
  * its solution list; falls back to bounded integer enumeration (reduce_univar_
  * integers) for the univariate inequality case Solve declines.

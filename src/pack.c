@@ -1346,7 +1346,7 @@ static void pack_diag_dump(void) {
             "\n       A head here either needs an NDArray fast path, or needs "
             "adding to\n       AWARE / INT64_OK in src/pack.c once it has one. "
             "See\n       docs/design/packed_arrays.md and "
-            "plans/HPC_IMPROVEMENT_PLAN.md.\n");
+            "docs/notes/plans/HPC_IMPROVEMENT_PLAN.md.\n");
 }
 
 void pack_gate_report(const Expr* head, const Expr* arg) {

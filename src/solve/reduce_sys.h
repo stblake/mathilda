@@ -1,7 +1,7 @@
 /*
  * reduce_sys.h
  *
- * Parametric linear-system engine for `Reduce` (REDUCE_PLAN.md, Phase 4).
+ * Parametric linear-system engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 4).
  *
  * Solves a system of LINEAR equations in the solve variables over the complex
  * numbers, where the coefficients may involve free parameters, and reports the

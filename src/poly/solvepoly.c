@@ -5,7 +5,7 @@
  * dispatched from `Solve` (src/solve.c).  Also reachable directly as
  * the context-qualified builtin `Solve`SolvePolynomialEquality`.
  *
- * Algorithm: plans/SOLVE_PLAN.md.  Memory contract: every helper returns a
+ * Algorithm: docs/notes/plans/SOLVE_PLAN.md.  Memory contract: every helper returns a
  * freshly-owned Expr* (or Expr**) -- inputs are borrowed and deep-
  * copied wherever they appear in the output.  On NULL return from the
  * top-level dispatcher, `res` (the original builtin argument) is left

@@ -194,7 +194,7 @@ static bool is_likely_irreducible_multivariate(Expr* P, Expr** vars,
              * irreducibility as well at a fraction of the cost.  (Before
              * bz_factor_to_expr moved to GMP coefficients such an image was
              * returned unfactored -- a false "irreducible" confirmation; see
-             * plans/FACTOR_PLAN.md §12.F6.) */
+             * docs/notes/plans/FACTOR_PLAN.md §12.F6.) */
             bool image_has_bigint = false;
             for (int i = 0; i <= deg_main; i++) {
                 Expr* c = get_coeff(image, main_var, i);

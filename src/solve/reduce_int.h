@@ -1,7 +1,7 @@
 /*
  * reduce_int.h
  *
- * Integer / Rationals domain for `Reduce` (REDUCE_PLAN.md, Phase 5).
+ * Integer / Rationals domain for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 5).
  *
  * A thin adapter over the existing `Solve[..., Integers|Rationals]` engine: its
  * solution list (finite tuples, or parametric families with C[k] generators) is

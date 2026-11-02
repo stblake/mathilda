@@ -3,7 +3,7 @@
  * -----------------
  * Minimal algebraic-number-field layer for the integer Diophantine
  * engines (the Thue solver, and later the elliptic-curve solver): the
- * shared "Tier-3 prerequisite" named in SOLVE_INTEGERS.md.
+ * shared "Tier-3 prerequisite" named in docs/notes/SOLVE_INTEGERS.md.
  *
  * A NumberField models K = Q(theta) with theta a root of a MONIC
  * irreducible integer polynomial f (the defining polynomial).  It carries

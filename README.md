@@ -1,537 +1,158 @@
 # Mathilda
 
-Mathilda is a small, open source computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99 and its own language, it implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions. 
+**A symbolic computer algebra system written in C99.**
 
-Today Mathilda spans over **370,000 lines of C99** across **577 source modules** (947 files including headers), exposing **more than 780 built-in functions** organized into **36 functional categories** — from arbitrary-precision arithmetic and symbolic calculus through polynomial factorization, dense linear algebra, a `Compile[]` bytecode compiler with transparent packed-array acceleration, numerical integration and optimization, integer and Diophantine equation solving, graph theory, machine learning, and interactive 2D/3D graphics.
+[![Build](https://github.com/stblake/mathilda/actions/workflows/build.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/build.yml)
+[![Tests](https://github.com/stblake/mathilda/actions/workflows/tests.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/tests.yml)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-stblake.github.io%2Fmathilda-informational)](https://stblake.github.io/mathilda/)
 
-## 🌟 Key Features
+Mathilda is built around a small, general core: a recursive expression model,
+infinite (fixed-point) evaluation driven by attributes, structural pattern
+matching with backtracking, and rewriting rules. On top of that core it builds a
+broad mathematical library: exact and arbitrary-precision arithmetic, symbolic
+calculus, polynomial algebra, equation solving, special functions, numerical
+analysis, and a `Compile[]` bytecode compiler over transparently packed arrays.
 
-**Evaluation engine**
-* **Infinite evaluation semantics:** expressions are repeatedly evaluated top-down until a fixed point is reached.
-* **Attribute-driven evaluator:** a small generic core consults per-symbol bitflags (`HoldFirst`/`HoldAll`, `Flat`, `Orderless`, `Listable`, `OneIdentity`, `Protected`, …) to decide how to process each call.
+The kernel is about 580,000 lines of C99 across 850 source files, plus 14,000
+lines of Mathilda's own language for the rule-based parts of the library. It
+exposes more than 1,250 built-in symbols and is checked by over 600 C unit-test
+suites. Big-number arithmetic uses GMP, MPFR and (optionally) FLINT. The name
+honours David Stoutemyer's PICOMATH-80.
 
-**Pattern matching & rules**
-* **First-class pattern matching:** `Blank` (`_`), `BlankSequence` (`__`), `BlankNullSequence` (`___`), named bindings (`x_`, `x_h`), `Condition` (`/;`), `PatternTest` (`?`), `Optional`, and `Repeated` — with full sequence backtracking.
-* **Rule engine:** transformation rules (`->`, `:>`) and replacement operators (`/.`, `//.`, `Replace`).
+## A taste of Mathilda
 
-**Numbers**
-* **Arbitrary-precision integers** via the GNU Multiple Precision Arithmetic Library (GMP), with automatic promotion/demotion from machine integers.
-* **Exact rationals and complex numbers**, plus **MPFR-backed arbitrary-precision reals** with precision/accuracy tracking (`N[expr, prec]`, precision literals such as `` 3.98`50 ``).
-* **Interval arithmetic** (`Interval`) for rigorous enclosures.
+```
+In[1]:= Integrate[1/(x^3 + 1), x]
+Out[1]= ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] + 1/3 Log[1 + x] - 1/6 Log[1 - x + x^2]
 
-**Symbolic mathematics**
-* **Calculus:** symbolic differentiation (`D`, `Dt`, `Derivative`); multi-method integration (`Integrate`) cascading rational-function, Risch–Norman, Cherry/Liouvillian, radical-substitution, derivative-divides, and CRC integral-table methods, plus definite/contour integration; `Series`, `Limit` (with a Gruntz most-rapidly-varying engine), and symbolic summation and products (`Sum`, `Product` — finite and infinite families via Gosper, hypergeometric, telescoping, and zeta algorithms).
-* **Polynomials:** univariate and multivariate arithmetic, factorization (square-free decomposition, Hensel lifting, irreducibility testing), algebraic-number factoring over ℚ(α), Gröbner bases (incl. over finite fields), GCD/LCM, resultants, and partial fractions — with optional FLINT acceleration.
-* **Linear algebra:** `Det`, `Inverse`, `Dot`, `Cross`; LU / QR / Cholesky / SVD / Schur decompositions; eigenvalues and eigenvectors via multiple algorithm kernels; norms, rank, and condition numbers — with optional LAPACK/BLAS acceleration for machine-precision work.
-* **Special functions:** `Gamma`, `LogGamma`, `PolyGamma`, `Zeta`, `HurwitzZeta`, `LerchPhi`, `PolyLog`, the Bessel and Airy families, `Erf`/`Erfc`/`Erfi`, exponential/log/sine/cosine integrals, `HypergeometricPFQ` (and `0F1`/`1F1`/`2F1`), Legendre, `BernoulliB`, `EulerE`, and more — many with rigorous `acb` numerics when built with FLINT.
-* **Simplification:** `Simplify`/`FullSimplify` with a complexity-driven search, trigonometric identities and rationalization, radical denesting, and an assumptions framework (`$Assumptions`, `Assuming`, `Element`).
+In[2]:= Series[Tan[x], {x, 0, 7}]
+Out[2]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7 + O[x]^8
 
-**Equation solving**
-* **Over the reals and complexes:** `Solve` for polynomial (via radicals and `Root` objects), radical, transcendental, and nonlinear systems; `SolveAlways`, `Eliminate`, `ToRadicals`, and `GroebnerBasis`.
-* **Diophantine (`Solve[…, Integers]`):** a dedicated integer-equation engine — linear systems via Hermite normal form, Pell and generalized Pell equations, Thue equations through a number-field/unit layer (Voronoi and Minkowski–LLL unit search), the sum-of-three-cubes search (Booker/Heath-Brown), Ramanujan–Nagell, ternary quadratic forms, Egyptian fractions, and power-sum searches (Lander–Parkin, Frye).
+In[3]:= DSolve[y''[x] + y[x] == Sin[x], y[x], x]
+Out[3]= {{y[x] -> -1/2 x Cos[x] + C[1] Cos[x] - C[2] Sin[x]}}
 
-**Numerical analysis**
-* **Quadrature & sums:** `NIntegrate` (adaptive, oscillatory, Levin-collocation, MPFR-precision), `NSum`/`NProduct` (Euler–Maclaurin and convergence acceleration), `NResidue`.
-* **Differential equations:** `NDSolve` for ODE initial-value problems and PDE systems (with upwind schemes and optional BLAS/LAPACK acceleration).
-* **Optimization:** global `NMinimize`/`NMaximize` (differential evolution, simulated annealing, basin hopping, SHGO, dual annealing) and local `FindMinimum`/`FindMaximum` (L-BFGS-B, Nelder–Mead, Powell, SLSQP, COBYLA/COBYQA, trust-region), plus mixed-integer and constrained problems.
-* **Roots & local analysis:** `FindRoot`, `NSolve`, `NRoots`, `NLimit`, `NSeries`, `ND`.
+In[4]:= Solve[x^2 - 2 y^2 == 1 && 0 < x < 100 && y > 0, {x, y}, Integers]
+Out[4]= {{x -> 3, y -> 2}, {x -> 17, y -> 12}, {x -> 99, y -> 70}}
 
-**High-performance numerics**
-* **Packed arrays:** ordinary `List`s of machine numbers are transparently backed by dense `NDArray` storage, and element-wise, reduction, and structural kernels operate directly on the buffer — optionally multithreaded across cores — for order-of-magnitude speedups over boxed evaluation.
-* **`Compile[]`:** a bytecode compiler that lowers numeric expressions to a register VM at both scalar and rank-1 array shapes, with auto-compilation of `Table`/`Sum`/`NIntegrate` bodies, and `CompileDiagnostics` for inspecting what lowered.
-* **Optional acceleration backends:** LAPACK/BLAS for dense linear algebra and FFTW for `Fourier`.
+In[5]:= Sum[1/k^2, {k, 1, Infinity}]
+Out[5]= 1/6 Pi^2
 
-**Number theory & factorization**
-* **Number theory:** `GCD`, `LCM`, `ExtendedGCD`, `PowerMod`, `Divisors`, `DivisorSigma`, `EulerPhi`, `MoebiusMu`, `PrimitiveRoot`, `MultiplicativeOrder`, continued fractions, and more.
-* **Integer factorization:** a unified, automatic pipeline alongside explicit algorithms — Pollard's Rho, Pollard's $P-1$, Williams' $P+1$, Fermat, CFRAC, Dixon's Method, and the Elliptic Curve Method (ECM).
+In[6]:= FactorInteger[2^128 + 1]
+Out[6]= {{59649589127497217, 1}, {5704689200685129054721, 1}}
 
-**Data structures**
-* **Associations** (`<|…|>`) with O(1) hashed lookup: `Keys`, `Values`, `Lookup`, `KeySort`, `AssociationThread`, and the aggregation vocabulary `GroupBy`, `Merge`, `Counts`, `GatherBy`, `Tally`.
+In[7]:= fib[0] = 0; fib[1] = 1; fib[n_] := fib[n] = fib[n - 1] + fib[n - 2]; fib[200]
+Out[7]= 280571172992510140037611932413038677189525
 
-**Graph theory**
-* `Graph` with directed/undirected/weighted edges, generators (`CompleteGraph`, `CycleGraph`, `RandomGraph`), queries (`AdjacencyMatrix`, `VertexDegree`, `ConnectedComponents`), algorithms (`FindShortestPath`, `GraphDistance`, `FindSpanningTree`), and `GraphPlot`.
-
-**Machine learning**
-* High-level `Classify`/`Predict` with `ClassifierFunction`/`PredictorFunction`, clustering (`FindClusters`, `ClusteringComponents`), dimensionality reduction (`PrincipalComponents`, `DimensionReduce`), `LinearModelFit`, `Nearest`, and `LearnDistribution`.
-
-**Signal & image processing**
-* **Fourier:** `Fourier`/`InverseFourier`, `FourierDCT`/`FourierDST` (FFTW-backed when available).
-* **Images:** `Image`/`Image3D`, filtering (`GaussianFilter`, `ImageConvolve`, `EdgeDetect`), morphology (`Dilation`, `Erosion`), `Binarize`, `ColorConvert`, `ImageResize`, and histograms.
-
-**Graphics & visualization** *(requires [Raylib](https://www.raylib.com/); gracefully omitted otherwise)*
-* **2D plots:** `Plot` with adaptive sampling and re-sampling on zoom/pan; `ParametricPlot` for curves and filled regions; `StreamPlot` for vector fields with speed-gradient colouring; `ListPlot`/`ListLinePlot` for discrete data; `ContourPlot` for iso-contours with marching-squares (equation form `f == c`, list of equations `{eq1, eq2, …}`, and numeric-body shading with `ContourShading`/`ColorFunction`).
-* **3D plots:** `Plot3D` for surface meshes; `ParametricPlot3D` for parametric space curves and surface patches; both rendered with per-face Lambertian shading in an interactive orbit camera (drag to rotate, scroll to zoom, right-drag to pan).
-* **Graphics primitives:** hand-built `Graphics[…]` and `Graphics3D[…]` objects using `Line`, `Point`, `Arrow`, `Disk`, `Rectangle`, `Polygon`, `Text`, `RGBColor`, `Opacity`, `Thickness`, and more; combined with `Show`.
-* **Legends and labels:** `PlotLegends -> Automatic` adds a colour-scale bar (contour/stream plots) or per-curve swatch box; `AxesLabel`, `PlotLabel`, `GridLines`, `Frame`, `Ticks` all pass through to the renderer.
-* **Interactive window:** toolbar with close, screenshot save, and view-reset buttons; Escape or the OS close button exits cleanly.
-
-**Programming & utilities**
-* **Functional programming:** `Map`, `Apply`, `Fold`, `Nest`, `Through`, `Composition`, and pure functions (`&` / `#`).
-* **Scoping & control flow:** `Module`, `Block`, `With`; `If`, `Which`, `Switch`, `Do`, `For`, `While`, `Piecewise`.
-* **Standard library:** lists and iteration, strings, statistics, random numbers, date/time, and file I/O.
-
----
-
-## 📚 Function Categories
-
-The complete reference (780+ functions across 36 categories) lives in [`Mathilda_spec.md`](Mathilda_spec.md), which indexes the per-category pages under [`docs/spec/builtins/`](docs/spec/builtins/):
-
-* Arithmetic · Algebra · Number Theory
-* Calculus · Simplification · Power Series
-* Solutions of Equations
-* Numerical Calculus
-* Elementary Functions · Special Functions · Mathematical Constants
-* Linear Algebra · LAPACK · BLAS
-* Packed Arrays
-* Fourier Transforms
-* Statistics · Machine Learning · Random Number Generation
-* Graphs
-* Image Processing
-* Data Structures (Associations)
-* Structural Manipulation · Expression Information
-* Lists and Iteration · Functional Programming
-* Pattern Matching · Comparisons
-* Control Flow · Assignment and Rules · Scoping Constructs
-* String Operations · File I/O · Time and Date
-* Graphics & Visualization
-* FLINT context (direct FLINT-kernel access)
-
-Weekly change summaries are recorded under [`docs/spec/changelog/`](docs/spec/changelog/).
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-To build and run Mathilda you need:
-
-* **GCC** (a real GCC — the build deliberately rejects Apple/LLVM clang, which hides the glibc-portability warnings the Linux CI gates on; on macOS install `gcc` via Homebrew)
-* **GMP** (`libgmp` / `gmp-dev`) — arbitrary-precision integers *(required)*
-* **GNU Readline** (`libreadline` / `readline-dev`) — interactive line editing *(required)*
-* **MPFR** (`libmpfr` / `mpfr-dev`) — arbitrary-precision reals *(enabled by default)*
-* **FLINT** ≥ 3.0 (`libflint` / `flint-dev`) — fast, rigorous polynomial arithmetic over algebraic extensions and rigorous `acb` numerics *(optional, auto-detected)*
-* **GMP-ECM** (`gmp-ecm` / `libecm-dev`) — Elliptic Curve Method integer factorization *(optional, auto-detected)*
-* **LAPACK / BLAS** — fast machine-precision linear algebra *(optional, auto-detected)*
-* **FFTW** ≥ 3 (`libfftw3` / `fftw3-dev`) — fast `Fourier`/`FourierDCT`/`FourierDST`; falls back to a naive $O(n^2)$ transform when absent *(optional, auto-detected via `pkg-config`)*
-* **PCRE2** (`libpcre2-8` / `libpcre2-dev`) — Perl-compatible regular expressions backing `RegularExpression`, `StringMatchQ`, `StringCases`, `StringReplace`, `StringSplit`; those heads warn and stay unevaluated when absent *(optional, auto-detected via `pkg-config`)*
-* **Raylib** ≥ 4.0 — interactive graphics window for `Plot`, `Plot3D`, `ContourPlot`, etc. *(optional, auto-detected via `pkg-config`; falls back to a text placeholder when absent)*
-* **CMake** — only required to build the test suite
-
-POSIX threads (used to parallelize the packed-array kernels across cores) are enabled by default on macOS and Linux and need no extra package.
-
-The optional backends are controlled by build-time flags and **degrade gracefully** when disabled or absent:
-
-| Flag | Default | Effect when on |
-|------|---------|----------------|
-| `USE_MPFR`     | `1` | Arbitrary-precision reals: `N[expr, prec]`, `Precision`/`Accuracy`, precision literals. Build without it via `make USE_MPFR=0`. |
-| `USE_FLINT`    | `1` | Fast, rigorous FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics (`Zeta`, `HurwitzZeta`, `PolyGamma`, `StieltjesGamma`). Auto-detected via `pkg-config` with a ≥ 3.0 version floor. Falls back to the classical (slower but still rigorous) path (`USE_FLINT=0`) when absent. |
-| `USE_LAPACK`   | `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
-| `USE_ECM`      | `1` | Elliptic Curve Method factorization via the system GMP-ECM library. Auto-detected via a compile-link probe; install `gmp-ecm` / `libecm-dev`. Falls back to disabled (`USE_ECM=0`) when absent. |
-| `USE_FFTW`     | `1` | FFTW-backed `Fourier`/`FourierDCT`/`FourierDST`. Auto-detected via `pkg-config fftw3`. Falls back to a naive $O(n^2)$ transform (`USE_FFTW=0`) when absent. |
-| `USE_REGEX`    | `1` | PCRE2-backed regular expressions: `RegularExpression`, `StringMatchQ`, `StringCases`, `StringReplace`, `StringSplit`. Auto-detected via `pkg-config libpcre2-8`. Those heads warn and stay unevaluated (`USE_REGEX=0`) when absent. |
-| `USE_THREADS`  | `1` | POSIX-thread parallelism for the element-wise packed-array kernels (`Sin`, `Exp`, `Erf`, …) on large arrays. Enabled on macOS/Linux; build the serial path via `make USE_THREADS=0`. |
-| `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib. Auto-detected via `pkg-config raylib`. When absent, `Show`/`Plot`/`Plot3D`/`ContourPlot`/etc. print a text placeholder and return normally. Build without it via `make USE_GRAPHICS=0`. |
-
-#### Installing dependencies
-
-**Linux (Debian / Ubuntu):**
-
-```bash
-# Required libraries
-sudo apt install libgmp-dev        # GMP — arbitrary-precision integers
-sudo apt install libmpfr-dev       # MPFR — arbitrary-precision reals
-sudo apt install libreadline-dev   # GNU Readline — interactive REPL
-
-# Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
-sudo apt install libflint-dev      # Debian Bookworm+/Ubuntu 24.04+ ship >= 3.0
-
-# Optional: GMP-ECM for advanced integer factorization
-sudo apt install libecm-dev
-
-# Optional: LAPACK / BLAS for fast machine-precision linear algebra
-sudo apt install liblapacke-dev libopenblas-dev
-
-# Optional: FFTW for fast Fourier / FourierDCT / FourierDST
-sudo apt install libfftw3-dev
-
-# Optional: PCRE2 for regular-expression string functions
-sudo apt install libpcre2-dev
-
-# Optional: Raylib for interactive plot windows (Plot, Plot3D, ContourPlot, ...)
-sudo apt install libraylib-dev      # Ubuntu 24.04+ / Debian Bookworm+
-# or build from source: https://github.com/raysan5/raylib
-
-# Optional: CMake, only needed to build the test suite
-sudo apt install cmake
+In[8]:= N[Pi, 50]
+Out[8]= 3.1415926535897932384626433832795028841971693993751
 ```
 
-On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
-`flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel` + `lapacke-devel` (BLAS via
-FlexiBLAS, detected automatically),
-`fftw-devel`, `pcre2-devel`, plus `cmake`.
+## Features
 
-> **Note on FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that
-> merged ANTIC for number-field arithmetic). Distributions that only package
-> FLINT 2.x — e.g. Ubuntu 22.04 or Debian Bullseye — are detected as too old and
-> the build automatically falls back to `USE_FLINT=0`. Install a newer FLINT from
-> source or a backport if you want the accelerated paths on those systems.
+- **Evaluation engine.** Fixed-point evaluation; attribute-driven argument
+  handling (`Hold*`, `Flat`, `Orderless`, `Listable`, `OneIdentity`,
+  `Protected`, …); `OwnValues`, `DownValues` and `UpValues`; `Module`, `Block`,
+  `With`; and non-local control flow (`Catch`/`Throw`, `Sow`/`Reap`).
+- **Patterns and rules.** `_`, `__`, `___`, `x_h`, `/;`, `?`, `:`, `..`,
+  `Alternatives`, `Except` and `HoldPattern`, with full sequence backtracking.
+  Rules (`->`, `:>`) and replacement (`/.`, `//.`, `Replace`).
+- **Numbers.** Arbitrary-precision integers and exact rationals,
+  complex numbers, and MPFR reals with precision and accuracy tracking
+  (`` 3.98`50 ``). Also `Interval` arithmetic.
+- **Calculus.** `D`/`Dt`; `Integrate`, which cascades through Risch–Norman,
+  Cherry/Liouvillian, algebraic (Trager), Weierstrass, CRC-table and other
+  methods, plus definite and contour integration. Also `Series`, `Limit` (a
+  Gruntz engine), `Sum`/`Product` (Gosper, hypergeometric and zeta families),
+  and `DSolve`.
+- **Algebra.** Univariate and multivariate factorization (over ℚ and number
+  fields ℚ(α)), `Together`/`Apart`/`Cancel`, Gröbner bases, resultants,
+  `Simplify`/`FullSimplify` with assumptions, and `Root`/`RootReduce`.
+- **Equation solving.** `Solve`, `Reduce` (cylindrical algebraic decomposition
+  and quantifier elimination) and `FindInstance`. `Solve[…, Integers]` handles
+  Diophantine equations: Hermite normal form, Pell and Thue equations, ternary
+  forms and more.
+- **Numerics.** `NIntegrate`, `NSum`, `NDSolve` (ODEs and PDEs), `NMinimize`,
+  `FindMinimum` (L-BFGS-B, SLSQP, trust-region, …), `FindRoot`, `NSolve`.
+- **High-performance arrays.** Lists of machine numbers are transparently packed
+  into dense buffers, and element-wise, reduction and structural kernels
+  (optionally multithreaded) run on the buffer directly. `Compile[]` lowers
+  numeric code to a register VM and auto-compiles `Table`/`Sum`/`NIntegrate`
+  bodies.
+- **Linear algebra.** LU, QR, Cholesky, SVD and Schur decompositions, and
+  eigensystems, with LAPACK/BLAS acceleration. Also `SparseArray`.
+- **Special functions.** Gamma, Zeta, PolyLog, the Bessel and Airy families,
+  hypergeometric `pFq`, `MeijerG`, elliptic integrals and orthogonal
+  polynomials. FLINT/arb gives rigorous numerics.
+- **Number theory.** Factorization (Pollard ρ and *p*−1, Williams *p*+1, CFRAC,
+  ECM, …), modular arithmetic, discrete logarithms and Dirichlet characters.
+- **And more.** Associations with O(1) lookup, strings and regular expressions,
+  graphs, statistics and machine learning, Fourier transforms, image
+  processing, and interactive 2D/3D graphics.
 
-**macOS (Homebrew):**
+See the [function reference](Mathilda_spec.md) for the complete list, organised
+by category.
 
-```bash
-brew install gmp mpfr readline cmake
-# Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic:
-brew install flint
-# Optional: FFTW for fast Fourier / FourierDCT / FourierDST:
-brew install fftw
-# Optional: PCRE2 for regular-expression string functions:
-brew install pcre2
-# Optional: Raylib for interactive plot windows:
-brew install raylib
-# Optional: GMP-ECM for advanced integer factorization:
-brew install gmp-ecm
-```
+## Quick start
 
-LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
-**Accelerate** framework.
-
-**Windows (MSYS2):**
-
-Mathilda builds as a native Windows executable (`Mathilda.exe`) with the MSYS2
-GCC toolchain — no WSL or Cygwin needed.
-
-1. Install [MSYS2](https://www.msys2.org/) (default location `C:\msys64`).
-2. Open the **MSYS2 UCRT64** shell from the Start menu and install the toolchain
-   and required libraries:
-
-   ```bash
-   pacman -Syu                        # update MSYS2 first (may ask you to reopen the shell)
-   pacman -S --needed \
-     git make \
-     mingw-w64-ucrt-x86_64-gcc \
-     mingw-w64-ucrt-x86_64-gmp \
-     mingw-w64-ucrt-x86_64-mpfr \
-     mingw-w64-ucrt-x86_64-pkgconf
-
-   # Optional: CMake, only needed to build the test suite
-   pacman -S --needed mingw-w64-ucrt-x86_64-cmake
-   ```
-
-   This is the configuration the Windows CI job builds and smoke-tests on every
-   push. The older **MINGW64** environment works too: open the *MSYS2 MinGW64*
-   shell instead and use the `mingw-w64-x86_64-` package prefix.
-
-MPFR is on by default and, unlike the auto-detected backends, does not degrade
-gracefully: install it as above, or build with `USE_MPFR=0`.
-
-Some features are reduced on Windows:
-
-* **GNU Readline** isn't available under MinGW, so it's compiled out
-  automatically. The REPL still works, without line editing, history, or
-  multi-line continuation.
-* **Threads** are off (`USE_THREADS=0`), so the packed-array kernels run on a
-  single core.
-* **`TimeConstrained`** is cooperative only. The evaluator loop enforces the
-  time limit, but it can't interrupt a single long-running C builtin.
-* **Optional backends** (FLINT, LAPACK, ECM, FFTW, PCRE2, Raylib) are switched
-  off in the recommended build below, because CI doesn't test them on Windows.
-
-### Building Mathilda
-
-The `makefile` auto-discovers `src/*.c`, configures and compiles internal dependencies, then links the main executable (`-std=c99 -O3`).
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/stblake/Mathilda.git
-   cd Mathilda
-   ```
-   Install GMP-ECM (used for advanced integer factorization) from your package
-   manager — `brew install gmp-ecm` on macOS or `sudo apt install libecm-dev`
-   on Debian/Ubuntu. The build autodetects it and links `-lecm`; if it is
-   absent, the build still succeeds with advanced factorization disabled
-   (equivalent to `make USE_ECM=0`).
-2. Build the project:
-   ```bash
-   make -j$(nproc)
-   ```
-   To build a leaner binary, disable optional backends, e.g.
-   `make -j$(nproc) USE_LAPACK=0 USE_MPFR=0`.
-
-   **On Windows**, run the build from the MSYS2 UCRT64 shell with the same
-   flags the CI job uses:
-   ```bash
-   make -j4 USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
-            USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
-   ./Mathilda.exe
-   ```
-   To launch `Mathilda.exe` from PowerShell or CMD rather than the MSYS2 shell,
-   add `C:\msys64\ucrt64\bin` to your Windows `PATH` (or copy the DLLs it
-   needs next to the executable). See *Shared libraries* below.
-3. Start the interactive REPL:
-   ```bash
-   ./Mathilda
-   ```
-   Or run a `.m` file as a script and exit — nothing is echoed, so the output
-   is exactly what the file `Print`s:
-   ```bash
-   ./Mathilda -file script.m       # a bare ./Mathilda script.m works too
-   ./Mathilda --help               # all options
-   ```
-
-### Installing Mathilda (deploying to a prefix)
-
-**The `Mathilda` executable is not self-contained.** Its kernel is written partly
-in C and partly in its own language: a tree of `.m` bootstrap modules under
-`src/internal/` is loaded *at runtime* — some at startup, some lazily on first
-use. Copy the binary alone and it will start, but `Simplify`/`FullSimplify`, the
-CRC integral table behind `Integrate`, the Bessel and distribution rules, and the
-`ParallelMixedTower` integration method will all be missing (you'll see a
-`LoadModule::nofile` diagnostic on stderr). An install must therefore provide
-**two** things alongside the binary:
-
-1. **The runtime module tree** — the whole `src/internal/` directory
-   (`init.m`, `bessel.m`, `distributions.m`, `simp/FullSimplify.m`,
-   `simp/transforms/*.m`, `CRCMathTablesIntegrals.m`, `mixed/ParallelMixed.m`).
-2. **The shared libraries** the binary was linked against (see *Shared libraries*
-   below).
-
-#### `make install` (recommended)
+Mathilda needs GCC (Apple clang is rejected), GMP and MPFR. GNU Readline is
+recommended for the REPL. FLINT, GMP-ECM, LAPACK, FFTW, PCRE2 and Raylib are
+optional and auto-detected.
 
 ```bash
-make                                   # build (PREFIX optional here — see note)
-sudo make install PREFIX=/usr/local    # install binary + module tree under PREFIX
-```
+# macOS
+brew install gcc gmp mpfr readline flint gmp-ecm
+# Debian / Ubuntu
+sudo apt install build-essential libgmp-dev libmpfr-dev libreadline-dev libflint-dev libecm-dev
 
-`PREFIX` on the **build** line is optional: it only bakes in the compile-time
-`-DMATHILDA_PREFIX` *absolute* fallback (mechanism 4 below), a belt-and-suspenders
-path for environments where the executable can't determine its own location.
-Relocation itself is a **runtime** property (mechanism 3, `<exe>/../share/…`), so a
-bare `make` still produces a fully relocatable install. `PREFIX` on the **install**
-line is what actually chooses the destination.
-
-The two lines above install
-
-| What | Where |
-|------|-------|
-| the `Mathilda` executable | `$(PREFIX)/bin/Mathilda` |
-| the runtime `.m` module tree | `$(PREFIX)/share/mathilda/internal/` |
-| the embedding C API header | `$(PREFIX)/include/mathilda_ffi.h` |
-| the static kernel library | `$(PREFIX)/lib/libmathilda.a` |
-| the shared kernel library | `$(PREFIX)/lib/libmathilda.so.0` + `libmathilda.so` (macOS: `libmathilda.0.dylib` + `libmathilda.dylib`; Windows: `bin/libmathilda.dll` + `lib/libmathilda.dll.a`) |
-| the pkg-config file | `$(PREFIX)/lib/pkgconfig/mathilda.pc` |
-
-The binary locates its modules **relative to its own path**
-(`<bindir>/../share/mathilda/internal/`), so the install is **relocatable** and
-needs no environment variable — move the whole prefix and it still works. The
-standard GNU variables are honoured for packaging:
-
-```bash
-make install DESTDIR=/tmp/stage PREFIX=/usr    # staged install (Debian, SageMath, …)
-make install prefix=/opt/mathilda              # or override bindir=/… datadir=/… directly
-make uninstall PREFIX=/usr/local               # remove everything `make install` put there
-```
-
-Because resolution is exe-relative, `DESTDIR` staging bakes in no absolute path:
-build once, install into a staging root, and the packaged binary finds its modules
-wherever the package is finally unpacked.
-
-#### Embedding the kernel (C API, libraries, pkg-config)
-
-The kernel can run **in-process** in another program (a Python/Cython extension,
-a Jupyter kernel, a mobile app) through the small C API in
-[`src/ffi/mathilda_ffi.h`](src/ffi/mathilda_ffi.h): `mathilda_ffi_init`,
-`mathilda_ffi_eval` / `_eval_latex` / `_eval_json` / `_eval_cell`,
-`mathilda_ffi_free`, and a few editor helpers. `make install` ships that header
-and both libraries (`make lib` builds them in the tree without installing):
-
-* **Shared library.** It dynamically exports *only* the `mathilda_ffi_*` API (the
-  kernel is compiled `-fvisibility=hidden`), so none of its internal names enter
-  the host process. It finds its module tree relative to **its own** location
-  (`<libdir>/../share/mathilda/internal/`), so a host linked with `-lmathilda`
-  needs no `MATHILDA_HOME`.
-* **Static library.** Compiled position-independent, so it can be linked into a
-  shared object such as a Python extension module. A static consumer has to link
-  the libraries the kernel was built against, and has to point the kernel at its
-  module tree. `mathilda.pc` records both:
-
-```bash
-pkg-config --cflags --libs mathilda           # shared:  -I…/include -L…/lib -lmathilda
-pkg-config --static --libs mathilda           # static:  … plus GMP/MPFR/FLINT/… as detected
-pkg-config --variable=internaldir mathilda    # pass to mathilda_ffi_set_home() (static use)
-```
-
-`make check-install` installs into a scratch prefix and checks all of the above.
-
-#### How the binary finds its modules
-
-`src/loadmodule.c` searches these locations in order (first hit wins), so you can
-deploy however suits you:
-
-1. **`$MATHILDA_HOME`** — point a binary at any module tree by exporting it to the
-   `internal` directory: `MATHILDA_HOME=/opt/app/share/mathilda/internal ./Mathilda`.
-2. **`<exe>/src/internal/`** — running straight from a build tree (the repo root).
-3. **`<exe>/../share/mathilda/internal/`** — the FHS layout `make install` creates.
-   The same path is also tried relative to the *shared library* holding the
-   kernel (`<libdir>/../share/…`), so an installed `libmathilda` loaded into any
-   host program finds its modules too.
-4. **compile-time `-DMATHILDA_PREFIX`** — `<prefix>/share/mathilda/internal/`,
-   baked in when you build with `make PREFIX=…`; a fallback for environments where
-   the executable's own path can't be determined.
-
-#### Manual install (without `make install`)
-
-```bash
-mkdir -p /opt/app/bin /opt/app/share/mathilda
-cp Mathilda /opt/app/bin/
-cp -R src/internal /opt/app/share/mathilda/internal
-/opt/app/bin/Mathilda          # finds ../share/mathilda/internal automatically
-```
-
-Or skip the layout entirely and set `MATHILDA_HOME` to wherever you placed
-`src/internal`.
-
-#### Shared libraries
-
-The binary is dynamically linked against every backend detected at build time, so
-the **target machine needs those same libraries** present (or link them
-statically). List them with:
-
-```bash
-ldd ./Mathilda        # Linux
-otool -L ./Mathilda   # macOS
-```
-
-* **Always:** GMP, MPFR, GNU Readline, plus the C runtime.
-* **When detected at build:** FLINT, GMP-ECM, PCRE2, FFTW, Raylib, LAPACK/BLAS.
-  Build a leaner, fewer-dependency binary by turning the optional backends off
-  (e.g. `make USE_GRAPHICS=0 USE_FFTW=0 USE_ECM=0`); each degrades gracefully at
-  runtime.
-* **Linux / macOS:** install the *runtime* packages on the target through the
-  system package manager, exactly as in *Installing dependencies* above — the
-  `-dev`/`-devel` headers are only needed to build; the target needs just the
-  runtime `.so`/`.dylib`. Apple's Accelerate framework (LAPACK/BLAS) ships with
-  macOS, so nothing extra is required there.
-* **Windows (MSYS2 UCRT64 / MinGW64):** the build produces `Mathilda.exe`. Put
-  the DLLs it depends on (GMP, MPFR, the GCC runtime, …) either beside the
-  executable or on `PATH` (`C:\msys64\ucrt64\bin`, or `C:\msys64\mingw64\bin`
-  for a MinGW64 build). `ldd ./Mathilda.exe` in the MSYS2 shell lists them.
-  Readline is unavailable on Windows and is compiled out automatically. See [`docs/building.md`](docs/building.md) for the full
-  Windows toolchain and packaging (the Tauri desktop app bundles the sidecar and
-  its DLLs for you).
-
-### Running the Test Suite
-
-Mathilda ships a comprehensive C-based unit suite — **461 `test_*.c` files**
-covering evaluation, parsing, pattern matching, arithmetic, polynomials,
-calculus, equation solving, numerical analysis, linear algebra, packed arrays,
-the `Compile[]` compiler, and more. CMake auto-detects the same optional
-backends (MPFR, FLINT, LAPACK, FFTW, ECM) during configuration.
-
-```bash
-cd tests
-mkdir -p build && cd build
-cmake ..
+git clone https://github.com/stblake/mathilda.git
+cd mathilda
 make -j$(nproc)
-
-# Run all test binaries
-for t in *_tests; do ./$t; done
+./Mathilda                  # interactive REPL
+./Mathilda -file script.m   # run a script
 ```
 
----
+[`docs/building.md`](docs/building.md) covers the rest:
 
-## 🛠️ Developer Guide & Architecture
+- Windows (MSYS2)
+- every build flag
+- `make install` and relocatable deployment
+- embedding the kernel through `libmathilda` and its C API
+- the desktop app
 
-Everything in Mathilda is represented by an immutable-by-convention `Expr` AST
-node — a tagged union over `Integer`, `Real`, `BigInt`, `Symbol`, `String`,
-`Function`, and (when built with MPFR) arbitrary-precision `MPFR` reals. Compound
-values are `Function` nodes: `Rational[n, d]`, `Complex[a, b]`, and lists
-(`List[…]`) are all expressions, so the same generic tools (`Part`, `Map`,
-`ReplaceAll`, …) operate uniformly on everything.
+## Documentation
 
-The system is modularized into several independent subsystems:
+| | |
+|---|---|
+| [Documentation site](https://stblake.github.io/mathilda/) | Tutorials and the per-function reference |
+| [`Mathilda_spec.md`](Mathilda_spec.md) | Built-in function reference, by category |
+| [`SPEC.md`](SPEC.md) | System architecture: parser, evaluator, pattern matcher, memory model |
+| [`docs/extending.md`](docs/extending.md) | Adding builtins, modules, rules and operators |
+| [`docs/design/`](docs/design/) | Design notes (packed arrays, `Compile[]`, message routing, …) |
+| [`docs/design/performance.md`](docs/design/performance.md) | Performance benchmarks, method and known gaps |
+| [`docs/spec/changelog/`](docs/spec/changelog/) | Weekly changelog |
+| [`book/`](book/) | *The Mathilda Book* (LaTeX source) |
 
-1. **Parser (`parse.c`)** — a Pratt parser mirroring Mathematica's operator precedences (inline lexing, no separate tokenizer).
-2. **Evaluator (`eval.c`)** — the fixed-point evaluation loop; applies `Hold*`, `Flat`, `Orderless`, and `Listable` before recursively evaluating arguments.
-3. **Symbol table (`symtab.c`)** — `OwnValues`, `DownValues` (user rules), attributes, docstrings, and native C built-in function pointers.
-4. **Pattern matcher & rule engine (`match.c`, `replace.c`)** — structural tree unification with sequence segmenting and backtracking.
+## Testing
 
-Larger mathematical domains live in dedicated subdirectories of `src/`:
+```bash
+cd tests && mkdir -p build && cd build
+cmake .. && make -j$(nproc)
+ctest -LE nightly -j4        # unit suites (what CI runs on every push)
+ctest -j4 --timeout 3600     # everything, including the nightly corpora
+```
 
-| Subsystem | Responsibility |
-|-----------|----------------|
-| `poly/`     | Univariate/multivariate polynomial arithmetic, factorization, algebraic-number fields, Gröbner bases |
-| `linalg/`   | Dense linear algebra; eigen kernels split by algorithm |
-| `calculus/` | `D`/`Dt`/`Derivative`, `Series`, `Limit`, `Integrate` (incl. Risch–Norman, Cherry/Liouvillian) |
-| `simp/`     | `Simplify`, trigonometric simplification, radical denesting, assumptions |
-| `sum/`, `product/` | Symbolic summation and products — finite and infinite families |
-| `solve/`    | `Solve` over Complexes/Reals plus the `Solve[…, Integers]` Diophantine engine (one file per method) |
-| `special_functions/` | Gamma, Zeta, Bessel, Airy, error/exponential integrals, hypergeometric families |
-| `numerical_calculus/`, `numerical_roots/` | `NIntegrate`, `NDSolve`, `NSum`/`NProduct`, `NMinimize`/`FindMinimum` family; `NSolve`, `NRoots`, `FindRoot` |
-| `ndarray.c`, `pack.c`, `compile/` | Packed machine-precision arrays, the transparency gate, and the `Compile[]` bytecode compiler + auto-compilation |
-| `graph/`    | Graph data structure, generators, and algorithms |
-| `ml/`, `stats/` | Machine-learning primitives and descriptive statistics |
-| `graphics/` | 2D/3D plot engine: adaptive sampler, marching-squares contours, Raylib renderer, vector font; `Plot`, `Plot3D`, `ParametricPlot`, `ParametricPlot3D`, `StreamPlot`, `ContourPlot`, `ListPlot`, `Show` |
-| `internal/` | Mathematica-syntax bootstrap `.m` files (init, integral tables) loaded at startup |
+The source tree is also checked by audits, such as `make check-c99`,
+`check-messages`, `check-packed-aware` and `check-compile-coverage`.
+[`SPEC.md` §9](SPEC.md#9-build--test) describes each one.
 
-A recurring design pattern is **C for performance, rules for mathematics**: hot
-paths (parser, evaluator, matcher, arithmetic) are C, while higher-level
-identities (integral tables, etc.) are expressed as `DownValues` in Mathilda's
-own language. The full architecture is documented in [`SPEC.md`](SPEC.md), and
-extension recipes in [`docs/extending.md`](docs/extending.md).
+## Contributing
 
-### Extending Mathilda: Adding a New Built-in Function
+Contributions are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
+build and test workflow, the builtin ownership contract, and the conventions
+around documentation and versioning.
 
-Adding new functionality to Mathilda is straightforward:
+## License
 
-1. **Write the C implementation.**
-   Create your evaluation logic in the appropriate `.c` module (e.g., `core.c`).
-   Your function signature must be `Expr* builtin_myfunc(Expr* res)`.
-
-   * **Memory rule (ownership contract):** the builtin **takes ownership** of
-     `res`. On success, return a **new** `Expr*` — the **evaluator** frees `res`
-     for you, so you must **not** call `expr_free(res)` yourself (doing so causes
-     a double-free). If you cannot evaluate the input (e.g. symbolic arguments to
-     a purely numeric function), return `NULL` **without freeing `res`**, and the
-     evaluator retains ownership, leaving the expression unevaluated. When you
-     reuse parts of `res` in your result, NULL them out first so the evaluator's
-     cleanup doesn't free them twice.
-
-   ```c
-   Expr* builtin_myfunc(Expr* res) {
-       if (res->data.function.arg_count != 1) return NULL;  /* leave unevaluated */
-       // ... mathematical logic ...
-       return expr_new_integer(42);  /* evaluator frees res — do NOT free it here */
-   }
-   ```
-
-2. **Register the function.**
-   In the module's initialization routine (e.g., `core_init()`), register the
-   function and assign a documentation string so it is available via `?MyFunc`:
-   ```c
-   symtab_add_builtin("MyFunc", builtin_myfunc);
-   symtab_set_docstring("MyFunc", "MyFunc[x]\n\tComputes the ultimate answer.");
-   ```
-
-3. **Assign attributes.**
-   If your function threads over lists, operates symmetrically, or holds its
-   arguments unevaluated, set the corresponding attributes during initialization:
-   ```c
-   symtab_get_def("MyFunc")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
-   ```
-
-4. **Test and document.**
-   * Add test cases to the appropriate suite in `tests/` using the `TEST(...)` macro.
-   * Document the function in the matching file under [`docs/spec/builtins/`](docs/spec/builtins/) and add a note to the current week's [`docs/spec/changelog/`](docs/spec/changelog/) entry.
-
-See [`docs/extending.md`](docs/extending.md) for the full recipes (modules,
-patterns, internal `.m` rules, operators) and [`CLAUDE.md`](CLAUDE.md) for the
-contributor workflow.
-
----
-
-## 📜 Open Source & License
-
-Mathilda is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**.
-
-You are heavily encouraged to explore the codebase, submit pull requests, report issues, and expand the CAS with new mathematical algorithms! Please see the `LICENSE` file for more details.
+Mathilda is free software, released under the
+[GNU General Public License v3.0](LICENSE).

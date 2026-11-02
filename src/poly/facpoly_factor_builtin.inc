@@ -1094,7 +1094,7 @@ static Expr* builtin_factor_core(Expr* res) {
      * may end up unfactored.  But it preserves the historical
      * Simplify behavior, which has the property that some downstream
      * TrigRoundtrip paths only converge when intermediate factors
-     * remain in their non-fully-factored form.  See plans/FACTOR_PLAN.md
+     * remain in their non-fully-factored form.  See docs/notes/plans/FACTOR_PLAN.md
      * cleanup C4.
      *
      * For direct user Factor calls (no memo active), use the SEPARATE-

@@ -1393,7 +1393,7 @@ static Expr* pms_verified_answer(Expr* r) {
  *
  * Choosing the value (measured at v0.240, $SpecialTimeBudget raised to 120 so
  * the budget is not what is being timed -- the table is in
- * MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md).  Every integrand this stage CLOSES
+ * docs/notes/MATHILDA_PARALLEL_MIXED_SPECIAL_PLAN.md).  Every integrand this stage CLOSES
  * closes fast: 0.019 s (x E^x^2) to 0.187 s (Sin[x]/x), with the elliptic
  * pencils at 0.07-0.08 s.  The slowest work that is not a close is the
  * Log[x] Sin[x] / Cos[x] Log[x] pair at 3.19 / 3.34 s -- a special answer found

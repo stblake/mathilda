@@ -4,7 +4,7 @@
  * Part of the Solve[..., Integers] engine; split out of solveint.c.
  * See solveint_internal.h for the shared SICtx/SearchState substrate.
  *
- * Tier 3 F (route A) of SOLVE_INTEGERS.md: the unbounded Ramanujan-Nagell-type
+ * Tier 3 F (route A) of docs/notes/SOLVE_INTEGERS.md: the unbounded Ramanujan-Nagell-type
  * exponential Diophantine  x^2 + D == 2^n  (b = 2).  For the class-number-1
  * imaginary-quadratic case (D squarefree, D == 7 (mod 8) so 2 splits in the
  * half-integer ring O_K = Z[(1+sqrt(-D))/2], and h(Q(sqrt(-D))) == 1), the

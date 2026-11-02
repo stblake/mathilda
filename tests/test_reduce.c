@@ -1159,7 +1159,7 @@ static void test_epsilon_delta(void) {
  * at the pole.  This pins the end-to-end limit proofs AND the base-engine atoms, in
  * BOTH directions (a wrong limit must refute, never guess). */
 static void test_rational_denominator_clearing(void) {
-    /* RESOLVE_IMPROVEMENTS.md §2: parameter x variable product, both neighbourhoods. */
+    /* docs/notes/RESOLVE_IMPROVEMENTS.md §2: parameter x variable product, both neighbourhoods. */
     run_test("Resolve[ForAll[m, m > 0, Exists[del, del > 0, "
              "ForAll[x, 0 < x < del, m x < 1]]], Reals]", "True");
     run_test("Resolve[ForAll[eps, eps > 0, Exists[n, n > 0, "

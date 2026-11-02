@@ -133,7 +133,7 @@ allocation-failure path was returning DSATUR's upper bound as though it were pro
 
 ## Notes
 
-- Ticket and measurements: `thoughts/shared/tickets/RG-2/plan.md` — `## Decisions`, the
+- Ticket and measurements: `docs/notes/thoughts/shared/tickets/RG-2/plan.md` — `## Decisions`, the
   `## Overview` correction paragraph, and `## Performance Considerations`.
 - Implementation: `src/graph/vertexcoloring.c` — `FVC_MAX_STEPS` (the reasoning above is
   restated at the constant) and the `tc_check_deadline()` poll in `fvc_bb`.

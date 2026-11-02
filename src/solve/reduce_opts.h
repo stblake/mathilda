@@ -1,7 +1,7 @@
 /*
  * reduce_opts.h
  *
- * Options carried through the `Reduce` engines (REDUCE_PLAN.md, Phase 8 --
+ * Options carried through the `Reduce` engines (docs/notes/REDUCE_PLAN.md, Phase 8 --
  * options).  Reduce reaches its solutions by building internal `Solve[...]`
  * calls and evaluating them, so the "hard" options (Cubics, Quartics,
  * GeneratedParameters) are honored by forwarding them onto those calls

@@ -1,7 +1,7 @@
 /*
  * reduce_qe.h
  *
- * Quantifier elimination for `Reduce` (REDUCE_PLAN.md, Phase 7): the `Exists`,
+ * Quantifier elimination for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 7): the `Exists`,
  * `ForAll` and `Resolve` heads.  A quantified real statement is turned into an
  * equivalent quantifier-free formula over the remaining free variables (or
  * True / False when none remain), by Cylindrical Algebraic Decomposition with

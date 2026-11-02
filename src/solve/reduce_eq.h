@@ -1,7 +1,7 @@
 /*
  * reduce_eq.h
  *
- * The complete univariate equation engine for `Reduce` (REDUCE_PLAN.md, Phase 1).
+ * The complete univariate equation engine for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 1).
  *
  * `Solve` returns only the GENERIC solution of a polynomial equation; `Reduce`
  * must report the COMPLETE solution set, including every case where a leading

@@ -733,7 +733,7 @@ static void test_nontorsion_divisor_certificate(void) {
         "  {{{{0}, {1}}, 1}, {{{0}, {-1}}, -1}}, None, 4]",
         "{False, {{3, 5}, {7, 5}, {11, 5}, {13, 5}}}");
     /* The certificate for [oo+ - oo-] (Cohen's -72 variant) was dead in
-     * Mathilda: its prime loop never ran (MATHILDA_DIVERGENCES.md A1) and the
+     * Mathilda: its prime loop never ran (docs/notes/MATHILDA_DIVERGENCES.md A1) and the
      * continued fraction over GF(p) never terminated (A3).  Orders 3, 13, 7, 21
      * modulo 7, 11, 13, 17 are pairwise incompatible. */
     assert_eval(
@@ -742,7 +742,7 @@ static void test_nontorsion_divisor_certificate(void) {
     /* Coth[x]/(1 + Sech[x]^5)^(3/2) itself: u = Sqrt[Cosh[x]] over y^2 = 1 + u^10
      * (genus 4); the certificate needs ~7000 Jacobian operations at p = 17 and
      * 41, which Mathematica does in 3 s and Mathilda's expression-level GF(p)
-     * arithmetic does not fit into $ParallelMixedTimeBudget (MATHILDA_DIVERGENCES.md
+     * arithmetic does not fit into $ParallelMixedTimeBudget (docs/notes/MATHILDA_DIVERGENCES.md
      * C).  Until the core primitives are fixed the honest outcome is the clean
      * decline; the certificate is the other admissible answer.  TIGHTEN to the
      * certificate alone once the Modulus primitives are native. */

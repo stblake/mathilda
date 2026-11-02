@@ -135,7 +135,7 @@ implementation missed.
 Both benchmarks are reproducible: `benchmarks/87-diophantine-integers/run.py`
 (needs a virtualenv with sympy) and `benchmarks/88-thue-equations/run.py` plus
 `grid.py` (need `gp` on the `PATH`). The development-driving document
-`SOLVE_INTEGERS.md` tracks the open tiers, and `docs/design/thue_completion_plan.md`
+`docs/notes/SOLVE_INTEGERS.md` tracks the open tiers, and `docs/design/thue_completion_plan.md`
 the Thue-specific completion plan.
 
 ---

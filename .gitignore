@@ -1,92 +1,91 @@
-# Prerequisites
+# ---------------------------------------------------------------------------
+# Build outputs
+# ---------------------------------------------------------------------------
+# Compiler dependency files, objects, libraries
 *.d
-
-# Object files
 *.o
-*.ko
 *.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Libraries
-*.lib
 *.a
+*.lib
 *.la
 *.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
 *.so
 *.so.*
 *.dylib
+*.dll
 
-# Executables
+# Executables and debug info
+/Mathilda
+/Mathilda.exe
+/picocas
 *.exe
 *.out
 *.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
 *.dSYM/
-*.su
-*.idb
 *.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
 *.dwo
-# Added by code-review-graph
-.code-review-graph/
+*.su
 
-# macOS
-.DS_Store
-
-# Built binaries
-/Mathilda
-/picocas
-
-# Claude scheduled-task lock
-.claude/scheduled_tasks.lock
-
-# GMP-ECM vendored source (now a system dependency; see SPEC.md §build)
+# GMP-ECM vendored source (now a system dependency; see SPEC.md §1)
 src/external/ecm/
 
+# ---------------------------------------------------------------------------
+# Test build (in-source ctest runs; tests/.gitignore covers tests/build/)
+# ---------------------------------------------------------------------------
+/Testing/
+tests/Testing/
+tests/CTestTestfile.cmake
+tests/bench_*
+!tests/bench_*.c
+tests/data/trager_stress_report.json
+
+# ---------------------------------------------------------------------------
+# Generated documentation and local-only artefacts
+# ---------------------------------------------------------------------------
 # Compile[] worked example — kept locally, deliberately not tracked. It is a
 # ~200 KB bundle (rendered PDF + snapshot PNG) that no build, test or docs
 # target consumes, so it only ever cost clone size.
 docs/compile_example/
 
-# Experiment sources are runnable scripts; their bytecode caches are not
-docs/experiments/**/__pycache__/
-tools/__pycache__/
-comparisons/__pycache__/
-benchmarks/__pycache__/
-benchmarks/**/__pycache__/
-docs/experiments/**/*.pyc
-benchmarks/**/*.pyc
-
-# The benchmark venv (sympy etc.) is created on demand, never tracked.
-benchmarks/.venv/
-
 # Repo-root performance write-ups (evaluator / pattern-matcher, .md + rendered
 # .pdf) are generated locally and deliberately not tracked.
 MATHILDA_*_PERFORMANCE.md
 MATHILDA_*_PERFORMANCE.pdf
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.pyc
+# The benchmark venv (sympy etc.) is created on demand, never tracked.
+benchmarks/.venv/
+
+# ---------------------------------------------------------------------------
+# Editor, OS and local AI-assistant tooling
+# ---------------------------------------------------------------------------
+.DS_Store
+.code-review-graph/
+# Only the shared project settings are tracked; agents, skills, commands,
+# worktrees and per-user settings stay local.
+.claude/*
+!.claude/settings.json
+.cursorrules
+.windsurfrules
+AGENTS.md
+.kiro/
+.opencode.json
+.scaffolding/
+
+# ---------------------------------------------------------------------------
+# Local research material and scratch space (never tracked)
+# ---------------------------------------------------------------------------
+/papers/
+/factorisation_temp/
+/mixed/
+/packages/
+/PARALLEL_MIXED*.md
+/a3.txt
+/s6.txt
+/mathilda_plot.png

@@ -169,7 +169,7 @@ $AnsatzColMemo = <||>;
    same answer is Complex: (1 + x^2)/(x - I) reduces to x + I only with the
    option.  Detected with the _Complex PATTERN, not FreeQ[e, Complex]: this
    kernel's FreeQ with a bare type-symbol does not match an atom's type-head
-   (MATHILDA_DIVERGENCES.md). *)
+   (docs/notes/MATHILDA_DIVERGENCES.md). *)
 CanRaw[e_] := With[{t = Together[e]},
   If[Cases[t, _Complex, {0, Infinity}] === {}, Cancel[t], Cancel[t, Extension -> Automatic]]];
 (* FieldDataMemo[atoms]: FieldData memoised by the atom set.  Building the field
@@ -1359,7 +1359,7 @@ ResidueClasses[T_, p_, tp_, Y_, verbose_: False] := Catch[Module[
     If[m >= 3,
       (* the substituted characteristic polynomial is expanded and its coefficients
          reduced before the gcd: an unexpanded algebraic constant that equals 0 need
-         not be recognised by the extension gcd (MATHILDA_DIVERGENCES.md A16).  A root of the residue polynomial
+         not be recognised by the extension gcd (docs/notes/MATHILDA_DIVERGENCES.md A16).  A root of the residue polynomial
          always has places over p, so an empty gcd is a computational failure, never
          a class to skip: skipping it would leave the residue divisor incomplete and
          the holomorphic-remainder certificate unsound. *)
@@ -3561,7 +3561,7 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
     colFr = Join[colFr, {#[[1]], NumDen /@ Take[Can /@ TPad[T, #[[2]]], nc]} & /@ extra]];
   (* iterators named ma / ent, not a / e: a Do iterator inside the package
      captures a caller's symbol of the same name on Mathilda
-     (MATHILDA_DIVERGENCES.md A18: Do, unlike Table, is not capture-avoiding), and a, b, e are the usual
+     (docs/notes/MATHILDA_DIVERGENCES.md A18: Do, unlike Table, is not capture-avoiding), and a, b, e are the usual
      parameter names of an integrand *)
   monoCols = If[m >= 3,
     Flatten[Table[With[{col = TowerD[T, (Times @@ (gens^monos[[ma]]))/denv TUnit[T, i - 1]]},
@@ -3636,7 +3636,7 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
        the old radical route (map back to radicals, Cancel[.., Extension ->
        Automatic]) could drop a factor of a special over the extension; both left
        an inconsistent, over-generated system (the Charlwood A2/A3/P8 divergence,
-       MATHILDA_DIVERGENCES.md E.2.1).  Instead use the PRODUCT of the distinct
+       docs/notes/MATHILDA_DIVERGENCES.md E.2.1).  Instead use the PRODUCT of the distinct
        denominators as the common multiple: any common multiple gives an
        equivalent system -- L is unknown-free, so multiplying the polynomial
        identity by an extra factor preserves its solution set -- and the quotient
@@ -3690,7 +3690,7 @@ AnsatzSystem[T_, rem_, denv_, units_, unkLogs_, css_, monos_, gammas_, betas_, u
      with transcendental parameters the entries are rational functions of the
      parameters and the default method is the one to use (Mathilda: the one-step
      method does not finish on a 20 x 15 system whose entries are linear in two
-     parameters, MATHILDA_DIVERGENCES.md A17) *)
+     parameters, docs/notes/MATHILDA_DIVERGENCES.md A17) *)
   red = If[FreeQ[aug, _Symbol?(! NumericQ[#] &)], RowReduce[aug, Method -> "OneStepRowReduction"], RowReduce[aug]];
   (* with transcendental parameters the entries are rational functions of the parameters:
      their zero is not syntactic, so the pivot test below sees them through Together

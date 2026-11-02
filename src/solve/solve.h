@@ -5,7 +5,7 @@
  * that parses options, normalises arguments, and dispatches to a
  * specialist (currently Solve`SolvePolynomialEquality in solvepoly.c).
  *
- * Architecture: plans/SOLVE_PLAN.md.
+ * Architecture: docs/notes/plans/SOLVE_PLAN.md.
  */
 
 #ifndef SOLVE_H

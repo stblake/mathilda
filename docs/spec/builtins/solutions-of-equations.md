@@ -871,7 +871,7 @@ for complete solution information") that a bare `Solve` would emit — the advic
 is moot from inside `Reduce`. Genuine `Solve` diagnostics (`Solve::svars`,
 `Solve::nsdim`, …) are not suppressed.
 
-**Status**: implemented incrementally per `REDUCE_PLAN.md`. Landed so far:
+**Status**: implemented incrementally per `docs/notes/REDUCE_PLAN.md`. Landed so far:
 
 - **Front-end + normal-form layer**: argument parsing, a `Reduce::ivar`
   diagnostic for an invalid variable specification, and a `True`/`False`

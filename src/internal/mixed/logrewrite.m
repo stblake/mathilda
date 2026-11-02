@@ -40,7 +40,7 @@
    budget of $RewriteBudget seconds (TimeConstrained) on the rewrite as a whole.
 
    Where this file differs from logrewrite.wl (the kernel divergences are catalogued in
-   MATHILDA_DIVERGENCES.md, A19-A23):
+   docs/notes/MATHILDA_DIVERGENCES.md, A19-A23):
      - Can leaves nested radicals in non-canonical forms: SameQ0 settles a numerically zero
        difference coefficient by coefficient (RootReduce), and a square root of a non-real
        number with real algebraic parts and a rational squared modulus counts as tame

@@ -1,7 +1,7 @@
 (* ddi_vol1_corpus.m -- the integrals of S. Blake, "Diabolically Difficult
    Integrals", Volume 1, transcribed for tools/ddi_stress.py, a stress test of
    Integrate[f, x, Method -> "Trager"] and Method -> "ParallelMixedTower" with
-   FriCAS as a third opinion.  Results: ALGEBRAIC_INTEGRAL_PERF.md.
+   FriCAS as a third opinion.  Results: docs/notes/ALGEBRAIC_INTEGRAL_PERF.md.
 
    FORMAT.  One case per line:  {"id", "family", "integrand", "expect", "ref"}
    - family: the book chapter (the LaTeX file stem).

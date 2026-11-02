@@ -1,7 +1,7 @@
 /*
  * reduce_companions.h
  *
- * Companion builtins for `Reduce` (REDUCE_PLAN.md, Phase 8).
+ * Companion builtins for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 8).
  *
  * v1 ships `LogicalExpand`: it expands a logical combination of equations,
  * inequalities and Boolean atoms into disjunctive normal form (an Or of Ands)

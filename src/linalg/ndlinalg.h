@@ -102,7 +102,7 @@ Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
  * The SVD pair: PseudoInverse[m] and LeastSquares[m, b].
  *
  * These do NOT take the call and do NOT defer via linalg_delist_and_reeval,
- * for the reason plans/HPC_IMPROVEMENT_PLAN.md item 10.2 records: a fast path
+ * for the reason docs/notes/plans/HPC_IMPROVEMENT_PLAN.md item 10.2 records: a fast path
  * that declines by re-evaluating the call re-enters the builtin that dispatched
  * to it. `NULL` means "I decline"; the caller then runs its own path with the
  * arguments it already has, and there is no way back in.

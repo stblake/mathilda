@@ -1,7 +1,7 @@
 /*
  * reduce_qe.c
  *
- * Quantifier elimination for `Reduce` (REDUCE_PLAN.md, Phase 7): the front-end
+ * Quantifier elimination for `Reduce` (docs/notes/REDUCE_PLAN.md, Phase 7): the front-end
  * for the `Exists`, `ForAll` and `Resolve` heads.  See reduce_qe.h for the shape
  * of the method and the three-case (by free-variable count) routing.
  *

@@ -15,7 +15,7 @@ Expr* builtin_unique(Expr* res);
  * Table) that actually binds names? scoping_capture_avoid: if substituting a
  * value carrying any name in danger[] into `e`'s body could capture one of e's
  * bound locals, return a fresh copy with the colliding locals alpha-renamed,
- * else NULL. See MATHILDA_DIVERGENCES.md A11. */
+ * else NULL. See docs/notes/MATHILDA_DIVERGENCES.md A11. */
 bool expr_is_binding_scope(Expr* e);
 Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
 

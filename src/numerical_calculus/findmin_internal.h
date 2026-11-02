@@ -477,7 +477,7 @@ typedef struct {
  * quantity (so it meant a 1e-4 violation, not 1e-8), and was used both to steer
  * the search and to decide what got returned. NMinimize therefore answered
  * NMinimize[{x^2+y^2, x+y >= 2}, {x,y}] with x + y = 1.99990 — a point violating
- * its own constraint, reported as the solution (NMINIMIZE_FEASIBILITY_BUG.md).
+ * its own constraint, reported as the solution (docs/notes/NMINIMIZE_FEASIBILITY_BUG.md).
  * Splitting the constant is not re-introducing that: the failure there was an
  * unnamed conflation, and the fix is that each threshold is now named for the
  * question it answers and used only for that question.
@@ -522,7 +522,7 @@ typedef struct {
  * old effective give-up threshold (1e-3), while never rejecting a problem the
  * solver can genuinely solve. Tightening it further is a real improvement and
  * requires first tightening the mixed-integer continuous refinement — see
- * NMINIMIZE_FEASIBILITY_BUG.md. */
+ * docs/notes/NMINIMIZE_FEASIBILITY_BUG.md. */
 #define NM_FEAS_RETURN_VIOL  1.0e-5   /* return path: what a caller may receive */
 #define NM_FEAS_RETURN       (NM_FEAS_RETURN_VIOL * NM_FEAS_RETURN_VIOL)
 #define NM_PENALTY_MU     1.0e6    /* fixed penalty weight for NelderMead/SA */

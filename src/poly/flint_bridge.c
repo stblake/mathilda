@@ -8479,7 +8479,7 @@ void flint_bridge_init(void) {
  *  These back PolynomialQuotient/Remainder/QuotientRemainder, PolynomialGCD
  *  and PolynomialExtendedGCD under `Modulus -> p`. FLINT's nmod_poly makes the
  *  GF(p) Euclidean/division routines native (the classical Expr path is a
- *  CoefficientList->Sum round trip per step; see MATHILDA_DIVERGENCES.md C).
+ *  CoefficientList->Sum round trip per step; see docs/notes/MATHILDA_DIVERGENCES.md C).
  *  Each declines (NULL) -- caller uses the classical fallback -- when the
  *  input is not a univariate polynomial over Q in `x`, when p is not a
  *  word-size prime (F_p must be a field for gcd/xgcd/divrem), or when a
