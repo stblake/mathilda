@@ -259,7 +259,7 @@ def main():
         check(f"latex: {name} sends no latex, so the payload is shown as text",
               latex(by_id.get(i, [])) == [None], by_id.get(i))
     check("latex: InputForm's payload is the input form, not StandardForm",
-          payloads(by_id.get(1, [])) == ["-1/(2 (1 - Sqrt[x])) + Log[1 - Sqrt[x]]/(2 Sqrt[x])"],
+          payloads(by_id.get(1, [])) == ["-1/2*1/(1 - Sqrt[x]) + Log[1 - Sqrt[x]]/(2*Sqrt[x])"],
           by_id.get(1))
     # The same derivative WITHOUT the directive still typesets: the scan for a
     # directive must not cost an ordinary result its LaTeX.

@@ -59,9 +59,13 @@ void test_fit_multivariate_quadratic(void) {
 
 void test_fit_transcendental_basis(void) {
     /* Sine basis (machine precision). */
-    assert_eval_eq("Fit[N[{{-Pi,4},{-Pi/2,0},{0,1},{Pi/2,-1},{Pi,-4}}], "
-                   "{Sin[x/2], Sin[x], Sin[2 x]}, x]",
-                   "-4.0 Sin[1/2 x] + 2.32843 Sin[x] + 0.0 Sin[2 x]", 0);   /* exact basis kept, as in the reference */
+    /* Sin[2 x] vanishes at every sample, so its coefficient is undetermined by
+     * the data: the minimum-norm solve gives 0.0 or a few ulps depending on the
+     * LAPACK in use (0.0 Sin[2 x] then absorbs to a bare 0.0).  Chop pins only
+     * the determined part. */
+    assert_eval_eq("Chop[Fit[N[{{-Pi,4},{-Pi/2,0},{0,1},{Pi/2,-1},{Pi,-4}}], "
+                   "{Sin[x/2], Sin[x], Sin[2 x]}, x]]",
+                   "-4.0 Sin[1/2 x] + 2.32843 Sin[x]", 0);
 }
 
 /* ---- WorkingPrecision ---- */
@@ -121,14 +125,15 @@ void test_fit_ridge_aliases(void) {
 }
 
 void test_fit_lasso_sparsity(void) {
-    /* Large penalty drives all non-constant coefficients to exactly zero. */
+    /* Large penalty drives all non-constant coefficients to exactly zero;
+     * 0.0 x^k then absorbs (an inexact zero absorbs its product), leaving 0.5. */
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1},{.1,0},{1,1}}, "
                    "{1, x, x^2, x^3, x^4}, x, FitRegularization -> {\"LASSO\", 1}]",
-                   "0.5 + 0.0 x + 0.0 x^2 + 0.0 x^3 + 0.0 x^4", 0);
+                   "0.5", 0);
     /* "L1" is an alias of "LASSO". */
     assert_eval_eq("Fit[{{0.,0.},{0.001,1},{0.01,1},{.1,0},{1,1}}, "
                    "{1, x, x^2, x^3, x^4}, x, FitRegularization -> {\"L1\", 1}]",
-                   "0.5 + 0.0 x + 0.0 x^2 + 0.0 x^3 + 0.0 x^4", 0);
+                   "0.5", 0);
 }
 
 void test_fit_lasso_monotone(void) {

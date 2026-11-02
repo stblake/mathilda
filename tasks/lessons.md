@@ -5097,3 +5097,15 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   line-buffer stdout, or it dies with SIGALRM and an empty log (`| tail` then hides the exit code).
 - 2026-10-30 (DDI stress review): user: PossibleZeroQ must be robust enough that verification needs no numeric fallback; a PZQ failure on a correct answer means improve PossibleZeroQ. Rule: no numeric acceptance paths (spotCheck/numericZeroQ/branchUnit sampling); numerics only to triage.
 - 2026-10-30: I made PossibleZeroQ re-test real samples lying on a branch cut off-axis, treating cut points as measure-zero noise. Wrong under the user's 'valid for all complex x' standard: principal values on cuts count, and dsolve_tests caught a branch-wrong DSolve answer it let through. Rule: never discount cut points in a zero test; a PZQ False on a branchy answer means fix the answer's branches.
+
+## 2026-11-02 — a green local ctest proved nothing (NDEBUG), and Linux CI was the only real gate
+- The in-source `tests/` tree was configured `CMAKE_BUILD_TYPE=Release`; `-DNDEBUG` compiled out the
+  `assert()` inside `assert_eval_eq`, so failed checks printed FAIL and exited 0. I shipped v0.6142 with two
+  wrong expected strings on that basis, and a dozen older stale pins were hidden the same way.
+- Rule: verify test changes in `tests/build` (CI's configuration), or grep the run's output for `^FAIL` —
+  never trust the pass count alone. (Now also enforced: CMake strips NDEBUG, helpers abort().)
+- Rule: a Linux-only numeric drift in double-double / compensated kernels is FP contraction first
+  (GNU-mode `-ffp-contract=fast` + an FMA-capable target), libm second. Reproduce with
+  `-march=haswell -ffp-contract=fast` before hypothesising about glibc.
+- Rule: an intermittent wrong answer or hang that varies run to run is memory first — run it under
+  `MallocPreScribble=1 MallocScribble=1` (deterministic) and an ASan build of the one suite.

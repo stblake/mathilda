@@ -41,6 +41,21 @@ enable_testing()
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_C_FLAGS MATCHES "-O")
     add_compile_options(-O2 -g)
 endif()
+# ...and whatever build type IS chosen, the asserts stay live: every check in
+# test_utils.h reports its failure through assert(), so under -DNDEBUG a suite
+# prints FAIL and still exits 0. A Release-configured tree hid a dozen stale
+# expectations that only CI's default build reported. The define is stripped from
+# the per-configuration flags themselves (a -UNDEBUG option is not enough: CMake
+# repeats the configuration flags after it on the command line).
+foreach(_cfg RELEASE RELWITHDEBINFO MINSIZEREL)
+    string(REPLACE "-DNDEBUG" "" CMAKE_C_FLAGS_${_cfg} "${CMAKE_C_FLAGS_${_cfg}}")
+endforeach()
+# The kernels are compiled as the shipped binary compiles them: no fused
+# multiply-add contraction (see CFLAGS in the makefile). The suites build in GNU
+# mode, whose GCC default is -ffp-contract=fast, so on an FMA-capable target
+# (CI's ubuntu-26.04 GCC 15) they tested different arithmetic from ./Mathilda --
+# the double-double kernels drifted by ~1e-13 and five suites failed on Linux only.
+add_compile_options(-ffp-contract=off)
 
 option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
@@ -4488,23 +4503,23 @@ endif()
 # verified inert first integrals.)
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 749)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 749)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2
 # (was 4; M31's shared prelude precision fix verified two more, see §2.2.11 block).
 add_test(NAME dsolve_corpus_2_2_1_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_221.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_221.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
 # Section 2.2.2 "Problems 101 to 200" (Table 2.19): 100 elementary ODEs, 9 IVPs.
 # Continuation of §2.2.1; same IVP handling (equation slot {ode, ic...}).  M22.
 # Baseline is the checked-in non-PASS high-water mark; each wave lowers it.
 add_test(NAME dsolve_corpus_2_2_2_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_222.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_222.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 6)
 # Section 2.2.3 "Problems 201 to 300" (Table 2.19): 100 elementary ODEs, 35 IVPs.
 # Continuation of §2.2.2 (constant-coeff any-order, Euler/Emden-Fowler, elementary
 # first-order); same IVP handling (equation slot {ode, ic...}).  M23.  Baseline 1
@@ -4512,8 +4527,8 @@ add_test(NAME dsolve_corpus_2_2_2_tests
 # lands on an Abel equation of the 2nd kind).
 add_test(NAME dsolve_corpus_2_2_3_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_223.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_223.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 # Section 2.2.4 "Problems 301 to 400" (Table 2.19): 100 elementary ODEs, 24 IVPs.
 # Continuation of §2.2.3, skewed toward higher-order constant-coefficient linear
 # (2nd/3rd/5th order, homogeneous + forced) and nonlinear _with_linear_symmetries;
@@ -4522,8 +4537,8 @@ add_test(NAME dsolve_corpus_2_2_3_tests
 # whose homogeneous is Kovacic but the nonhomogeneous var-params is not wired).
 add_test(NAME dsolve_corpus_2_2_4_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_224.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_224.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
 # Section 2.2.5 "Problems 401 to 500" (Table 2.19): 100 elementary ODEs, 15 IVPs.
 # Continuation of §2.2.4; a series-solution-heavy chunk (Edwards & Penney): 2nd-order
 # linear (const + variable coeff), Airy/Emden-Fowler, Gegenbauer, Bessel, Jacobi/2F1,
@@ -4533,8 +4548,8 @@ add_test(NAME dsolve_corpus_2_2_4_tests
 # coefficient equation Mathilda leaves unevaluated, matching Mathematica).
 add_test(NAME dsolve_corpus_2_2_5_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_225.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 21)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_225.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 21)
 
 # Section 2.2.6 "Problems 501 to 600" (Table 2.29, Edwards & Penney 6th ed.): 100
 # ODEs -- 74 scalar (47 IVP) + 26 systems.  Dominated by forced linear
@@ -4549,8 +4564,8 @@ add_test(NAME dsolve_corpus_2_2_5_tests
 # three systems whose closed form exceeds the 8 s per-case budget.
 add_test(NAME dsolve_corpus_2_2_6_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_226.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 9)
 
 # Section 2.2.7 "Problems 601 to 700" (Table 2.31): 100 ODEs -- 50 scalar (23 IVP;
 # elementary first-order: separable / quadrature / linear / homogeneous / Riccati) +
@@ -4564,8 +4579,8 @@ add_test(NAME dsolve_corpus_2_2_6_tests
 # y'=Log[1+y^2] (675); and the slow homogeneous-class-G y'=4(x y)^(1/3) (683).
 add_test(NAME dsolve_corpus_2_2_7_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_227.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_227.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 6)
 
 # Section 2.2.8 "Problems 701 to 800" (Table 2.33, Edwards & Penney): 100 scalar
 # first-order ODEs (20 IVP), 0 systems.  Elementary families -- separable, linear,
@@ -4583,8 +4598,8 @@ add_test(NAME dsolve_corpus_2_2_7_tests
 #   ParallelMixedSpecial's 10 s cascade budget to decline (equally slow at v0.461; tasks/todo.md).
 add_test(NAME dsolve_corpus_2_2_8_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_228.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_228.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Section 2.2.9 "Problems 801 to 900" (Edwards & Penney): 100 scalar ODEs
 # (35 IVP), 0 systems.  Dominated by second-order linear: 38 const-coeff
@@ -4601,8 +4616,8 @@ add_test(NAME dsolve_corpus_2_2_8_tests
 # instead of relying on the non-numericizable "trust DSolve" path.
 add_test(NAME dsolve_corpus_2_2_9_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_229.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_229.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
 # Section 2.2.10 "Problems 901 to 1000" (Edwards & Penney): 100 records --
 # 56 scalar (15 IVP) + 44 systems.  Constant-coefficient linear (2nd/3rd/4th
@@ -4623,8 +4638,8 @@ add_test(NAME dsolve_corpus_2_2_9_tests
 #    and closes with variation of parameters (dsolve_kovacic.c).
 add_test(NAME dsolve_corpus_2_2_10_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2210.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2210.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
 # Section 2.2.11 "Problems 1001 to 1100" (Edwards & Penney): 100 records --
 # 59 scalar (13 IVP) + 41 systems.  A large leading block of FIRST-ORDER CONSTANT-
@@ -4652,8 +4667,8 @@ add_test(NAME dsolve_corpus_2_2_10_tests
 #    section's non-PASS count, never raise it, never introduces a FAIL.
 add_test(NAME dsolve_corpus_2_2_11_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2211.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2211.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Section 2.2.12 "Problems 1101 to 1200" (Edwards & Penney): 100 records --
 # 100 scalar first-order ODEs (38 IVP), 0 systems.  Elementary first-order
@@ -4679,8 +4694,8 @@ add_test(NAME dsolve_corpus_2_2_11_tests
 # solved-for-x: E^x plus linear x), 1157 (Abel 2nd kind (a y+b)/(c y+d), the M13 gap).
 add_test(NAME dsolve_corpus_2_2_12_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2212.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2212.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Section 2.2.13 (Problems 1201-1300, Edwards & Penney): 100 records, 32 IVP,
 # 0 systems.  52 second-order (incl. 6 Euler-Cauchy "Emden-Fowler") + 48
@@ -4688,8 +4703,8 @@ add_test(NAME dsolve_corpus_2_2_12_tests
 # after the M33 wave; research-grade Abel-2nd-type residue declines (bounded).
 add_test(NAME dsolve_corpus_2_2_13_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2213.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2213.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # Section 2.2.14 (Problems 1301-1400, Boyce & DiPrima): 100 records, 25 IVP,
 # 1 system.  2nd-order-linear dominated -- 38 _with_linear_symmetries, 19
@@ -4711,8 +4726,8 @@ add_test(NAME dsolve_corpus_2_2_13_tests
 # genuinely nonlinear, no closed form in Maple/Mathematica/Sympy.
 add_test(NAME dsolve_corpus_2_2_14_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2214.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2214.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 12)
 
 # Section 2.2.15 (Problems 1401-1500, Boyce & DiPrima): 100 records, 18 IVP,
 # 61 systems (53 2x2 + 8 3x3 constant-coefficient linear).  Scalars: high-order
@@ -4725,8 +4740,8 @@ add_test(NAME dsolve_corpus_2_2_14_tests
 # both also unsolved by SymPy).
 add_test(NAME dsolve_corpus_2_2_15_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2215.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2215.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Section 2.2.16 (Problems 1501-1600, Boyce & DiPrima): 100 records, 56 IVP,
 # 0 systems.  Buckets: 77 elementary first-order (39 separable, 25 linear, 13
@@ -4741,8 +4756,8 @@ add_test(NAME dsolve_corpus_2_2_15_tests
 # independent variable of y'==a y^((a-1)/a)).
 add_test(NAME dsolve_corpus_2_2_16_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2216.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2216.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Section 2.2.17 (Problems 1601-1700, Nasser Abbasi): 100 records, 28 IVP, 0
 # systems.  First-order-dominated: 27 homogeneous, 23 Abel-tagged (most overlap
@@ -4757,8 +4772,8 @@ add_test(NAME dsolve_corpus_2_2_16_tests
 # 1681/1689 (nonelementary integrating factor), 1691.
 add_test(NAME dsolve_corpus_2_2_17_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2217.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 15)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2217.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 15)
 
 # Section 2.2.18 (Problems 1701-1800, Nasser Abbasi): 100 records, 14 IVP, 0
 # systems.  45 first-order / 55 second-order (no order >= 3).  Mixed: 25 2nd-order
@@ -4773,8 +4788,8 @@ add_test(NAME dsolve_corpus_2_2_17_tests
 # Int[E^x/Sqrt[x]] -> Erfi, a deep-Risch Erf-tower extension).
 add_test(NAME dsolve_corpus_2_2_18_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2218.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2218.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Section 2.2.19 (Problems 1801-1900, Nasser Abbasi): 100 records, 27 IVP, 0
 # systems.  Second-order-linear dominated: 3 Riccati, ~30 nonhomogeneous 2nd-order
@@ -4787,8 +4802,8 @@ add_test(NAME dsolve_corpus_2_2_18_tests
 #   commit's prelude); the 25 there was not reproducible.
 add_test(NAME dsolve_corpus_2_2_19_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2219.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 27)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2219.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 27)
 
 # Section 2.2.20 (Problems 1901-2000, Nasser Abbasi): 100 records, 34 IVP, 0
 # systems.  ALL homogeneous 2nd-order linear with a regular singular point
@@ -4801,8 +4816,8 @@ add_test(NAME dsolve_corpus_2_2_19_tests
 # bounded declines, not wrong answers -- see STATUS.md.
 add_test(NAME dsolve_corpus_2_2_20_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2220.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 42)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2220.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 42)
 
 # Section 2.2.21 (Problems 2001-2100, Nasser Abbasi): 100 records, 0 IVP, 0
 # systems.  ALL homogeneous 2nd-order linear regular-singular ("Series expansion
@@ -4812,8 +4827,8 @@ add_test(NAME dsolve_corpus_2_2_20_tests
 # Baseline 28 -> 31 (2026-10-26): as 2.2.19: every non-PASS case was non-PASS at 6ef80ba5 itself.
 add_test(NAME dsolve_corpus_2_2_21_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2221.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 31)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2221.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 31)
 
 # Section 2.2.22 (Problems 2101-2200, Nasser Abbasi): 100 records, 19 IVP, 0
 # systems.  Dominated by higher-order (3rd-6th) constant-coefficient linear ODEs
@@ -4827,8 +4842,8 @@ add_test(NAME dsolve_corpus_2_2_21_tests
 # scalar * Laurent-SeriesData order truncation.
 add_test(NAME dsolve_corpus_2_2_22_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2222.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2222.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Section 2.2.23 (Problems 2201-2300, Nasser Abbasi): 100 records, 17 IVP, 55
 # systems.  The first SYSTEMS-heavy section since 2.2.15: 45 scalar (higher-order
@@ -4841,8 +4856,8 @@ add_test(NAME dsolve_corpus_2_2_22_tests
 # exponential; systems).  Baseline argv3 = the STATUS.md non-PASS count.
 add_test(NAME dsolve_corpus_2_2_23_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2223.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2223.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Section 2.2.24 (Problems 2301-2400, Nasser Abbasi): 100 records, 51 IVP, 0
 # systems.  Mixed first-order (separable / linear / homogeneous class A/C / exact
@@ -4866,8 +4881,8 @@ add_test(NAME dsolve_corpus_2_2_23_tests
 # standing 1-margin for the flaky fork-timeout cluster).
 add_test(NAME dsolve_corpus_2_2_24_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2224.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2224.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 14)
 
 # Section 2.2.25 (Problems 2401-2500, Nasser Abbasi): 100 records, 32 IVP, 0
 # systems.  Second-order-linear-heavy: constant-coefficient nonhomogeneous (incl.
@@ -4885,8 +4900,8 @@ add_test(NAME dsolve_corpus_2_2_24_tests
 # integrating factor).
 add_test(NAME dsolve_corpus_2_2_25_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2225.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 19)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2225.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 19)
 
 # Section 2.2.26 (Problems 2501-2600, Nasser Abbasi): 100 records, 50 IVP, 0
 # systems.  A Braun-textbook section: a first-order-nonlinear-heavy front half
@@ -4907,8 +4922,8 @@ add_test(NAME dsolve_corpus_2_2_25_tests
 #   the implicit-function rule); they now decline.
 add_test(NAME dsolve_corpus_2_2_26_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 15)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2226.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 15)
 
 # Section 2.2.27 (Problems 2601-2700, Nasser Abbasi): 100 records, 96 scalar
 # (39 IVP), 4 systems.  A 2nd-order-linear-heavy section: constant-coefficient
@@ -4919,8 +4934,8 @@ add_test(NAME dsolve_corpus_2_2_26_tests
 # the STATUS.md non-PASS count.
 add_test(NAME dsolve_corpus_2_2_27_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2227.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 17)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2227.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 17)
 
 # Section 2.2.28 (Problems 2701-2800, Nasser Abbasi): 100 records, 18 scalar
 # (3 IVP), 82 systems -- a systems-heavy section: constant-coefficient linear
@@ -4932,8 +4947,8 @@ add_test(NAME dsolve_corpus_2_2_27_tests
 # f2[t] (2708/2762/2780) + system DiracDelta/UnitStep forcing (2781/2782).
 add_test(NAME dsolve_corpus_2_2_28_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2228.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2228.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 14)
 
 # Section 2.2.29 (Problems 2801-2900, Nasser Abbasi): 100 records, 75 scalar
 # (21 IVP), 25 systems.  A first-order-nonlinear + linear-systems section: 2x2/3x3/
@@ -4952,8 +4967,8 @@ add_test(NAME dsolve_corpus_2_2_28_tests
 # DSolve times out at the 8 s harness bound -- deferred).
 add_test(NAME dsolve_corpus_2_2_29_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2229.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2229.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 12)
 
 # DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.30
 # (Problems 2901-3000, 12000.org).  100 scalar first-order ODEs (24 IVPs, 0 systems):
@@ -4972,8 +4987,8 @@ add_test(NAME dsolve_corpus_2_2_29_tests
 # symmetry, 2979 IVP fit over 4 nested-radical branches).
 add_test(NAME dsolve_corpus_2_2_30_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2230.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2230.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.31
 # (Problems 3001-3100, 12000.org).  100 scalar ODEs (20 IVPs, 0 systems): a
@@ -4991,8 +5006,8 @@ add_test(NAME dsolve_corpus_2_2_30_tests
 # so the y(0)=1 condition cannot be fitted -- same deferred class as 2.2.30-2979).
 add_test(NAME dsolve_corpus_2_2_31_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2231.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2231.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.32
 # (Problems 3101-3200, 12000.org).  100 scalar ODEs (8 IVPs, 0 systems): entirely
@@ -5011,8 +5026,8 @@ add_test(NAME dsolve_corpus_2_2_31_tests
 # 0 FAIL.
 add_test(NAME dsolve_corpus_2_2_32_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2232.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2232.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # 12000.org "Solving ODEs" section 2.2.33 (Problems 3201-3300).  M53: 100 records
 # (93 scalar [14 IVP], 7 systems).  Measured 77/100 scalar PASS, 0 FAIL, 23 UNEVAL
@@ -5031,8 +5046,8 @@ add_test(NAME dsolve_corpus_2_2_32_tests
 #   conditions only at complex constants (tasks/todo.md).
 add_test(NAME dsolve_corpus_2_2_33_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2233.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2233.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 11)
 
 # 12000.org "Solving ODEs" section 2.2.34 (Problems 3301-3400).  M61: 100 records, all
 # scalar (16 IVP), 0 systems.  Three sub-blocks: first-order nonlinear solvable-for-y'
@@ -5055,8 +5070,8 @@ add_test(NAME dsolve_corpus_2_2_33_tests
 # decline all forcing -- the named next step), and 3346's stage-2 quadrature is elliptic.
 add_test(NAME dsolve_corpus_2_2_34_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2234.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 18)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2234.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 18)
 
 # 12000.org "Solving ODEs" section 2.2.35 (Problems 3401-3500).  M62: 100 records, all
 # scalar (31 IVP), 0 systems; Riley-Hobson-Bence, Robert H Martin 1983, Martin-Reissner
@@ -5081,8 +5096,8 @@ add_test(NAME dsolve_corpus_2_2_34_tests
 # point (the deferred class shared with 2.2.30-2979 and 2.2.31-3049).
 add_test(NAME dsolve_corpus_2_2_35_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2235.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2235.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # 12000.org "Solving ODEs" section 2.2.36 (Problems 3501-3600).  M63: 100 records, all
 # scalar (9 IVP), 0 systems; Goode & Annin 4th ed 2015 (44), Goode 2nd ed 2000 (43),
@@ -5115,8 +5130,8 @@ add_test(NAME dsolve_corpus_2_2_35_tests
 # sympy=False, the documented non-elementary class whose sibling 3576 solves.
 add_test(NAME dsolve_corpus_2_2_36_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2236.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2236.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 5)
 
 # M64 (Problems 3601-3700, our section 2.2.37 = upstream 2.1.37).  Heavily
 # first-order (20 linear / 10 separable / 8 Bernoulli / the homogeneous-classA/
@@ -5135,8 +5150,8 @@ add_test(NAME dsolve_corpus_2_2_36_tests
 #   implicit check; it now declines.
 add_test(NAME dsolve_corpus_2_2_37_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2237.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2237.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # M65 (Problems 3701-3800, our section 2.2.38 = upstream 2.1.38).  Goode & Annin
 # 4th ed., second-order-LINEAR dominated: 67 _linear, 18 _with_linear_symmetries,
@@ -5154,8 +5169,8 @@ add_test(NAME dsolve_corpus_2_2_37_tests
 # wall -- a latency residue, same class as 2.2.32's 3161/3164/3165.
 add_test(NAME dsolve_corpus_2_2_38_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2238.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2238.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # M66 (Problems 3801-3900, our section 2.2.39 = upstream 2.1.39).  Systems-heavy:
 # 92 constant-coefficient linear systems (53 2x2, 32 3x3, 7 4x4; a forced block
@@ -5171,8 +5186,8 @@ add_test(NAME dsolve_corpus_2_2_38_tests
 # (variable-coeff 2x2/3x3 systems), 3886 (cubic-Root 3x3 spectrum churn).
 add_test(NAME dsolve_corpus_2_2_39_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2239.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2239.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # M67 (Problems 3901-4000, our section 2.2.40 = upstream 2.1.40).  A Laplace-
 # transform-style chapter: 26 constant-coefficient linear systems + first/second-
@@ -5186,8 +5201,8 @@ add_test(NAME dsolve_corpus_2_2_39_tests
 # dsolve_common.c).  Now genuinely correct; 0 non-PASS.  Baseline argv3 = 0.
 add_test(NAME dsolve_corpus_2_2_40_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2240.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2240.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
 # Section 2.2.41 "Problems 4001 to 4100" (Nasser Abbasi; upstream Ch2.S1.SS41.htm).
 # 100 scalar (6 IVP), 0 systems; 2nd-order-linear dominated (59 _2nd_linear, incl.
@@ -5203,8 +5218,8 @@ add_test(NAME dsolve_corpus_2_2_40_tests
 # Baseline argv3 = 25.
 add_test(NAME dsolve_corpus_2_2_41_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2241.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 25)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2241.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 25)
 
 # Section 2.2.42 "Problems 4101 to 4200" (Nasser Abbasi; upstream Ch2.S1.SS42.htm).
 # 88 scalar (20 IVP) + 12 systems; mixed higher-order constant-coefficient linear,
@@ -5217,8 +5232,8 @@ add_test(NAME dsolve_corpus_2_2_41_tests
 # Baseline argv3 = 1.
 add_test(NAME dsolve_corpus_2_2_42_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2242.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2242.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Section 2.2.43 "Problems 4201 to 4300" (Nasser Abbasi; upstream Ch2.S1.SS43.htm).
 # 100 scalar (15 IVP), 0 systems; first-order dominated (30 separable, 18 linear,
@@ -5237,8 +5252,8 @@ add_test(NAME dsolve_corpus_2_2_42_tests
 # latency).  Baseline argv3 = 7.
 add_test(NAME dsolve_corpus_2_2_43_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2243.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2243.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Section 2.2.44 "Problems 4301 to 4400" (Nasser Abbasi; upstream Ch2.S1.SS44.htm).
 # 100 scalar (2 IVP), 0 systems; first-order NONLINEAR dominated (separable,
@@ -5257,8 +5272,8 @@ add_test(NAME dsolve_corpus_2_2_43_tests
 # Baseline argv3 = 8.
 add_test(NAME dsolve_corpus_2_2_44_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2244.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2244.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 8)
 
 # Section 2.2.45 "Problems 4401 to 4500" (Nasser Abbasi; upstream Ch2.S1.SS45.htm).
 # 100 scalar (0 IVP), 0 systems; first-order nonlinear + a few 2nd-order, 17
@@ -5272,8 +5287,8 @@ add_test(NAME dsolve_corpus_2_2_44_tests
 # 4438 (SolvableForX, pinned-only by the slow-verify policy).  Baseline argv3 = 6.
 add_test(NAME dsolve_corpus_2_2_45_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2245.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2245.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 6)
 
 # Section 2.2.46 "Problems 4501 to 4600" (Nasser Abbasi; upstream Ch2.S1.SS46.htm).
 # 45 scalar (19 IVP) + 55 linear systems.  Baseline 89/100 -> 94/100 (M74-M78 batch): shared fixes -- Riccati
@@ -5287,8 +5302,8 @@ add_test(NAME dsolve_corpus_2_2_45_tests
 # >8 s).  Baseline argv3 = 6.
 add_test(NAME dsolve_corpus_2_2_46_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2246.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2246.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 6)
 
 # Section 2.2.47 "Problems 4601 to 4700" (Nasser Abbasi; upstream Ch2.S1.SS47.htm).
 # 100 scalar, first-order linear/Riccati/Abel dominated.  Baseline 83/100 -> 89/100: shared fixes -- Riccati
@@ -5302,8 +5317,8 @@ add_test(NAME dsolve_corpus_2_2_46_tests
 # 4690-4692 (Abel), 4622/4623 (non-elementary quadrature, latency).  Baseline argv3 = 11.
 add_test(NAME dsolve_corpus_2_2_47_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2247.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2247.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 11)
 
 # Section 2.2.48 "Problems 4701 to 4800" (Nasser Abbasi; upstream Ch2.S1.SS48.htm).
 # 100 scalar, first-order nonlinear.  Baseline 76/100 -> 85/100: shared fixes -- Riccati
@@ -5323,8 +5338,8 @@ add_test(NAME dsolve_corpus_2_2_47_tests
 # y' == Cos[x] Sec[y]^2, slow for its class -- open).
 add_test(NAME dsolve_corpus_2_2_48_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2248.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 20)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2248.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 20)
 
 # Section 2.2.49 "Problems 4801 to 4900" (Nasser Abbasi; upstream Ch2.S1.SS49.htm).
 # 100 scalar, first-order nonlinear.  Baseline 85/100 -> 88/100: shared fixes -- Riccati
@@ -5338,8 +5353,8 @@ add_test(NAME dsolve_corpus_2_2_48_tests
 # 4892 (linear, ArcTanh integrating factor).  Baseline argv3 = 12.
 add_test(NAME dsolve_corpus_2_2_49_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2249.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2249.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 12)
 
 # Section 2.2.50 "Problems 4901 to 5000" (Nasser Abbasi; upstream Ch2.S1.SS50.htm).
 # 100 scalar, rational first-order.  Baseline 90/100 -> 92/100 (4929 a 5 s latency flutterer): shared fixes -- Riccati
@@ -5352,8 +5367,8 @@ add_test(NAME dsolve_corpus_2_2_49_tests
 # 4929.  Baseline argv3 = 8.
 add_test(NAME dsolve_corpus_2_2_50_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2250.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2250.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 8)
 
 # --- M79-M83 batch (v0.451): sections 2.2.51-2.2.55, Problems 5001-5500 ---------
 # Shared fixes: NthAlgebraic / SolvableForY implicit second passes, HomogeneousG
@@ -5370,8 +5385,8 @@ add_test(NAME dsolve_corpus_2_2_50_tests
 # 5049, 5058.  Gate 17 + 1 for the load-sensitive 5026/5029.  Baseline argv3 = 18.
 add_test(NAME dsolve_corpus_2_2_51_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2251.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 18)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2251.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 18)
 
 # Section 2.2.52 "Problems 5101 to 5200" (Nasser Abbasi; upstream Ch2.S1.SS52.htm).
 # 100 scalar, 0 IVP.  Rational first-order: Abel 2nd type, homogeneous classes.  Baseline 93/100 -> 96/100.
@@ -5379,8 +5394,8 @@ add_test(NAME dsolve_corpus_2_2_51_tests
 # 5142/5149.  Baseline argv3 = 4.
 add_test(NAME dsolve_corpus_2_2_52_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2252.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2252.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Section 2.2.53 "Problems 5201 to 5300" (Nasser Abbasi; upstream Ch2.S1.SS53.htm).
 # 100 scalar, 0 IVP.  Rational first-order.  Baseline 91/100 -> 96/100.
@@ -5388,8 +5403,8 @@ add_test(NAME dsolve_corpus_2_2_52_tests
 # for the load-sensitive 5227/5234/5238.  Baseline argv3 = 5.
 add_test(NAME dsolve_corpus_2_2_53_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2253.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2253.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 5)
 
 # Section 2.2.54 "Problems 5301 to 5400" (Nasser Abbasi; upstream Ch2.S1.SS54.htm).
 # 100 scalar, 0 IVP.  Bernoulli / class-G / exact and implicit first-order.  Baseline 80/100 -> 92/100.
@@ -5397,8 +5412,8 @@ add_test(NAME dsolve_corpus_2_2_53_tests
 # 5371-5374, 5375 (separable).  Gate 8 + 1 for 5345 (a 4-5 s solve, load-sensitive).  Baseline argv3 = 9.
 add_test(NAME dsolve_corpus_2_2_54_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2254.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2254.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 9)
 
 # Section 2.2.55 "Problems 5401 to 5500" (Nasser Abbasi; upstream Ch2.S1.SS55.htm).
 # 100 scalar, 0 IVP.  Class G / dAlembert / linear-symmetry first-order.  Baseline 81/100 -> 95/100.
@@ -5407,8 +5422,8 @@ add_test(NAME dsolve_corpus_2_2_54_tests
 # load-sensitive).  Baseline argv3 = 7.
 add_test(NAME dsolve_corpus_2_2_55_tests
          COMMAND dsolve_corpus_tests
-                 ../../DSolve_test_status/DE_examples_2255.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2255.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

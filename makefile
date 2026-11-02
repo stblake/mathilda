@@ -150,7 +150,14 @@ endif
 # no-FLINT / no-MPFR CI job — the one place nobody reads the warning stream.
 # Promote it so that job fails loudly instead: the fix is always to guard the
 # definition with the same `#ifdef` as its caller.
-CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
+# -ffp-contract=off: the machine kernels' double-double arithmetic (Dekker
+# products, TwoSum) and the compensated sums are error-free transformations only
+# when a*b + c is two roundings. A fused multiply-add silently breaks them; GCC
+# fuses whenever the target has FMA and contraction is on (GNU mode, or
+# -march=native), which moved Hypergeometric0F1 / MeijerG / Gamma by ~1e-13 in
+# the tests' build. -std=c99 implies it for GCC; it is spelled out so a
+# -march=native build, or a compiler with another default, cannot lose it.
+CFLAGS = -O3 -std=c99 -ffp-contract=off -Wall -Wextra -Werror=implicit-function-declaration \
          -Werror=incompatible-pointer-types -Werror=int-conversion \
          -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/ml -I./src/linalg -I./src/numbertheory -I./src/numbertheory/factorinteger -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/solve -I./src/ffi -I./src/bitwise -I./src/sparse $(SYSPREFIX_CFLAGS)
 

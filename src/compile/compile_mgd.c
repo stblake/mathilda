@@ -10,9 +10,9 @@
  * register.  See docs/design/compile-arbitrary-precision.md. */
 #include "compile_emit.h"        /* Ctx / Val / ins / arg_find */
 #include "../arithmetic.h"       /* is_rational, expr_new_* */
+#include "../sym_names.h"         /* SYM_Plus, SYM_Times, ...: used in every build */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx, numeric_mpfr_* — the managed containers */
-#include "../sym_names.h"
 #endif
 #include <math.h>
 #include <string.h>

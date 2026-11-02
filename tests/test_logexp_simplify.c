@@ -398,12 +398,12 @@ void test_pi_period_factored_half_sin(void) {
     assert_eval_eq("Refine[Cos[(2 n + 1) Pi/2], Element[n, Integers]]", "0", 0);
 }
 void test_pi_period_factored_third(void) {
-    assert_eval_eq("Refine[Sin[(n + 1/3) Pi], Element[n, Integers]]", "(-1)^n Sqrt[3]/2", 0);
+    assert_eval_eq("Refine[Sin[(n + 1/3) Pi], Element[n, Integers]]", "1/2 (-1)^n Sqrt[3]", 0);
     assert_eval_eq("Refine[Tan[(n + 1/4) Pi], Element[n, Integers]]", "1", 0);
 }
 void test_pi_period_factored_declines(void) {
     /* no integer part (n/2 + 1/2 is not split), or n not an integer */
-    assert_eval_eq("Refine[Sin[(n/2 + 1/2) Pi], Element[n, Integers]]", "Sin[(1/2 + n/2) Pi]", 0);
+    assert_eval_eq("Refine[Sin[(n/2 + 1/2) Pi], Element[n, Integers]]", "Sin[(1/2 + 1/2 n) Pi]", 0);
     assert_eval_eq("Refine[Cos[(n - 1/2) Pi], Element[n, Reals]]", "Cos[(-1/2 + n) Pi]", 0);
 }
 

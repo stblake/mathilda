@@ -961,7 +961,10 @@ static int gf_fglm_mod(const ulong* M, slong nv, slong D, slong one_idx, nmod_t 
         gfm_add(&R->stair, m);
         slong me = R->stair.n - 1;
         for (slong w = 0; w < nv; w++) {
-            memcpy(e, m, (size_t)nv * sizeof(ulong));
+            /* by index, not through m: gfm_add below may realloc cand.ex, and
+             * m points into it (a stale m read freed memory -- a wrong
+             * staircase, so a wrong or never-finishing Lex basis) */
+            memcpy(e, cand.ex + best * nv, (size_t)nv * sizeof(ulong));
             e[w]++;
             if (gfm_find(&cand, e) >= 0) continue;
             slong k = gfm_add(&cand, e);

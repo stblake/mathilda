@@ -91,6 +91,96 @@ static bool radical_factor_split(const Expr* e,
     return true;
 }
 
+/* Positive numeric content c of a sum base -- the GCD of its terms' rational
+ * coefficients, so it covers a constant radicand like 6 - 6 Pi + 2 Pi^2, which
+ * FactorTerms (rightly) leaves alone -- with rest = Expand[base / c], both
+ * owned.  False unless c is a positive rational other than 1. */
+static bool radical_base_content(const Expr* base, Expr** c, Expr** rest) {
+    if (!base || base->type != EXPR_FUNCTION || !base->data.function.head
+        || base->data.function.head->type != EXPR_SYMBOL
+        || base->data.function.head->data.symbol.name != SYM_Plus) return false;
+    size_t m = base->data.function.arg_count;
+    Expr** co = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) {
+        const Expr* term = base->data.function.args[i];
+        const Expr* k = term;
+        if (term->type == EXPR_FUNCTION && term->data.function.head
+            && term->data.function.head->type == EXPR_SYMBOL
+            && term->data.function.head->data.symbol.name == SYM_Times
+            && term->data.function.arg_count > 0)
+            k = term->data.function.args[0];
+        int64_t kn, kd;
+        bool num = k->type == EXPR_INTEGER || k->type == EXPR_BIGINT || is_rational(k, &kn, &kd);
+        co[i] = num ? expr_copy((Expr*)k) : expr_new_integer(1);
+    }
+    Expr* g = eval_and_free(expr_new_function(expr_new_symbol("GCD"), co, m));
+    free(co);
+    int64_t gn, gd;
+    bool ok = g && ((radical_base_is_positive_integer(g) && !(g->type == EXPR_INTEGER && g->data.integer == 1))
+                    || (is_rational(g, &gn, &gd) && gn > 0 && gd > 1));
+    if (!ok) { if (g) expr_free(g); return false; }
+    Expr* q = expr_new_function(expr_new_symbol(SYM_Times),
+                  (Expr*[]){ expr_copy((Expr*)base),
+                             expr_new_function(expr_new_symbol(SYM_Power),
+                                 (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2) }, 2);
+    *rest = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){ q }, 1));
+    *c = g;
+    return true;
+}
+
+/* Pull the positive numeric content out of a sum radicand when the same
+ * product holds a positive-integer radical with that exponent:
+ *     Sqrt[2] Sqrt[6 + 2 x^2]  ->  Sqrt[2] Sqrt[2] Sqrt[3 + x^2]  ->  2 Sqrt[3 + x^2]
+ * (c u)^r = c^r u^r holds on the principal branch for every c > 0, since c
+ * leaves arg(u) unchanged.  The split alone is never simpler -- it pays off
+ * only through the merge with the neighbouring radical, which is why it lives
+ * here and not as a bottom-up rewrite of the lone Sqrt.  Returns the new
+ * Times (evaluated) or NULL. */
+static Expr* simp_radicals_split_content(const Expr* tn) {
+    size_t n = tn->data.function.arg_count;
+    Expr** out = NULL;
+    size_t nout = 0, cap = 0;
+    bool split = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* f = tn->data.function.args[i];
+        Expr *c = NULL, *rest = NULL;
+        bool did = false;
+        if (f->type == EXPR_FUNCTION && f->data.function.head
+            && f->data.function.head->type == EXPR_SYMBOL
+            && f->data.function.head->data.symbol.name == SYM_Power
+            && f->data.function.arg_count == 2
+            && is_rational_literal(f->data.function.args[1])) {
+            const Expr* ex = f->data.function.args[1];
+            bool partner = false;
+            for (size_t j = 0; j < n && !partner; j++) {
+                const Expr *bj, *ej;
+                if (j != i && radical_factor_split(tn->data.function.args[j], &bj, &ej)
+                    && expr_eq((Expr*)ex, (Expr*)ej)) partner = true;
+            }
+            if (partner && radical_base_content(f->data.function.args[0], &c, &rest)) did = true;
+        }
+        if (nout + 2 > cap) { cap = cap ? 2 * cap : n + 4; out = realloc(out, sizeof(Expr*) * cap); }
+        if (did) {
+            const Expr* ex = f->data.function.args[1];
+            out[nout++] = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ c, expr_copy((Expr*)ex) }, 2);
+            out[nout++] = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ rest, expr_copy((Expr*)ex) }, 2);
+            split = true;
+        } else {
+            out[nout++] = expr_copy((Expr*)f);
+        }
+    }
+    if (!split) {
+        for (size_t k = 0; k < nout; k++) expr_free(out[k]);
+        free(out);
+        return NULL;
+    }
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), out, nout));
+    free(out);
+    return r;
+}
+
 /* Combine same-exponent positive-integer radical factors of a Times
  * node. Returns NULL when no combine fires. */
 static Expr* simp_radicals_combine_times(const Expr* tn) {
@@ -197,6 +287,16 @@ static Expr* simp_radicals_walk(const Expr* e) {
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
         && target->data.function.head->data.symbol.name == SYM_Times) {
+        Expr* split = simp_radicals_split_content(target);
+        if (split) {
+            if (current) expr_free(current);
+            current = split;
+            target = current;
+            if (!(target->type == EXPR_FUNCTION && target->data.function.head
+                  && target->data.function.head->type == EXPR_SYMBOL
+                  && target->data.function.head->data.symbol.name == SYM_Times))
+                return current;
+        }
         Expr* combined = simp_radicals_combine_times(target);
         if (combined) {
             if (current) expr_free(current);

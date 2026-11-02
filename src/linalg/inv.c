@@ -926,6 +926,92 @@ static Expr* pseudoinverse_exact(Expr* a, int m, int n) {
     return simplified;
 }
 
+/* Numeric value of a real number atom (machine, MPFR, integer or rational
+ * zero); false for anything else. */
+static bool pinv_atom_double(const Expr* e, double* out) {
+    switch (e->type) {
+        case EXPR_REAL:    *out = e->data.real; return true;
+        case EXPR_INTEGER: *out = (double)e->data.integer; return true;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
+#endif
+        default: return false;
+    }
+}
+
+/* PseudoInverse of an arbitrary-precision matrix through its SVD:
+ * A^+ = V . S^+ . U^H, where S^+ inverts every singular value above the
+ * cutoff and zeroes the rest.  This is what makes the rank a property of the
+ * precision: rationalising instead turns an entry known only to 24 digits,
+ * such as Sin[2 N[Pi, 24]] ~ 1e-24, into an exact nonzero number, the matrix
+ * becomes full rank, and the "exact" pseudoinverse of that perturbation is
+ * meaningless at the input precision (Fit at 24 digits returned
+ * -637534208 Sin[x/2] for a rank-deficient basis).  The automatic cutoff is
+ * max(m, n) * 2^(1-bits) * sigma_max, the precision analogue of the machine
+ * path's max(m, n) * eps * sigma_max (nd_svd_cutoff).  Returns NULL when the
+ * SVD does not evaluate, leaving the caller to the exact pipeline. */
+static Expr* pseudoinverse_svd_inexact(Expr* a, int m, int n, long bits,
+                                       bool tol_automatic, double tol_value) {
+    Expr* svd = eval_and_free(expr_new_function(
+                    expr_new_symbol("SingularValueDecomposition"),
+                    (Expr*[]){ expr_copy(a) }, 1));
+    if (!svd || svd->type != EXPR_FUNCTION || !head_is(svd, SYM_List)
+        || svd->data.function.arg_count != 3) {
+        if (svd) expr_free(svd);
+        return NULL;
+    }
+    Expr* U = svd->data.function.args[0];
+    Expr* S = svd->data.function.args[1];
+    Expr* V = svd->data.function.args[2];
+    int k = (m < n) ? m : n;
+    if (S->type != EXPR_FUNCTION || (int)S->data.function.arg_count != m) {
+        expr_free(svd);
+        return NULL;
+    }
+
+    /* the diagonal, its doubles, and sigma_max */
+    double* sv = malloc(sizeof(double) * (size_t)k);
+    double smax = 0.0;
+    bool ok = true;
+    for (int i = 0; i < k && ok; i++) {
+        Expr* row = S->data.function.args[i];
+        ok = row->type == EXPR_FUNCTION && (int)row->data.function.arg_count == n
+             && pinv_atom_double(row->data.function.args[i], &sv[i]);
+        if (ok && sv[i] > smax) smax = sv[i];
+    }
+    if (!ok) { free(sv); expr_free(svd); return NULL; }
+    double cutoff = tol_automatic
+        ? (double)((m > n) ? m : n) * ldexp(1.0, (int)(1 - bits)) * smax
+        : tol_value * smax;
+
+    /* S^+ : n x m, 1/sigma_i on the diagonal where sigma_i > cutoff */
+    Expr** rows = malloc(sizeof(Expr*) * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        Expr** cols = malloc(sizeof(Expr*) * (size_t)m);
+        for (int j = 0; j < m; j++) {
+            if (i == j && i < k && sv[i] > cutoff) {
+                Expr* s = S->data.function.args[i]->data.function.args[i];
+                cols[j] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ expr_copy(s), expr_new_integer(-1) }, 2));
+            } else {
+                cols[j] = expr_new_integer(0);
+            }
+        }
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, (size_t)m);
+        free(cols);
+    }
+    Expr* Splus = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+    free(rows);
+    free(sv);
+
+    Expr* UH = eval_and_free(expr_new_function(expr_new_symbol("ConjugateTranspose"),
+                                 (Expr*[]){ expr_copy(U) }, 1));
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Dot),
+                  (Expr*[]){ expr_copy(V), Splus, UH }, 3));
+    expr_free(svd);
+    return r;
+}
+
 /* ------------------------------------------------------------------ *
  *  PseudoInverse builtin                                              *
  * ------------------------------------------------------------------ */
@@ -1020,6 +1106,14 @@ Expr* builtin_pseudoinverse(Expr* res) {
                 expr_free(packed);
             }
         }
+    }
+
+    /* Above machine precision the SVD carries the precision AND decides the
+     * rank; the exact pipeline below would decide it from rationalised noise. */
+    if (info.has_inexact && prec_bits > 53) {
+        Expr* r = pseudoinverse_svd_inexact(arg, m, n, prec_bits,
+                                            tol_automatic, tol_value);
+        if (r) return r;
     }
 
     Expr* a_rat = NULL;

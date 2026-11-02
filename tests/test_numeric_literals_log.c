@@ -47,9 +47,10 @@ static void test_complexexpand_grouping(void) {
 
 static void test_heaviside_attributes(void) {
     /* the rules and attributes live in src/internal/distributions.m */
-    assert_eval_eq("If[FileExistsQ[\"../src/internal/distributions.m\"], "
-                   "Get[\"../src/internal/distributions.m\"], "
-                   "Get[\"src/internal/distributions.m\"]]; 0", "0", 0);
+    /* searched upward, so the suite runs from tests/ and from CI's tests/build/ */
+    assert_eval_eq("Get[SelectFirst[{\"src\", \"../src\", \"../../src\", \"../../../src\"}, "
+                   "FileExistsQ[# <> \"/internal/distributions.m\"] &] <> "
+                   "\"/internal/distributions.m\"]; 0", "0", 0);
     assert_eval_eq("Attributes[HeavisideTheta]", "{Listable, Orderless, Protected}", 0);
     assert_eval_eq("Attributes[DiracDelta]", "{Listable, Orderless, Protected}", 0);
     assert_eval_eq("HeavisideTheta[{1, 0, 1} - 1/2]", "{1, 0, 1}", 0);

@@ -191,8 +191,12 @@ static void test_fitted_models_print_abbreviated(void) {
 static void test_abbreviation_hides_nothing_and_breaks_nothing(void) {
     /* Eliding is only safe because the information is one keystroke away rather than
      * gone -- FullForm must still reveal the parameters. */
-    assert_eval_eq("FullForm[Predict[" LINE "]]",
-                   "PredictorFunction[\"LinearRegression\", List[1.0, 2.0], 1, 0]", 0);
+    assert_eval_startswith("FullForm[Predict[" LINE "]]",
+                           "PredictorFunction[\"LinearRegression\", List[1.0");
+    /* the fitted coefficients with ==: their last bit depends on the LAPACK
+     * (1.0 here, 1.0000000000000002 with OpenBLAS) */
+    assert_eval_eq("With[{p = Predict[" LINE "]}, p[[1]] === \"LinearRegression\" && "
+                   "p[[2]] == {1., 2.} && {p[[3]], p[[4]]} === {1, 0}]", "True", 0);
     /* And the abbreviation is a PRINTING change only: application and property access
      * must be untouched. A change that reached into the object rather than its rendering
      * would show up here. */

@@ -198,15 +198,16 @@ static void test_singular_fits_decline(void) {
 static void test_bic_picks_the_component_count_from_the_data(void) {
     /* One component for unimodal data, two for bimodal -- and the fitted means are the
      * two modes with equal weight, which is the answer rather than merely a plausible
-     * one. Asserted through FullForm because the fitted object prints elided. */
-    assert_eval_eq("FullForm[LearnDistribution[" UNI ", Method -> \"GaussianMixture\"]]",
-                   "LearnedDistribution[\"GaussianMixture\", "
-                   "List[List[1.0], List[2.0], List[1.41]], 1, 1]", 0);
-    assert_eval_eq("FullForm[LearnDistribution[" BIMODAL ", "
-                   "Method -> \"GaussianMixture\"]]",
-                   "LearnedDistribution[\"GaussianMixture\", "
-                   "List[List[0.5, 0.5], List[1.0], List[0.37666666666666665], "
-                   "List[11.0], List[0.37666666666666665]], 1, 2]", 0);   /* FullForm: every digit */
+     * one. The structure and the component count are asserted exactly; the fitted
+     * reals with ==, which tolerates the last bits: those depend on the BLAS/libm
+     * (1.41 here, 1.4100000000000004 with glibc + OpenBLAS). */
+    assert_eval_eq("With[{f = LearnDistribution[" UNI ", Method -> \"GaussianMixture\"]}, "
+                   "Head[f] === LearnedDistribution && f[[1]] === \"GaussianMixture\" && "
+                   "f[[2]] == {{1.}, {2.}, {1.41}} && {f[[3]], f[[4]]} === {1, 1}]", "True", 0);
+    assert_eval_eq("With[{f = LearnDistribution[" BIMODAL ", Method -> \"GaussianMixture\"]}, "
+                   "Head[f] === LearnedDistribution && f[[1]] === \"GaussianMixture\" && "
+                   "f[[2]] == {{0.5, 0.5}, {1.}, {0.37666666666666665}, {11.}, {0.37666666666666665}} && "
+                   "{f[[3]], f[[4]]} === {1, 2}]", "True", 0);
 }
 
 static void test_one_component_mixture_relates_exactly_to_the_multinormal(void) {

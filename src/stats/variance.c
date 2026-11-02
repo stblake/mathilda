@@ -63,17 +63,19 @@ Expr* builtin_variance(Expr* res) {
 
     if (all_numeric) {
         if (has_real) {
-            // Welford's algorithm
-            double m = 0;
-            double s = 0;
+            /* The machine kernel's own two-pass reduction, not a second
+             * algorithm: a boxed list too short to pack must give the packed,
+             * NDArray and Compile[] answer bit for bit (Welford's one-pass
+             * update, used here before, differed in the last ulp on glibc). */
+            double* xs = malloc(sizeof(double) * n);
+            if (!xs) return NULL;
             for (size_t i = 0; i < n; i++) {
-                double x = 0.0;
-                stats_is_numeric(data->data.function.args[i], &x, NULL);
-                double old_m = m;
-                m += (x - m) / (double)(i + 1);
-                s += (x - m) * (x - old_m);
+                xs[i] = 0.0;
+                stats_is_numeric(data->data.function.args[i], &xs[i], NULL);
             }
-            return expr_new_real(s / (double)(n - 1));
+            double v = ndred_variance_f64(xs, n);
+            free(xs);
+            return expr_new_real(v);
         } else {
             /* Exact calculation for Variance, WITH OVERFLOW DETECTION.
              * Var = (Sum[x^2] - n*Mean[x]^2) / (n-1)

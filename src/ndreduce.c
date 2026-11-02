@@ -1478,6 +1478,16 @@ Expr* ndred_variance(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     return nd_moment_leading(res, 0);
 }
+
+/* The rank-1 Variance above, over a plain double array (n >= 2): the same two
+ * passes through the same reducers, so the boxed machine path in variance.c
+ * gives the packed / NDArray / Compile[] answer bit for bit. */
+double ndred_variance_f64(const double* x, size_t n) {
+    double sr, si;
+    nd_full_sum(x, NDT_FLOAT64, n, &sr, &si);
+    double ss = nd_full_sumsq(x, NDT_FLOAT64, n, sr / (double)n, 0.0);
+    return ss / (double)(n - 1);
+}
 Expr* ndred_std(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     return nd_moment_leading(res, 1);

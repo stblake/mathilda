@@ -74,14 +74,14 @@ static inline void test_stderr_restore(int saved) {
 
 static inline void assert_eval_eq(const char* input, const char* expected, int is_fullform) {
     struct Expr* parsed = parse_expression(input);
-    assert(parsed != NULL);
+    if (!parsed) { fprintf(stderr, "FAIL: does not parse: %s\n", input); abort(); }
     struct Expr* evaluated = evaluate(parsed);
     expr_free(parsed);
     char* str = is_fullform ? expr_to_string_fullform(evaluated) : expr_to_string(evaluated);
     if (strcmp(str, expected) != 0) {
         fprintf(stderr, "FAIL: %s\n  Expected: %s\n  Actual:   %s\n", input, expected, str);
+        abort();   /* not assert(): -DNDEBUG would make a failed check pass */
     }
-    assert(strcmp(str, expected) == 0);
     free(str);
     expr_free(evaluated);
 }
@@ -91,7 +91,7 @@ static inline void assert_eval_eq(const char* input, const char* expected, int i
  * low-order digits depend on exact bit-level rounding. */
 static inline void assert_eval_startswith(const char* input, const char* prefix) {
     struct Expr* parsed = parse_expression(input);
-    assert(parsed != NULL);
+    if (!parsed) { fprintf(stderr, "FAIL: does not parse: %s\n", input); abort(); }
     struct Expr* evaluated = evaluate(parsed);
     expr_free(parsed);
     char* str = expr_to_string(evaluated);
@@ -100,8 +100,8 @@ static inline void assert_eval_startswith(const char* input, const char* prefix)
     if (!ok) {
         fprintf(stderr, "FAIL: %s\n  Expected prefix: %s\n  Actual:          %s\n",
                 input, prefix, str);
+        abort();
     }
-    assert(ok);
     free(str);
     expr_free(evaluated);
 }

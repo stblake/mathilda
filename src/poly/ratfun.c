@@ -3548,6 +3548,7 @@ Expr* ratfun_cancel_mod(const Expr* e, const mpz_t p) { (void)e; (void)p; return
 Expr* ratfun_apart_mod(const Expr* e, const Expr* x, const mpz_t p) { (void)e; (void)x; (void)p; return NULL; }
 
 Expr* ratfun_together(const Expr* e) { (void)e; return NULL; }
+Expr* ratfun_together_factored(const Expr* e) { (void)e; return NULL; }
 Expr* ratfun_cancel(const Expr* e) { (void)e; return NULL; }
 Expr* ratfun_apart(const Expr* e, const Expr* x) { (void)e; (void)x; return NULL; }
 

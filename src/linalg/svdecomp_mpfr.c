@@ -290,12 +290,16 @@ static int svdm_jacobi_sweeps(mpfr_t* A, int n, int p, mpfr_t* V,
     mpfr_init2(s,     bits); mpfr_init2(abs_t, bits);
     mpfr_init2(tmp,   bits);
 
-    /* Convergence tolerance: half the working precision (Jacobi has
-     * quadratic convergence so we set the cutoff to where rounding
-     * dominates -- 2^(-bits/2) of the column norms). */
+    /* Convergence tolerance n * 2^-bits of the column norms (the one-sided
+     * Jacobi criterion of Demmel-Veselic, LAPACK's m * eps).  Stopping at
+     * half the precision, 2^(-bits/2), as this used to, leaves the columns
+     * orthogonal -- and so U and V accurate -- to half the digits the result
+     * displays; quadratic convergence makes the full criterion cost only a
+     * sweep or two more.  n * 2^-bits stays above the rounding floor of an
+     * n-term inner product, so it cannot stall. */
     mpfr_t tol; mpfr_init2(tol, bits);
-    mpfr_set_si(tol, 1, MPFR_RNDN);
-    mpfr_mul_2si(tol, tol, -(long)bits / 2, MPFR_RNDN);
+    mpfr_set_si(tol, n, MPFR_RNDN);
+    mpfr_mul_2si(tol, tol, -(long)bits, MPFR_RNDN);
 
     int max_sweeps = 30;     /* safety upper bound; usually <= 5 needed */
     int sweep = 0;
@@ -493,9 +497,9 @@ static int svdm_jacobi_sweeps_complex(mpfr_t* A_re, mpfr_t* A_im,
     mpfr_init2(c, bits);        mpfr_init2(s, bits);
     mpfr_init2(abs_t, bits);    mpfr_init2(tmp, bits);
 
-    mpfr_t tol; mpfr_init2(tol, bits);
-    mpfr_set_si(tol, 1, MPFR_RNDN);
-    mpfr_mul_2si(tol, tol, -(long)bits / 2, MPFR_RNDN);
+    mpfr_t tol; mpfr_init2(tol, bits);       /* n * 2^-bits, as the real kernel */
+    mpfr_set_si(tol, n, MPFR_RNDN);
+    mpfr_mul_2si(tol, tol, -(long)bits, MPFR_RNDN);
 
     int max_sweeps = 30;
     int sweep = 0;

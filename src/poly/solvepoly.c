@@ -1096,6 +1096,13 @@ static bool is_nquadratic(Expr* poly, Expr* var, int d,
  *  Per-factor dispatcher.                                             *
  * ------------------------------------------------------------------ */
 
+/* >0 while FindInstance runs: the reference's FindInstance writes a root of
+ * unity in radicals ((-1 - I Sqrt[3])/2), its Solve and Reduce as
+ * (-1)^(p/q).  Registered with TimeConstrained's unwind counters.  Defined in every build:
+ * core.c and Reduce's companions use it whether or not FLINT is linked. */
+static int g_rou_off = 0;
+int* solvepoly_roots_of_unity_off_counter(void) { return &g_rou_off; }
+
 #ifdef USE_FLINT
 /* n when `f` (a polynomial in var) is +-Phi_n, the n-th cyclotomic
  * polynomial, with integer coefficients; 0 otherwise. */
@@ -1130,12 +1137,6 @@ static ulong solve_cyclotomic_index(Expr* f, Expr* var) {
  * +-(-1)^(1/4), +-(-1)^(3/4)), rather than the quadratic formula's
  * (-1 +- I Sqrt[3])/2 or nested radicals.  False (nothing pushed) when g
  * has a non-cyclotomic factor or is not an integer polynomial. */
-/* >0 while FindInstance runs: the reference's FindInstance writes a root of
- * unity in radicals ((-1 - I Sqrt[3])/2), its Solve and Reduce as
- * (-1)^(p/q).  Registered with TimeConstrained's unwind counters. */
-static int g_rou_off = 0;
-int* solvepoly_roots_of_unity_off_counter(void) { return &g_rou_off; }
-
 static bool solve_roots_of_unity(Expr* g, Expr* var, bool reals_only, int64_t mult, SolList* sl) {
     if (g_rou_off > 0) return false;
     Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList),

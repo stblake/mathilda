@@ -40,7 +40,23 @@ static void check(const char* input, const char* expected) {
 static void check_near(const char* lhs, const char* rhs, const char* tol) {
     char buf[1024];
     snprintf(buf, sizeof buf, "Abs[(%s) - (%s)] < %s", lhs, rhs, tol);
-    check(buf, "True");
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* s = expr_to_string(res);
+    if (strcmp(s, "True") != 0) {
+        /* show the value itself, not just the comparison's False */
+        char vbuf[1024];
+        snprintf(vbuf, sizeof vbuf, "InputForm[%s]", lhs);
+        Expr* ve = parse_expression(vbuf);
+        Expr* vr = evaluate(ve);
+        char* vs = expr_to_string(vr);
+        printf("mixed numericalize test failed: %s\n  value: %s\n  want:  %s (tol %s)\n",
+               lhs, vs, rhs, tol);
+        fflush(stdout);
+        free(vs); expr_free(ve); expr_free(vr);
+        ASSERT(0);
+    }
+    free(s); expr_free(e); expr_free(res);
 }
 
 /* ---- The evaluator rule: an irrational exact argument beside an inexact one ---- */

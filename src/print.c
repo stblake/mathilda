@@ -1279,6 +1279,15 @@ static void print_standard(Expr* e, int parent_prec) {
                     is_negative = true;
                     t_copy = expr_new_real(-arg->data.real);
                     to_print = t_copy;
+#ifdef USE_MPFR
+                } else if (arg->type == EXPR_MPFR && mpfr_sgn(arg->data.mpfr) < 0) {
+                    /* an arbitrary-precision term signs the operator, as a
+                     * machine one does: a - 0.25`24, not a + -0.25`24 */
+                    is_negative = true;
+                    t_copy = expr_new_mpfr_copy(arg->data.mpfr);
+                    mpfr_neg(t_copy->data.mpfr, t_copy->data.mpfr, MPFR_RNDN);
+                    to_print = t_copy;
+#endif
                 } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
                     const char* h = arg->data.function.head->data.symbol.name;
                     if (h == SYM_Times && arg->data.function.arg_count > 0) {
@@ -1333,6 +1342,16 @@ static void print_standard(Expr* e, int parent_prec) {
                             expr_free(t_copy->data.function.args[0]);
                             t_copy->data.function.args[0] = expr_new_real(-f_arg->data.real);
                             to_print = t_copy;
+#ifdef USE_MPFR
+                        } else if (f_arg->type == EXPR_MPFR && mpfr_sgn(f_arg->data.mpfr) < 0) {
+                            is_negative = true;
+                            t_copy = expr_unshare(expr_copy(arg));
+                            Expr* pos = expr_new_mpfr_copy(f_arg->data.mpfr);
+                            mpfr_neg(pos->data.mpfr, pos->data.mpfr, MPFR_RNDN);
+                            expr_free(t_copy->data.function.args[0]);
+                            t_copy->data.function.args[0] = pos;
+                            to_print = t_copy;
+#endif
                         } else if (f_arg->type == EXPR_FUNCTION && f_arg->data.function.head->type == EXPR_SYMBOL && f_arg->data.function.head->data.symbol.name == SYM_Rational) {
                             Expr* num = f_arg->data.function.args[0];
                             if (num->type == EXPR_INTEGER && num->data.integer < 0) {

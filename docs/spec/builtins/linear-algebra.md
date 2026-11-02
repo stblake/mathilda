@@ -921,15 +921,23 @@ rank-deficient) matrix.
   exact or symbolic matrix and an unusable one for a machine matrix — it did not
   finish on a 300 × 300 in 180 s, where the SVD path takes 23 ms. An exact
   matrix is unaffected and still answers exactly.
-- MPFR matrices, and any `Real` matrix small enough not to be held as a
-  [packed list](packed-arrays.md), are rationalised at the input precision,
+- **An MPFR matrix takes the arbitrary-precision SVD** (v0.6143): `A⁺ = V Σ⁺ Uᴴ`,
+  the rank decided by the precision. The automatic cutoff is
+  `max(m, n) × 2^(1−bits) × σ₁`, the precision analogue of the machine rule. Rationalising
+  an MPFR matrix instead turns entries known to 24 digits, such as
+  `Sin[2 N[Pi, 24]] ≈ 1e-24`, into exact nonzero numbers, making a rank-deficient
+  matrix full rank and its pseudoinverse meaningless (a 24-digit `Fit` with a
+  vanishing basis column returned `-637534208 Sin[x/2]`). The exact pipeline remains
+  the fallback when the SVD does not evaluate.
+- A `Real` matrix small enough not to be held as a
+  [packed list](packed-arrays.md) is rationalised at machine precision,
   computed exactly to preserve rank, and numericalised back.
 - The `Tolerance` option accepts `Automatic` (default), a non-negative
   number, or a non-negative `Rational`. It takes effect on the SVD path, where
   there are singular values to truncate: `Automatic` is
   `max(m, n) × $MachineEpsilon × σ₁` — LAPACK's own rank criterion, and NumPy's
   default `rcond` — and an explicit `t` is a fraction of the largest singular
-  value `σ₁`. The exact pipeline has no singular values and ignores it.
+  value `σ₁`. The exact pipeline has no singular values and ignores it; the MPFR SVD path honours it as the machine one does.
 - Issues `PseudoInverse::matrix` warning and returns unevaluated if the
   argument is not a non-empty rank-2 tensor.
 - Returns unevaluated when an unknown option name is supplied or
@@ -1751,7 +1759,9 @@ Gives the singular value decomposition of a matrix.
     over column pairs of `A`, apply the rotation that diagonalises
     `[<a_i,a_i>, <a_i,a_j>; <a_i,a_j>, <a_j,a_j>]` to columns `i` and
     `j` of both `A` and the accumulating `V`.  After convergence (off-
-    diagonal norm below `2^(-bits/2)`), column norms of `A` are the
+    diagonal norm below `n · 2^(-bits)` of the column norms -- v0.6143; it
+    was `2^(-bits/2)`, which left `u` and `v` accurate to only half the
+    displayed digits), column norms of `A` are the
     singular values and `A[:, i] / sigma_i` are the left singular
     vectors.  Orthonormal completion of the `n - rank` remaining
     columns of `u` uses Gram-Schmidt at the working precision.  Real

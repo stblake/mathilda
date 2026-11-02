@@ -412,6 +412,7 @@ void eval_dep_note_slow(SymbolDef* d) {
 }
 
 void eval_dep_forget(SymbolDef* d) {
+    if (g_dep_log_n == 0) return;
     for (size_t i = 0; i < g_dep_log_n; i++)
         if (g_dep_log[i] == d) g_dep_log[i] = NULL;
 }

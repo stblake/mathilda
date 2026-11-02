@@ -1033,8 +1033,11 @@ Expr* builtin_groebner_basis(Expr* res) {
         int n_field_main = (int)(n_vars - n_params);
         gb_rational_function_reduce(G, &out_n, n_field_main);
     }
-    free(wmat_buf);
-    wmat_buf = NULL;
+    /* wmat_buf is NOT freed here: every GBPoly in G points at it (its
+     * monomial order), and the conversion below still sorts terms through it
+     * (gb_main_coefficients -> gb_poly_normalize -> gb_cmp).  Freeing it first
+     * was a use-after-free that a reused block turned into a wrong basis or an
+     * unbounded coefficient-explosion run.  It is released with G. */
 
     /* If the basis collapses to {<non-zero constant>} -> {1}.  Over the
      * integers a constant generator c means the ideal is c*Z[x] (not <1>
@@ -1047,6 +1050,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     }
     if (has_const) {
         gb_basis_free(G, out_n);
+        free(wmat_buf);
         free(all_vars);
         exprset_free(&param_explicit, false);
         exprset_free(&main_set, false);
@@ -1116,6 +1120,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         }
     }
     gb_basis_free(G, out_n);
+    free(wmat_buf);
     free(all_vars);
     exprset_free(&param_explicit, false);
     exprset_free(&main_set, false);

@@ -402,7 +402,12 @@ static Expr* integrate_over_param(const Expr* J, const Expr* p) {
 /* Value of the antiderivative G at p = p0.  Direct substitution when it yields a
  * finite value; otherwise the Limit engine (handles 0, Infinity, removable
  * singularities).  Borrows all. */
-static Expr* eval_at_param(const Expr* G, const Expr* p, const Expr* p0) {
+/* G at p = p0: substitution, else the limit -- taken UNDER the assumptions when
+ * given.  A boundary limit such as E^(-a^2 x^2) Sin[b x] at x -> Infinity is 0
+ * only for real nonzero a, so without them Limit rightly stays unevaluated and
+ * Stage B lost its boundary term M (Exp[-a^2 x^2] Cos[b x] stopped closing). */
+static Expr* eval_at_param_with(const Expr* G, const Expr* p, const Expr* p0,
+                                const Expr* assumptions) {
     Expr* s = subst(G, p, p0);
     if (s && is_finite_value(s)) {
         Expr* ss = ev1("Simplify", s);
@@ -411,11 +416,18 @@ static Expr* eval_at_param(const Expr* G, const Expr* p, const Expr* p0) {
     } else if (s) {
         expr_free(s);
     }
-    Expr* lim = ev2("Limit", expr_copy((Expr*)G),
-                    mk_fn2("Rule", expr_copy((Expr*)p), expr_copy((Expr*)p0)));
+    Expr* rule = mk_fn2("Rule", expr_copy((Expr*)p), expr_copy((Expr*)p0));
+    Expr* lim = assumptions
+        ? eval_take(mk_fn3("Limit", expr_copy((Expr*)G), rule,
+                           mk_fn2("Rule", mk_sym("Assumptions"), expr_copy((Expr*)assumptions))))
+        : ev2("Limit", expr_copy((Expr*)G), rule);
     if (lim && is_finite_value(lim)) return lim;
     if (lim) expr_free(lim);
     return NULL;
+}
+
+static Expr* eval_at_param(const Expr* G, const Expr* p, const Expr* p0) {
+    return eval_at_param_with(G, p, p0, NULL);
 }
 
 /* -------------------------------------------------------------------------
@@ -2013,9 +2025,9 @@ static void collect_term_shapes(const Expr* e, const Expr* x,
  * the IBP identity J = lambda I + [U] is only valid when the boundary converges. */
 static Expr* boundary_value(const Expr* U, const Expr* x, const Expr* a,
                             const Expr* b, const Expr* assumptions) {
-    Expr* Ub = eval_at_param(U, x, b);
+    Expr* Ub = eval_at_param_with(U, x, b, assumptions);
     if (!Ub) return NULL;
-    Expr* Ua = eval_at_param(U, x, a);
+    Expr* Ua = eval_at_param_with(U, x, a, assumptions);
     if (!Ua) { expr_free(Ub); return NULL; }
     Expr* diff = mk_fn2("Plus", Ub, t_neg(Ua));        /* consumes Ub, Ua */
     Expr* M = simplify_with(diff, assumptions);
