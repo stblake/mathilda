@@ -47,6 +47,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "internal.h"  /* internal_factorinteger: Log of a rational */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -407,11 +408,78 @@ static bool pe_apply_rule(Expr* e, const PECtx* ctx,
 /* Top-down recursive driver                                          */
 /* ------------------------------------------------------------------ */
 
+/* Log[q] for a rational q other than 0 and 1: the sum of e_p Log[p] over its
+ * prime factorisation (negative for the denominator's), plus I Pi when q < 0,
+ * as the reference does: PowerExpand[Log[12]] = 2 Log[2] + Log[3],
+ * PowerExpand[Log[-8]] = I Pi + 3 Log[2].  Exact on the principal branch, so
+ * no assumption is needed.  NULL when q is not such a rational or is prime. */
+static Expr* pe_log_rational(const Expr* e) {
+    if (!is_head(e, "Log") || e->data.function.arg_count != 1) return NULL;
+    const Expr* q = e->data.function.args[0];
+    Expr* parts[2] = { NULL, NULL };             /* numerator, denominator */
+    if (q->type == EXPR_INTEGER || q->type == EXPR_BIGINT) {
+        parts[0] = expr_copy((Expr*)q);
+    } else if (is_head(q, "Rational") && q->data.function.arg_count == 2) {
+        parts[0] = expr_copy(q->data.function.args[0]);
+        parts[1] = expr_copy(q->data.function.args[1]);
+    } else {
+        return NULL;
+    }
+    bool negative = false;
+    size_t cap = 8, nt = 0, nprime = 0;
+    Expr** terms = malloc(sizeof(Expr*) * cap);
+    for (int side = 0; side < 2; side++) {
+        Expr* z = parts[side];
+        if (!z) continue;
+        if ((z->type == EXPR_INTEGER && z->data.integer < 0)
+            || (z->type == EXPR_BIGINT && mpz_sgn(z->data.bigint) < 0)) {
+            negative = true;
+            z = eval_and_free(fn2("Times", pe_int(-1), z));
+        }
+        Expr* fl = eval_and_free(internal_factorinteger((Expr*[]){ z }, 1));
+        if (is_head(fl, "List")) {
+            for (size_t i = 0; i < fl->data.function.arg_count; i++) {
+                Expr* pr = fl->data.function.args[i];
+                if (!is_head(pr, "List") || pr->data.function.arg_count != 2) continue;
+                Expr* p = pr->data.function.args[0];
+                if (p->type == EXPR_INTEGER && p->data.integer == 1) continue;
+                if (nt == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
+                Expr* ex = expr_copy(pr->data.function.args[1]);
+                if (side == 1) ex = eval_and_free(fn2("Times", pe_int(-1), ex));
+                terms[nt++] = fn2("Times", ex, fn1("Log", expr_copy(p)));
+                nprime++;
+            }
+        }
+        expr_free(fl);
+    }
+    /* A lone prime to the first power (Log[7]) is already expanded. */
+    bool trivial = !negative && nprime == 1 && is_head(terms[0], "Times")
+        && terms[0]->data.function.args[0]->type == EXPR_INTEGER
+        && terms[0]->data.function.args[0]->data.integer == 1;
+    if (nprime == 0 || trivial) {
+        for (size_t i = 0; i < nt; i++) expr_free(terms[i]);
+        free(terms);
+        return NULL;
+    }
+    if (negative) {
+        if (nt == cap) { cap += 1; terms = realloc(terms, sizeof(Expr*) * cap); }
+        terms[nt++] = fn2("Times", expr_new_symbol(SYM_I), pe_pi());
+    }
+    Expr* out = eval_and_free(fnN("Plus", terms, nt));
+    free(terms);
+    return out;
+}
+
 static Expr* pe_rec(Expr* e, const PECtx* ctx) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     const char* h = head_name(e);
+
+    {
+        Expr* lr = pe_log_rational(e);
+        if (lr) return lr;
+    }
 
     /* Thread over lists / equations / inequalities / logic. */
     if (is_thread_head(h)) {

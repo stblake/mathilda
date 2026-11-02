@@ -40,6 +40,7 @@
  */
 
 #include "functionexpand.h"
+#include "polygamma.h"   /* polygamma_gauss_digamma */
 #include "meijer_g.h"
 #include "symtab.h"
 #include "attr.h"
@@ -180,12 +181,42 @@ static Expr* fe_expand(const Expr* e);
 static Expr* fe_polygamma_closed(const Expr* e) {
     if (!fe_is_head(e, SYM_PolyGamma) || e->data.function.arg_count != 2) return NULL;
     const Expr* me = e->data.function.args[0];
-    if (me->type != EXPR_INTEGER || me->data.integer < 1 || me->data.integer > 200) return NULL;
+    if (me->type != EXPR_INTEGER || me->data.integer < 0 || me->data.integer > 200) return NULL;
     int64_t xn, xd;
     if (!fe_rational(e->data.function.args[1], &xn, &xd)) return NULL;
+    /* Digamma at a positive non-integer rational: Gauss's theorem (the
+     * reference: FunctionExpand[PolyGamma[0, 1/3]] =
+     * -EulerGamma - Pi/(2 Sqrt[3]) - 3 Log[3]/2). */
+    if (me->data.integer == 0)
+        return (xn > 0 && xd > 1) ? polygamma_gauss_digamma(xn, xd) : NULL;
     int64_t n = me->data.integer + 1;
     Expr* M = expr_new_integer(me->data.integer);
     Expr* out = NULL;
+    if (xd == 1 && xn >= 1 && xn <= 10000) {
+        /* Positive integer k, every order (zeta(odd) included):
+         * n! ((-1)^(n+1) (Zeta[n+1] - H_{k-1}^(n+1))), n! outside as in the
+         * reference: FunctionExpand[PolyGamma[2, 3]] = 2 (9/8 - Zeta[3]). */
+        Expr* args[2] = { M, expr_new_integer(xn) };
+        out = fe_apply("(#1! ((-1)^(#1 + 1) (Zeta[#1 + 1] - HarmonicNumber[#2 - 1, #1 + 1])))&",
+                       args, 2);
+        expr_free(args[1]);
+        expr_free(M);
+        return out;                     /* already in the reference's form */
+    }
+    if (xd == 2 && xn > 1 && xn <= 20001) {
+        /* Positive half-integer k + 1/2 past 1/2: (2^(n) - 1) Zeta[n] less the
+         * recurrence terms.  Odd orders keep n! outside (6 (-16 + Pi^4/6)),
+         * even orders (zeta(odd)) come out expanded (448/27 - 14 Zeta[3]), as
+         * in the reference. */
+        Expr* args[2] = { M, expr_new_integer((xn - 1) / 2) };
+        out = fe_apply(me->data.integer % 2 == 1
+            ? "(#1! ((2^(#1 + 1) - 1) Zeta[#1 + 1] - Sum[(jj + 1/2)^(-#1 - 1), {jj, 0, #2 - 1}]))&"
+            : "Expand[-#1! ((2^(#1 + 1) - 1) Zeta[#1 + 1] - Sum[(jj + 1/2)^(-#1 - 1), {jj, 0, #2 - 1}])]&",
+            args, 2);
+        expr_free(args[1]);
+        expr_free(M);
+        return out;
+    }
     if (xn == 1 && xd == 2) {
         out = fe_apply("((-1)^(#1 + 1) #1! (2^(#1 + 1) - 1) Zeta[#1 + 1])&", &M, 1);
     } else if (xd == 4 && (xn == 1 || xn == 3) && (n == 2 || n % 2 == 1)) {

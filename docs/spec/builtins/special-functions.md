@@ -1067,21 +1067,23 @@ Behaviour:
   `n ≥ 1`. `PolyGamma[ComplexInfinity]` and `PolyGamma[n, Indeterminate]`
   → `Indeterminate`.
 - **Exact at positive integers.** `PolyGamma[0, m] = H_{m-1} − EulerGamma`
-  (a rational minus Euler's constant), e.g. `PolyGamma[5] = 25/12 - EulerGamma`,
-  `PolyGamma[100]` a large exact rational minus `EulerGamma`. For **odd** order
-  `n ≥ 1` the value closes via ζ(n+1) into a rational plus a rational multiple of
-  `Pi^(n+1)`: `PolyGamma[1, 1] = Pi^2/6`, `PolyGamma[3, 1] = Pi^4/15`,
-  `PolyGamma[3, 5] = -22369/3456 + Pi^4/15`. For **even** order `n ≥ 1` the value
-  involves ζ(odd) and stays symbolic, e.g. `PolyGamma[2, 1]`, `PolyGamma[4, 1]`.
-- **Exact at rational arguments (Gauss digamma theorem).** For order `n = 0` and
-  a positive rational `p/q`, `PolyGamma[0, p/q]` closes into an elementary form
-  `−EulerGamma − ln(2q) − (π/2) cot(πp/q) + 2 Σ cos(2πnp/q) ln(sin(nπ/q))`
-  (integer part folded back via `ψ(x+1) = ψ(x) + 1/x`). Only **half-integer**
-  arguments are auto-evaluated (`pg_gauss_digamma` declines other denominators,
-  to avoid the cancellation-prone general form), e.g.
-  `PolyGamma[0, 1/2] = -EulerGamma - Log[4]`,
-  `PolyGamma[0, 5/2] = 8/3 - EulerGamma - Log[4]`; `PolyGamma[0, 1/4]` and
-  `PolyGamma[0, 3/4] - PolyGamma[0, 1/4]` stay unevaluated.
+  (a rational minus Euler's constant), e.g. `PolyGamma[5] = 25/12 - EulerGamma`.
+  For **odd** order `n ≥ 1` the value closes via ζ(n+1) and is written, as in the
+  reference, with `n!` outside the sum: `PolyGamma[3, 2] = 6 (-1 + Pi^4/90)`,
+  `PolyGamma[1, 4] = -49/36 + Pi^2/6`, `PolyGamma[3, 1] = Pi^4/15`. For **even**
+  order `n ≥ 1` the value involves ζ(odd) and stays symbolic (`PolyGamma[2, 3]`);
+  `FunctionExpand` gives `2 (9/8 - Zeta[3])`.
+- **Half-integers** (v0.6131, matching the reference). Odd order `n ≥ 1` closes
+  through ζ(even): `PolyGamma[1, 1/2] = Pi^2/2`, `PolyGamma[1, 3/2] = -4 + Pi^2/2`,
+  `PolyGamma[3, 3/2] = 6 (-16 + Pi^4/6)`. Digamma at any non-integer rational,
+  half-integers included, **stays unevaluated** (`PolyGamma[0, 3/2]`), as do even
+  orders. `FunctionExpand` gives the closed forms: the Gauss digamma theorem
+  (`FunctionExpand[PolyGamma[0, 5/2]] = 8/3 - EulerGamma - Log[4]`,
+  `FunctionExpand[PolyGamma[0, 1/3]] = -EulerGamma - Pi/(2 Sqrt[3]) - 3/2 Log[3]`,
+  its log terms merged into one log as in the reference) and the ζ(odd) forms
+  (`FunctionExpand[PolyGamma[2, 5/2]] = 448/27 - 14 Zeta[3]`). Until v0.6130
+  digamma at half-integers evaluated on its own, so a rule written for the
+  unevaluated `PolyGamma[0, 3/2]` (FeynCalc's `SimplifyPolyLog`) never fired.
 - **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (the log-gamma function;
   see below). Orders ≤ −2 stay unevaluated.
 - **Machine precision** (integer order `0 ≤ n ≤ 40`, real or complex `z`) →
@@ -3432,6 +3434,10 @@ ones, bottom-up (`src/special_functions/functionexpand.c`):
   (`p ≤ q`) or `1/z` (`p > q`), each in a classical form where it has one — else,
   for `p = q` with `m + n ≤ p` and a symbolic `z`, the Piecewise of the inner and
   outer expansions (see `MeijerG`). The log case is returned unchanged.
+- **PolyGamma[n, q]** at a positive rational `q` (v0.6131): integer `q`, every
+  order, as `n! ((-1)^(n+1) (Zeta[n+1] - HarmonicNumber[q-1, n+1]))`
+  (`2 (9/8 - Zeta[3])` for `PolyGamma[2, 3]`); half-integer `q`, every order;
+  digamma at any rational by the Gauss digamma theorem. See `PolyGamma`.
 - **PolyLog[n, w]**, integer `n ≥ 2`, `w = E^(I Pi r)` an exact root of unity
   (spelled with `I`, `−1`, `(−1)^r`, `E^(I Pi r)` and products of them) →
   `Re + I Im` with `x = r/2 mod 1 = p/q`:

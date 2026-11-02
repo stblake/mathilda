@@ -306,28 +306,27 @@ static Expr* pg_exact_at_positive_int(long n, long m) {
     fact_mpz(nf, n);                                 /* n! */
     mpq_set_z(tmpq, nf);
 
-    mpq_t A, B, S;
-    mpq_inits(A, B, S, (mpq_ptr)0);
-    mpq_mul(A, tmpq, c);                             /* A = n! c */
-    mpq_canonicalize(A);
+    /* n! (c Pi^(n+1) - S), with n! kept outside the sum as the reference
+     * writes it: PolyGamma[3, 2] = 6 (-1 + Pi^4/90). */
+    mpq_t S;
+    mpq_init(S);
     power_sum(S, m, n + 1);
-    mpq_mul(B, tmpq, S);                             /* n! S */
-    mpq_neg(B, B);                                   /* B = -n! S */
-    mpq_canonicalize(B);
+    mpq_neg(S, S);
 
-    Expr* Aex = expr_from_mpq(A);
     Expr* pipow_args[2] = { expr_new_symbol(SYM_Pi), expr_new_integer(n + 1) };
     Expr* pipow = expr_new_function(expr_new_symbol(SYM_Power), pipow_args, 2);
-    Expr* term_args[2] = { Aex, pipow };
+    Expr* term_args[2] = { expr_from_mpq(c), pipow };
     Expr* term = expr_new_function(expr_new_symbol(SYM_Times), term_args, 2);
-    Expr* Bex = expr_from_mpq(B);
-    Expr* sum_args[2] = { term, Bex };
-    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
+    Expr* sum_args[2] = { term, expr_from_mpq(S) };
+    Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2));
+    Expr* nfe = expr_new_bigint_from_mpz(nf);
+    Expr* prod_args[2] = { nfe, sum };
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), prod_args, 2);
 
-    mpq_clears(c, tmpq, A, B, S, (mpq_ptr)0);
+    mpq_clears(c, tmpq, S, (mpq_ptr)0);
     mpz_clears(pw, f2j, nf, (mpz_ptr)0);
 
-    return eval_and_free(sum);
+    return eval_and_free(prod);
 }
 
 /* ================================================================== */
@@ -635,17 +634,117 @@ static Expr* pg_int(int64_t v) { return expr_new_integer(v); }
  * Every trig factor has a rational multiple of pi as argument and reduces to an
  * algebraic/elementary value on evaluation, so the result is elementary.
  * Returns NULL for non-positive or large-denominator arguments (stay symbolic).*/
-static Expr* pg_gauss_digamma(int64_t num, int64_t den) {
-    /* Only half-integer arguments (den == 2) are auto-evaluated to the exact
-     * closed form, matching Wolfram: PolyGamma[0, 5/2] simplifies but
-     * PolyGamma[0, 11/5] stays symbolic. Beyond WL fidelity this avoids a real
-     * numerical trap: the general Gauss closed form is a sum of O(1) terms
-     * (-gamma, -ln(2q), (pi/2)cot, cos*ln sin, ...) that cancel to the small
-     * digamma value, so numericalising it at the requested precision loses one
-     * or two digits to catastrophic cancellation (e.g. N[PolyGamma[22/10], 50]).
-     * Keeping general rationals symbolic routes N through the correctly-rounded
-     * mpfr_digamma path instead. */
-    if (num <= 0 || den != 2 || den > POLYGAMMA_EXACT_ARG_CAP) return NULL;
+/* The Gauss form carries several logs of algebraic constants (-Log[6] -
+ * Log[Sqrt[3]/2] at 1/3); the reference writes their sum as one log: Log[N]
+ * for a rational N (-Log[8] at 3/4), e Log[b] for N = b^e with a fractional e
+ * (-(3/2) Log[3] at 1/3).  Merge c_i Log[a_i] (c_i rational, a_i numeric)
+ * into that form when N takes one of those two shapes; otherwise keep the
+ * sum.  Consumes `sum`. */
+static bool pg_is_rational_atom(const Expr* e) {
+    int64_t n, d;
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || is_rational((Expr*)e, &n, &d);
+}
+
+/* N = q b^e (q rational, b > 1 an integer, e a non-integer rational) with
+ * q = b^k for an integer k: the owned (k + e) Log[b], else NULL. */
+static Expr* pg_log_of_prime_power(const Expr* N) {
+    if (N->type != EXPR_FUNCTION || N->data.function.head->type != EXPR_SYMBOL
+        || N->data.function.head->data.symbol.name != SYM_Times
+        || N->data.function.arg_count != 2) return NULL;
+    int64_t qn, qd, en, ed;
+    const Expr* q = N->data.function.args[0];
+    const Expr* P = N->data.function.args[1];
+    if (q->type == EXPR_INTEGER) { qn = q->data.integer; qd = 1; }
+    else if (!is_rational((Expr*)q, &qn, &qd)) return NULL;
+    if (P->type != EXPR_FUNCTION || P->data.function.head->type != EXPR_SYMBOL
+        || P->data.function.head->data.symbol.name != SYM_Power
+        || P->data.function.args[0]->type != EXPR_INTEGER
+        || !is_rational(P->data.function.args[1], &en, &ed)) return NULL;
+    int64_t b = P->data.function.args[0]->data.integer;
+    if (b < 2 || qn <= 0) return NULL;
+    int64_t k = 0;
+    while (qn % b == 0) { qn /= b; k++; }        /* numerator: b^k */
+    while (qd % b == 0) { qd /= b; k--; }        /* denominator: b^-k */
+    if (qn != 1 || qd != 1) return NULL;
+    Expr* ex = eval_and_free(pg_call(SYM_Plus, (Expr*[]){ pg_int(k), make_rational(en, ed) }, 2));
+    return pg_call(SYM_Times, (Expr*[]){ ex,
+               pg_call(SYM_Log, (Expr*[]){ pg_int(b) }, 1) }, 2);
+}
+
+static Expr* pg_merge_logs(Expr* sum) {
+    if (!sum || sum->type != EXPR_FUNCTION || sum->data.function.head->type != EXPR_SYMBOL
+        || sum->data.function.head->data.symbol.name != SYM_Plus) return sum;
+    size_t n = sum->data.function.arg_count;
+    Expr** keep = malloc(sizeof(Expr*) * (n + 1));
+    Expr** pw = malloc(sizeof(Expr*) * (n + 1));
+    size_t nk = 0, np = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = sum->data.function.args[i];
+        Expr* c = NULL; Expr* lg = t;
+        if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL
+            && t->data.function.head->data.symbol.name == SYM_Times
+            && t->data.function.arg_count == 2 && pg_is_rational_atom(t->data.function.args[0])) {
+            c = t->data.function.args[0]; lg = t->data.function.args[1];
+        }
+        bool is_log = lg->type == EXPR_FUNCTION && lg->data.function.head->type == EXPR_SYMBOL
+            && lg->data.function.head->data.symbol.name == SYM_Log
+            && lg->data.function.arg_count == 1 && expr_is_numeric_quantity(lg->data.function.args[0]);
+        if (is_log) {
+            pw[np++] = pg_call(SYM_Power, (Expr*[]){ expr_copy(lg->data.function.args[0]),
+                                                      c ? expr_copy(c) : pg_int(1) }, 2);
+        } else {
+            keep[nk++] = expr_copy(t);
+        }
+    }
+    Expr* merged = NULL;
+    if (np >= 2) {
+        Expr* N = eval_and_free(pg_call(SYM_Times, pw, np));
+        np = 0;
+        /* N or 1/N rational: Log[N]; N = b^e: e Log[b] (with 1/N likewise). */
+        if (pg_is_rational_atom(N) && !(N->type == EXPR_INTEGER && N->data.integer <= 0)) {
+            int64_t nn, dd;
+            if (is_rational(N, &nn, &dd) && nn == 1) {          /* 1/d -> -Log[d] */
+                merged = pg_call(SYM_Times, (Expr*[]){ pg_int(-1),
+                             pg_call(SYM_Log, (Expr*[]){ pg_int(dd) }, 1) }, 2);
+            } else {
+                merged = pg_call(SYM_Log, (Expr*[]){ expr_copy(N) }, 1);
+            }
+        } else if ((merged = pg_log_of_prime_power(N)) != NULL) {
+            /* q b^e with q = b^k: (k + e) Log[b] (1/(3 Sqrt[3]) at 1/3) */
+        } else if (N->type == EXPR_FUNCTION && N->data.function.head->type == EXPR_SYMBOL
+                   && N->data.function.head->data.symbol.name == SYM_Power
+                   && N->data.function.arg_count == 2
+                   && N->data.function.args[0]->type == EXPR_INTEGER
+                   && N->data.function.args[0]->data.integer > 1
+                   && pg_is_rational_atom(N->data.function.args[1])) {
+            merged = pg_call(SYM_Times, (Expr*[]){ expr_copy(N->data.function.args[1]),
+                         pg_call(SYM_Log, (Expr*[]){ expr_copy(N->data.function.args[0]) }, 1) }, 2);
+        }
+        expr_free(N);
+    }
+    for (size_t i = 0; i < np; i++) expr_free(pw[i]);
+    free(pw);
+    if (!merged) {
+        for (size_t i = 0; i < nk; i++) expr_free(keep[i]);
+        free(keep);
+        return sum;
+    }
+    keep[nk++] = merged;
+    expr_free(sum);
+    Expr* out = eval_and_free(pg_call(SYM_Plus, keep, nk));
+    free(keep);
+    return out;
+}
+
+Expr* polygamma_gauss_digamma(int64_t num, int64_t den) {
+    /* Only FunctionExpand calls this (v0.6130): the reference leaves digamma at
+     * every non-integer rational unevaluated -- PolyGamma[0, 5/2] included --
+     * and FunctionExpand gives the closed form.  Keeping it symbolic also
+     * avoids a numerical trap: the closed form is a sum of O(1) terms (-gamma,
+     * -ln(2q), (pi/2)cot, cos*ln sin, ...) that cancel to the small digamma
+     * value, so numericalising it loses digits to cancellation, while the
+     * symbolic PolyGamma goes through the correctly-rounded mpfr_digamma. */
+    if (num <= 0 || den < 2 || den > POLYGAMMA_EXACT_ARG_CAP) return NULL;
     int64_t M = num / den;          /* integer part >= 0 */
     int64_t a = num - M * den;      /* fractional numerator, 0 < a < den */
 
@@ -680,9 +779,47 @@ static Expr* pg_gauss_digamma(int64_t num, int64_t den) {
     for (int64_t j = 0; j < M; j++)
         terms[nt++] = make_rational(den, a + j * den);
 
-    Expr* sum = pg_call(SYM_Plus, terms, nt);
+    Expr* sum = eval_and_free(pg_call(SYM_Plus, terms, nt));
     free(terms);
-    return eval_and_free(sum);
+    return pg_merge_logs(sum);
+}
+
+/* PolyGamma[n, k + 1/2] for odd n >= 1 (num = 2k + 1):
+ *   n! ((2^(n+1) - 1) Zeta[n+1] - Sum_{j=0}^{k-1} (j + 1/2)^-(n+1)),
+ * Zeta[n+1] closed (n + 1 even); n! kept outside, as in the reference:
+ * PolyGamma[3, 3/2] = 6 (-16 + Pi^4/6), PolyGamma[1, 5/2] = -40/9 + Pi^2/2. */
+static Expr* pg_exact_at_half_int(long n, int64_t num) {
+    if (n < 1 || n % 2 == 0 || n > POLYGAMMA_EXACT_ORDER_CAP) return NULL;
+    if (num > 2 * (int64_t)POLYGAMMA_EXACT_ARG_CAP) return NULL;
+    int64_t k = (num - 1) / 2;
+    mpq_t S, t;
+    mpz_t d, nf;
+    mpq_init(S); mpq_init(t);
+    mpz_init(d); mpz_init(nf);
+    for (int64_t j = 0; j < k; j++) {            /* (2/(2j+1))^(n+1) */
+        mpz_ui_pow_ui(d, (unsigned long)(2 * j + 1), (unsigned long)(n + 1));
+        mpq_set_z(t, d);
+        mpq_inv(t, t);
+        mpz_ui_pow_ui(d, 2, (unsigned long)(n + 1));
+        mpz_mul(mpq_numref(t), mpq_numref(t), d);
+        mpq_canonicalize(t);
+        mpq_add(S, S, t);
+    }
+    mpq_neg(S, S);
+    mpz_ui_pow_ui(d, 2, (unsigned long)(n + 1));
+    mpz_sub_ui(d, d, 1);
+    Expr* zarg = expr_new_integer(n + 1);
+    Expr* zeta = expr_new_function(expr_new_symbol(SYM_Zeta), &zarg, 1);
+    Expr* coef_args[2] = { expr_new_bigint_from_mpz(d), zeta };
+    Expr* term = expr_new_function(expr_new_symbol(SYM_Times), coef_args, 2);
+    Expr* sum_args[2] = { term, expr_from_mpq(S) };
+    Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2));
+    fact_mpz(nf, n);
+    Expr* prod_args[2] = { expr_new_bigint_from_mpz(nf), sum };
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), prod_args, 2);
+    mpq_clear(S); mpq_clear(t);
+    mpz_clear(d); mpz_clear(nf);
+    return eval_and_free(prod);
 }
 
 /* ================================================================== */
@@ -714,13 +851,14 @@ static Expr* polygamma_two_arg(Expr* order, Expr* z) {
         return exact; /* NULL -> stays symbolic (even order, or past caps) */
     }
 
-    /* Digamma (n = 0) at a positive rational argument: Gauss digamma theorem
-     * gives an elementary closed form (e.g. psi(3/4) - psi(1/4) = pi). */
-    if (n == 0) {
+    /* Odd order at a positive half-integer: closed through zeta(even), as in
+     * the reference (PolyGamma[1, 1/2] = Pi^2/2).  Digamma at a rational and
+     * the even orders (zeta(odd)) stay symbolic; FunctionExpand expands them. */
+    if (n % 2 == 1) {
         int64_t rn, rd;
-        if (is_rational(z, &rn, &rd) && rn > 0) {
-            Expr* g = pg_gauss_digamma(rn, rd);
-            if (g) return g;
+        if (is_rational(z, &rn, &rd) && rn > 0 && rd == 2) {
+            Expr* h = pg_exact_at_half_int(n, rn);
+            if (h) return h;
         }
     }
 

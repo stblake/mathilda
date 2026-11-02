@@ -14,6 +14,12 @@
  * returns a new Expr* on success, or NULL to leave the call symbolic. */
 Expr* builtin_polygamma(Expr* res);
 
+/* Gauss digamma theorem: the elementary closed form of PolyGamma[0, num/den]
+ * for a positive non-integer rational (owned), or NULL past the argument cap.
+ * FunctionExpand's; PolyGamma itself leaves rational digamma symbolic. */
+#include <stdint.h>
+Expr* polygamma_gauss_digamma(int64_t num, int64_t den);
+
 /* Registers PolyGamma (and the inert LogGamma symbol) in the symbol table. */
 void polygamma_init(void);
 

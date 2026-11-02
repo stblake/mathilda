@@ -256,9 +256,14 @@ static Expr* beta_param_deriv(Expr* A, Expr* B, long i, long j) {
  * Bounded (k, n <= 64), exact. */
 static Expr* beta_polygamma_to_zeta(Expr* v) {
     if (!v || !contains_head(v, "PolyGamma")) return v;
+    /* Half-integer (and other rational) arguments go through FunctionExpand:
+     * PolyGamma[0, 3/2] stays symbolic since v0.6130, as in the reference,
+     * so the Beta value would otherwise keep it. */
     static const char* RULE =
-        "PolyGamma[n_Integer, k_Integer] /; 1 <= n <= 64 && 1 <= k <= 64 :> "
-        "(-1)^(n + 1) n! (Zeta[n + 1] - Sum[1/m^(n + 1), {m, 1, k - 1}])";
+        "{PolyGamma[n_Integer, k_Integer] /; 1 <= n <= 64 && 1 <= k <= 64 :> "
+        "(-1)^(n + 1) n! (Zeta[n + 1] - Sum[1/m^(n + 1), {m, 1, k - 1}]), "
+        "PolyGamma[n_Integer, q_Rational] /; 0 <= n <= 64 && q > 0 :> "
+        "FunctionExpand[PolyGamma[n, q]]}";
     Expr* rule = parse_expression(RULE);
     if (!rule) return v;
     return eval_take(mk_fn2("ReplaceAll", v, rule));

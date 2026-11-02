@@ -3464,6 +3464,14 @@ else()
     target_link_libraries(compound_variables_tests gmp m)
 endif()
 
+add_executable(powerexpand_polygamma_tests test_powerexpand_polygamma.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(powerexpand_polygamma_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(powerexpand_polygamma_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(powerexpand_polygamma_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(print_tests PRIVATE ../src)
 
