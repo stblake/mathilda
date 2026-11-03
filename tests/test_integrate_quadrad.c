@@ -104,6 +104,39 @@ static void test_strict_no_match(void) {
         "Integrate`QuadraticRadicals");
 }
 
+/* Symbolic leading coefficient (Nasser, 2026-11-03).  Sqrt[(a x + c)^2 - 1] used
+ * to come back WITHOUT its Log term (the Euler substitution's Sqrt[a^2] vs
+ * (a^2)^(3/2) hid a repeated factor from the rational integrator), a
+ * b-scaled radicand gave a bogus RootSum, and (k x + c)/Sqrt[1 - (k x + c)^2]
+ * took 110 s to fail (radicand degree read as 0).  Checked numerically: a
+ * dropped Log is exactly what a symbolic Simplify can be fooled about. */
+static void test_symbolic_leading_coefficient(void) {
+    const char* fs[] = {
+        "Sqrt[a^2 x^2 + 2 a c x + c^2 - 1]",
+        "Sqrt[a^2 b^4 x^2 + 2 a b^4 c x + b^4 c^2 - 1]",
+        "Sqrt[4 a^2 b^6 x^2 + 8 a b^6 c x + 4 b^6 c^2 - 4 b^2]/(2 b^2)",
+        "x Sqrt[-b^2 (4 - 4 a^2 b^4 x^2 - 8 a b^4 x c - 4 b^4 c^2)]",
+        "(k x + c)/Sqrt[1 - (k x + c)^2]",
+        "x^2 Sqrt[a x^2 + 1]",
+        "Sqrt[a x^2 + b x + c]",
+    };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+            "Module[{g = Integrate[%s, x]}, FreeQ[g, Integrate | RootSum] && "
+            "Abs[N[(D[g, x] - (%s)) /. {a -> 13/10, b -> 7/10, c -> 2/5, k -> 9/10, "
+            "x -> 21/100}]] < 10^-10]", fs[i], fs[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* the cancelled-Log closed form, directly */
+    assert_eval_eq("Integrate[(k x + c)/Sqrt[1 - (k x + c)^2], x]",
+                   "-Sqrt[1 - (c + k x)^2]/k", 0);
+    /* textbook shape of the symbolic-a closed form */
+    assert_eval_eq("Integrate[Sqrt[a x^2 + b x + c], x]",
+        "((b + 2 a x) Sqrt[c + b x + a x^2])/(4 a) + ((-b^2 + 4 a c) "
+        "Log[b + 2 a x + 2 Sqrt[a] Sqrt[c + b x + a x^2]])/(8 a^(3/2))", 0);
+}
+
 void test_integrate_quadrad(void) {
     symtab_init();
     core_init();
@@ -112,6 +145,7 @@ void test_integrate_quadrad(void) {
     TEST(test_method_plumbing);
     TEST(test_symbolic_coefficient);
     TEST(test_strict_no_match);
+    TEST(test_symbolic_leading_coefficient);
 
     printf("All Integrate QuadraticRadicals tests passed!\n");
 }

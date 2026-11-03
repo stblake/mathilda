@@ -195,7 +195,16 @@ static void qr_scan(Expr* e, Expr* x, Expr** first_rad, int* found, bool* ok) {
             if (qa > 1 && !expr_free_of(base, x)) {
                 /* A genuine radical whose argument depends on x. */
                 Expr* vars[1] = { x };
-                if (is_polynomial(base, vars, 1) && get_degree_poly(base, x) == 2) {
+                /* Degree of the EXPANDED radicand: get_degree_poly reads only bare
+                 * x^n terms, so 1 - (c + k x)^2 scored 0 and the radical was never
+                 * claimed (the later stages then spent 110 s failing on it). */
+                int deg = -1;
+                if (is_polynomial(base, vars, 1)) {
+                    Expr* eb = eval_take(internal_expand((Expr*[]){ expr_copy(base) }, 1));
+                    deg = eb ? get_degree_poly(eb, x) : -1;
+                    if (eb) expr_free(eb);
+                }
+                if (deg == 2) {
                     if (qa != 2) {
                         *ok = false;     /* non-square root of the quadratic */
                         return;
@@ -245,10 +254,14 @@ typedef struct {
  *   X  = (u^2 - c)/(b - 2 Sqrt[a] u)
  *   dx = 2(-Sqrt[a] u^2 + b u - Sqrt[a] c)/(b - 2 Sqrt[a] u)^2
  *   U  = Sqrt[rad] - Sqrt[a] x
- * All coefficient arguments are borrowed. */
-static QrSub qr_euler1(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x, Expr* u) {
+ * `sa_in` stands for Sqrt[a]: NULL builds Sqrt[a] itself; otherwise it is an
+ * opaque symbol s (see qr_core) -- the rational integral in u is then exact for
+ * EVERY s, so substituting any s with s^2 == a afterwards is exact.  All
+ * arguments are borrowed. */
+static QrSub qr_euler1(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x, Expr* u,
+                       const Expr* sa_in) {
     QrSub s;
-    Expr* sa  = mk_fn1("Sqrt", expr_copy(a));
+    Expr* sa  = sa_in ? expr_copy((Expr*)sa_in) : mk_fn1("Sqrt", expr_copy(a));
     Expr* den = mk_fn2("Plus", expr_copy(b),
                     mk_fn3("Times", mk_int(-2), expr_copy(sa), expr_copy(u)));
 
@@ -561,6 +574,50 @@ static Expr* qr_Jp(Expr* p, Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
     return eval_take(res);
 }
 
+/* True if `e` contains a Log (the transcendental part of I_0). */
+static bool qr_has_log(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Log)) return true;
+    if (qr_has_log(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (qr_has_log(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Append the distinct Log[...] subexpressions of `e` to *out (borrowed). */
+static void qr_collect_logs(const Expr* e, Expr*** out, size_t* n) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (head_is((Expr*)e, SYM_Log)) {
+        for (size_t i = 0; i < *n; i++) if (expr_eq((*out)[i], (Expr*)e)) return;
+        *out = realloc(*out, (*n + 1) * sizeof(Expr*));
+        (*out)[(*n)++] = (Expr*)e;
+        return;
+    }
+    qr_collect_logs(e->data.function.head, out, n);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        qr_collect_logs(e->data.function.args[i], out, n);
+}
+
+/* Collect[Expand[total], {Log terms..., Sqrt[rad]}, Together]: the textbook
+ * shape of a symbolic-coefficient closed form.  Consumes `total`, borrows `rad`;
+ * returns `total` unchanged if the tidy fails. */
+static Expr* qr_tidy_closed_form(Expr* total, Expr* rad) {
+    Expr** logs = NULL; size_t nlogs = 0;
+    qr_collect_logs(total, &logs, &nlogs);
+    Expr** keys = malloc((nlogs + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < nlogs; i++) keys[i] = expr_copy(logs[i]);
+    keys[nlogs] = mk_sqrt(expr_copy(rad));
+    free(logs);
+    Expr* klist = expr_new_function(expr_new_symbol(SYM_List), keys, nlogs + 1);
+    free(keys);
+    Expr* ex = eval_take(internal_expand((Expr*[]){ expr_copy(total) }, 1));
+    if (!ex) { expr_free(klist); return total; }
+    Expr* tidy = eval_take(mk_fn3("Collect", ex, klist, expr_new_symbol("Together")));
+    if (!tidy) return total;
+    expr_free(total);
+    return tidy;
+}
+
 /* Closed-form driver.  Borrows f,x,rad,a,b,c; returns owned antiderivative or
  * NULL (caller then tries the Euler substitution). */
 static Expr* qr_direct(Expr* f, Expr* x, Expr* rad, Expr* a, Expr* b, Expr* c) {
@@ -646,15 +703,27 @@ static Expr* qr_direct(Expr* f, Expr* x, Expr* rad, Expr* a, Expr* b, Expr* c) {
     if (poly_acc) expr_free(poly_acc);
     if (!okflag) { expr_free(total); return NULL; }
 
+    total = eval_take(total);
     /* A pure polynomial-over-Sqrt[rad] integrand with a SYMBOLIC leading
-     * coefficient (no ArcTan/ArcTanh pole term) gains nothing here over the Euler
-     * substitution -- and its Log-form I_n derivative makes a symbolic Simplify
-     * (the differentiate-back check outside the parametric Goursat path) very
-     * costly.  Decline so qr_core falls back to Euler; the parametric Goursat
-     * genus-0 pieces always carry a pole, so they keep this closed form. */
-    if (!has_pole && expr_numeric_sign(a) == 0) { expr_free(total); return NULL; }
-
-    return eval_take(total);
+     * coefficient (no ArcTan/ArcTanh pole term).  This used to decline to the
+     * Euler substitution, guarding a costly symbolic Simplify in a
+     * differentiate-back check that no longer reproduces: the quadrad, Goursat,
+     * dispatch, linrad and Weierstrass suites pass identically and in the same
+     * time either way.  The Euler form it fell back to is a rational function of
+     * (Sqrt[rad] - Sqrt[a] x) that a SECOND quadrature cannot close (the double
+     * quadrature of the missing-y ODE y''y''' == a Sqrt[1 + b^2 y''^2] spun for
+     * 110 s, unevaluated), so emit the textbook closed form instead, collected
+     * over Sqrt[rad] and its Log (the nested I_n recurrence distributed, so a
+     * cancelled I_0 vanishes: (k x + c)/Sqrt[1 - (k x + c)^2] -> -Sqrt[..]/k):
+     *   ((b + 2 a x) Sqrt[rad])/(4 a) + ((4 a c - b^2) Log[..])/(8 a^(3/2)).
+     * MATHILDA_QR_SYMBOLIC_EULER restores the old decline for A/B. */
+    if (!has_pole && expr_numeric_sign(a) == 0 && total) {
+        if (getenv("MATHILDA_QR_SYMBOLIC_EULER") && qr_has_log(total)) {
+            expr_free(total); return NULL;
+        }
+        total = qr_tidy_closed_form(total, rad);
+    }
+    return total;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -669,6 +738,7 @@ static Expr* qr_core(Expr* f, Expr* x) {
     Expr* rad = NULL, *rade = NULL;
     Expr* a = NULL, *b = NULL, *c = NULL;
     Expr* exy = NULL, *y = NULL, *u = NULL, *su = NULL;
+    Expr* sq = NULL, *sqval = NULL;   /* opaque Sqrt[a] stand-in and its value */
     Expr* result = NULL;
 
     /* --- 1. Identify the shared degree-2 radicand. --- */
@@ -753,9 +823,25 @@ static Expr* qr_core(Expr* f, Expr* x) {
     snprintf(uname, sizeof uname, "Integrate`QuadraticRadicals`u$%lu", qr_sym_counter++);
     u = expr_new_symbol(uname);
 
+    /* A SYMBOLIC leading coefficient enters the substitution as an opaque symbol
+     * sq standing for Sqrt[a], not as Sqrt[a] itself.  The u-integrand otherwise
+     * mixes Sqrt[a^2], (a^2)^(3/2) and a^3, which the rational integrator reads as
+     * unrelated symbols: the Hermite gcd misses a repeated factor and the log part
+     * becomes a RootSum over a multiple root -- 0 (a DROPPED Log term, a wrong
+     * antiderivative of Sqrt[(a x + c)^2 - 1]) or a bogus RootSum.  The u-integral
+     * is exact for every value of sq, so sq -> PowerExpand[Sqrt[Factor[a]]] (any
+     * square root of a) afterwards is exact too: a^2 -> a, 4 a^2 b^6 -> 2 a b^3. */
+    if (branch == 1 && expr_numeric_sign(a) == 0) {
+        char sname[96];
+        snprintf(sname, sizeof sname, "Integrate`QuadraticRadicals`s$%lu", qr_sym_counter++);
+        sq = expr_new_symbol(sname);
+        sqval = eval_take(mk_fn1("PowerExpand", mk_sqrt(eval_take(mk_fn1("Factor", expr_copy(a))))));
+        if (!sqval) goto done;
+    }
+
     /* --- 4. Rationalise: exy * dx /. {y -> ysub, x -> X}, then Cancel. --- */
     {
-        QrSub s = (branch == 1) ? qr_euler1(a, b, c, rad, x, u)
+        QrSub s = (branch == 1) ? qr_euler1(a, b, c, rad, x, u, sq)
                                 : qr_euler3(a, b, c, rad, x, u);
         su = s.U;                                       /* freed at done */
         Expr* prod  = mk_fn2("Times", expr_copy(exy), s.dx);   /* consumes s.dx */
@@ -771,6 +857,7 @@ static Expr* qr_core(Expr* f, Expr* x) {
             qr_depth--;
             expr_free(integrand);
             if (G) result = replace_one(G, u, su);     /* consumes G; borrows su */
+            if (result && sq) result = replace_one(result, sq, sqval);
         }
     }
 
@@ -784,6 +871,8 @@ done:
     if (y)    expr_free(y);
     if (u)    expr_free(u);
     if (su)   expr_free(su);
+    if (sq)   expr_free(sq);
+    if (sqval) expr_free(sqval);
     return result;
 }
 
@@ -810,9 +899,11 @@ void integrate_quadrad_init(void) {
     symtab_set_docstring("Integrate`QuadraticRadicals",
         "Integrate`QuadraticRadicals[f, x] integrates a rational function of x and\n"
         "square roots (a x^2 + b x + c)^(m/2) sharing one quadratic argument. It\n"
-        "applies a single real-valued Euler substitution chosen by the sign of a\n"
-        "(and, when a < 0, of the discriminant), reduces f to a rational function\n"
-        "of u, integrates that, and back-substitutes. The substitution is exact,\n"
-        "so the result is not re-verified. Strict: returns unevaluated when f is\n"
-        "not of this form or the reduced integral does not close.");
+        "first tries the closed forms (ArcTan/ArcTanh/ArcSinh/ArcSin/Log, also for a\n"
+        "symbolic a), else applies a single real-valued Euler substitution chosen\n"
+        "by the sign of a (and, when a < 0, of the discriminant), reduces f to a\n"
+        "rational function of u, integrates that, and back-substitutes. The\n"
+        "substitution is exact, so the result is not re-verified. Strict: returns\n"
+        "unevaluated when f is not of this form or the reduced integral does not\n"
+        "close.");
 }
