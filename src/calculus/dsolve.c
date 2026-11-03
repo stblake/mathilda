@@ -47,6 +47,7 @@ typedef enum {
     DS_EULER,
     DS_EXACTODE,
     DS_SPECIALFORM,
+    DS_SFTRANSFORM,
     DS_KOVACIC,
     DS_GENAIRY,
     DS_OPERFACTOR,
@@ -96,6 +97,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
     if (strcmp(s, "ExactODE")         == 0) return DS_EXACTODE;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
+    if (strcmp(s, "SpecialFunctionTransform") == 0) return DS_SFTRANSFORM;
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
     if (strcmp(s, "GeneralizedAiry")    == 0) return DS_GENAIRY;
     if (strcmp(s, "OperatorFactor")     == 0) return DS_OPERFACTOR;
@@ -157,6 +159,7 @@ extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_nl_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_specialform_transform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_genairy_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_operfactor_try(DSolveProblem* P, size_t* nbranch);
@@ -488,6 +491,12 @@ Expr* builtin_dsolve(Expr* res) {
              * become rational under t = phi(x) (Cos/Sin/Tan) — transform, recurse,
              * back-substitute (e.g. y''+Cot[x]y'+k(k+1)y==0 -> Legendre). */
             if (!result) result = dsolve_run(&P, dsolve_changevar_try);
+            /* SpecialFunctionTransform: the polynomial-coefficient class that reaches a
+             * Kummer / Whittaker / Bessel row only after a change of variables (shift to
+             * the singular point + exponential factor, degenerate Whittaker, quadratic
+             * argument z = (x - x0)^2).  Late: Kovacic / ChangeOfVariable find the
+             * simpler Liouvillian answer first when there is one; numerically gated. */
+            if (!result) result = dsolve_run(&P, dsolve_specialform_transform_try);
             /* General nonhomogeneous variation-of-parameters BACKSTOP: L[y]==g whose
              * homogeneous L[y]==0 is solvable by a special-function / change-of-
              * variable method that does not itself carry forcing.  Solves the
@@ -705,6 +714,7 @@ Expr* builtin_dsolve(Expr* res) {
                               if (!result) result = dsolve_run(&P, dsolve_exactode_nl_try);
                               break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
+        case DS_SFTRANSFORM:  result = dsolve_run(&P, dsolve_specialform_transform_try); break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
         case DS_GENAIRY:      result = dsolve_run(&P, dsolve_genairy_try);     break;
         case DS_OPERFACTOR:   result = dsolve_run(&P, dsolve_operfactor_try);  break;

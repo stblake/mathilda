@@ -586,6 +586,41 @@ static void t_m19_declines_integer_2mu(void) {
                "HypergeometricPFQ]");
 }
 
+/* ---- DSolve`SpecialFunctionTransform (late slot): linear coefficients shifted to
+ * the singular point + exponential factor -> Kummer/Bessel; degenerate Whittaker
+ * (HypergeometricU partner); quadratic argument z = (x - x0)^2 (Weber / Hermite /
+ * Whittaker in x^2); affine->Gauss with both orientations.  Each answer must be a
+ * List whose residual vanishes numerically for the full solution AND for the C[2]
+ * solution alone, the parameters instantiated. ---- */
+#define SFT_RES(LHS, SUBS) \
+    "Module[{s = DSolve[" LHS " == 0, y, x]}, Head[s] === List && " \
+    "Abs[N[(" LHS ") /. s[[1]] /. " SUBS "]] < 1/1000000 && " \
+    "Abs[N[(" LHS ") /. s[[1]] /. C[1] -> 0 /. " SUBS "]] < 1/1000000]"
+static void t_sf_transform(void) {
+    /* linear coefficients, singular point at -a (2.2.60-5938) */
+    check_true(SFT_RES("(b2 x + a2) y[x] + (b1 x + a1) y'[x] + (x + a) y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 1/3, a1 -> 2/7, a2 -> 3/5, b1 -> 5/4, b2 -> 1/6, x -> 9/10}"));
+    /* degenerate Whittaker: b == 0, HypergeometricU partner (2.2.59-5887) */
+    check_true(SFT_RES("(x + a) y[x] + x y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, x -> 7/10}"));
+    check_true("Not[FreeQ[DSolve[(x + a) y[x] + x y''[x] == 0, y[x], x], HypergeometricU]]");
+    /* Weber (2.2.58-5748) and Hermite type (2.2.59-5831): quadratic argument */
+    check_true(SFT_RES("(c x^2 + b x + a) y[x] + y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, b -> 1/3, c -> 3/5, x -> 7/10}"));
+    check_true(SFT_RES("c y[x] + (b x + a) y'[x] + y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, b -> 1/3, c -> 3/5, x -> 7/10}"));
+    /* Whittaker in x^2 (2.2.60-5987) */
+    check_true(SFT_RES("-(c^2 x^4 + b^2 x^2 + a^2) y[x] + x y'[x] + x^2 y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, b -> 1/3, c -> 3/5, x -> 7/10}"));
+    /* affine->Gauss, exponents {0, 0} at t = 1: the other orientation */
+    check_true("Module[{s = DSolve[4 t^2 (1 - t) Y''[t] + t (2 - 6 t) Y'[t] - a (a + 1) Y[t] == 0, Y, t]}, "
+               "Head[s] === List && Abs[N[(4 t^2 (1 - t) Y''[t] + t (2 - 6 t) Y'[t] - a (a + 1) Y[t]) /. s[[1]] "
+               "/. {C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, t -> 3/10}]] < 1/1000000]");
+    /* the triconfluent y'' + (x^4 + a1 x^2 + a0) y == 0 has no confluent row: declines */
+    check_true("FreeQ[DSolve`SpecialFunctionTransform[(x^4 + a1 x^2 + a0) y[x] + y''[x] == 0, y, x], "
+               "HypergeometricPFQ]");
+}
+
 /* ---- M20: PolynomialShiftSubstitution (x-dependent-shift substitution ->
  * separable, implicit first integral).  Verified by the implicit-function rule
  * D[G,x] + D[G,y[x]]*RHS == 0 (branch-safe). ---- */
@@ -3446,8 +3481,13 @@ static void nasser_implicit_ok(const char* ode, const char* res, const char* sam
     check_true(buf);
 }
 static void t_nasser_no_series(void) {
-    check_true("Head[Check[DSolve[(3 x - 1) y''[x] - (3 x + 2) y'[x] + (6 x - 8) y[x] == 0, "
-               "y[x], x], $Failed]] === DSolve");
+    /* Never a series answer.  Since SpecialFunctionTransform (linear coefficients
+     * -> Kummer after the shift x -> x - 1/3) it is a verified closed form; an
+     * unevaluated DSolve is the other admissible outcome. */
+    check_true("With[{s = Check[DSolve[(3 x - 1) y''[x] - (3 x + 2) y'[x] + (6 x - 8) y[x] == 0, "
+               "y, x], $Failed]}, Head[s] === DSolve || (FreeQ[s, SeriesData] && "
+               "Abs[N[((3 x - 1) y''[x] - (3 x + 2) y'[x] + (6 x - 8) y[x]) /. s[[1]] "
+               "/. {C[1] -> 6/5, C[2] -> 4/5, x -> 7/10}]] < 10^-8)]");
 }
 static void t_nasser_no_nonelem_leak(void) {
     check_true("Head[Check[DSolve[D[y'[x]/y[x], x] + 2 a Coth[y'[x]/y[x]] == 2 a^2, "
@@ -3628,6 +3668,7 @@ int main(void) {
     TEST(t_m17_affine_declines_confluent);
     TEST(t_m19_whittaker_confluent);
     TEST(t_m19_declines_integer_2mu);
+    TEST(t_sf_transform);
     TEST(t_m20_polyshift_402);
     TEST(t_m20_polyshift_371);
     TEST(t_m20_declines_nonlinear_base);

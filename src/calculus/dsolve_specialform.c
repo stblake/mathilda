@@ -866,7 +866,7 @@ static bool whittaker_num_ok(const Expr* base, const Expr* Qc, const char* xv) {
  *   claimed by the A + B/x^2 row above; this runs after it under the caller's
  *   !general guard, and every emission is gated by the caller's sf_num_ok.
  *   Qc, xvar borrowed; returns C[1] W1 + C[2] W2, or NULL. */
-static Expr* specialform_whittaker_basis(const Expr* Qc, const char* xvar) {
+static Expr* specialform_whittaker_basis(const Expr* Qc, const char* xvar, bool degen_ok) {
     Expr* rt = sf_ct(expr_copy((Expr*)Qc));                 /* Cancel[Together[Qc]] */
     if (ds_is_zero(rt)) { expr_free(rt); return NULL; }
     Expr* den  = eval_and_free(ds_call1("Denominator", expr_copy(rt)));
@@ -926,7 +926,26 @@ static Expr* specialform_whittaker_basis(const Expr* Qc, const char* xvar) {
                 Expr* iq = eval_and_free(ds_call1("IntegerQ", twomu));   /* consumes twomu */
                 bool dep = (iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True);
                 expr_free(iq);
-                if (!dep) {
+                /* Degenerate 2 mu in Z (late SpecialFunctionTransform only, degen_ok):
+                 * the +mu 1F1 solution stays, and Tricomi's U[1/2+mu-kappa, 1+2mu, z]
+                 * (a solution of the same Kummer equation for every lower parameter)
+                 * replaces the dependent/singular -mu partner -- independent unless
+                 * the upper parameter 1/2+mu-kappa is a non-positive integer (the 1F1
+                 * is then a polynomial onto which U collapses), which still declines. */
+                bool use_u = false;
+                if (dep && degen_ok) {
+                    Expr* up = sf_ct(ds_call2(SYM_Subtract,
+                                   ds_call2(SYM_Plus, eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2)), expr_copy(mu)),
+                                   expr_copy(kappa)));
+                    Expr* iq2 = eval_and_free(ds_call1("IntegerQ", expr_copy(up)));
+                    bool upint = (iq2->type == EXPR_SYMBOL && iq2->data.symbol.name == SYM_True);
+                    expr_free(iq2);
+                    bool polyF = upint && up->type == EXPR_INTEGER && up->data.integer <= 0;
+                    expr_free(up);
+                    if (!polyF) use_u = true;
+                }
+                if (!dep || use_u) {
                     Expr* z = sf_ct(ds_call2(SYM_Times, expr_copy(c),
                                   ds_call2(SYM_Subtract, expr_new_symbol(xvar), expr_copy(x0))));
                     Expr* ehalf = eval_and_free(ds_call1("Exp",
@@ -938,7 +957,7 @@ static Expr* specialform_whittaker_basis(const Expr* Qc, const char* xvar) {
                                      (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2));           /* 1/2 */
                     Expr* branches[2] = { NULL, NULL };
                     for (int s = 0; s < 2; s++) {
-                        Expr* smu = (s == 0) ? expr_copy(mu)
+                        Expr* smu = (s == 0 || use_u) ? expr_copy(mu)
                                   : ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(mu));   /* +-mu */
                         Expr* exp1  = ds_call2(SYM_Plus, expr_copy(half), expr_copy(smu));        /* 1/2 +- mu */
                         Expr* upper = ds_call2(SYM_Subtract,
@@ -948,7 +967,8 @@ static Expr* specialform_whittaker_basis(const Expr* Qc, const char* xvar) {
                                           ds_call2(SYM_Times, expr_new_integer(2), expr_copy(smu))); /* 1 +- 2 mu */
                         expr_free(smu);
                         Expr* zpow = eval_and_free(ds_call2(SYM_Power, expr_copy(z), exp1));       /* z^(1/2+-mu) */
-                        Expr* onef = expr_new_function(expr_new_symbol("Hypergeometric1F1"),
+                        Expr* onef = expr_new_function(expr_new_symbol(
+                                         (use_u && s == 1) ? "HypergeometricU" : "Hypergeometric1F1"),
                                          (Expr*[]){ upper, lower, expr_copy(z) }, 3);
                         branches[s] = eval_and_free(ds_call2(SYM_Times, expr_copy(ehalf),
                                           ds_call2(SYM_Times, zpow, onef)));
@@ -1134,7 +1154,7 @@ static bool hgc_num_ok(const DSolveProblem* P, const Expr* cand,
 
 /* Kummer row of dsolve_specialform_try (see the comment at its call): the
  * C[1], C[2] basis of y'' + Pc y' + Qc y == 0, or NULL. */
-static Expr* specialform_kummer_basis(Expr* Pc, Expr* Qc, const char* xvar) {
+static Expr* specialform_kummer_basis(Expr* Pc, Expr* Qc, const char* xvar, bool sym_b) {
     Expr* out = NULL;
     Expr* xP = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Pc)));
     Expr* slope = ds_d(expr_copy(xP), expr_new_symbol(xvar));
@@ -1142,7 +1162,26 @@ static Expr* specialform_kummer_basis(Expr* Pc, Expr* Qc, const char* xvar) {
         Expr* ks = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(slope)));  /* s */
         Expr* kb = ds_simplify(ds_subst(expr_copy(xP), expr_new_symbol(xvar), expr_new_integer(0)));  /* b */
         Expr* xQ = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Qc)));
-        if (ds_free_of(kb, xvar) && ds_free_of(xQ, xvar) && specialform_is_number(kb)) {
+        bool bnum = specialform_is_number(kb);
+        if (ds_free_of(kb, xvar) && ds_free_of(xQ, xvar) && !bnum && sym_b) {
+            /* SYMBOLIC b (late SpecialFunctionTransform only): {1F1[a, b, z], U[a, b, z]}
+             * -- no symbolic power z^(1-b), so the residual stays a pure pFq sum; U is
+             * independent of 1F1 unless a is a non-positive integer (1F1 a polynomial
+             * onto which U collapses), which declines.  The caller gates numerically. */
+            Expr* ka = sf_ct(ds_call2(SYM_Times, expr_new_integer(-1),
+                           ds_call2(SYM_Times, expr_copy(xQ), powneg1_sf(expr_copy(ks)))));
+            bool apoly = ka->type == EXPR_INTEGER && ka->data.integer <= 0;
+            if (!apoly) {
+                Expr* z = eval_and_free(ds_call2(SYM_Times, expr_copy(ks), expr_new_symbol(xvar)));
+                Expr* M = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
+                              (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
+                Expr* U = eval_and_free(expr_new_function(expr_new_symbol(SYM_HypergeometricU),
+                              (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
+                out = combo(M, U);
+                expr_free(z);
+            }
+            expr_free(ka);
+        } else if (ds_free_of(kb, xvar) && ds_free_of(xQ, xvar) && bnum) {
             Expr* ka = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
                            ds_call2(SYM_Times, expr_copy(xQ), powneg1_sf(expr_copy(ks)))));  /* a */
             Expr* iq = eval_and_free(ds_call1("IntegerQ", expr_copy(kb)));
@@ -1201,6 +1240,134 @@ static Expr* specialform_kummer_basis(Expr* Pc, Expr* Qc, const char* xvar) {
     }
     expr_free(slope); expr_free(xP);
     return out;
+}
+
+/* ---- affine -> Gauss 2F1 (see the call site in dsolve_specialform_try).
+ *      Pc, Qc borrowed; returns the verified general solution or NULL. ---- */
+static Expr* specialform_affine_gauss(DSolveProblem* P, Expr* Pc, Expr* Qc,
+                                      const char* xvar, bool both_orient) {
+    Expr* general = NULL;
+    Expr* dP  = eval_and_free(ds_call1("Denominator", ds_call1("Together", expr_copy(Pc))));
+    Expr* dQ  = eval_and_free(ds_call1("Denominator", ds_call1("Together", expr_copy(Qc))));
+    Expr* u   = eval_and_free(ds_call2("PolynomialLCM", dP, dQ));   /* consumes dP, dQ */
+    Expr* du  = ds_d(expr_copy(u), expr_new_symbol(xvar));
+    Expr* g   = eval_and_free(ds_call2("PolynomialGCD", expr_copy(u), du));  /* consumes du */
+    Expr* rad = eval_and_free(ds_call1("Cancel", ds_call2(SYM_Times, expr_copy(u),
+                    expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2))));  /* u / gcd(u,u') */
+    Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                   (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar) }, 2));
+    bool ratl = (pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True);
+    expr_free(pq);
+    bool deg2 = false;
+    if (ratl) {
+        Expr* deg = eval_and_free(expr_new_function(expr_new_symbol("Exponent"),
+                        (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar) }, 2));
+        deg2 = (deg->type == EXPR_INTEGER && deg->data.integer == 2);
+        expr_free(deg);
+    }
+    if (deg2) {
+        #define AF_COEF(k) eval_and_free(expr_new_function(expr_new_symbol("Coefficient"), \
+            (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar), expr_new_integer(k) }, 3))
+        Expr* c2 = AF_COEF(2); Expr* c1 = AF_COEF(1); Expr* c0 = AF_COEF(0);
+        #undef AF_COEF
+        /* roots of rad == 0, i.e. of t^2 - S t + Pr, S = -c1/c2, Pr = c0/c2 */
+        Expr* S = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
+                      ds_call2(SYM_Times, expr_copy(c1),
+                          expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ expr_copy(c2), expr_new_integer(-1) }, 2))));
+        Expr* Pr = ds_simplify(ds_call2(SYM_Times, expr_copy(c0),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy(c2), expr_new_integer(-1) }, 2)));
+        Expr* x1 = NULL; Expr* x2 = NULL;
+        if (specialform_quad_roots(S, Pr, &x1, &x2) &&
+            !sf_has_radical(x1) && !sf_has_radical(x2)) {   /* rational RSPs only */
+          /* both_orient (late slot): when the map with x1 at s = 0 declines -- e.g.
+           * the exponents there are {0, 0}, an integer c the Gauss row refuses --
+           * retry with the singular points swapped, so the point with a non-integer
+           * exponent difference is the expansion point (4 t^2 (1-t) Y'' +
+           * t (2 - 6 t) Y' - a (a+1) Y == 0). */
+          for (int orient = 0; orient < (both_orient ? 2 : 1) && !general; orient++) {
+            if (orient == 1) { Expr* tx = x1; x1 = x2; x2 = tx; }
+            Expr* h = ds_simplify(ds_call2(SYM_Subtract, expr_copy(x2), expr_copy(x1)));
+            if (!ds_is_zero(h)) {
+                const char* sv = intern_symbol("DSolve`hgs");
+                Expr* xsub = eval_and_free(ds_call2(SYM_Plus, expr_copy(x1),
+                                 ds_call2(SYM_Times, expr_copy(h), expr_new_symbol(sv))));
+                /* Cancel[Together[.]] (not Simplify) for the mapped coefficients:
+                 * Simplify can mis-reduce a constant-over-quadratic like
+                 * 3/(4 s (s-1)) to -3/(4 s), dropping the second pole so the
+                 * mapped equation is no longer canonical Gauss. */
+                Expr* Pt = eval_and_free(ds_call1("Cancel", ds_call1("Together",
+                               ds_call2(SYM_Times, expr_copy(h),
+                                   ds_subst(expr_copy(Pc), expr_new_symbol(xvar), expr_copy(xsub))))));
+                Expr* Qt = eval_and_free(ds_call1("Cancel", ds_call1("Together",
+                               ds_call2(SYM_Times,
+                                   ds_call2(SYM_Power, expr_copy(h), expr_new_integer(2)),
+                                   ds_subst(expr_copy(Qc), expr_new_symbol(xvar), expr_copy(xsub))))));
+                expr_free(xsub);
+                /* local exponents (indicial roots) at s=0 and s=1: rho^2 -
+                 * (1-p_i) rho + q_i == 0, p0=(s Pt)|0, q0=(s^2 Qt)|0, and the
+                 * s->1 analogue.  Cancel[Together[.]] (not Simplify) reduces the
+                 * pole factor to lowest terms so the s^k / s^k cancels BEFORE the
+                 * s->0 substitution — else s->0 hits 0*Infinity = Indeterminate. */
+                #define SF_POLE(ARG, AT) ds_subst( \
+                    eval_and_free(ds_call1("Cancel", ds_call1("Together", (ARG)))), \
+                    expr_new_symbol(sv), expr_new_integer(AT))
+                Expr* p0 = SF_POLE(ds_call2(SYM_Times, expr_new_symbol(sv), expr_copy(Pt)), 0);
+                Expr* q0 = SF_POLE(ds_call2(SYM_Times,
+                               ds_call2(SYM_Power, expr_new_symbol(sv), expr_new_integer(2)), expr_copy(Qt)), 0);
+                Expr* smo = ds_call2(SYM_Subtract, expr_new_symbol(sv), expr_new_integer(1));   /* s-1 */
+                Expr* p1 = SF_POLE(ds_call2(SYM_Times, expr_copy(smo), expr_copy(Pt)), 1);
+                Expr* q1 = SF_POLE(ds_call2(SYM_Times,
+                               ds_call2(SYM_Power, expr_copy(smo), expr_new_integer(2)), expr_copy(Qt)), 1);
+                #undef SF_POLE
+                expr_free(smo);
+                Expr* e0[2] = { NULL, NULL }; Expr* e1[2] = { NULL, NULL };
+                bool have0 = false, have1 = false;
+                if (ds_free_of(p0, sv) && ds_free_of(q0, sv)) {
+                    Expr* S0 = ds_simplify(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(p0)));
+                    have0 = specialform_quad_roots(S0, q0, &e0[0], &e0[1]);
+                    expr_free(S0);
+                }
+                if (ds_free_of(p1, sv) && ds_free_of(q1, sv)) {
+                    Expr* S1 = ds_simplify(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(p1)));
+                    have1 = specialform_quad_roots(S1, q1, &e1[0], &e1[1]);
+                    expr_free(S1);
+                }
+                if (have0 && have1) {
+                    Expr* sback = eval_and_free(ds_call2(SYM_Times,
+                                      ds_call2(SYM_Subtract, expr_new_symbol(xvar), expr_copy(x1)),
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_copy(h), expr_new_integer(-1) }, 2)));  /* (x-x1)/h */
+                    for (int i = 0; i < 2 && !general; i++) {
+                        for (int j = 0; j < 2 && !general; j++) {
+                            Expr* cand_s = specialform_fhomotopy(Pt, Qt, sv, e0[i], e1[j]);
+                            if (!cand_s) continue;
+                            /* consumes cand_s */
+                            Expr* cand = ds_subst(cand_s, expr_new_symbol(sv), expr_copy(sback));
+                            if (hgc_num_ok(P, cand, xvar, P->fun_names[0], x1, h)) general = cand;
+                            else expr_free(cand);
+                        }
+                    }
+                    expr_free(sback);
+                }
+                for (int k = 0; k < 2; k++) {
+                    if (e0[k]) expr_free(e0[k]);
+                    if (e1[k]) expr_free(e1[k]);
+                }
+                expr_free(p0); expr_free(q0); expr_free(p1); expr_free(q1);
+                expr_free(Pt); expr_free(Qt);
+            }
+            expr_free(h);
+          }
+        }
+        expr_free(S); expr_free(Pr); expr_free(c2); expr_free(c1); expr_free(c0);
+        if (x1) expr_free(x1);
+        if (x2) expr_free(x2);
+    }
+    expr_free(u); expr_free(g); expr_free(rad);
+    return general;
 }
 
 Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
@@ -1287,7 +1454,7 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *      irregular point at infinity, emitted as the verifiable Exp z^mu 1F1 form.
      *      specialform_whittaker_basis self-verifies against the reduced equation
      *      (== the original when P == 0), so it never ships a mis-read pole. ---- */
-    if (!general && ds_is_zero(Pc)) general = specialform_whittaker_basis(Qc, xvar);
+    if (!general && ds_is_zero(Pc)) general = specialform_whittaker_basis(Qc, xvar, false);
 
     /* ---- Bessel / modified Bessel: P == 1/x, Q = s - v^2/x^2 ---- */
     if (!general) {
@@ -1333,7 +1500,7 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      * x y'' - 2x y' - y == 0 (s == 2, §2.2.47-4603).  b must be a NUMBER: a symbolic
      * exponent z^(1-b) makes the verify residual a symbolic-power + pFq sum on which
      * zero_test hangs; a stays free (symbolic). */
-    if (!general) general = specialform_kummer_basis(Pc, Qc, xvar);
+    if (!general) general = specialform_kummer_basis(Pc, Qc, xvar, false);
 
     /* ---- Kummer behind an exponential: P == p0 + p1/x, Q == q0 + q1/x, q0 != 0 ----
      * y == E^(lambda x) w with lambda^2 + p0 lambda + q0 == 0 removes the constant
@@ -1366,7 +1533,7 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
                 Expr* Q2 = ds_simplify(ds_call2(SYM_Plus, expr_copy(Qc),
                                ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_copy(lam), expr_copy(Pc)),
                                    ds_call2(SYM_Power, expr_copy(lam), expr_new_integer(2)))));
-                Expr* base = specialform_kummer_basis(P2, Q2, xvar);
+                Expr* base = specialform_kummer_basis(P2, Q2, xvar, false);
                 if (base) {
                     Expr* mu = eval_and_free(ds_call2(SYM_Power, expr_new_symbol(SYM_E),
                                    ds_call2(SYM_Times, expr_copy(lam), expr_new_symbol(xvar))));
@@ -1398,120 +1565,7 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *      deg >= 3 is Heun = future).  A wrong RSP map yields a 2F1 whose residual
      *      zero_test cannot disprove, so hgc_num_ok (numeric back-substitution on
      *      the ORIGINAL equation) is the mandatory guard of the 0-FAIL invariant. */
-    if (!general) {
-        Expr* dP  = eval_and_free(ds_call1("Denominator", ds_call1("Together", expr_copy(Pc))));
-        Expr* dQ  = eval_and_free(ds_call1("Denominator", ds_call1("Together", expr_copy(Qc))));
-        Expr* u   = eval_and_free(ds_call2("PolynomialLCM", dP, dQ));   /* consumes dP, dQ */
-        Expr* du  = ds_d(expr_copy(u), expr_new_symbol(xvar));
-        Expr* g   = eval_and_free(ds_call2("PolynomialGCD", expr_copy(u), du));  /* consumes du */
-        Expr* rad = eval_and_free(ds_call1("Cancel", ds_call2(SYM_Times, expr_copy(u),
-                        expr_new_function(expr_new_symbol(SYM_Power),
-                            (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2))));  /* u / gcd(u,u') */
-        Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
-                       (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar) }, 2));
-        bool ratl = (pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True);
-        expr_free(pq);
-        bool deg2 = false;
-        if (ratl) {
-            Expr* deg = eval_and_free(expr_new_function(expr_new_symbol("Exponent"),
-                            (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar) }, 2));
-            deg2 = (deg->type == EXPR_INTEGER && deg->data.integer == 2);
-            expr_free(deg);
-        }
-        if (deg2) {
-            #define AF_COEF(k) eval_and_free(expr_new_function(expr_new_symbol("Coefficient"), \
-                (Expr*[]){ expr_copy(rad), expr_new_symbol(xvar), expr_new_integer(k) }, 3))
-            Expr* c2 = AF_COEF(2); Expr* c1 = AF_COEF(1); Expr* c0 = AF_COEF(0);
-            #undef AF_COEF
-            /* roots of rad == 0, i.e. of t^2 - S t + Pr, S = -c1/c2, Pr = c0/c2 */
-            Expr* S = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
-                          ds_call2(SYM_Times, expr_copy(c1),
-                              expr_new_function(expr_new_symbol(SYM_Power),
-                                  (Expr*[]){ expr_copy(c2), expr_new_integer(-1) }, 2))));
-            Expr* Pr = ds_simplify(ds_call2(SYM_Times, expr_copy(c0),
-                           expr_new_function(expr_new_symbol(SYM_Power),
-                               (Expr*[]){ expr_copy(c2), expr_new_integer(-1) }, 2)));
-            Expr* x1 = NULL; Expr* x2 = NULL;
-            if (specialform_quad_roots(S, Pr, &x1, &x2) &&
-                !sf_has_radical(x1) && !sf_has_radical(x2)) {   /* rational RSPs only */
-                Expr* h = ds_simplify(ds_call2(SYM_Subtract, expr_copy(x2), expr_copy(x1)));
-                if (!ds_is_zero(h)) {
-                    const char* sv = intern_symbol("DSolve`hgs");
-                    Expr* xsub = eval_and_free(ds_call2(SYM_Plus, expr_copy(x1),
-                                     ds_call2(SYM_Times, expr_copy(h), expr_new_symbol(sv))));
-                    /* Cancel[Together[.]] (not Simplify) for the mapped coefficients:
-                     * Simplify can mis-reduce a constant-over-quadratic like
-                     * 3/(4 s (s-1)) to -3/(4 s), dropping the second pole so the
-                     * mapped equation is no longer canonical Gauss. */
-                    Expr* Pt = eval_and_free(ds_call1("Cancel", ds_call1("Together",
-                                   ds_call2(SYM_Times, expr_copy(h),
-                                       ds_subst(expr_copy(Pc), expr_new_symbol(xvar), expr_copy(xsub))))));
-                    Expr* Qt = eval_and_free(ds_call1("Cancel", ds_call1("Together",
-                                   ds_call2(SYM_Times,
-                                       ds_call2(SYM_Power, expr_copy(h), expr_new_integer(2)),
-                                       ds_subst(expr_copy(Qc), expr_new_symbol(xvar), expr_copy(xsub))))));
-                    expr_free(xsub);
-                    /* local exponents (indicial roots) at s=0 and s=1: rho^2 -
-                     * (1-p_i) rho + q_i == 0, p0=(s Pt)|0, q0=(s^2 Qt)|0, and the
-                     * s->1 analogue.  Cancel[Together[.]] (not Simplify) reduces the
-                     * pole factor to lowest terms so the s^k / s^k cancels BEFORE the
-                     * s->0 substitution — else s->0 hits 0*Infinity = Indeterminate. */
-                    #define SF_POLE(ARG, AT) ds_subst( \
-                        eval_and_free(ds_call1("Cancel", ds_call1("Together", (ARG)))), \
-                        expr_new_symbol(sv), expr_new_integer(AT))
-                    Expr* p0 = SF_POLE(ds_call2(SYM_Times, expr_new_symbol(sv), expr_copy(Pt)), 0);
-                    Expr* q0 = SF_POLE(ds_call2(SYM_Times,
-                                   ds_call2(SYM_Power, expr_new_symbol(sv), expr_new_integer(2)), expr_copy(Qt)), 0);
-                    Expr* smo = ds_call2(SYM_Subtract, expr_new_symbol(sv), expr_new_integer(1));   /* s-1 */
-                    Expr* p1 = SF_POLE(ds_call2(SYM_Times, expr_copy(smo), expr_copy(Pt)), 1);
-                    Expr* q1 = SF_POLE(ds_call2(SYM_Times,
-                                   ds_call2(SYM_Power, expr_copy(smo), expr_new_integer(2)), expr_copy(Qt)), 1);
-                    #undef SF_POLE
-                    expr_free(smo);
-                    Expr* e0[2] = { NULL, NULL }; Expr* e1[2] = { NULL, NULL };
-                    bool have0 = false, have1 = false;
-                    if (ds_free_of(p0, sv) && ds_free_of(q0, sv)) {
-                        Expr* S0 = ds_simplify(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(p0)));
-                        have0 = specialform_quad_roots(S0, q0, &e0[0], &e0[1]);
-                        expr_free(S0);
-                    }
-                    if (ds_free_of(p1, sv) && ds_free_of(q1, sv)) {
-                        Expr* S1 = ds_simplify(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(p1)));
-                        have1 = specialform_quad_roots(S1, q1, &e1[0], &e1[1]);
-                        expr_free(S1);
-                    }
-                    if (have0 && have1) {
-                        Expr* sback = eval_and_free(ds_call2(SYM_Times,
-                                          ds_call2(SYM_Subtract, expr_new_symbol(xvar), expr_copy(x1)),
-                                          expr_new_function(expr_new_symbol(SYM_Power),
-                                              (Expr*[]){ expr_copy(h), expr_new_integer(-1) }, 2)));  /* (x-x1)/h */
-                        for (int i = 0; i < 2 && !general; i++) {
-                            for (int j = 0; j < 2 && !general; j++) {
-                                Expr* cand_s = specialform_fhomotopy(Pt, Qt, sv, e0[i], e1[j]);
-                                if (!cand_s) continue;
-                                /* consumes cand_s */
-                                Expr* cand = ds_subst(cand_s, expr_new_symbol(sv), expr_copy(sback));
-                                if (hgc_num_ok(P, cand, xvar, P->fun_names[0], x1, h)) general = cand;
-                                else expr_free(cand);
-                            }
-                        }
-                        expr_free(sback);
-                    }
-                    for (int k = 0; k < 2; k++) {
-                        if (e0[k]) expr_free(e0[k]);
-                        if (e1[k]) expr_free(e1[k]);
-                    }
-                    expr_free(p0); expr_free(q0); expr_free(p1); expr_free(q1);
-                    expr_free(Pt); expr_free(Qt);
-                }
-                expr_free(h);
-            }
-            expr_free(S); expr_free(Pr); expr_free(c2); expr_free(c1); expr_free(c0);
-            if (x1) expr_free(x1);
-            if (x2) expr_free(x2);
-        }
-        expr_free(u); expr_free(g); expr_free(rad);
-    }
+    if (!general) general = specialform_affine_gauss(P, Pc, Qc, xvar, false);
 
     /* ---- Liouville normal-form pre-pass: a P != 0 equation whose y'-free normal
      *      form z'' = r z (with y = mu z, mu = Exp[-Integrate[P/2]]) is one of the
@@ -1579,7 +1633,7 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
              * only decline, never emit a wrong closed form. */
             bool whit = false;
             if (!base && leaf_count_internal(negr, true) <= 50) {
-                base = specialform_whittaker_basis(negr, xvar);
+                base = specialform_whittaker_basis(negr, xvar, false);
                 if (base) whit = true;
             }
             expr_free(negr);
@@ -1703,11 +1757,296 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* ===================================================================
+ * DSolve`SpecialFunctionTransform -- the LATE special-function slot.
+ *
+ * SpecialFunctionForm above matches a table of canonical forms in the variable
+ * the equation is written in.  A large polynomial-coefficient class reaches those
+ * rows only after a change of the dependent and/or independent variable that the
+ * table does not try.  This method tries three, each composed back and gated by
+ * sf_num_ok (numeric back-substitution into the ORIGINAL equation with every
+ * symbolic parameter instantiated), so a mis-read transform can only decline:
+ *
+ *  (1) Linear coefficients (Laplace's equation, the Kummer class):
+ *        (a2 x + b2) y'' + (a1 x + b1) y' + (a0 x + b0) y == 0,  a2 != 0.
+ *      Translate the single finite singular point x0 to the origin (t = x - x0),
+ *      so  t y'' + (A t + B) y' + (C t + D) y == 0.  y = E^(lam t) w with
+ *      lam^2 + A lam + C == 0 removes the t-part of the y-coefficient:
+ *        t w'' + ((2 lam + A) t + B) w' + (lam B + D) w == 0,
+ *      Kummer's equation in z = s t, s = -(2 lam + A) = Sqrt[A^2 - 4 C] (lam = 0
+ *      when C == 0).  A double root (A^2 == 4 C) leaves t w'' + B w' + K w == 0,
+ *      K = lam B + D: Bessel, w = t^((1-B)/2) Z_(B-1)(2 Sqrt[K t]).
+ *      A symbolic b = B is allowed here (basis {1F1, U}); the early row needs a
+ *      numeric b.
+ *  (2) The Liouville normal form q = -r (w'' + q w == 0) read by the Whittaker row
+ *      with the DEGENERATE case 2 mu in Z admitted (HypergeometricU partner).
+ *  (3) Quadratic argument: q even about a centre x0 (the single pole of q, or the
+ *      vertex of a polynomial q).  z = (x - x0)^2 with w = (x - x0)^(-1/2) v(z)
+ *      gives v'' + Qz v == 0, Qz = (q + 3/(4 (x-x0)^2)) / (4 (x-x0)^2) as a
+ *      rational function of z (the Schwarzian term of the Liouville
+ *      transformation), read by the Whittaker / reduced / power-potential rows.
+ *      Reaches Weber's equation y'' + (c x^2 + b x + a) y == 0, the Hermite type
+ *      y'' + (b x + a) y' + c y == 0, and the Bessel operator with an even
+ *      quartic potential x^2 y'' + x y' - (c^2 x^4 + b^2 x^2 + a^2) y == 0.
+ *
+ * Runs after Kovacic and ChangeOfVariable (a Liouvillian/elementary answer, when
+ * one exists, is found first and is simpler).  Not recursive.  Killswitch
+ * MATHILDA_NO_SF_TRANSFORM.
+ * =================================================================== */
+
+/* squarefree part of the common denominator of (a, b) in x; owned. */
+static Expr* sft_pole_rad(const Expr* a, const Expr* b, const char* xv) {
+    Expr* da = eval_and_free(ds_call1("Denominator", ds_call1("Together", expr_copy((Expr*)a))));
+    Expr* db = eval_and_free(ds_call1("Denominator", ds_call1("Together", expr_copy((Expr*)b))));
+    Expr* u  = eval_and_free(ds_call2("PolynomialLCM", da, db));
+    Expr* du = ds_d(expr_copy(u), expr_new_symbol(xv));
+    Expr* g  = eval_and_free(ds_call2("PolynomialGCD", expr_copy(u), du));
+    return sf_ct(ds_call2(SYM_Times, u, powneg1_sf(g)));
+}
+/* degree of e in x, or -1 unless e is a polynomial in x. */
+static int sft_degree(const Expr* e, const char* xv) {
+    if (e && e->type == EXPR_INTEGER && e->data.integer == 0) return 0;   /* the zero polynomial */
+    Expr* pq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+                   (Expr*[]){ expr_copy((Expr*)e), expr_new_symbol(xv) }, 2));
+    bool ok = pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
+    expr_free(pq);
+    if (!ok) return -1;
+    Expr* d = eval_and_free(expr_new_function(expr_new_symbol("Exponent"),
+                  (Expr*[]){ expr_copy((Expr*)e), expr_new_symbol(xv) }, 2));
+    int r = (d->type == EXPR_INTEGER && d->data.integer >= 0 && d->data.integer < 64)
+          ? (int)d->data.integer : -1;
+    expr_free(d);
+    return r;
+}
+static Expr* sft_coef(const Expr* e, const char* xv, int k) {
+    return eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
+               (Expr*[]){ expr_copy((Expr*)e), expr_new_symbol(xv), expr_new_integer(k) }, 3));
+}
+/* -c0/c1 for the linear polynomial rad = c1 x + c0; owned. */
+static Expr* sft_root1(const Expr* rad, const char* xv) {
+    Expr* r0 = sft_coef(rad, xv, 0);
+    Expr* r1 = sft_coef(rad, xv, 1);
+    return sf_ct(ds_call2(SYM_Times, expr_new_integer(-1), ds_call2(SYM_Times, r0, powneg1_sf(r1))));
+}
+static Expr* sft_half(int num) {   /* num/2 */
+    return eval_and_free(ds_call2(SYM_Times, expr_new_integer(num),
+               powneg1_sf(expr_new_integer(2))));
+}
+/* f * (C[1] b0 + C[2] b1), distributed over the basis terms so the factor meets
+ * each term's own powers (as the pre-pass above does).  f, base consumed. */
+static Expr* sft_distribute(Expr* f, Expr* base) {
+    if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL &&
+        base->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t nb = base->data.function.arg_count;
+        Expr** terms = malloc(nb * sizeof(Expr*));
+        for (size_t k = 0; k < nb; k++)
+            terms[k] = ds_call2(SYM_Times, expr_copy(f), expr_copy(base->data.function.args[k]));
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, nb));
+        free(terms);
+        expr_free(f); expr_free(base);
+        return r;
+    }
+    return eval_and_free(ds_call2(SYM_Times, f, base));
+}
+
+/* (1) linear coefficients.  Pc, Qc borrowed. */
+static Expr* sft_laplace(DSolveProblem* P, const Expr* Pc, const Expr* Qc, const char* xv) {
+    Expr* rad = sft_pole_rad(Pc, Qc, xv);
+    int drad = sft_degree(rad, xv);
+    Expr* out = NULL;
+    if (drad != 1) { expr_free(rad); return NULL; }
+    Expr* x0 = sft_root1(rad, xv);
+    expr_free(rad);
+    Expr* xs = eval_and_free(ds_call2(SYM_Plus, expr_new_symbol(xv), expr_copy(x0)));
+    Expr* Pt = sf_ct(ds_call2(SYM_Times, expr_new_symbol(xv),
+                   ds_subst(expr_copy((Expr*)Pc), expr_new_symbol(xv), expr_copy(xs))));
+    Expr* Qt = sf_ct(ds_call2(SYM_Times, expr_new_symbol(xv),
+                   ds_subst(expr_copy((Expr*)Qc), expr_new_symbol(xv), expr_copy(xs))));
+    expr_free(xs);
+    int dp = sft_degree(Pt, xv), dq = sft_degree(Qt, xv);
+    if (dp >= 0 && dp <= 1 && dq >= 0 && dq <= 1) {
+        Expr* A = sft_coef(Pt, xv, 1); Expr* B = sft_coef(Pt, xv, 0);
+        Expr* C = sft_coef(Qt, xv, 1); Expr* D = sft_coef(Qt, xv, 0);
+        Expr* disc = sf_ct(ds_call2(SYM_Subtract,
+                         ds_call2(SYM_Power, expr_copy(A), expr_new_integer(2)),
+                         ds_call2(SYM_Times, expr_new_integer(4), expr_copy(C))));
+        Expr* lam = NULL; Expr* base = NULL;
+        if (ds_is_zero(disc)) {
+            /* double root: t w'' + B w' + K w == 0 -> t^((1-B)/2) Z_(B-1)(2 Sqrt[K t]) */
+            lam = sf_ct(ds_call2(SYM_Times, sft_half(-1), expr_copy(A)));
+            Expr* K = sf_ct(ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_copy(lam), expr_copy(B)),
+                                     expr_copy(D)));
+            if (!ds_is_zero(K)) {
+                Expr* nu  = eval_and_free(ds_call2(SYM_Subtract, expr_copy(B), expr_new_integer(1)));
+                Expr* arg = eval_and_free(ds_call2(SYM_Times, expr_new_integer(2),
+                                ds_call1("Sqrt", ds_call2(SYM_Times, expr_copy(K), expr_new_symbol(xv)))));
+                Expr* pre = eval_and_free(ds_call2(SYM_Power, expr_new_symbol(xv),
+                                ds_call2(SYM_Times, sft_half(1),
+                                    ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(B)))));
+                Expr* b0 = ds_call2(SYM_Times, expr_copy(pre), expr_new_function(expr_new_symbol("BesselJ"),
+                               (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2));
+                Expr* b1 = ds_call2(SYM_Times, expr_copy(pre), expr_new_function(expr_new_symbol("BesselY"),
+                               (Expr*[]){ expr_copy(nu), expr_copy(arg) }, 2));
+                base = combo(b0, b1);
+                expr_free(nu); expr_free(arg); expr_free(pre);
+            }
+            expr_free(K);
+        } else {
+            lam = ds_is_zero(C) ? expr_new_integer(0)
+                : sf_ct(ds_call2(SYM_Times, sft_half(1),
+                      ds_call2(SYM_Subtract, ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(A)),
+                          ds_call1("Sqrt", expr_copy(disc)))));
+            /* P2 = (2 lam + A) + B/t,  Q2 = (lam B + D)/t */
+            Expr* P2 = eval_and_free(ds_call2(SYM_Plus,
+                           ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_new_integer(2), expr_copy(lam)),
+                                    expr_copy(A)),
+                           ds_call2(SYM_Times, expr_copy(B), powneg1_sf(expr_new_symbol(xv)))));
+            Expr* Q2 = eval_and_free(ds_call2(SYM_Times,
+                           ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_copy(lam), expr_copy(B)),
+                                    expr_copy(D)),
+                           powneg1_sf(expr_new_symbol(xv))));
+            base = specialform_kummer_basis(P2, Q2, xv, true);
+            expr_free(P2); expr_free(Q2);
+        }
+        if (base) {
+            Expr* ef = eval_and_free(ds_call1("Exp", ds_call2(SYM_Times, expr_copy(lam),
+                                                               expr_new_symbol(xv))));
+            Expr* cand = sft_distribute(ef, base);
+            Expr* back = eval_and_free(ds_call2(SYM_Subtract, expr_new_symbol(xv), expr_copy(x0)));
+            cand = ds_subst(cand, expr_new_symbol(xv), back);
+            if (sf_num_ok(P, cand, xv, P->fun_names[0])) out = cand;
+            else expr_free(cand);
+        }
+        if (lam) expr_free(lam);
+        expr_free(A); expr_free(B); expr_free(C); expr_free(D); expr_free(disc);
+    }
+    expr_free(Pt); expr_free(Qt); expr_free(x0);
+    return out;
+}
+
+/* y = f * base, PowerExpand-merged (stacked radicals of one base), gated.
+ * f, base consumed. */
+static Expr* sft_compose(DSolveProblem* P, Expr* f, Expr* base, const char* xv) {
+    Expr* cand = sft_distribute(f, base);
+    cand = eval_and_free(ds_call1("PowerExpand", cand));
+    if (sf_num_ok(P, cand, xv, P->fun_names[0])) return cand;
+    expr_free(cand);
+    return NULL;
+}
+
+/* (3) quadratic argument on the normal form q (w'' + q w == 0).  q, mu borrowed
+ * (mu the recovery factor, y = mu w). */
+static Expr* sft_quadarg(DSolveProblem* P, const Expr* q, const Expr* mu, const char* xv) {
+    Expr* zero = expr_new_integer(0);
+    Expr* rad = sft_pole_rad(q, zero, xv);
+    expr_free(zero);
+    int drad = sft_degree(rad, xv);
+    Expr* x0 = NULL;
+    if (drad == 1) x0 = sft_root1(rad, xv);
+    else if (drad == 0) {
+        int d = sft_degree(q, xv);
+        if (d >= 2 && d % 2 == 0 && d <= 8) {    /* centre = vertex of the even-degree polynomial */
+            Expr* cd = sft_coef(q, xv, d); Expr* cd1 = sft_coef(q, xv, d - 1);
+            x0 = sf_ct(ds_call2(SYM_Times, expr_new_integer(-1),
+                     ds_call2(SYM_Times, cd1, powneg1_sf(ds_call2(SYM_Times, expr_new_integer(d), cd)))));
+        }
+    }
+    expr_free(rad);
+    if (!x0) return NULL;
+    Expr* out = NULL;
+    Expr* xs = eval_and_free(ds_call2(SYM_Plus, expr_new_symbol(xv), expr_copy(x0)));
+    Expr* qs = sf_ct(ds_subst(expr_copy((Expr*)q), expr_new_symbol(xv), xs));     /* q(x0 + u) */
+    Expr* qm = ds_subst(expr_copy(qs), expr_new_symbol(xv),
+                   eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_new_symbol(xv))));
+    Expr* odd = sf_ct(ds_call2(SYM_Subtract, expr_copy(qs), qm));
+    bool even = ds_is_zero(odd);
+    expr_free(odd);
+    if (even && !ds_free_of(qs, xv)) {
+        /* Qz = (q(Sqrt z) + 3/(4 z)) / (4 z) */
+        Expr* qz = ds_subst(expr_copy(qs), expr_new_symbol(xv), ds_call1("Sqrt", expr_new_symbol(xv)));
+        Expr* three4 = eval_and_free(ds_call2(SYM_Times, expr_new_integer(3),
+                           powneg1_sf(ds_call2(SYM_Times, expr_new_integer(4), expr_new_symbol(xv)))));
+        Expr* Qz = sf_ct(ds_call2(SYM_Times, ds_call2(SYM_Plus, qz, three4),
+                         powneg1_sf(ds_call2(SYM_Times, expr_new_integer(4), expr_new_symbol(xv)))));
+        Expr* num = eval_and_free(ds_call1("Numerator", expr_copy(Qz)));
+        Expr* den = eval_and_free(ds_call1("Denominator", expr_copy(Qz)));
+        bool rat = sft_degree(num, xv) >= 0 && sft_degree(den, xv) >= 0;
+        expr_free(num); expr_free(den);
+        Expr* base = NULL;
+        if (rat && leaf_count_internal(Qz, true) <= 80) {
+            base = specialform_whittaker_basis(Qz, xv, true);
+            if (!base) base = specialform_reduced_basis(Qz, xv);
+            if (!base) base = specialform_power_potential(Qz, xv);
+        }
+        expr_free(Qz);
+        if (base) {
+            /* v(z) -> v((x - x0)^2);  y = mu (x - x0)^(-1/2) v */
+            Expr* t = eval_and_free(ds_call2(SYM_Subtract, expr_new_symbol(xv), expr_copy(x0)));
+            base = ds_subst(base, expr_new_symbol(xv),
+                       eval_and_free(ds_call2(SYM_Power, expr_copy(t), expr_new_integer(2))));
+            Expr* f = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)mu),
+                          ds_call2(SYM_Power, t, sft_half(-1))));
+            out = sft_compose(P, f, base, xv);
+        }
+    }
+    expr_free(qs); expr_free(x0);
+    return out;
+}
+
+Expr** dsolve_specialform_transform_try(DSolveProblem* P, size_t* nbranch) {
+    if (getenv("MATHILDA_NO_SF_TRANSFORM")) return NULL;
+    Expr* Pc; Expr* Qc;
+    if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
+    const char* xv = P->ind_names[0];
+    Expr* general = NULL;
+    if (ds_is_rational_in(Pc, xv) && ds_is_rational_in(Qc, xv) &&
+        leaf_count_internal(Pc, true) + leaf_count_internal(Qc, true) <= 120) {
+        general = sft_laplace(P, Pc, Qc, xv);
+        if (!general) general = specialform_affine_gauss(P, Pc, Qc, xv, true);
+        if (!general) {
+            Expr* mu = NULL;
+            Expr* r = dsolve_normal_form(Pc, Qc, xv, &mu);
+            if (mu && r) {
+                Expr* q = sf_ct(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(r)));
+                if (leaf_count_internal(q, true) <= 80) {
+                    Expr* base = specialform_whittaker_basis(q, xv, true);
+                    if (base) general = sft_compose(P, expr_copy(mu), base, xv);
+                    if (!general) general = sft_quadarg(P, q, mu, xv);
+                }
+                expr_free(q);
+            }
+            if (mu) expr_free(mu);
+            if (r) expr_free(r);
+        }
+    }
+    expr_free(Pc); expr_free(Qc);
+    if (!general) return NULL;
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = general;
+    *nbranch = 1;
+    return out;
+}
+
+static Expr* builtin_dsolve_specialform_transform(Expr* res) {
+    return dsolve_method_builtin(res, dsolve_specialform_transform_try);
+}
+
 static Expr* builtin_dsolve_specialform(Expr* res) {
     return dsolve_method_builtin(res, dsolve_specialform_try);
 }
 
 void dsolve_specialform_init(void) {
+    symtab_add_builtin("DSolve`SpecialFunctionTransform", builtin_dsolve_specialform_transform);
+    symtab_get_def("DSolve`SpecialFunctionTransform")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`SpecialFunctionTransform",
+        "DSolve`SpecialFunctionTransform[eqn, y, x] solves a homogeneous second-order linear "
+        "ODE with rational coefficients that reaches a confluent special-function row only "
+        "after a change of variables: linear coefficients (a2 x + b2) y'' + (a1 x + b1) y' + "
+        "(a0 x + b0) y == 0 (shift to the singular point, y = E^(lam x) w -> Kummer "
+        "Hypergeometric1F1/HypergeometricU, or Bessel at a double root), the degenerate "
+        "Whittaker normal form (HypergeometricU partner), and a normal form even about a "
+        "centre x0 read in z = (x - x0)^2 (Weber / Hermite / Whittaker in x^2). Every answer "
+        "is numerically back-substituted with the parameters sampled.");
     symtab_add_builtin("DSolve`SpecialFunctionForm", builtin_dsolve_specialform);
     symtab_get_def("DSolve`SpecialFunctionForm")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`SpecialFunctionForm",
