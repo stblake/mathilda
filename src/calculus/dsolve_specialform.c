@@ -43,6 +43,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../core.h"
+#include "../arithmetic.h"   /* arith_warnings_mute_push/pop: numeric screens are internal probes */
 #include <stdlib.h>
 #include <math.h>
 
@@ -97,6 +98,32 @@ static bool sf_has_radical(const Expr* e) {
     return false;
 }
 
+/* True if e contains an elementary transcendental function: a trigonometric /
+ * hyperbolic head (or its inverse), Log, or (unless allow_exp) Exp / a power of E.
+ * The reduced-form rows below are each for an algebraic potential (or, for the
+ * exponential-Bessel row, an exponential one); on a trigonometric potential --
+ * the Liouville normal form of y - x y' + (1 - x Cot[x]) y'' == 0 (2.2.60-5952)
+ * -- their Simplify calls cost 8 s and their x -> 0 probes leak Power::infy,
+ * before every row declines.  This structural prefilter skips them. */
+static bool sf_has_transcendental(const Expr* e, bool allow_exp) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL) {
+        static const char* names[] = { "Sin", "Cos", "Tan", "Cot", "Sec", "Csc",
+            "Sinh", "Cosh", "Tanh", "Coth", "Sech", "Csch", "ArcSin", "ArcCos", "ArcTan",
+            "ArcCot", "ArcSec", "ArcCsc", "ArcSinh", "ArcCosh", "ArcTanh", "Log", "Exp" };
+        size_t nn = sizeof(names) / sizeof(names[0]) - (allow_exp ? 1 : 0);
+        for (size_t k = 0; k < nn; k++)
+            if (h->data.symbol.name == intern_symbol(names[k])) return true;
+        if (!allow_exp && h->data.symbol.name == SYM_Power && e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_SYMBOL &&
+            e->data.function.args[0]->data.symbol.name == SYM_E) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sf_has_transcendental(e->data.function.args[i], allow_exp)) return true;
+    return false;
+}
+
 /* --- numeric self-verify for an emitted 2nd-order solution.  The Pöschl-Teller
  *     row below returns a Hypergeometric2F1 combination whose residual zero_test
  *     cannot decide, so (as with M12/M14) we gate emission on a numeric back-
@@ -123,7 +150,7 @@ static double sf_abs_at(const Expr* R, const char* xv, double xval) {
              : (e && e->type == EXPR_INTEGER) ? (double)e->data.integer : NAN;
     expr_free(e); return m;
 }
-static bool sf_num_ok(const DSolveProblem* P, const Expr* general,
+static bool sf_num_ok_raw(const DSolveProblem* P, const Expr* general,
                       const char* xv, const char* yname) {
     Expr* R = expr_copy(P->eq_residuals[0]);
     Expr* b0 = expr_copy((Expr*)general);
@@ -162,6 +189,18 @@ static bool sf_num_ok(const DSolveProblem* P, const Expr* general,
     }
     expr_free(R);
     return small >= 2 && big == 0;
+}
+
+/* The numeric screens evaluate a candidate at sample points, where a removable
+ * 0/0 or a pole (Power::infy, Infinity::indet) is a legitimate probe outcome --
+ * an internal probe, so its arithmetic warnings are muted (invisible to Check
+ * too).  The counter is TimeConstrained-unwind registered in core.c. */
+static bool sf_num_ok(const DSolveProblem* P, const Expr* general,
+                      const char* xv, const char* yname) {
+    arith_warnings_mute_push();
+    bool r = sf_num_ok_raw(P, general, xv, yname);
+    arith_warnings_mute_pop();
+    return r;
 }
 
 /* Sin[x]^pe Cos[x]^q Hypergeometric2F1[(pe+q+s)/2, (pe+q-s)/2, pe+1/2, Sin[x]^2].
@@ -365,6 +404,9 @@ static bool specialform_quad_roots(Expr* S, Expr* Pr, Expr** ra, Expr** rb) {
  *      in z'' + Qc z == 0 (borrowed); returns C[1] z0 + C[2] z1 or NULL. */
 static Expr* specialform_reduced_basis(Expr* Qc, const char* xvar) {
     Expr* general = NULL;
+    const bool alg = !sf_has_transcendental(Qc, false);   /* algebraic potential */
+    const bool expo = !sf_has_transcendental(Qc, true);   /* at most exponential */
+    if (!expo) return NULL;
 
     /* ---- Airy: P == 0, Q = -(A x + B), A = -dQ/dx constant, B = -Q(0) ---- */
     if (!general) {
@@ -400,7 +442,7 @@ static Expr* specialform_reduced_basis(Expr* Qc, const char* xvar) {
      *      Airy (Q linear => m==1) and literal Bessel (P==1/x) run first, so the
      *      !general guard keeps this from colliding with them.  Verified, like the
      *      other rows, by the substrate's back-substitution. */
-    if (!general) {
+    if (!general && alg) {
         Expr* reff = ds_simplify(expr_copy(Qc));   /* Q == A x^m (P==0, so this is the potential) */
         Expr* m = NULL; Expr* mp2 = NULL; Expr* A = NULL;
         if (!ds_is_zero(reff)) {
@@ -532,7 +574,7 @@ static Expr* specialform_reduced_basis(Expr* Qc, const char* xvar) {
      *   This is the normal (u'-free) form the plain Bessel row (P == 1/x) and the
      *   pure-power row (Q a single power) both miss; it is the second-order factor
      *   of Bessel-type third-order symmetric squares (e.g. E17). */
-    if (!general) {
+    if (!general && alg) {
         Expr* q2 = ds_simplify(ds_call2(SYM_Times, expr_copy(Qc),         /* x^2 Q */
                        ds_call2(SYM_Power, expr_new_symbol(xvar), expr_new_integer(2))));
         Expr* Ac = eval_and_free(expr_new_function(expr_new_symbol("Coefficient"),
@@ -811,7 +853,7 @@ static Expr* specialform_power_potential(Expr* Qc, const char* xvar) {
  * stacks, so it is both cheap and thrash-free.  base solving the reduced equation
  * means mu*base solves the original (the normal-form transformation is exact), so the
  * caller may emit mu*base without the original-equation gate.  base, Qc borrowed. */
-static bool whittaker_num_ok(const Expr* base, const Expr* Qc, const char* xv) {
+static bool whittaker_num_ok_raw(const Expr* base, const Expr* Qc, const char* xv) {
     Expr* b2 = ds_d(ds_d(expr_copy((Expr*)base), expr_new_symbol(xv)), expr_new_symbol(xv));
     Expr* R  = ds_call2(SYM_Plus, b2,
                    ds_call2(SYM_Times, expr_copy((Expr*)Qc), expr_copy((Expr*)base)));  /* w'' + Qc w */
@@ -843,6 +885,13 @@ static bool whittaker_num_ok(const Expr* base, const Expr* Qc, const char* xv) {
     }
     expr_free(R);
     return small >= 2 && big == 0;
+}
+
+static bool whittaker_num_ok(const Expr* base, const Expr* Qc, const char* xv) {
+    arith_warnings_mute_push();          /* internal probe: see sf_num_ok */
+    bool r = whittaker_num_ok_raw(base, Qc, xv);
+    arith_warnings_mute_pop();
+    return r;
 }
 
 /* ---- Whittaker / confluent-hypergeometric (1F1) reduced form ----
@@ -1095,7 +1144,7 @@ static Expr* specialform_fhomotopy(Expr* Pt, Expr* Qt, const char* sv,
  * Mirrors sf_num_ok, but samples x INSIDE the mapped segment [x1, x2] (so the
  * separation s=(x-x1)/h lands in (0,1) and the x^(1-c) factor stays real/finite);
  * x1, h are instantiated at the same generic reals as the residual's params. */
-static bool hgc_num_ok(const DSolveProblem* P, const Expr* cand,
+static bool hgc_num_ok_raw(const DSolveProblem* P, const Expr* cand,
                        const char* xv, const char* yname,
                        const Expr* x1, const Expr* h) {
     Expr* R = expr_copy(P->eq_residuals[0]);
@@ -1150,6 +1199,15 @@ static bool hgc_num_ok(const DSolveProblem* P, const Expr* cand,
     }
     expr_free(R);
     return ok;
+}
+
+static bool hgc_num_ok(const DSolveProblem* P, const Expr* cand,
+                       const char* xv, const char* yname,
+                       const Expr* x1, const Expr* h) {
+    arith_warnings_mute_push();          /* internal probe: see sf_num_ok */
+    bool r = hgc_num_ok_raw(P, cand, xv, yname, x1, h);
+    arith_warnings_mute_pop();
+    return r;
 }
 
 /* Kummer row of dsolve_specialform_try (see the comment at its call): the
