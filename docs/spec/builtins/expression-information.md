@@ -274,6 +274,25 @@ Pipeline (each stage exits early on a definite verdict):
    `E^(I x)`) stays representable and is deliberately left untouched.
 1. **Structural** — literal `0`, `Complex[0, 0]`, named non-zero
    constants like `Pi` are decided in O(1).
+1a. **Generalized functions** (v0.6161, `src/zero_test_distrib.c`) — an
+   expression in `DiracDelta`, `Derivative[k][DiracDelta]` and
+   `HeavisideTheta` is decided as a **distribution**, before the inert-call
+   abstraction (which would turn those atoms into free symbols). Pointwise
+   sampling cannot decide one: `DiracDelta` vanishes at every sample point, and
+   `HeavisideTheta` does not evaluate at a complex one.
+   - Every atom's argument must be `c (t - a)` in one variable `t`, with `c` a
+     non-zero real and `a` a real number; otherwise the stage declines.
+   - Each `c(t) DiracDelta^(k)(t - a)` is **sifted** onto the basis
+     `DiracDelta^(m)(t - a)`: `Sum[(-1)^j Binomial[k, j] c^(j)(a)
+     DiracDelta^(k-j)(t - a), {j, 0, k}]`. Every basis coefficient must be zero.
+   - The **regular part** is split at the `HeavisideTheta` breakpoints. On each
+     interval every `Theta` is 0 or 1, and the analytic piece must be zero; an
+     analytic piece that vanishes on an interval vanishes identically.
+   - `False` if any coefficient or piece is non-zero; `True` if all are zero.
+     So `Cos[t] DiracDelta[t - Pi] + DiracDelta[t - Pi]`, `t DiracDelta'[t] +
+     DiracDelta[t]`, `HeavisideTheta[t - 1] - HeavisideTheta[t - 1]^2` and
+     `HeavisideTheta[1 - t] + HeavisideTheta[t - 1] - 1` are `True` (all were
+     `False`), and `DiracDelta[t - Pi]`, `t DiracDelta'[t]` stay `False`.
 1b. **Structural non-zero certificate** — a sound, unconditional proof that
    `expr` is *not* identically zero, so it is decided `False` with no numeric
    sampling. The lever is that the exponential is entire and has no zeros
@@ -308,6 +327,17 @@ Pipeline (each stage exits early on a definite verdict):
    generator set, exact rational arithmetic); FLINT declines back to the
    classical predicate only for coefficients it cannot model (an inexact real,
    an irrational constant such as `Pi`, or a `Complex` coefficient).
+2b. **Exact trig/exp kernel** (`src/simp/simp_trigexp_zero.c`) — a rational
+   function of one kernel `t = E^(I x)` (`Sin[k x]`, `Cos[k x]`, `Sec[k x]`,
+   `E^(k I x)`, …; or `t = E^x` for the hyperbolic family), with parameters and
+   opaque `x`-dependent subterms as further axes, is decided by exact rational
+   point evaluation on a Nullstellensatz grid. A `True` is always sound. A
+   `False` is trusted only when **no opaque `x`-dependent subterm** is present
+   (v0.6161): the grid treats each one as an independent generator, but they
+   can be algebraically dependent on each other or on the kernel. `E^(t/2)
+   (E^((-1/2 - I) t) + E^((-1/2 + I) t)) - 2 Cos[t]` was reported non-zero that
+   way; `Sqrt[Cos[t]]` is algebraic over the kernel field. With one present, a
+   non-zero grid point defers to the sampler.
 3. **Numeric precision ladder** — for closed-form numeric inputs,
    numericalize at machine precision. A residual that is a non-trivial
    fraction of the operand scale is a genuine non-zero (`False`); a
@@ -331,9 +361,24 @@ Pipeline (each stage exits early on a definite verdict):
    antiderivative's `Log[1 + 2x^4 + 2x^3 y + …]` the argument cancels at
    negative `x`, so an exact zero leaves a large machine residual, or a
    denominator rounds to exactly `0.0` and reads as a pole. Now:
-   - **A machine non-zero** stands only once two consecutive **MPFR** rungs
-     agree (to 2^-20 relative). The machine rung never vouches for itself,
-     because an artifact can survive unchanged to 200 bits.
+   - **A machine non-zero is re-evaluated on the exact point** (v0.6161). A
+     machine-real sample stays machine under `N`, so climbing on it made every
+     MPFR rung a re-run of the machine one, and their agreement read as a
+     stable non-zero. The point's reals are now made exact first.
+   - **It stands only on the top two rungs.** A zero still falls by at least
+     half the bits added between them; a genuine value holds. Agreement between
+     lower rungs is no evidence: at `x^2 = 205`, `1/2 - Tanh[x^2]/2 ~ 1e-178`
+     rounds to 0 at both 200 and 500 bits, so `Sech[x^2]^2 - 4 (1/2 -
+     Tanh[x^2]/2)(1/2 + Tanh[x^2]/2)` sat at `1e-178` on both and was called
+     non-zero (v0.6160 and earlier). The machine rung never vouches for itself.
+   - **A point whose cancellation outruns the ladder is re-drawn.** If the top
+     rung is still below its precision floor measured against the
+     *structural* operand scale (which reaches inside every `Plus`), the point
+     cannot tell a zero from a value: at `u ~ -355`, `1/2 + Tanh[u]/2 ~
+     e^-710` is unchanged through 1000 bits. Such a point is treated like an
+     IEEE overflow, an unrepresentable coordinate, and the sampler re-draws it
+     from a smaller magnitude shell. A non-zero function is resolvably
+     non-zero at the smaller-shell points, so this cannot hide one.
    - **A residual that falls below the deep-zero floor**, or drops by 2^60
      over the ladder, is a zero.
    - **A machine-precision infinity** defers to the next rung. A genuine pole

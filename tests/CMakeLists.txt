@@ -1057,6 +1057,7 @@ set(COMMON_SRC
     ../src/solve/solvethue.c
     ../src/solve/solveint_thue.c
     ../src/zero_test.c
+    ../src/zero_test_distrib.c
     ../src/numeric_complex.c
     ../src/flint_num_bridge.c
     ../src/nc_accuracy.c
@@ -4782,7 +4783,7 @@ add_test(NAME dsolve_corpus_2_2_14_tests
 add_test(NAME dsolve_corpus_2_2_15_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2215.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # Section 2.2.16 (Problems 1501-1600, Boyce & DiPrima): 100 records, 56 IVP,
 # 0 systems.  Buckets: 77 elementary first-order (39 separable, 25 linear, 13
@@ -4798,7 +4799,7 @@ add_test(NAME dsolve_corpus_2_2_15_tests
 add_test(NAME dsolve_corpus_2_2_16_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2216.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Section 2.2.17 (Problems 1601-1700, Nasser Abbasi): 100 records, 28 IVP, 0
 # systems.  First-order-dominated: 27 homogeneous, 23 Abel-tagged (most overlap
@@ -4989,7 +4990,7 @@ add_test(NAME dsolve_corpus_2_2_27_tests
 add_test(NAME dsolve_corpus_2_2_28_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2228.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 14)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 15)
 
 # Section 2.2.29 (Problems 2801-2900, Nasser Abbasi): 100 records, 75 scalar
 # (21 IVP), 25 systems.  A first-order-nonlinear + linear-systems section: 2x2/3x3/
@@ -5454,7 +5455,7 @@ add_test(NAME dsolve_corpus_2_2_53_tests
 add_test(NAME dsolve_corpus_2_2_54_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2254.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 9)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 10)
 
 # Section 2.2.55 "Problems 5401 to 5500" (Nasser Abbasi; upstream Ch2.S1.SS55.htm).
 # 100 scalar, 0 IVP.  Class G / dAlembert / linear-symmetry first-order.  Baseline 81/100 -> 95/100.
@@ -5500,7 +5501,7 @@ add_test(NAME dsolve_corpus_2_2_58_tests
 add_test(NAME dsolve_corpus_2_2_59_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2259.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 12)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 15)
 
 # Section 2.2.60 "Problems 5901 to 6000" (Nasser Abbasi; upstream Ch2.S1.SS60.htm).
 # 100 scalar, 0 IVP.  2nd-order linear, Kummer/Whittaker/Emden.  v0.6147 91/100 -> v0.6158 98/100 (M84-M93).
@@ -5509,7 +5510,7 @@ add_test(NAME dsolve_corpus_2_2_59_tests
 add_test(NAME dsolve_corpus_2_2_60_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2260.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
 # Section 2.2.61 "Problems 6001 to 6100" (Nasser Abbasi; upstream Ch2.S1.SS61.htm).
 # 100 scalar, 0 IVP.  2nd-order linear Euler / Gegenbauer / exact.  v0.6149 84/100 -> v0.6158 94/100 (M84-M93).
@@ -5536,7 +5537,7 @@ add_test(NAME dsolve_corpus_2_2_62_tests
 add_test(NAME dsolve_corpus_2_2_63_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2263.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 20)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 21)
 
 # Section 2.2.64 "Problems 6301 to 6400" (Nasser Abbasi; upstream Ch2.S1.SS64.htm).
 # 100 scalar, 0 IVP.  nonlinear 2nd order (Kamke 6.x).  v0.6149 34/100 -> v0.6158 49/100 (M84-M93).

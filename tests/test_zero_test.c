@@ -1161,6 +1161,38 @@ static void test_huge_cancel_machine_point_exact_climb(void) {
  * cancelling to exactly 0.0 read as a pole -- both "decisive" FALSEs for an
  * exact zero.  A machine non-zero now has to survive the precision ladder
  * (two agreeing MPFR rungs), and a machine infinity is re-evaluated higher. */
+/* v0.6161: three false negatives found by the PossibleZeroQ-only DSolve corpus
+ * verifier, each with its genuine non-zero twin. */
+static void test_ladder_on_exact_point_top_rungs(void) {
+    /* 1/2 - Tanh[x^2]/2 ~ 1e-178 at x^2 ~ 205: the 200/500-bit rungs agreed on
+     * the uncancelled value (and a machine-real point pinned them to machine) */
+    assert_pzq("PossibleZeroQ[Sech[x^2]^2 - 4 (1/2 - Tanh[x^2]/2) (1/2 + Tanh[x^2]/2)]", "True");
+    /* u ~ -355: e^-710 outruns the 1000-bit rung -> the point is re-drawn */
+    assert_pzq("PossibleZeroQ[((1 - x) Sech[(x - x^2/2 - c)/2]^2)/4 - (-1 + x) (-1/2 + "
+               "Tanh[(x - x^2/2 - c)/2]/2) (1/2 + Tanh[(x - x^2/2 - c)/2]/2)]", "True");
+    assert_pzq("PossibleZeroQ[Sech[x^2]^3 - 4 (1/2 - Tanh[x^2]/2) (1/2 + Tanh[x^2]/2)]", "False");
+    assert_pzq("PossibleZeroQ[Sech[x^2]^2 - 4 (1/2 - Tanh[x^2]/2) (1/2 + Tanh[x^2]/2) + E^(-x^2)]", "False");
+    assert_pzq("PossibleZeroQ[Gamma[x], Assumptions -> Element[x, Integers] && x <= 0]", "False");
+}
+
+static void test_distributions(void) {
+    assert_pzq("PossibleZeroQ[Cos[t] DiracDelta[t - Pi] + DiracDelta[t - Pi]]", "True");
+    assert_pzq("PossibleZeroQ[t Derivative[1][DiracDelta][t] + DiracDelta[t]]", "True");
+    assert_pzq("PossibleZeroQ[DiracDelta[2 t - 2] - DiracDelta[t - 1]/2]", "True");
+    assert_pzq("PossibleZeroQ[HeavisideTheta[t - 1] - HeavisideTheta[t - 1]^2]", "True");
+    assert_pzq("PossibleZeroQ[HeavisideTheta[1 - t] + HeavisideTheta[t - 1] - 1]", "True");
+    assert_pzq("PossibleZeroQ[DiracDelta[t - Pi]]", "False");
+    assert_pzq("PossibleZeroQ[t Derivative[1][DiracDelta][t]]", "False");
+    assert_pzq("PossibleZeroQ[Sin[t] DiracDelta[t - Pi/2]]", "False");
+    assert_pzq("PossibleZeroQ[HeavisideTheta[t - 1] - HeavisideTheta[t - 2]]", "False");
+}
+
+static void test_trigexp_opaque_false_untrusted(void) {
+    /* E^(t/2) and E^((-1/2 - I) t) are dependent on each other and the kernel */
+    assert_pzq("PossibleZeroQ[E^(t/2) (E^((-1/2 - I) t) + E^((-1/2 + I) t)) - 2 Cos[t]]", "True");
+    assert_pzq("PossibleZeroQ[E^(t/2) (E^((-1/2 - I) t) + E^((-1/2 + I) t)) - Cos[t]]", "False");
+}
+
 static void test_deep_cancellation_zero_is_true(void) {
     assert_pzq("PossibleZeroQ[D[1/4 ArcTan[(-2 x^3 (1 + x^4)^(1/4) + 2 x (1 + x^4)^(3/4))/"
                "(1 + 2 x^4 - 2 x^2 Sqrt[1 + x^4])] + 1/4 Log[1 + 2 x^4 + 2 x^3 (1 + x^4)^(1/4) + "
@@ -1395,6 +1427,9 @@ int main(void) {
     TEST(test_huge_cancel_machine_point_exact_climb);
     /* Group 21 — non-holomorphic heads sampled at complex points */
     TEST(test_deep_cancellation_zero_is_true);
+    TEST(test_ladder_on_exact_point_top_rungs);
+    TEST(test_distributions);
+    TEST(test_trigexp_opaque_false_untrusted);
     TEST(test_nonholomorphic_conjugate_minus_x);
     TEST(test_nonholomorphic_re_minus_x);
     TEST(test_nonholomorphic_genuine_identities);

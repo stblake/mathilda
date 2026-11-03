@@ -41,6 +41,7 @@
  *             (no run-to-run flakiness) and the user's RNG stream is untouched.
  */
 #include "zero_test.h"
+#include "zero_test_distrib.h"
 
 #include "arithmetic.h"
 #include "attr.h"
@@ -1345,12 +1346,25 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
  * gate -- a "decisive" FALSE that made PossibleZeroQ reject correct Trager
  * antiderivatives.  A genuine non-zero keeps its value when the precision is
  * raised; cancellation noise does not.  So the machine verdict is resolved up
- * the ladder: two consecutive rungs that AGREE (to 2^-20 relative) settle a
- * stable non-zero (FALSE); a residual that collapses below the deep-zero floor
- * is a cancellation-hidden zero (TRUE); a residual that never stabilises keeps
- * the old machine verdict (FALSE), as does an unavailable MPFR path. */
-static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, double scale) {
-    double prev = mag;
+ * the ladder, on the EXACT point (zt_exactify_reals): a machine-real sample
+ * stays machine under N, so climbing on it made every MPFR rung a re-run of the
+ * machine one, and their agreement read as a stable non-zero.  A residual that
+ * collapses below the deep-zero floor (or by 2^60 from its machine value) is a
+ * cancellation-hidden zero (TRUE).  Otherwise the verdict is read off the TOP
+ * two rungs, as decide_numeric_huge_scale does: a zero still falls by at least
+ * half the bits added, a genuine value holds.  Agreement between LOWER rungs is
+ * no evidence -- at x^2 = 205, 1/2 - Tanh[x^2]/2 ~ 1e-178 rounds to 0 at both
+ * 200 and 500 bits, so Sech[x^2]^2 - 4 (1/2 - Tanh/2)(1/2 + Tanh/2) sat at
+ * 1e-178 on both and an identity was reported non-zero (DSolve corpus
+ * 2.2.16-1585).  An unavailable MPFR path keeps the machine verdict (FALSE). */
+static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, double scale,
+                                                 bool* out_overflow) {
+    Expr* exact = zt_exactify_reals(e);
+    if (exact) e = exact;
+    double ms[PRECISION_LADDER_LEN];      /* residual at each decided MPFR rung */
+    long   bits[PRECISION_LADDER_LEN];    /* ... and that rung's precision      */
+    int got = 0;
+    ZeroTestResult verdict = ZERO_TEST_FALSE;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
         ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
@@ -1358,17 +1372,48 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
         /* an undecidable rung (Indeterminate from a still-cancelling 0 * Infinity,
          * or MPFR unavailable) says nothing: try the next one */
         if (rr == ZERO_TEST_UNKNOWN) continue;
-        if (scale > 0.0 && m < scale * ldexp(1.0, -ZT_DEEP_ZERO_BITS)) return ZERO_TEST_TRUE;
-        /* agreement is evidence only between two MPFR rungs: a cancellation
-         * artifact can survive unchanged from machine precision to 200 bits and
-         * clear only at 1000 (x = -39.45 in a Trager Log argument: 6.98, 6.98,
-         * then 2e-207), so the machine residual never vouches for itself */
-        if (i >= 2 && fabs(m - prev) <= prev * ldexp(1.0, -20)) return ZERO_TEST_FALSE;
-        prev = m;
+        /* an MPFR-rung pole is a genuine pole (evaluate_rung_core already defers
+         * a machine-precision 0.0 denominator up the ladder): non-zero */
+        if (!isfinite(m)) { got = -1; break; }
+        if (scale > 0.0 && m < scale * ldexp(1.0, -ZT_DEEP_ZERO_BITS)) {
+            verdict = ZERO_TEST_TRUE;
+            got = -1;                     /* decided: skip the trend tests */
+            break;
+        }
+        ms[got] = m; bits[got] = PRECISION_LADDER[i]; ++got;
     }
-    /* never two agreeing rungs: a residual that collapsed by 2^60 or more from
-     * its machine value over the ladder was cancellation noise all along */
-    return prev < mag * ldexp(1.0, -60) ? ZERO_TEST_TRUE : ZERO_TEST_FALSE;
+    if (got >= 1) {
+        /* a residual that collapsed by 2^60 or more from its machine value over
+         * the ladder was cancellation noise all along */
+        if (ms[got - 1] < mag * ldexp(1.0, -60)) verdict = ZERO_TEST_TRUE;
+        /* the top two decided rungs: a zero falls by >= half the bits added */
+        else if (got >= 2) {
+            long gained = bits[got - 1] - bits[got - 2];
+            if (ms[got - 1] <= ms[got - 2] * ldexp(1.0, (int)(-gained / 2)))
+                verdict = ZERO_TEST_TRUE;
+        }
+        /* Still at or below the top rung's precision floor, measured against the
+         * STRUCTURAL operand scale (magnitude_scale reaches inside every Plus,
+         * where the top-level numeric scale only sees the already-cancelled
+         * summands): the cancellation outruns the ladder, and the point cannot
+         * tell a zero from a value.  At u ~ -355, 1/2 + Tanh[u]/2 ~ e^-710 ~
+         * 1e-308 sits unchanged through 1000 bits.  Such a point is an
+         * unrepresentable coordinate, exactly like an IEEE overflow: flag it for
+         * the sampler's shell re-draw instead of voting FALSE.  Sound -- a
+         * re-draw neither invents a zero nor drops a genuine one: a non-zero
+         * function is resolvably non-zero at the smaller-shell points. */
+        if (verdict == ZERO_TEST_FALSE && out_overflow) {
+            double s_struct = magnitude_scale(e);
+            long top = bits[got - 1];
+            if (isfinite(s_struct) && s_struct > 0.0 && top > ZT_NONZERO_HEADROOM &&
+                ms[got - 1] < s_struct * ldexp(1.0, -(int)(top - ZT_NONZERO_HEADROOM))) {
+                *out_overflow = true;
+                verdict = ZERO_TEST_UNKNOWN;
+            }
+        }
+    }
+    if (exact) expr_free(exact);
+    return verdict;
 }
 
 static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
@@ -1386,7 +1431,7 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
         return decide_numeric_huge_scale(e, mag, scale);
 
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
-        return zt_resolve_machine_nonzero(e, mag, scale);
+        return zt_resolve_machine_nonzero(e, mag, scale, out_overflow);
 
     double prev_mag = mag;
     bool honored = false;
@@ -1462,7 +1507,7 @@ static ZeroTestResult screen_point(const Expr* e, bool* out_overflow) {
          * decide_numeric_huge_scale), which climbs MPFR to adjudicate. */
         if (scale >= ldexp(1.0, ZT_HUGE_SCALE_BITS)) return ZERO_TEST_UNKNOWN;
         /* Deep cancellation below the top-level scale: confirm up the ladder. */
-        return zt_resolve_machine_nonzero(e, mag, scale);
+        return zt_resolve_machine_nonzero(e, mag, scale, out_overflow);
     }
     return ZERO_TEST_TRUE;
 }
@@ -1952,7 +1997,10 @@ static ZeroTestResult zt_point_verdict(const Expr* sub, bool screen, bool* out_o
     if (r == ZERO_TEST_UNKNOWN) {
         if (screen) {
             r = screen_point(sub, out_overflow);
-            if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub, out_overflow);
+            /* a point flagged for re-draw (overflow / unresolvable cancellation)
+             * goes back to the sampler; only an unreduced one climbs the ladder */
+            if (r == ZERO_TEST_UNKNOWN && !(out_overflow && *out_overflow))
+                r = decide_numeric(sub, out_overflow);
         } else {
             r = decide_numeric(sub, out_overflow);
         }
@@ -2360,6 +2408,17 @@ static ZeroTestResult zt_decide_core(const Expr* e) {
     r = decide_structural(e);
     if (r != ZERO_TEST_UNKNOWN) return r;
 
+    /* Stage 0a: a generalized function (DiracDelta / its derivatives /
+     * HeavisideTheta).  Pointwise sampling cannot decide one -- a delta vanishes
+     * at every sample, and Theta does not evaluate at a complex one -- so it is
+     * decided as a distribution: sifted delta coefficients and the regular piece
+     * on each interval between breakpoints, each by this zero test
+     * (zero_test_distrib.c).  An unsupported shape falls through. */
+    if (zt_has_distribution(e)) {
+        r = zt_decide_distribution(e, zero_test_decide);
+        if (r != ZERO_TEST_UNKNOWN) return r;
+    }
+
     /* Stage 0b: a structural non-zero certificate (c * E^f and the like).  Sound
      * and unconditional, and it must run BEFORE the algebraic/symbolic-exponent
      * guards below, which route straight to Schwartz–Zippel — the sampler cannot
@@ -2586,6 +2645,17 @@ static void pzq_atoms_free(PzqAtoms* at) {
     free(at->to);
 }
 
+/* zero_test_decide on `e` with its opaque calls abstracted to fresh symbols,
+ * exactly as a top-level unconditional PossibleZeroQ call does. */
+static ZeroTestResult pzq_decide_abstracted(const Expr* e) {
+    PzqAtoms atoms = { NULL, NULL, 0, 0 };
+    Expr* abstracted = pzq_abstract(e, &atoms);
+    ZeroTestResult r = zero_test_decide(abstracted ? abstracted : e);
+    if (abstracted) expr_free(abstracted);
+    pzq_atoms_free(&atoms);
+    return r;
+}
+
 Expr* builtin_possible_zero_q(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2655,6 +2725,20 @@ Expr* builtin_possible_zero_q(Expr* res) {
             effective = pzq_combine_with_and(expr_copy(positional_assum), dollar);
         else
             effective = dollar;
+    }
+
+    /* A generalized function is decided as a distribution BEFORE the opaque-
+     * call abstraction below, which would otherwise turn DiracDelta[t - a] and
+     * HeavisideTheta[t - a] into free symbols and sample them as numbers.  Its
+     * scalar sub-questions (sifted coefficients, interval pieces) go through the
+     * same abstract-then-decide path as a top-level call.  Unconditional only:
+     * under assumptions the constrained sampler stays the arbiter. */
+    if (assumption_is_trivial(effective) && zt_has_distribution(arg)) {
+        ZeroTestResult rd = zt_decide_distribution(arg, pzq_decide_abstracted);
+        if (rd != ZERO_TEST_UNKNOWN) {
+            expr_free(effective);
+            return pzq_bool(rd);
+        }
     }
 
     /* Opaque calls become fresh symbols, in the expression and in the

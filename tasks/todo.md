@@ -1,3 +1,21 @@
+# DSolve corpus verifier: PossibleZeroQ only (from v0.6160, 2026-11-03)
+
+The prelude's dsResidVerdict accepted a branch when a majority of six real sample
+points were small -- a numeric acceptance path (forbidden: PZQ is the verifier).
+1582's explicit branches satisfy the ODE only on Re(x/(1-Cx)) > 0; PZQ says False.
+
+- [x] V1 prelude: dsResidVerdict = TimeConstrained PossibleZeroQ on the symbolic residual (True OK / False BAD / undecided UNK); UNFIT only for IVPs
+- [x] V2 re-run all 66 corpora, old vs new verifier, diff per-record verdicts
+- [x] V3 triage each new FAIL: branch-restricted answer (DSolve bug) vs PZQ false negative (PZQ bug)
+- [ ] V4 fix the separable inversion (1582 class) -- keep only branches PZQ verifies, else the implicit relation
+- [ ] V5 further fixes by class; re-gate; STATUS/README/PLAN/changelog; bump + tag
+
+## Review (v0.6161)
+- Verifier: PZQ, then PZQ∘PowerExpand (raw, then radicands factored) per the user's branch policy; IC at a removable singularity by two-sided Limit; UNFIT only for IVPs; harness loads distributions.m (was missing: DiracDelta[-1] unevaluated).
+- PZQ fixes: ladder resolve on exact point + top-two-rung trend + unresolvable point -> re-draw (1585); distribution stage zero_test_distrib.c (1506 class); trigexp FALSE untrusted with opaque generators (1118).
+- Corpus: non-PASS 996 -> 1008 (27 P->F, 14 P->U, 3 U->F, 29 U->P). 7 gates raised to measured.
+- Open (V4/V5 work queue): Re/Im of symbolic roots (1292/3571/5808); Arg in Integrate system answers (1439/2707/2761/2778/4550/4575); radical inversions (1582, 5016/5017/5047/5048, 5335/5343, 1592, 3056); 14 IVPs with unfitted C at a singular IC point; Limit[Sqrt[x^2]/x, x->0, Direction->1] = 1 (wrong).
+
 # Nasser's 2026-11-03 report (7 DSolve items), from v0.6158
 
 Plan: ~/.claude/plans/let-s-fix-the-following-sprightly-scott.md

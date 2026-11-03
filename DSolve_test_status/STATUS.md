@@ -9,6 +9,14 @@ must lower it.
 Verdicts: PASS = verified closed form · UNEVAL = declined/timeout/`{}` ·
 FAIL = wrong branch (numeric back-substitution) · SKIP = system.
 
+> **2026-11-03 — PossibleZeroQ verifier (v0.6161).** A branch passes only when PossibleZeroQ proves its
+> residual zero (directly, or after PowerExpand for an ODE with a branch in its right-hand side); the
+> six-real-point majority test is gone. Corpus-wide non-PASS 996 → 1008: 30 answers newly exposed as
+> wrong (Re/Im of symbolic roots, Arg in system answers, radical inversions) and 14 IVPs whose
+> condition was never fitted, against 29 gains from the distribution rules and limit-checked
+> conditions. Seven gates raised to the measured count (§2.2.15/16/28/54/59/60/63). Per-record list:
+> `../docs/spec/changelog/2026-11-02.md` (v0.6161).
+
 > **2026-10-12 — M68 (Nasser's v0.354 report).** An automatic `DSolve` now returns only solutions:
 > no truncated `SeriesData`, no relation still carrying `y'` (series / first-integral methods are
 > pinned-only). Every section's PASS count that rested on those shapes dropped (and 7 masked wrong

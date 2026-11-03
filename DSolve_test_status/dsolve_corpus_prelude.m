@@ -15,32 +15,39 @@
  * dsolveCheckCode[label, eqn, fn, iv, classif] returns an integer verdict:
  *
  *   0 = PASS   DSolve returned a non-empty List of branches and every explicit
- *              branch back-substitutes numerically to ~0 -- for an IVP that is
+ *              branch's residual is proved zero by PossibleZeroQ -- for an IVP
  *              the ODE residual AND every initial condition (implicit /
- *              parametric / non-numericizable branches are accepted on DSolve's
- *              own symbolic self-verification).
- *   1 = FAIL   DSolve returned a closed form but an explicit branch is
- *              demonstrably nonzero at the majority of numeric sample points
- *              (a wrong answer -- the case the symbolic verifier can miss when
- *              the residual is undecidable, cf. M12/M14).
+ *              parametric branches are accepted on DSolve's own symbolic
+ *              self-verification).
+ *   1 = FAIL   DSolve returned a closed form and PossibleZeroQ says an explicit
+ *              branch's residual is NOT zero (a wrong answer).
  *   2 = UNEVAL DSolve declined (bubbled back unevaluated, $Aborted, or {}), OR
  *              returned an IVP solution that still carries a generated constant
- *              C[k] -- i.e. the general solution with the initial condition
- *              unfitted, so the IVP is not actually solved (not a wrong answer).
+ *              C[k] and fails its conditions -- the general solution with the
+ *              initial condition unfitted, so the IVP is not actually solved.
  *   3 = SKIP   Reserved for a record that is not a solvable ODE/system (e.g. a
  *              converter placeholder).  Systems are NO LONGER skipped -- they are
  *              solved and back-substituted like any other record (M27).
  *
  * Verification is by BACK-SUBSTITUTION, never string comparison, so it is
- * immune to solution spelling.  Free parameters and generated constants C[k]
- * are instantiated at fixed generic rational points; the independent variable
- * is swept over several points and the residual must vanish at the majority of
- * points where it numericizes (mirrors the l2_num_ok / cv_num_ok policy that
- * dsolve_lie2.c / dsolve_changevar.c use internally).
+ * immune to solution spelling, and PossibleZeroQ is THE verifier: the residual
+ * keeps C[k] and every parameter symbolic, there is no numeric acceptance path,
+ * and a PossibleZeroQ false negative is fixed in PossibleZeroQ.  (Until
+ * v0.6161 a branch passed when a majority of six real sample points were small,
+ * which accepted answers valid only on part of the line.)  See dsResidVerdict
+ * for the branch policy and dsMemberResid for conditions at a removable
+ * singularity.
  *)
 
+(* The harness runs core_init() only, never src/internal/init.m, so without
+ * this the corpus measured DSolve WITHOUT the distribution rules every REPL
+ * session loads: DiracDelta[-1] and HeavisideTheta[-1] stayed unevaluated in
+ * impulse-response answers (2.2.40-3976 ...), which the old numeric verifier
+ * could not numericize and so accepted as "UNK".  init.m loads exactly this
+ * module; keep the two in step. *)
+LoadModule["distributions.m"];
+
 $dsSolveTimeout = 8;          (* seconds per DSolve call *)
-$dsTol          = 1*^-6;
 $dsProtected    = {E, Pi, I, Infinity, ComplexInfinity, Indeterminate,
                    True, False, Degree, EulerGamma, GoldenRatio, Catalan,
                    Complex, Rational, Integer, Real, List,
@@ -71,51 +78,47 @@ dsFreeParams[resid_, iv_] := DeleteCases[
   DeleteDuplicates@Cases[resid, s_Symbol /; !MemberQ[$dsProtected, s], {0, Infinity}],
   iv | C];
 
-(* Verdict for a single residual expression: "OK" (verified zero),
- * "BAD" (verified nonzero), or "UNK" (could not numericize). *)
-(* The sweep index and the residual-value holder are $-prefixed so they can never
- * collide with an ODE PARAMETER of the same name: the loop variable dynamically
- * rebinds every occurrence of its symbol while the residual is evaluated, so a
- * plain `k` loop over a residual that carries a parameter `k` (e.g. §2.2.4-387,
- * `m x''+k x==F0 Cos[om t]`) would force the spring constant to 0..5 instead of
- * its generic sample value -> a bogus nonzero residual -> a FALSE "BAD". The
- * converter never emits a `$`-prefixed symbol, so `$dsSweep`/`$dsVal` are safe. *)
-dsResidVerdict[resid_, iv_] := Module[
-  {params, consts, pv, vals = {}, $dsSweep, cv, $dsVal, $dsPt, a, nsmall},
-  params = dsFreeParams[resid, iv];
-  consts = DeleteDuplicates@Cases[resid, C[_Integer], Infinity];
-  pv = MapIndexed[#1 -> (13/10 + First[#2]*4/17) &, params];
-  Do[
-    cv = MapIndexed[#1 -> (7/10 + $dsSweep/5 + First[#2]*3/19) &, consts];
-    $dsPt = 11/10 + $dsSweep*5/13;   (* the sample point (exact rational) *)
-    (* Substitute a high-PRECISION REAL for the independent variable, NEVER an
-     * exact rational.  A corpus residual is often a high-degree polynomial or
-     * radical in iv -- a homogeneous / Bernoulli closed form carries
-     * (P(x))^(3/2) factors -- so an EXACT iv forms (hugeRational)^(3/2), whose
-     * square-factor extraction factors a ~20-digit integer and can hang Power
-     * for minutes (2.2.31-3043: y'x = 2y + 2 x^4 y^3, y[1]=1, solved instantly by
-     * DSolve but the exact back-substitution never returned -> spurious UNEVAL).
-     * A real iv makes every power a fast floating power: the verifier's job is
-     * NUMERIC back-substitution, so it must numericize the point, not do exact
-     * radical algebra.  The residual itself stays symbolic, so the two precision
-     * tiers below still resolve catastrophic cancellation exactly as before. *)
-    $dsVal = N[resid /. pv /. cv /. iv -> N[$dsPt, 24], 20];
-    (* A fast-growing (large-eigenvalue) solution back-substitutes to a residual that
-     * is a difference of huge E^{lambda x} terms, so a TRUE zero looks large at
-     * 20-digit precision -- catastrophic cancellation (e.g. the eigenvalue-64 system
-     * 2.2.11-1001: |resid|@20 = 8.9*^43 at x=3, but @120 = 2*^-56).  When the 20-digit
-     * value is NOT already small, re-evaluate the residual with the iv at HIGH
-     * precision (210 digits): a genuine nonzero stays nonzero, a cancellation
-     * artifact collapses to ~0.  This only ever turns a spurious "not small" into
-     * "small" -- monotone: it can lower a section's non-PASS count, never raise it,
-     * and never introduces a FAIL. *)
-    If[(NumberQ[$dsVal] || Head[$dsVal] === Complex) && Abs[$dsVal] >= $dsTol,
-       $dsVal = N[resid /. pv /. cv /. iv -> N[$dsPt, 210], 200]];
-    If[NumberQ[$dsVal] || Head[$dsVal] === Complex, AppendTo[vals, Abs[$dsVal]]];
-  , {$dsSweep, 0, 5}];
-  If[Length[vals] < 2, Return["UNK"]];
-  nsmall = Count[vals, a_ /; a < $dsTol];
-  If[nsmall >= Ceiling[Length[vals]/2], "OK", "BAD"]
+(* Verdict for a single residual expression: "OK" (PossibleZeroQ proves it
+ * zero), "BAD" (PossibleZeroQ says it is not zero), or "UNK" (PossibleZeroQ did
+ * not answer within $dsPZQTimeout).
+ *
+ * PossibleZeroQ is THE verifier.  The residual keeps the generated constants C[k]
+ * and every ODE parameter SYMBOLIC, so a PASS means the branch satisfies the ODE
+ * identically -- for every value of the constants and for all complex iv -- not
+ * merely at a handful of real sample points.  The verifier this replaces scored
+ * a branch by a majority of six real points (with 20/210-digit retries), which
+ * accepted answers valid only on part of the line: 2.2.16-1582,
+ * x^2 y y' == (y^2 - 1)^(3/2), whose explicit inversion holds only where
+ * Re(x/(1 - C x)) > 0 because Sqrt[w^2] == w is not an identity.  There is no
+ * numeric acceptance path: a PossibleZeroQ false negative is a PossibleZeroQ bug,
+ * to be fixed there, never rescued here.  Numerics are for triage only.
+ *
+ * Messages are muted: the residual is a probe, and a leaked diagnostic from it
+ * would be attributed to the record. *)
+(* Branch policy.  An ODE whose right-hand side carries a branch -- y' = x
+ * Sqrt[y], y' == (y^2 - 1)^(3/2) -- has NO explicit solution valid for all
+ * complex x: y = (x^2 + 2 C)^2/16 satisfies it only where x^2 + 2 C is on the
+ * principal sheet, and the reference system's answers have the same property.
+ * Such a branch is accepted when PossibleZeroQ proves the PowerExpand-ed
+ * residual zero: PowerExpand takes every power on its principal branch
+ * consistently, so this certifies "valid on the principal region" -- the local
+ * notion of an ODE solution -- symbolically, with no numeric acceptance.  A
+ * residual that is not zero even then is a wrong answer (BAD). *)
+$dsPZQTimeout = 4;
+(* Every radicand factored (exactly), so PowerExpand can see a square that was
+ * expanded inside the radical: Sqrt[C^2 + 2 C Log[x] + Log[x]^2]. *)
+dsFactorRadicands[e_] := Quiet@TimeConstrained[
+  e /. Power[b_, p_Rational] /; !NumericQ[b] :> Power[Factor[b], p], $dsPZQTimeout, e];
+dsPZQ[e_] := Quiet@TimeConstrained[PossibleZeroQ[e], $dsPZQTimeout, $Aborted];
+dsResidVerdict[resid_, iv_] := Module[{z, zp},
+  z = dsPZQ[resid];
+  If[z === True, Return["OK"]];
+  (* undecided within the budget: the PowerExpand variants are no cheaper, and
+   * three more budgets per member would outrun the harness's per-case alarm *)
+  If[z === $Aborted, Return["UNK"]];
+  zp = dsPZQ[PowerExpand[resid]];
+  If[zp =!= True, zp = dsPZQ[PowerExpand[dsFactorRadicands[resid]]]];
+  Which[zp === True, "OK", z === False || zp === False, "BAD", True, "UNK"]
 ];
 
 (* The target function symbol of an explicit rule (fn -> Function[..] or the
@@ -142,6 +145,24 @@ dsExplicitQ[_, _] := False;
  * condition (y[x0]==v) is free of the independent variable iv, the ODE is not. *)
 dsIsIVP[eqn_, iv_] := ListQ[eqn] && AnyTrue[eqn, FreeQ[#, iv] &];
 
+(* The residual of one member of the equation slot under branch br.  A point
+ * condition y[x0] == v / y'[x0] == v whose direct substitution is Indeterminate
+ * or infinite sits on a removable singularity of the closed form (e.g.
+ * (x^2/2)^(1/4)/Sqrt[x] at x0 = 0): the condition means the two-sided LIMIT
+ * there, so y^(k)[x0] is replaced by Limit[D[y[iv] /. br, {iv, k}], iv -> x0].
+ * A branch-restricted answer has no two-sided limit and still fails. *)
+dsMemberResid[eq_, br_, fn_, iv_] := Module[{fns = dsFnList[fn], r},
+  r = Quiet[(eq /. Equal -> Subtract) /. br];   (* a probe: 1/0 at a removable point *)
+  If[!FreeQ[eq, iv] || FreeQ[r, Indeterminate | ComplexInfinity | DirectedInfinity],
+    Return[r]];
+  Quiet@TimeConstrained[
+    (eq /. Equal -> Subtract) /. {
+      Derivative[k_][f_Symbol][x0_] /; MemberQ[fns, f] && FreeQ[x0, iv] :>
+        Limit[D[f[iv] /. br, {iv, k}], iv -> x0],
+      f_Symbol[x0_] /; MemberQ[fns, f] && FreeQ[x0, iv] :> Limit[f[iv] /. br, iv -> x0]},
+    $dsPZQTimeout, r]
+];
+
 (* Verify one branch against the equation slot, which is either a single scalar
  * ODE lhs==rhs, or (for an IVP) a List {ode, ic1, ...}: every member -- the ODE
  * residual AND each initial condition -- must back-substitute to ~0.  Verdicts:
@@ -158,9 +179,14 @@ dsBranchVerdict[eqn_, br_, fn_, iv_] := Module[{eqs, resids, verds, leaked},
   leaked = !FreeQ[br, C[_Integer]];
   If[!dsExplicitQ[br, fn],                     (* implicit/parametric *)
     Return[If[dsIsIVP[eqn, iv] && leaked, "UNFIT", "UNK"]]];
-  resids = ((# /. Equal -> Subtract) /. br) & /@ eqs;
+  resids = dsMemberResid[#, br, fn, iv] & /@ eqs;
   verds  = dsResidVerdict[#, iv] & /@ resids;
-  If[MemberQ[verds, "BAD"], Return[If[leaked, "UNFIT", "BAD"]]];
+  (* A failing branch that still carries C[k] is UNFIT -- the general solution
+   * returned without fitting the conditions -- only for an IVP/BVP.  For a plain
+   * ODE every general solution carries C[k], so this would score every wrong
+   * answer as UNEVAL instead of FAIL. *)
+  If[MemberQ[verds, "BAD"],
+    Return[If[leaked && dsIsIVP[eqn, iv], "UNFIT", "BAD"]]];
   If[AllTrue[verds, # === "UNK" &], "UNK", "OK"]
 ];
 

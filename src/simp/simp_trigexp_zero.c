@@ -573,6 +573,16 @@ static TrigExpZeroResult decide_with_var_mode(const Expr* e, const Expr* var,
     collect(e, var, vn, &ks, &atoms, &supported, hyp);
     if (!supported || ks.count == 0) { kset_free(&ks); aset_free(&atoms); return TRIGEXP_ZERO_UNKNOWN; }
 
+    /* The opaque x-dependent generators are treated as independent axes, which
+     * is sound for a TRUE (an identity in independent generators survives any
+     * specialisation) but NOT for a FALSE: they may be algebraically dependent
+     * on each other or on the kernel -- E^(t/2) and E^((-1/2 - I) t) next to
+     * Cos[t] (E^(t/2) (E^((-1/2-I) t) + E^((-1/2+I) t)) - 2 Cos[t] == 0 was
+     * reported non-zero, DSolve corpus 2.2.12-1118), or Sqrt[Cos[t]], algebraic
+     * over the kernel field.  With any opaque present a non-zero grid point
+     * proves nothing; the numeric sampler decides instead. */
+    size_t n_opaque = atoms.count;
+
     /* Append free-parameter symbols (symbols other than the kernel variable)
      * as further independent axes; aset_add dedups against the opaques. */
     gather_params(e, vn, &atoms);
@@ -617,7 +627,7 @@ static TrigExpZeroResult decide_with_var_mode(const Expr* e, const Expr* var,
         } while (grid_next(idx, deg, naxes));
         free(idx); free(avals);
 
-        if (nonzero)   { verdict = TRIGEXP_ZERO_FALSE;   break; }
+        if (nonzero)   { verdict = n_opaque ? TRIGEXP_ZERO_UNKNOWN : TRIGEXP_ZERO_FALSE; break; }
         if (undecided) { verdict = TRIGEXP_ZERO_UNKNOWN; break; }
         if (pole)      continue;
         verdict = TRIGEXP_ZERO_TRUE;
