@@ -918,7 +918,7 @@ Plan: packages/feyncalc/FEYNCALC_REMAINING_GAPS.md (195 tests, clusters G1-G13).
   - [ ] H factor a common base with integer-differing exponents (x^(a - 1) + x^a -> x^(-1 + a) (1 + x)), also Together -- Parametrize ID44/10
   - [ ] E fold a monomial into a power of the same product -- Parametrize ID9 (simp_power.c)
   - [x] D Legendre duplication on shifted Gamma ratios over-applied (Simplify[Gamma[-2+2e]/Gamma[-2+e]] stays in the reference) -- Parametrize ID11 -- v0.6146 (simp_sf_engine.c sf_improves: a score rise needs a whole family eliminated)
-  - [ ] NEW (found round 13): the parser reads `3e-3` as the Real 0.003 (a Mathilda e-notation extension, src/parse.c parse_number), where the reference reads `3 e - 3`. Simplify[4^(3e-3)] gave 1.00417 -- a silent wrong answer for any input that names an epsilon `e` (FeynCalc style). 213 test strings use e-notation; needs a user decision before removing the extension
+  - [x] DECIDED (2026-11-03, user): `3e-3` is the Real 0.003 (Mathilda's e-notation extension stays) and `3 e-3` is Plus[Times[3, e], -3], which the parser already does. Write a space when e is a symbol.
   - [ ] NEW: OutputForm prints -x^(-2) as -1/x^2 (reference -x^(-2)); InputForm is right
   - [ ] NEW: a bignum base under a symbolic rational exponent that is not an exact root is not split per prime ((3^50 2)^(x/2); the reference gives 2^(x/2) 847288609443^x)
   - [ ] AddScalingParameter-ID6: Simplify finds a strictly simpler form than the reference (simp_split_multiplicative) -- goes with the tie-breaking item
