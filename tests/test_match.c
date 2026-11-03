@@ -203,9 +203,11 @@ void test_match_condition_backtracks_into_nested() {
      * power-rule denominator 1 + 1/(-1 + a) is combined by Cancel, which no
      * longer declines on a generator whose EXPONENT is rational in a variable
      * (y^(1/(a - 1)) is one opaque generator); the reference's form is
-     * ((-1 + a) x^(a/(-1 + a)))/a, the same antiderivative. */
+     * ((-1 + a) x^(a/(-1 + a)))/a, the same antiderivative.  The x-free
+     * y^(1/(-1 + a)) is split off before the cascade and multiplies the
+     * antiderivative of x^(1/(a-1)) alone. */
     assert_eval_eq("Integrate[x^(1/(a-1)) y^(1/(a-1)), x]",
-                   "(-x^(1 + 1/(-1 + a)) y^(1/(-1 + a)) + a x^(1 + 1/(-1 + a)) y^(1/(-1 + a)))/a", 0);
+                   "((-x^(1 + 1/(-1 + a)) + a x^(1 + 1/(-1 + a))) y^(1/(-1 + a)))/a", 0);
 }
 
 /* A Condition over a OneIdentity head with an Optional element: the subject

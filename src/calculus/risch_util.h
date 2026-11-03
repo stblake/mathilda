@@ -21,6 +21,9 @@
 
 /* Build-and-evaluate. */
 Expr* rt_eval_call(const char* head, Expr** args, size_t n);  /* adopts args elems */
+/* Polynomial-algebra primitives (PolynomialGCD, ...) that came back unevaluated
+ * through rt_eval_call; see risch_util.c.  Monotone counter. */
+extern unsigned long g_rt_prim_unevaluated;
 Expr* rt_eval_own(Expr* e);                                   /* frees e, returns eval */
 Expr* rt_eval1(const char* head, Expr* a);
 Expr* rt_eval2(const char* head, Expr* a, Expr* b);

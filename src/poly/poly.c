@@ -43,6 +43,7 @@
 #include "expsplit.h"
 #include "expand.h"
 #include "eval.h"
+#include "core.h"          /* tc_register_unwind_counter */
 #include "symtab.h"
 #include "attr.h"
 #include "arithmetic.h"
@@ -3130,6 +3131,114 @@ static bool pg_has_negpow(const Expr* e) {
     return false;
 }
 
+/* Generalized-variable abstraction for the classical PolynomialGCD path.
+ *
+ * collect_variables recurses into the base of a rational power, so the
+ * variables of Sqrt[2] Sqrt[a] are {a} and Sqrt[a] = a^(1/2) is then "not a
+ * polynomial in a": the classical path declined, leaving
+ * PolynomialGCD[1, Sqrt[2] Sqrt[a]] (and Sqrt[a] Sqrt[b], Sqrt[a] Log[b], ...)
+ * unevaluated.  Every caller that treats the result as a polynomial then
+ * computes with an unevaluated PolynomialGCD head -- the base-field Risch DE
+ * did, read the garbage as "no solution", and certified the elementary
+ * Cos[x] Sin[x] Cosh[a x] (-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[a]) as
+ * non-elementary.
+ *
+ * The reference reads such a subexpression as a generalized variable, as
+ * Variables does for Log[b].  pg_abstract replaces every maximal
+ * non-polynomial subexpression that depends on a variable (a non-integer power
+ * of a non-numeric base, or any other head than Plus/Times/integer Power) by a
+ * fresh symbol, so the arguments become genuine polynomials.  Sound for any
+ * use of the GCD: substituting the atoms back is a ring homomorphism, so the
+ * gcd computed over the abstracted ring maps to a common divisor of the
+ * originals (an algebraic relation between atoms, a = Sqrt[a]^2, is merely not
+ * exploited -- the result can be smaller than the field gcd, never wrong). */
+typedef struct { Expr** atom; Expr** sym; size_t n, cap; } PgAbs;
+
+/* Re-entry depth of pg_gcd_generalized; registered with
+ * tc_register_unwind_counter in poly_init so a TimeConstrained unwind through
+ * the nested gcd cannot leave it raised. */
+static int g_pg_gen_depth = 0;
+
+static bool pg_depends(Expr* e, Expr** vars, size_t nv) {
+    for (size_t i = 0; i < nv; i++)
+        if (contains_any_symbol_from(e, vars[i])) return true;
+    return false;
+}
+
+static Expr* pg_abstract(Expr* e, Expr** vars, size_t nv, PgAbs* A) {
+    if (!pg_depends(e, vars, nv)) return expr_copy(e);
+    for (size_t i = 0; i < nv; i++) if (expr_eq(e, vars[i])) return expr_copy(e);
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        bool structural = (h == SYM_Plus || h == SYM_Times);
+        if (h == SYM_Power && e->data.function.arg_count == 2
+            && e->data.function.args[1]->type == EXPR_INTEGER) structural = true;
+        if (structural) {
+            size_t n = e->data.function.arg_count;
+            Expr** a = malloc(n * sizeof(Expr*));
+            for (size_t i = 0; i < n; i++)
+                a[i] = (h == SYM_Power && i == 1) ? expr_copy(e->data.function.args[i])
+                                                 : pg_abstract(e->data.function.args[i], vars, nv, A);
+            Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+            free(a);
+            return r;
+        }
+    }
+    for (size_t i = 0; i < A->n; i++)
+        if (expr_eq(A->atom[i], e)) return expr_copy(A->sym[i]);
+    if (A->n == A->cap) {
+        A->cap = A->cap ? 2 * A->cap : 4;
+        A->atom = realloc(A->atom, A->cap * sizeof(Expr*));
+        A->sym  = realloc(A->sym,  A->cap * sizeof(Expr*));
+    }
+    char name[64];
+    snprintf(name, sizeof name, "PolynomialGCD`Private`k$%zu", A->n + 1);
+    A->atom[A->n] = expr_copy(e);
+    A->sym[A->n]  = expr_new_symbol(name);
+    return expr_copy(A->sym[A->n++]);
+}
+
+/* gcd of the (non-polynomial) `rems` with their generalized variables
+ * abstracted; NULL when there is nothing to abstract or the abstracted gcd
+ * itself declines. */
+static Expr* pg_gcd_generalized(Expr* head, Expr** rems, size_t count,
+                                Expr** vars, size_t nv) {
+    /* One level only.  The abstracted arguments are polynomials, but the
+     * engines on the way down may rewrite them (ExpSplit generators for a
+     * symbolic power z^n, the Together numerator, ...) into a shape the
+     * classical path again calls non-polynomial; abstracting that a second time
+     * recursed without bound (simp_sf_airy: PolynomialGCD[z^n, k$1 Gamma[3/2+n]]).
+     * A nested request declines instead -- the pre-abstraction behaviour. */
+    if (g_pg_gen_depth > 0) return NULL;
+    PgAbs A = { NULL, NULL, 0, 0 };
+    Expr** ab = malloc(count * sizeof(Expr*));
+    for (size_t i = 0; i < count; i++) ab[i] = pg_abstract(rems[i], vars, nv, &A);
+    Expr* r = NULL;
+    if (A.n > 0) {
+        Expr* call = expr_new_function(expr_copy(head), ab, count);   /* adopts ab[i] */
+        g_pg_gen_depth++;
+        Expr* g = builtin_polynomialgcd(call);
+        g_pg_gen_depth--;
+        expr_free(call);
+        if (g) {
+            Expr** rules = malloc(A.n * sizeof(Expr*));
+            for (size_t i = 0; i < A.n; i++)
+                rules[i] = expr_new_function(expr_new_symbol(SYM_Rule),
+                    (Expr*[]){ expr_copy(A.sym[i]), expr_copy(A.atom[i]) }, 2);
+            Expr* rl = expr_new_function(expr_new_symbol(SYM_List), rules, A.n);
+            free(rules);
+            r = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                                (Expr*[]){ g, rl }, 2));
+        }
+    } else {
+        for (size_t i = 0; i < count; i++) expr_free(ab[i]);
+    }
+    free(ab);
+    for (size_t i = 0; i < A.n; i++) { expr_free(A.atom[i]); expr_free(A.sym[i]); }
+    free(A.atom); free(A.sym);
+    return r;
+}
+
 /* Option `Extension -> α`: factor over Q(α) using the QAUPoly         */
 /* machinery (see polynomialgcd_with_extension above).  `Extension ->   */
 /* None` is accepted and treated as the default (no extension).         */
@@ -3592,7 +3701,13 @@ Expr* builtin_polynomialgcd(Expr* res) {
             break;
         }
     }
-    if (!all_poly) {
+    /* A generalized variable (Sqrt[a], Log[b], ...) makes an argument "not a
+     * polynomial" in the collected variables: take the gcd with those atoms
+     * abstracted to fresh symbols (pg_gcd_generalized) instead of declining. */
+    Expr* gen_gcd = NULL;
+    if (!all_poly)
+        gen_gcd = pg_gcd_generalized(res->data.function.head, rems, count, vars, v_count);
+    if (!all_poly && !gen_gcd) {
         for (size_t i = 0; i < count; i++) expr_free(rems[i]);
         free(rems);
         for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
@@ -3602,7 +3717,7 @@ Expr* builtin_polynomialgcd(Expr* res) {
         free(common_args);
         return NULL;
     }
-    
+
     /* Multivariate explosion guard. The recursive content/pseudo-remainder
      * GCD below is exponential in the number of generators: poly_content
      * recurses one variable smaller for *every* coefficient, and each
@@ -3628,7 +3743,9 @@ Expr* builtin_polynomialgcd(Expr* res) {
     }
 
     Expr* cur_gcd;
-    if (multivar_gcd_skipped) {
+    if (gen_gcd) {
+        cur_gcd = gen_gcd;
+    } else if (multivar_gcd_skipped) {
         cur_gcd = expr_new_integer(1);
     } else {
         cur_gcd = expr_copy(rems[0]);
@@ -6436,6 +6553,7 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
 }
 
 void poly_init(void) {
+    tc_register_unwind_counter(&g_pg_gen_depth);   /* pg_gcd_generalized re-entry */
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
     symtab_get_def("PolynomialQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Internal`RationalFunctionQ", builtin_rationalfunctionq);

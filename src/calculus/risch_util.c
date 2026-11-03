@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* ================================================================== */
 /* Small evaluation helpers.                                          */
@@ -82,10 +83,37 @@ static long rt_lcm_l(long a, long b) {
 
 /* Build `head[args...]` (adopting the owned `args` element pointers) and
  * evaluate it, freeing the constructed call.  Returns evaluate()'s result. */
+/* Count of polynomial-algebra primitives that came back UNEVALUATED.
+ *
+ * The Risch decision procedure is authoritative only while its polynomial
+ * arithmetic over the constant field is: a PolynomialGCD / PolynomialQuotient /
+ * PolynomialRemainder / PolynomialExtendedGCD / Resultant left unevaluated (a
+ * coefficient ring an engine does not cover) is then computed with as if it were
+ * a polynomial, and the "no solution" the algorithm reaches from that garbage is
+ * no theorem.  That is how PolynomialGCD[1, Sqrt[2] Sqrt[a]] (once unevaluated)
+ * turned the elementary
+ *     Cos[x] Sin[x] Cosh[a x] (-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[a])
+ * into a "proved" Integrate::nonelem.  rt_decide_field snapshots this counter
+ * around the field integration and demotes a NONELEMENTARY verdict reached with
+ * an unevaluated primitive to UNKNOWN. */
+unsigned long g_rt_prim_unevaluated = 0;
+
+static bool rt_is_poly_primitive(const char* head) {
+    return strcmp(head, "PolynomialGCD") == 0 || strcmp(head, "PolynomialQuotient") == 0
+        || strcmp(head, "PolynomialRemainder") == 0
+        || strcmp(head, "PolynomialExtendedGCD") == 0
+        || strcmp(head, "PolynomialQuotientRemainder") == 0
+        || strcmp(head, "Resultant") == 0;
+}
+
 Expr* rt_eval_call(const char* head, Expr** args, size_t n) {
     Expr* call = expr_new_function(expr_new_symbol(head), args, n);
     Expr* r = evaluate(call);
     expr_free(call);
+    if (r && r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+        && strcmp(r->data.function.head->data.symbol.name, head) == 0
+        && rt_is_poly_primitive(head))
+        g_rt_prim_unevaluated++;
     return r;
 }
 

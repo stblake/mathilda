@@ -103,6 +103,71 @@ static bool depends_on_var(const Expr* f, const Expr* x) {
     return false;
 }
 
+/* Constant-factor split for the indefinite cascade: Integrate[c f, x] =
+ * c Integrate[f, x] for c free of x.  When `f` is a product with at least one
+ * x-free factor that is not a plain rational number (a symbol, a radical, Pi,
+ * (-1)^(3/4), ...) and at least one x-dependent factor, sets *c_out to the
+ * product of the x-free factors and *g_out to the product of the rest (both
+ * owned, evaluated) and returns true.
+ *
+ * Every stage of the cascade is entitled to a constant multiple, but several
+ * pay for one: DerivativeDivides searches a substitution over the constant's
+ * atoms (Integrate[a Sin[x], x] cost 0.24 s against 5 ms for Sin[x]), and the
+ * Risch tower carries a symbolic-parameter radical through every polynomial
+ * gcd of its coefficient field.  A rational number is left in place: it costs
+ * nothing anywhere and splitting it would only change the layout of the answer
+ * (3 (Sin[x] - x Cos[x]) for 3 Sin[x] - 3 x Cos[x]). */
+static bool integrate_split_constant(const Expr* f, const Expr* x,
+                                     Expr** c_out, Expr** g_out) {
+    *c_out = *g_out = NULL;
+    if (!head_is((Expr*)f, SYM_Times)) return false;
+    size_t n = f->data.function.arg_count;
+    size_t nc = 0, ng = 0;
+    bool nonrational = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = f->data.function.args[i];
+        if (depends_on_var(a, x)) { ng++; continue; }
+        nc++;
+        if (!(a->type == EXPR_INTEGER || a->type == EXPR_BIGINT
+              || head_is((Expr*)a, SYM_Rational)))
+            nonrational = true;
+    }
+    if (nc == 0 || ng == 0 || !nonrational) return false;
+    Expr** cs = malloc(nc * sizeof(Expr*));
+    Expr** gs = malloc(ng * sizeof(Expr*));
+    size_t ic = 0, ig = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = f->data.function.args[i];
+        if (depends_on_var(a, x)) gs[ig++] = expr_copy(a);
+        else                      cs[ic++] = expr_copy(a);
+    }
+    *c_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), cs, nc));
+    *g_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), gs, ng));
+    free(cs); free(gs);
+    return true;
+}
+
+/* c * r for the split constant c (borrowed) and an antiderivative r (owned).
+ * Distributed over a top-level sum, the layout the cascade produced before the
+ * split (c Sin[x] - c x Cos[x], not c (Sin[x] - x Cos[x])). */
+static Expr* integrate_apply_constant(const Expr* c, Expr* r) {
+    Expr* out;
+    if (head_is(r, SYM_Plus)) {
+        size_t n = r->data.function.arg_count;
+        Expr** ts = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++)
+            ts[i] = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy((Expr*)c), expr_copy(r->data.function.args[i]) }, 2);
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ts, n));
+        free(ts);
+    } else {
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_copy((Expr*)c), expr_copy(r) }, 2));
+    }
+    expr_free(r);
+    return out;
+}
+
 /* True iff `f` contains a Power[b, e] whose base involves `x` and whose
  * exponent is not a concrete number -- a symbolic-exponent power such as x^k,
  * x^(k-1) or (1-x)^l.  Such an integrand is provably not a rational function of
@@ -2147,6 +2212,13 @@ static Expr* integrate_definite(Expr* res) {
 /* Nesting depth of the method cascade (see integrate.h). */
 int g_integrate_depth = 0;
 
+/* The integrand the Integrate::nonelem diagnostic names while the top-level
+ * cascade runs on a constant-split integrand (integrate_split_constant): the
+ * user's c g, not the g the stages see.  NULL when nothing was split.  Borrowed
+ * for the duration of the cascade; set on every depth-0 entry, so a value
+ * stranded by an unwinding TimeConstrained is overwritten before it is read. */
+static Expr* g_integrate_named_f = NULL;
+
 /* ------------------------------------------------------------------------
  * TimeConstraint: the cascade's wall-clock budget.
  *
@@ -2462,6 +2534,9 @@ static Expr* integrate_definite_scoped(Expr* res) {
 void integrate_announce_nonelementary(Expr* f, Expr* x) {
     if (g_integrate_depth > 1) return;    /* internal recursion: stay silent   */
     if (g_integrate_quiet != 0) return;   /* speculative / DSolve suppression   */
+    /* In the cascade the stages see the integrand with its x-free constant
+     * factor split off; the message names the integrand as the user gave it. */
+    if (g_integrate_depth == 1 && g_integrate_named_f) f = g_integrate_named_f;
     char* fs = expr_to_string(f);
     char* xs = expr_to_string(x);
     if (g_integrate_depth == 1 && fs && xs) {  /* cascade: at most one stage speaks */
@@ -2685,6 +2760,20 @@ Expr* builtin_integrate(Expr* res) {
      * TimeConstraint themselves. */
     if (g_integrate_depth == 0 && method == METHOD_AUTOMATIC)
         integrate_arm_budget(time_constraint);
+
+    /* Integrate[c g, x] = c Integrate[g, x]: the cascade runs on g alone (see
+     * integrate_split_constant).  The Integrate::nonelem diagnostic still names
+     * the integrand as given (g_integrate_named_f). */
+    Expr* split_c = NULL;
+    Expr* split_g = NULL;
+    Expr* named_saved = g_integrate_named_f;
+    if (method == METHOD_AUTOMATIC
+        && integrate_split_constant(effective_f, x, &split_c, &split_g)) {
+        if (g_integrate_depth == 0) g_integrate_named_f = effective_f;
+        effective_f = split_g;
+    } else if (g_integrate_depth == 0) {
+        g_integrate_named_f = NULL;
+    }
 
     g_integrate_depth++;
     /* Fresh top-level cascade: clear the Integrate::nonelem de-dup flag so the
@@ -2926,7 +3015,11 @@ Expr* builtin_integrate(Expr* res) {
      * radical-bearing antiderivatives — recombine the algebraic part and
      * tidy inverse-trig arguments.  Runs on the symbolic result before the
      * inexact path numericalises it.  See intsimp_finalize. */
+    g_integrate_named_f = named_saved;   /* no stage announces past this point */
+    if (result && split_c) result = integrate_apply_constant(split_c, result);
     if (result) result = intsimp_finalize(result, x);   /* takes ownership */
+    if (split_c) expr_free(split_c);
+    if (split_g) expr_free(split_g);
 
     if (coerced) expr_free(coerced);
     if (method_sub) expr_free(method_sub);

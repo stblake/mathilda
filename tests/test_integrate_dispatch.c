@@ -454,6 +454,50 @@ static void test_step_and_impulse_indefinite(void) {
     assert_eval_eq("Head[Integrate[UnitStep[x]/x, x]]", "Integrate", 0);
 }
 
+/* An x-free constant multiple integrates as c Integrate[g, x], whatever its
+ * shape.  Integrate[(-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[a]) Cos[x] Sin[x] Cosh[a x], x]
+ * took ~4.7 s and returned unevaluated with a FALSE Integrate::nonelem: the
+ * base-field Risch DE took PolynomialGCD[1, Sqrt[2] Sqrt[a]], which came back
+ * unevaluated (two generalized-variable radicals), computed with the unevaluated
+ * head as a polynomial, and read the garbage as a "no solution" certificate.
+ * Fixed three ways, each pinned here: PolynomialGCD abstracts generalized
+ * variables; a Risch certificate reached through an unevaluated polynomial
+ * primitive is demoted to undecided; and the cascade splits a non-rational
+ * x-free factor off before any stage sees it.  Every answer must diff back. */
+static void test_constant_factor_split(void) {
+    const char* cases[] = {
+        "(-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[a]) Cos[x] Sin[x] Cosh[a x]",
+        "-(I (-1)^(3/4) Sqrt[Pi] Cos[x] Sin[x] Sinh[a x])/(Sqrt[2] Sqrt[a])",
+        "(-1)^(3/4)/Sqrt[2] Sin[x]",
+        "Sqrt[a] Sqrt[b] Log[c] x E^x",
+        "(-1)^(1/3) Sqrt[a] Sqrt[b] E^(a x) Cos[x]",
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+            "With[{f = %s}, With[{r = Check[Integrate[f, x], $Failed]}, "
+            "r =!= $Failed && FreeQ[r, Integrate] && "
+            "Chop[N[(D[r, x] - f) /. {a -> 7/10, b -> 3/5, c -> 2, x -> 13/10}]] === 0]]",
+            cases[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* fast: the repro was ~4.7 s before the fix, ~0.03 s after */
+    double t = elapsed_seconds(
+        "Integrate[(-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[b] Sqrt[a]) Cos[x] Sin[x] Cosh[a x], x]");
+    ASSERT(t < 2.0);
+    /* the layout of a split constant over a sum is unchanged (distributed) */
+    assert_eval_eq("Integrate[a x Sin[x], x]", "-a x Cos[x] + a Sin[x]", 0);
+    /* the decision procedure no longer certifies it non-elementary */
+    assert_eval_eq("Risch`ElementaryIntegralQ["
+                   "(-1)^(3/4) Sqrt[Pi]/(Sqrt[2] Sqrt[a]) Cos[x] Sin[x] Cosh[a x], x]",
+                   "True", 0);
+    /* PolynomialGCD over generalized variables (formerly unevaluated) */
+    assert_eval_eq("PolynomialGCD[1, Sqrt[2] Sqrt[a]]", "1", 0);
+    assert_eval_eq("PolynomialGCD[1, Sqrt[a] Log[b]]", "1", 0);
+    assert_eval_eq("PolynomialGCD[Sqrt[2] Sqrt[a] x, Sqrt[2] Sqrt[a] x^2]", "Sqrt[a] x", 0);  /* Sqrt[2] is a unit */
+    assert_eval_eq("PolynomialGCD[1 + x, Sqrt[a] Sqrt[b] (1 + x)]", "1 + x", 0);
+}
+
 void test_integrate_dispatch(void) {
     symtab_init();
     core_init();
@@ -476,6 +520,7 @@ void test_integrate_dispatch(void) {
     TEST(test_root_kernel_keeps_radicals);
     TEST(test_linearity_distributes_product);
     TEST(test_step_and_impulse_indefinite);
+    TEST(test_constant_factor_split);
 
     printf("All Integrate dispatch tests passed!\n");
 }

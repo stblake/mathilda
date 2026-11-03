@@ -588,11 +588,18 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
             g_rt_decide_mode = true;
             g_rt_decision    = RT_DEC_UNKNOWN;
             Expr* rem = NULL;
+            unsigned long prim0 = g_rt_prim_unevaluated;
             Expr* Q = rt_field_integrate(F, &T, (long)T.n - 1, x, &rem);
             if (Q && !rem)                               verdict = RT_DEC_ELEMENTARY;
             else if (Q && rem)                           verdict = RT_DEC_NONELEMENTARY;
             else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
             else                                         verdict = RT_DEC_UNKNOWN;
+            /* A certificate reached through an unevaluated polynomial primitive
+             * (PolynomialGCD over a coefficient ring no engine covered) proves
+             * nothing: the algorithm computed with an unevaluated head as if it
+             * were a polynomial.  Demote it to UNKNOWN (see risch_util.c). */
+            if (verdict == RT_DEC_NONELEMENTARY && g_rt_prim_unevaluated != prim0)
+                verdict = RT_DEC_UNKNOWN;
             if (Q) expr_free(Q);
             if (rem) expr_free(rem);
             g_rt_decide_mode = save_mode;
