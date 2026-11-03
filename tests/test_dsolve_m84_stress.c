@@ -134,6 +134,24 @@ static void t_m84_controls(void) {
                 "y, x], 10, $Aborted]] === DSolve`ChangeOfVariable");
 }
 
+/* F6 — two v0.6154 regressions caught by the campaign's final per-record A/B.
+ * (a) PolynomialGCD's generalized-variable abstraction left x-free RADICAL
+ * constants as coefficients, so the gcd went to the number-field engine over
+ * Q((-3)^(1/3), (-1)^(2/3), 2^(1/3)): this IVP took 12.9 s (0.04 s before).
+ * (b) Integrate split off an x-free constant carrying a sum, which then survived
+ * unnormalised into SolvableForY's induced-ODE solution, so it was no longer
+ * solved for the function and the record declined. */
+static void t_m84_v6154_followups(void) {
+    ASSERT_TRUE("Module[{$t = AbsoluteTime[], $s}, "
+                "$s = DSolve[{(x^2 + 3 x) y'[x] == y[x]^3 + 2 y[x], y[1] == 1}, y, x]; "
+                "Head[$s] === List && AbsoluteTime[] - $t < 3]");
+    ASSERT_TRUE("Head[TimeConstrained[DSolve[(-y[x] + y'[x] x)^2 == y'[x]^2 - 2 y[x] y'[x]/x + 1, "
+                "y, x], 30, $Aborted]] === List");
+    /* the unit convention of the generalized gcd: a numeric factor is dropped */
+    ASSERT_TRUE("PolynomialGCD[Sqrt[2] Sqrt[a] x, Sqrt[2] Sqrt[a] x^2] === Sqrt[a] x");
+    ASSERT_TRUE("PolynomialGCD[(x + Sqrt[2]) Sqrt[a], (x + Sqrt[2]) x Sqrt[a]] === Sqrt[a] (Sqrt[2] + x)");
+}
+
 int main(void) {
     alarm(400);                          /* ~25 solves of 0.1–3 s each */
     setvbuf(stdout, NULL, _IOLBF, 0);    /* the shared alarm() loses buffered output */
@@ -147,6 +165,7 @@ int main(void) {
     TEST(t_m84_hyperbolic);
     TEST(t_m84_ivp_local_branch);
     TEST(t_m84_controls);
+    TEST(t_m84_v6154_followups);
 
     printf("All DSolve M84 stress tests passed.\n");
     return 0;

@@ -117,6 +117,15 @@ static bool depends_on_var(const Expr* f, const Expr* x) {
  * gcd of its coefficient field.  A rational number is left in place: it costs
  * nothing anywhere and splitting it would only change the layout of the answer
  * (3 (Sin[x] - x Cos[x]) for 3 Sin[x] - 3 x Cos[x]). */
+/* A Plus anywhere inside e. */
+static bool int_contains_plus(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Plus)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (int_contains_plus(e->data.function.args[i])) return true;
+    return false;
+}
+
 static bool integrate_split_constant(const Expr* f, const Expr* x,
                                      Expr** c_out, Expr** g_out) {
     *c_out = *g_out = NULL;
@@ -127,6 +136,14 @@ static bool integrate_split_constant(const Expr* f, const Expr* x,
     for (size_t i = 0; i < n; i++) {
         const Expr* a = f->data.function.args[i];
         if (depends_on_var(a, x)) { ng++; continue; }
+        /* Only a MONOMIAL constant (no Plus inside: a, Sqrt[2], (-1)^(3/4), Pi^2)
+         * is split off.  A constant carrying a sum, such as the unnormalised
+         * 1/(2 + (-16 + 3 I Sqrt[2])/4 + (12 - 4 I Sqrt[2])/8) (which is -2) of a
+         * separable integrand, used to collapse under the cascade's own
+         * normalisation of the whole integrand.  Pulled out, it survived raw into
+         * the antiderivative, and the implicit answer it fed could no longer be
+         * solved for the function (§2.1.2-981, SolvableForY's induced ODE). */
+        if (int_contains_plus(a)) { ng++; continue; }
         nc++;
         if (!(a->type == EXPR_INTEGER || a->type == EXPR_BIGINT
               || head_is((Expr*)a, SYM_Rational)))
@@ -138,8 +155,8 @@ static bool integrate_split_constant(const Expr* f, const Expr* x,
     size_t ic = 0, ig = 0;
     for (size_t i = 0; i < n; i++) {
         Expr* a = f->data.function.args[i];
-        if (depends_on_var(a, x)) gs[ig++] = expr_copy(a);
-        else                      cs[ic++] = expr_copy(a);
+        if (depends_on_var(a, x) || int_contains_plus(a)) gs[ig++] = expr_copy(a);
+        else                                                 cs[ic++] = expr_copy(a);
     }
     *c_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), cs, nc));
     *g_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), gs, ng));

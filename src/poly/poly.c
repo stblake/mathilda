@@ -44,6 +44,7 @@
 #include "expand.h"
 #include "eval.h"
 #include "core.h"          /* tc_register_unwind_counter */
+#include "parse.h"         /* parse_expression: the unit strip */
 #include "symtab.h"
 #include "attr.h"
 #include "arithmetic.h"
@@ -3165,8 +3166,27 @@ static bool pg_depends(Expr* e, Expr** vars, size_t nv) {
     return false;
 }
 
+/* A non-integer power anywhere in e ((-3)^(1/3), Sqrt[2], (-1)^(2/3) ...). */
+static bool pg_has_frac_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type != EXPR_INTEGER) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (pg_has_frac_power(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* pg_abstract(Expr* e, Expr** vars, size_t nv, PgAbs* A) {
-    if (!pg_depends(e, vars, nv)) return expr_copy(e);
+    /* On this (already non-polynomial) path an x-free RADICAL constant is
+     * abstracted too, not left as a coefficient: kept, it sends the abstracted gcd
+     * to the number-field engine over Q((-3)^(1/3), (-1)^(2/3), 2^(1/3), ...) --
+     * a high-degree field -- where the pre-abstraction path declined at once.  An
+     * IVP fit in DSolve (§2.2.29-2867, (x^2 + 3 x) y' == y^3 + 2 y, y[1] == 1) went
+     * from 0.04 s to 12.9 s inside that field gcd.  Same soundness argument:
+     * substitution is a ring homomorphism, so the result is still a common divisor. */
+    if (!pg_depends(e, vars, nv) && !pg_has_frac_power(e)) return expr_copy(e);
     for (size_t i = 0; i < nv; i++) if (expr_eq(e, vars[i])) return expr_copy(e);
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
@@ -3210,6 +3230,7 @@ static Expr* pg_gcd_generalized(Expr* head, Expr** rems, size_t count,
      * recursed without bound (simp_sf_airy: PolynomialGCD[z^n, k$1 Gamma[3/2+n]]).
      * A nested request declines instead -- the pre-abstraction behaviour. */
     if (g_pg_gen_depth > 0) return NULL;
+    if (getenv("MATHILDA_NO_PG_GENERALIZED")) return NULL;   /* A/B killswitch */
     PgAbs A = { NULL, NULL, 0, 0 };
     Expr** ab = malloc(count * sizeof(Expr*));
     for (size_t i = 0; i < count; i++) ab[i] = pg_abstract(rems[i], vars, nv, &A);
@@ -3229,6 +3250,13 @@ static Expr* pg_gcd_generalized(Expr* head, Expr** rems, size_t count,
             free(rules);
             r = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
                                                 (Expr*[]){ g, rl }, 2));
+            /* A numeric factor of the gcd is a unit (Sqrt[2] now comes back as an
+             * abstracted atom): drop it, as the polynomial path does. */
+            Expr* unitstrip = parse_expression(
+                "Function[{PolynomialGCD`Private`g}, If[NumericQ[PolynomialGCD`Private`g], 1, "
+                "If[Head[PolynomialGCD`Private`g] === Times, "
+                "Select[PolynomialGCD`Private`g, !NumericQ[#] &], PolynomialGCD`Private`g]]]");
+            if (unitstrip) r = eval_and_free(expr_new_function(unitstrip, (Expr*[]){ r }, 1));
         }
     } else {
         for (size_t i = 0; i < count; i++) expr_free(ab[i]);
