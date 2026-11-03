@@ -30,6 +30,12 @@ extern int g_dsolve_depth;
  * pre-pass fire below top level in that (mu-safe) context — see the comment there. */
 extern int dsolve_nh_vop_active;
 
+/* Nonzero while DSolve`ChangeOfVariable (dsolve_changevar.c) solves its transformed
+ * equation Y(t), t = phi(x).  It composes the basis as Y(phi(x)) rather than feeding
+ * the normal-form recovery factor into a reduction, so it is mu-safe in the same
+ * sense as dsolve_nh_vop_active and shares that exemption in dsolve_specialform.c. */
+extern int dsolve_cv_active;
+
 /* Register DSolve and fan out to every method's init.  Called from core_init. */
 void dsolve_init(void);
 

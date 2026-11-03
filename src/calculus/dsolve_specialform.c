@@ -1520,7 +1520,7 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *      elementary (dsolve_normal_form returns NULL otherwise -> skip).  Gated
      *      by sf_num_ok as a defensive numeric back-substitution: a sign/branch
      *      error in mu would otherwise reach the corpus as a numericizing FAIL. */
-    if (!general && !ds_is_zero(Pc) && (g_dsolve_depth <= 1 || dsolve_nh_vop_active)) {
+    if (!general && !ds_is_zero(Pc) && (g_dsolve_depth <= 1 || dsolve_nh_vop_active || dsolve_cv_active)) {
         /* Top-level only (g_dsolve_depth <= 1): a recursive caller such as
          * OperatorFactor peels a first-order factor and re-solves the order-(n-1)
          * quotient, and the mu = Exp[-Int P/2] recovery factor this pre-pass emits
@@ -1532,7 +1532,9 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
          * solve the HOMOGENEOUS part and needs this recogniser for a Bessel/Airy set
          * carrying a y' term (e.g. 4x^2 y'' - 4x y' + (3-16x^2) y == 8 x^(5/2)); it
          * extracts the basis rather than composing mu back into a reduction, so the
-         * infinite-rewrite hazard does not apply. */
+         * infinite-rewrite hazard does not apply.  DSolve`ChangeOfVariable (dsolve_cv_active)
+         * shares the exemption for the same reason: it composes the transformed basis
+         * Y(t) as Y(phi(x)) (t = E^(k x) leaves a Y' term, e.g. Y'' + Y'/t + a/(b^2 t) Y). */
         Expr* mu = NULL;
         Expr* r  = dsolve_normal_form(Pc, Qc, xvar, &mu);
         if (mu) {

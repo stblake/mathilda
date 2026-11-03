@@ -3819,6 +3819,12 @@ add_executable(dsolve_m63_stress_tests test_dsolve_m63_stress.c $<TARGET_OBJECTS
 target_include_directories(dsolve_m63_stress_tests PRIVATE ../src ../src/calculus)
 add_test(NAME dsolve_m63_stress_tests COMMAND dsolve_m63_stress_tests)
 
+# M84 (§2.2.58–59): ChangeOfVariable over exponential / scaled-trig / hyperbolic
+# coefficients, and the IVP branch that holds at its initial point.
+add_executable(dsolve_m84_stress_tests test_dsolve_m84_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_m84_stress_tests PRIVATE ../src ../src/calculus)
+add_test(NAME dsolve_m84_stress_tests COMMAND dsolve_m84_stress_tests)
+
 add_executable(inactive_tests test_inactive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(inactive_tests PRIVATE ../src ../src/calculus)
 add_test(NAME inactive_tests COMMAND inactive_tests)
