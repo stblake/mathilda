@@ -179,8 +179,8 @@ void test_gamma_incomplete_exact() {
 void test_gamma_incomplete_int_closed() {
     /* Positive integer first argument -> finite closed form. */
     assert_eval_eq("Gamma[2, 3]", "4/E^3", 0);            /* exact stays exact */
-    assert_eval_eq("Gamma[2, x]", "E^(-x) (1 + x)", 0);   /* symbolic reduces  */
-    assert_eval_eq("Gamma[3, x]", "E^(-x) (2 + 2 x + x^2)", 0);
+    assert_eval_eq("Gamma[2, x]", "(1 + x)/E^x", 0);   /* symbolic reduces  */
+    assert_eval_eq("Gamma[3, x]", "(2 + 2 x + x^2)/E^x", 0);
     assert_eval_eq("Gamma[2, 1/2]", "3/(2 Sqrt[E])", 0);    /* exact rational z  */
     /* Gamma[4, 2] = 38 e^-2. */
     assert_eval_eq("Gamma[4, 2]", "38/E^2", 0);
@@ -190,9 +190,9 @@ void test_gamma_incomplete_int_closed() {
 
 void test_gamma_derivatives() {
     /* dGamma/dz of the incomplete form: -z^(a-1) e^-z. */
-    assert_eval_eq("D[Gamma[a, x], x]", "-E^(-x) x^(-1 + a)", 0);
+    assert_eval_eq("D[Gamma[a, x], x]", "-x^(-1 + a)/E^x", 0);
     /* Chain rule through the second argument. */
-    assert_eval_eq("D[Gamma[a, x^2], x]", "-2 E^(-x^2) x (x^2)^(-1 + a)", 0);
+    assert_eval_eq("D[Gamma[a, x^2], x]", "-(2 x (x^2)^(-1 + a))/E^x^2", 0);
     /* Derivative wrt the first argument has no closed form here: generic. */
     assert_eval_eq("D[Gamma[x, z], x]", "Derivative[1, 0][Gamma][x, z]", 0);
     /* One-argument Gamma'[z] = Gamma[z] PolyGamma[0, z]. */

@@ -196,9 +196,9 @@ static void test_unevaluated(void) {
  * must still resolve. */
 static void test_symbolic_exponent_no_garbage(void) {
     check("Limit[Log[x]/x^s, x -> Infinity]",
-          "Limit[x^(-s) Log[x], x -> Infinity]");
+          "Limit[Log[x]/x^s, x -> Infinity]");
     check("Limit[Log[x]/x^s, x -> Infinity, Method -> \"Series\"]",
-          "Limit[x^(-s) Log[x], x -> Infinity, Method -> \"Series\"]");
+          "Limit[Log[x]/x^s, x -> Infinity, Method -> \"Series\"]");
     check_equiv("Limit[Log[x]/x^2, x -> Infinity]", "0");
     check_equiv("Limit[x^s/x^s, x -> Infinity]",    "1");
 }

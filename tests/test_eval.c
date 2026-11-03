@@ -970,8 +970,7 @@ void test_numeric_power_coprime_basis_o4() {
     assert_eval_eq("{4^(5/8 - I t) 5^(-5/8 + I t), 2^(-I t) 3^(I t), 2^((-1 + I) t) 3^((1 - I) t), "
                    "2^(1 + (-1 + I) t) 3^(-1 + (1 - I) t), 2^(-I) 3^I, 2^(1 - I) 3^(-1 + I), "
                    "2^(2.5 t) 3^(-2.5 t)}",
-                   "{(4/5)^(5/8 - I t), (3/2)^(I t), (2/3)^((-1 + I) t), (2/3)^(1 + (-1 + I) t), "
-                   "(3/2)^I, (3/2)^(-1 + I), 2^(2.5 t) 3^(-2.5 t)}", 0);
+                   "{(4/5)^(5/8 - I t), (3/2)^(I t), (2/3)^((-1 + I) t), (2/3)^(1 + (-1 + I) t), (3/2)^I, (3/2)^(-1 + I), 2^(2.5 t)/3^(2.5 t)}", 0);
 }
 
 /* A condition does not promote a rule past an earlier, at-least-as-specific

@@ -57,7 +57,7 @@ void test_together_forms(void) {
     assert_form("Together[a/(x y) + b/(x z)]", "(b y + a z)/(x y z)");
     assert_form("Together[1/(1 + E^x) + Log[x]/(E^(2 x) - 1)]", "(-1 + E^x + Log[x])/((-1 + E^x) (1 + E^x))");
     /* the generator is oriented positively: 1/E^x is a denominator */
-    assert_form("Together[1 + E^(-x)]", "E^(-x) (1 + E^x)");
+    assert_form("Together[1 + E^(-x)]", "(1 + E^x)/E^x");
 }
 
 void test_cancel_forms(void) {

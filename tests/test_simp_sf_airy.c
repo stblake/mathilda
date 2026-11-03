@@ -63,7 +63,7 @@ static void test_struve(void) {
         sf_zero(FMT("(StruveH[(%s) - 1, z] + StruveH[(%s) + 1, z] - 2 (%s)/z StruveH[%s, z] - (z/2)^(%s)/(Sqrt[Pi] Gamma[(%s) + 3/2])) StruveH[%s, z]",
                     n, n, n, n, n, n, n));
     }
-    sf_to("StruveH[n - 1, z] + StruveH[n + 1, z] - 2 n/z StruveH[n, z]", "(2^(-n) z^n)/(Sqrt[Pi] Gamma[3/2 + n])");
+    sf_to("StruveH[n - 1, z] + StruveH[n + 1, z] - 2 n/z StruveH[n, z]", "z^n/(2^n Sqrt[Pi] Gamma[3/2 + n])");
     sf_unchanged("StruveH[n, z] + StruveH[n, w]");
 }
 

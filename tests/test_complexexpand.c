@@ -77,7 +77,7 @@ void test_cx_exp_log(void) {
     assert_eval_eq("ComplexExpand[3^(I x)]", "Cos[x Log[3]] + I Sin[x Log[3]]", 0);
     assert_eval_eq("ComplexExpand[(-1)^(4 I/5)]", "E^(-4/5 Pi)", 0);
     assert_eval_eq("ComplexExpand[(-3)^(4 I/5)]",
-                   "E^(-4/5 Pi) Cos[4/5 Log[3]] + I E^(-4/5 Pi) Sin[4/5 Log[3]]", 0);
+                   "Cos[4/5 Log[3]]/E^(4/5 Pi) + (I Sin[4/5 Log[3]])/E^(4/5 Pi)", 0);
     /* (-1)^(4/5): exact radicals from Mathilda's trig tables. */
     assert_eval_eq("ComplexExpand[(-1)^(4/5)]",
                    "-1/4 - 1/4 Sqrt[5] + (1/4*I) Sqrt[10 - 2 Sqrt[5]]", 0);

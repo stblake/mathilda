@@ -83,7 +83,7 @@ static void test_named_closed_forms(void) {
     assert_eval_eq("HypergeometricPFQ[{1/2},{3/2},z]", "(Sqrt[Pi] Erfi[Sqrt[z]])/(2 Sqrt[z])", 0);
     assert_eval_eq("HypergeometricPFQ[{-1/2},{1/2},z]", "E^z - Sqrt[Pi] Sqrt[z] Erfi[Sqrt[z]]", 0);
     assert_eval_eq("HypergeometricPFQ[{1},{3/2},-z]",
-                   "(E^(-z) Sqrt[Pi] Erfi[Sqrt[z]])/(2 Sqrt[z])", 0);
+                   "(Sqrt[Pi] Erfi[Sqrt[z]])/(2 E^z Sqrt[z])", 0);
     assert_eval_eq("HypergeometricPFQ[{2},{3},z]", "(2 (E^z - (-1 + E^z)/z))/z", 0);
     /* a neither half-integer nor a positive integer: declined (the incomplete
      * gamma form has no numerics on its cut, the series does) */

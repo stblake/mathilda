@@ -118,7 +118,7 @@ void test_power_of_quotient_positive(void) {
     /* (a/b)^c with both positive expands via the Times rule
      * (a/b is Times[a, b^-1]). */
     assert_eval_eq("Simplify[(a / b)^c, a > 0 && b > 0]",
-                   "a^c b^(-c)", 0);
+                   "a^c/b^c", 0);
 }
 
 /* ---- Tower of powers ---- */

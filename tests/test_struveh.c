@@ -254,11 +254,9 @@ void test_struveh_halfinteger_elementary() {
 
 void test_struve_derivative() {
     assert_eval_eq("D[StruveH[nu, x], x]",
-        "1/2 ((2^(-nu) x^nu)/(Sqrt[Pi] Gamma[3/2 + nu]) + StruveH[-1 + nu, "
-        "x] - StruveH[1 + nu, x])", 0);
+        "1/2 (x^nu/(2^nu Sqrt[Pi] Gamma[3/2 + nu]) + StruveH[-1 + nu, x] - StruveH[1 + nu, x])", 0);
     assert_eval_eq("D[StruveL[nu, x], x]",
-        "1/2 ((2^(-nu) x^nu)/(Sqrt[Pi] Gamma[3/2 + nu]) + StruveL[-1 + nu, "
-        "x] + StruveL[1 + nu, x])", 0);
+        "1/2 (x^nu/(2^nu Sqrt[Pi] Gamma[3/2 + nu]) + StruveL[-1 + nu, x] + StruveL[1 + nu, x])", 0);
     assert_eval_eq("D[StruveH[nu, x], nu]", "Derivative[1, 0][StruveH][nu, x]", 0);
     assert_eval_eq("D[StruveH[nu, y], x]", "0", 0);
     /* The derivative of the elementary H_{1/2} agrees with the rule's value. */

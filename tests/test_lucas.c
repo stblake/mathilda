@@ -118,8 +118,7 @@ static void test_derivatives(void) {
     assert_eval_eq("D[LucasL[n, x], x]",
         "(n (2 LucasL[-1 + n, x] + x LucasL[n, x]))/(4 + x^2)", 0);
     assert_eval_eq("D[LucasL[n], n]",
-        "GoldenRatio^(-n) (GoldenRatio^(2 n) Log[GoldenRatio] - "
-        "Cos[n Pi] Log[GoldenRatio] - Pi Sin[n Pi])", 0);
+        "(GoldenRatio^(2 n) Log[GoldenRatio] - Cos[n Pi] Log[GoldenRatio] - Pi Sin[n Pi])/GoldenRatio^n", 0);
     /* Cross-check the x-derivative against the closed polynomial derivative
      * at fixed points: d/dx L_3(x) = 3 + 3 x^2 -> 15 at x = 2, and
      * d/dx L_5(x) = 5 + 15 x^2 + 5 x^4 -> 25 at x = 1. (A Simplify[... - ...]

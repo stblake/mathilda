@@ -668,6 +668,14 @@ Exponentiation.
   rule this gives `Sqrt[(1/27/a)^(2/3)] → 1/3 (1/a)^(1/3)`. Gated to fire only
   when the coefficient genuinely reduces, so `Sqrt[2 Pi]`, `(4 Pi)^(2/3)`,
   `Sqrt[2 Sqrt[3]]` stay nested.
+- **Exact rational base, symbolic exponent** (v0.6146). The reference's normal forms, with `e` any non-numeric exponent (`Pi` and `Sqrt[2]` count) and `c = p/q`, `q > 1`:
+  - `(1/n)^e` is `n^(-e)`: `(1/4)^(2 - 2 e)` is `4^(-2 + 2 e)`.
+  - `(a/b)^(-r)` is `(b/a)^r` for `a < b`: `(2/3)^(-x)` is `(3/2)^x`, while `(4/3)^(-x)` stays.
+  - `b^(c r)` takes an exact `q`-th root `R` of `b`: `4^(-D/2)` is `2^(-D)`, `8^(2 x/3)` is `2^(2 x)`, `(2^70)^(x/2)` is `34359738368^x`.
+  - Otherwise, a base whose primes all share one power `K` is `R^(K c r)`: `64^(x/4)` is `2^(3 x/2)`, `1000^(x/2)` is `10^(3 x/2)`. Mixed powers split per prime, with `p^m` kept whole for an integer `m`: `12^(D/2)` is `2^D 3^(D/2)`, `72^(x/2)` is `2^(3 x/2) 3^x`. A root `R < 1` flips to `(1/R)^(-...)`.
+  - A negative base splits off `(-1)^(c r)`, which is `I^(p r)` for `q = 2`: `(-1)^(x/2)` is `I^x`, `(-3)^(x/2)` is `I^x 3^(x/2)`. For `q > 2` only when the magnitude rewrites: `(-8)^(x/3)` is `(-1)^(x/3) 2^x`, `(-6)^(x/3)` stays.
+  - A squarefree base (`6^(x/2)`, `(2/3)^(x/2)`), an integer coefficient (`4^(2 x)`) and a `Plus` exponent other than under `1/n` (`4^(1 + x/2)`) stay. A bignum base that is not an exact root is left alone where the reference factors it.
+  - FeynCalc's Feynman-parameter prefactors meet in this form: `2^(D/2) 4^(-D/2)` is `2^(-D/2)`.
 - For `Power[Integer, Rational]` with positive base and positive
   `p/q` exponent, splits the base's prime factorisation into a
   product of distinct-prime powers grouped by reduced effective

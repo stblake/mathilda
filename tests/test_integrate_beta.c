@@ -217,9 +217,9 @@ static void test_beta_widened_strip(void) {
  * made Check[] reject a Gaussian-Bessel integral another stage then closed. */
 static void test_kingreflect_halfline_gate(void) {
     check_quiet("Integrate[x Exp[-p x^2] BesselJ[0, b x], {x, 0, Infinity}, "
-                "Assumptions -> p > 0 && b > 0]", "E^(-b^2/(4 p))/(2 p)");
+                "Assumptions -> p > 0 && b > 0]", "1/(2 E^(b^2/(4 p)) p)");
     check_quiet("Check[Integrate[x Exp[-p x^2] BesselJ[0, b x], {x, 0, Infinity}, "
-                "Assumptions -> p > 0 && b > 0], \"msg\"]", "E^(-b^2/(4 p))/(2 p)");
+                "Assumptions -> p > 0 && b > 0], \"msg\"]", "1/(2 E^(b^2/(4 p)) p)");
 }
 
 int main(void) {

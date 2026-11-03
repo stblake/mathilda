@@ -911,13 +911,16 @@ Plan: packages/feyncalc/FEYNCALC_REMAINING_GAPS.md (195 tests, clusters G1-G13).
 - [x] G10 FeynRule/FunctionalD ; v0.6134; G8 mostly closed (v0.6136-39)
 - [x] v0.6145 round 12: FindDivergences ID2/3 (Simplify numeric-basis pre-pass kept (la^2)^ep abstracted), SetOptions on symbol lists (PaVe BReduce), Together compound-arg atoms (NPointTo4Point), pure-function body sharing (Isolate 0.11x -> 0.52x); 13368, superset
 - [ ] G7 Feynman parametrisation -- bisected 2026-11-03 (scratchpad g7a/g7b), causes:
-  - [ ] F Power: perfect-power integer base under a symbolic exponent (4^(D/2) -> 2^D, 12^(D/2) -> 2^D 3^(D/2), (1/4)^e -> 4^-e) -- Parametrize ID10/11 (power.c)
-  - [ ] C Together splits the integer part of a symbolic exponent on a non-sign-normal base ((b - a)^(-1 + n) -> -(-a + b)^n/(a - b)) -- Parametrize ID26 (rat.c)
+  - [x] F Power: perfect-power integer base under a symbolic exponent (4^(D/2) -> 2^D, 12^(D/2) -> 2^D 3^(D/2), (1/4)^e -> 4^-e) -- Parametrize ID10/11 (power.c) -- v0.6146; ID11 also needed Simplify's exponent-content fold (4^(-2+2e) -> 16^(-1+e)) and D; ID11's prefactor now matches, its remaining diff is B inside the power base
+  - [x] C Together splits the integer part of a symbolic exponent on a non-sign-normal base ((b - a)^(-1 + n) -> -(-a + b)^n/(a - b)) -- Parametrize ID26 (rat.c) -- v0.6146, negative integer parts only; (b - a)^(1 + n) -> -((a - b) (-a + b)^n) still open (the product re-merges into (-a + b)^(1 + n))
   - [ ] A Simplify[e, sum == 1]: per-subterm/coefficient reduction, compared before the stronger plain Simplify wins -- Prepare ID11/13/14 (simp_reduce_by_equations)
   - [ ] B nested Collect with simplified coefficients (x1 x2 + ... -> x4 (x3 + x5) + x1 (...) + x2 (...); m + s x - s x^2 -> m - s (-1 + x) x) -- Parametrize ID6/20 (simp_search.c try_collect_per_variable)
   - [ ] H factor a common base with integer-differing exponents (x^(a - 1) + x^a -> x^(-1 + a) (1 + x)), also Together -- Parametrize ID44/10
   - [ ] E fold a monomial into a power of the same product -- Parametrize ID9 (simp_power.c)
-  - [ ] D Legendre duplication on shifted Gamma ratios over-applied (Simplify[Gamma[-2+2e]/Gamma[-2+e]] stays in the reference) -- Parametrize ID11
+  - [x] D Legendre duplication on shifted Gamma ratios over-applied (Simplify[Gamma[-2+2e]/Gamma[-2+e]] stays in the reference) -- Parametrize ID11 -- v0.6146 (simp_sf_engine.c sf_improves: a score rise needs a whole family eliminated)
+  - [ ] NEW (found round 13): the parser reads `3e-3` as the Real 0.003 (a Mathilda e-notation extension, src/parse.c parse_number), where the reference reads `3 e - 3`. Simplify[4^(3e-3)] gave 1.00417 -- a silent wrong answer for any input that names an epsilon `e` (FeynCalc style). 213 test strings use e-notation; needs a user decision before removing the extension
+  - [ ] NEW: OutputForm prints -x^(-2) as -1/x^2 (reference -x^(-2)); InputForm is right
+  - [ ] NEW: a bignum base under a symbolic rational exponent that is not an exact root is not split per prime ((3^50 2)^(x/2); the reference gives 2^(x/2) 847288609443^x)
   - [ ] AddScalingParameter-ID6: Simplify finds a strictly simpler form than the reference (simp_split_multiplicative) -- goes with the tie-breaking item
 - [ ] With does not rename a Function's bound variable captured from its value: With[{v = 1 + y}, Function[y, {y, v}]][2] is {2, 3} (reference {2, 1 + y})
 - [ ] InputForm of a pure function: the reference prints "a + #1 & " (trailing space)

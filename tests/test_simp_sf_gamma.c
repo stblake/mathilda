@@ -323,7 +323,7 @@ static void test_gamma_incomplete(void) {
                             A[i], k, Zs[zi], A[i], k, A[i], Zs[zi], sum));
             }
     sf_zero("Gamma[a + 1, z] - a Gamma[a, z] - z^a E^-z");
-    sf_to("Gamma[a + 2, z] - (a + 1) Gamma[a + 1, z]", "E^(-z) z^(1 + a)");
+    sf_to("Gamma[a + 2, z] - (a + 1) Gamma[a + 1, z]", "z^(1 + a)/E^z");
     sf_zero("Gamma[a, z] - (Gamma[a + 1, z] - z^a E^-z)/a");
     sf_unchanged("Gamma[a, z] + Gamma[a, w]");
     sf_identity("Gamma[a + 1, z] - a Gamma[a, z] - z^a E^-z");

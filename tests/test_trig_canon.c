@@ -300,7 +300,7 @@ static void test_symbolic_exponent_skipped(void) {
     Case cs[] = {
         {"Cos[x]^n",     "Cos[x]^n"},
         {"1/Cos[x]^n",   "Cos[x]^(-n)"},
-        {"Sin[x]/Cos[x]^k", "Cos[x]^(-k) Sin[x]"},
+        {"Sin[x]/Cos[x]^k", "Sin[x]/Cos[x]^k"},
         {NULL, NULL}
     };
     run_cases("symbolic_exponent_skipped", cs);

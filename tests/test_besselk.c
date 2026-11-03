@@ -250,9 +250,7 @@ void test_besselk_series_infinity() {
      * DLMF 10.40.2 a_k * Sqrt[Pi/2]. (The Exp[-x] * SeriesData product keeps
      * its O-term under Normal, so compare the raw Series.) */
     assert_eval_eq("Series[BesselK[0, x], {x, Infinity, 4}]",
-        "E^(-x) (Sqrt[1/2 Pi] Sqrt[1/x] - 1/8 Sqrt[1/2 Pi] (1/x)^(3/2)"
-        " + 9/128 Sqrt[1/2 Pi] (1/x)^(5/2) - 75/1024 Sqrt[1/2 Pi] (1/x)^(7/2)"
-        " + O[1/x]^(9/2))", 0);
+        "(Sqrt[1/2 Pi] Sqrt[1/x] - 1/8 Sqrt[1/2 Pi] (1/x)^(3/2) + 9/128 Sqrt[1/2 Pi] (1/x)^(5/2) - 75/1024 Sqrt[1/2 Pi] (1/x)^(7/2) + O[1/x]^(9/2))/E^x", 0);
     /* Limit at infinity is 0 (falls out of the asymptotic series). */
     assert_eval_eq("Limit[BesselK[n, x], x -> Infinity]", "0", 0);
 }

@@ -267,7 +267,7 @@ static void test_nl_exponential_denominator(void) {
     /* DiffUnderInt pinned: declines, silently and quickly (no idiv from its
      * probes, no base outside x > 0). */
     check_quiet("Integrate`DiffUnderInt[Exp[-x t]/t^2, {t, 1, Infinity}, Assumptions -> x > 0]",
-                "Integrate`DiffUnderInt[E^(-t x)/t^2, {t, 1, Infinity}, Assumptions -> x > 0]");
+                "Integrate`DiffUnderInt[1/(E^(t x) t^2), {t, 1, Infinity}, Assumptions -> x > 0]");
 }
 
 int main(void) {

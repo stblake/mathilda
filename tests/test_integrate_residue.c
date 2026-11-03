@@ -254,7 +254,7 @@ static void test_assumptions_option(void) {
 static void test_fourier_symbolic(void) {
     /* Integrate[Cos[k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
     check_eq("Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
-             "Assumptions -> {a > 0, k > 0}]", "(E^(-a k) Pi)/a");
+             "Assumptions -> {a > 0, k > 0}]", "Pi/(a E^(a k))");
     /* Sin is odd -> 0. */
     check_eq("Integrate[Sin[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
              "Assumptions -> {a > 0, k > 0}]", "0");
@@ -269,7 +269,7 @@ static void test_fourier_symbolic(void) {
     /* Bare complex-exponential kernel Exp[I k x] with symbolic parameters:
      * Integrate[Exp[I k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
     check_eq("Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
-             "Assumptions -> {a > 0, k > 0}]", "(E^(-a k) Pi)/a");
+             "Assumptions -> {a > 0, k > 0}]", "Pi/(a E^(a k))");
     check_eq("Chop[N[(Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
              "Assumptions -> {a > 0, k > 0}] - Pi E^(-a k)/a) /. {a -> 12/10, k -> 9/10}]]",
              "0");
@@ -279,7 +279,7 @@ static void test_fourier_symbolic(void) {
      * wrong Pi E^-a/(2 a^2) instead of Pi (1+a) E^-a/(2 a^3). */
     check_eq("Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0, Method -> \"Residue\"]",
-             "((1 + a) E^(-a) Pi)/(2 a^3)");
+             "((1 + a) Pi)/(2 a^3 E^a)");
     check_eq("Chop[N[(Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0, Method -> \"Residue\"] "
              "- Pi (1 + a) E^(-a)/(2 a^3)) /. a -> 7/5]]", "0");
@@ -457,7 +457,7 @@ static void test_gaussian(void) {
     check_eq("Integrate[Exp[-x^2] Cos[2 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "Sqrt[Pi]/E");
     check_eq("Integrate[Exp[-x^2] Cos[2 a x], {x, -Infinity, Infinity}, Method -> \"Residue\", "
-             "Assumptions -> a > 0]", "E^(-a^2) Sqrt[Pi]");
+             "Assumptions -> a > 0]", "Sqrt[Pi]/E^a^2");
     /* Shifted exponent, Exp kernel, and a scaled leading coefficient. */
     check_eq("Integrate[Exp[-x^2 + 3 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "E^(9/4) Sqrt[Pi]");
@@ -478,10 +478,10 @@ static void test_gaussian(void) {
      * E^(-b^2/(4a)); even half-line = half of it. */
     check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
-             "E^(-b^2/(4 a)) Sqrt[Pi/a]");
+             "Sqrt[Pi/a]/E^(b^2/(4 a))");
     check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
-             "1/2 E^(-b^2/(4 a)) Sqrt[Pi/a]");
+             "Sqrt[Pi/a]/(2 E^(b^2/(4 a)))");
     check_eq("With[{r = Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
              "{FreeQ[r, Integrate], Chop[N[(r - Sqrt[Pi/a] Exp[-b^2/(4 a)]/2) "
@@ -490,7 +490,7 @@ static void test_gaussian(void) {
      * works on the FindInstance representative path too. */
     check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
              "Assumptions -> a > 0 && Element[b, Reals], Method -> \"Residue\"]",
-             "1/2 E^(-b^2/(4 a)) Sqrt[Pi/a]");
+             "Sqrt[Pi/a]/(2 E^(b^2/(4 a)))");
 }
 
 /* -------------------------------------------------------------------------
@@ -507,7 +507,7 @@ static void test_honest_declines(void) {
     /* Case 21: a Hankel-type contour fragment, ambiguous / divergent in the
      * ordinary sense. */
     check_eq("Integrate[Exp[x] x^(-s), {x, 1, -Infinity}, Method -> \"Residue\"]",
-             "Integrate[E^x x^(-s), {x, 1, -Infinity}, Method -> \"Residue\"]");
+             "Integrate[E^x/x^s, {x, 1, -Infinity}, Method -> \"Residue\"]");
     /* Case In[20]: ArcTan[a x]/(x (1+b^2 x^2)) on {0, Infinity} = (Pi/2) Log[1+a/b].
      * The integrand has a BRANCH CUT (ArcTan), not isolated poles; the value is
      * reached by parametric differentiation (Feynman: d/da of the integral is a
@@ -643,7 +643,7 @@ static void test_mellin_power(void) {
      * stated as s > 0, not the Refine-unfriendly complex spelling Re[s] > 0). */
     check_eq("Integrate[x^(s-1) Exp[-a x^2], {x, 0, Infinity}, "
              "Assumptions -> s > 0 && a > 0, Method -> \"Residue\"]",
-             "1/2 a^(-1/2 s) Gamma[1/2 s]");
+             "Gamma[1/2 s]/(2 a^(1/2 s))");
     check_eq("Chop[N[(Integrate[x^(s-1) Exp[-a x^2], {x,0,Infinity}, "
              "Assumptions -> s>0 && a>0, Method -> \"Residue\"] - a^(-s/2) Gamma[s/2]/2) "
              "/. {s -> 3/2, a -> 1}]]", "0");

@@ -176,7 +176,7 @@ static void test_hurwitz(void) {
         sf_zero(FMT("HurwitzZeta[3, %s + 1] - HurwitzZeta[3, %s] + (%s)^-3", A_SH[i], A_SH[i], A_SH[i]));
         sf_zero(FMT("HurwitzZeta[5/2, %s + 1] - HurwitzZeta[5/2, %s] + (%s)^(-5/2)", A_SH[i], A_SH[i], A_SH[i]));
     }
-    sf_to("HurwitzZeta[s, a + 1] - HurwitzZeta[s, a]", "-a^(-s)");
+    sf_to("HurwitzZeta[s, a + 1] - HurwitzZeta[s, a]", "-1/a^s");
     sf_unchanged("HurwitzZeta[s, a] + HurwitzZeta[t, a + 1]");
     sf_identity("HurwitzZeta[s, a + 1] - HurwitzZeta[s, a] + a^(-s)");
 }
@@ -191,7 +191,7 @@ static void test_zeta2(void) {
             sf_zero(FMT("Zeta[%s, %s + 1] - Zeta[%s, %s] + ((%s)^2)^(-(%s)/2)", S_SH[j], A_SH[i], S_SH[j], A_SH[i], A_SH[i], S_SH[j]));
             sf_zero(FMT("Zeta[%s, %s] - Zeta[%s, %s - 1] + ((%s - 1)^2)^(-(%s)/2)", S_SH[j], A_SH[i], S_SH[j], A_SH[i], A_SH[i], S_SH[j]));
         }
-    sf_to("Zeta[s, a + 1] - Zeta[s, a]", "-(a^2)^(-1/2 s)");
+    sf_to("Zeta[s, a + 1] - Zeta[s, a]", "-1/(a^2)^(1/2 s)");
     sf_unchanged("Zeta[s, a] + Zeta[s, b]");
     sf_identity("Zeta[s, a] - Zeta[s, a - 1] + ((a - 1)^2)^(-s/2)");
 }
@@ -218,7 +218,7 @@ static void test_lerch(void) {
         }
     for (size_t i = 0; i < 6; i++)
         sf_zero(FMT("z LerchPhi[z, 2, %s + 1] - LerchPhi[z, 2, %s] + (%s)^-2", A_SH[i], A_SH[i], A_SH[i]));
-    sf_to("z LerchPhi[z, s, a + 1] - LerchPhi[z, s, a]", "-a^(-s)");
+    sf_to("z LerchPhi[z, s, a + 1] - LerchPhi[z, s, a]", "-1/a^s");
     sf_zero("LerchPhi[z, 3, a + 1] z - LerchPhi[z, 3, a] + a^-3");
     sf_unchanged("LerchPhi[z, s, a] + LerchPhi[w, s, a + 1]");
     sf_identity("z LerchPhi[z, s, a + 1] - LerchPhi[z, s, a] + a^(-s)");

@@ -1596,6 +1596,141 @@ static Expr* simp_normalize_exponents(const Expr* e) {
     return out;
 }
 
+/* ---- integer exponent content into an exact base --------------------------
+ *
+ * b^(g a) = (b^g)^a for an exact positive base b and an integer g: the
+ * reference's Simplify moves the integer content of a symbolic exponent into
+ * the base whenever that is no more complex (4^(-2 + 2 e) -> 16^(-1 + e),
+ * 2^(4 x) -> 16^x, 2^(2 x) 3^(2 x) -> 36^x, 2^(-2 x) -> 4^(-x)). FeynCalc's
+ * Feynman-parameter prefactors are compared in this form (Parametrize ID11).
+ * The content is taken over the terms' integer coefficients only; a rational
+ * coefficient leaves the power alone. Returns a freshly owned rebuilt tree
+ * when something folded, else NULL. */
+static bool nb_rat(const Expr* x, mpz_t num, mpz_t den);
+
+static bool fold_term_coeff(const Expr* t, mpz_t c) {
+    if (expr_is_integer_like(t)) { mpz_t v; expr_to_mpz(t, v); mpz_set(c, v); mpz_clear(v); return true; }
+    if (expr_is_numeric_like(t)) return false;
+    if (expn_head_is(t, SYM_Times) && t->data.function.arg_count >= 2) {
+        const Expr* a0 = t->data.function.args[0];
+        if (expr_is_integer_like(a0)) { mpz_t v; expr_to_mpz(a0, v); mpz_set(c, v); mpz_clear(v); return true; }
+        if (expr_is_numeric_like(a0)) return false;
+    }
+    mpz_set_ui(c, 1);
+    return true;
+}
+
+/* t with its integer coefficient divided by g (exact), unevaluated. */
+static Expr* fold_term_div(const Expr* t, const mpz_t g) {
+    mpz_t v, q;
+    mpz_init(q);
+    if (expr_is_integer_like(t)) {
+        expr_to_mpz(t, v);
+        mpz_divexact(q, v, g);
+        mpz_clear(v);
+        Expr* r = expr_bigint_normalize(expr_new_bigint_from_mpz(q));
+        mpz_clear(q);
+        return r;
+    }
+    /* Times[c, rest...] with c an integer (fold_term_coeff vouched for it) */
+    size_t n = t->data.function.arg_count;
+    Expr** a = malloc(n * sizeof(Expr*));
+    expr_to_mpz(t->data.function.args[0], v);
+    mpz_divexact(q, v, g);
+    mpz_clear(v);
+    a[0] = expr_bigint_normalize(expr_new_bigint_from_mpz(q));
+    mpz_clear(q);
+    for (size_t i = 1; i < n; i++) a[i] = expr_copy(t->data.function.args[i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), a, n);
+    free(a);
+    return r;
+}
+
+static Expr* fold_power_content(const Expr* p) {
+    const Expr* b = p->data.function.args[0];
+    const Expr* x = p->data.function.args[1];
+    if (expr_is_numeric_like(x)) return NULL;
+    mpz_t bn, bd;
+    mpz_init(bn); mpz_init(bd);
+    if (!nb_rat(b, bn, bd) || mpz_sgn(bn) <= 0 ||
+        (mpz_cmp_ui(bn, 1) == 0 && mpz_cmp_ui(bd, 1) == 0)) {
+        mpz_clear(bn); mpz_clear(bd);
+        return NULL;
+    }
+    bool plus = expn_head_is(x, SYM_Plus);
+    size_t nt = plus ? x->data.function.arg_count : 1;
+    mpz_t g, c;
+    mpz_init(g); mpz_init(c);
+    bool ok = true;
+    for (size_t i = 0; i < nt && ok; i++) {
+        ok = fold_term_coeff(plus ? x->data.function.args[i] : x, c);
+        if (ok) mpz_gcd(g, g, c);
+    }
+    Expr* out = NULL;
+    /* the folded base b^g stays small: bits(b) g <= 256 */
+    if (ok && mpz_cmp_ui(g, 2) >= 0 &&
+        (mpz_sizeinbase(bn, 2) + mpz_sizeinbase(bd, 2)) * mpz_get_ui(g) <= 256) {
+        unsigned long gu = mpz_get_ui(g);
+        mpz_pow_ui(bn, bn, gu);
+        mpz_pow_ui(bd, bd, gu);
+        Expr* nx;
+        if (plus) {
+            Expr** a = malloc(nt * sizeof(Expr*));
+            for (size_t i = 0; i < nt; i++) a[i] = fold_term_div(x->data.function.args[i], g);
+            nx = expr_new_function(expr_new_symbol(SYM_Plus), a, nt);
+            free(a);
+        } else {
+            nx = fold_term_div(x, g);
+        }
+        Expr* cand = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                         (Expr*[]){ make_rational_mpz(bn, bd), nx }, 2));
+        if (simp_default_complexity(cand) <= simp_default_complexity(p)) out = cand;
+        else expr_free(cand);
+    }
+    mpz_clear(g); mpz_clear(c); mpz_clear(bn); mpz_clear(bd);
+    return out;
+}
+
+static Expr* fold_rebuild(const Expr* e, bool* changed) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc((m ? m : 1) * sizeof(Expr*));
+    bool sub = false;
+    for (size_t i = 0; i < m; i++) a[i] = fold_rebuild(e->data.function.args[i], &sub);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, m);
+    free(a);
+    if (sub) { r = eval_and_free(r); *changed = true; }
+    if (expn_head_is(r, SYM_Power) && r->data.function.arg_count == 2) {
+        Expr* f = fold_power_content(r);
+        if (f) { expr_free(r); r = f; *changed = true; }
+    }
+    return r;
+}
+
+/* Any Power with an exact non-unit base and an exponent with an integer
+ * coefficient >= 2 in reach? A cheap scan, so a tree with nothing to fold is
+ * not rebuilt. */
+static bool fold_any(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expn_head_is(e, SYM_Power) && e->data.function.arg_count == 2 &&
+        !expr_is_numeric_like(e->data.function.args[1]) &&
+        (expr_is_integer_like(e->data.function.args[0]) ||
+         expn_head_is(e->data.function.args[0], SYM_Rational)))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (fold_any(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* simp_fold_exponent_content(const Expr* e) {
+    if (!fold_any(e)) return NULL;
+    bool changed = false;
+    Expr* r = fold_rebuild(e, &changed);
+    if (changed) return r;
+    expr_free(r);
+    return NULL;
+}
+
 /* ---- numeric powers over one coprime basis --------------------------------
  *
  * Terms whose numeric powers share factors across the WHOLE expression, not
@@ -1902,6 +2037,8 @@ static Expr* builtin_simplify_inner(Expr* res) {
     }
     Expr* post = simp_normalize_exponents(out);
     if (post) { expr_free(out); out = post; }
+    Expr* fold = simp_fold_exponent_content(out);
+    if (fold) { expr_free(out); out = fold; }
     return out;
 }
 

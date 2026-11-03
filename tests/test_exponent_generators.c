@@ -55,7 +55,7 @@ static void test_assumed_positive_power_split(void) {
     assert_eval_eq("Simplify[(la x)^s la^(-s), Assumptions -> la > 0]", "x^s", 0);
     assert_eval_eq("Simplify[(-la)^s la^(-s), Assumptions -> la > 0]", "(-1)^s", 0);
     /* not positive by assumption: no split */
-    assert_eval_eq("Simplify[(-la^4)^s la^(-4 s)]", "la^(-4 s) (-la^4)^s", 0);
+    assert_eval_eq("Simplify[(-la^4)^s la^(-4 s)]", "(-la^4)^s/la^(4 s)", 0);
 }
 
 static void test_numeric_basis_keeps_symbolic_powers(void) {

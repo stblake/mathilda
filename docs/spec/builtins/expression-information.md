@@ -1232,6 +1232,11 @@ Out[3]= {a, b, b, b, c}
   with no precision mark (`-0.30102999566398114`), which reads back as a machine real (v0.6136).
   Until v0.6133 InputForm printed the standard layout
   (`1/100 a + 5 x`). The standard output form is unchanged.
+- **A negative symbolic exponent goes in the denominator** (v0.6146), in InputForm, the standard
+  form and TeXForm, as the reference writes it: `c x^(-n)` is `c/x^n`, `3^(x/2) 2^(-x)` is
+  `3^(x/2)/2^x`, `a E^(-x)` is `a/E^x`, `a x^(-1.5 n)` is `a/x^(1.5*n)`. A lone negated power keeps
+  the power: `-x^(-n)`. Until v0.6146 these printed with the power in the numerator
+  (`c*x^(-n)`); the expression itself is unchanged.
 - In the notebook front end, `InputForm` (and `FullForm`, `TeXForm`, `NumberForm`) suppresses
   typesetting and shows the printed text as code. Typesetting offers only the two typeset
   notations (`StandardForm`, `TraditionalForm`), so it has nothing to render these in; the kernel

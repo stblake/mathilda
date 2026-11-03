@@ -81,8 +81,23 @@ Expr* builtin_product_cantor(Expr* res) {
     if (!prod_free_of(base, var)) return NULL;
     if (prod_free_of(E, var))     return NULL;
 
-    /* Convergence: |base| < 1 must be provably true. */
-    if (!abs_lt_one(base)) return NULL;
+    /* Convergence: |base| < 1 must be provably true.  Power writes
+     * (1/3)^(2^k) as 3^(-2^k), as the reference does, so a base outside the
+     * disc with a negated exponent is read as (1/base)^(-E). */
+    Expr* own_base = NULL;
+    Expr* own_E = NULL;
+    if (!abs_lt_one(base)) {
+        /* only an exponent written negated: 3^(-2^k), never 3^(2^k) */
+        if (!(E->type == EXPR_FUNCTION && E->data.function.head->type == EXPR_SYMBOL &&
+              E->data.function.head->data.symbol.name == SYM_Times &&
+              E->data.function.arg_count >= 2 && is_int_val(E->data.function.args[0], -1)))
+            return NULL;
+        own_base = prod_eval("Power", (Expr*[]){ expr_copy(base), expr_new_integer(-1) }, 2);
+        own_E = prod_eval("Times", (Expr*[]){ expr_new_integer(-1), expr_copy(E) }, 2);
+        if (!abs_lt_one(own_base)) { expr_free(own_base); expr_free(own_E); return NULL; }
+        base = own_base;
+        E = own_E;
+    }
 
     /* Double-exponent doubling test: Simplify[E(k+1)/E(k)] == 2. */
     Expr* kp1 = expr_new_function(expr_new_symbol(SYM_Plus),
@@ -94,7 +109,7 @@ Expr* builtin_product_cantor(Expr* res) {
     Expr* ratio = prod_eval("Simplify", (Expr*[]){ ratio_raw }, 1);  /* adopts */
     bool doubling = is_int_val(ratio, 2);
     expr_free(ratio);
-    if (!doubling) return NULL;
+    if (!doubling) { if (own_base) { expr_free(own_base); expr_free(own_E); } return NULL; }
 
     /* Closed form: M = E(imin);  result = 1 / (1 - base^M). */
     Expr* M = prod_subst(E, var, imin);
@@ -108,6 +123,7 @@ Expr* builtin_product_cantor(Expr* res) {
     Expr* out = prod_div(one, denom);
     expr_free(one);
     expr_free(denom);
+    if (own_base) { expr_free(own_base); expr_free(own_E); }
     return out;
 }
 

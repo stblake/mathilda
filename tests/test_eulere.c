@@ -101,7 +101,7 @@ void test_euler_polynomial_identity() {
 
 void test_euler_half_symbolic() {
     /* EulerE[n, 1/2] folds to 2^-n EulerE[n] for symbolic n. */
-    assert_eval_eq("EulerE[n, 1/2]", "2^(-n) EulerE[n]", 0);
+    assert_eval_eq("EulerE[n, 1/2]", "EulerE[n]/2^n", 0);
 }
 
 /* ---- Listable threading --------------------------------------------- */

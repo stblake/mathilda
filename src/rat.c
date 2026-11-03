@@ -2686,17 +2686,45 @@ static bool exp_offset_pair(const Expr* e) {
 }
 
 /* `head` applied over the exponent generators, or NULL (see above). */
+/* A power of a sum with a symbolic exponent ((c + d)^n): every fast engine
+ * declines it, and the classical path multiplies it into the other
+ * denominator factors -- Together[1/((a - b) (c + d)^n)] came back as
+ * 1/(a (c + d)^n - b (c + d)^n).  Over the generators it is one opaque factor,
+ * as in the reference. */
+static bool rat_has_sum_power(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2 &&
+        head_is(e->data.function.args[0], SYM_Plus) &&
+        !expr_is_numeric_like(e->data.function.args[1]))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_has_sum_power(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* rat_over_exponent_generators(Expr* res, const char* head) {
-    if (res->data.function.arg_count < 1 || !exp_offset_pair(res->data.function.args[0]))
+    if (res->data.function.arg_count < 1 ||
+        !(exp_offset_pair(res->data.function.args[0]) ||
+          (head == SYM_Together && rat_has_sum_power(res->data.function.args[0]))))
         return NULL;
     ExpSplitTab st = {0};
-    Expr* split = expsplit_abstract(res->data.function.args[0], &st);
+    Expr* split = exp_offset_pair(res->data.function.args[0])
+                ? expsplit_abstract(res->data.function.args[0], &st)
+                : expsplit_abstract_all(res->data.function.args[0], &st);
     if (!split) return NULL;
     size_t n = res->data.function.arg_count;
     Expr** fa = malloc(n * sizeof(Expr*));
     fa[0] = split;
     for (size_t i = 1; i < n; i++) fa[i] = expr_copy(res->data.function.args[i]);
-    Expr* f = eval_and_free(expr_new_function(expr_new_symbol(head), fa, n));
+    /* The inner call is nested, so it would answer in the expanded internal
+     * form; a user-level Together keeps the factored one over the
+     * generators too (1/((a - b) (c + d)^n), not 1/(a (c + d)^n - ...)). */
+    Expr* f = NULL;
+#ifdef USE_FLINT
+    if (head == SYM_Together && n == 1 && ratfun_factored_form()) f = ratfun_together_factored(fa[0]);
+#endif
+    if (f) { for (size_t i = 0; i < n; i++) expr_free(fa[i]); }
+    else f = eval_and_free(expr_new_function(expr_new_symbol(head), fa, n));
     free(fa);
     Expr* out = f ? expsplit_restore(f, &st) : NULL;
     expsplit_free(&st);
@@ -2738,9 +2766,86 @@ Expr* builtin_cancel(Expr* res) {
 }
 
 /* Layer-5 memoisation wrapper for Together (see builtin_cancel above). */
+/* B^(k + s) with an integer k != 0, a symbolic s and a base B whose
+ * normal form is a negated associate (b - a, 1 - x, -x, 2 - 2 x: Together
+ * writes 1/(b - a) as -1/(a - b)): the integer part is a rational factor and
+ * joins the fraction in normal form, B^s staying as it is --
+ * Together[(b - a)^(-1 + n)] = -((-a + b)^n/(a - b)), as in the reference
+ * (FCFeynmanParametrize ID26).  A base already in normal form (a + b, a - b,
+ * -1 + x) keeps the power whole.  Returns the rewritten tree, or NULL. */
+static Expr* together_split_signed_power(const Expr* p) {
+    const Expr* b = p->data.function.args[0];
+    const Expr* x = p->data.function.args[1];
+    if (b->type != EXPR_FUNCTION || expr_is_numeric_like((Expr*)b) ||
+        expr_is_numeric_like((Expr*)x) || !head_is((Expr*)x, SYM_Plus))
+        return NULL;
+    Expr *s, *off;
+    exp_split_offset(x, &s, &off);
+    /* a positive integer part stays: its factor would merge straight back
+     * into B^s */
+    if (!off || off->type != EXPR_INTEGER || off->data.integer >= 0) { expr_free(s); return NULL; }
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                  (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                                 (Expr*[]){ expr_copy((Expr*)b), expr_new_integer(-1) }, 2) }, 1));
+    if (!is_superficially_negative(r)) { expr_free(r); expr_free(s); return NULL; }
+    /* B^k = (1/B)^(-k), with 1/B in normal form */
+    Expr* bk = expr_new_function(expr_new_symbol(SYM_Power),
+                   (Expr*[]){ r, expr_new_integer(-off->data.integer) }, 2);
+    Expr* bs = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy((Expr*)b), s }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ bs, bk }, 2));
+}
+
+static Expr* together_split_signed_powers(const Expr* e, bool* changed) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* r = together_split_signed_power(e);
+        if (r) { *changed = true; return r; }
+    }
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc((m ? m : 1) * sizeof(Expr*));
+    bool sub = false;
+    for (size_t i = 0; i < m; i++) a[i] = together_split_signed_powers(e->data.function.args[i], &sub);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, m);
+    free(a);
+    if (sub) { *changed = true; return eval_and_free(r); }
+    return r;
+}
+
+/* Is there a power with a non-numeric Plus exponent anywhere in e? */
+static bool together_has_offset_power(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2 &&
+        head_is(e->data.function.args[1], SYM_Plus) &&
+        !expr_is_numeric_like(e->data.function.args[1]))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (together_has_offset_power(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_together(Expr* res) {
     if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
         return expr_copy(res);
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&
+        together_has_offset_power(res->data.function.args[0])) {
+        bool changed = false;
+        Expr* sp = together_split_signed_powers(res->data.function.args[0], &changed);
+        if (changed) {
+            size_t n = res->data.function.arg_count;
+            Expr** fa = malloc(n * sizeof(Expr*));
+            fa[0] = sp;
+            for (size_t i = 1; i < n; i++) fa[i] = expr_copy(res->data.function.args[i]);
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), fa, n);
+            free(fa);
+            /* called directly, not evaluated: the call stays user-level, so
+             * the factored form survives (ratfun.c rf_factored_form) */
+            Expr* r = builtin_together(call);
+            if (!r) return call;
+            expr_free(call);
+            return r;
+        }
+        expr_free(sp);
+    }
     /* A Rule, relation or logical connective threads, as in the reference
      * (the Inequality operator slots kept). */
     {
@@ -2754,7 +2859,17 @@ Expr* builtin_together(Expr* res) {
     }
     rat_together_cancel_depth++;
     Expr* gen = rat_over_exponent_generators(res, SYM_Together);
-    Expr* out = rat_prefer_smaller(builtin_together_compute(res), gen);
+    Expr* out;
+#ifdef USE_FLINT
+    /* A sum's symbolic power alone triggered the generators: at user level
+     * that answer is the factored engine's own normal form, which the leaf
+     * count must not trade for the classical one (-1/2 (2 - 2 x)^n/(-1 + x),
+     * not -(2 - 2 x)^n/(-2 + 2 x)). */
+    if (gen && ratfun_factored_form() && !exp_offset_pair(res->data.function.args[0]))
+        out = gen;
+    else
+#endif
+    out = rat_prefer_smaller(builtin_together_compute(res), gen);
     rat_together_cancel_depth--;
     /* Under Extension -> Automatic, canonicalise the denominator sign of a
      * fractional result so its leading term is positive — Wolfram's Together

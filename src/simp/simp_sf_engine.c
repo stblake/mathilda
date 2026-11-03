@@ -1179,19 +1179,62 @@ static size_t sf_atom_count(const Expr* e) {
     return c;
 }
 
-/* Is `cand` (score cs, sf_count cn) an improvement over (s0, n0)?  A strict
- * score drop always is.  Eliminating special-function kernels is a
- * simplification the leaf score cannot see -- Gamma[1/3] Gamma[2/3] and
- * 2 Pi/Sqrt[3] tie, (n - k)/(1 + k) outscores Binomial[n, k + 1]/Binomial[n,
- * k], 1/x + 1/(1 + x) + 1/(2 + x) outscores PolyGamma[0, x + 3] -
- * PolyGamma[0, x] -- so a strict drop in the kernel count is accepted while
- * the score stays within half (plus 4) of the original -- within double
- * (plus 4) when every kernel is eliminated.  Both measures are
+/* Does e hold a registered special-function atom with head h? */
+static bool sf_has_head(const Expr* e, const char* h) {
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* eh = e->data.function.head;
+    if (eh->type == EXPR_SYMBOL && eh->data.symbol.name == h) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sf_has_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
+/* Does e contain the symbol named s? */
+static bool sf_has_symbol(const Expr* e, const char* s) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == s;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (sf_has_symbol(e->data.function.head, s)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sf_has_symbol(e->data.function.args[i], s)) return true;
+    return false;
+}
+
+/* Does some special-function head of o vanish from c entirely? */
+static bool sf_head_eliminated(const Expr* c, const Expr* o) {
+    if (o->type != EXPR_FUNCTION) return false;
+    const Expr* h = o->data.function.head;
+    if (h->type == EXPR_SYMBOL && head_present(h->data.symbol.name) &&
+        !sf_has_head(c, h->data.symbol.name))
+        return true;
+    for (size_t i = 0; i < o->data.function.arg_count; i++)
+        if (sf_head_eliminated(c, o->data.function.args[i])) return true;
+    return false;
+}
+
+/* Is `c` (score cs) an improvement over `o` (score s0)?  A strict score drop
+ * always is.  Eliminating special-function kernels is a simplification the
+ * leaf score cannot see -- Gamma[1/3] Gamma[2/3] and 2 Pi/Sqrt[3] tie,
+ * (n - k)/(1 + k) outscores Binomial[n, k + 1]/Binomial[n, k],
+ * 1/x + 1/(1 + x) + 1/(2 + x) outscores PolyGamma[0, x + 3] - PolyGamma[0, x]
+ * -- so a strict drop in the kernel count is accepted while the score stays
+ * within double (plus 4) when every kernel is eliminated, and within half
+ * (plus 4) otherwise (BesselJ[1/3, x] + BesselJ[7/3, x] -> 8 BesselJ[4/3, x]/(3 x)).
+ * A drop that keeps every family and brings in Pi must not raise the score:
+ * that is a kernel traded for constants, not removed.  Legendre's duplication
+ * takes Gamma[-2 + 2 e]/Gamma[-2 + e] (score 17) to
+ * 2^(-3 + 2 e) (-2 + e) Gamma[-1/2 + e]/Sqrt[Pi] (26), which the reference's
+ * Simplify does not do, and FeynCalc compares prefactors in the Gamma-ratio
+ * form (FCFeynmanParametrize ID11); three StruveH becoming one Gamma over
+ * Sqrt[Pi] still counts, the whole Struve family going.  Both measures are
  * bounded below and one strictly decreases, so the rule cannot cycle. */
-static bool sf_improves(size_t cs, size_t cn, size_t s0, size_t n0) {
+static bool sf_improves(const Expr* c, size_t cs, const Expr* o, size_t s0) {
     if (cs < s0) return true;
+    size_t cn = sf_atom_count(c), n0 = sf_atom_count(o);
     if (cn == 0 && n0 > 0) return cs <= 2 * s0 + 4;   /* every kernel eliminated */
-    return cn < n0 && cs <= s0 + s0 / 2 + 4;
+    if (cn >= n0) return false;
+    if (cs <= s0) return true;
+    if (cs > s0 + s0 / 2 + 4) return false;
+    return sf_head_eliminated(c, o) || !(sf_has_symbol(c, SYM_Pi) && !sf_has_symbol(o, SYM_Pi));
 }
 
 /* Is f's partner family (rank-2 pair relation) present in fs? */
@@ -1278,7 +1321,7 @@ static Expr* run_families(Expr* cur, size_t* cur_score, FamSet* fs, const Expr* 
         }
         free(gbuf);
         if (fam_best && (!greedy || fam_score <= *cur_score ||
-                         sf_improves(fam_score, sf_atom_count(fam_best), *cur_score, sf_atom_count(cur)))) {
+                         sf_improves(fam_best, fam_score, cur, *cur_score))) {
             expr_free(cur);
             cur = fam_best; *cur_score = fam_score;
             *changed = true;
@@ -1391,7 +1434,7 @@ static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx
         size_t s_all = cur_score;
         bool ch_all = false;
         Expr* all = families_rounds(expr_copy(cur), &s_all, complexity_func, false, &ch_all);
-        if (ch_all && sf_improves(s_all, sf_atom_count(all), in_score, sf_atom_count(input))) {
+        if (ch_all && sf_improves(all, s_all, input, in_score)) {
             expr_free(cur);
             cur = all; cur_score = s_all; changed = true;
         } else {
@@ -1419,7 +1462,7 @@ static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx
             c = best_form(eval_and_free(c), complexity_func, true, &s);
             /* ties are accepted: a pass restores vocabulary (Gamma[2 + n] ->
              * Factorial[1 + n] when the input used Factorial) at equal score */
-            if (s <= cur_score || sf_improves(s, sf_atom_count(c), cur_score, sf_atom_count(cur))) {
+            if (s <= cur_score || sf_improves(c, s, cur, cur_score)) {
                 expr_free(cur);
                 cur = c; cur_score = s;
                 changed = true;
@@ -1437,7 +1480,7 @@ static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx
         }
 
     /* 4. gate */
-    if (!changed || !sf_improves(cur_score, sf_atom_count(cur), in_score, sf_atom_count(input))) {
+    if (!changed || !sf_improves(cur, cur_score, input, in_score)) {
         if (changed && simp_debug_enabled()) {
             char tag[96];
             snprintf(tag, sizeof tag, "SpecialFunctions(rejected: score %zu vs %zu, kernels %zu vs %zu)",
@@ -1473,8 +1516,7 @@ static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx
         }
     }
     if (fin && (score_with_func(fin, complexity_func) <= cur_score ||
-                sf_improves(score_with_func(fin, complexity_func), sf_atom_count(fin),
-                            cur_score, sf_atom_count(cur)))) {
+                sf_improves(fin, score_with_func(fin, complexity_func), cur, cur_score))) {
         expr_free(cur);
         return fin;
     }

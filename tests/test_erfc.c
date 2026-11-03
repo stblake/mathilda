@@ -135,9 +135,9 @@ void test_erfc_arbitrary_complex() {
 
 void test_erfc_derivatives() {
     /* D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(-z^2) (note the minus sign vs Erf). */
-    assert_eval_eq("D[Erfc[x], x]", "-(2 E^(-x^2))/Sqrt[Pi]", 0);
+    assert_eval_eq("D[Erfc[x], x]", "-2/(E^x^2 Sqrt[Pi])", 0);
     /* Chain rule. */
-    assert_eval_eq("D[Erfc[x^2], x]", "-(4 E^(-x^4) x)/Sqrt[Pi]", 0);
+    assert_eval_eq("D[Erfc[x^2], x]", "-(4 x)/(E^x^4 Sqrt[Pi])", 0);
     /* Series at the origin (generic D-based Taylor fallback); constant term
      * is the Erfc[0] = 1 exact value. */
     assert_eval_startswith("Series[Erfc[x], {x, 0, 3}]", "1 - (2 x)/Sqrt[Pi] + (2 x^3)/(3 Sqrt[Pi])");

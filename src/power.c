@@ -607,6 +607,229 @@ bool power_scalar_components(const Expr* e, double* re, double* im) {
     return false;
 }
 
+/* Exact numerator and denominator of an Integer, BigInt or Rational base
+ * (num/den reduced, den > 0); false for anything else. Initialises num/den
+ * only on success. */
+static bool power_exact_rational_parts(const Expr* b, mpz_t num, mpz_t den) {
+    if (b->type == EXPR_INTEGER || b->type == EXPR_BIGINT) {
+        expr_to_mpz(b, num);
+        mpz_init_set_ui(den, 1);
+        return true;
+    }
+    if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+        b->data.function.head->data.symbol.name == SYM_Rational &&
+        b->data.function.arg_count == 2 &&
+        expr_is_integer_like(b->data.function.args[0]) &&
+        expr_is_integer_like(b->data.function.args[1])) {
+        expr_to_mpz(b->data.function.args[0], num);
+        expr_to_mpz(b->data.function.args[1], den);
+        return true;
+    }
+    return false;
+}
+
+/* Times[k, rest] for an exact rational k, unevaluated (the caller evaluates
+ * the whole result). rest is borrowed. */
+static Expr* power_scaled_exponent(const mpz_t kn, const mpz_t kd, Expr* rest) {
+    Expr* k = make_rational_mpz(kn, kd);
+    return expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ k, expr_copy(rest) }, 2);
+}
+
+/* An exact rational base under a symbolic exponent, in the reference's normal
+ * forms. FeynCalc's Feynman parametrisation compares against these (4^(-D/2)
+ * must meet 2^(-D) in the same sum). With e symbolic (not an explicit number;
+ * Pi and Sqrt[2] count as symbolic) and c = p/q, q > 1:
+ *
+ *   (1/n)^e         -> n^(-e)                 (1/4)^(2 - 2 e) = 4^(-2 + 2 e)
+ *   (a/b)^(-r)      -> (b/a)^r      for a < b (2/3)^(-x) = (3/2)^x; (4/3)^(-x) stays
+ *   b^(c r)         -> R^(p r)      when R = b^(1/q) is exact (8^(2x/3) = 2^(2x),
+ *                                   (2^70)^(x/2) = 34359738368^x); R < 1 flips
+ *                                   to (1/R)^(-p r)
+ *   b^(c r)         -> R^(K c r)    when b = R^K with every prime to the same
+ *                                   power K (64^(x/4) = 2^(3x/2), 1000^(x/2) =
+ *                                   10^(3x/2)); R < 1 flips likewise
+ *   b^(c r)         -> prod p^(k c r) otherwise, with p^(k c) written (p^m)^r
+ *                                   when k c = m is an integer (12^(D/2) =
+ *                                   2^D 3^(D/2), 72^(x/2) = 2^(3x/2) 3^x);
+ *                                   Times then merges equal exponents
+ *   (-b)^(c r)      -> I^(p r) b^(c r)        for q = 2 ((-3)^(x/2) = I^x 3^(x/2),
+ *                                   (-1)^(x/2) = I^x), and (-1)^(c r) b'
+ *                                   for q > 2 only when b^(c r) itself
+ *                                   rewrites ((-8)^(x/3) = (-1)^(x/3) 2^x,
+ *                                   (-6)^(x/3) stays)
+ *
+ * A squarefree b (every prime to the first power: 6^(x/2), (2/3)^(x/2)) and
+ * an integer c (4^(2x)) stay. Every identity holds on the principal branch
+ * because the bases are positive reals ((-1)^z = I^(2z) is principal too).
+ * Returns NULL when nothing applies. The result is unevaluated. */
+static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
+    if (expr_is_numeric_like(exp)) return NULL;
+    if (exp->type == EXPR_SYMBOL &&
+        (exp->data.symbol.name == SYM_Infinity || exp->data.symbol.name == SYM_ComplexInfinity ||
+         exp->data.symbol.name == SYM_Indeterminate))
+        return NULL;
+    if (head_is(exp, SYM_DirectedInfinity) || head_is(exp, SYM_Complex)) return NULL;
+
+    mpz_t num, den;
+    if (!power_exact_rational_parts(base, num, den)) return NULL;
+    Expr* out = NULL;
+    int sgn = mpz_sgn(num);
+    if (sgn == 0) { mpz_clear(num); mpz_clear(den); return NULL; }
+
+    /* The exponent's rational coefficient p/q (q > 1) and the rest. */
+    int64_t cp = 0, cq = 1;
+    const Expr* c0 = NULL;
+    Expr* rest = NULL;
+    if (head_is(exp, SYM_Times) && exp->data.function.arg_count >= 2) {
+        c0 = exp->data.function.args[0];
+        if (is_rational(c0, &cp, &cq) && (cq > 1 || cp == -1)) {
+            size_t n = exp->data.function.arg_count;
+            if (n == 2) rest = expr_copy(exp->data.function.args[1]);
+            else {
+                Expr** ra = malloc(sizeof(Expr*) * (n - 1));
+                for (size_t i = 1; i < n; i++) ra[i - 1] = expr_copy(exp->data.function.args[i]);
+                rest = expr_new_function(expr_new_symbol(SYM_Times), ra, n - 1);
+                free(ra);
+            }
+        } else {
+            cp = 0; cq = 1;
+        }
+    }
+
+    if (sgn > 0 && mpz_cmp_ui(num, 1) == 0 && mpz_cmp_ui(den, 1) > 0) {
+        /* (1/n)^e -> n^(-e) */
+        Expr* ne = expr_new_function(expr_new_symbol(SYM_Times),
+                                     (Expr*[]){ expr_new_integer(-1), expr_copy(exp) }, 2);
+        out = expr_new_function(expr_new_symbol(SYM_Power),
+                                (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_mpz(den)), ne }, 2);
+        goto done;
+    }
+    if (!rest) goto done;
+
+    if (sgn > 0 && cq == 1) {
+        /* cp == -1: (a/b)^(-r) -> (b/a)^r for a < b. */
+        if (mpz_cmp(num, den) < 0)
+            out = expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ make_rational_mpz(den, num), expr_copy(rest) }, 2);
+        goto done;
+    }
+    if (cq == 1) goto done;
+
+    if (sgn < 0) {
+        /* Split off (-1)^(c r). */
+        mpz_t pn;
+        mpz_init(pn);
+        mpz_neg(pn, num);
+        Expr* pos = make_rational_mpz(pn, den);
+        mpz_clear(pn);
+        Expr* pos_rw = power_rational_base_symbolic_exp(pos, exp);
+        Expr* sign_part = NULL;
+        if (cq == 2) {
+            Expr* pe = expr_new_function(expr_new_symbol(SYM_Times),
+                                         (Expr*[]){ expr_new_integer(cp), expr_copy(rest) }, 2);
+            sign_part = expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_new_symbol(SYM_I), pe }, 2);
+        } else if (pos_rw) {
+            sign_part = expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_new_integer(-1), expr_copy(exp) }, 2);
+        }
+        if (sign_part) {
+            Expr* mag = pos_rw ? pos_rw
+                               : expr_new_function(expr_new_symbol(SYM_Power),
+                                                   (Expr*[]){ expr_copy(pos), expr_copy(exp) }, 2);
+            out = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ sign_part, mag }, 2);
+        } else if (pos_rw) {
+            expr_free(pos_rw);
+        }
+        expr_free(pos);
+        goto done;
+    }
+    if (mpz_cmp_ui(num, 1) == 0 && mpz_cmp_ui(den, 1) == 0) goto done;
+
+    {
+        /* Exact q-th root R of num/den. */
+        mpz_t rn, rd, kn, kd;
+        mpz_inits(rn, rd, kn, kd, NULL);
+        if (mpz_root(rn, num, (unsigned long)cq) && mpz_root(rd, den, (unsigned long)cq)) {
+            bool flip = mpz_cmp(rn, rd) < 0;
+            mpz_set_si(kn, flip ? -cp : cp);
+            mpz_set_ui(kd, 1);
+            Expr* rb = flip ? make_rational_mpz(rd, rn) : make_rational_mpz(rn, rd);
+            out = expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ rb, power_scaled_exponent(kn, kd, rest) }, 2);
+            mpz_clears(rn, rd, kn, kd, NULL);
+            goto done;
+        }
+        mpz_clears(rn, rd, kn, kd, NULL);
+    }
+
+    if (mpz_fits_slong_p(num) && mpz_fits_slong_p(den)) {
+        enum { MAXP = 64 };
+        int64_t pr[2 * MAXP], ex[2 * MAXP];
+        int nn = 0, nd = 0;
+        if (!power_factor_int64((int64_t)mpz_get_si(num), pr, ex, MAXP, &nn) ||
+            !power_factor_int64((int64_t)mpz_get_si(den), pr + nn, ex + nn, MAXP, &nd))
+            goto done;
+        int np = nn + nd;
+        for (int i = nn; i < np; i++) ex[i] = -ex[i];
+        int64_t K = 0;
+        bool same = true, squarefree = true;
+        for (int i = 0; i < np; i++) {
+            int64_t a = ex[i] < 0 ? -ex[i] : ex[i];
+            if (a != 1) squarefree = false;
+            if (i > 0 && a != K) same = false;
+            K = a;
+        }
+        if (np == 0 || squarefree) goto done;
+
+        mpz_t rn, rd, kn, kd, pz;
+        mpz_inits(rn, rd, kn, kd, pz, NULL);
+        if (same) {
+            /* num/den = R^K, R = prod p^(sign k). */
+            mpz_set_ui(rn, 1);
+            mpz_set_ui(rd, 1);
+            for (int i = 0; i < np; i++) mpz_mul_si(ex[i] > 0 ? rn : rd, ex[i] > 0 ? rn : rd, pr[i]);
+            bool flip = mpz_cmp(rn, rd) < 0;
+            mpz_set_si(kn, flip ? -K * cp : K * cp);
+            mpz_set_si(kd, cq);
+            Expr* rb = flip ? make_rational_mpz(rd, rn) : make_rational_mpz(rn, rd);
+            out = expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ rb, power_scaled_exponent(kn, kd, rest) }, 2);
+        } else {
+            Expr** fs = malloc(sizeof(Expr*) * (size_t)np);
+            for (int i = 0; i < np; i++) {
+                /* m = k c = k p / q */
+                mpz_set_si(kn, ex[i]);
+                mpz_mul_si(kn, kn, cp);
+                mpz_set_si(kd, cq);
+                mpz_gcd(pz, kn, kd);
+                mpz_divexact(kn, kn, pz);
+                mpz_divexact(kd, kd, pz);
+                mpz_set_si(pz, pr[i]);
+                if (mpz_cmp_ui(kd, 1) == 0 && mpz_cmpabs_ui(kn, 64) <= 0) {
+                    /* (p^|m|)^(sign(m) r); a larger |m| keeps p^(m r) */
+                    int s = mpz_sgn(kn);
+                    mpz_abs(kn, kn);
+                    mpz_pow_ui(pz, pz, mpz_get_ui(kn));
+                    mpz_set_si(kn, s);
+                }
+                fs[i] = expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_mpz(pz)),
+                                                     power_scaled_exponent(kn, kd, rest) }, 2);
+            }
+            out = expr_new_function(expr_new_symbol(SYM_Times), fs, (size_t)np);
+            free(fs);
+        }
+        mpz_clears(rn, rd, kn, kd, pz, NULL);
+    }
+
+done:
+    if (rest) expr_free(rest);
+    mpz_clear(num);
+    mpz_clear(den);
+    return out;
+}
+
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -865,6 +1088,11 @@ Expr* builtin_power(Expr* res) {
     if (is_series_data(base) || is_series_data(exp)) {
         Expr* r = series_power(base, exp);
         if (r) return r;
+    }
+
+    {
+        Expr* rw = power_rational_base_symbolic_exp(base, exp);
+        if (rw) return rw;
     }
 
     bool base_is_zero = false;

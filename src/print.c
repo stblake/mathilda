@@ -47,6 +47,38 @@ static Expr* print_neg_int(int64_t v) {
     return e;
 }
 
+/* An exponent Times[c, rest...] with c a negative number, negated (owned):
+ * the reference puts such a power in the denominator of a product, as it
+ * does x^(-2) -- c x^(-n) is c/x^n, a E^(-x) is a/E^x, 3^(x/2) 2^(-x) is
+ * 3^(x/2)/2^x.  NULL for any other exponent.  A lone power keeps x^(-n). */
+static Expr* print_neg_symbolic_exp(const Expr* x) {
+    if (x->type != EXPR_FUNCTION || x->data.function.head->type != EXPR_SYMBOL ||
+        x->data.function.head->data.symbol.name != SYM_Times || x->data.function.arg_count < 2)
+        return NULL;
+    const Expr* c = x->data.function.args[0];
+    Expr* nc = NULL;
+    int64_t n, d;
+    if (c->type == EXPR_INTEGER && c->data.integer < 0) nc = print_neg_int(c->data.integer);
+    else if (c->type == EXPR_BIGINT && mpz_sgn(c->data.bigint) < 0) {
+        mpz_t z; mpz_init(z); mpz_neg(z, c->data.bigint);
+        nc = expr_new_bigint_from_mpz(z); mpz_clear(z);
+    }
+    else if (is_rational((Expr*)c, &n, &d) && n < 0) nc = make_rational(-n, d);
+    else if (c->type == EXPR_REAL && c->data.real < 0.0) nc = expr_new_real(-c->data.real);
+    if (!nc) return NULL;
+    size_t k = x->data.function.arg_count;
+    bool unit = nc->type == EXPR_INTEGER && nc->data.integer == 1;
+    if (unit && k == 2) { expr_free(nc); return expr_copy(x->data.function.args[1]); }
+    size_t m = unit ? k - 1 : k;
+    Expr** a = malloc(m * sizeof(Expr*));
+    size_t j = 0;
+    if (!unit) a[j++] = nc; else expr_free(nc);
+    for (size_t i = 1; i < k; i++) a[j++] = expr_copy(x->data.function.args[i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), a, m);
+    free(a);
+    return r;
+}
+
 /* ---------------------------------------------------------------------------
  * Output sink.  Every output primitive in this file writes through g_print_sink
  * (NULL => the real stdout).  The capture helpers below install an in-memory
@@ -635,6 +667,12 @@ static void print_times_inputform(Expr* e) {
                 den_int_power = false;
                 continue;
             }
+            Expr* nx = print_neg_symbolic_exp(x);
+            if (nx) {
+                den[nd++] = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(a->data.function.args[0]), nx }, 2);
+                continue;
+            }
         }
         num[nn++] = expr_copy(a);
     }
@@ -1102,6 +1140,8 @@ static void print_standard(Expr* e, int parent_prec) {
                     } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
                         is_neg = true;
                         pos_exp = expr_new_real(-exp->data.real);
+                    } else if ((pos_exp = print_neg_symbolic_exp(exp)) != NULL) {
+                        is_neg = true;
                     }
                     if (is_neg) {
                         if (pos_exp->type == EXPR_INTEGER && pos_exp->data.integer == 1) {
@@ -2520,6 +2560,8 @@ static void print_tex(Expr* e, int parent_prec) {
                         neg = true; pos_exp = make_rational(-n, d);
                     } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
                         neg = true; pos_exp = expr_new_real(-exp->data.real);
+                    } else if ((pos_exp = print_neg_symbolic_exp(exp)) != NULL) {
+                        neg = true;
                     }
                     if (neg) {
                         if (pos_exp->type == EXPR_INTEGER && pos_exp->data.integer == 1) {

@@ -177,10 +177,9 @@ void test_airyai_derivatives() {
 
 void test_airyai_series_infinity() {
     assert_eval_eq("Series[AiryAi[x], {x, Infinity, 2}]",
-        "E^(-2/3 x^(3/2)) ((1/x)^(1/4)/(2 Sqrt[Pi])"
-        " - (5 (1/x)^(7/4))/(96 Sqrt[Pi]) + O[1/x]^(13/4))", 0);
+        "((1/x)^(1/4)/(2 Sqrt[Pi]) - (5 (1/x)^(7/4))/(96 Sqrt[Pi]) + O[1/x]^(13/4))/E^(2/3 x^(3/2))", 0);
     assert_eval_eq("Series[AiryAi[x], {x, Infinity, 1}]",
-        "E^(-2/3 x^(3/2)) ((1/x)^(1/4)/(2 Sqrt[Pi]) + O[1/x]^(7/4))", 0);
+        "((1/x)^(1/4)/(2 Sqrt[Pi]) + O[1/x]^(7/4))/E^(2/3 x^(3/2))", 0);
 }
 
 /* ==================================================================== */
@@ -322,12 +321,9 @@ void test_airyaiprime_series() {
     /* Asymptotic at Infinity (DLMF 9.7.6): leading -1/(2 Sqrt[Pi]) x^(1/4),
      * coefficients -7/96/Sqrt[Pi], 455/9216/Sqrt[Pi]. */
     assert_eval_eq("Series[AiryAiPrime[x], {x, Infinity, 2}]",
-        "E^(-2/3 x^(3/2)) (-1/(2 Sqrt[Pi] (1/x)^(1/4))"
-        " - (7 (1/x)^(5/4))/(96 Sqrt[Pi]) + O[1/x]^(11/4))", 0);
+        "(-1/(2 Sqrt[Pi] (1/x)^(1/4)) - (7 (1/x)^(5/4))/(96 Sqrt[Pi]) + O[1/x]^(11/4))/E^(2/3 x^(3/2))", 0);
     assert_eval_eq("Series[AiryAiPrime[x], {x, Infinity, 3}]",
-        "E^(-2/3 x^(3/2)) (-1/(2 Sqrt[Pi] (1/x)^(1/4))"
-        " - (7 (1/x)^(5/4))/(96 Sqrt[Pi]) + (455 (1/x)^(11/4))/(9216 Sqrt[Pi])"
-        " + O[1/x]^(17/4))", 0);
+        "(-1/(2 Sqrt[Pi] (1/x)^(1/4)) - (7 (1/x)^(5/4))/(96 Sqrt[Pi]) + (455 (1/x)^(11/4))/(9216 Sqrt[Pi]) + O[1/x]^(17/4))/E^(2/3 x^(3/2))", 0);
 }
 
 /* ---- derivative rule ------------------------------------------------ */

@@ -85,7 +85,7 @@ void test_lp_reduce_to_zeta() {
     assert_eval_eq("LerchPhi[1, 3, 1]", "Zeta[3]", 0);
     /* z = -1: 2^-s (Zeta[s, a/2] - Zeta[s, (a+1)/2]). */
     assert_eval_eq("LerchPhi[-1, s, 1/2]",
-                   "2^(-s) (Zeta[s, 1/4] - Zeta[s, 3/4])", 0);
+                   "(Zeta[s, 1/4] - Zeta[s, 3/4])/2^s", 0);
 }
 
 void test_lp_nonpositive_integer_a() {
@@ -113,8 +113,7 @@ void test_lp_minus_one_integer_a() {
 void test_lp_series_at_zero() {
     /* Series at z = 0 with symbolic s, a: coefficient ((k+a)^2)^(-s/2). */
     assert_eval_eq("Normal[Series[LerchPhi[z, s, a], {z, 0, 3}]]",
-                   "(a^2)^(-1/2 s) + ((1 + a)^2)^(-1/2 s) z + "
-                   "((2 + a)^2)^(-1/2 s) z^2 + ((3 + a)^2)^(-1/2 s) z^3", 0);
+                   "(a^2)^(-1/2 s) + z/((1 + a)^2)^(1/2 s) + z^2/((2 + a)^2)^(1/2 s) + z^3/((3 + a)^2)^(1/2 s)", 0);
     /* Reducible case (a positive integer) goes through PolyLog and matches. */
     assert_eval_eq("Normal[Series[LerchPhi[z, 1, 2], {z, 0, 4}]]",
                    "1/2 + 1/3 z + 1/4 z^2 + 1/5 z^3 + 1/6 z^4", 0);

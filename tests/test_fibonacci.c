@@ -112,7 +112,7 @@ static void test_derivatives(void) {
     assert_eval_eq("D[Fibonacci[n, x], x]",
         "(2 n Fibonacci[-1 + n, x] + (-1 + n) x Fibonacci[n, x])/(4 + x^2)", 0);
     assert_eval_eq("D[Fibonacci[n], n]",
-        "(GoldenRatio^(-n) (GoldenRatio^(2 n) Log[GoldenRatio] + Cos[n Pi] Log[GoldenRatio] + Pi Sin[n Pi]))/Sqrt[5]", 0);
+        "(GoldenRatio^(2 n) Log[GoldenRatio] + Cos[n Pi] Log[GoldenRatio] + Pi Sin[n Pi])/(Sqrt[5] GoldenRatio^n)", 0);
 }
 
 int main(void) {

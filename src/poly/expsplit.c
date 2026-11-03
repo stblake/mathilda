@@ -171,6 +171,24 @@ Expr* expsplit_abstract_numeric(const Expr* e, ExpSplitTab* t) {
     return abstract_top(e, t, true);
 }
 
+/* Every power with a symbolic exponent becomes generators, a lone (c + d)^n
+ * included (expsplit_abstract leaves one that has nothing to split); NULL
+ * when e has no such power. */
+static bool has_symbolic_power(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (is_head(e, SYM_Power) && e->data.function.arg_count == 2 &&
+        !expr_is_numeric_like(e->data.function.args[1]))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_symbolic_power(e->data.function.args[i])) return true;
+    return false;
+}
+
+Expr* expsplit_abstract_all(const Expr* e, ExpSplitTab* t) {
+    if (getenv("MATHILDA_NO_EXPSPLIT") || !has_symbolic_power(e)) return NULL;
+    return eval_and_free(abstract_rec(e, t, false));
+}
+
 int expsplit_index(const ExpSplitTab* t, const Expr* e) {
     if (e->type != EXPR_SYMBOL) return -1;
     for (size_t i = 0; i < t->n; i++)

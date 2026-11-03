@@ -301,8 +301,8 @@ void test_symbolic_rules(void) {
     assert_eval_eq("BesselJ[-1/2, x]", "Sqrt[2/(Pi x)] Cos[x]", 0);
     assert_eval_eq("BesselY[1/2, x]", "-Sqrt[2/(Pi x)] Cos[x]", 0);
     assert_eval_eq("BesselI[-1/2, x]", "Sqrt[2/(Pi x)] Cosh[x]", 0);
-    assert_eval_eq("BesselK[1/2, x]", "E^(-x) Sqrt[Pi/(2 x)]", 0);
-    assert_eval_eq("BesselK[-3/2, x]", "E^(-x) Sqrt[Pi/(2 x)] + (E^(-x) Sqrt[Pi/(2 x)])/x", 0);
+    assert_eval_eq("BesselK[1/2, x]", "Sqrt[Pi/(2 x)]/E^x", 0);
+    assert_eval_eq("BesselK[-3/2, x]", "Sqrt[Pi/(2 x)]/E^x + Sqrt[Pi/(2 x)]/(E^x x)", 0);
     assert_eval_eq("BesselJ[5/2, x]",
         "-Sqrt[2/(Pi x)] Sin[x] + (3 (-Sqrt[2/(Pi x)] Cos[x] + (Sqrt[2/(Pi x)] Sin[x])/x))/x", 0);
     assert_eval_eq("BesselJ[-2, x]", "BesselJ[2, x]", 0);

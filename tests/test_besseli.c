@@ -260,9 +260,7 @@ void test_besseli_series_infinity() {
      * (-1)^k a_k sqrt(1/(2pi)) coefficients plus a subdominant I E^{-x} series
      * with a_k sqrt(1/(2pi)) coefficients (n = 0 here, so E^{I n Pi} = 1). */
     assert_eval_eq("Series[BesselI[0, x], {x, Infinity, 2}]",
-        "I E^(-x) (Sqrt[1/x]/Sqrt[2 Pi] - (1/x)^(3/2)/(8 Sqrt[2 Pi]) + O[1/x]^(5/2))"
-        " + E^x (Sqrt[1/x]/Sqrt[2 Pi] + (1/x)^(3/2)/(8 Sqrt[2 Pi])"
-        " + O[1/x]^(5/2))", 0);
+        "(I (Sqrt[1/x]/Sqrt[2 Pi] - (1/x)^(3/2)/(8 Sqrt[2 Pi]) + O[1/x]^(5/2)))/E^x + E^x (Sqrt[1/x]/Sqrt[2 Pi] + (1/x)^(3/2)/(8 Sqrt[2 Pi]) + O[1/x]^(5/2))", 0);
 }
 
 /* ---- stress --------------------------------------------------------- */
