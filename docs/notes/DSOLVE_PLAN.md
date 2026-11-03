@@ -3527,6 +3527,51 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   - **Open:** intermittent SIGILL under load — TimeConstrained's async jump inside a
     non-GMP `malloc` (pre-existing; same rate on HEAD).
 
+- **M84–M93 — §2.2.56–§2.2.65 corpus (Problems 5501–6500, Nasser Abbasi), two batches.**
+  ✅ DONE (v0.6148–v0.6158). New corpora `DE_examples_2256.m` … `DE_examples_2265.m` (upstream
+  §2.1.56–65; 1000 scalar, 0 IVP, 0 systems); `make check-corpus-indvar` green; gates
+  `dsolve_corpus_2_2_{56..65}_tests` at **12 / 10 / 10 / 12 / 3 / 7 / 7 / 20 / 52 / 34**
+  (measured gap + 1; the two final runs were record-for-record identical); reports
+  `DSolve_test_status/reports/2.2.{56..65}.md`. **Batch A (§2.2.56–60): 388 → 458/500** (86/56/86/69/91 →
+  89/91/91/89/98) against v0.6147; **Batch B (§2.2.61–65): 311 → 385/500** (84/80/55/34/58 →
+  94/94/81/49/67) against v0.6149. **0 FAIL** in all 66 corpora. Per-record A/B of v0.6158 against
+  v0.6147 on every corpus: **+342**, the one FAIL on main fixed, three P→U (4426/4727 pass with their
+  section run alone; 5227 is open, below).
+  - **Lead fixes.** IVP branch must hold at its initial point (`ds_branch_ic_local_ok`, v0.6148 —
+    §2.2.1-71 was a wrong answer on main). `DSolve\`ChangeOfVariable` over scaled-trig (`s = k x`,
+    TrigExpand, `t = Sin^2`), exponential and hyperbolic coefficients (`t = E^(k x)`, `E^(2 k x)`),
+    denominator-cleared hand-off and the `dsolve_cv_active` exemption of SpecialFunctionForm's
+    normal-form pre-pass (v0.6149, +32). Kovacic keeps its 5 s budget (every long step bounded;
+    `g_integrate_quiet` registered for unwind, v0.6157). Two v0.6154 regressions found by the final
+    A/B and fixed (v0.6158).
+  - **Worker fixes (parallel worktrees, serially integrated).** `DSolve\`ParametricQuadrature`,
+    NthAlgebraic binomial separable, transcendental Clairaut, gated SolvableForX (v0.6150, §2.2.57
+    +35). `DSolve\`SpecialFunctionTransform` (linear-coefficient Kummer, degenerate Whittaker, quadratic
+    argument, affine→Gauss both orientations, v0.6151); `DSolve\`KnownSolutionReduction` and inert
+    missing-y quadratures (v0.6152); muted SpecialFunctionForm screens (v0.6153). PolynomialGCD over
+    generalized variables + no Risch certificate through an unevaluated primitive + Integrate
+    constant split (v0.6154; a false `Integrate::nonelem`). AutonomousReduction repaired, new
+    `DSolve\`ScalingReduction`, Liouville implicit (v0.6155). `DSolve\`RiemannP` (three regular
+    singular points anywhere, Möbius → Gauss) and `DSolve\`RationalSubstitution` (`t = x^k`,
+    inversion) (v0.6156).
+  - **Converter** (`tools/latex_ode_to_mathilda.py`, byte-identical on every other cached page
+    except cosmetic spacing): `\operatorname{a2}` parameters glued to the next head (`a2Csc`,
+    `b1x`) — seven §2.2.58–61 records asked the wrong question; `x\operatorname{LegendreP}` (a syntax
+    error that made §2.2.61 unloadable); a nested arbitrary function's placeholder leaking a control
+    byte (§2.2.65 unloadable); `Sqrt[` shredded to `S q r t` inside an arbitrary function's argument.
+  - *Residue 157* (0 FAIL), by class: Lie-symmetry first order (§2.2.56, ~12), class C/G and
+    `y = G(x, y')` (§2.2.57, ~8), Mathieu / confluent / triconfluent Heun / spheroidal (~25), HeunG
+    (5), Riemann-P equations behind a trig substitution (4), forced equations over a
+    hypergeometric basis (3), Abel of the second kind after a second-order reduction (~15), general
+    Emden–Fowler (~8), Painlevé (3), arbitrary functions inside a reduced equation (~10).
+  - **Open:** §2.2.53-5227 — the implicit answer is correct but carries terms that sum to zero
+    since the v0.6154 constant split changed `∫ M dx`'s layout, and the harness no longer verifies it
+    within the wall (the section stays inside its gate). §2.2.16 gate red on main before this
+    campaign (1582 answers in 0.02 s; the harness's verifier rejects its radical branch). A
+    TimeConstrained abort of a nested DSolve leaks its problem struct (`dsolve_parse`; needs an
+    in-flight free registry, not just counters). §2.2.59-5869: ChangeOfVariable's basis
+    `Sqrt[-1 + Cos[x]^2]` + a `Log` form needs a simplifier before VoP.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

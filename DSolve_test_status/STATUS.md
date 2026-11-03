@@ -2598,6 +2598,166 @@ Full per-case results: `reports/2.2.55.tsv`; bucketed report: `reports/2.2.55.md
 
 ---
 
+## Section 2.2.56 — "Problems 5501 to 5600" (Nasser Abbasi)
+
+Corpus: `DE_examples_2256.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.56, `Ch2.S1.SS56.htm`). First-order rational / homogeneous class A and G / dAlembert (41 `sympy=False`). `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_56_tests` · gate baseline **12** (11 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M84 baseline, HEAD v0.6147) | 86 / 100 | 86.0% | 14 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **89 / 100** | **89.0%** | **11** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: rational and class-G first order needing Lie symmetries (5507, 5509, 5513, 5565, 5566, 5580, 5596–5598, 5600); 5533 (elliptic quadrature).
+Full per-case results: `reports/2.2.56.tsv`; bucketed report: `reports/2.2.56.md`.
+
+---
+
+## Section 2.2.57 — "Problems 5601 to 5700" (Nasser Abbasi)
+
+Corpus: `DE_examples_2257.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.57, `Ch2.S1.SS57.htm`). First-order `F(x, y') == 0` / `F(y, y') == 0` quadrature, Clairaut, dAlembert, linear symmetries. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_57_tests` · gate baseline **10** (9 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M84 baseline, HEAD v0.6147) | 56 / 100 | 56.0% | 44 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **91 / 100** | **91.0%** | **9** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: 5606; 5627/5628/5664/5665 (class C, `y = G(x, y')`); 5654/5672 (class G); 5655 (needs `u = x y`); 5681.
+Full per-case results: `reports/2.2.57.tsv`; bucketed report: `reports/2.2.57.md`.
+
+---
+
+## Section 2.2.58 — "Problems 5701 to 5800" (Nasser Abbasi)
+
+Corpus: `DE_examples_2258.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.58, `Ch2.S1.SS58.htm`). Second-order linear with exponential and trigonometric coefficients. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_58_tests` · gate baseline **10** (9 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M84 baseline, HEAD v0.6147) | 86 / 100 | 86.0% | 14 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **91 / 100** | **91.0%** | **9** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: Mathieu and modified Mathieu (5751, 5752, 5757, 5763–5765, no `MathieuC` head); 5755 (confluent Heun); 5749 (triconfluent Heun); 5706.
+Full per-case results: `reports/2.2.58.tsv`; bucketed report: `reports/2.2.58.md`.
+
+---
+
+## Section 2.2.59 — "Problems 5801 to 5900" (Nasser Abbasi)
+
+Corpus: `DE_examples_2259.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.59, `Ch2.S1.SS59.htm`). Second-order linear with trig / hyperbolic / exponential coefficients. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_59_tests` · gate baseline **12** (11 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M84 baseline, HEAD v0.6147) | 69 / 100 | 69.0% | 31 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **89 / 100** | **89.0%** | **11** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: Riemann-P equations behind a trig substitution not yet reached (5853, 5856, 5858, 5863); confluent Heun / spheroidal (5847, 5850, 5876, 5877); 5833; 5869 (forced, `Log`-form basis blocks VoP); 5894.
+Full per-case results: `reports/2.2.59.tsv`; bucketed report: `reports/2.2.59.md`.
+
+---
+
+## Section 2.2.60 — "Problems 5901 to 6000" (Nasser Abbasi)
+
+Corpus: `DE_examples_2260.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.60, `Ch2.S1.SS60.htm`). Second-order linear Kummer / Whittaker / Emden–Fowler. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_60_tests` · gate baseline **3** (2 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M84 baseline, HEAD v0.6147) | 91 / 100 | 91.0% | 9 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **98 / 100** | **98.0%** | **2** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: 5908 (the reference answers with a `DifferentialRoot`), 5948.
+Full per-case results: `reports/2.2.60.tsv`; bucketed report: `reports/2.2.60.md`.
+
+---
+
+## Section 2.2.61 — "Problems 6001 to 6100" (Nasser Abbasi)
+
+Corpus: `DE_examples_2261.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.61, `Ch2.S1.SS61.htm`). Second-order linear Euler / Gegenbauer / exact. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_61_tests` · gate baseline **7** (6 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M89 baseline, v0.6149) | 84 / 100 | 84.0% | 16 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **94 / 100** | **94.0%** | **6** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: spheroidal (6065, 6088, 6090); forced over a hypergeometric basis (6058, 6072); 6050 (arbitrary `f`).
+Full per-case results: `reports/2.2.61.tsv`; bucketed report: `reports/2.2.61.md`.
+
+---
+
+## Section 2.2.62 — "Problems 6101 to 6200" (Nasser Abbasi)
+
+Corpus: `DE_examples_2262.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.62, `Ch2.S1.SS62.htm`). Second-order linear Gauss / Jacobi. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_62_tests` · gate baseline **7** (6 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M89 baseline, v0.6149) | 80 / 100 | 80.0% | 20 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **94 / 100** | **94.0%** | **6** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: spheroidal (6146, 6171, 6172, 6174); 6192 (doubly confluent); 6186.
+Full per-case results: `reports/2.2.62.tsv`; bucketed report: `reports/2.2.62.md`.
+
+---
+
+## Section 2.2.63 — "Problems 6201 to 6300" (Nasser Abbasi)
+
+Corpus: `DE_examples_2263.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.63, `Ch2.S1.SS63.htm`). Second-order linear Riemann / Heun. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_63_tests` · gate baseline **20** (19 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M89 baseline, v0.6149) | 55 / 100 | 55.0% | 45 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **81 / 100** | **81.0%** | **19** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: HeunG (6224, 6226, 6227, 6280, 6288); spheroidal (6234, 6235, 6244, 6260, 6264–6267); irregular points at `±I` (6256, 6261, 6263); 6239; 6295 (trig); 6300 (Painlevé I).
+Full per-case results: `reports/2.2.63.tsv`; bucketed report: `reports/2.2.63.md`.
+
+---
+
+## Section 2.2.64 — "Problems 6301 to 6400" (Nasser Abbasi)
+
+Corpus: `DE_examples_2264.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.64, `Ch2.S1.SS64.htm`). Nonlinear second order (Kamke §6). `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_64_tests` · gate baseline **52** (51 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M89 baseline, v0.6149) | 34 / 100 | 34.0% | 66 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **49 / 100** | **49.0%** | **51** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: Abel equations of the second kind after reduction (6315, 6316, 6318, 6326, 6330, 6338, 6345); general Emden–Fowler (6309, 6356, 6374–6376, 6389); Painlevé (6304); arbitrary functions in the reduced equation (6365–6368, 6400); missing-y Riccati/Bernoulli forms; 6377/6390 (log-shift symmetry).
+Full per-case results: `reports/2.2.64.tsv`; bucketed report: `reports/2.2.64.md`.
+
+---
+
+## Section 2.2.65 — "Problems 6401 to 6500" (Nasser Abbasi)
+
+Corpus: `DE_examples_2265.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.65, `Ch2.S1.SS65.htm`). Nonlinear second order, reducible-μ. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_65_tests` · gate baseline **34** (33 + 1 load margin; two final runs identical).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-11-03 (M89 baseline, v0.6149) | 58 / 100 | 58.0% | 42 | 0 FAIL, 0 crash. |
+| 2026-11-03 (**M84–M93**, v0.6158) | **67 / 100** | **67.0%** | **33** | **0 FAIL, 0 crash.** Shared fixes of the campaign (see `../docs/notes/DSOLVE_PLAN.md` M84–M93). |
+
+Residue: as §2.2.64: Abel after reduction (6437, 6438, 6454), Emden–Fowler (6410, 6413), arbitrary-function reductions (6466), 6414 (`f[y/Sqrt[x]]`).
+Full per-case results: `reports/2.2.65.tsv`; bucketed report: `reports/2.2.65.md`.
+
+---
+
 ## The §2.2.51–§2.2.55 batch (M79–M83, v0.451) — what fixed what
 
 Five sections, Problems 5001–5500: **431/500 → 462/500, 0 FAIL** (and 3 of the 431 were

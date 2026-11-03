@@ -5466,6 +5466,96 @@ add_test(NAME dsolve_corpus_2_2_55_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2255.m
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
+# Section 2.2.56 "Problems 5501 to 5600" (Nasser Abbasi; upstream Ch2.S1.SS56.htm).
+# 100 scalar, 0 IVP.  1st-order rational / homogeneous class A,G / dAlembert.  v0.6147 86/100 -> v0.6158 89/100 (M84-M93).
+# Residue 11: rational and class-G first order needing Lie symmetries (5507 5509 5513 5565 5566 5580 5596-5598 5600), 5533 (elliptic quadrature).
+# Gate 11 + 1 load margin (two final runs identical).  Baseline argv3 = 12.
+add_test(NAME dsolve_corpus_2_2_56_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2256.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 12)
+
+# Section 2.2.57 "Problems 5601 to 5700" (Nasser Abbasi; upstream Ch2.S1.SS57.htm).
+# 100 scalar, 0 IVP.  1st-order F(x,y')/F(y,y') quadrature, Clairaut, dAlembert.  v0.6147 56/100 -> v0.6158 91/100 (M84-M93).
+# Residue 9: 5606, 5627/5628/5664/5665 (class C / y = G(x,y')), 5654/5672 (class G), 5655 (u = x y), 5681.
+# Gate 9 + 1 load margin (two final runs identical).  Baseline argv3 = 10.
+add_test(NAME dsolve_corpus_2_2_57_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2257.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 10)
+
+# Section 2.2.58 "Problems 5701 to 5800" (Nasser Abbasi; upstream Ch2.S1.SS58.htm).
+# 100 scalar, 0 IVP.  2nd-order linear with exponential / trig coefficients.  v0.6147 86/100 -> v0.6158 91/100 (M84-M93).
+# Residue 9: Mathieu / modified Mathieu (5751 5752 5757 5763-5765), 5755 (confluent Heun), 5749 (triconfluent Heun), 5706.
+# Gate 9 + 1 load margin (two final runs identical).  Baseline argv3 = 10.
+add_test(NAME dsolve_corpus_2_2_58_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2258.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 10)
+
+# Section 2.2.59 "Problems 5801 to 5900" (Nasser Abbasi; upstream Ch2.S1.SS59.htm).
+# 100 scalar, 0 IVP.  2nd-order linear, trig/hyperbolic coefficients.  v0.6147 69/100 -> v0.6158 89/100 (M84-M93).
+# Residue 11: Riemann-P over trig not reached (5853 5856 5858 5863), confluent Heun / spheroidal (5847 5850 5876 5877), 5833, 5869 (forced, Log-form basis), 5894.
+# Gate 11 + 1 load margin (two final runs identical).  Baseline argv3 = 12.
+add_test(NAME dsolve_corpus_2_2_59_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2259.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 12)
+
+# Section 2.2.60 "Problems 5901 to 6000" (Nasser Abbasi; upstream Ch2.S1.SS60.htm).
+# 100 scalar, 0 IVP.  2nd-order linear, Kummer/Whittaker/Emden.  v0.6147 91/100 -> v0.6158 98/100 (M84-M93).
+# Residue 2: 5908 (reference returns DifferentialRoot), 5948.
+# Gate 2 + 1 load margin (two final runs identical).  Baseline argv3 = 3.
+add_test(NAME dsolve_corpus_2_2_60_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2260.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 3)
+
+# Section 2.2.61 "Problems 6001 to 6100" (Nasser Abbasi; upstream Ch2.S1.SS61.htm).
+# 100 scalar, 0 IVP.  2nd-order linear Euler / Gegenbauer / exact.  v0.6149 84/100 -> v0.6158 94/100 (M84-M93).
+# Residue 6: spheroidal (6065 6088 6090), forced over a hypergeometric basis (6058 6072), 6050 (arbitrary f).
+# Gate 6 + 1 load margin (two final runs identical).  Baseline argv3 = 7.
+add_test(NAME dsolve_corpus_2_2_61_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2261.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
+
+# Section 2.2.62 "Problems 6101 to 6200" (Nasser Abbasi; upstream Ch2.S1.SS62.htm).
+# 100 scalar, 0 IVP.  2nd-order linear Gauss / Jacobi.  v0.6149 80/100 -> v0.6158 94/100 (M84-M93).
+# Residue 6: spheroidal (6146 6171 6172 6174), 6192 (doubly confluent), 6186 (a1[b x + a] corpus head).
+# Gate 6 + 1 load margin (two final runs identical).  Baseline argv3 = 7.
+add_test(NAME dsolve_corpus_2_2_62_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2262.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 7)
+
+# Section 2.2.63 "Problems 6201 to 6300" (Nasser Abbasi; upstream Ch2.S1.SS63.htm).
+# 100 scalar, 0 IVP.  2nd-order linear Riemann / Heun.  v0.6149 55/100 -> v0.6158 81/100 (M84-M93).
+# Residue 19: HeunG (6224 6226 6227 6280 6288), spheroidal (6234 6235 6244 6260 6264-6267), irregular +-I (6256 6261 6263), 6239, 6295 (trig), 6300 (Painleve I).
+# Gate 19 + 1 load margin (two final runs identical).  Baseline argv3 = 20.
+add_test(NAME dsolve_corpus_2_2_63_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2263.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 20)
+
+# Section 2.2.64 "Problems 6301 to 6400" (Nasser Abbasi; upstream Ch2.S1.SS64.htm).
+# 100 scalar, 0 IVP.  nonlinear 2nd order (Kamke 6.x).  v0.6149 34/100 -> v0.6158 49/100 (M84-M93).
+# Residue 51: Abel 2nd kind after reduction, general Emden-Fowler, Painleve, arbitrary functions in the reduced equation, missing-y Riccati/Bernoulli forms.
+# Gate 51 + 1 load margin (two final runs identical).  Baseline argv3 = 52.
+add_test(NAME dsolve_corpus_2_2_64_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2264.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 52)
+
+# Section 2.2.65 "Problems 6401 to 6500" (Nasser Abbasi; upstream Ch2.S1.SS65.htm).
+# 100 scalar, 0 IVP.  nonlinear 2nd order, reducible mu.  v0.6149 58/100 -> v0.6158 67/100 (M84-M93).
+# Residue 33: as 2.2.64 (Abel after reduction, Emden-Fowler, arbitrary-function reductions).
+# Gate 33 + 1 load margin (two final runs identical).  Baseline argv3 = 34.
+add_test(NAME dsolve_corpus_2_2_65_tests
+         COMMAND dsolve_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2265.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 34)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

@@ -1,3 +1,22 @@
+# DSolve: the next 1000 of Nasser's corpus, §2.2.56–§2.2.65 (problems 5501–6500), from 2026-11-03, v0.6147
+
+Plan: ~/.claude/plans/let-s-continue-our-implementation-sequential-nebula.md
+Two batches of 500: A = M84–M88 (§2.2.56–60), B = M89–M93 (§2.2.61–65).
+HEAD reference: per-record TSVs of all 61 older corpora on the v0.6147 harness (scratchpad), for A/B.
+
+- [x] A1 corpora DE_examples_2256..2260.m generated (500 scalar, 0 IVP), parse OK, check-corpus-indvar green
+- [x] A2 baseline: 394/500 (88/56/86/72/92), 0 FAIL; converter fixes (a2Csc, b1x glue, \operatorname juxtaposition, nested arbfun placeholder)
+- [x] A3 triage: ChangeOfVariable families (lead), polynomial-coeff special forms + reductions + Riemann-P (agent), first-order polynomial-in-p (agent)
+- [x] A4 fixes: IVP local branch v0.6148, ChangeOfVariable v0.6149, ParametricQuadrature & co v0.6150, SpecialFunctionTransform / KnownSolutionReduction / SF screens v0.6151–53, PolynomialGCD + Integrate v0.6154
+- [x] A5 gates, reports, README/STATUS, DSOLVE_PLAN M84–M93, changelog, lessons
+- [x] B1 corpora 2261..2265 (converter: \operatorname juxtaposition, nested arbfun placeholder, Sqrt shredding); baseline 311/500
+- [x] B2–B5 nonlinear reductions v0.6155, RiemannP + RationalSubstitution v0.6156, Kovacic budget v0.6157, v0.6154 regressions v0.6158; gates and docs
+
+## Review
+- Batch A 388 → 458/500 (v0.6147 base), Batch B 311 → 385/500 (v0.6149 base): 699 → 843 / 1000, 0 FAIL in 66 corpora.
+- Per-record A/B v0.6158 vs v0.6147: +342; the main FAIL (2.2.1-71) fixed; 4426/4727 flutter; 5227 open (correct implicit answer, harness verify budget).
+- Open: 5227; §2.2.16 gate red before the campaign (1582 verifier); TC-abort leak of the DSolve problem struct; 5869 basis simplifier.
+
 # FeynCalc speed campaign: Mathilda >= 10x the reference kernel (from 2026-11-01, v0.6117)
 
 Plan: ~/.claude/plans/let-s-continue-our-dev-tranquil-bentley.md

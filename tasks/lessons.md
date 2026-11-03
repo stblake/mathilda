@@ -5109,3 +5109,38 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   `-march=haswell -ffp-contract=fast` before hypothesising about glibc.
 - Rule: an intermittent wrong answer or hang that varies run to run is memory first — run it under
   `MallocPreScribble=1 MallocScribble=1` (deterministic) and an ASan build of the one suite.
+
+## 2026-11-03 — The next 1000 of Nasser's corpus (§2.2.56–§2.2.65, problems 5501–6500, v0.6148–v0.6157)
+- **I ran `git reset --hard` with uncommitted edits in the tree** (the converter fixes, my todo
+  section) to re-sequence integrated commits with per-commit version bumps. Both were silently
+  discarded; I rebuilt them from the transcript and proved the converter by regenerating the ten
+  corpora byte-identically. Rule: bump at cherry-pick time, or commit pending edits first;
+  `git status --short | grep -v '^??'` must be empty before any `reset --hard`.
+- **A FAIL hid inside a gate's count.** §2.2.1-71 (`y' == 2 Sqrt[y], y[a] == b`) returned the wrong
+  root on main and the gate (baseline 2 non-PASS) stayed green. Rule: grep every corpus TSV for
+  `^F` at the start of a campaign; a FAIL is a wrong answer, never part of a baseline.
+- **An IVP branch must hold at its initial point.** A fixed sampling grid sees a partial-domain branch
+  as a mixed profile and keeps it; the decisive samples are x0 ± h, after the parameters are
+  instantiated (so a symbolic x0 and the body share values).
+- **A nested DSolve skips the linear normaliser** (depth > 1 is assumed canonical), so a method that
+  builds a transformed equation must hand it over denominator-cleared, or Euler never sees
+  `Y'' + a/t^2 Y`. And a recogniser gated to top level (SpecialFunctionForm's Liouville pre-pass)
+  needs an explicit exemption for each mu-safe caller (VoP, now ChangeOfVariable).
+- **My own debug line captured an `else`.** Inserting `if (getenv(..)) fprintf(..);` between an
+  `if {...}` and its `else if` made the solve run only WITHOUT the debug flag — I chased a phantom
+  for three builds. Put instrumentation before the `if`, or in its own block.
+- **A between-iterations deadline is not a budget.** Kovacic's 5 s deadline was checked only between
+  combination-loop steps, so one Solve/Integrate/zero test ran 12 s or forever and starved every
+  method behind it. Bound each long evaluator call by the remaining budget (TimeConstrained clamps
+  nested budgets), and profile with stage timestamps: `sample` truncates deep stacks and showed no
+  DSolve frame at all.
+- **A counter raised around a speculative call must be registered for unwind** — `g_integrate_quiet`
+  was not, so one aborted quadrature silenced `Integrate::nonelem` for the rest of the session.
+  Grep for every `x++; ... x--;` bracket around an evaluator call when adding a TimeConstrained.
+- **Probe-variable capture, again**: `r = Get["...2264.m"]` hit $RecursionLimit because a record
+  contains the symbol `r`. Every probe assignment uses a `$` name.
+- **Converter**: three upstream spellings broke records silently or made a whole file unloadable —
+  `\operatorname{a2}\csc` (parameter glued to a head), `x\operatorname{LegendreP}` (syntax error),
+  a nested arbitrary function's placeholder and a `Sqrt[` head inside `f(..)` being re-shredded.
+  Always load every new corpus file (`$r = Get[..]`) and diff the converter old-vs-new over ALL
+  cached pages before regenerating.

@@ -332,7 +332,17 @@ def _apply_arbfun(s, f, mains, indvar, protected):
             while k < len(s) and s[k] == ' ': k += 1
             if k < len(s) and s[k] == '(':
                 cl = find_matching(s, k); arg = s[k + 1:cl]; j = cl + 1
+                # An arbitrary function nested in this argument (`g(y, f(x) y')`,
+                # §2.2.65-6416) was already replaced by its placeholder, which the
+                # recursive conversion mangled into a stray control byte.  Carry it
+                # through as an opaque macro token (`\zzprotN`, N in letters --
+                # digits would be split off as a factor; the trailing space keeps a following
+                # `y` from reading as part of the token) and map it back after.
+                arg = re.sub('\x07(\\d+)\x07',
+                             lambda m: '\\zzprot' + ''.join(chr(97 + int(d)) for d in m.group(1)) + ' ', arg)
                 argc = convert_side(arg, mains, [], indvar)
+                argc = re.sub(r'zzprot([a-j]+)',
+                              lambda m: '\x07%s\x07' % ''.join(str(ord(c) - 97) for c in m.group(1)), argc)
                 final = f + ("'" * primes) + '[' + argc + ']'
             else:
                 final = f + ("'" * primes) + '[' + indvar + ']'
@@ -367,6 +377,10 @@ def _implicit_mult(s):
     # and `\prime` runs are untouched -- prior sections regenerate byte-identically.
     _fn = '|'.join(sorted((re.escape(k[1:]) for k in FUNCS), key=len, reverse=True))
     s = re.sub(r'(?<=[A-Za-z0-9])(?=\\(?:' + _fn + r')(?![A-Za-z]))', ' ', s)
+    # The same for a head written `\operatorname{Name}` (`x\operatorname{LegendreP}(n,x)`,
+    # §2.2.61-6072): glued, it read as `xLegendreP(n,x)`, a syntax error that made
+    # the whole corpus file unloadable.
+    s = re.sub(r'(?<=[A-Za-z0-9])(?=\\operatorname\s*\{)', ' ', s)
     # A LETTER directly juxtaposed against `\sqrt` is implicit multiplication and must
     # be separated too (`x-k\sqrt{...}` -> `x-k \sqrt{...}`, §2.2.29-2890 / §2.2.24-2360
     # / §2.2.26-2536 `t\sqrt{1-y^2}`).  `\sqrt` is protected below (so its radicand is
@@ -388,6 +402,11 @@ def _implicit_mult(s):
     # still has its brace arg protected by the general rule, so its name is not
     # shredded letter-by-letter.
     s = re.sub(r'\\(?:frac|sqrt)\b', _prot, s)
+    # Inside an arbitrary function's argument (converted recursively AFTER the outer
+    # pass already lowered `\sqrt{..}` to `Sqrt[..]`) the head would otherwise be
+    # shredded letter by letter into `S q r t[..]` (§2.2.65-6414/6415).  Raw LaTeX
+    # never contains `Sqrt[`, so the top-level pass is unaffected.
+    s = re.sub(r'(?<![A-Za-z])Sqrt(?=\[)', _prot, s)
     t = re.sub(r'\\[A-Za-z]+(?:\s*\{[^{}]*\})?', _prot, s)
     t = re.sub(r'(?<=[0-9])(?=[A-Za-z])', ' ', t)      # 8y  -> 8 y
     t = re.sub(r'(?<=[A-Za-z])(?=[A-Za-z])', ' ', t)   # yx  -> y x
@@ -398,7 +417,14 @@ def _implicit_mult(s):
 def convert_side(expr, mains, arbs, indvar):
     protected = []; s = _implicit_mult(expr); extra = set()
     def _opname(nm):
-        return OPNAME_RENAME.get(nm.strip(), nm.strip())
+        nm = nm.strip()
+        # A subscripted PARAMETER set upright (`\operatorname{a2}\csc(x)^2`,
+        # §2.2.59-5847/5876/5877, §2.2.58-5755) is a variable juxtaposed against the
+        # next factor: keep a separating space, or it glues to the following
+        # function head as the bogus symbol `a2Csc`.  Function names never end in a
+        # digit, so the Heaviside/arccot renames are untouched.
+        if re.fullmatch(r'[A-Za-z]+\d+', nm): return nm + ' '
+        return OPNAME_RENAME.get(nm, nm)
     for nm in re.findall(r'\\operatorname\s*\{([^{}]*)\}', s): extra.add(_opname(nm))
     s = re.sub(r'\\operatorname\s*\{([^{}]*)\}', lambda m: _opname(m.group(1)), s)
     for mm in re.findall(r'\\textit\s*\{\s*\\?_?(F\d+)\s*\}', s): extra.add('Maple' + mm)
@@ -471,7 +497,10 @@ def convert_side(expr, mains, arbs, indvar):
     s = re.sub('\x00([A-Za-z][A-Za-z0-9]*)\x00([0-9]+)\x00',
                lambda m: m.group(1) + ("'" * int(m.group(2))) + '[' + indvar + ']', s)
     for h in (set(FUNCS.values()) | {'Sqrt', 'Exp', 'DiracDelta'} | extra): s = fn_paren_to_bracket(s, h)
-    for idx, val in enumerate(protected): s = s.replace('\x07%d\x07' % idx, val)
+    # Reverse order: a placeholder nested inside another's text always has the LOWER
+    # index (the inner call was replaced first), so restoring outermost-first
+    # exposes it before its own turn comes.
+    for idx in range(len(protected) - 1, -1, -1): s = s.replace('\x07%d\x07' % idx, protected[idx])
     s = re.sub(r'\s*\[\s*', '[', s); s = re.sub(r'\s*\]', ']', s)
     s = re.sub(r'\(\s+', '(', s); s = re.sub(r'\s+\)', ')', s)
     s = re.sub(r'\s+', ' ', s).strip()
