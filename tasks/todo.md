@@ -9,10 +9,11 @@ Plan: ~/.claude/plans/let-s-fix-the-following-sprightly-scott.md
 - [x] W5 separable inversion Solve muted (Solve::nongen)
 - [x] W6 ds_tidy_integrand on held integrands (item 7)
 - [x] tests (test_dsolve 4 new, test_integrate_quadrad 1 new), docs, changelog
-- [ ] corpus gates (66) vs STATUS baselines; commit v0.6159 (Integrate) + v0.6160 (DSolve), tags
+- [x] corpus gates (66) vs STATUS baselines; commit v0.6159 (Integrate) + v0.6160 (DSolve), tags
 
 ## Review
-- ctest -LE nightly: 587/587. check-messages, check-c99 green.
+- ctest -LE nightly: 587/587. check-messages, check-c99 green. leaks: 0.
+- DSolve corpus: 65/66 gates green; §2.2.16 red with the same pre-existing 1508/1582 records (documented in DSOLVE_PLAN, red on main before).
 
 # DSolve: the next 1000 of Nasser's corpus, §2.2.56–§2.2.65 (problems 5501–6500), from 2026-11-03, v0.6147
 
