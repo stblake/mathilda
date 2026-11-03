@@ -722,21 +722,72 @@ bool ds_has_radical_power(const Expr* e) {
     return false;
 }
 
-bool ds_branch_num_ok(const DSolveProblem* P, const Expr* body) {
-    if (P->nfun != 1) return true;                 /* systems verified separately */
+/* The residual of equation e with y and its derivatives replaced by body (owned),
+ * or NULL for a distributional / Green's-function residual (not numerically
+ * judgeable).  Shared by ds_branch_num_ok and ds_branch_ic_local_ok. */
+static Expr* ds_branch_residual(const DSolveProblem* P, const Expr* body, size_t e) {
     const char* yname = P->fun_names[0];
     const char* xvar  = P->ind_names[0];
     int maxord = P->max_order[0];
+    Expr* sub = expr_copy(P->eq_residuals[e]);
+    for (int k = maxord; k >= 1; k--) {
+        Expr* dk = expr_copy((Expr*)body);
+        for (int i = 0; i < k; i++) dk = ds_d(dk, expr_new_symbol(xvar));
+        sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
+    }
+    sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+    if (ds_residual_is_distributional(sub)) { expr_free(sub); return NULL; }
+    return sub;
+}
+
+/* An IVP branch must satisfy the ODE AT its initial point, not merely somewhere
+ * on the sampling grid.  y' == 2 Sqrt[y], y[a] == b fits C = -a +- Sqrt[b]; both
+ * candidates (x - a -+ Sqrt[b])^2 meet the condition and both are solutions on
+ * part of the line (ds_branch_num_ok sees a mixed profile and keeps each), but
+ * only (x - a + Sqrt[b])^2 holds near x = a -- the other has y' < 0 there
+ * (§2.2.1-71, a wrong answer on main through v0.6147).  False only when the
+ * residual is CONFIDENTLY nonzero at every sample on BOTH sides of the first
+ * condition's point (x0 +- h, after instantiating the parameters, so a symbolic
+ * x0 and the body share their generic values).  A solution valid on one side
+ * only (the condition at a branch point) gives a mixed profile and is kept; a
+ * non-numericizable residual is kept. */
+static bool ds_branch_ic_local_ok(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1 || P->ncond == 0) return true;
+    const char* xvar = P->ind_names[0];
+    const Expr* x0 = P->conds[0].point;
+    if (!x0 || !ds_free_of(x0, xvar)) return true;
+    static const double hs[] = { 1e-3, -1e-3, 3e-3, -3e-3 };
     for (size_t e = 0; e < P->neq; e++) {
-        Expr* sub = expr_copy(P->eq_residuals[e]);
-        for (int k = maxord; k >= 1; k--) {
-            Expr* dk = expr_copy((Expr*)body);
-            for (int i = 0; i < k; i++) dk = ds_d(dk, expr_new_symbol(xvar));
-            sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
+        Expr* sub = ds_branch_residual(P, body, e);
+        if (!sub) continue;
+        if (ds_has_undefined_function(sub) || ds_has_head(sub, SYM_Integrate)) {
+            expr_free(sub); continue;
         }
-        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+        int ngood = 0, nbig = 0;
+        for (int i = 0; i < 4; i++) {
+            Expr* xt = eval_and_free(ds_call2(SYM_Plus, expr_copy((Expr*)x0), expr_new_real(hs[i])));
+            Expr* at = ds_subst_generics(ds_subst(expr_copy(sub), expr_new_symbol(xvar), xt), xvar);
+            Expr* mg = eval_and_free(ds_call1("Abs", eval_and_free(ds_call1("N", at))));
+            double mag = (mg && mg->type == EXPR_REAL)    ? mg->data.real
+                       : (mg && mg->type == EXPR_INTEGER) ? (double)mg->data.integer : NAN;
+            expr_free(mg);
+            if (isnan(mag) || !isfinite(mag)) continue;
+            ngood++;
+            if (mag > 1e-4) nbig++;
+        }
+        expr_free(sub);
+        if (ngood == 4 && nbig == 4) return false;
+    }
+    return true;
+}
+
+bool ds_branch_num_ok(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1) return true;                 /* systems verified separately */
+    const char* xvar  = P->ind_names[0];
+    for (size_t e = 0; e < P->neq; e++) {
+        Expr* sub = ds_branch_residual(P, body, e);
         /* Distributional / Green's-function residual: cannot numerically judge -- keep. */
-        if (ds_residual_is_distributional(sub)) { expr_free(sub); continue; }
+        if (!sub) continue;
         Expr* R = ds_subst_generics(sub, xvar);    /* consumes sub */
         if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) {
             expr_free(R); continue;                /* non-numericizable -- keep */
@@ -1572,16 +1623,19 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
              * (numeric check inconclusive), preserving prior single-branch behavior. */
             size_t nbr = solres->data.function.arg_count;
             Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
-            /* Two passes: a verified branch whose fitted constants are real first
+            /* Passes: a verified branch whose fitted constants are real first
              * (Solve may list Log[-1/Sqrt[2]] before Log[1/Sqrt[2]] when only
              * E^(2 C[1]) is pinned -- both fit, the real one is the answer to
-             * give), then any verified branch. */
+             * give), then any verified branch.  Passes 0-1 additionally require
+             * the branch to hold AT the initial point (ds_branch_ic_local_ok);
+             * passes 2-3 are the previous order, reached only when no branch
+             * does. */
             bool picked = false;
-            for (int pass = 0; pass < 2 && !picked && nbr > 1; pass++)
+            for (int pass = 0; pass < 4 && !picked && nbr > 1; pass++)
             for (size_t bi = 0; bi < nbr; bi++) {
                 Expr* cb = solres->data.function.args[bi];
                 if (!head_is(cb, SYM_List)) continue;
-                if (pass == 0 && !ds_fit_branch_real(cb)) continue;
+                if ((pass == 0 || pass == 2) && !ds_fit_branch_real(cb)) continue;
                 Expr* cand = eval_and_free(internal_replace_all(
                     (Expr*[]){ expr_copy((Expr*)body), expr_copy(cb) }, 2));
                 /* Compare candidate families at their PRINCIPAL member: a transcendental
@@ -1591,6 +1645,7 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                  * defaulting to args[0] (the wrong odd-multiple branch, 2.2.24-2329). */
                 cand = ds_collapse_principal(cand);
                 bool ok = ds_branch_num_ok(P, cand);
+                if (ok && pass < 2) ok = ds_branch_ic_local_ok(P, cand);
                 expr_free(cand);
                 if (ok) { branch = cb; picked = true; break; }
             }
