@@ -40,6 +40,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../common.h"
+#include "../core.h"          /* leaf_count_internal */
 #include <stdlib.h>
 
 /* base^-1; base consumed. */
@@ -357,8 +358,18 @@ Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch) {
      * Simplify's transforms rewrite inside it and every rewrite re-runs the
      * integration cascade -- y' == 2x - (1 + x^2) y + y^2 (section 2.2.47-4658,
      * u carries Integrate[E^(x + x^3/3)]) spent its whole budget there. */
-    Expr* body = (riccati_has_special(raw) || ds_has_head(raw, SYM_Integrate)
-                  || ds_has_head(raw, SYM_Inactive)) ? raw : ds_simplify(raw);
+    Expr* body;
+    if (riccati_has_special(raw) || ds_has_head(raw, SYM_Integrate)
+        || ds_has_head(raw, SYM_Inactive)) body = raw;
+    else if (leaf_count_internal(raw, true) > 600) {
+        /* A large logarithmic derivative -- u'/u of a product of powers with radical
+         * symbolic exponents, (c x^2 + b x + a)^2 (y' + y^2) + A == 0 (§2.2.50-5000),
+         * 1225 leaves -- sends Simplify past any budget (> 20 s); the tidy form is
+         * worth at most a bounded attempt, the raw quotient is already the answer. */
+        Expr* keep = expr_copy(raw);
+        body = eval_and_free(expr_new_function(expr_new_symbol("TimeConstrained"),
+                   (Expr*[]){ ds_call1(SYM_Simplify, raw), expr_new_integer(2), keep }, 3));
+    } else body = ds_simplify(raw);
 
     expr_free(q0); expr_free(q1); expr_free(q2);
 

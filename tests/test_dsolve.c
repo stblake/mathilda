@@ -621,6 +621,44 @@ static void t_sf_transform(void) {
                "HypergeometricPFQ]");
 }
 
+/* ---- DSolve`RiemannP (three regular singular points -> Moebius + exponent shift ->
+ * Gauss) and DSolve`RationalSubstitution (t = x^k, inversion at an irregular point).
+ * Sampled at a COMPLEX x: the 2F1 argument can land on the real cut [1, oo).
+ * Each answer must be a List whose residual vanishes for the full solution AND for
+ * the C[2] solution alone, the parameters instantiated. ---- */
+static void t_riemannp(void) {
+    /* squared leading coefficient, Infinity the third point (2.2.63-6273) */
+    check_true(SFT_RES("(x - a)^2 (x - b)^2 y''[x] - k^2 y[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, b -> 3/5, k -> 1/3, x -> 3/10 + I/5}"));
+    /* radical points +-I (2.2.61-6063) */
+    check_true(SFT_RES("a^2 y[x] + x y'[x] + (x^2 + 1) y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, x -> 3/10 + I/5}"));
+    /* two finite points and an ordinary Infinity (2.2.63-6282) */
+    check_true(SFT_RES("A y[x] + (c x^2 + b x + a)^2 y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, A -> 1/3, a -> 2/7, b -> 3/5, c -> 1/6, x -> 3/10 + I/5}"));
+    /* logarithmic case: a terminating 2F1 seeds a reduction of order (2.2.63-6223) */
+    check_true(SFT_RES("-2 y[x] + (1 - x)^2 x y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, x -> 3/10 + I/5}"));
+    /* four singular points (HeunG): declines */
+    check_true("Head[DSolve`RiemannP[(c1 x + c0) y[x] + (b2 x^2 + b1 x + b0) y'[x] + "
+               "(a1 - x) (a2 - x) (a3 - x) y''[x] == 0, y, x]] =!= List");
+}
+static void t_ratsubst(void) {
+    /* inversion at the irregular point 0 -> Kummer (2.2.62-6190) */
+    check_true(SFT_RES("-y[x] + 2 x y'[x] + x^3 y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, x -> 3/10 + I/5}"));
+    /* (b x + a)^4 y'' + y == 0: inversion -> constant coefficients (2.2.63-6281) */
+    check_true(SFT_RES("y[x] + (b x + a)^4 y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, b -> 3/5, x -> 3/10 + I/5}"));
+    /* symbolic power argument t = x^k (2.2.63-6294) */
+    check_true(SFT_RES("(a2 + b2 x^k) y[x] + x (a1 + b1 x^k) y'[x] + x^2 (a0 + b0 x^k) y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a0 -> 2/7, a1 -> 3/5, a2 -> 1/6, b0 -> 5/4, b1 -> 2/9, "
+        "b2 -> 3/7, k -> 5/2, x -> 3/10 + I/5}"));
+    /* x -> -x symmetric, points 0, +-1, oo folded by t = x^2 (2.2.63-6211) */
+    check_true(SFT_RES("c x y[x] + (b x^2 + a) y'[x] + x (1 - x^2) y''[x]",
+        "{C[1] -> 6/5, C[2] -> 4/5, a -> 2/7, b -> 3/5, c -> 1/3, x -> 3/10 + I/5}"));
+}
+
 /* ---- M20: PolynomialShiftSubstitution (x-dependent-shift substitution ->
  * separable, implicit first integral).  Verified by the implicit-function rule
  * D[G,x] + D[G,y[x]]*RHS == 0 (branch-safe). ---- */
@@ -3759,6 +3797,8 @@ int main(void) {
     TEST(t_m19_whittaker_confluent);
     TEST(t_m19_declines_integer_2mu);
     TEST(t_sf_transform);
+    TEST(t_riemannp);
+    TEST(t_ratsubst);
     TEST(t_m20_polyshift_402);
     TEST(t_m20_polyshift_371);
     TEST(t_m20_declines_nonlinear_base);

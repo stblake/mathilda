@@ -366,6 +366,26 @@ Expr** dsolve_knownsol_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* Reduction of order from a caller-supplied solution y1 of the homogeneous part
+ * (e.g. an elementary terminating hypergeometric solution found by
+ * DSolve`RiemannP): certified by L[y1] == 0, then the same build/verify as the
+ * method above.  Returns the general body (owned) or NULL.  y1 borrowed. */
+Expr* dsolve_knownsol_reduce(DSolveProblem* P, const Expr* y1) {
+    if (g_ks_active || P->nfun != 1 || P->neq != 1 || P->max_order[0] != 2) return NULL;
+    const char* xv = P->ind_names[0];
+    Expr** c = NULL; Expr* g = NULL; int n = 0;
+    if (!dsolve_linear_coeffs(P, &c, &g, &n)) return NULL;
+    Expr* body = NULL;
+    if (n == 2 && !ds_is_structural_zero(c[2])) {
+        g_ks_active++;
+        if (ks_annihilates(c, y1, xv)) body = ks_build2(P, c, g, y1, xv);
+        g_ks_active--;
+    }
+    for (int k = 0; k <= n; k++) expr_free(c[k]);
+    free(c); expr_free(g);
+    return body;
+}
+
 static Expr* builtin_dsolve_knownsol(Expr* res) {
     return dsolve_method_builtin(res, dsolve_knownsol_try);
 }

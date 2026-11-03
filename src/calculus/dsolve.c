@@ -48,6 +48,8 @@ typedef enum {
     DS_EXACTODE,
     DS_SPECIALFORM,
     DS_SFTRANSFORM,
+    DS_RIEMANNP,
+    DS_RATSUBST,
     DS_KOVACIC,
     DS_GENAIRY,
     DS_OPERFACTOR,
@@ -99,6 +101,8 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "ExactODE")         == 0) return DS_EXACTODE;
     if (strcmp(s, "SpecialFunctionForm") == 0) return DS_SPECIALFORM;
     if (strcmp(s, "SpecialFunctionTransform") == 0) return DS_SFTRANSFORM;
+    if (strcmp(s, "RiemannP")           == 0) return DS_RIEMANNP;
+    if (strcmp(s, "RationalSubstitution") == 0) return DS_RATSUBST;
     if (strcmp(s, "Kovacic")            == 0) return DS_KOVACIC;
     if (strcmp(s, "GeneralizedAiry")    == 0) return DS_GENAIRY;
     if (strcmp(s, "OperatorFactor")     == 0) return DS_OPERFACTOR;
@@ -162,6 +166,9 @@ extern Expr** dsolve_exactode_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exactode_nl_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_specialform_transform_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_riemannp_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_ratsubst_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_ratsubst_init(void);
 extern Expr** dsolve_kovacic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_genairy_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_operfactor_try(DSolveProblem* P, size_t* nbranch);
@@ -506,6 +513,17 @@ Expr* builtin_dsolve(Expr* res) {
              * argument z = (x - x0)^2).  Late: Kovacic / ChangeOfVariable find the
              * simpler Liouvillian answer first when there is one; numerically gated. */
             if (!result) result = dsolve_run(&P, dsolve_specialform_transform_try);
+            /* RiemannP: exactly three regular singular points on the sphere (any
+             * finite ones -- rational, symbolic or radical -- plus Infinity when it
+             * is singular) -> Moebius map to {0, Infinity, 1} and exponent shift ->
+             * Hypergeometric2F1.  Late: every narrower row above keeps its answer;
+             * not recursive; numerically gated at complex points. */
+            if (!result) result = dsolve_run(&P, dsolve_riemannp_try);
+            /* RationalSubstitution: t = x^k (x P, x^2 Q rational in x^k) or the
+             * inversion x = x0 + 1/t at a finite irregular point, then the cascade on
+             * the transformed equation.  Recursive: top-level only, re-entry guarded,
+             * deadline + decline memo; numerically gated on the original equation. */
+            if (!result) result = dsolve_run(&P, dsolve_ratsubst_try);
             /* General nonhomogeneous variation-of-parameters BACKSTOP: L[y]==g whose
              * homogeneous L[y]==0 is solvable by a special-function / change-of-
              * variable method that does not itself carry forcing.  Solves the
@@ -753,6 +771,8 @@ Expr* builtin_dsolve(Expr* res) {
                               break;
         case DS_SPECIALFORM:  result = dsolve_run(&P, dsolve_specialform_try); break;
         case DS_SFTRANSFORM:  result = dsolve_run(&P, dsolve_specialform_transform_try); break;
+        case DS_RIEMANNP:     result = dsolve_run(&P, dsolve_riemannp_try);    break;
+        case DS_RATSUBST:     result = dsolve_run(&P, dsolve_ratsubst_try);    break;
         case DS_KOVACIC:      result = dsolve_run(&P, dsolve_kovacic_try);     break;
         case DS_GENAIRY:      result = dsolve_run(&P, dsolve_genairy_try);     break;
         case DS_OPERFACTOR:   result = dsolve_run(&P, dsolve_operfactor_try);  break;
@@ -846,6 +866,7 @@ void dsolve_init(void) {
     dsolve_solvefor_init();
     dsolve_inverse_init();
     dsolve_knownsol_init();
+    dsolve_ratsubst_init();
     dsolve_homog_g_init();
     dsolve_paramquad_init();
     tc_register_unwind_counter(&g_dsolve_depth);   /* restored on a timeout unwind */

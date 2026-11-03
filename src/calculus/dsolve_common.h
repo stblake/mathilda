@@ -483,4 +483,15 @@ bool  dsolve_verify_implicit2(const DSolveProblem* P, const Expr* G);
  * xv and Yv may coincide.  `R` consumed.  Defined in dsolve_scaling2.c. */
 bool  dsolve_abstract_zero(Expr* R, const char* xv, const char* Yv);
 
+/* Reduction of order from a known solution y1 (borrowed) of the homogeneous part of
+ * a 2nd-order linear ODE (dsolve_knownsol.c); quadratures held inert when they do not
+ * close; self-verified.  Returns the general solution body (owned) or NULL. */
+Expr* dsolve_knownsol_reduce(DSolveProblem* P, const Expr* y1);
+
+/* Numeric gate for a 2nd-order linear candidate (C[1], C[2] allowed) of
+ * y'' + Pc y' + Qc y == 0: the residual relative to its terms at five complex
+ * points (off every real branch cut), 20 digits, parameters instantiated
+ * (dsolve_specialform.c).  All borrowed. */
+bool dsolve_num_ok_complex(const Expr* cand, const Expr* Pc, const Expr* Qc, const char* xv);
+
 #endif /* MATHILDA_DSOLVE_COMMON_H */

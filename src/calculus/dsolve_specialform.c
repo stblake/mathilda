@@ -2085,6 +2085,574 @@ Expr** dsolve_specialform_transform_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* ===================================================================
+ * DSolve`RiemannP -- the general three-point Fuchsian equation.
+ *
+ * A homogeneous y'' + P y' + Q y == 0 with rational coefficients whose singular
+ * points on the Riemann sphere are exactly three, all regular, is Riemann's
+ * P-equation: it has no accessory parameter, so the three points and their
+ * local exponents determine it, and a Moebius map sending the points to
+ * {0, Infinity, 1} together with an exponent shift reaches Gauss's equation.
+ * With the points a -> 0, b -> Infinity, c -> 1 (any of them may itself be
+ * Infinity) and exponents {al, al'}, {be, be'}, {ga, ga'},
+ *
+ *     z = (x - a)(c - b) / ((x - b)(c - a)),
+ *     y = (x-a)^al (x-c)^ga (x-b)^(-al-ga) 2F1[al+be+ga, al+be'+ga, 1+al-al', z]
+ *
+ * (a factor whose point is Infinity is dropped; constants are absorbed), and the
+ * second solution is the same with al <-> al' (the z^(1-C) partner).  The
+ * assignment is chosen so that the point sent to 0 has a NON-integer exponent
+ * difference (otherwise the pair is dependent / logarithmic); all six are tried.
+ *
+ * The finite points are the roots of the squarefree part of the coefficient
+ * denominators (linear and quadratic factors: rational, symbolic, or radical
+ * such as +-I/Sqrt[a]); a factor of degree >= 3 declines.  The local data come
+ * from L'Hopital at each root, (x - r) P -> N(r)/D'(r) etc., so no algebraic
+ * cancellation over the root's field is needed.  Infinity is ordinary iff
+ * P = 2/x + O(x^-2) and Q = O(x^-4); any irregular point declines (the confluent
+ * cases are other methods').  Covers Legendre/Gegenbauer/Jacobi with points at
+ * +-1, +-I, +-a, the shifted Gauss forms, three general finite points
+ * (a1 - x)(a2 - x)(a3 - x) y'' + ..., and the squared-leading-coefficient
+ * family (x - a)^2 (x - b)^2 y'' + ... y == 0 with Infinity a third point.
+ *
+ * Every candidate is gated by rp_num_ok: the normalised residual evaluated at
+ * COMPLEX sample points (off every branch cut of the powers and of 2F1) at 20
+ * digits with every parameter instantiated, relative to the size of its terms.
+ * Late slot (after SpecialFunctionTransform), not recursive; killswitch
+ * MATHILDA_NO_RIEMANNP.
+ * =================================================================== */
+
+/* multiplicity (0..3) of the root r in the polynomial D, by derivative zero tests;
+ * *dval receives D^(m)(r) (owned) for the returned m.  D, r borrowed. */
+static int rp_mult(const Expr* D, const Expr* r, const char* xv, Expr** dval) {
+    Expr* d = expr_copy((Expr*)D);
+    int m = 0;
+    *dval = NULL;
+    for (; m <= 3; m++) {
+        Expr* v = sf_ct(ds_subst(expr_copy(d), expr_new_symbol(xv), expr_copy((Expr*)r)));
+        if (!ds_is_zero(v)) {
+            Expr* vs = ds_simplify(v);
+            if (!ds_is_zero(vs)) { *dval = vs; break; }
+            expr_free(vs);
+        } else expr_free(v);
+        d = ds_d(d, expr_new_symbol(xv));
+    }
+    expr_free(d);
+    return m;
+}
+
+/* lim_{x->r} (x - r)^k N/D for coprime N, D:  0 when mult(D, r) < k,
+ * k! N(r) / D^(k)(r) when it equals k, NULL (irregular) when it exceeds k. */
+static Expr* rp_local(const Expr* N, const Expr* D, const Expr* r, const char* xv, int k) {
+    Expr* dv = NULL;
+    int m = rp_mult(D, r, xv, &dv);
+    Expr* out = NULL;
+    if (m < k) out = expr_new_integer(0);
+    else if (m == k && dv) {
+        Expr* nv = ds_subst(expr_copy((Expr*)N), expr_new_symbol(xv), expr_copy((Expr*)r));
+        out = ds_simplify(ds_call2(SYM_Times, ds_call2(SYM_Times, expr_new_integer(k == 2 ? 2 : 1), nv),
+                                   powneg1_sf(expr_copy(dv))));
+    }
+    if (dv) expr_free(dv);
+    return out;
+}
+
+/* degree of the rational function N/D at Infinity (deg N - deg D; -1000 for N == 0),
+ * and *lc its leading-coefficient ratio (owned).  -2000 when not polynomial. */
+static int rp_infdeg(const Expr* N, const Expr* D, const char* xv, Expr** lc) {
+    *lc = NULL;
+    if (ds_is_zero(N)) return -1000;
+    int dn = sft_degree(N, xv), dd = sft_degree(D, xv);
+    if (dn < 0 || dd < 0) return -2000;
+    *lc = ds_simplify(ds_call2(SYM_Times, sft_coef(N, xv, dn), powneg1_sf(sft_coef(D, xv, dd))));
+    return dn - dd;
+}
+
+/* Normalised residual check at complex points: |y'' + P y' + Q y| against
+ * |y''| + |P y'| + |Q y|, at 20 digits, parameters instantiated at generic exact
+ * rationals, the two constants at distinct values.  cand, Pc, Qc borrowed. */
+static bool rp_num_ok_raw(const Expr* cand, const Expr* Pc, const Expr* Qc, const char* xv) {
+    Expr* y0 = expr_copy((Expr*)cand);
+    y0 = ds_subst(y0, ds_const(1), eval_and_free(ds_call2(SYM_Times, expr_new_integer(13),
+                                       powneg1_sf(expr_new_integer(10)))));
+    y0 = ds_subst(y0, ds_const(2), eval_and_free(ds_call2(SYM_Times, expr_new_integer(7),
+                                       powneg1_sf(expr_new_integer(10)))));
+    Expr* y1 = ds_d(expr_copy(y0), expr_new_symbol(xv));
+    Expr* y2 = ds_d(expr_copy(y1), expr_new_symbol(xv));
+    Expr* t[3];
+    t[0] = y2;
+    t[1] = ds_call2(SYM_Times, expr_copy((Expr*)Pc), y1);
+    t[2] = ds_call2(SYM_Times, expr_copy((Expr*)Qc), y0);
+    {
+        const char* skip[] = { xv, intern_symbol("E"), intern_symbol("Pi"),
+            intern_symbol("I"), intern_symbol("C"), intern_symbol("EulerGamma"),
+            intern_symbol("Degree"), intern_symbol("GoldenRatio"),
+            intern_symbol("Catalan"), intern_symbol("Infinity") };
+        const int nskip = (int)(sizeof(skip)/sizeof(skip[0]));
+        const char* syms[64]; int ns = 0;
+        for (int k = 0; k < 3; k++) sf_collect_params(t[k], syms, &ns, 64);
+        int pidx = 0;
+        for (int i = 0; i < ns; i++) {
+            bool sk = false;
+            for (int j = 0; j < nskip; j++) if (syms[i] == skip[j]) { sk = true; break; }
+            if (sk) continue;
+            int num = 29 + 13 * pidx; pidx++;
+            for (int k = 0; k < 3; k++)
+                t[k] = ds_subst(t[k], expr_new_symbol(syms[i]),
+                           eval_and_free(ds_call2(SYM_Times, expr_new_integer(num),
+                                             powneg1_sf(expr_new_integer(100)))));
+        }
+    }
+    static const int xs[5][2] = { {37, 61}, {143, 29}, {-71, 83}, {230, -47}, {-160, -90} };
+    int small = 0, big = 0;
+    for (int i = 0; i < 5; i++) {
+        Expr* xp = eval_and_free(ds_call2(SYM_Times,
+                       expr_new_function(expr_new_symbol(SYM_Complex),
+                           (Expr*[]){ expr_new_integer(xs[i][0]), expr_new_integer(xs[i][1]) }, 2),
+                       powneg1_sf(expr_new_integer(100))));
+        double v[3]; bool okv = true; double re = 0, im = 0;
+        for (int k = 0; k < 3 && okv; k++) {
+            Expr* e = ds_subst(expr_copy(t[k]), expr_new_symbol(xv), expr_copy(xp));
+            e = eval_and_free(ds_call2("N", e, expr_new_integer(20)));
+            Expr* re_e = eval_and_free(ds_call1("Re", expr_copy(e)));
+            Expr* im_e = eval_and_free(ds_call1("Im", e));
+            Expr* rn = eval_and_free(ds_call1("N", re_e));
+            Expr* in = eval_and_free(ds_call1("N", im_e));
+            double r_ = (rn->type == EXPR_REAL) ? rn->data.real
+                      : (rn->type == EXPR_INTEGER) ? (double)rn->data.integer : NAN;
+            double i_ = (in->type == EXPR_REAL) ? in->data.real
+                      : (in->type == EXPR_INTEGER) ? (double)in->data.integer : NAN;
+            expr_free(rn); expr_free(in);
+            if (!isfinite(r_) || !isfinite(i_)) { okv = false; break; }
+            re += r_; im += i_;
+            v[k] = hypot(r_, i_);
+        }
+        expr_free(xp);
+        if (!okv) continue;
+        double scale = v[0] + v[1] + v[2];
+        double res = hypot(re, im);
+        if (scale == 0.0) continue;
+        if (res <= 1e-9 * scale) small++;
+        else if (res > 1e-5 * scale) big++;
+    }
+    for (int k = 0; k < 3; k++) expr_free(t[k]);   /* t[] own y2, y1, y0 */
+    return small >= 3 && big == 0;
+}
+static bool rp_num_ok(const Expr* cand, const Expr* Pc, const Expr* Qc, const char* xv) {
+    arith_warnings_mute_push();          /* internal probe: see sf_num_ok */
+    bool r = rp_num_ok_raw(cand, Pc, Qc, xv);
+    arith_warnings_mute_pop();
+    return r;
+}
+
+/* Exported (dsolve_common.h): the same complex-point gate for other late
+ * second-order methods (DSolve`RationalSubstitution). */
+bool dsolve_num_ok_complex(const Expr* cand, const Expr* Pc, const Expr* Qc, const char* xv) {
+    return rp_num_ok(cand, Pc, Qc, xv);
+}
+
+/* (x - p)^e, or 1 when p is Infinity (NULL); p, e borrowed. */
+static Expr* rp_pow(const Expr* p, const Expr* e, const char* xv) {
+    if (!p) return expr_new_integer(1);
+    return ds_call2(SYM_Power, ds_call2(SYM_Subtract, expr_new_symbol(xv), expr_copy((Expr*)p)),
+                    expr_copy((Expr*)e));
+}
+
+/* One solution for the assignment a -> 0, b -> Infinity, c -> 1 (NULL = the point
+ * Infinity) with the exponent A0 carried at a (A1 its partner), ga at c, {be, be2}
+ * at b:  (x-a)^A0 (x-c)^ga (x-b)^(-A0-ga) 2F1[A0+be+ga, A0+be2+ga, 1+A0-A1, z].
+ * All borrowed; owned result. */
+static Expr* rp_one(const Expr* a, const Expr* b, const Expr* c,
+                    const Expr* A0, const Expr* A1, const Expr* be, const Expr* be2,
+                    const Expr* ga, const char* xv) {
+    Expr* x = expr_new_symbol(xv);
+    Expr* z;
+    #define RP_D(p) ds_call2(SYM_Subtract, expr_copy(x), expr_copy((Expr*)(p)))
+    #define RP_S(p, q) ds_call2(SYM_Subtract, expr_copy((Expr*)(p)), expr_copy((Expr*)(q)))
+    if (!b)      z = ds_call2(SYM_Times, RP_D(a), powneg1_sf(RP_S(c, a)));
+    else if (!a) z = ds_call2(SYM_Times, RP_S(c, b), powneg1_sf(RP_D(b)));
+    else if (!c) z = ds_call2(SYM_Times, RP_D(a), powneg1_sf(RP_D(b)));
+    else z = ds_call2(SYM_Times, ds_call2(SYM_Times, RP_D(a), RP_S(c, b)),
+                      powneg1_sf(ds_call2(SYM_Times, RP_D(b), RP_S(c, a))));
+    #undef RP_D
+    #undef RP_S
+    expr_free(x);
+    z = sf_ct(z);
+    Expr* p1 = ds_simplify(ds_call2(SYM_Plus, expr_copy((Expr*)A0),
+                   ds_call2(SYM_Plus, expr_copy((Expr*)be), expr_copy((Expr*)ga))));
+    Expr* p2 = ds_simplify(ds_call2(SYM_Plus, expr_copy((Expr*)A0),
+                   ds_call2(SYM_Plus, expr_copy((Expr*)be2), expr_copy((Expr*)ga))));
+    Expr* p3 = ds_simplify(ds_call2(SYM_Plus, expr_new_integer(1),
+                   ds_call2(SYM_Subtract, expr_copy((Expr*)A0), expr_copy((Expr*)A1))));
+    Expr* F = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric2F1),
+                  (Expr*[]){ p1, p2, p3, z }, 4));
+    Expr* mb = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                   ds_call2(SYM_Plus, expr_copy((Expr*)A0), expr_copy((Expr*)ga))));
+    Expr* pref = eval_and_free(ds_call2(SYM_Times, rp_pow(a, A0, xv),
+                     ds_call2(SYM_Times, rp_pow(c, ga, xv), rp_pow(b, mb, xv))));
+    expr_free(mb);
+    return eval_and_free(ds_call2(SYM_Times, pref, F));
+}
+
+/* The pair: rp_one with al, then with al' (the z^(1-C) partner). */
+static Expr* rp_build(const Expr* a, const Expr* b, const Expr* c,
+                      const Expr* al, const Expr* al2, const Expr* be, const Expr* be2,
+                      const Expr* ga, const char* xv) {
+    Expr* s0 = rp_one(a, b, c, al, al2, be, be2, ga, xv);
+    Expr* s1 = rp_one(a, b, c, al2, al, be, be2, ga, xv);
+    return combo(s0, s1);
+}
+
+/* True iff e is provably an integer (IntegerQ after simplification). */
+static bool rp_is_int(const Expr* e) {
+    Expr* s = ds_simplify(expr_copy((Expr*)e));
+    Expr* iq = eval_and_free(ds_call1("IntegerQ", s));
+    bool r = iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True;
+    expr_free(iq);
+    return r;
+}
+
+/* The degenerate sphere: the Liouville normal form w'' + q w == 0 (y = mu w) has
+ * q CONSTANT (w = E^(+-Sqrt[-q] x)) or q = c/(x - x0)^2 (Euler, w = (x - x0)^rho,
+ * rho (rho - 1) + c == 0; a double root takes the Log partner).  The equation may
+ * still carry an irregular point -- 4 x^2 y'' + 4 x^3 y' + (x^4 + 2 x^2 + a) y == 0
+ * in t = x^2 has q = (a + 3)/(16 t^2) -- that only mu sees.  Pc, Qc borrowed. */
+static Expr* rp_normal_euler(const Expr* Pc, const Expr* Qc, const char* xv) {
+    Expr* mu = NULL;
+    Expr* r = dsolve_normal_form(Pc, Qc, xv, &mu);
+    Expr* out = NULL;
+    if (r && mu && !ds_has_head(mu, SYM_Integrate)) {
+        Expr* q = sf_ct(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(r)));
+        Expr* w = NULL;
+        Expr* x = expr_new_symbol(xv);
+        if (ds_free_of(q, xv)) {
+            if (ds_is_zero(q)) w = combo(expr_new_integer(1), expr_copy(x));
+            else {
+                Expr* s = eval_and_free(ds_call1("Sqrt", ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(q))));
+                w = combo(eval_and_free(ds_call1("Exp", ds_call2(SYM_Times, expr_copy(s), expr_copy(x)))),
+                          eval_and_free(ds_call1("Exp", ds_call2(SYM_Times, expr_new_integer(-1),
+                                                     ds_call2(SYM_Times, s, expr_copy(x))))));
+            }
+        } else {
+            Expr* zero = expr_new_integer(0);
+            Expr* rad = sft_pole_rad(q, zero, xv);
+            expr_free(zero);
+            if (sft_degree(rad, xv) == 1) {
+                Expr* x0 = sft_root1(rad, xv);
+                Expr* t = eval_and_free(ds_call2(SYM_Subtract, expr_copy(x), expr_copy(x0)));
+                Expr* c = sf_ct(ds_call2(SYM_Times, expr_copy(q),
+                              ds_call2(SYM_Power, expr_copy(t), expr_new_integer(2))));
+                if (ds_free_of(c, xv)) {
+                    /* rho = 1/2 +- Sqrt[1/4 - c] */
+                    Expr* d = sf_ct(ds_call2(SYM_Subtract,
+                                  ds_call2(SYM_Times, sft_half(1), sft_half(1)), expr_copy(c)));   /* 1/4 - c */
+                    if (ds_is_zero(d)) {
+                        Expr* sq = eval_and_free(ds_call1("Sqrt", expr_copy(t)));
+                        w = combo(expr_copy(sq), eval_and_free(ds_call2(SYM_Times, sq,
+                                      ds_call1("Log", expr_copy(t)))));
+                    } else {
+                        Expr* sd = eval_and_free(ds_call1("Sqrt", expr_copy(d)));
+                        Expr* r1 = eval_and_free(ds_call2(SYM_Plus, sft_half(1), expr_copy(sd)));
+                        Expr* r2 = eval_and_free(ds_call2(SYM_Subtract, sft_half(1), sd));
+                        w = combo(eval_and_free(ds_call2(SYM_Power, expr_copy(t), r1)),
+                                  eval_and_free(ds_call2(SYM_Power, expr_copy(t), r2)));
+                    }
+                    expr_free(d);
+                }
+                expr_free(c); expr_free(t); expr_free(x0);
+            }
+            expr_free(rad);
+        }
+        expr_free(x);
+        expr_free(q);
+        if (w) {
+            Expr* cand = sft_distribute(expr_copy(mu), w);
+            cand = eval_and_free(ds_call1(SYM_PowerExpand, cand));
+            if (rp_num_ok(cand, Pc, Qc, xv)) out = cand;
+            else expr_free(cand);
+        }
+    }
+    if (r) expr_free(r);
+    if (mu) expr_free(mu);
+    return out;
+}
+
+/* Does y'' + Pc y' + Qc y == 0 have a solution x^m, |m| <= 3?  Borrowed. */
+static bool rp_has_monomial_solution(const Expr* Pc, const Expr* Qc, const char* xv) {
+    for (int m = -3; m <= 3; m++) {
+        Expr* x = expr_new_symbol(xv);
+        /* m (m-1) x^(m-2) + P m x^(m-1) + Q x^m, over x^(m-2) */
+        Expr* r = sf_ct(ds_call2(SYM_Plus, expr_new_integer((int64_t)m * (m - 1)),
+                      ds_call2(SYM_Plus,
+                          ds_call2(SYM_Times, expr_new_integer(m),
+                              ds_call2(SYM_Times, expr_copy((Expr*)Pc), expr_copy(x))),
+                          ds_call2(SYM_Times, expr_copy((Expr*)Qc),
+                              ds_call2(SYM_Power, expr_copy(x), expr_new_integer(2))))));
+        expr_free(x);
+        bool z = ds_is_zero(r);
+        expr_free(r);
+        if (z) return true;
+    }
+    return false;
+}
+
+/* Finite points x1, x2 and Infinity (exponents ex[2], {0, 1} when it is ordinary):
+ * when the solutions are products of powers (x - x1)^r (x - x2)^s -- r an exponent
+ * at x1, s one at x2, and -(r + s) one at Infinity, i.e. the 2F1 terminates at its
+ * first term (always so for an ordinary Infinity or exponents {0, -1} there: a
+ * Moebius image of Euler's equation) -- write them directly; a double exponent at
+ * x1 takes the partner times Log[(x - x1)/(x - x2)].  The 2F1 route gives the same
+ * functions through (1 - z)^(-a) in a far larger form, which a Riccati
+ * linearisation then has to differentiate ((c x^2 + b x + a)^2 (y' + y^2) + A == 0).
+ * pts, ex borrowed. */
+static Expr* rp_two_point(Expr* pts[3], Expr* ex[3][2], const Expr* Pc, const Expr* Qc,
+                          const char* xv) {
+    Expr* sol[2] = { NULL, NULL };
+    for (int i = 0; i < 2; i++) {
+        if (i == 1) {
+            Expr* d = sf_ct(ds_call2(SYM_Subtract, expr_copy(ex[0][0]), expr_copy(ex[0][1])));
+            bool dbl = ds_is_zero(d);
+            expr_free(d);
+            if (dbl) {
+                if (sol[0]) {
+                    Expr* lg = ds_call1("Log", ds_call2(SYM_Times,
+                                   ds_call2(SYM_Subtract, expr_new_symbol(xv), expr_copy(pts[0])),
+                                   powneg1_sf(ds_call2(SYM_Subtract, expr_new_symbol(xv), expr_copy(pts[1])))));
+                    sol[1] = eval_and_free(ds_call2(SYM_Times, expr_copy(sol[0]), lg));
+                }
+                break;
+            }
+        }
+        for (int j = 0; j < 2 && !sol[i]; j++) {
+            bool okj = false;
+            for (int k = 0; k < 2 && !okj; k++) {
+                Expr* sum = sf_ct(ds_call2(SYM_Plus, expr_copy(ex[0][i]),
+                                ds_call2(SYM_Plus, expr_copy(ex[1][j]), expr_copy(ex[2][k]))));
+                okj = ds_is_zero(sum);
+                expr_free(sum);
+            }
+            if (okj) sol[i] = eval_and_free(ds_call2(SYM_Times, rp_pow(pts[0], ex[0][i], xv),
+                                                     rp_pow(pts[1], ex[1][j], xv)));
+        }
+    }
+    Expr* out = NULL;
+    if (sol[0] && sol[1]) {
+        out = combo(sol[0], sol[1]);
+        if (!rp_num_ok(out, Pc, Qc, xv)) { expr_free(out); out = NULL; }
+    } else {
+        if (sol[0]) expr_free(sol[0]);
+        if (sol[1]) expr_free(sol[1]);
+    }
+    return out;
+}
+
+Expr** dsolve_riemannp_try(DSolveProblem* P, size_t* nbranch) {
+    if (getenv("MATHILDA_NO_RIEMANNP")) return NULL;
+    Expr* Pc; Expr* Qc;
+    if (!dsolve_second_order_PQ(P, &Pc, &Qc)) return NULL;
+    const char* xv = P->ind_names[0];
+    Expr* general = NULL;
+    Expr* NP = NULL; Expr* DP = NULL; Expr* NQ = NULL; Expr* DQ = NULL;
+    Expr* rad = NULL; Expr* fl = NULL;
+    Expr* pts[3] = { NULL, NULL, NULL };
+    Expr* ex[3][2] = { { NULL, NULL }, { NULL, NULL }, { NULL, NULL } };
+    bool isinf[3] = { false, false, false };
+    int npt = 0;
+    bool ok = ds_is_rational_in(Pc, xv) && ds_is_rational_in(Qc, xv) &&
+              leaf_count_internal(Pc, true) + leaf_count_internal(Qc, true) <= 160;
+    if (ok) {
+        general = rp_normal_euler(Pc, Qc, xv);
+        if (general) ok = false;
+    }
+    if (ok) {
+        Expr* Pt = sf_ct(expr_copy(Pc));
+        Expr* Qt = sf_ct(expr_copy(Qc));
+        NP = eval_and_free(ds_call1("Numerator", expr_copy(Pt)));
+        DP = eval_and_free(ds_call1("Denominator", Pt));
+        NQ = eval_and_free(ds_call1("Numerator", expr_copy(Qt)));
+        DQ = eval_and_free(ds_call1("Denominator", Qt));
+        Expr* u  = eval_and_free(ds_call2("PolynomialLCM", expr_copy(DP), expr_copy(DQ)));
+        Expr* du = ds_d(expr_copy(u), expr_new_symbol(xv));
+        Expr* g  = eval_and_free(ds_call2("PolynomialGCD", expr_copy(u), du));
+        rad = sf_ct(ds_call2(SYM_Times, u, powneg1_sf(g)));
+        int dr = sft_degree(rad, xv);
+        ok = dr >= 1 && dr <= 3;
+    }
+    /* ---- singular points ---- */
+    if (ok) {
+        fl = eval_and_free(ds_call1("FactorList", expr_copy(rad)));
+        if (!fl || !ds_has_head(fl, SYM_List)) ok = false;
+        for (size_t i = 0; ok && i < fl->data.function.arg_count; i++) {
+            Expr* pair = fl->data.function.args[i];
+            if (!ds_has_head(pair, SYM_List) || pair->data.function.arg_count != 2) { ok = false; break; }
+            Expr* fac = pair->data.function.args[0];
+            int df = sft_degree(fac, xv);
+            if (df == 0) continue;
+            if (df < 0 || df > 2 || npt + df > 3) { ok = false; break; }
+            Expr* sol = ds_solve(ds_call2(SYM_Equal, expr_copy(fac), expr_new_integer(0)),
+                                 expr_new_symbol(xv));
+            size_t k = 0;
+            Expr** rs = dsolve_extract_solutions(sol, xv, &k);
+            if (sol) expr_free(sol);
+            if (!rs || (int)k != df) ok = false;
+            for (size_t j = 0; j < k; j++) {
+                if (ok && !ds_has_head(rs[j], SYM_Root) && leaf_count_internal(rs[j], true) <= 40)
+                    pts[npt++] = rs[j];
+                else { ok = false; expr_free(rs[j]); }
+            }
+            free(rs);
+        }
+    }
+    /* ---- local exponents at the finite points ---- */
+    for (int i = 0; ok && i < npt; i++) {
+        Expr* p = rp_local(NP, DP, pts[i], xv, 1);
+        Expr* q = rp_local(NQ, DQ, pts[i], xv, 2);
+        if (p && q) {
+            Expr* S = ds_simplify(ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(p)));
+            ok = specialform_quad_roots(S, q, &ex[i][0], &ex[i][1]);
+            expr_free(S);
+        } else ok = false;                                   /* irregular point */
+        if (p) expr_free(p);
+        if (q) expr_free(q);
+    }
+    /* ---- Infinity: ordinary, regular singular (a point), or irregular (decline) ---- */
+    if (ok) {
+        Expr* lp = NULL; Expr* lq = NULL;
+        int dp = rp_infdeg(NP, DP, xv, &lp), dq = rp_infdeg(NQ, DQ, xv, &lq);
+        if (dp == -2000 || dq == -2000 || dp >= 0 || dq >= -1) ok = false;   /* irregular */
+        else {
+            /* ordinary iff P - 2/x = O(x^-2) and Q = O(x^-4) */
+            bool ordinary = false;
+            if (dq <= -4) {
+                Expr* r2 = sf_ct(ds_call2(SYM_Subtract, ds_call2(SYM_Times, expr_new_symbol(xv),
+                                   expr_copy(Pc)), expr_new_integer(2)));
+                Expr* n2 = eval_and_free(ds_call1("Numerator", expr_copy(r2)));
+                Expr* d2 = eval_and_free(ds_call1("Denominator", r2));
+                Expr* l2 = NULL;
+                int dd = rp_infdeg(n2, d2, xv, &l2);
+                ordinary = dd != -2000 && dd <= -1;
+                if (l2) expr_free(l2);
+                expr_free(n2); expr_free(d2);
+            }
+            if (!ordinary) {
+                if (npt != 2) ok = false;
+                else {
+                    Expr* pinf = (dp == -1) ? expr_copy(lp) : expr_new_integer(0);
+                    Expr* qinf = (dq == -2) ? expr_copy(lq) : expr_new_integer(0);
+                    Expr* S = ds_simplify(ds_call2(SYM_Subtract, pinf, expr_new_integer(1)));
+                    isinf[2] = true;
+                    ok = specialform_quad_roots(S, qinf, &ex[2][0], &ex[2][1]);
+                    expr_free(S); expr_free(qinf);
+                    npt = 3;
+                }
+            } else if (npt == 2) {
+                /* two singular points and an ordinary Infinity: Infinity is a third
+                 * "point" with exponents {0, 1} (y ~ c0 + c1/x), and the P-symbol
+                 * reduction still holds (the 2F1 is then elementary). */
+                isinf[2] = true;
+                ex[2][0] = expr_new_integer(0);
+                ex[2][1] = expr_new_integer(1);
+                npt = 3;
+            } else if (npt != 3) ok = false;
+        }
+        if (lp) expr_free(lp);
+        if (lq) expr_free(lq);
+    }
+    /* two finite points + Infinity: try the elementary product pair first */
+    if (ok && npt == 3 && isinf[2]) {
+        general = rp_two_point(pts, ex, Pc, Qc, xv);
+        if (general) ok = false;
+    }
+    /* ---- the six assignments; the point sent to 0 needs a non-integer
+     *      exponent difference ---- */
+    if (ok && npt == 3) {
+        static const int perm[6][3] = { {0,2,1}, {1,2,0}, {0,1,2}, {2,1,0}, {1,0,2}, {2,0,1} };
+        bool nonint[3];
+        for (int i = 0; i < 3; i++) {
+            Expr* d = eval_and_free(ds_call2(SYM_Subtract, expr_copy(ex[i][0]), expr_copy(ex[i][1])));
+            nonint[i] = !rp_is_int(d);
+            expr_free(d);
+        }
+        int tries = 0;
+        for (int k = 0; k < 6 && !general && tries < 3; k++) {
+            int i0 = perm[k][0], i1 = perm[k][1], i2 = perm[k][2];
+            if (!nonint[i0]) continue;
+            /* prefer a zero exponent at a and at c (the cleanest prefactor) */
+            int ia = ds_is_zero(ex[i0][1]) ? 1 : 0;
+            int ic = ds_is_zero(ex[i2][1]) ? 1 : 0;
+            Expr* cand = rp_build(isinf[i0] ? NULL : pts[i0], isinf[i1] ? NULL : pts[i1],
+                                  isinf[i2] ? NULL : pts[i2],
+                                  ex[i0][ia], ex[i0][1 - ia], ex[i1][0], ex[i1][1],
+                                  ex[i2][ic], xv);
+            tries++;
+            if (cand && leaf_count_internal(cand, true) <= 600 && rp_num_ok(cand, Pc, Qc, xv))
+                general = cand;
+            else if (cand) expr_free(cand);
+        }
+    }
+    /* ---- every usable exponent difference an integer (the logarithmic case): a
+     *      TERMINATING solution pref * 2F1[A, B, C, z] (C = 1 + al - al' >= 1, both
+     *      choices of ga -- the second is Euler's transform) is elementary, and
+     *      the second solution is a reduction of order from it (quadratures held
+     *      inert when they do not close; KnownSolutionReduction's verifier).
+     *      A Fuchsian equation has no exponential solution, so when it has a
+     *      MONOMIAL one DSolve`KnownSolutionReduction (later) reduces from it
+     *      with its own cleaner y1: this stage leaves those to it. ---- */
+    if (ok && npt == 3 && !general && g_dsolve_depth <= 1 && !rp_has_monomial_solution(Pc, Qc, xv)) {
+        static const int perm[6][3] = { {0,2,1}, {1,2,0}, {0,1,2}, {2,1,0}, {1,0,2}, {2,0,1} };
+        int tries = 0;
+        for (int k = 0; k < 6 && !general && tries < 4; k++) {
+            int i0 = perm[k][0], i1 = perm[k][1], i2 = perm[k][2];
+            Expr* d = ds_simplify(ds_call2(SYM_Subtract, expr_copy(ex[i0][0]), expr_copy(ex[i0][1])));
+            bool dint = d->type == EXPR_INTEGER;
+            int ia = (dint && d->data.integer >= 0) ? 0 : 1;   /* al - al' >= 0 */
+            expr_free(d);
+            if (!dint) continue;
+            for (int ic = 0; ic < 2 && !general && tries < 4; ic++) {
+                Expr* y1 = rp_one(isinf[i0] ? NULL : pts[i0], isinf[i1] ? NULL : pts[i1],
+                                  isinf[i2] ? NULL : pts[i2],
+                                  ex[i0][ia], ex[i0][1 - ia], ex[i1][0], ex[i1][1],
+                                  ex[i2][ic], xv);
+                if (!ds_has_head(y1, SYM_Hypergeometric2F1) && !ds_has_head(y1, SYM_HypergeometricPFQ) &&
+                    leaf_count_internal(y1, true) <= 200 && !ds_is_zero(y1)) {
+                    tries++;
+                    y1 = ds_simplify(y1);
+                    /* an elementary 2F1 often comes back through ArcTanh / Log:
+                     * E^(-2 ArcTanh[u]) is (1-u)/(1+u).  The tidied form is used
+                     * only if it is still annihilated (knownsol certifies). */
+                    Expr* y1t = eval_and_free(ds_call1(SYM_PowerExpand,
+                                    ds_simplify(eval_and_free(ds_call1("TrigToExp", expr_copy(y1))))));
+                    if (!expr_eq(y1t, y1)) general = dsolve_knownsol_reduce(P, y1t);
+                    expr_free(y1t);
+                    if (!general) general = dsolve_knownsol_reduce(P, y1);
+                }
+                expr_free(y1);
+            }
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        if (pts[i]) expr_free(pts[i]);
+        if (ex[i][0]) expr_free(ex[i][0]);
+        if (ex[i][1]) expr_free(ex[i][1]);
+    }
+    if (fl) expr_free(fl);
+    if (rad) expr_free(rad);
+    if (NP) expr_free(NP);
+    if (DP) expr_free(DP);
+    if (NQ) expr_free(NQ);
+    if (DQ) expr_free(DQ);
+    expr_free(Pc); expr_free(Qc);
+    if (!general) return NULL;
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = general;
+    *nbranch = 1;
+    return out;
+}
+
+static Expr* builtin_dsolve_riemannp(Expr* res) {
+    return dsolve_method_builtin(res, dsolve_riemannp_try);
+}
+
 static Expr* builtin_dsolve_specialform_transform(Expr* res) {
     return dsolve_method_builtin(res, dsolve_specialform_transform_try);
 }
@@ -2094,6 +2662,18 @@ static Expr* builtin_dsolve_specialform(Expr* res) {
 }
 
 void dsolve_specialform_init(void) {
+    symtab_add_builtin("DSolve`RiemannP", builtin_dsolve_riemannp);
+    symtab_get_def("DSolve`RiemannP")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`RiemannP",
+        "DSolve`RiemannP[eqn, y, x] solves a homogeneous second-order linear ODE with "
+        "rational coefficients whose singular points are exactly three regular singular "
+        "points on the Riemann sphere (finite roots of the coefficient denominators, "
+        "rational, symbolic or radical, plus Infinity when it is singular). A Moebius map "
+        "sends them to 0, Infinity, 1 and the local exponents are pulled out: "
+        "y = (x-a)^al (x-c)^ga (x-b)^(-al-ga) Hypergeometric2F1[al+be+ga, al+be'+ga, "
+        "1+al-al', z] with its z^(1-C) partner, the point sent to 0 having a non-integer "
+        "exponent difference. Numerically back-substituted at complex points with the "
+        "parameters sampled.");
     symtab_add_builtin("DSolve`SpecialFunctionTransform", builtin_dsolve_specialform_transform);
     symtab_get_def("DSolve`SpecialFunctionTransform")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`SpecialFunctionTransform",
