@@ -49,6 +49,33 @@
 static time_t g_kv_deadline;
 static bool kv_expired(void) { return time(NULL) >= g_kv_deadline; }
 
+/* `e` (consumed) evaluated under TimeConstrained for what is left of the per-call
+ * budget; NULL when the budget is already spent or runs out.  The deadline above is
+ * checked only BETWEEN steps, so one Solve of the Riccati ansatz over radical pole
+ * coefficients (singular points at +-I/Sqrt[2]: (2 x^2 + 1) y'' + 3 x y' - 3 y == 0,
+ * §2.2.62-6138) ran 12 s past its 5 s budget, and (1 + x^3) x y'' ... (§2.2.63-6250)
+ * never returned, starving every method behind Kovacic (RiemannP solves both in
+ * 0.03 s).  Nested budgets clamp to an enclosing TimeConstrained. */
+static Expr* kv_bounded(Expr* e) {
+    time_t left = g_kv_deadline - time(NULL);
+    if (left <= 0) { expr_free(e); return NULL; }
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(intern_symbol("TimeConstrained")),
+                  (Expr*[]){ e, expr_new_integer((int64_t)left),
+                             expr_new_symbol(intern_symbol("$Aborted")) }, 3));
+    if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol("$Aborted")) {
+        expr_free(r); return NULL;
+    }
+    return r;
+}
+static Expr* kv_solve(Expr* eqs, Expr* vars)  { return kv_bounded(ds_call2(SYM_Solve, eqs, vars)); }
+/* Simplify within the budget; on a timeout the unsimplified `e` is returned. */
+static Expr* kv_simplify(Expr* e) {
+    Expr* r = kv_bounded(ds_call1(SYM_Simplify, expr_copy(e)));
+    if (!r) return e;
+    expr_free(e);
+    return r;
+}
+
 /* ---- small evaluated builders (args consumed, result owned) ---- */
 static Expr* T2(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Times, a, b)); }
 static Expr* A2(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Plus,  a, b)); }
@@ -117,7 +144,7 @@ static Expr* solve_ansatz(Expr* eqexpr, const char* x, Expr** unk, size_t nu, Ex
     Expr* varlist = expr_new_function(expr_new_symbol(SYM_List), vs, nu);
     free(vs);
 
-    Expr* sol = ds_solve(eqlist, varlist);
+    Expr* sol = kv_solve(eqlist, varlist);
     Expr* out = NULL;
     if (sol && head_is(sol, SYM_List) && sol->data.function.arg_count >= 1) {
         Expr* branch = sol->data.function.args[0];
@@ -128,7 +155,7 @@ static Expr* solve_ansatz(Expr* eqexpr, const char* x, Expr** unk, size_t nu, Ex
             for (size_t i = 0; i < nu; i++)
                 if (ds_contains(out, unk[i]->data.symbol.name))
                     out = ds_subst(out, expr_copy(unk[i]), expr_new_integer(0));
-            out = ds_simplify(out);
+            out = kv_simplify(out);
         }
     }
     if (sol) expr_free(sol);
@@ -157,7 +184,7 @@ static Expr* solve_high_coeffs(Expr* g, const char* x, int kmin, int kmax,
     for (size_t i = 0; i < nu; i++) vs[i] = expr_copy(unk[i]);
     Expr* varlist = expr_new_function(expr_new_symbol(SYM_List), vs, nu);
     free(vs);
-    Expr* sol = ds_solve(eqlist, varlist);
+    Expr* sol = kv_solve(eqlist, varlist);
     Expr* out = NULL;
     if (sol && head_is(sol, SYM_List) && sol->data.function.arg_count >= 1) {
         Expr* branch = sol->data.function.args[0];
@@ -167,7 +194,7 @@ static Expr* solve_high_coeffs(Expr* g, const char* x, int kmin, int kmax,
             for (size_t i = 0; i < nu; i++)
                 if (ds_contains(out, unk[i]->data.symbol.name))
                     out = ds_subst(out, expr_copy(unk[i]), expr_new_integer(0));
-            out = ds_simplify(out);
+            out = kv_simplify(out);
         }
     }
     if (sol) expr_free(sol);
@@ -257,22 +284,29 @@ static Expr* fold_const_factor(Expr* e, const char* x) {
 static Expr* second_solution(const Expr* z1, const char* x) {
     Expr* inv = Powi(expr_copy((Expr*)z1), -2);
     g_integrate_quiet++;   /* speculative: a non-elementary ∫ means "decline" */
-    Expr* integ = ds_integrate(inv, expr_new_symbol(x));
+    Expr* integ = kv_bounded(ds_call2(SYM_Integrate, inv, expr_new_symbol(x)));
     g_integrate_quiet--;
+    if (!integ) return NULL;                         /* budget spent */
     if (ds_has_head(integ, SYM_Integrate)) { expr_free(integ); return NULL; }
-    return fold_const_factor(ds_simplify(T2(expr_copy((Expr*)z1), integ)), x);
+    return fold_const_factor(kv_simplify(T2(expr_copy((Expr*)z1), integ)), x);
 }
 
 /* z = Exp[∫ω] with the antiderivative guarded (D[∫ω] == ω).  NULL on failure. */
 static Expr* exp_integral(const Expr* w, const char* x) {
     g_integrate_quiet++;   /* speculative: a non-elementary ∫ means "decline" */
-    Expr* integ = ds_integrate(expr_copy((Expr*)w), expr_new_symbol(x));
+    Expr* integ = kv_bounded(ds_call2(SYM_Integrate, expr_copy((Expr*)w), expr_new_symbol(x)));
     g_integrate_quiet--;
+    if (!integ) return NULL;                         /* budget spent */
     if (ds_has_head(integ, SYM_Integrate)) { expr_free(integ); return NULL; }
     Expr* back = ds_d(expr_copy(integ), expr_new_symbol(x));
     Expr* chk = Sub(back, expr_copy((Expr*)w));
-    bool ok = ds_is_zero(chk);
-    expr_free(chk);
+    /* The differentiate-back check, under the per-call budget (a timeout is a
+     * decline): the unbounded ds_is_zero spun indefinitely on the logs over the
+     * cube roots of -1 of Integrate[(3 x^3 - 1)/(2 x (x^3 + 1)), x]
+     * (x (x^3 + 1) y'' + (x^3 - 1) y' - x^2 y == 0, §2.2.63-6250). */
+    Expr* zq = kv_bounded(ds_call1("PossibleZeroQ", chk));
+    bool ok = zq && zq->type == EXPR_SYMBOL && zq->data.symbol.name == SYM_True;
+    expr_free(zq);
     if (!ok) { expr_free(integ); return NULL; }
     return fn1("Exp", integ);
 }
@@ -819,16 +853,16 @@ static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
                     theta = A2(theta, A2(sct, T2(expr_copy(a),
                                  Powi(Sub(expr_new_symbol(x), expr_copy(pr.roots[i])), -1))));
                 }
-                theta = ds_simplify(theta);
+                theta = kv_simplify(theta);
                 Expr* e = exp_integral(theta, x);       /* Exp[∫ω]; borrows theta */
                 if (!e) { expr_free(theta); continue; }
                 /* R2 = ω' + ω² - r */
-                Expr* R2 = ds_simplify(Sub(A2(ds_d(expr_copy(theta), expr_new_symbol(x)),
+                Expr* R2 = kv_simplify(Sub(A2(ds_d(expr_copy(theta), expr_new_symbol(x)),
                                               Powi(expr_copy(theta), 2)),
                                            expr_copy((Expr*)r)));
                 Expr* Psol = solve_monic_P(theta, R2, dv, x, counter);
                 if (Psol) {
-                    Expr* y1 = ds_simplify(T2(T2(expr_copy((Expr*)recovery), expr_copy(Psol)),
+                    Expr* y1 = kv_simplify(T2(T2(expr_copy((Expr*)recovery), expr_copy(Psol)),
                                               expr_copy(e)));
                     expr_free(Psol);
                     Expr* lc = fn1("LeafCount", expr_copy(y1));
@@ -868,9 +902,9 @@ static Expr* kovacic_case1_general(const Expr* r, const Expr* rd,
             Expr* y1 = cand[pick];
             Expr* integrand = ds_simplify(T2(expr_copy(w2), Powi(expr_copy(y1), -2)));
             g_integrate_quiet++;   /* speculative: non-elementary ∫ => this y1 declines */
-            Expr* integ = ds_integrate(integrand, expr_new_symbol(x));  /* consumes integrand */
+            Expr* integ = kv_bounded(ds_call2(SYM_Integrate, integrand, expr_new_symbol(x)));
             g_integrate_quiet--;
-            if (!ds_has_head(integ, SYM_Integrate) && !has_hang_special(integ)) {   /* ∫ elementary & clean */
+            if (integ && !ds_has_head(integ, SYM_Integrate) && !has_hang_special(integ)) {   /* ∫ elementary & clean */
                 Expr* y2 = ds_simplify(T2(expr_copy(y1), integ));       /* consumes integ */
                 /* Assemble C[1] y1 + C[2] y2 with y1, y2 already individually
                  * Simplify'd.  Deliberately NOT realify()'d: a final Simplify of

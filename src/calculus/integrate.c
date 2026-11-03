@@ -3059,6 +3059,10 @@ void integrate_init(void) {
      * must not leave the definite depth raised, or every later Integrate::nonelem
      * would be deferred forever. */
     tc_register_unwind_counter(&g_integrate_definite_depth);
+    /* Raised around speculative quadratures all over DSolve; a TimeConstrained abort
+     * inside one left it raised for the rest of the session (every later
+     * Integrate::nonelem silenced, and the Risch stage gated on it skipped). */
+    tc_register_unwind_counter(&g_integrate_quiet);
 
     /* The ParallelMixedTower method symbol (lazy-loads src/internal/mixed/
      * ParallelMixed.m on first use).  Registered here so the qualified-symbol
