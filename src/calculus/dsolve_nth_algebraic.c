@@ -101,83 +101,16 @@ static void recurse_collect(Expr* subeqn, const char* yname, const char* xvar,
  * s Sqrt[r] == ±Sqrt[s^2 r] pointwise, so for a QUADRATIC, rewriting both roots
  * the same way leaves the pair {root+, root-} unchanged as a set; the caller
  * applies it only at degree 2 and re-checks that every rewritten root still
- * annihilates the polynomial, keeping the raw roots otherwise. */
-static Expr* na_sqrt_split(Expr* R) {           /* Sqrt[R] rewritten; R consumed */
-    Expr* fl = eval_and_free(ds_call1("FactorSquareFreeList", expr_copy(R)));
-    if (!head_is(fl, SYM_List)) { expr_free(fl);
-        return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ R }, 1); }
-    size_t nf = fl->data.function.arg_count;
-    Expr** outf = malloc((nf + 1) * sizeof(Expr*)); size_t no = 0;
-    Expr** inf  = malloc((nf + 1) * sizeof(Expr*)); size_t ni = 0;
-    bool ok = true;
-    for (size_t i = 0; i < nf && ok; i++) {
-        Expr* pr = fl->data.function.args[i];
-        if (!head_is(pr, SYM_List) || pr->data.function.arg_count != 2
-            || pr->data.function.args[1]->type != EXPR_INTEGER) { ok = false; break; }
-        Expr* f = pr->data.function.args[0];
-        int64_t m = pr->data.function.args[1]->data.integer;
-        bool numeric = (f->type == EXPR_INTEGER || head_is(f, SYM_Rational));
-        if (numeric) {
-            /* numeric content f^m: an exact positive square root comes outside */
-            Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-                          (Expr*[]){ expr_copy(f), expr_new_integer(m) }, 2));
-            Expr* sq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt),
-                           (Expr*[]){ expr_copy(c) }, 1));
-            if (sq->type == EXPR_INTEGER || head_is(sq, SYM_Rational)) {
-                outf[no++] = sq; expr_free(c);
-            } else { inf[ni++] = c; expr_free(sq); }
-            continue;
-        }
-        if (m / 2 > 0)
-            outf[no++] = expr_new_function(expr_new_symbol(SYM_Power),
-                             (Expr*[]){ expr_copy(f), expr_new_integer(m / 2) }, 2);
-        if (m % 2)
-            inf[ni++] = expr_copy(f);
-    }
-    expr_free(fl);
-    bool has_sym_out = false;
-    for (size_t i = 0; i < no; i++)
-        if (!(outf[i]->type == EXPR_INTEGER || head_is(outf[i], SYM_Rational))) has_sym_out = true;
-    if (!ok || !has_sym_out) {               /* nothing symbolic to pull out */
-        for (size_t i = 0; i < no; i++) expr_free(outf[i]);
-        for (size_t i = 0; i < ni; i++) expr_free(inf[i]);
-        free(outf); free(inf);
-        return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ R }, 1);
-    }
-    expr_free(R);
-    Expr* inner = ni ? expr_new_function(expr_new_symbol(SYM_Times), inf, ni)
-                     : expr_new_integer(1);
-    free(inf);
-    outf[no++] = expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ inner }, 1);
-    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), outf, no);
-    free(outf);
-    return r;
-}
-
-/* e with every Sqrt[R] (Power[R, 1/2]) rewritten by na_sqrt_split; e borrowed. */
-static Expr* na_sqrt_extract(const Expr* e, const Expr* half) {
-    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
-    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
-        && expr_eq(e->data.function.args[1], half))
-        return na_sqrt_split(na_sqrt_extract(e->data.function.args[0], half));
-    size_t n = e->data.function.arg_count;
-    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
-    for (size_t i = 0; i < n; i++) a[i] = na_sqrt_extract(e->data.function.args[i], half);
-    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
-    free(a);
-    return r;
-}
-
+ * annihilates the polynomial, keeping the raw roots otherwise.  The rewrite itself
+ * is ds_sqrt_extract_squares (dsolve_common.c), shared with LowerDerivativeReduction. */
 /* Rewrite the degree-2 roots gs[0..ng) in place when every rewritten root still
  * satisfies poly(Dn) == 0 identically (else leave all of them untouched). */
 static void na_normalise_quadratic_roots(Expr** gs, size_t ng, const Expr* poly,
                                          const char* Dn) {
-    Expr* half = eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational),
-                     (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2));
     Expr** nw = malloc(ng * sizeof(Expr*));
     bool ok = true, changed = false;
     for (size_t i = 0; i < ng; i++) {
-        nw[i] = eval_and_free(na_sqrt_extract(gs[i], half));
+        nw[i] = ds_sqrt_extract_squares(gs[i]);
         if (!expr_eq(nw[i], gs[i])) changed = true;
     }
     for (size_t i = 0; i < ng && ok && changed; i++) {
@@ -191,7 +124,6 @@ static void na_normalise_quadratic_roots(Expr** gs, size_t ng, const Expr* poly,
         else expr_free(nw[i]);
     }
     free(nw);
-    expr_free(half);
 }
 
 /* ---- binomial separable form:  y'^n == A(x) B(y) ----

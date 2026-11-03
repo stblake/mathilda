@@ -1,3 +1,19 @@
+# Nasser's 2026-11-03 report (7 DSolve items), from v0.6158
+
+Plan: ~/.claude/plans/let-s-fix-the-following-sprightly-scott.md
+
+- [x] W1 dsolve_parse flattens nested equation/condition lists (items 1-3, item 4 IVP)
+- [x] W2 Integrate`QuadraticRadicals symbolic a: opaque Sqrt[a] in Euler I (dropped Log = wrong answer), expanded-radicand degree (110 s), closed form + Collect tidy instead of the Euler decline
+- [x] W3 SymmetricSquare: expand exponents, distribute mu (x^a C1 + C2 + C3 x^-a)
+- [x] W4 LowerDerivativeReduction: all branches, ds_sqrt_extract_squares (shared), Cauchy repeated integration, inert fallback (items 5, 6)
+- [x] W5 separable inversion Solve muted (Solve::nongen)
+- [x] W6 ds_tidy_integrand on held integrands (item 7)
+- [x] tests (test_dsolve 4 new, test_integrate_quadrad 1 new), docs, changelog
+- [ ] corpus gates (66) vs STATUS baselines; commit v0.6159 (Integrate) + v0.6160 (DSolve), tags
+
+## Review
+- ctest -LE nightly: 587/587. check-messages, check-c99 green.
+
 # DSolve: the next 1000 of Nasser's corpus, §2.2.56–§2.2.65 (problems 5501–6500), from 2026-11-03, v0.6147
 
 Plan: ~/.claude/plans/let-s-continue-our-implementation-sequential-nebula.md

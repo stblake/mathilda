@@ -352,6 +352,128 @@ Expr* ds_rename_param(const Expr* e, const char* head) {
     return r;
 }
 
+Expr* ds_expand_power_exponents(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power && n == 2
+        && e->data.function.args[1]->type == EXPR_FUNCTION) {
+        Expr* b = ds_expand_power_exponents(e->data.function.args[0]);
+        Expr* x = eval_and_free(ds_call1("Expand", expr_copy(e->data.function.args[1])));
+        return eval_and_free(ds_call2(SYM_Power, b, x));
+    }
+    Expr* nh = ds_expand_power_exponents(h);
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) args[i] = ds_expand_power_exponents(e->data.function.args[i]);
+    Expr* r = expr_new_function(nh, args, n);
+    free(args);
+    return r;
+}
+
+/* ---- perfect-square extraction from radicals (see ds_sqrt_extract_squares) ----
+ * Each Sqrt[R] becomes sqrt(c2) * prod f^Floor[m/2] * Sqrt[c1 * prod f^Mod[m,2]]
+ * from FactorSquareFreeList[R] (c = c2 c1 the numeric content, c2 an exact
+ * square).  Moved from dsolve_nth_algebraic.c. */
+static Expr* ds_sqrt_split(Expr* R) {           /* Sqrt[R] rewritten; R consumed */
+    Expr* fl = eval_and_free(ds_call1("FactorSquareFreeList", expr_copy(R)));
+    if (!head_is(fl, SYM_List)) { expr_free(fl);
+        return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ R }, 1); }
+    size_t nf = fl->data.function.arg_count;
+    Expr** outf = malloc((nf + 1) * sizeof(Expr*)); size_t no = 0;
+    Expr** inf  = malloc((nf + 1) * sizeof(Expr*)); size_t ni = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* pr = fl->data.function.args[i];
+        if (!head_is(pr, SYM_List) || pr->data.function.arg_count != 2
+            || pr->data.function.args[1]->type != EXPR_INTEGER) { ok = false; break; }
+        Expr* f = pr->data.function.args[0];
+        int64_t m = pr->data.function.args[1]->data.integer;
+        bool numeric = (f->type == EXPR_INTEGER || head_is(f, SYM_Rational));
+        if (numeric) {
+            /* numeric content f^m: an exact positive square root comes outside */
+            Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ expr_copy(f), expr_new_integer(m) }, 2));
+            Expr* sq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt),
+                           (Expr*[]){ expr_copy(c) }, 1));
+            if (sq->type == EXPR_INTEGER || head_is(sq, SYM_Rational)) {
+                outf[no++] = sq; expr_free(c);
+            } else { inf[ni++] = c; expr_free(sq); }
+            continue;
+        }
+        if (m / 2 > 0)
+            outf[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_copy(f), expr_new_integer(m / 2) }, 2);
+        if (m % 2)
+            inf[ni++] = expr_copy(f);
+    }
+    expr_free(fl);
+    bool has_sym_out = false;
+    for (size_t i = 0; i < no; i++)
+        if (!(outf[i]->type == EXPR_INTEGER || head_is(outf[i], SYM_Rational))) has_sym_out = true;
+    if (!ok || !has_sym_out) {               /* nothing symbolic to pull out */
+        for (size_t i = 0; i < no; i++) expr_free(outf[i]);
+        for (size_t i = 0; i < ni; i++) expr_free(inf[i]);
+        free(outf); free(inf);
+        return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ R }, 1);
+    }
+    expr_free(R);
+    Expr* inner = ni ? expr_new_function(expr_new_symbol(SYM_Times), inf, ni)
+                     : expr_new_integer(1);
+    free(inf);
+    outf[no++] = expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ inner }, 1);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), outf, no);
+    free(outf);
+    return r;
+}
+
+/* e with every Sqrt[R] (Power[R, 1/2]) rewritten by ds_sqrt_split; e borrowed. */
+static Expr* ds_sqrt_extract_rec(const Expr* e, const Expr* half) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[1], half))
+        return ds_sqrt_split(ds_sqrt_extract_rec(e->data.function.args[0], half));
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = ds_sqrt_extract_rec(e->data.function.args[i], half);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+Expr* ds_sqrt_extract_squares(const Expr* e) {
+    Expr* half = eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational),
+                     (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2));
+    Expr* r = eval_and_free(ds_sqrt_extract_rec(e, half));
+    expr_free(half);
+    return r;
+}
+
+/* The integrand of a HELD (inert) integral is part of the answer: give it its
+ * Together form when that is strictly smaller (E^Cos[x] (-x^2/2 + x^2 (-1/4 +
+ * Log[x]/2)) -> E^Cos[x] x^2 (-3 + 2 Log[x])/4; Nasser, 2026-11-03).  An
+ * identity rewrite, leaf-count gated so an integrand already in its smallest form
+ * is untouched.  f consumed. */
+Expr* ds_tidy_integrand(Expr* f) {
+    if (!f || f->type != EXPR_FUNCTION) return f;
+    Expr* tog = eval_and_free(ds_call1(SYM_Together, expr_copy(f)));
+    if (!tog) return f;
+    /* Factor pulls the common E^Cos[x] x^2 out of the Together numerator; only on
+     * a small integrand (a display tidy must not cost a polynomial factorisation
+     * of a large one). */
+    if (leaf_count_internal(tog, true) <= 200) {
+        Expr* fac = eval_and_free(ds_call1("Factor", expr_copy(tog)));
+        if (fac && leaf_count_internal(fac, true) < leaf_count_internal(tog, true)) {
+            expr_free(tog); tog = fac;
+        } else if (fac) expr_free(fac);
+    }
+    if (leaf_count_internal(tog, true) < leaf_count_internal(f, true)) {
+        expr_free(f); return tog;
+    }
+    expr_free(tog);
+    return f;
+}
+
 /* ------------------------------------------------------------------ *
  *  Option parsing                                                     *
  * ------------------------------------------------------------------ */
@@ -412,6 +534,18 @@ static bool ds_is_condition(const Expr* item, const char** funcs, size_t nfun, c
     if (!ok) return false;
     *fi = k; *order = ord; *point = arg; *value = val;
     return true;
+}
+
+/* Append the leaves of a (possibly nested) List of equations/conditions to
+ * *items (borrowed pointers; growable array of capacity *cap). */
+static void ds_flatten_items(Expr* e, Expr*** items, size_t* n, size_t* cap) {
+    if (head_is(e, SYM_List)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            ds_flatten_items(e->data.function.args[i], items, n, cap);
+        return;
+    }
+    if (*n == *cap) { *cap *= 2; *items = realloc(*items, *cap * sizeof(Expr*)); }
+    (*items)[(*n)++] = e;
 }
 
 /* ------------------------------------------------------------------ *
@@ -484,15 +618,19 @@ bool dsolve_parse(Expr* res, DSolveProblem* P) {
     if (own_fi) free(fi);
 
     /* ---- equations / conditions (A[0]) ---- */
-    Expr* eqns = A[0];
-    Expr** items; size_t nitems; bool own_items = false;
-    if (head_is(eqns, SYM_List)) { nitems = eqns->data.function.arg_count; items = eqns->data.function.args; }
-    else { nitems = 1; items = malloc(sizeof(Expr*)); items[0] = eqns; own_items = true; }
+    /* Nested lists are flattened: DSolve[{ode, {y[0]==1, y'[0]==2}}, ...] is the
+     * same problem as the flat {ode, y[0]==1, y'[0]==2} (a user-level `ic = {...}`
+     * spliced into the equation list).  Before this a List item was silently
+     * dropped, so its conditions were never fitted and C[k] leaked into an IVP
+     * answer (Nasser, 2026-11-03). */
+    size_t nitems = 0, cap = 4;
+    Expr** items = malloc(cap * sizeof(Expr*));
+    ds_flatten_items(A[0], &items, &nitems, &cap);
 
     /* Normalize each item (D -> Derivative). */
-    Expr** norm = malloc(nitems * sizeof(Expr*));
+    Expr** norm = malloc((nitems ? nitems : 1) * sizeof(Expr*));
     for (size_t i = 0; i < nitems; i++) norm[i] = ds_normalize_derivs(items[i]);
-    if (own_items) free(items);
+    free(items);
 
     P->max_order = calloc(nfun ? nfun : 1, sizeof(int));
     P->eq_residuals = malloc((nitems ? nitems : 1) * sizeof(Expr*));
@@ -2280,7 +2418,8 @@ Expr* ds_inactivate_integrate(Expr* e) {
         expr_free(e);
         Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
                           (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
-        return expr_new_function(inact, (Expr*[]){ ds_inactivate_integrate(f), v }, 2);
+        f = ds_tidy_integrand(ds_inactivate_integrate(f));
+        return expr_new_function(inact, (Expr*[]){ f, v }, 2);
     }
     e->data.function.head = ds_inactivate_integrate(h);
     for (size_t i = 0; i < e->data.function.arg_count; i++)

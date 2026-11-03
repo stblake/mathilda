@@ -415,6 +415,20 @@ Expr* ds_const(int k);
 /* Rewrite every generated constant C[k] in `e` to head[k] (the GeneratedParameters
  * head).  `e` borrowed, result owned (a no-op deep copy when head == "C"). */
 Expr* ds_rename_param(const Expr* e, const char* head);
+/* Answer tidy: fresh tree with every symbolic Power exponent Expand-ed
+ * (x^(2 (1/2 + a/2)) -> x^(1 + a)), so integer exponent shifts merge with
+ * neighbouring powers of the same base once the caller Expands.  Exact: only the
+ * exponent's own form changes, never the base or the branch. */
+Expr* ds_expand_power_exponents(const Expr* e);
+/* Fresh, evaluated copy of e with every Sqrt[R] rewritten to pull R's square
+ * factors outside: Sqrt[s^2 r] -> s Sqrt[r] (FactorSquareFreeList).  s Sqrt[r] ==
+ * +-Sqrt[s^2 r] pointwise, NOT identically, so a caller must re-verify the
+ * rewritten expression against the equation it is meant to satisfy (NthAlgebraic
+ * re-checks its quadratic's roots; LowerDerivativeReduction its reduced ODE). */
+Expr* ds_sqrt_extract_squares(const Expr* e);
+/* Together form of an inert integral's integrand when strictly smaller (an
+ * identity rewrite for answer readability).  f consumed. */
+Expr* ds_tidy_integrand(Expr* f);
 
 /* True iff the interned symbol `name` occurs anywhere in `e` (head or arg). */
 bool  ds_contains(const Expr* e, const char* name);

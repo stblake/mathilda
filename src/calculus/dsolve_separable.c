@@ -32,6 +32,7 @@
 #include "../attr.h"
 #include "../common.h"
 #include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
+#include "../message.h"         /* mth_msg_suppress_push: mute the inversion Solve */
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
@@ -409,7 +410,13 @@ Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     Expr* rhs = eval_and_free(ds_call2(SYM_Plus, rhsInt, ds_const(1)));
     Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ lhsInt, rhs }, 2);
 
+    /* The inversion is speculative (its branches are verified below), so its
+     * Solve::nongen / Solve::ifun diagnostics are probe noise: mute them, as the
+     * autonomous and homogeneous inversions do.  At top level the nested-DSolve
+     * mute does not apply, so q q' == a Sqrt[1 + b^2 q^2] leaked Solve::nongen. */
+    mth_msg_suppress_push();
     Expr* solres = ds_solve(eq, expr_new_symbol(Yname));
+    mth_msg_suppress_pop();
     size_t nb = 0;
     Expr** bodies = dsolve_extract_solutions(solres, Yname, &nb);
     if (solres) expr_free(solres);

@@ -132,6 +132,12 @@ Expr** dsolve_symsquare_try(DSolveProblem* P, size_t* nbranch) {
                                       ds_call2(SYM_Times, ds_const(3),
                                           ds_call2(SYM_Power, expr_copy(u2), expr_new_integer(2))))));
                     body = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), w));
+                    /* tidy: (u1^2 = x^(2 r)) * mu leaves x^(2 (1/2 + a/2))/x; expand
+                     * the exponents and distribute mu so the integer shifts merge
+                     * (-> C[1] x^a + C[2] + C[3] x^-a). */
+                    Expr* tidy = eval_and_free(ds_call1("Expand", ds_expand_power_exponents(body)));
+                    expr_free(body);
+                    body = tidy;
                 }
                 expr_free(u1); expr_free(u2); expr_free(ubody);
             }

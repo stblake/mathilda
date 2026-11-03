@@ -3698,6 +3698,50 @@ static void t_reduce_order_inert(void) {
                "=!= List, False]");
 }
 
+/* ---- Nasser's 2026-11-03 report ---- */
+/* Conditions given as a nested list {ode, {ic...}} are flattened, not dropped. */
+static void t_nasser_nested_ic_list(void) {
+    check_form("DSolve[{y'[x] == 2 x + 1, {y[0] == 3}}, y[x], x]",
+               "{{y[x] -> 3 + x + x^2}}");
+    check_true("FreeQ[DSolve[{x''[t] == 1/(1 + t)^3, {x[0] == 0, x'[0] == 0}}, x, t], C]");
+    check_true("PossibleZeroQ[(x[t] /. DSolve[{x''[t] == 1/(1 + t)^3, "
+               "{x[0] == 0, Derivative[1][x][0] == 0}}, x, t][[1]]) - (t/2 - 1/2 + 1/(2 (1 + t)))]");
+    check_form("DSolve[{x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] == 0, "
+               "{y[1] == 6, y'[1] == 14, y''[1] == 22}}, y, x]",
+               "{{y -> Function[{x}, x + 2 x^2 + 3 x^3]}}");
+    /* deeper nesting flattens too */
+    check_form("DSolve[{{y'[x] == 2 x + 1}, {{y[0] == 3}}}, y[x], x]",
+               "{{y[x] -> 3 + x + x^2}}");
+}
+/* SymmetricSquare's answer tidied: x^(2 (1/2 + a/2))/x -> x^a. */
+static void t_nasser_symsquare_tidy(void) {
+    check_form("DSolve[(1 - a^2) x y'[x] + 3 x^2 y''[x] + x^3 y'''[x] == 0, y, x]",
+               "{{y -> Function[{x}, x^a C[1] + C[2] + C[3]/x^a]}}");
+    check_true("Module[{s = DSolve[{(1 - a^2) x y'[x] + 3 x^2 y''[x] + x^3 y'''[x] == 0, "
+               "{y[1] == 6, y'[1] == 14, y''[1] == 22}}, y, x]}, FreeQ[s, C] && "
+               "PossibleZeroQ[(y[1] /. s[[1]]) - 6] && PossibleZeroQ[(y'[1] /. s[[1]]) - 14]]");
+}
+/* LowerDerivativeReduction: every branch, radical cleanup, Cauchy quadrature. */
+static void t_nasser_lower_reduce(void) {
+    /* the curvature equation: circles */
+    check_true("Module[{ode = (1 + y'[x]^2) y'''[x] - 3 y'[x] y''[x]^2, s}, "
+               "s = DSolve[ode == 0, y, x]; Length[s] >= 1 && FreeQ[s, DSolve | Integrate] && "
+               "Abs[N[ode /. s[[1]] /. {C[1] -> 3/10, C[2] -> 7/10, C[3] -> 11/10, x -> 2/5}]] < 10^-10]");
+    /* y'' y''' == a Sqrt[1 + b^2 y''^2]: two closed branches */
+    check_true("Module[{ode = y''[x] y'''[x] - a Sqrt[1 + b^2 y''[x]^2], s}, "
+               "s = DSolve[ode == 0, y, x]; Length[s] == 2 && FreeQ[s, DSolve | Integrate] && "
+               "AllTrue[s, Abs[N[ode /. # /. {a -> 13/10, b -> 7/10, C[1] -> 3/10, C[2] -> 7/10, "
+               "C[3] -> 11/10, x -> 2/5}]] < 10^-10 &]]");
+    /* no Solve::nongen leaks from the separable inversion */
+    check_true("Check[DSolve[q'[x] q[x] == a Sqrt[1 + b^2 q[x]^2], q, x]; True, False]");
+}
+/* The exact third-order ODE: no messages, and a combined held integrand. */
+static void t_nasser_exact_inert_tidy(void) {
+    check_true("Module[{ode = Sin[x] y[x] - 2 Cos[x] y'[x] - Sin[x] y''[x] + y'''[x] == Log[x], s}, "
+               "s = Check[DSolve[ode, y, x], $Failed]; s =!= $Failed && "
+               "!FreeQ[s, E^Cos[x] x^2 (-3 + 2 Log[x])]]");
+}
+
 int main(void) {
     /* The shared alarm(120) in test_utils.h is too short for this suite:
      * 293 tests, ~175 s measured (2026-10-26); the heavy ones are no-crash and
@@ -4026,6 +4070,10 @@ int main(void) {
     TEST(t_autonomous_branches_elliptic);
     TEST(t_scaling_reduction);
     TEST(t_liouville_implicit);
+    TEST(t_nasser_nested_ic_list);
+    TEST(t_nasser_symsquare_tidy);
+    TEST(t_nasser_lower_reduce);
+    TEST(t_nasser_exact_inert_tidy);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

@@ -239,6 +239,9 @@ static Expr* ex_split_fic_integrals(const Expr* e, const char* fic) {
             expr_free(rest);
         }
         if (!ok) { expr_free(h0); expr_free(h1); return NULL; }
+        /* the split pieces are what the answer shows: their combined form */
+        h0 = ds_tidy_integrand(h0);
+        h1 = ds_tidy_integrand(h1);
         const Expr* v = e->data.function.args[1];
         Expr* i1 = expr_new_function(expr_copy(e->data.function.head),
                                      (Expr*[]){ h1, expr_copy((Expr*)v) }, 2);
