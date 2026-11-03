@@ -160,6 +160,15 @@ Expr* internal_force_rationalize_bits(const Expr* e, long bits);
 Expr* internal_rationalize_then_numericalize(Expr* res,
                                              Expr* (*core)(Expr*));
 
+/* As above, with an optional `post` pass over the EXACT result before it is
+ * numericalised (it consumes its argument and returns the replacement); NULL
+ * means none.  Factor uses it to make each factor monic, as the reference
+ * writes an approximate factorisation.  Both variants run at the input's
+ * own precision when every inexact leaf is arbitrary-precision, and at
+ * machine precision otherwise. */
+Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*),
+                                                  Expr* (*post)(Expr*));
+
 /* Register the Rationalize symbol with the global symbol table. Called
  * from core_init. */
 void rationalize_init(void);

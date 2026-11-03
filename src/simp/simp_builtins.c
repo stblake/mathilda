@@ -2060,7 +2060,10 @@ static Expr* builtin_simplify_core(Expr* res) {
         if (expr0->type == EXPR_FUNCTION && head_is(expr0, SYM_List)) {
             return simplify_thread_list(res);
         }
-        return internal_rationalize_then_numericalize(res, builtin_simplify);
+        g_simp_inexact_depth++;
+        Expr* out = internal_rationalize_then_numericalize(res, builtin_simplify);
+        g_simp_inexact_depth--;
+        return out;
     }
 
     Expr* expr = res->data.function.args[0];

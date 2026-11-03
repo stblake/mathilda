@@ -266,7 +266,8 @@ static void test_polylog(void) {
     for (size_t i = 0; i < 5; i++)
         sf_zero(FMT("PolyLog[2, %s] + PolyLog[2, 1 - %s] - Pi^2/6 + Log[%s] Log[1 - %s]", C[i], C[i], C[i], C[i]));
     sf_zero("PolyLog[s, z^2] - 2^(s - 1) (PolyLog[s, z] + PolyLog[s, -z])");
-    sf_to("PolyLog[2, z] + PolyLog[2, 1 - z]", "1/6 Pi^2 - Log[1 - z] Log[z]");
+    /* the reference's Simplify takes the content out (v0.6147) */
+    sf_to("PolyLog[2, z] + PolyLog[2, 1 - z]", "1/6 (Pi^2 - 6 Log[1 - z] Log[z])");
     sf_to_assuming("PolyLog[2, z] + PolyLog[2, z/(z - 1)]", "z < 1", "-1/2 Log[1 - z]^2", LT1_PTS, 3);
     sf_unchanged("PolyLog[2, z] + PolyLog[2, z/(z - 1)]");    /* Landen fails on (1, Inf) */
     sf_unchanged("PolyLog[2, z] + PolyLog[2, 1/z]");          /* inversion fails on (0, Inf) */

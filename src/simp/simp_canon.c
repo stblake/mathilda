@@ -234,6 +234,8 @@ static void lift_compute_mpq_gcd(mpq_t* values, size_t n, mpq_t out) {
     }
 }
 
+int g_simp_inexact_depth = 0;
+
 static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
     if (!plus_e || plus_e->type != EXPR_FUNCTION
         || !plus_e->data.function.head
@@ -258,20 +260,22 @@ static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
     size_t common_count = 0;
     lift_find_common(lists, n, &common, &common_count);
 
-    /* Restrict the firing condition to a real shared algebraic factor.
-     * A coefficient-only GCD lift (e.g. Plus[a/3, b/9] -> (1/9)(3a + b))
-     * doesn't reveal new structure that Together/Cancel haven't already
-     * exposed, and feeding it through the round loop can blow up
-     * downstream transform cost (the evaluator re-rationalises Sqrt
-     * products, etc.). */
-    if (common_count == 0) {
-        for (size_t i = 0; i < n; i++) { lift_tl_free(&lists[i]); mpq_clear(coefs[i]); }
-        free(lists); free(coefs); free(common);
-        return NULL;
-    }
-
     mpq_t cgcd; mpq_init(cgcd);
     lift_compute_mpq_gcd(coefs, n, cgcd);
+
+    /* Fire on a shared algebraic factor, or on a numeric content other
+     * than 1: 2 + 2 x -> 2 (1 + x), 1/2 + x/3 -> (3 + 2 x)/6, as the
+     * reference writes them when the two forms tie on complexity (issue
+     * #122; the caller keeps the lift only when it is no more complex,
+     * so 3 + 6 x stays).  This runs once, as a final top-level polish --
+     * never inside the round loop, where a coefficient-only lift could
+     * blow up downstream transform cost. */
+    if (common_count == 0 && (mpq_cmp_ui(cgcd, 1, 1) == 0 || g_simp_inexact_depth > 0)) {
+        for (size_t i = 0; i < n; i++) { lift_tl_free(&lists[i]); mpq_clear(coefs[i]); }
+        free(lists); free(coefs); free(common);
+        mpq_clear(cgcd);
+        return NULL;
+    }
 
     /* Build lifted multiplicative factor: cgcd * Times(common). */
     Expr* gcd_expr = lift_mpq_to_expr(cgcd);

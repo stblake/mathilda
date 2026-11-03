@@ -43,6 +43,7 @@
 #include "poly.h"
 #include "arithmetic.h"   /* is_infinity_sym */
 #include "sym_names.h"
+#include "simp.h"         /* simp_default_complexity */
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -362,8 +363,16 @@ static Expr* sr_decompose(Expr* f, Expr* var, Expr* imin, Expr* ext,
     /* Simplify for a clean WL-matching form: it rationalises the complex /
      * radical residue coefficients (cancelling the spurious overall I that a
      * bare Together leaves) and groups the shared EulerGamma in the conjugate
-     * case. */
+     * case.  Taken only when strictly simpler: on a tie the evaluated sum
+     * keeps its form, as the reference's Sum does -- Sum[1/i^2, {i, 2,
+     * Infinity}] is -1 + Pi^2/6, where Simplify takes the content out. */
+    Expr* plain = expr_copy(evaled);
     Expr* result = sum_eval("Simplify", (Expr*[]){ evaled }, 1);
+    if (result && simp_default_complexity(result) >= simp_default_complexity(plain)) {
+        expr_free(result);
+        return plain;
+    }
+    expr_free(plain);
     return result;
 }
 

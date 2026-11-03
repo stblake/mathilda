@@ -727,8 +727,106 @@ bool internal_args_contain_inexact(const Expr* res) {
  *                          precision than that, they will recover it
  *                          when numericalising the eventual result at
  *                          MPFR. */
+#ifdef USE_MPFR
+/* Simplest rational (smallest denominator) in the closed interval
+ * [lo, hi], 0 < lo < hi, by the continued-fraction descent: take the
+ * integer part a of lo; stop at lo itself if it is an integer, or at a + 1
+ * if that lies in the interval; otherwise recurse on (1/(hi-a), 1/(lo-a)).
+ * The convergent recurrence accumulates the answer.  `lo` and `hi` are
+ * clobbered. */
+static void simplest_rational_between(mpq_t lo, mpq_t hi, mpz_t num, mpz_t den) {
+    mpz_t a, h0, h1, k0, k1, t;
+    mpz_inits(a, h0, h1, k0, k1, t, NULL);
+    mpz_set_ui(h0, 0); mpz_set_ui(h1, 1);       /* h_{-2}, h_{-1} */
+    mpz_set_ui(k0, 1); mpz_set_ui(k1, 0);       /* k_{-2}, k_{-1} */
+    mpq_t q;
+    mpq_init(q);
+    for (;;) {
+        mpz_fdiv_q(a, mpq_numref(lo), mpq_denref(lo));
+        bool done = false;
+        if (mpz_cmp_ui(mpq_denref(lo), 1) == 0) {
+            done = true;                                   /* lo is an integer */
+        } else {
+            mpq_set_z(q, a);
+            mpz_add_ui(mpq_numref(q), mpq_numref(q), 1);   /* q = a + 1 */
+            if (mpq_cmp(q, hi) <= 0) { mpz_add_ui(a, a, 1); done = true; }
+        }
+        /* h = a h1 + h0, k = a k1 + k0 */
+        mpz_mul(t, a, h1); mpz_add(t, t, h0); mpz_set(h0, h1); mpz_set(h1, t);
+        mpz_mul(t, a, k1); mpz_add(t, t, k0); mpz_set(k0, k1); mpz_set(k1, t);
+        if (done) break;
+        mpq_set_z(q, a);
+        mpq_sub(lo, lo, q);                        /* lo - a > 0 */
+        mpq_sub(hi, hi, q);                        /* hi - a > lo - a */
+        mpq_inv(q, hi);
+        mpq_inv(hi, lo);
+        mpq_set(lo, q);
+    }
+    mpz_set(num, h1);
+    mpz_set(den, k1);
+    mpq_clear(q);
+    mpz_clears(a, h0, h1, k0, k1, t, NULL);
+}
+
+/* An MPFR leaf made exact at `bits` of precision (its own, if lower): the
+ * simplest rational within a quarter unit in the last place, so it rounds
+ * back to the same value, and short when the value is (2.`30 -> 2,
+ * 0.1`30 -> 1/10).  Going through a double, as the machine path does, threw
+ * away every digit past the 16th -- Factor[N[Pi, 50] x + 1] came back as
+ * 245850922/78256779 (issue #124). */
+static Expr* force_rationalize_mpfr(const Expr* e, long bits) {
+    mpfr_srcptr x = e->data.mpfr;
+    if (!mpfr_number_p(x)) return expr_copy((Expr*)e);
+    if (mpfr_zero_p(x)) return expr_new_integer(0);
+    long p = (long)mpfr_get_prec(x);
+    long s = (bits > 0 && bits < p) ? p - bits : 0;   /* coarser than its own */
+    mpz_t m, num, den;
+    mpz_inits(m, num, den, NULL);
+    mpfr_exp_t ex = mpfr_get_z_2exp(m, x);           /* x = m 2^ex exactly */
+    int sign = mpz_sgn(m);
+    mpz_abs(m, m);
+    /* [lo, hi] = (4m -+ 2^s) 2^(ex-2) */
+    mpq_t lo, hi;
+    mpq_inits(lo, hi, NULL);
+    mpz_mul_2exp(m, m, 2);
+    mpz_t w;
+    mpz_init_set_ui(w, 1);
+    mpz_mul_2exp(w, w, (mp_bitcnt_t)s);
+    mpz_sub(mpq_numref(lo), m, w);
+    mpz_add(mpq_numref(hi), m, w);
+    mpz_clear(w);
+    long sh = (long)ex - 2;
+    mpz_set_ui(mpq_denref(lo), 1);
+    mpz_set_ui(mpq_denref(hi), 1);
+    if (sh >= 0) {
+        mpz_mul_2exp(mpq_numref(lo), mpq_numref(lo), (mp_bitcnt_t)sh);
+        mpz_mul_2exp(mpq_numref(hi), mpq_numref(hi), (mp_bitcnt_t)sh);
+    } else {
+        mpz_mul_2exp(mpq_denref(lo), mpq_denref(lo), (mp_bitcnt_t)(-sh));
+        mpz_mul_2exp(mpq_denref(hi), mpq_denref(hi), (mp_bitcnt_t)(-sh));
+    }
+    mpq_canonicalize(lo);
+    mpq_canonicalize(hi);
+    Expr* out;
+    if (mpq_sgn(lo) <= 0) {
+        out = expr_new_integer(0);                   /* the interval holds 0 */
+    } else {
+        simplest_rational_between(lo, hi, num, den);
+        if (sign < 0) mpz_neg(num, num);
+        out = expr_from_mpz_rational(num, den);
+    }
+    mpq_clears(lo, hi, NULL);
+    mpz_clears(m, num, den, NULL);
+    return out;
+}
+#endif
+
 static Expr* force_rationalize_leaf(const Expr* e, long bits) {
     if (!is_inexact_leaf(e)) return expr_copy((Expr*)e);
+#ifdef USE_MPFR
+    /* An arbitrary-precision leaf asked for more than a double holds. */
+    if (e->type == EXPR_MPFR && bits > 53) return force_rationalize_mpfr(e, bits);
+#endif
 
     double xv;
     if (!extract_double(e, &xv)) return expr_copy((Expr*)e);
@@ -880,19 +978,19 @@ bool internal_args_contain_inexact_coefficient(const Expr* res) {
     return false;
 }
 
-static void rn_collect_kernels(const Expr* e, RnKernels* k) {
+static void rn_collect_kernels(const Expr* e, RnKernels* k, long bits) {
     if (!e || e->type != EXPR_FUNCTION) return;
     const Expr* h = e->data.function.head;
     if (h->type != EXPR_SYMBOL || is_hold_head_sym(h)) return;
     if (rn_is_structural_head(h->data.symbol.name)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            rn_collect_kernels(e->data.function.args[i], k);
+            rn_collect_kernels(e->data.function.args[i], k, bits);
         return;
     }
     if (is_numeric_quantity(e)) return;
     for (size_t i = 0; i < k->n; i++)
         if (expr_eq((Expr*)e, k->orig[i])) return;
-    Expr* ex = internal_force_rationalize(e);
+    Expr* ex = internal_force_rationalize_bits(e, bits);
     /* Two distinct inputs that rationalise alike (f[0.5], f[1/2]) cannot
      * both be restored from one exact form: drop the ambiguous key. */
     for (size_t i = 0; i < k->n; i++) {
@@ -957,18 +1055,24 @@ static Expr* rn_swap(const Expr* e, Expr** from, Expr** to, size_t n, bool* hit)
 }
 
 /* Numericalise an exact round-trip result, keeping the input's kernels as
- * they were written (see the block comment above). */
-static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Expr* res) {
+ * they were written (see the block comment above).  `bits` is the round
+ * trip's working precision: 0 for machine, else the MPFR precision. */
+static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Expr* res,
+                                             long bits) {
+    NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+    if (bits > 0) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; }
+#endif
     RnKernels k = {0};
     for (size_t i = 0; i < res->data.function.arg_count; i++)
-        rn_collect_kernels(res->data.function.args[i], &k);
+        rn_collect_kernels(res->data.function.args[i], &k, bits);
 
     Expr* out = NULL;
     if (k.n > 0 && !rn_mentions_placeholder(exact_result, &k)) {
         bool hit = false;
         Expr* parked = rn_swap(exact_result, k.exact, k.ph, k.n, &hit);
         if (hit) {
-            Expr* num = numericalize(parked, numeric_machine_spec());
+            Expr* num = numericalize(parked, spec);
             bool back = false;
             out = eval_and_free(rn_swap(num, k.ph, k.orig, k.n, &back));
             expr_free(num);
@@ -976,12 +1080,45 @@ static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Exp
         expr_free(parked);
     }
     rn_kernels_free(&k);
-    return out ? out : numericalize((Expr*)exact_result, numeric_machine_spec());
+    return out ? out : numericalize((Expr*)exact_result, spec);
 }
 
-Expr* internal_rationalize_then_numericalize(Expr* res,
-                                             Expr* (*core)(Expr*)) {
+/* Smallest precision, in bits, over the inexact leaves of `e`'s arguments
+ * when EVERY one is arbitrary-precision; 0 when any is a machine number
+ * (or there is none).  Machine precision is the floor of the contagion, so
+ * one machine leaf makes the whole round trip a machine one (issue #124:
+ * Factor[N[Pi, 50] x + 1] came back at machine precision). */
+static long rn_round_trip_bits(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_REAL) return -1;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return (long)mpfr_get_prec(e->data.mpfr);
+#endif
+    if (e->type != EXPR_FUNCTION) return 0;
+    long best = rn_round_trip_bits(e->data.function.head);
+    if (best < 0) return -1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        long b = rn_round_trip_bits(e->data.function.args[i]);
+        if (b < 0) return -1;
+        if (b > 0 && (best == 0 || b < best)) best = b;
+    }
+    return best;
+}
+
+Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*),
+                                                  Expr* (*post)(Expr*)) {
     if (!res || res->type != EXPR_FUNCTION || !core) return NULL;
+
+    /* Working precision of the round trip: the input's own, when it is
+     * entirely arbitrary-precision, else machine (bits == 0, the legacy
+     * convergent-bound rationalisation). */
+    long bits = 0;
+    for (size_t i = 0; i < res->data.function.arg_count && bits >= 0; i++) {
+        long b = rn_round_trip_bits(res->data.function.args[i]);
+        if (b < 0) bits = -1;
+        else if (b > 0 && (bits == 0 || b < bits)) bits = b;
+    }
+    if (bits <= 53) bits = 0;
 
     /* Build a clone of `res` with every argument force-rationalised.
      * The head is structurally copied (the symbol is the dispatch key
@@ -992,7 +1129,7 @@ Expr* internal_rationalize_then_numericalize(Expr* res,
         new_args = (Expr**)malloc(sizeof(Expr*) * n);
         if (!new_args) return NULL;
         for (size_t i = 0; i < n; i++) {
-            new_args[i] = internal_force_rationalize(res->data.function.args[i]);
+            new_args[i] = internal_force_rationalize_bits(res->data.function.args[i], bits);
         }
     }
     Expr* clone = expr_new_function(expr_copy(res->data.function.head),
@@ -1015,17 +1152,20 @@ Expr* internal_rationalize_then_numericalize(Expr* res,
      * we must free it after we extract or discard the result. We must
      * also leave `res` untouched so the outer evaluator can free it. */
     Expr* exact_result = core(clone);
-    if (!exact_result) {
-        expr_free(clone);
-        return NULL;
-    }
+    expr_free(clone);
+    if (!exact_result) return NULL;
+    if (post) exact_result = post(exact_result);
 
     /* Round-trip the exact result back to numeric so callers see
      * inexact-in / inexact-out. */
-    Expr* numeric = rn_numericalize_keeping_kernels(exact_result, res);
+    Expr* numeric = rn_numericalize_keeping_kernels(exact_result, res, bits);
     expr_free(exact_result);
-    expr_free(clone);
     return numeric;
+}
+
+Expr* internal_rationalize_then_numericalize(Expr* res,
+                                             Expr* (*core)(Expr*)) {
+    return internal_rationalize_then_numericalize_post(res, core, NULL);
 }
 
 /* ------------------------------------------------------------------------

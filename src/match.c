@@ -2108,6 +2108,31 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
          * takes a PREFIX of option arguments -- the longest first, down to
          * none -- and the rest goes to the later pattern elements. As the last
          * element only the whole run can succeed, as before. */
+        SymbolDef* phdef = (pat_head && pat_head->type == EXPR_SYMBOL)
+                           ? symtab_node_def(pat_head) : NULL;
+        if (phdef && (phdef->attributes & ATTR_ORDERLESS) && n_exprs > 0) {
+            /* Under an Orderless head the arguments are in canonical order, so
+             * the options need not lead: h[1, o -> v] against the sorted LHS
+             * h[OptionsPattern[], a_] (issue #123). Move the option arguments
+             * to the front -- stable, so their relative order is kept -- and
+             * take a prefix of THAT, longest first, as below. */
+            Expr** ord = malloc(sizeof(Expr*) * n_exprs);
+            size_t nopt = 0, k = 0;
+            for (size_t i = 0; i < n_exprs; i++)
+                if (mo_is_option_rule(exprs[i]) || mo_is_list(exprs[i])) ord[k++] = exprs[i];
+            nopt = k;
+            for (size_t i = 0; i < n_exprs; i++)
+                if (!(mo_is_option_rule(exprs[i]) || mo_is_list(exprs[i]))) ord[k++] = exprs[i];
+            bool ok = false;
+            for (size_t take = nopt + 1; take-- > 0 && !ok; ) {
+                if (n_pats == 1 && take != n_exprs) continue;
+                ok = opt_match_prefix(ord, take, n_exprs, pats, n_pats, opt_pat, bind_sym,
+                                      extra_bind_sym, seq_cond, env, condition, pat_head,
+                                      total_pats, parent);
+            }
+            free(ord);
+            return ok;
+        }
         size_t run = 0;                    /* leading arguments that are options */
         while (run < n_exprs && (mo_is_option_rule(exprs[run]) || mo_is_list(exprs[run]))) run++;
         for (size_t take = run + 1; take-- > 0; ) {

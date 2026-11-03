@@ -269,7 +269,8 @@ static void test_exact_inputs_stay_exact(void) {
  * ---------------------------------------------------------------------- */
 
 static void test_kernel_args_not_numericalised(void) {
-    assert_eval_eq("Factor[a .4 + c[1] + d]", "0.2 (2.0 a + 5.0 d + 5.0 c[1])", 0);
+    /* monic in the leading monomial, as the reference writes it (v0.6147) */
+    assert_eval_eq("Factor[a .4 + c[1] + d]", "0.4 (a + 2.5 d + 2.5 c[1])", 0);
     assert_eval_eq("Factor[(x[-1] - x[-2 + g])*0.1 + (-x[-3 + g] + x[-4 + g])]",
                    "0.1 (x[-1] + 10.0 x[-4 + g] - 10.0 x[-3 + g] - 1.0 x[-2 + g])", 0);
     assert_eval_eq("Factor[0.5 x f[1/2] + Sin[2] y]", "0.5 (1.81859 y + x f[1/2])", 0);

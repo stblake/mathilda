@@ -223,6 +223,14 @@ Gives the number of elements or subexpressions that match a pattern.
   `t[a -> 1, x] /. t[o:OptionsPattern[], b_] :> {{o}, b}` is `{{a -> 1}, x}`.
   On an `Orderless` head the slot sorts first: `s[a__, OptionsPattern[]]`
   becomes `s[OptionsPattern[], a__]` and still matches `s[x]`.
+- **Orderless heads** (v0.6147, #123). The arguments of an `Orderless` head are
+  in canonical order too, so its options need not lead: after
+  `SetAttributes[h, Orderless]`, `h[a_, OptionsPattern[]]` (stored as
+  `h[OptionsPattern[], a_]`) is called as `h[1, o -> v]`. There the slot takes
+  the option arguments wherever they sit, all of them first and then fewer,
+  and the rest go to the other elements. A definition like
+  `fun[a_, b_, c_, OptionsPattern[]] := r /; OptionValue[Explicit]` now fires
+  whether `SetAttributes` comes before or after it, as in the reference.
 - **Named and guarded.** `opts:OptionsPattern[]` binds `opts` to the option
   arguments as written: a list of rules stays a list (`f[x_, o:OptionsPattern[]]
   := {o}; f[1, {a -> 1}, b -> 2]` is `{{a -> 1}, b -> 2}`). A guard on it,

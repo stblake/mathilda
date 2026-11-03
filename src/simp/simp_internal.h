@@ -190,6 +190,11 @@ bool contains_explicit_complex(const Expr* e);
 /* ------------------------------------------------------------------ */
 
 Expr* simp_lift_common_factor(const Expr* e);
+/* Nonzero while Simplify runs its approximate-number round trip: the lift
+ * then needs a shared algebraic factor, never a numeric content alone, as
+ * the reference leaves 2. + 2. x as it is.  A depth, registered with the
+ * TimeConstrained unwind. */
+extern int g_simp_inexact_depth;
 Expr* canon_negate_pairs(const Expr* e);
 
 /* Memoised wrapper used by transforms in many files. Defined in

@@ -663,6 +663,88 @@ int facpoly_lead_sign_in(const Expr* f, const Expr* input) {
 
 static Expr* builtin_factor_core(Expr* res);
 
+static Expr* fm_fn1(const char* h, Expr* a) {
+    Expr* args[1] = { a };
+    return expr_new_function(expr_new_symbol(h), args, 1);
+}
+static Expr* fm_fn2(const char* h, Expr* a, Expr* b) {
+    Expr* args[2] = { a, b };
+    return expr_new_function(expr_new_symbol(h), args, 2);
+}
+
+/* A factor base made monic: b / lc, where lc is b's coefficient on its
+ * lexicographically leading monomial (CoefficientRules' first rule), with lc
+ * returned through *lc_out.  NULL (and *lc_out untouched) when b is not a sum
+ * or lc is not an exact number other than 1. */
+static Expr* factor_monic_base(const Expr* b, Expr** lc_out) {
+    if (!head_is(b, SYM_Plus) || b->data.function.arg_count < 2) return NULL;
+    Expr* rules = eval_and_free(fm_fn1(SYM_CoefficientRules, expr_copy((Expr*)b)));
+    Expr* lc = NULL;
+    if (head_is(rules, SYM_List) && rules->data.function.arg_count > 0) {
+        const Expr* r0 = rules->data.function.args[0];
+        if (head_is(r0, SYM_Rule) && r0->data.function.arg_count == 2)
+            lc = expr_copy(r0->data.function.args[1]);
+    }
+    expr_free(rules);
+    int64_t n, d;
+    bool exact_num = lc && (expr_is_integer_like(lc) || is_rational(lc, &n, &d)
+                            || head_is(lc, SYM_Rational));
+    if (!exact_num || (lc->type == EXPR_INTEGER && lc->data.integer == 1)) {
+        expr_free(lc);
+        return NULL;
+    }
+    Expr* q = eval_and_free(fm_fn1(SYM_Expand,
+                  fm_fn2(SYM_Times, expr_copy((Expr*)b),
+                         fm_fn2(SYM_Power, expr_copy(lc), expr_new_integer(-1)))));
+    *lc_out = lc;
+    return q;
+}
+
+/* Post pass for an approximate Factor (internal_rationalize_then_numericalize
+ * _post): write every polynomial factor monic in its leading monomial and
+ * gather the leading coefficients into the numeric content, as the reference
+ * writes an approximate factorisation -- Factor[2.5 x + 1] is
+ * 2.5 (0.4 + x), not 0.5 (2. + 5. x), and Factor[N[Pi, 50] x + 1] is
+ * Pi (1/Pi + x) to 50 digits rather than the round trip's rational
+ * 1/q (q + p x) with a 25-digit q (issue #124). */
+static Expr* factor_inexact_monic(Expr* exact) {
+    if (!exact) return NULL;
+    bool is_times = head_is(exact, SYM_Times);
+    size_t m = is_times ? exact->data.function.arg_count : 1;
+    Expr** fs = is_times ? exact->data.function.args : &exact;
+    Expr** out = malloc(sizeof(Expr*) * (m + 1));
+    Expr* content = expr_new_integer(1);
+    bool changed = false;
+    for (size_t i = 0; i < m; i++) {
+        const Expr* f = fs[i];
+        const Expr* b = f;
+        const Expr* e = NULL;
+        if (head_is(f, SYM_Power) && f->data.function.arg_count == 2
+            && f->data.function.args[1]->type == EXPR_INTEGER) {
+            b = f->data.function.args[0];
+            e = f->data.function.args[1];
+        }
+        Expr* lc = NULL;
+        Expr* mb = factor_monic_base(b, &lc);
+        if (!mb) { out[i] = expr_copy((Expr*)f); continue; }
+        changed = true;
+        out[i] = e ? fm_fn2(SYM_Power, mb, expr_copy((Expr*)e)) : mb;
+        content = fm_fn2(SYM_Times, content,
+                         e ? fm_fn2(SYM_Power, lc, expr_copy((Expr*)e)) : lc);
+    }
+    if (!changed) {
+        for (size_t i = 0; i < m; i++) expr_free(out[i]);
+        free(out);
+        expr_free(content);
+        return exact;
+    }
+    out[m] = content;
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), out, m + 1));
+    free(out);
+    expr_free(exact);
+    return r;
+}
+
 Expr* builtin_factor(Expr* res) {
     Expr* r = builtin_factor_core(res);
     const Expr* input = (res && res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1)
@@ -909,7 +991,8 @@ static Expr* builtin_factor_core(Expr* res) {
      * inexact results -- they go through their own evaluation path. */
     if (internal_args_contain_inexact_coefficient(res)) {
         if (memo_key) expr_free(memo_key);
-        return internal_rationalize_then_numericalize(res, builtin_factor);
+        return internal_rationalize_then_numericalize_post(res, builtin_factor,
+                                                           factor_inexact_monic);
     }
 
 
