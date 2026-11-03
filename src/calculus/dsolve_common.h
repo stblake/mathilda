@@ -102,6 +102,7 @@ bool  dsolve_result_relations(const Expr* r, const char* yname, const char* xvar
  * own later implicit pass: put adopts G[0..n); take removes and returns (or NULL). */
 void   dsolve_stash_put(int tag, uint64_t h, Expr** G, size_t n);
 Expr** dsolve_stash_take(int tag, uint64_t h, size_t* n);
+bool   dsolve_stash_has(int tag, uint64_t h);   /* peek: is an entry waiting? */
 
 /* ---- first integrals R(x, y[x], y'[x]) == C[1] of a SECOND-order ODE ----
  * The try-fn returns, per branch, the first-integral LHS Rf (an expression in x,
@@ -125,6 +126,11 @@ Expr* dsolve_method_builtin_first_integral(Expr* res, DSolveTryFn fn);
  * declining never silently ignores a condition.  `dsolve_method_builtin_parametric`
  * is the strict pinned-method entry. */
 Expr* dsolve_run_parametric(DSolveProblem* P, DSolveTryFn fn);
+/* The substrate's own check of one parametric pair {x = X(t), y = Y(t)} against the
+ * original residual (exposed so a method can try another parametrisation when its
+ * first candidate would be dropped). */
+bool  dsolve_verify_parametric(const DSolveProblem* P, const Expr* X, const Expr* Y,
+                               const char* tname);
 Expr* dsolve_method_builtin_parametric(Expr* res, DSolveTryFn fn);
 
 /* ---- systems (nfun > 1): a solution is one body per dependent function ---- */

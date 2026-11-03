@@ -208,7 +208,42 @@ static const char* sfy_pick_param(const Expr* X, const Expr* Y, const char* xvar
 /* Shared core.  for_y: solve for y = G(x,p) and solve the induced x(p) ODE.
  * !for_y (SolvableForX): solve for x = H(y,p) and solve the induced y(p) ODE.
  * Returns a malloc'd array of DSolve`Param[X,Y,t] branch wrappers, or NULL. */
-static Expr** sfy_solve_for(DSolveProblem* P, bool for_y, size_t* nbranch){
+/* The automatic SolvableForX gate (lin_gate): the induced ODE dF/dp = rhs(p, F)
+ * must be LINEAR or BERNOULLI in F -- rhs = (sum of c_k(p) F^k)/d(p) with the
+ * occurring degrees {0, 1}, {1}, or {1, m} -- which the cascade closes in
+ * milliseconds and whose parametric answer is rational/elementary in p.  rhs
+ * borrowed, in terms of keep (the bare unknown symbol). */
+static bool sfy_linear_induced(const Expr* rhs, const char* keep){
+    Expr* tg  = eval_and_free(ds_call1(SYM_Together, expr_copy((Expr*)rhs)));
+    Expr* num = eval_and_free(ds_call1("Numerator", expr_copy(tg)));
+    Expr* den = eval_and_free(ds_call1("Denominator", tg));
+    bool ok = ds_free_of(den, keep);
+    expr_free(den);
+    if (ok) {
+        Expr* pq = eval_and_free(ds_call2("PolynomialQ", expr_copy(num), expr_new_symbol(keep)));
+        ok = (pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True);
+        if (pq) expr_free(pq);
+    }
+    if (ok) {
+        Expr* cl = eval_and_free(ds_call2("CoefficientList", expr_copy(num), expr_new_symbol(keep)));
+        ok = head_is(cl, SYM_List) && cl->data.function.arg_count >= 2
+             && cl->data.function.arg_count <= 16;
+        size_t n_hi = 0;
+        bool has1 = false;
+        for (size_t k = 0; ok && k < cl->data.function.arg_count; k++) {
+            if (ds_is_zero(cl->data.function.args[k])) continue;
+            if (k == 1) has1 = true;
+            else if (k >= 2) n_hi++;
+        }
+        /* linear: {0, 1} or {1};  Bernoulli: {1, m} (no constant term) */
+        if (ok) ok = has1 && n_hi <= 1 && !(n_hi == 1 && !ds_is_zero(cl->data.function.args[0]));
+        expr_free(cl);
+    }
+    expr_free(num);
+    return ok;
+}
+
+static Expr** sfy_solve_for(DSolveProblem* P, bool for_y, bool lin_gate, size_t* nbranch){
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
     if (P->ncond > 0) return NULL;          /* parametric IVP-fitting is future */
@@ -229,7 +264,8 @@ static Expr** sfy_solve_for(DSolveProblem* P, bool for_y, size_t* nbranch){
 
     /* decline memo, keyed per residual AND direction (a for-y decline must not
      * suppress the for-x attempt). */
-    uint64_t h = expr_hash(P->eq_residuals[0]) ^ (for_y ? 0x9E3779B97F4A7C15ull : 0ull);
+    uint64_t h = expr_hash(P->eq_residuals[0]) ^ (for_y ? 0x9E3779B97F4A7C15ull : 0ull)
+                 ^ (lin_gate ? 0xD1B54A32D192ED03ull : 0ull);
     sfy_memo_sync(eval_toplevel_id());
     if (sfy_memo_seen(h)) return NULL;
 
@@ -264,6 +300,10 @@ static Expr** sfy_solve_for(DSolveProblem* P, bool for_y, size_t* nbranch){
     Expr** Gs = dsolve_extract_solutions(sol, solve_var, &nG);
     if (sol) expr_free(sol);
     if (!Gs) { expr_free(R0); sfy_memo_add(h); return NULL; }
+    if (lin_gate && nG != 1) {          /* the automatic gate: one isolated root only */
+        for (size_t i = 0; i < nG; i++) if (Gs[i]) expr_free(Gs[i]);
+        free(Gs); expr_free(R0); sfy_memo_add(h); return NULL;
+    }
 
     Expr** imp = NULL; size_t nimp = 0;   /* implicit relations (single y-root only) */
     const char* Ff = intern_symbol("DSolve`sfF");   /* the induced-ODE unknown F(p) */
@@ -288,6 +328,7 @@ static Expr** sfy_solve_for(DSolveProblem* P, bool for_y, size_t* nbranch){
 
         /* induced ODE:  F'[p] == G_p / denom, with keep_var -> F[p]. */
         Expr* rhs = eval_and_free(ds_call2(SYM_Times, Gp, sfy_powneg1(denom)));
+        if (lin_gate && !sfy_linear_induced(rhs, keep_var)) { expr_free(rhs); expr_free(G); continue; }
         rhs = ds_subst(rhs, expr_new_symbol(keep_var), ds_make_funcapp(Ff, 0, Pn));
         Expr* ode = expr_new_function(expr_new_symbol(SYM_Equal),
                         (Expr*[]){ ds_make_funcapp(Ff, 1, Pn), rhs }, 2);   /* consumes rhs */
@@ -341,8 +382,18 @@ static Expr** sfy_solve_for(DSolveProblem* P, bool for_y, size_t* nbranch){
     return out;
 }
 
-Expr** dsolve_solvablefory_try(DSolveProblem* P, size_t* nbranch){ return sfy_solve_for(P, true,  nbranch); }
-Expr** dsolve_solvableforx_try(DSolveProblem* P, size_t* nbranch){ return sfy_solve_for(P, false, nbranch); }
+Expr** dsolve_solvablefory_try(DSolveProblem* P, size_t* nbranch){ return sfy_solve_for(P, true,  false, nbranch); }
+Expr** dsolve_solvableforx_try(DSolveProblem* P, size_t* nbranch){ return sfy_solve_for(P, false, false, nbranch); }
+/* The automatic SolvableForX: one root x = H(y, p) whose induced y(p) ODE is linear
+ * or Bernoulli (sfy_linear_induced) -- the x-analogue of Lagrange, e.g.
+ * y^2 y'^3 - x y' + y == 0: x = y^2 p^2 + y/p, dy/dp = -y/p + 1/(2 p^4).  The
+ * ungated method stays pinned-only (its general induced ODE can be costly to
+ * verify); MATHILDA_NO_SFX_LINEAR disables this slot for A/B. */
+Expr** dsolve_solvableforx_linear_try(DSolveProblem* P, size_t* nbranch){
+    if (getenv("MATHILDA_NO_SFX_LINEAR")) return NULL;
+    if (g_dsolve_depth > 1) return NULL;   /* top level: a nested caller needs y(x) */
+    return sfy_solve_for(P, false, true, nbranch);
+}
 
 /* The implicit pass: consume what the parametric for-y pass stashed for this
  * residual (pinned on its own, run the parametric pass first to populate it). */
@@ -353,7 +404,7 @@ static Expr** sfy_implicit_impl(DSolveProblem* P, size_t* nbranch, bool may_solv
     Expr** G = dsolve_stash_take(SFY_STASH_TAG, h, &n);
     if (!G && may_solve){
         size_t ne = 0;
-        Expr** ex = sfy_solve_for(P, true, &ne);
+        Expr** ex = sfy_solve_for(P, true, false, &ne);
         if (ex){ for (size_t i=0;i<ne;i++) expr_free(ex[i]); free(ex); return NULL; }
         G = dsolve_stash_take(SFY_STASH_TAG, h, &n);
     }

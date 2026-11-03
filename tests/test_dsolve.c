@@ -1968,6 +1968,41 @@ static void t_lagrange_singular(void) {
     check_true("Length[DSolve[y[x] == x (y'[x])^2 + (y'[x])^3, y, x]] == 1");
 }
 
+/* ParametricQuadrature: x or y missing, not solvable for y' (parametric answer). */
+static void t_paramquad(void) {
+    check_lagrange("DSolve`ParametricQuadrature", "Sin[y'[x]] + y'[x] == x",
+                   "Sin[y'[x]] + y'[x] - x");
+    check_lagrange("DSolve`ParametricQuadrature", "y'[x]^3 - a x y'[x] + x^3 == 0",   /* p = t x */
+                   "y'[x]^3 - a x y'[x] + x^3");
+    check_lagrange("DSolve`ParametricQuadrature", "E^(y'[x] - y[x]) - y'[x]^2 + 1 == 0",  /* x-free */
+                   "E^(y'[x] - y[x]) - y'[x]^2 + 1");
+    /* automatic dispatch reaches it */
+    check_form("Head[DSolve[Log[y'[x]] + x y'[x] + a == 0, y, x]]", "List");
+    /* both variables present: not this method */
+    check_form("Head[DSolve`ParametricQuadrature[y'[x]^3 == x + y[x], y, x]]",
+               "DSolve`ParametricQuadrature");
+}
+/* NthAlgebraic binomial-separable form y'^n == A(x) B(y), non-elementary y-integral:
+ * the n first integrals, verified by the implicit-function rule. */
+static void t_nth_algebraic_binomial(void) {
+    check_true("Length[DSolve[y'[x]^3 + f[x] (y[x] - a)^2 (y[x] - b)^2 == 0, y, x]] == 3");
+    check_true("Length[DSolve[y'[x]^4 == (y[x] - a)^3 (y[x] - b)^2, y, x]] == 4");
+    check_true("Module[{r = DSolve[y'[x]^4 == (y[x] - a)^3 (y[x] - b)^2, y, x]}, "
+               "And @@ (PossibleZeroQ[(y'[x]^4 - (y[x] - a)^3 (y[x] - b)^2) /. "
+               "Derivative[1][y][x] -> (-D[#[[1, 1]] /. y[x] -> Y, x]/D[#[[1, 1]] /. y[x] -> Y, Y] /. Y -> y[x])] & /@ r)]");
+}
+/* Clairaut in a transcendental spelling: y - x y' only enters through F(y - x y', y'). */
+static void t_clairaut_shift(void) {
+    check_method("DSolve`Clairaut", "(1 + y'[x]^2) Sin[x y'[x] - y[x]]^2 == 1",
+                 "(1 + y'[x]^2) Sin[x y'[x] - y[x]]^2 - 1");
+}
+/* SolvableForX's automatic slot: a linear induced y(p) ODE. */
+static void t_solvableforx_linear(void) {
+    check_form("Head[DSolve[y[x]^2 y'[x]^3 - x y'[x] + y[x] == 0, y, x]]", "List");
+    check_lagrange("DSolve`SolvableForX", "y[x]^2 y'[x]^3 - x y'[x] + y[x] == 0",
+                   "y[x]^2 y'[x]^3 - x y'[x] + y[x]");
+}
+
 /* PowerSeries: was ordinary + auto; add two more ordinary-point forms. */
 static void t_powerseries_more(void) {
     check_series("DSolve`PowerSeries", "y''[x] + x y'[x] + y[x] == 0",
@@ -3737,6 +3772,10 @@ int main(void) {
     TEST(t_lagrange_more);
     TEST(t_lagrange_declines);
     TEST(t_lagrange_singular);
+    TEST(t_paramquad);
+    TEST(t_nth_algebraic_binomial);
+    TEST(t_clairaut_shift);
+    TEST(t_solvableforx_linear);
     TEST(t_powerseries_more);
     TEST(t_homogeneous_algebraic);
     TEST(t_reduce_order_riccati);

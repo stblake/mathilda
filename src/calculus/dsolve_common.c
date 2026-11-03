@@ -2787,6 +2787,13 @@ void dsolve_stash_put(int tag, uint64_t h, Expr** G, size_t n) {
     ds_stash[ds_stash_n].key = key; ds_stash[ds_stash_n].G = G; ds_stash[ds_stash_n].n = n;
     ds_stash_n++;
 }
+bool dsolve_stash_has(int tag, uint64_t h) {
+    ds_stash_sync();
+    uint64_t key = ds_stash_key(tag, h);
+    for (int i = 0; i < ds_stash_n; i++) if (ds_stash[i].key == key) return true;
+    return false;
+}
+
 Expr** dsolve_stash_take(int tag, uint64_t h, size_t* n) {
     ds_stash_sync();
     uint64_t key = ds_stash_key(tag, h);
@@ -2927,7 +2934,7 @@ Expr* dsolve_method_builtin_first_integral(Expr* res, DSolveTryFn fn) {
  * (where zero_test cannot prove D[Y,t]/D[X,t] == t) a PossibleZeroQ numeric
  * sampling of the parameter is the fallback before rejecting — the same permissive
  * policy as the implicit path. */
-static bool dsolve_verify_parametric(const DSolveProblem* P, const Expr* X,
+bool dsolve_verify_parametric(const DSolveProblem* P, const Expr* X,
                                      const Expr* Y, const char* tname) {
     if (P->nfun != 1) return false;
     const char* yname = P->fun_names[0];

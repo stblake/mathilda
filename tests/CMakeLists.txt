@@ -912,6 +912,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_solvefor.c
     ../src/calculus/dsolve_inverse.c
     ../src/calculus/dsolve_homogeneous_g.c
+    ../src/calculus/dsolve_paramquad.c
     ../src/calculus/dsolve_ratsol2.c
     ../src/calculus/dsolve_nonhomog_vop.c
     ../src/calculus/dsolve_piecewise.c

@@ -26,6 +26,8 @@
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
+#include "../message.h"
+#include "../common.h"
 #include <stdlib.h>
 
 /* Test one candidate root Yexpr of R == 0 for Y, and on success append the line family
@@ -67,6 +69,54 @@ static void clairaut_emit(DSolveProblem* P, Expr* Yexpr, const char* xvar,
         free(ps);
     }
     expr_free(fp); expr_free(Yexpr);
+}
+
+/* Clairaut in a TRANSCENDENTAL spelling, F(y - x y', y') == 0 with F not polynomial
+ * in y ((1 + y'^2) Sin[x y' - y]^2 == 1, §2.2.57-5697).  The test is structural:
+ * with Y = x p + w the residual must become free of x, F(w, p).  Along a line
+ * y = c x + w the slope is the constant c, so every root w(c) of F(w, c) == 0 gives
+ * the line family y = C[1] x + w(C[1]).  Solve's periodic inverse-function roots
+ * (ConditionalExpression[w0 + 2 Pi C[1], C[1] \[Element] Integers]) contribute
+ * their representative w0 -- each is a genuine member of the family; the bodies
+ * are back-substituted by the substrate like every other Clairaut answer.  The
+ * Solve runs bounded and muted (Solve::ifun is probe noise here). */
+static void clairaut_shifted(const Expr* R, const char* xvar,
+                             const char* Yn, const char* Pn,
+                             Expr*** bodies, size_t* nb, size_t* cap) {
+    const char* Wn = intern_symbol("DSolve`clW");
+    Expr* shift = ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_new_symbol(xvar), expr_new_symbol(Pn)),
+                           expr_new_symbol(Wn));
+    Expr* F = eval_and_free(ds_subst(expr_copy((Expr*)R), expr_new_symbol(Yn), shift));
+    if (!ds_free_of(F, xvar) || ds_free_of(F, Wn) || ds_free_of(F, Pn)) { expr_free(F); return; }
+    Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ F, expr_new_integer(0) }, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_TimeConstrained), (Expr*[]){
+        ds_call2(SYM_Solve, eq, expr_new_symbol(Wn)), expr_new_integer(3),
+        expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    Expr* sol = eval_and_free(call);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
+    size_t nr = 0;
+    Expr** roots = dsolve_extract_solutions(sol, Wn, &nr);
+    if (sol) expr_free(sol);
+    const char* cond = intern_symbol("ConditionalExpression");
+    for (size_t i = 0; roots && i < nr; i++) {
+        Expr* w = roots[i];
+        if (!w) continue;
+        if (head_is(w, cond) && w->data.function.arg_count == 2) {
+            Expr* w0 = ds_subst(expr_copy(w->data.function.args[0]), ds_const(1), expr_new_integer(0));
+            expr_free(w); w = w0;
+        }
+        if (ds_contains(w, Wn) || ds_contains(w, xvar) || ds_contains(w, intern_symbol("C"))
+            || ds_has_head(w, intern_symbol("Root")) || ds_has_head(w, cond)) { expr_free(w); continue; }
+        Expr* body = eval_and_free(ds_call2(SYM_Plus,
+                         ds_call2(SYM_Times, expr_new_symbol(xvar), ds_const(1)),
+                         ds_subst(w, expr_new_symbol(Pn), ds_const(1))));
+        if (*nb >= *cap) { *cap *= 2; *bodies = realloc(*bodies, *cap * sizeof(Expr*)); }
+        (*bodies)[(*nb)++] = body;
+    }
+    free(roots);
 }
 
 Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch) {
@@ -112,6 +162,8 @@ Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch) {
             for (size_t i = 0; i < nr; i++)
                 clairaut_emit(P, roots[i], xvar, Yn, Pn, &bodies, &nb, &cap);
             free(roots);
+        } else if (!getenv("MATHILDA_NO_CLAIRAUT_SHIFT")) {
+            clairaut_shifted(R, xvar, Yn, Pn, &bodies, &nb, &cap);
         }
     }
     expr_free(R);

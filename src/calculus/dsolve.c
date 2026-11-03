@@ -72,6 +72,7 @@ typedef enum {
     DS_FROBENIUS,
     DS_SOLVABLEFORY,
     DS_SOLVABLEFORX,
+    DS_PARAMQUAD,
     DS_INVALID
 } DSolveMethod;
 
@@ -89,6 +90,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "Lagrange")         == 0) return DS_LAGRANGE;
     if (strcmp(s, "SolvableForY")     == 0) return DS_SOLVABLEFORY;
     if (strcmp(s, "SolvableForX")     == 0) return DS_SOLVABLEFORX;
+    if (strcmp(s, "ParametricQuadrature") == 0) return DS_PARAMQUAD;
     if (strcmp(s, "UndeterminedCoefficients") == 0) return DS_UNDETCOEFF;
     if (strcmp(s, "LinearConstantCoefficients") == 0) return DS_CONSTCOEFF;
     if (strcmp(s, "EulerCauchy")      == 0) return DS_EULER;
@@ -126,6 +128,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
 extern Expr** dsolve_factorable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nth_algebraic_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_nth_algebraic_binomial_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_quadrature_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch);
@@ -145,6 +148,9 @@ extern Expr** dsolve_solvablefory_implicit_try(DSolveProblem* P, size_t* nbranch
 extern Expr** dsolve_homog_g_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homog_g_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_solvableforx_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_solvableforx_linear_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_paramquad_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_paramquad_init(void);
 extern Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch);
@@ -406,6 +412,10 @@ Expr* builtin_dsolve(Expr* res) {
              * below still claim their equations. */
             if (!result) result = dsolve_run(&P, dsolve_factorable_try);
             if (!result) result = dsolve_run(&P, dsolve_nth_algebraic_try);
+            /* ...its binomial-separable relations (y'^n == A(x) B(y) with a non-
+             * elementary y-integral), stashed by the pass above: the n verified first
+             * integrals, before the specialists re-attempt the same separation. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_nth_algebraic_binomial_try);
             if (!result) result = dsolve_run(&P, dsolve_quadrature_try);
             if (!result) result = dsolve_run(&P, dsolve_linear1_try);
             if (!result) result = dsolve_run(&P, dsolve_bernoulli_try);
@@ -572,6 +582,17 @@ Expr* builtin_dsolve(Expr* res) {
              * degree-1-in-x form with a cubic-denominator induced ODE produces a
              * transcendental branch whose back-substitution verify is very slow,
              * so it is opt-in like FirstOrderPowerSeries / EigenvalueProblem. */
+            /* ParametricQuadrature: a first-order ODE with x or y MISSING that no
+             * method above could solve for y' (Sin[y'] + y' == x, y'^3 - a x y' + x^3
+             * == 0, E^(y' - y) == y'^2 - 1).  The curve F(u, p) == 0 is parametrised
+             * (p = t, t u, t +- u, the present variable u isolated) and the missing
+             * coordinate is one quadrature.  Not recursive -- one bounded Solve and
+             * Integrate per candidate -- so it costs only the equations it targets.
+             * Ahead of SolvableForY and the heuristic backstops, which can spin on
+             * the same form (§2.2.57-5635: 13 s); it defers (in the try-fn) to
+             * NthAlgebraic's implicit pass when every y'-root has a first integral.
+             * MATHILDA_NO_PARAMQUAD disables it for A/B. */
+            if (!result) result = dsolve_run_parametric(&P, dsolve_paramquad_try);
             if (!result) result = dsolve_run_parametric(&P, dsolve_solvablefory_try);
             /* ...and its implicit slope elimination: when the induced x(p) ODE solves
              * only implicitly, Phi(p, x) == C, each explicit root p_k(x, y) of the
@@ -579,6 +600,10 @@ Expr* builtin_dsolve(Expr* res) {
              * above, so no second solve; re-verified against the original ODE).
              * MATHILDA_NO_SFY_IMPLICIT disables it for A/B. */
             if (!result) result = dsolve_run_implicit(&P, dsolve_solvablefory_implicit_try);
+            /* SolvableForX, automatic only where the induced y(p) ODE is linear or
+             * Bernoulli (the x-analogue of Lagrange: y^2 y'^3 - x y' + y == 0) --
+             * cheap to solve and to verify; the general method stays pinned. */
+            if (!result) result = dsolve_run_parametric(&P, dsolve_solvableforx_linear_try);
             /* Homogeneous class G (isobaric): F(l x, l^k y, l^(k-1) y') == l^w F.
              * y = x^k u, t = Log[x] makes it autonomous in u(t); recursed, mapped back.
              * The weight is solved from samples and checked identically; k == 1 is
@@ -672,6 +697,7 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_LAGRANGE:     result = dsolve_run_parametric(&P, dsolve_lagrange_try); break;
         case DS_SOLVABLEFORY: result = dsolve_run_parametric(&P, dsolve_solvablefory_try); break;
         case DS_SOLVABLEFORX: result = dsolve_run_parametric(&P, dsolve_solvableforx_try); break;
+        case DS_PARAMQUAD:    result = dsolve_run_parametric(&P, dsolve_paramquad_try); break;
         case DS_UNDETCOEFF:   result = dsolve_run(&P, dsolve_undetcoeff_try);  break;
         case DS_CONSTCOEFF:   result = dsolve_run(&P, dsolve_constcoeff_try);  break;
         case DS_EULER:        result = dsolve_run(&P, dsolve_euler_try);       break;
@@ -767,6 +793,7 @@ void dsolve_init(void) {
     dsolve_solvefor_init();
     dsolve_inverse_init();
     dsolve_homog_g_init();
+    dsolve_paramquad_init();
     tc_register_unwind_counter(&g_dsolve_depth);   /* restored on a timeout unwind */
     dsolve_undetcoeff_init();
     dsolve_constcoeff_init();

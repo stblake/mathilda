@@ -21,6 +21,7 @@
 #include "../attr.h"
 #include "../message.h"
 #include "../common.h"
+#include "integrate.h"
 #include <stdlib.h>
 #include <time.h>
 
@@ -193,6 +194,135 @@ static void na_normalise_quadratic_roots(Expr** gs, size_t ng, const Expr* poly,
     expr_free(half);
 }
 
+/* ---- binomial separable form:  y'^n == A(x) B(y) ----
+ * A first-order ODE c y'^n + Q(x, y) == 0 whose S = -Q/c factors into an x-part
+ * and a y-part (5612: y'^3 + f[x] (y - a)^2 (y - b)^2 == 0; 5667: y'^4 ==
+ * (y - a)^3 (y - b)^2) has the n branches y' = w_k A^(1/n) B^(1/n), w_k the n-th
+ * roots of unity -- as a SET exactly the n roots of S, since (A B)^(1/n) and
+ * A^(1/n) B^(1/n) differ by an n-th root of unity at every point.  Each branch is
+ * separable, with the first integral
+ *
+ *     Integrate[B(y)^(-1/n), y] - w_k Integrate[A(x)^(1/n), x] == C[1].
+ *
+ * Solve's roots keep the product under ONE radical (expanded), which hides the
+ * split, and the recursion then pays a full non-elementary separable attempt per
+ * root (5612: 6.6 s to decline).  So when the y-integral does not close quickly the
+ * n relations are built here directly -- each integral attempted ONCE, a
+ * non-elementary or timed-out one kept inert (Inactive[Integrate]) -- and stashed
+ * for the implicit pass, which re-verifies each against the ORIGINAL ODE.  When the
+ * y-integral is elementary nothing changes: the ordinary root recursion owns it
+ * (and may invert explicitly).  A, B are built from FactorList's factors, so
+ * A B == S holds by construction.  MATHILDA_NO_NA_BINOMIAL disables it for A/B. */
+#define NA_BINOM_INT_SEC 2
+#define NA_BINOM_STASH_TAG 41
+
+/* Integrate[f, v] once under a short budget, muted; an unevaluated, aborted or
+ * otherwise unclosed result becomes the inert Inactive[Integrate][f, v].  f consumed. */
+static Expr* na_integral_or_inert(Expr* f, const char* v) {
+    Expr* call = ds_call2(SYM_Integrate, expr_copy(f), expr_new_symbol(v));
+    Expr* g = expr_new_function(expr_new_symbol(intern_symbol("TimeConstrained")),
+                  (Expr*[]){ call, expr_new_integer(NA_BINOM_INT_SEC),
+                             expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    g_integrate_quiet++;
+    Expr* r = eval_and_free(g);
+    g_integrate_quiet--;
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
+    if (r && !ds_has_head(r, SYM_Integrate) && !ds_contains(r, intern_symbol("$Aborted"))) {
+        expr_free(f);
+        return r;
+    }
+    if (r) expr_free(r);
+    Expr* ih = expr_new_function(expr_new_symbol(SYM_Inactive),
+                   (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+    return expr_new_function(ih, (Expr*[]){ f, expr_new_symbol(v) }, 2);
+}
+
+/* Returns true when R (in Dn = y', Yn = y) is binomial-separable with a y-integral
+ * that does not close; then *rel / *nrel receive the n first-integral LHSs in
+ * terms of y[x].  Rsub borrowed. */
+static bool na_binomial_separable(const Expr* Rsub, const char* Dn, long deg,
+                                  const char* yname, const char* xvar,
+                                  Expr*** rel, size_t* nrel) {
+    if (getenv("MATHILDA_NO_NA_BINOMIAL") || deg < 2 || deg > 12) return false;
+    const char* Yn = intern_symbol("DSolve`naY");
+    Expr* R = ds_subst(expr_copy((Expr*)Rsub), ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
+    if (ds_contains(R, yname)) { expr_free(R); return false; }
+    Expr* cl = eval_and_free(ds_call2("CoefficientList", R, expr_new_symbol(Dn)));
+    bool ok = head_is(cl, SYM_List) && cl->data.function.arg_count == (size_t)deg + 1;
+    for (long k = 1; ok && k < deg; k++)
+        if (!ds_is_zero(cl->data.function.args[k])) ok = false;
+    if (ok && (ds_contains(cl->data.function.args[deg], Yn)
+               || ds_contains(cl->data.function.args[deg], xvar)
+               || ds_is_zero(cl->data.function.args[deg]))) ok = false;
+    Expr* S = NULL;
+    if (ok) {
+        S = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+                ds_call2(SYM_Times, expr_copy(cl->data.function.args[0]),
+                    ds_call2(SYM_Power, expr_copy(cl->data.function.args[deg]), expr_new_integer(-1)))));
+        if (!ds_contains(S, Yn)) ok = false;           /* a pure quadrature: not this form */
+    }
+    expr_free(cl);
+    if (!ok) { if (S) expr_free(S); return false; }
+
+    /* split S's factors into the x-part A and the y-part B, each to the power 1/n */
+    Expr* fl = eval_and_free(ds_call1("FactorList", S));
+    if (!head_is(fl, SYM_List)) { expr_free(fl); return false; }
+    size_t nf = fl->data.function.arg_count;
+    Expr** ax = malloc((nf + 1) * sizeof(Expr*)); size_t na = 0;
+    Expr** by = malloc((nf + 1) * sizeof(Expr*)); size_t nbf = 0;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* pr = fl->data.function.args[i];
+        if (!head_is(pr, SYM_List) || pr->data.function.arg_count != 2) { ok = false; break; }
+        Expr* f = pr->data.function.args[0];
+        bool hasY = ds_contains(f, Yn), hasX = ds_contains(f, xvar);
+        if (hasY && hasX) { ok = false; break; }
+        /* f^(m/n): the x-side to +1/n, the y-side to -1/n (the integrand 1/B^(1/n)) */
+        Expr* ex = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                       expr_copy(pr->data.function.args[1]),
+                       expr_new_function(expr_new_symbol(SYM_Rational),
+                           (Expr*[]){ expr_new_integer(hasY ? -1 : 1), expr_new_integer(deg) }, 2) }, 2));
+        Expr* pw = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(f), ex }, 2);
+        if (hasY) by[nbf++] = pw; else ax[na++] = pw;
+    }
+    expr_free(fl);
+    if (!ok || nbf == 0) {
+        for (size_t i = 0; i < na; i++) expr_free(ax[i]);
+        for (size_t i = 0; i < nbf; i++) expr_free(by[i]);
+        free(ax); free(by);
+        return false;
+    }
+    Expr* invB = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), by, nbf));
+    Expr* A = na ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), ax, na))
+                 : expr_new_integer(1);
+    free(ax); free(by);
+
+    /* the y-integral first: elementary -> leave the equation to the root recursion */
+    Expr* IY = na_integral_or_inert(invB, Yn);
+    if (!ds_has_head(IY, SYM_Inactive)) {
+        expr_free(IY); expr_free(A);
+        return false;
+    }
+    Expr* IX = ds_free_of(A, xvar)
+             ? eval_and_free(ds_call2(SYM_Times, A, expr_new_symbol(xvar)))
+             : na_integral_or_inert(A, xvar);
+    Expr* IYy = ds_subst(IY, expr_new_symbol(Yn), ds_make_funcapp(yname, 0, xvar));
+    Expr** out = malloc((size_t)deg * sizeof(Expr*));
+    for (long k = 0; k < deg; k++) {
+        Expr* w = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){
+                      expr_new_integer(-1),
+                      expr_new_function(expr_new_symbol(SYM_Rational),
+                          (Expr*[]){ expr_new_integer(2 * k), expr_new_integer(deg) }, 2) }, 2));
+        out[k] = eval_and_free(ds_call2(SYM_Subtract, expr_copy(IYy),
+                     ds_call2(SYM_Times, w, expr_copy(IX))));
+    }
+    expr_free(IYy); expr_free(IX);
+    *rel = out; *nrel = (size_t)deg;
+    return true;
+}
+
 Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     const char* yname = P->fun_names[0];
@@ -239,7 +369,15 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
         bool ispoly = (pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True);
         expr_free(pq);
 
-        if (deg >= 2 && ispoly) {
+        Expr** brel = NULL; size_t nbrel = 0;
+        if (deg >= 2 && ispoly && n == 1
+            && na_binomial_separable(Rsub, Dn, deg, yname, xvar, &brel, &nbrel)) {
+            /* binomial separable with a non-elementary y-integral: the n relations
+             * are final -- stash them for the binomial implicit slot that follows
+             * this one in the cascade, and skip the root recursion */
+            dsolve_stash_put(NA_BINOM_STASH_TAG, memo_h, brel, nbrel);
+            expr_free(Rsub);
+        } else if (deg >= 2 && ispoly) {
             Expr* poly = (deg == 2 && !getenv("MATHILDA_NO_NA_SQRT")) ? expr_copy(Rsub) : NULL;
             Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                            (Expr*[]){ Rsub, expr_new_integer(0) }, 2);  /* consumes Rsub */
@@ -343,15 +481,37 @@ static Expr** na_implicit_impl(DSolveProblem* P, size_t* nbranch, bool may_solve
     uint64_t h = expr_hash(P->eq_residuals[0]);
     size_t n = 0;
     Expr** G = dsolve_stash_take(NA_STASH_TAG, h, &n);
+    if (!G) G = dsolve_stash_take(NA_BINOM_STASH_TAG, h, &n);
     if (!G && may_solve) {
         size_t ne = 0;
         Expr** ex = dsolve_nth_algebraic_try(P, &ne);   /* populates the stash on decline */
         if (ex) { for (size_t i = 0; i < ne; i++) expr_free(ex[i]); free(ex); return NULL; }
         G = dsolve_stash_take(NA_STASH_TAG, h, &n);
+        if (!G) G = dsolve_stash_take(NA_BINOM_STASH_TAG, h, &n);
     }
     if (!G) return NULL;
     *nbranch = n;
     return G;
+}
+
+/* The binomial-separable relations (na_binomial_separable), consumed by the slot
+ * right after the explicit pass: they are the whole answer for that form, and every
+ * specialist between here and the late implicit slot would only re-attempt the same
+ * non-elementary separation (Separable's sampled split: ~3 s on 5612). */
+Expr** dsolve_nth_algebraic_binomial_try(DSolveProblem* P, size_t* nbranch) {
+    if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 1) return NULL;
+    size_t n = 0;
+    Expr** G = dsolve_stash_take(NA_BINOM_STASH_TAG, expr_hash(P->eq_residuals[0]), &n);
+    if (!G) return NULL;
+    *nbranch = n;
+    return G;
+}
+
+/* True when the explicit pass stashed a first integral for every y'-root of this
+ * equation -- the late implicit slot will answer it, so a parametric method placed
+ * before that slot defers. */
+bool dsolve_nth_algebraic_has_relations(const DSolveProblem* P) {
+    return P->neq == 1 && dsolve_stash_has(NA_STASH_TAG, expr_hash(P->eq_residuals[0]));
 }
 
 Expr** dsolve_nth_algebraic_implicit_try(DSolveProblem* P, size_t* nbranch) {
