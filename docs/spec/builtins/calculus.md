@@ -332,6 +332,15 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
   `Method -> Automatic`.
 - **Direction** selects the approach: `Reals`/`"TwoSided"` (default),
   `"FromAbove"` (or `-1`), `"FromBelow"` (or `+1`), or `Complexes`.
+- **Branch phases at a finite point** (v0.6162). When the Series layer's
+  expansion has coefficients that still depend on `x` — typically the branch
+  phase of a fractional power or Log of a vanishing base (`Sqrt[x^2]` expands
+  as `(Sqrt[x^2]/x) x`) — a one-sided limit re-expands with the side as an
+  assumption (`x > a` / `x < a`), which reduces the phase to a constant, and a
+  two-sided limit takes both sides and returns `Indeterminate` when they
+  differ: `Limit[Sqrt[x^2]/x, x -> 0, Direction -> 1]` = `-1`,
+  `Direction -> -1` = `1`, two-sided `Indeterminate`;
+  `Limit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> 1]` = `-1/Sqrt[2]`.
 - **Method** restricts the internal strategy cascade to a single named
   group. `Automatic` runs the full cascade in order; a named method runs
   only that group and leaves `Limit` unevaluated if it does not apply

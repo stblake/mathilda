@@ -1492,11 +1492,12 @@ Two blocks: a first-order block (3001–3056 — homogeneous class A/C/G +
 Abel(2nd type) + rational + Bernoulli + linear + exact + separable) and a
 constant-coefficient **linear** block (3057–3100 — 2nd/3rd/high-order missing-x +
 quadrature). Solved by the first-order stack and `LinearConstantCoefficients`.
-`ctest -R dsolve_corpus_2_2_31_tests` · gate baseline **1**.
+`ctest -R dsolve_corpus_2_2_31_tests` · gate baseline **2** (v0.6162: 3049 exposed, see the table).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-09-16 (M50) | **99 / 100** | **99.0%** | **1** | **0 FAIL, 0 crash.** One general **harness** fix (numeric verifier now numericizes the sample point with a high-precision real instead of an exact rational) flipped 3043 from a spurious spin-to-timeout to PASS. No solver change needed — the section solves out of the box. Gate baseline **1**. |
+| 2026-11-04 (v0.6162) | 98 / 100 | 98.0% | **2** | **Exposed wrong answer, not a regression.** 3049 (`y(0) = 1`) returns `x Sqrt[(-6x^4 + Sqrt[4x^4 + 36x^8])/(2x^4)]` = `Sign[x] Sqrt[-3x^2 + Sqrt[1 + 9x^4]]`, the true solution (the reference's answer) only for x > 0. It passed because the verifier's two-sided `Limit` at x = 0 wrongly gave 1; after the Series branch-phase fix it is `Indeterminate`. The fix belongs in DSolve: return the branch valid on both sides. Gate baseline **2**. |
 
 **M50 — one general harness (verifier) fix**, verified 0-regression:
 

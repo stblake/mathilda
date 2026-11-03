@@ -402,8 +402,8 @@ since the head already names the method.  Attributes are
 |--------|---------|---------|
 | `Method` | `Automatic` | `Automatic` (best of Richardson / Wynn / Levin-u), `EulerSum`, `SequenceLimit`, or `"Levin"` / `"LevinU"` / `"LevinT"` / `"LevinV"`. |
 | `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
-| `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`. |
-| `Scale` | `1` | initial step (finite) / distance from origin (infinite). |
+| `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`; also Limit's `"FromAbove"` (≡ `-1`) and `"FromBelow"` (≡ `1`). |
+| `Scale` | `1` | initial step (finite) / distance from origin (infinite).  Left at its default, a ladder whose starting samples hit a singularity unrelated to the limit (`Sqrt[x^2]/(x + x^2)` at `x = -1` on the way to 0) is retried up to three times on a ladder shrunk by φ = 0.618…, which shares no point with any dyadic ladder.  An explicit `Scale` is used as given. |
 | `Terms` | `13` | *starting* number of sample points / extrapolation depth, grown adaptively to meet `AccuracyGoal`.  This, not `WorkingPrecision`, sets the accuracy on a branch-point / fractional-power approach: 13 samples resolve such a tail to ~12 machine digits, where the historical `7` reached only ~3. |
 | `WynnDegree` | `1` | `SequenceLimit` iterations. |
 | `AccuracyGoal` | `MachinePrecision` | Absolute-error target (digits); combines with PrecisionGoal as 10^-a + \|x\|10^-p.  Automatic/MachinePrecision track WorkingPrecision; Infinity disables. |
@@ -432,9 +432,17 @@ The check runs in two stages:
    much wider ladder: 20 octaves sampled twice, at `Scale 2^k` and
    `Scale φ 2^k` with `φ = (Sqrt[5] - 1)/2`.  The φ offset both doubles the
    resolution and breaks the power-of-two aliasing that would otherwise hide a
-   function like `Sin[Pi x]`.  Writing `env` for the ratio of `max |f|` over the
-   half nearest the limit point to `max |f|` over the half furthest from it, a
-   verdict of `env > 0.6` refuses the limit.
+   function like `Sin[Pi x]`.  Let `env` be the ratio of the largest
+   **increment** `|f(z_i) - f(z_{i-1})|` over the half of the ladder nearest the
+   limit point to the largest over the half furthest from it.  A verdict of
+   `env > 0.6` refuses the limit.  Increments below 256 ulps of the sample scale
+   count as zero.  The envelope used to be read off `|f|` itself.  That tends to
+   `|L|` for any convergent sequence with a non-zero limit, so a near-constant
+   sequence whose roundoff-level increments happened to reverse was refused as
+   oscillatory: `Sqrt[-x]/Sqrt[x]` (identically `I` from above), and
+   `Sqrt[x^2]/x` at `x -> -3` (v0.6162).  What has to decay is the deviation
+   from the limit.  An exactly constant sequence has zero increments, and the
+   gate abstains on it.
 
 The verdict is therefore a property of the expression, not of `Terms`, `Scale`
 or `Method`.  It catches growing envelopes (`x Sin[x]`, `Sqrt[x] Sin[x]`,

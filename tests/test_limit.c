@@ -133,8 +133,13 @@ static void test_log_reduction(void) {
 static void test_arctanh_branch_point(void) {
     /* Simplify-based equivalence: the value is Log[2] but is spelled with a
      * Log[1/2] that Expand/Together (check_equiv) cannot fold. */
-    check("Simplify[Limit[Log[a] + ArcTanh[Sqrt[1 - a^2]], a -> 0] - Log[2]]", "0");
-    check("Simplify[Limit[ArcTanh[Sqrt[1 - a^2]] + Log[a/2], a -> 0]]", "0");
+    check("Simplify[Limit[Log[a] + ArcTanh[Sqrt[1 - a^2]], a -> 0, Direction -> \"FromAbove\"] - Log[2]]", "0");
+    check("Simplify[Limit[ArcTanh[Sqrt[1 - a^2]] + Log[a/2], a -> 0, Direction -> \"FromAbove\"]]", "0");
+    /* From below Log[a] carries I Pi, so the two-sided (real) limit does not
+     * exist -- the reference system agrees (v0.6162; this was Log[2]). */
+    check("Simplify[Limit[Log[a] + ArcTanh[Sqrt[1 - a^2]], a -> 0, Direction -> \"FromBelow\"] - Log[2] - I Pi]", "0");
+    check("Limit[Log[a] + ArcTanh[Sqrt[1 - a^2]], a -> 0]", "Indeterminate");
+    check("Limit[ArcTanh[Sqrt[1 - a^2]] + Log[a/2], a -> 0]", "Indeterminate");
     /* The underlying Series must close (not return unevaluated). */
     check("FreeQ[Series[ArcTanh[Sqrt[1 - a^2]], {a, 0, 1}], Series]", "True");
 }
@@ -1051,6 +1056,126 @@ static void test_method_heads(void) {
     check("StringLength[Information[\"Limit`LHospital\"]] > 80", "True");
 }
 
+/* Sqrt[g^2]-family branch phase (v0.6162). Series used to reduce the leading
+ * monomial of a fractional power to its principal root -- (x^2)^(1/2) -> x -- and
+ * Log[x^2] to 2 Log[x], so Limit[Sqrt[x^2]/x, x -> 0, Direction -> 1] was 1
+ * (truth -1) and the two-sided limit 1 (truth Indeterminate). Every expected
+ * value below is the reference system's answer for the same input. */
+static void test_sqrt_square_branch_phase(void) {
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 0]", "Indeterminate");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 0, Direction -> \"FromBelow\"]", "-1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 0, Direction -> \"FromAbove\"]", "1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 0, Direction -> Reals]", "Indeterminate");
+    check_equiv("Limit[x/Sqrt[x^2], x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[4*x^2]/x, x -> 0, Direction -> 1]", "-2");
+    check_equiv("Limit[Sqrt[x^2 + x^3]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[x^2 + x^3]/x, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Sqrt[x^2 + x^4]/x, x -> 0]", "Indeterminate");
+    check_equiv("Limit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> 1]", "-(1/Sqrt[2])");
+    check_equiv("Limit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> -1]", "1/Sqrt[2]");
+    check_equiv("Limit[Sqrt[1 - Cos[x]]/x, x -> 0]", "Indeterminate");
+    check_equiv("Limit[Sqrt[Sin[x]^2]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[Sin[x]^2]/Sin[x], x -> 0, Direction -> \"FromAbove\"]", "1");
+    check_equiv("Limit[Sqrt[x^4]/x^2, x -> 0]", "1");
+    check_equiv("Limit[Sqrt[x^6]/x^3, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[(x^3)^(1/3)/x, x -> 0, Direction -> 1]", "-(-1)^(1/3)");
+    check_equiv("Limit[(x^2)^(1/3)/x^(2/3), x -> 0, Direction -> 1]", "-(-1)^(1/3)");
+    check_equiv("Limit[(x^4)^(1/4)/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[(x^4 + x^5)^(1/4)/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[(x - 1)^2]/(x - 1), x -> 1, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[(x - 1)^2]/(x - 1), x -> 1, Direction -> -1]", "1");
+    check_equiv("Limit[Sqrt[(x - 1)^2]/(x - 1), x -> 1]", "Indeterminate");
+    check_equiv("Limit[Sqrt[x^2 - 2*x + 1]/(x - 1), x -> 1, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[(x + 2)^2]/(x + 2), x -> -2, Direction -> \"FromBelow\"]", "-1");
+    check_equiv("Limit[(Sqrt[x^2] + x)/x, x -> 0, Direction -> 1]", "0");
+    check_equiv("Limit[(Sqrt[x^2] + x)/x, x -> 0, Direction -> -1]", "2");
+    check_equiv("Limit[Sqrt[x^2]/Sin[x], x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[x^2]/Tan[2*x], x -> 0, Direction -> 1]", "-1/2");
+    check_equiv("Limit[Sqrt[x^2]*(Exp[x]/x), x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[x^2]/(x + x^2), x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[x^2]/x^2, x -> 0, Direction -> 1]", "Infinity");
+    check_equiv("Limit[x*(Sqrt[x^2]/x^2), x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Sqrt[x^2], x -> 0, Direction -> 1]", "0");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> 2]", "1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> -3]", "-1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> Infinity]", "1");
+    check_equiv("Limit[Sqrt[x^2]/x, x -> -Infinity]", "-1");
+    check_equiv("Limit[Sqrt[x^2 + 1]/x, x -> -Infinity]", "-1");
+    check_equiv("Limit[Sqrt[-x]/Sqrt[x], x -> 0, Direction -> -1]", "I");
+    check_equiv("Limit[(1 - Cos[x])^(3/2)/x^3, x -> 0, Direction -> 1]", "-1/2*1/Sqrt[2]");
+    check_equiv("Limit[x + Log[x^2]/2 - Log[x], x -> 0, Direction -> 1]", "(-I)*Pi");
+    check_equiv("Limit[Log[x^2]/2 - Log[x], x -> 0, Direction -> -1]", "0");
+    check_equiv("Limit[Log[x^2] - 2*Log[x], x -> 0]", "Indeterminate");
+    check_equiv("Limit[Log[x^2]/Log[x], x -> 0]", "2");
+    check_equiv("Limit[x*Log[x^2], x -> 0]", "0");
+    check_equiv("Limit[Log[-x] - Log[x], x -> 0, Direction -> 1]", "(-I)*Pi");
+    check_equiv("Limit[Exp[Log[x^2]/2]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[(x^2)^x, x -> 0, Direction -> 1]", "1");
+    check_equiv("Limit[Sqrt[x^2]^x, x -> 0, Direction -> 1]", "1");
+    check_equiv("Limit[x^x, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[(Sqrt[x^2] - Sin[x])/x, x -> 0, Direction -> 1]", "-2");
+}
+/* Limit stress set around branch phases (v0.6162): odd/even roots of powers,
+ * Log of a vanishing argument, shifted and symbolic points, products with a
+ * jump (ArcTan[1/x] Sqrt[x^2]/x), x in an exponent, nested radicals, +-Infinity.
+ * Every expected value is the reference system's answer for the same input;
+ * it exposed the ArcTan/ArcCot/ArcTanh/ArcCoth half-Pi constant reading only the
+ * sign of the leading coefficient, never the side of the point. */
+static void test_limit_branch_stress(void) {
+    check_equiv("Limit[(Sqrt[x^2] - x)/x^2, x -> 0, Direction -> -1]", "0");
+    check_equiv("Limit[(Sqrt[x^2] - x)/x, x -> 0, Direction -> 1]", "-2");
+    check_equiv("Limit[(Sqrt[x^2 + x^4] - Sqrt[x^2])/x^3, x -> 0, Direction -> 1]", "-1/2");
+    check_equiv("Limit[Sqrt[x^2 + x^4]/Sin[x], x -> 0, Direction -> \"FromBelow\"]", "-1");
+    check_equiv("Limit[Sqrt[1 - Cos[2*x]]/Sin[x], x -> 0, Direction -> 1]", "-Sqrt[2]");
+    check_equiv("Limit[Sqrt[1 - Cos[2*x]]/Sin[x], x -> 0]", "Indeterminate");
+    check_equiv("Limit[Sqrt[x^2*(1 + x)]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[x^4 + x^6]/x^2, x -> 0]", "1");
+    check_equiv("Limit[(x^6)^(1/3)/x^2, x -> 0, Direction -> 1]", "1");
+    check_equiv("Limit[(x^3)^(2/3)/x^2, x -> 0, Direction -> 1]", "(-1)^(2/3)");
+    check_equiv("Limit[(x^5)^(1/5)/x, x -> 0, Direction -> 1]", "-(-1)^(1/5)");
+    check_equiv("Limit[(x^4)^(3/4)/x^3, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[(x^4)^(3/4)/x^3, x -> 0]", "Indeterminate");
+    check_equiv("Limit[Sqrt[Sin[x]^2]/Tan[x], x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[Sin[x]^2]/Tan[x], x -> Pi, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[Sin[x]^2]/Tan[x], x -> Pi, Direction -> -1]", "1");
+    check_equiv("Limit[Sqrt[(x - 2)^2]/(x^2 - 4), x -> 2, Direction -> 1]", "-1/4");
+    check_equiv("Limit[Sqrt[(x - 2)^2]/(x^2 - 4), x -> 2]", "Indeterminate");
+    check_equiv("Limit[Sqrt[x^2 - 2*x + 1]/(1 - x), x -> 1, Direction -> -1]", "-1");
+    check_equiv("Limit[Sqrt[(x - a)^2]/(x - a), x -> a, Direction -> 1]", "-1");
+    check_equiv("Limit[Sqrt[(x - a)^2]/(x - a), x -> a, Direction -> -1]", "1");
+    check_equiv("Limit[Sqrt[x^2]*Log[x^2], x -> 0]", "0");
+    check_equiv("Limit[x*(Log[x^2]/Sqrt[x^2]), x -> 0, Direction -> 1]", "Infinity");
+    check_equiv("Limit[Log[x^2]/Log[x^4], x -> 0]", "1/2");
+    check_equiv("Limit[Log[-x], x -> 0, Direction -> 1]", "-Infinity");
+    check_equiv("Limit[Log[-x]/Log[x], x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[x*Log[-x], x -> 0, Direction -> 1]", "0");
+    check_equiv("Limit[Log[x^2] - Log[x], x -> 0, Direction -> 1]", "-Infinity");
+    check_equiv("Limit[Log[Sin[x]^2] - 2*Log[x], x -> 0, Direction -> -1]", "0");
+    check("Simplify[Limit[Log[1 - Cos[x]] - Log[x^2], x -> 0] + Log[2]]", "0");   /* = -Log[2] */
+    check_equiv("Limit[(x^2)^(1/x), x -> 0, Direction -> -1]", "0");
+    check_equiv("Limit[(1 + Sqrt[x^2])^(1/x), x -> 0, Direction -> 1]", "E^(-1)");
+    check_equiv("Limit[(1 + Sqrt[x^2])^(1/x), x -> 0, Direction -> -1]", "E");
+    check_equiv("Limit[(1 + Sqrt[x^2])^(1/x), x -> 0]", "Indeterminate");
+    check_equiv("Limit[Exp[Sqrt[x^2]/x], x -> 0, Direction -> 1]", "E^(-1)");
+    check_equiv("Limit[Sin[Sqrt[x^2]]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[ArcTan[1/x]*(Sqrt[x^2]/x), x -> 0, Direction -> 1]", "Pi/2");
+    check_equiv("Limit[(Sqrt[x^2] - Sin[x])/x^3, x -> 0, Direction -> -1]", "1/6");
+    check_equiv("Limit[(Exp[Sqrt[x^2]] - 1)/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[(Exp[Sqrt[x^2]] - 1)/x, x -> 0]", "Indeterminate");
+    check_equiv("Limit[Sqrt[x^2 + x] - Sqrt[x^2 - x], x -> -Infinity]", "-1");
+    check_equiv("Limit[Sqrt[x^2 + x] + x, x -> -Infinity]", "-1/2");
+    check_equiv("Limit[x + Sqrt[x^2 + 2*x], x -> -Infinity]", "-1");
+    check_equiv("Limit[(x^3)^(1/3)/x, x -> -Infinity]", "-(-1)^(1/3)");
+    check_equiv("Limit[Sqrt[x^4 + x]/x^2, x -> -Infinity]", "1");
+    check_equiv("Limit[x*(Sqrt[x^2 + 1] - Sqrt[x^2]), x -> -Infinity]", "-1/2");
+    check_equiv("Limit[Sqrt[x + Sqrt[x^2]]/Sqrt[x], x -> 0, Direction -> -1]", "Sqrt[2]");
+    check_equiv("Limit[Sqrt[1 + Sqrt[x^2]] - 1, x -> 0]", "0");
+    check_equiv("Limit[(Sqrt[1 + Sqrt[x^2]] - 1)/x, x -> 0, Direction -> 1]", "-1/2");
+    check_equiv("Limit[Sqrt[x^2*Sin[x]^2]/x^2, x -> 0]", "1");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1091,6 +1216,8 @@ int main(void) {
     TEST(test_special_log_leading);
     TEST(test_method);
     TEST(test_method_heads);
+    TEST(test_sqrt_square_branch_phase);
+    TEST(test_limit_branch_stress);
 
     printf("All limit tests passed.\n");
     return 0;

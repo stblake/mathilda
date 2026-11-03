@@ -225,6 +225,26 @@ static bool expr_free_of(Expr* e, Expr* target) {
     return true;
 }
 
+
+/* True when `coef` contains some symbol that occurs (in argument position) in
+ * `fact` -- i.e. an assumption fact could actually speak about it. */
+static bool coef_mentions_fact_symbol(Expr* coef, const Expr* fact) {
+    if (!fact) return false;
+    if (fact->type == EXPR_SYMBOL) return !expr_free_of(coef, (Expr*)fact);
+    if (fact->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < fact->data.function.arg_count; i++)
+        if (coef_mentions_fact_symbol(coef, fact->data.function.args[i])) return true;
+    return false;
+}
+
+/* The assumption-time coefficient cleanup is keyed on assumed symbols: a
+ * coefficient none of whose symbols occur in any fact has nothing to clean. */
+static bool coef_mentions_assumed_symbol(Expr* coef, const AssumeCtx* a) {
+    for (size_t i = 0; i < a->count; i++)
+        if (coef_mentions_fact_symbol(coef, a->facts[i])) return true;
+    return false;
+}
+
 /* ------------------------------------------------------------------------- *
  * split_two_term: decompose e = a + b*x^(p/q)
  *
@@ -420,6 +440,12 @@ typedef struct {
      * freed by the recursion -- built and freed once in builtin_series. It
      * propagates for free because every recursive call reuses the same ctx. */
     const AssumeCtx* assume;
+    /* Known sign of t = x - x0 on the expansion neighbourhood: +1 (the u = 1/x
+     * remap at +Infinity, or an assumption x > x0), -1 (assumption x < x0), 0
+     * when undecided. Resolves the branch phase of a fractional power of a
+     * vanishing base (so_pow_lead_coef). Zero-initialised by every positional
+     * initializer that omits it. */
+    int     tsign;
 } SeriesCtx;
 
 static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx);
@@ -1042,7 +1068,135 @@ static SeriesObj* so_pow_1plus_alpha(SeriesObj* u, Expr* alpha) {
  *   s = a0 * (x-x0)^(nmin/den) * (1 + u)
  * with u = s/(a0*(x-x0)^(nmin/den)) - 1 having u.nmin >= 1.
  * Then s^alpha = a0^alpha * (x-x0)^(nmin*alpha/den) * (1+u)^alpha. */
-static SeriesObj* so_pow_expr(SeriesObj* s_in, Expr* alpha) {
+static Expr* series_build_xmx0(Expr* x, Expr* x0);
+
+/* Sign of a constant that is a real NUMBER (Integer/Rational/Real, or a
+ * numeric expression such as 1 - Sqrt[3] whose N value is real): +1 / -1.
+ * 0 for zero, a complex number, or anything symbolic. Unlike
+ * series_real_sign this never reports a complex value as positive -- the
+ * branch-phase factoring below relies on the sign being literally true. */
+static int so_real_number_sign(Expr* c) {
+    if (!expr_is_numeric_quantity(c)) return 0;
+    Expr* nv = simp(mk_fn1("N", expr_copy(c)));
+    int sg = 0;
+    if (nv->type == EXPR_REAL)         sg = (nv->data.real > 0) - (nv->data.real < 0);
+    else if (nv->type == EXPR_INTEGER) sg = (nv->data.integer > 0) - (nv->data.integer < 0);
+    expr_free(nv);
+    return sg;
+}
+
+/* Leading coefficient of s^alpha, where s = a0 t^r (1 + u), t = x - x0,
+ * r = nmin/den != 0, alpha a non-integer rational.
+ *
+ * Writing s^alpha = (a0 t^r)^alpha (1+u)^alpha = P(t) t^(r alpha) (1+u)^alpha
+ * puts the whole branch behaviour into the phase
+ *
+ *     P(t) = (a0 t^r)^alpha / t^(r alpha),
+ *
+ * which is NOT 1 in general: Sqrt[x^2] = x Sqrt[x^2]/x, the phase being Sign[x]
+ * on the real line. Reducing it to a0^alpha (the old behaviour) silently took
+ * the principal root of the leading monomial, so Series[Sqrt[x^2], {x,0,2}]
+ * was x + O[x]^3 and Limit[Sqrt[x^2]/x, x -> 0, Direction -> 1] was 1 (truth
+ * -1). The phase is constant on each real half-line, so:
+ *
+ *   tsign = +1  (t known positive, e.g. the u = 1/x remap at +Infinity):
+ *               P = P(1) = a0^alpha -- byte-for-byte the legacy coefficient;
+ *   tsign = -1  (t known negative): P = P(-1), a constant;
+ *   tsign =  0  (side unknown): P is kept symbolic in t, as the reference
+ *               system does (SeriesData[x, 0, {Sqrt[x^2]/x}, 1, 4, 1]).
+ *
+ * A positive part of a0 (|a0| for a real number, a0 itself when assumed
+ * positive) factors out of the radical exactly, keeping Sqrt[2 x + x^2] at
+ * Sqrt[2] x^(1/2) + ... rather than Sqrt[2 x]/Sqrt[x] x^(1/2) + .... For
+ * -1 < r <= 1 the evaluator cancels (t^r)^alpha t^(-r alpha) to 1 itself, so
+ * Sqrt[x], Sqrt[Sin[x]], (x + x^2)^(1/3) keep their plain coefficients. */
+static Expr* so_pow_lead_coef(Expr* a0, int64_t nmin, int64_t den, Expr* alpha,
+                              Expr* x, Expr* x0, int tsign,
+                              const AssumeCtx* assume) {
+    int64_t p, q;
+    if (nmin == 0 || tsign > 0 || !is_rational(alpha, &p, &q) || q == 1)
+        return simp(mk_power(expr_copy(a0), expr_copy(alpha)));
+    /* a0 = c * a1 with c > 0 pulled out of the radical. */
+    Expr* c;
+    Expr* a1;
+    int sg = so_real_number_sign(a0);
+    if (sg > 0 || (sg == 0 && assume && assume_known_positive(assume, a0))) {
+        c = expr_copy(a0);  a1 = expr_new_integer(1);
+    } else if (sg < 0) {
+        c = simp(mk_times(expr_new_integer(-1), expr_copy(a0)));
+        a1 = expr_new_integer(-1);
+    } else {
+        c = expr_new_integer(1);  a1 = expr_copy(a0);
+    }
+    Expr* t = tsign < 0 ? expr_new_integer(-1) : series_build_xmx0(x, x0);
+    int64_t g = gcd_i64(abs_i64(nmin), den);
+    Expr* r = simp(expr_new_function(mk_symbol("Rational"),
+        (Expr*[]){ expr_new_integer(nmin / g), expr_new_integer(den / g) }, 2));
+    Expr* lead  = mk_times(a1, mk_power(expr_copy(t), expr_copy(r)));
+    Expr* neg_ra = simp(mk_times(expr_new_integer(-1), mk_times(expr_copy(r), expr_copy(alpha))));
+    Expr* phase = mk_times(mk_power(lead, expr_copy(alpha)), mk_power(t, neg_ra));
+    expr_free(r);
+    return simp(mk_times(mk_power(c, expr_copy(alpha)), phase));
+}
+
+/* Log of the leading monomial a0 t^r (t = x - x0, r = nmin/den != 0), the
+ * symbolic constant term of Log[a0 t^r (1 + u)] = Log[a0 t^r] + Log[1 + u].
+ *
+ * Splitting it as Log[a0] + r Log[t] (the old behaviour) is a branch error off
+ * the positive half-line: Log[x^2] is not 2 Log[x] for x < 0 (they differ by
+ * 2 Pi I), nor is Log[-x] = I Pi + Log[x]. So:
+ *   - a positive part c of a0 always splits off exactly: Log[c] + Log[a1 t^r];
+ *   - Log[t^r] = r Log[t] exactly when a1 = 1 and -1 < r <= 1;
+ *   - tsign = +1: Log[a0] + r Log[t], byte-for-byte the legacy coefficient;
+ *   - tsign = -1: Log[a1 (-1)^r] - r Log[-1] + r Log[t] (the value of
+ *     Log[a1 t^r] - r Log[t], constant on t < 0, at t = -1);
+ *   - otherwise Log[a1 t^r] is kept, as the reference system does
+ *     (SeriesData[x, 0, {Log[x^2], ...}, 0, ...]). Owned result. */
+static Expr* so_log_lead_const(Expr* a0, int64_t nmin, int64_t den,
+                               Expr* x, Expr* x0, int tsign,
+                               const AssumeCtx* assume) {
+    int64_t g = gcd_i64(abs_i64(nmin), den);
+    Expr* r = simp(expr_new_function(mk_symbol("Rational"),
+        (Expr*[]){ expr_new_integer(nmin / g), expr_new_integer(den / g) }, 2));
+    Expr* t = series_build_xmx0(x, x0);
+    Expr* r_log_t = mk_times(expr_copy(r), mk_fn1("Log", expr_copy(t)));
+    if (tsign > 0) {
+        expr_free(t); expr_free(r);
+        return simp(mk_plus(mk_fn1("Log", expr_copy(a0)), r_log_t));
+    }
+    Expr* c;
+    Expr* a1;
+    int sg = so_real_number_sign(a0);
+    if (sg > 0 || (sg == 0 && assume && assume_known_positive(assume, a0))) {
+        c = expr_copy(a0);  a1 = expr_new_integer(1);
+    } else if (sg < 0) {
+        c = simp(mk_times(expr_new_integer(-1), expr_copy(a0)));
+        a1 = expr_new_integer(-1);
+    } else {
+        c = expr_new_integer(1);  a1 = expr_copy(a0);
+    }
+    bool a1_one = (a1->type == EXPR_INTEGER && a1->data.integer == 1);
+    bool r_in_range = (nmin > -den) && (nmin <= den);   /* -1 < r <= 1 */
+    Expr* rest;
+    if (a1_one && r_in_range) {
+        expr_free(a1);
+        rest = r_log_t;
+    } else if (tsign < 0) {
+        Expr* phase = mk_fn1("Log", mk_times(a1, mk_power(expr_new_integer(-1),
+                                                          expr_copy(r))));
+        Expr* corr = mk_times(mk_times(expr_new_integer(-1), expr_copy(r)),
+                              mk_fn1("Log", expr_new_integer(-1)));
+        rest = mk_plus(mk_plus(phase, corr), r_log_t);
+    } else {
+        expr_free(r_log_t);
+        rest = mk_fn1("Log", mk_times(a1, mk_power(expr_copy(t), expr_copy(r))));
+    }
+    expr_free(t); expr_free(r);
+    return simp(mk_plus(mk_fn1("Log", c), rest));
+}
+
+static SeriesObj* so_pow_expr(SeriesObj* s_in, Expr* alpha, int tsign,
+                              const AssumeCtx* assume) {
     if (alpha->type == EXPR_INTEGER) {
         return so_pow_int(s_in, alpha->data.integer);
     }
@@ -1072,7 +1226,8 @@ static SeriesObj* so_pow_expr(SeriesObj* s_in, Expr* alpha) {
          * s^alpha = a0^alpha * (x-x0)^(nmin*alpha/den). If alpha is rational,
          * we can express the shift exactly; otherwise we give up. */
         so_free(u);
-        Expr* a0_pow = simp(mk_power(expr_copy(a0), expr_copy(alpha)));
+        Expr* a0_pow = so_pow_lead_coef(a0, nmin, s->den, alpha, s->x, s->x0,
+                                        tsign, assume);
         if (nmin == 0) {
             SeriesObj* r = so_alloc(s->x, s->x0, 0, s->order, s->den);
             if (r->coef_count > 0) so_set_coef(r, 0, a0_pow);
@@ -1113,7 +1268,8 @@ static SeriesObj* so_pow_expr(SeriesObj* s_in, Expr* alpha) {
     if (!oneplus_pow) { so_free(s); return NULL; }
 
     /* Step 5: scalar multiply by a0^alpha and shift by nmin*alpha/den. */
-    Expr* a0_pow_alpha = simp(mk_power(expr_copy(a0), expr_copy(alpha)));
+    Expr* a0_pow_alpha = so_pow_lead_coef(a0, nmin, s->den, alpha, s->x, s->x0,
+                                          tsign, assume);
     SeriesObj* scaled = so_scalar_mul(a0_pow_alpha, oneplus_pow);
     expr_free(a0_pow_alpha);
     so_free(oneplus_pow);
@@ -2202,31 +2358,87 @@ static SeriesObj* so_apply_arccos(SeriesObj* s) {
 }
 
 /* Apply ArcCot[s] = Pi/2 - ArcTan[s]. */
-static SeriesObj* so_apply_arccot(SeriesObj* s) {
+/* The half-Pi constant of ArcCot[v] / ArcCoth[v] (equivalently ArcTan[1/v] /
+ * ArcTanh[1/v]) for a VANISHING series v ~ lead t^r, t = x - x0, r > 0:
+ *
+ *   ArcCot[v]  = (Pi/2) v Sqrt[v^-2]    - ArcTan[v]    ((Pi/2) Sign[v] on reals)
+ *   ArcCoth[v] = -(Pi/2) v Sqrt[-v^-2]  + ArcTanh[v]   (-(I Pi/2) Sign[v])
+ *
+ * The constant depends on the sign of the WHOLE leading monomial, not just
+ * lead: ArcTan[1/x] is Pi/2 for x > 0 and -Pi/2 for x < 0. It used to be read
+ * off lead alone (ArcTan: +Pi/2 unless lead < 0; ArcTanh/ArcCoth: +I Pi/2
+ * always -- wrong for x > 0, where ArcTanh[1000.] = 0.001 - I Pi/2). Now:
+ *   - the side is known (ctx->tsign, +1 at the +Infinity remap) or irrelevant
+ *     (r an even integer): t -> +-1 and the sign of lead (t)^r is read off --
+ *     numerically, or by the assumptions for a symbolic lead;
+ *   - otherwise the reference system's symbolic form above, with v = lead t^r.
+ * Returns an owned constant. */
+static Expr* so_half_pi_branch_const(SeriesObj* v, bool hyperbolic,
+                                     const SeriesCtx* ctx) {
+    Expr* lead = NULL;
+    int64_t k = 0;
+    for (size_t i = 0; i < v->coef_count; i++)
+        if (!is_lit_zero(v->coefs[i])) { lead = v->coefs[i]; k = (int64_t)i; break; }
+    Expr* half_pi = simp(mk_times(make_rational(hyperbolic ? -1 : 1, 2), mk_symbol("Pi")));
+    if (!lead) return half_pi;              /* degenerate: legacy +Pi/2 shape */
+    int64_t num = v->nmin + k, den = v->den;
+    int64_t g = gcd_i64(abs_i64(num), den);
+    num /= g; den /= g;
+    bool even = (den == 1) && (num % 2 == 0);
+    int tsign = ctx ? ctx->tsign : 1;
+    if (even && tsign == 0) tsign = 1;
+    Expr* r = (den == 1) ? expr_new_integer(num) : make_rational(num, den);
+    Expr* T = tsign ? expr_new_integer(tsign)
+                    : series_build_xmx0(v->x, v->x0);
+    Expr* M = simp(mk_times(expr_copy(lead),
+                            mk_power(expr_copy(T), expr_copy(r))));   /* v's monomial */
+    int sg = 0;
+    if (tsign) sg = series_real_sign(M, ctx ? ctx->assume : NULL);
+    Expr* phase;
+    if (sg != 0) {
+        /* v M^-1... on reals: Sign[M] (circular), I Sign[M] (hyperbolic). */
+        phase = hyperbolic ? simp(mk_times(expr_new_integer(sg),
+                                 expr_new_function(mk_symbol("Complex"),
+                                     (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2)))
+                           : expr_new_integer(sg);
+    } else {
+        /* A real-number lead of known sign s factors out of the radical:
+         * M Sqrt[(+-) M^-2] = s t^r Sqrt[(+-) t^-2r]  (the reference's
+         * -(Pi/2) w Sqrt[w^-2] for ArcTan[1/((1 - Sqrt[3]) w)]). */
+        int ls = so_real_number_sign(lead);
+        Expr* base = ls ? simp(mk_power(expr_copy(T), expr_copy(r))) : expr_copy(M);
+        Expr* inv2 = mk_power(expr_copy(base), expr_new_integer(-2));
+        if (hyperbolic) inv2 = mk_times(expr_new_integer(-1), inv2);
+        phase = simp(mk_times(mk_times(expr_new_integer(ls ? ls : 1), base),
+                              mk_fn1("Sqrt", inv2)));
+    }
+    expr_free(M); expr_free(T); expr_free(r);
+    return simp(mk_times(half_pi, phase));
+}
+
+/* ArcCot[s] = C - ArcTan[s] for a vanishing s, C from so_half_pi_branch_const
+ * (also ArcTan[1/s]). */
+static SeriesObj* so_apply_arccot(SeriesObj* s, const SeriesCtx* ctx) {
     SeriesObj* at = so_apply_kernel_at_zero("ArcTan", s);
     if (!at) return NULL;
     SeriesObj* neg = so_neg(at);
     so_free(at);
-    Expr* halfpi = simp(mk_times(make_rational(1, 2), mk_symbol("Pi")));
-    SeriesObj* k = so_from_constant(halfpi, neg->x, neg->x0, neg->order, neg->den);
-    expr_free(halfpi);
+    Expr* c = so_half_pi_branch_const(s, false, ctx);
+    SeriesObj* k = so_from_constant(c, neg->x, neg->x0, neg->order, neg->den);
+    expr_free(c);
     SeriesObj* r = so_add(k, neg);
     so_free(k); so_free(neg);
     return r;
 }
 
-/* Apply ArcCoth[s] = I*Pi/2 + ArcTanh[s] (principal-branch convention that
- * matches Mathematica's Series[ArcCoth[x], {x, 0, n}] output). */
-static SeriesObj* so_apply_arccoth(SeriesObj* s) {
+/* ArcCoth[s] = C + ArcTanh[s] for a vanishing s, C from so_half_pi_branch_const
+ * (also ArcTanh[1/s]). */
+static SeriesObj* so_apply_arccoth(SeriesObj* s, const SeriesCtx* ctx) {
     SeriesObj* at = so_apply_kernel_at_zero("ArcTanh", s);
     if (!at) return NULL;
-    /* I*Pi/2 = Complex[0, 1/2] * Pi  -- build as Times[Complex[0, 1/2], Pi]. */
-    Expr* half = make_rational(1, 2);
-    Expr* iconst = expr_new_function(mk_symbol("Complex"),
-                        (Expr*[]){ expr_new_integer(0), half }, 2);
-    Expr* ihp = simp(mk_times(iconst, mk_symbol("Pi")));
-    SeriesObj* k = so_from_constant(ihp, at->x, at->x0, at->order, at->den);
-    expr_free(ihp);
+    Expr* c = so_half_pi_branch_const(s, true, ctx);
+    SeriesObj* k = so_from_constant(c, at->x, at->x0, at->order, at->den);
+    expr_free(c);
     SeriesObj* r = so_add(k, at);
     so_free(k); so_free(at);
     return r;
@@ -2243,17 +2455,6 @@ static SeriesObj* so_apply_arccosh(SeriesObj* s) {
     SeriesObj* r = so_scalar_mul(iconst, acs);
     expr_free(iconst); so_free(acs);
     return r;
-}
-
-/* Build the series representing I*Pi/2 as a SeriesObj-compatible constant. */
-static SeriesObj* so_const_half_i_pi(SeriesObj* tmpl) {
-    Expr* half = make_rational(1, 2);
-    Expr* iconst = expr_new_function(mk_symbol("Complex"),
-                        (Expr*[]){ expr_new_integer(0), half }, 2);
-    Expr* ihp = simp(mk_times(iconst, mk_symbol("Pi")));
-    SeriesObj* k = so_from_constant(ihp, tmpl->x, tmpl->x0, tmpl->order, tmpl->den);
-    expr_free(ihp);
-    return k;
 }
 
 /* Sinh[c + u] = Sinh[c] Cosh[u] + Cosh[c] Sinh[u].
@@ -2667,10 +2868,10 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     return series_expand_nested(arg, ctx);
             }
         }
-        /* Sqrt[g^2] == Abs[g]: the generic Power handler below picks the
-         * principal +g root regardless of assumptions, so resolve the sign
-         * here when g's sign is known (mirrors the Abs kernel above). Only
-         * fires for a provably-signed g, so Sqrt[g^2] = ±g holds identically. */
+        /* Sqrt[g^2] == Abs[g]: when g's sign is known (a stronger fact than the
+         * side of x0 the generic Power handler's phase uses) resolve it here,
+         * mirroring the Abs kernel above. Only fires for a provably-signed g,
+         * so Sqrt[g^2] = ±g holds identically. */
         if (ctx->assume && head && head == SYM_Power &&
             e->data.function.arg_count == 2) {
             Expr* b  = e->data.function.args[0];
@@ -2730,42 +2931,10 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             if (base_has_x && !exp_has_x) {
                 SeriesObj* bs = series_expand_nested(base, ctx);
                 if (!bs) return NULL;
-                /* True leading exponent numerator: bs->nmin can sit below the
-                 * first non-zero coefficient (1-Cos[x] stores nmin=0, coefs
-                 * {0,0,1/2,...}), so read the first non-zero term, not nmin. */
-                int64_t lead_num = so_first_nonzero_exp(bs, bs->nmin);
-                int64_t bden = bs->den;
-                SeriesObj* r = so_pow_expr(bs, exp);
+                /* The branch phase of a vanishing base (Sqrt[x^2] = x Sqrt[x^2]/x)
+                 * is resolved by ctx->tsign, or kept symbolic in x - x0. */
+                SeriesObj* r = so_pow_expr(bs, exp, ctx->tsign, ctx->assume);
                 so_free(bs);
-                /* An even-order zero taken to a fractional power: so_pow_expr
-                 * factors the leading monomial c*x^bnmin and reduces (x^bnmin)^exp
-                 * to x^e, taking the principal + root. For real x < 0 the true
-                 * value is |x|^e, so when e is ODD the whole series is off by a
-                 * global -1 (e.g. Sqrt[1-Cos[x]] ~ |x|/Sqrt2 = -x/Sqrt2 for x<0).
-                 * Flip it. Guards: expansion at the origin (sign of x-x0 == sign
-                 * of x), integer-step leading (bden==1) even power, and x proven
-                 * negative. At the at_infinity remap ctx->x is the internal u,
-                 * never provably negative, so this never mis-fires there -- which
-                 * is why the sign is queried locally rather than via a ctx field.
-                 * x>0 / no-assumption leaves argpos/argneg false => byte-for-byte
-                 * legacy. Sqrt[x^2] is still intercepted earlier (the explicit
-                 * Power[Power[g,2],1/2] handler), so this is the hidden-square
-                 * generalisation only. */
-                if (r && ctx->assume && is_lit_zero(ctx->x0) &&
-                    bden == 1 && lead_num != INT64_MAX &&
-                    lead_num > 0 && (lead_num % 2 == 0) &&
-                    assume_known_negative(ctx->assume, ctx->x)) {
-                    int64_t p, q;
-                    if (is_rational(exp, &p, &q) && q != 0 &&
-                        (lead_num * p) % q == 0) {
-                        int64_t e = (lead_num * p) / q;
-                        if (e & 1) {
-                            SeriesObj* rn = so_neg(r);
-                            so_free(r);
-                            r = rn;
-                        }
-                    }
-                }
                 return r;
             }
             /* Exponent depends on x: rewrite as Exp[exp * Log[base]] and recurse. */
@@ -2838,16 +3007,10 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             SeriesObj* log_rest = so_apply_log(shifted);
             so_free(shifted); so_free(as);
             if (!log_rest) { expr_free(a0); return NULL; }
-            /* Add symbolic Log[a0] + (nmin/den) * Log[x - x0]. */
-            Expr* log_a0 = simp(mk_fn1("Log", a0));
-            Expr* base_sym;
-            if (is_lit_zero(ctx->x0)) base_sym = expr_copy(ctx->x);
-            else                      base_sym = simp(mk_plus(expr_copy(ctx->x),
-                                                              simp(mk_times(expr_new_integer(-1),
-                                                                            expr_copy(ctx->x0)))));
-            Expr* log_base = simp(mk_fn1("Log", base_sym));
-            Expr* n_over_d = make_rational(nmin, log_rest->den);
-            Expr* extra = simp(mk_plus(log_a0, simp(mk_times(n_over_d, log_base))));
+            /* Add the symbolic Log of the leading monomial, Log[a0 (x-x0)^r]. */
+            Expr* extra = so_log_lead_const(a0, nmin, log_rest->den, ctx->x,
+                                            ctx->x0, ctx->tsign, ctx->assume);
+            expr_free(a0);
             SeriesObj* extras = so_from_constant(extra, log_rest->x, log_rest->x0, log_rest->order, log_rest->den);
             expr_free(extra);
             SeriesObj* r = so_add(extras, log_rest);
@@ -2996,49 +3159,15 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     int sc = so_branch_point_imag_sign(inner);
                     if (sc != 0) r = so_apply_arctan_branch_point(inner, sc, ctx->target_order, ctx);
                 }
-                /* If arg blows up at x0 (e.g. 1/x), use the +oo-direction
-                 * identity ArcTan[u] = Pi/2 - ArcTan[1/u] = ArcCot-of-(1/u),
-                 * mirroring the ArcCot at-infinity branch below. */
+                /* If arg blows up at x0 (e.g. 1/x): ArcTan[u] = ArcCot[1/u] */
                 if (!r && inner->nmin < 0) {
+                    /* ArcTan[u] = ArcCot[1/u]: the half-Pi constant takes the
+                     * sign of 1/u's whole leading monomial (lead t^r), read by
+                     * so_half_pi_branch_const -- numerically for a radical lead
+                     * such as 1/(1 - Sqrt[3]) (Mathar M6968), by the assumptions
+                     * for a symbolic one, by the side of x0 for an odd power. */
                     SeriesObj* inv = so_inv(inner);
-                    if (inv) { r = so_apply_arccot(inv); so_free(inv); }
-                    /* so_apply_arccot assumes the argument -> +Infinity and emits
-                     * +Pi/2.  The true constant is Sign[lead] Pi/2, lead being the
-                     * argument's leading coefficient:
-                     *   - numeric lead (e.g. 1/(1 - Sqrt[3])): its numeric sign --
-                     *     a negative radical constant is NOT a literal negative, so
-                     *     it used to slip through as +Pi/2 and every definite
-                     *     integral telescoping an ArcTan[x/c] with c < 0 came out
-                     *     wrong (Mathar M6968: Integrate[1/(1+2a x^2+b x^4)]);
-                     *   - symbolic lead the assumptions sign: that sign;
-                     *   - otherwise Mathematica's Sqrt[lead^2]/lead factor, which
-                     *     is the sign for every real lead and never assumes one.
-                     * A positive lead needs no correction. */
-                    if (r && inner->coef_count > 0) {
-                        Expr* lead = NULL;
-                        for (size_t li = 0; li < inner->coef_count; li++)
-                            if (!is_lit_zero(inner->coefs[li])) { lead = inner->coefs[li]; break; }
-                        int sg = lead ? series_real_sign(lead, ctx->assume) : 1;
-                        Expr* shift = NULL;          /* added to the constant term */
-                        if (sg < 0) {
-                            shift = simp(mk_times(expr_new_integer(-1), mk_symbol("Pi")));
-                        } else if (sg == 0) {
-                            /* (Sqrt[lead^2]/lead - 1) Pi/2 */
-                            Expr* sq = mk_fn1("Sqrt", mk_fn2("Power", expr_copy(lead), expr_new_integer(2)));
-                            Expr* fac = mk_fn2("Plus",
-                                mk_times(sq, mk_fn2("Power", expr_copy(lead), expr_new_integer(-1))),
-                                expr_new_integer(-1));
-                            shift = simp(mk_times(fac, mk_times(mk_fn2("Rational", expr_new_integer(1),
-                                                                         expr_new_integer(2)),
-                                                                mk_symbol("Pi"))));
-                        }
-                        if (shift) {
-                            SeriesObj* pis = so_from_constant(shift, r->x, r->x0, r->order, r->den);
-                            expr_free(shift);
-                            SeriesObj* r2 = so_add(r, pis);
-                            so_free(r); so_free(pis); r = r2;
-                        }
-                    }
+                    if (inv) { r = so_apply_arccot(inv, ctx); so_free(inv); }
                 }
             }
             else if (head == SYM_SinIntegral) {
@@ -3081,19 +3210,11 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     r = series_expand(rew, ctx);
                     expr_free(rew);
                 }
-                /* If arg blows up at x0, use principal-branch identity
-                 * ArcTanh[1/u] = I*Pi/2 + ArcTanh[u]. */
+                /* If arg blows up at x0: ArcTanh[1/u] = ArcCoth[u], whose
+                 * -(I Pi/2) Sign[u] constant so_apply_arccoth resolves. */
                 if (!r && inner->nmin < 0) {
                     SeriesObj* inv = so_inv(inner);
-                    if (inv) {
-                        SeriesObj* at = so_apply_kernel_at_zero("ArcTanh", inv);
-                        so_free(inv);
-                        if (at) {
-                            SeriesObj* k = so_const_half_i_pi(at);
-                            r = so_add(k, at);
-                            so_free(k); so_free(at);
-                        }
-                    }
+                    if (inv) { r = so_apply_arccoth(inv, ctx); so_free(inv); }
                 }
             }
             else if (head == SYM_EllipticK || head == SYM_EllipticE) {
@@ -3173,7 +3294,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 }
             }
             else if (head == SYM_ArcCot) {
-                r = so_apply_arccot(inner);
+                r = so_apply_arccot(inner, ctx);
                 /* Branch points at ±I: logarithmic series. */
                 if (!r) {
                     int sc = so_branch_point_imag_sign(inner);
@@ -3187,7 +3308,7 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 }
             }
             else if (head == SYM_ArcCoth) {
-                r = so_apply_arccoth(inner);
+                r = so_apply_arccoth(inner, ctx);
                 /* Branch points at ±1: logarithmic series. */
                 if (!r) {
                     int sc = so_branch_point_sign(inner);
@@ -3479,6 +3600,7 @@ static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
             /* pending_log_coef   */ NULL,
             /* pending_discriminator */ NULL,
             /* assume */ NULL,  /* SeriesData arithmetic layer carries no option. */
+            /* tsign */ (x->type == EXPR_SYMBOL) ? 0 : 1,  /* 1/x: +Infinity */
         };
         s = series_expand(op, &ctx);
         if (!s) { *incompatible = true; return NULL; }
@@ -3579,7 +3701,11 @@ Expr* series_power(Expr* base, Expr* exp) {
         SeriesObj* b = so_from_seriesdata(base);
         if (!b) return NULL;
         if (expr_free_of(exp, b->x)) {
-            SeriesObj* r = so_pow_expr(b, exp);
+            /* A symbol variable is a finite-point series whose side is
+             * unknown here (phase kept symbolic); a compound one (1/x) is the
+             * +Infinity form, where t = 1/x > 0. */
+            int tsign = (b->x->type == EXPR_SYMBOL) ? 0 : 1;
+            SeriesObj* r = so_pow_expr(b, exp, tsign, NULL);
             so_free(b);
             if (!r) return NULL;
             so_trim_leading(r);
@@ -7061,6 +7187,16 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * symbolic-centre pad is deliberate (see above; residue.c compensates
      * there).  The loop is bounded by rounds, not by order -- each round
      * adds the measured deficit, which is finite for a fixed input. */
+    /* Side of the expansion point, for the branch phase of fractional powers
+     * (so_pow_lead_coef): +Infinity is the u = 1/x > 0 remap; at a finite
+     * point only an assumption (x > x0 / x < x0) decides it. */
+    int tsign = 0;
+    if (at_infinity) tsign = 1;
+    else if (assume) {
+        Expr* t = series_build_xmx0(x_use, x0_use);
+        tsign = series_real_sign(t, assume);
+        expr_free(t);
+    }
     SeriesObj* s = NULL;
     int64_t internal_order = order + pad;
     SeriesCtx ctx;
@@ -7072,6 +7208,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             /* pending_log_coef   */ NULL,
             /* pending_discriminator */ NULL,
             /* assume */ assume,
+            /* tsign */ tsign,
         };
         ctx = c0;
         s = series_expand(f_use, &ctx);
@@ -7153,6 +7290,15 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
          * is deliberately NOT touched; only the emitted coefficients are cleaned. */
         if (ctx.assume) {
             for (size_t ci = 0; ci < s->coef_count; ci++) {
+                /* A purely numeric coefficient keys on no assumed symbol;
+                 * the positive-real cascade would only respell it
+                 * (Sqrt[Pi/2] -> Sqrt[Pi]/Sqrt[2]). Leave it as computed. */
+                if (expr_is_numeric_quantity(s->coefs[ci])) continue;
+                /* Nor does one that mentions no assumed symbol: the cascade
+                 * would otherwise apply its positive-real rewrites to free
+                 * parameters (Sqrt[E^(4 c)] -> E^(2 c) under x > 0, false for
+                 * complex c) -- which a Limit side probe (x > x0) exposed. */
+                if (!coef_mentions_assumed_symbol(s->coefs[ci], ctx.assume)) continue;
                 /* The positive-real Log/Power cascade first: the per-symbol
                  * rules below do not reach a radical of a PRODUCT, so
                  * Sqrt[a^2 b^2]/(2 a^2 b^2) stayed put under a, b > 0 while

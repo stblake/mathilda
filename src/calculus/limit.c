@@ -1379,6 +1379,66 @@ apply_prefactor:
     return result;
 }
 
+/* Read the limit off Series[f, {x, x0, k}] for k = START, 2 START, ... MAX.
+ * `assum` (borrowed, may be NULL) is passed as the Series Assumptions option.
+ * *stuck is set when the expansion's coefficients still depend on x (escalating
+ * the order cannot help then). */
+static Expr* series_probe_limit(Expr* f_use, Expr* x_use, Expr* x0_use,
+                                int effective_dir, LimitCtx* ctx,
+                                Expr* assum, bool* stuck_out) {
+    Expr* result = NULL;
+    bool stuck = false;
+    for (int64_t k = LIMIT_SERIES_START_ORDER;
+         k <= LIMIT_SERIES_MAX_ORDER;
+         k *= 2) {
+        Expr* spec = expr_new_function(
+            mk_sym("List"),
+            (Expr*[]){ expr_copy(x_use), expr_copy(x0_use), mk_int(k) }, 3);
+        Expr* call = assum
+            ? expr_new_function(mk_sym("Series"),
+                  (Expr*[]){ expr_copy(f_use), spec,
+                             mk_fn2("Rule", mk_sym("Assumptions"), expr_copy(assum)) }, 3)
+            : mk_fn2("Series", expr_copy(f_use), spec);
+        Expr* s    = simp(call);
+        LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth, ctx->method, ctx->assume };
+        result = read_leading_term_limit(s, &leaf);
+        /* A genuine limit value is free of the expansion variable. If the
+         * leading-term reader handed back something that still depends on it
+         * -- e.g. the undecidable symbolic exponent in Log[x]/x^s, whose
+         * "leading term" came out as `Infinity x^-s` -- it did NOT resolve the
+         * limit; discard it so the cascade abstains instead of returning a
+         * malformed (x-dependent) answer. */
+        if (result && expr_contains(result, x_use)) {
+            expr_free(result); result = NULL;
+        }
+        /* If the series expansion still mentions the limit variable in
+         * its coefficients (asymptotic shapes like Log[E^x-E^a] at x->a
+         * whose leading "coefficient" is Log[x-a], or the branch phase
+         * Sqrt[x^2]/x of Sqrt[x^2]), escalating to higher order won't help
+         * and is expensive (O(k^3) for common heads). Short-circuit and hand
+         * off to the caller / the later layers. */
+        stuck = (result == NULL) && s && expr_contains(s, x_use);
+        expr_free(s);
+        if (result) break;
+        if (stuck) break;
+    }
+    *stuck_out = stuck;
+    return result;
+}
+
+/* The ctx's assumption facts plus the side of the point (x > x0 or x < x0),
+ * as one And[...] for the Series Assumptions option. Owned. */
+static Expr* series_side_assumption(LimitCtx* ctx, int side) {
+    size_t nf = ctx->assume ? ctx->assume->count : 0;
+    Expr** a = (Expr**)malloc((nf + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < nf; i++) a[i] = expr_copy(ctx->assume->facts[i]);
+    a[nf] = mk_fn2(side > 0 ? "Greater" : "Less",
+                   expr_copy(ctx->x), expr_copy(ctx->point));
+    Expr* r = expr_new_function(mk_sym("And"), a, nf + 1);
+    free(a);
+    return simp(r);
+}
+
 static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
     /* The limit variable must be a symbol before we probe with Series. split_rule
      * does not check, and Limit does not hold its arguments, so `x = 5;
@@ -1427,35 +1487,54 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
         effective_dir = LIMIT_DIR_FROMABOVE;
     }
 
-    Expr* result = NULL;
-    for (int64_t k = LIMIT_SERIES_START_ORDER;
-         k <= LIMIT_SERIES_MAX_ORDER;
-         k *= 2) {
-        Expr* spec = expr_new_function(
-            mk_sym("List"),
-            (Expr*[]){ expr_copy(x_use), expr_copy(x0_use), mk_int(k) }, 3);
-        Expr* call = mk_fn2("Series", expr_copy(f_use), spec);
-        Expr* s    = simp(call);
-        LimitCtx leaf = { x_use, x0_use, effective_dir, ctx->depth, ctx->method, ctx->assume };
-        result = read_leading_term_limit(s, &leaf);
-        /* A genuine limit value is free of the expansion variable. If the
-         * leading-term reader handed back something that still depends on it
-         * -- e.g. the undecidable symbolic exponent in Log[x]/x^s, whose
-         * "leading term" came out as `Infinity x^-s` -- it did NOT resolve the
-         * limit; discard it so the cascade abstains instead of returning a
-         * malformed (x-dependent) answer. */
-        if (result && expr_contains(result, x_use)) {
-            expr_free(result); result = NULL;
+    bool stuck = false;
+    Expr* result = series_probe_limit(f_use, x_use, x0_use, effective_dir,
+                                      ctx, NULL, &stuck);
+
+    /* A coefficient that still depends on x at a FINITE point is typically the
+     * branch phase of a fractional power of a vanishing base: Series[Sqrt[x^2],
+     * {x, 0, k}] = SeriesData[x, 0, {Sqrt[x^2]/x}, 1, ...], the phase being
+     * Sign[x] on the real line. It is constant on each side, so re-expand with
+     * the side as an assumption, which resolves it (Series reduces the phase to
+     * its value at x - x0 = +-1). Two-sided: both sides, Indeterminate when
+     * they disagree. Only reached on the stuck path, so ordinary expansions pay
+     * nothing. */
+    if (!result && stuck && !y_sym && !is_divergent(ctx->point) &&
+        ctx->x->type == EXPR_SYMBOL && free_of(ctx->point, ctx->x)) {
+        int d = ctx->dir;
+        if (d == LIMIT_DIR_FROMABOVE || d == LIMIT_DIR_FROMBELOW) {
+            Expr* as = series_side_assumption(ctx, d);
+            bool st2 = false;
+            result = series_probe_limit(f_use, x_use, x0_use, d, ctx, as, &st2);
+            expr_free(as);
+        } else if (d == LIMIT_DIR_TWOSIDED || d == LIMIT_DIR_REALS) {
+            Expr* asL = series_side_assumption(ctx, -1);
+            Expr* asR = series_side_assumption(ctx, +1);
+            bool st2 = false;
+            Expr* L = series_probe_limit(f_use, x_use, x0_use,
+                                         LIMIT_DIR_FROMBELOW, ctx, asL, &st2);
+            Expr* R = series_probe_limit(f_use, x_use, x0_use,
+                                         LIMIT_DIR_FROMABOVE, ctx, asR, &st2);
+            expr_free(asL); expr_free(asR);
+            /* One side resolved and the other did not (e.g. Log[x^2] - 2 Log[x]
+             * is identically 0 for x > 0, an all-zero series the leading-term
+             * reader declines): settle the missing side with the full
+             * one-sided cascade. Only after partial progress, and depth-
+             * guarded, so a shape neither side can read costs nothing extra. */
+            if ((L != NULL) != (R != NULL) && ctx->depth <= 3) {
+                LimitCtx side = *ctx;
+                side.dir = L ? LIMIT_DIR_FROMABOVE : LIMIT_DIR_FROMBELOW;
+                Expr* o = compute_limit(f, &side);
+                if (o && expr_contains(o, ctx->x)) { expr_free(o); o = NULL; }
+                if (L) R = o; else L = o;
+            }
+            if (L && R && !is_indeterminate(L) && !is_indeterminate(R)) {
+                if (expr_eq(L, R)) { result = L; L = NULL; }
+                else result = mk_sym("Indeterminate");
+            }
+            if (L) expr_free(L);
+            if (R) expr_free(R);
         }
-        /* If the series expansion still mentions the limit variable in
-         * its coefficients (asymptotic shapes like Log[E^x-E^a] at x->a
-         * whose leading "coefficient" is Log[x-a]), escalating to higher
-         * order won't help and is expensive (O(k^3) for common heads).
-         * Short-circuit and hand off to the later layers. */
-        bool stuck = (result == NULL) && s && expr_contains(s, x_use);
-        expr_free(s);
-        if (result) break;
-        if (stuck) break;
     }
 
     if (f_owned)  expr_free(f_owned);

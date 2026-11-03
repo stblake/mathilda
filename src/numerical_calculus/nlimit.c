@@ -81,6 +81,7 @@
 #include <complex.h>
 #include <gmp.h>
 #include <math.h>
+#include <float.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -181,6 +182,10 @@ static bool nl_accept(double result_mag, double step, double maxsample) {
 #define NL_OSC_ENV_MAX        0.6
 #define NL_OSC_PHI            0.6180339887498949  /* (Sqrt[5]-1)/2, in (1/2, 1) */
 #define NL_OSC_MIN_REVERSALS  1
+/* Increments within this many ulps of the sample scale count as zero. */
+#define NL_OSC_NOISE_ULPS     256.0
+/* Retries of an Automatic-Scale ladder whose prefix hit a singular sample. */
+#define NL_SCALE_RETRIES      3
 /* Both ladders over at least half the window: a truncated ladder must still
  * span enough octaves for the envelope ratio to mean anything. */
 #define NL_OSC_MIN_POINTS     (NL_OSC_OCTAVES)
@@ -505,10 +510,35 @@ static bool nl_osc_use_phi(bool infinite, int visit) {
     return infinite ? (visit == 0) : (visit == 1);
 }
 
+/* |v_i - v_{i-1}| along the diagnostic ladder: what must decay for a limit to
+ * exist is the deviation from the limit, not |f| itself. The envelope used to be
+ * read off |f|, which tends to |L| != 0 for every convergent sequence with a
+ * nonzero limit -- ratio ~1, "non-decaying" -- so a near-constant sample whose
+ * roundoff-level increments happened to reverse direction (Sqrt[-x]/Sqrt[x] = I
+ * from above, Sqrt[1 - Cos[2 x]] Csc[x] -> -Sqrt[2] from below) was refused as
+ * oscillatory. Increments decay for every convergent sequence and do not for a
+ * non-decaying oscillation; an exactly constant one has all-zero increments, on
+ * which nl_envelope_ratio abstains. Returns the number of increments. */
+static int nl_increment_mags(const double _Complex* v, int n, double* mags) {
+    /* Increments at roundoff level are noise, not oscillation: a sequence
+     * constant to the last few ulps (Sqrt[1 - Cos[2 x]] Csc[x] = -Sqrt[2] for
+     * x < 0) would otherwise show a flat, "non-decaying" noise envelope. */
+    double vmax = 0.0;
+    for (int i = 0; i < n; i++) if (cabs(v[i]) > vmax) vmax = cabs(v[i]);
+    double floor_ = NL_OSC_NOISE_ULPS * DBL_EPSILON * vmax;
+    int m = 0;
+    for (int i = 1; i < n; i++) {
+        double d = cabs(v[i] - v[i - 1]);
+        mags[m++] = (d <= floor_) ? 0.0 : d;
+    }
+    return m;
+}
+
 /* True if the sampled function oscillates with a non-decaying envelope. */
 static bool nl_oscillates_machine(NlCtx* c, double _Complex z0,
                                   double _Complex dir, double _Complex scale,
                                   bool infinite) {
+    double _Complex vals[2 * NL_OSC_OCTAVES];
     double mags[2 * NL_OSC_OCTAVES];
     int n = 0;
     for (int k = 0; k < NL_OSC_OCTAVES; k++) {
@@ -518,11 +548,13 @@ static bool nl_oscillates_machine(NlCtx* c, double _Complex z0,
             double _Complex z = infinite ? dir * scale * h
                                          : z0 - dir * scale * h;
             double _Complex v;
-            if (nl_sample_machine(c, z, &v)) mags[n++] = cabs(v);
+            if (nl_sample_machine(c, z, &v)) vals[n++] = v;
         }
     }
+    /* The envelope of the INCREMENTS: see nl_increment_mags. */
+    int m = nl_increment_mags(vals, n, mags);
     double env;
-    if (!nl_envelope_ratio(mags, n, &env)) return false;
+    if (!nl_envelope_ratio(mags, m, &env)) return false;
     return env > NL_OSC_ENV_MAX;
 }
 
@@ -536,8 +568,10 @@ static bool nl_oscillates_mpfr(NlCtx* c, const mpfr_t z0r, const mpfr_t z0i,
                                const mpfr_t dsr, const mpfr_t dsi,
                                bool infinite, long bits) {
     mpfr_prec_t p = (mpfr_prec_t)bits;
-    mpfr_t zr, zi, hk, vr, vi, phi;
-    mpfr_inits2(p, zr, zi, hk, vr, vi, phi, (mpfr_ptr)0);
+    mpfr_t zr, zi, hk, vr, vi, phi, pr, pi, dr, di;
+    mpfr_inits2(p, zr, zi, hk, vr, vi, phi, pr, pi, dr, di, (mpfr_ptr)0);
+    bool have_prev = false;
+    double vmax = 0.0;
     mpfr_set_d(phi, NL_OSC_PHI, MPFR_RNDN);
 
     double mags[2 * NL_OSC_OCTAVES];
@@ -555,13 +589,27 @@ static bool nl_oscillates_mpfr(NlCtx* c, const mpfr_t z0r, const mpfr_t z0i,
                 mpfr_sub(zr, z0r, zr, MPFR_RNDN);
                 mpfr_sub(zi, z0i, zi, MPFR_RNDN);
             }
-            if (nl_sample_mpfr(c, zr, zi, vr, vi))
-                mags[n++] = hypot(mpfr_get_d(vr, MPFR_RNDN),
-                                  mpfr_get_d(vi, MPFR_RNDN));
+            /* Increments at working precision (see nl_increment_mags). */
+            if (nl_sample_mpfr(c, zr, zi, vr, vi)) {
+                double vm = hypot(mpfr_get_d(vr, MPFR_RNDN), mpfr_get_d(vi, MPFR_RNDN));
+                if (vm > vmax) vmax = vm;
+                if (have_prev) {
+                    mpfr_sub(dr, vr, pr, MPFR_RNDN);
+                    mpfr_sub(di, vi, pi, MPFR_RNDN);
+                    mags[n++] = hypot(mpfr_get_d(dr, MPFR_RNDN),
+                                      mpfr_get_d(di, MPFR_RNDN));
+                }
+                mpfr_set(pr, vr, MPFR_RNDN); mpfr_set(pi, vi, MPFR_RNDN);
+                have_prev = true;
+            }
         }
     }
-    mpfr_clears(zr, zi, hk, vr, vi, phi, (mpfr_ptr)0);
+    mpfr_clears(zr, zi, hk, vr, vi, phi, pr, pi, dr, di, (mpfr_ptr)0);
 
+    /* Roundoff-level increments are noise (nl_increment_mags), here at the
+     * working precision. */
+    double floor_ = NL_OSC_NOISE_ULPS * ldexp(1.0, -(int)bits) * vmax;
+    for (int i = 0; i < n; i++) if (mags[i] <= floor_) mags[i] = 0.0;
     double env;
     if (!nl_envelope_ratio(mags, n, &env)) return false;
     return env > NL_OSC_ENV_MAX;
@@ -661,9 +709,20 @@ static bool nl_apply_option(Expr* rule, NlOpts* o) {
         return true;
     }
     if (name == SYM_Direction) {
+        /* Limit's spellings: "FromAbove" == -1 (approach from larger values),
+         * "FromBelow" == +1. They need an Expr to borrow, so they point at two
+         * process-lifetime constants. */
+        static Expr* dir_from_above = NULL;
+        static Expr* dir_from_below = NULL;
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic)
             o->direction = NULL;       /* Automatic == -1 */
-        else
+        else if (rhs->type == EXPR_STRING && !strcmp(rhs->data.string, "FromAbove")) {
+            if (!dir_from_above) dir_from_above = expr_new_integer(-1);
+            o->direction = dir_from_above;
+        } else if (rhs->type == EXPR_STRING && !strcmp(rhs->data.string, "FromBelow")) {
+            if (!dir_from_below) dir_from_below = expr_new_integer(1);
+            o->direction = dir_from_below;
+        } else
             o->direction = rhs;
         return true;
     }
@@ -806,14 +865,31 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
     NlBind bind; nl_bind_snapshot(&bind, var);
     NlCtx ctx; ctx.f = expr; ctx.bind = &bind; ctx.spec = numeric_machine_spec();
 
-    /* Sample the starting prefix. */
+    /* Sample the starting prefix. A ladder point can land on a singularity of
+     * expr that has nothing to do with the limit -- Sqrt[x^2]/(x + x^2) at
+     * x = -1, Log[-x]/Log[x] at x = 1, both the first point of the default
+     * ladder towards 0. With Scale left Automatic, retry on a ladder shrunk by
+     * the irrational phi (it shares no point with any dyadic ladder); an
+     * explicit Scale is honoured verbatim. */
     int filled = 0;
     bool ok = true;
-    for (; filled < start; filled++) {
-        double _Complex z;
-        if (infinite) z = dir * scale * ldexp(1.0, filled);     /* u * Scale * 2^k */
-        else          z = z0 - dir * scale * ldexp(1.0, -filled); /* z0 - d*Scale*2^-k */
-        if (!nl_sample_machine(&ctx, z, &S[filled])) { ok = false; break; }
+    for (int attempt = 0; ; attempt++) {
+        /* An attempt that can still be retried is an internal probe: its
+         * Power::infy at the singular point must not reach the user (nor flip
+         * an enclosing Check[]) when a later ladder succeeds. The last attempt
+         * runs unmuted, so a genuine failure reports exactly as before. */
+        bool retryable = !o->scale && attempt < NL_SCALE_RETRIES;
+        if (retryable) arith_warnings_mute_push();
+        filled = 0; ok = true;
+        for (; filled < start; filled++) {
+            double _Complex z;
+            if (infinite) z = dir * scale * ldexp(1.0, filled);     /* u * Scale * 2^k */
+            else          z = z0 - dir * scale * ldexp(1.0, -filled); /* z0 - d*Scale*2^-k */
+            if (!nl_sample_machine(&ctx, z, &S[filled])) { ok = false; break; }
+        }
+        if (retryable) arith_warnings_mute_pop();
+        if (ok || !retryable) break;
+        scale *= NL_OSC_PHI;
     }
     /* The oscillation diagnosis samples expr too, so it must run while the
      * variable is still bound -- before nl_bind_restore, not after. */
@@ -1052,13 +1128,23 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
     NlBind bind; nl_bind_snapshot(&bind, var);
     NlCtx ctx; ctx.f = expr; ctx.bind = &bind; ctx.spec = spec;
 
-    /* Sample the starting prefix. */
+    /* Sample the starting prefix, retrying on a phi-shrunk ladder when a point
+     * lands on a singularity and Scale is Automatic (see nl_run_machine). */
     int filled = 0;
     bool ok = true;
-    while (filled < start) {
-        if (!nl_sample_index_mpfr(&ctx, filled, infinite, z0r, z0i, dsr, dsi,
-                                  zr, zi, hk, Sr[filled], Si[filled])) { ok = false; break; }
-        filled++;
+    for (int attempt = 0; ; attempt++) {
+        bool retryable = !o->scale && attempt < NL_SCALE_RETRIES;  /* see machine path */
+        if (retryable) arith_warnings_mute_push();
+        filled = 0; ok = true;
+        while (filled < start) {
+            if (!nl_sample_index_mpfr(&ctx, filled, infinite, z0r, z0i, dsr, dsi,
+                                      zr, zi, hk, Sr[filled], Si[filled])) { ok = false; break; }
+            filled++;
+        }
+        if (retryable) arith_warnings_mute_pop();
+        if (ok || !retryable) break;
+        mpfr_mul_d(dsr, dsr, NL_OSC_PHI, MPFR_RNDN);
+        mpfr_mul_d(dsi, dsi, NL_OSC_PHI, MPFR_RNDN);
     }
     /* Same ordering constraint as the machine path: diagnose before unbinding.
      * The reversal screen is a sign test, so it reads the samples as doubles. */

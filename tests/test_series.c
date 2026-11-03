@@ -601,8 +601,9 @@ static void test_series_arccot(void) {
     setup_full();
     assert_fullform(
         "Series[ArcCot[x], {x, 0, 5}]",
-        "SeriesData[x, 0, List[Times[Rational[1, 2], Pi], -1, 0, Rational[1, 3], 0, "
-        "Rational[-1, 5]], 0, 6, 1]");
+        /* (Pi/2) Sign[x] on reals, kept as the reference's x Sqrt[x^-2] (v0.6162). */
+        "SeriesData[x, 0, List[Times[Rational[1, 2], Pi, Power[Power[x, -2], Rational[1, 2]], x], "
+        "-1, 0, Rational[1, 3], 0, Rational[-1, 5]], 0, 6, 1]");
 }
 /* ArcCoth[x] ~ I*Pi/2 + ArcTanh[x] near x = 0 (principal branch). The
  * leading constant prints as Times[Complex[0, 1/2], Pi] after the
@@ -611,15 +612,18 @@ static void test_series_arccoth_at_zero(void) {
     setup_full();
     assert_fullform(
         "Series[ArcCoth[x], {x, 0, 5}]",
-        "SeriesData[x, 0, List[Times[Complex[0, Rational[1, 2]], Pi], 1, 0, "
-        "Rational[1, 3], 0, Rational[1, 5]], 0, 6, 1]");
+        /* -(I Pi/2) Sign[x] on reals (ArcCoth[0.001] = 0.001 - I Pi/2); the
+         * old constant +I Pi/2 was wrong for x > 0 (v0.6162). */
+        "SeriesData[x, 0, List[Times[Rational[-1, 2], Pi, Power[Times[-1, Power[x, -2]], Rational[1, 2]], x], "
+        "1, 0, Rational[1, 3], 0, Rational[1, 5]], 0, 6, 1]");
 }
 /* ArcCoth[x^2] at x = 0: constant plus even-power series. */
 static void test_series_arccoth_of_xsquared(void) {
     setup_full();
     assert_fullform(
         "Series[ArcCoth[x^2], {x, 0, 3}]",
-        "SeriesData[x, 0, List[Times[Complex[0, Rational[1, 2]], Pi], 0, 1, 0], 0, 4, 1]");
+        /* x^2 > 0 on either side: -I Pi/2 (was +I Pi/2, wrong; v0.6162). */
+        "SeriesData[x, 0, List[Times[Complex[0, Rational[-1, 2]], Pi], 0, 1, 0], 0, 4, 1]");
 }
 /* Previously: infinite "1/0" errors because naive Taylor substituted
  * x -> 0 in an expression with ArcCoth[ComplexInfinity]. Now the
@@ -1081,8 +1085,9 @@ static void test_series_arctanh_of_inverse(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTanh[1/x], {x, 0, 7}]",
-        "SeriesData[x, 0, List[Times[Complex[0, Rational[1, 2]], Pi], 1, 0, "
-        "Rational[1, 3], 0, Rational[1, 5], 0, Rational[1, 7]], 0, 8, 1]");
+        /* ArcTanh[1/x] = -(I Pi/2) Sign[x] + ArcTanh[x] on reals (v0.6162). */
+        "SeriesData[x, 0, List[Times[Rational[-1, 2], Pi, Power[Times[-1, Power[x, -2]], Rational[1, 2]], x], "
+        "1, 0, Rational[1, 3], 0, Rational[1, 5], 0, Rational[1, 7]], 0, 8, 1]");
 }
 /* ArcCosh[1/x] / ArcSinh[1/x] expansions carry the symbolic -Log[x]
  * constant term from the identity rewrite. */
@@ -2520,6 +2525,58 @@ static void test_series_gamma_family_poles(void) {
     check_quiet("Limit[Gamma[s] Sin[s], s -> 0]", "1");
 }
 
+/* Branch phase of a fractional power / Log of a vanishing base (v0.6162).
+ * (a0 t^r)^alpha is NOT a0^alpha t^(r alpha) off the positive half-line, nor
+ * Log[a0 t^r] = Log[a0] + r Log[t]: Series[Sqrt[x^2]] was x + O[x]^3 and
+ * Series[Log[x^2]] was 2 Log[x], both wrong for x < 0. The phase is now kept
+ * in the coefficient (the reference system's form), and resolved to a constant
+ * when an assumption fixes the side of x0. */
+static void test_series_branch_phase(void) {
+    setup_full();
+    check_quiet("Series[Sqrt[x^2], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[x^2]/x, 0}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[4 x^2], {x, 0, 2}] === SeriesData[x, 0, {(2*Sqrt[x^2])/x, 0}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[-x^2], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[-x^2]/x, 0}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[a x^2], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[a*x^2]/x, 0}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[x^2 + x^3], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[x^2]/x, Sqrt[x^2]/(2*x)}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[1 - Cos[x]], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[x^2]/(Sqrt[2]*x), 0}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[x^3], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[x^3]/x^(3/2), 0}, 3, 5, 2]", "True");
+    check_quiet("Series[Sqrt[-x], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[-x]/Sqrt[x], 0, 0, 0}, 1, 5, 2]", "True");
+    check_quiet("Series[Sqrt[x], {x, 0, 2}] === SeriesData[x, 0, {1, 0, 0, 0}, 1, 5, 2]", "True");
+    check_quiet("Series[Sqrt[2 x + x^2], {x, 0, 2}] === SeriesData[x, 0, {Sqrt[2], 0, 1/(2*Sqrt[2]), 0}, 1, 5, 2]", "True");
+    check_quiet("Series[Log[x^2], {x, 0, 2}] === SeriesData[x, 0, {Log[x^2], 0, 0}, 0, 3, 1]", "True");
+    check_quiet("Series[Log[-x], {x, 0, 2}] === SeriesData[x, 0, {Log[-x], 0, 0}, 0, 3, 1]", "True");
+    check_quiet("Series[Log[x^2 + x^3], {x, 0, 2}] === SeriesData[x, 0, {Log[x^2], 1, -1/2}, 0, 3, 1]", "True");
+    check_quiet("Series[Log[2 x], {x, 0, 2}] === SeriesData[x, 0, {Log[2] + Log[x], 0, 0}, 0, 3, 1]", "True");
+    /* Resolved by the side of the expansion point. */
+    check_quiet("Series[Sqrt[x^2], {x, 0, 2}, Assumptions -> x < 0] === SeriesData[x, 0, {0, -1, 0}, 0, 3, 1]", "True");
+    check_quiet("Series[Sqrt[x^2 + x^3], {x, 0, 2}, Assumptions -> x < 0] === SeriesData[x, 0, {-1, -1/2}, 1, 3, 1]", "True");
+    check_quiet("Series[Sqrt[x^2 + x^3], {x, 0, 2}, Assumptions -> x > 0] === SeriesData[x, 0, {1, 1/2}, 1, 3, 1]", "True");
+    check_quiet("Series[Log[-x], {x, 0, 2}, Assumptions -> x < 0] === SeriesData[x, 0, {Log[-x], 0, 0}, 0, 3, 1]", "True");
+    check_quiet("Series[Log[x^2] - 2 Log[x], {x, 0, 2}, Assumptions -> x < 0] === SeriesData[x, 0, {-2 I Pi, 0, 0}, 0, 3, 1]", "True");
+    /* Away from 0 and at Infinity the coefficients stay plain. */
+    check_quiet("Series[Sqrt[1 - x], {x, 1, 2}] === SeriesData[x, 1, {Sqrt[1 - x]/Sqrt[-1 + x], 0, 0, 0}, 1, 5, 2]", "True");
+    check_quiet("Series[Sqrt[x^2 - 1], {x, 1, 2}] === SeriesData[x, 1, {Sqrt[2], 0, 1/(2 Sqrt[2]), 0}, 1, 5, 2]", "True");
+    check_quiet("Series[Sqrt[x^2 + 1], {x, Infinity, 2}] === SeriesData[x^(-1), 0, {1, 0, 1/2, 0}, -1, 3, 1]", "True");
+    /* Every expansion agrees with its function on BOTH real sides of 0 and
+     * on the imaginary axis (the old principal-root reduction failed at -10^-3). */
+    check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 3}]] - f) /. x -> p, 30]], {p, {-1/1000, 1/1000, -I/1000}}]], {f, {Sqrt[x^2], Sqrt[4 x^2], Sqrt[-x^2], Sqrt[x^2 + x^3], Sqrt[Sin[x]^2], (x^2)^(1/3), Sqrt[x^4], Sqrt[x^3], Sqrt[1-Cos[x]], Sqrt[-x^2+x^3], (x^4+x^5)^(1/4), Sqrt[x], Sqrt[2 x], Sqrt[-x], Sqrt[2x + x^2], Sqrt[Sin[x]], Log[x^2], Log[x^2 + x^3], Log[-x], Log[Sin[x]^2], Log[-2 x + x^2], Log[x^3+x^4], Log[1/x], Sqrt[x^2] Exp[x], (x^2)^(1/3) Cos[x], 1/Sqrt[x^2+x^4]}}]] < 10^-8", "True");
+
+    /* ArcTan/ArcCot/ArcTanh/ArcCoth half-Pi constants take the sign of the
+     * whole leading monomial: Sign[x] for ArcTan[1/x], none for 1/x^2. */
+    check_quiet("Series[ArcTan[1/x], {x, 0, 1}] === SeriesData[x, 0, {Pi Sqrt[x^(-2)] x/2, -1}, 0, 2, 1]", "True");
+    check_quiet("Series[ArcTan[1/x], {x, 0, 1}, Assumptions -> x < 0] === SeriesData[x, 0, {-Pi/2, -1}, 0, 2, 1]", "True");
+    check_quiet("Series[ArcTan[1/x^2], {x, 0, 1}, Assumptions -> x < 0] === SeriesData[x, 0, {Pi/2, 0}, 0, 2, 1]", "True");
+    check_quiet("Series[ArcCot[x^3], {x, 0, 1}, Assumptions -> x < 0] === SeriesData[x, 0, {-Pi/2, 0}, 0, 2, 1]", "True");
+    check_quiet("Series[ArcTanh[1/x], {x, 0, 1}] === SeriesData[x, 0, {-Pi Sqrt[-x^(-2)] x/2, 1}, 0, 2, 1]", "True");
+    check_quiet("Series[ArcCoth[x], {x, 0, 1}, Assumptions -> x > 0] === SeriesData[x, 0, {-I Pi/2, 1}, 0, 2, 1]", "True");
+    /* The assumption-time coefficient cleanup touches only assumed symbols:
+     * Sqrt[E^(4 c)] is NOT E^(2 c) for complex c. */
+    check_quiet("Series[Sqrt[E^(4 c)] + x, {x, 0, 1}, Assumptions -> x > 0] === SeriesData[x, 0, {Sqrt[E^(4 c)], 1}, 0, 2, 1]", "True");
+    check_quiet("Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a > 0] === SeriesData[x, 0, {a, 1/(2 a), -1/(8 a^3)}, 0, 3, 1]", "True");
+    check_quiet("Series[ArcTan[x/(1 - Sqrt[3])], {x, Infinity, 2}] === SeriesData[x^(-1), 0, {-Pi/2, -1 + Sqrt[3], 0}, 0, 3, 1]", "True");
+    check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 2}]] - f) /. x -> p, 30]], {p, {-1/1000, 1/1000}}]], {f, {ArcTan[1/x], ArcTan[1/x^3], ArcCot[x], ArcTanh[1/x], ArcCoth[x], ArcTan[1 + 2/x], ArcTan[1/Sin[x]]}}]] < 10^-6", "True");
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -2699,6 +2756,7 @@ int main(void) {
     TEST(test_series_stress_07);
     TEST(test_series_stress_08);
     TEST(test_series_stress_09);
+    TEST(test_series_branch_phase);
 
     printf("All series tests passed.\n");
     return 0;

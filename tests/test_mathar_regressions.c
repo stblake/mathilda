@@ -64,13 +64,17 @@ static void test_series_arctan_sign(void) {
     /* Numeric negative radical leading coefficient. */
     check_eq("Limit[2 ArcTan[x/(1 - Sqrt[3])], x -> Infinity]", "-Pi");
     check_eq("Limit[Sqrt[2] ArcTan[x/(1 - Sqrt[3])], x -> Infinity]", "-Pi/Sqrt[2]");
-    check_eq("Series[ArcTan[1/((1 - Sqrt[3]) w)], {w, 0, 1}]",
+    /* The constant is (Pi/2) Sign[(1 - Sqrt[3]) w]: the reference's
+     * -(Pi/2) w Sqrt[w^-2] generically, -Pi/2 for w > 0 (v0.6162). */
+    check_eq("Series[ArcTan[1/((1 - Sqrt[3]) w)], {w, 0, 1}] === SeriesData[w, 0, {-Pi Sqrt[w^(-2)] w/2, -1 + Sqrt[3]}, 0, 2, 1]", "True");
+    check_eq("Series[ArcTan[1/((1 - Sqrt[3]) w)], {w, 0, 1}, Assumptions -> w > 0]",
              "-1/2 Pi + (-1 + Sqrt[3]) w + O[w]^2");
     /* Positive coefficient: unchanged. */
     check_eq("Limit[2 ArcTan[x/(Sqrt[3] - 1)], x -> Infinity]", "Pi");
     /* Symbolic coefficient: the sign factor, never an assumed sign. */
-    check_eq("Chop[N[(Normal[Series[ArcTan[c/w], {w, 0, 1}]] /. w -> 0) /. c -> -2]]", "-1.5708");
-    check_eq("Chop[N[(Normal[Series[ArcTan[c/w], {w, 0, 1}]] /. w -> 0) /. c -> 3]]", "1.5708");
+    /* (w -> 0 in the constant presumes the side: w > 0, stated.) */
+    check_eq("Chop[N[(Normal[Series[ArcTan[c/w], {w, 0, 1}, Assumptions -> w > 0]] /. w -> 0) /. c -> -2]]", "-1.5708");
+    check_eq("Chop[N[(Normal[Series[ArcTan[c/w], {w, 0, 1}, Assumptions -> w > 0]] /. w -> 0) /. c -> 3]]", "1.5708");
     /* The definite integral that exposed it (M6968 instance). */
     check_eq("Chop[N[Integrate[1/(1 + 2 x^2 + x^4/2), {x, 0, Infinity}] - Sqrt[1 - 1/Sqrt[2]] Pi/2]]", "0");
     check_eq("Chop[N[Integrate[1/(1 + 5/3 x^2 + 3/8 x^4), {x, 0, Infinity}] - 0.9237722717237228]]", "0");

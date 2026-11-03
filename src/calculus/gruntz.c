@@ -73,6 +73,20 @@ static Expr* mk_fn2(const char* n, Expr* a, Expr* b) {
     Expr* args[2] = { a, b };
     return expr_new_function(mk_sym(n), args, 2);
 }
+
+/* Series[f, spec] in the mrv variable w, which is POSITIVE by construction
+ * (w -> 0+). Series keeps the branch phase of a fractional power / Log of a
+ * vanishing base symbolic unless the side is known -- Sqrt[w^2] expands as
+ * (Sqrt[w^2]/w) w -- so state w > 0 (conjoined with any ambient
+ * $Assumptions, which an explicit Assumptions option would otherwise
+ * replace). Consumes f and spec. */
+static Expr* series_in_w(Expr* f, Expr* spec, const Expr* w) {
+    Expr* assum = mk_fn2("And",
+        mk_fn2("Greater", expr_copy((Expr*)w), mk_int(0)),
+        mk_sym("$Assumptions"));
+    Expr* opt = mk_fn2("Rule", mk_sym("Assumptions"), assum);
+    return expr_new_function(mk_sym("Series"), (Expr*[]){ f, spec, opt }, 3);
+}
 static Expr* mk_times(Expr* a, Expr* b) { return mk_fn2("Times", a, b); }
 static Expr* mk_plus(Expr* a, Expr* b)  { return mk_fn2("Plus", a, b); }
 static Expr* mk_pow(Expr* a, Expr* b)   { return mk_fn2("Power", a, b); }
@@ -918,7 +932,7 @@ static Expr* expand_logs(const Expr* e, const Expr* w, const Expr* x, const Expr
                 Expr* factored = NULL;
                 Expr* vspec = expr_new_function(mk_sym("List"),
                     (Expr*[]){ expr_copy((Expr*)w), mk_int(0), mk_int(order) }, 3);
-                Expr* gsd = simp(mk_fn2("Series", expr_copy(G2), vspec));
+                Expr* gsd = simp(series_in_w(expr_copy(G2), vspec, w));
                 Expr* clead; int64_t vnum = 0, vden = 1;
                 bool rok = read_series_leading(gsd, w, &clead, &vnum, &vden);
                 /* H(0) = clead (the leading coefficient); usable only if it is a
@@ -935,7 +949,7 @@ static Expr* expand_logs(const Expr* e, const Expr* w, const Expr* x, const Expr
                     Expr* hspec = expr_new_function(mk_sym("List"),
                         (Expr*[]){ expr_copy((Expr*)w), mk_int(0), mk_int(order) }, 3);
                     Expr* logH = simp(mk_fn1("Normal",
-                        mk_fn2("Series", mk_log(Hh), hspec)));
+                        series_in_w(mk_log(Hh), hspec, w)));
                     Expr* klogw = simp(mk_times(make_exponent(vnum, vden),
                                                 mk_log(expr_copy((Expr*)w))));
                     factored = simp(mk_plus(klogw, logH));
@@ -954,7 +968,7 @@ static Expr* expand_logs(const Expr* e, const Expr* w, const Expr* x, const Expr
                 Expr* spec = expr_new_function(mk_sym("List"),
                     (Expr*[]){ expr_copy((Expr*)w), mk_int(0), mk_int(order) }, 3);
                 Expr* ser = simp(mk_fn1("Normal",
-                    mk_fn2("Series", mk_log(G2), spec)));  /* mk_log consumes G2 */
+                    series_in_w(mk_log(G2), spec, w)));  /* mk_log consumes G2 */
                 if (contains_complex_head(ser)) { expr_free(ser); return node; }
                 expr_free(node);
                 return ser;
@@ -1043,7 +1057,7 @@ static bool series_leadterm(const Expr* f, const Expr* wsym, const Expr* x, cons
 
         Expr* spec = expr_new_function(mk_sym("List"),
             (Expr*[]){ expr_copy((Expr*)wsym), mk_int(0), mk_int(ord) }, 3);
-        Expr* sd = simp(mk_fn2("Series", f4, spec));
+        Expr* sd = simp(series_in_w(f4, spec, wsym));
         Expr* c0; int64_t num, den;
         if (read_series_leading(sd, wsym, &c0, &num, &den)) {
             Expr* c0r = xreplace(c0, pos_sym, neg_logw);   /* restore -Log[w] */

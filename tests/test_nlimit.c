@@ -468,6 +468,137 @@ static void test_memory_loop(void) {
  *  Main
  * ---------------------------------------------------------------------- */
 
+/* Branch-phase battery (v0.6162): every finite one-sided limit of the Limit
+ * branch-phase tests (test_limit.c: test_sqrt_square_branch_phase,
+ * test_limit_branch_stress), two-sided ones split into FromAbove/FromBelow, the
+ * expected value being N of the reference system's exact one-sided Limit. It
+ * exposed three NLimit gaps: Direction -> "FromAbove"/"FromBelow" unsupported;
+ * a false NLimit::osc on near-constant samples (the envelope read |f| -> |L|,
+ * not the increments); and a default-Scale ladder point on an unrelated
+ * singularity (Sqrt[x^2]/(x + x^2) at x = -1) failing the whole limit.
+ * Sqrt[1 - Cos[2 x]] Csc[x] cancels catastrophically in machine precision
+ * (it is identically Sign[x] Sqrt[2]), so it runs at WorkingPrecision -> 30. */
+static void test_branch_phase_battery(void) {
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[x/Sqrt[x^2], x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(2*Sqrt[x^2])/x, x -> 0, Direction -> 1]", "-2.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2 + x^3]/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2 + x^3]/x, x -> 0, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2 + x^4]/x, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2 + x^4]/x, x -> 0, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> 1]", "-0.70710678118654752440084436210484903928", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> -1]", "0.70710678118654752440084436210484903928", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> \"FromAbove\"]", "0.70710678118654752440084436210484903928", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[x]]/x, x -> 0, Direction -> \"FromBelow\"]", "-0.70710678118654752440084436210484903928", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[Sin[x]^2]/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Csc[x]*Sqrt[Sin[x]^2], x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^4]/x^2, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^4]/x^2, x -> 0, Direction -> \"FromBelow\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^6]/x^3, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^3)^(1/3)/x, x -> 0, Direction -> 1]", "-0.5 - 0.86602540378443864676372317075293618347*I", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^2)^(1/3)/x^(2/3), x -> 0, Direction -> 1]", "-0.5 - 0.86602540378443864676372317075293618347*I", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^4)^(1/4)/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^4 + x^5)^(1/4)/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-1 + x)^2]/(-1 + x), x -> 1, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-1 + x)^2]/(-1 + x), x -> 1, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-1 + x)^2]/(-1 + x), x -> 1, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-1 + x)^2]/(-1 + x), x -> 1, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - 2*x + x^2]/(-1 + x), x -> 1, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(2 + x)^2]/(2 + x), x -> -2, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x + Sqrt[x^2])/x, x -> 0, Direction -> 1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[(x + Sqrt[x^2])/x, x -> 0, Direction -> -1]", "2.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]*Csc[x], x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]*Cot[2*x], x -> 0, Direction -> 1]", "-0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[(E^x*Sqrt[x^2])/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/(x + x^2), x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[x/Sqrt[x^2], x -> 0, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2], x -> 0, Direction -> 1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 2, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 2, Direction -> \"FromBelow\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> -3, Direction -> \"FromAbove\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> -3, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> Infinity]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> -Infinity]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 + x^2]/x, x -> -Infinity]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[-x]/Sqrt[x], x -> 0, Direction -> -1]", "1.*I", 3e-6);
+    ASSERT_CLOSE("NLimit[(1 - Cos[x])^(3/2)/x^3, x -> 0, Direction -> 1]", "-0.35355339059327376220042218105242451964", 3e-6);
+    ASSERT_CLOSE("NLimit[x - Log[x] + Log[x^2]/2, x -> 0, Direction -> 1]", "-3.1415926535897932384626433832795028842*I", 3e-6);
+    ASSERT_CLOSE("NLimit[-Log[x] + Log[x^2]/2, x -> 0, Direction -> -1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[-2*Log[x] + Log[x^2], x -> 0, Direction -> \"FromAbove\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[-2*Log[x] + Log[x^2], x -> 0, Direction -> \"FromBelow\"]", "-6.2831853071795864769252867665590057684*I", 3e-6);
+    ASSERT_CLOSE("NLimit[Log[x^2]/Log[x], x -> 0, Direction -> \"FromAbove\"]", "2.", 3e-6);
+    ASSERT_CLOSE("NLimit[Log[x^2]/Log[x], x -> 0, Direction -> \"FromBelow\"]", "2.", 3e-6);
+    ASSERT_CLOSE("NLimit[x*Log[x^2], x -> 0, Direction -> \"FromAbove\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[x*Log[x^2], x -> 0, Direction -> \"FromBelow\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[Log[-x] - Log[x], x -> 0, Direction -> 1]", "-3.1415926535897932384626433832795028842*I", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^2)^x, x -> 0, Direction -> 1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^2)^(x/2), x -> 0, Direction -> 1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[x^x, x -> 0, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(Sqrt[x^2] - Sin[x])/x, x -> 0, Direction -> 1]", "-2.", 3e-6);
+    ASSERT_CLOSE("NLimit[(-x + Sqrt[x^2])/x^2, x -> 0, Direction -> -1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[(-x + Sqrt[x^2])/x, x -> 0, Direction -> 1]", "-2.", 3e-6);
+    ASSERT_CLOSE("NLimit[(-Sqrt[x^2] + Sqrt[x^2 + x^4])/x^3, x -> 0, Direction -> 1]", "-0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2 + x^4]*Csc[x], x -> 0, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[2*x]]*Csc[x], x -> 0, Direction -> 1, WorkingPrecision -> 30]", "-1.41421356237309504880168872420969807857", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[2*x]]*Csc[x], x -> 0, Direction -> \"FromAbove\", WorkingPrecision -> 30]", "1.41421356237309504880168872420969807857", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - Cos[2*x]]*Csc[x], x -> 0, Direction -> \"FromBelow\", WorkingPrecision -> 30]", "-1.41421356237309504880168872420969807857", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2*(1 + x)]/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^4 + x^6]/x^2, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^4 + x^6]/x^2, x -> 0, Direction -> \"FromBelow\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^6)^(1/3)/x^2, x -> 0, Direction -> 1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^3)^(2/3)/x^2, x -> 0, Direction -> 1]", "-0.5 + 0.86602540378443864676372317075293618347*I", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^5)^(1/5)/x, x -> 0, Direction -> 1]", "-0.80901699437494742410229341718281905886 - 0.5877852522924731291687059546390727686*I", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^4)^(3/4)/x^3, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^4)^(3/4)/x^3, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^4)^(3/4)/x^3, x -> 0, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Cot[x]*Sqrt[Sin[x]^2], x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Cot[x]*Sqrt[Sin[x]^2], x -> Pi, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Cot[x]*Sqrt[Sin[x]^2], x -> Pi, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-2 + x)^2]/(-4 + x^2), x -> 2, Direction -> 1]", "-0.25", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-2 + x)^2]/(-4 + x^2), x -> 2, Direction -> \"FromAbove\"]", "0.25", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[(-2 + x)^2]/(-4 + x^2), x -> 2, Direction -> \"FromBelow\"]", "-0.25", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[1 - 2*x + x^2]/(1 - x), x -> 1, Direction -> -1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]*Log[x^2], x -> 0, Direction -> \"FromAbove\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2]*Log[x^2], x -> 0, Direction -> \"FromBelow\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[Log[x^2]/Log[x^4], x -> 0, Direction -> \"FromAbove\"]", "0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[Log[x^2]/Log[x^4], x -> 0, Direction -> \"FromBelow\"]", "0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[Log[-x]/Log[x], x -> 0, Direction -> -1]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[x*Log[-x], x -> 0, Direction -> 1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[-2*Log[x] + Log[Sin[x]^2], x -> 0, Direction -> -1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[-Log[x^2] + Log[1 - Cos[x]], x -> 0, Direction -> \"FromAbove\"]", "-0.69314718055994530941723212145817656807", 3e-6);
+    ASSERT_CLOSE("NLimit[-Log[x^2] + Log[1 - Cos[x]], x -> 0, Direction -> \"FromBelow\"]", "-0.69314718055994530941723212145817656807", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^2)^x^(-1), x -> 0, Direction -> -1]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[(1 + Sqrt[x^2])^x^(-1), x -> 0, Direction -> 1]", "0.36787944117144232159552377016146086745", 3e-6);
+    ASSERT_CLOSE("NLimit[(1 + Sqrt[x^2])^x^(-1), x -> 0, Direction -> -1]", "2.71828182845904523536028740430832960766", 3e-6);
+    ASSERT_CLOSE("NLimit[(1 + Sqrt[x^2])^x^(-1), x -> 0, Direction -> \"FromAbove\"]", "2.71828182845904523536028740430832960766", 3e-6);
+    ASSERT_CLOSE("NLimit[(1 + Sqrt[x^2])^x^(-1), x -> 0, Direction -> \"FromBelow\"]", "0.36787944117144232159552377016146086745", 3e-6);
+    ASSERT_CLOSE("NLimit[E^(Sqrt[x^2]/x), x -> 0, Direction -> 1]", "0.36787944117144232159552377016146086745", 3e-6);
+    ASSERT_CLOSE("NLimit[Sin[Sqrt[x^2]]/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(Sqrt[x^2]*ArcTan[x^(-1)])/x, x -> 0, Direction -> 1]", "1.5707963267948966192313216916397514421", 3e-6);
+    ASSERT_CLOSE("NLimit[(Sqrt[x^2] - Sin[x])/x^3, x -> 0, Direction -> -1]", "0.16666666666666666666666666666666666667", 3e-6);
+    ASSERT_CLOSE("NLimit[(-1 + E^Sqrt[x^2])/x, x -> 0, Direction -> 1]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(-1 + E^Sqrt[x^2])/x, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(-1 + E^Sqrt[x^2])/x, x -> 0, Direction -> \"FromBelow\"]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[-Sqrt[-x + x^2] + Sqrt[x + x^2], x -> -Infinity]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[x + Sqrt[x + x^2], x -> -Infinity]", "-0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[x + Sqrt[2*x + x^2], x -> -Infinity]", "-1.", 3e-6);
+    ASSERT_CLOSE("NLimit[(x^3)^(1/3)/x, x -> -Infinity]", "-0.5 - 0.86602540378443864676372317075293618347*I", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x + x^4]/x^2, x -> -Infinity]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[x*(-Sqrt[x^2] + Sqrt[1 + x^2]), x -> -Infinity]", "-0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x + Sqrt[x^2]]/Sqrt[x], x -> 0, Direction -> -1]", "1.41421356237309504880168872420969807857", 3e-6);
+    ASSERT_CLOSE("NLimit[-1 + Sqrt[1 + Sqrt[x^2]], x -> 0, Direction -> \"FromAbove\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[-1 + Sqrt[1 + Sqrt[x^2]], x -> 0, Direction -> \"FromBelow\"]", "0", 3e-6);
+    ASSERT_CLOSE("NLimit[(-1 + Sqrt[1 + Sqrt[x^2]])/x, x -> 0, Direction -> 1]", "-0.5", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2*Sin[x]^2]/x^2, x -> 0, Direction -> \"FromAbove\"]", "1.", 3e-6);
+    ASSERT_CLOSE("NLimit[Sqrt[x^2*Sin[x]^2]/x^2, x -> 0, Direction -> \"FromBelow\"]", "1.", 3e-6);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -498,6 +629,7 @@ int main(void) {
     TEST(test_stress_battery);
     TEST(test_stress_terms_sweep);
     TEST(test_memory_loop);
+    TEST(test_branch_phase_battery);
 
     printf("All nlimit_tests passed.\n");
     return 0;

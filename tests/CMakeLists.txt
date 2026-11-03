@@ -5046,10 +5046,15 @@ add_test(NAME dsolve_corpus_2_2_30_tests
 # solved instantly by DSolve but scored a spurious UNEVAL).  Residue 1: 3049
 # (homogeneous IVP y[0]=1 whose explicit radical branches factor x, forcing y(0)=0,
 # so the y(0)=1 condition cannot be fitted -- same deferred class as 2.2.30-2979).
+# v0.6162: gate 1 -> 2, an EXPOSED wrong answer, not a regression.  3049's answer
+# x Sqrt[(-6x^4 + Sqrt[4x^4 + 36x^8])/(2x^4)] is Sign[x] Sqrt[-3x^2 + Sqrt[1 + 9x^4]]
+# -- the true solution only for x > 0 -- and passed only because the verifier's
+# two-sided Limit at x = 0 wrongly returned 1; it is now (correctly) Indeterminate.
+# 3056 is the pre-existing residue.
 add_test(NAME dsolve_corpus_2_2_31_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2231.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # DSolve corpus regression gate: Nasser Abbasi's ODE collection, section 2.2.32
 # (Problems 3101-3200, 12000.org).  100 scalar ODEs (8 IVPs, 0 systems): entirely
