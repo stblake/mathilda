@@ -66,6 +66,7 @@ typedef enum {
     DS_LINEARIZABLE,
     DS_LIE,
     DS_AUTONOMOUS,
+    DS_SCALING2,
     DS_LIOUVILLE,
     DS_IFACTOR,
     DS_FIRSTINTEGRAL,
@@ -117,6 +118,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
     if (strcmp(s, "LieSymmetry")          == 0) return DS_LIE;
     if (strcmp(s, "LieGroup")             == 0) return DS_LIE;
     if (strcmp(s, "AutonomousReduction") == 0) return DS_AUTONOMOUS;
+    if (strcmp(s, "ScalingReduction") == 0) return DS_SCALING2;
     if (strcmp(s, "Liouville")            == 0) return DS_LIOUVILLE;
     if (strcmp(s, "ReducibleIntegratingFactor") == 0) return DS_IFACTOR;
     if (strcmp(s, "ReducibleFirstIntegral") == 0) return DS_FIRSTINTEGRAL;
@@ -186,6 +188,7 @@ extern void dsolve_inverse_init(void);
 extern void dsolve_homog_g_init(void);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_autonomous_elliptic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie2_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_ifactor_try(DSolveProblem* P, size_t* nbranch);
@@ -232,6 +235,10 @@ extern void dsolve_sepreduced_init(void);
 extern void dsolve_linearizable_init(void);
 extern void dsolve_lie_init(void);
 extern void dsolve_autonomous_init(void);
+extern Expr** dsolve_scaling2_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_scaling2_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_scaling2_init(void);
+extern Expr** dsolve_liouville_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_liouville_init(void);
 extern void dsolve_lie2_init(void);
 extern void dsolve_ifactor_init(void);
@@ -551,9 +558,27 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_almostlinear_try);
             if (!result) result = dsolve_run_implicit(&P, dsolve_sepreduced_try);
             if (!result) result = dsolve_run(&P, dsolve_autonomous_try);
+            /* ...and its implicit companion EARLY, but only where every reduced
+             * quadrature is provably non-elementary (p == c Sqrt[P(y)], P squarefree of
+             * degree >= 3: the y'' == polynomial(y) family).  There the inert first
+             * integral is the answer, and the integrating-factor / point-symmetry
+             * searches below only burned the budget first (6 s). */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_autonomous_elliptic_try);
             /* Liouville: y'' + g(y)(y')^2 + h(x)y' == 0 (has both y and x, so
              * missing-y/missing-x reductions above decline).  Two quadratures. */
             if (!result) result = dsolve_run(&P, dsolve_liouville_try);
+            /* ScalingReduction (2nd order): a deterministic similarity reduction --
+             * homogeneous in y -> u = y'/y (first order); isobaric x -> l x,
+             * y -> l^k y -> y = x^k u(Log[x]); translation along (1, -rho) ->
+             * v = y + rho x -- the last two AUTONOMOUS in u (then AutonomousReduction).
+             * Recursive, top level only.  Ahead of the integrating-factor and
+             * point-symmetry SEARCHES (heuristic, and together 7 s on
+             * (a x + b y) y'^3 + y'' == 0, which this reduces in 1 s); explicit pass,
+             * then its implicit pass (relations mapped back and verified numerically
+             * against the second-order equation).  MATHILDA_NO_SCALING2 disables both
+             * for A/B. */
+            if (!result) result = dsolve_run(&P, dsolve_scaling2_try);
+            if (!result) result = dsolve_run_implicit(&P, dsolve_scaling2_implicit_try);
             /* ReducibleIntegratingFactor: nonlinear-2nd-order integrating factor of a
              * restricted form (mu(x,y)/mu(x,y')/mu(y,y')) -> first integral R==C[1] ->
              * first-order cascade.  An ALGEBRAIC search (Cheb-Terrab & Roche 1999),
@@ -576,6 +601,10 @@ Expr* builtin_dsolve(Expr* res) {
              * inert first integral Inactive[Integrate][1/p, y[x]] - x == C[1] (M59) --
              * where the explicit autonomous method above declined (spin-guard). */
             if (!result) result = dsolve_run_implicit(&P, dsolve_autonomous_implicit_try);
+            /* Liouville's general integral, implicit: where a Liouville quadrature does
+             * not close (or g(y), h(x) are arbitrary) the explicit Liouville above
+             * declined; the relation with inert integrals, verified at order two. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_liouville_implicit_try);
             /* implicit first-integral fallback: a homogeneous ODE with no explicit
              * inverse (transcendental log-spiral) is returned as G(x,y[x]) == C[1] */
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
@@ -744,10 +773,15 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_SEPREDUCED:   result = dsolve_run_implicit(&P, dsolve_sepreduced_try); break;
         case DS_LINEARIZABLE: result = dsolve_run(&P, dsolve_linearizable_try);  break;
         case DS_LIE:          result = dsolve_run_implicit(&P, dsolve_lie_try);   break;
+        case DS_SCALING2:     result = dsolve_run(&P, dsolve_scaling2_try);
+                              if (!result) result = dsolve_run_implicit(&P, dsolve_scaling2_implicit_try);
+                              break;
         case DS_AUTONOMOUS:   result = dsolve_run(&P, dsolve_autonomous_try);
                               if (!result) result = dsolve_run_implicit(&P, dsolve_autonomous_implicit_try);
                               break;
-        case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);    break;
+        case DS_LIOUVILLE:    result = dsolve_run(&P, dsolve_liouville_try);
+                              if (!result) result = dsolve_run_implicit(&P, dsolve_liouville_implicit_try);
+                              break;
         case DS_IFACTOR:      result = dsolve_run(&P, dsolve_ifactor_try);      break;
         case DS_FIRSTINTEGRAL: result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try); break;
         case DS_FOPOWERSERIES: result = dsolve_run(&P, dsolve_first_order_series_try); break;
@@ -838,6 +872,7 @@ void dsolve_init(void) {
     dsolve_linearizable_init();
     dsolve_lie_init();
     dsolve_autonomous_init();
+    dsolve_scaling2_init();
     dsolve_liouville_init();
     dsolve_lie2_init();
     dsolve_ifactor_init();

@@ -469,4 +469,18 @@ bool  ds_branch_num_ok(const DSolveProblem* P, const Expr* body);
  * pole-crossing branch, so a purely rational/exp/trig/log body skips the numeric probe. */
 bool  ds_has_radical_power(const Expr* e);
 
+/* Verify an implicit relation G(x, y[x]) == C of a SECOND-order scalar ODE (the
+ * shared implicit verify only substitutes y' and is vacuous at order two): along a
+ * level curve y' = -G_x/G_y, y'' its total derivative; the residual must vanish at
+ * every (x, y).  Sampled numerically (constants and parameters drawn, two draws),
+ * or decided symbolically when an inert quadrature or arbitrary function makes it
+ * unsamplable.  Defined in dsolve_scaling2.c. */
+bool  dsolve_verify_implicit2(const DSolveProblem* P, const Expr* G);
+/* Is the residual R(xv, Yv) identically zero, where R carries inert integrals,
+ * arbitrary functions or C[k] that cannot be sampled as they stand?  Each such atom
+ * is abstracted to a fresh symbol and the result sampled at moderate values (three
+ * draws; never the symbolic zero test, which reads a decaying E^(-a) (...) as 0).
+ * xv and Yv may coincide.  `R` consumed.  Defined in dsolve_scaling2.c. */
+bool  dsolve_abstract_zero(Expr* R, const char* xv, const char* Yv);
+
 #endif /* MATHILDA_DSOLVE_COMMON_H */

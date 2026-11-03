@@ -3457,6 +3457,55 @@ static void t_m62_peel_slot_latency(void) {
     check_true("TimeConstrained[DSolve[y[x]^2 y'''[x] == (y'[x])^3, y, x], 8, $Aborted] =!= $Aborted");
 }
 
+/* AutonomousReduction: every stage-1 branch, the divided reduced ODE, implicit stage-1
+ * relations solved for p, and the provably elliptic quadrature claimed early. */
+static void t_autonomous_branches_elliptic(void) {
+    /* y'' == cubic: both +-Sqrt branches, inert elliptic quadrature, fast */
+    check_true("Length[DSolve[y''[x] == a0 + a1 y[x] + a2 y[x]^2 + a3 y[x]^3, y[x], x]] == 2");
+    check_true("First[Timing[DSolve[y''[x] == a + b y[x] + 2 y[x]^3, y[x], x]]] < 2");
+    /* p p' + f p^2 + g == 0 is Bernoulli once divided by p (arbitrary f, g) */
+    check_true("Length[DSolve[g[y[x]] + f[y[x]] y'[x]^2 + y''[x] == 0, y[x], x]] == 2");
+    /* p p' + f p + g p^2 == 0 is LINEAR once divided by p */
+    check_form("Head[DSolve[f[y[x]] y'[x] + g[y[x]] y'[x]^2 + y''[x] == 0, y[x], x]]", "List");
+    /* implicit stage 1 (-a y^2/2 - 1/Sqrt[1 + p^2] == C) solved for p */
+    check_form("Head[DSolve[y''[x] == a y[x] (1 + y'[x]^2)^(3/2), y[x], x]]", "List");
+    /* the singular stage-1 solution p == b +- I (radicand zero) is not an answer */
+    check_true("FreeQ[DSolve[y''[x] == a y[x] (1 + (b - y'[x])^2)^(3/2), y[x], x], "
+               "Complex[_, _]]");
+}
+
+/* ScalingReduction: homogeneous in y (u = y'/y) and isobaric (y = x^k u(Log[x])). */
+static void t_scaling_reduction(void) {
+    /* y-homogeneous with arbitrary coefficients: u' == g + f u (linear) */
+    check_form("Head[DSolve`ScalingReduction[y[x] y''[x] == g[x] y[x]^2 + f[x] y[x] y'[x] + "
+               "y'[x]^2, y, x]]", "List");
+    /* y-homogeneous, constant coefficients: verified explicit answer */
+    check_true("Module[{r = DSolve`ScalingReduction[y[x] y''[x] == 3 y[x]^2 + 2 y[x] y'[x] + "
+               "2 y'[x]^2, y, x]}, ListQ[r] && And @@ (PossibleZeroQ[(y[x] y''[x] - 3 y[x]^2 - "
+               "2 y[x] y'[x] - 2 y'[x]^2) /. #] & /@ r)]");
+    /* isobaric k = 1: x^3 y'' == a (x y' - y)^2 */
+    check_true("Module[{r = DSolve[x^3 y''[x] == a (x y'[x] - y[x])^2, y, x]}, ListQ[r] && "
+               "And @@ (PossibleZeroQ[Together[(x^3 y''[x] - a (x y'[x] - y[x])^2) /. #]] & /@ r)]");
+    /* isobaric k = -1/2: Lane-Emden index 5, inert elliptic relation in Sqrt[x] y */
+    check_true("Module[{r = DSolve[x y''[x] + 2 y'[x] + x y[x]^5 == 0, y[x], x]}, "
+               "Length[r] == 2 && !FreeQ[r, Log[x]] && !FreeQ[r, Sqrt[x] y[x]]]");
+    /* translation along (1, 1): v = y - x makes it autonomous */
+    check_true("Module[{r = DSolve[2 y'[x] (y'[x] + 1) + (x - y[x]) y''[x] == 0, y[x], x]}, "
+               "Length[r] == 2 && !FreeQ[r, -x + y[x]]]");
+    /* translation along (b, -a), reached ahead of the heuristic searches */
+    check_true("ListQ[TimeConstrained[DSolve[(a x + b y[x]) y'[x]^3 + y''[x] == 0, y[x], x], "
+               "6, $Aborted]]");
+    /* not scale-invariant: declined */
+    check_form("Head[DSolve`ScalingReduction[y''[x] == y[x]^2 + x, y, x]]",
+               "DSolve`ScalingReduction");
+}
+
+/* Liouville implicit companion: non-closing / arbitrary quadratures kept inert. */
+static void t_liouville_implicit(void) {
+    check_form("Head[DSolve[f[x] y'[x] + g[y[x]] y'[x]^2 + y''[x] == 0, y[x], x]]", "List");
+    check_true("!FreeQ[DSolve`Liouville[x y'[x] + y[x] y'[x]^2 + y''[x] == 0, y, x], Erf]");
+}
+
 /* ---- Nasser's v0.354 report: an automatic DSolve returns only solutions ---- *
  * (1) a linear ODE with no closed form found must not come back as a truncated
  * power series; (2) a speculative sub-solve's Integrate::nonelem must not leak;
@@ -3464,7 +3513,8 @@ static void t_m62_peel_slot_latency(void) {
  * carrying y' -- the autonomous reduction finishes it to a relation in x and y
  * alone (closed form when the quadrature is elementary, else inert).
  *
- * nasser_implicit_ok checks a {{G == C[1]}} answer intrinsically: G(x, y) == C[1]
+ * nasser_implicit_ok checks every branch of a {{G == C[1]}, ...} answer (p == +-Sqrt[...]
+ * gives two) intrinsically: G(x, y) == C[1]
  * gives y' = p = -G_x/G_y (an inert Integrate[f, y] contributes f to G_y, by the
  * FTC) and y'' = p dp/dy; the ODE residual `res` (in Y, p, pp) must vanish at a
  * sample point.  Check[] must not fire: probe diagnostics are not user events. */
@@ -3472,12 +3522,12 @@ static void nasser_implicit_ok(const char* ode, const char* res, const char* sam
     char buf[1600];
     snprintf(buf, sizeof(buf),
         "With[{s = Check[DSolve[%s, y[x], x], $Failed]}, "
-        "MatchQ[s, {{_Equal}}] && FreeQ[s, Derivative] && FreeQ[s, SeriesData] && "
-        "Module[{l = s[[1, 1, 1]] /. y[x] -> Y, ly, p, pp}, "
+        "MatchQ[s, {{_Equal}..}] && FreeQ[s, Derivative] && FreeQ[s, SeriesData] && "
+        "And @@ Table[Module[{l = s[[$bi, 1, 1]] /. y[x] -> Y, ly, p, pp}, "
         "ly = D[l /. Inactive[Integrate][_, Y] :> 0, Y] + "
         "Total[Cases[l, Inactive[Integrate][f_, Y] :> f, {0, Infinity}]]; "
         "p = -D[l, x]/ly; pp = p D[p, Y]; "
-        "Abs[N[(%s) /. %s, 30]] < 10^-8]]", ode, res, sample);
+        "Abs[N[(%s) /. %s, 30]] < 10^-8], {$bi, Length[s]}]]", ode, res, sample);
     check_true(buf);
 }
 static void t_nasser_no_series(void) {
@@ -3933,6 +3983,9 @@ int main(void) {
     TEST(t_m62_peel_slot_latency);
     TEST(t_known_solution_reduction);
     TEST(t_reduce_order_inert);
+    TEST(t_autonomous_branches_elliptic);
+    TEST(t_scaling_reduction);
+    TEST(t_liouville_implicit);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

@@ -18,6 +18,7 @@
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
+#include "integrate.h"          /* g_integrate_quiet: the bounded quadratures */
 #include <stdlib.h>
 
 /* Coefficient[e, p, k]; e borrowed, result owned. */
@@ -26,15 +27,15 @@ static Expr* coeff_p(const Expr* e, const char* p, int k) {
         (Expr*[]){ expr_copy((Expr*)e), expr_new_symbol(p), expr_new_integer(k) }, 3));
 }
 
-Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch) {
-    if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 2) return NULL;
+/* Recognise y'' == -g(Y) p^2 - h(x) p; on success *gout, *hout (owned) in Y / x. */
+static bool lv_recognise(DSolveProblem* P, const char* Yn, Expr** gout, Expr** hout) {
+    if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 2) return false;
     const char* yname = P->fun_names[0];
     const char* xvar  = P->ind_names[0];
-    const char* Yn = intern_symbol("DSolve`lvY");
     const char* pn = intern_symbol("DSolve`lvP");
 
     Expr* F = dsolve_solve_top_derivative(P, 2);          /* y'' == F(x, y, y') */
-    if (!F) return NULL;
+    if (!F) return false;
     /* F with y'[x] -> p, y[x] -> Y */
     Expr* Fp = ds_subst(F, ds_make_funcapp(yname, 1, xvar), expr_new_symbol(pn));
     Fp = ds_subst(Fp, ds_make_funcapp(yname, 0, xvar), expr_new_symbol(Yn));
@@ -57,8 +58,17 @@ Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch) {
     Expr* g = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), c2));
     Expr* h = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), c1));
     if (!okform || !ds_free_of(g, xvar) || !ds_free_of(h, Yn) || ds_is_zero(g)) {
-        expr_free(g); expr_free(h); return NULL;
+        expr_free(g); expr_free(h); return false;
     }
+    *gout = g; *hout = h;
+    return true;
+}
+
+Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch) {
+    const char* xvar  = P->ind_names[0];
+    const char* Yn = intern_symbol("DSolve`lvY");
+    Expr *g = NULL, *h = NULL;
+    if (!lv_recognise(P, Yn, &g, &h)) return NULL;
 
     /* EG = Integrate[Exp[Integrate[g, Y]], Y] ; EH = Integrate[Exp[-Integrate[h,x]], x] */
     Expr* G  = ds_integrate(g, expr_new_symbol(Yn));
@@ -86,8 +96,60 @@ Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch) {
     return bodies;
 }
 
+/* Integrate[e, v] when it closes within a short budget, else the inert
+ * Inactive[Integrate][e, v].  `e` consumed. */
+static Expr* lv_quad(Expr* e, const char* v) {
+    Expr* call = ds_call2(SYM_Integrate, expr_copy(e), expr_new_symbol(v));
+    Expr* g = expr_new_function(expr_new_symbol(intern_symbol("TimeConstrained")),
+                  (Expr*[]){ call, expr_new_integer(2),
+                             expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+    g_integrate_quiet++;
+    Expr* F = eval_and_free(g);
+    g_integrate_quiet--;
+    if (F && !ds_has_head(F, SYM_Integrate) && !ds_contains(F, intern_symbol("$Aborted"))) {
+        expr_free(e);
+        return F;
+    }
+    if (F) expr_free(F);
+    Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                      (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+    return expr_new_function(inact, (Expr*[]){ e, expr_new_symbol(v) }, 2);
+}
+
+/* Implicit companion: where a Liouville quadrature is non-elementary (or involves an
+ * arbitrary g(y) / h(x)), the general integral itself,
+ *     (Integrate[Exp[Integrate[g, y]], y] - C[2]) / Integrate[Exp[-Integrate[h, x]], x]
+ *         == C[1],
+ * with the non-closing integrals kept inert -- the reference's own shape for the
+ * family.  Verified against the second-order equation by implicit differentiation
+ * (dsolve_verify_implicit2: numeric, or symbolic over the inert integrals and
+ * arbitrary functions).  Runs late, after the explicit methods. */
+Expr** dsolve_liouville_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    const char* Yn = intern_symbol("DSolve`lvY");
+    Expr *g = NULL, *h = NULL;
+    if (!lv_recognise(P, Yn, &g, &h)) return NULL;
+    Expr* G  = lv_quad(g, Yn);
+    Expr* EG = lv_quad(eval_and_free(ds_call1("Exp", G)), Yn);
+    Expr* H  = lv_quad(h, xvar);
+    Expr* EH = lv_quad(eval_and_free(ds_call1("Exp",
+                   ds_call2(SYM_Times, expr_new_integer(-1), H))), xvar);
+    EG = ds_subst(EG, expr_new_symbol(Yn), ds_make_funcapp(yname, 0, xvar));
+    Expr* rel = eval_and_free(ds_call2(SYM_Times,
+                    ds_call2(SYM_Subtract, EG, ds_const(2)),
+                    ds_call2(SYM_Power, EH, expr_new_integer(-1))));
+    if (!dsolve_verify_implicit2(P, rel)) { expr_free(rel); return NULL; }
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = rel;
+    *nbranch = 1;
+    return out;
+}
+
 static Expr* builtin_dsolve_liouville(Expr* res) {
-    return dsolve_method_builtin(res, dsolve_liouville_try);
+    Expr* r = dsolve_method_builtin(res, dsolve_liouville_try);
+    if (!r) r = dsolve_method_builtin_implicit(res, dsolve_liouville_implicit_try);
+    return r;
 }
 
 void dsolve_liouville_init(void) {
