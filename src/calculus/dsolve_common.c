@@ -903,6 +903,32 @@ static bool ds_expr_rel_zero(const Expr* e, const char* xvar) {
     return nnum >= 3 && nsmall >= 3 && nbig == 0;
 }
 
+/* Positive numeric certificate for a CLOSED scalar body: its residual against the
+ * original ODE, with parameters and C[k] instantiated at exact rationals, must be
+ * zero RELATIVE to the size of its own terms at the sample points (see
+ * ds_expr_rel_zero).  Unlike ds_branch_num_ok (a reject filter that keeps whatever
+ * it cannot judge), this answers true only on evidence.  Borrowed. */
+bool ds_residual_rel_verified(const DSolveProblem* P, const Expr* body) {
+    if (P->nfun != 1) return false;
+    const char* yname = P->fun_names[0];
+    const char* xvar  = P->ind_names[0];
+    int maxord = P->max_order[0];
+    for (size_t e = 0; e < P->neq; e++) {
+        Expr* sub = expr_copy(P->eq_residuals[e]);
+        for (int k = maxord; k >= 1; k--) {
+            Expr* dk = expr_copy((Expr*)body);
+            for (int i = 0; i < k; i++) dk = ds_d(dk, expr_new_symbol(xvar));
+            sub = ds_subst(sub, ds_make_funcapp(yname, k, xvar), dk);
+        }
+        sub = ds_subst(sub, ds_make_funcapp(yname, 0, xvar), expr_copy((Expr*)body));
+        bool ok = !ds_has_undefined_function(sub) && !ds_has_head(sub, SYM_Integrate)
+               && ds_expr_rel_zero(sub, xvar);
+        expr_free(sub);
+        if (!ok) return false;
+    }
+    return true;
+}
+
 bool ds_inert_vop_verified(const DSolveProblem* P, const Expr* body) {
     if (P->nfun != 1) return false;
     const char* yname = P->fun_names[0];
@@ -3604,6 +3630,74 @@ static Expr* linfac_drop_constant_factors(Expr* mu, const char* xvar) {
     return r;
 }
 
+/* First Sin[u]/Cos[u] argument u in e with u mentioning xvar (borrowed), or NULL. */
+static const Expr* linfac_trig_arg(const Expr* e, const char* xvar) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if ((head_is((Expr*)e, SYM_Sin) || head_is((Expr*)e, SYM_Cos))
+        && e->data.function.arg_count == 1
+        && ds_contains(e->data.function.args[0], intern_symbol(xvar)))
+        return e->data.function.args[0];
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* u = linfac_trig_arg(e->data.function.args[i], xvar);
+        if (u) return u;
+    }
+    return NULL;
+}
+
+/* Rationalise a RADICAL trigonometric integrating factor.  Integrate returns
+ * Integrate[Csc[x], x] as (Log[2 - 2 Cos[x]] - Log[2 + 2 Cos[x]])/2, so the
+ * integrating factor of y' + (Cot[x] + Csc[x]) y == q comes back as
+ * Sqrt[2 - 2 Cos[x]] Sin[x]/Sqrt[2 + 2 Cos[x]] -- which IS 1 - Cos[x] (its square
+ * is (1 - c)(1 - c^2)/(1 + c) = (1 - c)^2), but Simplify does not see it, and
+ * Integrate[mu q] then spins on the radical integrand (§2.2.59-5857: > 20 s, where
+ * the rational mu integrates in 0.3 s).  Square mu, write Sin[u] -> s, Cos[u] -> c,
+ * reduce numerator and denominator modulo s^2 + c^2 - 1 in s; when the result is
+ * free of s and its square root (Factor, then PowerExpand) is radical-free, that
+ * root is +-mu on each interval, hence an integrating factor (mu is defined only up
+ * to a locally constant factor; the final solution is verified by back-
+ * substitution).  Returns the rationalised mu (owned) or NULL.  mu borrowed. */
+static Expr* linfac_rationalise_trig_radical(const Expr* mu, const char* xvar) {
+    if (getenv("MATHILDA_NO_LINFAC_TRIGRAD")) return NULL;
+    if (!ds_has_var_fractional_power(mu, xvar)) return NULL;
+    const Expr* u = linfac_trig_arg(mu, xvar);
+    if (!u) return NULL;
+    const char* sv = intern_symbol("DSolve`lfS");
+    const char* cv = intern_symbol("DSolve`lfC");
+    Expr* m2 = eval_and_free(ds_call1("Together",
+                   ds_call2(SYM_Power, expr_copy((Expr*)mu), expr_new_integer(2))));
+    m2 = ds_subst(m2, ds_call1(SYM_Sin, expr_copy((Expr*)u)), expr_new_symbol(sv));
+    m2 = ds_subst(m2, ds_call1(SYM_Cos, expr_copy((Expr*)u)), expr_new_symbol(cv));
+    m2 = eval_and_free(ds_call1("Together", m2));
+    Expr* out = NULL;
+    if (!ds_contains(m2, intern_symbol(xvar))) {
+        Expr* rel = eval_and_free(ds_call2(SYM_Plus,
+                        ds_call2(SYM_Plus, ds_call2(SYM_Power, expr_new_symbol(sv), expr_new_integer(2)),
+                                           ds_call2(SYM_Power, expr_new_symbol(cv), expr_new_integer(2))),
+                        expr_new_integer(-1)));
+        Expr* nd[2];
+        nd[0] = eval_and_free(ds_call1(SYM_Numerator, expr_copy(m2)));
+        nd[1] = eval_and_free(ds_call1("Denominator", expr_copy(m2)));
+        for (int k = 0; k < 2; k++)
+            nd[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialRemainder),
+                        (Expr*[]){ nd[k], expr_copy(rel), expr_new_symbol(sv) }, 3));
+        if (!ds_contains(nd[0], sv) && !ds_contains(nd[1], sv) && !ds_is_zero(nd[0])) {
+            Expr* r = eval_and_free(ds_call1(SYM_Factor,
+                          ds_call2(SYM_Times, nd[0],
+                              ds_call2(SYM_Power, nd[1], expr_new_integer(-1)))));
+            nd[0] = nd[1] = NULL;
+            Expr* sq = eval_and_free(ds_call1("PowerExpand", ds_call1("Sqrt", r)));
+            if (!ds_has_fractional_power(sq) && !ds_contains(sq, sv)) {
+                sq = ds_subst(sq, expr_new_symbol(cv), ds_call1(SYM_Cos, expr_copy((Expr*)u)));
+                out = linfac_drop_constant_factors(sq, xvar);
+            } else expr_free(sq);
+        }
+        for (int k = 0; k < 2; k++) if (nd[k]) expr_free(nd[k]);
+        expr_free(rel);
+    }
+    expr_free(m2);
+    return out;
+}
+
 static Expr* linfac_mu(Expr* Pcoef, const char* xvar) {
     g_integrate_quiet++;   /* a non-elementary integrating-factor integral is kept
                             * unevaluated below, not surfaced as a speculative message */
@@ -3622,6 +3716,10 @@ static Expr* linfac_mu(Expr* Pcoef, const char* xvar) {
      * nonzero constant/branch and the final solution is verified by
      * back-substitution, so choosing a branch here is sound. */
     mu = eval_and_free(ds_call1("PowerExpand", ds_simplify(mu)));
+    {
+        Expr* rmu = linfac_rationalise_trig_radical(mu, xvar);
+        if (rmu) { expr_free(mu); mu = rmu; }
+    }
     /* Rationalise an inverse-hyperbolic integrating factor.  Integrating a rational
      * p with a real quadratic denominator produces ArcTanh/ArcCoth terms
      * (Integrate[4/(x^2-1),x] == -4 ArcTanh[x], §2.2.30-2980), and Simplify /
@@ -3683,8 +3781,39 @@ static Expr* linfac_simplify_exponents(Expr* e, const char* xvar) {
     return r;
 }
 
+/* Integrate[f, x] bounded to `secs` seconds and muted; a timed-out or refused
+ * quadrature comes back as Inactive[Integrate][f, x] (never a raw unevaluated
+ * Integrate, which re-runs the integration cascade on every re-evaluation of the
+ * body it sits in).  f consumed; result owned. */
+Expr* ds_integrate_or_inert(Expr* f, const char* xvar, int secs) {
+    g_integrate_quiet++;
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Integrate),
+                     (Expr*[]){ expr_copy(f), expr_new_symbol(xvar) }, 2);
+    Expr* guarded = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                        (Expr*[]){ call, expr_new_integer(secs > 0 ? secs : 1),
+                                   expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+    Expr* r = eval_and_free(guarded);
+    g_integrate_quiet--;
+    if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol("$Aborted")) {
+        expr_free(r);
+        return ds_inactivate_integrate(expr_new_function(expr_new_symbol(SYM_Integrate),
+                   (Expr*[]){ f, expr_new_symbol(xvar) }, 2));
+    }
+    expr_free(f);
+    if (ds_has_active_integrate(r)) r = ds_inactivate_integrate(r);
+    return r;
+}
+
+/* Nesting counter of dsolve_linear_factor_solve_inert's elementary attempt: while
+ * it is > 0 the integrating-factor quadrature Integrate[mu q, x] is bounded to
+ * LINFAC_INT_BUDGET seconds (0, the default, is unbounded -- the IVP callers need
+ * the closed form).  Registered with tc_register_unwind_counter (in
+ * dsolve_linear1_init) so a timeout unwind cannot leave it raised. */
+int g_linfac_inert_active = 0;
+#define LINFAC_INT_BUDGET 3
+
 Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
-    Expr* mu = linfac_mu(Pcoef, xvar);                             /* consumes Pcoef */
+    Expr* mu = linfac_mu(Pcoef, xvar);                            /* consumes Pcoef */
     if (!mu) { expr_free(Qcoef); return NULL; }
     g_integrate_quiet++;
     Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef)); /* consumes Qcoef */
@@ -3704,7 +3833,17 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
             expr_free(integrand); integrand = tog;
         } else if (tog) expr_free(tog);
     }
-    Expr* Qint = ds_integrate(integrand, expr_new_symbol(xvar));
+    Expr* Qint;
+    if (g_linfac_inert_active > 0) {
+        /* Bounded attempt (general-solution callers only, see
+         * dsolve_linear_factor_solve_inert): a non-elementary mu q can cost the
+         * integrator many seconds to REFUSE -- Integrate[E^Cos[x] x^2 Log[x], x]
+         * takes 7.9 s to answer "nonelementary" -- and the general solution is the
+         * same exact formula either way, with the quadrature held inert. */
+        Qint = ds_integrate_or_inert(integrand, xvar, LINFAC_INT_BUDGET);
+    } else {
+        Qint = ds_integrate(integrand, expr_new_symbol(xvar));
+    }
     g_integrate_quiet--;
     /* When ∫mu q dx is NON-elementary, Qint is a still-unevaluated Integrate[...].
      * Do NOT decline: the integrating-factor solution y = mu^-1 (∫mu q dx + C[1])
@@ -3739,7 +3878,15 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
  * point, so callers with point conditions keep the declining solver.  Pcoef and
  * Qcoef are consumed. */
 Expr* dsolve_linear_factor_solve_inert(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
+    /* A general solution can hold its quadrature inert, so the elementary attempt
+     * is bounded (3 s) and a refused / timed-out Integrate[mu q] comes back as
+     * Inactive[Integrate] rather than a raw unevaluated Integrate (which re-runs
+     * the integrator on every re-evaluation of the body: §2.2.58-5862's reduced
+     * first integral spun past every budget).  Saved/restored for re-entrancy. */
+    bool bounded = !getenv("MATHILDA_NO_LINFAC_BUDGET");
+    if (bounded) g_linfac_inert_active++;
     Expr* body = dsolve_linear_factor_solve(expr_copy(Pcoef), expr_copy(Qcoef), xvar);
+    if (bounded) g_linfac_inert_active--;
     if (body) { expr_free(Pcoef); expr_free(Qcoef); return body; }
     /* Integrate the sign-normalised exponent: E^(-Inactive[Integrate][-g, x]) prints
      * as E^Inactive[Integrate][g, x] when -P is the simpler of the two (y' == g y). */

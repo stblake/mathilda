@@ -180,6 +180,8 @@ extern Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_inverse_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_knownsol_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_knownsol_init(void);
 extern void dsolve_inverse_init(void);
 extern void dsolve_homog_g_init(void);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
@@ -685,6 +687,13 @@ Expr* builtin_dsolve(Expr* res) {
              * Last by design: from here the slot can only turn UNEVAL into an answer, so
              * it cannot cost a case that some earlier method already solves, and its
              * cost lands only on equations that were returning nothing. */
+            /* Reduction of order from an elementary KNOWN solution (x^m or E^(lambda x),
+             * certified by L[y1] == 0), the second solution / particular held as
+             * Inactive[Integrate] when non-elementary and the answer self-verified.
+             * Late: it only turns an UNEVAL into an answer (§2.2.60-5933 arbitrary f,
+             * §2.2.60-5968 symbolic-rate exponential, §2.2.59-5836 forced).
+             * MATHILDA_NO_KNOWNSOL disables it for A/B. */
+            if (!result) result = dsolve_run(&P, dsolve_knownsol_try);
             if (!result) result = dsolve_run(&P, dsolve_nonhomog_vop_inert_try);
             break;
         case DS_FACTORABLE:   result = dsolve_run(&P, dsolve_factorable_try);  break;
@@ -802,6 +811,7 @@ void dsolve_init(void) {
     dsolve_lagrange_init();
     dsolve_solvefor_init();
     dsolve_inverse_init();
+    dsolve_knownsol_init();
     dsolve_homog_g_init();
     dsolve_paramquad_init();
     tc_register_unwind_counter(&g_dsolve_depth);   /* restored on a timeout unwind */

@@ -911,6 +911,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_changevar.c
     ../src/calculus/dsolve_solvefor.c
     ../src/calculus/dsolve_inverse.c
+    ../src/calculus/dsolve_knownsol.c
     ../src/calculus/dsolve_homogeneous_g.c
     ../src/calculus/dsolve_paramquad.c
     ../src/calculus/dsolve_ratsol2.c

@@ -18,6 +18,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../common.h"
+#include "integrate.h"      /* g_integrate_quiet */
 #include <stdlib.h>
 
 /* Extract the RHS of {{p[x] -> expr}} (applied form). */
@@ -35,6 +36,67 @@ static Expr* extract_applied(Expr* r, const char* pfun) {
         }
     }
     return NULL;
+}
+
+/* The general solution y = C[2] + Integrate[p, x] when the quadrature does not
+ * close: each additive term of p is integrated on its own (bounded, muted), its
+ * x-free factors (the C[1] the first-order solve carries, parameters) pulled out,
+ * and a term that does not close is held as Inactive[Integrate] -- the reference's
+ * shape for y'' + f[x] y' == 0 (C[2] + Inactive[Integrate][C[1] E^-Inactive[
+ * Integrate][f, x], x]).  General solutions only (an indefinite inert integral
+ * cannot be fitted at a point).  The body is exact by the fundamental theorem
+ * (checked: D[y, x] - p must cancel structurally once each inert integral is
+ * differentiated).  MATHILDA_NO_RO_INERT disables it.  pbody consumed. */
+static Expr* reduce_order_inert(DSolveProblem* P, Expr* pbody, const char* xvar) {
+    if (P->ncond > 0 || getenv("MATHILDA_NO_RO_INERT")) { expr_free(pbody); return NULL; }
+    Expr* pe = head_is(pbody, SYM_Plus) ? expr_copy(pbody)
+             : eval_and_free(ds_call1("Expand", expr_copy(pbody)));
+    size_t nt = head_is(pe, SYM_Plus) ? pe->data.function.arg_count : 1;
+    Expr** parts = malloc((nt + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < nt; i++) {
+        Expr* t = (nt == 1 && !head_is(pe, SYM_Plus)) ? expr_copy(pe)
+                                                       : expr_copy(pe->data.function.args[i]);
+        /* split t = k * g with k free of x */
+        Expr* k = expr_new_integer(1);
+        Expr* g = t;
+        if (head_is(t, SYM_Times)) {
+            size_t n = t->data.function.arg_count, nk = 0, ng = 0;
+            Expr** ka = malloc(n * sizeof(Expr*));
+            Expr** ga = malloc(n * sizeof(Expr*));
+            for (size_t j = 0; j < n; j++) {
+                Expr* f = t->data.function.args[j];
+                if (!ds_contains(f, intern_symbol(xvar))) ka[nk++] = expr_copy(f);
+                else ga[ng++] = expr_copy(f);
+            }
+            expr_free(k);
+            k = (nk == 0) ? expr_new_integer(1)
+                          : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), ka, nk));
+            g = (ng == 0) ? expr_new_integer(1)
+                          : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), ga, ng));
+            free(ka); free(ga);
+            expr_free(t);
+        }
+        Expr* gi = ds_integrate_or_inert(g, xvar, 3);          /* consumes g */
+        parts[i] = ds_call2(SYM_Times, k, gi);
+    }
+    parts[nt] = ds_const(2);
+    expr_free(pe);
+    Expr* body = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), parts, nt + 1));
+    free(parts);
+    Expr* chk = eval_and_free(ds_call1("Together", ds_call2(SYM_Subtract,
+                    ds_d(expr_copy(body), expr_new_symbol(xvar)), pbody)));
+    bool ok = ds_is_zero(chk);
+    expr_free(chk);
+    if (!ok) { expr_free(body); return NULL; }
+    return body;
+}
+
+static Expr** reduce_order_wrap(Expr* body, size_t* nbranch) {
+    if (!body) return NULL;
+    Expr** out = malloc(sizeof(Expr*));
+    out[0] = body;
+    *nbranch = 1;
+    return out;
 }
 
 Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch) {
@@ -68,9 +130,22 @@ Expr** dsolve_reduce_order_try(DSolveProblem* P, size_t* nbranch) {
     expr_free(r);
     if (!pbody) return NULL;
 
-    /* y = Integrate[p, x] + C[2] (p already carries C[1]) */
+    /* y = Integrate[p, x] + C[2] (p already carries C[1]).  The quadrature is an
+     * internal probe: a non-elementary p must not surface Integrate::nonelem to the
+     * user (§2.2.59-5880 leaked it), so the integrator is muted around it. */
+    if (ds_has_inactive_integrate(pbody)) {
+        /* The first-order solve already held part of p inert (y'' + f[x] y' == 0
+         * gives p = C[1] E^-Inactive[Integrate][f, x]); integrating it again cannot
+         * close, so do not pay the integrator for the refusal. */
+        return reduce_order_wrap(reduce_order_inert(P, pbody, xvar), nbranch);
+    }
+    g_integrate_quiet++;
     Expr* yint = ds_integrate(expr_copy(pbody), expr_new_symbol(xvar));
-    if (ds_has_head(yint, SYM_Integrate)) { expr_free(yint); expr_free(pbody); return NULL; }
+    g_integrate_quiet--;
+    if (ds_has_head(yint, SYM_Integrate)) {
+        expr_free(yint);
+        return reduce_order_wrap(reduce_order_inert(P, pbody, xvar), nbranch);
+    }
     /* Guard against a wrong antiderivative (the Integrate engine returns 0 for
      * some rational integrands with symbolic parameters, which would silently
      * yield the degenerate y = const): require D[yint, x] == p.  The correct

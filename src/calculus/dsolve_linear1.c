@@ -16,6 +16,7 @@
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
+#include "../core.h"   /* tc_register_unwind_counter */
 #include <stdlib.h>
 
 Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch) {
@@ -130,6 +131,7 @@ static Expr* builtin_dsolve_linear1(Expr* res) {
 }
 
 void dsolve_linear1_init(void) {
+    tc_register_unwind_counter(&g_linfac_inert_active);   /* restored on a timeout unwind */
     symtab_add_builtin("DSolve`LinearFirstOrder", builtin_dsolve_linear1);
     symtab_get_def("DSolve`LinearFirstOrder")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`LinearFirstOrder",

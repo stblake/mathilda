@@ -3193,7 +3193,7 @@ static void t_m60_bessel_inverse_power(void) {
     "             {pt, {23/50, 91/100, 157/100, 211/100}}]] < 10^-25,"               \
     "  (b = s[[1]][[1]][[2]][[2]];"                                                  \
     "   r = " residual ";"                                                           \
-    "   zs = DeleteDuplicates@Cases[r, Inactive[Integrate][__], {0, Infinity}];"     \
+    "   zs = Reverse@SortBy[DeleteDuplicates@Cases[r, Inactive[Integrate][__], {0, Infinity}], LeafCount];" \
     "   Length[zs] >= 1 &&"                                                          \
     "   (For[i = 1, i <= Length[zs], i++,"                                           \
     "        r = r /. zs[[i]] -> ToExpression[\"m61z\" <> ToString[i]]];"            \
@@ -3570,6 +3570,46 @@ static void t_clean_answer_forms(void) {
                "FreeQ[s, E] && FreeQ[s, Log] && !FreeQ[s, x^Sqrt[7]] && !FreeQ[s, x^(-Sqrt[7])]]");
 }
 
+/* ---- reduction of order with inert quadratures (§2.2.59/60) ---- */
+
+/* Residual of an inert answer with every Inactive[Integrate] replaced by a free
+ * symbol AFTER differentiation must vanish identically (exact Together) -- the
+ * independent statement of the fundamental-theorem construction.  The body is
+ * bound to `kb` (not `b`: the equations carry a parameter b). */
+#define KS_EXACT(ode, residual)                                                      \
+    "Module[{s = DSolve[" ode ", y, x], kb, r, zs, i},"                              \
+    "  Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive] &&"                 \
+    "  (kb = s[[1]][[1]][[2]][[2]]; r = " residual ";"                               \
+    "   zs = Reverse@SortBy[DeleteDuplicates@Cases[r, Inactive[Integrate][__], {0, Infinity}], LeafCount];" \
+    "   For[i = 1, i <= Length[zs], i++,"                                            \
+    "       r = r /. zs[[i]] -> ToExpression[\"ksz\" <> ToString[i]]];"              \
+    "   FreeQ[r, Inactive] && Together[r] === 0)]"
+
+static void t_known_solution_reduction(void) {
+    /* y1 = 1/x with an ARBITRARY coefficient f (§2.2.60-5933) */
+    check_true(KS_EXACT("x y''[x] + (2 + f[x] x) y'[x] + f[x] y[x] == 0",
+                        "x D[kb, {x, 2}] + (2 + f[x] x) D[kb, x] + f[x] kb"));
+    /* y1 = E^(b x), symbolic rate (§2.2.60-5968) */
+    check_true(KS_EXACT("x^2 y''[x] + a y'[x] - b (b x^2 + a) y[x] == 0",
+                        "x^2 D[kb, {x, 2}] + a D[kb, x] - b (b x^2 + a) kb"));
+    /* forced, y1 = x (§2.2.59-5836): the particular closes to 1 */
+    check_true(M61_VERIFY("y''[x] - x^2 y'[x] + x y[x] == x",
+                          "D[b, {x, 2}] - x^2 D[b, x] + x b - x"));
+}
+
+/* missing y: the second quadrature is held inert, and no Integrate::nonelem
+ * escapes the internal probe (§2.2.59-5880) */
+static void t_reduce_order_inert(void) {
+    check_true("Check[Module[{s = DSolve[f[x] y'[x] + y''[x] == 0, y, x]}, "
+               "Head[s] === List && !FreeQ[s, Inactive[Integrate]]], False]");
+    /* a radical trigonometric integrating factor is rationalised (§2.2.59-5857) */
+    check_true("Module[{s = TimeConstrained[DSolve[(Cot[x] + Csc[x]) y'[x] + y''[x] == "
+               "1 + a Csc[x], y, x], 30, $Aborted]}, Head[s] === List]");
+    /* EulerCauchy on a constant leading coefficient declines silently */
+    check_true("Check[Head[DSolve`EulerCauchy[(Cot[x] + Csc[x]) y'[x] + y''[x] == 1, y, x]] "
+               "=!= List, False]");
+}
+
 int main(void) {
     /* The shared alarm(120) in test_utils.h is too short for this suite:
      * 293 tests, ~175 s measured (2026-10-26); the heavy ones are no-crash and
@@ -3891,6 +3931,8 @@ int main(void) {
     TEST(t_m62_sequential_constant_fit);
     TEST(t_m62_nonlinear_exact);
     TEST(t_m62_peel_slot_latency);
+    TEST(t_known_solution_reduction);
+    TEST(t_reduce_order_inert);
 
     printf("\nAll DSolve tests passed.\n");
     return 0;

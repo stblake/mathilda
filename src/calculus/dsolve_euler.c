@@ -204,6 +204,16 @@ Expr** dsolve_euler_try(DSolveProblem* P, size_t* nbranch) {
      * n c_n / c_n' = (x-b), so b = x - n c_n / c_n'.  b = 0 for the classic
      * equation; the pole for a shifted one.  b must be free of x. */
     Expr* dcn = ds_d(expr_copy(c[n]), expr_new_symbol(xvar));                    /* c_n'(x) */
+    /* A constant leading coefficient has no centre (c_n' == 0, n >= 1): not
+     * equidimensional.  Decline BEFORE forming 1/c_n', which would surface
+     * Power::infy to the user from this internal probe (the pinned
+     * DSolve`EulerCauchy on (Cot[x] + Csc[x]) y' + y'' == 1 + a Csc[x] did). */
+    if (ds_is_structural_zero(dcn)) {
+        expr_free(dcn);
+        for (int k = 0; k <= n; k++) expr_free(c[k]);
+        free(c); expr_free(g);
+        return NULL;
+    }
     Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ dcn, expr_new_integer(-1) }, 2));                 /* 1 / c_n' */
     Expr* ncn = eval_and_free(ds_call2(SYM_Times, expr_new_integer(n), expr_copy(c[n]))); /* n c_n */

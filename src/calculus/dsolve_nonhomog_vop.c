@@ -170,6 +170,15 @@ static Expr** nh_try_core(DSolveProblem* P, size_t* nbranch, bool inert){
         for (int k=0;k<=n && !transc;k++)
             transc = ds_has_head(c[k],SYM_Sin)||ds_has_head(c[k],SYM_Cos)||ds_has_head(c[k],SYM_Tan)||
                      ds_has_head(c[k],SYM_Cot)||ds_has_head(c[k],SYM_Sec)||ds_has_head(c[k],SYM_Csc);
+        /* A MISSING-y second-order equation (c_0 == 0) is a first-order linear
+         * equation in p = y' and is owned by DSolve`ReductionOfOrder, which solves it
+         * by one integrating factor plus a quadrature (held inert if need be).  This
+         * backstop would instead re-solve the homogeneous part and integrate the
+         * Wronskian quotients unbounded: (Cot[x] + Csc[x]) y' + y'' == 1 + a Csc[x]
+         * (§2.2.59-5857) spun past every budget here, where the reduction closes in
+         * 2 s.  MATHILDA_NH_VOP_MISSING_Y restores the old claim for A/B. */
+        if (transc && n == 2 && ds_is_structural_zero(c[0])
+            && !getenv("MATHILDA_NH_VOP_MISSING_Y")) transc = false;
         if (!transc) { for (int k=0;k<=n;k++) expr_free(c[k]); free(c); expr_free(g); return NULL; }
     } else {
         /* The inert mode's class: a RATIONAL-coefficient second-order equation with a
@@ -227,9 +236,17 @@ static Expr** nh_try_core(DSolveProblem* P, size_t* nbranch, bool inert){
         }
         if (okbasis && !nh_expired()){
             bool was_inert = false;
+            /* The elementary mode needs every Wronskian quadrature to CLOSE, so bound
+             * each attempt (3 s, as Kovacic's own VoP): on an ugly radical basis the
+             * refusals alone ran 57 s (-(a^2+1) y - 2 Tan[x] y' + y'' == Sin[x],
+             * §2.2.59-5873, homogeneous set Sqrt[1 + Tan^2] Cos[Sqrt[-a^2] x]), and
+             * this method's 12 s deadline is only checked between steps. */
+            bool bound = !inert && !getenv("MATHILDA_NH_VOP_UNBOUNDED");
+            if (bound) dsolve_vp_set_integral_budget(3);
             Expr* yp = dsolve_variation_of_parameters_mode(basis, (size_t)n, g, c[n], xv,
                            inert ? VP_ALLOW_INERT : VP_ELEMENTARY,
                            inert ? &was_inert : NULL);
+            if (bound) dsolve_vp_set_integral_budget(0);
             if (!inert) {
                 if (yp && !ds_has_head(yp, SYM_Integrate)){
                     Expr* full = eval_and_free(ds_call2(SYM_Plus, expr_copy(hb), yp));

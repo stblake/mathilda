@@ -224,6 +224,12 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar);
  * Qcoef, x]) with I1 = Inactive[Integrate][Pcoef, x] instead of NULL.  Elementary
  * cases are byte-identical to dsolve_linear_factor_solve.  Args consumed. */
 Expr* dsolve_linear_factor_solve_inert(Expr* Pcoef, Expr* Qcoef, const char* xvar);
+/* Integrate[f, x] bounded to `secs` seconds and muted; on timeout / refusal the
+ * quadrature is Inactive[Integrate][f, x].  f consumed. */
+Expr* ds_integrate_or_inert(Expr* f, const char* xvar, int secs);
+/* Nesting counter of the inert solver's bounded elementary attempt (see
+ * dsolve_common.c); exposed only for tc_register_unwind_counter. */
+extern int g_linfac_inert_active;
 
 /* Causal (definite-convolution) variant for a distributional / impulse forcing:
  * y = mu^-1 (C[1] + Integrate[mu(s) Qcoef(s), {s, 0, x}]).  The definite integral
@@ -377,6 +383,11 @@ bool ds_has_inactive_integrate(const Expr* e);
  * machine reals reads 1e-7 through sheer cancellation of 1e4-magnitude terms, where
  * the same residual at exact rationals reads 1e-28. */
 bool ds_inert_vop_verified(const DSolveProblem* P, const Expr* body);
+
+/* Positive numeric certificate for a CLOSED body: the residual vanishes relative
+ * to its own terms at exact-rational sample points (parameters and C[k]
+ * instantiated).  False when it cannot numericize. */
+bool ds_residual_rel_verified(const DSolveProblem* P, const Expr* body);
 
 /* ---- shared building blocks used by the methods ---- */
 
