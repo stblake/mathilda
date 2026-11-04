@@ -3,10 +3,16 @@
  * See mathieu_arb.h and sf_machine_mathieu.c (the machine twin, which documents
  * the algorithm and the normalization). Outline at working precision wp:
  *
- *   1. q == 0 exactly: cos(sqrt(a) z) / -sqrt(a) sin(sqrt(a) z); a == 0 -> 1/sqrt2.
+ *   0. The odd functions (MathieuS, odd == 1) share every step: the same nu
+ *      and c_k, a sine sum in place of the cosine sum (C + i S is the Floquet
+ *      solution sum c_k e^{i (nu+2k) z}).
+ *   1. q == 0 exactly: cos(sqrt(a) z) / -sqrt(a) sin(sqrt(a) z) (sin / sqrt(a)
+ *      cos for S); a == 0 -> 1/sqrt2 (0 for S).
  *   2. The machine plan (sf_machine_mathieu_plan_info) gives nu0, the dominant
  *      index m, and whether a is a characteristic value (nu snapped to an
- *      integer n; then nu = n exactly and the DLMF factor 1/sqrt 2 applies).
+ *      integer n; then nu = n exactly and the DLMF factor 1/sqrt 2 applies,
+ *      and the function of the other parity -- S at a = a_n, C at a = b_n -- is
+ *      exactly 0).
  *   3. Otherwise nu is refined by Newton on
  *          g(nu) = (a - (nu+2m)^2) - q (c_{m+1}/c_m + c_{m-1}/c_m),
  *      the ratios from continued fractions. Precision doubles per level from 64
@@ -31,16 +37,88 @@
  * from the asymptotic ratio |q| / |(nu+2k)^2 - a| capped at 1 (an upper bound on
  * |c_k|, so p_k is never too small), weighted by e^{2|k||Im z|} for complex z.
  */
+/* pthread_sigmask / sigfillset (the threaded halves below) are POSIX: glibc
+ * hides them under -std=c99 unless this precedes every #include. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE 1
+#endif
+
 #ifdef USE_FLINT
 
 #include "mathieu_arb.h"
 #include "sf_machine_mathieu.h"
+#include "core.h"            /* tc_async_defer_push / pop, tc_check_deadline */
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include <flint/flint.h>
 #include <flint/arb.h>
 #include <flint/acb.h>
+
+#ifdef MATHILDA_THREADS
+#include <pthread.h>
+#include <signal.h>
+#endif
+
+/* ------------------------------------------------------------------ */
+/* Two-way parallelism                                                 */
+/* ------------------------------------------------------------------ */
+
+/* The kernel has three pairs of independent halves -- the two Miller sweeps
+ * (from +infinity and from -infinity toward m), the two Clenshaw sums (cosine
+ * and sine), the coefficient corrections on either side of m -- each a long run
+ * of big-number multiplications. Above MATHIEU_PAR_BITS they run on two worker
+ * threads under the discipline of src/numbertheory/factorinteger/fi_par.c:
+ * workers start with every signal blocked, the region is bracketed by
+ * tc_async_defer_push/pop, and the calling thread only waits in pthread_join, so
+ * a TimeConstrained timeout is taken at its next safe point after both workers
+ * finish (the guarded GMP/FLINT allocators only jump on the main thread). A
+ * worker that cannot be created runs inline after the joins. */
+#define MATHIEU_PAR_BITS 4096
+
+#ifdef MATHILDA_THREADS
+typedef struct { void (*fn)(void*); void* arg; } MathieuJob;
+static void* mathieu_job_run(void* p) {
+    MathieuJob* j = (MathieuJob*)p;
+    j->fn(j->arg);
+    flint_cleanup();                       /* this thread's FLINT caches */
+    return NULL;
+}
+#endif
+
+static void mathieu_par2(void (*fn)(void*), void* a0, void* a1, int par) {
+#ifdef MATHILDA_THREADS
+    if (par) {
+        pthread_t th[2];
+        MathieuJob job[2];
+        int started[2];
+        sigset_t all, old;
+        sigfillset(&all);
+        memset(&old, 0, sizeof old);       /* written by the first call */
+        pthread_sigmask(SIG_SETMASK, &all, &old);
+        tc_async_defer_push();
+        job[0].fn = fn; job[0].arg = a0;
+        job[1].fn = fn; job[1].arg = a1;
+        for (int i = 0; i < 2; i++)
+            started[i] = pthread_create(&th[i], NULL, mathieu_job_run, &job[i]) == 0;
+        pthread_sigmask(SIG_SETMASK, &old, NULL);
+        for (int i = 0; i < 2; i++) if (started[i]) pthread_join(th[i], NULL);
+        for (int i = 0; i < 2; i++) if (!started[i]) fn(job[i].arg);
+        tc_async_defer_pop();
+        tc_check_deadline();               /* a timeout due now unwinds here */
+        return;
+    }
+#else
+    (void)par;
+#endif
+    fn(a0);
+    fn(a1);
+}
 
 #ifndef M_LN2
 #define M_LN2 0.69314718055994530942
@@ -191,16 +269,30 @@ static inline void m_dk(acb_t d, const MillerCtx* M, slong k, slong p) {
     acb_sub_si(d, d, 4 * k * k, p);
 }
 
-/* Fill e[k - lo] (and de) for k in [lo, hi]: the + side sweep gives k >= m (its
- * e_m in e[m - lo]), the - side gives k < m and its own e_m in *em_minus. The
- * two sides carry independent scales. */
-static void miller_sweeps(acb_ptr e, acb_ptr de, acb_t em_minus, acb_t dem_minus,
-                          const MillerCtx* M, const acb_t q, slong m,
-                          const Profile* P, slong pmax, slong pder) {
+/* One side of the sweep pair (see miller_sweeps). */
+typedef struct {
+    acb_ptr e, de;               /* the shared vectors (each side writes its half) */
+    acb_ptr em_minus, dem_minus; /* the - side's own e_m (and derivative) */
+    const MillerCtx* M;
+    acb_srcptr q;
+    slong m;
+    const Profile* P;
+    slong pmax, pder;
+    int side;                    /* 0: from hi down to m; 1: from lo up to m - 1 */
+} SweepJob;
+
+static void miller_side(void* arg) {
+    const SweepJob* J = (const SweepJob*)arg;
+    acb_ptr e = J->e, de = J->de;
+    const MillerCtx* M = J->M;
+    acb_srcptr q = J->q;
+    slong m = J->m, pmax = J->pmax, pder = J->pder;
+    const Profile* P = J->P;
     slong lo = P->lo, hi = P->hi;
+    int side = J->side;
     acb_t d, dd, t, prev, dprev;
     acb_init(d); acb_init(dd); acb_init(t); acb_init(prev); acb_init(dprev);
-    for (int side = 0; side < 2; side++) {
+    {
         int sg = side == 0 ? -1 : +1;              /* direction of travel */
         slong kfar = side == 0 ? hi : lo;
         /* e_far = 1, e_beyond = 0 */
@@ -233,16 +325,32 @@ static void miller_sweeps(acb_ptr e, acb_ptr de, acb_t em_minus, acb_t dem_minus
                 mdivq(u, q, M, pd);
                 acb_get_mid(u, u);
                 acb_set(dprev, dek);
-                if (kn == m && side == 1) acb_swap(dem_minus, u);
+                if (kn == m && side == 1) acb_swap(J->dem_minus, u);
                 else acb_swap(de + (kn - lo), u);
                 acb_clear(u);
             }
             acb_set(prev, ek);
-            if (kn == m && side == 1) acb_swap(em_minus, t);
+            if (kn == m && side == 1) acb_swap(J->em_minus, t);
             else acb_swap(e + (kn - lo), t);
         }
     }
     acb_clear(d); acb_clear(dd); acb_clear(t); acb_clear(prev); acb_clear(dprev);
+}
+
+/* Fill e[k - lo] (and de) for k in [lo, hi]: the + side sweep gives k >= m (its
+ * e_m in e[m - lo]), the - side gives k < m and its own e_m in *em_minus. The
+ * two sides carry independent scales, write disjoint entries, and run in
+ * parallel at high precision. */
+static void miller_sweeps(acb_ptr e, acb_ptr de, acb_t em_minus, acb_t dem_minus,
+                          const MillerCtx* M, const acb_t q, slong m,
+                          const Profile* P, slong pmax, slong pder) {
+    SweepJob J[2];
+    for (int s = 0; s < 2; s++) {
+        J[s].e = e; J[s].de = de; J[s].em_minus = em_minus; J[s].dem_minus = dem_minus;
+        J[s].M = M; J[s].q = q; J[s].m = m; J[s].P = P;
+        J[s].pmax = pmax; J[s].pder = pder; J[s].side = s;
+    }
+    mathieu_par2(miller_side, &J[0], &J[1], pmax >= MATHIEU_PAR_BITS);
 }
 
 /* g(nu) = d_m - q (e+_{m+1}/e+_m + e-_{m-1}/e-_m) and (when de given) g'(nu). */
@@ -290,54 +398,82 @@ static void miller_g(acb_t g, acb_t dg, acb_srcptr e, acb_srcptr de,
  * about 2^950 at N = 1634 -- although the true error stays tiny (the Clenshaw
  * error for a cosine sum is bounded by sum_k |e_k| |U_{k-1}| <= sum (k+1) |e_k|).
  * The bound: (N+1)^2 (max rounding + max input radius) + rad(c2) N^3 max|coeff|. */
-static void clenshaw_cs(arb_t A, arb_t B, arb_srcptr al, arb_srcptr be, slong N,
-                        const slong* pk, const arb_t c2, const arb_t cs,
-                        const arb_t sn, slong prec) {
+typedef struct {
+    arb_ptr out;                 /* A (pass 0) or B (pass 1) */
+    arb_srcptr co;               /* al or be */
+    arb_srcptr al;               /* al_0, for the cosine pass */
+    slong N;
+    const slong* pk;
+    arb_srcptr c2, cs, sn;
+    slong prec;
+    int pass;
+} ClenJob;
+
+static void clenshaw_pass(void* arg) {
+    const ClenJob* J = (const ClenJob*)arg;
+    arb_srcptr co = J->co;
+    slong N = J->N;
+    const slong* pk = J->pk;
+    int pass = J->pass;
     arb_t b1, b2, t, x2;
     arb_init(b1); arb_init(b2); arb_init(t); arb_init(x2);
-    arb_get_mid_arb(x2, c2);
+    arb_get_mid_arb(x2, J->c2);
     mag_t amax, rmax, rnd, err, tmp;
     mag_init(amax); mag_init(rmax); mag_init(rnd); mag_init(err); mag_init(tmp);
-    for (int pass = 0; pass < 2; pass++) {
-        arb_srcptr co = pass == 0 ? al : be;
-        arb_zero(b1); arb_zero(b2);
-        mag_zero(amax); mag_zero(rmax); mag_zero(rnd);
-        for (slong k = N; k >= (pass == 0 ? 0 : 1); k--) {
-            arb_get_mag(tmp, co + k);
-            mag_max(amax, amax, tmp);
-            mag_max(rmax, rmax, arb_radref(co + k));
-            if (k == 0) break;
-            arb_mul(t, x2, b1, pk[k]);
-            arb_sub(t, t, b2, pk[k]);
-            arb_add_arf(t, t, arb_midref(co + k), pk[k]);
-            /* the rounding of this step, ~2^-pk |b_k|, folded into rnd */
-            mag_max(rnd, rnd, arb_radref(t));
-            mag_zero(arb_radref(t));
-            arb_swap(b2, b1); arb_swap(b1, t);
-        }
-        if (pass == 0) {                 /* f = al_0 + b1 cos th - b2 */
-            arb_mul(A, b1, cs, prec);
-            arb_sub(A, A, b2, prec);
-            arb_add(A, A, al + 0, prec);
-        } else {                         /* g = b1 sin th */
-            arb_mul(B, b1, sn, prec);
-        }
-        /* rigorous a-priori error: (N+1)^2 (rnd + rmax) + rad(c2) N^3 amax */
-        mag_add(err, rnd, rmax);
-        mag_mul_ui(err, err, (ulong)((N + 1) * (N + 1)));
-        mag_mul_ui(tmp, arb_radref(c2), (ulong)(N + 1));
-        mag_mul_ui(tmp, tmp, (ulong)((N + 1) * (N + 1)));
-        mag_mul(tmp, tmp, amax);
-        mag_add(err, err, tmp);
-        arb_add_error_mag(pass == 0 ? A : B, err);
+    arb_zero(b1); arb_zero(b2);
+    for (slong k = N; k >= (pass == 0 ? 0 : 1); k--) {
+        arb_get_mag(tmp, co + k);
+        mag_max(amax, amax, tmp);
+        mag_max(rmax, rmax, arb_radref(co + k));
+        if (k == 0) break;
+        arb_mul(t, x2, b1, pk[k]);
+        arb_sub(t, t, b2, pk[k]);
+        arb_add_arf(t, t, arb_midref(co + k), pk[k]);
+        /* the rounding of this step, ~2^-pk |b_k|, folded into rnd */
+        mag_max(rnd, rnd, arb_radref(t));
+        mag_zero(arb_radref(t));
+        arb_swap(b2, b1); arb_swap(b1, t);
     }
+    if (pass == 0) {                     /* f = al_0 + b1 cos th - b2 */
+        arb_mul(J->out, b1, J->cs, J->prec);
+        arb_sub(J->out, J->out, b2, J->prec);
+        arb_add(J->out, J->out, J->al + 0, J->prec);
+    } else {                             /* g = b1 sin th */
+        arb_mul(J->out, b1, J->sn, J->prec);
+    }
+    /* rigorous a-priori error: (N+1)^2 (rnd + rmax) + rad(c2) N^3 amax */
+    mag_add(err, rnd, rmax);
+    mag_mul_ui(err, err, (ulong)((N + 1) * (N + 1)));
+    mag_mul_ui(tmp, arb_radref(J->c2), (ulong)(N + 1));
+    mag_mul_ui(tmp, tmp, (ulong)((N + 1) * (N + 1)));
+    mag_mul(tmp, tmp, amax);
+    mag_add(err, err, tmp);
+    arb_add_error_mag(J->out, err);
     mag_clear(amax); mag_clear(rmax); mag_clear(rnd); mag_clear(err); mag_clear(tmp);
     arb_clear(b1); arb_clear(b2); arb_clear(t); arb_clear(x2);
 }
 
-static void q0_closed_form(acb_t res, const acb_t a, const acb_t z, int deriv, slong prec) {
+/* The two passes (cosine sum A, sine sum B) are independent: in parallel at
+ * high precision. */
+static void clenshaw_cs(arb_t A, arb_t B, arb_srcptr al, arb_srcptr be, slong N,
+                        const slong* pk, const arb_t c2, const arb_t cs,
+                        const arb_t sn, slong prec) {
+    ClenJob J[2];
+    for (int pass = 0; pass < 2; pass++) {
+        J[pass].out = pass == 0 ? A : B;
+        J[pass].co = pass == 0 ? al : be;
+        J[pass].al = al;
+        J[pass].N = N; J[pass].pk = pk;
+        J[pass].c2 = c2; J[pass].cs = cs; J[pass].sn = sn;
+        J[pass].prec = prec; J[pass].pass = pass;
+    }
+    mathieu_par2(clenshaw_pass, &J[0], &J[1], prec >= MATHIEU_PAR_BITS);
+}
+
+static void q0_closed_form(acb_t res, const acb_t a, const acb_t z, int odd, int deriv,
+                           slong prec) {
     if (acb_is_zero(a)) {
-        if (deriv) acb_zero(res);
+        if (deriv || odd) acb_zero(res);
         else { acb_set_si(res, 2); acb_rsqrt(res, res, prec); }
         return;
     }
@@ -346,9 +482,19 @@ static void q0_closed_form(acb_t res, const acb_t a, const acb_t z, int deriv, s
     acb_sqrt(s, a, prec);
     acb_mul(u, s, z, prec);
     acb_sin_cos(sn, cs, u, prec);
-    if (deriv) { acb_mul(res, s, sn, prec); acb_neg(res, res); }
-    else acb_set(res, cs);
-    if (acb_is_real(a) && acb_is_real(z)) arb_zero(acb_imagref(res));   /* cos / cosh */
+    if (odd) {
+        if (deriv) acb_mul(res, s, cs, prec);
+        else acb_set(res, sn);
+        /* real a, z: sin / sqrt(a) cos are real for a > 0, i sinh / i cosh for a < 0 */
+        if (acb_is_real(a) && acb_is_real(z)) {
+            if (arb_is_negative(acb_realref(a))) arb_zero(acb_realref(res));
+            else if (arb_is_positive(acb_realref(a))) arb_zero(acb_imagref(res));
+        }
+    } else {
+        if (deriv) { acb_mul(res, s, sn, prec); acb_neg(res, res); }
+        else acb_set(res, cs);
+        if (acb_is_real(a) && acb_is_real(z)) arb_zero(acb_imagref(res));   /* cos / cosh */
+    }
     acb_clear(s); acb_clear(u); acb_clear(sn); acb_clear(cs);
 }
 
@@ -356,9 +502,60 @@ static void q0_closed_form(acb_t res, const acb_t a, const acb_t z, int deriv, s
 /* The kernel                                                           */
 /* ------------------------------------------------------------------ */
 
+/* The final pass's per-coefficient work on c[i0 .. i1): the first-order Newton
+ * correction c_k += delta c_k' with its second-order remainder (when delta is
+ * given), then the glue onto the + side's scale (when ratio is given). */
+typedef struct {
+    acb_ptr c;
+    acb_srcptr dc;
+    const Profile* P;
+    slong m, wp;
+    acb_srcptr delta;
+    const mag_struct* d2;        /* |delta|^2 */
+    acb_srcptr ratio;
+    slong i0, i1;
+} CorrJob;
+
+static void corr_job_set(CorrJob* J, acb_ptr c, acb_srcptr dc, const Profile* P, slong m,
+                         slong wp, acb_srcptr delta, const mag_struct* d2,
+                         acb_srcptr ratio, slong i0, slong i1) {
+    J->c = c; J->dc = dc; J->P = P; J->m = m; J->wp = wp;
+    J->delta = delta; J->d2 = d2; J->ratio = ratio; J->i0 = i0; J->i1 = i1;
+}
+
+static void corr_range(void* arg) {
+    const CorrJob* J = (const CorrJob*)arg;
+    const Profile* P = J->P;
+    slong lo = P->lo, wp = J->wp;
+    acb_t dt; acb_init(dt);
+    mag_t mk; mag_init(mk);
+    for (slong i = J->i0; i < J->i1; i++) {
+        if (J->delta) {
+            /* delta ~ 2^-(wp/2): the product delta e_k' needs only ~p_k - wp/2
+             * bits to be accurate to 2^-p_k relative to e_k */
+            slong pc = P->p[i] - wp / 2 + 48;
+            if (pc < 64) pc = 64;
+            if (pc > P->p[i]) pc = P->p[i];
+            acb_mul(dt, J->delta, J->dc + i, pc);
+            acb_add(J->c + i, J->c + i, dt, P->p[i]);
+            /* second-order remainder of the first-order correction:
+             * ~ |delta|^2 |e_k''| <~ |delta|^2 (8 (|k - m| + 2))^2 |e_k| */
+            slong dk = lo + i - J->m;
+            if (dk < 0) dk = -dk;
+            acb_get_mag(mk, J->c + i);
+            mag_mul(mk, mk, J->d2);
+            mag_mul_ui(mk, mk, (ulong)(64 * (dk + 2) * (dk + 2)));
+            acb_add_error_mag(J->c + i, mk);
+        }
+        if (J->ratio) acb_mul(J->c + i, J->c + i, J->ratio, P->p[i]);
+    }
+    mag_clear(mk);
+    acb_clear(dt);
+}
+
 /* Newton for nu up to precision `ptop` (about half the final precision; the
  * final pass in mathieu_acb applies the last correction to the coefficients).
- * Precision doubles per level from 64 bits; g' is carried at half the level's
+ * Precision doubles per level, ending at ptop; g' is carried at half the level's
  * precision -- an approximate derivative with relative error eps keeps Newton
  * at e_{n+1} ~ eps e_n + C e_n^2, still 2^-pw from 2^-(pw/2). Returns 0 on
  * failure. Arithmetic is on midpoints. */
@@ -372,8 +569,17 @@ static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
     mag_t last;
     mag_init(last);
     int ok = 0;
-    for (slong pw = 64; ; pw *= 2) {
-        if (pw > ptop) pw = ptop;
+    /* The level schedule, built top-down (ptop, ~ptop/2, ..., <= 96) so that it
+     * ends exactly at ptop: doubling up from 64 would end with a level just
+     * above a power of two, a near-duplicate of the full-cost level before it. */
+    slong lev[64];
+    int nlev = 0;
+    for (slong pw = ptop; ; pw = pw / 2 + 8) {
+        lev[nlev++] = pw;
+        if (pw <= 96 || nlev == 64) break;
+    }
+    for (int li = nlev - 1; li >= 0; li--) {
+        slong pw = lev[li];
         Profile P;
         if (!profile_build(&P, nur, nui, ar, ai, qr, qi, m, 0.0, pw)) break;
         slong n = P.hi - P.lo + 1;
@@ -398,7 +604,7 @@ static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
         _acb_vec_clear(e, n); _acb_vec_clear(de, n);
         profile_clear(&P);
         if (!lvl_ok) break;
-        if (pw == ptop) { ok = 1; break; }
+        if (li == 0) ok = 1;
     }
     mag_clear(last);
     acb_clear(am); acb_clear(qm); acb_clear(g); acb_clear(dg); acb_clear(step);
@@ -407,11 +613,13 @@ static int refine_nu(acb_t nu, const acb_t a, const acb_t q, slong m,
 }
 
 void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
-                 int deriv, slong prec) {
+                 int odd, int deriv, slong prec) {
     if (!acb_is_finite(a) || !acb_is_finite(q) || !acb_is_finite(z)) {
         acb_indeterminate(res); return;
     }
-    if (acb_is_zero(q)) { q0_closed_form(res, a, z, deriv, prec); return; }
+    odd = odd ? 1 : 0;
+    deriv = deriv ? 1 : 0;
+    if (acb_is_zero(q)) { q0_closed_form(res, a, z, odd, deriv, prec); return; }
 
     double ar = arf_get_d(arb_midref(acb_realref(a)), ARF_RND_NEAR);
     double ai = arf_get_d(arb_midref(acb_imagref(a)), ARF_RND_NEAR);
@@ -419,12 +627,16 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     double qi = arf_get_d(arb_midref(acb_imagref(q)), ARF_RND_NEAR);
     double zr = arf_get_d(arb_midref(acb_realref(z)), ARF_RND_NEAR);
     double zi = arf_get_d(arb_midref(acb_imagref(z)), ARF_RND_NEAR);
-    double nur, nui; int integer, mi, lo_m, hi_m;
+    double nur, nui; int integer, parity, mi, lo_m, hi_m;
     if (!sf_machine_mathieu_plan_info(ar, ai, qr, qi, &nur, &nui, &integer,
-                                      &mi, &lo_m, &hi_m)) {
+                                      &parity, &mi, &lo_m, &hi_m)) {
         acb_indeterminate(res); return;
     }
     (void)lo_m; (void)hi_m;
+    /* the other parity at a characteristic value: identically 0 */
+    if (integer && ((odd && parity > 0) || (!odd && parity < 0))) {
+        acb_zero(res); return;
+    }
     slong m = mi;
     int realpq = acb_is_real(a) && acb_is_real(q);
     int real_nu = integer || (realpq && nui == 0.0);
@@ -432,6 +644,9 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     /* Guard bits for the phase nu z and the coefficient weights (nu+2k). */
     double zabs = hypot(zr, zi), nuabs = hypot(nur, nui);
     slong wp = prec + 24 + (slong)(log2(1.0 + zabs * (1.0 + nuabs)) + 0.5);
+    /* the odd functions (se, ce') vanish like z at 0, so a small |z| costs
+     * log2(1/|z|) bits of cancellation in the Floquet sum */
+    if ((odd ^ deriv) && zabs > 0.0 && zabs < 1.0) wp += (slong)(-log2(zabs) + 1.0);
 
     acb_t nu;
     acb_init(nu);
@@ -452,15 +667,21 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     slong lo = P.lo, hi = P.hi, n = hi - lo + 1;
     acb_ptr c = _acb_vec_init(n);
     acb_ptr dc = integer ? NULL : _acb_vec_init(n);
-    acb_t t, S, s, emm, demm, g, dg, delta;
-    acb_init(t); acb_init(S); acb_init(s);
+    acb_t t, S, s, emm, demm, g, dg, delta, ratio;
+    acb_init(t); acb_init(S); acb_init(s); acb_init(ratio);
     acb_init(emm); acb_init(demm); acb_init(g); acb_init(dg); acb_init(delta);
 
     /* Final pass at wp: Miller sweeps (values at the profile precision, the
      * nu-derivative at wp/2), the last Newton correction delta = -g/g' (nu is
      * already good to ~wp/2 bits, so delta ~ 2^-(wp/2) and its own error is
      * O(delta^2) ~ 2^-wp), and the coefficients corrected to first order,
-     * e_k(nu + delta) = e_k + delta e_k' + O(delta^2). */
+     * e_k(nu + delta) = e_k + delta e_k' + O(delta^2).
+     *
+     * Glue: the - side (k < m) is brought onto the + side's scale in the same
+     * pass (e_k *= e+_m/e-_m), so c is ONE vector with c_m = e+_m. Its
+     * normalization -- sum c_k^2 = 1, Re(c_0) > 0, DLMF 1/sqrt2 for integer nu
+     * -- is a single scalar `s` applied to the final sum, not to every
+     * coefficient. */
     {
         MillerCtx M;
         mctx_init(&M, a, q, nu, wp);
@@ -471,49 +692,35 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
             if (acb_contains_zero(dg)) { mctx_clear(&M); acb_indeterminate(res); goto done; }
             acb_div(delta, g, dg, wp);
             acb_neg(delta, delta);
-            mag_t d2, mk;
-            mag_init(d2); mag_init(mk);
+            mag_t d2;
+            mag_init(d2);
             acb_get_mag(d2, delta);
             mag_mul(d2, d2, d2);                   /* |delta|^2 */
-            acb_t dt; acb_init(dt);
-            /* delta ~ 2^-(wp/2): the product delta e_k' needs only ~p_k - wp/2
-             * bits to be accurate to 2^-p_k relative to e_k */
-            for (slong i = 0; i < n; i++) {
-                slong pc = P.p[i] - wp / 2 + 48;
-                if (pc < 64) pc = 64;
-                if (pc > P.p[i]) pc = P.p[i];
-                acb_mul(dt, delta, dc + i, pc);
-                acb_add(c + i, c + i, dt, P.p[i]);
-                /* second-order remainder of the first-order correction:
-                 * ~ |delta|^2 |e_k''| <~ |delta|^2 (8 (|k - m| + 2))^2 |e_k| */
-                slong dk = lo + i - m;
-                if (dk < 0) dk = -dk;
-                acb_get_mag(mk, c + i);
-                mag_mul(mk, mk, d2);
-                mag_mul_ui(mk, mk, (ulong)(64 * (dk + 2) * (dk + 2)));
-                acb_add_error_mag(c + i, mk);
-            }
-            acb_clear(dt);
+            /* c_m and the - side's e_m first: the glue ratio needs both */
+            CorrJob one;
+            corr_job_set(&one, c, dc, &P, m, wp, delta, d2, NULL, m - lo, m - lo + 1);
+            corr_range(&one);
             acb_addmul(emm, delta, demm, wp);
+            acb_div(ratio, c + (m - lo), emm, wp);
+            /* the two sides of m: correction (and on the - side the glue) */
+            CorrJob J[2];
+            corr_job_set(&J[0], c, dc, &P, m, wp, delta, d2, ratio, 0, m - lo);
+            corr_job_set(&J[1], c, dc, &P, m, wp, delta, d2, NULL, m - lo + 1, n);
+            mathieu_par2(corr_range, &J[0], &J[1], wp >= MATHIEU_PAR_BITS);
             acb_add(nu, nu, delta, wp);
             /* nu's own error: the correction is exact to O(delta^2) */
             mag_mul_2exp_si(d2, d2, 8);
             if (real_nu) arb_add_error_mag(acb_realref(nu), d2);
             else acb_add_error_mag(nu, d2);
-            mag_clear(d2); mag_clear(mk);
+            mag_clear(d2);
+        } else {
+            /* integer nu: no correction, only the glue of the - side */
+            acb_div(ratio, c + (m - lo), emm, wp);
+            CorrJob J;
+            corr_job_set(&J, c, NULL, &P, m, wp, NULL, NULL, ratio, 0, m - lo);
+            corr_range(&J);
         }
         mctx_clear(&M);
-    }
-    /* Glue: bring the - side onto the + side's scale (k < m: e_k *= e+_m/e-_m),
-     * so c is ONE vector with c_m = e+_m. Its normalization -- sum c_k^2 = 1,
-     * Re(c_0) > 0, DLMF 1/sqrt2 for integer nu -- is a single scalar `s`
-     * applied to the final sum, not to every coefficient. */
-    {
-        acb_t ratio;
-        acb_init(ratio);
-        acb_div(ratio, c + (m - lo), emm, wp);
-        for (slong i = 0; lo + i < m; i++) acb_mul(c + i, c + i, ratio, P.p[i]);
-        acb_clear(ratio);
     }
     /* S = sum c_k^2: arb's fused dot product (one rounding, the operands' own
      * mantissa lengths), much cheaper than n squarings at the profile. */
@@ -561,8 +768,18 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
          * N = ce(0) = s sum c_k, on midpoints. */
         /* in ball arithmetic: the unscaled Miller values can exceed the
          * double range, so scale before reading the parts */
-        acb_t N; acb_init(N);
-        for (slong i = 0; i < n; i++) acb_add(N, N, c + i, 64);
+        /* N_C = ce(0) = s sum c_k; N_S = se'(0) = s sum (nu + 2k) c_k */
+        acb_t N, wk; acb_init(N); acb_init(wk);
+        for (slong i = 0; i < n; i++) {
+            if (odd) {
+                acb_add_si(wk, nu, 2 * (lo + i), 64);
+                acb_mul(wk, wk, c + i, 64);
+                acb_add(N, N, wk, 64);
+            } else {
+                acb_add(N, N, c + i, 64);
+            }
+        }
+        acb_clear(wk);
         acb_mul(N, N, s, 64);
         double vr = arf_get_d(arb_midref(acb_realref(N)), ARF_RND_NEAR);
         double vi = arf_get_d(arb_midref(acb_imagref(N)), ARF_RND_NEAR);
@@ -601,7 +818,16 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
         clenshaw_cs(A, B, al, be, N, pk, c2, cs, sn, wp);
         arb_mul(ph, acb_realref(nu), acb_realref(z), wp);
         arb_sin_cos(sp, cp2, ph, wp);
-        if (!deriv) {
+        if (odd) {
+            /* se = sin(nu z) A + cos(nu z) B; se' (weighted) = cos A - sin B */
+            if (!deriv) {
+                arb_mul(acb_realref(res), sp, A, wp);
+                arb_addmul(acb_realref(res), cp2, B, wp);
+            } else {
+                arb_mul(acb_realref(res), cp2, A, wp);
+                arb_submul(acb_realref(res), sp, B, wp);
+            }
+        } else if (!deriv) {
             arb_mul(acb_realref(res), cp2, A, wp);
             arb_submul(acb_realref(res), sp, B, wp);
         } else {
@@ -647,19 +873,26 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
         acb_exp(e2, inz, wp);
         acb_add(A, Pw, Mwi, wp); acb_mul(A, A, e1, wp);
         acb_add(B, Pwi, Mw, wp); acb_mul(B, B, e2, wp);
-        if (!deriv) {
+        /* A = F(z), B = F(-z): ce = (A+B)/2, ce' = (i/2)(A-B),
+         * se = -(i/2)(A-B), se' = (A+B)/2 (the derivatives with weighted c) */
+        int sum_form = odd ? deriv : !deriv;
+        if (sum_form) {
             acb_add(res, A, B, wp);
             acb_mul_2exp_si(res, res, -1);
         } else {
             acb_sub(res, A, B, wp);
-            acb_mul_onei(res, res);
+            if (odd) acb_div_onei(res, res); else acb_mul_onei(res, res);
             acb_mul_2exp_si(res, res, -1);
         }
         acb_mul(res, res, s, wp);
-        /* Real (a, q): y_e is real on the real AND the imaginary axis (the
-         * equation is real along both), so there the value is N times a real. */
+        /* Real (a, q): the value is N y(z), y = y_e, y_e', y_o, y_o' real on the
+         * real axis (the equation is real there). On the imaginary axis the
+         * equation is real too, so the EVEN ones (y_e, y_o') are real there and
+         * the ODD ones (y_e', y_o) are i times a real. */
         if (realpq && (acb_is_real(z) || arb_is_zero(acb_realref(z)))) {
-            if (real_nu || !imag_kind) arb_zero(acb_imagref(res));
+            int nreal = real_nu || !imag_kind;           /* N real, else imaginary */
+            int vreal = acb_is_real(z) || !(odd ^ deriv) ? nreal : !nreal;
+            if (vreal) arb_zero(acb_imagref(res));
             else arb_zero(acb_realref(res));
         }
         acb_clear(w); acb_clear(wi); acb_clear(Pw); acb_clear(Pwi); acb_clear(Mw);
@@ -669,7 +902,7 @@ void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
     acb_set_round(res, res, prec);
 
 done:
-    acb_clear(t); acb_clear(S); acb_clear(s);
+    acb_clear(t); acb_clear(S); acb_clear(s); acb_clear(ratio);
     acb_clear(emm); acb_clear(demm); acb_clear(g); acb_clear(dg); acb_clear(delta);
     _acb_vec_clear(c, n);
     if (dc) _acb_vec_clear(dc, n);

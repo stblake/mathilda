@@ -959,6 +959,17 @@ static bool ndk_MathieuCPrime_n(const double* re, const double* im, size_t n,
                                 double* rr, double* ri) {
     return ndk_mathieu_n(1, re, im, n, rr, ri);
 }
+/* MathieuS / MathieuSPrime: the odd twins, the same plan cache. */
+static bool ndk_MathieuS_n(const double* re, const double* im, size_t n,
+                           double* rr, double* ri) {
+    if (n != 3) return false;
+    return sf_machine_mathieu_fn(1, 0, re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+}
+static bool ndk_MathieuSPrime_n(const double* re, const double* im, size_t n,
+                                double* rr, double* ri) {
+    if (n != 3) return false;
+    return sf_machine_mathieu_fn(1, 1, re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+}
 /* HypergeometricU[a, b, z]: re[0] = a, re[1] = b, re[2] = z. Real only. */
 static bool ndk_HypergeometricU_n(const double* re, const double* im, size_t n,
                                   double* rr, double* ri) {
@@ -1027,6 +1038,8 @@ static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3,
 static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
 static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true };
 static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true };
+static const NDNaryKernel NDKN_MathieuS            = { ndk_MathieuS_n, 3, true };
+static const NDNaryKernel NDKN_MathieuSPrime       = { ndk_MathieuSPrime_n, 3, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL, NULL };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL, NULL };
@@ -1119,6 +1132,8 @@ void ndkernels_init(void) {
     REG_N(WhittakerM);  /* WhittakerM[k, m, z] for Compile[] */
     REG_N(MathieuC);       /* MathieuC[a, q, z] for Compile[] */
     REG_N(MathieuCPrime);  /* MathieuCPrime[a, q, z] for Compile[] */
+    REG_N(MathieuS);       /* MathieuS[a, q, z] for Compile[] */
+    REG_N(MathieuSPrime);  /* MathieuSPrime[a, q, z] for Compile[] */
     REG_N(HypergeometricU); /* HypergeometricU[a, b, z] for Compile[] */
     REG_N(WhittakerW);  /* WhittakerW[k, m, z] for Compile[] */
     REG_N(DirichletL);  /* DirichletL[k, j, s] for Compile[] */

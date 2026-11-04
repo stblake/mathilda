@@ -567,6 +567,9 @@ P("whittakerw", "special", "WhittakerW[2., 3., p]",
 # to 16 digits; Mathilda snaps a machine a that close to a characteristic value.
 P("mathieuc", "special", "MathieuC[7.449109739529178, 5., p]",
   "sp.mathieu_cem(2, 5.0, np.degrees(p))[0]")
+# MathieuS at a = b_2(5): se_2, against mathieu_sem (x in degrees).
+P("mathieus", "special", "MathieuS[2.0994604454866654, 5., p]",
+  "sp.mathieu_sem(2, 5.0, np.degrees(p))[0]")
 # GammaRegularized / BetaRegularized are not implemented in Mathilda (they returned
 # unevaluated -> the probes only ever reported UNEVAL mismatches). Removed; tracked
 # as a feature gap in tasks/special_functions_perf_review_2026-10-16.md.

@@ -5144,3 +5144,13 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   a nested arbitrary function's placeholder and a `Sqrt[` head inside `f(..)` being re-shredded.
   Always load every new corpus file (`$r = Get[..]`) and diff the converter old-vs-new over ALL
   cached pages before regenerating.
+
+## MathieuS (v0.6166, 2026-11-04)
+- **Never `git stash` while a background build/test job runs**: it swaps the sources out from
+  under the compiler for that window, so the run's result no longer certifies the tree. Run
+  read-only "does the gate catch the old code" checks in a worktree, or after the job ends.
+- **Precision literals with an exponent**: `1.*^-3`30` is not Mathilda syntax; write
+  `N[1/1000, 30]` in tests.
+- **A representative choice that "doesn't matter" for one function can flip the sign of its
+  sibling** (nu vs -nu: ce invariant, se odd). Check every consumer of a shared plan's
+  conventions when adding a new head over it.

@@ -99,3 +99,24 @@ checkIf["MathieuC ce_2(., 5) over 10^6", "MathieuC",
 (* Arbitrary precision: one value at 10^4 digits (no SciPy counterpart). *)
 benchIf["MathieuC at 10^4 digits", "MathieuC", MathieuC[2, 1, 3.7`10000];];
 checkIf["MathieuC at 10^4 digits", "MathieuC", Round[10^6 MathieuC[2, 1, 3.7`30]]];
+
+(* MathieuS[a, q, z], the odd Mathieu function: the same (a, q) plan as MathieuC
+   (one cached set of Floquet coefficients; MathieuC + I MathieuS is the Floquet
+   solution), a sine sum per element. Generic a again has no SciPy counterpart. *)
+benchIf["MathieuS[a, q, .] over 10^6", "MathieuS", MathieuS[2, 1, v];];
+checkIf["MathieuS[a, q, .] over 10^6", "MathieuS", Round[10^6 N[MathieuS[2, 1, 1/2]]]];
+
+benchIf["MathieuSPrime[a, q, .] over 10^6", "MathieuSPrime", MathieuSPrime[2, 1, v];];
+checkIf["MathieuSPrime[a, q, .] over 10^6", "MathieuSPrime",
+        Round[10^6 N[MathieuSPrime[2, 1, 1/2]]]];
+
+(* The characteristic order se_2(z, 5): a = b_2(5) to 16 digits (DLMF
+   normalization in all three systems). SciPy's mathieu_sem(2, 5, x) takes x in
+   DEGREES. *)
+benchIf["MathieuS se_2(., 5) over 10^6", "MathieuS", MathieuS[2.0994604454866654, 5., v];];
+checkIf["MathieuS se_2(., 5) over 10^6", "MathieuS",
+        Round[10^6 MathieuS[2.0994604454866654, 5., 0.5]]];
+
+(* Arbitrary precision: one value at 10^4 digits (no SciPy counterpart). *)
+benchIf["MathieuS at 10^4 digits", "MathieuS", MathieuS[2, 1, 3.7`10000];];
+checkIf["MathieuS at 10^4 digits", "MathieuS", Round[10^6 MathieuS[2, 1, 3.7`30]]];

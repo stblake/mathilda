@@ -939,6 +939,8 @@ static void pack_mark_aware_heads(void) {
          * in double. */
         "MathieuC",
         "MathieuCPrime",
+        "MathieuS",          /* the odd twins: same plan, same buffer loop */
+        "MathieuSPrime",
         /* LerchPhi[z, s, a] holds a buffer in any of its three slots; its builtin
          * delists each visible NDArray / packed arg and re-evaluates (so Listable
          * threads the element-wise sf_machine_lerchphi), rather than leaving a

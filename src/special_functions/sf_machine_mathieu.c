@@ -1,4 +1,5 @@
-/* Mathilda -- machine-precision Mathieu functions (MathieuC / MathieuCPrime).
+/* Mathilda -- machine-precision Mathieu functions (MathieuC / MathieuCPrime,
+ * MathieuS / MathieuSPrime).
  *
  * See sf_machine_mathieu.h for the definition and normalization. This file holds
  * the double-precision algorithm shared by the scalar builtin, the packed /
@@ -236,7 +237,13 @@ typedef struct {
     int rlo, rhi;                /* the |c_k| >= 1e-20 max|c| window (real z) */
     int real;                    /* nu and every c_k real (real hot path) */
     int realpq;                  /* a and q real */
-    int imag_kind;               /* realpq, but the normalized value is imaginary */
+    int imag_kind;               /* realpq, but the normalized ce is imaginary */
+    int imag_kind_s;             /* realpq, but the normalized se is imaginary */
+    int parity;                  /* integer nu: +1 c_k = c_{-n-k} (a = a_n: ce
+                                  * periodic, se = 0), -1 antisymmetric (a = b_n:
+                                  * se periodic, ce = 0); 0 for generic nu */
+    mcx y0, y1;                  /* ce(0) = sum c_k, se'(0) = sum (nu+2k) c_k: the
+                                  * Taylor seeds for the small-|z| arm */
     int cap;                     /* allocated length of the arrays */
     mcx* c;                      /* normalized coefficients */
     mcx* w;                      /* (nu + 2k) c_k, for the derivative */
@@ -393,6 +400,113 @@ static bool glue_coefficients(MathieuPlan* p) {
     return true;
 }
 
+/* Integer nu = n (a is a characteristic value). The decaying coefficient
+ * vector is then symmetric (c_k = c_{-n-k}: a = a_n, ce periodic) or
+ * antisymmetric (a = b_n, se periodic) under the fold k -> -n-k about the centre
+ * -n/2, and in the antisymmetric case with n even the centre coefficient is
+ * exactly 0 -- a continued fraction of ratios run THROUGH the centre divides by
+ * it. So only the upper half is computed: the ratios r_k = c_k / c_{k-1} from
+ * +infinity down to the centre, and a forward recurrence from the centre (where
+ * the parity fixes the start) up to the glue point g (the dominant index, folded
+ * onto the upper half). The parity is the one whose two halves agree at g --
+ * the classical a_n / b_n consistency test -- and the lower half is the mirror,
+ * exactly +-c, so the wrong-parity sum (se at a_n, ce at b_n) is structurally
+ * zero. Sets p->parity; c is unnormalized. */
+static bool glue_integer(MathieuPlan* p) {
+    int n = (int)p->nu.re, lo = p->lo, hi = p->lo + p->n - 1;
+    mcx q = p->q, a = p->a, nu = p->nu;
+    mcx* c = p->c;
+    mcx* r = p->scratch;                 /* r[k - lo] = c_k / c_{k-1}, k > kc */
+    mcx* f = p->scratch2;                /* forward values on [kc, gmax] */
+    int even = ((n % 2) + 2) % 2 == 0;
+    int kc = even ? -n / 2 : -(n - 1) / 2;   /* nu + 2 kc = 0 (even) or 1 (odd) */
+    int g = p->m;
+    if (-n - g > g) g = -n - g;
+    if (g < kc) g = kc;
+    if (kc < lo || g + 2 > hi || -n - lo > hi) return false;
+    /* r_{kc+1} = c_{kc+1}/c_kc is infinite in the antisymmetric even case (its
+     * denominator vanishes, exactly or nearly); it is only read by the
+     * symmetric test with g == kc, which then cannot hold */
+    int r_inf = 0;
+    mcx rr = mc(0.0, 0.0);
+    for (int k = hi; k > kc; k--) {
+        mcx den = mc_sub(diag_d(a, nu, k), mc_mul(q, rr));
+        if (den.re == 0.0 && den.im == 0.0) {
+            if (k == kc + 1 && even) { r_inf = 1; break; }
+            return false;
+        }
+        rr = mc_div(q, den);
+        r[k - lo] = rr;
+    }
+    double best = INFINITY;
+    int bt = 0, bg = g;
+    for (int t = 1; t >= -1; t -= 2) {
+        int g0 = (even && t < 0 && g == kc) ? kc + 1 : g;   /* c_kc = 0 there */
+        if (r_inf && g0 + 1 == kc + 1) continue;
+        int gmax = g0 > kc + 1 ? g0 : kc + 1;
+        /* the start: even & symmetric  d_kc c_kc = 2 q c_{kc+1};
+         *            even & antisym    c_kc = 0, c_{kc+1} = 1;
+         *            odd               c_{kc-1} = t c_kc */
+        if (even && t < 0) { f[0] = mc(0.0, 0.0); f[1] = mc(1.0, 0.0); }
+        else if (even) {
+            f[0] = mc(1.0, 0.0);
+            f[1] = mc_div(diag_d(a, nu, kc), mc_scale(q, 2.0));
+        } else {
+            f[0] = mc(1.0, 0.0);
+            f[1] = mc_div(mc_sub(diag_d(a, nu, kc), mc_scale(q, (double)t)), q);
+        }
+        for (int k = kc + 1; k < gmax; k++) {             /* f_{k+1} */
+            mcx v = mc_div(mc_sub(mc_mul(diag_d(a, nu, k), f[k - kc]),
+                                  mc_mul(q, f[k - 1 - kc])), q);
+            f[k + 1 - kc] = v;
+            if (mc_abs(v) > 1e250)
+                for (int j = 0; j <= k + 1 - kc; j++) f[j] = mc_scale(f[j], 1e-250);
+        }
+        /* consistency at g0: d c_g0 - q c_{g0-1} - q c_{g0+1} = 0, with
+         * c_{g0+1} = r_{g0+1} c_g0 and c_{kc-1} the mirror t c_{-n-kc+1} */
+        mcx fg = f[g0 - kc], fm;
+        if (g0 - 1 >= kc) fm = f[g0 - 1 - kc];
+        else fm = mc_scale(f[-n - (g0 - 1) - kc], (double)t);
+        if (fg.re == 0.0 && fg.im == 0.0) continue;
+        mcx res = mc_sub(mc_sub(diag_d(a, nu, g0), mc_mul(q, mc_div(fm, fg))),
+                         mc_mul(q, r[g0 + 1 - lo]));
+        double scale = mc_abs(diag_d(a, nu, g0)) + 2.0 * mc_abs(q) + 1.0;
+        double rel = mc_abs(res) / scale;
+        if (rel < best) { best = rel; bt = t; bg = g0; }
+    }
+    if (bt == 0 || !(best < 1e-6)) return false;
+    /* rebuild the chosen forward half (the loop above may have overwritten f) */
+    {
+        int t = bt, g0 = bg;
+        int gmax = g0 > kc + 1 ? g0 : kc + 1;
+        if (even && t < 0) { f[0] = mc(0.0, 0.0); f[1] = mc(1.0, 0.0); }
+        else if (even) {
+            f[0] = mc(1.0, 0.0);
+            f[1] = mc_div(diag_d(a, nu, kc), mc_scale(q, 2.0));
+        } else {
+            f[0] = mc(1.0, 0.0);
+            f[1] = mc_div(mc_sub(diag_d(a, nu, kc), mc_scale(q, (double)t)), q);
+        }
+        for (int k = kc + 1; k < gmax; k++) {
+            mcx v = mc_div(mc_sub(mc_mul(diag_d(a, nu, k), f[k - kc]),
+                                  mc_mul(q, f[k - 1 - kc])), q);
+            f[k + 1 - kc] = v;
+            if (mc_abs(v) > 1e250)
+                for (int j = 0; j <= k + 1 - kc; j++) f[j] = mc_scale(f[j], 1e-250);
+        }
+        for (int k = kc; k <= g0; k++) c[k - lo] = f[k - kc];
+        for (int k = g0 + 1; k <= hi; k++) c[k - lo] = mc_mul(c[k - 1 - lo], r[k - lo]);
+        for (int k = lo; k < kc; k++) {
+            int kp = -n - k;                                   /* > k, <= hi */
+            c[k - lo] = mc_scale(c[kp - lo], (double)t);
+        }
+        if (even && t < 0) c[kc - lo] = mc(0.0, 0.0);
+        p->parity = t;
+    }
+    for (int i = 0; i < p->n; i++) if (!mc_finite(c[i])) return false;
+    return true;
+}
+
 /* Choose the exponent representative nearest sqrt(a). */
 static mcx pick_nu(mcx a, mcx C) {
     mcx nu0 = mc_scale(mc_acos(C), 1.0 / M_PI);
@@ -404,7 +518,13 @@ static mcx pick_nu(mcx a, mcx C) {
         for (int dm = -1; dm <= 1; dm++) {
             mcx v = mc_add(v0, mc(2.0 * (m0 + dm), 0.0));
             double d = mc_abs(mc_sub(v, sa));
-            if (d < bd - 1e-12) { bd = d; best = v; }
+            /* a tie (sqrt(a) on the imaginary axis: a < 0, nu real) takes
+             * Re(nu) >= 0. MathieuC cannot tell nu from -nu, but MathieuS
+             * changes sign with it: se -> sin(sqrt(a) z) as q -> 0 needs the
+             * branch continuous from a > 0 (the DLMF se_n sign). */
+            if (d < bd - 1e-12 || (fabs(d - bd) <= 1e-12 && v.re > best.re)) {
+                bd = d; best = v;
+            }
         }
     }
     return best;
@@ -426,6 +546,10 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
     double nr = floor(nu.re + 0.5);
     double eps = mc_abs(mc_sub(nu, mc(nr, 0.0)));
     p->integer = eps < 2e-6 * fmax(1.0, fabs(nr));
+    /* the inverse iteration below runs at the UNSNAPPED estimate: at an exact
+     * characteristic value the Floquet matrix at the integer nu is singular */
+    mcx nu_h = nu;
+    if (p->integer && eps < 1e-9) nu_h = mc_add(mc(nr, 0.0), mc(1e-7, 0.0));
     if (p->integer) nu = mc(nr, 0.0);
 
     /* Coefficient range: the oscillatory zone |nu+2k|^2 <~ |a| + 2|q| plus the
@@ -449,7 +573,7 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
     p->n = 2 * half + 1;
     if (!plan_reserve(p, p->n)) return false;
 
-    int m = dominant_index(p, nu);
+    int m = dominant_index(p, p->integer ? nu_h : nu);
     if (m == INT32_MIN) return false;
     p->m = m;
 
@@ -458,6 +582,7 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
          * edge (eps small) the two equivalent roots nu, 2n - nu are close, which
          * slows it, hence the generous iteration cap. */
         bool conv = false;
+        double prev = INFINITY;
         for (int it = 0; it < 40; it++) {
             mcx g, dg;
             if (!consistency_g(p, nu, m, &g, &dg)) break;
@@ -465,7 +590,15 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
             mcx step = mc_div(g, dg);
             nu = mc_sub(nu, step);
             if (!mc_finite(nu)) break;
-            if (mc_abs(step) <= 4e-16 * (1.0 + mc_abs(nu))) { conv = true; break; }
+            double sa = mc_abs(step), sc = 1.0 + mc_abs(nu);
+            if (sa <= 4e-16 * sc) { conv = true; break; }
+            /* The noise floor: near a band edge g' is small (the equivalent
+             * roots nu and 2n - nu nearly coincide), so the rounding of g
+             * moves nu by ~eps/|g'| -- nu itself is that ill-conditioned in a.
+             * Once the steps are tiny and no longer shrinking quadratically,
+             * the iteration has converged as far as double allows. */
+            if (sa < 1e-9 * sc && sa > 0.25 * prev) { conv = true; break; }
+            prev = sa;
         }
         if (!conv) return false;
         /* Real inputs in a stability band: nu is real; drop the rounding residue
@@ -489,7 +622,10 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         }
     }
     p->nu = nu;
-    if (!glue_coefficients(p)) return false;
+    p->parity = 0;
+    if (p->integer) {
+        if (!glue_integer(p)) return false;
+    } else if (!glue_coefficients(p)) return false;
 
     /* normalize: sum c_k^2 = 1, sign Re(c_0) > 0 */
     mcx S = mc(0.0, 0.0);
@@ -522,12 +658,20 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
     p->rlo = 0; p->rhi = p->n - 1;
     while (p->rlo < -p->lo - 1 && mc_abs(p->c[p->rlo]) < 1e-20 * cmax) p->rlo++;
     while (p->rhi > -p->lo && mc_abs(p->c[p->rhi]) < 1e-20 * cmax) p->rhi--;
+    p->y0 = mc(0.0, 0.0); p->y1 = mc(0.0, 0.0);
+    for (int i = 0; i < p->n; i++) {
+        p->y0 = mc_add(p->y0, p->c[i]);
+        p->y1 = mc_add(p->y1, p->w[i]);
+    }
     if (p->realpq && !p->real) {
-        /* Real (a, q): the value is N y_e(z), y_e real, N^2 real -- so real or
-         * purely imaginary. Read which from N = ce(0) = sum c_k. */
-        mcx N = mc(0.0, 0.0);
-        for (int i = 0; i < p->n; i++) N = mc_add(N, p->c[i]);
-        p->imag_kind = fabs(N.im) > fabs(N.re);
+        /* Real (a, q): ce = N_C y_e(z), se = N_S y_o(z) with y_e, y_o real and
+         * N_C^2, N_S^2 real (conj(c_k) = +-c_{-n-k} for nu = n + i mu), so each
+         * value is real or purely imaginary. Read which from N_C = ce(0) and
+         * N_S = se'(0). */
+        p->imag_kind = fabs(p->y0.im) > fabs(p->y0.re);
+        p->imag_kind_s = fabs(p->y1.im) > fabs(p->y1.re);
+    } else {
+        p->imag_kind_s = 0;
     }
     return true;
 }
@@ -559,17 +703,82 @@ static MathieuPlan* get_plan(double ar, double ai, double qr, double qi) {
 /* Evaluation                                                          */
 /* ------------------------------------------------------------------ */
 
-static bool eval_plan(const MathieuPlan* p, int deriv, mcx z, mcx* out) {
+/* Small |z|: the Taylor series of the solution itself,
+ *     y'' = (2 q cos 2z - a) y,   y(0) = ce(0) (even) or 0, y'(0) = se'(0) (odd),
+ * f(z) = 2 q cos 2z - a = sum_j f_j z^j, (k+2)(k+1) y_{k+2} = sum_j f_j y_{k-j}.
+ * Used for the two ODD functions (se, ce'), whose Floquet sums lose relative
+ * accuracy as z -> 0 (value ~ z, terms ~ 1), and only for |z| <= tau, where the
+ * series converges fast. Returns false when it has not converged (the Floquet
+ * sum then answers). */
+#define MATHIEU_TAYLOR_N 48
+static bool taylor_eval(const MathieuPlan* p, int odd, int deriv, mcx z, mcx* out) {
+    mcx f[MATHIEU_TAYLOR_N], y[MATHIEU_TAYLOR_N + 2];
+    /* f_j: 2q (-4)^(j/2) / (j/2)! ... for even j; f_0 = 2q - a */
+    double fac = 1.0;
+    for (int j = 0; j < MATHIEU_TAYLOR_N; j++) {
+        if (j & 1) { f[j] = mc(0.0, 0.0); continue; }
+        int h = j / 2;
+        if (h > 0) fac *= -4.0 / ((double)(j - 1) * (double)j);   /* (-4)^h/(2h)! */
+        f[j] = mc_scale(p->q, 2.0 * fac);
+    }
+    f[0] = mc_sub(f[0], p->a);
+    y[0] = odd ? mc(0.0, 0.0) : p->y0;
+    y[1] = odd ? p->y1 : mc(0.0, 0.0);
+    /* sum in powers of z (and the derivative), stop when two consecutive
+     * nonzero terms are below 2^-60 of the running sum */
+    mcx zp = mc(1.0, 0.0);                       /* z^k */
+    mcx zpm = mc(0.0, 0.0);                      /* z^(k-1) */
+    mcx sum = mc(0.0, 0.0);
+    int small = 0;
+    for (int k = 0; k < MATHIEU_TAYLOR_N; k++) {
+        if (k >= 2) {
+            mcx s = mc(0.0, 0.0);
+            for (int j = 0; j <= k - 2; j += 2) s = mc_add(s, mc_mul(f[j], y[k - 2 - j]));
+            y[k] = mc_scale(s, 1.0 / ((double)k * (double)(k - 1)));
+        }
+        mcx term = deriv ? (k >= 1 ? mc_scale(mc_mul(y[k], zpm), (double)k) : mc(0.0, 0.0))
+                         : mc_mul(y[k], zp);
+        sum = mc_add(sum, term);
+        zpm = zp;
+        zp = mc_mul(zp, z);
+        if ((y[k].re != 0.0 || y[k].im != 0.0) && k >= 3) {
+            if (mc_abs(term) <= 1e-18 * mc_abs(sum)) { if (++small >= 2) { *out = sum; return mc_finite(sum); } }
+            else small = 0;
+        }
+    }
+    return false;
+}
+
+static bool eval_plan(const MathieuPlan* p, int odd, int deriv, mcx z, mcx* out) {
     if (p->q0) {
         if (p->a.re == 0.0 && p->a.im == 0.0) {
-            *out = deriv ? mc(0.0, 0.0) : mc(sqrt(0.5), 0.0);
+            /* ce_0 = 1/sqrt 2; se = sin(0 z) = 0 */
+            *out = (deriv || odd) ? mc(0.0, 0.0) : mc(sqrt(0.5), 0.0);
             return true;
         }
         mcx u = mc_mul(p->sa, z);                                 /* sqrt(a) z */
         mcx cu = mc(cos(u.re) * cosh(u.im), -sin(u.re) * sinh(u.im));
         mcx su = mc(sin(u.re) * cosh(u.im), cos(u.re) * sinh(u.im));
-        *out = deriv ? mc_scale(mc_mul(p->sa, su), -1.0) : cu;
+        if (odd) *out = deriv ? mc_mul(p->sa, cu) : su;
+        else     *out = deriv ? mc_scale(mc_mul(p->sa, su), -1.0) : cu;
         return mc_finite(*out);
+    }
+    /* A characteristic value of the other parity (se at a = a_n, ce at b_n):
+     * the Floquet-normalized function is identically zero (the limit from both
+     * sides; no periodic solution of that parity exists). */
+    if ((odd && p->parity > 0) || (!odd && p->parity < 0)) {
+        *out = mc(0.0, 0.0);
+        return true;
+    }
+    /* The odd functions (se, ce') vanish at 0 like z: near there the Floquet sum
+     * keeps only absolute accuracy, so the Taylor series answers. */
+    if ((odd ^ deriv) && z.re == 0.0 && z.im == 0.0) {      /* exactly 0 */
+        *out = mc(0.0, 0.0);
+        return true;
+    }
+    if (odd ^ deriv) {
+        double tau = 0.25 / sqrt(1.0 + mc_abs(p->a) + 2.0 * mc_abs(p->q));
+        if (mc_abs(z) <= tau && taylor_eval(p, odd, deriv, z, out)) return true;
     }
     /* Centred sums: c_k for k >= 0 (P) and k < 0 (M), so the phases are
      * e^{+-i nu z} with nu ~ sqrt(a) rather than nu + 2 lo -- a large offset
@@ -606,7 +815,10 @@ static bool eval_plan(const MathieuPlan* p, int deriv, mcx z, mcx* out) {
         double er = cos(ph), ei = sin(ph);
         double Sr = Pr + Mr, Si = Pi + Mi;
         double vr = er * Sr - ei * Si, vi = er * Si + ei * Sr;
-        *out = deriv ? mc(-vi, 0.0) : mc(vr, 0.0);
+        /* A = e^{i nu z}[P + M] = sum c_k e^{i (nu+2k) z}: Re A = ce, Im A = se;
+         * with the weights, Re A_w = se', -Im A_w = ce'. */
+        if (odd) *out = deriv ? mc(vr, 0.0) : mc(vi, 0.0);
+        else     *out = deriv ? mc(-vi, 0.0) : mc(vr, 0.0);
         return isfinite(out->re);
     }
     /* General complex path. Term k carries |c_k| e^{-2k Im z} (in w = e^{2iz})
@@ -633,6 +845,13 @@ static bool eval_plan(const MathieuPlan* p, int deriv, mcx z, mcx* out) {
         else if (i < p->rlo) break;
     }
     if (!(lmax + enu < 650.0)) return false;                     /* overflow */
+    /* The window was sized for |c_k| down to 1e-300; a large |Im z| weights the
+     * tail by e^{2|k| |Im z|}, so a term at the window's END can still be within
+     * e^-41.5 of the largest -- the sum would then be truncated, not converged.
+     * Decline (the ball kernel widens its window for complex z). */
+    if ((top == n - 1 && p->lc[n - 1] + 2.0 * fabs((double)(p->lo + n - 1) * y) >= lmax - 41.5) ||
+        (bot == 0 && i0 > 0 && p->lc[0] + 2.0 * fabs((double)p->lo * y) >= lmax - 41.5))
+        return false;
     if (bot >= i0) bot = i0;                                      /* no k < 0 terms */
     if (deriv) {
         /* the weights (nu+2k) only grow the terms polynomially */
@@ -658,7 +877,11 @@ static bool eval_plan(const MathieuPlan* p, int deriv, mcx z, mcx* out) {
     mcx inz = mc_mul(mc(0.0, 1.0), mc_mul(p->nu, z));          /* i nu z */
     mcx e1 = mc_exp(inz), e2 = mc_exp(mc(-inz.re, -inz.im));
     mcx A = mc_mul(e1, mc_add(Pw, Mwi)), B = mc_mul(e2, mc_add(Pwi, Mw));
-    mcx v = deriv ? mc_mul(mc(0.0, 0.5), mc_sub(A, B)) : mc_scale(mc_add(A, B), 0.5);
+    /* A = F(z), B = F(-z), F = sum c_k e^{i (nu+2k) z}:
+     *   ce = (A + B)/2, ce' = (i/2)(A_w - B_w), se = -(i/2)(A - B), se' = (A_w + B_w)/2 */
+    mcx v;
+    if (odd) v = deriv ? mc_scale(mc_add(A, B), 0.5) : mc_mul(mc(0.0, -0.5), mc_sub(A, B));
+    else     v = deriv ? mc_mul(mc(0.0, 0.5), mc_sub(A, B)) : mc_scale(mc_add(A, B), 0.5);
     if (!mc_finite(v)) return false;
     /* Cancellation guard: the largest term vs the result. Losing more than four
      * digits of the sixteen is declined -- the arbitrary-precision kernel (ball
@@ -673,31 +896,52 @@ static bool eval_plan(const MathieuPlan* p, int deriv, mcx z, mcx* out) {
     return true;
 }
 
-bool sf_machine_mathieu(int deriv, double ar, double ai, double qr, double qi,
-                        double zr, double zi, double* rr, double* ri) {
+bool sf_machine_mathieu_fn(int odd, int deriv, double ar, double ai, double qr,
+                           double qi, double zr, double zi, double* rr, double* ri) {
     if (!isfinite(ar) || !isfinite(ai) || !isfinite(qr) || !isfinite(qi) ||
         !isfinite(zr) || !isfinite(zi)) return false;
     MathieuPlan* p = get_plan(ar, ai, qr, qi);
     if (!p) return false;
     mcx v;
-    if (!eval_plan(p, deriv ? 1 : 0, mc(zr, zi), &v)) return false;
+    odd = odd ? 1 : 0;
+    if (!eval_plan(p, odd, deriv ? 1 : 0, mc(zr, zi), &v)) return false;
+    if (p->realpq && zi != 0.0 && zr == 0.0 && !p->q0) {
+        /* Imaginary axis: the equation is real along it too, so the even
+         * functions (ce, se') are N times a real there and the odd ones
+         * (ce', se) N times i times a real. */
+        int ik = odd ? p->imag_kind_s : p->imag_kind;
+        int nreal = p->real || !ik;
+        int vreal = (odd ^ (deriv ? 1 : 0)) ? !nreal : nreal;
+        if (vreal) v.im = 0.0; else v.re = 0.0;
+    }
     if (p->realpq && zi == 0.0) {
         /* real or purely imaginary, exactly */
-        if (p->q0 || p->real) v.im = 0.0;            /* cos / cosh: real */
-        else if (p->imag_kind) v.re = 0.0;
+        int ik = odd ? p->imag_kind_s : p->imag_kind;
+        if (p->q0) {
+            /* cos(sqrt(a) z), sqrt(a) sin: real; sin(sqrt(a) z), sqrt(a) cos(...)
+             * for a < 0: i sinh, i cosh -- purely imaginary */
+            if (odd && p->a.re < 0.0) v.re = 0.0; else v.im = 0.0;
+        }
+        else if (p->real) v.im = 0.0;
+        else if (ik) v.re = 0.0;
         else v.im = 0.0;
     }
     *rr = v.re; *ri = v.im;
     return true;
 }
 
+bool sf_machine_mathieu(int deriv, double ar, double ai, double qr, double qi,
+                        double zr, double zi, double* rr, double* ri) {
+    return sf_machine_mathieu_fn(0, deriv, ar, ai, qr, qi, zr, zi, rr, ri);
+}
+
 bool sf_machine_mathieu_plan_info(double ar, double ai, double qr, double qi,
                                   double* nur, double* nui, int* integer,
-                                  int* m, int* lo, int* hi) {
+                                  int* parity, int* m, int* lo, int* hi) {
     if (!isfinite(ar) || !isfinite(ai) || !isfinite(qr) || !isfinite(qi)) return false;
     MathieuPlan* p = get_plan(ar, ai, qr, qi);
     if (!p || p->q0) return false;
-    *nur = p->nu.re; *nui = p->nu.im; *integer = p->integer;
+    *nur = p->nu.re; *nui = p->nu.im; *integer = p->integer; *parity = p->parity;
     *m = p->m; *lo = p->lo; *hi = p->lo + p->n - 1;
     return true;
 }

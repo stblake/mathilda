@@ -1,3 +1,33 @@
+# MathieuS[a, q, z] + MathieuSPrime (v0.6166, 2026-11-04)
+
+Plan: /Users/user/.claude/plans/pasted-content-id-0290-following-on-golden-cookie.md
+
+- [x] 1. Machine kernel: odd flag, sine sums, parity at integer nu, imag_kind_s, Taylor arm at small |z|
+- [x] 2. Arb kernel: odd flag, Clenshaw/Horner sine forms, imaginary-axis parity fix (MathieuCPrime bug)
+- [x] 3. Bridge, builtins, exact/parity rules, sym_names, docstrings, D/Series, ND kernels, AWARE, Compile
+- [x] 4. tests/test_mathieu.c: 10 MathieuS groups + MathieuC regressions
+- [x] 5. Benchmark rows + numeric_sweep probe; docs, changelog, version
+
+### Review
+- The reference shares MathieuC's coefficients for S: C + I S is Floquet (checked to 30 digits).
+  It is WRONG for complex a (ODE residual about 3) and at a = a_n (residual -4.5), where we return 0.
+- Found and fixed in the shared plan:
+  - b_{2j} gluing divided by the zero centre coefficient; replaced by fold-based glue_integer;
+  - inverse iteration was singular at the snapped nu;
+  - Newton's noise floor near band edges;
+  - nu tie for a < 0, which flips the sign of S;
+  - truncated complex-z sums at the window edge;
+  - CPrime zeroed on the imaginary axis.
+- Speed:
+  - 10^4 digits: 0.15 s wall / 0.24 s CPU (reference 0.27 s), from two worker threads plus a top-down Newton schedule;
+  - 500 digits: 1.2 ms (reference 5.7 ms);
+  - se_2 over 10^6: 20 ms (scipy 765 ms);
+  - generic S over 10^6: 19 ms (reference about 126 s).
+- Gates:
+  - c99, messages, packed-aware and compile-coverage pass;
+  - ctest -LE nightly passes 589/589;
+  - valgrind definitely-lost equals the startup baseline (13,440 B) for 1x and 6x workloads.
+
 # MathieuC[a, q, z] + MathieuCPrime (from v0.6164, 2026-11-04)
 
 Plan: /Users/user/.claude/plans/pasted-content-id-c7dd-in-src-special-f-velvet-hinton.md

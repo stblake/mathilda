@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even Mathieu function `MathieuC` (with `MathieuCPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3351,7 +3351,9 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
   the true error stays at the working precision.
 - **Performance.**
   - 500 digits: `MathieuC[2, 1, 3.7`500]` in 1.5 ms (reference 16 ms).
-  - 10^4 digits: 0.40 s (reference 0.70 s).
+  - 10^4 digits: 0.15 s wall, 0.24 s CPU (reference 0.27 s). Above 4096 bits the
+    two Miller sweeps, the two Clenshaw sums and the coefficient corrections each
+    run as two worker threads.
   - Machine-precision buffers: `MathieuC[2, 1, v]` over 10^6 points in 15 ms.
   - Characteristic order: `ce_2(., 5)` over 10^6 points in 17 ms, against
     scipy `mathieu_cem` 920 ms.
@@ -3376,9 +3378,79 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
 - **Messages.** `MathieuC[]` emits `MathieuC::argrx` (through the message funnel:
   `Check` and `Quiet` see it).
 
-Not yet provided: `MathieuS`, `MathieuSPrime`, `MathieuCharacteristicA`,
-`MathieuCharacteristicB` and `MathieuCharacteristicExponent` as builtins (the
-exponent is computed internally), and asymptotic Series at Infinity.
+- **At `a = b_n(q)`** (an odd characteristic value) no periodic even solution
+  exists, and the Floquet-normalized even function is identically `0`; that limit
+  is returned: `MathieuC[3.917024772998471, 1., 0.7] = 0.` (`b_2(1)`). The
+  reference returns a nonzero value there that does not satisfy the Mathieu
+  equation.
+
+Not yet provided: `MathieuCharacteristicA`, `MathieuCharacteristicB` and
+`MathieuCharacteristicExponent` as builtins (the exponent is computed
+internally), and asymptotic Series at Infinity.
+
+Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
+
+## MathieuS and MathieuSPrime
+
+`MathieuS[a, q, z]` gives the odd Mathieu function with characteristic value `a`
+and parameter `q`, the odd solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
+`MathieuSPrime[a, q, z]` is its `z`-derivative. Both are defined for all complex
+`a`, `q`, `z`.
+
+- **Definition and normalization.** `Sum[c_k Sin[(nu + 2k) z]]` with the
+  coefficients and exponent of `MathieuC`, so `MathieuC + I MathieuS` is the
+  Floquet solution `Sum[c_k E^(I (nu + 2k) z)]`
+  (`F(z + Pi) = E^(I Pi nu) F(z)`):
+  - generic `nu`: `Sum[c_k^2] = 1`, `Re(c_0) > 0`. The representative of `nu`
+    is the one nearest `Sqrt[a]`, taking `Re(nu) >= 0` on a tie (`a < 0`). The
+    sine sum changes sign with `nu -> -nu`; the tie rule keeps
+    `MathieuS -> Sin[Sqrt[a] z]` as `q -> 0`;
+  - `a = b_n(q)`: `se_n` with the DLMF normalization (scipy's `mathieu_sem`):
+    `MathieuS[3.917024772998471, 1., 0.5] = 0.763792` (`b_2(1)`);
+  - `a = a_n(q)` (an even characteristic value): no periodic odd solution
+    exists, and the Floquet-normalized odd function is identically `0`, its limit
+    from both sides. `MathieuS` returns `0` there. The reference returns a
+    nonzero value at `MathieuS[MathieuCharacteristicA[2, 1], 1, 1/2]`, but its
+    residual in the equation is about `-4.5`;
+  - `q = 0`: `Sin[Sqrt[a] z]`.
+
+  In stability bands (real `nu`) and at every `b_n`, this agrees with the
+  reference to the last digit. For complex `nu` (instability bands, complex `a`
+  or `q`), Mathilda's value is the analytic normalization: real or purely
+  imaginary for real `a`, `q`, `z` (`MathieuS[-5, 3, 0.7] = 3.15987 I`).
+  For complex `a` the reference's `MathieuS` does not solve the equation
+  (residual about `3` at `MathieuS[I, -2, 3/2 + 3 I/10]`), so
+  `MathieuS[I, -2, 2.5 + I]` is `38.4941 + 40.642 I` here and
+  `26.8675 + 19.7052 I` there.
+- **Exact values.** `MathieuS[a, 0, z] = Sin[Sqrt[a] z]`,
+  `MathieuSPrime[a, 0, z] = Sqrt[a] Cos[Sqrt[a] z]`, `MathieuS[a, q, 0] = 0`.
+  Odd in `z`: `MathieuS[a, q, -x] = -MathieuS[a, q, x]`, while `MathieuSPrime` is
+  even.
+- **Numerics.**
+  - `MathieuS[2, 1, 3.2] = -0.768098`;
+  - `MathieuS[2, 1, 3.2`30] = -0.7680982888758991508884760160`;
+  - `N[MathieuS[2, 1, 37/10], 50]`;
+  - `N[MathieuS[3, 3, 10^12], 20] = -1.1132442186984920324`.
+
+  Machine `MathieuS[3, 3, 10.^12]` is limited by the rounding of `nu` times
+  `10^12`, as in any machine computation.
+
+  Small `|z|` is relatively accurate: the odd functions (`se`, `ce'`) use the
+  Taylor series of the equation for `|z| <= 1/(4 Sqrt[1 + |a| + 2|q|])`, where
+  the Floquet sum has only absolute accuracy.
+- **Performance** (10^6 machine points, wall clock):
+  - `MathieuS[2, 1, v]`: 19 ms (reference about 126 s);
+  - `se_2(., 5)` (`MathieuS[b_2(5), 5., v]`): 20 ms, against scipy
+    `mathieu_sem` 765 ms;
+  - 500 digits: 1.2 ms (reference 5.7 ms);
+  - 10^4 digits: 0.15 s wall, 0.24 s CPU (reference 0.27 s).
+- **Surfaces.** The same machine helper (`sf_machine_mathieu_fn`, sharing the
+  plan cache with `MathieuC`) serves the scalar path, the packed / NDArray n-ary
+  kernel, and `Compile[]` at scalar and array shapes, bit-for-bit.
+- **Derivative and Series.** `D[MathieuS[a, q, x], x] = MathieuSPrime[a, q, x]`
+  and `D[MathieuSPrime[a, q, x], x] = (-a + 2 q Cos[2 x]) MathieuS[a, q, x]`.
+  `Series[MathieuS[3, 2, x], {x, 0, 8}] = MathieuSPrime[3, 2, 0] (x + x^3/6 - 47/120 x^5 + 113/5040 x^7) + O[x]^9`.
+- **Listable**; `MathieuS[]` emits `MathieuS::argrx`.
 
 Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
 

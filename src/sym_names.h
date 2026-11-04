@@ -295,6 +295,8 @@ extern const char* SYM_HypergeometricU;
 extern const char* SYM_WhittakerM;
 extern const char* SYM_MathieuC;
 extern const char* SYM_MathieuCPrime;
+extern const char* SYM_MathieuS;
+extern const char* SYM_MathieuSPrime;
 extern const char* SYM_WhittakerW;
 extern const char* SYM_HeavisideTheta;
 extern const char* SYM_HermitianMatrixQ;

@@ -1,6 +1,7 @@
 /* Tests for MathieuC[a, q, z] and MathieuCPrime[a, q, z], the even Mathieu
  * function (the even solution of y'' + (a - 2 q cos 2z) y = 0) and its
- * z-derivative.
+ * z-derivative, and for MathieuS[a, q, z] / MathieuSPrime[a, q, z], the odd
+ * one (the test_mathieus_* functions at the end).
  *
  * Reference values:
  *   - real a, q in a stability band, and every characteristic value: the
@@ -372,6 +373,327 @@ void test_mathieu_attributes() {
                "MathieuCPrime docstring missing");
 }
 
+/* ==================================================================== */
+/* MathieuS / MathieuSPrime                                              */
+/* ==================================================================== */
+/* Reference values: the reference CAS (25 digits) wherever nu is real -- a
+ * stability band, and every characteristic value b_n -- where MathieuC + I
+ * MathieuS is exactly the Floquet solution in both systems. For complex nu the
+ * reference's MathieuS is NOT a solution of the Mathieu equation (its ODE
+ * residual at MathieuS[I, -2, 3/2 + 3 I/10] is ~3), so those cases are tested
+ * by the ODE, oddness, the Floquet property and self-consistency. */
+
+/* ---- exact rules and passthrough ------------------------------------ */
+
+void test_mathieus_exact() {
+    assert_eval_eq("MathieuS[a, 0, z]", "Sin[Sqrt[a] z]", 0);
+    assert_eval_eq("MathieuS[4, 0, z]", "Sin[2 z]", 0);
+    assert_eval_eq("MathieuS[1, 0, z]", "Sin[z]", 0);
+    assert_eval_eq("MathieuS[0, 0, z]", "0", 0);
+    assert_eval_eq("MathieuSPrime[a, 0, z]", "Sqrt[a] Cos[Sqrt[a] z]", 0);
+    assert_eval_eq("MathieuSPrime[0, 0, z]", "0", 0);
+    /* se is odd: se(0) = 0, se' even */
+    assert_eval_eq("MathieuS[a, q, 0]", "0", 0);
+    assert_eval_eq("MathieuS[2, 1, 0]", "0", 0);
+    assert_eval_eq("MathieuSPrime[a, q, 0]", "MathieuSPrime[a, q, 0]", 0);
+    assert_eval_eq("MathieuS[a, q, -x]", "-MathieuS[a, q, x]", 0);
+    assert_eval_eq("MathieuSPrime[a, q, -x]", "MathieuSPrime[a, q, x]", 0);
+    assert_eval_eq("MathieuS[2, 1, -3]", "-MathieuS[2, 1, 3]", 0);
+    /* exact input stays symbolic */
+    assert_eval_eq("MathieuS[a, q, z]", "MathieuS[a, q, z]", 0);
+    assert_eval_eq("MathieuS[2, 1, 3]", "MathieuS[2, 1, 3]", 0);
+    assert_eval_eq("MathieuS[2, 1, Infinity]", "MathieuS[2, 1, Infinity]", 0);
+    /* numeric zero and parity on machine numbers */
+    assert_true("MathieuS[2., 1., 0] == 0");
+    assert_true("MathieuS[2, 1, -3.2] == -MathieuS[2, 1, 3.2]");
+    assert_true("MathieuSPrime[2, 1, -3.2] == MathieuSPrime[2, 1, 3.2]");
+    /* q = 0 numerically: sin / i sinh */
+    assert_true("Abs[MathieuS[2, 0, 0.7] - Sin[Sqrt[2.] 0.7]] < 10^-15");
+    assert_true("Re[MathieuS[-1, 0, 0.5]] == 0 && Abs[Im[MathieuS[-1, 0, 0.5]] - Sinh[0.5]] < 10^-15");
+}
+
+/* ---- machine precision, real stability band -------------------------- */
+
+void test_mathieus_machine_real() {
+    assert_close("MathieuS[2, 1, 3.2]", -0.7680982888758991508884760160, 1e-14);
+    assert_close("MathieuS[2, 1, 3.7]", -0.94825674959404574160708085731, 1e-14);
+    assert_close("MathieuS[2, 1, 0.5]", 0.26361344360795635701423299718, 1e-14);
+    assert_close("MathieuS[3, 2, 1.]", 0.99031016385316265653888270297, 1e-14);
+    assert_close("MathieuS[50, 1, 1.]", 0.65778463974512344586713129198, 1e-14);
+    assert_close("MathieuS[1/2, 1/10, 20.]", 1.04382654891620502058886342995, 1e-13);
+    assert_close("MathieuS[7, -3, 4.]", -1.02653385375864498691545447292, 1e-14);
+    assert_close("MathieuS[1/3, 1/7, -2.]", -0.96817201670654653061403812589, 1e-14);
+    assert_close("MathieuS[3, 1, 1000.]", -0.17419150349928755730461857289, 1e-12);
+    assert_close("MathieuSPrime[2, 1, 0.5]", 0.50226074781711933771901987424, 1e-14);
+    assert_close("MathieuSPrime[2, 1, 0.]", 0.53361615142920196105596353989, 1e-14);
+    assert_close("MathieuSPrime[3, 2, 1.]", -0.02381538574086996863946798565, 1e-14);
+    assert_close("MathieuSPrime[7, -3, 4.]", -1.50850750640838419057975888693, 1e-14);
+    assert_close("MathieuSPrime[50, 1, 1.]", 5.31772615182975184137352076959, 1e-14);
+    /* small z: relative accuracy (the Taylor arm), not the Floquet sum's
+     * absolute accuracy */
+    assert_true("Abs[MathieuS[2, 1, 1.*^-10]/(1.*^-10 0.53361615142920196105596354) - 1] < 10^-14");
+    assert_true("Abs[MathieuS[2, 1, 1.*^-3]/MathieuS[2, 1, N[1/1000, 30]] - 1] < 10^-14");
+    assert_true("Abs[MathieuS[50, 7, 0.01]/MathieuS[50, 7, 0.01`30] - 1] < 10^-14");
+    assert_true("Abs[MathieuCPrime[3, 2, 1.*^-8]/MathieuCPrime[3, 2, N[10^-8, 30]] - 1] < 10^-14");
+    assert_true("Abs[MathieuS[2, 1, 1.*^-10 (1 + I)]/MathieuS[2, 1, N[10^-10 (1 + I), 30]] - 1] < 10^-14");
+}
+
+/* ---- characteristic values ------------------------------------------- */
+
+void test_mathieus_characteristic() {
+    /* a = b_n(q): se_n with the DLMF normalization (b_n to 25 digits; a
+     * machine a within an ulp snaps) */
+    assert_close("MathieuS[3.917024772998471, 1., 0.5]", 0.76379180880612364073161728954, 1e-12);
+    assert_close("MathieuS[2.0994604454866654, 5., 0.7]", 0.75768033899141663541702755179, 1e-12);
+    assert_close("MathieuS[9.047739259809375, 1., 0.7]", 0.94726754585766302921814623858, 1e-12);
+    assert_close("MathieuS[-5.790080598637771, 5., 0.7]", 0.30060395258588347683590532579, 1e-12);
+    assert_close("MathieuS[-0.11024881699209517, 1., 0.5]", 0.36986839755591103147077965296, 1e-12);
+    assert_true("Abs[MathieuS[2.09946044548666536395565456881965689508`25, 5, 7/10] - "
+                "0.7576803389914166354170275518] < 10^-20");
+    assert_true("Abs[MathieuS[9.04773925980937498237494653468680316843`25, 1, 7/10] - "
+                "0.9472675458576630292181462386] < 10^-20");
+    assert_true("Abs[MathieuSPrime[3.91702477299847118670341688529379991597`25, 1, 7/10] - "
+                "0.6425728763755913524357839453] < 10^-20");
+    /* a = a_n(q): no periodic odd solution; the Floquet-normalized odd
+     * function is identically 0 (its limit from both sides) */
+    assert_true("MathieuS[4.371300982735086, 1., 0.7] == 0");
+    assert_true("MathieuSPrime[4.371300982735086, 1., 0.7] == 0");
+    assert_true("MathieuS[4.37130098273508566117112091819948782529`25, 1, 7/10] == 0");
+    assert_true("MathieuS[-0.45513860410741354823263318752888586664`25, 1, 7/10] == 0");
+    assert_true("MathieuS[7.449109739529178, 5., 0.7] == 0");
+    /* ... and symmetrically MathieuC at a = b_n */
+    assert_true("MathieuC[3.917024772998471, 1., 0.7] == 0");
+    assert_true("MathieuCPrime[3.917024772998471, 1., 0.7] == 0");
+    assert_true("MathieuC[2.0994604454866654, 5., 0.7] == 0");
+    assert_true("MathieuC[3.91702477299847118670341688529379991597`25, 1, 7/10] == 0");
+    /* near (not at) a characteristic value the function is small, not 0 */
+    assert_true("0 < Abs[MathieuS[4.3713, 1., 0.7]] < 10^-2");
+    /* a band edge at larger q: nu = 2 + 0.0287 i is ill-conditioned, still
+     * evaluated (MathieuC and MathieuS), and satisfies the ODE */
+    assert_true("NumericQ[MathieuS[2.1, 5., 0.7]] && NumericQ[MathieuC[2.1, 5., 0.7]]");
+    assert_true("Abs[MathieuS[2.1, 5., 0.7] - MathieuS[21/10, 5, 0.7`30]] < 10^-10");
+    assert_true("Abs[MathieuC[2.1, 5., 0.7] - MathieuC[21/10, 5, 0.7`30]] < 10^-10");
+}
+
+/* ---- arbitrary precision --------------------------------------------- */
+
+void test_mathieus_arbitrary() {
+    assert_true("Abs[MathieuS[2, 1, 3.2`30] - (-0.7680982888758991508884760160)] < 10^-27");
+    assert_true("Abs[N[MathieuS[2, 1, 37/10], 50] - "
+                "(-0.94825674959404574160708085731501659004752955180031)] < 10^-48");
+    assert_true("Precision[MathieuS[2, 1, 3.70000000000000000000000000000000]] > 30");
+    assert_true("Precision[MathieuS[2, 1, 3.70000000000000000000000000000000]] < 34");
+    assert_true("Abs[MathieuS[2, 1, 3.70000000000000000000000000000000] - "
+                "(-0.9482567495940457416070808573150)] < 10^-30");
+    assert_true("Abs[MathieuS[2, 1, 3.7`500] - (-0.94825674959404574160708085731501659004752955180032200691800800254810079970944587640169008500185104156959040913427876221900381404174519439217391658600839509861080967031186875016112982506290366176135128704259476145136047113713144310)] < 10^-228");
+    assert_true("Precision[MathieuS[2, 1, 3.7`500]] > 499");
+    /* 500 vs 600 digits agree to 500 */
+    assert_true("MathieuS[2, 1, N[37/10, 500]] == MathieuS[2, 1, N[37/10, 600]]");
+    assert_true("Abs[MathieuS[2, 1, N[37/10, 500]] - N[MathieuS[2, 1, N[37/10, 600]], 500]] < 10^-490 || "
+                "MathieuS[2, 1, N[37/10, 500]] - MathieuS[2, 1, N[37/10, 600]] == 0");
+    assert_true("Abs[N[MathieuSPrime[2, 1, 16/5], 30] - (-0.414590689653679482133477536123)] < 10^-28");
+    assert_true("Abs[N[MathieuS[2, 1, 3]] - (-0.685047939537226094)] < 10^-13");
+    /* machine input is insufficient at z = 10^12 (nu z to 1e-4); N is right */
+    assert_true("Abs[N[MathieuS[3, 3, 10^12], 20] - (-1.1132442186984920324)] < 10^-18");
+    assert_true("Abs[N[MathieuS[3, 1, 10^15], 25] - (-0.6596260006395244322902593)] < 10^-23");
+    /* the ball kernel and the machine helper agree */
+    assert_true("Abs[MathieuS[7, -3, 4`30] - MathieuS[7, -3, 4.]] < 10^-14");
+    assert_true("Abs[MathieuSPrime[50, 1, 1`30] - MathieuSPrime[50, 1, 1.]] < 10^-13");
+}
+
+/* ---- complex arguments and parameters -------------------------------- */
+
+void test_mathieus_complex() {
+    /* complex z, real stable (a, q): the normalization agrees */
+    assert_true("Abs[MathieuS[2, 1, 3.2`25 + 0.5`25 I] - "
+                "(-0.75195327203699548458570281570 - 0.21251777957127455557463952437 I)] < 10^-22");
+    assert_true("Abs[MathieuS[2, 1, 1. + 2. I] - (-54.015604428266988 + 11.511632826296836 I)] < 10^-12");
+    assert_true("Abs[MathieuSPrime[2, 1, 1. + 2. I] - (-144.15963036897887 + 359.52975139493334 I)] < 10^-11");
+    /* imaginary axis, real (a, q): se and ce' are i times a real there, se'
+     * and ce real (machine and arbitrary precision alike) */
+    assert_true("Abs[N[MathieuS[2, 1, I/2], 20] - 0.26335055509155453511 I] < 10^-19");
+    assert_true("Abs[N[MathieuSPrime[2, 1, I/2], 20] - 0.49859470344438407657] < 10^-19");
+    assert_true("Re[MathieuS[2, 1, 0.5 I]] == 0 && Im[MathieuSPrime[2, 1, 0.5 I]] == 0");
+    /* regression: MathieuCPrime on the imaginary axis was zeroed (the
+     * ball kernel assumed every function is real there) */
+    assert_true("Abs[N[MathieuCPrime[2, 1, I/2], 20] - 0.20524473480830092561 I] < 10^-19");
+    assert_true("Abs[MathieuCPrime[2, 1, 0.5 I] - 0.20524473480830092561 I] < 10^-14");
+    /* complex parameters: machine and arbitrary precision agree */
+    assert_true("Abs[MathieuS[I, -2, 2.5 + I] - MathieuS[I, -2, N[5/2 + I, 30]]] < 10^-11");
+    assert_true("Abs[MathieuS[I, -2, 2.5 + I] - (38.494107004 + 40.641965471 I)] < 10^-8");
+    assert_true("Abs[MathieuS[2, 1 + I, 1.] - MathieuS[2, 1 + I, 1`30]] < 10^-13");
+    assert_true("Abs[MathieuSPrime[2 + I, 1, 1.5] - MathieuSPrime[2 + I, 1, 3/2`30]] < 10^-13");
+}
+
+/* ---- instability bands, the Floquet property, the Wronskian ---------- */
+
+void test_mathieus_unstable() {
+    /* real (a, q) in an instability band: a real normalization constant or a
+     * purely imaginary one, each value accordingly */
+    assert_true("Head[MathieuS[4, 1, 0.5]] === Real");
+    assert_true("Re[MathieuS[-5, 3, 0.7]] == 0");
+    assert_true("Re[MathieuS[2, 3, 0.5]] == 0");
+    /* the 30-digit kernel decides the same kind */
+    assert_true("Abs[MathieuS[-5, 3, 0.7] - MathieuS[-5, 3, 7/10`30]] < 10^-13");
+    assert_true("Abs[MathieuS[4, 1, 0.5] - MathieuS[4, 1, 1/2`30]] < 10^-13");
+    /* C + I S is the Floquet solution: F(z + Pi)/F(z) is the same multiplier
+     * at every z, stable or not, real or complex parameters */
+    const char* cases[][2] = {
+        { "2", "1" }, { "4", "1" }, { "-5", "3" }, { "I", "-2" }, { "2 + I", "1" },
+        { "1/2", "-7" }, { "25", "30" },
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+            "Block[{F = Function[z, MathieuC[%s, %s, z] + I MathieuS[%s, %s, z]]}, "
+            "Abs[F[N[7/10 + Pi, 40]]/F[N[7/10, 40]] - F[N[13/10 + I/5 + Pi, 40]]/F[N[13/10 + I/5, 40]]] "
+            "< 10^-25 * Abs[F[N[7/10 + Pi, 40]]/F[N[7/10, 40]]]]",
+            cases[i][0], cases[i][1], cases[i][0], cases[i][1]);
+        assert_true(buf);
+        /* Wronskian C S' - C' S = C(0) S'(0), constant in z */
+        snprintf(buf, sizeof buf,
+            "Block[{a = %s, q = %s, z = N[13/10 + I/5, 40]}, "
+            "Abs[MathieuC[a, q, z] MathieuSPrime[a, q, z] - MathieuCPrime[a, q, z] MathieuS[a, q, z] - "
+            "MathieuC[a, q, N[0, 40]] MathieuSPrime[a, q, N[0, 40]]] < 10^-25 * "
+            "(1 + Abs[MathieuC[a, q, N[0, 40]] MathieuSPrime[a, q, N[0, 40]]])]",
+            cases[i][0], cases[i][1]);
+        assert_true(buf);
+    }
+    /* the same at machine precision, real stable band */
+    assert_true("Abs[MathieuC[2, 1, 1.3] MathieuSPrime[2, 1, 1.3] - "
+                "MathieuCPrime[2, 1, 1.3] MathieuS[2, 1, 1.3] - "
+                "MathieuC[2, 1, 0.] MathieuSPrime[2, 1, 0.]] < 10^-14");
+}
+
+/* ---- the ODE itself -------------------------------------------------- */
+
+void test_mathieus_ode() {
+    const char* cases[][3] = {
+        { "2", "1", "13/10" }, { "4", "1", "1/2" }, { "-5", "3", "7/10" },
+        { "I", "-2", "5/2 + I" }, { "I", "-2", "3/2 + 3 I/10" }, { "2 + I", "1", "3/2" },
+        { "25", "30", "1" }, { "1/2", "-7", "2 - I/3" },
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+            "Block[{a = %s, q = %s, z = %s, h = 10^-15}, "
+            "Abs[(MathieuSPrime[a, q, N[z + h, 40]] - MathieuSPrime[a, q, N[z - h, 40]])/(2 h) - "
+            "(2 q Cos[2 N[z, 40]] - a) MathieuS[a, q, N[z, 40]]] < 10^-20 * "
+            "(1 + Abs[MathieuS[a, q, N[z, 40]]])]", cases[i][0], cases[i][1], cases[i][2]);
+        assert_true(buf);
+        snprintf(buf, sizeof buf,
+            "Block[{a = %s, q = %s, z = %s, h = 10^-15}, "
+            "Abs[(MathieuS[a, q, N[z + h, 40]] - MathieuS[a, q, N[z - h, 40]])/(2 h) - "
+            "MathieuSPrime[a, q, N[z, 40]]] < 10^-20 * (1 + Abs[MathieuSPrime[a, q, N[z, 40]]])]",
+            cases[i][0], cases[i][1], cases[i][2]);
+        assert_true(buf);
+        /* odd in z at a complex point */
+        snprintf(buf, sizeof buf,
+            "Block[{a = %s, q = %s, z = N[%s, 30]}, "
+            "Abs[MathieuS[a, q, z] + MathieuS[a, q, -z]] < 10^-25 (1 + Abs[MathieuS[a, q, z]])]",
+            cases[i][0], cases[i][1], cases[i][2]);
+        assert_true(buf);
+    }
+}
+
+/* ---- Listable, buffers, Compile -------------------------------------- */
+
+void test_mathieus_buffers() {
+    assert_eval_eq("MathieuS[a, q, {z1, z2, z3}]",
+                   "{MathieuS[a, q, z1], MathieuS[a, q, z2], MathieuS[a, q, z3]}", 0);
+    assert_true("MathieuS[2, 1, {1., 2.}] == {MathieuS[2, 1, 1.], MathieuS[2, 1, 2.]}");
+    assert_true("MathieuS[{1, 2}, 1, 1.] == {MathieuS[1, 1, 1.], MathieuS[2, 1, 1.]}");
+    assert_true("MathieuSPrime[2, {1, 2}, 1.] == {MathieuSPrime[2, 1, 1.], MathieuSPrime[2, 2, 1.]}");
+    /* packed buffer: bit-for-bit with the scalar path, stays packed */
+    assert_true("PackedArrayQ[MathieuS[2, 1, Range[0., 10., 0.01]]]");
+    assert_true("With[{v = Range[-3., 3., 0.01]}, "
+                "MathieuS[2, 1, v] === Table[MathieuS[2, 1, x], {x, v}]]");
+    assert_true("With[{v = Range[-3., 3., 0.01]}, "
+                "MathieuSPrime[3, -2, v] === Table[MathieuSPrime[3, -2, x], {x, v}]]");
+    assert_true("With[{v = Range[0., 3., 0.25]}, "
+                "Normal[MathieuS[7, 2, NDArray[v]]] === MathieuS[7, 2, FromPackedArray[v]]]");
+    assert_eval_eq("Head[MathieuS[2, 1, NDArray[{1.5, 2.5, 3.5}]]]", "NDArray", 0);
+    /* an instability band with an imaginary normalization: complex output */
+    assert_true("PackedArrayQ[MathieuS[-5, 3, Range[0., 10., 0.01]]]");
+    assert_true("With[{v = Range[0., 1., 0.01]}, MathieuS[-5, 3, v][[51]] === MathieuS[-5, 3, v[[51]]]]");
+    assert_true("Normal[MathieuS[-5, 3, NDArray[{0.5, 1.}]]] == {MathieuS[-5, 3, 0.5], MathieuS[-5, 3, 1.]}");
+    /* characteristic values over a buffer: b_n gives se_n, a_n gives 0 */
+    assert_true("Max[Abs[MathieuS[4.371300982735086, 1., Range[0., 3., 0.1]]]] == 0");
+    assert_true("With[{v = Range[0., 3., 0.1]}, "
+                "MathieuS[3.917024772998471, 1., v] === Table[MathieuS[3.917024772998471, 1., x], {x, v}]]");
+    /* int64 NDArray: delisted, exact elements stay symbolic */
+    assert_eval_eq("MathieuS[2, 1, NDArray[{1, 2}, DataType -> \"int64\"]]",
+                   "{MathieuS[2, 1, 1], MathieuS[2, 1, 2]}", 0);
+    /* Compile: scalar and array lower, values bit-equal to the interpreter */
+    assert_eval_eq("CompileDiagnostics[{{x, _Real}}, MathieuS[2., 1., x]][[1]]",
+                   "\"Compiled\" -> True", 0);
+    assert_eval_eq("CompileDiagnostics[{{v, _Real, 1}}, MathieuS[2., 1., v]][[1]]",
+                   "\"Compiled\" -> True", 0);
+    assert_eval_eq("CompileDiagnostics[{{x, _Real}}, MathieuSPrime[2., 1., x]][[1]]",
+                   "\"Compiled\" -> True", 0);
+    assert_eval_eq("CompileDiagnostics[{{v, _Real, 1}}, MathieuSPrime[2., 1., v]][[1]]",
+                   "\"Compiled\" -> True", 0);
+    assert_true("Compile[{{x, _Real}}, MathieuS[2., 1., x]][3.2] === MathieuS[2., 1., 3.2]");
+    assert_true("Compile[{{x, _Real}}, MathieuSPrime[2., 1., x]][3.2] === MathieuSPrime[2., 1., 3.2]");
+    assert_true("With[{w = Range[0., 5., 0.05]}, "
+                "Max[Abs[Compile[{{v, _Real, 1}}, MathieuS[2., 1., v]][w] - MathieuS[2., 1., w]]] == 0]");
+    assert_true("Compile[{{x, _Complex}}, MathieuS[2., 1., x]][1. + 0.5 I] === MathieuS[2., 1., 1. + 0.5 I]");
+    /* a purely imaginary value from a real-typed Compile falls back intact */
+    assert_true("Compile[{{x, _Real}}, MathieuS[-5., 3., x]][0.7] == MathieuS[-5., 3., 0.7]");
+    /* auto-compiled Table agrees with the buffer path */
+    assert_true("Abs[Total[Table[MathieuS[2, 1, x], {x, 0., 1., 0.25}]] - "
+                "Total[MathieuS[2, 1, {0., 0.25, 0.5, 0.75, 1.}]]] < 10^-14");
+}
+
+/* ---- D and Series ---------------------------------------------------- */
+
+void test_mathieus_derivative() {
+    assert_eval_eq("D[MathieuS[a, q, x], x]", "MathieuSPrime[a, q, x]", 0);
+    assert_eval_eq("D[MathieuSPrime[a, q, x], x]",
+                   "(-a + 2 q Cos[2 x]) MathieuS[a, q, x]", 0);
+    assert_eval_eq("Table[D[MathieuS[a, q, x], {x, n}], {n, 1, 4}]",
+        "{MathieuSPrime[a, q, x], (-a + 2 q Cos[2 x]) MathieuS[a, q, x], "
+        "(-a + 2 q Cos[2 x]) MathieuSPrime[a, q, x] - 4 q MathieuS[a, q, x] Sin[2 x], "
+        "-8 q Cos[2 x] MathieuS[a, q, x] + (-a + 2 q Cos[2 x])^2 MathieuS[a, q, x] - "
+        "8 q MathieuSPrime[a, q, x] Sin[2 x]}", 0);
+    assert_eval_eq("D[MathieuS[a, q, x^2], x]", "2 x MathieuSPrime[a, q, x^2]", 0);
+    assert_eval_eq("D[MathieuS[a, q, x], a]", "Derivative[1, 0, 0][MathieuS][a, q, x]", 0);
+    assert_eval_eq("D[MathieuSPrime[a, q, x], q]", "Derivative[0, 1, 0][MathieuSPrime][a, q, x]", 0);
+    assert_eval_eq("D[MathieuS[a, q, y], x]", "0", 0);
+    assert_eval_eq("Series[MathieuS[3, 2, z], {z, 0, 4}]",
+        "MathieuSPrime[3, 2, 0] z + 1/6 MathieuSPrime[3, 2, 0] z^3 + O[z]^5", 0);
+    assert_eval_eq("Series[MathieuS[3, 2, x], {x, 0, 8}]",
+        "MathieuSPrime[3, 2, 0] x + 1/6 MathieuSPrime[3, 2, 0] x^3 - "
+        "47/120 MathieuSPrime[3, 2, 0] x^5 + 113/5040 MathieuSPrime[3, 2, 0] x^7 + O[x]^9", 0);
+    assert_eval_eq("Series[MathieuS[a, q, x], {x, x0, 2}]",
+        "MathieuS[a, q, x0] + MathieuSPrime[a, q, x0] (x - x0) + "
+        "1/2 (-a + 2 q Cos[2 x0]) MathieuS[a, q, x0] (x - x0)^2 + O[x - x0]^3", 0);
+    /* the truncated series agrees numerically */
+    assert_true("Abs[N[(Normal[Series[MathieuS[3, 2, x], {x, 0, 13}]] /. x -> 1/10), 30] - "
+                "MathieuS[3, 2, 0.1`30]] < 10^-14");
+}
+
+/* ---- argument count, attributes, docstrings -------------------------- */
+
+void test_mathieus_argcount_attributes() {
+    assert_eval_eq("MathieuS[]", "MathieuS[]", 0);
+    assert_eval_eq("MathieuS[1, 2]", "MathieuS[1, 2]", 0);
+    assert_eval_eq("MathieuSPrime[1, 2, 3, 4]", "MathieuSPrime[1, 2, 3, 4]", 0);
+    assert_eval_eq("Check[MathieuS[], \"failed\"]", "\"failed\"", 0);
+    assert_eval_eq("Quiet[MathieuS[1, 2]]", "MathieuS[1, 2]", 0);
+    assert_eval_eq("Check[MathieuSPrime[1], \"failed\"]", "\"failed\"", 0);
+    assert_eval_eq("Attributes[MathieuS]",
+                   "{Listable, NHoldFirst, NumericFunction, Protected}", 0);
+    assert_eval_eq("Attributes[MathieuSPrime]",
+                   "{Listable, NHoldFirst, NumericFunction, Protected}", 0);
+    SymbolDef* d = symtab_get_def("MathieuS");
+    ASSERT_MSG(d && d->docstring && strstr(d->docstring, "MathieuS[a, q, z]"),
+               "MathieuS docstring missing");
+    d = symtab_get_def("MathieuSPrime");
+    ASSERT_MSG(d && d->docstring && strstr(d->docstring, "MathieuSPrime[a, q, z]"),
+               "MathieuSPrime docstring missing");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -391,6 +713,17 @@ int main() {
     TEST(test_mathieu_argcount);
     TEST(test_mathieu_attributes);
 
-    printf("All MathieuC / MathieuCPrime tests passed.\n");
+    TEST(test_mathieus_exact);
+    TEST(test_mathieus_machine_real);
+    TEST(test_mathieus_characteristic);
+    TEST(test_mathieus_arbitrary);
+    TEST(test_mathieus_complex);
+    TEST(test_mathieus_unstable);
+    TEST(test_mathieus_ode);
+    TEST(test_mathieus_buffers);
+    TEST(test_mathieus_derivative);
+    TEST(test_mathieus_argcount_attributes);
+
+    printf("All MathieuC / MathieuCPrime / MathieuS / MathieuSPrime tests passed.\n");
     return 0;
 }

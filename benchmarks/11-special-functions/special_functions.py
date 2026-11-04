@@ -101,3 +101,7 @@ check("EllipticPi[n, m] over 10^6",
 _vdeg = np.degrees(v)
 bench("MathieuC ce_2(., 5) over 10^6", lambda: sp.mathieu_cem(2, 5.0, _vdeg)[0])
 check("MathieuC ce_2(., 5) over 10^6", r6(sp.mathieu_cem(2, 5.0, np.degrees(0.5))[0]))
+# MathieuS: again only the integer orders -- mathieu_sem(m, q, x), x in DEGREES,
+# DLMF normalization -- MathieuS at a = b_m(q).
+bench("MathieuS se_2(., 5) over 10^6", lambda: sp.mathieu_sem(2, 5.0, _vdeg)[0])
+check("MathieuS se_2(., 5) over 10^6", r6(sp.mathieu_sem(2, 5.0, np.degrees(0.5))[0]))

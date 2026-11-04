@@ -170,6 +170,9 @@ FUNCTIONS = {
     "opendir": _P1, "readdir": _P1, "closedir": _P1,
     # <dlfcn.h> -- dladdr/Dl_info are GNU extensions on glibc.
     "dladdr": _GNU_ONLY,
+    # <signal.h> -- the sigset_t calls of the threaded regions (fi_par.c,
+    # mathieu_arb.c) are POSIX, hidden by glibc under -std=c99.
+    "sigfillset": _P1, "sigemptyset": _P1, "pthread_sigmask": _P199506,
 }
 
 # A call, but not `p->jn(...)` / `s.jn(...)` -- a struct member of that name is

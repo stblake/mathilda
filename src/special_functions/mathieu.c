@@ -1,15 +1,21 @@
-/* Mathilda -- MathieuC[a, q, z] and MathieuCPrime[a, q, z].
+/* Mathilda -- MathieuC[a, q, z], MathieuCPrime[a, q, z], MathieuS[a, q, z] and
+ * MathieuSPrime[a, q, z].
  *
  *   MathieuC[a, q, z]       the even Mathieu function with characteristic value
  *                           a and parameter q: the even solution of
  *                           y'' + (a - 2 q cos 2z) y = 0.
- *   MathieuCPrime[a, q, z]  its z-derivative.
+ *   MathieuS[a, q, z]       the odd Mathieu function: the odd solution.
+ *   MathieuCPrime / MathieuSPrime   their z-derivatives.
  *
- * Definition and normalization (sf_machine_mathieu.h): the Floquet form
- * sum_k c_k cos((nu + 2k) z), nu the characteristic exponent, with
+ * Definition and normalization (sf_machine_mathieu.h): the Floquet forms
+ * sum_k c_k cos((nu + 2k) z) and sum_k c_k sin((nu + 2k) z) with ONE set of
+ * coefficients (C + i S is the Floquet solution), nu the characteristic
+ * exponent, with
  *   generic nu   sum_k c_k^2 = 1 (analytic in a and q), sign Re(c_0) > 0;
- *   integer nu   (a a characteristic value) the DLMF normalization;
- *   q == 0       cos(sqrt(a) z), and 1/sqrt 2 for a == 0.
+ *   integer nu   (a a characteristic value) the DLMF normalization; the
+ *                function of the other parity (S at a = a_n, C at a = b_n) is
+ *                identically 0, the limit of the convention from both sides;
+ *   q == 0       cos(sqrt(a) z) / sin(sqrt(a) z), and 1/sqrt 2 for C at a == 0.
  * For real a, q in a stability band (nu real) and for every characteristic value
  * this coincides with the reference CAS; in the instability bands and for complex
  * a or q (complex nu) the reference uses a non-analytic normalization, and the
@@ -23,8 +29,13 @@
  *     MathieuCPrime[a, q, 0]   -> 0                  (ce is even)
  *     MathieuC[a, q, -z]       -> MathieuC[a, q, z]  (even, superficial sign)
  *     MathieuCPrime[a, q, -z]  -> -MathieuCPrime[a, q, z]
+ *     MathieuS[a, 0, z]        -> Sin[Sqrt[a] z]
+ *     MathieuSPrime[a, 0, z]   -> Sqrt[a] Cos[Sqrt[a] z]
+ *     MathieuS[a, q, 0]        -> 0                  (se is odd)
+ *     MathieuS[a, q, -z]       -> -MathieuS[a, q, z]
+ *     MathieuSPrime[a, q, -z]  -> MathieuSPrime[a, q, z]
  *   a visible NDArray / packed buffer z   -> the machine helper threaded over it
- *   machine-precision call                -> sf_machine_mathieu (the SAME helper
+ *   machine-precision call                -> sf_machine_mathieu_fn (the SAME helper
  *                                            the buffer loop, the Compile VM and
  *                                            the NDArray kernel call: bit-for-bit)
  *   machine declined / arbitrary precision -> flint_num_mathieu (arb ball kernel
@@ -126,13 +137,13 @@ static Expr* machine_result(double rr, double ri, bool any_complex_in) {
     return sf_machine_complex_result(rr, ri);
 }
 
-static Expr* mathieu_machine(Expr* res, int deriv, bool* declined) {
+static Expr* mathieu_machine(Expr* res, int odd, int deriv, bool* declined) {
     SFMachineArgs ma;
     *declined = false;
     if (!sf_machine_scalar_args(res, &ma) || ma.n != 3) return NULL;
     double rr, ri;
-    if (!sf_machine_mathieu(deriv, ma.re[0], ma.im[0], ma.re[1], ma.im[1],
-                            ma.re[2], ma.im[2], &rr, &ri)) {
+    if (!sf_machine_mathieu_fn(odd, deriv, ma.re[0], ma.im[0], ma.re[1], ma.im[1],
+                               ma.re[2], ma.im[2], &rr, &ri)) {
         *declined = true;
         return NULL;
     }
@@ -144,7 +155,7 @@ static Expr* mathieu_machine(Expr* res, int deriv, bool* declined) {
  * declined element -- goes through ndarray_delist_and_reeval, where each element
  * takes the scalar route (never NULL once a buffer is present: the scalar driver
  * cannot consume one). */
-static Expr* mathieu_ndarray(Expr* res, int deriv) {
+static Expr* mathieu_ndarray(Expr* res, int odd, int deriv) {
     Expr** args = res->data.function.args;
     const Expr* a_e = args[0];
     const Expr* q_e = args[1];
@@ -165,7 +176,7 @@ static Expr* mathieu_ndarray(Expr* res, int deriv) {
         size_t i = 0;
         for (; i < sz; i++) {
             double ri;
-            if (!sf_machine_mathieu(deriv, ad, 0.0, qd, 0.0, x[i], 0.0, &o[i], &ri) ||
+            if (!sf_machine_mathieu_fn(odd, deriv, ad, 0.0, qd, 0.0, x[i], 0.0, &o[i], &ri) ||
                 ri != 0.0) break;
         }
         if (i == sz)
@@ -179,7 +190,7 @@ static Expr* mathieu_ndarray(Expr* res, int deriv) {
     for (size_t i = 0; i < sz; i++) {
         double xr, xi, rr, ri;
         ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
-        if (!sf_machine_mathieu(deriv, ad, 0.0, qd, 0.0, xr, xi, &rr, &ri)) {
+        if (!sf_machine_mathieu_fn(odd, deriv, ad, 0.0, qd, 0.0, xr, xi, &rr, &ri)) {
             free(buf);
             return ndarray_delist_and_reeval(res);
         }
@@ -201,9 +212,16 @@ static Expr* mathieu_ndarray(Expr* res, int deriv) {
 /* Exact rules                                                         */
 /* ------------------------------------------------------------------ */
 
-static Expr* mathieu_exact(const char* head, Expr* a, Expr* q, Expr* z, int deriv,
-                           bool any_inexact) {
+static Expr* mathieu_exact(const char* head, Expr* a, Expr* q, Expr* z, int odd,
+                           int deriv, bool any_inexact) {
     /* q == 0: the Mathieu equation is y'' + a y = 0. */
+    if (is_exact_zero(q) && odd) {
+        /* sin(sqrt(a) z), sqrt(a) cos(sqrt(a) z): both 0 at a == 0 */
+        Expr* sa = mk_fn1("Sqrt", expr_copy(a));
+        Expr* arg = mk_fn2("Times", expr_copy(sa), expr_copy(z));
+        if (!deriv) { expr_free(sa); return eval_owned(mk_fn1("Sin", arg)); }
+        return eval_owned(mk_fn2("Times", sa, mk_fn1("Cos", arg)));
+    }
     if (is_exact_zero(q)) {
         /* the constant answers (1/Sqrt[2], 0) are exact, so they are only
          * returned for exact input; an inexact z takes the numeric path */
@@ -219,13 +237,14 @@ static Expr* mathieu_exact(const char* head, Expr* a, Expr* q, Expr* z, int deri
         return eval_owned(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
             expr_new_integer(-1), sa, mk_fn1("Sin", arg) }, 3));
     }
-    /* ce'(0) = 0 (ce even); an inexact a or q gives the numeric 0. */
-    if (deriv && is_exact_zero(z) && !any_inexact) return expr_new_integer(0);
+    /* ce'(0) = se(0) = 0 (the odd ones); an inexact a or q gives the numeric 0. */
+    bool fodd = (odd != 0) != (deriv != 0);
+    if (fodd && is_exact_zero(z) && !any_inexact) return expr_new_integer(0);
     /* Parity in z, on the superficial sign (as Cos / Sin do). */
     if (expr_is_superficially_negative(z)) {
         Expr* nz = eval_owned(mk_fn2("Times", expr_new_integer(-1), expr_copy(z)));
         Expr* f = mk_fn3_sym(head, expr_copy(a), expr_copy(q), nz);
-        if (!deriv) return f;
+        if (!fodd) return f;
         return mk_fn2("Times", expr_new_integer(-1), f);
     }
     return NULL;
@@ -235,18 +254,18 @@ static Expr* mathieu_exact(const char* head, Expr* a, Expr* q, Expr* z, int deri
 /* Driver                                                              */
 /* ------------------------------------------------------------------ */
 
-static Expr* mathieu_builtin(Expr* res, const char* head, int deriv) {
+static Expr* mathieu_builtin(Expr* res, const char* head, int odd, int deriv) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 3) return builtin_arg_error(head, argc, 3, 3);
     Expr** args = res->data.function.args;
 
-    Expr* nd = mathieu_ndarray(res, deriv);
+    Expr* nd = mathieu_ndarray(res, odd, deriv);
     if (nd) return nd;
 
     long b0 = mth_inexact_bits(args[0]), b1 = mth_inexact_bits(args[1]);
     long b2 = mth_inexact_bits(args[2]);
-    Expr* ex = mathieu_exact(head, args[0], args[1], args[2], deriv,
+    Expr* ex = mathieu_exact(head, args[0], args[1], args[2], odd, deriv,
                              b0 > 0 || b1 > 0 || b2 > 0);
     if (ex) return ex;
 
@@ -260,19 +279,21 @@ static Expr* mathieu_builtin(Expr* res, const char* head, int deriv) {
 
     if (outb <= 53) {
         bool declined = false;
-        Expr* m = mathieu_machine(res, deriv, &declined);
+        Expr* m = mathieu_machine(res, odd, deriv, &declined);
         if (m) return m;
         /* Machine declined (cancellation at large Im z, a large |a| or |q|, a
          * degenerate normalization): the ball kernel at 53 bits, demoted. */
-        Expr* v = flint_num_mathieu(args[0], args[1], args[2], deriv);
+        Expr* v = flint_num_mathieu(args[0], args[1], args[2], odd, deriv);
         if (v) return demote_machine(v);
         return NULL;
     }
-    return flint_num_mathieu(args[0], args[1], args[2], deriv);
+    return flint_num_mathieu(args[0], args[1], args[2], odd, deriv);
 }
 
-Expr* builtin_mathieuc(Expr* res)      { return mathieu_builtin(res, "MathieuC", 0); }
-Expr* builtin_mathieucprime(Expr* res) { return mathieu_builtin(res, "MathieuCPrime", 1); }
+Expr* builtin_mathieuc(Expr* res)      { return mathieu_builtin(res, "MathieuC", 0, 0); }
+Expr* builtin_mathieucprime(Expr* res) { return mathieu_builtin(res, "MathieuCPrime", 0, 1); }
+Expr* builtin_mathieus(Expr* res)      { return mathieu_builtin(res, "MathieuS", 1, 0); }
+Expr* builtin_mathieusprime(Expr* res) { return mathieu_builtin(res, "MathieuSPrime", 1, 1); }
 
 void mathieu_init(void) {
     const unsigned attrs = ATTR_LISTABLE | ATTR_NHOLDFIRST | ATTR_NUMERICFUNCTION |
@@ -281,5 +302,9 @@ void mathieu_init(void) {
     symtab_get_def("MathieuC")->attributes |= attrs;
     symtab_add_builtin("MathieuCPrime", builtin_mathieucprime);
     symtab_get_def("MathieuCPrime")->attributes |= attrs;
+    symtab_add_builtin("MathieuS", builtin_mathieus);
+    symtab_get_def("MathieuS")->attributes |= attrs;
+    symtab_add_builtin("MathieuSPrime", builtin_mathieusprime);
+    symtab_get_def("MathieuSPrime")->attributes |= attrs;
     /* Docstrings live in info.c (info_init). */
 }

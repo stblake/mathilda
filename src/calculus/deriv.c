@@ -1915,8 +1915,18 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
          *     Derivative[1,0,0][head][A,Q,Z] / Derivative[0,1,0][head][A,Q,Z].
          * Zero-derivative arms are dropped, so D[MathieuC[a,q,x],x] keeps only
          * the dZ term (and Series about any point follows by Taylor). */
-        if ((h == SYM_MathieuC || h == SYM_MathieuCPrime) && n == 3) {
-            const char* hn = h == SYM_MathieuC ? "MathieuC" : "MathieuCPrime";
+        /*   MathieuS / MathieuSPrime: the same equation for se,
+         *   d/dZ MathieuS = MathieuSPrime,
+         *   d/dZ MathieuSPrime = (-A + 2 Q Cos[2 Z]) MathieuS. */
+        if ((h == SYM_MathieuC || h == SYM_MathieuCPrime ||
+             h == SYM_MathieuS || h == SYM_MathieuSPrime) && n == 3) {
+            const int odd = (h == SYM_MathieuS || h == SYM_MathieuSPrime);
+            const int is_prime = (h == SYM_MathieuCPrime || h == SYM_MathieuSPrime);
+            const char* hn = h == SYM_MathieuC ? "MathieuC" :
+                             h == SYM_MathieuCPrime ? "MathieuCPrime" :
+                             h == SYM_MathieuS ? "MathieuS" : "MathieuSPrime";
+            const char* base = odd ? "MathieuS" : "MathieuC";
+            const char* prime = odd ? "MathieuSPrime" : "MathieuCPrime";
             Expr* A = args[0];
             Expr* Q = args[1];
             Expr* Z = args[2];
@@ -1928,8 +1938,8 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
 
             if (!is_lit_zero(dZ)) {
                 Expr* dfdz;
-                if (h == SYM_MathieuC) {
-                    dfdz = expr_new_function(mk_sym("MathieuCPrime"),
+                if (!is_prime) {
+                    dfdz = expr_new_function(mk_sym(prime),
                               (Expr*[]){ expr_copy(A), expr_copy(Q), expr_copy(Z) }, 3);
                 } else {
                     /* (-A + 2 Q Cos[2 Z]) MathieuC[A, Q, Z] */
@@ -1938,7 +1948,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
                                        mk_int(2), expr_copy(Q),
                                        mk_fn1("Cos", mk_fn2("Times", mk_int(2), expr_copy(Z)))
                                    }, 3));
-                    Expr* ce = expr_new_function(mk_sym("MathieuC"),
+                    Expr* ce = expr_new_function(mk_sym(base),
                               (Expr*[]){ expr_copy(A), expr_copy(Q), expr_copy(Z) }, 3);
                     dfdz = mk_fn2("Times", coef, ce);
                 }

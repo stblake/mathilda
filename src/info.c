@@ -1322,6 +1322,26 @@ void info_init(void) {
         "MathieuC[a, q, z]. Exact values: MathieuCPrime[a, q, 0] = 0,\n"
         "MathieuCPrime[a, 0, z] = -Sqrt[a] Sin[Sqrt[a] z]; odd in z. Numerics as for\n"
         "MathieuC (machine, arbitrary precision, packed/NDArray, Compile[]). Listable.");
+    symtab_set_docstring("MathieuS",
+        "MathieuS[a, q, z]\n"
+        "\tgives the odd Mathieu function with characteristic value a and parameter q.\n"
+        "It is the odd solution of y'' + (a - 2 q Cos[2 z]) y = 0, in the Floquet form\n"
+        "Sum[c_k Sin[(nu + 2 k) z], k] with the coefficients of MathieuC (so MathieuC +\n"
+        "I MathieuS is the Floquet solution): Sum[c_k^2] = 1, Re(c_0) > 0. At a = b_n\n"
+        "(integer nu, odd type) it is se_n with the DLMF normalization; at a = a_n it is\n"
+        "identically 0 (the limit; no periodic odd solution exists).\n"
+        "Exact values: MathieuS[a, 0, z] = Sin[Sqrt[a] z], MathieuS[a, q, 0] = 0; odd in z.\n"
+        "Evaluates numerically for all complex a, q, z at machine or arbitrary\n"
+        "precision (the result tracks the input precision); a shared machine kernel\n"
+        "drives the scalar, packed/NDArray and Compile[] surfaces.\n"
+        "D[MathieuS[a, q, z], z] = MathieuSPrime[a, q, z]; Series follows. Listable.");
+    symtab_set_docstring("MathieuSPrime",
+        "MathieuSPrime[a, q, z]\n"
+        "\tgives the derivative with respect to z of the odd Mathieu function\n"
+        "MathieuS[a, q, z]. D[MathieuSPrime[a, q, z], z] = (2 q Cos[2 z] - a)\n"
+        "MathieuS[a, q, z]. Exact values: MathieuSPrime[a, 0, z] = Sqrt[a] Cos[Sqrt[a] z];\n"
+        "even in z. Numerics as for MathieuS (machine, arbitrary precision,\n"
+        "packed/NDArray, Compile[]). Listable.");
     symtab_set_docstring("WhittakerM",
         "WhittakerM[k, m, z]\n"
         "\tgives the Whittaker function M_{k,m}(z).\n"

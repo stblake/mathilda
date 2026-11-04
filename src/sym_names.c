@@ -293,6 +293,8 @@ const char* SYM_HypergeometricU = NULL;
 const char* SYM_WhittakerM = NULL;
 const char* SYM_MathieuC = NULL;
 const char* SYM_MathieuCPrime = NULL;
+const char* SYM_MathieuS = NULL;
+const char* SYM_MathieuSPrime = NULL;
 const char* SYM_WhittakerW = NULL;
 const char* SYM_HeavisideTheta = NULL;
 const char* SYM_HermitianMatrixQ = NULL;
@@ -1413,6 +1415,8 @@ void sym_names_init(void) {
     SYM_WhittakerM                 = intern_symbol("WhittakerM");
     SYM_MathieuC                   = intern_symbol("MathieuC");
     SYM_MathieuCPrime              = intern_symbol("MathieuCPrime");
+    SYM_MathieuS                   = intern_symbol("MathieuS");
+    SYM_MathieuSPrime              = intern_symbol("MathieuSPrime");
     SYM_WhittakerW                 = intern_symbol("WhittakerW");
     SYM_HeavisideTheta             = intern_symbol("HeavisideTheta");
     SYM_HermitianMatrixQ           = intern_symbol("HermitianMatrixQ");

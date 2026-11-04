@@ -1,4 +1,5 @@
-/* Mathilda -- arbitrary-precision Mathieu functions (arb / acb kernel).
+/* Mathilda -- arbitrary-precision Mathieu functions (arb / acb kernel):
+ * MathieuC, MathieuCPrime, MathieuS, MathieuSPrime.
  *
  * The same algorithm as the machine helpers (sf_machine_mathieu.c), carried out
  * in ball arithmetic: the machine plan supplies the exponent nu, the dominant
@@ -17,11 +18,12 @@
 #ifdef USE_FLINT
 #include <flint/acb.h>
 
-/* MathieuC (deriv == 0) or MathieuCPrime (deriv == 1) at (a, q, z), working
- * precision `prec`. Sets `res` to an indeterminate ball when it cannot answer
- * (the machine plan failed, a degenerate normalization, a non-finite input). */
+/* MathieuC (odd == 0) or MathieuS (odd == 1), or their z-derivative
+ * (deriv == 1), at (a, q, z), working precision `prec`. Sets `res` to an
+ * indeterminate ball when it cannot answer (the machine plan failed, a
+ * degenerate normalization, a non-finite input). */
 void mathieu_acb(acb_t res, const acb_t a, const acb_t q, const acb_t z,
-                 int deriv, slong prec);
+                 int odd, int deriv, slong prec);
 #endif
 
 #endif /* MATHILDA_MATHIEU_ARB_H */
