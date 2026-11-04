@@ -98,6 +98,16 @@ Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe);
 Expr* ndla_normalize(Expr* res);    /* Normalize[v]                   */
 Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
 
+/* The dense matrix heads added with the SparseArray linear-algebra work.  Each
+ * is DEFINED next to its builtin (cholesky.c, hessenberg.c, ...) because it is
+ * that builtin's machine kernel, not a separate implementation: the boxed
+ * machine path, the packed path, the visible NDArray and Compile[] all call the
+ * same raw-double helper, so the four surfaces agree bit for bit.  None of them
+ * delists and re-evaluates on a numerical failure (a non-positive-definite
+ * Cholesky, say): it reports the message and returns NULL, as the boxed path
+ * does for the same matrix. */
+Expr* ndla_choleskydecomposition(Expr* res);   /* cholesky.c          */
+
 /* ------------------------------------------------------------------------
  * The SVD pair: PseudoInverse[m] and LeastSquares[m, b].
  *

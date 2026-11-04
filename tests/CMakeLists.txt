@@ -783,6 +783,8 @@ set(COMMON_SRC
     ../src/linalg/schurdecomp.c
     ../src/linalg/schurdecomp_machine.c
     ../src/linalg/schurdecomp_mpfr.c
+    ../src/linalg/la_dense.c
+    ../src/linalg/cholesky.c
     ../src/readwrite.c
     ../src/loadmodule.c
     ../src/files.c
@@ -3121,6 +3123,15 @@ else()
     target_link_libraries(schurdecomp_tests gmp m)
 endif()
 add_test(NAME schurdecomp_tests COMMAND schurdecomp_tests)
+
+add_executable(cholesky_tests test_cholesky.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cholesky_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(cholesky_tests gmp m ${ECM_LIB})
+    add_dependencies(cholesky_tests build_ecm)
+else()
+    target_link_libraries(cholesky_tests gmp m)
+endif()
 
 add_executable(mateigen_direct_tests test_mateigen_direct.c eigen_corpus.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mateigen_direct_tests PRIVATE ../src)

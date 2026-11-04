@@ -19,6 +19,7 @@
 #include "../list/list_gradient.h" /* list_gradient_ndarray — numerical gradient */
 #include "../linalg/ndlinalg.h"    /* ndla_* single/rank-2 linalg */
 #include "../linalg/linalg.h"      /* builtin_matrixpower, nd_dot_machine */
+#include "../linalg/la_dense.h"    /* la_*_machine: the dense-head kernels */
 #include "../list/transpose.h"     /* builtin_conjugate_transpose */
 #include "../sort.h"               /* builtin_reverse_sort */
 #include "../convolutions.h"       /* builtin_list_convolve / _correlate */
@@ -90,6 +91,10 @@ static Expr* nd_matrixpower(Expr* call) {      /* MatrixPower[m, e]: m square */
     if (call->data.function.arg_count != 2
         || !nd_square_matrix(call->data.function.args[0])) return NULL;
     return builtin_matrixpower(call);
+}
+static Expr* nd_cholesky(Expr* call) {        /* silent machine kernel */
+    if (call->data.function.arg_count != 1) return NULL;
+    return la_cholesky_machine(call->data.function.args[0]);
 }
 static Expr* nd_pseudoinverse(Expr* call) {    /* direct-args, real float64 only */
     if (call->data.function.arg_count != 1) return NULL;
@@ -190,6 +195,11 @@ static const NdFnSpec ND_FNS[] = {
     { "ReverseSort",        builtin_reverse_sort,         0, 0, false, NDF_INT | NDF_REAL, false },
     { "ConjugateTranspose", builtin_conjugate_transpose,  0, 2, false, NDF_INT | NDF_REAL | NDF_CPLX, false },
     { "PseudoInverse",      nd_pseudoinverse,             0, 2, false, NDF_REAL, false },
+    /* CholeskyDecomposition: the interpreter's own machine kernel (dpotrf /
+     * zpotrf), silent on a non-Hermitian or non-positive-definite operand so
+     * the interpreter fallback reports it once.  An int operand's factor is
+     * exact (Sqrt), so real/complex only. */
+    { "CholeskyDecomposition", nd_cholesky,               0, 2, false, NDF_REAL | NDF_CPLX, false },
     /* COMPILE_MISSING.md §4: the transforms.  Fourier / InverseFourier are
      * real-in complex-out — the ONLY heads that need complex_result (their
      * fourier_compile wrapper always builds NDT_COMPLEX64 so the buffer matches

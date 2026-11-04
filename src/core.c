@@ -1098,6 +1098,8 @@ void core_init(void) {
     jordandecomp_init();
     void schurdecomp_init(void);
     schurdecomp_init();
+    void cholesky_init(void);
+    cholesky_init();
     fit_init();
     readwrite_init();
     void readlist_init(void);

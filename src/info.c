@@ -2154,6 +2154,19 @@ void info_init(void) {
         "input.  A non-numeric (symbolic) matrix, for which there is no\n"
         "closed-form Schur decomposition, is left unevaluated, as is a\n"
         "non-square argument.");
+    symtab_set_docstring("CholeskyDecomposition",
+        "CholeskyDecomposition[m]\n"
+        "\tgives the Cholesky decomposition of a Hermitian (or real\n"
+        "\tsymmetric) positive-definite matrix m: the upper-triangular c\n"
+        "\twith ConjugateTranspose[c] . c == m.\n"
+        "\n"
+        "Exact and symbolic m give an exact answer built with Sqrt and\n"
+        "Conjugate; machine numbers (List, packed array or NDArray) use\n"
+        "LAPACK potrf; arbitrary-precision numbers keep their precision.\n"
+        "Messages: ::matsq (not a non-empty square matrix), ::herm (not\n"
+        "Hermitian or real symmetric), ::npdef (exact, not positive\n"
+        "definite), ::posdef (inexact, not sufficiently positive definite).\n"
+        "Option: TargetStructure (any value gives a dense List).");
     symtab_set_docstring("SingularValueDecomposition",
         "SingularValueDecomposition[m]\n"
         "\tgives the singular value decomposition of a matrix m as a\n"

@@ -1513,6 +1513,56 @@ In[3]:= {q, s, p, t} = SchurDecomposition[{{{.5, 1}, {1.5, 2}}, {{2.5, 3}, {3.5,
 Out[3]= {{0, 0}, {0, 0}}
 ```
 
+## CholeskyDecomposition
+Gives the Cholesky decomposition of a Hermitian (or real symmetric)
+positive-definite matrix.
+- `CholeskyDecomposition[m]` — the upper-triangular `c` with
+  `ConjugateTranspose[c] . c == m`.
+
+**Features**:
+- `Protected` (the reference also sets `ReadProtected`; Mathilda never does).
+- Every precision class:
+  - **exact and symbolic** entries give an exact answer built with `Sqrt` and
+    `Conjugate`, in the reference's form:
+    `c[[i, i]] = Sqrt[m[[i, i]] - Sum c[[k, i]] Conjugate[c[[k, i]]]]` and
+    `c[[i, j]] = (m[[i, j]] - Sum Conjugate[c[[k, i]]] c[[k, j]]) / c[[i, i]]`;
+  - **machine** reals and complexes (a `List`, a packed array or an `NDArray`)
+    use LAPACK `dpotrf` / `zpotrf` on the upper triangle (an in-house column
+    Cholesky when LAPACK is absent), and answer a packed matrix with exact-zero
+    bits below the diagonal;
+  - **arbitrary precision** keeps the input precision, with exact `0` below the
+    diagonal, as the reference does.
+- Hermitian test: exact/symbolic `m` must equal `ConjugateTranspose[m]`, or equal
+  `Transpose[m]` with no explicit complex entry (so `{{a, b}, {b, c}}` is
+  accepted and `{{2, I}, {I, 2}}` is not); inexact `m` passes a relative
+  `1e-12` test.
+- Messages (reference text): `::matsq` (not a non-empty square matrix),
+  `::herm` (not Hermitian or real symmetric), `::npdef` (exact, not positive
+  definite), `::posdef` (inexact, not sufficiently positive definite),
+  `::optx` (an option other than `TargetStructure`). A symbolic matrix with a
+  non-positive numeric pivot, a vector and an atom are left unevaluated
+  silently, as in the reference.
+- Option `TargetStructure -> Automatic | "Dense" | "Structured"`: all give a
+  dense `List`.
+- `SparseArray` input is densified by the transparency gate (answer: a `List`,
+  as in the reference).
+- **Compile**: lowers for `_Real` and `_Complex` rank-2 operands (an `ND_FNS`
+  row calling the same machine kernel, so `List`, packed, `NDArray` and
+  `Compile[]` agree bit for bit); a non-positive-definite operand degrades to
+  the interpreter, which reports it once.
+
+```mathematica
+In[1]:= CholeskyDecomposition[{{4, 2, 1}, {2, 3, 0}, {1, 0, 5}}]
+Out[1]= {{2, 1, 1/2}, {0, Sqrt[2], -1/2*1/Sqrt[2]}, {0, 0, Sqrt[37/2]/2}}
+
+In[2]:= CholeskyDecomposition[{{a, b}, {b, c}}]
+Out[2]= {{Sqrt[a], b/Sqrt[a]}, {0, Sqrt[c - (b*Conjugate[b/Sqrt[a]])/Sqrt[a]]}}
+
+In[3]:= CholeskyDecomposition[{{1, 2}, {2, 1}}]
+CholeskyDecomposition::npdef: The matrix {{1, 2}, {2, 1}} is not positive definite.
+Out[3]= CholeskyDecomposition[{{1, 2}, {2, 1}}]
+```
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that
