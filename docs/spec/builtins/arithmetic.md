@@ -1215,6 +1215,10 @@ Out[7]= {{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 4}, {{9, 9, 9, 0, 0,
 - For exact inputs the mantissa is an exact `Rational` of the form
   `x / b^e`; for inexact inputs the mantissa is returned with the same
   precision as `x`.
+- For a machine real the exponent is decided on the double's exact value, so a
+  value just above a power of the base is on the right side of it
+  (`MantissaExponent[0.01]` is `{0.1, -1}`, since the double 0.01 is
+  0.0100000000000000002...), and the mantissa is rounded once.
 - Bases must be integers `>= 2`. Non-integer bases leave the call
   unevaluated (general `Real` / symbolic bases are not yet supported).
 - Complex arguments emit `MantissaExponent::realx` and leave the call

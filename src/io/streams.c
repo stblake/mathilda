@@ -16,6 +16,7 @@
  */
 
 #include "streams.h"
+#include "print_fortran.h"
 #include "message.h"   /* mth_message */
 #include "sym_names.h"
 #include "symtab.h"
@@ -201,16 +202,48 @@ Expr* stream_make_object(const Stream* s) {
 /* Open / Close / Streams                                              */
 /* ------------------------------------------------------------------ */
 
+/* Is a a Rule/RuleDelayed with a symbol key? */
+static int is_option_rule(const Expr* a) {
+    return a->type == EXPR_FUNCTION && a->data.function.arg_count == 2 &&
+           a->data.function.head->type == EXPR_SYMBOL &&
+           (a->data.function.head->data.symbol.name == SYM_Rule ||
+            a->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
+           a->data.function.args[0]->type == EXPR_SYMBOL;
+}
+
+/* OpenRead/OpenWrite/OpenAppend[file, opts...].  Of the options, an output
+ * stream keeps FormatType (the form Write renders in) and PageWidth (the
+ * width a FortranForm stream breaks its lines at, 78 by default); the others
+ * (CharacterEncoding, BinaryFormat, ...) are accepted and ignored. */
 static Expr* open_common(Expr* res, int output, int append, const char* who) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     const char* name = stream_filename_arg(res->data.function.args[0]);
     if (!name) return NULL;
+    const char* format_type = NULL;
+    int page_width = 78;
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (!is_option_rule(a)) return NULL;
+        const char* key = a->data.function.args[0]->data.symbol.name;
+        const Expr* v = a->data.function.args[1];
+        if (key == SYM_FormatType && v->type == EXPR_SYMBOL) format_type = v->data.symbol.name;
+        else if (key == SYM_PageWidth) {
+            if (v->type == EXPR_INTEGER && v->data.integer > 0)
+                page_width = (int)(v->data.integer > 100000 ? 100000 : v->data.integer);
+            else page_width = 0;   /* Infinity */
+        }
+    }
     int id = output ? stream_open_output(name, append) : stream_open_input(name);
     if (id < 0) {
         mth_message(who, "noopen", "Cannot open %s.", name);
         return expr_new_symbol(SYM_DollarFailed);
     }
-    return stream_make_object(stream_by_id(id));
+    Stream* st = stream_by_id(id);
+    if (output) {
+        st->format_type = format_type == SYM_InputForm ? NULL : format_type;
+        st->page_width = page_width;
+    }
+    return stream_make_object(st);
 }
 
 /* StringToStream["string"] -- an input stream over a copy of the string, as
@@ -392,6 +425,19 @@ Expr* builtin_write(Expr* res) {
     if (!s) return fail ? expr_new_symbol(SYM_DollarFailed) : NULL;
 
     size_t argc = res->data.function.arg_count;
+    if (!s->borrowed && argc > 1 &&
+        (s->format_type == SYM_FortranForm || s->format_type == SYM_CForm)) {
+        /* All the expressions of one Write form one row (laid out together). */
+        char* str = fortran_form_string_seq(res->data.function.args + 1, argc - 1,
+                                            s->format_type == SYM_CForm ? FORM_LANG_C
+                                                                        : FORM_LANG_FORTRAN,
+                                            s->page_width);
+        fputs(str, s->fp);
+        free(str);
+        fputc('\n', s->fp);
+        fflush(s->fp);
+        return expr_new_symbol(SYM_Null);
+    }
     for (size_t i = 1; i < argc; i++) {
         Expr* e = res->data.function.args[i];
         /* A file stream writes InputForm, its default FormatType in the

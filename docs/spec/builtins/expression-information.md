@@ -1430,6 +1430,7 @@ Out[2]= 1, 2, 3
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in the reference: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
 - `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `OutputForm` (default), `InputForm` (strings quoted, with `\"` and `\\` escaped, so the result re-reads; `HoldForm` is kept, `ToString[HoldForm[1 + 1], InputForm]` is `"HoldForm[1 + 1]"`, and a held non-canonical product prints as written, `HoldForm[1*x]`; `Format[..., InputForm]` rules apply), `FullForm`, and `TeXForm` (strings as `\text{abc}`). `StandardForm` is accepted as an alias for `InputForm`.
+- `ToString[expr, form, opts]` / `ToString[expr, opts]`: the options `FormatType -> form` (the same as the positional form) and `PageWidth -> n` (used by `FortranForm` and `CForm`: an expression wider than `n` is broken into continuation lines; the default is unbounded). `FortranForm` and `CForm` are accepted as forms.
 
 **Features**:
 - `Protected`.
@@ -1452,6 +1453,29 @@ Out[4]= "{a, 1}"
 
 In[5]:= ToString["a\"b", InputForm]
 Out[5]= "\"a\\\"b\""
+```
+
+## FortranForm / CForm
+- `FortranForm[expr]`: prints as Fortran source text for `expr`.
+- `CForm[expr]`: prints as C source text for `expr`.
+
+**Features**:
+- `Protected`. Inert display wrappers: `FortranForm[x^2]` stays as it is and prints as `x**2`; `ToString[FortranForm[e]]` gives the text.
+- Fortran: `x**2`, `f(x,y)`, `List(1,2)`, `(0,1)` for `I`, `a.eq.b`, `.ne.`, `.lt.`, `.le.`, `.gt.`, `.ge.`, `.and.`, `.or.`, `.not.`. C: `Power(x,2)`, `Complex(0,1)`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `!`, `a % b` for `Mod`, `a[i]` for `Part`. Both: `Sqrt(x)` for a square root, `1/x`, `1/Sqrt(x)`.
+- Numbers as the reference writes them: a lone rational is its machine value (`2/3` is `0.6666666666666666`); a rational coefficient keeps its numerator and writes the denominator as a real (`a/100.`, `(-2*x)/3.`, `1/(2.*x)`), except `-1/q`, which is its value times the rest (`-0.5*x/y`); reals use the shortest round-trip digits with a trailing point when integral (`100.`) and scientific notation from `10^6` up and below `10^-5` (`1.e6`, `1.5e-7`); rational exponents are reals (`x**1.5`).
+- A power with a negative exponent goes to the denominator inside a product (`y/x**2`, `(a*b)/(c*d**2)`) but keeps its exponent alone (`x**(-2)`).
+- `Format[f[...], FortranForm] := rhs` (or `CForm`) display rules apply; plain `Format[f[...]] := rhs` rules do not.
+- Written to a stream opened with `FormatType -> FortranForm` (see `OpenWrite`), or by `ToString[e, FormatType -> FortranForm, PageWidth -> n]`, an expression wider than the page is laid out as fixed-form Fortran: the first line starts in column 9 (8 spaces) and continuation lines start with `     -` and one more space than the nesting depth of the row being broken. Sums break after `+`/`-`, argument lists after `,`, and an over-long atom is split with `\`. `CForm` breaks the same way without the first-line prefix. Break points are chosen greedily: this matches the reference on sums at any depth (the shape generated code has), while at narrow widths the reference sometimes breaks before a parenthesised factor instead.
+
+```mathematica
+In[1]:= FortranForm[a/100 + 5 x + Sqrt[y]/z^2]
+Out[1]= a/100. + 5*x + Sqrt(y)/z**2
+
+In[2]:= CForm[x^2 + 2 I x == 0 && y >= 1]
+Out[2]= Complex(0,2)*x + Power(x,2) == 0 && y >= 1
+
+In[3]:= ToString[Sum[v[k], {k, 7}], FormatType -> FortranForm, PageWidth -> 40]
+Out[3]= "        v(1) + v(2) + v(3) + v(4) + \n     -  v(5) + v(6) + v(7)"
 ```
 
 ## ToExpression

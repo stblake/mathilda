@@ -187,6 +187,7 @@ Open a file and return a stream object addressing a persistent current point.
 - `Protected`. Return `$Failed` (with an `Open*::noopen` diagnostic) if the file cannot be opened.
 - The integer in the returned object is an internal handle into the stream registry; the object is inert and prints as itself.
 - The registry is freed on `Close` or, for anything still open, at program exit (no leaks).
+- Options: an output stream keeps `FormatType -> form` (the form `Write` renders in; `InputForm` by default, `FortranForm` and `CForm` supported) and `PageWidth -> n` (78 by default; a `FortranForm` or `CForm` stream breaks a wider expression into continuation lines, see `FortranForm`). Other options (`CharacterEncoding`, ...) are accepted and ignored.
 
 #### Basic Examples
 

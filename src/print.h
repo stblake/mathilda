@@ -31,6 +31,10 @@ char* expr_to_string_outputform(Expr* e);   /* strings unquoted, as Print */
  * the plain and LaTeX printers. Caller owns and must free the result. */
 Expr* series_data_to_display_expr(Expr* e);
 
+/* Format[f[...], form] := rhs rewrite of e for the named form, evaluated; NULL
+ * when no rule for that form applies.  Caller frees. */
+Expr* print_form_format_rewrite(Expr* e, const char* form);
+
 Expr* builtin_print(Expr* res);
 Expr* builtin_echo(Expr* res);
 void echo_print_line(Expr* label, Expr* value);

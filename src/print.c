@@ -8,6 +8,7 @@
 // Print
 
 #include "print.h"
+#include "print_fortran.h"
 #include "expr.h"
 #include "arithmetic.h"
 #include "context.h"
@@ -309,6 +310,15 @@ static Expr* format_value_rewrite(Expr* e, const char* form) {
         if (out) return out;
     }
     return NULL;
+}
+
+/* Format[f[...], form] := rhs rewrite of e for a named form (FortranForm,
+ * CForm, ...): the rule's right-hand side evaluated, or NULL.  Used by the
+ * Fortran/C renderer (print_fortran.c). */
+Expr* print_form_format_rewrite(Expr* e, const char* form) {
+    if (!symtab_format_value_count || !e) return NULL;
+    if (e->type != EXPR_SYMBOL && e->type != EXPR_FUNCTION) return NULL;
+    return format_value_rewrite(e, form);
 }
 
 /* The box control character (\!, \(, \), \* ... as private-use code
@@ -902,6 +912,13 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if (head == SYM_TeXForm && e->data.function.arg_count == 1) {
             print_tex(e->data.function.args[0], 0);
+        }
+        else if ((head == SYM_FortranForm || head == SYM_CForm) &&
+                 e->data.function.arg_count == 1) {
+            char* txt = fortran_form_string(e->data.function.args[0],
+                                            head == SYM_CForm ? FORM_LANG_C : FORM_LANG_FORTRAN, 0);
+            printf("%s", txt);
+            free(txt);
         }
         else if (head == SYM_InputForm && e->data.function.arg_count == 1) {
             g_inputform_depth++;

@@ -1,3 +1,18 @@
+# FeynCalc round 14: last failures + speed (from 2026-11-04, v0.6166)
+
+Plan: ~/.claude/plans/let-s-continue-our-feyncalc-wondrous-castle.md
+Reference run saved (local) in packages/feyncalc/harness/ref_wl/.
+
+- [x] P0 per-dir run at v0.6166: 13371/13412, no losses vs BASELINE_PASS (+Factor3-ID10, SharedObjectsBehavior-ID201); geomean 1.42x (1.51x at r13b; uniform ~10% drift, the same binary varies ~10% run to run -- interleave A/B for speed claims)
+- [ ] W  DiracTrace-ID46/ID70, TID-ID65 (wrong answers?), DiracOrder-ID54, PauliChainJoin-ID19
+- [ ] G7 FCFeynmanParametrize ID6/9/10/11/20/44, FCFeynmanPrepare ID11/13/14 (causes A, B, E, H)
+- [ ] T  form ties: DiracTrace-ID71, FCDiffEqChangeVariables ID1-3, PauliTrickAnticommutator ID1/3, SUNSimplify-ID23, AddScalingParameter-ID6
+- [ ] M  SUNSimplify ID83/84 (Flat+Orderless rest_ binding order)
+- [ ] P  FCToTeXPreviewTermOrder ID1-4 (HoldForm order / InputForm)
+- [x] F  Write2 ID1-3, 5-7: FortranForm/CForm printer + OpenWrite/ToString FormatType+PageWidth + MantissaExponent exact exponent ; v0.6167 (+6). Follow-up: reference line-break choice at narrow widths is global (breaks before a parenthesised factor), ours greedy
+- [ ] S  singletons: FourDivergence-ID18, Solve3-ID2, SharedToolsFRH-ID2, Factor3-ID14, TID-ID50 (MSG), FCLoopFromGLI-ID29#2, FCLoopFindIntegralMappings-ID14 (LaunchKernels)
+- [ ] SP speed: corpus-wide profile hot spots; worst-ratio files; largest files
+
 # MathieuS[a, q, z] + MathieuSPrime (v0.6166, 2026-11-04)
 
 Plan: /Users/user/.claude/plans/pasted-content-id-0290-following-on-golden-cookie.md

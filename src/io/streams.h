@@ -30,6 +30,9 @@ typedef struct {
     /* output streams */
     FILE*  fp;          /* open output handle */
     int    borrowed;    /* fp is the process stdout/stderr: flushed, never closed */
+    /* OpenWrite[..., FormatType -> f, PageWidth -> n] */
+    const char* format_type; /* interned form name, NULL = InputForm */
+    int    page_width;  /* > 0, or 0 for unbounded (default 78) */
 } Stream;
 
 /* Open `name` for reading: slurp it and register an input stream.  Returns the

@@ -385,6 +385,7 @@ set(COMMON_SRC
     ../src/pack.c
     ../src/print.c
     ../src/print_latex.c
+    ../src/print_fortran.c
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
@@ -5832,6 +5833,16 @@ else()
     target_link_libraries(streams_tests gmp m)
 endif()
 add_test(NAME streams_tests COMMAND streams_tests)
+
+add_executable(fortran_form_tests test_fortran_form.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(fortran_form_tests PRIVATE ../src ../src/io)
+if(USE_ECM)
+    target_link_libraries(fortran_form_tests gmp m ${ECM_LIB})
+    add_dependencies(fortran_form_tests build_ecm)
+else()
+    target_link_libraries(fortran_form_tests gmp m)
+endif()
+add_test(NAME fortran_form_tests COMMAND fortran_form_tests)
 
 add_executable(time_constrained_tests test_time_constrained.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(time_constrained_tests PRIVATE ../src)

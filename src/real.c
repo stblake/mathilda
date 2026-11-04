@@ -1375,21 +1375,41 @@ Expr* builtin_mantissa_exponent(Expr* res) {
             return me_make_pair(expr_new_real(0.0), 0);
         }
         double absv = fabs(v);
-        double log_b = log((double)b_ulong);
-        long e_val = (long)floor(log(absv) / log_b) + 1;
-
-        /* Compute scale = b^e_val.  Off-by-one corrections cover the rare
-         * case where floor(log / log) rounds across a power-of-b boundary
-         * because of double-rounding in the log itself. */
-        double scale = pow((double)b_ulong, (double)e_val);
-        double m = v / scale;
-        if (fabs(m) >= 1.0) {
-            m /= (double)b_ulong;
-            e_val++;
-        } else if (fabs(m) * (double)b_ulong < 1.0) {
-            m *= (double)b_ulong;
-            e_val--;
+        /* The exponent is decided on the double's EXACT value, so a value
+         * just above a power of the base lands on the right side of it:
+         * 0.01 is 0.0100000000000000002..., which is 0.1 * 10^-1, not
+         * 0.999... * 10^-2 (a floating log/floor put it there). */
+        mpq_t q;
+        mpq_init(q);
+        mpq_set_d(q, absv);
+        long e_val = rd_rational_natural_exp(q, base);
+        unsigned long ae = (unsigned long)(e_val < 0 ? -e_val : e_val);
+        mpz_t pw;
+        mpz_init(pw);
+        mpz_ui_pow_ui(pw, b_ulong, ae);
+        double m;
+        if (mpz_sizeinbase(pw, 2) <= 53) {
+            /* b^|e| is exact in a double: one correctly rounded operation. */
+            double p = mpz_get_d(pw);
+            m = e_val >= 0 ? v / p : v * p;
+        } else {
+#ifdef USE_MPFR
+            /* m = |x| / b^e, rounded once to nearest. */
+            if (e_val >= 0) mpz_mul(mpq_denref(q), mpq_denref(q), pw);
+            else mpz_mul(mpq_numref(q), mpq_numref(q), pw);
+            mpq_canonicalize(q);
+            mpfr_t t;
+            mpfr_init2(t, 53);
+            mpfr_set_q(t, q, MPFR_RNDN);
+            m = mpfr_get_d(t, MPFR_RNDN);
+            mpfr_clear(t);
+            if (v < 0) m = -m;
+#else
+            m = v / pow((double)b_ulong, (double)e_val);
+#endif
         }
+        mpz_clear(pw);
+        mpq_clear(q);
         mpz_clear(base);
         return me_make_pair(expr_new_real(m), e_val);
     }

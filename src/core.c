@@ -142,6 +142,7 @@
 #include "match.h"
 #include "flint_num_bridge.h"   /* flint_cert_binding_clear (timeout unwind) */
 #include "print.h"
+#include "print_fortran.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -812,6 +813,8 @@ void core_init(void) {
     symtab_add_builtin("FullForm", builtin_fullform);
     symtab_add_builtin("InputForm", builtin_inputform);
     symtab_add_builtin("TeXForm", builtin_texform);
+    symtab_add_builtin("FortranForm", builtin_texform);   /* inert wrapper; rendered by print_fortran.c */
+    symtab_add_builtin("CForm", builtin_texform);         /* inert wrapper; rendered by print_fortran.c */
     symtab_add_builtin("TraditionalForm", builtin_display_form);
     symtab_add_builtin("StandardForm", builtin_display_form);
     symtab_add_builtin("Information", builtin_information);
@@ -877,6 +880,8 @@ void core_init(void) {
     symtab_get_def("FullForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("InputForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("TeXForm")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("FortranForm")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("CForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("TraditionalForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("StandardForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("HoldForm")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
@@ -4581,19 +4586,40 @@ Expr* builtin_quotientremainder(Expr* res) {
 Expr* builtin_tostring(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 1 || argc > 2) return NULL;
+    if (argc < 1) return NULL;
 
     Expr* expr = res->data.function.args[0];
-    const char* form_name = SYM_OutputForm;     /* Mathematica's default */
+    const char* form_name = SYM_OutputForm;     /* the default form */
+    int page_width = 0;                         /* unbounded */
 
-    if (argc == 2) {
-        Expr* form_arg = res->data.function.args[1];
-        if (form_arg->type != EXPR_SYMBOL) return NULL;
-        form_name = form_arg->data.symbol.name;
+    /* ToString[expr, form, opts...] / ToString[expr, opts...]: the options
+     * FormatType -> form and PageWidth -> n (Infinity: unbounded). */
+    for (size_t i = 1; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type == EXPR_SYMBOL && i == 1) { form_name = a->data.symbol.name; continue; }
+        if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2 &&
+            a->data.function.head->type == EXPR_SYMBOL &&
+            (a->data.function.head->data.symbol.name == SYM_Rule ||
+             a->data.function.head->data.symbol.name == SYM_RuleDelayed) &&
+            a->data.function.args[0]->type == EXPR_SYMBOL) {
+            const char* key = a->data.function.args[0]->data.symbol.name;
+            Expr* v = a->data.function.args[1];
+            if (key == SYM_FormatType && v->type == EXPR_SYMBOL) { form_name = v->data.symbol.name; continue; }
+            if (key == SYM_PageWidth) {
+                if (v->type == EXPR_INTEGER && v->data.integer > 0) page_width = (int)(v->data.integer > 100000 ? 100000 : v->data.integer);
+                else page_width = 0;
+                continue;
+            }
+            continue;   /* other options (CharacterEncoding, ...) do not change the text */
+        }
+        return NULL;
     }
 
     char* str = NULL;
-    if (form_name == SYM_FullForm) {
+    if (form_name == SYM_FortranForm || form_name == SYM_CForm) {
+        str = fortran_form_string(expr, form_name == SYM_CForm ? FORM_LANG_C : FORM_LANG_FORTRAN,
+                                  page_width);
+    } else if (form_name == SYM_FullForm) {
         str = expr_to_string_fullform(expr);
     } else if (form_name == SYM_TeXForm) {
         Expr* inner[1];

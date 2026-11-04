@@ -4434,6 +4434,19 @@ void info_init(void) {
         "When an input evaluates to TeXForm[expr], TeXForm does not appear in the output.\n"
         "TeXForm translates standard mathematical functions and operations.\n"
         "Following standard mathematical conventions, single-character symbol names are given in italic font, while multiple character names are given in roman font.");
+    symtab_set_docstring("FortranForm",
+        "FortranForm[expr]\n"
+        "\tprints as a Fortran language version of expr: x**2, f(x,y), (0,1) for I,\n"
+        "\ta.eq.b, .and./.or./.not.; rationals as reals (a/100.), Sqrt(x).\n"
+        "Written to a stream opened with FormatType -> FortranForm (or ToString[expr,\n"
+        "FormatType -> FortranForm, PageWidth -> n]), an expression wider than the page\n"
+        "is laid out as fixed-form Fortran with \"     -\" continuation lines.\n"
+        "Format[f[...], FortranForm] := rhs rules apply.");
+    symtab_set_docstring("CForm",
+        "CForm[expr]\n"
+        "\tprints as a C language version of expr: Power(x,2), f(x,y), Complex(0,1),\n"
+        "\ta == b, &&, ||, !, a % b for Mod, a[i] for Part; rationals as reals.\n"
+        "Format[f[...], CForm] := rhs rules apply.");
     symtab_set_docstring("HoldForm", "HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.");
     symtab_set_docstring("ToString",
         "ToString[expr]\n"
