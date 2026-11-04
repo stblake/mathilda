@@ -1,6 +1,17 @@
 # FeynCalc round 14: last failures + speed (from 2026-11-04, v0.6166)
 
-Status v0.6173: per-dir 13389/13412 (no losses), BASELINE_PASS raised (local). v0.6172 Simplify ties (600-case corpus 390 -> 439 identical, scratchpad st/: gen.py cases.txt run.m cmp.py reg.py); v0.6173 matcher enumeration order (deferred slot alternatives). Remaining 23: G7 (9), FCDiffEqChangeVariables 1-3 (reference keeps input quotient form), DiracTrace-ID71 (per-coefficient factor after Collect), AddScalingParameter-ID6, DiracOrder-ID54 (dummy name in diracChainContract //.), FourDivergence-ID18, Solve3-ID2, SharedToolsFRH-ID2, Factor3-ID14, TID-ID50, FCLoopFromGLI-ID29#2, FCLoopFindIntegralMappings-ID14, FeynAmpDenominatorSimplify-ID44 (stateful). Also: Replace[a+b+c, a+b->x] wrong (rule_try flat-leftover fallback for Replace, src/replace.c).
+Status v0.6176: per-dir 13391/13412, 2 SKIP as UNSUPPORTED (parallel subkernels; user decision), 19 left. Fixed this round: Replace whole-expression (v0.6174), #126 quotient follow-up (v0.6175), numloop seed + Collect head (v0.6176: TID-ID50, Solve3-ID2).
+Remaining, by cause (bisect reports 2026-11-04; repros in scratchpad agentG7/, agentS2/, agentX/):
+- A Simplify[e, sum == 1] per-subterm reduction (simp_builtins.c simp_reduce_by_equations): Prepare ID11/13/14
+- B nested Collect + Factor-oriented coefficients (try_collect_per_variable; simp_split_additive n<4 gate + raw-symbol linking): Parametrize ID6/20/11, FourDivergence-ID18, PauliTrickAnticommutator-ID3 (3 u.v - D u.v -> -((-3+D) u.v)), DiracTrace-ID71 (component split, first-term rule)
+- E fold monomial into power of same product (simp_power.c): Parametrize ID9
+- H common base with integer-differing exponents, shared Together/Simplify helper: Parametrize ID44, ID10 (with N)
+- N D[f, {x, n>=2}] keeps x-free factors outside (deriv.c higher_order_partial): Parametrize ID10
+- Q quotient orientation: expanded denominator leading positive, sign into numerator sum or outside (FCDiffEqChangeVariables ID1-3)
+- P partial monomial content from Collect[_, m] (AddScalingParameter-ID6): only full gcd
+- M match_flat_leftover element-driven subset order (match.c ~3139): DiracOrder-ID54
+- R cubic/radical conventions (solvepoly.c solve_cubic_radical; power.c bigint square part, trial bound ~65521; rationalised quadratic root): SharedToolsFRH-ID2, Factor3-ID14
+
 Agent findings to act on (repros in scratchpad agentW/agentT/agentP):
 - Matcher (W, M): Orderless/Flat first-match order differs -- reference assigns elements to slots first, bare blanks take leftovers, nested Orderless arg orders tried before moving elements; rest_. (Optional) is enumerated first because the reorder is skipped when any_opt (match.c ~1882-1940, ~2190-2520). Repros: pc[L[i4],L[i5]] hd[1,L[i5]] hd[3,L[i4]] UpValue; ReplaceList[ch[e,j] ch[x,i] Aa[i,j], r_ ch[a_,ii_] Aa[ii_,jj_] :> ii] = {j,i} ref; Replace[s[1] s[2] s[3] s[4], rest_. s[a_] :> {rest,a}] = {s[2]s[3]s[4],1} ref. Fixes TID-ID65 (WRONG answer: drops D*SPLRD via LCPC PairContract), DiracOrder-ID54, PauliChainJoin-ID19, SUNSimplify-ID83/84. Also Replace at level 0 matches a subset of a Flat head (Replace[a+b+c, a+b -> x] gives c + x; ref unchanged) -- wrong.
 - T: (1) Factor's sign-rearrangement veto on product ties (simp_search.c ~782) -- reference takes lower LeafCount on SC tie for products; (2) per-coefficient factoring after Collect (try_collect_per_variable); (3) simp_pipeline_rational ties take Together's form; (4) simp_split_multiplicative lifts 1/96 + Apart (SUNSimplify-ID23).
