@@ -72,7 +72,13 @@ Implements dynamic scoping by temporarily overriding symbol values.
 **Features**:
 - `HoldAll`, `Protected`.
 - Affects only values, not names.
-- Restores original values and attributes after execution.
+- **Localises attributes and built-in rules too** (v0.6170), as in the reference: inside
+  `Block[{f}, ...]` the symbol has no attributes and no C builtin, so `Attributes[f]` is `{}`,
+  an `Orderless` `f[b, a]` stays unsorted, `Block[{Sin}, Sin[{0, 1}]]` is `Sin[{0, 1}]`, and
+  `Block[{Message}, ...]` makes `Message` calls inert. Before, the attributes were saved and
+  restored but never cleared. Inside `Block[{Times}, ...]` the reference still multiplies
+  numbers (`Times[2, 3, b]` is `6 b`); Mathilda leaves a blocked `Times` entirely inert.
+- Restores original values, attributes and builtins after execution.
 - **The returned value is evaluated again once the symbols are restored**
   (v0.6053), as in the reference: `x = 5; Block[{x}, x + y]` is `5 + y`, and
   with `f[a_] := a^2`, `Block[{f}, f[3]]` is `9`. Before, the fixed-point stamp

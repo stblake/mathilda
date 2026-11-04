@@ -760,6 +760,7 @@ typedef struct BlockSavedVar {
     Rule*    old_up;
 #endif
     uint32_t old_attrs;
+    BuiltinFunc old_builtin;   /* the C builtin, suspended inside the Block */
     int32_t  old_dep_scoped;
 } BlockSavedVar;
 
@@ -847,8 +848,10 @@ static void blk_restore_frame(BlockFrame* f) {
           symtab_up_value_count = (symtab_up_value_count >= k) ? symtab_up_value_count - k : 0; }
         def->up_values = f->saved[i].old_up;
 #endif
-        bool attrs_changed = def->attributes != f->saved[i].old_attrs;
+        bool attrs_changed = def->attributes != f->saved[i].old_attrs ||
+                             def->builtin_func != f->saved[i].old_builtin;
         def->attributes  = f->saved[i].old_attrs;
+        def->builtin_func = f->saved[i].old_builtin;
         /* Restored directly, behind add_rule's back, so invalidate: the value
          * Block returns is evaluated again once its symbols are back, as in the
          * reference -- x = 5; Block[{x}, x + y] is 5 + y and, with
@@ -915,6 +918,7 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
             frame->saved[i].old_own   = def->own_values;
             frame->saved[i].old_down  = def->down_values;
             frame->saved[i].old_attrs = def->attributes;
+            frame->saved[i].old_builtin = def->builtin_func;
             /* Inside a dispatch frame, the frames open now enclose this Block:
              * what it writes to the symbol is gone again before they end. */
             frame->saved[i].old_dep_scoped = def->dep_scoped;
@@ -936,6 +940,17 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
              * final, but not inside Block[{flag}, ...].  Nothing changes for a
              * symbol that had no values. */
             if (had_values) eval_bump_definition_swap(def, false);
+            /* Block localises attributes and built-in rules too, as in the
+             * reference: inside Block[{f}, ...] the symbol has no attributes
+             * (Attributes[f] is {}, an Orderless f[b, a] stays unsorted) and
+             * a builtin's C code does not run (Block[{Sin}, Sin[{0, 1}]] is
+             * Sin[{0, 1}]; FeynCalc's TeX preview runs //. on inert Plus and
+             * Times inside Block[{Plus, Times}, ...]). */
+            if (def->attributes || def->builtin_func) {
+                def->attributes = 0;
+                def->builtin_func = NULL;
+                eval_bump_definition_swap(def, true);
+            }
 
             if (init_val) {
                 symtab_add_own_value(name, (v->type == EXPR_SYMBOL ? v : v->data.function.args[0]), init_val);
