@@ -185,6 +185,34 @@ Gives the number of elements or subexpressions that match a pattern.
   order. A literal argument (no pattern construct) is matched to the first
   equal argument only, because every equal choice leaves the same bindings:
   `ReplaceList[o[a, a], o[a, x_] :> x]` is `{a}`.
+- **Enumeration order** (which match `ReplaceList` lists first, and so which
+  one `Replace` or a definition takes). For the arguments of one call, as in
+  the reference, with three nested loops:
+  1. Outermost, the Optional defaults of the level's slots. All matches with
+     no slot defaulted come first, then those with the last Optional slot
+     defaulted, and so on; the earliest Optional slot counts most.
+     `ReplaceList[s[1] s[2] s[3], r_. q_. s[a_] :> {r, q, a}]` lists the six
+     `{s[i], s[j], a}` first, then the three with `r -> 1`, then the three with
+     `q -> 1`.
+  2. Then which elements go to which slot. Slots are taken in canonical pattern
+     order, with the leftover-takers last: sequences, Flat blanks, and an
+     Optional wrapping one. `r_. s[a_]` enumerates `a = 1, 2, 3` with `r` the
+     rest, as `r_ s[a_]` does. For an ordered head this loop is the sequence
+     split.
+  3. Innermost, for that assignment, each slot's own internal alternatives,
+     slot by slot in slot order. These are the orientations of a nested
+     `Orderless` call, a nested split, an `Alternatives` branch, or an inner
+     Optional. With `Aa` Orderless, `ReplaceList[ch[e, j] ch[x, i] Aa[i, j],
+     r_ ch[a_, ii_] Aa[ii_, jj_] :> {ii, r}]` is `{{j, ch[x, i]}, {i, ch[e, j]}}`:
+     `Aa`'s second orientation is tried before `ch` moves on. A rule's
+     condition is checked once the whole assignment is made, so it backtracks
+     into the alternatives first.
+
+  Before, step 3 ran outside step 2, and an Optional leftover-taker was
+  enumerated first. Differs from the reference: a `/;` inside one slot of an
+  `Orderless` product sees the bindings of the earlier slots in Mathilda, but
+  of no other slot in the reference (`ReplaceList[f[1] g[1] g[2] h[3], f[i_]
+  g[k_ /; k == i] r_ :> ...]` is `{}` there).
 - **OneIdentity.** `f[p1, ..., pn]` matches a lone `x` as though it were
   `f[x]` only through **defaults**: some `pi` must be Optional, so that the
   others match `x` while it takes its default (`x` matches `Times[n_., x_]`

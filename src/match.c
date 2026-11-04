@@ -282,9 +282,10 @@ static bool pat_is_variable_seq(Expr* p) {
 }
 
 /* True when pattern element `p` is (or wraps) an Optional -- x_. or
- * Optional[...]. Optional carries a *positional* default resolved via
- * get_default_value(pat_head, original_index, ...), so a pattern list that
- * contains one must NOT be reordered: the index would shift. */
+ * Optional[...]. x_. carries a *positional* default resolved via
+ * get_default_value(pat_head, index, ...), so an Orderless pattern list that
+ * contains one is reordered only when that default cannot depend on the
+ * index (defaults_position_free). */
 static bool pat_has_optional(Expr* p) {
     Expr* cur = p;
     while (cur && cur->type == EXPR_FUNCTION
@@ -523,6 +524,20 @@ static bool flat_group_may_equal(const Expr* existing, const Expr* pat_head,
  * performance) reordering and match in source order. */
 #define MATCH_REORDER_CAP 64
 
+/* A continuation: "match exprs[0..n_exprs) against pats[0..n_pats) at the
+ * level whose head is pat_head, then `condition`, then `parent`".  `kind`
+ * (zero in every positional initialiser) selects three special frames used by
+ * the deferred-alternatives order of match_args_internal (see the comment
+ * "Enumeration order" there):
+ *   PM_DEFER -- a DeferFrame: the level has slots whose internal alternatives
+ *               were deferred; reaching it means every element of the level is
+ *               assigned, so the deferred matches run now (oldest first), then
+ *               the level's condition, then the level's real parent.
+ *   PM_RUN   -- a RunFrame: "run deferred match idx of the chain, and so on".
+ *   PM_CHECK -- a CheckFrame: a later slot of a level with deferrals has just
+ *               matched; if it bound anything, probe the deferred chain with
+ *               those bindings before going deeper. */
+enum { PM_NORMAL = 0, PM_DEFER = 1, PM_RUN = 2, PM_CHECK = 3 };
 typedef struct ParentMatch {
     Expr** exprs;
     size_t n_exprs;
@@ -532,7 +547,46 @@ typedef struct ParentMatch {
     Expr* pat_head;
     size_t total_pats;
     struct ParentMatch* parent;
+    unsigned char kind;
 } ParentMatch;
+
+/* One deferred slot of a level: element (or Flat group) `elem` is assigned to
+ * slot pattern `pat`, whose match -- with all of its internal alternatives --
+ * runs once the whole level is assigned.  pm.condition / pm.parent are the
+ * level's guard and real continuation; `prev` is the previous deferral of the
+ * same level (NULL for the first).  Lives on the C stack of the deferring
+ * match_args_internal call, which outlives every use. */
+typedef struct DeferFrame {
+    ParentMatch pm;
+    Expr* elem;
+    Expr* pat;
+    struct DeferFrame* prev;
+} DeferFrame;
+
+/* Continuation inside the deferred chain: run chain[idx..m), then (unless
+ * `probe`) the level condition and parent.  A probe only asks whether the
+ * chain has a consistent assignment at all, and stops at the first. */
+typedef struct RunFrame {
+    ParentMatch pm;
+    DeferFrame** chain;
+    size_t idx, m;
+    Expr* condition;
+    ParentMatch* parent;
+    bool probe;
+} RunFrame;
+
+/* Continuation after a slot matched in place at a level that already has
+ * deferrals: if the slot's match bound anything (env->count > mark), the
+ * deferred chain must still have a consistent assignment with those bindings,
+ * else the element is rejected here -- before the later slots search (and a
+ * leftover-taker builds its group) for an assignment the deferred matches
+ * would reject anyway.  `next` is the slot's real continuation. */
+typedef struct CheckFrame {
+    ParentMatch pm;
+    DeferFrame* chain;
+    size_t mark;
+    ParentMatch* next;
+} CheckFrame;
 
 static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 /* Is `h` a OneIdentity symbol? Out of line so the recursive matcher's frame
@@ -792,7 +846,61 @@ static void bind_leftover_names(Expr* p, MatchEnv* env) {
         bind_leftover_names(p->data.function.args[i], env);
 }
 
+static bool call_parent(MatchEnv* env, ParentMatch* parent);
+
+/* Run deferred match chain[idx], with the rest of the chain (and then the
+ * level's condition and parent) as its continuation, so a failure downstream
+ * backtracks into that slot's other internal alternatives. */
+static bool defer_step(MatchEnv* env, DeferFrame** chain, size_t idx, size_t m,
+                       Expr* condition, ParentMatch* parent, bool probe) {
+    if (idx == m) {
+        if (probe) return true;
+        if (condition && !eval_guard_true(condition, env)) return false;
+        return call_parent(env, parent);
+    }
+    RunFrame rf;
+    memset(&rf, 0, sizeof rf);
+    rf.pm.kind = PM_RUN;
+    rf.chain = chain; rf.idx = idx + 1; rf.m = m;
+    rf.condition = condition; rf.parent = parent; rf.probe = probe;
+    size_t saved = env->count;
+    if (match_internal(chain[idx]->elem, chain[idx]->pat, env, &rf.pm)) return true;
+    env_rollback(env, saved);
+    return false;
+}
+
+/* Run every deferred match of the level whose newest deferral is `last`, in
+ * slot order (oldest first).  The chain is short -- one entry per deferred
+ * slot -- so it is gathered into a stack array, with a heap fallback. */
+static bool defer_run_all(MatchEnv* env, DeferFrame* last, bool probe) {
+    size_t m = 0;
+    for (DeferFrame* f = last; f; f = f->prev) m++;
+    DeferFrame* local[16];
+    DeferFrame** chain = m <= 16 ? local : malloc(m * sizeof(DeferFrame*));
+    size_t i = m;
+    for (DeferFrame* f = last; f; f = f->prev) chain[--i] = f;
+    bool r = defer_step(env, chain, 0, m, last->pm.condition, last->pm.parent, probe);
+    if (chain != local) free(chain);
+    return r;
+}
+
 static bool call_parent(MatchEnv* env, ParentMatch* parent) {
+    if (parent && parent->kind != PM_NORMAL) {      /* deferred-alternatives frames */
+        if (parent->kind == PM_DEFER)
+            return defer_run_all(env, (DeferFrame*)parent, false);
+        if (parent->kind == PM_CHECK) {
+            CheckFrame* cf = (CheckFrame*)parent;
+            if (env->count > cf->mark) {
+                size_t s = env->count;
+                bool ok = defer_run_all(env, cf->chain, true);
+                env_rollback(env, s);
+                if (!ok) return false;
+            }
+            return call_parent(env, cf->next);
+        }
+        RunFrame* rf = (RunFrame*)parent;
+        return defer_step(env, rf->chain, rf->idx, rf->m, rf->condition, rf->parent, rf->probe);
+    }
     if (parent == &top_level_sentinel) {
         size_t saved = env->count;
         if (env->top_pattern) bind_leftover_names(env->top_pattern, env);
@@ -1096,7 +1204,7 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
             ParentMatch args_frame = { expr->data.function.args, expr->data.function.arg_count,
                                        inner_pat->data.function.args, inner_pat->data.function.arg_count,
                                        cond, inner_pat->data.function.head,
-                                       inner_pat->data.function.arg_count, parent };
+                                       inner_pat->data.function.arg_count, parent, PM_NORMAL };
             if (match_internal(expr->data.function.head, inner_pat->data.function.head, env, &args_frame))
                 return true;
             env_rollback(env, saved_env_count);
@@ -1120,7 +1228,7 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
          * carrying `cond`, then the parent), so a guard that fails backtracks into
          * the inner pattern's other assignments instead of ending the match. */
         size_t saved_env_count = env->count;
-        ParentMatch guard_cont = { NULL, 0, NULL, 0, cond, NULL, 0, parent };
+        ParentMatch guard_cont = { NULL, 0, NULL, 0, cond, NULL, 0, parent, PM_NORMAL };
         if (!match_internal(expr, inner_pat, env, &guard_cont)) {
             env_rollback(env, saved_env_count);
             return false;
@@ -1276,7 +1384,7 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
                 ParentMatch args_frame = { expr->data.function.args, expr->data.function.arg_count,
                                            pattern->data.function.args, pattern->data.function.arg_count,
                                            NULL, pattern->data.function.head,
-                                           pattern->data.function.arg_count, parent };
+                                           pattern->data.function.arg_count, parent, PM_NORMAL };
                 if (match_internal(expr->data.function.head, pattern->data.function.head, env, &args_frame))
                     return true;
                 env_rollback(env, saved_env_count);
@@ -1368,6 +1476,62 @@ static bool pat_is_single_elem(Expr* p) {
         return true;
     }
     return true;
+}
+
+/* Can pattern `p` match ONE given expression in more than one way, i.e. does
+ * it have internal alternatives (given whatever is already bound)?  Sources:
+ * a nested call on an Orderless head with two or more non-literal arguments
+ * (Aa[i_, j_] has two orientations), a nested Flat call with two or more
+ * arguments (its splits), a call with two variable-width arguments
+ * (f[x__, y__]), a non-literal Alternatives, an Optional inside a call
+ * (default or not), Repeated, (Orderless)PatternSequence, KeyValuePattern.
+ * Conservative: "true" when unsure -- a false "true" only costs a deferral; a
+ * false "false" would give the wrong enumeration order.  PatternTest and
+ * Except commit to the first match of their operand, so they have none.
+ * A slot that answers false is matched in place, exactly as before. */
+static bool pat_multi_alt(Expr* p) {
+    if (p->type != EXPR_FUNCTION) return false;
+    Expr* hd = p->data.function.head;
+    size_t n = p->data.function.arg_count;
+    Expr** a = p->data.function.args;
+    if (hd->type == EXPR_SYMBOL) {
+        const char* h = hd->data.symbol.name;
+        if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence
+            || h == SYM_Verbatim || h == SYM_PatternTest || h == SYM_Except)
+            return false;
+        if (h == SYM_Pattern) return n == 2 && pat_multi_alt(a[1]);
+        if ((h == SYM_Condition || SYM_IS_HOLDPATTERN(h) || h == SYM_Longest
+             || h == SYM_Shortest) && n >= 1)
+            return pat_multi_alt(a[0]);
+        if (h == SYM_Alternatives) {
+            for (size_t i = 0; i < n; i++)
+                if (!pat_is_literal(a[i])) return true;
+            return false;
+        }
+        if (h == SYM_Optional || h == SYM_Repeated || h == SYM_RepeatedNull
+            || h == SYM_PatternSequence || h == SYM_OrderlessPatternSequence
+            || h == SYM_KeyValuePattern || h == SYM_OptionsPattern)
+            return true;
+    } else if (pat_multi_alt(hd)) {
+        return true;
+    }
+    size_t nonlit = 0, nvar = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (pat_is_literal(a[i])) continue;
+        nonlit++;
+        if (pat_multi_alt(a[i])) return true;
+        if (!pat_is_single_elem(a[i])) nvar++;
+    }
+    if (nonlit == 0) return false;
+    /* Two variable-width arguments split in several ways; one (LorentzIndex[
+     * z_, dim___]) takes whatever the fixed-width ones leave, in one way. */
+    if (nvar >= 2) return true;
+    if (hd->type == EXPR_SYMBOL) {
+        uint32_t at = get_attributes_def(symtab_node_def(hd));
+        if ((at & ATTR_ORDERLESS) && nonlit >= 2) return true;
+        if ((at & ATTR_FLAT) && n >= 2) return true;
+    }
+    return false;
 }
 
 /* Static bounds on how many arguments pattern `p` can consume in a sequence:
@@ -1703,6 +1867,102 @@ static bool opt_match_prefix(Expr** exprs, size_t take, size_t n_exprs, Expr** p
         return false;
 }
 
+/* Optional[q] / Optional[q, d] -> q; anything else unchanged. */
+static Expr* pat_strip_optional(Expr* q) {
+    if (q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL
+        && q->data.function.head->data.symbol.name == SYM_Optional
+        && q->data.function.arg_count >= 1)
+        return q->data.function.args[0];
+    return q;
+}
+
+/* Is element `q` of an Orderless level a leftover-taker -- a sequence blank,
+ * or (Flat head `flat_hn`) an element that may take a group -- judged by what
+ * an Optional wraps?  These are matched after the fixed elements. */
+static bool pat_is_late(Expr* q, const char* flat_hn) {
+    Expr* s = pat_strip_optional(q);
+    return pat_is_variable_seq(s) || (flat_hn && !flat_elem_single_span(s, flat_hn));
+}
+
+/* Is the positional default Default[h, i, n] independent of i for head h?
+ * Plus and Times (Protected, fixed defaults 0 and 1) always; any head while
+ * Default has no rules at all (there is then no default but the built-in). */
+static bool defaults_position_free(Expr* pat_head) {
+    const char* hn = pat_head->data.symbol.name;
+    if (hn == SYM_Plus || hn == SYM_Times) return true;
+    SymbolDef* d = intern_symbol_node(SYM_Default);
+    eval_dep_note(d);
+    return !d || d->down_values == NULL;
+}
+
+/* Must the Optional slots of this (reordered) Orderless level be enumerated
+ * as default VARIANTS, outermost (see match_optional_variants)?  Not when the
+ * in-place default already gives that order: an Optional slot that is first,
+ * or last behind slots that each consume a fixed number of elements (then it
+ * can take its default only when nothing is left, and an element only when
+ * something is).  Not either when an Optional is wrapped (p:(x_.), Shortest),
+ * which keeps the in-place handling. */
+static bool opt_variants_needed(Expr** pats, size_t n_pats, const char* flat_hn) {
+    bool varied_before = false, need = false;
+    size_t n_opt = 0;
+    for (size_t i = 0; i < n_pats; i++) {
+        Expr* q = pats[i];
+        bool opt = pat_has_optional(q);
+        if (opt) {
+            if (q->type != EXPR_FUNCTION || q->data.function.head->type != EXPR_SYMBOL
+                || q->data.function.head->data.symbol.name != SYM_Optional) return false;
+            if (++n_opt > 16) return false;
+            if (i > 0 && (i + 1 < n_pats || varied_before)) need = true;
+        }
+        if (opt || pat_is_late(q, flat_hn)) varied_before = true;
+    }
+    return need;
+}
+
+/* The Optional slots of one Orderless level, enumerated as variants: for each
+ * subset D of them (in the order: none, then counting with the LAST Optional
+ * slot as the low bit), the slots in D take their defaults and drop out, the
+ * others lose their Optional (so they must take elements), and the level is
+ * matched in full.  Defaults are position-free here (the caller checked), so
+ * the default of a slot does not depend on where reordering put it. */
+static bool match_optional_variants(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats,
+                                    MatchEnv* env, Expr* condition, Expr* pat_head,
+                                    size_t total_pats, ParentMatch* parent) {
+    size_t m = 0;
+    for (size_t i = 0; i < n_pats; i++)
+        if (pat_has_optional(pats[i])) m++;
+    Expr** np = malloc(n_pats * sizeof(Expr*));
+    bool r = false;
+    for (uint32_t v = 0; v < (UINT32_C(1) << m) && !r; v++) {
+        size_t saved = env->count;
+        bool ok = true;
+        size_t w = 0, t = 0;
+        for (size_t i = 0; i < n_pats && ok; i++) {
+            Expr* q = pats[i];
+            if (!pat_has_optional(q)) { np[w++] = q; continue; }
+            bool use_default = (v >> (m - 1 - t)) & 1;
+            t++;
+            if (!use_default) { np[w++] = q->data.function.args[0]; continue; }
+            Expr* dv = q->data.function.arg_count == 2
+                ? expr_copy(q->data.function.args[1])
+                : get_default_value(pat_head, (int)(i + 1), (int)total_pats);
+            if (!dv) { ok = false; break; }
+            Expr* sym = NULL; Expr* inner = NULL;
+            if (is_pattern(q->data.function.args[0], &sym, &inner) && sym->type == EXPR_SYMBOL) {
+                Expr* ex = env_get(env, sym->data.symbol.name);
+                if (ex) ok = expr_eq(ex, dv);
+                else env_set(env, sym->data.symbol.name, dv);
+            }
+            expr_free(dv);
+        }
+        if (ok)
+            r = match_args_internal(exprs, n_exprs, np, w, env, condition, pat_head, w, parent);
+        if (!r) env_rollback(env, saved);
+    }
+    free(np);
+    return r;
+}
+
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent) {
 
     /* HoldPattern is transparent to matching, including for the width of an
@@ -1892,22 +2152,32 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
      * Under a Flat head a plain blank (x_, x_:0) also takes a group, and so
      * enumerates subsets like x__: it moves too, behind every element that
      * takes exactly one operand (Plus[n_?NumberQ o1_., o2_:0] sorts o2_ first
-     * and enumerated every subset of a sum for it).  Skipped when any element
-     * carries an Optional positional default (x_.), whose index would shift
-     * under reordering; x_:0 carries its own. */
+     * and enumerated every subset of a sum for it).  This is also the order
+     * the reference enumerates in: leftover-takers come last.  An Optional
+     * element is judged by what it wraps -- r_. in a Flat head takes the
+     * leftover like r_, and its default only when nothing is left over:
+     * ReplaceList[s[1] s[2] s[3], r_. s[a_] :> {r, a}] lists a = 1, 2, 3 in
+     * turn with r the rest, as r_ s[a_] does.  Skipped (as before) when an
+     * element carries a positional default (x_.) whose value may depend on its
+     * index, which reordering would shift: a head other than Plus/Times while
+     * Default has rules.  x_:0 carries its own default and moves freely. */
     Expr* reorder_storage[MATCH_REORDER_CAP];
     if (n_pats >= 2 && pat_head && pat_head->type == EXPR_SYMBOL) {
         SymbolDef* hd = symtab_node_def(pat_head);
         if (hd && (hd->attributes & ATTR_ORDERLESS)) {
             const char* flat_hn = (hd->attributes & ATTR_FLAT) ? pat_head->data.symbol.name : NULL;
-#define MATCH_LATE(q) (pat_is_variable_seq(q) || (flat_hn && !flat_elem_single_span((q), flat_hn)))
-            bool any_opt = false, need = false, seen_seq = false;
+#define MATCH_LATE(q) pat_is_late((q), flat_hn)
+            bool any_opt = false, pos_dep = false, need = false, seen_seq = false;
             for (size_t i = 0; i < n_pats; i++) {
-                if (pat_has_positional_optional(pats[i])) { any_opt = true; break; }
+                if (pat_has_optional(pats[i])) {
+                    any_opt = true;
+                    if (pat_has_positional_optional(pats[i])
+                        && !defaults_position_free(pat_head)) { pos_dep = true; break; }
+                }
                 if (MATCH_LATE(pats[i])) seen_seq = true;
                 else if (seen_seq) need = true;  /* fixed element after a blank */
             }
-            if (!any_opt && need) {
+            if (!pos_dep && need) {
                 /* Fast path: reorder into the stack buffer for the common case.
                  * For a very wide pattern (> MATCH_REORDER_CAP elements) fall
                  * back to a heap buffer and recurse once so the fail-fast
@@ -1935,6 +2205,18 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 }
                 pats = dst;
             }
+            /* Optional defaults are the OUTERMOST loop of a level: every match
+             * with no slot defaulted comes first, then those with the last
+             * Optional slot defaulted, ..., the earliest one counting most:
+             * ReplaceList[s[1] s[2] s[3], r_. q_. s[a_] :> {r, q, a}] gives
+             * the six {s[i], s[j], a} first, then the three r -> 1, then the
+             * three q -> 1.  The in-place default (after the element's own
+             * choices) gives that order on its own when the Optional slot is
+             * first, or last behind slots of fixed width (whose consumption
+             * fixes whether anything is left for it); otherwise split here. */
+            if (any_opt && !pos_dep && opt_variants_needed(pats, n_pats, flat_hn))
+                return match_optional_variants(exprs, n_exprs, pats, n_pats, env, condition,
+                                               pat_head, total_pats, parent);
         }
     }
 #undef MATCH_LATE
@@ -2340,6 +2622,62 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     if (is_orderless && min_k <= max_k && n_exprs > 0)
         oscratch = malloc(n_exprs * (sizeof(Expr*) + sizeof(int)));
 
+    /* Enumeration order.  The reference enumerates the matches of one level
+     * (one call's arguments) in this order, for every head:
+     *   1. outermost, the Optional defaults of the level's slots
+     *      (match_optional_variants);
+     *   2. then WHICH elements go to which slot -- slots in canonical pattern
+     *      order, leftover-takers last (the reorder above); for an ordered
+     *      head this is the sequence split;
+     *   3. innermost, for that fixed assignment, each slot's own internal
+     *      alternatives (the orientations of a nested Orderless Aa[i_, j_],
+     *      a nested split f[x__, y__], an Alternatives branch, an inner
+     *      Optional), slot by slot in slot order -- before any element moves
+     *      to another slot.
+     * So with Aa Orderless, ReplaceList[ch[e, j] ch[x, i] Aa[i, j],
+     * r_ ch[a_, ii_] Aa[ii_, jj_] :> {ii, r}] is {{j, ch[x, i]}, {i, ch[e, j]}}:
+     * the ch slot takes ch[e, j] first, and Aa's second orientation is tried
+     * before ch moves on to ch[x, i].  A rule condition is checked at the end
+     * of the whole assignment, so it backtracks into the alternatives first.
+     *
+     * Plain backtracking nests 2 inside 3 for a slot that matches with
+     * alternatives (its match is the continuation's outer loop), so such a
+     * slot is DEFERRED: its element is chosen and recorded, the later slots
+     * choose theirs, and once the level is fully assigned the deferred matches
+     * run in slot order (defer_run_all), with their alternatives backtracking
+     * against each other, then the condition, then the parent.  Deferral only
+     * happens where it changes the order: the slot has alternatives
+     * (pat_multi_alt) and some later slot still has a choice of elements --
+     * or an earlier slot of the level is already deferred (whose alternatives
+     * must then stay outside this slot's).  A slot that matches its element
+     * in at most one way -- the common case -- is matched in place as before,
+     * so both nestings visit the same states and nothing extra is done.
+     * Before recording a deferral the whole chain is probed once (does it
+     * have any consistent assignment with this element?), so an element that
+     * cannot match its slot is still pruned before the later slots search. */
+    bool defer_slot = false, defer_probe = false;
+    if (!is_seq && !is_rep && min_k <= max_k) {
+        bool parent_defer = parent && parent->kind == PM_DEFER;
+        bool later = false;
+        if (n_pats >= 3) {
+            if (is_orderless || is_flat) later = true;
+            else
+                for (size_t i = 1; i < n_pats && !later; i++)
+                    if (!pat_is_single_elem(pats[i])) later = true;
+        }
+        if ((later || parent_defer) && !(parent_defer && condition)) {
+            defer_slot = pat_multi_alt(inner_p)
+                || (parent_defer && pat_contains_head(inner_p, SYM_Condition, NULL));
+            /* A probe pays whenever some slot follows: even a forced
+             * leftover-taker builds its group before the end of the level. */
+            defer_probe = n_pats >= 2;
+        }
+    }
+    /* After a deferral, a slot matched in place re-checks the deferred chain
+     * against what it bound (CheckFrame) -- unless it is the last slot, whose
+     * continuation runs the chain anyway. */
+    bool defer_check = !defer_slot && n_pats >= 2 && parent && parent->kind == PM_DEFER;
+
     if (min_k <= max_k) {
         for (size_t step = 0; step <= max_k - min_k; step++) {
             size_t k = is_longest ? (max_k - step) : (min_k + step);
@@ -2500,10 +2838,50 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                         if (existing) bind_ok = expr_eq(matched_val, existing);
                         else env_set(env, p_sym->data.symbol.name, matched_val);
                     }
-                    if (bind_ok) {
+                    if (bind_ok && defer_slot) {
+                        /* Record the assignment; the match runs at the end
+                         * of the level (see "Enumeration order" above). */
+                        DeferFrame df;
+                        memset(&df, 0, sizeof df);
+                        df.pm.kind = PM_DEFER;
+                        df.elem = matched_val;
+                        df.pat = inner_p;
+                        if (parent && parent->kind == PM_DEFER) {
+                            df.prev = (DeferFrame*)parent;
+                            df.pm.condition = parent->condition;
+                            df.pm.parent = parent->parent;
+                        } else {
+                            df.pm.condition = condition;
+                            df.pm.parent = parent;
+                        }
+                        bool feasible = true;
+                        if (defer_probe) {
+                            size_t ps = env->count;
+                            feasible = defer_run_all(env, &df, true);
+                            env_rollback(env, ps);
+                        }
+                        if (feasible && match_args_internal(remainder, n_exprs - k, pats + 1,
+                                                            n_pats - 1, env, NULL, pat_head,
+                                                            total_pats, &df.pm)) {
+                            expr_free(matched_val);
+                            free(oscratch);
+                            return true;
+                        }
+                    } else if (bind_ok) {
                         ParentMatch cont = { remainder, n_exprs - k, pats + 1, n_pats - 1,
-                                             condition, pat_head, total_pats, parent };
-                        if (match_internal(matched_val, inner_p, env, &cont)) {
+                                             condition, pat_head, total_pats, parent,
+                                             PM_NORMAL };
+                        ParentMatch* kont = &cont;
+                        CheckFrame cf;
+                        if (defer_check) {
+                            memset(&cf, 0, sizeof cf);
+                            cf.pm.kind = PM_CHECK;
+                            cf.chain = (DeferFrame*)parent;
+                            cf.mark = saved_env_inner;
+                            cf.next = &cont;
+                            kont = &cf.pm;
+                        }
+                        if (match_internal(matched_val, inner_p, env, kont)) {
                             expr_free(matched_val);
                             free(oscratch);
                             return true;
