@@ -607,7 +607,9 @@ static bool vm_range_array_op(const Instr* c, Slot* R) {
             Expr* args[1 + NDARRAY_MAX_RANK];
             args[0] = expr_copy(src);
             for (size_t i = 0; i < nx; i++)
-                args[1 + i] = expr_new_integer((int64_t)R[c->a + (unsigned)i].i);
+                args[1 + i] = fn->extra_real
+                            ? expr_new_real(R[c->a + (unsigned)i].r)
+                            : expr_new_integer((int64_t)R[c->a + (unsigned)i].i);
             Expr* call = expr_new_function(expr_new_symbol(fn->head), args, 1 + nx);
             if (!call) { expr_free(args[0]); return false; }
             Expr* r = fn->fn(call);

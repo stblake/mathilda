@@ -676,7 +676,8 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             IT(0, ta);
             for (int i = 0; i < nf->nextra; i++) {
                 CompileType te;
-                if (!infer_type(c, A[1 + i], &te) || te != CT_INT) return false;
+                if (!infer_type(c, A[1 + i], &te)) return false;
+                if (te != CT_INT && !(te == CT_REAL && nd_fn_lookup_real(h, na))) return false;
             }
             CompileType rt = nd_fn_result(nf, ta);
             if ((int)rt < 0) return false;

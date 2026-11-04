@@ -296,6 +296,7 @@ EXEMPT = {
     "Eigensystem": "returns the ragged pair {values, vectors} (a vector and a "
                    "matrix, complex or real by data); no single machine array",
     "Eigenvalues": "may be complex for a real matrix; result type not static",
+    "MatrixFunction": "its first argument is a function value (f), which no compiled register or ND table operand carries; MatrixExp / MatrixLog / MatrixPower lower instead",
     "CharacteristicPolynomial": "returns a symbolic Plus in x, not a machine array",
     "PositiveDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "NegativeDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",

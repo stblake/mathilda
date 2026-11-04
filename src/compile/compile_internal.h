@@ -739,6 +739,12 @@ typedef struct {
                           * the CT_COMPLEX register the compiler promises here. */
     bool real_result;  /* result is a REAL array whatever the operand's element
                         * type (SingularValueList of a complex matrix) */
+    bool extra_real;     /* this row's trailing arguments are machine REALS,
+                          * not integers (MatrixPower[m, s] with a real s).  A
+                          * head with both forms has two rows; nd_fn_lookup
+                          * finds the integer one, nd_fn_lookup_real the real
+                          * one, and the emitter picks by the argument's type
+                          * (A_NDFN's flags stay the plain run length). */
 } NdFnSpec;
 
 typedef struct {
@@ -754,7 +760,7 @@ typedef struct {
                         * (DuplicateFreeQ); the register is CT_BOOL */
 } NdRedSpec;
 
-typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED, R2_KRON } NdFn2Rank;
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED, R2_KRON, R2_MATVEC } NdFn2Rank;
 typedef enum { NDF2_PROMOTE, NDF2_SAME, NDF2_EXACT } NdFn2Elem;
 
 typedef struct {
@@ -768,6 +774,7 @@ typedef struct {
 /* Table lookup + static result-type resolution.  Used by the inference pass and
  * the emitter; `na` is the call's argument count (array + trailing ints). */
 const NdFnSpec*  nd_fn_lookup(const char* h, size_t na);
+const NdFnSpec*  nd_fn_lookup_real(const char* h, size_t na);
 CompileType      nd_fn_result(const NdFnSpec* s, CompileType ta);
 const NdRedSpec* nd_red_lookup(const char* h, size_t na);
 CompileType      nd_red_result(const NdRedSpec* s, CompileType ta);

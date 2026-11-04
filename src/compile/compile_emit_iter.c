@@ -176,14 +176,25 @@ int emit_iter(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             if ((int)rt < 0) { c->ok = false; return -1; }
             Slot z = { 0 };
             int base = 0;
+            bool any_real = false;
             for (int i = 0; i < nf->nextra; i++) {
                 int r = alloc_temp(c);
                 if (i == 0) base = r;
                 Val v;
                 if (!emit(c, A[1 + i], &v)) return -1;
-                if (v.type != CT_INT) { c->ok = false; return -1; }
+                if (v.type == CT_REAL && nd_fn_lookup_real(h, na)) any_real = true;
+                else if (v.type != CT_INT) { c->ok = false; return -1; }
                 ins(c, OP_MOVE, (uint32_t)r, (uint32_t)v.reg, 0, z);
                 free_if_tmp(c, v);
+            }
+            /* A real trailing argument selects the head's real-argument row
+             * (the VM boxes the run as Reals); a mixed int/real run declines. */
+            if (any_real) {
+                nf = nd_fn_lookup_real(h, na);
+                for (int i = 0; i < nf->nextra; i++) {
+                    CompileType te;
+                    if (!infer_type(c, A[1 + i], &te) || te != CT_REAL) { c->ok = false; return -1; }
+                }
             }
             Slot ip; memset(&ip, 0, sizeof ip); ip.p = nf;
             int rout = alloc_arr(c);
