@@ -933,6 +933,12 @@ static void pack_mark_aware_heads(void) {
         /* WhittakerW[k, m, z]: same shape, threads sf_machine_whittaker_w over the
          * buffer z. Not int64_ok: the U series runs in double. */
         "WhittakerW",
+        /* MathieuC / MathieuCPrime [a, q, z] hold the buffer z: the builtin builds
+         * the (a, q) Floquet plan once and threads sf_machine_mathieu over it (a
+         * buffer a or q is delisted and re-evaluated). Not int64_ok: the sums run
+         * in double. */
+        "MathieuC",
+        "MathieuCPrime",
         /* LerchPhi[z, s, a] holds a buffer in any of its three slots; its builtin
          * delists each visible NDArray / packed arg and re-evaluates (so Listable
          * threads the element-wise sf_machine_lerchphi), rather than leaving a

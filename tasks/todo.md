@@ -1,3 +1,30 @@
+# MathieuC[a, q, z] + MathieuCPrime (from v0.6164, 2026-11-04)
+
+Plan: /Users/user/.claude/plans/pasted-content-id-c7dd-in-src-special-f-velvet-hinton.md
+Normalization (verified vs reference): generic nu -> sum c_k cos((nu+2k)z), sum c_k^2 = 1;
+integer nu -> DLMF (int ce^2 = pi).
+
+- [x] 1. Reference grid (signs, branches, near-characteristic, exact cases)
+- [x] 2. Machine helpers + (a,q) coefficient cache
+- [x] 3. arb kernel in flint_num_bridge (precision ladder; 500 / 10^4 digits)
+- [x] 4. mathieu.c builtins, exact/parity rules, attrs, docstrings, sym_names
+- [x] 5. ND kernels, AWARE, Compile, D, Series
+- [x] 6. tests/test_mathieu.c + valgrind
+- [x] 7. Benchmark rows (vs wolframscript, scipy)
+- [x] 8. Docs, changelog, version bump, commit + tag
+
+### Review
+- Normalization: matches the reference wherever nu is real. For complex nu, the user
+  chose the analytic Sum c_k^2 = 1, which leaves a z-constant factor against the
+  reference (ratio-constancy tests).
+- Speed:
+  - 500 digits: 1.5 ms (reference 16 ms); 10^4 digits: 0.40 s (reference 0.70 s).
+  - 10^6 machine points: 15 ms. ce_2 over 10^6: 17 ms, against scipy 920 ms.
+- Wrong reference value: at MathieuC[-1, 2, 5 I] the reference returns ~1e45; mpmath confirms ~1e-3.
+- Gates: c99, messages, packed-aware, compile-coverage, nd-surfaces and array-exactness all
+  pass. Valgrind of the REPL session equals the startup baseline.
+- Also fixed: the Attributes print order (NHold* before NumericFunction).
+
 # Issue #125: DifferentialForms package (from v0.6162, 2026-11-04)
 
 Reporter: `<< DifferentialForms.m; d[x]` gave `Dt[x]`. Plan: corpus of every exported

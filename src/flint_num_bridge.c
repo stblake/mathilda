@@ -28,6 +28,7 @@
 #include <flint/arb.h>
 #include <flint/acb.h>
 #include <flint/acb_dirichlet.h>
+#include "special_functions/mathieu_arb.h"   /* mathieu_acb */
 #include <flint/dirichlet.h>
 #include <flint/ulong_extras.h>
 #include <flint/acb_elliptic.h>
@@ -1262,6 +1263,19 @@ static void nb_struve_h(acb_t res, const acb_t nu, const acb_t z, slong prec) {
     acb_clear(w); acb_clear(zh); acb_clear(t);
 }
 
+/* MathieuC / MathieuCPrime: adapters to the nb_fn3 shape for the ladder. The
+ * kernel adds its own guard bits for the phase nu z (log2 |z| of them), so a
+ * large real z (N[MathieuC[3, 1, 10^15], 20]) resolves on the first rung. */
+static void nb_mathieu_c(acb_t r, const acb_t a, const acb_t q, const acb_t z, slong prec) {
+    mathieu_acb(r, a, q, z, 0, prec);
+}
+static void nb_mathieu_cp(acb_t r, const acb_t a, const acb_t q, const acb_t z, slong prec) {
+    mathieu_acb(r, a, q, z, 1, prec);
+}
+Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int deriv) {
+    return nb_eval3(a, q, z, deriv ? nb_mathieu_cp : nb_mathieu_c);
+}
+
 Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
     const Expr* args[2] = { nu, z };
     slong outb = pick_out_bits(args, 2);
@@ -2266,6 +2280,9 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
 }
 Expr* flint_num_struveh(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
+Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int deriv) {
+    (void)a; (void)q; (void)z; (void)deriv; return NULL;
+}
 Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z) {
     (void)a; (void)b; (void)c; (void)z; return NULL;
 }

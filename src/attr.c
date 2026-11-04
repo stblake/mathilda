@@ -448,14 +448,15 @@ static Expr* attributes_of(Expr* arg) {
     }
     if (attrs & ATTR_HOLDALLCOMPLETE) attr_list[i++] = expr_new_symbol(SYM_HoldAllComplete);
     if (attrs & ATTR_LISTABLE) attr_list[i++] = expr_new_symbol(SYM_Listable);
-    if (attrs & ATTR_NUMERICFUNCTION) attr_list[i++] = expr_new_symbol(SYM_NumericFunction);
-    if (attrs & ATTR_ONEIDENTITY) attr_list[i++] = expr_new_symbol(SYM_OneIdentity);
+    /* Alphabetical, case-insensitively: NHold* sorts before NumericFunction. */
     if ((attrs & ATTR_NHOLDALL) == ATTR_NHOLDALL) {
         attr_list[i++] = expr_new_symbol(SYM_NHoldAll);
     } else {
         if (attrs & ATTR_NHOLDFIRST) attr_list[i++] = expr_new_symbol(SYM_NHoldFirst);
         if (attrs & ATTR_NHOLDREST) attr_list[i++] = expr_new_symbol(SYM_NHoldRest);
     }
+    if (attrs & ATTR_NUMERICFUNCTION) attr_list[i++] = expr_new_symbol(SYM_NumericFunction);
+    if (attrs & ATTR_ONEIDENTITY) attr_list[i++] = expr_new_symbol(SYM_OneIdentity);
     if (attrs & ATTR_ORDERLESS) attr_list[i++] = expr_new_symbol(SYM_Orderless);
     if (attrs & ATTR_PROTECTED) attr_list[i++] = expr_new_symbol(SYM_Protected);
     if (attrs & ATTR_SEQUENCEHOLD) attr_list[i++] = expr_new_symbol(SYM_SequenceHold);

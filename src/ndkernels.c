@@ -44,6 +44,7 @@
 #include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
 #include "special_functions/sf_machine_bessel.h"
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
+#include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
 #include "special_functions/surd.h"          /* Surd binary kernel (sf_surd_r) */
 #include "special_functions/besseljzero.h"   /* BesselJZero binary kernel */
@@ -939,6 +940,25 @@ static bool ndk_WhittakerM_n(const double* re, const double* im, size_t n,
     double v; if (!sf_machine_whittaker_m(re[0], re[1], re[2], &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+/* MathieuC / MathieuCPrime [a, q, z]: complex in every slot. A real call can
+ * have a purely imaginary value (an instability band); the kernel returns it
+ * whole -- ndarray_map_nary widens the output buffer to complex, and the
+ * Compile VM's real-slot KERNN hands such a call to the interpreter (oi != 0),
+ * so the imaginary part is never dropped. The plan cache behind
+ * sf_machine_mathieu is thread-local, so nd_parallel_for may split the map. */
+static bool ndk_mathieu_n(int deriv, const double* re, const double* im, size_t n,
+                          double* rr, double* ri) {
+    if (n != 3) return false;
+    return sf_machine_mathieu(deriv, re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+}
+static bool ndk_MathieuC_n(const double* re, const double* im, size_t n,
+                           double* rr, double* ri) {
+    return ndk_mathieu_n(0, re, im, n, rr, ri);
+}
+static bool ndk_MathieuCPrime_n(const double* re, const double* im, size_t n,
+                                double* rr, double* ri) {
+    return ndk_mathieu_n(1, re, im, n, rr, ri);
+}
 /* HypergeometricU[a, b, z]: re[0] = a, re[1] = b, re[2] = z. Real only. */
 static bool ndk_HypergeometricU_n(const double* re, const double* im, size_t n,
                                   double* rr, double* ri) {
@@ -1005,6 +1025,8 @@ static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true 
 static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true };
 static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
 static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
+static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true };
+static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL, NULL };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL, NULL };
@@ -1095,6 +1117,8 @@ void ndkernels_init(void) {
     REG_N(MeijerG);     /* MeijerG[{{..},{..}}, {{..},{..}}, z(, r)] for Compile[] */
     REG_N(LaguerreL);   /* generalized LaguerreL[n, a, x] for Compile[] */
     REG_N(WhittakerM);  /* WhittakerM[k, m, z] for Compile[] */
+    REG_N(MathieuC);       /* MathieuC[a, q, z] for Compile[] */
+    REG_N(MathieuCPrime);  /* MathieuCPrime[a, q, z] for Compile[] */
     REG_N(HypergeometricU); /* HypergeometricU[a, b, z] for Compile[] */
     REG_N(WhittakerW);  /* WhittakerW[k, m, z] for Compile[] */
     REG_N(DirichletL);  /* DirichletL[k, j, s] for Compile[] */

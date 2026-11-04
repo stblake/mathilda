@@ -562,6 +562,11 @@ P("whittakerm", "special", "WhittakerM[2., 3., p]",
   "np.exp(-p/2.0)*p**3.5*sp.hyp1f1(1.5, 7.0, p)")
 P("whittakerw", "special", "WhittakerW[2., 3., p]",
   "np.exp(-p/2.0)*p**3.5*sp.hyperu(1.5, 7.0, p)")
+# Mathieu: SciPy has only the characteristic orders (mathieu_cem(m, q, x) with x
+# in DEGREES, DLMF normalization -- the same as MathieuC at a = a_m(q)). a_2(5)
+# to 16 digits; Mathilda snaps a machine a that close to a characteristic value.
+P("mathieuc", "special", "MathieuC[7.449109739529178, 5., p]",
+  "sp.mathieu_cem(2, 5.0, np.degrees(p))[0]")
 # GammaRegularized / BetaRegularized are not implemented in Mathilda (they returned
 # unevaluated -> the probes only ever reported UNEVAL mismatches). Removed; tracked
 # as a feature gap in tasks/special_functions_perf_review_2026-10-16.md.

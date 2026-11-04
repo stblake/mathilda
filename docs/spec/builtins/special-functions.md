@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even Mathieu function `MathieuC` (with `MathieuCPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3280,6 +3280,107 @@ Out[3]= 1/Gamma[1 - k]
 In[4]:= WhittakerW[2, 1/2, 1.]  (* -E^(-1/2): the U polynomial case *)
 Out[4]= -0.606531
 ```
+
+## MathieuC and MathieuCPrime
+
+`MathieuC[a, q, z]` gives the even Mathieu function with characteristic value `a`
+and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
+`MathieuCPrime[a, q, z]` is its `z`-derivative. Both are defined for all complex
+`a`, `q`, `z`.
+
+- **Definition and normalization.** The Floquet form `Sum[c_k Cos[(nu + 2k) z]]`,
+  where `nu` is the characteristic exponent (`Cos[Pi nu] = y_e(Pi)` for the even
+  solution with `y_e(0) = 1`) and `(a - (nu+2k)^2) c_k = q (c_{k-1} + c_{k+1})`:
+  - generic `nu`: `Sum[c_k^2] = 1` (the plain square, so the function is analytic
+    in `a` and `q`), with the sign fixed by `Re(c_0) > 0`, `c_0` the `Cos[nu z]`
+    coefficient for the representative of `nu` nearest `Sqrt[a]`;
+  - integer `nu` (`a` a characteristic value, `MathieuCharacteristicA[r, q]` for
+    an integer `r`): the DLMF normalization `Integrate[ce^2, {z, 0, 2 Pi}] = Pi`,
+    i.e. scipy's `mathieu_cem`. A machine `a` within ~2e-6 in `nu` of a
+    characteristic value is treated as one;
+  - `q = 0`: `Cos[Sqrt[a] z]`, and `1/Sqrt[2]` for `a = 0` (`ce_0`).
+
+  For real `a`, `q` in a stability band (real `nu`), and at every characteristic
+  value, this coincides with the reference CAS. In an instability band, or for
+  complex `a` or `q` (complex `nu`), the reference uses a non-analytic
+  normalization (`Sum[|c_k|^2] = 1` with a phase convention), so there the two
+  differ by a `z`-independent constant factor. Both are the even solution.
+  Example: `MathieuC[I, -2, 2.5 + I]` is `40.7538 - 38.419 I` here and
+  `20.292 - 27.0428 I` there. For real `a`, `q` the value is real or purely
+  imaginary on the real and imaginary axes (`MathieuC[4, 1, 0.5] = 0.632114 I`).
+- **Exact values.** `MathieuC[a, 0, z] = Cos[Sqrt[a] z]`,
+  `MathieuC[0, 0, z] = 1/Sqrt[2]`, `MathieuCPrime[a, 0, z] = -Sqrt[a] Sin[Sqrt[a] z]`,
+  `MathieuCPrime[a, q, 0] = 0`. Even in `z`, with the superficial sign rule (as
+  `Cos`): `MathieuC[a, q, -x] = MathieuC[a, q, x]`,
+  `MathieuCPrime[a, q, -x] = -MathieuCPrime[a, q, x]`. All-exact numeric arguments
+  stay unevaluated (`MathieuC[2, 1, 3]`); `N` evaluates them, and `NHoldFirst`
+  keeps an exact `a`.
+- **Numerics.**
+  - Machine: `MathieuC[2, 1, 3.2] = -0.899531`.
+  - Arbitrary precision, tracking the input precision:
+    `MathieuC[2, 1, 3.2`20] = -0.899531163441461283`,
+    `MathieuC[2, 1, 3.2`20 + 0.5`20 I] = -0.882739739030372925 + 0.156794630450643144 I`,
+    `N[MathieuC[2, 1, 37/10], 50]` to 50 digits.
+  - Large `|z|`: `N[MathieuC[3, 1, 10^15], 20] = -0.78255601989076339546`. Machine
+    `MathieuC[3, 1, 10.^15]` is meaningless, as it is for any machine-precision
+    computation of `nu 10^15`.
+  - Large `Im z`: where the Floquet sum cancels (`MathieuC[-1, 2, 5. I]`, terms
+    ~`e^40`, value ~`1e-3`), the machine path declines to the ball kernel, which
+    answers correctly. The reference returns `~1e45` there; the value
+    `N y_e(5 i)` is confirmed by an independent mpmath ODE integration.
+- **Algorithm.** One plan per `(a, q)`, then a short sum per `z`:
+  - `nu`: Hill's determinant, rewritten without the poles at `a = (2k)^2` (the
+    sinc factor divided out analytically) and with its polynomially convergent
+    tail in closed form, refined by Newton on the continued-fraction consistency
+    function (every root is an equivalent exponent);
+  - the dominant coefficient index comes from inverse iteration on the
+    truncated Floquet matrix;
+  - coefficients come from two Miller sweeps glued there;
+  - the sum is a centred Horner in `e^(2iz)` (complex), or a single real Horner
+    pass (real stable).
+
+  The arbitrary-precision kernel (`src/special_functions/mathieu_arb.c`, arb balls
+  in the precision ladder) does the same, with three refinements:
+  - precision-doubling Newton with a half-precision derivative;
+  - a final first-order coefficient correction instead of a last full pass;
+  - a per-index precision profile: tail coefficients carry only the bits they
+    contribute.
+
+  Clenshaw and the Miller sweeps run on midpoints with a rigorous a-priori
+  error bound, because ball radii grow like `1.5^N` in those recurrences while
+  the true error stays at the working precision.
+- **Performance.**
+  - 500 digits: `MathieuC[2, 1, 3.7`500]` in 1.5 ms (reference 16 ms).
+  - 10^4 digits: 0.40 s (reference 0.70 s).
+  - Machine-precision buffers: `MathieuC[2, 1, v]` over 10^6 points in 15 ms.
+  - Characteristic order: `ce_2(., 5)` over 10^6 points in 17 ms, against
+    scipy `mathieu_cem` 920 ms.
+  - Per point: about 80 ns real and 200 ns complex; a new `(a, q)` plan costs
+    about 28 µs.
+- **Surfaces.** The machine helper `sf_machine_mathieu` is shared bit-for-bit by
+  the scalar path, the packed / NDArray map (an n-ary kernel, parallel; a
+  complex-valued result widens the buffer), and `Compile[]` at scalar and array
+  shapes, real and complex (`CompileDiagnostics[{{v, _Real, 1}}, MathieuC[2., 1., v]]`
+  reports `Compiled -> True`). A real-typed compiled call whose value is
+  imaginary hands the call to the interpreter.
+- **Derivative.** `D[MathieuC[a, q, x], x] = MathieuCPrime[a, q, x]` and
+  `D[MathieuCPrime[a, q, x], x] = (-a + 2 q Cos[2 x]) MathieuC[a, q, x]`, so
+  `Table[D[MathieuC[a, q, x], {x, n}], {n, 4}]` is closed in `MathieuC` /
+  `MathieuCPrime`. `d/da` and `d/dq` stay inert
+  (`Derivative[1, 0, 0][MathieuC][a, q, x]`).
+- **Series** follows from the derivative:
+  - `Series[MathieuC[3, 2, x], {x, 0, 8}] = MathieuC[3, 2, 0] (1 + x^2/2 - 5/8 x^4 - 47/720 x^6 + 473/4480 x^8) + O[x]^9`;
+  - at a generic point:
+    `Series[MathieuC[a, q, x], {x, x0, 2}] = MathieuC[a, q, x0] + MathieuCPrime[a, q, x0] (x - x0) - 1/2 (a - 2 q Cos[2 x0]) MathieuC[a, q, x0] (x - x0)^2 + O[x - x0]^3`.
+- **Listable.** `MathieuC[a, q, {z1, z2, z3}] = {MathieuC[a, q, z1], ...}`.
+- **Messages.** `MathieuC[]` emits `MathieuC::argrx` (through the message funnel:
+  `Check` and `Quiet` see it).
+
+Not yet provided: `MathieuS`, `MathieuSPrime`, `MathieuCharacteristicA`,
+`MathieuCharacteristicB` and `MathieuCharacteristicExponent` as builtins (the
+exponent is computed internally), and asymptotic Series at Infinity.
+
+Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
 
 ## MeijerG
 

@@ -74,3 +74,28 @@ checkIf["EllipticPi[n, m] over 10^6", "EllipticPi", Round[10^6 N[EllipticPi[1/3,
 benchIf["EllipticPi[n, ., m] over 10^6", "EllipticPi", EllipticPi[1/2, ep, em];];
 checkIf["EllipticPi[n, ., m] over 10^6", "EllipticPi",
         Round[10^6 N[EllipticPi[1/3, 1, 1/2]]]];
+
+(* --- Mathieu functions ---------------------------------------------------- *)
+(* MathieuC[a, q, z] at a generic (non-characteristic) a: SciPy has no counterpart
+   (only the integer orders), so that row is Mathilda vs Mathematica. The plan
+   (characteristic exponent + Floquet coefficients) is built once per (a, q),
+   then the buffer is a short Clenshaw-like sum per element. a = 2, q = 1 is in a
+   stability band, where every normalization convention coincides, so the check
+   value is comparable across systems. *)
+benchIf["MathieuC[a, q, .] over 10^6", "MathieuC", MathieuC[2, 1, v];];
+checkIf["MathieuC[a, q, .] over 10^6", "MathieuC", Round[10^6 N[MathieuC[2, 1, 1/2]]]];
+
+benchIf["MathieuCPrime[a, q, .] over 10^6", "MathieuCPrime", MathieuCPrime[2, 1, v];];
+checkIf["MathieuCPrime[a, q, .] over 10^6", "MathieuCPrime",
+        Round[10^6 N[MathieuCPrime[2, 1, 1/2]]]];
+
+(* The characteristic order ce_2(z, 5): a = a_2(5) to 16 digits, which all three
+   systems treat as the characteristic value (DLMF normalization). SciPy's
+   mathieu_cem(2, 5, x) takes x in DEGREES. *)
+benchIf["MathieuC ce_2(., 5) over 10^6", "MathieuC", MathieuC[7.449109739529178, 5., v];];
+checkIf["MathieuC ce_2(., 5) over 10^6", "MathieuC",
+        Round[10^6 MathieuC[7.449109739529178, 5., 0.5]]];
+
+(* Arbitrary precision: one value at 10^4 digits (no SciPy counterpart). *)
+benchIf["MathieuC at 10^4 digits", "MathieuC", MathieuC[2, 1, 3.7`10000];];
+checkIf["MathieuC at 10^4 digits", "MathieuC", Round[10^6 MathieuC[2, 1, 3.7`30]]];

@@ -93,3 +93,11 @@ check("EllipticE[., m] over 10^6", r6(sp.ellipeinc(1.0, 0.5)))
 bench("EllipticPi[n, m] over 10^6", lambda: _ellippi(0.5, em))
 check("EllipticPi[n, m] over 10^6",
       r6(float(sp.elliprf(0.0, 0.5, 1.0) + (1.0 / 3.0 / 3.0) * sp.elliprj(0.0, 0.5, 1.0, 1.0 - 1.0 / 3.0))))
+
+# --- Mathieu functions -----------------------------------------------------
+# SciPy has only the integer orders: mathieu_cem(m, q, x), x in DEGREES, DLMF
+# normalization -- MathieuC at a = a_m(q). The generic-a and 10^4-digit rows of
+# special_functions.m have no SciPy counterpart (ABSENT here).
+_vdeg = np.degrees(v)
+bench("MathieuC ce_2(., 5) over 10^6", lambda: sp.mathieu_cem(2, 5.0, _vdeg)[0])
+check("MathieuC ce_2(., 5) over 10^6", r6(sp.mathieu_cem(2, 5.0, np.degrees(0.5))[0]))

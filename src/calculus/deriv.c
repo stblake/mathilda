@@ -1907,6 +1907,62 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return expr_new_function(mk_sym("Plus"), terms, 3);
         }
 
+        /* --- MathieuC[A, Q, Z] / MathieuCPrime[A, Q, Z]: the Mathieu equation
+         *   ce'' = (2 Q Cos[2 Z] - A) ce, so
+         *   d/dZ MathieuC      = MathieuCPrime,
+         *   d/dZ MathieuCPrime = (-A + 2 Q Cos[2 Z]) MathieuC.
+         *   d/dA, d/dQ have no closed form -> inert
+         *     Derivative[1,0,0][head][A,Q,Z] / Derivative[0,1,0][head][A,Q,Z].
+         * Zero-derivative arms are dropped, so D[MathieuC[a,q,x],x] keeps only
+         * the dZ term (and Series about any point follows by Taylor). */
+        if ((h == SYM_MathieuC || h == SYM_MathieuCPrime) && n == 3) {
+            const char* hn = h == SYM_MathieuC ? "MathieuC" : "MathieuCPrime";
+            Expr* A = args[0];
+            Expr* Q = args[1];
+            Expr* Z = args[2];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dQ = deriv_of(Q, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                Expr* dfdz;
+                if (h == SYM_MathieuC) {
+                    dfdz = expr_new_function(mk_sym("MathieuCPrime"),
+                              (Expr*[]){ expr_copy(A), expr_copy(Q), expr_copy(Z) }, 3);
+                } else {
+                    /* (-A + 2 Q Cos[2 Z]) MathieuC[A, Q, Z] */
+                    Expr* coef = mk_fn2("Plus", mk_neg(expr_copy(A)),
+                                   expr_new_function(mk_sym("Times"), (Expr*[]){
+                                       mk_int(2), expr_copy(Q),
+                                       mk_fn1("Cos", mk_fn2("Times", mk_int(2), expr_copy(Z)))
+                                   }, 3));
+                    Expr* ce = expr_new_function(mk_sym("MathieuC"),
+                              (Expr*[]){ expr_copy(A), expr_copy(Q), expr_copy(Z) }, 3);
+                    dfdz = mk_fn2("Times", coef, ce);
+                }
+                terms[nt++] = mk_fn2("Times", dfdz, dZ);
+            } else {
+                expr_free(dZ);
+            }
+            for (int which = 0; which < 2; which++) {
+                Expr* dP = which == 0 ? dA : dQ;
+                if (is_lit_zero(dP)) { expr_free(dP); continue; }
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(which == 0 ? 1 : 0), mk_int(which == 1 ? 1 : 0),
+                                         mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym(hn));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(A), expr_copy(Q), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dP);
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            if (nt == 2) return mk_fn2("Plus", terms[0], terms[1]);
+            return expr_new_function(mk_sym("Plus"), terms, 3);
+        }
+
         /* --- WhittakerM[K, M, Z]: chain rule on the argument Z (DLMF 13.4.27,
          *   z M' = (z/2 - k) M + (k + m + 1/2) M_{k+1,m}):
          *   d/dZ M_{k,m}(Z) = (1/2 - k/Z) M_{k,m}(Z) + ((1/2+k+m)/Z) M_{k+1,m}(Z).

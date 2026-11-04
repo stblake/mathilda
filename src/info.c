@@ -1303,6 +1303,25 @@ void info_init(void) {
         "Exact reductions U(0,b,z) = 1 and U(a,a+1,z) = z^(-a); a non-positive\n"
         "integer a gives the expanded polynomial (e.g. U(-1,b,z) = z - b).\n"
         "D[HypergeometricU[a,b,z],z] = -a HypergeometricU[a+1,b+1,z]. Listable.");
+    symtab_set_docstring("MathieuC",
+        "MathieuC[a, q, z]\n"
+        "\tgives the even Mathieu function with characteristic value a and parameter q.\n"
+        "It is the even solution of y'' + (a - 2 q Cos[2 z]) y = 0, in the Floquet form\n"
+        "Sum[c_k Cos[(nu + 2 k) z], k], nu the characteristic exponent, normalized by\n"
+        "Sum[c_k^2] = 1 with Re(c_0) > 0 (analytic in a and q); at a characteristic\n"
+        "value (integer nu) the DLMF normalization Integrate[ce^2, {z, 0, 2 Pi}] = Pi.\n"
+        "Exact values: MathieuC[a, 0, z] = Cos[Sqrt[a] z], MathieuC[0, 0, z] = 1/Sqrt[2];\n"
+        "even in z. Evaluates numerically for all complex a, q, z at machine or\n"
+        "arbitrary precision (the result tracks the input precision); a shared\n"
+        "machine kernel drives the scalar, packed/NDArray and Compile[] surfaces.\n"
+        "D[MathieuC[a, q, z], z] = MathieuCPrime[a, q, z]; Series follows. Listable.");
+    symtab_set_docstring("MathieuCPrime",
+        "MathieuCPrime[a, q, z]\n"
+        "\tgives the derivative with respect to z of the even Mathieu function\n"
+        "MathieuC[a, q, z]. D[MathieuCPrime[a, q, z], z] = (2 q Cos[2 z] - a)\n"
+        "MathieuC[a, q, z]. Exact values: MathieuCPrime[a, q, 0] = 0,\n"
+        "MathieuCPrime[a, 0, z] = -Sqrt[a] Sin[Sqrt[a] z]; odd in z. Numerics as for\n"
+        "MathieuC (machine, arbitrary precision, packed/NDArray, Compile[]). Listable.");
     symtab_set_docstring("WhittakerM",
         "WhittakerM[k, m, z]\n"
         "\tgives the Whittaker function M_{k,m}(z).\n"

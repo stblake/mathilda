@@ -112,6 +112,12 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
  * |z| gets its bits up front rather than by blind doubling. */
 Expr* flint_num_struveh(const Expr* nu, const Expr* z);     /* StruveH[nu, z]    */
 
+/* MathieuC[a, q, z] (deriv == 0) / MathieuCPrime[a, q, z] (deriv == 1) at
+ * arbitrary precision: the ball-arithmetic Floquet kernel of
+ * special_functions/mathieu_arb.c, run inside the precision ladder. NULL when
+ * the kernel cannot answer (no machine plan, degenerate normalization). */
+Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int deriv);
+
 /* Hypergeometric2F1[a, b, c, z] at arbitrary precision (acb_hypgeom_2f1, with
  * its transformations near z = 1). Used by HypergeometricPFQ's MPFR path. */
 Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z);
