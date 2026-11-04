@@ -1989,6 +1989,107 @@ static const Expr* simp_call_assumptions(const Expr* res, const Expr** opt) {
 
 static Expr* builtin_simplify_inner(Expr* res);
 
+/* Is t a term carrying a reciprocal power (c/x, x^-2 y, ...)? */
+static bool simp_term_has_reciprocal(const Expr* t) {
+    const Expr* const* fs = &t;
+    size_t n = 1;
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+        t->data.function.head->data.symbol.name == SYM_Times) {
+        fs = (const Expr* const*)t->data.function.args;
+        n = t->data.function.arg_count;
+    }
+    for (size_t i = 0; i < n; i++) {
+        const Expr* f = fs[i];
+        if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+            f->data.function.head->data.symbol.name == SYM_Power &&
+            f->data.function.arg_count == 2) {
+            const Expr* x = f->data.function.args[1];
+            if ((x->type == EXPR_INTEGER && x->data.integer < 0) ||
+                (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+                 x->data.function.head->data.symbol.name == SYM_Rational &&
+                 x->data.function.args[0]->type == EXPR_INTEGER &&
+                 x->data.function.args[0]->data.integer < 0))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Is p a sum with a term carrying a reciprocal power? */
+static bool simp_is_divided_sum(const Expr* p) {
+    if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL ||
+        p->data.function.head->data.symbol.name != SYM_Plus) return false;
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (simp_term_has_reciprocal(p->data.function.args[i])) return true;
+    return false;
+}
+
+/* Does e hold a divided sum anywhere? */
+static bool simp_has_divided_sum(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (simp_is_divided_sum(e)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (simp_has_divided_sum(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Does e hold, anywhere, a product with a divided-sum factor:
+ * c (p/x + q), (x^-1 + x^2)/2? */
+static bool simp_has_divided_sum_factor(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Times) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (simp_is_divided_sum(e->data.function.args[i])) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (simp_has_divided_sum_factor(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* e with every divided-sum factor of a product put over its common
+ * denominator (Together), re-evaluated; NULL when nothing changes. */
+static Expr* simp_rejoin_divided_sum_factors(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    bool is_times = e->data.function.head->type == EXPR_SYMBOL &&
+                    e->data.function.head->data.symbol.name == SYM_Times;
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = e->data.function.args[i];
+        Expr* na = NULL;
+        if (is_times && simp_is_divided_sum(a)) {
+            /* Together, then the numerator's integer content out:
+             * -2 + 6/x -> (2 (3 - x))/x as one factor */
+            Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Together"),
+                                 (Expr*[]){ expr_copy((Expr*)a) }, 1));
+            Expr* num = eval_and_free(expr_new_function(expr_new_symbol("FactorTerms"),
+                (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol("Numerator"),
+                               (Expr*[]){ expr_copy(t) }, 1)) }, 1));
+            Expr* den = eval_and_free(expr_new_function(expr_new_symbol("Denominator"),
+                               (Expr*[]){ t }, 1));
+            na = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ num, expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2));
+        } else {
+            na = simp_rejoin_divided_sum_factors(a);
+        }
+        if (na) {
+            if (!args) {
+                args = malloc(sizeof(Expr*) * (n ? n : 1));
+                for (size_t k = 0; k < n; k++) args[k] = NULL;
+            }
+            args[i] = na;
+        }
+    }
+    if (!args) return NULL;
+    for (size_t k = 0; k < n; k++)
+        if (!args[k]) args[k] = expr_copy(e->data.function.args[k]);
+    Expr* r = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, n));
+    free(args);
+    return r;
+}
+
 Expr* builtin_simplify(Expr* res) {
     Expr* out = builtin_simplify_inner(res);
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
@@ -2507,6 +2608,28 @@ static Expr* builtin_simplify_core(Expr* res) {
         }
     }
 
+    /* No termwise-divided sum factor the input did not have: Simplify of
+     * (18 - 6 n^2 + n^4)/(96 n^2) stays as it is in the reference, where
+     * the content lift and Apart gave (-6 + 18/n^2 + n^2)/96, and
+     * a b (-3 + 2 x)/x is not a b (2 - 3/x), though both score lower.
+     * The reference keeps such a factor when the input had one
+     * (a (b + c/x), (1 + 1/x) y); a lone sum is not a factor, so
+     * Simplify[(2 x - 3)/x] stays 2 - 3/x. */
+    if (simp_has_divided_sum_factor(best)) {
+        if (!simp_has_divided_sum(expr)) {
+            Expr* rejoined = simp_rejoin_divided_sum_factors(best);
+            if (rejoined) {
+                expr_free(best);
+                best = rejoined;
+            }
+        } else if (!simp_has_divided_sum_factor(expr) &&
+                   score_with_func(best, opt_complexity) >= score_with_func(expr, opt_complexity)) {
+            /* Simplify[2/x + 4 x] stays as it is (not 2 (x^-1 + 2 x), a tie) */
+            expr_free(best);
+            best = expr_copy(expr);
+        }
+    }
+
     /* Sign canonicalisation: flip pairs of negative-leading Plus factors
      * inside a top-level Times so each binomial leads with its
      * positive-coefficient term, e.g.
@@ -2517,7 +2640,7 @@ static Expr* builtin_simplify_core(Expr* res) {
      * (11) into -2 (2 - eps) (2 - x) (15) when they are numeric. */
     {
         Expr* canon = canon_negate_pairs(best);
-        if (canon && score_with_func(canon, opt_complexity) <=
+        if (canon && score_with_func(canon, opt_complexity) <
                      score_with_func(best, opt_complexity)) {
             expr_free(best);
             best = canon;

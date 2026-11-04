@@ -50,8 +50,25 @@ void test_simplify_factor_tie_issue126(void) {
     assert_eval_eq("Simplify[(3 - 2 a)^2 y]", "(3 - 2 a)^2 y", 0);
     /* the sign of Factor's content moves into a factor when cheaper */
     assert_eval_eq("Simplify[5 y - 3 y^2]", "(5 - 3 y) y", 0);
-    /* paired sign flip of the input beats Factor's 2 (4 + 3 a) (1 - 3 x) */
-    assert_eval_eq("SimplifyCount[Simplify[(-2 + 6 x) (-4 - 3 a)]]", "12", 0);
+    /* no paired sign flip (the reference has none): Factor's form, score 14,
+     * as the reference gives it */
+    assert_eval_eq("(Simplify[(-2 + 6 x) (-4 - 3 a)]) === (-2 (4 + 3 a) (-1 + 3 x))", "True", 0);
+    /* a sign-only rewrite of a product wins a tie when it changes the
+     * content (reference): (3 - d) y -> -((-3 + d) y) */
+    assert_eval_eq("(Simplify[(3 - d) y]) === (-((-3 + d) y))", "True", 0);
+    assert_eval_eq("(Simplify[(1 - a) (-2 + 3 eps)]) === (-((-1 + a) (-2 + 3 eps)))", "True", 0);
+    assert_eval_eq("(Simplify[(2 - D) (3 - D)]) === ((-3 + D) (-2 + D))", "True", 0);
+    /* Factor's factor already oriented as the input is kept */
+    assert_eval_eq("(Simplify[-7 x (7 d - 6 x)]) === (-7 (7 d - 6 x) x)", "True", 0);
+    /* no termwise-divided sum factor the input did not have */
+    assert_eval_eq("(Simplify[(18 - 6 n^2 + n^4)/(96 n^2)]) === ((18 - 6 n^2 + n^4)/(96 n^2))", "True", 0);
+    assert_eval_eq("(Simplify[a b (2 x - 3)/x]) === ((a b (-3 + 2 x))/x)", "True", 0);
+    assert_eval_eq("(Simplify[(1 + x^3)/(2 x)]) === ((1 + x^3)/(2 x))", "True", 0);
+    assert_eval_eq("(Simplify[2/x + 4 x]) === (2/x + 4 x)", "True", 0);
+    assert_eval_eq("(Simplify[a (b + c/x)]) === (a (b + c/x))", "True", 0);
+    /* a number times one sum over a monomial: the expanded numerator */
+    assert_eval_eq("(Simplify[(-2 (-1 + x))/y]) === ((2 - 2 x)/y)", "True", 0);
+    assert_eval_eq("(Simplify[-((-3 + d)/x)]) === ((3 - d)/x)", "True", 0);
     /* numeric pair flip is score-gated: stays -2 (-2 + eps) (-2 + x) */
     assert_eval_eq("Simplify[(-2 + x) (4 - 2 eps)]", "-2 (-2 + eps) (-2 + x)", 0);
     /* a sum input keeps the cheaper partially-factored form */

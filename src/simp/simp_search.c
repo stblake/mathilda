@@ -607,6 +607,22 @@ static int exact_number_sign(const Expr* e) {
     return 2;
 }
 
+
+
+/* Factor's output reduced to the candidate Simplify should score, or NULL.
+ *
+ * Factor puts the sign on the numeric content and gives every Plus factor a
+ * positive leading variable term, which is not always the cheapest spelling:
+ * 5 y - 3 y^2 factors as -y (-5 + 3 y) (score 10) where (5 - 3 y) y scores 8.
+ * When the content c is negative, each variant that moves the sign into one
+ * Plus factor (-c, Expand[-p]) is scored and the cheapest wins on a STRICT
+ * improvement, so -4 (-1 + eps) y (8) is kept over 4 (1 - eps) y (9). The
+ * magnitude of c is never folded back into a factor: 2 (1 + 2 eps) y z is
+ * the factored form, (2 + 4 eps) y z merely the input again.
+ *
+ * NULL when Factor found no factorisation (it handed back a Plus): an
+ * expanded sum is no more simplified than the input and is already offered
+ * as the Expand candidate. */
 /* Sign-normalised factor: of a Plus `p` and its negation Expand[-p], the one
  * that sorts first; Power[base, k] normalises its base. Anything else is
  * returned as a copy. Two factors that differ only by a sign normalise to the
@@ -679,21 +695,62 @@ static bool factor_is_sign_rearrangement(const Expr* input,
     return same;
 }
 
-/* Factor's output reduced to the candidate Simplify should score, or NULL.
- *
- * Factor puts the sign on the numeric content and gives every Plus factor a
- * positive leading variable term, which is not always the cheapest spelling:
- * 5 y - 3 y^2 factors as -y (-5 + 3 y) (score 10) where (5 - 3 y) y scores 8.
- * When the content c is negative, each variant that moves the sign into one
- * Plus factor (-c, Expand[-p]) is scored and the cheapest wins on a STRICT
- * improvement, so -4 (-1 + eps) y (8) is kept over 4 (1 - eps) y (9). The
- * magnitude of c is never folded back into a factor: 2 (1 + 2 eps) y z is
- * the factored form, (2 + 4 eps) y z merely the input again.
- *
- * NULL when Factor found no factorisation (it handed back a Plus): an
- * expanded sum is no more simplified than the input and is already offered
- * as the Expand candidate. */
-static Expr* factored_tie_candidate(const Expr* factored,
+/* Is e c P m^-k... : a numeric factor c, exactly one sum P, and otherwise
+ * only negative powers of symbols (the denominator a monomial)? */
+static bool quotient_numeric_times_sum_over_monomial(const Expr* e) {
+    if (!simp_eq_head_sym(e, "Times")) return false;
+    size_t nsum = 0, nden = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* f = e->data.function.args[i];
+        if (exact_number_sign(f) != 2) continue;
+        if (simp_eq_head_sym(f, "Plus")) { nsum++; continue; }
+        if (f->type == EXPR_SYMBOL) return false;            /* a numerator symbol */
+        if (simp_eq_head_sym(f, "Power") && f->data.function.arg_count == 2 &&
+            f->data.function.args[0]->type == EXPR_SYMBOL &&
+            exact_number_sign(f->data.function.args[1]) == -1) { nden++; continue; }
+        return false;
+    }
+    return nsum == 1 && nden >= 1;
+}
+
+/* Do a and b carry the same leading numeric factor (1 when none)? */
+static bool same_numeric_content(const Expr* a, const Expr* b) {
+    const Expr* ca = simp_eq_head_sym(a, "Times") && a->data.function.arg_count ? a->data.function.args[0] : NULL;
+    const Expr* cb = simp_eq_head_sym(b, "Times") && b->data.function.arg_count ? b->data.function.args[0] : NULL;
+    bool na = ca && exact_number_sign(ca) != 2, nb = cb && exact_number_sign(cb) != 2;
+    if (!na && !nb) return true;
+    if (na && nb) return expr_eq(ca, cb);
+    const Expr* c = na ? ca : cb;
+    return c->type == EXPR_INTEGER && c->data.integer == 1;
+}
+
+/* Is p a positive constant multiple of a Plus factor of `input` (a top-level
+ * Times argument, or the base of one of its powers, or input itself)? */
+static bool plus_matches_input_orientation(const Expr* p, const Expr* input) {
+    const Expr* const* fs = &input;
+    size_t nf = 1;
+    if (simp_eq_head_sym(input, "Times")) {
+        fs = (const Expr* const*)input->data.function.args;
+        nf = input->data.function.arg_count;
+    }
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* f = fs[i];
+        if (simp_eq_head_sym(f, "Power") && f->data.function.arg_count == 2)
+            f = f->data.function.args[0];
+        if (!simp_eq_head_sym(f, "Plus")) continue;
+        Expr* q = call_unary_owned("Cancel", eval_and_free(expr_new_function(
+            expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_copy((Expr*)p),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy((Expr*)f), expr_new_integer(-1) }, 2) }, 2)));
+        bool pos = q && exact_number_sign(q) == 1;
+        if (q) expr_free(q);
+        if (pos) return true;
+    }
+    return false;
+}
+
+static Expr* factored_tie_candidate(const Expr* factored, const Expr* input,
                                     const Expr* complexity_func) {
     if (simp_eq_head_sym(factored, "Power")) return expr_copy((Expr*)factored);
     if (!simp_eq_head_sym(factored, "Times")) return NULL;
@@ -719,6 +776,14 @@ static Expr* factored_tie_candidate(const Expr* factored,
             } else {
                 args[i] = expr_copy((Expr*)a);
             }
+        }
+        /* Never re-orient a factor Factor already wrote as the input does:
+         * -7 (7 d - 6 x) x keeps (7 d - 6 x), though 7 x (-7 d + 6 x)
+         * scores lower, as in the reference. */
+        if (plus_matches_input_orientation(fj, input)) {
+            for (size_t i = 0; i < n; i++) expr_free(args[i]);
+            free(args);
+            continue;
         }
         Expr* var = eval_and_free(
             expr_new_function(expr_new_symbol(SYM_Times), args, n));
@@ -766,18 +831,9 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
     Expr* expanded = traced_call_unary("Expand", input);
     if (expanded) update_best(&best, &bs, expanded, complexity_func);
 
-    /* Sign-pair flip of the input's Plus factors (canon_negate_pairs), as an
-     * ordinary strict candidate: (-2 + 6 x) (-4 - 3 a) (14) ->
-     * (2 - 6 x) (4 + 3 a) (12), which then also outranks Factor's
-     * 2 (4 + 3 a) (1 - 3 x) (13). */
-    {
-        Expr* flipped = canon_negate_pairs(input);
-        if (flipped) {
-            update_best(&best, &bs, flipped, complexity_func);
-            expr_free(flipped);
-        }
-    }
-
+    /* No sign-pair flip of the input's Plus factors as a candidate: the
+     * reference has no such move, and a flipped pair that scores lower
+     * replaced its Factor form ((3 - d) y stays -((-3 + d) y) there). */
     if (!has_non_integer_power(input)) {
         /* Factor wins TIES when it refines a product (issue #126):
          * (4 - 4 eps) y and -4 (-1 + eps) y both score 8, and the factored
@@ -785,19 +841,27 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
          * See factored_tie_candidate for the candidate itself. */
         Expr* factored = traced_call_unary("Factor", input);
         if (factored) {
-            Expr* fc = factored_tie_candidate(factored, complexity_func);
+            Expr* fc = factored_tie_candidate(factored, input, complexity_func);
             if (fc) {
                 size_t fs = score_with_func(fc, complexity_func);
-                /* A tie is Factor's only when the input is already a
-                 * product (two factorisations compete; the finer one wins)
-                 * and Factor did more than move signs between its factors.
+                /* A tie is Factor's when the input is already a product
+                 * (two factorisations compete), sign-only rewrites included:
+                 * (3 - d) y -> -((-3 + d) y), (1 - a) (-2 + 3 eps) ->
+                 * -((-1 + a) (-2 + 3 eps)), as in the reference.
                  * A tie with a SUM input stays with the sum: the top-level
                  * polish (simp_lift_common_factor at <=) reaches cheaper
                  * partially-factored forms from it, e.g.
                  * (1 - eps) eps - 4 eps z (4 + z) -> eps (1 - eps - 4 z (4 + z))
                  * (15), where Factor's -eps (-1 + eps + 16 z + 4 z^2) is 17. */
+                /* ... except a pure re-orientation of the input that keeps
+                 * its content, sign included: (5 - 3 z)^2 x z stays (not
+                 * x z (-5 + 3 z)^2), while 6 (-1 + 5 d - 6 a) -> -6 (1 + 6 a
+                 * - 5 d). Once another candidate (Expand) beat the input the
+                 * tie is Factor's: (2 - D) (3 - D) -> (-3 + D) (-2 + D). */
                 bool tie_ok = !simp_eq_head_sym(input, "Plus") &&
-                              !factor_is_sign_rearrangement(input, fc);
+                              !(expr_eq(best, input) &&
+                                factor_is_sign_rearrangement(input, fc) &&
+                                same_numeric_content(input, fc));
                 if (fs < bs || (tie_ok && fs == bs && !expr_eq(fc, best))) {
                     expr_free(best);
                     best = fc;
@@ -912,8 +976,36 @@ static Expr* simp_pipeline_rational(const Expr* input,
             Expr* fc = traced_call_unary("Factor", fc_src);
             factor_memo_pop();
             if (fc) {
-                update_best(&best, &bs, fc, complexity_func);
+                /* Factor takes a tie here too when it does more than move
+                 * signs of the input: a quotient keeps its orientation even
+                 * when the content's sign would change ((1 + x)/(1 - x)
+                 * stays, not -((1 + x)/(-1 + x)), as in the reference). */
+                size_t fs = score_with_func(fc, complexity_func);
+                bool tie_ok = !(expr_eq(best, input) &&
+                                factor_is_sign_rearrangement(input, fc));
+                if (fs < bs || (tie_ok && fs == bs && !expr_eq(fc, best))) {
+                    expr_free(best);
+                    best = expr_copy(fc);
+                    bs = fs;
+                }
                 expr_free(fc);
+            }
+        }
+    }
+
+    /* A number times one sum over a monomial takes the expanded numerator
+     * on a tie: (-2 (-1 + x))/y -> (2 - 2 x)/y, -((-3 + d)/x) -> (3 - d)/x,
+     * as in the reference (which keeps (2 - 2 x)/y as it is). */
+    if (quotient_numeric_times_sum_over_monomial(best)) {
+        Expr* en2 = traced_call_unary("ExpandNumerator", best);
+        if (en2) {
+            size_t s2 = score_with_func(en2, complexity_func);
+            if (s2 <= bs && !expr_eq(en2, best)) {
+                expr_free(best);
+                best = en2;
+                bs = s2;
+            } else {
+                expr_free(en2);
             }
         }
     }
@@ -1458,7 +1550,17 @@ static Expr* simp_split_multiplicative(const Expr* input, const AssumeCtx* ctx,
             has_number = true;
         if (head_is(f, SYM_Plus)) has_sum = true;
     }
-    if (!has_number || !has_sum || !split_rest_connected(input)) return split;
+    bool sum_den = false;
+    for (size_t i = 0; i < input->data.function.arg_count; i++) {
+        const Expr* f = input->data.function.args[i];
+        if (head_is(f, SYM_Power) && f->data.function.arg_count == 2 &&
+            head_is(f->data.function.args[0], SYM_Plus) &&
+            exact_number_sign(f->data.function.args[1]) == -1) sum_den = true;
+    }
+    /* A sum in the denominator: the whole fraction is simplified too, so
+     * its Together/Factor normal form competes with the split's:
+     * (-4 (1 - eps) y)/(1 - y^2) -> (-4 (-1 + eps) y)/(-1 + y^2). */
+    if (!sum_den && (!has_number || !has_sum || !split_rest_connected(input))) return split;
     const Expr* saved = g_split_whole;
     g_split_whole = input;
     Expr* whole = simp_dispatch(input, ctx, complexity_func);
