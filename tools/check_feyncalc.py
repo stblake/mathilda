@@ -24,7 +24,8 @@ or timed out; an id in a group the upstream driver never runs is not counted).
 Results are written to packages/feyncalc/harness/results/
 <Dir>.tsv.  The ratchet: every id in harness/BASELINE_PASS.txt that was run
 must still PASS (exit 1 otherwise); newly passing ids are listed so the
-baseline can be raised with --update-baseline."""
+baseline can be raised with --update-baseline.  Ids in PER_FILE_STATEFUL depend
+on an earlier file's state and are ratcheted only in a --per-dir run."""
 import argparse
 import collections
 import concurrent.futures as cf
@@ -43,6 +44,21 @@ RUNNER = os.path.join(REPO, "tools", "feyncalc", "run_fc_tests.m")
 UNIT_DIRS = ["Shared", "NonCommAlgebra", "Lorentz", "Dirac", "SUN", "Pauli",
              "Feynman", "Tables", "LoopIntegrals", "ExportImport"]
 VERDICTS = ["PASS", "FAIL", "MSG", "ABORT", "TIMEOUT", "SKIP", "NOTRUN"]
+
+# Ids whose upstream expected value holds only with state left behind by an
+# EARLIER .test file of the same directory (cached scalar products, DataType
+# declarations, option changes), so they pass in a --per-dir run (one process
+# per directory, the upstream layout) and fail in the default per-file shards
+# whatever the kernel. A per-file run reports them but does not ratchet them;
+# --per-dir ratchets them as usual. An entry belongs here only when it FAILs
+# per-file and PASSes per-dir both under Mathilda and under a second kernel
+# binary (--binary B, two --no-ratchet runs); an id that merely flakes per-file
+# (a timing check) does not.
+PER_FILE_STATEFUL = {
+    ("LoopIntegrals", "fcstFeynAmpDenominatorSimplify-ID44"):
+        "passes only after an earlier LoopIntegrals file has run; in a fresh "
+        "process Momentum[gkin meta n, D] stays unexpanded (2026-11-04)",
+}
 
 GROUP_RE = re.compile(r"^(Tests`[A-Za-z]+`[A-Za-z0-9]+)\s*=", re.M)
 ID_RE = re.compile(r'\{\s*"([A-Za-z][A-Za-z0-9]*-ID[0-9]+)"\s*,')
@@ -353,6 +369,14 @@ def main():
     ran = {(lab, i) for lab, res in per.items() for i in res}
     base = load_baseline()
     regressed = sorted(k for k in base if k in ran and k not in now_pass)
+    if not a.per_dir:
+        stateful = [k for k in regressed if k in PER_FILE_STATEFUL]
+        regressed = [k for k in regressed if k not in PER_FILE_STATEFUL]
+        if stateful:
+            print(f"\n{len(stateful)} baseline ids not ratcheted per-file (they need "
+                  "another file's state; rerun with --per-dir to check them):")
+            for k in stateful:
+                print(f"  {k[0]}\t{k[1]}: {PER_FILE_STATEFUL[k]}")
     gained = sorted(now_pass - base)
     if gained:
         print(f"\n{len(gained)} newly passing (not in the baseline)" +
