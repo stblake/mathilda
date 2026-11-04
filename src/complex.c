@@ -749,9 +749,10 @@ Expr* builtin_conjugate(Expr* res) {
     Expr* arg = res->data.function.args[0];
     /* Conjugate is an involution: Conjugate[Conjugate[z]] -> z. */
     if (head_is(arg, SYM_Conjugate) && arg->data.function.arg_count == 1) {
-        Expr* inner = arg->data.function.args[0];
-        arg->data.function.args[0] = NULL;
-        return inner;
+        /* Copy (a refcount bump), never steal: `arg` may be shared with a
+         * live value (v = Conjugate[b]; Conjugate[v] used to leave v as
+         * Conjugate[Null] and crash on its next use). */
+        return expr_copy(arg->data.function.args[0]);
     }
     /* Re, Im, Abs, and Arg are real-valued by construction, so they are
      * Conjugate-fixed regardless of whether their argument numericalizes. */
