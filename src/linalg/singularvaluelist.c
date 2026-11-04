@@ -204,8 +204,10 @@ static bool svl_parse(const Expr* res, SvlArgs* a) {
  * the selection length, or -1 after a ::take message. */
 static long long svl_select(const SvlArgs* a, int count, int nz, int* idx) {
     if (!a->has_k) {
-        long long take = nz;
-        if (a->upto && a->upto_k < take) take = a->upto_k;
+        /* UpTo[k] draws from ALL the values, zeros included, as an explicit k
+         * does (reference: SingularValueList[{{1, 2}, {2, 4}}, UpTo[2]] is
+         * {5, 0}); with no spec only the nonzero values. */
+        long long take = a->upto ? (a->upto_k < count ? a->upto_k : count) : nz;
         for (long long i = 0; i < take; i++) idx[i] = (int)i;
         return take;
     }
@@ -272,6 +274,7 @@ static Expr* svl_machine(const SvlArgs* a, const Expr* m, bool* failed) {
     int mn = r < c ? r : c;
     double tol = a->tol_auto ? (double)(r > c ? r : c) * DBL_EPSILON : a->tol;
     int nz = svl_nonzero(S, mn, tol);
+    for (int i = nz; i < mn; i++) S[i] = 0.0;   /* under the tolerance: 0., as the reference */
     int* idx = (int*)malloc(sizeof(int) * (size_t)(mn > 0 ? mn : 1) * 2 + sizeof(int));
     long long n = svl_select(a, mn, nz, idx);
     Expr* out = NULL;
@@ -342,6 +345,7 @@ static Expr* svl_generalized(const SvlArgs* args, bool* failed) {
         for (int j = i; j > 0 && S[j - 1] < S[j]; j--) { double t = S[j]; S[j] = S[j - 1]; S[j - 1] = t; }
     double tol = args->tol_auto ? (double)(r1 > n ? r1 : n) * DBL_EPSILON : args->tol;
     int nz = svl_nonzero(S, cnt, tol);
+    for (int i = nz; i < cnt; i++) S[i] = 0.0;
     int* idx = (int*)malloc(sizeof(int) * (size_t)(cnt + 1) * 2);
     long long sel = svl_select(args, cnt, nz, idx);
     Expr* out = NULL;
@@ -378,6 +382,7 @@ static Expr* svl_mpfr(const SvlArgs* a, const Expr* m, int r, int c, long bits,
     /* default: 8 max(r, c) 2^-bits relative -- the Jacobi floor at `bits` */
     double tol = a->tol_auto ? 8.0 * (double)r * ldexp(1.0, -(int)bits) : a->tol;
     int nz = svl_nonzero(Sd, mn, tol);
+    for (int i = nz; i < mn; i++) mpfr_set_zero(S[i], 1);
     int* idx = (int*)malloc(sizeof(int) * (size_t)(mn + 1) * 2);
     long long n = svl_select(a, mn, nz, idx);
     Expr* out = NULL;

@@ -20,6 +20,8 @@ static void test_exact(void) {
     chk_if("SingularValueList[{{1,1},{1,1}}/3]", "{2/3}");
     chk_if("SingularValueList[{{1,2},{3,4}}, 1]", "{Sqrt[15 + Sqrt[221]]}");
     chk_if("SingularValueList[{{1,2},{2,4}}, 2]", "{5, 0}");
+    chk_if("SingularValueList[{{1,2},{2,4}}, UpTo[2]]", "{5, 0}");
+    chk_if("SingularValueList[{{1.,2.},{2.,4.}}, UpTo[3]]", "{5.0, 0.0}");
     chk_if("SingularValueList[{{1,2},{3,4}}, Tolerance -> 0.5]", "{Sqrt[15 + Sqrt[221]]}");
     chk_if("SingularValueList[{{1,2},{3,4}}, Cubics -> True]", "{Sqrt[15 + Sqrt[221]], Sqrt[15 - Sqrt[221]]}");
     chk_if("SingularValueList[{{a,0},{0,b}}]", "{Sqrt[a*Conjugate[a]], Sqrt[b*Conjugate[b]]}");
@@ -41,6 +43,7 @@ static void test_machine(void) {
     chk_if("SingularValueList[{{10.,0,0},{0,1.,0},{0,0,0}}, -1]", "{0.0}");
     chk_if("SingularValueList[{{1.,2.},{3.,4.}}, 0]", "{}");
     chk_true("SingularValueList[{{1.,2.},{3.,4.}}, {1}] == Take[SingularValueList[{{1.,2.},{3.,4.}}], 1]");
+    chk_true("SingularValueList[{{1.,2.},{3.,4.}}, {1, 2}] == SingularValueList[{{1.,2.},{3.,4.}}]");
     chk_true("SingularValueList[{{1.,2.},{3.,4.}}, UpTo[3]] == SingularValueList[{{1.,2.},{3.,4.}}]");
     chk_true("SingularValueList[{{1.,2.},{3.,4.}}, -1] == {Last[SingularValueList[{{1.,2.},{3.,4.}}]]}");
     /* agreement with the full decomposition, real and complex, tall and wide */
