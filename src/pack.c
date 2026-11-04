@@ -315,6 +315,19 @@ static Expr* pack_force_coerce(Expr* list, bool have_dtype, NDType dtype) {
     return packed;
 }
 
+Expr* pack_force_machine(Expr* list) {
+    if (!list) return list;
+    Expr* packed = pack_build(list, 0, false, NDT_FLOAT64, true);
+    if (!packed) return list;
+    if (!is_ndarray(packed) ||
+        (packed->data.ndarray.dtype != NDT_FLOAT64 && packed->data.ndarray.dtype != NDT_COMPLEX64)) {
+        expr_free(packed);
+        return list;
+    }
+    expr_free(list);
+    return packed;
+}
+
 Expr* pack_repack_like(const Expr* src, Expr* list) {
     if (!list || !is_packed_list(src)) return list;
     /* No threshold: the input was already a buffer, so staying one costs nothing

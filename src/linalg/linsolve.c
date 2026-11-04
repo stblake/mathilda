@@ -46,6 +46,9 @@
 #include "flint_bridge.h"
 #include "flint_qqbar.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "common.h"
+#include "linsolvefn.h"
+#include "sparse/sparse_la.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1265,8 +1268,60 @@ Expr* builtin_rowreduce(Expr* res) {
     return NULL;
 }
 
+/* LinearSolve[m, b, Method -> "Krylov" | {"Krylov", ...} | "Multifrontal" |
+ * "Cholesky"]: the methods of the sparse solver (src/sparse/sparse_la_solve.c),
+ * which also takes a dense machine matrix. Exact or arbitrary-precision input
+ * keeps its exact solve; Krylov says so (LinearSolve::kryinfp), as the
+ * reference does. NULL when the call names none of these methods. */
+static Expr* linearsolve_sparse_methods(Expr* res, bool* handled) {
+    *handled = false;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 3) return NULL;
+    const char* meth = NULL;
+    for (size_t i = 2; i < argc; i++) {
+        Expr* r = res->data.function.args[i];
+        if (r->type != EXPR_FUNCTION || r->data.function.arg_count != 2 ||
+            r->data.function.head->type != EXPR_SYMBOL ||
+            r->data.function.head->data.symbol.name != SYM_Rule) continue;
+        Expr* l = r->data.function.args[0];
+        Expr* v = r->data.function.args[1];
+        if (l->type != EXPR_SYMBOL || l->data.symbol.name != SYM_Method) continue;
+        if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL &&
+            v->data.function.head->data.symbol.name == SYM_List && v->data.function.arg_count >= 1)
+            v = v->data.function.args[0];
+        if (v->type == EXPR_STRING &&
+            (strcmp(v->data.string, "Krylov") == 0 || strcmp(v->data.string, "Multifrontal") == 0 ||
+             strcmp(v->data.string, "Cholesky") == 0))
+            meth = v->data.string;
+    }
+    if (!meth) return NULL;
+    *handled = true;
+    Expr* r = spla_linearsolve_call(res, res->data.function.args[0], res->data.function.args[1],
+                                    (const Expr* const*)res->data.function.args + 2, argc - 2);
+    if (r && expr_eq(r, res)) { expr_free(r); return NULL; }   /* left as written, after a message */
+    if (r) return r;
+    /* the direct solve of the same system, without the Method option */
+    Expr* a[2] = { expr_copy(res->data.function.args[0]), expr_copy(res->data.function.args[1]) };
+    Expr* call = expr_new_function(expr_new_symbol("LinearSolve"), a, 2);
+    r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
 Expr* builtin_linearsolve(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* LinearSolve[m] / LinearSolve[m, opts]: a LinearSolveFunction */
+    if (res->data.function.arg_count == 1 ||
+        (res->data.function.arg_count >= 2 && res->data.function.args[1]->type == EXPR_FUNCTION &&
+         res->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&
+         (res->data.function.args[1]->data.function.head->data.symbol.name == SYM_Rule ||
+          res->data.function.args[1]->data.function.head->data.symbol.name == SYM_RuleDelayed)))
+        return linsolvefn_make(res);
+    {
+        bool handled;
+        Expr* r = linearsolve_sparse_methods(res, &handled);
+        if (handled) return r;
+    }
     if (linalg_call_has_ndarray(res)) return ndla_linearsolve(res);
 
     /* Small machine-real system: pack both operands and take the same path.
@@ -1383,4 +1438,5 @@ void matsol_init(void) {
 
     symtab_add_builtin("LinearSolve", builtin_linearsolve);
     symtab_get_def("LinearSolve")->attributes |= ATTR_PROTECTED;
+    linsolvefn_init();
 }

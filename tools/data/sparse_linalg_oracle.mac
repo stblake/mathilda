@@ -1,0 +1,99 @@
+/* sparse_linalg_oracle.mac -- the maxima side of tools/sparse_linalg_oracle.py.
+ *
+ * Exact (rational / symbolic) linear algebra on small matrices: the oracle for
+ * the int, rational and symbolic entry kinds.  The Python driver writes one
+ * call per case,
+ *
+ *     SLrun(id, "op", matrix([..], ..), issym)$
+ *
+ * and reads back one line per case on stdout:
+ *
+ *     @@M {"id":17,"val":<encoded>}      or      @@M {"id":17,"err":true}
+ *
+ * The value encoding is the one the Mathilda/reference prelude uses (see
+ * SL_PRELUDE in the .py): a JSON tree whose leaves are "i:<int>",
+ * "q:<num>/<den>", "R:<bigfloat>" (50 digits, for algebraic values), a
+ * {"c":[re,im]} pair for a complex number, true/false, or "s:<text>" for
+ * anything that is not a number.
+ *
+ * Symbolic kind: the answer is computed with the symbols xa, xb and then
+ * evaluated at xa = 3/7, xb = -5/11 -- the same point the other two systems
+ * use -- so the comparison is exact rational arithmetic.
+ */
+load(stringproc)$
+load(linearalgebra)$
+display2d : false$
+fpprec : 50$
+SLsub : [xa = 3/7, xb = -5/11]$
+
+SLq(s) := sconcat("\"", s, "\"")$
+SLencr(x) := if integerp(x) then SLq(sconcat("i:", string(x)))
+  else if ratnump(x) then SLq(sconcat("q:", string(num(x)), "/", string(denom(x))))
+  else block([y : bfloat(x)],
+    if bfloatp(y) then SLq(sconcat("R:", ssubst("e", "b", string(y))))
+    else SLq(sconcat("s:", string(x))))$
+SLencn(x) := block([y : rectform(x), re, im],
+  re : ratsimp(realpart(y)), im : ratsimp(imagpart(y)),
+  if im = 0 then SLencr(re)
+  else sconcat("{\"c\":[", SLencr(re), ",", SLencr(im), "]}"))$
+SLjoin(l) := if l = [] then "" else simplode(l, ",")$
+SLenc(x) := if matrixp(x) then sconcat("[", SLjoin(map(SLenc, args(x))), "]")
+  else if listp(x) then sconcat("[", SLjoin(map(SLenc, x)), "]")
+  else if x = true then "true" else if x = false then "false"
+  else SLencn(x)$
+
+/* a column matrix as a flat list (the other systems answer a vector) */
+SLcol(v) := makelist(v[i, 1], i, 1, length(v))$
+SLrev(v) := transpose(matrix(reverse(SLcol(v))))$
+/* eigenvalues with their multiplicities expanded, as a flat list */
+SLeig(M) := block([e : eigenvalues(M), out : []],
+  for i : 1 thru length(e[1]) do
+    for k : 1 thru e[2][i] do out : endcons(e[1][i], out),
+  out)$
+SLsubst(r) := if r = true or r = false or integerp(r) then r
+  else ratsimp(subst(SLsub, r))$
+
+SLop(op, M, x0, b, Bm, K, n, m) :=
+  if op = "det" then determinant(M)
+  else if op = "inv" then SLm(invert(M))
+  else if op = "solve" then SLcol(SLm(SLm(invert(M)) . b))
+  else if op = "solveM" then SLm(SLm(invert(M)) . Bm)
+  else if op = "solveT" then SLcol(SLm(SLm(invert(transpose(M))) . b))
+  else if op = "rank" then rank(M)
+  else if op = "nullcount" then m - rank(M)
+  else if op = "charpoly" then
+    block([p : expand(charpoly(M, SLt))], makelist(coeff(p, SLt, i), i, 0, n))
+  else if op = "pow2" then SLm(M . M)
+  else if op = "adj" then (if n = 1 then matrix([1]) else adjoint(M))
+  else if op = "tr" then mat_trace(M)
+  else if op = "dotAAt" then SLm(M . transpose(M))
+  else if op = "dotv" then SLcol(SLm(M . x0))
+  else if op = "T" then transpose(M)
+  else if op = "kron" then kronecker_product(M, K)
+  else if op = "symq" then is(M = transpose(M))
+  else if op = "eig" then SLeig(M)
+  else if op = "norm1" then lmax(makelist(sum(abs(M[i, j]), i, 1, n), j, 1, m))
+  else if op = "normInf" then lmax(makelist(sum(abs(M[i, j]), j, 1, m), i, 1, n))
+  else if op = "normF" then sqrt(sum(sum(abs(M[i, j])^2, i, 1, n), j, 1, m))
+  else error("unknown op", op)$
+
+/* a 1 x 1 product collapses to a scalar in maxima; keep it a matrix */
+SLm(v) := if matrixp(v) then v else matrix([v])$
+
+SLrun(id, op, M, issym) := block([r],
+  /* the whole case runs under errcatch: an uncaught error would abort the
+     batch and lose every later case */
+  r : errcatch(block([n, m, x0, b, Bm, K : matrix([1, 2], [0, -1]), v],
+    n : length(M), m : length(transpose(M)),
+    x0 : transpose(matrix(makelist((-1)^i * i / (i + 1), i, 1, m))),
+    b : SLm(M . x0),
+    Bm : addcol(b, SLm(M . SLrev(x0))),
+    /* norms of a symbolic matrix: substitute first (abs() of a symbol stays) */
+    if issym and member(op, ["norm1", "normInf", "normF"]) then M : subst(SLsub, M),
+    v : SLop(op, M, x0, b, Bm, K, n, m),
+    if matrixp(v) and op # "inv" and op # "solveM" and op # "pow2" and op # "adj"
+       and op # "dotAAt" and op # "T" and op # "kron" then v : SLcol(v),
+    if issym then v : SLsubst(v),
+    SLenc(v))),
+  if r = [] then printf(true, "@@M {\"id\":~a,\"err\":true}~%", id)
+  else printf(true, "@@M {\"id\":~a,\"val\":~a}~%", id, first(r)))$

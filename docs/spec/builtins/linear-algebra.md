@@ -2302,6 +2302,46 @@ In[8]:= a = RandomInteger[{-3, 3}, {2, 3, 6}];
 Out[8]= {6, 4, 5}
 ```
 
+
+### LinearSolve: sparse matrices, machine methods, LinearSolveFunction (v0.6180)
+
+- **`LinearSolve[m]`** and `LinearSolve[m, opts]` give a
+  `LinearSolveFunction[{rows, cols}, {key, m, {opts}}]` (Length 2, as the
+  reference's). `f[b]`, `f[B]` (several right-hand sides),
+  `f[b, "T"]` (transpose), `f[b, "C"]` (conjugate transpose), `f[b, "J"]`
+  (conjugate), `f[b, "N"]`; `f["Properties"]`, `f["MatrixDimensions"]`,
+  `f["ConditionNumber"]` (1-norm estimate). A machine matrix, dense or
+  SparseArray, is factored once (UMFPACK / CHOLMOD / LAPACK, see below) and the
+  factor kept in a small LRU cache keyed by `key`; because the object carries
+  `m`, an evicted factor is recomputed transparently. Exact, MPFR and symbolic
+  matrices, the `"Krylov"` method, and singular (`LinearSolve::sing1`) or
+  rectangular (`LinearSolve::sqmat1`) matrices make an object that solves
+  afresh on every application, as the reference does. Errors:
+  `LinearSolveFunction::lslc` (wrong length), `LinearSolve::notrhsm` (bad mode).
+- **Machine methods**, for a dense or SparseArray machine matrix:
+  `Method -> "Multifrontal"` (sparse LU), `"Cholesky"` (`LinearSolve::npdef`
+  when not positive definite), `"Krylov"` or
+  `{"Krylov", Method -> "ConjugateGradient" | "BiCGSTAB" | "GMRES",
+  "Preconditioner" -> "ILU0" | "ILUT" | "ILUTP" | None | Automatic | f,
+  "MaxIterations" -> k, Tolerance -> t, "StartingVector" -> v}`. The Krylov
+  default is BiCGSTAB with ILU0 (the reference's). Messages: `::kryme` (unknown
+  method), `::krypre` (unknown preconditioner), `::krymit` (iteration limit:
+  the last iterate is returned). Exact input with `"Krylov"` says `::kryinfp`
+  and is solved exactly.
+- **SparseArray coefficient matrix.** A machine SparseArray (real or complex,
+  zero background) is solved by a native kernel (`src/sparse/sparse_la_solve.c`)
+  without densifying: up to order 128 by a dense LAPACK LU (bit-identical to
+  the dense matrix), above that by UMFPACK, or CHOLMOD first for a Hermitian
+  matrix with a positive diagonal, when SuiteSparse is linked; otherwise by
+  the dense LU within the 2^27-element densify cap and by Krylov beyond it.
+  The answer is a packed List (a SparseArray right-hand side gives a dense
+  answer too). As in the reference, and unlike the dense matrix, a **singular**
+  machine SparseArray gives `LinearSolve::sing` and stays unevaluated (even for
+  a consistent b), and a **rectangular** one gives `LinearSolve::sqmat`. Exact,
+  MPFR and symbolic SparseArrays behave exactly like the dense matrix
+  (particular solutions, `::nosol`). `Det` and `Inverse` of a machine
+  SparseArray above order 128 use the same factorisation (`Inverse::sing`
+  for a singular one); `Inverse` answers a List, as in the reference.
 ## LeastSquares
 Finds `x` that solves the linear least-squares problem for `m . x == b`,
 i.e. an `x` minimising `Norm[m . x - b]`.

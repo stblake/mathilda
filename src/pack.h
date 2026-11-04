@@ -131,6 +131,15 @@ Expr* pack_offer(Expr* list);
  * does. Returns `list` unchanged if it is not packable at all. */
 Expr* pack_force(Expr* list, bool have_dtype, NDType dtype);
 
+/* The linear-algebra contagion pack: a numeric array holding at least one
+ * machine Real (or machine Complex) packs to a float64 (complex64) buffer, the
+ * exact integers in it widened -- the answer of Det / Inverse / LinearSolve of
+ * such a matrix is a machine number either way, which is what makes the
+ * widening invisible here although automatic packing must never make it. An
+ * all-integer, boolean or non-numeric list is returned unchanged. Consumes
+ * `list` like pack_force. */
+Expr* pack_force_machine(Expr* list);
+
 /* Re-pack an operation's List output back into a buffer, for an operation whose
  * INPUT was a packed list (`src`). Consumes `list`; returns it unchanged when it
  * cannot pack.

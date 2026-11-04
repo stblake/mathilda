@@ -233,6 +233,53 @@ if(USE_FLINT)
     endif()
 endif()
 
+# SuiteSparse (UMFPACK + CHOLMOD) and ARPACK for sparse linear algebra,
+# mirroring the makefile's probes: headers under <prefix>/include/suitesparse
+# and <arpack/arpack.h>; SUITESPARSE_PREFIX / ARPACK_PREFIX (cache variables or
+# environment) point at a non-standard install. Graceful degrade as in the
+# makefile: the sparse direct solvers fall back to a dense LU / Krylov and the
+# eigensolvers to the native Krylov-Schur.
+option(USE_SUITESPARSE "Use SuiteSparse UMFPACK/CHOLMOD for sparse direct solves" ON)
+option(USE_ARPACK "Use ARPACK for sparse eigenvalue problems" ON)
+set(SUITESPARSE_PREFIX "$ENV{SUITESPARSE_PREFIX}" CACHE PATH "Non-standard SuiteSparse install prefix")
+set(ARPACK_PREFIX "$ENV{ARPACK_PREFIX}" CACHE PATH "Non-standard ARPACK install prefix")
+if(USE_SUITESPARSE)
+    find_path(SUITESPARSE_INCLUDE_DIR umfpack.h
+              HINTS ${SUITESPARSE_PREFIX}/include/suitesparse
+              PATH_SUFFIXES suitesparse)
+    find_library(SS_UMFPACK umfpack HINTS ${SUITESPARSE_PREFIX}/lib)
+    find_library(SS_CHOLMOD cholmod HINTS ${SUITESPARSE_PREFIX}/lib)
+    find_library(SS_AMD amd HINTS ${SUITESPARSE_PREFIX}/lib)
+    find_library(SS_COLAMD colamd HINTS ${SUITESPARSE_PREFIX}/lib)
+    find_library(SS_CONFIG suitesparseconfig HINTS ${SUITESPARSE_PREFIX}/lib)
+    if(SUITESPARSE_INCLUDE_DIR AND SS_UMFPACK AND SS_CHOLMOD AND SS_AMD AND SS_COLAMD AND SS_CONFIG)
+        add_compile_definitions(USE_UMFPACK USE_CHOLMOD)
+        include_directories(${SUITESPARSE_INCLUDE_DIR})
+        link_libraries(${SS_UMFPACK} ${SS_CHOLMOD} ${SS_AMD} ${SS_COLAMD} ${SS_CONFIG})
+        get_filename_component(SS_LIBDIR ${SS_UMFPACK} DIRECTORY)
+        set(CMAKE_BUILD_RPATH "${CMAKE_BUILD_RPATH};${SS_LIBDIR}")
+    else()
+        message(WARNING "SuiteSparse (UMFPACK/CHOLMOD) not detected; building tests with USE_SUITESPARSE=OFF")
+        message(WARNING "  macOS (Homebrew): brew install suite-sparse")
+        message(WARNING "  Ubuntu/Debian:    sudo apt install libsuitesparse-dev")
+        set(USE_SUITESPARSE OFF)
+    endif()
+endif()
+if(USE_ARPACK)
+    find_path(ARPACK_INCLUDE_DIR arpack/arpack.h HINTS ${ARPACK_PREFIX}/include)
+    find_library(ARPACK_LIB arpack HINTS ${ARPACK_PREFIX}/lib)
+    if(ARPACK_INCLUDE_DIR AND ARPACK_LIB)
+        add_compile_definitions(USE_ARPACK)
+        include_directories(${ARPACK_INCLUDE_DIR})
+        link_libraries(${ARPACK_LIB})
+    else()
+        message(WARNING "ARPACK (arpack-ng >= 3.8) not detected; building tests with USE_ARPACK=OFF")
+        message(WARNING "  macOS (Homebrew): brew install arpack")
+        message(WARNING "  Ubuntu/Debian:    sudo apt install libarpack2-dev")
+        set(USE_ARPACK OFF)
+    endif()
+endif()
+
 # PCRE2 autodetection — mirror the makefile's libpcre2-8 pkg-config probe with
 # graceful degrade: when absent, the regex engine wrapper compiles to stubs and
 # the regex string builtins warn and stay unevaluated at runtime.
@@ -369,6 +416,10 @@ set(COMMON_SRC
     ../src/sparse/sparse_struct.c
     ../src/sparse/sparse_dot.c
     ../src/sparse/sparse_func.c
+    ../src/sparse/sparse_la_core.c
+    ../src/sparse/sparse_la_factor.c
+    ../src/sparse/sparse_la_krylov.c
+    ../src/sparse/sparse_la_solve.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c
@@ -679,6 +730,7 @@ set(COMMON_SRC
     ../src/datetime.c
     ../src/mtime.c
     ../src/linalg/linalg.c
+    ../src/linalg/linsolvefn.c
     ../src/linalg/util.c
     ../src/linalg/dot.c
     ../src/linalg/det.c
@@ -1873,6 +1925,8 @@ add_test(NAME sparse_reduce_tests COMMAND sparse_reduce_tests)
 
 add_executable(sparse_dot_tests test_sparse_dot.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sparse_dot_tests PRIVATE ../src)
+add_executable(sparse_la_solve_tests test_sparse_la_solve.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sparse_la_solve_tests PRIVATE ../src)
 add_test(NAME sparse_dot_tests COMMAND sparse_dot_tests)
 
 add_executable(sparse_func_tests test_sparse_func.c $<TARGET_OBJECTS:mathilda_common>)

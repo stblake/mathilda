@@ -95,14 +95,15 @@ by category.
 ## Quick start
 
 Mathilda needs GCC (Apple clang is rejected), GMP and MPFR. GNU Readline is
-recommended for the REPL. FLINT, GMP-ECM, LAPACK, FFTW, PCRE2 and Raylib are
-optional and auto-detected.
+recommended for the REPL. FLINT, GMP-ECM, LAPACK, SuiteSparse (UMFPACK,
+CHOLMOD), ARPACK, FFTW, PCRE2 and Raylib are optional and auto-detected.
 
 ```bash
 # macOS
-brew install gcc gmp mpfr readline flint gmp-ecm
+brew install gcc gmp mpfr readline flint gmp-ecm suite-sparse arpack
 # Debian / Ubuntu
-sudo apt install build-essential libgmp-dev libmpfr-dev libreadline-dev libflint-dev libecm-dev
+sudo apt install build-essential libgmp-dev libmpfr-dev libreadline-dev libflint-dev libecm-dev \
+                 libsuitesparse-dev libarpack2-dev
 
 git clone https://github.com/stblake/mathilda.git
 cd mathilda

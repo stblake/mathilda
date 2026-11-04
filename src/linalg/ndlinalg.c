@@ -56,20 +56,23 @@ bool linalg_call_has_ndarray(const Expr* res)
  * repeats unpacked and 0.0012 s packed, for the identical value. The question
  * worth asking is "is this a matrix of machine numbers", which is this.
  *
- * Deliberately REAL machine buffers only: pack_force sniffs the dtype, and an
- * all-Integer or all-Rational matrix would either pack to an int64 buffer or
- * decline, in both cases putting an exact matrix on a floating-point path whose
- * answer is not the exact one Det and Inverse owe it. Anything that does not
- * sniff to NDT_FLOAT64 is handed back unpacked.
+ * Deliberately MACHINE buffers only (float64, or complex64 when a machine
+ * complex is present -- a mixed Real/Complex matrix is the common shape of a
+ * complex factor, and without this it fell into the symbolic eliminator):
+ * pack_force sniffs the dtype, and an all-Integer or all-Rational matrix would
+ * either pack to an int64 buffer or decline, in both cases putting an exact
+ * matrix on a floating-point path whose answer is not the exact one Det and
+ * Inverse owe it. Anything else is handed back unpacked.
  *
  * Returns a freshly owned copy of `arg` as a packed array, or NULL to decline.
  * Never mutates or frees `arg`. */
 Expr* linalg_pack_machine_operand(const Expr* arg)
 {
     if (!arg || is_ndarray(arg)) return NULL;
-    Expr* packed = pack_force(expr_copy((Expr*)arg), false, NDT_FLOAT64);
+    Expr* packed = pack_force_machine(expr_copy((Expr*)arg));
     if (!packed) return NULL;
-    if (!is_ndarray(packed) || packed->data.ndarray.dtype != NDT_FLOAT64) {
+    if (!is_ndarray(packed) ||
+        (packed->data.ndarray.dtype != NDT_FLOAT64 && packed->data.ndarray.dtype != NDT_COMPLEX64)) {
         expr_free(packed);
         return NULL;
     }

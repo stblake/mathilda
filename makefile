@@ -5,6 +5,9 @@ USE_GRAPHICS ?= 1
 USE_FLINT ?= 1
 USE_REGEX ?= 1
 USE_FFTW ?= 1
+USE_SUITESPARSE ?= 1
+USE_ARPACK ?= 1
+comma := ,
 
 # Platform detection — used for readline and other OS-specific choices.
 # On Windows under MSYS2/MinGW, uname returns "MINGW64_NT-*" or similar;
@@ -431,6 +434,63 @@ ifeq ($(USE_LAPACK), 1)
     $(warning   Fedora/RHEL:    sudo dnf install lapack-devel lapacke-devel openblas-devel)
     $(warning   Arch:           sudo pacman -S openblas lapacke)
     override USE_LAPACK := 0
+  endif
+endif
+
+# SuiteSparse (UMFPACK + CHOLMOD) and ARPACK for sparse linear algebra on
+# SparseArray: direct sparse LU / Cholesky behind LinearSolve, Det, Inverse
+# and LinearSolveFunction, and implicitly restarted Lanczos / Arnoldi behind
+# Eigenvalues / Eigensystem / SingularValueList with a count k
+# (src/sparse/sparse_la_*.c). System libraries, autodetected by compile+link
+# probes in the GMP-ECM style (the '#' of each #include written as printf's
+# \043, see the ECM note above). When absent the build still succeeds: the
+# direct solvers fall back to a dense LAPACK LU (within the densify cap) and
+# the Krylov solvers, and the eigensolvers to the native Arnoldi.
+#   macOS (Homebrew):   brew install suite-sparse arpack
+#   Ubuntu/Debian:      sudo apt install libsuitesparse-dev libarpack2-dev
+#   Fedora:             sudo dnf install suitesparse-devel arpack-devel
+#   MSYS2 (UCRT64):     pacman -S mingw-w64-ucrt-x86_64-suitesparse mingw-w64-ucrt-x86_64-arpack
+# The headers live in <prefix>/include/suitesparse on every distribution, so
+# that directory is added to the include path; ARPACK's ISO C binding is
+# <arpack/arpack.h> (arpack-ng >= 3.8).
+# SUITESPARSE_PREFIX=<dir> (and ARPACK_PREFIX=<dir>) point at a non-standard
+# install, e.g. a source build: make SUITESPARSE_PREFIX=$HOME/.local/suitesparse
+# Its lib/ is added to the link path and, for the shared libraries, the rpath.
+SUITESPARSE_INC_DIRS := $(foreach d,$(SUITESPARSE_PREFIX) $(HOMEBREW) $(SYSTEM_PREFIX) /usr /mingw64 /ucrt64,$(wildcard $(d)/include/suitesparse))
+SUITESPARSE_CFLAGS   := $(addprefix -I,$(firstword $(SUITESPARSE_INC_DIRS)))
+SUITESPARSE_LDDIR    := $(if $(SUITESPARSE_PREFIX),-L$(SUITESPARSE_PREFIX)/lib -Wl$(comma)-rpath$(comma)$(SUITESPARSE_PREFIX)/lib,)
+ARPACK_CFLAGS        := $(if $(ARPACK_PREFIX),-I$(ARPACK_PREFIX)/include,)
+ARPACK_LDDIR         := $(if $(ARPACK_PREFIX),-L$(ARPACK_PREFIX)/lib -Wl$(comma)-rpath$(comma)$(ARPACK_PREFIX)/lib,)
+ifeq ($(USE_SUITESPARSE), 1)
+  SUITESPARSE_PROBE := $(shell f=/tmp/mathilda_ssprobe_$$$$; \
+    printf '\043include <umfpack.h>\n\043include <cholmod.h>\nint main(void){double c[UMFPACK_CONTROL];cholmod_common cc;umfpack_dl_defaults(c);cholmod_l_start(&cc);cholmod_l_finish(&cc);return 0;}\n' > $$f.c 2>/dev/null && \
+    $(CC) $$f.c -o $$f $(SUITESPARSE_CFLAGS) $(SYSPREFIX_CFLAGS) $(HOMEBREW_CFLAGS) \
+      $(SUITESPARSE_LDDIR) $(SYSPREFIX_LDFLAGS) $(HOMEBREW_LDFLAGS) -lumfpack -lcholmod -lamd -lcolamd -lsuitesparseconfig 2>/dev/null && echo y; \
+    rm -f $$f.c $$f)
+  ifeq ($(SUITESPARSE_PROBE), y)
+    CFLAGS  += -DUSE_UMFPACK -DUSE_CHOLMOD $(SUITESPARSE_CFLAGS)
+    LDFLAGS += $(SUITESPARSE_LDDIR) -lumfpack -lcholmod -lamd -lcolamd -lsuitesparseconfig
+  else
+    $(warning SuiteSparse (UMFPACK/CHOLMOD) not detected; building with USE_SUITESPARSE=0 (sparse direct solves use a dense LU within the densify cap, else Krylov))
+    $(warning   macOS (Homebrew): brew install suite-sparse)
+    $(warning   Ubuntu/Debian:    sudo apt install libsuitesparse-dev)
+    override USE_SUITESPARSE := 0
+  endif
+endif
+ifeq ($(USE_ARPACK), 1)
+  ARPACK_PROBE := $(shell f=/tmp/mathilda_arprobe_$$$$; \
+    printf '\043include <arpack/arpack.h>\nint main(void){a_int ido=0,info=0,ip[11]={0},pp[11]={0};double r[1],v[1],wd[3],wl[1];dsaupd_c(&ido,"I",1,"LM",1,0.0,r,1,v,1,ip,pp,wd,wl,1,&info);return 0;}\n' > $$f.c 2>/dev/null && \
+    $(CC) $$f.c -o $$f $(ARPACK_CFLAGS) $(SYSPREFIX_CFLAGS) $(HOMEBREW_CFLAGS) \
+      $(ARPACK_LDDIR) $(SYSPREFIX_LDFLAGS) $(HOMEBREW_LDFLAGS) -larpack 2>/dev/null && echo y; \
+    rm -f $$f.c $$f)
+  ifeq ($(ARPACK_PROBE), y)
+    CFLAGS  += -DUSE_ARPACK $(ARPACK_CFLAGS)
+    LDFLAGS += $(ARPACK_LDDIR) -larpack
+  else
+    $(warning ARPACK (arpack-ng >= 3.8, ISO C binding) not detected; building with USE_ARPACK=0 (sparse eigensolvers use the native Arnoldi))
+    $(warning   macOS (Homebrew): brew install arpack)
+    $(warning   Ubuntu/Debian:    sudo apt install libarpack2-dev)
+    override USE_ARPACK := 0
   endif
 endif
 

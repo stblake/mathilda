@@ -22,6 +22,8 @@ end that runs the kernel as a sidecar) is covered in
 | FLINT ≥ 3.0 | `libflint-dev` / `flint` | optional — fast, rigorous polynomial arithmetic over ℚ and number fields, rigorous `acb` numerics |
 | GMP-ECM | `libecm-dev` / `gmp-ecm` | optional — Elliptic Curve Method factorization |
 | LAPACK / BLAS | `liblapacke-dev libopenblas-dev` / *(Accelerate, built in)* | optional — machine-precision linear algebra |
+| SuiteSparse (UMFPACK, CHOLMOD) | `libsuitesparse-dev` / `suite-sparse` | optional — sparse direct LU / Cholesky for `SparseArray` (`LinearSolve`, `Det`, `Inverse`, `LinearSolveFunction`); without it a dense LU within the 2^27-element densify cap, then Krylov (`USE_SUITESPARSE=0` to omit) |
+| ARPACK (arpack-ng ≥ 3.8) | `libarpack2-dev` / `arpack` | optional — implicitly restarted Lanczos / Arnoldi for `Eigenvalues[s, k]`, `Eigensystem[s, k]`, `SingularValueList[s, k]` on large `SparseArray`s; native Krylov–Schur otherwise (`USE_ARPACK=0` to omit) |
 | FFTW ≥ 3 | `libfftw3-dev` / `fftw` | optional — fast `Fourier`/`FourierDCT`/`FourierDST` (naive O(n²) otherwise) |
 | PCRE2 | `libpcre2-dev` / `pcre2` | optional — `RegularExpression` and the regex string functions |
 | Raylib ≥ 4.0 | `libraylib-dev` / `raylib` | optional — interactive plot windows (text placeholder otherwise) |
@@ -35,6 +37,7 @@ POSIX threads (used to parallelise packed-array kernels) need no extra package.
 ```bash
 brew install gcc gmp mpfr readline cmake
 brew install flint gmp-ecm fftw pcre2 raylib      # optional
+brew install suite-sparse arpack                   # optional: sparse linear algebra
 ```
 
 LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
@@ -45,12 +48,14 @@ LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
 ```bash
 sudo apt install build-essential libgmp-dev libmpfr-dev libreadline-dev cmake
 sudo apt install libflint-dev libecm-dev liblapacke-dev libopenblas-dev \
-                 libfftw3-dev libpcre2-dev libraylib-dev   # optional
+                 libfftw3-dev libpcre2-dev libraylib-dev \
+                 libsuitesparse-dev libarpack2-dev        # optional
 ```
 
 **Fedora / RHEL:** `gmp-devel`, `mpfr-devel`, `readline-devel`, `flint-devel`
 (≥ 3.0), `gmp-ecm-devel`, `lapack-devel` + `lapacke-devel` (BLAS via FlexiBLAS,
-detected automatically), `fftw-devel`, `pcre2-devel`, plus `cmake`.
+detected automatically), `fftw-devel`, `pcre2-devel`, `suitesparse-devel`,
+`arpack-devel`, plus `cmake`.
 
 > **FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that merged
 > ANTIC for number-field arithmetic). Distributions that only package FLINT 2.x —

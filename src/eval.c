@@ -37,6 +37,7 @@
 #include <limits.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
+#include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -3719,6 +3720,18 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 if (applied) {
                     expr_free(res);
                     *changed = true; /* Pure Function applied */
+                    return applied;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol.name == SYM_LinearSolveFunction &&
+                       res->data.function.arg_count >= 1 && linsolvefn_is(head)) {
+                /* 7-lsf. LinearSolveFunction[...][b] solves with the cached
+                 * factorisation (src/linalg/linsolvefn.c); NULL leaves it. */
+                Expr* applied = linsolvefn_apply(head, res->data.function.args,
+                                                 res->data.function.arg_count);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
                     return applied;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&

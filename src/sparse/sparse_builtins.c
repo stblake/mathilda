@@ -8,6 +8,7 @@
 
 #include "sparse.h"
 #include "sparse_internal.h"
+#include "sparse_la.h"
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "symtab.h"
@@ -401,4 +402,5 @@ void sparse_init(void) {
     sparse_struct_init();
     sparse_dot_init();
     sparse_func_init();
+    sparse_la_init();
 }

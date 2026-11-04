@@ -24,6 +24,9 @@
 #ifdef USE_GRAPHICS
 #include <raylib.h>
 #endif
+#ifdef USE_UMFPACK
+#include <SuiteSparse_config.h>
+#endif
 
 /* Two-level stringify so macro *values* (not names) get quoted. */
 #define MVER_STR2(x) #x
@@ -98,6 +101,20 @@
 #  define VER_LAPACK ""
 #endif
 
+/* --- SuiteSparse (UMFPACK/CHOLMOD) and ARPACK: sparse linear algebra ---- */
+#if defined(USE_UMFPACK) && defined(SUITESPARSE_MAIN_VERSION) && defined(SUITESPARSE_SUB_VERSION)
+#  define VER_SUITESPARSE ", SuiteSparse " MVER_STR(SUITESPARSE_MAIN_VERSION) "." MVER_STR(SUITESPARSE_SUB_VERSION)
+#elif defined(USE_UMFPACK)
+#  define VER_SUITESPARSE ", SuiteSparse"
+#else
+#  define VER_SUITESPARSE ""
+#endif
+#ifdef USE_ARPACK
+#  define VER_ARPACK ", ARPACK"
+#else
+#  define VER_ARPACK ""
+#endif
+
 /* --- GNU Readline (no portable compile-time version macro; report name) */
 #ifndef NO_READLINE
 #  define VER_READLINE ", Readline"
@@ -114,6 +131,8 @@ static const char kVersionString[] =
     VER_ECM
     VER_GRAPHICS
     VER_LAPACK
+    VER_SUITESPARSE
+    VER_ARPACK
     VER_READLINE
     ")";
 
