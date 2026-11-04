@@ -4,7 +4,7 @@ Plan: ~/.claude/plans/let-s-continue-our-feyncalc-wondrous-castle.md
 Reference run saved (local) in packages/feyncalc/harness/ref_wl/.
 
 - [x] P0 per-dir run at v0.6166: 13371/13412, no losses vs BASELINE_PASS (+Factor3-ID10, SharedObjectsBehavior-ID201); geomean 1.42x (1.51x at r13b; uniform ~10% drift, the same binary varies ~10% run to run -- interleave A/B for speed claims)
-- [ ] W  DiracTrace-ID46/ID70, TID-ID65 (wrong answers?), DiracOrder-ID54, PauliChainJoin-ID19
+- [ ] W  DiracTrace-ID46 done v0.6168 (Factor sign on expansion); ID70 is equal (dummy labels), TID-ID65 (WRONG answer), DiracOrder-ID54, PauliChainJoin-ID19, SUNSimplify ID83/84: matcher Orderless/Optional binding order (src/match.c)
 - [ ] G7 FCFeynmanParametrize ID6/9/10/11/20/44, FCFeynmanPrepare ID11/13/14 (causes A, B, E, H)
 - [ ] T  form ties: DiracTrace-ID71, FCDiffEqChangeVariables ID1-3, PauliTrickAnticommutator ID1/3, SUNSimplify-ID23, AddScalingParameter-ID6
 - [ ] M  SUNSimplify ID83/84 (Flat+Orderless rest_ binding order)

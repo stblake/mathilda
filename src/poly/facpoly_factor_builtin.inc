@@ -432,6 +432,53 @@ static bool factor_has_large_exponent(const Expr* e) {
  *    every input).
  * NULL to continue with the full cascade; FACTOR_LRGEXP when an exponent is
  * out of bounds (message emitted). */
+/* Does a sum carry a non-real numeric coefficient (I x - y)? */
+static bool factor_sum_has_complex_coeff(const Expr* p) {
+    if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL ||
+        p->data.function.head->data.symbol.name != SYM_Plus) return false;
+    for (size_t i = 0; i < p->data.function.arg_count; i++) {
+        const Expr* t = p->data.function.args[i];
+        const Expr* c = t;
+        if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+            t->data.function.head->data.symbol.name == SYM_Times && t->data.function.arg_count >= 1)
+            c = t->data.function.args[0];
+        if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+            c->data.function.head->data.symbol.name == SYM_Complex) return true;
+    }
+    return false;
+}
+
+/* A product with a negative real numeric coefficient and a sum factor with
+ * Gaussian coefficients, and no power of a sum: Factor[-2 (I x - y)].  The
+ * reference decides the sign on the expansion -- it gives 2 (-I x + y), as
+ * Factor[-2 I x + 2 y] does -- so such a product is not factored factor by
+ * factor (which kept -2 (I x - y), and left two equal traces that did not
+ * cancel: DiracTrace in the BMHV scheme). */
+static bool factor_negative_real_times_gaussian_sum(const Expr* arg) {
+    size_t n = arg->data.function.arg_count;
+    if (n < 2) return false;
+    const Expr* c = arg->data.function.args[0];
+    bool neg = (c->type == EXPR_INTEGER && c->data.integer < 0) ||
+               (c->type == EXPR_BIGINT && mpz_sgn(c->data.bigint) < 0) ||
+               (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+                c->data.function.head->data.symbol.name == SYM_Rational &&
+                c->data.function.arg_count == 2 &&
+                ((c->data.function.args[0]->type == EXPR_INTEGER && c->data.function.args[0]->data.integer < 0) ||
+                 (c->data.function.args[0]->type == EXPR_BIGINT && mpz_sgn(c->data.function.args[0]->data.bigint) < 0)));
+    if (!neg) return false;
+    bool gauss = false;
+    for (size_t i = 1; i < n; i++) {
+        const Expr* f = arg->data.function.args[i];
+        if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+            f->data.function.head->data.symbol.name == SYM_Power &&
+            f->data.function.arg_count == 2 && f->data.function.args[0]->type == EXPR_FUNCTION &&
+            f->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+            f->data.function.args[0]->data.function.head->data.symbol.name == SYM_Plus) return false;
+        if (factor_sum_has_complex_coeff(f)) gauss = true;
+    }
+    return gauss;
+}
+
 static Expr* factor_fast_entry(Expr* arg) {
     if (factor_has_large_exponent(arg)) {
         mth_message("Factor", "lrgexp", "Exponent is out of bounds for function Factor.");
@@ -441,6 +488,8 @@ static Expr* factor_fast_entry(Expr* arg) {
         return NULL;
     const char* h = arg->data.function.head->data.symbol.name;
     size_t n = arg->data.function.arg_count;
+    if (h == SYM_Times && factor_negative_real_times_gaussian_sum(arg))
+        return NULL;   /* the Gaussian-content stage decides the sign on the expansion */
     if (h == SYM_Times || (h == SYM_Power && n == 2
                            && arg->data.function.args[1]->type == EXPR_INTEGER)) {
         size_t nb = h == SYM_Times ? n : 1;
