@@ -237,14 +237,15 @@ static Expr* leg_poly_from_coeffs(mpq_t* c, size_t deg, const Expr* x) {
              * Real (or Integer) scalar but not a Rational, so a big-rational
              * coefficient would fall off the buffer into per-element bignum
              * arithmetic -- which is what made high degree explode in the first
-             * place. mpq_get_d is exactly the coercion the buffer arithmetic
-             * would apply anyway, so the answer is unchanged to rounding. */
-            Expr* acc = expr_new_real(mpq_get_d(c[deg]));   /* c[deg] */
+             * place. Each coefficient is rounded once to the nearest double
+             * (numeric_mpq_to_double, as N rounds it), the coercion the buffer
+             * arithmetic would apply anyway. */
+            Expr* acc = expr_new_real(numeric_mpq_to_double(c[deg]));   /* c[deg] */
             for (size_t i = deg; i-- > 0; ) {               /* fold c[deg-1..0] */
                 Expr* mul = expr_new_function(expr_new_symbol(SYM_Times),
                                 (Expr*[]){ acc, expr_copy((Expr*)x) }, 2);
                 Expr* add = expr_new_function(expr_new_symbol(SYM_Plus),
-                                (Expr*[]){ mul, expr_new_real(mpq_get_d(c[i])) }, 2);
+                                (Expr*[]){ mul, expr_new_real(numeric_mpq_to_double(c[i])) }, 2);
                 acc = eval_and_free(add);
             }
             return acc;

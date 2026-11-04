@@ -20,6 +20,7 @@
  */
 
 #include "precision.h"
+#include "rationalize.h"
 
 #include "arithmetic.h"
 #include "ndarray.h"   /* ndt_get / ndt_is_complex for NDArray accuracy */
@@ -266,13 +267,6 @@ static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
         *out_spec = numeric_machine_spec();
         return true;
     }
-    if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity) {
-        /* Infinity precision: keep values exact. Implemented as a signal
-         * to the walker — for now, we simply return a machine spec and
-         * rely on numericalize's default exact-preservation for atoms. */
-        *out_spec = numeric_machine_spec();
-        return true;
-    }
     int64_t rn, rd;
     double digits = 0.0;
     if (n->type == EXPR_INTEGER) digits = (double)n->data.integer;
@@ -298,6 +292,12 @@ static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
 
 Expr* builtin_set_precision(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    /* Infinite precision: the exact value of every approximate number
+     * (0.1 -> 3602879701896397/36028797018963968), exact parts untouched.
+     * Until v0.6179 this was treated as MachinePrecision: SetPrecision[0.1,
+     * Infinity] stayed 0.1, and SetPrecision[Pi, Infinity] became 3.14159. */
+    if (expr_is_positive_infinity(res->data.function.args[1]))
+        return internal_exact_value(res->data.function.args[0]);
     NumericSpec spec;
     if (!parse_prec_arg(res->data.function.args[1], &spec)) return NULL;
     return numericalize(res->data.function.args[0], spec);
@@ -314,6 +314,9 @@ Expr* builtin_set_accuracy(Expr* res) {
      * The precision in digits is: n + log10(|x|). */
     const Expr* value = res->data.function.args[0];
     const Expr* n     = res->data.function.args[1];
+
+    /* Infinite accuracy is infinite precision: the exact values. */
+    if (expr_is_positive_infinity(n)) return internal_exact_value(value);
 
     int64_t rn, rd;
     double target_acc = 0.0;
@@ -372,10 +375,13 @@ void precision_init(void) {
         "SetPrecision[x, n]\n"
         "\tReturns an expression equivalent to x with numeric values\n"
         "\tre-rounded or promoted to n decimal digits of precision.\n"
-        "\tRequires a USE_MPFR build for n > MachinePrecision.");
+        "\tSetPrecision[x, Infinity] replaces each approximate number by\n"
+        "\tits exact rational value. Requires a USE_MPFR build for\n"
+        "\tn > MachinePrecision.");
     symtab_set_docstring("SetAccuracy",
         "SetAccuracy[x, n]\n"
         "\tReturns an expression equivalent to x with numeric values\n"
-        "\tre-rounded or promoted to n decimal digits of accuracy.\n"
+        "\tre-rounded or promoted to n decimal digits of accuracy;\n"
+        "\tSetAccuracy[x, Infinity] gives exact values.\n"
         "\tRequires a USE_MPFR build for high-accuracy outputs.");
 }

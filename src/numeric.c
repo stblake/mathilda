@@ -508,14 +508,50 @@ static double mpz_to_double_rn(const mpz_t v) {
     return mpz_get_d(v);
 }
 
+/* See numeric.h.  |q| = n/d is scaled by 2^-s so that the integer quotient
+ * holds the double's significand: s = e - (DBL_MANT_DIG - 1) for
+ * 2^e <= |q| < 2^(e+1), but never below the subnormal spacing exponent
+ * DBL_MIN_EXP - DBL_MANT_DIG (-1074), so a subnormal keeps only the bits it
+ * has.  The remainder decides the rounding (half to even), and
+ * m 2^s is then exact in a double (m <= 2^53), so ldexp does not round. */
+double numeric_mpq_to_double(const void* qv) {
+    mpq_srcptr q = (mpq_srcptr)qv;
+    int sgn = mpq_sgn(q);
+    if (sgn == 0) return 0.0;
+    mpz_t n, d, m, r;
+    mpz_inits(n, d, m, r, NULL);
+    mpz_abs(n, mpq_numref(q));
+    mpz_set(d, mpq_denref(q));
+    /* e = floor(log2(n/d)): n/d lies in [2^(e0-1), 2^(e0+1)) for
+     * e0 = bits(n) - bits(d); one comparison picks the side. */
+    long e = (long)mpz_sizeinbase(n, 2) - (long)mpz_sizeinbase(d, 2);
+    mpz_set(m, d);
+    if (e >= 0) mpz_mul_2exp(m, m, (mp_bitcnt_t)e);
+    else        mpz_mul_2exp(r, n, (mp_bitcnt_t)(-e));
+    if (e >= 0 ? (mpz_cmp(n, m) < 0) : (mpz_cmp(r, d) < 0)) e--;
+    double out;
+    if (e >= DBL_MAX_EXP) {
+        out = HUGE_VAL;                               /* past DBL_MAX */
+    } else {
+        long s = e - (DBL_MANT_DIG - 1);
+        const long smin = (long)DBL_MIN_EXP - DBL_MANT_DIG;   /* -1074 */
+        if (s < smin) s = smin;
+        /* m = round(n / (d 2^s)), half to even */
+        if (s >= 0) { mpz_mul_2exp(d, d, (mp_bitcnt_t)s); }
+        else        { mpz_mul_2exp(n, n, (mp_bitcnt_t)(-s)); }
+        mpz_fdiv_qr(m, r, n, d);
+        mpz_mul_2exp(r, r, 1);
+        int c = mpz_cmp(r, d);
+        if (c > 0 || (c == 0 && mpz_odd_p(m))) mpz_add_ui(m, m, 1);
+        out = ldexp(mpz_get_d(m), (int)s);            /* exact, or inf */
+    }
+    mpz_clears(n, d, m, r, NULL);
+    return sgn < 0 ? -out : out;
+}
+
 #ifdef USE_MPFR
 static double mpq_to_double_rn(const mpq_t q) {
-    mpfr_t t;
-    mpfr_init2(t, DBL_MANT_DIG);
-    mpfr_set_q(t, q, MPFR_RNDN);
-    double d = mpfr_get_d(t, MPFR_RNDN);
-    mpfr_clear(t);
-    return d;
+    return numeric_mpq_to_double(q);
 }
 #endif
 
@@ -777,7 +813,32 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
             return r;
         }
 #endif
-        return leaf_from_double((double)rn / (double)rd, spec);
+        /* One IEEE division is one correct rounding when both parts are
+         * exact doubles (|.| <= 2^53); otherwise converting them first would
+         * round twice. */
+        const int64_t exact_max = INT64_C(1) << DBL_MANT_DIG;
+        if (rn <= exact_max && rn >= -exact_max && rd <= exact_max && rd >= -exact_max)
+            return leaf_from_double((double)rn / (double)rd, spec);
+        mpq_t q;
+        mpq_init(q);
+        mpz_set_si(mpq_numref(q), 0);
+        {
+            /* int64 -> mpz without assuming long is 64 bits (LLP64) */
+            mpz_t hi;
+            mpz_init_set_si(hi, (long)(rn >> 32));
+            mpz_mul_2exp(hi, hi, 32);
+            mpz_add_ui(hi, hi, (unsigned long)(rn & 0xFFFFFFFFu));
+            mpz_set(mpq_numref(q), hi);
+            mpz_set_si(hi, (long)(rd >> 32));
+            mpz_mul_2exp(hi, hi, 32);
+            mpz_add_ui(hi, hi, (unsigned long)(rd & 0xFFFFFFFFu));
+            mpz_set(mpq_denref(q), hi);
+            mpz_clear(hi);
+        }
+        mpq_canonicalize(q);
+        double dq = numeric_mpq_to_double(q);
+        mpq_clear(q);
+        return leaf_from_double(dq, spec);
     }
 
     /* Bigint-aware Rational[n, d] → direct numeric quotient. The int64 path
@@ -826,7 +887,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         mpq_clear(q);
         return leaf_from_double(dq, spec);
 #else
-        double dq = mpq_get_d(q);
+        double dq = numeric_mpq_to_double(q);
         mpq_clear(q);
         return leaf_from_double(dq, spec);
 #endif

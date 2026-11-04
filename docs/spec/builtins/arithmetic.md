@@ -108,6 +108,25 @@ An expression that cancels nothing is evaluated once, as before. Examples:
 once.
 
 **Precision semantics**:
+- **Machine rounding is IEEE round-to-nearest, ties to even, with gradual
+  underflow** (v0.6179). An exact rational becomes the double a correctly
+  rounded decimal literal of it would give, through exactly one rounding
+  (`numeric_mpq_to_double`, in GMP integers). The earlier path rounded twice
+  (to a 53-bit MPFR, then to the double), which could be off by one ulp below
+  `$MinMachineNumber`, where a subnormal holds fewer than 53 bits:
+  `N[3/2 2^-1074 - 2^-1200]` gave `2^-1073` instead of `2^-1074`. An `int64`
+  numerator or denominator past `2^53` also no longer rounds before the
+  division: `N[(2^62 + 1)/3]` is the nearest double. `Rationalize[x, 0]` and
+  `SetPrecision[x, Infinity]` therefore round-trip through `N` exactly.
+- `SetPrecision[x, Infinity]` (and `SetAccuracy[x, Infinity]`) replaces each
+  approximate number by its **exact** value. A machine or MPFR number is a
+  dyadic rational, so nothing rounds: `SetPrecision[0.1, Infinity]` is
+  `3602879701896397/36028797018963968`, `SetPrecision[5.*^-324, Infinity]` is
+  `2^-1074`. Exact numbers, symbolic constants and symbols are unchanged
+  (`SetPrecision[{0.5, Pi, x + 0.25}, Infinity]` is `{1/2, Pi, 1/4 + x}`), and
+  held forms are not entered. (Until v0.6179 it acted as `MachinePrecision`,
+  which numericalised `Pi` and left `0.1` inexact; `SetAccuracy[x, Infinity]`
+  did not evaluate.)
 - `N[expr]` gives a **machine-precision** approximation of the whole result. It
   targets machine precision even when `expr` is already an approximate
   arbitrary-precision number, so `N[N[Pi, 100]]` (i.e. `N[Pi, 100] // N`)

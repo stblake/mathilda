@@ -188,7 +188,7 @@ static Expr* bern_one_arg(Expr* arg) {
     if (k == BIDX_EXACT) {
         out = bern_expr_from_mpq(q);
     } else if (k == BIDX_REAL) {
-        out = expr_new_real(mpq_get_d(q));
+        out = expr_new_real(numeric_mpq_to_double(q));   /* IEEE nearest, as N */
     } else { /* BIDX_MPFR */
 #ifdef USE_MPFR
         out = expr_new_mpfr_bits((mpfr_prec_t)prec);

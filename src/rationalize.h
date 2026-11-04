@@ -119,6 +119,12 @@ bool internal_args_contain_inexact_coefficient(const Expr* res);
  * consumed. */
 Expr* internal_force_rationalize(const Expr* e);
 
+/* Every approximate number in e replaced by its exact (dyadic) value; exact
+ * numbers, symbolic constants and held forms unchanged.  The engine of
+ * SetPrecision[x, Infinity] and SetAccuracy[x, Infinity].  Caller owns the
+ * result. */
+Expr* internal_exact_value(const Expr* e);
+
 /* Precision-aware variant of internal_force_rationalize.
  *
  * `bits` is the precision in bits at which each inexact leaf should be

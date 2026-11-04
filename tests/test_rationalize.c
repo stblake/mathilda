@@ -16,10 +16,12 @@
 #include "parse.h"
 #include "print.h"
 #include "rationalize.h"
+#include "numeric.h"
 #include "symtab.h"
 #include "test_utils.h"
 
 #include <gmp.h>
+#include <float.h>
 #include <math.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -354,6 +356,136 @@ static void test_exact_tolerances(void) {
     assert_eval_eq("Rationalize[Pi, 1/100]", "22/7", 0);
 }
 
+/* ------------------------------------------------------------------------
+ *  v0.6179: N of an exact rational rounds once, to nearest, ties to even
+ *  (numeric_mpq_to_double), and SetPrecision[x, Infinity] is exact.
+ * ---------------------------------------------------------------------- */
+#ifdef USE_MPFR
+#include <mpfr.h>
+/* Reference: an MPFR emulating an IEEE double exactly (53 bits, the double's
+ * exponent range, subnormalised), so its rounding is IEEE round-to-nearest-
+ * even, gradual underflow included. */
+static double ref_ieee_double(const mpq_t q) {
+    mpfr_exp_t emin = mpfr_get_emin(), emax = mpfr_get_emax();
+    mpfr_set_emin(DBL_MIN_EXP - DBL_MANT_DIG + 1);   /* -1073 */
+    mpfr_set_emax(DBL_MAX_EXP);                      /* 1024 */
+    mpfr_t t;
+    mpfr_init2(t, DBL_MANT_DIG);
+    int tern = mpfr_set_q(t, q, MPFR_RNDN);
+    tern = mpfr_check_range(t, tern, MPFR_RNDN);
+    mpfr_subnormalize(t, tern, MPFR_RNDN);
+    double d = mpfr_get_d(t, MPFR_RNDN);
+    mpfr_clear(t);
+    mpfr_set_emin(emin);
+    mpfr_set_emax(emax);
+    return d;
+}
+
+/* q = (num / den) 2^shift, built exactly. */
+static void make_q(mpq_t q, const mpz_t num, const mpz_t den, long shift) {
+    mpz_set(mpq_numref(q), num);
+    mpz_set(mpq_denref(q), den);
+    mpq_canonicalize(q);
+    if (shift >= 0) mpq_mul_2exp(q, q, (mp_bitcnt_t)shift);
+    else            mpq_div_2exp(q, q, (mp_bitcnt_t)(-shift));
+}
+
+static bool same_double(double a, double b) {
+    return (a == b && signbit(a) == signbit(b)) || (isnan(a) && isnan(b));
+}
+
+static void test_mpq_to_double_matches_ieee(void) {
+    gmp_randstate_t rs;
+    gmp_randinit_default(rs);
+    gmp_randseed_ui(rs, 20261105UL);
+    mpz_t a, b;
+    mpz_inits(a, b, NULL);
+    mpq_t q;
+    mpq_init(q);
+    int bad = 0;
+    /* random rationals across every exponent, overflow and underflow included */
+    for (int i = 0; i < 20000 && bad < 5; i++) {
+        mpz_urandomb(a, rs, 1 + (mp_bitcnt_t)(i % 200));
+        mpz_add_ui(a, a, 1);
+        mpz_urandomb(b, rs, 1 + (mp_bitcnt_t)((i * 7) % 150));
+        mpz_add_ui(b, b, 1);
+        if (i & 1) mpz_neg(a, a);
+        long shift = (long)(i % 2300) - 1150;       /* 2^-1150 .. 2^1150 */
+        make_q(q, a, b, shift);
+        double got = numeric_mpq_to_double(q), want = ref_ieee_double(q);
+        if (!same_double(got, want)) {
+            bad++;
+            gmp_fprintf(stderr, "  mpq->double %Qd: got %a, want %a\n", q, got, want);
+        }
+    }
+    /* exact midpoints and their neighbours: (2k+1)/2 ulp, in the normal and
+     * subnormal ranges and at the overflow edge -- ties must go to even */
+    long exps[] = { -1074, -1073, -1060, -1023, -1022, -1000, -52, 0, 52, 900, 970, 971 };
+    for (size_t j = 0; j < sizeof exps / sizeof exps[0]; j++) {
+        for (unsigned long k = 0; k < 64; k++) {
+            mpz_set_ui(a, 2 * (k * 2654435761UL % 9007199254740991UL) + 1);
+            mpz_set_ui(b, 2);
+            for (int nudge = -1; nudge <= 1; nudge++) {
+                make_q(q, a, b, exps[j]);           /* (2m+1)/2 2^e: a midpoint */
+                if (nudge) {
+                    mpq_t eps;
+                    mpq_init(eps);
+                    mpq_set_ui(eps, 1, 1);
+                    mpq_div_2exp(eps, eps, 1300);
+                    if (nudge < 0) mpq_sub(q, q, eps); else mpq_add(q, q, eps);
+                    mpq_clear(eps);
+                }
+                double got = numeric_mpq_to_double(q), want = ref_ieee_double(q);
+                if (!same_double(got, want)) {
+                    bad++;
+                    if (bad < 8) fprintf(stderr, "  midpoint e=%ld k=%lu nudge=%d: got %a, want %a\n",
+                                         exps[j], k, nudge, got, want);
+                }
+            }
+        }
+    }
+    ASSERT(bad == 0);
+    mpq_clear(q);
+    mpz_clears(a, b, NULL);
+    gmp_randclear(rs);
+}
+#endif
+
+static void test_n_rounds_once(void) {
+    /* the case that exposed it: just under 3/2 2^-1074 rounds DOWN to 2^-1074
+     * (the 53-bit MPFR intermediate rounded it up to the midpoint, and then
+     * ties-to-even took 2^-1073) */
+    assert_true("N[Rationalize[5.*^-324, 0]] == 5.*^-324");
+    assert_true("N[3/2 2^-1074] == 2^-1073 // N");          /* tie: to even */
+    assert_true("N[5/2 2^-1074] == N[2 2^-1074]");          /* tie: to even */
+    /* Rationalize[x, 0] round-trips at every magnitude, subnormals included */
+    assert_true("And @@ Table[With[{v = RandomReal[] 2.^RandomInteger[{-1074, 1023}]}, "
+                "N[Rationalize[v, 0]] == v], {500}]");
+    /* int64 parts past 2^53: one rounding, not two */
+    assert_true("N[(2^62 + 1)/3] == N[(2^62 + 1)/3, 40]");
+    assert_true("N[(2^62 + 1)/3] == 1537228672809129301/1 // N");
+    assert_true("N[1/(2^60 + 1)] == N[1/(2^60 + 1), 40]");
+    /* other exact -> machine coercions round the same way as N */
+    assert_true("And @@ Table[BernoulliB[1. k] === N[BernoulliB[k]], {k, 2, 60, 2}]");
+}
+
+static void test_setprecision_infinity_exact(void) {
+    assert_eval_eq("SetPrecision[0.1, Infinity]", "3602879701896397/36028797018963968", 0);
+    assert_eval_eq("SetPrecision[0.5, Infinity]", "1/2", 0);
+    assert_true("SetPrecision[{0.5, Pi, x + 0.25, 1/3, 2.0 + 0.5 I}, Infinity] === "
+                "{1/2, Pi, 1/4 + x, 1/3, 2 + I/2}");
+    assert_eval_eq("SetAccuracy[0.25, Infinity]", "1/4", 0);
+    assert_true("With[{r = SetPrecision[1.*^300, Infinity]}, IntegerQ[r] && N[r] === 1.*^300]");
+    assert_true("SetPrecision[5.*^-324, Infinity] === 2^-1074");
+    /* MPFR: the exact value of the binary number, which N gives back */
+    assert_true("With[{r = SetPrecision[N[1/3, 30], Infinity]}, "
+                "Head[r] === Rational && r != 1/3 && N[r, 30] == N[1/3, 30]]");
+    /* exact round trip of machine reals */
+    assert_true("And @@ Table[With[{v = RandomReal[{-1, 1}] 10.^RandomInteger[{-300, 300}]}, "
+                "N[SetPrecision[v, Infinity]] === v], {300}]");
+    assert_eval_eq("Hold[0.1] // SetPrecision[#, Infinity] &", "Hold[0.1]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -401,6 +533,11 @@ int main(void) {
     TEST(test_exact_round_trip_machine);
     TEST(test_exact_arbitrary_precision);
     TEST(test_exact_tolerances);
+#ifdef USE_MPFR
+    TEST(test_mpq_to_double_matches_ieee);
+#endif
+    TEST(test_n_rounds_once);
+    TEST(test_setprecision_infinity_exact);
 
     printf("All rationalize_tests passed.\n");
     return 0;

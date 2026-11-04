@@ -900,6 +900,41 @@ Expr* internal_force_rationalize_bits(const Expr* e, long bits) {
     return eval_and_free(rebuilt);
 }
 
+/* SetPrecision[x, Infinity] / SetAccuracy[x, Infinity]: every approximate
+ * number in e replaced by its exact value (a machine or MPFR number IS a
+ * dyadic rational m 2^e, so this rounds nothing): 0.1 ->
+ * 3602879701896397/36028797018963968.  Exact numbers and symbolic constants
+ * (Pi stays Pi) are untouched, held forms are not entered (as SetPrecision's
+ * other forms), and the rebuilt expression is re-evaluated so Plus / Times /
+ * Complex re-canonicalise. */
+Expr* internal_exact_value(const Expr* e) {
+    if (!e) return NULL;
+    if (is_inexact_leaf(e)) {
+        mpq_t x;
+        mpq_init(x);
+        long prec, ulp_e;
+        Expr* out;
+        if (rz_number(e, x, &prec, &ulp_e)) out = expr_from_mpz_rational(mpq_numref(x), mpq_denref(x));
+        else out = expr_copy((Expr*)e);            /* not finite: unchanged */
+        mpq_clear(x);
+        return out;
+    }
+    if (e->type != EXPR_FUNCTION || is_rational_like(e) ||
+        is_hold_head_sym(e->data.function.head))
+        return expr_copy((Expr*)e);
+    const size_t n = e->data.function.arg_count;
+    Expr* new_head = internal_exact_value(e->data.function.head);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        if (!new_args) { expr_free(new_head); return expr_copy((Expr*)e); }
+        for (size_t i = 0; i < n; i++) new_args[i] = internal_exact_value(e->data.function.args[i]);
+    }
+    Expr* rebuilt = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return eval_and_free(rebuilt);
+}
+
 Expr* internal_force_rationalize(const Expr* e) {
     return internal_force_rationalize_bits(e, 0);
 }

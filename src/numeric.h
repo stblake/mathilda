@@ -82,6 +82,18 @@ typedef struct {
 long numeric_digits_to_bits(double digits);
 double numeric_bits_to_digits(long bits);
 
+/* The IEEE-754 double nearest the exact rational q, ties to even, with
+ * gradual underflow: the same double a correctly rounded decimal literal of
+ * q would give.  Exactly one rounding, done in GMP integers.  GMP's
+ * mpq_get_d truncates; rounding to a 53-bit MPFR and then to a double rounds
+ * TWICE, and below DBL_MIN, where a double holds fewer than 53 bits, the
+ * second rounding could land on the wrong neighbour (N[r] for r just under
+ * 3/2 2^-1074 gave 2^-1073).  Magnitudes past DBL_MAX give +-HUGE_VAL;
+ * magnitudes below half the smallest subnormal give a zero of q's sign.
+ * Declared with an opaque pointer so this header need not include gmp.h:
+ * pass an mpq_t (it decays to mpq_ptr). */
+double numeric_mpq_to_double(const void* q);
+
 /* Make a default-machine spec. */
 static inline NumericSpec numeric_machine_spec(void) {
     NumericSpec s;
