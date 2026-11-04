@@ -1108,6 +1108,8 @@ void core_init(void) {
     orthogonalize_init();
     void hessenberg_init(void);
     hessenberg_init();
+    void matfunc_init(void);
+    matfunc_init();
     fit_init();
     readwrite_init();
     void readlist_init(void);

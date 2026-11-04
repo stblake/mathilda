@@ -789,6 +789,10 @@ set(COMMON_SRC
     ../src/linalg/singularvaluelist.c
     ../src/linalg/la_dense.c
     ../src/linalg/cholesky.c
+    ../src/linalg/matfunc.c
+    ../src/linalg/matfunc_machine.c
+    ../src/linalg/matfunc_mpfr.c
+    ../src/linalg/matfunc_exact.c
     ../src/readwrite.c
     ../src/loadmodule.c
     ../src/files.c

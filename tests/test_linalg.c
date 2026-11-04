@@ -257,17 +257,19 @@ void test_matrixpower() {
     run_test("MatrixPower[{{1,2},{3,4}},-1,{1,0}]",
         "List[-2, Rational[3, 2]]");
 
-    /* Fractional power: should warn and return unevaluated */
-    run_test("MatrixPower[{{1,2},{3,4}},1/2]",
-        "MatrixPower[List[List[1, 2], List[3, 4]], Rational[1, 2]]");
+    /* Fractional power: the principal square root (matfunc.c), whose square
+     * is the matrix again (test_matfunc.c pins the closed forms). */
+    run_test("Max[Abs[Flatten[N[MatrixPower[{{1,2},{3,4}},1/2] . MatrixPower[{{1,2},{3,4}},1/2], 30] - {{1,2},{3,4}}]]] < 10^-25",
+        "True");
 
     /* Non-square matrix: error */
     run_test("MatrixPower[{{1,2,3},{4,5,6}},2]",
         "MatrixPower[List[List[1, 2, 3], List[4, 5, 6]], 2]");
 
-    /* Symbolic exponent: unevaluated */
-    run_test("MatrixPower[{{1,2},{3,4}},n]",
-        "MatrixPower[List[List[1, 2], List[3, 4]], n]");
+    /* Symbolic exponent: the closed form over the eigenvalues (as the
+     * reference answers), which at n = 3 is the integer power. */
+    run_test("Max[Abs[Flatten[N[MatrixPower[{{1,2},{3,4}},n] /. n -> 3, 30] - {{37,54},{81,118}}]]] < 10^-25",
+        "True");
 
     /* Singular matrix with negative power */
     run_test("MatrixPower[{{1,2},{2,4}},-1]",

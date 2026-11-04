@@ -103,14 +103,14 @@ static void test_message_subsystem(void) {
     assert_eval("Check[IntegerDigits[1, 2, 3, 4], CAUGHT]", "CAUGHT");
     /* power.c / matpow.c -- previously Check-blind / escaped both. */
     assert_eval("Check[Power[0, -2], CAUGHT]", "CAUGHT");
-    assert_eval("Check[MatrixPower[{{1, 2}, {3, 4}}, 1/2], CAUGHT]", "CAUGHT");
+    assert_eval("Check[MatrixPower[{{1, 2, 3}, {4, 5, 6}}, 2], CAUGHT]", "CAUGHT");
     /* linalg / eval / regex representatives. */
     assert_eval("Check[Det[{{1, 2, 3}, {4, 5, 6}}], CAUGHT]", "CAUGHT");
     assert_eval("Check[Sin = 5, CAUGHT]", "CAUGHT");   /* Set::wrsym (Protected) */
 
     /* Quiet[] silences the print at these sites (no message-driven failure). */
-    assert_eval("Quiet[MatrixPower[{{1, 2}, {3, 4}}, 1/2]]",
-                "MatrixPower[{{1, 2}, {3, 4}}, 1/2]");
+    assert_eval("Quiet[MatrixPower[{{1, 2, 3}, {4, 5, 6}}, 2]]",
+                "MatrixPower[{{1, 2, 3}, {4, 5, 6}}, 2]");
     ASSERT(!eval_stderr_contains("Quiet[Det[{{1, 2, 3}, {4, 5, 6}}]]", "Det::"));
 
     /* CRUCIAL: an INTERNAL probe mute (g_arith_warnings_muted) is invisible to

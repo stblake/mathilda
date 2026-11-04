@@ -2,7 +2,8 @@
  *
  * Implements integer matrix exponentiation via square-and-multiply.
  * Negative exponents are handled by composing with Inverse[m] (which lives
- * in matinv.c).  Fractional exponents are flagged as unsupported.
+ * in matinv.c).  Any other exponent (rational, real, complex, symbolic) is
+ * the principal power, handed to matfunc_matrixpower (matfunc.c).
  */
 
 #include "linalg.h"
@@ -13,6 +14,7 @@
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
+#include "matfunc.h"   /* matfunc_matrixpower: non-integer exponents */
 #include "message.h"   /* mth_message: route MatrixPower diagnostics through Quiet/Check */
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,18 +81,11 @@ Expr* builtin_matrixpower(Expr* res) {
         is_rational = true;
     }
 
-    /* Fractional powers: warn and return unevaluated */
-    if (is_rational || is_real) {
-        char* exp_str = expr_to_string(exp_arg);
-        mth_message("MatrixPower", "fract",
-                "Fractional matrix powers are not currently supported. "
-                "Exponent %s is not an integer.", exp_str);
-        free(exp_str);
-        return NULL;
-    }
-
-    /* Symbolic or non-numeric exponent: return unevaluated */
-    if (!is_int && !is_bigint) return NULL;
+    /* A non-integer exponent -- rational, real, complex or symbolic -- is the
+     * principal power, computed by the matrix-function machinery (matfunc.c).
+     * The integer path below is untouched. */
+    (void)is_rational; (void)is_real;
+    if (!is_int && !is_bigint) return matfunc_matrixpower(res);
 
     /* Get the exponent value; for bigint, check it fits in int64_t */
     int64_t exp_val = 0;

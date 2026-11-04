@@ -97,6 +97,12 @@ Expr* ndla_norm(Expr* res);         /* Norm[v] / Norm[v, p] / Norm[m] */
 Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe);
 Expr* ndla_normalize(Expr* res);    /* Normalize[v]                   */
 Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
+/* The matrix functions (src/linalg/matfunc.c): the whole call, a float64 or
+ * complex64 buffer straight to the machine kernels (an integer buffer is
+ * delisted for the exact engine).  Compile[] delegates to the same functions. */
+Expr* ndla_matrixexp(Expr* res);       /* MatrixExp[m], MatrixExp[m, v]  */
+Expr* ndla_matrixlog(Expr* res);       /* MatrixLog[m]                   */
+Expr* ndla_matrixfunction(Expr* res);  /* MatrixFunction[f, m]           */
 
 /* The dense matrix heads added with the SparseArray linear-algebra work.  Each
  * is DEFINED next to its builtin (cholesky.c, hessenberg.c, ...) because it is

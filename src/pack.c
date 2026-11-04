@@ -825,6 +825,7 @@ static void pack_mark_aware_heads(void) {
          * path. That split is the whole reason the two flags are separate. */
         "Det", "Inverse", "PseudoInverse", "LinearSolve", "LeastSquares",
         "RowReduce", "NullSpace", "MatrixRank", "MatrixPower",
+        "MatrixExp", "MatrixLog", "MatrixFunction",
         "LUDecomposition", "QRDecomposition", "SingularValueDecomposition",
         "JordanDecomposition", "SchurDecomposition", "CholeskyDecomposition",
         "SingularValueList", "Minors", "Adjugate", "Orthogonalize",
