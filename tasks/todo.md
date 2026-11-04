@@ -1,3 +1,24 @@
+# Issue #125: DifferentialForms package (from v0.6162, 2026-11-04)
+
+Reporter: `<< DifferentialForms.m; d[x]` gave `Dt[x]`. Plan: corpus of every exported
+function + usage examples + identities, compared with recorded answers, root-cause kernel fixes.
+
+- [x] H1 harness: tools/check_differentialforms.py + tools/differentialforms/run_df_cases.m + tests/differentialforms/corpus.m (236 cases), `make check-differentialforms`; package local in packages/differentialforms/ (untracked)
+- [x] F1 Literal = HoldPattern for matching (SYM_IS_HOLDPATTERN) -- the reported bug
+- [x] F2 positional ReplacePart[expr, new, pos(, npos)] (Indices -> Basis/HodgeStar/...)
+- [x] F3 named operator heads interned System` (\[Wedge] reached package's Wedge rules)
+- [x] F4 Dt honours Constant (wrong answer: ball Stokes 4/3 Pi R^3 == 2 Pi^2 R); Attributes[{...}]
+- [x] F5 Context["name"] via $ContextPath
+- [x] F6 display: SequenceForm, Format[..., InputForm|TeXForm], HoldForm kept in InputForm, held 1*x, TeX strings
+- [x] F7 tests/test_package_compat.c; docs; changelog; v0.6163
+- [ ] Follow-up: notebook LaTeX channel (print_latex.c) ignores FormatValues -- the notebook shows altform[1, {x}] while the text payload shows (1) dx
+- [ ] Follow-up: draft #125 reply (show user before posting)
+
+## Review (v0.6163)
+- Corpus 236/236 (recorded answers cached locally; 44 identities all True; 10 TensorProduct cases are hand-derived `expect`).
+- Harness trap found: a Do loop variable named `c` in the driver captured the corpus's free symbol `c` (Do binds dynamically) -- driver locals are $-prefixed.
+- Valgrind: definitely-lost identical (13,440 B / 420 blocks) for Print[1], 1x and 20x of the new paths.
+
 # DSolve corpus verifier: PossibleZeroQ only (from v0.6160, 2026-11-03)
 
 The prelude's dsResidVerdict accepted a branch when a majority of six real sample

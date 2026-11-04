@@ -872,6 +872,16 @@ check-messages:
 check-feyncalc: Mathilda
 	python3 tools/check_feyncalc.py $(FC_ARGS)
 
+# `make check-differentialforms` -- the DifferentialForms package (issue #125):
+# a 236-case corpus (tests/differentialforms/corpus.m) covering every exported
+# function, compared semantically with recorded expected answers, plus
+# mathematical identities (d.d = 0, Leibniz, Stokes, Cartan, homotopy, Hodge).
+# The package itself is local (packages/differentialforms/, untracked); the
+# check skips cleanly without it. `DF_ARGS="--record --binary B"` records
+# expected answers from kernel binary B.
+check-differentialforms: Mathilda
+	python3 tools/check_differentialforms.py $(DF_ARGS)
+
 # `make check-corpus-indvar` — does every DSolve corpus record ask the question
 # the book printed? A converted record can PARSE cleanly and still encode a
 # DIFFERENT equation, because the converter promoted a PARAMETER to the
@@ -1054,7 +1064,7 @@ print-flags:
 	@echo "CFLAGS = $(CFLAGS)"
 	@echo "LDFLAGS = $(LDFLAGS)"
 
-.PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-interval check-packed-aware \
+.PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \
