@@ -296,6 +296,7 @@ Applies a rule or list of rules to transform an expression.
 
 **Features**:
 - `Protected`.
+- **Whole expressions only** (v0.6174), as in the reference: `Replace`, `ReplaceAt` and `ReplaceList` do not rewrite a subset of a `Flat` head's arguments, so `Replace[a + b + c, a + b -> x]` is `a + b + c` and `Replace[f[a + b + c], a + b -> x, {1}]` is `f[a + b + c]`. Only `ReplaceAll` (`/.`) and `ReplaceRepeated` (`//.`) do: `(a + b + c) /. a + b -> x` is `c + x`. Before, `Replace` gave `c + x` too.
 - Rules must be of the form `lhs -> rhs` (`Rule`) or `lhs :> rhs` (`RuleDelayed`).
 - Tries rules in order. The first one that matches is applied.
 - If rules are given in nested lists, `Replace` is mapped onto the inner lists.

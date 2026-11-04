@@ -536,20 +536,22 @@ static ReplaceRule* rules_collect(Expr* rules_expr, size_t* out_count) {
 
 /* Try one rule at `e`: the owned, bound (but unevaluated) replacement, or NULL
  * when the rule does not apply. */
-static Expr* rule_try(const ReplaceRule* r, Expr* e) {
+static Expr* rule_try(const ReplaceRule* r, Expr* e, bool flat_subset) {
     if (!r->pattern) {
         Expr* v = assoc_lookup_value(r->replacement, e);
         return v ? expr_copy(v) : NULL;
     }
-    /* Flat-aware: a Flat-head (Plus/Times/...) rule rewrites a SUBSET of a
-     * longer operand sequence, keeping the rest (e.g. 1+x+y /. x+y->z gives
-     * 1+z). The ordinary match stays inline (so the common path is unchanged);
-     * only a failed match falls through to Flat-head leftover matching, which
-     * adds genuinely-new matches without altering existing ones. */
+    /* Flat-aware (flat_subset, ReplaceAll and ReplaceRepeated only): a
+     * Flat-head (Plus/Times/...) rule rewrites a SUBSET of a longer operand
+     * sequence, keeping the rest (1 + x + y /. x + y -> z gives 1 + z).
+     * Replace, ReplaceAt and ReplaceList match whole expressions only, as in
+     * the reference: Replace[a + b + c, a + b -> x] is a + b + c. The
+     * ordinary match stays inline; only a failed match falls through to the
+     * Flat-head leftover matching. */
     MatchEnv* env = env_new();
     Expr* out = match(e, r->pattern, env)
         ? replace_bindings(r->replacement, env)
-        : match_flat_leftover(e, r->pattern, r->replacement, env);
+        : (flat_subset ? match_flat_leftover(e, r->pattern, r->replacement, env) : NULL);
     env_free(env);
     return rule_finish(r, out);
 }
@@ -629,7 +631,7 @@ static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, 
 
     if (match_level) {
         for (size_t i = 0; i < num_rules; i++) {
-            Expr* repl = rule_try(&rules[i], new_e);
+            Expr* repl = rule_try(&rules[i], new_e, false);
             if (repl) {
                 expr_free(new_e);
                 return repl;
@@ -718,7 +720,7 @@ Expr* builtin_replace(Expr* res) {
 
 static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
     for (size_t i = 0; i < num_rules; i++) {
-        Expr* repl = rule_try(&rules[i], e);
+        Expr* repl = rule_try(&rules[i], e, true);
         if (repl) return repl;
     }
 
@@ -874,7 +876,7 @@ static Expr* do_replace_all_idx(Expr* e, ReplaceRule* rules, const RuleIndex* ix
     while (i < nb || j < ix->nwild) {
         size_t r = (j >= ix->nwild || (i < nb && b->idx[i] < ix->wild[j])) ? b->idx[i++]
                                                                            : ix->wild[j++];
-        Expr* repl = rule_try(&rules[r], e);
+        Expr* repl = rule_try(&rules[r], e, true);
         if (repl) return repl;
     }
 
@@ -1113,7 +1115,7 @@ Expr* builtin_replacelist(Expr* res) {
         if (state.limit >= 0 && (int64_t)state.count >= state.limit) break;
         if (!rules[i].pattern) {
             /* An association rule set: its literal keys match at most once. */
-            Expr* repl = rule_try(&rules[i], expr);
+            Expr* repl = rule_try(&rules[i], expr, false);
             if (repl) {
                 if (state.count == state.cap) {
                     state.cap *= 2;
@@ -1166,7 +1168,7 @@ static ReplaceRule* parse_replace_rules(Expr* rules_expr, size_t* out_count) {
  */
 static Expr* replaceat_apply_rules(ReplaceRule* rules, size_t num_rules, Expr* target) {
     for (size_t i = 0; i < num_rules; i++) {
-        Expr* repl = rule_try(&rules[i], target);
+        Expr* repl = rule_try(&rules[i], target, false);
         if (repl) return rules[i].delayed ? eval_and_free(repl) : repl;
     }
     return expr_copy(target);
