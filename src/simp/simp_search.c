@@ -724,6 +724,50 @@ static bool same_numeric_content(const Expr* a, const Expr* b) {
     return c->type == EXPR_INTEGER && c->data.integer == 1;
 }
 
+/* The numerator of a quotient e (Numerator[e]), or NULL. */
+static Expr* quotient_numerator(const Expr* e) {
+    return call_unary_owned("Numerator", expr_copy((Expr*)e));
+}
+
+/* Does a factored candidate cand win a SimplifyCount tie against best for the
+ * quotient input?  As for a product (v0.6164, #126), only when the input's
+ * numerator is itself a product -- a bare sum keeps its form, so
+ * (2 - 2 a)/(1 + b) and (1 + x)/(1 - x) stay, while ((4 - 4 eps) y)/(...)
+ * takes -4 (-1 + eps) y -- and not when the candidate only re-orients the
+ * input's factors with the same content. */
+static bool quotient_tie_ok(const Expr* input, const Expr* best, const Expr* cand) {
+    Expr* num = quotient_numerator(input);
+    bool sum_num = num && simp_eq_head_sym(num, "Plus");
+    if (num) expr_free(num);
+    if (sum_num) return false;
+    return !(expr_eq(best, input) && factor_is_sign_rearrangement(input, cand) &&
+             same_numeric_content(input, cand));
+}
+
+/* Factor[Numerator[e]] / Denominator[e], or NULL when e has no denominator
+ * or the numerator does not change. */
+static Expr* numerator_factored(const Expr* e) {
+    Expr* num = quotient_numerator(e);
+    Expr* den = call_unary_owned("Denominator", expr_copy((Expr*)e));
+    Expr* out = NULL;
+    if (num && den && !(den->type == EXPR_INTEGER && den->data.integer == 1)) {
+        factor_memo_push(NULL);
+        Expr* fn = call_unary_owned("Factor", expr_copy(num));
+        factor_memo_pop();
+        if (fn && !expr_eq(fn, num)) {
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ fn, expr_new_function(expr_new_symbol(SYM_Power),
+                                   (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2) }, 2));
+            fn = NULL;
+        }
+        if (fn) expr_free(fn);
+    }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    return out;
+}
+
+
 /* Is p a positive constant multiple of a Plus factor of `input` (a top-level
  * Times argument, or the base of one of its powers, or input itself)? */
 static bool plus_matches_input_orientation(const Expr* p, const Expr* input) {
@@ -976,19 +1020,33 @@ static Expr* simp_pipeline_rational(const Expr* input,
             Expr* fc = traced_call_unary("Factor", fc_src);
             factor_memo_pop();
             if (fc) {
-                /* Factor takes a tie here too when it does more than move
-                 * signs of the input: a quotient keeps its orientation even
-                 * when the content's sign would change ((1 + x)/(1 - x)
-                 * stays, not -((1 + x)/(-1 + x)), as in the reference). */
                 size_t fs = score_with_func(fc, complexity_func);
-                bool tie_ok = !(expr_eq(best, input) &&
-                                factor_is_sign_rearrangement(input, fc));
-                if (fs < bs || (tie_ok && fs == bs && !expr_eq(fc, best))) {
+                if (fs < bs || (quotient_tie_ok(input, best, fc) && fs == bs &&
+                                !expr_eq(fc, best))) {
                     expr_free(best);
                     best = expr_copy(fc);
                     bs = fs;
                 }
                 expr_free(fc);
+            }
+            /* The numerator factored over the denominator as it stands
+             * (issue #126): ((4 - 4 eps) y)/(-1 + y^2) ->
+             * (-4 (-1 + eps) y)/(-1 + y^2), where Factor of the whole also
+             * splits the denominator into (-1 + y) (1 + y) and costs more. */
+            for (int pass = 0; pass < 2; pass++) {
+                /* from the input (keeps its denominator), then from the
+                 * Together form ((3 - 3 a) b/(1 - b^2) -> 3 (-1 + a) b/(-1 + b^2)) */
+                Expr* nf = numerator_factored(pass == 0 ? input : fc_src);
+                if (!nf) continue;
+                size_t ns = score_with_func(nf, complexity_func);
+                if (ns < bs || (pass == 0 && quotient_tie_ok(input, best, nf) && ns == bs &&
+                                !expr_eq(nf, best))) {
+                    expr_free(best);
+                    best = nf;
+                    bs = ns;
+                } else {
+                    expr_free(nf);
+                }
             }
         }
     }
@@ -1565,7 +1623,11 @@ static Expr* simp_split_multiplicative(const Expr* input, const AssumeCtx* ctx,
     g_split_whole = input;
     Expr* whole = simp_dispatch(input, ctx, complexity_func);
     g_split_whole = saved;
-    if (whole && score_with_func(whole, complexity_func) < score_with_func(split, complexity_func)) {
+    size_t sw = whole ? score_with_func(whole, complexity_func) : 0;
+    size_t ss = score_with_func(split, complexity_func);
+    /* A fraction with a sum denominator is the rational pipeline's to
+     * decide, ties included (#126: ((4 - 4 eps) y)/(-1 + y^2)). */
+    if (whole && (sw < ss || (sum_den && sw == ss))) {
         expr_free(split);
         return whole;
     }

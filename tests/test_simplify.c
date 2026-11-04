@@ -69,6 +69,15 @@ void test_simplify_factor_tie_issue126(void) {
     /* a number times one sum over a monomial: the expanded numerator */
     assert_eval_eq("(Simplify[(-2 (-1 + x))/y]) === ((2 - 2 x)/y)", "True", 0);
     assert_eval_eq("(Simplify[-((-3 + d)/x)]) === ((3 - d)/x)", "True", 0);
+    /* #126 follow-up: a product numerator over a sum denominator takes its
+     * Factor form on a tie, the denominator kept as it stands */
+    assert_eval_eq("(Simplify[((4 - 4 eps) y)/(-1 + y^2)]) === ((-4 (-1 + eps) y)/(-1 + y^2))", "True", 0);
+    assert_eval_eq("(Simplify[((6 - 6 a) b)/(1 + b)]) === ((-6 (-1 + a) b)/(1 + b))", "True", 0);
+    assert_eval_eq("(Simplify[((3 - 3 a) b)/(1 - b^2)]) === ((3 (-1 + a) b)/(-1 + b^2))", "True", 0);
+    assert_eval_eq("(Simplify[((4 - 4 eps) y z)/(-1 + y^2)]) === ((-4 (-1 + eps) y z)/(-1 + y^2))", "True", 0);
+    /* a bare-sum numerator keeps its form on a tie */
+    assert_eval_eq("(Simplify[(2 - 2 a)/(1 + b)]) === ((2 - 2 a)/(1 + b))", "True", 0);
+    assert_eval_eq("(Simplify[(1 + x)/(1 - x)]) === ((1 + x)/(1 - x))", "True", 0);
     /* numeric pair flip is score-gated: stays -2 (-2 + eps) (-2 + x) */
     assert_eval_eq("Simplify[(-2 + x) (4 - 2 eps)]", "-2 (-2 + eps) (-2 + x)", 0);
     /* a sum input keeps the cheaper partially-factored form */

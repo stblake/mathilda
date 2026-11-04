@@ -14,6 +14,8 @@ returns the simplest form it finds.
   the candidate of minimum complexity.
 - `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
 
+**A product numerator over a sum takes its Factor form on a tie** (v0.6175, #126 follow-up). `Simplify[((4 - 4 eps) y)/(-1 + y^2)]` is `(-4 (-1 + eps) y)/(-1 + y^2)` (LeafCount 13; it stayed at 14), as in the reference. The numerator is factored over the denominator as it stands (Factor of the whole also splits `-1 + y^2` and costs more), from the input and from its Together form, and a fraction with a sum denominator is decided by the rational pipeline, ties included. A numerator that is a bare sum keeps its form on a tie, as in the reference: `(2 - 2 a)/(1 + b)` and `(1 + x)/(1 - x)` stay. Not yet: such a fraction as one term of a two-term sum (`... + z`) is not simplified term by term.
+
 **Ties follow the reference's candidate set** (v0.6172). Over a new 600-expression random corpus (products of signed binomials and monomials, powers, quotients and sums), outputs identical to the reference rose from 390 to 439.
 - A sign-only rewrite of a product now wins a tie when it changes the numeric content: `Simplify[(3 - d) y]` is `-((-3 + d) y)` and `(1 - a) (-2 + 3 eps)` is `-((-1 + a) (-2 + 3 eps))`.
 - A pure re-orientation that keeps the content is still vetoed. `(5 - 3 z)^2 x z` is unchanged.
