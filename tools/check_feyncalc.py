@@ -25,7 +25,9 @@ Results are written to packages/feyncalc/harness/results/
 <Dir>.tsv.  The ratchet: every id in harness/BASELINE_PASS.txt that was run
 must still PASS (exit 1 otherwise); newly passing ids are listed so the
 baseline can be raised with --update-baseline.  Ids in PER_FILE_STATEFUL depend
-on an earlier file's state and are ratcheted only in a --per-dir run."""
+on an earlier file's state and are ratcheted only in a --per-dir run.  Ids in
+UNSUPPORTED need a kernel feature Mathilda does not provide (parallel
+subkernels) and are reported as SKIP."""
 import argparse
 import collections
 import concurrent.futures as cf
@@ -58,6 +60,19 @@ PER_FILE_STATEFUL = {
     ("LoopIntegrals", "fcstFeynAmpDenominatorSimplify-ID44"):
         "passes only after an earlier LoopIntegrals file has run; in a fresh "
         "process Momentum[gkin meta n, D] stays unexpanded (2026-11-04)",
+}
+
+# Ids that need a kernel feature Mathilda deliberately does not provide.
+# A non-PASS result for one of these is reported as SKIP, with the reason in
+# the messages column, so it neither counts against the pass rate nor
+# ratchets. Decided with the user, 2026-11-04: no parallel subkernels
+# (LaunchKernels declines with LaunchKernels::nopar; $ParallelizeFeynCalc =
+# True then aborts by design in FCMain.m).
+UNSUPPORTED = {
+    ("LoopIntegrals", "fcstFCLoopFindIntegralMappings-ID14"):
+        "needs parallel subkernels (LaunchKernels[2]; $ParallelizeFeynCalc = True)",
+    ("LoopIntegrals", "fcstFCLoopFromGLI-ID29#2"):
+        "needs parallel subkernels ($ParallelizeFeynCalc = True)",
 }
 
 GROUP_RE = re.compile(r"^(Tests`[A-Za-z]+`[A-Za-z0-9]+)\s*=", re.M)
@@ -324,7 +339,10 @@ def main():
     for r in runs:
         for i, (v, secs) in r["results"].items():
             d = r["details"].get(i, ["", "", ""])
-            per[r["shard"]["label"]][i] = (v, secs, r["shard"]["file"], *d[:3])
+            lab = r["shard"]["label"]
+            if v != "PASS" and (lab, i) in UNSUPPORTED:
+                v, d = "SKIP", [d[0], d[1], "unsupported: " + UNSUPPORTED[(lab, i)]]
+            per[lab][i] = (v, secs, r["shard"]["file"], *d[:3])
     for lab, res in per.items():
         path = os.path.join(a.results_dir, lab.replace("/", "_") + ".tsv")
         with open(path, "w", encoding="utf-8") as fh:
