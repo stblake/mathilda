@@ -4482,7 +4482,16 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
 
     if (var_idx == num_vars) {
         if (h) {
-            return eval_and_free(expr_new_function(expr_copy(h), (Expr*[]){expr_copy(expr)}, 1));
+            /* The user's h runs at the caller's builtin depth, as threading
+             * does (alg_thread_call): Collect[e, v, Together] answers with
+             * the user-level factored Together ((a b)/(x0 (1 + x0)), not
+             * (a b)/(x0 + x0^2)), as in the reference (FeynCalc Solve3). */
+            int* depth = eval_builtin_depth_counter();
+            int saved = *depth;
+            if (*depth > 0) (*depth)--;
+            Expr* r = eval_and_free(expr_new_function(expr_copy(h), (Expr*[]){expr_copy(expr)}, 1));
+            *depth = saved;
+            return r;
         }
         return expr_copy(expr);
     }

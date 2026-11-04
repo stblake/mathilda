@@ -14,6 +14,9 @@
  *   - Block localises attributes and built-in rules: Block[{f}, ...] sees no
  *     attributes and no C builtin (FeynCalc's TeX preview runs //. on inert
  *     Plus and Times inside Block[{Plus, Times}, ...]).
+ *   - Replace / ReplaceAt / ReplaceList match whole expressions only: the
+ *     Flat-subset rewrite (1 + x + y /. x + y -> z) is ReplaceAll's and
+ *     ReplaceRepeated's alone (Replace[a + b + c, a + b -> x] was c + x).
  * Expected values computed by the reference kernel.
  */
 
@@ -86,12 +89,42 @@ static void test_block_localises_attributes_and_builtins(void) {
     same("Block[{x = 2}, x^2]", "4");
 }
 
+static void test_replace_whole_expression_only(void) {
+    /* Replace, ReplaceAt and ReplaceList match whole expressions; only
+     * ReplaceAll / ReplaceRepeated rewrite a subset of a Flat head */
+    same("Replace[a + b + c, a + b -> x]", "a + b + c");
+    same("Replace[a b c, a b -> x]", "a b c");
+    same("Replace[f[a + b + c], a + b -> x, {1}]", "f[a + b + c]");
+    same("Replace[f[a + b + c], a + b -> x, All]", "f[a + b + c]");
+    same("ReplaceAt[f[a + b + c], a + b -> x, 1]", "f[a + b + c]");
+    same("Replace[a + b + c, {a + b -> x, c -> 1}]", "a + b + c");
+    same("ReplaceList[a + b + c, a + b -> x]", "{}");
+    same("(a + b + c) /. a + b -> x", "c + x");
+    same("(a + b + c) //. a + b -> x", "c + x");
+    same("Replace[a + b + c, a + b + c -> x]", "x");
+    same("Replace[a + b + c, x_ + b -> {x}]", "{a + c}");
+}
+
+static void test_numloop_seed_and_collect_head(void) {
+    /* a loop does not numericalise a non-numeric value its variable holds
+     * (user rules on machine numbers fired: FeynCalc TID-ID50) */
+    same("nlhit = 0; nlh[x_Real, y_] := (nlhit++; nlhh); nlres = nlh[0, k - p]; "
+         "Do[nlres = nlfoo[nlres], {i, 1}]; {nlhit, nlres}",
+         "{0, nlfoo[nlh[0, k - p]]}");
+    /* Collect's head runs at the caller's level: Together answers factored */
+    same("Collect[c1 X + c2, {c1, c2}, Together[(a b)/(x0 (1 + x0))] &]",
+         "(a b c1)/(x0 (1 + x0)) + (a b c2)/(x0 (1 + x0))");
+    same("Collect[(a b)/(x0 + x0^2) c1, c1, Together]", "(a b c1)/(x0 (1 + x0))");
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_factor_gaussian_sign_on_expansion);
     TEST(test_inputform_nested_parens);
     TEST(test_block_localises_attributes_and_builtins);
+    TEST(test_replace_whole_expression_only);
+    TEST(test_numloop_seed_and_collect_head);
     printf("All FeynCalc round-14 tests passed.\n");
     return 0;
 }

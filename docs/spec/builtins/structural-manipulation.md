@@ -1454,7 +1454,7 @@ Collects together terms involving the same powers of objects matching a variable
 - `Protected`.
 - Automatically threads over lists, equations, inequalities, and logic functions.
 - Effectively writes `expr` as a polynomial in `x` or a fractional power of `x`.
-- `Collect[expr, var, h]` applies `h` to the expression that forms the coefficient of each term obtained.
+- `Collect[expr, var, h]` applies `h` to the expression that forms the coefficient of each term obtained. `h` runs at the caller's level (v0.6176), so `Collect[e, v, Together]` gives `Together`'s user-level factored form, as in the reference (`(a b)/(x0 (1 + x0))`, not `(a b)/(x0 + x0^2)`).
 - `var` may be a pattern (`Power[_, 1/2]`, `f[_]`, `x^_`, `p | q`, `f[n_] /; n > 0`). Every distinct subexpression of `expr` that matches it, at levels 1 to Infinity, becomes a collection variable of its own, in canonical order (v0.516).
 - Numeric coefficients are never powers of the key: `Collect[2 x + 2 y, Sqrt[2]]` stays `2 x + 2 y` (v0.516).
 

@@ -583,7 +583,11 @@ static double numprog_run(const NumProg* p, const double* regs, double* stack) {
 static bool seed_from_symbol(const Expr* sym, double* out, bool* inexact) {
     Expr* cur = evaluate((Expr*)sym);   /* evaluate borrows, returns fresh */
     bool ok = false;
-    if (cur && cur != sym && cur->type != EXPR_SYMBOL) {
+    /* Only a numeric value is converted: numericalising anything else
+     * evaluates it with machine numbers in it, so user rules fire with side
+     * effects (res = h[0, k - p] before a Do fired h[x_Real, y_] on
+     * h[0.0, k - 1.0 p] -- FeynCalc's TemporalPair message, TID-ID50). */
+    if (cur && cur != sym && cur->type != EXPR_SYMBOL && expr_is_numeric_quantity(cur)) {
         Expr* v = numericalize(cur, numeric_machine_spec());
         ok = to_machine_double(v, out);
         if (ok) *inexact = has_inexact_leaf(cur);
