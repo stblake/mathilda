@@ -1,17 +1,31 @@
 # FeynCalc round 14: last failures + speed (from 2026-11-04, v0.6166)
 
+Status v0.6171: per-dir 13382/13412 (+11, no losses), geomean 1.49x, BASELINE_PASS raised to it (local).
+Agent findings to act on (repros in scratchpad agentW/agentT/agentP):
+- Matcher (W, M): Orderless/Flat first-match order differs -- reference assigns elements to slots first, bare blanks take leftovers, nested Orderless arg orders tried before moving elements; rest_. (Optional) is enumerated first because the reorder is skipped when any_opt (match.c ~1882-1940, ~2190-2520). Repros: pc[L[i4],L[i5]] hd[1,L[i5]] hd[3,L[i4]] UpValue; ReplaceList[ch[e,j] ch[x,i] Aa[i,j], r_ ch[a_,ii_] Aa[ii_,jj_] :> ii] = {j,i} ref; Replace[s[1] s[2] s[3] s[4], rest_. s[a_] :> {rest,a}] = {s[2]s[3]s[4],1} ref. Fixes TID-ID65 (WRONG answer: drops D*SPLRD via LCPC PairContract), DiracOrder-ID54, PauliChainJoin-ID19, SUNSimplify-ID83/84. Also Replace at level 0 matches a subset of a Flat head (Replace[a+b+c, a+b -> x] gives c + x; ref unchanged) -- wrong.
+- T: (1) Factor's sign-rearrangement veto on product ties (simp_search.c ~782) -- reference takes lower LeafCount on SC tie for products; (2) per-coefficient factoring after Collect (try_collect_per_variable); (3) simp_pipeline_rational ties take Together's form; (4) simp_split_multiplicative lifts 1/96 + Apart (SUNSimplify-ID23).
+- S: FourDivergence-ID18 Simplify collect over Sqrt[m^2 - sp[q,q]] + sign out of coefficient; Cardano form (positive radicands, real root first) for Solve/ToRadicals (SharedToolsFRH-ID2, Factor3-ID14); Sqrt[27067195991679469617841] = 104729 Sqrt[2467796558401] (square part beyond trial division); TID-ID50 0 -> 0. inside FDS (ExplicitLorentzIndex[0.]); FCLoopFromGLI-ID29#2 + FCLoopFindIntegralMappings-ID14 need $ParallelizeFeynCalc / LaunchKernels.
+- Follow-ups: SeriesCoefficient[FresnelS[x], {x,0,n}] returns unflattened Times; Block[{Times}] reference still folds numbers; FortranForm narrow-width break choice; Unique[{"a","b"}] counter per element.
+
 Plan: ~/.claude/plans/let-s-continue-our-feyncalc-wondrous-castle.md
 Reference run saved (local) in packages/feyncalc/harness/ref_wl/.
 
 - [x] P0 per-dir run at v0.6166: 13371/13412, no losses vs BASELINE_PASS (+Factor3-ID10, SharedObjectsBehavior-ID201); geomean 1.42x (1.51x at r13b; uniform ~10% drift, the same binary varies ~10% run to run -- interleave A/B for speed claims)
-- [ ] W  DiracTrace-ID46 done v0.6168 (Factor sign on expansion); ID70 is equal (dummy labels), TID-ID65 (WRONG answer), DiracOrder-ID54, PauliChainJoin-ID19, SUNSimplify ID83/84: matcher Orderless/Optional binding order (src/match.c)
+- [ ] W  (NEXT) DiracTrace-ID46 done v0.6168 (Factor sign on expansion); ID70 is equal (dummy labels), TID-ID65 (WRONG answer), DiracOrder-ID54, PauliChainJoin-ID19, SUNSimplify ID83/84: matcher Orderless/Optional binding order (src/match.c)
 - [ ] G7 FCFeynmanParametrize ID6/9/10/11/20/44, FCFeynmanPrepare ID11/13/14 (causes A, B, E, H)
-- [ ] T  form ties: DiracTrace-ID71, FCDiffEqChangeVariables ID1-3, PauliTrickAnticommutator ID1/3, SUNSimplify-ID23, AddScalingParameter-ID6
+- [ ] T  form ties (agentT report 2026-11-04: four Simplify mechanisms, not one tie rule -- see review below): DiracTrace-ID71, FCDiffEqChangeVariables ID1-3, PauliTrickAnticommutator ID1/3, SUNSimplify-ID23, AddScalingParameter-ID6
 - [ ] M  SUNSimplify ID83/84 (Flat+Orderless rest_ binding order)
-- [ ] P  FCToTeXPreviewTermOrder ID1-4 (HoldForm order / InputForm)
+- [x] P  FCToTeXPreviewTermOrder ID1-4: InputForm nested-paren printer v0.6169 + Block clears attributes/builtins v0.6170
 - [x] F  Write2 ID1-3, 5-7: FortranForm/CForm printer + OpenWrite/ToString FormatType+PageWidth + MantissaExponent exact exponent ; v0.6167 (+6). Follow-up: reference line-break choice at narrow widths is global (breaks before a parenthesised factor), ours greedy
 - [ ] S  singletons: FourDivergence-ID18, Solve3-ID2, SharedToolsFRH-ID2, Factor3-ID14, TID-ID50 (MSG), FCLoopFromGLI-ID29#2, FCLoopFindIntegralMappings-ID14 (LaunchKernels)
-- [ ] SP speed: corpus-wide profile hot spots; worst-ratio files; largest files
+- [ ] SP speed: profile done (agentSP, scratchpad agentSP/agg_*.txt): interpreter overhead dominates (eval 25%, malloc 15%, matcher 12%, node new/free 10%, rb_rec 5%, Set value walks 4%, canonical order 5%). Done: lazy has_return v0.6171. Next, ranked:
+  1. rb_rec/replace_bindings substitution skeleton per rule (match.c ~2640) + ov_inject_rec (options_builtin.c ~411): 5-8% corpus
+  2. eval_mentions_symbols_of on every Set (eval.c ~3630): needs a per-node symbol summary
+  3. allocation: expr_new_function two mallocs (node + args), real_value_cmp mpz inits: 8-12%
+  4. sort.c symbol_cmp strrchr per compare -> cache short-name key; rational fast path
+  5. Isolate: stored values re-evaluated when extracted via DownValues (0.5x file)
+  6. apply_up_values per-arg def lookups -> per-outer-head bit; evaluator arg-classification bitmask
+  7. Collect2-ID11 bulk Expand of a 100k-term sum (expand_range_first)
 
 # MathieuS[a, q, z] + MathieuSPrime (v0.6166, 2026-11-04)
 
