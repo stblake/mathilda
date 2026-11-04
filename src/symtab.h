@@ -49,8 +49,10 @@ typedef struct Rule {
     uint8_t scoped_cond;
     /* 1 when the replacement mentions Return: applying the rule then
      * evaluates the result and yields v for a top-level Return[v], as the
-     * reference returns from a definition (f[x_] := If[x > 0, Return[1], 2]). */
-    uint8_t has_return;
+     * reference returns from a definition (f[x_] := If[x > 0, Return[1], 2]).
+     * -1 until first needed: computed when the rule is first applied, so an
+     * assignment (x = big) never walks its value for it. */
+    int8_t has_return;
     /* Ordering facts about the pattern, fixed at insertion: 1 when it holds
      * no pattern object at all (f[1]; such rules lead the list), and 1 when
      * it names a pattern variable twice (f[x_, x_]; never taken as more

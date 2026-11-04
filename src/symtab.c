@@ -1480,7 +1480,12 @@ static bool rule_mentions_optionvalue(Rule* rule) {
  * reference's return from a definition. Return[v, other] and a Return below
  * the top level (1 + Return[2]) are left as they are. Consumes result. */
 static Expr* rule_result(const Rule* rule, Expr* result, const char* head) {
-    if (!rule->has_return || !result) return result;
+    if (!result || !rule->has_return) return result;
+    if (rule->has_return < 0) {
+        /* lazily cached on the (otherwise immutable) rule */
+        ((Rule*)rule)->has_return = mentions_return(rule->replacement) ? 1 : 0;
+        if (!rule->has_return) return result;
+    }
     Expr* ev = evaluate(result);
     expr_free(result);
     Expr* v = NULL;
@@ -1921,7 +1926,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
                 } else {
                     expr_free(dup->replacement);
                     dup->replacement = expr_copy(replacement);
-                    dup->has_return = mentions_return(replacement);
+                    dup->has_return = -1;   /* computed on first use (rule_result) */
                     dup->ov_tmpl = -1;
                     dup->delayed = delayed;
                     expr_free(canon);
@@ -1941,7 +1946,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
             // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
-            curr->has_return = mentions_return(replacement);
+            curr->has_return = -1;   /* computed on first use (rule_result) */
             curr->ov_tmpl = -1;
             curr->delayed = delayed;
             expr_free(canon);
@@ -1964,7 +1969,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
             curr->pattern = canon;          /* same alpha_hash: keep it */
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
-            curr->has_return = mentions_return(replacement);
+            curr->has_return = -1;   /* computed on first use (rule_result) */
             curr->ov_tmpl = -1;
             curr->delayed = delayed;
             expr_free(key);
@@ -1982,7 +1987,7 @@ static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool dela
     new_rule->alpha_hash = ahash;
     new_rule->delayed = delayed;
     new_rule->scoped_cond = scoped;
-    new_rule->has_return = mentions_return(replacement);
+    new_rule->has_return = -1;   /* computed on first use (rule_result) */
     new_rule->ov_tmpl = -1;
     new_rule->literal = literal ? 1 : 0;
     new_rule->nonlinear = pattern_is_nonlinear(canon) ? 1 : 0;
