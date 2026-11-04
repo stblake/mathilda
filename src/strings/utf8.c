@@ -173,6 +173,11 @@ static const U8CharInfo k_char_class[] = {
 #include "named_char_class.inc"
 };
 
+void u8_for_each_class_head(void (*fn)(const char* head)) {
+    for (size_t i = 0; i < sizeof k_char_class / sizeof k_char_class[0]; i++)
+        if (k_char_class[i].head) fn(k_char_class[i].head);
+}
+
 const U8CharInfo* u8_char_class(uint32_t cp) {
     size_t lo = 0, hi = sizeof k_char_class / sizeof k_char_class[0];
     while (lo < hi) {

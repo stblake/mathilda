@@ -3679,6 +3679,11 @@ void info_init(void) {
         "HoldPattern has attributes {HoldAll, Protected}.\n"
         "The left-hand sides of rules and assignments are normally evaluated before being used for matching; wrap the LHS in HoldPattern to stop that evaluation (e.g. HoldPattern[_+_] -> 0 matches any two-term sum, whereas _+_ -> 0 would match a pattern simplified by Plus before the rule is applied).\n"
         "HoldPattern is removed by one layer of ReleaseHold.");
+    symtab_set_docstring("Literal",
+        "Literal[expr]\n"
+        "\tis an obsolete synonym of HoldPattern: equivalent to expr for pattern matching, with expr kept unevaluated.\n"
+        "Literal is a distinct symbol -- it prints as Literal, and ReleaseHold does not remove it -- but every pattern consumer (rules, assignments, ReplaceAll, Cases, MatchQ) treats it exactly as HoldPattern.\n"
+        "Literal has attributes {HoldAll, Protected}. New code should use HoldPattern.");
     symtab_set_docstring("Unevaluated",
         "Unevaluated[expr]\n"
         "\trepresents the unevaluated form of expr when it appears as the argument to a function.\n"

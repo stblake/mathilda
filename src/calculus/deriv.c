@@ -200,6 +200,11 @@ static Expr* build_unevaluated_d_nonconsts(const Expr* sym, const Expr* x,
 /* Recognise the symbols that Dt treats as absolute constants. These
  * mirror the rule set in the original deriv.m plus a few additional
  * Mathematica-compatible constants. */
+static bool symbol_has_constant_attr(const char* name) {
+    SymbolDef* d = symtab_lookup(name);
+    return d && (d->attributes & ATTR_CONSTANT);
+}
+
 static bool is_dt_constant_symbol(const Expr* e) {
     if (!e || e->type != EXPR_SYMBOL) return false;
     const char* s = e->data.symbol.name;
@@ -209,7 +214,11 @@ static bool is_dt_constant_symbol(const Expr* e) {
            s == SYM_GoldenRatio || s == SYM_Degree ||
            s == SYM_GoldenAngle || s == SYM_Glaisher ||
            s == SYM_Khinchin ||
-           s == SYM_True || s == SYM_False;
+           s == SYM_True || s == SYM_False ||
+           /* A user symbol given the Constant attribute
+            * (SetAttributes[R, Constant]) is a constant for Dt: Dt[R] = 0,
+            * Dt[R x] = R Dt[x]. */
+           symbol_has_constant_attr(s);
 }
 
 /* ---------------------------------------------------------------------- */

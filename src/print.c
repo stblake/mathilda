@@ -263,25 +263,49 @@ static bool g_apply_formats = false;
 static int g_format_depth = 0;
 #define FORMAT_DEPTH_LIMIT 256
 
-/* The display rewrite of e under its symbol's FormatValues: the first plain
- * (non-MakeBoxes) rule whose pattern matches, its right-hand side evaluated.
- * NULL when no rule applies. */
-static Expr* format_value_rewrite(Expr* e) {
+/* The display rewrite of e under its symbol's FormatValues, its right-hand
+ * side evaluated; NULL when no rule applies.
+ *
+ * form == NULL (OutputForm / StandardForm): the first plain rule,
+ * Format[f[...]] := rhs, stored as f[...] :> rhs.
+ * form == InputForm / TeXForm: the first rule for that form,
+ * Format[f[...], form] := rhs, stored as MakeBoxes[f[...], form] :>
+ * Format[rhs, form]; the Format wrapper is stripped. (The generic
+ * MakeBoxes[f[...], FormatType_] twin of a plain rule is never used here:
+ * its FormatType is a pattern, not the form.) */
+static Expr* format_value_rewrite(Expr* e, const char* form) {
     const Expr* k = e;
     while (k->type == EXPR_FUNCTION) k = k->data.function.head;
     if (k->type != EXPR_SYMBOL) return NULL;
     for (Rule* r = symtab_get_format_values(k->data.symbol.name); r; r = r->next) {
         const Expr* p = r->pattern;
-        if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
-            p->data.function.head->data.symbol.name == SYM_MakeBoxes) continue;
+        bool is_mb = p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+                     p->data.function.head->data.symbol.name == SYM_MakeBoxes;
+        Expr* pat = r->pattern;
+        if (!form) {
+            if (is_mb) continue;
+        } else {
+            if (!is_mb || p->data.function.arg_count != 2) continue;
+            const Expr* f = p->data.function.args[1];
+            if (f->type != EXPR_SYMBOL || f->data.symbol.name != form) continue;
+            pat = p->data.function.args[0];
+        }
         MatchEnv* env = env_new();
         Expr* out = NULL;
-        if (match(e, r->pattern, env)) {
+        if (match(e, pat, env)) {
             Expr* bound = replace_bindings(r->replacement, env);
             out = evaluate(bound);
             expr_free(bound);
         }
         env_free(env);
+        if (out && form && out->type == EXPR_FUNCTION &&
+            out->data.function.head->type == EXPR_SYMBOL &&
+            out->data.function.head->data.symbol.name == SYM_Format &&
+            out->data.function.arg_count >= 1) {
+            Expr* inner = expr_copy(out->data.function.args[0]);
+            expr_free(out);
+            out = inner;
+        }
         if (out) return out;
     }
     return NULL;
@@ -630,6 +654,26 @@ static void print_inputform_rest(Expr** num, size_t nn, Expr** den, size_t nd,
 
 static void print_times_inputform(Expr* e) {
     size_t count = e->data.function.arg_count;
+    /* A held, non-canonical product -- a literal factor 1, or two numeric
+     * factors (HoldForm[1*x], HoldForm[2*3]) -- prints literally, as written:
+     * folding its coefficients would show HoldForm[1*x] as x. An evaluated
+     * Times never has either shape. */
+    {
+        size_t nnum = 0;
+        bool has_one = false;
+        for (size_t i = 0; i < count; i++) {
+            Expr* a = e->data.function.args[i];
+            if (a->type == EXPR_INTEGER || a->type == EXPR_BIGINT || a->type == EXPR_REAL) nnum++;
+            if (a->type == EXPR_INTEGER && a->data.integer == 1) has_one = true;
+        }
+        if (count >= 2 && (has_one || nnum >= 2)) {
+            for (size_t i = 0; i < count; i++) {
+                if (i) printf("*");
+                print_standard(e->data.function.args[i], 4501);
+            }
+            return;
+        }
+    }
     mpz_t pn, pd;
     mpz_init_set_si(pn, 1);
     mpz_init_set_si(pd, 1);
@@ -771,7 +815,8 @@ static void print_standard(Expr* e, int parent_prec) {
      * formatted again: Format[a[x_]] := b[x], Format[b[x_]] := 9 shows 9); a
      * rule that keeps reproducing a match stops at FORMAT_DEPTH_LIMIT, as the
      * reference stops at $RecursionLimit with Format::forml. */
-    if (g_apply_formats && symtab_format_value_count && g_inputform_depth == 0 &&
+    /* Inside InputForm only Format[..., InputForm] rules apply. */
+    if (g_apply_formats && symtab_format_value_count &&
         (e->type == EXPR_SYMBOL || e->type == EXPR_FUNCTION)) {
         if (g_format_depth >= FORMAT_DEPTH_LIMIT) {
             if (g_format_depth == FORMAT_DEPTH_LIMIT)
@@ -779,7 +824,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             "Recursion depth limit $RecursionLimit exceeded while formatting output.");
             g_format_depth++;   /* report once per print */
         } else {
-            Expr* shown = format_value_rewrite(e);
+            Expr* shown = format_value_rewrite(e, g_inputform_depth > 0 ? SYM_InputForm : NULL);
             if (shown) {
                 g_format_depth++;
                 print_standard(shown, parent_prec);
@@ -839,7 +884,17 @@ static void print_standard(Expr* e, int parent_prec) {
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol.name;
         
-        if (head == SYM_FullForm && e->data.function.arg_count == 1) {
+        if (head == SYM_SequenceForm) {
+            /* SequenceForm[a, b, ...] shows its arguments side by side: strings
+             * as their characters, except in InputForm, where each argument
+             * keeps its input form ("a"1 for SequenceForm["a", 1]). */
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                Expr* a = e->data.function.args[i];
+                if (a->type == EXPR_STRING && g_inputform_depth == 0) fputs(a->data.string, MTH_POUT);
+                else print_standard(a, 0);
+            }
+        }
+        else if (head == SYM_FullForm && e->data.function.arg_count == 1) {
             /* FullForm keeps string quotes even inside Print / ToString. */
             g_inputform_depth++;
             expr_print_fullform(e->data.function.args[0]);
@@ -857,7 +912,15 @@ static void print_standard(Expr* e, int parent_prec) {
             print_series_data(e, parent_prec);
         }
         else if (head == SYM_HoldForm && e->data.function.arg_count == 1) {
-            print_standard(e->data.function.args[0], parent_prec);
+            /* Invisible in display, but InputForm keeps the wrapper so the
+             * text re-reads as the held expression: HoldForm[1 + 1]. */
+            if (g_inputform_depth > 0) {
+                printf("HoldForm[");
+                print_standard(e->data.function.args[0], 0);
+                printf("]");
+            } else {
+                print_standard(e->data.function.args[0], parent_prec);
+            }
         }
         /* TraditionalForm/StandardForm only pick a TYPESET notation (see
          * print_latex.c); as text they are invisible, like HoldForm -- except
@@ -1742,6 +1805,23 @@ char* expr_to_string_outputform(Expr* e) {
     return str_capture_finish(&c);
 }
 
+/* InputForm text for ToString[expr, InputForm]: Format[..., InputForm]
+ * display rules apply, so it is NOT for re-parsing by
+ * the kernel itself -- internal callers use expr_to_string. */
+char* expr_to_string_inputform_display(Expr* e) {
+    Expr* inner = expr_copy(e);
+    Expr* wrapper = expr_new_function(expr_new_symbol(SYM_InputForm), &inner, 1);
+    bool saved_af = g_apply_formats;
+    int saved_fd = g_format_depth;
+    g_apply_formats = true;
+    g_format_depth = 0;
+    char* out = expr_to_string(wrapper);
+    g_format_depth = saved_fd;
+    g_apply_formats = saved_af;
+    expr_free(wrapper);
+    return out;
+}
+
 char* expr_to_string_fullform(Expr* e) {
     StrCapture c;
     if (!str_capture_open(&c)) return NULL;
@@ -2360,7 +2440,7 @@ static void print_tex(Expr* e, int parent_prec) {
         return;
     }
     if (e->type == EXPR_SYMBOL) { print_tex_symbol(e->data.symbol.name); return; }
-    if (e->type == EXPR_STRING) { printf("\\text{\"%s\"}", e->data.string); return; }
+    if (e->type == EXPR_STRING) { printf("\\text{%s}", e->data.string); return; }
     if (e->type == EXPR_NDARRAY) {
         if (is_packed_list(e)) {
             /* Renders as the List it is. Materialises rather than streaming,
@@ -2398,6 +2478,30 @@ static void print_tex(Expr* e, int parent_prec) {
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
+
+    /* Display rules: Format[f[...], TeXForm] first, then a plain
+     * Format[f[...]] (TeXForm is a display form). TeX is never fed back into
+     * evaluation, so they always apply. */
+    if (symtab_format_value_count && g_format_depth < FORMAT_DEPTH_LIMIT) {
+        Expr* shown = format_value_rewrite(e, SYM_TeXForm);
+        if (!shown) shown = format_value_rewrite(e, NULL);
+        if (shown) {
+            g_format_depth++;
+            print_tex(shown, parent_prec);
+            g_format_depth--;
+            expr_free(shown);
+            return;
+        }
+    }
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_SequenceForm) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            Expr* a = e->data.function.args[i];
+            if (a->type == EXPR_STRING) printf("\\text{%s}", a->data.string);
+            else print_tex(a, 0);
+        }
+        return;
+    }
 
     int my_prec = get_expr_prec(e);
     bool need_parens = (my_prec < parent_prec);

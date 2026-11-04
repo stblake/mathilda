@@ -664,7 +664,7 @@ static const Expr* strip_pattern_wrappers(const Expr* p) {
            p->data.function.head->type == EXPR_SYMBOL &&
            p->data.function.arg_count >= 1) {
         const char* h = p->data.function.head->data.symbol.name;
-        if (h == SYM_HoldPattern || h == SYM_Verbatim) {
+        if (SYM_IS_HOLDPATTERN(h) || h == SYM_Verbatim) {
             p = p->data.function.args[0];
             continue;
         }
@@ -747,7 +747,7 @@ static bool slot_is_verbatim(const Expr* p) {
          w = w->data.function.args[0]) {
         const char* wh = w->data.function.head->data.symbol.name;
         if (wh == SYM_Verbatim) return true;
-        if (wh != SYM_HoldPattern && wh != SYM_Condition && wh != SYM_PatternTest) return false;
+        if (!SYM_IS_HOLDPATTERN(wh) && wh != SYM_Condition && wh != SYM_PatternTest) return false;
     }
     return false;
 }
@@ -1057,7 +1057,7 @@ static int32_t pattern_specificity(const Expr* p) {
         const char* h = head->data.symbol.name;
         size_t ac = p->data.function.arg_count;
 
-        if (h == SYM_HoldPattern || h == SYM_Verbatim) {
+        if (SYM_IS_HOLDPATTERN(h) || h == SYM_Verbatim) {
             return ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0;
         }
         if (h == SYM_Pattern) {
@@ -1213,7 +1213,7 @@ static Expr* pattern_canonicalize(Expr* p) {
         /* HoldPattern / Verbatim explicitly opt out of canonicalization;
          * their whole purpose is to match a literal subtree without
          * pattern-semantic interpretation. */
-        if (h == SYM_HoldPattern || h == SYM_Verbatim) return p;
+        if (SYM_IS_HOLDPATTERN(h) || h == SYM_Verbatim) return p;
 
         /* Blank-family and OptionsPattern carry only type/head metadata
          * in their children -- no nested pattern that wants canonicalization. */
@@ -1514,7 +1514,7 @@ static const Expr* pat_unname(const Expr* p) {
     for (;;) {
         if (pat_is(p, SYM_Pattern) && p->data.function.arg_count == 2)
             p = p->data.function.args[1];
-        else if (pat_is(p, SYM_HoldPattern) && p->data.function.arg_count == 1)
+        else if ((pat_is(p, SYM_HoldPattern) || pat_is(p, SYM_Literal)) && p->data.function.arg_count == 1)
             p = p->data.function.args[0];
         else
             return p;
@@ -1540,7 +1540,7 @@ static bool pat_is_construct(const Expr* e) {
     return h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
            h == SYM_Pattern || h == SYM_Optional || h == SYM_Alternatives ||
            h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Condition ||
-           h == SYM_PatternTest || h == SYM_HoldPattern || h == SYM_Verbatim ||
+           h == SYM_PatternTest || SYM_IS_HOLDPATTERN(h) || h == SYM_Verbatim ||
            h == SYM_Except || h == SYM_OptionsPattern || h == SYM_PatternSequence ||
            h == SYM_Longest || h == SYM_Shortest || h == SYM_OrderlessPatternSequence ||
            h == SYM_KeyValuePattern;
@@ -3049,7 +3049,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
             bool delayed = el->data.function.head->data.symbol.name == SYM_RuleDelayed;
             if (lhs->type == EXPR_FUNCTION &&
                 lhs->data.function.head->type == EXPR_SYMBOL &&
-                lhs->data.function.head->data.symbol.name == SYM_HoldPattern &&
+                SYM_IS_HOLDPATTERN(lhs->data.function.head->data.symbol.name) &&
                 lhs->data.function.arg_count == 1)
                 lhs = lhs->data.function.args[0];   /* unwrap HoldPattern */
 

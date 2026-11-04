@@ -406,7 +406,7 @@ Expr* builtin_cases(Expr* res) {
             Expr* hoisted = eval_hoist_rhs_conditions(pattern, replacement, &replacement);
             if (hoisted != pattern) pattern = owned_pattern = hoisted;
         }
-    } else if (patt_arg->type == EXPR_FUNCTION && patt_arg->data.function.head->data.symbol.name == SYM_HoldPattern && patt_arg->data.function.arg_count == 1) {
+    } else if (patt_arg->type == EXPR_FUNCTION && SYM_IS_HOLDPATTERN(patt_arg->data.function.head->data.symbol.name) && patt_arg->data.function.arg_count == 1) {
         Expr* hp_arg = patt_arg->data.function.args[0];
         if (hp_arg->type == EXPR_FUNCTION && (hp_arg->data.function.head->data.symbol.name == SYM_Rule || hp_arg->data.function.head->data.symbol.name == SYM_RuleDelayed) && hp_arg->data.function.arg_count == 2) {
             pattern = hp_arg; // Just match the rule itself

@@ -96,4 +96,12 @@ typedef struct {
  * tools/classify_named_chars.wls + tools/gen_named_chars.py --classes. */
 const U8CharInfo* u8_char_class(uint32_t cp);
 
+/* Call fn(head) for every operator head and letter alias in the class table
+ * (Wedge, CircleTimes, Element, Degree, ...). Every one of them is a System`
+ * symbol the parser can emit, so sym_names_init interns them all up front:
+ * otherwise a package that defines rules for, say, Wedge inside BeginPackage
+ * mints a private DifferentialForms`Wedge while `a \[Wedge] b` still parses to
+ * System`Wedge, and the infix form never reaches the package's rules. */
+void u8_for_each_class_head(void (*fn)(const char* head));
+
 #endif /* MATHILDA_UTF8_H */

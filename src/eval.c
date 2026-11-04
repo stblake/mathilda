@@ -1365,7 +1365,7 @@ static bool lhs_arg_contains_pattern(Expr* e) {
         if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence
             || h == SYM_Pattern || h == SYM_Optional || h == SYM_Repeated
             || h == SYM_RepeatedNull || h == SYM_PatternTest
-            || h == SYM_HoldPattern || h == SYM_Condition) {
+            || SYM_IS_HOLDPATTERN(h) || h == SYM_Condition) {
             return true;
         }
         if (lhs_arg_contains_pattern(e->data.function.head)) return true;
@@ -1391,7 +1391,7 @@ static bool lhs_pattern_mentions_valued_symbol(Expr* e) {
     size_t n = e->data.function.arg_count;
     if (h->type == EXPR_SYMBOL) {
         const char* hn = h->data.symbol.name;
-        if (hn == SYM_HoldPattern || hn == SYM_Verbatim) return false;
+        if (SYM_IS_HOLDPATTERN(hn) || hn == SYM_Verbatim) return false;
         if (hn == SYM_Pattern)
             return n == 2 && lhs_pattern_mentions_valued_symbol(e->data.function.args[1]);
         if (hn == SYM_Condition || hn == SYM_PatternTest)
@@ -1428,7 +1428,7 @@ static Expr* lhs_fold_pattern_free(Expr* e) {
     uint32_t attrs = ATTR_NONE;
     if (h->type == EXPR_SYMBOL) {
         const char* hn = h->data.symbol.name;
-        if (hn == SYM_HoldPattern || hn == SYM_Verbatim || hn == SYM_Blank ||
+        if (SYM_IS_HOLDPATTERN(hn) || hn == SYM_Verbatim || hn == SYM_Blank ||
             hn == SYM_BlankSequence || hn == SYM_BlankNullSequence) {
             expr_free(nh);
             return expr_copy(e);
@@ -1468,7 +1468,7 @@ static const char* assignment_target_symbol(Expr* lhs) {
         lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.arg_count >= 1) {
         const char* h = lhs->data.function.head->data.symbol.name;
-        if (h == SYM_Condition || h == SYM_HoldPattern || h == SYM_Part ||
+        if (h == SYM_Condition || SYM_IS_HOLDPATTERN(h) || h == SYM_Part ||
             h == SYM_MessageName) {
             /* f::tag = ... targets f, not MessageName: a usage message may be
              * attached to an unprotected symbol even though MessageName itself
@@ -2034,10 +2034,10 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
              * inside): a rule for f, stored with its HoldPattern, as the
              * reference stores it. HoldPattern[s] = v is an OwnValue of s.
              * The rule used to land on HoldPattern itself, silently. */
-            if (symbol_name == SYM_HoldPattern) {
+            if (SYM_IS_HOLDPATTERN(symbol_name)) {
                 Expr* inner = lhs;
                 while (inner->type == EXPR_FUNCTION && inner->data.function.head->type == EXPR_SYMBOL &&
-                       (inner->data.function.head->data.symbol.name == SYM_HoldPattern ||
+                       (SYM_IS_HOLDPATTERN(inner->data.function.head->data.symbol.name) ||
                         inner->data.function.head->data.symbol.name == SYM_Condition) &&
                        inner->data.function.arg_count >= 1)
                     inner = inner->data.function.args[0];
@@ -2236,7 +2236,7 @@ static int collect_level_one_symbols(Expr* lhs, const char** out, int cap) {
     if (!lhs) return 0;
     while (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
         (lhs->data.function.head->data.symbol.name == SYM_Condition ||
-         lhs->data.function.head->data.symbol.name == SYM_HoldPattern) &&
+         SYM_IS_HOLDPATTERN(lhs->data.function.head->data.symbol.name)) &&
         lhs->data.function.arg_count >= 1)
         lhs = lhs->data.function.args[0];
     if (lhs->type != EXPR_FUNCTION) return 0;
@@ -2283,7 +2283,7 @@ static TagPos classify_tag_position(const char* tag, Expr* lhs) {
     while (lhs->type == EXPR_FUNCTION &&
         lhs->data.function.head->type == EXPR_SYMBOL &&
         (lhs->data.function.head->data.symbol.name == SYM_Condition ||
-         lhs->data.function.head->data.symbol.name == SYM_HoldPattern) &&
+         SYM_IS_HOLDPATTERN(lhs->data.function.head->data.symbol.name)) &&
         lhs->data.function.arg_count >= 1)
         lhs = lhs->data.function.args[0];
     if (lhs->type == EXPR_SYMBOL)

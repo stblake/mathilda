@@ -4792,7 +4792,7 @@ static bool collect_var_is_pattern(const Expr* e) {
         if (s == SYM_Blank || s == SYM_BlankSequence || s == SYM_BlankNullSequence
             || s == SYM_Pattern || s == SYM_Optional || s == SYM_Repeated
             || s == SYM_RepeatedNull || s == SYM_PatternTest || s == SYM_Condition
-            || s == SYM_Alternatives || s == SYM_Except || s == SYM_HoldPattern)
+            || s == SYM_Alternatives || s == SYM_Except || SYM_IS_HOLDPATTERN(s))
             return true;
     } else if (collect_var_is_pattern(hd)) {
         return true;

@@ -323,6 +323,8 @@ Replaces parts of an expression at specified positions.
 - `ReplacePart[expr, {i, j, ...} -> new]`: Replaces the part at a nested position.
 - `ReplacePart[expr, {{i1, ...} -> new1, {i2, ...} -> new2, ...}]`: Multiple replacements.
 - `ReplacePart[expr, pattern -> new]`: Replaces parts at all positions matching `pattern` (e.g., `_`, `Except[...]`).
+- `ReplacePart[expr, new, pos]`: the older positional form, used by old packages. `pos` is an integer `n`, one position `{i, j, ...}`, or a list of positions `{{...}, {...}}`; so `{}` names no position (`expr` unchanged) and `{{}}` names `expr` itself.
+- `ReplacePart[expr, new, pos, npos]`: the parts at `pos` become the parts of `new` at `npos`, pairwise (a single `npos` serves every position).
 
 **Features**:
 - `Protected`.
@@ -330,6 +332,7 @@ Replaces parts of an expression at specified positions.
 - Supports mixed positive/negative indices in nested position specs (e.g., `{2, -1}`).
 - Default `Heads -> False`: pattern-based position specs do not match the head (index 0). Use an explicit `0 -> new` rule to replace the head.
 - Supports `Rule` (`->`) and `RuleDelayed` (`:>`).
+- In the positional forms, a position that does not exist is an error, unlike the rule form: `ReplacePart::partw`, and the call stays unevaluated. A malformed position gives `ReplacePart::psl`. They are translated to one `position -> value` rule per position, so both forms share one engine.
 
 ```mathematica
 In[1]:= ReplacePart[{a, b, c, d}, 2 -> x]
@@ -589,10 +592,18 @@ Out[2]= {HoldPattern[a] :> 5}
   `Hold`, `HoldForm` and `HoldPattern` too. A result is formatted again
   (`Format[a[x_]] := b[x]; Format[b[x_]] := 9` shows `a[1]` as `9`). A rule
   that keeps producing a match stops with `Format::forml`.
-- `InputForm`, `FullForm` and evaluation never see the rules. A script's
-  `Print` writes the raw expression, as `wolframscript` does.
-- Mathilda has no box typesetting, so `MakeBoxes` rules are stored and listed
-  but not rendered.
+- `Format[lhs, InputForm] := rhs` rules apply in InputForm display --
+  `ToString[expr, InputForm]` and an `InputForm[...]` in `Out[]` -- and
+  `Format[lhs, TeXForm] := rhs` rules in `TeXForm` (which falls back to the
+  plain rules). Plain rules never apply inside InputForm. `FullForm`,
+  evaluation, and the kernel's own internal printing never see any rule. A
+  script's `Print` writes the raw expression.
+- `SequenceForm[a, b, ...]` displays its arguments side by side: strings as
+  their characters (`ToString[SequenceForm["(", 1, ") dx"]]` is `"(1) dx"`), in
+  InputForm with each argument in its input form (`"a"1`), and in `TeXForm`
+  with strings as `\text{...}`.
+- Mathilda has no box typesetting, so `MakeBoxes` rules other than the
+  `Format[..., form]` pairs above are stored and listed but not rendered.
 - `Format` is `Protected`, `FormatValues` is `HoldAll`/`Protected`, and
   `MakeBoxes` is `HoldAllComplete` (a `System` symbol). An untagged
   `MakeBoxes[...] := ...` is a DownValue of `MakeBoxes`. Assigning a format to
@@ -602,8 +613,11 @@ Out[2]= {HoldPattern[a] :> 5}
 In[1]:= Format[k[x_]] := x + 1; {ToString[k[3]], ToString[k[3], InputForm], k[3] === k[3]}
 Out[1]= {4, k[3], True}
 
-In[2]:= f /: MakeBoxes[f, TraditionalForm] := "F"; {UpValues[f], FormatValues[f]}
-Out[2]= {{}, {HoldPattern[MakeBoxes[f, TraditionalForm]] :> F}}
+In[2]:= Format[q[a_], InputForm] := HoldForm[a qq]; ToString[q[1], InputForm]
+Out[2]= "HoldForm[1*qq]"
+
+In[3]:= f /: MakeBoxes[f, TraditionalForm] := "F"; {UpValues[f], FormatValues[f]}
+Out[3]= {{}, {HoldPattern[MakeBoxes[f, TraditionalForm]] :> F}}
 ```
 
 ## ClearAll, Remove

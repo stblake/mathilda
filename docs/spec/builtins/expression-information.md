@@ -2,7 +2,8 @@
 
 ## Attributes
 Returns the core evaluation attributes assigned to a symbol.
-- `Attributes[symbol]`
+- `Attributes[symbol]`, `Attributes["name"]`
+- `Attributes[{s1, s2, ...}]`: the list of their attribute lists (`FreeQ[Attributes[{x}], Constant]` is how old packages test for `Constant`). An element that is not a symbol or string stays `Attributes[el]`, with `Attributes::ssle`.
 
 **Features**: 
 - Common attributes include `Flat` (associativity), `Orderless` (commutativity), `Listable` (automatic threading over lists), `HoldFirst`, `HoldRest`, `HoldAll` (evaluation control), and `Protected`.
@@ -676,6 +677,13 @@ context. They stay inert: `RowBox[{"a"}]` evaluates to itself.
 `PageWidth`, `FormatType`, `Trig`, `Integral`.
 
 The list is in `src/sym_names.c`, next to `Surd`.
+
+Every head the parser can emit for a named operator character (`\[Wedge]` ->
+`Wedge`, `\[CircleTimes]` -> `CircleTimes`, `\[Element]`, …, the class table in
+`src/strings/named_char_class.inc`) is also interned as `System`` at startup.
+Otherwise a package that defines `Wedge[x__] := ...` inside `BeginPackage` gets
+a private ``Pkg`Wedge`` while `a \[Wedge] b` still parses to ``System`Wedge``,
+and the infix form never reaches the package's rules (issue #125).
 
 ## $SystemMemory
 The total physical memory of the machine, in bytes, as an integer (`sysctl
@@ -1421,7 +1429,7 @@ Out[2]= 1, 2, 3
 
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in the reference: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
-- `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `OutputForm` (default), `InputForm` (strings quoted, with `\"` and `\\` escaped, so the result re-reads), `FullForm`, and `TeXForm`. `StandardForm` is accepted as an alias for `InputForm`.
+- `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `OutputForm` (default), `InputForm` (strings quoted, with `\"` and `\\` escaped, so the result re-reads; `HoldForm` is kept, `ToString[HoldForm[1 + 1], InputForm]` is `"HoldForm[1 + 1]"`, and a held non-canonical product prints as written, `HoldForm[1*x]`; `Format[..., InputForm]` rules apply), `FullForm`, and `TeXForm` (strings as `\text{abc}`). `StandardForm` is accepted as an alias for `InputForm`.
 
 **Features**:
 - `Protected`.
@@ -1558,6 +1566,9 @@ Gives the current context, or the context of a symbol.
   `BeginPackage["P`"]` or `Begin["P`"]`, `$x = 1` creates ``P`$x`` (issue #104).
   System `$`-variables (`$RecursionLimit`, `$Assumptions`, …) still resolve to
   System. After `EndPackage[]` the short name `$x` finds ``P`$x`` via `$ContextPath`.
+- `Context["name"]` resolves a bare name the way the parser does, through
+  `$Context` and then `$ContextPath`: after `EndPackage[]`, `Context["f"]`
+  reports the package context of an existing ``P`f``.
 - `Context["name"]` for a name that does not exist emits `Context::notfound`
   and stays unevaluated.
 

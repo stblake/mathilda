@@ -84,7 +84,7 @@ static bool simp_skip_recursion_head(const char* h) {
     return h == SYM_Hold ||
            h == SYM_HoldForm ||
            h == SYM_HoldComplete ||
-           h == SYM_HoldPattern ||
+           SYM_IS_HOLDPATTERN(h) ||
            h == SYM_Unevaluated ||
            h == SYM_Pattern ||
            h == SYM_Blank ||

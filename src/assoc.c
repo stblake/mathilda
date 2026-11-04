@@ -487,7 +487,7 @@ static bool key_contains_pattern(const Expr* e) {
         if (n == SYM_Blank || n == SYM_BlankSequence || n == SYM_BlankNullSequence ||
             n == SYM_Pattern || n == SYM_Alternatives || n == SYM_Except ||
             n == SYM_PatternTest || n == SYM_Condition || n == SYM_Optional ||
-            n == SYM_Repeated || n == SYM_RepeatedNull || n == SYM_HoldPattern ||
+            n == SYM_Repeated || n == SYM_RepeatedNull || SYM_IS_HOLDPATTERN(n) ||
             n == SYM_Verbatim)
             return true;
     } else if (key_contains_pattern(h)) {

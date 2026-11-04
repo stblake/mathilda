@@ -305,6 +305,13 @@ extern const char* SYM_HoldComplete;
 extern const char* SYM_HoldFirst;
 extern const char* SYM_HoldForm;
 extern const char* SYM_HoldPattern;
+extern const char* SYM_Literal;
+/* Literal is the obsolete System` synonym of HoldPattern: a distinct symbol
+ * (it prints as Literal and ReleaseHold leaves it alone) that every pattern
+ * consumer -- the matcher, rule storage, ReplaceAll, Cases -- reads exactly as
+ * HoldPattern. Test pattern semantics with this predicate, never with a bare
+ * == SYM_HoldPattern. */
+#define SYM_IS_HOLDPATTERN(h) ((h) == SYM_HoldPattern || (h) == SYM_Literal)
 extern const char* SYM_KeyValuePattern;
 extern const char* SYM_HoldRest;
 extern const char* SYM_I;
@@ -607,6 +614,7 @@ extern const char* SYM_FormatValues;
 extern const char* SYM_NValues;
 extern const char* SYM_Format;
 extern const char* SYM_MakeBoxes;
+extern const char* SYM_SequenceForm;
 extern const char* SYM_FormatType;
 extern const char* SYM_UpSet;
 extern const char* SYM_UpSetDelayed;

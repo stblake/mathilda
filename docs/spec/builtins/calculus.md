@@ -161,8 +161,9 @@ Total derivative.
 - `Dt[f]` -- total derivative of `f`. Numeric literals and the
   distinguished constants (`Pi`, `E`, `I`, `Infinity`,
   `ComplexInfinity`, `EulerGamma`, `Catalan`, `GoldenRatio`,
-  `Degree`) vanish. Unknown symbols `y` appear as `Dt[y]` factors,
-  modelling implicit functional dependence.
+  `Degree`) vanish, as does a symbol with the `Constant` attribute
+  (`SetAttributes[R, Constant]; Dt[R x]` is `R Dt[x]`). Unknown symbols `y`
+  appear as `Dt[y]` factors, modelling implicit functional dependence.
 - `Dt[f, x]`, `Dt[f, {x, n}]`, `Dt[f, x, y, ...]` -- *total* derivative
   with respect to each variable. Unlike `D`, every symbol other than the
   differentiation variable and the distinguished constants is an implicit

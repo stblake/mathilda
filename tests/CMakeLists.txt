@@ -3643,6 +3643,12 @@ add_test(NAME parametricplot_tests COMMAND parametricplot_tests)
 add_executable(context_tests test_context.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(context_tests PRIVATE ../src)
 
+# Legacy-package compatibility (issue #125, DifferentialForms): Literal,
+# positional ReplacePart, Dt with Constant, Attributes[{...}], operator heads
+# as System`, Context["name"], SequenceForm / Format[..., InputForm|TeXForm].
+add_executable(package_compat_tests test_package_compat.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(package_compat_tests PRIVATE ../src)
+
 add_executable(needs_tests test_needs.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(needs_tests PRIVATE ../src)
 add_test(NAME needs_tests COMMAND needs_tests)

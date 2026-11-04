@@ -524,6 +524,21 @@ static Expr* builtin_context(Expr* res) {
         return out;
     }
 
+    /* Bare string name: resolve it through {$Context} U $ContextPath exactly
+     * as the parser would, so Context["fooF"] after EndPackage reports the
+     * package context of an existing Foo`fooF (it used to say notfound). */
+    if (a->type == EXPR_STRING) {
+        char* q = context_resolve_name(name);
+        size_t qlen = q ? context_prefix_len(q) : 0;
+        if (qlen > 0 && symtab_lookup(q)) {
+            q[qlen] = '\0';
+            Expr* out = expr_new_string(q);
+            free(q);
+            return out;
+        }
+        free(q);
+    }
+
     /* Bare name: look it up. A builtin, or a name flagged System at kernel
      * init (Pi, Automatic, $Version, $Failed, ...), reports "System`"; any
      * other existing symbol reports "Global`". The init flag also covers

@@ -2,6 +2,8 @@
 #include "symtab.h"
 #include "eval.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message */
+#include "print.h"     /* expr_to_string */
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,6 +20,7 @@ static SymbolAttr builtin_attrs[] = {
     {"HoldRest", ATTR_HOLDREST | ATTR_PROTECTED},
     {"HoldComplete", ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED},
     {"HoldPattern", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"Literal", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Unevaluated", ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED},
     {"Set", ATTR_HOLDFIRST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"SetDelayed", ATTR_HOLDALL | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
@@ -370,9 +373,40 @@ Expr* builtin_set_attributes(Expr* res) {
     return expr_new_symbol(SYM_Null);
 }
 
+static Expr* attributes_of(Expr* arg);
+
+/* Attributes[s] / Attributes["name"] -> the attribute list of one symbol;
+ * Attributes[{s1, s2, ...}] -> {Attributes[s1], Attributes[s2], ...} (the
+ * DifferentialForms package tests FreeQ[Attributes[{x}], Constant]). */
 Expr* builtin_attributes(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = arg->data.function.arg_count;
+        Expr** items = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t k = 0; k < n; k++) {
+            Expr* el = arg->data.function.args[k];
+            items[k] = attributes_of(el);
+            if (!items[k]) {
+                /* The bad element stays Attributes[el] (with ::ssle) and
+                 * the rest are still answered. */
+                char* es = expr_to_string(el);
+                mth_message("Attributes", "ssle",
+                            "Symbol or string expected at position 1 in Attributes[%s].", es);
+                free(es);
+                Expr* one = expr_copy(el);
+                items[k] = expr_new_function(expr_new_symbol("Attributes"), &one, 1);
+            }
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
+        free(items);
+        return out;
+    }
+    return attributes_of(arg);
+}
+
+static Expr* attributes_of(Expr* arg) {
     const char* sym_name = NULL;
     if (arg->type == EXPR_SYMBOL) sym_name = arg->data.symbol.name;
     else if (arg->type == EXPR_STRING) sym_name = arg->data.string;

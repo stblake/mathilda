@@ -228,8 +228,131 @@ static Expr* replace_part_rec(Expr* expr, RawRule* rules, size_t num_rules, Path
     return expr_copy(expr);
 }
 
+/* ---------------------------------------------------------------------------
+ * Legacy positional forms (used by old packages, e.g. DifferentialForms'
+ * Indices):
+ *
+ *   ReplacePart[expr, new, pos]         parts at pos become new
+ *   ReplacePart[expr, new, pos, npos]   parts at pos become new[[npos]]
+ *
+ * pos is an integer n, a single position {i, j, ...}, or a list of positions
+ * {{...}, {...}} (so {} names NO position and leaves expr alone, while {{}}
+ * names expr itself). Unlike the rule form, a position that does not exist is
+ * an error: ReplacePart::partw, and the call stays unevaluated. The forms are
+ * translated into one `position -> value` RawRule per position and handed to
+ * the rule engine (replace_part_rec), so the two surfaces cannot drift.
+ * ------------------------------------------------------------------------- */
+
+static bool rp_is_int_list(const Expr* e) {
+    if (!head_is(e, SYM_List)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (e->data.function.args[i]->type != EXPR_INTEGER) return false;
+    return true;
+}
+
+/* Normalise a legacy position spec into a List of positions (each a List of
+ * integers). Returns an owned List, or NULL when the spec is malformed. */
+static Expr* rp_positions(Expr* spec) {
+    if (spec->type == EXPR_INTEGER) {
+        Expr* one = expr_copy(spec);
+        Expr* pos = expr_new_function(expr_new_symbol(SYM_List), &one, 1);
+        return expr_new_function(expr_new_symbol(SYM_List), &pos, 1);
+    }
+    if (!head_is(spec, SYM_List)) return NULL;
+    size_t n = spec->data.function.arg_count;
+    if (n > 0 && rp_is_int_list(spec)) {          /* one position {i, j, ...} */
+        Expr* pos = expr_copy(spec);
+        return expr_new_function(expr_new_symbol(SYM_List), &pos, 1);
+    }
+    for (size_t i = 0; i < n; i++)                /* a list of positions */
+        if (!rp_is_int_list(spec->data.function.args[i])) return NULL;
+    return expr_copy(spec);
+}
+
+/* The part of `e` at integer position `pos` (borrowed), or NULL if it does not
+ * exist. Index 0 is the head; negative indices count from the end. */
+static Expr* rp_part_at(Expr* e, const Expr* pos) {
+    for (size_t d = 0; d < pos->data.function.arg_count; d++) {
+        if (e->type != EXPR_FUNCTION) return NULL;
+        int64_t k = pos->data.function.args[d]->data.integer;
+        int64_t len = (int64_t)e->data.function.arg_count;
+        if (k == 0) { e = e->data.function.head; continue; }
+        if (k < 0) k += len + 1;
+        if (k < 1 || k > len) return NULL;
+        e = e->data.function.args[k - 1];
+    }
+    return e;
+}
+
+static void rp_partw(Expr* pos, Expr* e) {
+    char* ps = expr_to_string(pos);
+    char* es = expr_to_string(e);
+    mth_message("ReplacePart", "partw", "Part %s of %s does not exist.", ps, es);
+    free(ps);
+    free(es);
+}
+
+static Expr* replace_part_legacy(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr* expr = res->data.function.args[0];
+    Expr* new_e = res->data.function.args[1];
+    Expr* poss = rp_positions(res->data.function.args[2]);
+    Expr* nposs = NULL;
+    if (!poss || (argc == 4 && !(nposs = rp_positions(res->data.function.args[3])))) {
+        Expr* bad = poss ? res->data.function.args[3] : res->data.function.args[2];
+        char* bs = expr_to_string(bad);
+        char* rs = expr_to_string(res);
+        mth_message("ReplacePart", "psl",
+                    "Position specification %s in %s is not a machine-sized "
+                    "integer or a list of machine-sized integers.", bs, rs);
+        free(bs);
+        free(rs);
+        if (poss) expr_free(poss);
+        return NULL;
+    }
+    size_t np = poss->data.function.arg_count;
+    /* npos pairs with pos position by position; a single npos serves all. */
+    if (nposs && nposs->data.function.arg_count != np &&
+        nposs->data.function.arg_count != 1) {
+        expr_free(poss);
+        expr_free(nposs);
+        return NULL;
+    }
+
+    RawRule* rules = malloc(sizeof(RawRule) * (np ? np : 1));
+    size_t nr = 0;
+    bool ok = true;
+    for (size_t i = 0; i < np && ok; i++) {
+        Expr* pos = poss->data.function.args[i];
+        if (!rp_part_at(expr, pos)) { rp_partw(pos, expr); ok = false; break; }
+        Expr* val = new_e;
+        if (nposs) {
+            Expr* npos = nposs->data.function.args[nposs->data.function.arg_count == 1 ? 0 : i];
+            val = rp_part_at(new_e, npos);
+            if (!val) { rp_partw(npos, new_e); ok = false; break; }
+        }
+        rules[nr].pos_spec = expr_copy(pos);
+        rules[nr].replacement = expr_copy(val);
+        rules[nr].delayed = false;
+        nr++;
+    }
+
+    Expr* result = NULL;
+    if (ok) result = nr ? replace_part_rec(expr, rules, nr, NULL, 0) : expr_copy(expr);
+    for (size_t i = 0; i < nr; i++) {
+        expr_free(rules[i].pos_spec);
+        expr_free(rules[i].replacement);
+    }
+    free(rules);
+    expr_free(poss);
+    if (nposs) expr_free(nposs);
+    return result;
+}
+
 Expr* builtin_replace_part(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count == 3 || res->data.function.arg_count == 4)
+        return replace_part_legacy(res);
     if (res->data.function.arg_count == 1) {
         // Operator form ReplacePart[rules]
         return NULL; // Stays unevaluated
@@ -656,7 +779,7 @@ static bool rk_pattern_head(const char* h) {
     return h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
            h == SYM_Pattern || h == SYM_Alternatives || h == SYM_Except ||
            h == SYM_PatternTest || h == SYM_Condition || h == SYM_Optional ||
-           h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_HoldPattern ||
+           h == SYM_Repeated || h == SYM_RepeatedNull || SYM_IS_HOLDPATTERN(h) ||
            h == SYM_Verbatim || h == SYM_Longest || h == SYM_Shortest ||
            h == SYM_OptionsPattern || h == SYM_PatternSequence ||
            h == SYM_OrderlessPatternSequence || h == SYM_KeyValuePattern;
@@ -668,7 +791,7 @@ static Expr* rk_unwrap(Expr* p) {
         if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL) return p;
         const char* h = p->data.function.head->data.symbol.name;
         size_t n = p->data.function.arg_count;
-        if (h == SYM_HoldPattern && n == 1)                     p = p->data.function.args[0];
+        if (SYM_IS_HOLDPATTERN(h) && n == 1)                     p = p->data.function.args[0];
         else if ((h == SYM_Condition || h == SYM_PatternTest) && n == 2) p = p->data.function.args[0];
         else if (h == SYM_Pattern && n == 2)                    p = p->data.function.args[1];
         else return p;

@@ -43,6 +43,13 @@
 - `HoldPattern[p]`: matches as `p` but keeps `p` unevaluated when the rule is
   formed (so e.g. `x_ + x_` is preserved as a sum pattern rather than
   collapsing to `2 x_`).
+- `Literal[p]`: the obsolete System` synonym of `HoldPattern` (`HoldAll`,
+  `Protected`), still used by old packages (`Dt[f] /. Literal[Dt[x_Symbol]] ->
+  ...` in DifferentialForms). Every pattern consumer -- rules, assignments,
+  `ReplaceAll`, `Cases`, `MatchQ` -- treats it exactly as `HoldPattern`, but it
+  stays a distinct symbol: it prints as `Literal`, and `ReleaseHold` and `N`
+  treat it as an ordinary head. In C, test pattern
+  semantics with `SYM_IS_HOLDPATTERN(h)`, never `h == SYM_HoldPattern`.
 - `Verbatim[expr]`: matches `expr` taken literally — the pattern constructs
   inside `expr` are not interpreted, so `Verbatim[x_]` matches only the literal
   `x_` (`Pattern[x, Blank[]]`).

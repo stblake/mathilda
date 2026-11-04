@@ -4605,11 +4605,9 @@ Expr* builtin_tostring(Expr* res) {
         str = expr_to_string_outputform(expr);
     } else if (form_name == SYM_InputForm) {
         /* Print under the InputForm wrapper so the text re-parses: literal
-         * heads (SeriesData), quoted strings, round-trip machine reals. */
-        Expr* wrapper = expr_new_function(expr_new_symbol(SYM_InputForm),
-                                          (Expr*[]){ expr_copy(expr) }, 1);
-        str = expr_to_string(wrapper);
-        expr_free(wrapper);
+         * heads (SeriesData), quoted strings, round-trip machine reals.
+         * Format[..., InputForm] display rules apply. */
+        str = expr_to_string_inputform_display(expr);
     } else if (form_name == SYM_StandardForm) {
         str = expr_to_string(expr);
     } else {

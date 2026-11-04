@@ -331,7 +331,7 @@ static bool pat_is_literal(const Expr* p) {
         if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
             h == SYM_Pattern || h == SYM_Alternatives || h == SYM_Except ||
             h == SYM_PatternTest || h == SYM_Condition || h == SYM_Optional ||
-            h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_HoldPattern ||
+            h == SYM_Repeated || h == SYM_RepeatedNull || SYM_IS_HOLDPATTERN(h) ||
             h == SYM_Verbatim || h == SYM_Longest || h == SYM_Shortest ||
             h == SYM_OptionsPattern || h == SYM_PatternSequence ||
             h == SYM_OrderlessPatternSequence || h == SYM_KeyValuePattern)
@@ -400,7 +400,7 @@ static bool flat_elem_single_span(Expr* p, const char* flat_head) {
     if (!hd || hd->type != EXPR_SYMBOL) return false;
     const char* h = hd->data.symbol.name;
     if (h == flat_head || h == SYM_Blank || h == SYM_BlankSequence ||
-        h == SYM_BlankNullSequence || h == SYM_Pattern || h == SYM_HoldPattern ||
+        h == SYM_BlankNullSequence || h == SYM_Pattern || SYM_IS_HOLDPATTERN(h) ||
         h == SYM_Alternatives || h == SYM_Condition || h == SYM_PatternTest ||
         h == SYM_Optional || h == SYM_Shortest || h == SYM_Longest ||
         h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Except ||
@@ -965,7 +965,7 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
      * being evaluated when the rule LHS is formed, so patterns that would
      * otherwise simplify (e.g. _+_ becoming 2 Blank[]) are preserved. */
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
-        pattern->data.function.head->data.symbol.name == SYM_HoldPattern &&
+        SYM_IS_HOLDPATTERN(pattern->data.function.head->data.symbol.name) &&
         pattern->data.function.arg_count == 1) {
         return match_internal(expr, pattern->data.function.args[0], env, parent);
     }
@@ -1075,7 +1075,7 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
             && inner_pat->data.function.head->type == EXPR_SYMBOL) {
             const char* ih = inner_pat->data.function.head->data.symbol.name;
             if (ih == SYM_Condition || ih == SYM_PatternTest
-                || ih == SYM_HoldPattern || ih == SYM_Verbatim
+                || SYM_IS_HOLDPATTERN(ih) || ih == SYM_Verbatim
                 || ih == SYM_Pattern || ih == SYM_Blank
                 || ih == SYM_BlankSequence || ih == SYM_BlankNullSequence
                 || ih == SYM_Alternatives || ih == SYM_Optional
@@ -1359,7 +1359,7 @@ static bool pat_is_single_elem(Expr* p) {
         if ((h == SYM_Condition || h == SYM_PatternTest) && ac == 2) {
             p = p->data.function.args[0]; continue;
         }
-        if (h == SYM_HoldPattern && ac == 1) { p = p->data.function.args[0]; continue; }
+        if (SYM_IS_HOLDPATTERN(h) && ac == 1) { p = p->data.function.args[0]; continue; }
         if (h == SYM_Alternatives) {
             for (size_t i = 0; i < ac; i++)
                 if (!pat_is_single_elem(p->data.function.args[i])) return false;
@@ -1383,7 +1383,7 @@ static void pat_width(Expr* p, size_t* lo, size_t* hi) {
     if ((h == SYM_Condition || h == SYM_PatternTest) && ac == 2) {
         pat_width(p->data.function.args[0], lo, hi); return;
     }
-    if ((h == SYM_HoldPattern || h == SYM_Longest || h == SYM_Shortest) && ac >= 1) {
+    if ((SYM_IS_HOLDPATTERN(h) || h == SYM_Longest || h == SYM_Shortest) && ac >= 1) {
         pat_width(p->data.function.args[0], lo, hi); return;
     }
     if (h == SYM_Optional && ac >= 1) {
@@ -1713,13 +1713,13 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     for (size_t i = 0; i < n_pats; i++) {
         Expr* pi = pats[i];
         if (pi->type == EXPR_FUNCTION && pi->data.function.head->type == EXPR_SYMBOL
-            && pi->data.function.head->data.symbol.name == SYM_HoldPattern
+            && SYM_IS_HOLDPATTERN(pi->data.function.head->data.symbol.name)
             && pi->data.function.arg_count == 1) {
             Expr** np = malloc(sizeof(Expr*) * n_pats);
             for (size_t j = 0; j < n_pats; j++) {
                 Expr* pj = pats[j];
                 while (pj->type == EXPR_FUNCTION && pj->data.function.head->type == EXPR_SYMBOL
-                       && pj->data.function.head->data.symbol.name == SYM_HoldPattern
+                       && SYM_IS_HOLDPATTERN(pj->data.function.head->data.symbol.name)
                        && pj->data.function.arg_count == 1)
                     pj = pj->data.function.args[0];
                 np[j] = pj;
@@ -2258,7 +2258,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             if (inner_hn != pat_head->data.symbol.name
                 && inner_hn != SYM_Blank && inner_hn != SYM_BlankSequence
                 && inner_hn != SYM_BlankNullSequence && inner_hn != SYM_Pattern
-                && inner_hn != SYM_HoldPattern
+                && !SYM_IS_HOLDPATTERN(inner_hn)
                 && inner_hn != SYM_Alternatives && inner_hn != SYM_Condition
                 && inner_hn != SYM_PatternTest && inner_hn != SYM_Optional
                 && inner_hn != SYM_Shortest && inner_hn != SYM_Longest
@@ -2830,7 +2830,7 @@ static Expr* flat_inner_call(Expr* pattern, const char* flat_head) {
            pattern->data.function.head &&
            pattern->data.function.head->type == EXPR_SYMBOL) {
         const char* h = pattern->data.function.head->data.symbol.name;
-        if (h == SYM_HoldPattern && pattern->data.function.arg_count == 1)
+        if (SYM_IS_HOLDPATTERN(h) && pattern->data.function.arg_count == 1)
             pattern = pattern->data.function.args[0];
         else if (h == SYM_Condition && pattern->data.function.arg_count == 2)
             pattern = pattern->data.function.args[0];
@@ -2863,7 +2863,7 @@ static Expr* flat_augment_pattern(Expr* pattern, const char* flat_head) {
         !pattern->data.function.head ||
         pattern->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* h = pattern->data.function.head->data.symbol.name;
-    if (h == SYM_HoldPattern && pattern->data.function.arg_count == 1) {
+    if (SYM_IS_HOLDPATTERN(h) && pattern->data.function.arg_count == 1) {
         Expr* inner = flat_augment_pattern(pattern->data.function.args[0], flat_head);
         if (!inner) return NULL;
         Expr** a = malloc(sizeof(Expr*));

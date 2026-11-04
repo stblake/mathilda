@@ -7,7 +7,10 @@
 
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "strings/utf8.h"  /* u8_for_each_class_head */
 #include <stddef.h>  /* NULL */
+
+static void intern_class_head(const char* head) { (void)intern_symbol(head); }
 
 const char* SYM_Abort = NULL;
 const char* SYM_Abs = NULL;
@@ -300,6 +303,8 @@ const char* SYM_HoldComplete = NULL;
 const char* SYM_HoldFirst = NULL;
 const char* SYM_HoldForm = NULL;
 const char* SYM_HoldPattern = NULL;
+const char* SYM_SequenceForm = NULL;
+const char* SYM_Literal = NULL;
 const char* SYM_Inactive = NULL;
 const char* SYM_Activate = NULL;
 const char* SYM_KeyValuePattern = NULL;
@@ -1416,6 +1421,8 @@ void sym_names_init(void) {
     SYM_HoldFirst                  = intern_symbol("HoldFirst");
     SYM_HoldForm                   = intern_symbol("HoldForm");
     SYM_HoldPattern                = intern_symbol("HoldPattern");
+    SYM_Literal                    = intern_symbol("Literal");
+    SYM_SequenceForm               = intern_symbol("SequenceForm");
     SYM_Inactive                   = intern_symbol("Inactive");
     SYM_Activate                   = intern_symbol("Activate");
     SYM_KeyValuePattern            = intern_symbol("KeyValuePattern");
@@ -2219,6 +2226,12 @@ void sym_names_init(void) {
         for (size_t i = 0; i < sizeof inert_system / sizeof inert_system[0]; i++)
             intern_symbol(inert_system[i]);
     }
+
+    /* Every head the parser can emit for a named operator character
+     * (\[Wedge] -> Wedge, \[CircleTimes] -> CircleTimes, ...) is System`.
+     * Interned here so intern_mark_all_system() flags them; see
+     * u8_for_each_class_head. */
+    u8_for_each_class_head(intern_class_head);
 
     /* FLINT` context: direct-access wrappers over the FLINT-backed kernels.
      * The backtick-qualified names live in the FLINT` context (not System`),
