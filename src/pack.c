@@ -827,6 +827,7 @@ static void pack_mark_aware_heads(void) {
         "RowReduce", "NullSpace", "MatrixRank", "MatrixPower",
         "LUDecomposition", "QRDecomposition", "SingularValueDecomposition",
         "JordanDecomposition", "SchurDecomposition", "CholeskyDecomposition",
+        "SingularValueList", "Minors", "Adjugate", "Orthogonalize",
         "Eigenvalues", "Eigenvectors", "CharacteristicPolynomial",
         "Tr", "Norm", "Normalize", "Cross",
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",

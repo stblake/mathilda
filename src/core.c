@@ -1100,6 +1100,12 @@ void core_init(void) {
     schurdecomp_init();
     void cholesky_init(void);
     cholesky_init();
+    void singularvaluelist_init(void);
+    singularvaluelist_init();
+    void minors_init(void);
+    minors_init();
+    void orthogonalize_init(void);
+    orthogonalize_init();
     fit_init();
     readwrite_init();
     void readlist_init(void);

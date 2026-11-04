@@ -96,6 +96,22 @@ static Expr* nd_cholesky(Expr* call) {        /* silent machine kernel */
     if (call->data.function.arg_count != 1) return NULL;
     return la_cholesky_machine(call->data.function.args[0]);
 }
+static Expr* nd_singularvaluelist(Expr* call) {  /* silent machine kernel */
+    if (call->data.function.arg_count != 1) return NULL;
+    return la_singularvaluelist_machine(call->data.function.args[0]);
+}
+static Expr* nd_minors(Expr* call) {          /* Minors[m]: machine kernel */
+    if (call->data.function.arg_count != 1) return NULL;
+    return la_minors_machine(call->data.function.args[0]);
+}
+static Expr* nd_adjugate(Expr* call) {        /* Adjugate[m]: SVD kernel   */
+    if (call->data.function.arg_count != 1) return NULL;
+    return la_adjugate_machine(call->data.function.args[0]);
+}
+static Expr* nd_orthogonalize(Expr* call) {   /* default inner product */
+    if (call->data.function.arg_count != 1) return NULL;
+    return la_orthogonalize_machine(call->data.function.args[0]);
+}
 static Expr* nd_pseudoinverse(Expr* call) {    /* direct-args, real float64 only */
     if (call->data.function.arg_count != 1) return NULL;
     const Expr* a = call->data.function.args[0];
@@ -134,25 +150,25 @@ static const NdFnSpec ND_FNS[] = {
      * own buffer path, so the two agree element for element. It declines (NULL
      * -> the VM aborts to the interpreter) for a negative exponent, a
      * non-positive modulus or one past its no-overflow bound. */
-    { "PowerMod",   ndint_powermod,     2, 0, false, NDF_INT, false },
-    { "Reverse",    ndstruct_reverse,   0, 0, false, 0, false },
-    { "Sort",       ndstruct_sort,      0, 0, false, 0, false },   /* 1-arg only: a comparator is a
+    { "PowerMod",   ndint_powermod,     2, 0, false, NDF_INT, false, false },
+    { "Reverse",    ndstruct_reverse,   0, 0, false, 0, false, false },
+    { "Sort",       ndstruct_sort,      0, 0, false, 0, false, false },   /* 1-arg only: a comparator is a
                                                    * function value the ND path
                                                    * cannot call back into */
-    { "Ordering",   ndstruct_ordering,  0, 0, true, 0, false },  /* argsort -> int64 positions;
+    { "Ordering",   ndstruct_ordering,  0, 0, true, 0, false, false },  /* argsort -> int64 positions;
                                                    * int_result forces the CT_INT
                                                    * element type (a permutation is
                                                    * integer for any input dtype) */
-    { "Accumulate", ndred_accumulate,   0, 0, false, 0, false },
-    { "Flatten",    ndstruct_flatten,   0, 1, false, 0, false },
-    { "Transpose",  ndstruct_transpose, 0, 2, false, 0, false },
+    { "Accumulate", ndred_accumulate,   0, 0, false, 0, false, false },
+    { "Flatten",    ndstruct_flatten,   0, 1, false, 0, false, false },
+    { "Transpose",  ndstruct_transpose, 0, 2, false, 0, false, false },
     /* Diagonal[m] and Diagonal[m, k]: a rank-2 buffer to its k-th diagonal (a
      * rank-1 vector).  Two rows for the two arities nd_fn_lookup keys on
      * (na == 1 + nextra); the optional k is the trailing integer argument. */
-    { "Diagonal",   ndstruct_diagonal,  0, 3, false, 0, false },
-    { "Diagonal",   ndstruct_diagonal,  1, 3, false, 0, false },
-    { "Take",       ndstruct_take,      1, 0, false, 0, false },
-    { "Drop",       ndstruct_drop,      1, 0, false, 0, false },
+    { "Diagonal",   ndstruct_diagonal,  0, 3, false, 0, false, false },
+    { "Diagonal",   ndstruct_diagonal,  1, 3, false, 0, false, false },
+    { "Take",       ndstruct_take,      1, 0, false, 0, false, false },
+    { "Drop",       ndstruct_drop,      1, 0, false, 0, false, false },
     /* Added 2026-08-02 by the sixth sweep (tools/compile_coverage.py).  Each
      * already had a buffer path in the interpreter and no lowering here, which
      * is the contradiction that audit exists to find: a head fast at the REPL
@@ -165,22 +181,22 @@ static const NdFnSpec ND_FNS[] = {
      * already declines by handing back a nested List, which the VM reads as
      * "not an NDArray" and aborts to the interpreter — the same faithful
      * degrade the existing seven rely on. */
-    { "Differences",   ndstruct_differences, 0, 0, false, 0, false },
+    { "Differences",   ndstruct_differences, 0, 0, false, 0, false, false },
     /* ListGradient[v] (default centered, unit spacing) on a rank-1 real array
      * gives a same-shape real array; NDF_REAL keeps integer/complex bodies out
      * (the answer there is Rational/exact and declines to the interpreter). The
      * spacing/option forms and rank>=2 return a List and bail safely. */
-    { "ListGradient",  list_gradient_ndarray, 0, 0, false, NDF_REAL, false },
-    { "Ratios",        ndstruct_ratios,      0, 0, false, 0, false },
-    { "Most",          nd_most,              0, 0, false, 0, false },
-    { "Rest",          nd_rest,              0, 0, false, 0, false },
-    { "Clip",          ndstruct_clip,        0, 0, false, 0, false },
-    { "RotateLeft",    nd_rotate_left,       1, 0, false, 0, false },
-    { "RotateRight",   nd_rotate_right,      1, 0, false, 0, false },
-    { "MovingAverage", ndred_moving_average, 1, 0, false, 0, false },
-    { "MovingMedian",  ndred_moving_median,  1, 0, false, 0, false },
-    { "TakeLargest",   nd_take_largest,      1, 0, false, 0, false },
-    { "TakeSmallest",  nd_take_smallest,     1, 0, false, 0, false },
+    { "ListGradient",  list_gradient_ndarray, 0, 0, false, NDF_REAL, false, false },
+    { "Ratios",        ndstruct_ratios,      0, 0, false, 0, false, false },
+    { "Most",          nd_most,              0, 0, false, 0, false, false },
+    { "Rest",          nd_rest,              0, 0, false, 0, false, false },
+    { "Clip",          ndstruct_clip,        0, 0, false, 0, false, false },
+    { "RotateLeft",    nd_rotate_left,       1, 0, false, 0, false, false },
+    { "RotateRight",   nd_rotate_right,      1, 0, false, 0, false, false },
+    { "MovingAverage", ndred_moving_average, 1, 0, false, 0, false, false },
+    { "MovingMedian",  ndred_moving_median,  1, 0, false, 0, false, false },
+    { "TakeLargest",   nd_take_largest,      1, 0, false, 0, false, false },
+    { "TakeSmallest",  nd_take_smallest,     1, 0, false, 0, false, false },
     /* COMPILE_MISSING.md §2: single array -> array linalg heads, each delegating
      * to its interpreter entry point (an adapter where that entry takes direct
      * args or prints on a structural mismatch — see the adapter block above).
@@ -189,17 +205,34 @@ static const NdFnSpec ND_FNS[] = {
      * Rationals/reals no int slot holds, so real (+complex where supported)
      * only; ReverseSort's buffer path declines complex (int+real); Conjugate-
      * Transpose preserves any dtype.  rank_rule 4 = require rank 1 -> rank 1. */
-    { "Inverse",            nd_inverse,                   0, 2, false, NDF_REAL | NDF_CPLX, false },
-    { "Normalize",          ndla_normalize,               0, 4, false, NDF_REAL | NDF_CPLX, false },
-    { "MatrixPower",        nd_matrixpower,               1, 2, false, NDF_REAL | NDF_CPLX, false },
-    { "ReverseSort",        builtin_reverse_sort,         0, 0, false, NDF_INT | NDF_REAL, false },
-    { "ConjugateTranspose", builtin_conjugate_transpose,  0, 2, false, NDF_INT | NDF_REAL | NDF_CPLX, false },
-    { "PseudoInverse",      nd_pseudoinverse,             0, 2, false, NDF_REAL, false },
+    { "Inverse",            nd_inverse,                   0, 2, false, NDF_REAL | NDF_CPLX, false, false },
+    { "Normalize",          ndla_normalize,               0, 4, false, NDF_REAL | NDF_CPLX, false, false },
+    { "MatrixPower",        nd_matrixpower,               1, 2, false, NDF_REAL | NDF_CPLX, false, false },
+    { "ReverseSort",        builtin_reverse_sort,         0, 0, false, NDF_INT | NDF_REAL, false, false },
+    { "ConjugateTranspose", builtin_conjugate_transpose,  0, 2, false, NDF_INT | NDF_REAL | NDF_CPLX, false, false },
+    { "PseudoInverse",      nd_pseudoinverse,             0, 2, false, NDF_REAL, false, false },
     /* CholeskyDecomposition: the interpreter's own machine kernel (dpotrf /
      * zpotrf), silent on a non-Hermitian or non-positive-definite operand so
      * the interpreter fallback reports it once.  An int operand's factor is
      * exact (Sqrt), so real/complex only. */
-    { "CholeskyDecomposition", nd_cholesky,               0, 2, false, NDF_REAL | NDF_CPLX, false },
+    { "CholeskyDecomposition", nd_cholesky,               0, 2, false, NDF_REAL | NDF_CPLX, false, false },
+    /* SingularValueList[m]: rank 2 -> rank 1 (rule 3), a REAL vector for a real
+     * or complex operand (real_result); the machine gesdd('N') kernel the
+     * interpreter uses.  A matrix whose every value falls under the tolerance
+     * would answer {} -- declined, the interpreter answers it. */
+    { "SingularValueList",  nd_singularvaluelist,         0, 3, false, NDF_REAL | NDF_CPLX, false, true },
+    /* Minors[m] (the (n-1)-minors, a C(r,n-1) x C(c,n-1) matrix) and
+     * Adjugate[m]: rank 2 -> rank 2, the interpreter's own machine kernels.
+     * An int operand's minors/adjugate are exact Integers no float slot should
+     * promise, so real/complex only.  Minors[m, k] / Minors[m, k, f] are not
+     * lowered (the table keys on arity; k and f fall to the interpreter). */
+    { "Minors",             nd_minors,                    0, 2, false, NDF_REAL | NDF_CPLX, false, false },
+    { "Adjugate",           nd_adjugate,                  0, 2, false, NDF_REAL | NDF_CPLX, false, false },
+    /* Orthogonalize[m] (rows = vectors, default inner product, Automatic
+     * method): rank 2 -> rank 2, the interpreter's machine kernel.  An int
+     * operand orthonormalises to radicals, so real/complex only; a user
+     * inner product or options run in the interpreter. */
+    { "Orthogonalize",      nd_orthogonalize,             0, 2, false, NDF_REAL | NDF_CPLX, false, false },
     /* COMPILE_MISSING.md §4: the transforms.  Fourier / InverseFourier are
      * real-in complex-out — the ONLY heads that need complex_result (their
      * fourier_compile wrapper always builds NDT_COMPLEX64 so the buffer matches
@@ -209,10 +242,10 @@ static const NdFnSpec ND_FNS[] = {
      * a real operand), so they delegate straight to their builtins and are gated
      * NDF_REAL — an int operand would mis-promise CT_INT for a real buffer, a
      * complex operand would break the real result promise. */
-    { "Fourier",            fourier_compile,          0, 0, false, NDF_INT | NDF_REAL | NDF_CPLX, true },
-    { "InverseFourier",     inverse_fourier_compile,  0, 0, false, NDF_INT | NDF_REAL | NDF_CPLX, true },
-    { "FourierDCT",         builtin_fourier_dct,      0, 0, false, NDF_REAL, false },
-    { "FourierDST",         builtin_fourier_dst,      0, 0, false, NDF_REAL, false },
+    { "Fourier",            fourier_compile,          0, 0, false, NDF_INT | NDF_REAL | NDF_CPLX, true, false },
+    { "InverseFourier",     inverse_fourier_compile,  0, 0, false, NDF_INT | NDF_REAL | NDF_CPLX, true, false },
+    { "FourierDCT",         builtin_fourier_dct,      0, 0, false, NDF_REAL, false, false },
+    { "FourierDST",         builtin_fourier_dst,      0, 0, false, NDF_REAL, false, false },
     /* COMPILE_MISSING.md §5: the matrix producers.  rank_rule 5 = rank 1 -> rank
      * 2; the delegate rebuilds H[ndarray] and the interpreter builtin returns a
      * packed rank-2 NDArray (DiagonalMatrix fills its buffer directly; Hankel /
@@ -223,25 +256,25 @@ static const NdFnSpec ND_FNS[] = {
      * keeps the interpreter's exact delist path.  Single-vector form only (what
      * the coverage probe H[v] tests); the two-vector Hankel/Toeplitz[c, r] form
      * is a rank-1 x rank-1 -> rank-2 A_NDFN2 lowering, not done here. */
-    { "DiagonalMatrix",     builtin_diagonalmatrix,    0, 5, false, NDF_INT | NDF_REAL, false },
-    { "HankelMatrix",       builtin_hankelmatrix,      0, 5, false, NDF_INT | NDF_REAL, false },
-    { "ToeplitzMatrix",     builtin_toeplitzmatrix,    0, 5, false, NDF_INT | NDF_REAL, false },
-    { "VandermondeMatrix",  builtin_vandermondematrix, 0, 5, false, NDF_INT | NDF_REAL, false },
+    { "DiagonalMatrix",     builtin_diagonalmatrix,    0, 5, false, NDF_INT | NDF_REAL, false, false },
+    { "HankelMatrix",       builtin_hankelmatrix,      0, 5, false, NDF_INT | NDF_REAL, false, false },
+    { "ToeplitzMatrix",     builtin_toeplitzmatrix,    0, 5, false, NDF_INT | NDF_REAL, false, false },
+    { "VandermondeMatrix",  builtin_vandermondematrix, 0, 5, false, NDF_INT | NDF_REAL, false, false },
     /* Covariance[a] / Correlation[a]: the one-argument auto form, a rank-2 real
      * matrix to its p x p (co)variance matrix (rank_rule 2 = rank 2 in and out;
      * the n x p -> p x p dim change is fine, the register tracks only rank).  The
      * two-argument forms are the R2_DOT rows in ND_FN2S below.  NDF_REAL only: an
      * integer matrix's covariance is a matrix of Rationals no float slot holds, so
      * it declines to the interpreter's exact path (nd_covariance delists). */
-    { "Covariance",         nd_covariance,             0, 2, false, NDF_REAL, false },
-    { "Correlation",        nd_correlation,            0, 2, false, NDF_REAL, false },
+    { "Covariance",         nd_covariance,             0, 2, false, NDF_REAL, false, false },
+    { "Correlation",        nd_correlation,            0, 2, false, NDF_REAL, false, false },
     /* Upper/LowerTriangularize[m] and [m, k]: a rank-2 buffer to a rank-2
      * buffer of the same dtype (the kept run of each row copied, the rest
      * zero bits: 0, 0. or 0. + 0. I), so any element type keeps its type. */
-    { "UpperTriangularize", builtin_uppertriangularize, 0, 2, false, 0, false },
-    { "UpperTriangularize", builtin_uppertriangularize, 1, 2, false, 0, false },
-    { "LowerTriangularize", builtin_lowertriangularize, 0, 2, false, 0, false },
-    { "LowerTriangularize", builtin_lowertriangularize, 1, 2, false, 0, false },
+    { "UpperTriangularize", builtin_uppertriangularize, 0, 2, false, 0, false, false },
+    { "UpperTriangularize", builtin_uppertriangularize, 1, 2, false, 0, false, false },
+    { "LowerTriangularize", builtin_lowertriangularize, 0, 2, false, 0, false, false },
+    { "LowerTriangularize", builtin_lowertriangularize, 1, 2, false, 0, false, false },
 };
 
 /* ---- delegated array -> scalar reductions ---------------------------------
@@ -398,6 +431,7 @@ CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     if (s->elems && !((s->elems >> (unsigned)CT_ELEM(ta)) & 1u)) return CT_ERR;  /* operand gate */
     int rank = CT_RANK(ta);
     CompileType elem = s->complex_result ? CT_COMPLEX
+                     : s->real_result    ? CT_REAL
                      : s->int_result     ? CT_INT
                      : CT_ELEM(ta);
     if (s->rank_rule == 1) return CT_ARRAY(elem, 1);

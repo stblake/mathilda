@@ -107,6 +107,10 @@ Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
  * Cholesky, say): it reports the message and returns NULL, as the boxed path
  * does for the same matrix. */
 Expr* ndla_choleskydecomposition(Expr* res);   /* cholesky.c          */
+Expr* ndla_singularvaluelist(Expr* res);       /* singularvaluelist.c */
+Expr* ndla_minors(Expr* res);                  /* minors.c            */
+Expr* ndla_adjugate(Expr* res);                /* minors.c            */
+Expr* ndla_orthogonalize(Expr* res);           /* orthogonalize.c     */
 
 /* ------------------------------------------------------------------------
  * The SVD pair: PseudoInverse[m] and LeastSquares[m, b].

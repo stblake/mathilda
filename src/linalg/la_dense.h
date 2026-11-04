@@ -101,6 +101,13 @@ bool la_parse_take_spec(const Expr* spec, long long* k, bool* upto);
  * anything it does not answer (the VM then aborts to the interpreter, which
  * reports it once). */
 Expr* la_cholesky_machine(const Expr* m);            /* cholesky.c */
+Expr* la_singularvaluelist_machine(const Expr* m);    /* singularvaluelist.c:
+                                                       * the default-tolerance
+                                                       * nonzero values (real) */
+Expr* la_minors_machine(const Expr* m);               /* minors.c: Minors[m]   */
+Expr* la_adjugate_machine(const Expr* m);             /* minors.c: Adjugate[m] */
+Expr* la_orthogonalize_machine(const Expr* m);        /* orthogonalize.c: the
+                                                       * Automatic method     */
 
 #ifdef __cplusplus
 }

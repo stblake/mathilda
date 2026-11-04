@@ -346,7 +346,7 @@ static int svdm_jacobi_sweeps(mpfr_t* A, int n, int p, mpfr_t* V,
                 mpfr_mul(s, t, c, MPFR_RNDN);
                 /* Apply to A's columns i, j and V's columns i, j. */
                 svdm_apply_rotation(A, n, i, j, c, s, bits);
-                svdm_apply_rotation(V, p, i, j, c, s, bits);
+                if (V) svdm_apply_rotation(V, p, i, j, c, s, bits);  /* NULL: values only */
             }
         }
         if (!rotated) break;
@@ -549,8 +549,9 @@ static int svdm_jacobi_sweeps_complex(mpfr_t* A_re, mpfr_t* A_im,
                 /* Apply complex rotation to A's and V's columns i, j. */
                 svdm_apply_rotation_complex(A_re, A_im, n, i, j,
                                               c, s, ec, es, bits);
-                svdm_apply_rotation_complex(V_re, V_im, p, i, j,
-                                              c, s, ec, es, bits);
+                if (V_re)                                  /* NULL: values only */
+                    svdm_apply_rotation_complex(V_re, V_im, p, i, j,
+                                                  c, s, ec, es, bits);
             }
         }
         if (!rotated) break;
@@ -1099,6 +1100,67 @@ Expr* svd_mpfr_dispatch(const SvdArgs* args, int n, int p, int n_a)
 
     int mn = (n < p) ? n : p;
     return svd_apply_postprocess(result, args, n, p, mn);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Singular values only (SingularValueList).                          *
+ *                                                                     *
+ *  The same one-sided Jacobi as the full decomposition, with V not    *
+ *  accumulated and U never formed: after the sweeps the columns of A  *
+ *  are mutually orthogonal and their 2-norms are the singular values. *
+ *  Requires p <= n (the caller hands a wide matrix in transposed, the *
+ *  singular values being those of the conjugate transpose).           *
+ * ------------------------------------------------------------------ */
+mpfr_t* svd_mpfr_values(Expr* m, int n, int p, mpfr_prec_t bits)
+{
+    if (p > n || p < 1) return NULL;
+    mpfr_t* sigma = NULL;
+    size_t total = (size_t)n * (size_t)p;
+    mpfr_t acc, t2;
+    if (svdm_matrix_has_complex(m, n, p)) {
+        mpfr_t *A_re = NULL, *A_im = NULL;
+        if (!svdm_load_complex(m, n, p, bits, &A_re, &A_im)) return NULL;
+        (void)svdm_jacobi_sweeps_complex(A_re, A_im, n, p, NULL, NULL, bits);
+        sigma = svdm_array_alloc((size_t)p, bits);
+        mpfr_init2(acc, bits); mpfr_init2(t2, bits);
+        for (int j = 0; j < p; j++) {
+            mpfr_set_zero(acc, 1);
+            for (int i = 0; i < n; i++) {
+                size_t off = (size_t)i + (size_t)j * (size_t)n;
+                mpfr_sqr(t2, A_re[off], MPFR_RNDN); mpfr_add(acc, acc, t2, MPFR_RNDN);
+                mpfr_sqr(t2, A_im[off], MPFR_RNDN); mpfr_add(acc, acc, t2, MPFR_RNDN);
+            }
+            mpfr_sqrt(sigma[j], acc, MPFR_RNDN);
+        }
+        svdm_array_free(A_re, total);
+        svdm_array_free(A_im, total);
+    } else {
+        mpfr_t* A = NULL;
+        if (!svdm_load_real(m, n, p, bits, &A)) return NULL;
+        (void)svdm_jacobi_sweeps(A, n, p, NULL, bits);
+        sigma = svdm_array_alloc((size_t)p, bits);
+        mpfr_init2(acc, bits); mpfr_init2(t2, bits);
+        for (int j = 0; j < p; j++) {
+            mpfr_set_zero(acc, 1);
+            for (int i = 0; i < n; i++) {
+                mpfr_sqr(t2, A[(size_t)i + (size_t)j * (size_t)n], MPFR_RNDN);
+                mpfr_add(acc, acc, t2, MPFR_RNDN);
+            }
+            mpfr_sqrt(sigma[j], acc, MPFR_RNDN);
+        }
+        svdm_array_free(A, total);
+    }
+    mpfr_clear(acc); mpfr_clear(t2);
+    /* descending (insertion sort: p is small) */
+    for (int i = 1; i < p; i++)
+        for (int j = i; j > 0 && mpfr_cmp(sigma[j - 1], sigma[j]) < 0; j--)
+            mpfr_swap(sigma[j - 1], sigma[j]);
+    return sigma;
+}
+
+void svd_mpfr_values_free(mpfr_t* sigma, int p)
+{
+    svdm_array_free(sigma, (size_t)p);
 }
 
 #endif /* USE_MPFR */

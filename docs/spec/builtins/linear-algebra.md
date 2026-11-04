@@ -1563,6 +1563,158 @@ CholeskyDecomposition::npdef: The matrix {{1, 2}, {2, 1}} is not positive defini
 Out[3]= CholeskyDecomposition[{{1, 2}, {2, 1}}]
 ```
 
+## SingularValueList
+Gives the singular values of a matrix.
+- `SingularValueList[m]` — the nonzero singular values, in decreasing order.
+- `SingularValueList[m, k]` — the first `k` (`k < 0`: the last `|k|`) of all
+  `min(rows, cols)` values, zeros included; also `{k}`, `{i, j}`, `{i, j, s}`
+  and `UpTo[k]` (up to `k` of the nonzero values).
+- `SingularValueList[{m, a}]` — the generalized singular values (machine
+  matrices only).
+
+**Features**:
+- `Protected`. Options `Tolerance -> Automatic`, `Method -> Automatic`
+  (`"Arnoldi"` accepted; dense input runs the direct method), `Cubics`,
+  `Quartics` (passed to `Eigenvalues` for exact input).
+- Tolerance (reference semantics): a value `s` is dropped when
+  `s < tol * s_max`. `Automatic` is `max(rows, cols) * $MachineEpsilon` for
+  machine input, about `8 max(rows, cols) 2^-bits` at arbitrary precision, and
+  exact zeros only for exact input. An all-zero matrix keeps its zeros
+  (`{0, 0}`), as the reference does. With an explicit `k` every value is a
+  candidate (`SingularValueList[{{1, 2}, {2, 4}}, 2]` is `{5, 0}`).
+- Precision classes:
+  - **machine** (List, packed, `NDArray`): LAPACK `gesdd` with `jobz = 'N'` —
+    values only, no `U` or `V`; a packed real vector;
+  - **arbitrary precision**: one-sided Jacobi at the input precision with `V`
+    not accumulated (`svd_mpfr_values` in `svdecomp_mpfr.c`);
+  - **exact / symbolic**: `Sqrt` of the `Eigenvalues` of the smaller Gram
+    matrix (`ConjugateTranspose[m] . m` or `m . ConjugateTranspose[m]`), each
+    eigenvalue passed through `Together` when numeric, sorted decreasing.
+- Generalized: LAPACK `ggsvd3` without vectors; the finite values
+  `alpha / beta`, decreasing. Exact or MPFR pairs give `::gfargs`, as in the
+  reference.
+- Messages: `::matrix`, `::take` ("Cannot take singular values 1 through 3 out
+  of the total of 2 singular values."), `::seqs`, `::tol`, `::emeth`,
+  `::gfargs`, `::optx`.
+- **Compile**: lowers for `_Real` and `_Complex` rank-2 operands (an `ND_FNS`
+  row with the new `real_result` flag — a complex matrix's singular values are
+  real), calling the interpreter's own `gesdd('N')` kernel, so all surfaces agree
+  bit for bit. The option and `k` forms are not lowered.
+
+```mathematica
+In[1]:= SingularValueList[{{1, 2}, {3, 4}}]
+Out[1]= {Sqrt[15 + Sqrt[221]], Sqrt[15 - Sqrt[221]]}
+
+In[2]:= SingularValueList[{{1., 0.}, {0., 1.*^-3}}, Tolerance -> 0.01]
+Out[2]= {1.}
+
+In[3]:= SingularValueList[{{1, 2}, {2, 4}}, 2]
+Out[3]= {5, 0}
+```
+
+## Minors
+Gives the minors of a matrix.
+- `Minors[m]` — the minors of order `n - 1`, `n = min(rows, cols)`.
+- `Minors[m, k]` — the `k × k` minors: a `C(rows, k) × C(cols, k)` matrix
+  whose `(r, c)` entry is the determinant of the rows in the `r`-th and the
+  columns in the `c`-th `k`-subset, subsets in **lexicographic** order (the
+  reference's convention: `Minors[{{a,b,c},{d,e,f},{g,h,i}}][[1]]` is
+  `{a e - b d, a f - c d, b f - c e}`). `k = 0` gives `{{1}}`; `k < 0` or
+  `k > n` gives `{}`; a non-integer `k` leaves the call unevaluated silently.
+- `Minors[m, k, f]` — `f` applied to each `k × k` submatrix instead of `Det`.
+
+**Features**:
+- `Protected`. `::matrix` for an argument that is not a non-empty rectangular
+  matrix.
+- Machine matrices (List, packed, `NDArray`): one partial-pivot LU
+  determinant per submatrix, a packed answer. Exact, symbolic and
+  arbitrary-precision matrices: `Det` of each submatrix (FLINT for rational
+  entries), at the input precision.
+- **Compile**: `Minors[m]` lowers for `_Real` / `_Complex` rank-2 operands
+  (rank 2 → rank 2, the same kernel); `Minors[m, k]` and `Minors[m, k, f]` are
+  not lowered (they run in the interpreter).
+
+```mathematica
+In[1]:= Minors[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]
+Out[1]= {{-3, -6, -3}, {-6, -11, -4}, {-3, -2, 2}}
+
+In[2]:= Minors[{{a, b, c}, {d, e, f}}, 2]
+Out[2]= {{-(b d) + a e, -(c d) + a f, -(c e) + b f}}
+```
+
+## Adjugate
+Gives the adjugate (classical adjoint) of a square matrix: the transposed
+cofactor matrix, with `Adjugate[m] . m == Det[m] IdentityMatrix[n]`, defined
+for a singular `m` too.
+
+**Features**:
+- `Protected` (the reference also sets `ReadProtected`; Mathilda never does).
+- Machine matrices: the SVD form
+  `adj(U S V^H) = det(U) det(V^H) V adj(S) U^H` with `adj(S)_k = Prod_{j≠k} s_j`
+  (LAPACK `gesdd`), which stays accurate for a singular matrix where
+  `Det[m] Inverse[m]` cannot be formed. One kernel for List, packed, `NDArray`
+  and `Compile[]`.
+- Exact rational, nonsingular, order ≥ 4: `Det[m] Inverse[m]` (FLINT).
+  Otherwise (exact, symbolic, MPFR): cofactors through `Det`, at the input
+  precision. `Adjugate[{{5}}]` is `{{1}}`.
+- `::matsq` for a non-square argument; a second argument gives `::intnm`, as
+  in the reference.
+- **Compile**: lowers for `_Real` / `_Complex` rank-2 operands.
+
+```mathematica
+In[1]:= Adjugate[{{a, b}, {c, d}}]
+Out[1]= {{d, -b}, {-c, a}}
+
+In[2]:= Adjugate[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[2]= {{-3, 6, -3}, {6, -12, 6}, {-3, 6, -3}}
+```
+
+## Orthogonalize
+Gram–Schmidt orthonormalisation.
+- `Orthogonalize[{v1, v2, ...}]` — an orthonormal list under the inner product
+  `u . Conjugate[v]`; a vector dependent on the earlier ones becomes a zero
+  vector, so there are as many outputs as inputs.
+- `Orthogonalize[{e1, e2, ...}, f]` — under the inner product `f[u, v]`; the
+  `ei` need not be vectors (`Orthogonalize[{1, x, x^2}, Integrate[#1 #2, {x, -1, 1}] &]`
+  gives normalised Legendre polynomials).
+
+**Features**:
+- `Protected`. Options `Method -> Automatic | "GramSchmidt" |
+  "ModifiedGramSchmidt" | "Householder" | "Reorthogonalization"` and
+  `Tolerance -> Automatic | t` (a residual shorter than `t` times its vector
+  becomes a zero vector: `Orthogonalize[{{1., 2.}, {3., 4.}}, Tolerance -> 0.5]`
+  is `{{0.447…, 0.894…}, {0., 0.}}`).
+- Exact, symbolic and arbitrary-precision input take the reference's classical
+  form `w_k = v_k - Sum_j (<v_k, w_j>/<w_j, w_j>) w_j`, `e_k = w_k/Norm[w_k]`
+  whatever the Method (as the reference does: Householder on an exact matrix
+  gives the Gram–Schmidt answer). An exact residual with (Gaussian) rational
+  entries is scaled to a primitive integer vector before normalising, giving
+  `(2 + 3 I)/Sqrt[26]` as in the reference. Mathilda's arithmetic does not
+  merge `13/(14 Sqrt[13/14])`-type products, so some radicals print in an
+  equivalent but different form (`13/Sqrt[182]` for the reference's
+  `Sqrt[13/14]`).
+- Machine numbers (default inner product): raw-double kernels — classical GS,
+  modified GS, MGS with a full second pass (`Automatic`,
+  `"Reorthogonalization"`), or Householder (LAPACK `geqrf` + `orgqr`, answer
+  signs as LAPACK gives them). Default tolerance `64 max(k, n) $MachineEpsilon`;
+  at arbitrary precision about `2^(8 - bits)`.
+- Messages: `::orbop` (bad Method), `::ornhip` (Householder with a user inner
+  product), `::ornhsl` (Householder on a dependent set), `::ornfa` (an inner
+  product that does not return a number or symbol), `::ornt` (ragged first
+  argument), `::orwdt` (an element unusable with Dot).
+- **Compile**: `Orthogonalize[m]` lowers for `_Real` / `_Complex` rank-2
+  operands (the Automatic machine kernel; List, packed, `NDArray` and
+  `Compile[]` agree bit for bit). A user inner product or options run in the
+  interpreter.
+
+```mathematica
+In[1]:= Orthogonalize[{{1, I}, {2, 3}}]
+Out[1]= {{1/Sqrt[2], I/Sqrt[2]}, {(2 + 3 I)/Sqrt[26], (3 - 2 I)/Sqrt[26]}}
+
+In[2]:= Orthogonalize[{{1, 2}, {3, 4}, {5, 6}}]
+Out[2]= {{1/Sqrt[5], 2/Sqrt[5]}, {2/Sqrt[5], -(1/Sqrt[5])}, {0, 0}}
+```
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that

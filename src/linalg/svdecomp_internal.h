@@ -167,6 +167,17 @@ Expr* ndla_singularvaluedecomposition(Expr* res);
  * ------------------------------------------------------------------ */
 Expr* svd_mpfr_dispatch(const SvdArgs* args, int n, int p, int n_a);
 
+#ifdef USE_MPFR
+#include <mpfr.h>
+/* Singular values only, for SingularValueList: one-sided Jacobi at `bits`
+ * without accumulating V or forming U.  `m` is a boxed n x p numeric matrix
+ * with p <= n (pass a wide matrix's ConjugateTranspose).  Returns p values
+ * sorted descending (free with svd_mpfr_values_free), or NULL when a leaf is
+ * not numeric. */
+mpfr_t* svd_mpfr_values(Expr* m, int n, int p, mpfr_prec_t bits);
+void    svd_mpfr_values_free(mpfr_t* sigma, int p);
+#endif
+
 /* ---------------------------------------------------------------------
  * Shared post-processing applied to a freshly assembled {u, sigma, v}
  * (or the generalized {{u, ua}, {sigma, sigma_a}, v}).

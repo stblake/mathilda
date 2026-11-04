@@ -783,6 +783,9 @@ set(COMMON_SRC
     ../src/linalg/schurdecomp.c
     ../src/linalg/schurdecomp_machine.c
     ../src/linalg/schurdecomp_mpfr.c
+    ../src/linalg/orthogonalize.c
+    ../src/linalg/minors.c
+    ../src/linalg/singularvaluelist.c
     ../src/linalg/la_dense.c
     ../src/linalg/cholesky.c
     ../src/readwrite.c
@@ -3123,6 +3126,33 @@ else()
     target_link_libraries(schurdecomp_tests gmp m)
 endif()
 add_test(NAME schurdecomp_tests COMMAND schurdecomp_tests)
+
+add_executable(orthogonalize_tests test_orthogonalize.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(orthogonalize_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(orthogonalize_tests gmp m ${ECM_LIB})
+    add_dependencies(orthogonalize_tests build_ecm)
+else()
+    target_link_libraries(orthogonalize_tests gmp m)
+endif()
+
+add_executable(minors_adjugate_tests test_minors_adjugate.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(minors_adjugate_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(minors_adjugate_tests gmp m ${ECM_LIB})
+    add_dependencies(minors_adjugate_tests build_ecm)
+else()
+    target_link_libraries(minors_adjugate_tests gmp m)
+endif()
+
+add_executable(singularvaluelist_tests test_singularvaluelist.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(singularvaluelist_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(singularvaluelist_tests gmp m ${ECM_LIB})
+    add_dependencies(singularvaluelist_tests build_ecm)
+else()
+    target_link_libraries(singularvaluelist_tests gmp m)
+endif()
 
 add_executable(cholesky_tests test_cholesky.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cholesky_tests PRIVATE ../src)

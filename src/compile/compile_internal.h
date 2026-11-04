@@ -737,6 +737,8 @@ typedef struct {
                           * The delegate must ALWAYS return NDT_COMPLEX64 (its
                           * fourier_compile wrapper does) so the buffer matches
                           * the CT_COMPLEX register the compiler promises here. */
+    bool real_result;  /* result is a REAL array whatever the operand's element
+                        * type (SingularValueList of a complex matrix) */
 } NdFnSpec;
 
 typedef struct {
