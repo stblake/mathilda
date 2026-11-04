@@ -285,6 +285,75 @@ static void test_rationalize_inside_list_with_constants(void) {
                    "{6/5, Pi, 67/10, x}", 0);
 }
 
+/* ------------------------------------------------------------------------
+ *  v0.6178: the exact core.  Every case below was wrong with the earlier
+ *  double-precision continued fractions.
+ * ---------------------------------------------------------------------- */
+
+/* Evaluate `src` and require it to give True. */
+static void assert_true(const char* src) {
+    assert_eval_eq(src, "True", 0);
+}
+
+static void test_exact_tiny_and_huge_machine(void) {
+    /* 1.*^-300 was 0 (the underflow guard took the zeroth convergent), so the
+     * x term of 1.*^300 + 1.*^-300 x vanished */
+    assert_true("With[{r = Rationalize[1.*^-300, 0]}, r > 0 && N[r] == 1.*^-300]");
+    assert_true("With[{r = Rationalize[1.*^300 + 1.*^-300 x, 0]}, "
+                "FreeQ[r, _Real] && !FreeQ[r, x] && N[Coefficient[r, x]] == 1.*^-300]");
+    /* 1.*^20 and 1.*^300 stayed inexact: integers, held exactly */
+    assert_eval_eq("Rationalize[1.*^20, 0]", "100000000000000000000", 0);
+    assert_true("With[{r = Rationalize[1.*^300, 0]}, IntegerQ[r] && r == SetPrecision[1.*^300, Infinity]]");
+    assert_eval_eq("Rationalize[1.*^20]", "100000000000000000000", 0);
+    assert_eval_eq("Rationalize[1.*^12]", "1000000000000", 0);
+    /* subnormals: nonzero, and strictly within half the (fixed) spacing
+     * 2^-1074 of the value -- checked exactly, since N of a rational that
+     * close to a rounding midpoint is not itself correctly rounded there */
+    assert_true("With[{r = Rationalize[5.*^-324, 0]}, 1/2 < r 2^1074 < 3/2]");
+    assert_true("With[{r = Rationalize[1.5*^-310, 0], k = Round[1.5*^-310/2.^-1074]}, "
+                "r > 0 && Abs[r 2^1074 - k] < 1/2]");
+    assert_true("With[{r = Rationalize[-1.*^-300, 0]}, r < 0 && N[r] == -1.*^-300]");
+}
+
+static void test_exact_round_trip_machine(void) {
+    /* Rationalize[x, 0] rounds back to x, across magnitudes */
+    assert_true("And @@ Table[With[{v = RandomReal[{-1, 1}] 10.^RandomInteger[{-300, 300}]}, "
+                "N[Rationalize[v, 0]] == v], {200}]");
+    /* the short forms are unchanged */
+    assert_eval_eq("Rationalize[N[Pi], 0]", "245850922/78256779", 0);
+    assert_eval_eq("Rationalize[0.1, 0]", "1/10", 0);
+    assert_eval_eq("Rationalize[3.14159, 0]", "314159/100000", 0);
+}
+
+static void test_exact_arbitrary_precision(void) {
+    /* N[Pi, 30] went through a double: accurate to 1e-17 only */
+    assert_true("Abs[N[Pi - Rationalize[N[Pi, 30], 0], 50]] < 10^-29");
+    assert_true("Abs[N[Pi - Rationalize[N[Pi, 60], 0], 80]] < 10^-59");
+    assert_eval_eq("Rationalize[N[1/3, 30], 0]", "1/3", 0);
+    assert_eval_eq("Rationalize[N[22/7, 40], 0]", "22/7", 0);
+    /* default mode at the leaf's own precision: a 7-digit denominator past
+     * the machine noise threshold (k_max ~ 1.7e6), so the machine value is
+     * left alone and the 40-digit one is recovered */
+    assert_eval_eq("Rationalize[N[1234567/7654321, 40]]", "1234567/7654321", 0);
+    assert_true("Head[Rationalize[N[1234567/7654321]]] === Real");
+    assert_true("Precision[Rationalize[N[Pi, 30]]] < Infinity");   /* left alone */
+}
+
+static void test_exact_tolerances(void) {
+    /* a tolerance with a bignum denominator did not evaluate */
+    assert_true("With[{r = Rationalize[N[Pi, 30], 10^-20]}, "
+                "Head[r] === Rational && Abs[N[Pi - r, 40]] <= 10^-20]");
+    assert_true("With[{r = Rationalize[Pi, 10^-30]}, "
+                "Head[r] === Rational && Abs[N[Pi - r, 50]] <= 10^-30]");
+    assert_true("With[{r = Rationalize[Sqrt[2], 10^-25]}, "
+                "Head[r] === Rational && Abs[N[Sqrt[2] - r, 50]] <= 10^-25]");
+    /* an exact bignum went through a double */
+    assert_eval_eq("Rationalize[10^30 + 1, 1/2]", "1000000000000000000000000000001", 0);
+    assert_eval_eq("Rationalize[(10^30 + 1)/3, 0]", "1000000000000000000000000000001/3", 0);
+    assert_eval_eq("Rationalize[7/22, 1/10]", "1/3", 0);
+    assert_eval_eq("Rationalize[Pi, 1/100]", "22/7", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -328,6 +397,10 @@ int main(void) {
     TEST(test_rationalize_protected);
     TEST(test_rationalize_rational_exact_in_zero_mode);
     TEST(test_rationalize_inside_list_with_constants);
+    TEST(test_exact_tiny_and_huge_machine);
+    TEST(test_exact_round_trip_machine);
+    TEST(test_exact_arbitrary_precision);
+    TEST(test_exact_tolerances);
 
     printf("All rationalize_tests passed.\n");
     return 0;

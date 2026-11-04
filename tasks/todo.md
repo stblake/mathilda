@@ -1123,3 +1123,10 @@ Plan: ~/.claude/plans/snappy-sprouting-pie.md
 - [x] tests/test_separable_decomposition.c (10 groups), tests/bench_separable_decomposition.c (nightly; verified to fail on the old code)
 - [x] Docs (simplification.md), changelog, v0.6177; check-messages, check-c99, leaks clean
 - Review: Rationalize defects (drops 1e-300 x beside 1e300; 30-digit Pi → ~1e-17) and Simplify[Sin[p]] > 60 s on the 251-leaf example are existing issues, recorded as follow-ups.
+
+## v0.6178: Rationalize exact core; SeparablePolynomialDecomposition moved to FullSimplify — review
+- [x] Rationalize: every mode in exact GMP arithmetic (tiny/huge/subnormal reals, MPFR precision, bignum tolerances, exact bignums). 4 new test groups in test_rationalize.c.
+- [x] Re-measured the Simplify stage: +26% on the 63-case polynomial corpus (interleaved, 3x each). Removed the C stage; simp_search.c is back to v0.6176.
+- [x] FullSimplify `Separable` transform, memoised per call: 38 leaves on the example, +45% FullSimplify time on polynomials, no measurable cost elsewhere.
+- [x] ctest -LE nightly: 591/593 passed in the loaded run. image_tests and parallelmixedtower_tests hit SIGALRM under machine load (load average ~44); both pass alone, and interleaved old/new image_tests timings show no regression. check-messages, check-c99 and leaks: clean.
+- Open: N of a near-midpoint subnormal rational; SetPrecision[x, Infinity] gives a Real; [Full]Simplify[Sin[p]] slow.

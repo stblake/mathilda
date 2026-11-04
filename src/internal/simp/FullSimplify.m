@@ -134,6 +134,61 @@ WrapLocal[fns_, tLoc_] :=
             Function[e, TimeConstrained[ff[e], tt, e]]]], fns];
 
 (* ---------------------------------------------------------------------- *)
+(* Separable stage. A multivariate polynomial rewritten as a minimal sum of   *)
+(* separable products B[S] Q[T], each factor Factor'd                        *)
+(* (simp/SeparablePolynomialDecomposition.m, loaded at startup):             *)
+(*   FullSimplify[Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)]] *)
+(*     -> -(a - b)^2 (x - y) + (3 a - b)^3 b^3 (1 + x^2 - y)^2  (LeafCount 38;  *)
+(*   Simplify gives 197, Expand and Factor 251).                               *)
+(* It is FullSimplify's, not Simplify's: as a Simplify stage it bought 14%    *)
+(* fewer leaves on a 63-case polynomial corpus for +26% Simplify time (v0.6177; *)
+(* moved here in v0.6178).                                                   *)
+(*                                                                           *)
+(* Which split to use cannot be known in advance, so every unordered split     *)
+(* {S, T} with both sides non-empty is tried, 2^(n-1) - 1 of them, for 2 to 5  *)
+(* variables (6 tripled the time for few leaves). One orientation per split:  *)
+(* the last variable is always in T (both orientations: +8 leaves, +48% time). *)
+(* The gate: the expanded form is an exact sum of at least 4 terms with no     *)
+(* non-integer power, in symbol variables only; inexact input is left alone,  *)
+(* since the decomposition of Rationalize[p, 0] is exact and FullSimplify must *)
+(* not change the precision of what it is given. Only a SUM is offered: a      *)
+(* rank-1 answer is a factorisation, which is Factor's (with Factor's sign     *)
+(* convention, issue #126). Simplify's transformation driver keeps the        *)
+(* candidate only if the whole expression gets strictly simpler.             *)
+(* ---------------------------------------------------------------------- *)
+SepHead = SeparablePolynomialDecomposition`SeparablePolynomialDecomposition;
+
+SepGate[p_] := Head[p] === Plus && Length[p] >= 4 &&
+    FreeQ[p, _?InexactNumberQ] && FreeQ[p, Power[_, q_ /; !IntegerQ[q]]];
+
+SepVars[v_] := 2 <= Length[v] <= 5 && VectorQ[v, (Head[#] === Symbol)&];
+
+(* The split numbered m (1 <= m < 2^(n-1)): S = the variables among the first
+   n - 1 whose bit is set, T = the rest (always holding the last variable). *)
+SepSplit[p_, vars_, m_] :=
+    With[{S = Pick[Most[vars], Reverse[IntegerDigits[m, 2, Length[vars] - 1]], 1]},
+        SepHead[p, S, Complement[vars, S]]];
+
+(* SepBest[p] is memoised per FullSimplify call (Core Blocks SepMemo): the
+   transformation driver re-applies every function after each improvement, and
+   a node whose Expand is unchanged would redo all its splits. *)
+SepBest[p_] := Module[{vars, cands},
+    vars = Variables[p];
+    If[!SepVars[vars], Return[None, Module]];
+    cands = Select[Table[SepSplit[p, vars, m], {m, 2^(Length[vars] - 1) - 1}],
+                   (Head[#] === Plus && FreeQ[#, SepHead])&];
+    If[cands === {}, None, cands[[First[Ordering[Map[SimplifyCount, cands], 1]]]]]
+];
+
+Separable[e_] := Module[{p, r},
+    p = Expand[e];
+    If[!SepGate[p], Return[e, Module]];
+    r = SepMemo[p];
+    If[Head[r] === SepMemo, r = SepBest[p]; SepMemo[p] = r];
+    If[r === None, e, r]
+];
+
+(* ---------------------------------------------------------------------- *)
 (* Consolidation sweep. Simplify only keeps a candidate of STRICTLY lower    *)
 (* complexity, so an identity that merely re-packages an expression at equal *)
 (* complexity (e.g. z Gamma[z] == Gamma[z+1], where both forms have the same *)
@@ -180,9 +235,10 @@ Core[expr_, allOpts_List] := Module[
     (* Relevance-selected identities for the heads present in expr. *)
     relevant = Relevant[expr];
 
-    (* {Automatic, <relevant>, <user-supplied>}: Automatic keeps the entire
-       built-in Simplify pipeline, guaranteeing FullSimplify >= Simplify. *)
-    allTF = Join[{Automatic}, WrapLocal[relevant, tLoc],
+    (* {Automatic, Separable, <relevant>, <user-supplied>}: Automatic keeps the
+       entire built-in Simplify pipeline, guaranteeing FullSimplify >= Simplify;
+       Separable (above) gates itself, so it costs a non-polynomial little. *)
+    allTF = Join[{Automatic}, WrapLocal[Prepend[relevant, Separable], tLoc],
                  WrapLocal[userTF, tLoc]];
 
     (* The positional assumption (if any) is put in force by binding
@@ -204,7 +260,7 @@ Core[expr_, allOpts_List] := Module[
        used (SimplifyCount when ComplexityFunction is Automatic). *)
     score = If[cf === Automatic, SimplifyCount, cf];
 
-    Block[{$Assumptions = $Assumptions && assum},
+    Block[{$Assumptions = $Assumptions && assum, SepMemo},
         (* Total time budget across all transformations. The plain-Simplify
            fallback is the HoldAll-protected third argument of TimeConstrained,
            so it is computed only on timeout -- never doubling work in the

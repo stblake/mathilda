@@ -1012,3 +1012,64 @@ In[8]:= N[Clip[1/11, {1/7, 5}], 50]
 Out[8]= 0.14285714285714285714285714285714285714285714285714
 ```
 
+
+## Rationalize
+
+`Rationalize[x]` converts each approximate number in `x` to a nearby rational
+`p/q`, but only when `|p/q - x| < 10^-4 / q^2`; otherwise the number is left
+alone. `Rationalize[x, dx]` gives the rational with the smallest denominator
+within `dx` of `x`. `Rationalize[x, 0]` converts any approximate number to the
+simplest rational that rounds back to it at its own precision.
+
+**Features**:
+- `Protected`. Threads over the structure of `x` (`Plus`, `Times`, `Complex`,
+  lists, ...); held forms are not entered. In the tolerance and zero forms a
+  numeric quantity (`Pi`, `Sqrt[2]`, `Exp[Sqrt[2]]`) is numericalised and
+  converted as a unit.
+- **Exact arithmetic throughout** (v0.6178). A machine or arbitrary-precision
+  number is a dyadic rational `m 2^e`, and every mode works on that exact value
+  in GMP rationals, so nothing rounds:
+  - every magnitude is handled, from subnormals to `1.*^308`; a number whose unit
+    in the last place is at least 1 is an integer and is returned exactly;
+  - an arbitrary-precision number keeps its own precision:
+    `Rationalize[N[Pi, 30], 0]` is within `2 10^-30` of `Pi`;
+  - the tolerance may be any exact or approximate number, bignum denominators
+    included (`Rationalize[N[Pi, 30], 10^-20]`). When it is finer than a machine
+    number resolves, a numeric quantity is numericalised at enough precision to
+    meet it (`Rationalize[Sqrt[2], 10^-30]`);
+  - exact numbers are converted exactly in the tolerance form
+    (`Rationalize[10^30 + 1, 1/2]`) and unchanged otherwise.
+- **`dx = 0`.** The answer is the simplest rational strictly inside the rounding
+  interval of `x`: half the gap to each neighbouring number, where the gap below
+  a power of two is half the gap above, and the endpoints are excluded because a
+  value exactly halfway may round to the neighbour.
+- **No tolerance.** The continued-fraction convergents of the exact value are
+  walked until the denominator passes the noise threshold
+  `sqrt(10^-4 / (eps |x|))`, `eps = 2^(1 - precision)`; past it a "match" is an
+  artefact of the last bits. So `N[Pi]` is left alone, and `N[1234567/7654321,
+  40]` is recovered while its machine value is not. The integer convergent is
+  always eligible (`Rationalize[1.*^12]` is `1000000000000`).
+- A non-numeric or negative tolerance leaves the call unevaluated.
+
+```mathematica
+In[1]:= Rationalize[6.75]
+Out[1]= 27/4
+
+In[2]:= Rationalize[N[Pi]]
+Out[2]= 3.14159
+
+In[3]:= Rationalize[N[Pi], 0]
+Out[3]= 245850922/78256779
+
+In[4]:= Rationalize[Pi, 1/100]
+Out[4]= 22/7
+
+In[5]:= Rationalize[1.2 + 6.7 x]
+Out[5]= 6/5 + (67 x)/10
+
+In[6]:= N[Pi - Rationalize[N[Pi, 30], 0], 5]
+Out[6]= -1.4066*10^-30
+
+In[7]:= Rationalize[1.*^20, 0]
+Out[7]= 100000000000000000000
+```

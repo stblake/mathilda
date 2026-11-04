@@ -1,12 +1,11 @@
 (* ====================================================================== *)
 (* SeparablePolynomialDecomposition.m -- minimal sum of separable products. *)
 (*                                                                          *)
-(* Loaded lazily by Simplify's polynomial pipeline (try_separable_decomp in *)
-(* src/simp/simp_search.c) the first time it sees a polynomial in two or    *)
-(* more variables; it can also be loaded by hand with                       *)
-(* LoadModule["simp/SeparablePolynomialDecomposition.m"].  Simplify tries    *)
-(* every bipartition {S, T} of the variables and keeps the decomposition     *)
-(* only when it is STRICTLY simpler than Expand / Factor / FactorTerms.      *)
+(* Loaded at startup by core_init, beside FullSimplify.m.  FullSimplify's    *)
+(* Separable transformation (simp/FullSimplify.m) tries every bipartition   *)
+(* {S, T} of a polynomial's variables and keeps the decomposition only when  *)
+(* the whole expression gets STRICTLY simpler.  (It was a Simplify stage in   *)
+(* v0.6177; it cost Simplify 26% on polynomial input, so it moved.)          *)
 (* ====================================================================== *)
 
 BeginPackage["SeparablePolynomialDecomposition`"];
@@ -45,16 +44,17 @@ expr : polynomial
     ``Factor[B1] Factor[Q1] + ... + Factor[Br] Factor[Qr]``.
     ``0`` when ``p`` is zero.  $Failed when ``p`` is not a polynomial in
     ``Join[S, T]`` or when ``S`` and ``T`` are not disjoint, non-empty lists
-    (the Simplify stage then declines).
+    (the FullSimplify stage then declines).
 
 Inexact input
 -------------
 A ``p`` with inexact (machine or arbitrary-precision) numbers is first
 rationalised with ``Rationalize[p, 0]`` and the exact form decomposed (the
 result is then exact).  If inexact numbers survive ``Rationalize``, ``p``
-itself is returned unchanged.  Simplify does not use this path: its stage
-gates on exact input, so Simplify never changes the precision of an
-inexact expression.
+itself is returned unchanged (only possible inside a held form, which
+Rationalize does not enter).  FullSimplify does not use this path: its stage
+gates on exact input, so it never changes the precision of an inexact
+expression.
 
 Notes
 -----

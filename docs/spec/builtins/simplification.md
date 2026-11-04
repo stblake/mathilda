@@ -113,16 +113,6 @@ Out[7]= {1, 1}
 Beyond the generic algebraic transforms, `Simplify` reaches a number of
 canonical forms that the generic pipeline alone does not:
 
-- **Separable sums of products** — after Factor and FactorTerms, a polynomial
-  in 2–5 variables with exact coefficients and at least 4 terms is offered
-  `SeparablePolynomialDecomposition` over every unordered split of its variables
-  (2^(n−1) − 1 of them). The candidate is kept only if it is a sum (rank ≥ 2)
-  and *strictly* cheaper. A rank-1 answer is a factorisation and stays with
-  Factor's sign convention, and Factor keeps its ties. Example:
-  `Simplify[Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)]]` is
-  `(3 a - b)^3 b^3 (1 + x^2 - y)^2 + (a - b)^2 (-x + y)` (LeafCount 251 → 38).
-  An inexact polynomial benefits through Simplify's usual rationalise-and-restore
-  wrapper, and keeps its precision.
 - **Cross-base radical fusion** — distinct positive-integer radicals sharing an
   exponent are combined inside a `Times`.
 - **Roots of unity** — `(-1)^(p/q)` and `E^(I p Pi/q)` atoms are reduced modulo
@@ -562,6 +552,16 @@ sign (`Log[2 Sec[x] - 2 Tan[x]] -> Log[2] - ArcTanh[Sin[x]]`), matching whicheve
 factored or distributed form the pipeline produces; a symbolic or negative
 coefficient, or an unequal pair, is left untouched (no branch is crossed).
 
+One transformation is always passed, whatever the heads: the **separable
+stage** (v0.6178), which offers a multivariate exact polynomial as a minimal sum
+of separable products through `SeparablePolynomialDecomposition` (see its
+section). `FullSimplify[Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x -
+y)]]` is `-(a - b)^2 (x - y) + (3 a - b)^3 b^3 (1 + x^2 - y)^2` (LeafCount 38;
+`Simplify` gives 197). It gates itself on the expanded form (exact, 2–5 symbol
+variables, at least 4 terms, integer powers only) and memoises per call, so
+non-polynomial input pays nothing measurable; on a 63-case polynomial corpus it
+saves 14% of leaves for +45% FullSimplify time.
+
 **Options** (in addition to the positional assumption):
 - `ComplexityFunction -> f` — custom complexity measure (forwarded to `Simplify`).
 - `TransformationFunctions -> {f1, ...}` — extra user transforms, merged with the
@@ -659,14 +659,25 @@ Rewrites a polynomial as a minimal-length sum of separable products.
 - `0` gives `0`. A non-polynomial `p`, an empty or overlapping `S`/`T`, or a
   non-list block gives `$Failed`.
 - **Inexact input** is rationalised with `Rationalize[p, 0]` and the exact form is
-  decomposed, so the answer is exact. If inexact numbers survive `Rationalize`,
+  decomposed, so the answer is exact. If inexact numbers survive `Rationalize`
+  (only possible inside a held form, which `Rationalize` does not enter),
   `p` is returned unchanged.
 - Cost is dominated by `CoefficientRules` and by `RowReduce` on an `m × n`
   rational matrix (`m`, `n` = the numbers of distinct `T`- and `S`-monomials).
   The 27225-term dense rank-1 `Expand[(1 + a + b + c)^8 (1 + x + y + z)^8]`
   takes about 1.3 s, and a rank-32, 11297-term sum about 0.45 s.
-- `Simplify` calls it for polynomials (see *Specialised transformations*). Gated
-  by `tests/bench_separable_decomposition.c` (normalised cost and
+- **`FullSimplify` stage** (not `Simplify`'s). `FullSimplify` passes a
+  transformation function to Simplify that offers it for each exact polynomial
+  (sub)expression in 2–5 variables with at least 4 terms after `Expand`, over
+  every unordered split of its variables (2^(n−1) − 1 of them, one orientation
+  each). The candidate is kept only if it is a sum (rank ≥ 2) and the whole
+  expression gets *strictly* cheaper, so a rank-1 answer (a factorisation) keeps
+  Factor's sign convention and Factor keeps its ties. Example:
+  `FullSimplify[Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)]]` is
+  `-(a - b)^2 (x - y) + (3 a - b)^3 b^3 (1 + x^2 - y)^2` (LeafCount 38; Simplify
+  gives 197). In v0.6177 it was a Simplify stage; it cost Simplify
+  26% on polynomial input, so it moved.
+- Gated by `tests/bench_separable_decomposition.c` (normalised cost and
   doubling-ratio gates).
 
 ```mathematica

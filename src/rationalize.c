@@ -201,289 +201,287 @@ static Expr* expr_from_mpz_rational(const mpz_t n, const mpz_t d) {
 }
 
 /* ------------------------------------------------------------------------
- *  Default-mode rationalisation: convergents with the c/q^2 bound.
+ *  The exact core.
  *
- *  Walk the continued fraction of |x|, compute successive convergents
- *  h_n / k_n, and return the first one with |h/k - x| < 10^-4 / k^2.
+ *  Every mode works on the EXACT value of the number, in GMP rationals.
+ *  A double or an MPFR value is a dyadic rational m 2^e, so nothing is lost
+ *  by converting it, and nothing below ever rounds.  The earlier core ran
+ *  its continued fractions in doubles, and that broke at both ends of the
+ *  range and at every precision above machine:
  *
- *  We stop the CF expansion at a generous depth; for double-precision
- *  inputs nothing useful comes out past ~50 partial quotients. If none
- *  satisfies the bound, return false so the caller can leave x alone.
+ *    - Rationalize[1.*^-300, 0] was 0 -- the fractional-part underflow
+ *      guard (frac <= 1e-300) accepted the zeroth convergent 0/1 -- so
+ *      Rationalize[1.*^300 + 1.*^-300 x, 0] dropped the x term;
+ *    - Rationalize[1.*^20, 0] and Rationalize[1.*^300, 0] stayed inexact
+ *      (a partial quotient above 1e18 aborted the walk);
+ *    - Rationalize[N[Pi, 30], 0] was accurate to 1e-17 only (the MPFR value
+ *      was read through a double), and Rationalize[N[Pi, 30], 10^-20] did
+ *      not evaluate at all (a tolerance with a bignum denominator was not
+ *      read);
+ *    - Rationalize[10^30 + 1, 1/2] went through a double as well.
+ *
+ *  The precision of a leaf is its own: 53 bits for a machine real, the MPFR
+ *  precision otherwise.
  * ---------------------------------------------------------------------- */
-static bool rationalize_default_double(double x, mpz_t out_n, mpz_t out_d) {
-    if (!isfinite(x)) return false;
 
-    const double C = 1.0e-4;
-    const int    MAX_TERMS = 64;       /* plenty for double precision */
-    const double TINY      = 1.0e-300; /* fractional-part underflow guard */
+/* Simplest rational (smallest denominator) in the closed interval
+ * [lo, hi], 0 < lo <= hi, by the continued-fraction descent: take the
+ * integer part a of lo; stop at lo itself if it is an integer, or at a + 1
+ * if that lies in the interval; otherwise recurse on (1/(hi-a), 1/(lo-a)).
+ * The convergent recurrence accumulates the answer.  `lo` and `hi` are
+ * clobbered. */
+static void simplest_rational_between(mpq_t lo, mpq_t hi, mpz_t num, mpz_t den) {
+    mpz_t a, h0, h1, k0, k1, t;
+    mpz_inits(a, h0, h1, k0, k1, t, NULL);
+    mpz_set_ui(h0, 0); mpz_set_ui(h1, 1);       /* h_{-2}, h_{-1} */
+    mpz_set_ui(k0, 1); mpz_set_ui(k1, 0);       /* k_{-2}, k_{-1} */
+    mpq_t q;
+    mpq_init(q);
+    for (;;) {
+        mpz_fdiv_q(a, mpq_numref(lo), mpq_denref(lo));
+        bool done = false;
+        if (mpz_cmp_ui(mpq_denref(lo), 1) == 0) {
+            done = true;                                   /* lo is an integer */
+        } else {
+            mpq_set_z(q, a);
+            mpz_add_ui(mpq_numref(q), mpq_numref(q), 1);   /* q = a + 1 */
+            if (mpq_cmp(q, hi) <= 0) { mpz_add_ui(a, a, 1); done = true; }
+        }
+        /* h = a h1 + h0, k = a k1 + k0 */
+        mpz_mul(t, a, h1); mpz_add(t, t, h0); mpz_set(h0, h1); mpz_set(h1, t);
+        mpz_mul(t, a, k1); mpz_add(t, t, k0); mpz_set(k0, k1); mpz_set(k1, t);
+        if (done) break;
+        mpq_set_z(q, a);
+        mpq_sub(lo, lo, q);                        /* lo - a > 0 */
+        mpq_sub(hi, hi, q);                        /* hi - a >= lo - a */
+        mpq_inv(q, hi);
+        mpq_inv(hi, lo);
+        mpq_set(lo, q);
+    }
+    mpz_set(num, h1);
+    mpz_set(den, k1);
+    mpq_clear(q);
+    mpz_clears(a, h0, h1, k0, k1, t, NULL);
+}
 
-    int sign = (x < 0.0) ? -1 : 1;
-    double ax = fabs(x);
+/* The simplest rational with magnitude in [|x| - wlo, |x| + whi] (wlo, whi
+ * >= 0), with the sign of x, into the initialised (num, den).  An interval
+ * holding 0 answers 0. */
+static void rz_simplest_around2(const mpq_t x, const mpq_t wlo, const mpq_t whi,
+                                mpz_t num, mpz_t den) {
+    mpq_t lo, hi;
+    mpq_inits(lo, hi, NULL);
+    mpq_abs(lo, x);
+    mpq_set(hi, lo);
+    mpq_sub(lo, lo, wlo);
+    mpq_add(hi, hi, whi);
+    if (mpq_sgn(lo) <= 0) {
+        mpz_set_ui(num, 0);
+        mpz_set_ui(den, 1);
+    } else {
+        simplest_rational_between(lo, hi, num, den);
+        if (mpq_sgn(x) < 0) mpz_neg(num, num);
+    }
+    mpq_clears(lo, hi, NULL);
+}
 
-    /* Past a certain denominator the floating-point noise of x dominates
-     * the c/q^2 bound — every "convergent" produced from there on is
-     * really an artefact of the input's last bits, not a true Diophantine
-     * approximation. The natural cutoff is q_max = sqrt(C / eps_x), where
-     * eps_x is the relative precision of x. For an IEEE double that's
-     * about sqrt(1e-4 / 2.22e-16) ≈ 2.12e6.
-     *
-     * Without this cap, Rationalize[N[Pi]] would happily report a deep
-     * convergent whose "matching" comes entirely from double-precision
-     * round-off rather than any genuine smallness of the next CF
-     * coefficient — Mathematica's behaviour is to leave N[Pi] unchanged. */
-    /* The noise is relative to |x|, so the cap scales with it: a fixed
-     * 2.5e6 (right for |x| ~ 1) refused Rationalize[1.*^-8] -> 1/100000000. */
-    const double k_max = (ax > 0.0) ? sqrt(C / (DBL_EPSILON * ax)) : 2.5e6;
+static void rz_simplest_around(const mpq_t x, const mpq_t w, mpz_t num, mpz_t den) {
+    rz_simplest_around2(x, w, w, num, den);
+}
 
-    /* CF state. h0/k0 = current convergent; h1/k1 = previous. */
-    mpz_t h0, h1, k0, k1, h, k;
-    mpz_init_set_ui(h0, 1); mpz_init_set_ui(h1, 0);
-    mpz_init_set_ui(k0, 0); mpz_init_set_ui(k1, 1);
-    mpz_init(h); mpz_init(k);
+/* log2 of a positive mpz, to double accuracy, at any magnitude. */
+static double rz_log2_z(const mpz_t z) {
+    long e;
+    double d = mpz_get_d_2exp(&e, z);
+    return log2(d) + (double)e;
+}
 
-    double xi = ax;
+/* Rationalize[x] with no tolerance: the first continued-fraction
+ * convergent h/k of |x| with |h/k - x| < 10^-4 / k^2, walked exactly.
+ * The walk stops once k passes the noise threshold
+ * k_max = sqrt(10^-4 / (eps |x|)), eps = 2^(1 - prec): past it a
+ * convergent's "match" is an artefact of the last bits of x, not a genuine
+ * Diophantine approximation (so N[Pi] is left alone, as in the reference).
+ * The integer convergent (k = 1) is always eligible: Rationalize[1.*^12] is
+ * 1000000000000 even though k_max < 1 there.  A zero convergent never
+ * stands for a nonzero x (Rationalize[0.000001] is not 0).  Returns false
+ * when no convergent qualifies. */
+static bool rz_default(const mpq_t x, long prec, mpz_t num, mpz_t den) {
+    if (mpq_sgn(x) == 0) { mpz_set_ui(num, 0); mpz_set_ui(den, 1); return true; }
+    mpz_t A, B, a, r, h0, h1, k0, k1, t, u;
+    mpz_inits(A, B, a, r, h0, h1, k0, k1, t, u, NULL);
+    mpz_abs(A, mpq_numref(x));
+    mpz_set(B, mpq_denref(x));
+    mpz_t XA, XB;                                /* |x| = XA / XB, kept */
+    mpz_init_set(XA, A);
+    mpz_init_set(XB, B);
+    const double log2_kmax = 0.5 * (log2(1.0e-4) - (double)(1 - prec)
+                                    - (rz_log2_z(XA) - rz_log2_z(XB)));
+    mpz_set_ui(h0, 0); mpz_set_ui(h1, 1);        /* h_{-2}, h_{-1} */
+    mpz_set_ui(k0, 1); mpz_set_ui(k1, 0);        /* k_{-2}, k_{-1} */
     bool found = false;
-
-    for (int i = 0; i < MAX_TERMS; i++) {
-        if (!isfinite(xi)) break;
-        double a_double = floor(xi);
-        if (a_double < 0 || a_double > 1.0e18) break;  /* sanity */
-        unsigned long a = (unsigned long)a_double;
-
-        /* h_n = a * h_{n-1} + h_{n-2}; same for k. */
-        mpz_mul_ui(h, h0, a);
-        mpz_add(h, h, h1);
-        mpz_mul_ui(k, k0, a);
-        mpz_add(k, k, k1);
-
-        /* Bound check: |h/k - ax| < C / k^2, only meaningful while
-         * k stays below the precision-noise threshold. */
-        double k_d = mpz_get_d(k);
-        double h_d = mpz_get_d(h);
-        if (k_d > k_max) break;
-        double err = fabs(h_d / k_d - ax);
-        /* A zero convergent never stands for a nonzero x: for |x| < 1e-4
-         * the first convergent 0/1 meets the bound, and Rationalize
-         * [0.000001] (and with it Factor[x - 0.000001]) returned 0. */
-        if (k_d > 0 && h_d > 0 && err < C / (k_d * k_d)) {
-            found = true;
-            break;
+    while (mpz_sgn(B) != 0) {
+        mpz_fdiv_qr(a, r, A, B);                 /* A/B = a + r/B */
+        mpz_mul(t, a, h1); mpz_add(t, t, h0); mpz_set(h0, h1); mpz_set(h1, t);
+        mpz_mul(t, a, k1); mpz_add(t, t, k0); mpz_set(k0, k1); mpz_set(k1, t);
+        if (mpz_cmp_ui(k1, 1) > 0 && rz_log2_z(k1) > log2_kmax) break;
+        if (mpz_sgn(h1) > 0) {
+            /* |h/k - XA/XB| < 1/(10^4 k^2)  <=>  |h XB - k XA| k 10^4 < XB */
+            mpz_mul(t, h1, XB);
+            mpz_mul(u, k1, XA);
+            mpz_sub(t, t, u);
+            mpz_abs(t, t);
+            mpz_mul(t, t, k1);
+            mpz_mul_ui(t, t, 10000);
+            if (mpz_cmp(t, XB) < 0) { found = true; break; }
         }
-
-        /* Advance: h1 ← h0, h0 ← h, similarly for k. */
-        mpz_set(h1, h0); mpz_set(h0, h);
-        mpz_set(k1, k0); mpz_set(k0, k);
-
-        /* Continued-fraction step: xi ← 1 / (xi - a). */
-        double frac = xi - a_double;
-        if (frac <= TINY) {
-            /* Exact CF termination — value is rational at h0/k0. Check
-             * the bound on h0/k0. */
-            double k0d = mpz_get_d(k0);
-            double h0d = mpz_get_d(h0);
-            double err0 = fabs(h0d / k0d - ax);
-            if (k0d > 0 && h0d > 0 && err0 < C / (k0d * k0d)) {
-                mpz_set(h, h0);
-                mpz_set(k, k0);
-                found = true;
-            }
-            break;
-        }
-        xi = 1.0 / frac;
+        mpz_set(A, B);
+        mpz_set(B, r);
     }
-
     if (found) {
-        mpz_init_set(out_n, h);
-        if (sign < 0) mpz_neg(out_n, out_n);
-        mpz_init_set(out_d, k);
+        mpz_set(num, h1);
+        if (mpq_sgn(x) < 0) mpz_neg(num, num);
+        mpz_set(den, k1);
     }
-
-    mpz_clear(h0); mpz_clear(h1); mpz_clear(k0); mpz_clear(k1);
-    mpz_clear(h);  mpz_clear(k);
+    mpz_clears(A, B, a, r, h0, h1, k0, k1, t, u, XA, XB, NULL);
     return found;
 }
 
-/* ------------------------------------------------------------------------
- *  Tolerance-mode rationalisation: simplest rational in [lo, hi].
- *
- *  Classical recursive descent on the continued fraction of the interval.
- *  At each step we extract floor(lo) and floor(hi):
- *
- *    - If they differ, an integer lies in (lo, hi] — return it.
- *    - If lo is itself an integer and lies in [lo, hi] — return it.
- *    - Otherwise both have the same floor a; recurse on (1/(hi-a), 1/(lo-a))
- *      and combine: result = a + 1/sub.
- *
- *  Implemented iteratively with a stack of integer parts, then unwound in
- *  reverse to assemble the resulting fraction.
- *
- *  The caller passes lo, hi in any order and possibly negative; the helper
- *  normalises to lo < hi and assumes positive operands at the top level.
- * ---------------------------------------------------------------------- */
-static void rationalize_interval(double lo, double hi, mpz_t out_n, mpz_t out_d) {
-    if (lo > hi) { double t = lo; lo = hi; hi = t; }
-
-    /* Sign: factor it out, work on positive interval. */
-    int sign = 1;
-    if (hi < 0) {
-        sign = -1;
-        double t = lo; lo = -hi; hi = -t;
-    }
-
-    /* If 0 ∈ [lo, hi], the simplest rational is 0. */
-    if (lo <= 0.0) {
-        mpz_init_set_ui(out_n, 0);
-        mpz_init_set_ui(out_d, 1);
-        return;
-    }
-
-    /* Stack of CF integer parts. 64 deep is comfortably more than enough
-     * for any double-precision interval. */
-    unsigned long a_stack[80];
-    int           depth = 0;
-    const int     MAX_DEPTH = 80;
-    const double  HUGE_FLOOR = 1.0e18;  /* sanity ceiling */
-
-    while (depth < MAX_DEPTH) {
-        double f_lo = floor(lo);
-        double f_hi = floor(hi);
-        if (f_lo > HUGE_FLOOR || f_hi > HUGE_FLOOR) break;
-
-        if (f_lo != f_hi || lo == f_lo) {
-            /* Smallest integer ≥ lo, but strictly: any integer in [lo, hi].
-             * If lo is itself integer, it's the answer; otherwise pick
-             * f_lo + 1 (which equals f_hi when they differ). */
-            unsigned long a = (lo == f_lo) ? (unsigned long)f_lo
-                                            : (unsigned long)f_lo + 1UL;
-            mpz_init_set_ui(out_n, a);
-            mpz_init_set_ui(out_d, 1);
-            /* Unwind the stack: at each level, replace (n, d) by
-             * (a_i * n + d, n). */
-            for (int i = depth - 1; i >= 0; i--) {
-                mpz_t newn;
-                mpz_init(newn);
-                mpz_mul_ui(newn, out_n, a_stack[i]);
-                mpz_add(newn, newn, out_d);
-                mpz_swap(out_d, out_n);   /* d ← old n */
-                mpz_swap(out_n, newn);    /* n ← a*old_n + old_d */
-                mpz_clear(newn);
-            }
-            if (sign < 0) mpz_neg(out_n, out_n);
-            return;
+/* One number, exactly: its value `x`, and for an inexact one its precision
+ * in bits and the exponents of the gaps to its neighbours: the next larger
+ * magnitude is 2^ulp_e away, the next smaller 2^ulp_lo_e (half as far when
+ * |x| is a power of two, except among the subnormals, whose spacing is
+ * fixed).  Exact numbers (Integer, BigInt, Rational with any size of parts)
+ * report prec = 0.  False for anything that is not a finite number. */
+static bool rz_number2(const Expr* e, mpq_t x, long* prec, long* ulp_e, long* ulp_lo_e) {
+    long dummy;
+    if (!ulp_lo_e) ulp_lo_e = &dummy;
+    *prec = 0;
+    *ulp_e = 0;
+    *ulp_lo_e = 0;
+    switch (e->type) {
+        case EXPR_INTEGER: mpq_set_si(x, (long)e->data.integer, 1UL); return true;
+        case EXPR_BIGINT:  mpq_set_z(x, e->data.bigint);              return true;
+        case EXPR_REAL: {
+            double v = e->data.real;
+            if (!isfinite(v)) return false;
+            mpq_set_d(x, v);                       /* exact */
+            int E = 0;
+            if (v != 0.0) (void)frexp(v, &E);      /* |v| = f 2^E, f in [1/2, 1) */
+            const long umin = DBL_MIN_EXP - DBL_MANT_DIG;   /* subnormal spacing */
+            long ue = (long)E - DBL_MANT_DIG;
+            if (ue < umin) ue = umin;
+            long le = ue;
+            if (v != 0.0 && fabs(v) == ldexp(1.0, E - 1) && ue - 1 >= umin) le = ue - 1;
+            *prec = DBL_MANT_DIG;
+            *ulp_e = ue;
+            *ulp_lo_e = le;
+            return true;
         }
-
-        /* Same floor a — descend. lo' = 1 / (hi - a), hi' = 1 / (lo - a). */
-        unsigned long a = (unsigned long)f_lo;
-        a_stack[depth++] = a;
-        double new_lo = 1.0 / (hi - f_lo);
-        double new_hi = 1.0 / (lo - f_lo);
-        lo = new_lo;
-        hi = new_hi;
-        /* If reciprocation overflowed (lo == f_lo) we'd be stuck; bail. */
-        if (!isfinite(lo) || !isfinite(hi)) break;
+#ifdef USE_MPFR
+        case EXPR_MPFR: {
+            mpfr_srcptr v = e->data.mpfr;
+            if (!mpfr_number_p(v)) return false;
+            *prec = (long)mpfr_get_prec(v);
+            if (mpfr_zero_p(v)) { mpq_set_ui(x, 0, 1); return true; }
+            mpz_t m;
+            mpz_init(m);
+            mpfr_exp_t ex = mpfr_get_z_2exp(m, v);   /* v = m 2^ex, m has prec bits */
+            mpz_abs(m, m);
+            *ulp_lo_e = (mpz_popcount(m) == 1) ? (long)ex - 1 : (long)ex;
+            if (mpfr_sgn(v) < 0) mpz_neg(m, m);
+            mpq_set_z(x, m);
+            if (ex >= 0) mpq_mul_2exp(x, x, (mp_bitcnt_t)ex);
+            else         mpq_div_2exp(x, x, (mp_bitcnt_t)(-ex));
+            mpz_clear(m);
+            *ulp_e = (long)ex;
+            return true;
+        }
+#endif
+        case EXPR_FUNCTION:
+            if (is_rational_like(e)) {
+                mpz_t n, d;
+                mpz_inits(n, d, NULL);
+                expr_to_mpz(e->data.function.args[0], n);
+                expr_to_mpz(e->data.function.args[1], d);
+                bool ok = mpz_sgn(d) != 0;
+                if (ok) {
+                    mpz_set(mpq_numref(x), n);
+                    mpz_set(mpq_denref(x), d);
+                    mpq_canonicalize(x);
+                }
+                mpz_clears(n, d, NULL);
+                return ok;
+            }
+            return false;
+        default:
+            return false;
     }
-
-    /* Fallback: depth exceeded or pathology. Return 0/1 — should be
-     * unreachable in practice for sane inputs. */
-    mpz_init_set_ui(out_n, 0);
-    mpz_init_set_ui(out_d, 1);
 }
 
-/* ------------------------------------------------------------------------
- *  Zero-tolerance rationalisation: walk convergents in GMP.
- *
- *  The interval-based algorithm above relies on doubles for its lo/hi
- *  bookkeeping, and at very tight tolerances (e.g. dx ≈ ½ ulp) the
- *  intermediate `hi - f_lo` losses precision long before the deep
- *  convergent that Mathematica picks (depth ~15 for π). For dx = 0 we
- *  walk continued-fraction convergents directly with mpz arithmetic,
- *  testing each against an ulp-derived tolerance.
- * ---------------------------------------------------------------------- */
-static bool rationalize_zero_double(double x, mpz_t out_n, mpz_t out_d) {
-    if (x == 0.0) {
-        mpz_init_set_ui(out_n, 0);
-        mpz_init_set_ui(out_d, 1);
+static bool rz_number(const Expr* e, mpq_t x, long* prec, long* ulp_e) {
+    return rz_number2(e, x, prec, ulp_e, NULL);
+}
+
+/* The rationalised value of the number `x` (precision `prec`, ulp 2^ulp_e;
+ * prec == 0 for an exact one) into the initialised (num, den), in `mode`
+ * with tolerance `dx` (TOLERANCE only).  False only in DEFAULT mode, when
+ * no convergent qualifies and the caller keeps the leaf. */
+static bool rz_core(const mpq_t x, long prec, long ulp_e, long ulp_lo_e,
+                    RationalizeMode mode, const mpq_t dx, mpz_t num, mpz_t den) {
+    if (mode == RATIONALIZE_TOLERANCE) {
+        rz_simplest_around(x, dx, num, den);
         return true;
     }
-    if (!isfinite(x)) return false;
-
-    /* Tolerance: ½ ulp(x). Anything within this band rounds back to x in
-     * IEEE-754, so it's the natural definition of "the same number". */
-    double abx = fabs(x);
-    double up = nextafter(abx, INFINITY);
-    double dn = nextafter(abx, 0.0);
-    double tol = 0.25 * (up - dn);            /* ≈ ½ ulp */
-    if (tol <= 0.0) tol = abx * DBL_EPSILON * 0.5;
-
-    int sign = (x < 0.0) ? -1 : 1;
-    double xi = abx;
-
-    mpz_t h0, h1, k0, k1, h, k;
-    mpz_init_set_ui(h0, 1); mpz_init_set_ui(h1, 0);
-    mpz_init_set_ui(k0, 0); mpz_init_set_ui(k1, 1);
-    mpz_init(h); mpz_init(k);
-
-    bool found = false;
-    const int    MAX_TERMS = 80;
-    const double TINY      = 1.0e-300;
-
-    for (int i = 0; i < MAX_TERMS; i++) {
-        if (!isfinite(xi)) break;
-        double a_double = floor(xi);
-        if (a_double < 0 || a_double > 1.0e18) break;
-        unsigned long a = (unsigned long)a_double;
-
-        mpz_mul_ui(h, h0, a);  mpz_add(h, h, h1);
-        mpz_mul_ui(k, k0, a);  mpz_add(k, k, k1);
-
-        double k_d = mpz_get_d(k);
-        double h_d = mpz_get_d(h);
-        double err = fabs(h_d / k_d - abx);
-        if (err <= tol) {
-            found = true;
-            break;
-        }
-
-        mpz_set(h1, h0); mpz_set(h0, h);
-        mpz_set(k1, k0); mpz_set(k0, k);
-
-        double frac = xi - a_double;
-        if (frac <= TINY) {
-            /* Exact rational reached at h0/k0 — accept it. */
-            mpz_set(h, h0); mpz_set(k, k0);
-            found = true;
-            break;
-        }
-        xi = 1.0 / frac;
+    /* An exact number is already rational; so is an inexact one whose ulp
+     * is at least 1 (every such value is an integer, held exactly). */
+    if (prec == 0 || ulp_e >= 0 || mpq_sgn(x) == 0) {
+        mpz_set(num, mpq_numref(x));
+        mpz_set(den, mpq_denref(x));
+        return true;
     }
-
-    if (found) {
-        mpz_init_set(out_n, h);
-        if (sign < 0) mpz_neg(out_n, out_n);
-        mpz_init_set(out_d, k);
-    }
-
-    mpz_clear(h0); mpz_clear(h1); mpz_clear(k0); mpz_clear(k1);
-    mpz_clear(h);  mpz_clear(k);
-    return found;
+    if (mode == RATIONALIZE_DEFAULT) return rz_default(x, prec, num, den);
+    /* ZERO: the simplest rational that rounds back to x at its own precision
+     * (so it is "the same number"): strictly within half the gap to each
+     * neighbour.  Open at both ends, since a value exactly halfway may round
+     * to the neighbour (ties to even: 1.5 2^-1074 is 2^-1073), and the gap
+     * below a power of two is half the gap above.  Shrinking each width by
+     * 2^-64 of itself makes the closed search interval an open one. */
+    mpq_t wlo, whi, t;
+    mpq_inits(wlo, whi, t, NULL);
+    mpq_set_ui(whi, 1, 1);
+    mpq_div_2exp(whi, whi, (mp_bitcnt_t)(1 - ulp_e));      /* 2^(ulp_e - 1) */
+    mpq_set_ui(wlo, 1, 1);
+    mpq_div_2exp(wlo, wlo, (mp_bitcnt_t)(1 - ulp_lo_e));   /* 2^(ulp_lo_e - 1) */
+    mpq_div_2exp(t, whi, 64); mpq_sub(whi, whi, t);
+    mpq_div_2exp(t, wlo, 64); mpq_sub(wlo, wlo, t);
+    rz_simplest_around2(x, wlo, whi, num, den);
+    mpq_clears(wlo, whi, t, NULL);
+    return true;
 }
 
 /* ------------------------------------------------------------------------
- *  Public core: dispatch on mode.
+ *  Public core: one double.
  * ---------------------------------------------------------------------- */
 bool internal_rationalize_double(double x, double dx, RationalizeMode mode,
                                  mpz_t out_n, mpz_t out_d) {
     if (!isfinite(x)) return false;
-
-    if (mode == RATIONALIZE_DEFAULT) {
-        return rationalize_default_double(x, out_n, out_d);
-    }
-    if (mode == RATIONALIZE_ZERO) {
-        return rationalize_zero_double(x, out_n, out_d);
-    }
-    if (dx < 0.0) dx = -dx;
-    rationalize_interval(x - dx, x + dx, out_n, out_d);
-    return true;
+    if (mode == RATIONALIZE_TOLERANCE && !isfinite(dx)) return false;
+    Expr leaf;
+    memset(&leaf, 0, sizeof leaf);
+    leaf.type = EXPR_REAL;
+    leaf.data.real = x;
+    mpq_t q, w;
+    mpq_inits(q, w, NULL);
+    long prec, ulp_e, ulp_lo_e;
+    (void)rz_number2(&leaf, q, &prec, &ulp_e, &ulp_lo_e);
+    mpq_set_d(w, fabs(dx));
+    mpz_init(out_n);
+    mpz_init(out_d);
+    bool ok = rz_core(q, prec, ulp_e, ulp_lo_e, mode, w, out_n, out_d);
+    if (!ok) { mpz_clear(out_n); mpz_clear(out_d); }
+    mpq_clears(q, w, NULL);
+    return ok;
 }
 
 /* ------------------------------------------------------------------------
@@ -492,33 +490,58 @@ bool internal_rationalize_double(double x, double dx, RationalizeMode mode,
 
 /* Convert a numeric leaf to its rationalised form. On success returns a
  * fresh Expr (Integer or Rational[n,d]); on failure returns NULL meaning
- * "leave the leaf as-is". */
-static Expr* rationalize_number_leaf(const Expr* e, double dx, RationalizeMode mode) {
-    double xv;
-    if (!extract_double(e, &xv)) return NULL;
-
-    /* In default mode, exact numbers (Integer, BigInt, Rational) are
-     * returned unchanged — only inexact (Real / MPFR) gets rewritten. */
-    if (mode == RATIONALIZE_DEFAULT && !is_inexact_leaf(e)) {
+ * "leave the leaf as-is".  In DEFAULT mode an exact number is returned
+ * unchanged; in ZERO mode too (it is its own exact value). */
+static Expr* rationalize_number_leaf(const Expr* e, const mpq_t dx, RationalizeMode mode) {
+    if (mode != RATIONALIZE_TOLERANCE && !is_inexact_leaf(e)) {
         return expr_copy((Expr*)e);
     }
-
+    mpq_t x;
+    mpq_init(x);
+    long prec, ulp_e, ulp_lo_e;
+    if (!rz_number2(e, x, &prec, &ulp_e, &ulp_lo_e)) { mpq_clear(x); return NULL; }
     mpz_t n, d;
-    if (!internal_rationalize_double(xv, dx, mode, n, d)) {
-        return NULL;  /* default mode failure: leaf passes through */
-    }
-    Expr* out = expr_from_mpz_rational(n, d);
-    mpz_clear(n); mpz_clear(d);
+    mpz_inits(n, d, NULL);
+    Expr* out = NULL;
+    if (rz_core(x, prec, ulp_e, ulp_lo_e, mode, dx, n, d)) out = expr_from_mpz_rational(n, d);
+    mpz_clears(n, d, NULL);
+    mpq_clear(x);
     return out;
 }
 
-/* Rationalise a numeric quantity (NumericQ) end-to-end: numericalise to
- * a double then rationalise. Used in tolerance / zero modes when the
- * subexpression is provably numeric (e.g. Sqrt[2], Exp[Sqrt[2]], Pi). */
-static Expr* rationalize_numeric_quantity(const Expr* e, double dx,
+/* Rationalise a numeric quantity (NumericQ) end-to-end: numericalise it,
+ * then rationalise the number.  Used in tolerance / zero modes when the
+ * subexpression is provably numeric (e.g. Sqrt[2], Exp[Sqrt[2]], Pi).
+ * Machine precision unless the tolerance is finer than a double resolves:
+ * Rationalize[Sqrt[2], 10^-30] numericalises at enough bits that the
+ * answer is within 10^-30 of Sqrt[2] itself, not of N[Sqrt[2]]. */
+static Expr* rationalize_numeric_quantity(const Expr* e, const mpq_t dx,
                                           RationalizeMode mode) {
     Expr* n_expr = numericalize(e, numeric_machine_spec());
     if (!n_expr) return NULL;
+#ifdef USE_MPFR
+    if (mode == RATIONALIZE_TOLERANCE && mpq_sgn(dx) > 0) {
+        double mag = 1.0;                          /* |x| at machine precision */
+        Expr *re0, *im0;
+        double v;
+        if (is_complex(n_expr, &re0, &im0)) {
+            double a = 0, b = 0;
+            if (extract_double(re0, &a) && extract_double(im0, &b)) mag = fmax(fabs(a), fabs(b));
+        } else if (extract_double(n_expr, &v)) {
+            mag = fabs(v);
+        }
+        if (!(mag >= 1.0) || !isfinite(mag)) mag = 1.0;
+        double log2_dx = rz_log2_z(mpq_numref(dx)) - rz_log2_z(mpq_denref(dx));
+        double need = log2(mag) - log2_dx + 16.0;  /* bits to resolve dx, with margin */
+        if (need > (double)DBL_MANT_DIG && need < 1.0e7) {
+            NumericSpec spec;
+            spec.mode = NUMERIC_MODE_MPFR;
+            spec.bits = (long)ceil(need);
+            Expr* hp = numericalize(e, spec);
+            if (hp) { expr_free(n_expr); n_expr = hp; }
+        }
+    }
+#endif
 
     /* If numericalisation produced a Complex with real components,
      * rationalise both parts. */
@@ -541,20 +564,16 @@ static Expr* rationalize_numeric_quantity(const Expr* e, double dx,
         expr_free(n_expr);
         return leaf;
     }
-    /* numericalize succeeded but rationalize_number_leaf rejected — only
-     * happens in default mode if the value is not inexact, which it must
-     * be after numericalize. Fall back to original. */
+    /* Not a finite number (an overflowed or Indeterminate value): keep
+     * the original. */
     expr_free(n_expr);
     return expr_copy((Expr*)e);
 }
 
-Expr* internal_rationalize_expr(const Expr* e, double dx, RationalizeMode mode) {
+static Expr* rationalize_walk(const Expr* e, const mpq_t dx, RationalizeMode mode) {
     if (!e) return NULL;
 
-    /* Numeric leaves: handle directly. Note `is_inexact_leaf` catches REAL
-     * and MPFR; integers / bigints flow through this path too because
-     * extract_double will succeed and rationalize_number_leaf will return
-     * a copy in default mode and the integer cast in non-default modes. */
+    /* Numeric leaves: handle directly. */
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT
         || e->type == EXPR_REAL
 #ifdef USE_MPFR
@@ -574,14 +593,13 @@ Expr* internal_rationalize_expr(const Expr* e, double dx, RationalizeMode mode) 
         return expr_copy((Expr*)e);
     }
 
-    if (e->type == EXPR_STRING) return expr_copy((Expr*)e);
-
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
 
-    /* Rational[n, d] — already rational; just copy. */
-    int64_t rn, rd;
-    if (is_rational((Expr*)e, &rn, &rd)) {
-        return expr_copy((Expr*)e);
+    /* Rational[n, d] (either part a bignum) — a number in its own right:
+     * unchanged unless a tolerance asks for a simpler one. */
+    if (is_rational_like(e)) {
+        Expr* r = rationalize_number_leaf(e, dx, mode);
+        return r ? r : expr_copy((Expr*)e);
     }
 
     /* Complex[re, im] — recurse componentwise. This handles the
@@ -589,8 +607,8 @@ Expr* internal_rationalize_expr(const Expr* e, double dx, RationalizeMode mode) 
      * evaluates to Complex[N[Pi], N[33 E / 211]]. */
     Expr *re_arg, *im_arg;
     if (is_complex((Expr*)e, &re_arg, &im_arg)) {
-        Expr* nre = internal_rationalize_expr(re_arg, dx, mode);
-        Expr* nim = internal_rationalize_expr(im_arg, dx, mode);
+        Expr* nre = rationalize_walk(re_arg, dx, mode);
+        Expr* nim = rationalize_walk(im_arg, dx, mode);
         Expr* c = make_complex(nre, nim);
         return eval_and_free(c);
     }
@@ -610,7 +628,7 @@ Expr* internal_rationalize_expr(const Expr* e, double dx, RationalizeMode mode) 
     /* General compound: rebuild with each part rationalised, then
      * re-evaluate so Plus/Times can re-canonicalise. */
     const size_t n = e->data.function.arg_count;
-    Expr* new_head = internal_rationalize_expr(e->data.function.head, dx, mode);
+    Expr* new_head = rationalize_walk(e->data.function.head, dx, mode);
     Expr** new_args = NULL;
     if (n > 0) {
         new_args = (Expr**)malloc(sizeof(Expr*) * n);
@@ -619,12 +637,22 @@ Expr* internal_rationalize_expr(const Expr* e, double dx, RationalizeMode mode) 
             return expr_copy((Expr*)e);
         }
         for (size_t i = 0; i < n; i++) {
-            new_args[i] = internal_rationalize_expr(e->data.function.args[i], dx, mode);
+            new_args[i] = rationalize_walk(e->data.function.args[i], dx, mode);
         }
     }
     Expr* rebuilt = expr_new_function(new_head, new_args, n);
     free(new_args);
     return eval_and_free(rebuilt);
+}
+
+Expr* internal_rationalize_expr(const Expr* e, double dx, RationalizeMode mode) {
+    if (!e) return NULL;
+    mpq_t w;
+    mpq_init(w);
+    if (isfinite(dx)) mpq_set_d(w, fabs(dx));
+    Expr* r = rationalize_walk(e, w, mode);
+    mpq_clear(w);
+    return r;
 }
 
 /* ------------------------------------------------------------------------
@@ -644,19 +672,20 @@ Expr* builtin_rationalize(Expr* res) {
         return internal_rationalize_expr(x, 0.0, RATIONALIZE_DEFAULT);
     }
 
-    Expr* dx_expr = res->data.function.args[1];
-    double dx;
-    if (!extract_double(dx_expr, &dx)) {
-        /* Non-numeric tolerance — leave unevaluated. */
+    /* The tolerance, exactly: 10^-20 (a bignum denominator) or N[10^-40, 50]
+     * are read as given, not through a double. */
+    mpq_t dx;
+    mpq_init(dx);
+    long prec, ulp_e;
+    if (!rz_number(res->data.function.args[1], dx, &prec, &ulp_e) || mpq_sgn(dx) < 0) {
+        /* Non-numeric or negative tolerance — leave unevaluated. */
+        mpq_clear(dx);
         return NULL;
     }
-    if (dx < 0.0) {
-        /* Negative tolerance is invalid in Mathematica; leave unevaluated. */
-        return NULL;
-    }
-
-    RationalizeMode mode = (dx == 0.0) ? RATIONALIZE_ZERO : RATIONALIZE_TOLERANCE;
-    return internal_rationalize_expr(x, dx, mode);
+    RationalizeMode mode = (mpq_sgn(dx) == 0) ? RATIONALIZE_ZERO : RATIONALIZE_TOLERANCE;
+    Expr* r = rationalize_walk(x, dx, mode);
+    mpq_clear(dx);
+    return r;
 }
 
 /* ------------------------------------------------------------------------
@@ -719,8 +748,7 @@ bool internal_args_contain_inexact(const Expr* res) {
  *
  *   bits ≥ 52           -- at or above machine precision.  TOLERANCE with
  *                          dx ≤ ulp(x) loses precision in the interval
- *                          arithmetic (the rationalize_default_double
- *                          comment in this file explains why), so we use
+ *                          arithmetic, so we use
  *                          the same RATIONALIZE_ZERO fallback as the
  *                          legacy path.  The output is bit-exact at
  *                          double precision; if the caller wants more
@@ -728,46 +756,6 @@ bool internal_args_contain_inexact(const Expr* res) {
  *                          when numericalising the eventual result at
  *                          MPFR. */
 #ifdef USE_MPFR
-/* Simplest rational (smallest denominator) in the closed interval
- * [lo, hi], 0 < lo < hi, by the continued-fraction descent: take the
- * integer part a of lo; stop at lo itself if it is an integer, or at a + 1
- * if that lies in the interval; otherwise recurse on (1/(hi-a), 1/(lo-a)).
- * The convergent recurrence accumulates the answer.  `lo` and `hi` are
- * clobbered. */
-static void simplest_rational_between(mpq_t lo, mpq_t hi, mpz_t num, mpz_t den) {
-    mpz_t a, h0, h1, k0, k1, t;
-    mpz_inits(a, h0, h1, k0, k1, t, NULL);
-    mpz_set_ui(h0, 0); mpz_set_ui(h1, 1);       /* h_{-2}, h_{-1} */
-    mpz_set_ui(k0, 1); mpz_set_ui(k1, 0);       /* k_{-2}, k_{-1} */
-    mpq_t q;
-    mpq_init(q);
-    for (;;) {
-        mpz_fdiv_q(a, mpq_numref(lo), mpq_denref(lo));
-        bool done = false;
-        if (mpz_cmp_ui(mpq_denref(lo), 1) == 0) {
-            done = true;                                   /* lo is an integer */
-        } else {
-            mpq_set_z(q, a);
-            mpz_add_ui(mpq_numref(q), mpq_numref(q), 1);   /* q = a + 1 */
-            if (mpq_cmp(q, hi) <= 0) { mpz_add_ui(a, a, 1); done = true; }
-        }
-        /* h = a h1 + h0, k = a k1 + k0 */
-        mpz_mul(t, a, h1); mpz_add(t, t, h0); mpz_set(h0, h1); mpz_set(h1, t);
-        mpz_mul(t, a, k1); mpz_add(t, t, k0); mpz_set(k0, k1); mpz_set(k1, t);
-        if (done) break;
-        mpq_set_z(q, a);
-        mpq_sub(lo, lo, q);                        /* lo - a > 0 */
-        mpq_sub(hi, hi, q);                        /* hi - a > lo - a */
-        mpq_inv(q, hi);
-        mpq_inv(hi, lo);
-        mpq_set(lo, q);
-    }
-    mpz_set(num, h1);
-    mpz_set(den, k1);
-    mpq_clear(q);
-    mpz_clears(a, h0, h1, k0, k1, t, NULL);
-}
-
 /* An MPFR leaf made exact at `bits` of precision (its own, if lower): the
  * simplest rational within a quarter unit in the last place, so it rounds
  * back to the same value, and short when the value is (2.`30 -> 2,

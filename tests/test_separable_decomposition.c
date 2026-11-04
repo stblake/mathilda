@@ -1,8 +1,8 @@
 /* test_separable_decomposition.c
  *
  * SeparablePolynomialDecomposition[p, S, T]
- * (src/internal/simp/SeparablePolynomialDecomposition.m) and its Simplify stage
- * (try_separable_decomposition, src/simp/simp_search.c).
+ * (src/internal/simp/SeparablePolynomialDecomposition.m) and its FullSimplify
+ * stage (Separable, src/internal/simp/FullSimplify.m).
  *
  * The function writes p as Sum_j B_j[S] Q_j[T] with the fewest terms (the rank
  * of the (S, T) coefficient flattening), each factor Factor'd.  Covered here:
@@ -16,10 +16,10 @@
  *   - properties over seeded random inputs: the answer is identically p, and
  *     its rank never exceeds the rank p was built with;
  *   - minimal rank against an independent MatrixRank of the flattening;
- *   - Simplify: the stage fires after Factor (strictly cheaper sums only, so
- *     a Factor tie, and any rank-1 answer, stays Factor's), never changes the value, never changes the
- *     precision of an inexact input, leaves univariate input alone, and
- *     works under assumptions;
+ *   - FullSimplify: the stage offers strictly cheaper sums only (so a Factor
+ *     tie, and any rank-1 answer, stays Factor's), never changes the value or
+ *     the precision of an inexact input, leaves univariate input alone, and
+ *     works under assumptions; plain Simplify does not run it;
  *   - symbol hygiene: the package's locals do not capture user symbols named
  *     like them (r, cs, c, M, Q, ...).
  * Timing gates live in bench_separable_decomposition.c (nightly tier).
@@ -171,8 +171,14 @@ static void test_inexact_inputs(void) {
           "Expand[SeparablePolynomialDecomposition[e, {a, b}, {x, y}] - Rationalize[e, 0]] === 0]");
     check("FreeQ[SeparablePolynomialDecomposition[Expand[(a + 0.25 b) (x - 0.5 y)], {a, b}, {x, y}], "
           "_?InexactNumberQ]");
-    /* inexact numbers that survive Rationalize[p, 0]: p comes back unchanged */
-    check("With[{e = 1.*^300 + 1.*^-300 a x}, SeparablePolynomialDecomposition[e, {a}, {x}] === e]");
+    /* extreme magnitudes rationalise exactly (until v0.6178 Rationalize[1.*^-300, 0]
+     * was 0 and Rationalize[1.*^300, 0] stayed inexact) */
+    check("With[{e = 1.*^300 + 1.*^-300 a x}, "
+          "Expand[SeparablePolynomialDecomposition[e, {a}, {x}] - Rationalize[e, 0]] === 0 && "
+          "!FreeQ[SeparablePolynomialDecomposition[e, {a}, {x}], a]]");
+    /* inexact numbers that survive Rationalize[p, 0] (it does not enter Hold):
+     * p comes back unchanged */
+    check("With[{e = a x + Hold[0.5]}, SeparablePolynomialDecomposition[e, {a}, {x}] === e]");
     /* rationalised but not a polynomial: the ordinary decline */
     same("SeparablePolynomialDecomposition[1.5 Sqrt[a] x, {a}, {x}]", "$Failed");
     same("SeparablePolynomialDecomposition[0., {a}, {x}]", "0");
@@ -211,41 +217,43 @@ static void test_minimal_rank(void) {
     same("SeparablePolynomialDecomposition[x y + 1, {x}, {y}]", "1 + x y");
 }
 
-static void test_simplify_stage(void) {
-    /* the docstring example: Expand / Factor give 251 leaves, the stage 38 */
-    check("With[{s = Simplify[spdP0]}, Expand[s - spdP0] === 0 && LeafCount[s] <= 38]");
-    inputform("Simplify[spdP0]", "-((a - b)^2*(x - y)) + (3*a - b)^3*b^3*(1 + x^2 - y)^2");
+static void test_fullsimplify_stage(void) {
+    /* the docstring example: Simplify gives 197 leaves, Expand / Factor 251,
+     * the separable form 38 */
+    check("With[{s = FullSimplify[spdP0]}, Expand[s - spdP0] === 0 && LeafCount[s] <= 38]");
+    inputform("FullSimplify[spdP0]", "-((a - b)^2*(x - y)) + (3*a - b)^3*b^3*(1 + x^2 - y)^2");
     check("With[{e = Expand[(1 + a + b)^6 (1 + x + y)^6 - (a - b)^3 (x + y)^4]}, "
-          "With[{s = Simplify[e]}, Expand[s - e] === 0 && LeafCount[s] < LeafCount[e]/10]]");
+          "With[{s = FullSimplify[e]}, Expand[s - e] === 0 && LeafCount[s] < LeafCount[e]/10]]");
     check("With[{e = Expand[(a + b)^2 (x + y)^2 + (a - b) (x - y)]}, "
-          "With[{s = Simplify[e]}, Expand[s - e] === 0 && LeafCount[s] < 25]]");
+          "With[{s = FullSimplify[e]}, Expand[s - e] === 0 && LeafCount[s] < 25]]");
     /* Factor still wins its own cases (ties stay with Factor) */
-    same("Simplify[Expand[(a + b) (x + y)]]", "(a + b) (x + y)");
-    same("Simplify[Expand[(x - 1)^3 (y + 2)^2]]", "(-1 + x)^3 (2 + y)^2");
-    same("Simplify[Expand[(1 + a + b + c + x + y)^4]]", "(1 + a + b + c + x + y)^4");
+    same("FullSimplify[Expand[(a + b) (x + y)]]", "(a + b) (x + y)");
+    same("FullSimplify[Expand[(x - 1)^3 (y + 2)^2]]", "(-1 + x)^3 (2 + y)^2");
+    same("FullSimplify[Expand[(1 + a + b + c + x + y)^4]]", "(1 + a + b + c + x + y)^4");
     /* a rank-1 decomposition is a factorisation: never offered, so Factor's
      * sign convention stands (2 (4 + 3 a) (1 - 3 x) scores 13 < 14) */
-    same("Simplify[(-2 + 6 x) (-4 - 3 a)]", "-2 (4 + 3 a) (-1 + 3 x)");
-    /* the expanded input already answers this through Factor (unchanged by
-     * the stage) */
-    same("Simplify[Expand[(-2 + 6 x) (-4 - 3 a)]]", "2 (4 + 3 a) (1 - 3 x)");
+    same("FullSimplify[(-2 + 6 x) (-4 - 3 a)]", "-2 (4 + 3 a) (-1 + 3 x)");
+    same("FullSimplify[Expand[(-2 + 6 x) (-4 - 3 a)]]", "2 (4 + 3 a) (1 - 3 x)");
     /* below the gate: too few terms, one variable */
-    same("Simplify[x y + x + y + 1]", "1 + x + y + x y");
-    same("Simplify[a x + b y]", "a x + b y");
-    same("Simplify[Expand[(1 + x)^4 + (1 + x)^2]]", "(1 + x)^2 (2 + 2 x + x^2)");
-    /* inexact input keeps its precision (Simplify rationalises internally and
-     * numericises its answer) and its value */
+    same("FullSimplify[x y + x + y + 1]", "1 + x + y + x y");
+    same("FullSimplify[a x + b y]", "a x + b y");
+    same("FullSimplify[Expand[(1 + x)^4 + (1 + x)^2]]", "(1 + x)^2 (2 + 2 x + x^2)");
+    /* inexact input keeps its precision and its value */
     check("With[{e = Expand[(a + 1.5) (x + 2) + (a - b)^2 (x - y)]}, "
-          "With[{s = Simplify[e]}, Precision[s] === MachinePrecision && "
+          "With[{s = FullSimplify[e]}, Precision[s] === MachinePrecision && "
           "Chop[Expand[s - e]] === 0 && LeafCount[s] < LeafCount[e]]]");
     /* never changes the value: random rank-2 sums in 4 variables */
     check("SeedRandom[9]; And @@ Table["
           "Module[{e = Expand[spdRP[{a, b}, 2, 3] spdRP[{x, y}, 2, 3] + "
           "spdRP[{a, b}, 2, 3] spdRP[{x, y}, 2, 3]], s}, "
-          "s = Simplify[e]; Expand[s - e] === 0 && LeafCount[s] <= LeafCount[e]], {rep, 20}]");
-    /* a polynomial under assumptions.  (Not Simplify[Sin[spdP0]]: that runs
-     * > 60 s with or without this stage, a separate Simplify cost.) */
-    check("With[{s = Simplify[spdP0, a > 0]}, Expand[s - spdP0] === 0 && LeafCount[s] <= 38]");
+          "s = FullSimplify[e]; Expand[s - e] === 0 && LeafCount[s] <= LeafCount[e]], {rep, 20}]");
+    /* under assumptions.  (Not [Full]Simplify[Sin[spdP0]]: that runs > 60 s
+     * with or without this stage, a separate Simplify cost.) */
+    check("With[{s = FullSimplify[spdP0, a > 0]}, Expand[s - spdP0] === 0 && LeafCount[s] <= 38]");
+    /* Simplify does NOT run the stage (v0.6178: +26% Simplify time on a
+     * polynomial corpus; it is FullSimplify's) */
+    check("LeafCount[Simplify[spdP0]] > 100");
+    check("LeafCount[Simplify[Expand[(a + b)^2 (x + y)^2 + (a - b) (x - y)]]] > 25");
 }
 
 static void test_symbol_hygiene(void) {
@@ -275,7 +283,7 @@ int main(void) {
     TEST(test_inexact_inputs);
     TEST(test_random_exactness_and_rank);
     TEST(test_minimal_rank);
-    TEST(test_simplify_stage);
+    TEST(test_fullsimplify_stage);
     TEST(test_symbol_hygiene);
     TEST(test_symbol_metadata);
     printf("All SeparablePolynomialDecomposition tests passed.\n");

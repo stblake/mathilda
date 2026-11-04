@@ -20,8 +20,6 @@
 #include "qafactor.h"
 #include "flint_qqbar.h"
 #include "simp_log.h"
-#include "loadmodule.h"
-#include "message.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -866,10 +864,6 @@ static Expr* factored_tie_candidate(const Expr* factored, const Expr* input,
  * No round loop: every winning move on a polynomial is reachable in
  * one application of the listed transforms; iterating doesn't help.
  */
-static void try_separable_decomposition(const Expr* expanded, Expr** best,
-                                        size_t* best_score,
-                                        const Expr* complexity_func);
-
 static Expr* simp_pipeline_polynomial(const Expr* input,
                                       const AssumeCtx* ctx,
                                       const Expr* complexity_func) {
@@ -925,9 +919,6 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
         Expr* fterms = traced_call_unary("FactorTerms", input);
         if (fterms) update_best(&best, &bs, fterms, complexity_func);
         if (fterms) expr_free(fterms);
-
-        /* After Factor / FactorTerms: a minimal sum of separable products. */
-        try_separable_decomposition(expanded, &best, &bs, complexity_func);
     }
 
     /* Per-variable Collect on input AND on the expanded form. The
@@ -945,128 +936,6 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
 
     if (expanded) expr_free(expanded);
     return best;
-}
-
-/* Stage: separable decomposition (src/internal/simp/SeparablePolynomialDecomposition.m).
- *
- * For a split {S, T} of the variables, p = Sum_j B_j[S] Q_j[T] with the fewest
- * terms (the rank of the (S, T) coefficient flattening), every factor
- * Factor'd. It reaches forms that none of Expand / Factor / FactorTerms /
- * Collect can, e.g.
- *   Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)]
- *     -> -(a - b)^2 (x - y) + (3 a - b)^3 b^3 (1 + x^2 - y)^2
- * (LeafCount 38; Expand and Factor both give 251).
- *
- * Which split to use can't be known in advance, so every unordered split
- * {S, T} with both sides non-empty is tried, 2^(n-1) - 1 of them, capped at
- * SEPDEC_MAX_VARS = 5 (15 calls). A cap of 6 (31 calls) bought 46 more
- * leaves on the corpus below but tripled its Simplify time, at ~250 ms per
- * dense 6-variable polynomial. Only one orientation of each split is tried.
- * The package picks its basis greedily from the coefficients with respect to
- * T, so the mirrored (T, S) call can give a different form. On a 63-case
- * polynomial corpus, trying both orientations bought 8 more leaves (2643 vs
- * 2651; 3077 without the stage) for +48% Simplify time instead of +21%. A candidate replaces `best` only if it is STRICTLY
- * cheaper, so every tie stays with Factor (issue #126), and only if it is a
- * sum (rank >= 2): a rank-1 answer is a factorisation, which belongs to Factor. The package returns
- * $Failed for anything outside its class; that, an atom, or a result still
- * holding the head is a decline. Inexact input is skipped (see the gate).
- *
- * core_init loads the module at startup, so the function is available from
- * the REPL. The load here, re-checked once per symtab generation as in
- * try_polylogladder (src/calculus/integrate.c), is normally an already-loaded
- * no-op; it covers an embedding that skipped the startup load, where a
- * failed load makes the stage decline. */
-#define SEPDEC_MAX_VARS 5
-#define SEPDEC_MIN_TERMS 4
-static const char* const SEPDEC_HEAD =
-    "SeparablePolynomialDecomposition`SeparablePolynomialDecomposition";
-static unsigned sepdec_load_gen = 0;
-static bool sepdec_load_succeeded = false;
-
-static bool sepdec_head_in(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    const Expr* h = e->data.function.head;
-    if (h && h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, SEPDEC_HEAD) == 0)
-        return true;
-    if (sepdec_head_in(h)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (sepdec_head_in(e->data.function.args[i])) return true;
-    return false;
-}
-
-static void try_separable_decomposition(const Expr* expanded, Expr** best,
-                                        size_t* best_score,
-                                        const Expr* complexity_func) {
-    /* A sum of at least SEPDEC_MIN_TERMS terms: anything smaller has no
-     * separable rewrite that Factor / Collect wouldn't already find. */
-    if (!expanded || !simp_eq_head_sym(expanded, "Plus") ||
-        expanded->data.function.arg_count < SEPDEC_MIN_TERMS)
-        return;
-    if (has_non_integer_power(expanded)) return;
-    /* No gate on the shape of *best: skipping the stage once Factor has won
-     * with a product looked free ((1 + a + b + c + x + y)^8 spends 0.48 s here
-     * for nothing), but content-times-sum products (-2 (...), x (...)) lose
-     * to the separable form often enough that it cost 179 leaves (+7%) on the
-     * 63-case corpus. */
-    /* Exact input only: the package would answer an inexact polynomial with
-     * the decomposition of Rationalize[p, 0], an EXACT form, and Simplify
-     * must not change the precision of what it is given. */
-    if (internal_contains_inexact(expanded)) return;
-
-    Expr* vars = call_unary_copy("Variables", expanded);
-    if (!vars) return;
-    size_t nv = (vars->type == EXPR_FUNCTION &&
-                 simp_eq_head_sym(vars, "List")) ? vars->data.function.arg_count : 0;
-    bool ok = nv >= 2 && nv <= SEPDEC_MAX_VARS;
-    for (size_t i = 0; ok && i < nv; i++)
-        if (vars->data.function.args[i]->type != EXPR_SYMBOL) ok = false;
-    if (!ok) { expr_free(vars); return; }
-
-    if (sepdec_load_gen != symtab_generation()) {
-        mth_msg_suppress_push();
-        sepdec_load_succeeded =
-            mathilda_load_module("simp/SeparablePolynomialDecomposition.m") != 0;
-        mth_msg_suppress_pop();
-        /* Read the generation after the load: loading a module defines rules,
-         * which bumps it. */
-        sepdec_load_gen = symtab_generation();
-    }
-    if (!sepdec_load_succeeded) { expr_free(vars); return; }
-
-    /* One orientation per unordered split: the last variable is always in T,
-     * so mask runs over the other nv - 1 variables (S = the set bits, never
-     * empty; T keeps the last variable, never empty). */
-    unsigned nsplits = (1u << (nv - 1)) - 1u;
-    for (unsigned mask = 1; mask <= nsplits; mask++) {
-        if (simp_deadline_expired()) break;
-        Expr** sv = malloc(nv * sizeof(Expr*));
-        Expr** tv = malloc(nv * sizeof(Expr*));
-        if (!sv || !tv) { free(sv); free(tv); break; }
-        size_t ns = 0, nt = 0;
-        for (size_t i = 0; i < nv; i++) {
-            Expr* v = expr_copy(vars->data.function.args[i]);
-            if (mask & (1u << i)) sv[ns++] = v; else tv[nt++] = v;
-        }
-        Expr* S = expr_new_function(expr_new_symbol(SYM_List), sv, ns);
-        Expr* T = expr_new_function(expr_new_symbol(SYM_List), tv, nt);
-        free(sv);
-        free(tv);
-        Expr* call = expr_new_function(expr_new_symbol(SEPDEC_HEAD),
-            (Expr*[]){ expr_copy((Expr*)expanded), S, T }, 3);
-        mth_msg_suppress_push();
-        Expr* r = evaluate(call);
-        mth_msg_suppress_pop();
-        expr_free(call);
-        if (!r) continue;
-        /* A sum only: a rank-1 answer is a factorisation, which is Factor's,
-         * with Factor's sign convention. Offering it here let
-         * 2 (4 + 3 a) (1 - 3 x) (13) beat Factor's reference form
-         * -2 (4 + 3 a) (-1 + 3 x) (14). */
-        if (simp_eq_head_sym(r, "Plus") && !sepdec_head_in(r))
-            update_best(best, best_score, r, complexity_func);  /* strict < */
-        expr_free(r);
-    }
-    expr_free(vars);
 }
 
 /*
