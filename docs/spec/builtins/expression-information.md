@@ -1285,6 +1285,13 @@ Out[3]= {a, b, b, b, c}
   with no precision mark (`-0.30102999566398114`), which reads back as a machine real (v0.6136).
   Until v0.6133 InputForm printed the standard layout
   (`1/100 a + 5 x`). The standard output form is unchanged.
+- **Held nested products and sums keep their parentheses** (v0.6169), as in the reference:
+  `HoldForm[a*b*(c*d)]`, `HoldForm[a + b + (c + d)]`, `HoldForm[a - (b - c)]`, `HoldForm[-(a*b)]`,
+  `HoldForm[(25*NH)/27]`, `HoldForm[a*((b*c)/d)]`, while a lone quotient numerator stays bare,
+  division being left-associative (`HoldForm[a/b/c]`). A complex coefficient is grouped with its
+  numerator like a real one (`(I*x)/y`, `((2*I)*x)/y`, `I/y`). Before, `HoldForm[a - (b - c)]`
+  printed as `a - b - c`, which reads back as a different value; FeynCalc's TeX-preview tests
+  compare these strings. The standard form groups the same way (`a b (c d)`).
 - **A negative symbolic exponent goes in the denominator** (v0.6146), in InputForm, the standard
   form and TeXForm, as the reference writes it: `c x^(-n)` is `c/x^n`, `3^(x/2) 2^(-x)` is
   `3^(x/2)/2^x`, `a E^(-x)` is `a/E^x`, `a x^(-1.5 n)` is `a/x^(1.5*n)`. A lone negated power keeps

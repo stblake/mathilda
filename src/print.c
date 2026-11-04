@@ -614,7 +614,7 @@ static void print_factor_list(Expr** f, size_t n, bool paren_if_many) {
     if (paren) printf("(");
     for (size_t i = 0; i < n; i++) {
         if (i > 0) printf("*");
-        print_standard(f[i], 4500);
+        print_standard(f[i], 4501);
     }
     if (paren) printf(")");
 }
@@ -626,6 +626,25 @@ static void print_mpz(const mpz_t z) {
     char* t = mpz_get_str(NULL, 10, z);
     printf("%s", t);
     free(t);
+}
+
+/* Is e a (held) product that prints as a quotient -- a factor with a
+ * negative numeric exponent?  As the lone numerator of a quotient it needs no
+ * parentheses, division being left-associative: HoldForm[(a/b)/c] is a/b/c. */
+static bool times_is_quotient(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Times) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* f = e->data.function.args[i];
+        if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+            f->data.function.head->data.symbol.name == SYM_Power && f->data.function.arg_count == 2) {
+            const Expr* x = f->data.function.args[1];
+            int64_t n, d;
+            if ((x->type == EXPR_INTEGER && x->data.integer < 0) || (is_rational((Expr*)x, &n, &d) && n < 0))
+                return true;
+        }
+    }
+    return false;
 }
 
 static void print_inputform_rest(Expr** num, size_t nn, Expr** den, size_t nd,
@@ -655,6 +674,7 @@ static void print_inputform_rest(Expr** num, size_t nn, Expr** den, size_t nd,
     bool paren = wrap == 1;
     if (paren) printf("(");
     if (nn == 0) printf("1");
+    else if (nn == 1 && times_is_quotient(num[0])) print_standard(num[0], 4500);   /* a/b/c */
     else print_factor_list(num, nn, true);
     printf("/");
     if (nd > 1) print_factor_list(den, nd, true);
@@ -734,12 +754,13 @@ static void print_times_inputform(Expr* e) {
     if (neg) mpz_neg(pn, pn);
     bool p_one = mpz_cmp_ui(pn, 1) == 0, q_one = mpz_cmp_ui(pd, 1) == 0;
 
-    if (coef_other && coef_other->type == EXPR_REAL && nd > 0) {
-        /* a real coefficient is part of the numerator: (1.5*x)/y, 2.5/x */
+    if (coef_other && nd > 0) {
+        /* a real or complex coefficient is part of the numerator: (1.5*x)/y,
+         * 2.5/x, ((2*I)*x)/y, I/y */
         bool np = nn > 0;
         if (np) printf("(");
         print_standard(coef_other, 4500);
-        for (size_t i = 0; i < nn; i++) { printf("*"); print_standard(num[i], 4500); }
+        for (size_t i = 0; i < nn; i++) { printf("*"); print_standard(num[i], 4501); }
         if (np) printf(")");
         printf("/");
         if (nd > 1) print_factor_list(den, nd, true);
@@ -774,7 +795,7 @@ static void print_times_inputform(Expr* e) {
         if (k) print_mpz(pn);
         for (size_t i = 0; i < nn; i++) {
             if (k || i > 0) printf("*");
-            print_standard(num[i], 4500);
+            print_standard(num[i], 4501);
         }
         if (np) printf(")");
         if (!q_one || nd > 0) {
@@ -784,7 +805,7 @@ static void print_times_inputform(Expr* e) {
             if (!q_one) print_mpz(pd);
             for (size_t i = 0; i < nd; i++) {
                 if (!q_one || i > 0) printf("*");
-                print_standard(den[i], m > 1 ? 4500 : 5001);
+                print_standard(den[i], m > 1 ? 4501 : 5001);
             }
             if (m > 1) printf(")");
         }
@@ -1548,7 +1569,12 @@ static void print_standard(Expr* e, int parent_prec) {
                     }
                 }
 
-                print_standard(to_print, 3500);
+                /* a held sum inside a sum keeps its parentheses:
+                 * HoldForm[a - (b - c)], HoldForm[a + (b + c) + d] */
+                bool nested_plus = to_print->type == EXPR_FUNCTION &&
+                    to_print->data.function.head->type == EXPR_SYMBOL &&
+                    to_print->data.function.head->data.symbol.name == SYM_Plus;
+                print_standard(to_print, nested_plus ? 3501 : 3500);
                 if (t_copy) expr_free(t_copy);
             }
         }

@@ -169,9 +169,9 @@ void test_chi_derivatives() {
 
 void test_chi_series_at_zero() {
     assert_eval_eq("Series[CoshIntegral[x], {x, 0, 6}]",
-        "EulerGamma + Log[x] + 1/4 x^2 + 1/96 x^4 + 1/4320 x^6 + O[x]^7", 0);
+        "(EulerGamma + Log[x]) + 1/4 x^2 + 1/96 x^4 + 1/4320 x^6 + O[x]^7", 0);
     assert_eval_eq("Series[CoshIntegral[x], {x, 0, 5}]",
-        "EulerGamma + Log[x] + 1/4 x^2 + 1/96 x^4 + O[x]^6", 0);
+        "(EulerGamma + Log[x]) + 1/4 x^2 + 1/96 x^4 + O[x]^6", 0);
 }
 
 void test_chi_series_at_infinity() {

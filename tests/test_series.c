@@ -2515,9 +2515,9 @@ static void test_series_gamma_family_poles(void) {
     check_quiet("Series[Gamma[s], {s, 0, 1}]",
                 "1/s - EulerGamma + 1/2 (EulerGamma^2 + 1/6 Pi^2) s + O[s]^2");
     check_quiet("Series[Gamma[s], {s, -2, 0}]",
-                "1/(2 (s + 2)) + 3/4 - 1/2 EulerGamma + O[s + 2]^1");
+                "1/(2 (s + 2)) + (3/4 - 1/2 EulerGamma) + O[s + 2]^1");
     check_quiet("Series[PolyGamma[s], {s, 0, 1}]", "-1/s - EulerGamma + 1/6 Pi^2 s + O[s]^2");
-    check_quiet("Series[PolyGamma[0, s], {s, -1, 0}]", "-1/(s + 1) + 1 - EulerGamma + O[s + 1]^1");
+    check_quiet("Series[PolyGamma[0, s], {s, -1, 0}]", "-1/(s + 1) + (1 - EulerGamma) + O[s + 1]^1");
     check_quiet("Series[PolyGamma[1, s], {s, 0, 0}]", "1/s^2 + 1/6 Pi^2 + O[s]^1");
     check_quiet("Series[Beta[s, 1], {s, 0, 1}]", "1/s + O[s]^2");
     /* Away from a pole Beta keeps its Taylor expansion. */

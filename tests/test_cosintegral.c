@@ -176,7 +176,7 @@ void test_ci_derivatives() {
 
 void test_ci_series_at_zero() {
     assert_eval_eq("Series[CosIntegral[x], {x, 0, 6}]",
-        "EulerGamma + Log[x] - 1/4 x^2 + 1/96 x^4 - 1/4320 x^6 + O[x]^7", 0);
+        "(EulerGamma + Log[x]) - 1/4 x^2 + 1/96 x^4 - 1/4320 x^6 + O[x]^7", 0);
 }
 
 void test_ci_series_at_infinity() {
