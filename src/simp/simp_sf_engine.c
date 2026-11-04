@@ -1366,13 +1366,6 @@ static bool module_pass_relevant(const SfModule* mod, const Expr* e) {
     return false;
 }
 
-static bool has_trig(const Expr* e) {
-    static const char** heads[] = { &SYM_Sin, &SYM_Cos, &SYM_Tan, &SYM_Cot, &SYM_Sec, &SYM_Csc };
-    for (size_t i = 0; i < sizeof heads / sizeof heads[0]; i++)
-        if (sf_contains_head(e, *heads[i])) return true;
-    return false;
-}
-
 /* MATHILDA_NO_SF_ENGINE=1 disables the pass (read once): an A/B switch for
  * isolating the engine's effect on a Simplify result or its cost. */
 static int sf_engine_disabled(void) {
@@ -1491,18 +1484,20 @@ static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx
         return NULL;
     }
     if (simp_debug_enabled()) simp_debug_log("SpecialFunctions", input, cur, 0.0);
-    /* A reflection leaves a trig residue (Sec[Pi nu] Sin[Pi/2 + Pi nu]) that
-     * only Simplify's bottom-up trig pass closes; anything else needs just
-     * one more dispatch (every family is on a basis, so neither re-enters
-     * the family rewrite). */
+    /* One bottom-up pass over the result (every family is on a basis, so it
+     * does not re-enter the family rewrite). Bottom-up, not a single
+     * top-level dispatch: the input's subterms were already simplified, but
+     * the terms the engine introduces were not, and the two spellings must
+     * meet. A reflection leaves a trig residue (Sec[Pi nu] Sin[Pi/2 + Pi nu])
+     * only the bottom-up trig pass closes; a Hurwitz recurrence leaves
+     * ((-1 + a/3)^2)^(-s/2) beside the input's ((-3 + a)^2/9)^(-s/2), which
+     * cancel only once both bases are in one form. */
     Expr* fin;
-    if (has_trig(cur)) {
+    {
         SimpMemo memo;
         simp_memo_init(&memo);
         fin = simp_bottomup(cur, ctx, complexity_func, &memo, 0);
         simp_memo_free(&memo);
-    } else {
-        fin = simp_dispatch(cur, ctx, complexity_func);
     }
     /* the trig pass may spell an argument Pi a + Pi b next to the input's
      * Pi (a + b); one more normal form lets Csc[u] Sin[u] cancel */

@@ -32,6 +32,33 @@ void test_simplify_collect_by_variable(void) {
     assert_eval_eq("Simplify[a x + b x + c]", "c + (a + b) x", 0);
 }
 
+/* Issue #126: Factor wins a score tie when it refines a product.
+ * (4 - 4 eps) y and -4 (-1 + eps) y both have SimplifyCount 8; the factored
+ * form (LeafCount 6, not 7) is the more simplified one. The tie rule must not
+ * fire when Factor only moves signs between factors, nor when it hands back
+ * an expanded sum; a strictly cheaper spelling still wins. */
+void test_simplify_factor_tie_issue126(void) {
+    assert_eval_eq("Simplify[(4 - 4 eps) y]", "-4 (-1 + eps) y", 0);
+    assert_eval_eq("LeafCount[Simplify[(4 - 4 eps) y]]", "6", 0);
+    assert_eval_eq("Simplify[4 y - 4 eps y]", "-4 (-1 + eps) y", 0);
+    assert_eval_eq("Simplify[(6 - 6 a) b c]", "-6 (-1 + a) b c", 0);
+    assert_eval_eq("Simplify[(4 - 4 eps) y + z]", "-4 (-1 + eps) y + z", 0);
+    /* strictly cheaper unfactored form is kept */
+    assert_eval_eq("Simplify[4 - 4 eps]", "4 - 4 eps", 0);
+    /* sign rearrangement only: input kept */
+    assert_eval_eq("Simplify[(5 - 3 z)^2 x z]", "x (5 - 3 z)^2 z", 0);
+    assert_eval_eq("Simplify[(3 - 2 a)^2 y]", "(3 - 2 a)^2 y", 0);
+    /* the sign of Factor's content moves into a factor when cheaper */
+    assert_eval_eq("Simplify[5 y - 3 y^2]", "(5 - 3 y) y", 0);
+    /* paired sign flip of the input beats Factor's 2 (4 + 3 a) (1 - 3 x) */
+    assert_eval_eq("SimplifyCount[Simplify[(-2 + 6 x) (-4 - 3 a)]]", "12", 0);
+    /* numeric pair flip is score-gated: stays -2 (-2 + eps) (-2 + x) */
+    assert_eval_eq("Simplify[(-2 + x) (4 - 2 eps)]", "-2 (-2 + eps) (-2 + x)", 0);
+    /* a sum input keeps the cheaper partially-factored form */
+    assert_eval_eq("SimplifyCount[Simplify[(1 - eps) eps + (-16 - 4 z) z eps]]",
+                   "15", 0);
+}
+
 /* ---- Cyclotomic / algebraic-number (Phase 1) ---- */
 
 void test_simplify_cyclotomic(void) {
@@ -1213,6 +1240,7 @@ int main(void) {
     TEST(test_simplify_polynomial);
     TEST(test_simplify_rational);
     TEST(test_simplify_collect_by_variable);
+    TEST(test_simplify_factor_tie_issue126);
     TEST(test_simplify_pythagorean);
     TEST(test_simplify_double_angle);
     TEST(test_simplify_exp_sinh_ratio);

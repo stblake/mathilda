@@ -524,8 +524,11 @@ void test_covariance() {
     assert_eval_eq("Covariance[{1,3/2},{2,11}]", "9/4", 0);
     /* Approximate input yields approximate output. */
     assert_eval_eq("Covariance[{1.5,3,5,10},{2,1.25,15,8}]", "11.2604", 0);
-    /* Symbolic (real transcendentals) reduces to the closed form. */
-    assert_eval_eq("Simplify[Covariance[{1,Pi},{E,2}]]", "-1/2 (2 - E) (1 - Pi)", 0);
+    /* Symbolic (real transcendentals) reduces to the closed form, the
+     * reference's -1/2 (-2 + E) (-1 + Pi) (SimplifyCount 13; the earlier
+     * expectation -1/2 (2 - E) (1 - Pi) scores 17 and was produced by an
+     * unconditional sign-pair flip, score-gated since v0.6164). */
+    assert_eval_eq("Simplify[Covariance[{1,Pi},{E,2}]]", "-1/2 (-2 + E) (-1 + Pi)", 0);
     /* Complex vectors: the conjugate lands on the SECOND argument. */
     assert_eval_eq("Covariance[{2+I,3-2I,5+4I},{I,1+2I,10-5I}]", "-7/3 + 56/3*I", 0);
     /* Auto-covariance matrix, exact. */

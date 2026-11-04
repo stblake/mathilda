@@ -2511,12 +2511,18 @@ static Expr* builtin_simplify_core(Expr* res) {
      * inside a top-level Times so each binomial leads with its
      * positive-coefficient term, e.g.
      *   ((-a + c) (-b + d))/(a b c d)  ->  ((a - c) (b - d))/(a b c d)
-     * Value-preserving (flips occur in pairs so signs cancel). */
+     * Value-preserving (flips occur in pairs so signs cancel). Accepted
+     * only at equal or lower score: flipping a pair is score-neutral when
+     * the flipped terms are symbolic, but turns -2 (-2 + eps) (-2 + x)
+     * (11) into -2 (2 - eps) (2 - x) (15) when they are numeric. */
     {
         Expr* canon = canon_negate_pairs(best);
-        if (canon) {
+        if (canon && score_with_func(canon, opt_complexity) <=
+                     score_with_func(best, opt_complexity)) {
             expr_free(best);
             best = canon;
+        } else if (canon) {
+            expr_free(canon);
         }
     }
 
