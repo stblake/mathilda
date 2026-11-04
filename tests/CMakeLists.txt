@@ -2511,6 +2511,9 @@ target_include_directories(factor_terms_tests PRIVATE ../src)
 add_executable(rat_tests test_rat.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rat_tests PRIVATE ../src)
 
+add_executable(matfunc_tests test_matfunc.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(matfunc_tests PRIVATE ../src)
+
 add_executable(linalg_tests test_linalg.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(linalg_tests PRIVATE ../src)
 

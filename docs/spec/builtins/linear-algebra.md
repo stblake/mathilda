@@ -983,7 +983,27 @@ Gives the matrix power of a square matrix.
   is materialised first and stays exact, because the exact fourth power of an
   integer matrix is an integer matrix and a float64 buffer cannot hold one past
   2^53.
-- Fractional matrix powers are not currently supported and generate a warning.
+- **Non-integer exponents** (rational, real, complex or symbolic `n`) give the
+  principal power, `exp(n log m)`, through the [MatrixFunction](#matrixfunction)
+  machinery (`src/linalg/matfunc.c`): an exact matrix with an exact or symbolic
+  `n` uses its Jordan form (`MatrixPower[{{2, 1}, {0, 2}}, s]` is
+  `{{2^s, 2^(-1 + s) s}, {0, 2^s}}`); a machine matrix uses the complex Schur
+  form -- the Bjorck--Hammarling square root for `n == 1/2`, Schur--Parlett with
+  the closed-form derivatives of `z^n` otherwise; an MPFR matrix keeps its
+  precision (Denman--Beavers square roots, `exp(n log m)`). An exact matrix with
+  a machine `n` is computed in machine arithmetic. A real matrix whose power is
+  real (no eigenvalue on the negative real axis) gets a real answer; a negative
+  eigenvalue gives the principal complex power. A real exponent always takes
+  this route, even an integer-valued one (`MatrixPower[m, 2.]`), as in the
+  reference; the integer path is unchanged.
+- `MatrixPower::zegev` for a negative power of a singular machine matrix;
+  `MatrixPower::nosol` when a zero eigenvalue sits in a Jordan block
+  (`MatrixPower[{{0., 1.}, {0., 0.}}, 0.5]`); the exact nilpotent case stays
+  unevaluated without a message, as in the reference.
+- Compile: `MatrixPower[m, s]` lowers for a real or complex rank-2 `m` and an
+  integer OR real `s` (the A_NDFN trailing argument may be a Real register);
+  when a real matrix's power is complex the compiled call declines to the
+  interpreter, which gives the complex answer.
 
 ```mathematica
 In[1]:= MatrixPower[{{a, b}, {c, d}}, 2]
@@ -1015,6 +1035,132 @@ Out[9]= {{1, 0}, {0, 1}}
 
 In[10]:= MatrixPower[{{5}}, -2]
 Out[10]= {{1/25}}
+
+In[11]:= MatrixPower[{{2, 1}, {1, 2}}, 1/2]
+Out[11]= {{1/2 + Sqrt[3]/2, -1/2 + Sqrt[3]/2}, {-1/2 + Sqrt[3]/2, 1/2 + Sqrt[3]/2}}
+
+In[12]:= MatrixPower[{{1., 2.}, {3., 4.}}, 0.5]
+Out[12]= {{0.553689 + 0.464394 I, 0.806961 - 0.212426 I}, {1.21044 - 0.31864 I, 1.76413 + 0.145754 I}}
+```
+
+## MatrixExp
+The matrix exponential.
+- `MatrixExp[m]`: the matrix exponential of the square matrix `m`.
+- `MatrixExp[m, v]`: the matrix exponential of `m` applied to the vector `v`.
+
+**Features**:
+- `Protected`. Options `Method -> Automatic` (accepted; one algorithm per
+  precision class) and `Parameter -> t` (computes `MatrixExp[t m]`).
+- **Exact and symbolic** `m`: the closed form over the Jordan form
+  `m = S J S^-1`, written as `sum f^(k)(lambda)/k! C_(lambda,k)` with each
+  coefficient matrix simplified on its own, so the answer is a short sum of
+  `E^lambda` terms. A nilpotent block gives the finite series
+  (`MatrixExp[{{0, 1}, {0, 0}}]` is `{{1, 1}, {0, 1}}`). A real exact matrix with
+  complex eigenvalues is answered in real form via `ComplexExpand`
+  (`MatrixExp[{{0, 1}, {-1, 0}}]` is `{{Cos[1], Sin[1]}, {-Sin[1], Cos[1]}}`).
+- **Machine** `m` (real or complex): Pade scaling and squaring with the
+  Al-Mohy--Higham (2009) degree selection (3/5/7/9/13) and `ell(A, m)`
+  backward-error correction against overscaling. A real matrix gives a real
+  packed result; a 1 x 1 matrix is the scalar `Exp` exactly. An overflowing
+  machine result is retried at 53-bit MPFR.
+- **MPFR** `m`: scaling and squaring with a truncated Taylor series whose degree
+  and scaling are chosen for the working precision (guard bits for the
+  squarings), so the answer keeps the input's precision.
+- `MatrixExp[m, v]` for machine input never forms `exp(m)`: the Al-Mohy--Higham
+  (2011) truncated-Taylor action with the `theta_m` table and the trace shift
+  (falling back to `MatrixExp[m] . v` when that is cheaper). `v` must be a
+  non-empty vector (`MatrixExp::vector`) of length `Length[m]`
+  (`MatrixExp::lslc`).
+- `MatrixExp::matsq` for a List that is not a non-empty square matrix; a
+  non-List argument stays unevaluated silently.
+- Packed / NDArray input reaches the kernels directly (on `pack.c`'s `AWARE`
+  list; `ndla_matrixexp`); List, packed and NDArray answers are bit-identical.
+- Compile: `MatrixExp[m]` (ND_FNS, rank 2) and `MatrixExp[m, v]` (ND_FN2S,
+  rank rule `R2_MATVEC`) lower for real and complex operands.
+- SparseArray: answered on the dense form (gate mode `SPG_DENSE`); the reference
+  re-sparsifies a machine answer (see the sparse gate).
+
+```mathematica
+In[1]:= MatrixExp[{{1, 1}, {0, 1}}]
+Out[1]= {{E, E}, {0, E}}
+
+In[2]:= MatrixExp[{{1., 2.}, {3., 4.}}]
+Out[2]= {{51.969, 74.7366}, {112.105, 164.074}}
+
+In[3]:= MatrixExp[{{1., 2.}, {3., 4.}}, {1., 1.}]
+Out[3]= {126.706, 276.179}
+
+In[4]:= MatrixExp[{{1, -2}, {2, 1}}]
+Out[4]= {{E Cos[2], -E Sin[2]}, {E Sin[2], E Cos[2]}}
+```
+
+## MatrixLog
+The principal matrix logarithm.
+- `MatrixLog[m]`: the principal logarithm of the square matrix `m`.
+
+**Features**:
+- `Protected`. Option `Method -> Automatic`.
+- **Exact and symbolic**: the Jordan-form closed form with `Log` and its
+  derivatives (`MatrixLog[{{1, 1}, {0, 1}}]` is `{{0, 1}, {0, 0}}`;
+  `MatrixLog[{{-1, 0}, {0, 2}}]` is `{{I Pi, 0}, {0, Log[2]}}`). A zero
+  eigenvalue: `MatrixLog::fnand` (diagonalisable) or `MatrixLog::fnanc` (in a
+  Jordan block), unevaluated.
+- **Machine**: inverse scaling and squaring on the complex Schur form
+  (Al-Mohy--Higham 2012): triangular square roots until `||T - I||` is within the
+  Pade bound, the Gauss--Legendre partial-fraction Pade approximant of
+  `log(I + X)`, then the diagonal and superdiagonal recomputed from closed forms
+  (the unwinding-number formula). A real matrix goes through the real Schur form
+  (triangularised by Givens rotations), so a negative real eigenvalue lands on
+  `+I Pi` deterministically. A real matrix with no eigenvalue on the negative
+  real axis gets a real answer (`MatrixLog[{{0., 1.}, {-1., 0.}}]` is real);
+  a negative eigenvalue gives a complex answer. Singular: `MatrixLog::zegev`.
+- **MPFR**: inverse scaling and squaring with Denman--Beavers square roots and
+  the `atanh` series, at the input's precision; an eigenvalue on the branch cut
+  is handled by rotating the matrix off the cut (`log A = i theta + log(e^(-i
+  theta) A)`), located by a machine eigenvalue pass.
+- Compile: lowers for real and complex rank-2 operands; a real matrix whose log
+  is complex declines to the interpreter.
+
+```mathematica
+In[1]:= MatrixLog[{{2, 1}, {1, 2}}]
+Out[1]= {{Log[3]/2, Log[3]/2}, {Log[3]/2, Log[3]/2}}
+
+In[2]:= MatrixExp[MatrixLog[{{1., 2.}, {3., 4.}}]]
+Out[2]= {{1., 2.}, {3., 4.}}
+```
+
+## MatrixFunction
+A primary matrix function.
+- `MatrixFunction[f, m]`: the matrix generated by the scalar function `f` (a
+  symbol or pure function) at the square matrix `m`.
+
+**Features**:
+- `Protected`. Option `Method -> Automatic`.
+- `Exp`, `Log` and (machine / MPFR) `Sqrt` use the `MatrixExp`, `MatrixLog` and
+  square-root kernels, so `MatrixFunction[Exp, m] === MatrixExp[m]`.
+- **Exact and symbolic**: the Jordan form with the derivatives of `f` (by `D`),
+  so an undefined `f` keeps its derivatives:
+  `MatrixFunction[f, {{1, 1}, {0, 1}}]` is `{{f[1], f'[1]}, {0, f[1]}}`, and a
+  non-analytic one too (`Abs'[1]`). A singular value: `MatrixFunction::nosol`.
+- **Machine**: Schur--Parlett (Davies--Higham 2003): eigenvalues clustered at
+  distance 0.1, the Schur form reordered (adjacent Givens swaps) so clusters are
+  contiguous, each cluster by a Taylor series about its mean with `f`'s
+  derivatives from `D`, the off-diagonal blocks by the block Parlett recurrence.
+  A derivative that is not numeric: `MatrixFunction::drvnnum`. An `f` whose
+  values are not numbers at all (an undefined `g`) gives the
+  eigen-decomposition form `V . DiagonalMatrix[g /@ vals] . Inverse[V]`.
+- **MPFR**: through the exact engine on the rationalised input, numericalised
+  back to the input precision (Exp / Log / Sqrt use the MPFR kernels).
+- `MatrixFunction::argr` for a wrong argument count, `::matsq` for a bad matrix.
+- Not compiled: the first argument is a function value, which no compiled
+  register carries (`tools/compile_coverage.py` EXEMPT).
+
+```mathematica
+In[1]:= MatrixFunction[Sin, {{1, 1}, {0, 1}}]
+Out[1]= {{Sin[1], Cos[1]}, {0, Sin[1]}}
+
+In[2]:= MatrixFunction[Sin, {{1., 2.}, {3., 4.}}]
+Out[2]= {{-0.465581, -0.148424}, {-0.222637, -0.688218}}
 ```
 
 ## RowReduce
