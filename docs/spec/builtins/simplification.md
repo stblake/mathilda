@@ -113,6 +113,16 @@ Out[7]= {1, 1}
 Beyond the generic algebraic transforms, `Simplify` reaches a number of
 canonical forms that the generic pipeline alone does not:
 
+- **Separable sums of products** — after Factor and FactorTerms, a polynomial
+  in 2–5 variables with exact coefficients and at least 4 terms is offered
+  `SeparablePolynomialDecomposition` over every unordered split of its variables
+  (2^(n−1) − 1 of them). The candidate is kept only if it is a sum (rank ≥ 2)
+  and *strictly* cheaper. A rank-1 answer is a factorisation and stays with
+  Factor's sign convention, and Factor keeps its ties. Example:
+  `Simplify[Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)]]` is
+  `(3 a - b)^3 b^3 (1 + x^2 - y)^2 + (a - b)^2 (-x + y)` (LeafCount 251 → 38).
+  An inexact polynomial benefits through Simplify's usual rationalise-and-restore
+  wrapper, and keeps its precision.
 - **Cross-base radical fusion** — distinct positive-integer radicals sharing an
   exponent are combined inside a `Times`.
 - **Roots of unity** — `(-1)^(p/q)` and `E^(I p Pi/q)` atoms are reduced modulo
@@ -623,6 +633,57 @@ First-cut limitations: the gamma recurrence matches a literal `+1` shift only
 (`Gamma[x + 2]/Gamma[x]` is left unreduced). The identity collection is expected
 to grow, and each family lives in its own file under
 `src/internal/simp/transforms/`.
+
+## SeparablePolynomialDecomposition
+Rewrites a polynomial as a minimal-length sum of separable products.
+
+- `SeparablePolynomialDecomposition[p, S, T]` writes `p` as
+  `Sum[B[[j]] Q[[j]], {j, r}]` with each `B[[j]]` a polynomial in the variables
+  `S` only and each `Q[[j]]` one in `T` only, with `r` as small as possible.
+  Every factor is passed through `Factor`.
+
+**Features**:
+- `Protected`. Implemented in Mathilda code as a package
+  (`src/internal/simp/SeparablePolynomialDecomposition.m`, context
+  ``SeparablePolynomialDecomposition` ``), loaded at startup.
+- `r` is the rank of the `(S, T)` flattening of `p`: its coefficient matrix with
+  rows indexed by `T`-monomials and columns by `S`-monomials. The decomposition
+  is unique up to a change of basis in `GL(r, Q)`.
+- The basis is chosen greedily. The coefficient polynomials with respect to `T`
+  are sorted by term count, and a maximal independent subset is taken in that
+  order through the pivot columns of `RowReduce[Transpose[M]]`. This favours
+  bases that `Factor` recognises; the smallest final expression is not
+  guaranteed (minimal formula size is NP-hard).
+- Symbols outside `S` and `T`, and numeric constants (`Pi`, `I`), are treated as
+  coefficients.
+- `0` gives `0`. A non-polynomial `p`, an empty or overlapping `S`/`T`, or a
+  non-list block gives `$Failed`.
+- **Inexact input** is rationalised with `Rationalize[p, 0]` and the exact form is
+  decomposed, so the answer is exact. If inexact numbers survive `Rationalize`,
+  `p` is returned unchanged.
+- Cost is dominated by `CoefficientRules` and by `RowReduce` on an `m × n`
+  rational matrix (`m`, `n` = the numbers of distinct `T`- and `S`-monomials).
+  The 27225-term dense rank-1 `Expand[(1 + a + b + c)^8 (1 + x + y + z)^8]`
+  takes about 1.3 s, and a rank-32, 11297-term sum about 0.45 s.
+- `Simplify` calls it for polynomials (see *Specialised transformations*). Gated
+  by `tests/bench_separable_decomposition.c` (normalised cost and
+  doubling-ratio gates).
+
+```mathematica
+In[1]:= p = Expand[(3 a b - b^2)^3 (x^2 - y + 1)^2 - (a - b)^2 (x - y)];
+
+In[2]:= SeparablePolynomialDecomposition[p, {a, b}, {x, y}]
+Out[2]= -(a - b)^2 (x - y) + (3 a - b)^3 b^3 (1 + x^2 - y)^2
+
+In[3]:= SeparablePolynomialDecomposition[Expand[(a + 2) (x + 1) + (a - 3) (x - 1)], {a}, {x}]
+Out[3]= 5 + (-1 + 2 a) x
+
+In[4]:= SeparablePolynomialDecomposition[Expand[(a + 1.5) (x + 2)], {a}, {x}]
+Out[4]= 1/2 (3 + 2 a) (2 + x)
+
+In[5]:= SeparablePolynomialDecomposition[Sqrt[a] x, {a}, {x}]
+Out[5]= $Failed
+```
 
 ## SimplifyCount
 The complexity measure used by `Simplify` when no `ComplexityFunction` option (or

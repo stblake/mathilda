@@ -17,16 +17,19 @@
 
 static void test_initial_state(void) {
     /* core_init() loads the FullSimplify package (BeginPackage["FullSimplify`"]
-     * ... EndPackage[]), which -- exactly as Mathematica's EndPackage does --
-     * prepends the package context to $ContextPath so its exported symbols
-     * (FullSimplify, RegisterTransforms) resolve under their short names. The
-     * current context returns to Global` and System` stays last. */
+     * ... EndPackage[]) and then the SeparablePolynomialDecomposition package.
+     * Each EndPackage prepends its package context to $ContextPath, so the
+     * exported symbols (FullSimplify, RegisterTransforms,
+     * SeparablePolynomialDecomposition) resolve under their short names. The
+     * later load comes first. The current context returns to Global` and
+     * System` stays last. */
     ASSERT_STR_EQ(context_current(), "Global`");
-    ASSERT(context_path_count() == 4);
-    ASSERT_STR_EQ(context_path_at(0), "FullSimplify`");
-    ASSERT_STR_EQ(context_path_at(1), "Global`");
-    ASSERT_STR_EQ(context_path_at(2), "Mathilda`");   /* Mathilda-only builtins */
-    ASSERT_STR_EQ(context_path_at(3), "System`");
+    ASSERT(context_path_count() == 5);
+    ASSERT_STR_EQ(context_path_at(0), "SeparablePolynomialDecomposition`");
+    ASSERT_STR_EQ(context_path_at(1), "FullSimplify`");
+    ASSERT_STR_EQ(context_path_at(2), "Global`");
+    ASSERT_STR_EQ(context_path_at(3), "Mathilda`");   /* Mathilda-only builtins */
+    ASSERT_STR_EQ(context_path_at(4), "System`");
 }
 
 static void test_resolve_bare_builtin(void) {
@@ -124,10 +127,11 @@ static void test_context_builtin_of_builtin(void) {
 
 static void test_dollar_context_and_path(void) {
     assert_eval_eq("$Context", "\"Global`\"", 0);
-    /* The FullSimplify package, loaded by core_init, leaves its context on
-     * $ContextPath (see test_initial_state). */
+    /* The FullSimplify and SeparablePolynomialDecomposition packages, loaded
+     * by core_init, leave their contexts on $ContextPath (see
+     * test_initial_state). */
     assert_eval_eq("$ContextPath",
-                   "{\"FullSimplify`\", \"Global`\", \"Mathilda`\", \"System`\"}", 0);
+                   "{\"SeparablePolynomialDecomposition`\", \"FullSimplify`\", \"Global`\", \"Mathilda`\", \"System`\"}", 0);
 }
 
 static void test_begin_changes_context(void) {

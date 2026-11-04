@@ -1114,3 +1114,12 @@ Plan: ~/.claude/plans/snappy-sprouting-pie.md
 - [x] README rewrite (verified example session), CONTRIBUTING.md, docs/building.md restructure, docs/notes/README.md
 - [x] Changelog entry
 - [x] Verify: build, check-c99/messages/compile-coverage, link check clean; ctest -LE nightly: all pass except dsolve_tests (EigenvalueProblem y'[0]==0,y[Pi]==0 check) -- pre-existing, the diff changes no code
+
+## SeparablePolynomialDecomposition + Simplify stage (v0.6177, 2026-11-05)
+- [x] Package `src/internal/simp/SeparablePolynomialDecomposition.m` (user's code; `EqualTo[0]` → `# === 0 &`, as EqualTo is missing; per-row CoefficientRules for 88× on the flattening; zero/decline/inexact rules)
+- [x] Inexact: `Rationalize[p, 0]`, else return p (user's rule)
+- [x] Simplify stage `try_separable_decomposition` (simp_search.c), eager load in core_init
+- [x] Tuned on a 63-case corpus: 1 orientation, ≤5 vars, no product gate (LeafCount −14%, +22% time)
+- [x] tests/test_separable_decomposition.c (10 groups), tests/bench_separable_decomposition.c (nightly; verified to fail on the old code)
+- [x] Docs (simplification.md), changelog, v0.6177; check-messages, check-c99, leaks clean
+- Review: Rationalize defects (drops 1e-300 x beside 1e300; 30-digit Pi → ~1e-17) and Simplify[Sin[p]] > 60 s on the 251-leaf example are existing issues, recorded as follow-ups.

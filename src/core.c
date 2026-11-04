@@ -1211,6 +1211,12 @@ void core_init(void) {
      * FullSimplify` on $ContextPath so bare FullSimplify[...] resolves. */
     mathilda_load_module("simp/FullSimplify.m");
 
+    /* SeparablePolynomialDecomposition[p, S, T] (a package, like the above:
+     * self-documenting via ::usage, self-protecting). Eager so the function is
+     * callable from the REPL; it loads in ~0.2 ms. Simplify's polynomial
+     * pipeline calls it (try_separable_decomposition, simp/simp_search.c). */
+    mathilda_load_module("simp/SeparablePolynomialDecomposition.m");
+
     /* Builtins that only evaluate the code they are given do not count in the
      * builtin nesting depth (eval_builtin_depth): Together[...] inside
      * Module/If/Table/Map is a user-level call, inside Integrate it is not. */

@@ -1656,6 +1656,12 @@ add_test(NAME bench_assoc COMMAND bench_assoc)
 # Evaluator baseline benchmark: Phase 0 of EVAL_SYMTAB_IMPROVEMENTS.md. Measures
 # per-node dispatch cost so the symbol-object rework can be validated against a
 # committed baseline. Machine-normalized "much slower" gate like bench_assoc.
+# SeparablePolynomialDecomposition: normalised cost + doubling-ratio gates.
+add_executable(bench_separable_decomposition bench_separable_decomposition.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(bench_separable_decomposition m)
+target_include_directories(bench_separable_decomposition PRIVATE ../src)
+add_test(NAME bench_separable_decomposition COMMAND bench_separable_decomposition)
+
 add_executable(bench_eval bench_eval.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(bench_eval m)
 target_include_directories(bench_eval PRIVATE ../src)
@@ -3597,6 +3603,14 @@ if(USE_ECM)
     target_link_libraries(feyncalc_round14_tests gmp m ${ECM_LIB})
 else()
     target_link_libraries(feyncalc_round14_tests gmp m)
+endif()
+
+add_executable(separable_decomposition_tests test_separable_decomposition.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(separable_decomposition_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(separable_decomposition_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(separable_decomposition_tests gmp m)
 endif()
 
 add_executable(match_order_tests test_match_order.c $<TARGET_OBJECTS:mathilda_common>)
