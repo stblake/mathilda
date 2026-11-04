@@ -151,6 +151,9 @@ Expr* direct_dispatch(Expr* m, Expr* a, int64_t n,
  * UpTo[k]); used by every per-method kernel that has already produced
  * a complete list. */
 Expr* direct_apply_k_spec_list(Expr* full_list, Expr* k_spec);
+/* vals / vecs (either may be NULL) -> the k-spec'd part, or {vals, vecs}
+ * when both were computed (MATEIGEN_WANT_BOTH, Eigensystem). */
+Expr* direct_finish(Expr* vals, Expr* vecs, Expr* k_spec);
 
 /* Sort permutation helpers (descending |lambda|), shared by every
  * dispatcher that needs to fix up Ritz-pair order. */

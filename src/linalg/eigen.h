@@ -37,6 +37,9 @@ Expr* builtin_eigenvectors(Expr* res);
  * linalg_delist_and_reeval. */
 Expr* ndla_eigenvalues(Expr* res);
 Expr* ndla_eigenvectors(Expr* res);
+/* Eigensystem[nd]: both parts from one LAPACK call (eigen_direct.c). */
+Expr* ndla_eigensystem(Expr* res);
+Expr* builtin_eigensystem(Expr* res);
 
 /* CharacteristicPolynomial[m, x] == Det[m - x I], and the generalized
  * CharacteristicPolynomial[{m, a}, x] == Det[m - x a].  Reuses the char-poly

@@ -2167,6 +2167,32 @@ void info_init(void) {
         "Hermitian or real symmetric), ::npdef (exact, not positive\n"
         "definite), ::posdef (inexact, not sufficiently positive definite).\n"
         "Option: TargetStructure (any value gives a dense List).");
+    symtab_set_docstring("HessenbergDecomposition",
+        "HessenbergDecomposition[m]\n"
+        "\tgives the Hessenberg decomposition of a numerical square matrix\n"
+        "\tm as {p, h}: p unitary, h upper Hessenberg, and\n"
+        "\tm == p . h . ConjugateTranspose[p].\n"
+        "\n"
+        "Options: Pivoting -> True also returns the balancing matrix d\n"
+        "(m . d == d . p . h . ConjugateTranspose[p]); TargetStructure.\n"
+        "Machine numbers use LAPACK gehrd + orghr; arbitrary-precision\n"
+        "numbers a Householder reduction at the input precision, with the\n"
+        "same reflector convention.  Exact input gives ::schurf, symbolic\n"
+        "input ::schurn, a non-square argument ::matsq.");
+    symtab_set_docstring("Eigensystem",
+        "Eigensystem[m]\n"
+        "\tgives {Eigenvalues[m], Eigenvectors[m]}: the eigenvalues and the\n"
+        "\tmatching eigenvectors, sorted by decreasing absolute value.\n"
+        "Eigensystem[m, k]\n"
+        "\tthe first k (k < 0: the last |k|); also UpTo[k].\n"
+        "Eigensystem[{m, a}]\n"
+        "\tthe generalized eigensystem of m with respect to a.\n"
+        "\n"
+        "Same options as Eigenvalues (Method, Cubics, Quartics).  Both\n"
+        "parts come from ONE decomposition (numerical kernels run once with\n"
+        "values and vectors; the symbolic path returns the eigenvalues it\n"
+        "found the eigenvectors for), paired and ordered exactly as\n"
+        "Eigenvalues and Eigenvectors.  Messages: ::matsq, ::seqs, ::take.");
     symtab_set_docstring("Minors",
         "Minors[m]\n"
         "\tgives the minors of order n - 1 of m, n = min(rows, cols).\n"

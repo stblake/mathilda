@@ -324,6 +324,17 @@ Expr* direct_apply_k_spec_list(Expr* full_list, Expr* k_spec) {
     return full_list;
 }
 
+/* Finish a WANT_* kernel: the k-spec applied to each part that was computed,
+ * and -- for MATEIGEN_WANT_BOTH (Eigensystem) -- the pair {values, vectors},
+ * both from the one decomposition, in the same sorted order. */
+Expr* direct_finish(Expr* vals, Expr* vecs, Expr* k_spec) {
+    if (vals) vals = direct_apply_k_spec_list(vals, k_spec);
+    if (vecs) vecs = direct_apply_k_spec_list(vecs, k_spec);
+    if (vals && vecs)
+        return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ vals, vecs }, 2);
+    return vals ? vals : vecs;
+}
+
 /* ---------- Real non-symmetric Direct: Hessenberg + Francis QR ------ *
  *                                                                       *
  *  For a general real n x n matrix, eigenvalues are extracted by:       *
@@ -1026,7 +1037,8 @@ static Expr* direct_real_general_machine(const MatD* A, MateigenWant want,
             if (info == 0) {
                 size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
                 direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
-                Expr* out;
+                Expr* out = NULL;
+                Expr* out_vecs = NULL;
                 if (want_Q) {
                     double* Vr = (double*)malloc(sizeof(double) * n * n);
                     double* Vi = (double*)malloc(sizeof(double) * n * n);
@@ -1044,13 +1056,14 @@ static Expr* direct_real_general_machine(const MatD* A, MateigenWant want,
                         double inv = (norm2 > 0.0) ? 1.0 / sqrt(norm2) : 1.0;
                         for (size_t i = 0; i < n; i++) { Vr[s * n + i] *= inv; Vi[s * n + i] *= inv; }
                     }
-                    out = direct_build_complex_eigenvector_list(Vr, Vi, n);
+                    out_vecs = direct_build_complex_eigenvector_list(Vr, Vi, n);
                     free(Vr); free(Vi);
-                } else {
+                }
+                if (want & MATEIGEN_WANT_VALUES) {
                     out = direct_build_complex_eigenvalue_list(wr, wi, n, perm);
                 }
                 free(perm); free(Ac); free(wr); free(wi); if (VR) free(VR);
-                return direct_apply_k_spec_list(out, k_spec);
+                return direct_finish(out, out_vecs, k_spec);
             }
         }
         free(Ac); free(wr); free(wi); if (VR) free(VR);
@@ -1082,21 +1095,23 @@ static Expr* direct_real_general_machine(const MatD* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex(eval_re, eval_im, n, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         double* V_re = (double*)malloc(sizeof(double) * n * n);
         double* V_im = (double*)malloc(sizeof(double) * n * n);
         schur_compute_eigvecs(H, Q, n, eval_re, eval_im, perm, V_re, V_im);
-        out = direct_build_complex_eigenvector_list(V_re, V_im, n);
+        out_vecs = direct_build_complex_eigenvector_list(V_re, V_im, n);
         free(V_re); free(V_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
     }
 
     free(H); free(eval_re); free(eval_im); free(perm);
     if (Q) free(Q);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Top-level "Direct" kernel for real symmetric machine-precision input.
@@ -1136,19 +1151,21 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
                 memcpy(wd, w, sizeof(double) * n);
                 size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
                 direct_sort_perm_desc_abs(wd, n, perm);
-                Expr* out;
+                Expr* out = NULL;
+                Expr* out_vecs = NULL;
                 if (want_Q) {
                     double* Q = (double*)malloc(sizeof(double) * n * n);
                     for (size_t i = 0; i < n; i++)
                         for (size_t j = 0; j < n; j++)   /* col j = dsyev col j */
                             Q[i * n + j] = Ac[i + j * n];
-                    out = direct_build_real_eigenvector_list(Q, n, perm);
+                    out_vecs = direct_build_real_eigenvector_list(Q, n, perm);
                     free(Q);
-                } else {
+                }
+                if (want & MATEIGEN_WANT_VALUES) {
                     out = direct_build_real_eigenvalue_list(wd, n, perm);
                 }
                 free(perm); free(wd); free(Ac); free(w);
-                return direct_apply_k_spec_list(out, k_spec);
+                return direct_finish(out, out_vecs, k_spec);
             }
         }
         free(Ac); free(w);
@@ -1181,14 +1198,14 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs(diag, n, perm);
 
-    Expr* out = (want_Q)
-        ? direct_build_real_eigenvector_list(Q, n, perm)
-        : direct_build_real_eigenvalue_list(diag, n, perm);
+    Expr* out_vecs = want_Q ? direct_build_real_eigenvector_list(Q, n, perm) : NULL;
+    Expr* out = (want & MATEIGEN_WANT_VALUES)
+        ? direct_build_real_eigenvalue_list(diag, n, perm) : NULL;
 
     free(diag); free(sub); free(perm);
     if (Q) free(Q);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* ---------- Complex Hermitian Direct: Householder + phase + sym QR -- *
@@ -1556,15 +1573,17 @@ static Expr* direct_complex_hermitian_machine(const MatD* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs(diag, n, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         /* V = Q Z (complex). */
         double* V_re = (double*)malloc(sizeof(double) * n * n);
         double* V_im = (double*)malloc(sizeof(double) * n * n);
         direct_compose_complex_Q_real_Z(Q_re, Q_im, Z, n, V_re, V_im);
-        out = direct_build_complex_hermitian_eigvec_list(V_re, V_im, n, perm);
+        out_vecs = direct_build_complex_hermitian_eigvec_list(V_re, V_im, n, perm);
         free(V_re); free(V_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_real_eigenvalue_list(diag, n, perm);
     }
 
@@ -1572,7 +1591,7 @@ static Expr* direct_complex_hermitian_machine(const MatD* A, MateigenWant want,
     if (Q_re) { free(Q_re); free(Q_im); }
     if (Z) free(Z);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* ---------- Complex general Direct: real block-embedding ------------- *
@@ -1791,7 +1810,8 @@ static Expr* direct_complex_general_machine(const MatD* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex(A_eval_re, A_eval_im, n, perm);
 
-    Expr* result;
+    Expr* result = NULL;
+    Expr* result_vecs = NULL;
     if (want_Q) {
         /* Permute eigenvector rows into sort order. */
         double* V_re = (double*)malloc(sizeof(double) * n * n);
@@ -1803,9 +1823,10 @@ static Expr* direct_complex_general_machine(const MatD* A, MateigenWant want,
                 V_im[k * n + l] = A_evec_im[src * n + l];
             }
         }
-        result = direct_build_complex_eigenvector_list(V_re, V_im, n);
+        result_vecs = direct_build_complex_eigenvector_list(V_re, V_im, n);
         free(V_re); free(V_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         result = direct_build_complex_eigenvalue_list(A_eval_re, A_eval_im,
                                                         n, perm);
     }
@@ -1813,7 +1834,7 @@ static Expr* direct_complex_general_machine(const MatD* A, MateigenWant want,
     free(A_eval_re); free(A_eval_im); free(perm);
     free(A_evec_re); free(A_evec_im);
 
-    return direct_apply_k_spec_list(result, k_spec);
+    return direct_finish(result, result_vecs, k_spec);
 }
 #ifdef USE_MPFR
 
@@ -2202,10 +2223,12 @@ static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_M(diag, n, perm);
 
-    Expr* result;
+    Expr* result = NULL;
+    Expr* result_vecs = NULL;
     if (want_Q) {
-        result = direct_build_real_eigenvector_list_M(Q, n, perm);
-    } else {
+        result_vecs = direct_build_real_eigenvector_list_M(Q, n, perm);
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         result = direct_build_real_eigenvalue_list_M(diag, n, perm);
     }
     free(perm);
@@ -2219,7 +2242,7 @@ static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
     mpfr_array_free(q, n);
     mpfr_array_free(tmp, 12);
 
-    return direct_apply_k_spec_list(result, k_spec);
+    return direct_finish(result, result_vecs, k_spec);
 }
 
 /* ===================================================================
@@ -3267,15 +3290,17 @@ static Expr* direct_real_general_mpfr(const MatM* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex_M(eval_re, eval_im, n, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         mpfr_t* V_re = mpfr_array_alloc(n * n, bits);
         mpfr_t* V_im = mpfr_array_alloc(n * n, bits);
         schur_compute_eigvecs_M(H, Q, n, bits, eval_re, eval_im, perm, V_re, V_im);
-        out = direct_build_complex_eigenvector_list_M(V_re, V_im, n);
+        out_vecs = direct_build_complex_eigenvector_list_M(V_re, V_im, n);
         mpfr_array_free(V_re, n * n);
         mpfr_array_free(V_im, n * n);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list_M(eval_re, eval_im, n, perm);
     }
 
@@ -3287,7 +3312,7 @@ static Expr* direct_real_general_mpfr(const MatM* A, MateigenWant want,
     mpfr_array_free(eval_re, n);
     mpfr_array_free(eval_im, n);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* ===================================================================
@@ -3693,15 +3718,17 @@ static Expr* direct_complex_hermitian_mpfr(const MatM* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_M(diag, n, perm);
 
-    Expr* result;
+    Expr* result = NULL;
+    Expr* result_vecs = NULL;
     if (want_Q) {
         mpfr_t* V_re = mpfr_array_alloc(n * n, bits);
         mpfr_t* V_im = mpfr_array_alloc(n * n, bits);
         direct_compose_complex_Q_real_Z_M(Q_re, Q_im, Z, n, bits, V_re, V_im);
-        result = direct_build_complex_hermitian_eigvec_list_M(V_re, V_im, n, perm);
+        result_vecs = direct_build_complex_hermitian_eigvec_list_M(V_re, V_im, n, perm);
         mpfr_array_free(V_re, n * n);
         mpfr_array_free(V_im, n * n);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         result = direct_build_real_eigenvalue_list_M(diag, n, perm);
     }
 
@@ -3710,7 +3737,7 @@ static Expr* direct_complex_hermitian_mpfr(const MatM* A, MateigenWant want,
     if (Z)    mpfr_array_free(Z, n * n);
     free(perm);
 
-    return direct_apply_k_spec_list(result, k_spec);
+    return direct_finish(result, result_vecs, k_spec);
 }
 
 /* ===================================================================
@@ -3932,7 +3959,8 @@ static Expr* direct_complex_general_mpfr(const MatM* A, MateigenWant want,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex_M(A_eval_re, A_eval_im, n, perm);
 
-    Expr* result;
+    Expr* result = NULL;
+    Expr* result_vecs = NULL;
     if (want_Q) {
         mpfr_t* V_re = mpfr_array_alloc(n * n, bits);
         mpfr_t* V_im = mpfr_array_alloc(n * n, bits);
@@ -3943,10 +3971,11 @@ static Expr* direct_complex_general_mpfr(const MatM* A, MateigenWant want,
                 mpfr_set(V_im[k * n + l], A_evec_im[src * n + l], MPFR_RNDN);
             }
         }
-        result = direct_build_complex_eigenvector_list_M(V_re, V_im, n);
+        result_vecs = direct_build_complex_eigenvector_list_M(V_re, V_im, n);
         mpfr_array_free(V_re, n * n);
         mpfr_array_free(V_im, n * n);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         result = direct_build_complex_eigenvalue_list_M(A_eval_re, A_eval_im,
                                                           n, perm);
     }
@@ -3955,7 +3984,7 @@ static Expr* direct_complex_general_mpfr(const MatM* A, MateigenWant want,
     mpfr_array_free(A_evec_re, n * n); mpfr_array_free(A_evec_im, n * n);
     free(perm);
 
-    return direct_apply_k_spec_list(result, k_spec);
+    return direct_finish(result, result_vecs, k_spec);
 }
 
 /* Dispatcher: route an MPFR-precision matrix through the appropriate
@@ -4193,7 +4222,8 @@ static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex(eval_re, eval_im, n, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_vec) {
         double* Vs_re = (double*)malloc(sizeof(double) * n * n);
         double* Vs_im = (double*)malloc(sizeof(double) * n * n);
@@ -4208,14 +4238,15 @@ static Expr* direct_generalized_machine(const MatD* A, const MatD* B,
                 Vs_im[s * n + i] = Vi[j * n + i] * inv;
             }
         }
-        out = direct_build_complex_eigenvector_list(Vs_re, Vs_im, n);
+        out_vecs = direct_build_complex_eigenvector_list(Vs_re, Vs_im, n);
         free(Vs_re); free(Vs_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
     }
 
     free(eval_re); free(eval_im); free(Vr); free(Vi); free(perm);
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Dispatcher entry point: route a numeric matrix through the
@@ -4690,6 +4721,113 @@ Expr* ndla_eigenvectors(Expr* res) {
         } else {
             free(A);
         }
+    }
+#endif
+    return linalg_delist_and_reeval(res);
+}
+
+/* Eigensystem[nd] on a machine NDArray: ONE LAPACK call (dsyev / dgeev /
+ * zgeev with vectors) gives both parts, sorted with the one permutation and
+ * built with the same helpers as ndla_eigenvalues / ndla_eigenvectors, so the
+ * pairing and the order match them.  Anything else (options, k, a pencil, no
+ * LAPACK) delists to the boxed Eigensystem. */
+Expr* ndla_eigensystem(Expr* res) {
+#ifdef USE_LAPACK
+    Expr* arg; int n;
+    if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
+        NDPresentation pres = arg->data.ndarray.present_as;
+        bool cplx = arg->data.ndarray.dtype == NDT_COMPLEX64;
+        int rr, cc; double* A = NULL;
+        Expr *vals = NULL, *vecs = NULL;
+        if (na_load_matrix(arg, cplx, /*colmajor=*/true, &rr, &cc, &A)) {
+            size_t nn = (size_t)n * (size_t)n;
+            if (cplx) {
+                double* w  = (double*)malloc(2 * (size_t)n * sizeof(double));
+                double* VR = (double*)malloc(2 * nn * sizeof(double));
+                if (w && VR && mat_lapack_zgeev(n, A, n, w, VR, n) == 0) {
+                    double* wr = (double*)calloc((size_t)n, sizeof(double));
+                    double* wi = (double*)calloc((size_t)n, sizeof(double));
+                    size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                    double* ev = (double*)malloc(2 * (size_t)n * sizeof(double));
+                    double* vb = (double*)malloc(2 * nn * sizeof(double));
+                    for (int i = 0; i < n; i++) { wr[i] = w[2 * i]; wi[i] = w[2 * i + 1]; }
+                    direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+                    for (int i = 0; i < n; i++) {
+                        ev[2 * i] = wr[perm[i]]; ev[2 * i + 1] = wi[perm[i]];
+                        for (int j = 0; j < n; j++) {
+                            size_t src = 2 * ((size_t)j + perm[i] * (size_t)n);
+                            size_t dst = 2 * ((size_t)i * (size_t)n + (size_t)j);
+                            vb[dst] = VR[src]; vb[dst + 1] = VR[src + 1];
+                        }
+                    }
+                    vals = na_build_vector_as(ev, n, true, pres);
+                    vecs = na_build_matrix_as(vb, n, n, true, false, pres);
+                    free(wr); free(wi); free(perm); free(ev); free(vb);
+                }
+                free(w); free(VR);
+            } else if (ndla_eigen_symmetric(A, n)) {
+                double* w = (double*)malloc((size_t)n * sizeof(double));
+                size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                if (w && perm && mat_lapack_dsyev(n, A, n, w) == 0) {
+                    direct_sort_perm_desc_abs(w, n, perm);
+                    double* ev = (double*)malloc((size_t)n * sizeof(double));
+                    double* vb = (double*)malloc(nn * sizeof(double));
+                    for (int s = 0; s < n; s++) {
+                        ev[s] = w[perm[s]];
+                        for (int i = 0; i < n; i++) vb[(size_t)s * n + i] = A[i + (size_t)perm[s] * n];
+                    }
+                    vals = na_build_vector_as(ev, n, false, pres);
+                    vecs = na_build_matrix_as(vb, n, n, false, false, pres);
+                    free(ev); free(vb);
+                }
+                free(w); free(perm);
+            } else {
+                double* wr = (double*)malloc((size_t)n * sizeof(double));
+                double* wi = (double*)malloc((size_t)n * sizeof(double));
+                double* VR = (double*)malloc(nn * sizeof(double));
+                size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+                if (wr && wi && VR && perm && mat_lapack_dgeev(n, A, n, wr, wi, VR, n) == 0) {
+                    direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+                    double* Vr = (double*)malloc(nn * sizeof(double));
+                    double* Vi = (double*)malloc(nn * sizeof(double));
+                    bool allreal = true;
+                    for (int s = 0; s < n; s++) {
+                        size_t jj = perm[s];
+                        double norm2 = 0.0;
+                        for (int i = 0; i < n; i++) {
+                            double re, im;
+                            if (wi[jj] == 0.0)     { re = VR[i + jj*n];     im = 0.0; }
+                            else if (wi[jj] > 0.0) { re = VR[i + jj*n];     im = VR[i + (jj+1)*n]; }
+                            else                   { re = VR[i + (jj-1)*n]; im = -VR[i + jj*n]; }
+                            Vr[s*n + i] = re; Vi[s*n + i] = im;
+                            norm2 += re*re + im*im;
+                            if (im != 0.0) allreal = false;
+                        }
+                        double inv = (norm2 > 0.0) ? 1.0/sqrt(norm2) : 1.0;
+                        for (int i = 0; i < n; i++) { Vr[s*n+i] *= inv; Vi[s*n+i] *= inv; }
+                    }
+                    bool vals_real = true;
+                    for (int i = 0; i < n; i++) if (wi[perm[i]] != 0.0) { vals_real = false; break; }
+                    if (vals_real) {
+                        double* ev = (double*)malloc((size_t)n * sizeof(double));
+                        for (int i = 0; i < n; i++) ev[i] = wr[perm[i]];
+                        vals = na_build_vector_as(ev, n, false, pres);
+                        free(ev);
+                    } else {
+                        vals = direct_build_complex_eigenvalue_list(wr, wi, n, perm);
+                    }
+                    if (allreal) vecs = na_build_matrix_as(Vr, n, n, false, false, pres);
+                    else         vecs = direct_build_complex_eigenvector_list(Vr, Vi, n);
+                    free(Vr); free(Vi);
+                }
+                free(wr); free(wi); free(VR); free(perm);
+            }
+        }
+        free(A);
+        if (vals && vecs)
+            return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ vals, vecs }, 2);
+        if (vals) expr_free(vals);
+        if (vecs) expr_free(vecs);
     }
 #endif
     return linalg_delist_and_reeval(res);

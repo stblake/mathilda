@@ -362,6 +362,18 @@ void zgebak_(const char* job, const char* side, const int* n,
              const int* ilo, const int* ihi, const double* scale,
              const int* m, double* v, const int* ldv, int* info);
 
+/* dgehrd / zgehrd -- reduce a general matrix to upper Hessenberg form by a
+ * unitary similarity (rows/columns ilo..ihi); dorghr / zunghr -- form the
+ * unitary Q from the reflectors.  HessenbergDecomposition. */
+void dgehrd_(const int* n, const int* ilo, const int* ihi, double* a,
+             const int* lda, double* tau, double* work, const int* lwork, int* info);
+void zgehrd_(const int* n, const int* ilo, const int* ihi, double* a,
+             const int* lda, double* tau, double* work, const int* lwork, int* info);
+void dorghr_(const int* n, const int* ilo, const int* ihi, double* a,
+             const int* lda, const double* tau, double* work, const int* lwork, int* info);
+void zunghr_(const int* n, const int* ilo, const int* ihi, double* a,
+             const int* lda, const double* tau, double* work, const int* lwork, int* info);
+
 #endif /* !MATHILDA_USE_ACCELERATE */
 
 #endif /* USE_LAPACK */
@@ -610,6 +622,17 @@ int mat_lapack_dgebak(char job, char side, int n, int ilo, int ihi,
                       const double* scale, int m, double* V, int ldv);
 int mat_lapack_zgebak(char job, char side, int n, int ilo, int ihi,
                       const double* scale, int m, double* V, int ldv);
+
+/* Hessenberg reduction (HessenbergDecomposition).  mat_lapack_dgehrd reduces
+ * the column-major A in place over rows/columns ilo..ihi (1-based; 1..n for
+ * the whole matrix): the upper Hessenberg H on and above the first
+ * subdiagonal, the reflectors below it, scalars in tau (n - 1 entries; 2(n-1)
+ * doubles for the complex form).  mat_lapack_dorghr then overwrites that same
+ * A with the unitary Q (A_in = Q H Q^H).  Return the LAPACK info; stubs -1. */
+int mat_lapack_dgehrd(int n, int ilo, int ihi, double* A, int lda, double* tau);
+int mat_lapack_zgehrd(int n, int ilo, int ihi, double* A, int lda, double* tau);
+int mat_lapack_dorghr(int n, int ilo, int ihi, double* A, int lda, const double* tau);
+int mat_lapack_zunghr(int n, int ilo, int ihi, double* A, int lda, const double* tau);
 
 #ifdef __cplusplus
 }

@@ -112,6 +112,10 @@ static Expr* nd_orthogonalize(Expr* call) {   /* default inner product */
     if (call->data.function.arg_count != 1) return NULL;
     return la_orthogonalize_machine(call->data.function.args[0]);
 }
+static Expr* nd_hessenberg(Expr* call) {      /* {p, h} stacked 2 x n x n */
+    if (call->data.function.arg_count != 1) return NULL;
+    return la_hessenberg_machine(call->data.function.args[0]);
+}
 static Expr* nd_pseudoinverse(Expr* call) {    /* direct-args, real float64 only */
     if (call->data.function.arg_count != 1) return NULL;
     const Expr* a = call->data.function.args[0];
@@ -233,6 +237,12 @@ static const NdFnSpec ND_FNS[] = {
      * operand orthonormalises to radicals, so real/complex only; a user
      * inner product or options run in the interpreter. */
     { "Orthogonalize",      nd_orthogonalize,             0, 2, false, NDF_REAL | NDF_CPLX, false, false },
+    /* HessenbergDecomposition[m] -> {p, h}: two n x n factors of one element
+     * type, which IS a rank-3 2 x n x n machine array -- rank_rule 6 (rank 2
+     * -> rank 3).  The delegate stacks the interpreter's own gehrd/orghr
+     * factors, so Compile[...][m] == HessenbergDecomposition[m] element for
+     * element; Pivoting (a third factor) is not lowered. */
+    { "HessenbergDecomposition", nd_hessenberg,           0, 6, false, NDF_REAL | NDF_CPLX, false, false },
     /* COMPILE_MISSING.md §4: the transforms.  Fourier / InverseFourier are
      * real-in complex-out — the ONLY heads that need complex_result (their
      * fourier_compile wrapper always builds NDT_COMPLEX64 so the buffer matches
@@ -425,7 +435,8 @@ const NdFnSpec* nd_fn_lookup(const char* h, size_t na) {
  * (Fourier: real in, complex out); otherwise the operand's element type is
  * preserved.  rank_rule: 0 = same rank, 1 = rank 1, 2 = rank 2 in/out,
  * 3 = rank 2 -> rank 1 (Diagonal), 4 = rank 1 in/out (Normalize),
- * 5 = rank 1 -> rank 2 (matrix producers). */
+ * 5 = rank 1 -> rank 2 (matrix producers), 6 = rank 2 -> rank 3 (a pair of
+ * same-shape factors stacked, HessenbergDecomposition's {p, h}). */
 CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     if (!CT_IS_ARRAY(ta)) return CT_ERR;
     if (s->elems && !((s->elems >> (unsigned)CT_ELEM(ta)) & 1u)) return CT_ERR;  /* operand gate */
@@ -439,6 +450,7 @@ CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
     if (s->rank_rule == 3) return rank == 2 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Diagonal */
     if (s->rank_rule == 4) return rank == 1 ? CT_ARRAY(elem, 1) : CT_ERR;  /* Normalize */
     if (s->rank_rule == 5) return rank == 1 ? CT_ARRAY(elem, 2) : CT_ERR;  /* matrix producers */
+    if (s->rank_rule == 6) return rank == 2 ? CT_ARRAY(elem, 3) : CT_ERR;  /* factor pairs {p, h} */
     return CT_ARRAY(elem, rank);
 }
 

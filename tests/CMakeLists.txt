@@ -783,6 +783,7 @@ set(COMMON_SRC
     ../src/linalg/schurdecomp.c
     ../src/linalg/schurdecomp_machine.c
     ../src/linalg/schurdecomp_mpfr.c
+    ../src/linalg/hessenberg.c
     ../src/linalg/orthogonalize.c
     ../src/linalg/minors.c
     ../src/linalg/singularvaluelist.c
@@ -3126,6 +3127,24 @@ else()
     target_link_libraries(schurdecomp_tests gmp m)
 endif()
 add_test(NAME schurdecomp_tests COMMAND schurdecomp_tests)
+
+add_executable(eigensystem_tests test_eigensystem.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(eigensystem_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(eigensystem_tests gmp m ${ECM_LIB})
+    add_dependencies(eigensystem_tests build_ecm)
+else()
+    target_link_libraries(eigensystem_tests gmp m)
+endif()
+
+add_executable(hessenberg_tests test_hessenberg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(hessenberg_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(hessenberg_tests gmp m ${ECM_LIB})
+    add_dependencies(hessenberg_tests build_ecm)
+else()
+    target_link_libraries(hessenberg_tests gmp m)
+endif()
 
 add_executable(orthogonalize_tests test_orthogonalize.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(orthogonalize_tests PRIVATE ../src)

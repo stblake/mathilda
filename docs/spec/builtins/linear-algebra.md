@@ -1568,7 +1568,7 @@ Gives the singular values of a matrix.
 - `SingularValueList[m]` — the nonzero singular values, in decreasing order.
 - `SingularValueList[m, k]` — the first `k` (`k < 0`: the last `|k|`) of all
   `min(rows, cols)` values, zeros included; also `{k}`, `{i, j}`, `{i, j, s}`
-  and `UpTo[k]` (up to `k` of the nonzero values).
+  and `UpTo[k]` (up to `k` of all the values, zeros included, as for `k`).
 - `SingularValueList[{m, a}]` — the generalized singular values (machine
   matrices only).
 
@@ -2940,3 +2940,89 @@ In[5]:= FreeQ[Eigenvectors[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}], {0, 0, 0}]
 Out[5]= True
 ```
 
+
+## Eigensystem
+Gives the eigenvalues and the matching eigenvectors of a square matrix.
+- `Eigensystem[m]` — `{Eigenvalues[m], Eigenvectors[m]}`, sorted by decreasing
+  absolute value.
+- `Eigensystem[m, k]` — the first `k` (`k < 0`: the last `|k|`); also
+  `UpTo[k]`. `Eigensystem[m, 0]` is `{{}, {}}`.
+- `Eigensystem[{m, a}]` — the generalized eigensystem of `m` with respect to `a`.
+
+**Features**:
+- `Protected`. Every argument form and option of `Eigenvalues` /
+  `Eigenvectors`: `k`, `-k`, `UpTo[k]`, `{m, a}`, `Method -> Automatic |
+  "Direct" | "Arnoldi" | "Banded" | "FEAST"` (with sub-options), `Cubics`,
+  `Quartics`.
+- **One decomposition.** The numerical kernels (Direct, Arnoldi, Banded, FEAST;
+  machine and MPFR, real, complex, symmetric/Hermitian, generalized) run ONCE
+  with `MATEIGEN_WANT_BOTH`: they sort the values, apply the one permutation to
+  the vectors, and k-select both parts together (`direct_finish` in
+  `eigen_direct.c`). A visible `NDArray` / packed matrix takes one LAPACK call
+  (`dsyev` / `dgeev` / `zgeev` with vectors) in `ndla_eigensystem`. The symbolic
+  path (exact or symbolic input, or an inexact matrix no numerical kernel
+  accepts) computes the eigenvalues from the characteristic polynomial once and
+  returns them together with the eigenvectors it found for them. So the result
+  equals `{Eigenvalues[...], Eigenvectors[...]}` in order and pairing — up to the
+  last bits of a machine eigenvalue, since a values-only LAPACK call
+  (`Eigenvalues`) and a values-and-vectors call (`Eigensystem`) may round
+  differently.
+- A defective matrix pads with zero vectors in place, as `Eigenvectors` does:
+  `Eigensystem[{{1, 1}, {0, 1}}]` is `{{1, 1}, {{1, 0}, {0, 0}}}`.
+- Messages (reference text): `::matsq`, `::seqs` (a bad sequence
+  specification), `::take` (`|k|` larger than the order — `Eigenvalues` itself
+  clips silently).
+- `SparseArray` input is densified by the transparency gate.
+- **Compile**: not lowered — the result is the ragged pair `{values, vectors}`
+  (a vector and a matrix, real or complex by data), which is no single machine
+  array (`EXEMPT` in `tools/compile_coverage.py`). The head is on `pack.c`'s
+  AWARE list, so a packed argument reaches `ndla_eigensystem` without being
+  unpacked.
+
+```mathematica
+In[1]:= Eigensystem[{{2, 1}, {1, 2}}]
+Out[1]= {{3, 1}, {{1, 1}, {-1, 1}}}
+
+In[2]:= Eigensystem[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 10.}}, -1]
+Out[2]= {{0.198247}, {{0.278296, -0.831847, 0.48019}}}
+```
+
+## HessenbergDecomposition
+Gives the Hessenberg decomposition of a numerical square matrix.
+- `HessenbergDecomposition[m]` — `{p, h}` with `p` unitary, `h` upper
+  Hessenberg and `m == p . h . ConjugateTranspose[p]`.
+
+**Features**:
+- `Protected` (the reference also sets `ReadProtected`; Mathilda never does).
+  Options `Pivoting -> False | True` (`True` adds the balancing matrix `d` from
+  LAPACK `gebal`, with `m . d == d . p . h . ConjugateTranspose[p]`) and
+  `TargetStructure` (dense either way); any other option gives `::optx`.
+- Numerical, as in the reference: an exact matrix gives `::schurf` ("received a
+  matrix with infinite precision") and a symbolic one `::schurn`, both left
+  unevaluated; a non-square argument gives `::matsq`.
+- **Machine** (List, packed, `NDArray`): LAPACK `dgehrd` + `dorghr` (real) or
+  `zgehrd` + `zunghr` (complex), new `mat_lapack_*` wrappers in
+  `src/linalg/lapack.c`. The factors match the reference digit for digit (same
+  reflector convention). A 2×2 matrix is already Hessenberg: `p` is the identity.
+- **Arbitrary precision**: a Householder reduction at the input precision using
+  LAPACK's reflector convention (`zlarfg`: a real `beta` of sign opposite to
+  `Re x0`, and the last reflector that only makes a complex subdiagonal entry
+  real), so the MPFR factors agree with the machine ones to machine precision.
+  Entries the reduction never touches — `p`'s first row and column and `h`
+  below the subdiagonal — are exact `0`, as in the reference. Pivoting at
+  arbitrary precision is computed at machine precision.
+- **Compile**: lowers for `_Real` / `_Complex` rank-2 operands. `{p, h}` is two
+  `n × n` factors of one element type, i.e. a rank-3 `2 × n × n` machine array:
+  the `ND_FNS` row uses the new `rank_rule` 6 (rank 2 → rank 3) and a delegate
+  that stacks the interpreter's own `gehrd`/`orghr` factors, so the compiled
+  answer equals the interpreted one element for element. Pivoting is not lowered.
+
+```mathematica
+In[1]:= {p, h} = HessenbergDecomposition[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 10.}}];
+        h
+Out[1]= {{1., -3.59701, -0.248069}, {-8.06226, 14.8, 2.4}, {0., 0.4, 0.2}}
+
+In[2]:= HessenbergDecomposition[{{1, 2}, {3, 4}}]
+HessenbergDecomposition::schurf: HessenbergDecomposition has received a matrix with infinite precision.
+Out[2]= HessenbergDecomposition[{{1, 2}, {3, 4}}]
+```

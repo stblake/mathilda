@@ -850,6 +850,68 @@ int mat_lapack_ztrtrs(int n, int nrhs, const double* A, int lda,
  * (void*)0, which does not implicitly convert to a function pointer and would
  * trip -Werror=incompatible-pointer-types.  SORT='N' means LAPACK never
  * references SELECT or BWORK, so a null for both is safe. */
+/* ---- Hessenberg reduction (HessenbergDecomposition) ---------------------- */
+
+int mat_lapack_dgehrd(int n, int ilo, int ihi, double* A, int lda, double* tau)
+{
+    int info = 0, lwork = -1;
+    double query = 0.0;
+    dgehrd_(&n, &ilo, &ihi, A, &lda, tau, &query, &lwork, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query, n > 1 ? n : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    if (!work) return -999;
+    dgehrd_(&n, &ilo, &ihi, A, &lda, tau, work, &lwork, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_zgehrd(int n, int ilo, int ihi, double* A, int lda, double* tau)
+{
+    int info = 0, lwork = -1;
+    double query[2] = { 0.0, 0.0 };
+    zgehrd_(&n, &ilo, &ihi, lapack_zptr(A), &lda, lapack_zptr(tau),
+            lapack_zptr(query), &lwork, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query[0], n > 1 ? n : 1);
+    double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
+    if (!work) return -999;
+    zgehrd_(&n, &ilo, &ihi, lapack_zptr(A), &lda, lapack_zptr(tau),
+            lapack_zptr(work), &lwork, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_dorghr(int n, int ilo, int ihi, double* A, int lda, const double* tau)
+{
+    int info = 0, lwork = -1;
+    double query = 0.0;
+    dorghr_(&n, &ilo, &ihi, A, &lda, (double*)tau, &query, &lwork, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query, n > 1 ? n : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    if (!work) return -999;
+    dorghr_(&n, &ilo, &ihi, A, &lda, (double*)tau, work, &lwork, &info);
+    free(work);
+    return info;
+}
+
+int mat_lapack_zunghr(int n, int ilo, int ihi, double* A, int lda, const double* tau)
+{
+    int info = 0, lwork = -1;
+    double query[2] = { 0.0, 0.0 };
+    zunghr_(&n, &ilo, &ihi, lapack_zptr(A), &lda, lapack_zptr((double*)tau),
+            lapack_zptr(query), &lwork, &info);
+    if (info != 0) return info;
+    lwork = lapack_lwork(query[0], n > 1 ? n : 1);
+    double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
+    if (!work) return -999;
+    zunghr_(&n, &ilo, &ihi, lapack_zptr(A), &lda, lapack_zptr((double*)tau),
+            lapack_zptr(work), &lwork, &info);
+    free(work);
+    return info;
+}
+
 int mat_lapack_dgees(int n, double* A, int lda,
                      double* wr, double* wi, double* VS, int ldvs)
 {
@@ -1108,6 +1170,15 @@ int mat_lapack_dtrtrs(int n, int nrhs, const double* A, int lda,
 int mat_lapack_ztrtrs(int n, int nrhs, const double* A, int lda,
                       double* B, int ldb)
 { (void)n; (void)nrhs; (void)A; (void)lda; (void)B; (void)ldb; return -1; }
+int mat_lapack_dgehrd(int n, int ilo, int ihi, double* A, int lda, double* tau)
+{ (void)n; (void)ilo; (void)ihi; (void)A; (void)lda; (void)tau; return -1; }
+int mat_lapack_zgehrd(int n, int ilo, int ihi, double* A, int lda, double* tau)
+{ (void)n; (void)ilo; (void)ihi; (void)A; (void)lda; (void)tau; return -1; }
+int mat_lapack_dorghr(int n, int ilo, int ihi, double* A, int lda, const double* tau)
+{ (void)n; (void)ilo; (void)ihi; (void)A; (void)lda; (void)tau; return -1; }
+int mat_lapack_zunghr(int n, int ilo, int ihi, double* A, int lda, const double* tau)
+{ (void)n; (void)ilo; (void)ihi; (void)A; (void)lda; (void)tau; return -1; }
+
 int mat_lapack_dgees(int n, double* A, int lda,
                      double* wr, double* wi, double* VS, int ldvs)
 { (void)n; (void)A; (void)lda; (void)wr; (void)wi; (void)VS; (void)ldvs; return -1; }

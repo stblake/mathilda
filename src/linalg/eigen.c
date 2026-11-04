@@ -11,6 +11,8 @@
 #include "common.h"
 #include "numeric.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "ndarray.h"
+#include "print.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -299,6 +301,64 @@ static Expr* eigen_normalize_vector(Expr* v) {
     return scaled;
 }
 
+/* The numerical dispatch shared by Eigenvectors (want = VECTORS) and
+ * Eigensystem (want = BOTH): Banded / Arnoldi / FEAST / Direct in the same
+ * preference order as builtin_eigenvalues.  NULL when no numerical kernel
+ * answered (the caller then takes the symbolic path). */
+static Expr* eigen_numeric_dispatch(EigenOpts* o, Expr* m, Expr* a, int64_t n,
+                                    MateigenWant want) {
+    EigenOpts opts = *o;
+    {
+        bool try_banded = (opts.method == MATEIGEN_BANDED)
+                       || (opts.method == MATEIGEN_AUTOMATIC
+                           && banded_automatic_prefers(m, n));
+        if (try_banded) {
+            Expr* out = banded_dispatch(m, a, n,
+                                          want,
+                                          opts.k_spec, opts.method_value);
+            if (out) return out;
+        }
+        bool try_arnoldi = (opts.method == MATEIGEN_ARNOLDI)
+                        || (opts.method == MATEIGEN_AUTOMATIC
+                            && arnoldi_automatic_prefers(opts.k_spec, (size_t)n));
+        if (try_arnoldi) {
+            Expr* out = arnoldi_dispatch(m, a, n,
+                                          want,
+                                          opts.k_spec, opts.method_value);
+            if (out) return out;
+        }
+        bool try_feast = (opts.method == MATEIGEN_FEAST)
+                      || (opts.method == MATEIGEN_AUTOMATIC
+                          && feast_automatic_prefers(m, n, opts.method_value));
+        if (try_feast) {
+            Expr* out = feast_dispatch(m, a, n,
+                                         want,
+                                         opts.k_spec, opts.method_value);
+            if (out) return out;
+        }
+        if (opts.method == MATEIGEN_AUTOMATIC
+            || opts.method == MATEIGEN_DIRECT
+            || opts.method == MATEIGEN_ARNOLDI
+            || opts.method == MATEIGEN_BANDED
+            || opts.method == MATEIGEN_FEAST) {
+            Expr* out = direct_dispatch(m, a, n,
+                                         want,
+                                         opts.k_spec);
+            if (out) return out;
+        }
+    }
+    return NULL;
+}
+
+/* The symbolic path of Eigenvectors and Eigensystem: eigenvalues from the
+ * characteristic polynomial (exactly, after rationalising an inexact matrix),
+ * sorted by descending |lambda|, and one null-space computation per distinct
+ * value.  Returns the eigenvector List (k-spec applied); when `vals_out` is
+ * non-NULL also the eigenvalue List in the SAME order with the same k-spec --
+ * both from the one computation (Eigensystem). */
+static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
+                                    bool inexact, Expr** vals_out);
+
 Expr* builtin_eigenvectors(Expr* res) {
     if (linalg_call_has_ndarray(res)) return ndla_eigenvectors(res);
     EigenOpts opts;
@@ -309,48 +369,17 @@ Expr* builtin_eigenvectors(Expr* res) {
 
     bool inexact = eigen_matrix_is_inexact(m)
                 || (a && eigen_matrix_is_inexact(a));
-
-    /* Numerical dispatch (mirrors builtin_eigenvalues). */
     if (inexact) {
-        bool try_banded = (opts.method == MATEIGEN_BANDED)
-                       || (opts.method == MATEIGEN_AUTOMATIC
-                           && banded_automatic_prefers(m, n));
-        if (try_banded) {
-            Expr* out = banded_dispatch(m, a, n,
-                                          MATEIGEN_WANT_VECTORS,
-                                          opts.k_spec, opts.method_value);
-            if (out) return out;
-        }
-        bool try_arnoldi = (opts.method == MATEIGEN_ARNOLDI)
-                        || (opts.method == MATEIGEN_AUTOMATIC
-                            && arnoldi_automatic_prefers(opts.k_spec, (size_t)n));
-        if (try_arnoldi) {
-            Expr* out = arnoldi_dispatch(m, a, n,
-                                          MATEIGEN_WANT_VECTORS,
-                                          opts.k_spec, opts.method_value);
-            if (out) return out;
-        }
-        bool try_feast = (opts.method == MATEIGEN_FEAST)
-                      || (opts.method == MATEIGEN_AUTOMATIC
-                          && feast_automatic_prefers(m, n, opts.method_value));
-        if (try_feast) {
-            Expr* out = feast_dispatch(m, a, n,
-                                         MATEIGEN_WANT_VECTORS,
-                                         opts.k_spec, opts.method_value);
-            if (out) return out;
-        }
-        if (opts.method == MATEIGEN_AUTOMATIC
-            || opts.method == MATEIGEN_DIRECT
-            || opts.method == MATEIGEN_ARNOLDI
-            || opts.method == MATEIGEN_BANDED
-            || opts.method == MATEIGEN_FEAST) {
-            Expr* out = direct_dispatch(m, a, n,
-                                         MATEIGEN_WANT_VECTORS,
-                                         opts.k_spec);
-            if (out) return out;
-        }
+        Expr* out = eigen_numeric_dispatch(&opts, m, a, n, MATEIGEN_WANT_VECTORS);
+        if (out) return out;
     }
+    return eigen_vectors_symbolic(&opts, m, a, n, inexact, NULL);
+}
 
+static Expr* eigen_vectors_symbolic(EigenOpts* o, Expr* m, Expr* a, int64_t n,
+                                    bool inexact, Expr** vals_out) {
+    EigenOpts opts = *o;
+    if (vals_out) *vals_out = NULL;
     if (inexact && opts.method_given
         && opts.method != MATEIGEN_AUTOMATIC
         && opts.method != MATEIGEN_DIRECT
@@ -469,6 +498,28 @@ Expr* builtin_eigenvectors(Expr* res) {
         vectors[vc++] = eigen_zero_vector(n);
     }
 
+    /* Eigensystem: the eigenvalues in the vectors' order, same k-spec. */
+    if (vals_out) {
+        Expr** vcopy = (Expr**)malloc(sizeof(Expr*) * (val_count ? val_count : 1));
+        for (size_t k = 0; k < val_count; k++) vcopy[k] = expr_copy(vals[k]);
+        size_t vk = 0;
+        Expr** vsel = eigen_apply_k_spec(vcopy, val_count, opts.k_spec, &vk);
+        free(vcopy);
+        Expr* vl = expr_new_function(expr_new_symbol(SYM_List), vsel, vk);
+        free(vsel);
+        if (inexact) {
+            Expr* nv = common_numericalize_result(vl, prec_bits);
+            expr_free(vl);
+            for (size_t k = 0; k < nv->data.function.arg_count; k++) {
+                Expr* c = eigen_chop(nv->data.function.args[k]);
+                expr_free(nv->data.function.args[k]);
+                nv->data.function.args[k] = c;
+            }
+            vl = nv;
+        }
+        *vals_out = vl;
+    }
+
     /* Free unused eigenvalues. */
     for (size_t k = 0; k < val_count; k++) expr_free(vals[k]);
     free(vals);
@@ -497,11 +548,94 @@ Expr* builtin_eigenvectors(Expr* res) {
     return out;
 }
 
+/* ---------------- Eigensystem ---------------- */
+
+/* Eigensystem[m, ...] == {Eigenvalues[m, ...], Eigenvectors[m, ...]}, computed
+ * from ONE decomposition: the numerical kernels run once with
+ * MATEIGEN_WANT_BOTH (they sort, pair and k-select both parts with the one
+ * permutation), and the symbolic path returns the eigenvalues it found the
+ * eigenvectors for.  Same argument forms and options as Eigenvalues. */
+static bool eigensystem_check(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1) return false;
+    Expr* m = res->data.function.args[0];
+    int64_t dims[64];
+    bool pair = m->type == EXPR_FUNCTION && head_is(m, SYM_List)
+             && m->data.function.arg_count == 2
+             && get_tensor_dims(m, dims) == 3 && dims[1] == dims[2];
+    int rank = pair ? 3 : (is_ndarray(m) ? m->data.ndarray.rank : get_tensor_dims(m, dims));
+    bool square = pair
+        || (is_ndarray(m) ? (rank == 2 && m->data.ndarray.dims[0] == m->data.ndarray.dims[1]
+                             && m->data.ndarray.dims[0] > 0)
+                          : (rank == 2 && dims[0] == dims[1] && dims[0] > 0));
+    if (!square) {
+        if (m->type == EXPR_FUNCTION && head_is(m, SYM_List)) {
+            char* s = expr_to_string(m);
+            mth_message("Eigensystem", "matsq", "Argument %s at position 1 is not a non-empty square matrix.", s ? s : "?");
+            free(s);
+        }
+        return false;
+    }
+    int64_t n = pair ? dims[1] : (is_ndarray(m) ? m->data.ndarray.dims[0] : dims[0]);
+    if (argc >= 2) {
+        Expr* k = res->data.function.args[1];
+        bool rule = k->type == EXPR_FUNCTION && (head_is(k, SYM_Rule) || head_is(k, SYM_RuleDelayed));
+        if (!rule) {
+            bool ok = k->type == EXPR_INTEGER
+                   || (head_is(k, SYM_UpTo) && k->data.function.arg_count == 1
+                       && k->data.function.args[0]->type == EXPR_INTEGER
+                       && k->data.function.args[0]->data.integer >= 0);
+            if (!ok) {
+                char* s = expr_to_string(res);
+                mth_message("Eigensystem", "seqs", "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or {m, n, s}) expected at position 2 in %s.", s ? s : "?");
+                free(s);
+                return false;
+            }
+            if (k->type == EXPR_INTEGER) {
+                int64_t kv = k->data.integer, ak = kv < 0 ? -kv : kv;
+                if (ak > n) {
+                    mth_message("Eigensystem", "take", "Cannot take eigenvectors and eigenvalues %lld through %lld out of the total of %lld eigenvectors and eigenvalues.",
+                                (long long)(kv < 0 ? kv : 1), (long long)(kv < 0 ? -1 : kv), (long long)n);
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+Expr* builtin_eigensystem(Expr* res) {
+    if (res->type != EXPR_FUNCTION || !eigensystem_check(res)) return NULL;
+    if (linalg_call_has_ndarray(res)) return ndla_eigensystem(res);
+    EigenOpts opts;
+    if (!eigen_parse_args(res, &opts)) return NULL;
+
+    Expr *m, *a; int64_t n;
+    if (!eigen_extract_matrix_pair(opts.arg0, &m, &a, &n)) return NULL;
+
+    bool inexact = eigen_matrix_is_inexact(m)
+                || (a && eigen_matrix_is_inexact(a));
+    if (inexact) {
+        Expr* out = eigen_numeric_dispatch(&opts, m, a, n, MATEIGEN_WANT_BOTH);
+        if (out) return out;
+    }
+    Expr* vals = NULL;
+    Expr* vecs = eigen_vectors_symbolic(&opts, m, a, n, inexact, &vals);
+    if (!vecs || !vals) {
+        if (vecs) expr_free(vecs);
+        if (vals) expr_free(vals);
+        return NULL;
+    }
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ vals, vecs }, 2);
+}
+
 void mateigen_init(void) {
     symtab_add_builtin("Eigenvalues", builtin_eigenvalues);
     symtab_get_def("Eigenvalues")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Eigenvectors", builtin_eigenvectors);
     symtab_get_def("Eigenvectors")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Eigensystem", builtin_eigensystem);
+    symtab_get_def("Eigensystem")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("CharacteristicPolynomial",
                        builtin_characteristicpolynomial);
     symtab_get_def("CharacteristicPolynomial")->attributes |= ATTR_PROTECTED;

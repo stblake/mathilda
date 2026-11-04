@@ -233,14 +233,13 @@ static Expr* banded_real_sym_machine(const MatD* A, size_t b,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs(diag, n, perm);
 
-    Expr* out = (want_Q)
-        ? direct_build_real_eigenvector_list(Q, n, perm)
-        : direct_build_real_eigenvalue_list(diag, n, perm);
+    Expr* out_vecs = want_Q ? direct_build_real_eigenvector_list(Q, n, perm) : NULL;
+    Expr* out = (want & MATEIGEN_WANT_VALUES) ? direct_build_real_eigenvalue_list(diag, n, perm) : NULL;
 
     free(diag); free(sub); free(perm);
     if (Q) free(Q);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Apply two-sided complex Hermitian Givens U^H A U symmetrically.
@@ -482,14 +481,16 @@ static Expr* banded_complex_hermitian_machine(const MatD* A, size_t b,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs(diag, n, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         double* V_re = (double*)malloc(sizeof(double) * n * n);
         double* V_im = (double*)malloc(sizeof(double) * n * n);
         direct_compose_complex_Q_real_Z(Q_re, Q_im, Z, n, V_re, V_im);
-        out = direct_build_complex_hermitian_eigvec_list(V_re, V_im, n, perm);
+        out_vecs = direct_build_complex_hermitian_eigvec_list(V_re, V_im, n, perm);
         free(V_re); free(V_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_real_eigenvalue_list(diag, n, perm);
     }
 
@@ -497,7 +498,7 @@ static Expr* banded_complex_hermitian_machine(const MatD* A, size_t b,
     if (Q_re) { free(Q_re); free(Q_im); }
     if (Z) free(Z);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Top-level "Banded" machine dispatcher.  Returns NULL when the input
@@ -714,9 +715,8 @@ static Expr* banded_real_sym_mpfr(const MatM* A, size_t b,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_M(diag, n, perm);
 
-    Expr* result = (want_Q)
-        ? direct_build_real_eigenvector_list_M(Q, n, perm)
-        : direct_build_real_eigenvalue_list_M(diag, n, perm);
+    Expr* result_vecs = want_Q ? direct_build_real_eigenvector_list_M(Q, n, perm) : NULL;
+    Expr* result = (want & MATEIGEN_WANT_VALUES) ? direct_build_real_eigenvalue_list_M(diag, n, perm) : NULL;
     free(perm);
 
     mpfr_array_free(W,    n * n);
@@ -726,7 +726,7 @@ static Expr* banded_real_sym_mpfr(const MatM* A, size_t b,
     mpfr_array_free(tmp_band, 5);
     mpfr_array_free(tmp_qr,   12);
 
-    return direct_apply_k_spec_list(result, k_spec);
+    return direct_finish(result, result_vecs, k_spec);
 }
 
 /* Apply two-sided complex Hermitian Givens U^H A U in plane (p, q) at
@@ -1041,15 +1041,17 @@ static Expr* banded_complex_hermitian_mpfr(const MatM* A, size_t b,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_M(diag, n, perm);
 
-    Expr* result;
+    Expr* result = NULL;
+    Expr* result_vecs = NULL;
     if (want_Q) {
         mpfr_t* V_re = mpfr_array_alloc(n * n, bits);
         mpfr_t* V_im = mpfr_array_alloc(n * n, bits);
         direct_compose_complex_Q_real_Z_M(Q_re, Q_im, Z, n, bits, V_re, V_im);
-        result = direct_build_complex_hermitian_eigvec_list_M(V_re, V_im, n, perm);
+        result_vecs = direct_build_complex_hermitian_eigvec_list_M(V_re, V_im, n, perm);
         mpfr_array_free(V_re, n * n);
         mpfr_array_free(V_im, n * n);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         result = direct_build_real_eigenvalue_list_M(diag, n, perm);
     }
 
@@ -1058,7 +1060,7 @@ static Expr* banded_complex_hermitian_mpfr(const MatM* A, size_t b,
     if (Z)    mpfr_array_free(Z, n * n);
     free(perm);
 
-    return direct_apply_k_spec_list(result, k_spec);
+    return direct_finish(result, result_vecs, k_spec);
 }
 
 /* MPFR Banded dispatcher.  Returns NULL when the matrix isn't

@@ -108,6 +108,9 @@ Expr* la_minors_machine(const Expr* m);               /* minors.c: Minors[m]   *
 Expr* la_adjugate_machine(const Expr* m);             /* minors.c: Adjugate[m] */
 Expr* la_orthogonalize_machine(const Expr* m);        /* orthogonalize.c: the
                                                        * Automatic method     */
+Expr* la_hessenberg_machine(const Expr* m);           /* hessenberg.c: {p, h}
+                                                       * as ONE rank-3
+                                                       * 2 x n x n array      */
 
 #ifdef __cplusplus
 }

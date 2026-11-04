@@ -1106,6 +1106,8 @@ void core_init(void) {
     minors_init();
     void orthogonalize_init(void);
     orthogonalize_init();
+    void hessenberg_init(void);
+    hessenberg_init();
     fit_init();
     readwrite_init();
     void readlist_init(void);

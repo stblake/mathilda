@@ -111,6 +111,7 @@ Expr* ndla_singularvaluelist(Expr* res);       /* singularvaluelist.c */
 Expr* ndla_minors(Expr* res);                  /* minors.c            */
 Expr* ndla_adjugate(Expr* res);                /* minors.c            */
 Expr* ndla_orthogonalize(Expr* res);           /* orthogonalize.c     */
+Expr* ndla_hessenbergdecomposition(Expr* res); /* hessenberg.c        */
 
 /* ------------------------------------------------------------------------
  * The SVD pair: PseudoInverse[m] and LeastSquares[m, b].

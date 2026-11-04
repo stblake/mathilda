@@ -293,6 +293,8 @@ EXEMPT = {
     "SchurDecomposition": "returns a pair/tuple of matrices",
     "SingularValueDecomposition": "returns a triple of matrices",
     "Eigenvectors": "result shape is data-dependent (defective matrices)",
+    "Eigensystem": "returns the ragged pair {values, vectors} (a vector and a "
+                   "matrix, complex or real by data); no single machine array",
     "Eigenvalues": "may be complex for a real matrix; result type not static",
     "CharacteristicPolynomial": "returns a symbolic Plus in x, not a machine array",
     "PositiveDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",

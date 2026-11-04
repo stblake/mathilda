@@ -842,13 +842,12 @@ static Expr* feast_real_sym_machine(const MatD* A, MateigenWant want,
         }
         size_t* perm = (size_t*)malloc(sizeof(size_t) * kept);
         direct_sort_perm_desc_abs(vals, kept, perm);
-        out = want_Q
-            ? feast_build_real_eigenvector_list_subset(vecs, n, kept, perm)
-            : feast_build_real_eigenvalue_list_subset(vals, kept, perm);
+        Expr* out_vecs = want_Q ? feast_build_real_eigenvector_list_subset(vecs, n, kept, perm) : NULL;
+        out = (want & MATEIGEN_WANT_VALUES) ? feast_build_real_eigenvalue_list_subset(vals, kept, perm) : NULL;
         free(perm);
         free(vals);
         if (vecs) free(vecs);
-        out = direct_apply_k_spec_list(out, k_spec);
+        out = direct_finish(out, out_vecs, k_spec);
     }
 
 cleanup:
@@ -1415,15 +1414,14 @@ static Expr* feast_complex_hermitian_machine(const MatD* A,
         }
         size_t* perm = (size_t*)malloc(sizeof(size_t) * kept);
         direct_sort_perm_desc_abs(vals, kept, perm);
-        out = want_Q
-            ? feast_build_complex_eigenvector_list_subset(vecs_re, vecs_im,
-                                                           n, kept, perm)
-            : feast_build_real_eigenvalue_list_subset(vals, kept, perm);
+        Expr* out_vecs = want_Q ? feast_build_complex_eigenvector_list_subset(vecs_re, vecs_im,
+                                                           n, kept, perm) : NULL;
+        out = (want & MATEIGEN_WANT_VALUES) ? feast_build_real_eigenvalue_list_subset(vals, kept, perm) : NULL;
         free(perm);
         free(vals);
         if (vecs_re) free(vecs_re);
         if (vecs_im) free(vecs_im);
-        out = direct_apply_k_spec_list(out, k_spec);
+        out = direct_finish(out, out_vecs, k_spec);
     }
 
 cleanup:
@@ -2438,13 +2436,12 @@ static Expr* feast_real_sym_mpfr(const MatM* A, MateigenWant want,
         }
         size_t* perm = (size_t*)malloc(sizeof(size_t) * kept);
         feast_sort_perm_desc_abs_M(vals, kept, perm);
-        out = want_Q
-            ? feast_build_real_eigenvector_list_subset_M(vecs, n, kept, perm)
-            : feast_build_real_eigenvalue_list_subset_M(vals, kept, perm);
+        Expr* out_vecs = want_Q ? feast_build_real_eigenvector_list_subset_M(vecs, n, kept, perm) : NULL;
+        out = (want & MATEIGEN_WANT_VALUES) ? feast_build_real_eigenvalue_list_subset_M(vals, kept, perm) : NULL;
         free(perm);
         mpfr_array_free(vals, kept);
         if (vecs) mpfr_array_free(vecs, n * kept);
-        out = direct_apply_k_spec_list(out, k_spec);
+        out = direct_finish(out, out_vecs, k_spec);
     }
 
 cleanup:
@@ -2972,15 +2969,14 @@ static Expr* feast_complex_hermitian_mpfr(const MatM* A, MateigenWant want,
         }
         size_t* perm = (size_t*)malloc(sizeof(size_t) * kept);
         feast_sort_perm_desc_abs_M(vals, kept, perm);
-        out = want_Q
-            ? feast_build_complex_eigenvector_list_subset_M(vecs_re, vecs_im,
-                                                              n, kept, perm)
-            : feast_build_real_eigenvalue_list_subset_M(vals, kept, perm);
+        Expr* out_vecs = want_Q ? feast_build_complex_eigenvector_list_subset_M(vecs_re, vecs_im,
+                                                              n, kept, perm) : NULL;
+        out = (want & MATEIGEN_WANT_VALUES) ? feast_build_real_eigenvalue_list_subset_M(vals, kept, perm) : NULL;
         free(perm);
         mpfr_array_free(vals, kept);
         if (vecs_re) mpfr_array_free(vecs_re, n * kept);
         if (vecs_im) mpfr_array_free(vecs_im, n * kept);
-        out = direct_apply_k_spec_list(out, k_spec);
+        out = direct_finish(out, out_vecs, k_spec);
     }
 
 cleanup:

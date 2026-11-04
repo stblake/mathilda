@@ -325,7 +325,8 @@ static Expr* arnoldi_real_general_machine(const MatD* A,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * mu);
     direct_sort_perm_desc_abs_complex(eval_re, eval_im, mu, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         /* Eigenvectors of H_m in the original basis -- schur_compute_eigvecs
          * gives Vh[sp * mu + j] = j-th component of sp-th (sorted) eigvec. */
@@ -367,16 +368,17 @@ static Expr* arnoldi_real_general_machine(const MatD* A,
                 }
             }
         }
-        out = mateigen_build_complex_eigvec_list_rect(VA_re, VA_im, mu, n);
+        out_vecs = mateigen_build_complex_eigvec_list_rect(VA_re, VA_im, mu, n);
         free(VA_re); free(VA_im); free(Vh_re); free(Vh_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list(eval_re, eval_im, mu, perm);
     }
 
     free(V); free(H); free(Hk); free(eval_re); free(eval_im); free(perm);
     if (Qh) free(Qh);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Complex general Arnoldi at machine precision.
@@ -666,7 +668,8 @@ static Expr* arnoldi_complex_general_machine(const MatD* A,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * mu);
     direct_sort_perm_desc_abs_complex(HA_eval_re, HA_eval_im, mu, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         /* Lift H_m eigvecs to A eigvecs:
          *   VA[k][i] = sum_{j=0}^{mu-1} V_m[j][i] * y_k[j]
@@ -705,9 +708,10 @@ static Expr* arnoldi_complex_general_machine(const MatD* A,
                 }
             }
         }
-        out = mateigen_build_complex_eigvec_list_rect(VA_re, VA_im, mu, n);
+        out_vecs = mateigen_build_complex_eigvec_list_rect(VA_re, VA_im, mu, n);
         free(VA_re); free(VA_im);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list(HA_eval_re, HA_eval_im,
                                                      mu, perm);
     }
@@ -717,7 +721,7 @@ static Expr* arnoldi_complex_general_machine(const MatD* A,
     free(HA_evec_re); free(HA_evec_im);
     free(perm);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Top-level machine-precision Arnoldi dispatcher. */
@@ -896,7 +900,8 @@ static Expr* arnoldi_real_general_mpfr(const MatM* A,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * mu);
     direct_sort_perm_desc_abs_complex_M(eval_re, eval_im, mu, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         mpfr_t* Vh_re = mpfr_array_alloc(mu * mu, bits);
         mpfr_t* Vh_im = mpfr_array_alloc(mu * mu, bits);
@@ -937,12 +942,13 @@ static Expr* arnoldi_real_general_mpfr(const MatM* A,
                 }
             }
         }
-        out = mateigen_build_complex_eigvec_list_rect_M(VA_re, VA_im, mu, n);
+        out_vecs = mateigen_build_complex_eigvec_list_rect_M(VA_re, VA_im, mu, n);
         mpfr_array_free(VA_re, mu * n);
         mpfr_array_free(VA_im, mu * n);
         mpfr_array_free(Vh_re, mu * mu);
         mpfr_array_free(Vh_im, mu * mu);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list_M(eval_re, eval_im, mu, perm);
     }
 
@@ -958,7 +964,7 @@ static Expr* arnoldi_real_general_mpfr(const MatM* A,
     mpfr_array_free(eval_im, mu);
     mpfr_array_free(tmp, 14);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* Complex general Arnoldi at MPFR precision.  Mirrors the machine
@@ -1351,7 +1357,8 @@ static Expr* arnoldi_complex_general_mpfr(const MatM* A,
     size_t* perm = (size_t*)malloc(sizeof(size_t) * mu);
     direct_sort_perm_desc_abs_complex_M(HA_eval_re, HA_eval_im, mu, perm);
 
-    Expr* out;
+    Expr* out = NULL;
+    Expr* out_vecs = NULL;
     if (want_Q) {
         /* Lift to A-eigenvectors: VA[k][i] = sum_j V_m[j][i] * y_k[j]
          * where y_k is the perm[k]-th H_m eigenvector (complex). */
@@ -1394,10 +1401,11 @@ static Expr* arnoldi_complex_general_mpfr(const MatM* A,
                 }
             }
         }
-        out = mateigen_build_complex_eigvec_list_rect_M(VA_re, VA_im, mu, n);
+        out_vecs = mateigen_build_complex_eigvec_list_rect_M(VA_re, VA_im, mu, n);
         mpfr_array_free(VA_re, mu * n);
         mpfr_array_free(VA_im, mu * n);
-    } else {
+    }
+    if (want & MATEIGEN_WANT_VALUES) {
         out = direct_build_complex_eigenvalue_list_M(HA_eval_re, HA_eval_im,
                                                        mu, perm);
     }
@@ -1418,7 +1426,7 @@ static Expr* arnoldi_complex_general_mpfr(const MatM* A,
     mpfr_array_free(HA_evec_re, mu * mu);
     mpfr_array_free(HA_evec_im, mu * mu);
 
-    return direct_apply_k_spec_list(out, k_spec);
+    return direct_finish(out, out_vecs, k_spec);
 }
 
 /* MPFR dispatcher for the Arnoldi method. */
