@@ -156,6 +156,13 @@ static void test_forms(void) {
     assert_eval_eq("Integrate[x^(b - 1) (a x + 1)^(-c), {x, 0, Infinity},"
                    " Assumptions -> a > 0 && b > 0 && c > b, Method -> \"Roach\"] ==="
                    " Gamma[b] Gamma[c - b]/(a^b Gamma[c])", "True", 0);
+    /* #9 by t = Tan[x]: (1 - t^2)^a on [0, 1].  The exponents PowerExpand
+     * leaves are expanded, so (1 + t^2)^(-1 - a + (2 + 2 a)/2) is 1 and not a
+     * spurious second G (whose convolution carried Gamma[0] and was rejected
+     * by the numeric check). */
+    assert_eval_eq("Integrate[Cos[x]^(-2 a - 2) Cos[2 x]^a, {x, 0, Pi/4},"
+                   " Assumptions -> a > 0, Method -> \"Roach\"] ==="
+                   " Sqrt[Pi] Gamma[1 + a]/(2 Gamma[3/2 + a])", "True", 0);
 }
 
 /* a symbolic finite upper limit z: the rescale x -> z y gives Log[z y], and a

@@ -298,9 +298,22 @@ static void test_nl_nested_expsplit_no_crash(void) {
              "Assumptions -> mu > 0 && nu > 0 && t > 0]]] =!= Null", "True");
 }
 
+/* An elliptic antiderivative is cross-checked.  For Mathar M6771 the indefinite
+ * cascade returns EllipticE/EllipticF of ArcSin[Sqrt[9/(8 (x - 5/8))]], whose
+ * argument exceeds 1 on [5/6, 5/4]: there it is an antiderivative of -f, and it
+ * telescoped to -0.12793.  The cross-check rejects it and the elliptic stage
+ * answers.  (Reached once DerivativeDivides stopped grinding on the elliptic
+ * kernel; before, the integral timed out.)  Reference value. */
+static void test_nl_elliptic_antiderivative_crosschecked(void) {
+    check_eq("Abs[N[Integrate[Sqrt[((5/4 - x) (-5/8 + x))/(7/4 - x)], {x, 5/6, 5/4}] - "
+             "0.1279340024731467]] < 10^-10", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_nl_elliptic_antiderivative_crosschecked);
 
     TEST(test_nl_branch_point_antiderivatives);
     TEST(test_nl_nested_expsplit_no_crash);

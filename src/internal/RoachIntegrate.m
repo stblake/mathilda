@@ -614,6 +614,11 @@ Roach`tanSubst[f_, x_, b_, assum_] := Module[{t, g},
   If[!FreeQ[g, x], Return[$Failed]];
   (* all bases are positive for 0 < t < Tan[b] <= Infinity, so PowerExpand is exact here *)
   g = PowerExpand[g/(1 + t^2)];
+  (* PowerExpand leaves an exponent such as -1 - a + (2 + 2 a)/2 unexpanded,
+     so (1 + t^2)^0 survived as a spurious G factor: Cos[x]^(-2a-2) Cos[2x]^a
+     became a two-G convolution with Gamma[1 + (-2 - 2 a)/2 + a] = Gamma[0] in
+     it, which the numeric check rejected, instead of (1 - t^2)^a *)
+  g = g /. Power[u_, e_] :> Power[u, Expand[e]];
   Roach`definite[g, t, 0, If[b === Pi/2, Infinity, Tan[b]], And[assum, 0 < t]]]
 
 (* integration by parts: u(x) x^s with u an inverse function of x *)

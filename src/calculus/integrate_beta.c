@@ -25,6 +25,7 @@
 
 #include <string.h>
 #include <stdbool.h>
+#include <stdarg.h>
 
 /* ---- construction / evaluation helpers ---------------------------------- */
 
@@ -320,7 +321,13 @@ static Expr* beta_gate(Expr* value, Expr* A, Expr* B, Expr* assumptions) {
     Expr* cond_prove = mk_fn2("And",
         mk_fn2("Greater", cp(A), mk_int(0)),
         mk_fn2("Greater", cp(B), mk_int(0)));
+    /* Simplify leaves some plain implications unreduced (1/2 + n > 0 under
+     * n > 0 came back as itself, so the value was needlessly conditioned);
+     * the Refine sign prover discharges them. */
+    Expr* cond_ref = assumptions ? cp(cond_prove) : NULL;
     int pv = prove(cond_prove, assumptions);
+    if (pv == 0 && cond_ref) { if (prove_ref(cond_ref, assumptions)) pv = 1; }
+    else if (cond_ref) expr_free(cond_ref);
     if (pv == 1)  return value;
     if (pv == -1) { expr_free(value); return NULL; }
     Expr* cond_show = mk_fn2("And",
@@ -398,6 +405,205 @@ Expr* integrate_halfbeta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptio
     Expr* value2 = beta_gate(value, A, B, assumptions);
     expr_free(A); expr_free(B);
     return value2;
+}
+
+/* ---- Reductions INTO the Beta family ------------------------------------ */
+/* Two shape-gated pre-FTC stages that integrate nothing themselves: each
+ * rewrites the integrand into a shape the [0,1] Beta stages own and hands it to
+ * them.  They run ahead of Newton-Leibniz for the same reason those stages do:
+ * with a SYMBOLIC exponent the antiderivative is a non-elementary incomplete
+ * Beta, and the indefinite cascade only finds that out after its full search
+ * -- 55-66 s on the two integrals below, 45 s of it ParallelMixedTower running
+ * into its own backstop -- before the definite cascade reaches a stage that
+ * closes them.  Integer and numeric exponents are left to Newton-Leibniz,
+ * whose elementary antiderivative is fast there. */
+
+/* Evaluate the pure-function template `t` (#1..#n) on borrowed arguments.
+ * Reparsed per call: each stage calls it a few times, and only once its
+ * structural gate has passed.  Template pattern variables live in
+ * Integrate`BetaR`, never in the user's context. */
+static Expr* bt_x(const char* t, int n, ...) {
+    Expr* body = parse_expression(t);
+    if (!body) return NULL;
+    Expr* args[6];
+    va_list ap;
+    va_start(ap, n);
+    for (int i = 0; i < n && i < 6; i++) args[i] = cp(va_arg(ap, Expr*));
+    va_end(ap);
+    Expr* fn = mk_fn1("Function", body);
+    return eval_take(expr_new_function(fn, n ? args : NULL, (size_t)n));
+}
+static bool bt_true(Expr* e) {            /* consumes e */
+    bool r = e && sym_is(e, "True");
+    if (e) expr_free(e);
+    return r;
+}
+
+/* True iff some Power[base, e] in f has a base depending on x and an exponent
+ * free of x that is not a number (a, 2 n - 1, -2 a - 2, ...). */
+static bool has_symbolic_exponent(const Expr* f, const Expr* x) {
+    if (!f || f->type != EXPR_FUNCTION) return false;
+    if (head_name_is(f, "Power") && f->data.function.arg_count == 2 &&
+        contains_symbol(f->data.function.args[0], x) &&
+        free_of_x(f->data.function.args[1], x) &&
+        !bt_true(ev1("NumericQ", cp(f->data.function.args[1]))))
+        return true;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (has_symbolic_exponent(f->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* The Beta-family closure of g on [0,1] in t: Beta, Half-Beta, Euler 2F1. */
+static Expr* beta_family_01(Expr* g, Expr* t, Expr* assumptions) {
+    Expr* zero = mk_int(0); Expr* one = mk_int(1);
+    Expr* r = integrate_beta_try(g, t, zero, one, assumptions);
+    if (!r) r = integrate_halfbeta_try(g, t, zero, one, assumptions);
+    if (!r) r = integrate_euler_2f1_try(g, t, zero, one, assumptions);
+    expr_free(zero); expr_free(one);
+    return r;
+}
+
+/* Beta[p, q] -> Gamma[p] Gamma[q]/Gamma[p + q], then Simplify -- inside the
+ * ConditionalExpression when there is one.  The user-facing form of a value
+ * the Beta stages build as Beta (FunctionExpand has no Beta rule).  Consumes v. */
+static Expr* beta_to_gamma(Expr* v, Expr* assumptions) {
+    if (!v) return NULL;
+    Expr* as = assumptions ? cp(assumptions) : expr_new_symbol("True");
+    Expr* r = bt_x(
+        "With[{g = Function[Integrate`BetaR`v, Simplify[Integrate`BetaR`v /. "
+        "Beta[Integrate`BetaR`p_, Integrate`BetaR`q_] :> Gamma[Integrate`BetaR`p] "
+        "Gamma[Integrate`BetaR`q]/Gamma[Integrate`BetaR`p + Integrate`BetaR`q], #2]]}, "
+        "If[Head[#1] === ConditionalExpression, "
+        "ConditionalExpression[g[#1[[1]]], #1[[2]]], g[#1]]]", 2, v, as);
+    expr_free(v); expr_free(as);
+    return r;
+}
+
+/* t = Tan[x] on [0, b], 0 < b <= Pi/4:
+ *   Integrate[f(x), {x, 0, b}] = Integrate[f(ArcTan t)/(1 + t^2), {t, 0, Tan[b]}],
+ * with Cos[x] = (1 + t^2)^(-1/2), Sin[x] = t (1 + t^2)^(-1/2),
+ * Cos[2x] = (1 - t^2)/(1 + t^2), Sin[2x] = 2t/(1 + t^2); then t -> Tan[b] t
+ * maps the interval onto [0, 1].  Roach's 2008 #9, Cos[x]^(-2a-2) Cos[2x]^a on
+ * [0, Pi/4], becomes (1 - t^2)^a, a Half-Beta.
+ *
+ * Why b <= Pi/4: on 0 < t < Tan[b] <= 1 every base the substitution produces
+ * (t, 1 + t^2, 1 - t^2) is positive, so PowerExpand is exact; past Pi/4 the
+ * factor 1 - t^2 changes sign and splitting a power of it would be wrong.  The
+ * exponents are then Expanded, so that (1 + t^2)^(-1 - a + (2 + 2a)/2)
+ * collapses to 1: left as it is, the Beta stages see a spurious (1 + t^2)
+ * factor and decline.  Declines unless one of the Beta stages closes. */
+Expr* integrate_tanbeta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!contains_symbol(f, x) || contains_symbol(b, x)) return NULL;
+    if (!contains_head(f, "Cos") && !contains_head(f, "Sin") && !contains_head(f, "Tan") &&
+        !contains_head(f, "Sec") && !contains_head(f, "Csc") && !contains_head(f, "Cot"))
+        return NULL;
+    if (!has_symbolic_exponent(f, x)) return NULL;
+    if (!bt_true(bt_x("TrueQ[0 < #1 <= Pi/4]", 1, b))) return NULL;
+
+    Expr* t = expr_new_symbol("Integrate`BetaR`t");
+    Expr* g = bt_x(
+        "With[{g = (#1 /. {Cos[2 #2] -> (1 - #3^2)/(1 + #3^2), "
+        "Sin[2 #2] -> 2 #3/(1 + #3^2), Cos[#2] -> 1/Sqrt[1 + #3^2], "
+        "Sin[#2] -> #3/Sqrt[1 + #3^2], Tan[#2] -> #3, Sec[#2] -> Sqrt[1 + #3^2], "
+        "Csc[#2] -> Sqrt[1 + #3^2]/#3, Cot[#2] -> 1/#3})/(1 + #3^2)}, "
+        "If[!FreeQ[g, #2], $Failed, "
+        "PowerExpand[Tan[#4] (g /. #3 -> Tan[#4] #3)] /. "
+        "Power[Integrate`BetaR`u_, Integrate`BetaR`e_] :> "
+        "Power[Integrate`BetaR`u, Expand[Integrate`BetaR`e]]]]",
+        4, f, x, t, b);
+    Expr* r = NULL;
+    if (g && contains_symbol(g, t)) r = beta_family_01(g, t, assumptions);
+    if (g) expr_free(g);
+    expr_free(t);
+    return beta_to_gamma(r, assumptions);
+}
+
+/* Integration by parts on [0, 1] for C x^p u(x), u = ArcSin[x] or ArcCos[x]:
+ *   = C u(1)/(p + 1) - C/(p + 1) Integrate[x^(p+1) u'(x), {x, 0, 1}],
+ * u' = +-(1 - x^2)^(-1/2), so the remainder is a Half-Beta.  The boundary term
+ * at 0 vanishes, and the integral converges, exactly when Re[p] > -1: proved
+ * under the assumptions (bare value), refuted (decline), or undecided (a
+ * ConditionalExpression on Re[p + 1] > 0).  Roach's 2008 #7, ArcSin[x]
+ * x^(2n-1), closes in milliseconds instead of after a 55 s indefinite search
+ * and a 125 s DiffUnderInt descent. */
+Expr* integrate_invtrig_beta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!(b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
+    if (!contains_head(f, "ArcSin") && !contains_head(f, "ArcCos")) return NULL;
+
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+    int kind = 0;                      /* 1 ArcSin, 2 ArcCos */
+    Expr* p = mk_int(0); Expr* C = mk_int(1);
+    bool ok = true;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* g = fac[i];
+        if (free_of_x(g, x)) { C = Times_(C, cp(g)); continue; }
+        if (is_symbol(g, x)) { p = Plus_(p, mk_int(1)); continue; }
+        if (kind == 0 && (head_name_is(g, "ArcSin") || head_name_is(g, "ArcCos")) &&
+            g->data.function.arg_count == 1 && is_symbol(g->data.function.args[0], x)) {
+            kind = head_name_is(g, "ArcSin") ? 1 : 2;
+            continue;
+        }
+        if (head_name_is(g, "Power") && g->data.function.arg_count == 2 &&
+            is_symbol(g->data.function.args[0], x) && free_of_x(g->data.function.args[1], x)) {
+            p = Plus_(p, cp(g->data.function.args[1]));
+            continue;
+        }
+        ok = false;
+    }
+    if (!ok || !kind) { expr_free(p); expr_free(C); return NULL; }
+    Expr* p1 = simp(Plus_(p, mk_int(1)));
+    /* a numeric exponent is Newton-Leibniz's: its antiderivative is elementary */
+    if (!p1 || bt_true(ev1("NumericQ", cp(p1)))) {
+        if (p1) expr_free(p1);
+        expr_free(C);
+        return NULL;
+    }
+
+    Expr* conv = mk_fn2("Greater", cp(p1), mk_int(0));
+    int pv = prove(cp(conv), assumptions);
+    if (pv == 0 && assumptions && prove_ref(cp(conv), assumptions)) pv = 1;
+    if (pv == 0 && assumptions &&
+        prove_ref(mk_fn2("LessEqual", cp(p1), mk_int(0)), assumptions)) pv = -1;
+    if (pv == -1) { expr_free(conv); expr_free(p1); expr_free(C); return NULL; }
+    Expr* as2 = assumptions ? mk_fn2("And", cp(assumptions), cp(conv)) : cp(conv);
+
+    /* remainder  s C x^(p+1) (1 - x^2)^(-1/2)/(p + 1):  s = -1 (ArcSin), +1 (ArcCos) */
+    Expr* rem = eval_take(mk_fn("Times", (Expr*[]){
+        mk_int(kind == 1 ? -1 : 1), cp(C), mk_fn2("Power", cp(p1), mk_int(-1)),
+        mk_fn2("Power", cp(x), cp(p1)),
+        mk_fn2("Power", Plus_(mk_int(1), Times_(mk_int(-1), mk_fn2("Power", cp(x), mk_int(2)))),
+               mk_fn2("Rational", mk_int(-1), mk_int(2))) }, 5));
+    Expr* zero = mk_int(0); Expr* onei = mk_int(1);
+    Expr* R = rem ? integrate_halfbeta_try(rem, x, zero, onei, as2) : NULL;
+    expr_free(zero); expr_free(onei);
+    if (rem) expr_free(rem);
+    if (R && (head_name_is(R, "ConditionalExpression") || mentions_nonfinite(R))) {
+        expr_free(R); R = NULL;
+    }
+    Expr* out = NULL;
+    if (R) {
+        /* boundary term C u(1)/(p + 1): u(1) = Pi/2 (ArcSin), 0 (ArcCos) */
+        Expr* bterm = kind == 1
+            ? Times_(cp(C), Times_(mk_fn2("Rational", mk_int(1), mk_int(2)),
+                     Times_(expr_new_symbol("Pi"), mk_fn2("Power", cp(p1), mk_int(-1)))))
+            : mk_int(0);
+        Expr* v = beta_to_gamma(eval_take(Plus_(bterm, R)), as2);
+        if (v && !mentions_nonfinite(v)) {
+            if (pv == 1) out = v;
+            else {
+                Expr* cs = simp2(mk_fn2("Greater", mk_fn1("Re", cp(p1)), mk_int(0)), assumptions);
+                out = eval_take(mk_fn2("ConditionalExpression", v, cs));
+            }
+        } else if (v) expr_free(v);
+    }
+    expr_free(as2); expr_free(conv); expr_free(p1); expr_free(C);
+    return out;
 }
 
 /* ---- Euler finite-interval -> Beta * Hypergeometric2F1 ------------------ */

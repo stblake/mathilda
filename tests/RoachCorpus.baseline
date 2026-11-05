@@ -2,8 +2,8 @@
 # are CORRECT. The runner (test_roach_corpus.c) fails when one of them is no
 # longer CORRECT; add an id when a case starts passing. Regenerate with
 # ROACH_CORPUS_WRITE_BASELINE=1.
-# Not listed though it can pass: R08-29 (CORRECT in 25-30 s, at the per-case
-# timeout, so it flips to TIMEOUT under load).
+# R08-29 is listed since v0.6222 (the DerivativeDivides elliptic-kernel gate
+# brought it from 25-30 s to under 1 s).
 R08-01
 R08-02
 R08-04
@@ -48,3 +48,13 @@ I97-01
 I97-05
 I97-10
 I97-11
+R08-09
+R08-18
+R08-20
+R08-24
+R08-27
+R08-29
+I96-06
+I96-11
+I96-12
+I97-03

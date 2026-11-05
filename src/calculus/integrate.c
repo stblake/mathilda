@@ -337,9 +337,18 @@ static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x);
  * nothing.  For those, run the cheap direct-quotient strategy only
  * (integrate_derivdivides_try) -- it still catches the genuine folds like
  * t^2/(t^3-1)^(1/3) via Pass 1 -- and leave the intact integrand for the
- * Goursat stage.  Non-pseudo-elliptic integrands keep the full search. */
+ * Goursat stage.  Non-pseudo-elliptic integrands keep the full search.
+ *
+ * The same holds when the curve is elliptic although no single radicand is a
+ * cubic (has_elliptic_sqrt_kernel): on Sqrt[z/((z - 1)(z - 2))] the search
+ * tried the shift kernels z - 1, z - 2, 1/(z - 1), 1/(z - 2), each of which
+ * only re-expresses the same elliptic integrand in u (Sqrt[2 + u]/(Sqrt[u]
+ * Sqrt[1 + u]), ...), and spent 1.1-2.4 s per Solve branch in a full cascade
+ * descent on it: 13-16 s, unbounded by TimeConstraint, before the integral
+ * reached the elliptic stage that closes it in 3 s. */
+static bool has_elliptic_sqrt_kernel(const Expr* f, const Expr* x);
 static Expr* try_derivdivides(Expr* f, Expr* x) {
-    if (has_pseudoelliptic_radical(f, x))
+    if (has_pseudoelliptic_radical(f, x) || has_elliptic_sqrt_kernel(f, x))
         return integrate_derivdivides_try(f, x);
     return integrate_derivdivides_full(f, x);
 }
@@ -586,6 +595,53 @@ static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x) {
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (has_pseudoelliptic_radical(e->data.function.args[i], x)) return true;
     return false;
+}
+
+/* Some Power[b, k/2] with b depending on x (structural pre-check). */
+static bool has_sqrt_radical_in(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (head_is((Expr*)ex, SYM_Rational) && ex->data.function.arg_count == 2 &&
+            ex->data.function.args[1]->type == EXPR_INTEGER &&
+            ex->data.function.args[1]->data.integer == 2 &&
+            depends_on_var(e->data.function.args[0], (Expr*)x))
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_sqrt_radical_in(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* True when the square-root radicals of `f` together define a curve of genus
+ * >= 1: the product of the numerators and denominators of every radicand b of
+ * a Power[b, k/2] is a polynomial whose odd-multiplicity part has degree >= 3.
+ * This is the elliptic shape has_pseudoelliptic_radical misses because no
+ * single radicand is a cubic: Sqrt[z/((z - 1)(z - 2))] (kernel z(z-1)(z-2)),
+ * or the three linear radicals Sqrt[2 + u]/(Sqrt[u] Sqrt[1 + u]) that a shift
+ * substitution turns it into.  Square roots only: a cube root of a quadratic is
+ * left alone, as it is by the polynomial gate. */
+static bool has_elliptic_sqrt_kernel(const Expr* f, const Expr* x) {
+    if (!has_sqrt_radical_in(f, x)) return false;
+    static Expr* tmpl = NULL;
+    if (!tmpl) tmpl = parse_expression(
+        "Module[{Integrate`EK`rs, Integrate`EK`k},"
+        " Integrate`EK`rs = DeleteDuplicates[Cases[#1, Power[Integrate`EK`b_ /; !FreeQ[Integrate`EK`b, #2],"
+        "   Integrate`EK`e_Rational /; Denominator[Integrate`EK`e] == 2] :> Together[Integrate`EK`b], {0, Infinity}]];"
+        " Integrate`EK`k = Times @@ Map[Function[Integrate`EK`r, Numerator[Integrate`EK`r] Denominator[Integrate`EK`r]],"
+        "   Integrate`EK`rs];"
+        " Integrate`EK`rs =!= {} && PolynomialQ[Integrate`EK`k, #2] &&"
+        " Exponent[Times @@ Cases[FactorSquareFreeList[Integrate`EK`k],"
+        "   {Integrate`EK`p_, Integrate`EK`m_?OddQ} :> Integrate`EK`p], #2] >= 3]");
+    if (!tmpl) return false;
+    Expr* fn = expr_new_function(expr_new_symbol(SYM_Function),
+                                 (Expr*[]){ expr_copy(tmpl) }, 1);
+    Expr* call = expr_new_function(fn, (Expr*[]){ expr_copy((Expr*)f), expr_copy((Expr*)x) }, 2);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    bool yes = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    return yes;
 }
 
 /* A circular-trig kernel sits in a DENOMINATOR of `e`: a Sec/Csc/Cot/Tan kernel
@@ -2168,6 +2224,15 @@ static Expr* integrate_definite(Expr* res) {
              * the quadratic-radical shape the plain Beta stage cannot match. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_halfbeta_try(cur, x, a, b, assumptions);
+            /* Reductions into the Beta family for a symbolic exponent (whose
+             * antiderivative is non-elementary, so Newton-Leibniz would only
+             * grind): t = Tan[x] on [0, b <= Pi/4], and by parts for
+             * x^p ArcSin[x] / ArcCos[x] on [0, 1].  Each declines unless a
+             * Beta stage closes the rewritten integrand. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_tanbeta_try(cur, x, a, b, assumptions);
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_invtrig_beta_try(cur, x, a, b, assumptions);
             /* Sin^m Cos^n over a canonical trig interval ([0,Pi/2], [0,Pi], [0,2Pi]). */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
                 r = integrate_trigpower_try(cur, x, a, b, assumptions);

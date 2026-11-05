@@ -130,6 +130,17 @@ static bool nl_has_step_head(const Expr* F, const Expr* x) {
     return contains_any_head_over_x(F, x, H, sizeof H / sizeof *H);
 }
 
+/* An incomplete elliptic integral over x.  Its amplitude is typically
+ * ArcSin[g(x)], real only where |g| <= 1, and the antiderivative is written for
+ * one branch of the radical: on another interval it is an antiderivative of
+ * -f, or complex.  Integrate[Sqrt[(5/4 - x)(x - 5/8)/(7/4 - x)], x] has
+ * ArcSin[Sqrt[9/(8 (x - 5/8))]], and on [5/6, 5/4] (argument > 1) it telescoped
+ * to -0.12793 for an integral of +0.12793 (Mathar M6771). */
+static bool nl_has_elliptic_head(const Expr* F, const Expr* x) {
+    static const char* const H[] = { "EllipticF", "EllipticE", "EllipticPi" };
+    return contains_any_head_over_x(F, x, H, sizeof H / sizeof *H);
+}
+
 /* An inverse-circular/hyperbolic node whose subtree contains a pole-bearing
  * trig head over x (e.g. ArcTan[Tan[x/2]/Sqrt[3]]).  This is the fingerprint of
  * a branch antiderivative whose jump may be uncorrected (no accompanying step
@@ -1305,7 +1316,8 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
     bool F_triggers = nl_has_step_head(F, x) || nl_has_arctrig_over_pole(F, x)
                       || nl_has_arctan_of_quotient(F, x)
                       || nl_find_radical_hazard(F, x, a, b)
-                      || nl_has_exp_polylog(F, x);
+                      || nl_has_exp_polylog(F, x)
+                      || nl_has_elliptic_head(F, x);
     expr_free(F);
 
     if (failed || !total) { if (total) expr_free(total); return NULL; }

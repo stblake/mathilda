@@ -99,17 +99,19 @@ static void test_trigpower_unit(void) {
     /* [0, 2Pi]: both even -> 4 x quarter. */
     check_eq("Integrate`TrigPower[Sin[x]^2 Cos[x]^2, {x, 0, 2 Pi}]", "1/4 Pi");
     /* Symbolic exponents over [0, Pi/2].  The affine strip (1+m)/2 > 0 is not
-     * discharged by Simplify from m > 0 (no linear-implication reasoning), so
-     * the honest result is a ConditionalExpression -- as for the residue
-     * 1/(1+x^n) family. */
+     * discharged by Simplify from m > 0 (no linear-implication reasoning); the
+     * gate's Refine fallback proves it, so the value is bare. */
     check_eq("Integrate`TrigPower[Sin[x]^m Cos[x]^n, {x, 0, Pi/2}, "
              "Assumptions -> m>0 && n>0]",
+             "1/2 Beta[1/2 (1 + m), 1/2 (1 + n)]");
+    /* undecided without assumptions: still conditioned */
+    check_eq("Integrate`TrigPower[Sin[x]^m Cos[x]^n, {x, 0, Pi/2}]",
              "ConditionalExpression[1/2 Beta[1/2 (1 + m), 1/2 (1 + n)], "
              "Re[1/2 (1 + m)] > 0 && Re[1/2 (1 + n)] > 0]");
     /* Over [0, Pi] only n parity matters, so m may stay symbolic (n = 2 even). */
     check_eq("Integrate`TrigPower[Sin[x]^m Cos[x]^2, {x, 0, Pi}, "
              "Assumptions -> m>0]",
-             "ConditionalExpression[Beta[1/2 (1 + m), 3/2], Re[1/2 (1 + m)] > 0]");
+             "Beta[1/2 (1 + m), 3/2]");
 }
 
 static void test_trigpower_vanishing(void) {
@@ -222,9 +224,77 @@ static void test_kingreflect_halfline_gate(void) {
                 "Assumptions -> p > 0 && b > 0], \"msg\"]", "1/(2 E^(b^2/(4 p)) p)");
 }
 
+/* -------------------------------------------------------------------------
+ * Reductions into the Beta family (integrate_tanbeta_try,
+ * integrate_invtrig_beta_try): Roach (2008) #9 and #7.  With a symbolic
+ * exponent the antiderivative is non-elementary, and before these stages the
+ * default cascade reached a closing stage only after Newton-Leibniz's
+ * indefinite search (55-66 s, ParallelMixedTower 45 s of it): #9 then declined
+ * (67 s), #7 closed after a further 125 s in DiffUnderInt.  Each value is
+ * checked against NIntegrate at a generic parameter, and the call is timed.
+ * ---------------------------------------------------------------------- */
+
+/* Integrate[f, {x, lo, hi}, opts] returns `expected` within `secs` seconds,
+ * and agrees with NIntegrate at the parameter point `pt`. */
+static void check_timed_value(const char* f, const char* spec, const char* opts,
+                              const char* expected, const char* pt, double secs) {
+    char buf[2048];
+    snprintf(buf, sizeof buf,
+             "With[{t = AbsoluteTiming[Integrate[%s, %s%s]]}, "
+             "{t[[1]] < %g, ToString[t[[2]]] === \"%s\", "
+             "Abs[N[(t[[2]] /. ConditionalExpression[v_, _] :> v) /. %s, 20] - "
+             "NIntegrate[(%s) /. %s, %s, WorkingPrecision -> 30]] < 10^-15}]",
+             f, spec, opts, secs, expected, pt, f, pt, spec);
+    check_eq(buf, "{True, True, True}");
+}
+
+static void test_tanbeta(void) {
+    /* #9: t = Tan[x] gives (1 - t^2)^a on [0, 1], a Half-Beta, in Gamma form */
+    check_timed_value("Cos[x]^(-2 a - 2) Cos[2 x]^a", "{x, 0, Pi/4}",
+                      ", Assumptions -> a > 0",
+                      "(Sqrt[Pi] Gamma[1 + a])/(2 Gamma[3/2 + a])", "a -> 2/3", 10);
+    /* the strip undecided without assumptions */
+    check_eq("Integrate[Cos[x]^(-2 a - 2) Cos[2 x]^a, {x, 0, Pi/4}]",
+             "ConditionalExpression[(Sqrt[Pi] Gamma[1 + a])/(2 Gamma[3/2 + a]), "
+             "Re[1 + a] > 0]");
+    /* t^a: a plain Beta */
+    check_timed_value("Sin[x]^a/Cos[x]^(a + 2)", "{x, 0, Pi/4}",
+                      ", Assumptions -> a > 0", "1/(1 + a)", "a -> 5/7", 10);
+    /* past Pi/4 the factor 1 - t^2 changes sign: declined (pinned, so the
+     * decline is visible rather than followed by the rest of the cascade) */
+    check_eq("Head[Integrate[Cos[x]^(-2 a - 2) Cos[2 x]^a, {x, 0, Pi/3}, "
+             "Assumptions -> a > 0, Method -> \"Beta\"]]", "Integrate");
+}
+
+static void test_invtrig_beta(void) {
+    /* #7: by parts, Pi/(4 n) minus a Half-Beta remainder */
+    check_timed_value("ArcSin[x] x^(2 n - 1)", "{x, 0, 1}", ", Assumptions -> n > 0",
+                      "(Pi - (Sqrt[Pi] Gamma[1/2 + n])/Gamma[1 + n])/(4 n)", "n -> 2/3", 10);
+    check_timed_value("ArcCos[x] x^p", "{x, 0, 1}", ", Assumptions -> p > -1",
+                      "(Sqrt[Pi] Gamma[1/2 (2 + p)])/((2 + 2 p) Gamma[1/2 (3 + p)])",
+                      "p -> -1/3", 10);
+    /* convergence (Re p > -1) undecided: conditioned; refuted: declined */
+    check_eq("Head[Integrate[ArcSin[x] x^(2 n - 1), {x, 0, 1}]]", "ConditionalExpression");
+    check_eq("Head[Integrate[ArcSin[x] x^p, {x, 0, 1}, Assumptions -> p < -2, "
+             "Method -> \"Beta\"]]", "Integrate");
+    /* a numeric exponent stays with Newton-Leibniz (elementary) */
+    check_eq("Integrate[ArcSin[x] x^2, {x, 0, 1}]", "-2/9 + 1/6 Pi");
+}
+
+/* The strip of a Half-Beta is proved by Refine when Simplify leaves it
+ * unreduced (1/2 + n > 0 under n > 0): no needless ConditionalExpression. */
+static void test_beta_gate_refine(void) {
+    check_eq("Integrate[x^(2 n)/Sqrt[1 - x^2], {x, 0, 1}, Assumptions -> n > 0]",
+             "1/2 Beta[1/2 + n, 1/2]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_tanbeta);
+    TEST(test_invtrig_beta);
+    TEST(test_beta_gate_refine);
 
     TEST(test_beta_unit);
     TEST(test_beta_logweight);

@@ -72,6 +72,13 @@ Expr* integrate_ratlog01_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptio
  * = C (1/2)^(i+1) d^i/dA^i Beta[A, e+1]|_{A=c/2} (via t = x^2). */
 Expr* integrate_halfbeta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 
+/* t = Tan[x] on [0, b], 0 < b <= Pi/4, for a trig integrand with a symbolic
+ * exponent, handed on to the [0,1] Beta stages above.  Borrowed args; returns
+ * a fresh value or NULL to fall through. */
+Expr* integrate_tanbeta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+/* By parts on [0,1] for C x^p ArcSin[x] / ArcCos[x], p symbolic: boundary term
+ * plus a Half-Beta remainder.  Borrowed args; fresh value or NULL. */
+Expr* integrate_invtrig_beta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 /* Explicit builtins.  Strict: NULL on any non-applicable input. */
 Expr* builtin_integrate_beta(Expr* res);
 Expr* builtin_integrate_trigpower(Expr* res);

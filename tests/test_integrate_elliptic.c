@@ -157,10 +157,27 @@ static void test_declines(void) {
     check_eq("Check[Integrate`Elliptic[1/Sqrt[x (x + 1) (x - 2)], {x, 2, Infinity}]; ok, failed]", "ok");
 }
 
+/* Roach 2008 #29 through the DEFAULT cascade.  Newton-Leibniz runs first, and
+ * its indefinite search used to spend 13-16 s (55-90 s under load) in
+ * DerivativeDivides' Eliminate/Solve pass: each shift kernel z - 1, z - 2,
+ * 1/(z - 1), 1/(z - 2) re-expressed the same elliptic integrand in u and paid
+ * a full cascade descent per Solve branch.  The elliptic-kernel gate sends it
+ * down the direct-quotient pass only, as for a polynomial cubic radicand. */
+static void test_default_cascade(void) {
+    check_eq("With[{t = AbsoluteTiming[Integrate[Sqrt[z/((z - 1) (z - 2))], {z, 2, 3}]]}, "
+             "{t[[1]] < 12, FreeQ[t[[2]], Integrate], "
+             "Abs[N[t[[2]] - 2.6696301067066588095129015821`28, 30]] < 10^-20}]",
+             "{True, True, True}");
+    /* the indefinite form declines (non-elementary) promptly */
+    check_eq("With[{t = AbsoluteTiming[Quiet[Integrate[Sqrt[z/((z - 1) (z - 2))], z]]]}, "
+             "{t[[1]] < 8, Head[t[[2]]]}]", "{True, Integrate}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
+    TEST(test_default_cascade);
     TEST(test_roach);
     TEST(test_configurations);
     TEST(test_declines);

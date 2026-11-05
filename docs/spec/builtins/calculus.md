@@ -1314,6 +1314,19 @@ monotonically down.
   cheap **direct-quotient** fold on those (so `x^2/(x^3-1)^(1/3)` is unaffected),
   and the explicit `Method -> "ParallelMixedTower"` is not gated.  The item
   numbers below group methods by kind and are unchanged.
+  `DerivativeDivides` also runs only its direct-quotient pass when the
+  square-root radicals together define an elliptic (or higher-genus) curve
+  although no single radicand is a cubic: the product of the radicands'
+  numerators and denominators has an odd-multiplicity part of degree ≥ 3.
+  On `Sqrt[z/((z - 1)(z - 2))]` the Eliminate/Solve pass tried the shift
+  kernels `z − 1`, `z − 2`, `1/(z − 1)`, `1/(z − 2)`; each only rewrote the
+  same elliptic integrand in `u`, and each Solve branch paid a full cascade
+  descent, 13–16 s in all that `TimeConstraint` did not bound. The indefinite
+  integral now declines in about 0.3 s, and the definite Roach 2008 #29,
+  `Integrate[Sqrt[z/((z - 1)(z - 2))], {z, 2, 3}]`, closes in about 1 s
+  (18 s before, 55–90 s under load) through the elliptic stage. The other
+  two gated stages (linearity's split, ParallelMixedTower) keep the polynomial
+  test.
 
   **Symbolic-exponent power times an exponential (as of v0.253).** A dedicated
   recogniser sits just after the Fresnel row, ahead of every general stage:
@@ -2077,7 +2090,10 @@ monotonically down.
       - `t = E^−x` for exponential integrands, which turns `x^k` into a
         `Log[t]^k θ(1 − t)` G function;
       - `t = Tan[x]` for trigonometric ones on `[0, b]` with `b ≤ π/2`, where
-        every base is positive;
+        every base is positive; the exponents `PowerExpand` leaves are then
+        expanded, so a factor such as `(1 + t^2)^(−1 − a + (2 + 2a)/2)` is 1
+        rather than a spurious second G (Roach 2008 #9 was rejected by the
+        numeric check before);
       - integration by parts for an inverse-trigonometric factor;
       - a factor `Log[x]^k` taken as `d^k/ds^k` of `x^s`, so the term loses
         one G (v0.6207);
@@ -2227,6 +2243,32 @@ monotonically down.
     (`x^(s-1) f`, `Sin^a Cos^b`) closes at once, instead of first driving FTC
     into a doomed elementary-antiderivative search. FTC still owns the
     integer-power and genuinely-elementary cases they decline on.
+    Two further pre-FTC stages under `"Beta"` integrate nothing themselves:
+    they rewrite a symbolic-exponent integrand into a shape the `[0,1]` Beta
+    stages own (Beta, Half-Beta, Euler 2F1) and decline unless one of those
+    closes it. The value is written with `Gamma` (`Beta[p, q] →
+    Gamma[p] Gamma[q]/Gamma[p + q]`).
+    - **`t = Tan[x]`** on `[0, b]`, `0 < b ≤ Pi/4`, then `t → Tan[b] t`.
+      Every base the substitution produces (`t`, `1 + t^2`, `1 − t^2`) is
+      positive there, so `PowerExpand` is exact, and the exponents are then
+      expanded. Roach 2008 #9:
+      `Integrate[Cos[x]^(-2a-2) Cos[2x]^a, {x, 0, Pi/4}, Assumptions -> a > 0]`
+      → `Sqrt[Pi] Gamma[1 + a]/(2 Gamma[3/2 + a])` in 0.01 s. Before, the
+      cascade spent 66 s in Newton-Leibniz (ParallelMixedTower ran to its 45 s
+      backstop) and declined.
+    - **By parts** on `[0, 1]` for `C x^p ArcSin[x]` or `C x^p ArcCos[x]`:
+      the boundary term `C u(1)/(p + 1)` plus a Half-Beta remainder. It needs
+      `Re[p] > −1`: when that follows from the assumptions the value is bare,
+      when they refute it the stage declines, and otherwise the value is a
+      `ConditionalExpression`. Roach 2008 #7:
+      `Integrate[ArcSin[x] x^(2n-1), {x, 0, 1}, Assumptions -> n > 0]` →
+      `(Pi − Sqrt[Pi] Gamma[1/2 + n]/Gamma[1 + n])/(4n)` in 0.05 s, where it
+      used to take 55–180 s (Newton-Leibniz, then a 125 s DiffUnderInt
+      descent, then Roach).
+    The Beta convergence-strip gate also tries `Refine` when `Simplify`
+    leaves the strip unreduced, so `Integrate[x^(2n)/Sqrt[1 - x^2], {x, 0, 1},
+    Assumptions -> n > 0]` is `Beta[1/2 + n, 1/2]/2`, not a
+    `ConditionalExpression` on `1/2 + n > 0`.
   - `"NewtonLeibniz"` — the real-axis definite-integral mechanism (implicit for
     the `{x, a, b}` form); see **Definite integration** below.
   - `"LineIntegral"` — the complex contour mechanism (implicit for the
@@ -2801,8 +2843,12 @@ cancelled by an accompanying `Floor` step — so `F(b) − F(a)` by direct
 substitution is the correct value with no interior split.  To stay correct when
 an antiderivative could instead carry a genuine *uncorrected* branch jump, a
 result built from a step head (`Floor`, `Sign`, …), an inverse-trig node over
-a pole-bearing trig head, or a **radical whose radicand vanishes inside the
-interval** (the real branch can kink there) is accepted only when a numeric
+a pole-bearing trig head, a **radical whose radicand vanishes inside the
+interval** (the real branch can kink there), or an **incomplete elliptic
+integral** in x (its `ArcSin[g(x)]` amplitude is real only where `|g| ≤ 1`, and
+the antiderivative is written for one branch of the radical: on
+`[5/6, 5/4]` that of `Sqrt[(5/4 - x)(x - 5/8)/(7/4 - x)]` telescoped to the
+negative of the integral) is accepted only when a numeric
 `NIntegrate` cross-check agrees; otherwise the integral is left unevaluated
 rather than risking a wrong value. As a final net, a real-looking integrand
 whose folded value has a **provably-nonzero imaginary part** is treated as a
