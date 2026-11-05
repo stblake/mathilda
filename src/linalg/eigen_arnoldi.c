@@ -129,6 +129,7 @@ static void arnoldi_parse_subopts(Expr* method_value, ArnoldiOpts* opts) {
     }
 }
 
+#ifdef USE_MPFR  /* the MPFR Arnoldi is their only user now */
 /* Number of eigenvalues requested by k_spec (0 = "all").  Accepts
  * Integer k, Integer -k, or UpTo[k]; ignores anything else. */
 static size_t arnoldi_target_k(Expr* k_spec, size_t n) {
@@ -163,6 +164,7 @@ static size_t arnoldi_default_basis_size(size_t target_k, size_t n) {
     if (m < 1) m = 1;
     return m;
 }
+#endif
 
 /* Heuristic for the Automatic dispatcher: never. A dense matrix with a
  * count is answered by Direct (LAPACK) and trimmed, as the reference does
