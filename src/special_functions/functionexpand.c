@@ -42,6 +42,7 @@
 #include "functionexpand.h"
 #include "polygamma.h"   /* polygamma_gauss_digamma */
 #include "meijer_g.h"
+#include "hrep.h"           /* hrep_pfq_expr: Roach's Formula algorithm */
 #include "symtab.h"
 #include "attr.h"
 #include "eval.h"
@@ -163,7 +164,7 @@ static bool fe_root_of_unity(const Expr* w, int64_t* rn, int64_t* rd) {
 
 /* Rule families of the walk: MeijerG; PolyLog/Log at roots of unity (with
  * the PolyGamma closed forms); the PolyGamma closed forms alone. */
-enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_ALL = 7 };
+enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_PFQ = 8, FE_ALL = 15 };
 static Expr* fe_walk(const Expr* e, bool* changed, int which);
 static Expr* fe_expand(const Expr* e);
 
@@ -373,8 +374,20 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
         node = eval_and_free(node);
     }
     Expr* s = NULL;
-    if ((which & FE_MEIJER) && fe_is_head(node, SYM_MeijerG))
+    if ((which & FE_MEIJER) && fe_is_head(node, SYM_MeijerG)) {
         s = meijerg_function_expand(node);
+        /* The Slater expansion leaves pFq terms. Each goes through Roach's
+         * Formula algorithm (Roach '97: a G function without the log case
+         * is a sum of pFq), so a MeijerG reduces to named functions. */
+        if (s && (which & FE_PFQ)) {
+            bool c2 = false;
+            Expr* s2 = fe_walk(s, &c2, FE_PFQ);
+            if (c2) { expr_free(s); s = eval_and_free(s2); }
+            else expr_free(s2);
+        }
+    }
+    if (!s && (which & FE_PFQ) && fe_is_head(node, SYM_HypergeometricPFQ))
+        s = hrep_pfq_expr(node);
     if (!s && (which & FE_ROOTS)) {
         s = fe_polylog_root(node);
         if (!s) s = fe_log_root(node);
@@ -539,7 +552,7 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
      * assumptions when they decide |z| against 1. */
     if (fe_count_head(r, SYM_MeijerG) > 0) {
         bool changed = false;
-        Expr* c = fe_walk(r, &changed, FE_MEIJER);
+        Expr* c = fe_walk(r, &changed, FE_MEIJER | FE_PFQ);
         if (changed && assumptions &&
             fe_count_head(c, SYM_Piecewise) > fe_count_head(r, SYM_Piecewise)) {
             Expr* rc = fe_refine_piecewise(c, assumptions);
@@ -549,6 +562,19 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
             fe_count_head(c, SYM_MeijerG) < fe_count_head(r, SYM_MeijerG) &&
             fe_count_head(c, SYM_HypergeometricPFQ) <= fe_count_head(r, SYM_HypergeometricPFQ) &&
             fe_count_head(c, SYM_Piecewise) <= fe_count_head(r, SYM_Piecewise)) {
+            expr_free(r); r = c;
+        } else {
+            expr_free(c);
+        }
+    }
+    /* (1b) HypergeometricPFQ -> a closed form by Roach's Formula algorithm,
+     * accepted when it leaves strictly fewer pFq and no new MeijerG. */
+    if (fe_count_head(r, SYM_HypergeometricPFQ) > 0) {
+        bool changed = false;
+        Expr* c = fe_walk(r, &changed, FE_PFQ);
+        if (changed &&
+            fe_count_head(c, SYM_HypergeometricPFQ) < fe_count_head(r, SYM_HypergeometricPFQ) &&
+            fe_count_head(c, SYM_MeijerG) <= fe_count_head(r, SYM_MeijerG)) {
             expr_free(r); r = c;
         } else {
             expr_free(c);

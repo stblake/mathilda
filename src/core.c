@@ -1160,6 +1160,8 @@ void core_init(void) {
     meijer_g_init();
     void functionexpand_init(void);
     functionexpand_init();
+    void hrep_init(void);
+    hrep_init();
     void zero_test_init(void);
     zero_test_init();
     void graphics_init(void);

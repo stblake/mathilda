@@ -3607,6 +3607,12 @@ ones, bottom-up (`src/special_functions/functionexpand.c`):
   (`p ≤ q`) or `1/z` (`p > q`), each in a classical form where it has one — else,
   for `p = q` with `m + n ≤ p` and a symbolic `z`, the Piecewise of the inner and
   outer expansions (see `MeijerG`). The log case is returned unchanged.
+- **HypergeometricPFQ** → a closed form by Roach's Formula algorithm (v0.6203,
+  see *Formula representations* below):
+  `FunctionExpand[Hypergeometric2F1[-3/2, -1/2, 1/2, z]]` =
+  `1/2 Sqrt[1 - z] (2 + z) + 3/2 Sqrt[z] ArcSin[Sqrt[z]]`. Unchanged when the
+  algorithm declines. Automatic evaluation of `HypergeometricPFQ` is not
+  affected.
 - **PolyGamma[n, q]** at a positive rational `q` (v0.6131): integer `q`, every
   order, as `n! ((-1)^(n+1) (Zeta[n+1] - HarmonicNumber[q-1, n+1]))`
   (`2 (9/8 - Zeta[3])` for `PolyGamma[2, 3]`); half-integer `q`, every order;
@@ -3652,6 +3658,125 @@ Out[2]= Sin[x] + E^(-z)
 In[3]:= FunctionExpand[MeijerG[{{},{2}},{{1/2,3/2},{}},z]]
 Out[3]= MeijerG[{{}, {2}}, {{1/2, 3/2}, {}}, z]
 ```
+
+## Formula representations (Roach's algorithm)
+
+`FunctionExpand[HypergeometricPFQ[{a1, …, ap}, {b1, …, bq}, z]]` and the
+diagnostic head `` HypergeometricPFQ`Representation[{a…}, {b…}, z] `` write a
+pFq in closed form with Kelly Roach's Formula algorithm (*Hypergeometric
+Function Representations*, ISSAC '96). The code is in
+`src/special_functions/hrep_core.c` (the algebra) and `hrep_certs.c` (the
+lookup certificates).
+
+- **Module.** With θ = w d/dw, F(a; b; w) satisfies
+  `[w Π(θ + a_j) − θ Π(θ + b_k − 1)] F = 0`, of order d = max(p, q + 1).
+  Every contiguous F(a + m; b + n; w) lies in the Q(params)(w)-module
+  spanned by the companion basis `[f0, θ f0, …, θ^(d−1) f0]` of an origin
+  F(a0; b0; w) = f0. θ acts on a coefficient vector through the origin's ODE,
+  so a **certificate** is just `(a0, b0, f0)`: Roach's derivative matrix M is
+  never entered by hand.
+- **Shifts.** `A_i: a_i → a_i + 1` is `1 + θ/a_i` and `B_i: b_i → b_i − 1`
+  is `1 + θ/(b_i − 1)`. Each inverse is one polynomial division of the ODE by
+  the shift's linear θ-factor, and the remainder constant is Roach's
+  definedness condition: `(1 − a_i) Π(b_k − a_i) ≠ 0` for lowering `a_i`,
+  `b_i Π(a_j − b_i) ≠ 0` for raising `b_i`.
+- **Strategy.** Parameters split into residue classes: symbolic part, plus
+  rational part mod 1. A certificate matches when its classes hold the same
+  upper and lower counts, and parameters pair in sorted order. Down-movers
+  are walked in ascending target order and up-movers in descending order
+  (Roach's Y-below-Y₀ rule). Every step is checked as it is taken, and an
+  undefined step abandons that candidate for the next. When a static
+  certificate is in the class it beats a family certificate, so that
+  half-integer Bessel answers come out in `Sinh` and `Cosh`. After that,
+  the shortest walk wins.
+- **Derivative formula.** When an upper parameter exceeds a lower one by
+  n ∈ Z⁺, the pair is removed and `Π_{m<n} (θ + b + m)/(b + m)` is applied to
+  the solved lower-order function (Roach '96 §17).
+- **Lerch Φ formula** (Roach '96 §18). When every upper parameter pairs by
+  an integer difference with a lower parameter, or with the 1 of k!, the
+  coefficient R(k) is rational. Apart gives `R = P(k) + Σ q/(k + r)^j`, and
+  `F = P(θ) 1/(1 − z) + Σ q Φ(z, j, r)`. At a rational r, Φ is
+  range-reduced into (0, 1] and written in PolyLog over the n-th roots of
+  z. For j = 1 that sum takes the real Log/ArcTan form. A real negative z
+  with odd n uses the real root, so the answer stays real. `LerchPhi` is
+  Σ zᵏ/((a+k)²)^{s/2}, so it is used only for a symbolic r.
+- **Integral formula** (generated certificates). When a lower parameter
+  exceeds an upper one by an integer, the engine:
+  1. solves the lower-order F(c; d; t) in closed form;
+  2. integrates it, `F(a, c; a+1, d; w) = a w^(−a) ∫₀^w t^(a−1) F(c; d; t) dt`,
+     with `a` shifted into (0, 1];
+  3. walks from that certificate.
+
+  Each `Integrate` probe has a 3-second deadline. A generated certificate,
+  and a Lerch result, is checked against the series at w = 1/7 and −1/5
+  (parameters at sample rationals) before it is used.
+- **Transformations.** When the direct routes fail, 2F1 also tries its
+  Euler and two Pfaff images and 1F1 its Kummer image. The cheap routes run
+  on every image before any integration is attempted.
+- **Values at z = 1, −1, 1/2.** The classical summation theorems come first:
+  - Gauss (convergent), Kummer, Gauss's second theorem, Bailey;
+  - Dixon, Watson, Whipple;
+  - 3F2(a, b, 1; c, 2; 1), with its digamma limit at b = 1.
+
+  These are tried over parameter permutations, together with their
+  derivative-formula reductions (`Σ β_m z^m (A)_m/(B)_m F(A+m; B+m)`).
+  Otherwise the closed form is substituted, and if that is not finite (a
+  removable singularity) the one-sided limit is taken. The engine never
+  returns `Indeterminate`.
+- **Presentation.**
+  - The 0F1 family is written in the entire kernel `w^(−ν/2) I_ν(2√w)`.
+    Its orders are reduced to two adjacent ones (0 and 1 for integer
+    orders), and a negated argument gives BesselJ exactly.
+  - A constant result has its Gamma at rationals shifted into (0, 1] and
+    reflected past 1/2, then Simplify is applied, capped at 2 seconds.
+- **Probe region.** The internal Integrate, Limit and check messages are
+  suppressed and do not trip an enclosing `Check`.
+- **Certificates** (v0.6203):
+  - 0F0;
+  - 1F0 (family);
+  - 0F1 at b = 1/2 and 3/2, plus the Bessel-I family;
+  - 1F1: (1/2; 3/2) Erfi, (1; 2), and the families (a; a+1), (1; b) and
+    (a; 2a);
+  - 2F1: (1,1;2) Log, (1,1;3/2), (1/2,1/2;3/2) ArcSin, (1/2,1;3/2) ArcTanh,
+    (±1/2,1/2;1) K/E, and the families (a, a+½; ½), (a, a+½; 3/2),
+    (a, −a; ½), (a, 1−a; 3/2), (1, a; 2) and (1, a; a+1) LerchPhi;
+  - 1F2: (1/2; 3/2, 3/2) Shi, plus the families (a; a+½, 2a) BesselI² and
+    (1; 2, b) (the integral of 0F1);
+  - 3F2: Clausen's (1, 1, 1; 3/2, 2) = ArcSin(√z)²/z.
+
+  `` HypergeometricPFQ`Certificates[] `` lists the table, and
+  `tests/test_hrep.c` checks every entry against its series.
+- **Symbolic parameters are generic.** A definedness constant that is a
+  nonzero rational function of the parameters counts as nonzero, as for any
+  CAS identity in symbolic parameters.
+- **Presentation.** The answer is collected over its special-function
+  kernels. Each coefficient is factored over one denominator, and Simplify
+  is applied when the coefficient carries a radical.
+
+```mathematica
+In[1]:= FunctionExpand[HypergeometricPFQ[{-3/2}, {-1/2, 1/2}, z]]
+Out[1]= (1 + 2 z) Cosh[2 Sqrt[z]] + Sqrt[z] Sinh[2 Sqrt[z]] - 4 z^(3/2) SinhIntegral[2 Sqrt[z]]
+
+In[2]:= FunctionExpand[Hypergeometric2F1[-3/2, -1/2, 2, z]]
+Out[2]= (4 (1 + 14 z + z^2) EllipticE[z])/(15 Pi z) + (4 (-1 + z) (1 + 7 z) EllipticK[z])/(15 Pi z)
+
+In[3]:= FunctionExpand[HypergeometricPFQ[{-1/2, 1/2, 1}, {3/2, 5/2}, z]]
+Out[3]= (3 (-1 + z))/(16 z) + (3 (-1 + z^2) Log[1 - Sqrt[z]])/(32 z^(3/2)) - (3 (-1 + z^2) Log[1 + Sqrt[z]])/(32 z^(3/2)) - (3 PolyLog[2, -Sqrt[z]])/(8 Sqrt[z]) + (3 PolyLog[2, Sqrt[z]])/(8 Sqrt[z])
+
+In[4]:= FunctionExpand[HypergeometricPFQ[{1, 3}, {2, 4, 5}, -z]]
+Out[4]= (6 (-12 + z^2))/z^3 - (72 BesselJ[0, 2 Sqrt[z]])/z^3 + (144 BesselJ[1, 2 Sqrt[z]])/z^(7/2)
+
+In[5]:= FunctionExpand[HypergeometricPFQ[{-11/4, -5/2, -5/2}, {-7/2, 1/4}, 1]]
+Out[5]= (355 Gamma[1/4]^2)/(56 Sqrt[2] Sqrt[Pi])
+```
+
+Roach 2008 (*Solving Integrals with the Quantum Computer Algebra System*),
+p. 6: all eleven pFq values close. Ten are in Roach's printed form or an
+equal closed form. 2F1(1, 1; 2/3; 8/9) is numerically equal to
+3^(3/2) π + 9 − 3 log 3 but prints with `(−1)^(1/3)` terms, because its
+root is chosen while the argument is still symbolic. Of the ISSAC '96
+gallery, the entries not needing the Struve L or Kelvin functions
+(added separately) or the PFD duplication formula close.
 
 ## LegendreP
 

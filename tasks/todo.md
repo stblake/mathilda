@@ -5,10 +5,10 @@ Papers: Roach ISSAC'96 "Hypergeometric Function Representations", ISSAC'97 "Meij
 Baseline v0.6189: paper integrals 7/30 correct, 2 WRONG (#25, #26); pFq values 2/11; '96 gallery 0/13; '97 gallery 0/13 closed.
 
 - [x] Phase 0 (v0.6197): WRONG #25/#26 from LinearRadicals (get_degree_poly on unexpanded radicand); #3 abort = Limit`Scoped re-scoping recursion. Fixed + tests; ctest 600/602 (meminfo, parallelmixedtower: load flakes, pass alone)
-- [ ] Phase 1: pFq engine core (src/hypergeo_rep: types, shift, contig, plan, formula, seed certs, Deriv formula); FunctionExpand[HypergeometricPFQ]
-- [ ] Phase 2: StruveL, AngerJ, WeberE, Kelvin ber/bei/ker/kei (all surfaces)
-- [ ] Phase 3: full pFq Lookup, Lerch/PFD, PFD duplication, unit-argument summations
-- [ ] Phase 4: MeijerG Formula (C/D shifts, G contiguity, G procedures, Slater, log case)
+- [x] Phase 1 (v0.6203): pFq engine (src/special_functions/hrep_*.c, companion-basis module, FLINT), seed certs, Deriv formula, FunctionExpand hook
+- [x] Phase 2: done on branch feat-struvel-anger-kelvin 7241091b (agent); merge pending
+- [~] Phase 3 (v0.6203): Lerch Phi + roots of unity, integral-formula generated certs, Euler/Pfaff/Kummer, unit theorems + limit, 2-param families. OPEN: PFD duplication, Struve L/Kelvin certs (after Phase 2 merge), 2F1(1,1;2/3;8/9) prints with (-1)^(1/3)
+- [~] Phase 4: Slater -> pFq engine (v0.6203). OPEN: G-module for the log case (shift ops derived, see session notes)
 - [ ] Phase 5: MeijerGReduce + integrate_roach.c (One G, Two G, PV, [0,1] Mellin), METHOD_ROACH
 - [ ] Phase 6: elliptic reduction (Carlson tables) integrate_elliptic.c
 - [ ] Phase 7: default cascade, RoachCorpus.m, corpora diff, benchmark
