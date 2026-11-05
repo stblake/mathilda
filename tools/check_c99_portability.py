@@ -62,6 +62,15 @@ as a 64-bit type (`1L << 40`, `(long)d << 32`, a 64-bit LCG constant written
 sole symptom (issue #92). `LLP64_RE` flags those spellings; the fix is
 `int64_t`/`uint64_t` with `INT64_C`/`UINT64_C`.
 
+A sixth check covers `bool` / `true` / `false` without `<stdbool.h>`. They
+are macros from that header in C99 (keywords only from C23), and macOS's
+`<Accelerate/Accelerate.h>` pulls it in transitively while Linux's plain
+`<cblas.h>` does not -- so `src/linalg/lapack.c` compiled clean on macOS and
+failed on Fedora (issue #128). A file is accepted when it, or a project header
+it reaches through `#include "..."` (resolved against its own directory and
+every directory under `src/`, the build's -I path), includes `<stdbool.h>`;
+a system header that happens to supply it on one platform does not count.
+
 Run via `make check-c99`; it exits nonzero and names every offending file.
 
 Scope
@@ -513,6 +522,65 @@ def scan_stream_assigns(text):
     return sorted(set(m.group(1) for m in STREAM_ASSIGN_RE.finditer(text)))
 
 
+# ---------------------------------------------------------------------------
+# Check 6: bool / true / false without <stdbool.h> (issue #128)
+# ---------------------------------------------------------------------------
+
+BOOL_USE_RE = re.compile(r"\b(bool|true|false)\b")
+LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
+STDBOOL_RE = re.compile(r"^\s*#\s*include\s*<stdbool\.h>", re.M)
+
+
+def header_index(repo_root):
+    """Map a header's basename to its paths under `src/` (the -I search path)."""
+    index = {}
+    for root, dirs, files in os.walk(os.path.join(repo_root, "src")):
+        dirs[:] = [d for d in dirs if d != "external"]
+        for name in files:
+            if name.endswith(".h"):
+                index.setdefault(name, []).append(os.path.join(root, name))
+    return index
+
+
+def provides_stdbool(path, index, memo, seen=None):
+    """True if `path`, or a project header it includes, includes <stdbool.h>."""
+    if path in memo:
+        return memo[path]
+    seen = set() if seen is None else seen
+    if path in seen:
+        return False
+    seen.add(path)
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            raw = fh.read()
+    except OSError:
+        return False
+    text = strip_comments_and_strings_keep_includes(raw)
+    found = bool(STDBOOL_RE.search(text))
+    if not found:
+        for name in LOCAL_INCLUDE_RE.findall(raw):
+            here = os.path.normpath(os.path.join(os.path.dirname(path), name))
+            candidates = [here] if os.path.exists(here) else \
+                index.get(os.path.basename(name), [])
+            if any(provides_stdbool(c, index, memo, seen) for c in candidates):
+                found = True
+                break
+    memo[path] = found
+    return found
+
+
+def strip_comments_and_strings_keep_includes(raw):
+    """Comment-strip `raw` but keep `<...>` include lines intact."""
+    return re.sub(r"/\*.*?\*/", " ", raw, flags=re.S)
+
+
+def scan_stdbool(repo_root, path, text, index, memo):
+    """Return True if `path` uses bool/true/false with no <stdbool.h> in reach."""
+    if not BOOL_USE_RE.search(text):
+        return False
+    return not provides_stdbool(os.path.join(repo_root, path), index, memo)
+
+
 def suggest(alternatives):
     """The feature-test macro we recommend for a symbol, as source lines."""
     if not alternatives:
@@ -536,6 +604,9 @@ def main():
     stream_offenders = []
     mingw_offenders = []
     llp64_offenders = []
+    bool_offenders = []
+    hdr_index = header_index(repo_root)
+    bool_memo = {}
 
     for path in source_files(repo_root):
         raw = read(repo_root, path)
@@ -574,9 +645,15 @@ def main():
             if llp64:
                 llp64_offenders.append((path, llp64))
 
+            # `.inc` fragments are pasted into a .c and inherit its includes.
+            if (not path.endswith(".inc")
+                    and scan_stdbool(repo_root, path, text, hdr_index,
+                                     bool_memo)):
+                bool_offenders.append(path)
+
     if not (const_offenders or func_offenders or late_offenders
             or wide_offenders or stream_offenders or mingw_offenders
-            or llp64_offenders):
+            or llp64_offenders or bool_offenders):
         return 0
 
     if const_offenders:
@@ -675,7 +752,18 @@ def main():
                 sys.stderr.write("  %s:%d  %s\n" % (path, line, kind))
         sys.stderr.write("\n")
 
-    total = len(set(p for p, _ in
+    if bool_offenders:
+        sys.stderr.write(
+            "error: bool/true/false used without <stdbool.h>. In C99 they are\n"
+            "       macros from that header; macOS's Accelerate headers supply it\n"
+            "       transitively, Linux's <cblas.h> does not, so the build breaks\n"
+            "       only there (issue #128). Add `#include <stdbool.h>` to:\n\n"
+        )
+        for path in bool_offenders:
+            sys.stderr.write("  %s\n" % path)
+        sys.stderr.write("\n")
+
+    total = len(set(bool_offenders) | set(p for p, _ in
                     const_offenders + func_offenders + late_offenders
                     + wide_offenders + stream_offenders + mingw_offenders
                     + llp64_offenders))

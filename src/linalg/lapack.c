@@ -24,6 +24,7 @@
 #include "lapack.h"
 
 #include <math.h>
+#include <stdbool.h>   /* issue #128: <cblas.h> does not supply it on Linux */
 #include <stdlib.h>
 #include <string.h>
 
