@@ -167,7 +167,8 @@ static void test_norm(void) {
     chk_true("Abs[Norm[Transpose[M]] - Norm[Normal[M]]] < 10^-13 Norm[M]");
     chk_if("Norm[SparseArray[{}, {3, 3}, 0.0]]", "0.0");
     /* an exact matrix 2-norm is not the machine kernel's to answer */
-    chk("Head[Norm[S]]", "Norm");
+    /* the exact 2-norm evaluates (v0.6196), as in the reference */
+    chk("Norm[S]", "Sqrt[1/2 (21 + 5 Sqrt[17])]");
 }
 
 static void test_accumulate(void) {

@@ -82,7 +82,7 @@ static void test_symmetric(void) {
     chk_true("With[{es = Eigensystem[lap[60], 3]}, resid[lap[60], es[[1]], es[[2]]] < 10^-12]");
     chk("Length /@ Eigensystem[lap[60], -2]", "{2, 2}");
     /* the sign convention: the largest component is positive */
-    chk_true("With[{v = Eigenvectors[lap[50], 2]}, And @@ (Function[x, x[[First[Ordering[-Abs[x], 1]]]] > 0] /@ v)]");
+    chk_true("With[{v = Eigenvectors[lap[50], 2]}, And @@ (Function[x, Re[x[[First[Select[Range[Length[x]], Abs[x[[#]]] >= (1 - 10^-8) Max[Abs[x]] &]]]]] > 0] /@ v)]");
     /* shift: the eigenvalues nearest 1.05, by decreasing magnitude
      * (reference: {1.1521712185802786, 1.0600465139453599, 0.9704143969803384}) */
     chk_true("close[Eigenvalues[lap[60], 3, Method -> {\"Arnoldi\", \"Shift\" -> 1.05}], "
@@ -140,7 +140,7 @@ static void test_complex(void) {
     chk_true("close[Eigenvalues[cgen, -3], Take[Eigenvalues[Normal[cgen]], -3], 10^-10]");
     chk_true("With[{es = Eigensystem[cgen, 3]}, resid[cgen, es[[1]], es[[2]]] < 10^-12]");
     /* the phase convention: the largest component real and positive */
-    chk_true("With[{v = Eigenvectors[cgen, 2]}, And @@ (Function[x, With[{c = x[[First[Ordering[-Abs[x], 1]]]]}, "
+    chk_true("With[{v = Eigenvectors[cgen, 2]}, And @@ (Function[x, With[{c = x[[First[Select[Range[Length[x]], Abs[x[[#]]] >= (1 - 10^-8) Max[Abs[x]] &]]]]}, "
              "Re[c] > 0 && Im[c] == 0]] /@ v)]");
     /* a complex shift on a real matrix */
     chk_true("close[Eigenvalues[lap[40], 3, Method -> {\"Arnoldi\", \"Shift\" -> 1 + I}], "

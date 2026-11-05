@@ -344,7 +344,9 @@ static void test_linalg_machine_decline_no_recursion(void) {
 /* Values the solver invents -- a free variable's 0, a pivot normalised to 1 --
  * take the input's exactness, so a machine-real input answers in Reals only. */
 static void test_linalg_singular_machine_heads(void) {
-    run_check_true("LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}] === {3., 0.}");
+    /* singular machine system: the minimum-norm solution, as in the reference
+     * ({0.6, 1.2}; v0.6196) */
+    run_check_true("Max[Abs[LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}] - {0.6, 1.2}]] < 10^-14");
     run_check_true("Union[Head /@ LinearSolve[{{1., 2., 3.}, {2., 4., 6.}, {1., 1., 1.}}, {1., 2., 3.}]] === {Real}");
     run_check_true("Union[Head /@ Flatten[RowReduce[{{1., 2., 1.}, {2., 4., 2.}}]]] === {Real}");
     run_check_true("RowReduce[{{1., 2., 1.}, {2., 4., 2.}}] == {{1., 2., 1.}, {0., 0., 0.}}");

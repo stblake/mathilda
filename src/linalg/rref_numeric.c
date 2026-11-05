@@ -2,6 +2,7 @@
  * See rref_numeric.h for the contract and the zero tolerance. */
 
 #include "rref_numeric.h"
+#include "pack.h"
 #include "la_dense.h"
 #include "common.h"
 #include "expr.h"
@@ -260,13 +261,18 @@ static int nm_rref(NMat* A, int pc, int* pivcol, bool* ill)
     return rank;
 }
 
-/* One output entry. */
+/* One output entry. A MACHINE matrix answers machine numbers throughout --
+ * the project rule (a machine matrix in, a machine matrix out, one element
+ * head: check-array-exactness), a documented deviation from the reference,
+ * which writes exact 1 / 0 for the structural entries
+ * (RowReduce[{{2., 0.}, {0., 4.}}] is {{1, 0.}, {0, 1}} there). An
+ * arbitrary-precision matrix keeps the reference's exact pivots and zeros. */
 static Expr* nm_entry(const NMat* A, size_t k)
 {
     bool machine = A->bits <= 53;
     switch (A->st[k]) {
-        case NM_ONE:  return expr_new_integer(1);
-        case NM_ZERO: return expr_new_integer(0);
+        case NM_ONE:  return machine ? expr_new_real(1.0) : expr_new_integer(1);
+        case NM_ZERO: return machine ? expr_new_real(0.0) : expr_new_integer(0);
         case NM_ELIM: return machine ? expr_new_real(0.0) : expr_new_integer(0);
         default: break;
     }
@@ -329,11 +335,15 @@ Expr* rref_numeric_rowreduce(const Expr* m0, long bits)
     for (int i = 0; i < r; i++) {
         Expr** el = (Expr**)malloc(sizeof(Expr*) * (size_t)c);
         for (int j = 0; j < c; j++)
-            el[j] = i >= rank ? expr_new_integer(0) : nm_entry(&A, NM_AT(&A, i, j));
+            el[j] = i >= rank ? (A.bits <= 53 ? expr_new_real(0.0) : expr_new_integer(0))
+                              : nm_entry(&A, NM_AT(&A, i, j));
         rows[i] = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)c);
         free(el);
     }
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)r);
+    /* a machine answer has one machine head throughout, so it packs (as the
+     * LAPACK path's did) */
+    if (A.bits <= 53) out = pack_offer(out);
     free(rows); free(piv);
     nm_free(&A);
     return out;
@@ -453,6 +463,9 @@ Expr* rref_numeric_inverse(const Expr* m0, long bits, bool* singular)
         free(el);
     }
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)r);
+    /* a machine answer has one machine head throughout, so it packs (as the
+     * LAPACK path's did) */
+    if (A.bits <= 53) out = pack_offer(out);
     free(rows);
     nm_free(&A);
     return out;
