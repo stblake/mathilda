@@ -18,6 +18,7 @@
 
 #include "expr.h"
 #include <stdbool.h>
+#include <stddef.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -56,6 +57,12 @@ int mf_expm(const double* A, int n, bool cx, double* E);
 /* exp(A) b without forming exp(A): the Al-Mohy--Higham (2011) truncated
  * Taylor action.  The work is complex when either operand is; `out` has the
  * element type cx || bcx and length n. */
+/* The truncated-Taylor degrees m and their theta_m (unit roundoff 2^-53),
+ * shared with the sparse action exp(A) b (src/sparse/sparse_la_func.c). */
+extern const int    EXPMV_M[];
+extern const double EXPMV_THETA[];
+extern const size_t EXPMV_NTHETA;
+
 int mf_expmv(const double* A, int n, bool cx, const double* b, bool bcx,
              double* out);
 

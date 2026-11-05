@@ -381,6 +381,10 @@ EXEMPT.update({
     ("Inverse", "*", "sym", "sig"):
         "plan (Result heads): Mathilda evaluates a symbolic sparse Inverse the "
         "reference leaves unevaluated",
+    ("LinearSolve-CG", "herm", "*", "msg"):
+        "the reference's CG with ILU0 on a complex Hermitian matrix stalls "
+        "(::krymit) -- ILU0 of a Hermitian matrix is not Hermitian; Mathilda's "
+        "converges to the residual tolerance (checked by the value rows)",
 })
 
 

@@ -522,14 +522,16 @@ int mf_expm(const double* A, int n, bool cx, double* E) {
 
 /* theta_m for the unit roundoff 2^-53: m = 1..30 from Higham's "Functions of
  * Matrices" table A.3, then 35..55 from Al-Mohy & Higham (2011) table 3.1. */
-static const int    EXPMV_M[]     = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+const int    EXPMV_M[]     = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
                                       16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
                                       29, 30, 35, 40, 45, 50, 55 };
-static const double EXPMV_THETA[] = { 2.29e-16, 2.58e-8, 1.39e-5, 3.40e-4, 2.40e-3, 9.07e-3,
+const double EXPMV_THETA[] = { 2.29e-16, 2.58e-8, 1.39e-5, 3.40e-4, 2.40e-3, 9.07e-3,
                                       2.38e-2, 5.00e-2, 8.96e-2, 1.44e-1, 2.14e-1, 3.00e-1,
                                       4.00e-1, 5.14e-1, 6.41e-1, 7.81e-1, 9.31e-1, 1.09,
                                       1.26, 1.44, 1.62, 1.82, 2.01, 2.22, 2.43, 2.64, 2.86,
                                       3.08, 3.31, 3.54, 4.7, 6.0, 7.2, 8.5, 9.9 };
+
+const size_t EXPMV_NTHETA = sizeof EXPMV_M / sizeof EXPMV_M[0];
 
 int mf_expmv(const double* A, int n, bool cx, const double* b, bool bcx, double* out) {
     bool z = cx || bcx;

@@ -166,6 +166,18 @@ static SpFactor* factor_of(const Expr* m, Expr* const* opts, size_t nopts, SpfSt
 
 /* ---- construction ------------------------------------------------------- */
 
+/* MatrixRank[m] < n for a matrix with no machine factor (exact, MPFR or
+ * symbolic entries): the singularity test behind LinearSolve::sing1. */
+static bool exact_rank_deficient(const Expr* m, int64_t n) {
+    Expr* a[1] = { expr_copy((Expr*)m) };
+    Expr* call = expr_new_function(expr_new_symbol("MatrixRank"), a, 1);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    bool def = r && r->type == EXPR_INTEGER && r->data.integer < n;
+    expr_free(r);
+    return def;
+}
+
 static Expr* mk_int(int64_t v) { return expr_new_integer(v); }
 
 /* Evaluate and release a freshly built expression (evaluate borrows). */
@@ -212,10 +224,20 @@ Expr* linsolvefn_make(const Expr* call) {
             msg_with_expr("LinearSolve", "npdef", "The matrix %s is not positive definite.", m);
             return expr_copy((Expr*)call);
         }
-        if (tried && st == SPF_SINGULAR)
+        bool singular = tried && st == SPF_SINGULAR;
+        if (!tried && exact_rank_deficient(m, r))
+            singular = true;          /* exact / MPFR / symbolic: the reference says so too */
+        if (singular)
             msg_with_expr("LinearSolve", "sing1",
                           "The matrix %s is singular so a factorization will not be saved.", m);
         return build_object(r, c, 0, m, opts, nopts);
+    }
+    {
+        double rc = spf_rcond(f);
+        if (rc >= 0.0 && rc < 1e-16)
+            msg_with_expr("LinearSolve", "luc",
+                          "Result for LinearSolve of badly conditioned matrix %s may contain significant numerical errors.",
+                          m);
     }
     int64_t key = g_next_key++;
     cache_put(key, f);

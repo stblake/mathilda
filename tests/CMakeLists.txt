@@ -420,6 +420,7 @@ set(COMMON_SRC
     ../src/sparse/sparse_la_factor.c
     ../src/sparse/sparse_la_krylov.c
     ../src/sparse/sparse_la_solve.c
+    ../src/sparse/sparse_la_func.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c

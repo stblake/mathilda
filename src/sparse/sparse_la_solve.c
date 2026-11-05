@@ -552,4 +552,5 @@ void sparse_la_init(void) {
     symtab_set_sparse_native("LinearSolve", (const void*)native_linearsolve);
     symtab_set_sparse_native("Det", (const void*)native_det);
     symtab_set_sparse_native("Inverse", (const void*)native_inverse);
+    sparse_la_func_init();
 }

@@ -1051,6 +1051,13 @@ The matrix exponential.
 **Features**:
 - `Protected`. Options `Method -> Automatic` (accepted; one algorithm per
   precision class) and `Parameter -> t` (computes `MatrixExp[t m]`).
+- **SparseArray** `m` (v0.6188, `src/sparse/sparse_la_func.c`): a machine
+  SparseArray answers a **SparseArray**, the reference's head, computed on the
+  dense form within the 2^27-element densify cap. An exact, MPFR or symbolic
+  one answers a List through the dense path. `MatrixExp[s, v]` for a machine
+  SparseArray runs the Al-Mohy–Higham truncated Taylor action on SpMV and
+  never forms the exponential, so it scales with the SpMV: the 90000 x 90000
+  2-D Laplacian takes 76 ms. The answer is a dense vector, as in the reference.
 - **Exact and symbolic** `m`: the closed form over the Jordan form
   `m = S J S^-1`, written as `sum f^(k)(lambda)/k! C_(lambda,k)` with each
   coefficient matrix simplified on its own, so the answer is a short sum of

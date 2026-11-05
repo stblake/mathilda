@@ -216,6 +216,10 @@ static void test_lsf(void) {
     chk_msg("LinearSolve[{{1., 2.}, {2., 4.}}]", "LinearSolve::sing1");
     chk("Head[Quiet[LinearSolve[{{1., 2.}, {2., 4.}}]]]", "LinearSolveFunction");
     chk_msg("LinearSolve[{{1., 2., 3.}, {4., 5., 6.}}]", "LinearSolve::sqmat1");
+    /* exact / symbolic singular matrices say sing1 too; badly conditioned luc */
+    chk_msg("LinearSolve[SparseArray[{}, {3, 3}]]", "LinearSolve::sing1");
+    chk_msg("LinearSolve[{{a, b}, {2 a, 2 b}}]", "LinearSolve::sing1");
+    chk_msg("LinearSolve[N[HilbertMatrix[14]]]", "LinearSolve::luc");
     chk("Quiet[LinearSolve[{{1, 2, 3}, {4, 5, 6}}]][{1, 2}]", "{-1/3, 2/3, 0}");
     /* sparse: reuse the factor many times */
     chk("h = LinearSolve[lap[3000]]; Head[h]", "LinearSolveFunction");
@@ -229,6 +233,27 @@ static void test_lsf(void) {
              "And @@ Table[res[lap[150] + k IdentityMatrix[150, SparseArray], fs[[k]][N[Range[150]]], N[Range[150]]] < 10^-10, {k, 12}]");
 }
 
+/* ---- MatrixExp of a SparseArray (sparse_la_func.c) ------------------------- */
+
+static void test_matrixexp(void) {
+    /* a machine SparseArray answers a SparseArray (reference head); exact a List */
+    chk("Head[MatrixExp[SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]]]", "SparseArray");
+    chk("Head[MatrixExp[SparseArray[{{1,1}->1,{2,2}->2}]]]", "List");
+    chk_true("With[{s = SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]}, "
+             "Max[Abs[Normal[MatrixExp[s]] - MatrixExp[Normal[s]]]] < 10^-14]");
+    /* the action on a vector, on SpMV: real, complex, against the dense action */
+    chk("lap2[k_] := Module[{t = lap[k], id = IdentityMatrix[k, SparseArray]}, "
+        "KroneckerProduct[t, id] + KroneckerProduct[id, t]]; Null", "Null");
+    chk_true("With[{a = -0.1 lap2[30], v = N[Range[900]]/900}, "
+             "Max[Abs[MatrixExp[a, v] - MatrixExp[Normal[a]] . v]] < 10^-13]");
+    chk_true("With[{c = SparseArray[{Band[{1,1}] -> 1. + I, Band[{1,2}] -> -0.5}, {200, 200}], v = N[Range[200]]}, "
+             "Max[Abs[MatrixExp[c, v] - MatrixExp[Normal[c]] . v]]/Max[Abs[MatrixExp[Normal[c]] . v]] < 10^-13]");
+    chk("Head[MatrixExp[-0.1 lap2[30], N[Range[900]]]]", "List");
+    /* far past the densify cap */
+    chk_true("With[{a = -0.1 lap2[300], v = N[Range[90000]]/90000}, "
+             "x = MatrixExp[a, v]; Length[x] == 90000 && Max[Abs[x]] <= 1.]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -239,6 +264,7 @@ int main(void) {
     test_methods();
     test_det_inverse();
     test_lsf();
+    test_matrixexp();
     if (failures) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;
