@@ -2063,11 +2063,13 @@ monotonically down.
 
       The elliptic integrals of the paper come from the `Integrate\`Elliptic`
       stage.
-    - In the automatic cascade (v0.6209) it is a late fallback, after
-      Newton-Leibniz and every table stage and before DiffUnderInt, with a
-      10-second budget. It therefore only sees integrals those stages all
-      declined, and it does not run under `PrincipalValue -> True`. Through
-      the default `Integrate`, Roach 2008 goes from 7 to 20 of 30 integrals.
+    - In the automatic cascade (v0.6209; moved last in v0.6213) the elliptic
+      stage and then this one are the final fallback. They run after
+      Newton-Leibniz, every table stage and DiffUnderInt, and this one has a
+      10-second budget. They therefore only see integrals the other stages
+      all declined, and they do not run under `PrincipalValue -> True`.
+      Through the default `Integrate`, Roach 2008 goes from 7 to 25 of 30
+      integrals.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.

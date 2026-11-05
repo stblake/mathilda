@@ -2240,19 +2240,22 @@ static Expr* integrate_definite(Expr* res) {
              * already declined, this ordinary-integral method would compute a
              * value ACROSS the interior pole (a divergent / complex artifact),
              * so a PV request that they cannot close is left unevaluated. */
-            /* Roach's Meijer G algorithm as a late fallback under Automatic:
-             * after Newton-Leibniz and every table stage, so it only sees
-             * integrals they all declined, and it cannot change an answer they
-             * give. It has its own budget (the PMS pattern). Every answer it
-             * returns has been checked numerically. Not under PrincipalValue,
-             * where its theorems would give the ordinary integral. */
+            if (!r && !has_undef && !principal_value &&
+                (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
+                r = integrate_diffunderint_try(cur, x, a, b, assumptions);
+            /* Roach's elliptic and Meijer G stages as the last fallback under
+             * Automatic: after Newton-Leibniz, every table stage and
+             * DiffUnderInt, so they only see integrals those all declined and
+             * cannot change an answer they give. Roach has its own budget (the
+             * PMS pattern). Every answer either returns has been checked
+             * numerically. Not under PrincipalValue, where their theorems give
+             * the ordinary integral. Where DiffUnderInt also closes an integral
+             * its form is the simpler one
+             * (Pi Log[1 + a] for INT Log[1 + a^2 x^2]/(1 + x^2)). */
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
                 r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
                 r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS);
-            if (!r && !has_undef && !principal_value &&
-                (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
-                r = integrate_diffunderint_try(cur, x, a, b, assumptions);
             /* A real-axis definite integral must evaluate to a value free of
              * its integration variable: a result still containing x is a leaked
              * antiderivative (a stage returned F(x) instead of F(b)-F(a)), which

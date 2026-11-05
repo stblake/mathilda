@@ -8,10 +8,10 @@ Baseline v0.6189: paper integrals 7/30 correct, 2 WRONG (#25, #26); pFq values 2
 - [x] Phase 1 (v0.6203): pFq engine (src/special_functions/hrep_*.c, companion-basis module, FLINT), seed certs, Deriv formula, FunctionExpand hook
 - [x] Phase 2: done on branch feat-struvel-anger-kelvin 7241091b (agent); merge pending
 - [~] Phase 3 (v0.6203): Lerch Phi + roots of unity, integral-formula generated certs, Euler/Pfaff/Kummer, unit theorems + limit, 2-param families. OPEN: PFD duplication, Struve L/Kelvin certs (after Phase 2 merge), 2F1(1,1;2/3;8/9) prints with (-1)^(1/3)
-- [~] Phase 4: Slater -> pFq engine (v0.6203). OPEN: G-module for the log case (shift ops derived, see session notes)
-- [ ] Phase 5: MeijerGReduce + integrate_roach.c (One G, Two G, PV, [0,1] Mellin), METHOD_ROACH
-- [ ] Phase 6: elliptic reduction (Carlson tables) integrate_elliptic.c
-- [ ] Phase 7: default cascade, RoachCorpus.m, corpora diff, benchmark
+- [x] Phase 4 (v0.6203, v0.6205): Slater -> pFq engine; G-module walk incl. log case; Struve L certs + order reduction
+- [x] Phase 5 (v0.6206-07): Method->"Roach" in src/internal/RoachIntegrate.m (PBM table, one/two-G, full 2.24.1 conditions, Log^k by d/ds, Lerch term, E^-x / Tan substitutions, IBP, numeric check). OPEN: Cauchy PV theorem (#20), G^{4,3}_{4,4} at 1 (#18), #9, #24; public MeijerGReduce builtin not exposed
+- [x] Phase 6 (v0.6211): Integrate`Elliptic (agent), all 7 Roach elliptic integrals
+- [~] Phase 7 (v0.6209, v0.6211): Roach + elliptic as late fallbacks in the Automatic cascade; corpora unchanged vs main (main has pre-existing WRONG: M6869/M6895/M8659/M8723, extreme 31/32 -- agent fixing). Default Integrate: 25/30 Roach integrals (7 before). OPEN: benchmark, RoachCorpus.m
 
 # FeynCalc round 14: last failures + speed (from 2026-11-04, v0.6166)
 
