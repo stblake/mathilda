@@ -2003,22 +2003,21 @@ static Expr* bs_coef_term(long c, const char* head, const Expr* n, long k, const
                   bs_fn2(SYM_Power, expr_copy((Expr*)z), expr_new_integer(-1)),
                   bs_shift(head, n, k, z));
 }
-/* Sqrt[c1 Pi^p1 / (c2 Pi^p2 z)] -- the half-integer prefactors:
- *   pi_over == false:  Sqrt[2/(Pi z)]      (J, Y, I)
- *   pi_over == true:   Sqrt[Pi/(2 z)]      (K) */
+/* The half-integer prefactors, as Sqrt[c]/Sqrt[z]:
+ *   pi_over == false:  Sqrt[2/Pi]/Sqrt[z]  (J, Y, I)
+ *   pi_over == true:   Sqrt[Pi/2]/Sqrt[z]  (K)
+ * The function is (z/2)^nu times a series in z^2, with the principal
+ * z^(1/2). Sqrt[1/z] is not 1/Sqrt[z] on the negative real axis, so the old
+ * Sqrt[2/(Pi z)] gave BesselJ[1/2, y] /. y -> -2 the wrong sign. It also gave
+ * MeijerG[{{1/2},{}},{{1/2},{-1/2}}, z] /. z -> 3 as -0.5486 instead of
+ * 0.5486, through 1F1(u; 2u) -> BesselI (v0.6200). */
 static Expr* bs_sqrt_pref(bool pi_over, const Expr* z) {
-    Expr* inner;
-    if (!pi_over)
-        inner = bs_fn2(SYM_Times, expr_new_integer(2),
-                       bs_fn2(SYM_Power,
-                              bs_fn2(SYM_Times, expr_new_symbol(SYM_Pi), expr_copy((Expr*)z)),
-                              expr_new_integer(-1)));
-    else
-        inner = bs_fn2(SYM_Times, expr_new_symbol(SYM_Pi),
-                       bs_fn2(SYM_Power,
-                              bs_fn2(SYM_Times, expr_new_integer(2), expr_copy((Expr*)z)),
-                              expr_new_integer(-1)));
-    return bs_fn1(SYM_Sqrt, inner);
+    Expr* c = pi_over
+        ? bs_fn2(SYM_Times, expr_new_symbol(SYM_Pi), make_rational(1, 2))
+        : bs_fn2(SYM_Times, expr_new_integer(2),
+                 bs_fn2(SYM_Power, expr_new_symbol(SYM_Pi), expr_new_integer(-1)));
+    return bs_fn2(SYM_Times, bs_fn1(SYM_Sqrt, c),
+                  bs_fn2(SYM_Power, expr_copy((Expr*)z), make_rational(-1, 2)));
 }
 
 static Expr* bessel_symbolic_rules(const char* kind, const Expr* order, const Expr* z) {

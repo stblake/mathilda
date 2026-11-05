@@ -297,14 +297,19 @@ void test_builtin_shapes(void) {
 /* ---- symbolic rules (formerly src/internal/bessel.m) ------------------- */
 
 void test_symbolic_rules(void) {
-    assert_eval_eq("BesselJ[1/2, x]", "Sqrt[2/(Pi x)] Sin[x]", 0);
-    assert_eval_eq("BesselJ[-1/2, x]", "Sqrt[2/(Pi x)] Cos[x]", 0);
-    assert_eval_eq("BesselY[1/2, x]", "-Sqrt[2/(Pi x)] Cos[x]", 0);
-    assert_eval_eq("BesselI[-1/2, x]", "Sqrt[2/(Pi x)] Cosh[x]", 0);
-    assert_eval_eq("BesselK[1/2, x]", "Sqrt[Pi/(2 x)]/E^x", 0);
-    assert_eval_eq("BesselK[-3/2, x]", "Sqrt[Pi/(2 x)]/E^x + Sqrt[Pi/(2 x)]/(E^x x)", 0);
-    assert_eval_eq("BesselJ[5/2, x]",
-        "-Sqrt[2/(Pi x)] Sin[x] + (3 (-Sqrt[2/(Pi x)] Cos[x] + (Sqrt[2/(Pi x)] Sin[x])/x))/x", 0);
+    /* Sqrt[2/Pi]/Sqrt[x], not Sqrt[2/(Pi x)]: the two differ in sign on the
+     * negative real axis, where only the first is the principal branch. */
+    assert_eval_eq("BesselJ[1/2, x] === Sqrt[2/Pi] Sin[x]/Sqrt[x]", "True", 0);
+    assert_eval_eq("BesselJ[-1/2, x] === Sqrt[2/Pi] Cos[x]/Sqrt[x]", "True", 0);
+    assert_eval_eq("BesselY[1/2, x] === -Sqrt[2/Pi] Cos[x]/Sqrt[x]", "True", 0);
+    assert_eval_eq("BesselI[-1/2, x] === Sqrt[2/Pi] Cosh[x]/Sqrt[x]", "True", 0);
+    assert_eval_eq("BesselK[1/2, x] === Sqrt[Pi/2] E^-x/Sqrt[x]", "True", 0);
+    assert_eval_eq("BesselK[-3/2, x] === Sqrt[Pi/2] E^-x/Sqrt[x] + Sqrt[Pi/2] E^-x/x^(3/2)", "True", 0);
+    assert_eval_eq("Expand[BesselJ[5/2, x] - (-Sqrt[2/Pi] Sin[x]/Sqrt[x] + "
+                   "(3 (-Sqrt[2/Pi] Cos[x]/Sqrt[x] + Sqrt[2/Pi] Sin[x]/x^(3/2)))/x)]", "0", 0);
+    /* the closed forms agree with the numerics on the negative real axis */
+    assert_eval_eq("Abs[N[(BesselJ[1/2, y] /. y -> -2) - BesselJ[1/2, -2.0], 15]] < 10^-12", "True", 0);
+    assert_eval_eq("Abs[N[(BesselI[3/2, y] /. y -> -2) - BesselI[3/2, -2.0], 15]] < 10^-12", "True", 0);
     assert_eval_eq("BesselJ[-2, x]", "BesselJ[2, x]", 0);
     assert_eval_eq("BesselJ[-3, x]", "-BesselJ[3, x]", 0);
     assert_eval_eq("BesselY[-1, x]", "-BesselY[1, x]", 0);
