@@ -157,6 +157,15 @@ static void test_methods(void) {
     chk_msg("LinearSolve[{{1, 2}, {3, 4}}, {1, 1}, Method -> \"Multifrontal\"]", "LinearSolve::exopt1");
     chk("Head[Quiet[LinearSolve[SparseArray[{{1,1}->4,{2,2}->3}], {1,1}, Method->\"Multifrontal\"]]]", "LinearSolve");
     chk("LinearSolve[SparseArray[{{1,1}->4,{2,2}->3}], {1,1}, Method->\"Cholesky\"]", "{0.25, 0.333333}");
+    /* method preconditions: Cholesky needs a Hermitian matrix (::herm, also
+     * for machine input -- never a one-triangle factor of a nonsymmetric
+     * matrix), Krylov explicit numbers (::krynum) */
+    chk_msg("LinearSolve[SparseArray[{{1,1}->4,{2,2}->3,{1,2}->aa}], {1,1}, Method->\"Cholesky\"]", "LinearSolve::herm");
+    chk_msg("LinearSolve[{{4., 1.}, {0., 3.}}, {1.,1.}, Method->\"Cholesky\"]", "LinearSolve::herm");
+    chk_msg("LinearSolve[SparseArray[{Band[{1,1}] -> 4., Band[{1,2}] -> 1.}, {300, 300}], N[Range[300]], Method->\"Cholesky\"]",
+            "LinearSolve::herm");
+    chk_msg("LinearSolve[SparseArray[{{1,1}->4,{2,2}->3,{1,2}->aa}], {1,1}, Method->\"Krylov\"]", "LinearSolve::krynum");
+    chk("Head[Quiet[LinearSolve[{{4, aa}, {0, 3}}, {1,1}, Method->\"Krylov\"]]]", "LinearSolve");
     /* machine contagion: integer or empty sparse with a machine b */
     chk_msg("LinearSolve[SparseArray[{}, {2,2}], {1.,1.}]", "LinearSolve::sing");
     chk_msg("LinearSolve[SparseArray[{{1,1}->1,{2,3}->2}], {1.,1.}]", "LinearSolve::sqmat");
@@ -239,6 +248,10 @@ static void test_matrixexp(void) {
     /* a machine SparseArray answers a SparseArray (reference head); exact a List */
     chk("Head[MatrixExp[SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]]]", "SparseArray");
     chk("Head[MatrixExp[SparseArray[{{1,1}->1,{2,2}->2}]]]", "List");
+    /* an arbitrary-precision SparseArray: SparseArray (reference); the action
+     * keeps the precision (dense path) */
+    chk("Head[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30]]]", "SparseArray");
+    chk("Precision[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30], {1,1}]]", "{30.103, 30.103}");
     chk_true("With[{s = SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]}, "
              "Max[Abs[Normal[MatrixExp[s]] - MatrixExp[Normal[s]]]] < 10^-14]");
     /* the action on a vector, on SpMV: real, complex, against the dense action */

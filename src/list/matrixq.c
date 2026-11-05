@@ -596,25 +596,26 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
  * is conservative.
  */
 
-static Expr* utri_emit_argt(size_t argc) {
-    mth_message("UpperTriangularMatrixQ", "argt", "UpperTriangularMatrixQ called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
+static Expr* utri_emit_argt(const char* head, size_t argc) {
+    mth_message(head, "argt", "%s called with %zu argument%s; 1 or 2 arguments are expected.", head, argc, argc == 1 ? "" : "s");
     return NULL;
 }
 
-static Expr* utri_emit_nonopt(Expr* bad, Expr* res) {
+static Expr* utri_emit_nonopt(const char* head, Expr* bad, Expr* res) {
     char* bad_str = expr_to_string(bad);
     char* call_str = expr_to_string(res);
-    mth_message("UpperTriangularMatrixQ", "nonopt", "Options expected (instead of %s) beyond position 2 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
+    mth_message(head, "nonopt", "Options expected (instead of %s) beyond position 2 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
     return NULL;
 }
 
-Expr* builtin_upper_triangular_matrix_q(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    ND_MATRIXQ_DELIST(res);
+/* UpperTriangularMatrixQ (lower = false: entries with j - i < k must be zero)
+ * and LowerTriangularMatrixQ (lower = true: entries with j - i > k must be
+ * zero), with the reference's head-specific messages. */
+static Expr* triangular_matrix_q(Expr* res, const char* head, bool lower) {
     size_t argc = res->data.function.arg_count;
-    if (argc == 0) return utri_emit_argt(0);
+    if (argc == 0) return utri_emit_argt(head, 0);
 
     Expr* m = res->data.function.args[0];
 
@@ -634,7 +635,10 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
             opt_start = 1;
         } else {
             if (a1->type != EXPR_INTEGER) {
-                return utri_emit_nonopt(a1, res);
+                char* s1 = expr_to_string(a1);
+                mth_message(head, "nmint", "%s is not a machine-sized integer.", s1 ? s1 : "?");
+                free(s1);
+                return NULL;
             }
             k = a1->data.integer;
             opt_start = 2;
@@ -666,7 +670,7 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
         }
     }
     if (last_bad != NULL) {
-        return utri_emit_nonopt(last_bad, res);
+        return utri_emit_nonopt(head, last_bad, res);
     }
 
     /* Validate matrix shape -- same gate as DiagonalMatrixQ. */
@@ -697,7 +701,7 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
         Expr** row_i = m->data.function.args[i]->data.function.args;
         for (size_t j = 0; j < ncols; j++) {
             int64_t off = (int64_t)j - (int64_t)i;
-            if (off >= k) continue;  /* on or above k-th diagonal -- ignore */
+            if (lower ? off <= k : off >= k) continue;  /* inside the triangle -- ignore */
             Expr* entry = row_i[j];
             bool zero;
             if (tolerance != NULL) {
@@ -710,4 +714,18 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
     }
 
     return expr_new_symbol(SYM_True);
+}
+
+Expr* builtin_upper_triangular_matrix_q(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
+    return triangular_matrix_q(res, "UpperTriangularMatrixQ", false);
+}
+
+/* LowerTriangularMatrixQ[m] / [m, k]: every entry above the k-th diagonal
+ * (j - i > k) is zero; Tolerance as for UpperTriangularMatrixQ. */
+Expr* builtin_lower_triangular_matrix_q(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    ND_MATRIXQ_DELIST(res);
+    return triangular_matrix_q(res, "LowerTriangularMatrixQ", true);
 }

@@ -97,6 +97,8 @@ Expr* ndla_norm(Expr* res);         /* Norm[v] / Norm[v, p] / Norm[m] */
 Expr* ndla_matrix_norm_direct(Expr* v, Expr* pe);
 Expr* ndla_normalize(Expr* res);    /* Normalize[v]                   */
 Expr* ndla_cross(Expr* res);        /* Cross[u, v] (3-vectors)        */
+Expr* ndla_projection(Expr* res);   /* Projection[u, v]               */
+Expr* ndla_tensorproduct(Expr* res);/* TensorProduct[a, b] (two arrays)*/
 /* The matrix functions (src/linalg/matfunc.c): the whole call, a float64 or
  * complex64 buffer straight to the machine kernels (an integer buffer is
  * delisted for the exact engine).  Compile[] delegates to the same functions. */

@@ -139,6 +139,7 @@ KryStatus kry_solve(const SpMat* A, const double* b, double* x, const KryOpts* o
 /* Registration of the native heads (called from sparse_init after the gate). */
 void sparse_la_init(void);
 void sparse_la_func_init(void);   /* MatrixExp (sparse_la_func.c) */
+void sparse_la_pred_init(void);   /* matrix predicates (sparse_la_pred.c) */
 
 /* Solve A x = B for a machine SparseArray A with the LinearSolve options in
  * `opts` (Method -> ...). Used by the LinearSolve native handler and by

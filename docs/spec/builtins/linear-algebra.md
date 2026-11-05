@@ -2242,6 +2242,45 @@ In[2]:= IdentityMatrix[{2, 3}]
 Out[2]= {{1, 0, 0}, {0, 1, 0}}
 ```
 
+## Projection
+The projection of one vector onto another (v0.6189, `src/linalg/projection.c`).
+- `Projection[u, v]`: `((u . Conjugate[v]) / (v . Conjugate[v])) v`.
+- `Projection[u, v, f]`: `f[u, v] / f[v, v] v` for an inner product `f`.
+
+**Features**:
+- `Protected`.
+- A zero `v` gives the zero vector (`Projection[{1, 2}, {0, 0}]` is `{0, 0}`).
+- Vectors of different lengths, or a vector beside a non-vector, give `Projection::prnv` and the call stays unevaluated. Two symbols give the formal `(y Conjugate[y] . x) / Conjugate[y] . y`, as in the reference.
+- Exact and symbolic entries stay exact; MPFR entries keep their precision.
+- Machine vectors take one kernel (`la_projection_machine`) on every surface: List, packed, NDArray (`ndla_projection`) and `Compile`, which lowers it at real and complex rank 1 (ND_FN2S row, `R2_VEC`). So `Compile[...][u, v] === Projection[u, v]`.
+- SparseArray: a sparse `v` gives a SparseArray (the answer is a multiple of `v`); a sparse `u` beside a dense `v` gives a dense vector.
+
+## TensorProduct
+The tensor product of arrays (v0.6189, `src/linalg/tensorproduct.c`).
+- `TensorProduct[t1, t2, ...]`: the outer product of all the elements, an array of rank `r1 + r2 + ...`.
+
+**Features**:
+- `Flat`, `OneIdentity`, `Protected`. `TensorProduct[t]` is `t`; `TensorProduct[]` is `1`.
+- A number factor multiplies (`TensorProduct[2, {1, 2}]` is `{2, 4}`). A symbol stays a formal factor (`TensorProduct[x, {1, 2}]` and `TensorProduct[a, b]` are left alone, as in the reference).
+- The product is computed by the buffer-aware, sparse-native `Outer[Times, ...]`. Any SparseArray factor gives a SparseArray.
+- `Compile` lowers `TensorProduct[a, b]` for two machine arrays (ND_FN2S row with the new rank rule `R2_OUTER`, rank `ra + rb`; an integer pair stays integer).
+
+## LowerTriangularMatrixQ
+- `LowerTriangularMatrixQ[m]`: True if every entry above the main diagonal is zero.
+- `LowerTriangularMatrixQ[m, k]`: True if every entry above the `k`-th diagonal is zero.
+
+**Features** (v0.6189; this builtin was missing):
+- `Protected`, with `Tolerance -> t` as for `UpperTriangularMatrixQ`, and rectangular matrices.
+- Messages: `::nonopt` for a third positional argument, `::nmint` for a non-integer `k`. `UpperTriangularMatrixQ` now also says `::nmint` for a non-integer `k`, as the reference does; it used to say `::nonopt`.
+- The two share one implementation (`triangular_matrix_q`, `src/list/matrixq.c`).
+
+### Matrix predicates of a SparseArray (v0.6189)
+`SymmetricMatrixQ`, `HermitianMatrixQ`, `SquareMatrixQ`, `DiagonalMatrixQ`, `UpperTriangularMatrixQ`, `LowerTriangularMatrixQ` and `PositiveDefiniteMatrixQ` of a SparseArray are answered in O(nnz) from the pattern and the stored values (`src/sparse/sparse_la_pred.c`). They used to be densified: O(n^2), and refused past the 2^27-element cap.
+- The answers are the dense builtins' answers on `Normal[s]`.
+- `PositiveDefiniteMatrixQ` of a machine SparseArray above order 128 tests the Hermitian part with a Cholesky attempt (CHOLMOD when linked).
+- Options, a diagonal offset, a nonzero background, or a boxed `HermitianMatrixQ` go through the dense gate.
+- `Cross` of SparseArray vectors answers on the dense form.
+
 ## KroneckerProduct
 The Kronecker (direct) product of arrays.
 - `KroneckerProduct[a, b]`: for matrices the block matrix whose `(i, j)` block

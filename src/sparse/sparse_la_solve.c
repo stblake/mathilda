@@ -115,6 +115,17 @@ static bool coeff_view(const Expr* A, bool promote, SpMat* V) {
     return spla_from_dense(A, V);
 }
 
+/* head[e] (or head[e, test]) evaluates to True. */
+static bool pred_true(const char* head, const Expr* e, const char* test) {
+    Expr* args[2] = { expr_copy((Expr*)e), test ? expr_new_symbol(test) : NULL };
+    Expr* call = expr_new_function(expr_new_symbol(head), args, test ? 2 : 1);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    bool t = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    expr_free(r);
+    return t;
+}
+
 /* LinearSolve[a, b] (no options), evaluated; a and b borrowed. */
 static Expr* plain_solve(const Expr* a, const Expr* b) {
     Expr* args[2] = { expr_copy((Expr*)a), expr_copy((Expr*)b) };
@@ -330,6 +341,20 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
     SolveOpts o;
     if (!parse_opts(opts, nopts, &o)) return NULL;
     if (o.bad) return expr_copy((Expr*)call);
+
+    /* method preconditions (reference): Cholesky needs a Hermitian matrix
+     * (::herm -- checked before anything is factored, so a nonsymmetric
+     * matrix never reaches a one-triangle Cholesky), Krylov explicit numbers
+     * (::krynum) */
+    if (o.sel == MS_CHOLESKY && !pred_true("HermitianMatrixQ", Ae, NULL)) {
+        msg_with_expr("LinearSolve", "herm", "The matrix %s is not Hermitian or real and symmetric.", Ae);
+        return expr_copy((Expr*)call);
+    }
+    if (o.sel == MS_KRYLOV && !pred_true("MatrixQ", Ae, "NumericQ")) {
+        mth_message("LinearSolve", "krynum",
+                    "Input to Krylov algorithm contains elements that are not explicit numbers.");
+        return expr_copy((Expr*)call);
+    }
 
     NumClass ca = num_class(Ae), cb = num_class(Be);
     bool machine = ca == NC_MACHINE || cb == NC_MACHINE;
@@ -553,4 +578,5 @@ void sparse_la_init(void) {
     symtab_set_sparse_native("Det", (const void*)native_det);
     symtab_set_sparse_native("Inverse", (const void*)native_inverse);
     sparse_la_func_init();
+    sparse_la_pred_init();
 }

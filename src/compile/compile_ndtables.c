@@ -543,6 +543,12 @@ static const NdFn2Spec ND_FN2S[] = {
     { "Dot",           nd_dot2,                NDF_REAL | NDF_CPLX,           R2_DOT,   NDF2_PROMOTE },
     { "LinearSolve",   nd_linearsolve,         NDF_REAL | NDF_CPLX,           R2_SOLVE, NDF2_PROMOTE },
     { "Cross",         nd_cross,               NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
+    /* Projection[u, v]: the interpreter's own machine kernel
+     * (la_projection_machine); an int pair projects to exact rationals, so
+     * real/complex only.  TensorProduct[a, b]: the outer product, rank
+     * ra + rb (R2_OUTER), exact on an int pair like KroneckerProduct. */
+    { "Projection",    ndla_projection,        NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
+    { "TensorProduct", ndla_tensorproduct,     NDF_INT | NDF_REAL | NDF_CPLX, R2_OUTER, NDF2_EXACT },
     { "LeastSquares",  nd_leastsquares,        NDF_REAL,                      R2_SOLVE, NDF2_PROMOTE },
     { "ListConvolve",  builtin_list_convolve,  NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
     { "ListCorrelate", builtin_list_correlate, NDF_REAL | NDF_CPLX,           R2_VEC,   NDF2_PROMOTE },
@@ -620,6 +626,7 @@ CompileType nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb) {
         case R2_MATVEC: if (ra != 2 || rb != 1) return CT_ERR; rr = 1; break;
         case R2_VEC:   if (ra != 1 || rb != 1) return CT_ERR; rr = 1; break;
         case R2_JOIN:  if (ra != rb) return CT_ERR; rr = ra; break;
+        case R2_OUTER: rr = ra + rb; break;                              /* TensorProduct */
         case R2_MATRIX: if (ra != 1 || rb != 1) return CT_ERR; rr = 2; break;  /* Hankel/Toeplitz[c, r] */
         case R2_PRED:  if (ra != 1 || rb != 1) return CT_ERR; return CT_BOOL;    /* IntersectingQ */
         case R2_KRON:

@@ -127,17 +127,20 @@ static bool sp_expmv(const SpMat* A, const double* b, double* out) {
     return true;
 }
 
-/* Is the SparseArray a machine one (typed machine values, or boxed values
- * holding a machine number)? */
-static bool sparse_is_machine(const SparseArray* sa) {
-    if (sa->kind == SPV_F64 || sa->kind == SPV_C128) return true;
-    if (sa->kind != SPV_EXPR) return false;
+/* The numeric class of a SparseArray's values: 0 exact (or symbolic), 1
+ * machine, 2 arbitrary precision. The reference answers MatrixExp of an
+ * inexact SparseArray (machine or MPFR) with a SparseArray, of an exact one
+ * with a List. */
+static int sparse_class(const SparseArray* sa) {
+    if (sa->kind == SPV_F64 || sa->kind == SPV_C128) return 1;
+    if (sa->kind != SPV_EXPR) return 0;
     Expr* const* v = sa->vals;
+    long bits = 0;
     for (int64_t k = 0; k < sa->pat->nnz; k++) {
         CommonInexactInfo inf = common_scan_inexact(v[k]);
-        if (inf.has_inexact) return inf.min_bits <= 53;
+        if (inf.has_inexact && (bits == 0 || inf.min_bits < bits)) bits = inf.min_bits;
     }
-    return false;
+    return bits == 0 ? 0 : bits <= 53 ? 1 : 2;
 }
 
 static Expr* eval_owned(Expr* e) {
@@ -151,7 +154,8 @@ static Expr* native_matrixexp(const Expr* call) {
     Expr* const* a = call->data.function.args;
     if (na < 1 || na > 2 || a[0]->type != EXPR_SPARSE) return NULL;
     const SparseArray* sa = sp_of(a[0]);
-    if (sa->rank != 2 || sa->dims[0] != sa->dims[1] || !sparse_is_machine(sa)) return NULL;
+    int cls = sparse_class(sa);
+    if (sa->rank != 2 || sa->dims[0] != sa->dims[1] || cls == 0) return NULL;
 
     if (na == 1) {
         /* SparseArray[MatrixExp[Normal[s]]]: the dense exponential, answered
@@ -171,7 +175,9 @@ static Expr* native_matrixexp(const Expr* call) {
         return eval_owned(expr_new_function(expr_new_symbol("SparseArray"), sa_args, 1));
     }
 
-    /* MatrixExp[s, v] */
+    /* MatrixExp[s, v]: the SpMV action is machine arithmetic; an
+     * arbitrary-precision s keeps its precision on the dense path */
+    if (cls != 1) return NULL;
     SpMat A;
     if (!spla_view(sa, true, &A)) return NULL;
     const Expr* v = a[1];

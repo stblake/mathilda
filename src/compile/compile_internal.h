@@ -760,7 +760,7 @@ typedef struct {
                         * (DuplicateFreeQ); the register is CT_BOOL */
 } NdRedSpec;
 
-typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED, R2_KRON, R2_MATVEC } NdFn2Rank;
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED, R2_KRON, R2_MATVEC, R2_OUTER } NdFn2Rank;
 typedef enum { NDF2_PROMOTE, NDF2_SAME, NDF2_EXACT } NdFn2Elem;
 
 typedef struct {

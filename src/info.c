@@ -2304,6 +2304,31 @@ void info_init(void) {
         "emits ::matdims.  An out-of-range k or UpTo[k] emits ::sval.\n"
         "Unknown option keys / values emit ::opts and leave the call\n"
         "unevaluated.");
+    symtab_set_docstring("LowerTriangularMatrixQ",
+        "LowerTriangularMatrixQ[m]\n"
+        "\tgives True if m is lower triangular (every entry above the main\n"
+        "\tdiagonal is zero), and False otherwise.\n"
+        "LowerTriangularMatrixQ[m, k]\n"
+        "\tgives True if every entry above the k-th diagonal is zero.\n"
+        "Option Tolerance -> t counts an entry e as zero when Abs[e] <= t.");
+    symtab_set_docstring("Projection",
+        "Projection[u, v]\n"
+        "\tgives the projection of the vector u onto v,\n"
+        "\t(u . Conjugate[v]) / (v . Conjugate[v]) v.\n"
+        "Projection[u, v, f]\n"
+        "\tuses the inner product f: f[u, v] / f[v, v] v.\n"
+        "\n"
+        "A zero v gives the zero vector; vectors of different lengths give\n"
+        "Projection::prnv. Exact, symbolic, machine and arbitrary-precision\n"
+        "entries are kept as such; a SparseArray v gives a SparseArray.");
+    symtab_set_docstring("TensorProduct",
+        "TensorProduct[t1, t2, ...]\n"
+        "\tgives the tensor product of the arrays t1, t2, ..., an array of\n"
+        "\trank r1 + r2 + ... (the outer product of all the elements).\n"
+        "\n"
+        "A number multiplies; a symbol stays a formal factor; a SparseArray\n"
+        "factor gives a SparseArray. Flat and OneIdentity:\n"
+        "TensorProduct[t] is t and TensorProduct[] is 1.");
     symtab_set_docstring("LinearSolveFunction",
         "LinearSolveFunction[dims, data]\n"
         "\trepresents a function, made by LinearSolve[m], that solves\n"

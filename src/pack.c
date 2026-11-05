@@ -831,7 +831,7 @@ static void pack_mark_aware_heads(void) {
         "SingularValueList", "Minors", "Adjugate", "Orthogonalize",
         "HessenbergDecomposition", "Eigensystem",
         "Eigenvalues", "Eigenvectors", "CharacteristicPolynomial",
-        "Tr", "Norm", "Normalize", "Cross",
+        "Tr", "Norm", "Normalize", "Cross", "Projection", "TensorProduct",
         "DiagonalMatrix", "HankelMatrix", "ToeplitzMatrix", "VandermondeMatrix",
         "PositiveDefiniteMatrixQ", "NegativeDefiniteMatrixQ",
         "LatticeReduce", "FindIntegerNullVector", "HermiteDecomposition",

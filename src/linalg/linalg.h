@@ -63,4 +63,11 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed);
  * A scalar for vector.vector, an NDArray otherwise.  Caller owns the result. */
 Expr* nd_dot_machine(const Expr* a, const Expr* b);
 
+/* Projection[u, v, (f)] (projection.c) and TensorProduct[t...]
+ * (tensorproduct.c); la_projection_machine is the one machine kernel behind
+ * every Projection surface. */
+Expr* builtin_projection(Expr* res);
+Expr* builtin_tensorproduct(Expr* res);
+void la_projection_machine(const double* u, const double* v, int n, bool cplx, double* out);
+
 #endif // LINALG_H

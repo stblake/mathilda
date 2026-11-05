@@ -287,6 +287,8 @@ void list_init(void) {
     symtab_get_def("SquareMatrixQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("DiagonalMatrixQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("UpperTriangularMatrixQ")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("LowerTriangularMatrixQ", builtin_lower_triangular_matrix_q);
+    symtab_get_def("LowerTriangularMatrixQ")->attributes |= ATTR_PROTECTED;
 
     symtab_set_docstring("Total", "Total[list]\n\tgives the total of the elements in list.\nTotal[list, n]\n\ttotals all elements down to level n.\nTotal[list, {n}]\n\ttotals elements at level n.\nTotal[list, {n1, n2}]\n\ttotals elements at levels n1 through n2.");
 }

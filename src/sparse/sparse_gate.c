@@ -394,7 +394,7 @@ static const char* const GATE_DENSE[] = {
     "CholeskyDecomposition", "SchurDecomposition", "JordanDecomposition",
     "HermiteDecomposition", "CharacteristicPolynomial", "LeastSquares",
     "PseudoInverse", "MatrixExp", "MatrixLog", "MatrixFunction",
-    "HessenbergDecomposition", "Minors", "Adjugate", "Orthogonalize",
+    "HessenbergDecomposition", "Minors", "Adjugate", "Orthogonalize", "Cross",
     /* sequence operations with a dense answer */
     "Accumulate", "Differences", "Ratios", "ListConvolve", "ListCorrelate",
     "Fourier", "InverseFourier", "FourierDCT", "FourierDST",
