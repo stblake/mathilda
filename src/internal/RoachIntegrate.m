@@ -106,8 +106,10 @@ Roach`GForm1[FresnelC[t_], x_] := Roach`mk[1/2, {1}, {}, {1/4}, {0, 3/4}, Pi^2 t
 Roach`GForm1[BesselJ[a_, t_], x_] /; FreeQ[a, x] := Roach`mk[1, {}, {}, {a/2}, {-a/2}, t^2/4, x]
 Roach`GForm1[BesselY[a_, t_], x_] /; FreeQ[a, x] :=
   Roach`mk[1, {}, {-(a + 1)/2}, {a/2, -a/2}, {-(a + 1)/2}, t^2/4, x]
+(* I_a(t) = Pi G^{1,0}_{1,3}(t^2/4 | (1+a)/2; a/2, -a/2, (1+a)/2) at +t^2/4
+   (the entry once read -t^2/4, which is not I_a: 0.881 for I_0(7/10) = 1.126) *)
 Roach`GForm1[BesselI[a_, t_], x_] /; FreeQ[a, x] :=
-  Roach`mk[Pi, {}, {(1 + a)/2}, {a/2}, {-a/2, (1 + a)/2}, -t^2/4, x]
+  Roach`mk[Pi, {}, {(1 + a)/2}, {a/2}, {-a/2, (1 + a)/2}, t^2/4, x]
 Roach`GForm1[BesselK[a_, t_], x_] /; FreeQ[a, x] := Roach`mk[1/2, {}, {}, {a/2, -a/2}, {}, t^2/4, x]
 Roach`GForm1[StruveH[a_, t_], x_] /; FreeQ[a, x] :=
   Roach`mk[1, {(a + 1)/2}, {}, {(a + 1)/2}, {-a/2, a/2}, t^2/4, x]
@@ -852,6 +854,81 @@ Roach`Run[f_, x_, a_, b_, assum_] := Module[{r, v, c},
 
 (* the Cauchy principal value (Integrate[..., PrincipalValue -> True]) *)
 Roach`RunPV[f_, x_, a_, b_, assum_] := Block[{Roach`$pv = True}, Roach`Run[f, x, a, b, assum]]
+
+(* ---------------------------------------------------------------- *)
+(* MeijerGReduce[expr, x]: the public face of the GForm table       *)
+(* ---------------------------------------------------------------- *)
+
+(* expr rewritten with each factor that has a G form replaced by
+     C Inactive[MeijerG][{{an}, {ap}}, {{bm}, {bq}}, w]        (argument c x)
+     C Inactive[MeijerG][{{an}, {ap}}, {{bm}, {bq}}, w, 1/q]   (argument c x^q)
+   for x > 0 -- the half line the table (PBM vol. 3 sec. 8.4) is written for.
+   In the four-argument form w = c^(1/q) x with w^q = c x^q exactly; that is
+   only certain for an integer q, so a fractional q keeps the three-argument
+   form with argument c x^q. Activate turns either back into MeijerG, which
+   evaluates both forms (MeijerG[a, b, w, r] = MeijerG[a, b, w^(1/r)]).
+
+   Sums are mapped term by term; in a product, constants and powers of x stay
+   outside and each other factor is converted on its own, so a product of two
+   transcendental factors is a product of two G functions. A positive integer
+   power of a convertible factor is that power of its G. UnitStep[1 - x] is
+   G^{1,0}_{1,1}(x | 1; 0); with a (1 - x^q)^(a-1) or Log[x^q] factor it is one
+   G. A factor with no G form is kept as it is; $Failed when no factor of the
+   expression has one (the builtin then returns unevaluated). *)
+
+Roach`mgInactive[Roach`g[C_, {an_, ap_}, {bm_, bq_}, c_, q_], x_] := Module[{w},
+  If[q === 1, Return[C Inactive[MeijerG][{an, ap}, {bm, bq}, c x]]];
+  If[IntegerQ[q],
+    w = PowerExpand[c^(1/q)];
+    If[Together[w^q - c] === 0,
+      Return[C Inactive[MeijerG][{an, ap}, {bm, bq}, w x, 1/q]]]];
+  C Inactive[MeijerG][{an, ap}, {bm, bq}, c x^q]]
+
+(* one factor -> its G form (an expression) or $Failed *)
+Roach`mgFactor[f_, x_] := Module[{gs = Roach`mgWhole[f, x], b},
+  If[gs === $Failed && MatchQ[f, Power[_, _Integer?Positive]] && !MatchQ[f, Power[_Plus, _]],
+    b = Roach`mgFactor[f[[1]], x];
+    If[b =!= $Failed, gs = b^f[[2]]]];
+  gs]
+Roach`mgWhole[f_, x_] := Module[{gs = Quiet[Roach`GForm1[f, x]]},
+  If[!ListQ[gs] || gs === {} || !And @@ (MatchQ[#, _Roach`g] & /@ gs), Return[$Failed]];
+  Total[Roach`mgInactive[#, x] & /@ gs]]
+
+Roach`mgTerm[t_, x_] := Module[{fs, C = 1, out = {}, hit = False, ind, g, i, done},
+  fs = Flatten[{If[Head[t] === Times, List @@ t, {t}]}];
+  (* E^(a + b x + c x^2) -> E^a E^(b x) E^(c x^2) *)
+  fs = Flatten[fs /. Power[E, p_Plus] /; !FreeQ[p, x] :> (Power[E, #] & /@ List @@ p)];
+  ind = Count[fs, Roach`Ind0[x]];
+  fs = DeleteCases[fs, Roach`Ind0[x]];
+  Do[Which[
+      FreeQ[fi, x], C = C fi,
+      fi === x || MatchQ[fi, Power[x, _?(FreeQ[#, x] &)]], AppendTo[out, fi],
+      True, AppendTo[out, {fi}]], {fi, fs}];
+  (* the indicator: first try it on each factor, then on its own *)
+  If[ind > 0,
+    done = False;
+    Do[If[ListQ[out[[i]]],
+         g = Roach`mgWhole[out[[i, 1]] Roach`Ind0[x], x];
+         If[g =!= $Failed, out[[i]] = g; hit = True; done = True; Break[]]],
+       {i, Length[out]}];
+    If[!done, g = Roach`mgWhole[Roach`Ind0[x], x]; AppendTo[out, g]; hit = True]];
+  out = Replace[out, {fi_} :> With[{r = Roach`mgFactor[fi, x]},
+           If[r === $Failed, fi, (hit = True; r)]], {1}];
+  {hit, C Times @@ out}]
+
+Roach`MeijerGReduce[e_, x_Symbol] := Module[{f, ts, rs},
+  If[FreeQ[e, x], Return[e]];
+  f = e /. UnitStep[1 - x] -> Roach`Ind0[x];
+  ts = If[Head[f] === Plus, List @@ f, {f}];
+  rs = Roach`mgTerm[#, x] & /@ ts;
+  If[!Or @@ rs[[All, 1]],
+    (* nothing converted: a bare power of x times a constant is its own
+       answer, anything else has no known form *)
+    Return[If[And @@ (MatchQ[#, x | Power[x, _?(FreeQ[#, x] &)]] & /@
+                Cases[Flatten[{If[Head[#] === Times, List @@ #, #] & /@ ts}], _?(!FreeQ[#, x] &)]),
+             e, $Failed]]];
+  Total[rs[[All, 2]]] /. Roach`Ind0[x] -> UnitStep[1 - x]]
+Roach`MeijerGReduce[___] := $Failed
 
 End[];
 $ContextPath = Roach`savedContextPath;

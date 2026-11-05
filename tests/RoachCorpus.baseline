@@ -1,0 +1,50 @@
+# tests/RoachCorpus.baseline -- the record ids of tests/RoachCorpus.m that
+# are CORRECT. The runner (test_roach_corpus.c) fails when one of them is no
+# longer CORRECT; add an id when a case starts passing. Regenerate with
+# ROACH_CORPUS_WRITE_BASELINE=1.
+# Not listed though it can pass: R08-29 (CORRECT in 25-30 s, at the per-case
+# timeout, so it flips to TIMEOUT under load).
+R08-01
+R08-02
+R08-04
+R08-05
+R08-06
+R08-08
+R08-10
+R08-11
+R08-12
+R08-13
+R08-14
+R08-15
+R08-16
+R08-17
+R08-19
+R08-21
+R08-22
+R08-23
+R08-26
+R08-28
+R08-30
+R08-F01
+R08-F02
+R08-F03
+R08-F04
+R08-F05
+R08-F06
+R08-F07
+R08-F08
+R08-F09
+R08-F10
+R08-F11
+I96-01
+I96-02
+I96-03
+I96-04
+I96-07
+I96-08
+I96-09
+I96-10
+I97-01
+I97-05
+I97-10
+I97-11

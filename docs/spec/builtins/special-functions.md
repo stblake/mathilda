@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3739,6 +3739,59 @@ Out[5]= {0.0511285, 0.126112, 0.133903}
 
 In[6]:= D[MeijerG[{{a1,a2},{a3,a4}},{{v},{-v}},z],z]
 Out[6]= MeijerG[{{-1, -1 + a1, -1 + a2}, {-1 + a3, -1 + a4}}, {{-1 + v}, {0, -1 - v}}, z]
+```
+
+## MeijerGReduce
+
+`MeijerGReduce[expr, x]` rewrites `expr` in terms of inactive Meijer G
+functions of `x`, for `x > 0`:
+
+- a factor whose G argument is `c x` becomes
+  `Inactive[MeijerG][{{a1..an},{an+1..ap}}, {{b1..bm},{bm+1..bq}}, c x]`;
+- a factor whose argument is `c x^q`, `q` an integer `≠ 1`, uses the
+  four-argument form `Inactive[MeijerG][alist, blist, w, 1/q]` with
+  `w = c^(1/q) x` (so `w^q = c x^q` exactly; `MeijerG[a, b, w, r]` is
+  `MeijerG[a, b, w^(1/r)]`): `Sin[x]` → `Sqrt[Pi] Inactive[MeijerG][{{},{}},{{1/2},{0}}, x/2, 1/2]`;
+- a fractional `q` keeps the three-argument form at `c x^q`
+  (`Sin[Sqrt[x]]` → `Sqrt[Pi] Inactive[MeijerG][{{},{}},{{1/2},{0}}, x/4]`).
+
+Sums are mapped term by term; in a product the constants and powers of `x` stay
+outside and every other factor is converted on its own, so a product of two
+transcendental factors is a product of two G functions (the reference sometimes
+fuses such a product into one G; both activate to `expr`). A positive integer
+power of a convertible factor is that power of its G; `BesselJ[ν, t]^2` has its
+own single-G entry. `E^(a + b x)` splits into `E^a` times the G of `E^(b x)`.
+`UnitStep[1 - x]` is `G^{1,0}_{1,1}(x | 1; 0)`, and together with a
+`(1 - x^q)^(a-1)` or `Log[x^q]` factor (`q > 0`) it is a single G
+(`(1 - x)^(a-1) UnitStep[1 - x]` → `Gamma[a] Inactive[MeijerG][{{},{a}},{{0},{}}, x]`).
+
+The table is the one `Integrate[..., Method -> "Roach"]` decomposes integrands
+with (`Roach`GForm1` in `src/internal/RoachIntegrate.m`, PBM vol. 3 sec. 8.4), so
+the two cannot drift apart: `Exp`, `Sin`/`Cos`, `Sinh`/`Cosh`, `Log[1 + c x^q]`,
+`ArcTan`/`ArcCot`, `(b + c x^q)^(-a)`, `Erf`/`Erfc`, `ExpIntegralEi[-c x^q]`,
+`ExpIntegralE`, `SinIntegral`/`CosIntegral`, `FresnelS`/`FresnelC`,
+`Gamma[a, t]`, `BesselJ`/`BesselY`/`BesselI`/`BesselK`, `StruveH`,
+`EllipticK`/`EllipticE`, `BesselJ[ν, t]^2`. A factor with no G form is kept as it
+is; when no factor of `expr` has one (`MeijerGReduce[foo[x], x]`, `Log[x]` with
+no indicator) the call stays unevaluated. A constant or a bare power of `x` is
+returned unchanged. A non-symbol second argument stays unevaluated; a wrong
+argument count gives `MeijerGReduce::argr`/`argrx`.
+
+`Activate[MeijerGReduce[f, x]]` equals `f` on `x > 0`; `tests/test_meijergreduce.c`
+checks this numerically for 50 inputs. The module is loaded lazily on the first
+call.
+
+Attributes: `Protected`.
+
+```
+In[1]:= MeijerGReduce[x^2 BesselJ[0, x] + Log[1 + a x], x]
+Out[1]= Inactive[MeijerG][{{1, 1}, {}}, {{1}, {0}}, a x] + x^2 Inactive[MeijerG][{{}, {}}, {{0}, {0}}, 1/2 x, 1/2]
+
+In[2]:= MeijerGReduce[E^(-x) BesselJ[0, x], x]
+Out[2]= Inactive[MeijerG][{{}, {}}, {{0}, {}}, x] Inactive[MeijerG][{{}, {}}, {{0}, {0}}, 1/2 x, 1/2]
+
+In[3]:= Activate[MeijerGReduce[ArcTan[x], x]] /. x -> 0.7
+Out[3]= 0.610726
 ```
 
 ## FunctionExpand

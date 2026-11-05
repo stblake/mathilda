@@ -1521,6 +1521,17 @@ void info_init(void) {
         "HypergeometricPFQ[{a, b}, {c}, z]; continued analytically to the whole\n"
         "plane, with the cut z > 1 taking the limit from below.");
 
+    symtab_set_docstring("MeijerGReduce",
+        "MeijerGReduce[expr, x]\n"
+        "\trewrites expr in terms of Inactive[MeijerG][{{a1..an}, {an+1..ap}},\n"
+        "{{b1..bm}, {bm+1..bq}}, w] (argument c x) or Inactive[MeijerG][alist, blist, w, r]\n"
+        "(argument c x^(1/r), w = c^r x), valid for x > 0. Sums are mapped, constants and\n"
+        "powers of x stay outside, and each other factor of a product becomes its own G\n"
+        "(exp, trig, hyperbolic, Log, ArcTan/ArcCot, powers of 1 + c x^q, UnitStep[1 - x],\n"
+        "Bessel J/Y/I/K, Struve H, Erf/Erfc, Ei/E_n, Si/Ci, Fresnel S/C, Gamma[a, x],\n"
+        "EllipticK/E). Factors with no G form are kept; returns unevaluated when none\n"
+        "has one. Activate gives back an expression equal to expr.");
+
     symtab_set_docstring("MeijerG",
         "MeijerG[{{a1, ..., an}, {an+1, ..., ap}}, {{b1, ..., bm}, {bm+1, ..., bq}}, z]\n"
         "\tis the Meijer G-function G^{m,n}_{p,q}(z | a; b), the Mellin-Barnes integral\n"

@@ -4280,6 +4280,20 @@ add_executable(integrate_roach_tests test_integrate_roach.c $<TARGET_OBJECTS:mat
 target_include_directories(integrate_roach_tests PRIVATE ../src)
 add_test(NAME integrate_roach_tests COMMAND integrate_roach_tests)
 
+# MeijerGReduce: Activate of the rewrite equals the input, numerically.
+add_executable(meijergreduce_tests test_meijergreduce.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(meijergreduce_tests PRIVATE ../src)
+
+# Roach's three test suites (2008 integrals + pFq values, ISSAC '96 and '97
+# galleries) against mpmath references: forked, timeout-scored; WRONG is
+# assert-empty and CORRECT ratchets against tests/RoachCorpus.baseline.
+# Nightly by name (*corpus*).
+add_executable(roach_corpus_tests test_roach_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(roach_corpus_tests PRIVATE ../src)
+add_test(NAME roach_corpus_tests
+         COMMAND roach_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/RoachCorpus.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/RoachCorpus.baseline)
+
 add_executable(sf_machine_hyper_tests test_sf_machine_hyper.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sf_machine_hyper_tests PRIVATE ../src)
 add_test(NAME sf_machine_hyper_tests COMMAND sf_machine_hyper_tests)

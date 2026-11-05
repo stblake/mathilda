@@ -534,3 +534,9 @@ folders, so adding one is a folder and nothing else.
 | # | experiment | what it measures |
 |---|---|---|
 | 123 | `native-vs-m` | The recursive Dirac trace from Woxi issue #2142 (Rolf Mertig's `diracTr`, verbatim) against `` Experimental`FeynCalc`DiracTr ``, for n = 8, 10, 12, 14 (13!! = 135135 terms), C alone at n = 16 (2027025 terms), and a repeated-index n = 12 trace. Also the issue's `Cases[_, _g, Infinity]` timing on both results. Checks: length, distinct `g`, and the coefficient sum, plus `C === .m`. `medium.frm`, the issue's FORM program, sits alongside for a by-hand FORM column (`time form -q medium.frm`), since the runner has no FORM driver. |
+
+## Meijer G definite integrals (125)
+
+| # | experiment | what it measures |
+|---|---|---|
+| 125 | `meijer-g-integrals` | A representative subset of `tests/RoachCorpus.m` (Roach's 2008 Quantum paper and his ISSAC '96/'97 galleries): 12 integrals over (0, oo) by `Integrate[..., Method -> "Roach"]` against sympy's `integrate(..., meijerg=True)` (meijerint, the same PBM 2.24.1 convolution method); 4 pFq of the ISSAC '96 gallery, `FunctionExpand` against `sympy.hyperexpand`; a 3F2 at z = 1 and a G^{1,4}_{4,2} at 30 digits against mpmath. Group A by subject. Numeric parameters, so sympy times its method and not its condition simplifier; every sympy call starts from a cleared cache. Checks: `Round[10^6 value]`, `"unevaluated"` for a row left open. |

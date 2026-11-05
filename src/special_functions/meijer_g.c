@@ -53,6 +53,7 @@
 #include "message.h"
 #include "common.h"             /* builtin_arg_error */
 #include "print.h"              /* expr_to_string */
+#include "loadmodule.h"         /* mathilda_load_module */
 #include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -1457,7 +1458,59 @@ done:
     return out;
 }
 
+/* ------------------------------------------------------------------------ */
+/* MeijerGReduce[expr, x]                                                   */
+/* ------------------------------------------------------------------------ */
+
+/* The rewrite is Roach`MeijerGReduce in src/internal/RoachIntegrate.m: it
+ * reuses the function -> G table (Roach`GForm1, PBM vol. 3 sec. 8.4) that the
+ * Method -> "Roach" integrator decomposes integrands with, so the two cannot
+ * drift apart. The module is loaded lazily, once per symbol-table generation,
+ * exactly as try_roach (src/calculus/integrate.c) loads it.
+ *
+ * Returns the rewritten expression, or NULL (unevaluated) when no factor of
+ * expr has a known G form or the second argument is not a symbol. */
+static unsigned mgr_load_gen = 0;
+static bool mgr_load_ok = false;
+
+static Expr* builtin_meijer_g_reduce(Expr* res) {
+    size_t na = res->data.function.arg_count;
+    if (na != 2) return builtin_arg_error("MeijerGReduce", na, 2, 2);
+    Expr* x = res->data.function.args[1];
+    if (x->type != EXPR_SYMBOL) return NULL;
+    if (mgr_load_gen != symtab_generation()) {
+        mgr_load_gen = symtab_generation();
+        mth_msg_suppress_push();
+        mgr_load_ok = mathilda_load_module("RoachIntegrate.m") != 0;
+        mth_msg_suppress_pop();
+        if (!mgr_load_ok)
+            mth_message("MeijerGReduce", "nofile",
+                "cannot locate src/internal/RoachIntegrate.m on disk.");
+    }
+    if (!mgr_load_ok) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("Roach`MeijerGReduce"),
+        (Expr*[]){ expr_copy(res->data.function.args[0]), expr_copy(x) }, 2);
+    /* the table's pattern conditions run Simplify/Refine probes whose
+     * messages are internal; they must reach neither the user nor Check[] */
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    Expr* r = evaluate(call);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
+    expr_free(call);
+    if (!r) return NULL;
+    if ((r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarFailed) ||
+        (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+         strcmp(r->data.function.head->data.symbol.name, "Roach`MeijerGReduce") == 0)) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 void meijer_g_init(void) {
     symtab_add_builtin("MeijerG", builtin_meijer_g);
     symtab_get_def("MeijerG")->attributes |= ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+    symtab_add_builtin("MeijerGReduce", builtin_meijer_g_reduce);
+    symtab_get_def("MeijerGReduce")->attributes |= ATTR_PROTECTED;
 }
