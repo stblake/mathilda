@@ -34,6 +34,7 @@
 #include "integrate_unknown.h"
 #include "integrate_derivdivides.h"
 #include "integrate_linrad.h"
+#include "integrate_elliptic.h"
 #include "integrate_quadrad.h"
 #include "integrate_linratiorad.h"
 #include "integrate_chebychev.h"
@@ -2203,6 +2204,11 @@ static Expr* integrate_definite(Expr* res) {
              * table), the one- and two-G integration theorems under the full
              * PBM 2.24.1 conditions, G -> named functions by the Formula
              * algorithm; any real interval. Pinned only (v0.6200). */
+            /* Roach's elliptic integrals: R(x, Sqrt[P]) with P a cubic or
+             * quartic, by Carlson's reduction (src/calculus/integrate_elliptic.c,
+             * self-verified against a 90-digit quadrature). */
+            if (!r && !has_undef && mech == METHOD_ROACH)
+                r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && mech == METHOD_ROACH)
                 r = try_roach(cur, x, a, b, assumptions, 0);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
@@ -2240,6 +2246,8 @@ static Expr* integrate_definite(Expr* res) {
              * give. It has its own budget (the PMS pattern). Every answer it
              * returns has been checked numerically. Not under PrincipalValue,
              * where its theorems would give the ordinary integral. */
+            if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
+                r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
                 r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS);
             if (!r && !has_undef && !principal_value &&

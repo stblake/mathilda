@@ -3753,6 +3753,78 @@ In[3]:= Integrate[1/(2 + Cosh[x]), x]                (* hyperbolic: no Floor *)
 Out[3]= (2 ArcTanh[Tanh[1/2 x]/Sqrt[3]])/Sqrt[3]
 ```
 
+### Integrate`Elliptic
+
+`Integrate`Elliptic[f, {x, a, b}]` (optionally `Assumptions -> ...`) evaluates
+the definite integral of `R(x, Sqrt[P(x)])` -- `R` rational, `P` a squarefree
+cubic or quartic with exact coefficients -- over a real interval (`a`, `b` may
+be `±Infinity`; a reversed interval is negated) in closed form with
+`EllipticF`, `EllipticE`, `EllipticPi`, `EllipticK` (parameter `m = k^2`) plus
+elementary terms (`ArcTan`, `ArcTanh`, `Log`, radicals).  Returns unevaluated
+when it cannot.  `Protected`.  Source: `src/calculus/integrate_elliptic.c`.
+
+Accepted integrands:
+- every half-integer power `g^(k/2)` of a rational function `g` of `x`, as
+  long as all of them share ONE squarefree kernel `P` (so `Sqrt[(z^2-1)/(9-z^2)]`
+  is `(z^2-1)/Sqrt[(z^2-1)(9-z^2)]`, and `Sqrt[(5-z)(z-2)(z-3) z^3]` is
+  `z Sqrt[(5-z)(z-2)(z-3) z]` on the interval); a radical in a denominator
+  (`(1 + y)/(2 x + y)`) is rationalised, and a purely rational part is passed
+  to `Integrate`;
+- `P` with four real roots, two real roots and a complex pair, two complex
+  pairs, or a cubic (three real roots or one); `P` must factor over `Q` into
+  pieces of degree <= 2, or have its irreducible cubic/quartic roots in
+  radicals (`x^4 + 1`, `x^3 - 2`);
+- `P` of one sign on the interval (a negative `P` gives an `I` factor); poles
+  of `R` real and off the closed interval, of any order.
+
+Method:
+1. **Normalise** to `A(x) + W(x)/Sqrt[P(x)]` with `P > 0` on the interval.
+2. **Even form.**  `P = pi Q1 Q2` with real quadratic forms whose root pairs
+   do not interlace (a cubic's fourth root is `Infinity`); the real Moebius map
+   `x = (al t + be)/(ga t + de)` sending `0`, `Infinity` to the common harmonic
+   pair of `Q1`, `Q2` (the roots of their Jacobian) makes both even in `t`:
+   `dx/Sqrt[P] = (al de - be ga) dt/Sqrt[pi (A1 + B1 t^2)(A2 + B2 t^2)]`.  Of
+   the two non-interlacing pairings of four real roots, both are tried and the
+   simpler result kept (a rational harmonic pair gives rational parameters).
+3. **Hermite reduction** in `t` leaves `Int dt/Sqrt`, `Int t dt/Sqrt`,
+   `Int t^2 dt/Sqrt`, `Int dt/((t - tau) Sqrt)` and an algebraic part.
+4. **Carlson.**  `s = t^2` turns the even parts into a cubic with three real
+   linear factors `s, A1 + B1 s, A2 + B2 s` (DLMF 19.29.4, 19.29.7, 19.29.8)
+   and the odd parts into a quadratic radical (`R_C` or an explicit
+   logarithm); where the even/odd split puts a removable pole inside the
+   range, both parts are Cauchy principal values.
+5. **Legendre form** exactly (DLMF 19.25.5-19.25.14 for `R_F`, `R_D` with its
+   special argument largest/middle/smallest, `R_J`; 19.20.14 for a negative
+   `R_J` parameter; 19.2.17-19.2.20 for `R_C`).
+6. **Verification.**  The 30-digit value of the closed form must agree to a
+   relative `10^-20` with a 90-digit double-exponential quadrature of `f`
+   (step sizes 1/32 and 1/64 must agree first); otherwise the stage declines.
+   Internal probes are muted (no messages leak, `Check[]` is not tripped).
+
+```
+In[1]:= Integrate`Elliptic[Sqrt[(z^2 - 1)/(9 - z^2)], {z, 1, 2}]
+Out[1]= -1/2 Sqrt[15] + 3 EllipticE[ArcSin[3 Sqrt[6]/8], 8/9] - EllipticF[ArcSin[3 Sqrt[6]/8], 8/9]/3
+
+In[2]:= Integrate`Elliptic[1/((z + 14) Sqrt[(z - 1) ((z - 13)^2 + 81)]), {z, 2, Infinity}]
+Out[2]= (-10 ArcTan[3] + 10 ArcTan[3 (-64 + 5 Sqrt[303])/71]
+         + 3 Sqrt[10] EllipticF[ArcSin[7 Sqrt[2/101]], 9/10] + 3 Sqrt[10] EllipticK[9/10])/(450 Sqrt[6])
+
+In[3]:= Integrate`Elliptic[1/((z - 5) Sqrt[(z^2 + 1) (z^2 - 4)]), {z, -Infinity, -3}]
+Out[3]= ArcTanh[25/(3 Sqrt[273])]/Sqrt[546] - Sqrt[5] EllipticF[Pi/4, 1/5]/21
+         + 4 EllipticPi[21/125, Pi/4, 1/5]/(105 Sqrt[5])
+         + (Log[4/5] - Log[17 + Sqrt[273]] + Log[47 + 2 Sqrt[546]])/(2 Sqrt[546])
+
+In[4]:= Integrate`Elliptic[x^2/Sqrt[(x + 1) (3 - x) (x^2 - 2 x + 2)], {x, -1, 3}]
+Out[4]= 2 Sqrt[5] EllipticE[4/5]
+```
+
+Declines: a root of `P` or a pole inside the interval, a pole at an endpoint,
+`deg P` not 3 or 4, two radicals with different kernels, symbolic
+parameters, complex poles, irreducible factors whose roots need `Root`
+objects (casus irreducibilis), a divergent integral.  When the harmonic pair
+of `Q1`, `Q2` is irrational the output carries nested radicals (correct, but
+not denested).
+
 ### InterpolatingFunction integrands
 
 `Integrate[InterpolatingFunction[...][x], x]` returns the antiderivative as a

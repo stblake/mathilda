@@ -1154,6 +1154,10 @@ void core_init(void) {
     solvealways_init();
     void integrate_init(void);
     integrate_init();
+    /* Elliptic definite-integration stage: Integrate`Elliptic (Carlson
+     * reduction to EllipticF/E/Pi).  Registered beside integrate_init. */
+    void integrate_elliptic_init(void);
+    integrate_elliptic_init();
     void dsolve_init(void);
     dsolve_init();
     void sum_init(void);

@@ -933,6 +933,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_series.c
     ../src/calculus/integrate_king.c
     ../src/calculus/integrate_feynparam.c
+    ../src/calculus/integrate_elliptic.c
     ../src/calculus/intrat.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
@@ -5898,6 +5899,18 @@ else()
     target_link_libraries(integrate_meijerconv_tests gmp m)
 endif()
 add_test(NAME integrate_meijerconv_tests COMMAND integrate_meijerconv_tests)
+
+# Elliptic definite-integration stage (src/calculus/integrate_elliptic.c):
+# R(x, Sqrt[P]) with P cubic/quartic via Carlson -> Legendre.
+add_executable(integrate_elliptic_tests test_integrate_elliptic.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_elliptic_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_elliptic_tests gmp m ${ECM_LIB})
+    add_dependencies(integrate_elliptic_tests build_ecm)
+else()
+    target_link_libraries(integrate_elliptic_tests gmp m)
+endif()
+add_test(NAME integrate_elliptic_tests COMMAND integrate_elliptic_tests)
 
 # Holonomic indefinite-integration stage (src/internal/Holonomic.m).
 add_executable(integrate_holonomic_tests test_integrate_holonomic.c $<TARGET_OBJECTS:mathilda_common>)
