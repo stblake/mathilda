@@ -1645,6 +1645,59 @@ static Expr* direct_complex_general_machine(const MatD* A, MateigenWant want,
 
     bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
 
+#ifdef USE_LAPACK
+    /* LAPACK zgeev: the native complex Hessenberg + QR. The 2n real
+     * embedding below has to decide which member of each (mu, conj mu) pair
+     * of M belongs to A from M's eigenvectors, and for clustered spectra
+     * (two eigenvalues of A within the extraction tolerance of each other's
+     * conjugates) it can pick conj(lambda): Eigensystem of a 71 x 71 complex
+     * matrix gave 1162.53 + 0.0893 I for 1162.53 - 0.0893 I, and vectors
+     * with residuals 5e-2. zgeev has no such step. Same sort / builders,
+     * so order and unit-2-norm normalisation are the fallback's. */
+    if (mathilda_lapack_probe()) {
+        double* Ac = (double*)malloc(sizeof(double) * 2 * n * n);
+        double* w = (double*)malloc(sizeof(double) * 2 * n);
+        double* VR = want_Q ? (double*)malloc(sizeof(double) * 2 * n * n) : NULL;
+        if (Ac && w && (!want_Q || VR)) {
+            for (size_t i = 0; i < n; i++)
+                for (size_t j = 0; j < n; j++) {        /* row-major -> col-major */
+                    Ac[2 * (i + j * n)] = A->re[i * n + j];
+                    Ac[2 * (i + j * n) + 1] = A->im[i * n + j];
+                }
+            int info = want_Q ? mat_lapack_zgeev((int)n, Ac, (int)n, w, VR, (int)n)
+                              : mat_lapack_zgeev_values((int)n, Ac, (int)n, w);
+            if (info == 0) {
+                double* wr = (double*)malloc(sizeof(double) * n);
+                double* wi = (double*)malloc(sizeof(double) * n);
+                size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+                for (size_t j = 0; j < n; j++) { wr[j] = w[2 * j]; wi[j] = w[2 * j + 1]; }
+                direct_sort_perm_desc_abs_complex(wr, wi, n, perm);
+                Expr* result = NULL;
+                Expr* result_vecs = NULL;
+                if (want_Q) {
+                    double* V_re = (double*)malloc(sizeof(double) * n * n);
+                    double* V_im = (double*)malloc(sizeof(double) * n * n);
+                    for (size_t k = 0; k < n; k++) {
+                        size_t src = perm[k];
+                        for (size_t l = 0; l < n; l++) {
+                            V_re[k * n + l] = VR[2 * (l + src * n)];
+                            V_im[k * n + l] = VR[2 * (l + src * n) + 1];
+                        }
+                    }
+                    result_vecs = direct_build_complex_eigenvector_list(V_re, V_im, n);
+                    free(V_re); free(V_im);
+                }
+                if (want & MATEIGEN_WANT_VALUES)
+                    result = direct_build_complex_eigenvalue_list(wr, wi, n, perm);
+                free(wr); free(wi); free(perm);
+                free(Ac); free(w); free(VR);
+                return direct_finish(result, result_vecs, k_spec);
+            }
+        }
+        free(Ac); free(w); free(VR);
+    }
+#endif
+
     /* Build real 2n x 2n block embedding. */
     double* H = (double*)malloc(sizeof(double) * N * N);
     for (size_t i = 0; i < n; i++) {
