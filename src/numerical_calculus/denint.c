@@ -94,20 +94,21 @@ static bool den_run_machine(DenTermMachine term, void* tctx, double tmax,
         if (term(NULL, tctx, 0.0, &c0)) sum = c0;
         double maxterm = cabs(sum);
         for (int side = -1; side <= 1; side += 2) {
-            double prev_m = INFINITY;
-            bool decaying = false;
+            /* Floor cut over a t-window, noise cut confirmed before it is
+             * taken: an interior zero is not the tail (DeTailGuard, dequad.h). */
+            DeTailGuard g; de_tail_guard_init(&g);
+            double _Complex ckpt = 0.0;
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > tmax) break;
                 double _Complex tm;
                 if (!term(NULL, tctx, t, &tm)) break;
-                double m = cabs(tm);
-                if (decaying && k > 3 && m > 4.0 * prev_m) break;  /* tail noise */
+                int act = de_tail_step(&g, fabs(t), cabs(tm), &maxterm,
+                                       DEN_REL_FLOOR);
+                if (act == DE_TAIL_ROLLBACK_STOP) { sum = ckpt; break; }
+                if (act == DE_TAIL_CHECKPOINT) ckpt = sum;
                 sum += tm;
-                if (m > maxterm) maxterm = m;
-                if (m < 0.1 * maxterm) decaying = true;
-                if (k > 2 && m <= DEN_REL_FLOOR * maxterm) break;
-                prev_m = m;
+                if (act == DE_TAIL_ADD_STOP) break;
             }
         }
         double _Complex Ival = h * sum;
@@ -230,7 +231,9 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
     double floor_rel = ldexp(1.0, -(int)bits - 4);
 
     mpfr_t sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di;
-    mpfr_inits2(p, sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di, (mpfr_ptr)0);
+    mpfr_t ck_re, ck_im;   /* noise checkpoint (DeTailGuard) */
+    mpfr_inits2(p, sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di,
+                ck_re, ck_im, (mpfr_ptr)0);
 
     double h = 1.0;
     bool have_prev = false, converged = false;
@@ -248,22 +251,27 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
             maxterm = den_l1_d(tr, ti);
         }
         for (int side = -1; side <= 1; side += 2) {
-            double prev_m = INFINITY;
-            bool decaying = false;
+            DeTailGuard g; de_tail_guard_init(&g);   /* windowed cuts, dequad.h */
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > tmax) break;
                 bool ok = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, t, tr, ti)
                                    : den_ss_term_mpfr(f, ctx, sc, t, tr, ti);
                 if (!ok) break;
-                double m = den_l1_d(tr, ti);
-                if (decaying && k > 3 && m > 4.0 * prev_m) break;
+                int act = de_tail_step(&g, fabs(t), den_l1_d(tr, ti), &maxterm,
+                                       floor_rel);
+                if (act == DE_TAIL_ROLLBACK_STOP) {
+                    mpfr_set(sum_re, ck_re, MPFR_RNDN);
+                    mpfr_set(sum_im, ck_im, MPFR_RNDN);
+                    break;
+                }
+                if (act == DE_TAIL_CHECKPOINT) {
+                    mpfr_set(ck_re, sum_re, MPFR_RNDN);
+                    mpfr_set(ck_im, sum_im, MPFR_RNDN);
+                }
                 mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
                 mpfr_add(sum_im, sum_im, ti, MPFR_RNDN);
-                if (m > maxterm) maxterm = m;
-                if (m < 0.1 * maxterm) decaying = true;
-                if (k > 2 && m <= floor_rel * maxterm) break;
-                prev_m = m;
+                if (act == DE_TAIL_ADD_STOP) break;
             }
         }
         mpfr_mul_d(I_re, sum_re, h, MPFR_RNDN);
@@ -282,7 +290,8 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
         have_prev = true;
     }
 
-    mpfr_clears(sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di, (mpfr_ptr)0);
+    mpfr_clears(sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di,
+                ck_re, ck_im, (mpfr_ptr)0);
     return converged;
 }
 

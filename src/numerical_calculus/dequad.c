@@ -59,25 +59,27 @@ bool dequad_halfline_machine(DeQuadSampleMachine f, void* ctx, double a,
         if (deq_term_machine(f, ctx, a, 0.0, &c0)) sum = c0;
         double maxterm = cabs(sum);
 
-        /* Each tail: add terms until they fall below the relative floor, or —
-         * crucially for integrands that hit a roundoff noise floor while the
-         * exp-sinh weight keeps growing — until the term, having decayed into
-         * the tail, starts *rising* again (the noise-amplification signature). */
+        /* Each tail: add terms until they have stayed below the relative floor,
+         * or — crucially for integrands that hit a roundoff noise floor while
+         * the exp-sinh weight keeps growing — until the terms, having decayed,
+         * rise again and keep growing (the noise-amplification signature).
+         * Both are judged over a t-window and the noise cut is confirmed
+         * before it is taken, so an interior zero of the integrand is not
+         * mistaken for the tail (DeTailGuard, dequad.h). */
         for (int side = -1; side <= 1; side += 2) {
-            double prev_m = INFINITY;
-            bool decaying = false;
+            DeTailGuard g; de_tail_guard_init(&g);
+            double _Complex ckpt = 0.0;
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > DEQ_TMAX_MACHINE) break;
                 double _Complex tm;
                 if (!deq_term_machine(f, ctx, a, t, &tm)) break;
-                double m = cabs(tm);
-                if (decaying && k > 3 && m > 4.0 * prev_m) break; /* tail noise blow-up */
+                int act = de_tail_step(&g, fabs(t), cabs(tm), &maxterm,
+                                       DEQ_REL_FLOOR);
+                if (act == DE_TAIL_ROLLBACK_STOP) { sum = ckpt; break; }
+                if (act == DE_TAIL_CHECKPOINT) ckpt = sum;
                 sum += tm;
-                if (m > maxterm) maxterm = m;
-                if (m < 0.1 * maxterm) decaying = true;          /* past the peak    */
-                if (k > 2 && m <= DEQ_REL_FLOOR * maxterm) break;
-                prev_m = m;
+                if (act == DE_TAIL_ADD_STOP) break;
             }
         }
 
@@ -162,8 +164,9 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
     double floor_rel = ldexp(1.0, -(int)bits - 4);
 
     mpfr_t sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, diff_re, diff_im;
+    mpfr_t ck_re, ck_im;   /* noise checkpoint (DeTailGuard) */
     mpfr_inits2(p, sum_re, sum_im, I_re, I_im, prev_re, prev_im,
-                tr, ti, diff_re, diff_im, (mpfr_ptr)0);
+                tr, ti, diff_re, diff_im, ck_re, ck_im, (mpfr_ptr)0);
 
     double h = 1.0;
     bool have_prev = false, converged = false;
@@ -179,20 +182,25 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
             maxterm = deq_l1_d(tr, ti);
         }
         for (int side = -1; side <= 1; side += 2) {
-            double prev_m = INFINITY;
-            bool decaying = false;
+            DeTailGuard g; de_tail_guard_init(&g);   /* windowed cuts, dequad.h */
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > tmax) break;
                 if (!deq_term_mpfr(f, ctx, a, &sc, t, tr, ti)) break;
-                double m = deq_l1_d(tr, ti);
-                if (decaying && k > 3 && m > 4.0 * prev_m) break; /* tail noise blow-up */
+                int act = de_tail_step(&g, fabs(t), deq_l1_d(tr, ti), &maxterm,
+                                       floor_rel);
+                if (act == DE_TAIL_ROLLBACK_STOP) {
+                    mpfr_set(sum_re, ck_re, MPFR_RNDN);
+                    mpfr_set(sum_im, ck_im, MPFR_RNDN);
+                    break;
+                }
+                if (act == DE_TAIL_CHECKPOINT) {
+                    mpfr_set(ck_re, sum_re, MPFR_RNDN);
+                    mpfr_set(ck_im, sum_im, MPFR_RNDN);
+                }
                 mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
                 mpfr_add(sum_im, sum_im, ti, MPFR_RNDN);
-                if (m > maxterm) maxterm = m;
-                if (m < 0.1 * maxterm) decaying = true;          /* past the peak    */
-                if (k > 2 && m <= floor_rel * maxterm) break;
-                prev_m = m;
+                if (act == DE_TAIL_ADD_STOP) break;
             }
         }
         mpfr_mul_d(I_re, sum_re, h, MPFR_RNDN);
@@ -215,7 +223,7 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
 
     deq_scratch_clear(&sc);
     mpfr_clears(sum_re, sum_im, I_re, I_im, prev_re, prev_im,
-                tr, ti, diff_re, diff_im, (mpfr_ptr)0);
+                tr, ti, diff_re, diff_im, ck_re, ck_im, (mpfr_ptr)0);
     return converged;
 }
 #endif /* USE_MPFR */

@@ -464,6 +464,45 @@ static void test_symbolic_preevaluation(void) {
     assert_eval_eq("Abs[Block[{y = 5}, NIntegrate[y^2, {y, 0, 1}]] - 1/3] < 10^-12", "True", 0);
 }
 
+/* Double-exponential tail truncation must not mistake an interior zero of the
+ * integrand for the tail.  A squared Bessel / trig factor has a double zero at
+ * every root, so a transformed term landing near one is tiny and the next is
+ * large; the drivers used to read that dip as "decayed, then noise" and cut
+ * away everything beyond it -- the bulk of the integral -- and report the
+ * truncated sum as converged (0.636355 for 0.642638 on [0, oo); 9.7e-15 at
+ * WorkingPrecision -> 20 on [0, 60]).  References: closed forms, else 40-digit
+ * piecewise Gauss-Legendre. */
+static void test_de_interior_zeros(void) {
+    const char* k0 = "N[2 EllipticK[4/5]/(Pi Sqrt[5]), 40]";   /* 0.6426376817731... */
+    /* Machine: exp-sinh half line, and a finite range. */
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, Infinity}]", k0, 1e-10);
+    ASSERT_CLOSE("NIntegrate[Exp[x] BesselJ[0, x]^2, {x, -Infinity, 0}]", k0, 1e-10);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, 20}]",
+                 "0.642637681745200618177181786944", 1e-10);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x] BesselJ[1, x], {x, 0, Infinity}]",
+                 "0.178681159113437763681178671163", 1e-10);
+    ASSERT_CLOSE("NIntegrate[Exp[-x/3] BesselJ[0, 2 x] BesselJ[1, x], {x, 0, Infinity}]",
+                 "0.0267677840697094977663843343592", 1e-11);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] Sin[x]^2, {x, 0, Infinity}]", "2/5", 1e-10);
+    ASSERT_CLOSE("NIntegrate[(SinIntegral[x] - Pi/2) Exp[-x], {x, 0, Infinity}]",
+                 "-Pi/4", 1e-10);
+    /* WorkingPrecision -> 20: tanh-sinh (finite) and exp-sinh (half line). */
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, Infinity}, "
+                 "WorkingPrecision -> 20]", k0, 1e-18);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, 60}, "
+                 "WorkingPrecision -> 20]", k0, 1e-18);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, 20}, "
+                 "WorkingPrecision -> 20]", "0.642637681745200618177181786944", 1e-18);
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, x], {x, 0, 20}, WorkingPrecision -> 20]",
+                 "1.05837882142112775848794021926", 1e-18);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x], {x, 0, 20}, WorkingPrecision -> 20]",
+                 "0.707106781077612320576590651691", 1e-18);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x] BesselJ[1, x], {x, 0, Infinity}, "
+                 "WorkingPrecision -> 20]", "0.178681159113437763681178671163", 1e-18);
+    ASSERT_CLOSE("NIntegrate[(SinIntegral[x] - Pi/2) Exp[-x], {x, 0, Infinity}, "
+                 "WorkingPrecision -> 20]", "N[-Pi/4, 40]", 1e-18);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -494,6 +533,7 @@ int main(void) {
     TEST(test_memory_loop);
     TEST(test_levin_rule);
     TEST(test_symbolic_preevaluation);
+    TEST(test_de_interior_zeros);
 
     printf("All nint_tests passed.\n");
     return 0;
