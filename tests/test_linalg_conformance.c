@@ -276,6 +276,14 @@ static void test_complex_perf(void) {
         "c12 = c40[[1 ;; 12, 1 ;; 12]]; {q2, t2} = SchurDecomposition[c12]; "
         "Print[\"DIAG schur12 resid \", Max[Abs[Flatten[q2 . t2 . ConjugateTranspose[q2] - c12]]], \" heads \", Union[Head /@ Flatten[q2]]]; "
         "Print[\"DIAG real91 \", With[{r = RandomReal[1, {91, 91}]}, {q, t} = SchurDecomposition[r]; Max[Abs[Flatten[q . t . Transpose[q] - r]]]]]; Null", "Null");
+    chk("SeedRandom[8]; Do[cn = RandomComplex[{-1 - I, 1 + I}, {n, n}]; "
+        "dotb = Table[Sum[cn[[i, k]] cn[[k, j]], {k, n}], {i, 4}, {j, 4}]; "
+        "{qn, tn} = SchurDecomposition[cn]; "
+        "Print[\"DIAGN \", n, \" dot4x4 \", Max[Abs[Flatten[(cn . cn)[[1 ;; 4, 1 ;; 4]] - dotb]]], "
+        "\" unitary \", Max[Abs[Flatten[qn . ConjugateTranspose[qn] - IdentityMatrix[n]]]], "
+        "\" lowerT \", Max[Abs[Flatten[LowerTriangularize[tn, -1]]]], "
+        "\" resid-boxed3 \", Max[Abs[Flatten[Table[Sum[qn[[i, k]] tn[[k, l]] Conjugate[qn[[j, l]]], {k, n}, {l, n}], {i, 2}, {j, 2}] - cn[[1 ;; 2, 1 ;; 2]]]]], "
+        "\" resid-dot \", Max[Abs[Flatten[qn . tn . ConjugateTranspose[qn] - cn]]]], {n, {64, 91, 128}}]; Null", "Null");
     /* the complex factors and their invariants, fast */
     chk_true("c91 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {tt, {q, t}} = AbsoluteTiming[SchurDecomposition[c91]]; "
              "{t2, rr} = AbsoluteTiming[q . t . ConjugateTranspose[q]]; "
