@@ -351,6 +351,8 @@ static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx);
 static Expr* layer_param_power(Expr* f, LimitCtx* ctx);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
+static int64_t growth_exponent_exact(Expr* e, Expr* x);
+static int dominant_summand_index(Expr* e, Expr* x);
 
 /* ---------------------------------------------------------------------- */
 /* Reciprocal trig normalization                                           */
@@ -2244,15 +2246,15 @@ static Expr* log_sum_rewrite(Expr* logexpr, LimitCtx* ctx) {
 
     int max_idx = -1;
 
-    /* Integer growth classifier (original behaviour). */
-    int64_t max_g = 0; int max_count = 0; bool unknown_seen = false;
-    for (size_t i = 0; i < n; i++) {
-        int64_t g = growth_exponent_upper(inner->data.function.args[i], ctx->x);
-        if (g == LIMIT_UNKNOWN_GROWTH) { unknown_seen = true; break; }
-        if (max_idx < 0 || g > max_g) { max_g = g; max_idx = (int)i; max_count = 1; }
-        else if (g == max_g) max_count++;
-    }
-    bool integer_dom = (!unknown_seen && max_count == 1 && max_g > 0);
+    /* Integer growth classifier: a divergent summand whose exact exponent
+     * beats every other summand's upper bound.  Choosing it by upper bounds
+     * alone took (1 - x)/x^2 (bound 1) over 1 in Log[1 + (1 - x)/x^2], and
+     * the split Log[(1 - x)/x^2] + Log[1 + x^2/(1 - x)] wraps by 2 Pi I (both
+     * arguments negative): Limit[2 Log[1 + x + x^2] - 2 Log[1 - x + x^2],
+     * x -> Infinity] was -20 I Pi. */
+    max_idx = dominant_summand_index(inner, ctx->x);
+    bool integer_dom = max_idx >= 0 &&
+        growth_exponent_exact(inner->data.function.args[max_idx], ctx->x) > 0;
 
     if (!integer_dom) {
         /* Assumption-aware: a single positive-power summand x^a (a>0 known),
@@ -2467,6 +2469,66 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x) {
     return LIMIT_UNKNOWN_GROWTH;
 }
 
+/* The EXACT growth exponent d of `e` at +Infinity (|e| ~ c x^d, c != 0), or
+ * LIMIT_UNKNOWN_GROWTH when it cannot be read off structurally.  Unlike
+ * growth_exponent_upper this is also a LOWER bound, which is what choosing a
+ * dominant summand needs: (1 - x)/x^2 has upper bound 1 (1/x^2 is bounded),
+ * but its exact exponent is -1.  A sum is exact only when one summand has a
+ * strictly larger exact exponent than every other summand's upper bound, so a
+ * leading cancellation ((x + 1)^2 - x^2) is never misread. */
+static int64_t growth_exponent_exact(Expr* e, Expr* x) {
+    if (!e) return LIMIT_UNKNOWN_GROWTH;
+    if (free_of(e, x)) return is_lit_zero(e) ? LIMIT_UNKNOWN_GROWTH : 0;
+    if (expr_eq(e, x)) return 1;
+    if (e->type != EXPR_FUNCTION) return LIMIT_UNKNOWN_GROWTH;
+    if (head_is(e, SYM_Times)) {
+        int64_t total = 0;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int64_t g = growth_exponent_exact(e->data.function.args[i], x);
+            if (g == LIMIT_UNKNOWN_GROWTH) return LIMIT_UNKNOWN_GROWTH;
+            total += g;
+        }
+        return total;
+    }
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER) {
+        int64_t g = growth_exponent_exact(e->data.function.args[0], x);
+        int64_t k = e->data.function.args[1]->data.integer;
+        if (g == LIMIT_UNKNOWN_GROWTH || k > 4096 || k < -4096 ||
+            g > 4096 || g < -4096)
+            return LIMIT_UNKNOWN_GROWTH;
+        return g * k;
+    }
+    if (head_is(e, SYM_Plus)) {
+        int idx = dominant_summand_index(e, x);
+        return idx < 0 ? LIMIT_UNKNOWN_GROWTH
+                       : growth_exponent_exact(e->data.function.args[idx], x);
+    }
+    return LIMIT_UNKNOWN_GROWTH;
+}
+
+/* Index of the summand of the Plus `e` that strictly dominates the others at
+ * +Infinity -- its exact growth exponent exceeds every other summand's upper
+ * bound -- or -1.  Any exponent is admitted; callers that need a divergent
+ * dominant check its exponent themselves. */
+static int dominant_summand_index(Expr* e, Expr* x) {
+    size_t n = e->data.function.arg_count;
+    int best = -1;
+    int64_t best_g = 0;
+    for (size_t i = 0; i < n; i++) {
+        int64_t g = growth_exponent_exact(e->data.function.args[i], x);
+        if (g == LIMIT_UNKNOWN_GROWTH) continue;
+        if (best < 0 || g > best_g) { best = (int)i; best_g = g; }
+    }
+    if (best < 0) return -1;
+    for (size_t i = 0; i < n; i++) {
+        if ((int)i == best) continue;
+        int64_t u = growth_exponent_upper(e->data.function.args[i], x);
+        if (u == LIMIT_UNKNOWN_GROWTH || u >= best_g) return -1;
+    }
+    return best;
+}
+
 /* True iff `e` is structurally bounded over the reals: every reachable
  * sub-expression's magnitude is dominated by a constant, via the family
  * |Sin|, |Cos|, |Tanh|, |ArcTan|, |ArcCot| <= const, products of
@@ -2530,17 +2592,12 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
      * term is at most O(x^(lower)) which the dominant absorbs. This
      * reasoning is asymptotic, so it only applies at infinity. */
     if (at_infinity) {
-    int64_t max_g = 0;
-    int max_idx = -1;
-    int max_count = 0;
-    bool unknown_seen = false;
-    for (size_t i = 0; i < n; i++) {
-        int64_t g = growth_exponent_upper(f->data.function.args[i], ctx->x);
-        if (g == LIMIT_UNKNOWN_GROWTH) { unknown_seen = true; break; }
-        if (max_idx < 0 || g > max_g) { max_g = g; max_idx = (int)i; max_count = 1; }
-        else if (g == max_g) max_count++;
-    }
-    if (!unknown_seen && max_idx >= 0 && max_count == 1 && max_g > 0) {
+    /* The dominant term's exponent must be exact (a lower bound too):
+     * (1 + x^3)/(1 + x^2) has upper bound 3 but grows like x, so it does not
+     * dominate -x^2. */
+    int max_idx = dominant_summand_index(f, ctx->x);
+    if (max_idx >= 0 &&
+        growth_exponent_exact(f->data.function.args[max_idx], ctx->x) > 0) {
         LimitCtx sub = *ctx; sub.depth += 1;
         Expr* lim_dom = compute_limit(f->data.function.args[max_idx], &sub);
         if (lim_dom && (is_infinity_sym(lim_dom) || is_neg_infinity(lim_dom))) {

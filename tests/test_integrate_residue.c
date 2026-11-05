@@ -750,6 +750,36 @@ static void test_rational_symbolic(void) {
              "{True, 0}");
 }
 
+/* -------------------------------------------------------------------------
+ * Higher-order poles at roots of unity.  Solve spells the roots of
+ * 1 +/- x^2 + x^4 as (-1)^(1/3), (-1)^(2/3), ...; the denominator's constant
+ * term about such a point (1 - (-1)^(1/3) + (-1)^(2/3)) is 0 without any
+ * evaluation rule saying so, and the Series engine took it for nonzero: the
+ * pole vanished, Residue was 0 and so was the integral.
+ * ---------------------------------------------------------------------- */
+static void test_root_of_unity_poles(void) {
+    check_eq("Integrate[x^4/(1 + x^2 + x^4)^3, {x, 0, Infinity}]", "Pi/(48 Sqrt[3])");
+    check_eq("Integrate[x^4/(1 - x^2 + x^4)^3, {x, 0, Infinity}]", "3/16 Pi");
+    /* Reference value (-9 - 2 I Sqrt[3])/36. */
+    check_eq("RootReduce[Residue[1/(1 + x^2 + x^4)^2, {x, (-1)^(1/3)}] - "
+             "(-9 - 2 I Sqrt[3])/36]", "0");
+}
+
+/* -------------------------------------------------------------------------
+ * Half-line rational principal values with a symbolic pole.  The keyhole sum
+ * carries Arg of the Solve roots (-a -/+ I Sqrt[3] a)/2; Refine used to send
+ * every such Arg to 0 under a > 0 (a vacuous Reduce proof of a sign for a
+ * non-real argument), leaving 3 times the value.
+ * ---------------------------------------------------------------------- */
+static void test_symbolic_pv_cube(void) {
+    check_eq("Integrate[1/(x^3 - a^3), {x, 0, Infinity}, PrincipalValue -> True, "
+             "Assumptions -> a > 0]", "-Pi/(3 Sqrt[3] a^2)");
+    check_eq("Integrate[x/(x^3 - a^3), {x, 0, Infinity}, PrincipalValue -> True, "
+             "Assumptions -> a > 0]", "Pi/(3 Sqrt[3] a)");
+    check_eq("Integrate[1/(x^3 - 8), {x, 0, Infinity}, PrincipalValue -> True]",
+             "-Pi/(12 Sqrt[3])");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -781,6 +811,8 @@ int main(void) {
     TEST(test_mellin_power);
     TEST(test_rational_symbolic);
     TEST(test_symbolic_negative_controls);
+    TEST(test_root_of_unity_poles);
+    TEST(test_symbolic_pv_cube);
 
     printf("All Integrate ContourResidue tests passed!\n");
     return 0;

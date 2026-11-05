@@ -422,7 +422,14 @@ static const Expr* sqrt_radicand(const Expr* e) {
 
 /* Prove the sign of a symbolic expression `p` via Reduce over the reals:
  *   +1 if p > 0 everywhere A holds, -1 if p < 0, 0 if undecided. */
-static int deep_sign(const Expr* p, const Expr* Aconj, RefineBudget* b) {
+static int deep_sign(const Expr* p, const AssumeCtx* ctx, const Expr* Aconj,
+                     RefineBudget* b) {
+    /* Reduce over the Reals reads every subexpression as real-valued, so for a
+     * non-real p BOTH p > 0 and p <= 0 are unsatisfiable and the entailment
+     * below "proves" p > 0 vacuously: Arg[(-a - Sqrt[-3 a^2])/2] -> 0 and
+     * Abs[-a + I a] -> -a + I a under a > 0.  The sign is only meaningful once
+     * p is known to be real. */
+    if (!prov_re(ctx, p)) return 0;
     Expr* pos = expr_new_function(expr_new_symbol(SYM_Greater),
                     (Expr*[]){ expr_copy((Expr*)p), expr_new_integer(0) }, 2);
     int r = reduce_entail_predicate(Aconj, pos, "Reals", b);
@@ -442,7 +449,8 @@ static int deep_sign(const Expr* p, const Expr* Aconj, RefineBudget* b) {
  * denominator is exposed (1 + b^2/a^2 -> (a^2+b^2)/a^2 -> Sqrt[a^2+b^2]/a).
  * Returns an owned rewritten tree, or NULL when nothing is extractable.  Sound:
  * every pulled |base|^k is non-negative, matching Sqrt's principal branch. */
-static Expr* sqrt_extract(const Expr* rad, const Expr* Aconj, RefineBudget* b) {
+static Expr* sqrt_extract(const Expr* rad, const AssumeCtx* ctx,
+                          const Expr* Aconj, RefineBudget* b) {
     Expr* together = NULL;
     const Expr* work = rad;
     if (head_is(rad, "Plus")) {
@@ -468,7 +476,7 @@ static Expr* sqrt_extract(const Expr* rad, const Expr* Aconj, RefineBudget* b) {
             budget_ok(b)) {
             const Expr* base = f->data.function.args[0];
             long k = f->data.function.args[1]->data.integer / 2;
-            int s = deep_sign(base, Aconj, b);
+            int s = deep_sign(base, ctx, Aconj, b);
             if (s != 0) {
                 Expr* absb = (s > 0)
                     ? expr_copy((Expr*)base)
@@ -511,8 +519,9 @@ static Expr* sqrt_extract(const Expr* rad, const Expr* Aconj, RefineBudget* b) {
 /* Bottom-up walk resolving Sign[p], Abs[p] and Sqrt[p^2] for polynomial p whose
  * sign the fast prover could not settle. Returns an owned rebuilt tree; sets
  * *changed when any node was rewritten. */
-static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
-                                  RefineBudget* b, int* changed) {
+static Expr* deep_positivity_walk(const Expr* e, const AssumeCtx* ctx,
+                                  const Expr* Aconj, RefineBudget* b,
+                                  int* changed) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
 
@@ -520,7 +529,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
     size_t n = e->data.function.arg_count;
     Expr** args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
     for (size_t i = 0; i < n; i++)
-        args[i] = deep_positivity_walk(e->data.function.args[i], Aconj, b, changed);
+        args[i] = deep_positivity_walk(e->data.function.args[i], ctx, Aconj, b, changed);
     Expr* rebuilt = expr_new_function(expr_copy(e->data.function.head), args, n);
     free(args);
 
@@ -534,7 +543,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
         rebuilt->data.function.arg_count == 1) {
         const Expr* p = rebuilt->data.function.args[0];
         if (p->type == EXPR_FUNCTION) {          /* only worth a CAD run for compound p */
-            int s = deep_sign(p, Aconj, b);
+            int s = deep_sign(p, ctx, Aconj, b);
             if (s != 0) {
                 *changed = 1;
                 Expr* out;
@@ -560,7 +569,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
     if (h == SYM_Arg && rebuilt->data.function.arg_count == 1) {
         const Expr* p = rebuilt->data.function.args[0];
         if (p->type == EXPR_FUNCTION) {          /* only worth a CAD run for compound p */
-            int s = deep_sign(p, Aconj, b);
+            int s = deep_sign(p, ctx, Aconj, b);
             if (s != 0) {
                 *changed = 1;
                 Expr* out = (s > 0) ? expr_new_integer(0) : expr_new_symbol(SYM_Pi);
@@ -575,7 +584,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
     if (rad) {
         const Expr* base = square_base(rad);
         if (base && base->type == EXPR_FUNCTION) {
-            int s = deep_sign(base, Aconj, b);
+            int s = deep_sign(base, ctx, Aconj, b);
             if (s != 0) {
                 *changed = 1;
                 Expr* out = (s > 0)
@@ -608,7 +617,7 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
             }
         }
         if (grad && (head_is(grad, "Times") || head_is(grad, "Plus"))) {
-            Expr* ext = sqrt_extract(grad, Aconj, b);
+            Expr* ext = sqrt_extract(grad, ctx, Aconj, b);
             if (ext) {
                 if (half < 0)
                     ext = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
@@ -633,7 +642,7 @@ static Expr* refine_unit_direction(const Expr* d, const AssumeCtx* ctx,
     Expr* r = apply_assumption_rules(sgn, ctx);
     if (r) { expr_free(sgn); sgn = r; }
     int changed = 0;
-    Expr* deep = deep_positivity_walk(sgn, Aconj, b, &changed);
+    Expr* deep = deep_positivity_walk(sgn, ctx, Aconj, b, &changed);
     expr_free(sgn);
     deep = eval_and_free(deep);
     if (deep->type == EXPR_INTEGER &&
@@ -790,7 +799,7 @@ Expr* builtin_refine(Expr* res) {
         if (!rewritten) rewritten = expr_copy(expr);
 
         int changed = 0;
-        Expr* deep = deep_positivity_walk(rewritten, Aconj, &bud, &changed);
+        Expr* deep = deep_positivity_walk(rewritten, ctx, Aconj, &bud, &changed);
         expr_free(rewritten);
 
         /* Directed infinities: settle a symbolic direction to its unit. */

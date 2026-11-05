@@ -235,9 +235,23 @@ static void test_pattern_name_capture(void) {
     check("Refine[Sqrt[r^2 rest], r > 0]", "r Sqrt[rest]");
 }
 
+/* The Reduce-backed sign proof is vacuous for a non-real argument (over the
+ * reals both p > 0 and p <= 0 are unsatisfiable): Arg[-a + I a] was 0 under
+ * a > 0, which tripled the PV of 1/(x^3 - a^3).  Arg of a positive multiple of a
+ * numeric constant is that constant's Arg. */
+static void test_refine_arg_complex(void) {
+    check("Refine[Arg[-a + I a], a > 0]", "3/4 Pi");
+    check("Refine[Arg[1/2 (-a - Sqrt[-3 a^2])], a > 0]", "-2/3 Pi");
+    check("Refine[Arg[a + I], a > 0]", "Arg[I + a]");
+    check("Refine[Abs[-a + I a], a > 0]", "Sqrt[2] a");
+    check("Refine[Arg[-a], a > 0]", "Pi");
+    check("Refine[Abs[x - 1], x > 2]", "-1 + x");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+    TEST(test_refine_arg_complex);
     test_power_sqrt();
     test_log();
     test_trig();

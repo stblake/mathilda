@@ -32,9 +32,12 @@
 #include "sym_names.h"
 #include "internal.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"   /* expr_is_numeric_quantity */
+#include "rationalize.h" /* internal_contains_inexact */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 /* Emit the too-few-arguments diagnostic and leave the call unevaluated. */
 static Expr* residue_emit_argcount(size_t argc) {
@@ -406,6 +409,40 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     return r;
 }
 
+static size_t residue_leaves(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 1;
+    size_t c = residue_leaves(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        c += residue_leaves(e->data.function.args[i]);
+    return c;
+}
+
+static bool residue_has_root(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.head->data.symbol.name, "Root") == 0) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (residue_has_root(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* An exact algebraic residue read off a Laurent series at an algebraic point
+ * keeps the series' unreduced coefficient arithmetic (Residue[z^(1/3)/(1 +
+ * z^2)^2, {z, I}] as a three-term sum of I^(k/3) quotients); Simplify, cheap
+ * on a numeric constant, collapses it.  Kept only when smaller.  Consumes r. */
+static Expr* residue_tidy_constant(Expr* r) {
+    if (!r || r->type != EXPR_FUNCTION || !expr_is_numeric_quantity(r) ||
+        internal_contains_inexact(r) || residue_leaves(r) <= 12)
+        return r;
+    Expr* s = residue_eval1("Simplify", expr_copy(r));
+    /* A Root object is smaller but no tidier than the radical it replaces. */
+    if (s && residue_leaves(s) < residue_leaves(r) && !residue_has_root(s)) {
+        expr_free(r); return s;
+    }
+    if (s) expr_free(s);
+    return r;
+}
+
 Expr* builtin_residue(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -425,7 +462,7 @@ Expr* builtin_residue(Expr* res) {
     Expr* z0 = spec->data.function.args[1];
     if (z->type != EXPR_SYMBOL) return NULL;
 
-    return residue_compute(expr, z, z0);
+    return residue_tidy_constant(residue_compute(expr, z, z0));
 }
 
 void residue_init(void) {

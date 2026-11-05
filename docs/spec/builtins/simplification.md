@@ -810,6 +810,14 @@ Gives the form an expression would take if its symbols satisfied the assumptions
   inequalities are assumed real. The zero test is sound under coupling equality
   assumptions: it never reports a genuine identity as non-zero (it downgrades to
   undecided rather than sampling points the assumptions exclude).
+- `Arg[c r] -> Arg[c]` for a numeric constant `c` and a provably positive `r`
+  (a sum is factored first): `Refine[Arg[(-a - I Sqrt[3] a)/2], a > 0]` is
+  `-2/3 Pi`, `Refine[Arg[(-1 + I) a], a > 0]` is `3/4 Pi`.
+- The Reduce-backed sign proof behind `Sign`/`Abs`/`Arg`/`Sqrt[p^2]` runs only
+  on a provably real `p`. Over the reals, both `p > 0` and `p <= 0` are
+  unsatisfiable for a non-real `p`, so the proof was vacuous:
+  `Refine[Arg[-a + I a], a > 0]` was `0` and `Refine[Abs[-a + I a], a > 0]`
+  was `-a + I a`. A sign is now read only when the realness is provable.
 - Purely symbolic/structural: no packed/NDArray kernel and no `Compile[]`
   lowering (it returns symbolic expressions, not machine numbers).
 

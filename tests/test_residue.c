@@ -83,7 +83,11 @@ static void test_symbolic_higher_order_poles(void) {
     check_eq("N[Abs[(Residue[Exp[I z]/(z^2 + a^2)^3, {z, I a}] "
              "- (-I) E^(-a) (a^2 + 3 a + 3)/(16 a^5)) /. a -> 2]] < 1/1000000", "True");
     /* z^(1/3) composed directly with a double pole at z = I: was a silent 0. */
-    check_eq("Residue[z^(1/3)/(1 + z^2)^2, {z, I}]", "(-1/6*I) I^(1/3)");
+    /* Reference value -(-1)^(2/3)/6.  The direct Laurent read now finds the
+     * pole itself (exact leading coefficients are zero-tested) and Residue
+     * tidies the constant to this spelling. */
+    check_eq("Residue[z^(1/3)/(1 + z^2)^2, {z, I}]", "1/36 (3 - (3*I) Sqrt[3])");
+    check_eq("RootReduce[Residue[z^(1/3)/(1 + z^2)^2, {z, I}] + (-1)^(2/3)/6]", "0");
     check_eq("N[Abs[Residue[z^(2/3)/(1 + z^2)^2, {z, I}] "
              "- (D[z^(2/3)/(z + I)^2, z] /. z -> I)]] < 1/1000000", "True");
     /* z^(1/2) (even denominator) always worked -- guard it stays correct. */

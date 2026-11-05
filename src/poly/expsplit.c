@@ -45,8 +45,9 @@ static Expr* gen_symbol(ExpSplitTab* t, const Expr* base, const Expr* term) {
         t->sym  = realloc(t->sym,  cap * sizeof(Expr*));
         t->cap = cap;
     }
-    char name[48];
-    snprintf(name, sizeof name, "ExpSplit`g%zu", t->n);
+    char name[64];
+    if (t->level <= 1) snprintf(name, sizeof name, "ExpSplit`g%zu", t->n);
+    else               snprintf(name, sizeof name, "ExpSplit`L%ug%zu", t->level, t->n);
     t->base[t->n] = expr_copy((Expr*)base);
     t->term[t->n] = expr_copy((Expr*)term);
     t->sym[t->n]  = expr_new_symbol(name);
@@ -138,6 +139,40 @@ static Expr* abstract_rec(const Expr* e, ExpSplitTab* t, bool numeric_only) {
     return r;
 }
 
+/* The nesting level of a generator symbol name -- ExpSplit`g<i> is level 1,
+ * ExpSplit`L<k>g<i> level k -- or 0 for any other symbol. */
+static unsigned generator_level(const char* name) {
+    static const char pfx[] = "ExpSplit`";
+    if (strncmp(name, pfx, sizeof pfx - 1) != 0) return 0;
+    name += sizeof pfx - 1;
+    if (name[0] == 'g') return 1;
+    if (name[0] != 'L') return 0;
+    unsigned k = 0;
+    for (name++; *name >= '0' && *name <= '9'; name++) k = 10 * k + (unsigned)(*name - '0');
+    return *name == 'g' ? k : 0;
+}
+
+static unsigned max_generator_level(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return generator_level(e->data.symbol.name);
+    if (e->type != EXPR_FUNCTION) return 0;
+    unsigned m = max_generator_level(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        unsigned k = max_generator_level(e->data.function.args[i]);
+        if (k > m) m = k;
+    }
+    return m;
+}
+
+/* Name this table's generators one level above any generator already in e.
+ * An abstraction can run while an enclosing one is still open, on an
+ * expression carrying the enclosing table's symbols (Integrate over
+ * s^(1 + mu) (1 - s^2)^nu BesselJ[mu, s t] nests Together inside Together);
+ * with the same names, the inner table read the outer ExpSplit`g0 as its own
+ * and restore_rec recursed without end. */
+static void choose_level(ExpSplitTab* t, const Expr* e) {
+    if (t->n == 0) t->level = 1 + max_generator_level(e);
+}
+
 static bool has_splittable(const Expr* e, bool numeric_only) {
     if (e->type != EXPR_FUNCTION) return false;
     if (is_head(e, SYM_Power) && e->data.function.arg_count == 2 &&
@@ -160,6 +195,7 @@ static Expr* abstract_top(const Expr* e, ExpSplitTab* t, bool numeric_only) {
     if (off < 0) off = getenv("MATHILDA_NO_EXPSPLIT") != NULL;
     if (off) return NULL;
     if (!has_splittable(e, numeric_only)) return NULL;
+    choose_level(t, e);
     return eval_and_free(abstract_rec(e, t, numeric_only));
 }
 
@@ -186,6 +222,7 @@ static bool has_symbolic_power(const Expr* e) {
 
 Expr* expsplit_abstract_all(const Expr* e, ExpSplitTab* t) {
     if (getenv("MATHILDA_NO_EXPSPLIT") || !has_symbolic_power(e)) return NULL;
+    choose_level(t, e);
     return eval_and_free(abstract_rec(e, t, false));
 }
 

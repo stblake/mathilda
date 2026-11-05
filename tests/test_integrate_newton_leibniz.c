@@ -270,9 +270,40 @@ static void test_nl_exponential_denominator(void) {
                 "Integrate`DiffUnderInt[1/(E^(t x) t^2), {t, 1, Infinity}, Assumptions -> x > 0]");
 }
 
+/* The antiderivative of Log[t]/(1 + t^2)^n carries ArcTanh[1 +/- 2 I t]; its
+ * Series at the t = 0 branch point dropped the Log of the inner slope
+ * (-Log[2 I]/2), so every n >= 2 was off by a multiple of Pi (n = 2 by
+ * -Pi/4).  And Limit at Infinity of the rational antiderivative's
+ * Log[1 + x + x^2] - Log[1 - x + x^2], scaled, split a Log across a sign
+ * change and came back -15/16 I Pi, so Newton-Leibniz called the convergent
+ * x^4/(1 + x^2 + x^4)^3 divergent.  Reference values. */
+static void test_nl_branch_point_antiderivatives(void) {
+    check_eq("Integrate[Log[t]/(1 + t^2)^2, {t, 0, 1}]", "1/8 (-4 Catalan - Pi)");
+    check_eq("Integrate[Log[t]/(1 + t^2)^3, {t, 0, 1}]", "1/16 (-1 - 6 Catalan - 2 Pi)");
+    /* Mathar M8659, both instantiations. */
+    check_eq("Abs[N[Integrate[Log[t]/(1 + t^2)^7, {t, 0, 7/4}] + 0.6655494122101222]] < 10^-10",
+             "True");
+    check_eq("Abs[N[Integrate[Log[t]/(1 + t^2)^3, {t, 0, 1/5}] + 0.5070095992828864]] < 10^-10",
+             "True");
+    check_eq("Integrate[x^4/(1 + x^2 + x^4)^3, {x, 0, Infinity}, Method -> \"NewtonLeibniz\"]",
+             "Pi/(48 Sqrt[3])");
+    check_eq("Limit[3/32 (Log[1 + x + x^2] - Log[1 - x + x^2]), x -> Infinity]", "0");
+}
+
+/* Mathar M14298 (symbolic form) recursed without end in the power-generator
+ * abstraction: a Together nested inside another read the outer table's
+ * ExpSplit`g0 as its own.  It must return (here unevaluated), not crash. */
+static void test_nl_nested_expsplit_no_crash(void) {
+    check_eq("Head[Quiet[Integrate[s^(1 + mu) (1 - s^2)^nu BesselJ[mu, s t], {s, 0, 1}, "
+             "Assumptions -> mu > 0 && nu > 0 && t > 0]]] =!= Null", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_nl_branch_point_antiderivatives);
+    TEST(test_nl_nested_expsplit_no_crash);
 
     TEST(test_detector);
     TEST(test_proper);

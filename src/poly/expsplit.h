@@ -12,6 +12,7 @@ typedef struct {
     Expr** term;   /* t */
     Expr** sym;    /* the private symbol standing for b^t */
     size_t n, cap;
+    unsigned level; /* nesting level of the generator names; 0 = not chosen */
 } ExpSplitTab;
 
 /* e with every splittable power rewritten over private generator symbols

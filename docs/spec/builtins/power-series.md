@@ -210,19 +210,10 @@ Expansions where the inner series diverges at the expansion point (e.g. `Series[
 - **Log fast path**: when `arg` matches `a + b x^(p/q)` with `a, b` both free of `x` and `a != 1`, rewrite `Log[a + b x^c]` as `Log[a] + Log[1 + (b/a) x^c]` and let the `Log1p` kernel compose with a pure monomial. Maxima's `sp2log` uses the same identity.
 - **Apart preprocessing**: if the input contains `Power[p(x), -n]` for `p` a polynomial in `x`, run `Apart[f, x]` to decompose into partial fractions before expanding. Composite denominators like `1/((1-x)(1-2x)(1-3x))` then break up into geometric-series pieces that hit the monomial fast path. Gated by a polynomial check so non-rational denominators (e.g. `1/(Exp[x] - 1 - x)`) bypass Apart and fall through to the generic `so_inv` path.
 
-**Branch-point expansion for inverse trig / hyperbolic heads** (reference-faithful). All eight `Arc*` heads expand at their branch points with the same wrapped output shape:
+**Branch-point expansion for inverse trig / hyperbolic heads** (reference-faithful). All eight `Arc*` heads expand at their branch points. Two mathematical families:
 
-```
-Plus[ f(x0),
-      Times[ log_coef, Log[x - x0] ],         (Family B only)
-      Times[ (-1)^Floor[(Pi/2 - Arg[x - x0])/(2 Pi)],
-             SeriesData[...] ] ]
-```
-
-The `(-1)^Floor[...]` factor is the reference branch discriminator — it is `1` on the principal sheet near `x0` and flips sign across the branch cut. Two mathematical families:
-
-- **Family A — square-root branches** (derivative ~ `1/Sqrt[(x - x0) * linear]`): `ArcSin` / `ArcCos` at `x = ±1`; `ArcSinh` at `x = ±I`; `ArcCosh` at `x = ±1`. Output is a Puiseux series with `den = 2` and no `Log` term. Derived from the identities `ArcCos[1 - s] = Sqrt[2s] · Σ b_k s^k / (2k+1)`, `b_k = (2k)! / (8^k (k!)^2)`, `ArcSinh[σI + u] = σ·I·π/2 + 2 ArcSinh[Sqrt[u / (2σI)]]`, and the principal-branch `ArcCosh[1 + u] = 2 ArcSinh[Sqrt[u/2]]`.
-- **Family B — logarithmic branches** (derivative has a simple pole at `x0`): `ArcTan` / `ArcCot` at `x = ±I`; `ArcTanh` / `ArcCoth` at `x = ±1`. Output contains an explicit `Log[x - x0]` term with its own coefficient (e.g. `-1/2` for `ArcTanh@1`, `-I/2` for `ArcTan@I`) plus a regular power series with `den = 1`. Derived from the identities `ArcTanh[x] = (1/2) Log[(1 + x)/(1 - x)]` and `ArcTan[z] = (1/(2 I)) Log[(1 + I z)/(1 - I z)]`.
+- **Family A — square-root branches** (derivative ~ `1/Sqrt[(x - x0) * linear]`): `ArcSin` / `ArcCos` at `x = ±1`; `ArcSinh` at `x = ±I`; `ArcCosh` at `x = ±1`. Output is a Puiseux series with `den = 2` and no `Log` term, wrapped as `f(x0) + (-1)^Floor[(Pi/2 - Arg[x - x0])/(2 Pi)] SeriesData[...]`; the `(-1)^Floor[...]` factor is `1` on the principal sheet near `x0` and flips the sign of the square root across the cut. Derived from the identities `ArcCos[1 - s] = Sqrt[2s] · Σ b_k s^k / (2k+1)`, `b_k = (2k)! / (8^k (k!)^2)`, `ArcSinh[σI + u] = σ·I·π/2 + 2 ArcSinh[Sqrt[u / (2σI)]]`, and the principal-branch `ArcCosh[1 + u] = 2 ArcSinh[Sqrt[u/2]]`.
+- **Family B — logarithmic branches** (derivative has a simple pole at `x0`): `ArcTan` / `ArcCot` at `x = ±I`; `ArcTanh` / `ArcCoth` at `x = ±1`. Each head is, exactly, `base + L Log[X u] + (regular Log1p part)` with `u = x0 + q (x - x0) - x0` the inner series (`q` its linear coefficient) — e.g. `ArcTanh[1 + u] = (Log[2 + u] - Log[-u])/2`, `ArcTan[I + u] = I/2 (Log[2 - I u] - Log[I u])`, the principal-`Log` definitions the numeric kernels use, cuts included (`ArcTanh[2.] = 0.549 - I Pi/2`). The singular log is split as `Log[X q t] = Log[X q] + Log[t]`, exact for `t = x - x0 > 0`, so the constant carries `L Log[X q]` (the slope `q` matters: `ArcTanh[1 + 2 I t]` has constant `I Pi/4`). Off that ray the split jumps by `2 Pi I`, and the output carries the jump additively, as the reference writes it: `2 Pi I L K` with `K = -Ceiling[(Arg[X q] + Arg[x - x0] - Pi)/(2 Pi)]` (0 for `x - x0 > 0`). With `Assumptions -> x > x0` / `x < x0` the side is known and the constant is resolved directly, with no `Ceiling` term. Composed (nested) expansions use the `x - x0 > 0` sheet.
 
 The handler fires when the inner series at `x0` is exactly `c + q (x - x0)` (constant plus linear, with `q ≠ 0`) and `c` matches the branch-point value. For nested cases (e.g. `Sin[ArcSinh[x]]` near `x = I`), composition is preserved by emitting a constant-inside `SeriesObj` instead of the wrapper.
 
@@ -235,8 +226,11 @@ Out[]= I Pi/2 + (-1)^Floor[(Pi/2 - Arg[x - I])/(2 Pi)] (
          + (-3 + 3 I)/160 (x - I)^(5/2) + O[x - I]^(7/2) )
 
 In[]:= Series[ArcTanh[x], {x, 1, 3}]
-Out[]= Log[2]/2 + I Pi/2 - Log[x - 1]/2 + (-1)^Floor[(Pi/2 - Arg[x-1])/(2 Pi)] (
-         (x - 1)/4 - (x - 1)^2/16 + (x - 1)^3/48 + O[x - 1]^4 )
+Out[]= -I Pi/2 + I Pi Ceiling[Arg[-1 + x]/(2 Pi)] + Log[2]/2 - Log[-1 + x]/2
+         + (x - 1)/4 - (x - 1)^2/16 + (x - 1)^3/48 + O[x - 1]^4
+
+In[]:= Series[ArcTanh[x], {x, 1, 1}, Assumptions -> x < 1]
+Out[]= (I Pi/2 + Log[2]/2 - Log[-1 + x]/2) + (x - 1)/4 + O[x - 1]^2
 
 In[]:= Series[ArcCosh[x + 1], {x, 0, 5}]
 Out[]= (-1)^Floor[(Pi/2 - Arg[x])/(2 Pi)] (
@@ -244,7 +238,9 @@ Out[]= (-1)^Floor[(Pi/2 - Arg[x])/(2 Pi)] (
          - 5 Sqrt[2]/896 x^(7/2) + 35 Sqrt[2]/18432 x^(9/2) + O[x]^(11/2) )
 ```
 
-`Normal[Series[ArcTanh[x], {x, 1, 3}]]` preserves the `Log[x - 1]` term and the branch discriminator — `Normal` collapses the inner `SeriesData` but the surrounding `Plus`/`Times` pass through unchanged (matching the reference).
+`Normal[Series[ArcTanh[x], {x, 1, 3}]]` preserves the `Log[x - 1]` term and the branch correction — `Normal` collapses the inner `SeriesData` but the surrounding `Plus` passes through unchanged (matching the reference).
+
+**Leading coefficients at an algebraic point are zero-tested.** Expanding about an algebraic point can leave a vanishing coefficient unreduced — `1 + x^2 + x^4` about `x0 = (-1)^(1/3)` has constant term `1 - (-1)^(1/3) + (-1)^(2/3)`, which is `0` (`x0^2 = x0 - 1`) though no evaluation rule says so. Every reader of a leading coefficient (series inverse, fractional power, `Log`) first zero-tests leading coefficients that are exact numeric constants but not literal numbers, so `Series[1/(1 + x^2 + x^4)^2, {x, (-1)^(1/3), -1}]` has its double pole and `Residue` at such a point is not `0`. Inexact coefficients are never tested (smallness is not zero), and a literal leading coefficient costs nothing.
 
 **Naive-Taylor fallback**: For expansion points that are not branch points (e.g. `Series[ArcSinh[x], {x, 1 + I, 3}]`, `Series[ArcSin[x], {x, 1/2, 3}]`), `series_expand` falls back to naive Taylor via repeated `D`. The fallback caps iterations and bails out on `Infinity` / `Indeterminate` derivatives so unknown heads cannot spin the engine. The singularity probe **evaluates** the substituted `f^(k)(x0)` with arithmetic warnings muted before testing for infinities, so an *unevaluated* pole produced by the substitution (e.g. `f[1/x]` at `x = 0` becoming `f[1/0]`) collapses to `ComplexInfinity` / `Indeterminate` and is detected cleanly — it no longer spills a spurious `Power::infy: 1/0` to stderr before the guard fires. So heads with no recognised expansion at the requested point (e.g. `Series[Gamma[x], {x, Infinity, 2}]`) return unevaluated silently rather than with a stray warning.
 

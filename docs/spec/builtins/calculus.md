@@ -354,7 +354,11 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
   - `"Series"` — Taylor / Laurent / Puiseux leading-term expansion.
   - `"LHospital"` — L'Hospital's rule with growth guardrails.
   - `"Asymptotic"` — dominant-term / `Log` / exponential reductions at
-    infinity, including `f^g` via `Exp[g Log f]`, and the compose-at-infinity
+    infinity (a summand dominates only when its EXACT growth exponent beats
+    every other summand's upper bound: `(1 - x)/x^2` is bounded by `x^1` but
+    grows like `x^-1`, so it does not dominate `1` in `Log[1 + (1 - x)/x^2]`,
+    whose split had wrapped by `2 Pi I` -- `Limit[3/32 (Log[1 + x + x^2] -
+    Log[1 - x + x^2]), x -> Infinity]` is `0`, not `-15/16 I Pi`), including `f^g` via `Exp[g Log f]`, and the compose-at-infinity
     rule: for `f[g(x)]` whose inner argument diverges to `±Infinity`, apply the
     builtin's own value at Infinity (`Erf[Infinity] = 1`, `Tanh[Infinity] = 1`,
     `ArcTan[Infinity] = Pi/2`, `Gamma[Infinity] = Infinity`, …). Functions that
@@ -695,8 +699,11 @@ expanding the numerator and denominator polynomials *separately*
 (`Expand[P(z0+w)] / Expand[Q(z0+w)]`) rather than `Together`-ing the shifted
 rational: binomial expansion of `Q(z0+w)` keeps every algebraic coefficient in
 the single minimal radical spelling of `z0` (so `((-1)^(1/4))^4 -> -1` still
-reduces), collapses `Q`'s constant term to a literal `0` (exposing the pole as a
-`w`-factor), and avoids the combinatorial blow-up that a second, `Together`-
+reduces), usually collapses `Q`'s constant term to a literal `0` (exposing the
+pole as a `w`-factor) -- and where it cannot, as at a root of unity `z0 =
+(-1)^(1/3)` of `1 + z^2 + z^4` whose constant term stays `1 - (-1)^(1/3) +
+(-1)^(2/3)`, the series engine zero-tests the exact leading coefficient (see
+`Series`), so the pole is not lost -- and avoids the combinatorial blow-up that a second, `Together`-
 introduced spelling (`(-1)^(3/4)` beside `(-1)^(1/4)`) would cause. `P`/`Q` are
 coprime, so the `w^-1` coefficient is unchanged. Transcendental /
 special-function integrands keep the direct expansion, which uses the engine's

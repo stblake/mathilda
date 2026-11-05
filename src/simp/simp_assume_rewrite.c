@@ -148,6 +148,56 @@ static bool sr_pure_imag(const Expr* e, double* im) {
     return sr_num(e->data.function.args[1], im);
 }
 
+/* True iff e is a Plus or a Times with a Plus factor. */
+static bool sr_contains_plus(const Expr* e) {
+    if (sr_head(e, "Plus")) return true;
+    if (!sr_head(e, "Times")) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sr_head(e->data.function.args[i], "Plus")) return true;
+    return false;
+}
+
+/* Arg[p] for p = c r with c a numeric constant and r provably positive under
+ * ctx: Arg[c], evaluated (owned).  A p carrying a sum is Factored first so a
+ * common symbolic scale is exposed ((-a - I Sqrt[3] a)/2 -> -(1 + I Sqrt[3]) a/2).
+ * NULL when p has no such split.  Borrows p. */
+static Expr* sr_arg_positive_scale(const Expr* p, const AssumeCtx* ctx) {
+    if (!ctx || p->type != EXPR_FUNCTION) return NULL;
+    if (!sr_head(p, "Plus") && !sr_head(p, "Times")) return NULL;
+    Expr* g = sr_contains_plus(p)
+        ? eval_and_free(expr_new_function(expr_new_symbol("Factor"),
+                            (Expr*[]){ expr_copy((Expr*)p) }, 1))
+        : expr_copy((Expr*)p);
+    if (!g || !sr_head(g, "Times")) { if (g) expr_free(g); return NULL; }
+    size_t n = g->data.function.arg_count;
+    Expr** cs = malloc(n * sizeof(Expr*));
+    Expr** rs = malloc(n * sizeof(Expr*));
+    size_t nc = 0, nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = g->data.function.args[i];
+        if (expr_is_numeric_quantity(f)) cs[nc++] = expr_copy(f);
+        else                             rs[nr++] = expr_copy(f);
+    }
+    expr_free(g);
+    Expr* out = NULL;
+    if (nc > 0 && nr > 0) {
+        Expr* r = (nr == 1) ? rs[0] : expr_new_function(expr_new_symbol(SYM_Times), rs, nr);
+        nr = 0;
+        bool pos = assume_known_positive(ctx, r);
+        expr_free(r);
+        if (pos) {
+            Expr* c = (nc == 1) ? cs[0] : expr_new_function(expr_new_symbol(SYM_Times), cs, nc);
+            nc = 0;
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Arg),
+                                    (Expr*[]){ c }, 1));
+        }
+    }
+    for (size_t i = 0; i < nc; i++) expr_free(cs[i]);
+    for (size_t i = 0; i < nr; i++) expr_free(rs[i]);
+    free(cs); free(rs);
+    return out;
+}
+
 /* Does ctx prove the strict order A < B by a direct inequality fact? */
 static bool sr_proves_slt(const AssumeCtx* ctx, const Expr* A, const Expr* B) {
     if (!ctx) return false;
@@ -1118,6 +1168,12 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                     free(rp);
                 }
             }
+            /* Arg[c r] = Arg[c] for a numeric constant c and a provably positive
+             * r (Arg is invariant under a positive scale).  A sum is factored
+             * first, so the root forms Solve gives for x^3 == a^3,
+             * (-a -/+ I Sqrt[3] a)/2, settle to -/+ 2 Pi/3 under a > 0. */
+            Expr* arg_scaled = sr_arg_positive_scale(a0, ctx);
+            if (arg_scaled) { expr_free(node); *changed = 1; return arg_scaled; }
         }
 
         /* Schwarz reflection: Conjugate[H[z]] -> H[Conjugate[z]] for H entire or

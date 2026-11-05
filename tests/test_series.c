@@ -788,17 +788,14 @@ static void test_series_arccosh_branch_point_neg(void) {
         "Times[Complex[0, Rational[-3, 80]], Power[2, Rational[-1, 2]]], 0], 0, 7, 2]]]");
 }
 
-/* Family B — ArcTanh at +1. Log[x-1] singularity with coefficient -1/2. */
+/* Family B — ArcTanh at +1. Log[x-1] singularity with coefficient -1/2; the
+ * constant is the reference's -I Pi/2 on the x > 1 sheet (it was +I Pi/2, the
+ * x < 1 value), with the additive I Pi Ceiling[...] branch correction. */
 static void test_series_arctanh_branch_point_pos(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTanh[x], {x, 1, 3}]",
-        "Plus[Times[Complex[0, Rational[1, "
-        "2]], Pi], Times[Rational[1, 2], Log[2]], "
-        "Times[Rational[-1, 2], Log[Plus[-1, x]]], "
-        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], "
-        "Times[-1, Arg[Plus[-1, x]]]]]]], SeriesData[x, 1, List[0, "
-        "Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1]]]");
+        "Plus[Times[Complex[0, Rational[-1, 2]], Pi], Times[Complex[0, 1], Pi, Ceiling[Times[Rational[1, 2], Power[Pi, -1], Arg[Plus[-1, x]]]]], Times[Rational[1, 2], Log[2]], Times[Rational[-1, 2], Log[Plus[-1, x]]], SeriesData[x, 1, List[Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 1, 4, 1]]");
 }
 
 /* Family B — ArcTanh at -1. Log[x+1] singularity with coefficient +1/2. */
@@ -806,11 +803,7 @@ static void test_series_arctanh_branch_point_neg(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTanh[x], {x, -1, 3}]",
-        "Plus[Times[Rational[-1, 2], Log[2]], "
-        "Times[Rational[1, 2], Log[Plus[1, x]]], "
-        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], "
-        "Times[-1, Arg[Plus[1, x]]]]]]], SeriesData[x, -1, List[0, "
-        "Rational[1, 4], Rational[1, 16], Rational[1, 48]], 0, 4, 1]]]");
+        "Plus[Times[Complex[0, -1], Pi, Ceiling[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[-1, Pi], Arg[Plus[1, x]]]]]], Times[Rational[-1, 2], Log[2]], Times[Rational[1, 2], Log[Plus[1, x]]], SeriesData[x, -1, List[Rational[1, 4], Rational[1, 16], Rational[1, 48]], 1, 4, 1]]");
 }
 
 /* Family B — ArcTan at +I. Log[x-I] singularity with coefficient -I/2. */
@@ -818,13 +811,7 @@ static void test_series_arctan_branch_point_pos_i(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTan[x], {x, I, 3}]",
-        "Plus[Times[Rational[1, 4], Pi], Times[Complex[0, "
-        "Rational[1, 2]], Log[2]], "
-        "Times[Complex[0, Rational[-1, 2]], Log[Plus[Complex[0, -1], x]]], "
-        "Times[Power[-1, Floor[Times[Rational[1, "
-        "2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, "
-        "-1], x]]]]]]], SeriesData[x, Complex[0, 1], List[0, "
-        "Rational[1, 4], Complex[0, Rational[1, 16]], Rational[-1, 48]], 0, 4, 1]]]");
+        "Plus[Times[Rational[1, 4], Pi], Times[-1, Pi, Ceiling[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[-1, 2], Pi], Arg[Plus[Complex[0, -1], x]]]]]], Times[Complex[0, Rational[1, 2]], Log[2]], Times[Complex[0, Rational[-1, 2]], Log[Plus[Complex[0, -1], x]]], SeriesData[x, Complex[0, 1], List[Rational[1, 4], Complex[0, Rational[1, 16]], Rational[-1, 48]], 1, 4, 1]]");
 }
 
 /* Family B — ArcTan at -I. */
@@ -832,13 +819,7 @@ static void test_series_arctan_branch_point_neg_i(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTan[x], {x, -I, 3}]",
-        "Plus[Times[Rational[-3, 4], Pi], Times[Complex[0, "
-        "Rational[-1, 2]], Log[2]], "
-        "Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, 1], x]]], "
-        "Times[Power[-1, Floor[Times[Rational[1, "
-        "2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, "
-        "1], x]]]]]]], SeriesData[x, Complex[0, -1], List[0, "
-        "Rational[1, 4], Complex[0, Rational[-1, 16]], Rational[-1, 48]], 0, 4, 1]]]");
+        "Plus[Times[Rational[1, 4], Pi], Times[Pi, Ceiling[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[-3, 2], Pi], Arg[Plus[Complex[0, 1], x]]]]]], Times[Complex[0, Rational[-1, 2]], Log[2]], Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, 1], x]]], SeriesData[x, Complex[0, -1], List[Rational[1, 4], Complex[0, Rational[-1, 16]], Rational[-1, 48]], 1, 4, 1]]");
 }
 
 /* Family B derived — ArcCot at +I (via Pi/2 - ArcTan identity). */
@@ -846,13 +827,7 @@ static void test_series_arccot_branch_point_pos_i(void) {
     setup_full();
     assert_fullform(
         "Series[ArcCot[x], {x, I, 3}]",
-        "Plus[Times[Rational[1, 4], Pi], Times[Complex[0, "
-        "Rational[-1, 2]], Log[2]], "
-        "Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, -1], x]]], "
-        "Times[Power[-1, Floor[Times[Rational[1, "
-        "2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, "
-        "-1], x]]]]]]], SeriesData[x, Complex[0, 1], List[0, "
-        "Rational[-1, 4], Complex[0, Rational[-1, 16]], Rational[1, 48]], 0, 4, 1]]]");
+        "Plus[Times[Rational[1, 4], Pi], Times[Pi, Ceiling[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[-3, 2], Pi], Arg[Plus[Complex[0, -1], x]]]]]], Times[Complex[0, Rational[-1, 2]], Log[2]], Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, -1], x]]], SeriesData[x, Complex[0, 1], List[Rational[-1, 4], Complex[0, Rational[-1, 16]], Rational[1, 48]], 1, 4, 1]]");
 }
 
 /* Family B derived — ArcCoth at +1. */
@@ -860,11 +835,7 @@ static void test_series_arccoth_branch_point_pos(void) {
     setup_full();
     assert_fullform(
         "Series[ArcCoth[x], {x, 1, 3}]",
-        "Plus[Times[Rational[1, 2], Log[2]], "
-        "Times[Rational[-1, 2], Log[Plus[-1, x]]], "
-        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], "
-        "Times[-1, Arg[Plus[-1, x]]]]]]], SeriesData[x, 1, List[0, "
-        "Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1]]]");
+        "Plus[Times[Complex[0, 1], Pi, Ceiling[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[-1, Pi], Arg[Plus[-1, x]]]]]], Times[Rational[1, 2], Log[2]], Times[Rational[-1, 2], Log[Plus[-1, x]]], SeriesData[x, 1, List[Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 1, 4, 1]]");
 }
 
 /* Family A retrofit — ArcSin at +1 (existing handler now routed through
@@ -2577,6 +2548,39 @@ static void test_series_branch_phase(void) {
     check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 2}]] - f) /. x -> p, 30]], {p, {-1/1000, 1/1000}}]], {f, {ArcTan[1/x], ArcTan[1/x^3], ArcCot[x], ArcTanh[1/x], ArcCoth[x], ArcTan[1 + 2/x], ArcTan[1/Sin[x]]}}]] < 10^-6", "True");
 }
 
+/* Family B with a non-unit inner slope q, and from every direction.  The
+ * constant used to drop the Log of q (ArcTanh[1 + 2 I x] lacked -Log[2 I]/2,
+ * putting Integrate[Log[t]/(1 + t^2)^2, {t, 0, 1}] off by Pi/4), and three q = 1
+ * constants sat on the wrong sheet.  Each expansion must match the function on
+ * a small circle around the branch point. */
+static void test_series_familyb_slope_and_sheet(void) {
+    setup_full();
+    const char* cases[] = {
+        "ArcTanh[1 + 2 I x], 0", "ArcTanh[-1 + 3 x], 0", "ArcCoth[-1 - 2 x], 0",
+        "ArcTan[I + 3 x], 0", "ArcCot[-I + (1 + I) x], 0", "ArcTanh[x], 1",
+        "ArcTan[x], -I", "ArcCot[x], -I", "ArcCoth[x], -1"
+    };
+    char buf[512];
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        snprintf(buf, sizeof buf,
+            "Module[{f = {%s}, s}, s = Normal[Series[f[[1]], {x, f[[2]], 3}]]; "
+            "Max[Table[Abs[N[(s - f[[1]]) /. x -> f[[2]] + 10^-3 Exp[I th], 20]], "
+            "{th, {0, 1, 2, 3, Pi, -1, -2, -3}}]] < 10^-11]", cases[i]);
+        check_quiet(buf, "True");
+    }
+    /* A known side resolves the constant with no Ceiling term. */
+    check_quiet("Normal[Series[ArcTanh[x], {x, 1, 1}, Assumptions -> x < 1]]",
+                "(1/2*I) Pi + 1/4 (-1 + x) + 1/2 Log[2] - 1/2 Log[-1 + x]");
+}
+
+/* Series about an algebraic point: an exact leading coefficient that is zero
+ * without an evaluation rule saying so (1 - (-1)^(1/3) + (-1)^(2/3)) is
+ * zero-tested, so the double pole of 1/(1 + x^2 + x^4)^2 is found. */
+static void test_series_algebraic_point_pole(void) {
+    setup_full();
+    check_quiet("Series[1/(1 + x^2 + x^4)^2, {x, (-1)^(1/3), -1}][[4]]", "-2");
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -2629,6 +2633,8 @@ int main(void) {
     TEST(test_series_branch_composition);
     TEST(test_series_arcsinh_non_branch_complex);
     TEST(test_normal_branch_passthrough);
+    TEST(test_series_familyb_slope_and_sheet);
+    TEST(test_series_algebraic_point_pole);
     TEST(test_series_arccsch_of_inverse);
     TEST(test_series_arccsc_of_inverse);
     TEST(test_series_arcsec_of_inverse);

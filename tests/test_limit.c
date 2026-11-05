@@ -1176,9 +1176,20 @@ static void test_limit_branch_stress(void) {
     check_equiv("Limit[Sqrt[x^2*Sin[x]^2]/x^2, x -> 0]", "1");
 }
 
+/* A dominant summand needs an EXACT growth exponent: (1 - x)/x^2 is bounded
+ * by x but decays like 1/x, so it does not dominate 1 in Log[1 + (1 - x)/x^2];
+ * splitting there wrapped by 2 Pi I. */
+static void test_limit_dominant_exact_growth(void) {
+    check("Limit[3/32 (Log[1 + x + x^2] - Log[1 - x + x^2]), x -> Infinity]", "0");
+    check("Limit[2 Log[1 + x + x^2] - 2 Log[1 - x + x^2], x -> Infinity]", "0");
+    check("Limit[(1 + x^3)/(1 + x^2) - x^2, x -> Infinity]", "-Infinity");
+    check("Limit[Log[x^3 + x] - 3 Log[x], x -> Infinity]", "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+    TEST(test_limit_dominant_exact_growth);
 
     TEST(test_fast_paths);
     TEST(test_series);
