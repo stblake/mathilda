@@ -266,7 +266,9 @@ static void test_complex_perf(void) {
     chk("{p1, p2} . {1., 2}", "1.0 p1 + 2 p2");
     /* the complex factors and their invariants, fast */
     chk_true("c91 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {tt, {q, t}} = AbsoluteTiming[SchurDecomposition[c91]]; "
-             "{t2, rr} = AbsoluteTiming[q . t . ConjugateTranspose[q]]; tt + t2 < 10 && Max[Abs[Flatten[rr - c91]]] < 10^-12");
+             "{t2, rr} = AbsoluteTiming[q . t . ConjugateTranspose[q]]; "
+             "{tt + t2 < 10, Max[Abs[Flatten[rr - c91]]] < 10^-12} === {True, True} || "
+             "(Print[\"schur c91: time \", tt + t2, \" residual \", Max[Abs[Flatten[rr - c91]]]]; False)");
     chk_true("h59 = Table[If[i == j, 70. + i, N[(Mod[i j, 7] - 3) + I (Mod[i + j, 5] - 2)]], {i, 59}, {j, 59}]; "
              "h59 = (h59 + ConjugateTranspose[h59])/2; {tt, rr} = AbsoluteTiming[RowReduce[h59]]; "
              "tt < 10 && rr == IdentityMatrix[59]");
