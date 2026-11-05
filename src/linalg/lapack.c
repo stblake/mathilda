@@ -919,13 +919,13 @@ int mat_lapack_dgees(int n, double* A, int lda,
     double query = 0.0;
     char jvs[2] = { 'V', 0 }, srt[2] = { 'N', 0 };
     dgees_(jvs, srt, 0, &n, A, &lda, &sdim, wr, wi, VS, &ldvs,
-           &query, &lwork, NULL, &info);
+           &query, &lwork, NULL, &info MTH_FSTRLEN2);
     if (info != 0) return info;
     lwork = lapack_lwork(query, 3 * n > 1 ? 3 * n : 1);
     double* work = (double*)malloc((size_t)lwork * sizeof(double));
     if (!work) return -999;
     dgees_(jvs, srt, 0, &n, A, &lda, &sdim, wr, wi, VS, &ldvs,
-           work, &lwork, NULL, &info);
+           work, &lwork, NULL, &info MTH_FSTRLEN2);
     free(work);
     return info;
 }
@@ -938,13 +938,13 @@ int mat_lapack_zgees(int n, double* A, int lda, double* w, double* VS, int ldvs)
     double* rwork = (double*)malloc((size_t)(n > 1 ? n : 1) * sizeof(double));
     if (!rwork) return -999;
     zgees_(jvs, srt, 0, &n, lapack_zptr(A), &lda, &sdim, lapack_zptr(w),
-           lapack_zptr(VS), &ldvs, lapack_zptr(query), &lwork, rwork, NULL, &info);
+           lapack_zptr(VS), &ldvs, lapack_zptr(query), &lwork, rwork, NULL, &info MTH_FSTRLEN2);
     if (info != 0) { free(rwork); return info; }
     lwork = lapack_lwork(query[0], 2 * n > 1 ? 2 * n : 1);
     double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
     if (!work) { free(rwork); return -999; }
     zgees_(jvs, srt, 0, &n, lapack_zptr(A), &lda, &sdim, lapack_zptr(w),
-           lapack_zptr(VS), &ldvs, lapack_zptr(work), &lwork, rwork, NULL, &info);
+           lapack_zptr(VS), &ldvs, lapack_zptr(work), &lwork, rwork, NULL, &info MTH_FSTRLEN2);
     free(work);
     free(rwork);
     return info;
