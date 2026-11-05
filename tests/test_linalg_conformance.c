@@ -264,6 +264,18 @@ static void test_complex_perf(void) {
     chk("{{1, 2}, {3, 4}} . {1., I}", "{1.0 + 2.0*I, 3.0 + 4.0*I}");
     chk("{{1, 2}, {3, 4}} . {{1, 1/2}, {1, 1}}", "{{3, 5/2}, {7, 11/2}}");
     chk("{p1, p2} . {1., 2}", "1.0 p1 + 2 p2");
+    /* TEMPORARY Linux diagnostic (zgees vs zgemm) -- removed once located */
+    chk("SeedRandom[7]; c40 = RandomComplex[{-1 - I, 1 + I}, {40, 40}]; "
+        "dotb = Table[Sum[c40[[i, k]] c40[[k, j]], {k, 40}], {i, 40}, {j, 40}]; "
+        "Print[\"DIAG dot40 \", Max[Abs[Flatten[c40 . c40 - dotb]]], \" packed \", NDArrayQ[c40]]; "
+        "{q4, t4} = SchurDecomposition[c40]; "
+        "Print[\"DIAG schur40 unitary \", Max[Abs[Flatten[q4 . ConjugateTranspose[q4] - IdentityMatrix[40]]]], "
+        "\" lowerT \", Max[Abs[Flatten[LowerTriangularize[t4, -1]]]], "
+        "\" resid-boxed \", Max[Abs[Flatten[Table[Sum[q4[[i, k]] t4[[k, l]] Conjugate[q4[[j, l]]], {k, 40}, {l, 40}], {i, 3}, {j, 3}] - c40[[1 ;; 3, 1 ;; 3]]]]], "
+        "\" resid-dot \", Max[Abs[Flatten[q4 . t4 . ConjugateTranspose[q4] - c40]]]]; "
+        "c12 = c40[[1 ;; 12, 1 ;; 12]]; {q2, t2} = SchurDecomposition[c12]; "
+        "Print[\"DIAG schur12 resid \", Max[Abs[Flatten[q2 . t2 . ConjugateTranspose[q2] - c12]]], \" heads \", Union[Head /@ Flatten[q2]]]; "
+        "Print[\"DIAG real91 \", With[{r = RandomReal[1, {91, 91}]}, {q, t} = SchurDecomposition[r]; Max[Abs[Flatten[q . t . Transpose[q] - r]]]]]; Null", "Null");
     /* the complex factors and their invariants, fast */
     chk_true("c91 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {tt, {q, t}} = AbsoluteTiming[SchurDecomposition[c91]]; "
              "{t2, rr} = AbsoluteTiming[q . t . ConjugateTranspose[q]]; "
