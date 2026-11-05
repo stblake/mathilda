@@ -1636,6 +1636,7 @@ typedef enum {
     METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
     METHOD_INTEGRAL_REP,     /* definite-only: special-function integral reps (half-line) */
     METHOD_MEIJER_CONV,      /* definite-only: Meijer G convolution of two kernels (half-line) */
+    METHOD_ROACH,            /* definite-only: Roach's Meijer G algorithm (src/internal/RoachIntegrate.m) */
     METHOD_PIECEWISE,        /* definite-only: Abs/Sign/Heaviside/UnitStep/Min/Max/Piecewise */
     METHOD_SERIES,           /* definite-only: series term-by-term on [0,1] (R(x) Log[x]^k) */
     METHOD_KING,             /* definite-only: general King reflection x -> a+b-x */
@@ -1681,6 +1682,7 @@ static IntegrateMethod method_from_string(const char* s) {
         return METHOD_RAMANUJAN;
     if (strcmp(s, "IntegralRepresentation") == 0) return METHOD_INTEGRAL_REP;
     if (strcmp(s, "MeijerConvolution") == 0) return METHOD_MEIJER_CONV;
+    if (strcmp(s, "Roach") == 0) return METHOD_ROACH;
     if (strcmp(s, "Piecewise") == 0) return METHOD_PIECEWISE;
     if (strcmp(s, "SeriesExpansion") == 0 || strcmp(s, "SeriesTermByTerm") == 0)
         return METHOD_SERIES;
@@ -1784,7 +1786,7 @@ static bool definite_parse_method(Expr* opt, const char** name,
         m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
         m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG ||
         m == METHOD_INTEGRAL_REP || m == METHOD_MEIJER_CONV ||
-        m == METHOD_PIECEWISE) return true;
+        m == METHOD_ROACH || m == METHOD_PIECEWISE) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -1914,6 +1916,45 @@ static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* as
                                     r->data.symbol.name == SYM_ComplexInfinity)) ||
         result_contains_head(r, "Integrate") ||
         result_contains_head(r, "MeijerConvolution`Run") ||
+        result_contains_head(r, "Throw")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+/* Definite stage: Roach's Meijer G algorithm (src/internal/RoachIntegrate.m),
+ * loaded lazily like MeijerConvolution. Any real interval. A $Failed or
+ * a surviving Integrate is a decline. */
+static unsigned roach_load_gen = 0;
+static bool roach_load_succeeded = false;
+
+static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (roach_load_gen != symtab_generation()) {
+        roach_load_gen = symtab_generation();
+        mth_msg_suppress_push();
+        roach_load_succeeded = mathilda_load_module("RoachIntegrate.m") != 0;
+        mth_msg_suppress_pop();
+        if (!roach_load_succeeded)
+            mth_message("Integrate`Roach", "nofile",
+                "cannot locate src/internal/RoachIntegrate.m on disk.");
+    }
+    if (!roach_load_succeeded) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("Roach`Run"),
+        (Expr*[]){ expr_copy(f), expr_copy(x), expr_copy(a), expr_copy(b),
+                   assumptions ? expr_copy(assumptions) : expr_new_symbol("True") }, 5);
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    Expr* r = evaluate(call);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
+    expr_free(call);
+    if (!r) return NULL;
+    if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
+                                    r->data.symbol.name == SYM_Indeterminate ||
+                                    r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_contains_head(r, "Integrate") ||
+        result_contains_head(r, "Roach`Run") ||
         result_contains_head(r, "Throw")) {
         expr_free(r);
         return NULL;
@@ -2152,6 +2193,12 @@ static Expr* integrate_definite(Expr* res) {
              * the table stages (they own their closed forms), before FTC. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_MEIJER_CONV))
                 r = try_meijer_convolution(cur, x, a, b, assumptions);
+            /* Roach's algorithm: every factor a Meijer G function (PBM sec. 8.4
+             * table), the one- and two-G integration theorems under the full
+             * PBM 2.24.1 conditions, G -> named functions by the Formula
+             * algorithm; any real interval. Pinned only (v0.6200). */
+            if (!r && !has_undef && mech == METHOD_ROACH)
+                r = try_roach(cur, x, a, b, assumptions);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
              * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
@@ -2162,7 +2209,7 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
                 mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
-                mech != METHOD_MEIJER_CONV &&
+                mech != METHOD_MEIJER_CONV && mech != METHOD_ROACH &&
                 mech != METHOD_PIECEWISE && mech != METHOD_SERIES &&
                 mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
@@ -3014,6 +3061,7 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_RATIONAL_LOG:
         case METHOD_INTEGRAL_REP:
         case METHOD_MEIJER_CONV:
+        case METHOD_ROACH:
         case METHOD_PIECEWISE:
         case METHOD_SERIES:
         case METHOD_KING:

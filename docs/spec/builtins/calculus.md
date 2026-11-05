@@ -2013,6 +2013,53 @@ monotonically down.
     - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
     - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
     - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
+  - `"Roach"` (definite, any real interval; v0.6205): Kelly Roach's Meijer G
+    algorithm (*Meijer G Function Representations*, ISSAC '97 §5; *Solving
+    Integrals with the Quantum Computer Algebra System*, 2008). Code in
+    `src/internal/RoachIntegrate.m`.
+    - **Interval.** The interval is mapped onto (0, ∞): `x → x + a`; the
+      half-line `(−∞, b)` by `x → −x`; the whole line split at 0; and a finite
+      `[a, b]` by `x → a + (b − a) y` with the indicator `θ(1 − y)`.
+    - **Factors.** After linearity, each term `C x^s F1 F2` must have every
+      factor a G function of `c x^q`, with q rational, or any q for a single G.
+      The lookup table is PBM vol. 3 §8.4 and covers:
+      - Exp, Sin/Cos/Sinh/Cosh, `(b + t)^-a`, `(1 − t)^(a−1) θ(1 − t)`,
+        `Log[t]^n θ(1 − t)`, `Log[1 + t]`;
+      - ArcTan, ArcCot, Ei, E_a, Si, Ci, Erf, Erfc, Γ(a, t), FresnelS/C;
+      - J, Y, I, K, Struve H, J², EllipticK/E.
+
+      A base `k0 + k1 x^q` is normalised to `k0 (1 + (k1/k0) x^q)` when
+      `k0 > 0` under the assumptions.
+    - **Theorems.** One G uses its Mellin transform. Two G use the
+      convolution `∫₀^∞ G1(σx) G2(ωx) dx = σ⁻¹ G(ω/σ)` (Luke 5.6.2), with the
+      arguments' powers brought to a common one by the Gauss multiplication
+      formula.
+    - **Validity.** The validity conditions are PBM 2.24.1 in full: the
+      35 cases with c1–c15, plus Luke's exponential-decay cases (the same set
+      as functions.wolfram.com 07.34.21.0011). Each relational atom is decided
+      under the assumptions: True drops it, False makes the term decline, and
+      anything else is kept and returned as a `ConditionalExpression`.
+    - **Fallbacks.**
+      - `t = E^−x` for exponential integrands, which turns `x^k` into a
+        `Log[t]^k θ(1 − t)` G function;
+      - `t = Tan[x]` for trigonometric ones on `[0, b]` with `b ≤ π/2`, where
+        every base is positive;
+      - integration by parts for an inverse-trigonometric factor.
+    - **The G result** goes through `FunctionExpand`: the Slater expansion,
+      then Roach's Formula algorithm.
+    - **Numeric check.** Every answer is checked at a FindInstance point of
+      the assumptions. It passes if it agrees with either the default
+      `NIntegrate` or a split-interval one, each capped at 5 s. If neither
+      gives a number the check is inconclusive and does not reject.
+    - **Roach 2008, pp. 3–4:**
+      - `∫₀^∞ e^(−αx) J₀(βx)² dx = 2 K(−4β²/α²)/(πα)`, which equals Roach's
+        `2K(4β²/(α² + 4β²))/(π√(α² + 4β²))`;
+      - `∫₀^∞ (Si(ax) − π/2) e^(−bx) dx = (ArcTan[a/b] − π/2)/b`;
+      - `∫₀^∞ x e^(−nx)/(e^x + 1) dx = (ζ(2, (1+n)/2) − ζ(2, 1 + n/2))/4`.
+
+      The elliptic integrals of the paper come from the `Integrate\`Elliptic`
+      stage.
+    - Pinned only; it is not yet in the automatic cascade.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.
