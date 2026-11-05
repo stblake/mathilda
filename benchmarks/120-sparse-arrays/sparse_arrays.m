@@ -132,7 +132,90 @@ bench["poisson: LinearSolve[L, b] CG 1e-10",
       solcg = LinearSolve[L, bb, Method -> {"Krylov", Method -> "ConjugateGradient",
                                             "Preconditioner" -> None, Tolerance -> 10^-10}]];
 check["poisson: LinearSolve[L, b] CG 1e-10", Round[Total[solcg]]];
+(* ---- native sparse solvers (v0.6180-v0.6188) on the same L ---------------
+
+   The direct methods by name, the Krylov methods with each incomplete-LU
+   preconditioner, a factor reused over 20 right-hand sides
+   (LinearSolveFunction), Det / Inverse of a 900 x 900 Laplacian, the action
+   MatrixExp[s, v] (no dense exponential formed), MatrixExp of a sparse
+   1-D Laplacian, and a complex-shifted (Helmholtz-like) solve.
+   Krylov checks are Round[10 Norm[x]]: Total[x] cancels to -56.6 over
+   90000 entries, so a 10^-10 residual still moves it in the first decimal,
+   while the norm (330.55) is stable to 10^-4. *)
+
+nrm10[x_] := Round[10 Norm[x]];
+krylov[meth_, pre_] := LinearSolve[L, bb,
+  Method -> {"Krylov", Method -> meth, "Preconditioner" -> pre, Tolerance -> 10^-10}];
+
+bench["poisson: LinearSolve Multifrontal", sol = LinearSolve[L, bb, Method -> "Multifrontal"]];
+check["poisson: LinearSolve Multifrontal", Round[1000 Total[sol]]];
+bench["poisson: LinearSolve Cholesky", sol = LinearSolve[L, bb, Method -> "Cholesky"]];
+check["poisson: LinearSolve Cholesky", Round[1000 Total[sol]]];
+
+bench["poisson: Krylov CG + ILU0 1e-10", x = krylov["ConjugateGradient", "ILU0"], 1];
+check["poisson: Krylov CG + ILU0 1e-10", nrm10[x]];
+bench["poisson: Krylov BiCGSTAB + ILU0 1e-10", x = krylov["BiCGSTAB", "ILU0"], 1];
+check["poisson: Krylov BiCGSTAB + ILU0 1e-10", nrm10[x]];
+bench["poisson: Krylov BiCGSTAB + ILUT 1e-10", x = krylov["BiCGSTAB", "ILUT"], 1];
+check["poisson: Krylov BiCGSTAB + ILUT 1e-10", nrm10[x]];
+bench["poisson: Krylov GMRES + ILUT 1e-10", x = krylov["GMRES", "ILUT"], 1];
+check["poisson: Krylov GMRES + ILUT 1e-10", nrm10[x]];
+bench["poisson: Krylov GMRES + ILUTP 1e-10", x = krylov["GMRES", "ILUTP"], 1];
+check["poisson: Krylov GMRES + ILUTP 1e-10", nrm10[x]];
+
+(* Factor once, then 20 distinct right-hand sides; the factorisation is
+   inside the timing, so a cached factor cannot flatter a rerun. *)
+bench["poisson: LinearSolveFunction, factor + 20 solves",
+      (lsf = LinearSolve[L]; Do[x = lsf[bb + k], {k, 20}])];
+check["poisson: LinearSolveFunction, factor + 20 solves", Round[1000 Total[lsf[bb + 20.]]]];
+
+u0 = Sin[N[Range[$m^2]]/100.];
+bench["poisson: MatrixExp[-0.5 L, u] (action)", y = MatrixExp[-0.5 L, u0]];
+check["poisson: MatrixExp[-0.5 L, u] (action)", Round[1000 Total[y]]];
+
+Lz = L + 0.5 I IdentityMatrix[$m^2, SparseArray];
+bench["poisson: complex shift LinearSolve[L + 0.5 I, b]", z = LinearSolve[Lz, bb]];
+check["poisson: complex shift LinearSolve[L + 0.5 I, b]",
+      {Round[1000 Re[Total[z]]], Round[1000 Im[Total[z]]]}];
+
+T30 = SparseArray[{Band[{1, 1}] -> 2., Band[{1, 2}] -> -1., Band[{2, 1}] -> -1.}, {30, 30}];
+I30 = IdentityMatrix[30, SparseArray];
+L30 = KroneckerProduct[T30, I30] + KroneckerProduct[I30, T30];
+bench["sparse: Det of 900x900 Laplacian / 4", d = Det[L30/4.]];
+check["sparse: Det of 900x900 Laplacian / 4", Round[10^6 Log[d]]];
+bench["sparse: Inverse of 900x900 Laplacian", inv = Inverse[L30]];
+check["sparse: Inverse of 900x900 Laplacian", Round[1000 Total[inv, 2]]];
+
+T1k = SparseArray[{Band[{1, 1}] -> 2., Band[{1, 2}] -> -1., Band[{2, 1}] -> -1.}, {1000, 1000}];
+bench["sparse: MatrixExp[-0.1 T] 1-D Laplacian 1000x1000", e = MatrixExp[-0.1 T1k]];
+check["sparse: MatrixExp[-0.1 T] 1-D Laplacian 1000x1000", Round[1000 Total[e, 2]]];
+
 bench["poisson: 6 largest eigenvalues", ev = Eigenvalues[L, 6]];
 check["poisson: 6 largest eigenvalues", Round[10^6 Total[ev]]];
 bench["poisson: 6 smallest eigenvalues", ev = Eigenvalues[L, -6]];
 check["poisson: 6 smallest eigenvalues", Round[10^6 Total[ev]]];
+
+(* ---- sparse eigensystem / singular values with a count (ARPACK) ----------
+   Last in the file on purpose: these are the cases still being built, and a
+   timeout here costs only these rows.
+
+   NOT the bare Laplacian L.  Its extreme eigenvalues are separated by ~3e-4
+   relative, and at that gap the reference's default Arnoldi stops early: the
+   two pre-existing L cases above read 47985493 / 4684 there against the exact
+   47995643 / 4357 (4 - 2 cos(i pi/301) - 2 cos(j pi/301), which scipy and the
+   closed form agree on).  H = L + V adds the potential
+   V(i, j) = 0.001 (i^2 + 2 j^2), which separates the ends of the spectrum, so
+   all three systems converge to the same six.  Likewise the singular values
+   are of a graded bidiagonal-plus-band G (sigma ~ 100/k), not of Dm, whose
+   top singular value 91.398 has multiplicity >= 8 (the reference returns five
+   copies and a 6th from below it).  The vectors are unit-normalised, so the
+   second Eigensystem check element is 1000 x 6. *)
+
+Hpot = L + SparseArray[Band[{1, 1}] -> 0.001 Flatten[Table[i^2 + 2 j^2, {i, $m}, {j, $m}]], {$m^2, $m^2}];
+bench["schrodinger: Eigensystem[L + V, 6]", es = Eigensystem[Hpot, 6], 1];
+check["schrodinger: Eigensystem[L + V, 6]",
+      {Round[10^6 Total[First[es]]], Round[1000 Total[Flatten[Abs[Last[es]]^2]]]}];
+$g = 20000;
+G = SparseArray[{Band[{1, 1}] -> 100./Range[$g], Band[{1, 2}] -> 0.1, Band[{4, 1}] -> 0.2}, {$g, $g}];
+bench["graded 20000: SingularValueList[G, 6]", sv = SingularValueList[G, 6], 1];
+check["graded 20000: SingularValueList[G, 6]", Round[10^6 Total[sv]]];

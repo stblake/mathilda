@@ -17,6 +17,14 @@ exactly).
 | access: row 500 x100 / element (500, 600) x1000 | `A[[500]]`, `A[[500, 600]]` | `A[[499], :]`, `A[499, 599]` |
 | access: explicit positions and values | `A["NonzeroPositions"]`, `A["NonzeroValues"]` | `tocoo()` |
 | dense: 2000 x 2000 dense -> sparse / sparse -> dense | `SparseArray[dense]`, `Normal` | `csr_array(dense)`, `toarray()` |
+| poisson: LinearSolve Multifrontal / Cholesky | `Method -> "Multifrontal"` (UMFPACK), `"Cholesky"` (CHOLMOD) | `spsolve`, `splu(permc_spec="MMD_AT_PLUS_A")` (scipy has neither) |
+| poisson: Krylov CG / BiCGSTAB / GMRES + ILU0 / ILUT / ILUTP | `Method -> {"Krylov", Method -> m, "Preconditioner" -> p}` | `cg` / `bicgstab` / `gmres(restart=50)` with natural-order `spilu`; CG unpreconditioned (see below) |
+| poisson: LinearSolveFunction, factor + 20 solves | `f = LinearSolve[L]; f[b]` | `splu(L).solve` |
+| poisson: MatrixExp[-0.5 L, u] (action) | `MatrixExp[s, v]` | `expm_multiply` |
+| poisson: complex shift LinearSolve[L + 0.5 I, b] | complex SparseArray, direct | `spsolve` (complex SuperLU) |
+| sparse: Det / Inverse of 900x900 Laplacian | `Det`, `Inverse` (sparse LU above order 128) | log det from `splu` U-diagonal, `spla.inv` |
+| sparse: MatrixExp[-0.1 T] 1-D Laplacian 1000x1000 | `MatrixExp[s]` answers a SparseArray | `expm` (sparse) |
+| schrodinger: Eigensystem[L + V, 6] / graded 20000: SingularValueList[G, 6] | count forms on a SparseArray (ARPACK) | `eigsh`, `svds` |
 
 ## Findings
 
@@ -62,3 +70,31 @@ Written as `r = {positions, values}`, the explicit-entries case would cost
 ~700 ms: a List materialises its packed elements (the packing layer's
 no-nesting invariant), so the case assigns the two buffers separately, as the
 Python returns a tuple of arrays.
+
+## Sparse linear algebra rows (v0.6180-v0.6189)
+
+The solver rows run on the same 300 x 300-grid Laplacian `L` as the existing
+Poisson cases. Two choices in them are deliberate:
+
+- **scipy has no ILU0, IC0 or ILUTP.** Its only incomplete factorisation is
+  SuperLU's threshold ILU (`spilu`), used in natural order without pivoting:
+  drop 1e-2 / fill 1 stands in for ILU0, drop 1e-4 / fill 5 for ILUT and
+  ILUTP. That ILU is not symmetric, and CG preconditioned with it stalls (no
+  convergence in 1000 iterations, measured), so the CG + ILU0 row runs scipy's
+  `cg` unpreconditioned. The scipy Krylov rows are timed once without a
+  warm-up: they cost 8–20 s each.
+- **Krylov checks are `Round[10 Norm[x]]`**, not `Round[Total[x]]`: the
+  solution's total cancels to -56.6 over 90000 entries, and a 1e-10 residual
+  still moves it in the first decimal (BiCGSTAB + ILU0 reads -56.49 where the
+  direct solve reads -56.55).
+
+The eigen/singular-value rows use `L + V` (`V(i, j) = 0.001 (i^2 + 2 j^2)`)
+and a graded band matrix rather than `L` and `Dm`. The two pre-existing
+`poisson: 6 largest / 6 smallest eigenvalues` rows show why: the Laplacian's
+extreme eigenvalues are ~3e-4 apart (relative), and the reference's default
+Arnoldi returns 47985493 / 4684 for those digests against the exact
+47995643 / 4357 (closed form `4 - 2 cos(i pi/301) - 2 cos(j pi/301)`, which
+scipy matches). `Dm`'s top singular value 91.398 has multiplicity >= 8, and
+the reference returns five copies and a smaller sixth. Those two rows stay as
+they were so their history continues; they read CHECK-FAIL on the reference
+column, not on Mathilda.

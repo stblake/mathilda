@@ -1,0 +1,66 @@
+/* ==========================================================================
+   Experiment 124 -- sparse linear algebra at scale (Maxima column).
+
+   Maxima has no sparse numeric solvers, so every machine-precision row is
+   SKIP; the column covers the exact small-matrix cases, with the same
+   labels, the same Lehmer-generated integer matrices and the same exact
+   checks as sparse_linalg.m.
+
+   Maxima's default `determinant` (ratmx : false) and `newdet` both expand
+   by minors on a matrix this sparse and do not finish 20 x 20 in minutes;
+   with ratmx : true, determinant / invert / charpoly run fraction-free
+   Gaussian elimination in the CRE representation, which is the comparable
+   algorithm.  LinearSolve is linsolve_by_lu and NullSpace is nullspace,
+   both from the linearalgebra package; rank is core.
+   ========================================================================== */
+
+load("../harness.mac")$
+load(linearalgebra)$
+
+require(["determinant", "invert", "linsolve_by_lu", "rank", "nullspace", "charpoly"])$
+
+for l in ["poisson2d 500^2: LinearSolve direct",
+          "poisson3d 30^3: LinearSolve direct",
+          "poisson3d 100^3 (10^6): CG 1e-6",
+          "convdiff 300^2: LinearSolve Multifrontal",
+          "convdiff 300^2: GMRES + ILUT 1e-8",
+          "convdiff 300^2: BiCGSTAB + ILU0 1e-8",
+          "helmholtz 300^2 complex: LinearSolve direct",
+          "lsf 300^2: LinearSolveFunction, factor + 100 solves",
+          "heat 500^2: MatrixExp[-L, u0] (action)",
+          "eigen 200^2 L + V: Eigenvalues[H, 6] (largest)",
+          "eigen 200^2 L + V: Eigenvalues[H, -6] (smallest)",
+          "eigen 200^2 L + V: Eigensystem[H, -6]"] do
+  skip(l, "sparse numeric linear algebra")$
+
+exE(n, sd, i, j) := block([s : mod(48271 * (n * (i - 1) + j) + sd, 2147483647)],
+  (if mod(s, 3) = 0 then mod(s, 19) - 9 else 0) + (if i = j then 10 else 0))$
+exG(n, sd, r, c) := genmatrix(lambda([i, j], exE(n, sd, i, j)), r, c)$
+exM(n, sd) := exG(n, sd, n, n)$
+exR(n, r) := exM(n, 7) . exG(n, 11, n, r) . exG(n, 13, r, n)$
+entrySum(m) := apply("+", flatten(args(m)))$
+
+m40 : exM(40, 1)$ m30 : exM(30, 2)$ m20 : exM(20, 3)$ m10 : exM(10, 4)$
+r40 : exR(40, 30)$ r30 : exR(30, 24)$
+b40 : genmatrix(lambda([i, j], i), 40, 1)$
+
+rdet(m) := block([ratmx : true], determinant(m))$
+rinv(m) := block([ratmx : true], invert(m))$
+rcp(m) := block([ratmx : true], expand(charpoly(m, x)))$
+
+bench("exact 40x40: Det", lambda([], rdet(m40)))$
+check("exact 40x40: Det", rdet(m40))$
+bench("exact 30x30: Inverse", lambda([], rinv(m30)))$
+check("exact 30x30: Inverse", entrySum(rinv(m30)))$
+bench("exact 40x40: LinearSolve", lambda([], linsolve_by_lu(m40, b40)))$
+check("exact 40x40: LinearSolve", entrySum(first(linsolve_by_lu(m40, b40))))$
+bench("exact 40x40: MatrixRank (rank 30)", lambda([], rank(r40)))$
+check("exact 40x40: MatrixRank (rank 30)", rank(r40))$
+bench("exact 30x30: NullSpace (nullity 6)", lambda([], nullspace(r30)))$
+check("exact 30x30: NullSpace (nullity 6)", length(args(nullspace(r30))))$
+bench("exact 20x20: CharacteristicPolynomial", lambda([], rcp(m20)))$
+check("exact 20x20: CharacteristicPolynomial", subst(x = 3, rcp(m20)))$
+bench("exact 10x10: Inverse x100", lambda([], for k : 1 thru 100 do rinv(m10)))$
+check("exact 10x10: Inverse x100", entrySum(rinv(m10)))$
+
+quit()$

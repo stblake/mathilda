@@ -12,7 +12,8 @@
    sum of |eigenvalues|, trace via eigenvalues.  Eigenvectors have no stable
    scalar (Mathematica does not normalise them), so that case carries no check.
 
-   ONE FINDING IS BAKED IN.  Eigensystem is ABSENT (benchIf).
+   Eigensystem was ABSENT until v0.6185; its cases stay behind benchIf so an
+   older binary still reports the absence rather than a fake timing.
 
    The generalized problem Eigenvalues[{A, B}] now takes a LAPACK machine path
    (dsygv for the symmetric-definite pencil here, dggev/zhegv/zggev otherwise;
@@ -57,3 +58,38 @@ check["Eigenvalues Arnoldi k=6 of 500x500", Round[10^6 Total[Eigenvalues[sm]]]];
 
 benchIf["Eigensystem symmetric 250x250", "Eigensystem", Eigensystem[sv];, 1];
 checkIf["Eigensystem symmetric 250x250", "Eigensystem", Round[10^6 Max[Eigenvalues[sm]]]];
+
+(* ---- Eigensystem (v0.6185) and the k forms --------------------------------
+
+   Eigensystem now exists, so the case above runs.  Below: a complex Hermitian
+   Eigensystem, and the count forms Eigenvalues[m, k] (the k largest in
+   absolute value), Eigenvalues[m, -k] (the k smallest), Eigensystem[m, k] and
+   SingularValueList[m, k] on a dense 300 x 300 matrix, against ARPACK
+   (eigsh / svds) on the Python side.  Checks on spdIntMatrix[8] (and the
+   Hermitian c4): order-invariant sums, plus the sum of |v|^2 over the
+   returned eigenvectors, which is the vector count when they are
+   unit-normalised. *)
+
+c4 = {{4., 1. + I, 0., 0.5 I}, {1. - I, 5., 2., 0.}, {0., 2., 6., 1. - 0.5 I},
+      {-0.5 I, 0., 1. + 0.5 I, 7.}};
+hc = With[{c = rand01[{250, 250}] + I rand01[{250, 250}]},
+          (c + ConjugateTranspose[c])/2];
+
+esChk[es_] := {Round[10^6 Total[Re[First[es]]]],
+               Round[10^6 Total[Flatten[Abs[Last[es]]^2]]]};
+
+benchIf["Eigensystem Hermitian 250x250 complex", "Eigensystem", Eigensystem[hc];, 1];
+checkIf["Eigensystem Hermitian 250x250 complex", "Eigensystem", esChk[Eigensystem[c4]]];
+
+bench["Eigenvalues k=6 (largest) of symmetric 300x300", Eigenvalues[sy, 6];, 1];
+check["Eigenvalues k=6 (largest) of symmetric 300x300", Round[10^6 Total[Eigenvalues[sm, 3]]]];
+
+bench["Eigenvalues k=-6 (smallest) of symmetric 300x300", Eigenvalues[sy, -6];, 1];
+check["Eigenvalues k=-6 (smallest) of symmetric 300x300", Round[10^6 Total[Eigenvalues[sm, -3]]]];
+
+benchIf["Eigensystem k=6 of symmetric 300x300", "Eigensystem", Eigensystem[sy, 6];, 1];
+checkIf["Eigensystem k=6 of symmetric 300x300", "Eigensystem", esChk[Eigensystem[sm, 3]]];
+
+benchIf["SingularValueList k=6 of 300x300", "SingularValueList", SingularValueList[ge, 6];, 1];
+checkIf["SingularValueList k=6 of 300x300", "SingularValueList",
+  Round[10^6 Total[SingularValueList[sm, 3]]]];
