@@ -1966,6 +1966,20 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
         expr_free(r);
         return NULL;
     }
+    /* In the automatic cascade, an answer conditioned on more than the
+     * assumptions is a decline. Roach`Run returns a bare value when the PBM
+     * 2.24.1 conditions follow from the assumptions; a ConditionalExpression
+     * means they do not. Those conditions are sufficient, not necessary, so
+     * the condition can cut away part of the assumed region on which the
+     * integral is perfectly finite: x^n E^(-mu x)/(beta + x) came back
+     * conditioned on n < 1 under n >= 0, undefined at n = 4. The pinned
+     * Method -> "Roach" still returns it. */
+    if (budget > 0 && r->type == EXPR_FUNCTION &&
+        r->data.function.head->type == EXPR_SYMBOL &&
+        r->data.function.head->data.symbol.name == SYM_ConditionalExpression) {
+        expr_free(r);
+        return NULL;
+    }
     return r;
 }
 

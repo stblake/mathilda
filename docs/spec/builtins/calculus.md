@@ -2075,7 +2075,15 @@ monotonically down.
       Newton-Leibniz, every table stage and DiffUnderInt, and this one has a
       10-second budget. They therefore only see integrals the other stages
       all declined, and they do not run under `PrincipalValue -> True`.
-      Through the default `Integrate`, Roach 2008 goes from 7 to 25 of 30
+      In the cascade, a Roach answer conditioned on more than the assumptions
+      is a decline (v0.6215). The PBM 2.24.1 conditions are only sufficient,
+      so such a condition can exclude part of the assumed region; the pinned
+      method still returns the `ConditionalExpression`.
+    - Every answer is checked numerically (v0.6215) at a generic point of
+      the assumptions: never an integer or half-integer, except that
+      integer-assumed variables get generic integers. An answer that is not
+      numeric at that point is rejected.
+    - Through the default `Integrate`, Roach 2008 goes from 7 to 25 of 30
       integrals.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.

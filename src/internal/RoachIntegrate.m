@@ -58,6 +58,12 @@ Roach`mk[C_, an_, ap_, bm_, bq_, arg_, x_] := With[{cq = Roach`CQ[arg, x]},
 
 (* Roach`Ind0[t] is inert and stands for UnitStep[1 - t] *)
 
+(* True when t == x^q with q > 0: then UnitStep[1 - t] == UnitStep[1 - x] on
+   x > 0, so a G-form carrying theta(1 - t) may stand for Roach`Ind0[x]. With
+   a coefficient c != 1 it would be theta(1 - c x^q), a different interval. *)
+Roach`unitQ[t_, x_] := With[{cq = Roach`CQ[t, x]},
+  cq =!= $Failed && cq[[1]] === 1 && TrueQ[cq[[2]] > 0]]
+
 (* ---------------------------------------------------------------- *)
 (* Function -> G table (PBM vol. 3 sec. 8.4)                         *)
 (* Returns a list of G terms whose sum is the factor, or $Failed.    *)
@@ -70,12 +76,12 @@ Roach`GForm1[Power[b_ + t_, ma_], x_] /; FreeQ[b, x] && FreeQ[ma, x] && !FreeQ[t
     Roach`CQ[t, x] =!= $Failed && !MatchQ[ma, _Integer?Positive] :=
   With[{a = -ma}, Roach`mk[b^(-a)/Gamma[a], {1 - a}, {}, {0}, {}, t/b, x]]
 (* (1 - t)^(a-1) on 0 < t < 1, with the interval indicator *)
-Roach`GForm1[Power[1 - t_, am1_] Roach`Ind0[x_], x_] /; FreeQ[am1, x] && Roach`CQ[t, x] =!= $Failed :=
+Roach`GForm1[Power[1 - t_, am1_] Roach`Ind0[x_], x_] /; FreeQ[am1, x] && Roach`unitQ[t, x] :=
   With[{a = am1 + 1}, Roach`mk[Gamma[a], {}, {a}, {0}, {}, t, x]]
 Roach`GForm1[Roach`Ind0[x_], x_] := Roach`mk[1, {}, {1}, {0}, {}, x, x]
-Roach`GForm1[Power[Log[t_], n_Integer?Positive] Roach`Ind0[x_], x_] /; Roach`CQ[t, x] =!= $Failed :=
+Roach`GForm1[Power[Log[t_], n_Integer?Positive] Roach`Ind0[x_], x_] /; Roach`unitQ[t, x] :=
   Roach`mk[(-1)^n n!, {}, ConstantArray[1, n + 1], ConstantArray[0, n + 1], {}, t, x]
-Roach`GForm1[Log[t_] Roach`Ind0[x_], x_] /; Roach`CQ[t, x] =!= $Failed :=
+Roach`GForm1[Log[t_] Roach`Ind0[x_], x_] /; Roach`unitQ[t, x] :=
   Roach`mk[-1, {}, {1, 1}, {0, 0}, {}, t, x]
 Roach`GForm1[Log[1 + t_], x_] /; Roach`CQ[t, x] =!= $Failed :=
   Roach`mk[1, {1, 1}, {}, {1}, {0}, t, x]
@@ -508,6 +514,12 @@ Roach`ibp[f_, x_, a_, b_, assum_] := Module[{u, v, du, bt, r},
   r = Roach`definite[du, x, a, b, assum];
   If[r === $Failed, $Failed, {bt - r[[1]], r[[2]]}]]
 
+(* Log[c y^q] -> Log[c] + q Log[y] for y > 0 and c provably positive (the
+   rescale x -> b y of a finite interval produces Log[b y]) *)
+Roach`logSplit[e_, y_, assum_] := e /. Log[u_] :> With[{cq = Roach`CQ[u, y]},
+    Log[cq[[1]]] + cq[[2]] Log[y] /; cq =!= $Failed && cq[[1]] =!= 1 &&
+      TrueQ[Quiet[Simplify[cq[[1]] > 0, assum]]]]
+
 (* any interval -> {value, condition} or $Failed *)
 Roach`definite[f_, x_, a_, b_, assum_] := Module[{y, r, r1, r2},
   Which[
@@ -529,7 +541,8 @@ Roach`definite[f_, x_, a_, b_, assum_] := Module[{y, r, r1, r2},
      Roach`definite[f /. x -> x + a, x, 0, Infinity, assum],
    True,
      (* finite: x -> a + (b - a) y on 0 < y < 1 *)
-     r = Roach`int0oo[Expand[(b - a) (f /. x -> a + (b - a) y)] Roach`Ind0[y], y,
+     r = Roach`int0oo[Expand[Roach`logSplit[(b - a) (f /. x -> a + (b - a) y), y,
+                                             And[assum, 0 < y]]] Roach`Ind0[y], y,
                       And[assum, 0 < y < 1]];
      If[r === $Failed && a === 0, r = Roach`tanSubst[f, x, b, assum]];
      If[r === $Failed, r = Roach`ibp[f, x, a, b, assum]];
@@ -546,20 +559,40 @@ Roach`finish[v_, assum_] := Module[{r = FunctionExpand[v]},
    can itself be wrong on an oscillatory integrand, so the answer passes when
    it agrees with EITHER of two independent evaluations: the default
    NIntegrate, or Gauss-Kronrod over a split of the interval. Each is capped
-   in time. When no point is found, or neither evaluation gives a number,
-   the check is inconclusive and does not reject. *)
+   in time. The point is generic (Roach`genericPt), never a special value
+   such as 1. An answer that is not numeric at the point is rejected. When
+   no point is found, or neither quadrature gives a number, the check is
+   inconclusive and does not reject. *)
 Roach`splitPts[a_, b_] := Which[
   a === -Infinity || b === -Infinity, {a, b},
   b === Infinity, Join[{a}, a + {1, 4, 16, 64, 256}, {Infinity}],
   True, Subdivide[a, b, 4]]
+(* a point satisfying the assumptions, away from the special values 0, 1, 2
+   at which a lost factor such as Log[z] or z^s would go unseen: generic
+   rationals first, FindInstance only when none of them satisfies assum *)
+Roach`genericPt[vars_, assum_] := Module[{cands, pt, isInt, gen},
+  (* a variable assumed integer gets a generic integer (3, 4, ...), not 1 *)
+  isInt = (!FreeQ[assum, Element[#, Integers]]) & /@ vars;
+  (* real variables: i + k + 1 + 2/7 + 1/(11 i + 3) (fractional part in (0.28, 0.36]), never an integer or a
+     half-integer, distinct per variable; then the negatives; then values in (0, 1) *)
+  gen[i_, k_] := i + k + 1 + 2/7 + 1/(11 i + 3);
+  cands = Table[Thread[vars -> MapThread[If[#2, 2 + #1 + k, gen[#1, k]] &,
+                                         {Range[Length[vars]], isInt}]], {k, 0, 3}];
+  cands = Join[cands,
+    {Thread[vars -> MapThread[If[#2, -2 - #1, -gen[#1, 0]] &, {Range[Length[vars]], isInt}]],
+     Thread[vars -> MapThread[If[#2, 2 + #1, (3 + 2 #1)/(11 + 3 #1)] &, {Range[Length[vars]], isInt}]]}];
+  Do[If[TrueQ[Quiet[Simplify[assum /. c]]], Return[c, Module]], {c, cands}];
+  pt = Quiet[FindInstance[assum, vars, Reals]];
+  If[MatchQ[pt, {{__Rule}, ___}], First[pt], $Failed]]
 Roach`agrees[vv_, ni_] := NumericQ[ni] && Abs[vv - ni] < 10^-8 (1 + Abs[ni])
 Roach`verify[f_, x_, a_, b_, val_, assum_] := Module[{vars, pt, vv, n1, n2, fa, aa, bb},
   vars = Complement[Cases[{f, val, a, b}, _Symbol?(!ValueQ[#] && Context[#] === "Global`" &), Infinity], {x}];
-  pt = If[vars === {}, {}, Quiet[FindInstance[assum, vars, Reals]]];
-  If[pt === {} && vars =!= {}, Return[True]];
-  pt = If[vars === {}, {}, First[pt]];
+  pt = If[vars === {}, {}, Roach`genericPt[vars, assum]];
+  If[pt === $Failed, Return[True]];
   vv = Quiet[N[val /. pt]];
-  If[!NumericQ[vv], Return[True]];
+  (* an answer with no value at a point the assumptions allow (a removable
+     Gamma pole at integer n, a pFq N cannot continue) is not usable there *)
+  If[!NumericQ[vv], Return[False]];
   fa = f /. pt; aa = a /. pt; bb = b /. pt;
   (* Block[{x}, ...]: the variable is restored even when a time cap aborts
      the quadrature mid-sample *)
@@ -569,7 +602,7 @@ Roach`verify[f_, x_, a_, b_, val_, assum_] := Module[{vars, pt, vv, n1, n2, fa, 
          With[{p = Roach`splitPts[aa, bb]},
            Total[Table[NIntegrate[fa, {x, p[[i]], p[[i + 1]]}], {i, Length[p] - 1}]]], 5, $Failed]]];
   If[Roach`agrees[vv, n2], Return[True]];
-  (* both inconclusive -> do not reject; any numeric disagreement -> reject *)
+  (* both quadratures inconclusive -> do not reject; any numeric disagreement -> reject *)
   !(NumericQ[n1] || NumericQ[n2])]
 
 Roach`Run[f_, x_, a_, b_, assum_] := Module[{r, v, c},

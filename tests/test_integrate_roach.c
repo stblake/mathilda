@@ -88,6 +88,17 @@ static void test_forms(void) {
                    " Gamma[b] Gamma[c - b]/(a^b Gamma[c])", "True", 0);
 }
 
+/* a symbolic finite upper limit z: the rescale x -> z y gives Log[z y], and a
+ * G-form carrying theta(1 - z y) must not stand in for theta(1 - y) -- it
+ * returned the value at z = 1 (Mathar M6460), which the numeric check passed
+ * because FindInstance chose z -> 1 */
+static void test_finite_symbolic_limit(void) {
+    check_roach("Log[t]/(1 + a^2 t^2)", "{t, 0, z}", "a > 0 && z > 0", "{a -> 7/3, z -> 7/4}");
+    check_roach("Log[t]/(1 + a^2 t^2)", "{t, 0, z}", "a > 0 && z > 0", "{a -> 7/4, z -> 5/4}");
+    assert_eval_eq("FreeQ[Integrate[Log[t]/(1 + a^2 t^2), {t, 0, z},"
+                   " Assumptions -> a > 0 && z > 0, Method -> \"Roach\"], z]", "False", 0);
+}
+
 /* the stage declines (stays unevaluated) rather than guessing */
 static void test_declines(void) {
     assert_eval_eq("Head[Integrate[Sin[x^x], {x, 0, 1}, Method -> \"Roach\"]]", "Integrate", 0);
@@ -113,6 +124,7 @@ int main(void) {
     TEST(test_paper);
     TEST(test_forms);
     TEST(test_exponential);
+    TEST(test_finite_symbolic_limit);
     TEST(test_declines);
     TEST(test_hygiene);
     printf("All Integrate Roach tests passed!\n");
