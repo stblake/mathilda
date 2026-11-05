@@ -389,6 +389,17 @@ void dorghr_(const int* n, const int* ilo, const int* ihi, double* a,
              const int* lda, const double* tau, double* work, const int* lwork, int* info);
 void zunghr_(const int* n, const int* ilo, const int* ihi, double* a,
              const int* lda, const double* tau, double* work, const int* lwork, int* info);
+/* zlahqr -- the unblocked double-shift QR of a Hessenberg matrix (Schur form
+ * and vectors); ztrevc -- eigenvectors of a triangular matrix. The fallback
+ * of mat_lapack_zgees / zgeev when the blocked LAPACK path fails its
+ * self-check (lapack.c, zlapack_verify). */
+void zlahqr_(const int* wantt, const int* wantz, const int* n, const int* ilo,
+             const int* ihi, double* h, const int* ldh, double* w, const int* iloz,
+             const int* ihiz, double* z, const int* ldz, int* info);
+void ztrevc_(const char* side, const char* howmny, const int* select, const int* n,
+             double* t, const int* ldt, double* vl, const int* ldvl, double* vr,
+             const int* ldvr, const int* mm, int* m, double* work, double* rwork,
+             int* info, size_t side_len, size_t howmny_len);
 
 #endif /* !MATHILDA_USE_ACCELERATE */
 

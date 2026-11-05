@@ -23,7 +23,9 @@
 
 #include "lapack.h"
 
+#include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 int mathilda_lapack_probe(void)
 {
@@ -538,6 +540,117 @@ int mat_lapack_dgeev(int n, double* A, int lda,
     return info;
 }
 
+
+/* ---------------------------------------------------------------------- *
+ *  Complex Schur / eigenvector self-check and fallback.                   *
+ *                                                                         *
+ *  Reference LAPACK 3.12.1 (and the OpenBLAS builds that bundle it) has a *
+ *  regression in the complex blocked multishift QR (Reference-LAPACK      *
+ *  issue #1160, introduced by PR #1020): for n >= 75 -- the zlaqr0 path   *
+ *  -- zgees returns a unitary Q and a triangular T with Q T Q^H != A, and *
+ *  zgeev wrong eigenvectors (residual ~0.1 on a random 91 x 91), while    *
+ *  the eigenvalues stay right. Found on the Ubuntu CI runner by a         *
+ *  standalone zgees program. Every call therefore checks its answer with  *
+ *  one random vector, O(n^2): A (Q x) against Q (T x), or A (V x) against *
+ *  V (diag(w) x). A failing answer is recomputed by the unblocked chain   *
+ *  zgehrd + zunghr + zlahqr (+ ztrevc) -- the path LAPACK itself takes    *
+ *  below n = 75 -- on non-Accelerate builds (Accelerate's LAPACK predates *
+ *  the regression).                                                       *
+ * ---------------------------------------------------------------------- */
+
+/* y = M x for a column-major complex n x n M (interleaved). */
+static void zmv(int n, const double* M, const double* x, double* y)
+{
+    for (int i = 0; i < n; i++) { y[2 * i] = 0.0; y[2 * i + 1] = 0.0; }
+    for (int j = 0; j < n; j++) {
+        double xr = x[2 * j], xi = x[2 * j + 1];
+        const double* c = M + 2 * (size_t)j * (size_t)n;
+        for (int i = 0; i < n; i++) {
+            y[2 * i]     += c[2 * i] * xr - c[2 * i + 1] * xi;
+            y[2 * i + 1] += c[2 * i] * xi + c[2 * i + 1] * xr;
+        }
+    }
+}
+
+/* Does A0 X == X D hold, with D the triangular T (D_diag false) or diag(w)
+ * (D_diag true)? Tested on one fixed pseudo-random x, relative to ||A0||. */
+static bool zlapack_verify(int n, const double* A0, const double* X, const double* T,
+                           const double* w, bool D_diag)
+{
+    if (n <= 0) return true;
+    size_t vn = 2 * (size_t)n;
+    double* x  = (double*)malloc(sizeof(double) * vn);
+    double* u  = (double*)malloc(sizeof(double) * vn);
+    double* y1 = (double*)malloc(sizeof(double) * vn);
+    double* y2 = (double*)malloc(sizeof(double) * vn);
+    if (!x || !u || !y1 || !y2) { free(x); free(u); free(y1); free(y2); return true; }
+    unsigned s = 2463534242u;
+    double xn = 0.0;
+    for (size_t k = 0; k < vn; k++) {
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+        x[k] = (double)(s % 20001u) / 10000.0 - 1.0;
+        xn += x[k] * x[k];
+    }
+    xn = sqrt(xn);
+    /* y1 = A0 (X x) */
+    zmv(n, X, x, u);
+    zmv(n, A0, u, y1);
+    /* y2 = X (D x) */
+    if (D_diag) {
+        for (int i = 0; i < n; i++) {
+            double wr = w[2 * i], wi = w[2 * i + 1], xr = x[2 * i], xi = x[2 * i + 1];
+            u[2 * i] = wr * xr - wi * xi;
+            u[2 * i + 1] = wr * xi + wi * xr;
+        }
+    } else {
+        /* T is upper triangular */
+        for (int i = 0; i < n; i++) {
+            double sr = 0.0, si = 0.0;
+            for (int j = i; j < n; j++) {
+                const double* t = T + 2 * ((size_t)j * (size_t)n + (size_t)i);
+                sr += t[0] * x[2 * j] - t[1] * x[2 * j + 1];
+                si += t[0] * x[2 * j + 1] + t[1] * x[2 * j];
+            }
+            u[2 * i] = sr;
+            u[2 * i + 1] = si;
+        }
+    }
+    zmv(n, X, u, y2);
+    double an = 0.0, d = 0.0;
+    for (size_t k = 0; k < 2 * (size_t)n * (size_t)n; k++) { double a = fabs(A0[k]); if (a > an) an = a; }
+    for (size_t k = 0; k < vn; k++) { double e = fabs(y1[k] - y2[k]); if (e > d) d = e; }
+    free(x); free(u); free(y1); free(y2);
+    /* a correct factorisation is ~ n eps ||A|| ||x||; a broken one O(||A||) */
+    return d <= 1e-8 * (an > 0.0 ? an : 1.0) * (xn > 0.0 ? xn : 1.0) * (double)n;
+}
+
+#if !defined(MATHILDA_USE_ACCELERATE)
+/* Complex Schur form of A0 by the unblocked chain: A <- T, VS <- Q, w the
+ * eigenvalues. 0 on success. */
+static int zschur_unblocked(int n, const double* A0, double* A, double* w, double* VS)
+{
+    size_t nn = 2 * (size_t)n * (size_t)n;
+    memcpy(A, A0, sizeof(double) * nn);
+    double* tau = (double*)malloc(sizeof(double) * 2 * (size_t)(n > 1 ? n : 1));
+    if (!tau) return -999;
+    int ilo = 1, ihi = n, info;
+    info = mat_lapack_zgehrd(n, ilo, ihi, A, n, tau);
+    if (info != 0) { free(tau); return info; }
+    memcpy(VS, A, sizeof(double) * nn);
+    info = mat_lapack_zunghr(n, ilo, ihi, VS, n, tau);
+    free(tau);
+    if (info != 0) return info;
+    for (int j = 0; j < n; j++)
+        for (int i = j + 2; i < n; i++) {
+            A[2 * ((size_t)j * (size_t)n + (size_t)i)] = 0.0;
+            A[2 * ((size_t)j * (size_t)n + (size_t)i) + 1] = 0.0;
+        }
+    int wantt = 1, wantz = 1;
+    zlahqr_(&wantt, &wantz, &n, &ilo, &ihi, A, &n, w, &ilo, &ihi, VS, &n, &info);
+    return info;
+}
+#endif
+
 int mat_lapack_zgeev(int n, double* A, int lda, double* w, double* VR, int ldvr)
 {
     int info = 0, lwork = -1;
@@ -553,11 +666,54 @@ int mat_lapack_zgeev(int n, double* A, int lda, double* w, double* VR, int ldvr)
     lwork = lapack_lwork(query[0], 2 * n > 1 ? 2 * n : 1);
     double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
     if (!work) { free(rwork); return -999; }
+    double* A0 = (lda == n && ldvr == n) ? (double*)malloc(sizeof(double) * 2 * (size_t)n * (size_t)n) : NULL;
+    if (A0) memcpy(A0, A, sizeof(double) * 2 * (size_t)n * (size_t)n);
     zgeev_(jvl, jvr, &n, lapack_zptr(A), &lda, lapack_zptr(w),
            lapack_zptr(vl), &ldvl, lapack_zptr(VR), &ldvr,
            lapack_zptr(work), &lwork, rwork, &info);
     free(work);
     free(rwork);
+    if (info == 0 && A0 && !zlapack_verify(n, A0, VR, NULL, w, true)) {
+#if !defined(MATHILDA_USE_ACCELERATE)
+        /* the unblocked Schur form, then the eigenvectors of T back-
+         * transformed by Q (ztrevc, HOWMNY = 'B'), normalised as zgeev does:
+         * unit 2-norm, largest component real */
+        info = zschur_unblocked(n, A0, A, w, VR);
+        if (info == 0) {
+            double* wk = (double*)malloc(sizeof(double) * 4 * (size_t)(n > 1 ? n : 1));
+            double* rw = (double*)malloc(sizeof(double) * (size_t)(n > 1 ? n : 1));
+            int mm = n, m = 0, one = 1;
+            if (!wk || !rw) info = -999;
+            else ztrevc_("R", "B", NULL, &n, A, &n, NULL, &one, VR, &n, &mm, &m, wk, rw, &info, 1, 1);
+            free(wk);
+            free(rw);
+        }
+        if (info == 0)
+            for (int j = 0; j < n; j++) {
+                double* c = VR + 2 * (size_t)j * (size_t)n;
+                double nrm = 0.0, big = -1.0;
+                int at = 0;
+                for (int i = 0; i < n; i++) {
+                    double a = c[2 * i] * c[2 * i] + c[2 * i + 1] * c[2 * i + 1];
+                    nrm += a;
+                    if (a > big) { big = a; at = i; }
+                }
+                nrm = sqrt(nrm);
+                if (nrm == 0.0) continue;
+                double pr = c[2 * at] / sqrt(big), pi = -c[2 * at + 1] / sqrt(big);   /* conj phase */
+                for (int i = 0; i < n; i++) {
+                    double r = c[2 * i], im = c[2 * i + 1];
+                    c[2 * i] = (r * pr - im * pi) / nrm;
+                    c[2 * i + 1] = (r * pi + im * pr) / nrm;
+                }
+                c[2 * at + 1] = 0.0;
+            }
+        if (info == 0 && !zlapack_verify(n, A0, VR, NULL, w, true)) info = -1001;
+#else
+        info = -1001;
+#endif
+    }
+    free(A0);
     return info;
 }
 
@@ -943,10 +1099,21 @@ int mat_lapack_zgees(int n, double* A, int lda, double* w, double* VS, int ldvs)
     lwork = lapack_lwork(query[0], 2 * n > 1 ? 2 * n : 1);
     double* work = (double*)malloc((size_t)lwork * 2 * sizeof(double));
     if (!work) { free(rwork); return -999; }
+    double* A0 = (lda == n && ldvs == n) ? (double*)malloc(sizeof(double) * 2 * (size_t)n * (size_t)n) : NULL;
+    if (A0) memcpy(A0, A, sizeof(double) * 2 * (size_t)n * (size_t)n);
     zgees_(jvs, srt, 0, &n, lapack_zptr(A), &lda, &sdim, lapack_zptr(w),
            lapack_zptr(VS), &ldvs, lapack_zptr(work), &lwork, rwork, NULL, &info MTH_FSTRLEN2);
     free(work);
     free(rwork);
+    if (info == 0 && A0 && !zlapack_verify(n, A0, VS, A, w, false)) {
+#if !defined(MATHILDA_USE_ACCELERATE)
+        info = zschur_unblocked(n, A0, A, w, VS);
+        if (info == 0 && !zlapack_verify(n, A0, VS, A, w, false)) info = -1001;
+#else
+        info = -1001;
+#endif
+    }
+    free(A0);
     return info;
 }
 

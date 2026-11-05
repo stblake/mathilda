@@ -264,32 +264,12 @@ static void test_complex_perf(void) {
     chk("{{1, 2}, {3, 4}} . {1., I}", "{1.0 + 2.0*I, 3.0 + 4.0*I}");
     chk("{{1, 2}, {3, 4}} . {{1, 1/2}, {1, 1}}", "{{3, 5/2}, {7, 11/2}}");
     chk("{p1, p2} . {1., 2}", "1.0 p1 + 2 p2");
-    /* TEMPORARY Linux diagnostic (zgees vs zgemm) -- removed once located */
-    chk("SeedRandom[7]; c40 = RandomComplex[{-1 - I, 1 + I}, {40, 40}]; "
-        "dotb = Table[Sum[c40[[i, k]] c40[[k, j]], {k, 40}], {i, 40}, {j, 40}]; "
-        "Print[\"DIAG dot40 \", Max[Abs[Flatten[c40 . c40 - dotb]]], \" packed \", NDArrayQ[c40]]; "
-        "{q4, t4} = SchurDecomposition[c40]; "
-        "Print[\"DIAG schur40 unitary \", Max[Abs[Flatten[q4 . ConjugateTranspose[q4] - IdentityMatrix[40]]]], "
-        "\" lowerT \", Max[Abs[Flatten[LowerTriangularize[t4, -1]]]], "
-        "\" resid-boxed \", Max[Abs[Flatten[Table[Sum[q4[[i, k]] t4[[k, l]] Conjugate[q4[[j, l]]], {k, 40}, {l, 40}], {i, 3}, {j, 3}] - c40[[1 ;; 3, 1 ;; 3]]]]], "
-        "\" resid-dot \", Max[Abs[Flatten[q4 . t4 . ConjugateTranspose[q4] - c40]]]]; "
-        "c12 = c40[[1 ;; 12, 1 ;; 12]]; {q2, t2} = SchurDecomposition[c12]; "
-        "Print[\"DIAG schur12 resid \", Max[Abs[Flatten[q2 . t2 . ConjugateTranspose[q2] - c12]]], \" heads \", Union[Head /@ Flatten[q2]]]; "
-        "Print[\"DIAG real91 \", With[{r = RandomReal[1, {91, 91}]}, {q, t} = SchurDecomposition[r]; Max[Abs[Flatten[q . t . Transpose[q] - r]]]]]; Null", "Null");
-    chk("SeedRandom[8]; Do[cn = RandomComplex[{-1 - I, 1 + I}, {n, n}]; "
-        "dotb = Table[Sum[cn[[i, k]] cn[[k, j]], {k, n}], {i, 4}, {j, 4}]; "
-        "{qn, tn} = SchurDecomposition[cn]; "
-        "Print[\"DIAGN \", n, \" dot4x4 \", Max[Abs[Flatten[(cn . cn)[[1 ;; 4, 1 ;; 4]] - dotb]]], "
-        "\" unitary \", Max[Abs[Flatten[qn . ConjugateTranspose[qn] - IdentityMatrix[n]]]], "
-        "\" lowerT \", Max[Abs[Flatten[LowerTriangularize[tn, -1]]]], "
-        "\" resid-boxed3 \", Max[Abs[Flatten[Table[Sum[qn[[i, k]] tn[[k, l]] Conjugate[qn[[j, l]]], {k, n}, {l, n}], {i, 2}, {j, 2}] - cn[[1 ;; 2, 1 ;; 2]]]]], "
-        "\" resid-dot \", Max[Abs[Flatten[qn . tn . ConjugateTranspose[qn] - cn]]]], {n, {64, 91, 128}}]; Null", "Null");
-    chk("SeedRandom[9]; c9 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {q9, t9} = SchurDecomposition[c9]; "
-        "{p9, h9} = HessenbergDecomposition[c9]; {ev, evec} = Eigensystem[c9]; "
-        "Print[\"DIAGS trace \", Abs[Tr[t9] - Tr[c9]], \" hess \", Max[Abs[Flatten[p9 . h9 . ConjugateTranspose[p9] - c9]]], "
-        "\" eigres \", Max[Table[Norm[c9 . evec[[k]] - ev[[k]] evec[[k]]], {k, 91}]], "
-        "\" evsum \", Abs[Total[ev] - Tr[c9]], \" diagvsev \", Max[Table[Min[Abs[ev - t9[[k, k]]]], {k, 91}]], "
-        "\" qhq \", Max[Abs[Flatten[ConjugateTranspose[q9] . c9 . q9 - t9]]]]; Null", "Null");
+    /* LAPACK 3.12.1's complex blocked QR regression (Reference-LAPACK #1160):
+     * zgees / zgeev at n >= 75 gave Q T Q^H != A and wrong eigenvectors on
+     * the Ubuntu runner; the wrappers self-check and recompute unblocked */
+    chk_true("SeedRandom[9]; c9 = RandomComplex[{-1 - I, 1 + I}, {128, 128}]; {ev, evec} = Eigensystem[c9]; "
+             "Max[Table[Norm[c9 . evec[[k]] - ev[[k]] evec[[k]]], {k, 128}]] < 10^-10 && "
+             "Max[Abs[Norm /@ evec - 1]] < 10^-12");
     /* the complex factors and their invariants, fast */
     chk_true("c91 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {tt, {q, t}} = AbsoluteTiming[SchurDecomposition[c91]]; "
              "{t2, rr} = AbsoluteTiming[q . t . ConjugateTranspose[q]]; "
