@@ -62,7 +62,6 @@
 #include "message.h"
 #include "print.h"
 #include "common.h"
-#include "ndarray.h"
 #include <float.h>
 #include <math.h>
 #include <stdlib.h>
@@ -1140,10 +1139,17 @@ static Expr* svd_dense_sparse_middle(const Expr* call) {
     Expr* r = evaluate(svd);
     expr_free(svd);
     if (r && r->type == EXPR_NDARRAY) {
-        /* a square answer {u, w, v} packs into one n x n x 3 buffer */
-        Expr* l = ndarray_to_nested_list(r);
+        /* a square answer {u, w, v} packs into one 3 x n x n buffer:
+         * split it into its three (packed) factors, r[[1]], r[[2]], r[[3]] */
+        Expr* parts[3];
+        for (int i = 0; i < 3; i++) {
+            Expr* pa[2] = { expr_copy(r), expr_new_integer(i + 1) };
+            Expr* pc = expr_new_function(expr_new_symbol("Part"), pa, 2);
+            parts[i] = evaluate(pc);
+            expr_free(pc);
+        }
         expr_free(r);
-        r = l;
+        r = expr_new_function(expr_new_symbol(SYM_List), parts, 3);
     }
     if (!r || !is_head(r, SYM_List) || r->data.function.arg_count != 3) { expr_free(r); return NULL; }
     Expr* mid = r->data.function.args[1];
