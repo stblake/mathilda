@@ -1777,19 +1777,30 @@ static Expr* my_number_gcd(Expr* a, Expr* b) {
 /* Degree of `e` as a polynomial in `var`. Walks the expression tree   */
 /* once; returns 0 for constants, max-of-summands for Plus, sum-of-    */
 /* factors for Times, and the integer exponent for `var^k`.            */
-/* PRECONDITION: `e` must be EXPANDED. A Power[base,k] counts toward    */
-/* the degree only when base IS var, so an unexpanded (a + b var)^k     */
-/* reports degree 0 — pass expr_expand(e), as every caller must.       */
+/* Exact on EXPANDED input. On unexpanded input a Power[p, k] with a    */
+/* nonnegative integer k counts k * deg(p), so the answer is an upper   */
+/* bound (exact unless a Plus cancels its leading terms). It used to    */
+/* count such a power as degree 0, and an unexpanded cubic              */
+/* (81 + (z-13)^2)(z-1) then reported degree 1. Integrate`LinearRadicals*/
+/* took it for a linear radicand and returned a wrong pseudo-elliptic   */
+/* answer (v0.6190). Callers that need the exact degree must still pass */
+/* expr_expand(e).                                                      */
 int get_degree_poly(Expr* e, Expr* var) {
     if (!e) return 0;
     if (expr_eq(e, var)) return 1;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol.name;
         if (head == SYM_Power && e->data.function.arg_count == 2) {
+            Expr* k = e->data.function.args[1];
             if (expr_eq(e->data.function.args[0], var)) {
-                if (e->data.function.args[1]->type == EXPR_INTEGER) {
-                    return (int)e->data.function.args[1]->data.integer;
+                if (k->type == EXPR_INTEGER) {
+                    return (int)k->data.integer;
                 }
+            } else if (k->type == EXPR_INTEGER && k->data.integer > 0 &&
+                       k->data.integer <= 1000000) {
+                int64_t d = (int64_t)k->data.integer *
+                            get_degree_poly(e->data.function.args[0], var);
+                return d > INT32_MAX ? INT32_MAX : (int)d;
             }
         } else if (head == SYM_Plus) {
             int max_deg = 0;

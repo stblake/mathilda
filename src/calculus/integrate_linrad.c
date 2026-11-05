@@ -48,6 +48,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "poly.h"
+#include "expand.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -156,7 +157,12 @@ static void lr_scan(Expr* e, Expr* x, Expr** first_base,
             if (!expr_free_of(base, x)) {
                 /* A radical whose argument depends on x: it must be linear. */
                 Expr* vars[1] = { x };
-                if (is_polynomial(base, vars, 1) && get_degree_poly(base, x) == 1) {
+                /* get_degree_poly is exact only on expanded input; an
+                 * unexpanded cubic (81 + (z-13)^2)(z-1) must not pass. */
+                Expr* eb = is_polynomial(base, vars, 1) ? expr_expand(base) : NULL;
+                int deg = eb ? get_degree_poly(eb, x) : -1;
+                if (eb) expr_free(eb);
+                if (deg == 1) {
                     int64_t qa = q < 0 ? -q : q;
                     if (*found == 0) {
                         *first_base = expr_copy(base);

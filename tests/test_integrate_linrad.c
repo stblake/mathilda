@@ -85,6 +85,30 @@ static void test_strict_no_match(void) {
     assert_head_unevaluated(
         "Integrate`LinearRadicals[5, x]",
         "Integrate`LinearRadicals");
+    /* Unexpanded product radicand (cubic): the degree must come from the
+     * expanded form. Until v0.6190 get_degree_poly read degree 1 here, the
+     * radicand was taken for linear, and the answer was a wrong elementary
+     * ArcTan (Roach 2008, integral 25). */
+    assert_head_unevaluated(
+        "Integrate`LinearRadicals[1/((z + 14) Sqrt[(z - 1)((z - 13)^2 + 81)]), z]",
+        "Integrate`LinearRadicals");
+    assert_head_unevaluated(
+        "Integrate`LinearRadicals[1/((18 - z) Sqrt[(1 - z)((16 - z)^2 + 64)]), z]",
+        "Integrate`LinearRadicals");
+}
+
+/* The default definite cascade on Roach 2008 integrals 25 and 26 must not
+ * return the wrong pseudo-elliptic value (0.042180 and 0.034659). Either it
+ * stays unevaluated or it agrees with NIntegrate. */
+static void test_no_wrong_elliptic_value(void) {
+    assert_eval_eq(
+        "With[{r = Integrate[1/((z + 14) Sqrt[(z - 1)((z - 13)^2 + 81)]),"
+        " {z, 2, Infinity}]}, If[FreeQ[r, Integrate],"
+        " Abs[N[r, 20] - 0.0355229827878928709689] < 10^-12, True]]", "True", 0);
+    assert_eval_eq(
+        "With[{r = Integrate[1/((18 - z) Sqrt[(1 - z)((16 - z)^2 + 64)]),"
+        " {z, -Infinity, 0}]}, If[FreeQ[r, Integrate],"
+        " Abs[N[r, 20] - 0.0160745346391821514209] < 10^-12, True]]", "True", 0);
 }
 
 void test_integrate_linrad(void) {
@@ -94,6 +118,7 @@ void test_integrate_linrad(void) {
     TEST(test_automatic_cascade);
     TEST(test_method_plumbing);
     TEST(test_strict_no_match);
+    TEST(test_no_wrong_elliptic_value);
 
     printf("All Integrate LinearRadicals tests passed!\n");
 }

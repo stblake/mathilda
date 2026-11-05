@@ -286,6 +286,17 @@ static void test_signed_pole_coefficient(void) {
     assert_eval_eq("Limit[c/x, x -> 0]", "ComplexInfinity", 0);
 }
 
+/* An Assumptions option whose evaluated form differs from the option as
+ * written (here a repeated conjunct) used to make the scoped Limit re-scope
+ * itself until $RecursionLimit. That hung DiffUnderInt on
+ * Integrate[(a^2-x^2)^(n-1/2), {x,0,a}] (Roach 2008 integral 3). It must
+ * return without a message. */
+static void test_scoped_option_no_rescope_loop(void) {
+    assert_eval_eq("Check[Head[Limit[x^n, n -> Infinity,"
+                   " Assumptions -> Abs[x] < 1 && Abs[x] < 1]] =!= $Failed, $Failed]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -303,6 +314,7 @@ int main(void) {
     TEST(test_assumed_limit_stress);
     TEST(test_assumed_limit_stress2);
     TEST(test_assumed_limit_guards);
+    TEST(test_scoped_option_no_rescope_loop);
 
     printf("All limit_assumptions tests passed!\n");
     return 0;

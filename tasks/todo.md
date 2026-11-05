@@ -1,3 +1,18 @@
+# Roach algorithms: Integrate[..., Method -> "Roach"] (from 2026-11-05, v0.6189)
+
+Plan: ~/.claude/plans/pasted-content-id-62fd-solving-integral-lexical-sparrow.md
+Papers: Roach ISSAC'96 "Hypergeometric Function Representations", ISSAC'97 "Meijer G Function Representations", Quantum 2008 (all in ~/Documents/Research/post_phd_research/algebraic_integration/research_papers_and_books/).
+Baseline v0.6189: paper integrals 7/30 correct, 2 WRONG (#25, #26); pFq values 2/11; '96 gallery 0/13; '97 gallery 0/13 closed.
+
+- [x] Phase 0 (v0.6197): WRONG #25/#26 from LinearRadicals (get_degree_poly on unexpanded radicand); #3 abort = Limit`Scoped re-scoping recursion. Fixed + tests; ctest 600/602 (meminfo, parallelmixedtower: load flakes, pass alone)
+- [ ] Phase 1: pFq engine core (src/hypergeo_rep: types, shift, contig, plan, formula, seed certs, Deriv formula); FunctionExpand[HypergeometricPFQ]
+- [ ] Phase 2: StruveL, AngerJ, WeberE, Kelvin ber/bei/ker/kei (all surfaces)
+- [ ] Phase 3: full pFq Lookup, Lerch/PFD, PFD duplication, unit-argument summations
+- [ ] Phase 4: MeijerG Formula (C/D shifts, G contiguity, G procedures, Slater, log case)
+- [ ] Phase 5: MeijerGReduce + integrate_roach.c (One G, Two G, PV, [0,1] Mellin), METHOD_ROACH
+- [ ] Phase 6: elliptic reduction (Carlson tables) integrate_elliptic.c
+- [ ] Phase 7: default cascade, RoachCorpus.m, corpora diff, benchmark
+
 # FeynCalc round 14: last failures + speed (from 2026-11-04, v0.6166)
 
 Status v0.6176: per-dir 13391/13412, 2 SKIP as UNSUPPORTED (parallel subkernels; user decision), 19 left. Fixed this round: Replace whole-expression (v0.6174), #126 quotient follow-up (v0.6175), numloop seed + Collect head (v0.6176: TID-ID50, Solve3-ID2).

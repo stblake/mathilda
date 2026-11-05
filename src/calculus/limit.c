@@ -5415,8 +5415,17 @@ static Expr* builtin_limit_scoped(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* call = res->data.function.args[0];
     if (!head_is(call, SYM_Limit)) return NULL;
+    /* The enclosing Block has already scoped $Assumptions, so go straight to
+     * the implementation. Re-entering builtin_limit re-ran the "already
+     * scoped?" test, cur === opt. Set[$Assumptions, opt] evaluates opt, and
+     * whenever that changed its form the test failed. The call then
+     * re-scoped itself without bound: unbounded Limit recursion under
+     * DiffUnderInt -> Simplify -> NewtonLeibniz PV, on
+     * Integrate[(a^2-x^2)^(n-1/2), {x,0,a}, Assumptions -> a>0 && n>0]. */
     Expr* c = expr_copy(call);
-    Expr* r = builtin_limit(c);
+    arith_warnings_mute_push();
+    Expr* r = builtin_limit_impl(c);
+    arith_warnings_mute_pop();
     expr_free(c);
     return r;
 }
