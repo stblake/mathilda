@@ -591,4 +591,5 @@ void sparse_la_init(void) {
     symtab_set_sparse_native("Inverse", (const void*)native_inverse);
     sparse_la_func_init();
     sparse_la_pred_init();
+    sparse_la_eigen_init();
 }

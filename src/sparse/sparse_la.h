@@ -159,4 +159,16 @@ Expr* spla_exact_rank(const Expr* A);
 Expr* spla_linearsolve_call(const Expr* call, const Expr* A, const Expr* B,
                             const Expr* const* opts, size_t nopts);
 
+/* Registration of the eigen / singular-value native heads (sparse_la_eigen.c),
+ * called from sparse_la_init. */
+void sparse_la_eigen_init(void);
+
+/* The machine Method -> "Arnoldi" of the dense Eigenvalues (want 1),
+ * Eigenvectors (2) and Eigensystem (3) with a count: the restarted Krylov
+ * driver of sparse_la_eigen.c on the CSR form of the dense matrix m (and of
+ * the pencil's b when a is non-NULL). NULL to decline -- no count, a count
+ * of n - 1 or more, an input that is not a machine matrix, a sub-option
+ * message -- and the caller's Direct path answers. */
+Expr* spla_eigen_dense_arnoldi(Expr* m, Expr* a, int64_t n, int want, Expr* k_spec, Expr* method_value);
+
 #endif /* MATHILDA_SPARSE_LA_H */
