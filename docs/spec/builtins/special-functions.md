@@ -3855,6 +3855,34 @@ lookup certificates).
   Each `Integrate` probe has a 3-second deadline. A generated certificate,
   and a Lerch result, is checked against the series at w = 1/7 and −1/5
   (parameters at sample rationals) before it is used.
+- **PFD duplication formula** (Roach '96 §19, generated certificates).
+  Write Δ(c, n) = c/n, (c+1)/n, …, (c+n−1)/n, so Π_i ((c+i)/n)_l =
+  (c)_{nl}/n^{nl}, and count the 1 of l! as a lower parameter. When the upper
+  parameters split into groups Δ(c_j, n) and singles, the lower ones into
+  groups Δ(d_j, n) and singles, and every single upper pairs with a single
+  lower by an integer difference, then with R(l) = Π (u)_l/(v)_l (rational)
+  and x = n^(#lower groups − #upper groups) w^(1/n),
+  `F = (1/n) Σ_{k<n} H(ω^k x)`, ω = e^(2πi/n),
+  `H(x) = Σ_m R(m/n) (c)_m/(d)_m x^m`.
+  R(m/n) is again a Pochhammer ratio in m, so H is a pFq whose extra
+  parameters differ in pairs by one: Roach's partial fraction decomposition
+  of R, left in product form for the derivative and Lerch formulas to take
+  apart. H is solved recursively. A pair parameter of H that would be a
+  nonpositive integer is range-reduced by shifting the series,
+  `F = Σ_{l<s} t_l w^l + t_s w^s F(a+s, 1; b+s, 1+s; w)`, which keeps every
+  group and pair. For n ≥ 3 an exponential `e^((a + b i) x)` is put in the
+  real form `e^(a x)(cos b x + i sin b x)`, so conjugate roots combine.
+  The formula is a certificate generator (Roach's "subroutine of Lookup"):
+  the search finds every grouping, the origin is the target with each group
+  moved to the nearest exact Δ(c, n) (a group holding the 1 of l! is pinned;
+  an origin with a cancelling pair is skipped), f0 is checked against the
+  series, and the walk reaches the target. It runs after the derivative
+  formula and before integration; the auxiliary H uses only the cheap
+  routes until integration is allowed. `0F2(; 1/3, 2/3; z)` =
+  `(e^(3 z^(1/3)) + 2 e^(−3 z^(1/3)/2) cos(3√3 z^(1/3)/2))/3` and its lattice
+  (Roach's gallery 1F3(1/2; −1/3, −1/2, −2/3; z), in his printed form) and
+  `0F3(; 1/4, 1/2, 3/4; z)` = `(cos 4z^(1/4) + cosh 4z^(1/4))/2` come out
+  this way.
 - **Transformations.** When the direct routes fail, 2F1 also tries its
   Euler and two Pfaff images and 1F1 its Kummer image. The cheap routes run
   on every image before any integration is attempted.
@@ -3874,6 +3902,23 @@ lookup certificates).
     orders), and a negated argument gives BesselJ exactly.
   - A constant result has its Gamma at rationals shifted into (0, 1] and
     reflected past 1/2, then Simplify is applied, capped at 2 seconds.
+    A constant written with complex numbers (a Lerch Φ value at a negative
+    argument takes the principal, complex root) is first normalised: roots
+    of unity become `Cos + I Sin`, every argument of an elementary function
+    is put in `a + b I` form, the whole is `ComplexExpand`-ed, and a zero
+    imaginary part (`PossibleZeroQ`) is dropped. For a constant every step
+    is exact; the result must agree with the input to 30 digits, or the
+    input stands. `FunctionExpand[Hypergeometric2F1[1, 1, 2/3, 8/9]]` =
+    `9 + 3 Sqrt[3] Pi − 3 Log[3]`.
+  - Bessel functions at quarter turns are named by the Kelvin functions.
+    When every kernel is a BesselI / BesselJ of integer order, the answer is
+    a Laurent polynomial in w^(1/4) times entire functions of it, so any
+    fourth root may stand for w^(1/4); at a negated argument w = −u the root
+    `(−1)^(1/4) u^(1/4)` is taken. Then `I_n(y) = i^(−n) J_n(i y)` and
+    `J_n(e^(3πi/4) Y) = ber_n Y + i bei_n Y`, `J_n(e^(5πi/4) Y) = ber_n Y − i bei_n Y`
+    (DLMF 10.61.1) with `J_n(−y) = (−1)^n J_n(y)`, chosen by the phase of the
+    argument's numeric coefficient. Integer Kelvin orders are reduced to 0
+    and 1 by DLMF 10.63.1.
 - **Probe region.** The internal Integrate, Limit and check messages are
   suppressed and do not trip an enclosing `Check`.
 - **Certificates** (v0.6203):
@@ -3887,7 +3932,18 @@ lookup certificates).
     (a, −a; ½), (a, 1−a; 3/2), (1, a; 2) and (1, a; a+1) LerchPhi;
   - 1F2: (1/2; 3/2, 3/2) Shi, plus the families (a; a+½, 2a) BesselI² and
     (1; 2, b) (the integral of 0F1);
+  - 0F3 Kelvin families: (1/2, (ν+1)/2, (ν+2)/2) =
+    Γ(ν+1)(y/2)^(−ν)(I_ν(y) + J_ν(y))/2 with y = 4w^(1/4), which is
+    `KelvinBer[0, 4 z^(1/4)]` at `−z` for ν = 0 (and
+    `KelvinBei[0, 4 z^(1/4)]/(4 Sqrt[z])` for 0F3(; 1, 3/2, 3/2; −z), the same
+    lattice); and (ν+1, (ν+1)/2, (ν+2)/2) = Γ(ν+1)²(x/2)^(−2ν) J_ν(x) I_ν(x)
+    with x⁴ = −64w, which is `ber_0² + bei_0²` of 2√2 z^(1/4) at z for ν = 0;
   - 3F2: Clausen's (1, 1, 1; 3/2, 2) = ArcSin(√z)²/z.
+  - Meijer G (the G walk, Roach '97): besides the Bessel, Struve, incomplete
+    Gamma, Erfc, Si/Ci and Log/ArcTan/EllipticK entries,
+    `G^{3,0}_{0,4}(w | ; 0, 0, 1/2 ; 1/2) = 4 ker_0(4 w^(1/4))` and
+    `G^{3,0}_{0,4}(w | ; 0, 1/2, 1/2 ; 0) = −4 kei_0(4 w^(1/4))`, from the
+    Mellin transforms of ker_0 and kei_0 and Gamma duplication.
 
   `` HypergeometricPFQ`Certificates[] `` lists the table, and
   `tests/test_hrep.c` checks every entry against its series.
@@ -3913,15 +3969,29 @@ Out[4]= (6 (-12 + z^2))/z^3 - (72 BesselJ[0, 2 Sqrt[z]])/z^3 + (144 BesselJ[1, 2
 
 In[5]:= FunctionExpand[HypergeometricPFQ[{-11/4, -5/2, -5/2}, {-7/2, 1/4}, 1]]
 Out[5]= (355 Gamma[1/4]^2)/(56 Sqrt[2] Sqrt[Pi])
+
+In[6]:= FunctionExpand[HypergeometricPFQ[{}, {1/2, 1/2, 1}, -z]]
+Out[6]= KelvinBer[0, 4 z^(1/4)]
+
+In[7]:= FunctionExpand[HypergeometricPFQ[{1/2}, {-1/3, -1/2, -2/3}, z]]
+Out[7]= E^(3 z^(1/3)) (1/3 - z^(1/3) + (3 z^(2/3))/2 - 3 z) + ((2/3 + z^(1/3) - (3 z^(2/3))/2 - 6 z) Cos[(3 Sqrt[3] z^(1/3))/2] + (Sqrt[3] (2 z^(1/3) + 3 z^(2/3)) Sin[(3 Sqrt[3] z^(1/3))/2])/2)/E^((3 z^(1/3))/2)
+
+In[8]:= FunctionExpand[Hypergeometric2F1[1, 1, 2/3, 8/9]]
+Out[8]= 9 + 3 Sqrt[3] Pi - 3 Log[3]
 ```
 
 Roach 2008 (*Solving Integrals with the Quantum Computer Algebra System*),
-p. 6: all eleven pFq values close. Ten are in Roach's printed form or an
-equal closed form. 2F1(1, 1; 2/3; 8/9) is numerically equal to
-3^(3/2) π + 9 − 3 log 3 but prints with `(−1)^(1/3)` terms, because its
-root is chosen while the argument is still symbolic. Of the ISSAC '96
-gallery, the entries not needing the Struve L or Kelvin functions
-(added separately) or the PFD duplication formula close.
+p. 6: all eleven pFq values close, in Roach's printed form or an equal
+closed form (2F1(1, 1; 2/3; 8/9) = 3^(3/2) π + 9 − 3 log 3 through the
+complex-constant tidy). Of the twelve ISSAC '96 gallery entries, eleven close
+through `FunctionExpand`, ten of them in Roach's printed form (the Kelvin
+0F3(; 1, 5/2, 4; z), the 1F4(1/3; −2/3, −1/2, 1/2, 1; z) in I_0, J_0, I_1, J_1
+of 4z^(1/4), and the duplication-formula 1F3(1/2; −1/3, −1/2, −2/3; z)
+included). The one that does not is 2F3(−1/2, 1; 1/4, 1/2, 3/4; z), Roach's
+erf·erfi formula: its lattice needs the integral of the duplication-formula
+function, `∫ y² (e^(y²) erf y − e^(−y²) erfi y) dy`, which `Integrate`
+declines (it is elementary in erf y · erfi y only after integration by
+parts), and no contiguity walk crosses the lower 1/2.
 
 ## LegendreP
 

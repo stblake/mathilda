@@ -104,6 +104,26 @@ static const HrCert CERTS[] = {
       "BesselI[0, 2 Sqrt[" W "]] - Pi/2 (StruveL[0, 2 Sqrt[" W "]] BesselI[1, 2 Sqrt[" W "]]"
       " - StruveL[1, 2 Sqrt[" W "]] BesselI[0, 2 Sqrt[" W "]])", NULL, 0 },
 
+    /* ---- 0F3: Kelvin functions ------------------------------------- */
+    /* 0F3(; 1/2, (nu+1)/2, (nu+2)/2; w) = Gamma(nu+1) (y/2)^-nu (I_nu(y) + J_nu(y))/2,
+     * y = 4 w^(1/4): the even-in-k half of the Bessel series. Entire in w,
+     * so any fourth root may stand for w^(1/4). At w = -x^4/256 it is
+     * Gamma(nu+1) (x/2)^-nu ber_nu(x)-type: ber_0(x) = 0F3(; 1/2, 1/2, 1; -x^4/256),
+     * bei_0(x) = (x^2/4) 0F3(; 1, 3/2, 3/2; -x^4/256), one lattice. The
+     * answer is named by Hrep`kelvin. */
+    { 0, 3, { 0 }, { "1/2", "(" AL " + 1)/2", "(" AL " + 2)/2" },
+      "Gamma[" AL " + 1] (2 " W "^(1/4))^(-" AL ") (BesselI[" AL ", 4 " W "^(1/4)]"
+      " + BesselJ[" AL ", 4 " W "^(1/4)])/2",
+      "!(IntegerQ[" AL "] && " AL " <= -1)", 1 },
+    /* 0F3(; nu+1, (nu+1)/2, (nu+2)/2; -x^4/64) = Gamma(nu+1)^2 (x/2)^(-2 nu) J_nu(x) I_nu(x),
+     * written at x = 2 Sqrt[2] (-1)^(1/4) w^(1/4) (x^4 = -64 w). For nu = 0
+     * and w = u > 0 the product is ber_0^2 + bei_0^2 of 2 Sqrt[2] u^(1/4). */
+    { 0, 3, { 0 }, { AL " + 1", "(" AL " + 1)/2", "(" AL " + 2)/2" },
+      "Gamma[" AL " + 1]^2 (Sqrt[2] (-1)^(1/4) " W "^(1/4))^(-2 " AL ")"
+      " BesselJ[" AL ", 2 Sqrt[2] (-1)^(1/4) " W "^(1/4)]"
+      " BesselI[" AL ", 2 Sqrt[2] (-1)^(1/4) " W "^(1/4)]",
+      "!(IntegerQ[" AL "] && " AL " <= -1)", 1 },
+
     /* ---- 3F2 ------------------------------------------------------- */
     /* Clausen: 3F2(1, 1, 1; 3/2, 2; w) = 2F1(1/2, 1/2; 3/2; w)^2 */
     { 3, 2, { "1", "1", "1" }, { "3/2", "2" }, "ArcSin[Sqrt[" W "]]^2/" W, NULL, 0 },
@@ -149,6 +169,13 @@ static const HrGCert GCERTS[] = {
     { 1, 1, 1, 3, { "1" }, { "1/2", "0", "0" }, "2 SinIntegral[2 Sqrt[" W "]]/Sqrt[Pi]", NULL, 0 },
     /* G^{2,0}_{1,3}(w | ; 1 ; 0, 0 ; 1/2) = -(2/sqrt Pi) Ci(2 sqrt w) */
     { 2, 0, 1, 3, { "1" }, { "0", "0", "1/2" }, "-2 CosIntegral[2 Sqrt[" W "]]/Sqrt[Pi]", NULL, 0 },
+    /* Kelvin functions of the second kind, by their Mellin transforms
+     * M[ker_0](s) = 2^(s-2) Gamma(s/2)^2 cos(Pi s/4), M[kei_0](s) = -2^(s-2) Gamma(s/2)^2 sin(Pi s/4)
+     * and Gamma duplication, at x = 4 w^(1/4):
+     * G^{3,0}_{0,4}(w | ; 0, 0, 1/2 ; 1/2) = 4 ker_0(4 w^(1/4)) */
+    { 3, 0, 0, 4, { 0 }, { "0", "0", "1/2", "1/2" }, "4 KelvinKer[0, 4 " W "^(1/4)]", NULL, 0 },
+    /* G^{3,0}_{0,4}(w | ; 0, 1/2, 1/2 ; 0) = -4 kei_0(4 w^(1/4)) */
+    { 3, 0, 0, 4, { 0 }, { "0", "1/2", "1/2", "0" }, "-4 KelvinKei[0, 4 " W "^(1/4)]", NULL, 0 },
 };
 
 const HrGCert* hr_gcertificates(int* n) {

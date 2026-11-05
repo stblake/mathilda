@@ -189,6 +189,15 @@ bool hr_par_split(const Expr* e, HrPar* out) {
         out->n = an; out->d = ad;
         return true;
     }
+    /* (1 + n)/2 is Times[1/2, 1 + n]: split its expansion n/2 + 1/2, so it
+     * lands in the residue class of n/2 */
+    if (is_head(e, SYM_Times)) {
+        Expr* x = ev(mk1("Expand", expr_copy((Expr*)e)));
+        bool ok = is_head(x, SYM_Plus) && hr_par_split(x, out);
+        expr_free(x);
+        if (ok) return true;
+        out->sym = NULL; out->n = 0; out->d = 1;
+    }
     out->sym = expr_copy((Expr*)e);
     return true;
 }
@@ -602,10 +611,11 @@ static Expr* family_solve(const Expr* t, const char* par, int k, const Expr* x) 
     Expr* c1 = ev(mk2(SYM_Plus, c1v, mk2(SYM_Times, expr_new_integer(-1), expr_copy(c0))));
     Expr* v = NULL;
     if (!(c1->type == EXPR_INTEGER && c1->data.integer == 0) && !mentions(c1, par)) {
-        v = ev(mk2(SYM_Times,
+        /* expanded: 2 (-1/2 + (1 + n)/2) is n */
+        v = ev(mk1("Expand", mk2(SYM_Times,
                    mk2(SYM_Plus, expr_copy((Expr*)x),
                        mk2(SYM_Times, expr_new_integer(-1), expr_copy(c0))),
-                   mk2(SYM_Power, expr_copy(c1), expr_new_integer(-1))));
+                   mk2(SYM_Power, expr_copy(c1), expr_new_integer(-1)))));
     }
     expr_free(c0); expr_free(c1);
     return v;
@@ -989,6 +999,449 @@ out:
     return ok;
 }
 
+/* ------------------------------------------------------------------ */
+/*  PFD duplication formula (Roach '96 sec. 19)                        */
+/* ------------------------------------------------------------------ */
+/*
+ * Notation: Delta(c, n) = c/n, (c+1)/n, ..., (c+n-1)/n, so that
+ *     prod_i ((c+i)/n)_l = (c)_(nl) / n^(nl)
+ * (Gauss multiplication). Count the 1 of l! as a lower parameter. When the
+ * upper parameters split into groups Delta(c_j, n) and singles, the lower
+ * ones into groups Delta(d_j, n) and singles, and every single upper u
+ * pairs with a single lower v by u - v in Z, then the coefficient of w^l is
+ *     t_l = R(l) (c)_(nl)/(d)_(nl) x^(nl),  x = n^(#lower groups - #upper groups) w^(1/n),
+ * with R(l) = prod (u)_l/(v)_l rational in l. So F is the m = 0 (mod n)
+ * part of
+ *     H(x) = sum_m R(m/n) (c)_m/(d)_m x^m,   F = (1/n) sum_{k<n} H(omega^k x),
+ * omega = e^(2 Pi I/n). R(m/n) is again a ratio of Pochhammer symbols in m:
+ * for u > v, (u)_l/(v)_l = prod_{j<u-v} (m + n(v+j))/(n(v+j)) gives the
+ * parameter pairs n(v+j)+1 over n(v+j); for u < v,
+ * prod_{j<v-u} n(u+j)/(m + n(u+j)) gives n(u+j) over n(u+j)+1. H is a pFq
+ * whose extra parameters differ in pairs by one: Roach's partial fraction
+ * decomposition of R is left in product form for the derivative and Lerch
+ * formulas to take apart, and H is solved recursively. With n = 1 and no
+ * groups this is the Lerch Phi formula of sec. 18.
+ *
+ * A pair parameter of H that is a nonpositive integer (u = -1/2, n = 2
+ * gives n u + 1 = 0) is range reduction: shift the series,
+ *     F = sum_{l<s} t_l w^l + t_s w^s F(a + s, 1; b + s, 1 + s; w),
+ * which keeps every group and pair (the 1 of l! becomes the lower 1 + s
+ * and the new upper 1 pairs with the new l!).
+ *
+ * The formula is installed as a certificate generator, Roach's "subroutine
+ * of Lookup": the origin is the target with each group moved to an exact
+ * Delta(c, n) (singles stay), f0 is the formula there, checked against the
+ * series, and the walk reaches the target. A group holding the 1 of l! is
+ * pinned so that the 1 stays put.
+ */
+
+#define HR_DUP_MAXE   (2 * HR_MAXD + 1)
+#define HR_DUP_MAXS   16          /* structures kept per search */
+#define HR_DUP_TRIES  4           /* formulas evaluated per target */
+#define HR_DUP_MAXSHIFT 8
+
+typedef struct {
+    int n;
+    int grp[HR_DUP_MAXE];   /* group id, or -1 for a single */
+    int ng;
+    int64_t dist;
+    Expr* a0[HR_MAXD];      /* origin, owned */
+    Expr* b0[HR_MAXD];
+} HrDupS;
+
+typedef struct {
+    int ne, p, q;           /* entries: a[0..p), b[0..q), then l!'s 1 */
+    HrPar par[HR_DUP_MAXE];
+    int side[HR_DUP_MAXE];  /* 0 upper, 1 lower */
+    int n;
+    int grp[HR_DUP_MAXE];   /* -1 unassigned, -2 single, else group id */
+    int ng;
+    HrDupS* out; int nout;
+    int budget;             /* search nodes left */
+} HrDupSearch;
+
+/* n (x - y) mod n as residues: x and y in one sym class, x - y in Z/n. */
+static bool par_nth_diff(const HrPar* x, const HrPar* y, int n, int64_t* o) {
+    if (!same_sym(x, y)) return false;
+    int64_t g = gcd64(x->d, y->d);
+    int64_t l = x->d / g * y->d;
+    int64_t num = (x->n * (l / x->d) - y->n * (l / y->d)) * n;
+    if (num % l != 0) return false;
+    *o = num / l;
+    return true;
+}
+
+/* The singles pair up by residue class (one upper with one lower). */
+static bool dup_singles_pair(const HrDupSearch* S, int* mate) {
+    bool used[HR_DUP_MAXE] = { false };
+    for (int i = 0; i < S->ne; i++) mate[i] = -1;
+    for (int i = 0; i < S->ne; i++) {
+        if (S->grp[i] != -2 || S->side[i] != 0) continue;
+        int pick = -1;
+        for (int j = 0; j < S->ne && pick < 0; j++) {
+            int64_t k;
+            if (S->grp[j] == -2 && S->side[j] == 1 && !used[j] &&
+                par_int_diff(&S->par[i], &S->par[j], &k)) pick = j;
+        }
+        if (pick < 0) return false;
+        used[pick] = true; mate[i] = pick; mate[pick] = i;
+    }
+    for (int j = 0; j < S->ne; j++)
+        if (S->grp[j] == -2 && S->side[j] == 1 && !used[j]) return false;
+    return true;
+}
+
+static void dup_search(HrDupSearch* S) {
+    if (S->nout >= HR_DUP_MAXS || --S->budget < 0) return;
+    int e = -1;
+    for (int i = 0; i < S->ne && e < 0; i++) if (S->grp[i] == -1) e = i;
+    if (e < 0) {
+        int mate[HR_DUP_MAXE];
+        if (S->ng == 0 || !dup_singles_pair(S, mate)) return;
+        HrDupS* o = &S->out[S->nout++];
+        memset(o, 0, sizeof *o);
+        o->n = S->n; o->ng = S->ng;
+        for (int i = 0; i < S->ne; i++) o->grp[i] = S->grp[i] >= 0 ? S->grp[i] : -1;
+        return;
+    }
+    /* e starts a group: members at residues e + i/n, i = 1..n-1, same side */
+    {
+        int mem[HR_MAXD + 1]; int nm = 1; mem[0] = e;
+        bool ok = true;
+        for (int i = 1; i < S->n && ok; i++) {
+            int pick = -1;
+            for (int j = 0; j < S->ne && pick < 0; j++) {
+                if (S->grp[j] != -1 || j == e || S->side[j] != S->side[e]) continue;
+                bool taken = false;
+                for (int t = 0; t < nm; t++) if (mem[t] == j) taken = true;
+                if (taken) continue;
+                int64_t o;
+                if (par_nth_diff(&S->par[j], &S->par[e], S->n, &o) &&
+                    ((o % S->n) + S->n) % S->n == i) pick = j;
+            }
+            if (pick < 0) ok = false; else mem[nm++] = pick;
+        }
+        if (ok) {
+            int g = S->ng++;
+            for (int t = 0; t < nm; t++) S->grp[mem[t]] = g;
+            dup_search(S);
+            for (int t = 0; t < nm; t++) S->grp[mem[t]] = -1;
+            S->ng--;
+        }
+    }
+    /* e is a single */
+    S->grp[e] = -2;
+    dup_search(S);
+    S->grp[e] = -1;
+}
+
+/* sym + num/den, evaluated. */
+static Expr* par_value_expr(const HrPar* base, int64_t num, int64_t den) {
+    Expr* r = make_rational(num, den);
+    if (!base->sym) return r;
+    return ev(mk2(SYM_Plus, expr_copy(base->sym), r));
+}
+
+static bool rational_nonpos_int(int64_t num, int64_t den) {
+    return den != 0 && num % den == 0 && num / den <= 0;
+}
+
+/* Move each group of structure o to an exact Delta(c, n) nearest the
+ * target, filling o->a0 / o->b0 and o->dist. False when no valid origin. */
+static bool dup_origin(const HrDupSearch* S, Expr* const* a, Expr* const* b, HrDupS* o) {
+    int n = o->n;
+    Expr* val[HR_DUP_MAXE] = { NULL };
+    o->dist = 0;
+    for (int g = 0; g < o->ng; g++) {
+        int mem[HR_DUP_MAXE], nm = 0, e0 = -1, fact = -1;
+        for (int i = 0; i < S->ne; i++) if (o->grp[i] == g) {
+            if (e0 < 0) e0 = i;
+            if (i == S->ne - 1) fact = i;
+            mem[nm++] = i;
+        }
+        /* offsets of the members from e0 in units of 1/n */
+        int64_t off[HR_DUP_MAXE], lo = INT64_MAX, hi = INT64_MIN;
+        for (int t = 0; t < nm; t++) {
+            if (!par_nth_diff(&S->par[mem[t]], &S->par[e0], n, &off[t])) goto fail;
+            if (off[t] < lo) lo = off[t];
+            if (off[t] > hi) hi = off[t];
+        }
+        /* window start j (offset of slot 0); member t sits in slot
+         * (off - j) mod n, at offset j + slot. */
+        int64_t best = INT64_MAX, bestj = 0;
+        for (int64_t j = lo - 2 * n; j <= hi + 2 * n; j++) {
+            int64_t dsum = 0; bool okj = true;
+            for (int t = 0; t < nm && okj; t++) {
+                int64_t slot = ((off[t] - j) % n + n) % n;
+                int64_t at = j + slot, dd = off[t] - at;      /* multiple of n */
+                if (mem[t] == fact && dd != 0) okj = false;
+                /* origin value = e0 + at/n must not be a nonpositive integer */
+                const HrPar* b0p = &S->par[e0];
+                if (!b0p->sym) {
+                    int64_t num = b0p->n * n + at * b0p->d, den = b0p->d * n;
+                    if (rational_nonpos_int(num, den)) okj = false;
+                }
+                dsum += (dd < 0 ? -dd : dd) / n;
+            }
+            if (okj && dsum < best) { best = dsum; bestj = j; }
+        }
+        if (best == INT64_MAX) goto fail;
+        o->dist += best;
+        for (int t = 0; t < nm; t++) {
+            if (mem[t] == fact) continue;
+            int64_t slot = ((off[t] - bestj) % n + n) % n;
+            int64_t at = bestj + slot;
+            const HrPar* b0p = &S->par[e0];
+            val[mem[t]] = par_value_expr(b0p, b0p->n * n + at * b0p->d, b0p->d * n);
+        }
+    }
+    if (0) {
+fail:
+        for (int i = 0; i < S->ne; i++) if (val[i]) expr_free(val[i]);
+        return false;
+    }
+    for (int i = 0; i < S->p; i++) o->a0[i] = val[i] ? val[i] : expr_copy(a[i]);
+    for (int j = 0; j < S->q; j++) o->b0[j] = val[S->p + j] ? val[S->p + j] : expr_copy(b[j]);
+    /* an origin with a cancelling pair is a lower-order function the walk
+     * cannot leave */
+    for (int i = 0; i < S->p; i++)
+        for (int j = 0; j < S->q; j++)
+            if (expr_eq(o->a0[i], o->b0[j])) return false;
+    return true;
+}
+
+static void dup_free(HrDupS* o, int p, int q) {
+    for (int i = 0; i < p; i++) if (o->a0[i]) expr_free(o->a0[i]);
+    for (int j = 0; j < q; j++) if (o->b0[j]) expr_free(o->b0[j]);
+    memset(o->a0, 0, sizeof o->a0);
+    memset(o->b0, 0, sizeof o->b0);
+}
+
+static int dup_cmp(const void* x, const void* y) {
+    const HrDupS* u = x; const HrDupS* v = y;
+    if (u->dist != v->dist) return u->dist < v->dist ? -1 : 1;
+    return u->n - v->n;
+}
+
+static Expr* pfq_images(Expr* const* a, size_t p, Expr* const* b, size_t q,
+                        const Expr* z, int transforms, int pass);
+
+/* Closed form of an auxiliary function at the symbol t: the full engine
+ * when integration is allowed, the cheap pass otherwise. */
+static Expr* hr_sub_solve(Expr* const* a, int p, Expr* const* b, int q, const Expr* t) {
+    if (hr_allow_integration) return hrep_pfq_inner(a, (size_t)p, b, (size_t)q, t, 1);
+    return pfq_images(a, (size_t)p, b, (size_t)q, t, 1, 0);
+}
+
+static bool expr_nonpos_int(const Expr* e) {
+    int64_t n, d;
+    return is_rational(e, &n, &d) && d == 1 && n <= 0;
+}
+
+/* t_l = prod (a)_l / prod (b)_l / l! as an evaluated Expr. */
+static Expr* dup_term(Expr* const* a, int p, Expr* const* b, int q, int64_t l) {
+    Expr* f[2 * HR_MAXD + 2]; int nf = 0;
+    for (int i = 0; i < p; i++)
+        f[nf++] = mk2("Pochhammer", expr_copy(a[i]), expr_new_integer(l));
+    for (int j = 0; j < q; j++)
+        f[nf++] = mk2(SYM_Power, mk2("Pochhammer", expr_copy(b[j]), expr_new_integer(l)),
+                      expr_new_integer(-1));
+    f[nf++] = mk2(SYM_Power, mk1("Factorial", expr_new_integer(l)), expr_new_integer(-1));
+    return ev(expr_new_function(expr_new_symbol(SYM_Times), f, (size_t)nf));
+}
+
+/* The duplication formula at the origin of structure o, in HR_W; NULL when
+ * it does not close. */
+static Expr* dup_formula(const HrDupSearch* S, const HrDupS* o) {
+    int n = o->n, p = S->p, q = S->q, ne = S->ne;
+    /* the origin's entries as Expr: uppers, lowers, then 1 */
+    Expr* E[HR_DUP_MAXE];
+    for (int i = 0; i < p; i++) E[i] = o->a0[i];
+    for (int j = 0; j < q; j++) E[p + j] = o->b0[j];
+    Expr* one = expr_new_integer(1);
+    E[ne - 1] = one;
+    /* pairs, from the residue classes of the origin */
+    HrPar op[HR_DUP_MAXE];
+    int npar = 0;
+    Expr* out = NULL;
+    for (; npar < ne; npar++) if (!hr_par_split(E[npar], &op[npar])) goto done0;
+    {
+    int mate[HR_DUP_MAXE];
+    {
+        HrDupSearch T = *S;
+        for (int i = 0; i < ne; i++) { T.par[i] = op[i]; T.grp[i] = o->grp[i] >= 0 ? o->grp[i] : -2; }
+        if (!dup_singles_pair(&T, mate)) goto done0;
+    }
+    int nug = 0, nlg = 0;
+    for (int g = 0; g < o->ng; g++) {
+        for (int i = 0; i < ne; i++) if (o->grp[i] == g) {
+            if (S->side[i] == 0) nug++; else nlg++;
+            break;
+        }
+    }
+    /* the least shift that makes H defined; a larger one only re-solves
+     * the same lattice */
+    bool tried = false;
+    for (int s = 0; s <= HR_DUP_MAXSHIFT && !tried; s++) {
+        Expr* Hu[4 * HR_MAXD + 4]; Expr* Hl[4 * HR_MAXD + 4];
+        int nu = 0, nl = 0;
+        bool valid = true;
+        Hu[nu++] = expr_new_integer(1);
+        /* groups: c = n * (smallest member) */
+        for (int g = 0; g < o->ng; g++) {
+            int lo = -1;
+            for (int i = 0; i < ne; i++) if (o->grp[i] == g) {
+                int64_t k;
+                if (lo < 0 || (par_nth_diff(&op[i], &op[lo], n, &k) && k < 0)) lo = i;
+            }
+            Expr* c = ev(mk1("Expand", mk2(SYM_Times, expr_new_integer(n),
+                             mk2(SYM_Plus, expr_copy(E[lo]), expr_new_integer(s)))));
+            if (S->side[lo] == 0) Hu[nu++] = c; else Hl[nl++] = c;
+        }
+        /* pairs */
+        for (int i = 0; i < ne && valid; i++) {
+            if (o->grp[i] >= 0 || S->side[i] != 0) continue;
+            int jv = mate[i];
+            int64_t k;
+            if (jv < 0 || !par_int_diff(&op[i], &op[jv], &k)) { valid = false; break; }
+            const Expr* base = k > 0 ? E[jv] : E[i];
+            int64_t cnt = k > 0 ? k : -k;
+            if (nu + cnt >= 4 * HR_MAXD + 3 || nl + cnt >= 4 * HR_MAXD + 3) { valid = false; break; }
+            for (int64_t j = 0; j < cnt; j++) {
+                /* n (base + s + j), and that plus one */
+                Expr* m = ev(mk1("Expand", mk2(SYM_Times, expr_new_integer(n),
+                                 mk2(SYM_Plus, expr_copy((Expr*)base), expr_new_integer(s + j)))));
+                Expr* m1 = ev(mk2(SYM_Plus, expr_copy(m), expr_new_integer(1)));
+                if (k > 0) { Hu[nu++] = m1; Hl[nl++] = m; }
+                else       { Hu[nu++] = m;  Hl[nl++] = m1; }
+            }
+        }
+        /* cancel equal pairs */
+        for (int i = 0; i < nu && valid; i++)
+            for (int j = 0; j < nl; j++)
+                if (Hu[i] && Hl[j] && expr_eq(Hu[i], Hl[j])) {
+                    expr_free(Hu[i]); expr_free(Hl[j]); Hu[i] = Hl[j] = NULL; break;
+                }
+        int cu = 0, cl = 0;
+        for (int i = 0; i < nu; i++) if (Hu[i]) Hu[cu++] = Hu[i];
+        for (int j = 0; j < nl; j++) if (Hl[j]) Hl[cl++] = Hl[j];
+        nu = cu; nl = cl;
+        for (int i = 0; i < nu; i++) if (expr_nonpos_int(Hu[i])) valid = false;
+        for (int j = 0; j < nl; j++) if (expr_nonpos_int(Hl[j])) valid = false;
+        if (nu > HR_MAXD || nl > HR_MAXD) valid = false;
+        if (valid) {
+            tried = true;
+            Expr* tsym = expr_new_symbol(HR_T);
+            hr_gen_depth++;
+            Expr* G = hr_sub_solve(Hu, nu, Hl, nl, tsym);
+            hr_gen_depth--;
+            if (G && closed_finite(G)) {
+                /* x = n^(#lower groups - #upper groups) w^(1/n) */
+                Expr* x = ev(mk2(SYM_Times,
+                    mk2(SYM_Power, expr_new_integer(n), expr_new_integer(nlg - nug)),
+                    mk2(SYM_Power, expr_new_symbol(HR_W), make_rational(1, n))));
+                Expr* terms[HR_MAXD + 1];
+                for (int k = 0; k < n; k++) {
+                    /* omega^k as Cos + I Sin, exact */
+                    Expr* om = ev(mk2(SYM_Plus,
+                        mk1("Cos", mk2(SYM_Times, make_rational(2 * k, n), expr_new_symbol(SYM_Pi))),
+                        mk2(SYM_Times, expr_new_symbol("I"),
+                            mk1("Sin", mk2(SYM_Times, make_rational(2 * k, n), expr_new_symbol(SYM_Pi))))));
+                    Expr* arg = ev(mk2(SYM_Times, om, expr_copy(x)));
+                    terms[k] = hr_subst(G, HR_T, arg);
+                    expr_free(arg);
+                }
+                expr_free(x);
+                Expr* sum = ev(expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)n));
+                /* prefix and t_s w^s, from the origin's own parameters */
+                Expr* pre[HR_DUP_MAXSHIFT + 1];
+                for (int l = 0; l < s; l++)
+                    pre[l] = mk2(SYM_Times, dup_term(o->a0, p, o->b0, q, l),
+                                 mk2(SYM_Power, expr_new_symbol(HR_W), expr_new_integer(l)));
+                Expr* main = mk2(SYM_Times,
+                    mk2(SYM_Times, dup_term(o->a0, p, o->b0, q, s), make_rational(1, n)),
+                    mk2(SYM_Times, mk2(SYM_Power, expr_new_symbol(HR_W), expr_new_integer(s)), sum));
+                pre[s] = main;
+                Expr* f0 = ev(expr_new_function(expr_new_symbol(SYM_Plus), pre, (size_t)s + 1));
+                /* e^(c x) with complex c in real form */
+                if (n > 2) f0 = ev(mk1("Hrep`expreal", f0));
+                if (closed_finite(f0)) out = f0; else expr_free(f0);
+            }
+            if (G) expr_free(G);
+            expr_free(tsym);
+        }
+        for (int i = 0; i < nu; i++) expr_free(Hu[i]);
+        for (int j = 0; j < nl; j++) expr_free(Hl[j]);
+    }
+    }
+done0:
+    for (int i = 0; i < npar; i++) hr_par_free(&op[i]);
+    expr_free(one);
+    return out;
+}
+
+static bool solve_by_duplication(Expr* const* a, int p, Expr* const* b, int q,
+                                 Expr* const* post, int npost, HrAnswer* ans) {
+    if (hr_gen_depth >= 2 || p + q + 1 > HR_DUP_MAXE) return false;
+    HrDupSearch S; memset(&S, 0, sizeof S);
+    S.p = p; S.q = q; S.ne = p + q + 1;
+    int nsplit = 0;
+    bool ok = false;
+    HrDupS* outs = calloc(HR_DUP_MAXS, sizeof(HrDupS));
+    HrPar ta[HR_MAXD], tb[HR_MAXD];
+    int na = 0, nb = 0;
+    for (; nsplit < p; nsplit++) {
+        if (!hr_par_split(a[nsplit], &S.par[nsplit])) goto out;
+        S.side[nsplit] = 0;
+    }
+    for (; nsplit < p + q; nsplit++) {
+        if (!hr_par_split(b[nsplit - p], &S.par[nsplit])) goto out;
+        S.side[nsplit] = 1;
+    }
+    S.par[nsplit].sym = NULL; S.par[nsplit].n = 1; S.par[nsplit].d = 1;
+    S.side[nsplit] = 1; nsplit++;
+    for (; na < p; na++) if (!hr_par_split(a[na], &ta[na])) goto out;
+    for (; nb < q; nb++) if (!hr_par_split(b[nb], &tb[nb])) goto out;
+    S.out = outs;
+    for (int n = 2; n <= HR_MAXD && S.nout < HR_DUP_MAXS; n++) {
+        S.n = n; S.ng = 0; S.budget = 20000;
+        for (int i = 0; i < S.ne; i++) S.grp[i] = -1;
+        int before = S.nout;
+        dup_search(&S);
+        /* keep the structures with a valid origin */
+        int k = before;
+        for (int i = before; i < S.nout; i++) {
+            HrDupS o = outs[i];
+            memset(o.a0, 0, sizeof o.a0); memset(o.b0, 0, sizeof o.b0);
+            if (dup_origin(&S, a, b, &o)) outs[k++] = o;
+            else dup_free(&o, p, q);
+        }
+        S.nout = k;
+    }
+    qsort(outs, (size_t)S.nout, sizeof(HrDupS), dup_cmp);
+    for (int i = 0; i < S.nout && i < HR_DUP_TRIES && !ok; i++) {
+        Expr* f0 = dup_formula(&S, &outs[i]);
+        if (!f0) continue;
+        if (verify_cert(f0, outs[i].a0, p, outs[i].b0, q)) {
+            HrCand c; memset(&c, 0, sizeof c);
+            c.p = p; c.q = q;
+            for (int j = 0; j < p; j++) c.a0[j] = expr_copy(outs[i].a0[j]);
+            for (int j = 0; j < q; j++) c.b0[j] = expr_copy(outs[i].b0[j]);
+            c.f0 = f0; f0 = NULL;
+            ok = walk_candidate(&c, a, p, b, q, ta, tb, ans, post, npost);
+            cand_free(&c);
+        }
+        if (f0) expr_free(f0);
+    }
+out:
+    for (int i = 0; i < S.nout; i++) dup_free(&outs[i], p, q);
+    free(outs);
+    for (int i = 0; i < nsplit; i++) hr_par_free(&S.par[i]);
+    for (int i = 0; i < na; i++) hr_par_free(&ta[i]);
+    for (int i = 0; i < nb; i++) hr_par_free(&tb[i]);
+    return ok;
+}
+
 /* Lookup + walk, applying the linear theta factors `post` at the end. */
 static bool hr_solve(Expr* const* a, int p, Expr* const* b, int q,
                      Expr* const* post, int npost, HrAnswer* ans, int depth) {
@@ -1025,6 +1478,7 @@ static bool hr_solve(Expr* const* a, int p, Expr* const* b, int q,
     /* No certificate reached the target: reduce the order, or generate a
      * certificate from the lower-order function by integration. */
     if (!ok) ok = solve_by_derivative(a, p, b, q, post, npost, ans, depth);
+    if (!ok) ok = solve_by_duplication(a, p, b, q, post, npost, ans);
     if (!ok && hr_allow_integration)
         ok = solve_by_integration(a, p, b, q, post, npost, ans);
 out:
@@ -1058,8 +1512,63 @@ static const char* HR_TIDY_DEF[] = {
      * 3F2(-11/4, -5/2, -5/2; -7/2, 1/4; 1) is 355 Gamma[1/4]^2/(56 Sqrt[2 Pi]). */
     "Hrep`gnorm[Hrep`e_] := Hrep`e /. Gamma[Hrep`x_Rational] :> With[{Hrep`f = Hrep`x - Floor[Hrep`x]},"
     " Pochhammer[Hrep`f, Floor[Hrep`x]] If[Hrep`f > 1/2, Pi/(Sin[Pi Hrep`f] Gamma[1 - Hrep`f]), Gamma[Hrep`f]]]",
-    "Hrep`const[Hrep`e_] := With[{Hrep`s = TimeConstrained[Simplify[Hrep`gnorm[Hrep`e]], 2, Hrep`e]},"
+    "Hrep`const[Hrep`e_] := With[{Hrep`s = TimeConstrained[Simplify[Hrep`gnorm[Hrep`creal[Hrep`e]]], 2, Hrep`e]},"
     " If[LeafCount[Hrep`s] <= LeafCount[Hrep`e], Hrep`s, Hrep`e]]",
+    /* A constant written with complex numbers: a Lerch Phi value at a
+     * negative argument takes the principal (complex) root, so
+     * 2F1(1, 1; 2/3; 8/9) arrives as 9 + 6 (-1)^(1/3) Sqrt[3] ArcTan[..] + ...
+     * Roots of unity become Cos + I Sin, every argument of an elementary
+     * function is put in a + b I form, and the whole is ComplexExpand-ed into
+     * real and imaginary parts; an imaginary part that is zero is dropped.
+     * For a constant every step is exact (no variable is assumed real). The
+     * result must agree with the input to 30 digits, or the input stands. */
+    "Hrep`creal[Hrep`e_] := If[FreeQ[Hrep`e, Complex | Power[-1, _Rational]], Hrep`e,"
+    " Module[{Hrep`t, Hrep`c, Hrep`re, Hrep`im, Hrep`r},"
+    "  Hrep`t = Hrep`e /. Power[-1, Hrep`q_Rational] :> Cos[Pi Hrep`q] + I Sin[Pi Hrep`q];"
+    "  Hrep`t = Hrep`t /. (Hrep`h : Log | ArcTan | ArcTanh | ArcSin | ArcCos | ArcSinh | ArcCosh |"
+    "    ArcCot | ArcCoth | PolyLog | Power)[Hrep`x__] :> Hrep`h @@ (ComplexExpand /@ {Hrep`x});"
+    "  Hrep`c = ComplexExpand[Hrep`t];"
+    "  Hrep`re = ComplexExpand[Re[Hrep`c]]; Hrep`im = ComplexExpand[Im[Hrep`c]];"
+    "  Hrep`r = If[PossibleZeroQ[Hrep`im], Hrep`re, Hrep`re + I Hrep`im];"
+    "  If[FreeQ[Hrep`r, Re | Im | Arg | Abs] && TrueQ[Abs[N[Hrep`r - Hrep`e, 30]] < 10^-25], Hrep`r, Hrep`e]]]",
+    /* Bessel functions at quarter turns, named by the Kelvin functions.
+     * The 0F3 Kelvin certificates are entire in w and written in w^(1/4),
+     * so every fourth root of w may stand for it, consistently. At a negated
+     * argument w = -u the root (-1)^(1/4) u^(1/4) is taken: Power[-u, s]
+     * becomes ((-1)^(1/4) u^(1/4))^(4 s) for s in Z/4. This is done only when
+     * every kernel is a BesselI / BesselJ of integer order, so the whole
+     * expression is a Laurent polynomial in the root times entire functions
+     * of it and the change of root is an identity. Then, for integer n and
+     * zeta = (-1)^(1/4), I_n(y) = I^-n J_n(I y) and (DLMF 10.61.1)
+     *   J_n(zeta^3 Y) = ber_n Y + I bei_n Y,   J_n(zeta^5 Y) = ber_n Y - I bei_n Y,
+     * with J_n(-y) = (-1)^n J_n(y), J_n(I Y) = I^n I_n(Y). */
+    "Hrep`kelvin[Hrep`e_] := If[!FreeQ[Hrep`e, (Hrep`h_Symbol[__] /; !MemberQ[{Plus, Times, Power, Rational,"
+    " Complex, BesselI, BesselJ}, Hrep`h]) | (BesselI | BesselJ)[Except[_Integer], _] |"
+    " Power[Times[_?Negative, __], Hrep`s_ /; !IntegerQ[4 Hrep`s]]] || FreeQ[Hrep`e, BesselI | BesselJ],"
+    " Hrep`e,"
+    " Expand[(Hrep`e /. Power[Hrep`b_, Hrep`s_] /; IntegerQ[4 Hrep`s] && !IntegerQ[Hrep`s] &&"
+    "   MatchQ[Hrep`b, Times[_?Negative, __]] :> ((-1)^(1/4) (-Hrep`b)^(1/4))^(4 Hrep`s)) /. {"
+    "   BesselJ[Hrep`n_, Hrep`y_] :> Hrep`kj[Hrep`n, Hrep`y],"
+    "   BesselI[Hrep`n_, Hrep`y_] :> I^(-Hrep`n) Hrep`kj[Hrep`n, I Hrep`y]} /."
+    "   Power[-1, Hrep`q_Rational] :> Cos[Pi Hrep`q] + I Sin[Pi Hrep`q]]]",
+    "Hrep`kj[Hrep`n_, Hrep`y_] := Module[{Hrep`c, Hrep`r, Hrep`j},"
+    "  {Hrep`c, Hrep`r} = If[Head[Hrep`y] === Times,"
+    "    {Times @@ Select[List @@ Hrep`y, NumericQ], Times @@ Select[List @@ Hrep`y, !NumericQ[#] &]},"
+    "    If[NumericQ[Hrep`y], {Hrep`y, 1}, {1, Hrep`y}]];"
+    "  Hrep`j = 4 Arg[Hrep`c]/Pi;"
+    "  If[!IntegerQ[Hrep`j], Return[BesselJ[Hrep`n, Hrep`y], Module]];"
+    "  Hrep`c = ComplexExpand[Hrep`c (-1)^(-Hrep`j/4)];"
+    "  If[!(NumericQ[Hrep`c] && TrueQ[Im[Hrep`c] == 0] && TrueQ[Hrep`c > 0]), Return[BesselJ[Hrep`n, Hrep`y], Module]];"
+    "  Hrep`r = Hrep`c Hrep`r;"
+    "  Switch[Mod[Hrep`j, 8],"
+    "   0, BesselJ[Hrep`n, Hrep`r],"
+    "   1, (-1)^Hrep`n (KelvinBer[Hrep`n, Hrep`r] - I KelvinBei[Hrep`n, Hrep`r]),"
+    "   2, I^Hrep`n BesselI[Hrep`n, Hrep`r],"
+    "   3, KelvinBer[Hrep`n, Hrep`r] + I KelvinBei[Hrep`n, Hrep`r],"
+    "   4, (-1)^Hrep`n BesselJ[Hrep`n, Hrep`r],"
+    "   5, KelvinBer[Hrep`n, Hrep`r] - I KelvinBei[Hrep`n, Hrep`r],"
+    "   6, (-I)^Hrep`n BesselI[Hrep`n, Hrep`r],"
+    "   7, (-1)^Hrep`n (KelvinBer[Hrep`n, Hrep`r] + I KelvinBei[Hrep`n, Hrep`r])]]",
     /* Hrep`I[nu, w] = w^(-nu/2) I_nu(2 sqrt w) = sum w^k/(k! Gamma(nu+k+1)),
      * entire in w. The 0F1 family certificates are written in it, so the
      * module derivatives stay in one kernel: d/dw I[nu, w] = I[nu+1, w].
@@ -1103,10 +1612,23 @@ static const char* HR_TIDY_DEF[] = {
     " StruveL[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :>"
     "   StruveL[Hrep`n - 2, Hrep`x] - 2 (Hrep`n - 1)/Hrep`x StruveL[Hrep`n - 1, Hrep`x]"
     "   - (Hrep`x/2)^(Hrep`n - 1)/(Sqrt[Pi] Gamma[Hrep`n + 1/2]),"
+    /* Kelvin functions, DLMF 10.63.1 with (f, g) = (ber, bei) or (ker, kei):
+     *   f_(n-1) + f_(n+1) = -(Sqrt[2] n/x) (f_n - g_n),
+     *   g_(n-1) + g_(n+1) = -(Sqrt[2] n/x) (f_n + g_n),   f_(-n) = (-1)^n f_n. */
+    " (Hrep`f : KelvinBer | KelvinBei | KelvinKer | KelvinKei)[Hrep`n_Integer /; Hrep`n < 0, Hrep`x_] :>"
+    "   (-1)^Hrep`n Hrep`f[-Hrep`n, Hrep`x],"
+    " KelvinBer[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :> -KelvinBer[Hrep`n - 2, Hrep`x]"
+    "   - Sqrt[2] (Hrep`n - 1)/Hrep`x (KelvinBer[Hrep`n - 1, Hrep`x] - KelvinBei[Hrep`n - 1, Hrep`x]),"
+    " KelvinBei[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :> -KelvinBei[Hrep`n - 2, Hrep`x]"
+    "   - Sqrt[2] (Hrep`n - 1)/Hrep`x (KelvinBer[Hrep`n - 1, Hrep`x] + KelvinBei[Hrep`n - 1, Hrep`x]),"
+    " KelvinKer[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :> -KelvinKer[Hrep`n - 2, Hrep`x]"
+    "   - Sqrt[2] (Hrep`n - 1)/Hrep`x (KelvinKer[Hrep`n - 1, Hrep`x] - KelvinKei[Hrep`n - 1, Hrep`x]),"
+    " KelvinKei[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :> -KelvinKei[Hrep`n - 2, Hrep`x]"
+    "   - Sqrt[2] (Hrep`n - 1)/Hrep`x (KelvinKer[Hrep`n - 1, Hrep`x] + KelvinKei[Hrep`n - 1, Hrep`x]),"
     " StruveL[Hrep`n_Integer /; Hrep`n < 0, Hrep`x_] :>"
     "   StruveL[Hrep`n + 2, Hrep`x] + 2 (Hrep`n + 1)/Hrep`x StruveL[Hrep`n + 1, Hrep`x]"
     "   + (Hrep`x/2)^(Hrep`n + 1)/(Sqrt[Pi] Gamma[Hrep`n + 5/2])}",
-    "Hrep`tidy[Hrep`r0_] := With[{Hrep`r = Hrep`ordred[Hrep`r0]}, With[{Hrep`k = DeleteDuplicates[Cases[Hrep`r,"
+    "Hrep`tidy[Hrep`r0_] := With[{Hrep`r = Hrep`kelvin[Hrep`ordred[Hrep`r0]]}, With[{Hrep`k = DeleteDuplicates[Cases[Hrep`r,"
     " (Hrep`h_Symbol[__] /; !MemberQ[{Plus, Times, Power, Rational, Complex,"
     " DirectedInfinity}, Hrep`h]) | Power[E, _], {0, Infinity}]]},"
     " Collect[Expand[Hrep`r], Hrep`k, Hrep`co]]]",
@@ -1592,6 +2114,14 @@ static const char* HR_LERCH_DEF[] = {
     " Hrep`n = Denominator[Hrep`r], Hrep`u = Hrep`root[Hrep`z, Denominator[Hrep`r]]},"
     " Hrep`n^(Hrep`s - 1) Sum[(E^(2 Pi I Hrep`k/Hrep`n) Hrep`u)^(-Hrep`m)"
     "  PolyLog[Hrep`s, E^(2 Pi I Hrep`k/Hrep`n) Hrep`u], {Hrep`k, 0, Hrep`n - 1}]]",
+    /* The duplication formula at n >= 3 evaluates its auxiliary function at
+     * omega^k x. An exponential e^((a + b I) x) is put in the real form
+     * e^(a x) (Cos[b x] + I Sin[b x]), an identity for every x, so the
+     * conjugate roots combine: e^(omega x) + e^(omega^-1 x) = 2 e^(-x/2) cos(Sqrt[3] x/2). */
+    "Hrep`expre[Hrep`x_] := With[{Hrep`r = Hrep`x /. Complex[Hrep`a_, Hrep`b_] :> Hrep`a},"
+    " If[Hrep`r === Hrep`x, E^Hrep`x, With[{Hrep`i = Expand[(Hrep`x - Hrep`r)/I]},"
+    "  E^Hrep`r (Cos[Hrep`i] + I Sin[Hrep`i])]]]",
+    "Hrep`expreal[Hrep`f_] := Expand[Hrep`f /. Power[E, Hrep`e_] :> Hrep`expre[Expand[Hrep`e]]]",
     /* F = P(theta) 1/(1-z) + sum q Phi: Hrep`lerch[R, k, z] with R the
      * rational coefficient in k. */
     "Hrep`lerch[Hrep`R_, Hrep`k_, Hrep`z_] := Module[{Hrep`t = Apart[Hrep`R, Hrep`k],"

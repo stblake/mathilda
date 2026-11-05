@@ -192,6 +192,85 @@ static void test_struve(void) {
     check_closed("HypergeometricPFQ[{1}, {3/2, 7/3}, z]", "{}", "7/10");
 }
 
+/* The closed form of `f` against the pFq series through z^8: at z = +-1/10
+ * the difference from the degree-8 partial sum must be no larger than the
+ * first omitted term allows (3 |t_9| |z|^9), so a wrong coefficient of any
+ * order <= 8 is caught; then 25 digits at z = 3/10. */
+static void check_series(const char* f) {
+    char buf[2048];
+    snprintf(buf, sizeof buf,
+        "With[{r = FunctionExpand[%s], s = Normal[Series[%s, {z, 0, 8}]],"
+        " t9 = SeriesCoefficient[%s, {z, 0, 9}]},"
+        " FreeQ[r, HypergeometricPFQ] && And @@ Table[Abs[N[(r - s) /. z -> h, 60]] <="
+        " 3 Abs[t9] Abs[h]^9 + 10^-55, {h, {1/10, -1/10}}] &&"
+        " Abs[N[(r - (%s)) /. z -> 3/10, 40]] < 10^-25]", f, f, f, f);
+    assert_eval_eq(buf, "True", 0);
+}
+
+/* Kelvin functions: the 0F3 certificate families (ber/bei, and the product
+ * J_nu I_nu = ber^2 + bei^2), and ker/kei as Meijer G. */
+static void test_kelvin(void) {
+    assert_eval_eq("FunctionExpand[HypergeometricPFQ[{}, {1/2, 1/2, 1}, -z]] === KelvinBer[0, 4 z^(1/4)]", "True", 0);
+    assert_eval_eq("FunctionExpand[HypergeometricPFQ[{}, {1, 3/2, 3/2}, -z]] === KelvinBei[0, 4 z^(1/4)]/(4 Sqrt[z])", "True", 0);
+    check_series("HypergeometricPFQ[{}, {1/2, 1/2, 1}, -z]");
+    check_series("HypergeometricPFQ[{}, {1, 3/2, 3/2}, -z]");
+    check_series("HypergeometricPFQ[{}, {3/2, 2, 5/2}, -z]");
+    check_closed("HypergeometricPFQ[{}, {1/2, 1/2, 1}, -z]", "{}", "-7/3");
+    /* positive argument: (I_0 + J_0)/2 of 4 z^(1/4) */
+    assert_eval_eq("FunctionExpand[HypergeometricPFQ[{}, {1/2, 1/2, 1}, z]] === BesselI[0, 4 z^(1/4)]/2 + BesselJ[0, 4 z^(1/4)]/2", "True", 0);
+    check_series("HypergeometricPFQ[{}, {1/2, 1/2, 1}, z]");
+    /* a non-integer order stays in Bessel form, correct for both signs */
+    check_series("HypergeometricPFQ[{}, {1/2, 2/3, 7/6}, -z]");
+    check_closed("HypergeometricPFQ[{}, {1/2, 2/3, 7/6}, z]", "{}", "-7/3");
+    /* the product family: ber_0^2 + bei_0^2 */
+    assert_eval_eq("FunctionExpand[HypergeometricPFQ[{}, {1/2, 1, 1}, z]] === KelvinBei[0, 2 Sqrt[2] z^(1/4)]^2 + KelvinBer[0, 2 Sqrt[2] z^(1/4)]^2", "True", 0);
+    check_series("HypergeometricPFQ[{}, {1/2, 1, 1}, z]");
+    check_series("HypergeometricPFQ[{}, {1/2, 1, 1}, -z]");
+    /* Roach's gallery: F(; 1, 5/2, 4; z) in ber_0, ber_1, bei_0, bei_1 */
+    check_series("HypergeometricPFQ[{}, {1, 5/2, 4}, z]");
+    assert_eval_eq("FreeQ[FunctionExpand[HypergeometricPFQ[{}, {1, 5/2, 4}, z]],"
+                   " BesselI | BesselJ | Complex]", "True", 0);
+    /* Roach's gallery: F(1/3; -2/3, -1/2, 1/2, 1; z), his printed form */
+    assert_eval_eq("FunctionExpand[HypergeometricPFQ[{1/3}, {-2/3, -1/2, 1/2, 1}, z]] ==="
+        " (1 + 3 Sqrt[z])/2 BesselI[0, 4 z^(1/4)] - 7 z^(1/4)/4 BesselI[1, 4 z^(1/4)] +"
+        " (1 - 3 Sqrt[z])/2 BesselJ[0, 4 z^(1/4)] + 7 z^(1/4)/4 BesselJ[1, 4 z^(1/4)]", "True", 0);
+    check_series("HypergeometricPFQ[{1/3}, {-2/3, -1/2, 1/2, 1}, z]");
+    /* symbolic order: the family */
+    check_closed("HypergeometricPFQ[{}, {1/2, (n + 1)/2, (n + 2)/2}, z]", "n -> 2/7", "3/10");
+    /* ker_0 and kei_0 by the G walk */
+    assert_eval_eq("FunctionExpand[MeijerG[{{}, {}}, {{0, 0, 1/2}, {1/2}}, z]] === 4 KelvinKer[0, 4 z^(1/4)]", "True", 0);
+    assert_eval_eq("FunctionExpand[MeijerG[{{}, {}}, {{0, 1/2, 1/2}, {0}}, z]] === -4 KelvinKei[0, 4 z^(1/4)]", "True", 0);
+    check_g("MeijerG[{{}, {}}, {{1, 0, 1/2}, {3/2}}, z]");
+    check_g("MeijerG[{{}, {}}, {{0, 1/2, 3/2}, {0}}, z]");
+}
+
+/* PFD duplication (Roach '96 sec. 19): Delta(c, n) groups, solved through
+ * the auxiliary function at the n-th roots of unity. */
+static void test_duplication(void) {
+    /* Roach's gallery: F(1/2; -1/3, -1/2, -2/3; z), his printed form */
+    assert_eval_eq("Expand[FunctionExpand[HypergeometricPFQ[{1/2}, {-1/3, -1/2, -2/3}, z]] -"
+        " ((2 - 6 z^(1/3) + 9 z^(2/3) - 18 z)/6 E^(3 z^(1/3)) +"
+        " (4 + 6 z^(1/3) - 9 z^(2/3) - 36 z)/6 E^(-3 z^(1/3)/2) Cos[3 Sqrt[3] z^(1/3)/2] +"
+        " Sqrt[3] z^(1/3) (2 + 3 z^(1/3))/2 E^(-3 z^(1/3)/2) Sin[3 Sqrt[3] z^(1/3)/2])]", "0", 0);
+    check_series("HypergeometricPFQ[{1/2}, {-1/3, -1/2, -2/3}, z]");
+    check_series("HypergeometricPFQ[{}, {1/3, 2/3}, z]");
+    check_series("HypergeometricPFQ[{}, {4/3, 5/3}, -z]");
+    /* n = 4 */
+    assert_eval_eq("FunctionExpand[HypergeometricPFQ[{}, {1/4, 1/2, 3/4}, z]] === Cos[4 z^(1/4)]/2 + Cosh[4 z^(1/4)]/2", "True", 0);
+    check_series("HypergeometricPFQ[{}, {1/4, 1/2, 3/4}, z]");
+    /* a group holding the 1 of k! plus a range-reduced pair */
+    check_series("HypergeometricPFQ[{1}, {1/4, 3/4}, z]");
+}
+
+/* A constant in complex numbers is put in real form: the Lerch Phi value at
+ * the negative argument -8 takes the principal root. */
+static void test_constant_tidy(void) {
+    assert_eval_eq("FunctionExpand[Hypergeometric2F1[1, 1, 2/3, 8/9]] === 9 + 3 Sqrt[3] Pi - 3 Log[3]", "True", 0);
+    assert_eval_eq("FreeQ[FunctionExpand[Hypergeometric2F1[1, 1, 2/3, -1/2]], Complex]", "True", 0);
+    assert_eval_eq("Abs[N[FunctionExpand[Hypergeometric2F1[1, 1, 2/3, -1/2]] -"
+                   " Hypergeometric2F1[1, 1, 2/3, -1/2], 30]] < 10^-25", "True", 0);
+}
+
 /* Declines stay unevaluated. */
 static void test_declines(void) {
     assert_eval_eq("FunctionExpand[HypergeometricPFQ[{a}, {c}, z]]",
@@ -218,6 +297,9 @@ int main(void) {
     TEST(test_meijer);
     TEST(test_unit_g);
     TEST(test_struve);
+    TEST(test_kelvin);
+    TEST(test_duplication);
+    TEST(test_constant_tidy);
     TEST(test_declines);
     printf("All hrep tests passed!\n");
     return 0;
