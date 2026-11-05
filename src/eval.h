@@ -192,6 +192,13 @@ bool     eval_node_reusable(const Expr* e);
  * For a builtin that has PROVED its fresh result is one, so the evaluator does
  * not run the builtin a second time only to confirm nothing changes. */
 void     eval_mark_fixed_point(Expr* e);
+/* Give `e` exactly the stamp `like` carries (clock and GROUND/INERT flag),
+ * where `like` was just stamped by eval_mark_fixed_point.  For a builtin
+ * building many nodes of ONE shape -- the same head, and arguments drawn from
+ * one set of already-stamped nodes -- for which eval_mark_fixed_point would
+ * reach the same verdict on every node (a 2M-term sum of Times[c, g..]).  The
+ * caller owns that proof; when in doubt use eval_mark_fixed_point. */
+void     eval_mark_fixed_point_like(Expr* e, const Expr* like);
 bool     eval_node_is_ground(const Expr* e);
 
 /* For a builtin returning a freshly built tree of Lists over literal atoms

@@ -416,6 +416,7 @@ set(COMMON_SRC
     ../src/sparse/sparse_struct.c
     ../src/sparse/sparse_dot.c
     ../src/sparse/sparse_func.c
+    ../src/experimental/feyncalc/diractr.c
     ../src/sparse/sparse_la_core.c
     ../src/sparse/sparse_la_factor.c
     ../src/sparse/sparse_la_krylov.c
@@ -3717,6 +3718,14 @@ if(USE_ECM)
     target_link_libraries(feyncalc_round13_tests gmp m ${ECM_LIB})
 else()
     target_link_libraries(feyncalc_round13_tests gmp m)
+endif()
+
+add_executable(experimental_diractr_tests test_experimental_diractr.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(experimental_diractr_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(experimental_diractr_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(experimental_diractr_tests gmp m)
 endif()
 
 add_executable(feyncalc_round14_tests test_feyncalc_round14.c $<TARGET_OBJECTS:mathilda_common>)

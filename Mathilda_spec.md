@@ -63,6 +63,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | BLAS context (`` BLAS`ddot ``, `` BLAS`dgemv ``, `` BLAS`dgemm ``, `` BLAS`zgemm ``, ...) — direct access to the machine-precision BLAS kernels | [`builtins/blas.md`](docs/spec/builtins/blas.md) |
 | LAPACK context (`` LAPACK`dgesv ``, `` LAPACK`dgeqrf ``, `` LAPACK`dgesdd ``, `` LAPACK`dgeev ``, ...) — direct access to the LAPACK drivers | [`builtins/lapack.md`](docs/spec/builtins/lapack.md) |
 | Image processing (`Image`, `ImageQ`, `ImageDimensions`, `ImageChannels`, `ImageType`, `ImageData`) — the raster representation and its accessors | [`builtins/image-processing.md`](docs/spec/builtins/image-processing.md) |
+| Experimental context (`` Experimental`FeynCalc`DiracTr ``) — native C kernels matching a reference Wolfram-language definition exactly | [`builtins/experimental.md`](docs/spec/builtins/experimental.md) |
 
 ## Changelog
 

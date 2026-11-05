@@ -526,3 +526,11 @@ folders, so adding one is a folder and nothing else.
 - `algebraic-numbers` — `RootReduce`, `MinimalPolynomial`, radical denesting
 - `pattern-rewriting` — `ReplaceAll` / `ReplaceRepeated` dispatch throughput
 - `arbitrary-precision` — `N[…, 1000]` against `mpmath`
+
+## Native kernels against the code they replace (123)
+
+`123-native-vs-m` times ONE computation written twice: ordinary Wolfram-language code, which runs through the evaluator, and an `` Experimental` `` C builtin that must return the identical value. The `.m` rows run in every system that reads the file. The C rows are `benchIf` and print SKIP where the head is absent. The `.m`-vs-C ratio within one system is what the native kernel buys, and the `.m` rows across systems compare evaluators. The runner places it in group G. Because the C rows have no baseline system, the runner classes them INCOMPLETE; read their times against the `.m` row of the same size.
+
+| # | experiment | what it measures |
+|---|---|---|
+| 123 | `native-vs-m` | The recursive Dirac trace from Woxi issue #2142 (Rolf Mertig's `diracTr`, verbatim) against `` Experimental`FeynCalc`DiracTr ``, for n = 8, 10, 12, 14 (13!! = 135135 terms), C alone at n = 16 (2027025 terms), and a repeated-index n = 12 trace. Also the issue's `Cases[_, _g, Infinity]` timing on both results. Checks: length, distinct `g`, and the coefficient sum, plus `C === .m`. `medium.frm`, the issue's FORM program, sits alongside for a by-hand FORM column (`time form -q medium.frm`), since the runner has no FORM driver. |

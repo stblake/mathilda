@@ -1188,6 +1188,11 @@ void core_init(void) {
     void assoc_ops_init(void);
     assoc_ops_init();
 
+    /* Experimental`FeynCalc`: native kernels for FeynCalc workloads
+     * (src/experimental/feyncalc/; DiracTr). */
+    void experimental_feyncalc_init(void);
+    experimental_feyncalc_init();
+
     /* Operator (curried) forms h[o...][x]. After every builtin and docstring
      * is registered (including assoc_ops_init's heads), since each row appends
      * its form to the head's docstring. */

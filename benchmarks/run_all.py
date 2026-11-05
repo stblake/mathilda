@@ -203,6 +203,11 @@ def group_of(num):
         # stress sizes are group A by subject; the 1-10 block was full when
         # they were added.
         return "A symbolic (sympy)"
+    if num == 123:
+        # One computation written twice -- Wolfram-language code and the native
+        # Experimental` C builtin that must return the identical value.  The
+        # ratio that matters is .m-vs-C within a system, not across systems.
+        return "G native kernels (.m vs C)"
     if 11 <= num <= 20:
         return "B numeric libraries (scipy)"
     if 21 <= num <= 28:

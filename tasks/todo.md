@@ -1130,3 +1130,12 @@ Plan: ~/.claude/plans/snappy-sprouting-pie.md
 - [x] FullSimplify `Separable` transform, memoised per call: 38 leaves on the example, +45% FullSimplify time on polynomials, no measurable cost elsewhere.
 - [x] ctest -LE nightly: 591/593 passed in the loaded run. image_tests and parallelmixedtower_tests hit SIGALRM under machine load (load average ~44); both pass alone, and interleaved old/new image_tests timings show no regression. check-messages, check-c99 and leaks: clean.
 - Open: N of a near-midpoint subnormal rational; SetPrecision[x, Infinity] gives a Real; [Full]Simplify[Sin[p]] slow.
+
+## Experimental`FeynCalc`DiracTr (v0.6189) — review
+
+- [x] `src/experimental/feyncalc/diractr.c`: native twin of Rolf Mertig's `diracTr` (Woxi #2142), SameQ to it. No evaluator calls: shared `g` nodes, integer matching rows, a row-moving LSD radix sort (2 digits per pass), a bottom-up stamp with `eval_mark_fixed_point_like`. Repeated arguments merge natively. Rules on `g`, arguments or arithmetic fall back to `Expand[...]`, unstamped.
+- [x] `eval.c`: `x = rhs` skips the mention walk when rhs is a compound, still-reusable fixed point. It was about 40% of `r = DiracTr @@ Array[x, 16]`. Diffed against the old binary on the self-referential Set cases: identical.
+- [x] Measured at n = 14 on a loaded machine (load average 9-21): C 26-40 ms; `.m` 2.9-3.9 s, 9.0 s in the reference kernel; FORM 0.58 s (per the issue). n = 16: C 0.5-0.7 s. Measured before the radix rewrite: 103 ms (n = 14) and 2.6 s (n = 16).
+- [x] `tests/test_experimental_diractr.c` (8 groups) passes. `ctest -LE nightly`: 601/601. valgrind leak summary identical with and without the calls. check-c99, check-messages and check-packed-aware are clean.
+- [x] `benchmarks/123-native-vs-m` (group G). Found while building it: a HoldRest `benchIf` given the head name through a variable is silently left unevaluated. Also, parsing a statement interns the symbol, so `Names[]` presence must be decided before the symbol is parsed.
+- Open: the remaining C-path cost is one Times node and one args array per term, which is irreducible as a boxed Expr; `Cases[_, _g, Infinity]` + `Union` on the result costs 3-5× the build.

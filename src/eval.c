@@ -611,6 +611,11 @@ void eval_mark_fixed_point(Expr* e) {
     e->last_evaluated_at = g_eval_clock | flag;
 }
 
+void eval_mark_fixed_point_like(Expr* e, const Expr* like) {
+    if (!e || !like || e->type != EXPR_FUNCTION || like->type != EXPR_FUNCTION) return;
+    e->last_evaluated_at = like->last_evaluated_at;
+}
+
 bool eval_stamp_list_literal(Expr* e) {
     if (!e) return false;
     SymbolDef* d = symtab_get_def(SYM_List);
@@ -3625,10 +3630,21 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                          * symbol of the left side (y = y + 1 re-evaluates, and
                          * recurses, as it should). Otherwise it is final: the
                          * re-evaluation repeated every message of a declining
-                         * call (z = Det[{{1, 2}}] printed Det::matsq twice). */
+                         * call (z = Det[{{1, 2}}] printed Det::matsq twice).
+                         *
+                         * An rhs that is STILL a reusable fixed point after the
+                         * assignment needs no walk: evaluate(rhs) would return it
+                         * as is.  An INERT stamp that relied on the assigned
+                         * symbol was invalidated by the binding itself, so
+                         * y = y + 1 still re-evaluates.  Compound nodes only:
+                         * eval_node_reusable is true of every atom, and x = x
+                         * must still recurse.  The walk is O(tree):
+                         * r = <135135-term trace> cost as much as building it. */
                         bool final_value = !is_delayed && settle_ok && settle_argc == 2 &&
                                            settle_snap[1] == rhs &&
-                                           !eval_mentions_symbols_of(rhs, target_lhs);
+                                           ((rhs->type == EXPR_FUNCTION &&
+                                             eval_node_reusable(rhs)) ||
+                                            !eval_mentions_symbols_of(rhs, target_lhs));
                         Expr* ret = is_delayed ? expr_new_symbol(SYM_Null)
                                   : final_value ? expr_copy(rhs) : evaluate(rhs);
                         if (free_target) expr_free(target_lhs);

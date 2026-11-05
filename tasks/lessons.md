@@ -5154,3 +5154,11 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - **A representative choice that "doesn't matter" for one function can flip the sign of its
   sibling** (nu vs -nu: ce invariant, se odd). Check every consumer of a shared plan's
   conventions when adding a new head over it.
+- **A user-supplied reference definition is the spec** (Experimental`FeynCalc`DiracTr,
+  2026-11-05): when the user hands over a `.m` definition to implement natively, match it
+  exactly (SameQ, term order included) and test it against that definition. Do not ask
+  semantics questions; the user rejected one.
+- **Native kernels never call the evaluator**: build the canonical tree directly, share
+  subnodes by refcount, and stamp it with `eval_mark_fixed_point(_like)`. Then profile
+  with `sample`: `Set` walking a huge rhs (`eval_mentions_any`) cost as much as the
+  kernel itself.
