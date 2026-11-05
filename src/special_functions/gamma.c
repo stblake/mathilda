@@ -833,14 +833,40 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
         Expr *are, *aim, *zre, *zim;
         gamma_decompose(a, zero, &are, &aim);
         gamma_decompose(z, zero, &zre, &zim);
-        bool any_complex  = (aim != zero) || (zim != zero);
+        /* A real negative z gives a complex value (z^a on the principal
+         * branch), which mpfr_gamma_inc reports as NaN. Send it to the
+         * complex routine with a zero imaginary part rather than leaving
+         * Gamma[2/9, -0.3] unevaluated. */
+        bool neg_real_z = false;
+        if (zim == zero) {
+            mpfr_t zt; mpfr_init2(zt, 64);
+            neg_real_z = gamma_set_mpfr(zt, zre) && mpfr_sgn(zt) < 0;
+            mpfr_clear(zt);
+        }
+        bool any_complex  = (aim != zero) || (zim != zero) || neg_real_z;
         bool any_inexact  = gamma_is_inexact(are) || gamma_is_inexact(aim) ||
                             gamma_is_inexact(zre) || gamma_is_inexact(zim);
         if (any_complex && any_inexact) {
             /* Min-contagion across all inexact parts of both complex args
              * (gamma_work_prec descends into Complex and floors at 53). */
             mpfr_prec_t p = gamma_work_prec(a, z);
+            /* Positive integer a and real z: Gamma(n, z) = (n-1)! e^-z
+             * sum z^k/k! is real, so drop the rounding residue the complex
+             * series leaves in the imaginary part. */
+            bool real_value = false;
+            if (neg_real_z && aim == zero) {
+                mpfr_t at; mpfr_init2(at, 64);
+                real_value = gamma_set_mpfr(at, are) && mpfr_integer_p(at) &&
+                             mpfr_sgn(at) > 0;
+                mpfr_clear(at);
+            }
             Expr* out = gamma_mpfr_inc_complex(are, aim, zre, zim, p);
+            if (out && real_value && out->type == EXPR_FUNCTION &&
+                out->data.function.arg_count == 2) {
+                Expr* re = expr_copy(out->data.function.args[0]);
+                expr_free(out);
+                out = re;
+            }
             if (out) { expr_free(zero); return out; }
         }
         expr_free(zero);

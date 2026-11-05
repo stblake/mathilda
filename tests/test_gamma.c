@@ -247,6 +247,22 @@ void test_gamma_attributes() {
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "Gamma must be Protected");
 }
 
+/* Real negative z: the value is complex (z^a on the principal branch). It
+ * used to stay unevaluated because mpfr_gamma_inc reports NaN there. A
+ * positive integer a gives a real value. References are the lower-gamma
+ * series Gamma(a) - z^a sum (-z)^k/(k! (a+k)). */
+static void test_gamma_incomplete_negative_real(void) {
+    assert_eval_eq("With[{a = 2/9, x = -3/10}, Abs[Gamma[a, -0.3] - N[Gamma[a] -"
+                   " x^a Sum[(-x)^k/(k! (a + k)), {k, 0, 80}]]] < 10^-14]", "True", 0);
+    assert_eval_eq("With[{a = 2/9, x = -3/10}, Abs[Gamma[a, N[x, 30]] - (Gamma[a] -"
+                   " x^a Sum[(-x)^k/(k! (a + k)), {k, 0, 120}])] < 10^-26]", "True", 0);
+    assert_eval_eq("With[{a = -1/3, x = -1/2}, Abs[Gamma[a, -0.5] - N[Gamma[a] -"
+                   " x^a Sum[(-x)^k/(k! (a + k)), {k, 0, 80}]]] < 10^-13]", "True", 0);
+    assert_eval_eq("Head[Gamma[3, -0.5]]", "Real", 0);
+    assert_eval_eq("Abs[Gamma[3, -0.5] - N[Gamma[3, -1/2]]] < 10^-14", "True", 0);
+    assert_eval_eq("Abs[Gamma[0.5, -2.0] - Sqrt[Pi] Erfc[Sqrt[-2.0]]] < 10^-13", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -265,6 +281,7 @@ int main() {
     TEST(test_gamma_derivatives);
     TEST(test_gamma_incomplete_numeric);
     TEST(test_gamma_incomplete_complex);
+    TEST(test_gamma_incomplete_negative_real);
     TEST(test_gamma_generalized);
     TEST(test_gamma_listable);
     TEST(test_gamma_attributes);
