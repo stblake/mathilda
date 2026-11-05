@@ -6008,6 +6008,18 @@ else()
 endif()
 add_test(NAME abort_tests COMMAND abort_tests)
 
+# A TimeConstrained timeout must put back the variable of an interrupted
+# Table / Do / Sum / NIntegrate / FindRoot / ... (binding frames, modular.c).
+add_executable(tc_binding_unwind_tests test_tc_binding_unwind.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(tc_binding_unwind_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(tc_binding_unwind_tests gmp m ${ECM_LIB})
+    add_dependencies(tc_binding_unwind_tests build_ecm)
+else()
+    target_link_libraries(tc_binding_unwind_tests gmp m)
+endif()
+add_test(NAME tc_binding_unwind_tests COMMAND tc_binding_unwind_tests)
+
 add_executable(subvalues_tests test_subvalues.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(subvalues_tests PRIVATE ../src)
 if(USE_ECM)

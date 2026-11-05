@@ -723,8 +723,8 @@ Expr* builtin_streamplot(Expr* res) {
     emit_scaling_meta(so.sf_x, so.sf_y, &passthrough, &pt_count);
 
     /* Shadow both iterator variables so the field sees no stray OwnValues. */
-    Rule* old_x = iter_spec_shadow(xspec.var);
-    Rule* old_y = iter_spec_shadow(yspec.var);
+    IterShadow old_x = iter_spec_shadow(xspec.var);
+    IterShadow old_y = iter_spec_shadow(yspec.var);
 
     FieldCtx ctx = { .xvar = xspec.var, .yvar = yspec.var,
                      .vx = vx_body, .vy = vy_body };
@@ -934,8 +934,8 @@ Expr* builtin_streamplot(Expr* res) {
         if (have_cfn) {
             size_t mid = n_pts / 2;
             double svx = 0, svy = 0;
-            Rule* sx2 = iter_spec_shadow(xspec.var);
-            Rule* sy2 = iter_spec_shadow(yspec.var);
+            IterShadow sx2 = iter_spec_shadow(xspec.var);
+            IterShadow sy2 = iter_spec_shadow(yspec.var);
             eval_field(&ctx, pts[mid].x, pts[mid].y, &svx, &svy);
             iter_spec_restore(xspec.var, sx2);
             iter_spec_restore(yspec.var, sy2);

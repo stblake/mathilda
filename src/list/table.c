@@ -96,7 +96,7 @@ Expr* builtin_table(Expr* res) {
         if (decline) { free(results); iter_spec_free(&s); return NULL; }
     }
 
-    Rule* old_own = iter_spec_shadow(var_sym);
+    IterShadow old_own = iter_spec_shadow(var_sym);
 
     if (is_n_times) {
         int64_t n = imax_e->data.integer;

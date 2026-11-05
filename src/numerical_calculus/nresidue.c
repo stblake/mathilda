@@ -28,6 +28,7 @@
  */
 
 #include "nresidue.h"
+#include "../modular.h"
 #include "quadrature.h"
 
 #include <complex.h>
@@ -127,17 +128,14 @@ static Expr* nr_from_complex_mpfr(const mpfr_t re, const mpfr_t im) {
 
 typedef struct {
     const char* name;      /* interned                           */
-    Rule*       saved_own; /* prior OwnValue chain (borrowed)    */
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } NrBind;
 
 static void nr_bind_snapshot(NrBind* b, const char* name) {
-    SymbolDef* def = symtab_get_def(name);
     b->name = name;
-    b->saved_own = def->own_values;
-    b->saved_attrs = def->attributes;
-    def->own_values = NULL;
+    /* Unwind-safe: a TimeConstrained timeout drains the frame. */
+    b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
 }
 
@@ -163,10 +161,7 @@ static void nr_bind_set(NrBind* b, Expr* value) {
 
 static void nr_bind_restore(NrBind* b) {
     if (!b->valid) return;
-    SymbolDef* def = symtab_get_def(b->name);
-    nr_bind_clear_temp(def);
-    def->own_values = b->saved_own;
-    def->attributes = b->saved_attrs;
+    mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     eval_clock_bump();
 }

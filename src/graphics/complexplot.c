@@ -595,7 +595,7 @@ Expr* builtin_complexplot(Expr* res) {
     int N = opts.plot_points;
     size_t stride = (size_t)(N + 1);
 
-    Rule* old_z = iter_spec_shadow(zvar);
+    IterShadow old_z = iter_spec_shadow(zvar);
     CGrid* grid = build_cgrid(zvar, body, opts.region_function,
                                xmin, xmax, ymin, ymax, N);
     iter_spec_restore(zvar, old_z);
@@ -708,7 +708,7 @@ Expr* builtin_complexplot3d(Expr* res) {
     int N = opts.plot_points;
     size_t stride = (size_t)(N + 1);
 
-    Rule* old_z = iter_spec_shadow(zvar);
+    IterShadow old_z = iter_spec_shadow(zvar);
     CGrid* grid = build_cgrid(zvar, body, opts.region_function,
                                xmin, xmax, ymin, ymax, N);
     iter_spec_restore(zvar, old_z);

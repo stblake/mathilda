@@ -225,8 +225,8 @@ Expr* builtin_densityplot(Expr* res) {
         return NULL;
     }
 
-    Rule* old_x = iter_spec_shadow(xspec.var);
-    Rule* old_y = iter_spec_shadow(yspec.var);
+    IterShadow old_x = iter_spec_shadow(xspec.var);
+    IterShadow old_y = iter_spec_shadow(yspec.var);
 
     /* Compile the body once as f(x, y); NULL keeps every sample on the
      * interpreter, exactly as before. */

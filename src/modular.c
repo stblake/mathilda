@@ -5,6 +5,7 @@
 #include "sym_names.h"
 #include "message.h"
 #include "print.h"
+#include "iter.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -868,19 +869,187 @@ static void blk_restore_frame(BlockFrame* f) {
     free(f);
 }
 
-int mth_block_depth_save(void) { return block_depth; }
+/* ---- Binding frames ---------------------------------------------------------
+ *
+ * The lighter sibling of a Block frame: ONE variable whose OwnValues (and, on
+ * request, DownValues and attributes) are set aside for the duration of a C
+ * builtin that binds it itself -- the iterator of Table / Do / Sum / Product
+ * and the plotters (iter_spec_shadow), the variable of NIntegrate / NSum /
+ * FindRoot / NMinimize / NDSolve / ND / NLimit / NSeries / NResidue.  Each of
+ * those used to save the old value in a C local and put it back on the way
+ * out, and a TimeConstrained timeout siglongjmps over that restore: `k` stayed
+ * bound to the last value the loop reached (k = 41006 after an interrupted
+ * Do) for the rest of the session.  Kept on this stack instead, the binding is
+ * put back by the same drain that restores Block frames.
+ *
+ * Cost.  A push or pop is a handful of stores into a static array that only
+ * ever grows, so nothing is allocated per call once the stack has reached its
+ * high-water mark; the per-ITERATION write of the loop value (iter_bind) does
+ * not touch the stack at all.
+ *
+ * Order.  Binding frames and Block frames interleave (Block[{x}, Table[..,
+ * {x, ..}]]), and an unwind must restore the newer one first, or the older
+ * would hand back a value the newer one then frees.  Each binding frame
+ * records the Block depth at its push, which tells the drain which of the two
+ * stack tops is newer.  mth_block_depth_save reports the sum of both depths.
+ *
+ * Out-of-order pops.  A plotter shadows x then y and restores x then y; the
+ * popped x frame is marked dead and the stack shrinks past dead frames once
+ * the ones above them are gone.
+ *
+ * Async safety.  The jump can land anywhere outside libc, so a frame is made
+ * visible (bind_top) only once it is filled in, and before the symbol's value
+ * is detached; a restore that finds the saved chain still installed frees
+ * nothing.  Growing the array copies into a new block and swaps the pointer,
+ * so the stack is never seen half-moved. */
 
-/* Drain the Block stack back down to `depth`, restoring each frame. Called
- * after a timeout siglongjmp, where the frames between here and the deadline
- * never got to run their own restore. */
+typedef struct BindFrame {
+    SymbolDef* def;          /* the bound symbol (symbol form)              */
+    Expr*      ivar;         /* indexed form v[k] (owned copy), else NULL   */
+    Rule*      saved_own;    /* detached OwnValues, or the detached v[k] rule */
+    Rule*      saved_down;   /* detached DownValues (MTH_BIND_DOWN)         */
+    uint32_t   saved_attrs;  /* MTH_BIND_ATTRS                              */
+    unsigned   flags;        /* MTH_BIND_* plus BIND_LIVE                   */
+    int        blk_depth;    /* block_depth when pushed: interleave order   */
+} BindFrame;
+
+#define BIND_LIVE 0x100u
+
+static BindFrame* volatile bind_stack = NULL;
+static volatile int        bind_top   = 0;
+static int                 bind_cap   = 0;
+
+/* Restore one live frame.  Idempotent with respect to a jump landing inside it
+ * (the drain may run it again): it frees only a chain that is not the saved
+ * one, and clears BIND_LIVE before freeing. */
+static void bind_restore(BindFrame* b) {
+    if (b->ivar) {
+        /* Indexed iterator v[k]: drop the loop's v[k] DownValue and put the
+         * outer one back (re-added, as the old restore did). */
+        const char* h = b->ivar->data.function.head->data.symbol.name;
+        Rule* ours = symtab_detach_down_value_exact(h, b->ivar);
+        Rule* saved = b->saved_own;
+        Expr* ivar = b->ivar;
+        b->saved_own = NULL;
+        b->ivar = NULL;
+        b->flags &= ~BIND_LIVE;
+        if (ours) symtab_rule_free(ours);
+        if (saved) {
+            symtab_add_down_value_as(h, saved->pattern, saved->replacement, saved->delayed);
+            symtab_rule_free(saved);
+        }
+        expr_free(ivar);
+        return;
+    }
+    SymbolDef* def = b->def;
+    Rule* cur_own = def->own_values;
+    def->own_values = b->saved_own;
+    Rule* cur_down = NULL;
+    if (b->flags & MTH_BIND_DOWN) {
+        cur_down = def->down_values;
+        def->down_values = b->saved_down;
+    }
+    if (b->flags & MTH_BIND_ATTRS) def->attributes = b->saved_attrs;
+    b->flags &= ~BIND_LIVE;
+    if (cur_own != b->saved_own) blk_free_rules(cur_own);
+    if (cur_down != b->saved_down) blk_free_rules(cur_down);
+}
+
+/* Make room for one more frame, keeping the old array intact until the new
+ * one is installed (see "Async safety" above). */
+static bool bind_reserve(void) {
+    if (bind_top < bind_cap) return true;
+    int ncap = bind_cap ? 2 * bind_cap : 64;
+    BindFrame* n = malloc((size_t)ncap * sizeof *n);
+    if (!n) return false;
+    BindFrame* old = bind_stack;
+    if (bind_top) memcpy(n, old, (size_t)bind_top * sizeof *n);
+    bind_stack = n;
+    bind_cap = ncap;
+    free(old);
+    return true;
+}
+
+/* Push a frame for the plain symbol `def`. */
+static int bind_push_symbol(SymbolDef* def, unsigned flags) {
+    if (!bind_reserve()) return -1;
+    int t = bind_top;
+    volatile BindFrame* b = &bind_stack[t];   /* ordered before bind_top */
+    b->blk_depth = block_depth;
+    b->def = def;
+    b->ivar = NULL;
+    b->saved_own = def->own_values;
+    b->saved_down = (flags & MTH_BIND_DOWN) ? def->down_values : NULL;
+    b->saved_attrs = (flags & MTH_BIND_ATTRS) ? def->attributes : 0;
+    b->flags = (flags & (MTH_BIND_ATTRS | MTH_BIND_DOWN)) | BIND_LIVE;
+    bind_top = t + 1;                 /* visible before anything is detached */
+    def->own_values = NULL;
+    if (flags & MTH_BIND_DOWN) def->down_values = NULL;
+    return t;
+}
+
+int mth_bind_push(Expr* var, unsigned flags) {
+    if (!var) return -1;
+    if (var->type == EXPR_SYMBOL)
+        return bind_push_symbol(symtab_get_def(var->data.symbol.name), flags);
+    if (!iter_var_is_indexed(var) || !bind_reserve()) return -1;
+    /* Indexed iterator v[k]: its value is the DownValue v[k] = ... */
+    int t = bind_top;
+    volatile BindFrame* b = &bind_stack[t];   /* ordered before bind_top */
+    b->blk_depth = block_depth;
+    b->def = NULL;
+    b->ivar = expr_copy(var);
+    b->saved_own = NULL;
+    b->saved_down = NULL;
+    b->saved_attrs = 0;
+    b->flags = BIND_LIVE;
+    bind_top = t + 1;
+    b->saved_own = symtab_detach_down_value_exact(
+        var->data.function.head->data.symbol.name, var);
+    return t;
+}
+
+int mth_bind_push_name(const char* name, unsigned flags) {
+    return name ? bind_push_symbol(symtab_get_def(name), flags) : -1;
+}
+
+bool mth_bind_pop(int token) {
+    if (token < 0 || token >= bind_top) return false;   /* already drained */
+    BindFrame* b = &bind_stack[token];
+    if (!(b->flags & BIND_LIVE)) return false;
+    bool had = b->saved_own != NULL || b->saved_down != NULL;
+    bind_restore(b);
+    while (bind_top > 0 && !(bind_stack[bind_top - 1].flags & BIND_LIVE)) bind_top--;
+    return had;
+}
+
+int mth_block_depth_save(void) { return block_depth + bind_top; }
+
+/* Drain the Block and binding stacks back down to `depth` (a value from
+ * mth_block_depth_save), newest frame first, restoring each. Called after a
+ * timeout siglongjmp, where the frames between here and the deadline never got
+ * to run their own restore. */
 void mth_block_depth_unwind(int depth) {
     blk_unwinding++;
-    while (block_depth > depth && block_stack) {
-        BlockFrame* f = block_stack;
-        block_stack = f->next;
-        block_depth--;
-        blk_restore_frame(f);
+    bool rebound = false;
+    while (block_depth + bind_top > depth) {
+        if (bind_top > 0 &&
+            (!block_stack || bind_stack[bind_top - 1].blk_depth >= block_depth)) {
+            BindFrame* b = &bind_stack[bind_top - 1];
+            if (b->flags & BIND_LIVE) { bind_restore(b); rebound = true; }
+            bind_top--;
+        } else if (block_stack) {
+            BlockFrame* f = block_stack;
+            block_stack = f->next;
+            block_depth--;
+            blk_restore_frame(f);
+        } else {
+            break;
+        }
     }
+    /* The bindings were put back behind add_rule's back: no fixed point
+     * stamped while a loop value was in force may be reused. */
+    if (rebound) eval_clock_bump();
     blk_unwinding--;
     /* Defensive: a mismatched count must not leave the counter drifting. */
     if (!block_stack) block_depth = 0;

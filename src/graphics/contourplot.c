@@ -563,8 +563,8 @@ Expr* builtin_contourplot(Expr* res) {
 
             /* Evaluate grid for this element (sample uniformly in world space). */
             GridCtx lctx = { .xvar = xspec.var, .yvar = yspec.var, .body = sub_body };
-            Rule* lox = iter_spec_shadow(xspec.var);
-            Rule* loy = iter_spec_shadow(yspec.var);
+            IterShadow lox = iter_spec_shadow(xspec.var);
+            IterShadow loy = iter_spec_shadow(yspec.var);
             lctx.ac = grid_compile(&lctx);
             for (int iy = 0; iy <= N; iy++) {
                 double yj = scale_invert(co.sf_y, u_ymin + iy * du_y);
@@ -688,8 +688,8 @@ Expr* builtin_contourplot(Expr* res) {
     }
 
     GridCtx ctx = { .xvar = xspec.var, .yvar = yspec.var, .body = eval_body };
-    Rule* old_x = iter_spec_shadow(xspec.var);
-    Rule* old_y = iter_spec_shadow(yspec.var);
+    IterShadow old_x = iter_spec_shadow(xspec.var);
+    IterShadow old_y = iter_spec_shadow(yspec.var);
     ctx.ac = grid_compile(&ctx);
 
     double zmin = 1e300, zmax = -1e300;

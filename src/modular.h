@@ -32,8 +32,28 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
  * also unwinds with mth_block_depth_unwind like a Block's. Used by Dialog. */
 void* mth_block_enter(Expr* const* specs, size_t n);
 void  mth_block_leave(void* frame);
+/* Depth of the dynamic-scope stacks (Block frames + binding frames, below). */
 int  mth_block_depth_save(void);
 void mth_block_depth_unwind(int depth);
+/* Binding frames: unwind-safe temporary localisation of ONE variable by a C
+ * builtin that binds it itself (an iterator, an integration variable).
+ * mth_bind_push detaches the variable's current OwnValues -- a Symbol, or the
+ * DownValue of an indexed iterator v[k] -- and returns a token (-1 for a NULL
+ * or non-variable `var`, a no-op for mth_bind_pop).  Bind values in between
+ * as before (symtab_add_own_value / iter_bind); mth_bind_pop frees what was
+ * bound and puts the old value back, returning whether there was one.  It
+ * does NOT bump the eval clock: the caller does, as it did before.  The frame
+ * lives on the stack the TimeConstrained unwind drains (with Block's frames,
+ * newest first), so a timeout can no longer leave the loop value installed.
+ * No allocation per push once the stack has grown; pops may be out of order.
+ *   MTH_BIND_ATTRS  also save the attributes and restore them on pop;
+ *   MTH_BIND_DOWN   also detach and restore the DownValues (symbols only). */
+#define MTH_BIND_ATTRS 0x1u
+#define MTH_BIND_DOWN  0x2u
+int  mth_bind_push(Expr* var, unsigned flags);
+int  mth_bind_push_name(const char* name, unsigned flags);
+bool mth_bind_pop(int token);
+
 /* Free the Block rule lists parked by a TimeConstrained unwind (see modular.c).
  * Call only at a top-level statement boundary, with no evaluation in flight. */
 void mth_block_graveyard_flush(void);

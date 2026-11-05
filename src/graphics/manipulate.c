@@ -409,7 +409,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
 
     while (!WindowShouldClose()) {
         /* ---- Evaluate body at current control values ---- */
-        Rule* saved[MAX_CTRLS];
+        IterShadow saved[MAX_CTRLS];
         for (int k = 0; k < n_ctrls; k++) {
             Expr* val = (ctrls[k].kind == MCTRL_RANGE)
                       ? expr_new_real(ctrls[k].value)

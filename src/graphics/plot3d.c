@@ -507,8 +507,8 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
                                        const Plot3DSampleOpts* sopts, Expr* single_color) {
     if (nfun == 0 || !(xmin < xmax) || !(ymin < ymax)) return NULL;
 
-    Rule* old_ownx = iter_spec_shadow(varx);
-    Rule* old_owny = iter_spec_shadow(vary);
+    IterShadow old_ownx = iter_spec_shadow(varx);
+    IterShadow old_owny = iter_spec_shadow(vary);
 
     Expr** prims = NULL;
     size_t cap = 0, prim_count = 0;

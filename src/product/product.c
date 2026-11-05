@@ -236,7 +236,7 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
     Expr** terms = malloc(sizeof(Expr*) * (n ? n : 1));
     size_t count = 0;
 
-    Rule* saved = iter_spec_shadow(var);
+    IterShadow saved = iter_spec_shadow(var);
     for (size_t i = 0; i < n; i++) {
         iter_bind(var, list->data.function.args[i]);
         terms[count++] = evaluate(f);
@@ -260,7 +260,7 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
     size_t cap = 16, count = 0;
     Expr** terms = malloc(sizeof(Expr*) * cap);
 
-    Rule* saved = iter_spec_shadow(var);
+    IterShadow saved = iter_spec_shadow(var);
     double val = min_val;
     Expr* curr_e = expr_copy(imin);
     bool overflow = false;
@@ -390,7 +390,7 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
     double nterms = (max_val - min_val) / di_val + 1.0;
     if (!(nterms >= 1.0) || nterms > (double)PRODUCT_MAX_COMPILED_TERMS) return NULL;
 
-    Rule* saved = iter_spec_shadow(s->var);
+    IterShadow saved = iter_spec_shadow(s->var);
     Expr* first_val = is_real ? expr_new_real(min_val) : expr_copy(s->imin);
     iter_bind(s->var, first_val);
     Expr* probe = evaluate(f);
@@ -494,7 +494,7 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
             prod_body_has_index_predicate(f, s.var->data.symbol.name);
 
         if (!is_real && di_val == 1.0 && min_val <= max_val && !index_pred_body) {
-            Rule* saved = iter_spec_shadow(s.var);
+            IterShadow saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
             if (cf) { iter_spec_free(&s); return cf; }

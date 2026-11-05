@@ -37,8 +37,7 @@
  * ------------------------------------------------------------------ */
 typedef struct {
     const char* name;      /* interned symbol name (borrowed)         */
-    Rule*       saved_own; /* the symbol's OwnValues before binding    */
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } NdBind;
 

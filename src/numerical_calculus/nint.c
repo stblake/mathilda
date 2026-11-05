@@ -15,7 +15,7 @@
  */
 
 #include "nint.h"
-#include "modular.h"   /* mth_block_enter/leave: unwind-safe localisation */
+#include "modular.h"   /* mth_block_enter/leave, mth_bind_push/pop: unwind-safe localisation */
 #include "gkadapt.h"
 #include "denint.h"
 #include "dequad.h"
@@ -125,17 +125,14 @@ static Expr* ni_from_complex_d(double _Complex c) {
 
 typedef struct {
     const char* name;
-    Rule*       saved_own;
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } NiBind;
 
 static void ni_bind_snapshot(NiBind* b, const char* name) {
-    SymbolDef* def = symtab_get_def(name);
     b->name = name;
-    b->saved_own = def->own_values;
-    b->saved_attrs = def->attributes;
-    def->own_values = NULL;
+    /* Unwind-safe: a TimeConstrained timeout drains the frame. */
+    b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
 }
 
@@ -161,10 +158,7 @@ static void ni_bind_set(NiBind* b, Expr* value) {
 
 static void ni_bind_restore(NiBind* b) {
     if (!b->valid) return;
-    SymbolDef* def = symtab_get_def(b->name);
-    ni_bind_clear_temp(def);
-    def->own_values = b->saved_own;
-    def->attributes = b->saved_attrs;
+    mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     eval_clock_bump();
 }
@@ -983,12 +977,10 @@ static Expr* levin_phase_derivative(const Expr* g, const char* var) {
      * which would collapse D[g, var] to 0 (or worse).  Detach any current
      * binding for the duration of the symbolic differentiation, then restore it
      * (the per-node samplers rebind it themselves). */
-    SymbolDef* vd = symtab_get_def(var);
-    Rule* saved_own = vd->own_values;
-    vd->own_values = NULL;
+    int vtok = mth_bind_push_name(var, 0);   /* unwind-safe detach */
     eval_clock_bump();
     Expr* gp = eval_and_free(dcall);
-    vd->own_values = saved_own;
+    mth_bind_pop(vtok);
     eval_clock_bump();
     if (!gp) return NULL;
     if (levin_occurs(gp, SYM_D) || levin_occurs(gp, "Derivative")) {

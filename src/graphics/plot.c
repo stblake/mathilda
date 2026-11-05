@@ -656,7 +656,7 @@ static Expr* build_plot_primitives(Expr** bodies, size_t nfun, Expr* var,
                                     const PlotSampleOpts* sopts, Expr* single_color) {
     if (nfun == 0 || !(xmin < xmax)) return NULL;
 
-    Rule* old_own = iter_spec_shadow(var);
+    IterShadow old_own = iter_spec_shadow(var);
     Expr*** per = malloc(sizeof(Expr**) * nfun);
     size_t* per_count = malloc(sizeof(size_t) * nfun);
     Expr** styles = malloc(sizeof(Expr*) * nfun);   /* owned; NULL = none */

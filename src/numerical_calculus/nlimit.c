@@ -77,6 +77,7 @@
  */
 
 #include "nlimit.h"
+#include "../modular.h"
 
 #include <complex.h>
 #include <gmp.h>
@@ -272,17 +273,14 @@ static void nl_cmul(mpfr_t out_re, mpfr_t out_im,
 
 typedef struct {
     const char* name;
-    Rule*       saved_own;
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } NlBind;
 
 static void nl_bind_snapshot(NlBind* b, const char* name) {
-    SymbolDef* def = symtab_get_def(name);
     b->name = name;
-    b->saved_own = def->own_values;
-    b->saved_attrs = def->attributes;
-    def->own_values = NULL;
+    /* Unwind-safe: a TimeConstrained timeout drains the frame. */
+    b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
 }
 
@@ -308,10 +306,7 @@ static void nl_bind_set(NlBind* b, Expr* value) {
 
 static void nl_bind_restore(NlBind* b) {
     if (!b->valid) return;
-    SymbolDef* def = symtab_get_def(b->name);
-    nl_bind_clear_temp(def);
-    def->own_values = b->saved_own;
-    def->attributes = b->saved_attrs;
+    mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     eval_clock_bump();
 }

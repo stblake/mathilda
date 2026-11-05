@@ -743,8 +743,8 @@ Expr* builtin_parametricplot(Expr* res) {
             expr_free(legends); return NULL;
         }
 
-        Rule* old1 = iter_spec_shadow(var1);
-        Rule* old2 = iter_spec_shadow(var2);
+        IterShadow old1 = iter_spec_shadow(var1);
+        IterShadow old2 = iter_spec_shadow(var2);
 
         size_t total = 0;
         Expr*** per_prims  = malloc(sizeof(Expr**) * nsub);
@@ -831,7 +831,7 @@ Expr* builtin_parametricplot(Expr* res) {
             expr_free(legends); return NULL;
         }
 
-        Rule* old1 = iter_spec_shadow(var1);
+        IterShadow old1 = iter_spec_shadow(var1);
 
         size_t total = 0;
         Expr*** per_prims  = malloc(sizeof(Expr**) * nbodies);

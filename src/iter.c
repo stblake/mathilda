@@ -38,6 +38,7 @@
  *   flow short-circuits.
  */
 
+#include "modular.h"
 #include "iter.h"
 #include "sparse/sparse.h"   /* {i, s}: iterate a SparseArray */
 #include "symtab.h"
@@ -345,14 +346,10 @@ bool iter_range_continue_bigint(const Expr* curr_e, const Expr* imax_e, double d
     return (di_val > 0) ? (c <= 0) : (c >= 0);
 }
 
-Rule* iter_spec_shadow(Expr* var) {
-    if (iter_var_is_indexed(var))
-        return symtab_detach_down_value_exact(var->data.function.head->data.symbol.name, var);
-    if (!var || var->type != EXPR_SYMBOL) return NULL;
-    SymbolDef* def = symtab_get_def(var->data.symbol.name);
-    Rule* old = def->own_values;
-    def->own_values = NULL;
-    return old;
+IterShadow iter_spec_shadow(Expr* var) {
+    /* A binding frame (modular.c), so a TimeConstrained timeout that jumps
+     * over iter_spec_restore still puts the variable back. */
+    return mth_bind_push(var, 0);
 }
 
 void iter_bind(Expr* var, Expr* value) {
@@ -362,31 +359,13 @@ void iter_bind(Expr* var, Expr* value) {
         symtab_add_own_value(var->data.symbol.name, var, value);
 }
 
-void iter_spec_restore(Expr* var, Rule* saved_own) {
-    if (iter_var_is_indexed(var)) {
-        const char* h = var->data.function.head->data.symbol.name;
-        Rule* ours = symtab_detach_down_value_exact(h, var);
-        if (ours) symtab_rule_free(ours);
-        if (saved_own) {
-            symtab_add_down_value_as(h, saved_own->pattern, saved_own->replacement, saved_own->delayed);
-            symtab_rule_free(saved_own);
-        }
-        return;
-    }
-    if (!var || var->type != EXPR_SYMBOL) return;
-    SymbolDef* def = symtab_get_def(var->data.symbol.name);
-    Rule* r = def->own_values;
-    while (r) {
-        Rule* next = r->next;
-        expr_free(r->pattern);
-        expr_free(r->replacement);
-        free(r);
-        r = next;
-    }
-    def->own_values = saved_own;
-    /* Giving the variable its outer value back is a binding, written directly:
-     * bump so no fixed point stamped while it was unbound is reused. */
-    if (saved_own) eval_clock_bump_binding(def);
+void iter_spec_restore(Expr* var, IterShadow token) {
+    bool had = mth_bind_pop(token);
+    /* Giving a symbol its outer value back is a binding, written directly:
+     * bump so no fixed point stamped while it was unbound is reused.  (An
+     * indexed variable's DownValue is re-added through symtab, which bumps.) */
+    if (had && var && var->type == EXPR_SYMBOL)
+        eval_clock_bump_binding(symtab_get_def(var->data.symbol.name));
 }
 
 /*
@@ -578,7 +557,7 @@ Expr* builtin_do(Expr* res) {
      * and restore the original binding after the loop exits. This mimics
      * Mathematica's localisation of Do's iterator.
      */
-    Rule* old_own = iter_spec_shadow(var_sym);
+    IterShadow old_own = iter_spec_shadow(var_sym);
 
     Expr* returned_val = NULL;
 

@@ -3,6 +3,7 @@
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
 #include "findmin_internal.h"
+#include "../modular.h"
 #include <stdint.h>
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 
@@ -270,10 +271,8 @@ static bool fm_apply_option_value(const char* name, Expr* rhs, FmOpts* opts) {
 
 void fm_bind_snapshot(FmVarBind* b, const char* name) {
     b->name = name;
-    SymbolDef* def = symtab_get_def(name);
-    b->saved_own = def->own_values;
-    b->saved_attrs = def->attributes;
-    def->own_values = NULL;
+    /* Unwind-safe: a TimeConstrained timeout drains the frame. */
+    b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
 }
 
@@ -313,17 +312,7 @@ void fm_bind_clear_temp(FmVarBind* b) {
 
 void fm_bind_restore(FmVarBind* b) {
     if (!b->valid) return;
-    SymbolDef* def = symtab_get_def(b->name);
-    Rule* curr = def->own_values;
-    while (curr) {
-        Rule* next = curr->next;
-        expr_free(curr->pattern);
-        expr_free(curr->replacement);
-        free(curr);
-        curr = next;
-    }
-    def->own_values = b->saved_own;
-    def->attributes = b->saved_attrs;
+    mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     eval_clock_bump();
 }

@@ -35,6 +35,7 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "eval.h"
+#include "modular.h"
 #include "print.h"
 
 /* From plot_common.c ($RaylibVerbose). Declared directly rather than via
@@ -527,16 +528,21 @@ static void graphics_animate(const Expr* body,
         }
 
         /* ---- Evaluate body at current iterator values ---- */
+        /* Each variable is localised on a binding frame (modular.h) for the
+         * frame's evaluation, as Manipulate does: the user's own value of the
+         * symbol is put back afterwards, not cleared. */
+        int btok[MAX_ITERS];
         for (int k = 0; k < n_iters; k++) {
+            btok[k] = mth_bind_push_name(iters[k].var_sym, 0);
             Expr* tval = expr_new_real(iters[k].t);
             Expr* vpat = expr_new_symbol(iters[k].var_sym);
-            symtab_add_own_value(iters[k].var_sym, vpat, expr_copy(tval));
+            symtab_add_own_value(iters[k].var_sym, vpat, tval);
             expr_free(vpat);
             expr_free(tval);
         }
         Expr* result = evaluate(expr_copy((Expr*)body));
-        for (int k = 0; k < n_iters; k++)
-            symtab_clear_symbol(iters[k].var_sym);
+        for (int k = n_iters - 1; k >= 0; k--) mth_bind_pop(btok[k]);
+        eval_clock_bump();
         if (frame_expr) expr_free(frame_expr);
         frame_expr = result;
 

@@ -106,14 +106,19 @@ bool iter_real_value(const Expr* e, double* out);
 bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di);
 
 /*
- * Block-style localization of the iterator variable.  shadow() saves and
- * clears the variable's current OwnValues (returning them); bind each
- * iteration's value with symtab_add_own_value(); restore() frees the
- * iteration-created OwnValue chain and reinstates the saved values.
+ * Block-style localization of the iterator variable.  shadow() sets the
+ * variable's current value aside (an OwnValue, or the v[k] DownValue of an
+ * indexed variable) and returns a token; bind each iteration's value with
+ * iter_bind(); restore() frees the iteration-created value and reinstates the
+ * saved one.  The saved value lives on a binding frame (modular.h,
+ * mth_bind_push), which a TimeConstrained timeout drains, so an interrupted
+ * loop cannot leave its variable bound.  shadow() allocates nothing once the
+ * frame stack has grown, and restores may come out of order.
  * `var` may be NULL (COUNT specs): both are no-ops then.
  */
-Rule* iter_spec_shadow(Expr* var);
-void  iter_spec_restore(Expr* var, Rule* saved_own);
+typedef int IterShadow;
+IterShadow iter_spec_shadow(Expr* var);
+void       iter_spec_restore(Expr* var, IterShadow token);
 
 /* curr + step for a machine-numeric iterator, without going through the
  * evaluator. Advancing by building Plus[curr, step] and calling evaluate() costs

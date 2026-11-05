@@ -301,8 +301,8 @@ Expr* builtin_vectorplot(Expr* res) {
     size_t n_arr   = 0;
     double spd_max = 0.0;
 
-    Rule* old_x = iter_spec_shadow(xspec.var);
-    Rule* old_y = iter_spec_shadow(yspec.var);
+    IterShadow old_x = iter_spec_shadow(xspec.var);
+    IterShadow old_y = iter_spec_shadow(yspec.var);
     VpField vfield = vp_compile(xspec.var, yspec.var, vx_body, vy_body);
 
     for (int iy = 0; iy < N; iy++) {

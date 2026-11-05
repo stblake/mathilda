@@ -3,6 +3,7 @@
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
 #include "findmin_internal.h"
+#include "../modular.h"
 
 
 void nm_rng_seed(NmRng* r, uint64_t seed) { r->s = seed; }
@@ -87,25 +88,13 @@ Expr* nm_fresh_symbol(void) {
     return expr_new_symbol(buf);
 }
 
-static void nm_free_rule_chain(Rule* r) {
-    while (r) {
-        Rule* nx = r->next;
-        expr_free(r->pattern);
-        expr_free(r->replacement);
-        free(r);
-        r = nx;
-    }
-}
-
+/* Each head's OwnValues and DownValues sit on a binding frame (modular.h), so
+ * a TimeConstrained timeout during the symbolic expansion puts them back. */
 void nm_heads_localize(NmHeadSave* sv, const char** names, size_t m) {
     for (size_t i = 0; i < m; i++) {
-        SymbolDef* def = symtab_get_def(names[i]);
         sv[i].name  = names[i];
-        sv[i].own   = def->own_values;
-        sv[i].down  = def->down_values;
+        sv[i].token = mth_bind_push_name(names[i], MTH_BIND_DOWN);
         sv[i].valid = true;
-        def->own_values  = NULL;
-        def->down_values = NULL;
     }
     if (m) eval_clock_bump();
 }
@@ -113,11 +102,7 @@ void nm_heads_localize(NmHeadSave* sv, const char** names, size_t m) {
 void nm_heads_restore(NmHeadSave* sv, size_t m) {
     for (size_t i = 0; i < m; i++) {
         if (!sv[i].valid) continue;
-        SymbolDef* def = symtab_get_def(sv[i].name);
-        nm_free_rule_chain(def->own_values);
-        nm_free_rule_chain(def->down_values);
-        def->own_values  = sv[i].own;
-        def->down_values = sv[i].down;
+        mth_bind_pop(sv[i].token);
         sv[i].valid = false;
     }
     if (m) eval_clock_bump();

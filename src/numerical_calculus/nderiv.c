@@ -47,6 +47,7 @@
  */
 
 #include "nderiv.h"
+#include "../modular.h"
 #include "nresidue.h"      /* NIntegrate reuses NResidue via the evaluator */
 
 #include <complex.h>
@@ -156,17 +157,14 @@ static double nd_binom_d(int n, int k) {
 
 typedef struct {
     const char* name;
-    Rule*       saved_own;
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } NdBind;
 
 static void nd_bind_snapshot(NdBind* b, const char* name) {
-    SymbolDef* def = symtab_get_def(name);
     b->name = name;
-    b->saved_own = def->own_values;
-    b->saved_attrs = def->attributes;
-    def->own_values = NULL;
+    /* Unwind-safe: a TimeConstrained timeout drains the frame. */
+    b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
 }
 
@@ -192,10 +190,7 @@ static void nd_bind_set(NdBind* b, Expr* value) {
 
 static void nd_bind_restore(NdBind* b) {
     if (!b->valid) return;
-    SymbolDef* def = symtab_get_def(b->name);
-    nd_bind_clear_temp(def);
-    def->own_values = b->saved_own;
-    def->attributes = b->saved_attrs;
+    mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     eval_clock_bump();
 }

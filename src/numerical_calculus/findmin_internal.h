@@ -99,8 +99,7 @@ typedef struct {
 /* Per-variable snapshot for Block-style binding. */
 typedef struct {
     const char* name;            /* interned                            */
-    Rule*       saved_own;
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } FmVarBind;
 
@@ -258,7 +257,7 @@ typedef struct { uint64_t s; } NmRng;
  * so an objective/constraint/variable expression that mentions x[i] evaluates
  * with x free — expanding Table/Sum symbolically without capturing any stray
  * user definition. Restored by nm_heads_restore. */
-typedef struct { const char* name; Rule* own; Rule* down; bool valid; } NmHeadSave;
+typedef struct { const char* name; int token; bool valid; } NmHeadSave;   /* token: mth_bind_push */
 
 /* ------------------------------------------------------------------ *
  *  Driver context bundle + point evaluation / comparison             *

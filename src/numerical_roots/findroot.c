@@ -35,6 +35,7 @@
  */
 
 #include "findroot.h"
+#include "../modular.h"
 
 #include <math.h>
 #include <complex.h>
@@ -115,8 +116,7 @@ typedef struct {
 /* Per-variable temporary OwnValue snapshot, restored on exit. */
 typedef struct {
     const char* name;            /* interned                            */
-    Rule*       saved_own;       /* prior chain (borrowed)              */
-    uint32_t    saved_attrs;
+    int         token;     /* binding frame (modular.h mth_bind_push) */
     bool        valid;
 } FrVarBind;
 
@@ -374,10 +374,8 @@ static FrSpecKind fr_parse_var_spec(Expr* spec, Expr** var_out,
  * a temporary value can be installed by fr_bind_set. */
 static void fr_bind_snapshot(FrVarBind* b, const char* name) {
     b->name = name;
-    SymbolDef* def = symtab_get_def(name);
-    b->saved_own = def->own_values;
-    b->saved_attrs = def->attributes;
-    def->own_values = NULL;
+    /* Unwind-safe: a TimeConstrained timeout drains the frame. */
+    b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
 }
 
@@ -404,17 +402,7 @@ static void fr_bind_set(FrVarBind* b, Expr* value) {
 /* Free any temp OwnValue we installed and restore the saved chain. */
 static void fr_bind_restore(FrVarBind* b) {
     if (!b->valid) return;
-    SymbolDef* def = symtab_get_def(b->name);
-    Rule* curr = def->own_values;
-    while (curr) {
-        Rule* next = curr->next;
-        expr_free(curr->pattern);
-        expr_free(curr->replacement);
-        free(curr);
-        curr = next;
-    }
-    def->own_values = b->saved_own;
-    def->attributes = b->saved_attrs;
+    mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     /* Bind chain changed → eval cache must be invalidated. */
     eval_clock_bump();
