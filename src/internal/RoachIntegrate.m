@@ -118,6 +118,38 @@ Roach`GForm1[EllipticE[t_], x_] := Roach`mk[-1/4, {1/2, 3/2}, {}, {0}, {0}, -t, 
 (* products of Bessel functions of one argument *)
 Roach`GForm1[Power[BesselJ[a_, t_], 2], x_] /; FreeQ[a, x] :=
   Roach`mk[1/Sqrt[Pi], {1/2}, {}, {a}, {-a, 0}, t^2, x]
+(* J_mu J_nu and K_mu K_nu of one argument (PBM 8.4.23). From the Mellin
+   transforms in u = t^2 and Legendre's duplication formula:
+     M[J_mu J_nu](w) = Gamma((mu+nu)/2 + w) Gamma(1/2 - w) Gamma(1 - w) / (Sqrt[Pi]
+       Gamma(1 + (nu-mu)/2 - w) Gamma(1 + (mu+nu)/2 - w) Gamma(1 + (mu-nu)/2 - w)),
+     M[K_mu K_nu](w) = Sqrt[Pi]/2 Prod Gamma(w +- mu/2 +- nu/2) / (Gamma(w) Gamma(w + 1/2)).
+   Both checked to 20 digits at mu = 3/10, nu = 7/5, t = 13/10. *)
+Roach`GForm1[BesselJ[mu_, t_] BesselJ[nu_, t_], x_] /; FreeQ[{mu, nu}, x] :=
+  Roach`mk[1/Sqrt[Pi], {1/2, 0}, {}, {(mu + nu)/2}, {(mu - nu)/2, -(mu + nu)/2, (nu - mu)/2}, t^2, x]
+Roach`GForm1[BesselK[mu_, t_] BesselK[nu_, t_], x_] /; FreeQ[{mu, nu}, x] :=
+  Roach`mk[Sqrt[Pi]/2, {}, {0, 1/2}, {(mu + nu)/2, (mu - nu)/2, (nu - mu)/2, -(mu + nu)/2}, {}, t^2, x]
+Roach`GForm1[Power[BesselK[a_, t_], 2], x_] /; FreeQ[a, x] :=
+  Roach`mk[Sqrt[Pi]/2, {}, {0, 1/2}, {a, 0, 0, -a}, {}, t^2, x]
+(* a G function of the variable is its own form *)
+Roach`GForm1[MeijerG[{an_List, ap_List}, {bm_List, bq_List}, t_], x_] :=
+  Roach`mk[1, an, ap, bm, bq, t, x]
+(* generalized hypergeometric functions (eq. 17 of Adamchik-Marichev):
+     pFq(a; b; t) = Prod Gamma(b)/Prod Gamma(a) G^{1,p}_{p,q+1}(-t | 1 - a; 0, 1 - b),
+   p <= q + 1, for p = q + 1 the continuation off the cut t >= 1 (2F1 at -2
+   checked); a nonpositive-integer a_j (a polynomial, a Gamma pole above)
+   declines, as does a nonpositive-integer b_j (the function is undefined) *)
+Roach`pfqG[A_List, B_List, t_, x_] /; Length[A] <= Length[B] + 1 &&
+    FreeQ[{A, B}, x] && !MemberQ[Join[A, B], _Integer?NonPositive] :=
+  Roach`mk[Times @@ (Gamma /@ B)/Times @@ (Gamma /@ A), 1 - A, {}, {0}, 1 - B, -t, x]
+Roach`pfqG[___] := $Failed
+Roach`GForm1[HypergeometricPFQ[A_List, B_List, t_], x_] := Roach`pfqG[A, B, t, x]
+Roach`GForm1[Hypergeometric0F1[b_, t_], x_] := Roach`pfqG[{}, {b}, t, x]
+Roach`GForm1[Hypergeometric1F1[a_, b_, t_], x_] := Roach`pfqG[{a}, {b}, t, x]
+Roach`GForm1[Hypergeometric2F1[a_, b_, c_, t_], x_] := Roach`pfqG[{a, b}, {c}, t, x]
+(* U(a, b, t) = G^{2,1}_{1,2}(t | 1 - a; 0, 1 - b)/(Gamma(a) Gamma(a - b + 1)) *)
+Roach`GForm1[HypergeometricU[a_, b_, t_], x_] /; FreeQ[{a, b}, x] &&
+    !MatchQ[a, _Integer?NonPositive] && !MatchQ[a - b + 1, _Integer?NonPositive] :=
+  Roach`mk[1/(Gamma[a] Gamma[a - b + 1]), {1 - a}, {}, {0, 1 - b}, {}, t, x]
 Roach`GForm1[f_, x_] := $Failed
 
 (* ---------------------------------------------------------------- *)
@@ -393,6 +425,9 @@ Roach`split[f0_, x_] := Module[{f, fs, C = 1, s = 0, rest = {}},
   (* an integer power of a sum with negative powers of x: one fraction first,
      exact for an integer exponent (1/(1/t - t) = t/(1 - t^2)) *)
   f = f0 /. Power[B_Plus, e_Integer] /; !FreeQ[B, Power[x, _?Negative]] :> Together[B]^e;
+  (* (x^a)^b = x^(a b) on x > 0, where every G form here lives: a MeijerG
+     of x^(3/2) evaluates to a function of x^(3/2) with a (x^(3/2))^(1/3) *)
+  f = f //. Power[Power[x, a_], b_] /; FreeQ[{a, b}, x] :> x^(a b);
   f = f /. pw : Power[_Plus, _] :> Roach`normBinom[pw, x];
   f = Expand[f /. Roach`pw -> Power, x];
   fs = If[Head[f] === Times, List @@ f, {f}];
@@ -533,15 +568,38 @@ Roach`pvTerm[C_, s_, grp_, x_] := Module[{ks, kpos, k, other, gs, rv, rc},
   If[rv === $Failed || rc === $Failed, Return[$Failed]];
   {rv[[1]], And[rc[[2]], And @@ (Roach`pvSmooth[#, k[[3]]] & /@ other)]}]
 
+(* the non-power factors of a term, with its exponentials merged and an
+   exponential of a sum of x-powers split into one factor per power *)
+Roach`prepRest[rest0_List, x_] := Module[{rest = rest0},
+  With[{ex = Cases[rest, Power[E, _]]},
+    If[Length[ex] > 1, rest = Append[DeleteCases[rest, Power[E, _]], E^Total[ex[[All, 2]]]]]];
+  rest = Flatten[rest /. Power[E, p_Plus] /; !FreeQ[p, x] :> (E^# & /@ List @@ p)];
+  Flatten[{rest}]]
+
+(* while a term has more than k factors, fuse two whose product has a
+   single-G entry of its own (J_mu J_nu, K_mu K_nu of one argument), so that
+   e.g. E^-x J_mu(x) J_nu(x) is two G functions, not three *)
+Roach`mergePairs[rest0_List, x_, k_] := Module[{rest = rest0, n, hit = True, i, j, g},
+  While[hit && (n = Length[rest]) > k,
+    hit = False;
+    (* an indicator factor is attachInd's to place, never merged here *)
+    Do[If[!hit && FreeQ[{rest[[i]], rest[[j]]}, Roach`Ind0],
+         g = Quiet[Roach`GForm1[rest[[i]] rest[[j]], x]];
+         If[MatchQ[g, {_}],
+           rest = Append[Delete[rest, {{i}, {j}}], rest[[i]] rest[[j]]]; hit = True]],
+       {i, 1, n - 1}, {j, i + 1, n}]];
+  rest]
+
 Roach`term0[f_, x_, assum_] := Module[{C, s, rest, groups, gs, res = $Failed, r, val, cond, out},
   Roach`$assum = assum;
   {C, s, rest} = Roach`split[f, x];
-  (* merge exponentials *)
-  With[{ex = Cases[rest, Power[E, _]]},
-    If[Length[ex] > 1, rest = Append[DeleteCases[rest, Power[E, _]], E^Total[ex[[All, 2]]]]]];
-  (* an exponential of a sum of x-powers splits into factors *)
-  rest = Flatten[rest /. Power[E, p_Plus] /; !FreeQ[p, x] :> (E^# & /@ List @@ p)];
-  rest = Flatten[{rest}];
+  rest = Roach`prepRest[rest, x];
+  (* the square of a factor with a G form and no single-G entry of its own
+     (BesselK[a, t]^2, Erfc[t]^2, ...) is the product of two G functions,
+     which the two-G theorem integrates *)
+  rest = Flatten[rest /. Power[h_, 2] /; !MatchQ[h, _Plus | E] &&
+      !ListQ[Quiet[Roach`GForm1[h^2, x]]] && ListQ[Quiet[Roach`GForm1[h, x]]] :> {h, h}];
+  rest = Roach`mergePairs[rest, x, 2];
   Catch[
    Do[
      (* under PV, a group with a pole kernel goes to the PV theorem *)
@@ -664,10 +722,16 @@ Roach`definite[f_, x_, a_, b_, assum_] := Module[{y, r, r1, r2},
    b === Infinity,
      Roach`definite[f /. x -> x + a, x, 0, Infinity, assum],
    True,
+     (* a symbolic endpoint: F(b) - F(a) by eq. 26, valid for every value of
+        the endpoint the conditions allow (the rescaled route below needs the
+        sign of b - a, which the assumptions often do not give) *)
+     r = If[NumericQ[a] && NumericQ[b] || Roach`$pv, $Failed, Roach`upperDef[f, x, a, b, assum]];
+     If[r =!= $Failed && r[[2]] === False, r = $Failed];
      (* finite: x -> a + (b - a) y on 0 < y < 1 *)
-     r = Roach`int0oo[Expand[Roach`logSplit[(b - a) (f /. x -> a + (b - a) y), y,
-                                             And[assum, 0 < y]]] Roach`Ind0[y], y,
-                      And[assum, 0 < y < 1]];
+     If[r === $Failed,
+       r = Roach`int0oo[Expand[Roach`logSplit[(b - a) (f /. x -> a + (b - a) y), y,
+                                               And[assum, 0 < y]]] Roach`Ind0[y], y,
+                        And[assum, 0 < y < 1]]];
      If[r === $Failed && a === 0, r = Roach`tanSubst[f, x, b, assum]];
      If[r === $Failed && !Roach`$pv, r = Roach`ibp[f, x, a, b, assum]];
      r]]
@@ -741,10 +805,19 @@ Roach`gResidues[r_] := r /. HoldPattern[g : MeijerG[{_List, _List}, {_List, _Lis
     s /; s =!= $Failed]
 
 Roach`finish[v_, assum_] := Module[{r = FunctionExpand[v]},
+  (* parameters as one fraction: (1 + a)/2 + v/2 -> (1 + a + v)/2, so that
+     coincident pFq parameters cancel *)
+  r = r /. {HypergeometricPFQ[al_List, bl_List, z_] :> HypergeometricPFQ[Together /@ al, Together /@ bl, z],
+            Gamma[u_] :> Gamma[Together[u]]};
   If[Roach`$pv && !FreeQ[r, MeijerG], r = FunctionExpand[Roach`gResidues[r]]];
   r = TimeConstrained[Refine[r, assum], 3, r];
   If[FreeQ[r, MeijerG | HypergeometricPFQ],
-    r = TimeConstrained[Simplify[r, assum], 5, r]];
+    r = TimeConstrained[Simplify[r, assum], 5, r],
+    (* the coefficient around a MeijerG / pFq that stays (Sqrt[2] Sqrt[2 Pi]
+       -> 2 Sqrt[Pi]), each such function frozen as an opaque symbol *)
+    With[{rules = (# -> Unique["Roach`h"]) & /@
+                  DeleteDuplicates[Cases[r, _MeijerG | _HypergeometricPFQ, {0, Infinity}]]},
+      r = TimeConstrained[Simplify[r /. rules, assum], 3, r /. rules] /. (Reverse /@ rules)]];
   r]
 
 (* Check an answer numerically at a point of the assumptions. A quadrature
@@ -849,6 +922,126 @@ Roach`verifyPV[f_, x_, a_, b_, val_, assum_] := Module[{vars, pt, vv, fa, aa, bb
   n1 = Block[{x}, Quiet[TimeConstrained[Roach`pvQuad[fa, x, aa, bb, poles], 10, $Failed]]];
   NumberQ[n1] && TrueQ[Roach`agrees[vv, n1]]]
 
+(* ---------------------------------------------------------------- *)
+(* A variable upper limit and antiderivatives: Adamchik and Marichev *)
+(* (ISSAC '90) eq. 26                                                *)
+(* ---------------------------------------------------------------- *)
+
+(* THEOREM (Adamchik-Marichev eq. 26; PBM vol. 3 2.24.2.2).
+     int_0^y t^(alpha-1) G^{m,n}_{p,q}(w t | a; b) dt
+       = y^alpha G^{m,n+1}_{p+1,q+1}(w y | 1 - alpha, a; b_1..b_m, -alpha, b_{m+1}..b_q).
+   For x^s G(c x^q) put t = x^q (q > 0, after G(z) = G'(1/z) when q < 0):
+   alpha = (s + 1)/q, with the factor 1/q and y^q in the argument.
+
+   VALIDITY of the definite form. The integral converges at 0 iff
+   Re(alpha + b_j) > 0 for j <= m. With p < q every residue series of the G
+   converges for all z and integrates term by term. With p = q the series
+   converges only for |z| < 1, but delta = m + n - (p + q)/2 > 0 and
+   |arg w| < delta Pi make the G analytic along the ray through w y, so both
+   sides continue analytically from small y. p > q, and p = q with
+   delta <= 0, decline.
+
+   ANTIDERIVATIVE. Both sides are analytic in alpha, so the right side is an
+   antiderivative of the integrand wherever it is defined, whether or not
+   the integral converges at 0. It is undefined when alpha + b_j is a
+   nonpositive integer for some j <= m: the new a-parameter 1 - alpha and that
+   b_j are then an integer apart in the wrong order, a Gamma pole of the
+   Mellin-Barnes integrand on both sides of the contour (int dx/x is the
+   simplest case). Those decline. *)
+Roach`upper[K_, s_, g0_Roach`g, y_, indef_] := Module[
+  {g = g0, sq, al, m, n, p, q, an, ap, bm, bq, c, qq, ok},
+  sq = Roach`sgn[g[[5]]];
+  If[sq == 0, Return[$Failed]];
+  If[sq < 0, g = Roach`flip[g]];
+  {m, n, p, q} = Roach`mnpq[g];
+  {an, ap} = g[[2]]; {bm, bq} = g[[3]]; c = g[[4]]; qq = g[[5]];
+  al = Together[(s + 1)/qq];
+  If[AnyTrue[bm, With[{d = Together[al + #]}, IntegerQ[d] && d <= 0] &], Return[$Failed]];
+  ok = Which[indef, True,
+             p < q, True,
+             p == q && TrueQ[Roach`delta[g] > 0], Abs[Arg[c]] < Roach`delta[g] Pi,
+             True, False];
+  If[ok === False, Return[$Failed]];
+  {K g[[1]]/qq y^(s + 1) Roach`argG[{Join[{1 - al}, an], ap}, {bm, Join[{-al}, bq]}, c, qq, y],
+   If[indef, True, And[ok, And @@ ((Re[al + #] > 0) & /@ bm)]]}]
+
+(* G(c y^q) for an integer q > 1 with c = w^q exactly: the four-argument
+   MeijerG[.., w y, 1/q], whose Mellin-Barnes integrand carries (w y)^(-q s)
+   rather than (c y^q)^(-s), so FunctionExpand writes its residue series in
+   powers of w y (Sqrt[Pi] FresnelS[...] for Sin[x]/Sqrt[x], not radicals of
+   y^2). On y > 0 the two are the same function. *)
+Roach`argG[A_, B_, c_, q_, y_] := Module[{w},
+  If[IntegerQ[q] && q > 1,
+    w = PowerExpand[c^(1/q)];
+    If[Together[w^q - c] === 0, Return[MeijerG[A, B, w y, 1/q]]]];
+  MeijerG[A, B, c y^q]]
+
+(* one term C x^s F(c x^q) (or C x^s) -> {F(y) = int_0^y, condition} or $Failed *)
+Roach`upperTerm[f_, x_, y_, assum_, indef_] := Module[{C, s, rest, gs},
+  Roach`$assum = assum;
+  {C, s, rest} = Roach`split[f, x];
+  rest = Roach`mergePairs[Roach`prepRest[rest, x], x, 1];
+  Which[
+    rest === {},
+      Which[!TrueQ[s == -1], {C y^(s + 1)/(s + 1), If[indef, True, Re[s] > -1]},
+            indef, {C Log[y], True},
+            True, $Failed],
+    Length[rest] == 1,
+      gs = Roach`GForm[rest[[1]], x];
+      If[!ListQ[gs] || Length[gs] != 1, $Failed, Roach`upper[C, s, gs[[1]], y, indef]],
+    True, $Failed]]
+
+(* int_a^b f for a finite interval with a symbolic endpoint, 0 <= a:
+   F(b) - F(a) with F(y) = int_0^y f by eq. 26, term by term *)
+Roach`upperDef[f_, x_, a_, b_, assum_] := Module[{ts, rs, F, y = Unique["Roach`y"]},
+  If[!(a === 0 || TrueQ[Quiet[Refine[a >= 0, assum]]]), Return[$Failed]];
+  ts = Expand[f];
+  ts = If[Head[ts] === Plus, List @@ ts, {ts}];
+  rs = Roach`upperTerm[#, x, y, And[assum, x > 0], False] & /@ ts;
+  If[MemberQ[rs, $Failed], Return[$Failed]];
+  F = Total[rs[[All, 1]]];
+  (* the G forms of the table hold for x > 0 (Erf[t] is G(t^2)/Sqrt[Pi],
+     even in t), so the interval must lie in x >= 0 *)
+  {(F /. y -> b) - If[a === 0, 0, F /. y -> a],
+   Roach`decide[And[If[a === 0, b >= 0, b >= a], And @@ rs[[All, 2]]], assum]}]
+
+(* an antiderivative is checked by differentiating it: PossibleZeroQ, or the
+   residual at two generic points (in x > 0 and the parameters' assumptions)
+   relative to the integrand. A residual that is not a number rejects. *)
+Roach`verifyD[f_, x_, F_, assum_] := Module[{d, vars, pt, pts, ok = True},
+  d = D[F, x] - f;
+  If[TrueQ[Quiet[TimeConstrained[PossibleZeroQ[d], 5, False]]], Return[True]];
+  vars = Complement[Cases[{f, F}, _Symbol?(!ValueQ[#] && Context[#] === "Global`" &), Infinity], {x}];
+  pt = Roach`genericPt[Join[{x}, vars], And[assum, x > 0]];
+  If[pt === $Failed, Return[False]];
+  pts = {pt, pt /. (x -> v_) :> (x -> v/3)};
+  Do[With[{r = Quiet[N[d /. p0, 30]], s0 = Quiet[N[f /. p0, 30]]},
+       If[!NumericQ[r] || !NumericQ[s0] || !(Abs[r] < 10^-12 (1 + Abs[s0])), ok = False]],
+     {p0, pts}];
+  (* and at x < 0 when the integrand is defined there: the G forms are
+     x > 0 forms, and an antiderivative must not be one only on x > 0
+     (Sqrt[x^2] for x) *)
+  If[ok, With[{p0 = pt /. (x -> v_) :> (x -> -v)},
+    With[{s0 = Quiet[N[f /. p0, 30]]},
+      If[NumericQ[s0] && TrueQ[Im[s0] == 0],
+        With[{r = Quiet[N[d /. p0, 30]]},
+          If[!NumericQ[r] || !(Abs[r] < 10^-12 (1 + Abs[s0])), ok = False]]]]]];
+  ok]
+
+(* Integrate[f, x, Method -> "Roach"]: an antiderivative by eq. 26, term by
+   term over the expanded integrand, each term a power of x times at most one
+   factor with a G form. The result goes through FunctionExpand; one that is
+   still a MeijerG declines, as does one that fails Roach`verifyD. *)
+Roach`RunIndefinite[f_, x_, assum0_] := Module[{assum = And[assum0, x > 0], ts, rs, F},
+  ts = Expand[f];
+  ts = If[Head[ts] === Plus, List @@ ts, {ts}];
+  rs = Roach`upperTerm[#, x, x, assum, True] & /@ ts;
+  If[MemberQ[rs, $Failed], Return[$Failed]];
+  F = Roach`finish[Total[rs[[All, 1]]], assum];
+  If[!FreeQ[F, MeijerG], Return[$Failed]];
+  If[!Roach`verifyD[f, x, F, assum0], Return[$Failed]];
+  F]
+
 Roach`Run[f_, x_, a_, b_, assum_] := Module[{r, v, c},
   r = Roach`definite[f, x, a, b, assum];
   If[r === $Failed, Return[$Failed]];
@@ -856,6 +1049,37 @@ Roach`Run[f_, x_, a_, b_, assum_] := Module[{r, v, c},
   v = Roach`finish[v, assum];
   If[!If[Roach`$pv, Roach`verifyPV, Roach`verify][f, x, a, b, v, assum], Return[$Failed]];
   If[c === True, v, ConditionalExpression[v, c]]]
+
+(* The early slot of the automatic cascade (before Newton-Leibniz and
+   DiffUnderInt). Those stages run a whole nested cascade per antiderivative
+   attempt or parameter derivative, and on a product of a higher
+   transcendental function with powers and binomials they grind: the
+   Adamchik-Marichev demo int_0^1 x^(p-1) (1 - x^2)^(b-1) J_v(c x) dx spent
+   over 60 s there and is a two-G integral Roach`Run closes in about one.
+   So that class comes here first. Roach`coveredQ is a cheap syntactic
+   screen: every term of the expanded integrand has at most two factors,
+   each with a single-G form, and at least one factor is a higher
+   transcendental function (an elementary integrand keeps the elementary
+   route and its form). *)
+Roach`$special = BesselJ | BesselY | BesselI | BesselK | StruveH | Erf | Erfc |
+  ExpIntegralEi | ExpIntegralE | SinIntegral | CosIntegral | Gamma | FresnelS |
+  FresnelC | EllipticK | EllipticE | HypergeometricPFQ | Hypergeometric0F1 |
+  Hypergeometric1F1 | Hypergeometric2F1 | HypergeometricU | MeijerG;
+Roach`coveredQ[f_, x_] := Module[{ts = Expand[f], ok = True, special = False},
+  ts = If[Head[ts] === Plus, List @@ ts, {ts}];
+  Do[Module[{C, s, rest},
+       {C, s, rest} = Roach`split[t, x];
+       rest = Roach`prepRest[rest, x];
+       rest = Flatten[rest /. Power[h_, 2] /; !MatchQ[h, _Plus | E] &&
+           !ListQ[Quiet[Roach`GForm1[h^2, x]]] && ListQ[Quiet[Roach`GForm1[h, x]]] :> {h, h}];
+       rest = Roach`mergePairs[rest, x, 2];
+       If[Length[rest] > 2 || !And @@ (MatchQ[Quiet[Roach`GForm1[#, x]], {_}] & /@ rest),
+         ok = False; Break[]];
+       If[!FreeQ[rest, Roach`$special], special = True]],
+     {t, ts}];
+  ok && special]
+Roach`RunEarly[f_, x_, a_, b_, assum_] :=
+  If[TrueQ[Quiet[Roach`coveredQ[f, x]]], Roach`Run[f, x, a, b, assum], $Failed]
 
 (* the Cauchy principal value (Integrate[..., PrincipalValue -> True]) *)
 Roach`RunPV[f_, x_, a_, b_, assum_] := Block[{Roach`$pv = True}, Roach`Run[f, x, a, b, assum]]

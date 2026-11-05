@@ -1992,7 +1992,7 @@ static bool roach_load_succeeded = false;
  * (Roach`RunPV: a pole kernel 1/(1 - c x^q) is the Hilbert-kernel G function,
  * and the answer is checked by a symmetric-excision quadrature). */
 static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, int budget,
-                       bool pv) {
+                       bool pv, bool early) {
     if (roach_load_gen != symtab_generation()) {
         roach_load_gen = symtab_generation();
         mth_msg_suppress_push();
@@ -2003,7 +2003,8 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
                 "cannot locate src/internal/RoachIntegrate.m on disk.");
     }
     if (!roach_load_succeeded) return NULL;
-    Expr* call = expr_new_function(expr_new_symbol(pv ? "Roach`RunPV" : "Roach`Run"),
+    Expr* call = expr_new_function(expr_new_symbol(pv ? "Roach`RunPV" :
+                                                   early ? "Roach`RunEarly" : "Roach`Run"),
         (Expr*[]){ expr_copy(f), expr_copy(x), expr_copy(a), expr_copy(b),
                    assumptions ? expr_copy(assumptions) : expr_new_symbol("True") }, 5);
     if (budget > 0)
@@ -2022,6 +2023,7 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
         result_contains_head(r, "Integrate") ||
         result_contains_head(r, "Roach`Run") ||
         result_contains_head(r, "Roach`RunPV") ||
+        result_contains_head(r, "Roach`RunEarly") ||
         result_contains_head(r, "Throw")) {
         expr_free(r);
         return NULL;
@@ -2037,6 +2039,49 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
     if (budget > 0 && r->type == EXPR_FUNCTION &&
         r->data.function.head->type == EXPR_SYMBOL &&
         r->data.function.head->data.symbol.name == SYM_ConditionalExpression) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+/* Indefinite stage: an antiderivative by Adamchik and Marichev's formula
+ * (ISSAC '90 eq. 26) -- int_0^x t^s G(c t^q) dt as one Meijer G function,
+ * reduced by FunctionExpand (src/internal/RoachIntegrate.m,
+ * Roach`RunIndefinite). The .m side declines anything it leaves as MeijerG
+ * and checks every answer by differentiating it. Loaded with try_roach.
+ * budget > 0 caps it under TimeConstrained (the automatic cascade). */
+#define ROACH_INDEFINITE_BUDGET_SECONDS 5
+static Expr* try_roach_indefinite(Expr* f, Expr* x, int budget) {
+    if (roach_load_gen != symtab_generation()) {
+        roach_load_gen = symtab_generation();
+        mth_msg_suppress_push();
+        roach_load_succeeded = mathilda_load_module("RoachIntegrate.m") != 0;
+        mth_msg_suppress_pop();
+        if (!roach_load_succeeded)
+            mth_message("Integrate`Roach", "nofile",
+                "cannot locate src/internal/RoachIntegrate.m on disk.");
+    }
+    if (!roach_load_succeeded) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("Roach`RunIndefinite"),
+        (Expr*[]){ expr_copy(f), expr_copy(x), expr_new_symbol("True") }, 3);
+    if (budget > 0)
+        call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
+            call, expr_new_integer(budget), expr_new_symbol(SYM_DollarFailed) }, 3);
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    Expr* r = evaluate(call);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
+    expr_free(call);
+    if (!r) return NULL;
+    if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
+                                    r->data.symbol.name == SYM_Indeterminate ||
+                                    r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_contains_head(r, "Integrate") ||
+        result_contains_head(r, "Roach`RunIndefinite") ||
+        result_contains_head(r, "MeijerG") ||
+        result_contains_head(r, "Throw")) {
         expr_free(r);
         return NULL;
     }
@@ -2294,7 +2339,21 @@ static Expr* integrate_definite(Expr* res) {
             if (!r && !has_undef && mech == METHOD_ROACH)
                 r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && mech == METHOD_ROACH)
-                r = try_roach(cur, x, a, b, assumptions, 0, principal_value);
+                r = try_roach(cur, x, a, b, assumptions, 0, principal_value, false);
+            /* Roach's Meijer G method, early, for a product of a higher
+             * transcendental function with powers and binomials that its
+             * one- and two-G theorems cover (Roach`RunEarly screens the
+             * integrand syntactically and declines anything else at once).
+             * Newton-Leibniz and DiffUnderInt run a nested cascade per
+             * antiderivative attempt or parameter derivative and grind on
+             * that class: the Adamchik-Marichev demo
+             * INT_0^1 x^(p-1) (1 - x^2)^(b-1) BesselJ[v, c x] spent over 60 s
+             * there and closes here in about a second. Answers are checked
+             * numerically, and a ConditionalExpression is a decline, as in
+             * the late slot. Elementary integrands are not screened in, so
+             * their answers keep the Newton-Leibniz form. */
+            if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
+                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, false, true);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
              * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
@@ -2347,14 +2406,14 @@ static Expr* integrate_definite(Expr* res) {
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
                 r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
-                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, false);
+                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, false, false);
             /* Under PrincipalValue the late fallback is Roach's PV theorem: the
              * pole kernel as the Hilbert-kernel G function inside the one- and
              * two-G theorems. It only sees integrals every PV-capable stage
              * (residue, Mellin PV, Newton-Leibniz) declined, and each answer is
              * checked against a symmetric-excision PV quadrature. */
             if (!r && !has_undef && principal_value && mech == METHOD_AUTOMATIC)
-                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, true);
+                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, true, false);
             /* nothing answered: the held Newton-Leibniz diagnostic stands */
             if (!r && nl_idiv_held) integrate_emit_idiv(cur, a, b);
             /* A real-axis definite integral must evaluate to a value free of
@@ -2478,7 +2537,7 @@ typedef enum {
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
-    IP_NSTAGES
+    IP_ROACH, IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
@@ -2487,7 +2546,8 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
-    "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial"
+    "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
+    "19 RoachMeijerG"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -3110,6 +3170,16 @@ Expr* builtin_integrate(Expr* res) {
              * search twice. */
             if (!g_integrate_no_special)
                 IP_STAGE(IP_PMS,      try_parallelmixedspecial(effective_f, x, true));
+            /* Adamchik-Marichev eq. 26 (Roach`RunIndefinite): x^s F(c x^q),
+             * F with a Meijer G form, integrates to one G function, which
+             * FunctionExpand writes as pFq or named functions. After every
+             * other stage, ParallelMixedSpecial included: its answers are
+             * usually hypergeometric, and anything an earlier stage closes
+             * keeps that form. Its own budget; skipped under
+             * g_integrate_no_special like the other tail stages. */
+            if (!g_integrate_no_special)
+                IP_STAGE(IP_ROACH,    try_roach_indefinite(effective_f, x,
+                                                           ROACH_INDEFINITE_BUDGET_SECONDS));
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
@@ -3186,8 +3256,12 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_OSC_POWER:
         case METHOD_RATIONAL_LOG:
         case METHOD_INTEGRAL_REP:
-        case METHOD_MEIJER_CONV:
         case METHOD_ROACH:
+            /* Adamchik-Marichev eq. 26: the indefinite form of the Meijer G
+             * method; unbudgeted when pinned. */
+            result = try_roach_indefinite(effective_f, x, 0);
+            break;
+        case METHOD_MEIJER_CONV:
         case METHOD_PIECEWISE:
         case METHOD_SERIES:
         case METHOD_KING:
@@ -3359,6 +3433,18 @@ void integrate_init(void) {
         "                          (f(a x)-f(b x))/x -> (f(0)-f(Inf)) Log[b/a], and a Log[x]^k weight;\n"
         "                          strip-gated, yielding a ConditionalExpression when\n"
         "                          Assumptions do not prove convergence; after NewtonLeibniz under Automatic\n"
+        "  \"Roach\"               — the Meijer G method (Adamchik-Marichev 1990, Roach 1996-97):\n"
+        "                          each factor written as a G function (PBM 8.4 table: elementary,\n"
+        "                          Bessel and Bessel products, Erf, Ei, Si/Ci, Fresnel, incomplete Gamma,\n"
+        "                          elliptic K/E, pFq, U, MeijerG); definite integrals by the one- and\n"
+        "                          two-G theorems under the PBM 2.24.1 conditions (any real interval,\n"
+        "                          rational power ratios, principal values); a symbolic endpoint or an\n"
+        "                          indefinite integral by int_0^y t^(a-1) G(w t) dt = y^a G'(w y);\n"
+        "                          the G result reduced by FunctionExpand. Every answer is checked\n"
+        "                          numerically (definite) or by differentiation (indefinite); a\n"
+        "                          ConditionalExpression when Assumptions do not prove the conditions.\n"
+        "                          Under Automatic: an early slot for higher transcendental integrands\n"
+        "                          it covers, a last definite fallback, and the last indefinite stage\n"
         "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
         "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"

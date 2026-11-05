@@ -199,6 +199,74 @@ static void test_unit_and_growing(void) {
                    " Assumptions -> a > 1, Method -> \"Roach\"]]", "Integrate", 0);
 }
 
+/* Adamchik and Marichev, "The algorithm for calculating integrals of
+ * hypergeometric type functions and its realization in REDUCE system"
+ * (ISSAC '90). Section 5's demonstration, its p = v + 2 special case, the
+ * indefinite / variable-upper-limit formula (26) with the paper's eq. (27),
+ * and the table entries of eq. (17) and PBM 8.4.23. */
+static void check_antiderivative(const char* f, const char* sub) {
+    /* closes, is free of MeijerG, and differentiates back to f at `sub` */
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "With[{F = Integrate[%s, x, Method -> \"Roach\"]},"
+        " FreeQ[F, Integrate | MeijerG] &&"
+        " Abs[N[(D[F, x] - (%s)) /. %s, 30]] < 10^-15]", f, f, sub);
+    assert_eval_eq(buf, "True", 0);
+}
+static void test_adamchik_marichev(void) {
+    /* sec. 5 demo, under the DEFAULT cascade (it timed out there: Newton-
+     * Leibniz and DiffUnderInt ground on it; the early Roach slot closes it) */
+    const char* demo = "Integrate[x^(p - 1) (1 - x^2)^(b - 1) BesselJ[v, c x], {x, 0, 1},"
+                       " Assumptions -> c > 0 && b > 0 && p + v > 0]";
+    char buf[2048];
+    snprintf(buf, sizeof buf,
+        "TimeConstrained[%s, 30, $Aborted] === (2^(-1 - v) c^v Gamma[b] Gamma[(p + v)/2]"
+        " HypergeometricPFQ[{(p + v)/2}, {(2 b + p + v)/2, 1 + v}, -c^2/4])/"
+        "(Gamma[1 + v] Gamma[(2 b + p + v)/2])", demo);
+    assert_eval_eq(buf, "True", 0);
+    check_roach("x^(p - 1) (1 - x^2)^(b - 1) BesselJ[v, c x]", "{x, 0, 1}",
+                "c > 0 && b > 0 && p + v > 0", "{p -> 5/3, b -> 3/2, v -> 1/3, c -> 7/4}");
+    /* p = v + 2: the paper's 2^(b-1) Gamma(b) J_(b+v)(c)/c^b */
+    assert_eval_eq("Integrate[x^(v + 1) (1 - x^2)^(b - 1) BesselJ[v, c x], {x, 0, 1},"
+                   " Assumptions -> c > 0 && b > 0 && v > -1] === 2^(b - 1) Gamma[b] BesselJ[b + v, c]/c^b",
+                   "True", 0);
+    /* eq. 27: a variable upper limit, conditioned on z >= 0 (the G forms are
+     * x > 0 forms: Erf[t] = G(t^2)/Sqrt[Pi] is even in t) */
+    check_roach("Sin[x]/Sqrt[x]", "{x, 0, z}", "z > 0", "{z -> 7/4}");
+    check_roach("x^2 Erf[x]", "{x, 0, z}", "z > 0", "{z -> 7/4}");
+    check_roach("x^(1/3) BesselJ[1, x]", "{x, 1/2, z}", "z > 1/2", "{z -> 9/4}");
+    assert_eval_eq("Head[Integrate[x^2 Erf[x], {x, 0, z}, Method -> \"Roach\"]]",
+                   "ConditionalExpression", 0);
+    /* eq. 26 as an antiderivative */
+    check_antiderivative("Sin[x]/Sqrt[x]", "{x -> 7/4}");
+    check_antiderivative("x^a BesselJ[v, x]", "{x -> 7/4, a -> 1/3, v -> 2/5}");
+    check_antiderivative("x^(1/3) Erfc[x]", "{x -> 7/4}");
+    check_antiderivative("x BesselJ[a, x] BesselJ[b, x]", "{x -> 7/4, a -> 1/3, b -> 2/5}");
+    check_antiderivative("x^2 Exp[-x^3/2]", "{x -> 7/4}");
+    /* the antiderivative of an odd-even pair must hold for x < 0 too */
+    assert_eval_eq("With[{F = Integrate[x^2 Erf[x], x, Method -> \"Roach\"]},"
+                   " FreeQ[F, Integrate] && Abs[N[(D[F, x] - x^2 Erf[x]) /. x -> -7/4, 30]] < 10^-15]",
+                   "True", 0);
+    /* dx/x: the G is undefined (a Gamma pole); the power rule gives Log */
+    assert_eval_eq("Integrate[1/x, x, Method -> \"Roach\"]", "Log[x]", 0);
+    /* squares and products of one argument (PBM 8.4.23): two G functions */
+    assert_eval_eq("Integrate[BesselK[0, x]^2, {x, 0, Infinity}] === Pi^2/4", "True", 0);
+    check_roach("BesselK[0, x]^2 x^s", "{x, 0, Infinity}", "s > 0", "{s -> 2/3}");
+    check_roach("x^2 Exp[-x] BesselK[0, x]^2", "{x, 0, Infinity}", "True", "{}");
+    check_roach("Exp[-x] BesselJ[0, x] BesselJ[1, x]", "{x, 0, Infinity}", "True", "{}");
+    check_roach("Erfc[x]^2", "{x, 0, Infinity}", "True", "{}");
+    /* eq. 17 and the confluent functions as integrands */
+    check_roach("x^(s - 1) Hypergeometric2F1[a, b, c, -x]", "{x, 0, Infinity}",
+                "0 < s < a && s < b && c > 0", "{s -> 1/3, a -> 3/2, b -> 7/4, c -> 5/2}");
+    check_roach("Exp[-x] Hypergeometric1F1[a, c, -x]", "{x, 0, Infinity}",
+                "a > 0 && c > 0", "{a -> 1/3, c -> 5/2}");
+    check_roach("HypergeometricU[a, b, x] x^(s - 1)", "{x, 0, Infinity}",
+                "s > 0 && s < a && s > b - 1 && a > 0", "{s -> 1/2, a -> 3/2, b -> 1/3}");
+    /* a MeijerG integrand (it evaluates to U and Exp before Integrate sees it) */
+    check_roach("MeijerG[{{1/2}, {}}, {{0, 0}, {}}, x] MeijerG[{{}, {}}, {{1/3}, {}}, x^(3/2)]",
+                "{x, 0, Infinity}", "True", "{}");
+}
+
 /* the stage declines (stays unevaluated) rather than guessing */
 static void test_declines(void) {
     assert_eval_eq("Head[Integrate[Sin[x^x], {x, 0, 1}, Method -> \"Roach\"]]", "Integrate", 0);
@@ -229,6 +297,7 @@ int main(void) {
     TEST(test_declines);
     TEST(test_hygiene);
     TEST(test_principal_value);
+    TEST(test_adamchik_marichev);
     printf("All Integrate Roach tests passed!\n");
     return 0;
 }

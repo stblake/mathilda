@@ -2043,7 +2043,7 @@ monotonically down.
     - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
     - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
     - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
-  - `"Roach"` (definite, any real interval; v0.6206): Kelly Roach's Meijer G
+  - `"Roach"` (definite, any real interval, v0.6206; indefinite, v0.6223): Kelly Roach's Meijer G
     algorithm (*Meijer G Function Representations*, ISSAC '97 §5; *Solving
     Integrals with the Quantum Computer Algebra System*, 2008). Code in
     `src/internal/RoachIntegrate.m`.
@@ -2164,6 +2164,74 @@ monotonically down.
         Newton-Leibniz, with the 10-second budget. Newton-Leibniz's
         `Integrate::idiv` is held until it has run and is printed only if
         nothing answered.
+    - **Adamchik–Marichev (ISSAC '90) completion (v0.6223).** The paper's
+      algorithm is: write each factor as a G function, check convergence,
+      apply the two-G theorem (21), reduce the G. The definite part was
+      already in place; this adds the rest.
+      - **Formula (26): variable upper limit and antiderivatives.**
+        `∫₀^y t^(α−1) G^{m,n}_{p,q}(wt | a; b) dt = y^α G^{m,n+1}_{p+1,q+1}(wy | 1−α, a; b₁..b_m, −α, b_{m+1}..b_q)`.
+        For `x^s G(c x^q)`, `α = (s+1)/q`. An integer `q > 1` with
+        `c = w^q` uses the four-argument `MeijerG[.., w y, 1/q]`, so the
+        result expands in powers of `w y`.
+        - A finite interval with a symbolic endpoint is `F(b) − F(a)`. It is
+          valid when `Re(α + b_j) > 0` (j ≤ m) and either `p < q`, or `p = q`
+          with `δ > 0` and `|arg w| < δπ`. Since the table's G forms hold on
+          x > 0, it also needs `0 ≤ a ≤ b`.
+          - Example: `Integrate[x^2 Erf[x], {x, 0, z}, Method -> "Roach"]` is
+            `ConditionalExpression[z^4 2F2(2, 1/2; 3, 3/2; −z²)/(2√π), z ≥ 0]`.
+          - This is the paper's eq. (27), `∫₀^z x^(−1/2) sin x dx`.
+        - `Integrate[f, x, Method -> "Roach"]` (new) gives an antiderivative
+          term by term. Each term is a power of x times at most one G factor
+          (two factors of one argument are fused, e.g. `J_a J_b`); a pure
+          power gives the power rule or `Log`. Convergence at 0 is not
+          needed, because both sides of (26) are analytic in α. It declines
+          when α + b_j is a nonpositive integer (a Gamma pole), when a
+          MeijerG is left after FunctionExpand, or when differentiating the
+          answer does not give back the integrand. That check is
+          PossibleZeroQ, or the residual at two generic points with x > 0
+          and one with x < 0; the x < 0 point rejects an x > 0-only form
+          such as `Sqrt[x^2]`.
+          - Examples: `x^a BesselJ[v, x]` gives
+            `x^(1+a+v) 1F2(...)/(2^(1+v) ((1+a+v)/2) Γ(1+v))`.
+            `ArcTan[x]/x` gives `I/2 (PolyLog[2, −I x] − PolyLog[2, I x])`.
+          - It is the last stage of the indefinite cascade, after
+            ParallelMixedSpecial, with a 5-second budget.
+      - **Table (eq. 17, PBM 8.4.23):**
+        - `HypergeometricPFQ` / `0F1` / `1F1` / `2F1` use
+          `pFq(a; b; t) = ΠΓ(b)/ΠΓ(a) G^{1,p}_{p,q+1}(−t | 1−a; 0, 1−b)`,
+          for p ≤ q+1 and no nonpositive-integer parameter.
+        - `HypergeometricU`:
+          `U(a, b, t) = G^{2,1}_{1,2}(t | 1−a; 0, 1−b)/(Γ(a)Γ(a−b+1))`.
+        - A `MeijerG` integrand is its own form.
+        - Products of one argument, derived from their Mellin transforms:
+          `J_μ J_ν = π^(−1/2) G^{1,2}_{2,4}(t² | 1/2, 0; (μ+ν)/2, (μ−ν)/2, −(μ+ν)/2, (ν−μ)/2)`
+          and `K_μ K_ν = (√π/2) G^{4,0}_{2,4}(t² | 0, 1/2; ±μ/2 ± ν/2)`.
+        - Every new entry was checked to 20 digits.
+        - When a term has more than two factors, two of one argument are
+          fused into one G (`E^−x J₀(x) J₁(x)`). The square of a factor with
+          no single-G square entry is two G functions, so
+          `Integrate[BesselK[0, x]^2, {x, 0, ∞}] = π²/4`.
+        - Nested powers `(x^a)^b` are read as `x^(ab)`, so a MeijerG of
+          `x^(3/2)`, which evaluates to a function of `(x^(3/2))^(1/3)`, is
+          recognised.
+      - **Early automatic slot.** Before Newton–Leibniz, Roach runs (10 s
+        budget) on integrands it fully covers that contain a higher
+        transcendental function (Bessel, Struve, Erf, Ei, Si/Ci, Fresnel,
+        incomplete Gamma, elliptic K/E, pFq, U, MeijerG).
+        - The screen `Roach\`coveredQ` is syntactic and cheap: at most two
+          G factors per term.
+        - The reason: Newton–Leibniz and DiffUnderInt run a nested cascade
+          for every antiderivative attempt or parameter derivative, and they
+          ground for more than 60 s on the paper's §5 demo
+          `∫₀¹ x^(p−1)(1−x²)^(b−1) J_v(cx) dx`. That demo now takes 0.9 s
+          and gives the paper's `c^v Γ(b) Γ((p+v)/2) 1F2((p+v)/2; (2b+p+v)/2, 1+v; −c²/4)/(2^(1+v) Γ(1+v) Γ((2b+p+v)/2))`;
+          with `p = v + 2` it gives `2^(b−1) Γ(b) J_(b+v)(c)/c^b`.
+        - Elementary integrands are never screened in, so they keep the
+          Newton–Leibniz form.
+      - The Roach corpus went from 44 to 54 CORRECT (0 WRONG).
+      - Not implemented: the integral transforms the paper derives from the
+        same machinery (Laplace, Fourier, Hankel, Mellin, Stieltjes,
+        Hilbert), fractional integrals, and three-G integrals.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.

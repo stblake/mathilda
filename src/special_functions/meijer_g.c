@@ -915,6 +915,40 @@ static Expr* mg_expansion_or_null(const MgView* g, bool dual) {
     return out;
 }
 
+/* G^{2,2}_{2,2}(w | a1, a2; b1, b2) in 1 - w (PBM vol. 3, 8.4.49.22 type):
+ *   prod_{i,j} Gamma(1 - a_i + b_j) / Gamma(2 - a1 - a2 + b1 + b2)
+ *     * w^b1 2F1(1 - a1 + b1, 1 - a2 + b1; 2 - a1 - a2 + b1 + b2; 1 - w).
+ * Both sides have the cut w <= 0. The 2F1 is analytic at w = 1, so this
+ * closes the logarithmic case b1 - b2 in Z (where the Slater sum does not
+ * exist) and the unit argument (the two-G theorem's K_nu K_mu integrals
+ * land there: G(1 | 1/2, 1/2; 0, 0)/4 = Pi^2/4). Checked numerically
+ * against the Mellin-Barnes integral at w = 7/10, 13/10, 1/2, 4. Only for
+ * FunctionExpand: the automatic MeijerG evaluation keeps the G. Declines
+ * where a Gamma of the prefactor has a pole (the G itself is then not
+ * defined by the contour). Evaluated and owned, or NULL. */
+static Expr* mg_g2222(const MgView* g) {
+    if (g->m != 2 || g->n != 2 || g->p != 2 || g->q != 2 || g->r) return NULL;
+    const Expr *a1 = g->a[0], *a2 = g->a[1], *b1 = g->b[0], *b2 = g->b[1];
+    Expr* g_args[4] = {
+        ev(add(sub(I_(1), cp(a1)), cp(b1))), ev(add(sub(I_(1), cp(a1)), cp(b2))),
+        ev(add(sub(I_(1), cp(a2)), cp(b1))), ev(add(sub(I_(1), cp(a2)), cp(b2))) };
+    Expr* c = ev(add(sub(sub(I_(2), cp(a1)), cp(a2)), add(cp(b1), cp(b2))));
+    long N;
+    bool pole = exact_nonpos_int(c, &N);
+    for (int i = 0; i < 4 && !pole; i++) pole = exact_nonpos_int(g_args[i], &N);
+    if (pole) {
+        for (int i = 0; i < 4; i++) expr_free(g_args[i]);
+        expr_free(c);
+        return NULL;
+    }
+    Expr* pref = dvd(mul(mul(gam(cp(g_args[0])), gam(g_args[1])),
+                         mul(gam(cp(g_args[2])), gam(g_args[3]))),
+                     gam(cp(c)));
+    Expr* f = mk(SYM_Hypergeometric2F1, 4,
+                 (Expr*[]){ g_args[0], g_args[2], c, sub(I_(1), cp(g->z)) });
+    return ev(mul(pref, mul(pw(cp(g->z), cp(b1)), f)));
+}
+
 Expr* meijerg_function_expand(const Expr* call) {
     MgView g;
     if (!mg_view(call, &g)) return NULL;
@@ -951,6 +985,8 @@ Expr* meijerg_function_expand(const Expr* call) {
             }
         }
     }
+    /* the Slater route declined (log case, or unit argument) */
+    if (!out) out = mg_g2222(&g);
     mg_view_free(&g);
     return out;
 }

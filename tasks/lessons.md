@@ -5162,3 +5162,7 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   subnodes by refcount, and stamp it with `eval_mark_fixed_point(_like)`. Then profile
   with `sample`: `Set` walking a huge rhs (`eval_mentions_any`) cost as much as the
   kernel itself.
+
+## Adamchik–Marichev completion (2026-11-05)
+- **New Integrate methods are written in `.m`** (user instruction): the mathematics goes in
+  `src/internal/*.m`, and `integrate.c` only gets the lazy-load stage wiring.

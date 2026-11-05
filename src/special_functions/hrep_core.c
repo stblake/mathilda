@@ -1649,9 +1649,21 @@ static bool has_free_symbol(const Expr* e) {
 }
 
 Expr* hr_tidy(Expr* r) {
+    /* A tidy is a rewrite of a closed form already checked finite; it must
+     * not turn it into Indeterminate (a Together/Simplify over a symbolic
+     * parameter can: 2F3((3+nu)/4, (1+nu)/4; 1/2, (2+nu)/2, (1+nu)/2; w)
+     * tidied to Indeterminate while its nu -> -nu mirror did not). Such a
+     * tidy is dropped and the untidied form kept. */
+    bool finite_in = closed_finite(r);
+    Expr* keep = finite_in ? expr_copy(r) : NULL;
     Expr* t = ev(mk1("Hrep`tidy", ev(mk1("Hrep`Ired", r))));
     if (mentions(t, "Hrep`I")) t = ev(mk1("Hrep`tidy", ev(mk1("Hrep`Inamed", t))));
     if (!has_free_symbol(t)) t = ev(mk1("Hrep`const", t));
+    if (keep && !closed_finite(t) && !mentions(keep, "Hrep`I")) {
+        expr_free(t);
+        return keep;
+    }
+    if (keep) expr_free(keep);
     return t;
 }
 

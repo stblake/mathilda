@@ -354,6 +354,36 @@ static Expr* fe_log_root(const Expr* e) {
 /* ------------------------------------------------------------------ */
 
 
+/* HypergeometricPFQ[{a..}, {b..}, z] with every parameter put over one
+ * denominator by Together, evaluated, so that parameters which agree only
+ * up to that form cancel (1/2 (2 + 2 v) against 1 + v); NULL when no
+ * parameter changes. Owned. */
+static Expr* fe_pfq_together(const Expr* e) {
+    if (e->data.function.arg_count != 3) return NULL;
+    bool any = false;
+    Expr* lists[2];
+    for (int k = 0; k < 2; k++) {
+        const Expr* L = e->data.function.args[k];
+        if (!fe_is_head(L, SYM_List)) {
+            for (int j = 0; j < k; j++) expr_free(lists[j]);
+            return NULL;
+        }
+        size_t n = L->data.function.arg_count;
+        Expr** v = malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            const Expr* par = L->data.function.args[i];
+            v[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                                                   (Expr*[]){ expr_copy((Expr*)par) }, 1));
+            if (!expr_eq(v[i], par)) any = true;
+        }
+        lists[k] = expr_new_function(expr_new_symbol(SYM_List), v, n);
+        free(v);
+    }
+    if (!any) { expr_free(lists[0]); expr_free(lists[1]); return NULL; }
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ),
+        (Expr*[]){ lists[0], lists[1], expr_copy(e->data.function.args[2]) }, 3));
+}
+
 /* A copy of e with every expandable node replaced, bottom-up; sets *changed
  * when anything was rewritten. `which` selects the rule families. Returns an
  * owned Expr. */
@@ -390,8 +420,13 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
             else expr_free(s2);
         }
     }
-    if (!s && (which & FE_PFQ) && fe_is_head(node, SYM_HypergeometricPFQ))
-        s = hrep_pfq_expr(node);
+    if (!s && (which & FE_PFQ) && fe_is_head(node, SYM_HypergeometricPFQ)) {
+        Expr* t = fe_pfq_together(node);
+        if (t) {
+            expr_free(node); node = t; *changed = true;
+        }
+        if (fe_is_head(node, SYM_HypergeometricPFQ)) s = hrep_pfq_expr(node);
+    }
     if (!s && (which & FE_ROOTS)) {
         s = fe_polylog_root(node);
         if (!s) s = fe_log_root(node);

@@ -3636,6 +3636,24 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
   converges there (the automatic reduction's rule); before, a term
   diverging where `G` is finite gave `ComplexInfinity`
   (`MeijerG[{{1/3,2/3},{}},{{0,1/3},{}},1]`, 5.5009).
+- **G^{2,2}_{2,2} in 1 − z** (v0.6223, FunctionExpand only, when the Slater
+  route declines):
+  `G^{2,2}_{2,2}(z | a₁, a₂; b₁, b₂) = ΠΓ(1 − aᵢ + b_j)/Γ(2 − a₁ − a₂ + b₁ + b₂) z^b₁ 2F1(1 − a₁ + b₁, 1 − a₂ + b₁; 2 − a₁ − a₂ + b₁ + b₂; 1 − z)`.
+  - Both sides have the cut z ≤ 0. The 2F1 is analytic at z = 1, so this
+    covers the log case (b₁ − b₂ an integer) and the unit argument.
+  - Example: `FunctionExpand[MeijerG[{{1/2, 1/2}, {}}, {{0, 0}, {}}, 1]]` =
+    `π²`, which gives `∫₀^∞ K₀(x)² dx = π²/4`.
+  - Checked numerically at z = 7/10, 13/10, 1/2 and 4. It declines when a
+    prefactor Gamma has a pole.
+- **pFq parameters over one denominator** (v0.6223). Before reducing a
+  `HypergeometricPFQ`, `FunctionExpand` puts each parameter through
+  `Together`, so parameters that agree only in that form cancel
+  (`1/2 (2 + 2 v)` against `1 + v`).
+  - This exposed a bug in the Formula algorithm's final tidy: it turned
+    `2F3((3+ν)/4, (1+ν)/4; 1/2, (2+ν)/2, (1+ν)/2; w)` into `Indeterminate`,
+    while its ν → −ν mirror was fine.
+  - `hr_tidy` now keeps the untidied closed form when the tidy is not
+    finite. The form above is now a sum of two `BesselI[ν/2, ±√w]` terms.
 - **G at z = 1 by residue summation** (`Hrep\`unitG`). For `p = q` and
   rational parameters the Mellin–Barnes integrand reduces, by the recurrence
   and the reflection formula, to `R(s) Π π/sin(π(c + s))` with `R`
