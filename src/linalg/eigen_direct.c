@@ -1519,6 +1519,51 @@ static Expr* direct_complex_hermitian_machine(const MatD* A, MateigenWant want,
     size_t n = A->n;
     if (n == 0) return NULL;
 
+#ifdef USE_LAPACK
+    /* LAPACK zheevd (blocked zhetrd + divide and conquer), as dsyev serves the
+     * real symmetric kernel above: the hand-rolled Householder + scalar QR
+     * below was ~30x slower than the real path at n = 250.  Same builders, so
+     * the output convention (descending |lambda|, stable on ties) is
+     * unchanged.  zheevd's answer is self-checked (mat_lapack_zheevd); on any
+     * failure the in-file kernel still runs. */
+    if (mathilda_lapack_probe()) {
+        bool want_V = (want & MATEIGEN_WANT_VECTORS) != 0;
+        double* Ac = (double*)malloc(sizeof(double) * 2 * n * n);
+        double* w  = (double*)malloc(sizeof(double) * n);
+        if (Ac && w) {
+            for (size_t i = 0; i < n; i++)          /* row-major -> column-major */
+                for (size_t j = 0; j < n; j++) {
+                    Ac[2 * (i + j * n)]     = A->re[i * n + j];
+                    Ac[2 * (i + j * n) + 1] = A->im[i * n + j];
+                }
+            if (mat_lapack_zheevd((int)n, Ac, (int)n, w, want_V ? 1 : 0) == 0) {
+                size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+                double* wd = (double*)malloc(sizeof(double) * n);
+                memcpy(wd, w, sizeof(double) * n);
+                direct_sort_perm_desc_abs(wd, n, perm);
+                Expr* vals = NULL;
+                Expr* vecs = NULL;
+                if (want_V) {
+                    double* V_re = (double*)malloc(sizeof(double) * n * n);
+                    double* V_im = (double*)malloc(sizeof(double) * n * n);
+                    for (size_t i = 0; i < n; i++)
+                        for (size_t j = 0; j < n; j++) {
+                            V_re[i * n + j] = Ac[2 * (i + j * n)];
+                            V_im[i * n + j] = Ac[2 * (i + j * n) + 1];
+                        }
+                    vecs = direct_build_complex_hermitian_eigvec_list(V_re, V_im, n, perm);
+                    free(V_re); free(V_im);
+                }
+                if (want & MATEIGEN_WANT_VALUES)
+                    vals = direct_build_real_eigenvalue_list(wd, n, perm);
+                free(perm); free(wd); free(Ac); free(w);
+                return direct_finish(vals, vecs, k_spec);
+            }
+        }
+        free(Ac); free(w);
+    }
+#endif
+
     /* Working complex copy of A (tridiag step modifies in place). */
     double* W_re = (double*)malloc(sizeof(double) * n * n);
     double* W_im = (double*)malloc(sizeof(double) * n * n);
@@ -4666,11 +4711,79 @@ MATHILDA_MAYBE_UNUSED static bool ndla_eigen_symmetric(const double* A, int n) {
     return true;
 }
 
+#ifdef USE_LAPACK
+/* True iff the interleaved complex column-major buffer A (n x n) is
+ * numerically Hermitian (same relative tolerance as ndla_eigen_symmetric). */
+static bool ndla_eigen_hermitian(const double* A, int n) {
+    double maxa = 0.0;
+    size_t nn = (size_t)n * (size_t)n;
+    for (size_t k = 0; k < 2 * nn; k++) { double v = fabs(A[k]); if (v > maxa) maxa = v; }
+    double tol = 1e-12 * (maxa > 0.0 ? maxa : 1.0);
+    for (int j = 0; j < n; j++) {
+        if (fabs(A[2 * ((size_t)j + (size_t)j * n) + 1]) > tol) return false;
+        for (int i = j + 1; i < n; i++) {
+            const double* a = A + 2 * ((size_t)i + (size_t)j * n);
+            const double* b = A + 2 * ((size_t)j + (size_t)i * n);
+            if (fabs(a[0] - b[0]) > tol || fabs(a[1] + b[1]) > tol) return false;
+        }
+    }
+    return true;
+}
+
+/* A complex Hermitian NDArray through zheevd: REAL eigenvalues (as the boxed
+ * Hermitian kernel and the reference give them -- zgeev left roundoff
+ * imaginary parts) in descending |lambda| order, eigenvectors as the rows of
+ * a packed complex matrix.  Returns false (nothing built) when the matrix is
+ * not Hermitian or LAPACK fails, so the caller takes the zgeev path. */
+static bool ndla_eigen_hermitian_solve(Expr* arg, int n, bool want_vals, bool want_vecs,
+                                       Expr** vals, Expr** vecs) {
+    int rr, cc; double* A = NULL;
+    *vals = NULL; *vecs = NULL;
+    if (!na_load_matrix(arg, true, /*colmajor=*/true, &rr, &cc, &A)) { free(A); return false; }
+    if (!ndla_eigen_hermitian(A, n)) { free(A); return false; }
+    NDPresentation pres = na_result_presentation(arg);
+    size_t nn = (size_t)n * (size_t)n;
+    double* w = (double*)malloc((size_t)n * sizeof(double));
+    size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
+    bool ok = false;
+    if (w && perm && mat_lapack_zheevd(n, A, n, w, want_vecs ? 1 : 0) == 0) {
+        direct_sort_perm_desc_abs(w, n, perm);
+        if (want_vals) {
+            double* ev = (double*)malloc((size_t)n * sizeof(double));
+            if (ev) {
+                for (int i = 0; i < n; i++) ev[i] = w[perm[i]];
+                *vals = na_build_vector_as(ev, n, false, pres);
+            }
+            free(ev);
+        }
+        if (want_vecs) {
+            double* vb = (double*)malloc(2 * nn * sizeof(double));
+            if (vb) {
+                for (int s = 0; s < n; s++)
+                    for (int i = 0; i < n; i++) {
+                        size_t src = 2 * ((size_t)i + perm[s] * (size_t)n);
+                        size_t dst = 2 * ((size_t)s * (size_t)n + (size_t)i);
+                        vb[dst] = A[src]; vb[dst + 1] = A[src + 1];
+                    }
+                *vecs = na_build_matrix_as(vb, n, n, true, /*colmajor=*/false, pres);
+            }
+            free(vb);
+        }
+        ok = (!want_vals || *vals) && (!want_vecs || *vecs);
+        if (!ok) { expr_free(*vals); expr_free(*vecs); *vals = NULL; *vecs = NULL; }
+    }
+    free(w); free(perm); free(A);
+    return ok;
+}
+#endif
+
 Expr* ndla_eigenvalues(Expr* res) {
 #ifdef USE_LAPACK
     Expr* arg; int n;
     if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
         if (arg->data.ndarray.dtype == NDT_COMPLEX64) {
+            Expr *hv, *hx;
+            if (ndla_eigen_hermitian_solve(arg, n, true, false, &hv, &hx)) return hv;
             Expr* out = ndla_eigenvalues_complex(arg, n);
             if (out) return out;
             return linalg_delist_and_reeval(res);
@@ -4727,6 +4840,8 @@ Expr* ndla_eigenvectors(Expr* res) {
     Expr* arg; int n;
     if (ndla_eigen_arg_ok(res, &arg, &n) && mathilda_lapack_probe()) {
         if (arg->data.ndarray.dtype == NDT_COMPLEX64) {
+            Expr *hv, *hx;
+            if (ndla_eigen_hermitian_solve(arg, n, false, true, &hv, &hx)) return hx;
             Expr* out = ndla_eigenvectors_complex(arg, n);
             if (out) return out;
             return linalg_delist_and_reeval(res);
@@ -4810,6 +4925,8 @@ Expr* ndla_eigensystem(Expr* res) {
         bool cplx = arg->data.ndarray.dtype == NDT_COMPLEX64;
         int rr, cc; double* A = NULL;
         Expr *vals = NULL, *vecs = NULL;
+        if (cplx && ndla_eigen_hermitian_solve(arg, n, true, true, &vals, &vecs))
+            return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ vals, vecs }, 2);
         if (na_load_matrix(arg, cplx, /*colmajor=*/true, &rr, &cc, &A)) {
             size_t nn = (size_t)n * (size_t)n;
             if (cplx) {

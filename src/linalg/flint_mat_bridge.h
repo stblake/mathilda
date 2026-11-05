@@ -45,6 +45,16 @@ Expr* flint_mat_det(Expr** flat, int n);
 Expr* flint_mat_inverse(Expr** flat, int n);
 
 /*
+ * Coefficients of det(x I - M) for the n x n all-rational matrix `flat`
+ * (row-major), lowest degree first: a malloc'd array of n + 1 Integer /
+ * Rational Exprs the caller owns (free each, then the array).  FLINT's
+ * fmpq_mat_charpoly (multimodular over the integer matrix after clearing
+ * denominators).  NULL when an entry is not rational, n <= 0, or FLINT is
+ * absent.  Does not take ownership of `flat`.
+ */
+Expr** flint_mat_charpoly(Expr** flat, int n);
+
+/*
  * Reduced row echelon form of an r×c matrix given row-major in `flat`, when
  * every entry is integer-like or Rational. Computes exactly via fmpq_mat_rref
  * and renders a List-of-Lists Expr the caller owns. Returns NULL when an entry

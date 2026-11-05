@@ -249,6 +249,23 @@ static void test_function(void) {
 
 /* ---- MatrixPower, non-integer exponents -------------------------------- */
 
+/* A clustered spectrum: every eigenvalue of a small random 100 x 100 matrix
+ * chains into one Schur-Parlett block.  Until v0.6221 the Taylor atom insisted
+ * on >= 99 terms, ran past a 64-order derivative cache and the call came back
+ * unevaluated; it now stops on the Higham-Davies tail bound. */
+static void test_function_clustered(void) {
+    chk("SeedRandom[11]; mc = RandomReal[{-1, 1}, {100, 100}]/10; Null", "Null");
+    chk_true("MatrixQ[MatrixFunction[Cos, mc], NumericQ]");
+    chk_true("relerr[MatrixFunction[Cos, mc], (MatrixExp[I mc] + MatrixExp[-I mc])/2] < 10.^-13");
+    chk_true("relerr[MatrixFunction[Exp[2 #] &, mc], MatrixExp[2 mc]] < 10.^-13");
+    chk_true("relerr[MatrixFunction[Sinh, 10 mc], (MatrixExp[10 mc] - MatrixExp[-10 mc])/2] < 10.^-12");
+    chk("cc = RandomComplex[{-1 - I, 1 + I}, {60, 60}]/5; Null", "Null");
+    chk_true("relerr[MatrixFunction[Sin, cc], (MatrixExp[I cc] - MatrixExp[-I cc])/(2 I)] < 10.^-13");
+    /* a Jordan block: nilpotent part, the series ends exactly */
+    chk("jb = DiagonalMatrix[ConstantArray[0.5, 40]] + DiagonalMatrix[ConstantArray[1., 39], 1]; Null", "Null");
+    chk_true("relerr[MatrixFunction[Exp[#] &, jb], MatrixExp[jb]] < 10.^-14");
+}
+
 static void test_power(void) {
     chk_if("MatrixPower[{{4, 0}, {0, 9}}, 1/2]", "{{2, 0}, {0, 3}}");
     chk_if("MatrixPower[{{2, 1}, {1, 2}}, 1/2]", "{{1/2 + Sqrt[3]/2, -1/2 + Sqrt[3]/2}, {-1/2 + Sqrt[3]/2, 1/2 + Sqrt[3]/2}}");
@@ -363,6 +380,7 @@ int main(void) {
     test_exp_messages();
     test_log();
     test_function();
+    test_function_clustered();
     test_power();
     test_invariants();
     test_sparse();

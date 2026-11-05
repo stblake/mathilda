@@ -897,23 +897,33 @@ static bool same_shape(const Expr* a, const Expr* b) {
 /* Decode a numeric scalar operand (Integer / Real / Complex[re,im]) into a
  * (re, im) pair. Returns false for a symbolic or non-machine scalar, so a Plus /
  * Times containing such a term falls through to the generic symbolic path. */
-static bool scalar_value(const Expr* e, double* re, double* im, bool* is_cplx) {
+/* A real numeric scalar (Integer / Real / BigInt / MPFR / Rational) at its
+ * machine value.  An NDArray is a machine-float buffer, so a Rational / BigInt /
+ * MPFR scalar broadcasts at its machine value (no exactness to preserve). This
+ * is what folds 1/2 NDArray[...] (= Times[1/2, NDArray]) and Mod[NDArray, 1/2]
+ * instead of leaving them symbolic. Note leaf_real (used for List->buffer
+ * packing) deliberately stays Integer/Real-only. */
+static bool real_scalar_value(const Expr* e, double* re) {
     int64_t rn, rd;
-    *im = 0.0; *is_cplx = false;
     if (leaf_real(e, re)) return true;
-    /* An NDArray is a machine-float buffer, so a Rational / BigInt / MPFR scalar
-     * broadcasts at its machine value (no exactness to preserve). This is what
-     * folds 1/2 NDArray[...] (= Times[1/2, NDArray]) and Mod[NDArray, 1/2]
-     * instead of leaving them symbolic. Note leaf_real (used for List->buffer
-     * packing) deliberately stays Integer/Real-only. */
     if (e->type == EXPR_BIGINT) { *re = mpz_get_d(e->data.bigint); return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)   { *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
 #endif
     if (is_rational(e, &rn, &rd)) { *re = (double)rn / (double)rd; return true; }
+    return false;
+}
+
+static bool scalar_value(const Expr* e, double* re, double* im, bool* is_cplx) {
+    *im = 0.0; *is_cplx = false;
+    if (real_scalar_value(e, re)) return true;
+    /* Complex parts decode the same way: Complex[0, 1/2] (I/2) is as numeric
+     * as Complex[0, 1].  Accepting only Integer/Real parts left
+     * (I/2) * packedMatrix unevaluated -- neither broadcast here nor delisted
+     * by the symbolic retry, which counts an exact complex as numeric. */
     if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
-        leaf_real(e->data.function.args[0], re) &&
-        leaf_real(e->data.function.args[1], im)) {
+        real_scalar_value(e->data.function.args[0], re) &&
+        real_scalar_value(e->data.function.args[1], im)) {
         *is_cplx = true;
         return true;
     }

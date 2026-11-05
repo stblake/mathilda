@@ -394,22 +394,17 @@ NDPresentation na_result_presentation(const Expr* input)
  * happened" flag must be armed -- expr_new_ndarray_raw does not set it, so we do,
  * exactly as ndbuild_open_like (src/pack.c) does.
  *
- * COMPLEX result: a complex packed-list is NOT a supported representation -- the
- * auto-packer only ever creates real (float64/int64) packed lists, and the
- * transparency gate corrupts a complex one (drops the imaginary part on
- * materialize).  So a complex result destined for a boxed-List caller
- * (NDA_HEAD_LIST) is boxed into a nested List of Complex[...]; a complex result
- * for an NDArray caller stays a visible complex64 NDArray (NDA_HEAD_NDARRAY),
- * which the gate leaves intact and which threads correctly against a visible
- * input in reconstruction. */
+ * COMPLEX result: packed too, as a complex64 packed list.  Until v0.402 the
+ * auto-packer only built real buffers and the gate dropped the imaginary part
+ * when it materialised a complex one, so a complex factor was boxed into a
+ * nested List of Complex[...] here.  Complex packing (and materialising) has
+ * been supported since v0.402, and boxing an n x n factor cost more than the
+ * factorisation itself (a 400 x 400 complex Cholesky spent ~95% of its time
+ * allocating and evaluating 160k Complex nodes). */
 static Expr* na_finish(Expr* nd, bool is_complex, NDPresentation pres)
 {
+    (void)is_complex;
     if (!nd || !is_ndarray(nd)) return nd;
-    if (is_complex && pres == NDA_HEAD_LIST) {
-        Expr* boxed = ndarray_to_nested_list(nd);
-        expr_free(nd);
-        return boxed;
-    }
     nd->data.ndarray.present_as = pres;
     if (pres == NDA_HEAD_LIST) pack_g_any_created = true;
     return nd;

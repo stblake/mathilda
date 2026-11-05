@@ -780,9 +780,15 @@ static bool nd_leaf_eq(const Expr* a, size_t k, const Expr* leaf) {
     if (dt == NDT_INT64) {
         if (leaf->type == EXPR_INTEGER)
             return leaf->data.integer == ndt_get_i(buf, k, dt);
-    } else if (!ndt_is_complex(dt) && leaf->type == EXPR_REAL) {
+    } else if (leaf->type == EXPR_REAL) {
+        /* A complex element with a zero imaginary part is the Real it
+         * evaluates to (Complex[x, 0.] canonicalises to x): the reference
+         * also has ToPackedArray[{1., 2. I}] === {1., 2. I}.  The element
+         * still DISPLAYS as 1. + 0. I (ndarray_buffer_element_to_expr is
+         * unchanged); only SameQ and the hash treat it as Real. */
         double re, im;
         ndt_get(buf, k, dt, &re, &im);
+        if (ndt_is_complex(dt) && im != 0.0) return false;
         if (isnan(re) && isnan(leaf->data.real)) return true;
         return re == leaf->data.real;
     }
@@ -826,8 +832,9 @@ static bool nd_packed_eq(const Expr* a, const Expr* b) {
                 return false;
         return true;
     }
-    if (ndt_is_complex(x->dtype) != ndt_is_complex(y->dtype))
-        return false;                                /* Complex[..] vs Real heads */
+    /* A complex element with a zero imaginary part materialises as a Real
+     * (ndarray_buffer_element_to_expr), so a complex and a real buffer are
+     * compared value by value: the real side reads im = 0. */
     for (size_t k = 0; k < n; k++) {
         double xr, xim, yr, yim;
         ndt_get(x->data, k, x->dtype, &xr, &xim);
@@ -984,7 +991,7 @@ static uint64_t hash_packed_level(const Expr* a, int level, size_t* idx) {
             return hash_as_integer(ndt_get_i(nd->data, k, nd->dtype));
         double re, im;
         ndt_get(nd->data, k, nd->dtype, &re, &im);
-        return ndt_is_complex(nd->dtype) ? hash_as_complex(re, im) : hash_as_real(re);
+        return (ndt_is_complex(nd->dtype) && im != 0.0) ? hash_as_complex(re, im) : hash_as_real(re);
     }
     uint64_t h = fnv_mix(FNV_OFFSET, (uint64_t)EXPR_FUNCTION);
     h = fnv_mix(h, hash_as_symbol(SYM_List));

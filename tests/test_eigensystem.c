@@ -94,6 +94,21 @@ static void test_machine(void) {
     chk_es("band, 4", "10.^-10");
 }
 
+/* Complex Hermitian input (packed and boxed) goes through zheevd: REAL
+ * eigenvalues, unitary eigenvectors, same order on both surfaces (v0.6221;
+ * the packed path used general zgeev and left roundoff imaginary parts). */
+static void test_hermitian(void) {
+    chk("SeedRandom[4]; hz = With[{c = RandomComplex[{-1 - I, 1 + I}, {80, 80}]}, c + ConjugateTranspose[c]]; "
+        "{hv, hx} = Eigensystem[hz]; Null", "Null");
+    chk_true("VectorQ[hv, Head[#] === Real &] && VectorQ[Eigenvalues[hz], Head[#] === Real &]");
+    chk_true("Max[Abs[Flatten[hz . Transpose[hx] - Transpose[hx] . DiagonalMatrix[hv]]]] < 10.^-12");
+    chk_true("Max[Abs[Flatten[Conjugate[hx] . Transpose[hx] - IdentityMatrix[80]]]] < 10.^-13");
+    chk_true("OrderedQ[Reverse[Abs[hv]]]");
+    chk_true("Max[Abs[Eigenvalues[Developer`FromPackedArray[hz]] - hv]] < 10.^-12");
+    chk_true("Eigenvectors[hz] == hx");
+    chk_true("Max[Abs[Eigenvalues[{{2., 1. - I}, {1. + I, 3.}}] - {4., 1.}]] < 10.^-14");
+}
+
 static void test_mpfr(void) {
     chk_es("N[{{1,2},{3,4}}, 30]", "10.^-25");
     chk_es("N[{{2,1},{1,2}}, 30]", "10.^-25");
@@ -131,6 +146,7 @@ int main(void) {
     test_mute_messages();
     test_exact();
     test_machine();
+    test_hermitian();
     test_mpfr();
     test_storage();
     test_messages();

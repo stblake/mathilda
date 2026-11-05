@@ -62,6 +62,11 @@ static void test_adjugate(void) {
              "Max[Abs[Adjugate[s] . s]] < 10.^-10]]");     /* rank 5 of 7: adj . s == 0 */
     chk_true("With[{a = Adjugate[N[{{1,2,3},{4,5,6},{7,8,10}}, 30]]}, "
              "Max[Abs[a - {{2, 4, -3}, {2, -11, 6}, {-3, 6, -3}}]] < 10^-27 && Precision[a[[1,1]]] > 25]");
+    /* well conditioned: det(m) m^-1 from one LU (v0.6221); near singular: SVD */
+    chk_true("SeedRandom[8]; With[{g = RandomReal[1, {150, 150}]}, "
+             "Max[Abs[Flatten[Adjugate[g] . g - Det[g] IdentityMatrix[150]]]]/Abs[Det[g]] < 10.^-11]");
+    chk_true("Max[Abs[Adjugate[{{1., 2.}, {2., 4. + 1.*^-12}}] - {{4., -2.}, {-2., 1.}}]] < 10.^-11");
+    chk_true("With[{r = RandomReal[1, {5, 5}]}, Max[Abs[Adjugate[r] - N[Adjugate[Rationalize[r, 0]]]]] < 10.^-13]");
     chk_msg("Adjugate[{{1,2,3},{4,5,6}}]", "Adjugate::matsq");
     chk_msg("Adjugate[{1,2}]", "Adjugate::matsq");
     chk_msg("Adjugate[{{1,2},{3,4}}, Modulus -> 5]", "Adjugate::intnm");

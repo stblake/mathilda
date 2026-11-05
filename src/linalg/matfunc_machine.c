@@ -941,8 +941,41 @@ static int logm_tri(int n, const double* T0, double* L) {
 
 /* ---- Schur--Parlett ----------------------------------------------------- */
 
+/* Infinity norm (largest row sum of moduli) of an L x L complex column-major
+ * block. */
+static double blk_norm_inf(int L, const double* B) {
+    double best = 0.0;
+    for (int i = 0; i < L; i++) {
+        double r = 0.0;
+        for (int j = 0; j < L; j++) {
+            size_t q = (size_t)i + (size_t)j * (size_t)L;
+            r += fabs(B[2 * q]) + fabs(B[2 * q + 1]);   /* >= |z|, cheap, no hypot */
+        }
+        if (r > best) best = r;
+    }
+    return best;
+}
+
+#define MF_ATOM_MAXTERMS 500
+
 /* f on one diagonal block T[s0 .. s0+len-1] by a Taylor series about the mean
- * eigenvalue; the result is written into the same block of F. */
+ * eigenvalue sigma; the result is written into the same block of F.
+ *
+ * Truncation follows Higham & Davies (SIAM J. Matrix Anal. Appl. 25(2), 2003,
+ * Algorithm 4.4 / MATLAB funm_atom): once a term is negligible relative to the
+ * partial sum, the tail is bounded by
+ *
+ *     ||P_{k+1}|| * mu * max_{0<=j<L} max_z |f^(k+1+j)(z)| / j!,
+ *
+ * where P_{k+1} = M^{k+1}/(k+1)!, M = T_block - sigma I, mu = ||(I - |N|)^-1 e||
+ * with N the strictly upper part of the block, and z ranges over the block's
+ * eigenvalues (approximated, as MATLAB does, by sigma and the eigenvalue
+ * farthest from it).  The series stops only when that bound is below u ||F||.
+ *
+ * The earlier rule -- two negligible terms AND at least L terms -- was both
+ * slower and wrong: a 100 x 100 random matrix chains ~99 eigenvalues into one
+ * block, the forced 99+ terms ran past the derivative cache, and the call
+ * failed (MatrixFunction[Cos, m] came back unevaluated). */
 static int parlett_atom(int n, const double* T, double* F, int s0, int len,
                         mf_scalar_fn fn, void* ctx) {
     if (len == 1) {
@@ -955,7 +988,13 @@ static int parlett_atom(int n, const double* T, double* F, int s0, int len,
     double* P  = (double*)calloc(2 * ll, sizeof(double));
     double* P2 = (double*)calloc(2 * ll, sizeof(double));
     double* Fb = (double*)calloc(2 * ll, sizeof(double));
-    if (!M || !P || !P2 || !Fb) { free(M); free(P); free(P2); free(Fb); return MF_FAIL; }
+    double* y  = (double*)malloc(sizeof(double) * (size_t)L);
+    int dcap = MF_ATOM_MAXTERMS + L + 2;
+    double* dmax = (double*)malloc(sizeof(double) * (size_t)dcap);   /* derivative bounds */
+    if (!M || !P || !P2 || !Fb || !y || !dmax) {
+        free(M); free(P); free(P2); free(Fb); free(y); free(dmax);
+        return MF_FAIL;
+    }
 #define BE(B, i, j) ((B) + 2 * ((size_t)(i) + (size_t)(j) * (size_t)L))
     double sr = 0.0, si = 0.0;
     for (int i = 0; i < L; i++) { sr += CE(T, s0 + i, s0 + i)[0]; si += CE(T, s0 + i, s0 + i)[1]; }
@@ -967,36 +1006,82 @@ static int parlett_atom(int n, const double* T, double* F, int s0, int len,
         }
     for (int i = 0; i < L; i++) { BE(M, i, i)[0] -= sr; BE(M, i, i)[1] -= si; }
 
+    /* The eigenvalue farthest from sigma: the second derivative-bound point. */
+    double zfr = sr, zfi = si, far = -1.0;
+    for (int i = 0; i < L; i++) {
+        double d = c_abs(BE(M, i, i)[0], BE(M, i, i)[1]);
+        if (d > far) { far = d; zfr = CE(T, s0 + i, s0 + i)[0]; zfi = CE(T, s0 + i, s0 + i)[1]; }
+    }
+
+    /* mu = ||y||_inf with (I - |N|) y = e: unit upper triangular, y >= 1. */
+    double mu = 1.0;
+    for (int i = L - 1; i >= 0; i--) {
+        double acc = 1.0;
+        for (int j = i + 1; j < L; j++) acc += c_abs(BE(M, i, j)[0], BE(M, i, j)[1]) * y[j];
+        y[i] = acc;
+        if (acc > mu) mu = acc;
+    }
+
+    int have_d = 0;      /* dmax[0 .. have_d-1] are filled */
     double f0r, f0i;
     int st = fn(ctx, sr, si, 0, &f0r, &f0i);
+    bool done = false;
     if (st == MF_OK) {
         for (int i = 0; i < L; i++) { BE(Fb, i, i)[0] = f0r; BE(Fb, i, i)[1] = f0i; }
-        memcpy(P, M, sizeof(double) * 2 * ll);
-        double fact = 1.0;
-        int small_run = 0;
-        for (int k = 1; k <= 300; k++) {
-            if (norm1(L, true, P) == 0.0) break;     /* nilpotent: exact */
-            fact *= (double)k;
+        memcpy(P, M, sizeof(double) * 2 * ll);               /* P = M^1 / 1! */
+        for (int k = 1; k <= MF_ATOM_MAXTERMS; k++) {
+            double fnF_old = blk_norm_inf(L, Fb);
             double dr, di;
             st = fn(ctx, sr, si, k, &dr, &di);
             if (st != MF_OK) break;
-            dr /= fact; di /= fact;
-            double tn = 0.0;
             for (size_t q = 0; q < ll; q++) {
                 double ar, ai;
                 c_mul(dr, di, P[2 * q], P[2 * q + 1], &ar, &ai);
+                P2[2 * q] = ar; P2[2 * q + 1] = ai;
                 Fb[2 * q] += ar; Fb[2 * q + 1] += ai;
-                double a = c_abs(ar, ai);
-                if (a > tn) tn = a;
             }
-            double fn_ = 0.0;
-            for (size_t q = 0; q < ll; q++) { double a = c_abs(Fb[2 * q], Fb[2 * q + 1]); if (a > fn_) fn_ = a; }
-            if (tn <= MF_U * fn_) { if (++small_run >= 2 && k >= L) break; }
-            else small_run = 0;
-            mm(L, true, P, M, P2);
-            memcpy(P, P2, sizeof(double) * 2 * ll);
-            if (!isfinite(fact)) { st = MF_FAIL; break; }
+            double tn = blk_norm_inf(L, P2);
+            /* P <- P M / (k + 1) */
+            {
+#ifdef USE_LAPACK
+                double al[2] = { 1.0 / (double)(k + 1), 0.0 }, zero[2] = { 0.0, 0.0 };
+                cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, L, L, L,
+                            (void*)al, (const void*)P, L, (const void*)M, L,
+                            (void*)zero, (void*)P2, L);
+#else
+                mm(L, true, P, M, P2);
+                for (size_t q = 0; q < 2 * ll; q++) P2[q] /= (double)(k + 1);
+#endif
+                double* t = P; P = P2; P2 = t;
+            }
+            double pn = blk_norm_inf(L, P);
+            if (pn == 0.0) { done = true; break; }             /* nilpotent: exact */
+            if (tn > MF_U * (MF_U + fnF_old)) continue;
+            /* Negligible term: bound the tail. */
+            int need = k + 1 + L;                              /* orders up to k+L */
+            if (need > dcap) need = dcap;
+            bool ok = true;
+            for (int j = have_d; j < need; j++) {
+                double ar, ai, br, bi;
+                int s1 = fn(ctx, sr, si, j, &ar, &ai);
+                int s2 = (far > 0.0) ? fn(ctx, zfr, zfi, j, &br, &bi) : s1;
+                if (s1 != MF_OK || s2 != MF_OK) { ok = false; break; }
+                if (far <= 0.0) { br = ar; bi = ai; }
+                double a = c_abs(ar, ai), b = c_abs(br, bi);
+                dmax[j] = a > b ? a : b;
+                have_d = j + 1;
+            }
+            if (!ok) continue;               /* cannot bound: keep summing */
+            double omega = 0.0, jf = 1.0;
+            for (int j = 0; j < L && k + 1 + j < have_d; j++) {
+                if (j > 0) jf *= (double)j;
+                double w = dmax[k + 1 + j] / jf;
+                if (w > omega) omega = w;
+            }
+            double trunc = pn * mu * omega;
+            if (isfinite(trunc) && trunc <= MF_U * blk_norm_inf(L, Fb)) { done = true; break; }
         }
+        if (st == MF_OK && !done) st = MF_FAIL;
     }
     if (st == MF_OK) {
         for (int j = 0; j < L; j++)
@@ -1006,7 +1091,7 @@ static int parlett_atom(int n, const double* T, double* F, int s0, int len,
             }
     }
 #undef BE
-    free(M); free(P); free(P2); free(Fb);
+    free(M); free(P); free(P2); free(Fb); free(y); free(dmax);
     return st;
 }
 

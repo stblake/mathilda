@@ -1154,3 +1154,17 @@ Plan: ~/.claude/plans/snappy-sprouting-pie.md
 - [x] `tests/test_experimental_diractr.c` (8 groups) passes. `ctest -LE nightly`: 601/601. valgrind leak summary identical with and without the calls. check-c99, check-messages and check-packed-aware are clean.
 - [x] `benchmarks/123-native-vs-m` (group G). Found while building it: a HoldRest `benchIf` given the head name through a variable is silently left unevaluated. Also, parsing a statement interns the symbol, so `Names[]` presence must be decided before the symbol is parsed.
 - Open: the remaining C-path cost is one Times node and one args array per term, which is irreducible as a boxed Expr; `Cases[_, _g, Infinity]` + `Union` on the result costs 3-5× the build.
+
+## Dense linear algebra: remaining slow cases vs scipy (v0.6221)
+
+Source: the open items of the sparse linear algebra review (complex Cholesky 76x, MatrixFunction[Cos] 23x, Hermitian Eigensystem 20x, exact CharacteristicPolynomial 29x, Adjugate 13x). Re-measured first; each gap traced to a root cause before any change.
+
+- [x] Complex Cholesky: ~95% of the time was boxing the factor into Complex[...] nodes (`na_finish`, a pre-v0.402 restriction). Complex results stay packed now. 0.10 → 0.016 s (scipy 0.006).
+  - [x] Found while doing it: packed complex vs boxed SameQ was False when an element has a zero imaginary part. SameQ/UnsameQ were not packed-aware, so the gate materialised Complex[1.,0.]. Put them on AWARE; expr_eq and the hash treat a zero-imaginary element as Real. A first attempt that changed ndarray_buffer_element_to_expr broke packed-complex display (`2. + 0. I`) and was reverted.
+  - [x] Found while doing it: `(I/2) * packed` stayed unevaluated (scalar_value rejected Complex with Rational parts).
+- [x] MatrixFunction[Cos] 100x100: actually a WRONG ANSWER, unevaluated (benchmark was timing the failure). Higham–Davies truncation bound + unbounded incremental derivative cache. 0.015 s, err ~1e-15.
+- [x] Hermitian eigen: packed path used general zgeev (slow, complex eigenvalues with roundoff imaginary parts). zheevd + O(n^2) self-check on packed and boxed paths. Eigenvalues 0.086 → 0.011 s (numpy 0.015); Eigenvectors 0.11 → 0.038 s (numpy 0.042).
+- [x] Adjugate: LU det*inv when rcond >= sqrt(u), SVD kept for near singular. 0.0185 → 0.0017 s (numpy 0.0026).
+- [x] CharacteristicPolynomial all-rational: FLINT fmpq_mat_charpoly. 40x40: 1.25 → 0.002 s (sympy 0.22).
+- [x] Tests in test_packed_list, test_matfunc, test_eigensystem, test_minors_adjugate, test_characteristicpolynomial, test_cholesky.
+- Open: CharacteristicPolynomial[m, non-symbol] evaluates where the reference gives General::ivar (pre-existing). Complex Cholesky still 2.7x scipy (load + Hermitian check + copy).

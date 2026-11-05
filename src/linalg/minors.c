@@ -202,6 +202,59 @@ static void mn_det_cm(double* M, int n, bool cplx, double* dre, double* dim) {
     mn_det(M, n, cplx, dre, dim);
 }
 
+/* Well-conditioned fast path: adj(A) = det(A) A^-1 from ONE LU (getrf, then
+ * getri on the same factor).  Accurate to the same kappa(A) u as the SVD form
+ * whenever A is safely nonsingular, at a fraction of the cost (a full SVD plus
+ * an n^3 reconstruction was ~7x numpy's det * inv at n = 200).  Declines
+ * (false) on a near-singular A -- rcond below sqrt(u), where det -> 0 and the
+ * inverse blows up -- or a non-finite product, leaving the SVD form, which
+ * stays exact through singularity. */
+static bool adjugate_lu(const double* Arm, int n, bool cplx, double* out) {
+    size_t comps = cplx ? 2 : 1, nn = (size_t)n * (size_t)n;
+    double* A = (double*)malloc(sizeof(double) * comps * nn);
+    int* ipiv = (int*)malloc(sizeof(int) * (size_t)n);
+    if (!A || !ipiv) { free(A); free(ipiv); return false; }
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++) {
+            size_t s = (size_t)i * n + j, d = (size_t)i + (size_t)j * n;
+            if (cplx) { A[2 * d] = Arm[2 * s]; A[2 * d + 1] = Arm[2 * s + 1]; }
+            else A[d] = Arm[s];
+        }
+    double anorm = cplx ? mat_lapack_zlange('1', n, n, A, n) : mat_lapack_dlange('1', n, n, A, n);
+    int info = cplx ? mat_lapack_zgetrf(n, n, A, n, ipiv) : mat_lapack_dgetrf(n, n, A, n, ipiv);
+    bool ok = false;
+    if (info == 0 && anorm > 0.0 && nd_lu_rcond('1', A, n, cplx, anorm) >= 1.4901161193847656e-08) {
+        /* det = prod(diag U) * (-1)^(row swaps) */
+        double dr = 1.0, di = 0.0;
+        for (int k = 0; k < n; k++) {
+            size_t q = (size_t)k + (size_t)k * n;
+            if (cplx) {
+                double ur = A[2 * q], ui = A[2 * q + 1];
+                double t = dr * ur - di * ui; di = dr * ui + di * ur; dr = t;
+            } else dr *= A[q];
+            if (ipiv[k] != k + 1) { dr = -dr; di = -di; }
+        }
+        info = cplx ? mat_lapack_zgetri(n, A, n, ipiv) : mat_lapack_dgetri(n, A, n, ipiv);
+        if (info == 0 && isfinite(dr) && isfinite(di)) {
+            ok = true;
+            for (int i = 0; i < n && ok; i++)
+                for (int j = 0; j < n; j++) {
+                    size_t o = (size_t)i * n + j, d = (size_t)i + (size_t)j * n;
+                    if (cplx) {
+                        double ar = A[2 * d], ai = A[2 * d + 1];
+                        out[2 * o] = dr * ar - di * ai; out[2 * o + 1] = dr * ai + di * ar;
+                        if (!isfinite(out[2 * o]) || !isfinite(out[2 * o + 1])) { ok = false; break; }
+                    } else {
+                        out[o] = dr * A[d];
+                        if (!isfinite(out[o])) { ok = false; break; }
+                    }
+                }
+        }
+    }
+    free(A); free(ipiv);
+    return ok;
+}
+
 /* Machine adjugate through the SVD (see the file comment), or NULL. */
 static Expr* adjugate_machine(const Expr* m) {
     int r = 0, c = 0;
@@ -213,7 +266,7 @@ static Expr* adjugate_machine(const Expr* m) {
     double* out = (double*)calloc(comps * nn, sizeof(double));
     if (n == 1) {
         out[0] = 1.0;
-    } else {
+    } else if (!adjugate_lu(Arm, n, cplx, out)) {
         /* column-major copy for LAPACK */
         double* A = (double*)malloc(sizeof(double) * comps * nn);
         for (int i = 0; i < n; i++)

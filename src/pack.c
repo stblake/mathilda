@@ -770,6 +770,12 @@ static void pack_mark_aware_heads(void) {
         "Length", "Dimensions", "Depth", "Part", "Head", "ByteCount",
         "NDArrayQ", "PackedArrayQ", "DataType", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
+        /* SameQ / UnsameQ are expr_eq, which compares a buffer against a boxed
+         * List (or another buffer) element by element without materialising.
+         * Through the gate they compared the MATERIALISED Complex[1., 0.]
+         * against the Real 1. and said False, where the reference (and
+         * expr_eq) say ToPackedArray[{1., 2. I}] === {1., 2. I}. */
+        "SameQ", "UnsameQ",
         /* SparseArray reads a packed dense array, and a packed {positions} ->
          * {values} rule, straight off the buffers (src/sparse/sparse_build.c);
          * ArrayRules converts through it. ArrayQ and ArrayDepth answer a

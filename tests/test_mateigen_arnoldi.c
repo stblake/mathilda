@@ -362,15 +362,17 @@ void test_arnoldi_complex_hermitian_2x2(void) {
     expr_free(arn);
 }
 
-/* Pauli-Y: {{0, -I}, {I, 0}} -> {+1, -1}. */
+/* Pauli-Y: {{0, -I}, {I, 0}} -> {-1, +1}.  A |lambda| tie keeps LAPACK's
+ * ascending order (zheevd since v0.6221), as the reference does:
+ * Eigenvalues[N[{{0, -I}, {I, 0}}]] is {-1., 1.} there too. */
 void test_arnoldi_pauli_y(void) {
     Expr* arn = eval_string(
         "Eigenvalues[N[{{0, -I}, {I, 0}}], Method -> \"Arnoldi\"]");
     ASSERT(list_len_eq(arn, 2));
     double e0 = extract_real(arn->data.function.args[0]);
     double e1 = extract_real(arn->data.function.args[1]);
-    ASSERT(fabs(e0 - 1.0) < 1e-9);
-    ASSERT(fabs(e1 + 1.0) < 1e-9);
+    ASSERT(fabs(e0 + 1.0) < 1e-9);
+    ASSERT(fabs(e1 - 1.0) < 1e-9);
     expr_free(arn);
 }
 

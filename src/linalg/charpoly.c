@@ -37,10 +37,66 @@
 #include "eval.h"
 #include "common.h"
 #include "pack.h"
+#include "flint_mat_bridge.h"
 #include "sym_names.h"
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+/* The all-rational ordinary case through FLINT: det(x I - m) from
+ * fmpq_mat_charpoly, signed to Det[m - x I] = (-1)^n det(x I - m) and summed
+ * as c_0 + c_1 x + ... + c_n x^n.  Faddeev-Leverrier over Expr arithmetic was
+ * O(n^4) bignum Expr operations (1.2 s for a 40 x 40 integer matrix, ~6x
+ * sympy); FLINT is multimodular.  Returns NULL (caller keeps the generic path)
+ * for a matrix with any non-rational entry or without FLINT. */
+static Expr* charpoly_flint(const Expr* m, int64_t n, const Expr* var) {
+    if (n < 1 || n > 4096) return NULL;
+    Expr* mm = pack_unpack(m);
+    const Expr* rows = mm ? mm : m;
+    if (rows->type != EXPR_FUNCTION || rows->data.function.arg_count != (size_t)n) {
+        expr_free(mm); return NULL;
+    }
+    size_t nn = (size_t)n * (size_t)n;
+    Expr** flat = (Expr**)malloc(sizeof(Expr*) * nn);
+    if (!flat) { expr_free(mm); return NULL; }
+    for (int64_t i = 0; i < n; i++) {
+        const Expr* row = rows->data.function.args[i];
+        if (row->type != EXPR_FUNCTION || row->data.function.arg_count != (size_t)n) {
+            free(flat); expr_free(mm); return NULL;
+        }
+        for (int64_t j = 0; j < n; j++) flat[i * n + j] = row->data.function.args[j];
+    }
+    Expr** c = flint_mat_charpoly(flat, (int)n);
+    free(flat);
+    expr_free(mm);
+    if (!c) return NULL;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (size_t)(n + 1));
+    if (!terms) {
+        for (int64_t k = 0; k <= n; k++) expr_free(c[k]);
+        free(c);
+        return NULL;
+    }
+    bool neg = (n & 1) != 0;
+    for (int64_t k = 0; k <= n; k++) {
+        Expr* coef = c[k];
+        if (neg) coef = expr_new_function(expr_new_symbol(SYM_Times),
+                                          (Expr*[]){ expr_new_integer(-1), coef }, 2);
+        Expr* pw = (k == 0) ? NULL
+                 : (k == 1) ? expr_copy((Expr*)var)
+                 : expr_new_function(expr_new_symbol(SYM_Power),
+                                     (Expr*[]){ expr_copy((Expr*)var), expr_new_integer(k) }, 2);
+        terms[k] = pw ? expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ coef, pw }, 2)
+                      : coef;
+    }
+    free(c);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)(n + 1));
+    free(terms);
+    /* A non-symbol variable (x + 1, a number) is multiplied out exactly as the
+     * generic path does it, with Expand. */
+    if (var->type != EXPR_SYMBOL)
+        sum = expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){ sum }, 1);
+    return eval_and_free(sum);
+}
 
 Expr* builtin_characteristicpolynomial(Expr* res) {
     size_t argc = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
@@ -64,6 +120,8 @@ Expr* builtin_characteristicpolynomial(Expr* res) {
 
     Expr* poly;
     if (a == NULL) {
+        Expr* fast = charpoly_flint(m, n, var);
+        if (fast) return fast;
         /* Ordinary: Faddeev-Leverrier gives det(lambda I - m). */
         poly = eigen_char_poly_faddeev(m, lam, (int)n);
         if (!poly) return NULL;

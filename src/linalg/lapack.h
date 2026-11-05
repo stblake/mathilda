@@ -258,6 +258,11 @@ void dsyev_(const char* jobz, const char* uplo, const int* n,
 void zheev_(const char* jobz, const char* uplo, const int* n,
             double* a, const int* lda, double* w,
             double* work, const int* lwork, double* rwork, int* info);
+void zheevd_(const char* jobz, const char* uplo, const int* n,
+             double* a, const int* lda, double* w,
+             double* work, const int* lwork, double* rwork, const int* lrwork,
+             int* iwork, const int* liwork, int* info,
+             size_t jobz_len, size_t uplo_len);
 
 /* dggev / zggev -- generalized eigenproblem A x = lambda B x for a general
  * pencil.  Real: eigenvalues are (alphar + i*alphai)/beta with conjugate
@@ -571,6 +576,12 @@ int mat_lapack_zgeev_values(int n, double* A, int lda, double* w);
  * ascending in w (length n, real), eigenvectors overwrite A (columns). */
 int mat_lapack_dsyev(int n, double* A, int lda, double* w);
 int mat_lapack_zheev(int n, double* A, int lda, double* w);
+/* zheevd (divide and conquer): eigenvalues ascending in w; with `vectors`, A
+ * (complex interleaved, column-major) is overwritten by the unitary
+ * eigenvector matrix.  Every answer with vectors is checked in O(n^2)
+ * (A (V x) against V (diag(w) x)), as zgees/zgeev are, and reported as
+ * info = -1001 when it fails, so the caller falls back. */
+int mat_lapack_zheevd(int n, double* A, int lda, double* w, int vectors);
 
 /* Eigenvalues only (jobz='N', uplo='U'): eigenvalues ascending in w; A is
  * used as scratch and does NOT receive eigenvectors. About half the work of

@@ -199,6 +199,18 @@ static void test_repeated_no_leak(void) {
     printf("  PASS: 125 repeated calls freed cleanly\n");
 }
 
+/* All-rational input goes to FLINT fmpq_mat_charpoly (v0.6221): it must
+ * agree with Det[m - x I] and print in the same expanded order. */
+static void test_flint_rational(void) {
+    check_out("CharacteristicPolynomial[{{1, 2, 0}, {3, 4, 1}, {0, 1/2, 2}}, x]",
+              "-9/2 - 15/2 x + 7 x^2 - x^3");
+    check_out("Expand[CharacteristicPolynomial[#, x] - Det[# - x IdentityMatrix[6]]]&["
+              "Table[Mod[3 i + 5 j^2, 11] - 5 + 1/(i + j), {i, 6}, {j, 6}]]", "0");
+    check_out("(CharacteristicPolynomial[Table[Mod[7 i j + i, 13] - 6, {i, 40}, {j, 40}], x] /. x -> 2) "
+              "=== Det[Table[Mod[7 i j + i, 13] - 6, {i, 40}, {j, 40}] - 2 IdentityMatrix[40]]", "True");
+    check_out("CharacteristicPolynomial[Developer`ToPackedArray[{{1, 2}, {3, 4}}], y]", "-2 - 5 y + y^2");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -210,6 +222,7 @@ int main(void) {
     TEST(test_zero_matrix);
     TEST(test_1x1);
     TEST(test_rational_3x3);
+    TEST(test_flint_rational);
     TEST(test_machine_3x3);
     TEST(test_complex_3x3);
     TEST(test_generalized_integer);

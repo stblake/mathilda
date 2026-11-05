@@ -124,6 +124,8 @@ static void test_compile(void) {
     chk_true("Normal[cf[a]] === CholeskyDecomposition[a]");
     chk_true("Normal[cf[a]] === Normal[CholeskyDecomposition[NDArray[a]]]");
     chk_true("Normal[cz[z]] === CholeskyDecomposition[z]");
+    /* a complex factor is a packed complex array, as the reference's (v0.6221) */
+    chk_true("Developer`PackedArrayQ[CholeskyDecomposition[Developer`ToPackedArray[z]]]");
     /* a non-positive-definite operand degrades to the interpreter */
     chk_msg("cf[{{1.,2.},{2.,1.}}]", "CholeskyDecomposition::posdef");
 }

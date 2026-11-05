@@ -809,6 +809,55 @@ int mat_lapack_zheev(int n, double* A, int lda, double* w)
     return info;
 }
 
+int mat_lapack_zheevd(int n, double* A, int lda, double* w, int vectors)
+{
+    if (n <= 0) return 0;
+    int info = 0, lwork = -1, lrwork = -1, liwork = -1;
+    double query[2] = { 0.0, 0.0 }, rquery = 0.0;
+    int iquery = 0;
+    char jz[2] = { vectors ? 'V' : 'N', 0 }, up[2] = { 'U', 0 };
+    size_t nn = (size_t)n * (size_t)lda;
+    double* A0 = NULL;
+    if (vectors) {                       /* the input, for the self-check */
+        A0 = (double*)malloc(sizeof(double) * 2 * nn);
+        if (A0) memcpy(A0, A, sizeof(double) * 2 * nn);
+    }
+    zheevd_(jz, up, &n, lapack_zptr(A), &lda, w, lapack_zptr(query), &lwork,
+            &rquery, &lrwork, &iquery, &liwork, &info MTH_FSTRLEN2);
+    if (info != 0) { free(A0); return info; }
+    lwork  = lapack_lwork(query[0], 2 * n + n * n);
+    lrwork = lapack_lwork(rquery, 1 + 5 * n + 2 * n * n);
+    liwork = iquery > 3 + 5 * n ? iquery : 3 + 5 * n;
+    double* work  = (double*)malloc((size_t)lwork * 2 * sizeof(double));
+    double* rwork = (double*)malloc((size_t)lrwork * sizeof(double));
+    int*    iwork = (int*)malloc((size_t)liwork * sizeof(int));
+    if (!work || !rwork || !iwork) {
+        free(work); free(rwork); free(iwork); free(A0);
+        return -999;
+    }
+    zheevd_(jz, up, &n, lapack_zptr(A), &lda, w, lapack_zptr(work), &lwork,
+            rwork, &lrwork, iwork, &liwork, &info MTH_FSTRLEN2);
+    free(work); free(rwork); free(iwork);
+    if (info == 0 && A0 && lda == n) {
+        /* zheevd reads only the upper triangle; the self-check multiplies by
+         * the full matrix, so complete the lower half from it. */
+        for (int j = 0; j < n; j++)
+            for (int i = j + 1; i < n; i++) {
+                size_t lo = 2 * ((size_t)i + (size_t)j * (size_t)n);
+                size_t hi = 2 * ((size_t)j + (size_t)i * (size_t)n);
+                A0[lo] = A0[hi]; A0[lo + 1] = -A0[hi + 1];
+            }
+        double* wc = (double*)calloc(2 * (size_t)n, sizeof(double));
+        if (wc) {
+            for (int i = 0; i < n; i++) wc[2 * i] = w[i];
+            if (!zlapack_verify(n, A0, A, NULL, wc, true)) info = -1001;
+            free(wc);
+        }
+    }
+    free(A0);
+    return info;
+}
+
 int mat_lapack_dggev(int n, double* A, int lda, double* B, int ldb,
                      double* alphar, double* alphai, double* beta,
                      double* VR, int ldvr)
@@ -1304,6 +1353,8 @@ int mat_lapack_dsyev_values(int n, double* A, int lda, double* w)
 { (void)n; (void)A; (void)lda; (void)w; return -1; }
 int mat_lapack_zheev(int n, double* A, int lda, double* w)
 { (void)n; (void)A; (void)lda; (void)w; return -1; }
+int mat_lapack_zheevd(int n, double* A, int lda, double* w, int vectors)
+{ (void)n; (void)A; (void)lda; (void)w; (void)vectors; return -1; }
 int mat_lapack_dggev(int n, double* A, int lda, double* B, int ldb,
                      double* alphar, double* alphai, double* beta,
                      double* VR, int ldvr)

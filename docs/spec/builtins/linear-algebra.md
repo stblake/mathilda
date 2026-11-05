@@ -1219,6 +1219,19 @@ repeated eigenvalue in a coupled block (a defective matrix) keeps the exact
 path, so `MatrixFunction[Sin, N[{{1, 1}, {0, 1}}, 30]]` has `Cos[1]` above the
 diagonal.
 
+### MatrixFunction: clustered spectra (Higham–Davies truncation)
+A non-normal machine matrix whose eigenvalues chain into one large
+Schur–Parlett block (any random 100 x 100 matrix scaled small) is summed as a
+Taylor series about the block's mean eigenvalue, and the series stops only when
+the Higham–Davies tail bound `||M^(k+1)/(k+1)!|| mu max_j |f^(k+1+j)|/j!` falls
+below `u ||F||` (`mu = ||(I - |N|)^-1 e||`, derivatives at the mean and the
+farthest eigenvalue). Derivatives of `f` are built incrementally and cached with
+no fixed order limit. Before v0.6221 the series required at least as many terms
+as the block size and the derivative cache stopped at order 64, so such a matrix
+came back unevaluated: `MatrixFunction[Cos, RandomReal[1, {100, 100}]/10]`
+now takes 0.015 s (scipy `cosm` 0.006 s), with errors of order `1e-15` against
+`(MatrixExp[I m] + MatrixExp[-I m])/2`.
+
 ## RowReduce
 Gives the row-reduced form of the matrix `m`.
 - `RowReduce[m]`
@@ -1764,7 +1777,10 @@ positive-definite matrix.
   - **machine** reals and complexes (a `List`, a packed array or an `NDArray`)
     use LAPACK `dpotrf` / `zpotrf` on the upper triangle (an in-house column
     Cholesky when LAPACK is absent), and answer a packed matrix with exact-zero
-    bits below the diagonal;
+    bits below the diagonal. A complex factor is a packed complex array too, as
+    the reference returns it (every machine linear-algebra result goes through
+    `na_finish`, which boxed complex results into `Complex[...]` nodes until
+    v0.6221);
   - **arbitrary precision** keeps the input precision, with exact `0` below the
     diagonal, as the reference does.
 - Hermitian test: exact/symbolic `m` must equal `ConjugateTranspose[m]`, or equal
@@ -1891,7 +1907,10 @@ for a singular `m` too.
 
 **Features**:
 - `Protected` (the reference also sets `ReadProtected`; Mathilda never does).
-- Machine matrices: the SVD form
+- Machine matrices, well conditioned (LU `rcond >= sqrt(u)`): `det(m) m^-1`
+  from one LU factorisation (`getrf` + `getri`), 0.0017 s at 200 x 200 (was
+  0.0185 s through the SVD; numpy `det * inv` 0.0026 s).
+- Machine matrices, near singular: the SVD form
   `adj(U S V^H) = det(U) det(V^H) V adj(S) U^H` with `adj(S)_k = Prod_{j≠k} s_j`
   (LAPACK `gesdd`), which stays accurate for a singular matrix where
   `Det[m] Inverse[m]` cannot be formed. One kernel for List, packed, `NDArray`
@@ -3050,7 +3069,11 @@ Gives the characteristic polynomial of a square matrix.
 - `Protected`.
 - Entries may be integer, rational, machine- or arbitrary-precision real,
   complex, or symbolic. The result is an expanded polynomial in `x`.
-- The ordinary case reuses the eigen module's Faddeev–LeVerrier–Souriau fast
+- An all-rational matrix (integers and rationals, List or packed) goes to
+  FLINT's multimodular `fmpq_mat_charpoly`: a 40 x 40 integer matrix takes
+  0.002 s (was 1.25 s through Faddeev–LeVerrier over `Expr` arithmetic; sympy
+  0.22 s).
+- Any other ordinary case reuses the eigen module's Faddeev–LeVerrier–Souriau fast
   path (`O(n^4)` matrix multiplications), so the characteristic polynomial of a
   large numeric matrix is computed in polynomial time — the naïve
   `Det[m - x I]` would face an `O(n!)` Laplace expansion of a symbolic-in-`x`
@@ -3293,7 +3316,12 @@ Gives the eigenvalues and the matching eigenvectors of a square matrix.
   with `MATEIGEN_WANT_BOTH`: they sort the values, apply the one permutation to
   the vectors, and k-select both parts together (`direct_finish` in
   `eigen_direct.c`). A visible `NDArray` / packed matrix takes one LAPACK call
-  (`dsyev` / `dgeev` / `zgeev` with vectors) in `ndla_eigensystem`. The symbolic
+  (`dsyev` / `zheevd` / `dgeev` / `zgeev` with vectors) in `ndla_eigensystem`.
+  A complex Hermitian matrix (relative tolerance `1e-12`) takes `zheevd`, on the
+  packed path and the boxed path alike, and its eigenvalues are Reals, as in the
+  reference (general `zgeev` left roundoff imaginary parts). Every `zheevd`
+  answer is checked in `O(n^2)` (`A (V x)` against `V (diag(w) x)`), as the
+  `zgees` / `zgeev` answers are. The symbolic
   path (exact or symbolic input, or an inexact matrix no numerical kernel
   accepts) computes the eigenvalues from the characteristic polynomial once and
   returns them together with the eigenvectors it found for them. So the result

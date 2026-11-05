@@ -2321,11 +2321,36 @@ void test_map_over_a_packed_list_stays_compiled(void) {
     assert_eval_eq("Scan[#^2 &, ToNDArray[{1., 2., 3.}]]", "Null", 0);
 }
 
+/* Complex buffers (v0.6221): a zero imaginary part materialises as a Real, so
+ * a packed complex array is SameQ (and hashes alike) to the boxed list it came
+ * from; and an exact complex scalar such as I/2 broadcasts over a packed array
+ * instead of leaving Times unevaluated. */
+static void test_complex_buffers_sameq_and_scalars(void) {
+    const char* trues[] = {
+        "Developer`ToPackedArray[{1., 2. I}] === {1., 2. I}",
+        "{1., 2. I} === Developer`ToPackedArray[{1., 2. I}]",
+        "Developer`ToPackedArray[{{1., 2. I}, {0., 3.}}] === {{1., 2. I}, {0., 3.}}",
+        "Length[Union[{Developer`ToPackedArray[{1., 2. I}], {1., 2. I}}]] == 1",
+        "Lookup[<|{1., 2. I} -> 7|>, Key[Developer`ToPackedArray[{1., 2. I}]]] == 7",
+        "(I/2) Developer`ToPackedArray[{{1., 2.}, {3., 4.}}] == {{0.5 I, 1. I}, {1.5 I, 2. I}}",
+        "(1/2 + I/3) Developer`ToPackedArray[{2., 4.}] == {1. + 0.6666666666666666 I, 2. + 1.3333333333333333 I}",
+        "Head[(I/2) Developer`ToPackedArray[{1. + I, 2.}]] === List",
+        NULL };
+    for (int i = 0; trues[i]; i++) {
+        Expr* r = ev(trues[i]);
+        char* s = expr_to_string(r);
+        if (strcmp(s, "True") != 0) fprintf(stderr, "  FAIL: %s -> %s\n", trues[i], s);
+        ASSERT_STR_EQ(s, "True");
+        free(s); expr_free(r);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_invisible_across_ranks_and_dtypes);
+    TEST(test_complex_buffers_sameq_and_scalars);
     TEST(test_presents_as_list);
     TEST(test_visible_ndarray_unchanged);
     TEST(test_exactness_preserved);

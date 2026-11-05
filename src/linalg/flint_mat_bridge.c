@@ -22,6 +22,7 @@
 #include <flint/fmpq.h>
 #include <flint/fmpq_mat.h>
 #include <flint/fmpq_vec.h>
+#include <flint/fmpq_poly.h>
 
 /* ------------------------------------------------------------------ */
 /*  Expr <-> fmpq (integer / rational scalars only)                    */
@@ -284,6 +285,30 @@ Expr* flint_mat_det(Expr** flat, int n) {
         fmpq_clear(d);
     }
 
+    fmpq_mat_clear(M);
+    return out;
+}
+
+Expr** flint_mat_charpoly(Expr** flat, int n) {
+    if (n <= 0) return NULL;
+    fmpq_mat_t M;
+    fmpq_mat_init(M, n, n);
+    Expr** out = NULL;
+    if (mb_fill_mat(M, flat, n, n)) {
+        fmpq_poly_t p;
+        fmpq_poly_init(p);
+        fmpq_mat_charpoly(p, M);
+        out = (Expr**)malloc(sizeof(Expr*) * (size_t)(n + 1));
+        if (out) {
+            fmpq_t c; fmpq_init(c);
+            for (int k = 0; k <= n; k++) {
+                fmpq_poly_get_coeff_fmpq(c, p, k);
+                out[k] = mb_expr_from_fmpq(c);
+            }
+            fmpq_clear(c);
+        }
+        fmpq_poly_clear(p);
+    }
     fmpq_mat_clear(M);
     return out;
 }
@@ -555,6 +580,7 @@ void flint_mat_bridge_init(void) {
 
 Expr* flint_mat_det(Expr** flat, int n) { (void)flat; (void)n; return NULL; }
 Expr* flint_mat_inverse(Expr** flat, int n) { (void)flat; (void)n; return NULL; }
+Expr** flint_mat_charpoly(Expr** flat, int n) { (void)flat; (void)n; return NULL; }
 Expr* flint_mat_rref(Expr** flat, int r, int c) { (void)flat; (void)r; (void)c; return NULL; }
 Expr* flint_mat_qr(Expr** flat, int n, int p) { (void)flat; (void)n; (void)p; return NULL; }
 Expr** flint_mat_solve(Expr** fm, int r, int c, Expr** fb, int k) {

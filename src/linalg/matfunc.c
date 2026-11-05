@@ -397,18 +397,36 @@ static Expr* schur_machine(const MfOperand* op, int kind, mf_scalar_fn fn, void*
     return r;
 }
 
-/* The generic scalar function: f^(k)(z) by evaluating Derivative[k][f][z]. */
+/* The generic scalar function: f^(k)(z) by evaluating the k-th derivative of f
+ * at z.  The derivatives are built incrementally (f^(k) = D[f^(k-1)]) and
+ * cached without a fixed order cap: the Schur--Parlett truncation test asks for
+ * orders up to (terms + block size), which for a 100 x 100 matrix whose
+ * eigenvalues form one cluster is well past 100. */
+#define MF_SYM_MAX_ORDER 4096
 typedef struct {
     const Expr* f;
-    Expr* deriv[64];
+    Expr** deriv;       /* deriv[k] = Function for f^(k), or NULL */
+    int cap;
     int bad_k;          /* the derivative order that failed to be numeric */
 } SymFnCtx;
 
 static int fn_symbolic(void* vctx, double zr, double zi, int k, double* fr, double* fi) {
     SymFnCtx* c = (SymFnCtx*)vctx;
-    if (k >= 64) return MF_FAIL;
+    if (k < 0 || k > MF_SYM_MAX_ORDER) return MF_FAIL;
+    if (k >= c->cap) {
+        int nc = c->cap ? c->cap : 64;
+        while (nc <= k) nc *= 2;
+        Expr** nd = (Expr**)realloc(c->deriv, sizeof(Expr*) * (size_t)nc);
+        if (!nd) return MF_FAIL;
+        for (int q = c->cap; q < nc; q++) nd[q] = NULL;
+        c->deriv = nd;
+        c->cap = nc;
+    }
     if (!c->deriv[k]) {
-        c->deriv[k] = mf_derivative_function(c->f, k);
+        int j = k;
+        while (j > 0 && !c->deriv[j]) j--;          /* the highest cached order <= k */
+        if (!c->deriv[j]) c->deriv[j] = mf_derivative_function(c->f, 0);
+        for (; j < k; j++) c->deriv[j + 1] = mf_derivative_function(c->deriv[j], 1);
     }
     Expr* z = zi == 0.0 ? expr_new_real(zr)
                         : mk2(SYM_Complex, expr_new_real(zr), expr_new_real(zi));
@@ -424,7 +442,8 @@ static int fn_symbolic(void* vctx, double zr, double zi, int k, double* fr, doub
 }
 
 static void symfn_free(SymFnCtx* c) {
-    for (int k = 0; k < 64; k++) expr_free(c->deriv[k]);
+    for (int k = 0; k < c->cap; k++) expr_free(c->deriv[k]);
+    free(c->deriv);
 }
 
 /* ===================================================================== *
