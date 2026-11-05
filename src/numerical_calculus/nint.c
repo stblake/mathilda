@@ -15,6 +15,7 @@
  */
 
 #include "nint.h"
+#include "modular.h"   /* mth_block_enter/leave: unwind-safe localisation */
 #include "gkadapt.h"
 #include "denint.h"
 #include "dequad.h"
@@ -2212,6 +2213,49 @@ Expr* builtin_nintegrate(Expr* res) {
     Expr* body = res->data.function.args[0];
     for (size_t i = 1; i < pos_end; i++)
         if (!ni_is_spec(res->data.function.args[i])) return NULL;
+
+    /* Localise the integration variables and evaluate the integrand
+     * symbolically once, then integrate the result, which is the reference's
+     * documented order. NIntegrate is HoldAll, so without this a held wrapper
+     * such as f /. b -> 1 reached the arbitrary-precision sampler
+     * unevaluated. NIntegrate[y^(b-1)/(1+y)^2 /. b -> 1, {y, 0, Infinity},
+     * WorkingPrecision -> 20] returned 0. When the evaluated integrand
+     * differs, the call is re-dispatched with it. The second entry finds it
+     * unchanged, so this does not recurse. */
+    {
+        Expr* vars[16]; size_t nv = 0;
+        for (size_t i = 1; i < pos_end && nv < 16; i++) {
+            Expr* sp = res->data.function.args[i];
+            if (sp->type == EXPR_FUNCTION && sp->data.function.arg_count >= 1 &&
+                sp->data.function.args[0]->type == EXPR_SYMBOL)
+                vars[nv++] = expr_copy(sp->data.function.args[0]);
+        }
+        /* A Block frame without Block's re-evaluation on exit: the integrand
+         * is evaluated with the variables unbound, and the result is used as
+         * is. (Block[{y}, y^2] would come back as 25 under an outer y = 5.)
+         * The frame is drained by a TimeConstrained unwind. */
+        void* frame = mth_block_enter(vars, nv);
+        Expr* eb = evaluate(body);
+        mth_block_leave(frame);
+        for (size_t i = 0; i < nv; i++) expr_free(vars[i]);
+        if (eb && !expr_eq(eb, body)) {
+            Expr** args = malloc(argc * sizeof(Expr*));
+            args[0] = eb;
+            for (size_t i = 1; i < argc; i++) args[i] = expr_copy(res->data.function.args[i]);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_NIntegrate), args, argc);
+            free(args);
+            Expr* r = evaluate(call);
+            expr_free(call);
+            /* still unevaluated: hand back NULL so the original call stays */
+            if (r && r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                r->data.function.head->data.symbol.name == SYM_NIntegrate) {
+                expr_free(r);
+                return NULL;
+            }
+            return r;
+        }
+        if (eb) expr_free(eb);
+    }
 
     NiOpts o;
     o.method = NI_AUTO;

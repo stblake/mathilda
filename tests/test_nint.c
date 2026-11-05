@@ -451,6 +451,19 @@ static void test_levin_rule(void) {
                  "Method->\"LevinRule\"]", "0.0004168", 1e-6);
 }
 
+/* NIntegrate localises its variables and evaluates the integrand symbolically
+ * once before sampling, which is the reference's order. A held wrapper such
+ * as f /. b -> 1 used to reach the arbitrary-precision sampler unevaluated
+ * and gave 0. */
+static void test_symbolic_preevaluation(void) {
+    assert_eval_eq("Abs[NIntegrate[y^(b - 1)/(1 + y)^2 /. b -> 1, {y, 0, Infinity},"
+                   " WorkingPrecision -> 20] - 1] < 10^-15", "True", 0);
+    assert_eval_eq("Abs[NIntegrate[y^(b - 1)/(1 + y)^2 /. b -> 3/2, {y, 0, Infinity},"
+                   " WorkingPrecision -> 20] - Pi/2] < 10^-15", "True", 0);
+    /* a localised variable keeps its outer value */
+    assert_eval_eq("Abs[Block[{y = 5}, NIntegrate[y^2, {y, 0, 1}]] - 1/3] < 10^-12", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -480,6 +493,7 @@ int main(void) {
     TEST(test_unevaluated_forms);
     TEST(test_memory_loop);
     TEST(test_levin_rule);
+    TEST(test_symbolic_preevaluation);
 
     printf("All nint_tests passed.\n");
     return 0;
