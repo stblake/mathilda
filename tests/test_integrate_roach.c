@@ -99,6 +99,29 @@ static void test_finite_symbolic_limit(void) {
                    " Assumptions -> a > 0 && z > 0, Method -> \"Roach\"], z]", "False", 0);
 }
 
+/* Roach 2008 #18: the convolution is G^{3,4}_{4,4} at 1 in the log case,
+ * reduced by the residue sum of its trigonometric Mellin-Barnes integrand
+ * (Hrep`unitG). #24: a growing exponential against Ei(-x^2), by analytic
+ * continuation from the decaying case (Roach`int2grow). */
+static void test_unit_and_growing(void) {
+    check_roach("ArcCot[x]/(x + 1)", "{x, 0, Infinity}", "True", "{}");
+    check_roach("ArcTan[x]/(x (x + 1))", "{x, 0, Infinity}", "True", "{}");
+    check_roach("x ArcCot[x]/((1 + x) (1 + x^2))", "{x, 0, Infinity}", "True", "{}");
+    assert_eval_eq("Integrate[ArcCot[x]/(x + 1), {x, 0, Infinity}, Method -> \"Roach\"] ==="
+                   " Catalan + Pi Log[2]/4", "True", 0);
+    assert_eval_eq("Integrate[ArcCot[x]/(x + 1), {x, 0, Infinity}] === Catalan + Pi Log[2]/4", "True", 0);
+    check_roach("ExpIntegralEi[-x^2] Exp[a^2 x^2]", "{x, 0, Infinity}", "0 < a < 1", "{a -> 1/3}");
+    check_roach("ExpIntegralEi[-x] Exp[b x] x", "{x, 0, Infinity}", "0 < b < 1", "{b -> 1/2}");
+    check_roach("Erfc[x] Exp[b x^2]", "{x, 0, Infinity}", "0 < b < 1", "{b -> 1/2}");
+    assert_eval_eq("Integrate[ExpIntegralEi[-x^2] Exp[a^2 x^2], {x, 0, Infinity},"
+                   " Assumptions -> 0 < a < 1, Method -> \"Roach\"] === -Sqrt[Pi] ArcSin[a]/a", "True", 0);
+    assert_eval_eq("Integrate[ExpIntegralEi[-x^2] Exp[a^2 x^2], {x, 0, Infinity},"
+                   " Assumptions -> 0 < a < 1] === -Sqrt[Pi] ArcSin[a]/a", "True", 0);
+    /* divergent: the exponential grows faster than Ei(-x^2) decays */
+    assert_eval_eq("Head[Integrate[ExpIntegralEi[-x^2] Exp[a^2 x^2], {x, 0, Infinity},"
+                   " Assumptions -> a > 1, Method -> \"Roach\"]]", "Integrate", 0);
+}
+
 /* the stage declines (stays unevaluated) rather than guessing */
 static void test_declines(void) {
     assert_eval_eq("Head[Integrate[Sin[x^x], {x, 0, 1}, Method -> \"Roach\"]]", "Integrate", 0);
@@ -125,6 +148,7 @@ int main(void) {
     TEST(test_forms);
     TEST(test_exponential);
     TEST(test_finite_symbolic_limit);
+    TEST(test_unit_and_growing);
     TEST(test_declines);
     TEST(test_hygiene);
     printf("All Integrate Roach tests passed!\n");

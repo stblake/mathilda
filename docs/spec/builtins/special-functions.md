@@ -3632,6 +3632,25 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
   (the `z == 1` clause when the inner terms converge there):
   `FunctionExpand[MeijerG[{{1},{1}},{{1/2},{0}},z]]` =
   `Piecewise[{{2 ArcSin[Sqrt[z]]/Sqrt[Pi], z == 1 || Abs[z] < 1}, {Sqrt[Pi], Abs[z] > 1}}, Indeterminate]`.
+  At `z = 1` with `p = q` the Slater sum is used only when every term
+  converges there (the automatic reduction's rule); before, a term
+  diverging where `G` is finite gave `ComplexInfinity`
+  (`MeijerG[{{1/3,2/3},{}},{{0,1/3},{}},1]`, 5.5009).
+- **G at z = 1 by residue summation** (`Hrep\`unitG`). For `p = q` and
+  rational parameters the Mellin–Barnes integrand reduces, by the recurrence
+  and the reflection formula, to `R(s) Π π/sin(π(c + s))` with `R`
+  rational, when every Gamma pairs. `G(1)` is then minus the sum of the
+  residues at the right poles (Abel's limit of the Slater series; the
+  powers of `Log z` drop out at 1). The sines are periodic up to sign, so
+  past the finitely many singular points of `R` the residues are a rational
+  function of `k` times `(±1)^k`. That sum is Hurwitz ζ, or the digamma
+  difference of the alternating sum, at rational arguments, which reduce to
+  Catalan, π and Log forms. `R` must decay, and a harmonic part must cancel
+  (sign +1); otherwise the sum declines. This covers the log case the Slater
+  route leaves:
+  `FunctionExpand[MeijerG[{{0,0,1/2,1/2},{}},{{0,0,1/2},{-1/2}},1]]` =
+  `Pi (4 Catalan + Pi Log[2])`, the convolution of `ArcCot[x]` and
+  `1/(1 + x)`. It is tried after the certificate walk.
   A definite `Integrate` answers through the same rewrite (its final pass,
   Refining such a Piecewise under the call's assumptions):
   `∫₀^∞ x J₀(ax)/(x²+c²) dx` = `BesselK[0, a c]`, `∫₀^∞ J₀(ax) sin(bx)/x dx` =

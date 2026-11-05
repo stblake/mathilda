@@ -1455,6 +1455,9 @@ done:
     return ok;
 }
 
+static Expr* unit_g(Expr* const* an, int n, Expr* const* ap, int np_,
+                    Expr* const* bm, int m, Expr* const* bq, int nq_);
+
 /* Closed form of MeijerG[{an, ap}, {bm, bq}, z]; NULL to decline. */
 Expr* hrep_meijerg(Expr* const* an, int n, Expr* const* ap, int np_,
                    Expr* const* bm, int m, Expr* const* bq, int nq_, const Expr* z) {
@@ -1491,6 +1494,13 @@ Expr* hrep_meijerg(Expr* const* an, int n, Expr* const* ap, int np_,
                 answer_free(&ans);
             }
         }
+    }
+    /* No certificate walk: at z = 1 the residue sum (p = q, rational
+     * parameters whose Mellin-Barnes integrand is trigonometric) */
+    if (!out && p == q) {
+        int64_t zn, zd;
+        if (is_rational(z, &zn, &zd) && zn == 1 && zd == 1)
+            out = unit_g(an, n, ap, np_, bm, m, bq, nq_);
     }
 fin:
     for (int i = 0; i < nc; i++) gcand_free(&cands[i]);
@@ -1863,6 +1873,136 @@ static Expr* unit_value(Expr* const* a, size_t p, Expr* const* b, size_t q, cons
     return hr_tidy(r);
 }
 
+/* ------------------------------------------------------------------ */
+/*  G^{m,n}_{p,p}(1) by residue summation                              */
+/* ------------------------------------------------------------------ */
+
+/* G(z) = (1/2 pi i) int Phi(s) z^s ds with
+ *     Phi(s) = prod_{j<=m} Gamma(b_j - s) prod_{j<=n} Gamma(1 - a_j + s)
+ *              / (prod_{j>m} Gamma(1 - b_j + s) prod_{j>n} Gamma(a_j - s)),
+ * and for |z| < 1 it is minus the sum of the residues of Phi(s) z^s at the
+ * right poles s = b_j + k, k >= 0 (Slater's theorem; the log case is a
+ * multiple pole). At z = 1 the powers z^s and their logarithms are 1 and 0,
+ * so by Abel's theorem G(1) is minus the sum of the residues of Phi itself,
+ * when that sum converges.
+ *
+ * With rational parameters and p = q, every Gamma reduces by the
+ * recurrence to Gamma(c0 +- s) with c0 in [0, 1) times a rational function
+ * of s, and the reflection formula pairs Gamma(c0 + s) with Gamma(1 - c0 - s)
+ * into pi/Sin[pi (c0 + s)]. When every Gamma pairs (p = q is necessary),
+ * Phi = R(s) T(s): R rational, T a product of reciprocal sines, which is
+ * periodic up to sign, T(s + 1) = (-1)^E T(s). On each class s = c + k of
+ * right poles the residue at c + k is then, beyond the finitely many
+ * singular points of R (summed exactly),
+ *     (-1)^(E k) sum_j t_{-j} R^{(j-1)}(c + k)/(j-1)!,
+ * t_{-j} the Laurent coefficients of T at c: a rational function of k. Its
+ * sum is Lerch Phi(+-1, n, r) term by term (Apart in k), reduced by
+ * Hrep`phi; for the sign +1 the n = 1 terms are summed jointly as
+ * -sum q psi(r), which needs sum q = 0. A harmonic part that does not
+ * cancel is a divergent sum and declines. R must decay (degree <= -1):
+ * then every residue and every coefficient of a power of Log z is O(1/k),
+ * and the Log z parts vanish in Abel's limit z -> 1-, which is the value
+ * the Slater expansion assigns to G(1) (mg_unit_ok's convention).
+ *
+ * This is the unit-argument value of a G function whose Slater pieces are
+ * pFq at +-1 in the log case (repeated b's), such as the convolution of
+ * ArcCot[x] with 1/(1 + x): G^{3,4}_{4,4}(1 | 0, 0, 1/2, 1/2; 0, 0, 1/2,
+ * -1/2) = 4 Pi Catalan + Pi^2 Log[2]. */
+static const char* HR_UNITG_DEF[] = {
+    "Hrep`gpoch[Hrep`x_, Hrep`n_Integer] := If[Hrep`n >= 0,"
+    " Product[Hrep`x + Hrep`i, {Hrep`i, 0, Hrep`n - 1}], 1/Product[Hrep`x - Hrep`i, {Hrep`i, 1, -Hrep`n}]]",
+    /* one rational coefficient q/(k + r)^n of the tail, summed over k >= 0 */
+    "Hrep`ugterm[Hrep`t_, Hrep`k_, Hrep`sig_] := Module[{Hrep`d, Hrep`n, Hrep`r, Hrep`q},"
+    "  If[PolynomialQ[Hrep`t, Hrep`k], Throw[$Failed, Hrep`ugfail]];"
+    "  Hrep`d = Denominator[Together[Hrep`t]]; Hrep`n = Exponent[Hrep`d, Hrep`k];"
+    "  Hrep`r = Coefficient[Hrep`d, Hrep`k, Hrep`n - 1]/(Hrep`n Coefficient[Hrep`d, Hrep`k, Hrep`n]);"
+    "  If[!PossibleZeroQ[Expand[Hrep`d - Coefficient[Hrep`d, Hrep`k, Hrep`n] (Hrep`k + Hrep`r)^Hrep`n]],"
+    "   Throw[$Failed, Hrep`ugfail]];"
+    "  Hrep`q = Together[Hrep`t (Hrep`k + Hrep`r)^Hrep`n];"
+    "  If[!FreeQ[Hrep`q, Hrep`k] || !MatchQ[Hrep`r, _Integer | _Rational], Throw[$Failed, Hrep`ugfail]];"
+    "  Which[Hrep`sig === 1 && Hrep`n == 1, {Hrep`q, -Hrep`q PolyGamma[0, Hrep`r]},"
+    "   Hrep`sig === 1, {0, Hrep`q Hrep`ugzeta[Hrep`n, Hrep`r]},"
+    "   Hrep`n == 1, {0, Hrep`q (PolyGamma[0, (Hrep`r + 1)/2] - PolyGamma[0, Hrep`r/2])/2},"
+    "   True, {0, Hrep`q 2^(-Hrep`n) (Hrep`ugzeta[Hrep`n, Hrep`r/2] - Hrep`ugzeta[Hrep`n, (Hrep`r + 1)/2])}]]",
+    /* sum_{k>=0} 1/(k + r)^n, n >= 2: the roots-of-unity form when it is
+     * free of PolyLog (Zeta[2, 1/4] = Pi^2 + 8 Catalan), else Zeta[n, r].
+     * The alternating sums are split into these by parity, so the answer
+     * stays real: Phi(-1, n, r) = 2^-n (zeta(n, r/2) - zeta(n, (r+1)/2)),
+     * and for n = 1 the digamma difference, which Gauss's theorem makes
+     * elementary. */
+    "Hrep`ugzeta[Hrep`n_, Hrep`r_] := With[{Hrep`v = Expand[Hrep`phi[1, Hrep`n, Hrep`r]]},"
+    " If[FreeQ[Hrep`v, PolyLog | LerchPhi], Hrep`v, Zeta[Hrep`n, Hrep`r]]]",
+    "Hrep`unitG[Hrep`an_List, Hrep`ap_List, Hrep`bm_List, Hrep`bq_List] := Catch[Module["
+    " {Hrep`gl, Hrep`rat = 1, Hrep`cnt = <||>, Hrep`trig = 1, Hrep`E0 = 0, Hrep`sig,"
+    "  Hrep`tot = 0, Hrep`H = 0, Hrep`s = Hrep`ugs},"
+    "  If[Hrep`bm === {} || Length[Hrep`an] + Length[Hrep`ap] != Length[Hrep`bm] + Length[Hrep`bq] ||"
+    "   !VectorQ[Join[Hrep`an, Hrep`ap, Hrep`bm, Hrep`bq], MatchQ[#, _Integer | _Rational] &],"
+    "   Throw[$Failed, Hrep`ugfail]];"
+    /* Gamma(c + sg s)^e -> Gamma(c0 + sg s)^e times a rational factor */
+    "  Hrep`gl = Join[{#, -1, 1} & /@ Hrep`bm, {1 - #, 1, 1} & /@ Hrep`an,"
+    "   {1 - #, 1, -1} & /@ Hrep`bq, {#, -1, -1} & /@ Hrep`ap];"
+    "  Do[With[{Hrep`c0 = Hrep`g[[1]] - Floor[Hrep`g[[1]]]},"
+    "    Hrep`rat = Hrep`rat Hrep`gpoch[Hrep`c0 + Hrep`g[[2]] Hrep`s, Floor[Hrep`g[[1]]]]^Hrep`g[[3]];"
+    "    Hrep`cnt[{Hrep`c0, Hrep`g[[2]]}] = Lookup[Hrep`cnt, Key[{Hrep`c0, Hrep`g[[2]]}], 0] + Hrep`g[[3]]],"
+    "   {Hrep`g, Hrep`gl}];"
+    /* reflection: Gamma(c0 + s) Gamma(1 - c0 - s) = pi/Sin[pi (c0 + s)];
+     * for c0 = 0 the partner is Gamma(-s) = -Gamma(1 - s)/s */
+    "  Do[If[Hrep`kk[[2]] == 1 && Hrep`cnt[Hrep`kk] != 0,"
+    "    With[{Hrep`c0 = Hrep`kk[[1]], Hrep`e = Hrep`cnt[Hrep`kk], Hrep`d0 = Mod[1 - Hrep`kk[[1]], 1]},"
+    "     If[Lookup[Hrep`cnt, Key[{Hrep`d0, -1}], 0] != Hrep`e, Throw[$Failed, Hrep`ugfail]];"
+    "     Hrep`cnt[{Hrep`d0, -1}] = 0; Hrep`cnt[Hrep`kk] = 0;"
+    "     If[Hrep`c0 == 0, Hrep`rat = Hrep`rat (-1/Hrep`s)^Hrep`e];"
+    "     Hrep`trig = Hrep`trig (Pi/Sin[Pi (Hrep`c0 + Hrep`s)])^Hrep`e; Hrep`E0 += Hrep`e]],"
+    "   {Hrep`kk, Keys[Hrep`cnt]}];"
+    "  If[AnyTrue[Values[Hrep`cnt], # != 0 &], Throw[$Failed, Hrep`ugfail]];"
+    "  Hrep`rat = Together[Hrep`rat]; Hrep`sig = (-1)^Hrep`E0;"
+    /* R not decaying: the residues, and the Log z parts that Abel's limit
+     * must send to 0, are then not O(1/k) -- decline. */
+    "  If[Exponent[Numerator[Hrep`rat], Hrep`s] - Exponent[Denominator[Hrep`rat], Hrep`s] > -1,"
+    "   Throw[$Failed, Hrep`ugfail]];"
+    "  Do[Module[{Hrep`c = Hrep`cl[[1]] - Floor[Hrep`cl[[1]]], Hrep`nmin, Hrep`rts, Hrep`K, Hrep`ts,"
+    "     Hrep`P, Hrep`f, Hrep`terms, Hrep`v},"
+    "    Hrep`nmin = Min[Floor /@ Hrep`cl];"
+    /* the singular points of R in this class: below K, exact residues */
+    "    Hrep`rts = Cases[Hrep`s /. Quiet[Solve[Numerator[Hrep`rat] Denominator[Hrep`rat] == 0, Hrep`s]],"
+    "     _Integer | _Rational];"
+    "    Hrep`rts = Select[Hrep`rts, IntegerQ[# - Hrep`c] &];"
+    "    Hrep`K = Max[Join[{Hrep`nmin}, (# - Hrep`c + 1) & /@ Hrep`rts]];"
+    "    Do[Hrep`tot += SeriesCoefficient[Hrep`rat Hrep`trig, {Hrep`s, Hrep`c + Hrep`j, -1}],"
+    "     {Hrep`j, Hrep`nmin, Hrep`K - 1}];"
+    /* the periodic tail k >= K */
+    "    Hrep`ts = Expand[Normal[Series[Hrep`trig, {Hrep`s, Hrep`c, 0}]] /. Hrep`s -> Hrep`c + Hrep`ugeps];"
+    "    Hrep`P = Exponent[Hrep`ts /. Hrep`ugeps -> 1/Hrep`ugu, Hrep`ugu];"
+    "    Hrep`f = Sum[Coefficient[Hrep`ts, Hrep`ugeps, -Hrep`j] D[Hrep`rat, {Hrep`s, Hrep`j - 1}]/(Hrep`j - 1)!,"
+    "     {Hrep`j, 1, Hrep`P}];"
+    "    Hrep`f = Apart[Together[Hrep`f /. Hrep`s -> Hrep`c + Hrep`K + Hrep`ugk], Hrep`ugk];"
+    "    If[Hrep`f =!= 0,"
+    "     Hrep`terms = If[Head[Hrep`f] === Plus, List @@ Hrep`f, {Hrep`f}];"
+    "     Do[Hrep`v = Hrep`ugterm[Hrep`t, Hrep`ugk, Hrep`sig];"
+    "      Hrep`H += Hrep`v[[1]]; Hrep`tot += Hrep`sig^Hrep`K Hrep`v[[2]], {Hrep`t, Hrep`terms}]]],"
+    "   {Hrep`cl, GatherBy[Hrep`bm, # - Floor[#] &]}];"
+    "  If[!PossibleZeroQ[Hrep`H], Throw[$Failed, Hrep`ugfail]];"
+    "  FunctionExpand[-Hrep`tot]], Hrep`ugfail]",
+};
+
+/* G^{m,n}_{p,p}(1) for rational parameters, or NULL. */
+static Expr* unit_g(Expr* const* an, int n, Expr* const* ap, int np_,
+                    Expr* const* bm, int m, Expr* const* bq, int nq_) {
+    if (n + np_ != m + nq_ || m == 0) return NULL;
+    Expr* L[4];
+    Expr* const* src[4] = { an, ap, bm, bq };
+    int len[4] = { n, np_, m, nq_ };
+    for (int i = 0; i < 4; i++) {
+        Expr** v = malloc(sizeof(Expr*) * (size_t)(len[i] ? len[i] : 1));
+        for (int j = 0; j < len[i]; j++) v[j] = expr_copy(src[i][j]);
+        L[i] = expr_new_function(expr_new_symbol(SYM_List), v, (size_t)len[i]);
+        free(v);
+    }
+    Expr* r = ev(expr_new_function(expr_new_symbol("Hrep`unitG"), L, 4));
+    if (!closed_finite(r)) { expr_free(r); return NULL; }
+    return hr_tidy(r);
+}
+
 /* One pass over the target and its images. */
 static Expr* pfq_images(Expr* const* a, size_t p, Expr* const* b, size_t q,
                         const Expr* z, int transforms, int pass) {
@@ -1982,6 +2122,10 @@ void hrep_init(void) {
         "pFq(a0; b0; Hrep`w) = f0, family parameters Hrep`al / Hrep`be.");
     for (size_t i = 0; i < sizeof HR_UNIT_DEF / sizeof HR_UNIT_DEF[0]; i++) {
         Expr* def = parse_expression(HR_UNIT_DEF[i]);
+        if (def) expr_free(ev(def));
+    }
+    for (size_t i = 0; i < sizeof HR_UNITG_DEF / sizeof HR_UNITG_DEF[0]; i++) {
+        Expr* def = parse_expression(HR_UNITG_DEF[i]);
         if (def) expr_free(ev(def));
     }
     for (size_t i = 0; i < sizeof HR_LERCH_DEF / sizeof HR_LERCH_DEF[0]; i++) {

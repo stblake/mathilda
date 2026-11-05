@@ -327,6 +327,47 @@ Roach`int2[K_, s_, g10_, g20_, x_] := Module[
   cond = Roach`cond2[h1, h2];
   {val, cond}]
 
+(* A growing exponential E^(w x^q), w > 0: its G, G^{1,0}_{0,1}(-w x^q), has
+   arg pi, outside every PBM 2.24.1 sector, yet the product converges when
+   the other factor decays exponentially faster (Ei(-x^2) ~ -E^(-x^2)/x^2
+   against E^(a^2 x^2), a^2 < 1).
+
+   The value is the analytic continuation of the decaying case. Write c for
+   the exponential's G argument. L(c) = int x^s G1(sigma x^q1) E^(-c x^q) dx
+   is analytic in c on the region where it converges, which contains the arc
+   c = w E^(I theta), 0 <= theta <= pi. At theta = 0, the PBM conditions hold
+   and L(c) is the Saxena G of c/sigma. That G is analytic in the open upper
+   half plane, and its principal value at arg pi is the limit from above. So
+   L(-w) is the same formula at c = -w, with c/sigma at arg pi. The
+   exponential must be the second factor, so that the argument is c/sigma
+   and not sigma/c, which would be at arg -pi. It must also not be inflated,
+   since (-w)^n loses the arg.
+
+   Convergence at infinity: G1 = G^{q1,0}_{p1,q1}(sigma y), p1 < q1, with
+   y = x^beta1, behaves as y^theta E^(-(q1 - p1) (sigma y)^(1/(q1 - p1)))
+   (Luke 5.7 Theorem 5), i.e. E^(-D x^k) with k = beta1/(q1 - p1) and
+   D = (q1 - p1) sigma^(1/(q1 - p1)). The product converges for k > q, or
+   for k == q and w < D. On k == q, w == D the power decides; that case
+   declines. *)
+Roach`growQ[Roach`g[_, {{}, {}}, {{_}, {}}, c_, q_]] :=
+  TrueQ[Refine[c < 0, Roach`$assum]] && Roach`sgn[q] == 1
+Roach`growQ[_] := False
+Roach`int2grow[K_, s_, g1_, ge : Roach`g[Ce_, ae_, be_, c_, q_], x_] := Module[
+  {m, n, p, qq, k, D, ok, rd, rv, q1 = g1[[5]], sigma = g1[[4]]},
+  {m, n, p, qq} = Roach`mnpq[g1];
+  If[!(n == 0 && m == qq && p < qq && Roach`sgn[q1] == 1), Return[$Failed]];
+  If[!MatchQ[q1, _Integer | _Rational] || !MatchQ[q, _Integer | _Rational], Return[$Failed]];
+  (* the exponential is not inflated: q divides into the common power *)
+  If[LCM[Numerator[q1] Denominator[q], Numerator[q] Denominator[q1]] =!= Numerator[q] Denominator[q1],
+    Return[$Failed]];
+  k = q1/(qq - p); D = (qq - p) sigma^(1/(qq - p));
+  ok = Which[k > q, True, k == q, -c < D, True, False];
+  (* conditions of the decaying case, c -> -c = w > 0 *)
+  rd = Roach`int2[K, s, g1, Roach`g[Ce, ae, be, -c, q], x];
+  rv = Roach`int2[K, s, g1, ge, x];
+  If[rd === $Failed || rv === $Failed, Return[$Failed]];
+  {rv[[1]], ok && rd[[2]]}]
+
 (* ---------------------------------------------------------------- *)
 (* One term: C x^s F1 F2                                            *)
 (* ---------------------------------------------------------------- *)
@@ -444,7 +485,10 @@ Roach`term0[f_, x_, assum_] := Module[{C, s, rest, groups, gs, res = $Failed, r,
      Switch[Length[gs],
       0, Continue[],
       1, r = Roach`int1[C, s, gs[[1]], x],
-      2, r = Roach`int2[C, s, gs[[1]], gs[[2]], x],
+      2, r = Which[
+             Roach`growQ[gs[[2]]], Roach`int2grow[C, s, gs[[1]], gs[[2]], x],
+             Roach`growQ[gs[[1]]], Roach`int2grow[C, s, gs[[2]], gs[[1]], x],
+             True, Roach`int2[C, s, gs[[1]], gs[[2]], x]],
       _, Continue[]];
      If[r === $Failed, Continue[]];
      {val, cond} = r;

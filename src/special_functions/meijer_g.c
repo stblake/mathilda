@@ -921,6 +921,11 @@ Expr* meijerg_function_expand(const Expr* call) {
     if (!out && !g.r) out = mg_named_shape(&g, true);
     if (!out) {
         int which = mg_pick(&g);
+        /* p == q at z = 1: the Slater terms are pF(p-1) at +-1 and may each
+         * diverge where G is finite -- G^{2,2}_{2,2}(1 | 1/3, 2/3; 0, 1/3)
+         * gave ComplexInfinity for 5.5009. Sum them only when every term
+         * converges there (mg_unit_ok), as the automatic reduction does. */
+        if (g.p == g.q && is_int_value(g.z, 1) && !mg_unit_ok(&g)) which = -2;
         if (which >= 0) {
             out = mg_expansion_or_null(&g, which == 1);
         } else if (!is_number(g.z)) {

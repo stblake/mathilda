@@ -2046,6 +2046,23 @@ monotonically down.
       as functions.wolfram.com 07.34.21.0011). Each relational atom is decided
       under the assumptions: True drops it, False makes the term decline, and
       anything else is kept and returned as a `ConditionalExpression`.
+    - **Growing exponential.** A factor `E^(w x^q)` with `w > 0` has its G at
+      arg π, outside every PBM sector, but the product can still converge
+      against a factor `G^{q1,0}_{p1,q1}(σ x^β)` that decays like
+      `E^(−D x^k)`, with `k = β/(q1 − p1)` and `D = (q1 − p1) σ^(1/(q1 − p1))`.
+      The term is taken when `k > q`, or when `k = q` and `w < D`. Its value
+      is the convolution formula at arg π, which is the analytic continuation
+      of the decaying case `w → −w` through the upper half plane. The PBM
+      conditions are checked on that decaying case. The exponential must not
+      need inflation. Example (Roach 2008 #24):
+      `∫₀^∞ Ei(−x²) e^(a²x²) dx = −√π ArcSin[a]/a` for `0 < a < 1`, and the
+      integral declines for `a > 1`.
+    - **Unit argument.** A convolution that lands on `G^{m,n}_{p,p}(1)` in
+      the log case is reduced by the residue sum of its trigonometric
+      Mellin–Barnes integrand (see `MeijerG`, special-functions). Example
+      (Roach 2008 #18):
+      `∫₀^∞ ArcCot[x]/(1 + x) dx = Catalan + π Log[2]/4`. The same holds
+      through the default `Integrate`.
     - **Fallbacks.**
       - `t = E^−x` for exponential integrands, which turns `x^k` into a
         `Log[t]^k θ(1 − t)` G function;
@@ -2084,7 +2101,7 @@ monotonically down.
       integer-assumed variables get generic integers. An answer that is not
       numeric at that point is rejected.
     - Through the default `Integrate`, Roach 2008 goes from 7 to 25 of 30
-      integrals.
+      integrals, and to 27 with #18 and #24.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.

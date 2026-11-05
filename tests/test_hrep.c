@@ -162,6 +162,26 @@ static void test_meijer(void) {
     check_g("MeijerG[{{}, {2}}, {{3/2, 0}, {}}, z]");
 }
 
+/* G^{m,n}_{p,p}(1) by residue summation: the Mellin-Barnes integrand is
+ * trigonometric times rational, the residues a rational function of k
+ * summed as Lerch Phi at +-1. */
+static void test_unit_g(void) {
+    /* the convolution of ArcCot[x] with 1/(1 + x) (Roach 2008, #18): log case */
+    assert_eval_eq("FunctionExpand[MeijerG[{{0, 0, 1/2, 1/2}, {}}, {{0, 0, 1/2}, {-1/2}}, 1]] ==="
+                   " Pi (4 Catalan + Pi Log[2])", "True", 0);
+    assert_eval_eq("FunctionExpand[MeijerG[{{0, 1/2, 1/2}, {1}}, {{0, 0, 1/2, 1/2}, {}}, 1]] ==="
+                   " Pi (4 Catalan + Pi Log[2])", "True", 0);
+    /* ArcCot's own G at 1: 2 ArcCot[1] */
+    assert_eval_eq("FunctionExpand[MeijerG[{{1/2}, {1}}, {{1/2, 0}, {}}, 1]] === Pi/2", "True", 0);
+    assert_eval_eq("With[{g = MeijerG[{{1/3}, {2/3}}, {{0, 1/3}, {}}, 1]},"
+                   " Abs[N[FunctionExpand[g] - g, 20]] < 10^-15]", "True", 0);
+    /* the Slater terms diverge at 1 (2F1(2/3, 1/3; 2/3; 1)): no ComplexInfinity */
+    assert_eval_eq("FreeQ[FunctionExpand[MeijerG[{{1/3, 2/3}, {}}, {{0, 1/3}, {}}, 1]], ComplexInfinity]",
+                   "True", 0);
+    /* not trigonometric (an unpaired Gamma): declines */
+    assert_eval_eq("Head[FunctionExpand[MeijerG[{{1/2, 1/2}, {1}}, {{1/2, 0, 0}, {}}, 1]]]", "MeijerG", 0);
+}
+
 /* Struve L certificates and integer-order reduction: Roach's gallery
  * 1F2(3/2; 5/2, 5; z) in I0, I1, L0, L1 */
 static void test_struve(void) {
@@ -196,6 +216,7 @@ int main(void) {
     TEST(test_values);
     TEST(test_quiet);
     TEST(test_meijer);
+    TEST(test_unit_g);
     TEST(test_struve);
     TEST(test_declines);
     printf("All hrep tests passed!\n");
