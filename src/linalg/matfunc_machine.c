@@ -1117,6 +1117,35 @@ static bool real_consistent(int n, const double* T, const double* F) {
     return true;
 }
 
+/* Is the Schur form T diagonal up to rounding -- a normal matrix (every
+ * Hermitian, real symmetric, unitary or skew matrix)?  Then f(A) = Q f(D) Q^H
+ * exactly and Schur--Parlett has nothing to do: its clustering made one atom
+ * of a Hermitian matrix whose eigenvalues sit within 0.1 of each other and
+ * summed a Taylor series over the whole block, 13x slower than the reference
+ * for MatrixFunction[Sin, s] of a 200 x 200 SPD s. */
+static bool diag_schur(int n, const double* T) {
+    double off = 0.0, dmax = 0.0;
+    for (int j = 0; j < n; j++) {
+        double d = c_abs(CE(T, j, j)[0], CE(T, j, j)[1]);
+        if (d > dmax) dmax = d;
+        for (int i = 0; i < j; i++) {
+            double a = c_abs(CE(T, i, j)[0], CE(T, i, j)[1]);
+            if (a > off) off = a;
+        }
+    }
+    return off <= 64.0 * (double)n * MF_U * (dmax > 0.0 ? dmax : 1.0);
+}
+
+/* f(T) of a diagonal T: f on each eigenvalue. */
+static int diag_fun(int n, const double* T, double* F, mf_scalar_fn fn, void* ctx) {
+    memset(F, 0, sizeof(double) * 2 * (size_t)n * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        int st = fn(ctx, CE(T, i, i)[0], CE(T, i, i)[1], 0, &CE(F, i, i)[0], &CE(F, i, i)[1]);
+        if (st != MF_OK) return st;
+    }
+    return MF_OK;
+}
+
 int mf_schur_fun(const double* A, int n, bool cx, int kind,
                  mf_scalar_fn fn, void* ctx, double* F, bool* is_real) {
     *is_real = false;
@@ -1143,6 +1172,7 @@ int mf_schur_fun(const double* A, int n, bool cx, int kind,
     if (st == MF_OK) {
         if (kind == MF_KIND_LOG)       st = logm_tri(n, T, Fs);
         else if (kind == MF_KIND_SQRT) st = sqrtm_tri(n, T, Fs);
+        else if (diag_schur(n, T))     st = diag_fun(n, T, Fs, fn, ctx);
         else                           st = schur_parlett(n, T, Q, Fs, fn, ctx);
     }
     if (st == MF_OK) {

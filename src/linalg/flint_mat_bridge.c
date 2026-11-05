@@ -21,6 +21,7 @@
 #include <flint/fmpz.h>
 #include <flint/fmpq.h>
 #include <flint/fmpq_mat.h>
+#include <flint/fmpq_vec.h>
 
 /* ------------------------------------------------------------------ */
 /*  Expr <-> fmpq (integer / rational scalars only)                    */
@@ -86,6 +87,163 @@ static int mb_fill_mat(fmpq_mat_t M, Expr** flat, int r, int c) {
     for (int i = 0; i < r * c; i++)
         if (!mb_expr_to_fmpq(flat[i], fmpq_mat_entry(M, i / c, i % c))) return 0;
     return 1;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Exact QR: rational Gram-Schmidt, square roots only at the end      */
+/* ------------------------------------------------------------------ */
+
+#include "eval.h"
+
+/* x = sq^2 * fr with fr free of square factors over the primes below 2^12;
+ * a cofactor left over that is itself a perfect square is absorbed too.
+ * (A large cofactor that is a product of big primes with a square among them
+ * is left in fr: the value is still right, only the radical not fully
+ * reduced.) */
+static void mb_square_split(fmpz_t sq, fmpz_t fr, const fmpz_t x) {
+    fmpz_t rest, p2, r;
+    fmpz_init_set(rest, x); fmpz_init(p2); fmpz_init(r);
+    fmpz_one(sq); fmpz_one(fr);
+    for (ulong p = 2; p < 4096 && fmpz_cmp_ui(rest, 1) > 0; p += (p == 2 ? 1 : 2)) {
+        int e = 0;
+        while (fmpz_divisible_ui(rest, p)) { fmpz_divexact_ui(rest, rest, p); e++; }
+        for (int i = 0; i < e / 2; i++) fmpz_mul_ui(sq, sq, p);
+        if (e & 1) fmpz_mul_ui(fr, fr, p);
+    }
+    if (fmpz_is_square(rest)) { fmpz_sqrt(r, rest); fmpz_mul(sq, sq, r); }
+    else fmpz_mul(fr, fr, rest);
+    fmpz_clear(rest); fmpz_clear(p2); fmpz_clear(r);
+}
+
+/* c / Sqrt[nn] (c, nn rational; nn > 0) in the reference's canonical form
+ * k Sqrt[B/A]: B and A coprime and square-free, and k's numerator prime to A
+ * and its denominator prime to B -- 3/Sqrt[51] is Sqrt[3/17], 75/Sqrt[51] is
+ * 25 Sqrt[3/17], 9/Sqrt[12] is 3 Sqrt[3]/2.  Times[3, 51^(-1/2)] does not
+ * reach that form by evaluation alone. */
+static Expr* mb_over_sqrt(const fmpq_t c, const fmpq_t nn) {
+    if (fmpq_is_zero(c)) return expr_new_integer(0);
+    fmpz_t sa, A, sb, B, g;
+    fmpz_init(sa); fmpz_init(A); fmpz_init(sb); fmpz_init(B); fmpz_init(g);
+    /* 1/Sqrt[a/b] = Sqrt[b/a] = (sb/sa) Sqrt[B/A] */
+    mb_square_split(sa, A, fmpq_numref(nn));
+    mb_square_split(sb, B, fmpq_denref(nn));
+    fmpq_t k;
+    fmpq_init(k);
+    fmpq_set(k, c);
+    fmpz_mul(fmpq_numref(k), fmpq_numref(k), sb);
+    fmpz_mul(fmpq_denref(k), fmpq_denref(k), sa);
+    fmpq_canonicalise(k);
+    /* g | num(k), g | A:  k Sqrt[B/A] = (k/g) Sqrt[g B / (A/g)] */
+    fmpz_gcd(g, fmpq_numref(k), A);
+    if (!fmpz_is_one(g)) {
+        fmpz_divexact(fmpq_numref(k), fmpq_numref(k), g);
+        fmpz_divexact(A, A, g);
+        fmpz_mul(B, B, g);
+    }
+    /* g | den(k), g | B:  k Sqrt[B/A] = (k g) Sqrt[(B/g) / (A g)] */
+    fmpz_gcd(g, fmpq_denref(k), B);
+    if (!fmpz_is_one(g)) {
+        fmpz_divexact(fmpq_denref(k), fmpq_denref(k), g);
+        fmpz_divexact(B, B, g);
+        fmpz_mul(A, A, g);
+    }
+    Expr* out;
+    if (fmpz_is_one(A) && fmpz_is_one(B)) {
+        out = mb_expr_from_fmpq(k);
+    } else {
+        fmpq_t rad;
+        fmpq_init(rad);
+        fmpz_set(fmpq_numref(rad), B);
+        fmpz_set(fmpq_denref(rad), A);
+        Expr* half = expr_new_function(expr_new_symbol(SYM_Rational),
+                                       (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2);
+        Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
+                                     (Expr*[]){ mb_expr_from_fmpq(rad), half }, 2);
+        fmpq_clear(rad);
+        out = fmpq_is_one(k) ? eval_and_free(pw)
+            : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ mb_expr_from_fmpq(k), pw }, 2));
+    }
+    fmpq_clear(k);
+    fmpz_clear(sa); fmpz_clear(A); fmpz_clear(sb); fmpz_clear(B); fmpz_clear(g);
+    return out;
+}
+
+Expr* flint_mat_qr(Expr** flat, int n, int p) {
+    if (n <= 0 || p <= 0) return NULL;
+    fmpq_mat_t A;
+    fmpq_mat_init(A, n, p);
+    if (!mb_fill_mat(A, flat, n, p)) { fmpq_mat_clear(A); return NULL; }
+    int kmax = n < p ? n : p;
+    fmpq_mat_t V;                 /* orthogonal vectors, one per column of V */
+    fmpq_mat_init(V, n, kmax);
+    fmpq* N = _fmpq_vec_init(kmax);           /* |v_j|^2 */
+    int* lead = (int*)malloc(sizeof(int) * (size_t)kmax);
+    fmpq_mat_t C;                 /* C[j, k] = <v_j, a_k> */
+    fmpq_mat_init(C, kmax, p);
+    fmpq* v = _fmpq_vec_init(n);
+    fmpq_t t, s;
+    fmpq_init(t); fmpq_init(s);
+    int rank = 0;
+    for (int k = 0; k < p; k++) {
+        for (int i = 0; i < n; i++) fmpq_set(v + i, fmpq_mat_entry(A, i, k));
+        for (int j = 0; j < rank; j++) {
+            /* c = <v_j, a_k>;  v -= (c / N_j) v_j */
+            fmpq_zero(s);
+            for (int i = 0; i < n; i++)
+                fmpq_addmul(s, fmpq_mat_entry(V, i, j), fmpq_mat_entry(A, i, k));
+            fmpq_set(fmpq_mat_entry(C, j, k), s);
+            if (fmpq_is_zero(s)) continue;
+            fmpq_div(t, s, N + j);
+            for (int i = 0; i < n; i++)
+                fmpq_submul(v + i, t, fmpq_mat_entry(V, i, j));
+        }
+        if (rank == kmax) continue;
+        fmpq_zero(s);
+        for (int i = 0; i < n; i++) fmpq_addmul(s, v + i, v + i);
+        if (fmpq_is_zero(s)) continue;           /* a dependent column */
+        for (int i = 0; i < n; i++) fmpq_set(fmpq_mat_entry(V, i, rank), v + i);
+        fmpq_set(N + rank, s);
+        fmpq_set(fmpq_mat_entry(C, rank, k), s); /* <v_k, a_k> = |v_k|^2 */
+        lead[rank] = k;
+        rank++;
+    }
+    Expr** qrows = (Expr**)malloc(sizeof(Expr*) * (size_t)(rank ? rank : 1));
+    Expr** rrows = (Expr**)malloc(sizeof(Expr*) * (size_t)(rank ? rank : 1));
+    for (int j = 0; j < rank; j++) {
+        Expr** qe = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+        for (int i = 0; i < n; i++) qe[i] = mb_over_sqrt(fmpq_mat_entry(V, i, j), N + j);
+        qrows[j] = expr_new_function(expr_new_symbol(SYM_List), qe, (size_t)n);
+        free(qe);
+        Expr** re = (Expr**)malloc(sizeof(Expr*) * (size_t)p);
+        for (int k = 0; k < p; k++)
+            re[k] = k < lead[j] ? expr_new_integer(0)
+                                : mb_over_sqrt(fmpq_mat_entry(C, j, k), N + j);
+        rrows[j] = expr_new_function(expr_new_symbol(SYM_List), re, (size_t)p);
+        free(re);
+    }
+    if (rank == 0) {
+        /* the zero matrix: the reference answers one row, q = {e1} and
+         * r = {0, ..., 0} (QRDecomposition[ConstantArray[0, {5, 6}]]) */
+        Expr** qe = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+        for (int i = 0; i < n; i++) qe[i] = expr_new_integer(i == 0 ? 1 : 0);
+        qrows[0] = expr_new_function(expr_new_symbol(SYM_List), qe, (size_t)n);
+        free(qe);
+        Expr** re = (Expr**)malloc(sizeof(Expr*) * (size_t)p);
+        for (int k = 0; k < p; k++) re[k] = expr_new_integer(0);
+        rrows[0] = expr_new_function(expr_new_symbol(SYM_List), re, (size_t)p);
+        free(re);
+        rank = 1;
+    }
+    Expr* q = expr_new_function(expr_new_symbol(SYM_List), qrows, (size_t)rank);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), rrows, (size_t)rank);
+    free(qrows); free(rrows);
+    fmpq_clear(t); fmpq_clear(s);
+    _fmpq_vec_clear(v, n);
+    _fmpq_vec_clear(N, kmax);
+    free(lead);
+    fmpq_mat_clear(C); fmpq_mat_clear(V); fmpq_mat_clear(A);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ q, r }, 2);
 }
 
 /* r×c fmpq_mat -> List-of-Lists Expr (caller owns). */
@@ -398,6 +556,7 @@ void flint_mat_bridge_init(void) {
 Expr* flint_mat_det(Expr** flat, int n) { (void)flat; (void)n; return NULL; }
 Expr* flint_mat_inverse(Expr** flat, int n) { (void)flat; (void)n; return NULL; }
 Expr* flint_mat_rref(Expr** flat, int r, int c) { (void)flat; (void)r; (void)c; return NULL; }
+Expr* flint_mat_qr(Expr** flat, int n, int p) { (void)flat; (void)n; (void)p; return NULL; }
 Expr** flint_mat_solve(Expr** fm, int r, int c, Expr** fb, int k) {
     (void)fm; (void)r; (void)c; (void)fb; (void)k; return NULL;
 }

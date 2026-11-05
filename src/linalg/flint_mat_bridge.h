@@ -88,6 +88,20 @@ int flint_mat_rank(Expr** flat, int r, int c);
  */
 int flint_rref_mpq_inplace(mpq_t* M, int r, int c, int64_t* pivot_for_col);
 
+/*
+ * QRDecomposition[m] of an n x p matrix of integers / rationals (row-major
+ * `flat`), as the reference answers it: Gram-Schmidt over Q on the columns,
+ * dependent columns dropped, so q is rank x n with ConjugateTranspose[q] . r
+ * == m.  The orthogonal (unnormalised) vectors v_j and their squared norms
+ * N_j stay rational; only the normalisation introduces a square root, so
+ * q[j, i] = v_j[i] / Sqrt[N_j] and r[j, k] = <v_j, a_k> / Sqrt[N_j], each
+ * built once and evaluated to the canonical radical (1/Sqrt[51],
+ * 2 Sqrt[3/17], ...).  The symbolic Gram-Schmidt this replaces simplified
+ * nested radicals at every step: a 5 x 5 integer matrix took a minute.
+ * Returns {q, r}, or NULL when an entry is not rational (or no FLINT).
+ */
+Expr* flint_mat_qr(Expr** flat, int n, int p);
+
 /* Registers the FLINT` context matrix builtins (FLINT`Det, FLINT`Inverse,
  * FLINT`LinearSolve, FLINT`RowReduce, FLINT`MatrixRank). Called from
  * core_init(). No-op without FLINT. */

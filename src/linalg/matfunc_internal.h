@@ -104,6 +104,11 @@ int mf_mpfr_expm(MfMat* a);
 int mf_mpfr_logm(MfMat* a);
 int mf_mpfr_powm(MfMat* a, const mpfr_t s_re, const mpfr_t s_im);
 int mf_mpfr_sqrtm(MfMat* a);
+/* f(A) for a scalar function f (any expression f[z] evaluates at a complex
+ * MPFR z) by the Parlett recurrence on the complex Schur form, at the input
+ * precision `bits`.  NULL (the caller keeps its exact path) on a non-numeric
+ * f value or eigenvalues closer than 2^-bits of their scale. */
+Expr* mf_mpfr_function(const Expr* m, int n, long bits, const Expr* f);
 #endif
 
 /* ---- exact / symbolic engine (matfunc_exact.c) -------------------------- */

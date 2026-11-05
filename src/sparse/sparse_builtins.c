@@ -198,29 +198,131 @@ static bool leaves_pass(const Expr* e, const Expr* test) {
     return test_true(test, expr_copy((Expr*)e));
 }
 
-/* ArrayQ[expr], ArrayQ[expr, patt], ArrayQ[expr, patt, test]: a full
- * rectangular array (every leaf at the same depth), whose depth matches patt
- * and whose every element passes test. */
+/* Is `e` rectangular down to depth n (n >= 1)?  A List must have children
+ * that are all rectangular to depth n - 1 with one common prefix shape; an
+ * NDArray or SparseArray is rectangular to any depth up to its rank.  Leaves
+ * below depth n are not looked at -- {{1, 2}, {3}} is rectangular to depth 1. */
+static bool prefix_shape(const Expr* e, int n, int64_t* dims) {
+    if (n <= 0) return true;
+    if (e->type == EXPR_SPARSE || e->type == EXPR_NDARRAY) {
+        int rank = e->type == EXPR_SPARSE ? e->data.sparse->rank : e->data.ndarray.rank;
+        if (rank < n) return false;
+        for (int k = 0; k < n; k++)
+            dims[k] = e->type == EXPR_SPARSE ? e->data.sparse->dims[k]
+                                             : e->data.ndarray.dims[k];
+        return true;
+    }
+    if (!head_is_sym(e, SYM_List)) return false;
+    size_t len = e->data.function.arg_count;
+    dims[0] = (int64_t)len;
+    if (n == 1) return true;
+    if (len == 0) return false;            /* {} has no depth-2 level */
+    int64_t d0[SP_MAX_RANK];
+    if (n - 1 > SP_MAX_RANK) return false;
+    if (!prefix_shape(e->data.function.args[0], n - 1, d0)) return false;
+    for (size_t i = 1; i < len; i++) {
+        int64_t di[SP_MAX_RANK];
+        if (!prefix_shape(e->data.function.args[i], n - 1, di)) return false;
+        for (int k = 0; k < n - 1; k++) if (di[k] != d0[k]) return false;
+    }
+    for (int k = 0; k < n - 1; k++) dims[k + 1] = d0[k];
+    return true;
+}
+
+/* The deepest n to which `e` is rectangular (what ArrayDepth reports): 0 for
+ * an atom, 1 for {{1, 2}, {3}}. */
+static int rect_depth(const Expr* e) {
+    int64_t dims[SP_MAX_RANK];
+    int n = 0;
+    while (n < SP_MAX_RANK && prefix_shape(e, n + 1, dims)) n++;
+    return n;
+}
+
+/* Do all the parts of `e` at level n (n >= 0; `e` verified rectangular to
+ * depth n) pass `test`? */
+static bool level_parts_pass(const Expr* e, int n, const Expr* test) {
+    if (n == 0) return test_true(test, expr_copy((Expr*)e));
+    if (e->type == EXPR_SPARSE || e->type == EXPR_NDARRAY) {
+        int rank = e->type == EXPR_SPARSE ? e->data.sparse->rank : e->data.ndarray.rank;
+        if (n == rank) return leaves_pass(e, test);
+        if (e->type == EXPR_SPARSE) {
+            /* the reference hands the test the parts as Lists
+             * (ArrayQ[SparseArray[{{1, 2}, {3, 4}}], 1, ListQ] is True) */
+            Expr* nl = sp_normal(e->data.sparse);
+            bool ok = nl && (head_is_sym(nl, SYM_List) || nl->type == EXPR_NDARRAY)
+                      && level_parts_pass(nl, n, test);
+            if (nl) expr_free(nl);
+            return ok;
+        }
+        int64_t len = e->type == EXPR_SPARSE ? e->data.sparse->dims[0]
+                                             : e->data.ndarray.dims[0];
+        for (int64_t i = 1; i <= len; i++) {
+            Expr* pa[2] = { expr_copy((Expr*)e), expr_new_integer(i) };
+            Expr* part = eval_and_free(expr_new_function(expr_new_symbol(SYM_Part), pa, 2));
+            bool ok = level_parts_pass(part, n - 1, test);
+            expr_free(part);
+            if (!ok) return false;
+        }
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!level_parts_pass(e->data.function.args[i], n - 1, test)) return false;
+    return true;
+}
+
+static bool depth_matches(int depth, const Expr* patt) {
+    Expr* margs[2] = { expr_new_integer(depth), expr_copy((Expr*)patt) };
+    Expr* mq = expr_new_function(expr_new_symbol(SYM_MatchQ), margs, 2);
+    Expr* r = evaluate(mq);
+    expr_free(mq);
+    bool ok = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    return ok;
+}
+
+/* ArrayQ[expr], ArrayQ[expr, patt], ArrayQ[expr, patt, test].
+ *
+ * Without a test: a full rectangular array (every leaf at the same depth, no
+ * List below it) whose depth matches patt.
+ *
+ * With a test the leaves are whatever sits at the chosen level, Lists
+ * included, so a ragged nest can still be an array of shallower depth
+ * (probed against the reference):
+ *   - an integer patt n asks for a structure rectangular to depth n >= 1
+ *     whose level-n parts all pass test --
+ *     ArrayQ[{{1, 2}, {3, 4}}, 1, ListQ] is True;
+ *   - any other patt is matched against the deepest rectangular depth d >= 1
+ *     (ArrayDepth) and the level-d parts must pass test --
+ *     ArrayQ[{{{1, 2}, {3, 4}}, {1, 2}, 3.}, _, FreeQ[#, _SparseArray] &] is
+ *     True (d = 1), ArrayQ[{{1, 2}, {3, 4}}, _, ListQ] is False (d = 2), and
+ *     ArrayQ[{{{1}}, {{2}}}, 1 | 2, True &] is False (d = 3). */
 static Expr* builtin_arrayq(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t na = res->data.function.arg_count;
     if (na < 1 || na > 3) return NULL;
     const Expr* e = res->data.function.args[0];
+    if (na == 3) {
+        const Expr* patt = res->data.function.args[1];
+        const Expr* test = res->data.function.args[2];
+        int d;
+        int64_t dims[SP_MAX_RANK];
+        if (patt->type == EXPR_INTEGER) {
+            int64_t want = patt->data.integer;
+            if (want < 1 || want > SP_MAX_RANK || !prefix_shape(e, (int)want, dims))
+                return expr_new_symbol(SYM_False);
+            d = (int)want;
+        } else {
+            d = rect_depth(e);
+            if (d < 1 || !depth_matches(d, patt)) return expr_new_symbol(SYM_False);
+        }
+        return expr_new_symbol(level_parts_pass(e, d, test) ? SYM_True : SYM_False);
+    }
     int rank = 0;
     int64_t dims[SP_MAX_RANK];
     bool arr = array_shape(e, &rank, dims, SP_MAX_RANK);
     if (!arr) return expr_new_symbol(SYM_False);
-    if (na >= 2) {
-        Expr* depth = expr_new_integer(rank);
-        Expr* margs[2] = { depth, expr_copy(res->data.function.args[1]) };
-        Expr* mq = expr_new_function(expr_new_symbol(SYM_MatchQ), margs, 2);
-        Expr* r = evaluate(mq);
-        expr_free(mq);
-        bool ok = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
-        if (r) expr_free(r);
-        if (!ok) return expr_new_symbol(SYM_False);
-    }
-    if (na == 3 && !leaves_pass(e, res->data.function.args[2])) return expr_new_symbol(SYM_False);
+    if (na == 2 && !depth_matches(rank, res->data.function.args[1]))
+        return expr_new_symbol(SYM_False);
     return expr_new_symbol(SYM_True);
 }
 

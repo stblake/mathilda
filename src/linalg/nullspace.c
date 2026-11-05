@@ -37,6 +37,7 @@
  * ownership of `res`.
  */
 
+#include "rref_numeric.h"   /* inexact NullSpace */
 #include "nullspace.h"
 #include "pack.h"
 #include "linalg.h"
@@ -267,6 +268,17 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method, Expr* zt) {
         if (svd_ns) return svd_ns;
     }
 #endif
+
+    /* Arbitrary-precision (or a machine matrix LAPACK did not take): the
+     * tolerance-aware elimination, so a pivot that is zero up to rounding is
+     * not divided through (an MPFR rank-deficient matrix answered {}). */
+    if (!zt && method == MATSOL_AUTOMATIC) {
+        long nbits = rref_numeric_bits(m, NULL);
+        if (nbits) {
+            Expr* ns = rref_numeric_nullspace(m, nbits);
+            if (ns) return ns;
+        }
+    }
 
     Expr** flat = malloc(sizeof(Expr*) * (size_t)rows * (size_t)cols);
     if (zt) {

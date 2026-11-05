@@ -11,6 +11,7 @@
 #include "sym_names.h"
 #include "ndarray.h"
 #include "pack.h"
+#include "ndlinalg.h"   /* linalg_pack_machine_operand: contagion packing */
 #include <stdio.h>
 #include <stdlib.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -172,7 +173,14 @@ static Expr* dot_pack_operand(Expr* list) {
     Expr* cand = pack_force(expr_copy(list), false, NDT_FLOAT64);
     if (cand && cand->type == EXPR_NDARRAY) return cand;
     if (cand) expr_free(cand);
-    return NULL;
+    /* Mixed heads under numeric contagion: machine Reals beside machine
+     * Complexes (the usual shape of a complex factor -- q of a complex Schur
+     * form), or exact numbers beside a machine Real.  pack_force declines a
+     * mixture, and the product of two 166 x 166 such matrices then ran the
+     * boxed Times/Plus loop: 18 s, against milliseconds as a complex128
+     * buffer.  linalg_pack_machine_operand packs only a list that holds a
+     * machine number, so an exact or symbolic operand still declines. */
+    return linalg_pack_machine_operand(list);
 }
 
 Expr* dot2(Expr* a, Expr* b, bool* error_printed) {

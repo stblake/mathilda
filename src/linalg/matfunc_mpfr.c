@@ -32,6 +32,10 @@
 #include "sym_names.h"
 #include "linalg.h"
 #include "ndarray.h"
+#include "la_dense.h"              /* la_has_complex */
+#include "eval.h"
+#include "numeric_complex.h"        /* numeric_mpfr_make_complex */
+#include "schurdecomp_internal.h"  /* schur_mpfr_complex_core */
 
 #include <math.h>
 #include <limits.h>
@@ -604,6 +608,170 @@ int mf_mpfr_powm(MfMat* a, const mpfr_t s_re, const mpfr_t s_im) {
     }
     mf_mat_free(&W);
     return st;
+}
+
+/* f(A) of an arbitrary-precision matrix by the Parlett recurrence on its
+ * complex Schur form A = Q T Q^H (schur_mpfr_complex_core):
+ *     F_ii = f(T_ii),
+ *     F_ij = [T_ij (F_jj - F_ii) + sum_{i<k<j} (T_ik F_kj - F_ik T_kj)]
+ *            / (T_jj - T_ii),
+ * then F(A) = Q F Q^H.  The work runs at twice the input precision plus a
+ * guard, so the divided differences of eigenvalues as close as 2^-bits keep
+ * the input's digits; eigenvalues closer than that (a repeated eigenvalue, a
+ * derogatory matrix) decline to the exact path.  It replaced that exact path
+ * for every MPFR matrix: rationalising a 6 x 6 30-digit matrix and taking
+ * MatrixFunction[Sin, .] symbolically ran past any time limit. */
+static bool mpfr_scalar_f(const Expr* f, mpfr_t zr, mpfr_t zi, mpfr_t fr, mpfr_t fi)
+{
+    Expr* z = mpfr_zero_p(zi) ? expr_new_mpfr_copy(zr) : numeric_mpfr_make_complex(zr, zi);
+    Expr* a[1] = { z };
+    Expr* val = eval_and_free(expr_new_function(expr_copy((Expr*)f), a, 1));
+    bool inexact = false;
+    mpfr_set_zero(fi, 1);
+    bool ok = get_approx_mpfr(val, fr, fi, &inexact)
+              && mpfr_number_p(fr) && mpfr_number_p(fi);
+    expr_free(val);
+    return ok;
+}
+
+Expr* mf_mpfr_function(const Expr* m, int n, long bits_in, const Expr* f)
+{
+    mpfr_prec_t bits = (mpfr_prec_t)bits_in;
+    mpfr_prec_t wp = 2 * bits + 32;
+    mpfr_t *Tr = NULL, *Ti = NULL, *Qr = NULL, *Qi = NULL;
+    if (!schur_mpfr_complex_core(m, n, wp, &Tr, &Ti, &Qr, &Qi)) return NULL;
+    size_t nn = (size_t)n * (size_t)n;
+#define AT(i, j) ((size_t)(i) * (size_t)n + (size_t)(j))
+    mpfr_t* Fr = (mpfr_t*)malloc(sizeof(mpfr_t) * nn);
+    mpfr_t* Fi = (mpfr_t*)malloc(sizeof(mpfr_t) * nn);
+    for (size_t k = 0; k < nn; k++) {
+        mpfr_init2(Fr[k], wp); mpfr_set_zero(Fr[k], 1);
+        mpfr_init2(Fi[k], wp); mpfr_set_zero(Fi[k], 1);
+    }
+    mpfr_t sr, si, tr, ti, dr, di, den, sep, scale;
+    mpfr_inits2(wp, sr, si, tr, ti, dr, di, den, sep, scale, (mpfr_ptr)0);
+    bool ok = true;
+    /* the eigenvalue scale, for the separation test */
+    mpfr_set_ui(scale, 1, MPFR_RNDN);
+    for (int i = 0; i < n; i++) {
+        mpfr_hypot(tr, Tr[AT(i, i)], Ti[AT(i, i)], MPFR_RNDN);
+        if (mpfr_cmp(tr, scale) > 0) mpfr_set(scale, tr, MPFR_RNDN);
+    }
+    mpfr_mul_2si(sep, scale, -(long)bits, MPFR_RNDN);
+    for (int i = 0; i < n && ok; i++)
+        ok = mpfr_scalar_f(f, Tr[AT(i, i)], Ti[AT(i, i)], Fr[AT(i, i)], Fi[AT(i, i)]);
+    for (int d = 1; d < n && ok; d++) {
+        for (int i = 0; i + d < n && ok; i++) {
+            int j = i + d;
+            /* s = T_ij (F_jj - F_ii) */
+            mpfr_sub(dr, Fr[AT(j, j)], Fr[AT(i, i)], MPFR_RNDN);
+            mpfr_sub(di, Fi[AT(j, j)], Fi[AT(i, i)], MPFR_RNDN);
+            mpfr_mul(sr, Tr[AT(i, j)], dr, MPFR_RNDN);
+            mpfr_mul(tr, Ti[AT(i, j)], di, MPFR_RNDN); mpfr_sub(sr, sr, tr, MPFR_RNDN);
+            mpfr_mul(si, Tr[AT(i, j)], di, MPFR_RNDN);
+            mpfr_mul(tr, Ti[AT(i, j)], dr, MPFR_RNDN); mpfr_add(si, si, tr, MPFR_RNDN);
+            for (int k = i + 1; k < j; k++) {
+                /* + T_ik F_kj - F_ik T_kj   (F T = T F, entry (i, j)) */
+                mpfr_mul(tr, Fr[AT(i, k)], Tr[AT(k, j)], MPFR_RNDN); mpfr_sub(sr, sr, tr, MPFR_RNDN);
+                mpfr_mul(tr, Fi[AT(i, k)], Ti[AT(k, j)], MPFR_RNDN); mpfr_add(sr, sr, tr, MPFR_RNDN);
+                mpfr_mul(tr, Fr[AT(i, k)], Ti[AT(k, j)], MPFR_RNDN); mpfr_sub(si, si, tr, MPFR_RNDN);
+                mpfr_mul(tr, Fi[AT(i, k)], Tr[AT(k, j)], MPFR_RNDN); mpfr_sub(si, si, tr, MPFR_RNDN);
+                mpfr_mul(tr, Tr[AT(i, k)], Fr[AT(k, j)], MPFR_RNDN); mpfr_add(sr, sr, tr, MPFR_RNDN);
+                mpfr_mul(tr, Ti[AT(i, k)], Fi[AT(k, j)], MPFR_RNDN); mpfr_sub(sr, sr, tr, MPFR_RNDN);
+                mpfr_mul(tr, Tr[AT(i, k)], Fi[AT(k, j)], MPFR_RNDN); mpfr_add(si, si, tr, MPFR_RNDN);
+                mpfr_mul(tr, Ti[AT(i, k)], Fr[AT(k, j)], MPFR_RNDN); mpfr_add(si, si, tr, MPFR_RNDN);
+            }
+            /* / (T_jj - T_ii) */
+            mpfr_sub(dr, Tr[AT(j, j)], Tr[AT(i, i)], MPFR_RNDN);
+            mpfr_sub(di, Ti[AT(j, j)], Ti[AT(i, i)], MPFR_RNDN);
+            mpfr_hypot(den, dr, di, MPFR_RNDN);
+            if (mpfr_cmp(den, sep) <= 0) {
+                /* a repeated (or numerically repeated) eigenvalue: the
+                 * divided difference is a derivative the recurrence cannot
+                 * form -- unless the block is structurally decoupled (T_ij
+                 * and every T_ik, T_kj between them exactly 0, as for a
+                 * diagonal matrix), when F_ij is 0 */
+                bool decoupled = mpfr_zero_p(Tr[AT(i, j)]) && mpfr_zero_p(Ti[AT(i, j)]);
+                for (int k = i + 1; k < j && decoupled; k++)
+                    decoupled = mpfr_zero_p(Tr[AT(i, k)]) && mpfr_zero_p(Ti[AT(i, k)])
+                             && mpfr_zero_p(Tr[AT(k, j)]) && mpfr_zero_p(Ti[AT(k, j)]);
+                if (decoupled) {
+                    mpfr_set_zero(Fr[AT(i, j)], 1); mpfr_set_zero(Fi[AT(i, j)], 1);
+                    continue;
+                }
+                ok = false; break;
+            }
+            mpfr_sqr(den, den, MPFR_RNDN);
+            /* (s)(conj d) / |d|^2 */
+            mpfr_mul(tr, sr, dr, MPFR_RNDN); mpfr_mul(ti, si, di, MPFR_RNDN);
+            mpfr_add(tr, tr, ti, MPFR_RNDN);
+            mpfr_div(Fr[AT(i, j)], tr, den, MPFR_RNDN);
+            mpfr_mul(tr, si, dr, MPFR_RNDN); mpfr_mul(ti, sr, di, MPFR_RNDN);
+            mpfr_sub(tr, tr, ti, MPFR_RNDN);
+            mpfr_div(Fi[AT(i, j)], tr, den, MPFR_RNDN);
+        }
+    }
+    Expr* out = NULL;
+    if (ok) {
+        /* R = Q F Q^H, into the T arrays (no longer needed) */
+        MfMat W;
+        if (mat_init(&W, n, bits)) {
+            mpfr_t ar, ai;
+            mpfr_inits2(wp, ar, ai, (mpfr_ptr)0);
+            /* G = Q F  (into T) */
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) {
+                    mpfr_set_zero(ar, 1); mpfr_set_zero(ai, 1);
+                    for (int k = 0; k <= j; k++) {
+                        mpfr_mul(tr, Qr[AT(i, k)], Fr[AT(k, j)], MPFR_RNDN); mpfr_add(ar, ar, tr, MPFR_RNDN);
+                        mpfr_mul(tr, Qi[AT(i, k)], Fi[AT(k, j)], MPFR_RNDN); mpfr_sub(ar, ar, tr, MPFR_RNDN);
+                        mpfr_mul(tr, Qr[AT(i, k)], Fi[AT(k, j)], MPFR_RNDN); mpfr_add(ai, ai, tr, MPFR_RNDN);
+                        mpfr_mul(tr, Qi[AT(i, k)], Fr[AT(k, j)], MPFR_RNDN); mpfr_add(ai, ai, tr, MPFR_RNDN);
+                    }
+                    mpfr_set(Tr[AT(i, j)], ar, MPFR_RNDN);
+                    mpfr_set(Ti[AT(i, j)], ai, MPFR_RNDN);
+                }
+            /* R = G Q^H */
+            bool real_in = !la_has_complex(m);
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) {
+                    mpfr_set_zero(ar, 1); mpfr_set_zero(ai, 1);
+                    for (int k = 0; k < n; k++) {
+                        /* G_ik conj(Q_jk) */
+                        mpfr_mul(tr, Tr[AT(i, k)], Qr[AT(j, k)], MPFR_RNDN); mpfr_add(ar, ar, tr, MPFR_RNDN);
+                        mpfr_mul(tr, Ti[AT(i, k)], Qi[AT(j, k)], MPFR_RNDN); mpfr_add(ar, ar, tr, MPFR_RNDN);
+                        mpfr_mul(tr, Ti[AT(i, k)], Qr[AT(j, k)], MPFR_RNDN); mpfr_add(ai, ai, tr, MPFR_RNDN);
+                        mpfr_mul(tr, Tr[AT(i, k)], Qi[AT(j, k)], MPFR_RNDN); mpfr_sub(ai, ai, tr, MPFR_RNDN);
+                    }
+                    mpfr_set(W.re[AT(i, j)], ar, MPFR_RNDN);
+                    mpfr_set(W.im[AT(i, j)], ai, MPFR_RNDN);
+                }
+            mpfr_clears(ar, ai, (mpfr_ptr)0);
+            /* f of a real matrix is real when its imaginary part is rounding */
+            bool force_real = false;
+            if (real_in) {
+                mpfr_t mre, mim;
+                mpfr_inits2(bits, mre, mim, (mpfr_ptr)0);
+                mpfr_set_zero(mre, 1); mpfr_set_zero(mim, 1);
+                for (size_t k = 0; k < nn; k++) {
+                    mpfr_abs(tr, W.re[k], MPFR_RNDN); if (mpfr_cmp(tr, mre) > 0) mpfr_set(mre, tr, MPFR_RNDN);
+                    mpfr_abs(tr, W.im[k], MPFR_RNDN); if (mpfr_cmp(tr, mim) > 0) mpfr_set(mim, tr, MPFR_RNDN);
+                }
+                mpfr_mul_2si(mre, mre, 8 - (long)bits, MPFR_RNDN);
+                force_real = mpfr_cmp(mim, mre) <= 0;
+                mpfr_clears(mre, mim, (mpfr_ptr)0);
+            }
+            out = mf_mat_to_expr(&W, bits, force_real);
+            mf_mat_free(&W);
+        }
+    }
+#undef AT
+    mpfr_clears(sr, si, tr, ti, dr, di, den, sep, scale, (mpfr_ptr)0);
+    for (size_t k = 0; k < nn; k++) { mpfr_clear(Fr[k]); mpfr_clear(Fi[k]); }
+    free(Fr); free(Fi);
+    schur_mpfr_core_free(Tr, n); schur_mpfr_core_free(Ti, n);
+    schur_mpfr_core_free(Qr, n); schur_mpfr_core_free(Qi, n);
+    return out;
 }
 
 #endif /* USE_MPFR */

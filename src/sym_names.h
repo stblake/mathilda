@@ -441,6 +441,7 @@ extern const char* SYM_Longest;
 extern const char* SYM_MachineEpsilon;
 extern const char* SYM_MachineNumberQ;
 extern const char* SYM_MachinePrecision;
+extern const char* SYM_SetPrecision;
 extern const char* SYM_MantissaExponent;
 extern const char* SYM_Max;
 extern const char* SYM_MaximalBy;

@@ -69,6 +69,7 @@
  * the q / r List wrappers have stolen / copied their entries.
  */
 
+#include "flint_mat_bridge.h"   /* flint_mat_qr: exact rational QR */
 #include "qrdecomp.h"
 #include "qrdecomp_internal.h"
 #include "linalg.h"
@@ -697,6 +698,19 @@ Expr* qr_symbolic_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
  *  of how the host BLAS/LAPACK/MPFR is configured.                    */
 Expr* qr_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
     CommonInexactInfo info = common_scan_inexact(m);
+    if (!info.has_inexact && !opts->pivoting) {
+        /* An integer / rational matrix: Gram-Schmidt over Q, the square roots
+         * introduced only at the end (flint_mat_qr).  NULL for anything else
+         * (Gaussian rationals, radicals, symbols), which keeps the symbolic
+         * kernel. */
+        Expr** flat = (Expr**)malloc(sizeof(Expr*) * (size_t)n * (size_t)p);
+        size_t idx = 0;
+        flatten_tensor(m, flat, &idx);
+        Expr* exact = flint_mat_qr(flat, n, p);
+        for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
+        free(flat);
+        if (exact) return exact;
+    }
     if (info.has_inexact) {
         if (info.min_bits <= 53) {
             Expr* fast = qr_machine_dispatch(m, n, p, opts);
@@ -750,7 +764,10 @@ Expr* builtin_qrdecomposition(Expr* res) {
              * sign, since the exact Gram-Schmidt and LAPACK's Householder pick
              * different signs. The QR test suite caught it. Same gate as
              * builtin_norm's. */
-            && matsol_is_inexact(res->data.function.args[0])) {
+            && matsol_is_inexact(res->data.function.args[0])
+            /* and MACHINE precision: na_load_matrix would round a 30-digit
+             * matrix to doubles (the MPFR Householder kernel keeps it) */
+            && common_scan_inexact(res->data.function.args[0]).min_bits <= 53) {
             /* REAL matrices only. For complex input Mathilda's convention is
              * m == ConjugateTranspose[q].r, so q is conj(Q^T) and not the plain
              * transpose this builds -- the complex QR tests caught exactly that.

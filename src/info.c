@@ -1696,8 +1696,9 @@ void info_init(void) {
         "\t\"Cylindrical\", \"Spherical\").");
     symtab_set_docstring("Norm",
         "Norm[expr]\n"
-        "\tgives the 2-norm of a number, vector, or matrix (Frobenius norm for\n"
-        "\tmatrices).\n"
+        "\tgives the 2-norm of a number, vector, or matrix (for a matrix the\n"
+        "\tspectral norm, its largest singular value -- exact as a radical or\n"
+        "\tRoot for an exact matrix).\n"
         "Norm[expr, p]\n"
         "\tgives the p-norm: Abs[expr] for scalars; (Sum |xi|^p)^(1/p) for\n"
         "\tvectors with 1 <= p < Infinity; Max[Abs[expr]] for p == Infinity;\n"
@@ -4707,7 +4708,9 @@ void info_init(void) {
         "ArrayQ[expr] gives True if expr is a full array (a list, or a SparseArray, with\n"
         "\tevery element at the same depth).\n"
         "ArrayQ[expr, patt] requires the depth to match patt.\n"
-        "ArrayQ[expr, patt, test] also requires test to give True on every element.");
+        "ArrayQ[expr, patt, test] requires test to give True on every part at the\n"
+        "\tlevel tested (Lists included): level n for an integer patt n, else the\n"
+        "\tdeepest level to which expr is rectangular.");
     symtab_set_docstring("ArrayDepth",
         "ArrayDepth[expr] gives the depth to which expr is a full array (0 for an atom).");
     symtab_set_docstring("Band",

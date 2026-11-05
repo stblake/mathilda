@@ -25,6 +25,8 @@
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
+#include "message.h"   /* mth_message: ::luc through Quiet/Check */
+#include "common.h"    /* common_scan_inexact: machine contagion */
 #include <math.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -70,6 +72,23 @@ Expr* linalg_pack_machine_operand(const Expr* arg)
 {
     if (!arg || is_ndarray(arg)) return NULL;
     Expr* packed = pack_force_machine(expr_copy((Expr*)arg));
+    if (packed && !is_ndarray(packed)) {
+        /* Numeric contagion: one machine number makes the whole matrix a
+         * machine matrix in the reference, so {{1., 0, 1}, {0, 1, 1},
+         * {0, 0, 6/10^10}} is decomposed (and warned about) as machine
+         * reals, and an exact 1/3, Pi or 30-digit entry beside a 1. is
+         * rounded to a double.  Without this a matrix of mixed heads fell
+         * into the fraction-free symbolic eliminator. */
+        CommonInexactInfo info = common_scan_inexact(arg);
+        if (info.has_inexact && info.min_bits <= 53) {
+            expr_free(packed);
+            Expr* sa[2] = { expr_copy((Expr*)arg),
+                            expr_new_symbol(SYM_MachinePrecision) };
+            Expr* num = eval_and_free(expr_new_function(
+                            expr_new_symbol(SYM_SetPrecision), sa, 2));
+            packed = pack_force_machine(num);
+        }
+    }
     if (!packed) return NULL;
     if (!is_ndarray(packed) ||
         (packed->data.ndarray.dtype != NDT_FLOAT64 && packed->data.ndarray.dtype != NDT_COMPLEX64)) {
@@ -236,6 +255,65 @@ static void nd_lu_solve_col(const double* LU, int n, const int* piv, double* b)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Conditioning: the ::luc threshold (see ndlinalg.h)                 */
+/* ------------------------------------------------------------------ */
+
+double nd_mat_norm(char norm, const double* A, int n, bool cplx)
+{
+    return cplx ? mat_lapack_zlange(norm, n, n, A, n)
+                : mat_lapack_dlange(norm, n, n, A, n);
+}
+
+double nd_lu_rcond(char norm, const double* LU, int n, bool cplx, double anorm)
+{
+    if (!(anorm > 0.0)) return 0.0;
+    double rcond = 0.0;
+    int info = cplx ? mat_lapack_zgecon(norm, n, LU, n, anorm, &rcond)
+                    : mat_lapack_dgecon(norm, n, LU, n, anorm, &rcond);
+    if (info != 0 || !(rcond > 0.0)) return 0.0;
+    return rcond;
+}
+
+void nd_warn_luc(const char* head, const Expr* m)
+{
+    char* s = expr_to_string((Expr*)m);
+    mth_message(head, "luc", "Result for %s of badly conditioned matrix %s may "
+                "contain significant numerical errors.", head, s ? s : "");
+    free(s);
+}
+
+bool nd_machine_rcond(const Expr* m, char norm, double* rcond)
+{
+    if (!mathilda_lapack_probe()) return false;
+    Expr* owned = NULL;
+    const Expr* buf = m;
+    if (!is_ndarray(m)) {
+        owned = linalg_pack_machine_operand(m);
+        if (!owned) return false;
+        buf = owned;
+    }
+    bool ok = false;
+    if (buf->data.ndarray.rank == 2 && buf->data.ndarray.dims[0] == buf->data.ndarray.dims[1]
+        && buf->data.ndarray.dims[0] > 0 && buf->data.ndarray.dtype != NDT_INT64) {
+        bool cplx = nd_arg_is_complex(buf);
+        int n, cc; double* A = NULL;
+        if (na_load_matrix(buf, cplx, true, &n, &cc, &A)) {
+            double anorm = nd_mat_norm(norm, A, n, cplx);
+            int* piv = (int*)malloc(sizeof(int) * (size_t)n);
+            int info = cplx ? mat_lapack_zgetrf(n, n, A, n, piv)
+                            : mat_lapack_dgetrf(n, n, A, n, piv);
+            if (info >= 0) {
+                *rcond = info > 0 ? 0.0 : nd_lu_rcond(norm, A, n, cplx, anorm);
+                ok = true;
+            }
+            free(piv); free(A);
+        }
+    }
+    if (owned) expr_free(owned);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Det                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -353,10 +431,14 @@ Expr* ndla_det(Expr* res)
             /* LAPACK dgetrf (blocked, vectorized) — det = sign * prod(diag U).
              * The product itself is formed by nd_real_det_result, which keeps a
              * finite answer when the raw double product would over/underflow. */
+            double anorm = nd_mat_norm('I', A, n, false);
             int info = mat_lapack_dgetrf(n, n, A, n, piv);
             if (info < 0) { free(piv); free(A); return linalg_delist_and_reeval(res); }
             for (int k = 0; k < n; k++)
                 if (piv[k] != k + 1) sign = -sign;    /* ipiv is 1-indexed */
+            /* an exactly singular matrix answers 0. with no warning */
+            if (info == 0 && nd_lu_rcond('I', A, n, false, anorm) < ND_LUC_RCOND)
+                nd_warn_luc("Det", arg);
         } else {
             nd_lu_real(A, n, piv, &sign);
         }
@@ -371,8 +453,11 @@ Expr* ndla_det(Expr* res)
     if (!na_load_matrix(arg, true, true, &n, &cc, &A))
         return linalg_delist_and_reeval(res);
     int* piv = (int*)malloc(sizeof(int) * (size_t)n);
+    double anorm = nd_mat_norm('I', A, n, true);
     int info = mat_lapack_zgetrf(n, n, A, n, piv);
     if (info < 0) { free(piv); free(A); return linalg_delist_and_reeval(res); }
+    if (info == 0 && nd_lu_rcond('I', A, n, true, anorm) < ND_LUC_RCOND)
+        nd_warn_luc("Det", arg);
     int sign = 1;
     for (int k = 0; k < n; k++)
         if (piv[k] != k + 1) sign = -sign;            /* ipiv is 1-indexed */
@@ -402,10 +487,13 @@ Expr* ndla_inverse(Expr* res)
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
         if (mathilda_lapack_probe()) {
             /* LAPACK dgetrf + dgetri (blocked, vectorized). */
+            double anorm = nd_mat_norm('1', A, n, false);
             int info = mat_lapack_dgetrf(n, n, A, n, piv);
             if (info != 0) {                          /* <0 bad arg, >0 singular */
                 free(piv); free(A); return linalg_delist_and_reeval(res);
             }
+            if (nd_lu_rcond('1', A, n, false, anorm) < ND_LUC_RCOND)
+                nd_warn_luc("Inverse", arg);
             info = mat_lapack_dgetri(n, A, n, piv);
             free(piv);
             if (info != 0) { free(A); return linalg_delist_and_reeval(res); }
@@ -438,8 +526,11 @@ Expr* ndla_inverse(Expr* res)
     if (!na_load_matrix(arg, true, true, &n, &cc, &A))
         return linalg_delist_and_reeval(res);
     int* piv = (int*)malloc(sizeof(int) * (size_t)n);
+    double anorm = nd_mat_norm('1', A, n, true);
     int info = mat_lapack_zgetrf(n, n, A, n, piv);
     if (info != 0) { free(piv); free(A); return linalg_delist_and_reeval(res); }
+    if (nd_lu_rcond('1', A, n, true, anorm) < ND_LUC_RCOND)
+        nd_warn_luc("Inverse", arg);
     info = mat_lapack_zgetri(n, A, n, piv);
     free(piv);
     if (info != 0) { free(A); return linalg_delist_and_reeval(res); }
@@ -497,18 +588,135 @@ static bool nd_load_rhs(const Expr* b, bool want_complex, int n,
     return false;
 }
 
+/* Set by a fast path that has DECIDED the call stays unevaluated (and has
+ * said why, e.g. LinearSolve::nosol), so the builtin must not fall through to
+ * its generic path and answer it differently.  See linalg_fast_refused. */
+static bool g_linalg_refused = false;
+
+bool linalg_fast_refused(void)
+{
+    bool r = g_linalg_refused;
+    g_linalg_refused = false;
+    return r;
+}
+
+/* Minimum-norm solution of the (rank-deficient or rectangular) machine system
+ * A X = B, A m x n and B m x nrhs column-major (interleaved re/im when cplx),
+ * from the SVD: X = V_r S_r^-1 U_r^H B over the singular values above
+ * max(m, n) eps s_1.  This is the reference's answer for every machine system
+ * the LU cannot solve (probed: LinearSolve[{{1., 2.}, {2., 4.}}, {1., 2.}] is
+ * {0.2, 0.4}, and a consistent wide system answers PseudoInverse[m] . b).
+ * Returns X (n x nrhs, caller frees), or NULL with *nosol set when the system
+ * is inconsistent: rank 0 (the reference refuses even a zero right-hand side
+ * there), or a residual over 1e-12 |b| (probed: {1, 2 + d} against
+ * {{1, 2}, {2, 4}} is solvable for d = 3e-12 and not for d = 5e-12). */
+static double* nd_minnorm_solve(const double* A, int m, int n, const double* B,
+                                int nrhs, bool cplx, bool* nosol)
+{
+    *nosol = false;
+    int w = cplx ? 2 : 1;
+    int k = m < n ? m : n;
+    double* W  = (double*)malloc(sizeof(double) * (size_t)w * m * n);
+    double* S  = (double*)malloc(sizeof(double) * (size_t)(k > 0 ? k : 1));
+    double* U  = (double*)malloc(sizeof(double) * (size_t)w * m * m);
+    double* VT = (double*)malloc(sizeof(double) * (size_t)w * n * n);
+    double* X  = (double*)calloc((size_t)w * n * nrhs, sizeof(double));
+    double* Y  = (double*)malloc(sizeof(double) * (size_t)w * (k > 0 ? k : 1));
+    memcpy(W, A, sizeof(double) * (size_t)w * m * n);
+    int info = cplx ? mat_lapack_zgesvd(m, n, W, m, S, U, m, VT, n)
+                    : mat_lapack_dgesvd(m, n, W, m, S, U, m, VT, n);
+    free(W);
+    if (info != 0) { free(S); free(U); free(VT); free(X); free(Y); return NULL; }
+    double tol = (double)(m > n ? m : n) * 2.220446049250313e-16 * (k > 0 ? S[0] : 0.0);
+    int r = 0;
+    while (r < k && S[r] > tol) r++;
+    if (r == 0) {
+        *nosol = true;
+        free(S); free(U); free(VT); free(X); free(Y);
+        return NULL;
+    }
+    for (int c = 0; c < nrhs; c++) {
+        const double* bc = B + (size_t)w * m * c;
+        double* xc = X + (size_t)w * n * c;
+        /* y = S_r^-1 U_r^H b */
+        for (int i = 0; i < r; i++) {
+            double yr = 0.0, yi = 0.0;
+            for (int q = 0; q < m; q++) {
+                if (cplx) {
+                    double ur = U[2 * (q + (size_t)i * m)], ui = U[2 * (q + (size_t)i * m) + 1];
+                    double br = bc[2 * q], bi = bc[2 * q + 1];
+                    yr += ur * br + ui * bi;      /* conj(u) b */
+                    yi += ur * bi - ui * br;
+                } else {
+                    yr += U[q + (size_t)i * m] * bc[q];
+                }
+            }
+            Y[w * i] = yr / S[i];
+            if (cplx) Y[2 * i + 1] = yi / S[i];
+        }
+        /* x = V_r y, with V[j, i] = conj(VT[i, j]) */
+        for (int j = 0; j < n; j++) {
+            double xr = 0.0, xi = 0.0;
+            for (int i = 0; i < r; i++) {
+                if (cplx) {
+                    double vr = VT[2 * (i + (size_t)j * n)];
+                    double vi = -VT[2 * (i + (size_t)j * n) + 1];
+                    xr += vr * Y[2 * i] - vi * Y[2 * i + 1];
+                    xi += vr * Y[2 * i + 1] + vi * Y[2 * i];
+                } else {
+                    xr += VT[i + (size_t)j * n] * Y[i];
+                }
+            }
+            xc[w * j] = xr;
+            if (cplx) xc[2 * j + 1] = xi;
+        }
+        /* consistency: |A x - b| <= 1e-12 |b| */
+        double rn = 0.0, bn = 0.0;
+        for (int q = 0; q < m; q++) {
+            double ar = -bc[w * q], ai = cplx ? -bc[2 * q + 1] : 0.0;
+            for (int j = 0; j < n; j++) {
+                if (cplx) {
+                    double pr = A[2 * (q + (size_t)j * m)], pi = A[2 * (q + (size_t)j * m) + 1];
+                    ar += pr * xc[2 * j] - pi * xc[2 * j + 1];
+                    ai += pr * xc[2 * j + 1] + pi * xc[2 * j];
+                } else {
+                    ar += A[q + (size_t)j * m] * xc[j];
+                }
+            }
+            rn += ar * ar + ai * ai;
+            bn += bc[w * q] * bc[w * q] + (cplx ? bc[2 * q + 1] * bc[2 * q + 1] : 0.0);
+        }
+        if (sqrt(rn) > 1e-12 * sqrt(bn)) {
+            *nosol = true;
+            free(S); free(U); free(VT); free(X); free(Y);
+            return NULL;
+        }
+    }
+    free(S); free(U); free(VT); free(Y);
+    return X;
+}
+
+/* LinearSolve[m, b] on machine operands.
+ *
+ * Square: LAPACK ?gesv (LU), with LinearSolve::luc when the infinity-norm
+ * rcond falls below ND_LUC_RCOND -- the reference keeps the LU answer of a
+ * nearly singular matrix and warns.  An exactly singular square matrix (a zero
+ * pivot) or a rectangular one takes the SVD minimum-norm solution
+ * (nd_minnorm_solve), or LinearSolve::nosol. */
 Expr* ndla_linearsolve(Expr* res)
 {
     if (res->data.function.arg_count != 2) return linalg_delist_and_reeval(res);
     Expr* m = res->data.function.args[0];
     Expr* b = res->data.function.args[1];
     if (!is_ndarray(m) || m->data.ndarray.rank != 2
-        || m->data.ndarray.dims[0] != m->data.ndarray.dims[1]
-        || m->data.ndarray.dims[0] == 0)
+        || m->data.ndarray.dims[0] == 0 || m->data.ndarray.dims[1] == 0
+        || m->data.ndarray.dtype == NDT_INT64)
         return linalg_delist_and_reeval(res);
+    bool square = m->data.ndarray.dims[0] == m->data.ndarray.dims[1];
     bool cplx = nd_arg_is_complex(m) || nd_arg_is_complex(b);
-
-    if (!cplx) {
+    if (!mathilda_lapack_probe()) {
+        if (cplx || !square) return linalg_delist_and_reeval(res);
+        /* no LAPACK: the in-house LU, a singular matrix deferring */
         int n, cc; double* A = NULL;
         if (!na_load_matrix(m, false, true, &n, &cc, &A))
             return linalg_delist_and_reeval(res);
@@ -517,19 +725,8 @@ Expr* ndla_linearsolve(Expr* res)
             free(A); return linalg_delist_and_reeval(res);
         }
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
-        if (mathilda_lapack_probe()) {
-            /* LAPACK dgesv (blocked LU + solve). */
-            int info = mat_lapack_dgesv(n, nrhs, A, n, piv, B, n);
-            free(piv); free(A);
-            if (info != 0) { free(B); return linalg_delist_and_reeval(res); }
-            Expr* out = nd_result_like(m, b, is_vec
-                            ? na_build_vector(B, n, false)
-                            : na_build_matrix(B, n, nrhs, false, true));
-            free(B);
-            return out;
-        }
         int sign, rank = nd_lu_real(A, n, piv, &sign);
-        if (rank < n) {                              /* singular: defer */
+        if (rank < n) {
             free(piv); free(A); free(B);
             return linalg_delist_and_reeval(res);
         }
@@ -541,22 +738,52 @@ Expr* ndla_linearsolve(Expr* res)
         return out;
     }
 
-    if (!mathilda_lapack_probe()) return linalg_delist_and_reeval(res);
-    int n, cc; double* A = NULL;
-    if (!na_load_matrix(m, true, true, &n, &cc, &A))
+    int w = cplx ? 2 : 1;
+    int rows, cols; double* A = NULL;
+    if (!na_load_matrix(m, cplx, true, &rows, &cols, &A))
         return linalg_delist_and_reeval(res);
     int nrhs; bool is_vec; double* B = NULL;
-    if (!nd_load_rhs(b, true, n, &nrhs, &is_vec, &B)) {
+    if (!nd_load_rhs(b, cplx, rows, &nrhs, &is_vec, &B)) {
         free(A); return linalg_delist_and_reeval(res);
     }
-    int* piv = (int*)malloc(sizeof(int) * (size_t)n);
-    int info = mat_lapack_zgesv(n, nrhs, A, n, piv, B, n);
-    free(piv); free(A);
-    if (info != 0) { free(B); return linalg_delist_and_reeval(res); }
+    double* X = NULL;
+    if (square) {
+        int n = rows;
+        double* LU = (double*)malloc(sizeof(double) * (size_t)w * n * n);
+        memcpy(LU, A, sizeof(double) * (size_t)w * n * n);
+        double anorm = nd_mat_norm('I', LU, n, cplx);
+        double* Bs = (double*)malloc(sizeof(double) * (size_t)w * n * nrhs);
+        memcpy(Bs, B, sizeof(double) * (size_t)w * n * nrhs);
+        int* piv = (int*)malloc(sizeof(int) * (size_t)n);
+        int info = cplx ? mat_lapack_zgesv(n, nrhs, LU, n, piv, Bs, n)
+                        : mat_lapack_dgesv(n, nrhs, LU, n, piv, Bs, n);
+        free(piv);
+        if (info == 0) {
+            if (nd_lu_rcond('I', LU, n, cplx, anorm) < ND_LUC_RCOND)
+                nd_warn_luc("LinearSolve", m);
+            X = Bs;
+        } else {
+            free(Bs);
+            if (info < 0) { free(LU); free(A); free(B); return linalg_delist_and_reeval(res); }
+        }
+        free(LU);
+    }
+    if (!X) {
+        bool nosol = false;
+        X = nd_minnorm_solve(A, rows, cols, B, nrhs, cplx, &nosol);
+        if (!X) {
+            free(A); free(B);
+            if (!nosol) return linalg_delist_and_reeval(res);
+            mth_message("LinearSolve", "nosol",
+                        "Linear equation encountered that has no solution.");
+            g_linalg_refused = true;
+            return NULL;
+        }
+    }
     Expr* out = nd_result_like(m, b, is_vec
-                    ? na_build_vector(B, n, true)
-                    : na_build_matrix(B, n, nrhs, true, true));
-    free(B);
+                    ? na_build_vector(X, cols, cplx)
+                    : na_build_matrix(X, cols, nrhs, cplx, true));
+    free(X); free(A); free(B);
     return out;
 }
 
@@ -877,34 +1104,40 @@ static double nd_svd_cutoff(int m, int n, double smax,
     return (double)((m > n) ? m : n) * 2.220446049250313e-16 * smax;
 }
 
-/* A real rank-2 float64 buffer is the entire domain of both routines: the
- * exact pipeline is the RIGHT answer for an exact matrix, and an int64 buffer
- * cannot arrive because neither head is on pack.c's INT64_OK list. */
+/* A rank-2 float64 or complex128 buffer is the entire domain of both
+ * routines: the exact pipeline is the RIGHT answer for an exact matrix, and an
+ * int64 buffer cannot arrive because neither head is on pack.c's INT64_OK
+ * list.  (Complex was declined until the oracle found PseudoInverse of a
+ * 20 x 20 machine complex matrix running the rationalised exact pipeline for
+ * minutes.) */
 static bool nd_svd_arg_ok(const Expr* a)
 {
     return a && is_ndarray(a) && a->data.ndarray.rank == 2
              && a->data.ndarray.dims[0] > 0 && a->data.ndarray.dims[1] > 0
-             && !nd_arg_is_complex(a) && mathilda_lapack_probe();
+             && a->data.ndarray.dtype != NDT_INT64 && mathilda_lapack_probe();
 }
 
-/* Thin SVD of `a`. On success the caller owns *S, *U and *VT and must free all
- * three; U is column-major m x k, VT column-major k x n, both as gesdd leaves
- * them. Returns false on a load failure or a gesdd that did not converge. */
-static bool nd_thin_svd(const Expr* a, int* m_out, int* n_out, int* k_out,
+/* Thin SVD of `a` (interleaved re/im when `cplx`). On success the caller owns
+ * *S, *U and *VT and must free all three; U is column-major m x k, VT
+ * column-major k x n, both as gesdd leaves them. Returns false on a load
+ * failure or a gesdd that did not converge. */
+static bool nd_thin_svd(const Expr* a, bool cplx, int* m_out, int* n_out, int* k_out,
                         double** S_out, double** U_out, double** VT_out)
 {
     int m, n; double* A = NULL;                       /* column-major m x n */
-    if (!na_load_matrix(a, false, true, &m, &n, &A)) return false;
+    if (!na_load_matrix(a, cplx, true, &m, &n, &A)) return false;
     int k = (m < n) ? m : n;
+    size_t w = cplx ? 2 : 1;
 
     double* S  = (double*)malloc(sizeof(double) * (size_t)k);
-    double* U  = (double*)malloc(sizeof(double) * (size_t)m * (size_t)k);
-    double* VT = (double*)malloc(sizeof(double) * (size_t)k * (size_t)n);
+    double* U  = (double*)malloc(sizeof(double) * w * (size_t)m * (size_t)k);
+    double* VT = (double*)malloc(sizeof(double) * w * (size_t)k * (size_t)n);
     if (!S || !U || !VT) {
         free(A); free(S); free(U); free(VT);
         return false;
     }
-    int info = mat_lapack_dgesdd('S', m, n, A, m, S, U, m, VT, k);
+    int info = cplx ? mat_lapack_zgesdd('S', m, n, A, m, S, U, m, VT, k)
+                    : mat_lapack_dgesdd('S', m, n, A, m, S, U, m, VT, k);
     free(A);                                          /* gesdd destroys A */
     if (info != 0) { free(S); free(U); free(VT); return false; }
 
@@ -913,12 +1146,54 @@ static bool nd_thin_svd(const Expr* a, int* m_out, int* n_out, int* k_out,
     return true;
 }
 
+/* PseudoInverse of a complex buffer: P = V S^+ U^H, n x m column-major. */
+static Expr* nd_pinv_complex(const Expr* a, bool tol_automatic, double tol_value)
+{
+    int m, n, k; double *S = NULL, *U = NULL, *VT = NULL;
+    if (!nd_thin_svd(a, true, &m, &n, &k, &S, &U, &VT)) return NULL;
+    double cutoff = nd_svd_cutoff(m, n, S[0], tol_automatic, tol_value);
+    for (int t = 0; t < k; t++) {                 /* rows of V^H scaled by 1/s */
+        double f = (S[t] > cutoff) ? 1.0 / S[t] : 0.0;
+        for (int j = 0; j < n; j++) {
+            VT[2 * (t + (size_t)j * k)] *= f;
+            VT[2 * (t + (size_t)j * k) + 1] *= f;
+        }
+    }
+    double* P = (double*)malloc(sizeof(double) * 2 * (size_t)n * (size_t)m);
+    if (!P) { free(S); free(U); free(VT); return NULL; }
+#ifdef USE_LAPACK
+    /* P = (V^H)^H (U)^H: zgemm with both operands conjugate-transposed */
+    double one[2] = { 1.0, 0.0 }, zero[2] = { 0.0, 0.0 };
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasConjTrans,
+                n, m, k, (void*)one, (const void*)VT, k, (const void*)U, m,
+                (void*)zero, (void*)P, n);
+#else
+    for (size_t z = 0; z < 2 * (size_t)n * (size_t)m; z++) P[z] = 0.0;
+    for (int j = 0; j < m; j++)
+        for (int t = 0; t < k; t++) {
+            /* conj(U[j, t]) */
+            double ur = U[2 * (j + (size_t)t * m)], ui = -U[2 * (j + (size_t)t * m) + 1];
+            for (int i = 0; i < n; i++) {
+                /* conj(VT[t, i]) */
+                double vr = VT[2 * (t + (size_t)i * k)], vi = -VT[2 * (t + (size_t)i * k) + 1];
+                P[2 * (i + (size_t)j * n)]     += vr * ur - vi * ui;
+                P[2 * (i + (size_t)j * n) + 1] += vr * ui + vi * ur;
+            }
+        }
+#endif
+    free(S); free(U); free(VT);
+    Expr* out = na_build_matrix(P, n, m, true, true);
+    free(P);
+    return nd_result_like(a, NULL, out);
+}
+
 Expr* ndla_pseudoinverse_direct(const Expr* a, bool tol_automatic, double tol_value)
 {
     if (!nd_svd_arg_ok(a)) return NULL;
+    if (nd_arg_is_complex(a)) return nd_pinv_complex(a, tol_automatic, tol_value);
 
     int m, n, k; double *S = NULL, *U = NULL, *VT = NULL;
-    if (!nd_thin_svd(a, &m, &n, &k, &S, &U, &VT)) return NULL;
+    if (!nd_thin_svd(a, false, &m, &n, &k, &S, &U, &VT)) return NULL;
 
     double cutoff = nd_svd_cutoff(m, n, S[0], tol_automatic, tol_value);
 
@@ -960,6 +1235,19 @@ Expr* ndla_leastsquares_direct(const Expr* a, const Expr* b,
 {
     if (!nd_svd_arg_ok(a)) return NULL;
     int rows = (int)a->data.ndarray.dims[0];
+    /* complex: the pseudo-inverse route (LeastSquares Direct IS
+     * PseudoInverse[m] . b) */
+    if (nd_arg_is_complex(a) || nd_arg_is_complex(b)) {
+        if (!nd_arg_is_complex(a)) return NULL;
+        Expr* p = nd_pinv_complex(a, tol_automatic, tol_value);
+        if (!p) return NULL;
+        Expr* bb = is_ndarray(b) ? expr_copy((Expr*)b) : linalg_pack_machine_operand(b);
+        if (!bb) { expr_free(p); return NULL; }
+        bool err = false;
+        Expr* out = ndarray_dot2(p, bb, &err);
+        expr_free(p); expr_free(bb);
+        return out;
+    }
 
     /* The right-hand side may be a vector or a matrix, packed or plain. A plain
      * List is accepted for the reason ndla_linearsolve accepts one: packing
@@ -979,7 +1267,7 @@ Expr* ndla_leastsquares_direct(const Expr* a, const Expr* b,
     }
 
     int m, n, k; double *S = NULL, *U = NULL, *VT = NULL;
-    if (!nd_thin_svd(a, &m, &n, &k, &S, &U, &VT)) { free(B); return NULL; }
+    if (!nd_thin_svd(a, false, &m, &n, &k, &S, &U, &VT)) { free(B); return NULL; }
 
     double cutoff = nd_svd_cutoff(m, n, S[0], tol_automatic, tol_value);
 

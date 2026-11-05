@@ -569,6 +569,10 @@ In[3]:= {{a, b}, {c, d}} . {{1, 2}, {3, 4}}
 Out[3]= {{a + 3 b, 2 a + 4 b}, {c + 3 d, 2 c + 4 d}}
 ```
 
+### Dot: numeric contagion
+An operand mixing machine Reals and Complexes (the usual shape of a complex
+factor), or exact numbers beside a machine Real, is packed for the BLAS path:
+the product of two 166 x 166 such matrices takes 0.07 s (was 18 s).
 
 ## Inner
 A generalization of `Dot` in which `f` plays the role of multiplication and `g` of addition.
@@ -730,6 +734,15 @@ Out[5]= Max[Abs[x], Abs[y], Abs[z]]
 In[6]:= Norm[{{a11, a12}, {a21, a22}}, "Frobenius"]
 Out[6]= Sqrt[Abs[a11]^2 + Abs[a12]^2 + Abs[a21]^2 + Abs[a22]^2]
 ```
+
+### Norm: the spectral norm of an exact, symbolic or MPFR matrix
+`Norm[m]` (`Norm[m, 2]`) of an exact or symbolic matrix is `Sqrt` of the
+largest eigenvalue of the smaller Gram matrix `m . m^H` / `m^H . m`, in the
+reference's form: `Norm[{{4, 1}, {0, 5}}]` is `Sqrt[21 + Sqrt[41]]`,
+`Norm[{{1, 2, 3}, {4, 5, 6}}]` is `Sqrt[(91 + Sqrt[8065])/2]`, a 3 x 3 gives
+`Sqrt[Root[...]]`, and a symbolic matrix a `Max` over the `Sqrt` of every
+eigenvalue (it has no order). An MPFR matrix answers its largest singular value
+(one-sided Jacobi) at the input precision; both were left unevaluated.
 
 ## Normalize
 Gives the normalized form of a scalar, vector, or tensor.
@@ -898,6 +911,17 @@ Out[12]= {{d/(a d - b c), -b/(a d - b c)}, {-c/(a d - b c), a/(a d - b c)}}
 > `matinv_init`).  The algorithm — fraction-free Gauss-Jordan
 > elimination on the augmented matrix `[A | I]` — is unchanged.
 
+### Inverse: conditioning and arbitrary precision
+- A machine matrix whose LAPACK 1-norm rcond is below `10^6 eps` (probed:
+  `2.215*^-10` warns, `2.23*^-10` does not) gives `Inverse::luc` and the
+  inverse; an exactly singular one `Inverse::sing`. Every call warns.
+- An MPFR (real or complex) matrix is inverted by Gauss-Jordan at the input
+  precision (`src/linalg/rref_numeric.c`); it used to drop to MachinePrecision
+  because the augmented identity was written as machine `1.`/`0.`. Entries the
+  elimination never touched stay exact `0`, as in the reference.
+- One machine number makes the whole matrix machine (contagion), so a mixed
+  exact/machine matrix takes the LAPACK path.
+
 ## PseudoInverse
 Gives the Moore-Penrose pseudoinverse of a rectangular (or
 rank-deficient) matrix.
@@ -964,6 +988,11 @@ Out[5]= {{-29/134, -2/67, 22/67, 17/134}, {49/134, 8/67, -21/67, -1/134}}
 In[6]:= PseudoInverse[{{1.25, 3.2, 3.2}, {7.9, -1.4, 5.1}, {0, 0, 0}}]
 Out[6]= {{-0.0385185, 0.0966633, 0.}, {0.210183, -0.0659894, 0.}, {0.117363, 0.0282303, 0.}}
 ```
+
+### PseudoInverse: machine complex
+A machine complex matrix (and any small machine matrix, packed without the
+packing threshold) uses the complex SVD (`zgesdd`, `P = V S^+ U^H` by
+`zgemm`); it ran the rationalised exact pipeline and a 20 x 20 did not finish.
 
 ## MatrixPower
 Gives the matrix power of a square matrix.
@@ -1042,6 +1071,13 @@ Out[11]= {{1/2 + Sqrt[3]/2, -1/2 + Sqrt[3]/2}, {-1/2 + Sqrt[3]/2, 1/2 + Sqrt[3]/
 In[12]:= MatrixPower[{{1., 2.}, {3., 4.}}, 0.5]
 Out[12]= {{0.553689 + 0.464394 I, 0.806961 - 0.212426 I}, {1.21044 - 0.31864 I, 1.76413 + 0.145754 I}}
 ```
+
+### MatrixPower: negative powers of a singular matrix
+`MatrixPower[m, -k]` says `MatrixPower::sing` (not `Inverse::sing`) when `m` is
+singular, and for a machine matrix already when its 1-norm rcond is below
+`100 eps` (probed: `2.22*^-14` is singular, `2.3*^-14` is not); between that and
+`10^6 eps` it answers with `Inverse::luc`, as the reference does. An MPFR matrix
+keeps its precision through the inverse.
 
 ## MatrixExp
 The matrix exponential.
@@ -1170,6 +1206,19 @@ In[2]:= MatrixFunction[Sin, {{1., 2.}, {3., 4.}}]
 Out[2]= {{-0.465581, -0.148424}, {-0.222637, -0.688218}}
 ```
 
+### MatrixFunction: normal matrices
+When the Schur form of a machine matrix is diagonal to rounding (every
+Hermitian, real symmetric or unitary matrix), `f` is applied to the eigenvalues
+directly: Schur-Parlett's 0.1 clustering otherwise made a single Taylor-series
+atom of a tightly clustered spectrum. `MatrixFunction[Sin, s]` of a 200 x 200
+SPD matrix takes 0.05 s (was 0.87 s; scipy `funm` 0.066 s).
+At arbitrary precision `MatrixFunction[f, m]` uses the Parlett recurrence on
+the complex Schur form at twice the input precision (it rationalised and
+worked symbolically: a 6 x 6 30-digit matrix ran past any time limit); a
+repeated eigenvalue in a coupled block (a defective matrix) keeps the exact
+path, so `MatrixFunction[Sin, N[{{1, 1}, {0, 1}}, 30]]` has `Cos[1]` above the
+diagonal.
+
 ## RowReduce
 Gives the row-reduced form of the matrix `m`.
 - `RowReduce[m]`
@@ -1210,6 +1259,23 @@ Out[3]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
 In[4]:= RowReduce[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"]
 Out[4]= {{1, 0}, {0, 1}}
+```
+
+### RowReduce of an inexact matrix
+A machine or MPFR matrix (real or complex) is reduced by a tolerance-aware
+Gauss-Jordan with partial pivoting (`src/linalg/rref_numeric.c`): a candidate
+pivot counts as zero when `|p| <= max(r, c) eps max|a_ij|` for a machine matrix
+-- the reference's own rule, probed on `diag(1, e)` of orders 2, 3 and 6 -- and
+64 times that at arbitrary precision. The answer has the reference's form:
+exact `1` at the pivots, exact `0` below them and in the zero rows, an inexact
+`0.` above a machine pivot (exact `0` above an MPFR one). A machine pivot below
+`10^6 eps max|a_ij|` warns `RowReduce::luc`. A singular 30-digit matrix used to
+row-reduce to the identity (the `10^-30` residue taken as a pivot) or to
+`Overflow[]` entries.
+
+```mathematica
+In[1]:= RowReduce[{{1., 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[1]= {{1, 0., -1.}, {0, 1, 2.}, {0, 0, 0}}
 ```
 
 ## NullSpace
@@ -1286,6 +1352,12 @@ Out[7]= {0, 0, 0}
 > `matnull_init`).  The basis extraction calls back into RowReduce via
 > the evaluator, so any future improvement to RowReduce automatically
 > propagates to NullSpace.
+
+### NullSpace at arbitrary precision
+An MPFR matrix (and a machine complex one) uses the tolerance-aware elimination
+and returns an orthonormal basis at the input precision
+(`NullSpace[N[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 30]]` is
+`{{0.408..., -0.816..., 0.408...}}`, as in the reference); it answered `{}`.
 
 ## MatrixRank
 Gives the rank of a matrix.
@@ -1666,6 +1738,16 @@ In[3]:= {q, s, p, t} = SchurDecomposition[{{{.5, 1}, {1.5, 2}}, {{2.5, 3}, {3.5,
 Out[3]= {{0, 0}, {0, 0}}
 ```
 
+### SchurDecomposition: exact input and complex arbitrary precision
+- The reference treats Schur as a numerical decomposition: an exact numeric
+  matrix (integers, rationals, Gaussian rationals, `Pi`) gives
+  `SchurDecomposition::schurf` and a symbolic one `::schurn`, both unevaluated;
+  a generalized pair with no inexact entry, or a symbolic one, gives `::exnum`;
+  a non-square matrix `::matsq`. One inexact entry makes the matrix numeric.
+- A complex MPFR matrix, or `RealBlockDiagonalForm -> False` at arbitrary
+  precision, uses a complex Schur kernel (Givens Hessenberg reduction and the
+  Wilkinson-shift QR iteration, 32 guard bits) and keeps the input precision.
+
 ## CholeskyDecomposition
 Gives the Cholesky decomposition of a Hermitian (or real symmetric)
 positive-definite matrix.
@@ -1797,6 +1879,10 @@ Out[1]= {{-3, -6, -3}, {-6, -11, -4}, {-3, -2, 2}}
 In[2]:= Minors[{{a, b, c}, {d, e, f}}, 2]
 Out[2]= {{-(b d) + a e, -(c d) + a f, -(c e) + b f}}
 ```
+
+### Minors: Det::luc
+A machine minor whose infinity-norm rcond is below `10^6 eps` warns `Det::luc`,
+as the reference's `Det` of each submatrix does.
 
 ## Adjugate
 Gives the adjugate (classical adjoint) of a square matrix: the transposed
@@ -1984,6 +2070,24 @@ Out[5]= {q, r, {{0, 1}, {1, 0}}}    (* column 1 (larger norm) pivoted first *)
 > Complex head, no `I` leaf) skip the conjugation to keep the
 > printed form free of `Conjugate[Sqrt[...]]` residues that
 > Mathilda's simplifier does not reduce.
+
+### QRDecomposition: exact radicals, machine residual
+- An integer / rational matrix is factored by Gram-Schmidt over Q with the
+  square roots taken only at the end (`flint_mat_qr`), each entry in the
+  reference's canonical radical form `k Sqrt[B/A]`:
+  `QRDecomposition[{{1, 2}, {3, 4}}]` is
+  `{{{1/Sqrt[10], 3/Sqrt[10]}, {3/Sqrt[10], -1/Sqrt[10]}}, {{Sqrt[10], 7 Sqrt[2/5]}, {0, Sqrt[2/5]}}}`.
+  A 5 x 5 integer matrix took a minute; it takes about a millisecond.
+- A machine QR drops only trailing rows of `r` that are negligible in their
+  entirety; cutting at the first small diagonal discarded live rows (a wide
+  65 x 75 matrix had `|q^H . r - m| = 0.84`).
+- The LAPACK fast path is for machine precision only; an MPFR matrix keeps
+  its precision through the Householder kernel.
+- The exact zero matrix answers the reference's one row:
+  `QRDecomposition[ConstantArray[0, {3, 4}]]` is `{{{1, 0, 0}}, {{0, 0, 0, 0}}}`.
+- Known difference: a rank-deficient machine matrix is truncated to its
+  numerical rank (q is rank x n); the reference returns the full
+  min(m, n)-row factorisation.
 
 ## LUDecomposition
 Gives the LU decomposition of a matrix.
@@ -2225,6 +2329,13 @@ Out[5]= {..., {{1.41421, 0.}, {0., 7.07107e-15}}, ...}
 >   precision; orthonormal completion of `u` via Gram-Schmidt; emits
 >   MPFR zeros (not Real 0.0) for off-diagonal sigma entries so
 >   downstream Dot products preserve the working precision.
+
+### SingularValueDecomposition: wide MPFR matrices
+The one-sided Jacobi kernel needs rows >= columns; a wide MPFR matrix is
+decomposed through its conjugate transpose. It overran `U` and crashed
+(`SingularValueDecomposition[N[{{1, 2, 3}, {4, 5, 6}}, 30]]`, and
+`LeastSquares` on it); the factors now agree with the reference digit for
+digit, signs included.
 
 ## IdentityMatrix
 Generates an identity matrix.
@@ -2749,6 +2860,21 @@ Out[8]= {6, 4, 5}
   of such matrices come from the same elimination. `Det` and `Inverse` of a machine
   SparseArray above order 128 use the same factorisation (`Inverse::sing`
   for a singular one); `Inverse` answers a List, as in the reference.
+
+### LinearSolve: singular machine systems, conditioning, arbitrary precision
+- A square machine system is solved by LU (`?gesv`); `LinearSolve::luc` when
+  the infinity-norm rcond is below `10^6 eps`.
+- An exactly singular square or a rectangular machine system answers the
+  minimum-norm solution, as the reference does:
+  `LinearSolve[{{1., 2.}, {2., 4.}}, {1., 2.}]` is `{0.2, 0.4}`. It is
+  inconsistent (`LinearSolve::nosol`, unevaluated) when the residual exceeds
+  `1e-12 |b|` (probed: `{1, 2 + 3*^-12}` solves, `{1, 2 + 5*^-12}` does not),
+  and for a zero matrix even with a zero right-hand side.
+- At arbitrary precision the tolerance-aware Gauss-Jordan on `[m | b]` answers
+  with every free variable `0` (`LinearSolve[N[{{1, 2, 3}, {4, 5, 6}}, 30], N[{1, 2}, 30]]`
+  is `{-1/3, 2/3, 0}` at 30 digits); a 54 x 54 complex system takes
+  milliseconds (it took over 10 s).
+
 ## LeastSquares
 Finds `x` that solves the linear least-squares problem for `m . x == b`,
 i.e. an `x` minimising `Norm[m . x - b]`.

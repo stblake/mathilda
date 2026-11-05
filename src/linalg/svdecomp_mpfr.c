@@ -60,6 +60,7 @@
 #include "sym_names.h"
 #include "numeric.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "eval.h"
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -959,15 +960,24 @@ static Expr* svdm_sigma_rect(const mpfr_t* sigma, int n, int p,
 }
 
 /* ------------------------------------------------------------------ *
- *  Complex MPFR Jacobi entry, non-generalized.                        *
+ *  Thin-or-square Jacobi core (n >= p).                               *
+ *                                                                     *
+ *  One-sided Jacobi orthogonalises the p columns of the n x p matrix  *
+ *  m, so it needs p <= n: U is n x n and receives one column per      *
+ *  column of A.  (A wide matrix is handed in conjugate-transposed by  *
+ *  the dispatcher -- writing p > n columns into an n x n U overran    *
+ *  the buffer.)  On success *U_out is the n x n U, *V_out the p x p V *
+ *  and *sigma_out the p singular values in descending order (caller   *
+ *  frees with svdm_array_free(.., p)).                                *
  * ------------------------------------------------------------------ */
-static Expr* svd_mpfr_dispatch_complex(const SvdArgs* args, int n, int p,
-                                         mpfr_prec_t bits)
+static bool svdm_core_complex(Expr* m, int n, int p, mpfr_prec_t bits,
+                              Expr** U_out, Expr** V_out,
+                              mpfr_t** sigma_out)
 {
     mpfr_t* A_re = NULL;
     mpfr_t* A_im = NULL;
-    if (!svdm_load_complex(args->m, n, p, bits, &A_re, &A_im)) {
-        return NULL;
+    if (!svdm_load_complex(m, n, p, bits, &A_re, &A_im)) {
+        return false;
     }
 
     size_t Vsz = (size_t)p * (size_t)p;
@@ -994,23 +1004,55 @@ static Expr* svd_mpfr_dispatch_complex(const SvdArgs* args, int n, int p,
     svdm_sort_descending_complex(sigma, U_re, U_im, n, V_re, V_im, p);
     (void)svdm_complete_U_complex(U_re, U_im, sigma, n, p, bits);
 
-    Expr* u_mat     = svdm_wrap_cm_complex(U_re, U_im, n, n, n, bits);
-    Expr* sigma_mat = svdm_sigma_rect(sigma, n, p, bits);
-    Expr* v_mat     = svdm_wrap_cm_complex(V_re, V_im, p, p, p, bits);
+    *U_out = svdm_wrap_cm_complex(U_re, U_im, n, n, n, bits);
+    *V_out = svdm_wrap_cm_complex(V_re, V_im, p, p, p, bits);
+    *sigma_out = sigma;
 
     svdm_array_free(A_re, (size_t)n * (size_t)p);
     svdm_array_free(A_im, (size_t)n * (size_t)p);
     svdm_array_free(V_re, Vsz); svdm_array_free(V_im, Vsz);
     svdm_array_free(U_re, Usz); svdm_array_free(U_im, Usz);
-    svdm_array_free(sigma, (size_t)p);
+    return true;
+}
 
-    Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
-    items[0] = u_mat; items[1] = sigma_mat; items[2] = v_mat;
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
-    free(items);
+static bool svdm_core_real(Expr* m, int n, int p, mpfr_prec_t bits,
+                           Expr** U_out, Expr** V_out, mpfr_t** sigma_out)
+{
+    mpfr_t* A = NULL;
+    if (!svdm_load_real(m, n, p, bits, &A)) {
+        return false;
+    }
 
-    int mn = (n < p) ? n : p;
-    return svd_apply_postprocess(result, args, n, p, mn);
+    /* V starts as the p x p identity. */
+    mpfr_t* V = svdm_array_alloc((size_t)p * (size_t)p, bits);
+    for (int j = 0; j < p; j++) {
+        for (int i = 0; i < p; i++) {
+            size_t off = (size_t)i + (size_t)j * (size_t)p;
+            mpfr_set_si(V[off], i == j ? 1 : 0, MPFR_RNDN);
+        }
+    }
+
+    /* U is all zeros so the unused n - p columns (when n > p) read as
+     * zero before the orthonormal-completion pass fills them. */
+    mpfr_t* U = svdm_array_alloc((size_t)n * (size_t)n, bits);
+    for (size_t k = 0; k < (size_t)n * (size_t)n; k++) {
+        mpfr_set_zero(U[k], 1);
+    }
+    mpfr_t* sigma = svdm_array_alloc((size_t)p, bits);
+
+    (void)svdm_jacobi_sweeps(A, n, p, V, bits);
+    svdm_extract_U_sigma(A, n, p, U, sigma, bits);
+    svdm_sort_descending(sigma, U, n, V, p);
+    (void)svdm_complete_U(U, sigma, n, p, bits);
+
+    *U_out = svdm_wrap_cm(U, n, n, n, bits);
+    *V_out = svdm_wrap_cm(V, p, p, p, bits);
+    *sigma_out = sigma;
+
+    svdm_array_free(A, (size_t)n * (size_t)p);
+    svdm_array_free(V, (size_t)p * (size_t)p);
+    svdm_array_free(U, (size_t)n * (size_t)n);
+    return true;
 }
 
 /* ------------------------------------------------------------------ *
@@ -1042,59 +1084,42 @@ Expr* svd_mpfr_dispatch(const SvdArgs* args, int n, int p, int n_a)
     }
     mpfr_prec_t bits = (mpfr_prec_t)info.min_bits;
 
-    /* Complex input -> complex Jacobi path. */
-    if (svdm_matrix_has_complex(args->m, n, p)) {
-        return svd_mpfr_dispatch_complex(args, n, p, bits);
+    /* The Jacobi core needs n >= p.  A wide matrix is decomposed through
+     * its conjugate transpose: A^H = U' S' V'^H  gives  A = V' S'^T U'^H,
+     * so U = V' (n x n), V = U' (p x p), and the min(n, p) = n singular
+     * values are shared. */
+    bool wide = p > n;
+    Expr* work = args->m;
+    Expr* owned = NULL;
+    if (wide) {
+        Expr** ca = (Expr**)malloc(sizeof(Expr*));
+        ca[0] = expr_copy(args->m);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_ConjugateTranspose),
+                                       ca, 1);
+        free(ca);
+        owned = evaluate(call);
+        expr_free(call);
+        work = owned;
     }
+    int wn = wide ? p : n;     /* rows of the matrix handed to the core */
+    int wp = wide ? n : p;     /* its columns: wp <= wn                 */
 
-    /* Real input -> real Jacobi path. */
-    mpfr_t* A = NULL;
-    if (!svdm_load_real(args->m, n, p, bits, &A)) {
-        return NULL;
-    }
+    Expr* U = NULL;
+    Expr* V = NULL;
+    mpfr_t* sigma = NULL;
+    bool ok = svdm_matrix_has_complex(work, wn, wp)
+                ? svdm_core_complex(work, wn, wp, bits, &U, &V, &sigma)
+                : svdm_core_real(work, wn, wp, bits, &U, &V, &sigma);
+    if (owned) expr_free(owned);
+    if (!ok) return NULL;
 
-    /* V starts as the p x p identity. */
-    mpfr_t* V = svdm_array_alloc((size_t)p * (size_t)p, bits);
-    for (int j = 0; j < p; j++) {
-        for (int i = 0; i < p; i++) {
-            size_t off = (size_t)i + (size_t)j * (size_t)p;
-            mpfr_set_si(V[off], i == j ? 1 : 0, MPFR_RNDN);
-        }
-    }
-
-    /* Allocate U and sigma. */
-    mpfr_t* U = svdm_array_alloc((size_t)n * (size_t)n, bits);
-    /* Initialise U to all zeros so unused n - p columns (when n > p)
-     * read as zero before the orthonormal-completion pass fills them. */
-    for (size_t k = 0; k < (size_t)n * (size_t)n; k++) {
-        mpfr_set_zero(U[k], 1);
-    }
-    mpfr_t* sigma = svdm_array_alloc((size_t)p, bits);
-
-    /* Run Jacobi sweeps. */
-    (void)svdm_jacobi_sweeps(A, n, p, V, bits);
-
-    /* Extract sigma and the first p columns of U from A. */
-    svdm_extract_U_sigma(A, n, p, U, sigma, bits);
-
-    /* Sort by descending sigma; permute U and V columns. */
-    svdm_sort_descending(sigma, U, n, V, p);
-
-    /* Orthonormal-complete U from `rank` columns out to n columns. */
-    (void)svdm_complete_U(U, sigma, n, p, bits);
-
-    /* Wrap outputs. */
-    Expr* u_mat     = svdm_wrap_cm(U, n, n, n, bits);
     Expr* sigma_mat = svdm_sigma_rect(sigma, n, p, bits);
-    Expr* v_mat     = svdm_wrap_cm(V, p, p, p, bits);
-
-    svdm_array_free(A,     (size_t)n * (size_t)p);
-    svdm_array_free(V,     (size_t)p * (size_t)p);
-    svdm_array_free(U,     (size_t)n * (size_t)n);
-    svdm_array_free(sigma, (size_t)p);
+    svdm_array_free(sigma, (size_t)wp);
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
-    items[0] = u_mat; items[1] = sigma_mat; items[2] = v_mat;
+    items[0] = wide ? V : U;
+    items[1] = sigma_mat;
+    items[2] = wide ? U : V;
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
 

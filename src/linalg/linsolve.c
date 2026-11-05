@@ -31,6 +31,7 @@
  *                                            textbook Cramer form for small n.
  */
 
+#include "rref_numeric.h"   /* inexact RowReduce / LinearSolve */
 #include "linsolve.h"
 #include "pack.h"
 #include "linalg.h"
@@ -1236,6 +1237,18 @@ Expr* builtin_rowreduce(Expr* res) {
         return out;
     }
 
+    /* An inexact matrix (machine or MPFR, real or complex): the
+     * tolerance-aware Gauss-Jordan, in the reference's form (exact 1 at the
+     * pivots, exact 0 rows).  The exact eliminators below treat a pivot that
+     * is zero up to rounding as nonzero and divide through it. */
+    if (method == MATSOL_AUTOMATIC) {
+        long nbits = rref_numeric_bits(arg, NULL);
+        if (nbits) {
+            Expr* rr = rref_numeric_rowreduce(arg, nbits);
+            if (rr) return rr;
+        }
+    }
+
     if (method == MATSOL_AUTOMATIC) method = matsol_resolve_automatic(arg);
 
     /* Native number-field fast path: a matrix of rationals and
@@ -1322,7 +1335,11 @@ Expr* builtin_linearsolve(Expr* res) {
         Expr* r = linearsolve_sparse_methods(res, &handled);
         if (handled) return r;
     }
-    if (linalg_call_has_ndarray(res)) return ndla_linearsolve(res);
+    if (linalg_call_has_ndarray(res)) {
+        Expr* r = ndla_linearsolve(res);
+        (void)linalg_fast_refused();
+        return r;
+    }
 
     /* Small machine-real system: pack both operands and take the same path.
      * See linalg_pack_machine_operand -- a 6x6 sits below the packing
@@ -1332,6 +1349,26 @@ Expr* builtin_linearsolve(Expr* res) {
         Expr* fast = linalg_try_fast(ndla_linearsolve, packed_call);
         expr_free(packed_call);
         if (fast) return fast;
+        if (linalg_fast_refused()) return NULL;   /* ::nosol already said */
+    }
+
+    /* Arbitrary precision (or a machine system the buffer path declined):
+     * the tolerance-aware Gauss-Jordan on [m | b], every free variable 0 --
+     * the reference's answer -- in O(n^2 (n + k)) MPFR operations instead of
+     * the boxed symbolic elimination (a 54 x 54 complex system took > 10 s). */
+    if (res->data.function.arg_count == 2) {
+        long nbits = rref_numeric_bits(res->data.function.args[0], res->data.function.args[1]);
+        if (nbits) {
+            bool nosol = false;
+            Expr* x = rref_numeric_linearsolve(res->data.function.args[0],
+                                               res->data.function.args[1], nbits, &nosol);
+            if (x) return x;
+            if (nosol) {
+                mth_message("LinearSolve", "nosol",
+                            "Linear equation encountered that has no solution.");
+                return NULL;
+            }
+        }
     }
 
     size_t argc = res->data.function.arg_count;

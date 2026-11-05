@@ -50,6 +50,18 @@ Expr* schur_machine_generalized(const Expr* m, const Expr* a, int n,
  * kernel. */
 Expr* schur_mpfr_standard_real(const Expr* m, int n, mpfr_prec_t bits,
                                const SchurOpts* opts);
+/* Arbitrary-precision complex Schur form (complex input, or
+ * RealBlockDiagonalForm -> False): {q, t} with t upper triangular, q unitary,
+ * at the input precision.  NULL on a non-numeric entry or no convergence. */
+Expr* schur_mpfr_standard_complex(const Expr* m, int n, mpfr_prec_t bits,
+                                  const SchurOpts* opts);
+/* The kernel behind it, on raw arrays at working precision wp: on success
+ * m = Q T Q^H with T upper triangular, each of *Tre, *Tim, *Qre, *Qim a
+ * freshly allocated row-major n x n mpfr_t array (free each with
+ * schur_mpfr_core_free).  Shared with MatrixFunction at arbitrary precision. */
+bool schur_mpfr_complex_core(const Expr* m, int n, mpfr_prec_t wp,
+                             mpfr_t** Tre, mpfr_t** Tim, mpfr_t** Qre, mpfr_t** Qim);
+void schur_mpfr_core_free(mpfr_t* a, int n);
 #endif
 
 #endif /* MATHILDA_LINALG_SCHURDECOMP_INTERNAL_H */

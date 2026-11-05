@@ -127,17 +127,36 @@ Expr* builtin_matrixpower(Expr* res) {
     int64_t abs_exp = exp_val;
     if (exp_val < 0) {
         abs_exp = -exp_val;
-        /* Compute Inverse[m] */
+        /* The reference calls a singular matrix MatrixPower::sing (not
+         * Inverse::sing), and a machine one singular already when its 1-norm
+         * rcond is below ND_SING_RCOND (100 eps); a merely badly conditioned
+         * one keeps the inverse with Inverse::luc, as Inverse itself warns. */
+        double rc = 0.0;
+        bool machine = nd_machine_rcond(m, '1', &rc);
+        if (machine && rc < ND_SING_RCOND) {
+            char* m_str = expr_to_string(m);
+            mth_message("MatrixPower", "sing", "Matrix %s is singular.", m_str);
+            free(m_str);
+            return NULL;
+        }
+        if (machine && rc < ND_LUC_RCOND) nd_warn_luc("Inverse", m);
+        /* Compute Inverse[m], its own diagnostics silenced: the ones that
+         * matter were said above, or become MatrixPower::sing below. */
         Expr* inv_call = expr_new_function(expr_new_symbol(SYM_Inverse),
             (Expr*[]){expr_copy(m)}, 1);
+        mth_msg_suppress_push();
         Expr* inv_result = evaluate(inv_call);
+        mth_msg_suppress_pop();
         expr_free(inv_call);
 
-        /* Check if Inverse returned unevaluated (singular matrix) */
+        /* Inverse returned unevaluated: a singular matrix */
         if (inv_result->type == EXPR_FUNCTION && inv_result->data.function.head->type == EXPR_SYMBOL
             && inv_result->data.function.head->data.symbol.name == SYM_Inverse) {
             expr_free(inv_result);
-            return NULL; /* Singular: Inverse already printed warning */
+            char* m_str = expr_to_string(m);
+            mth_message("MatrixPower", "sing", "Matrix %s is singular.", m_str);
+            free(m_str);
+            return NULL;
         }
         base = inv_result;
     } else {

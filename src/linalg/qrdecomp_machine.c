@@ -227,14 +227,16 @@ static int mach_numerical_rank(const double* A_cm, int n, int p,
 
     size_t stride = is_complex ? 2 : 1;
 
+    /* the scale: the largest entry of the upper trapezoid R */
     double max_diag = 0.0;
-    for (int i = 0; i < k; i++) {
-        size_t off = stride * ((size_t)i + (size_t)i * (size_t)n);
-        double mag = is_complex
-            ? hypot(A_cm[off], A_cm[off + 1])
-            : fabs(A_cm[off]);
-        if (mag > max_diag) max_diag = mag;
-    }
+    for (int i = 0; i < k; i++)
+        for (int j = i; j < p; j++) {
+            size_t off = stride * ((size_t)i + (size_t)j * (size_t)n);
+            double mag = is_complex
+                ? hypot(A_cm[off], A_cm[off + 1])
+                : fabs(A_cm[off]);
+            if (mag > max_diag) max_diag = mag;
+        }
     if (max_diag == 0.0) return 0;
 
     /* LAPACK's documented "loose" rank-revealing tolerance.  Tight
@@ -242,14 +244,24 @@ static int mach_numerical_rank(const double* A_cm, int n, int p,
      * ill-conditioned-but-non-singular factors. */
     double tol = ((double)((n > p ? n : p))) * DBL_EPSILON * max_diag;
 
-    int rank = 0;
-    for (int i = 0; i < k; i++) {
-        size_t off = stride * ((size_t)i + (size_t)i * (size_t)n);
-        double mag = is_complex
-            ? hypot(A_cm[off], A_cm[off + 1])
-            : fabs(A_cm[off]);
-        if (mag > tol) rank++;
-        else break;
+    /* Only TRAILING rows of R that are negligible in their entirety may be
+     * dropped.  Without pivoting a small diagonal R[i, i] does not make the
+     * rows below it negligible: a column that depends on the earlier ones
+     * leaves R[i, i] ~ 0 while the later columns still put weight in rows
+     * i, i+1, ...  Cutting at the first small diagonal threw those rows away,
+     * so ConjugateTranspose[q] . r missed m by O(1) (a wide 65 x 75 matrix
+     * from the oracle: residual 0.84). */
+    int rank = k;
+    while (rank > 0) {
+        int i = rank - 1;
+        double rowmax = 0.0;
+        for (int j = i; j < p; j++) {
+            size_t off = stride * ((size_t)i + (size_t)j * (size_t)n);
+            double mag = is_complex ? hypot(A_cm[off], A_cm[off + 1]) : fabs(A_cm[off]);
+            if (mag > rowmax) rowmax = mag;
+        }
+        if (rowmax > tol) break;
+        rank--;
     }
     return rank;
 }

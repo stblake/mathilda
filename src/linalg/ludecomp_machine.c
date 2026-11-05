@@ -285,7 +285,7 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
     return NULL;
 #else
     static uint64_t lapack_warn_counter = 0;
-    static uint64_t sing_warn_counter   = 0;
+    /* every call warns: a once-per-process latch hid the message from Check */
 
     int steps = (rows < cols) ? rows : cols;
     bool square = (rows == cols);
@@ -328,8 +328,7 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
      * surface the standard singular warning and continue, matching
      * Mathematica's LUDecomposition::sing behaviour. */
     if (info > 0) {
-        if (!sing_warn_counter) {
-            sing_warn_counter = 1;
+        {
             char* s = expr_to_string(m);
             mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
             free(s);
@@ -342,13 +341,10 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
      * the condition number is mathematically undefined, so we return
      * exact Integer 0 in the c slot.
      *
-     * Badly-conditioned warning (::luc):  if cond_est > 1 / DBL_EPSILON
-     * the matrix is so ill-conditioned that LAPACK's factorisation
-     * may have lost most of its significant digits.  Mathematica
-     * emits an LUDecomposition::luc warning in this case; we mirror
-     * it.  The warning is suppressed for matrices that already
-     * tripped ::sing (info > 0) to avoid double-warning. */
-    static uint64_t luc_warn_counter = 0;
+     * Badly-conditioned warning (::luc): the reference warns when the
+     * infinity-norm rcond is below ND_LUC_RCOND (10^6 eps, see
+     * ndlinalg.h).  Not for a matrix that already tripped ::sing. */
+
     Expr* c;
     if (!square) {
         c = expr_new_integer(0);
@@ -367,9 +363,7 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
         } else {
             cond_est = HUGE_VAL;
         }
-        if (info == 0 && cond_est > 1.0 / DBL_EPSILON
-                      && !luc_warn_counter) {
-            luc_warn_counter = 1;
+        if (info == 0 && rcond < ND_LUC_RCOND) {
             char* s = expr_to_string(m);
             mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
             free(s);
@@ -436,9 +430,8 @@ Expr* ndla_ludecomposition(Expr* res)
                     : mat_lapack_dgetrf(n, n, A, n, ipiv);
     if (info < 0) { free(A); free(ipiv); return linalg_delist_and_reeval(res); }
 
-    static uint64_t sing_warn = 0, luc_warn = 0;
-    if (info > 0 && !sing_warn) {
-        sing_warn = 1;
+
+    if (info > 0) {
         char* s = expr_to_string(arg);
         mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
         free(s);
@@ -449,8 +442,7 @@ Expr* ndla_ludecomposition(Expr* res)
         int cinfo = cplx ? mat_lapack_zgecon('I', n, A, n, anorm, &rcond)
                          : mat_lapack_dgecon('I', n, A, n, anorm, &rcond);
         cond_est = (cinfo != 0 || rcond <= 0.0) ? HUGE_VAL : 1.0 / rcond;
-        if (cond_est > 1.0 / DBL_EPSILON && !luc_warn) {
-            luc_warn = 1;
+        if (rcond < ND_LUC_RCOND) {
             char* s = expr_to_string(arg);
             mth_message("LUDecomposition", "luc", "Result for LUDecomposition of badly conditioned matrix %s may contain significant numerical errors.", s);
             free(s);

@@ -155,6 +155,8 @@ static Expr* minors_machine(const Expr* m, int k) {
     size_t comps = cplx ? 2 : 1;
     double* out = (double*)malloc(sizeof(double) * comps * (size_t)(nr * nc));
     double* W = (double*)malloc(sizeof(double) * comps * (size_t)(k * k > 0 ? k * k : 1));
+    double* L = (double*)malloc(sizeof(double) * comps * (size_t)(k * k > 0 ? k * k : 1));
+    int* ipiv = (int*)malloc(sizeof(int) * (size_t)(k > 0 ? k : 1));
     for (int64_t a = 0; a < nr; a++)
         for (int64_t b = 0; b < nc; b++) {
             for (int i = 0; i < k; i++)
@@ -164,13 +166,33 @@ static Expr* minors_machine(const Expr* m, int k) {
                     if (cplx) { W[2 * dst] = A[2 * src]; W[2 * dst + 1] = A[2 * src + 1]; }
                     else W[dst] = A[src];
                 }
+            /* the reference takes each minor with Det, which warns Det::luc
+             * for a badly conditioned (nonsingular) submatrix: the same
+             * infinity-norm rcond test, on a column-major copy */
+            if (k >= 2 && mathilda_lapack_probe()) {
+                for (int i = 0; i < k; i++)
+                    for (int j = 0; j < k; j++) {
+                        size_t src = (size_t)i * k + j, dst = (size_t)j * k + i;
+                        if (cplx) { L[2 * dst] = W[2 * src]; L[2 * dst + 1] = W[2 * src + 1]; }
+                        else L[dst] = W[src];
+                    }
+                double anorm = nd_mat_norm('I', L, k, cplx);
+                int info = cplx ? mat_lapack_zgetrf(k, k, L, k, ipiv)
+                                : mat_lapack_dgetrf(k, k, L, k, ipiv);
+                if (info == 0 && nd_lu_rcond('I', L, k, cplx, anorm) < ND_LUC_RCOND) {
+                    Expr* sub = na_build_matrix(W, k, k, cplx, false);
+                    Expr* box = la_boxed_copy(sub);
+                    nd_warn_luc("Det", box);
+                    expr_free(box); expr_free(sub);
+                }
+            }
             double dr, di;
             mn_det(W, k, cplx, &dr, &di);
             size_t o = (size_t)(a * nc + b);
             if (cplx) { out[2 * o] = dr; out[2 * o + 1] = di; } else out[o] = dr;
         }
     Expr* res = na_build_matrix_as(out, (int)nr, (int)nc, cplx, false, na_result_presentation(m));
-    free(out); free(W); free(rs); free(cs); free(A);
+    free(out); free(W); free(L); free(ipiv); free(rs); free(cs); free(A);
     return res;
 }
 

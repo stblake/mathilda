@@ -36,6 +36,7 @@
 #include "numarray.h"
 #include "lapack.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "la_dense.h"  /* la_prec_class / la_all_numeric: the exact refusal */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -184,11 +185,37 @@ Expr* builtin_schurdecomposition(Expr* res) {
         n = schur_matrix_order(arg0);
         if (n < 1) {
             char* s = expr_to_string((Expr*)arg0);
-            mth_message("SchurDecomposition", "sqma", "Argument %s at position 1 is not a non-empty square matrix or a pair of square matrices.", s ? s : "?");
+            mth_message("SchurDecomposition", "matsq", "Argument %s at position 1 is not a non-empty square matrix.", s ? s : "?");
             free(s);
             return NULL;
         }
         m = arg0;
+    }
+
+    /* A Schur decomposition is a numerical factorisation: the reference
+     * refuses an exact matrix (::schurf, even a numeric one like Pi or a
+     * Gaussian rational) and a symbolic one (::schurn), leaving the call
+     * unevaluated; a generalized pair with no inexact entry, or any
+     * non-numeric one, is ::exnum.  One inexact entry anywhere makes the
+     * whole matrix numeric (contagion), so {{1, 2}, {3, 4.}} decomposes. */
+    if (generalized) {
+        long b1 = 0, b2 = 0;
+        bool exact = la_prec_class(m, &b1) == LA_EXACT
+                     && la_prec_class(a, &b2) == LA_EXACT;
+        if (exact || !la_all_numeric(m) || !la_all_numeric(a)) {
+            mth_message("SchurDecomposition", "exnum", "SchurDecomposition has received a matrix with non-numerical or exact elements.");
+            return NULL;
+        }
+    } else {
+        long b1 = 0;
+        if (!la_all_numeric(m)) {
+            mth_message("SchurDecomposition", "schurn", "SchurDecomposition has received a matrix with non-numeric elements.");
+            return NULL;
+        }
+        if (la_prec_class(m, &b1) == LA_EXACT) {
+            mth_message("SchurDecomposition", "schurf", "SchurDecomposition has received a matrix with infinite precision.");
+            return NULL;
+        }
     }
 
     if (generalized) {
@@ -219,6 +246,12 @@ Expr* builtin_schurdecomposition(Expr* res) {
         Expr* r = schur_mpfr_standard_real(m, n, pb, &opts);
         if (r) return r;
         /* fall through to the machine kernel on MPFR non-convergence */
+    }
+    /* A complex (or complex-triangular) Schur form at arbitrary precision:
+     * the machine kernel would round a 30-digit matrix to MachinePrecision. */
+    if (!machine && !opts.pivoting && !is_ndarray(m)) {
+        Expr* r = schur_mpfr_standard_complex(m, n, (mpfr_prec_t)bits, &opts);
+        if (r) return r;
     }
 #endif
 

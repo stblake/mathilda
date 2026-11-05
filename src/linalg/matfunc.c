@@ -644,6 +644,9 @@ static Expr* matrixfunction_impl(Expr* res) {
             }
         }
 #endif
+#ifdef USE_MPFR
+        if (!r && !is_ndarray(op.m)) r = mf_mpfr_function(op.m, op.n, op.bits, f);
+#endif
         if (!r) r = via_exact_numeric(op.m, op.n, op.bits, f, MFX_FUNCTION, "MatrixFunction");
     } else {
         r = mf_exact_apply(op.m, op.n, f, MFX_FUNCTION, "MatrixFunction");

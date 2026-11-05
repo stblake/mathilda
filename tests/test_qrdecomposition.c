@@ -305,9 +305,10 @@ static void test_qr_rank_deficient_4x3(void) {
 }
 
 static void test_qr_zero_matrix(void) {
-    /* rank 0: q = {}, r = {}.  Just check the result is two empty lists. */
-    run_test("QRDecomposition[{{0, 0, 0}, {0, 0, 0}}]", "{{}, {}}");
-    run_test("QRDecomposition[{{0, 0}, {0, 0}, {0, 0}}]", "{{}, {}}");
+    /* rank 0: the reference answers one row, q = {e1}, r = {0, ..., 0}
+     * (QRDecomposition[{{0, 0}, {0, 0}, {0, 0}}] is {{{1, 0, 0}}, {{0, 0}}}). */
+    run_test("QRDecomposition[{{0, 0, 0}, {0, 0, 0}}]", "{{{1, 0}}, {{0, 0, 0}}}");
+    run_test("QRDecomposition[{{0, 0}, {0, 0}, {0, 0}}]", "{{{1, 0, 0}}, {{0, 0}}}");
 }
 
 /* ==================  rationals  ================== */

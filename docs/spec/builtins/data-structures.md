@@ -1761,8 +1761,15 @@ Attributes: `{Protected}`.
 
 - `ArrayQ[expr]` is `True` for a full array: a List (or SparseArray) whose
   every element sits at the same depth.
-- `ArrayQ[expr, patt]` also requires the depth to match `patt`;
-  `ArrayQ[expr, patt, test]` requires `test` to give `True` on every element.
+- `ArrayQ[expr, patt]` also requires the depth to match `patt`.
+- `ArrayQ[expr, patt, test]` tests the parts at a level, Lists included, so a
+  ragged nest can be an array of shallower depth (probed against the
+  reference): an integer `patt` `n` asks for a structure rectangular to depth
+  `n` whose level-`n` parts all pass `test` (`ArrayQ[{{1, 2}, {3, 4}}, 1, ListQ]`
+  is `True`); any other `patt` is matched against the deepest rectangular depth
+  `d` and the level-`d` parts must pass (`ArrayQ[{{{1, 2}, {3, 4}}, {1, 2}, 3.},
+  _, FreeQ[#, _SparseArray] &]` is `True`, `ArrayQ[{{1, 2}, {3, 4}}, _, ListQ]`
+  is `False`).
 
 Attributes: `{Protected}`. Reads packed arrays from their shape.
 

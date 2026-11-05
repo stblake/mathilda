@@ -39,6 +39,7 @@
  * explicitly released.
  */
 
+#include "rref_numeric.h"   /* arbitrary-precision Inverse */
 #include "inv.h"
 #include "pack.h"
 #include "ndarray.h"
@@ -625,6 +626,25 @@ Expr* builtin_inverse(Expr* res) {
 
     int n = (int)dims[0];
 
+    /* Arbitrary precision: Gauss-Jordan at the input precision.  The
+     * fraction-free path below wrote machine 1. / 0. into the augmented
+     * identity, and the contagion dragged the whole inverse down to machine
+     * precision (Inverse[{{N[9, 30]}}] was 0.111111). */
+    if (method == MATSOL_AUTOMATIC) {
+        long nbits = rref_numeric_bits(arg, NULL);
+        if (nbits > 53) {
+            bool singular = false;
+            Expr* r = rref_numeric_inverse(arg, nbits, &singular);
+            if (r) return r;
+            if (singular) {
+                char* arg_str = expr_to_string(arg);
+                inv_warn("Inverse::sing: Matrix %s is singular.\n", arg_str);
+                free(arg_str);
+                return NULL;
+            }
+        }
+    }
+
     /* Exact fast path: an all-rational matrix inverts in polynomial time via
      * FLINT (fmpq_mat_inv), and the inverse is unique so the result is
      * identical to the classical division-free path. A singular or
@@ -1094,17 +1114,14 @@ Expr* builtin_pseudoinverse(Expr* res) {
          * same prec_bits), so no value changes. pack_offer keeps the usual
          * threshold, leaving matrices too small to pack on the exact path with
          * results identical to before. */
-        Expr* mach = common_numericalize_result(arg, prec_bits);
-        if (mach) {
-            Expr* packed = pack_offer(mach);           /* consumes `mach` */
-            if (is_ndarray(packed)) {
-                Expr* fast = ndla_pseudoinverse_direct(packed, tol_automatic,
-                                                       tol_value);
-                expr_free(packed);
-                if (fast) return fast;
-            } else {
-                expr_free(packed);
-            }
+        /* No packing threshold: a small machine matrix (a complex 20 x 20 in
+         * particular, whose mixed Real/Complex entries never pack on their
+         * own) ran the rationalised exact pipeline for minutes. */
+        Expr* packed = linalg_pack_machine_operand(arg);
+        if (packed) {
+            Expr* fast = ndla_pseudoinverse_direct(packed, tol_automatic, tol_value);
+            expr_free(packed);
+            if (fast) return fast;
         }
     }
 

@@ -5,8 +5,14 @@
  *   Norm[v, p]    vector  -> p-norm, also Infinity
  *   Norm[m, "Frobenius"]  -> Frobenius norm (works on any tensor rank)
  *
- * Other matrix norms (SVD-based 2-norm, etc.) are not yet implemented and
- * fall through to NULL so the call stays symbolic.
+ *   Norm[m] / Norm[m, 2]  -> the spectral norm, the largest singular value:
+ *       machine   LAPACK (ndla_matrix_norm_direct),
+ *       MPFR      one-sided Jacobi at the input precision (svd_mpfr_values),
+ *       exact / symbolic   Sqrt of the largest eigenvalue of the smaller Gram
+ *                 matrix m.m^H or m^H.m, as the reference answers it:
+ *                 Norm[{{4, 1}, {0, 5}}] is Sqrt[21 + Sqrt[41]], a 3 x 3
+ *                 gives Sqrt[Root[...]], and a symbolic matrix a Max of the
+ *                 Sqrt of every eigenvalue.
  */
 
 #include "linalg.h"
@@ -16,6 +22,11 @@
 #include "common.h"    /* common_scan_inexact — machine vs MPFR gate below */
 #include "eval.h"
 #include "sym_names.h"
+#include "la_dense.h"         /* la_all_numeric */
+#include "svdecomp_internal.h" /* svd_mpfr_values: the MPFR spectral norm */
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -163,6 +174,29 @@ Expr* builtin_norm(Expr* res) {
      * Packing it to float64 and returning 6.76783 would be a machine-real answer
      * to an exact question; normalize_tests caught exactly that, via
      * Normalize[{{1,2},{4,5}}, Norm]. */
+#ifdef USE_MPFR
+    /* Arbitrary precision: the largest singular value at the input precision
+     * (packing to float64 below would silently drop it to machine). */
+    if (rank == 2 && !p && dims[0] > 0 && dims[1] > 0 && la_all_numeric(expr)) {
+        CommonInexactInfo info = common_scan_inexact(expr);
+        if (info.has_inexact && info.min_bits > 53) {
+            int n = (int)dims[0], q = (int)dims[1];
+            Expr* work = expr_copy(expr);
+            if (q > n) {          /* the singular values of m^H are m's */
+                work = eval_and_free(expr_new_function(
+                    expr_new_symbol(SYM_ConjugateTranspose), (Expr*[]){ work }, 1));
+                int t = n; n = q; q = t;
+            }
+            mpfr_t* sig = svd_mpfr_values(work, n, q, (mpfr_prec_t)info.min_bits);
+            expr_free(work);
+            if (sig) {
+                Expr* out = expr_new_mpfr_copy(sig[0]);
+                svd_mpfr_values_free(sig, q);
+                return out;
+            }
+        }
+    }
+#endif
     if (rank == 2 && matsol_is_inexact(expr)) {
         Expr* packed = ndarray_from_nested_list(expr, NDT_FLOAT64);
         if (!packed) packed = ndarray_from_nested_list(expr, NDT_COMPLEX64);
@@ -196,6 +230,46 @@ Expr* builtin_norm(Expr* res) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), (Expr*[]){ tot }, 1));
     }
 
-    // Fallback for unhandled matrix norm (e.g. SVD max singular value)
+    /* The spectral norm of an exact or symbolic matrix: Sqrt of the largest
+     * eigenvalue of the smaller Gram matrix (m.m^H when m is wide or square,
+     * else m^H.m).  The Gram matrix is positive semidefinite, so for a numeric
+     * matrix the eigenvalue of largest magnitude (Eigenvalues[g, 1]) is the
+     * largest; a symbolic one has no order, so the answer is the Max over
+     * all of them. */
+    if (rank == 2 && dims[0] > 0 && dims[1] > 0 &&
+        (!p || (p->type == EXPR_INTEGER && p->data.integer == 2)) &&
+        !matsol_is_inexact(expr)) {
+        Expr* ct = eval_and_free(expr_new_function(expr_new_symbol(SYM_ConjugateTranspose),
+                                                   (Expr*[]){ expr_copy(expr) }, 1));
+        Expr* g = dims[0] <= dims[1]
+            ? expr_new_function(expr_new_symbol(SYM_Dot), (Expr*[]){ expr_copy(expr), ct }, 2)
+            : expr_new_function(expr_new_symbol(SYM_Dot), (Expr*[]){ ct, expr_copy(expr) }, 2);
+        g = eval_and_free(g);
+        bool numeric = la_all_numeric(expr);
+        Expr* ev = numeric
+            ? expr_new_function(expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ g, expr_new_integer(1) }, 2)
+            : expr_new_function(expr_new_symbol(SYM_Eigenvalues), (Expr*[]){ g }, 1);
+        ev = eval_and_free(ev);
+        if (!head_is(ev, SYM_List) || ev->data.function.arg_count == 0) {
+            expr_free(ev);
+            return NULL;
+        }
+        Expr* out;
+        if (numeric) {
+            Expr* top = expr_copy(ev->data.function.args[0]);
+            expr_free(ev);
+            /* the reference's form of a quadratic surd: Sqrt[21 + Sqrt[41]],
+             * Sqrt[(91 + Sqrt[8065])/2] -- one fraction, content cancelled */
+            top = eval_and_free(expr_new_function(expr_new_symbol(SYM_Together),
+                                                  (Expr*[]){ top }, 1));
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ top }, 1));
+        } else {
+            Expr* sq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ ev }, 1));
+            out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Apply),
+                                    (Expr*[]){ expr_new_symbol(SYM_Max), sq }, 2));
+        }
+        return out;
+    }
+
     return NULL;
 }

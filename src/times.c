@@ -27,7 +27,17 @@
  * the extracted square, so (n_in) == (*root)^2 * (n_out).  Trial division
  * is O(sqrt(n)); callers must pass only the small radicand of a Sqrt, never
  * a large coefficient — folding a big coefficient in here is what made
- * builtin_times hang on large series terms (issue #41). */
+ * builtin_times hang on large series terms (issue #41).
+ *
+ * The trial divisors stop at SPLIT_TRIAL_LIMIT (Power's own limit for the
+ * same question, POWER_TRIAL_LIMIT in power.c), after which a residual that
+ * is itself a perfect square is still absorbed.  Every radicand below 10^10
+ * is split exactly as before; a larger one may keep a square of a prime above
+ * the limit inside the radical -- the value is unchanged -- where the
+ * unbounded loop ran for sqrt(n) steps: the radicands of an exact
+ * QRDecomposition of a 6 x 6 rational matrix (20-digit Gram norms) took
+ * minutes in this loop. */
+#define SPLIT_TRIAL_LIMIT 100000
 static void mpz_split_square_part(mpz_t root, mpz_t n) {
     mpz_set_ui(root, 1);
     if (mpz_cmp_ui(n, 1) <= 0) return;
@@ -45,6 +55,15 @@ static void mpz_split_square_part(mpz_t root, mpz_t n) {
             mpz_divexact(n, n, prsq);
             mpz_mul(root, root, pr);
         } else {
+            if (mpz_cmp_ui(pr, SPLIT_TRIAL_LIMIT) > 0) {
+                /* a large residual: only a whole square is still taken */
+                if (mpz_perfect_square_p(n)) {
+                    mpz_sqrt(pr, n);
+                    mpz_mul(root, root, pr);
+                    mpz_set_ui(n, 1);
+                }
+                break;
+            }
             mpz_add_ui(pr, pr, 2);
             mpz_mul(prsq, pr, pr);
         }

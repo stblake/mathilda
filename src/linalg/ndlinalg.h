@@ -81,6 +81,37 @@ Expr* linalg_try_fast(Expr* (*fast)(Expr*), Expr* packed_call);
 /* Per-routine NDArray fast paths. Each takes the full call `res`, parses the
  * arguments it needs, and returns a fast-path result, a genuine-error NULL, or
  * `linalg_delist_and_reeval(res)` when the buffer path does not apply. */
+/* ---- conditioning (::luc / ::sing) -------------------------------------
+ *
+ * The reference warns Head::luc ("Result for Head of badly conditioned matrix
+ * m may contain significant numerical errors.") when the LAPACK ?gecon
+ * reciprocal condition estimate of the factored machine matrix is below
+ * ND_LUC_RCOND = 10^6 machine epsilons (probed: an rcond of 2.215e-10 warns,
+ * 2.23e-10 does not).  Inverse measures it in the 1-norm; Det, LinearSolve and
+ * LUDecomposition in the infinity norm.  MatrixPower[m, -k] calls a machine
+ * matrix singular (MatrixPower::sing, unevaluated) below ND_SING_RCOND =
+ * 100 epsilons, 1-norm. */
+#define ND_LUC_RCOND  (1.0e6 * 2.220446049250313e-16)
+#define ND_SING_RCOND (1.0e2 * 2.220446049250313e-16)
+
+/* rcond of an n x n column-major ?getrf factorisation LU (interleaved re/im
+ * when cplx), given the `norm` ('1' or 'I') of the matrix BEFORE factoring.
+ * 0 when the estimate fails or the matrix is singular. */
+double nd_lu_rcond(char norm, const double* LU, int n, bool cplx, double anorm);
+/* The `norm` of an n x n column-major machine matrix (call before ?getrf). */
+double nd_mat_norm(char norm, const double* A, int n, bool cplx);
+/* Emit head::luc for matrix m (routed through mth_message). */
+void nd_warn_luc(const char* head, const Expr* m);
+/* rcond of a square machine matrix m (a machine List, packed or NDArray), in
+ * `norm`; 0 for a singular one.  False when m is not a square machine matrix
+ * or LAPACK is unavailable. */
+bool nd_machine_rcond(const Expr* m, char norm, double* rcond);
+
+/* True (and cleared) when the last fast path decided its call stays
+ * unevaluated and has already emitted the reason: the caller must return NULL
+ * rather than run its generic path. */
+bool linalg_fast_refused(void);
+
 Expr* ndla_det(Expr* res);          /* Det[m]                         */
 Expr* ndla_inverse(Expr* res);      /* Inverse[m]                     */
 Expr* ndla_linearsolve(Expr* res);  /* LinearSolve[m, b]              */

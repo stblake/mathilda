@@ -151,13 +151,13 @@ static void test_custom_norm_symbol(void) {
 
 static void test_custom_norm_norm_on_matrix(void) {
     /* The user explicitly passes Norm as the norm function.  Norm on a
-     * 2-D matrix is the 2-norm (largest singular value), which the
-     * current builtin_norm leaves symbolic -- we just verify the shape
-     * distributes properly and the call terminates. */
+     * 2-D matrix is the 2-norm (largest singular value), exact here as in
+     * the reference: {{1/Sqrt[23 + 2*Sqrt[130]], 2/Sqrt[23 + 2*Sqrt[130]]},
+     * {4/Sqrt[23 + 2*Sqrt[130]], 5/Sqrt[23 + 2*Sqrt[130]]}}. */
     assert_eval_eq(
         "Normalize[{{1, 2}, {4, 5}}, Norm]",
-        "{{1/Norm[{{1, 2}, {4, 5}}], 2/Norm[{{1, 2}, {4, 5}}]},"
-        " {4/Norm[{{1, 2}, {4, 5}}], 5/Norm[{{1, 2}, {4, 5}}]}}",
+        "{{1/Sqrt[23 + 2 Sqrt[130]], 2/Sqrt[23 + 2 Sqrt[130]]},"
+        " {4/Sqrt[23 + 2 Sqrt[130]], 5/Sqrt[23 + 2 Sqrt[130]]}}",
         0);
 }
 
