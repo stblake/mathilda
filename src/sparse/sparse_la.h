@@ -99,6 +99,11 @@ bool spf_solve(const SpFactor* f, const double* B, double* X, int64_t nrhs, bool
 bool spf_det(const SpFactor* f, double* re, double* im);
 /* 1-norm reciprocal condition estimate, or -1 when unavailable. */
 double spf_rcond(const SpFactor* f);
+/* Should a solve with this factor warn ::luc? The LAPACK factor uses the
+ * reference's dense threshold (reciprocal condition < 10^6 eps, its own
+ * gecon estimate); UMFPACK's estimate is only the pivot magnitude ratio, so
+ * it warns only below 1e-16 (a matrix singular to working precision). */
+bool spf_badly_conditioned(const SpFactor* f);
 int64_t spf_n(const SpFactor* f);
 bool spf_cplx(const SpFactor* f);
 const char* spf_backend(const SpFactor* f);   /* "UMFPACK", "CHOLMOD", "LAPACK" */

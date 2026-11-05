@@ -6247,6 +6247,19 @@ if(PYTHON3_EXE)
     add_test(NAME trager_fricas_stress
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/trager_fricas_stress.py --check
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    # Linear algebra on SparseArray against recorded reference / scipy /
+    # maxima answers (tools/sparse_linalg_oracle.py): --quick replays 150
+    # recorded cases with no oracle installed (per push); the stress run
+    # (nightly, by the *stress* name) queries the live oracles it finds. Both
+    # drive the top-level ./Mathilda and skip (77) when it has not been built.
+    add_test(NAME sparse_linalg_oracle_quick
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/sparse_linalg_oracle.py --quick
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(sparse_linalg_oracle_quick PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME sparse_linalg_oracle_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/sparse_linalg_oracle.py -n 1000 --seed 1 --large 6
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(sparse_linalg_oracle_stress PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # Every *_tests executable is a ctest test.  175 suites were built by every

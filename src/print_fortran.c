@@ -93,7 +93,7 @@ static FNode* ftok_own(char* s) {
 
 static FNode* frow(void) { return fn_alloc(); }
 
-static void fadd(FNode* r, FNode* k, unsigned char brk) {
+static void fnode_add(FNode* r, FNode* k, unsigned char brk) {
     if (r->n == r->cap) {
         size_t nc = r->cap ? 2 * r->cap : 4;
         r->kids = realloc(r->kids, nc * sizeof(FNode*));
@@ -107,7 +107,7 @@ static void fadd(FNode* r, FNode* k, unsigned char brk) {
     r->len += k->len;
 }
 
-static void fadd_tok(FNode* r, const char* s) { fadd(r, ftok(s), BRK_NONE); }
+static void fadd_tok(FNode* r, const char* s) { fnode_add(r, ftok(s), BRK_NONE); }
 
 static void ffree(FNode* f) {
     if (!f) return;
@@ -121,7 +121,7 @@ static void ffree(FNode* f) {
 static FNode* fparen(FNode* k) {
     FNode* r = frow();
     fadd_tok(r, "(");
-    fadd(r, k, BRK_NONE);
+    fnode_add(r, k, BRK_NONE);
     fadd_tok(r, ")");
     return r;
 }
@@ -416,9 +416,9 @@ static FNode* build_number(Ctx* c, const Expr* e, int* prec) {
     FNode* r = frow();
     if (c->lang == FORM_LANG_C) fadd_tok(r, "Complex");
     fadd_tok(r, "(");
-    fadd(r, build_real_part(c, e->data.function.args[0]), BRK_NONE);
+    fnode_add(r, build_real_part(c, e->data.function.args[0]), BRK_NONE);
     fadd_tok(r, ",");
-    fadd(r, build_real_part(c, e->data.function.args[1]), BRK_ARG);
+    fnode_add(r, build_real_part(c, e->data.function.args[1]), BRK_ARG);
     fadd_tok(r, ")");
     return r;
 }
@@ -427,7 +427,7 @@ static FNode* build_sqrt(Ctx* c, const Expr* b) {
     FNode* r = frow();
     fadd_tok(r, "Sqrt");
     fadd_tok(r, "(");
-    fadd(r, build_wrapped(c, b, P_LOWEST), BRK_NONE);
+    fnode_add(r, build_wrapped(c, b, P_LOWEST), BRK_NONE);
     fadd_tok(r, ")");
     return r;
 }
@@ -448,8 +448,8 @@ static FNode* build_power(Ctx* c, const Expr* b, const Expr* e, int* prec) {
         FNode* r = frow();
         fadd_tok(r, "1");
         fadd_tok(r, "/");
-        if (is_int_value(e, -1)) fadd(r, build_wrapped(c, b, P_TIMES + 1), BRK_NONE);
-        else fadd(r, build_sqrt(c, b), BRK_NONE);
+        if (is_int_value(e, -1)) fnode_add(r, build_wrapped(c, b, P_TIMES + 1), BRK_NONE);
+        else fnode_add(r, build_sqrt(c, b), BRK_NONE);
         return r;
     }
     FNode* r = frow();
@@ -458,18 +458,18 @@ static FNode* build_power(Ctx* c, const Expr* b, const Expr* e, int* prec) {
         int pe;
         fadd_tok(r, "Power");
         fadd_tok(r, "(");
-        fadd(r, build_wrapped(c, b, P_LOWEST), BRK_NONE);
+        fnode_add(r, build_wrapped(c, b, P_LOWEST), BRK_NONE);
         fadd_tok(r, ",");
-        fadd(r, build_exponent(c, e, &pe), BRK_ARG);
+        fnode_add(r, build_exponent(c, e, &pe), BRK_ARG);
         fadd_tok(r, ")");
         return r;
     }
     *prec = P_POWER;
     int pe;
-    fadd(r, build_wrapped(c, b, P_POWER + 1), BRK_NONE);
+    fnode_add(r, build_wrapped(c, b, P_POWER + 1), BRK_NONE);
     fadd_tok(r, "**");
     FNode* ex = build_exponent(c, e, &pe);
-    fadd(r, wrap_node(ex, pe, P_POWER), BRK_NONE);
+    fnode_add(r, wrap_node(ex, pe, P_POWER), BRK_NONE);
     return r;
 }
 
@@ -538,7 +538,7 @@ static FNode* join_factors(FactorList* l, int* prec) {
     for (size_t i = 0; i < l->n; i++) {
         if (i) fadd_tok(r, "*");
         Factor* f = &l->v[i];
-        fadd(r, f->coef ? f->node : wrap_node(f->node, f->prec, P_TIMES + 1), BRK_NONE);
+        fnode_add(r, f->coef ? f->node : wrap_node(f->node, f->prec, P_TIMES + 1), BRK_NONE);
     }
     *prec = P_TIMES;
     return r;
@@ -591,9 +591,9 @@ static FNode* build_times_core(Ctx* c, const Expr* coef, Expr* const* fs, size_t
         if (den.n >= 2) dn = fparen(dn);
         else dn = wrap_node(dn, pd, P_TIMES + 1);
         result = frow();
-        fadd(result, nn, BRK_NONE);
+        fnode_add(result, nn, BRK_NONE);
         fadd_tok(result, "/");
-        fadd(result, dn, BRK_NONE);
+        fnode_add(result, dn, BRK_NONE);
         *prec = P_TIMES;
     }
     free(num.v);
@@ -628,15 +628,15 @@ static FNode* build_times(Ctx* c, Expr* const* args, size_t n, bool neg, int* pr
             FNode* inner = nr == 1 ? build(c, rest[0], &p) : build_times_core(c, NULL, rest, nr, &p);
             r = frow();
             fadd_tok(r, "-");
-            fadd(r, wrap_node(inner, p, P_TIMES + 1), BRK_NONE);
+            fnode_add(r, wrap_node(inner, p, P_TIMES + 1), BRK_NONE);
             *prec = P_UNARY;
         }
     } else if (coef && is_rational(coef) && is_int_value(coef->data.function.args[0], -1) && nr > 0) {
         int p;
         r = frow();
-        fadd(r, ftok_own(fmt_double(rational_to_double(coef))), BRK_NONE);
+        fnode_add(r, ftok_own(fmt_double(rational_to_double(coef))), BRK_NONE);
         fadd_tok(r, "*");
-        fadd(r, build_times_core(c, NULL, rest, nr, &p), BRK_NONE);
+        fnode_add(r, build_times_core(c, NULL, rest, nr, &p), BRK_NONE);
         *prec = P_TIMES;
     } else if (coef && nr == 0) {
         r = build_number(c, coef, prec);
@@ -677,7 +677,7 @@ static FNode* build_plus(Ctx* c, const Expr* e, int* prec) {
             if (i > 0) fadd_tok(r, " + ");
             tn = build(c, t, &p);
         }
-        fadd(r, wrap_node(tn, p, P_PLUS + 1), i > 0 ? BRK_TERM : BRK_NONE);
+        fnode_add(r, wrap_node(tn, p, P_PLUS + 1), i > 0 ? BRK_TERM : BRK_NONE);
     }
     *prec = P_PLUS;
     return r;
@@ -688,7 +688,7 @@ static FNode* build_infix(Ctx* c, const Expr* e, const char* op, int myprec, int
     size_t n = e->data.function.arg_count;
     for (size_t i = 0; i < n; i++) {
         if (i) fadd_tok(r, op);
-        fadd(r, build_wrapped(c, e->data.function.args[i], myprec + 1), BRK_NONE);
+        fnode_add(r, build_wrapped(c, e->data.function.args[i], myprec + 1), BRK_NONE);
     }
     *prec = myprec;
     return r;
@@ -699,12 +699,12 @@ static FNode* build_infix(Ctx* c, const Expr* e, const char* op, int myprec, int
 static FNode* build_call(Ctx* c, const Expr* e, const char* open, const char* close,
                          const char* sep, int* prec) {
     FNode* r = frow();
-    fadd(r, build_wrapped(c, e->data.function.head, P_ATOM), BRK_NONE);
+    fnode_add(r, build_wrapped(c, e->data.function.head, P_ATOM), BRK_NONE);
     fadd_tok(r, open);
     size_t n = e->data.function.arg_count;
     for (size_t i = 0; i < n; i++) {
         if (i) fadd_tok(r, sep);
-        fadd(r, build_wrapped(c, e->data.function.args[i], P_LOWEST), i ? BRK_ARG : BRK_NONE);
+        fnode_add(r, build_wrapped(c, e->data.function.args[i], P_LOWEST), i ? BRK_ARG : BRK_NONE);
     }
     fadd_tok(r, close);
     *prec = P_ATOM;
@@ -793,7 +793,7 @@ static FNode* build(Ctx* c, const Expr* e, int* prec) {
             FNode* r = frow();
             for (size_t i = 0; i < n; i++) {
                 int p;
-                fadd(r, build(c, e->data.function.args[i], &p), BRK_NONE);
+                fnode_add(r, build(c, e->data.function.args[i], &p), BRK_NONE);
             }
             *prec = P_ATOM;
             return r;
@@ -804,7 +804,7 @@ static FNode* build(Ctx* c, const Expr* e, int* prec) {
         if (h == SYM_Not && n == 1) {
             FNode* r = frow();
             fadd_tok(r, c->lang == FORM_LANG_FORTRAN ? ".not." : "!");
-            fadd(r, build_wrapped(c, e->data.function.args[0], P_NOT + 1), BRK_NONE);
+            fnode_add(r, build_wrapped(c, e->data.function.args[0], P_NOT + 1), BRK_NONE);
             *prec = P_NOT;
             return r;
         }
@@ -812,10 +812,10 @@ static FNode* build(Ctx* c, const Expr* e, int* prec) {
             if (h == SYM_Mod && n == 2) return build_infix(c, e, " % ", P_TIMES, prec);
             if (h == SYM_Part && n >= 2) {
                 FNode* r = frow();
-                fadd(r, build_wrapped(c, e->data.function.args[0], P_ATOM), BRK_NONE);
+                fnode_add(r, build_wrapped(c, e->data.function.args[0], P_ATOM), BRK_NONE);
                 for (size_t i = 1; i < n; i++) {
                     fadd_tok(r, "[");
-                    fadd(r, build_wrapped(c, e->data.function.args[i], P_LOWEST), BRK_NONE);
+                    fnode_add(r, build_wrapped(c, e->data.function.args[i], P_LOWEST), BRK_NONE);
                     fadd_tok(r, "]");
                 }
                 *prec = P_ATOM;
@@ -932,7 +932,7 @@ char* fortran_form_string_seq(Expr* const* es, size_t n, FormLang lang, int page
     FNode* root = frow();
     for (size_t i = 0; i < n; i++) {
         int p;
-        fadd(root, build(&c, es[i], &p), BRK_NONE);
+        fnode_add(root, build(&c, es[i], &p), BRK_NONE);
     }
     char* s = layout(root, lang, page_width);
     ffree(root);

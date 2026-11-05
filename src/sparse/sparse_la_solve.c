@@ -487,10 +487,10 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
             return NULL;
         }
         bool ok = spf_solve(f, b.buf, X, b.nrhs, false);
-        double rc = spf_rcond(f);
+        bool badly = spf_badly_conditioned(f);
         spf_free(f);
         if (!ok) { free(X); rhs_free(&b); spla_view_free(&A); return NULL; }
-        if (rc >= 0.0 && rc < 1e-16)
+        if (badly)
             msg_with_expr("LinearSolve", "luc",
                           "Result for LinearSolve of badly conditioned matrix %s may contain significant numerical errors.",
                           Ae);

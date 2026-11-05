@@ -381,6 +381,9 @@ EXEMPT.update({
     ("Inverse", "*", "sym", "sig"):
         "plan (Result heads): Mathilda evaluates a symbolic sparse Inverse the "
         "reference leaves unevaluated",
+    ("SingularValueList*", "zero", "*", "scipy"):
+        "scipy's svds/svdvals drop zero singular values of an all-zero matrix; "
+        "the reference (and Mathilda) report them as 0 (checked by the ref row)",
     ("LinearSolve-CG", "herm", "*", "msg"):
         "the reference's CG with ILU0 on a complex Hermitian matrix stalls "
         "(::krymit) -- ILU0 of a Hermitian matrix is not Hermitian; Mathilda's "
@@ -1885,7 +1888,10 @@ def main():
         sys.exit(f"no case {a.repro}")
 
     if not os.path.exists(a.binary):
-        sys.exit(f"no Mathilda binary at {a.binary}")
+        # exit 77: ctest's SKIP_RETURN_CODE (the CMake test tree builds no REPL;
+        # the oracle drives the top-level ./Mathilda from `make`)
+        print(f"SKIP: no Mathilda binary at {a.binary} (run `make` at the top level)")
+        sys.exit(77)
     workdir = os.path.abspath(a.keep) if a.keep else tempfile.mkdtemp(prefix="sla_oracle_")
     os.makedirs(workdir, exist_ok=True)
     t_start = time.time()

@@ -60,6 +60,11 @@ int64_t spf_n(const SpFactor* f) { return f->n; }
 bool spf_cplx(const SpFactor* f) { return f->cplx; }
 double spf_rcond(const SpFactor* f) { return f->rcond; }
 
+bool spf_badly_conditioned(const SpFactor* f) {
+    if (f->rcond < 0.0) return false;
+    return f->bk == BK_LAPACK ? f->rcond < 1e6 * 2.220446049250313e-16 : f->rcond < 1e-16;
+}
+
 const char* spf_backend(const SpFactor* f) {
     switch (f->bk) {
         case BK_UMFPACK: return "UMFPACK";

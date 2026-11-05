@@ -32,6 +32,7 @@ extern "C" {
 #endif
 
 #ifdef USE_LAPACK
+#include <stddef.h>
 
 #if defined(MATHILDA_USE_ACCELERATE)
 /*
@@ -74,6 +75,13 @@ extern "C" {
  *
  * See https://netlib.org/lapack/ for full specification.
  */
+/* The trailing hidden CHARACTER lengths of a Fortran call: present for the
+ * gfortran ABI (non-Accelerate LAPACK), absent for Accelerate's CLAPACK. */
+#if defined(MATHILDA_USE_ACCELERATE)
+#  define MTH_FSTRLEN2
+#else
+#  define MTH_FSTRLEN2 , (size_t)1, (size_t)1
+#endif
 #if !defined(MATHILDA_USE_ACCELERATE)
 
 /* dgeqrf — compute QR factorization of a real M x N matrix
@@ -318,14 +326,22 @@ void ztrtrs_(const char* uplo, const char* trans, const char* diag,
  * with A_in = VS * T * VS^H. */
 typedef int (*mathilda_dgees_select_t)(const double*, const double*);
 typedef int (*mathilda_zgees_select_t)(const double*);
+/* gees takes its two CHARACTER arguments' hidden lengths (the gfortran ABI
+ * appends a size_t per CHARACTER argument). Omitting them is the classic
+ * C-calls-Fortran bug that gfortran >= 8's sibling-call optimisation turns
+ * into stack corruption: on Linux (reference LAPACK / OpenBLAS) zgees of a
+ * 91 x 91 complex matrix -- the blocked zlaqr0 path, n >= 75 -- returned a
+ * unitary Q and a triangular T with Q T Q^H != A (residual 0.12). */
 void dgees_(const char* jobvs, const char* sort, mathilda_dgees_select_t select,
             const int* n, double* a, const int* lda, int* sdim,
             double* wr, double* wi, double* vs, const int* ldvs,
-            double* work, const int* lwork, int* bwork, int* info);
+            double* work, const int* lwork, int* bwork, int* info,
+            size_t jobvs_len, size_t sort_len);
 void zgees_(const char* jobvs, const char* sort, mathilda_zgees_select_t select,
             const int* n, double* a, const int* lda, int* sdim,
             double* w, double* vs, const int* ldvs,
-            double* work, const int* lwork, double* rwork, int* bwork, int* info);
+            double* work, const int* lwork, double* rwork, int* bwork, int* info,
+            size_t jobvs_len, size_t sort_len);
 
 /* dgges / zgges -- generalized Schur (QZ) factorization of a matrix pencil
  * (A, B).  jobvsl='V', jobvsr='V' return the left/right Schur vectors
@@ -373,6 +389,17 @@ void dorghr_(const int* n, const int* ilo, const int* ihi, double* a,
              const int* lda, const double* tau, double* work, const int* lwork, int* info);
 void zunghr_(const int* n, const int* ilo, const int* ihi, double* a,
              const int* lda, const double* tau, double* work, const int* lwork, int* info);
+/* zlahqr -- the unblocked double-shift QR of a Hessenberg matrix (Schur form
+ * and vectors); ztrevc -- eigenvectors of a triangular matrix. The fallback
+ * of mat_lapack_zgees / zgeev when the blocked LAPACK path fails its
+ * self-check (lapack.c, zlapack_verify). */
+void zlahqr_(const int* wantt, const int* wantz, const int* n, const int* ilo,
+             const int* ihi, double* h, const int* ldh, double* w, const int* iloz,
+             const int* ihiz, double* z, const int* ldz, int* info);
+void ztrevc_(const char* side, const char* howmny, const int* select, const int* n,
+             double* t, const int* ldt, double* vl, const int* ldvl, double* vr,
+             const int* ldvr, const int* mm, int* m, double* work, double* rwork,
+             int* info, size_t side_len, size_t howmny_len);
 
 #endif /* !MATHILDA_USE_ACCELERATE */
 

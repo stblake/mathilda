@@ -188,18 +188,6 @@ EXEMPT = {
           "indices: Mathematica's LUDecomposition[{{2., 1.}, {1., 3.}}] is "
           "{{{2., 1.}, {0.5, 2.5}}, {1, 2}, 3.2}. Three different things in a "
           "List, not one matrix of two heads.",
-    "rowreduce": "RowReduce of a machine matrix answers exact 1 at each pivot "
-                 "and exact 0 below the pivots and in the zero rows, with an "
-                 "inexact 0. only where the elimination ran above a pivot: "
-                 "the reference's RowReduce[{{1., 2.}, {3., 4.}}] is "
-                 "{{1, 0.}, {0, 1}}, RowReduce[{{1., 2., 3.}, {4., 5., 6.}, "
-                 "{7., 8., 9.}}] is {{1, 0., -1.}, {0, 1, 2.}, {0, 0, 0}}.",
-    "x_rowreduce": "see rowreduce -- the reference's RowReduce[Table[If[i == j, "
-                   "3., 1./(1. + Abs[i - j])], {i, 3}, {j, 3}]] is "
-                   "{{1, 0., 0.}, {0, 1, 0.}, {0, 0, 1}}.",
-    "x_rowreduce_diag": "see rowreduce -- the reference's "
-                        "RowReduce[DiagonalMatrix[N[{1, 2, 3}]]] is "
-                        "{{1, 0., 0.}, {0, 1, 0.}, {0, 0, 1}}.",
     "x_hilbert": "HilbertMatrix is exact Rationals by default; the 1 at [[1,1]] "
                  "is an Integer because 1/1 reduces. Uniformly EXACT, so it is "
                  "flagged only by the exact/exact split, not a real mixture.",
