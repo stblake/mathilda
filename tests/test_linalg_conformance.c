@@ -284,6 +284,12 @@ static void test_complex_perf(void) {
         "\" lowerT \", Max[Abs[Flatten[LowerTriangularize[tn, -1]]]], "
         "\" resid-boxed3 \", Max[Abs[Flatten[Table[Sum[qn[[i, k]] tn[[k, l]] Conjugate[qn[[j, l]]], {k, n}, {l, n}], {i, 2}, {j, 2}] - cn[[1 ;; 2, 1 ;; 2]]]]], "
         "\" resid-dot \", Max[Abs[Flatten[qn . tn . ConjugateTranspose[qn] - cn]]]], {n, {64, 91, 128}}]; Null", "Null");
+    chk("SeedRandom[9]; c9 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {q9, t9} = SchurDecomposition[c9]; "
+        "{p9, h9} = HessenbergDecomposition[c9]; {ev, evec} = Eigensystem[c9]; "
+        "Print[\"DIAGS trace \", Abs[Tr[t9] - Tr[c9]], \" hess \", Max[Abs[Flatten[p9 . h9 . ConjugateTranspose[p9] - c9]]], "
+        "\" eigres \", Max[Table[Norm[c9 . evec[[k]] - ev[[k]] evec[[k]]], {k, 91}]], "
+        "\" evsum \", Abs[Total[ev] - Tr[c9]], \" diagvsev \", Max[Table[Min[Abs[ev - t9[[k, k]]]], {k, 91}]], "
+        "\" qhq \", Max[Abs[Flatten[ConjugateTranspose[q9] . c9 . q9 - t9]]]]; Null", "Null");
     /* the complex factors and their invariants, fast */
     chk_true("c91 = RandomComplex[{-1 - I, 1 + I}, {91, 91}]; {tt, {q, t}} = AbsoluteTiming[SchurDecomposition[c91]]; "
              "{t2, rr} = AbsoluteTiming[q . t . ConjugateTranspose[q]]; "
