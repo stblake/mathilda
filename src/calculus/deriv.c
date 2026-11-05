@@ -1789,6 +1789,72 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- AngerJ / WeberE / KelvinBer / KelvinBei / KelvinKer / KelvinKei
+         * [N, Z]: chain rule on both args. In Z:
+         *   d/dZ J_N = (J_(N-1) - J_(N+1))/2,  d/dZ E_N = (E_(N-1) - E_(N+1))/2
+         *     (DLMF 11.10.32-11.10.33 combined)
+         *   with R = ber|ker, I = bei|kei (DLMF 10.63.1 halved and recombined):
+         *   d/dZ R_N = (R_(N+1) - R_(N-1) + I_(N+1) - I_(N-1)) / (2 Sqrt[2])
+         *   d/dZ I_N = (I_(N+1) - I_(N-1) - R_(N+1) + R_(N-1)) / (2 Sqrt[2])
+         * In N: Derivative[1,0][head][N, Z] (no closed form in the order). */
+        if ((h == SYM_AngerJ || h == SYM_WeberE || h == SYM_KelvinBer ||
+             h == SYM_KelvinBei || h == SYM_KelvinKer || h == SYM_KelvinKei) && n == 2) {
+            const char* hn = h == SYM_AngerJ ? "AngerJ" : h == SYM_WeberE ? "WeberE"
+                           : h == SYM_KelvinBer ? "KelvinBer" : h == SYM_KelvinBei ? "KelvinBei"
+                           : h == SYM_KelvinKer ? "KelvinKer" : "KelvinKei";
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                Expr* dSdZ;
+                if (h == SYM_AngerJ || h == SYM_WeberE) {
+                    Expr* lo = mk_fn2(hn, mk_fn2("Plus", mk_int(-1), expr_copy(N)), expr_copy(Z));
+                    Expr* hi = mk_fn2(hn, mk_fn2("Plus", mk_int(1), expr_copy(N)), expr_copy(Z));
+                    dSdZ = mk_fn2("Times", mk_fn2("Rational", mk_int(1), mk_int(2)),
+                                  mk_fn2("Plus", lo, mk_neg(hi)));
+                } else {
+                    bool ker = h == SYM_KelvinKer || h == SYM_KelvinKei;
+                    bool imag = h == SYM_KelvinBei || h == SYM_KelvinKei;
+                    const char* R = ker ? "KelvinKer" : "KelvinBer";
+                    const char* Ih = ker ? "KelvinKei" : "KelvinBei";
+                    Expr* Rhi = mk_fn2(R, mk_fn2("Plus", mk_int(1), expr_copy(N)), expr_copy(Z));
+                    Expr* Rlo = mk_fn2(R, mk_fn2("Plus", mk_int(-1), expr_copy(N)), expr_copy(Z));
+                    Expr* Ihi = mk_fn2(Ih, mk_fn2("Plus", mk_int(1), expr_copy(N)), expr_copy(Z));
+                    Expr* Ilo = mk_fn2(Ih, mk_fn2("Plus", mk_int(-1), expr_copy(N)), expr_copy(Z));
+                    Expr* sum = imag
+                        ? expr_new_function(mk_sym("Plus"), (Expr*[]){
+                              Ihi, mk_neg(Ilo), mk_neg(Rhi), Rlo }, 4)
+                        : expr_new_function(mk_sym("Plus"), (Expr*[]){
+                              Rhi, mk_neg(Rlo), Ihi, mk_neg(Ilo) }, 4);
+                    /* 1/(2 Sqrt[2]) = 2^(-3/2) */
+                    dSdZ = mk_fn2("Times", mk_fn2("Power", mk_int(2),
+                                  mk_fn2("Rational", mk_int(-3), mk_int(2))), sum);
+                }
+                terms[nt++] = mk_fn2("Times", dSdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym(hn));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- StruveH[N, Z] / StruveL[N, Z]: chain rule on both args.
          *   d/dZ H_N(Z) = ((Z/2)^N / (Sqrt[Pi] Gamma[N + 3/2])
          *                  + H_(N-1)(Z) - H_(N+1)(Z)) / 2

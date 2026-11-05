@@ -1238,7 +1238,7 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
  * dodge at nu = -3/2, -5/2, ... -- and acb_hypgeom_pfq bounds the (convergent)
  * series rigorously. The convergent series loses ~1.44*|z| bits to cancellation;
  * flint_num_struveh folds that allowance into the starting working precision. */
-static void nb_struve_h(acb_t res, const acb_t nu, const acb_t z, slong prec) {
+static void nb_struve_hl(acb_t res, const acb_t nu, const acb_t z, int modified, slong prec) {
     acb_struct a[1], b[2];
     acb_t w, zh, t;
     acb_init(&a[0]); acb_init(&b[0]); acb_init(&b[1]);
@@ -1250,7 +1250,7 @@ static void nb_struve_h(acb_t res, const acb_t nu, const acb_t z, slong prec) {
 
     acb_mul(w, z, z, prec);                /* z^2                            */
     acb_mul_2exp_si(w, w, -2);             /* z^2 / 4                        */
-    acb_neg(w, w);                         /* -z^2 / 4                       */
+    if (!modified) acb_neg(w, w);          /* -z^2 / 4 (H); +z^2 / 4 (L)     */
 
     acb_hypgeom_pfq(res, a, 1, b, 2, w, 1 /* regularized */, prec);
 
@@ -1285,15 +1285,23 @@ Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int odd, in
     return nb_eval3(a, q, z, f);
 }
 
-Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
+static void nb_struve_h(acb_t r, const acb_t nu, const acb_t z, slong prec) {
+    nb_struve_hl(r, nu, z, 0, prec);
+}
+static void nb_struve_l(acb_t r, const acb_t nu, const acb_t z, slong prec) {
+    nb_struve_hl(r, nu, z, 1, prec);
+}
+
+/* The two-argument ladder with a cancellation allowance for kernels built on a
+ * convergent power series in z^2 (Struve, Anger-Weber): read |z| once at a
+ * cheap precision and add ~1.45 bits per unit of |z| to the starting working
+ * precision, so a large |z| is resolved in the first attempt rather than by
+ * repeated doubling. This is a precision heuristic only -- the ladder
+ * (nb_should_retry / nb_emit_bits) remains the rigorous backstop, so a wrong
+ * estimate costs time, not digits. */
+static Expr* nb_eval2_series(const Expr* nu, const Expr* z, nb_fn2 f) {
     const Expr* args[2] = { nu, z };
     slong outb = pick_out_bits(args, 2);
-
-    /* Cancellation allowance: read |z| once at a cheap precision and add ~1.45
-     * bits per unit of |z| to the starting working precision, so a large |z| is
-     * resolved in the first attempt rather than by repeated doubling. This is a
-     * precision heuristic only -- the ladder (nb_should_retry / nb_emit_bits)
-     * remains the rigorous backstop, so a wrong estimate costs time, not digits. */
     slong cancel = 0;
     {
         acb_t Z0; acb_init(Z0);
@@ -1313,7 +1321,7 @@ Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
     for (int attempt = 0; ; attempt++) {
         slong wp = (outb + NB_GUARD + cancel) << attempt;
         if (!expr_to_acb(nu, NU, wp) || !expr_to_acb(z, Z, wp)) break;
-        nb_struve_h(R, NU, Z, wp);
+        f(R, NU, Z, wp);
         if (nb_should_retry(R, outb, attempt)) continue;
         slong bits = nb_emit_bits(R, outb);
         if (bits > 0) out = acb_to_expr(R, bits);
@@ -1321,6 +1329,171 @@ Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
     }
     acb_clear(NU); acb_clear(Z); acb_clear(R);
     return out;
+}
+
+Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
+    return nb_eval2_series(nu, z, nb_struve_h);
+}
+
+Expr* flint_num_struvel(const Expr* nu, const Expr* z) {
+    return nb_eval2_series(nu, z, nb_struve_l);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Anger J_nu(z) and Weber E_nu(z)                                    */
+/* ------------------------------------------------------------------ */
+/* DLMF 11.10.8-11 with the two series as regularized 1F2's (a = 1, so the
+ * (1)_k / k! factor is 1 and the 1/Gamma pair is exactly 1F2~'s):
+ *   S1 = 1F2~(1; 1 + nu/2, 1 - nu/2; -z^2/4)
+ *   S2 = (z/2) 1F2~(1; 3/2 + nu/2, 3/2 - nu/2; -z^2/4)
+ *   J_nu = cos(nu pi/2) S1 + sin(nu pi/2) S2,  E_nu = sin(nu pi/2) S1 - cos(nu pi/2) S2.
+ * Entire in both nu and z, valid over the whole complex plane. */
+static void nb_anger_weber(acb_t res, const acb_t nu, const acb_t z, int weber, slong prec) {
+    acb_struct a[1], b[2];
+    acb_t w, h, s1, s2, sn, cs, t;
+    acb_init(&a[0]); acb_init(&b[0]); acb_init(&b[1]);
+    acb_init(w); acb_init(h); acb_init(s1); acb_init(s2);
+    acb_init(sn); acb_init(cs); acb_init(t);
+
+    acb_one(&a[0]);
+    acb_mul_2exp_si(h, nu, -1);            /* nu/2 */
+    acb_mul(w, z, z, prec);
+    acb_mul_2exp_si(w, w, -2);
+    acb_neg(w, w);                         /* -z^2/4 */
+
+    acb_one(t);
+    acb_add(&b[0], t, h, prec);            /* 1 + nu/2 */
+    acb_sub(&b[1], t, h, prec);            /* 1 - nu/2 */
+    acb_hypgeom_pfq(s1, a, 1, b, 2, w, 1, prec);
+
+    acb_set_d(t, 1.5);
+    acb_add(&b[0], t, h, prec);            /* 3/2 + nu/2 */
+    acb_sub(&b[1], t, h, prec);            /* 3/2 - nu/2 */
+    acb_hypgeom_pfq(s2, a, 1, b, 2, w, 1, prec);
+    acb_mul_2exp_si(t, z, -1);
+    acb_mul(s2, s2, t, prec);              /* (z/2) 1F2~ */
+
+    acb_sin_cos_pi(sn, cs, h, prec);
+    if (!weber) {
+        acb_mul(res, cs, s1, prec);
+        acb_addmul(res, sn, s2, prec);
+    } else {
+        acb_mul(res, sn, s1, prec);
+        acb_submul(res, cs, s2, prec);
+    }
+
+    acb_clear(&a[0]); acb_clear(&b[0]); acb_clear(&b[1]);
+    acb_clear(w); acb_clear(h); acb_clear(s1); acb_clear(s2);
+    acb_clear(sn); acb_clear(cs); acb_clear(t);
+}
+static void nb_anger_j(acb_t r, const acb_t nu, const acb_t z, slong prec) {
+    nb_anger_weber(r, nu, z, 0, prec);
+}
+static void nb_weber_e(acb_t r, const acb_t nu, const acb_t z, slong prec) {
+    nb_anger_weber(r, nu, z, 1, prec);
+}
+Expr* flint_num_anger_weber(const Expr* nu, const Expr* z, int weber) {
+    return nb_eval2_series(nu, z, weber ? nb_weber_e : nb_anger_j);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Kelvin functions ber, bei, ker, kei                                */
+/* ------------------------------------------------------------------ */
+/* ber/bei, from the defining series continued analytically in z (the only cut
+ * is the (z/2)^nu prefactor's, along the negative real axis):
+ *   ber_nu + i bei_nu "=" (z/2)^nu e^(3 nu pi i/4) 0F1~(; nu+1; i z^2/4),
+ * so with P = e^(3 nu pi i/4) 0F1~(; nu+1; i z^2/4), Q = e^(-3 nu pi i/4)
+ * 0F1~(; nu+1; -i z^2/4):
+ *   ber_nu(z) = (z/2)^nu (P + Q)/2,  bei_nu(z) = (z/2)^nu (P - Q)/(2i).
+ * ker/kei, from DLMF 10.61.2 continued with the same cut:
+ *   A = e^(-nu pi i/2) K_nu(z e^(pi i/4)),  B = e^(nu pi i/2) K_nu(z e^(-pi i/4)),
+ *   ker_nu(z) = (A + B)/2,  kei_nu(z) = (A - B)/(2i),
+ * where a rotated argument that crosses K's cut (arg z > 3 pi/4 for A, < -3 pi/4
+ * for B) is brought back by DLMF 10.34.2 with m = +-1:
+ *   K_nu(w e^(+-pi i)) = e^(-+nu pi i) K_nu(w) -+ pi i I_nu(w).
+ * A real order with z > 0 (or ber/bei at an integer order and real z) is real
+ * by symmetry, so the imaginary part -- a tight ball about zero -- is set to 0. */
+static int nb_is_real(const acb_t x) { return arb_is_zero(acb_imagref(x)); }
+
+static void nb_kelvin(acb_t res, const acb_t nu, const acb_t z, int which, slong prec) {
+    acb_t P, Q, t, e, u;
+    acb_init(P); acb_init(Q); acb_init(t); acb_init(e); acb_init(u);
+    if (which <= 1) {
+        acb_t a, w;
+        acb_init(a); acb_init(w);
+        acb_add_ui(a, nu, 1, prec);                        /* nu + 1 */
+        acb_mul(w, z, z, prec);
+        acb_mul_2exp_si(w, w, -2);                         /* z^2/4 */
+        acb_mul_onei(t, w);                                /* i z^2/4 */
+        acb_hypgeom_0f1(P, a, t, 1, prec);
+        acb_div_onei(t, w);                                /* -i z^2/4 */
+        acb_hypgeom_0f1(Q, a, t, 1, prec);
+        acb_mul_2exp_si(t, nu, -2);
+        acb_mul_ui(t, t, 3, prec);                         /* 3 nu/4 */
+        acb_exp_pi_i(e, t, prec);
+        acb_mul(P, P, e, prec);
+        acb_neg(t, t);
+        acb_exp_pi_i(e, t, prec);
+        acb_mul(Q, Q, e, prec);
+        if (which == 0) acb_add(res, P, Q, prec);
+        else { acb_sub(res, P, Q, prec); acb_div_onei(res, res); }
+        acb_mul_2exp_si(res, res, -1);
+        acb_mul_2exp_si(t, z, -1);
+        acb_pow(t, t, nu, prec);                           /* (z/2)^nu, principal */
+        acb_mul(res, res, t, prec);
+        acb_clear(a); acb_clear(w);
+    } else {
+        double zr = arf_get_d(arb_midref(acb_realref(z)), ARF_RND_NEAR);
+        double zi = arf_get_d(arb_midref(acb_imagref(z)), ARF_RND_NEAR);
+        for (int side = 0; side < 2; side++) {
+            /* side 0: A (rotation +pi/4, phase e^(-nu pi i/2)); side 1: B. */
+            acb_ptr out = side == 0 ? P : Q;
+            double sg = side == 0 ? 1.0 : -1.0;
+            int wrap = side == 0 ? (zr < 0.0 && zi >= 0.0 && zi < -zr)
+                                 : (zr < 0.0 && zi < 0.0 && zi > zr);
+            acb_set_d(t, sg * (wrap ? -0.75 : 0.25));
+            acb_exp_pi_i(e, t, prec);
+            acb_mul(u, z, e, prec);                        /* rotated argument */
+            acb_hypgeom_bessel_k(out, nu, u, prec);
+            if (wrap) {
+                acb_t Iv;
+                acb_init(Iv);
+                acb_neg(t, nu);
+                if (side == 1) acb_neg(t, t);              /* e^(-+nu pi i) */
+                acb_exp_pi_i(e, t, prec);
+                acb_mul(out, out, e, prec);
+                acb_hypgeom_bessel_i(Iv, nu, u, prec);
+                acb_const_pi(t, prec);
+                acb_mul(Iv, Iv, t, prec);
+                acb_mul_onei(Iv, Iv);                        /* pi i I_nu */
+                if (side == 0) acb_sub(out, out, Iv, prec);
+                else           acb_add(out, out, Iv, prec);
+                acb_clear(Iv);
+            }
+            acb_mul_2exp_si(t, nu, -1);
+            if (side == 0) acb_neg(t, t);                  /* -+ nu/2 */
+            acb_exp_pi_i(e, t, prec);
+            acb_mul(out, out, e, prec);
+        }
+        if (which == 2) acb_add(res, P, Q, prec);
+        else { acb_sub(res, P, Q, prec); acb_div_onei(res, res); }
+        acb_mul_2exp_si(res, res, -1);
+    }
+    if (nb_is_real(nu) && nb_is_real(z) && acb_is_finite(res)) {
+        int zpos = arb_is_positive(acb_realref(z));
+        int nint = acb_is_int(nu);
+        if (zpos || (which <= 1 && nint)) arb_zero(acb_imagref(res));
+    }
+    acb_clear(P); acb_clear(Q); acb_clear(t); acb_clear(e); acb_clear(u);
+}
+static void nb_kelvin_ber(acb_t r, const acb_t nu, const acb_t z, slong p) { nb_kelvin(r, nu, z, 0, p); }
+static void nb_kelvin_bei(acb_t r, const acb_t nu, const acb_t z, slong p) { nb_kelvin(r, nu, z, 1, p); }
+static void nb_kelvin_ker(acb_t r, const acb_t nu, const acb_t z, slong p) { nb_kelvin(r, nu, z, 2, p); }
+static void nb_kelvin_kei(acb_t r, const acb_t nu, const acb_t z, slong p) { nb_kelvin(r, nu, z, 3, p); }
+Expr* flint_num_kelvin(const Expr* nu, const Expr* z, int which) {
+    static const nb_fn2 F[4] = { nb_kelvin_ber, nb_kelvin_bei, nb_kelvin_ker, nb_kelvin_kei };
+    if (which < 0 || which > 3) return NULL;
+    return nb_eval2(nu, z, F[which]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -2289,6 +2462,13 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
 }
 Expr* flint_num_struveh(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
+Expr* flint_num_struvel(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
+Expr* flint_num_anger_weber(const Expr* nu, const Expr* z, int weber) {
+    (void)nu; (void)z; (void)weber; return NULL;
+}
+Expr* flint_num_kelvin(const Expr* nu, const Expr* z, int which) {
+    (void)nu; (void)z; (void)which; return NULL;
+}
 Expr* flint_num_mathieu(const Expr* a, const Expr* q, const Expr* z, int odd, int deriv) {
     (void)a; (void)q; (void)z; (void)odd; (void)deriv; return NULL;
 }

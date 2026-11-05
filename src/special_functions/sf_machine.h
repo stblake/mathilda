@@ -113,6 +113,25 @@ bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
  * caller falls to the FLINT arb bridge. Shared bit-for-bit with the NDArray
  * kernel (ndk_StruveH_c) and the Compile VM. */
 bool sf_machine_struve_h(double nu, double z, double* out);    /* StruveH */
+/* StruveL L_nu(z), real machine path: the cancellation-free convergent series
+ * (DLMF 11.2.2) and, for z > 30, I_{-nu} + the DLMF 11.6.2 asymptotic. Declines
+ * where the value is complex (z < 0, non-integer nu), on cancellation
+ * (nu < -3/2), Gamma overflow or a non-finite result. Shared bit for bit by the
+ * scalar builtin, the NDArray kernel (ndk_StruveL_c) and the Compile VM. */
+bool sf_machine_struve_l(double nu, double z, double* out);    /* StruveL */
+/* AngerJ J_nu(z) (which == 0) / WeberE E_nu(z) (which == 1), real machine path
+ * (sf_machine_angerkelvin.c): the S1/S2 power series (DLMF 11.10.8-9) for small
+ * |z|, else J_nu / -Y_nu plus the Gauss-Legendre-integrated Laplace-type
+ * integrals of DLMF 11.10.4-11.10.6; negative z through the parity
+ * J_nu(-z) = J_{-nu}(z), E_nu(-z) = -E_{-nu}(z). Declines when neither regime
+ * meets its error budget (the arb bridge answers). */
+bool sf_machine_anger_weber(int which, double nu, double z, double* out);
+/* Kelvin functions, real machine path (sf_machine_angerkelvin.c), which =
+ * 0 ber, 1 bei, 2 ker, 3 kei. ber+i bei = J_nu(x e^(3 pi i/4)) and
+ * ker+i kei = e^(-nu pi i/2) K_nu(x e^(pi i/4)) through the shared complex
+ * Bessel kernels. Declines where the value is complex (x < 0 except ber/bei at
+ * an integer order) or the kernel declines. */
+bool sf_machine_kelvin(int which, double nu, double x, double* out);
 
 /* Already-existing double algorithms in inverf.c / inverfc.c, exposed so the
  * same two consumers can use them rather than degrading. */

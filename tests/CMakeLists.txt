@@ -488,6 +488,11 @@ set(COMMON_SRC
     ../src/special_functions/expintegralei.c
     ../src/special_functions/expintegrale.c
     ../src/special_functions/struveh.c
+    ../src/special_functions/struvel.c
+    ../src/special_functions/angerweber.c
+    ../src/special_functions/kelvin.c
+    ../src/special_functions/sf_dispatch2.c
+    ../src/special_functions/sf_machine_angerkelvin.c
     ../src/special_functions/logintegral.c
     ../src/special_functions/sinintegral.c
     ../src/special_functions/cosintegral.c
@@ -4281,6 +4286,9 @@ add_test(NAME sf_machine_bessel_tests COMMAND sf_machine_bessel_tests)
 add_executable(struveh_tests test_struveh.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(struveh_tests PRIVATE ../src)
 add_test(NAME struveh_tests COMMAND struveh_tests)
+add_executable(struvel_anger_kelvin_tests test_struvel_anger_kelvin.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(struvel_anger_kelvin_tests PRIVATE ../src)
+add_test(NAME struvel_anger_kelvin_tests COMMAND struvel_anger_kelvin_tests)
 
 add_executable(elliptic_machine_tests test_elliptic_machine.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(elliptic_machine_tests PRIVATE ../src)

@@ -785,6 +785,31 @@ static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
 }
 static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false, NULL, NULL };
 
+/* Anger-Weber and Kelvin: (nu, z) shims over the shared machine helpers of
+ * special_functions/sf_machine_angerkelvin.c, which the scalar builtins call
+ * too -- so scalar, packed, NDArray and Compile[] agree bit for bit. Each
+ * declines where the value is complex (-> List path -> arb). The Kelvin unary
+ * kernels are the order-0 one-argument forms KelvinBer[x], ... */
+static bool ndk_anger_r(double nu, double z, double* o) { return sf_machine_anger_weber(0, nu, z, o); }
+static bool ndk_weber_r(double nu, double z, double* o) { return sf_machine_anger_weber(1, nu, z, o); }
+static bool ndk_ber_r(double nu, double x, double* o) { return sf_machine_kelvin(0, nu, x, o); }
+static bool ndk_bei_r(double nu, double x, double* o) { return sf_machine_kelvin(1, nu, x, o); }
+static bool ndk_ker_r(double nu, double x, double* o) { return sf_machine_kelvin(2, nu, x, o); }
+static bool ndk_kei_r(double nu, double x, double* o) { return sf_machine_kelvin(3, nu, x, o); }
+#define NDK_KELVIN0(NAME, W)                                                   \
+static bool ndk_##NAME##0_r(double x, double* o) { return sf_machine_kelvin(W, 0.0, x, o); } \
+static bool ndk_##NAME##0_c(double re, double im, double* ore, double* oim) {  \
+    if (im != 0.0) return false;                                               \
+    if (!sf_machine_kelvin(W, 0.0, re, ore)) return false;                     \
+    *oim = 0.0; return true;                                                   \
+}                                                                              \
+static const NDUnaryKernel NDKU_##NAME = { ndk_##NAME##0_c, ndk_##NAME##0_r, true, false, NULL, NULL, false, NULL };
+NDK_KELVIN0(KelvinBer, 0)
+NDK_KELVIN0(KelvinBei, 1)
+NDK_KELVIN0(KelvinKer, 2)
+NDK_KELVIN0(KelvinKei, 3)
+#undef NDK_KELVIN0
+
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
                            double* rr, double* ri) {                           \
@@ -795,6 +820,13 @@ static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
 static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL, NULL };
 NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
 NDK_BIN2(StruveH,           sf_machine_struve_h)
+NDK_BIN2(StruveL,           sf_machine_struve_l)
+NDK_BIN2(AngerJ,            ndk_anger_r)
+NDK_BIN2(WeberE,            ndk_weber_r)
+NDK_BIN2(KelvinBer,         ndk_ber_r)
+NDK_BIN2(KelvinBei,         ndk_bei_r)
+NDK_BIN2(KelvinKer,         ndk_ker_r)
+NDK_BIN2(KelvinKei,         ndk_kei_r)
 NDK_BIN2(Surd,              sf_surd_r)          /* Surd[x, n]: real root, integer n */
 NDK_BIN2(BesselJZero,       sf_bessel_j_zero_r) /* BesselJZero[n, k]: real n, integer k */
 #undef NDK_BIN2
@@ -1094,6 +1126,13 @@ void ndkernels_init(void) {
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
     REG_B(StruveH, NDKB_StruveH);   /* real z via sf_machine_struve_h; Compile[] too */
+    REG_B(StruveL, NDKB_StruveL);   /* real z via sf_machine_struve_l; Compile[] too */
+    REG_B(AngerJ,  NDKB_AngerJ);    /* sf_machine_anger_weber */
+    REG_B(WeberE,  NDKB_WeberE);
+    REG_B(KelvinBer, NDKB_KelvinBer); REG_U(KelvinBer);   /* sf_machine_kelvin; */
+    REG_B(KelvinBei, NDKB_KelvinBei); REG_U(KelvinBei);   /* REG_U = order-0   */
+    REG_B(KelvinKer, NDKB_KelvinKer); REG_U(KelvinKer);   /* one-arg form      */
+    REG_B(KelvinKei, NDKB_KelvinKei); REG_U(KelvinKei);
     REG_B(Surd,    NDKB_Surd);      /* declines even roots of x < 0 -> List path */
     REG_B(BesselJZero, NDKB_BesselJZero); /* real n > -1, integer-valued k */
 

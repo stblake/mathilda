@@ -111,6 +111,16 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
  * allowance (~1.44*|z| bits) is pre-added to the working precision so a large
  * |z| gets its bits up front rather than by blind doubling. */
 Expr* flint_num_struveh(const Expr* nu, const Expr* z);     /* StruveH[nu, z]    */
+/* StruveL[nu, z] -- the modified Struve function, the same regularized 1F2
+ * with +z^2/4: L_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; z^2/4). */
+Expr* flint_num_struvel(const Expr* nu, const Expr* z);     /* StruveL[nu, z]    */
+/* AngerJ[nu, z] (weber == 0) / WeberE[nu, z] (weber == 1) through the two
+ * regularized 1F2 series of DLMF 11.10.8-11; whole complex plane. */
+Expr* flint_num_anger_weber(const Expr* nu, const Expr* z, int weber);
+/* KelvinBer / KelvinBei / KelvinKer / KelvinKei [nu, z] (which = 0..3): ber/bei
+ * from two 0F1~ at +-i z^2/4, ker/kei from K_nu at z e^(+-pi i/4) with the
+ * DLMF 10.34.2 continuation, so the only cut is the negative real axis. */
+Expr* flint_num_kelvin(const Expr* nu, const Expr* z, int which);
 
 /* MathieuC[a, q, z] (odd == 0) / MathieuS[a, q, z] (odd == 1), or the
  * z-derivative MathieuCPrime / MathieuSPrime (deriv == 1), at arbitrary

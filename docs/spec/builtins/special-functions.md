@@ -500,8 +500,7 @@ Out[4]= -ExpIntegralE[-1 + n, z]
 - **Derivative.** `D[StruveH[ν, z], z] = ((z/2)^ν/(√π Γ(ν+3/2)) + H_{ν−1}(z) −
   H_{ν+1}(z))/2`; the ν-derivative is the inert `Derivative[1, 0][StruveH]`.
   `D[StruveL[ν, z], z]` gets the analogue `((z/2)^ν/(√π Γ(ν+3/2)) + L_{ν−1}(z) +
-  L_{ν+1}(z))/2` (`StruveL` itself is not yet a builtin; the rule fires on the
-  symbolic head).
+  L_{ν+1}(z))/2` (see StruveL below).
 - **Arbitrary precision** (`N[StruveH[ν, z], p]` with an exact or MPFR argument):
   the rigorous FLINT/arb kernel `H_ν(z) = (z/2)^(ν+1) · ₁F̃₂(1; 3/2, ν+3/2; −z²/4)`
   (the *regularized* ₁F₂, so it is entire in ν — no pole to dodge — and valid for
@@ -543,6 +542,133 @@ Out[3]= {0.0521737, 0.198457, 0.646764}
 
 In[4]:= {StruveH[-3/2, 2.], StruveH[-5/2, 2.]}
 Out[4]= {-0.491294, 0.223925}
+```
+
+## StruveL
+
+- `StruveL[nu, z]` — the modified Struve function L_ν(z), the particular
+  solution of `z² y'' + z y' − (z² + ν²) y = 4 (z/2)^(ν+1)/(√π Γ(ν+½))`, with
+  series L_ν(z) = (z/2)^(ν+1) Σ_k (z/2)^(2k)/(Γ(k+3/2) Γ(k+ν+3/2)) (DLMF 11.2.2).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- Exact value: `StruveL[nu, 0] = 0` for a real ν > −1 (a symbolic ν stays).
+- **Half-odd-integer order → elementary**, in `Sinh`/`Cosh`:
+  `L_{−(n+½)}(z) = I_{n+½}(z)` and `L_{n+½}(z) = I_{−(n+½)}(z) − (1/π)
+  Σ_{j=0}^n (−1)^j Γ(j+½)(z/2)^(n−2j−½)/(n−j)!` (DLMF 11.4.4 and the
+  terminating 11.6.2), with the half-integer modified Bessel functions in their
+  spherical (Hankel-sum) form: `StruveL[1/2, z] = -Sqrt[2]/(Sqrt[Pi] Sqrt[z]) +
+  (Sqrt[2] Cosh[z])/(Sqrt[Pi] Sqrt[z])`, `StruveL[-1/2, z] = Sqrt[2] Sinh[z]/(Sqrt[Pi] Sqrt[z])`.
+- **Derivative**: `D[StruveL[ν, z], z] = ((z/2)^ν/(√π Γ(ν+3/2)) + L_{ν−1}(z) +
+  L_{ν+1}(z))/2`; the ν-derivative is the inert `Derivative[1, 0][StruveL]`.
+- **Machine precision**: a raw-`double` kernel shared bit for bit by the scalar
+  path, packed arrays / `NDArray` and `Compile[]` (scalar and rank-1, and so
+  auto-compiled `Table`/`Sum`). For ν > −3/2 every series term has one sign, so
+  the convergent series is cancellation-free at every real z (measured
+  ≤ 1.2e-15 relative against 40-digit arb over ν ∈ [−2.3, 6], z ∈ (0, 100]);
+  for z > 30 it switches to `I_{−ν}(z)` plus the DLMF 11.6.2 asymptotic. It
+  declines where the value is complex (z < 0 with a non-integer ν) or the
+  series cancels (ν < −3/2), and the arb kernel answers at 53 bits
+  (`StruveL[0.5, -2.] = 0. − 1.5584 I`).
+- **Arbitrary precision / complex**: arb's regularized
+  `(z/2)^(ν+1) ₁F̃₂(1; 3/2, ν+3/2; z²/4)`, entire in ν, whole complex plane, with
+  StruveH's cancellation allowance and ball ladder.
+
+```mathematica
+In[1]:= StruveL[1, 2.]
+Out[1]= 1.10276
+
+In[2]:= N[StruveL[1/3, 7], 30]
+Out[2]= 166.928466768913900120706714408
+```
+
+## AngerJ / WeberE
+
+- `AngerJ[nu, z]` — the Anger function **J**_ν(z) = (1/π)∫₀^π cos(νθ − z sin θ) dθ.
+- `WeberE[nu, z]` — the Weber function **E**_ν(z) = (1/π)∫₀^π sin(νθ − z sin θ) dθ.
+
+(The three-argument associated forms are not implemented; they stay unevaluated.)
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- **Exact reductions** (each checked against the integral definition at 30
+  digits in `tests/test_struvel_anger_kelvin.c`):
+  - `AngerJ[n, z] = BesselJ[n, z]` for an integer n;
+  - `AngerJ[nu, 0] = Sinc[nu Pi]` (evaluated for an exact numeric ν:
+    `AngerJ[1/2, 0] = 2/Pi`);
+  - `WeberE[n, z] = (1/π) Σ_{k=0}^{⌊(n−1)/2⌋} Γ(k+½)(z/2)^(n−2k−1)/Γ(n+½−k) −
+    StruveH[n, z]` for n ≥ 0 (DLMF 11.10.15): `WeberE[0, z] = -StruveH[0, z]`,
+    `WeberE[3, z] = 2/(3 Pi) + (2 z^2)/(15 Pi) - StruveH[3, z]`;
+  - `WeberE[-n, z] = (-1)^n WeberE[n, z]` (θ → π − θ in the integral);
+  - `WeberE[nu, 0] = nu Pi Sinc[nu Pi/2]^2/2` (= (1 − cos νπ)/(νπ), evaluated
+    for an exact numeric ν).
+- **Derivative**: `D[AngerJ[ν, z], z] = (AngerJ[ν−1, z] − AngerJ[ν+1, z])/2`,
+  likewise for `WeberE` (DLMF 11.10.32-33); the ν-derivative is inert.
+- **Machine precision** (raw-`double`, shared bit for bit with packed /
+  `NDArray` / `Compile[]`): the S1/S2 power series of DLMF 11.10.8-9 for small
+  |z| (accepted when its cancellation estimate is within 4 ulp), otherwise
+  `J_ν(z) + (sin νπ/π) A(ν)` and `−Y_ν(z) − (A(−ν) + cos νπ A(ν))/π`, with
+  `A(μ) = ∫₀^∞ e^(−μt − z sinh t) dt` (DLMF 11.10.4-6) integrated by a 24-point
+  Gauss–Legendre rule on [0, T] — the integrand is entire and decays
+  double-exponentially, so the rule converges geometrically. Negative z uses
+  `J_ν(−z) = J_{−ν}(z)`, `E_ν(−z) = −E_{−ν}(z)`. Errors are judged against the
+  local envelope (both functions oscillate through zeros); measured ≤ 2.1e-15 of
+  the envelope against 40-digit arb. An integer-order `AngerJ` is the BesselJ
+  kernel itself.
+- **Arbitrary precision / complex**: two regularized ₁F₂'s in arb,
+  `S1 = ₁F̃₂(1; 1+ν/2, 1−ν/2; −z²/4)` and `S2 = (z/2) ₁F̃₂(1; 3/2+ν/2, 3/2−ν/2;
+  −z²/4)`, combined with `sin(νπ/2)`, `cos(νπ/2)`; entire in ν and z.
+
+```mathematica
+In[1]:= {AngerJ[2, z], WeberE[1, z], AngerJ[nu, 0]}
+Out[1]= {BesselJ[2, z], 2/Pi - StruveH[1, z], Sinc[nu Pi]}
+
+In[2]:= {AngerJ[1/3, 2.], WeberE[1/3, 2.]}
+Out[2]= {0.55058, -0.565462}
+```
+
+## KelvinBer / KelvinBei / KelvinKer / KelvinKei
+
+- `KelvinBer[nu, z]`, `KelvinBei[nu, z]`, `KelvinKer[nu, z]`, `KelvinKei[nu, z]`
+  — the Kelvin functions, `ber_ν(x) + i bei_ν(x) = J_ν(x e^(3πi/4))` and
+  `ker_ν(x) + i kei_ν(x) = e^(−νπi/2) K_ν(x e^(πi/4))` for x > 0 (DLMF 10.61),
+  continued analytically with the only branch cut on the negative real axis
+  (values on the cut are taken from above; Schwarz-reflection symmetric).
+- `KelvinBer[z]` etc. are the order-0 forms and evaluate to `KelvinBer[0, z]`.
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- **Exact values**: `head[-n, z] = (-1)^n head[n, z]` for an integer n
+  (DLMF 10.61.6); `KelvinBer[0, 0] = 1`, `KelvinBer[nu, 0] = 0` (ν > 0),
+  `KelvinBei[nu, 0] = 0` (ν ≥ 0), `KelvinKer[0, 0] = Infinity`,
+  `KelvinKei[0, 0] = -Pi/4`, `KelvinKer[1, 0] = KelvinKei[1, 0] = ComplexInfinity`.
+- **Derivative** (DLMF 10.63.1, halved and recombined): with R = ber|ker and
+  I = bei|kei, `R'_ν = (R_{ν+1} − R_{ν−1} + I_{ν+1} − I_{ν−1})/(2√2)` and
+  `I'_ν = (I_{ν+1} − I_{ν−1} − R_{ν+1} + R_{ν−1})/(2√2)`; so
+  `D[KelvinBer[z], z] = (2 KelvinBei[1, z] + 2 KelvinBer[1, z])/(2 Sqrt[2])`.
+- **Machine precision** (raw-`double`, shared bit for bit with packed /
+  `NDArray` / `Compile[]`, including the unary order-0 kernels behind
+  `KelvinBer[x]`): the complex Bessel J/K kernels of `sf_machine_bessel.c` at the
+  rotated argument. Measured ≤ 4.4e-15 of the envelope `|ber + i bei|` (resp.
+  `|ker + i kei|`) against 40-digit arb for x ≤ 100 — the residual is the
+  conditioning of the rotated argument, ~x/√2 ulp. A negative x declines (except
+  ber/bei at an integer order: `ber_n(−x) = (−1)^n ber_n(x)`) and is answered by
+  arb (`KelvinBer[1/2, -2.] = 0. − 0.307238 I`).
+- **Arbitrary precision / complex**: ber/bei from two regularized ₀F₁'s at
+  ±i z²/4 times `(z/2)^ν`; ker/kei from `K_ν(z e^(±πi/4))` with the
+  DLMF 10.34.2 continuation `K_ν(w e^(±πi)) = e^(∓νπi) K_ν(w) ∓ πi I_ν(w)` where
+  a rotated argument crosses K's cut. A real result (real ν, z > 0) is
+  returned as a Real.
+
+```mathematica
+In[1]:= {KelvinBer[1.5], KelvinKei[0, 1.5]}
+Out[1]= {0.921072, -0.331396}
+
+In[2]:= N[KelvinKer[1/3, -2 + 3 I], 20]
+Out[2]= -10.5906978812710808984 - 4.89677861808647898171*I
 ```
 
 ## LogIntegral

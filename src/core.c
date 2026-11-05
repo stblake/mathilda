@@ -33,6 +33,9 @@
 #include "expintegralei.h"
 #include "expintegrale.h"
 #include "struveh.h"
+#include "struvel.h"
+#include "angerweber.h"
+#include "kelvin.h"
 #include "logintegral.h"
 #include "sinintegral.h"
 #include "cosintegral.h"
@@ -896,6 +899,9 @@ void core_init(void) {
     expintegralei_init();
     expintegrale_init();
     struveh_init();
+    struvel_init();
+    angerweber_init();
+    kelvin_init();
     logintegral_init();
     sinintegral_init();
     cosintegral_init();

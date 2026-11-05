@@ -10,6 +10,7 @@
 #include "sf_machine_gamma.h"
 #include "sf_machine_zeta.h"  /* zeta-family kernels */
 #include "sf_machine_hyper.h"   /* sf_machine_hyperu_quad */
+#include "sf_machine_bessel.h"  /* sf_bessel_i_r (StruveL asymptotic) */
 
 #include <math.h>
 #include <complex.h>
@@ -1159,8 +1160,11 @@ bool sf_series_usable(double peak, double result) {
 /* The convergent 1F2-form series. Sets *val and the predicted relative error
  * *relerr (cancellation). Returns false only for a Gamma overflow, a complex
  * prefactor, non-convergence, or a non-finite result. */
-static bool struve_series(double nu, double z, double* val, double* relerr) {
+static bool struve_series(double nu, double z, int sgn, double* val, double* relerr) {
     double w = 0.25 * z * z;                            /* (z/2)^2 >= 0           */
+    /* sgn = -1: H_nu (alternating); sgn = +1: L_nu, the modified function, whose
+     * series is the same with every term of one sign (DLMF 11.2.2). */
+    double ws = sgn < 0 ? -w : w;
     double hump = 0.5 * fabs(z);                         /* term peak ~ |z|/2      */
     double t;
     int k0 = 0;
@@ -1174,7 +1178,7 @@ static bool struve_series(double nu, double z, double* val, double* relerr) {
         k0 = (int)(-(nu + 0.5) + 0.5);
         if (k0 > 4000) return false;
         t = 2.0 / sqrt(M_PI);                           /* 1/Gamma(3/2)           */
-        for (int j = 1; j <= k0; j++) t *= -w / (j + 0.5);
+        for (int j = 1; j <= k0; j++) t *= ws / (j + 0.5);
     } else {
         double g = tgamma(c);
         if (!isfinite(g) || g == 0.0) return false;     /* overflow / underflow   */
@@ -1185,7 +1189,7 @@ static bool struve_series(double nu, double z, double* val, double* relerr) {
     for (k = k0 + 1; k < 8000; k++) {
         double denom = (k + 0.5) * (k + nu + 0.5);
         if (denom == 0.0) return false;                 /* nu a negative half-int */
-        t *= -w / denom;
+        t *= ws / denom;
         sum += t;
         double at = fabs(t);
         if (at > maxabs) maxabs = at;
@@ -1280,7 +1284,7 @@ static bool struve_asymp(double nu, double z, double* val, double* relerr) {
 bool sf_machine_struve_h(double nu, double z, double* out) {
     if (z == 0.0) { *out = 0.0; return nu > -1.0; }
 
-    double cv, ce; bool cok = struve_series(nu, z, &cv, &ce);
+    double cv, ce; bool cok = struve_series(nu, z, -1, &cv, &ce);
     double av, ae; bool aok = struve_asymp(nu, z, &av, &ae);
 
     /* Prefer the regime with the smaller predicted error; accept only if that
@@ -1288,4 +1292,65 @@ bool sf_machine_struve_h(double nu, double z, double* out) {
     if (cok && (!aok || ce <= ae)) { *out = cv; return isfinite(cv) && ce < STRUVE_ACCEPT; }
     if (aok)                       { *out = av; return isfinite(av) && ae < STRUVE_ACCEPT; }
     return false;
+}
+
+/* ------------------------------------------------------------------ */
+/*  StruveL L_nu(z) -- real machine path                               */
+/* ------------------------------------------------------------------ */
+/* L_nu(z) = (z/2)^(nu+1) sum_{k>=0} (z/2)^(2k)/(Gamma(k+3/2)Gamma(k+nu+3/2))
+ * (DLMF 11.2.2): the StruveH series with every term of one sign once
+ * Gamma(k+nu+3/2) > 0, so for nu > -3/2 it is cancellation-free at every real
+ * z and the convergent series alone is accurate to a few ulp (the summation's
+ * own rounding). For large z it switches to L_nu = I_{-nu} + the DLMF 11.6.2
+ * asymptotic (struvel_asymp), which needs a handful of terms instead of ~z/2.
+ * Declines where the value is complex (z < 0 with non-integer nu), the series
+ * lost more than STRUVEL_ACCEPT to cancellation (nu < -3/2), Gamma overflow
+ * (large nu), or the result overflows a double; the caller then answers through
+ * the arb bridge. Shared bit for bit with the NDArray kernel and Compile VM. */
+#define STRUVEL_ACCEPT 1.0e-14
+#define STRUVEL_ASYMP_Z 30.0   /* large-z switch, see struvel_asymp */
+
+/* L_nu(z) = I_{-nu}(z) + (1/pi) sum_{k>=0} (-1)^(k+1) Gamma(k+1/2) (z/2)^(nu-2k-1)
+ *                                        / Gamma(nu+1/2-k)          (DLMF 11.6.2)
+ * for z > STRUVEL_ASYMP_Z. I_{-nu} grows like e^z while the correction is
+ * algebraic, so the (divergent) sum only has to reach eps relative to the
+ * total; it terminates exactly at a half-integer nu. Declines (false) when the
+ * smallest term is still above that floor (|nu| comparable to z), so the
+ * convergent series answers instead. */
+static bool struvel_asymp(double nu, double z, double* out) {
+    double bi;
+    if (!sf_bessel_i_r(-nu, z, &bi) || !isfinite(bi) || !(bi > 0.0)) return false;
+    double c = nu + 0.5, sum = 0.0;
+    if (!(c <= 0.0 && c == floor(c))) {           /* else every 1/Gamma is 0 */
+        double g = tgamma(c);
+        if (!isfinite(g) || g == 0.0) return false;
+        double term = -sqrt(M_PI) * pow(0.5 * z, nu - 1.0) / g;
+        if (!isfinite(term)) return false;
+        double w = 0.25 * z * z, prev = fabs(term);
+        sum = term;
+        for (int k = 1; ; k++) {
+            if (k > 200) return false;
+            term *= -(k - 0.5) * (nu + 0.5 - k) / w;
+            if (term == 0.0) break;                  /* terminated (half-int nu) */
+            double at = fabs(term);
+            if (at > prev) return false;             /* divergence before eps    */
+            sum += term;
+            if (at < 1.0e-17 * M_PI * bi) break;      /* below the rounding floor */
+            prev = at;
+        }
+    }
+    double v = bi + sum / M_PI;
+    if (!isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
+bool sf_machine_struve_l(double nu, double z, double* out) {
+    if (z == 0.0) { *out = 0.0; return nu > -1.0; }
+    if (!isfinite(nu) || !isfinite(z)) return false;
+    double v, e;
+    if (z > STRUVEL_ASYMP_Z && struvel_asymp(nu, z, &v)) { *out = v; return true; }
+    if (!struve_series(nu, z, +1, &v, &e)) return false;
+    *out = v;
+    return isfinite(v) && e < STRUVEL_ACCEPT;
 }
