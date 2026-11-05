@@ -155,7 +155,9 @@ static Expr* native_matrixexp(const Expr* call) {
     if (na < 1 || na > 2 || a[0]->type != EXPR_SPARSE) return NULL;
     const SparseArray* sa = sp_of(a[0]);
     int cls = sparse_class(sa);
-    if (sa->rank != 2 || sa->dims[0] != sa->dims[1] || cls == 0) return NULL;
+    /* a nonzero background: the reference answers a List (the gate's dense
+     * path) */
+    if (sa->rank != 2 || sa->dims[0] != sa->dims[1] || cls == 0 || !spla_is_zero(sa->bg)) return NULL;
 
     if (na == 1) {
         /* SparseArray[MatrixExp[Normal[s]]]: the dense exponential, answered

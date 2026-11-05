@@ -423,6 +423,7 @@ set(COMMON_SRC
     ../src/sparse/sparse_la_solve.c
     ../src/sparse/sparse_la_func.c
     ../src/sparse/sparse_la_pred.c
+    ../src/sparse/sparse_la_exact.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c

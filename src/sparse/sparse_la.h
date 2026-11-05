@@ -28,6 +28,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* A numeric zero background: sp_is_zero (exact 0, 0., 0.+0.I) or an
+ * arbitrary-precision zero -- N[s, 30] gives an MPFR 0 background. */
+bool spla_is_zero(const Expr* e);
+
 /* ---- machine view -------------------------------------------------------- */
 
 typedef struct {
@@ -140,6 +144,12 @@ KryStatus kry_solve(const SpMat* A, const double* b, double* x, const KryOpts* o
 void sparse_la_init(void);
 void sparse_la_func_init(void);   /* MatrixExp (sparse_la_func.c) */
 void sparse_la_pred_init(void);   /* matrix predicates (sparse_la_pred.c) */
+
+/* Exact rational sparse elimination (sparse_la_exact.c; FLINT builds). NULL
+ * to decline (not exact rational, too small or dense, no FLINT). */
+Expr* spla_exact_solve(const Expr* call, const Expr* A, const Expr* B);
+Expr* spla_exact_det(const Expr* A);
+Expr* spla_exact_rank(const Expr* A);
 
 /* Solve A x = B for a machine SparseArray A with the LinearSolve options in
  * `opts` (Method -> ...). Used by the LinearSolve native handler and by

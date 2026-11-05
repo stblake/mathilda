@@ -512,6 +512,10 @@ static Expr* native_linearsolve(const Expr* call) {
     }
     for (size_t i = 2; i < n; i++)
         if (!is_rule(a[i])) return NULL;
+    if (n == 2 && num_class(a[0]) == NC_EXACT && num_class(a[1]) == NC_EXACT) {
+        Expr* r = spla_exact_solve(call, a[0], a[1]);
+        if (r) return r;
+    }
     return spla_linearsolve_call(call, a[0], a[1], (const Expr* const*)a + 2, n - 2);
 }
 
@@ -519,6 +523,7 @@ static Expr* native_linearsolve(const Expr* call) {
 
 static Expr* native_det(const Expr* call) {
     if (call->data.function.arg_count != 1) return NULL;
+    if (num_class(call->data.function.args[0]) == NC_EXACT) return spla_exact_det(call->data.function.args[0]);
     const SparseArray* sa = sp_of(call->data.function.args[0]);
     SpMat A;
     if (!sa || !spla_view(sa, false, &A)) return NULL;
@@ -573,7 +578,14 @@ static Expr* native_inverse(const Expr* call) {
     return r;
 }
 
+static Expr* native_matrixrank(const Expr* call) {
+    if (call->data.function.arg_count != 1) return NULL;
+    if (num_class(call->data.function.args[0]) != NC_EXACT) return NULL;
+    return spla_exact_rank(call->data.function.args[0]);
+}
+
 void sparse_la_init(void) {
+    symtab_set_sparse_native("MatrixRank", (const void*)native_matrixrank);
     symtab_set_sparse_native("LinearSolve", (const void*)native_linearsolve);
     symtab_set_sparse_native("Det", (const void*)native_det);
     symtab_set_sparse_native("Inverse", (const void*)native_inverse);

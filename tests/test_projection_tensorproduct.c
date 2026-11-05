@@ -95,6 +95,9 @@ static void test_predicates(void) {
     chk("SquareMatrixQ[SparseArray[{{1,1}->1}, {2,3}]]", "False");
     chk("SymmetricMatrixQ[SparseArray[{{1,2}->a,{2,1}->a}, {2,2}]]", "True");
     chk("SymmetricMatrixQ[SparseArray[{{1,2}->a,{2,1}->b}, {2,2}]]", "False");
+    /* an explicit stored zero (sparse arithmetic keeps it) is a zero entry */
+    chk("z = SparseArray[{{1,1}->1,{1,2}->1,{2,2}->1}, {2,2}] - SparseArray[{{1,2}->1}, {2,2}]; "
+        "{DiagonalMatrixQ[z], SymmetricMatrixQ[z], LowerTriangularMatrixQ[z]}", "{True, True, True}");
     /* far past the densify cap: answered from the pattern */
     chk("big = SparseArray[{Band[{1,1}] -> 2., Band[{1,2}] -> -1., Band[{2,1}] -> -1.}, {100000, 100000}]; "
         "{SymmetricMatrixQ[big], HermitianMatrixQ[big], DiagonalMatrixQ[big], UpperTriangularMatrixQ[big], "

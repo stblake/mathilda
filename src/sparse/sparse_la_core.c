@@ -10,8 +10,19 @@
 #include "ndarray_internal.h"
 #include "numarray.h"
 #include <math.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
+
+bool spla_is_zero(const Expr* e) {
+    if (sp_is_zero(e)) return true;
+#ifdef USE_MPFR
+    if (e && e->type == EXPR_MPFR) return mpfr_zero_p(e->data.mpfr) != 0;
+#endif
+    return false;
+}
 
 bool spla_view(const SparseArray* sa, bool promote_int, SpMat* A) {
     memset(A, 0, sizeof *A);

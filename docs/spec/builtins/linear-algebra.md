@@ -2733,7 +2733,14 @@ Out[8]= {6, 4, 5}
   machine SparseArray gives `LinearSolve::sing` and stays unevaluated (even for
   a consistent b), and a **rectangular** one gives `LinearSolve::sqmat`. Exact,
   MPFR and symbolic SparseArrays behave exactly like the dense matrix
-  (particular solutions, `::nosol`). `Det` and `Inverse` of a machine
+  (particular solutions, `::nosol`). An **exact rational** SparseArray of
+  order >= 64 that is sparse (density < 10%), or that exceeds the densify cap,
+  is solved by an exact sparse LU over FLINT `fmpq` with Markowitz-style
+  pivoting (`src/sparse/sparse_la_exact.c`, v0.6191): fill-free systems cost
+  O(nnz) rational operations (the exact 20000 x 20000 tridiagonal solves in
+  0.04 s; it was refused at the cap), a singular system gets the reference's
+  particular solution (free unknowns 0) or `::nosol`; `Det` and `MatrixRank`
+  of such matrices come from the same elimination. `Det` and `Inverse` of a machine
   SparseArray above order 128 use the same factorisation (`Inverse::sing`
   for a singular one); `Inverse` answers a List, as in the reference.
 ## LeastSquares

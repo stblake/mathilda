@@ -35,7 +35,7 @@ static Expr* bool_expr(bool b) { return expr_new_symbol(b ? SYM_True : SYM_False
 static const SparseArray* only_matrix(const Expr* call) {
     if (call->data.function.arg_count != 1) return NULL;
     const SparseArray* sa = sp_of(call->data.function.args[0]);
-    if (!sa || sa->rank != 2 || !sp_is_zero(sa->bg)) return NULL;
+    if (!sa || sa->rank != 2 || !spla_is_zero(sa->bg)) return NULL;
     return sa;
 }
 
@@ -50,6 +50,17 @@ static int64_t find_ij(const SparsePattern* p, int64_t i, int64_t j) {
         else hi = mid;
     }
     return (lo < p->rowptr[i + 1] && col_of(p, lo) == j) ? lo : -1;
+}
+
+/* Is stored value k zero? (Sparse arithmetic does not re-minimise, so an
+ * explicit stored 0 can occur and counts as a zero entry.) */
+static bool val_is_zero(const SparseArray* sa, int64_t k) {
+    switch (sa->kind) {
+        case SPV_INT64: return ((const int64_t*)sa->vals)[k] == 0;
+        case SPV_F64:   return ((const double*)sa->vals)[k] == 0.0;
+        case SPV_C128:  return ((const double*)sa->vals)[2 * k] == 0.0 && ((const double*)sa->vals)[2 * k + 1] == 0.0;
+        default:        return spla_is_zero(((Expr* const*)sa->vals)[k]);
+    }
 }
 
 /* mode 0: v(k) equal to v(t); mode 1: v(k) equal to conj(v(t)). False for a
@@ -77,7 +88,10 @@ static int mirror_test(const SparseArray* sa, int mode) {
         for (int64_t k = p->rowptr[i]; k < p->rowptr[i + 1]; k++) {
             int64_t j = col_of(p, k);
             int64_t t = find_ij(p, j, i);
-            if (t < 0) return 0;
+            if (t < 0) {
+                if (val_is_zero(sa, k)) continue;      /* an explicit zero mirrors the background */
+                return 0;
+            }
             bool known;
             bool ok = vals_match(sa, k, t, mode, &known);
             if (!known) return -1;
@@ -115,7 +129,8 @@ static Expr* band_test(const Expr* call, int which) {
     for (int64_t i = 0; i < sa->dims[0]; i++)
         for (int64_t k = p->rowptr[i]; k < p->rowptr[i + 1]; k++) {
             int64_t j = col_of(p, k);
-            if ((which == 0 && j != i) || (which == 1 && j < i) || (which == 2 && j > i))
+            if (((which == 0 && j != i) || (which == 1 && j < i) || (which == 2 && j > i)) &&
+                !val_is_zero(sa, k))
                 return bool_expr(false);
         }
     return bool_expr(true);

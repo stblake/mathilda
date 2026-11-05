@@ -242,12 +242,40 @@ static void test_lsf(void) {
              "And @@ Table[res[lap[150] + k IdentityMatrix[150, SparseArray], fs[[k]][N[Range[150]]], N[Range[150]]] < 10^-10, {k, 12}]");
 }
 
+/* ---- exact rational sparse elimination (sparse_la_exact.c) ------------------ */
+
+static void test_exact(void) {
+    chk("ea = SparseArray[{Band[{1,1}] -> 3, Band[{1,2}] -> -1, Band[{2,1}] -> 2, Band[{1, 9}] -> 1, "
+        "Band[{5, 1}] -> -2}, {100, 100}]; "
+        "eq = SparseArray[{Band[{1,1}] -> 1/3, Band[{1,2}] -> -2/7, Band[{2,1}] -> 5, Band[{1,20}] -> 1/2}, {100, 100}]; "
+        "es = SparseArray[{Band[{1,1}] -> 1, Band[{1,2}] -> 1}, {100, 100}] + SparseArray[{{100, 100} -> -1}, {100, 100}]; Null",
+        "Null");
+    /* against the dense exact path: solve, Det, MatrixRank, rational entries, matrix rhs */
+    chk_true("LinearSolve[ea, Range[100]] === LinearSolve[Normal[ea], Range[100]]");
+    chk_true("Det[ea] === Det[Normal[ea]] && MatrixRank[ea] === MatrixRank[Normal[ea]]");
+    chk_true("LinearSolve[eq, Range[100]] === LinearSolve[Normal[eq], Range[100]] && Det[eq] === Det[Normal[eq]]");
+    chk_true("LinearSolve[ea, Transpose[{Range[100], 2 Range[100]}]] === "
+             "LinearSolve[Normal[ea], Transpose[{Range[100], 2 Range[100]}]]");
+    chk_true("With[{p = SparseArray[Table[{i, Mod[3 i, 100] + 1} -> i, {i, 100}], {100, 100}]}, "
+             "Det[p] === Det[Normal[p]] && LinearSolve[p, Range[100]] === LinearSolve[Normal[p], Range[100]]]");
+    /* singular (an explicit stored zero on the diagonal): rank, Det 0, a
+     * particular solution of a consistent system, ::nosol otherwise */
+    chk("{MatrixRank[es], Det[es]}", "{99, 0}");
+    chk_true("With[{c = es . ConstantArray[1, 100]}, es . LinearSolve[es, c] == c]");
+    chk_msg("LinearSolve[es, UnitVector[100, 100]]", "LinearSolve::nosol");
+    /* past the densify cap */
+    chk_true("With[{L = SparseArray[{Band[{1,1}] -> 2, Band[{1,2}] -> -1, Band[{2,1}] -> -1}, {20000, 20000}]}, "
+             "x = LinearSolve[L, ConstantArray[1, 20000]]; x[[1;;3]] == {10000, 19999, 29997} && "
+             "L . x == ConstantArray[1, 20000] && Det[L] == 20001 && MatrixRank[L] == 20000]");
+}
+
 /* ---- MatrixExp of a SparseArray (sparse_la_func.c) ------------------------- */
 
 static void test_matrixexp(void) {
     /* a machine SparseArray answers a SparseArray (reference head); exact a List */
     chk("Head[MatrixExp[SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]]]", "SparseArray");
     chk("Head[MatrixExp[SparseArray[{{1,1}->1,{2,2}->2}]]]", "List");
+    chk("Head[MatrixExp[SparseArray[{{1,1}->1.,{2,2}->2.}, {2,2}, 0.5]]]", "List");
     /* an arbitrary-precision SparseArray: SparseArray (reference); the action
      * keeps the precision (dense path) */
     chk("Head[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30]]]", "SparseArray");
@@ -278,6 +306,7 @@ int main(void) {
     test_det_inverse();
     test_lsf();
     test_matrixexp();
+    test_exact();
     if (failures) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;
