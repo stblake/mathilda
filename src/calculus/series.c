@@ -4142,8 +4142,46 @@ static bool has_non_rational_power_in(Expr* e, Expr* x) {
     return false;
 }
 
+/* True iff `e` contains an irrational algebraic NUMBER: a radical of a
+ * literal number (Sqrt[3], (-1)^(1/3), 2^(1/4)) or a Root / AlgebraicNumber
+ * object.  Apart works over the coefficient field Q(params), and reads such a
+ * constant as one more independent transcendental: its partial-fraction
+ * linear solve (fraction-free elimination plus PolynomialGCD over that field)
+ * never applies Sqrt[3]^2 = 3, and the coefficient degrees grow with the
+ * denominator's degree.  On the w-shifted denominator of a double pole at a
+ * root of unity, w^2 (6 - 6 I Sqrt[3] + ...) of degree 8, Apart took over
+ * 120 s where the Newton inversion it was meant to replace costs
+ * milliseconds. */
+static bool has_irrational_number(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* s = h->data.symbol.name;
+        if (s == SYM_Root || strcmp(s, "AlgebraicNumber") == 0) return true;
+        if (s == SYM_Power && e->data.function.arg_count == 2) {
+            const Expr* b = e->data.function.args[0];
+            const Expr* p = e->data.function.args[1];
+            bool num_base = b->type == EXPR_INTEGER || b->type == EXPR_BIGINT ||
+                (b->type == EXPR_FUNCTION &&
+                 b->data.function.head->type == EXPR_SYMBOL &&
+                 (b->data.function.head->data.symbol.name == SYM_Rational ||
+                  b->data.function.head->data.symbol.name == SYM_Complex));
+            bool frac_exp = p->type == EXPR_FUNCTION &&
+                p->data.function.head->type == EXPR_SYMBOL &&
+                p->data.function.head->data.symbol.name == SYM_Rational;
+            if (num_base && frac_exp) return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_irrational_number(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* try_apart_preprocess(Expr* f, Expr* x) {
     if (!has_negative_power_in(f, x)) return NULL;
+    /* Algebraic-number coefficients: Apart is slower than the inversion it
+     * replaces, by orders of magnitude (see has_irrational_number). */
+    if (has_irrational_number(f)) return NULL;
     /* Apart is only defined for rational functions. If any negative-power
      * subterm has a non-polynomial base (e.g. 1/(Exp[x] - 1 - x), which has
      * a transcendental denominator), bail out rather than risk feeding

@@ -86,7 +86,7 @@ static void test_symbolic_higher_order_poles(void) {
     /* Reference value -(-1)^(2/3)/6.  The direct Laurent read now finds the
      * pole itself (exact leading coefficients are zero-tested) and Residue
      * tidies the constant to this spelling. */
-    check_eq("Residue[z^(1/3)/(1 + z^2)^2, {z, I}]", "1/36 (3 - (3*I) Sqrt[3])");
+    check_eq("Residue[z^(1/3)/(1 + z^2)^2, {z, I}]", "1/12 (1 - I Sqrt[3])");
     check_eq("RootReduce[Residue[z^(1/3)/(1 + z^2)^2, {z, I}] + (-1)^(2/3)/6]", "0");
     check_eq("N[Abs[Residue[z^(2/3)/(1 + z^2)^2, {z, I}] "
              "- (D[z^(2/3)/(z + I)^2, z] /. z -> I)]] < 1/1000000", "True");
@@ -153,6 +153,55 @@ static void test_numeric_crosscheck(void) {
              "- NResidue[(z + 1)/(z^2 (z - 2)), {z, 0}]]] < 1/1000", "True");
 }
 
+/* Higher-order poles at roots of unity, in both the radical spelling
+ * (1/2 + I Sqrt[3]/2) and the (-1)^(k/n) spelling.  The shifted denominator
+ * then carries algebraic-number coefficients, and Series' Apart
+ * preprocessing over them took minutes (Residue[1/(1 + x^2 + x^4)^2,
+ * {x, 1/2 + I Sqrt[3]/2}] never returned); Series now skips Apart there and
+ * inverts the denominator directly.  Each value is pinned exactly, then
+ * checked against a contour integral on a small circle (Cauchy). */
+static void check_root_of_unity(const char* f, const char* x0,
+                                const char* expected) {
+    char in[512];
+    snprintf(in, sizeof in, "Residue[%s, {x, %s}]", f, x0);
+    check_eq(in, expected);
+    snprintf(in, sizeof in,
+             "Abs[N[Residue[%s, {x, %s}], 20] - NIntegrate[(%s /. x -> N[%s, 30]"
+             " + Exp[I t]/100) I Exp[I t]/100, {t, 0, 2 Pi},"
+             " WorkingPrecision -> 20]/(2 Pi I)] < 10^-10", f, x0, f, x0);
+    check_eq(in, "True");
+}
+
+static void test_roots_of_unity_higher_order(void) {
+    const char* f = "1/(1 + x^2 + x^4)^2";
+    check_root_of_unity(f, "1/2 + I Sqrt[3]/2", "1/36 (-9 - (2*I) Sqrt[3])");
+    check_root_of_unity(f, "(-1)^(1/3)", "1/36 (-9 - (2*I) Sqrt[3])");
+    check_root_of_unity(f, "-1/2 + I Sqrt[3]/2", "1/36 (9 - (2*I) Sqrt[3])");
+    check_root_of_unity(f, "(-1)^(2/3)", "1/36 (9 - (2*I) Sqrt[3])");
+    check_root_of_unity(f, "1/2 - I Sqrt[3]/2", "1/36 (-9 + (2*I) Sqrt[3])");
+    check_root_of_unity(f, "-(-1)^(2/3)", "1/36 (-9 + (2*I) Sqrt[3])");
+
+    check_root_of_unity("1/(1 + x^3)^2", "1/2 + I Sqrt[3]/2",
+                        "1/9 (-1 - I Sqrt[3])");
+    check_root_of_unity("1/(1 + x^3)^2", "(-1)^(1/3)", "-2/9 (-1)^(1/3)");
+
+    check_root_of_unity("1/(x^4 + 1)^3", "(1 + I)/Sqrt[2]",
+                        "(-21/128 - 21/128*I)/Sqrt[2]");
+    check_root_of_unity("1/(x^4 + 1)^3", "(-1)^(1/4)", "(21/128*I) (-1)^(3/4)");
+    check_root_of_unity("1/(x^4 + 1)^3", "(-1)^(3/4)", "(-21/128*I) (-1)^(1/4)");
+
+    check_root_of_unity("1/(1 - x + x^2)^2", "1/2 + I Sqrt[3]/2",
+                        "(-2/3*I)/Sqrt[3]");
+    check_root_of_unity("1/(1 - x + x^2)^2", "(-1)^(1/3)", "(-2/9*I) Sqrt[3]");
+
+    /* Order 3, and a residue whose content Together removes. */
+    check_root_of_unity("x^2/(1 + x^2 + x^4)^3", "1/2 + I Sqrt[3]/2",
+                        "1/144 (18 - I Sqrt[3])");
+    /* Same size as 180/(-18 - 18 I Sqrt[3])^2, without the denominator. */
+    check_root_of_unity("1/(x^6 - 1)^2", "1/2 + I Sqrt[3]/2",
+                        "1/72 (-5 - (5*I) Sqrt[3])");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -166,6 +215,7 @@ int main(void) {
     TEST(test_branch_points);
     TEST(test_bad_arguments);
     TEST(test_numeric_crosscheck);
+    TEST(test_roots_of_unity_higher_order);
 
     printf("All Residue tests passed!\n");
     return 0;

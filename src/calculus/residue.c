@@ -426,20 +426,81 @@ static bool residue_has_root(const Expr* e) {
     return false;
 }
 
+/* True iff `e` has a non-atomic denominator: Power[b, negative] with b a
+ * compound expression (a sum or a radical), as in 180/(-18 - 18 I Sqrt[3])^2
+ * or 1/(2 Sqrt[3]).  A literal Rational is not a denominator here. */
+static bool residue_has_compound_denominator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* p = e->data.function.args[1];
+        bool neg = (p->type == EXPR_INTEGER && p->data.integer < 0) ||
+                   (p->type == EXPR_FUNCTION &&
+                    p->data.function.head->type == EXPR_SYMBOL &&
+                    p->data.function.head->data.symbol.name == SYM_Rational &&
+                    p->data.function.args[0]->type == EXPR_INTEGER &&
+                    p->data.function.args[0]->data.integer < 0);
+        if (neg && b->type == EXPR_FUNCTION) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (residue_has_compound_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Total bit length of the integer leaves of `e`: the tie-break between two
+ * equally large spellings, so (54 - 3 I Sqrt[3])/432 yields to
+ * (18 - I Sqrt[3])/144.  A bigint counts a flat 64 bits: only the ordering
+ * of two small spellings matters. */
+static size_t residue_int_bits(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER) {
+        uint64_t v = e->data.integer < 0 ? (uint64_t)(-(e->data.integer + 1)) + 1
+                                         : (uint64_t)e->data.integer;
+        size_t b = 0;
+        while (v) { b++; v >>= 1; }
+        return b;
+    }
+    if (e->type == EXPR_BIGINT) return 64;
+    if (e->type != EXPR_FUNCTION) return 0;
+    size_t c = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        c += residue_int_bits(e->data.function.args[i]);
+    return c;
+}
+
+/* Is candidate `s` a tidier spelling of `r`?  Strictly fewer leaves; or as
+ * few while clearing a compound denominator (180/(-18 - 18 I Sqrt[3])^2 ->
+ * (-5 - 5 I Sqrt[3])/72); or as few, introducing no compound denominator,
+ * with smaller integers (a common content removed).  A Root object is
+ * smaller but no tidier than the radical it replaces. */
+static bool residue_tidier(Expr* s, Expr* r) {
+    if (!s || residue_has_root(s)) return false;
+    size_t ls = residue_leaves(s), lr = residue_leaves(r);
+    if (ls != lr) return ls < lr;
+    bool dr = residue_has_compound_denominator(r);
+    bool ds = residue_has_compound_denominator(s);
+    if (dr != ds) return dr;
+    return residue_int_bits(s) < residue_int_bits(r);
+}
+
 /* An exact algebraic residue read off a Laurent series at an algebraic point
  * keeps the series' unreduced coefficient arithmetic (Residue[z^(1/3)/(1 +
  * z^2)^2, {z, I}] as a three-term sum of I^(k/3) quotients); Simplify, cheap
- * on a numeric constant, collapses it.  Kept only when smaller.  Consumes r. */
+ * on a numeric constant, collapses it, and Together removes a common content
+ * Simplify leaves behind ((54 - 3 I Sqrt[3])/432 -> (18 - I Sqrt[3])/144).
+ * The tidiest candidate is kept (residue_tidier).  Consumes r. */
 static Expr* residue_tidy_constant(Expr* r) {
     if (!r || r->type != EXPR_FUNCTION || !expr_is_numeric_quantity(r) ||
         internal_contains_inexact(r) || residue_leaves(r) <= 12)
         return r;
-    Expr* s = residue_eval1("Simplify", expr_copy(r));
-    /* A Root object is smaller but no tidier than the radical it replaces. */
-    if (s && residue_leaves(s) < residue_leaves(r) && !residue_has_root(s)) {
-        expr_free(r); return s;
+    static const char* const heads[] = { "Simplify", "Together" };
+    for (size_t i = 0; i < sizeof heads / sizeof heads[0]; i++) {
+        Expr* s = residue_eval1(heads[i], expr_copy(r));
+        if (residue_tidier(s, r)) { expr_free(r); r = s; }
+        else if (s) expr_free(s);
     }
-    if (s) expr_free(s);
     return r;
 }
 

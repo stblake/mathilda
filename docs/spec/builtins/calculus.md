@@ -709,6 +709,16 @@ coprime, so the `w^-1` coefficient is unchanged. Transcendental /
 special-function integrands keep the direct expansion, which uses the engine's
 own knowledge of the Laurent series at `z0` (e.g. `Zeta` at `1`).
 
+**Roots of unity.** A higher-order pole at a root of unity is answered in
+either spelling, radical or `(-1)^(k/n)`: `Residue[1/(1 + x^2 + x^4)^2, {x,
+1/2 + I Sqrt[3]/2}]` is `(-9 - 2 I Sqrt[3])/36` in about 0.2 s (it did not
+return before, because `Series`' `Apart` preprocessing ran over the shifted
+denominator's `Sqrt[3]` coefficients; see `Series`). An exact residue is
+finally tidied by `Simplify` and `Together`, keeping the smaller spelling,
+on a tie the one without a compound denominator or with smaller integers:
+`(-5 - 5 I Sqrt[3])/72` rather than `180/(-18 - 18 I Sqrt[3])^2`, and
+`(18 - I Sqrt[3])/144` rather than `(54 - 3 I Sqrt[3])/432`.
+
 **Self-validation at higher-order poles.** A padded `Series` can return a `-1`
 coefficient that is *present but inaccurate*: over an order-`m` pole the regular
 cofactor is truncated too early and the principal part drops product-rule cross
