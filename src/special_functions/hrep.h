@@ -31,6 +31,13 @@ Expr* hrep_pfq(Expr* const* a, size_t p, Expr* const* b, size_t q,
  * `e` is not one or the algorithm declines. Borrows `e`. */
 Expr* hrep_pfq_expr(const Expr* e);
 
+/* Closed form of MeijerG[{{an}, {ap}}, {{bm}, {bq}}, z] by the G version of
+ * the walk (Roach '97), or NULL. hrep_meijerg_expr takes the evaluated node
+ * and runs as a probe region. */
+Expr* hrep_meijerg(Expr* const* an, int n, Expr* const* ap, int np_,
+                   Expr* const* bm, int m, Expr* const* bq, int nq_, const Expr* z);
+Expr* hrep_meijerg_expr(const Expr* e);
+
 /* Registers the diagnostic builtin HypergeometricPFQ`Representation. */
 void hrep_init(void);
 

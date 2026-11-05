@@ -1089,10 +1089,27 @@ static const char* HR_TIDY_DEF[] = {
      * radical, Simplify merges (z - 1)/Sqrt[1 - z] into -Sqrt[1 - z]. */
     "Hrep`co[Hrep`c_] := With[{Hrep`f = Factor[Together[Hrep`c]]},"
     " If[FreeQ[Hrep`f, Power[_, _Rational]], Hrep`f, Simplify[Hrep`f]]]",
-    "Hrep`tidy[Hrep`r_] := With[{Hrep`k = DeleteDuplicates[Cases[Hrep`r,"
+    /* Integer orders of the named functions reduce to 0 and 1 by the
+     * three-term recurrences, so an answer reads in I0, I1, L0, L1 as
+     * Roach's do. StruveL's recurrence is inhomogeneous:
+     *   L_(nu-1) - L_(nu+1) = (2 nu/x) L_nu + (x/2)^nu/(Sqrt[Pi] Gamma[nu + 3/2]). */
+    "Hrep`ordred[Hrep`e_] := Hrep`e //. {"
+    " BesselI[Hrep`n_Integer /; Hrep`n < 0, Hrep`x_] :> BesselI[-Hrep`n, Hrep`x],"
+    " BesselI[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :>"
+    "   BesselI[Hrep`n - 2, Hrep`x] - 2 (Hrep`n - 1)/Hrep`x BesselI[Hrep`n - 1, Hrep`x],"
+    " BesselJ[Hrep`n_Integer /; Hrep`n < 0, Hrep`x_] :> (-1)^Hrep`n BesselJ[-Hrep`n, Hrep`x],"
+    " BesselJ[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :>"
+    "   2 (Hrep`n - 1)/Hrep`x BesselJ[Hrep`n - 1, Hrep`x] - BesselJ[Hrep`n - 2, Hrep`x],"
+    " StruveL[Hrep`n_Integer /; Hrep`n >= 2, Hrep`x_] :>"
+    "   StruveL[Hrep`n - 2, Hrep`x] - 2 (Hrep`n - 1)/Hrep`x StruveL[Hrep`n - 1, Hrep`x]"
+    "   - (Hrep`x/2)^(Hrep`n - 1)/(Sqrt[Pi] Gamma[Hrep`n + 1/2]),"
+    " StruveL[Hrep`n_Integer /; Hrep`n < 0, Hrep`x_] :>"
+    "   StruveL[Hrep`n + 2, Hrep`x] + 2 (Hrep`n + 1)/Hrep`x StruveL[Hrep`n + 1, Hrep`x]"
+    "   + (Hrep`x/2)^(Hrep`n + 1)/(Sqrt[Pi] Gamma[Hrep`n + 5/2])}",
+    "Hrep`tidy[Hrep`r0_] := With[{Hrep`r = Hrep`ordred[Hrep`r0]}, With[{Hrep`k = DeleteDuplicates[Cases[Hrep`r,"
     " (Hrep`h_Symbol[__] /; !MemberQ[{Plus, Times, Power, Rational, Complex,"
     " DirectedInfinity}, Hrep`h]) | Power[E, _], {0, Infinity}]]},"
-    " Collect[Expand[Hrep`r], Hrep`k, Hrep`co]]",
+    " Collect[Expand[Hrep`r], Hrep`k, Hrep`co]]]",
 };
 
 static bool has_free_symbol(const Expr* e) {
@@ -1152,6 +1169,359 @@ static Expr* answer_expr(const HrAnswer* ans, const Expr* z) {
     }
     expr_free(sum);
     return hr_tidy(r);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Meijer G (Roach '97)                                               */
+/* ------------------------------------------------------------------ */
+/*
+ * G = G^{m,n}_{p,q}(w | a_1..a_n, a_{n+1}..a_p ; b_1..b_m, b_{m+1}..b_q)
+ * satisfies [ sigma w P(theta) - Q(theta) ] G = 0 with
+ *   sigma = (-1)^(p-m-n),  P = prod_j (theta - a_j + 1),  Q = prod_k (theta - b_k),
+ * of order d = max(p, q). The four first-order shifts come from the Gamma
+ * recurrences of the Mellin-Barnes integrand:
+ *   raise b_k   : G' = -(theta - b_k) G  (k <= m),  +(theta - b_k) G  (k > m)
+ *   lower a_j   : G' = +(theta + 1 - a_j) G  (j <= n),  -(...) G  (j > n)
+ * and their inverses are one polynomial division of the ODE each:
+ *   lower b_k (b' = b_k - 1, eps = -1 for k <= m, else +1):
+ *     P = R (theta - b') + r,  H = eps [prod_{l != k}(theta - b_l) - sigma w R] G / (sigma w r),
+ *     defined iff r = P(b') = prod_j (b_k - a_j) != 0
+ *   raise a_j (eta = +1 for j <= n, else -1):
+ *     Q = R (theta - a_j) + r,  H = eta [sigma w prod_{i != j}(theta - a_i + 1) - R] G / r,
+ *     defined iff r = Q(a_j) = prod_k (a_j - b_k) != 0.
+ * The groups (a_n | a_p ; b_m | b_q) never exchange members, so a walk keeps
+ * (m, n, p, q). Certificates are hr_gcertificates().
+ */
+
+typedef struct {
+    int m, n, p, q;          /* group sizes: an = n, ap = p - n, bm = m, bq = q - m */
+    int a[HR_MAXD], b[HR_MAXD];
+    int sigma;               /* handle of (-1)^(p-m-n) */
+} HrG;
+
+static bool g_init(HrMod* M, HrG* g, const int* a0, const int* b0) {
+    int d = (g->p > g->q) ? g->p : g->q;
+    if (d < 1 || d > HR_MAXD) return false;
+    M->d = d;
+    HrPoly P, Q;
+    poly_one(M, &P);
+    for (int j = 0; j < g->p; j++) poly_mul_lin(M, &P, tcre_sub(M->t, M->one, a0[j]));
+    poly_one(M, &Q);
+    for (int k = 0; k < g->q; k++) poly_mul_lin(M, &Q, tcre_sub(M->t, M->zero, b0[k]));
+    int sw = tcre_mul(M->t, g->sigma, M->w);
+    int L[HR_MAXD + 1];
+    for (int j = 0; j <= d; j++) {
+        int u = (j <= P.deg) ? P.c[j] : M->zero;
+        int v = (j <= Q.deg) ? Q.c[j] : M->zero;
+        L[j] = tcre_sub(M->t, tcre_mul(M->t, sw, u), v);
+    }
+    if (tcre_is_zero(M->t, L[d]) != 0) return false;
+    int minus_inv = tcre_div(M->t, tcre_sub(M->t, M->zero, M->one), L[d]);
+    for (int k = 0; k < d; k++) M->c[k] = tcre_mul(M->t, minus_inv, L[k]);
+    M->C[0] = M->one;
+    for (int k = 1; k < d; k++) M->C[k] = M->zero;
+    return true;
+}
+
+/* C <- s (theta + alpha) C */
+static bool g_lin(HrMod* M, int s, int alpha) {
+    int T[HR_MAXD];
+    if (!m_theta_plus(M, alpha, M->C, T)) return false;
+    v_scale(M, s, T, M->C);
+    return true;
+}
+
+static int neg1(HrMod* M) { return tcre_sub(M->t, M->zero, M->one); }
+
+static bool g_b_up(HrMod* M, HrG* g, int k) {
+    int s = (k < g->m) ? neg1(M) : M->one;
+    if (!g_lin(M, s, tcre_sub(M->t, M->zero, g->b[k]))) return false;
+    g->b[k] = tcre_add(M->t, g->b[k], M->one);
+    return true;
+}
+
+static bool g_a_down(HrMod* M, HrG* g, int j) {
+    int s = (j < g->n) ? M->one : neg1(M);
+    if (!g_lin(M, s, tcre_sub(M->t, M->one, g->a[j]))) return false;
+    g->a[j] = tcre_sub(M->t, g->a[j], M->one);
+    return true;
+}
+
+static bool g_b_down(HrMod* M, HrG* g, int k) {
+    int bp = tcre_sub(M->t, g->b[k], M->one);
+    HrPoly P; poly_one(M, &P);
+    for (int j = 0; j < g->p; j++) poly_mul_lin(M, &P, tcre_sub(M->t, M->one, g->a[j]));
+    HrPoly R; int r;
+    poly_div_lin(M, &P, tcre_sub(M->t, M->zero, bp), &R, &r);
+    if (!nonzero(M, r)) return false;
+    int S1[HR_MAXD], T[HR_MAXD], S2[HR_MAXD];
+    v_copy(M, M->C, S1);
+    for (int l = 0; l < g->q; l++) {
+        if (l == k) continue;
+        if (!m_theta_plus(M, tcre_sub(M->t, M->zero, g->b[l]), S1, T)) return false;
+        v_copy(M, T, S1);
+    }
+    if (!m_apply_poly(M, &R, M->C, S2)) return false;
+    v_scale(M, tcre_mul(M->t, g->sigma, M->w), S2, S2);
+    v_sub(M, S1, S2, T);
+    int eps = (k < g->m) ? neg1(M) : M->one;
+    int fac = tcre_div(M->t, eps, tcre_mul(M->t, tcre_mul(M->t, g->sigma, M->w), r));
+    v_scale(M, fac, T, M->C);
+    g->b[k] = bp;
+    return true;
+}
+
+static bool g_a_up(HrMod* M, HrG* g, int j) {
+    HrPoly Q; poly_one(M, &Q);
+    for (int k = 0; k < g->q; k++) poly_mul_lin(M, &Q, tcre_sub(M->t, M->zero, g->b[k]));
+    HrPoly R; int r;
+    poly_div_lin(M, &Q, tcre_sub(M->t, M->zero, g->a[j]), &R, &r);
+    if (!nonzero(M, r)) return false;
+    int S1[HR_MAXD], T[HR_MAXD], S2[HR_MAXD];
+    v_copy(M, M->C, S1);
+    for (int i = 0; i < g->p; i++) {
+        if (i == j) continue;
+        if (!m_theta_plus(M, tcre_sub(M->t, M->one, g->a[i]), S1, T)) return false;
+        v_copy(M, T, S1);
+    }
+    v_scale(M, tcre_mul(M->t, g->sigma, M->w), S1, S1);
+    if (!m_apply_poly(M, &R, M->C, S2)) return false;
+    v_sub(M, S1, S2, T);
+    int eta = (j < g->n) ? M->one : neg1(M);
+    v_scale(M, tcre_div(M->t, eta, r), T, M->C);
+    g->a[j] = tcre_add(M->t, g->a[j], M->one);
+    return true;
+}
+
+/* A G candidate: instantiated certificate, parameters in group order
+ * (a = an ++ ap, b = bm ++ bq). */
+typedef struct {
+    int m, n, p, q;
+    Expr* a0[HR_MAXD]; Expr* b0[HR_MAXD];
+    Expr* f0;
+    int64_t dist; int family; int order;
+} HrGCand;
+
+static void gcand_free(HrGCand* c) {
+    for (int i = 0; i < c->p; i++) if (c->a0[i]) expr_free(c->a0[i]);
+    for (int i = 0; i < c->q; i++) if (c->b0[i]) expr_free(c->b0[i]);
+    if (c->f0) expr_free(c->f0);
+    memset(c, 0, sizeof *c);
+}
+
+/* pair one group: t[off..off+len) with o[off..off+len) */
+static bool pair_group(const HrPar* t, const HrPar* o, int off, int len, int* perm, int64_t* k) {
+    int pp[HR_MAXD]; int64_t kk[HR_MAXD];
+    if (len == 0) return true;
+    if (!pair_lists(t + off, o + off, len, pp, kk)) return false;
+    for (int i = 0; i < len; i++) { perm[off + i] = off + pp[i]; k[off + i] = kk[i]; }
+    return true;
+}
+
+static int64_t gcand_distance(const HrGCand* c, const HrPar* ta, const HrPar* tb,
+                              int* pa, int64_t* ka, int* pb, int64_t* kb) {
+    HrPar oa[HR_MAXD], ob[HR_MAXD];
+    int na = 0, nb = 0;
+    int64_t dist = -1;
+    for (; na < c->p; na++) if (!hr_par_split(c->a0[na], &oa[na])) goto out;
+    for (; nb < c->q; nb++) if (!hr_par_split(c->b0[nb], &ob[nb])) goto out;
+    if (!pair_group(ta, oa, 0, c->n, pa, ka)) goto out;
+    if (!pair_group(ta, oa, c->n, c->p - c->n, pa, ka)) goto out;
+    if (!pair_group(tb, ob, 0, c->m, pb, kb)) goto out;
+    if (!pair_group(tb, ob, c->m, c->q - c->m, pb, kb)) goto out;
+    dist = 0;
+    for (int i = 0; i < c->p; i++) dist += ka[i] < 0 ? -ka[i] : ka[i];
+    for (int i = 0; i < c->q; i++) dist += kb[i] < 0 ? -kb[i] : kb[i];
+out:
+    for (int i = 0; i < na; i++) hr_par_free(&oa[i]);
+    for (int i = 0; i < nb; i++) hr_par_free(&ob[i]);
+    return dist;
+}
+
+static bool gcand_make(const HrGCert* ct, Expr* const* vals, int nv, HrGCand* c) {
+    memset(c, 0, sizeof *c);
+    c->m = ct->m; c->n = ct->n; c->p = ct->p; c->q = ct->q;
+    for (int i = 0; i < ct->p; i++) c->a0[i] = fam_subst(parse_expression(ct->a[i]), vals, nv);
+    for (int i = 0; i < ct->q; i++) c->b0[i] = fam_subst(parse_expression(ct->b[i]), vals, nv);
+    if (ct->cond) {
+        Expr* v = fam_subst(parse_expression(ct->cond), vals, nv);
+        bool bad = v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False;
+        expr_free(v);
+        if (bad) { gcand_free(c); return false; }
+    }
+    c->f0 = fam_subst(parse_expression(ct->f0), vals, nv);
+    return true;
+}
+
+typedef struct {
+    const HrGCert* ct;
+    Expr* const* a; Expr* const* b;     /* target, group order */
+    const HrPar* ta; const HrPar* tb;
+    HrGCand* cands; int* nc; int order;
+} HrGEnum;
+
+static void genum_family(HrGEnum* en, int k, Expr** vals) {
+    if (*en->nc >= HR_MAXCAND || en->ct->family > HR_NFAMPAR) return;
+    if (k >= en->ct->family) {
+        HrGCand c;
+        if (!gcand_make(en->ct, vals, k, &c)) return;
+        int pa[HR_MAXD], pb[HR_MAXD]; int64_t ka[HR_MAXD], kb[HR_MAXD];
+        c.dist = gcand_distance(&c, en->ta, en->tb, pa, ka, pb, kb);
+        if (c.dist < 0) { gcand_free(&c); return; }
+        c.family = en->ct->family ? 1 : 0; c.order = en->order;
+        en->cands[(*en->nc)++] = c;
+        return;
+    }
+    if (k < 0 || k >= HR_NFAMPAR) return;
+    const char* par = HR_FAMPAR[k];
+    /* a template fixes par against a target of the same group */
+    for (int role = 0; role < 2; role++) {
+        int nt = role ? en->ct->q : en->ct->p;
+        for (int ti = 0; ti < nt; ti++) {
+            int lo, hi;
+            if (role == 0) { lo = ti < en->ct->n ? 0 : en->ct->n; hi = ti < en->ct->n ? en->ct->n : en->ct->p; }
+            else           { lo = ti < en->ct->m ? 0 : en->ct->m; hi = ti < en->ct->m ? en->ct->m : en->ct->q; }
+            Expr* t = fam_subst(parse_expression(role ? en->ct->b[ti] : en->ct->a[ti]), vals, k);
+            for (int xi = lo; xi < hi && *en->nc < HR_MAXCAND; xi++) {
+                Expr* v = family_solve(t, par, k, role ? en->b[xi] : en->a[xi]);
+                if (!v) break;
+                vals[k] = v;
+                genum_family(en, k + 1, vals);
+                expr_free(v);
+            }
+            expr_free(t);
+        }
+    }
+}
+
+static int gcand_cmp(const void* x, const void* y) {
+    const HrGCand* u = x; const HrGCand* v = y;
+    if (u->family != v->family) return u->family - v->family;
+    if (u->dist != v->dist) return (u->dist < v->dist) ? -1 : 1;
+    return u->order - v->order;
+}
+
+/* Walk G candidate c to the target (a: an ++ ap, b: bm ++ bq). */
+static bool gwalk(const HrGCand* c, Expr* const* a, Expr* const* b,
+                  const HrPar* ta, const HrPar* tb, HrAnswer* ans) {
+    int pa[HR_MAXD], pb[HR_MAXD]; int64_t ka[HR_MAXD], kb[HR_MAXD];
+    if (gcand_distance(c, ta, tb, pa, ka, pb, kb) < 0) return false;
+    const char* gens[32]; int ng = 0;
+    gens[ng++] = HR_W;
+    for (int i = 0; i < c->p; i++) if (!collect_symbols(a[i], gens, &ng, 32) || !collect_symbols(c->a0[i], gens, &ng, 32)) return false;
+    for (int i = 0; i < c->q; i++) if (!collect_symbols(b[i], gens, &ng, 32) || !collect_symbols(c->b0[i], gens, &ng, 32)) return false;
+    HrMod M; memset(&M, 0, sizeof M);
+    M.t = tcre_new(gens, ng);
+    if (!M.t) return false;
+    bool ok = false;
+    Expr* zero = expr_new_integer(0), *one = expr_new_integer(1);
+    Expr* wsym = expr_new_symbol(HR_W);
+    Expr* wi = mk2(SYM_Power, expr_new_symbol(HR_W), expr_new_integer(-1));
+    M.zero = H(&M, zero); M.one = H(&M, one); M.w = H(&M, wsym); M.wi = H(&M, wi);
+    expr_free(zero); expr_free(one); expr_free(wsym); expr_free(wi);
+    HrG g; memset(&g, 0, sizeof g);
+    g.m = c->m; g.n = c->n; g.p = c->p; g.q = c->q;
+    g.sigma = ((c->p - c->m - c->n) % 2 == 0) ? M.one : tcre_sub(M.t, M.zero, M.one);
+    int a0[HR_MAXD], b0[HR_MAXD];
+    for (int i = 0; i < c->p; i++) { a0[i] = H(&M, c->a0[pa[i]]); if (a0[i] < 0) goto done; g.a[i] = a0[i]; }
+    for (int i = 0; i < c->q; i++) { b0[i] = H(&M, c->b0[pb[i]]); if (b0[i] < 0) goto done; g.b[i] = b0[i]; }
+    if (!g_init(&M, &g, a0, b0)) goto done;
+    {
+        HrMove mv[2 * HR_MAXD]; int nm = 0;
+        for (int i = 0; i < c->p; i++) if (ka[i]) { mv[nm].is_a = true; mv[nm].idx = i; mv[nm].k = ka[i]; mv[nm].tval = par_value(&ta[i]); nm++; }
+        for (int i = 0; i < c->q; i++) if (kb[i]) { mv[nm].is_a = false; mv[nm].idx = i; mv[nm].k = kb[i]; mv[nm].tval = par_value(&tb[i]); nm++; }
+        qsort(mv, (size_t)nm, sizeof *mv, move_cmp);
+        for (int s2 = 0; s2 < nm; s2++) {
+            int64_t k = mv[s2].k;
+            for (int64_t j = 0; j < (k < 0 ? -k : k); j++) {
+                bool okk;
+                if (mv[s2].is_a) okk = (k > 0) ? g_a_up(&M, &g, mv[s2].idx) : g_a_down(&M, &g, mv[s2].idx);
+                else             okk = (k > 0) ? g_b_up(&M, &g, mv[s2].idx) : g_b_down(&M, &g, mv[s2].idx);
+                if (!okk) goto done;
+            }
+        }
+    }
+    ans->d = M.d;
+    ans->f0 = expr_copy(c->f0);
+    for (int k = 0; k < M.d; k++) {
+        Expr* e = tcre_to_expr(M.t, M.C[k]);
+        if (!e) goto done;
+        ans->coef[k] = ev(e);
+    }
+    ok = true;
+done:
+    tcre_free(M.t);
+    if (!ok) answer_free(ans);
+    return ok;
+}
+
+/* Closed form of MeijerG[{an, ap}, {bm, bq}, z]; NULL to decline. */
+Expr* hrep_meijerg(Expr* const* an, int n, Expr* const* ap, int np_,
+                   Expr* const* bm, int m, Expr* const* bq, int nq_, const Expr* z) {
+    if (!flint_bridge_available()) return NULL;
+    int p = n + np_, q = m + nq_;
+    if (p > HR_MAXD || q > HR_MAXD || p + q == 0) return NULL;
+    Expr* a[HR_MAXD]; Expr* b[HR_MAXD];
+    for (int i = 0; i < n; i++) a[i] = an[i];
+    for (int i = 0; i < np_; i++) a[n + i] = ap[i];
+    for (int i = 0; i < m; i++) b[i] = bm[i];
+    for (int i = 0; i < nq_; i++) b[m + i] = bq[i];
+    HrPar ta[HR_MAXD], tb[HR_MAXD];
+    int na = 0, nb = 0;
+    Expr* out = NULL;
+    HrGCand* cands = calloc(HR_MAXCAND, sizeof(HrGCand));
+    int nc = 0;
+    for (; na < p; na++) if (!hr_par_split(a[na], &ta[na])) goto fin;
+    for (; nb < q; nb++) if (!hr_par_split(b[nb], &tb[nb])) goto fin;
+    {
+        int ncert = 0;
+        const HrGCert* certs = hr_gcertificates(&ncert);
+        for (int ci = 0; ci < ncert && nc < HR_MAXCAND; ci++) {
+            const HrGCert* ct = &certs[ci];
+            if (ct->m != m || ct->n != n || ct->p != p || ct->q != q) continue;
+            HrGEnum en = { ct, a, b, ta, tb, cands, &nc, ci };
+            Expr* vals[HR_NFAMPAR];
+            genum_family(&en, 0, vals);
+        }
+        qsort(cands, (size_t)nc, sizeof(HrGCand), gcand_cmp);
+        for (int i = 0; i < nc && !out; i++) {
+            HrAnswer ans; memset(&ans, 0, sizeof ans);
+            if (gwalk(&cands[i], a, b, ta, tb, &ans)) {
+                out = answer_expr(&ans, z);
+                answer_free(&ans);
+            }
+        }
+    }
+fin:
+    for (int i = 0; i < nc; i++) gcand_free(&cands[i]);
+    free(cands);
+    for (int i = 0; i < na; i++) hr_par_free(&ta[i]);
+    for (int i = 0; i < nb; i++) hr_par_free(&tb[i]);
+    return out;
+}
+
+Expr* hrep_meijerg_expr(const Expr* e) {
+    if (!is_head(e, SYM_MeijerG) || e->data.function.arg_count != 3) return NULL;
+    const Expr* A = e->data.function.args[0];
+    const Expr* B = e->data.function.args[1];
+    if (!is_head(A, SYM_List) || A->data.function.arg_count != 2) return NULL;
+    if (!is_head(B, SYM_List) || B->data.function.arg_count != 2) return NULL;
+    const Expr *an = A->data.function.args[0], *ap = A->data.function.args[1];
+    const Expr *bm = B->data.function.args[0], *bq = B->data.function.args[1];
+    if (!is_head(an, SYM_List) || !is_head(ap, SYM_List) || !is_head(bm, SYM_List) || !is_head(bq, SYM_List))
+        return NULL;
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    arith_warnings_mute_push();
+    Expr* r = hrep_meijerg(an->data.function.args, (int)an->data.function.arg_count,
+                           ap->data.function.args, (int)ap->data.function.arg_count,
+                           bm->data.function.args, (int)bm->data.function.arg_count,
+                           bq->data.function.args, (int)bq->data.function.arg_count,
+                           e->data.function.args[2]);
+    arith_warnings_mute_pop();
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
+    return r;
 }
 
 /* ------------------------------------------------------------------ */

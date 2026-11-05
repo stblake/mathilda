@@ -21,6 +21,7 @@
 
 #define W  "Hrep`w"
 #define AL "Hrep`al"
+#define BE "Hrep`be"
 
 static const HrCert CERTS[] = {
     /* ---- 0F0, 1F0 ------------------------------------------------- */
@@ -94,6 +95,15 @@ static const HrCert CERTS[] = {
       "BesselI[" AL " - 1/2, Sqrt[" W "]]^2",
       "!(IntegerQ[2 " AL "] && " AL " <= 0)", 1 },
 
+    /* 1F2(1; 3/2, nu + 3/2; w) = Gamma(3/2) Gamma(nu + 3/2) w^(-(nu+1)/2) L_nu(2 sqrt w) */
+    { 1, 2, { "1" }, { "3/2", AL " + 3/2" },
+      "Gamma[3/2] Gamma[" AL " + 3/2] " W "^(-(" AL " + 1)/2) StruveL[" AL ", 2 Sqrt[" W "]]",
+      "!(IntegerQ[2 " AL "] && " AL " <= -3/2)", 1 },
+    /* 1F2(1/2; 1, 3/2; w) = I0(2 sqrt w) - Pi/2 (L0 I1 - L1 I0)(2 sqrt w): the integral of I0 */
+    { 1, 2, { "1/2" }, { "1", "3/2" },
+      "BesselI[0, 2 Sqrt[" W "]] - Pi/2 (StruveL[0, 2 Sqrt[" W "]] BesselI[1, 2 Sqrt[" W "]]"
+      " - StruveL[1, 2 Sqrt[" W "]] BesselI[0, 2 Sqrt[" W "]])", NULL, 0 },
+
     /* ---- 3F2 ------------------------------------------------------- */
     /* Clausen: 3F2(1, 1, 1; 3/2, 2; w) = 2F1(1/2, 1/2; 3/2; w)^2 */
     { 3, 2, { "1", "1", "1" }, { "3/2", "2" }, "ArcSin[Sqrt[" W "]]^2/" W, NULL, 0 },
@@ -102,4 +112,46 @@ static const HrCert CERTS[] = {
 const HrCert* hr_certificates(int* n) {
     *n = (int)(sizeof CERTS / sizeof CERTS[0]);
     return CERTS;
+}
+
+/* ---- Meijer G certificates (PBM vol. 3 sec. 8.4, the Roach`GForm table
+ *      of src/internal/RoachIntegrate.m read backwards) ---------------- */
+static const HrGCert GCERTS[] = {
+    /* G^{1,0}_{0,1}(w | ; b) = w^b e^-w */
+    { 1, 0, 0, 1, { 0 }, { AL }, W "^" AL " E^(-" W ")", NULL, 1 },
+    /* G^{1,0}_{0,2}(w | ; b1 ; b2) = w^((b1+b2)/2) J_(b1-b2)(2 sqrt w) */
+    { 1, 0, 0, 2, { 0 }, { AL, BE },
+      W "^((" AL " + " BE ")/2) BesselJ[" AL " - " BE ", 2 Sqrt[" W "]]", NULL, 2 },
+    /* G^{2,0}_{0,2}(w | ; b1, b2) = 2 w^((b1+b2)/2) K_(b1-b2)(2 sqrt w) */
+    { 2, 0, 0, 2, { 0 }, { AL, BE },
+      "2 " W "^((" AL " + " BE ")/2) BesselK[" AL " - " BE ", 2 Sqrt[" W "]]", NULL, 2 },
+    /* G^{1,1}_{1,1}(w | a ; b) = Gamma(1 - a + b) w^b (1 + w)^(a - b - 1) */
+    { 1, 1, 1, 1, { AL }, { BE },
+      "Gamma[1 - " AL " + " BE "] " W "^" BE " (1 + " W ")^(" AL " - " BE " - 1)",
+      "!(IntegerQ[" AL " - " BE "] && " AL " - " BE " >= 1)", 2 },
+    /* G^{1,2}_{2,2}(w | 1, 1 ; 1 ; 0) = Log(1 + w) */
+    { 1, 2, 2, 2, { "1", "1" }, { "1", "0" }, "Log[1 + " W "]", NULL, 0 },
+    /* G^{1,2}_{2,2}(w | 1/2, 1 ; 1/2 ; 0) = 2 ArcTan(sqrt w) */
+    { 1, 2, 2, 2, { "1/2", "1" }, { "1/2", "0" }, "2 ArcTan[Sqrt[" W "]]", NULL, 0 },
+    /* G^{1,2}_{2,2}(w | 1/2, 1/2 ; 0 ; 0) = 2 K(-w) */
+    { 1, 2, 2, 2, { "1/2", "1/2" }, { "0", "0" }, "2 EllipticK[-" W "]", NULL, 0 },
+    /* G^{2,0}_{1,2}(w | ; 1 ; a, 0) = Gamma(a, w) */
+    { 2, 0, 1, 2, { "1" }, { AL, "0" }, "Gamma[" AL ", " W "]", NULL, 1 },
+    /* G^{2,0}_{1,2}(w | ; 1 ; 0, 1/2) = sqrt(Pi) Erfc(sqrt w) */
+    { 2, 0, 1, 2, { "1" }, { "0", "1/2" }, "Sqrt[Pi] Erfc[Sqrt[" W "]]", NULL, 0 },
+    /* G^{2,0}_{1,3}(w | ; -(nu+1)/2 ; nu/2, -nu/2 ; -(nu+1)/2) = Y_nu(2 sqrt w) */
+    { 2, 0, 1, 3, { "-(" AL " + 1)/2" }, { AL "/2", "-" AL "/2", "-(" AL " + 1)/2" },
+      "BesselY[" AL ", 2 Sqrt[" W "]]", NULL, 1 },
+    /* G^{1,1}_{1,3}(w | (nu+1)/2 ; (nu+1)/2 ; -nu/2, nu/2) = H_nu(2 sqrt w) */
+    { 1, 1, 1, 3, { "(" AL " + 1)/2" }, { "(" AL " + 1)/2", "-" AL "/2", AL "/2" },
+      "StruveH[" AL ", 2 Sqrt[" W "]]", NULL, 1 },
+    /* G^{1,1}_{1,3}(w | 1 ; 1/2 ; 0, 0) = (2/sqrt Pi) Si(2 sqrt w) */
+    { 1, 1, 1, 3, { "1" }, { "1/2", "0", "0" }, "2 SinIntegral[2 Sqrt[" W "]]/Sqrt[Pi]", NULL, 0 },
+    /* G^{2,0}_{1,3}(w | ; 1 ; 0, 0 ; 1/2) = -(2/sqrt Pi) Ci(2 sqrt w) */
+    { 2, 0, 1, 3, { "1" }, { "0", "0", "1/2" }, "-2 CosIntegral[2 Sqrt[" W "]]/Sqrt[Pi]", NULL, 0 },
+};
+
+const HrGCert* hr_gcertificates(int* n) {
+    *n = (int)(sizeof GCERTS / sizeof GCERTS[0]);
+    return GCERTS;
 }

@@ -375,6 +375,10 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     }
     Expr* s = NULL;
     if ((which & FE_MEIJER) && fe_is_head(node, SYM_MeijerG)) {
+        /* The G walk first: it handles the log case and names the result
+         * directly (K, Y, Ci, Gamma(a, z), ...). Then the Slater route. */
+        if (which & FE_PFQ) s = hrep_meijerg_expr(node);
+        if (s) { expr_free(node); *changed = true; return s; }
         s = meijerg_function_expand(node);
         /* The Slater expansion leaves pFq terms. Each goes through Roach's
          * Formula algorithm (Roach '97: a G function without the log case

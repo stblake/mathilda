@@ -38,6 +38,18 @@ typedef struct {
 
 const HrCert* hr_certificates(int* n);
 
+/* A Meijer G certificate: G^{m,n}_{p,q}(w | a[0..n) a[n..p) ; b[0..m) b[m..q)) = f0. */
+typedef struct {
+    int m, n, p, q;
+    const char* a[6];
+    const char* b[6];
+    const char* f0;
+    const char* cond;
+    int family;
+} HrGCert;
+
+const HrGCert* hr_gcertificates(int* n);
+
 /* e /. sym -> val, evaluated; borrows. */
 Expr* hr_subst(const Expr* e, const char* sym, const Expr* val);
 

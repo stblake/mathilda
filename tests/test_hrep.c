@@ -143,6 +143,35 @@ static void test_quiet(void) {
                    "ok", 0);
 }
 
+/* The G walk (Roach '97), including the log case the Slater route cannot do. */
+static void check_g(const char* g) {
+    char buf[1024];
+    snprintf(buf, sizeof buf,
+        "With[{r = FunctionExpand[%s]}, FreeQ[r, MeijerG | HypergeometricPFQ] &&"
+        " Abs[N[(r - (%s)) /. z -> 7/10, 30]] < 10^-20 && Abs[N[(r - (%s)) /. z -> 3, 30]] < 10^-20]",
+        g, g, g);
+    assert_eval_eq(buf, "True", 0);
+}
+static void test_meijer(void) {
+    assert_eval_eq("FunctionExpand[MeijerG[{{}, {1}}, {{0, 0}, {}}, z]] === Gamma[0, z]", "True", 0);
+    assert_eval_eq("FunctionExpand[MeijerG[{{}, {-1/2}}, {{0, 0}, {-1/2}}, z]] === BesselY[0, 2 Sqrt[z]]", "True", 0);
+    check_g("MeijerG[{{}, {2}}, {{1, 0}, {}}, z]");
+    check_g("MeijerG[{{}, {1}}, {{0, 0}, {1/2}}, z]");
+    check_g("MeijerG[{{}, {2}}, {{1, 1}, {1/2}}, z]");
+    check_g("MeijerG[{{}, {1}}, {{1/2, 0}, {}}, z]");
+    check_g("MeijerG[{{}, {2}}, {{3/2, 0}, {}}, z]");
+}
+
+/* Struve L certificates and integer-order reduction: Roach's gallery
+ * 1F2(3/2; 5/2, 5; z) in I0, I1, L0, L1 */
+static void test_struve(void) {
+    check_closed("HypergeometricPFQ[{3/2}, {5/2, 5}, z]", "{}", "7/10");
+    check_closed("HypergeometricPFQ[{3/2}, {5/2, 5}, z]", "{}", "-3");
+    assert_eval_eq("FreeQ[FunctionExpand[HypergeometricPFQ[{3/2}, {5/2, 5}, z]],"
+                   " (BesselI | StruveL)[n_ /; n > 1 || n < 0, _]]", "True", 0);
+    check_closed("HypergeometricPFQ[{1}, {3/2, 7/3}, z]", "{}", "7/10");
+}
+
 /* Declines stay unevaluated. */
 static void test_declines(void) {
     assert_eval_eq("FunctionExpand[HypergeometricPFQ[{a}, {c}, z]]",
@@ -166,6 +195,8 @@ int main(void) {
     TEST(test_generated);
     TEST(test_values);
     TEST(test_quiet);
+    TEST(test_meijer);
+    TEST(test_struve);
     TEST(test_declines);
     printf("All hrep tests passed!\n");
     return 0;
