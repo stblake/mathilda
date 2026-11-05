@@ -1926,10 +1926,13 @@ static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* as
 /* Definite stage: Roach's Meijer G algorithm (src/internal/RoachIntegrate.m),
  * loaded lazily like MeijerConvolution. Any real interval. A $Failed or
  * a surviving Integrate is a decline. */
+#define ROACH_CASCADE_BUDGET_SECONDS 10
 static unsigned roach_load_gen = 0;
 static bool roach_load_succeeded = false;
 
-static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+/* budget > 0: the call runs under TimeConstrained[..., budget] (the automatic
+ * cascade); 0: unbounded (the pinned method). */
+static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, int budget) {
     if (roach_load_gen != symtab_generation()) {
         roach_load_gen = symtab_generation();
         mth_msg_suppress_push();
@@ -1943,6 +1946,9 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     Expr* call = expr_new_function(expr_new_symbol("Roach`Run"),
         (Expr*[]){ expr_copy(f), expr_copy(x), expr_copy(a), expr_copy(b),
                    assumptions ? expr_copy(assumptions) : expr_new_symbol("True") }, 5);
+    if (budget > 0)
+        call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
+            call, expr_new_integer(budget), expr_new_symbol(SYM_DollarFailed) }, 3);
     unsigned long fired0 = mth_msg_fired_count();
     mth_msg_suppress_push();
     Expr* r = evaluate(call);
@@ -2198,7 +2204,7 @@ static Expr* integrate_definite(Expr* res) {
              * PBM 2.24.1 conditions, G -> named functions by the Formula
              * algorithm; any real interval. Pinned only (v0.6200). */
             if (!r && !has_undef && mech == METHOD_ROACH)
-                r = try_roach(cur, x, a, b, assumptions);
+                r = try_roach(cur, x, a, b, assumptions, 0);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
              * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
@@ -2228,6 +2234,14 @@ static Expr* integrate_definite(Expr* res) {
              * already declined, this ordinary-integral method would compute a
              * value ACROSS the interior pole (a divergent / complex artifact),
              * so a PV request that they cannot close is left unevaluated. */
+            /* Roach's Meijer G algorithm as a late fallback under Automatic:
+             * after Newton-Leibniz and every table stage, so it only sees
+             * integrals they all declined, and it cannot change an answer they
+             * give. It has its own budget (the PMS pattern). Every answer it
+             * returns has been checked numerically. Not under PrincipalValue,
+             * where its theorems would give the ordinary integral. */
+            if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
+                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS);
             if (!r && !has_undef && !principal_value &&
                 (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
                 r = integrate_diffunderint_try(cur, x, a, b, assumptions);
