@@ -273,8 +273,10 @@ void test_arnoldi_real_residual(void) {
  *  BasisSize / Tolerance / MaxIterations sub-options             *
  * ============================================================ */
 
-/* BasisSize -> 3 caps the Krylov basis; result length == 3 in the
- * default no-k_spec case. */
+/* The whole spectrum (no k) is Direct's, whatever the Arnoldi
+ * sub-options: the machine Arnoldi is the restarted Krylov driver of
+ * sparse_la_eigen.c, which takes a count; a single truncated pass that
+ * returned BasisSize Ritz values for a full-spectrum request is gone. */
 void test_arnoldi_basis_size_cap(void) {
     double A[16] = {
         5.0, 1.0, 0.0, 0.0,
@@ -287,14 +289,10 @@ void test_arnoldi_basis_size_cap(void) {
     snprintf(buf, sizeof buf,
         "Eigenvalues[%s, Method -> {\"Arnoldi\", \"BasisSize\" -> 3}]", m);
     Expr* arn = eval_string(buf);
-    ASSERT(list_len_eq(arn, 3));
-    /* The first (largest |lambda|) Ritz value should be close to Direct's
-     * largest eigenvalue (sqrt(2)-shifted symmetric tridiag eigenvalue
-     * ~6.04 within Arnoldi's convergence at m=3). */
+    ASSERT(list_len_eq(arn, 4));
+    /* Direct's top eigenvalue of this matrix is 5.74528124017414 */
     double v0 = extract_real(arn->data.function.args[0]);
-    /* Direct's top-1 for this matrix is ~5.83118; Arnoldi with m=3 should
-     * be near it but exact convergence is not required for m < n. */
-    ASSERT(v0 > 5.0 && v0 < 7.0);
+    ASSERT(fabs(v0 - 5.74528124017414) < 1e-10);
     expr_free(arn);
     free(m);
 }

@@ -424,6 +424,7 @@ set(COMMON_SRC
     ../src/sparse/sparse_la_func.c
     ../src/sparse/sparse_la_pred.c
     ../src/sparse/sparse_la_exact.c
+    ../src/sparse/sparse_la_eigen.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c
@@ -783,6 +784,7 @@ set(COMMON_SRC
     ../src/linalg/charpoly.c
     ../src/linalg/eigen_direct.c
     ../src/linalg/eigen_arnoldi.c
+    ../src/linalg/krylov_schur.c
     ../src/linalg/eigen_banded.c
     ../src/linalg/eigen_feast.c
     ../src/linalg/jordandecomp.c
@@ -1945,6 +1947,9 @@ add_executable(sparse_la_solve_tests test_sparse_la_solve.c $<TARGET_OBJECTS:mat
 target_include_directories(sparse_la_solve_tests PRIVATE ../src)
 add_executable(projection_tensorproduct_tests test_projection_tensorproduct.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(projection_tensorproduct_tests PRIVATE ../src)
+
+add_executable(sparse_la_eigen_tests test_sparse_la_eigen.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sparse_la_eigen_tests PRIVATE ../src ../src/linalg)
 add_test(NAME sparse_dot_tests COMMAND sparse_dot_tests)
 
 add_executable(sparse_func_tests test_sparse_func.c $<TARGET_OBJECTS:mathilda_common>)

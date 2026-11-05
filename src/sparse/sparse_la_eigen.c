@@ -62,6 +62,7 @@
 #include "message.h"
 #include "print.h"
 #include "common.h"
+#include "ndarray.h"
 #include <float.h>
 #include <math.h>
 #include <stdlib.h>
@@ -531,14 +532,47 @@ static void msg_take(EigKind kind, const EigOpts* o, int64_t total) {
                     what, (long long)o->k, (long long)total, what);
 }
 
-static void msg_arh(EigKind kind, int64_t k, int64_t n) {
+/* ::arh (machine) / ::arhm (exact): the sparse array is about to be
+ * densified for a count the Krylov methods would not serve well. */
+static void msg_arh(EigKind kind, int64_t k, int64_t n, bool machine) {
     bool sv = kind == EK_SVL || kind == EK_SVD;
     const char* what = sv ? "singular values and/or singular vectors" : "eigenvalues and/or eigenvectors";
-    mth_message(kind_head(kind), "arh",
-                "Because finding %lld out of the %lld %s is likely to be faster with dense matrix methods, "
-                "the sparse input matrix will be converted. If fewer %s would be sufficient, consider "
-                "restricting this number using the second argument to %s.",
-                (long long)k, (long long)n, what, what, kind_head(kind));
+    if (machine)
+        mth_message(kind_head(kind), "arh",
+                    "Because finding %lld out of the %lld %s is likely to be faster with dense matrix methods, "
+                    "the sparse input matrix will be converted. If fewer %s would be sufficient, consider "
+                    "restricting this number using the second argument to %s.",
+                    (long long)k, (long long)n, what, what, kind_head(kind));
+    else
+        mth_message(kind_head(kind), "arhm",
+                    "Because finding %lld out of the %lld %s is likely to be faster with dense matrix methods, "
+                    "the sparse input matrix will be converted. If fewer %s at machine precision would be "
+                    "sufficient, consider using N on the matrix and restricting this number using the second "
+                    "argument to %s.",
+                    (long long)k, (long long)n, what, what, kind_head(kind));
+}
+
+/* Exact entries throughout (no inexact number at all). */
+static bool sparse_is_exact(const SparseArray* sa) {
+    if (!sa || sa->rank != 2) return false;
+    if (common_scan_inexact(sa->bg).has_inexact) return false;
+    if (sa->kind == SPV_INT64) return true;
+    if (sa->kind != SPV_EXPR) return false;
+    Expr* const* v = sa->vals;
+    for (int64_t k = 0; k < sa->pat->nnz; k++)
+        if (common_scan_inexact(v[k]).has_inexact) return false;
+    return true;
+}
+
+/* The reference's densify notice for a request it answers densely: n > 100
+ * (rows or columns, for the singular-value heads) and at most a fifth of the
+ * matrix stored -- a fuller array is dense in all but name, and converting
+ * it is not news. `k` is the count (the dimension for the whole spectrum). */
+static void maybe_arh(EigKind kind, const SparseArray* sa, int64_t k, int64_t kdim, bool machine) {
+    int64_t m = sa->dims[0], n = sa->dims[1];
+    int64_t big = m > n ? m : n;
+    if (big <= 100 || 5 * sa->pat->nnz > m * n) return;
+    msg_arh(kind, k, kdim, machine);
 }
 
 static void msg_maxit(const char* head, int64_t lim) {
@@ -792,7 +826,9 @@ static EigOut eigen_krylov(EigKind kind, const SpMat* A0, const SpMat* B0, const
     if (p.ncv > 0 && p.ncv <= p.nev) p.ncv = (int)(p.nev + 1 <= n ? p.nev + 1 : n);
     p.maxit = o->maxit;
     p.tol = o->tol;
-    p.want_vectors = kind != EK_VALUES;
+    /* vectors always: Eigenvalues, Eigenvectors and Eigensystem then make
+     * the identical Krylov run, so their values agree to the bit */
+    p.want_vectors = true;
     if (o->start) {
         int len = 0;
         if (!na_load_vector(o->start, c, &len, &v0) || len != n) {
@@ -1012,8 +1048,11 @@ static EigOut svd_krylov(EigKind kind, const Expr* se, const SpMat* A0, const Ei
     double smax = 0.0;
     for (int i = 0; i < got; i++) smax = fmax(smax, sv[i]);
     double floor_ = o->sv_tol >= 0.0 ? o->sv_tol * smax : (double)big * DBL_EPSILON * smax;
-    int keep = 0;
-    for (int i = 0; i < got; i++) if (sv[perm[i]] > floor_ || (o->sv_tol >= 0.0 && sv[perm[i]] >= floor_)) perm[keep++] = perm[i];
+    /* a value under the tolerance is reported as 0. -- the count reaches
+     * it, as in the dense SingularValueList */
+    int keep = got;
+    for (int i = 0; i < got; i++)
+        if (o->sv_tol >= 0.0 ? sv[i] < floor_ : sv[i] <= floor_) sv[i] = 0.0;
     if (kind == EK_SVL) {
         Expr** it = malloc(sizeof(Expr*) * (size_t)(keep > 0 ? keep : 1));
         if (!it) goto done;
@@ -1100,6 +1139,12 @@ static Expr* svd_dense_sparse_middle(const Expr* call) {
     free(args);
     Expr* r = evaluate(svd);
     expr_free(svd);
+    if (r && r->type == EXPR_NDARRAY) {
+        /* a square answer {u, w, v} packs into one n x n x 3 buffer */
+        Expr* l = ndarray_to_nested_list(r);
+        expr_free(r);
+        r = l;
+    }
     if (!r || !is_head(r, SYM_List) || r->data.function.arg_count != 3) { expr_free(r); return NULL; }
     Expr* mid = r->data.function.args[1];
     int rows = 0, cols = 0;
@@ -1118,16 +1163,61 @@ static Expr* svd_dense_sparse_middle(const Expr* call) {
     return r;
 }
 
+/* The exact zero matrix with a count: every eigenvalue 0, and the
+ * reference's eigenvectors -- the unit vectors e_n, e_(n-1), ..., e_1, of
+ * which k takes the first and -k the last. Answered here because the dense
+ * exact path builds a characteristic polynomial of degree n first. */
+static Expr* exact_zero_eigen(EigKind kind, const EigOpts* o, int64_t n) {
+    int64_t k = o->k < n ? o->k : n;
+    Expr* vals = NULL;
+    Expr* vecs = NULL;
+    if (kind != EK_VECTORS) {
+        Expr** it = malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+        if (!it) return NULL;
+        for (int64_t i = 0; i < k; i++) it[i] = expr_new_integer(0);
+        vals = expr_new_function(expr_new_symbol(SYM_List), it, (size_t)k);
+        free(it);
+    }
+    if (kind != EK_VALUES) {
+        Expr** rows = malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+        Expr** comp = malloc(sizeof(Expr*) * (size_t)n);
+        if (!rows || !comp) { free(rows); free(comp); expr_free(vals); return NULL; }
+        for (int64_t q = 0; q < k; q++) {
+            /* position in the full list {e_n, ..., e_1} */
+            int64_t pos = o->from_end ? n - k + q : q;
+            int64_t one = n - 1 - pos;                 /* 0-based index of the 1 */
+            for (int64_t i = 0; i < n; i++) comp[i] = expr_new_integer(i == one ? 1 : 0);
+            rows[q] = expr_new_function(expr_new_symbol(SYM_List), comp, (size_t)n);
+        }
+        vecs = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)k);
+        free(rows);
+        free(comp);
+    }
+    if (kind == EK_VALUES) return vals;
+    if (kind == EK_VECTORS) return vecs;
+    Expr* pr[2] = { vals, vecs };
+    return expr_new_function(expr_new_symbol(SYM_List), pr, 2);
+}
+
 /* ---- the native handlers ------------------------------------------------- */
 
 /* Eigenvalues / Eigenvectors / Eigensystem [s or {a, b}, k, opts]. */
 static Expr* native_eigen(const Expr* call, EigKind kind) {
     size_t na = call->data.function.arg_count;
     Expr* const* a = call->data.function.args;
-    if (na < 2) return NULL;                       /* the whole spectrum: dense */
+    if (na < 1) return NULL;
     const char* head = kind_head(kind);
     EigOpts o;
     opts_init(&o);
+    if (na < 2 || is_rule(a[1])) {
+        /* the whole spectrum: dense, with the reference's notice */
+        const SparseArray* sa = sp_of(a[0]);
+        if (sa && sa->rank == 2 && sa->dims[0] == sa->dims[1]) {
+            if (sparse_is_machine(sa)) maybe_arh(kind, sa, sa->dims[0], sa->dims[0], true);
+            else if (sparse_is_exact(sa)) maybe_arh(kind, sa, sa->dims[0], sa->dims[0], false);
+        }
+        return NULL;
+    }
     if (!parse_k(a[1], &o)) return NULL;
     /* the matrix, or the pencil {a, b} */
     const Expr* ae = a[0];
@@ -1141,7 +1231,24 @@ static Expr* native_eigen(const Expr* call, EigKind kind) {
     }
     bool machine_a = ae->type == EXPR_SPARSE ? sparse_is_machine(sp_of(ae)) : dense_is_machine(ae);
     bool machine_b = !be || (be->type == EXPR_SPARSE ? sparse_is_machine(sp_of(be)) : dense_is_machine(be));
-    if (!machine_a && !(be && machine_b)) return NULL;
+    if (!machine_a && !(be && machine_b)) {
+        const SparseArray* sa = sp_of(ae);
+        if (!be && sa && sparse_is_exact(sa) && sa->dims[0] == sa->dims[1]) {
+            int64_t n = sa->dims[0];
+            if (o.from_end && sa->pat->nnz == 0 && o.k <= n)
+                /* the reference's shift-invert about 0 meets the zero matrix
+                 * (and it still answers, densely) */
+                mth_message(head, "ssing",
+                            "Failed to factor the matrix involving the shift. This may be caused by the "
+                            "shift, 0, corresponding exactly to an eigenvalue. Changing the shift value "
+                            "slightly might help.");
+            else if (5 * o.k > n && o.k <= n)
+                maybe_arh(kind, sa, o.k, n, false);
+            if (sa->pat->nnz == 0 && sp_is_zero(sa->bg) && na == 2 && (o.k <= n || o.upto))
+                return exact_zero_eigen(kind, &o, n);
+        }
+        return NULL;
+    }
     int ps = parse_opts(a + 2, na - 2, head, false, &o);
     if (ps == P_DECLINE) return NULL;
     if (ps == P_BAD) return expr_copy((Expr*)call);
@@ -1170,7 +1277,7 @@ static Expr* native_eigen(const Expr* call, EigKind kind) {
         /* the reference's choice of the dense method */
         if (be) { if (n * n <= EIG_DENSE_MAX) goto decline; }
         else if (n <= 14 || 5 * A.nnz > n * n || 5 * o.k > n) {
-            if (5 * o.k > n && n > 100) msg_arh(kind, o.k, n);
+            if (5 * o.k > n && ae->type == EXPR_SPARSE) maybe_arh(kind, sp_of(ae), o.k, n, true);
             goto decline;
         }
     }
@@ -1197,7 +1304,30 @@ static Expr* native_eigensystem(const Expr* call) { return native_eigen(call, EK
 static Expr* native_singular(const Expr* call, EigKind kind) {
     size_t na = call->data.function.arg_count;
     Expr* const* a = call->data.function.args;
-    if (na < 1 || a[0]->type != EXPR_SPARSE || !sparse_is_machine(sp_of(a[0]))) return NULL;
+    if (na < 1 || a[0]->type != EXPR_SPARSE) return NULL;
+    if (!sparse_is_machine(sp_of(a[0]))) {
+        const SparseArray* sa = sp_of(a[0]);
+        if (sa->rank == 2 && sparse_is_exact(sa) && (na < 2 || is_rule(a[1]))) {
+            int64_t kmin = sa->dims[0] < sa->dims[1] ? sa->dims[0] : sa->dims[1];
+            maybe_arh(kind, sa, kmin, kmin, false);
+        }
+        /* the exact zero matrix with a count: k exact zeros (reference) */
+        EigOpts oz;
+        opts_init(&oz);
+        if (kind == EK_SVL && na == 2 && sa->rank == 2 && sparse_is_exact(sa) && sa->pat->nnz == 0 &&
+            sp_is_zero(sa->bg) && parse_k(a[1], &oz)) {
+            int64_t kmin = sa->dims[0] < sa->dims[1] ? sa->dims[0] : sa->dims[1];
+            if (oz.k > kmin && !oz.upto) return NULL;          /* ::take: the dense path */
+            int64_t k = oz.k < kmin ? oz.k : kmin;
+            Expr** it = malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+            if (!it) return NULL;
+            for (int64_t i = 0; i < k; i++) it[i] = expr_new_integer(0);
+            Expr* r = expr_new_function(expr_new_symbol(SYM_List), it, (size_t)k);
+            free(it);
+            return r;
+        }
+        return NULL;
+    }
     const char* head = kind_head(kind);
     EigOpts o;
     opts_init(&o);
@@ -1209,11 +1339,16 @@ static Expr* native_singular(const Expr* call, EigKind kind) {
     int ps = parse_opts(a + first_opt, na - first_opt, head, true, &o);
     if (ps == P_DECLINE) return NULL;
     if (ps == P_BAD) return expr_copy((Expr*)call);
-    if (!o.has_k) return kind == EK_SVD ? svd_dense_sparse_middle(call) : NULL;
+    if (!o.has_k) {
+        const SparseArray* sa = sp_of(a[0]);
+        int64_t kmin = sa->dims[0] < sa->dims[1] ? sa->dims[0] : sa->dims[1];
+        maybe_arh(kind, sa, kmin, kmin, true);
+        return kind == EK_SVD ? svd_dense_sparse_middle(call) : NULL;
+    }
     SpMat A;
     if (!spla_view(sp_of(a[0]), true, &A)) return NULL;
     Expr* result = NULL;
-    int64_t kmin = A.m < A.n ? A.m : A.n, big = A.m > A.n ? A.m : A.n;
+    int64_t kmin = A.m < A.n ? A.m : A.n;
     if (o.k > kmin && !o.upto) {
         msg_take(kind, &o, kmin);
         spla_view_free(&A);
@@ -1227,7 +1362,7 @@ static Expr* native_singular(const Expr* call, EigKind kind) {
     }
     bool dense = !o.arnoldi && (kmin <= 14 || 5 * A.nnz > A.m * A.n || 5 * o.k > kmin);
     if (dense) {
-        if (!o.arnoldi && 5 * o.k > kmin && big > 100) msg_arh(kind, o.k, kmin);
+        if (!o.arnoldi && 5 * o.k > kmin) maybe_arh(kind, sp_of(a[0]), o.k, kmin, true);
         spla_view_free(&A);
         return kind == EK_SVD ? svd_dense_sparse_middle(call) : NULL;
     }

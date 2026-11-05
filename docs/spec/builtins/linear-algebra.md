@@ -1724,6 +1724,9 @@ Gives the singular values of a matrix.
   and `UpTo[k]` (up to `k` of all the values, zeros included, as for `k`).
 - `SingularValueList[{m, a}]` — the generalized singular values (machine
   matrices only).
+- A machine `SparseArray` with a count, and `Method -> "Arnoldi"`: see
+  "Eigenvalues / Eigenvectors / Eigensystem / SingularValueList /
+  SingularValueDecomposition: SparseArray and Method -> \"Arnoldi\"" after `Eigensystem`.
 
 **Features**:
 - `Protected`. Options `Tolerance -> Automatic`, `Method -> Automatic`
@@ -2087,6 +2090,9 @@ Gives the singular value decomposition of a matrix.
   `a == ua . sigma_a . ConjugateTranspose[v]`.  Both matrices must
   share the same number of columns; truncation `k` is not supported in
   this form.
+- A machine `SparseArray` with a count, and `Method -> "Arnoldi"`: see
+  "Eigenvalues / Eigenvectors / Eigensystem / SingularValueList /
+  SingularValueDecomposition: SparseArray and Method -> \"Arnoldi\"" after `Eigensystem`.
 
 **Features**:
 - `Protected`.
@@ -2955,6 +2961,9 @@ Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m, k]`: first `k` eigenvalues largest in absolute value.
 - `Eigenvalues[m, -k]`: `k` eigenvalues smallest in absolute value.
 - `Eigenvalues[m, UpTo[k]]`: up to `k` eigenvalues.
+- A machine `SparseArray` with a count, and `Method -> "Arnoldi"`: see
+  "Eigenvalues / Eigenvectors / Eigensystem / SingularValueList /
+  SingularValueDecomposition: SparseArray and Method -> \"Arnoldi\"" after `Eigensystem`.
 
 **Features**:
 - `Protected`.
@@ -3171,7 +3180,8 @@ Gives the eigenvalues and the matching eigenvectors of a square matrix.
 - Messages (reference text): `::matsq`, `::seqs` (a bad sequence
   specification), `::take` (`|k|` larger than the order — `Eigenvalues` itself
   clips silently).
-- `SparseArray` input is densified by the transparency gate.
+- `SparseArray` input with a count: the Krylov path below; the whole spectrum
+  is densified by the transparency gate.
 - **Compile**: not lowered — the result is the ragged pair `{values, vectors}`
   (a vector and a matrix, real or complex by data), which is no single machine
   array (`EXEMPT` in `tools/compile_coverage.py`). The head is on `pack.c`'s
@@ -3184,6 +3194,100 @@ Out[1]= {{3, 1}, {{1, 1}, {-1, 1}}}
 
 In[2]:= Eigensystem[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 10.}}, -1]
 Out[2]= {{0.198247}, {{0.278296, -0.831847, 0.48019}}}
+```
+
+### Eigenvalues / Eigenvectors / Eigensystem / SingularValueList / SingularValueDecomposition: SparseArray and Method -> "Arnoldi"
+
+A few eigenpairs or singular values of a machine `SparseArray` (real or complex
+entries, zero background) come from a restarted Krylov method, without
+densifying (`src/sparse/sparse_la_eigen.c`, `src/linalg/krylov_schur.c`):
+
+- **Forms**: `Eigenvalues[s, k]`, `[s, -k]`, `[s, UpTo[k]]`, the same for
+  `Eigenvectors` and `Eigensystem`, the pencil `{a, b}` (either may be sparse),
+  `SingularValueList[s, k]` / `[s, -k]`, `SingularValueDecomposition[s, k]` /
+  `[s, -k]`. Sizes far above the densify cap work: the 6 smallest eigenvalues
+  of the 90000 x 90000 2-D Laplacian take ~2 s.
+- **When the reference densifies instead** (and so does Mathilda, with the same
+  answer as the dense matrix): `n <= 14`; more than a fifth of the matrix
+  stored (`5 nnz > n^2`); a count over a fifth of the dimension (`5 |k| > n`;
+  `min(m, n)` for the singular-value heads); the whole spectrum; the pencil
+  under the densify cap unless `Method -> "Arnoldi"`. For a densified request
+  on a large, genuinely sparse matrix (`max(m, n) > 100`, `5 nnz <= m n`) the
+  reference says `::arh` ("Because finding k out of the n eigenvalues and/or
+  eigenvectors is likely to be faster with dense matrix methods ...") for
+  machine input and `::arhm` for exact input; so does Mathilda. `|k|` beyond
+  the dimension is `::take`, unevaluated.
+- **Algorithms**: `k > 0` takes the `k` largest in magnitude of `A` (of
+  `b^-1 a` for a pencil); `-k` the smallest, by shift-and-invert about 0
+  through a sparse factor (CHOLMOD for a Hermitian matrix with a positive
+  diagonal, UMFPACK, or a dense LAPACK LU up to order 128). An exactly
+  singular matrix at the implicit shift 0 is shifted by `1e-7 phi ||A||`
+  instead -- the eigenvalues are still `sigma + 1/theta` exactly, and the
+  reference answers there too. The Krylov layer is ARPACK (`dsaupd` /
+  `dnaupd` / `znaupd`, mode 1 on a callback) when linked, else -- and when
+  `MATHILDA_NO_ARPACK=1` is set, or a run of ARPACK does not converge -- a
+  native Krylov-Schur: full re-orthogonalisation (CGS2), Ritz pairs of the
+  projected matrix by LAPACK (`dsyev`/`zheev` for a Hermitian operator,
+  `dgeev`/`zgeev` otherwise), thick restart onto the wanted invariant subspace
+  (thick-restart Lanczos for a Hermitian operator), real arithmetic for a real
+  operator, and every pair confirmed by its explicit residual before the run
+  stops. Singular values use the Hermitian eigenproblem of `A^H A` (or `A A^H`,
+  the smaller), `(A^H A)^-1` through a factor of `A` for `-k` on a square
+  matrix (the normal matrix itself, factored, for a rectangular one); each
+  `sigma` is refined as `||A v||`.
+- **`Method -> {"Arnoldi", opts}`** (the reference's sub-options):
+  `"Shift" -> s` (the eigenvalues nearest `s`, for `k` and `-k` alike;
+  `::ssing`, unevaluated, when `a - s b` is exactly singular), `"Criteria" ->
+  "Magnitude" | "RealPart" | "ImaginaryPart" | "BothEnds"` (applied to
+  `1/(lambda - s)` when a shift or `-k` is in force -- so `-k` with
+  `"RealPart"` gives the eigenvalues just above 0; `"BothEnds"` is `k - k/2`
+  from the top and `k/2` from the bottom, for a real symmetric matrix only,
+  else `::arbsym`; `::eslct` for another name), `"BasisSize"` (an integer
+  over 3 and at most `n`, else `::arbss`), `"MaxIterations"` (restarts; when
+  reached, `::maxit2` and the current values are returned), `"Tolerance"`,
+  `"StartingVector"` (`::svecnm` for a wrong length); `::moptx` for another
+  name and `::wrgopt` for a value of the wrong kind. Explicit `"Arnoldi"` always
+  takes the Krylov path.
+- **Ordering and normalisation**, as the dense answer: decreasing `|lambda|`
+  (ties: the more negative real part, then `+imag`, first), a conjugate pair
+  split by `k` exactly as the dense answer splits it (the solver computes one
+  extra value to see the pair); eigenvalues of a Hermitian matrix (and of a
+  real definite pencil) are `Real`. Eigenvectors have unit 2-norm and their
+  largest component real and positive -- the Krylov sign / phase is otherwise
+  arbitrary (the reference's own sparse and dense signs differ). Singular
+  values decrease; a value under the tolerance (`Tolerance`, default
+  `max(m, n) eps sigma_max`) is reported as `0.`.
+- **Result heads** (the reference's): Lists; `SingularValueDecomposition` of a
+  machine SparseArray, with or without `k`, is `{List, SparseArray, List}` -- the
+  singular-value matrix a SparseArray with background `0.`.
+- **Accuracy**: every returned pair has `||A v - lambda v|| <= ~1e-12 ||A||`.
+  Where the reference's own Arnoldi stops short (`::maxit2` on the
+  1000 x 1000 Laplacian with `k = 6`, `SingularValueList[s, -3]` ~1e-3 off)
+  Mathilda converges.
+- **Dense `Method -> "Arnoldi"`** (machine) runs the same driver on the CSR form
+  of the matrix, with all the sub-options above, `-k`, and the pencil. It
+  replaced a single, un-restarted Arnoldi pass (eigenvector residuals up to
+  `3e-2`). Without a count, or for `k >= n - 1`, Direct answers. A dense
+  matrix with `Method -> Automatic` and a count is Direct (LAPACK) trimmed --
+  `Eigenvalues[m, k] === Take[Eigenvalues[m], k]`, as in the reference (the
+  former automatic switch to the single-pass Arnoldi for small `k` was ~1e-3
+  off on medium matrices). MPFR input keeps its own Arnoldi.
+- A complex general machine matrix (dense, or a SparseArray densified) is now
+  solved by LAPACK `zgeev`; the real `2n x 2n` embedding it replaces could pick
+  `conj(lambda)` for one member of a clustered pair (`1162.53 + 0.089 I` for
+  `1162.53 - 0.089 I`, vector residuals `5e-2`). It remains the fallback
+  without LAPACK.
+
+```mathematica
+In[1]:= L = KroneckerProduct[#, IdentityMatrix[300, SparseArray]] +
+            KroneckerProduct[IdentityMatrix[300, SparseArray], #] &[
+          SparseArray[{Band[{1, 1}] -> 2., Band[{1, 2}] -> -1., Band[{2, 1}] -> -1.}, {300, 300}]];
+In[2]:= Eigenvalues[L, -3]
+Out[2]= {0.000544657, 0.000544657, 0.000217868}
+
+In[3]:= Eigenvalues[SparseArray[{Band[{1, 1}] -> 2., Band[{1, 2}] -> -1., Band[{2, 1}] -> -1.}, {60, 60}], 3,
+          Method -> {"Arnoldi", "Shift" -> 1.05}]
+Out[3]= {1.15217, 1.06005, 0.970414}
 ```
 
 ## HessenbergDecomposition

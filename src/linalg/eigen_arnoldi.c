@@ -9,7 +9,7 @@
 #include "sym_intern.h"
 #include "common.h"
 #include "numeric.h"
-#include "sparse_la.h"
+#include "sparse/sparse_la.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
