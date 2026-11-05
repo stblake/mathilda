@@ -38,7 +38,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgmp-dev libmpfr-dev libreadline-dev \
             libecm-dev liblapacke-dev libopenblas-dev \
-            libflint-dev libpcre2-dev libfftw3-dev
+            libflint-dev libpcre2-dev libfftw3-dev \
+            libsuitesparse-dev libarpack2-dev
           # raylib is universe-only and not on every runner image. USE_GRAPHICS
           # degrades to a text placeholder without it, so this one is allowed to
           # fail. libx11-dev is installed alongside it so the transitive -lX11

@@ -62,7 +62,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake libgmp-dev libmpfr-dev libreadline-dev \
             libecm-dev liblapacke-dev libopenblas-dev \
-            libflint-dev libpcre2-dev libfftw3-dev
+            libflint-dev libpcre2-dev libfftw3-dev \
+            libsuitesparse-dev libarpack2-dev
           sudo apt-get install -y --no-install-recommends libraylib-dev libx11-dev \
             || echo "raylib unavailable -- tests build with USE_GRAPHICS=OFF"
 
