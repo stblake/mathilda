@@ -29,6 +29,76 @@ static void define_ref(void) {
         " Total[Table[NIntegrate[f, {x, p[[i]], p[[i + 1]]}], {i, Length[p] - 1}]]]");
     Expr* r = evaluate(e);
     expr_free(e); expr_free(r);
+    /* Cauchy principal value about the poles ps, by symmetric excision:
+     * int_0^d (f(p + u) + f(p - u)) du on [p - d, p + d] (bounded integrand),
+     * the rest of [a, b] ordinary */
+    e = parse_expression(
+        "RoachTest`pvN[f_, {x_, a_, b_}, ps_List] := Module[{d = 1/4, pts, tot = 0, u},"
+        " pts = Join[{a}, Flatten[{# - d, # + d} & /@ ps], {b}];"
+        " Do[tot += If[pts[[2 i]] === Infinity,"
+        "   Total[Table[NIntegrate[f, {x, #[[j]], #[[j + 1]]}],"
+        "     {j, Length[#] - 1}]] &[Join[{pts[[2 i - 1]]}, pts[[2 i - 1]] + {1, 4, 16, 64, 256}, {Infinity}]],"
+        "   NIntegrate[f, {x, pts[[2 i - 1]], pts[[2 i]]}]], {i, Length[pts]/2}];"
+        " Do[tot += NIntegrate[(f /. x -> p + u) + (f /. x -> p - u), {u, 0, d}],"
+        "   {p, ps}];"
+        " tot]");
+    r = evaluate(e);
+    expr_free(e); expr_free(r);
+}
+
+/* Integrate[f, rng, PrincipalValue -> True, Assumptions -> as(, Method -> "Roach")]
+ * closes and agrees at `sub` with the symmetric-excision PV quadrature about
+ * the poles `ps` to 1e-8. */
+static void check_pv(const char* f, const char* rng, const char* as, const char* sub,
+                     const char* ps, int pinned) {
+    char buf[4096], opt[512];
+    /* no Assumptions option for "True": the PV Newton-Leibniz stage under an
+     * explicit Assumptions -> True is slow on ArcTan[x]/(x (1 - x^2)) (Limit) */
+    if (strcmp(as, "True") == 0) opt[0] = '\0';
+    else snprintf(opt, sizeof opt, ", Assumptions -> %s", as);
+    snprintf(buf, sizeof buf,
+        "With[{r = Integrate[%s, %s, PrincipalValue -> True%s%s]},"
+        " FreeQ[r, Integrate] && With[{v = N[(r /. ConditionalExpression[w_, _] :> w) /. %s],"
+        " ref = RoachTest`pvN[Evaluate[(%s) /. %s], Evaluate[%s /. %s], %s]},"
+        " Abs[v - ref] < 10^-8 (1 + Abs[ref])]]",
+        f, rng, opt, pinned ? ", Method -> \"Roach\"" : "", sub, f, sub, rng, sub, ps);
+    assert_eval_eq(buf, "True", 0);
+}
+
+/* Cauchy principal values by Roach's PV theorem: the kernel 1/(1 - x) under
+ * PV is Pi G^{1,1}_{2,2}(x | 0, 1/2; 0, 1/2) (Mellin transform Pi Cot[Pi w])
+ * inside the one- and two-G theorems */
+static void test_principal_value(void) {
+    /* Roach 2008 #20; the reference value is -Catalan */
+    assert_eval_eq("Integrate[ArcTan[x]/(1 - x^2), {x, 0, Infinity}, PrincipalValue -> True,"
+                   " Method -> \"Roach\"]", "-Catalan", 0);
+    assert_eval_eq("Integrate[ArcTan[x]/(1 - x^2), {x, 0, Infinity}, PrincipalValue -> True]",
+                   "-Catalan", 0);
+    check_pv("ArcTan[x]/(1 - x^2)", "{x, 0, Infinity}", "True", "{}", "{1}", 1);
+    /* the default cascade closes it without a stray Integrate::idiv from the
+     * Newton-Leibniz stage that declined before the Roach fallback */
+    assert_eval_eq("Check[Integrate[ArcTan[x]/(1 - x^2), {x, 0, Infinity},"
+                   " PrincipalValue -> True], failed]", "-Catalan", 0);
+    /* one G: the Mellin transform of the kernel */
+    assert_eval_eq("Integrate[x^(s - 1)/(1 - x), {x, 0, Infinity}, PrincipalValue -> True,"
+                   " Assumptions -> 0 < s < 1, Method -> \"Roach\"] === Pi Cot[Pi s]", "True", 0);
+    check_pv("x^(s - 1)/(1 - x)", "{x, 0, Infinity}", "0 < s < 1", "{s -> 1/3}", "{1}", 1);
+    check_pv("x^(s - 1)/(1 - x^2)", "{x, 0, Infinity}", "0 < s < 2", "{s -> 3/5}", "{1}", 1);
+    check_pv("x^(s - 1)/(a - x)", "{x, 0, Infinity}", "0 < s < 1 && a > 0",
+             "{s -> 2/7, a -> 3/2}", "{3/2}", 1);
+    /* Log[x] by differentiation in the exponent */
+    assert_eval_eq("Integrate[Log[x]/(1 - x^2), {x, 0, Infinity}, PrincipalValue -> True,"
+                   " Method -> \"Roach\"] === -Pi^2/4", "True", 0);
+    check_pv("Log[x]/(1 - x^2)", "{x, 0, Infinity}", "True", "{}", "{1}", 1);
+    /* two G: Bessel and ArcTan against the kernel, through the default cascade */
+    check_pv("BesselJ[0, x]/(1 - x^2)", "{x, 0, Infinity}", "True", "{}", "{1}", 0);
+    check_pv("ArcTan[x]/(x (1 - x^2))", "{x, 0, Infinity}", "True", "{}", "{1}", 0);
+    /* declines: a double pole has no Cauchy PV, ArcTan[x]/(1 - x) diverges at
+     * Infinity */
+    assert_eval_eq("Head[Integrate[x^(s - 1)/(1 - x)^2, {x, 0, Infinity}, PrincipalValue -> True,"
+                   " Assumptions -> 0 < s < 1, Method -> \"Roach\"]]", "Integrate", 0);
+    assert_eval_eq("Head[Quiet[Integrate[ArcTan[x]/(1 - x), {x, 0, Infinity},"
+                   " PrincipalValue -> True]]]", "Integrate", 0);
 }
 
 /* Integrate[f, {x, a, b}, Assumptions -> as, Method -> "Roach"] closes (no
@@ -151,6 +221,7 @@ int main(void) {
     TEST(test_unit_and_growing);
     TEST(test_declines);
     TEST(test_hygiene);
+    TEST(test_principal_value);
     printf("All Integrate Roach tests passed!\n");
     return 0;
 }

@@ -1932,8 +1932,11 @@ static unsigned roach_load_gen = 0;
 static bool roach_load_succeeded = false;
 
 /* budget > 0: the call runs under TimeConstrained[..., budget] (the automatic
- * cascade); 0: unbounded (the pinned method). */
-static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, int budget) {
+ * cascade); 0: unbounded (the pinned method).  pv: the Cauchy principal value
+ * (Roach`RunPV: a pole kernel 1/(1 - c x^q) is the Hilbert-kernel G function,
+ * and the answer is checked by a symmetric-excision quadrature). */
+static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, int budget,
+                       bool pv) {
     if (roach_load_gen != symtab_generation()) {
         roach_load_gen = symtab_generation();
         mth_msg_suppress_push();
@@ -1944,7 +1947,7 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
                 "cannot locate src/internal/RoachIntegrate.m on disk.");
     }
     if (!roach_load_succeeded) return NULL;
-    Expr* call = expr_new_function(expr_new_symbol("Roach`Run"),
+    Expr* call = expr_new_function(expr_new_symbol(pv ? "Roach`RunPV" : "Roach`Run"),
         (Expr*[]){ expr_copy(f), expr_copy(x), expr_copy(a), expr_copy(b),
                    assumptions ? expr_copy(assumptions) : expr_new_symbol("True") }, 5);
     if (budget > 0)
@@ -1962,6 +1965,7 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
                                     r->data.symbol.name == SYM_ComplexInfinity)) ||
         result_contains_head(r, "Integrate") ||
         result_contains_head(r, "Roach`Run") ||
+        result_contains_head(r, "Roach`RunPV") ||
         result_contains_head(r, "Throw")) {
         expr_free(r);
         return NULL;
@@ -2087,6 +2091,7 @@ static Expr* integrate_definite(Expr* res) {
              * leaving the integral in its correct unevaluated form.  Pinned
              * methods are honoured regardless. */
             bool has_undef = def_has_undefined_function(cur, x);
+            bool nl_idiv_held = false;   /* see integrate_idiv_defer_begin */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RESIDUE))
                 r = integrate_residue_try(cur, x, a, b, assumptions, &diverges,
                                           principal_value);
@@ -2224,7 +2229,7 @@ static Expr* integrate_definite(Expr* res) {
             if (!r && !has_undef && mech == METHOD_ROACH)
                 r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && mech == METHOD_ROACH)
-                r = try_roach(cur, x, a, b, assumptions, 0);
+                r = try_roach(cur, x, a, b, assumptions, 0, principal_value);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
              * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
@@ -2237,9 +2242,17 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
                 mech != METHOD_MEIJER_CONV && mech != METHOD_ROACH &&
                 mech != METHOD_PIECEWISE && mech != METHOD_SERIES &&
-                mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM)
+                mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM) {
+                /* Under PrincipalValue in the automatic cascade the Roach PV
+                 * fallback below may still close what Newton-Leibniz reports
+                 * divergent, so its idiv is held until that has run. */
+                bool hold = principal_value && mech == METHOD_AUTOMATIC && !has_undef;
+                bool saved = false;
+                if (hold) saved = integrate_idiv_defer_begin();
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
                                                     principal_value, assumptions);
+                if (hold) nl_idiv_held = integrate_idiv_defer_end(saved);
+            }
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
              * under Automatic these are pre-passes inside Ramanujan; the pinned
              * methods route directly here. */
@@ -2269,7 +2282,16 @@ static Expr* integrate_definite(Expr* res) {
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
                 r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
-                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS);
+                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, false);
+            /* Under PrincipalValue the late fallback is Roach's PV theorem: the
+             * pole kernel as the Hilbert-kernel G function inside the one- and
+             * two-G theorems. It only sees integrals every PV-capable stage
+             * (residue, Mellin PV, Newton-Leibniz) declined, and each answer is
+             * checked against a symmetric-excision PV quadrature. */
+            if (!r && !has_undef && principal_value && mech == METHOD_AUTOMATIC)
+                r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, true);
+            /* nothing answered: the held Newton-Leibniz diagnostic stands */
+            if (!r && nl_idiv_held) integrate_emit_idiv(cur, a, b);
             /* A real-axis definite integral must evaluate to a value free of
              * its integration variable: a result still containing x is a leaked
              * antiderivative (a stage returned F(x) instead of F(b)-F(a)), which
@@ -3163,6 +3185,7 @@ void integrate_init(void) {
      * must not leave the definite depth raised, or every later Integrate::nonelem
      * would be deferred forever. */
     tc_register_unwind_counter(&g_integrate_definite_depth);
+    tc_register_unwind_counter(integrate_idiv_defer_counter());
     /* Raised around speculative quadratures all over DSolve; a TimeConstrained abort
      * inside one left it raised for the rest of the session (every later
      * Integrate::nonelem silenced, and the Risch stage gated on it skipped). */

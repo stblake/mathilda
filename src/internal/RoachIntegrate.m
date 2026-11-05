@@ -464,8 +464,72 @@ Roach`term[f_, x_, assum_] := Module[{k, g, r, v},
   (* a derivative in a parameter of a pFq / MeijerG is not a closed form *)
   If[!FreeQ[r[[1]], HypergeometricPFQ | MeijerG], Return[$Failed]];
   v = Quiet[D[r[[1]], {Roach`eps, k}] /. Roach`eps -> 0];
-  If[!FreeQ[v, Derivative], Return[$Failed]];
+  (* a Gamma pole cancelling at eps = 0 (PV: Pi Cot[Pi (1 + eps)/2] as a
+     Gamma ratio): reduce the ratio to trigonometric form first *)
+  If[!FreeQ[v, Indeterminate | ComplexInfinity],
+    v = Quiet[D[TimeConstrained[Simplify[FunctionExpand[r[[1]]]], 5, r[[1]]], {Roach`eps, k}] /.
+              Roach`eps -> 0]];
+  If[!FreeQ[v, Derivative | Indeterminate | ComplexInfinity], Return[$Failed]];
   {v, r[[2]] /. Roach`eps -> 0}]
+
+(* ---------------------------------------------------------------- *)
+(* Cauchy principal value (Roach ISSAC '97 sec. 5, PBM 2.24.1 under  *)
+(* the Hilbert-kernel G)                                             *)
+(* ---------------------------------------------------------------- *)
+
+(* THEOREM. For 0 < Re w < 1,
+     PV int_0^oo x^(w-1)/(1 - x) dx = Pi Cot[Pi w]
+       = Pi Gamma[w] Gamma[1 - w]/(Gamma[1/2 + w] Gamma[1/2 - w]),
+   which is the Mellin transform of Pi G^{1,1}_{2,2}(x | 0, 1/2; 0, 1/2).
+   So under PV the kernel 1/(1 - x) IS that G function (a distribution: its
+   p = q, delta = 0 and mu = 1 put it on the boundary of the PBM conditions,
+   which is the pole). By Mellin-Parseval,
+     PV int_0^oo f(x)/(1 - x) dx = (1/(2 Pi i)) int_L F(w) Pi Cot[Pi (1 - w)] dw
+   on a line in the common strip, which is the one- or two-G theorem with the
+   kernel G in place of an ordinary G. The theorem holds when
+     (a) int_0^oo f(x)/(1 + x) dx converges (the same behaviour at 0 and oo,
+         which gives the common strip), and
+     (b) f is analytic at the pole x0.
+   A kernel 1/(1 + t) with t = c x^q, c < 0 is the same G at -t = |c| x^q (pole
+   at x0 = |c|^(-1/q)); PV is invariant under the smooth monotone change
+   t = |c| x^q, so the scale and the power need nothing more. Condition (a) is
+   decided by the PBM conditions with the kernel replaced by the ordinary
+   1/(1 + |c| x^q) = G^{1,1}_{1,1}(|c| x^q | 0; 0); condition (b) holds unless
+   the other G has p = q and its own singular point (-1)^(p-m-n) at x0. *)
+
+Roach`$pv = False;
+
+(* a factor 1/(1 + c x^q) with c < 0 under the assumptions:
+   {PV kernel G, ordinary G for the conditions, the pole} *)
+Roach`pvKernel[Power[B_Plus, -1], x_] /; Length[B] == 2 && MemberQ[List @@ B, 1] :=
+  Module[{t = B - 1, cq},
+    cq = Roach`CQ[t, x];
+    If[cq === $Failed || !TrueQ[Refine[cq[[1]] < 0, Roach`$assum]], Return[$Failed]];
+    {Roach`g[Pi, {{0}, {1/2}}, {{0}, {1/2}}, -cq[[1]], cq[[2]]],
+     Roach`g[1, {{0}, {}}, {{0}, {}}, -cq[[1]], cq[[2]]],
+     (-cq[[1]])^(-1/cq[[2]])}]
+Roach`pvKernel[_, _] := $Failed
+
+(* condition (b): the non-kernel G is analytic at the pole x0 *)
+Roach`pvSmooth[g : Roach`g[_, {an_, ap_}, {bm_, bq_}, c_, q_], x0_] := Module[{m, n, p, qq},
+  {m, n, p, qq} = Roach`mnpq[g];
+  If[p != qq, True, c x0^q != (-1)^(p - m - n)]]
+
+(* one PV term: grp has exactly one kernel factor -> {value, condition} or $Failed *)
+Roach`pvTerm[C_, s_, grp_, x_] := Module[{ks, kpos, k, other, gs, rv, rc},
+  ks = Roach`pvKernel[#, x] & /@ grp;
+  kpos = Flatten[Position[ks, _List, {1}, Heads -> False]];
+  If[Length[kpos] != 1, Return[$Failed]];
+  k = ks[[kpos[[1]]]];
+  other = Roach`GForm[#, x] & /@ Delete[grp, kpos[[1]]];
+  If[MemberQ[other, $Failed] || !And @@ (Length[#] == 1 & /@ other), Return[$Failed]];
+  other = First /@ other;
+  Switch[Length[other],
+    0, rv = Roach`int1[C, s, k[[1]], x]; rc = Roach`int1[C, s, k[[2]], x],
+    1, rv = Roach`int2[C, s, other[[1]], k[[1]], x]; rc = Roach`int2[C, s, other[[1]], k[[2]], x],
+    _, Return[$Failed]];
+  If[rv === $Failed || rc === $Failed, Return[$Failed]];
+  {rv[[1]], And[rc[[2]], And @@ (Roach`pvSmooth[#, k[[3]]] & /@ other)]}]
 
 Roach`term0[f_, x_, assum_] := Module[{C, s, rest, groups, gs, res = $Failed, r, val, cond, out},
   Roach`$assum = assum;
@@ -478,6 +542,13 @@ Roach`term0[f_, x_, assum_] := Module[{C, s, rest, groups, gs, res = $Failed, r,
   rest = Flatten[{rest}];
   Catch[
    Do[
+     (* under PV, a group with a pole kernel goes to the PV theorem *)
+     If[Roach`$pv && MemberQ[grp, Power[_Plus, -1]],
+       r = Roach`pvTerm[C, s, grp, x];
+       If[r =!= $Failed,
+         {val, cond} = r;
+         cond = Roach`decide[cond, assum];
+         If[cond =!= False, Throw[{val, cond}]]]];
      gs = Roach`GForm[#, x] & /@ grp;
      If[MemberQ[gs, $Failed], Continue[]];
      If[!And @@ (Length[#] == 1 & /@ gs), Continue[]];
@@ -571,7 +642,9 @@ Roach`definite[f_, x_, a_, b_, assum_] := Module[{y, r, r1, r2},
    a === 0 && b === Infinity,
      r = Roach`int0oo[f, x, And[assum, x > 0]];
      If[r === $Failed, r = Roach`expSubst[f, x, assum]];
-     If[r === $Failed, r = Roach`ibp[f, x, a, b, assum]];
+     (* not under PV: Integrate's v has a Log[1 - x] branch at the pole, so the
+        boundary terms do not cancel there *)
+     If[r === $Failed && !Roach`$pv, r = Roach`ibp[f, x, a, b, assum]];
      r,
    a === -Infinity && b === Infinity,
      r1 = Roach`definite[f, x, 0, Infinity, assum];
@@ -589,11 +662,79 @@ Roach`definite[f_, x_, a_, b_, assum_] := Module[{y, r, r1, r2},
                                              And[assum, 0 < y]]] Roach`Ind0[y], y,
                       And[assum, 0 < y < 1]];
      If[r === $Failed && a === 0, r = Roach`tanSubst[f, x, b, assum]];
-     If[r === $Failed, r = Roach`ibp[f, x, a, b, assum]];
+     If[r === $Failed && !Roach`$pv, r = Roach`ibp[f, x, a, b, assum]];
      r]]
 
 (* simplify the G result *)
+(* G as the sum of the residues at its left poles (Mellin-Barnes closed to the
+   left), for a G that FunctionExpand leaves: the PV theorem lands on the
+   singular argument z = 1 of a p = q G, and with coincident b's (a log case)
+   there is no Slater sum of pFq's. With
+     Phi(w) = prod Gamma(b_j + w) prod Gamma(1 - a_j - w) /
+              (prod Gamma(1 - b_j - w) prod Gamma(a_j + w)) z^-w,
+   the left poles of one class of b's (members an integer apart, beta0 the
+   lowest) are w = -beta0 - K, K = 0, 1, .... Reflecting every
+   Gamma(c + w) at w = -beta0 - K + eps,
+     Gamma(c - beta0 - K + eps) = Pi (-1)^K/(Sin[Pi (c - beta0 + eps)] Gamma(1 - c + beta0 + K - eps)),
+   leaves a K-free trigonometric factor carrying the pole of order r, times
+   Gammas of K + const - eps. The residue is the eps^-1 coefficient: the
+   trigonometric Laurent coefficients times eps-derivatives of the Gamma part
+   (PolyGamma in K), summed over K by Sum. K below K0, where a reflected
+   Gamma is itself singular, are taken one at a time. $Failed when Sum does
+   not close. Valid for |z| < 1, and at z = 1 for p = q by Abel's theorem
+   when the series converges; the PV check verifies every answer. *)
+Roach`gSum[MeijerG[{an_List, ap_List}, {bm_List, bq_List}, z_]] := Module[
+  {cls, tot = 0, phi, w, eps, K = Roach`sumK, b0, cterms, dterms, r, K0, trig, gam, tc, gen, sgn, small, out},
+  phi[ww_] := Times @@ (Gamma[# + ww] & /@ bm) Times @@ (Gamma[1 - # - ww] & /@ an) /
+              (Times @@ (Gamma[1 - # - ww] & /@ bq) Times @@ (Gamma[# + ww] & /@ ap)) z^(-ww);
+  (* classes of b's an integer apart *)
+  cls = {};
+  Do[With[{i = SelectFirst[Range[Length[cls]], IntegerQ[Simplify[b - cls[[#, 1]]]] &, 0]},
+       If[i === 0, AppendTo[cls, {b}], cls[[i]] = Append[cls[[i]], b]]], {b, bm}];
+  Catch[
+   Do[
+     b0 = First[SortBy[cl, Simplify[# - cl[[1]]] &]];
+     (* {c, sigma}: Gamma(c + w)^sigma; {d, sigma}: Gamma(d - w)^sigma *)
+     cterms = Join[{#, 1} & /@ bm, {#, -1} & /@ ap];
+     dterms = Join[{1 - #, 1} & /@ an, {1 - #, -1} & /@ bq];
+     r = Total[If[IntegerQ[Simplify[#[[1]] - b0]], #[[2]], 0] & /@ cterms];
+     K0 = Max[Join[{0},
+       Cases[cterms, {c_, _} /; IntegerQ[Simplify[c - b0]] :> Simplify[c - b0]],
+       Cases[dterms, {d_, _} /; IntegerQ[Simplify[d + b0]] :> 1 - Simplify[d + b0]]]];
+     (* K < K0 one at a time *)
+     Do[small = Quiet[SeriesCoefficient[phi[-b0 - k + eps], {eps, 0, -1}]];
+        If[!FreeQ[small, SeriesCoefficient | Indeterminate | ComplexInfinity], Throw[$Failed]];
+        tot += small, {k, 0, K0 - 1}];
+     If[r > 0,
+       trig = Times @@ ((Pi/Sin[Pi (Simplify[#[[1]] - b0] + eps)])^#[[2]] & /@ cterms);
+       gam = Times @@ ((Gamma[1 - #[[1]] + b0 + K - eps]^(-#[[2]])) & /@ cterms) *
+             Times @@ ((Gamma[#[[1]] + b0 + K - eps]^#[[2]]) & /@ dterms) z^(b0 + K - eps);
+       sgn = (-1)^(K Total[cterms[[All, 2]]]);
+       tc = Quiet[CoefficientList[Normal[Series[trig eps^r, {eps, 0, r - 1}]], eps]];
+       If[!VectorQ[tc] || !FreeQ[tc, Series], Throw[$Failed]];
+       tc = PadRight[tc, r];
+       gen = sgn Sum[tc[[r - j]] (D[gam, {eps, j}] /. eps -> 0)/j!, {j, 0, r - 1}];
+       (* PolyGamma differences at arguments an integer apart collapse *)
+       gen = TimeConstrained[Simplify[FunctionExpand[gen]], 5, gen];
+       (* the summand and the bounds injected: Sum holds its arguments *)
+       out = With[{sg = gen, k0 = K0}, Quiet[Sum[sg, {Roach`sumK, k0, Infinity}]]];
+       If[!FreeQ[out, Sum | DirectedInfinity | ComplexInfinity | Indeterminate], Throw[$Failed]];
+       tot += out],
+     {cl, cls}];
+   tot]]
+Roach`gSum[_] := $Failed
+
+(* the residue sum for each MeijerG FunctionExpand left, under PV; for
+   |z| > 1 that of G(z) = G'(1/z) (a -> 1 - b, b -> 1 - a), i.e. the right
+   poles *)
+Roach`gFlip[MeijerG[{an_, ap_}, {bm_, bq_}, z_]] := MeijerG[{1 - bm, 1 - bq}, {1 - an, 1 - ap}, 1/z]
+Roach`gResidues[r_] := r /. HoldPattern[g : MeijerG[{_List, _List}, {_List, _List}, z_?NumericQ]] :>
+  With[{s = Which[TrueQ[Abs[z] <= 1], Roach`gSum[g], TrueQ[Abs[z] > 1], Roach`gSum[Roach`gFlip[g]],
+                  True, $Failed]},
+    s /; s =!= $Failed]
+
 Roach`finish[v_, assum_] := Module[{r = FunctionExpand[v]},
+  If[Roach`$pv && !FreeQ[r, MeijerG], r = FunctionExpand[Roach`gResidues[r]]];
   r = TimeConstrained[Refine[r, assum], 3, r];
   If[FreeQ[r, MeijerG | HypergeometricPFQ],
     r = TimeConstrained[Simplify[r, assum], 5, r]];
@@ -649,13 +790,68 @@ Roach`verify[f_, x_, a_, b_, val_, assum_] := Module[{vars, pt, vv, n1, n2, fa, 
   (* both quadratures inconclusive -> do not reject; any numeric disagreement -> reject *)
   !(NumericQ[n1] || NumericQ[n2])]
 
+(* ---------------------------------------------------------------- *)
+(* Principal-value check: symmetric excision about every real pole   *)
+(* ---------------------------------------------------------------- *)
+
+(* the real poles of fa (numeric but for x) inside (aa, bb): the real roots
+   of every base B of a negative power B^e in fa; a pure power of x is
+   dropped (its pole is at the endpoint 0 or outside). $Failed when such a
+   base is not a polynomial, since then the poles are not known. A pole of a
+   sum of fractions is a pole of one of them, so no Together (which would
+   also expand x^(9/14) (1 - x) into a non-polynomial). *)
+Roach`pvPoles[fa_, x_, aa_, bb_] := Module[{bs, rs},
+  bs = Cases[{fa}, Power[B_, e_ /; NumericQ[e] && TrueQ[e < 0]] :> B, Infinity];
+  bs = DeleteDuplicates[Select[bs, !FreeQ[#, x] && !MatchQ[#, x | Power[x, _]] &]];
+  If[!And @@ (PolynomialQ[#, x] & /@ bs), Return[$Failed]];
+  rs = Flatten[Quiet[x /. NSolve[# == 0, x]] & /@ bs];
+  If[!VectorQ[rs, NumberQ], Return[$Failed]];
+  rs = Re /@ Select[rs, Abs[Im[#]] < 10^-10 &];
+  rs = Select[rs, N[aa] < # < N[bb] &];
+  Union[rs, SameTest -> (Abs[#1 - #2] < 10^-8 &)]]
+
+(* PV quadrature with symmetric excision: on [p - d, p + d] the integral is
+   int_0^d (f(p + u) + f(p - u)) du, whose integrand is bounded (the 1/u
+   parts cancel); the rest of the interval is ordinary. *)
+Roach`pvQuad[fa_, x_, aa_, bb_, poles_] := Module[{d, fin, pts, tot = 0, u, lo, hi, i, gap},
+  fin = Select[Join[{aa}, poles, {bb}], NumericQ];
+  gap = Min[Differences[N[fin]]];
+  d = Min[1/2, gap/3];
+  pts = Join[{aa}, Flatten[{# - d, # + d} & /@ poles], {bb}];
+  Do[lo = pts[[2 i - 1]]; hi = pts[[2 i]];
+     tot += If[hi === Infinity && NumericQ[lo],
+               With[{sp = Join[{lo}, lo + {1, 4, 16, 64, 256}, {Infinity}]},
+                 Total[Table[NIntegrate[fa, {x, sp[[j]], sp[[j + 1]]}], {j, Length[sp] - 1}]]],
+               NIntegrate[fa, {x, lo, hi}]],
+     {i, Length[pts]/2}];
+  Do[tot += NIntegrate[(fa /. x -> p + u) + (fa /. x -> p - u), {u, 0, d}], {p, poles}];
+  tot]
+
+(* Under PV every answer must agree with the PV quadrature; an unknown pole
+   set, a non-numeric quadrature or no assumption point rejects. *)
+Roach`verifyPV[f_, x_, a_, b_, val_, assum_] := Module[{vars, pt, vv, fa, aa, bb, poles, n1},
+  vars = Complement[Cases[{f, val, a, b}, _Symbol?(!ValueQ[#] && Context[#] === "Global`" &), Infinity], {x}];
+  pt = If[vars === {}, {}, Roach`genericPt[vars, assum]];
+  If[pt === $Failed, Return[False]];
+  vv = Quiet[N[val /. pt]];
+  If[!NumberQ[vv], Return[False]];
+  fa = f /. pt; aa = a /. pt; bb = b /. pt;
+  If[aa === -Infinity, Return[False]];
+  poles = Roach`pvPoles[fa, x, aa, bb];
+  If[poles === $Failed, Return[False]];
+  n1 = Block[{x}, Quiet[TimeConstrained[Roach`pvQuad[fa, x, aa, bb, poles], 10, $Failed]]];
+  NumberQ[n1] && TrueQ[Roach`agrees[vv, n1]]]
+
 Roach`Run[f_, x_, a_, b_, assum_] := Module[{r, v, c},
   r = Roach`definite[f, x, a, b, assum];
   If[r === $Failed, Return[$Failed]];
   {v, c} = r;
   v = Roach`finish[v, assum];
-  If[!Roach`verify[f, x, a, b, v, assum], Return[$Failed]];
+  If[!If[Roach`$pv, Roach`verifyPV, Roach`verify][f, x, a, b, v, assum], Return[$Failed]];
   If[c === True, v, ConditionalExpression[v, c]]]
+
+(* the Cauchy principal value (Integrate[..., PrincipalValue -> True]) *)
+Roach`RunPV[f_, x_, a_, b_, assum_] := Block[{Roach`$pv = True}, Roach`Run[f, x, a, b, assum]]
 
 End[];
 $ContextPath = Roach`savedContextPath;

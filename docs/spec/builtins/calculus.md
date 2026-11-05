@@ -2091,7 +2091,8 @@ monotonically down.
       stage and then this one are the final fallback. They run after
       Newton-Leibniz, every table stage and DiffUnderInt, and this one has a
       10-second budget. They therefore only see integrals the other stages
-      all declined, and they do not run under `PrincipalValue -> True`.
+      all declined. Under `PrincipalValue -> True` only this one runs, by
+      the PV theorem below.
       In the cascade, a Roach answer conditioned on more than the assumptions
       is a decline (v0.6215). The PBM 2.24.1 conditions are only sufficient,
       so such a condition can exclude part of the assumed region; the pinned
@@ -2101,7 +2102,42 @@ monotonically down.
       integer-assumed variables get generic integers. An answer that is not
       numeric at that point is rejected.
     - Through the default `Integrate`, Roach 2008 goes from 7 to 25 of 30
-      integrals, and to 27 with #18 and #24.
+      integrals, to 27 with #18 and #24, and to 28 with #20.
+    - **Cauchy principal value** (`PrincipalValue -> True`). For
+      `0 < Re w < 1`, `PV ∫₀^∞ x^(w−1)/(1 − x) dx = π cot(πw)
+      = π Γ(w) Γ(1 − w)/(Γ(1/2 + w) Γ(1/2 − w))`, the Mellin transform of
+      `π G^{1,1}_{2,2}(x | 0, 1/2; 0, 1/2)`. Under PV the kernel `1/(1 − x)`
+      is that G function (Roach, ISSAC '97 §5), and by Mellin–Parseval the
+      one- and two-G theorems apply with it in place of an ordinary G. A
+      factor `1/(1 + c x^q)` with `c < 0` under the assumptions is the kernel
+      at `|c| x^q`, a pole at `x₀ = |c|^(−1/q)`; PV is invariant under that
+      smooth monotone change of variable. The theorem holds when
+      `∫₀^∞ f(x)/(1 + |c| x^q) dx` converges (the PBM 2.24.1 conditions with
+      the ordinary `G^{1,1}_{1,1}` kernel, which gives a common Mellin strip)
+      and the other G is analytic at `x₀` (a `p = q` G must not have its
+      singular point `(−1)^(p−m−n)` there). A double pole has no Cauchy PV
+      and declines. Integration by parts is not used under PV.
+      - The two-G result lands on the argument `z = 1` of a `p = q` G, often a
+        log case with no Slater sum. It is then summed as the Mellin–Barnes
+        residues at the left poles (the right ones for `|z| > 1`): every
+        `Γ(c + w)` is reflected at `w = −β₀ − K + ε`, the K-free trigonometric
+        factor carries the pole, the Gamma part's ε-derivatives give PolyGamma
+        in K, and `Sum` closes the series.
+      - Every PV answer is checked against a symmetric-excision quadrature at a
+        generic point of the assumptions: `∫₀^d (f(p + u) + f(p − u)) du`
+        about each real pole p (the roots of the polynomial bases of the
+        negative powers in f), the rest of the interval ordinary. An unknown
+        pole set or a non-numeric quadrature rejects.
+      - Examples: Roach 2008 #20,
+        `Integrate[ArcTan[x]/(1 − x^2), {x, 0, ∞}, PrincipalValue -> True]`
+        is `−Catalan`; `x^(s−1)/(1 − x)` gives `π Cot[π s]` (`0 < s < 1`),
+        `x^(s−1)/(a − x)` gives `a^(s−1) π Cot[π s]`, and `Log[x]/(1 − x^2)`
+        gives `−π²/4`.
+      - The pinned `Method -> "Roach"` runs it under PV. In the automatic
+        cascade it is the last PV stage, after residue, the Mellin PV and
+        Newton-Leibniz, with the 10-second budget. Newton-Leibniz's
+        `Integrate::idiv` is held until it has run and is printed only if
+        nothing answered.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.

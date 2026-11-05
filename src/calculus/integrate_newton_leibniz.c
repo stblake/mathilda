@@ -690,10 +690,32 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
  * Divergence reporting + continuity cross-check.
  * ---------------------------------------------------------------------- */
 
+/* The held-idiv region (integrate_idiv_defer_begin): its nesting depth and
+ * whether an idiv was held in the innermost one. */
+static int  g_idiv_hold = 0;
+static bool g_idiv_pending = false;
+
+bool integrate_idiv_defer_begin(void) {
+    bool prev = g_idiv_pending;
+    g_idiv_hold++;
+    g_idiv_pending = false;
+    return prev;
+}
+
+bool integrate_idiv_defer_end(bool prev) {
+    bool held = g_idiv_pending;
+    if (g_idiv_hold > 0) g_idiv_hold--;
+    g_idiv_pending = prev;
+    return held;
+}
+
+int* integrate_idiv_defer_counter(void) { return &g_idiv_hold; }
+
 /* Emit the Mathematica-style Integrate::idiv warning to stderr, naming the
  * integrand and interval.  Shared (declared in the header) so other definite
  * mechanisms can report divergence with the same diagnostic. */
 void integrate_emit_idiv(Expr* f, Expr* a, Expr* b) {
+    if (g_idiv_hold > 0) { g_idiv_pending = true; return; }
     char* fs = expr_to_string(f);
     char* as = expr_to_string(a);
     char* bs = expr_to_string(b);

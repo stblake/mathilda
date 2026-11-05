@@ -74,6 +74,19 @@ bool nl_numeric_is_complex(Expr* e);
  * integral with the same diagnostic. */
 void integrate_emit_idiv(Expr* f, Expr* a, Expr* b);
 
+/* Hold the idiv diagnostic of one cascade region.  Under PrincipalValue the
+ * Newton-Leibniz stage reports idiv when it cannot form the PV, but a later
+ * stage (Roach's PV theorem) may still close the integral, so the definite
+ * dispatcher brackets that stage with begin/end: an idiv emitted inside the
+ * region (by the stage or a sub-integral) is held, not printed, and end()
+ * says whether one was.  The dispatcher re-emits it only if nothing answered.
+ * Regions nest (begin returns the enclosing region's flag, end restores it);
+ * the nesting counter is registered with TimeConstrained, so a timeout that
+ * unwinds through a region does not leave idiv held for the session. */
+bool integrate_idiv_defer_begin(void);
+bool integrate_idiv_defer_end(bool prev);
+int* integrate_idiv_defer_counter(void);
+
 /* `Integrate`NewtonLeibniz[f, {x, a, b}]` builtin.  Strict: returns NULL on
  * any non-applicable input. */
 Expr* builtin_integrate_newton_leibniz(Expr* res);
