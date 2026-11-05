@@ -2013,7 +2013,7 @@ monotonically down.
     - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
     - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
     - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
-  - `"Roach"` (definite, any real interval; v0.6205): Kelly Roach's Meijer G
+  - `"Roach"` (definite, any real interval; v0.6206): Kelly Roach's Meijer G
     algorithm (*Meijer G Function Representations*, ISSAC '97 §5; *Solving
     Integrals with the Quantum Computer Algebra System*, 2008). Code in
     `src/internal/RoachIntegrate.m`.
@@ -2044,7 +2044,11 @@ monotonically down.
         `Log[t]^k θ(1 − t)` G function;
       - `t = Tan[x]` for trigonometric ones on `[0, b]` with `b ≤ π/2`, where
         every base is positive;
-      - integration by parts for an inverse-trigonometric factor.
+      - integration by parts for an inverse-trigonometric factor;
+      - a factor `Log[x]^k` taken as `d^k/ds^k` of `x^s`, so the term loses
+        one G (v0.6207);
+      - on (0, 1), `t^a (−Log t)^k/(1 ∓ t^m)` as `k! m^(−k−1) ζ(k+1, (a+1)/m)`,
+        or the alternating sum (v0.6207).
     - **The G result** goes through `FunctionExpand`: the Slater expansion,
       then Roach's Formula algorithm.
     - **Numeric check.** Every answer is checked at a FindInstance point of

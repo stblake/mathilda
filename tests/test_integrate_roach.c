@@ -61,6 +61,20 @@ static void test_paper(void) {
     check_roach("Exp[-a x] x^n/(b + x)", "{x, 0, Infinity}", "a > 0 && b > 0 && n > -1", "{a -> 2, b -> 1/3, n -> 2/3}");
     check_roach("Log[x + 1] Cos[a x]/x", "{x, 0, Infinity}", "a > 0", "{a -> 2}");
     check_roach("x Erfc[a x] Exp[-x^2 b]", "{x, 0, Infinity}", "a > 0 && b > 0", "{a -> 2, b -> 1/3}");
+    check_roach("x/(Exp[3 x] - 1)^(1/3)", "{x, 0, Infinity}", "True", "{}");
+    check_roach("x Exp[-x]/Sqrt[Exp[x] - 1]", "{x, 0, Infinity}", "True", "{}");
+    check_roach("x^2 Csch[x] Exp[-2 x n]", "{x, 0, Infinity}", "n > 0", "{n -> 2/3}");
+}
+
+/* t = E^-x with Log[t]^k by differentiation in the exponent, and the Lerch
+ * term for 1/(1 -+ t^m): Roach's printed values */
+static void test_exponential(void) {
+    assert_eval_eq("Integrate[x/(Exp[3 x] - 1)^(1/3), {x, 0, Infinity}, Method -> \"Roach\"] ==="
+                   " Pi (Pi + 3 Sqrt[3] Log[3])/27", "True", 0);
+    assert_eval_eq("Integrate[x Exp[-x]/Sqrt[Exp[x] - 1], {x, 0, Infinity}, Method -> \"Roach\"] ==="
+                   " Pi Log[2] - Pi/2", "True", 0);
+    assert_eval_eq("Integrate[x^2 Csch[x] Exp[-2 x n], {x, 0, Infinity}, Assumptions -> n > 0,"
+                   " Method -> \"Roach\"] === Zeta[3, n + 1/2]/2", "True", 0);
 }
 
 /* Roach's printed forms */
@@ -98,6 +112,7 @@ int main(void) {
     define_ref();
     TEST(test_paper);
     TEST(test_forms);
+    TEST(test_exponential);
     TEST(test_declines);
     TEST(test_hygiene);
     printf("All Integrate Roach tests passed!\n");

@@ -84,7 +84,8 @@ Roach`GForm1[Cos[t_], x_] := Roach`mk[Sqrt[Pi], {}, {}, {0}, {1/2}, t^2/4, x]
 Roach`GForm1[Sinh[t_], x_] := Roach`mk[Pi^(3/2), {}, {1}, {1/2}, {1, 0}, t^2/4, x]
 Roach`GForm1[Cosh[t_], x_] := Roach`mk[Pi^(3/2), {}, {1/2}, {0}, {1/2, 1/2}, t^2/4, x]
 Roach`GForm1[ArcTan[t_], x_] := Roach`mk[1/2, {1/2, 1}, {}, {1/2}, {0}, t^2, x]
-Roach`GForm1[ArcCot[t_], x_] := Roach`mk[1/2, {1}, {1/2}, {1/2, 0}, {}, t^2, x]
+(* ArcCot(t) = ArcTan(1/t) for t > 0: the ArcTan G at 1/t^2, flipped *)
+Roach`GForm1[ArcCot[t_], x_] := Roach`mk[1/2, {1/2}, {1}, {1/2, 0}, {}, t^2, x]
 Roach`GForm1[ExpIntegralEi[mt_], x_] /; Roach`CQ[-mt, x] =!= $Failed &&
     TrueQ[Simplify[Roach`CQ[-mt, x][[1]] > 0]] :=
   Roach`mk[-1, {}, {1}, {0, 0}, {}, -mt, x]       (* Ei(-t) = -E1(t), t > 0 *)
@@ -327,16 +328,24 @@ Roach`int2[K_, s_, g10_, g20_, x_] := Module[
 (* (k0 + k1 x^q)^e -> k0^e (1 + (k1/k0) x^q)^e when k0 > 0 under the
    assumptions, so that the table's (1 + t)^-a and (1 - t)^(a-1) forms match. *)
 Roach`normBinom[Power[B_Plus, e_], x_] /; FreeQ[e, x] && Length[B] == 2 && !FreeQ[B, x] :=
-  Module[{k0 = Select[B, FreeQ[#, x] &], k1},
+  Module[{k0 = Select[B, FreeQ[#, x] &], k1, cq},
     k1 = B - k0;
-    If[k0 === 0 || TrueQ[k0 == 1] || !TrueQ[Refine[k0 > 0, Roach`$assum]], Power[B, e],
-      Roach`pw[k0, e] Power[Expand[1 + k1/k0], e]]]
+    Which[
+      k0 === 0 || TrueQ[k0 == 1], Power[B, e],
+      TrueQ[Refine[k0 > 0, Roach`$assum]], Roach`pw[k0, e] Power[Expand[1 + k1/k0], e],
+      (* (k1 x^q + k0)^e = k1^e x^(q e) (1 + (k0/k1) x^-q)^e for k1 > 0, x > 0 *)
+      (cq = Roach`CQ[k1, x]) =!= $Failed && TrueQ[Refine[cq[[1]] > 0, Roach`$assum]],
+        Roach`pw[cq[[1]], e] Roach`pw[x, cq[[2]] e] Power[Expand[1 + k0/k1], e],
+      True, Power[B, e]]]
 Roach`normBinom[e_, x_] := e
 
 (* split a product into constant, power of x, and the other factors *)
 Roach`split[f0_, x_] := Module[{f, fs, C = 1, s = 0, rest = {}},
-  f = f0 /. pw : Power[_Plus, _] :> Roach`normBinom[pw, x];
-  f = f /. Roach`pw -> Power;
+  (* an integer power of a sum with negative powers of x: one fraction first,
+     exact for an integer exponent (1/(1/t - t) = t/(1 - t^2)) *)
+  f = f0 /. Power[B_Plus, e_Integer] /; !FreeQ[B, Power[x, _?Negative]] :> Together[B]^e;
+  f = f /. pw : Power[_Plus, _] :> Roach`normBinom[pw, x];
+  f = Expand[f /. Roach`pw -> Power, x];
   fs = If[Head[f] === Times, List @@ f, {f}];
   Do[Which[
       FreeQ[fi, x], C = C fi,
@@ -348,13 +357,70 @@ Roach`split[f0_, x_] := Module[{f, fs, C = 1, s = 0, rest = {}},
   {C, s, rest}]
 
 (* the indicator joins a (1 - t)^a or Log factor, or stands alone *)
-Roach`attachInd[rest_, x_] := Module[{r = rest, i},
+Roach`indQ[f_, x_] := MatchQ[f, Power[1 - _, _] | Power[Log[_], _] | Log[_] | Power[1 + _, _]]
+Roach`attachInd[rest_, x_] := Module[{r = rest, i, all},
   If[FreeQ[r, Roach`Ind0], Return[{r}]];
   r = DeleteCases[r, Roach`Ind0[x]];
-  Table[If[i == 0, Append[r, Roach`Ind0[x]],
-     ReplacePart[r, i -> r[[i]] Roach`Ind0[x]]], {i, 0, Length[r]}]]
+  (* theta^2 = theta: every factor that has an indicator form may carry it *)
+  all = If[Count[r, _?(Roach`indQ[#, x] &)] >= 2,
+          {If[Roach`indQ[#, x], # Roach`Ind0[x], #] & /@ r}, {}];
+  Join[all, Table[If[i == 0, Append[r, Roach`Ind0[x]],
+     ReplacePart[r, i -> r[[i]] Roach`Ind0[x]]], {i, 0, Length[r]}]]]
 
-Roach`term[f_, x_, assum_] := Module[{C, s, rest, groups, gs, res = $Failed, r, val, cond, out},
+(* Log[x]^k x^s = d^k/ds^k x^s: a power of the log of the variable is
+   removed from the term, the term is solved with x^(s + eps), and the result
+   is differentiated k times in eps at 0. The validity conditions are open in
+   s, so they hold at eps = 0 when they hold in a neighbourhood. This keeps a
+   second indicator G off the integrand. A second indicator jumping at the
+   same point (sigma = omega) is a case the PBM conditions exclude. *)
+Roach`logPower[f_, x_] := Module[{fs = If[Head[f] === Times, List @@ f, {f}], k = 0, rest = {}},
+  Do[Which[
+      fi === Log[x], k += 1,
+      MatchQ[fi, Power[Log[x], _Integer?Positive]], k += fi[[2]],
+      True, AppendTo[rest, fi]], {fi, fs}];
+  {k, Times @@ rest}]
+
+(* On (0, 1): t^a (-Log t)^k / (1 - s t^m), s = +1 or -1, is a Lerch sum,
+     int_0^1 t^a (-Log t)^k t^(m j) dt = k!/(a + 1 + m j)^(k+1),
+   so the term is k! m^(-k-1) Phi(s, k+1, (a+1)/m): Zeta[k+1, (a+1)/m] for
+   s = 1, and the alternating sum
+   2^(-k-1) (Zeta[k+1, (a+1)/(2m)] - Zeta[k+1, (a+1+m)/(2m)]) for s = -1.
+   Here 1/(1 - t^m) alone is not integrable at 1, so this is not two G
+   functions. *)
+Roach`lerchTerm[f_, x_, assum_] := Module[{C, s, rest, k = 0, m, sg, r = {}, a, h},
+  If[FreeQ[f, Roach`Ind0[x]], Return[$Failed]];
+  {C, s, rest} = Roach`split[f /. Roach`Ind0[x] -> 1, x];
+  Do[Which[
+      fi === Log[x], k += 1,
+      MatchQ[fi, Power[Log[x], _Integer?Positive]], k += fi[[2]],
+      MatchQ[fi, Power[1 + c_. Power[x, mm_.], -1] /; MatchQ[c, 1 | -1] && IntegerQ[mm] && mm > 0],
+        AppendTo[r, fi],
+      True, Return[$Failed, Module]], {fi, rest}];
+  If[k < 1 || Length[r] != 1, Return[$Failed]];
+  h = r[[1, 1]];                                   (* 1 + c x^m *)
+  m = Exponent[h, x]; sg = -Coefficient[h, x, m];
+  a = s;
+  (* (-Log t)^k = (-1)^k Log[t]^k *)
+  {C (-1)^k k! m^(-k - 1) If[sg === 1, Zeta[k + 1, (a + 1)/m],
+     2^(-k - 1) (Zeta[k + 1, (a + 1)/(2 m)] - Zeta[k + 1, (a + 1 + m)/(2 m)])],
+   Re[a] > -1}]
+
+Roach`term[f_, x_, assum_] := Module[{k, g, r, v},
+  r = Roach`term0[f, x, assum];
+  If[r =!= $Failed, Return[r]];
+  r = Roach`lerchTerm[f, x, assum];
+  If[r =!= $Failed, Return[{r[[1]], Roach`decide[r[[2]], assum]}]];
+  {k, g} = Roach`logPower[f, x];
+  If[k == 0, Return[$Failed]];
+  r = Roach`term0[g x^Roach`eps, x, assum];
+  If[r === $Failed, Return[$Failed]];
+  (* a derivative in a parameter of a pFq / MeijerG is not a closed form *)
+  If[!FreeQ[r[[1]], HypergeometricPFQ | MeijerG], Return[$Failed]];
+  v = Quiet[D[r[[1]], {Roach`eps, k}] /. Roach`eps -> 0];
+  If[!FreeQ[v, Derivative], Return[$Failed]];
+  {v, r[[2]] /. Roach`eps -> 0}]
+
+Roach`term0[f_, x_, assum_] := Module[{C, s, rest, groups, gs, res = $Failed, r, val, cond, out},
   Roach`$assum = assum;
   {C, s, rest} = Roach`split[f, x];
   (* merge exponentials *)
@@ -407,9 +473,11 @@ Roach`expSubst[f_, x_, assum_] := Module[{t, g, r},
   If[FreeQ[f, Power[E, _?(!FreeQ[#, x] &)]] && FreeQ[f, Csch | Sech | Sinh | Cosh | Tanh | Coth], Return[$Failed]];
   g = f /. {Csch[u_] :> 2/(E^u - E^-u), Sech[u_] :> 2/(E^u + E^-u),
             Sinh[u_] :> (E^u - E^-u)/2, Cosh[u_] :> (E^u + E^-u)/2};
-  g = Together[PowerExpand[(g /. x -> -Log[t])/t]] /. Log[t] -> Roach`L;
-  If[!FreeQ[g, Log] || !FreeQ[g, E], Return[$Failed]];
-  g = g /. Roach`L -> Log[t];
+  (* E^(c x) becomes t^-c on evaluation. No PowerExpand: it is not valid
+     on every branch, and Roach`normBinom does the rewriting that is valid
+     for 0 < t < 1. *)
+  g = (g /. x -> -Log[t])/t;
+  If[!FreeQ[g /. Log[t] -> Roach`L, Log] || !FreeQ[g, Power[E, _]], Return[$Failed]];
   r = Roach`int0oo[Expand[g] Roach`Ind0[t], t, And[assum, 0 < t < 1]];
   r]
 
