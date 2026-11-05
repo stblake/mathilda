@@ -2651,13 +2651,19 @@ static void direct_split_2x2_real_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
     mpfr_set(*b, H[i * n + (i + 1)],     MPFR_RNDN);
     mpfr_set(*c, H[(i + 1) * n + i],     MPFR_RNDN);
     mpfr_set(*d, H[(i + 1) * n + (i + 1)], MPFR_RNDN);
+    /* disc = tr^2 - 4 det = (a - d)^2 + 4 b c, in the second form: the
+     * first subtracts two nearly equal numbers when the eigenvalues are close
+     * (the zero cluster of a rank-deficient matrix), and its rounding then
+     * costs half the digits of the rotation -- a 30-digit Schur residual of
+     * 8e-16. The eigenvector component v0 = lam - d = (a - d)/2 + sq/2 takes
+     * sq with the sign of (a - d), so it never cancels either (as LAPACK's
+     * dlanv2 chooses its root). */
     mpfr_add(*tr,  *a, *d, MPFR_RNDN);
-    mpfr_mul(*det, *a, *d, MPFR_RNDN);
+    mpfr_sub(*det, *a, *d, MPFR_RNDN);          /* a - d */
+    mpfr_mul(*disc, *det, *det, MPFR_RNDN);
     mpfr_mul(*prod, *b, *c, MPFR_RNDN);
-    mpfr_sub(*det, *det, *prod, MPFR_RNDN);
-    mpfr_mul(*disc, *tr, *tr, MPFR_RNDN);
-    mpfr_mul_2si(*prod, *det, 2, MPFR_RNDN);    /* 4 * det */
-    mpfr_sub(*disc, *disc, *prod, MPFR_RNDN);
+    mpfr_mul_2si(*prod, *prod, 2, MPFR_RNDN);   /* 4 b c */
+    mpfr_add(*disc, *disc, *prod, MPFR_RNDN);
     if (mpfr_sgn(*disc) < 0) return;
 
     mpfr_t sq, lam, v0, v1, r;
@@ -2668,9 +2674,10 @@ static void direct_split_2x2_real_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
     mpfr_init2(r,   bits);
 
     mpfr_sqrt(sq, *disc, MPFR_RNDN);
-    mpfr_add(lam, *tr, sq, MPFR_RNDN);
-    mpfr_div_2si(lam, lam, 1, MPFR_RNDN);
-    mpfr_sub(v0, lam, *d, MPFR_RNDN);
+    if (mpfr_sgn(*det) < 0) mpfr_neg(sq, sq, MPFR_RNDN);
+    mpfr_add(v0, *det, sq, MPFR_RNDN);
+    mpfr_div_2si(v0, v0, 1, MPFR_RNDN);         /* lam - d */
+    mpfr_add(lam, v0, *d, MPFR_RNDN);
     mpfr_set(v1, *c, MPFR_RNDN);
     mpfr_hypot(r, v0, v1, MPFR_RNDN);
     if (mpfr_zero_p(r)) {
@@ -2792,9 +2799,14 @@ int direct_qr_real_general_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
             mpfr_mul(tmp1, b, c, MPFR_RNDN);
             mpfr_sub(det, det, tmp1, MPFR_RNDN);
             mpfr_init2(disc, bits);
-            mpfr_mul(disc, tr, tr, MPFR_RNDN);
-            mpfr_mul_2si(tmp1, det, 2, MPFR_RNDN);
-            mpfr_sub(disc, disc, tmp1, MPFR_RNDN);
+            /* disc = (a - d)^2 + 4 b c (= tr^2 - 4 det without the
+             * cancellation for close eigenvalues; the same form as
+             * direct_split_2x2_real_M, so the two agree on real vs complex) */
+            mpfr_sub(disc, a, d, MPFR_RNDN);
+            mpfr_mul(disc, disc, disc, MPFR_RNDN);
+            mpfr_mul(tmp1, b, c, MPFR_RNDN);
+            mpfr_mul_2si(tmp1, tmp1, 2, MPFR_RNDN);
+            mpfr_add(disc, disc, tmp1, MPFR_RNDN);
             mpfr_init2(half_tr, bits);
             mpfr_div_2si(half_tr, tr, 1, MPFR_RNDN);
             mpfr_init2(sq, bits);
@@ -2816,8 +2828,14 @@ int direct_qr_real_general_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
                 mpfr_sub(eval_re[p - 1], half_tr, sq, MPFR_RNDN);
                 mpfr_set_zero(eval_im[p - 1], 1);
                 direct_split_2x2_real_M(H, n, bits, p, Q, tmp);
-                mpfr_set(H[(p - 2) * n + (p - 2)], eval_re[p - 2], MPFR_RNDN);
-                mpfr_set(H[(p - 1) * n + (p - 1)], eval_re[p - 1], MPFR_RNDN);
+                /* the eigenvalues are the split block's diagonal: writing the
+                 * discriminant-formula values over it (as before) broke the
+                 * similarity by their rounding (~sqrt(ulp) for a near-double
+                 * eigenvalue; a 30-digit Schur residual of 8e-16) */
+                if (mpfr_zero_p(H[(p - 1) * n + (p - 2)])) {
+                    mpfr_set(eval_re[p - 2], H[(p - 2) * n + (p - 2)], MPFR_RNDN);
+                    mpfr_set(eval_re[p - 1], H[(p - 1) * n + (p - 1)], MPFR_RNDN);
+                }
                 p -= 2;
                 iter = 0;
             }

@@ -397,6 +397,19 @@ static void test_singular_linearsolve(void) {
              "NDArray[LinearSolve[{{1., 2.}, {2., 4.}}, {1., 2.}]]");
 }
 
+/* A rank-deficient 30-digit real matrix: its zero-eigenvalue cluster makes
+ * 2x2 blocks with a near-double eigenvalue, whose split rotation and
+ * eigenvalues the MPFR Francis QR computed through tr^2 - 4 det (half the
+ * digits lost): the Schur residual was 8e-16 instead of ~1e-28. */
+static void test_schur_mpfr_rank_deficient(void) {
+    chk_true("SeedRandom[3]; d = N[RandomInteger[{-9, 9}, {12, 12}]/7, 30]; "
+             "d[[All, 12]] = d[[All, 1]] + d[[All, 2]]; {q, t} = SchurDecomposition[d]; "
+             "Max[Abs[q . t . Transpose[q] - d]] < 10^-25 && Max[Abs[q . Transpose[q] - IdentityMatrix[12]]] < 10^-25");
+    chk_true("SeedRandom[5]; d = N[RandomInteger[{-5, 5}, {9, 9}], 50]; d[[All, 9]] = 2 d[[All, 3]]; "
+             "d[[All, 8]] = d[[All, 1]] - d[[All, 4]]; {q, t} = SchurDecomposition[d]; "
+             "Max[Abs[q . t . Transpose[q] - d]] < 10^-45");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -414,6 +427,7 @@ int main(void) {
     test_matfunc_normal();
     test_arrayq();
     test_singular_linearsolve();
+    test_schur_mpfr_rank_deficient();
     if (failures) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

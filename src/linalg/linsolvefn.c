@@ -233,8 +233,7 @@ Expr* linsolvefn_make(const Expr* call) {
         return build_object(r, c, 0, m, opts, nopts);
     }
     {
-        double rc = spf_rcond(f);
-        if (rc >= 0.0 && rc < 1e-16)
+        if (spf_badly_conditioned(f))
             msg_with_expr("LinearSolve", "luc",
                           "Result for LinearSolve of badly conditioned matrix %s may contain significant numerical errors.",
                           m);
