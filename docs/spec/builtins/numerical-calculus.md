@@ -801,6 +801,18 @@ and `mcint` (Monte-Carlo).  Attributes:
 `HoldAll, Protected`.  The integration variable is `Block`-localised and the
 integrand evaluated/numericalised at each sample point.
 
+The integrand is first evaluated symbolically, with the variables unbound, and
+the evaluated form is integrated — except when that evaluation swells it (more
+than 16 times the leaves of the integrand as written, and over 256) while the
+integrand as written has a numeric value at interior points of the ranges: the
+written form is then sampled.  Symbolic evaluation expands
+`LaguerreL[1000, r E^(I phi)]` or `LegendreP[200, x]^2` into polynomials whose
+terms cancel catastrophically at every sample point, where the unexpanded
+function is evaluated pointwise by its stable recurrence:
+`NIntegrate[LegendreP[200, x]^2, {x, -1, 1}]` is `2/401` and the
+argument-principle count of the zeros of `L_1000` inside `|z| = 3940` is 999.
+A held `D[...]` has no value at a number, so its evaluated form is used.
+
 ### Method selection (`Method -> Automatic`)
 
 | Region / integrand | Engine |
