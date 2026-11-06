@@ -167,6 +167,10 @@ argument/option handling, then absences, then bottlenecks.
 
 ## Holdout (experiments 136–145) — failures still open at v0.6242
 
+Target: every one of the 240 holdout cases correct (against the established
+true answer) **and** faster in Mathilda than in the baseline column — a SLOWER
+case, even within 1.5×, is open work.
+
 The holdout ([`ISSAC97_HOLDOUT.md`](ISSAC97_HOLDOUT.md)) at v0.6225: 127 AHEAD,
 49 SLOWER, 18 INCOMPLETE, 46 CHECK-FAIL (Mathilda wrong in 31). At v0.6242
 (after W1–W9, A1–A9, X1, X3, B4): 152 / 42 / 16 / 30. Remaining, by area
