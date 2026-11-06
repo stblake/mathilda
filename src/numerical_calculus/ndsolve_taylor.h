@@ -2,7 +2,7 @@
  *
  * For a first-order system  Y' = F(t, Y)  whose right-hand side is built from
  * + , * , powers with a constant exponent, Exp, Log, Sin, Cos, Tan, Sinh, Cosh,
- * Tanh and ArcTan, the Taylor coefficients of the solution through (t0, Y0)
+ * Tanh, ArcTan and Abs, the Taylor coefficients of the solution through (t0, Y0)
  * are computed exactly (up to rounding) by automatic differentiation in Taylor
  * mode: the RHS expression trees are flattened once into a tape of elementary
  * operations, and the k-th coefficient of every tape node is obtained from the
@@ -47,6 +47,24 @@ bool nd_taylor_coeffs(NdTaylorTape* T, const mpfr_t t0, mpfr_t* Y0, int p,
  * (y'', y''' at the nodes of a machine-precision solution). */
 bool nd_taylor_coeffs_d(NdTaylorTape* T, double t0, const double* Y0, int p,
                         double* C);
+
+/* Kinks: the zeros of the arguments of Abs, where the series of Abs[a] = s a
+ * changes branch.  After nd_taylor_coeffs, nd_taylor_kink_coeff(T, j, k) is
+ * the k-th Taylor coefficient (k < p) of the j-th Abs argument and
+ * nd_taylor_kink_sign its branch (+-1, 0 if the argument vanishes
+ * identically).  A driver that lands on a zero of argument j calls
+ * nd_taylor_force_kink_zero(T, j) before the next nd_taylor_coeffs: the
+ * argument is then taken as exactly zero and the branch chosen from its first
+ * nonzero coefficient along the direction set by nd_taylor_set_direction.
+ * nd_taylor_singular is true when that call met a fractional power of the
+ * zero (|a|^(3/2)): the coefficients then hold the regular part only and the
+ * point must be crossed by a method that does not need a series. */
+void     nd_taylor_set_direction(NdTaylorTape* T, int dir);
+int      nd_taylor_kink_count(const NdTaylorTape* T);
+int      nd_taylor_kink_sign(const NdTaylorTape* T, int j);
+mpfr_ptr nd_taylor_kink_coeff(NdTaylorTape* T, int j, int k);
+void     nd_taylor_force_kink_zero(NdTaylorTape* T, int j);
+bool     nd_taylor_singular(const NdTaylorTape* T);
 
 #endif /* USE_MPFR */
 #endif

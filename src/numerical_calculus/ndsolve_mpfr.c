@@ -832,8 +832,133 @@ static double mp_taylor_lnorm(size_t d, mpfr_t* C, int k, mpfr_t* Y, NdTol tol) 
     return best;
 }
 
+/* The Taylor step h (from the two trailing terms), before the caps. */
+static double mp_taylor_step(size_t d, mpfr_t* C, int p, mpfr_t* Y, NdTol tol) {
+    double hm = HUGE_VAL;
+    for (int k = p - 1; k <= p; k++) {
+        double ln = mp_taylor_lnorm(d, C, k, Y, tol);
+        if (ln == -HUGE_VAL) continue;
+        double hk = exp(-ln / (double)k);
+        if (hk < hm) hm = hk;
+    }
+    return 0.9 * hm;
+}
+
+/* Value at h of the polynomial sum_{k<=deg} c(k) h^k of Abs argument j. */
+static void mp_kink_poly(NdTaylorTape* TT, int j, int deg, const mpfr_t h, mpfr_t out) {
+    mpfr_set(out, nd_taylor_kink_coeff(TT, j, deg), MPFR_RNDN);
+    for (int k = deg - 1; k >= 0; k--)
+        mpfr_fma(out, out, h, nd_taylor_kink_coeff(TT, j, k), MPFR_RNDN);
+}
+
+/* The first zero in (0, |h|] (signed like h) of the Abs arguments' series,
+ * where an argument leaves the branch the step was expanded on.  Returns the
+ * index of the argument whose zero comes first and writes it to *root, or -1.
+ * The search samples the step, then bisects the first bracket to the working
+ * precision: Abs[a] = s a is exact up to that point and wrong after it, so a
+ * step must end there, as at an event. */
+static int mp_first_kink(NdTaylorTape* TT, int p, const mpfr_t h, mpfr_t root, long bits) {
+    int nk = nd_taylor_kink_count(TT);
+    if (nk == 0) return -1;
+    const int NS = 8;
+    int best = -1;
+    mpfr_t lo, hi, mid, v, cut;
+    mpfr_inits2(bits, lo, hi, mid, v, cut, (mpfr_ptr)0);
+    mpfr_set(cut, h, MPFR_RNDN);
+    for (int j = 0; j < nk; j++) {
+        int sg = nd_taylor_kink_sign(TT, j);
+        if (sg == 0) continue;
+        int deg = p - 1;
+        bool found = false;
+        mpfr_set_zero(lo, 1);
+        for (int i = 1; i <= NS && !found; i++) {
+            mpfr_mul_si(hi, cut, i, MPFR_RNDN); mpfr_div_si(hi, hi, NS, MPFR_RNDN);
+            mp_kink_poly(TT, j, deg, hi, v);
+            if (mpfr_sgn(v) * sg < 0) found = true;
+            else mpfr_set(lo, hi, MPFR_RNDN);
+        }
+        if (!found) continue;
+        /* bisect [lo, hi]: the argument has sign sg at lo, -sg at hi */
+        for (int it = 0; it < (int)bits + 8; it++) {
+            mpfr_add(mid, lo, hi, MPFR_RNDN); mpfr_div_2ui(mid, mid, 1, MPFR_RNDN);
+            if (mpfr_equal_p(mid, lo) || mpfr_equal_p(mid, hi)) break;
+            mp_kink_poly(TT, j, deg, mid, v);
+            if (mpfr_sgn(v) * sg > 0) mpfr_set(lo, mid, MPFR_RNDN);
+            else mpfr_set(hi, mid, MPFR_RNDN);
+        }
+        mpfr_set(cut, hi, MPFR_RNDN);   /* later arguments must come before it */
+        best = j;
+    }
+    if (best >= 0) mpfr_set(root, cut, MPFR_RNDN);
+    mpfr_clears(lo, hi, mid, v, cut, (mpfr_ptr)0);
+    return best;
+}
+
+/* Cross a point where the series does not exist (a fractional power of an
+ * Abs argument at its zero) with adaptive DOPRI5 steps, keeping each node's
+ * series data (the series exists again off the zero), until the series step
+ * at the current point is at least as long as the Runge-Kutta step.  On
+ * return (t, Y) is the point to resume the series from; it has not been
+ * pushed.  *done is set when the target was reached (and pushed). */
+static NdStatus mp_cross_singular(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
+                                  MpSol* sol, NdTol tol, int p, mpfr_t t, mpfr_t* Y,
+                                  mpfr_t* C, const mpfr_t target, double hstart,
+                                  long bits, int64_t* budget, bool* done) {
+    size_t d = P->d;
+    int dir = mpfr_cmp(target, t) > 0 ? 1 : -1;
+    double span = fabs(P->tmax - P->tmin);
+    long ubits = bits > 1000 ? 1000 : bits;
+    MpDopri T;
+    mp_dopri_init(&T, bits);
+    mpfr_t h, rem, tn;
+    mpfr_inits2(bits, h, rem, tn, (mpfr_ptr)0);
+    mpfr_t* Yn = mp_vec(d, bits);
+    mpfr_t* Ye = mp_vec(d, bits);
+    mpfr_t* k = mp_vec(7 * d, bits);
+    double hcur = hstart;
+    NdStatus st = ND_OK;
+    *done = false;
+    for (;;) {
+        mpfr_sub(rem, target, t, MPFR_RNDN);
+        double remd = fabs(mpfr_get_d(rem, MPFR_RNDN));
+        double tscale = fabs(mpfr_get_d(t, MPFR_RNDN)) + span;
+        if (!(hcur > tscale * ldexp(1.0, -(int)ubits + 8))) { st = ND_ERR_STEPSIZE; break; }
+        bool last = (hcur >= remd);
+        if (last) mpfr_set(h, rem, MPFR_RNDN);
+        else mpfr_set_d(h, dir * hcur, MPFR_RNDN);
+        if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
+        if (!dopri5_mpfr(P, &T, t, Y, h, Yn, Ye, k, bits)) { hcur *= 0.5; continue; }
+        double err = mp_wrms(d, Ye, Y, Yn, tol);
+        double hd = fabs(mpfr_get_d(h, MPFR_RNDN));
+        double fac = err > 0.0 ? 0.9 * pow(1.0 / err, 0.2) : 5.0;
+        if (err > 1.0) { hcur = hd * (fac < 0.2 ? 0.2 : fac); continue; }
+        if (last) mpfr_set(tn, target, MPFR_RNDN); else mpfr_add(tn, t, h, MPFR_RNDN);
+        mpfr_set(t, tn, MPFR_RNDN);
+        for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yn[i], MPFR_RNDN);
+        if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
+        if (fac > 5.0) fac = 5.0;
+        if (fac < 0.2) fac = 0.2;
+        hcur = hd * fac;
+        if (last) {
+            mpsol_push_taylor(sol, t, C);
+            *done = true;
+            break;
+        }
+        if (!nd_taylor_singular(TT) && mp_taylor_step(d, C, p, Y, tol) >= hd) break;
+        mpsol_push_taylor(sol, t, C);
+        if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+    }
+    mp_dopri_clear(&T);
+    mp_vec_free(Yn, d); mp_vec_free(Ye, d); mp_vec_free(k, 7 * d);
+    mpfr_clears(h, rem, tn, (mpfr_ptr)0);
+    return st;
+}
+
 /* Integrate from (t0, Y0) to `target` (either direction), pushing a node with
- * its Taylor data at every step (and at t0 itself when push_first). */
+ * its Taylor data at every step (and at t0 itself when push_first).  A step
+ * ends on the first zero of an Abs argument within it (where Abs[a] changes
+ * branch); a point where the series does not exist is crossed by
+ * mp_cross_singular. */
 static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
                                 MpSol* sol, NdTol tol, int p,
                                 const mpfr_t t0, mpfr_t* Y0, const mpfr_t target,
@@ -842,25 +967,32 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
     int cmp0 = mpfr_cmp(target, t0);
     if (cmp0 == 0) return ND_OK;
     double dir = (cmp0 > 0) ? 1.0 : -1.0;
+    nd_taylor_set_direction(TT, (int)dir);
     double span = fabs(P->tmax - P->tmin);
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
     double first = (o->starting_step > 0.0) ? o->starting_step : HUGE_VAL;
     long ubits = bits > 1000 ? 1000 : bits;
 
-    mpfr_t t, h, rem;
-    mpfr_inits2(bits, t, h, rem, (mpfr_ptr)0);
+    mpfr_t t, h, rem, root;
+    mpfr_inits2(bits, t, h, rem, root, (mpfr_ptr)0);
     mpfr_set(t, t0, MPFR_RNDN);
     mpfr_t* Y = mp_vec(d, bits);
     mpfr_t* C = mp_vec((size_t)(p + 1) * d, bits);
+    /* At a kink the node carries the series of the step that ended there,
+     * re-expanded about its end (the branch behind it), so the interval
+     * before the kink is interpolated from one branch.  Cl holds that. */
+    mpfr_t* Cl = mp_vec((size_t)(p + 1) * d, bits);
+    bool at_kink = false;
     for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Y0[i], MPFR_RNDN);
 
     NdStatus st = ND_OK;
     bool first_node = true;
+    double hprev = 0.0;
     for (;;) {
         if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
         if (!first_node || push_first) {
-            mpsol_push_taylor(sol, t, C);
+            mpsol_push_taylor(sol, t, at_kink ? Cl : C);
             if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
         }
         mpfr_sub(rem, target, t, MPFR_RNDN);
@@ -868,19 +1000,36 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
         if (mpfr_zero_p(rem) || dir * remd <= 0.0) break;
         remd = fabs(remd);
 
-        /* step from the two trailing terms */
-        double hm = HUGE_VAL;
-        for (int k = p - 1; k <= p; k++) {
-            double ln = mp_taylor_lnorm(d, C, k, Y, tol);
-            if (ln == -HUGE_VAL) continue;
-            double hk = exp(-ln / (double)k);
-            if (hk < hm) hm = hk;
+        if (nd_taylor_singular(TT)) {
+            /* the node above holds the regular part; cross by Runge-Kutta */
+            bool done = false;
+            double hs = hprev > 0.0 ? 1e-3 * hprev : 1e-6 * span;
+            at_kink = false;
+            st = mp_cross_singular(P, o, TT, sol, tol, p, t, Y, C, target, hs, bits, budget, &done);
+            if (st != ND_OK || done) break;
+            first_node = false;
+            continue;
         }
-        hm *= 0.9;
+
+        double hm = mp_taylor_step(d, C, p, Y, tol);
         if (hm > h_cap) hm = h_cap;
         if (hm > frac_cap) hm = frac_cap;
         if (first_node && hm > first) hm = first;
         first_node = false;
+        if (at_kink) {
+            /* The interval after the kink is interpolated with the node's
+             * other-branch derivatives at its start: keep it short enough that
+             * the jump in the node data, |C_j - Cl_j| h^j, stays below the
+             * tolerance.  The step after it is a full one on the new branch. */
+            for (size_t q = 0; q < (size_t)(p + 1) * d; q++) mpfr_sub(Cl[q], C[q], Cl[q], MPFR_RNDN);
+            for (int j = 1; j <= sol->K && j <= p; j++) {
+                double ln = mp_taylor_lnorm(d, Cl, j, Y, tol);
+                if (ln == -HUGE_VAL) continue;
+                double hj = 0.5 * exp(-ln / (double)j);
+                if (hj < hm) hm = hj;
+            }
+            at_kink = false;
+        }
         /* step-size underflow: the solution is running into a singularity */
         double tscale = fabs(mpfr_get_d(t, MPFR_RNDN)) + span;
         if (!(hm > tscale * ldexp(1.0, -(int)ubits + 8))) { st = ND_ERR_STEPSIZE; break; }
@@ -888,6 +1037,9 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
         bool last = (hm >= remd);
         if (last) mpfr_set(h, rem, MPFR_RNDN);
         else      mpfr_set_d(h, dir * hm, MPFR_RNDN);
+        /* end the step on the first zero of an Abs argument inside it */
+        int kink = mp_first_kink(TT, p, h, root, bits);
+        if (kink >= 0) { mpfr_set(h, root, MPFR_RNDN); last = false; }
 
         /* Y(t + h) = sum_k C_k h^k  (Horner) */
         for (size_t i = 0; i < d && st == ND_OK; i++) {
@@ -897,11 +1049,25 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
             if (!mpfr_number_p(Y[i])) st = ND_ERR_SAMPLE;
         }
         if (st != ND_OK) break;
+        if (kink >= 0) {
+            /* Taylor shift of the step's series to its end, Cl_j = sum_k C_k
+             * binom(k, j) h^(k - j): the data of the branch behind the kink */
+            for (size_t i = 0; i < d; i++) {
+                for (int k = 0; k <= p; k++) mpfr_set(Cl[(size_t)k * d + i], C[(size_t)k * d + i], MPFR_RNDN);
+                for (int j = 0; j < p; j++)
+                    for (int k = p - 1; k >= j; k--)
+                        mpfr_fma(Cl[(size_t)k * d + i], Cl[(size_t)(k + 1) * d + i], h,
+                                 Cl[(size_t)k * d + i], MPFR_RNDN);
+            }
+            at_kink = true;
+        }
+        hprev = fabs(mpfr_get_d(h, MPFR_RNDN));
         if (last) mpfr_set(t, target, MPFR_RNDN);
         else      mpfr_add(t, t, h, MPFR_RNDN);
+        if (kink >= 0) nd_taylor_force_kink_zero(TT, kink);
     }
-    mp_vec_free(Y, d); mp_vec_free(C, (size_t)(p + 1) * d);
-    mpfr_clears(t, h, rem, (mpfr_ptr)0);
+    mp_vec_free(Y, d); mp_vec_free(C, (size_t)(p + 1) * d); mp_vec_free(Cl, (size_t)(p + 1) * d);
+    mpfr_clears(t, h, rem, root, (mpfr_ptr)0);
     return st;
 }
 

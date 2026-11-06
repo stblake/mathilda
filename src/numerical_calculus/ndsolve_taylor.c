@@ -16,6 +16,17 @@
  *   SINH/COSH  the same with both signs +
  *   ATAN    u = ArcTan[a], w = 1 + a^2:
  *           u_k = (k a_k - sum_{j=1..k-1} j u_j w_{k-j}) / (k w_0)
+ *   ABS     u = Abs[a] = s a, s = Sign[a] on the side of the expansion point
+ *           being integrated into (Sign[a_0], or, when a_0 = 0, the sign of the
+ *           first nonzero a_k (-1)^k along a backward step).  The series is
+ *           exact up to the next zero of a -- the kink, which the driver
+ *           locates (nd_taylor_kink_*) and lands on, so no step straddles it.
+ *
+ * At a kink the driver marks the argument as exactly zero.  A fractional
+ * power c > 0 of an argument that is then exactly zero, |a|^c ~ |a_1 s|^c, has
+ * no Taylor series at all; its coefficients are set to those of the regular
+ * part (zero) and nd_taylor_singular() reports it, so the driver crosses that
+ * point with a Runge-Kutta step instead of the series.
  *
  * The state recurrence is then Y_{k+1} = F_k / (k + 1).  A positive integer
  * power is expanded into multiplications (so y^3 stays defined where y = 0,
@@ -34,7 +45,7 @@
 
 enum {
     TN_CONST, TN_T, TN_Y, TN_ADD, TN_SCALE, TN_MUL, TN_POW,
-    TN_EXP, TN_LOG, TN_SIN, TN_COS, TN_SINH, TN_COSH, TN_ATAN
+    TN_EXP, TN_LOG, TN_SIN, TN_COS, TN_SINH, TN_COSH, TN_ATAN, TN_ABS
 };
 
 typedef struct {
@@ -47,6 +58,8 @@ typedef struct {
     mpfr_t c;           /* CONST value, SCALE factor, POW exponent */
     double cd;          /* c rounded to double (machine evaluation) */
     bool   has_c;
+    int    sgn;         /* TN_ABS: sign in use (+-1), 0 while undetermined */
+    bool   force_zero;  /* TN_ABS: the argument is exactly zero (a kink) here */
 } TNode;
 
 struct NdTaylorTape {
@@ -62,6 +75,12 @@ struct NdTaylorTape {
     mpfr_t*  v;
     int      pcap;
     int      vn;        /* number of nodes v was sized for */
+    /* kinks: the TN_ABS nodes, the direction of integration, and whether the
+     * last nd_taylor_coeffs met a fractional power of an exact zero */
+    int*     absn; int nabs, capabs;
+    int      dir;
+    bool     any_forced;
+    bool     singular;
     /* build context */
     Expr* const* ysym;
     const char*  tvar;
@@ -313,7 +332,14 @@ static int tn_build_node(NdTaylorTape* T, const Expr* e) {
                 return tn_int_power(T, tn_build(T, b), x->data.integer);
             }
             mpfr_t al; mpfr_init2(al, T->bits);
-            int r = tn_eval_const(T, x, al) ? tn_pow(T, tn_build(T, b), al) : -1;
+            int r = -1;
+            if (tn_eval_const(T, x, al)) {
+                /* an integer-valued exponent (3., 6/2) is a product, defined
+                 * where the base vanishes */
+                if (mpfr_integer_p(al) && mpfr_fits_slong_p(al, RND) && !mpfr_zero_p(al))
+                    r = tn_int_power(T, tn_build(T, b), (int64_t)mpfr_get_si(al, RND));
+                else r = tn_pow(T, tn_build(T, b), al);
+            }
             mpfr_clear(al);
             return r;
         }
@@ -335,6 +361,18 @@ static int tn_build_node(NdTaylorTape* T, const Expr* e) {
     }
     if (n != 1) return -1;
     if (h == SYM_Exp) return tn_unary(T, TN_EXP, tn_build(T, A[0]));
+    if (h == SYM_Abs) {
+        int r = tn_unary(T, TN_ABS, tn_build(T, A[0]));
+        if (r < 0) return -1;
+        if (T->nabs == T->capabs) {
+            int nc = T->capabs ? 2 * T->capabs : 4;
+            int* na = realloc(T->absn, sizeof(int) * (size_t)nc);
+            if (!na) return -1;
+            T->absn = na; T->capabs = nc;
+        }
+        T->absn[T->nabs++] = r;
+        return r;
+    }
     if (h == SYM_Log) return tn_unary(T, TN_LOG, tn_build(T, A[0]));
     if (h == SYM_Sqrt) {
         mpfr_t al; mpfr_init2(al, T->bits); mpfr_set_d(al, 0.5, RND);
@@ -391,7 +429,7 @@ void nd_taylor_free(NdTaylorTape* T) {
     free(T->dv);
     free(T->memo_e); free(T->memo_h); free(T->memo_n);
     free(T->pw_base); free(T->pw_exp); free(T->pw_node);
-    free(T->out); free(T->ynode);
+    free(T->out); free(T->ynode); free(T->absn);
     free(T);
 }
 
@@ -400,7 +438,7 @@ NdTaylorTape* nd_taylor_build(Expr* const* f, size_t d, Expr* const* ysym,
     if (d == 0) return NULL;
     NdTaylorTape* T = calloc(1, sizeof(NdTaylorTape));
     if (!T) return NULL;
-    T->bits = bits; T->d = d; T->ysym = ysym; T->tvar = tvar;
+    T->bits = bits; T->d = d; T->ysym = ysym; T->tvar = tvar; T->dir = 1;
     T->out = malloc(sizeof(int) * d);
     T->ynode = malloc(sizeof(int) * d);
     if (!T->out || !T->ynode) { nd_taylor_free(T); return NULL; }
@@ -462,6 +500,9 @@ bool nd_taylor_coeffs(NdTaylorTape* T, const mpfr_t t0, mpfr_t* Y0, int p,
         }
     }
     for (size_t i = 0; i < d; i++) mpfr_set(C[i], Y0[i], RND);
+    T->singular = false;
+    T->any_forced = false;
+    for (int j = 0; j < T->nabs; j++) if (T->nodes[T->absn[j]].force_zero) T->any_forced = true;
 
     bool ok = true;
     for (int k = 0; k < p && ok; k++) {
@@ -489,6 +530,13 @@ bool nd_taylor_coeffs(NdTaylorTape* T, const mpfr_t t0, mpfr_t* Y0, int p,
                 break;
             case TN_POW: {
                 mpfr_ptr a0 = V(T, nd->a, 0);
+                if (mpfr_zero_p(a0) && T->any_forced && mpfr_sgn(nd->c) > 0
+                    && !mpfr_integer_p(nd->c)) {
+                    /* |a_1 s|^c at a kink: no series; the regular part is 0 */
+                    mpfr_set_zero(out, 1);
+                    T->singular = true;
+                    break;
+                }
                 if (k == 0) { mpfr_pow(out, a0, nd->c, RND); break; }
                 if (mpfr_zero_p(a0)) { ok = false; break; }
                 mpfr_set_zero(acc, 1);
@@ -551,6 +599,23 @@ bool nd_taylor_coeffs(NdTaylorTape* T, const mpfr_t t0, mpfr_t* Y0, int p,
                 mpfr_div_si(V(T, c, k), s2, hyp ? k : -k, RND);
                 break;
             }
+            case TN_ABS: {
+                mpfr_ptr ak = V(T, nd->a, k);
+                if (k == 0) {
+                    nd->sgn = (nd->force_zero || mpfr_zero_p(ak)) ? 0 : mpfr_sgn(ak);
+                    if (nd->sgn == 0) mpfr_set_zero(out, 1);
+                    else mpfr_abs(out, ak, RND);
+                    break;
+                }
+                if (nd->sgn == 0 && !mpfr_zero_p(ak)) {
+                    int sg = mpfr_sgn(ak);
+                    nd->sgn = (T->dir < 0 && (k & 1)) ? -sg : sg;
+                }
+                if (nd->sgn == 0) mpfr_set_zero(out, 1);
+                else if (nd->sgn > 0) mpfr_set(out, ak, RND);
+                else mpfr_neg(out, ak, RND);
+                break;
+            }
             case TN_ATAN: {
                 if (k == 0) { mpfr_atan(out, V(T, nd->a, 0), RND); break; }
                 mpfr_mul_si(acc, V(T, nd->a, k), k, RND);
@@ -576,8 +641,18 @@ bool nd_taylor_coeffs(NdTaylorTape* T, const mpfr_t t0, mpfr_t* Y0, int p,
         }
     }
     mpfr_clears(acc, tmp, s2, (mpfr_ptr)0);
+    for (int j = 0; j < T->nabs; j++) T->nodes[T->absn[j]].force_zero = false;
     return ok;
 }
+
+void nd_taylor_set_direction(NdTaylorTape* T, int dir) { if (T) T->dir = dir < 0 ? -1 : 1; }
+int  nd_taylor_kink_count(const NdTaylorTape* T) { return T ? T->nabs : 0; }
+int  nd_taylor_kink_sign(const NdTaylorTape* T, int j) { return T->nodes[T->absn[j]].sgn; }
+mpfr_ptr nd_taylor_kink_coeff(NdTaylorTape* T, int j, int k) {
+    return V(T, T->nodes[T->absn[j]].a, k);
+}
+void nd_taylor_force_kink_zero(NdTaylorTape* T, int j) { T->nodes[T->absn[j]].force_zero = true; }
+bool nd_taylor_singular(const NdTaylorTape* T) { return T && T->singular; }
 
 /* ------------------------------------------------------------------ *
  *  Machine-precision evaluation of the same tape                      *
@@ -658,6 +733,13 @@ bool nd_taylor_coeffs_d(NdTaylorTape* T, double t0, const double* Y0, int p,
                 }
                 r /= k;
                 DV(T, c, k) = hyp ? s2 / k : -s2 / k;
+                break;
+            }
+            case TN_ABS: {
+                double ak = DV(T, nd->a, k);
+                if (k == 0) nd->sgn = (ak > 0.0) - (ak < 0.0);
+                else if (nd->sgn == 0 && ak != 0.0) nd->sgn = (ak > 0.0) ? 1 : -1;
+                r = nd->sgn * ak;
                 break;
             }
             case TN_ATAN: {
