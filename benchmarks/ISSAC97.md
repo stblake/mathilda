@@ -131,7 +131,7 @@ argument/option handling, then absences, then bottlenecks.
 | W14 | printer follow-ups to v0.6264: a MachinePrecision number past the double range prints 15 digits with trailing zeros (`1.00000000000000e+400`, numloop_tests); a non-whole precision one digit short; MPFR -0 loses its sign | **fixed v0.6289** (digit count floor(L) - floor(L - p); a 53-bit number past the double range shows its digits; inexact zero unsigned) |
 | W15 | `N[x, n]` stores exactly ceil(n log2 10) bits with no guard bits, so the last displayed digit can be wrong (`N[Sqrt[2], 50]` ends ...770, true ...769); also a timeout during MPFR's constant computation poisoned the Pi cache (fixed v0.6291) | **fixed v0.6292-v0.6293** (16 guard bits; precision = width - 16; wrong last digits 68/360 -> 0; Precision[N[Pi, 30]] = 30.) |
 | W16 | `1/3^700 == 0` and `PossibleZeroQ[1/3^700]` True (exact rationals beyond the double range read as 0; made h4.9 look wrong) | **fixed v0.6296** |
-| W17 | `PossibleZeroQ[Pi/3^700]` and `Pi/3^700 == 0` True: the zero test's numeric stage measures magnitudes in doubles (1e-334 underflows) | open |
+| W17 | `PossibleZeroQ[Pi/3^700]` and `Pi/3^700 == 0` True: the zero test's numeric stage measures magnitudes in doubles (1e-334 underflows) | open (agent; top priority, user) |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
