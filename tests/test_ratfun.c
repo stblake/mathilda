@@ -205,6 +205,52 @@ void test_stress(void) {
         "ok");
 }
 
+/* Kernels as variables: Sin/Cos/Sinh/Cosh of anything, f[x] and
+ * Derivative[n][f][x] are independent polynomial variables of the factored
+ * engine (no identity between them: Sin^2 + Cos^2 stays).  The answer is the
+ * form the engine gives the same function in plain symbols ordered as the
+ * atoms are (Cos[x] < Sin[x], f[x] < Derivative[1][f][x]). */
+void test_kernel_atoms(void) {
+    /* 1/(s - c) - 1/(s + c) = 2c/(s^2 - c^2) */
+    assert_true("Together[1/(Sin[x] - Cos[x]) - 1/(Sin[x] + Cos[x])] === "
+                "(-2 Cos[x])/((Cos[x] - Sin[x]) (Cos[x] + Sin[x]))");
+    /* s/(1 + c) + c/(1 - s) = (s - s^2 + c + c^2)/((1 + c)(1 - s)) */
+    assert_true("Together[Sin[x]/(1 + Cos[x]) + Cos[x]/(1 - Sin[x])] === "
+                "(-Cos[x] - Cos[x]^2 - Sin[x] + Sin[x]^2)/((1 + Cos[x]) (-1 + Sin[x]))");
+    /* s/(s^2 - c^2) + 1/(s - c) = (2 s + c)/(s^2 - c^2) */
+    assert_true("Together[Sin[x]/(Sin[x]^2 - Cos[x]^2) + 1/(Sin[x] - Cos[x])] === "
+                "(-Cos[x] - 2 Sin[x])/((Cos[x] - Sin[x]) (Cos[x] + Sin[x]))");
+    assert_true("Together[(Cos[x] - Sin[x])/(Sin[x]^2 - Cos[x]^2)] === 1/(-Cos[x] - Sin[x])");
+    assert_true("Together[Sinh[y]/(Sinh[y]^2 - Cosh[y]^2) + 1/(Sinh[y] - Cosh[y])] === "
+                "(-Cosh[y] - 2 Sinh[y])/((Cosh[y] - Sinh[y]) (Cosh[y] + Sinh[y]))");
+    /* f'/f + 1/(f + f'') = (f + f f' + f' f'')/(f (f + f'')) */
+    assert_true("Together[f'[x]/f[x] + 1/(f[x] + f''[x])] === "
+                "(f[x] + f[x] f'[x] + f'[x] f''[x])/(f[x] (f[x] + f''[x]))");
+    assert_true("Together[f'[x]/(1 + f'[x]) + Derivative[0, 1][g][x, y]/g[x, y]] === "
+                "(g[x, y] f'[x] + Derivative[0, 1][g][x, y] + f'[x] Derivative[0, 1][g][x, y])/"
+                "(g[x, y] (1 + f'[x]))");
+    assert_true("Cancel[(f'[x]^2 - f[x]^2)/(f'[x] + f[x])] === -f[x] + f'[x]");
+    assert_true("Cancel[(Sin[x]^2 - Cos[x]^2)/(Sin[x] - Cos[x])] === Cos[x] + Sin[x]");
+    /* no trig identity: Sin^2 + Cos^2 is not 1 to Together */
+    assert_true("Together[(Sin[x]^2 + Cos[x]^2)/(1 + Sin[x])] === (Cos[x]^2 + Sin[x]^2)/(1 + Sin[x])");
+    assert_true("Together[1/Sin[x] - 1/Sin[x]] === 0");
+    /* the same answer as with the atoms renamed to ordered symbols */
+    assert_true("X = rho[p] Cos[p]; Y = rho[p] Sin[p] + 1; yp = D[Y, p]/D[X, p];"
+                "ypp = D[yp, p]/D[X, p]; polarE = ypp - (X^3 + Y^3 + yp^3);"
+                "fw = {Cos[p] -> a1, rho[p] -> a2, Sin[p] -> a3, Derivative[1][rho][p] -> a4,"
+                "      Derivative[2][rho][p] -> a5};"
+                "polarT = Together[polarE]; polarT === (Together[polarE /. fw] /. (Reverse /@ fw))");
+    assert_true("Length[Expand[Factor[Numerator[polarT]]]] == 30");
+    assert_true("Abs[N[polarT - polarE /. rho -> Function[q, 1 + q^2 + q^3] /. p -> 3/7, 40]] < 10^-30");
+    /* a trig atom alone in a denominator would read back as Csc/Sec/Tan: that
+     * answer stays with the other paths (the value is unchanged either way) */
+    assert_true("t = Together[1 + 1/(Sin[x]^2 + Sin[x] Cos[x])];"
+                "PossibleZeroQ[t - (1 + 1/(Sin[x]^2 + Sin[x] Cos[x]))] && FreeQ[t, Power[Sin[x], _?Negative]]");
+    /* Csc, Sec, Tan, ... are not taken as kernels */
+    assert_true("Together[1 + Csc[x]] === 1 + Csc[x]");
+    assert_true("Together[Csc[x] + Sec[x]] === Csc[x] + Sec[x]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -219,6 +265,7 @@ int main(void) {
     TEST(test_options);
     TEST(test_internal_form);
     TEST(test_gaussian);
+    TEST(test_kernel_atoms);
     TEST(test_stress);
     if (g_failures) {
         printf("%d ratfun test(s) FAILED\n", g_failures);

@@ -57,7 +57,16 @@ Cancels out common factors in the numerator and denominator of an expression.
   nothing to cancel is returned unchanged. A univariate input runs on dense
   `fmpz_poly`. Typically 3–70× faster than before: a degree-1000 gcd
   88 ms → 1.2 ms, 6-variable sparse 21 ms → 5.8 ms. Algebraic constants (`I`,
-  `Sqrt[2]`), radicals, forward trig and inexact numbers keep the paths below.
+  `Sqrt[2]`), radicals, `Tan`/`Cot`/`Sec`/`Csc` (and their hyperbolic
+  counterparts) and inexact numbers keep the paths below.
+- **`Sin`, `Cos`, `Sinh`, `Cosh` and derivatives of unknown functions are
+  kernels** of the factored engine: each `Sin[u]`, `Cos[u]`, `f[x]`,
+  `Derivative[n][f][x]` is an independent polynomial variable (no identity
+  between them is applied, `Sin^2 + Cos^2` stays), so
+  `Cancel[(Sin[x]^2 - Cos[x]^2)/(Sin[x] - Cos[x])]` is `Cos[x] + Sin[x]` and
+  `Cancel[(f'[x]^2 - f[x]^2)/(f'[x] + f[x])]` is `-f[x] + f'[x]`. An answer
+  that would leave such a trig atom alone in a denominator (where evaluation
+  would rewrite it to `Csc`/`Sec`/`Tan`) keeps the other paths.
 - **`Modulus -> p`** (v0.6072) cancels over the integers modulo a prime `p`.
   `Modulus -> 0` is the default; a composite modulus is `Cancel::modp` and the
   call stays unevaluated; a nonzero modulus with an `Extension` is
@@ -141,6 +150,13 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
   fractional term needs no gcd at all, which is what makes deeply nested
   fractions cheap. `E^(k u)` kernels are powers of one generator `g = E^u`
   oriented positively, so `Together[1 + E^(-x)]` is `E^(-x) (1 + E^x)`.
+  `Sin`/`Cos`/`Sinh`/`Cosh` atoms and `Derivative[n][f][x]` are kernels too
+  (see Cancel), with the answer in the same factored form as for symbols:
+  `Together[1/(Sin[x] - Cos[x]) - 1/(Sin[x] + Cos[x])]` is
+  `-2 Cos[x]/((Cos[x] - Sin[x]) (Cos[x] + Sin[x]))`. Deriving the polar form
+  of `y'' = x^3 + y^3 + y'^3` (`Factor[Numerator[Together[...]]]` in `rho[p]`,
+  `Sin[p]`, `Cos[p]`, `rho'[p]`, `rho''[p]`) went from 3.9 ms to 1.2 ms;
+  `Together` alone from 3.2 ms to 0.31 ms.
   Before → after on the shootout corpus (`benchmarks/98-rational-shootout`):
   200 linear summands 11.9 → 10.0 ms, nested depth 32 0.39 → 0.19 ms, 16
   multivariate summands 136 → 91 ms, 17 Gaussian summands 44 → 0.48 ms.

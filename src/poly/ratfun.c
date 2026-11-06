@@ -73,6 +73,7 @@
 #include "message.h"
 #include "print.h"
 #include "sym_names.h"
+#include "numeric.h"
 #include "flint_bridge_internal.h"
 
 /* gr_poly_xgcd arrived in FLINT 3.2; the Euclidean variant has the same
@@ -101,6 +102,7 @@ typedef struct {
     int inherit_flip;       /* rf_push marks the pushed factor flipped        */
     int nest;               /* sums being converted around this one (0: top) */
     int normalised;         /* rf_push: p is already a stored (normalised) factor */
+    int trig;               /* Sin/Cos/Sinh/Cosh atoms among the variables   */
 } RfCtx;
 
 /* The largest degree the engine takes.  Beyond it FLINT's gcds (which deflate
@@ -154,6 +156,59 @@ static int rf_add_atom(RfCtx* C, const Expr* e) {
     return rf_push_ptr(&C->atom, &C->n, &C->cap, e);
 }
 
+/* Opaque kernels for Together and Cancel.  >0 while ratfun_together or
+ * ratfun_cancel builds its context: Apart and the gcd entry points, whose
+ * main variable a kernel such as Sin[x] would depend on, keep declining.
+ *
+ * A rational function in Sin[p], Cos[p], rho[p] and Derivative[1][rho][p] is
+ * a rational function in those atoms taken as independent variables: Together
+ * and Cancel apply no identity between them (Sin^2 + Cos^2 stays), so treating
+ * each as a polynomial variable is exact, whatever variables their arguments
+ * share with other atoms.  Two readback hazards are fenced off:
+ *  - Tan/Cot/Sec/Csc (and the hyperbolic ones) are reciprocals or quotients of
+ *    the accepted heads, and the classical path relates them (1 + Cot^2 ...);
+ *    an input carrying one is declined (rf_scan does not accept their heads);
+ *  - an accepted trig atom left as a monomial denominator would be rewritten
+ *    by evaluation (Sin^-1 -> Csc, Sin/Cos -> Tan); rf_to_expr declines such
+ *    a result (rf_trig_den), so the answer is always the engine's own form. */
+static int g_rf_kernels = 0;
+
+static int rf_has_fresh_symbol(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return strncmp(e->data.symbol.name, "$flk", 4) == 0 ||
+               strncmp(e->data.symbol.name, "~flk", 4) == 0;
+    if (e->type != EXPR_FUNCTION) return 0;
+    if (rf_has_fresh_symbol(e->data.function.head)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rf_has_fresh_symbol(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/* Sin[u], Cos[u], Sinh[u], Cosh[u] with a non-numeric argument (a numeric one,
+ * Sin[Pi/7], is an algebraic or transcendental constant the other paths own). */
+static int rf_trig_kernel(const Expr* e) {
+    const char* h = e->data.function.head->data.symbol.name;
+    if (!(h == SYM_Sin || h == SYM_Cos || h == SYM_Sinh || h == SYM_Cosh) ||
+        e->data.function.arg_count != 1)
+        return 0;
+    return !expr_is_numeric_quantity(e) && !rf_has_fresh_symbol(e);
+}
+
+/* Derivative[n1, ...][f][args]: f a symbol, the orders integers.  It survived
+ * evaluation, so it is an unknown function's derivative -- an opaque atom
+ * exactly like f[args] itself. */
+static int rf_derivative_atom(const Expr* e) {
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_FUNCTION || h->data.function.arg_count != 1 ||
+        h->data.function.args[0]->type != EXPR_SYMBOL)
+        return 0;
+    const Expr* d = h->data.function.head;
+    if (!rf_head_is(d, SYM_Derivative) || d->data.function.arg_count == 0) return 0;
+    for (size_t i = 0; i < d->data.function.arg_count; i++)
+        if (d->data.function.args[i]->type != EXPR_INTEGER) return 0;
+    return !expr_is_numeric_quantity(e) && !rf_has_fresh_symbol(e);
+}
+
 /* Pass 1: collect the atoms; 0 declines. */
 static int rf_scan(const Expr* e, RfCtx* C) {
     switch (e->type) {
@@ -169,7 +224,8 @@ static int rf_scan(const Expr* e, RfCtx* C) {
             return rf_bad_symbol(e) ? 0 : rf_add_atom(C, e);
         case EXPR_FUNCTION: {
             const Expr* h = e->data.function.head;
-            if (h->type != EXPR_SYMBOL) return 0;
+            if (h->type != EXPR_SYMBOL)
+                return g_rf_kernels > 0 && rf_derivative_atom(e) ? rf_add_atom(C, e) : 0;
             const char* hn = h->data.symbol.name;
             size_t n = e->data.function.arg_count;
             if (hn == SYM_Rational) return 1;
@@ -191,6 +247,10 @@ static int rf_scan(const Expr* e, RfCtx* C) {
             }
             if (fb_km_is_generic_kernel_head(hn) || fb_km_is_inert_head_atom(e))
                 return rf_add_atom(C, e);
+            if (g_rf_kernels > 0 && rf_trig_kernel(e)) {
+                C->trig++;
+                return rf_add_atom(C, e);
+            }
             return 0;
         }
         default:
@@ -1922,7 +1982,29 @@ static Expr* rf_to_expr_expanded(const Rf* R, const RfCtx* C) {
     return eval_and_free(r);
 }
 
+/* A trig atom (rf_trig_kernel) alone in a denominator factor: evaluation
+ * would turn its reciprocal into Csc/Sec/Csch/Sech, or a quotient into
+ * Tan/Cot, which is not the form the engine computed. */
+static int rf_trig_den(const Rf* R, const RfCtx* C) {
+    if (!C->trig) return 0;
+    ulong* ex = malloc(C->n * sizeof(ulong));
+    if (!ex) return 1;
+    int bad = 0;
+    for (slong i = 0; i < R->n && !bad; i++) {
+        if (R->f[i].e >= 0 || !rf_is_mono(&R->f[i].p)) continue;
+        fmpz_mpoly_get_term_exp_ui(ex, &R->f[i].p, 0, C->ctx);
+        for (size_t v = 0; v < C->n && !bad; v++)
+            if (ex[v] && C->atom[v]->type == EXPR_FUNCTION &&
+                C->atom[v]->data.function.head->type == EXPR_SYMBOL &&
+                rf_trig_kernel(C->atom[v]))
+                bad = 1;
+    }
+    free(ex);
+    return bad;
+}
+
 static Expr* rf_to_expr(const Rf* R, const RfCtx* C) {
+    if (rf_trig_den(R, C)) return NULL;
     if (!rf_factored_form()) return rf_to_expr_expanded(R, C);
     static int check = -1;
     if (check < 0) check = getenv("MATHILDA_RATFUN_DIRECT_CHECK") ? 1 : 0;
@@ -1983,7 +2065,10 @@ static Expr* rf_normal_form(const Expr* e, RfCtx* C) {
 Expr* ratfun_together(const Expr* e) {
     if (!e) return NULL;
     RfCtx C;
-    if (!rf_ctx_build(e, &C, NULL)) return NULL;
+    g_rf_kernels++;
+    int built = rf_ctx_build(e, &C, NULL);
+    g_rf_kernels--;
+    if (!built) return NULL;
     /* Nothing to combine: a polynomial (or a product of them) is left as it
      * is, factored or expanded -- Together[(1 + x)^2 (2 + x)] stays. */
     /* no denominator: a product stays as written (Together[(1 + x)^2 (2 + x)]),
@@ -2035,7 +2120,10 @@ Expr* ratfun_cancel(const Expr* e) {
             if (rf_nested_sum_den(e->data.function.args[i], 1)) return NULL;
     } else if (rf_nested_sum_den(e, 1)) return NULL;
     RfCtx C;
-    if (!rf_ctx_build(e, &C, NULL)) return NULL;
+    g_rf_kernels++;
+    int built = rf_ctx_build(e, &C, NULL);
+    g_rf_kernels--;
+    if (!built) return NULL;
     Expr* out = NULL;
     if (rf_head_is(e, SYM_Plus)) {
         size_t n = e->data.function.arg_count;
