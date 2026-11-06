@@ -186,10 +186,10 @@ the ones where Mathilda is wrong, incomplete or slower; "neither" = both wrong):
 | NIntegrate | h2.3 machine + wp40 (70 s), h2.7 wp40 timeout, h2.8 (neither) (h2.9 was the baseline wrong) | **fixed v0.6268-v0.6269** (137: 14 AHEAD, 3 SLOWER, 0 wrong; SLOWER: h2.5 wp40, h2.7 machine and wp40) |
 | NSum | h3.2, h3.4, h3.6, h3.7, h3.8 machine wrong; h3.2/3.4/3.7/3.8 wp30 timeouts | **fixed v0.6261-v0.6263** (all 20 rows correct; h3.6 wp30 still SLOWER, 3.3x by wall under load) |
 | SeriesCoefficient / Residue | h4.4, h4.8, h4.9 (Tan, k = 401) wrong; h4.5 Residue timeout; h4.10 Residue wrong | **fixed v0.6245–v0.6247** (all correct; h4.8 283 ms vs 106 ms still SLOWER) |
-| FindRoot / special functions (agent) | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | open |
+| FindRoot / special functions | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | **fixed v0.6272-v0.6277** (140: 20/20 AHEAD; new JacobiP, RiemannSiegelZ/Theta) |
 | NSolve | h6.5, h6.7 machine: solutions missing | **fixed v0.6256** (all ten systems complete; h6.5 91 ms vs 98.5) |
 | Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | **fixed v0.6248** (h7.2 4096/729, h7.3 9765625/1048576, h7.10 1/64; the h7.3 machine point was the baseline wrong) |
 | N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | open |
-| Integrate | h8.5, h8.8 unevaluated | open (agent) |
+| Integrate | h8.5, h8.8 unevaluated | **fixed v0.6278-v0.6281** (143: 30/30 correct and AHEAD; h8.5 55 ms vs 1.5 s, h8.8 99 ms vs 13.8 s) |
 | eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
 | NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 were the baseline wrong (Mathilda correct); h10.7 singular endpoint (Mathilda 2.96e113) and h10.3/h10.4 Lane-Emden wp30 SLOWER | **fixed v0.6258-v0.6260** (h10.7 correct to 23 digits; Lane-Emden 1.7 s -> 30 ms, 4.3 s -> 0.11 s); h10.7's start data corrected in the benchmark |
