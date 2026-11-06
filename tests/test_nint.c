@@ -640,6 +640,10 @@ static void test_option_values_and_nonnumeric(void) {
                   "NIntegrate[ff[x], {x, 0, 1}, WorkingPrecision -> 30]");
     /* machine-number values at WorkingPrecision: stops at their accuracy
      * (precw) instead of refining level after level */
+    /* an under-resolved oscillation also stalls for a few levels, at
+     * differences of the integral's own size: not the noise floor */
+    ASSERT_REL("NIntegrate[Cos[1000 Sin[x]], {x, 0, Pi}, WorkingPrecision -> 40]",
+               "Pi BesselJ[0, 1000]", "10^-25");
     ASSERT_EQ_STR("Module[{h}, h[x_?NumericQ] := N[Exp[x]]; "
                   "Abs[Quiet[NIntegrate[h[x], {x, 0, 1}, WorkingPrecision -> 25]] - (E - 1)] < 10^-14]",
                   "True");

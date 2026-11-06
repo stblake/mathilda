@@ -339,8 +339,11 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
              * the goal (machine numbers inside a WorkingPrecision -> 25 run)
              * stops improving; each further level doubles the cost for
              * nothing, so after two levels without a bit of progress the best
-             * estimate is returned unconverged (the caller warns). */
-            if (level >= 4 && !(ld < lprevd - 1.0)) {
+             * estimate is returned unconverged (the caller warns).  Only a
+             * difference already far below the integral (20 bits) counts:
+             * an under-resolved oscillation (Cos[1000 Sin[x]]) also stalls,
+             * at differences of the integral's own size, until h resolves it. */
+            if (level >= 4 && !(ld < lprevd - 1.0) && ld < lI - 20.0) {
                 if (++stalled >= 2) break;
             } else {
                 stalled = 0;
