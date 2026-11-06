@@ -61,10 +61,15 @@
 #include "numeric.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "eval.h"
+#include "mp_parallel.h"
 
 #include <gmp.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
+#ifdef USE_FLINT
+#include <flint/flint.h>
+#include <flint/arb.h>
+#endif
 #endif
 
 #include <stdbool.h>
@@ -1127,12 +1132,381 @@ Expr* svd_mpfr_dispatch(const SvdArgs* args, int n, int p, int n_a)
     return svd_apply_postprocess(result, args, n, p, mn);
 }
 
+#ifdef USE_FLINT
 /* ------------------------------------------------------------------ *
- *  Singular values only (SingularValueList).                          *
+ *  Singular values by bidiagonalisation (real input, values only).    *
  *                                                                     *
- *  The same one-sided Jacobi as the full decomposition, with V not    *
- *  accumulated and U never formed: after the sweeps the columns of A  *
- *  are mutually orthogonal and their 2-norms are the singular values. *
+ *  One-sided Jacobi costs ~ 3 n p^2 / 2 multiply-adds per sweep and   *
+ *  an ill-conditioned matrix takes 10+ sweeps (a 120 x 120 Kahan      *
+ *  matrix at 60 digits: 4 s).  The standard route instead:            *
+ *                                                                     *
+ *   1. Golub-Kahan bidiagonalisation A = U B V^T by Householder       *
+ *      reflectors from the left and the right (4 n p^2 - 4 p^3 / 3    *
+ *      multiply-adds, once).  Every inner product is one fused        *
+ *      arb_approx_dot (accumulated in fixed point, rounded once) and  *
+ *      every entry update one fused multiply-add; the columns (left   *
+ *      reflector) and rows (right reflector) are independent and are *
+ *      split over threads (mp_parallel_for).                          *
+ *   2. The singular values of the upper bidiagonal B by the implicit- *
+ *      shift Golub-Kahan QR iteration (Golub & Van Loan, Alg. 8.6.2): *
+ *      Wilkinson shift from the trailing 2 x 2 of B^T B, a column /   *
+ *      row Givens bulge chase, deflation once |e_i| is negligible     *
+ *      against |d_i| + |d_i+1|, and a zero diagonal entry chased out  *
+ *      along its row (or up its column at the bottom of a block).     *
+ *      O(p) per sweep, a few sweeps per value.                        *
+ *                                                                     *
+ *  Accuracy: both stages are backward stable, so each value is        *
+ *  within ~ p 2^-w ||A||_2 of the exact one -- the guarantee of the   *
+ *  machine kernel (LAPACK gesdd) at w bits.  The work runs at the     *
+ *  caller's precision plus SVDB_GUARD bits and is rounded to it at    *
+ *  the end.                                                           *
+ * ------------------------------------------------------------------ */
+#define SVDB_GUARD 32
+
+typedef struct {
+    arb_ptr A;            /* n x p row-major midpoints */
+    arb_ptr u;            /* reflector: rows k.. (left) or cols k+1.. (right) */
+    arb_ptr wv;           /* left reflector: 2 u . A[k.., j] per column j */
+    size_t n, p, k;
+    slong prec;
+} SvdBi;
+
+/* Left reflector on column k, rows k..n-1, first half: for each column
+ * j > k, wv_j = 2 u . A[k.., j]. */
+static void svdb_left_dot(void* c0, int64_t lo, int64_t hi, int chunk)
+{
+    SvdBi* c = (SvdBi*)c0;
+    (void)chunk;
+    size_t n = c->n, p = c->p, k = c->k;
+    for (int64_t t = lo; t < hi; t++) {
+        size_t j = k + 1 + (size_t)t;
+        arb_approx_dot(c->wv + j, NULL, 0, c->u + k, 1, c->A + k * p + j, (slong)p,
+                       (slong)(n - k), c->prec);
+        arf_mul_2exp_si(arb_midref(c->wv + j), arb_midref(c->wv + j), 1);
+    }
+}
+
+/* ... second half, by rows (contiguous): A[i, j] -= u_i wv_j for i >= k,
+ * j > k. */
+static void svdb_left_upd(void* c0, int64_t lo, int64_t hi, int chunk)
+{
+    SvdBi* c = (SvdBi*)c0;
+    (void)chunk;
+    size_t p = c->p, k = c->k;
+    for (int64_t t = lo; t < hi; t++) {
+        size_t i = k + (size_t)t;
+        arb_ptr row = c->A + i * p;
+        arf_srcptr ui = arb_midref(c->u + i);
+        if (arf_is_zero(ui)) continue;
+        for (size_t j = k + 1; j < p; j++)
+            arf_submul(arb_midref(row + j), ui, arb_midref(c->wv + j), c->prec, ARF_RND_NEAR);
+    }
+}
+
+/* Right reflector on row k, columns k+1..p-1: for each row i > k,
+ * w = A[i, k+1..] . u,  A[i, k+1..] -= (2 w) u. */
+static void svdb_right(void* c0, int64_t lo, int64_t hi, int chunk)
+{
+    SvdBi* c = (SvdBi*)c0;
+    (void)chunk;
+    size_t p = c->p, k = c->k;
+    arb_t w;
+    arb_init(w);
+    for (int64_t t = lo; t < hi; t++) {
+        size_t i = k + 1 + (size_t)t;
+        arb_ptr row = c->A + i * p;
+        arb_approx_dot(w, NULL, 0, row + k + 1, 1, c->u + k + 1, 1, (slong)(p - k - 1),
+                       c->prec);
+        arf_mul_2exp_si(arb_midref(w), arb_midref(w), 1);
+        for (size_t j = k + 1; j < p; j++)
+            arf_submul(arb_midref(row + j), arb_midref(c->u + j), arb_midref(w), c->prec, ARF_RND_NEAR);
+    }
+    arb_clear(w);
+}
+
+/* The unit Householder vector u (contiguous, len cells) with
+ * (I - 2 u u^T) x = alpha e_1 for x = len entries at stride st.  False
+ * (alpha = 0, no reflection) when x is zero. */
+static bool svdb_house(arb_srcptr x, slong st, size_t len, arb_ptr u, arf_t alpha,
+                       slong prec)
+{
+    arb_t s;
+    arf_t nrm;
+    arb_init(s); arf_init(nrm);
+    arb_approx_dot(s, NULL, 0, x, st, x, st, (slong)len, prec);
+    bool ok = !arf_is_zero(arb_midref(s));
+    if (ok) {
+        arf_sqrt(nrm, arb_midref(s), prec, ARF_RND_NEAR);
+        if (arf_sgn(arb_midref(x)) >= 0) arf_neg(alpha, nrm); else arf_set(alpha, nrm);
+        arf_sub(arb_midref(u), arb_midref(x), alpha, prec, ARF_RND_NEAR);
+        for (size_t i = 1; i < len; i++)
+            arf_set(arb_midref(u + i), arb_midref(x + (slong)i * st));
+        arb_approx_dot(s, NULL, 0, u, 1, u, 1, (slong)len, prec);
+        if (arf_is_zero(arb_midref(s))) ok = false;
+        else {
+            arf_sqrt(nrm, arb_midref(s), prec, ARF_RND_NEAR);
+            for (size_t i = 0; i < len; i++)
+                arf_div(arb_midref(u + i), arb_midref(u + i), nrm, prec, ARF_RND_NEAR);
+        }
+    }
+    if (!ok) arf_zero(alpha);
+    arb_clear(s); arf_clear(nrm);
+    return ok;
+}
+
+/* Givens: r = hypot(f, g), c = f / r, s = g / r (c = 1, s = 0 for g = 0). */
+static void svdb_givens(mpfr_t c, mpfr_t s, mpfr_t r, const mpfr_t f, const mpfr_t g)
+{
+    if (mpfr_zero_p(g)) {
+        mpfr_set_ui(c, 1, MPFR_RNDN); mpfr_set_zero(s, 1); mpfr_set(r, f, MPFR_RNDN);
+        return;
+    }
+    mpfr_hypot(r, f, g, MPFR_RNDN);
+    mpfr_div(c, f, r, MPFR_RNDN);
+    mpfr_div(s, g, r, MPFR_RNDN);
+}
+
+/* x' = c x + s y,  y' = c y - s x  (t1, t2 scratch at x's precision). */
+static void svdb_rot(mpfr_t x, mpfr_t y, const mpfr_t c, const mpfr_t s,
+                     mpfr_t t1, mpfr_t t2)
+{
+    mpfr_mul(t1, s, y, MPFR_RNDN);
+    mpfr_fma(t1, c, x, t1, MPFR_RNDN);
+    mpfr_mul(t2, s, x, MPFR_RNDN);
+    mpfr_fms(y, c, y, t2, MPFR_RNDN);
+    mpfr_swap(x, t1);
+}
+
+/* Singular values of the upper bidiagonal (d[0..p-1], e[0..p-2]), left in
+ * d as |values|.  False if the iteration does not converge. */
+static bool svdb_bidiag_qr(mpfr_t* d, mpfr_t* e, int p, mpfr_prec_t w)
+{
+    mpfr_t c, s, r, f, g, t1, t2, tol, abstol, mu, a, b, x;
+    mpfr_init2(c, w); mpfr_init2(s, w); mpfr_init2(r, w); mpfr_init2(f, w);
+    mpfr_init2(g, w); mpfr_init2(t1, w); mpfr_init2(t2, w); mpfr_init2(tol, w);
+    mpfr_init2(abstol, w); mpfr_init2(mu, w); mpfr_init2(a, w); mpfr_init2(b, w);
+    mpfr_init2(x, w);
+
+    /* Relative deflation threshold 4 2^-w; the absolute one, below which
+     * an entry is noise of the backward-stable reduction anyway,
+     * p 2^-w ||B|| with ||B|| <= max_i |d_i| + |e_i|. */
+    mpfr_set_ui_2exp(tol, 1, 2 - (long)w, MPFR_RNDN);
+    mpfr_set_zero(abstol, 1);
+    for (int i = 0; i < p; i++) {
+        mpfr_abs(t1, d[i], MPFR_RNDN);
+        if (i + 1 < p) { mpfr_abs(t2, e[i], MPFR_RNDN); mpfr_add(t1, t1, t2, MPFR_RNDN); }
+        if (mpfr_cmp(t1, abstol) > 0) mpfr_set(abstol, t1, MPFR_RNDN);
+    }
+    mpfr_mul_ui(abstol, abstol, (unsigned long)p, MPFR_RNDN);
+    mpfr_mul_2si(abstol, abstol, -(long)w, MPFR_RNDN);
+
+    bool ok = true;
+    long iter = 0, maxit = 60L * p + 100;
+    int hi = p - 1;
+    while (hi > 0) {
+        for (int i = 0; i < hi; i++) {
+            if (mpfr_zero_p(e[i])) continue;
+            mpfr_abs(t1, d[i], MPFR_RNDN);
+            mpfr_abs(t2, d[i + 1], MPFR_RNDN);
+            mpfr_add(t1, t1, t2, MPFR_RNDN);
+            mpfr_mul(t1, t1, tol, MPFR_RNDN);
+            if (mpfr_cmpabs(e[i], t1) <= 0 || mpfr_cmpabs(e[i], abstol) <= 0)
+                mpfr_set_zero(e[i], 1);
+        }
+        while (hi > 0 && mpfr_zero_p(e[hi - 1])) hi--;
+        if (hi == 0) break;
+        int lo = hi - 1;
+        while (lo > 0 && !mpfr_zero_p(e[lo - 1])) lo--;
+        if (++iter > maxit) { ok = false; break; }
+
+        /* A negligible diagonal entry splits the block. */
+        int z = -1;
+        for (int i = lo; i <= hi; i++)
+            if (mpfr_cmpabs(d[i], abstol) <= 0) { z = i; break; }
+        if (z >= 0) {
+            mpfr_set_zero(d[z], 1);
+            if (z < hi) {
+                /* Rotate rows j and z (j = z+1..hi) to chase x = B(z, j)
+                 * off the right end: (d_j, x) -> (r, 0), and the row-z
+                 * entry of column j+1 becomes -s e_j. */
+                mpfr_set(x, e[z], MPFR_RNDN);
+                mpfr_set_zero(e[z], 1);
+                for (int j = z + 1; j <= hi; j++) {
+                    svdb_givens(c, s, r, d[j], x);
+                    mpfr_set(d[j], r, MPFR_RNDN);
+                    if (j < hi) {
+                        mpfr_mul(x, s, e[j], MPFR_RNDN);
+                        mpfr_neg(x, x, MPFR_RNDN);
+                        mpfr_mul(e[j], c, e[j], MPFR_RNDN);
+                    }
+                }
+            } else {
+                /* Rotate columns j and hi (j = hi-1..lo) to chase
+                 * x = B(j, hi) up: (d_j, x) -> (r, 0), and the column-hi
+                 * entry of row j-1 becomes -s e_(j-1). */
+                mpfr_set(x, e[hi - 1], MPFR_RNDN);
+                mpfr_set_zero(e[hi - 1], 1);
+                for (int j = hi - 1; j >= lo; j--) {
+                    svdb_givens(c, s, r, d[j], x);
+                    mpfr_set(d[j], r, MPFR_RNDN);
+                    if (j > lo) {
+                        mpfr_mul(x, s, e[j - 1], MPFR_RNDN);
+                        mpfr_neg(x, x, MPFR_RNDN);
+                        mpfr_mul(e[j - 1], c, e[j - 1], MPFR_RNDN);
+                    }
+                }
+            }
+            continue;
+        }
+
+        /* Wilkinson shift: the eigenvalue of the trailing 2 x 2
+         * [[a, f], [f, b]] of B^T B nearer b. */
+        int m = hi - 1;
+        mpfr_sqr(a, d[m], MPFR_RNDN);
+        if (m > lo) { mpfr_sqr(t1, e[m - 1], MPFR_RNDN); mpfr_add(a, a, t1, MPFR_RNDN); }
+        mpfr_sqr(b, d[hi], MPFR_RNDN);
+        mpfr_sqr(t1, e[m], MPFR_RNDN);
+        mpfr_add(b, b, t1, MPFR_RNDN);
+        mpfr_mul(f, d[m], e[m], MPFR_RNDN);
+        mpfr_sub(t1, a, b, MPFR_RNDN);
+        mpfr_div_2ui(t1, t1, 1, MPFR_RNDN);              /* delta */
+        mpfr_hypot(t2, t1, f, MPFR_RNDN);
+        if (mpfr_sgn(t1) < 0) mpfr_neg(t2, t2, MPFR_RNDN);
+        mpfr_add(t1, t1, t2, MPFR_RNDN);
+        if (mpfr_zero_p(t1)) mpfr_set(mu, b, MPFR_RNDN);
+        else {
+            mpfr_sqr(t2, f, MPFR_RNDN);
+            mpfr_div(t2, t2, t1, MPFR_RNDN);
+            mpfr_sub(mu, b, t2, MPFR_RNDN);
+        }
+
+        /* The bulge chase.  (f, g) is the pair the next rotation zeroes. */
+        mpfr_sqr(f, d[lo], MPFR_RNDN);
+        mpfr_sub(f, f, mu, MPFR_RNDN);
+        mpfr_mul(g, d[lo], e[lo], MPFR_RNDN);
+        for (int k = lo; k < hi; k++) {
+            /* columns k, k+1 */
+            svdb_givens(c, s, r, f, g);
+            if (k > lo) mpfr_set(e[k - 1], r, MPFR_RNDN);
+            svdb_rot(d[k], e[k], c, s, t1, t2);
+            mpfr_mul(g, s, d[k + 1], MPFR_RNDN);          /* bulge B(k+1, k) */
+            mpfr_mul(d[k + 1], c, d[k + 1], MPFR_RNDN);
+            /* rows k, k+1 */
+            svdb_givens(c, s, r, d[k], g);
+            mpfr_set(d[k], r, MPFR_RNDN);
+            svdb_rot(e[k], d[k + 1], c, s, t1, t2);
+            mpfr_set(f, e[k], MPFR_RNDN);
+            if (k + 1 < hi) {
+                mpfr_mul(g, s, e[k + 1], MPFR_RNDN);      /* bulge B(k, k+2) */
+                mpfr_mul(e[k + 1], c, e[k + 1], MPFR_RNDN);
+            }
+        }
+    }
+    for (int i = 0; i < p; i++) mpfr_abs(d[i], d[i], MPFR_RNDN);
+
+    mpfr_clear(c); mpfr_clear(s); mpfr_clear(r); mpfr_clear(f); mpfr_clear(g);
+    mpfr_clear(t1); mpfr_clear(t2); mpfr_clear(tol); mpfr_clear(abstol);
+    mpfr_clear(mu); mpfr_clear(a); mpfr_clear(b); mpfr_clear(x);
+    return ok;
+}
+
+/* One pass at working precision w: the p singular values (unsorted) of the
+ * column-major n x p real matrix Acm, p <= n, into sigma.  False on
+ * non-convergence. */
+static bool svdm_values_bidiag_at(const mpfr_t* Acm, int n, int p, mpfr_prec_t w,
+                                  mpfr_t* sigma)
+{
+    slong prec = (slong)w;
+    size_t N = (size_t)n, P = (size_t)p;
+    arb_ptr A = _arb_vec_init((slong)(N * P));
+    arb_ptr u = _arb_vec_init((slong)N);
+    arb_ptr wv = _arb_vec_init((slong)P);
+    for (size_t i = 0; i < N; i++)
+        for (size_t j = 0; j < P; j++)
+            arf_set_mpfr(arb_midref(A + i * P + j), Acm[i + j * N]);
+    mpfr_t* d = svdm_array_alloc(P, w);
+    mpfr_t* e = svdm_array_alloc(P, w);
+    arf_t alpha;
+    arf_init(alpha);
+    SvdBi c;
+    c.A = A; c.u = u; c.wv = wv; c.n = N; c.p = P; c.prec = prec;
+    double limbs = (double)w / 64.0;
+    for (size_t k = 0; k < P; k++) {
+        c.k = k;
+        /* left reflector: zero A[k+1.., k] */
+        if (svdb_house(A + k * P + k, (slong)P, N - k, u + k, alpha, prec) && k + 1 < P) {
+            double work = (double)(N - k) * (double)(P - k - 1) * limbs * limbs;
+            mp_parallel_for(svdb_left_dot, &c, (int64_t)(P - k - 1), work);
+            mp_parallel_for(svdb_left_upd, &c, (int64_t)(N - k), work);
+        }
+        arf_get_mpfr(d[k], alpha, MPFR_RNDN);
+        if (k + 1 >= P) break;
+        /* right reflector: zero A[k, k+2..] */
+        if (k + 2 < P) {
+            if (svdb_house(A + k * P + k + 1, 1, P - k - 1, u + k + 1, alpha, prec))
+                mp_parallel_for(svdb_right, &c, (int64_t)(N - k - 1),
+                                2.0 * (double)(N - k - 1) * (double)(P - k - 1) * limbs * limbs);
+            arf_get_mpfr(e[k], alpha, MPFR_RNDN);
+        } else {
+            arf_get_mpfr(e[k], arb_midref(A + k * P + k + 1), MPFR_RNDN);
+        }
+    }
+    mpfr_set_zero(e[P - 1], 1);
+    arf_clear(alpha);
+    _arb_vec_clear(A, (slong)(N * P));
+    _arb_vec_clear(u, (slong)N);
+    _arb_vec_clear(wv, (slong)P);
+    bool ok = svdb_bidiag_qr(d, e, p, w);
+    if (ok)
+        for (int i = 0; i < p; i++) mpfr_set(sigma[i], d[i], MPFR_RNDN);
+    svdm_array_free(d, P);
+    svdm_array_free(e, P);
+    return ok;
+}
+
+/* The singular values of the exact (binary) input to `bits` relative
+ * accuracy.  A backward-stable pass at w bits leaves sigma_i with an
+ * absolute error ~ 2^-w sigma_max, i.e. log2(sigma_max / sigma_i) bits of
+ * its relative accuracy are lost -- the 1.2e-42 smallest singular value of
+ * a 50 x 50 equispaced Vandermonde matrix at 100 digits came out with 57.
+ * So when the spread of the values that survive the default tolerance
+ * (8 n 2^-bits sigma_max, the caller's floor) exceeds the guard, the pass
+ * is repeated once with the spread added to the working precision. */
+static bool svdm_values_bidiag(const mpfr_t* Acm, int n, int p, mpfr_prec_t bits,
+                               mpfr_t* sigma)
+{
+    mpfr_prec_t w = bits + SVDB_GUARD;
+    if (!svdm_values_bidiag_at(Acm, n, p, w, sigma)) return false;
+    mpfr_t smax, floor_, smin;
+    mpfr_init2(smax, 64); mpfr_init2(floor_, 64); mpfr_init2(smin, 64);
+    mpfr_set_zero(smax, 1);
+    for (int i = 0; i < p; i++)
+        if (mpfr_cmp(sigma[i], smax) > 0) mpfr_set(smax, sigma[i], MPFR_RNDN);
+    mpfr_mul_ui(floor_, smax, 8UL * (unsigned long)n, MPFR_RNDN);
+    mpfr_mul_2si(floor_, floor_, -(long)bits, MPFR_RNDN);
+    mpfr_set(smin, smax, MPFR_RNDN);
+    for (int i = 0; i < p; i++)
+        if (mpfr_cmp(sigma[i], floor_) > 0 && mpfr_cmp(sigma[i], smin) < 0)
+            mpfr_set(smin, sigma[i], MPFR_RNDN);
+    long spread = 0;
+    if (!mpfr_zero_p(smin))
+        spread = (long)mpfr_get_exp(smax) - (long)mpfr_get_exp(smin) + 1;
+    mpfr_clear(smax); mpfr_clear(floor_); mpfr_clear(smin);
+    if (spread > SVDB_GUARD / 2)
+        return svdm_values_bidiag_at(Acm, n, p, w + (mpfr_prec_t)spread, sigma);
+    return true;
+}
+#endif /* USE_FLINT */
+
+/* ------------------------------------------------------------------ *
+ *  Singular values only (SingularValueList, Norm[m, 2]).              *
+ *                                                                     *
+ *  Real input with FLINT: bidiagonalisation + bidiagonal QR           *
+ *  (svdm_values_bidiag).  Otherwise, and as the fallback should that  *
+ *  iteration not converge, the same one-sided Jacobi as the full      *
+ *  decomposition, with V not accumulated and U never formed: after    *
+ *  the sweeps the columns of A are mutually orthogonal and their      *
+ *  2-norms are the singular values.                                   *
  *  Requires p <= n (the caller hands a wide matrix in transposed, the *
  *  singular values being those of the conjugate transpose).           *
  * ------------------------------------------------------------------ */
@@ -1162,9 +1536,15 @@ mpfr_t* svd_mpfr_values(Expr* m, int n, int p, mpfr_prec_t bits)
     } else {
         mpfr_t* A = NULL;
         if (!svdm_load_real(m, n, p, bits, &A)) return NULL;
-        (void)svdm_jacobi_sweeps(A, n, p, NULL, bits);
         sigma = svdm_array_alloc((size_t)p, bits);
         mpfr_init2(acc, bits); mpfr_init2(t2, bits);
+#ifdef USE_FLINT
+        if (svdm_values_bidiag((const mpfr_t*)A, n, p, bits, sigma)) {
+            svdm_array_free(A, total);
+            goto sorted;
+        }
+#endif
+        (void)svdm_jacobi_sweeps(A, n, p, NULL, bits);
         for (int j = 0; j < p; j++) {
             mpfr_set_zero(acc, 1);
             for (int i = 0; i < n; i++) {
@@ -1175,6 +1555,9 @@ mpfr_t* svd_mpfr_values(Expr* m, int n, int p, mpfr_prec_t bits)
         }
         svdm_array_free(A, total);
     }
+#ifdef USE_FLINT
+sorted:
+#endif
     mpfr_clear(acc); mpfr_clear(t2);
     /* descending (insertion sort: p is small) */
     for (int i = 1; i < p; i++)

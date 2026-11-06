@@ -1867,8 +1867,17 @@ Gives the singular values of a matrix.
 - Precision classes:
   - **machine** (List, packed, `NDArray`): LAPACK `gesdd` with `jobz = 'N'` —
     values only, no `U` or `V`; a packed real vector;
-  - **arbitrary precision**: one-sided Jacobi at the input precision with `V`
-    not accumulated (`svd_mpfr_values` in `svdecomp_mpfr.c`);
+  - **arbitrary precision** (`svd_mpfr_values` in `svdecomp_mpfr.c`): a real
+    matrix is reduced to upper bidiagonal form by Householder reflectors from
+    both sides (fused `arb_approx_dot` inner products, rows / columns split
+    over threads), and the bidiagonal's singular values come from the
+    implicit-shift Golub-Kahan QR iteration.  The work runs at the input
+    precision plus 32 guard bits; when the surviving values spread over more
+    than 16 bits (sigma_max / sigma_min) the pass is repeated once with the
+    spread added, so each value -- the smallest included -- carries the input
+    precision in relative terms (the 1.2e-42 smallest value of the 50 x 50
+    equispaced Vandermonde matrix at 100 digits: all 100).  A complex matrix
+    (or a build without FLINT) uses one-sided Jacobi with `V` not accumulated;
   - **exact / symbolic**: `Sqrt` of the `Eigenvalues` of the smaller Gram
     matrix (`ConjugateTranspose[m] . m` or `m . ConjugateTranspose[m]`), each
     eigenvalue passed through `Together` when numeric, sorted decreasing.

@@ -18,7 +18,9 @@
  *   machine -> svl_machine_values: LAPACK gesdd with jobz = 'N' (values only,
  *              no U or V).  The one helper behind the boxed List, packed List,
  *              visible NDArray and Compile[], so they agree bit for bit.
- *   MPFR    -> svd_mpfr_values: one-sided Jacobi with V not accumulated.
+ *   MPFR    -> svd_mpfr_values: Householder bidiagonalisation + bidiagonal
+ *              QR for a real matrix, one-sided Jacobi (V not accumulated)
+ *              for a complex one.
  *   exact / symbolic -> Sqrt of the Eigenvalues of the smaller Gram matrix
  *              (ConjugateTranspose[m] . m or m . ConjugateTranspose[m]).
  */
@@ -369,7 +371,7 @@ static Expr* svl_generalized(const SvlArgs* args, bool* failed) {
 static Expr* svl_mpfr(const SvlArgs* a, const Expr* m, int r, int c, long bits,
                       bool* failed) {
     Expr* boxed = la_boxed_copy(m);
-    if (c > r) {                          /* Jacobi wants a tall matrix */
+    if (c > r) {                          /* the kernels want a tall matrix */
         boxed = la_ev1(SYM_ConjugateTranspose, boxed);
         int t = r; r = c; c = t;
     }
@@ -379,7 +381,7 @@ static Expr* svl_mpfr(const SvlArgs* a, const Expr* m, int r, int c, long bits,
     int mn = c;
     double* Sd = (double*)malloc(sizeof(double) * (size_t)mn);
     for (int i = 0; i < mn; i++) Sd[i] = mpfr_get_d(S[i], MPFR_RNDN);
-    /* default: 8 max(r, c) 2^-bits relative -- the Jacobi floor at `bits` */
+    /* default: 8 max(r, c) 2^-bits relative -- the kernels' floor at `bits` */
     double tol = a->tol_auto ? 8.0 * (double)r * ldexp(1.0, -(int)bits) : a->tol;
     int nz = svl_nonzero(Sd, mn, tol);
     for (int i = nz; i < mn; i++) mpfr_set_zero(S[i], 1);

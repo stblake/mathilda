@@ -63,6 +63,55 @@ static void test_mpfr(void) {
              "Abs[s[[1]] - Sqrt[(91 + Sqrt[8065])/2]] < 10^-38]");
 }
 
+/* The real MPFR kernel: Householder bidiagonalisation + bidiagonal QR, with
+ * the working precision widened by the spread of the values.  Every expected
+ * value here is exact or an independently known closed form. */
+static void test_mpfr_bidiag(void) {
+    /* Graded, exactly representable: an 8 x 4 matrix with orthonormal
+     * columns (I - J/4 is orthogonal) times diag(1, 2^-30, 2^-80, 2^-130)
+     * times a 4 x 4 orthogonal Hadamard matrix / 2.  Every entry is dyadic
+     * and fits in 60 digits, so the singular values of the MPFR matrix are
+     * exactly the diagonal; each must come out to full relative precision
+     * although the spread is 2^130. */
+    chk_true("Module[{q = IdentityMatrix[8] - ConstantArray[1/4, {8, 8}], "
+             "h = {{1,1,1,1},{1,-1,1,-1},{1,1,-1,-1},{1,-1,-1,1}}/2, "
+             "d = {1, 2^-30, 2^-80, 2^-130}, s}, "
+             "s = SingularValueList[N[q[[All, 1 ;; 4]] . DiagonalMatrix[d] . h, 60]]; "
+             "Length[s] == 4 && Max[Abs[s/d - 1]] < 10^-55 && Min[Precision /@ s] >= 59]");
+    /* the same, wide (transposed) */
+    chk_true("Module[{q = IdentityMatrix[8] - ConstantArray[1/4, {8, 8}], "
+             "h = {{1,1,1,1},{1,-1,1,-1},{1,1,-1,-1},{1,-1,-1,1}}/2, "
+             "d = {1, 2^-30, 2^-80, 2^-130}, s}, "
+             "s = SingularValueList[N[Transpose[q[[All, 1 ;; 4]] . DiagonalMatrix[d] . h], 60]]; "
+             "Max[Abs[s/d - 1]] < 10^-55]");
+    /* the n x n bidiagonal of ones: sigma_k = 2 Cos[k Pi/(2 n + 1)] */
+    chk_true("Module[{n = 30, s}, "
+             "s = SingularValueList[N[Table[If[j == i || j == i + 1, 1, 0], {i, n}, {j, n}], 50]]; "
+             "Max[Abs[s - Table[2 Cos[k Pi/(2 n + 1)], {k, n}]]] < 10^-47]");
+    /* the 50 x 50 Vandermonde matrix on (i-1)/49: smallest value known to
+     * 28 digits (two independent algorithms at 400 and 600 digits) */
+    chk_true("Module[{s = SingularValueList[N[Table[If[j == 1, 1, ((i - 1)/49)^(j - 1)], "
+             "{i, 50}, {j, 50}], 100]]}, "
+             "Length[s] == 50 && Abs[Last[s]/1.214052974061843949823397917`30*^-42 - 1] < 10^-26]");
+    /* Kahan matrix, n = 120, theta = 6/5 */
+    chk_true("Module[{s = SingularValueList[N[Table[Which[i == j, Sin[6/5]^(i - 1), "
+             "j > i, -Cos[6/5] Sin[6/5]^(i - 1), True, 0], {i, 120}, {j, 120}], 60]]}, "
+             "Abs[Last[s]/4.488013531293049259832894189`30*^-20 - 1] < 10^-26]");
+    /* rank deficiency and zero diagonal entries of the bidiagonal */
+    chk_true("With[{s = SingularValueList[N[{{1,2},{2,4},{3,6}}, 30]]}, "
+             "Length[s] == 1 && Abs[s[[1]] - Sqrt[70]] < 10^-28]");
+    chk_true("With[{s = SingularValueList[N[{{0,1,0},{0,0,1},{0,0,0}}, 30], 3]}, "
+             "Abs[s[[1]] - 1] < 10^-29 && Abs[s[[2]] - 1] < 10^-29 && s[[3]] == 0]");
+    chk_true("With[{s = SingularValueList[N[{{1,1,0},{0,0,1},{0,0,1}}, 30]]}, "
+             "Max[Abs[s - {Sqrt[2], Sqrt[2]}]] < 10^-28]");
+    chk_if("SingularValueList[N[{{0,0},{0,0},{0,0}}, 30]]", "{0, 0}");
+    /* agreement with the eigenvalues of the Gram matrix at twice the digits */
+    chk_true("Module[{r = RandomReal[{-1, 1}, {9, 6}, WorkingPrecision -> 40], s, g}, "
+             "s = SingularValueList[r]; "
+             "g = Sqrt[Reverse[Sort[Eigenvalues[SetPrecision[Transpose[r] . r, 90]]]]]; "
+             "Max[Abs[s - g]] < 10^-37]");
+}
+
 static void test_generalized(void) {
     chk_true("Max[Abs[SingularValueList[{{{1.,2.},{3.,4.}}, {{2.,0.},{0.,1.}}}] - "
              "{4.738720018687269, 0.21102744961856199}]] < 10.^-13");
@@ -115,6 +164,7 @@ int main(void) {
     test_exact();
     test_machine();
     test_mpfr();
+    test_mpfr_bidiag();
     test_generalized();
     test_storage();
     test_messages();

@@ -7,7 +7,7 @@
  *
  *   Norm[m] / Norm[m, 2]  -> the spectral norm, the largest singular value:
  *       machine   LAPACK (ndla_matrix_norm_direct),
- *       MPFR      one-sided Jacobi at the input precision (svd_mpfr_values),
+ *       MPFR      svd_mpfr_values at the input precision,
  *       exact / symbolic   Sqrt of the largest eigenvalue of the smaller Gram
  *                 matrix m.m^H or m^H.m, as the reference answers it:
  *                 Norm[{{4, 1}, {0, 5}}] is Sqrt[21 + Sqrt[41]], a 3 x 3
