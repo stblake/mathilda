@@ -262,6 +262,24 @@ static void test_trig_oscillatory(void) {
                  "Pi^2/6 - Pi/2 + 1/4", 1e-26);
 }
 
+/* Bessel summands: J_nu(c n), Y_nu(c n) oscillate like e^(+-i c n), a phase the
+ * symbolic split finds only through the Hankel decomposition.  Closed forms
+ * from Poisson summation: sum_{n>=1} J_0(n x) = -1/2 + (1/x)(1 + 2 sum_{m >= 1,
+ * 2 Pi m < x} (1 - (2 Pi m/x)^2)^(-1/2)), so 1/2 at x = 1, 0 at x = 2 and one
+ * aliased frequency at x = 10; sum J_1(n x)/n = 1 - x/4 (0 < x < 2 Pi); and
+ * sum Y_0(n) = 0.61698948158458515325 (an independent high-precision sum). */
+static void test_bessel_oscillatory(void) {
+    ASSERT_CLOSE("NSum[BesselJ[0, n], {n, 1, Infinity}]", "1/2", 1e-12);
+    ASSERT_CLOSE("NSum[BesselJ[0, 2 n], {n, 1, Infinity}]", "0", 1e-12);
+    ASSERT_CLOSE("NSum[BesselJ[0, 10 n], {n, 1, Infinity}]",
+                 "-1/2 + (1/10) (1 + 2/Sqrt[1 - (2 Pi/10)^2])", 1e-12);
+    ASSERT_CLOSE("NSum[BesselJ[1, n]/n, {n, 1, Infinity}]", "3/4", 1e-12);
+    ASSERT_CLOSE("NSum[BesselJ[1, 3 n]/n, {n, 1, Infinity}]", "1/4", 1e-12);
+    ASSERT_CLOSE("NSum[BesselY[0, n], {n, 1, Infinity}]", "0.61698948158458515325", 1e-12);
+    ASSERT_CLOSE("NSum[BesselJ[0, n], {n, 1, Infinity}, WorkingPrecision -> 30]",
+                 "1/2", 1e-26);
+}
+
 /* Alternating summands the numeric sign probe misses (a zero first term,
  * a magnitude that rises before it falls).  -eta'(s) closed forms:
  * sum (-1)^n Log[n]/n = EulerGamma Log[2] - Log[2]^2/2, and
@@ -385,6 +403,7 @@ int main(void) {
     TEST(test_slow_algebraic_machine);
     TEST(test_slow_log_honest);
     TEST(test_trig_oscillatory);
+    TEST(test_bessel_oscillatory);
     TEST(test_alternating_log);
     TEST(test_slow_log_tails);
     TEST(test_unevaluated_forms);
