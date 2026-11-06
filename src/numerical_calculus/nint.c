@@ -1804,15 +1804,29 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
          * only if they do not converge. */
         const double strong = 8.0 * M_PI;
         bool weak = false;
+        if (!got && (o->method == NI_LEVIN || o->method == NI_AUTO)) {
+            bool lconv = false;
+            if (ni_try_levin_collocation_mpfr(ctx, a, b, o,
+                                              o->method == NI_AUTO ? strong : 0.0,
+                                              &weak, re, im, &lconv)
+                && (o->method == NI_LEVIN || lconv)) {
+                conv = lconv; got = true;
+            }
+        }
+        if (!got && (o->method == NI_AUTO || o->method == NI_DE))
+            got = ni_mpfr_powsing(ctx, am, bm, o, re, im, abserr, &conv);
+        if (!got && (o->method == NI_AUTO || o->method == NI_DE))
+            got = ni_mpfr_graded(ctx, am, bm, o, re, im, abserr, &conv);
         /* An integrand analytic on the interval's own scale (x PolyLog[3, -x]
          * on [0, 1], the first lobe of Sin[x^3]) converges geometrically under
          * Clenshaw-Curtis: 33-129 nested Chebyshev samples where tanh-sinh,
          * built for endpoint singularities, pays 150-350 at 30-40 digits.  A
-         * bounded probe (N <= 128, kept only when it converged) runs first; it
-         * stops as soon as a doubling gains under 8 bits, so on an endpoint
-         * singularity it declines within 33 samples and the cascade below runs
-         * as before. */
-        if (o->method == NI_AUTO) {
+         * bounded probe (N <= 128, kept only when it converged) runs once the
+         * cheap detectors of a power-law endpoint and of a boundary layer
+         * (x^x^x) have found neither; it stops as soon as a doubling gains
+         * under 8 bits, so on anything steeper it declines within 33 samples
+         * and tanh-sinh runs as before. */
+        if (!got && o->method == NI_AUTO) {
             CcCache* cc = ccquad_cache_new(bits);
             double cerr;
             /* asked for every target digit, not just PrecisionGoal: the rule
@@ -1827,19 +1841,6 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
             }
             ccquad_cache_free(cc);
         }
-        if (!got && (o->method == NI_LEVIN || o->method == NI_AUTO)) {
-            bool lconv = false;
-            if (ni_try_levin_collocation_mpfr(ctx, a, b, o,
-                                              o->method == NI_AUTO ? strong : 0.0,
-                                              &weak, re, im, &lconv)
-                && (o->method == NI_LEVIN || lconv)) {
-                conv = lconv; got = true;
-            }
-        }
-        if (!got && (o->method == NI_AUTO || o->method == NI_DE))
-            got = ni_mpfr_powsing(ctx, am, bm, o, re, im, abserr, &conv);
-        if (!got && (o->method == NI_AUTO || o->method == NI_DE))
-            got = ni_mpfr_graded(ctx, am, bm, o, re, im, abserr, &conv);
         if (!got)
             conv = denint_tanhsinh_mpfr(ni_sample_mpfr, ctx, am, bm, bits,
                                         ni_mpfr_reltol(o), ni_mpfr_levels(o),
