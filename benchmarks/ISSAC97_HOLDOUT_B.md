@@ -192,7 +192,7 @@ pi/sqrt2 of y'' = e^y; Kepler's equation for the e = 0.99 orbit.
 
 Recorded 2026-11-06, each file run sequentially on an otherwise lightly loaded
 host; raw outputs in `issac97b_baseline/`. Against the true answers the
-baseline column is CORRECT on **242 of 258** cases:
+baseline column is CORRECT on **243 of 258** cases:
 
 | family | cases | baseline correct |
 |---|---|---|
@@ -205,9 +205,9 @@ baseline column is CORRECT on **242 of 258** cases:
 | 7 cancellation limits | 32 | 32 |
 | 8 closed-form definite integrals | 30 | 29 |
 | 9 operator eigenvalues | 22 | 22 |
-| 10 ODE singularities | 24 | 23 |
+| 10 ODE singularities | 24 | 24 |
 
-The 16 it does not answer correctly (each true answer re-checked by both of
+The 15 it does not answer correctly (each true answer re-checked by both of
 its independent routes):
 
 | case | baseline | true |
@@ -222,9 +222,19 @@ its independent routes):
 | b6.1 NSolve machine (Katsura-5) | 30 solutions | 32 |
 | b6.10 NSolve machine (Trinks) | 9 solutions | 10 |
 | b8.10 Integrate exact | unevaluated | (gamma + log 2pi)/(2 pi) |
-| b10.8 bisection shooting wp30 | -1.58807260 | -1.588071023 |
 
-b10.8: the same criterion in IEEE double (scipy DOP853) reaches the published
-value to 9 digits at X = 40, so the case stands; the baseline's 30-digit run
-returns -1.58807260 independently of X (also at X = 100), i.e. its 30-digit
-integrations misclassify near the root.
+b10.8 (truth corrected 2026-11-07): the case's true answer was first given as the
+published slope -1.588071023, which the shooting method reaches only from exact
+start values.  The program starts at x0 = 1e-4 from the two-term series
+y = 1 - B x + (4/3) x^(3/2), y' = -B + 2 x^(1/2), which omits the next terms
+(2/5) b x^(5/2) of y and b x^(3/2) of y' (b = -B): the start slope is off by
+B x0^(3/2) = 1.6e-6, and the criterion's root moves by the same amount.  A
+Taylor-series integrator in s = sqrt(x) (Y' = 2 s P, P' = 2 Y^(3/2), order 25,
+30 digits, independent of both systems) running the program's own 34-step
+bisection gives, with the program's start values, -1.58807260308 (X = 40) and
+-1.58807260058 (X = 60); with the four-term start series, -1.58807134 (X = 20),
+-1.588071025 (X = 40) and -1.5880710227 (X = 60), the published value, which
+also reproduces the IEEE-double DOP853 figures above.  So the true answer of the
+case as programmed is -1.58807260 (9 digits); both systems return it, the
+baseline at every X (also X = 100) because the bias is in the start values, not
+in X.  The machine row (X = 40, 6 digits) is unaffected.

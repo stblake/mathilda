@@ -50,6 +50,10 @@
           sign of y' + 3y/x at X = 10 / 20 / 40: 1.58809300, 1.58807134,
           1.588071027, converging to the published value like X^-6.2, which
           also sets the method's digits: X = 40 is good to 8, X = 60 to 9).
+          The case as programmed starts from the two-term series at x0 = 1e-4,
+          whose slope lacks the -B x0^(3/2) term: its root is shifted by
+          +1.58e-6 to -1.58807260058 (X = 60), the wp30 row's true answer
+          (Taylor integration in s = sqrt(x); see ISSAC97_HOLDOUT_B.md).
    b10.9  y'' = e^y, y(0) = y'(0) = 0: y = -2 log cos(x/sqrt2), a logarithmic
           singularity at x* = pi/sqrt2 = 2.22144146907918312350794049503
           (second: u = e^(-y/2) satisfies u'' = -u/2, root of u by Taylor
