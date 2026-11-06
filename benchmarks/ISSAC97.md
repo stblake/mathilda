@@ -127,6 +127,7 @@ argument/option handling, then absences, then bottlenecks.
 | W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | **fixed v0.6249** |
 | W11 | Equal/Less of arbitrary-precision reals use a machine-sized tolerance: `N[1 - 10^-20, 30] < 1` is False and `== 1` True (found via holdout 145) | open (agent) |
 | W12 | `N[expr, n]` with deep cancellation returned 0 or wrong digits silently (h7.4/h7.5/h7.8; two exact zeros counted as agreement) | open (agent; N::meprec at the default cap) |
+| W13 | `N[0, 30]` (and inexact zero parts such as Re of `N[Erf[I], 30]`) is an inexact zero `0.e-30` where an exact 0 is expected; `N[10^-7, 12]` stores no guard bits and displays its binary value `9.99999999999e-08` (found by the printer fix) | open |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
@@ -140,7 +141,7 @@ argument/option handling, then absences, then bottlenecks.
 | A6 | machine FindRoot on L_1000 (|f| ~ 1e867) fails after 3.3 s instead of escalating (P5) | **fixed v0.6228** |
 | A7 | FindMinimum at WorkingPrecision 30 returns a machine-precision minimum value; MPFR bracket-finding fails on an InterpolatingFunction (P10) | **fixed v0.6233 (value precision: the number carries 30 digits; the printer drops trailing zeros, see P1)** |
 | A8 | `InterpolatingFunction[...]["Domain"]` (and the other property queries) unevaluated (P10) | **fixed v0.6231** |
-| A10 | the printer drops trailing zeros of arbitrary-precision reals: `N[1, 30]` prints `1.0` (P10) | open |
+| A10 | the printer drops trailing zeros of arbitrary-precision reals: `N[1, 30]` prints `1.0` (P10) | **fixed v0.6264** |
 | A9 | `Precision[matrix]` maps over the elements instead of returning the minimum (P1) | **fixed v0.6240** |
 
 ### Absences
