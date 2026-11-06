@@ -300,6 +300,38 @@ static void test_eigenvalues_nystrom_mpfr(void) {
     run_check_true("Max[Abs[Take[nyE, 8] - Take[nyR, 8]]] < 10^-27");
 }
 
+/* Eigenvectors of nonsymmetric banded matrices with complex pairs, from the
+ * Schur form: each pair must satisfy A v == lambda v to the working
+ * precision.  The Francis bulge chase left the rounding residue of each
+ * annihilated bulge entry below the subdiagonal; a 2x2 split rotation then
+ * mixed it into a subdiagonal of T, the back-substitution read that as a 2x2
+ * block next to a genuine complex pair, and returned vectors with relative
+ * residual 0.09-0.5 (band[12, 12] at 30 digits, band[6, 9] at 40; the 12 x 12
+ * c293 after the fused Hessenberg reduction changed the convergence order). */
+static void test_eigensystem_nonsymmetric_band_mpfr(void) {
+    run_silent("esRes[m_, prec_] := Module[{a = N[m, prec], ev, vs}, "
+               "{ev, vs} = Eigensystem[a]; "
+               "Max[Table[Norm[a . vs[[k]] - ev[[k]] vs[[k]]]/(Norm[a] Norm[vs[[k]]]), "
+               "{k, Length[ev]}]]]; "
+               "band[s_, n_] := Table[If[Abs[i - j] <= 2, Mod[i^2 + 3 j + s i j, 17] - 8 "
+               "+ If[i == j, 2 i - n, 0], 0], {i, n}, {j, n}]; "
+               "c293 = {{-157/35, -9/7, -6/5, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "
+               "{2/3, 169/30, 7/6, -4/5, 0, 0, 0, 0, 0, 0, 0, 0}, "
+               "{0, 7/5, -153/20, -3, 1/4, 0, 0, 0, 0, 0, 0, 0}, "
+               "{0, 0, -3/2, 29/4, 1, -7/4, 0, 0, 0, 0, 0, 0}, "
+               "{0, 0, -5/4, 5/7, 115/12, 2/7, 7/3, 0, 0, 0, 0, 0}, "
+               "{0, 0, 0, 5, 0, 28/3, 0, 7/3, 0, 0, 0, 0}, "
+               "{0, 0, 0, 0, -2/7, 8/3, -38/3, 1, -5/7, 0, 0, 0}, "
+               "{0, 0, 0, 0, 0, 4/3, 3/4, 109/12, -1, 0, 0, 0}, "
+               "{0, 0, 0, 0, 0, 0, -4/3, 5/2, -121/12, 0, 1/4, 0}, "
+               "{0, 0, 0, 0, 0, 0, 0, 8/7, 9/5, -453/35, -1, 0}, "
+               "{0, 0, 0, 0, 0, 0, 0, 0, 2/5, -8/3, 757/105, -8/7}, "
+               "{0, 0, 0, 0, 0, 0, 0, 0, 0, -2, -9/2, 27/2}}");
+    run_check_true("esRes[c293, 30] < 10^-28");
+    run_check_true("Max[Table[esRes[band[s, 12], 30], {s, 12}]] < 10^-28");
+    run_check_true("Max[Table[esRes[band[s, 9], 40], {s, 8}]] < 10^-38");
+}
+
 /* ---- Outer through compiled code ---------------------------------------- */
 
 static void test_outer_compiled(void) {
@@ -358,6 +390,7 @@ int main(void) {
     TEST(test_eigenvalues_hilbert_mpfr);
     TEST(test_eigenvalues_nonsymmetric_mpfr);
     TEST(test_eigenvalues_nystrom_mpfr);
+    TEST(test_eigensystem_nonsymmetric_band_mpfr);
     TEST(test_outer_compiled);
     TEST(test_conjugate_huge_mpfr);
     printf("All arbitrary-precision linear algebra tests passed!\n");

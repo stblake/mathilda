@@ -478,6 +478,12 @@ static void direct_francis_step(double* H, size_t n, size_t q, size_t p,
             H[(k + 1) * n + j] -= s0 * u2;
             H[(k + 2) * n + j] -= s0 * u3;
         }
+        /* P was built to annihilate the bulge H[k+1..k+2, k-1]; store the
+         * exact zeros, not the rounding residue (see direct_francis_step_M). */
+        if (k > q) {
+            H[(k + 1) * n + (k - 1)] = 0.0;
+            H[(k + 2) * n + (k - 1)] = 0.0;
+        }
         /* Apply P from the right to cols (k, k+1, k+2). */
         size_t row_end = (k + 3 < p) ? (k + 3) : (p - 1);
         for (size_t i = 0; i <= row_end; i++) {
@@ -523,6 +529,7 @@ static void direct_francis_step(double* H, size_t n, size_t q, size_t p,
             H[k * n + j]       -= s0 * u1;
             H[(k + 1) * n + j] -= s0 * u2;
         }
+        H[(k + 1) * n + (k - 1)] = 0.0;   /* annihilated by construction */
         for (size_t i = 0; i < p; i++) {
             double s0 = (H[i * n + k] * u1
                        + H[i * n + (k + 1)] * u2) * 2.0;
@@ -2851,6 +2858,18 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
             mpfr_mul(*prod, *s0, *u3, MPFR_RNDN);
             mpfr_sub(H[(k + 2) * n + j], H[(k + 2) * n + j], *prod, MPFR_RNDN);
         }
+        /* For k > q the reflector was built from (x, y, z) = H[k..k+2, k-1]
+         * to annihilate the bulge H[k+1..k+2, k-1]: store those exact zeros
+         * (as LAPACK's dlahqr does), not the rounding residue of applying
+         * it.  Left in place the residue sits below the subdiagonal, a later
+         * 2x2 split rotation mixes it INTO a subdiagonal of the final Schur
+         * form, and the eigenvector back-substitution, which reads a nonzero
+         * subdiagonal as a 2x2 block, then pairs the wrong rows (a 12 x 12
+         * at 30 digits returned eigenvectors with residual 0.1). */
+        if (k > q) {
+            mpfr_set_zero(H[(k + 1) * n + (k - 1)], 1);
+            mpfr_set_zero(H[(k + 2) * n + (k - 1)], 1);
+        }
         /* Right: cols (k, k+1, k+2). */
         size_t row_end = (k + 3 < p) ? (k + 3) : (p - 1);
         for (size_t i = row_start; i <= row_end; i++) {
@@ -2923,6 +2942,7 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
             mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
             mpfr_sub(H[(k + 1) * n + j], H[(k + 1) * n + j], *prod, MPFR_RNDN);
         }
+        mpfr_set_zero(H[(k + 1) * n + (k - 1)], 1);   /* annihilated, as above */
         for (size_t i = row_start; i < p; i++) {
             mpfr_mul(*s0, H[i * n + k], *u1, MPFR_RNDN);
             mpfr_mul(*prod, H[i * n + (k + 1)], *u2, MPFR_RNDN);
