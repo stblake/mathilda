@@ -983,6 +983,24 @@ static void test_modular_route_lex(void) {
     check_modular_matches_exact("GroebnerBasis[{NextPrime[2^62] x^2 + y^2 - 1, y^2 - 1, z^2 - x}, {x, y, z}]", 1);
 }
 
+/* Lex under Modulus -> p, zero-dimensional: DRL by F4 then FGLM mod p.  The
+ * reduced Lex basis over Q, made monic and reduced mod p, must be the GF(p)
+ * basis (32003 is a lucky prime for these systems: the leading monomials
+ * agree), independently of either engine. */
+static void test_lex_modulus_by_fglm(void) {
+    const char* defs =
+        "gbMonic[g_, v_, p_] := PolynomialMod[g PowerMod[First[MonomialList[g, v, \"Lexicographic\"] /. "
+        "Thread[v -> 1]], -1, p], p]; "
+        "gbSame[e_, v_, p_] := Module[{q = GroebnerBasis[e, v], m = GroebnerBasis[e, v, Modulus -> p]}, "
+        "Length[q] == Length[m] && Sort[Expand /@ (gbMonic[#, v, p] & /@ q)] === Sort[Expand /@ m]]; True";
+    check_true(defs);
+    check_true("gbSame[{a + b + c + d + e, a b + b c + c d + d e + e a, a b c + b c d + c d e + d e a + e a b, "
+               "a b c d + b c d e + c d e a + d e a b + e a b c, a b c d e - 1}, {a, b, c, d, e}, 32003]");
+    check_true("gbSame[{x + 2 y + 2 z - 1, x^2 + 2 y^2 + 2 z^2 - x, 2 x y + 2 y z - y}, {x, y, z}, 32003]");
+    check_true("gbSame[{10 x (y^2 + z^2) - 11 x + 10, 10 y (x^2 + z^2) - 11 y + 10, "
+               "10 z (x^2 + y^2) - 11 z + 10}, {x, y, z}, 32003]");
+}
+
 /* ------------------------------------------------------------------ */
 
 /* InexactNumbers on a zero-dimensional Lex problem goes through the numeric
@@ -1083,6 +1101,7 @@ int main(void) {
     TEST(test_modular_route_infinity);
     TEST(test_modular_route_unlucky_and_positive_dim);
     TEST(test_modular_route_lex);
+    TEST(test_lex_modulus_by_fglm);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");

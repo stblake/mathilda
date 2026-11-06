@@ -67,12 +67,12 @@
 #include "core.h"           /* tc_deadline_passed, tc_check_deadline */
 #include "gb_f4.h"
 #include "mp_parallel.h"     /* mp_parallel_for */
+#include "mtime.h"           /* mth_mono_seconds: the direct attempt's budget */
 
 /* Phase timings of the modular routes on stderr: build with
  * -DGB_FLINT_TRACE and set GBDBG (development only). */
 #ifdef GB_FLINT_TRACE
 #include <stdio.h>
-#include "mtime.h"
 #define GF_TRACE(...) do { if (getenv("GBDBG")) fprintf(stderr, __VA_ARGS__); } while (0)
 #define GF_CLOCK() mth_mono_seconds()
 #else
@@ -175,6 +175,7 @@ typedef struct {
     /* a work budget (0: none): gf_run gives up -- `over` -- past this many
      * pairs or once a new element's coefficients exceed this many bits */
     slong budget_pairs; flint_bitcnt_t budget_bits; int over;
+    double budget_seconds;      /* and a wall-clock budget (0: none) */
     int expired;                /* the deadline passed inside a reduction */
     GfPair* P;
     slong np, capp;
@@ -548,9 +549,13 @@ static int gf_run(Gf* G) {
     void* s = G->mod ? (void*)ms : (void*)zs;
     int ok = 1;
     slong done_pairs = 0;
+    double t_start = G->budget_seconds > 0 ? mth_mono_seconds() : 0.0;
     while (G->np > 0) {
         if (tc_deadline_passed()) { ok = 0; break; }
-        if (G->budget_pairs && ++done_pairs > G->budget_pairs) { G->over = 1; ok = 0; break; }
+        ++done_pairs;
+        if (G->budget_pairs && done_pairs > G->budget_pairs) { G->over = 1; ok = 0; break; }
+        if (G->budget_seconds > 0 && (done_pairs & 7) == 0 &&
+            mth_mono_seconds() - t_start > G->budget_seconds) { G->over = 1; ok = 0; break; }
         slong k = gf_pick(G);
         GfPair q = G->P[k];
         G->P[k] = G->P[--G->np];
@@ -572,6 +577,7 @@ static int gf_run(Gf* G) {
             gf_add(G, s, d > q.sugar ? d : q.sugar);
         }
     }
+    GF_TRACE("[run] mod %d ord %d pairs %ld elements %ld ok %d over %d\n", G->mod, G->ord, (long)done_pairs, (long)G->nb, ok, G->over);
     if (G->mod) nmod_mpoly_clear(ms, G->M); else fmpz_mpoly_clear(zs, G->Z);
     return ok;
 }
@@ -813,8 +819,14 @@ static int gf_is_unit(const Gf* G, slong k) {
 #define GF_LEX_BUDGET_PAIRS 64        /* the direct Lex attempt first (gf_basis) */
 #define GF_LEX_BUDGET_BITS  256
 #define GF_FGLM_PRIMES 400
-#define GF_DEG_BUDGET_PAIRS 64        /* the direct DRL/DegLex attempt (gf_basis) */
-#define GF_DEG_BUDGET_BITS  256
+/* The direct DRL/DegLex attempt (gf_basis): small systems -- noon-4, cyclic-5,
+ * four dense quadrics -- finish in a few ms there, where the modular route's
+ * fixed costs (the Hilbert check, the exact verification) are larger.  The
+ * attempt stops at whichever budget it meets first; on katsura-6 an attempt
+ * bounded by pairs alone burned most of the 240 ms the exact run takes. */
+#define GF_DEG_BUDGET_PAIRS   256
+#define GF_DEG_BUDGET_BITS    1024
+#define GF_DEG_BUDGET_SECONDS 0.004
 
 /* A set of exponent vectors with their indices (open addressing). */
 typedef struct { ulong* ex; slong nv, n, cap; slong* tab; slong tcap; } GfMon;
@@ -3158,6 +3170,55 @@ static int gf_modular_lex(GBPoly* const* F, size_t nF, const GBPoly* f0, GBPoly*
 /*  Entry                                                              */
 /* ------------------------------------------------------------------ */
 
+/* Lex over GF(p), zero-dimensional: the DRL basis by F4, then FGLM mod p
+ * (border-recursion multiplication matrices) -- Lex directly suffers the
+ * intermediate degree growth of Lex even without coefficient growth
+ * (cyclic-5 mod 32003: 96 ms in Lex F4).  1 with *out, 0 to decline
+ * (positive-dimensional, D > GF_FGLM_MAXD, a denominator divisible by p). */
+static int gf_lex_mod_fglm(GBPoly* const* F, size_t n, ulong p, const GBPoly* f0,
+                           GBPoly*** out, size_t* out_n, int* timed_out) {
+    slong nv = f0->n_vars;
+    Gf G; gf_init(&G, 1, p, nv, ORD_DEGREVLEX);
+    slong* idx = NULL; slong ng = 0;
+    int done = 0;
+    if (gf_engine(&G, F, n, p, &idx, &ng, timed_out)) {
+        int unit = 0;
+        for (slong i = 0; i < ng && !unit; i++) unit = gf_is_unit(&G, idx[i]);
+        GfMon S; gfm_init(&S, nv);
+        if (unit) {
+            *out = malloc(sizeof(GBPoly*)); (*out)[0] = gf_one_gbpoly(f0); *out_n = 1; done = 1;
+        } else if (gf_staircase(&G, idx, ng, &S, GF_FGLM_MAXD)) {
+            slong D = S.n;
+            ulong* M = flint_malloc((size_t)(nv * D * D) * sizeof(ulong));
+            GfFglm R;
+            if (gf_mult_matrices_border(&G, idx, ng, &S, M) && gf_fglm_mod(M, nv, D, 0, G.M->mod, &R, 0, NULL)) {
+                Gf L; gf_init(&L, 1, p, nv, ORD_LEX);
+                GBPoly** Rv = malloc((size_t)(R.nrel ? R.nrel : 1) * sizeof(GBPoly*));
+                for (slong k = 0; k < R.nrel; k++) {
+                    gf_grow(&L);
+                    slong j = L.nb++;
+                    nmod_mpoly_init(L.mb + j, L.M);
+                    nmod_mpoly_push_term_ui_ui(L.mb + j, 1, R.rel_ex + k * nv, L.M);
+                    for (slong i = 0; i < R.rel_n[k]; i++)
+                        if (R.rel_c[k][i])
+                            nmod_mpoly_push_term_ui_ui(L.mb + j, nmod_neg(R.rel_c[k][i], L.M->mod),
+                                                       R.stair.ex + i * nv, L.M);
+                    nmod_mpoly_sort_terms(L.mb + j, L.M);
+                    Rv[k] = gf_to_gbpoly(&L, j, f0);
+                }
+                *out = Rv; *out_n = (size_t)R.nrel; done = 1;
+                gf_clear(&L);
+                gff_clear(&R);
+            }
+            flint_free(M);
+        }
+        gfm_clear(&S);
+    }
+    flint_free(idx);
+    gf_clear(&G);
+    return done;
+}
+
 /* The common driver: F rational GBPolys (one order), p = 0 for Q. */
 static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* out_n) {
     if (!gf_enabled() || n == 0) return 0;
@@ -3179,6 +3240,7 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
     if (!p && (ord == ORD_DEGREVLEX || ord == ORD_DEGLEX) && gf_modular_on != 2) {
         Gf L; gf_init(&L, 0, 0, f0->n_vars, ord);
         L.budget_pairs = GF_DEG_BUDGET_PAIRS; L.budget_bits = GF_DEG_BUDGET_BITS;
+        L.budget_seconds = GF_DEG_BUDGET_SECONDS;
         slong* idx = NULL;
         int ok = gf_engine(&L, F, n, 0, &idx, &nr, &timed_out);
         if (ok) {
@@ -3266,6 +3328,13 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
         gf_clear(&Dg);
         if (timed_out) tc_check_deadline();
         if (handled) { *out = R; *out_n = (size_t)nr; return 1; }
+    }
+    if (p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
+        size_t nm = 0;
+        int ok = gf_lex_mod_fglm(F, n, p, f0, &R, &nm, &timed_out);
+        if (timed_out) tc_check_deadline();
+        if (ok) { *out = R; *out_n = nm; return 1; }
+        R = NULL;
     }
     Gf G; gf_init(&G, p != 0, p, f0->n_vars, ord);
     slong* idx = NULL;
