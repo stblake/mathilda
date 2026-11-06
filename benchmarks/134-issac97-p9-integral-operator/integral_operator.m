@@ -31,6 +31,12 @@ require[{"Eigensystem", "Eigenvalues", "GaussianQuadratureWeights", "FunctionInt
 (* Captured BEFORE any definition below mentions the symbol: parsing a
    definition creates the symbol, after which Names[] would report it. *)
 haveFI = haveQ["FunctionInterpolation"];
+(* In a system where GaussianQuadratureWeights lives in a loadable package
+   (the 1997 NumericalMath`GaussianQuadrature`, today
+   NumericalDifferentialEquationAnalysis`), load it first; Mathilda has it built
+   in, and its $VersionNumber (< 1) skips the load. *)
+If[$VersionNumber >= 1, Quiet[Needs["NumericalDifferentialEquationAnalysis`"]]];
+haveGQW = haveQ["GaussianQuadratureWeights"];
 
 K[x_, y_] := E^(x + y + x^2 + y^2 + x y + x^2 y^2);
 
@@ -54,6 +60,11 @@ nystrom[prec_] := Module[{xs, ws, eOld = 1, eNew, i = 0, c, pts, wts},
 (* Check the largest node, not the weight sum: the sum is 1 to working
    precision, so its leading digits sit on the 0.999.../1.000... rounding edge. *)
 run["p9 m1 Gauss nodes Golub-Welsch wp20", gaussLegendre01[32, 20], sig[Max[#[[1]]], 15] &, 3];
+(* The notebook's own call, from the GaussianQuadrature package. *)
+If[haveGQW,
+  run["p9 m1 Gauss nodes GaussianQuadratureWeights wp20",
+    Transpose[GaussianQuadratureWeights[32, 0, 1, 20]], sig[Max[#[[1]]], 15] &, 3],
+  Print["SKIP\tp9 m1 Gauss nodes GaussianQuadratureWeights wp20\tGaussianQuadratureWeights"]];
 run["p9 m1 Nystrom machine", nystrom[MachinePrecision], sig[#, 12] &, 3];
 run["p9 m1 Nystrom wp20", nystrom[20], sig[#, 14] &, 3];
 run["p9 m1 Nystrom wp40", nystrom[40], sig[#, 14] &];
