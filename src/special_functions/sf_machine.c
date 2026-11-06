@@ -259,7 +259,28 @@ bool sf_machine_legendre_p(double n, double x, double* out) {
  * to the MPFR / symbolic path, matching the ChebyshevU helper (the seed T_1 = x
  * is the only difference from U_1 = 2x). */
 bool sf_machine_chebyshev_t(double n, double x, double* out) {
-    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    if (n != floor(n) || n < 0.0 || !isfinite(x)) return false;
+    if (n > 1000.0) {
+        /* High degree: the trigonometric / hyperbolic closed form, O(1) instead
+         * of O(n).  With x = cos(theta), T_n(x) = cos(n theta); a rounding of x
+         * already moves T_n by |T_n'(x)| eps = n |sin(n theta)| eps / sin(theta),
+         * and the formula's own error, |sin(n theta)| 2 n theta eps, is within
+         * 2 theta sin(theta) <= 3.7 of that -- so it is as accurate as the
+         * argument allows, on the whole interval (acos and cos are accurate
+         * for every argument).  The recurrence, below, stays for n <= 1000,
+         * where it is exact on small integers and dyadic arguments.  Off the
+         * interval, T_n(x) = sgn(x)^n cosh(n acosh|x|); an overflow declines
+         * (the MPFR path keeps the value). */
+        double v;
+        if (fabs(x) <= 1.0) {
+            v = cos(n * acos(x));
+        } else {
+            v = cosh(n * acosh(fabs(x)));
+            if (x < 0.0 && fmod(n, 2.0) != 0.0) v = -v;
+        }
+        *out = v;
+        return isfinite(v);
+    }
     int N = (int)n;
     if (N == 0) { *out = 1.0; return true; }
     double t0 = 1.0, t1 = x;

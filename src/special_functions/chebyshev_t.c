@@ -155,6 +155,10 @@ static bool cheb_reflect(int64_t ni, unsigned long* deg) {
 /* ------------------------------------------------------------------ */
 
 #ifdef USE_MPFR
+/* Above this degree a real arbitrary-precision x takes the closed form
+ * cos(n acos x) / cosh(n acosh x) rather than the recurrence. */
+#define CHEB_TRIG_MIN_DEG 64
+
 /* T_deg(x) for an inexact x, by the stable forward recurrence (seed T_0 = 1,
  * T_1 = x). A real x runs a real MPFR recurrence; a complex x the complex ncpx
  * one. Splitting the real case is not cosmetic: the complex recurrence carries
@@ -172,7 +176,34 @@ static Expr* cheb_numeric_recurrence(unsigned long deg,
     Expr* out = NULL;
     bool inexact = false;
     if (get_approx_mpfr(x_e, x.re, x.im, &inexact)) {
-        if (mpfr_zero_p(x.im)) {
+        if (mpfr_zero_p(x.im) && deg > CHEB_TRIG_MIN_DEG) {
+            /* real x, high degree: T_n(x) = cos(n acos x) on [-1, 1], and
+             * sgn(x)^n cosh(n acosh |x|) off it -- O(1) operations instead of
+             * the recurrence's O(n), and free of its error growth (a rounding
+             * at step k reaches T_n multiplied by U_{n-k}(x) ~ n - k near
+             * x = +-1, ~n^2/2 ulps in all; the 32 guard bits are gone by
+             * n ~ 10^5).  The product n theta gains log2(n) bits of absolute
+             * error, which the extra guard bits absorb. */
+            mpfr_prec_t gp = wp;
+            for (unsigned long m = deg; m > 1; m >>= 1) gp++;
+            mpfr_t th, v;
+            mpfr_init2(th, gp); mpfr_init2(v, gp);
+            mpfr_abs(v, x.re, PRND);
+            bool inside = mpfr_cmp_ui(v, 1) <= 0;
+            if (inside) {
+                mpfr_acos(th, x.re, PRND);
+                mpfr_mul_ui(th, th, deg, PRND);
+                mpfr_cos(v, th, PRND);
+            } else {
+                mpfr_acosh(th, v, PRND);
+                mpfr_mul_ui(th, th, deg, PRND);
+                mpfr_cosh(v, th, PRND);
+                if (mpfr_sgn(x.re) < 0 && (deg & 1UL)) mpfr_neg(v, v, PRND);
+            }
+            if (mpfr_number_p(v))
+                out = cheb_make_result(v, v, out_prec, true);
+            mpfr_clear(th); mpfr_clear(v);
+        } else if (mpfr_zero_p(x.im)) {
             /* real recurrence: plain MPFR, half the per-step work */
             mpfr_t r0, r1, rk, t;
             mpfr_init2(r0, wp); mpfr_init2(r1, wp);
@@ -311,10 +342,12 @@ static Expr* chebyshev_t_two_arg(Expr* n_e, Expr* x_e) {
                 /* Machine fast path: the raw-double / double-complex recurrence,
                  * bit-identical to the ND kernel and Compile[].  Taken only when
                  * the requested precision is machine (<= 53 bits) and x is a
-                 * machine real/complex.  A large degree, an overflow, or an
-                 * arbitrary-precision argument makes the helper decline, and we
-                 * fall through to the MPFR recurrence below unchanged. */
-                if (cheb_out_prec(n_e, x_e) <= 53 && deg <= 1000) {
+                 * machine real/complex.  A real x of any degree has a helper
+                 * (the recurrence to degree 1000, the closed form Cos[n ArcCos[x]]
+                 * / Cosh[n ArcCosh[x]] above); a complex x of degree > 1000, an
+                 * overflow, or an arbitrary-precision argument makes it decline,
+                 * and we fall through to the MPFR recurrence below unchanged. */
+                if (cheb_out_prec(n_e, x_e) <= 53) {
                     double xr, xi; bool real;
                     if (cheb_machine_xy(x_e, &xr, &xi, &real)) {
                         if (real) {

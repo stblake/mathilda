@@ -3082,9 +3082,18 @@ Out[5]= x - x^2 + 3/2 x^3 - 8/3 x^4 + O[x]^5
   `double`-complex, the same kernel used by the NDArray fast path and
   `Compile[]`, so a scalar `ChebyshevT[n, x]` is bit-identical to its packed and
   compiled forms. A packed **complex** buffer stays on the buffer (the ND kernel
-  has a complex arm). An arbitrary-precision argument, a degree above 1000, or an
-  overflow falls back to the stable MPFR recurrence unchanged, so accuracy and
-  the overflow→MPFR behaviour are preserved.
+  has a complex arm). An arbitrary-precision argument, a complex argument of
+  degree above 1000, or an overflow falls back to the stable MPFR recurrence
+  unchanged, so accuracy and the overflow→MPFR behaviour are preserved.
+- **High degree (real argument).** Above degree 1000 (machine) and degree 64
+  (arbitrary precision) a real `x` takes the closed form `Cos[n ArcCos[x]]` on
+  `[-1, 1]` and `Sign[x]^n Cosh[n ArcCosh[Abs[x]]]` off it: `O(1)` operations
+  instead of `O(n)`, and free of the recurrence's `~n²/2`-ulp error growth near
+  `x = ±1`. The closed form's error is within a factor `2 θ sin θ ≤ 3.7` of the
+  error a rounding of `x` already causes (`|T_n'(x)| ε`), so it is as accurate as
+  the argument allows. `ChebyshevT[2001, 0.9999997]` takes ~1 µs (was ~400 µs
+  through MPFR), the same value on every surface; the machine helper still uses
+  the recurrence up to degree 1000, where it is exact on small integers.
 
 An exact non-integer order with an exact/symbolic argument (e.g.
 `ChebyshevT[1/2, x]`) stays symbolic; symbolic `Series` / `SeriesCoefficient`
