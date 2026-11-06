@@ -12,8 +12,8 @@
 #include <flint/nmod_mpoly.h>
 
 /* A Groebner basis of <F[0..n)> (F read, never taken): *G (allocated, ng
- * initialised nmod_mpoly, caller clears and flint_frees) is the MINIMAL basis,
- * monic, not tail-reduced, in no particular order.  Returns 1, or 0 when the
+ * initialised nmod_mpoly, caller clears and flint_frees) is the REDUCED basis,
+ * monic, ascending by leading monomial ({1} for the unit ideal).  Returns 1, or 0 when the
  * deadline passed (*expired set; nothing is held) -- or when F4 declines
  * (exponents past 2^20: *expired clear), so the caller's own engine runs. */
 int gb_f4_nmod(const nmod_mpoly_struct* F, slong n, const nmod_mpoly_ctx_t ctx,

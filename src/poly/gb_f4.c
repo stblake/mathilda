@@ -28,7 +28,8 @@
  *  4. Every nonzero reduced S-row has a leading monomial no basis element
  *     divides: it is a new basis element (the pairs updated).
  *
- * The output is the minimal basis, monic; gb_flint.c tail-reduces it.
+ * The output is the reduced basis: the minimal one, each element's tail
+ * reduced by the smaller ones (f4_interreduce).
  *
  * TimeConstrained: tc_deadline_passed is polled every round and every 256
  * rows; on expiry everything is freed and *expired returned.
@@ -574,6 +575,106 @@ out:
 }
 
 /* ------------------------------------------------------------------ */
+/*  The reduced basis                                                  */
+/* ------------------------------------------------------------------ */
+
+/* A max-heap of monomial ids in the order. */
+typedef struct { slong* a; slong n, c; } F4Heap;
+static void hp_push(F4Heap* H, const F4Mons* M, slong x) {
+    if (H->n == H->c) { H->c = H->c ? 2 * H->c : 256; H->a = flint_realloc(H->a, (size_t)H->c * sizeof(slong)); }
+    slong i = H->n++;
+    while (i > 0) {
+        slong up = (i - 1) / 2;
+        if (fm_cmp(M, H->a[up], x) <= 0) break;       /* parent larger: stop */
+        H->a[i] = H->a[up]; i = up;
+    }
+    H->a[i] = x;
+}
+static slong hp_pop(F4Heap* H, const F4Mons* M) {
+    slong top = H->a[0], x = H->a[--H->n], i = 0;
+    for (;;) {
+        slong l = 2 * i + 1, r = l + 1, b = i;
+        slong bv = x;
+        if (l < H->n && fm_cmp(M, H->a[l], bv) < 0) { b = l; bv = H->a[l]; }
+        if (r < H->n && fm_cmp(M, H->a[r], bv) < 0) { b = r; bv = H->a[r]; }
+        if (b == i) break;
+        H->a[i] = H->a[b]; i = b;
+    }
+    if (H->n) H->a[i] = x;
+    return top;
+}
+
+/* Tail-reduce the minimal basis sel[0..ns) (ascending by leading monomial)
+ * in place: each element by the ones before it, which are already reduced,
+ * so every reducer is final.  A heap of monomial ids and a coefficient per
+ * id: no FLINT division (whose stack use does not suit worker threads). */
+static int f4_interreduce(F4* S, const slong* sel, slong ns) {
+    slong nv = S->M.nv;
+    ulong* coef = NULL; char* inh = NULL; slong ccap = 0;
+    F4Heap H = {0};
+    ulong* u = flint_malloc((size_t)nv * sizeof(ulong));
+    ulong* tmp = flint_malloc((size_t)nv * sizeof(ulong));
+    int ok = 1;
+#define GROWC(id) do { if ((id) >= ccap) { slong nc = 2 * (id) + 1024; \
+        coef = flint_realloc(coef, (size_t)nc * sizeof(ulong)); inh = flint_realloc(inh, (size_t)nc); \
+        memset(coef + ccap, 0, (size_t)(nc - ccap) * sizeof(ulong)); memset(inh + ccap, 0, (size_t)(nc - ccap)); \
+        ccap = nc; } } while (0)
+    for (slong a = 0; a < ns && ok; a++) {
+        if ((a & 15) == 15 && tc_deadline_passed()) { ok = 0; break; }
+        F4Poly* f = S->B + sel[a];
+        slong rlen = 0, rcap = f->len;
+        slong* rm = flint_malloc((size_t)rcap * sizeof(slong));
+        ulong* rc = flint_malloc((size_t)rcap * sizeof(ulong));
+        rm[rlen] = f->mon[0]; rc[rlen] = f->cf[0]; rlen++;
+        for (slong t = 1; t < f->len; t++) {
+            GROWC(f->mon[t]);
+            coef[f->mon[t]] = f->cf[t];
+            inh[f->mon[t]] = 1;
+            hp_push(&H, &S->M, f->mon[t]);
+        }
+        while (H.n) {
+            slong m = hp_pop(&H, &S->M);
+            inh[m] = 0;
+            ulong c = coef[m]; coef[m] = 0;
+            if (!c) continue;
+            /* a reducer among the earlier (reduced) elements: the shortest */
+            slong g = -1;
+            for (slong b = 0; b < a; b++) {
+                const F4Poly* h = S->B + sel[b];
+                if (fm_divides(&S->M, h->mon[0], m) && (g < 0 || h->len < S->B[g].len)) g = sel[b];
+            }
+            if (g < 0) {                                /* irreducible: in the result */
+                if (rlen == rcap) {
+                    rcap *= 2;
+                    rm = flint_realloc(rm, (size_t)rcap * sizeof(slong));
+                    rc = flint_realloc(rc, (size_t)rcap * sizeof(ulong));
+                }
+                rm[rlen] = m; rc[rlen] = c; rlen++;
+                continue;
+            }
+            const F4Poly* h = S->B + g;
+            const ulong* em = S->M.ex + m * nv; const ulong* eh = S->M.ex + h->mon[0] * nv;
+            for (slong v = 0; v < nv; v++) u[v] = em[v] - eh[v];
+            ulong nc = nmod_neg(c, S->mod);
+            for (slong t = 1; t < h->len; t++) {
+                slong mm = fm_mul(&S->M, h->mon[t], u, tmp);
+                GROWC(mm);
+                coef[mm] = nmod_add(coef[mm], nmod_mul(nc, h->cf[t], S->mod), S->mod);
+                if (!inh[mm]) { inh[mm] = 1; hp_push(&H, &S->M, mm); }
+            }
+        }
+        f4_poly_clear(f);
+        f->len = rlen; f->mon = rm; f->cf = rc;
+    }
+    if (!ok) {                                          /* leave nothing behind */
+        while (H.n) { slong m = hp_pop(&H, &S->M); coef[m] = 0; inh[m] = 0; }
+    }
+#undef GROWC
+    flint_free(coef); flint_free(inh); flint_free(H.a); flint_free(u); flint_free(tmp);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Driver                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -654,21 +755,34 @@ int gb_f4_nmod(const nmod_mpoly_struct* F, slong n, const nmod_mpoly_ctx_t ctx,
         for (slong k = 0; k < S.nb && unit < 0; k++)
             if (S.active[k] && S.M.deg[S.B[k].mon[0]] == 0) unit = k;
         slong cnt = 0;
-        for (slong k = 0; k < S.nb; k++) if (S.active[k]) cnt++;
-        if (unit >= 0) cnt = 1;
-        *G = flint_malloc((size_t)(cnt ? cnt : 1) * sizeof(nmod_mpoly_struct));
+        slong* sel = flint_malloc((size_t)(S.nb ? S.nb : 1) * sizeof(slong));
+        if (unit >= 0) {                                /* (1): the constant, monic */
+            S.B[unit].len = 1;
+            sel[cnt++] = unit;
+        } else
+            for (slong k = 0; k < S.nb; k++) if (S.active[k]) sel[cnt++] = k;
+        /* ascending by leading monomial */
+        for (slong i = 1; i < cnt; i++)
+            for (slong j = i; j > 0 && fm_cmp(&S.M, S.B[sel[j - 1]].mon[0], S.B[sel[j]].mon[0]) < 0; j--) {
+                slong t = sel[j]; sel[j] = sel[j - 1]; sel[j - 1] = t;
+            }
+        ok = f4_interreduce(&S, sel, cnt);
         slong q = 0;
-        for (slong k = 0; k < S.nb; k++) {
-            if (!S.active[k] || (unit >= 0 && k != unit)) continue;
-            nmod_mpoly_struct* g = *G + q++;
-            nmod_mpoly_init(g, ctx);
-            const F4Poly* f = S.B + k;
-            for (slong t = 0; t < f->len; t++)
-                nmod_mpoly_push_term_ui_ui(g, f->cf[t], S.M.ex + f->mon[t] * nv, ctx);
-            /* pushed in descending order already: no sort needed */
-        }
+        if (ok) {
+            *G = flint_malloc((size_t)(cnt ? cnt : 1) * sizeof(nmod_mpoly_struct));
+            for (slong a = 0; a < cnt; a++) {
+                nmod_mpoly_struct* g = *G + q++;
+                nmod_mpoly_init(g, ctx);
+                const F4Poly* f = S.B + sel[a];
+                for (slong t = 0; t < f->len; t++)
+                    nmod_mpoly_push_term_ui_ui(g, f->cf[t], S.M.ex + f->mon[t] * nv, ctx);
+                /* pushed in descending order: no sort needed */
+            }
+        } else *expired = 1;
+        flint_free(sel);
         *ng = q;
     } else *expired = 1;
+    if (!ok) *expired = 1;
     for (slong k = 0; k < S.nb; k++) f4_poly_clear(S.B + k);
     flint_free(S.B); flint_free(S.sugar); flint_free(S.active); flint_free(S.P);
     flint_free(S.tmp); flint_free(ex);

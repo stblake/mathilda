@@ -81,8 +81,18 @@ int mp_parallel_for(MpRangeFn fn, void* ctx, int64_t n, double work)
         sigfillset(&all);
         pthread_sigmask(SIG_SETMASK, &all, &old);
         tc_async_defer_push();
+        /* a worker's stack as large as the main thread's would be: FLINT's
+         * kernels keep their temporaries on the stack (TMP_ALLOC, 8 KB a
+         * block, many blocks live at once), and the platform default for a
+         * secondary thread (512 KB on macOS) is overrun by a heap division
+         * with a few hundred divisors -- the multi-modular Groebner
+         * verification spun in the stack probe instead of finishing */
+        pthread_attr_t attr;
+        int have_attr = pthread_attr_init(&attr) == 0;
+        if (have_attr) pthread_attr_setstacksize(&attr, (size_t)64 << 20);
         for (int i = 0; i < nj; i++)
-            started[i] = pthread_create(&th[i], NULL, mp_job_run, &job[i]) == 0;
+            started[i] = pthread_create(&th[i], have_attr ? &attr : NULL, mp_job_run, &job[i]) == 0;
+        if (have_attr) pthread_attr_destroy(&attr);
         pthread_sigmask(SIG_SETMASK, &old, NULL);
         for (int i = 0; i < nj; i++) if (started[i]) pthread_join(th[i], NULL);
         for (int i = 0; i < nj; i++) if (!started[i]) fn(ctx, job[i].lo, job[i].hi, i);

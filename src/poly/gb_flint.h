@@ -45,4 +45,10 @@ int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
  * the route has produced so far in this process. */
 long gb_flint_shape_route(int on);
 
+/* DegreeReverseLexicographic / DegreeLexicographic over Q: the certified
+ * multi-modular route first (on = 1, the default) or not (0); the environment
+ * variable MATHILDA_GB_MODULAR_OFF does the same.  Returns the number of bases
+ * the route has produced so far. */
+long gb_flint_modular_route(int on);
+
 #endif /* GB_FLINT_H */

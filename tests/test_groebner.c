@@ -883,6 +883,92 @@ static void test_shape_route_declines(void) {
     check_shape_matches_exact("GroebnerBasis[{x^2 + y^2 + z^2 - 1, x - y z}, {x, y, z}]", 0);
 }
 /* ------------------------------------------------------------------ */
+/* The certified multi-modular route in degree orders (gf_modular_*)  */
+/* ------------------------------------------------------------------ */
+
+/* GroebnerBasis[input] with the modular route off (the fraction-free
+ * engine) and on must agree exactly, and the route must (or must not) have
+ * produced the answer. */
+static void check_modular_matches_exact(const char* input, int expect_route) {
+    gb_flint_modular_route(0);
+    Expr* e = parse_expression(input);
+    Expr* res = evaluate(e);
+    char* exact = expr_to_string_fullform(res);
+    expr_free(e); expr_free(res);
+    long before = gb_flint_modular_route(1);
+    e = parse_expression(input);
+    res = evaluate(e);
+    char* got = expr_to_string_fullform(res);
+    expr_free(e); expr_free(res);
+    long after = gb_flint_modular_route(1);
+    if (strcmp(exact, got) != 0)
+        fprintf(stdout, "FAIL: %s\n  exact:   %.300s\n  modular: %.300s\n", input, exact, got);
+    ASSERT_STR_EQ(got, exact);
+    if ((after > before) != expect_route) {
+        fprintf(stdout, "FAIL: %s: modular route %s\n", input, expect_route ? "did not run" : "ran");
+        ASSERT_STR_EQ(expect_route ? "declined" : "ran", expect_route ? "ran" : "declined");
+    }
+    free(exact); free(got);
+}
+
+/* Random dense systems (zero-dimensional, no solutions at infinity), in DRL
+ * and DegLex, small and 6-digit coefficients; a rational input. */
+static void test_modular_route_random_systems(void) {
+    static const char* const V[] = {"x", "y", "z", "w"};
+    static const int sys[][6] = {
+        {2, 2, 3, 0, 0, 0}, {3, 2, 2, 2, 0, 0}, {3, 2, 3, 2, 0, 1}, {4, 2, 2, 2, 2, 0},
+    };
+    static const char* const ord[] = {"DegreeReverseLexicographic", "DegreeLexicographic"};
+    for (size_t t = 0; t < sizeof sys / sizeof sys[0]; t++)
+        for (size_t o = 0; o < 2; o++) {
+            int nv = sys[t][0];
+            long cmax = sys[t][5] ? 999999 : 9;
+            char buf[16384];
+            snprintf(buf, sizeof buf, "GroebnerBasis[{");
+            for (int i = 0; i < nv; i++) {
+                if (i) strcat(buf, ", ");
+                shape_poly(buf, sizeof buf, V, nv, sys[t][1 + i], cmax);
+            }
+            strcat(buf, "}, {");
+            for (int i = 0; i < nv; i++) { if (i) strcat(buf, ", "); strcat(buf, V[i]); }
+            strcat(buf, "}, MonomialOrder -> ");
+            strcat(buf, ord[o]);
+            strcat(buf, "]");
+            check_modular_matches_exact(buf, 1);
+        }
+    check_modular_matches_exact("GroebnerBasis[{x^2/3 + y/7 - 1, y^2 - x/5 + 2/11}, {x, y}, "
+                                "MonomialOrder -> DegreeReverseLexicographic]", 1);
+}
+
+/* Solutions at infinity (cyclic-5, noon-4): the Hilbert certificate fails
+ * for <F^h> and the leading monomials come from the certified basis of the
+ * homogenised ideal (DRL); in DegLex there is no such route: the exact
+ * engine answers. */
+static void test_modular_route_infinity(void) {
+    check_modular_matches_exact("GroebnerBasis[{a + b + c + d + e, a b + b c + c d + d e + e a, "
+        "a b c + b c d + c d e + d e a + e a b, a b c d + b c d e + c d e a + d e a b + e a b c, "
+        "a b c d e - 1}, {a, b, c, d, e}, MonomialOrder -> DegreeReverseLexicographic]", 1);
+    check_modular_matches_exact("GroebnerBasis[{10 x (y^2 + z^2) - 11 x + 10, 10 y (x^2 + z^2) - 11 y + 10, "
+        "10 z (x^2 + y^2) - 11 z + 10}, {x, y, z}, MonomialOrder -> DegreeReverseLexicographic]", 1);
+    check_modular_matches_exact("GroebnerBasis[{x y - 1, y^2 - 2}, {x, y}, "
+        "MonomialOrder -> DegreeLexicographic]", 0);
+}
+
+/* Positive-dimensional ideals, and a first prime that is unlucky: modulo
+ * NextPrime[2^62] the leading term p x^2 vanishes, so its leading monomials
+ * differ; the next two agree and replace it. */
+static void test_modular_route_unlucky_and_positive_dim(void) {
+    check_modular_matches_exact("GroebnerBasis[{x^2 + y^2 + z^2 - 1, x y - z}, {x, y, z}, "
+        "MonomialOrder -> DegreeReverseLexicographic]", 1);
+    check_modular_matches_exact("GroebnerBasis[{x^3 - y z, y^2 - x z + 1}, {x, y, z}, "
+        "MonomialOrder -> DegreeReverseLexicographic]", 1);
+    check_modular_matches_exact("GroebnerBasis[{NextPrime[2^62] x^2 + y, y^2 + x - 1}, {x, y}, "
+        "MonomialOrder -> DegreeReverseLexicographic]", 1);
+    check_modular_matches_exact("GroebnerBasis[{NextPrime[2^62] x^2 + y z, y^2 + x - 1, z^2 - x y + 3}, {x, y, z}, "
+        "MonomialOrder -> DegreeReverseLexicographic]", 1);
+}
+
+/* ------------------------------------------------------------------ */
 
 /* InexactNumbers on a zero-dimensional Lex problem goes through the numeric
  * FGLM: the basis must have the exact basis's exponent vectors, and every
@@ -978,6 +1064,9 @@ int main(void) {
     TEST(test_shape_route_random_systems);
     TEST(test_shape_route_unlucky_prime);
     TEST(test_shape_route_declines);
+    TEST(test_modular_route_random_systems);
+    TEST(test_modular_route_infinity);
+    TEST(test_modular_route_unlucky_and_positive_dim);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");
