@@ -57,7 +57,15 @@ typedef struct { const char* name; const char* why; } Gap;
 static const Gap KNOWN_GAPS[] = {
     /* (a) the interpreter leaves these unevaluated on machine reals: none at
      * present. BesselJZero gained its kernel (and compiles) in v0.477; the four
-     * below evaluate on machine reals and moved to (d). */
+     * below evaluate on machine reals and moved to (d). The index-only zero
+     * heads take an EXACT integer index and are valued only by N (NHoldFirst):
+     * ZetaZero[1.] / AiryAiZero[2.] stay unevaluated, so a compiled answer
+     * would be the forbidden divergence. */
+    { "ZetaZero",             "exact index only; a Real index stays unevaluated" },
+    { "AiryAiZero",           "exact index only; a Real index stays unevaluated" },
+    { "AiryAiPrimeZero",      "exact index only; a Real index stays unevaluated" },
+    { "AiryBiZero",           "exact index only; a Real index stays unevaluated" },
+    { "AiryBiPrimeZero",      "exact index only; a Real index stays unevaluated" },
     /* (b) deliberately not machine-scalar functions. */
     { "KroneckerDelta",       "a comparison by Equal, not a numeric kernel" },
     { "GCD",                  "exact integer semantics; not a double kernel" },

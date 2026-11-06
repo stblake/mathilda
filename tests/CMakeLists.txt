@@ -586,6 +586,10 @@ set(COMMON_SRC
     ../src/special_functions/barnesg.c
     ../src/special_functions/qpochhammer.c
     ../src/special_functions/besseljzero.c
+    ../src/special_functions/zetazero.c
+    ../src/special_functions/airyzero.c
+    ../src/special_functions/mathieu_char.c
+    ../src/poly/countroots.c
     ../src/power.c
     ../src/funcprog.c
     ../src/permutations.c
@@ -4278,6 +4282,14 @@ add_test(NAME whittaker_tests COMMAND whittaker_tests)
 add_executable(mathieu_tests test_mathieu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mathieu_tests PRIVATE ../src)
 add_test(NAME mathieu_tests COMMAND mathieu_tests)
+
+add_executable(special_zeros_tests test_special_zeros.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(special_zeros_tests PRIVATE ../src)
+add_test(NAME special_zeros_tests COMMAND special_zeros_tests)
+
+add_executable(countroots_tests test_countroots.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(countroots_tests PRIVATE ../src)
+add_test(NAME countroots_tests COMMAND countroots_tests)
 
 add_executable(hypergeometricu_tests test_hypergeometricu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(hypergeometricu_tests PRIVATE ../src)

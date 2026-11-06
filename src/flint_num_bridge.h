@@ -51,6 +51,15 @@ Expr* flint_num_nielsen_polylog(const Expr* n, const Expr* p, const Expr* z);
 /* BesselJZero at arbitrary precision: the zero of BesselJ[nu, x] nearest the
  * machine zero `seed`, by Newton in arb, returned at `bits` bits. */
 Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits);
+/* The same for BesselY[nu, x] (BesselYZero). */
+Expr* flint_num_bessel_y_zero(const Expr* nu, double seed, long bits);
+/* ZetaZero[n]: 1/2 + I t_n, t_n the n-th positive zero of RiemannSiegelZ
+ * (certified index; n < 0 the conjugate), at `bits` bits. n an exact nonzero
+ * integer, |n| < 2^56. NULL otherwise or without FLINT. */
+Expr* flint_num_zeta_zero(const Expr* n, long bits);
+/* The n-th zero (n >= 1, exact) of AiryAi (which 0), AiryAiPrime (1),
+ * AiryBi (2) or AiryBiPrime (3), a negative real, at `bits` bits. */
+Expr* flint_num_airy_zero(int which, const Expr* n, long bits);
 /* QPochhammer[a, q] (n == NULL) and QPochhammer[a, q, n] for any n, |q| < 1:
  * (a; q)_n = (a; q)_inf / (a q^n; q)_inf. */
 Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n);

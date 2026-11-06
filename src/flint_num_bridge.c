@@ -444,27 +444,32 @@ Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n) {
 }
 
 /* The zero of J_nu nearest `seed` (a machine zero), refined by Newton in arb at
- * `bits` (+ guard) bits: x <- x - J_nu(x) / J_nu'(x), J' = (J_{nu-1} - J_{nu+1})/2,
- * with the working precision doubling from 64 bits so each step starts from an
- * iterate already correct to the previous precision. */
-Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) {
+ * `bits` (+ guard) bits: x <- x - J_nu(x) / J_nu'(x), with
+ * J_nu'(x) = J_{nu-1}(x) - (nu/x) J_nu(x) (DLMF 10.6.2), so a step costs two
+ * Bessel evaluations. The seed carries ~50 correct bits and Newton doubles
+ * them, so ONE step per doubled working precision (from 96 bits) reaches the
+ * target, and a final step at the target absorbs a seed that was less
+ * accurate than that. */
+static Expr* nb_bessel_zero(int y, const Expr* nu, double seed, long bits) {
     slong target = bits + NB_GUARD;
-    acb_t N, Nm, Np, X, F, A, B;
-    acb_init(N); acb_init(Nm); acb_init(Np); acb_init(X); acb_init(F);
-    acb_init(A); acb_init(B);
+    acb_t N, Nm, X, F, A;
+    acb_init(N); acb_init(Nm); acb_init(X); acb_init(F); acb_init(A);
     Expr* out = NULL;
     if (!expr_to_acb(nu, N, target)) goto done;
     acb_set_d(X, seed);
-    for (slong wp = 64; ; wp *= 2) {
+    for (slong wp = 96; ; wp *= 2) {
         if (wp > target) wp = target;
+        int steps = wp == target ? 2 : 1;
         acb_sub_si(Nm, N, 1, wp);
-        acb_add_si(Np, N, 1, wp);
-        for (int it = 0; it < 4; it++) {
-            acb_hypgeom_bessel_j(F, N, X, wp);
-            acb_hypgeom_bessel_j(A, Nm, X, wp);
-            acb_hypgeom_bessel_j(B, Np, X, wp);
-            acb_sub(A, A, B, wp);
-            acb_mul_2exp_si(A, A, -1);
+        for (int it = 0; it < steps; it++) {
+            if (y) { acb_hypgeom_bessel_y(F, N, X, wp); acb_hypgeom_bessel_y(A, Nm, X, wp); }
+            else   { acb_hypgeom_bessel_j(F, N, X, wp); acb_hypgeom_bessel_j(A, Nm, X, wp); }
+            /* f' = f_{nu-1} - (nu/x) f_nu (f = J or Y); the step is F / f' */
+            acb_t T; acb_init(T);
+            acb_div(T, N, X, wp);
+            acb_mul(T, T, F, wp);
+            acb_sub(A, A, T, wp);
+            acb_clear(T);
             acb_div(F, F, A, wp);
             acb_sub(X, X, F, wp);
             acb_get_mid(X, X);          /* Newton: carry the midpoint */
@@ -473,8 +478,89 @@ Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) {
     }
     if (acb_is_finite(X)) out = acb_to_expr(X, bits);
 done:
-    acb_clear(N); acb_clear(Nm); acb_clear(Np); acb_clear(X); acb_clear(F);
-    acb_clear(A); acb_clear(B);
+    acb_clear(N); acb_clear(Nm); acb_clear(X); acb_clear(F); acb_clear(A);
+    return out;
+}
+
+Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) {
+    return nb_bessel_zero(0, nu, seed, bits);
+}
+Expr* flint_num_bessel_y_zero(const Expr* nu, double seed, long bits) {
+    return nb_bessel_zero(1, nu, seed, bits);
+}
+
+/* Render a real ball whose radius is below 2^-bits relative, else NULL: the
+ * rigorous zero routines below return a ball, and one wider than the target
+ * precision (which only an extreme index could produce) is not an answer. */
+static Expr* nb_tight_arb_to_expr(const arb_t x, long bits) {
+    if (!arb_is_finite(x) || arb_rel_accuracy_bits(x) < bits) return NULL;
+    mpfr_t m;
+    mpfr_init2(m, bits > 2 ? (mpfr_prec_t)bits : 53);
+    arf_get_mpfr(m, arb_midref(x), MPFR_RNDN);
+    return expr_new_mpfr_move(m);
+}
+
+/* The n-th nontrivial zero of zeta above (n > 0) or below (n < 0) the real
+ * axis, 1/2 + I t_n, t_{-n} = -t_n. t_n is the n-th positive zero of the
+ * Hardy Z function, which acb_dirichlet_hardy_z_zero isolates rigorously
+ * (Gram / Rosser blocks, Turing's method -- so the INDEX is certified, not
+ * merely a nearby zero) and refines at the working precision. */
+Expr* flint_num_zeta_zero(const Expr* n, long bits) {
+    fmpz_t k;
+    fmpz_init(k);
+    Expr* out = NULL;
+    if (!expr_to_fmpz(n, k) || fmpz_is_zero(k)) { fmpz_clear(k); return NULL; }
+    int neg = fmpz_sgn(k) < 0;
+    fmpz_abs(k, k);
+    /* Beyond ~10^17 the isolation cost (and its double-precision Gram
+     * estimates) is out of reach; decline rather than hang. */
+    if (fmpz_bits(k) > 56) { fmpz_clear(k); return NULL; }
+    arb_t t;
+    arb_init(t);
+    for (slong wp = bits + 8; wp <= 4 * (bits + NB_GUARD); wp *= 2) {   /* certified: the ball says when it is enough */
+        acb_dirichlet_hardy_z_zero(t, k, wp);
+        if (arb_rel_accuracy_bits(t) >= bits) break;
+    }
+    Expr* im = nb_tight_arb_to_expr(t, bits);
+    if (im) {
+        if (neg) {
+            mpfr_neg(im->data.mpfr, im->data.mpfr, MPFR_RNDN);
+        }
+        mpfr_t re;
+        mpfr_init2(re, mpfr_get_prec(im->data.mpfr));
+        mpfr_set_d(re, 0.5, MPFR_RNDN);
+        out = numeric_mpfr_make_complex(re, im->data.mpfr);
+        mpfr_clear(re);
+        expr_free(im);
+    }
+    arb_clear(t);
+    fmpz_clear(k);
+    return out;
+}
+
+/* The n-th (n >= 1) zero of AiryAi (which = 0), AiryAiPrime (1), AiryBi (2)
+ * or AiryBiPrime (3): all four lie on the negative real axis.
+ * arb_hypgeom_airy_zero starts from the asymptotic expansion of the zero and
+ * refines it by Newton with a certified enclosure. */
+Expr* flint_num_airy_zero(int which, const Expr* n, long bits) {
+    if (which < 0 || which > 3) return NULL;
+    fmpz_t k;
+    fmpz_init(k);
+    if (!expr_to_fmpz(n, k) || fmpz_sgn(k) <= 0 || fmpz_bits(k) > 62) {
+        fmpz_clear(k);
+        return NULL;
+    }
+    arb_t z;
+    arb_init(z);
+    Expr* out = NULL;
+    for (slong wp = bits + 8; wp <= 4 * (bits + NB_GUARD); wp *= 2) {   /* certified: the ball says when it is enough */
+        arb_hypgeom_airy_zero(which == 0 ? z : NULL, which == 1 ? z : NULL,
+                              which == 2 ? z : NULL, which == 3 ? z : NULL, k, wp);
+        if (arb_rel_accuracy_bits(z) >= bits) break;
+    }
+    out = nb_tight_arb_to_expr(z, bits);
+    arb_clear(z);
+    fmpz_clear(k);
     return out;
 }
 
@@ -2503,6 +2589,9 @@ Expr* flint_num_stieltjes(const Expr* n, const Expr* a) { (void)n; (void)a; retu
 Expr* flint_num_expint(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }
 Expr* flint_num_nielsen_polylog(const Expr* n, const Expr* p, const Expr* z) { (void)n; (void)p; (void)z; return NULL; }
 Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) { (void)nu; (void)seed; (void)bits; return NULL; }
+Expr* flint_num_zeta_zero(const Expr* n, long bits) { (void)n; (void)bits; return NULL; }
+Expr* flint_num_bessel_y_zero(const Expr* nu, double seed, long bits) { (void)nu; (void)seed; (void)bits; return NULL; }
+Expr* flint_num_airy_zero(int which, const Expr* n, long bits) { (void)which; (void)n; (void)bits; return NULL; }
 Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n) { (void)a; (void)q; (void)n; return NULL; }
 Expr* flint_num_legendre_p(const Expr* n, const Expr* m, const Expr* z, int type) { (void)n; (void)m; (void)z; (void)type; return NULL; }
 Expr* flint_num_legendre_q(const Expr* n, const Expr* m, const Expr* z, int type) { (void)n; (void)m; (void)z; (void)type; return NULL; }

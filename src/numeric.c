@@ -17,6 +17,7 @@
 #include "symtab.h"
 #include "match.h"
 #include "sym_names.h"
+#include "sym_intern.h"   /* intern_symbol: the held-value registry */
 #include "root_numeric.h"
 #include "root.h"        /* rootsum_expand_over_roots: N over a RootSum */
 #include "sparse/sparse.h"  /* N over a SparseArray */
@@ -27,6 +28,7 @@
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -1046,6 +1048,27 @@ static int g_n_held_depth = 0;
  * uninitialised. */
 static bool g_n_contagion = false;
 
+/* ---- index-only heads: N's direct route (numeric_register_held_value) ----
+ * A handful of heads (ZetaZero, AiryAiZero, ...) at most, so a linear scan by
+ * interned name, reached only for a head with NHoldFirst. Written at init
+ * only. */
+#define N_HELD_MAX 16
+static struct { const char* name; NumericHeldValueFn fn; } g_n_held[N_HELD_MAX];
+static int g_n_held_count = 0;
+
+void numeric_register_held_value(const char* name, NumericHeldValueFn fn) {
+    const char* hn = intern_symbol(name);
+    for (int i = 0; i < g_n_held_count; i++)
+        if (g_n_held[i].name == hn) { g_n_held[i].fn = fn; return; }
+    if (g_n_held_count >= N_HELD_MAX) {
+        fprintf(stderr, "numeric_register_held_value: registry full (%s)\n", name);
+        abort();
+    }
+    g_n_held[g_n_held_count].name = hn;
+    g_n_held[g_n_held_count].fn = fn;
+    g_n_held_count++;
+}
+
 /* ---- common subexpressions within one numericalization pass --------------
  *
  * N of a composition substitutes whole expressions for a variable, so the
@@ -1401,6 +1424,18 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
         e->data.function.head->data.symbol.name == SYM_StieltjesGamma) {
         Expr* r = numeric_stieltjes_n(e, spec);
         if (r) return r;
+    }
+    /* The same for the registered index-only heads (ZetaZero, AiryAiZero,
+     * ...): see numeric_register_held_value. */
+    if (g_n_held_count > 0 && e->data.function.head->type == EXPR_SYMBOL &&
+        (get_attributes(e->data.function.head->data.symbol.name) & ATTR_NHOLDFIRST)) {
+        const char* hn = e->data.function.head->data.symbol.name;
+        for (int i = 0; i < g_n_held_count; i++) {
+            if (g_n_held[i].name != hn) continue;
+            Expr* r = g_n_held[i].fn(e, spec);
+            if (r) return r;
+            break;
+        }
     }
 
 #ifdef USE_MPFR

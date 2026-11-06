@@ -48,6 +48,7 @@
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
 #include "special_functions/surd.h"          /* Surd binary kernel (sf_surd_r) */
 #include "special_functions/besseljzero.h"   /* BesselJZero binary kernel */
+#include "special_functions/mathieu_char.h"  /* MathieuCharacteristicA/B kernels */
 #include "special_functions/riemann_siegel.h" /* RiemannSiegelZ / Theta unary kernels */
 #include "special_functions/sf_machine_nielsen.h" /* Nielsen PolyLog n-ary kernel */
 #include <complex.h>
@@ -836,6 +837,9 @@ NDK_BIN2(KelvinKer,         ndk_ker_r)
 NDK_BIN2(KelvinKei,         ndk_kei_r)
 NDK_BIN2(Surd,              sf_surd_r)          /* Surd[x, n]: real root, integer n */
 NDK_BIN2(BesselJZero,       sf_bessel_j_zero_r) /* BesselJZero[n, k]: real n, integer k */
+NDK_BIN2(BesselYZero,       sf_bessel_y_zero_r) /* BesselYZero[n, k]: real n >= 0 */
+NDK_BIN2(MathieuCharacteristicA, sf_mathieu_char_a_r) /* real r, real q */
+NDK_BIN2(MathieuCharacteristicB, sf_mathieu_char_b_r)
 #undef NDK_BIN2
 
 /* PolyLog[s, z]: written out because it has a machine COMPLEX arm. A wholly
@@ -1152,6 +1156,9 @@ void ndkernels_init(void) {
     REG_B(KelvinKei, NDKB_KelvinKei); REG_U(KelvinKei);
     REG_B(Surd,    NDKB_Surd);      /* declines even roots of x < 0 -> List path */
     REG_B(BesselJZero, NDKB_BesselJZero); /* real n > -1, integer-valued k */
+    REG_B(BesselYZero, NDKB_BesselYZero); /* real n >= 0, integer-valued k */
+    REG_B(MathieuCharacteristicA, NDKB_MathieuCharacteristicA); /* sf_mathieu_char_r */
+    REG_B(MathieuCharacteristicB, NDKB_MathieuCharacteristicB);
 
     /* Exponential-integral family (sf_machine.c) + two already-existing
      * double algorithms that were simply never registered. */

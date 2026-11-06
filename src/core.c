@@ -945,6 +945,10 @@ void core_init(void) {
     airybi_init();
     bessel_init();
     void besseljzero_init(void);    besseljzero_init();
+    void zetazero_init(void);       zetazero_init();
+    void airyzero_init(void);       airyzero_init();
+    void mathieu_char_init(void);   mathieu_char_init();
+    void countroots_init(void);     countroots_init();
     fibonacci_init();
     lucas_init();
     void hyperfactorial_init(void); hyperfactorial_init();

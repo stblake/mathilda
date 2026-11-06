@@ -394,6 +394,16 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
  * Without MPFR it returns `r`. */
 Expr* numeric_lower_mpfr_to_machine(Expr* r);
 
+/* N's route to the value of a call whose arguments N leaves exact: a head
+ * with NHoldFirst whose only argument is an index (ZetaZero[n],
+ * AiryAiZero[n], ...) has nothing for N to numericalize, so N asks the head
+ * directly. `fn` returns the value at `spec` (a machine number for a machine
+ * spec, `spec.bits` bits otherwise) or NULL to leave the call alone. The
+ * registry is consulted only for heads carrying ATTR_NHOLDFIRST; registered
+ * from the head's _init(). */
+typedef Expr* (*NumericHeldValueFn)(const Expr* call, NumericSpec spec);
+void numeric_register_held_value(const char* name, NumericHeldValueFn fn);
+
 /* Registers N (and, in Phase 2, Precision/Accuracy/SetPrecision/SetAccuracy
  * and MachinePrecision) with the symbol table. */
 void numeric_init(void);

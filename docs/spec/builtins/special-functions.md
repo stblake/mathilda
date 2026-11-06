@@ -3522,9 +3522,55 @@ and parameter `q`, the even solution of `y'' + (a - 2 q Cos[2 z]) y = 0`;
   reference returns a nonzero value there that does not satisfy the Mathieu
   equation.
 
-Not yet provided: `MathieuCharacteristicA`, `MathieuCharacteristicB` and
-`MathieuCharacteristicExponent` as builtins (the exponent is computed
-internally), and asymptotic Series at Infinity.
+Not yet provided: `MathieuCharacteristicExponent` as a builtin (the exponent is
+computed internally), and asymptotic Series at Infinity. The characteristic
+values are `MathieuCharacteristicA` / `MathieuCharacteristicB` (below).
+
+Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
+
+## MathieuCharacteristicA and MathieuCharacteristicB
+
+`MathieuCharacteristicA[r, q]` and `MathieuCharacteristicB[r, q]` are the
+characteristic values `a_r(q)`, `b_r(q)` of Mathieu's equation
+`y'' + (a - 2 q cos 2z) y = 0`. For an integer `r`, `a_r` is the value with an
+even periodic solution (period `π` for even `r`, `2π` for odd) and `b_r`
+(`r >= 1`) the value with an odd one; `a_{-r} = a_r`, `b_{-r} = b_r`. For a
+non-integer `r`, `a_r = b_r` is the value whose Floquet exponent is `r`
+(continuous in `q` from `r^2`, even in `r` and in `q`).
+
+```
+In[1]:= MathieuCharacteristicA[0, 25.]
+Out[1]= -40.2568
+In[2]:= N[MathieuCharacteristicA[0, 25], 30]
+Out[2]= -40.2567795465667872758017193249
+In[3]:= MathieuCharacteristicB[2, 1.]
+Out[3]= 3.91702
+In[4]:= MathieuCharacteristicA[1.5, 2.] == MathieuCharacteristicB[1.5, 2.]
+Out[4]= True
+```
+
+- Exact arguments stay symbolic except `q = 0` (`r^2`). `NHoldFirst` keeps `N`
+  from making an integer order a Real, so `N[MathieuCharacteristicA[0, 25], 30]`
+  numericalizes `q` alone. `MathieuCharacteristicB[0, q]` emits
+  `MathieuCharacteristicB::zord` (there is no `b_0`).
+- Method: the eigenvalue of the symmetric tridiagonal Fourier-coefficient matrix
+  of the class (`cos 2kz`, `cos (2k+1)z`, `sin (2k+1)z`, `sin (2k+2)z`, or
+  `e^{i (nu+2k) z}` over all `k` for a non-integer order), truncated where the
+  eigenvalue's truncation error falls below `2^-(bits+30)`. The wanted value is
+  the eigenvalue of fixed rank (the rank of `r^2` on the diagonal at `q = 0`):
+  for real `q` the eigenvalues of an unreduced symmetric tridiagonal matrix are
+  simple, so the rank never changes.
+- Machine: Sturm-sequence bisection in doubles (`sf_mathieu_char_r`), the one
+  helper behind the scalar path, the packed / `NDArray` map
+  (`MathieuCharacteristicA[2, v]` over a buffer of `q`) and `Compile[]`
+  (`CompileDiagnostics[{{x, _Real}}, MathieuCharacteristicA[2, x]]` compiles), so
+  the surfaces agree bit for bit.
+- Arbitrary precision: the machine value refined by Newton on `det(T - x)` in
+  MPFR (the logarithmic derivative is a sum over the `LDL^T` pivots) with the
+  precision doubling, then certified by two Sturm counts at `x -+ 2^-(bits+2)`;
+  bisection when the certificate fails.
+- Complex `q` or `r`: unevaluated (the eigenvalue curves meet at branch points
+  off the real axis, so the rank argument does not apply).
 
 Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
 
@@ -4167,6 +4213,54 @@ In[2]:= RiemannSiegelTheta[10.]
 Out[2]= -3.06707
 ```
 
+## ZetaZero
+
+`ZetaZero[k]` is the `k`-th nontrivial zero of the Riemann zeta function above
+the real axis, `1/2 + I t_k` (`t_k` the `k`-th positive zero of
+`RiemannSiegelZ`); `ZetaZero[-k]` is its conjugate.
+
+```
+In[1]:= N[ZetaZero[1]]
+Out[1]= 0.5 + 14.1347 I
+In[2]:= N[Im[ZetaZero[1000]], 30]
+Out[2]= 1419.42248094599568646598903808
+In[3]:= N[ZetaZero[10^6]]
+Out[3]= 0.5 + 600270. I
+```
+
+- An exact index stays symbolic; `N` gives the value (the head is `NHoldFirst`,
+  and `N` reaches it through `numeric_register_held_value`). A number that is
+  not a nonzero integer emits `ZetaZero::intnz` and stays unevaluated.
+- arb's `acb_dirichlet_hardy_z_zero`: the zero is isolated rigorously (Gram /
+  Rosser blocks, Turing's method), so the `k`-th zero is certified to be the
+  `k`-th, then refined at the requested precision (machine: 53 bits, lowered).
+  `ZetaZero[10^6]` in ~75 ms. Without FLINT it stays unevaluated.
+- No packed / `NDArray` / `Compile` surface: the argument is an exact index.
+
+Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
+
+## AiryAiZero, AiryAiPrimeZero, AiryBiZero and AiryBiPrimeZero
+
+`AiryAiZero[k]`, `AiryAiPrimeZero[k]`, `AiryBiZero[k]` and `AiryBiPrimeZero[k]`
+are the `k`-th zeros (`k = 1, 2, ...`) of `AiryAi`, `AiryAiPrime`, `AiryBi` and
+`AiryBiPrime`; all are negative reals.
+
+```
+In[1]:= N[AiryAiZero[1]]
+Out[1]= -2.33811
+In[2]:= N[AiryAiZero[500], 30]
+Out[2]= -177.009251046479206825466153442
+```
+
+- An exact index stays symbolic and `N` gives the value (`NHoldFirst`, as for
+  `ZetaZero`); a non-integer or non-positive index stays unevaluated.
+- arb's `arb_hypgeom_airy_zero` (the asymptotic expansion of the zero, DLMF
+  9.9.6-9.9.9, refined by Newton with a certified enclosure), at the requested
+  precision. Without FLINT they stay unevaluated.
+- No packed / `NDArray` / `Compile` surface: the argument is an exact index.
+
+Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
+
 ## LegendreP
 
 `LegendreP[n, x]` gives the Legendre polynomial / function `P_n(x)`;
@@ -4589,7 +4683,32 @@ are unequal (v0.477; new). `KroneckerDelta[]` is 1 and `KroneckerDelta[n]` is
   are more than 2 apart), then Newton on `J_n / J_n'`. Shared by the scalar path,
   the packed / `NDArray` map and `Compile`. Within 3 ulp of the reference.
 - Arbitrary precision: the machine zero refined by Newton in arb with the
-  precision doubling from 64 bits (`N[BesselJZero[0, 1], 30]`).
+  precision doubling (`N[BesselJZero[0, 1], 30]`). A step uses
+  `J_n' = J_{n-1} - (n/x) J_n` (two Bessel evaluations, not three) and one step
+  per doubled precision from 96 bits plus one at the target, since the machine
+  seed already carries ~50 correct bits: `N[BesselJZero[0, 1000], 30]` went from
+  ~1 ms to ~0.3 ms.
+
+## BesselYZero
+
+`BesselYZero[n, k]` is the k-th positive zero of `BesselY[n, x]`, for a real
+order `n >= 0`.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`. Exact calls stay
+  unevaluated; an inexact argument (and so `N`) evaluates, as for `BesselJZero`.
+- The same machinery as `BesselJZero` (one implementation, `bz_zero_r`):
+  McMahon's expansion with `beta = (k + n/2 - 3/4) Pi` when `k > n + 20`,
+  otherwise a sign-change scan from `max(n, 0.05)` (no zero of `Y_n` lies below
+  `n`), then Newton. Machine helper `sf_bessel_y_zero_r`, shared by the scalar
+  path, the packed / `NDArray` map and `Compile`; arbitrary precision by Newton in
+  arb (`flint_num_bessel_y_zero`).
+
+```
+In[1]:= N[BesselYZero[0, 1]]
+Out[1]= 0.893577
+In[2]:= N[BesselYZero[1, 2], 30]
+Out[2]= 5.42968104079413513277200519085
+```
 
 ## HeavisideTheta and DiracDelta
 
