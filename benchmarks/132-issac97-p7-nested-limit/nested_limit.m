@@ -51,6 +51,7 @@ m2[] := Module[{oldRatio = 10^9, newRatio, i = 2},
   While[newRatio = N[f[g[N[10^(-i), 200 i]]]/g[f[N[10^(-i), 200 i]]], 12];
         Abs[(newRatio - oldRatio)/newRatio] > 10^(-12), i = i + 1; oldRatio = newRatio];
   newRatio];
-run["p7 m2 numeric approach wp200i", m2[], sig[#, 11] &, 3];
+(* One timed run: N of the same exact expressions on a repeat may be cached. *)
+run["p7 m2 numeric approach wp200i", m2[], sig[#, 11] &];
 
 run["p7 direct Limit", Limit[f[g[x]]/g[f[x]], x -> 0], sig[#, 12] &];

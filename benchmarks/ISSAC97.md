@@ -195,3 +195,26 @@ the ones where Mathilda is wrong, incomplete or slower; "neither" = both wrong):
 | Integrate | h8.5, h8.8 unevaluated | **fixed v0.6278-v0.6281** (143: 30/30 correct and AHEAD; h8.5 55 ms vs 1.5 s, h8.8 99 ms vs 13.8 s) |
 | eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
 | NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 were the baseline wrong (Mathilda correct); h10.7 singular endpoint (Mathilda 2.96e113) and h10.3/h10.4 Lane-Emden wp30 SLOWER | **fixed v0.6258-v0.6260** (h10.7 correct to 23 digits; Lane-Emden 1.7 s -> 30 ms, 4.3 s -> 0.11 s); h10.7's start data corrected in the benchmark |
+
+## Run at v0.6293 (2026-11-06 evening, load ~3-5, both columns fresh)
+
+**ISSAC '97 (126-135):** 47 rows AHEAD, 6 SLOWER, 0 Mathilda wrong. Six rows
+disagree and in every one Mathilda is right (P3 wp40: baseline timeout; P4 machine
+contour: baseline wrong; P5 machine L1000 and L100: baseline returns the start point;
+P5 NSolve: baseline timeout; P7 direct Limit: baseline timeout). One row is
+INCOMPLETE in both (P5 RootCount, B6). SLOWER: P1 machine rows at clock resolution
+(1.1-1.2x), P4 Trapezoidal wp400 (454 vs 182 ms), P7 numeric approach (17 vs 6 ms,
+now timed as one run), P10 Together/Factor (3.3 vs 2.8 ms).
+
+**Holdout A (136-145):** 188 AHEAD / 38 SLOWER / 0 INCOMPLETE / 14 CHECK-FAIL
+(v0.6225: 127 / 49 / 18 / 46). Of the 14, Mathilda matches the true answer in 12;
+Mathilda is wrong in 2: h4.9 `SeriesCoefficient[Tan[x], {x, 0, 401}]` (correct at
+v0.6249, a regression since) and h9.9 sine Galerkin at 40 digits, n = 200. The h7
+"point N[.., 30]" SLOWER rows were timing the baseline's cache of N on repeats; they
+are now single runs.
+
+Wave 3 (every SLOWER case, by area): arbitrary-precision SVD/eigen (h1.2 9.8x, h1.4
+5.8x) and small machine matrices; NIntegrate (h2.3/2.5/2.6/2.7, h8.10, the contour
+Trapezoidal rows h4.3/4.4/4.8/4.9/4.10 and P4); exact coefficients (h4.7, h4.8) and
+NSum h3.6; exact lex GroebnerBasis (h6.3/6.7/6.8/6.10, up to 6.2x); N at a point
+(h7.x, re-measured as single runs), FindRoot h5.9, sine Galerkin h9.9, P7, P10.
