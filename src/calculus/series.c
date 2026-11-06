@@ -24,6 +24,7 @@
  */
 
 #include "series.h"
+#include "series_ratpoly.h" /* FLINT truncated-series arithmetic over Q */
 #include "../special_functions/meijer_g.h" /* meijerg_series_terms */
 #include "../sparse/sparse.h"
 #include "../message.h"    /* mth_message: the Quiet[]/Check[] funnel for Series::ivar. */
@@ -633,9 +634,17 @@ static SeriesObj* so_add(SeriesObj* a, SeriesObj* b) {
     int64_t new_order = aa->order < bb->order ? aa->order : bb->order;
     SeriesObj* r = so_alloc(aa->x, aa->x0, new_nmin, new_order, aa->den);
     for (int64_t k = new_nmin; k < new_order; k++) {
-        Expr* sum = expr_new_integer(0);
         int64_t ia = k - aa->nmin;
         int64_t ib = k - bb->nmin;
+        Expr* ca = (ia >= 0 && (size_t)ia < aa->coef_count) ? aa->coefs[ia] : NULL;
+        Expr* cb = (ib >= 0 && (size_t)ib < bb->coef_count) ? bb->coefs[ib] : NULL;
+        /* Two rational coefficients add exactly without the evaluator. */
+        Expr* q = ca && cb ? srp_add2(ca, cb)
+                : ca && srp_is_rational(ca) ? expr_copy(ca)
+                : cb && srp_is_rational(cb) ? expr_copy(cb)
+                : (!ca && !cb) ? expr_new_integer(0) : NULL;
+        if (q) { so_set_coef(r, (size_t)(k - new_nmin), q); continue; }
+        Expr* sum = expr_new_integer(0);
         if (ia >= 0 && (size_t)ia < aa->coef_count) sum = simp(mk_plus(sum, expr_copy(aa->coefs[ia])));
         if (ib >= 0 && (size_t)ib < bb->coef_count) sum = simp(mk_plus(sum, expr_copy(bb->coefs[ib])));
         so_set_coef(r, (size_t)(k - new_nmin), coef_cancel(sum));
@@ -647,7 +656,8 @@ static SeriesObj* so_add(SeriesObj* a, SeriesObj* b) {
 static SeriesObj* so_scalar_mul(Expr* c, SeriesObj* a) {
     SeriesObj* r = so_alloc(a->x, a->x0, a->nmin, a->order, a->den);
     for (size_t i = 0; i < a->coef_count; i++) {
-        so_set_coef(r, i, simp(mk_times(expr_copy(c), expr_copy(a->coefs[i]))));
+        Expr* q = srp_mul2(c, a->coefs[i]);   /* exact rational product */
+        so_set_coef(r, i, q ? q : simp(mk_times(expr_copy(c), expr_copy(a->coefs[i]))));
     }
     return r;
 }
@@ -676,6 +686,21 @@ static SeriesObj* so_mul(SeriesObj* a, SeriesObj* b) {
     int64_t ob = bb->order + aa->nmin;
     int64_t result_order = oa < ob ? oa : ob;
     SeriesObj* r = so_alloc(aa->x, aa->x0, result_nmin, result_order, aa->den);
+    /* Rational coefficients: one truncated polynomial multiply (FLINT
+     * mullow) replaces the O(n^2) evaluator products and sums below.  The
+     * product's coefficient i + j lands at index i + j of r, truncated at
+     * r's length -- the same convolution, exactly. */
+    if (r->coef_count > 0) {
+        Expr** out = malloc(r->coef_count * sizeof(Expr*));
+        if (out && srp_mullow(aa->coefs, aa->coef_count, bb->coefs, bb->coef_count,
+                              r->coef_count, out)) {
+            for (size_t idx = 0; idx < r->coef_count; idx++) so_set_coef(r, idx, out[idx]);
+            free(out);
+            so_free(aa); so_free(bb);
+            return r;
+        }
+        free(out);
+    }
     for (size_t i = 0; i < aa->coef_count; i++) {
         if (is_lit_zero(aa->coefs[i])) continue;
         for (size_t j = 0; j < bb->coef_count; j++) {
@@ -847,6 +872,22 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
      * nothing to that work but inflate a naive leaf sum for polynomials
      * with mostly-zero coefficients like 1/(1+x^N). Purely-numeric coefs
      * also don't grow under simp() so they don't count against the cap. */
+    /* Rational coefficients: Newton inversion over Q (FLINT inv_series),
+     * exact to the full relative order, with no cap. */
+    {
+        Expr** out = malloc(N * sizeof(Expr*));
+        if (out && srp_inv_series(a->coefs, a->coef_count, N, out)) {
+            SeriesObj* r = so_alloc(a->x, a->x0, -a->nmin, a->order - 2 * a->nmin, a->den);
+            for (size_t i = 0; i < N; i++) {
+                if (i < r->coef_count) so_set_coef(r, i, out[i]);
+                else expr_free(out[i]);
+            }
+            free(out);
+            so_free(a);
+            return r;
+        }
+        free(out);
+    }
     int64_t total_leaves = 0;
     for (size_t i = 0; i < a->coef_count && i < N; i++) {
         if (is_lit_zero(a->coefs[i])) continue;
@@ -961,6 +1002,21 @@ static SeriesObj* so_pow_int(SeriesObj* a, int64_t n) {
         SeriesObj* p = so_pow_int(inv, -n);
         so_free(inv);
         return p;
+    }
+    /* Rational coefficients: a = t^nmin A(t), a^n = t^(n nmin) A^n, known to
+     * the same relative length as a (what the binary powering below gives:
+     * each so_mul keeps order - nmin), computed by one FLINT pow_trunc. */
+    if (a->coef_count > 0) {
+        size_t cnt = a->coef_count;
+        Expr** out = malloc(cnt * sizeof(Expr*));
+        if (out && srp_pow_trunc(a->coefs, cnt, (uint64_t)n, cnt, out)) {
+            int64_t nmin_n = a->nmin * n;
+            SeriesObj* r = so_alloc(a->x, a->x0, nmin_n, nmin_n + (int64_t)cnt, a->den);
+            for (size_t i = 0; i < cnt; i++) so_set_coef(r, i, out[i]);
+            free(out);
+            return r;
+        }
+        free(out);
     }
     /* Binary exponentiation. */
     SeriesObj* result = NULL;
@@ -1385,6 +1441,31 @@ static SeriesObj* so_compose_scalar_kernel(Expr** kernel, size_t N, SeriesObj* u
     /* Normalize u's own coefficients so radicals introduced upstream (e.g.
      * by so_inv of a shifted radical at infinity) don't seed the nesting. */
     so_normalize_radical_coefs(u);
+    /* Rational kernel and rational u with u(x0) = 0 (nmin >= 1): one FLINT
+     * compose_series in t = (x - x0)^(1/den), the Horner loop below done in
+     * quasi-linear arithmetic.  The result is known to O(t^order), as the
+     * Horner result is (a constant times u keeps u's order). */
+    if (u->nmin >= 1 && u->order > u->nmin) {
+        size_t n = (size_t)u->order;
+        Expr** uu = malloc(n * sizeof(Expr*));
+        Expr** out = malloc(n * sizeof(Expr*));
+        if (uu && out) {
+            Expr* zero = expr_new_integer(0);
+            for (size_t j = 0; j < n; j++) {
+                int64_t i = (int64_t)j - u->nmin;
+                uu[j] = (i >= 0 && (size_t)i < u->coef_count) ? u->coefs[i] : zero;
+            }
+            int ok = srp_compose_series(kernel, N, uu, n, n, out);
+            expr_free(zero);
+            if (ok) {
+                SeriesObj* r = so_alloc(u->x, u->x0, 0, u->order, u->den);
+                for (size_t j = 0; j < n; j++) so_set_coef(r, j, out[j]);
+                free(uu); free(out);
+                return r;
+            }
+        }
+        free(uu); free(out);
+    }
     SeriesObj* result = so_from_constant(kernel[N - 1], u->x, u->x0, u->order, u->den);
     /* Iterate k = N-2, N-3, ..., 0 using a size_t-safe reverse loop. */
     for (size_t k = N - 1; k-- > 0; ) {
@@ -2768,6 +2849,68 @@ static SeriesObj* series_zeta_at(SeriesCtx* ctx) {
     return NULL;
 }
 
+/* The x-power of a monomial term c x^k of an expanded polynomial (c free of
+ * x, k a nonnegative integer): sets *k and returns true, and *c (owned, NULL
+ * for c = 1) when `c_out` is given.  False for any other shape. */
+static bool poly_term_degree(Expr* t, Expr* x, int64_t* k, Expr** c_out) {
+    if (c_out) *c_out = NULL;
+    if (expr_free_of(t, x)) { *k = 0; if (c_out) *c_out = expr_copy(t); return true; }
+    if (expr_eq(t, x)) { *k = 1; return true; }
+    if (t->type != EXPR_FUNCTION || t->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = t->data.function.head->data.symbol.name;
+    if (h == SYM_Power) {
+        if (t->data.function.arg_count != 2 || !expr_eq(t->data.function.args[0], x)) return false;
+        Expr* p = t->data.function.args[1];
+        if (p->type != EXPR_INTEGER || p->data.integer < 0) return false;
+        *k = p->data.integer;
+        return true;
+    }
+    if (h != SYM_Times) return false;
+    size_t n = t->data.function.arg_count;
+    size_t xi = SIZE_MAX;
+    for (size_t i = 0; i < n; i++) {
+        if (expr_free_of(t->data.function.args[i], x)) continue;
+        if (xi != SIZE_MAX) return false;            /* two x-factors */
+        xi = i;
+    }
+    if (xi == SIZE_MAX) return false;
+    if (!poly_term_degree(t->data.function.args[xi], x, k, NULL)) return false;
+    if (c_out) {
+        Expr** rest = malloc((n - 1 ? n - 1 : 1) * sizeof(Expr*));
+        size_t m = 0;
+        for (size_t i = 0; i < n; i++)
+            if (i != xi) rest[m++] = expr_copy(t->data.function.args[i]);
+        *c_out = m == 1 ? rest[0] : expr_new_function(mk_symbol("Times"), rest, m);
+        free(rest);
+    }
+    return true;
+}
+
+/* An expanded polynomial in x (a Plus of monomials c x^k) about x0 = 0: its
+ * series IS its coefficient list, read off directly.  Expanding term by term
+ * instead builds one dense series per monomial and adds them pairwise --
+ * O(terms * order) work, minutes for the degree-6000 numerator a rational
+ * Residue expands.  NULL when `e` is not of that shape. */
+static SeriesObj* so_from_expanded_polynomial(Expr* e, SeriesCtx* ctx) {
+    size_t n = e->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        int64_t k;
+        if (!poly_term_degree(e->data.function.args[i], ctx->x, &k, NULL)) return NULL;
+    }
+    SeriesObj* r = so_alloc(ctx->x, ctx->x0, 0, ctx->order, 1);
+    for (size_t i = 0; i < n; i++) {
+        int64_t k; Expr* c;
+        poly_term_degree(e->data.function.args[i], ctx->x, &k, &c);
+        if (!c) c = expr_new_integer(1);
+        if (k >= (int64_t)r->coef_count) { expr_free(c); continue; }
+        Expr* old = r->coefs[k];
+        Expr* q = srp_add2(old, c);
+        so_set_coef(r, (size_t)k, q ? q : simp(mk_plus(expr_copy(old), expr_copy(c))));
+        expr_free(c);
+    }
+    return r;
+}
+
 static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
     /* Early out: free of x => constant series. */
     if (expr_free_of(e, ctx->x)) {
@@ -2892,6 +3035,10 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
         }
         /* ---- Plus ---- */
         if (head && head == SYM_Plus) {
+            if (is_lit_zero(ctx->x0)) {
+                SeriesObj* poly = so_from_expanded_polynomial(e, ctx);
+                if (poly) return poly;
+            }
             SeriesObj* acc = NULL;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 SeriesObj* t = series_expand_nested(e->data.function.args[i], ctx);
@@ -4186,8 +4333,38 @@ static bool has_irrational_number(const Expr* e) {
     return false;
 }
 
+/* True iff `e` is built from x, rational numbers, Plus, Times and integer
+ * Powers: a rational function of x over Q.  Every series coefficient of such
+ * an `e` is rational, so the whole expansion runs in the exact FLINT arm
+ * (so_mul / so_inv / so_pow_int), where inverting the denominator is a
+ * quasi-linear Newton iteration -- cheaper than the Apart that would
+ * otherwise split it (a partial-fraction decomposition factors the
+ * denominator and divides the numerator by it: for a degree-6000 numerator
+ * over x^3001 that division alone took minutes). */
+#ifdef USE_FLINT
+static bool is_rational_function_over_q(const Expr* e, const Expr* x) {
+    if (srp_is_rational(e)) return true;
+    if (e->type == EXPR_SYMBOL) return expr_eq(e, x);
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Power) {
+        return n == 2 && e->data.function.args[1]->type == EXPR_INTEGER &&
+               is_rational_function_over_q(e->data.function.args[0], x);
+    }
+    if (h != SYM_Plus && h != SYM_Times) return false;
+    for (size_t i = 0; i < n; i++)
+        if (!is_rational_function_over_q(e->data.function.args[i], x)) return false;
+    return true;
+}
+#endif
+
 static Expr* try_apart_preprocess(Expr* f, Expr* x) {
     if (!has_negative_power_in(f, x)) return NULL;
+#ifdef USE_FLINT
+    /* Over Q the exact series arithmetic beats the decomposition. */
+    if (is_rational_function_over_q(f, x)) return NULL;
+#endif
     /* Algebraic-number coefficients: Apart is slower than the inversion it
      * replaces, by orders of magnitude (see has_irrational_number). */
     if (has_irrational_number(f)) return NULL;

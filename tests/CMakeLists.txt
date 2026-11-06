@@ -857,6 +857,7 @@ set(COMMON_SRC
     ../src/strings/regex/stringcontainsq.c
     ../src/strings/regex/regex_init.c
     ../src/calculus/series.c
+    ../src/calculus/series_ratpoly.c
     ../src/calculus/deriv.c
     ../src/calculus/minimize.c
     ../src/calculus/limit.c

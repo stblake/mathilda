@@ -1425,12 +1425,13 @@ static void test_apart_at_nonzero_point(void) {
 static void test_apart_at_infinity(void) {
     setup_full();
     /* 1/(x^2 - 1) at Infinity = 1/x^2 * 1/(1 - 1/x^2) = 1/x^2 + 1/x^4 + 1/x^6 + ...
-     * The engine emits the trimmed-leading-zero form with nmin = 1 (the
-     * leading zero at (1/x)^1 is kept explicitly, and nmin starts at 1
-     * since the series has no constant term). */
+     * The leading term is (1/x)^2, so nmin = 2 with no padding zero.  (A
+     * rational function over Q is expanded in exact arithmetic, not through
+     * Apart, whose 1/(2 (x - 1)) - 1/(2 (x + 1)) split left a cancelled
+     * leading zero at (1/x)^1.) */
     assert_fullform(
         "Series[1/(x^2 - 1), {x, Infinity, 6}]",
-        "SeriesData[Power[x, -1], 0, List[0, 1, 0, 1, 0, 1], 1, 7, 1]");
+        "SeriesData[Power[x, -1], 0, List[1, 0, 1, 0, 1], 2, 7, 1]");
 }
 
 /* Asymptotic expansion of ExpIntegralEi at Infinity (DLMF 6.12.2):
@@ -2581,6 +2582,55 @@ static void test_series_algebraic_point_pole(void) {
     check_quiet("Series[1/(1 + x^2 + x^4)^2, {x, (-1)^(1/3), -1}][[4]]", "-2");
 }
 
+
+/* Exact rational arm (series_ratpoly.c): every coefficient rational, so the
+ * products, inverses, powers and compositions run in FLINT's truncated
+ * polynomial arithmetic.  Each expectation is derived independently of the
+ * series engine: Expand, a closed form, or a Bernoulli-number formula. */
+static void test_series_rational_exact_arm(void) {
+    setup_full();
+    /* A product of polynomial powers, truncated below its degree: the
+     * coefficients are those of the expanded product. */
+    assert_eval_eq(
+        "With[{p = (1 + x)^200 (1 + x + x^2)^100 (1 + x^2 + x^3)^50}, "
+        "CoefficientList[Normal[Series[p, {x, 0, 300}]], x] === "
+        "Take[CoefficientList[Expand[p], x], 301]]", "True", 0);
+    /* The same at a nonzero rational point, against the expansion at 0 of
+     * the shifted product. */
+    assert_eval_eq(
+        "With[{p = (1 + x)^30 (2 - x + x^2)^20}, "
+        "Expand[Normal[Series[p, {x, 1/2, 40}]] /. x -> 1/2 + t] === "
+        "With[{q = Expand[p /. x -> 1/2 + t]}, Sum[Coefficient[q, t, k] t^k, {k, 0, 40}]]]", "True", 0);
+    /* 1/(1 - x - x^2) generates Fibonacci[n + 1]: past order 64 (where a
+     * capped inversion used to report 0 coefficients under an O-term that
+     * claimed them). */
+    assert_eval_eq(
+        "With[{s = Series[1/(1 - x - x^2), {x, 0, 100}]}, "
+        "Table[SeriesCoefficient[s, n], {n, 60, 100, 10}] === "
+        "Table[Fibonacci[n + 1], {n, 60, 100, 10}]]", "True", 0);
+    /* Tan's coefficients from the Bernoulli numbers, to order 41. */
+    assert_eval_eq(
+        "With[{s = Series[Tan[x], {x, 0, 41}]}, "
+        "Table[SeriesCoefficient[s, 2 n - 1], {n, 1, 21}] === "
+        "Table[(-1)^(n - 1) 2^(2 n) (2^(2 n) - 1) BernoulliB[2 n]/(2 n)!, {n, 1, 21}]]",
+        "True", 0);
+    /* Nested compositions with cancellation (Tan[Sin[x]] - Sin[Tan[x]] =
+     * x^7/30 + 29 x^9/756 + 1913 x^11/75600 + 95 x^13/7392 + ...). */
+    assert_eval_eq(
+        "With[{s = Series[Tan[Sin[x]] - Sin[Tan[x]], {x, 0, 13}]}, "
+        "{Normal[s] === x^7/30 + 29 x^9/756 + 1913 x^11/75600 + 95 x^13/7392, "
+        "s[[5]]}]", "{True, 14}", 0);
+    /* An identity: the cancelled composite has no terms through order 40. */
+    assert_eval_eq(
+        "Normal[Series[Sin[Sinh[x]]^2 + Cos[Sinh[x]]^2 - 1, {x, 0, 40}]]", "0", 0);
+    /* A rational function over Q expands without partial fractions, and
+     * agrees with them. */
+    assert_eval_eq(
+        "With[{f = (x^3 + 2)/((1 - 2 x)^3 (3 + x)^2)}, "
+        "Normal[Series[f, {x, 0, 30}]] === Normal[Series[Apart[f], {x, 0, 30}]]]",
+        "True", 0);
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -2702,6 +2752,7 @@ int main(void) {
     TEST(test_apart_nonrational_denominator_guard);
     TEST(test_apart_at_nonzero_point);
     TEST(test_apart_at_infinity);
+    TEST(test_series_rational_exact_arm);
 
     /* Regression: no $SeriesInvVar$ leakage for Series at Infinity. */
     TEST(test_series_expintegralei_at_infinity);

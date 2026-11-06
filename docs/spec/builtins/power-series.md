@@ -273,6 +273,24 @@ In[9]:= Series[{Sin[x], Cos[x], Tan[x]}, {x, 0, 5}]
 Out[9]= {x - 1/6 x^3 + 1/120 x^5 + O[x]^6, 1 - 1/2 x^2 + 1/24 x^4 + O[x]^6, x + 1/3 x^3 + 2/15 x^5 + O[x]^6}
 ```
 
+### Exact arithmetic over Q
+
+When every coefficient is a rational number -- a polynomial or rational
+function with rational coefficients, the elementary functions at `0` and their
+compositions -- products, inverses, integer powers and compositions with
+`Exp`/`Sin`/`Cos`/`Sinh`/`Cosh`/`ArcTan`/... run as truncated polynomial
+arithmetic over Q (FLINT `mullow`, `inv_series`, `pow_trunc`,
+`compose_series`). `Series[(x + 1)^2000 (x^2 + x + 1)^1000 (x^4 + x^3 + x^2 +
+x + 1)^500, {x, 0, 3000}]` takes about the time of `Expand` of the same
+product, and `Series[f[x], {x, 0, 25}]` for a sum of twelve 3-fold Sin/Tan/
+Sinh/Tanh compositions about 30 ms. An expanded polynomial at `0` is read off
+as its coefficient list, and a rational function over Q is expanded directly
+rather than through `Apart`. Series inversion is exact to the requested order
+for numeric coefficients (`SeriesCoefficient[Series[1/(1 - x - x^2), {x, 0,
+100}], 100]` is `Fibonacci[101]`); with symbolic coefficients it may stop
+early to bound expression growth, and the `O`-term then moves down to the
+last computed term.
+
 ## Normal
 Converts a `SeriesData` back into an ordinary expression by dropping its O-term.
 - `Normal[expr]`
