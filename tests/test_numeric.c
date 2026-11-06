@@ -380,6 +380,15 @@ static void test_accuracy_builtin(void) {
     /* MPFR zero @ p digits: Accuracy[0``p] = p (N[0, 50] is the exact 0) */
     assert_eval_startswith("Accuracy[SetPrecision[0, 50]]", "50.");
     assert_eval_eq("Accuracy[N[0, 50]]", "Infinity", 0);
+    /* An exact cancellation x - x keeps the accuracy the operands had,
+     * p - log2|x| bits rounded down: N[x, 30] is 100 bits, so 1/34 leaves
+     * floor(100 + log2 34) = 105 bits (31.6 digits), 10^10 leaves
+     * floor(100 - log2 10^10) = 66 bits (19.9 digits), and 1 its 100 bits.
+     * It used to be the bare 100 bits whatever the operands' size. */
+    assert_eval_startswith("Accuracy[N[1/34, 30] - N[1/34, 30]]", "31.6");
+    assert_eval_startswith("Accuracy[N[10^10, 30] - N[10^10, 30]]", "19.8");
+    assert_eval_startswith("Accuracy[N[1, 30] - N[1, 30]]", "30.1");
+    assert_eval_startswith("Accuracy[N[1/34, 30] - N[1/34, 40]]", "31.6");
 }
 
 static void test_set_precision(void) {

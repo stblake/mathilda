@@ -192,6 +192,28 @@ long numeric_min_inexact_bits(const Expr* e) {
 
 typedef int (*MpfrBinaryOp)(mpfr_t, const mpfr_t, const mpfr_t, mpfr_rnd_t);
 
+/* An approximate zero carries only accuracy: its bit precision IS its
+ * accuracy in bits (Accuracy[0 at p bits] = p / log2 10 digits). When x + y
+ * cancels exactly, the zero knows the sum only as well as the operands knew
+ * their values, p - log2 max(|x|, |y|) bits below the units place -- not the
+ * bare p bits it was computed with, which would make N[1/34, 30] -
+ * N[1/34, 30] ~ 2^-100 uncertain where it is ~ 2^-105, and N[10^10, 30] -
+ * N[10^10, 30] ~ 2^-100 where it is ~ 2^-67. Rounded down, so the accuracy
+ * is never overstated. */
+static void cancelled_zero_accuracy(mpfr_t s, const mpfr_t x, const mpfr_t y) {
+    if (!mpfr_zero_p(s) || (!mpfr_regular_p(x) && !mpfr_regular_p(y))) return;
+    const mpfr_srcptr big = !mpfr_regular_p(y) ? x
+                          : !mpfr_regular_p(x) ? y
+                          : (mpfr_cmpabs(x, y) >= 0 ? x : y);
+    long e;
+    double m = mpfr_get_d_2exp(&e, big, MPFR_RNDN);
+    double acc = floor((double)mpfr_get_prec(s) - ((double)e + log2(fabs(m))));
+    if (acc < (double)MPFR_PREC_MIN) acc = (double)MPFR_PREC_MIN;
+    if (acc > (double)MPFR_PREC_MAX / 2) return;
+    mpfr_set_prec(s, (mpfr_prec_t)acc);
+    mpfr_set_zero(s, +1);
+}
+
 /* Generic MPFR binary dispatcher. Handles the common shape: extract real
  * MPFR operands from `a` and `b`, apply `op`, return a fresh EXPR_MPFR.
  * Returns NULL if either operand isn't a pure real (Complex → caller
@@ -246,7 +268,10 @@ static Expr* mpfr_binop(const Expr* a, const Expr* b, long default_bits,
     }
     mpfr_init2(out, bits);
     op(out, ra, rb, MPFR_RNDN);
-    if (op == mpfr_add || op == mpfr_sub) note_cancellation(ra, rb, out);
+    if (op == mpfr_add || op == mpfr_sub) {
+        note_cancellation(ra, rb, out);
+        cancelled_zero_accuracy(out, ra, rb);
+    }
     mpfr_clear(ra); mpfr_clear(ia);
     mpfr_clear(rb); mpfr_clear(ib);
     return expr_new_mpfr_move(out);
