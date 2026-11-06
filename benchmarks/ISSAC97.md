@@ -38,7 +38,7 @@ answer is a CHECK-FAIL and its timing is discarded.
 | 132 | `Limit[f[g[x]]/g[f[x]], x -> 0]`, f, g twelve-term nested Sin/Tan/Sinh/Tanh sums | 3060352455.6720 (exact rational) |
 | 133 | `Integrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}]` | 0.21088285956559351177 (closed form) |
 | 134 | largest eigenvalue of the integral operator with kernel E^(x+y+x^2+y^2+xy+x^2y^2) on [0, 1] | 37.529145560335 |
-| 135 | y'' = x^3 + y^3 + y'^3, y(0) = y'(0) = 0: the blow-up point r and y(r) | r = 1.6443766903388, y(r) = 0.93193876511029 |
+| 135 | y'' = x^3 + y^3 + y'^3, y(0) = y'(0) = 0: the blow-up point r and y(r) | r = 1.6443766903388407202, y(r) = 0.93193876511028105335 |
 
 The machine contour row of 129 has no machine-precision answer in either
 system: the integrand peaks at ~1e1430, so a system that does not escalate
@@ -126,14 +126,15 @@ argument/option handling, then absences, then bottlenecks.
 ### Argument and option handling
 | # | deficiency | status |
 |---|---|---|
-| A1 | NDSolve carries `HoldAll`, so `NDSolve[ode, ...]` with the equations in a variable fails with `NDSolve::nodeqs` (P10) | open |
-| A2 | FindMinimum `{t, t0, t1}` (two starting points) read as a constraint: `FindMinimum::nimpl` (P10) | open |
-| A3 | FindRoot/FindMinimum reject Real-valued WorkingPrecision/AccuracyGoal/MaxIterations (`N[FindRoot[...]]` makes them Real): `badopt` (P5, P10) | open |
-| A4 | FindRoot rejects a 1 × 1 matrix `Jacobian -> {{g[x]}}` ("non-real derivative") (P5) | open |
-| A5 | FindRoot secant at WP 100 diverges where |f| ~ 1e867 (P5 m1, and so all of m2) | open |
-| A6 | machine FindRoot on L_1000 (|f| ~ 1e867) fails after 3.3 s instead of escalating (P5) | open |
-| A7 | FindMinimum at WorkingPrecision 30 returns a machine-precision minimum value; MPFR bracket-finding fails on an InterpolatingFunction (P10) | open |
-| A8 | `InterpolatingFunction[...]["Domain"]` (and the other property queries) unevaluated (P10) | open |
+| A1 | NDSolve carries `HoldAll`, so `NDSolve[ode, ...]` with the equations in a variable fails with `NDSolve::nodeqs` (P10) | **fixed v0.6232** |
+| A2 | FindMinimum `{t, t0, t1}` (two starting points) read as a constraint: `FindMinimum::nimpl` (P10) | **fixed v0.6230** |
+| A3 | FindRoot/FindMinimum reject Real-valued WorkingPrecision/AccuracyGoal/MaxIterations (`N[FindRoot[...]]` makes them Real): `badopt` (P5, P10) | **fixed v0.6228** |
+| A4 | FindRoot rejects a 1 × 1 matrix `Jacobian -> {{g[x]}}` ("non-real derivative") (P5) | **fixed v0.6228** |
+| A5 | FindRoot secant at WP 100 diverges where |f| ~ 1e867 (P5 m1, and so all of m2) | **fixed v0.6228** |
+| A6 | machine FindRoot on L_1000 (|f| ~ 1e867) fails after 3.3 s instead of escalating (P5) | **fixed v0.6228** |
+| A7 | FindMinimum at WorkingPrecision 30 returns a machine-precision minimum value; MPFR bracket-finding fails on an InterpolatingFunction (P10) | **fixed v0.6233 (value precision: the number carries 30 digits; the printer drops trailing zeros, see P1)** |
+| A8 | `InterpolatingFunction[...]["Domain"]` (and the other property queries) unevaluated (P10) | **fixed v0.6231** |
+| A10 | the printer drops trailing zeros of arbitrary-precision reals: `N[1, 30]` prints `1.0` (P10) | open |
 | A9 | `Precision[matrix]` maps over the elements instead of returning the minimum (P1) | open |
 
 ### Absences
