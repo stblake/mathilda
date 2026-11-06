@@ -159,8 +159,8 @@ argument/option handling, then absences, then bottlenecks.
 | B4 | 800-digit 256 × 256 Dot (power method) (P1 m2) | 11.1 s | 7.9 s | **fixed v0.6242 (800-digit power method 11.1 s -> ~3 s)** |
 | B5 | MPFR Eigenvalues at 20–40 digits, 64 × 64 nonsymmetric (P9 Nyström) | 640 ms | 323 ms | **fixed v0.6250-v0.6253** (Nystrom wp20 3.9 s -> 0.32 s same host; wp40 0.50 s vs 0.39 s still SLOWER) |
 | B6 | contour NIntegrate of L'_1000/L_1000 at 100 digits (P5 RootCount): the integrand is evaluated symbolically once, which expands LaguerreL[1000, rho E^(I phi)] into its degree-1000 polynomial (~93 ms and ~250 digits of cancellation per sample); needs sampling of the unexpanded form or precision-loss detection | > 120 s | unevaluated (same expansion) | open |
-| B7 | `NSolve[LaguerreL[1000, x] == 0, x, WorkingPrecision -> 50]` | > 600 s | > 120 s | open |
-| B8 | GroebnerBasis with CoefficientDomain -> InexactNumbers (P6) | 18.5 ms | 11.2 ms | open |
+| B7 | `NSolve[LaguerreL[1000, x] == 0, x, WorkingPrecision -> 50]` | > 600 s | > 120 s | **fixed v0.6254 (> 600 s -> 4-9 s)** |
+| B8 | GroebnerBasis with CoefficientDomain -> InexactNumbers (P6) | 18.5 ms | 11.2 ms | **fixed v0.6255 (70 -> 18 ms same load)** |
 | B9 | NIntegrate at 60 digits on x^2 PolyLog[3, 1/(x+1)] (P8): PolyLog[3, z] near z = 1 costs ~20 ms per call at 80 digits | 1.6 s | 1.1 s | open |
 | B11 | P2 after the W1/W4 fixes: machine 71 ms, WP 30 117 ms, WP 50 805 ms, WP 100 3.1 s, ProductLog machine/WP 30 677/1406 ms (load ~100) | | 6.7 / 12 / 31 / 118 / 24 / 88 ms | open (agent) |
 | B10 | the polar ODE derivation: Together/Numerator/Factor of a trig rational (P10) | 4.2 ms | 2.8 ms | open |
@@ -182,7 +182,7 @@ The holdout ([`ISSAC97_HOLDOUT.md`](ISSAC97_HOLDOUT.md)) at v0.6225: 127 AHEAD,
 | NSum | h3.2, h3.4, h3.6, h3.7, h3.8 machine wrong; h3.2/3.4/3.7/3.8 wp30 timeouts | open |
 | SeriesCoefficient / Residue | h4.4, h4.8, h4.9 (Tan, k = 401) wrong; h4.5 Residue timeout; h4.10 Residue wrong | **fixed v0.6245–v0.6247** (all correct; h4.8 283 ms vs 106 ms still SLOWER) |
 | FindRoot / special functions (agent) | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | open |
-| NSolve | h6.5, h6.7 machine: solutions missing | open (NSolve agent) |
+| NSolve | h6.5, h6.7 machine: solutions missing | **fixed v0.6256** (all ten systems complete; h6.5 91 ms vs 98.5) |
 | Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | **fixed v0.6248** (h7.2 4096/729, h7.3 9765625/1048576, h7.10 1/64; the h7.3 machine point was the baseline wrong) |
 | N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | open |
 | Integrate | h8.5, h8.8 unevaluated | open (agent) |
