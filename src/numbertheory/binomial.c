@@ -12,6 +12,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "checked_int.h"  /* ci_mul_i64 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -357,6 +358,25 @@ Expr* builtin_binomial(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* arg_n = res->data.function.args[0];
     Expr* arg_m = res->data.function.args[1];
+
+    /* --- (0) machine integers, 0 <= m <= n: C(n, k), k = min(m, n - m), by
+     * C(n - k + i, i) = C(n - k + i - 1, i - 1) (n - k + i) / i, each division
+     * exact; an overflowing product falls through to GMP.  A table of
+     * binomials (an inverse Hilbert matrix: three per entry) paid two mpz
+     * conversions and an mpz binomial per call for word-sized answers. --- */
+    if (arg_n->type == EXPR_INTEGER && arg_m->type == EXPR_INTEGER) {
+        int64_t n = arg_n->data.integer, m = arg_m->data.integer;
+        if (n >= 0 && m >= 0 && m <= n) {
+            int64_t k = (n - m < m) ? n - m : m;
+            int64_t r = 1, t;
+            bool ovf = false;
+            for (int64_t i = 1; i <= k && !ovf; i++) {
+                ovf = ci_mul_i64(r, n - k + i, &t);
+                r = t / i;
+            }
+            if (!ovf) return expr_new_integer(r);
+        }
+    }
 
     /* --- (1) exact integer / integer path. --- */
     if (expr_is_integer_like(arg_n) && expr_is_integer_like(arg_m)) {

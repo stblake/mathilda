@@ -198,6 +198,14 @@ int main(void) {
     assert_eval_eq("Binomial[355, 150] == Binomial[355, 205]", "True", 0);
     assert_eval_eq("Binomial[3000, 1500] == 3000!/(1500!)^2", "True", 0);
     assert_eval_eq("{Binomial[300, 301], Binomial[300, -1], Binomial[0, 0]}", "{0, 0, 1}", 0);
+    /* the machine-word path: values near and past 2^63 (an overflowing step
+     * hands over to GMP), against the factorial quotient */
+    assert_eval_eq("{Binomial[19, 9], Binomial[62, 31], Binomial[66, 33], Binomial[67, 33], "
+                   "Binomial[1000, 3], Binomial[10^6, 2], Binomial[5, 0], Binomial[5, 5], Binomial[3, 5]}",
+                   "{92378, 465428353255261088, 7219428434016265740, 14226520737620288370, "
+                   "166167000, 499999500000, 1, 1, 0}", 0);
+    assert_eval_eq("Union[Flatten[Table[Binomial[n, k] == n!/(k! (n - k)!), {n, 0, 70}, {k, 0, n}]]]",
+                   "{True}", 0);
     assert_eval_eq("Binomial[-5, 3]", "-35", 0);
     assert_eval_eq("Binomial[-300, 4] == (-300) (-301) (-302) (-303)/24", "True", 0);
     assert_eval_eq("{Binomial[-1, -1], Binomial[-2, -5]}", "{1, -4}", 0);
