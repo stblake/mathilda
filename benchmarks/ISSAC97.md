@@ -128,7 +128,7 @@ argument/option handling, then absences, then bottlenecks.
 | W11 | Equal/Less of arbitrary-precision reals use a machine-sized tolerance: `N[1 - 10^-20, 30] < 1` is False and `== 1` True (found via holdout 145) | **fixed v0.6286-v0.6288** (lowest-accuracy rule; exact cancellation keeps accuracy; FindInstance witness check) |
 | W12 | `N[expr, n]` with deep cancellation returned 0 or wrong digits silently (h7.4/h7.5/h7.8; two exact zeros counted as agreement) | **fixed v0.6283-v0.6284** (certified digits; N::meprec at the default cap, correct at $MaxExtraPrecision = 1000) |
 | W13 | `N[0, 30]` (and inexact zero parts such as Re of `N[Erf[I], 30]`) is an inexact zero `0.e-30` where an exact 0 is expected; `N[10^-7, 12]` stores no guard bits and displays its binary value `9.99999999999e-08` (found by the printer fix) | **fixed v0.6285** (exact zeros stay exact; N[10^-7, 12] is the correctly rounded 40-bit value, displayed correctly) |
-| W14 | printer follow-ups to v0.6264: a MachinePrecision number past the double range prints 15 digits with trailing zeros (`1.00000000000000e+400`, numloop_tests); a non-whole precision one digit short; MPFR -0 loses its sign | open (agent) |
+| W14 | printer follow-ups to v0.6264: a MachinePrecision number past the double range prints 15 digits with trailing zeros (`1.00000000000000e+400`, numloop_tests); a non-whole precision one digit short; MPFR -0 loses its sign | **fixed v0.6289** (digit count floor(L) - floor(L - p); a 53-bit number past the double range shows its digits; inexact zero unsigned) |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
