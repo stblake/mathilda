@@ -309,6 +309,11 @@ EXEMPT = {
                          "machine type); AWARE only to read a packed value tensor",
     "InterpolatingPolynomial": "returns a symbolic polynomial in x, not a machine "
                                "array (cf. CharacteristicPolynomial)",
+    "FunctionInterpolation": "HoldAll; samples a held expression into an "
+                             "InterpolatingFunction object (no compiled machine type)",
+    "GaussianQuadratureWeights": "builds an n x 2 rule from an integer order; no "
+                                 "element-wise numeric argument to lower",
+    "GaussianQuadratureError": "returns a symbolic error term, not a number",
     # Image / graphics heads.  An Image (or Graphics) object has no compiled
     # machine type, so a head that constructs one, queries one, or takes one as
     # its argument cannot lower -- the AWARE entry only lets the transparency

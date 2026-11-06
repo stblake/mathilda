@@ -1908,6 +1908,12 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     if (want_mpfr && bits <= 53) {
         CommonInexactInfo di = g_obj_cache.inexact;
         if (di.has_inexact && di.min_bits > 53) { bits = di.min_bits; machine_arg = true; }
+        /* Conversely, an arbitrary-precision argument on MACHINE data: the
+         * value can carry no more than machine precision, so it is the
+         * double kernel's answer.  (The MPFR kernels do not read a packed
+         * machine table, and this case used to stay unevaluated: a machine
+         * interpolant inside NIntegrate[..., WorkingPrecision -> 25].) */
+        else if (di.has_inexact) want_mpfr = false;
     }
     if (want_mpfr) {
         result = interp_eval_mpfr(domain, table, m, call_args, ders, orders, method, Ksupplied, periodic, bits);
@@ -3639,8 +3645,17 @@ void interp_init(void) {
      * each call -- an O(N) deep re-traversal that dominated per-point cost.
      * Holding them keeps the object a true normal form and makes evaluating it
      * O(1); the application's own argument `x` is still evaluated normally
-     * (attributes of the object head, not InterpolatingFunction, govern that). */
-    def->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+     * (attributes of the object head, not InterpolatingFunction, govern that).
+     *
+     * NHoldAll: the object is a self-contained approximation, so N and
+     * SetPrecision must leave its data alone.  Numericalizing it rewrote the
+     * domain and every node to the new precision and the result no longer
+     * evaluated: SetPrecision[k[y] ifun[y], 25] -- the integrand of an
+     * operator iteration -- became an expression with no numeric value.  The
+     * application's argument is still numericalized (it is an argument of
+     * the call ifun[y], not of the object), and the object's own kernels
+     * already compute at the precision of that argument and of its data. */
+    def->attributes |= ATTR_HOLDALL | ATTR_NHOLDALL | ATTR_PROTECTED;
 
     symtab_add_builtin("Interpolation", builtin_interpolation);
     SymbolDef* idef = symtab_get_def("Interpolation");

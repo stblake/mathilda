@@ -1152,6 +1152,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/dequad.c
     ../src/numerical_calculus/nresidue.c
     ../src/numerical_calculus/gaussquad.c
+    ../src/numerical_calculus/funcinterp.c
     ../src/numerical_calculus/nderiv.c
     ../src/numerical_calculus/nseries.c
     ../src/numerical_calculus/nlimit.c
@@ -1848,6 +1849,9 @@ target_include_directories(nresidue_tests PRIVATE ../src ../src/numerical_calcul
 
 add_executable(gaussquad_tests test_gaussquad.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(gaussquad_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(funcinterp_tests test_funcinterp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(funcinterp_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(nderiv_tests test_nderiv.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(nderiv_tests PRIVATE ../src ../src/numerical_calculus)

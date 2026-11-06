@@ -224,6 +224,8 @@ NUMERIC = {
     "FindRoot", "FindMinimum", "FindMaximum", "FindFit", "Fit",
     "Interpolation", "ListInterpolation", "InterpolatingPolynomial",
     "NMinimize", "NMaximize", "NLimit", "ND", "NResidue", "NSeries",
+    # a rule from an integer order; a held expression sampled into an object
+    "GaussianQuadratureWeights", "GaussianQuadratureError", "FunctionInterpolation",
     "RandomReal", "RandomInteger", "RandomComplex", "RandomVariate",
     "RandomChoice", "RandomSample", "RandomPrime",
 

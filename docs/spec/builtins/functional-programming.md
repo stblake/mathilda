@@ -171,6 +171,13 @@ whose values are found by interpolation, and — like `Function` — is evaluate
 by applying it to arguments. Any number of real arguments (dimensions) is
 supported.
 
+Attributes `{HoldAll, NHoldAll, Protected}`: `N` and `SetPrecision` leave the
+object's data alone (only the arguments of a call `ifun[x]` are numericalized),
+so `SetPrecision[k[x, y] ifun[y], 25]` is still a valid integrand. The value at
+an arbitrary-precision argument has the precision of the data: a machine table
+gives a machine number (computed by the double kernels), a table of `p`-digit
+values a `p`-digit number.
+
 - `domain`: one interval per dimension, `{{x1min, x1max}, ..., {xmmin, xmmax}}`.
   The number of intervals `m` is the dimensionality.
 - `table`: the data points, `{{coord1, val1}, {coord2, val2}, ...}`. For `m = 1`

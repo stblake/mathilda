@@ -246,6 +246,9 @@ SKIP_EXPLOSIVE = {
     "PolynomialGCD", "PolynomialLCM", "Roots", "NRoots", "NSolve",
     "RootReduce", "ToRadicals", "Discriminant", "Interpolation",
     "ListInterpolation", "InterpolatingPolynomial", "Fit", "FindFit",
+    # GaussianQuadratureWeights builds a rule from an integer order (no buffer
+    # argument); FunctionInterpolation samples a held expression into an object.
+    "GaussianQuadratureWeights", "GaussianQuadratureError", "FunctionInterpolation",
     "LatticeReduce", "FindIntegerNullVector", "Orthogonalize",
     # More symbolic engines, surfaced by the first --gate-only run at the n the
     # makefile actually uses (5000) rather than the 50000 the baseline below was

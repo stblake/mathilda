@@ -4,7 +4,8 @@ Numerical (as opposed to symbolic) calculus routines: the numerical derivative
 `ND`, numerical integration `NIntegrate`, numerical summation `NSum`, numerical
 products `NProduct`, numerical limits `NLimit`, the numerical series expansion
 `NSeries`, the numerical residue `NResidue`, the numerical differential-
-equation solver `NDSolve`, and Gauss–Legendre rules `GaussianQuadratureWeights`. They return machine-precision
+equation solver `NDSolve`, Gauss–Legendre rules `GaussianQuadratureWeights`,
+and adaptive sampling into an interpolant, `FunctionInterpolation`. They return machine-precision
 or arbitrary-precision (MPFR) numbers, and several succeed on inputs that the
 symbolic engine cannot close — essential singularities, non-elementary
 integrands, slowly-convergent or alternating sums, and limits with no closed
@@ -997,6 +998,58 @@ Out[2]= 1/2016000 (-a + b)^7 Derivative[6][f]
 Surfaces: not element-wise over numbers (it builds a rule from an integer
 order), so it has no NDArray kernel or `Compile[]` lowering; a machine rule is
 an `n x 2` real List, which packs.
+
+## FunctionInterpolation
+
+`FunctionInterpolation[expr, {x, xmin, xmax}]` samples `expr` at numeric `x`
+and returns an [`InterpolatingFunction`](functional-programming.md) that
+approximates it on `[xmin, xmax]`; `FunctionInterpolation[expr, {x, ...}, {y,
+...}, ...]` interpolates on a tensor-product grid. Attributes: `{HoldAll,
+Protected}` — `expr` is re-evaluated at every sample with the variables
+Block-localised to numbers, so an inner `NIntegrate[..., {y, 0, 1}]`, a
+`Module`, or a variable with a global value all work.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `InterpolationOrder` | `3` | order of the piecewise interpolant (1–20) |
+| `InterpolationPoints` | `11` | initial points per dimension (integer or one per dimension; at least order + 2) |
+| `InterpolationPrecision` | `Automatic` | precision of the stored values and sample coordinates; `Automatic`/`MachinePrecision` = machine reals |
+| `AccuracyGoal` | `Automatic` | `Automatic` = `Infinity` (no absolute criterion) |
+| `PrecisionGoal` | `Automatic` | `Automatic` = half the `InterpolationPrecision` (8 at machine precision) |
+| `MaxRecursion` | `6` | refinement passes |
+
+`SetOptions[FunctionInterpolation, ...]` changes the defaults.
+
+**Algorithm.** Each dimension starts from a uniform grid. A refinement pass
+estimates the interpolation error in every grid interval *without new
+samples*: along each grid line, the `(k+1)`-th divided difference over the
+`k + 2` points centred on the interval times the nodal polynomial of the
+`k + 1` points nearest its midpoint — the leading term of the order-`k`
+interpolation error there. An interval whose estimate exceeds
+`max(10^-AccuracyGoal, 10^-PrecisionGoal |f|)` on any grid line through it is
+bisected, and passes repeat until every interval meets the goals or
+`MaxRecursion` passes are made. Above machine precision the estimate is
+computed in MPFR, so goals beyond 16 digits are measurable. The object is built
+by `Interpolation[data, InterpolationOrder -> k]`, so evaluation, derivatives
+and property queries (`f["Grid"]`, `f["InterpolationOrder"]`, ...) are those
+of `InterpolatingFunction`.
+
+A sample that is not a real number emits `FunctionInterpolation::nreal` and
+leaves the call unevaluated; so do a non-real or empty range and malformed
+option values.
+
+```
+In[1]:= f = FunctionInterpolation[NIntegrate[Exp[x y], {y, 0, 1}], {x, 0, 1}];
+In[2]:= {f[0.3], (Exp[0.3] - 1)/0.3}
+Out[2]= {1.16196, 1.16196}
+
+In[3]:= g = FunctionInterpolation[Exp[x], {x, 0, 1}, InterpolationPrecision -> 30,
+          PrecisionGoal -> 25, InterpolationOrder -> 8];
+In[4]:= g[1/3] - Exp[1/3]     (* ~ 1e-29 *)
+```
+
+Surfaces: returns an `InterpolatingFunction` object from held symbolic input,
+so there is no packed/NDArray or `Compile[]` form.
 
 ## NRoots
 

@@ -270,6 +270,8 @@ extern const char* SYM_DimensionReducerFunction;
 extern const char* SYM_Interpolation;
 extern const char* SYM_ListInterpolation;
 extern const char* SYM_InterpolationOrder;
+extern const char* SYM_InterpolationPoints;
+extern const char* SYM_InterpolationPrecision;
 extern const char* SYM_PeriodicInterpolation;
 extern const char* SYM_GaussianIntegers;
 extern const char* SYM_GeneratedParameters;
