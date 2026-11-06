@@ -11,9 +11,41 @@
 #include <stdio.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
+/* An atomic pattern (a symbol, number or string) matches exactly the
+ * subexpressions structurally equal to it, so containment is a plain tree
+ * walk -- no MatchEnv, no matcher.  Expand[e, x] asks this at every node of e,
+ * and the matcher's per-call environment made the two-argument Expand of an
+ * already-expanded 5000-term sum ~7x slower than the one-argument one. */
+static bool patt_is_atom(const Expr* p) { return p->type != EXPR_FUNCTION; }
+
+static bool expr_contains_atom(const Expr* e, const Expr* atom) {
+    if (e->type == atom->type && expr_eq((Expr*)e, (Expr*)atom)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expr_contains_atom(e->data.function.head, atom)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_contains_atom(e->data.function.args[i], atom)) return true;
+    return false;
+}
+
+/* Alternatives[a1, a2, ...] of atoms (the pattern Coefficient builds for a
+ * multivariate form): true when every alternative is an atom. */
+static bool patt_is_atom_alternatives(const Expr* p) {
+    if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL ||
+        p->data.function.head->data.symbol.name != SYM_Alternatives) return false;
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (!patt_is_atom(p->data.function.args[i])) return false;
+    return true;
+}
+
 static bool expr_contains_patt(Expr* e, Expr* patt) {
     if (!patt) return true; // NULL pattern matches everything
-    
+    if (patt_is_atom(patt)) return expr_contains_atom(e, patt);
+    if (patt_is_atom_alternatives(patt)) {
+        for (size_t i = 0; i < patt->data.function.arg_count; i++)
+            if (expr_contains_atom(e, patt->data.function.args[i])) return true;
+        return false;
+    }
+
     MatchEnv* env = env_new();
     bool is_match = match(e, patt, env);
     env_free(env);
@@ -436,11 +468,13 @@ static Expr* expr_expand_impl(Expr* e, Expr* patt, bool overflow_mode) {
  * together.  Restricted to a node the evaluator has stamped as a fixed point,
  * so it is already canonical: internal callers also hand raw trees (Times[1, a]
  * from a FLINT conversion) that they rely on Expand to evaluate. */
-static bool times_already_expanded(const Expr* e) {
+static bool times_already_expanded(const Expr* e, Expr* patt) {
     if (eval_node_stamp(e) == 0) return false;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         const Expr* f = e->data.function.args[i];
         if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL) continue;
+        /* Expand[e, patt] leaves a factor free of patt as it is. */
+        if (patt && !expr_contains_patt((Expr*)f, patt)) continue;
         const char* h = f->data.function.head->data.symbol.name;
         if (h == SYM_Plus) return false;
         if (h == SYM_Power && f->data.function.arg_count == 2) {
@@ -467,7 +501,7 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
      * the classical re-multiplication.  Expanding an expanded sum used to
      * rebuild every product term factor by factor (issue #112: ~6 Times
      * evaluations per term of a 10395-term sum). */
-    if (patt == NULL && head == SYM_Times && times_already_expanded(e))
+    if (head == SYM_Times && times_already_expanded(e, patt))
         return expr_copy(e);
 
     /* Fast path: for a plain (single-argument) Expand of an arithmetic head,
@@ -636,6 +670,15 @@ static Expr* expr_expand_impl_b(Expr* e, Expr* patt, bool overflow_mode, bool bo
         if (exp->type == EXPR_INTEGER && exp->data.integer > 0) {
             int64_t n = exp->data.integer;
             Expr* exp_base = expr_expand_impl_b(base, patt, overflow_mode, child_bounded);
+            /* Nothing to distribute: a power of a non-sum that expanded to
+             * itself (x^k, Sin[x]^2) is already expanded, as a stamped fixed
+             * point.  Rebuilding it multiplied x by itself k times. */
+            if (exp_base == base && eval_node_stamp(e) != 0 &&
+                !(base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL &&
+                  base->data.function.head->data.symbol.name == SYM_Plus)) {
+                expr_free(exp_base);
+                return expr_copy(e);
+            }
             /* Reached only when the top-level FLINT fast path did not handle
              * this power (FLINT absent, a non-polynomial base, or a
              * pattern-restricted Expand).  Gate on the estimated result size and

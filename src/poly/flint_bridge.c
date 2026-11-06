@@ -348,14 +348,46 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                 return ok;
             }
             if (h == SYM_Times) {
-                fmpq_mpoly_one(out, ctx);
-                fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+                /* A balanced product tree, not a running product: multiplying
+                 * the accumulated product by one factor at a time re-reads the
+                 * whole (growing) product per factor, so Product[1 + x^k,
+                 * {k, 100}] cost ~n^2/2 coefficient operations on long
+                 * integers; pairing equal-sized operands lets the univariate
+                 * case reach FLINT's subquadratic dense multiplication and is
+                 * never worse in the multivariate one. */
+                if (n <= 2) {
+                    fmpq_mpoly_one(out, ctx);
+                    fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+                    int ok = 1;
+                    for (size_t i = 0; i < n && ok; i++) {
+                        ok = to_mpoly(e->data.function.args[i], t, ctx, vs);
+                        if (ok) fmpq_mpoly_mul(out, out, t, ctx);
+                    }
+                    fmpq_mpoly_clear(t, ctx);
+                    return ok;
+                }
+                fmpq_mpoly_struct* f = malloc(sizeof(fmpq_mpoly_struct) * n);
+                if (!f) return 0;
+                size_t m = 0;
                 int ok = 1;
                 for (size_t i = 0; i < n && ok; i++) {
-                    ok = to_mpoly(e->data.function.args[i], t, ctx, vs);
-                    if (ok) fmpq_mpoly_mul(out, out, t, ctx);
+                    fmpq_mpoly_init(f + m, ctx);
+                    ok = to_mpoly(e->data.function.args[i], f + m, ctx, vs);
+                    m++;
                 }
-                fmpq_mpoly_clear(t, ctx);
+                while (ok && m > 1) {
+                    size_t k = 0;
+                    for (size_t i = 0; i + 1 < m; i += 2) {
+                        fmpq_mpoly_mul(f + k, f + i, f + i + 1, ctx);
+                        k++;
+                    }
+                    if (m & 1) { fmpq_mpoly_swap(f + k, f + m - 1, ctx); k++; }
+                    for (size_t i = k; i < m; i++) fmpq_mpoly_clear(f + i, ctx);
+                    m = k;
+                }
+                if (ok) fmpq_mpoly_swap(out, f, ctx);
+                for (size_t i = 0; i < m; i++) fmpq_mpoly_clear(f + i, ctx);
+                free(f);
                 return ok;
             }
             if (h == SYM_Power) {
@@ -406,10 +438,76 @@ static Expr* expr_from_fmpq_local(const fmpq_t q) {
  * Plus[ Times[coeff, var^e, ...], ... ]. The evaluator canonicalises it after
  * the builtin returns, so we need not produce sorted/normal form here.
  */
+/* True when no rule can rewrite a Plus/Times/Power built here and `var` has
+ * no value: the canonical univariate form below is then the evaluator's own
+ * fixed point, so it may be stamped as one. */
+static bool univariate_canonical_ok(const char* var) {
+    if (symtab_up_value_count != 0) return false;
+    const char* hs[3] = { SYM_Plus, SYM_Times, SYM_Power };
+    for (int i = 0; i < 3; i++) {
+        SymbolDef* d = symtab_get_def(hs[i]);
+        if (!d || d->down_values || d->sub_values || d->own_values) return false;
+    }
+    SymbolDef* v = symtab_get_def(var);
+    return v && !v->own_values;
+}
+
+/* A univariate polynomial straight into its evaluated form: terms in
+ * ascending degree (the canonical order of c x^k terms is by degree alone),
+ * each c x^k as Times[c, Power[x, k]] (or x^k when c = 1), the variable node
+ * shared, and every compound node stamped as a fixed point.  Handing the raw
+ * tree to the evaluator instead re-evaluated every term and re-sorted the sum:
+ * for the 5051-term Expand[Product[1 + x^k, {k, 100}]] that was ~3/4 of the
+ * Expand.  NULL when the shortcut does not apply (caller builds the raw tree). */
+static Expr* mpoly_to_expr_univariate(const fmpq_mpoly_t P, const fmpq_mpoly_ctx_t ctx,
+                                      const char* var) {
+    if (!univariate_canonical_ok(var)) return NULL;
+    slong len = fmpq_mpoly_length(P, ctx);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)len);
+    if (!terms) return NULL;
+    Expr* x = expr_new_symbol(var);
+    fmpq_t c;
+    fmpq_init(c);
+    ulong ex[1];
+    /* FLINT stores the terms by descending degree. */
+    for (slong i = len - 1, t = 0; i >= 0; i--, t++) {
+        fmpq_mpoly_get_term_coeff_fmpq(c, P, i, ctx);
+        fmpq_mpoly_get_term_exp_ui(ex, P, i, ctx);
+        Expr* coef = expr_from_fmpq_local(c);
+        eval_mark_fixed_point(coef);                  /* Rational[n, d]: canonical */
+        if (ex[0] == 0) { terms[t] = coef; continue; }
+        Expr* pw;
+        if (ex[0] == 1) pw = expr_copy(x);
+        else {
+            Expr* pa[2] = { expr_copy(x), expr_new_integer((int64_t)ex[0]) };
+            pw = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
+            eval_mark_fixed_point(pw);
+        }
+        if (fmpq_is_one(c)) { expr_free(coef); terms[t] = pw; continue; }
+        Expr* ta[2] = { coef, pw };
+        terms[t] = expr_new_function(expr_new_symbol(SYM_Times), ta, 2);
+        eval_mark_fixed_point(terms[t]);
+    }
+    fmpq_clear(c);
+    expr_free(x);
+    Expr* out;
+    if (len == 1) out = terms[0];
+    else {
+        out = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)len);
+        eval_mark_fixed_point(out);
+    }
+    free(terms);
+    return out;
+}
+
 static Expr* mpoly_to_expr(const fmpq_mpoly_t P, const fmpq_mpoly_ctx_t ctx,
                            const VarSet* vs) {
     slong len = fmpq_mpoly_length(P, ctx);
     if (len == 0) return expr_new_integer(0);
+    if (vs->count == 1) {
+        Expr* u = mpoly_to_expr_univariate(P, ctx, vs->names[0]);
+        if (u) return u;
+    }
 
     slong nv = (slong)vs->count;
     ulong* exps = malloc(sizeof(ulong) * (size_t)(nv > 0 ? nv : 1));

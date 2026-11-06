@@ -175,6 +175,35 @@ void test_expand_opaque_kernels() {
     kexp_is("Length[Expand[(f[1] + f[2] + f[3] + f[4] + f[5] + f[6])^8]]", "1287");
 }
 
+/* Products of many factors (a balanced product tree in the FLINT bridge),
+ * the univariate result built directly in evaluated form, and Expand[e, x] /
+ * Coefficient on an already-expanded sum (no re-expansion).  Expected values
+ * are independent: Stirling numbers of the first kind, a telescoping
+ * product, and the count of partitions of 2525 into distinct parts <= 100
+ * (dynamic programming over the parts). */
+void test_expand_products_and_canonical_form() {
+    /* s(10, j), the signed Stirling numbers of the first kind */
+    kexp_is("CoefficientList[Expand[Product[x - k, {k, 0, 9}]], x]",
+            "{0, -362880, 1026576, -1172700, 723680, -269325, 63273, -9450, 870, -45, 1}");
+    kexp_is("Expand[(a + b) (a - b) (a^2 + b^2) (a^4 + b^4)]", "a^8 - b^8");
+    kexp_is("Expand[(1 - x) (1 + x) (1 + x^2) (1 + x^4) (1 + x^8)]", "1 - x^16");
+    kexp_is("Coefficient[Expand[Product[1 + x^k, {k, 100}]], x, 2525]",
+            "1731024005948725016633786324");
+    /* The direct univariate form is the evaluator's own: rebuilding every
+     * term and the sum from scratch must give the identical expression. */
+    kexp_is("With[{e = Expand[(1 - x)^7 (2 + 3 x)^3 (x/2 - 3/7)^2]}, "
+            "e === Plus @@ (Times @@ If[Head[#] === Times, List @@ #, {#}] & /@ List @@ e)]",
+            "True");
+    kexp_is("Expand[(x/2 - 3/7)^3]", "-27/343 + 27/98 x - 9/28 x^2 + 1/8 x^3");
+    kexp_is("Expand[(1 + x)^3 - x^3]", "1 + 3 x + 3 x^2");
+    kexp_is("Expand[(1 + x)^2 - 1]", "2 x + x^2");
+    /* Expand[e, x] of an expanded sum is the sum; free factors stay put. */
+    kexp_is("With[{e = Expand[(1 + x + y)^6]}, Expand[e, x] === e]", "True");
+    kexp_is("Expand[(a + b) x^2 (1 + x), x]", "(a + b) x^2 + (a + b) x^3");
+    kexp_is("Expand[(a + b)^2 x^3 + c x, x]", "c x + (a + b)^2 x^3");
+    kexp_is("Coefficient[Expand[(1 + x + y)^4], x, 2]", "6 + 12 y + 6 y^2");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -183,6 +212,7 @@ int main() {
     TEST(test_expand_flint_overflow);
     TEST(test_expand_all);
     TEST(test_expand_opaque_kernels);
+    TEST(test_expand_products_and_canonical_form);
 
     printf("All expand tests passed!\n");
     return 0;
