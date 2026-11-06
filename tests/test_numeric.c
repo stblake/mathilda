@@ -511,6 +511,92 @@ static void test_n_adaptive_precision(void) {
  * exact 0.0 produced by a cancellation never certifies itself, and a short
  * last step to the cap cannot agree on rounding noise. Expected values are
  * closed forms, not this code's output. */
+/* The MPFR elementary functions run through arb's ball arithmetic and keep a
+ * value only when the whole ball rounds to one number, so the answer must be
+ * bit for bit the correctly rounded value MPFR itself computes. */
+static void test_mpfr_elementary_bit_identical(void) {
+    typedef int (*Op)(mpfr_t, const mpfr_t, mpfr_rnd_t);
+    const Op ops[] = { mpfr_sin, mpfr_cos, mpfr_tan, mpfr_sinh, mpfr_cosh, mpfr_tanh,
+                       mpfr_atan, mpfr_asin, mpfr_acos, mpfr_atanh, mpfr_asinh, mpfr_acosh,
+                       mpfr_cot, mpfr_sec, mpfr_csc, mpfr_coth, mpfr_sech, mpfr_csch, mpfr_exp };
+    const char* names[] = { "sin", "cos", "tan", "sinh", "cosh", "tanh", "atan", "asin", "acos",
+                            "atanh", "asinh", "acosh", "cot", "sec", "csc", "coth", "sech", "csch",
+                            "exp" };
+    const long precs[] = { 65, 100, 197, 1000, 3001 };
+    /* x = num/den: small, moderate, near 1 (domain edges of asin/atanh), large */
+    const long nums[] = { 1, 3, 7, 999999, 1000001, 31, -5, 12345 };
+    const long dens[] = { 1000000007, 10, 9, 1000000, 1000000, 3, 4, 100 };
+    int checked = 0;
+    for (size_t o = 0; o < sizeof(ops) / sizeof(ops[0]); o++)
+        for (size_t pi = 0; pi < sizeof(precs) / sizeof(precs[0]); pi++)
+            for (size_t xi = 0; xi < sizeof(nums) / sizeof(nums[0]); xi++) {
+                mpfr_t x, ref;
+                mpfr_init2(x, precs[pi]);
+                mpfr_init2(ref, precs[pi]);
+                mpfr_set_si(x, nums[xi], MPFR_RNDN);
+                mpfr_div_si(x, x, dens[xi], MPFR_RNDN);
+                ops[o](ref, x, MPFR_RNDN);
+                Expr* in = expr_new_mpfr_copy(x);
+                Expr* got = numeric_mpfr_apply_unary(in, 0, ops[o]);
+                if (mpfr_nan_p(ref)) {
+                    ASSERT(got == NULL);
+                } else {
+                    ASSERT(got != NULL && got->type == EXPR_MPFR);
+                    if (!mpfr_equal_p(got->data.mpfr, ref)) {
+                        printf("FAIL: %s at %ld bits of %ld/%ld differs from MPFR\n",
+                               names[o], precs[pi], nums[xi], dens[xi]);
+                        ASSERT(0);
+                    }
+                    checked++;
+                }
+                if (got) expr_free(got);
+                expr_free(in);
+                mpfr_clear(x);
+                mpfr_clear(ref);
+            }
+    ASSERT(checked > 500);
+}
+
+/* An approximate argument cannot equal an exact table value: the inverse
+ * functions answer numerically (and the exact inputs still give exact angles). */
+static void test_inverse_trig_numeric_arguments(void) {
+    assert_eval_eq("ArcSin[1/2] === Pi/6", "True", 0);
+    assert_eval_eq("ArcTan[1] === Pi/4", "True", 0);
+    assert_eval_eq("ArcCos[-1/2] === 2 Pi/3", "True", 0);
+    assert_eval_eq("Abs[ArcSin[0.5] - Pi/6] < 10^-15", "True", 0);
+    assert_eval_eq("Abs[ArcCos[0.5] - Pi/3] < 10^-15", "True", 0);
+    assert_eval_eq("Abs[ArcTan[1.] - Pi/4] < 10^-15", "True", 0);
+    assert_eval_eq("Abs[ArcSin[N[1/2, 40]] - N[Pi/6, 45]] < 10^-39", "True", 0);
+    assert_eval_eq("Abs[ArcCot[N[1, 40]] - N[Pi/4, 45]] < 10^-39", "True", 0);
+    assert_eval_eq("Precision[ArcSin[N[1/2, 40]]] == 40", "True", 0);
+}
+
+/* N of a composition f[g[x]] repeats g's whole tree in every position of x in
+ * f; each distinct subexpression is evaluated once per pass.  Values deep in
+ * the cancellation (100 to 450 digits cancel), checked against independent
+ * 3000- and 6000-digit evaluations that agree to all digits shown. */
+static void test_n_composition_common_subexpressions(void) {
+    assert_eval_eq(
+        "f2[x_] = Tan[Sin[x]] - Sin[Tan[x]]; g2[x_] = Tan[Tanh[x]] - Tanh[Tan[x]]; "
+        "Block[{$MaxExtraPrecision = 1000}, Abs[N[f2[g2[x]]/g2[f2[x]] /. x -> 10^-6, 30] "
+        "- 5.618655692684505410761`25] < 10^-20]", "True", 0);
+    assert_eval_eq(
+        "f3[x_] = ArcTan[ArcTanh[ArcSin[x]]] + ArcTanh[ArcSin[ArcTan[x]]] + ArcSin[ArcTan[ArcTanh[x]]] "
+        "- ArcTan[ArcSin[ArcTanh[x]]] - ArcSin[ArcTanh[ArcTan[x]]] - ArcTanh[ArcTan[ArcSin[x]]] "
+        "- ArcTan[ArcSinh[ArcTanh[x]]] - ArcSinh[ArcTanh[ArcTan[x]]] - ArcTanh[ArcTan[ArcSinh[x]]] "
+        "+ ArcTan[ArcTanh[ArcSinh[x]]] + ArcTanh[ArcSinh[ArcTan[x]]] + ArcSinh[ArcTan[ArcTanh[x]]]; "
+        "g3[x_] = ArcSinh[ArcTanh[ArcSin[x]]] + ArcTanh[ArcSin[ArcSinh[x]]] + ArcSin[ArcSinh[ArcTanh[x]]] "
+        "- ArcSinh[ArcSin[ArcTanh[x]]] - ArcSin[ArcTanh[ArcSinh[x]]] - ArcTanh[ArcSinh[ArcSin[x]]] "
+        "- ArcTan[ArcSinh[ArcSin[x]]] - ArcSinh[ArcSin[ArcTan[x]]] - ArcSin[ArcTan[ArcSinh[x]]] "
+        "+ ArcTan[ArcSin[ArcSinh[x]]] + ArcSin[ArcSinh[ArcTan[x]]] + ArcSinh[ArcTan[ArcSin[x]]]; "
+        "Block[{$MaxExtraPrecision = 1000}, Abs[N[f3[g3[x]]/g3[f3[x]] /. x -> 10^-4, 30] "
+        "- 9.313225746154790314691`25] < 10^-20]", "True", 0);
+    assert_eval_eq(
+        "f10[x_] = Tan[Sin[Tan[Sin[x]]]] - Sin[Tan[Sin[Tan[x]]]]; g10[x_] = Sinh[Tanh[x]] - Tanh[Sinh[x]]; "
+        "Block[{$MaxExtraPrecision = 1000}, Abs[N[f10[g10[x]]/g10[f10[x]] /. x -> 10^-5, 30] "
+        "- 0.01562499996571180559310`25] < 10^-22]", "True", 0);
+}
+
 static void test_n_adaptive_certification(void) {
     /* E^1000 (E^(a - E^-1000) - E^a) = -E^a (1 - E^-1000/2 + ...): ~1450 bits
      * cancel. Was an exact 0.0 at every $MaxExtraPrecision. */
@@ -800,6 +886,9 @@ int main(void) {
     TEST(test_mpfr_complex_corner_cases);
     TEST(test_n_guard_bits_display);
     TEST(test_n_does_not_evaluate_held_arguments);
+    TEST(test_mpfr_elementary_bit_identical);
+    TEST(test_inverse_trig_numeric_arguments);
+    TEST(test_n_composition_common_subexpressions);
 #endif
 
     printf("All numeric_tests passed.\n");

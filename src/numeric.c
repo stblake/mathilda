@@ -1030,7 +1030,107 @@ static int g_n_held_depth = 0;
  * uninitialised. */
 static bool g_n_contagion = false;
 
+/* ---- common subexpressions within one numericalization pass --------------
+ *
+ * N of a composition substitutes whole expressions for a variable, so the
+ * same exact subtree recurs: f[g[x]] with a twelve-term g puts g's tree in
+ * every one of f's twelve leaf positions, and each pass of N's adaptive
+ * precision (at up to thousands of bits) re-evaluated every copy -- 468
+ * elementary-function calls at the precision where 72 distinct ones are the
+ * whole job.  A pass therefore memoizes the value of each call of a
+ * NumericFunction head (Plus, Times, Power, Sin, ArcTan, ...: pure functions
+ * of their numeric arguments, so evaluating a second identical copy can only
+ * give the same value again) keyed by the subtree's structure, the spec and
+ * the contagion mode.  The memo lives for one pass of numericalize_top --
+ * a nested numericalize_top, which reads the pass's cancellation statistics,
+ * gets its own -- so the statistics a hit skips were recorded by the first
+ * evaluation in the same pass. */
+typedef struct {
+    Expr* key;          /* owned copy (a refcount) of the exact subtree */
+    Expr* val;          /* owned numericalized value */
+    uint64_t h;
+    long bits;
+    int mode;
+    bool contagion;
+} NMemoEntry;
+
+typedef struct {
+    NMemoEntry* tab;    /* open addressing, cap a power of two */
+    size_t cap, count;
+} NMemo;
+
+static NMemo* g_nmemo = NULL;
+
+static bool nmemo_eligible(const Expr* e) {
+    if (!g_nmemo || g_n_held_depth > 0 || e->data.function.arg_count == 0) return false;
+    const Expr* h = e->data.function.head;
+    return h && h->type == EXPR_SYMBOL
+        && (get_attributes(h->data.symbol.name) & ATTR_NUMERICFUNCTION);
+}
+
+static Expr* nmemo_find(const Expr* e, uint64_t h, NumericSpec spec) {
+    NMemo* m = g_nmemo;
+    if (!m->cap) return NULL;
+    for (size_t i = (size_t)h & (m->cap - 1);; i = (i + 1) & (m->cap - 1)) {
+        NMemoEntry* t = &m->tab[i];
+        if (!t->key) return NULL;
+        if (t->h == h && t->bits == spec.bits && t->mode == (int)spec.mode
+            && t->contagion == g_n_contagion && expr_eq(t->key, (Expr*)e))
+            return expr_copy(t->val);
+    }
+}
+
+static void nmemo_put(const Expr* e, uint64_t h, NumericSpec spec, const Expr* val) {
+    NMemo* m = g_nmemo;
+    if (!val) return;
+    if (2 * (m->count + 1) > m->cap) {
+        size_t nc = m->cap ? 2 * m->cap : 64;
+        NMemoEntry* nt = (NMemoEntry*)calloc(nc, sizeof(NMemoEntry));
+        if (!nt) return;
+        for (size_t i = 0; i < m->cap; i++) {
+            if (!m->tab[i].key) continue;
+            size_t j = (size_t)m->tab[i].h & (nc - 1);
+            while (nt[j].key) j = (j + 1) & (nc - 1);
+            nt[j] = m->tab[i];
+        }
+        free(m->tab);
+        m->tab = nt;
+        m->cap = nc;
+    }
+    size_t j = (size_t)h & (m->cap - 1);
+    while (m->tab[j].key) j = (j + 1) & (m->cap - 1);
+    NMemoEntry* t = &m->tab[j];
+    t->key = expr_copy((Expr*)e);
+    t->val = expr_copy((Expr*)val);
+    t->h = h;
+    t->bits = spec.bits;
+    t->mode = (int)spec.mode;
+    t->contagion = g_n_contagion;
+    m->count++;
+}
+
+static void nmemo_clear(NMemo* m) {
+    for (size_t i = 0; i < m->cap; i++)
+        if (m->tab[i].key) { expr_free(m->tab[i].key); expr_free(m->tab[i].val); }
+    free(m->tab);
+    m->tab = NULL;
+    m->cap = m->count = 0;
+}
+
+static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec);
+static Expr* numericalize_pass(const Expr* e, NumericSpec spec);
+
 static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
+    if (!nmemo_eligible(e)) return numericalize_function_uncached(e, spec);
+    uint64_t h = expr_hash(e);
+    Expr* hit = nmemo_find(e, h, spec);
+    if (hit) return hit;
+    Expr* r = numericalize_function_uncached(e, spec);
+    nmemo_put(e, h, spec, r);
+    return r;
+}
+
+static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     /* An N rule on the head (h /: N[h[x_]] := ...) gives the whole call's value. */
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
         Expr* nv = n_value(e, e->data.function.head->data.symbol.name, spec);
@@ -2512,7 +2612,7 @@ Expr* numericalize_machine_unplanned(const Expr* e) {
     bool saved_contagion = g_n_contagion;
     g_n_held_depth = 0;
     g_n_contagion = false;
-    Expr* r = numericalize_rec(e, numeric_machine_spec());
+    Expr* r = numericalize_pass(e, numeric_machine_spec());
     g_n_held_depth = saved;
     g_n_contagion = saved_contagion;
     return r;
@@ -2531,11 +2631,23 @@ static Expr* numericalize_contagion(const Expr* e, NumericSpec spec) {
     return r;
 }
 
+/* One evaluation of `e` at `spec` with its own subexpression memo (see
+ * NMemo), restoring the enclosing pass's memo afterwards. */
+static Expr* numericalize_pass(const Expr* e, NumericSpec spec) {
+    NMemo memo = { NULL, 0, 0 };
+    NMemo* saved = g_nmemo;
+    g_nmemo = &memo;
+    Expr* r = numericalize_rec(e, spec);
+    g_nmemo = saved;
+    nmemo_clear(&memo);
+    return r;
+}
+
 static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     if (!e) return NULL;
 
 #ifndef USE_MPFR
-    return numericalize_rec(e, spec);
+    return numericalize_pass(e, spec);
 #else
     const bool from_n = g_numeric_from_n;
     g_numeric_from_n = false;
@@ -2548,7 +2660,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     long saved_cancel = g_numeric_cancel_bits;
     long saved_left = g_numeric_cancel_left;
     g_numeric_cancel_bits = 0;
-    Expr* r = numericalize_rec(e, work);
+    Expr* r = numericalize_pass(e, work);
     long cancelled = g_numeric_cancel_bits;
     /* Adaptive precision is the promise of the N builtin's N[expr, p] (the
      * capping mode is produced solely by N); internal working-precision
@@ -2593,7 +2705,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             g_numeric_cancel_bits = 0;
             g_numeric_cancel_left = LONG_MAX;
             g_numeric_reevaluations++;
-            Expr* cur = numericalize_rec(e, w);
+            Expr* cur = numericalize_pass(e, w);
             long Lc = g_numeric_cancel_bits;
             long Kc = g_numeric_cancel_left;
             if (Lc > cancelled) cancelled = Lc;
