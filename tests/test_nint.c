@@ -799,6 +799,22 @@ static void test_endpoint_cancellation_wp(void) {
                   "warned]", "ok");
 }
 
+/* Interior points where the integrand is not analytic are read off its
+ * Log/Abs/fractional-power arguments and become exact breakpoints at
+ * WorkingPrecision.  Closed forms: F(x) = x Log|x^2 - 2| - 2x + Sqrt[2]
+ * Log|(x + Sqrt[2])/(x - Sqrt[2])|; int Log|x - c| = (x - c)(Log|x - c| - 1);
+ * int (x - c) e^x = (x - c - 1) e^x. */
+static void test_interior_singular_points_wp(void) {
+    ASSERT_CLOSE("NIntegrate[Log[Abs[x^2 - 2]], {x, 0, 4}, WorkingPrecision -> 30]",
+                 "4 Log[14] - 8 + Sqrt[2] Log[(4 + Sqrt[2])/(4 - Sqrt[2])]", 1e-27);
+    ASSERT_CLOSE("NIntegrate[Log[Abs[x^2 - 2]], {x, 4, 0}, WorkingPrecision -> 30]",
+                 "-(4 Log[14] - 8 + Sqrt[2] Log[(4 + Sqrt[2])/(4 - Sqrt[2])])", 1e-27);
+    ASSERT_CLOSE("NIntegrate[Log[Abs[x - Pi/3]], {x, 0, 4}, WorkingPrecision -> 30]",
+                 "(Pi/3) (Log[Pi/3] - 1) + (4 - Pi/3) (Log[4 - Pi/3] - 1)", 1e-27);
+    ASSERT_CLOSE("NIntegrate[Abs[x - 1/3] Exp[x], {x, 0, 1}, WorkingPrecision -> 30]",
+                 "2 E^(1/3) - E/3 - 4/3", 1e-27);
+}
+
 static void test_symbolic_swell(void) {
     /* Symbolic processing that swells the integrand is not used when the held
      * integrand samples numerically.  Expanding LegendreP[200, x]^2 gives a
@@ -870,6 +886,7 @@ int main(void) {
     TEST(test_narrow_features_wp);
     TEST(test_symbolic_swell);
     TEST(test_endpoint_cancellation_wp);
+    TEST(test_interior_singular_points_wp);
 
     printf("All nint_tests passed.\n");
     return 0;

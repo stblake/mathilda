@@ -3172,6 +3172,135 @@ static bool ni_check_numeric(Expr* body, const char* var, double a, double b) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Interior points of non-analyticity at WorkingPrecision             *
+ * ------------------------------------------------------------------ *
+ *
+ * Every arbitrary-precision rule here converges geometrically only for an
+ * integrand analytic inside the interval; tanh-sinh and Clenshaw-Curtis absorb
+ * singularities at the ENDPOINTS, not inside.  Log[Abs[x^2 - 2]] on [0, 4] has
+ * a logarithmic singularity at Sqrt[2], so at 30 digits every rule stalled near
+ * 5 correct digits and NIntegrate returned 3.6013587 for 3.6013302 (after 7 s
+ * of levels); split at Sqrt[2], the same rules take 5 ms.  (The machine path
+ * finds such a point by adaptive bisection, which the doubled cost of each
+ * MPFR panel does not allow.)
+ *
+ * The points are read off the integrand: Log[u], Abs[u] and u^p (p not a
+ * non-negative integer: poles, roots, fractional powers) are non-analytic
+ * where u = 0, so for each such u that is a polynomial in the variable with
+ * numeric coefficients, its real roots inside (a, b) become breakpoints.  The
+ * roots are kept exact (Sqrt[2], Root objects), so the MPFR endpoint of each
+ * piece is the singular point to the working precision (ni_endpoint_mpfr). */
+#define NI_SING_MAX 32
+#define NI_SING_MAX_DEGREE 24
+
+#ifdef USE_MPFR
+
+static Expr* ni_ev(const char* head, Expr** args, size_t n, const char* var);
+static bool ni_free_of_var(const Expr* e, const char* var) { return !levin_occurs(e, var); }
+
+static void ni_sing_collect(const Expr* e, const char* var, Expr** us, int* nu) {
+    if (!e || e->type != EXPR_FUNCTION || *nu >= NI_SING_MAX) return;
+    const Expr* hd = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    const Expr* u = NULL;
+    if (hd->type == EXPR_SYMBOL) {
+        const char* h = hd->data.symbol.name;
+        if ((h == SYM_Log || h == SYM_Abs) && n == 1) u = e->data.function.args[0];
+        else if (h == SYM_Power && n == 2) {
+            const Expr* p = e->data.function.args[1];
+            bool nonneg_int = (p->type == EXPR_INTEGER && p->data.integer >= 0);
+            double pd;
+            if (!nonneg_int && ni_free_of_var(p, var) && ni_to_double_real((Expr*)p, &pd))
+                u = e->data.function.args[0];
+        }
+    }
+    if (u && !ni_free_of_var(u, var)) {
+        bool dup = false;
+        for (int i = 0; i < *nu && !dup; i++) dup = expr_eq(us[i], (Expr*)u);
+        if (!dup) us[(*nu)++] = expr_copy((Expr*)u);
+    }
+    ni_sing_collect(hd, var, us, nu);
+    for (size_t i = 0; i < n; i++) ni_sing_collect(e->data.function.args[i], var, us, nu);
+}
+
+/* Exact real roots in (a, b) of the polynomial factors of the integrand's
+ * singular arguments, sorted, appended to roots[] (owned) with their doubles. */
+static int ni_interior_singular_points(Expr* body, const char* var, double a, double b,
+                                       Expr** roots, double* vals, int maxn) {
+    Expr* us[NI_SING_MAX];
+    int nu = 0, nr = 0;
+    ni_sing_collect(body, var, us, &nu);
+    for (int i = 0; i < nu; i++) {
+        Expr* u = us[i];
+        Expr* pq = ni_ev(SYM_PolynomialQ, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
+        bool poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
+        expr_free(pq);
+        if (poly) {
+            Expr* dg = ni_ev(SYM_Exponent, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
+            poly = dg && dg->type == EXPR_INTEGER && dg->data.integer >= 1
+                   && dg->data.integer <= NI_SING_MAX_DEGREE;
+            expr_free(dg);
+        }
+        /* numeric coefficients only: the roots must be numbers */
+        if (poly) {
+            Expr* vs = ni_ev(SYM_Variables, (Expr*[]){ expr_copy(u) }, 1, var);
+            poly = vs && vs->type == EXPR_FUNCTION && vs->data.function.arg_count == 1;
+            expr_free(vs);
+        }
+        if (!poly) continue;
+        Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                                     (Expr*[]){ expr_copy(u), expr_new_integer(0) }, 2);
+        Expr* sol = ni_ev(SYM_Solve, (Expr*[]){ eq, expr_new_symbol(var),
+                                                expr_new_symbol(SYM_Reals) }, 3, var);
+        if (sol && sol->type == EXPR_FUNCTION && sol->data.function.head->type == EXPR_SYMBOL
+            && sol->data.function.head->data.symbol.name == SYM_List) {
+            for (size_t j = 0; j < sol->data.function.arg_count && nr < maxn; j++) {
+                Expr* rs = sol->data.function.args[j];
+                if (rs->type != EXPR_FUNCTION || rs->data.function.arg_count != 1) continue;
+                Expr* r = rs->data.function.args[0];
+                if (r->type != EXPR_FUNCTION || r->data.function.arg_count != 2
+                    || r->data.function.head->type != EXPR_SYMBOL
+                    || r->data.function.head->data.symbol.name != SYM_Rule)
+                    continue;
+                Expr* val = r->data.function.args[1];
+                /* the double of the correctly rounded value: ni_endpoint_mpfr
+                 * matches the piece endpoint to its exact node by this double */
+                NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = 160;
+                Expr* num = numericalize(val, sp);
+                double rv = NAN;
+                bool in = false;
+                if (num) {
+                    mpfr_t re, im;
+                    mpfr_inits2(160, re, im, (mpfr_ptr)0);
+                    bool inexact;
+                    if (get_approx_mpfr(num, re, im, &inexact) && mpfr_zero_p(im)
+                        && mpfr_number_p(re)) {
+                        rv = mpfr_get_d(re, MPFR_RNDN);
+                        in = rv > a + 1e-12 * (b - a) && rv < b - 1e-12 * (b - a);
+                    }
+                    mpfr_clears(re, im, (mpfr_ptr)0);
+                }
+                expr_free(num);
+                for (int k = 0; in && k < nr; k++)
+                    if (fabs(vals[k] - rv) <= 1e-14 * (1.0 + fabs(rv))) in = false;
+                if (!in) continue;
+                /* insertion sort by value */
+                int k = nr;
+                while (k > 0 && vals[k - 1] > rv) {
+                    vals[k] = vals[k - 1]; roots[k] = roots[k - 1]; k--;
+                }
+                vals[k] = rv; roots[k] = expr_copy(val);
+                nr++;
+            }
+        }
+        expr_free(sol);
+    }
+    for (int i = 0; i < nu; i++) expr_free(us[i]);
+    return nr;
+}
+#endif /* USE_MPFR */
+
+/* ------------------------------------------------------------------ *
  *  Phase substitution for a power-law phase                           *
  * ------------------------------------------------------------------ *
  *
@@ -3483,6 +3612,38 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
                 return ps;
             }
         }
+#ifdef USE_MPFR
+        /* interior points of non-analyticity, split exactly at WorkingPrecision */
+        if (real_finite && o.prec_mpfr && o.method == NI_AUTO && nspecs == 1
+            && !o.exclusions && a != b) {
+            Expr* roots[NI_SING_MAX];
+            double vals[NI_SING_MAX];
+            double lo = a < b ? a : b, hi = a < b ? b : a;
+            int nr = ni_interior_singular_points(eff_body, var, lo, hi, roots, vals,
+                                                 NI_SING_MAX);
+            if (nr > 0) {
+                double _Complex nodes[NI_SING_MAX + 2];
+                Expr* enodes[NI_SING_MAX + 2];
+                int nn = 0;
+                bool rev = a > b;
+                nodes[nn] = a; enodes[nn++] = spec0->data.function.args[1];
+                for (int i = 0; i < nr; i++) {
+                    int k = rev ? nr - 1 - i : i;
+                    nodes[nn] = vals[k]; enodes[nn++] = roots[k];
+                }
+                nodes[nn] = b; enodes[nn++] = spec0->data.function.args[2];
+                NiOpts os = o;
+                os.spec_nodes = enodes;
+                os.spec_nnodes = (size_t)nn;
+                out = ni_run_contour(eff_body, var, nodes, nn, &os);
+                for (int i = 0; i < nr; i++) expr_free(roots[i]);
+                expr_free(amin);
+                expr_free(amax);
+                expr_free(inner);
+                return out;
+            }
+        }
+#endif
         if (real_finite && (o.method == NI_PV || o.exclusions)) {
             double lo = a < b ? a : b, hi = a < b ? b : a;
             ni_extract_points(o.exclusions, var, lo, hi, pts, &npts, 64);
