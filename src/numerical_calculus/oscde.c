@@ -15,14 +15,107 @@
 
 #include "oscde.h"
 
-#ifdef USE_MPFR
-
 #include <math.h>
 #include <stdlib.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+/* ------------------------------------------------------------------ *
+ *  Machine precision                                                  *
+ * ------------------------------------------------------------------ */
+
+/* (φ(t), φ'(t)) in double.  ψ = -2t - α(1 - e^-t) - β(e^t - 1) runs from +∞
+ * (t → -∞) to -∞; D = 1 - e^ψ.  For ψ > 0 the form is rescaled by q = e^-ψ so
+ * nothing overflows short of the horizon: φ = -t q/(1 - q),
+ * φ' = q (t ψ' - (1 - q))/(1 - q)^2; for ψ <= 0, D = -expm1(ψ) keeps the
+ * small-t cancellation exact.  Returns false past the horizon (φ' underflowed). */
+static bool oscde_phi_d(double t, double alpha, double beta,
+                        double* phi, double* phip) {
+    if (t == 0.0) {
+        double sig = 2.0 + alpha + beta;
+        *phi = 1.0 / sig;
+        *phip = ((alpha - beta) + sig * sig) / (2.0 * sig * sig);
+        return true;
+    }
+    double ep = exp(t), em = exp(-t);
+    double psi = -2.0 * t - alpha * (1.0 - em) - beta * (ep - 1.0);
+    double psip = -2.0 - alpha * em - beta * ep;
+    if (!isfinite(psi) || psi > 700.0) return false;
+    if (psi > 0.0) {
+        double q = exp(-psi), omq = -expm1(-psi);
+        *phi = -t * q / omq;
+        *phip = q * (t * psip - omq) / (omq * omq);
+    } else {
+        double D = -expm1(psi), Dp = -exp(psi) * psip;
+        *phi = t / D;
+        *phip = (D - t * Dp) / (D * D);
+    }
+    return isfinite(*phi) && isfinite(*phip);
+}
+
+bool oscde_fourier_machine(DeQuadSampleMachine f, void* ctx, double omega,
+                           OscDeKind kind, double reltol, int max_levels,
+                           long max_eval, double _Complex* out, double* abserr) {
+    *out = 0.0; *abserr = INFINITY;
+    if (!(omega > 0.0)) return false;
+    if (reltol <= 0.0) reltol = 1e-10;
+    if (max_levels < 3) max_levels = 3;
+    const double beta = 0.25, off = (kind == OSCDE_COS) ? 0.5 : 0.0;
+    const double drop = reltol * 1.0e-2;
+    const int QUIT = 4;
+    double _Complex prev = 0.0;
+    double Dprev = INFINITY;
+    long evals = 0;
+    double h = 1.0;
+    for (int level = 0; level < max_levels; level++, h *= 0.5) {
+        double M = M_PI / h;
+        double alpha = beta / sqrt(1.0 + M * log(1.0 + M) / (2.0 * M_PI));
+        double _Complex sum = 0.0;
+        double maxterm = 0.0;
+        for (int dir = 1; dir >= -1; dir -= 2) {
+            int streak = 0;
+            for (long k = (dir > 0 ? 0 : -1); ; k += dir) {
+                if (max_eval > 0 && ++evals > max_eval) return false;
+                double t = ((double)k + off) * h, phi, phip, tm = 0.0;
+                if (oscde_phi_d(t, alpha, beta, &phi, &phip)) {
+                    double x = M * phi / omega;
+                    double _Complex v;
+                    if (isfinite(x) && f(ctx, x, &v)
+                        && isfinite(creal(v)) && isfinite(cimag(v))) {
+                        double _Complex term = v * (M_PI / omega) * phip;
+                        sum += term;
+                        tm = cabs(term);
+                    }
+                } else if (dir < 0) {
+                    break;                     /* left horizon: φ' is gone */
+                }
+                if (tm > maxterm) maxterm = tm;
+                if (tm <= drop * maxterm) { if (++streak >= QUIT) break; }
+                else streak = 0;
+            }
+        }
+        *out = sum;
+        if (level > 0) {
+            double d = fabs(creal(sum - prev)) + fabs(cimag(sum - prev));
+            *abserr = d;
+            /* digit-growth extrapolation, as in oscde_fourier_mpfr */
+            double S1 = fabs(creal(sum)) + fabs(cimag(sum));
+            double D1 = log2(d) - log2(S1), lest = D1;
+            if (level >= 3 && D1 < Dprev && Dprev < 0.0) {
+                double r = D1 / Dprev;
+                lest = D1 * (r < 2.0 ? r : 2.0);
+            }
+            if (level >= 2 && (d <= reltol * S1 || lest <= log2(reltol))) return true;
+            Dprev = D1;
+        }
+        prev = sum;
+    }
+    return false;
+}
+
+#ifdef USE_MPFR
 
 /* Scratch temporaries reused across every node of a level (no per-node MPFR
  * alloc/free). */
@@ -165,6 +258,15 @@ static void oscde_level(OscDeScratch* s, DeQuadSampleMPFR f, void* ctx,
     mpfr_set(out_im, s->si, MPFR_RNDN);
 }
 
+/* log2 |x| over the full MPFR exponent range (-inf for 0). */
+static double oscde_log2(mpfr_srcptr x) {
+    if (mpfr_zero_p(x)) return -INFINITY;
+    if (!mpfr_number_p(x)) return INFINITY;
+    long e;
+    double m = mpfr_get_d_2exp(&e, x, MPFR_RNDN);
+    return log2(fabs(m)) + (double)e;
+}
+
 bool oscde_fourier_mpfr(DeQuadSampleMPFR f, void* ctx, double omega,
                         OscDeKind kind, long bits, double reltol,
                         int max_levels, mpfr_t out_re, mpfr_t out_im,
@@ -179,6 +281,7 @@ bool oscde_fourier_mpfr(DeQuadSampleMPFR f, void* ctx, double omega,
     mpfr_t cur_re, cur_im, prev_re, prev_im;
     mpfr_inits2((mpfr_prec_t)bits, cur_re, cur_im, prev_re, prev_im,
                 (mpfr_ptr)0);
+    double Dprev = INFINITY;          /* log2 relative difference, last level */
 
     double h = 1.0;                       /* halved each level */
     double err = INFINITY;
@@ -205,7 +308,22 @@ bool oscde_fourier_mpfr(DeQuadSampleMPFR f, void* ctx, double omega,
             mpfr_abs(s.w,    cur_im, MPFR_RNDN);
             mpfr_add(s.tmp2, s.tmp2, s.w, MPFR_RNDN);         /* |S|₁ */
             mpfr_mul_d(s.tmp2, s.tmp2, reltol, MPFR_RNDN);
-            if (level >= 2 && mpfr_cmp(s.tmp1, s.tmp2) <= 0) conv = true;
+            /* The digits grow geometrically per halving (doubling, at best):
+             * once the level differences shrink, the error of this level is
+             * extrapolated from their growth, log e_L = D_L min(D_L/D_{L-1}, 2)
+             * with D the log relative difference (the standard DE estimate),
+             * instead of waiting for d_{L+1} -- which saves the confirming
+             * level, half the nodes, each a transform plus a sample. */
+            double lS = oscde_log2(s.tmp2) - log2(reltol);       /* log2 |S|₁ */
+            double D1 = oscde_log2(s.tmp1) - lS;
+            double lest = D1;
+            if (level >= 3 && D1 < Dprev && Dprev < 0.0) {
+                double r = D1 / Dprev;
+                lest = D1 * (r < 2.0 ? r : 2.0);
+            }
+            if (level >= 2 && (mpfr_cmp(s.tmp1, s.tmp2) <= 0 || lest <= log2(reltol)))
+                conv = true;
+            Dprev = D1;
         }
         mpfr_set(prev_re, cur_re, MPFR_RNDN);
         mpfr_set(prev_im, cur_im, MPFR_RNDN);

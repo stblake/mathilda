@@ -28,14 +28,23 @@
 #define MATHILDA_OSCDE_H
 
 #include <stdbool.h>
-
-#ifdef USE_MPFR
-#include <mpfr.h>
-#include "dequad.h"   /* DeQuadSampleMPFR */
+#include "dequad.h"   /* DeQuadSampleMachine / DeQuadSampleMPFR */
 
 /* Kind of oscillation, selecting the node grid (integer for sine so a node
  * lands on every zero kπ/ω; half-integer for cosine, zeros at (k+½)π/ω). */
 typedef enum { OSCDE_SIN, OSCDE_COS } OscDeKind;
+
+/* The machine-precision rule: same transformation and level schedule as
+ * oscde_fourier_mpfr, in double.  *out receives the last level's sum; returns
+ * true when two successive levels (from the third on) agree to reltol, false
+ * otherwise or once max_eval (> 0) samples have been spent, so the caller can
+ * fall back to another method. */
+bool oscde_fourier_machine(DeQuadSampleMachine f, void* ctx, double omega,
+                           OscDeKind kind, double reltol, int max_levels,
+                           long max_eval, double _Complex* out, double* abserr);
+
+#ifdef USE_MPFR
+#include <mpfr.h>
 
 /* Compute I = ∫_0^∞ f(x) dx where f oscillates as {sin|cos}(ω x) (ω > 0) at
  * `bits` precision.  (out_re,out_im) must be pre-initialised by the caller.

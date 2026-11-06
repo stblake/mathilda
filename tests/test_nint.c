@@ -697,6 +697,29 @@ static void test_contour_wp_compiled(void) {
                   "MaxRecursion -> 14]]/(2 Pi) - 46189/262144] < 10^-20", "True");
 }
 
+/* ---- Fourier integrals and smooth WorkingPrecision integrals ----
+ * Machine precision: a well-aligned amp(x) {Sin|Cos}[w x] on [0, oo) runs the
+ * Ooura-Mori rule (it used to fall to integrate-between-the-zeros, 2e-9 off on
+ * Sin[1/x]).  Closed forms: int_0^oo Cos[x]/(1+x)^2 = 1 - Sin[1] Ci(1) - Cos[1]
+ * (Pi/2 - Si(1)) (by parts); Sin[1] - Ci(1); Gamma[4/3]/2.  WorkingPrecision:
+ * the bounded Clenshaw-Curtis probe on analytic integrands, the weak-oscillation
+ * Levin gate (first lobe of Sin[x^3]); references from 50-digit mpmath quad. */
+static void test_fourier_and_smooth_wp(void) {
+    ASSERT_REL("NIntegrate[Cos[x]/(1 + x)^2, {x, 0, Infinity}]",
+               "1 - Sin[1] CosIntegral[1] - Cos[1] (Pi/2 - SinIntegral[1])", "10^-12");
+    ASSERT_REL("NIntegrate[Sin[1/x], {x, 0, 1}]", "Sin[1] - CosIntegral[1]", "10^-12");
+    ASSERT_REL("NIntegrate[Sin[x^3], {x, 0, Infinity}]", "Gamma[4/3]/2", "10^-12");
+    ASSERT_REL("NIntegrate[x PolyLog[3, -x], {x, 0, 1}, WorkingPrecision -> 30]",
+               "-0.30765458032881955246584991473604059788450112197684", "10^-27");
+    ASSERT_REL("NIntegrate[Sin[x^3], {x, 0, Pi^(1/3)}, WorkingPrecision -> 40]",
+               "0.59096435190956840433899567161260526283135974435192", "10^-30");
+    /* an endpoint singularity: the probe declines, tanh-sinh as before */
+    ASSERT_REL("NIntegrate[Sqrt[x] Log[x], {x, 0, 1}, WorkingPrecision -> 30]", "-4/9", "10^-27");
+    ASSERT_REL("NIntegrate[BesselJ[0, x], {x, 0, 20}, WorkingPrecision -> 30]",
+               "NIntegrate[BesselJ[0, x], {x, 0, 20}, WorkingPrecision -> 30, "
+               "Method -> \"DoubleExponential\"]", "10^-27");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -736,6 +759,7 @@ int main(void) {
     TEST(test_polylog_integrand);
     TEST(test_phase_substitution);
     TEST(test_contour_wp_compiled);
+    TEST(test_fourier_and_smooth_wp);
 
     printf("All nint_tests passed.\n");
     return 0;

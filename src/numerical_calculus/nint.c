@@ -1150,7 +1150,6 @@ static Expr* levin_phase_derivative(const Expr* g, const char* var) {
     return gp;
 }
 
-#ifdef USE_MPFR
 /* Recognise a well-aligned Fourier-type integrand F(x) = amp(x)·{sin|cos}(ω x)
  * whose oscillation has frequency ω (a positive real constant) and zero phase
  * offset, so the Ooura–Mori DE nodes land on the oscillation's zeros kπ/ω (sine)
@@ -1205,7 +1204,6 @@ static bool ni_fourier_detect(const Expr* body, const char* var,
     *kind = (k == LEVIN_KERNEL_SIN) ? OSCDE_SIN : OSCDE_COS;
     return true;
 }
-#endif /* USE_MPFR */
 
 /* Levin collocation on a finite real interval.  Detects the oscillatory kernel
  * in ctx->body, differentiates the phase symbolically, and runs the collocation
@@ -1261,7 +1259,8 @@ static NiAtt ni_try_levin_collocation(NiCtx* ctx, double a, double b,
  * already carry the MPFR numeric spec.  Writes the result into (re,im) and the
  * convergence verdict into *conv; returns true if an estimate was produced. */
 static bool ni_try_levin_collocation_mpfr(NiCtx* ctx, double a, double b,
-                                          const NiOpts* o, mpfr_t re, mpfr_t im,
+                                          const NiOpts* o, double min_phase,
+                                          bool* weak, mpfr_t re, mpfr_t im,
                                           bool* conv) {
     if (ctx->map_mode != NI_MAP_AFFINE
         || creal(ctx->x_scale) != 1.0 || cimag(ctx->x_scale) != 0.0
@@ -1275,6 +1274,30 @@ static bool ni_try_levin_collocation_mpfr(NiCtx* ctx, double a, double b,
     NiCtx camp = *ctx; ni_ctx_rebody(&camp, amp);
     NiCtx cg   = *ctx; ni_ctx_rebody(&cg,   g);
     NiCtx cgp  = *ctx; ni_ctx_rebody(&cgp,  gp);
+    if (min_phase > 0.0) {
+        /* Levin pays a dense complex MPFR solve per order (n up to 64): it is
+         * the rule for MANY oscillations, where a quadrature rule needs nodes
+         * in proportion to them.  Over a few periods -- the first lobe of
+         * Sin[x^3], phase 0 .. Pi -- the endpoint-robust rules are far cheaper
+         * (and Levin, with g' = 0 at an end, needed its top order), so the
+         * caller tries them first and keeps Levin as the fallback.  The phase
+         * variation is read at machine precision on a 16-panel grid. */
+        NiCtx gm = cg;
+        gm.spec = numeric_machine_spec();
+        double tv = 0.0, prev = 0.0;
+        for (int i = 0; i <= 16 && isfinite(tv); i++) {
+            double _Complex v;
+            if (!ni_sample_machine(&gm, a + (b - a) * i / 16.0, &v)) tv = INFINITY;
+            else {
+                if (i > 0) tv += fabs(creal(v) - prev);
+                prev = creal(v);
+            }
+        }
+        if (tv < min_phase) {
+            *weak = true;
+            expr_free(g); expr_free(amp); expr_free(gp); return false;
+        }
+    }
     bool ok = levin_collocation_mpfr(
         a, b, o->bits, ni_sample_mpfr, &camp, ni_sample_mpfr, &cgp,
         ni_sample_mpfr, &cg, kind, ni_mpfr_reltol(o), 64, re, im, conv);
@@ -1776,9 +1799,16 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
                                   re, im, abserr);
     } else {
         bool got = false; conv = false;
+        /* Automatic: Levin first only over many periods (>= 4); a weakly
+         * oscillatory integrand goes to the quadrature rules first and to Levin
+         * only if they do not converge. */
+        const double strong = 8.0 * M_PI;
+        bool weak = false;
         if (o->method == NI_LEVIN || o->method == NI_AUTO) {
             bool lconv = false;
-            if (ni_try_levin_collocation_mpfr(ctx, a, b, o, re, im, &lconv)
+            if (ni_try_levin_collocation_mpfr(ctx, a, b, o,
+                                              o->method == NI_AUTO ? strong : 0.0,
+                                              &weak, re, im, &lconv)
                 && (o->method == NI_LEVIN || lconv)) {
                 conv = lconv; got = true;
             }
@@ -1791,6 +1821,17 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
             conv = denint_tanhsinh_mpfr(ni_sample_mpfr, ctx, am, bm, bits,
                                         ni_mpfr_reltol(o), ni_mpfr_levels(o),
                                         re, im, abserr);
+        if (!conv && weak) {
+            mpfr_t lre, lim;
+            mpfr_init2(lre, bits); mpfr_init2(lim, bits);
+            bool lconv = false, w2 = false;
+            if (ni_try_levin_collocation_mpfr(ctx, a, b, o, 0.0, &w2, lre, lim, &lconv)
+                && lconv) {
+                mpfr_set(re, lre, MPFR_RNDN); mpfr_set(im, lim, MPFR_RNDN);
+                conv = true;
+            }
+            mpfr_clears(lre, lim, (mpfr_ptr)0);
+        }
     }
     mpfr_clears(am, bm, (mpfr_ptr)0);
     return conv;
@@ -2071,8 +2112,22 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
     double reltol, abstol;
     ni_machine_tols(o, &reltol, &abstol);
     double _Complex val; double abserr;
-    bool conv;
-    if (o->method == NI_LEVIN) {
+    bool conv = false;
+    /* A well-aligned Fourier integrand amp(x) {Sin|Cos}[w x] on [0, oo): the
+     * Ooura-Mori rule, as on the MPFR path.  Exp-sinh cannot converge on an
+     * oscillatory tail, so the cascade below spent every one of its levels
+     * (some 3 x 10^4 samples) before integrating between the zeros; this rule
+     * needs a few hundred.  Declines (falls through) when it does not settle. */
+    if ((o->method == NI_AUTO || o->method == NI_LEVIN)
+        && !reflect && sign > 0.0 && a == 0.0) {
+        OscDeKind fkind; double fomega;
+        if (ni_fourier_detect(body, var, &fkind, &fomega))
+            conv = oscde_fourier_machine(ni_sample_machine, &ctx, fomega, fkind,
+                                         reltol, 12, 200000, &val, &abserr);
+    }
+    if (conv) {
+        /* done */
+    } else if (o->method == NI_LEVIN) {
         conv = osc_integrate_machine(ni_sample_machine, &ctx, a, 0.0, true,
                                      reltol, 600, &val, &abserr);
     } else {
@@ -2943,6 +2998,9 @@ static Expr* ni_try_phase_substitution(Expr* body, const char* var, Expr* amin,
         Expr* total = NULL;
         bool good = true;
         for (int i = 0; i < nparts; i++) {
+            /* an exactly vanishing coefficient (Sin[t0] for the lobe start
+             * t0 = Pi) needs no integral: half the work for every n > 1 */
+            if (coef[i]->type == EXPR_INTEGER && coef[i]->data.integer == 0) continue;
             Expr* integrand = ni_ev2(SYM_Times, expr_copy(Bs),
                                      ni_ev1(kern[i], expr_new_symbol(var), var), var);
             Expr** args = malloc((2 + nopts) * sizeof(Expr*));
