@@ -895,7 +895,7 @@ static void check_modular_matches_exact(const char* input, int expect_route) {
     Expr* res = evaluate(e);
     char* exact = expr_to_string_fullform(res);
     expr_free(e); expr_free(res);
-    long before = gb_flint_modular_route(1);
+    long before = gb_flint_modular_route(2);        /* no direct attempt first */
     e = parse_expression(input);
     res = evaluate(e);
     char* got = expr_to_string_fullform(res);
@@ -966,6 +966,21 @@ static void test_modular_route_unlucky_and_positive_dim(void) {
         "MonomialOrder -> DegreeReverseLexicographic]", 1);
     check_modular_matches_exact("GroebnerBasis[{NextPrime[2^62] x^2 + y z, y^2 + x - 1, z^2 - x y + 3}, {x, y, z}, "
         "MonomialOrder -> DegreeReverseLexicographic]", 1);
+}
+
+/* Lex over Q through the modular route: non-shape zero-dimensional ideals
+ * (FGLM mod p per prime), positive-dimensional ones (F4 in Lex mod p), and an
+ * unlucky first prime -- each certified by the DRL basis -- against the exact
+ * engines. */
+static void test_modular_route_lex(void) {
+    check_modular_matches_exact("GroebnerBasis[{a + b + c + d, a b + b c + c d + d a, "
+                                "a b c + b c d + c d a + d a b, a b c d - 1}, {a, b, c, d}]", 1);
+    check_modular_matches_exact("GroebnerBasis[{10 x y^2 + 10 x z^2 - 11 x + 10, 10 y x^2 + 10 y z^2 - 11 y + 10, "
+                                "10 z x^2 + 10 z y^2 - 11 z + 10}, {x, y, z}]", 1);
+    check_modular_matches_exact("GroebnerBasis[{x^2 - 1, y^2 - 1, z^2 - x y}, {x, y, z}]", 1);
+    check_modular_matches_exact("GroebnerBasis[{x^2 + y^2 + z^2 - 1, x y - z}, {x, y, z}]", 1);
+    check_modular_matches_exact("GroebnerBasis[{x^3 - y z, y^2 - x z + 1}, {x, y, z}]", 1);
+    check_modular_matches_exact("GroebnerBasis[{NextPrime[2^62] x^2 + y^2 - 1, y^2 - 1, z^2 - x}, {x, y, z}]", 1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1067,6 +1082,7 @@ int main(void) {
     TEST(test_modular_route_random_systems);
     TEST(test_modular_route_infinity);
     TEST(test_modular_route_unlucky_and_positive_dim);
+    TEST(test_modular_route_lex);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");

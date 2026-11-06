@@ -813,6 +813,8 @@ static int gf_is_unit(const Gf* G, slong k) {
 #define GF_LEX_BUDGET_PAIRS 64        /* the direct Lex attempt first (gf_basis) */
 #define GF_LEX_BUDGET_BITS  256
 #define GF_FGLM_PRIMES 400
+#define GF_DEG_BUDGET_PAIRS 64        /* the direct DRL/DegLex attempt (gf_basis) */
+#define GF_DEG_BUDGET_BITS  256
 
 /* A set of exponent vectors with their indices (open addressing). */
 typedef struct { ulong* ex; slong nv, n, cap; slong* tab; slong tcap; } GfMon;
@@ -1372,49 +1374,6 @@ static slong gf_homog_count(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpo
     return res;
 }
 
-/* The multiplication matrices mod p of the reduced GF(p) DRL basis
- * idx[0..ng) on its staircase S: M[(v D + c) D + r] = coefficient of
- * standard monomial r in NF(x_v b_c) (the layout gf_fglm_mod reads). */
-static int gf_mult_matrices_mod(Gf* G, const slong* idx, slong ng, const GfMon* S, ulong* M,
-                                slong v_lo, slong v_hi) {
-    slong nv = G->nv, D = S->n;
-    memset(M + v_lo * D * D, 0, (size_t)((v_hi - v_lo) * D * D) * sizeof(ulong));
-    ulong* e = flint_malloc((size_t)nv * sizeof(ulong));
-    ulong* te = flint_malloc((size_t)nv * sizeof(ulong));
-    slong nred = gf_reducers(G, -1, 1);
-    nmod_mpoly_t m, R; nmod_mpoly_init(m, G->M); nmod_mpoly_init(R, G->M);
-    int ok = 1;
-    for (slong v = v_lo; v < v_hi && ok; v++) {
-        for (slong c = 0; c < D && ok; c++) {
-            ulong* col = M + (v * D + c) * D;
-            memcpy(e, S->ex + c * nv, (size_t)nv * sizeof(ulong));
-            e[v]++;
-            slong k = gfm_find(S, e);
-            if (k >= 0) { col[k] = 1; continue; }
-            slong b = -1;
-            for (slong i = 0; i < ng && b < 0; i++)
-                if (memcmp(G->lm + idx[i] * nv, e, (size_t)nv * sizeof(ulong)) == 0) b = idx[i];
-            const nmod_mpoly_struct* src;
-            slong t0;
-            if (b >= 0) { src = G->mb + b; t0 = 1; }        /* monic: e = -tail */
-            else {
-                nmod_mpoly_zero(m, G->M);
-                nmod_mpoly_set_coeff_ui_ui(m, 1, e, G->M);
-                nmod_mpoly_divrem_ideal(G->mq, R, m, G->mr, nred, G->M);
-                src = R; t0 = 0;
-            }
-            for (slong t = t0; t < src->length; t++) {
-                nmod_mpoly_get_term_exp_ui(te, src, t, G->M);
-                slong r = gfm_find(S, te);
-                if (r < 0) { ok = 0; break; }
-                col[r] = t0 ? nmod_neg(src->coeffs[t], G->M->mod) : src->coeffs[t];
-            }
-        }
-    }
-    nmod_mpoly_clear(m, G->M); nmod_mpoly_clear(R, G->M);
-    flint_free(e); flint_free(te);
-    return ok;
-}
 
 /* Are u, M u, ..., M^(D-1) u independent, u the unit vector of the
  * standard monomial 1 (index 0) and M the D x D matrix (column c at M + c D)? */
@@ -1446,6 +1405,8 @@ static int gf_krylov_full(const ulong* M, slong D, nmod_t mod) {
     return ok;
 }
 
+static int gf_mult_matrices_border(Gf* G, const slong* idx, slong ng, const GfMon* S, ulong* M);
+
 /* One prime: the shape-position image  vals[0..D) = the coefficients of
  * h - w^D (h monic), vals[(1 + i) D + j] = coefficient j of q_i = g_i h' mod h
  * for the variables i = 0..nv-2.  Returns D, 0 when the prime is unusable
@@ -1472,13 +1433,11 @@ static slong gf_shape_image(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpo
         ulong* M = flint_malloc((size_t)(nv * D * D) * sizeof(ulong));
         GfFglm R;
         /* shape position needs 1, w, ..., w^(D-1) independent mod I: the
-         * Krylov test on M_w alone declines a non-shape ideal before the
-         * other matrices are built */
-        int ok = gf_mult_matrices_mod(&G, idx, ng, &S, M, nv - 1, nv);
+         * Krylov test on M_w declines a non-shape ideal before FGLM */
+        int ok = gf_mult_matrices_border(&G, idx, ng, &S, M);
         if (ok && !gf_krylov_full(M + (nv - 1) * D * D, D, G.M->mod)) {
             flint_free(M); gfm_clear(&S); res = -1; goto done;
         }
-        ok = ok && gf_mult_matrices_mod(&G, idx, ng, &S, M, 0, nv - 1);
         int nsh = 0;
         ok = ok && gf_fglm_mod(M, nv, D, 0, G.M->mod, &R, 1, &nsh);
         if (nsh) { flint_free(M); gfm_clear(&S); res = -1; goto done; }
@@ -2400,12 +2359,165 @@ static int gf_homog_hilbert(fmpz_poly_t N, const fmpz_mpoly_struct* Fz, slong n,
     return ok;
 }
 
+/* The multiplication matrices mod p of a reduced GF(p) basis in a degree
+ * order, without polynomial division: by the border recursion.  A border
+ * monomial e = x_v b (b standard, e not) is either a leading monomial (its
+ * normal form is minus the element's tail, all standard: the basis is
+ * reduced) or e = x_w e' with e' a SMALLER border monomial (w != v divides
+ * e / LM(g) for the g whose leading monomial divides e), and then
+ * NF(e) = sum_s NF(e')_s NF(x_w s), every x_w s standard or a border monomial
+ * below e.  The border is processed in increasing order, so each term is
+ * known.  O(nv D^3) word operations, no heap division (thread-safe: FLINT's
+ * divrem_ideal keeps large temporaries on the stack).  Layout:
+ * M[(v D + c) D + r] = coefficient of standard monomial r in NF(x_v b_c), as
+ * gf_fglm_mod reads it. */
+static int gf_mult_matrices_border(Gf* G, const slong* idx, slong ng, const GfMon* S, ulong* M) {
+    slong nv = G->nv, D = S->n;
+    nmod_t mod = G->M->mod;
+    GfMon Bm; gfm_init(&Bm, nv);
+    ulong* e = flint_malloc((size_t)nv * sizeof(ulong));
+    /* the border */
+    for (slong c = 0; c < D; c++)
+        for (slong v = 0; v < nv; v++) {
+            memcpy(e, S->ex + c * nv, (size_t)nv * sizeof(ulong));
+            e[v]++;
+            if (gfm_find(S, e) < 0) gfm_add(&Bm, e);
+        }
+    slong nb = Bm.n;
+    /* increasing order */
+    slong* ord = flint_malloc((size_t)(nb ? nb : 1) * sizeof(slong));
+    for (slong i = 0; i < nb; i++) ord[i] = i;
+    for (slong i = 1; i < nb; i++) {                     /* insertion sort, ascending */
+        slong x = ord[i], j = i;
+        while (j > 0 && gf_cmp(Bm.ex + ord[j - 1] * nv, Bm.ex + x * nv, nv, G->ord) < 0) { ord[j] = ord[j - 1]; j--; }
+        ord[j] = x;
+    }
+    ulong* NF = flint_calloc((size_t)((nb ? nb : 1) * D), sizeof(ulong));
+    char* known = flint_calloc((size_t)(nb ? nb : 1), 1);
+    ulong* te = flint_malloc((size_t)nv * sizeof(ulong));
+    int ok = 1;
+    for (slong a = 0; a < nb && ok; a++) {
+        slong i = ord[a];
+        const ulong* ei = Bm.ex + i * nv;
+        ulong* out = NF + i * D;
+        slong b = -1;
+        for (slong k = 0; k < ng && b < 0; k++)
+            if (memcmp(G->lm + idx[k] * nv, ei, (size_t)nv * sizeof(ulong)) == 0) b = idx[k];
+        if (b >= 0) {                                    /* minus the tail */
+            const nmod_mpoly_struct* g = G->mb + b;
+            for (slong t = 1; t < g->length && ok; t++) {
+                nmod_mpoly_get_term_exp_ui(te, g, t, G->M);
+                slong r = gfm_find(S, te);
+                if (r < 0) { ok = 0; break; }
+                out[r] = nmod_neg(g->coeffs[t], mod);
+            }
+            known[i] = 1;
+            continue;
+        }
+        /* e = x_w e', e' a known border monomial */
+        slong w, ip = -1;
+        for (w = 0; w < nv && ip < 0; w++) {
+            if (!ei[w]) continue;
+            memcpy(e, ei, (size_t)nv * sizeof(ulong));
+            e[w]--;
+            slong j = gfm_find(&Bm, e);
+            if (j >= 0 && known[j]) ip = j;
+        }
+        if (ip < 0) { ok = 0; break; }
+        w--;                                             /* the loop stepped past it */
+        const ulong* src = NF + ip * D;
+        for (slong s = 0; s < D && ok; s++) {
+            ulong cs = src[s];
+            if (!cs) continue;
+            memcpy(e, S->ex + s * nv, (size_t)nv * sizeof(ulong));
+            e[w]++;
+            slong r = gfm_find(S, e);
+            if (r >= 0) { out[r] = nmod_add(out[r], cs, mod); continue; }
+            slong j = gfm_find(&Bm, e);
+            if (j < 0 || !known[j]) { ok = 0; break; }   /* cannot happen */
+            _nmod_vec_scalar_addmul_nmod(out, NF + j * D, D, cs, mod);
+        }
+        known[i] = 1;
+    }
+    if (ok) {
+        memset(M, 0, (size_t)(nv * D * D) * sizeof(ulong));
+        for (slong v = 0; v < nv; v++)
+            for (slong c = 0; c < D; c++) {
+                ulong* col = M + (v * D + c) * D;
+                memcpy(e, S->ex + c * nv, (size_t)nv * sizeof(ulong));
+                e[v]++;
+                slong k = gfm_find(S, e);
+                if (k >= 0) { col[k] = 1; continue; }
+                memcpy(col, NF + gfm_find(&Bm, e) * D, (size_t)D * sizeof(ulong));
+            }
+    }
+    flint_free(te); flint_free(known); flint_free(NF); flint_free(ord); flint_free(e);
+    gfm_clear(&Bm);
+    return ok;
+}
+
+/* One prime's image in Lex: the reduced Lex basis of F mod p.  For a
+ * zero-dimensional ideal from the DRL basis (F4) by FGLM mod p -- far cheaper
+ * than Lex directly; otherwise by F4 in Lex.  As gf_mod_image. */
+static slong gf_lex_image(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpoly_ctx_struct* Zc,
+                          ulong p, nmod_mpoly_ctx_t Mc, nmod_mpoly_struct** out) {
+    slong nv = Zc->minfo->nvars;
+    Gf G; gf_init(&G, 1, p, nv, ORD_DEGREVLEX);
+    slong* idx = NULL; slong ng = 0; int to = 0;
+    slong res;
+    *out = NULL;
+    if (!gf_engine_from_z(&G, Fz, n, Zc, 0, &idx, &ng, &to)) { res = to ? -2 : 0; goto done; }
+    for (slong i = 0; i < ng; i++) if (gf_is_unit(&G, idx[i])) { res = -1; goto done; }
+    {
+        GfMon S; gfm_init(&S, nv);
+        if (!gf_staircase(&G, idx, ng, &S, GF_FGLM_MAXD)) {
+            /* positive-dimensional (or too large for FGLM): Lex directly */
+            gfm_clear(&S);
+            flint_free(idx); idx = NULL;
+            gf_clear(&G);
+            gf_init(&G, 1, p, nv, ORD_LEX);
+            if (!gf_engine_from_z(&G, Fz, n, Zc, 0, &idx, &ng, &to)) { res = to ? -2 : 0; goto done; }
+            *out = flint_malloc((size_t)(ng ? ng : 1) * sizeof(nmod_mpoly_struct));
+            for (slong i = 0; i < ng; i++) {
+                nmod_mpoly_init(*out + i, Mc);
+                nmod_mpoly_set(*out + i, G.mb + idx[i], Mc);
+            }
+            res = ng;
+            goto done;
+        }
+        slong D = S.n;
+        ulong* M = flint_malloc((size_t)(nv * D * D) * sizeof(ulong));
+        GfFglm R;
+        int ok = gf_mult_matrices_border(&G, idx, ng, &S, M) && gf_fglm_mod(M, nv, D, 0, G.M->mod, &R, 0, NULL);
+        flint_free(M); gfm_clear(&S);
+        if (!ok) { res = 0; goto done; }
+        *out = flint_malloc((size_t)(R.nrel ? R.nrel : 1) * sizeof(nmod_mpoly_struct));
+        for (slong k = 0; k < R.nrel; k++) {
+            nmod_mpoly_struct* g = *out + k;
+            nmod_mpoly_init(g, Mc);
+            nmod_mpoly_push_term_ui_ui(g, 1, R.rel_ex + k * nv, Mc);
+            for (slong i = 0; i < R.rel_n[k]; i++) {
+                ulong c = R.rel_c[k][i];
+                if (c) nmod_mpoly_push_term_ui_ui(g, nmod_neg(c, G.M->mod), R.stair.ex + i * nv, Mc);
+            }
+            nmod_mpoly_sort_terms(g, Mc);
+        }
+        res = R.nrel;
+        gff_clear(&R);
+    }
+done:
+    flint_free(idx);
+    gf_clear(&G);
+    return res;
+}
+
 /* One prime's image: the reduced basis of F mod p in order `ord`, as nmod
  * polynomials in Mc (sorted ascending by leading monomial).  Returns the
  * number of elements, 0 for an unusable prime, -1 for the unit ideal, -2 on
  * the deadline. */
 static slong gf_mod_image(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpoly_ctx_struct* Zc, int ord,
                           ulong p, nmod_mpoly_ctx_t Mc, nmod_mpoly_struct** out) {
+    if (ord == ORD_LEX) return gf_lex_image(Fz, n, Zc, p, Mc, out);
     slong nv = Zc->minfo->nvars;
     Gf G; gf_init(&G, 1, p, nv, ord);
     slong* idx = NULL; slong ng = 0; int to = 0;
@@ -2626,6 +2738,60 @@ static void gf_img_batch_clear(GfImgJob* B) {
     B->nb = 0;
 }
 
+/* Certificate (c') for a Lex candidate: each element reduces to 0 by the
+ * certified DRL basis Dm of I, so <G> lies in I.  Parallel over the
+ * elements, as gf_verify_task. */
+typedef struct {
+    const Gf* Dm; const fmpz_mpoly_struct* C; const fmpz_mpoly_ctx_struct* Zc; slong nc;
+    slong ntask; volatile int failed;
+} GfMembJob;
+
+static void gf_memb_task(void* vctx, int64_t lo, int64_t hi, int chunk) {
+    (void)chunk;
+    GfMembJob* J = vctx;
+    const Gf* V = J->Dm;
+    slong nv = V->nv, nd = 0;
+    for (slong k = 0; k < V->nb; k++) if (V->active[k]) nd++;
+    fmpz_mpoly_struct** dv = flint_malloc((size_t)(nd ? nd : 1) * sizeof(fmpz_mpoly_struct*));
+    fmpz_mpoly_struct** qv = flint_malloc((size_t)(nd ? nd : 1) * sizeof(fmpz_mpoly_struct*));
+    slong q = 0;
+    for (slong k = 0; k < V->nb; k++) {
+        if (!V->active[k]) continue;
+        dv[q] = (fmpz_mpoly_struct*)(V->zb + k);
+        qv[q] = flint_malloc(sizeof(fmpz_mpoly_struct));
+        fmpz_mpoly_init(qv[q], V->Z);
+        q++;
+    }
+    fmpz_t scl; fmpz_init(scl);
+    fmpz_mpoly_t h, r; fmpz_mpoly_init(h, V->Z); fmpz_mpoly_init(r, V->Z);
+    ulong* ex = flint_malloc((size_t)nv * sizeof(ulong));
+    for (int64_t task = lo; task < hi; task++)
+        for (slong w = (slong)task; w < J->nc && !J->failed; w += J->ntask) {
+            if (tc_deadline_passed()) { J->failed = 1; break; }
+            const fmpz_mpoly_struct* f = J->C + w;
+            fmpz_mpoly_zero(h, V->Z);
+            for (slong t = 0; t < f->length; t++) {
+                fmpz_mpoly_get_term_exp_ui(ex, f, t, J->Zc);
+                fmpz_mpoly_push_term_fmpz_ui(h, f->coeffs + t, ex, V->Z);
+            }
+            fmpz_mpoly_sort_terms(h, V->Z);
+            fmpz_mpoly_combine_like_terms(h, V->Z);
+            fmpz_mpoly_quasidivrem_ideal(scl, qv, r, h, dv, nd, V->Z);
+            if (!fmpz_mpoly_is_zero(r, V->Z)) J->failed = 1;
+        }
+    flint_free(ex);
+    fmpz_mpoly_clear(h, V->Z); fmpz_mpoly_clear(r, V->Z); fmpz_clear(scl);
+    for (slong k = 0; k < nd; k++) { fmpz_mpoly_clear(qv[k], V->Z); flint_free(qv[k]); }
+    flint_free(qv); flint_free(dv);
+}
+
+static int gf_verify_member(const Gf* Dm, const fmpz_mpoly_struct* C, slong nc, const fmpz_mpoly_ctx_struct* Zc) {
+    GfMembJob J;
+    J.Dm = Dm; J.C = C; J.Zc = Zc; J.nc = nc; J.ntask = MP_PAR_MAX; J.failed = 0;
+    mp_parallel_for(gf_memb_task, &J, J.ntask, nc > 1 ? 1e12 : 0.0);
+    return !J.failed && !tc_deadline_passed();
+}
+
 static int gf_modular_on = 1;
 static long gf_modular_hits = 0;
 long gb_flint_modular_route(int on) { gf_modular_on = on; return gf_modular_hits; }
@@ -2641,7 +2807,8 @@ static double dbg_f4, dbg_rr, dbg_ver, dbg_crt;
  * (nothing else done) when it fails.  Returns 1, 0 to decline, -1 as said;
  * *timed_out on the deadline. */
 static int gf_lift(Gf* Zg, const fmpz_mpoly_struct* Fz, slong n, int ord, int hs,
-                   const ulong* want, slong nw, fmpz_mpoly_struct** Cout, slong* nc, int* timed_out) {
+                   const ulong* want, slong nw, const Gf* memb,
+                   fmpz_mpoly_struct** Cout, slong* nc, int* timed_out) {
     slong nv = Zg->nv;
     int done = 0;
     slong ne = -1, alt_ne = -1, misses = 0, unusable = 0;
@@ -2754,6 +2921,7 @@ static int gf_lift(Gf* Zg, const fmpz_mpoly_struct* Fz, slong n, int ord, int hs
                 Gf V; gf_init(&V, 0, 0, nv, ord);
                 double v0 = GF_CLOCK();
                 int cert = gf_verify_basis(&V, C, ne, Fz, n, Zg->Z);
+                if (cert && memb) cert = gf_verify_member(memb, C, ne, Zg->Z);
                 dbg_ver += GF_CLOCK() - v0;
                 GF_TRACE("[mod] nv %ld cert %d at %ld bits, %ld elements\n", (long)nv, cert, (long)fmpz_bits(M), (long)ne);
                 if (!cert && tc_deadline_passed()) *timed_out = 1;
@@ -2834,7 +3002,7 @@ static int gf_modular_degree(GBPoly* const* F, size_t nF, const GBPoly* f0, int 
         n++;
     }
     fmpz_mpoly_struct* C = NULL; slong nc = 0;
-    int r = gf_lift(&Zg, Fz, n, ord, 1, NULL, 0, &C, &nc, timed_out);
+    int r = gf_lift(&Zg, Fz, n, ord, 1, NULL, 0, NULL, &C, &nc, timed_out);
     if (r < 0 && !*timed_out && ord == ORD_DEGREVLEX) {
         /* through K = <F^h> */
         Gf Zh; gf_init(&Zh, 0, 0, nv + 1, ORD_DEGREVLEX);
@@ -2853,7 +3021,7 @@ static int gf_modular_degree(GBPoly* const* F, size_t nF, const GBPoly* f0, int 
             fmpz_mpoly_sort_terms(Fh + i, Zh.Z);
         }
         fmpz_mpoly_struct* CK = NULL; slong nk = 0;
-        int rk = gf_lift(&Zh, Fh, n, ORD_DEGREVLEX, 0, NULL, 0, &CK, &nk, timed_out);
+        int rk = gf_lift(&Zh, Fh, n, ORD_DEGREVLEX, 0, NULL, 0, NULL, &CK, &nk, timed_out);
         if (rk == 1) {
             /* LT(I): the dehomogenised leading monomials, minimal, ascending */
             ulong* L = flint_malloc((size_t)((nk ? nk : 1) * nv) * sizeof(ulong));
@@ -2882,7 +3050,7 @@ static int gf_modular_degree(GBPoly* const* F, size_t nF, const GBPoly* f0, int 
                     memcpy(L + j * nv, L + (j - 1) * nv, (size_t)nv * sizeof(ulong));
                     memcpy(L + (j - 1) * nv, ex, (size_t)nv * sizeof(ulong));
                 }
-            r = gf_lift(&Zg, Fz, n, ord, 0, L, nm, &C, &nc, timed_out);
+            r = gf_lift(&Zg, Fz, n, ord, 0, L, nm, NULL, &C, &nc, timed_out);
             flint_free(L);
             for (slong i = 0; i < nk; i++) fmpz_mpoly_clear(CK + i, Zh.Z);
             flint_free(CK);
@@ -2939,6 +3107,53 @@ static int gf_drl_exact(Gf* Dg, GBPoly* const* F, size_t n, const GBPoly* f0, sl
     return gf_engine(Dg, F, n, 0, idx, nd, timed_out);
 }
 
+
+/* Lex over Q, any dimension, multi-modular: the reduced Lex basis mod p per
+ * prime (FGLM from the F4 DRL basis when zero-dimensional, F4 in Lex
+ * otherwise), lifted as in the degree orders, and CERTIFIED by (a) and (b)
+ * -- a Lex Groebner basis of an ideal containing I -- and (c'): every
+ * element reduces to 0 by the certified DRL basis of I, so the ideal it
+ * generates lies in I.  Then it is I's reduced Lex basis. */
+static int gf_modular_lex(GBPoly* const* F, size_t nF, const GBPoly* f0, GBPoly*** out, size_t* out_n,
+                          int* timed_out) {
+    slong nv = f0->n_vars;
+    *timed_out = 0;
+    if (!gf_modular_on || getenv("MATHILDA_GB_MODULAR_OFF")) return 0;
+    Gf Dg; gf_init(&Dg, 0, 0, nv, ORD_DEGREVLEX);
+    slong* didx = NULL; slong nd = 0;
+    int done = 0;
+    if (gf_modular_degree(F, nF, f0, ORD_DEGREVLEX, NULL, NULL, timed_out, &Dg, &didx, &nd)) {
+        int unit = 0;
+        for (slong i = 0; i < nd && !unit; i++) unit = gf_is_unit(&Dg, didx[i]);
+        if (!unit) {
+            Gf Zg; gf_init(&Zg, 0, 0, nv, ORD_LEX);
+            fmpz_mpoly_struct* Fz = flint_malloc((size_t)(nF ? nF : 1) * sizeof(fmpz_mpoly_struct));
+            slong n = 0;
+            for (size_t i = 0; i < nF; i++) {
+                if (!F[i]->n_terms) continue;
+                fmpz_mpoly_init(Fz + n, Zg.Z);
+                gf_from_gbpoly(&Zg, Fz + n, F[i], 0);
+                gf_normalise(&Zg, Fz + n);
+                n++;
+            }
+            fmpz_mpoly_struct* C = NULL; slong nc = 0;
+            if (gf_lift(&Zg, Fz, n, ORD_LEX, 0, NULL, 0, &Dg, &C, &nc, timed_out) == 1) {
+                GBPoly** R = malloc((size_t)(nc ? nc : 1) * sizeof(GBPoly*));
+                for (slong i = 0; i < nc; i++) R[i] = gf_zpoly_to_gbpoly(C + i, Zg.Z, Zg.tmp, f0);
+                *out = R; *out_n = (size_t)nc; done = 1;
+                for (slong i = 0; i < nc; i++) fmpz_mpoly_clear(C + i, Zg.Z);
+                flint_free(C);
+            }
+            for (slong i = 0; i < n; i++) fmpz_mpoly_clear(Fz + i, Zg.Z);
+            flint_free(Fz);
+            gf_clear(&Zg);
+        }
+    }
+    flint_free(didx);
+    gf_clear(&Dg);
+    return done;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Entry                                                              */
 /* ------------------------------------------------------------------ */
@@ -2958,7 +3173,28 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
     int timed_out = 0;
     GBPoly** R = NULL;
     slong nr = 0;
-    /* a degree order over Q: multi-modular, certified */
+    /* a degree order over Q: a small system directly (the fraction-free run
+     * under a work budget: a few dozen pairs, small coefficients), else
+     * multi-modular, certified */
+    if (!p && (ord == ORD_DEGREVLEX || ord == ORD_DEGLEX) && gf_modular_on != 2) {
+        Gf L; gf_init(&L, 0, 0, f0->n_vars, ord);
+        L.budget_pairs = GF_DEG_BUDGET_PAIRS; L.budget_bits = GF_DEG_BUDGET_BITS;
+        slong* idx = NULL;
+        int ok = gf_engine(&L, F, n, 0, &idx, &nr, &timed_out);
+        if (ok) {
+            int unit = 0;
+            for (slong i = 0; i < nr && !unit; i++) unit = gf_is_unit(&L, idx[i]);
+            if (unit) nr = 1;
+            R = malloc((size_t)(nr ? nr : 1) * sizeof(GBPoly*));
+            for (slong i = 0; i < nr; i++)
+                R[i] = unit ? gf_one_gbpoly(f0) : gf_to_gbpoly(&L, idx[i], f0);
+        }
+        flint_free(idx);
+        gf_clear(&L);
+        if (timed_out) tc_check_deadline();
+        if (ok) { *out = R; *out_n = (size_t)nr; return 1; }
+        R = NULL; nr = 0;
+    }
     if (!p && (ord == ORD_DEGREVLEX || ord == ORD_DEGLEX)) {
         size_t nm = 0;
         int ok = gf_modular_degree(F, n, f0, ord, &R, &nm, &timed_out, NULL, NULL, NULL);
@@ -2977,7 +3213,7 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
         if (ok) { *out = R; *out_n = ns; return 1; }
         R = NULL;
     }
-    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
+    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF") && gf_modular_on != 2) {
         Gf L; gf_init(&L, 0, 0, f0->n_vars, ORD_LEX);
         L.budget_pairs = GF_LEX_BUDGET_PAIRS; L.budget_bits = GF_LEX_BUDGET_BITS;
         slong* idx = NULL;
@@ -2995,6 +3231,13 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
         if (timed_out) tc_check_deadline();
         if (ok) { *out = R; *out_n = (size_t)nr; return 1; }
         R = NULL; nr = 0;
+    }
+    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
+        size_t nm = 0;
+        int ok = gf_modular_lex(F, n, f0, &R, &nm, &timed_out);
+        if (timed_out) tc_check_deadline();
+        if (ok) { *out = R; *out_n = nm; return 1; }
+        R = NULL;
     }
     if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
         Gf Dg; gf_init(&Dg, 0, 0, f0->n_vars, ORD_DEGREVLEX);

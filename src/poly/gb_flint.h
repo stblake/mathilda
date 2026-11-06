@@ -47,8 +47,9 @@ long gb_flint_shape_route(int on);
 
 /* DegreeReverseLexicographic / DegreeLexicographic over Q: the certified
  * multi-modular route first (on = 1, the default) or not (0); the environment
- * variable MATHILDA_GB_MODULAR_OFF does the same.  Returns the number of bases
- * the route has produced so far. */
+ * variable MATHILDA_GB_MODULAR_OFF does the same; on = 2 also skips the
+ * budgeted direct attempt that answers small systems first.  Returns the
+ * number of bases the route has produced so far. */
 long gb_flint_modular_route(int on);
 
 #endif /* GB_FLINT_H */
