@@ -27,6 +27,10 @@
  *     Conjugate pairs therefore cancel their imaginary parts exactly:
  *     PolyLog[3, I] + PolyLog[3, -I] -> -3 Zeta[3]/16.
  *
+ *   PolyLog[2, 2] = Pi^2/4 - I Pi Log[2] and PolyLog[3, 2] = 7/8 Zeta[3] +
+ *                Pi^2/4 Log[2] - I Pi Log[2]^2/2 (inversion formula; PolyLog's
+ *                own branch, Im < 0 on the cut).
+ *
  *   Log[w] -> I Pi r and Log[1 + w] -> Log[2 Cos[Pi r/2]] + I Pi r/2
  *                (-1 < r < 1) for the same roots of unity w.
  *
@@ -325,6 +329,26 @@ static Expr* fe_polylog_root(const Expr* e) {
     return out;
 }
 
+/* PolyLog[2, 2] and PolyLog[3, 2] by the inversion formula
+ * Li_n(z) + (-1)^n Li_n(1/z) = -(2 Pi I)^n/n! B_n(1/2 + Log[-z]/(2 Pi I)) at
+ * z = 2, with Li_n(1/2) closed for n = 2, 3 and Log[-2] = Log[2] + I Pi (the
+ * branch PolyLog itself evaluates on: the value approached from below the cut):
+ *     PolyLog[2, 2] = Pi^2/4 - I Pi Log[2],
+ *     PolyLog[3, 2] = 7/8 Zeta[3] + Pi^2/4 Log[2] - I Pi Log[2]^2/2.
+ * NULL (nothing owned) for any other call. */
+static Expr* fe_polylog_two(const Expr* e) {
+    if (!fe_is_head(e, SYM_PolyLog) || e->data.function.arg_count != 2) return NULL;
+    const Expr* ne = e->data.function.args[0];
+    const Expr* z = e->data.function.args[1];
+    if (ne->type != EXPR_INTEGER || z->type != EXPR_INTEGER || z->data.integer != 2)
+        return NULL;
+    if (ne->data.integer == 2)
+        return fe_apply("(Pi^2/4 - I Pi Log[2])&", NULL, 0);
+    if (ne->data.integer == 3)
+        return fe_apply("(7/8 Zeta[3] + Pi^2/4 Log[2] - I Pi Log[2]^2/2)&", NULL, 0);
+    return NULL;
+}
+
 /* Log[w] -> I Pi r, Log[1 + w] -> Log[2 Cos[Pi r/2]] + I Pi r/2 (|r| < 1). */
 static Expr* fe_log_root(const Expr* e) {
     if (!fe_is_head(e, SYM_Log) || e->data.function.arg_count != 1) return NULL;
@@ -429,6 +453,7 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     }
     if (!s && (which & FE_ROOTS)) {
         s = fe_polylog_root(node);
+        if (!s) s = fe_polylog_two(node);
         if (!s) s = fe_log_root(node);
     }
     if (!s && (which & (FE_ROOTS | FE_PGAMMA))) s = fe_polygamma_closed(node);
@@ -581,6 +606,30 @@ static Expr* fe_expand(const Expr* e) {
                             (Expr*[]){ expr_copy((Expr*)e) }, 1));
 }
 
+/* A copy of `e` with every Log[1/n] (integer n >= 2) written -Log[n]; sets
+ * *changed when one was rewritten.  The same number, one Log fewer to merge:
+ * an endpoint value Log[1 - 1/(1 + x)] at x = 1 otherwise stays apart from the
+ * Log[2] of PolyLog[2, 1/2] and PolyLog[3, 1/2]. */
+static Expr* fe_log_reciprocal(const Expr* e, bool* changed) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    int64_t n = 0, d = 0;
+    if (fe_is_head(e, SYM_Log) && e->data.function.arg_count == 1 &&
+        is_rational(e->data.function.args[0], &n, &d) && n == 1 && d >= 2) {
+        *changed = true;
+        Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
+                        (Expr*[]){ expr_new_integer(d) }, 1);
+        return expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), lg }, 2);
+    }
+    size_t na = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (na ? na : 1));
+    for (size_t i = 0; i < na; i++)
+        args[i] = fe_log_reciprocal(e->data.function.args[i], changed);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, na);
+    free(args);
+    return out;
+}
+
 Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
     if (!r) return r;
     /* (1) MeijerG -> named functions. Accepted only when it leaves no MeijerG,
@@ -630,6 +679,22 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
         if (changed) { Expr* x = fe_expand(c); expr_free(c); c = x; }
         if (changed && fe_leaf_count(c) < fe_leaf_count(r) &&
             fe_count_head(c, SYM_PolyGamma) <= fe_count_head(r, SYM_PolyGamma)) {
+            expr_free(r); r = c;
+        } else {
+            expr_free(c);
+        }
+    }
+    /* (3) A Newton-Leibniz value assembled from Log and PolyLog endpoint values
+     * (Log[1/2] from Log[1 - 1/(1 + x)], PolyLog[3, 1/2] = 7/8 Zeta[3] - ...)
+     * comes back as a sum of unexpanded groups.  Log[1/n] -> -Log[n] and one
+     * Expand merge the like terms; accepted only when the result is strictly
+     * smaller, so a value that is not a sum of such groups keeps its form. */
+    if (fe_count_head(r, SYM_Log) > 0) {
+        bool changed = false;
+        Expr* c0 = fe_log_reciprocal(r, &changed);
+        Expr* c = fe_expand(c0);
+        expr_free(c0);
+        if (c && fe_leaf_count(c) < fe_leaf_count(r)) {
             expr_free(r); r = c;
         } else {
             expr_free(c);

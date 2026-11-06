@@ -3845,6 +3845,11 @@ ones, bottom-up (`src/special_functions/functionexpand.c`):
   from the representative `p ≤ q/2`, so a conjugate pair cancels structurally:
   `FunctionExpand[PolyLog[3, I] + PolyLog[3, −I]]` = `−3 Zeta[3]/16`,
   `FunctionExpand[PolyLog[3, E^(2 Pi I/3)]]` = `2 I Pi^3/81 − 4 Zeta[3]/9`.
+- **PolyLog[2, 2]** → `Pi^2/4 - I Pi Log[2]` and **PolyLog[3, 2]** →
+  `7/8 Zeta[3] + Pi^2/4 Log[2] - I Pi Log[2]^2/2`, by the inversion formula with
+  `Li_n(1/2)` closed, on the branch PolyLog evaluates (the value approached from
+  below the cut, so the imaginary part is negative). Automatic evaluation leaves
+  both as they are.
 - **Log[w]** → `I Pi r`, **Log[1 + w]** → `Log[2 Cos[Pi r/2]] + I Pi r/2`
   (`|r| < 1`) for the same roots of unity.
 - **PolyGamma[m, x]**, `x ∈ {1/2, 1/4, 3/4}`, via `ζ(n, 1/2) = (2^n−1) ζ(n)` and
@@ -3861,6 +3866,10 @@ A definite `Integrate` runs the same rules as its final pass
 pFq or unresolved Piecewise is left, and a root-of-unity rewrite only when the
 (expanded) result is strictly smaller with no new `PolyGamma`:
 `∫₀¹ ArcTan[x]/x dx` = `Catalan`, `∫₀^{π/2} x Log[2 Cos x] dx` = `−7 Zeta[3]/16`.
+Last, a value containing `Log` is rewritten with `Log[1/n]` → `−Log[n]` and
+expanded, kept only when strictly smaller, so endpoint values such as
+`Log[1/2]` and the `Log[2]` of `PolyLog[3, 1/2]` merge into one sum of
+`Zeta[3]`, `Pi^2 Log[2]`, `Log[2]^k` and rationals.
 
 Attributes: `Protected`.
 
