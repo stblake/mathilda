@@ -223,6 +223,23 @@ static int nb_should_retry(const acb_t z, slong outb, int attempt) {
     return acb_rel_accuracy_bits(z) < outb;
 }
 
+/* The working precision of the next rung.  A kernel's loss (a cancellation,
+ * a value near a zero of the function) is a number of bits nearly independent
+ * of the working precision, so the step goes where the measured shortfall is
+ * covered -- one retry for Ai(x) 10^-40 from its zero, which a doubling also
+ * needed but at 1.3x the bits.  A ball with no relative accuracy at all (one
+ * around zero) still doubles. */
+static slong nb_next_wp(const acb_t z, slong wp, slong outb) {
+    slong acc = acb_contains_zero(z) ? 0 : acb_rel_accuracy_bits(z);
+    slong next = 2 * wp;
+    if (acc > 0) {
+        slong need = wp + (outb - acc) + NB_GUARD;
+        if (need < next) next = need;
+    }
+    if (next <= wp) next = wp + NB_GUARD;
+    return next;
+}
+
 /* Arb kernel shapes, by arity. The incomplete elliptic kernels carry an extra
  * `times_pi` flag; static adapters below absorb it so they fit these types. */
 typedef void (*nb_fn1)(acb_t, const acb_t, slong);
@@ -239,15 +256,15 @@ static Expr* nb_eval(const Expr* const* args, int n, slong outb,
     for (int i = 0; i < n; i++) acb_init(A[i]);
     acb_init(R);
     Expr* out = NULL;
+    slong wp = outb + NB_GUARD;
     for (int attempt = 0; ; attempt++) {
-        slong wp = (outb + NB_GUARD) << attempt;
         int ok = 1;
         for (int i = 0; i < n && ok; i++) ok = expr_to_acb(args[i], A[i], wp);
         if (!ok) break;                            /* non-numeric: decline */
         if (n == 1)      f1(R, A[0], wp);
         else if (n == 2) f2(R, A[0], A[1], wp);
         else             f3(R, A[0], A[1], A[2], wp);
-        if (nb_should_retry(R, outb, attempt)) continue;
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
         slong bits = nb_emit_bits(R, outb);
         if (bits > 0) out = acb_to_expr(R, bits);
         break;
@@ -857,12 +874,12 @@ Expr* flint_num_stieltjes(const Expr* n, const Expr* a) {
     slong outb = a ? pick_out_bits(args, 1) : 53;
     acb_t A, R; acb_init(A); acb_init(R);
     Expr* out = NULL;
+    slong wp = outb + NB_GUARD;
     for (int attempt = 0; ; attempt++) {
-        slong wp = (outb + NB_GUARD) << attempt;
         if (a && !expr_to_acb(a, A, wp)) break;
         if (!a) acb_one(A);
         acb_dirichlet_stieltjes(R, N, A, wp);
-        if (nb_should_retry(R, outb, attempt)) continue;
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
         slong bits = nb_emit_bits(R, outb);
         if (bits > 0) out = acb_to_expr(R, bits);
         break;
@@ -934,12 +951,12 @@ Expr* flint_num_dirichlet_l(const Expr* s, uint64_t q, uint64_t den,
     slong outb = pick_out_bits(args, 1);
     acb_t S, R; acb_init(S); acb_init(R);
     Expr* out = NULL;
+    slong wp = outb + NB_GUARD;
     for (int attempt = 0; ; attempt++) {
-        slong wp = (outb + NB_GUARD) << attempt;
         if (!expr_to_acb(s, S, wp)) break;
         acb_dirichlet_l(R, S, G, x, wp);
         if (neul) nb_dirichlet_euler(R, S, neul, eul_p, eul_num, den, wp);
-        if (nb_should_retry(R, outb, attempt)) continue;
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
         slong bits = nb_emit_bits(R, outb);
         if (bits > 0) out = acb_to_expr(R, bits);
         break;
@@ -1798,12 +1815,12 @@ Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* 
     acb_t A, B, C, Z, R;
     acb_init(A); acb_init(B); acb_init(C); acb_init(Z); acb_init(R);
     Expr* out = NULL;
+    slong wp = outb + NB_GUARD;
     for (int attempt = 0; ; attempt++) {
-        slong wp = (outb + NB_GUARD) << attempt;
         if (!expr_to_acb(a, A, wp) || !expr_to_acb(b, B, wp) ||
             !expr_to_acb(c, C, wp) || !expr_to_acb(z, Z, wp)) break;
         acb_hypgeom_2f1(R, A, B, C, Z, 0, wp);
-        if (nb_should_retry(R, outb, attempt)) continue;
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
         slong bits = nb_emit_bits(R, outb);
         if (bits > 0) out = acb_to_expr(R, bits);
         break;
