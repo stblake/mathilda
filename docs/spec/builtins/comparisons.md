@@ -85,6 +85,13 @@ Tests whether two (or more) expressions are mathematically equal.
 - Two exact rationals compare exactly, whatever the size of their parts
   (v0.477): `1 == 1 + 10^-20` is `False`. It used to reach the tolerant
   machine comparison and test `True`.
+- Two other exact numeric quantities (`Pi + 10^-20`, `Exp[1 + 10^-20]`,
+  `Pi/3^700`) are ordered by their doubles only when those are in the normal
+  double range and more than `2^-40` apart; otherwise they are read at 128 and
+  then 1024 bits, and a difference above `2^(16 - p)` of the larger side
+  decides. `Pi + 10^-20 == Pi` and `Exp[1 + 10^-20] == E` are `False` (they
+  were `True`: both sides are the same double), `Pi/3^700 > 0` is `True` (it
+  stayed unevaluated: `Pi/3^700` has no double), `Pi/3^700 == 0` is `False`.
 - Closed-form numeric constants that carry no real ordering are decided by the
   exact zero-test: `I == 0` is `False`, `(1 + I) == (1 - I)` is `False`, and a
   complex radical such as `(-1 + (1/8)(-1 - I Sqrt[3])^3)/(-1 + (1/2)(-1 - I Sqrt[3]))

@@ -300,6 +300,77 @@ static bool compare_approximate(Expr* a, Expr* b, bool want_order, int* out) {
     mpfr_clears(ar.v, ai.v, br.v, bi.v, (mpfr_ptr)0);
     return ok;
 }
+
+/* True iff `e` holds no approximate number anywhere: an exact numeric
+ * quantity such as Pi + 10^-20, Exp[1 + 10^-20] or Pi/3^700. */
+static bool cmp_is_exact_quantity(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL || e->type == EXPR_MPFR) return false;
+    if (e->type != EXPR_FUNCTION) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        if (!cmp_is_exact_quantity(e->data.function.args[i])) return false;
+    return cmp_is_exact_quantity(e->data.function.head);
+}
+
+/* `e` at `bits` into the real `v`, refusing a value that came back as a
+ * machine real (some head ignored the requested precision, so the value
+ * carries 53 bits whatever was asked) or with a non-zero imaginary part. */
+static bool cmp_real_at(const Expr* e, long bits, mpfr_t v) {
+    NumericSpec s; s.mode = NUMERIC_MODE_MPFR; s.bits = bits;
+    Expr* n = numericalize(e, s);
+    if (!n) return false;
+    bool ok = false;
+    if (n->type == EXPR_MPFR && mpfr_number_p(n->data.mpfr)) {
+        mpfr_set(v, n->data.mpfr, MPFR_RNDN);
+        ok = true;
+    } else if (n->type == EXPR_INTEGER || n->type == EXPR_BIGINT ||
+               is_rational_like(n)) {
+        mpq_t q;
+        mpq_init(q);
+        ok = cmp_exact_rational(n, q);
+        if (ok) mpfr_set_q(v, q, MPFR_RNDN);
+        mpq_clear(q);
+    }
+    expr_free(n);
+    return ok;
+}
+
+/* The order of two EXACT real quantities, read at increasing precision.
+ *
+ * A double cannot order them: N[Pi + 10^-20] and N[Pi] are the same double,
+ * so the machine comparison called them equal (Pi + 10^-20 == Pi was True),
+ * and Pi/3^700 has no double at all (it is below 2^-1074), so Pi/3^700 > 0
+ * stayed unevaluated.  At p bits each side is good to a relative 2^-p, so a
+ * difference above 2^(16 - p) of the larger side is resolved and its sign is
+ * the order; one that is not resolved at the top rung is reported equal (0),
+ * as the machine rule did.  Every magnitude stays in MPFR, so the exponent
+ * range is no limit.  False -- the caller keeps its own rule -- when a side
+ * does not evaluate to a real number at the requested precision. */
+static bool cmp_exact_order(const Expr* a, const Expr* b, int* out) {
+    static const long rungs[] = { 128, 1024 };
+    bool ok = false;
+    mpfr_t x, y, d, t;
+    mpfr_inits2(64, x, y, d, t, (mpfr_ptr)0);
+    for (size_t r = 0; r < sizeof rungs / sizeof rungs[0]; ++r) {
+        long bits = rungs[r];
+        mpfr_set_prec(x, (mpfr_prec_t)bits);
+        mpfr_set_prec(y, (mpfr_prec_t)bits);
+        mpfr_set_prec(d, (mpfr_prec_t)bits);
+        mpfr_set_prec(t, (mpfr_prec_t)bits);
+        if (!cmp_real_at(a, bits, x) || !cmp_real_at(b, bits, y)) { ok = false; break; }
+        ok = true;
+        mpfr_sub(d, x, y, MPFR_RNDN);
+        if (mpfr_zero_p(d)) { *out = 0; continue; }
+        /* t = 2^(16 - bits) max(|x|, |y|) */
+        if (mpfr_cmpabs(x, y) >= 0) mpfr_abs(t, x, MPFR_RNDN);
+        else                        mpfr_abs(t, y, MPFR_RNDN);
+        mpfr_mul_2si(t, t, 16 - bits, MPFR_RNDN);
+        if (mpfr_cmpabs(d, t) > 0) { *out = mpfr_sgn(d) > 0 ? 1 : -1; break; }
+        *out = 0;
+    }
+    mpfr_clears(x, y, d, t, (mpfr_ptr)0);
+    return ok;
+}
 #endif
 
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
@@ -386,8 +457,33 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     }
 #endif
 
-    if (!get_numeric_value(a, &va, &na, &da, &exact_a)) return 0;
-    if (!get_numeric_value(b, &vb, &nb, &db, &exact_b)) return 0;
+    bool got_a = get_numeric_value(a, &va, &na, &da, &exact_a);
+    bool got_b = got_a && get_numeric_value(b, &vb, &nb, &db, &exact_b);
+
+#ifdef USE_MPFR
+    /* Two exact quantities, at least one beyond an exact rational (Pi + 10^-20,
+     * Pi/3^700).  Their doubles decide only a clear order: both in the normal
+     * range (or an exact 0) and apart by more than 2^-40 relative.  Anything
+     * closer -- or a value the double range cannot hold, which N returns as an
+     * extended-range MPFR and get_numeric_value declines -- is ordered at
+     * increasing precision (cmp_exact_order). */
+    if (cmp_is_exact_quantity(a) && cmp_is_exact_quantity(b) &&
+        expr_is_numeric_quantity(a) && expr_is_numeric_quantity(b)) {
+        bool clear = false;
+        if (got_b && isfinite(va) && isfinite(vb) &&
+            (va == 0.0 || fabs(va) >= DBL_MIN) && (vb == 0.0 || fabs(vb) >= DBL_MIN)) {
+            double mx = fabs(va) > fabs(vb) ? fabs(va) : fabs(vb);
+            clear = fabs(va - vb) > mx * 0x1p-40;
+        }
+        int cmp;
+        if (!clear && cmp_exact_order(a, b, &cmp)) {
+            *can_compare = true;
+            return cmp;
+        }
+    }
+#endif
+
+    if (!got_b) return 0;
 
     *can_compare = true;
     if (exact_a && exact_b) {

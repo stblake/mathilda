@@ -716,6 +716,27 @@ static void test_infinity_ordering(void) {
                    "5", 1);
 }
 
+/* Exact quantities closer than a double resolves, or outside the double
+ * range, compare by their exact values.  Expected values from first
+ * principles: Pi/3^700 ~ 3.3 10^-334 > 0; Pi > E; Exp[1 + 10^-20] - E =
+ * E (e^10^-20 - 1) > 0; Pi + 10^-20 > Pi. */
+static void test_compare_exact_quantities_precision_and_range(void) {
+    assert_eval_eq("{Pi/3^700 == 0, Pi/3^700 != 0, Pi/3^700 > 0, Pi/3^700 < 0, -Pi/3^700 < 0}",
+                   "List[False, True, True, False, True]", 1);
+    assert_eval_eq("{I Pi/3^700 == 0, E/10^400 == 0, Pi 10^500 == 0, Zeta[3] 10^1000 == 0}",
+                   "List[False, False, False, False]", 1);
+    assert_eval_eq("{Pi/3^700 < E/3^700, Pi 10^500 > E 10^500, Pi/3^700 > 1/3^701}",
+                   "List[False, True, True]", 1);
+    assert_eval_eq("{Pi + 10^-20 == Pi, Exp[1 + 10^-20] == E, Exp[1 + 10^-20] != E, "
+                   "Sqrt[2] + 10^-30 == Sqrt[2], Exp[1 + 10^-20] > E, Pi + 10^-20 > Pi}",
+                   "List[False, False, True, False, True, True]", 1);
+    assert_eval_eq("Exp[-10^4] - Exp[-10^4 - 10^-20] == 0", "False", 1);
+    /* equal exact values stay equal */
+    assert_eval_eq("{Sqrt[5 + 2 Sqrt[6]] == Sqrt[3] + Sqrt[2], Sin[Pi/7]^2 + Cos[Pi/7]^2 == 1, "
+                   "Sqrt[5 + 2 Sqrt[6]] <= Sqrt[3] + Sqrt[2], Sqrt[5 + 2 Sqrt[6]] < Sqrt[3] + Sqrt[2]}",
+                   "List[True, True, True, False]", 1);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -750,6 +771,7 @@ int main() {
     TEST(test_greater_unevaluated);
     TEST(test_compare_bigint_adjacent);
     TEST(test_compare_rational_beyond_double_range);
+    TEST(test_compare_exact_quantities_precision_and_range);
     TEST(test_indeterminate_ieee_unordered);
     TEST(test_variadic_comparison_chains);
     TEST(test_equal_lists_tolerance);
