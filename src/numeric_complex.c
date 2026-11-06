@@ -719,8 +719,18 @@ void ncpx_pow_si(ncpx* out, const ncpx* z, long n, mpfr_prec_t wp) {
     ncpx_clear(&b); ncpx_clear(&r);
 }
 
-/* out = z^w = exp(w log z), principal branch. */
+/* out = z^w = exp(w log z), principal branch.  An integer exponent (a real
+ * w with zero imaginary part and an integral value) is z^n exactly, taken by
+ * binary powering: the polar route costs a complex log and exp (an atan, a
+ * sqrt, a log, an exp, a sin_cos) per power -- most of the time of a compiled
+ * Product[1 - z^k, {k, 1, 1000}] at 50 digits -- and rounds more. */
 void ncpx_pow(ncpx* out, const ncpx* z, const ncpx* w, mpfr_prec_t wp) {
+    if (mpfr_zero_p(w->im) && mpfr_integer_p(w->re)
+        && mpfr_cmpabs_ui(w->re, 1UL << 20) <= 0
+        && !(mpfr_zero_p(z->re) && mpfr_zero_p(z->im))) {
+        ncpx_pow_si(out, z, mpfr_get_si(w->re, NRND), wp);
+        return;
+    }
     ncpx l, m;
     ncpx_init(&l, wp); ncpx_init(&m, wp);
     ncpx_log(&l, z, wp);
