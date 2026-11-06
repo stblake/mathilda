@@ -255,6 +255,15 @@ void zgeev_(const char* jobvl, const char* jobvr, const int* n,
 void dsyev_(const char* jobz, const char* uplo, const int* n,
             double* a, const int* lda, double* w,
             double* work, const int* lwork, int* info);
+/* dsbevd -- eigenvalues (ascending) and optionally eigenvectors of a real
+ * symmetric band matrix in LAPACK band storage AB (ldab >= kd + 1, the
+ * upper triangle: AB[kd + i - j + j*ldab] = A[i, j], max(0, j-kd) <= i <= j),
+ * by band reduction to tridiagonal form (dsbtrd, O(n^2 kd)) and divide and
+ * conquer. */
+void dsbevd_(const char* jobz, const char* uplo, const int* n, const int* kd,
+             double* ab, const int* ldab, double* w, double* z, const int* ldz,
+             double* work, const int* lwork, int* iwork, const int* liwork,
+             int* info, size_t jobz_len, size_t uplo_len);
 void zheev_(const char* jobz, const char* uplo, const int* n,
             double* a, const int* lda, double* w,
             double* work, const int* lwork, double* rwork, int* info);
@@ -587,6 +596,23 @@ int mat_lapack_zheevd(int n, double* A, int lda, double* w, int vectors);
  * used as scratch and does NOT receive eigenvectors. About half the work of
  * the jobz='V' form for a values-only request. */
 int mat_lapack_dsyev_values(int n, double* A, int lda, double* w);
+
+/* Real symmetric BAND eigenproblem (dsbevd, uplo='U').  A is the full n x n
+ * symmetric matrix (row- or column-major: symmetric) of half-bandwidth kd;
+ * it is read, not modified.  Eigenvalues ascending in w; with `vectors`, Z
+ * (n x n, column-major) receives the orthonormal eigenvectors.  O(n^2 kd)
+ * for the reduction against O(n^3) for dsyev on the full matrix. */
+int mat_lapack_dsbevd(int n, int kd, const double* A, double* w, double* Z, int vectors);
+
+/* The dense symmetric eigenproblem with the dsyev / dsyev_values contract
+ * (A n x n, lda = n; eigenvalues ascending in w; with `vectors` the
+ * eigenvectors overwrite A's columns; for values only A is scratch).
+ * Values only: a narrow band (half-bandwidth <= n/64, n >= 128) goes to
+ * dsbevd, O(n^2 kd); else, with n >= MTH_DSYEV_2STAGE_MIN_N on Accelerate,
+ * dsyev_2stage, whose BLAS-3 band reduction beats dsytrd at large n;
+ * otherwise (and with vectors) exactly dsyev / dsyev_values. */
+#define MTH_DSYEV_2STAGE_MIN_N 800
+int mat_lapack_dsyev_auto(int n, double* A, double* w, int vectors);
 
 /* Generalized eigenproblem A x = lambda B x (jobvl='N', jobvr='V'). Real:
  * eigenvalues are (alphar[j] + i*alphai[j]) / beta[j] with VR packed per

@@ -789,6 +789,88 @@ int mat_lapack_dsyev_values(int n, double* A, int lda, double* w)
     return info;
 }
 
+int mat_lapack_dsbevd(int n, int kd, const double* A, double* w, double* Z, int vectors)
+{
+    if (n <= 0 || kd < 0 || kd >= n) return -1;
+    int ldab = kd + 1, info = 0, lwork = -1, liwork = -1, iq = 0, ldz = vectors ? n : 1;
+    double query = 0.0, zdummy = 0.0;
+    char jz[2] = { vectors ? 'V' : 'N', 0 }, up[2] = { 'U', 0 };
+    double* AB = (double*)malloc((size_t)ldab * (size_t)n * sizeof(double));
+    if (!AB) return -999;
+    for (int j = 0; j < n; j++) {
+        int i0 = j - kd > 0 ? j - kd : 0;
+        for (int i = i0; i <= j; i++)
+            AB[(size_t)(kd + i - j) + (size_t)j * (size_t)ldab] = A[(size_t)i * (size_t)n + (size_t)j];
+    }
+    double* zp = vectors ? Z : &zdummy;
+    dsbevd_(jz, up, &n, &kd, AB, &ldab, w, zp, &ldz, &query, &lwork, &iq, &liwork, &info MTH_FSTRLEN2);
+    if (info != 0) { free(AB); return info; }
+    lwork = lapack_lwork(query, vectors ? 1 + 5 * n + 2 * n * n : 2 * n);
+    liwork = iq > 0 ? iq : (vectors ? 3 + 5 * n : 1);
+    double* work = (double*)malloc((size_t)lwork * sizeof(double));
+    int* iwork = (int*)malloc((size_t)liwork * sizeof(int));
+    if (!work || !iwork) { free(AB); free(work); free(iwork); return -999; }
+    dsbevd_(jz, up, &n, &kd, AB, &ldab, w, zp, &ldz, work, &lwork, iwork, &liwork, &info MTH_FSTRLEN2);
+    free(AB); free(work); free(iwork);
+    return info;
+}
+
+/* Half-bandwidth of a symmetric n x n matrix: the largest |i - j| with a
+ * nonzero entry (exact zeros only: band storage must reproduce A exactly).
+ * Gives up (returns n) once the band is too wide to be worth using. */
+static int sym_half_bandwidth(int n, const double* A, int give_up)
+{
+    int kd = 0;
+    for (int i = 0; i < n; i++) {
+        const double* row = A + (size_t)i * (size_t)n;
+        for (int j = n - 1; j > i + kd; j--)
+            if (row[j] != 0.0) { kd = j - i; break; }
+        if (kd > give_up) return n;
+    }
+    return kd;
+}
+
+int mat_lapack_dsyev_auto(int n, double* A, double* w, int vectors)
+{
+    if (vectors) return mat_lapack_dsyev(n, A, n, w);
+    /* Values only of a narrowly banded matrix: dsbevd's band reduction is
+     * O(n^2 kd).  Measured against the dense routines below it wins while
+     * kd < ~n/40 (n = 1000: 0.06 s at kd = 5 against 0.17 s; kd = 60 already
+     * loses, 0.25 s), so the cut is kd <= n/64. */
+    if (n >= 128) {
+        int kd = sym_half_bandwidth(n, A, n / 64);
+        if (kd <= n / 64 && mat_lapack_dsbevd(n, kd, A, w, NULL, 0) == 0) return 0;
+    }
+#if defined(MATHILDA_USE_ACCELERATE)
+    /* Values only, large n: the two-stage reduction (dense -> band in BLAS-3
+     * blocks, then band -> tridiagonal) does the O(n^3) part as matrix-matrix
+     * products, where dsytrd spends half of it in matrix-vector ones: 1.8x on
+     * a 1600 x 1600 symmetric matrix.  Below ~800 the band stage's overhead
+     * loses (0.016 s against 0.011 s at n = 400).  Any failure falls back. */
+    if (n >= MTH_DSYEV_2STAGE_MIN_N) {
+        int info = 0, lwork = -1;
+        double query = 0.0;
+        char jz[2] = { 'N', 0 }, up[2] = { 'U', 0 };
+        double* Ac = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
+        if (Ac) {
+            memcpy(Ac, A, (size_t)n * (size_t)n * sizeof(double));
+            dsyev_2stage_(jz, up, &n, Ac, &n, w, &query, &lwork, &info);
+            if (info == 0) {
+                lwork = lapack_lwork(query, 3 * n);
+                double* work = (double*)malloc((size_t)lwork * sizeof(double));
+                if (work) {
+                    dsyev_2stage_(jz, up, &n, Ac, &n, w, work, &lwork, &info);
+                    free(work);
+                    if (info == 0) { free(Ac); return 0; }
+                }
+            }
+            free(Ac);
+        }
+    }
+#endif
+    return mat_lapack_dsyev_values(n, A, n, w);
+}
+
 int mat_lapack_zheev(int n, double* A, int lda, double* w)
 {
     int info = 0, lwork = -1;

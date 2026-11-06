@@ -8,6 +8,8 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "common.h"
+#include "lapack.h"
+#include <stdint.h>
 #include "numeric.h"
 #include <stdbool.h>
 #include <stdlib.h>
@@ -76,6 +78,15 @@ static bool banded_automatic_prefers_real(const MatD* A, size_t b,
                                             double sym_tol) {
     (void)sym_tol;
     size_t n = A->n;
+#ifdef USE_LAPACK
+    /* With LAPACK, Direct is the better automatic choice at every band:
+     * values-only Direct routes a narrow band to dsbevd itself
+     * (mat_lapack_dsyev_auto), and the Givens chase here is O(n^3) with
+     * full-row updates where dsyev's blocked dsytrd is faster at any
+     * bandwidth worth calling narrow.  Method -> "Banded" still comes here
+     * (and runs dsbevd). */
+    if (mathilda_lapack_probe()) return false;
+#endif
     if (n <= 8) return false;       /* tiny -- Direct is faster + simpler */
     if (b >= n - 1) return false;   /* fully dense band */
     size_t thresh = (n / 4 > 8) ? n / 4 : 8;
@@ -210,6 +221,40 @@ static Expr* banded_real_sym_machine(const MatD* A, size_t b,
                                        MateigenWant want, Expr* k_spec) {
     size_t n = A->n;
     if (n == 0) return NULL;
+
+#ifdef USE_LAPACK
+    /* LAPACK dsbevd: blocked band reduction (dsbtrd) plus divide and
+     * conquer, in band storage.  The Givens chase below updates full rows
+     * and columns, O(n) per rotation and O(n^3) in all with a strided
+     * column walk -- a 1600 x 1600 five-point Laplacian (half-bandwidth 40)
+     * took 1 s there and 30 ms here.  Output goes through the same
+     * builders (descending |lambda|, unit columns); on any LAPACK failure
+     * the hand-rolled kernel still runs. */
+    if (mathilda_lapack_probe() && n <= (size_t)INT32_MAX / n) {
+        bool wantV = (want & MATEIGEN_WANT_VECTORS) != 0;
+        double* w = (double*)malloc(sizeof(double) * n);
+        double* Z = wantV ? (double*)malloc(sizeof(double) * n * n) : NULL;
+        if (w && (!wantV || Z) &&
+            mat_lapack_dsbevd((int)n, (int)b, A->re, w, Z, wantV ? 1 : 0) == 0) {
+            size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+            direct_sort_perm_desc_abs(w, n, perm);
+            Expr* out_vecs = NULL;
+            if (wantV) {
+                double* Q = (double*)malloc(sizeof(double) * n * n);
+                for (size_t i = 0; i < n; i++)
+                    for (size_t j = 0; j < n; j++)   /* col j = dsbevd col j */
+                        Q[i * n + j] = Z[i + j * n];
+                out_vecs = direct_build_real_eigenvector_list(Q, n, perm);
+                free(Q);
+            }
+            Expr* out = (want & MATEIGEN_WANT_VALUES)
+                      ? direct_build_real_eigenvalue_list(w, n, perm) : NULL;
+            free(perm); free(w); free(Z);
+            return direct_finish(out, out_vecs, k_spec);
+        }
+        free(w); free(Z);
+    }
+#endif
 
     double* W = (double*)malloc(sizeof(double) * n * n);
     memcpy(W, A->re, sizeof(double) * n * n);

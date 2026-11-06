@@ -1152,8 +1152,8 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
         if (Ac && w) {
             memcpy(Ac, A->re, sizeof(double) * n * n);  /* symmetric: layout-agnostic */
             int info = want_Q
-                ? mat_lapack_dsyev((int)n, Ac, (int)n, w)          /* jobz='V' */
-                : mat_lapack_dsyev_values((int)n, Ac, (int)n, w);  /* jobz='N' */
+                ? mat_lapack_dsyev_auto((int)n, Ac, w, 1)   /* jobz='V' (dsbevd when banded) */
+                : mat_lapack_dsyev_auto((int)n, Ac, w, 0);  /* jobz='N' */
             if (info == 0) {
                 /* dsyev returns eigenvalues ASCENDING, and the stable |lambda|
                  * sort keeps that order on a tie, so +/-v comes out
@@ -5356,7 +5356,7 @@ Expr* ndla_eigenvalues(Expr* res) {
                 /* Symmetric: dsyev (real spectrum) -- as the boxed path does. */
                 double* w = (double*)malloc((size_t)n * sizeof(double));
                 size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
-                if (w && perm && mat_lapack_dsyev_values(n, A, n, w) == 0) {
+                if (w && perm && mat_lapack_dsyev_auto(n, A, w, 0) == 0) {
                     direct_sort_perm_desc_abs(w, n, perm);
                     double* ev = (double*)malloc((size_t)n * sizeof(double));
                     for (int i = 0; i < n; i++) ev[i] = w[perm[i]];
@@ -5416,7 +5416,7 @@ Expr* ndla_eigenvectors(Expr* res) {
                 double* w = (double*)malloc((size_t)n * sizeof(double));
                 size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
                 double* vb = (double*)malloc((size_t)n * (size_t)n * sizeof(double));
-                if (w && perm && vb && mat_lapack_dsyev(n, A, n, w) == 0) {
+                if (w && perm && vb && mat_lapack_dsyev_auto(n, A, w, 1) == 0) {
                     direct_sort_perm_desc_abs(w, n, perm);
                     for (int s = 0; s < n; s++)
                         for (int i = 0; i < n; i++)
@@ -5516,7 +5516,7 @@ Expr* ndla_eigensystem(Expr* res) {
             } else if (ndla_eigen_symmetric(A, n)) {
                 double* w = (double*)malloc((size_t)n * sizeof(double));
                 size_t* perm = (size_t*)malloc((size_t)n * sizeof(size_t));
-                if (w && perm && mat_lapack_dsyev(n, A, n, w) == 0) {
+                if (w && perm && mat_lapack_dsyev_auto(n, A, w, 1) == 0) {
                     direct_sort_perm_desc_abs(w, n, perm);
                     double* ev = (double*)malloc((size_t)n * sizeof(double));
                     double* vb = (double*)malloc(nn * sizeof(double));

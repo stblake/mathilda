@@ -3273,6 +3273,13 @@ Gives a list of the eigenvalues of a square matrix.
   list form (`Method -> {"Name", "Key" -> value, ...}`); see the
   per-method sections in the `?Eigenvalues` REPL docstring and the
   weekly changelog entries under `docs/spec/changelog/`.
+- Machine real symmetric eigenvalues (no vectors) with LAPACK: a narrow band
+  (half-bandwidth `<= n/64`, `n >= 128`) goes to the band solver `dsbevd`
+  (`O(n^2 kd)`); otherwise, at `n >= 800` with Accelerate, the two-stage
+  `dsyev_2stage`, whose dense-to-band reduction is BLAS-3 (1.8x on a
+  1600 x 1600 Laplacian); else `dsyev`.  With LAPACK present `Automatic`
+  no longer prefers the in-file Givens `"Banded"` kernel (it is `O(n^3)` with
+  full-row updates); `Method -> "Banded"` runs `dsbevd`.
 
 ### `Method -> "FEAST"` (interval slice)
 
