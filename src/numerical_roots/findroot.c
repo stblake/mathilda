@@ -1286,8 +1286,10 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         bool stop = false;
         if (polished >= 0) {
             /* fr_polish_done in MPFR: at the resolution, stalled, or capped. */
+            /* 16 ulps of x -- of the double it is returned as, for an escalated
+             * machine solve: bits beyond 53 are rounded away. */
             polished++;
-            mpfr_mul_2si(scale, scale, 4 - bits, MPFR_RNDN);      /* 16 ulps of x */
+            mpfr_mul_2si(scale, scale, 4 - (opts->escalated ? 53 : bits), MPFR_RNDN);
             mpfr_mul_2si(prev_step, prev_step, -1, MPFR_RNDN);    /* prev / 2     */
             stop = mpfr_cmp(tmp, scale) <= 0 || mpfr_cmp(tmp, prev_step) > 0
                    || polished >= FR_POLISH_MAX;
