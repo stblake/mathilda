@@ -19,6 +19,7 @@
 #include "assoc_struct.h"   /* Equal/Unequal between associations */
 #include <stdio.h>
 #include <gmp.h>
+#include <float.h>
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
@@ -73,36 +74,6 @@ static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, 
     return ok;
 }
 
-#ifdef USE_MPFR
-/* True when `e` is an arbitrary-precision value a double cannot stand in for:
- * it overflows to +/-inf, or flushes a nonzero value to zero. A machine
- * number carries a 53-bit mantissa but an arbitrary exponent, so N[1001!]
- * (~4e2570) and N[Exp[-1000]] (~5e-435) are both ordinary results here. */
-static bool cmp_out_of_double_range(const Expr* e) {
-    if (!e || e->type != EXPR_MPFR) return false;
-    if (!mpfr_number_p(e->data.mpfr)) return false;
-    double d = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
-    return isinf(d) || (d == 0.0 && !mpfr_zero_p(e->data.mpfr));
-}
-
-/* Compare in MPFR when a double would saturate. Returns false (leaving the
- * caller on its usual path) unless both operands read cleanly as real
- * numbers, so symbolic arguments and the in-range tolerant comparison below
- * are untouched. */
-static bool compare_via_mpfr(Expr* a, Expr* b, int* out) {
-    if (!cmp_out_of_double_range(a) && !cmp_out_of_double_range(b)) return false;
-    long bits = numeric_combined_bits(a, b, 0);
-    mpfr_t ra, ia, rb, ib;
-    mpfr_inits2((mpfr_prec_t)bits, ra, ia, rb, ib, (mpfr_ptr)0);
-    bool ok = get_approx_mpfr(a, ra, ia, NULL)
-           && get_approx_mpfr(b, rb, ib, NULL)
-           && mpfr_zero_p(ia) && mpfr_zero_p(ib)
-           && mpfr_number_p(ra) && mpfr_number_p(rb);
-    if (ok) *out = mpfr_cmp(ra, rb);
-    mpfr_clears(ra, ia, rb, ib, (mpfr_ptr)0);
-    return ok;
-}
-#endif
 
 /* An integer-like Expr into an already-initialised mpz (expr_to_mpz
  * initialises its target, so it goes through a temporary). */
@@ -154,6 +125,180 @@ static int real_infinity_sign(const Expr* e) {
     if (is_rational(dir, &p, &q)) return (p > 0) - (p < 0);
     return 0;
 }
+
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------------
+ *  Tolerant comparison of approximate numbers
+ *
+ *  Two approximate numbers are Equal when they agree to within the
+ *  uncertainty of the less accurate of them, ignoring its last few binary
+ *  digits. Concretely, with every inexact operand x assigned
+ *
+ *      precision  p(x) = its mantissa bits     (53 for a machine real,
+ *                                               0 for an approximate zero)
+ *      accuracy   a(x) = p(x) - log2|x|        (an approximate zero: its
+ *                                               bit precision; machine 0.:
+ *                                               53 + 1022 bits)
+ *
+ *  and an exact operand (Integer, Rational, Pi, Sqrt[2], ...) infinite
+ *  accuracy, the operand g of LEAST accuracy governs:
+ *
+ *      x == y   iff   |x - y| <= 2^(k(g) - a(g)),
+ *      k(g) = 7 * min(p(g), 53) / 53        (bits ignored)
+ *
+ *  so a number of at least machine precision has its last 7 bits (~2.107
+ *  decimal digits) ignored, and a lower-precision one proportionally fewer
+ *  -- an approximate zero none, it compares by accuracy alone. For two
+ *  machine reals of similar size this is the familiar relative 2^-46.
+ *  Complex operands compare part by part, each part with its own precision.
+ *
+ *  The ordering heads are consistent with it: inside the tolerance x < y is
+ *  False and x <= y True; outside it the sign of x - y decides.
+ *
+ *  Before this rule existed an arbitrary-precision operand was read as a
+ *  double and compared with the machine tolerance, so N[1 - 10^-20, 30] == 1
+ *  was True and N[1 - 10^-20, 30] < 1 False. Two machine reals (or a machine
+ *  real and an exact number) never come here: compare_numeric keeps its
+ *  double path for them.
+ * ---------------------------------------------------------------------- */
+
+enum { CMP_PART_EXACT = 0, CMP_PART_MACHINE = 1, CMP_PART_MPFR = 2 };
+
+/* One real component of an operand: its value at the working precision, and
+ * how much it is worth -- exact, or inexact with `bits` of precision. */
+typedef struct {
+    mpfr_t v;
+    int kind;
+    long bits;
+} CmpPart;
+
+/* Bits of a part's accuracy, a(x) above. Only called on inexact parts. */
+static double cmp_part_accuracy_bits(const CmpPart* p) {
+    if (mpfr_zero_p(p->v))
+        return p->kind == CMP_PART_MACHINE ? (double)(DBL_MANT_DIG - DBL_MIN_EXP + 1)
+                                           : (double)p->bits;
+    long e;
+    double m = mpfr_get_d_2exp(&e, p->v, MPFR_RNDN);
+    return (double)p->bits - ((double)e + log2(fabs(m)));
+}
+
+/* Load one real atom into `p`: an exact rational of either size, a machine
+ * real, or an MPFR. `force_exact` marks a value that stands for an exact
+ * quantity (a numericalized Pi, Sqrt[2], ...). False for anything else. */
+static bool cmp_load_atom(const Expr* e, CmpPart* p, bool force_exact) {
+    if (e->type == EXPR_REAL) {
+        if (!isfinite(e->data.real)) return false;
+        mpfr_set_d(p->v, e->data.real, MPFR_RNDN);
+        p->kind = CMP_PART_MACHINE; p->bits = DBL_MANT_DIG;
+    } else if (e->type == EXPR_MPFR) {
+        if (!mpfr_number_p(e->data.mpfr)) return false;
+        mpfr_set(p->v, e->data.mpfr, MPFR_RNDN);
+        p->kind = CMP_PART_MPFR; p->bits = (long)mpfr_get_prec(e->data.mpfr);
+    } else {
+        mpq_t q;
+        mpq_init(q);
+        bool ok = cmp_exact_rational(e, q);
+        if (ok) mpfr_set_q(p->v, q, MPFR_RNDN);
+        mpq_clear(q);
+        if (!ok) return false;
+        p->kind = CMP_PART_EXACT; p->bits = 0;
+    }
+    if (force_exact) { p->kind = CMP_PART_EXACT; p->bits = 0; }
+    return true;
+}
+
+/* A real number or Complex[re, im] of real atoms into (re, im). */
+static bool cmp_load_number(const Expr* e, CmpPart* re, CmpPart* im, bool force_exact) {
+    Expr *r, *i;
+    if (e->type == EXPR_FUNCTION && is_complex((Expr*)e, &r, &i))
+        return cmp_load_atom(r, re, force_exact) && cmp_load_atom(i, im, force_exact);
+    if (!cmp_load_atom(e, re, force_exact)) return false;
+    mpfr_set_zero(im->v, +1);
+    im->kind = CMP_PART_EXACT; im->bits = 0;
+    return true;
+}
+
+/* An operand into (re, im) at `wbits`: a number directly, a closed-form
+ * numeric quantity (Pi, 1 + Sqrt[2], E^I) through N at the working
+ * precision, keeping its exactness. */
+static bool cmp_load_operand(const Expr* e, long wbits, CmpPart* re, CmpPart* im) {
+    if (cmp_load_number(e, re, im, false)) return true;
+    if (!expr_is_numeric_quantity(e)) return false;
+    NumericSpec s; s.mode = NUMERIC_MODE_MPFR; s.bits = wbits;
+    Expr* n = numericalize(e, s);
+    if (!n) return false;
+    bool ok = cmp_load_number(n, re, im, true);
+    expr_free(n);
+    return ok;
+}
+
+/* Compare two parts. Returns false when both are exact (no tolerance to
+ * apply: the caller's exact paths own that), else sets *out to 0 when they
+ * are equal within the governing tolerance, otherwise to the sign of x - y. */
+static bool cmp_parts(const CmpPart* x, const CmpPart* y, long wbits, int* out) {
+    bool ix = x->kind != CMP_PART_EXACT, iy = y->kind != CMP_PART_EXACT;
+    if (!ix && !iy) return false;
+    const CmpPart* g;
+    double acc;
+    if (ix && iy) {
+        double ax = cmp_part_accuracy_bits(x), ay = cmp_part_accuracy_bits(y);
+        g = ax <= ay ? x : y;
+        acc = ax <= ay ? ax : ay;
+    } else {
+        g = ix ? x : y;
+        acc = cmp_part_accuracy_bits(g);
+    }
+    double prec = mpfr_zero_p(g->v) ? 0.0 : (double)g->bits;
+    double ignored = 7.0 * (prec < DBL_MANT_DIG ? prec : DBL_MANT_DIG) / DBL_MANT_DIG;
+
+    mpfr_t d, tol;
+    mpfr_init2(d, (mpfr_prec_t)wbits);
+    mpfr_init2(tol, 64);
+    mpfr_sub(d, x->v, y->v, MPFR_RNDN);
+    int sign = mpfr_sgn(d);
+    mpfr_abs(d, d, MPFR_RNDN);
+    mpfr_set_d(tol, ignored - acc, MPFR_RNDN);
+    mpfr_ui_pow(tol, 2, tol, MPFR_RNDN);
+    *out = (sign == 0 || mpfr_cmp(d, tol) <= 0) ? 0 : (sign > 0 ? 1 : -1);
+    mpfr_clears(d, tol, (mpfr_ptr)0);
+    return true;
+}
+
+/* The tolerant comparison of a and b when at least one carries an MPFR
+ * value. Returns false (caller keeps its own path) when the rule does not
+ * apply: no MPFR operand, an operand that is not a number, or a pair of
+ * exact parts. On success *out is
+ *   want_order:  -1 / 0 / +1   (both operands real; a complex one declines)
+ *   otherwise:    0 equal, 1 unequal   (complex parts compared one by one). */
+static bool compare_approximate(Expr* a, Expr* b, bool want_order, int* out) {
+    if (!numeric_any_mpfr(a, b)) return false;
+    long wbits = numeric_combined_bits(a, b, 0) + 32;
+    CmpPart ar, ai, br, bi;
+    mpfr_inits2((mpfr_prec_t)wbits, ar.v, ai.v, br.v, bi.v, (mpfr_ptr)0);
+    bool ok = cmp_load_operand(a, wbits, &ar, &ai) && cmp_load_operand(b, wbits, &br, &bi);
+    if (ok) {
+        int cr = 0, ci = 0;
+        bool real_pair = mpfr_zero_p(ai.v) && ai.kind == CMP_PART_EXACT
+                      && mpfr_zero_p(bi.v) && bi.kind == CMP_PART_EXACT;
+        if (want_order) {
+            ok = real_pair && cmp_parts(&ar, &br, wbits, &cr);
+            if (ok) *out = cr;
+        } else {
+            bool dr = cmp_parts(&ar, &br, wbits, &cr);
+            bool di = real_pair || cmp_parts(&ai, &bi, wbits, &ci);
+            /* A pair of exact parts (Complex[0, x] against I y: both real
+             * parts 0) carries no tolerance. Equal working values settle it;
+             * unequal ones decline, as they may be two roundings of
+             * the same exact value. */
+            if (!dr && !mpfr_equal_p(ar.v, br.v)) ok = false;
+            if (!di && !mpfr_equal_p(ai.v, bi.v)) ok = false;
+            if (ok) *out = (cr == 0 && ci == 0) ? 0 : 1;
+        }
+    }
+    mpfr_clears(ar.v, ai.v, br.v, bi.v, (mpfr_ptr)0);
+    return ok;
+}
+#endif
 
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     double va, vb;
@@ -224,9 +369,9 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
 #ifdef USE_MPFR
     {
         int cmp;
-        if (compare_via_mpfr(a, b, &cmp)) {
+        if (compare_approximate(a, b, true, &cmp)) {
             *can_compare = true;
-            return cmp < 0 ? -1 : (cmp > 0 ? 1 : 0);
+            return cmp;
         }
     }
 #endif
@@ -488,6 +633,59 @@ static bool has_visible_ndarray_operand(const Expr* res) {
     return false;
 }
 
+/* Equal on a pair with an arbitrary-precision operand, by the tolerance of
+ * compare_approximate (complex parts one by one). True when it decides,
+ * with *unequal set; the verdict is final -- an exact zero test of the
+ * difference must not override it, since the difference of two approximate
+ * numbers is itself approximate. */
+static bool approximate_equal_verdict(Expr* a, Expr* b, bool* unequal) {
+#ifdef USE_MPFR
+    int v;
+    if (compare_approximate(a, b, false, &v)) { *unequal = v != 0; return true; }
+#else
+    (void)a; (void)b; (void)unequal;
+#endif
+    return false;
+}
+
+/* An approximate number: a machine real, an MPFR, or Complex[] with one. */
+static bool is_inexact_number(Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    Expr *re, *im;
+    return e->type == EXPR_FUNCTION && is_complex(e, &re, &im)
+        && (is_inexact_number(re) || is_inexact_number(im));
+}
+
+/* The tolerance makes approximate equality intransitive: in a chain
+ * x1 == x2 == x3 whose neighbours each agree, x1 and x3 may still differ by
+ * more than the tolerance, and then the chain is False -- every pair must
+ * be equal. Exact equality is transitive, so only pairs of approximate
+ * numbers are re-checked. True when some non-adjacent pair of the n values
+ * v[0], v[stride], v[2 stride], ... is unequal (stride 2 walks the values of
+ * an Inequality[v0, Equal, v1, Equal, v2] chain). */
+static bool chain_has_unequal_inexact_pair(Expr* const* v, size_t n, size_t stride) {
+    for (size_t i = 0; i + 2 < n; i++) {
+        Expr* a = v[i * stride];
+        if (!is_inexact_number(a)) continue;
+        for (size_t j = i + 2; j < n; j++) {
+            Expr* b = v[j * stride];
+            if (!is_inexact_number(b)) continue;
+            bool unequal;
+            if (approximate_equal_verdict(a, b, &unequal)) {
+                if (unequal) return true;
+                continue;
+            }
+            bool can_compare = false;
+            int cmp = compare_numeric(a, b, &can_compare);
+            if (can_compare && cmp != 0) return true;
+        }
+    }
+    return false;
+}
+
 Expr* builtin_equal(Expr* res) {
     if (res->type != EXPR_FUNCTION) {
         return NULL;
@@ -521,6 +719,9 @@ Expr* builtin_equal(Expr* res) {
             if (av == ASSOC_EQ_TRUE) equal = true;
             else all_equal = false;
             continue;
+        } else if (approximate_equal_verdict(a, b, &definitely_unequal)) {
+            if (definitely_unequal) return expr_new_symbol(SYM_False);
+            equal = true;
         } else {
             bool can_compare = false;
             int cmp = compare_numeric(a, b, &can_compare);
@@ -566,6 +767,10 @@ Expr* builtin_equal(Expr* res) {
     }
 
     if (all_equal) {
+        if (res->data.function.arg_count > 2
+            && chain_has_unequal_inexact_pair(res->data.function.args,
+                                              res->data.function.arg_count, 1))
+            return expr_new_symbol(SYM_False);
         return expr_new_symbol(SYM_True);
     }
 
@@ -613,6 +818,8 @@ Expr* builtin_unequal(Expr* res) {
                                          : assoc_equal_verdict(a, b);
                 if (av == ASSOC_EQ_TRUE) equal = true;
                 else if (av == ASSOC_EQ_FALSE) definitely_unequal = true;
+            } else if (approximate_equal_verdict(a, b, &definitely_unequal)) {
+                equal = !definitely_unequal;
             } else {
                 bool can_compare;
                 int cmp = compare_numeric(a, b, &can_compare);
@@ -793,6 +1000,16 @@ Expr* builtin_inequality(Expr* res) {
     }
     if (!any_undecided) {
         free(undecided);
+        /* Every maximal run of Equal links (v_s == ... == v_e) must hold
+         * pairwise, not just between neighbours: see
+         * chain_has_unequal_inexact_pair. */
+        for (size_t k = 0; k < npairs; ) {
+            size_t e = k;
+            while (e < npairs && res->data.function.args[2*e + 1]->data.symbol.name == SYM_Equal) e++;
+            if (e - k >= 2 && chain_has_unequal_inexact_pair(res->data.function.args + 2*k, e - k + 1, 2))
+                return expr_new_symbol(SYM_False);
+            k = e > k ? e : k + 1;
+        }
         return expr_new_symbol(SYM_True);
     }
 

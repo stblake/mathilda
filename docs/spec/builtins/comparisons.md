@@ -52,6 +52,32 @@ Tests whether two (or more) expressions are mathematically equal.
 
 **Features**:
 - Numeric arguments are compared by value, so `2 == 2.0` is `True`.
+- Approximate numbers are equal when they agree to within the uncertainty of
+  the **less accurate** one, ignoring its last 7 bits (about 2.1 decimal
+  digits). With precision `p` bits (53 for a machine real; an approximate zero
+  has none) and accuracy `a = p - log2|x|` bits (a zero: its own bit
+  precision), the operand of least accuracy governs and `x == y` holds iff
+  `|x - y| <= 2^(k - a)`, `k = 7 min(p, 53)/53`. An exact operand (`1`, `Pi`,
+  `Sqrt[2]`) has unlimited accuracy, so it compares at the approximate side's
+  precision. Two machine reals keep the relative `2^-46` rule. Complex numbers
+  compare part by part.
+  `N[1 - 10^-20, 30] == 1` is `False` and `N[1 - 10^-29, 30] == 1` is `True`.
+  Before this, an arbitrary-precision operand was read as a double and compared
+  at the machine tolerance, so `N[1 - 1192/10^30, 30] == 1` was `True` and
+  `N[1 - 1192/10^30, 30] < 1` was `False`.
+  `N[x, d]` carries `ceil(d log2 10)` bits (`Precision[N[1, 30]]` is 30.103),
+  so the window at 1 is `2^(7 - 100) ~ 1.0 10^-28` at 30 digits.
+- The ordering heads agree with it: inside the window `x < y` is `False` and
+  `x <= y` is `True`; outside it the sign of `x - y` decides. The window holds
+  beyond the double range too (`N[10^3000, 30] == N[10^3000 (1 + 10^-29), 30]`).
+- The tolerance is not transitive, so a chain `a == b == c` needs **every**
+  pair equal, not just neighbours: with `a = N[1, 30]`, `b = N[1 - 90/10^30, 30]`,
+  `c = N[1 - 180/10^30, 30]`, `a == b` and `b == c` are `True`, `a == b == c`
+  is `False`. Machine reals follow the same rule
+  (`1. == 1. + 10.^-14 == 1. + 2 10.^-14` is `False`).
+- An exact cancellation leaves an approximate zero as accurate as its
+  operands: `N[1/34, 30] - N[1/34, 30]` has accuracy above 31 digits, not 30,
+  so it is `< 10^-31`.
 - Two exact rationals compare exactly, whatever the size of their parts
   (v0.477): `1 == 1 + 10^-20` is `False`. It used to reach the tolerant
   machine comparison and test `True`.
@@ -74,7 +100,7 @@ Tests whether two (or more) expressions are mathematically equal.
   same test (see
   [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 - Two Lists are compared element by element with `Equal` itself, recursively
-  through nested lists, so the machine-real tolerance applies inside them:
+  through nested lists, so the approximate-number tolerance applies inside them:
   `{0.1 + 0.2, 1.} == {0.3, 1.}` is `True`. Lists of different lengths are
   `False`, one decidably unequal position makes the whole comparison `False`
   (`{x, 1} == {y, 2}`), and otherwise it stays symbolic (`{x} == {y}`).

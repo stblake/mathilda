@@ -599,6 +599,86 @@ void test_equal_lists_tolerance() {
     assert_eval_eq("{0.1 + 0.2} == {0.3} == {0.3}", "True", 0);
 }
 
+/* Approximate numbers are Equal within the uncertainty of the less accurate
+ * one, ignoring its last 7 bits: |x - y| <= 2^(7 - a), a = the least of the
+ * operands' accuracies in bits (precision bits - log2|x|; exact operands
+ * have none to spend). N[x, p] carries ceil(p log2 10) bits, so at 1 the
+ * window is 2^(7 - ceil(p log2 10)), between 68 10^-p (p = 50) and
+ * 101 10^-p (p = 30): an offset of 50 10^-p is inside it at every p
+ * below, 200 10^-p outside. An arbitrary-precision operand used to be read
+ * as a double and compared at the machine tolerance (relative 2^-46), so
+ * N[1 - 10^-20, 30] == 1 was True and N[1 - 10^-20, 30] < 1 False. */
+static void test_equal_approximate_tolerance(void) {
+    /* the cases that were wrong, and the two that were already right */
+    assert_eval_eq("d = N[1 - 1192/10^30, 30]; {d < 1, d == 1, d <= 1, d != 1}",
+                   "List[True, False, True, True]", 1);
+    assert_eval_eq("e = N[1 - 10^-20, 30]; {e < 1, e == 1, e > 1, e != 1}",
+                   "List[True, False, False, True]", 1);
+    assert_eval_eq("f = N[1 - 10^-29, 30]; {f < 1, f == 1, f <= 1, f >= 1, f != 1}",
+                   "List[False, True, True, True, False]", 1);
+    assert_eval_eq("{1.0 - 10.^-15 < 1, 1.0 - 10.^-15 == 1}", "List[False, True]", 1);
+    /* both sides of the window, at 20, 30, 50 and 100 digits: inside it Less
+     * is False and LessEqual True, outside it the sign decides */
+    assert_eval_eq("Union[Table[{N[1 - 50/10^p, p] == 1, N[1 + 50/10^p, p] == 1, "
+                   "N[1 - 50/10^p, p] < 1, N[1 - 50/10^p, p] <= 1, N[1 + 50/10^p, p] > 1, "
+                   "N[1 + 50/10^p, p] >= 1}, {p, {20, 30, 50, 100}}]]",
+                   "List[List[True, True, False, True, False, True]]", 1);
+    assert_eval_eq("Union[Table[{N[1 - 200/10^p, p] == 1, N[1 + 200/10^p, p] == 1, "
+                   "N[1 - 200/10^p, p] < 1, N[1 + 200/10^p, p] > 1, N[1 - 200/10^p, p] != 1}, "
+                   "{p, {20, 30, 50, 100}}]]",
+                   "List[List[False, False, True, True, True]]", 1);
+    /* negative numbers */
+    assert_eval_eq("{N[-1 - 50/10^30, 30] == -1, N[-1 - 50/10^30, 30] < -1, "
+                   "N[-1 - 200/10^30, 30] == -1, N[-1 - 200/10^30, 30] < -1, N[-1 + 200/10^30, 30] > -1}",
+                   "List[True, False, False, True, True]", 1);
+    /* mixed precisions: the lower one governs */
+    assert_eval_eq("{N[1 - 50/10^30, 50] == N[1, 30], N[1 - 50/10^30, 30] == N[1, 50], "
+                   "N[1 - 200/10^30, 50] == N[1, 30], N[1 - 50/10^30, 50] == N[1, 50], "
+                   "N[1 - 50/10^30, 50] < N[1, 30], N[1 - 50/10^30, 50] < N[1, 50]}",
+                   "List[True, True, False, False, False, True]", 1);
+    /* against a machine real the machine rule (relative 2^-46 = 1.42 10^-14) governs */
+    assert_eval_eq("{N[1 + 10^-14, 30] == 1., N[1 + 2 10^-14, 30] == 1., "
+                   "N[1 + 10^-14, 30] > 1., N[1 + 2 10^-14, 30] > 1.}",
+                   "List[True, False, False, True]", 1);
+    /* an approximate zero compares by its accuracy (~30 digits here) alone */
+    assert_eval_eq("z = N[1, 30] - N[1, 30]; {z == 0, z == 10^-31, z == 10^-29, "
+                   "z < 10^-29, z < 10^-31, z == -10^-31}",
+                   "List[True, True, False, True, False, True]", 1);
+    /* an exact cancellation knows the zero as well as the operands knew their
+     * values: N[1/34, 30] - N[1/34, 30] is ~2^-105 uncertain (accuracy above
+     * 31 digits), N[10^10, 30] - N[10^10, 30] ~2^-67 (below 20 digits) */
+    assert_eval_eq("a34 = N[1/34, 30]; b10 = N[10^10, 30]; {a34 - a34 < 10^-31, "
+                   "a34 - N[1/34, 40] < 10^-31, b10 - b10 < 10^-21, b10 - b10 < 10^-19, "
+                   "31 < Accuracy[a34 - a34] < 32, 19 < Accuracy[b10 - b10] < 20}",
+                   "List[True, True, False, True, True, True]", 1);
+    /* a small nonzero number is not an approximate zero: relative tolerance */
+    assert_eval_eq("{N[10^-40, 30] == 0, N[10^-40, 30] > 0, "
+                   "N[10^-40, 30] == N[10^-40 (1 + 50/10^30), 30], "
+                   "N[10^-40, 30] == N[10^-40 (1 + 200/10^30), 30]}",
+                   "List[False, True, True, False]", 1);
+    /* complex numbers: part by part (Equal only) */
+    assert_eval_eq("{N[1 + I + 50/10^30, 30] == 1 + I, N[1 + I + 200/10^30, 30] == 1 + I, "
+                   "N[1 + I (1 + 50/10^30), 30] == 1 + I, N[1 + I (1 + 200/10^30), 30] == 1 + I, "
+                   "N[1 + I (1 + 200/10^30), 30] != 1 + I, N[2 I, 30] == 2 I}",
+                   "List[True, False, True, False, True, True]", 1);
+    /* exact closed forms compare at the approximate operand's precision */
+    assert_eval_eq("{N[Pi, 30] == Pi, N[Pi + 10^-26, 30] == Pi, N[Pi + 10^-26, 30] > Pi, "
+                   "N[Sqrt[2], 40] == Sqrt[2], N[Sqrt[2], 40] < Sqrt[2], N[E, 50] >= E}",
+                   "List[True, False, True, True, False, True]", 1);
+    /* the tolerance is not transitive: every pair of a chain must be equal */
+    assert_eval_eq("a = N[1, 30]; b = N[1 - 90/10^30, 30]; c = N[1 - 180/10^30, 30]; "
+                   "{a == b, b == c, a == c, a == b == c, Equal[a, b, c], a >= b >= c, a > b, Unequal[a, b, c]}",
+                   "List[True, True, False, False, False, True, False, False]", 1);
+    assert_eval_eq("{1. == 1. + 10.^-14 == 1. + 2 10.^-14, 0.1 + 0.2 == 0.3}",
+                   "List[False, True]", 1);
+    /* beyond the double range the same relative rule holds */
+    assert_eval_eq("{N[10^3000, 30] == N[10^3000 (1 + 10^-29), 30], "
+                   "N[10^3000, 30] == N[10^3000 (1 + 10^-25), 30], "
+                   "N[10^3000, 30] < N[10^3000 (1 + 10^-29), 30], "
+                   "N[10^3000, 30] < N[10^3000 (1 + 10^-25), 30]}",
+                   "List[True, False, False, True]", 1);
+}
+
 /* The real infinities order against reals and each other (reference values).
  * FeynCalc's MaxIterations -> Infinity loop guard counter < Infinity stayed
  * unevaluated, so NestWhileList stopped after one element. */
@@ -654,6 +734,7 @@ int main() {
     TEST(test_indeterminate_ieee_unordered);
     TEST(test_variadic_comparison_chains);
     TEST(test_equal_lists_tolerance);
+    TEST(test_equal_approximate_tolerance);
     TEST(test_not_basic);
     TEST(test_and_basic);
     TEST(test_or_basic);

@@ -115,7 +115,10 @@ static void test_m_one_continuation(void) {
     assert_eval("EllipticE[2, 1]", "EllipticE[2, 1]"); /* outside: not Sin[2] */
     /* and off the strip the numeric answer is the continuation, not Sin */
     assert_true("Abs[N[EllipticE[2, 1], 20] - (2 - Sin[2])] < 10^-18");
-    assert_true("Abs[N[EllipticE[2, 1], 20] - N[EllipticE[2, 1 - 10^-25], 20]] < 10^-20");
+    /* two 20-digit values near 1.09 agree to their accuracy, ~19.7 digits:
+     * the difference is an approximate zero that cannot be certified below
+     * 10^-20 (inside its uncertainty Less is False) */
+    assert_true("Abs[N[EllipticE[2, 1], 20] - N[EllipticE[2, 1 - 10^-25], 20]] < 10^-19");
 }
 
 /* Poles answer ComplexInfinity, in every spelling of the argument.

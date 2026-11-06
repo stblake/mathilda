@@ -5389,8 +5389,9 @@ void info_init(void) {
     symtab_set_docstring("Equal",
         "lhs == rhs or Equal[lhs, rhs]\n"
         "\ttests mathematical equality. Numeric arguments decide directly\n"
-        "\t(Integer / Rational exact comparison; Real / MPFR comparison with\n"
-        "\tprecision tolerance); structurally identical symbolic forms decide\n"
+        "\t(Integer / Rational exact comparison; approximate numbers agree when\n"
+        "\tthey differ by at most the uncertainty of the less accurate one, its\n"
+        "\tlast 7 bits ignored); structurally identical symbolic forms decide\n"
         "\tTrue; otherwise the call stays unevaluated as a symbolic equation.\n"
         "Equal threads over Lists pairwise; chained Equal becomes Inequality.\n"
         "Following IEEE 754 / ISO 60559, Indeterminate is unordered with every\n"
