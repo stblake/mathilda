@@ -15,6 +15,7 @@
 #include "../assoc.h"            /* is_association / assoc_lookup_value / assoc_values_list */
 #include "../ndarray.h"          /* NDType / NDT_* for assoc_elem_ndt */
 #include "../sym_names.h"        /* SYM_Rule / SYM_RuleDelayed */
+#include "../sym_intern.h"       /* intern_symbol */
 #include <string.h>
 #include <stdlib.h>
 
@@ -536,6 +537,16 @@ bool try_emit_assoc(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
  * otherwise (so a shared head falls through to the array branch, and an
  * association-only head with no valid operand ultimately bails). */
 bool try_infer_assoc(Ctx* c, const char* h, Expr** A, size_t na, CompileType* out) {
+    /* Heads are interned: rule out the common case (every arithmetic node of
+     * the body asks) by pointer before the string compares below, which were
+     * a measurable share of compiling a long body. */
+    static const char* key_member = NULL;
+    static const char* key_free = NULL;
+    if (!key_member) { key_member = intern_symbol("KeyMemberQ"); key_free = intern_symbol("KeyFreeQ"); }
+    if (h != SYM_Lookup && h != SYM_KeyExistsQ && h != key_member && h != key_free &&
+        h != SYM_Length && h != SYM_Values && h != SYM_KeyDrop && h != SYM_KeyTake &&
+        h != SYM_Counts)
+        return false;
     bool is_lookup = strcmp(h, "Lookup") == 0 && (na == 2 || na == 3);
     bool is_exists = (strcmp(h, "KeyExistsQ") == 0 || strcmp(h, "KeyMemberQ") == 0
                       || strcmp(h, "KeyFreeQ") == 0) && na == 2;

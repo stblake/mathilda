@@ -423,11 +423,19 @@ static bool pass_vn(Opt* o, bool* progress) {
     unsigned char* kk = calloc((size_t)nreg, 1);      /* register holds a constant */
     Slot*  kv  = calloc((size_t)nreg, sizeof(Slot));
     uint32_t* alias = malloc((size_t)nreg * sizeof(uint32_t));
+    /* aliased[d]: some other register's alias points at d, so a write to d
+     * must reset those aliases.  Without it every write scanned all nreg
+     * aliases -- O(n * nreg), most of the 1.5 ms an 800-instruction body (the
+     * derivative of a 20-factor product) took to compile. */
+    unsigned char* aliased = calloc((size_t)nreg, 1);
     VNEntry* vn = calloc(o->n ? o->n : 1, sizeof(VNEntry));
-    if (!kk || !kv || !alias || !vn) { free(kk); free(kv); free(alias); free(vn); return false; }
+    if (!kk || !kv || !alias || !aliased || !vn) {
+        free(kk); free(kv); free(alias); free(aliased); free(vn); return false;
+    }
 
     for (size_t b = 0; b < o->nblk; b++) {
         memset(kk, 0, (size_t)nreg);
+        memset(aliased, 0, (size_t)nreg);
         for (int r = 0; r < nreg; r++) alias[r] = (uint32_t)r;
         size_t nvn = 0;
 
@@ -437,6 +445,7 @@ static bool pass_vn(Opt* o, bool* progress) {
             if (compile_op_kind[c->op] == K_ARR
                 || compile_op_kind[c->op] == K_ARANGE) {    /* opaque: reset state */
                 memset(kk, 0, (size_t)nreg);
+                memset(aliased, 0, (size_t)nreg);
                 for (int r = 0; r < nreg; r++) alias[r] = (uint32_t)r;
                 nvn = 0;
                 continue;
@@ -524,10 +533,21 @@ static bool pass_vn(Opt* o, bool* progress) {
             /* record the write, and invalidate everything it kills */
             if (s.wd && (int)c->dst < nreg) {
                 uint32_t d = c->dst;
-                for (size_t v = 0; v < nvn; v++)
-                    if (vn[v].valid && (vn[v].dst == d || vn[v].a == d || vn[v].b == d))
-                        vn[v].valid = false;
-                for (int r = 0; r < nreg; r++) if (alias[r] == d) alias[r] = (uint32_t)r;
+                /* Drop the entries the write kills, compacting the table as it
+                 * goes: an invalid entry can never match again, and keeping
+                 * them made both this scan and the CSE search above grow with
+                 * every instruction of the block (O(n^2) per block). */
+                size_t keep = 0;
+                for (size_t v = 0; v < nvn; v++) {
+                    if (!vn[v].valid || vn[v].dst == d || vn[v].a == d || vn[v].b == d)
+                        continue;
+                    vn[keep++] = vn[v];
+                }
+                nvn = keep;
+                if (aliased[d]) {
+                    for (int r = 0; r < nreg; r++) if (alias[r] == d) alias[r] = (uint32_t)r;
+                    aliased[d] = 0;
+                }
                 /* And d's OWN alias.  Without this, `MOVE d <- a` followed by any
                  * instruction that WRITES d left alias[d] still pointing at a, so
                  * a later read of d was copy-propagated back to a — the value
@@ -540,12 +560,13 @@ static bool pass_vn(Opt* o, bool* progress) {
                     kk[d] = 1; kv[d] = c->imm;
                 } else if (compile_op_kind[c->op] == K_MOVE && (int)c->a < nreg) {
                     alias[d] = c->a;                     /* d is now a copy of a */
+                    if (c->a != d) aliased[c->a] = 1;
                     if (kk[c->a]) { kk[d] = 1; kv[d] = kv[c->a]; }
                 }
             }
         }
     }
-    free(kk); free(kv); free(alias); free(vn);
+    free(kk); free(kv); free(alias); free(aliased); free(vn);
     return true;
 }
 
@@ -652,12 +673,30 @@ static bool pass_rebuild(Opt* o, const size_t* hoist_to) {
     size_t* map = malloc((o->n + 1) * sizeof(size_t));
     if (!out || !map) { free(out); free(map); return false; }
 
+    /* The instructions hoisted to each position, in program order, as linked
+     * lists (built back to front so each list comes out ascending).  Scanning
+     * the rest of the program for them at every position was O(n^2). */
+    size_t* hfirst = NULL;
+    size_t* hnext = NULL;
+    if (hoist_to) {
+        hfirst = malloc((o->n ? o->n : 1) * sizeof(size_t));
+        hnext  = malloc((o->n ? o->n : 1) * sizeof(size_t));
+        if (!hfirst || !hnext) { free(out); free(map); free(hfirst); free(hnext); return false; }
+        for (size_t i = 0; i < o->n; i++) hfirst[i] = (size_t)-1;
+        for (size_t h = o->n; h-- > 0; ) {
+            size_t t = hoist_to[h];
+            if (t == (size_t)-1 || t > h) continue;   /* hoists only move upward */
+            hnext[h] = hfirst[t];
+            hfirst[t] = h;
+        }
+    }
+
     size_t m = 0;
     for (size_t i = 0; i < o->n; i++) {
         /* instructions hoisted to this position come first */
         if (hoist_to) {
-            for (size_t h = i; h < o->n; h++)
-                if (hoist_to[h] == i && compile_op_kind[o->code[h].op] != K_NOP)
+            for (size_t h = hfirst[i]; h != (size_t)-1; h = hnext[h])
+                if (compile_op_kind[o->code[h].op] != K_NOP)
                     out[m++] = o->code[h];
         }
         map[i] = m;
@@ -679,7 +718,7 @@ static bool pass_rebuild(Opt* o, const size_t* hoist_to) {
 
     memcpy(o->code, out, m * sizeof(Instr));
     o->n = m;
-    free(out); free(map);
+    free(out); free(map); free(hfirst); free(hnext);
     return true;
 }
 

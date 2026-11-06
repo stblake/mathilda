@@ -2310,8 +2310,18 @@ static bool cse_head_is_pure(const char* h) {
         "Sum", "Product", "Nest", "If", "With", "Module", "Block", "Function",
         "Which", "Switch", "Piecewise", "Total", "Length"
     };
-    for (size_t i = 0; i < sizeof impure / sizeof impure[0]; i++)
-        if (strcmp(h, impure[i]) == 0) return false;
+    /* Symbol names are interned, so the table is compared by pointer once
+     * resolved: a strcmp against each of the 25 names at every node of the
+     * planner's scan was the largest single cost of compiling a long body. */
+    enum { NIMPURE = sizeof impure / sizeof impure[0] };
+    static const char* interned[NIMPURE];
+    static bool ready = false;
+    if (!ready) {
+        for (size_t i = 0; i < NIMPURE; i++) interned[i] = intern_symbol(impure[i]);
+        ready = true;
+    }
+    for (size_t i = 0; i < NIMPURE; i++)
+        if (h == interned[i]) return false;
     return true;
 }
 
