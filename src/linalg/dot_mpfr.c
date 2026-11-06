@@ -12,15 +12,15 @@
  * at least as accurate as the pairwise Times / Plus it replaces.  Large
  * products are split by rows over worker threads.
  *
- * Domain: both operands of rank 1 or 2 (rectangular Lists), at least one of
- * them entirely MPFR reals, the other MPFR reals or exact Integers /
- * Rationals.  So every product has an MPFR factor and every output element is
- * an MPFR number, exactly as the generic path would give.  An exact 0 is
- * admitted: Times[0, x] of an MPFR x is an MPFR zero at x's precision, so it
- * contributes nothing to the sum and imposes x's precision, which is what the
- * fused sum with that leaf read as an MPFR zero does (a DiagonalMatrix or any
- * other sparse exact operand: m . DiagonalMatrix[w] declined to n^3 symbolic
- * Times / Plus before, 1.4 s at 64 x 64).  Anything else -- a machine Real
+ * Domain: both operands of rank 1 or 2 (rectangular Lists), either one of
+ * them entirely MPFR reals and the other MPFR reals or exact Integers /
+ * Rationals, or both MPFR reals apart from exact zeros (N[m, p] keeps the
+ * zeros of an exact m exact).  An exact 0 contributes nothing to a sum (a
+ * DiagonalMatrix or any other sparse exact operand: m . DiagonalMatrix[w]
+ * declined to n^3 symbolic Times / Plus before, 1.4 s at 64 x 64); an output
+ * whose every product has an exact-zero factor is the exact 0, as 0 x is for
+ * an MPFR x, and every other output is an MPFR number, as the generic path
+ * gives.  Anything else -- a machine Real
  * (contagion to machine precision), a Complex, a symbol -- declines to the
  * generic path.
  *
@@ -76,6 +76,11 @@ static int dotm_leaf(const Expr* e)
     return DL_BAD;
 }
 
+static bool dotm_exact_zero(const Expr* e)
+{
+    return e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
 static bool dotm_is_list(const Expr* e)
 {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
@@ -91,6 +96,7 @@ typedef struct {
     int64_t rows, cols;
     const Expr** leaf;
     bool all_mpfr;
+    bool mpfr_or_zero;   /* every leaf MPFR or the exact 0 */
 } DotmOp;
 
 static bool dotm_read(const Expr* e, bool left, DotmOp* op)
@@ -100,6 +106,7 @@ static bool dotm_read(const Expr* e, bool left, DotmOp* op)
     size_t n = e->data.function.arg_count;
     const Expr* r0 = e->data.function.args[0];
     op->all_mpfr = true;
+    op->mpfr_or_zero = true;
     if (!dotm_is_list(r0)) {
         op->rank = 1;
         op->rows = left ? 1 : (int64_t)n;
@@ -110,6 +117,7 @@ static bool dotm_read(const Expr* e, bool left, DotmOp* op)
             int c = dotm_leaf(e->data.function.args[i]);
             if (c == DL_BAD) { free(op->leaf); op->leaf = NULL; return false; }
             if (c != DL_MPFR) op->all_mpfr = false;
+            if (c != DL_MPFR && !dotm_exact_zero(e->data.function.args[i])) op->mpfr_or_zero = false;
             op->leaf[i] = e->data.function.args[i];
         }
         return true;
@@ -131,10 +139,18 @@ static bool dotm_read(const Expr* e, bool left, DotmOp* op)
             int c = dotm_leaf(x);
             if (c == DL_BAD) { free(op->leaf); op->leaf = NULL; return false; }
             if (c != DL_MPFR) op->all_mpfr = false;
+            if (c != DL_MPFR && !dotm_exact_zero(x)) op->mpfr_or_zero = false;
             op->leaf[i * m + j] = x;
         }
     }
     return true;
+}
+
+/* An output element: the MPFR value, or the exact 0 (the value cleared). */
+static Expr* dotm_out(mpfr_t c, bool exact_zero)
+{
+    if (exact_zero) { mpfr_clear(c); return expr_new_integer(0); }
+    return expr_new_mpfr_move(c);
 }
 
 /* The work: C[r, s] = sum_k A[r, k] B[k, s]. */
@@ -209,7 +225,12 @@ Expr* dot_mpfr(const Expr* a, const Expr* b)
     if (!dotm_read(b, false, &B)) { free(A.leaf); return NULL; }
     Expr* result = NULL;
     int64_t R = A.rows, K = A.cols, S = B.cols;
-    if (K != B.rows || !(A.all_mpfr || B.all_mpfr)) goto done;
+    /* One operand all MPFR (the other MPFR or exact), or both MPFR apart from
+     * exact zeros -- what N[m, p] of a sparse exact matrix gives, its zeros
+     * staying exact: m . m of such an m left this path for the generic one,
+     * 0.016 -> 0.75 s at 100 x 100. */
+    if (K != B.rows || !(A.all_mpfr || B.all_mpfr || (A.mpfr_or_zero && B.mpfr_or_zero)))
+        goto done;
     {
         /* precisions: the smaller MPFR precision, as Times / Plus give */
         long* rbits = (long*)malloc(sizeof(long) * (size_t)R);
@@ -261,10 +282,24 @@ Expr* dot_mpfr(const Expr* a, const Expr* b)
                 Bt[s * K + k] = ex[ei++];
             }
         mpfr_clear(im);
+        /* An output whose every product has an exact-zero factor is the
+         * exact 0, as 0 x is for an MPFR x ({0, 0} . {1.`20, 2.`20} is 0).
+         * Every other output has a product of two nonzero factors, one of
+         * them MPFR, so its precision is finite. */
+        bool* zout = (bool*)calloc((size_t)(R * S), sizeof(bool));
+        if (nexact) {
+            for (int64_t r = 0; r < R; r++)
+                for (int64_t s2 = 0; s2 < S; s2++) {
+                    bool all0 = true;
+                    for (int64_t k = 0; k < K && all0; k++)
+                        all0 = dotm_exact_zero(A.leaf[r * K + k]) || dotm_exact_zero(B.leaf[k * S + s2]);
+                    zout[r * S + s2] = all0;
+                }
+        }
         for (int64_t r = 0; r < R; r++)
             for (int64_t s = 0; s < S; s++) {
-                /* one operand is all MPFR, so at least one side is finite */
                 long p = rbits[r] < cbits[s] ? rbits[r] : cbits[s];
+                if (zout[r * S + s] || p == LONG_MAX) p = 2;   /* exact 0, set below */
                 mpfr_init2(C[r * S + s], (mpfr_prec_t)p);
             }
 
@@ -306,18 +341,18 @@ Expr* dot_mpfr(const Expr* a, const Expr* b)
         /* shape: vector.vector -> scalar; matrix.vector / vector.matrix ->
          * vector; matrix.matrix -> matrix */
         if (A.rank == 1 && B.rank == 1) {
-            result = expr_new_mpfr_move(C[0]);
+            result = dotm_out(C[0], zout[0]);
         } else if (A.rank == 1 || B.rank == 1) {
             int64_t len = A.rank == 1 ? S : R;
             Expr** el = (Expr**)malloc(sizeof(Expr*) * (size_t)len);
-            for (int64_t i = 0; i < len; i++) el[i] = expr_new_mpfr_move(C[i]);
+            for (int64_t i = 0; i < len; i++) el[i] = dotm_out(C[i], zout[i]);
             result = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)len);
             free(el);
         } else {
             Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)R);
             for (int64_t r = 0; r < R; r++) {
                 Expr** el = (Expr**)malloc(sizeof(Expr*) * (size_t)S);
-                for (int64_t s = 0; s < S; s++) el[s] = expr_new_mpfr_move(C[r * S + s]);
+                for (int64_t s = 0; s < S; s++) el[s] = dotm_out(C[r * S + s], zout[r * S + s]);
                 rows[r] = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)S);
                 free(el);
             }
@@ -331,6 +366,7 @@ Expr* dot_mpfr(const Expr* a, const Expr* b)
         free(C);
         free(rbits);
         free(cbits);
+        free(zout);
     }
 done:
     free(A.leaf);

@@ -332,12 +332,14 @@ static void test_n_prec_transcendentals(void) {
 }
 
 static void test_n_prec_rational_and_mixed(void) {
+    /* 1/7 to 40 digits rounds up its 40th: ...571428|571... -> ...571429 */
     assert_eval_startswith("N[1/7, 40]",
-                           "0.1428571428571428571428571428571428571428");
+                           "0.1428571428571428571428571428571428571429");
     assert_eval_startswith("N[Pi + E, 40]",
                            "5.85987448204883");
+    /* Pi^2 = 9.86960440108935861883449099987|615...: the 30th digit rounds up */
     assert_eval_startswith("N[Pi^2, 30]",
-                           "9.86960440108935861883449099987");
+                           "9.86960440108935861883449099988");
     assert_eval_startswith("N[Sqrt[Pi] + Log[2], 30]",
                            "2.46560103146546");
 }
@@ -375,8 +377,9 @@ static void test_accuracy_builtin(void) {
     assert_eval_startswith("Accuracy[0.001]", "18.");
     /* Accuracy of 3.14`50 ≈ 50 − log10(3.14) ≈ 49.5. */
     assert_eval_startswith("Accuracy[3.14`50]", "49.");
-    /* MPFR zero @ p digits: Accuracy[0``p] = p. */
-    assert_eval_startswith("Accuracy[N[0, 50]]", "50.");
+    /* MPFR zero @ p digits: Accuracy[0``p] = p (N[0, 50] is the exact 0) */
+    assert_eval_startswith("Accuracy[SetPrecision[0, 50]]", "50.");
+    assert_eval_eq("Accuracy[N[0, 50]]", "Infinity", 0);
 }
 
 static void test_set_precision(void) {
@@ -410,12 +413,13 @@ static void test_n_prec_complex_pow(void) {
      * complex-valued power. The polar-form helper in numeric.c now handles
      * these cases. The two forms below evaluate to the same primitive 8th
      * root of unity, so their difference must round to zero. */
+    /* Sqrt[2]/2 = 0.70710678118654752440084436210484|90...: 32 digits round up */
     assert_eval_startswith("N[(-1)^(1/4), 32]",
-                           "0.70710678118654752440084436210484");
+                           "0.70710678118654752440084436210485");
     assert_eval_startswith("N[E^(I Pi/4), 32]",
-                           "0.70710678118654752440084436210484");
+                           "0.70710678118654752440084436210485");
     assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 32]",
-                   "0.0 + 0.0*I", 0);
+                   "0.e-32 + 0.e-32*I", 0);
     /* Negative real base with complex exponent: i^i = exp(-pi/2). */
     assert_eval_startswith("N[I^I, 32]",
                            "0.20787957635076190854695561983");
@@ -436,14 +440,15 @@ static void test_barnesg_arbitrary_precision(void) {
  * 0.0 (it is -5*10^-41) and the exact zero below was 3*10^-52 at p = 32. */
 static void test_n_adaptive_precision(void) {
     /* a genuine cancellation keeps its digits */
-    assert_eval_startswith("N[Cos[10^-20] - 1, 20]", "-4.99999999999999999999e-41");
+    /* -5*10^-41 + 4.2*10^-82: 20 digits round to -5.0000000000000000000e-41 */
+    assert_eval_startswith("N[Cos[10^-20] - 1, 20]", "-5.0000000000000000000e-41");
     assert_eval_eq("Abs[N[Cos[10^-20] - 1, 32]/(-5*10^-41) - 1] < 10^-30", "True", 0);
     /* an exact zero comes out as zero at every precision */
-    assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 50]", "0.0 + 0.0*I", 0);
+    assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 50]", "0.e-50 + 0.e-50*I", 0);
     assert_eval_eq("N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40] == 0", "True", 0);
     /* genuine small values and plain cases are untouched */
-    assert_eval_startswith("N[Exp[-200], 32]", "1.38389652673673753064868145697908e-87");
-    assert_eval_startswith("N[Pi - 314159265358979323846/10^20, 30]", "2.643383279502884197169399375107e-21");
+    assert_eval_startswith("N[Exp[-200], 32]", "1.3838965267367375306486814569791e-87");
+    assert_eval_startswith("N[Pi - 314159265358979323846/10^20, 30]", "2.64338327950288419716939937511e-21");
     /* machine inputs gain no digits under N[_, p], so their noise stays */
     assert_eval_startswith("N[0.1 + 0.2 - 0.3, 32]", "5.55112e-17");
 }
@@ -497,6 +502,50 @@ static void test_n_adaptive_certification(void) {
     /* a part that is not cancelling is unaffected by one that is */
     assert_eval_eq("Abs[Quiet[N[Pi + (Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]), 30]] - N[Pi, 40]] < 10^-29",
                    "True", 0);
+}
+
+/* An exact zero has no digits, so N[_, p] leaves it exact, and an exact-zero
+ * part stays exact through arbitrary-precision arithmetic and the kernels
+ * that map an axis to an axis. Machine N keeps 0. Values are closed forms. */
+static void test_n_exact_zero_parts(void) {
+    assert_eval_eq("N[0, 30] === 0", "True", 0);
+    assert_eval_eq("N[{0, 1/3, 0}, 20][[{1, 3}]] === {0, 0}", "True", 0);
+    assert_eval_eq("N[f[0, 1/2], 20][[1]] === 0", "True", 0);
+    assert_eval_eq("0 N[Pi, 20] === 0", "True", 0);
+    assert_eval_eq("Times[0, N[Pi, 20], x] === 0", "True", 0);
+    /* pure imaginary results: the real part is exactly 0 */
+    assert_eval_eq("Re[N[2 I, 20]] === 0 && Re[N[I Pi, 20]] === 0", "True", 0);
+    assert_eval_eq("Re[N[Sqrt[-2], 20]] === 0 && Abs[Im[N[Sqrt[-2], 20]] - N[Sqrt[2], 40]] < 10^-19",
+                   "True", 0);
+    assert_eval_eq("With[{z = Sqrt[N[-3, 25]]^3}, Re[z] === 0 && Abs[Im[z] + N[3 Sqrt[3], 40]] < 10^-23]",
+                   "True", 0);
+    assert_eval_eq("Complex[0, N[2, 20]]^2 === N[-4, 20]", "True", 0);
+    assert_eval_eq("Complex[0, N[2, 20]] Complex[0, N[3, 20]] === N[-6, 20]", "True", 0);
+    /* Erf[I y] = I Erfi[y], Erfi[I y] = I Erf[y] */
+    assert_eval_eq("With[{z = N[Erf[I], 30]}, Re[z] === 0 && Abs[Im[z] - N[Erfi[1], 40]] < 10^-29]",
+                   "True", 0);
+    assert_eval_eq("With[{z = N[Erfi[I], 25]}, Re[z] === 0 && Abs[Im[z] - N[Erf[1], 40]] < 10^-24]",
+                   "True", 0);
+    /* ArcCosh[x] = I ArcCos[x] on [-1, 1); ArcCos[x] = I ArcCosh[x] for x > 1;
+     * ArcCosh[1/2] had a stray real part -3.9*10^-90 at 70 digits */
+    assert_eval_eq("With[{z = ArcCosh[N[1/2, 50]]}, Re[z] === 0 && Abs[Im[z] - N[Pi/3, 60]] < 10^-49]",
+                   "True", 0);
+    assert_eval_eq("Re[N[ArcCosh[1/2], 70]] === 0 && Re[N[ArcCosh[-1/3], 30]] === 0", "True", 0);
+    assert_eval_eq("With[{z = N[ArcCos[2], 20]}, Re[z] === 0 && Abs[Im[z] - N[ArcCosh[2], 40]] < 10^-19]",
+                   "True", 0);
+    /* Sin[I y] = I Sinh[y], Tan[I y] = I Tanh[y] and back */
+    assert_eval_eq("With[{z = Sin[Complex[0, N[2, 20]]]}, Re[z] === 0 && Abs[Im[z] - N[Sinh[2], 40]] < 10^-19]",
+                   "True", 0);
+    assert_eval_eq("Re[Tanh[Complex[0, N[1/3, 20]]]] === 0 && Re[Sinh[Complex[0, N[1, 20]]]] === 0",
+                   "True", 0);
+    /* a zero matrix stays exact, so its decomposition is the exact one */
+    assert_eval_eq("QRDecomposition[N[{{0, 0}, {0, 0}}, 60]] === {{{1, 0}}, {{0, 0}}}", "True", 0);
+    /* an exact 0 index or branch is now honoured: ProductLog[0, z] */
+    assert_eval_eq("Abs[N[ProductLog[0, 1/3], 20] - 0.25762765304973670428`22] < 10^-19", "True", 0);
+    /* machine precision is unchanged */
+    assert_eval_eq("N[0]", "0.0", 0);
+    assert_eval_eq("0 2.5", "0.0", 0);
+    assert_eval_eq("Head[Re[N[ArcCosh[1/2]]]] === Real && Head[Re[N[Erf[I]]]] === Real", "True", 0);
 }
 
 /* An N[expr, p] that cancels nothing is evaluated exactly once. */
@@ -633,6 +682,7 @@ int main(void) {
     TEST(test_n_adaptive_precision);
     TEST(test_n_adaptive_certification);
     TEST(test_n_adaptive_single_pass);
+    TEST(test_n_exact_zero_parts);
     TEST(test_barnesg_arbitrary_precision);
     TEST(test_mpfr_complex_corner_cases);
     TEST(test_n_does_not_evaluate_held_arguments);

@@ -538,6 +538,10 @@ Expr* builtin_erf(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+#ifdef USE_MPFR
+    /* Erf[I y] = I Erfi[y]: the zero real part stays exact */
+    if (argc == 1) { Expr* ax = numeric_mpfr_imag_axis(args[0], "Erfi"); if (ax) return ax; }
+#endif
 
     /* Machine-scalar fast path, ahead of every special-value ladder: the same
      * kernels the NDArray / packed / Compile surfaces call, so all five agree

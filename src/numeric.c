@@ -341,10 +341,78 @@ Expr* numeric_mpfr_apply_unary(const Expr* e, long default_bits, MpfrUnaryOp op)
  * Returns Complex[MPFR, MPFR], a pure MPFR when the imaginary part rounds to
  * zero, or NULL if either operand isn't an MPFR-promotable numeric value or
  * the base is zero (handled by the dedicated 0^x path elsewhere). */
+/* True for an exact zero: Integer 0 (the exact part of Complex[0, y]). */
+static bool is_exact_zero(const Expr* e) {
+    return e && e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
+/* base^exp for a base on an axis -- a negative MPFR real, or Complex[0, y]
+ * with an exact zero real part -- and an exact exponent n/2 that keeps the
+ * result on an axis: base = |m| I^q exactly (q = 2 for a negative real, 1 or
+ * 3 for +-I y), so base^(n/2) = |m|^(n/2) I^(q n/2) when q n is even (the
+ * principal value: arg base = q Pi/2 lies in (-Pi, Pi]). The zero part is
+ * exact, as it is in the base: the polar form computed it as cos(Pi/2)-size
+ * noise (Sqrt[N[-2, 20]] had a real part 2.9*10^-21, Complex[0, 2.`20]^2 an
+ * imaginary part 1.6*10^-20). NULL for any other shape. */
+static Expr* mpfr_axial_pow(const Expr* base, const Expr* exp, long bits) {
+    int64_t n2;                      /* the exponent times 2 */
+    if (exp->type == EXPR_INTEGER) {
+        if (exp->data.integer > INT64_MAX / 2 || exp->data.integer < INT64_MIN / 2) return NULL;
+        n2 = 2 * exp->data.integer;
+    } else {
+        int64_t en, ed;
+        if (!is_rational((Expr*)exp, &en, &ed) || ed != 2) return NULL;
+        n2 = en;
+    }
+    const Expr* mag;                 /* the MPFR magnitude, signed */
+    int q;
+    Expr *re, *im;
+    if (base->type == EXPR_MPFR && mpfr_sgn(base->data.mpfr) < 0) {
+        mag = base; q = 2;
+    } else if (is_complex((Expr*)base, &re, &im) && is_exact_zero(re)
+               && im->type == EXPR_MPFR && mpfr_regular_p(im->data.mpfr)) {
+        mag = im; q = mpfr_sgn(im->data.mpfr) > 0 ? 1 : 3;
+    } else {
+        return NULL;
+    }
+    if (((int64_t)q * n2) % 2 != 0) return NULL;      /* off the axes */
+    /* k = (q n2 / 2) mod 4, from q n2 mod 8 (no overflow; q n2 is even) */
+    int64_t k = (((int64_t)q * (n2 % 8)) % 8 + 8) % 8 / 2;
+    long pb = (long)mpfr_get_prec(mag->data.mpfr);
+    if (pb < bits) bits = pb;
+    mpfr_t m, ex, v;
+    mpfr_init2(m, bits); mpfr_init2(ex, 64); mpfr_init2(v, bits);
+    mpfr_abs(m, mag->data.mpfr, MPFR_RNDN);
+    mpfr_set_si(ex, (long)n2, MPFR_RNDN);
+    mpfr_div_2ui(ex, ex, 1, MPFR_RNDN);              /* n2 / 2, exact */
+    mpfr_pow(v, m, ex, MPFR_RNDN);
+    mpfr_clear(m); mpfr_clear(ex);
+    if (!mpfr_number_p(v)) { mpfr_clear(v); return NULL; }
+    if (k == 2 || k == 3) mpfr_neg(v, v, MPFR_RNDN);
+    Expr* val = expr_new_mpfr_move(v);
+    if (k == 0 || k == 2) return val;
+    return make_complex(expr_new_integer(0), val);
+}
+
+Expr* numeric_mpfr_imag_axis(const Expr* arg, const char* partner) {
+    Expr *re, *im;
+    if (!arg || !is_complex((Expr*)arg, &re, &im) || !is_exact_zero(re)
+        || im->type != EXPR_MPFR || !mpfr_number_p(im->data.mpfr)) return NULL;
+    Expr* g = eval_and_free(expr_new_function(expr_new_symbol(partner),
+                                              (Expr*[]){ expr_copy(im) }, 1));
+    if (!g) return NULL;
+    if (g->type != EXPR_MPFR || !mpfr_number_p(g->data.mpfr)) { expr_free(g); return NULL; }
+    return make_complex(expr_new_integer(0), g);
+}
+
 Expr* numeric_mpfr_complex_pow(const Expr* base, const Expr* exp,
                                long default_bits) {
     long bits = numeric_combined_bits(base, exp, default_bits);
     if (bits <= 0) bits = 53;
+    {
+        Expr* ax = mpfr_axial_pow(base, exp, bits);
+        if (ax) return ax;
+    }
 
     mpfr_t a, b, c, d;
     mpfr_init2(a, bits); mpfr_init2(b, bits);
@@ -615,8 +683,21 @@ static Expr* leaf_from_double(double v, NumericSpec spec) {
     return expr_new_real(v);
 }
 
+static bool g_n_contagion;   /* defined below, with its contract */
+
 static Expr* leaf_from_integer(int64_t v, NumericSpec spec) {
 #ifdef USE_MPFR
+    /* N[0, p] is the exact 0: a zero has no digits to approximate, so it
+     * carries no precision, and an exact-zero part stays exact (N[{0, 1/3},
+     * 20] is {0, 0.33...}, N[2 I, 20] is Complex[0, 2.`20]). Only N's own
+     * capping mode: SetPrecision (plain MPFR mode) gives a zero a precision,
+     * and machine N[0] is 0. as before. The exact operands of an
+     * arbitrary-precision Plus/Times (inexact contagion, plain MPFR mode)
+     * follow the same rule: 0 N[Pi, 20] is 0, Complex[0, 1] N[Pi, 20] is
+     * Complex[0, 3.14...`20]. */
+    if (v == 0 && (spec.mode == NUMERIC_MODE_MPFR_CAP
+                   || (spec.mode == NUMERIC_MODE_MPFR && g_n_contagion)))
+        return expr_new_integer(0);
     if (numeric_spec_is_mpfr(spec)) {
         /* long may be 32 bits on some platforms; use a path that carries
          * the full int64 range through the mpz_t bridge. */
@@ -1535,6 +1616,19 @@ static Expr* numeric_round_result(Expr* e, NumericSpec out) {
     Expr* head = numeric_round_result(expr_copy(e->data.function.head), out);
     for (size_t i = 0; i < n; ++i) {
         args[i] = numeric_round_result(expr_copy(e->data.function.args[i]), out);
+    }
+    /* A machine complex number has two machine parts: the exact zero part an
+     * arbitrary-precision kernel keeps (ArcCosh[x] = I ArcCos[x], |x| < 1)
+     * is 0. once the other part is a machine Real, as machine N always gave. */
+    if (out.mode == NUMERIC_MODE_MACHINE && n == 2 && head->type == EXPR_SYMBOL
+        && head->data.symbol.name == SYM_Complex) {
+        for (size_t i = 0; i < 2; ++i) {
+            if (args[i]->type == EXPR_INTEGER && args[i]->data.integer == 0
+                && args[1 - i]->type == EXPR_REAL) {
+                expr_free(args[i]);
+                args[i] = expr_new_real(0.0);
+            }
+        }
     }
     Expr* rebuilt = expr_new_function(head, args, n);
     free(args);

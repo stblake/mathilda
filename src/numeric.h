@@ -211,6 +211,14 @@ int numeric_mpfr_pow_fast(mpfr_ptr rop, mpfr_srcptr x, mpfr_srcptr y,
 Expr* numeric_mpfr_complex_pow(const Expr* base, const Expr* exp,
                                long default_bits);
 
+/* f(I y) = I g(y) on the imaginary axis, for an odd f whose partner g is
+ * real there (Erf/Erfi, Sin/Sinh, Tan/Tanh, both ways). When `arg` is
+ * Complex[0, y] with an exact zero real part and an MPFR y, returns
+ * Complex[0, partner[y]] (the zero part stays exact, as it is in the
+ * argument); NULL otherwise -- including a machine y, which keeps the machine
+ * rule. */
+Expr* numeric_mpfr_imag_axis(const Expr* arg, const char* partner);
+
 /* Apply an MPFR unary real function to `e`. Returns a fresh EXPR_MPFR,
  * or NULL if `e` isn't a real-valued MPFR-promotable number (e.g. it's
  * complex or symbolic). Used by Sin/Cos/Tan/Sinh/Cosh/Log/Exp/…

@@ -681,6 +681,10 @@ Expr* builtin_sin(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Sin", arg); if (r) return r; }
+#ifdef USE_MPFR
+    /* Sin[I y] = I Sinh[y]: the zero real part stays exact */
+    { Expr* ax = numeric_mpfr_imag_axis(arg, "Sinh"); if (ax) return ax; }
+#endif
 
     { Expr* inv = strip_inverse_call(arg, "ArcSin"); if (inv) return inv; }
 
@@ -789,6 +793,10 @@ Expr* builtin_tan(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Tan", arg); if (r) return r; }
+#ifdef USE_MPFR
+    /* Tan[I y] = I Tanh[y]: the zero real part stays exact */
+    { Expr* ax = numeric_mpfr_imag_axis(arg, "Tanh"); if (ax) return ax; }
+#endif
 
     { Expr* inv = strip_inverse_call(arg, "ArcTan"); if (inv) return inv; }
 
@@ -1191,6 +1199,13 @@ Expr* builtin_arccos(Expr* res) {
     if (exact) return exact;
 
 #ifdef USE_MPFR
+    /* ArcCos[x] = I ArcCosh[x] for a real x > 1: the real part is an exact 0
+     * (the complex kernel left an inexact one) */
+    if (arg->type == EXPR_MPFR && mpfr_cmp_ui(arg->data.mpfr, 1) > 0) {
+        Expr* v = expr_new_mpfr_bits(mpfr_get_prec(arg->data.mpfr));
+        mpfr_acosh(v->data.mpfr, arg->data.mpfr, MPFR_RNDN);
+        return make_complex(expr_new_integer(0), v);
+    }
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_acos);
         if (r) return r;

@@ -214,6 +214,17 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
     if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
 #ifdef USE_MPFR
     if (numeric_any_mpfr(a, b) && !is_complex(a, NULL, NULL) && !is_complex(b, NULL, NULL)) {
+        /* An exact 0 times an arbitrary-precision number is the exact 0
+         * (0 N[Pi, 20] is 0): the product is zero whatever the factor's
+         * digits, so it has no precision to report. This is what keeps the
+         * zero part of Complex[0, y] exact through a product, Complex[0, 1]
+         * N[Pi, 20] being Complex[0, 3.14...`20]. A machine Real keeps the
+         * machine rule (0 2.5 is 0.). A non-finite MPFR is not a number. */
+        if (((a->type == EXPR_INTEGER && a->data.integer == 0 && b->type == EXPR_MPFR
+              && mpfr_number_p(b->data.mpfr))
+             || (b->type == EXPR_INTEGER && b->data.integer == 0 && a->type == EXPR_MPFR
+                 && mpfr_number_p(a->data.mpfr))))
+            return expr_new_integer(0);
         Expr* r = numeric_mpfr_mul(a, b, 0);
         if (r) return r;
     }

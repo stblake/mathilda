@@ -324,10 +324,11 @@ static void test_zero_rational(void) {
 
 #ifdef USE_MPFR
 static void test_zero_mpfr(void) {
-    /* MPFR zero via N[0, 50]: result is an MPFR holding -(p_bits/log2(10)).
-     * N[0, 50] requests 50 decimal digits = ceil(50*log2(10)) = 167 bits, so
-     * the value is approximately -167/log2(10) ≈ -50.27. */
-    Expr* p = parse_expression("RealExponent[N[0, 50]]");
+    /* MPFR zero via SetPrecision[0, 50] (N[0, 50] is the exact 0): result is
+     * an MPFR holding -(p_bits/log2(10)). 50 decimal digits =
+     * ceil(50*log2(10)) = 167 bits, so the value is approximately
+     * -167/log2(10) ≈ -50.27. */
+    Expr* p = parse_expression("RealExponent[SetPrecision[0, 50]]");
     Expr* e = evaluate(p);
     expr_free(p);
     double v;

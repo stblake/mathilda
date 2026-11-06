@@ -174,10 +174,10 @@ void test_arc_hyperbolic_mpfr_complex(void) {
         /* asinh(1+i) ~ 1.06128 + 0.66624 i */
         {"ArcSinh[Complex[N[1, 50], N[1, 50]]]",
          "1.06127506190503565203301891621357348580678549893864", 40},
-        /* acosh(0.5) is in domain (-1, 1) for the real path → NaN →
-         * complex fallback: i * acos(0.5) = i pi/3 ~ 0 + 1.04720 i */
+        /* ArcCosh[x] = i acos(x) on [-1, 1): i pi/3 ~ 1.04720 i, the real
+         * part an exact 0 */
         {"ArcCosh[N[1/2, 50]]",
-         "0.e-50 + 1.0471975511965977461542144610931676280657231331250*I", 30},
+         "1.0471975511965977461542144610931676280657231331250*I", 30},
         /* atanh(2) is out of (-1, 1) → complex fallback ~ atanh(0.5) - i pi/2 */
         {"ArcTanh[N[2, 50]]",
          "0.54930614433405484569762261846126285232374527891137", 40},

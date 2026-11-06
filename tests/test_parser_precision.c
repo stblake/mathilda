@@ -478,7 +478,8 @@ static void test_very_long_literal(void) {
  * is applied to the decimal text in one rounding, so the literal is the
  * number it spells. */
 static void test_zero_accuracy_and_scaled_mark(void) {
-    assert_eval_eq("Accuracy[0``30] == Accuracy[N[0, 30]]", "True", 0);
+    /* N[0, 30] is the exact 0; SetPrecision gives a zero its accuracy */
+    assert_eval_eq("Accuracy[0``30] == Accuracy[SetPrecision[0, 30]]", "True", 0);
     assert_eval_startswith("Accuracy[0``30]", "30.10");
     assert_eval_eq("3.355`2.*^-61 === SetPrecision[3355/1000 10^-61, 2.]", "True", 0);
     assert_eval_eq("1.0000000000000000000000000000004`30.*^50 === N[10^50, 30]", "True", 0);

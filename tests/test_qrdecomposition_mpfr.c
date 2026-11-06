@@ -413,7 +413,10 @@ static void test_mpfr_rank_deficient_pivoted_30(void) {
 }
 
 static void test_mpfr_zero_matrix(void) {
-    Expr* res = run("QRDecomposition[N[{{0, 0}, {0, 0}}, 60]]");
+    /* SetPrecision: inexact zeros at 60 digits. (N[{{0, 0}, {0, 0}}, 60]
+     * keeps its zeros exact, so it is the exact decomposition
+     * {{{1, 0}}, {{0, 0}}}, checked in test_numeric's exact-zero test.) */
+    Expr* res = run("QRDecomposition[SetPrecision[{{0, 0}, {0, 0}}, 60]]");
     res = test_delist(res);   /* unpack if the result came back packed */
     Expr* q = res->data.function.args[0];
     Expr* r = res->data.function.args[1];

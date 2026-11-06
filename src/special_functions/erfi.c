@@ -583,6 +583,10 @@ Expr* builtin_erfi(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+#ifdef USE_MPFR
+    /* Erfi[I y] = I Erf[y]: the zero real part stays exact */
+    if (argc == 1) { Expr* ax = numeric_mpfr_imag_axis(args[0], "Erf"); if (ax) return ax; }
+#endif
 
     /* Machine-scalar fast path, ahead of the special-value ladder: the kernels
      * the NDArray / packed / Compile surfaces share (sf_machine_error.c). A

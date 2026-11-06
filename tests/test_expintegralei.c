@@ -166,8 +166,9 @@ void test_ei_large_magnitude() {
 
     /* Re z << 0: e^z underflows, the result collapses to the branch constant
      * -I Pi (Im z < 0) with a vanishing real part. */
+    /* -Pi + O(E^-80): 12 digits round to -3.14159265359 */
     assert_eval_startswith("N[Im[ExpIntegralEi[-80 - 2 I]], 12]",
-                           "-3.14159265358");
+                           "-3.14159265359");
 
     /* Regression: the reported abort. N numericises -10^60 I, driving |z| to
      * 1e60; this must now yield a finite numeric result, not crash. */
@@ -183,7 +184,8 @@ void test_ei_large_magnitude() {
         expr_free(r);
     }
     /* Real large-negative argument: Ei(-10^60) ~ 0 (e^x underflow), no crash. */
-    assert_eval_startswith("N[ExpIntegralEi[-10^60], 20]", "-0.");
+    /* (an MPFR zero; the printer writes a zero without its sign) */
+    assert_eval_startswith("N[ExpIntegralEi[-10^60], 20]", "0.");
 }
 
 /* ---- derivatives ---------------------------------------------------- */

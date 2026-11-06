@@ -134,6 +134,24 @@ working-precision numericalization evaluates once. Arithmetic on numbers that
 are already inexact does not track cancellation: with `a = N[E^1000, 30]`,
 `a - (a - 1)` is `0.` and its `Precision` is the operands' 30.1.
 
+**Exact zeros**: a zero has no digits to approximate, so `N[0, p]` is the
+exact `0`, and an exact-zero part stays exact under `N[expr, p]`:
+`N[{0, 1/3, 0}, 20]` is `{0, 0.33333333333333333333, 0}`, `N[f[0, 1/2], 20]`
+is `f[0, 0.50000000000000000000]`, `N[2 I, 20]` and `N[Sqrt[-2], 20]` are
+pure imaginary (`Complex[0, y]`). Arithmetic keeps it: `0 N[Pi, 20]` is `0`
+(a machine `0 2.5` stays `0.`), a product or an integer/half-integer power
+on an axis stays on the axis (`Complex[0, N[2, 20]]^2` is `-4.0000000000000000000`,
+`Sqrt[N[-2, 20]]` has no real part; the polar form left `10^-20`-size
+noise there). The kernels that map the imaginary axis to itself keep the
+zero part: `Erf[I y] = I Erfi[y]`, `Erfi[I y] = I Erf[y]`, `Sin`/`Sinh`,
+`Tan`/`Tanh` likewise, and on the real line `ArcCosh[x] = I ArcCos[x]` for
+`-1 <= x < 1` and `ArcCos[x] = I ArcCosh[x]` for `x > 1` (`N[ArcCosh[1/2],
+70]` had a stray real part `-3.9*10^-90`). An exact `0` index is honoured:
+`N[ProductLog[0, 1/3], 20]` evaluates (it was left as `ProductLog[0., ...]`).
+A zero that a computation produces (a cancellation) is inexact: `0.` with
+its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
+`0. + 1.65043 I`).
+
 **Precision semantics**:
 - `Precision[expr]` and `Accuracy[expr]` are one number for any expression,
   the **minimum** over its numbers (they are not `Listable`): exact parts

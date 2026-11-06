@@ -208,11 +208,16 @@ static void test_dot_mpfr_exact_zeros(void) {
     /* an MPFR diagonal at a lower precision sets the result's */
     run_check_true("Abs[Precision[zm . DiagonalMatrix[N[zw, 20]]] - 20] < 1");
     run_check_true("relerr[zm . DiagonalMatrix[N[zw, 20]], zx . zd] < 10^-19");
-    /* a row of zeros gives MPFR zeros, as the generic Times / Plus do */
+    /* a row of exact zeros gives exact zeros, as 0 x is for an MPFR x */
     run_check_true("Module[{r = {{0, 0}, {1, 2}} . N[{{1/3, 1/5}, {1/7, 1/9}}, 20]}, "
-                   "Head[r[[1, 1]]] === Real && r[[1, 1]] == 0 && "
+                   "r[[1]] === {0, 0} && "
                    "Abs[r[[2, 1]] - 13/21] < 10^-19]");
     run_check_true("relerr[{0, 1, 0, 2} . N[hilb[4], 25], {0, 1, 0, 2} . hilb[4]] < 10^-24");
+    /* N[m, p] keeps the exact zeros of a sparse m, and m . m stays on the
+     * fused path (0.75 s on the generic one at 100 x 100) */
+    run_check_true("Module[{m = N[IdentityMatrix[100] + DiagonalMatrix[Range[99], 1], 40], t, r}, "
+                   "{t, r} = AbsoluteTiming[m . m]; t < 0.3 && r[[1, 4]] === 0 && "
+                   "Abs[r[[1, 2]] - 2] < 10^-38 && Abs[r[[1, 3]] - 2] < 10^-38]");
 }
 
 /* ---- Eigenvalues of N[Hilbert[n], p] ------------------------------------ */
