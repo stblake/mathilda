@@ -1201,6 +1201,7 @@ set(COMMON_SRC
     ../src/numerical_roots/nroots.c
     ../src/numerical_roots/nroots_aberth.c
     ../src/numerical_roots/nroots_jt.c
+    ../src/numerical_roots/nroots_adaptive.c
     ../src/numerical_roots/nsolve.c
     ../src/numerical_roots/nsolve_system.c
     ../src/graphics/graphics_init.c

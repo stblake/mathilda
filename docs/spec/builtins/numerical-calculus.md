@@ -1073,7 +1073,28 @@ decomposed** (Yun's algorithm on the integer polynomial): each squarefree factor
 is solved separately — well-conditioned — and its roots emitted with the factor's
 multiplicity. This keeps high powers such as `(x^2-2)^30` exact and fast, where
 solving the expanded degree-60 polynomial directly would be catastrophically
-ill-conditioned. Results are then noise-chopped, conjugate-symmetrized (for real
+ill-conditioned.
+Rational coefficients are cleared of denominators first, so they take the same
+exact path (the squarefree decomposition is FLINT's when built with it).
+
+**Exact polynomials are solved at a per-root adaptive precision**
+(`nroots_adaptive.c`), because the monomial expansion of a high-degree
+polynomial can cancel far beyond any fixed working precision: for
+`LaguerreL[1000, x]` the terms `|c_k x^k|` reach `10^1118` where `|L_1000|` is
+`~10^856`, and mid-spectrum the cancellation is ~470 digits. Each evaluation
+carries a rounding-error bound (`sum |c_k| |x|^k`), and a root is accepted only
+when the bound places the true root within the target precision; the
+evaluation precision is raised per root, as far as that root's own cancellation
+requires. Real roots are found first, largest to smallest, by Laguerre's method
+with the found roots divided out implicitly — globally and monotonically
+convergent while every remaining root is real (orthogonal polynomials, Wilkinson
+polynomials), each next search starting from a safe Newton bound or the
+extrapolated root sequence. The walk stops at the first sign of a non-real root
+and Aberth (DPE starting phase, then per-root MPFR precision) completes the
+rest with the found roots held fixed. `NSolve[LaguerreL[1000, x] == 0, x,
+WorkingPrecision -> 50]` takes a few seconds (it did not finish in 600 s), all
+1000 roots real and correct to 50 digits; the machine-precision call returns
+correct doubles rather than overflowing. Results are then noise-chopped, conjugate-symmetrized (for real
 polynomials), clustered so multiple roots print identically, canonically ordered
 (reals ascending, then complex by Re, then |Im|, negative Im first), and rounded
 to the target precision.

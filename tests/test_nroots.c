@@ -333,6 +333,81 @@ static void test_memory_loop(void) {
         }
 }
 
+/* ---------------------------------------------------------------------- *
+ *  High degree with a cancelling expansion (the adaptive-precision engine)
+ * ---------------------------------------------------------------------- */
+
+/* The monomial expansion of LaguerreL[1000, x] has |c_k x^k| up to ~1e1118
+ * where |L_1000| ~ 1e856 (and ~1e470 digits of cancellation mid-spectrum):
+ * every root needs its own evaluation precision.  Truth: the largest zero
+ * 3943.24739484527095238972810775344564096526363934564746059856857487
+ * (computed independently by Newton on the three-term recurrence at 100
+ * digits), and the zero count 1000 (L_n has n simple positive zeros). */
+static void test_laguerre_1000_wp50(void) {
+    ASSERT_TRUE("Module[{r = x /. NSolve[LaguerreL[1000, x] == 0, x, WorkingPrecision -> 50]}, "
+                "Length[r] == 1000 && Count[r, _Real] == 1000 && Min[r] > 0 && "
+                "Abs[Max[r] - 3943.247394845270952389728107753445640965263639345647460598568574874867`70] "
+                "< 10^-44 && Precision[Max[r]] >= 49]");
+}
+
+/* Degree-200..300 orthogonal polynomials at 30 digits: every zero real, and
+ * sampled zeros bracketed to 10^-27 relative by a sign change of the
+ * polynomial evaluated numerically at 90 digits (its own recurrence, not the
+ * cancelling monomial expansion the root finder works on). */
+static bool polished_ok(const char* fn, int n, const char* idx) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "Module[{f = %s, r}, r = Sort[x /. NSolve[f[x] == 0, x, WorkingPrecision -> 30]]; "
+        "Length[r] == %d && Count[r, _Real] == %d && "
+        "And @@ Table[Sign[f[SetPrecision[r[[k]] (1 - 10^-27), 90]]] "
+        "Sign[f[SetPrecision[r[[k]] (1 + 10^-27), 90]]] == -1, {k, %s}]]",
+        fn, n, n, idx);
+    return lang_true(buf);
+}
+
+static void test_orthogonal_high_degree(void) {
+    ASSERT_MSG(polished_ok("LaguerreL[200, #] &", 200, "{1, 100, 200}"), "LaguerreL[200]");
+    ASSERT_MSG(polished_ok("HermiteH[300, #] &", 300, "{1, 150, 151, 300}"), "HermiteH[300]");
+    ASSERT_MSG(polished_ok("LegendreP[256, #] &", 256, "{1, 128, 256}"), "LegendreP[256]");
+    /* ChebyshevT zeros are known in closed form: cos((2k-1) Pi / (2n)). */
+    ASSERT_TRUE("Module[{r = Sort[x /. NSolve[ChebyshevT[400, x] == 0, x, WorkingPrecision -> 30]]}, "
+                "Length[r] == 400 && Max[Abs[r - Sort[N[Table[Cos[(2 k - 1) Pi/800], {k, 400}], 40]]]] < 10^-28]");
+}
+
+/* Machine precision on the same polynomials: the coefficients overflow a
+ * double (L_1000) or cancel far beyond it, so the machine answer must come
+ * from the escalating engine -- correct digits, never garbage. */
+static void test_machine_high_degree(void) {
+    ASSERT_TRUE("Module[{r = x /. NSolve[LaguerreL[1000, x] == 0, x]}, "
+                "Length[r] == 1000 && Count[r, _Real] == 1000 && "
+                "Abs[Max[r] - 3943.2473948452709523897] < 10^-9 && Precision[Max[r]] === MachinePrecision]");
+    ASSERT_TRUE("Module[{r = Sort[List @@ NRoots[ChebyshevT[300, x] == 0, x][[All, 2]]]}, "
+                "Length[r] == 300 && Max[Abs[r - Sort[N[Table[Cos[(2 k - 1) Pi/600], {k, 300}]]]]] < 10^-14]");
+}
+
+/* Wilkinson's polynomial: exact integer roots, a classical ill-conditioned
+ * expansion (perturbing one coefficient by 2^-23 moves roots into the
+ * complex plane), at machine precision and at 30 digits. */
+static void test_wilkinson(void) {
+    ASSERT_TRUE("Module[{r = Sort[x /. NSolve[Product[x - k, {k, 20}] == 0, x]]}, "
+                "Length[r] == 20 && Max[Abs[r - Range[20]]] < 10^-12]");
+    ASSERT_TRUE("Module[{r = Sort[x /. NSolve[Product[x - k, {k, 20}] == 0, x, WorkingPrecision -> 30]]}, "
+                "Length[r] == 20 && Max[Abs[r - Range[20]]] < 10^-28]");
+    /* Close rational roots k/40, degree 40. */
+    ASSERT_TRUE("Module[{r = Sort[x /. NSolve[Product[40 x - k, {k, 40}] == 0, x, WorkingPrecision -> 25]]}, "
+                "Length[r] == 40 && Max[Abs[r - Range[40]/40]] < 10^-23]");
+}
+
+/* Mixed real and complex roots at high degree with a cancelling expansion:
+ * the real walk takes the real zeros, Aberth the rest. */
+static void test_mixed_high_degree(void) {
+    ASSERT_TRUE("Module[{r = x /. NSolve[(x^2 + 1) LaguerreL[60, x] == 0, x, WorkingPrecision -> 30]}, "
+                "Length[r] == 62 && Count[r, _Real] == 60 && "
+                "Max[Abs[Sort[Select[r, Head[#] === Complex &], Im[#1] < Im[#2] &] - {-I, I}]] < 10^-28]");
+    ASSERT_TRUE("Module[{r = x /. NSolve[x^100 - 1 == 0, x]}, Length[r] == 100 && "
+                "Max[Abs[r^100 - 1]] < 10^-10 && Count[r, _Real] == 2]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -353,6 +428,11 @@ int main(void) {
     TEST(test_unevaluated);
     TEST(test_attributes);
     TEST(test_memory_loop);
+    TEST(test_laguerre_1000_wp50);
+    TEST(test_orthogonal_high_degree);
+    TEST(test_machine_high_degree);
+    TEST(test_wilkinson);
+    TEST(test_mixed_high_degree);
 
     printf("All nroots_tests passed.\n");
     return 0;

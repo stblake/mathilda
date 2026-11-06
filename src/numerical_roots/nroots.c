@@ -49,6 +49,11 @@
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
+#ifdef USE_FLINT
+#include <flint/fmpz.h>
+#include <flint/fmpz_poly.h>
+#include <flint/fmpz_poly_factor.h>
+#endif
 
 /* ------------------------------------------------------------------ *
  *  Diagnostics                                                        *
@@ -159,6 +164,67 @@ static bool nr_expr_to_ncpx(Expr* e, ncpx* out) {
     return false;
 }
 
+/* Exact rational coefficient -> numerator / denominator (false if inexact or
+ * not a rational number). */
+static bool nr_exact_rational(Expr* e, mpz_t num, mpz_t den) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) { mpz_set_si(num, (long)e->data.integer); mpz_set_ui(den, 1); return true; }
+    if (e->type == EXPR_BIGINT)  { mpz_set(num, e->data.bigint); mpz_set_ui(den, 1); return true; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && e->data.function.arg_count == 2) {
+        Expr* a = e->data.function.args[0];
+        Expr* b = e->data.function.args[1];
+        if (!expr_is_integer_like(a) || !expr_is_integer_like(b)) return false;
+        expr_to_mpz(a, num); expr_to_mpz(b, den);
+        return mpz_sgn(den) != 0;
+    }
+    return false;
+}
+
+/* The polynomial sum c_k x^k with exact rational coefficients, scaled by the
+ * lcm of the denominators to an integer polynomial with the same roots; NULL when any coefficient is not an exact rational. */
+static ZUPoly* nr_coeffs_to_zupoly(Expr** coeffs, int d) {
+    mpz_t* num = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)(d + 1));
+    mpz_t den, L;
+    mpz_init(den); mpz_init_set_ui(L, 1);
+    int k = 0;
+    bool ok = true;
+    for (; k <= d; k++) {
+        mpz_init(num[k]);
+        if (!nr_exact_rational(coeffs[k], num[k], den)) { ok = false; k++; break; }
+        /* Invariant: num[j] = c_j * L for every j < k, L = the lcm of the
+         * denominators seen so far. */
+        if (mpz_cmp_ui(den, 1) != 0) {
+            mpz_t g; mpz_init(g);
+            mpz_lcm(g, L, den);
+            if (mpz_cmp(g, L) != 0) {
+                /* Rescale the earlier numerators by g/L. */
+                mpz_t f; mpz_init(f);
+                mpz_divexact(f, g, L);
+                for (int j = 0; j < k; j++) mpz_mul(num[j], num[j], f);
+                mpz_clear(f);
+                mpz_set(L, g);
+            }
+            mpz_divexact(g, L, den);
+            mpz_mul(num[k], num[k], g);
+            mpz_clear(g);
+        } else {
+            mpz_mul(num[k], num[k], L);
+        }
+    }
+    ZUPoly* z = NULL;
+    if (ok) {
+        z = zupoly_new(d + 1);
+        for (int j = 0; j <= d; j++) zupoly_setcoef(z, j, num[j]);
+        zupoly_normalize(z);
+    }
+    for (int j = 0; j < k; j++) mpz_clear(num[j]);
+    free(num);
+    mpz_clear(den); mpz_clear(L);
+    return z;
+}
+
 /* ------------------------------------------------------------------ *
  *  Coefficient extraction:  equation + var -> NrPoly at working prec
  *
@@ -250,10 +316,12 @@ static NrPoly* nr_build_poly(Expr* equation, Expr* var, mpfr_prec_t wp,
         if (!ok) { fail = true; k = d; /* stop loop */ }
         else if (!mpfr_zero_p(p->c[k].im)) p->is_real = 0;
     }
+    /* Exact integer polynomial (if any) for the squarefree multiplicity path
+     * and the adaptive-precision engine: rational coefficients are cleared
+     * of denominators (same roots). */
+    if (out_zpoly && !fail) *out_zpoly = nr_coeffs_to_zupoly(coeffs, d);
     for (int k = 0; k <= d; k++) expr_free(coeffs[k]);
     free(coeffs);
-    /* Exact integer polynomial (if any) for the squarefree multiplicity path. */
-    if (out_zpoly && !fail) *out_zpoly = expr_to_zupoly(expanded, var);
     expr_free(expanded);
 
     if (fail) {
@@ -453,6 +521,43 @@ static ZUPoly* nr_zupoly_derivative(const ZUPoly* p) {
  * outputs on success (caller frees each fac with zupoly_free, then the arrays);
  * returns -1 on any inexact division (caller falls back to the numeric path). */
 static int nr_yun(const ZUPoly* p, ZUPoly*** facs_out, int** mults_out, int* nf_out) {
+#ifdef USE_FLINT
+    /* FLINT's squarefree factorisation (modular gcds): the subresultant PRS
+     * below is quadratic in the degree on coefficients that grow to
+     * O(n * bits) — minutes at degree 1000 with 8000-bit coefficients. */
+    {
+        fmpz_poly_t f; fmpz_poly_init(f);
+        fmpz_t t; fmpz_init(t);
+        for (int i = 0; i <= p->deg; i++) {
+            fmpz_set_mpz(t, *zupoly_getcoef(p, i));
+            fmpz_poly_set_coeff_fmpz(f, i, t);
+        }
+        fmpz_poly_factor_t fac; fmpz_poly_factor_init(fac);
+        fmpz_poly_factor_squarefree(fac, f);
+        int nf = (int)fac->num;
+        ZUPoly** facs = (ZUPoly**)malloc(sizeof(ZUPoly*) * (size_t)(nf ? nf : 1));
+        int* mults = (int*)malloc(sizeof(int) * (size_t)(nf ? nf : 1));
+        mpz_t m; mpz_init(m);
+        for (int k = 0; k < nf; k++) {
+            const fmpz_poly_struct* g = fac->p + k;
+            int dg = (int)fmpz_poly_degree(g);
+            facs[k] = zupoly_new(dg + 1);
+            for (int i = 0; i <= dg; i++) {
+                fmpz_poly_get_coeff_fmpz(t, g, i);
+                fmpz_get_mpz(m, t);
+                zupoly_setcoef(facs[k], i, m);
+            }
+            zupoly_normalize(facs[k]);
+            mults[k] = (int)fac->exp[k];
+        }
+        mpz_clear(m);
+        fmpz_poly_factor_clear(fac);
+        fmpz_clear(t);
+        fmpz_poly_clear(f);
+        *facs_out = facs; *mults_out = mults; *nf_out = nf;
+        return 0;
+    }
+#endif
     ZUPoly* fp = nr_zupoly_derivative(p);
     ZUPoly* g  = zupoly_gcd(p, fp);
     zupoly_free(fp);
@@ -500,28 +605,57 @@ static NrPoly* nr_zupoly_to_nrpoly(const ZUPoly* z, mpfr_prec_t wp) {
 
 /* Solve an exact polynomial via squarefree decomposition.  Fills roots[0..d-1]
  * (d = zp->deg) with each squarefree factor's roots repeated by multiplicity.
+ *
+ * With Method Automatic / "Aberth" each squarefree factor goes to the
+ * adaptive-precision engine (nroots_adaptive.c), which certifies every root to
+ * target_bits against the exact coefficients however badly the monomial
+ * expansion cancels; *uncertified receives the number of roots it could not
+ * certify (best values are still returned) and *certified is false when any
+ * factor fell back to a fixed-precision engine (other methods, or a decline).
  * Returns 0 on success, -1 to request the numeric fallback. */
 static int nr_solve_exact(const ZUPoly* zp, NrMethod method, int max_iter,
-                          mpfr_prec_t wp, ncpx* roots, bool want_machine) {
+                          mpfr_prec_t wp, long target_bits, ncpx* roots,
+                          bool want_machine, int* uncertified, bool* certified) {
     int d = zp->deg;
     ZUPoly** facs = NULL; int* mults = NULL; int nf = 0;
+    *uncertified = 0;
+    *certified = true;
     if (nr_yun(zp, &facs, &mults, &nf) != 0) return -1;
 
     int fill = 0, rc = 0;
     for (int k = 0; k < nf && rc == 0; k++) {
-        NrPoly* fp = nr_zupoly_to_nrpoly(facs[k], wp);
-        int di = fp->deg;
-        if (di <= 0) { nr_poly_free(fp); continue; }
+        int di = facs[k]->deg;
+        if (di <= 0) continue;
         ncpx* fr = (ncpx*)malloc(sizeof(ncpx) * (size_t)di);
         for (int j = 0; j < di; j++) ncpx_init(&fr[j], wp);
-        if (nr_solve(fp, method, max_iter, wp, fr, want_machine) == 0) {
+        int frc = -1;
+        if (method == NR_AUTO || method == NR_ABERTH) {
+            /* Exact zero roots (a squarefree factor has at most one). */
+            int z0 = 0;
+            while (z0 < di && mpz_sgn(facs[k]->c[z0]) == 0) z0++;
+            int unc = 0;
+            frc = (di - z0 >= 1)
+                ? nr_aberth_exact((const mpz_t*)(facs[k]->c + z0), di - z0,
+                                  target_bits, fr, wp, &unc)
+                : 0;
+            if (frc == 0) {
+                for (int j = di - z0; j < di; j++) ncpx_set_ui(&fr[j], 0);
+                *uncertified += unc;
+            }
+        }
+        if (frc != 0) {
+            *certified = false;
+            NrPoly* fp = nr_zupoly_to_nrpoly(facs[k], wp);
+            frc = nr_solve(fp, method, max_iter, wp, fr, want_machine);
+            nr_poly_free(fp);
+        }
+        if (frc == 0) {
             for (int j = 0; j < di; j++)
                 for (int m = 0; m < mults[k]; m++)
                     if (fill < d) ncpx_set(&roots[fill++], &fr[j]);
         } else rc = -1;
         for (int j = 0; j < di; j++) ncpx_clear(&fr[j]);
         free(fr);
-        nr_poly_free(fp);
     }
     for (int k = 0; k < nf; k++) zupoly_free(facs[k]);
     free(facs); free(mults);
@@ -610,13 +744,22 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
      *    tolerance (regardless of position) and snap each group to its
      *    centroid, so roots of multiplicity > 1 become numerically identical
      *    and print as identical equations.  Single-linkage anchored at each
-     *    group's first member; n is small. */
+     *    group's first member.  A double-precision distance test rules out
+     *    almost every pair before the MPFR comparison (O(n^2) MPFR work was
+     *    seconds at degree 1000). */
     mpfr_t tolc, sre, sim;
     mpfr_init2(tolc, wp); mpfr_init2(sre, wp); mpfr_init2(sim, wp);
+    double tolc_d;
     {
         double td = numeric_bits_to_digits(target_bits);
-        double t = pow(10.0, -0.5 * td);
-        mpfr_set_d(tolc, t, MPFR_RNDN);
+        tolc_d = pow(10.0, -0.5 * td);
+        mpfr_set_d(tolc, tolc_d, MPFR_RNDN);
+    }
+    double* dre = (double*)malloc(sizeof(double) * (size_t)n);
+    double* dim = (double*)malloc(sizeof(double) * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        dre[i] = mpfr_get_d(roots[i].re, MPFR_RNDN);
+        dim[i] = mpfr_get_d(roots[i].im, MPFR_RNDN);
     }
     int* grp = (int*)malloc(sizeof(int) * (size_t)n);
     for (int i = 0; i < n; i++) grp[i] = -1;
@@ -624,8 +767,17 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
     for (int i = 0; i < n; i++) {
         if (grp[i] >= 0) continue;
         grp[i] = ng;
-        for (int j = i + 1; j < n; j++)
-            if (grp[j] < 0 && nr_close(&roots[j], &roots[i], tolc, wp)) grp[j] = ng;
+        double ai = fabs(dre[i]) + fabs(dim[i]);
+        for (int j = i + 1; j < n; j++) {
+            if (grp[j] >= 0) continue;
+            double aj = fabs(dre[j]) + fabs(dim[j]);
+            double sc = ai > aj ? ai : aj;
+            if (sc < 1.0) sc = 1.0;
+            /* |a - b| > tol max(1,|a|) + rounding of the doubles: not close. */
+            if (fabs(dre[j] - dre[i]) + fabs(dim[j] - dim[i])
+                > 2.0 * tolc_d * sc + 0x1p-48 * sc) continue;
+            if (nr_close(&roots[j], &roots[i], tolc, wp)) grp[j] = ng;
+        }
         ng++;
     }
     for (int g = 0; g < ng; g++) {
@@ -648,6 +800,7 @@ static void nr_postprocess(ncpx* roots, int* realf, int n, int poly_is_real,
         }
     }
     free(grp);
+    free(dre); free(dim);
 
     /* 3. Conjugate-pair symmetrization (real-coefficient polynomials only):
      *     complex roots come in exact conjugate pairs.  Average each pair's Re
@@ -979,10 +1132,14 @@ Expr* builtin_nroots(Expr* res) {
      * failure) uses the direct numeric engine. */
     int rc;
     int poly_is_real;
+    int n_uncert = 0;
+    bool exact_certified = false;
     if (zp && zp->deg == d && d >= 2
-        && nr_solve_exact(zp, opts.method, max_iter, wp, roots, want_machine) == 0) {
+        && nr_solve_exact(zp, opts.method, max_iter, wp, target_bits, roots,
+                          want_machine, &n_uncert, &exact_certified) == 0) {
         rc = 0; poly_is_real = 1;
     } else {
+        exact_certified = false;
         rc = nr_solve(p, opts.method, max_iter, wp, roots, want_machine);
         poly_is_real = p->is_real;
     }
@@ -992,7 +1149,13 @@ Expr* builtin_nroots(Expr* res) {
      * roots (accuracy is never a reason to leave NRoots unevaluated). */
     bool goal_short = false;
     double goal_err = 0.0, goal_tol = 0.0;
-    if (rc == 0) {
+    if (rc == 0 && exact_certified) {
+        /* The adaptive engine judged every root against the exact coefficients
+         * with an evaluation error bound; re-checking at wp would only measure
+         * the rounding noise of a cancelling expansion. */
+        goal_short = n_uncert > 0;
+        goal_err = 1.0; goal_tol = pow(2.0, -(double)target_bits);
+    } else if (rc == 0) {
         goal_short = nr_goal_shortfall(p, roots, d, opts.acc_goal, opts.prec_goal,
                                        numeric_bits_to_digits(target_bits), wp,
                                        &goal_err, &goal_tol);

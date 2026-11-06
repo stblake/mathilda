@@ -54,6 +54,17 @@ int nr_companion(const NrPoly* p, ncpx* roots, mpfr_prec_t wp);
 /* Jenkins–Traub three-stage algorithm (RPOLY real / CPOLY complex). */
 int nr_jenkinstraub(const NrPoly* p, ncpx* roots, int max_iter, mpfr_prec_t wp);
 
+/* All roots of an EXACT integer polynomial  sum coef[k] x^k  (n >= 1,
+ * coef[0] and coef[n] non-zero), every root evaluated at its own adaptively
+ * chosen precision so that it is accurate to `target_bits` bits however much
+ * the monomial expansion cancels (nroots_adaptive.c).  `roots[0..n-1]` are
+ * ncpx_init'd by the caller at `wp`.  *uncertified receives the number of
+ * roots that hit the iteration / precision cap (their best values are still
+ * written).  Returns 0, or -1 to decline (root radii outside the double
+ * exponent range) — the caller then uses a fixed-precision engine. */
+int nr_aberth_exact(const mpz_t* coef, int n, long target_bits,
+                    ncpx* roots, mpfr_prec_t wp, int* uncertified);
+
 #endif /* USE_MPFR */
 
 #endif /* MATHILDA_NROOTS_INTERNAL_H */
