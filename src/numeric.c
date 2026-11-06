@@ -31,6 +31,10 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "print.h"     /* expr_to_string: N::meprec text */
 #include "stieltjesgamma.h" /* numeric_stieltjes_n: N of an NHoldFirst constant */
+#if defined(USE_FLINT) && defined(USE_MPFR)
+#include <flint/arb.h>   /* arb twins of the MPFR elementary functions */
+#include <flint/arf.h>
+#endif
 
 /* M_PI and M_E are POSIX/GNU extensions, not part of C99. glibc hides them
  * under -std=c99, so provide portable fallbacks here. */
@@ -397,6 +401,84 @@ bool numeric_expr_is_mpfr(const Expr* e) {
     return expr_max_mpfr_prec(e) > 0;
 }
 
+#ifdef USE_FLINT
+/* ---- elementary functions through arb, correctly rounded -------------------
+ *
+ * MPFR's elementary functions are correctly rounded but slow: at 1000 bits
+ * mpfr_atan takes 27 us and mpfr_asin 33 us, where FLINT's arb_atan / arb_asin
+ * take 3.8 / 4.9 us; sin, tan, sinh, tanh are 2-3x faster in arb from 200 to
+ * 6000 bits.  N of a composition of elementary functions deep in a
+ * cancellation spends essentially all its time in these calls.  arb returns a
+ * ball [m - r, m + r] that contains the true value, so the value is kept only
+ * when both ends of the ball round (to nearest, at the target precision) to the
+ * same number -- which is then the correctly rounded value, bit for bit what
+ * the MPFR function returns.  Otherwise (a value within the ball's width of a
+ * rounding boundary: probability ~2^-30; a domain boundary; a result outside
+ * the MPFR exponent range) the MPFR function decides. */
+typedef void (*ArbUnaryFn)(arb_t, const arb_t, slong);
+
+static ArbUnaryFn arb_twin_of(MpfrUnaryOp op) {
+    if (op == (MpfrUnaryOp)mpfr_sin)   return arb_sin;
+    if (op == (MpfrUnaryOp)mpfr_cos)   return arb_cos;
+    if (op == (MpfrUnaryOp)mpfr_tan)   return arb_tan;
+    if (op == (MpfrUnaryOp)mpfr_sinh)  return arb_sinh;
+    if (op == (MpfrUnaryOp)mpfr_cosh)  return arb_cosh;
+    if (op == (MpfrUnaryOp)mpfr_tanh)  return arb_tanh;
+    if (op == (MpfrUnaryOp)mpfr_atan)  return arb_atan;
+    if (op == (MpfrUnaryOp)mpfr_asin)  return arb_asin;
+    if (op == (MpfrUnaryOp)mpfr_acos)  return arb_acos;
+    if (op == (MpfrUnaryOp)mpfr_atanh) return arb_atanh;
+    if (op == (MpfrUnaryOp)mpfr_asinh) return arb_asinh;
+    if (op == (MpfrUnaryOp)mpfr_acosh) return arb_acosh;
+    if (op == (MpfrUnaryOp)mpfr_cot)   return arb_cot;
+    if (op == (MpfrUnaryOp)mpfr_sec)   return arb_sec;
+    if (op == (MpfrUnaryOp)mpfr_csc)   return arb_csc;
+    if (op == (MpfrUnaryOp)mpfr_coth)  return arb_coth;
+    if (op == (MpfrUnaryOp)mpfr_sech)  return arb_sech;
+    if (op == (MpfrUnaryOp)mpfr_csch)  return arb_csch;
+    if (op == (MpfrUnaryOp)mpfr_exp)   return arb_exp;
+    return NULL;
+}
+
+/* True when the finite arf `x` rounds into MPFR's current exponent range. */
+static bool arf_fits_mpfr(const arf_t x) {
+    if (arf_is_zero(x)) return true;
+    if (!arf_is_finite(x)) return false;
+    return arf_cmpabs_2exp_si(x, (slong)mpfr_get_emax() - 2) < 0
+        && arf_cmpabs_2exp_si(x, (slong)mpfr_get_emin() + 2) > 0;
+}
+
+/* out = f(x) correctly rounded to nearest at out's precision, or false. */
+static bool arb_unary_round(mpfr_t out, const mpfr_t x, ArbUnaryFn f) {
+    if (!mpfr_number_p(x)) return false;
+    mpfr_prec_t p = mpfr_get_prec(out);
+    arb_t a, b;
+    arf_t lo, hi;
+    arb_init(a); arb_init(b);
+    arf_init(lo); arf_init(hi);
+    arf_set_mpfr(arb_midref(a), x);
+    mag_zero(arb_radref(a));
+    f(b, a, (slong)p + 32);
+    bool ok = false;
+    if (arb_is_finite(b)) {
+        arf_set_mag(hi, arb_radref(b));
+        arf_sub(lo, arb_midref(b), hi, ARF_PREC_EXACT, ARF_RND_DOWN);
+        arf_add(hi, arb_midref(b), hi, ARF_PREC_EXACT, ARF_RND_DOWN);
+        if (arf_fits_mpfr(lo) && arf_fits_mpfr(hi)) {
+            mpfr_t rh;
+            mpfr_init2(rh, p);
+            arf_get_mpfr(out, lo, MPFR_RNDN);
+            arf_get_mpfr(rh, hi, MPFR_RNDN);
+            ok = mpfr_equal_p(out, rh) != 0;
+            mpfr_clear(rh);
+        }
+    }
+    arf_clear(lo); arf_clear(hi);
+    arb_clear(a); arb_clear(b);
+    return ok;
+}
+#endif
+
 Expr* numeric_mpfr_apply_unary(const Expr* e, long default_bits, MpfrUnaryOp op) {
     long bits = numeric_combined_bits(e, NULL, default_bits);
     mpfr_t r, i, out;
@@ -408,7 +490,13 @@ Expr* numeric_mpfr_apply_unary(const Expr* e, long default_bits, MpfrUnaryOp op)
         return NULL;
     }
     mpfr_init2(out, bits);
+#ifdef USE_FLINT
+    ArbUnaryFn twin = bits > 64 ? arb_twin_of(op) : NULL;
+    if (!twin || !arb_unary_round(out, r, twin))
+        op(out, r, MPFR_RNDN);
+#else
     op(out, r, MPFR_RNDN);
+#endif
     mpfr_clear(r); mpfr_clear(i);
     /* Domain failure (e.g. asin(2), acosh(0.5), log(-1)) — return NULL so
      * the caller can route through a complex-aware fallback rather than
