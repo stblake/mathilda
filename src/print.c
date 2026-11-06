@@ -399,6 +399,179 @@ static void print_function_fullform(Expr* e) {
     printf("]");
 }
 
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ */
+/*  Arbitrary-precision reals                                          */
+/* ------------------------------------------------------------------ */
+/*
+ * An MPFR real carries only a binary precision. N[x, n] (and the literal
+ * x`n) stores ceil(n log2 10) bits, so floor(bits log10 2) recovers n: the
+ * number of decimal digits the value is known to. Every one of them is
+ * significant, so the display forms print exactly that many, trailing zeros
+ * included -- N[1, 30] is 1.00000000000000000000000000000, not 1.0, which
+ * would claim two digits.
+ *
+ * Display (OutputForm, ToString, Print, TeXForm), for |x| = d.ddd 10^e:
+ *   - positional when -5 <= e < 6 and e < n (n = significant digits); the
+ *     integer part is padded with zeros when the n digits do not reach the
+ *     decimal point (99.99999`2 -> 100.);
+ *   - otherwise d.ddd e+XX (TeXForm: d.ddd\times 10^{XX}), the mantissa
+ *     still showing all n digits;
+ *   e is decided before rounding to n digits, so a value that rounds up
+ *   across a power of ten keeps its positional layout (9.99999`3 -> 10.0).
+ *   A zero shows its accuracy a the same way: 0. for a <= 5, else 0.e-a.
+ *
+ * InputForm / FullForm: digits`p (or digits`p*^e for e < -5 or e >= 6)
+ * with enough digits to name the binary value exactly (trailing zeros
+ * trimmed: 1.`30.) and a precision mark p that the parser maps back to the
+ * same number of bits, so the text re-reads to the identical number. A zero
+ * is written by its accuracy, 0``a.
+ */
+#define MTH_LOG10_2 0.30102999566398119521
+#define MTH_LOG2_10 3.3219280948873626      /* the parser's digits -> bits factor */
+
+/* Decimal digits (>= 1) carried by a `bits`-bit value. */
+static long mpfr_known_digits(mpfr_prec_t bits) {
+    long d = (long)floor((double)bits * MTH_LOG10_2 + 1e-9);
+    return d < 1 ? 1 : d;
+}
+
+/* The first n significant digits of |x| (x finite, nonzero), rounded with
+ * `rnd`, as a malloc'd NUL-terminated digit string; *exp10 receives e with
+ * |x| ~ d.ddd 10^e for those rounded digits. NULL on failure. */
+static char* mpfr_sig_digits(const mpfr_t x, long n, mpfr_rnd_t rnd, long* exp10) {
+    char* buf = NULL;
+    int len = rnd == MPFR_RNDZ ? mpfr_asprintf(&buf, "%.*RZe", (int)(n - 1), x)
+                               : mpfr_asprintf(&buf, "%.*RNe", (int)(n - 1), x);
+    if (len < 0 || !buf) return NULL;
+    char* out = malloc((size_t)len + 1);
+    if (!out) { mpfr_free_str(buf); return NULL; }
+    size_t k = 0;
+    const char* p = buf;
+    if (*p == '-' || *p == '+') p++;
+    for (; *p && *p != 'e' && *p != 'E'; p++)
+        if (isdigit((unsigned char)*p)) out[k++] = *p;
+    out[k] = '\0';
+    *exp10 = (*p == 'e' || *p == 'E') ? strtol(p + 1, NULL, 10) : 0;
+    mpfr_free_str(buf);
+    return out;
+}
+
+/* Lay digits D (nd of them) with decimal exponent e out positionally. */
+static void mpfr_put_positional(const char* D, long nd, long e) {
+    if (e >= 0) {
+        for (long i = 0; i <= e; i++) putchar(i < nd ? D[i] : '0');
+        putchar('.');
+        for (long i = e + 1; i < nd; i++) putchar(D[i]);
+    } else {
+        printf("0.");
+        for (long i = 0; i < -e - 1; i++) putchar('0');
+        fputs(D, MTH_POUT);
+    }
+}
+
+/* Mantissa d.ddd of a scientific layout. */
+static void mpfr_put_mantissa(const char* D) {
+    putchar(D[0]);
+    putchar('.');
+    fputs(D + 1, MTH_POUT);
+}
+
+/* Exponent suffix of the display form: e+50 / e-05 as a machine real
+ * prints, or the TeX \times 10^{e}. */
+static void mpfr_put_display_exponent(long e, bool tex) {
+    if (tex) {
+        char t[32];
+        snprintf(t, sizeof t, "%ld", e);
+        if (strlen(t) == 1) printf("\\times 10^%s", t);
+        else printf("\\times 10^{%s}", t);
+    } else {
+        printf("e%c%02ld", e < 0 ? '-' : '+', e < 0 ? -e : e);
+    }
+}
+
+/* Display form of an MPFR real (see the block comment above). */
+static void print_mpfr_display(const mpfr_t x, bool tex) {
+    if (!mpfr_number_p(x)) {            /* NaN / infinity: no digits to show */
+        char* buf = NULL;
+        if (mpfr_asprintf(&buf, "%Rg", x) >= 0 && buf) { fputs(buf, MTH_POUT); mpfr_free_str(buf); }
+        return;
+    }
+    long n = mpfr_known_digits(mpfr_get_prec(x));
+    if (mpfr_zero_p(x)) {
+        /* An inexact zero is known to absolute accuracy 10^-n. */
+        printf("0.");
+        if (n > 5) mpfr_put_display_exponent(-n, tex);
+        return;
+    }
+    long eu = 0, er = 0;
+    char* T = mpfr_sig_digits(x, n, MPFR_RNDZ, &eu);   /* exponent before rounding */
+    char* D = mpfr_sig_digits(x, n, MPFR_RNDN, &er);
+    if (!T || !D) { free(T); free(D); printf("<mpfr print error>"); return; }
+    if (mpfr_sgn(x) < 0) putchar('-');
+    if (eu < -5 || eu >= 6 || eu >= n) {
+        mpfr_put_mantissa(D);
+        mpfr_put_display_exponent(er, tex);
+    } else {
+        mpfr_put_positional(D, (long)strlen(D), er);
+    }
+    free(T);
+    free(D);
+}
+
+/* The precision (accuracy, for a zero) mark that parse.c reads back to
+ * exactly `bits` bits: bits = ceil(mark * log2 10). The whole number of
+ * digits when it does (N[x, 30] -> 30.), else the shortest decimal that
+ * does, checked through the same text -> double the parser performs. */
+static void mpfr_put_precision_mark(mpfr_prec_t bits) {
+    double x = (double)bits * MTH_LOG10_2;
+    char t[48];
+    long d = (long)floor(x + 1e-9);
+    if (d >= 1 && (mpfr_prec_t)ceil((double)d * MTH_LOG2_10) == bits) {
+        printf("%ld.", d);
+        return;
+    }
+    for (int k = 1; k <= 17; k++) {
+        double scale = pow(10.0, k);
+        snprintf(t, sizeof t, "%.*f", k, floor(x * scale) / scale);
+        double m = strtod(t, NULL);
+        if (m >= 1.0 && (mpfr_prec_t)ceil(m * MTH_LOG2_10) == bits) {
+            fputs(t, MTH_POUT);
+            return;
+        }
+    }
+    snprintf(t, sizeof t, "%.17g", x);
+    fputs(t, MTH_POUT);
+}
+
+/* InputForm / FullForm text of an MPFR real, which re-reads to the same
+ * value at the same precision. */
+static void print_mpfr_input(const mpfr_t x) {
+    mpfr_prec_t bits = mpfr_get_prec(x);
+    if (!mpfr_number_p(x)) { print_mpfr_display(x, false); return; }
+    if (mpfr_zero_p(x)) {
+        printf("0``");
+        mpfr_put_precision_mark(bits);
+        return;
+    }
+    /* 1 + ceil(bits log10 2) digits name every bits-bit value uniquely. */
+    long n = 1 + (long)ceil((double)bits * MTH_LOG10_2);
+    long e = 0;
+    char* D = mpfr_sig_digits(x, n, MPFR_RNDN, &e);
+    if (!D) { printf("<mpfr print error>"); return; }
+    long nd = (long)strlen(D);
+    while (nd > 1 && D[nd - 1] == '0') D[--nd] = '\0';
+    if (mpfr_sgn(x) < 0) putchar('-');
+    bool sci = e < -5 || e >= 6;
+    if (sci) mpfr_put_mantissa(D);
+    else mpfr_put_positional(D, nd, e);
+    putchar('`');
+    mpfr_put_precision_mark(bits);
+    if (sci) printf("*^%ld", e);
+    free(D);
+}
+#endif
+
 /* InputForm/FullForm text of a machine real: the shortest decimal that reads
  * back to the same double, so the printed form re-parses to the same value
  * (OutputForm's %g keeps six digits and does not).  At most 17 significant
@@ -495,30 +668,12 @@ void expr_print_fullform(Expr* e) {
             break;
         }
 #ifdef USE_MPFR
-        case EXPR_MPFR: {
-            /* Print with decimal-digit precision matching the value's
-             * stored binary precision. `%.*Rg` uses the `g` style (drops
-             * trailing zeros) so most common values print cleanly; we
-             * append ".0" for integer-valued outputs for consistency
-             * with EXPR_REAL formatting (e.g. 3. → 3.0). */
-            long digits = (long)ceil((double)mpfr_get_prec(e->data.mpfr)
-                                     / 3.3219280948873626);
-            if (digits < 1) digits = 1;
-            char* buf = NULL;
-            int len = mpfr_asprintf(&buf, "%.*Rg", (int)digits, e->data.mpfr);
-            if (len >= 0 && buf) {
-                printf("%s", buf);
-                if (strchr(buf, '.') == NULL && strchr(buf, 'e') == NULL
-                    && strchr(buf, 'E') == NULL && strchr(buf, 'n') == NULL
-                    && strchr(buf, 'i') == NULL /* nan / inf */) {
-                    printf(".0");
-                }
-                mpfr_free_str(buf);
-            } else {
-                printf("<mpfr print error>");
-            }
+        case EXPR_MPFR:
+            /* Display: every known digit, trailing zeros included;
+             * InputForm/FullForm: the re-readable digits`prec spelling. */
+            if (g_inputform_depth > 0) print_mpfr_input(e->data.mpfr);
+            else print_mpfr_display(e->data.mpfr, false);
             break;
-        }
 #endif
     }
 }
@@ -2364,14 +2519,7 @@ static void print_tex_number(Expr* e) {
             break;
         }
 #ifdef USE_MPFR
-        case EXPR_MPFR: {
-            long digits = (long)ceil((double)mpfr_get_prec(e->data.mpfr) / 3.3219280948873626);
-            if (digits < 1) digits = 1;
-            char* buf = NULL;
-            int len = mpfr_asprintf(&buf, "%.*Rg", (int)digits, e->data.mpfr);
-            if (len >= 0 && buf) { printf("%s", buf); mpfr_free_str(buf); }
-            break;
-        }
+        case EXPR_MPFR: print_mpfr_display(e->data.mpfr, true); break;
 #endif
         default: expr_print_fullform(e); break;
     }

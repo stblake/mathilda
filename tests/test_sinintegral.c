@@ -113,10 +113,10 @@ void test_si_arbitrary_precision() {
         "0.49310741804306668916162670757276465364");
     /* Large argument at high precision (asymptotic path). */
     assert_eval_startswith("N[SinIntegral[50], 30]",
-        "1.55161707248593589472798559485");
+        "1.55161707248593589472798559486");
     /* The precision of the output tracks the precision of the input. */
     assert_eval_startswith("SinIntegral[2.0000000000000000000000]",
-                           "1.6054129768026948485767");
+                           "1.605412976802694848577");
 }
 
 /* ---- machine complex ------------------------------------------------ */

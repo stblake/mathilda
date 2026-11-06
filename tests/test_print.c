@@ -477,6 +477,55 @@ void test_inputform_real_roundtrip() {
     printf("PASS: InputForm machine reals round-trip\n");
 }
 
+#ifdef USE_MPFR
+/* Arbitrary-precision reals print every digit their precision carries
+ * (trailing zeros included), positionally when -5 <= e < 6 and e < n, else
+ * as d.ddd e+XX; InputForm carries the precision mark (and *^e outside
+ * -5..5) so ToExpression gives back the same value and precision. */
+void test_mpfr_display_digits() {
+    static const struct { const char* in; const char* out; } cases[] = {
+        {"ToString[N[1, 30]]", "1.00000000000000000000000000000"},
+        {"ToString[N[1/4, 20]]", "0.25000000000000000000"},
+        {"ToString[N[10^50, 30]]", "1.00000000000000000000000000000e+50"},
+        {"ToString[N[10^-5, 6]]", "0.0000100000"},
+        {"ToString[N[123456, 10]]", "123456.0000"},
+        {"ToString[N[1234567, 5]]", "1.2346e+06"},
+        {"ToString[12.`2]", "12."},
+        {"ToString[123.`2]", "1.2e+02"},
+        {"ToString[-N[Pi, 20]]", "-3.1415926535897932385"},
+        {"ToString[N[1 + 2 I, 25]]",
+         "1.000000000000000000000000 + 2.000000000000000000000000*I"},
+        {"ToString[N[0, 30]]", "0.e-30"},
+        {"ToString[{1.0, 0.25, 1.64438}]", "{1.0, 0.25, 1.64438}"},
+        {"ToString[N[1, 30], InputForm]", "1.`30."},
+        {"ToString[N[1/4, 20], InputForm]", "0.25`20."},
+        {"ToString[N[10^50, 30], InputForm]",
+         "1.0000000000000000000000000000004`30.*^50"},
+        {"ToString[N[1 + 2 I, 25], InputForm]", "1.`25. + 2.`25.*I"},
+        {"ToString[N[0, 30], InputForm]", "0``30."},
+        {"ToString[TeXForm[N[10^50, 30]]]",
+         "1.00000000000000000000000000000\\times 10^{50}"},
+        {"With[{v = {N[10^50, 30], N[Pi, 40], -N[E, 17]*10^-61, N[0, 30], "
+         "N[1/3, 100]*10^60}}, With[{w = ToExpression[ToString[v, InputForm]]}, "
+         "w === v && Precision /@ w === Precision /@ v]]", "True"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+        char* str = (res->type == EXPR_STRING) ? strdup(res->data.string) : expr_to_string(res);
+        if (!str || strcmp(str, cases[i].out) != 0)
+            printf("  %s\n    got      %s\n    expected %s\n",
+                   cases[i].in, str ? str : "(null)", cases[i].out);
+        ASSERT(str && strcmp(str, cases[i].out) == 0);
+        free(str);
+        expr_free(e);
+        expr_free(res);
+    }
+    printf("PASS: arbitrary-precision reals print their precision's digits\n");
+}
+#endif
+
 void test_quotient_denominator_parenthesised() {
     static const struct { const char* in; const char* out; } cases[] = {
         {"HoldForm[Power[Power[x, -1], -1]]",          "1/(1/x)"},
@@ -570,6 +619,9 @@ int main() {
     TEST(test_quotient_denominator_parenthesised);
     TEST(test_inputform_real_roundtrip);
     TEST(test_dot_infix);
+#ifdef USE_MPFR
+    TEST(test_mpfr_display_digits);
+#endif
 
     printf("All print tests passed!\n");
     return 0;

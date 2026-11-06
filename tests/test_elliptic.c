@@ -619,7 +619,7 @@ static void test_precision_is_honest(void) {
                 "/ (1570796326794897122662117945335/10^45) - 1] < 10^-29");
     /* a zero-valued result must not climb the ladder looking for relative
      * accuracy it can never have -- it must come straight back */
-    assert_eval("FLINT`Zeta[-2.]", "0.0");
+    assert_eval("FLINT`Zeta[-2.]", "0.e-15");
     /* and the well-conditioned path is unchanged */
     assert_true("Abs[N[EllipticK[2/5], 40] "
                 "- 1.777519371491253323502990072871915020298] < 10^-39");

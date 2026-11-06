@@ -468,7 +468,7 @@ static void test_n_values(void) {
                    "{{HoldPattern[N[nz2, {MachinePrecision, MachinePrecision}]] :> 1.5}, {}, 1.5, 3.5}", 0);
     assert_eval_eq("nz4 /: N[nz4] = 2.; {NValues[nz4], UpValues[nz4]}",
                    "{{HoldPattern[N[nz4, {MachinePrecision, MachinePrecision}]] :> 2.0}, {}}", 0);
-    assert_eval_eq("N[nz3, p_] := p; {NValues[nz3], N[nz3, 20]}", "{{HoldPattern[N[nz3, p_]] :> p}, 20.0}", 0);
+    assert_eval_eq("N[nz3, p_] := p; {NValues[nz3], N[nz3, 20]}", "{{HoldPattern[N[nz3, p_]] :> p}, 20.000000000000000000}", 0);
     assert_eval_eq("N[nf5[x_]] := x^2; {N[nf5[3]], DownValues[nf5]}", "{9.0, {}}", 0);
     assert_eval_eq("nz6 /: N[nz6, p_] := N[Pi, p]; N[nz6]", "3.14159", 0);
     assert_eval_eq("NValues[nz2] = {}; {NValues[nz2], N[nz2]}", "{{}, nz2}", 0);

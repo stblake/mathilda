@@ -226,7 +226,7 @@ void test_zeta_hurwitz_negative_s() {
     /* mpmath zeta(-38.5, 2.3) (binary 2.3) = -171975634955859.1617936557; the
      * unguarded kernel returned -1.45e22 at machine and 20 digits alike. */
     assert_close("Abs[Zeta[-38.5, 2.3]/(-171975634955859.1617936557) - 1]", 0.0, 1e-13);
-    assert_eval_startswith("Zeta[-38.5`25, 0.5`25]", "-136480636625537.3949011");
+    assert_eval_startswith("Zeta[-38.5`25, 0.5`25]", "-1.364806366255373949011079e+14");
     /* Symmetric convention for a < 0 stays real. */
     assert_close("Zeta[-2.5, -0.5]", 0.169765361042211756, 1e-12);
 }

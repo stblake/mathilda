@@ -45,7 +45,7 @@ void test_rescale_real() {
     check("Rescale[Pi, {0, 2.5}]", "1.25664");
     /* Precision of the output tracks the precision of the input. */
     check("Rescale[8, {-9, 7.111111111111111111111}]",
-          "1.055172413793103448276");
+          "1.05517241379310344828");
 }
 
 /* ---- Complex inputs ---- */
@@ -57,8 +57,9 @@ void test_rescale_complex() {
 /* ---- High-precision evaluation via N ---- */
 void test_rescale_high_precision() {
     check("N[Rescale[1/11, {1/7, 5}], 50]",
-          "-0.0106951871657754010695187165775401069518716577540107");
-    check("N[Rescale[1/8, {1/17, 1/11}], 100]", "2.0625");
+          "-0.010695187165775401069518716577540106951871657754011");
+    check("N[Rescale[1/8, {1/17, 1/11}], 100]",
+          "2.062500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
 }
 
 /* ---- Three-argument form: y0 + (y1 - y0)(x - min)/(max - min) ---- */

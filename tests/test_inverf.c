@@ -98,7 +98,7 @@ void test_inverf_arbitrary_precision() {
         "0.595116081449994850019300360168108253439616886279848409714612569202207183989666902521700511902573");
     /* Precision-tracking on a 24-significant-digit input. */
     assert_eval_startswith("InverseErf[0.330000000000000000000000]",
-        "0.301332146133705826128503");
+        "0.30133214613370582612850");
     /* MPFR coverage case (numeric-builtins-cover-MPFR lesson). */
     assert_eval_startswith("N[InverseErf[1/2], 35]",
         "0.4769362762044698733814183536431305");

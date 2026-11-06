@@ -266,10 +266,10 @@ void test_airyaiprime_arbitrary_real() {
         "-0.0262508810359032303648954962972325094463178381357");
     /* Precision tracks the input (0.5 to 20 significant digits). */
     assert_eval_startswith("AiryAiPrime[0.5`20]",
-        "-0.224910532664683893136");
+        "-0.22491053266468389314");
     /* High precision on a rational argument. */
     assert_eval_startswith("N[AiryAiPrime[1/2], 60]",
-        "-0.224910532664683893135996990328583214825029635610892837136285");
+        "-0.224910532664683893135996990328583214825029635610892837136286");
 }
 
 /* ---- machine and arbitrary-precision complex ------------------------ */

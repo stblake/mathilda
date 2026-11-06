@@ -136,7 +136,7 @@ void test_laguerre_l_highprec() {
                            "-1.11292980686726510314");
     /* The cancellation case at 20-digit precision: stable recurrence. */
     assert_eval_startswith("LaguerreL[100, 0, N[5, 20]]",
-                           "1.4555271625328812606");
+                           "1.4555271625328812607");
 }
 
 /* ---- cross-surface identity ----------------------------------------- */

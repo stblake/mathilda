@@ -129,10 +129,10 @@ void test_erf_machine_complex() {
 void test_erf_arbitrary_complex() {
     /* Erf[I] to 30 digits is exactly I erfi(1) (mpmath reference). */
     assert_eval_startswith("N[Erf[I], 30]",
-        "0.0 + 1.6504257587975428760253377295");
+        "0.e-30 + 1.65042575879754287602533772956*I");
     /* Erf[1/2 + I], mpmath reference. */
     assert_eval_startswith("N[Erf[1/2 + I], 30]",
-        "1.2048475583142180027021126820");
+        "1.20484755831421800270211268210");
 }
 
 /* ---- |Im z| beyond the machine kernel: extended exponent, not Overflow -- */

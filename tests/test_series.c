@@ -2120,7 +2120,7 @@ static void test_series_plus_mpfr(void) {
     setup_full();
     assert_fullform(
         "Series[Exp[x], {x, 0, 2}] + N[1, 30]",
-        "SeriesData[x, 0, List[2.0, 1, Rational[1, 2]], 0, 3, 1]");
+        "SeriesData[x, 0, List[2.00000000000000000000000000000, 1, Rational[1, 2]], 0, 3, 1]");
 }
 
 /* ------------------------------------------------------------------------- */

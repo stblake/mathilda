@@ -148,7 +148,7 @@ void test_gamma_arbitrary_precision() {
                            "1.101802490879712732769141986222996480824");
     /* Gamma[1/2] at high precision is Sqrt[Pi]. */
     assert_eval_startswith("N[Gamma[1/2], 40]",
-                           "1.772453850905516027298167483341145182797");
+                           "1.772453850905516027298167483341145182798");
     /* Output precision survives: 50-digit request prints ~50 digits. */
     assert_eval_startswith("N[Gamma[10], 30]", "362880.");
 }

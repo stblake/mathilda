@@ -93,7 +93,7 @@ void test_sinc_machine_real() {
 
 void test_sinc_arbitrary_precision() {
     assert_eval_startswith("N[Sinc[2], 45]",
-        "0.454648713412840847698009932955872421351127485");
+        "0.454648713412840847698009932955872421351127486");
     assert_eval_startswith("N[Sinc[1], 40]",
         "0.84147098480789650665250232163029899962");
     /* Precision tracking. */

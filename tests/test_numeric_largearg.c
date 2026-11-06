@@ -235,7 +235,7 @@ static void check_unary_against_oracle(const UnaryCase* c, const char* arg) {
 static void test_reported_transcript(void) {
     /* In[6]: the real literal was always right — the parser promotes it to
      * a 62-bit MPFR from its text, never through a double. */
-    assert_prints_prefix("Sin[3141592653589793238.]", "-0.4463151633593201122");
+    assert_prints_prefix("Sin[3141592653589793238.]", "-0.446315163359320112");
 
     /* In[8]: the bug. Machine N used to answer -0.641653, which is
      * Sin[3141592653589793280] — the nearest double to the argument. */
@@ -243,13 +243,13 @@ static void test_reported_transcript(void) {
 
     /* In[9]: the high-precision form was already right and must stay so. */
     assert_prints_prefix("N[Sin[3141592653589793238], 30]",
-                         "-0.446315163359320112201603619323");
+                         "-0.446315163359320112201603619324");
 
     /* The same defect at the other end of the precision range: a *low*
      * two-argument request used to round the leaf to the requested 34 bits
      * before Sin ever saw it, and answered -0.32885101403. */
     assert_prints_prefix("N[Sin[3141592653589793238], 10]", "-0.446315163");
-    assert_prints_prefix("N[Sin[3141592653589793238], 5]",  "-0.44631");
+    assert_prints_prefix("N[Sin[3141592653589793238], 5]",  "-0.44632");
 
     /* Sin[2^53] and Sin[2^53 + 1] must differ. They did not: both
      * arguments round to the same double. */

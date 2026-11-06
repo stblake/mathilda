@@ -82,7 +82,7 @@ void test_fit_24_digits(void) {
     assert_eval_startswith(
         "Fit[N[{{-Pi,4},{-Pi/2,0},{0,1},{Pi/2,-1},{Pi,-4}},24], "
         "{Sin[x/2], Sin[x], Sin[2 x]}, x]",
-        "-4.0 Sin[1/2 x] + 2.3284271247461");
+        "-4.00000000000000000000000 Sin[1/2 x] + 2.3284271247461");
 }
 
 void test_fit_auto_keeps_input_precision(void) {

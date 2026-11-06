@@ -1409,7 +1409,7 @@ static void test_find_instance(void) {
     run_contains("FindInstance[a b + b c + c d + d e == 0 && a^2 + b^2 + c^2 + d^2 + e^2 == 5, "
                  "{a, b, c, d, e}, Integers]", "Rule[a");
     /* 1-variable real transcendental root far out: Tan[x]==x above 10^6. */
-    run_contains("FindInstance[Tan[x] == x && x > 10^6, x, Reals]", "1000001.9");
+    run_contains("FindInstance[Tan[x] == x && x > 10^6, x, Reals]", "1.000001928");
     /* Inexact-input feasibility (damped oscillation), two distinct points + a>0. */
     run_contains("FindInstance[E^(-a x) Cos[b x] == 0.1 && E^(-a y) Cos[b y] == 0.1 "
                  "&& x != y && a > 0, {a, b, x, y}, Reals]", "Rule[a");

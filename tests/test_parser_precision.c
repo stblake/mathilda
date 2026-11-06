@@ -472,6 +472,21 @@ static void test_very_long_literal(void) {
  *  main()
  * ---------------------------------------------------------------------- */
 
+#ifdef USE_MPFR
+/* N.  A zero with an accuracy mark gets the accuracy it names (no extra
+ * leading digit), and a *^ exponent after an arbitrary-precision mantissa
+ * is applied to the decimal text in one rounding, so the literal is the
+ * number it spells. */
+static void test_zero_accuracy_and_scaled_mark(void) {
+    assert_eval_eq("Accuracy[0``30] == Accuracy[N[0, 30]]", "True", 0);
+    assert_eval_startswith("Accuracy[0``30]", "30.10");
+    assert_eval_eq("3.355`2.*^-61 === SetPrecision[3355/1000 10^-61, 2.]", "True", 0);
+    assert_eval_eq("1.0000000000000000000000000000004`30.*^50 === N[10^50, 30]", "True", 0);
+    assert_eval_eq("Precision[1.0000000000000000000000000000004`30.*^50] == Precision[N[10^50, 30]]", "True", 0);
+    assert_eval_eq("-2.5`40*^-30 === SetPrecision[-25/10 10^-30, 40]", "True", 0);
+}
+#endif
+
 int main(void) {
     symtab_init();
     core_init();
@@ -533,6 +548,7 @@ int main(void) {
     /* M — frac-only & 100-digit literals */
     TEST(test_frac_only_high_precision);
     TEST(test_very_long_literal);
+    TEST(test_zero_accuracy_and_scaled_mark);
 #endif
 
     printf("All parser_precision_tests passed.\n");

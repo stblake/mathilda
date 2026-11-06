@@ -125,7 +125,7 @@ void test_chi_arbitrary_precision() {
     assert_eval_startswith("N[CoshIntegral[2], 50]",
         "2.4526669226469145219061326474994928766017806887285");
     assert_eval_startswith("N[CoshIntegral[1], 40]",
-        "0.83786694098020824089467857943575630999303");
+        "0.8378669409802082408946785794357563099930");
     /* The precision of the output tracks the precision of the input. */
     assert_eval_startswith("CoshIntegral[2.000000000000000000000000000000000000]",
                            "2.4526669226469145219061326474994928");

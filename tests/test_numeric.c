@@ -43,8 +43,8 @@ static void test_n_big_rational_leaf(void) {
     /* Out-of-range machine quotient: carried as a machine-precision MPFR
      * real (arbitrary exponent, ~16 sig figs) so it stays finite and
      * nonzero, not Rational[Real, Real]. */
-    assert_eval_startswith("N[10^400/3]", "3.333333333333333");
-    assert_eval_startswith("N[1/10^400]", "9.999999999999999e-401");
+    assert_eval_startswith("N[10^400/3]", "3.33333333333333");
+    assert_eval_startswith("N[1/10^400]", "1.00000000000000e-400");
     /* In-range BigInt-component quotient: ordinary IEEE double (~6 sig figs). */
     assert_eval_startswith("N[(7*10^350)/(3*10^300)]", "2.33333e+50");
     /* Two-argument N computes the quotient at the requested precision. */
@@ -229,7 +229,7 @@ static void test_inexact_contagion(void) {
 
     /* Two MPFR operands — min precision wins, not max. 1.0`50 + 1.0`20
      * used to preserve 50 digits; now lands at 20. */
-    assert_eval_startswith("1.0`50 Pi + 1.0`20", "4.14159265358979323846");
+    assert_eval_startswith("1.0`50 Pi + 1.0`20", "4.1415926535897932385");
     assert_eval_startswith("Precision[1.0`50 Pi + 1.0`20]", "20.");
     assert_eval_startswith("Precision[1.0`30 1.0`50]",     "30.");
 

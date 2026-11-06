@@ -230,7 +230,7 @@ void test_hz_negative_s() {
      * -136480636625537.3949011079. */
     assert_close("Abs[HurwitzZeta[-38.5, 0.5]/(-136480636625537.3949011079) - 1]",
                  0.0, 1e-13);
-    assert_eval_startswith("HurwitzZeta[-38.5`25, 0.5`25]", "-136480636625537.3949011");
+    assert_eval_startswith("HurwitzZeta[-38.5`25, 0.5`25]", "-1.364806366255373949011079e+14");
     /* Beyond the double range: the extended-exponent value, not Overflow[]
      * (mpmath zeta(-300.5, 0.5) = 1.67567821924552743936e375). */
     assert_eval_eq("Abs[HurwitzZeta[-300.5, 0.5]/(1.6756782192455274394 10^375) - 1] < 10^-13",

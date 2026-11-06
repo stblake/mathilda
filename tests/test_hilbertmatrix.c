@@ -187,9 +187,9 @@ static void test_mpfr_precision_carried(void) {
 static void test_mpfr_terminating_entries_exact(void) {
     /* Entries with terminating binary expansions are represented exactly. */
     assert_eval_eq("HilbertMatrix[2, WorkingPrecision -> 30][[1, 1]]",
-                   "1.0", 0);
+                   "1.00000000000000000000000000000", 0);
     assert_eval_eq("HilbertMatrix[2, WorkingPrecision -> 30][[1, 2]]",
-                   "0.5", 0);
+                   "0.500000000000000000000000000000", 0);
 }
 
 static void test_mpfr_recurring_entry_value(void) {

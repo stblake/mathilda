@@ -1074,7 +1074,7 @@ void test_factorial(void) {
 
     /* MPFR input: Factorial via mpfr_gamma at full input precision. */
     e = parse_expression("Factorial[N[10, 35]]"); res = evaluate(e); s = expr_to_string_fullform(res);
-    assert(strncmp(s, "3628800", 7) == 0); free(s); expr_free(res); expr_free(e);
+    assert(strncmp(s, "3.62880000000000", 16) == 0 && strstr(s, "e+06") != NULL); free(s); expr_free(res); expr_free(e);
 
     e = parse_expression("Factorial[N[1/2, 35]]"); res = evaluate(e); s = expr_to_string_fullform(res);
     /* Expected ~ 0.886226925452758013649083741670572591... */

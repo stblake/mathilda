@@ -294,7 +294,7 @@ void test_besseli_stress() {
     }
     /* Deep precision in the asymptotic regime stays real and accurate. */
     assert_eval_startswith("BesselI[0, 30`60]",
-        "781672297823.977");
+        "7.81672297823977489717389816705295005444944253977947003347689e+11");
 #endif
     /* Large order, small argument: tiny but accurate. */
     assert_rel("BesselI[10, 1.0]", 2.7529480398368736e-10, 1e-8);

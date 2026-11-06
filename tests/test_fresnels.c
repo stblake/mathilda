@@ -115,7 +115,7 @@ void test_fs_arbitrary_precision() {
         "0.42964946444392686440314980678606499145656");
     /* Large argument at high precision (asymptotic path). */
     assert_eval_startswith("N[FresnelS[50], 30]",
-        "0.493633802585938741453268239798");
+        "0.493633802585938741453268239799");
 }
 
 /* ---- machine complex ------------------------------------------------ */

@@ -130,7 +130,7 @@ void test_ci_arbitrary_precision() {
         "-0.0056283863241163054401858954984");
     /* The precision of the output tracks the precision of the input. */
     assert_eval_startswith("CosIntegral[2.0000000000000000000000]",
-                           "0.42298082877486499569856");
+                           "0.4229808287748649956986");
     assert_eval_startswith("CosIntegral[2.8`30]",
                            "0.18648838964317576774819020");
 }

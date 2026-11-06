@@ -201,7 +201,7 @@ void test_arc_trig_mpfr_complex(void) {
         /* ArcCos[2] = i acosh(2) ~ 0 + 1.31696 i — domain failure on
          * the real path falls through to the complex path. */
         {"ArcCos[N[2, 50]]",
-         "0.0 + 1.31695789692481670862504634730796844402698197146751*I", 30},
+         "0.e-50 + 1.3169578969248167086250463473079684440269819714675*I", 30},
         /* ArcTan[Complex[1, 1]] ~ 1.01722 + 0.40236 i */
         {"ArcTan[Complex[N[1, 50], N[1, 50]]]",
          "1.01722196789785136772278896155048292206356087698684", 40},

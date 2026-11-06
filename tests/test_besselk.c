@@ -124,7 +124,7 @@ void test_besselk_arbitrary_real() {
         "0.011159676085853024269745195979833489225009023888474");
     /* Precision tracks the input (37-digit argument). */
     assert_eval_startswith("BesselK[1, 4.000000000000000000000000000000000000]",
-        "0.01248349888726843147038417998080606848");
+        "0.0124834988872684314703841799808060685");
     /* Half-integer at high precision via the connection formula. */
     assert_eval_startswith("N[BesselK[1/2, 2], 40]",
         "0.119937771968061447368036501636793516");

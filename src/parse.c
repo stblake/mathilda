@@ -498,13 +498,16 @@ static Expr* build_precision_literal(const char* mantissa_str, double digits,
         mpfr_t tmp; mpfr_init2(tmp, 128);
         mpfr_set_str(tmp, mantissa_str, 10, MPFR_RNDN);
         double log10_abs = 0.0;
+        /* A zero has no leading digit: its accuracy IS its precision
+         * (Accuracy[0``a] = a), so it takes no extra digit. */
+        double lead_digit = mpfr_zero_p(tmp) ? 0.0 : 1.0;
         if (!mpfr_zero_p(tmp)) {
             mpfr_t abs_t; mpfr_init2(abs_t, 128);
             mpfr_abs(abs_t, tmp, MPFR_RNDN);
             log10_abs = floor(log10(mpfr_get_d(abs_t, MPFR_RNDN)));
             mpfr_clear(abs_t);
         }
-        double total_digits = digits + log10_abs + 1.0;
+        double total_digits = digits + log10_abs + lead_digit;
         if (total_digits < 1.0) total_digits = 1.0;
         bits_prec = (long)ceil(total_digits * 3.3219280948873626);
         mpfr_clear(tmp);
@@ -910,6 +913,24 @@ static Expr* parse_number(ParserState* s) {
             double d = strtod(tbuf, NULL);
             expr_free(result);
             result = expr_new_real(d);
+#ifdef USE_MPFR
+        } else if (result && result->type == EXPR_MPFR && mlen > 0 && mlen < 96
+                   && (mantissa_start[mlen] == '`' || mantissa_start + mlen == save)) {
+            /* Likewise an arbitrary-precision mantissa: rounding it to its
+             * bits and then multiplying by a rounded 10^e rounds three
+             * times, so 3.355`2.*^-61 (InputForm's spelling of a value)
+             * would not read back to that value. One correctly rounded
+             * conversion of the scaled decimal, at the same precision. */
+            char tbuf[128];
+            snprintf(tbuf, sizeof tbuf, "%.*se%ld", (int)mlen, mantissa_start, exp_val);
+            Expr* scaled = expr_new_mpfr_from_str(tbuf, mpfr_get_prec(result->data.mpfr));
+            if (scaled) {
+                expr_free(result);
+                result = scaled;
+            } else {
+                result = apply_pow10_scale(result, exp_val);
+            }
+#endif
         } else {
             result = apply_pow10_scale(result, exp_val);
         }
