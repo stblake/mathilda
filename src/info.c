@@ -3777,6 +3777,9 @@ void info_init(void) {
         "\tdomain are extrapolated with a warning.\n"
         "Derivative[d1, ..., dm][InterpolatingFunction[...]]\n"
         "\tgives an InterpolatingFunction for the mixed partial derivative.\n"
+        "InterpolatingFunction[...][\"prop\"] gives a property: \"Domain\",\n"
+        "\t\"Coordinates\", \"Grid\", \"ValuesOnGrid\", \"InterpolationOrder\",\n"
+        "\t\"Properties\".\n"
         "In standard output only the domain is shown; the rest is <>.");
     symtab_set_docstring("Interpolation",
         "Interpolation[data]\n"

@@ -211,10 +211,30 @@ in the reference. When applied it evaluates the mixed partial
 across repeated differentiation, and an order beyond the local polynomial
 degree yields `0`.
 
+**Properties**: `ifun["prop"]` queries the object instead of evaluating it.
+
+| Property | Result |
+|---|---|
+| `"Domain"` | `{{x1min, x1max}, ...}`, one interval per dimension |
+| `"Coordinates"` | `{{x1 abscissae...}, {x2 abscissae...}, ...}`, ascending |
+| `"Grid"` | the tensor of grid points `{x1, ..., xm}` (shape `n1 × ... × nm × m`) |
+| `"ValuesOnGrid"` | the tensor of tabulated values (shape `n1 × ... × nm`) |
+| `"InterpolationOrder"` | `{o1, ..., om}`: the explicit order, else `2K+1` for `K` supplied derivatives (Hermite), else `min(3, n_k - 1)` |
+| `"Properties"` | the list of property names |
+
+Coordinates keep the type they were tabulated with (exact data stays exact). An
+unknown property leaves the call unevaluated. For an `NDSolve` solution,
+`"Domain"` is where the integration actually reached: a solution stopped at a
+singularity reports the stopping point (`y' == 1 + y^2, y(0) == 0` gives
+`{{0., 1.5708}}`).
+
 **Semantics**:
 - An *exact* argument tuple (Integer/Rational) coinciding with a grid node
-  returns that node's stored value exactly (value queries only); all other
-  queries return a machine real.
+  returns that node's stored value exactly (value queries only).  Any other
+  query returns a machine real for machine data.  On arbitrary-precision data
+  an exact or arbitrary-precision argument gives a number at the data's (or
+  the argument's, if lower) precision, and a machine-number argument gives a
+  machine number, computed at the data's precision and rounded once.
 - An argument outside `domain` is extrapolated from the nearest window, and an
   `InterpolatingFunction::dmval` warning is issued.
 - A symbolic argument, a wrong number of arguments (≠ `m`), or a malformed
@@ -271,7 +291,11 @@ point `x` (a number, or an `{x, y, ...}` coordinate list in m-D).
   derivative order. Mixed partials not present in the data (e.g. `f_xy` from
   gradient-only data) are filled by central finite differences across the grid.
   This reproduces a cubic from `{f, f'}` and a quintic from `{f, f', f''}`
-  exactly, and likewise for separable polynomials in m-D.
+  exactly, and likewise for separable polynomials in m-D. Up to `K = 15`
+  supplied derivatives (degree 31) are accepted; a 1-D evaluation reads only
+  the two bracketing nodes, and the arbitrary-precision kernel carries
+  `2K + 32` guard bits (the monomial basis of degree `2K+1` cancels about
+  `2K+1` bits).
 
 **Options.**
 

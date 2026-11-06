@@ -87,6 +87,9 @@ static void mfun_free(MFun* f) {
 
 /* sorted-unique insert of value v (mpfr) into g[0..*len-1] */
 static void grid_insert_m(mpfr_t* g, size_t* len, const mpfr_t v) {
+    /* Tables arrive sorted (Interpolation, NDSolve): append in O(1) then,
+     * instead of a linear scan per node (O(n^2) per evaluation). */
+    if (*len == 0 || mpfr_greater_p(v, g[*len - 1])) { mpfr_set(g[*len], v, RND); (*len)++; return; }
     size_t i = 0;
     while (i < *len && mpfr_less_p(g[i], v)) i++;
     if (i < *len && mpfr_equal_p(g[i], v)) return;
@@ -470,6 +473,29 @@ static mpfr_t* build_basis_m(int k, long prec) {
     return basis;
 }
 
+/* The basis depends only on (k, prec), but costs 2(k+1) dense solves of size
+ * k+1 -- for a degree-27 NDSolve table, far more than the evaluation it
+ * serves.  Keep the most recent few. */
+#define BASIS_CACHE_N 4
+static struct { int k; long prec; mpfr_t* basis; } g_basis_cache[BASIS_CACHE_N];
+static int g_basis_next;
+
+static mpfr_t* basis_cached_m(int k, long prec) {
+    for (int i = 0; i < BASIS_CACHE_N; i++)
+        if (g_basis_cache[i].basis && g_basis_cache[i].k == k && g_basis_cache[i].prec == prec)
+            return g_basis_cache[i].basis;
+    int slot = g_basis_next; g_basis_next = (g_basis_next + 1) % BASIS_CACHE_N;
+    if (g_basis_cache[slot].basis) {
+        int ok = g_basis_cache[slot].k;
+        size_t nb = (size_t)2 * (ok + 1) * (2 * ok + 2);
+        for (size_t i = 0; i < nb; i++) mpfr_clear(g_basis_cache[slot].basis[i]);
+        free(g_basis_cache[slot].basis);
+    }
+    g_basis_cache[slot].k = k; g_basis_cache[slot].prec = prec;
+    g_basis_cache[slot].basis = build_basis_m(k, prec);
+    return g_basis_cache[slot].basis;
+}
+
 /* g-th derivative at t of polynomial coeffs c[0..deg], into out */
 static void phi_eval_m(mpfr_t* c, int deg, int g, const mpfr_t t, mpfr_t out, long prec) {
     mpfr_t fl; mpfr_init2(fl, prec);
@@ -671,6 +697,47 @@ static void hermite_tensor_eval_m(const MFun* g, mpfr_t* T, size_t dcount, size_
     free(lo); free(a); free(c); free(h); free(t); free(factor);
 }
 
+/* 1-D two-point Hermite with all K = k derivatives supplied at every node:
+ * only the two nodes bracketing x enter, so read just those (build_T_m would
+ * convert every node's derivatives on each evaluation).
+ *
+ * Carried with guard bits: the degree-(2k+1) basis polynomials, in monomial
+ * form on [0, 1], have coefficients up to ~2^(2k+1), so summing them at the
+ * data's own precision cancels ~2k+1 bits.  For an NDSolve table of degree 27
+ * at 30 digits that left ~22 good digits, and a minimum located on the
+ * interpolant moved by sqrt(1e-22) -- the last digits of the abscissa. */
+static bool hermite_1d_eval_m(const MFun* g, const int* cpath, int vrank, int k,
+                              const mpfr_t x, int der, mpfr_t out, long prec) {
+    long wprec = prec + 2 * k + 32;
+    mpfr_t* basis = basis_cached_m(k, wprec);
+    size_t i = bracket_m(g->grid[0], g->nk[0], x);
+    int D = 2 * k + 2;
+    mpfr_t h, t, phi, hp, val, term, acc;
+    mpfr_inits2(wprec, h, t, phi, hp, val, term, acc, (mpfr_ptr)0);
+    mpfr_sub(h, g->grid[0][i + 1], g->grid[0][i], RND);
+    mpfr_sub(t, x, g->grid[0][i], RND); mpfr_div(t, t, h, RND);
+    mpfr_set_zero(acc, 1);
+    bool ok = true;
+    for (int c = 0; c < 2 && ok; c++) {
+        Expr* entry = g->entryAt[i + (size_t)c];
+        for (int a = 0; a <= k && ok; a++) {
+            int aa[1] = { a };
+            if (!extract_supplied_m(entry, 1, cpath, vrank, aa, a, val)) { ok = false; break; }
+            if (mpfr_zero_p(val)) continue;
+            phi_eval_m(basis + ((size_t)(c * (k + 1) + a)) * (size_t)D, 2 * k + 1, der, t, phi, wprec);
+            int ex = a - der;
+            if (ex >= 0) mpfr_pow_ui(hp, h, (unsigned long)ex, RND);
+            else { mpfr_pow_ui(hp, h, (unsigned long)(-ex), RND); mpfr_ui_div(hp, 1, hp, RND); }
+            mpfr_mul(term, val, phi, RND);
+            mpfr_mul(term, term, hp, RND);
+            mpfr_add(acc, acc, term, RND);
+        }
+    }
+    mpfr_set(out, acc, RND);
+    mpfr_clears(h, t, phi, hp, val, term, acc, (mpfr_ptr)0);
+    return ok;
+}
+
 /* value-only tensor evaluation (default / spline), recursive over dims */
 typedef struct { const MFun* f; mpfr_t* p; const int* ders; int64_t* s; size_t* w; int kernel; long prec; } MCtx;
 
@@ -711,8 +778,11 @@ static bool eval_component_mpfr(MFun* f, const int* cpath, int vrank, size_t m,
                                 int method, int Ksupplied, mpfr_t out, long prec) {
     if (method == METHOD_HERMITE || Ksupplied >= 1) {
         int K = Ksupplied, k = K > 1 ? K : 1;
+        if (k > INTERP_MAX_SUPPLIED) return false;   /* build_basis_m's fixed system size */
+        if (m == 1 && K >= 1 && !(f->periodic && f->periodic[0]))
+            return hermite_1d_eval_m(f, cpath, vrank, k, p[0], ders[0], out, prec);
+        mpfr_t* basis = basis_cached_m(k, prec);
         size_t dcount = ipow_sz((size_t)(k + 1), m);
-        mpfr_t* basis = build_basis_m(k, prec);
         mpfr_t* T = build_T_m(f, m, K, k, dcount, cpath, vrank, prec);
         bool ok = (T != NULL);
         if (ok) {
@@ -720,9 +790,6 @@ static bool eval_component_mpfr(MFun* f, const int* cpath, int vrank, size_t m,
             for (size_t i = 0; i < f->total * dcount; i++) mpfr_clear(T[i]);
             free(T);
         }
-        size_t nb = (size_t)2 * (k + 1) * (2 * k + 2);
-        for (size_t i = 0; i < nb; i++) mpfr_clear(basis[i]);
-        free(basis);
         return ok;
     }
     mpfr_t* V = malloc(sizeof(mpfr_t) * f->total);

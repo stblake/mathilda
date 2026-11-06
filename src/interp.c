@@ -1074,6 +1074,32 @@ static double hermite_tensor_eval(const IFun* g, const double* T, size_t dcount,
     return result;
 }
 
+/* 1-D two-point Hermite with every derivative through order k supplied at
+ * every node: only the two nodes bracketing x enter, so read just those --
+ * build_T converts every node of the table on each evaluation, which made a
+ * single evaluation of an NDSolve solution O(number of steps). */
+static bool hermite_1d_eval(const IFun* g, const int* cpath, int vrank, int k,
+                            const double* basis, double x, int der, double* out) {
+    size_t i = bracket_interval(g->grid[0], g->nk[0], x);
+    double h = g->grid[0][i + 1] - g->grid[0][i];
+    double t = (x - g->grid[0][i]) / h;
+    int D = 2 * k + 2;
+    double acc = 0.0;
+    for (int c = 0; c < 2; c++) {
+        Expr* entry = g->entryAt[i + (size_t)c];
+        for (int a = 0; a <= k; a++) {
+            int aa[1] = { a };
+            double v;
+            if (!extract_supplied(entry, 1, cpath, vrank, aa, a, &v)) return false;
+            if (v == 0.0) continue;
+            double phi = phi_eval(basis + ((size_t)(c * (k + 1) + a)) * (size_t)D, 2 * k + 1, der, t);
+            acc += v * phi * pow(h, (double)(a - der));
+        }
+    }
+    *out = acc;
+    return true;
+}
+
 /* --- value-array shape + result assembly ------------------------------ */
 
 static Expr* make_list(Expr** items, size_t n);   /* defined below */
@@ -1123,7 +1149,13 @@ static bool eval_component_double(IFun* f, const int* cpath, int vrank, size_t m
                                   double* out) {
     if (method == METHOD_HERMITE || Ksupplied >= 1) {
         int K = Ksupplied, k = K > 1 ? K : 1;
+        if (k > INTERP_MAX_SUPPLIED) return false;   /* build_basis' fixed system size */
         double* basis = build_basis(k);
+        if (m == 1 && K >= 1 && f->entryAt && !(f->periodic && f->periodic[0])) {
+            bool ok = hermite_1d_eval(f, cpath, vrank, k, basis, p[0], ders[0], out);
+            free(basis);
+            return ok;
+        }
         double* T = build_T(f, m, K, k, cpath, vrank);
         if (!T) { free(basis); return false; }
         *out = hermite_tensor_eval(f, T, ipow_sz((size_t)(k + 1), m), m, k,
@@ -1268,8 +1300,14 @@ static void obj_cache_load(Expr* table) {
         g_obj_cache.inexact.has_inexact = true;
         g_obj_cache.inexact.min_bits = 53;
     } else {
-        g_obj_cache.is_mpfr   = numeric_expr_is_mpfr(table);
+        /* Arbitrary-precision data: every inexact leaf is an MPFR number above
+         * machine precision.  (numeric_expr_is_mpfr looks at a scalar only, so
+         * it never saw the MPFR leaves of a table: an NDSolve solution computed
+         * at WorkingPrecision -> 40 then evaluated at an exact point fell to
+         * the double kernels and lost all but ~8 of its digits.) */
         g_obj_cache.inexact   = common_scan_inexact(table);
+        g_obj_cache.is_mpfr   = g_obj_cache.inexact.has_inexact
+                                && g_obj_cache.inexact.min_bits > 53;
     }
 #endif
 }
@@ -1509,6 +1547,224 @@ static Expr* interp_vector_1d(Expr* domain, Expr* table, const Expr* arg, size_t
     return result;
 }
 
+/* --- property queries: ifun["Domain"], ifun["Grid"], ... --------------- */
+
+/* One distinct abscissa along an axis: its double (for sorting/lookup) and the
+ * coordinate as stored (borrowed for a boxed table, NULL for a packed one). */
+typedef struct { double v; Expr* e; } IpAxisPt;
+
+static int cmp_axis_pt(const void* a, const void* b) {
+    double x = ((const IpAxisPt*)a)->v, y = ((const IpAxisPt*)b)->v;
+    return (x < y) ? -1 : (x > y) ? 1 : 0;
+}
+
+/* The tabulated grid of an object, read straight off its table.  ax[k] holds
+ * the nk[k] distinct ascending abscissae of axis k; node[flat] is the table row
+ * sitting at each row-major grid node (or SIZE_MAX if the grid has a hole). */
+typedef struct {
+    size_t m, npts, total;
+    size_t* nk;
+    IpAxisPt** ax;
+    size_t* node;
+} IpGrid;
+
+static void ip_grid_free(IpGrid* g) {
+    if (g->ax) for (size_t k = 0; k < g->m; k++) free(g->ax[k]);
+    free(g->ax); free(g->nk); free(g->node);
+    memset(g, 0, sizeof(*g));
+}
+
+/* Coordinate k of table row i, as a double and (boxed table only) the Expr. */
+static bool ip_row_coord(Expr* table, size_t m, size_t i, size_t k,
+                         double* v, Expr** e) {
+    if (is_ndarray(table)) {
+        const double* buf = (const double*)table->data.ndarray.data;
+        *v = buf[i * (m + 1) + k]; *e = NULL;
+        return true;
+    }
+    Expr* c = entry_coord(table->data.function.args[i], m, k);
+    if (!c) return false;
+    *e = c;
+    return node_to_double(c, v);
+}
+
+static bool ip_grid_build(Expr* table, size_t m, IpGrid* g) {
+    memset(g, 0, sizeof(*g));
+    size_t npts;
+    if (is_ndarray(table)) {
+        if (table->data.ndarray.rank != 2 || table->data.ndarray.dtype != NDT_FLOAT64
+            || (size_t)table->data.ndarray.dims[1] != m + 1) return false;
+        npts = (size_t)table->data.ndarray.dims[0];
+    } else {
+        if (table_Ksupplied(table) < 0) return false;
+        npts = table->data.function.arg_count;
+    }
+    if (npts == 0) return false;
+    g->m = m; g->npts = npts;
+    g->nk = calloc(m, sizeof(size_t));
+    g->ax = calloc(m, sizeof(IpAxisPt*));
+    if (!g->nk || !g->ax) { ip_grid_free(g); return false; }
+    g->total = 1;
+    for (size_t k = 0; k < m; k++) {
+        IpAxisPt* a = malloc(sizeof(IpAxisPt) * npts);
+        if (!a) { ip_grid_free(g); return false; }
+        g->ax[k] = a;
+        for (size_t i = 0; i < npts; i++)
+            if (!ip_row_coord(table, m, i, k, &a[i].v, &a[i].e)) { ip_grid_free(g); return false; }
+        qsort(a, npts, sizeof(IpAxisPt), cmp_axis_pt);
+        size_t len = 0;
+        for (size_t i = 0; i < npts; i++)
+            if (len == 0 || a[i].v != a[len - 1].v) a[len++] = a[i];
+        g->nk[k] = len;
+        if (g->total > SIZE_MAX / len) { ip_grid_free(g); return false; }
+        g->total *= len;
+    }
+    g->node = malloc(sizeof(size_t) * g->total);
+    if (!g->node) { ip_grid_free(g); return false; }
+    for (size_t f = 0; f < g->total; f++) g->node[f] = SIZE_MAX;
+    for (size_t i = 0; i < npts; i++) {
+        size_t flat = 0;
+        for (size_t k = 0; k < m; k++) {
+            double v; Expr* e;
+            ip_row_coord(table, m, i, k, &v, &e);
+            /* binary search the distinct abscissae */
+            size_t lo = 0, hi = g->nk[k];
+            while (lo < hi) {
+                size_t mid = lo + (hi - lo) / 2;
+                if (g->ax[k][mid].v < v) lo = mid + 1; else hi = mid;
+            }
+            flat = flat * g->nk[k] + lo;
+        }
+        g->node[flat] = i;
+    }
+    return true;
+}
+
+/* Coordinate as an Expr: the stored one when boxed, else a machine Real. */
+static Expr* ip_axis_expr(const IpAxisPt* p) {
+    return p->e ? expr_copy(p->e) : expr_new_real(p->v);
+}
+
+/* Value stored at table row i (scalar or array, as tabulated). */
+static Expr* ip_row_value(Expr* table, size_t m, size_t i) {
+    if (is_ndarray(table)) {
+        const double* buf = (const double*)table->data.ndarray.data;
+        return expr_new_real(buf[i * (m + 1) + m]);
+    }
+    return expr_copy(entry_value(table->data.function.args[i]));
+}
+
+/* Nest the row-major flat array `items` (owned, consumed) into a tensor of
+ * shape nk[0] x ... x nk[m-1]. */
+static Expr* ip_nest(Expr** items, const size_t* nk, size_t m, size_t level,
+                     size_t* pos) {
+    size_t len = nk[level];
+    Expr** row = malloc(sizeof(Expr*) * len);
+    for (size_t j = 0; j < len; j++)
+        row[j] = (level + 1 == m) ? items[(*pos)++] : ip_nest(items, nk, m, level + 1, pos);
+    Expr* out = make_list(row, len);
+    free(row);
+    return out;
+}
+
+/* Interpolation order per axis: the object's explicit orders slot, else the
+ * order the evaluator uses -- 2K+1 for K supplied derivatives (Hermite), cubic
+ * for the Spline/Hermite methods, min(3, n_k - 1) for the default Newton
+ * window. */
+static Expr* ip_orders(Expr* ifun, const IpGrid* g, int Ksupplied) {
+    size_t m = g->m;
+    size_t obj_argc = ifun->data.function.arg_count;
+    if (obj_argc >= 4 && interp_is_list(ifun->data.function.args[3])
+        && ifun->data.function.args[3]->data.function.arg_count == m && Ksupplied == 0)
+        return expr_copy(ifun->data.function.args[3]);
+    bool cubic_method = false;
+    if (obj_argc >= 5 && ifun->data.function.args[4]->type == EXPR_STRING) cubic_method = true;
+    Expr** os = malloc(sizeof(Expr*) * m);
+    for (size_t k = 0; k < m; k++) {
+        int64_t o;
+        if (Ksupplied >= 1) o = 2 * (int64_t)Ksupplied + 1;
+        else if (cubic_method) o = 3;
+        else o = (g->nk[k] > 4) ? 3 : (int64_t)g->nk[k] - 1;
+        os[k] = expr_new_integer(o);
+    }
+    Expr* out = make_list(os, m);
+    free(os);
+    return out;
+}
+
+/*
+ * interp_property:
+ *   ifun["Domain"]             {{x1min, x1max}, ...}
+ *   ifun["Coordinates"]        {{x1 abscissae...}, {x2 abscissae...}, ...}
+ *   ifun["Grid"]               tensor of grid points {x1, ..., xm}
+ *   ifun["ValuesOnGrid"]       tensor of the tabulated values
+ *   ifun["InterpolationOrder"] {o1, ..., om}
+ *   ifun["Properties"]         the list of property names
+ *   Returns NULL for an unknown property (the call stays unevaluated).
+ */
+static Expr* interp_property(Expr* ifun, const char* name) {
+    Expr* domain = ifun->data.function.args[0];
+    Expr* table  = ifun->data.function.args[1];
+    size_t m = parse_domain_dim(domain);
+    if (m == 0) return NULL;
+    if (strcmp(name, "Domain") == 0) return expr_copy(domain);
+    if (strcmp(name, "Properties") == 0) {
+        static const char* const props[] = { "Coordinates", "Domain", "Grid",
+            "InterpolationOrder", "Properties", "ValuesOnGrid" };
+        size_t np = sizeof(props) / sizeof(props[0]);
+        Expr* ps[6];
+        for (size_t i = 0; i < np; i++) ps[i] = expr_new_string(props[i]);
+        return make_list(ps, np);
+    }
+    bool want_coords = strcmp(name, "Coordinates") == 0;
+    bool want_grid   = strcmp(name, "Grid") == 0;
+    bool want_vals   = strcmp(name, "ValuesOnGrid") == 0;
+    bool want_order  = strcmp(name, "InterpolationOrder") == 0;
+    if (!want_coords && !want_grid && !want_vals && !want_order) return NULL;
+
+    IpGrid g;
+    if (!ip_grid_build(table, m, &g)) return NULL;
+    Expr* out = NULL;
+    if (want_order) {
+        out = ip_orders(ifun, &g, table_Ksupplied(table));
+    } else if (want_coords) {
+        Expr** axes = malloc(sizeof(Expr*) * m);
+        for (size_t k = 0; k < m; k++) {
+            Expr** cs = malloc(sizeof(Expr*) * g.nk[k]);
+            for (size_t j = 0; j < g.nk[k]; j++) cs[j] = ip_axis_expr(&g.ax[k][j]);
+            axes[k] = make_list(cs, g.nk[k]);
+            free(cs);
+        }
+        out = make_list(axes, m);
+        free(axes);
+    } else {
+        /* Grid / ValuesOnGrid need every node of the tensor grid present. */
+        bool full = true;
+        for (size_t f = 0; f < g.total; f++) if (g.node[f] == SIZE_MAX) { full = false; break; }
+        if (full) {
+            Expr** items = malloc(sizeof(Expr*) * g.total);
+            size_t* idx = calloc(m, sizeof(size_t));
+            for (size_t f = 0; f < g.total; f++) {
+                if (want_vals) {
+                    items[f] = ip_row_value(table, m, g.node[f]);
+                } else {
+                    Expr** pt = malloc(sizeof(Expr*) * m);
+                    for (size_t k = 0; k < m; k++) pt[k] = ip_axis_expr(&g.ax[k][idx[k]]);
+                    items[f] = make_list(pt, m);
+                    free(pt);
+                }
+                /* advance the row-major multi-index */
+                for (size_t k = m; k-- > 0; ) { if (++idx[k] < g.nk[k]) break; idx[k] = 0; }
+            }
+            size_t pos = 0;
+            out = ip_nest(items, g.nk, m, 0, &pos);
+            free(items); free(idx);
+        }
+    }
+    ip_grid_free(&g);
+    return out;
+}
+
 /* --- public entry points ---------------------------------------------- */
 
 Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
@@ -1517,6 +1773,9 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     if (obj_argc < 2 || obj_argc > 6) return NULL;
     Expr* domain = ifun->data.function.args[0];
     Expr* table  = ifun->data.function.args[1];
+
+    if (argc == 1 && call_args[0]->type == EXPR_STRING && call_args[0]->data.string)
+        return interp_property(ifun, call_args[0]->data.string);
 
     size_t m = parse_domain_dim(domain);
     if (m == 0 || argc != m) return NULL;
@@ -1605,7 +1864,8 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
         size_t nvec = 0;
         bool data_mpfr = false;
 #ifdef USE_MPFR
-        data_mpfr = g_obj_cache.is_mpfr || numeric_expr_is_mpfr(domain);
+        CommonInexactInfo dom = common_scan_inexact(domain);
+        data_mpfr = g_obj_cache.is_mpfr || (dom.has_inexact && dom.min_bits > 53);
 #endif
         if (!data_mpfr && m == 1 && argc == 1 &&
             interp_arg_is_real_array(call_args[0], &nvec)) {
@@ -1635,13 +1895,28 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
             CommonInexactInfo ci = common_scan_inexact(call_args[k]);
             if (ci.has_inexact) { if (!any || ci.min_bits < mn) mn = ci.min_bits; any = true; }
         }
-        if (g_obj_cache.is_mpfr || numeric_expr_is_mpfr(domain)) want_mpfr = true;
+        if (g_obj_cache.is_mpfr || (ai.has_inexact && ai.min_bits > 53)) want_mpfr = true;
         for (size_t k = 0; k < m; k++) if (numeric_expr_is_mpfr(call_args[k])) want_mpfr = true;
         if (want_mpfr) bits = (mn > 53) ? mn : 53;
     }
-    if (want_mpfr)
+    /* A machine-number argument makes the value a machine number (precision
+     * contagion), but on arbitrary-precision data it is still computed by the
+     * MPFR kernels at the data's precision: a high-order Hermite table (an
+     * NDSolve solution) is ill-conditioned in double, and rounding once at
+     * the end is what a machine query of exact-enough data should give. */
+    bool machine_arg = false;
+    if (want_mpfr && bits <= 53) {
+        CommonInexactInfo di = g_obj_cache.inexact;
+        if (di.has_inexact && di.min_bits > 53) { bits = di.min_bits; machine_arg = true; }
+    }
+    if (want_mpfr) {
         result = interp_eval_mpfr(domain, table, m, call_args, ders, orders, method, Ksupplied, periodic, bits);
-    else
+        if (result && machine_arg) {
+            Expr* r = numericalize(result, numeric_machine_spec());
+            expr_free(result);
+            result = r;
+        }
+    } else
 #endif
         result = interp_eval_double(domain, table, m, call_args, ders, orders,
                                     method, Ksupplied, periodic);

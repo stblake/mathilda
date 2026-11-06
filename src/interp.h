@@ -18,6 +18,16 @@
 
 #include "expr.h"
 
+/* Largest number of supplied derivatives per node ({x, y, y', ..., y^(K)})
+ * the Hermite kernels accept: the two-point basis of degree 2K+1 is solved in
+ * fixed (K+1) x (K+1) systems of size 16.  A table with more is left
+ * unevaluated rather than overrunning them. */
+#define INTERP_MAX_SUPPLIED 15
+
+/* Interpolation also answers property queries: ifun["Domain"],
+ * ifun["Coordinates"], ifun["Grid"], ifun["ValuesOnGrid"],
+ * ifun["InterpolationOrder"] and ifun["Properties"] (via interp_apply). */
+
 /* Register InterpolatingFunction in the symbol table (attributes only). */
 void interp_init(void);
 
