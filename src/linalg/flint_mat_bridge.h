@@ -86,6 +86,15 @@ Expr** flint_mat_solve(Expr** flat_m, int r, int c, Expr** flat_b, int k);
 int flint_mat_rank(Expr** flat, int r, int c);
 
 /*
+ * Product of an r×k and a k×s matrix (row-major flats) when every entry is
+ * integer-like or Rational, via fmpq_mat_mul (one common denominator, then a
+ * multimodular integer product).  Returns a malloc'd Expr** of length r*s
+ * (row-major), every element owned by the caller, or NULL for a non-rational
+ * entry, a size <= 0, or no FLINT.  Does not take ownership of the inputs.
+ */
+Expr** flint_mat_mul(Expr** flat_a, int r, int k, Expr** flat_b, int s);
+
+/*
  * In-place reduced row echelon form of an r×c rational matrix supplied as a
  * flat row-major mpq_t array `M` (M[i*c + j]; every entry already mpq_init'd).
  * Computed exactly via FLINT's fraction-free fmpq_mat_rref — far faster than a

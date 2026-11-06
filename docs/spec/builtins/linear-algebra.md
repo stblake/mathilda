@@ -580,6 +580,14 @@ In[3]:= {{a, b}, {c, d}} . {{1, 2}, {3, 4}}
 Out[3]= {{a + 3 b, 2 a + 4 b}, {c + 3 d, 2 c + 4 d}}
 ```
 
+### Dot: exact rational operands
+Two operands of rank <= 2 whose entries are all integers or rationals are
+multiplied as one FLINT `fmpq_mat_mul` (a common denominator, then a
+multimodular integer product) instead of a `Times` and a `Plus` evaluated per
+element; the first non-rational entry declines to the generic path.  The
+21 x 101 by 101 x 21 normal matrix of a degree-20 polynomial fit took 154 ms
+per element-wise and takes 2 ms.
+
 ### Dot: numeric contagion
 An operand mixing machine Reals and Complexes (the usual shape of a complex
 factor), or exact numbers beside a machine Real, is packed for the BLAS path:
@@ -3020,7 +3028,7 @@ i.e. an `x` minimising `Norm[m . x - b]`.
   call unevaluated.
 - Accepted Method names:
   - `Method -> Automatic` or `Method -> "Automatic"` — alias for `"Direct"` (default).
-  - `Method -> "Direct"` — Moore-Penrose solve `PseudoInverse[m] . b`. Works on every input family (dense or sparse, exact or numeric, real or complex). The workhorse method. A **machine-real** coefficient matrix takes the same thin SVD `PseudoInverse` does, applying `V`, `S^+` and `U^T` to `b` in turn rather than forming the pseudo-inverse and multiplying: `LeastSquares[A500, b500]` did not finish in 180 s on the exact pipeline and costs 77 ms here. The iterative methods below are deliberately left on the exact path — they are chosen for their iteration, not their answer.
+  - `Method -> "Direct"` — Moore-Penrose solve `PseudoInverse[m] . b`. Works on every input family (dense or sparse, exact or numeric, real or complex). The workhorse method. A **machine-real** coefficient matrix takes the same thin SVD `PseudoInverse` does, applying `V`, `S^+` and `U^T` to `b` in turn rather than forming the pseudo-inverse and multiplying: `LeastSquares[A500, b500]` did not finish in 180 s on the exact pipeline and costs 77 ms here. The iterative methods below are deliberately left on the exact path — they are chosen for their iteration, not their answer.  An **arbitrary-precision** real matrix with `rows >= cols` and the Automatic tolerance is solved by Householder QR, `x = LinearSolve[r, q . b]`, when `r` is square with every `|r_ii|` above `2^(-bits/2) max |r_jj|` (full column rank, condition below `10^(digits/2)`, where the SVD would truncate nothing); otherwise, and for an explicit `Tolerance`, the SVD `PseudoInverse`.  A degree-20 fit to 101 points at 60 digits: 45 ms (SVD: 180 ms), within `10^-54` of the exact solution.  Exact matrices take the exact `PseudoInverse`, whose rational products are FLINT matrix products (see `Dot`).
   - `Method -> "IterativeRefinement"` — residual-correction loop on top of Direct: `x <- PseudoInverse[m] . b`, then repeatedly `r = b - m . x`, `dx = PseudoInverse[m] . r`, `x <- x + dx`, capped at 50 iterations and terminated when `Total[Flatten[dx]^2] <= Tolerance^2`. For exact inputs the first correction is exactly zero (Moore-Penrose identity) so the loop converges in one pass; for inexact inputs the loop drives round-off down to Tolerance.
   - `Method -> "Krylov"` — Conjugate-Gradient-on-Least-Squares (Hestenes-Stiefel CG applied to the normal equations). Iterates `q = A p`, `alpha = |s|^2 / |q|^2`, `x <- x + alpha p`, `r <- r - alpha q`, `s = A^T r`, `beta = |s_new|^2 / |s|^2`, `p <- s_new + beta p` from `x_0 = 0` (so the iterate stays in `range(A^T)` and converges to the minimum-norm LS solution for rank-deficient `m`). Capped at `2 cols(m) + 10` iterations. Matrix RHS are solved column-by-column and recombined via `Transpose`. Symbolic inputs (the convergence test is undecidable for them) fall back to Direct.
   - `Method -> "LSQR"` — Paige-Saunders LSQR (ACM TOMS 1982): Lanczos bidiagonalisation of `m` with a Givens-rotation update of the resulting upper triangular factor. Dispatches by input grammar: free-symbol inputs go to Direct; exact (Integer / Rational) and Complex inputs go to Krylov / CGLS (mathematically equivalent without the square-root growth in exact arithmetic); pure-real inputs with at least one Real entry run the canonical double-precision algorithm. Uses the Paige-Saunders estimate `|phi_bar * alpha_{k+1}|` of `||A^T r||` for the convergence test, scaled against the initial gradient `||A^T b||`. Cap is `2 cols(m) + 10` iterations. Detects rank deficiency by monitoring `alpha_new / max(|A_ij|)` and `beta_new / max(|A_ij|)`, avoiding the catastrophic blowup of dividing by a near-zero `alpha`.

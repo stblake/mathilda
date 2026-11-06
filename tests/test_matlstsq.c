@@ -686,9 +686,33 @@ static void test_lstsq_stress_loop(void) {
     printf("PASS: stress loop (5 shapes x 50/50/50/30/20 iterations)\n");
 }
 
+/* Exact polynomial fit and its arbitrary-precision twin.  The exact answer is
+ * checked against the normal equations written out with explicit sums (no
+ * Dot), the 40-digit one against that exact answer, and a rank-deficient
+ * 40-digit matrix against PseudoInverse . b (the minimum-norm solution the
+ * QR route must not replace). */
+static void test_lstsq_polyfit_exact_and_mpfr(void) {
+    check_true("Module[{A = Table[If[j == 0, 1, (-1 + 2 (i - 1)/30)^j], {i, 31}, {j, 0, 8}], "
+               "b = Table[1/(1 + 25 (-1 + 2 (i - 1)/30)^2), {i, 31}], nrm, rhs}, "
+               "nrm = Table[Sum[A[[k, i]] A[[k, j]], {k, 31}], {i, 9}, {j, 9}]; "
+               "rhs = Table[Sum[A[[k, i]] b[[k]], {k, 31}], {i, 9}]; "
+               "LeastSquares[A, b] === LinearSolve[nrm, rhs]]");
+    /* exact rational Dot against explicit sums */
+    check_true("Module[{p = Table[(i + 2 j)/(3 + i j), {i, 7}, {j, 5}], q = Table[(i - j)/(1 + i^2), {i, 5}, {j, 6}]}, "
+               "p . q === Table[Sum[p[[i, k]] q[[k, j]], {k, 5}], {i, 7}, {j, 6}] && "
+               "p[[1]] . q[[All, 2]] === Sum[p[[1, k]] q[[k, 2]], {k, 5}]]");
+    check_true("Module[{A = Table[If[j == 0, 1, (-1 + 2 (i - 1)/30)^j], {i, 31}, {j, 0, 8}], "
+               "b = Table[1/(1 + 25 (-1 + 2 (i - 1)/30)^2), {i, 31}]}, "
+               "Max[Abs[LeastSquares[N[A, 40], N[b, 40]] - LeastSquares[A, b]]] < 10^-35]");
+    check_true("Module[{A = N[{{1, 2, 3}, {2, 4, 6}, {1, 0, 1}, {0, 1, 1}}, 40], b = N[{1, 2, 3, 4}, 40]}, "
+               "Max[Abs[LeastSquares[A, b] - PseudoInverse[A] . b]] < 10^-30]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_lstsq_polyfit_exact_and_mpfr);
 
     /* Spec examples */
     TEST(test_lstsq_spec_overdetermined_3x2);

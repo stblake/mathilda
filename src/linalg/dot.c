@@ -13,6 +13,8 @@
 #include "pack.h"
 #include "ndlinalg.h"   /* linalg_pack_machine_operand: contagion packing */
 #include "dot_mpfr.h"
+#include "flint_mat_bridge.h"   /* flint_mat_mul: exact rational products */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -329,26 +331,37 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
     int64_t S = 1; for (int i = 1; i < rankB; i++)     S *= dimsB[i];
 
     Expr** flatC = NULL;
-    if (R * S > 0) flatC = malloc(sizeof(Expr*) * (R * S));
-
-    for (int64_t r = 0; r < R; r++) {
-        for (int64_t s = 0; s < S; s++) {
-            Expr** sum_args = NULL;
-            if (K > 0) sum_args = malloc(sizeof(Expr*) * K);
-            for (int64_t k = 0; k < K; k++) {
-                Expr* a_elem = flatA[r * K + k];
-                Expr* b_elem = flatB[k * S + s];
-                Expr* t_args[2] = { expr_copy(a_elem), expr_copy(b_elem) };
-                sum_args[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
+    /* Integer / rational operands of rank <= 2: one exact matrix product in
+     * FLINT (common denominator, multimodular integer product) instead of a
+     * Times and a Plus evaluated per element.  The 21 x 101 by 101 x 21
+     * normal matrix of a degree-20 polynomial fit (entries ((2i - 100)/100)^j)
+     * took 154 ms on that path.  Declines (NULL) at the first non-rational
+     * entry, so a symbolic or mixed product keeps the generic loop. */
+    if (rankA <= 2 && rankB <= 2 && K > 0 && R * S > 0 &&
+        R <= INT32_MAX && S <= INT32_MAX && K <= INT32_MAX &&
+        (int64_t)idxA == N_A && (int64_t)idxB == N_B)
+        flatC = flint_mat_mul(flatA, (int)R, (int)K, flatB, (int)S);
+    if (!flatC && R * S > 0) {
+        flatC = malloc(sizeof(Expr*) * (R * S));
+        for (int64_t r = 0; r < R; r++) {
+            for (int64_t s = 0; s < S; s++) {
+                Expr** sum_args = NULL;
+                if (K > 0) sum_args = malloc(sizeof(Expr*) * K);
+                for (int64_t k = 0; k < K; k++) {
+                    Expr* a_elem = flatA[r * K + k];
+                    Expr* b_elem = flatB[k * S + s];
+                    Expr* t_args[2] = { expr_copy(a_elem), expr_copy(b_elem) };
+                    sum_args[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
+                }
+                if (K == 0) {
+                    flatC[r * S + s] = expr_new_integer(0);
+                } else if (K == 1) {
+                    flatC[r * S + s] = sum_args[0];
+                } else {
+                    flatC[r * S + s] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, K));
+                }
+                if (sum_args) free(sum_args);
             }
-            if (K == 0) {
-                flatC[r * S + s] = expr_new_integer(0);
-            } else if (K == 1) {
-                flatC[r * S + s] = sum_args[0];
-            } else {
-                flatC[r * S + s] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, K));
-            }
-            if (sum_args) free(sum_args);
         }
     }
 

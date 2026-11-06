@@ -364,6 +364,26 @@ Expr** flint_mat_solve(Expr** flat_m, int r, int c, Expr** flat_b, int k) {
     return out;  /* NULL: non-rational / non-square / singular -> classical */
 }
 
+Expr** flint_mat_mul(Expr** flat_a, int r, int k, Expr** flat_b, int s) {
+    if (r <= 0 || k <= 0 || s <= 0) return NULL;
+    fmpq_mat_t A, B, C;
+    fmpq_mat_init(A, r, k);
+    fmpq_mat_init(B, k, s);
+    Expr** out = NULL;
+    if (mb_fill_mat(A, flat_a, r, k) && mb_fill_mat(B, flat_b, k, s)) {
+        fmpq_mat_init(C, r, s);
+        fmpq_mat_mul(C, A, B);
+        out = malloc(sizeof(Expr*) * (size_t)r * (size_t)s);
+        if (out)
+            for (int i = 0; i < r * s; i++)
+                out[i] = mb_expr_from_fmpq(fmpq_mat_entry(C, i / s, i % s));
+        fmpq_mat_clear(C);
+    }
+    fmpq_mat_clear(A);
+    fmpq_mat_clear(B);
+    return out;   /* NULL: a non-rational entry -> the generic Times/Plus path */
+}
+
 int flint_mat_rank(Expr** flat, int r, int c) {
     if (r <= 0 || c <= 0) return -1;
     fmpq_mat_t A, B;
@@ -587,6 +607,9 @@ Expr** flint_mat_solve(Expr** fm, int r, int c, Expr** fb, int k) {
     (void)fm; (void)r; (void)c; (void)fb; (void)k; return NULL;
 }
 int flint_mat_rank(Expr** flat, int r, int c) { (void)flat; (void)r; (void)c; return -1; }
+Expr** flint_mat_mul(Expr** fa, int r, int k, Expr** fb, int s) {
+    (void)fa; (void)r; (void)k; (void)fb; (void)s; return NULL;
+}
 int flint_rref_mpq_inplace(mpq_t* M, int r, int c, int64_t* pivot_for_col) {
     (void)M; (void)r; (void)c; (void)pivot_for_col; return 0;
 }
