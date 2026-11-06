@@ -498,9 +498,12 @@ static void test_list_nonfinite_falls_back(void) {
      * extended-exponent real (#^2 via Power: 10.^200 -> 10^400 -> 10^800), and
      * Plus/Times past the double range yield Overflow[] (never inf.0). Both
      * paths still land on the same answer -- the compiled run bails, the
-     * interpreter answers. */
+     * interpreter answers. The extended-exponent reals keep 53 bits
+     * (precision 15.95...): squaring rounds them just below 10^400 and 10^800
+     * (10^400 - 3.08*10^383), which shows the 15 digits above that precision,
+     * rounded up to 1.00000000000000. */
     expect_full("NestList[#^2&, 10.^200, 2]",
-                "List[1e+200, 1e+400, 9.999999999999999e+799]");
+                "List[1e+200, 1.00000000000000e+400, 1.00000000000000e+800]");
     expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, Overflow[]]");
     expect_full("FoldList[#1 + #2&, 0., {1.*^308, 1.*^308}]",
                 "List[0.0, 1e+308, Overflow[]]");

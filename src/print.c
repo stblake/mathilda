@@ -405,11 +405,21 @@ static void print_function_fullform(Expr* e) {
 /* ------------------------------------------------------------------ */
 /*
  * An MPFR real carries only a binary precision. N[x, n] (and the literal
- * x`n) stores ceil(n log2 10) bits, so floor(bits log10 2) recovers n: the
- * number of decimal digits the value is known to. Every one of them is
- * significant, so the display forms print exactly that many, trailing zeros
- * included -- N[1, 30] is 1.00000000000000000000000000000, not 1.0, which
- * would claim two digits.
+ * x`n) stores ceil(n log2 10) bits; its decimal precision p is n when a
+ * whole n maps to those bits (floor(bits log10 2) recovers it), else
+ * bits log10 2 -- the value Precision[] reports (15.954589770191003 for the
+ * 53 bits of a machine computation that left the double range).
+ *
+ * The digits shown are those above the value's uncertainty |x| 10^-p: with
+ * L = log10|x|, the last digit sits at 10^(floor(L - p) + 1), so
+ *     n = floor(L) - floor(L - p)
+ * significant digits. A whole p gives n = p for every x; a fractional p
+ * depends on the leading digits: 1.`16.5 shows 17 (1.0000000000000000),
+ * 0.33333333333333333`16.5 shows 16, a 53-bit 10^400/3 shows 16
+ * (3.333333333333333e+399), a 53-bit 0.95 shows 15 (0.950000000000000).
+ * Every one of them is significant, so trailing zeros are printed --
+ * N[1, 30] is 1.00000000000000000000000000000, not 1.0, which would claim
+ * two digits.
  *
  * Display (OutputForm, ToString, Print, TeXForm), for |x| = d.ddd 10^e:
  *   - positional when -5 <= e < 6 and e < n (n = significant digits); the
@@ -430,10 +440,28 @@ static void print_function_fullform(Expr* e) {
 #define MTH_LOG10_2 0.30102999566398119521
 #define MTH_LOG2_10 3.3219280948873626      /* the parser's digits -> bits factor */
 
-/* Decimal digits (>= 1) carried by a `bits`-bit value. */
+/* Whole decimal digits (>= 1) carried by a `bits`-bit value: the accuracy
+ * shown for an inexact zero. */
 static long mpfr_known_digits(mpfr_prec_t bits) {
     long d = (long)floor((double)bits * MTH_LOG10_2 + 1e-9);
     return d < 1 ? 1 : d;
+}
+
+/* Significant digits (>= 1) displayed for a nonzero finite `bits`-bit value
+ * whose leading digits, truncated, are D17 (at least one digit): see the
+ * block comment above. With f = log10 of the mantissa d.ddd (0 <= f < 1),
+ * floor(L) - floor(L - p) = -floor(f - p). */
+static long mpfr_display_digits(mpfr_prec_t bits, const char* D17) {
+    long d = (long)floor((double)bits * MTH_LOG10_2 + 1e-9);
+    if (d >= 1 && (mpfr_prec_t)ceil((double)d * MTH_LOG2_10) == bits)
+        return d;                                   /* whole precision: n = p */
+    double p = (double)bits * MTH_LOG10_2;
+    double m = 0.0, scale = 1.0;
+    for (const char* q = D17; *q; q++, scale /= 10.0) m += (*q - '0') * scale;
+    double f = m > 1.0 ? log10(m) : 0.0;
+    if (f >= 1.0) f = nextafter(1.0, 0.0);
+    long n = -(long)floor(f - p);
+    return n < 1 ? 1 : n;
 }
 
 /* The first n significant digits of |x| (x finite, nonzero), rounded with
@@ -497,17 +525,23 @@ static void print_mpfr_display(const mpfr_t x, bool tex) {
         if (mpfr_asprintf(&buf, "%Rg", x) >= 0 && buf) { fputs(buf, MTH_POUT); mpfr_free_str(buf); }
         return;
     }
-    long n = mpfr_known_digits(mpfr_get_prec(x));
     if (mpfr_zero_p(x)) {
-        /* An inexact zero is known to absolute accuracy 10^-n. */
+        /* An inexact zero is known to absolute accuracy 10^-n. It has no
+         * sign: an MPFR -0 prints as 0. too. */
+        long n = mpfr_known_digits(mpfr_get_prec(x));
         printf("0.");
         if (n > 5) mpfr_put_display_exponent(-n, tex);
         return;
     }
     long eu = 0, er = 0;
-    char* T = mpfr_sig_digits(x, n, MPFR_RNDZ, &eu);   /* exponent before rounding */
+    /* Truncated leading digits: the exponent before rounding (truncation
+     * never carries into the next power of ten) and the mantissa that
+     * decides how many digits a fractional precision shows. */
+    char* T = mpfr_sig_digits(x, 17, MPFR_RNDZ, &eu);
+    if (!T) { printf("<mpfr print error>"); return; }
+    long n = mpfr_display_digits(mpfr_get_prec(x), T);
     char* D = mpfr_sig_digits(x, n, MPFR_RNDN, &er);
-    if (!T || !D) { free(T); free(D); printf("<mpfr print error>"); return; }
+    if (!D) { free(T); printf("<mpfr print error>"); return; }
     if (mpfr_sgn(x) < 0) putchar('-');
     if (eu < -5 || eu >= 6 || eu >= n) {
         mpfr_put_mantissa(D);

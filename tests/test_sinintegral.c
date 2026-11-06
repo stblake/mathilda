@@ -116,7 +116,7 @@ void test_si_arbitrary_precision() {
         "1.55161707248593589472798559486");
     /* The precision of the output tracks the precision of the input. */
     assert_eval_startswith("SinIntegral[2.0000000000000000000000]",
-                           "1.605412976802694848577");
+                           "1.6054129768026948485767");
 }
 
 /* ---- machine complex ------------------------------------------------ */

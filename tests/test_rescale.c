@@ -45,7 +45,7 @@ void test_rescale_real() {
     check("Rescale[Pi, {0, 2.5}]", "1.25664");
     /* Precision of the output tracks the precision of the input. */
     check("Rescale[8, {-9, 7.111111111111111111111}]",
-          "1.05517241379310344828");
+          "1.055172413793103448276");
 }
 
 /* ---- Complex inputs ---- */

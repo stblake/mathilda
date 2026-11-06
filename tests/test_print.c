@@ -495,16 +495,44 @@ void test_mpfr_display_digits() {
         {"ToString[-N[Pi, 20]]", "-3.1415926535897932385"},
         {"ToString[N[1 + 2 I, 25]]",
          "1.000000000000000000000000 + 2.000000000000000000000000*I"},
-        {"ToString[N[0, 30]]", "0.e-30"},
+        {"ToString[0``30]", "0.e-30"},
         {"ToString[{1.0, 0.25, 1.64438}]", "{1.0, 0.25, 1.64438}"},
         {"ToString[N[1, 30], InputForm]", "1.`30."},
         {"ToString[N[1/4, 20], InputForm]", "0.25`20."},
         {"ToString[N[10^50, 30], InputForm]",
          "1.0000000000000000000000000000004`30.*^50"},
         {"ToString[N[1 + 2 I, 25], InputForm]", "1.`25. + 2.`25.*I"},
-        {"ToString[N[0, 30], InputForm]", "0``30."},
+        {"ToString[0``30, InputForm]", "0``30."},
         {"ToString[TeXForm[N[10^50, 30]]]",
          "1.00000000000000000000000000000\\times 10^{50}"},
+        /* A fractional precision p shows n = floor(L) - floor(L - p) digits,
+         * L = log10|x|: the digits above the uncertainty |x| 10^-p. 55 bits
+         * (the literal mark 16.5) is p = 16.557 (Precision[] reports it). */
+        {"ToString[1.`16.5]", "1.0000000000000000"},                 /* 17 */
+        {"ToString[9.`16.5]", "9.000000000000000"},                  /* 16 */
+        {"ToString[1.`20.5]", "1.00000000000000000000"},              /* 21 */
+        {"ToString[N[Pi, 10.2]]", "3.141592654"},                   /* 10 */
+        {"ToString[N[Pi, 10.5]]", "3.1415926536"},                  /* 11 */
+        {"ToString[SetPrecision[123456, 6.5]]", "123456.0"},
+        /* 53 bits (a machine computation that left the double range, or
+         * SetPrecision[x, $MachinePrecision]): p = 15.954589770191003. */
+        {"ToString[N[10^400/3]]", "3.333333333333333e+399"},          /* 16 */
+        {"ToString[1.7 10.^400]", "1.700000000000000e+400"},          /* 16 */
+        {"ToString[2.^2000]", "1.148130695274255e+602"},              /* 16 */
+        {"ToString[SetPrecision[95/100, $MachinePrecision]]",
+         "0.950000000000000"},                                       /* 15 */
+        {"ToString[SetPrecision[89/100, $MachinePrecision]]",
+         "0.8900000000000000"},                                      /* 16 */
+        /* The count is decided before rounding: a value just below a power
+         * of ten keeps the shorter count when it rounds up to it. */
+        {"ToString[SetPrecision[10^400 - 10^383, $MachinePrecision]]",
+         "1.00000000000000e+400"},                                   /* 15 */
+        {"ToString[SetPrecision[10^400 + 10^384, $MachinePrecision]]",
+         "1.000000000000000e+400"},                                  /* 16 */
+        {"ToString[SetPrecision[99999996/10^7, 7.5]]", "10.00000"},
+        /* An inexact zero has no sign. */
+        {"ToString[-1 * 0``20]", "0.e-20"},
+        {"ToString[-1 * 0``20, InputForm]", "0``20."},
         {"With[{v = {N[10^50, 30], N[Pi, 40], -N[E, 17]*10^-61, N[0, 30], "
          "N[1/3, 100]*10^60}}, With[{w = ToExpression[ToString[v, InputForm]]}, "
          "w === v && Precision /@ w === Precision /@ v]]", "True"},
