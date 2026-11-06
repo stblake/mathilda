@@ -555,7 +555,18 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   with `N = imin + max(NSumTerms, settle)·di` (the head extends through any late
   peak so the tail integral starts in the monotone region).  The tail integral
   uses a self-contained **double-exponential (exp-sinh)** quadrature
-  (`dequad.{c,h}`) whose tolerance and depth scale with `WorkingPrecision`.  The
+  (`dequad.{c,h}`) whose tolerance and depth scale with `WorkingPrecision`.
+  At machine precision a summand that decays as a power law `C x^-p` gets a
+  **split tail** instead: `∫_N^X` by adaptive Gauss–Kronrod on a logarithmic
+  abscissa, plus the analytic remainder `X f(X)/(p - 1)` from the local exponent
+  `p = -log2(f(2X)/f(X))`, at the largest `X` (ladder `N·10^(8j)`) where the power
+  law is verified; the same split one rung lower gives the error estimate.  With
+  `p` near 1 the remainder is far from negligible at any `X` a double can hold
+  (`1/(n^Pi + n^2 + n^Sqrt[2] + 1)^(1/3)`: `p = Pi/3`), which exp-sinh lost
+  silently; it is now summed to full machine precision.  When the summand is
+  not a power law but is still non-negligible at the farthest reachable point
+  (`1/(n Log[n]^2)`), that mass enters the error estimate and `NSum::accgl` is
+  issued.  The
   derivative corrections are **hybrid**: symbolic `D` + `BernoulliB` while the
   derivative tree stays small (robust, and the original path for simple
   summands), switching to **numerical contour (circle-DFT) derivatives** once it

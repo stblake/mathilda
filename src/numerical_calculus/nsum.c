@@ -45,6 +45,7 @@
 #include "numeric.h"
 #include "seqaccel.h"
 #include "dequad.h"
+#include "gkadapt.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -843,6 +844,112 @@ static bool ns_sample_x_machine(void* vc, double x, double _Complex* out) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Tail integral for algebraically decaying summands (machine)        *
+ *                                                                     *
+ *  A summand f(x) ~ C x^-p with p just above 1 (1/(n^Pi+...)^(1/3),    *
+ *  p = Pi/3) leaves ∫_X^∞ f dx ~ C X^(1-p)/(p-1) far from negligible   *
+ *  at every X a double can hold: reaching 1e-12 relative needs         *
+ *  X ~ 10^(12/(p-1)), i.e. 10^255 at p - 1 = 0.047, and the summand     *
+ *  itself overflows (x^Pi) near 10^98.  The exp-sinh rule then loses    *
+ *  its far tail to non-finite samples while its successive levels still *
+ *  agree with each other, so it reports convergence on an integral that *
+ *  is short by the whole unreached remainder (5e-5 relative here).      *
+ *                                                                     *
+ *  The tail is therefore split at a point X where the power law has     *
+ *  been verified:                                                       *
+ *      ∫_N^∞ f = ∫_{ln N}^{ln X} f(e^u) e^u du  +  X f(X) / (p(X) - 1),  *
+ *  the first piece by adaptive Gauss–Kronrod on the logarithmic         *
+ *  abscissa (the integrand there decays like e^{-(p-1)u}: smooth and    *
+ *  short), the second analytically from the local exponent              *
+ *      p(x) = -log2( f(2x) / f(x) ),                                    *
+ *  which is exact for a pure power and converges to the true exponent   *
+ *  as the lower-order terms x^-q die away.  X is the largest point of a *
+ *  ladder N·10^(8j) at which f is a finite, normal, phase-stable power   *
+ *  law; the same split taken one rung lower gives an independent        *
+ *  estimate, and their difference is the reported error — so a          *
+ *  remainder that is still moving (a slowly varying factor such as a     *
+ *  log, or a correction x^-q with tiny q) shows up in the error rather   *
+ *  than being silently absorbed.                                        *
+ *                                                                     *
+ *  Returns false when the summand is not an algebraic power law at      *
+ *  large x (exponential decay underflows the ladder; oscillatory or     *
+ *  logarithmic factors make p unstable; p <= 1 is not summable this way)*
+ *  and the caller keeps the exp-sinh rule.                              *
+ * ------------------------------------------------------------------ */
+
+/* g(u) = f(e^u)·e^u — the tail integrand on the logarithmic abscissa. */
+static bool ns_sample_logx_machine(void* vc, double u, double _Complex* out) {
+    double x = exp(u);
+    double _Complex f;
+    if (!isfinite(x) || !ns_sample_x_machine(vc, x, &f)) return false;
+    *out = f * x;
+    return true;
+}
+
+/* A sample that carries full relative precision: finite and comfortably
+ * normal.  An exact 0 is not "live" — it is either a genuine underflow or an
+ * intermediate overflow (1/Infinity^(1/3)), and the two cannot be told apart. */
+static bool ns_live_sample(double _Complex f) {
+    double a = cabs(f);
+    return isfinite(a) && a > 1e-280;
+}
+
+#define NS_ALG_LADDER_MAX 38          /* rungs N·10^(8j), j = 1..; < 10^300    */
+
+/* Walk the ladder x_j = N·10^(8j).  Sets *far_mass to x·|f(x)| at the last
+ * live rung (0 if none) — for any slowly varying decay, a lower estimate of
+ * the integral mass beyond the reach of double-range quadrature.  Returns true
+ * (with the split tail integral in *out, its error in *abserr) when the last
+ * two live rungs show a settled, summable power law. */
+static bool ns_tail_integral_algebraic_machine(NsCtx* c, double Nd,
+                                               double _Complex* out, double* abserr,
+                                               double* far_mass) {
+    *far_mass = 0.0;
+    if (!(Nd > 0.0)) return false;
+    double X[2] = {0, 0}, P[2] = {0, 0};
+    double _Complex F[2] = {0, 0};
+    int n = 0;                         /* consecutive power-law rungs ending here */
+    double x = Nd;
+    for (int j = 0; j < NS_ALG_LADDER_MAX; j++) {
+        x *= 1e8;
+        if (!isfinite(2.0 * x)) break;
+        double _Complex f1, f2;
+        if (!ns_sample_x_machine(c, x, &f1) || !ns_live_sample(f1)) break;
+        *far_mass = x * cabs(f1);
+        /* Local exponent p(x) = -log2(f(2x)/f(x)): exact for a pure power,
+         * whose ratio is real positive (an oscillating x^(-a-ib) or
+         * sin(x)/x^2 is not). */
+        bool pw = ns_sample_x_machine(c, 2.0 * x, &f2) && ns_live_sample(f2);
+        double _Complex r = pw ? f2 / f1 : 0.0;
+        pw = pw && creal(r) > 0.0 && fabs(cimag(r)) <= 1e-10 * creal(r);
+        if (!pw) { n = 0; continue; }
+        X[0] = X[1]; P[0] = P[1]; F[0] = F[1];
+        X[1] = x; P[1] = -log2(creal(r)); F[1] = f1;
+        n++;
+    }
+    if (n < 2) return false;
+    /* A power law: the exponent has settled (tolerance far above the ~1e-15
+     * roundoff of p, far below any visible drift) and is summable. */
+    if (!(fabs(P[1] - P[0]) <= 1e-8 * fabs(P[1]))) return false;
+    if (!(P[1] > 1.0 + 1e-6) || !(P[0] > 1.0 + 1e-6)) return false;
+    int J = 1;
+
+    double uN = log(Nd), u1 = log(X[J - 1]), u2 = log(X[J]);
+    GkResult q1 = gk_integrate_machine(ns_sample_logx_machine, c, uN, u1,
+                                       1e-300, 1e-14, 400, 0, false);
+    if (q1.status == GK_NONNUMERIC) return false;
+    GkResult q2 = gk_integrate_machine(ns_sample_logx_machine, c, u1, u2,
+                                       1e-300, 1e-14, 400, 0, false);
+    if (q2.status == GK_NONNUMERIC) return false;
+
+    double _Complex R1 = X[J - 1] * F[J - 1] / (P[J - 1] - 1.0);
+    double _Complex R2 = X[J] * F[J] / (P[J] - 1.0);
+    *out = q1.value + q2.value + R2;
+    *abserr = cabs((q2.value + R2) - R1) + q1.abs_err + q2.abs_err;
+    return true;
+}
+
+/* ------------------------------------------------------------------ *
  *  Numerical contour (circle-DFT) derivatives for the EM corrections  *
  *                                                                     *
  *  The Euler–Maclaurin corrections need the odd derivatives f^(2j-1)  *
@@ -1014,10 +1121,24 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
     double _Complex fN;
     if (!ns_eval_complex_machine(c, c->body, expr_copy(Nval), &fN)) { expr_free(Nval); return NULL; }
 
+    /* Tail integral: the split power-law rule when the summand decays
+     * algebraically (exp-sinh cannot reach its remainder in double range),
+     * else the exp-sinh half-line rule. */
     double _Complex Iv; double abserr;
-    bool integ = dequad_halfline_machine(ns_sample_x_machine, c, Nd, 1e-12, 14, &Iv, &abserr);
+    bool integ;
+    double far_mass;
+    if (ns_tail_integral_algebraic_machine(c, Nd, &Iv, &abserr, &far_mass)) {
+        integ = abserr <= 1e-12 * cabs(Iv);
+        far_mass = 0.0;                       /* the remainder is accounted for */
+    } else {
+        integ = dequad_halfline_machine(ns_sample_x_machine, c, Nd, 1e-12, 14, &Iv, &abserr);
+    }
     double relerr = abserr / (cabs(Iv) + 1e-300);
     if (!integ && relerr > 1e-6) { expr_free(Nval); return NULL; }   /* fall back */
+    /* The exp-sinh level difference cannot see mass beyond its farthest finite
+     * sample (every level loses it alike); while the summand is still live out
+     * there (a log-damped 1/(x Log[x]^2)), that mass belongs in the error. */
+    if (far_mass > abserr) abserr = far_mass;
 
     double _Complex tail = Iv / ddi + fN / 2.0;
 
@@ -1085,8 +1206,13 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
         if (mag < tol) { met = true; break; }
         dipow *= ddi * ddi;
     }
-    if (ns_goal_active(o) && !met && napplied > 0 && isfinite(prev_mag) && prev_mag > tol)
-        nc_warn_goal("NSum", prev_mag, tol);
+    /* Error estimate: the unconverged correction series plus the tail
+     * integral's own estimate, which dominates for a slowly decaying summand. */
+    {
+        double est = abserr;
+        if (!met && napplied > 0 && isfinite(prev_mag)) est += prev_mag;
+        if (ns_goal_active(o) && est > tol) nc_warn_goal("NSum", est, tol);
+    }
     free(a);
     expr_free(dcur);
     expr_free(Nval);

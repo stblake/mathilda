@@ -195,6 +195,44 @@ static void test_composite_precision(void) {
                  "Log[1/(E^(EulerGamma/2) Gamma[3/2])]", 1e-24);
 }
 
+/* Slowly converging algebraic series at MACHINE precision.  Terms ~ n^-p with
+ * p just above 1 put almost all of the sum in the Euler–Maclaurin tail
+ * integral, whose remainder ∫_X^∞ ~ X^(1-p)/(p-1) is still ~1e-4 at the
+ * largest X a double holds; exp-sinh quadrature lost it while its levels still
+ * agreed (the ISSAC '97 problem-3 sum came out 21.192745, 5e-5 relative).
+ * Each case must reach 10 significant digits.  References are closed forms
+ * (Zeta, Hurwitz zeta), the binomial–Zeta expansion
+ *     Σ (n^2+1)^-s = 2^-s + Σ_k Binomial[-s,k] (Zeta[2s+2k] - 1),
+ * or a published 20-digit value. */
+static void test_slow_algebraic_machine(void) {
+    ASSERT_CLOSE("NSum[1/n^1.05,{n,1,Infinity}]", "Zeta[21/20]", 21e-10);
+    ASSERT_CLOSE("NSum[1/n^(11/10),{n,1,Infinity}]", "Zeta[11/10]", 11e-10);
+    ASSERT_CLOSE("NSum[1/n^(51/50),{n,1,Infinity}]", "Zeta[51/50]", 51e-10);
+    ASSERT_CLOSE("NSum[1/n^1.5,{n,1,Infinity}]", "Zeta[3/2]", 3e-10);
+    ASSERT_CLOSE("NSum[1/(n+1/2)^(3/2),{n,0,Infinity}]", "Zeta[3/2,1/2]", 5e-10);
+    ASSERT_CLOSE("NSum[1/n^(21/20)+1/n^(41/20),{n,1,Infinity}]",
+                 "Zeta[21/20]+Zeta[41/20]", 22e-10);
+    ASSERT_CLOSE("NSum[1/(n^2+1)^(11/20),{n,1,Infinity}]",
+                 "2^(-11/20)+Sum[Binomial[-11/20,k](Zeta[11/10+2k]-1),{k,0,80}]", 1e-9);
+    ASSERT_CLOSE("NSum[1/(n^2+1)^(3/4),{n,1,Infinity}]",
+                 "2^(-3/4)+Sum[Binomial[-3/4,k](Zeta[3/2+2k]-1),{k,0,80}]", 3e-10);
+    /* ISSAC '97 Systems Challenge, problem 3. */
+    ASSERT_CLOSE("NSum[1/(n^Pi+n^2+n^Sqrt[2]+1)^(1/3),{n,1,Infinity}]",
+                 "21.19324037771154094", 21e-10);
+}
+
+/* A slowly varying factor defeats any power-law tail: Σ_{n≥2} 1/(n Log[n]^2)
+ * = 2.10974280123689197448 has a remainder 1/Log[X] beyond the double range.
+ * NSum must then either be right to 10 digits or say that it is not (an
+ * NSum::accgl message, observed through Check). */
+static void test_slow_log_honest(void) {
+    char* s = eval_str("Quiet[Check[If[Abs[NSum[1/(n Log[n]^2),{n,2,Infinity}]"
+                       " - 2.10974280123689197448] < 3*10^-10, ok, bad], warned]]");
+    ASSERT_MSG(strcmp(s, "ok") == 0 || strcmp(s, "warned") == 0,
+               "1/(n Log[n]^2): silently inaccurate: %s", s);
+    free(s);
+}
+
 static void test_unevaluated_forms(void) {
     char* s1 = eval_str("NSum[1/i^2,{i,1,n}]");         /* symbolic upper bound */
     ASSERT_MSG(strstr(s1, "NSum[") != NULL, "symbolic bound should stay: %s", s1);
@@ -259,6 +297,8 @@ int main(void) {
     TEST(test_peaked_summand);
     TEST(test_composite_precision);
     TEST(test_working_precision);
+    TEST(test_slow_algebraic_machine);
+    TEST(test_slow_log_honest);
     TEST(test_unevaluated_forms);
     TEST(test_attributes);
     TEST(test_memory_loop);
