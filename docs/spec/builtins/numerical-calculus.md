@@ -807,9 +807,9 @@ integrand evaluated/numericalised at each sample point.
 |--------------------|--------|
 | finite real, smooth | globally-adaptive Gauss-Kronrod (G7-K15) with QAGS Wynn extrapolation |
 | finite real, endpoint singularity | tanh-sinh double-exponential |
-| arbitrary `WorkingPrecision` (> machine), finite real | at the target precision + guard bits (MPFR): a power-law endpoint is mapped away, a boundary layer is split into graded Clenshaw-Curtis pieces, an integrand analytic on the interval is taken by a bounded Clenshaw-Curtis probe (N <= 128, kept only when converged to every target digit), Levin collocation goes first only over at least 4 periods, else tanh-sinh |
+| arbitrary `WorkingPrecision` (> machine), finite real | at the target precision + guard bits (MPFR): a power-law endpoint is mapped away, a boundary layer is split into graded Clenshaw-Curtis pieces, an integrand analytic on the interval is taken by a bounded Clenshaw-Curtis probe (N <= 128, kept only when converged to every target digit), Levin collocation goes first only over at least 4 periods, a narrow peak, near-pole or endpoint scale feature takes the recentred double-exponential rule (below), else tanh-sinh |
 | machine precision, integrand leaves the double range in the bulk of the interval (e.g. `x^x^x` on `[1, 6]` reaches 2.7e36305; a Laurent polynomial on the unit circle whose powers give `Overflow[]`) | the machine pass is discarded and the integral re-run on the MPFR path at machine-equivalent precision (53 bits + guard); the result is a 53-bit Real, the representation machine arithmetic itself uses beyond 1.8e308.  A sample within 1e-10 of the span from an endpoint (an endpoint singularity) does not trigger this. |
-| semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
+| semi-infinite / doubly-infinite | exp-sinh / sinh-sinh; at `WorkingPrecision` a narrow or off-centre peak on `[a, oo)` takes the recentred double-exponential rule (below) |
 | semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx` | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros), at machine precision and at any `WorkingPrecision` — hundreds of digits in a few thousand samples; a power-law phase `A(x) Sin[c x^n]` reaches it through the phase variable `t = c x^n` |
 | oscillatory (many periods / slow tail), general | integrate between zeros + Wynn epsilon (finite: half-period panels; MPFR-accelerated at high `WorkingPrecision`) |
 | doubly-infinite, non-decaying oscillation (e.g. `Exp[I x^2]`, `Cos[x^2]`) | split at 0, each half integrated between the zeros + Wynn epsilon (sinh-sinh fallback) |
@@ -944,7 +944,38 @@ point is a breakpoint.  The pieces are integrated from the endpoint inwards by
 nested Clenshaw–Curtis (33–257 Chebyshev points, tables shared by the pieces;
 tanh-sinh for a piece still too steep), each later piece only to an absolute
 tolerance set by the running total.  100 digits of `x^x^x` on `[1, 6]` take about
-1150 samples.
+1150 samples.  A rise that stays constant step after step is a power law
+`|x - c|^p`, `p <= -1`, cut off at a small distance (the near-pole
+`1/(eps^2 + x^2)`), not a layer: only a rise that keeps shrinking (by 4x a step
+on average) is graded, and the near-pole goes to the recentred rule below.
+
+#### Narrow peaks and near-poles at WorkingPrecision
+
+Exp-sinh and tanh-sinh are trapezoidal sums in `t` after `y = W sinh t`, where
+`y` is a log variable of the range (`log(x - a)` on `[a, oo)`, `W = Pi/2`;
+`log((x - a)/(b - x))` on `[a, b]`, `W = Pi`).  They resolve `y` on a scale of
+about `sqrt(y^2 + W^2) h`, so a feature of width `w` at `y0` needs
+`h ~ w/|y0|`: 10^4 samples for the peak of `E^(-x^2 - 10^6/x^2)` (width 1% of its
+abscissa), and no convergence at all for a Lorentzian `1/((x - 100)^2 + 10^-6)`
+on `[0, oo)` (0.59 relative error after 20 s).  The recentred rule centres the
+same map on the feature, `y = y0 + w sinh v`, and sums in `v`; the feature then
+has width ~1 and the sum converges double-exponentially with `h ~ 1/8`.
+
+`(y0, w)` come from the log mass `log|f(x(y)) x'(y)|` on a coarse grid in `y`
+(23 points on the half line; 33 on a finite range, reaching distances
+`e^-(bits log 2)` from the endpoints), whose three highest interior local
+maxima are refined by golden-section search until the bracket lies within half
+a bit of the top; the one of largest mass wins and `w` comes from the
+curvature there.  It is used only when it carries the mass the grid sees (an
+oscillatory integrand, with a lobe everywhere, is declined) and when centring
+gains at least 4x in step over the standard rule.  When one recentring has not
+settled by `h = 1/32` the feature shares the range with another (two
+Lorentzians): the range is split at it (a broad scale feature at an endpoint
+is cut off `e^4` further in instead) and each piece is done the same way, up to
+8 pieces; a piece without a feature takes the standard rule.  At 40 digits:
+`E^(-x^2 - 10^6/x^2)` on `[0, oo)` 310 samples (was ~10^4), `x^1000 E^-x`
+337, `1/(10^-20 + x^2)` on `[0, 1]` ~250 (was 1916), a Lorentzian of width
+`10^-8` inside `[0, 1]` a few hundred (did not converge).
 
 #### Strong algebraic endpoint singularities
 

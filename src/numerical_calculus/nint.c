@@ -1564,6 +1564,9 @@ static bool ni_mpfr_graded(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
         mpfr_set(d, half, MPFR_RNDN);
         double lprev = lmid;
         int k = 0;
+        /* sum of log2(rise_i / rise_{i+1}) over the steps: a layer's rise
+         * c d (15/16) shrinks 16-fold per step, a power law's is constant */
+        double rise_prev = 0.0, lratio = 0.0;
         while (k < NI_LAYER_MAX_STEPS) {
             mpfr_div_2ui(d, d, NI_LAYER_SHIFT, MPFR_RNDN);
             if (sd > 0) mpfr_sub(x, bm, d, MPFR_RNDN);
@@ -1571,10 +1574,23 @@ static bool ni_mpfr_graded(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
             if (mpfr_equal_p(x, sd > 0 ? bm : am)) break;
             double l = ni_mpfr_log2f(ctx, x, vr, vi);
             if (isnan(l) || !(l - lprev > (NI_LAYER_SHIFT))) break;
+            if (k > 0) lratio += log2(rise_prev / (l - lprev));
+            rise_prev = l - lprev;
             mpfr_init2(cand[k], bits);
             mpfr_set(cand[k], x, MPFR_RNDN);
             k++;
             lprev = l;
+        }
+        /* A rise that stays (about) constant step after step is a power law
+         * |x - c|^p, p <= -1, cut off at a small distance eps: the near-pole
+         * 1/(eps^2 + x^2).  That is a scale feature of width ~1 in the log of
+         * the distance, which the recentred rule (ni_mpfr_rc) takes
+         * in ~250 samples, where these pieces need up to 257 Chebyshev points
+         * each across log16(1/eps) of them.  Only a rise that keeps shrinking
+         * (mean ratio >= 4 a step) is a layer. */
+        if (k >= 2 && lratio / (k - 1) < 2.0) {
+            for (int i = 0; i < k; i++) mpfr_clear(cand[i]);
+            k = 0;
         }
         if (k >= 2 && lprev > lpeak) {
             for (int i = 0; i < npts; i++) mpfr_clear(pts[i]);
@@ -1771,6 +1787,99 @@ static bool ni_mpfr_powsing(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
     return done;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Narrow features at WorkingPrecision: the recentred DE rule          *
+ * ------------------------------------------------------------------ *
+ *
+ * A narrow interior peak (exp(-x^2 - b/x^2), x^n e^-x), a near-pole
+ * (a Lorentzian 1/((x - x0)^2 + eps^2)), or a scale feature next to an
+ * endpoint (1/(eps^2 + x^2)) holds its mass where the standard DE rules are
+ * coarse; the rule recentred on it (denint.h) resolves it in a few hundred
+ * samples.  When one recentring does not settle -- a second feature the
+ * centred map under-resolves (two Lorentzians) -- the range is split at the
+ * located feature and each piece is done the same way: the feature is then a
+ * scale feature at a piece's endpoint and the other one the piece's own
+ * dominant feature.  A piece with no feature takes the standard rule.  Depth
+ * NI_RC_SPLIT_DEPTH bounds the pieces at 2^depth.
+ *
+ * Returns -1 when no feature was located on the whole range (nothing written:
+ * the caller's cascade runs), else whether the pieces converged. */
+#define NI_RC_SPLIT_DEPTH 3
+
+/* The abscissa of the map variable y: a + e^y, or a + (b - a)/(1 + e^-y). */
+static void ni_rc_abscissa(DenRecentreKind kind, mpfr_srcptr a, mpfr_srcptr b,
+                           double y, mpfr_t xs) {
+    mpfr_t t;
+    mpfr_init2(t, mpfr_get_prec(xs));
+    if (kind == DEN_RC_HALFLINE) {
+        mpfr_set_d(t, y, MPFR_RNDN);
+        mpfr_exp(t, t, MPFR_RNDN);
+        mpfr_add(xs, a, t, MPFR_RNDN);
+    } else {
+        mpfr_set_d(t, -y, MPFR_RNDN);
+        mpfr_exp(t, t, MPFR_RNDN);
+        mpfr_add_ui(t, t, 1, MPFR_RNDN);
+        mpfr_sub(xs, b, a, MPFR_RNDN);
+        mpfr_div(xs, xs, t, MPFR_RNDN);
+        mpfr_add(xs, a, xs, MPFR_RNDN);
+    }
+    mpfr_clear(t);
+}
+
+/* The standard rule on a piece: tanh-sinh, or exp-sinh on a half line. */
+static bool ni_mpfr_rc_standard(NiCtx* ctx, DenRecentreKind kind, mpfr_srcptr a,
+                                mpfr_srcptr b, const NiOpts* o,
+                                mpfr_t re, mpfr_t im, double* abserr) {
+    if (kind == DEN_RC_FINITE)
+        return denint_tanhsinh_mpfr(ni_sample_mpfr, ctx, a, b, o->bits,
+                                    ni_mpfr_reltol(o), ni_mpfr_levels(o),
+                                    re, im, abserr);
+    return dequad_halfline_mpfr(ni_sample_mpfr, ctx, a, o->bits, ni_mpfr_reltol(o),
+                                ni_mpfr_levels(o), re, im, abserr);
+}
+
+static int ni_mpfr_rc(NiCtx* ctx, DenRecentreKind kind, mpfr_srcptr a, mpfr_srcptr b,
+                      const NiOpts* o, int depth, mpfr_t re, mpfr_t im, double* abserr) {
+    long bits = o->bits;
+    double y0, w;
+    if (!denint_recentre_locate_mpfr(ni_sample_mpfr, ctx, kind, a, b, bits, &y0, &w)) {
+        if (depth == 0) return -1;
+        return ni_mpfr_rc_standard(ctx, kind, a, b, o, re, im, abserr);
+    }
+    /* A broad feature (width >= 1/2 in y) hugging an endpoint (within e^-4
+     * of the length, or of the half line's origin) is a scale feature there:
+     * the near-pole 1/(eps^2 + x^2), or the half of a peak a split left at
+     * the cut.  Alone it settles under the full level budget; when it does
+     * not, the piece is cut e^4 further in, which leaves the feature its own
+     * piece and the rest only its e^-4 remnant (splitting at its centre would
+     * just move the cut).  Any other feature is split at its centre when one
+     * recentring has not settled by h = 1/32 -- a single well-centred
+     * feature settles by h = 1/16, so it shares the piece with another. */
+    bool hugs = w >= 0.5 && (kind == DEN_RC_FINITE ? fabs(y0) >= 4.0 : y0 <= -4.0);
+    bool split = depth < NI_RC_SPLIT_DEPTH;
+    if (denint_recentre_mpfr(ni_sample_mpfr, ctx, kind, a, b, bits, y0, w,
+                             ni_mpfr_reltol(o), split && !hugs ? 5 : 7, re, im, abserr))
+        return 1;
+    if (!split)
+        return depth == 0 ? 0 : ni_mpfr_rc_standard(ctx, kind, a, b, o, re, im, abserr);
+    double ys = !hugs ? y0 : (y0 > 0.0 ? y0 - 4.0 : y0 + 4.0);
+    mpfr_t xs, r2, i2;
+    mpfr_inits2(bits, xs, r2, i2, (mpfr_ptr)0);
+    ni_rc_abscissa(kind, a, b, ys, xs);
+    int ok = 0;
+    if (mpfr_number_p(xs) && mpfr_greater_p(xs, a) && (!b || mpfr_less_p(xs, b))) {
+        double e1 = 0.0, e2 = 0.0;
+        int c1 = ni_mpfr_rc(ctx, DEN_RC_FINITE, a, xs, o, depth + 1, re, im, &e1);
+        int c2 = ni_mpfr_rc(ctx, kind, xs, b, o, depth + 1, r2, i2, &e2);
+        mpfr_add(re, re, r2, MPFR_RNDN);
+        mpfr_add(im, im, i2, MPFR_RNDN);
+        *abserr = e1 + e2;
+        ok = (c1 == 1 && c2 == 1);
+    }
+    mpfr_clears(xs, r2, i2, (mpfr_ptr)0);
+    return ok;
+}
+
 /* ∫_a^b f at the MPFR working precision, ctx already in MPFR mode: an explicit
  * fixed rule, Levin collocation for a detected oscillatory kernel, else the
  * endpoint-robust tanh-sinh rule.  (re, im) are initialised by the caller at
@@ -1840,6 +1949,12 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
                 got = true; conv = true; *abserr = cerr;
             }
             ccquad_cache_free(cc);
+        }
+        /* a narrow peak, near-pole or endpoint scale feature: the DE rule
+         * recentred on it */
+        if (!got && o->method == NI_AUTO
+            && ni_mpfr_rc(ctx, DEN_RC_FINITE, am, bm, o, 0, re, im, abserr) == 1) {
+            got = true; conv = true;
         }
         if (!got)
             conv = denint_tanhsinh_mpfr(ni_sample_mpfr, ctx, am, bm, bits,
@@ -2093,6 +2208,10 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
                                           bits, mreltol, 16, re, im, &abserr);
         }
 
+        /* A narrow or far-off-centre feature (exp(-x^2 - b/x^2), x^n e^-x,
+         * a Lorentzian peak): the exp-sinh rule recentred on it (denint.h). */
+        if (!conv && o->method == NI_AUTO)
+            conv = ni_mpfr_rc(&ctx, DEN_RC_HALFLINE, am, NULL, o, 0, re, im, &abserr) == 1;
         if (!conv && o->method == NI_LEVIN) {
             conv = osc_integrate_mpfr(ni_sample_machine, &gctx, ni_sample_mpfr, &ctx,
                                       a, bits, mreltol, 600, ni_mpfr_levels(o),

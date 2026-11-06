@@ -153,7 +153,14 @@ bool denint_sinhsinh_machine(DeQuadSampleMachine f, void* ctx,
 typedef struct {
     mpfr_t halfpi, t, s, u, au, eu, onep, tmp, weight, x, fr, fi, half, a, b;
     bool finite;   /* false => tanh-sinh (uses a,b,half); n/a for sinh-sinh */
+    /* recentred rule (DEN_TERM_RECENTRED): the map kind and the centre / width
+     * of the feature in the map variable y (see denint_recentre_*). */
+    DenRecentreKind rc_kind;
+    double rc_y0, rc_w;
 } DenMpfrScratch;
+
+/* The term a level of den_run_mpfr sums at parameter t. */
+typedef enum { DEN_TERM_TANHSINH, DEN_TERM_SINHSINH, DEN_TERM_RECENTRED } DenTermKind;
 
 static void den_scratch_init(DenMpfrScratch* sc, mpfr_prec_t p) {
     mpfr_inits2(p, sc->halfpi, sc->t, sc->s, sc->u, sc->au, sc->eu, sc->onep,
@@ -161,6 +168,8 @@ static void den_scratch_init(DenMpfrScratch* sc, mpfr_prec_t p) {
                 sc->a, sc->b, (mpfr_ptr)0);
     mpfr_const_pi(sc->halfpi, MPFR_RNDN);
     mpfr_div_2ui(sc->halfpi, sc->halfpi, 1, MPFR_RNDN);   /* π/2 */
+    sc->finite = false;
+    sc->rc_kind = DEN_RC_HALFLINE; sc->rc_y0 = 0.0; sc->rc_w = 1.0;
 }
 static void den_scratch_clear(DenMpfrScratch* sc) {
     mpfr_clears(sc->halfpi, sc->t, sc->s, sc->u, sc->au, sc->eu, sc->onep,
@@ -236,8 +245,20 @@ static bool den_ss_term_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
  * halving, so once the level differences are shrinking (d_L < d_{L-1}) the
  * error of level L is estimated as d_L^2 / d_{L-1} rather than d_L, which
  * saves the final confirming level: half the samples of the run. */
+static bool den_rc_term_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
+                             double tv, mpfr_t term_re, mpfr_t term_im);
+
+static bool den_term_mpfr(DenTermKind kind, DeQuadSampleMPFR f, void* ctx,
+                          DenMpfrScratch* sc, double t, mpfr_t tr, mpfr_t ti) {
+    switch (kind) {
+    case DEN_TERM_TANHSINH: return den_ts_term_mpfr(f, ctx, sc, t, tr, ti);
+    case DEN_TERM_SINHSINH: return den_ss_term_mpfr(f, ctx, sc, t, tr, ti);
+    default:                return den_rc_term_mpfr(f, ctx, sc, t, tr, ti);
+    }
+}
+
 static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
-                         bool tanhsinh, long bits, double tmax,
+                         DenTermKind kind, long bits, double tmax,
                          double reltol, mpfr_srcptr abstol, int max_levels,
                          mpfr_t out_re, mpfr_t out_im, double* abserr) {
     if (reltol <= 0.0) reltol = 1e-13;
@@ -266,8 +287,7 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
 
     for (int level = 0; level <= max_levels; level++) {
         if (level == 0) {
-            bool ok0 = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, 0.0, tr, ti)
-                                : den_ss_term_mpfr(f, ctx, sc, 0.0, tr, ti);
+            bool ok0 = den_term_mpfr(kind, f, ctx, sc, 0.0, tr, ti);
             if (ok0) {
                 any = true;
                 mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
@@ -294,8 +314,7 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
                 if (fabs(t) > tmax) break;
                 /* an even node inside the settled span is already summed */
                 if (kstep == 2 && (k & 1) == 0 && fabs(t) <= span) continue;
-                bool ok = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, t, tr, ti)
-                                   : den_ss_term_mpfr(f, ctx, sc, t, tr, ti);
+                bool ok = den_term_mpfr(kind, f, ctx, sc, t, tr, ti);
                 if (!ok) break;
                 any = true;
                 double lt = de_mpfr_log2_l1(tr, ti);
@@ -385,7 +404,7 @@ bool denint_tanhsinh_mpfr_abs(DeQuadSampleMPFR f, void* ctx,
     mpfr_sub(sc.half, b, a, MPFR_RNDN);
     mpfr_div_2ui(sc.half, sc.half, 1, MPFR_RNDN);   /* (b-a)/2 */
     double tmax = 4.0 + 0.25 * log((double)bits);
-    bool ok = den_run_mpfr(f, ctx, &sc, true, bits, tmax, reltol, abstol, max_levels,
+    bool ok = den_run_mpfr(f, ctx, &sc, DEN_TERM_TANHSINH, bits, tmax, reltol, abstol, max_levels,
                            out_re, out_im, abserr);
     den_scratch_clear(&sc);
     return ok;
@@ -396,8 +415,225 @@ bool denint_sinhsinh_mpfr(DeQuadSampleMPFR f, void* ctx,
                           mpfr_t out_re, mpfr_t out_im, double* abserr) {
     DenMpfrScratch sc; den_scratch_init(&sc, (mpfr_prec_t)bits);
     double tmax = 4.5 + 0.25 * log((double)bits);
-    bool ok = den_run_mpfr(f, ctx, &sc, false, bits, tmax, reltol, NULL, max_levels,
+    bool ok = den_run_mpfr(f, ctx, &sc, DEN_TERM_SINHSINH, bits, tmax, reltol, NULL, max_levels,
                            out_re, out_im, abserr);
+    den_scratch_clear(&sc);
+    return ok;
+}
+
+/* ================================================================== *
+ *  Recentred double-exponential rule (see denint.h)                   *
+ * ================================================================== */
+
+/* The range map at y = sc->u: the abscissa into sc->x and dx/dy into
+ * sc->weight.  Half line: x = a + e^y.  Finite: x = a + len s(y) with the
+ * logistic s(y) = 1/(1 + e^-y), formed from the offset to the NEAREST
+ * endpoint, len e^-|y|/(1 + e^-|y|), so a node next to either endpoint keeps
+ * its distance exactly; dx/dy = len e^-|y|/(1 + e^-|y|)^2.  False when the
+ * exponential leaves MPFR's range or the abscissa rounds onto an endpoint
+ * (the side's tail is then truncated, as the other DE rules do). */
+static bool den_rc_point(DenMpfrScratch* sc) {
+    if (sc->rc_kind == DEN_RC_HALFLINE) {
+        mpfr_exp(sc->eu, sc->u, MPFR_RNDN);
+        if (!mpfr_regular_p(sc->eu)) return false;
+        mpfr_add(sc->x, sc->a, sc->eu, MPFR_RNDN);
+        if (!mpfr_number_p(sc->x) || mpfr_equal_p(sc->x, sc->a)) return false;
+        mpfr_set(sc->weight, sc->eu, MPFR_RNDN);
+        return true;
+    }
+    mpfr_abs(sc->tmp, sc->u, MPFR_RNDN);
+    mpfr_neg(sc->tmp, sc->tmp, MPFR_RNDN);
+    mpfr_exp(sc->eu, sc->tmp, MPFR_RNDN);                 /* e^-|y| */
+    if (!mpfr_regular_p(sc->eu)) return false;
+    mpfr_add_ui(sc->onep, sc->eu, 1, MPFR_RNDN);          /* 1 + e^-|y| */
+    mpfr_div(sc->tmp, sc->eu, sc->onep, MPFR_RNDN);       /* offset / len */
+    mpfr_div(sc->weight, sc->tmp, sc->onep, MPFR_RNDN);
+    mpfr_mul(sc->weight, sc->weight, sc->half, MPFR_RNDN);
+    mpfr_mul(sc->tmp, sc->tmp, sc->half, MPFR_RNDN);      /* offset */
+    if (mpfr_sgn(sc->u) <= 0) mpfr_add(sc->x, sc->a, sc->tmp, MPFR_RNDN);
+    else                      mpfr_sub(sc->x, sc->b, sc->tmp, MPFR_RNDN);
+    if (mpfr_lessequal_p(sc->x, sc->a) || mpfr_greaterequal_p(sc->x, sc->b)) return false;
+    return true;
+}
+
+/* Recentred term at parameter v = tv: y = y0 + w sinh v, weight
+ * x'(y) w cosh v. */
+static bool den_rc_term_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
+                             double tv, mpfr_t term_re, mpfr_t term_im) {
+    mpfr_set_d(sc->t, tv, MPFR_RNDN);
+    mpfr_sinh_cosh(sc->s, sc->au, sc->t, MPFR_RNDN);      /* au holds cosh v */
+    mpfr_mul_d(sc->u, sc->s, sc->rc_w, MPFR_RNDN);
+    mpfr_add_d(sc->u, sc->u, sc->rc_y0, MPFR_RNDN);       /* y */
+    if (!den_rc_point(sc)) return false;
+    if (!f(ctx, sc->x, sc->fr, sc->fi)) return false;
+    if (!mpfr_number_p(sc->fr) || !mpfr_number_p(sc->fi)) return false;
+    mpfr_mul(sc->weight, sc->weight, sc->au, MPFR_RNDN);
+    mpfr_mul_d(sc->weight, sc->weight, sc->rc_w, MPFR_RNDN);
+    if (!mpfr_number_p(sc->weight)) return false;
+    mpfr_mul(term_re, sc->fr, sc->weight, MPFR_RNDN);
+    mpfr_mul(term_im, sc->fi, sc->weight, MPFR_RNDN);
+    return true;
+}
+
+/* log2 of the mass density |f(x(y)) x'(y)| at y (-Inf where the sample fails
+ * or vanishes). */
+static double den_rc_logmass(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
+                             double y) {
+    mpfr_set_d(sc->u, y, MPFR_RNDN);
+    if (!den_rc_point(sc)) return -INFINITY;
+    if (!f(ctx, sc->x, sc->fr, sc->fi)) return -INFINITY;
+    if (!mpfr_number_p(sc->fr) || !mpfr_number_p(sc->fi)) return -INFINITY;
+    double l = de_mpfr_log2_l1(sc->fr, sc->fi);
+    if (l == -INFINITY) return l;
+    return l + de_mpfr_log2_abs(sc->weight);
+}
+
+static void den_rc_setup(DenMpfrScratch* sc, DenRecentreKind kind,
+                         const mpfr_t a, mpfr_srcptr b) {
+    sc->rc_kind = kind;
+    mpfr_set(sc->a, a, MPFR_RNDN);
+    if (kind == DEN_RC_FINITE) {
+        mpfr_set(sc->b, b, MPFR_RNDN);
+        mpfr_sub(sc->half, b, a, MPFR_RNDN);              /* len (not halved) */
+    }
+}
+
+/* Golden-section budget: the bracket shrinks by 0.618 a sample, so 120
+ * samples reach a width of 1e-25 of the starting grid step. */
+#define DEN_RC_GOLD_MAX 120
+/* the bracket lies within the peak's top once its ends are this close (bits) */
+#define DEN_RC_TOP_BITS 0.5
+/* centring must gain at least this factor in step size */
+#define DEN_RC_GAIN 4.0
+#define DEN_RC_GRID_MAX 48
+
+#define DEN_RC_REFINE 3
+
+/* Refine the grid maximum k (an interior local maximum) by golden-section
+ * search on the bracket (lo, xb, hi), m(xb) >= m(lo), m(hi): each probe goes
+ * into the longer side, and the bracket closes on the probe or the old
+ * middle, whichever is higher, until its ends are within DEN_RC_TOP_BITS of
+ * the middle -- the bracket then lies inside the peak's top, where the log
+ * mass is a parabola whose curvature gives the width w (nats of y, capped at
+ * the standard rule's own scale).  False when it does not get there. */
+static bool den_rc_refine(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
+                          const double* grid, const double* ml, int k,
+                          DenRecentreKind kind, double* y_out, double* w_out,
+                          double* m_out) {
+    const double g = 0.3819660112501051;            /* 2 - golden ratio */
+    double lo = grid[k - 1], hi = grid[k + 1], xb = grid[k];
+    double mlo = ml[k - 1], mhi = ml[k + 1], mb = ml[k];
+    bool top = false;
+    for (int it = 0; it < DEN_RC_GOLD_MAX; it++) {
+        double me = mlo < mhi ? mlo : mhi;
+        if (mb - me < DEN_RC_TOP_BITS) { top = true; break; }
+        if (!(hi - lo > 1e-12 * (1.0 + fabs(xb)))) break;  /* below double y */
+        bool right = (hi - xb) >= (xb - lo);
+        double x = right ? xb + g * (hi - xb) : xb - g * (xb - lo);
+        double mx = den_rc_logmass(f, ctx, sc, x);
+        if (mx > mb) {
+            if (right) { lo = xb; mlo = mb; } else { hi = xb; mhi = mb; }
+            xb = x; mb = mx;
+        } else if (right) { hi = x; mhi = mx; }
+        else              { lo = x; mlo = mx; }
+    }
+    if (!top) return false;
+    /* curvature of the log mass through (lo, xb, hi), in nats */
+    double c = 2.0 * ((mhi - mb) / (hi - xb) - (mb - mlo) / (xb - lo))
+             / (hi - lo) * 0.6931471805599453;
+    if (!(c < 0.0) || !isfinite(c)) return false;
+    double w = 1.0 / sqrt(-c);
+    double wdef = (kind == DEN_RC_HALFLINE) ? 0.5 * M_PI : M_PI;
+    if (w > wdef) w = wdef;
+    *y_out = xb; *w_out = w; *m_out = mb;
+    return true;
+}
+
+bool denint_recentre_locate_mpfr(DeQuadSampleMPFR f, void* ctx, DenRecentreKind kind,
+                                 const mpfr_t a, mpfr_srcptr b, long bits,
+                                 double* y0_out, double* w_out) {
+    if (kind == DEN_RC_FINITE && !b) return false;
+    DenMpfrScratch sc; den_scratch_init(&sc, (mpfr_prec_t)bits);
+    den_rc_setup(&sc, kind, a, b);
+
+    /* The grid in y.  Half line: x - a from e^-14 to e^30 in steps of e^2.
+     * Finite: |y| <= 16 in steps of 2, then steps growing by 1.25 out to the
+     * working precision's smallest offset, e^-(bits ln 2): a feature next to
+     * an endpoint is a scale feature (near-pole, boundary layer) whose log
+     * mass is a tent of slope ~1 in y, visible to a coarse grid. */
+    static const double far[] = { 20, 25, 31, 39, 49, 61, 76, 95, 119, 149, 186 };
+    double grid[DEN_RC_GRID_MAX], ml[DEN_RC_GRID_MAX];
+    int ng = 0;
+    if (kind == DEN_RC_HALFLINE) {
+        for (int k = -7; k <= 15; k++) grid[ng++] = 2.0 * k;
+    } else {
+        int nf = 0;
+        double ymax = (double)bits * 0.6931471805599453 + 4.0;
+        while (nf < (int)(sizeof far / sizeof far[0]) && far[nf] <= ymax) nf++;
+        for (int i = nf - 1; i >= 0; i--) grid[ng++] = -far[i];
+        for (int k = -16; k <= 16; k += 2) grid[ng++] = k;
+        for (int i = 0; i < nf; i++) grid[ng++] = far[i];
+    }
+    for (int i = 0; i < ng; i++) ml[i] = den_rc_logmass(f, ctx, &sc, grid[i]);
+    /* Refine the grid's interior local maxima, highest first (at most
+     * DEN_RC_REFINE of them): a narrow spike shows on the grid only through
+     * its shoulders, as a local maximum that need not be the global one when
+     * a broader feature shares the range.  The one of largest mass wins. */
+    int cand[DEN_RC_REFINE], nc = 0;
+    for (int i = 1; i < ng - 1; i++) {
+        if (!(ml[i] > -INFINITY && ml[i - 1] > -INFINITY && ml[i + 1] > -INFINITY)) continue;
+        if (!(ml[i] > ml[i - 1] && ml[i] >= ml[i + 1])) continue;
+        int pos;
+        if (nc < DEN_RC_REFINE) pos = nc++;
+        else if (ml[i] > ml[cand[DEN_RC_REFINE - 1]]) pos = DEN_RC_REFINE - 1;
+        else continue;
+        while (pos > 0 && ml[cand[pos - 1]] < ml[i]) { cand[pos] = cand[pos - 1]; pos--; }
+        cand[pos] = i;
+    }
+    bool found = false;
+    double by = 0.0, bw = 0.0, bm = -INFINITY, bmass = -INFINITY;
+    for (int c = 0; c < nc; c++) {
+        double y, w, mtop;
+        if (!den_rc_refine(f, ctx, &sc, grid, ml, cand[c], kind, &y, &w, &mtop)) continue;
+        double lmass = mtop + log2(w);            /* log2 of the peak's mass */
+        if (lmass > bmass) { bmass = lmass; by = y; bw = w; bm = mtop; found = true; }
+    }
+    if (found) {
+        /* The feature must carry the mass: its share ~ w sqrt(2 pi)
+         * (density relative to the peak's) against what the grid sees
+         * outside it.  An oscillatory integrand has a lobe like this
+         * everywhere (Sin[100 x]^2 on [0, 1]) and goes to the rules built
+         * for it. */
+        double rest = 0.0;
+        for (int i = 0; i < ng; i++) {
+            if (!(ml[i] > -INFINITY) || fabs(grid[i] - by) <= 3.0 * bw) continue;
+            double dy = 0.5 * (grid[i < ng - 1 ? i + 1 : i] - grid[i > 0 ? i - 1 : i]);
+            rest += exp2(ml[i] - bm) * dy;
+        }
+        bool dominant = rest <= DEN_RC_GAIN * bw * 2.5066282746310002;
+        /* the standard rule's resolution at the feature, against its width */
+        double wdef = (kind == DEN_RC_HALFLINE) ? 0.5 * M_PI : M_PI;
+        found = dominant && sqrt(by * by + wdef * wdef) >= DEN_RC_GAIN * bw;
+        if (found) { *y0_out = by; *w_out = bw; }
+    }
+    den_scratch_clear(&sc);
+    return found;
+}
+
+bool denint_recentre_mpfr(DeQuadSampleMPFR f, void* ctx, DenRecentreKind kind,
+                          const mpfr_t a, mpfr_srcptr b, long bits,
+                          double y0, double w, double reltol, int max_levels,
+                          mpfr_t out_re, mpfr_t out_im, double* abserr) {
+    if (kind == DEN_RC_FINITE && !b) return false;
+    DenMpfrScratch sc; den_scratch_init(&sc, (mpfr_prec_t)bits);
+    den_rc_setup(&sc, kind, a, b);
+    sc.rc_y0 = y0; sc.rc_w = w;
+    /* v span: y must reach ~2 bits nats either side of the feature (the mass
+     * of an algebraic tail decays like e^-|y - y0|); the tail guard cuts the
+     * sum long before wherever the decay is faster */
+    double tmax = asinh(2.0 * (double)bits / w) + 1.0;
+    bool ok = den_run_mpfr(f, ctx, &sc, DEN_TERM_RECENTRED, bits, tmax, reltol, NULL,
+                           max_levels, out_re, out_im, abserr);
     den_scratch_clear(&sc);
     return ok;
 }

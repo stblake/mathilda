@@ -85,6 +85,45 @@ bool ccquad_mpfr_upto(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_
 bool denint_sinhsinh_mpfr(DeQuadSampleMPFR f, void* ctx,
                           long bits, double reltol, int max_levels,
                           mpfr_t out_re, mpfr_t out_im, double* abserr);
+
+/* Recentred double-exponential rule, for an integrand whose mass sits in a
+ * feature far narrower than, or far from the centre of, what the standard
+ * rule resolves (a narrow peak exp(-x^2 - b/x^2), x^n e^-x for large n, a
+ * Lorentzian 1/((x - x0)^2 + eps^2), a near-pole 1/(eps^2 + x^2) at an
+ * endpoint).
+ *
+ * Both standard rules are a trapezoidal sum in t after the map
+ * y = W sinh t, where y is a log variable of the range: y = log(x - a) on the
+ * half line (exp-sinh, W = pi/2) and y = log((x - a)/(b - x)) on [a, b]
+ * (tanh-sinh, W = pi).  They therefore resolve y on a scale of about
+ * sqrt(y^2 + W^2) h: a feature of width w in y at y0 needs a step
+ * h ~ w / |y0|, and the node count grows as 1/h -- 10^4 samples for the
+ * peak of exp(-x^2 - 10^6/x^2), whose width is 1% of its abscissa.
+ * Centring the same map on the feature, y = y0 + w sinh v, gives it a width
+ * of about 1 in v, and the trapezoidal sum in v converges double-
+ * exponentially again, now with h ~ 1/8 (the rest of the range still decays
+ * double-exponentially in v, as before in t).
+ *
+ * denint_recentre_locate_mpfr finds (y0, w): the maximum of the log mass
+ * log|f(x(y)) x'(y)| on a coarse grid in y, refined by golden-section search
+ * until the bracket lies within the peak's top half-bit, and w from the
+ * curvature there.  It returns true only when centring pays: when the
+ * feature is narrower than the standard rule's own resolution at y0 by a
+ * factor >= 4.  An oscillatory or multi-modal integrand (no dominant
+ * maximum, or one at the edge of the grid) is declined.  The cost is the
+ * grid (23-33 samples) plus ~log1.6(4/w) golden-section samples.
+ *
+ * denint_recentre_mpfr then integrates with the nested trapezoidal driver of
+ * the tanh-sinh rule (same tail guard and convergence test).  b is ignored
+ * for the half line; (out_re, out_im) are pre-initialised. */
+typedef enum { DEN_RC_HALFLINE = 0, DEN_RC_FINITE = 1 } DenRecentreKind;
+bool denint_recentre_locate_mpfr(DeQuadSampleMPFR f, void* ctx, DenRecentreKind kind,
+                                 const mpfr_t a, mpfr_srcptr b, long bits,
+                                 double* y0, double* w);
+bool denint_recentre_mpfr(DeQuadSampleMPFR f, void* ctx, DenRecentreKind kind,
+                          const mpfr_t a, mpfr_srcptr b, long bits,
+                          double y0, double w, double reltol, int max_levels,
+                          mpfr_t out_re, mpfr_t out_im, double* abserr);
 #endif /* USE_MPFR */
 
 #endif /* MATHILDA_DENINT_H */

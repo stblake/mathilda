@@ -720,6 +720,61 @@ static void test_fourier_and_smooth_wp(void) {
                "Method -> \"DoubleExponential\"]", "10^-27");
 }
 
+/* ---- Narrow features at WorkingPrecision: the recentred DE rule ----
+ * Closed forms: int_0^oo Exp[-x^2 - a^2/x^2] = Sqrt[Pi]/2 E^(-2a) (substitute
+ * u = x - a/x); int_0^oo x^n E^-x = n!; a Lorentzian integrates to ArcTan;
+ * the near-pole 1/(eps^2 + x^2) on [0, 1] to ArcTan[1/eps]/eps.  Exp-sinh and
+ * tanh-sinh needed 10^4 samples (or did not converge: the Lorentzian on
+ * [0, oo) with eps = 10^-3 returned 0.59 relative error after 20 s); the
+ * recentred rule takes a few hundred. */
+static void test_narrow_features_wp(void) {
+    ASSERT_REL("NIntegrate[E^(-x^2 - 1/x^2), {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "Sqrt[Pi]/2 E^-2", "10^-28");
+    ASSERT_REL("NIntegrate[E^(-x^2 - 100/x^2), {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "Sqrt[Pi]/2 E^-20", "10^-28");
+    ASSERT_REL("NIntegrate[E^(-x^2 - 10^6/x^2), {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "Sqrt[Pi]/2 E^-2000", "10^-28");
+    ASSERT_REL("NIntegrate[E^(-x^2 - 10^8/x^2), {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "Sqrt[Pi]/2 E^-20000", "10^-28");
+    ASSERT_REL("NIntegrate[x^50 E^-x, {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "50!", "10^-28");
+    ASSERT_REL("NIntegrate[x^1000 E^-x, {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "1000!", "10^-28");
+    /* Lorentzian peaks on the half line, one and two of them (the second
+     * needs the split at the first) */
+    ASSERT_REL("NIntegrate[1/((x - 100)^2 + 1), {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "Pi/2 + ArcTan[100]", "10^-28");
+    ASSERT_REL("NIntegrate[1/((x - 100)^2 + 10^-6), {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "(Pi/2 + ArcTan[10^5]) 10^3", "10^-28");
+    ASSERT_REL("NIntegrate[1/((x - 100)^2 + 10^-6) + 1/((x - 300)^2 + 10^-6), "
+               "{x, 0, Infinity}, WorkingPrecision -> 40]",
+               "(Pi + ArcTan[10^5] + ArcTan[3 10^5]) 10^3", "10^-28");
+    /* finite intervals: an interior Lorentzian, two of them, a near-pole at
+     * either endpoint */
+    ASSERT_REL("NIntegrate[1/((x - 1/3)^2 + 10^-8), {x, 0, 1}, WorkingPrecision -> 40]",
+               "(ArcTan[(2/3) 10^4] + ArcTan[(1/3) 10^4]) 10^4", "10^-28");
+    ASSERT_REL("NIntegrate[1/((x - 1/3)^2 + 10^-16), {x, 0, 1}, WorkingPrecision -> 40]",
+               "(ArcTan[(2/3) 10^8] + ArcTan[(1/3) 10^8]) 10^8", "10^-28");
+    ASSERT_REL("NIntegrate[1/((x - 1/3)^2 + 10^-8) + 1/((x - 2/3)^2 + 10^-8), {x, 0, 1}, "
+               "WorkingPrecision -> 40]",
+               "2 (ArcTan[(2/3) 10^4] + ArcTan[(1/3) 10^4]) 10^4", "10^-28");
+    ASSERT_REL("NIntegrate[1/(10^-20 + x^2), {x, 0, 1}, WorkingPrecision -> 40]",
+               "ArcTan[10^10] 10^10", "10^-28");
+    ASSERT_REL("NIntegrate[1/(10^-40 + x^2), {x, 0, 1}, WorkingPrecision -> 40]",
+               "ArcTan[10^20] 10^20", "10^-28");
+    ASSERT_REL("NIntegrate[1/(10^-20 + (1 - x)^2), {x, 0, 1}, WorkingPrecision -> 40]",
+               "ArcTan[10^10] 10^10", "10^-28");
+    /* a narrow Gaussian on a peak of mass, plus a broad one */
+    ASSERT_REL("NIntegrate[E^(-(x - 3)^2) + 1/((x - 50)^2 + 10^-6), {x, 0, Infinity}, "
+               "WorkingPrecision -> 40]",
+               "Sqrt[Pi]/2 (1 + Erf[3]) + (Pi/2 + ArcTan[5 10^4]) 10^3", "10^-28");
+    /* oscillatory integrands are not features: the rules built for them */
+    ASSERT_REL("NIntegrate[Sin[100 x]^2, {x, 0, 1}, WorkingPrecision -> 40]",
+               "1/2 - Sin[200]/400", "10^-28");
+    ASSERT_REL("NIntegrate[E^-x BesselJ[0, x]^2, {x, 0, Infinity}, WorkingPrecision -> 30]",
+               "2 EllipticK[-4]/Pi", "10^-20");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -760,6 +815,7 @@ int main(void) {
     TEST(test_phase_substitution);
     TEST(test_contour_wp_compiled);
     TEST(test_fourier_and_smooth_wp);
+    TEST(test_narrow_features_wp);
 
     printf("All nint_tests passed.\n");
     return 0;
