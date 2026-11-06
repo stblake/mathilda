@@ -1955,7 +1955,12 @@ typedef struct {
     mpfr_prec_t bits;
 } TriPar;
 
-/* p[i] = 2 sum_j A[i, j] u[j] */
+/* Only the LOWER triangle (j <= i) of the trailing block is kept current:
+ * the matrix stays symmetric under the reduction, so updating the upper half
+ * too doubled the cost of the dominant rank-2 step for nothing.  A(i, j) for
+ * j > i is read as A[j, i]. */
+
+/* p[i] = 2 sum_j A(i, j) u[j] */
 static void tri_par_matvec(void* c0, int64_t lo, int64_t hi, int chunk)
 {
     (void)chunk;
@@ -1965,8 +1970,12 @@ static void tri_par_matvec(void* c0, int64_t lo, int64_t hi, int chunk)
     mpfr_init2(t, c->bits);
     for (size_t i = c->k + 1 + (size_t)lo; i < c->k + 1 + (size_t)hi; i++) {
         mpfr_set_zero(s, 1);
-        for (size_t j = c->k + 1; j < c->n; j++) {
+        for (size_t j = c->k + 1; j <= i; j++) {
             mpfr_mul(t, c->A[i * c->n + j], c->u[j], MPFR_RNDN);
+            mpfr_add(s, s, t, MPFR_RNDN);
+        }
+        for (size_t j = i + 1; j < c->n; j++) {
+            mpfr_mul(t, c->A[j * c->n + i], c->u[j], MPFR_RNDN);
             mpfr_add(s, s, t, MPFR_RNDN);
         }
         mpfr_mul_2si(c->p[i], s, 1, MPFR_RNDN);
@@ -1975,21 +1984,27 @@ static void tri_par_matvec(void* c0, int64_t lo, int64_t hi, int chunk)
     mpfr_clear(t);
 }
 
-/* A_22 -= u q^T + q u^T */
+/* A_22 -= u q^T + q u^T on the lower triangle.  Row r's work is r - k, so
+ * the range index t is interleaved over the rows (k+1, n-1, k+2, n-2, ...)
+ * to give every contiguous chunk mp_parallel_for hands a thread an equal
+ * share. */
 static void tri_par_rank2(void* c0, int64_t lo, int64_t hi, int chunk)
 {
     (void)chunk;
     TriPar* c = (TriPar*)c0;
     mpfr_t t;
     mpfr_init2(t, c->bits);
-    for (size_t i = c->k + 1 + (size_t)lo; i < c->k + 1 + (size_t)hi; i++)
-        for (size_t j = c->k + 1; j < c->n; j++) {
+    for (int64_t ti = lo; ti < hi; ti++) {
+        size_t i = (ti % 2 == 0) ? c->k + 1 + (size_t)(ti / 2)
+                                 : c->n - 1 - (size_t)(ti / 2);
+        for (size_t j = c->k + 1; j <= i; j++) {
             mpfr_ptr a = c->A[i * c->n + j];
             mpfr_mul(t, c->u[i], c->q[j], MPFR_RNDN);
             mpfr_sub(a, a, t, MPFR_RNDN);
             mpfr_mul(t, c->q[i], c->u[j], MPFR_RNDN);
             mpfr_sub(a, a, t, MPFR_RNDN);
         }
+    }
     mpfr_clear(t);
 }
 
@@ -2097,8 +2112,8 @@ void direct_tridiag_real_sym_M(mpfr_t* A, size_t n, mpfr_prec_t bits,
             mpfr_mul_2si(*s_acc, *s_acc, 1, MPFR_RNDN);
             mpfr_sub(q[i], p[i], *s_acc, MPFR_RNDN);
         }
-        /* A_22 -= u q^T + q u^T */
-        mp_parallel_for(tri_par_rank2, &tp, m, 2.0 * work);
+        /* A_22 -= u q^T + q u^T (lower triangle) */
+        mp_parallel_for(tri_par_rank2, &tp, m, work);
         /* Set subdiag + clear eliminated entries (drift control). */
         mpfr_set(sub[k], *alpha, MPFR_RNDN);
         mpfr_set(A[(k + 1) * n + k], *alpha, MPFR_RNDN);
@@ -2324,9 +2339,16 @@ Expr* direct_build_real_eigenvector_list_M(const mpfr_t* Q, size_t n,
     return out;
 }
 
-/* Real symmetric MPFR entry point. */
+/* Real symmetric MPFR entry point.
+ *
+ * chol_L, when non-NULL, is the row-major lower Cholesky factor L of a
+ * positive-definite B, and A is the reduced matrix L^-1 A0 L^-T of the
+ * symmetric-definite pencil A0 x = lambda B x (direct_generalized_mpfr).
+ * The eigenvalues are the pencil's; each eigenvector y of A maps back to
+ * the pencil eigenvector x = L^-T y, renormalised to unit 2-norm (the
+ * convention every other kernel uses). */
 static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
-                                    Expr* k_spec) {
+                                    Expr* k_spec, const mpfr_t* chol_L) {
     size_t n = A->n;
     mpfr_prec_t bits = A->bits;
     bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
@@ -2358,6 +2380,34 @@ static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
         direct_tridiag_real_sym_M(Awork, n, bits, diag, sub, Q, want_Q,
                                    u, p, q, tmp);
         direct_symtridiag_qr_M(diag, sub, n, bits, Q, want_Q, tmp);
+    }
+
+    if (want_Q && chol_L) {
+        /* Back-transform each column: solve L^T x = q (L^T is upper
+         * triangular), then scale x to unit 2-norm. */
+        mpfr_t* x = mpfr_array_alloc(n, bits);
+        mpfr_t acc, t;
+        mpfr_init2(acc, bits); mpfr_init2(t, bits);
+        for (size_t j = 0; j < n; j++) {
+            for (size_t ii = n; ii-- > 0; ) {
+                mpfr_set(acc, Q[ii * n + j], MPFR_RNDN);
+                for (size_t k = ii + 1; k < n; k++) {
+                    mpfr_mul(t, chol_L[k * n + ii], x[k], MPFR_RNDN);
+                    mpfr_sub(acc, acc, t, MPFR_RNDN);
+                }
+                mpfr_div(x[ii], acc, chol_L[ii * n + ii], MPFR_RNDN);
+            }
+            mpfr_set_zero(acc, 1);
+            for (size_t ii = 0; ii < n; ii++) {
+                mpfr_sqr(t, x[ii], MPFR_RNDN);
+                mpfr_add(acc, acc, t, MPFR_RNDN);
+            }
+            mpfr_sqrt(acc, acc, MPFR_RNDN);
+            for (size_t ii = 0; ii < n; ii++)
+                mpfr_div(Q[ii * n + j], x[ii], acc, MPFR_RNDN);
+        }
+        mpfr_clear(acc); mpfr_clear(t);
+        mpfr_array_free(x, n);
     }
 
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
@@ -4371,14 +4421,236 @@ static Expr* direct_complex_general_mpfr(const MatM* A, MateigenWant want,
     return direct_finish(result, result_vecs, k_spec);
 }
 
+/* Symmetry tolerance n * 2^{-bits+4} * ||M||_inf for a real MatM. */
+static void gen_mpfr_sym_tol(const MatM* M, mpfr_t tol) {
+    mpfr_prec_t bits = M->bits;
+    matM_norm_inf_real(M->re, M->n, bits, tol);
+    if (mpfr_zero_p(tol)) mpfr_set_ui(tol, 1, MPFR_RNDN);
+    mpfr_div_2si(tol, tol, (long)bits - 4, MPFR_RNDN);
+    mpfr_mul_ui(tol, tol, (unsigned long)M->n, MPFR_RNDN);
+}
+
+/* The two triangular solves of the symmetric-definite reduction
+ * C = L^-1 A L^-T (direct_generalized_mpfr), split over threads. */
+typedef struct {
+    const mpfr_t* L;    /* n x n lower Cholesky factor of B */
+    const mpfr_t* A;    /* n x n symmetric */
+    mpfr_t* W;          /* L^-1 A */
+    mpfr_t* C;          /* lower triangle of W L^-T */
+    size_t n;
+    mpfr_prec_t bits;
+} GenRed;
+
+/* W[:, j] = L^-1 A[:, j] for the columns j in [lo, hi).  Forward
+ * substitution keeps the rows above a column's first nonzero zero, so the
+ * sums start there: a diagonal or banded A costs a third of a dense one. */
+static void gen_red_w(void* c0, int64_t lo, int64_t hi, int chunk)
+{
+    (void)chunk;
+    GenRed* g = (GenRed*)c0;
+    size_t n = g->n;
+    mpfr_t acc, t;
+    mpfr_init2(acc, g->bits);
+    mpfr_init2(t, g->bits);
+    for (size_t j = (size_t)lo; j < (size_t)hi; j++) {
+        size_t f = 0;
+        while (f < n && mpfr_zero_p(g->A[f * n + j])) f++;
+        for (size_t i = 0; i < f; i++) mpfr_set_zero(g->W[i * n + j], 1);
+        for (size_t i = f; i < n; i++) {
+            mpfr_set(acc, g->A[i * n + j], MPFR_RNDN);
+            for (size_t k = f; k < i; k++) {
+                mpfr_mul(t, g->L[i * n + k], g->W[k * n + j], MPFR_RNDN);
+                mpfr_sub(acc, acc, t, MPFR_RNDN);
+            }
+            mpfr_div(g->W[i * n + j], acc, g->L[i * n + i], MPFR_RNDN);
+        }
+    }
+    mpfr_clear(acc);
+    mpfr_clear(t);
+}
+
+/* Lower triangle of row i of C = W L^-T, solving C[i, :] L^T = W[i, :]:
+ * C[i, j] = (W[i, j] - sum_{k<j} C[i, k] L[j, k]) / L[j, j] for j <= i.
+ * Row i costs ~i^2/2, so the range index is interleaved over the rows
+ * (0, n-1, 1, n-2, ...) to balance the chunks. */
+static void gen_red_c(void* c0, int64_t lo, int64_t hi, int chunk)
+{
+    (void)chunk;
+    GenRed* g = (GenRed*)c0;
+    size_t n = g->n;
+    mpfr_t acc, t;
+    mpfr_init2(acc, g->bits);
+    mpfr_init2(t, g->bits);
+    for (int64_t ti = lo; ti < hi; ti++) {
+        size_t i = (ti % 2 == 0) ? (size_t)(ti / 2) : n - 1 - (size_t)(ti / 2);
+        for (size_t j = 0; j <= i; j++) {
+            mpfr_set(acc, g->W[i * n + j], MPFR_RNDN);
+            for (size_t k = 0; k < j; k++) {
+                mpfr_mul(t, g->C[i * n + k], g->L[j * n + k], MPFR_RNDN);
+                mpfr_sub(acc, acc, t, MPFR_RNDN);
+            }
+            mpfr_div(g->C[i * n + j], acc, g->L[j * n + j], MPFR_RNDN);
+        }
+    }
+    mpfr_clear(acc);
+    mpfr_clear(t);
+}
+
+/* Generalized MPFR eigenproblem  A x = lambda B x  for a real pencil.
+ *
+ * The arbitrary-precision twin of direct_generalized_machine.  Without it
+ * a pencil whose cells carry more than machine precision was coerced to
+ * doubles and solved by LAPACK, so Eigenvalues[{a, b}] at 40 digits
+ * answered with machine accuracy (a 200-mode sine Galerkin pencil was
+ * wrong in its 11th digit) while labelling nothing as machine.
+ *
+ *   - A and B symmetric, B positive definite: Cholesky B = L L^T and the
+ *     symmetric standard problem C = L^-1 A L^-T, whose spectrum is the
+ *     pencil's and real by construction (direct_real_sym_mpfr maps the
+ *     eigenvectors back through L^-T).
+ *   - otherwise: B = P L U with partial pivoting and the standard problem
+ *     B^-1 A (same eigenvalues and eigenvectors) through the real general
+ *     kernel.
+ *
+ * Returns NULL (the caller falls back) for a complex pencil or a
+ * numerically singular B -- an infinite eigenvalue, which the machine
+ * dggev / symbolic paths report. */
+static Expr* direct_generalized_mpfr(const MatM* A, const MatM* B,
+                                     MateigenWant want, Expr* k_spec) {
+    size_t n = A->n;
+    mpfr_prec_t bits = A->bits;
+    if (n == 0 || B->n != n || A->is_complex || B->is_complex) return NULL;
+
+    mpfr_t tolA, tolB, acc, t;
+    mpfr_inits2(bits, tolA, tolB, acc, t, (mpfr_ptr)0);
+    gen_mpfr_sym_tol(A, tolA);
+    gen_mpfr_sym_tol(B, tolB);
+    bool symdef = matM_is_real_symmetric(A, tolA) && matM_is_real_symmetric(B, tolB);
+
+    Expr* out = NULL;
+    bool done = false;
+    if (symdef) {
+        /* Cholesky B = L L^T (row-major lower L; upper part stays 0). */
+        mpfr_t* L = mpfr_array_alloc(n * n, bits);
+        for (size_t i = 0; i < n * n; i++) mpfr_set_zero(L[i], 1);
+        bool pd = true;
+        for (size_t j = 0; j < n && pd; j++) {
+            mpfr_set(acc, B->re[j * n + j], MPFR_RNDN);
+            for (size_t k = 0; k < j; k++) {
+                mpfr_sqr(t, L[j * n + k], MPFR_RNDN);
+                mpfr_sub(acc, acc, t, MPFR_RNDN);
+            }
+            if (mpfr_sgn(acc) <= 0) { pd = false; break; }
+            mpfr_sqrt(L[j * n + j], acc, MPFR_RNDN);
+            for (size_t i = j + 1; i < n; i++) {
+                mpfr_set(acc, B->re[i * n + j], MPFR_RNDN);
+                for (size_t k = 0; k < j; k++) {
+                    mpfr_mul(t, L[i * n + k], L[j * n + k], MPFR_RNDN);
+                    mpfr_sub(acc, acc, t, MPFR_RNDN);
+                }
+                mpfr_div(L[i * n + j], acc, L[j * n + j], MPFR_RNDN);
+            }
+        }
+        if (pd) {
+            /* C = L^-1 A L^-T in two triangular solves: W = L^-1 A
+             * (columns independent), then C = W L^-T row by row, only
+             * its lower triangle (C is symmetric; rows independent). */
+            mpfr_t* W = mpfr_array_alloc(n * n, bits);
+            mpfr_t* C = mpfr_array_alloc(n * n, bits);
+            GenRed gr = { (const mpfr_t*)L, (const mpfr_t*)A->re, W, C, n, bits };
+            double limbs = (double)bits / 64.0;
+            double nn = (double)n;
+            mp_parallel_for(gen_red_w, &gr, (int64_t)n, nn * nn * nn / 2.0 * limbs * limbs);
+            mp_parallel_for(gen_red_c, &gr, (int64_t)n, nn * nn * nn / 6.0 * limbs * limbs);
+            for (size_t i = 0; i < n; i++)
+                for (size_t j = i + 1; j < n; j++)
+                    mpfr_set(C[i * n + j], C[j * n + i], MPFR_RNDN);
+            mpfr_array_free(W, n * n);
+            MatM Cm = { n, 0, bits, C, NULL };
+            out = direct_real_sym_mpfr(&Cm, want, k_spec, (const mpfr_t*)L);
+            mpfr_array_free(C, n * n);
+            done = true;
+        }
+        mpfr_array_free(L, n * n);
+    }
+
+    if (!done) {
+        /* Gaussian elimination with partial pivoting on [B | A]:
+         * M = B^-1 A.  A pivot at or below n 2^-bits ||B|| is singular. */
+        mpfr_t* U = mpfr_array_alloc(n * n, bits);
+        mpfr_t* M = mpfr_array_alloc(n * n, bits);
+        for (size_t i = 0; i < n * n; i++) {
+            mpfr_set(U[i], B->re[i], MPFR_RNDN);
+            mpfr_set(M[i], A->re[i], MPFR_RNDN);
+        }
+        mpfr_t floor_v;
+        mpfr_init2(floor_v, bits);
+        matM_norm_inf_real(B->re, n, bits, floor_v);
+        mpfr_div_2si(floor_v, floor_v, (long)bits, MPFR_RNDN);
+        mpfr_mul_ui(floor_v, floor_v, (unsigned long)n, MPFR_RNDN);
+        bool singular = false;
+        for (size_t k = 0; k < n; k++) {
+            size_t p = k;
+            for (size_t i = k + 1; i < n; i++)
+                if (mpfr_cmpabs(U[i * n + k], U[p * n + k]) > 0) p = i;
+            if (mpfr_cmpabs(U[p * n + k], floor_v) <= 0) { singular = true; break; }
+            if (p != k)
+                for (size_t j = 0; j < n; j++) {
+                    mpfr_swap(U[p * n + j], U[k * n + j]);
+                    mpfr_swap(M[p * n + j], M[k * n + j]);
+                }
+            for (size_t i = k + 1; i < n; i++) {
+                if (mpfr_zero_p(U[i * n + k])) continue;
+                mpfr_div(acc, U[i * n + k], U[k * n + k], MPFR_RNDN);
+                for (size_t j = k + 1; j < n; j++) {
+                    mpfr_mul(t, acc, U[k * n + j], MPFR_RNDN);
+                    mpfr_sub(U[i * n + j], U[i * n + j], t, MPFR_RNDN);
+                }
+                for (size_t j = 0; j < n; j++) {
+                    mpfr_mul(t, acc, M[k * n + j], MPFR_RNDN);
+                    mpfr_sub(M[i * n + j], M[i * n + j], t, MPFR_RNDN);
+                }
+                mpfr_set_zero(U[i * n + k], 1);
+            }
+        }
+        if (!singular) {
+            for (size_t ii = n; ii-- > 0; )        /* back substitution */
+                for (size_t j = 0; j < n; j++) {
+                    mpfr_set(acc, M[ii * n + j], MPFR_RNDN);
+                    for (size_t k = ii + 1; k < n; k++) {
+                        mpfr_mul(t, U[ii * n + k], M[k * n + j], MPFR_RNDN);
+                        mpfr_sub(acc, acc, t, MPFR_RNDN);
+                    }
+                    mpfr_div(M[ii * n + j], acc, U[ii * n + ii], MPFR_RNDN);
+                }
+            MatM Mm = { n, 0, bits, M, NULL };
+            out = direct_real_general_mpfr(&Mm, want, k_spec);
+        }
+        mpfr_clear(floor_v);
+        mpfr_array_free(U, n * n);
+        mpfr_array_free(M, n * n);
+    }
+
+    mpfr_clears(tolA, tolB, acc, t, (mpfr_ptr)0);
+    return out;
+}
+
 /* Dispatcher: route an MPFR-precision matrix through the appropriate
  * Direct kernel.  All four shapes (real symmetric, real general,
- * complex Hermitian, complex general) now have MPFR implementations. */
+ * complex Hermitian, complex general) have MPFR implementations, and a
+ * real pencil {m, a} goes through direct_generalized_mpfr. */
 static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
                                     mpfr_prec_t bits,
                                     MateigenWant want, Expr* k_spec) {
-    if (a != NULL) return NULL;
     if (n <= 0)    return NULL;
+    if (a != NULL) {
+        MatM A, B;
+        if (!matM_load(m, (size_t)n, bits, &A)) return NULL;
+        if (!matM_load(a, (size_t)n, bits, &B)) { matM_free(&A); return NULL; }
+        Expr* out = direct_generalized_mpfr(&A, &B, want, k_spec);
+        matM_free(&A); matM_free(&B);
+        return out;
+    }
 
     MatM A;
     if (!matM_load(m, (size_t)n, bits, &A)) return NULL;
@@ -4404,7 +4676,7 @@ static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
             out = direct_complex_general_mpfr(&A, want, k_spec);
     } else {
         if (matM_is_real_symmetric(&A, tol))
-            out = direct_real_sym_mpfr(&A, want, k_spec);
+            out = direct_real_sym_mpfr(&A, want, k_spec, NULL);
         else
             out = direct_real_general_mpfr(&A, want, k_spec);
     }

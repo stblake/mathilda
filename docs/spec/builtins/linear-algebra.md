@@ -3237,6 +3237,14 @@ Gives a list of the eigenvalues of a square matrix.
   free variables (no concrete modulus) retain Solve's natural order.
 - When `m, a` have a shared null space, `Eigenvalues[{m, a}]` returns
   `Infinity` for each degree drop in the characteristic polynomial.
+- A numeric pencil `{m, a}` is solved at the precision of its entries: machine
+  input through LAPACK (`dsygv` for a symmetric `m` with symmetric positive
+  definite `a`, `dggev` otherwise), arbitrary-precision real input in MPFR —
+  the Cholesky reduction `L^-1 m L^-T` (`a = L L^T`) and the symmetric kernel
+  when `a` is symmetric positive definite, so the spectrum is real by
+  construction, else `a^-1 m` by partial-pivoting elimination and the general
+  kernel.  A singular `a` (an infinite eigenvalue) and a complex
+  arbitrary-precision pencil take the machine / symbolic path.
 - Options: `Cubics -> False`, `Quartics -> False` (defaults), `Method`.  With
   the defaults a general irreducible cubic/quartic characteristic polynomial is
   returned as held `Root[]` objects (matching the reference); `Cubics -> True` /

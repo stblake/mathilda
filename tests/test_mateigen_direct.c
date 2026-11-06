@@ -1856,6 +1856,78 @@ void test_mpfr_complex_general_diagonal(void) {
     mpfr_assert_true("MPFR complex general 2x2 diagonal", src);
 }
 
+/* --- MPFR generalized pencils {a, b} -------------------------------------
+ *
+ * A pencil whose cells carry more than machine precision used to be
+ * coerced to doubles and solved by LAPACK, so its eigenvalues came back as
+ * machine numbers good to ~1e-13 however many digits the input had.  The
+ * expected values below are independent of the kernel under test: the
+ * congruence A = P^T D P, B = P^T P gives A x = lambda B x <=> D y = lambda y
+ * (y = P x), so the eigenvalues are exactly the entries of D; the small
+ * pencils are checked against the roots of the exact Det[a - lambda b]. */
+
+void test_mpfr_pencil_congruence_symdef_40(void) {
+    /* P lower-triangular all ones (unimodular), D = diag(k/7), n = 40:
+     * B = P^T P is symmetric positive definite with cond ~ 10^3. */
+    const char* src =
+        "Module[{n = 40, p, d, a, b, vs, err},\n"
+        "  p = Table[If[i >= j, 1, 0], {i, n}, {j, n}];\n"
+        "  d = DiagonalMatrix[Table[k/7, {k, n}]];\n"
+        "  a = N[Transpose[p] . d . p, 40]; b = N[Transpose[p] . p, 40];\n"
+        "  vs = Sort[Eigenvalues[{a, b}]];\n"
+        "  err = Max[Abs[vs - Table[k/7, {k, n}]]];\n"
+        "  TrueQ[Length[vs] == n] && TrueQ[Min[Precision /@ vs] > 35]\n"
+        "    && TrueQ[N[err 10^33] < 1.0]]";
+    mpfr_assert_true("MPFR pencil P^T D P / P^T P, n=40, 40 digits", src);
+}
+
+void test_mpfr_pencil_congruence_nonsym_30(void) {
+    /* A = P^T D Q, B = P^T Q with P, Q unimodular and different: a
+     * non-symmetric pencil (LU path) with eigenvalues D = diag(1 - k/5). */
+    const char* src =
+        "Module[{n = 12, p, q, d, a, b, vs, err},\n"
+        "  p = Table[If[i >= j, 1, 0], {i, n}, {j, n}];\n"
+        "  q = Table[If[j >= i, If[j == i + 1, 2, 1], 0], {i, n}, {j, n}];\n"
+        "  d = DiagonalMatrix[Table[1 - k/5, {k, n}]];\n"
+        "  a = N[Transpose[p] . d . q, 30]; b = N[Transpose[p] . q, 30];\n"
+        "  vs = Sort[Re[Eigenvalues[{a, b}]]];\n"
+        "  err = Max[Abs[vs - Sort[Table[1 - k/5, {k, n}]]]];\n"
+        "  TrueQ[Min[Precision /@ vs] > 25] && TrueQ[N[err 10^24] < 1.0]]";
+    mpfr_assert_true("MPFR non-symmetric pencil (LU), n=12, 30 digits", src);
+}
+
+void test_mpfr_pencil_small_vs_exact_roots(void) {
+    /* 3x3 symmetric-definite, symmetric-indefinite and non-symmetric
+     * pencils against N[.., 45] of the exact characteristic roots. */
+    const char* src =
+        "Module[{a, b1, b2, a3, b3, chk},\n"
+        "  a = {{2, 1, 0}, {1, 3, 1}, {0, 1, 4}};\n"
+        "  b1 = {{4, 1, 0}, {1, 3, 0}, {0, 0, 2}};\n"
+        "  b2 = {{1, 2, 0}, {2, 1, 0}, {0, 0, -3}};\n"
+        "  a3 = {{1, 2, 3}, {0, 4, 5}, {1, 0, 6}}; b3 = {{2, 0, 1}, {1, 3, 0}, {0, 1, 1}};\n"
+        "  chk[m_, w_] := Module[{got, ex},\n"
+        "    got = SortBy[Eigenvalues[N[{m, w}, 30]], {Re[#], Im[#]} &];\n"
+        "    ex = SortBy[N[x /. Solve[Det[m - x w] == 0, x], 45], {Re[#], Im[#]} &];\n"
+        "    TrueQ[Min[Precision /@ got] > 25] && TrueQ[N[Max[Abs[got - ex]] 10^25] < 1.0]];\n"
+        "  chk[a, b1] && chk[a, b2] && chk[a3, b3]]";
+    mpfr_assert_true("MPFR 3x3 pencils vs exact roots (30 digits)", src);
+}
+
+void test_mpfr_pencil_eigenvectors_residual(void) {
+    /* Eigensystem of a symmetric-definite pencil: a.v == lambda b.v to
+     * the working precision and each vector of unit 2-norm. */
+    const char* src =
+        "Module[{a, b, vals, vecs, res, nrm},\n"
+        "  a = N[{{2, 1, 0}, {1, 3, 1}, {0, 1, 4}}, 30];\n"
+        "  b = N[{{4, 1, 0}, {1, 3, 0}, {0, 0, 2}}, 30];\n"
+        "  {vals, vecs} = Eigensystem[{a, b}];\n"
+        "  res = Max[Abs[Flatten[Table[a . vecs[[k]] - vals[[k]] b . vecs[[k]], {k, 3}]]]];\n"
+        "  nrm = Max[Abs[(Norm /@ vecs) - 1]];\n"
+        "  TrueQ[N[res 10^26] < 1.0] && TrueQ[N[nrm 10^26] < 1.0]]";
+    mpfr_assert_true("MPFR pencil eigenvectors: residual and unit norm", src);
+}
+
+
 void test_mpfr_sym_1x1(void) {
     /* Edge case: 1x1 -- bypasses tridiag entirely. */
     const char* src =
@@ -1977,6 +2049,11 @@ int main(void) {
     TEST(test_mpfr_complex_general_eigenvalues_carry_precision);
     TEST(test_mpfr_complex_general_eigenvectors_are_lists);
     TEST(test_mpfr_complex_general_diagonal);
+    /* MPFR generalized pencils. */
+    TEST(test_mpfr_pencil_congruence_symdef_40);
+    TEST(test_mpfr_pencil_congruence_nonsym_30);
+    TEST(test_mpfr_pencil_small_vs_exact_roots);
+    TEST(test_mpfr_pencil_eigenvectors_residual);
 #endif
 
     printf("All mateigen Direct (machine-precision) tests passed!\n");
