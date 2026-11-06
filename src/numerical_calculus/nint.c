@@ -264,11 +264,14 @@ typedef struct {
      * ni_sample_mpfr_guarded): the exact endpoints of the range being
      * integrated (borrowed, valid while gd_on), and per endpoint whether its
      * deep samples were found free of cancellation (1), cancelling at
-     * gd_rate lost bits per bit of distance (2), or not yet probed (0). */
+     * gd_rate lost bits per bit of distance (2), losing a depth-independent
+     * gd_rate bits (4), probed once at depth gd_L1 losing gd_lost1 bits (3),
+     * or not yet probed (0). */
     bool        gd_on;
     mpfr_srcptr gd_a, gd_b;
     int         gd_state[2];
     double      gd_rate[2];
+    double      gd_L1[2], gd_lost1[2];
 #endif
 } NiCtx;
 
@@ -282,6 +285,7 @@ static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
     c->gd_on = false; c->gd_a = NULL; c->gd_b = NULL;
     c->gd_state[0] = c->gd_state[1] = 0;
     c->gd_rate[0] = c->gd_rate[1] = 0.0;
+    c->gd_L1[0] = c->gd_L1[1] = c->gd_lost1[0] = c->gd_lost1[1] = 0.0;
 #endif
 }
 
@@ -553,17 +557,31 @@ static double ni_mpfr_rel_log2(const mpfr_t ur, const mpfr_t ui, const mpfr_t vr
  * So a sample within 2^-20 of the span of an endpoint is checked by evaluating
  * it again with the abscissa widened by L + 32 bits (doubling the extra bits
  * until two evaluations agree to the target precision).  The bits the
- * working-precision value lost give the endpoint's cancellation rate (lost bits
- * per bit of distance): an endpoint whose first deep sample lost nothing is
- * marked clean and never checked again (a genuine x^-1/2 singularity, or a
- * regular integrand, pays one extra evaluation); a cancelling one is evaluated
- * from then on directly at the precision its rate predicts, plus a check. */
+ * working-precision value lost tell the endpoint's kind.  An endpoint whose
+ * first deep sample lost nothing is marked clean and never checked again (a
+ * genuine x^-1/2 singularity, or a regular integrand, pays one extra
+ * evaluation).  Otherwise a second sample at least 16 bits deeper or shallower
+ * decides: a loss that grows with the depth is a cancellation (lost bits per
+ * bit of distance, the rate, then predicts the precision of every later deep
+ * sample, evaluated directly at it plus a check); a loss that does not is the
+ * integrand's own conditioning (E^E^E^x near x = 2 loses ~14 bits at any
+ * depth), harmless within the guard bits and otherwise covered by a constant
+ * extra precision. */
 #define NI_GD_MIN_L     20.0
 #define NI_GD_MAX_EXTRA 16384L
 static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpfr_t out_im,
                                    bool* handled) {
     *handled = false;
     if (!c->gd_on || !c->gd_a || !c->gd_b || c->spec.mode != NUMERIC_MODE_MPFR) return false;
+    /* cheap screen in doubles: the bulk of the nodes is far from both ends
+     * (and both ends clean is the common case) */
+    if (c->gd_state[0] == 1 && c->gd_state[1] == 1) return false;
+    {
+        double xd = mpfr_get_d(xm, MPFR_RNDN);
+        double ad = mpfr_get_d(c->gd_a, MPFR_RNDN), bd = mpfr_get_d(c->gd_b, MPFR_RNDN);
+        double near = ldexp(fabs(bd - ad), -(int)NI_GD_MIN_L + 1);
+        if (fabs(xd - ad) > near && fabs(bd - xd) > near) return false;
+    }
     long p = c->spec.bits;
     mpfr_t t;
     mpfr_init2(t, mpfr_get_prec(xm) + 8);
@@ -577,6 +595,19 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
     int side = (la <= lb) ? 0 : 1;
     double L = ls - (side == 0 ? la : lb);
     if (!(L >= NI_GD_MIN_L) || !isfinite(L) || c->gd_state[side] == 1) return false;
+    /* Once a loss has been measured, a sample whose loss is predicted to stay
+     * well inside the guard bits (64) under the worse of the two readings --
+     * growing with the depth at the measured rate, or constant -- needs no
+     * second evaluation. */
+    {
+        double guard_bits = 64.0;
+        int st = c->gd_state[side];
+        double pred = st == 2 ? c->gd_rate[side] * L
+                    : st == 3 ? (c->gd_lost1[side] * L / c->gd_L1[side] > c->gd_lost1[side]
+                                 ? c->gd_lost1[side] * L / c->gd_L1[side] : c->gd_lost1[side])
+                    : st == 4 ? c->gd_rate[side] - 32.0 : INFINITY;
+        if (pred < guard_bits - 16.0) return false;
+    }
     *handled = true;
     /* The probe evaluations' own precision is not the integrand's: a value that
      * cancelled to a 1-bit zero at the working precision is replaced by the
@@ -589,15 +620,21 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
     mpfr_inits2((mpfr_prec_t)p, pr, pi, (mpfr_ptr)0);
     long extra;
     bool have_prev;
-    if (c->gd_state[side] == 2) {
-        extra = (long)ceil(c->gd_rate[side] * L) + 32;
+    if (c->gd_state[side] == 2 || c->gd_state[side] == 4) {
+        extra = c->gd_state[side] == 2 ? (long)ceil(c->gd_rate[side] * L) + 32
+                                       : (long)c->gd_rate[side];
         if (extra > NI_GD_MAX_EXTRA) extra = NI_GD_MAX_EXTRA;
         mpfr_set_prec(pr, (mpfr_prec_t)(p + extra));
         mpfr_set_prec(pi, (mpfr_prec_t)(p + extra));
         have_prev = ni_eval_mpfr_at_prec(c, xm, p + extra, pr, pi);
         extra *= 2;
     } else {
-        have_prev = ni_eval_mpfr_at_prec(c, xm, p, pr, pi);
+        /* the working-precision value through the ordinary (compiled) path */
+        Expr* num = ni_eval_at(c, expr_new_mpfr_copy(xm));
+        bool inexact;
+        have_prev = num && get_approx_mpfr(num, pr, pi, &inexact)
+                    && mpfr_number_p(pr) && mpfr_number_p(pi);
+        expr_free(num);
         extra = (long)ceil(L) + 32;
     }
     mpfr_t v0r, v0i;                                  /* the first value, for the rate */
@@ -628,12 +665,21 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
             lost = isfinite(rl) ? v0p + rl : 0.0;
             if (lost < 0.0) lost = 0.0;
         }
+        double guard = (double)(p - tb);
         if (c->gd_state[side] == 0) {
             if (lost < 8.0) c->gd_state[side] = 1;
-            else { c->gd_state[side] = 2; c->gd_rate[side] = lost / L; }
-        } else if (lost / L > c->gd_rate[side] && c->gd_state[side] == 2
-                   && mpfr_get_prec(v0r) == (mpfr_prec_t)p) {
-            c->gd_rate[side] = lost / L;
+            else { c->gd_state[side] = 3; c->gd_L1[side] = L; c->gd_lost1[side] = lost; }
+        } else if (c->gd_state[side] == 3 && fabs(L - c->gd_L1[side]) >= 16.0) {
+            double growth = (lost - c->gd_lost1[side]) / (L - c->gd_L1[side]);
+            double worst = lost > c->gd_lost1[side] ? lost : c->gd_lost1[side];
+            if (growth < 0.25) {
+                if (worst < guard - 16.0) c->gd_state[side] = 1;
+                else { c->gd_state[side] = 4; c->gd_rate[side] = worst + 32.0; }
+            } else {
+                double r1 = c->gd_lost1[side] / c->gd_L1[side], r2 = lost / L;
+                c->gd_state[side] = 2;
+                c->gd_rate[side] = r1 > r2 ? r1 : r2;
+            }
         }
         mpfr_set(out_re, cr, MPFR_RNDN);
         mpfr_set(out_im, ci, MPFR_RNDN);
@@ -2086,6 +2132,8 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
     mpfr_srcptr gda_saved = ctx->gd_a, gdb_saved = ctx->gd_b;
     int gs0 = ctx->gd_state[0], gs1 = ctx->gd_state[1];
     double gr0 = ctx->gd_rate[0], gr1 = ctx->gd_rate[1];
+    double gl0 = ctx->gd_L1[0], gl1 = ctx->gd_L1[1];
+    double gx0 = ctx->gd_lost1[0], gx1 = ctx->gd_lost1[1];
     if (ctx->map_mode == NI_MAP_AFFINE && creal(ctx->x_scale) == 1.0
         && creal(ctx->x_shift) == 0.0) {
         ctx->gd_on = true; ctx->gd_a = am; ctx->gd_b = bm;
@@ -2173,6 +2221,8 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
     ctx->gd_on = gd_saved; ctx->gd_a = gda_saved; ctx->gd_b = gdb_saved;
     ctx->gd_state[0] = gs0; ctx->gd_state[1] = gs1;
     ctx->gd_rate[0] = gr0; ctx->gd_rate[1] = gr1;
+    ctx->gd_L1[0] = gl0; ctx->gd_L1[1] = gl1;
+    ctx->gd_lost1[0] = gx0; ctx->gd_lost1[1] = gx1;
     mpfr_clears(am, bm, (mpfr_ptr)0);
     return conv;
 }
@@ -2208,6 +2258,43 @@ static bool ni_machine_power_below_range(NiCtx* c, double a, double b) {
     return false;
 }
 #endif
+
+/* The default AccuracyGoal is a ~16-digit ABSOLUTE floor, 10^-15.95: the
+ * combined tolerance 10^-a + |I| 10^-p is met as soon as the error is below it.
+ * That is a statement about the integrand's units, not about the integral: for
+ * an integrand of size 1e-54 (Gamma[z]^3 on a circle about z = -20, a residue
+ * of 3.19e-54) the floor is met by any estimate at all, and the rules stopped
+ * after their first panel, three digits off.  When the user has not set
+ * AccuracyGoal, the floor is therefore taken relative to the integrand's own
+ * scale -- max |f| over seven interior points (sampled through the integral's own,
+ * compiled, sampler) times the length of the range --
+ * whenever that scale is below 1 (a larger integrand keeps the absolute floor,
+ * which its relative goal dominates anyway).  The scaled floor plays the same
+ * role at every magnitude: it lets an integral that cancels to ~0 against an
+ * O(1) integrand stop, without letting a tiny integrand stop early. */
+static void ni_scale_accuracy_floor(NiCtx* ctx, double a, double b, NiOpts* o) {
+    if (o->acc_goal_user || o->prec_mpfr || !(o->acc_goal > 0.0) || !isfinite(o->acc_goal))
+        return;
+    double span = fabs(b - a);
+    if (!(span > 0.0) || !isfinite(span)) return;
+    /* middle first: a sample already of size >= 1/span settles it */
+    static const double fr[7] = { 0.5, 0.2113, 0.7887, 0.0731, 0.9269, 0.3473, 0.6527 };
+    double mag = 0.0;
+    bool any = false;
+    arith_warnings_mute_push();
+    for (int i = 0; i < 7 && !(mag * span >= 1.0); i++) {
+        double _Complex v;
+        if (ni_sample_machine(ctx, a + fr[i] * (b - a), &v)) {
+            double m = cabs(v);
+            if (m > mag) mag = m;
+            any = true;
+        }
+    }
+    arith_warnings_mute_pop();
+    double scale = mag * span;
+    if (!any || !(scale > 0.0) || scale >= 1.0) return;
+    o->acc_goal += -log10(scale);
+}
 
 static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
                                    double a, double b, const NiOpts* o) {
@@ -2254,13 +2341,15 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
         return NULL;
     }
 #endif
-    NiAtt best = ni_core_finite(&ctx, a, b, o);
+    NiOpts so = *o;
+    ni_scale_accuracy_floor(&ctx, a, b, &so);
+    NiAtt best = ni_core_finite(&ctx, a, b, &so);
     ni_bind_restore(&bind);
     autocompiled_free(ctx.ac);
     autocompiled_free(ctx.ac_prec);
 
     if (!best.have) return NULL;        /* no numeric estimate at all */
-    if (!best.conv) ni_warn_goal(o, best.err, cabs(best.val));
+    if (!best.conv) ni_warn_goal(&so, best.err, cabs(best.val));
     return ni_from_complex_d(best.val * sign);
 }
 
@@ -3656,48 +3745,6 @@ static int ni_interior_singular_points(Expr* body, const char* var, double a, do
 }
 #endif /* USE_MPFR */
 
-/* The default AccuracyGoal is a ~16-digit ABSOLUTE floor, 10^-15.95: the
- * combined tolerance 10^-a + |I| 10^-p is met as soon as the error is below it.
- * That is a statement about the integrand's units, not about the integral: for
- * an integrand of size 1e-54 (Gamma[z]^3 on a circle about z = -20, a residue
- * of 3.19e-54) the floor is met by any estimate at all, and the rules stopped
- * after their first panel, three digits off.  When the user has not set
- * AccuracyGoal, the floor is therefore taken relative to the integrand's own
- * scale -- max |f| over a few interior points times the length of the range --
- * whenever that scale is below 1 (a larger integrand keeps the absolute floor,
- * which its relative goal dominates anyway).  The scaled floor plays the same
- * role at every magnitude: it lets an integral that cancels to ~0 against an
- * O(1) integrand stop, without letting a tiny integrand stop early. */
-static void ni_scale_accuracy_floor(Expr* body, const char* var, double a, double b,
-                                    NiOpts* o) {
-    if (o->acc_goal_user || o->prec_mpfr || !(o->acc_goal > 0.0) || !isfinite(o->acc_goal))
-        return;
-    double span = fabs(b - a);
-    if (!(span > 0.0) || !isfinite(span)) return;
-    NiBind bind;
-    ni_bind_snapshot(&bind, var);
-    NiCtx ctx;
-    ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
-    static const double fr[7] = { 0.0731, 0.2113, 0.3473, 0.5, 0.6527, 0.7887, 0.9269 };
-    double mag = 0.0;
-    bool any = false;
-    arith_warnings_mute_push();
-    for (int i = 0; i < 7; i++) {
-        Expr* num = ni_eval_at(&ctx, expr_new_real(a + fr[i] * (b - a)));
-        double _Complex v;
-        if (num && ni_to_complex(num, &v) && isfinite(creal(v)) && isfinite(cimag(v))) {
-            double m = cabs(v);
-            if (m > mag) mag = m;
-            any = true;
-        }
-        expr_free(num);
-    }
-    arith_warnings_mute_pop();
-    ni_bind_restore(&bind);
-    double scale = mag * span;
-    if (!any || !(scale > 0.0) || scale >= 1.0) return;
-    o->acc_goal += -log10(scale);
-}
 
 /* ------------------------------------------------------------------ *
  *  Phase substitution for a power-law phase                           *
@@ -4002,8 +4049,6 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
             expr_free(inner);
             return NULL;
         }
-        if (real_finite && a != b && nspecs == 1)
-            ni_scale_accuracy_floor(eff_body, var, a, b, &o);
         /* a power-law phase: integrate in the phase variable */
         if (o.method == NI_AUTO && nspecs == 1 && !o.exclusions) {
             Expr* ps = ni_try_phase_substitution(eff_body, var, spec0->data.function.args[1],
