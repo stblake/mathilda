@@ -851,6 +851,8 @@ static void test_rotated_halfline_wp(void) {
     ASSERT_CLOSE("NIntegrate[Sin[x] Cos[x/2]/x, {x, 0, Infinity}, WorkingPrecision -> 30]",
                  "Pi/2", 1e-24);
     ASSERT_CLOSE("NIntegrate[BesselJ[0, x] Cos[x/2], {x, 0, Infinity}]", "2/Sqrt[3]", 1e-7);
+}
+
 /* Exact constants of the integrand numericalized once (ni_prenumericalize):
  * a Cauchy coefficient whose weight (99/100 E^(I t))^-200 evaluates to the
  * exact rational (100/99)^200 times E^(-200 I t), [z^200] 1/(1 - z) = 1 and
