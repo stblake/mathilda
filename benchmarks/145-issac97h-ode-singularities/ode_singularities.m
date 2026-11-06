@@ -122,9 +122,14 @@ blasiusScaled[wp_] := Module[{sol = NDSolve[{g'''[x] + g[x] g''[x]/2 == 0, g[0] 
 run["h10.6 Blasius scaling wp30", blasiusScaled[30], sig[#, 15] &];
 
 (* ---- h10.7: value at the singular point of the Gauss equation ---------- *)
+(* Start data: the 2F1 series through x0^4, exact (truncation ~1e-30 relative).
+   The first version used 1 + a b x0/c and a y' with a factor 2 dropped in its
+   x0 term, which moved the posed problem's y(1) 6.4e-14 off 2F1(a, b; c; 1). *)
+gaussSer[x_, a_, b_, c_] := Sum[Pochhammer[a, k] Pochhammer[b, k]/(Pochhammer[c, k] k!) x^k, {k, 0, 4}];
+gaussSerD[x_, a_, b_, c_] := Sum[Pochhammer[a, k] Pochhammer[b, k]/(Pochhammer[c, k] (k - 1)!) x^(k - 1), {k, 1, 4}];
 gauss[wp_] := Module[{a = 1/3, b = 1/2, c = 2, x0 = 10^-6, s},
   s = NDSolve[{x (1 - x) y''[x] + (c - (a + b + 1) x) y'[x] - a b y[x] == 0,
-               y[x0] == 1 + a b x0/c, y'[x0] == a b/c + a (a + 1) b (b + 1) x0/(2 c (c + 1))},
+               y[x0] == gaussSer[x0, a, b, c], y'[x0] == gaussSerD[x0, a, b, c]},
               y, {x, x0, 1}, Evaluate[Sequence @@ opts[wp]]];
   num[y[1] /. First[s]]];
 run["h10.7 Gauss value at x=1 machine", gauss[mp], sig[#, 6] &, 3];
