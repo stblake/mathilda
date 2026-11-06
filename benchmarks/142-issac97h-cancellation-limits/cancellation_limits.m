@@ -23,7 +23,10 @@
               case is the REDUCED quotient f[x]/g[x] at x = 1/10;
      wp       N[e /. x -> x_w, 30] at an exact point x_w deep in the
               cancellation (100 to 450 digits cancel), checked to 20 digits:
-              the system must raise its internal precision on its own.
+              the system must raise its internal precision on its own, with
+              $MaxExtraPrecision raised to 1000 for these rows (the default
+              cap of 50 extra digits cannot reach them in any system, which
+              then rightly answers N::meprec rather than 30 digits).
 
    PROBLEMS AND TRUE VALUES.  Limits: exact, from the leading terms of the
    Taylor expansions (f ~ a x^p, g ~ b x^q gives f[g]/g[f] -> a^(1-q) b^(p-1))
@@ -86,5 +89,5 @@ Do[With[{lab = p[[1]], e = p[[2]], pt = p[[3]], em = If[p[[4]] === Automatic, p[
    run[lab <> " Limit exact", Limit[e, x -> pt], exactChk];
    run[lab <> " point machine" <> If[p[[4]] === Automatic, "", " reduced f/g"], em /. x -> xm,
        sig[#, If[lab === "h7.3", 4, 5]] &, 3];
-   run[lab <> " point N[.., 30]", N[ew /. x -> xw, 30], sig[#, 20] &, 3]],
+   run[lab <> " point N[.., 30]", Block[{$MaxExtraPrecision = 1000}, N[ew /. x -> xw, 30]], sig[#, 20] &, 3]],
   {p, problems}];
