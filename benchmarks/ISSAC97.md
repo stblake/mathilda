@@ -116,11 +116,14 @@ argument/option handling, then absences, then bottlenecks.
 ### Wrong answers
 | # | deficiency | status |
 |---|---|---|
-| W1 | NIntegrate at WorkingPrecision 30–100 on x^x^x over [1, 6]: 6.60e25591 for 1.10e36300 (P2) | open |
-| W2 | NIntegrate of the ProductLog-substituted P2 integrand: 0.0 (machine), 7.64e35391 (WP 30) | open |
-| W3 | Trapezoidal NIntegrate at WP 400 on the periodic P4 contour: 1.5457e1428 for 3.9739e1426, after 2 ms (stops early) | open |
-| W4 | machine NIntegrate whose integrand leaves the double range returns unevaluated (P2) or a silent 0.0 (P4) instead of escalating | open |
+| W1 | NIntegrate at WorkingPrecision 30–100 on x^x^x over [1, 6]: 6.60e25591 for 1.10e36300 (P2) | **fixed v0.6235** |
+| W2 | NIntegrate of the ProductLog-substituted P2 integrand: 0.0 (machine), 7.64e35391 (WP 30) | **fixed v0.6235** |
+| W3 | Trapezoidal NIntegrate at WP 400 on the periodic P4 contour: 1.5457e1428 for 3.9739e1426, after 2 ms (stops early) | **fixed v0.6236** |
+| W4 | machine NIntegrate whose integrand leaves the double range returns unevaluated (P2) or a silent 0.0 (P4) instead of escalating | **fixed v0.6235 (escalation to MPFR)** |
 | W5 | machine NSum on a series with n^-1.047 terms: 5e-5 relative error, no warning (P3) | **fixed v0.6226** |
+| W7 | machine complex powers past the double range give `Overflow[]` (`(1.0 + 2.0 I)^1000`) where machine reals switch to MPFR; NIntegrate now escalates around it (P4) | open |
+| W8 | the half-line Fourier probe rewrote the integrand in place (`Exp[-x^2]` -> `Power[E, -1, x^2]`): every WP integral over [0, oo) wrong (found via P2) | **fixed v0.6234** |
+| W9 | MPFR endpoints taken as doubles (`2 Pi` off by 2.4e-16); one-sided tail cut before a climbing side's bulk (`(1 + Cos[x])^2000` lost half) (found via P4) | **fixed v0.6235** |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | open |
 
 ### Argument and option handling
@@ -154,8 +157,9 @@ argument/option handling, then absences, then bottlenecks.
 | B3 | `Series` of nested Sin/Tan/Sinh/Tanh compositions to order 25 (P7) | 1.8–2.5 s | 0.6–1.9 s | open |
 | B4 | 800-digit 256 × 256 Dot (power method) (P1 m2) | 11.1 s | 7.9 s | open |
 | B5 | MPFR Eigenvalues at 20–40 digits, 64 × 64 nonsymmetric (P9 Nyström) | 640 ms | 323 ms | open |
-| B6 | contour NIntegrate of L'_1000/L_1000 at 100 digits (P5 RootCount) | > 120 s | — | open |
+| B6 | contour NIntegrate of L'_1000/L_1000 at 100 digits (P5 RootCount): the integrand is evaluated symbolically once, which expands LaguerreL[1000, rho E^(I phi)] into its degree-1000 polynomial (~93 ms and ~250 digits of cancellation per sample); needs sampling of the unexpanded form or precision-loss detection | > 120 s | unevaluated (same expansion) | open |
 | B7 | `NSolve[LaguerreL[1000, x] == 0, x, WorkingPrecision -> 50]` | > 600 s | > 120 s | open |
 | B8 | GroebnerBasis with CoefficientDomain -> InexactNumbers (P6) | 18.5 ms | 11.2 ms | open |
-| B9 | NIntegrate at 60 digits on x^2 PolyLog[3, 1/(x+1)] (P8) | 1.6 s | 1.1 s | open |
+| B9 | NIntegrate at 60 digits on x^2 PolyLog[3, 1/(x+1)] (P8): PolyLog[3, z] near z = 1 costs ~20 ms per call at 80 digits | 1.6 s | 1.1 s | open |
+| B11 | P2 after the W1/W4 fixes: machine 71 ms, WP 30 117 ms, WP 50 805 ms, WP 100 3.1 s, ProductLog machine/WP 30 677/1406 ms (load ~100) | | 6.7 / 12 / 31 / 118 / 24 / 88 ms | open (agent) |
 | B10 | the polar ODE derivation: Together/Numerator/Factor of a trig rational (P10) | 4.2 ms | 2.8 ms | open |
