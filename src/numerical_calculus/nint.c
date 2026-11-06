@@ -139,6 +139,15 @@ static bool g_ni_beyond = false;
  * deliver the requested digits; builtin_nintegrate reports it (precw). */
 static long g_ni_sample_bits = 0;
 static bool g_ni_escalated = false;
+/* Absolute error the endpoint cancellation guard could not remove (0: none).
+ * A deep sample whose raised-precision re-evaluation is capped by an inexact
+ * constant of the integrand (a 45-digit 1/2 in (E^x - 1 - x - x^2/2)/x^3 at
+ * WorkingPrecision -> 40) keeps the noise its cancellation left; its size
+ * times the node's distance to the endpoint (the order of its quadrature
+ * weight) is added here, and builtin_nintegrate lowers the precision of the
+ * result to what that error leaves (precw).  Saved and restored like
+ * g_ni_sample_bits. */
+static double g_ni_guard_noise_l2 = -INFINITY;   /* log2 of the sum */
 
 /* True when the numericalised sample `e` is a number outside the double range
  * (an MPFR value beyond 2^1024) or carries Overflow[] anywhere. */
@@ -270,6 +279,9 @@ typedef struct {
      * or not yet probed (0). */
     bool        gd_on;
     mpfr_srcptr gd_a, gd_b;
+    /* The exact integrand the guard's raised-precision evaluations use in
+     * place of `body` (borrowed; NULL to use `body`), see NiOpts.pre_body. */
+    Expr*       gd_exact;
     int         gd_state[2];
     double      gd_rate[2];
     double      gd_L1[2], gd_lost1[2];
@@ -283,7 +295,7 @@ static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
     c->ac_enabled = false; c->ac_tried = false; c->ac = NULL; c->ac_prec = NULL;
     c->ep_lo = -INFINITY; c->ep_hi = INFINITY;
 #ifdef USE_MPFR
-    c->gd_on = false; c->gd_a = NULL; c->gd_b = NULL;
+    c->gd_on = false; c->gd_a = NULL; c->gd_b = NULL; c->gd_exact = NULL;
     c->gd_state[0] = c->gd_state[1] = 0;
     c->gd_rate[0] = c->gd_rate[1] = 0.0;
     c->gd_L1[0] = c->gd_L1[1] = c->gd_lost1[0] = c->gd_lost1[1] = 0.0;
@@ -496,6 +508,45 @@ static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
 }
 
 #ifdef USE_MPFR
+/* `e` with every arbitrary-precision number widened exactly to `bits` (a new
+ * reference; NULL when `e` holds none, so the caller keeps `e`).  The value
+ * of each number is unchanged: only the precision it caps the arithmetic at.
+ * Nothing under a holding head is touched. */
+static Expr* ni_widen_numbers(const Expr* e, long bits) {
+    if (!e) return NULL;
+    if (e->type == EXPR_MPFR) {
+        if ((long)mpfr_get_prec(e->data.mpfr) >= bits) return NULL;
+        mpfr_t w;
+        mpfr_init2(w, (mpfr_prec_t)bits);
+        mpfr_set(w, e->data.mpfr, MPFR_RNDN);          /* exact: more bits */
+        return expr_new_mpfr_move(w);
+    }
+    if (e->type != EXPR_FUNCTION) return NULL;
+    Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        uint32_t at = symtab_get_def(h->data.symbol.name)->attributes;
+        if (at & (ATTR_HOLDALL | ATTR_HOLDFIRST | ATTR_HOLDREST | ATTR_HOLDALLCOMPLETE))
+            return NULL;
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* y = ni_widen_numbers(e->data.function.args[i], bits);
+        if (!y) continue;
+        if (!a) {
+            a = malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < n; j++) a[j] = NULL;
+        }
+        a[i] = y;
+    }
+    if (!a) return NULL;
+    for (size_t i = 0; i < n; i++)
+        if (!a[i]) a[i] = expr_copy(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(h), a, n);
+    free(a);
+    return out;
+}
+
 /* MPFR sample callback: f at the real abscissa x (mapped by the real part of
  * the affine map — MPFR is used for real integration ranges).  (out_re,out_im)
  * are pre-initialised at the working precision by the DE kernel. */
@@ -503,7 +554,8 @@ static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
  * bits (the abscissa is widened exactly; the interpreter computes at the
  * precision of its operands).  The compiled program, built for the working
  * precision, is bypassed.  (re, im) are initialised by the caller. */
-static bool ni_eval_mpfr_at_prec(NiCtx* c, const mpfr_t xm, long prec, mpfr_t re, mpfr_t im) {
+static bool ni_eval_mpfr_at_prec(NiCtx* c, const mpfr_t xm, long prec, mpfr_t re, mpfr_t im,
+                                 long* delivered) {
     if ((long)mpfr_get_prec(xm) > prec) prec = (long)mpfr_get_prec(xm);
     mpfr_t xw;
     mpfr_init2(xw, (mpfr_prec_t)prec);
@@ -513,13 +565,20 @@ static bool ni_eval_mpfr_at_prec(NiCtx* c, const mpfr_t xm, long prec, mpfr_t re
     NumericSpec saved = c->spec;
     AutoCompiled* saved_ac = c->ac_prec;
     bool saved_en = c->ac_enabled;
+    Expr* saved_body = c->body;
     c->spec.bits = prec;
     c->ac_prec = NULL;
     c->ac_enabled = false;
+    if (c->gd_exact) c->body = c->gd_exact;
+    long sbits = g_ni_sample_bits;
+    g_ni_sample_bits = 0;
     Expr* num = ni_eval_at(c, xe);
+    if (delivered) *delivered = g_ni_sample_bits;   /* 0: not an MPFR value */
+    if (g_ni_sample_bits == 0 || (sbits && sbits < g_ni_sample_bits)) g_ni_sample_bits = sbits;
     c->spec = saved;
     c->ac_prec = saved_ac;
     c->ac_enabled = saved_en;
+    c->body = saved_body;
     if (!num) return false;
     bool inexact;
     bool ok = get_approx_mpfr(num, re, im, &inexact);
@@ -627,7 +686,7 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
         if (extra > NI_GD_MAX_EXTRA) extra = NI_GD_MAX_EXTRA;
         mpfr_set_prec(pr, (mpfr_prec_t)(p + extra));
         mpfr_set_prec(pi, (mpfr_prec_t)(p + extra));
-        have_prev = ni_eval_mpfr_at_prec(c, xm, p + extra, pr, pi);
+        have_prev = ni_eval_mpfr_at_prec(c, xm, p + extra, pr, pi, NULL);
         extra *= 2;
     } else {
         /* the working-precision value through the ordinary (compiled) path */
@@ -643,10 +702,16 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
     if (have_prev) { mpfr_set(v0r, pr, MPFR_RNDN); mpfr_set(v0i, pi, MPFR_RNDN); }
     mpfr_inits2((mpfr_prec_t)p, cr, ci, (mpfr_ptr)0);
     bool ok = false;
+    long db = 0, asked = 0;                           /* delivered / requested bits */
+    bool capped = false;
     for (int it = 0; it < 8; it++) {
         mpfr_set_prec(cr, (mpfr_prec_t)(p + extra));
         mpfr_set_prec(ci, (mpfr_prec_t)(p + extra));
-        bool got = ni_eval_mpfr_at_prec(c, xm, p + extra, cr, ci);
+        long dbi = 0;
+        bool got = ni_eval_mpfr_at_prec(c, xm, p + extra, cr, ci, &dbi);
+        if (got) { db = dbi; asked = p + extra; }
+        /* held below the asked precision: raising it further cannot help */
+        if (got && db > 0 && db < asked - 8) { capped = true; break; }
         if (got && have_prev && ni_mpfr_rel_log2(pr, pi, cr, ci) <= agree_l2) { ok = true; break; }
         if (got) {
             mpfr_set_prec(pr, mpfr_get_prec(cr)); mpfr_set_prec(pi, mpfr_get_prec(ci));
@@ -657,7 +722,59 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
         extra *= 2;
         if (extra > NI_GD_MAX_EXTRA) extra = NI_GD_MAX_EXTRA;
     }
-    if (ok) {
+    /* Capped: part of the integrand delivers fewer bits than asked whatever
+     * the abscissa carries -- a machine number (its inexact arbitrary-precision
+     * numbers are widened, see gd_exact) -- so raising the precision resolves
+     * nothing: two such evaluations agree because they carry the same
+     * rounding, and the agreed value went into the rule as if it were exact.
+     * Its noise is measured instead by evaluating once more with the abscissa
+     * rounded to xb = db - 12 bits: every operation then runs at xb bits, and
+     * a cancellation's noise grows by the 2^12 the precision shrank, so
+     * |f(db) - f(xb)| 2^-12 is the noise of the capped value -- while that
+     * difference stays below the value; one of 1/16 of the value or more says
+     * the sample has next to no digit left, and it is declined like an
+     * unevaluable endpoint node (the rules truncate that side's tail there).
+     * A kept sample's noise, times 2 L its distance (a tanh-sinh node 2^-L
+     * from the endpoint weighs about 0.7 L h its distance), is the error it
+     * leaves, recorded in g_ni_guard_noise_l2.  The abscissa must keep its
+     * distance to the endpoint (L + 40 bits when that endpoint is not 0);
+     * a node too deep for that is kept unmeasured, as before the guard. */
+    if (capped) {
+        ok = true;
+        mpfr_srcptr ep = side == 0 ? c->gd_a : c->gd_b;
+        double need = mpfr_zero_p(ep) ? 40.0 : L + 40.0;
+        double v_l2 = de_mpfr_log2_l1(cr, ci);
+        long xb = db - 12;
+        if ((double)xb >= need && isfinite(v_l2)) {
+            mpfr_t xl, qr, qi, d;
+            mpfr_init2(xl, (mpfr_prec_t)xb);
+            mpfr_set(xl, xm, MPFR_RNDN);
+            mpfr_inits2((mpfr_prec_t)xb, qr, qi, (mpfr_ptr)0);
+            if (ni_eval_mpfr_at_prec(c, xl, xb, qr, qi, NULL)) {
+                mpfr_init2(d, (mpfr_prec_t)asked + 8);
+                mpfr_sub(d, qr, cr, MPFR_RNDN);
+                double n_l2 = de_mpfr_log2_abs(d);
+                mpfr_sub(d, qi, ci, MPFR_RNDN);
+                double ni_l2 = de_mpfr_log2_abs(d);
+                mpfr_clear(d);
+                if (ni_l2 > n_l2) n_l2 = ni_l2;
+                if (isfinite(n_l2) && n_l2 > v_l2 - 4.0) {
+                    ok = false;
+                } else if (isfinite(n_l2) && n_l2 - 12.0 > v_l2 - (double)db + 16.0) {
+                    double e_l2 = n_l2 - 12.0 + log2(L) + 1.0 + ls - L;
+                    double g = g_ni_guard_noise_l2;
+                    g_ni_guard_noise_l2 = !isfinite(g) ? e_l2
+                        : (g > e_l2 ? g + log2(1.0 + exp2(e_l2 - g))
+                                    : e_l2 + log2(1.0 + exp2(g - e_l2)));
+                }
+            }
+            mpfr_clears(xl, qr, qi, (mpfr_ptr)0);
+        }
+        if (ok) {
+            mpfr_set(out_re, cr, MPFR_RNDN);
+            mpfr_set(out_im, ci, MPFR_RNDN);
+        }
+    } else if (ok) {
         /* bits the first evaluation lost, against the agreed value */
         double lost = 0.0;
         if (mpfr_number_p(v0r) && mpfr_number_p(v0i)) {
@@ -710,6 +827,39 @@ static bool ni_sample_mpfr(void* vctx, const mpfr_t x, mpfr_t out_re, mpfr_t out
     if (ok && (!mpfr_number_p(out_re) || !mpfr_number_p(out_im))) ok = false;
     expr_free(num);
     return ok;
+}
+
+/* `out` (consumed) with its precision lowered to what an absolute error of
+ * 2^noise_l2 leaves, when that is below target_bits: a real or complex MPFR
+ * number is rounded to those bits and NIntegrate::precw reports it.  Any
+ * other result is returned as it is. */
+static Expr* ni_cap_precision(Expr* out, double noise_l2, long target_bits) {
+    Expr *re = NULL, *im = NULL;
+    bool cpx = is_complex(out, &re, &im);
+    if (!cpx) re = out;
+    if (re->type != EXPR_MPFR || (cpx && im->type != EXPR_MPFR)) return out;
+    double mag = de_mpfr_log2_l1(re->data.mpfr, cpx ? im->data.mpfr : re->data.mpfr);
+    if (!cpx) mag = de_mpfr_log2_abs(re->data.mpfr);
+    if (!isfinite(mag)) return out;
+    double acc = mag - noise_l2;
+    if (!(acc < (double)target_bits)) return out;
+    long nb = acc > 2.0 ? (long)floor(acc) : 2;
+    ni_warn("precw", "an endpoint cancellation in the integrand could not be resolved "
+            "past the precision of its inexact constants; the result has about "
+            "%.3g digits.", numeric_bits_to_digits(nb));
+    mpfr_t r, i;
+    mpfr_init2(r, (mpfr_prec_t)nb);
+    mpfr_set(r, re->data.mpfr, MPFR_RNDN);
+    Expr* nout;
+    if (cpx) {
+        mpfr_init2(i, (mpfr_prec_t)nb);
+        mpfr_set(i, im->data.mpfr, MPFR_RNDN);
+        nout = make_complex(expr_new_mpfr_move(r), expr_new_mpfr_move(i));
+    } else {
+        nout = expr_new_mpfr_move(r);
+    }
+    expr_free(out);
+    return nout;
 }
 
 /* Build a result from a guarded-precision (re,im) pair: round to target_bits,
@@ -864,6 +1014,15 @@ typedef struct {
      * rather than as their double (see ni_endpoint_mpfr). */
     Expr* const* spec_nodes;
     size_t       spec_nnodes;
+    /* At WorkingPrecision ni_dispatch_1d hands the rules pre_body, the
+     * integrand with its exact constants numericalized once at `bits`
+     * (ni_prenumericalize); exact_body is the integrand as given (both
+     * borrowed, NULL when not in effect).  The endpoint cancellation guard
+     * re-evaluates the deep nodes of pre_body through exact_body, since a
+     * constant carried at the working precision caps the precision of every
+     * sum it enters at that precision. */
+    const Expr*  pre_body;
+    Expr*        exact_body;
 } NiOpts;
 
 static bool ni_is_known_option(const char* s) {
@@ -2131,6 +2290,8 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
      * only for the plain real abscissa map, whose x is the integration variable. */
     bool gd_saved = ctx->gd_on;
     mpfr_srcptr gda_saved = ctx->gd_a, gdb_saved = ctx->gd_b;
+    Expr* gde_saved = ctx->gd_exact;
+    Expr* gd_widened = NULL;
     int gs0 = ctx->gd_state[0], gs1 = ctx->gd_state[1];
     double gr0 = ctx->gd_rate[0], gr1 = ctx->gd_rate[1];
     double gl0 = ctx->gd_L1[0], gl1 = ctx->gd_L1[1];
@@ -2138,6 +2299,15 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
     if (ctx->map_mode == NI_MAP_AFFINE && creal(ctx->x_scale) == 1.0
         && creal(ctx->x_shift) == 0.0) {
         ctx->gd_on = true; ctx->gd_a = am; ctx->gd_b = bm;
+        /* The guard's raised-precision evaluations take the integrand as
+         * given, not its prenumericalized copy (whose constants carry only
+         * the working precision), with every inexact number of it widened
+         * exactly: a number holds the arithmetic it enters to its own
+         * precision, and a 45-digit 1/2 in (E^x - 1 - x - x^2/2)/x^3 at
+         * WorkingPrecision -> 40 left the deep nodes 10^127 for 1/6. */
+        Expr* base = (o->pre_body && ctx->body == o->pre_body) ? o->exact_body : ctx->body;
+        gd_widened = ni_widen_numbers(base, bits + NI_GD_MAX_EXTRA + 64);
+        ctx->gd_exact = gd_widened ? gd_widened : (base != ctx->body ? base : NULL);
         ctx->gd_state[0] = ctx->gd_state[1] = 0;
         ctx->gd_rate[0] = ctx->gd_rate[1] = 0.0;
     }
@@ -2220,6 +2390,8 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
         }
     }
     ctx->gd_on = gd_saved; ctx->gd_a = gda_saved; ctx->gd_b = gdb_saved;
+    ctx->gd_exact = gde_saved;
+    expr_free(gd_widened);
     ctx->gd_state[0] = gs0; ctx->gd_state[1] = gs1;
     ctx->gd_rate[0] = gr0; ctx->gd_rate[1] = gr1;
     ctx->gd_L1[0] = gl0; ctx->gd_L1[1] = gl1;
@@ -3530,7 +3702,9 @@ static Expr* ni_dispatch_1d(Expr* body, const char* var,
     if (o->prec_mpfr && o->bits > 0) {
         NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = o->bits;
         Expr* pb = ni_prenumericalize(body, var, sp);
-        Expr* r = ni_dispatch_1d_impl(pb, var, amin, amax, o);
+        NiOpts po = *o;
+        if (pb != body) { po.pre_body = pb; po.exact_body = body; }
+        Expr* r = ni_dispatch_1d_impl(pb, var, amin, amax, &po);
         expr_free(pb);
         return r;
     }
@@ -4435,6 +4609,7 @@ Expr* builtin_nintegrate(Expr* res) {
     o.exclusions = NULL;
     o.rule_type = 0; o.romberg = true; o.nc_points = 3;
     o.spec_nodes = NULL; o.spec_nnodes = 0;
+    o.pre_body = NULL; o.exact_body = NULL;
     for (size_t i = pos_end; i < argc; i++)
         if (!ni_apply_option(res->data.function.args[i], &o)) return NULL;
 
@@ -4458,9 +4633,11 @@ Expr* builtin_nintegrate(Expr* res) {
      * by an MPFR pass at machine-equivalent precision (see g_ni_beyond). */
     bool saved_beyond = g_ni_beyond, saved_escalated = g_ni_escalated;
     long saved_sbits = g_ni_sample_bits;
+    double saved_gnoise = g_ni_guard_noise_l2;
     g_ni_beyond = false;
     g_ni_escalated = false;
     g_ni_sample_bits = 0;
+    g_ni_guard_noise_l2 = -INFINITY;
     Expr* out = ni_integrate(res, argc, pos_end, &o);
 #ifdef USE_MPFR
     if (!o.prec_mpfr && g_ni_beyond) {
@@ -4488,9 +4665,17 @@ Expr* builtin_nintegrate(Expr* res) {
                 "less than the WorkingPrecision (%.3g digits).",
                 numeric_bits_to_digits(g_ni_sample_bits),
                 numeric_bits_to_digits(o.target_bits));
+#ifdef USE_MPFR
+    /* An endpoint cancellation the guard could not resolve (see
+     * g_ni_guard_noise_l2): the result carries only the digits that error
+     * leaves, never the WorkingPrecision it did not reach. */
+    if (out && o.prec_mpfr && isfinite(g_ni_guard_noise_l2))
+        out = ni_cap_precision(out, g_ni_guard_noise_l2, o.target_bits);
+#endif
     g_ni_beyond = saved_beyond;
     g_ni_escalated = saved_escalated;
     g_ni_sample_bits = saved_sbits;
+    g_ni_guard_noise_l2 = saved_gnoise;
     return out;
 }
 

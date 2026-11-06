@@ -793,6 +793,24 @@ static void test_endpoint_cancellation_wp(void) {
                  "Sum[1/(k! (k - 2)), {k, 3, 70}]", 1e-33);
     ASSERT_CLOSE("NIntegrate[(1 - Cos[x])/x^2, {x, 0, 2}, WorkingPrecision -> 30]",
                  "SinIntegral[2] - (1 - Cos[2])/2", 1e-24);
+    /* A rational constant inside the cancelling sum (prenumericalized at the
+     * working precision for the rules, but re-evaluated exactly by the guard;
+     * 0.19066889 for 0.19066925 when it was not):
+     *   int_0^1 (sin x - x + x^3/6)/x^5 = sum_{k>=2} (-1)^k/((2k+1)! (2k-3)),
+     *   int_0^1 (e^x - 1 - x - x^2/2 - x^3/6)/x^4 = sum_{k>=4} 1/(k! (k-3)). */
+    ASSERT_CLOSE("NIntegrate[(Sin[x] - x + x^3/6)/x^5, {x, 0, 1}, WorkingPrecision -> 40]",
+                 "Sum[(-1)^k/((2 k + 1)! (2 k - 3)), {k, 2, 40}]", 1e-35);
+    ASSERT_CLOSE("NIntegrate[(Exp[x] - 1 - x - x^2/2 - x^3/6)/x^4, {x, 0, 1}, "
+                 "WorkingPrecision -> 40]", "Sum[1/(k! (k - 3)), {k, 4, 70}]", 1e-35);
+    ASSERT_EQ_STR("Precision[NIntegrate[(Exp[x] - 1 - x - x^2/2)/x^3, {x, 0, 1}, "
+                  "WorkingPrecision -> 40]] >= 39", "True");
+    /* an inexact constant is widened exactly for the guard (it held every
+     * deep re-evaluation to its own 45 or 60 digits, and the rule took the
+     * resulting 10^127 for 1/6 at face value) */
+    ASSERT_CLOSE("NIntegrate[(Exp[x] - 1 - x - N[1/2, 45] x^2)/x^3, {x, 0, 1}, "
+                 "WorkingPrecision -> 40]", "Sum[1/(k! (k - 2)), {k, 3, 70}]", 1e-35);
+    ASSERT_CLOSE("NIntegrate[(Exp[x] - 1 - x - N[1/2, 60] x^2)/x^3, {x, 0, 1}, "
+                 "WorkingPrecision -> 40]", "Sum[1/(k! (k - 2)), {k, 3, 70}]", 1e-35);
     /* no message: the samples are now accurate (the cancelled zeros used to
      * be reported as a 1-bit integrand precision) */
     ASSERT_EQ_STR("Check[NIntegrate[(Exp[x] - 1 - x)/x^2, {x, 0, 1}, WorkingPrecision -> 30]; ok, "
