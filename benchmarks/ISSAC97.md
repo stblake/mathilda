@@ -132,6 +132,7 @@ argument/option handling, then absences, then bottlenecks.
 | W15 | `N[x, n]` stores exactly ceil(n log2 10) bits with no guard bits, so the last displayed digit can be wrong (`N[Sqrt[2], 50]` ends ...770, true ...769); also a timeout during MPFR's constant computation poisoned the Pi cache (fixed v0.6291) | **fixed v0.6292-v0.6293** (16 guard bits; precision = width - 16; wrong last digits 68/360 -> 0; Precision[N[Pi, 30]] = 30.) |
 | W16 | `1/3^700 == 0` and `PossibleZeroQ[1/3^700]` True (exact rationals beyond the double range read as 0; made h4.9 look wrong) | **fixed v0.6296** |
 | W17 | `PossibleZeroQ[Pi/3^700]` and `Pi/3^700 == 0` True: the zero test's numeric stage measures magnitudes in doubles (1e-334 underflows) | **fixed v0.6320-v0.6321** (log2 magnitudes throughout the zero test; Equal/Less of exact quantities beyond the double; also Log[3] 10^309, Exp[1 + 10^-20] - E, Pi + 10^-20 == Pi) |
+| W18 | NIntegrate: a weak second peak next to a strong one (1e-6 of the mass) and an interior kink `Abs[x - 1/3]` on [0, 1] are wrong at ~1e-11 (with a convergence warning, not silent) | open |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
@@ -233,3 +234,5 @@ ahead; still behind at sub-ms: h7.1 N 0.22 vs 0.17, h7.6 0.17 vs 0.09; P7 m2 11.
 8.7 vs 4.6 (evaluator cost: agent); P10 Together 3.4 vs 2.8 (agent); h2.5 wp40 (agent).
 Evaluator wave 3 (v0.6317-v0.6319): exact Table entries 1.5-6x faster (Kahan 6.2 -> 1.05 us); h1.4 machine
 3.3 vs 4.0 ms (ahead), h1.7 even; h1.2 / h1.10 machine still behind (machine N of E^(-k/25) goes through MPFR).
+Narrow features (v0.6324): h2.5 wp40 2.6 vs 15.3 ms, h2.6 2.0 vs 10.7 ms; holdout 137 all AHEAD or baseline-wrong.
+Together kernels (v0.6322-v0.6323): P10 polar ODE derivation 1.7 vs 2.8 ms.
