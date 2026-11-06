@@ -608,6 +608,31 @@ void ncpx_pow_d(ncpx* out, const ncpx* z, double e, mpfr_prec_t wp) {
     mpfr_clears(r, th, c, s, ex, (mpfr_ptr)0);
 }
 
+/* out = z^k for an integer k, by binary powering (a division for k < 0):
+ * only multiplications, so no atan2 / pow / sin_cos per call, and exact for
+ * a Gaussian-integer z within the precision.  The squarings carry
+ * 2 bitlength(|k|) guard bits for their accumulated rounding. */
+void ncpx_pow_si(ncpx* out, const ncpx* z, long k, mpfr_prec_t wp) {
+    unsigned long m = k < 0 ? 0UL - (unsigned long)k : (unsigned long)k;
+    mpfr_prec_t g = 0;
+    for (unsigned long t = m; t; t >>= 1) g += 2;
+    ncpx b, r;
+    ncpx_init(&b, wp + g); ncpx_init(&r, wp + g);
+    ncpx_set(&b, z);
+    ncpx_set_ui(&r, 1);
+    for (unsigned long t = m; t; t >>= 1) {
+        if (t & 1UL) ncpx_mul(&r, &r, &b, wp + g);
+        if (t > 1UL) ncpx_mul(&b, &b, &b, wp + g);
+    }
+    if (k < 0) {
+        ncpx_set_ui(&b, 1);
+        ncpx_div(&r, &b, &r, wp + g);
+    }
+    mpfr_set(out->re, r.re, NRND);
+    mpfr_set(out->im, r.im, NRND);
+    ncpx_clear(&b); ncpx_clear(&r);
+}
+
 /* out = z^w = exp(w log z), principal branch. */
 void ncpx_pow(ncpx* out, const ncpx* z, const ncpx* w, mpfr_prec_t wp) {
     ncpx l, m;

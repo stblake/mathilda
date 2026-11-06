@@ -397,6 +397,36 @@ static void test_csc_is_one_over_sin(void) {
  *  main
  * ------------------------------------------------------------------ */
 
+/* ncpx_pow_si: an integer power by binary powering.  Gaussian integers are
+ * exact ((1 + 2i)^5 = 41 - 38i, (1 + 2i)^-2 = (-3 - 4i)/25), and a general z
+ * agrees with exp(k log z) (ncpx_pow) for k = -7, 0, 1, 13. */
+static void test_pow_si(void) {
+    ncpx z, r, w, o;
+    ncpx_init(&z, PREC); ncpx_init(&r, PREC); ncpx_init(&w, PREC); ncpx_init(&o, PREC);
+    mpfr_t e;
+    ncpx_set_d(&z, 1.0, 2.0);
+    ncpx_pow_si(&r, &z, 5, PREC);
+    ASSERT(mpfr_cmp_si(r.re, 41) == 0 && mpfr_cmp_si(r.im, -38) == 0);
+    ncpx_pow_si(&r, &z, -2, PREC);
+    mset(e, "-0.12"); assert_mpfr_close(r.re, e, "(1+2i)^-2 re"); mpfr_clear(e);
+    mset(e, "-0.16"); assert_mpfr_close(r.im, e, "(1+2i)^-2 im");
+    ncpx_set_d(&z, 0.3, -1.7);
+    long ks[4] = { -7, 0, 1, 13 };
+    for (int i = 0; i < 4; i++) {
+        ncpx_pow_si(&r, &z, ks[i], PREC);
+        ncpx_set_d(&w, (double)ks[i], 0.0);
+        ncpx_pow(&o, &z, &w, PREC + 32);
+        assert_mpfr_close(r.re, o.re, "pow_si re");
+        assert_mpfr_close(r.im, o.im, "pow_si im");
+    }
+    /* aliasing: out == z */
+    ncpx_set_d(&z, 1.0, 2.0);
+    ncpx_pow_si(&z, &z, 3, PREC);
+    ASSERT(mpfr_cmp_si(z.re, -11) == 0 && mpfr_cmp_si(z.im, -2) == 0);
+    mpfr_clear(e);
+    ncpx_clear(&z); ncpx_clear(&r); ncpx_clear(&w); ncpx_clear(&o);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -419,6 +449,7 @@ int main(void) {
     TEST(test_apply_complex_unary_through_expr);
     TEST(test_apply_complex_unary_keeps_complex_when_im_nonzero);
     TEST(test_csc_is_one_over_sin);
+    TEST(test_pow_si);
     printf("All numeric_complex tests passed.\n");
     return 0;
 }

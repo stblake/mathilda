@@ -299,6 +299,12 @@ static void test_slow_log_tails(void) {
                  "2.109742801236891974479257198`30", 1e-24);
     ASSERT_CLOSE("NSum[1/(n Log[n] Log[Log[n]]^2),{n,3,Infinity},WorkingPrecision->30]",
                  "38.40676809282178631849374770`30", 1e-22);
+    /* oscillatory, through the phase split's arbitrary-precision half-line
+     * quadrature (nodes of each level reused by the next): (Pi - 1)/2 */
+    ASSERT_CLOSE("NSum[Sin[n]/n,{n,1,Infinity},WorkingPrecision->30]",
+                 "N[(Pi - 1)/2, 40]", 1e-26);
+    ASSERT_CLOSE("NSum[Cos[n]/n^2,{n,1,Infinity},WorkingPrecision->30]",
+                 "N[Pi^2/6 - Pi/2 + 1/4, 40]", 1e-26);
     /* 1/Log[n] - 1/Log[n+1] telescopes to 1/Log[2], but its continuous
      * extension cancels to nothing at the huge x the tail needs: no method can
      * certify it, so it must warn rather than be silently wrong. */

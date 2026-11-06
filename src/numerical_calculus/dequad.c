@@ -13,6 +13,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -145,6 +146,39 @@ static bool deq_term_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
 }
 
 
+/* The terms one level computed on one side, t = k h for k = 1 .. n, kept so
+ * the next level (step h/2) reads its even nodes t = 2k (h/2) instead of
+ * evaluating the integrand there again: each halving then costs only its new
+ * odd nodes, half of what re-sampling the whole level did.  The terms are a
+ * deterministic function of t, so the sums -- and the tail guard that walks
+ * them in order -- are exactly those of the uncached loop. */
+typedef struct {
+    mpfr_t* re;
+    mpfr_t* im;
+    size_t n, cap;    /* n valid terms (k = 1 .. n); cap entries initialised */
+} DeqSideCache;
+
+/* Store term k, where k == c->n + 1 (the walk is consecutive from k = 1). */
+static void deq_cache_put(DeqSideCache* c, size_t k, const mpfr_t re, const mpfr_t im,
+                          mpfr_prec_t p) {
+    if (k > c->cap) {
+        size_t nc = c->cap ? 2 * c->cap : 64;
+        while (nc < k) nc *= 2;
+        c->re = realloc(c->re, sizeof(mpfr_t) * nc);
+        c->im = realloc(c->im, sizeof(mpfr_t) * nc);
+        for (size_t i = c->cap; i < nc; i++) { mpfr_init2(c->re[i], p); mpfr_init2(c->im[i], p); }
+        c->cap = nc;
+    }
+    mpfr_set(c->re[k - 1], re, MPFR_RNDN);
+    mpfr_set(c->im[k - 1], im, MPFR_RNDN);
+    c->n = k;
+}
+
+static void deq_cache_free(DeqSideCache* c) {
+    for (size_t i = 0; i < c->cap; i++) { mpfr_clear(c->re[i]); mpfr_clear(c->im[i]); }
+    free(c->re); free(c->im);
+}
+
 bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
                           long bits, double reltol, int max_levels,
                           mpfr_t out_re, mpfr_t out_im, double* abserr) {
@@ -169,22 +203,37 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
     bool have_prev = false, converged = false;
     *abserr = INFINITY;
 
+    /* [0]/[1]: the previous level's terms on t < 0 / t > 0; [2]/[3]: this
+     * level's, swapped in at the end of the level. */
+    DeqSideCache cache[4];
+    memset(cache, 0, sizeof cache);
+    mpfr_t c0_re, c0_im;               /* the t = 0 term, the same every level */
+    mpfr_inits2(p, c0_re, c0_im, (mpfr_ptr)0);
+    bool c0_ok = deq_term_mpfr(f, ctx, a, &sc, 0.0, c0_re, c0_im);
+
     for (int level = 0; level <= max_levels; level++, h *= 0.5) {
         mpfr_set_ui(sum_re, 0, MPFR_RNDN);
         mpfr_set_ui(sum_im, 0, MPFR_RNDN);
         double lmax = -INFINITY;   /* log2 of the level's largest term */
-        if (deq_term_mpfr(f, ctx, a, &sc, 0.0, tr, ti)) {
-            mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
-            mpfr_add(sum_im, sum_im, ti, MPFR_RNDN);
-            lmax = de_mpfr_log2_l1(tr, ti);
+        if (c0_ok) {
+            mpfr_add(sum_re, sum_re, c0_re, MPFR_RNDN);
+            mpfr_add(sum_im, sum_im, c0_im, MPFR_RNDN);
+            lmax = de_mpfr_log2_l1(c0_re, c0_im);
         }
         const double lcenter = lmax;                   /* the t = 0 term */
         for (int side = -1; side <= 1; side += 2) {
+            DeqSideCache* prv = &cache[side < 0 ? 0 : 1];
+            DeqSideCache* cur = &cache[side < 0 ? 2 : 3];
+            cur->n = 0;
             DeTailGuard g; de_tail_guard_init(&g, lcenter);   /* dequad.h */
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > tmax) break;
-                if (!deq_term_mpfr(f, ctx, a, &sc, t, tr, ti)) break;
+                if (level > 0 && (k & 1) == 0 && (size_t)(k / 2) <= prv->n) {
+                    mpfr_set(tr, prv->re[k / 2 - 1], MPFR_RNDN);
+                    mpfr_set(ti, prv->im[k / 2 - 1], MPFR_RNDN);
+                } else if (!deq_term_mpfr(f, ctx, a, &sc, t, tr, ti)) break;
+                deq_cache_put(cur, (size_t)k, tr, ti, p);
                 int act = de_tail_step_log2(&g, fabs(t), de_mpfr_log2_l1(tr, ti),
                                             &lmax, lfloor);
                 if (act == DE_TAIL_ROLLBACK_STOP) {
@@ -218,8 +267,13 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
         mpfr_set(prev_re, I_re, MPFR_RNDN);
         mpfr_set(prev_im, I_im, MPFR_RNDN);
         have_prev = true;
+        for (int i = 0; i < 2; i++) {
+            DeqSideCache tmp = cache[i]; cache[i] = cache[i + 2]; cache[i + 2] = tmp;
+        }
     }
 
+    for (int i = 0; i < 4; i++) deq_cache_free(&cache[i]);
+    mpfr_clears(c0_re, c0_im, (mpfr_ptr)0);
     deq_scratch_clear(&sc);
     mpfr_clears(sum_re, sum_im, I_re, I_im, prev_re, prev_im,
                 tr, ti, diff_re, diff_im, ck_re, ck_im, (mpfr_ptr)0);

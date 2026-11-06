@@ -1450,7 +1450,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
 #ifdef USE_MPFR
                 {
                     ncpx* d = (ncpx*)RD.p; const ncpx* x = (const ncpx*)RA.p;
-                    ncpx_pow_d(d, x, (double)(long)c->imm.i, mpfr_get_prec(d->re));
+                    ncpx_pow_si(d, x, (long)c->imm.i, mpfr_get_prec(d->re));
                 }
 #else
                 goto vm_fail;
