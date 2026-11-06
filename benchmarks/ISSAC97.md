@@ -126,8 +126,9 @@ argument/option handling, then absences, then bottlenecks.
 | W9 | MPFR endpoints taken as doubles (`2 Pi` off by 2.4e-16); one-sided tail cut before a climbing side's bulk (`(1 + Cos[x])^2000` lost half) (found via P4) | **fixed v0.6235** |
 | W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | **fixed v0.6249** |
 | W11 | Equal/Less of arbitrary-precision reals use a machine-sized tolerance: `N[1 - 10^-20, 30] < 1` is False and `== 1` True (found via holdout 145) | open (agent) |
-| W12 | `N[expr, n]` with deep cancellation returned 0 or wrong digits silently (h7.4/h7.5/h7.8; two exact zeros counted as agreement) | open (agent; N::meprec at the default cap) |
-| W13 | `N[0, 30]` (and inexact zero parts such as Re of `N[Erf[I], 30]`) is an inexact zero `0.e-30` where an exact 0 is expected; `N[10^-7, 12]` stores no guard bits and displays its binary value `9.99999999999e-08` (found by the printer fix) | open |
+| W12 | `N[expr, n]` with deep cancellation returned 0 or wrong digits silently (h7.4/h7.5/h7.8; two exact zeros counted as agreement) | **fixed v0.6283-v0.6284** (certified digits; N::meprec at the default cap, correct at $MaxExtraPrecision = 1000) |
+| W13 | `N[0, 30]` (and inexact zero parts such as Re of `N[Erf[I], 30]`) is an inexact zero `0.e-30` where an exact 0 is expected; `N[10^-7, 12]` stores no guard bits and displays its binary value `9.99999999999e-08` (found by the printer fix) | **fixed v0.6285** (exact zeros stay exact; N[10^-7, 12] is the correctly rounded 40-bit value, displayed correctly) |
+| W14 | printer follow-ups to v0.6264: a MachinePrecision number past the double range prints 15 digits with trailing zeros (`1.00000000000000e+400`, numloop_tests); a non-whole precision one digit short; MPFR -0 loses its sign | open (agent) |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
@@ -189,7 +190,7 @@ the ones where Mathilda is wrong, incomplete or slower; "neither" = both wrong):
 | FindRoot / special functions | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | **fixed v0.6272-v0.6277** (140: 20/20 AHEAD; new JacobiP, RiemannSiegelZ/Theta) |
 | NSolve | h6.5, h6.7 machine: solutions missing | **fixed v0.6256** (all ten systems complete; h6.5 91 ms vs 98.5) |
 | Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | **fixed v0.6248** (h7.2 4096/729, h7.3 9765625/1048576, h7.10 1/64; the h7.3 machine point was the baseline wrong) |
-| N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | open |
+| N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | **fixed v0.6283** (rows now ask with $MaxExtraPrecision = 1000; correct) |
 | Integrate | h8.5, h8.8 unevaluated | **fixed v0.6278-v0.6281** (143: 30/30 correct and AHEAD; h8.5 55 ms vs 1.5 s, h8.8 99 ms vs 13.8 s) |
 | eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
 | NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 were the baseline wrong (Mathilda correct); h10.7 singular endpoint (Mathilda 2.96e113) and h10.3/h10.4 Lane-Emden wp30 SLOWER | **fixed v0.6258-v0.6260** (h10.7 correct to 23 digits; Lane-Emden 1.7 s -> 30 ms, 4.3 s -> 0.11 s); h10.7's start data corrected in the benchmark |
