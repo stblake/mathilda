@@ -387,8 +387,17 @@ static Expr* erfc_one_arg(Expr* arg) {
     }
 
 #ifdef USE_MPFR
-    /* 3. Arbitrary-precision real (mpfr_erfc is cancellation-free). */
+    /* 3. Arbitrary-precision real (mpfr_erfc is cancellation-free).  Past
+     * |x| = 20 mpfr_erfc costs milliseconds at a few hundred bits (2.8 ms at
+     * x = 23, 340 bits) where arb's asymptotic kernel is rigorous and two
+     * orders of magnitude faster -- the same split as the complex path. */
     if (arg->type == EXPR_MPFR) {
+        double xd = mpfr_get_d(arg->data.mpfr, MPFR_RNDN);
+        if (xd * xd > ERFC_ARB_Z2) {
+            Expr* v = flint_num_erfc(arg);
+            if (v && v->type == EXPR_MPFR) return v;
+            if (v) expr_free(v);
+        }
         mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
         Expr* out = expr_new_mpfr_bits(prec);
         mpfr_erfc(out->data.mpfr, arg->data.mpfr, ERND);

@@ -202,6 +202,17 @@ void test_erfc_machine_surfaces() {
         "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
 }
 
+/* Arbitrary precision past |x| = 20 (the arb kernel): values against mpmath
+ * at 110 digits; the precision of the argument is kept. */
+static void test_erfc_arbitrary_large(void) {
+    assert_eval_eq("Abs[Erfc[N[23 + 1/7, 100]]/6.053748166683477195128003136610203667474512097297128533965113919320038871711985720426213436431961484`100*^-235 - 1] < 10^-95",
+                   "True", 0);
+    assert_eval_eq("Precision[Erfc[N[23 + 1/7, 100]]] == 100", "True", 0);
+    assert_eval_eq("Abs[Erfc[N[45, 60]]/4.4851764038684402357228084163432997259731295903816`50*^-882 - 1] < 10^-48",
+                   "True", 0);
+    assert_eval_eq("Erfc[N[-25, 40]] == 2", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -218,6 +229,7 @@ int main() {
     TEST(test_erfc_arity);
 
     TEST(test_erfc_machine_surfaces);
+    TEST(test_erfc_arbitrary_large);
 
     printf("All Erfc tests passed.\n");
     return 0;
