@@ -519,10 +519,11 @@ static void test_mpfr_elementary_bit_identical(void) {
     typedef int (*Op)(mpfr_t, const mpfr_t, mpfr_rnd_t);
     const Op ops[] = { mpfr_sin, mpfr_cos, mpfr_tan, mpfr_sinh, mpfr_cosh, mpfr_tanh,
                        mpfr_atan, mpfr_asin, mpfr_acos, mpfr_atanh, mpfr_asinh, mpfr_acosh,
-                       mpfr_cot, mpfr_sec, mpfr_csc, mpfr_coth, mpfr_sech, mpfr_csch, mpfr_exp };
+                       mpfr_cot, mpfr_sec, mpfr_csc, mpfr_coth, mpfr_sech, mpfr_csch, mpfr_exp,
+                       mpfr_log };
     const char* names[] = { "sin", "cos", "tan", "sinh", "cosh", "tanh", "atan", "asin", "acos",
                             "atanh", "asinh", "acosh", "cot", "sec", "csc", "coth", "sech", "csch",
-                            "exp" };
+                            "exp", "log" };
     const long precs[] = { 65, 100, 197, 1000, 3001 };
     /* x = num/den: small, moderate, near 1 (domain edges of asin/atanh), large */
     const long nums[] = { 1, 3, 7, 999999, 1000001, 31, -5, 12345 };

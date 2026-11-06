@@ -451,6 +451,7 @@ static ArbUnaryFn arb_twin_of(MpfrUnaryOp op) {
     if (op == (MpfrUnaryOp)mpfr_sech)  return arb_sech;
     if (op == (MpfrUnaryOp)mpfr_csch)  return arb_csch;
     if (op == (MpfrUnaryOp)mpfr_exp)   return arb_exp;
+    if (op == (MpfrUnaryOp)mpfr_log)   return arb_log;
     return NULL;
 }
 

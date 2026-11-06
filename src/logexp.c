@@ -355,10 +355,12 @@ Expr* builtin_log(Expr* res) {
             mpfr_init2(rr, bits); mpfr_init2(ii, bits);
             bool ok = get_approx_mpfr(z, rr, ii, NULL);
             if (ok && mpfr_zero_p(ii) && mpfr_sgn(rr) > 0) {
-                mpfr_t out; mpfr_init2(out, bits);
-                mpfr_log(out, rr, MPFR_RNDN);
+                /* correctly rounded, through arb when it is faster (mpfr_log
+                 * is an AGM: ~10 us at 300 bits where arb_log takes ~1 us) */
                 mpfr_clear(rr); mpfr_clear(ii);
-                return expr_new_mpfr_move(out);
+                Expr* lr = numeric_mpfr_apply_unary(z, 0, (MpfrUnaryOp)mpfr_log);
+                if (lr) return lr;
+                mpfr_init2(rr, bits); mpfr_init2(ii, bits);
             }
             mpfr_clear(rr); mpfr_clear(ii);
             /* Complex MPFR path: negative real MPFR, or Complex with an
