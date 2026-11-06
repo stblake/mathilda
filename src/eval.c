@@ -692,6 +692,105 @@ static const char* g_dispatch_head = NULL;
 int  eval_builtin_depth(void) { return g_builtin_depth; }
 const char* eval_dispatch_head(void) { return g_dispatch_head; }
 int* eval_builtin_depth_counter(void) { return &g_builtin_depth; }
+
+/* ---- common numeric subexpressions within one sum or product -------------
+ *
+ * Substituting an arbitrary-precision number into a composition repeats its
+ * leaves: f[y] with f[x_] = Tan[Tanh[Sin[x]]] + Tanh[Sin[Tan[x]]] + ... puts
+ * Sin[y] in three of the twelve terms and Sinh[Sin[y]] in two, and at
+ * thousands of bits every copy costs a full arb evaluation.  While the
+ * arguments of a sum or product (a Flat NumericFunction head) are evaluated,
+ * the value of each call of a non-Flat NumericFunction head (Sin, Tanh,
+ * Power, Gamma, ...: pure functions of their arguments) whose arguments are
+ * all number atoms, at least one arbitrary-precision, is therefore kept and
+ * reused for an identical call (same head, same values at the same
+ * precisions).  The scope is the OUTERMOST such argument evaluation at the
+ * builtin depth it opened at -- the subtree the evaluator itself walks; a
+ * builtin's internal evaluations (a sampler, a loop body) are excluded, and a
+ * memo never outlives the evaluation of the sum that opened it, so repeating
+ * a computation repeats its work.  A call that fired a message is not kept
+ * (a hit would skip the message), the table is bounded, and a TimeConstrained
+ * unwind restores the depth (tc_register_unwind_counter); stale entries are
+ * dropped when the next scope opens. */
+#ifdef USE_MPFR
+typedef struct { Expr* key; Expr* val; uint64_t h; } NfMemoEntry;
+#define NFMEMO_CAP 512           /* power of two; at most CAP/2 entries */
+static NfMemoEntry g_nfmemo[NFMEMO_CAP];
+static size_t g_nfmemo_count = 0;
+static int g_nfmemo_depth = 0;       /* > 0 while a scope is open */
+static int g_nfmemo_bdepth = 0;      /* g_builtin_depth at which it opened */
+int* eval_nfmemo_depth_counter(void) { return &g_nfmemo_depth; }
+
+static void nfmemo_clear(void) {
+    if (!g_nfmemo_count) return;
+    for (size_t i = 0; i < NFMEMO_CAP; i++)
+        if (g_nfmemo[i].key) {
+            expr_free(g_nfmemo[i].key); expr_free(g_nfmemo[i].val);
+            g_nfmemo[i].key = g_nfmemo[i].val = NULL;
+        }
+    g_nfmemo_count = 0;
+}
+
+/* Open a scope (true: the caller closes it with nfmemo_close). */
+static bool nfmemo_open(void) {
+    if (g_nfmemo_depth > 0) return false;
+    nfmemo_clear();                  /* entries a timeout unwind left behind */
+    g_nfmemo_depth = 1;
+    g_nfmemo_bdepth = g_builtin_depth;
+    return true;
+}
+
+static void nfmemo_close(void) {
+    g_nfmemo_depth = 0;
+    nfmemo_clear();
+}
+
+/* Is `call` (an evaluated non-Flat NumericFunction call, dispatched at
+ * builtin depth bdepth) memoizable here? */
+static bool nfmemo_eligible(const Expr* call, int bdepth) {
+    if (g_nfmemo_depth <= 0 || bdepth != g_nfmemo_bdepth) return false;
+    if (call->type != EXPR_FUNCTION || call->data.function.head->type != EXPR_SYMBOL) return false;
+    size_t n = call->data.function.arg_count;
+    if (n == 0) return false;
+    bool mp = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (a->type == EXPR_MPFR) mp = true;
+        else if (a->type != EXPR_INTEGER && a->type != EXPR_REAL && a->type != EXPR_BIGINT)
+            return false;
+    }
+    return mp;
+}
+
+static Expr* nfmemo_find(const Expr* call, uint64_t h) {
+    for (size_t i = (size_t)h & (NFMEMO_CAP - 1);; i = (i + 1) & (NFMEMO_CAP - 1)) {
+        NfMemoEntry* t = &g_nfmemo[i];
+        if (!t->key) return NULL;
+        if (t->h == h && expr_eq(t->key, call)) return expr_copy(t->val);
+    }
+}
+
+/* A fresh copy of the call node (its atoms shared), or NULL when the table
+ * is full or the call too wide. */
+static Expr* nfmemo_key(const Expr* call) {
+    if (2 * (g_nfmemo_count + 1) > NFMEMO_CAP) return NULL;  /* full: stop keeping */
+    size_t n = call->data.function.arg_count;
+    Expr* argv[8];
+    if (n > 8) return NULL;
+    for (size_t i = 0; i < n; i++) argv[i] = expr_copy(call->data.function.args[i]);
+    return expr_new_function(expr_copy(call->data.function.head), argv, n);
+}
+
+/* Keep key (consumed) -> val. */
+static void nfmemo_put(Expr* key, uint64_t h, const Expr* val) {
+    size_t j = (size_t)h & (NFMEMO_CAP - 1);
+    while (g_nfmemo[j].key) j = (j + 1) & (NFMEMO_CAP - 1);
+    g_nfmemo[j].key = key;
+    g_nfmemo[j].val = expr_copy((Expr*)val);
+    g_nfmemo[j].h = h;
+    g_nfmemo_count++;
+}
+#endif
 /* The recursion depth of the evaluate() frame whose current step came to rest
  * without any rewrite (set at evaluate_step_core's rest return, read by the
  * evaluate loop right after the step); -1 otherwise. */
@@ -2827,6 +2926,13 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * first sighting rather than on every function node. */
             Expr** held_uneval = NULL;
             size_t held_uneval_count = 0;
+#ifdef USE_MPFR
+            /* the arguments of a sum or product share their numeric calls
+             * (see NfMemoEntry) */
+            const bool nfmemo_scope =
+                argc >= 2 && (attrs & ATTR_NUMERICFUNCTION) && (attrs & ATTR_FLAT) &&
+                !hold_all_complete && nfmemo_open();
+#endif
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 bool hold = hold_all_complete;
                 if (i == 0 && (attrs & ATTR_HOLDFIRST)) hold = true;
@@ -2935,6 +3041,9 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 if (arg_evaluated && (eval_is_inflight_unwind(new_args[i]) ||
                                       eval_is_inflight_goto(new_args[i]))) {
                     Expr* sentinel = new_args[i];
+#ifdef USE_MPFR
+                    if (nfmemo_scope) nfmemo_close();
+#endif
                     for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
                     if (new_args != new_args_stack) free(new_args);
                     free(held_uneval);   /* free(NULL) is a no-op */
@@ -2944,6 +3053,9 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 }
             }
             
+#ifdef USE_MPFR
+            if (nfmemo_scope) nfmemo_close();
+#endif
             Expr* res = expr_new_function(head, new_args, argc);
             if (new_args != new_args_stack) free(new_args);
 
@@ -3599,7 +3711,30 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                             { extern void dispatch_stats_taint(SymbolDef*); dispatch_stats_taint(hdef); }
                         }
                     }
+#ifdef USE_MPFR
+                    /* a repeated numeric call inside one sum (NfMemoEntry) */
+                    uint64_t nf_h = 0;
+                    const bool nf_memo = (attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT) &&
+                                         nfmemo_eligible(res, g_builtin_depth - opaque);
+                    Expr* ret = NULL;
+                    if (nf_memo) {
+                        nf_h = expr_hash(res);
+                        ret = nfmemo_find(res, nf_h);
+                    }
+                    if (!ret && nf_memo) {
+                        /* the key is built before the call: the builtin owns
+                         * the call it is given and may take it apart */
+                        Expr* key = nfmemo_key(res);
+                        ret = hdef->builtin_func(res);
+                        if (key && ret && mth_msg_fired_count() == msg_before)
+                            nfmemo_put(key, nf_h, ret);
+                        else if (key) expr_free(key);
+                    } else if (!ret) {
+                        ret = hdef->builtin_func(res);
+                    }
+#else
                     Expr* ret = hdef->builtin_func(res);
+#endif
                     /* 5a. Mixed exact/inexact numeric arguments. A numeric
                      * builtin that declined f[2., Sqrt[2]] is re-called once
                      * with its exact numeric arguments numericalized to the

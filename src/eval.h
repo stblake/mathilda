@@ -34,6 +34,9 @@ int  eval_builtin_depth(void);
  * not change it. */
 const char* eval_dispatch_head(void);
 int* eval_builtin_depth_counter(void);
+/* The open-scope depth of the evaluator's numeric-call memo within a sum or
+ * product (eval.c, NfMemoEntry), for tc_register_unwind_counter. */
+int* eval_nfmemo_depth_counter(void);
 
 /* Trace[expr] support (beads-planning-b3k). Evaluate `held_expr` to a fixed
  * point, recording each top-level rewrite, and return a freshly-owned flat

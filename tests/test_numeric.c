@@ -13,6 +13,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "test_utils.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -580,6 +581,43 @@ static void test_inverse_trig_numeric_arguments(void) {
  * f; each distinct subexpression is evaluated once per pass.  Values deep in
  * the cancellation (100 to 450 digits cancel), checked against independent
  * 3000- and 6000-digit evaluations that agree to all digits shown. */
+/* Ordinary evaluation of a composition at an arbitrary-precision point: the
+ * repeated numeric calls inside one sum share their value (eval.c,
+ * NfMemoEntry).  The value must be the one each call gives on its own:
+ * checked against an evaluation at 2000 digits (3.0603524556729171455e9,
+ * which a second system also gives to 11 digits) and, term by term, against
+ * the same terms evaluated as a List, whose arguments share nothing. */
+static void test_eval_sum_common_numeric_calls(void) {
+    assert_eval_eq(
+        "fp7[x_] = Tan[Tanh[Sin[x]]] + Tanh[Sin[Tan[x]]] + Sin[Tan[Tanh[x]]] - Tan[Sin[Tanh[x]]] "
+        "- Sin[Tanh[Tan[x]]] - Tanh[Tan[Sin[x]]] - Tan[Sinh[Tanh[x]]] - Sinh[Tanh[Tan[x]]] "
+        "- Tanh[Tan[Sinh[x]]] + Tan[Tanh[Sinh[x]]] + Tanh[Sinh[Tan[x]]] + Sinh[Tan[Tanh[x]]]; "
+        "gp7[x_] = Sinh[Tanh[Sin[x]]] + Tanh[Sin[Sinh[x]]] + Sin[Sinh[Tanh[x]]] - Sinh[Sin[Tanh[x]]] "
+        "- Sin[Tanh[Sinh[x]]] - Tanh[Sinh[Sin[x]]] - Tan[Sinh[Sin[x]]] - Sinh[Sin[Tan[x]]] "
+        "- Sin[Tan[Sinh[x]]] + Tan[Sin[Sinh[x]]] + Sin[Sinh[Tan[x]]] + Sinh[Tan[Sin[x]]]; "
+        "Abs[N[fp7[gp7[N[10^-5, 1000]]]/gp7[fp7[N[10^-5, 1000]]], 12] / "
+        "3.0603524556729171455`20*^9 - 1] < 10^-11", "True", 0);
+    /* the same terms summed by Total over a List (whose arguments share
+     * nothing) agree with the sum to its precision */
+    assert_eval_eq("Module[{y = N[10^-5, 1000], t}, "
+                   "t = {Tan[Tanh[Sin[y]]], Tanh[Sin[Tan[y]]], Sin[Tan[Tanh[y]]], -Tan[Sin[Tanh[y]]], "
+                   "-Sin[Tanh[Tan[y]]], -Tanh[Tan[Sin[y]]], -Tan[Sinh[Tanh[y]]], -Sinh[Tanh[Tan[y]]], "
+                   "-Tanh[Tan[Sinh[y]]], Tan[Tanh[Sinh[y]]], Tanh[Sinh[Tan[y]]], Sinh[Tan[Tanh[y]]]}; "
+                   "Abs[fp7[y] - Total[t]] <= 10^-990 Max[Abs[t]]]", "True", 0);
+    /* term by term: each shared call equals the call evaluated alone */
+    assert_eval_eq("Module[{y = N[2/7, 300]}, "
+                   "Sin[y] + Sinh[Sin[y]] + 2 Sin[y] + Cos[Sinh[Sin[y]]] - "
+                   "(3 (Sin[y] + 0) + (Sinh[Sin[y]] + 0) + (Cos[Sinh[Sin[y]]] + 0)) == 0 && "
+                   "Precision[Sin[y] + Sin[y]] == 300]", "True", 0);
+    /* equal values at different precisions are different calls */
+    assert_eval_eq("Module[{s = Sin[N[1/3, 50]] + Sin[N[1/3, 60]]}, "
+                   "Precision[s] == 50 && Abs[s - 2 Sin[N[1/3, 70]]] < 10^-48]", "True", 0);
+    /* a call that reports a message is not kept: both copies report it */
+    unsigned long before = mth_msg_fired_count();
+    assert_eval_eq("Module[{z = N[0, 30]}, Power[z, -1] + Power[z, -1]]", "Indeterminate", 0);
+    ASSERT(mth_msg_fired_count() - before >= 2);
+}
+
 static void test_n_composition_common_subexpressions(void) {
     assert_eval_eq(
         "f2[x_] = Tan[Sin[x]] - Sin[Tan[x]]; g2[x_] = Tan[Tanh[x]] - Tanh[Tan[x]]; "
@@ -894,6 +932,7 @@ int main(void) {
     TEST(test_mpfr_elementary_bit_identical);
     TEST(test_inverse_trig_numeric_arguments);
     TEST(test_n_composition_common_subexpressions);
+    TEST(test_eval_sum_common_numeric_calls);
 #endif
 
     printf("All numeric_tests passed.\n");

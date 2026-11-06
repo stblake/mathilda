@@ -1324,6 +1324,9 @@ void core_init(void) {
         if (d) d->eval_pure = 1;
     }
     tc_register_unwind_counter(eval_builtin_depth_counter());
+#ifdef USE_MPFR
+    tc_register_unwind_counter(eval_nfmemo_depth_counter());
+#endif
     tc_register_unwind_counter(solvepoly_roots_of_unity_off_counter());
 }
 
