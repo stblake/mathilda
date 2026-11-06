@@ -1597,6 +1597,50 @@ static int gf_shape_contains(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mp
 
 #define GF_QUOT_PRIMES 4096
 
+/* The quotients' images and CRT on worker threads. */
+typedef struct {
+    const fmpz_poly_struct* A; slong na; const fmpz_poly_struct* B; const fmpz_poly_struct* H;
+    slong D, L; const ulong* primes; ulong* res; char* good;
+} GfQuotJob;
+
+static void gf_quot_img_task(void* vctx, int64_t lo, int64_t hi, int chunk) {
+    (void)chunk;
+    GfQuotJob* J = vctx;
+    for (int64_t i = lo; i < hi; i++) {
+        ulong p = J->primes[i];
+        nmod_poly_t Hp, Bp, Tp, Ap;
+        nmod_poly_init(Hp, p); nmod_poly_init(Bp, p); nmod_poly_init(Tp, p); nmod_poly_init(Ap, p);
+        fmpz_poly_get_nmod_poly(Hp, J->H);
+        fmpz_poly_get_nmod_poly(Bp, J->B);
+        if (nmod_poly_invmod(Tp, Bp, Hp)) {
+            for (slong k = 0; k < J->na; k++) {
+                fmpz_poly_get_nmod_poly(Ap, J->A + k);
+                nmod_poly_mulmod(Ap, Ap, Tp, Hp);
+                for (slong j = 0; j < J->D; j++) J->res[i * J->L + k * J->D + j] = nmod_poly_get_coeff_ui(Ap, j);
+            }
+            J->good[i] = 1;
+        }
+        nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
+    }
+}
+
+typedef struct {
+    const fmpz_comb_struct* comb; const ulong* res; fmpz* crt; slong np, L;
+} GfCrtJob;
+
+static void gf_quot_crt_task(void* vctx, int64_t lo, int64_t hi, int chunk) {
+    (void)chunk;
+    GfCrtJob* J = vctx;
+    fmpz_comb_temp_t ct; fmpz_comb_temp_init(ct, J->comb);
+    ulong* col = flint_malloc((size_t)J->np * sizeof(ulong));
+    for (int64_t c = lo; c < hi; c++) {
+        for (slong i = 0; i < J->np; i++) col[i] = J->res[i * J->L + c];
+        fmpz_multi_CRT_ui(J->crt + c, col, J->comb, ct, 0);
+    }
+    flint_free(col);
+    fmpz_comb_temp_clear(ct);
+}
+
 /* One candidate from the residues: g_k = N / d with the running common
  * denominator, then exactly verified (H | N B - d A_k).  1 when every g_k
  * passed. */
@@ -1682,10 +1726,7 @@ static int gf_quotients(fmpq_poly_struct* g, const fmpz_poly_struct* A, slong na
     slong cap = GF_QUOT_PRIMES, rcap = 0, np = 0, nfail = 0;
     ulong* primes = NULL;
     ulong* res = NULL;                                  /* res[i L + c]: prime i, coefficient c */
-    ulong* col = NULL;
     fmpz* crt = _fmpz_vec_init(L);
-    nmod_poly_t Hp, Bp, Tp, Ap; nmod_poly_init(Hp, 2); nmod_poly_init(Bp, 2);
-    nmod_poly_init(Tp, 2); nmod_poly_init(Ap, 2);
     ulong p = UWORD(1) << 62;
     int ok = 0;
     while (!ok && np < cap) {
@@ -1694,37 +1735,44 @@ static int gf_quotients(fmpq_poly_struct* g, const fmpz_poly_struct* A, slong na
             rcap = want;
             primes = flint_realloc(primes, (size_t)rcap * sizeof(ulong));
             res = flint_realloc(res, (size_t)rcap * (size_t)L * sizeof(ulong));
-            col = flint_realloc(col, (size_t)rcap * sizeof(ulong));
         }
-        while (np < want && np < cap) {
-            if ((np & 63) == 63 && tc_deadline_passed()) goto out;
-            p = n_nextprime(p, 1);
-            if (fmpz_fdiv_ui(lc, p) == 0) continue;
-            nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
-            nmod_poly_init(Hp, p); nmod_poly_init(Bp, p); nmod_poly_init(Tp, p); nmod_poly_init(Ap, p);
-            fmpz_poly_get_nmod_poly(Hp, H);
-            fmpz_poly_get_nmod_poly(Bp, B);
-            if (!nmod_poly_invmod(Tp, Bp, Hp)) {            /* res(H, B) = 0 mod p */
-                if (np == 0 && ++nfail >= 8) goto out;
-                continue;
+        /* the images of the next primes, on worker threads */
+        {
+            if (tc_deadline_passed()) goto out;
+            slong m = 0;
+            while (np + m < want) {
+                p = n_nextprime(p, 1);
+                if (fmpz_fdiv_ui(lc, p) == 0) continue;
+                primes[np + m++] = p;
             }
-            for (slong k = 0; k < na; k++) {
-                fmpz_poly_get_nmod_poly(Ap, A + k);
-                nmod_poly_mulmod(Ap, Ap, Tp, Hp);
-                for (slong j = 0; j < D; j++) res[np * L + k * D + j] = nmod_poly_get_coeff_ui(Ap, j);
+            GfQuotJob J;
+            J.A = A; J.na = na; J.B = B; J.H = H; J.D = D; J.L = L;
+            J.primes = primes + np; J.res = res + np * L;
+            J.good = flint_calloc((size_t)(m ? m : 1), 1);
+            mp_parallel_for(gf_quot_img_task, &J, m, m > 4 ? 1e12 : 0.0);
+            /* compact: a prime with res(H, B) = 0 mod p is dropped */
+            slong w = np;
+            for (slong i = 0; i < m; i++) {
+                if (!J.good[i]) { nfail++; continue; }
+                if (w != np + i) {
+                    primes[w] = primes[np + i];
+                    memmove(res + w * L, res + (np + i) * L, (size_t)L * sizeof(ulong));
+                }
+                w++;
             }
-            primes[np++] = p;
+            flint_free(J.good);
+            np = w;
+            if (np == 0 && nfail >= 8) goto out;
         }
-        if (np == 0) break;
-        /* one CRT per coefficient over all np primes */
-        fmpz_comb_t comb; fmpz_comb_temp_t ct;
+        if (np == 0) { want = 8; continue; }
+        /* one CRT per coefficient over all np primes, on worker threads */
+        fmpz_comb_t comb;
         fmpz_comb_init(comb, primes, np);
-        fmpz_comb_temp_init(ct, comb);
-        for (slong c = 0; c < L; c++) {
-            for (slong i = 0; i < np; i++) col[i] = res[i * L + c];
-            fmpz_multi_CRT_ui(crt + c, col, comb, ct, 0);
+        {
+            GfCrtJob J;
+            J.comb = comb; J.res = res; J.crt = crt; J.np = np; J.L = L;
+            mp_parallel_for(gf_quot_crt_task, &J, L, (double)L * (double)np * (double)np > 1e7 ? 1e12 : 0.0);
         }
-        fmpz_comb_temp_clear(ct);
         fmpz_t M; fmpz_init_set_ui(M, 1);
         for (slong i = 0; i < np; i++) fmpz_mul_ui(M, M, primes[i]);
         double qc0 = GF_CLOCK();
@@ -1736,9 +1784,8 @@ static int gf_quotients(fmpq_poly_struct* g, const fmpz_poly_struct* A, slong na
         if (want > cap) want = cap;
     }
 out:
-    nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
     _fmpz_vec_clear(crt, L);
-    flint_free(res); flint_free(primes); flint_free(col);
+    flint_free(res); flint_free(primes);
     return ok;
 }
 
