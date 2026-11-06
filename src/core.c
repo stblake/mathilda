@@ -2963,6 +2963,18 @@ static bool is_numeric_quantity(Expr* e) {
             if (head_name == SYM_Root)
                 return root_trans_is_object(e) || root_algebraic_is_numeric(e);
 
+            /* StieltjesGamma[n] / StieltjesGamma[n, a] is a numeric constant for
+             * numeric arguments (N evaluates it) although the head carries
+             * NHoldFirst rather than NumericFunction -- the coefficients of
+             * Zeta's Laurent series at 1, so a limit answer built from them
+             * must count as a number. */
+            if (head_name == SYM_StieltjesGamma &&
+                (e->data.function.arg_count == 1 || e->data.function.arg_count == 2)) {
+                for (size_t i = 0; i < e->data.function.arg_count; i++)
+                    if (!is_numeric_quantity(e->data.function.args[i])) return false;
+                return true;
+            }
+
             SymbolDef* def = symtab_get_def(head_name);
             if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++) {

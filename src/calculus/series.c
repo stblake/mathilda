@@ -3198,6 +3198,46 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             if (z) return z;
             /* unsupported point/order: fall through to generic differentiation */
         }
+        /* ---- Zeta[u] with u(x0) = 1, u not the bare variable: the pole of
+         * zeta composed through u.  Taylor-via-D cannot expand it (every
+         * derivative is ComplexInfinity at the pole), so substitute the
+         * Laurent expansion that defines the Stieltjes constants,
+         *     zeta(u) = 1/w + Sum_{k>=0} (-1)^k gamma_k/k! w^k,  w = u - 1,
+         * truncated where w^k (valuation >= k, as w(x0) = 0) falls below the
+         * requested order.  Zeta[1 + 1/n] at n -> Infinity is this shape after
+         * the 1/n remap. ---- */
+        if (head && head == SYM_Zeta && e->data.function.arg_count == 1 &&
+            !expr_eq(e->data.function.args[0], ctx->x) &&
+            !expr_free_of(e->data.function.args[0], ctx->x) &&
+            ctx->order >= 0 && ctx->order <= 256) {
+            Expr* u = e->data.function.args[0];
+            arith_warnings_mute_push();
+            Expr* u0 = simp(mk_fn2("ReplaceAll", expr_copy(u),
+                                   mk_fn2("Rule", expr_copy(ctx->x), expr_copy(ctx->x0))));
+            arith_warnings_mute_pop();
+            bool at_pole = u0 && u0->type == EXPR_INTEGER && u0->data.integer == 1;
+            if (u0) expr_free(u0);
+            if (at_pole) {
+                Expr* w = simp(mk_plus(expr_copy(u), expr_new_integer(-1)));
+                Expr* rewrite = mk_power(expr_copy(w), expr_new_integer(-1));
+                int64_t M = ctx->order + 1;
+                for (int64_t k = 0; k <= M; k++) {
+                    Expr* c;
+                    if (k == 0) c = mk_symbol("EulerGamma");
+                    else c = mk_times(expr_new_integer((k % 2 == 0) ? 1 : -1),
+                                 mk_times(mk_power(mk_fn1("Factorial", expr_new_integer(k)),
+                                                   expr_new_integer(-1)),
+                                          mk_fn1("StieltjesGamma", expr_new_integer(k))));
+                    Expr* term = k == 0 ? c
+                        : mk_times(c, mk_power(expr_copy(w), expr_new_integer(k)));
+                    rewrite = mk_plus(rewrite, term);
+                }
+                expr_free(w);
+                SeriesObj* r = series_expand_nested(rewrite, ctx);
+                expr_free(rewrite);
+                if (r) return r;
+            }
+        }
         /* ---- Gamma / PolyGamma / Beta at a pole.  Taylor-via-D cannot expand
          * them there (every derivative is ComplexInfinity), so shift the argument
          * off the pole with the functional equations, leaving a factor analytic
@@ -5241,6 +5281,36 @@ static Expr* try_series_polygamma_at_infinity(Expr* f, Expr* x, int64_t n) {
     return build_recip_seriesdata(x, coefs, ncoef, m, n);
 }
 
+/* Asymptotic expansion of HarmonicNumber[x] at x = Infinity.  H_x =
+ * psi(x + 1) + EulerGamma = psi(x) + 1/x + EulerGamma, so (DLMF 5.11.2)
+ *
+ *   H_x ~ Log[x] + EulerGamma + 1/(2x) - Sum_{k>=1} B_{2k}/(2k) x^-(2k)
+ *       = Log[x] + EulerGamma + 1/(2x) - 1/(12 x^2) + 1/(120 x^4) - ...
+ *
+ * the digamma tail with its 1/x coefficient raised by 1.  Returns NULL unless
+ * f is exactly HarmonicNumber[x] in the expansion variable. */
+static Expr* try_series_harmonicnumber_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (!has_symbol_head(f, "HarmonicNumber") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    if (n < 1) n = 1;
+    size_t ncoef = (size_t)n;
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+    expr_free(coefs[0]);
+    coefs[0] = make_rational(1, 2);                       /* x^-1: +1/2 */
+    for (int64_t k = 1; ; k++) {
+        int64_t p = 2 * k;
+        if (p > n) break;
+        Expr* b2k = eval_and_free(mk_fn1("BernoulliB", expr_new_integer(2 * k)));
+        Expr* coef = eval_and_free(mk_times(b2k, make_rational(-1, 2 * k)));
+        expr_free(coefs[(size_t)(p - 1)]);
+        coefs[(size_t)(p - 1)] = coef;
+    }
+    Expr* tail = build_recip_seriesdata(x, coefs, ncoef, 1, n);
+    return mk_plus(mk_plus(mk_fn1("Log", expr_copy(x)), mk_symbol("EulerGamma")), tail);
+}
+
 /* Asymptotic form of Zeta[x] at x = Infinity. Zeta[x] = Sum_{k>=1} k^-x, and as
  * x -> +oo the tail collapses onto its leading terms: Zeta[x] = 1 + 2^-x + 3^-x
  * + ..., each k^-x = Exp[-x Log[k]] exponentially smaller than the previous.
@@ -7254,6 +7324,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return pg;
+        }
+        /* HarmonicNumber[x] at Infinity: Log[x] + EulerGamma growth head plus
+         * the digamma Laurent tail shifted by 1/x. */
+        Expr* hn = try_series_harmonicnumber_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (hn) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return hn;
         }
         /* Zeta[x] at Infinity: exponential-scale asymptotic 1 + 2^-x + 3^-x +
          * ... (truncated exp-log Dirichlet sum, not a 1/x Laurent series). */
