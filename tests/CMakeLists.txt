@@ -549,6 +549,7 @@ set(COMMON_SRC
     ../src/special_functions/chebyshev_t.c
     ../src/special_functions/chebyshev_u.c
     ../src/special_functions/laguerre_l.c
+    ../src/special_functions/jacobi_p.c
     ../src/special_functions/hermite_h.c
     ../src/special_functions/whittaker.c
     ../src/special_functions/hypergeometricu.c

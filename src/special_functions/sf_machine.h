@@ -71,6 +71,14 @@ bool sf_machine_laguerre_l_assoc_c(double n, double a, double xre, double xim,
                                    double* rr, double* ri);
 bool sf_machine_laguerre_l_c(double n, double xre, double xim,
                              double* rr, double* ri);
+/* JacobiP: the Jacobi polynomial P_n^(a,b)(x) for a non-negative integer degree
+ * n <= 1000 and real a, b, by the forward three-term recurrence. Declines for a
+ * non-integer/negative/large n, a degenerate recurrence (a + b a negative
+ * integer <= -2) or a non-finite result. */
+bool sf_machine_jacobi_p(double n, double a, double b, double x, double* out);
+/* JacobiP with a machine COMPLEX argument x = xre + i*xim (n, a, b real). */
+bool sf_machine_jacobi_p_c(double n, double a, double b, double xre, double xim,
+                           double* rr, double* ri);
 bool sf_machine_airy_ai(double x, double* out);        /* AiryAi */
 bool sf_machine_airy_bi(double x, double* out);        /* AiryBi */
 bool sf_machine_airy_ai_prime(double x, double* out);  /* AiryAiPrime */

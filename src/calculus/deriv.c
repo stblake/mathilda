@@ -2492,6 +2492,42 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return expr_new_function(mk_sym("Plus"), terms, nt);
         }
 
+        /* --- JacobiP[N, A, B, Z]:
+         *   d/dZ P_N^(A,B)(Z) = (N+A+B+1)/2 JacobiP[N-1, A+1, B+1, Z]  (DLMF 18.9.15).
+         *   d/dN, d/dA, d/dB have no elementary form (kept inert via Derivative). */
+        if (h == SYM_JacobiP && n == 4) {
+            Expr* terms[4];
+            size_t nt = 0;
+            for (int slot = 0; slot < 4; slot++) {
+                Expr* ds = deriv_of(args[slot], x, nonconsts);
+                if (is_lit_zero(ds)) { expr_free(ds); continue; }
+                Expr* piece;
+                if (slot == 3) {
+                    Expr* jp = expr_new_function(mk_sym("JacobiP"), (Expr*[]){
+                        mk_fn2("Plus", expr_copy(args[0]), mk_int(-1)),
+                        mk_fn2("Plus", expr_copy(args[1]), mk_int(1)),
+                        mk_fn2("Plus", expr_copy(args[2]), mk_int(1)),
+                        expr_copy(args[3]) }, 4);
+                    Expr* c = expr_new_function(mk_sym("Plus"), (Expr*[]){
+                        expr_copy(args[0]), expr_copy(args[1]), expr_copy(args[2]),
+                        mk_int(1) }, 4);
+                    piece = expr_new_function(mk_sym("Times"), (Expr*[]){
+                        mk_fn2("Rational", mk_int(1), mk_int(2)), c, jp }, 3);
+                } else {
+                    Expr* op = expr_new_function(mk_sym("Derivative"), (Expr*[]){
+                        mk_int(slot == 0), mk_int(slot == 1), mk_int(slot == 2), mk_int(0) }, 4);
+                    Expr* op_g = mk_fn_head1(op, mk_sym("JacobiP"));
+                    piece = expr_new_function(op_g, (Expr*[]){
+                        expr_copy(args[0]), expr_copy(args[1]), expr_copy(args[2]),
+                        expr_copy(args[3]) }, 4);
+                }
+                terms[nt++] = mk_fn2("Times", piece, ds);
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
+
         /* --- ExpIntegralE[N, Z]: d/dZ E_N(Z) = -E_(N-1)(Z) (DLMF 8.19.13);
          *     d/dN has no elementary form (kept inert via Derivative[1,0]). */
         if (h == SYM_ExpIntegralE && n == 2) {

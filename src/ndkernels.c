@@ -963,6 +963,15 @@ static bool ndk_LaguerreL_n(const double* re, const double* im, size_t n,
     double v; if (!sf_machine_laguerre_l_assoc(re[0], re[1], re[2], &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+/* JacobiP[n, a, b, x]: re[0..3] = n, a, b, x. Real n, a, b; x real or complex,
+ * through sf_machine_jacobi_p[_c] -- the scalar builtin's machine helper. */
+static bool ndk_JacobiP_n(const double* re, const double* im, size_t n,
+                          double* rr, double* ri) {
+    if (n != 4 || im[0] || im[1] || im[2]) return false;
+    if (im[3] != 0.0) return sf_machine_jacobi_p_c(re[0], re[1], re[2], re[3], im[3], rr, ri);
+    double v; if (!sf_machine_jacobi_p(re[0], re[1], re[2], re[3], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
 /* WhittakerM[k, m, z]: re[0] = k, re[1] = m, re[2] = z. Real only (the Compile VM
  * consumes it); a complex argument falls to the interpreter. */
 static bool ndk_WhittakerM_n(const double* re, const double* im, size_t n,
@@ -1065,6 +1074,7 @@ static const NDNaryKernel NDKN_DirichletL          = { ndk_DirichletL_n, 3, fals
 static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
 static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true };
+static const NDNaryKernel NDKN_JacobiP             = { ndk_JacobiP_n, 4, true };
 static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true };
 static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
 static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
@@ -1168,6 +1178,7 @@ void ndkernels_init(void) {
     REG_N(HypergeometricPFQ);
     REG_N(MeijerG);     /* MeijerG[{{..},{..}}, {{..},{..}}, z(, r)] for Compile[] */
     REG_N(LaguerreL);   /* generalized LaguerreL[n, a, x] for Compile[] */
+    REG_N(JacobiP);     /* JacobiP[n, a, b, x]: buffers and Compile[] */
     REG_N(WhittakerM);  /* WhittakerM[k, m, z] for Compile[] */
     REG_N(MathieuC);       /* MathieuC[a, q, z] for Compile[] */
     REG_N(MathieuCPrime);  /* MathieuCPrime[a, q, z] for Compile[] */

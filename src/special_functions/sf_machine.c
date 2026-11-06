@@ -472,6 +472,72 @@ bool sf_machine_laguerre_l_c(double n, double xre, double xim,
     return sf_machine_laguerre_l_assoc_c(n, 0.0, xre, xim, rr, ri);
 }
 
+/* JacobiP[n, a, b, x] for a non-negative integer degree n and real parameters
+ * a, b, by the forward three-term recurrence (DLMF 18.9.1-2)
+ *   P_0 = 1,  P_1 = (a + 1) + (a + b + 2)(x - 1)/2,
+ *   2k (k+s)(2k+s-2) P_k = (2k+s-1) [(2k+s)(2k+s-2) x + a^2 - b^2] P_{k-1}
+ *                          - 2 (k+a-1)(k+b-1)(2k+s) P_{k-2},     s = a + b,
+ * which is stable upward on and off [-1, 1] (the polynomial is the dominant
+ * solution off the interval and the recurrence is the orthogonality one on it).
+ * The leading coefficient 2k(k+s)(2k+s-2) vanishes only for a negative integer
+ * s <= -2; the helper then declines, as it does for a non-integer, negative or
+ * very large degree or a non-finite result, and the caller takes the MPFR /
+ * hypergeometric path. a = b = 0 is LegendreP, a = b = -1/2 a multiple of
+ * ChebyshevT. */
+bool sf_machine_jacobi_p(double n, double a, double b, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    if (!isfinite(a) || !isfinite(b) || !isfinite(x)) return false;
+    int N = (int)n;
+    double p0 = 1.0;
+    if (N == 0) { *out = p0; return true; }
+    double s = a + b;
+    double p1 = (a + 1.0) + (s + 2.0) * (x - 1.0) * 0.5;
+    if (N == 1) { *out = p1; return isfinite(p1); }
+    double d = a * a - b * b;
+    for (int k = 2; k <= N; k++) {
+        double t = 2.0 * k + s;                      /* 2k + s */
+        double c1 = 2.0 * k * (k + s) * (t - 2.0);
+        if (c1 == 0.0) return false;
+        double c2 = (t - 1.0) * (t * (t - 2.0) * x + d);
+        double c3 = 2.0 * (k + a - 1.0) * (k + b - 1.0) * t;
+        double pk = (c2 * p1 - c3 * p0) / c1;
+        p0 = p1; p1 = pk;
+    }
+    *out = p1;
+    return isfinite(p1);
+}
+
+/* JacobiP with a machine COMPLEX argument x = xre + i*xim (real n, a, b), by
+ * the same recurrence carried in two doubles (manual re/im, no <complex.h>). */
+bool sf_machine_jacobi_p_c(double n, double a, double b, double xre, double xim,
+                           double* rr, double* ri) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    if (!isfinite(a) || !isfinite(b)) return false;
+    int N = (int)n;
+    if (N == 0) { *rr = 1.0; *ri = 0.0; return true; }
+    double s = a + b;
+    double p0r = 1.0, p0i = 0.0;
+    double p1r = (a + 1.0) + (s + 2.0) * (xre - 1.0) * 0.5;
+    double p1i = (s + 2.0) * xim * 0.5;
+    if (N == 1) { *rr = p1r; *ri = p1i; return isfinite(p1r) && isfinite(p1i); }
+    double d = a * a - b * b;
+    for (int k = 2; k <= N; k++) {
+        double t = 2.0 * k + s;
+        double c1 = 2.0 * k * (k + s) * (t - 2.0);
+        if (c1 == 0.0) return false;
+        double q = (t - 1.0) * t * (t - 2.0);
+        double c2r = q * xre + (t - 1.0) * d, c2i = q * xim;   /* complex c2 */
+        double c3 = 2.0 * (k + a - 1.0) * (k + b - 1.0) * t;
+        double inv = 1.0 / c1;
+        double pkr = ((c2r * p1r - c2i * p1i) - c3 * p0r) * inv;
+        double pki = ((c2r * p1i + c2i * p1r) - c3 * p0i) * inv;
+        p0r = p1r; p0i = p1i;
+        p1r = pkr; p1i = pki;
+    }
+    *rr = p1r; *ri = p1i;
+    return isfinite(p1r) && isfinite(p1i);
+}
+
 /* LegendreQ (sf_machine_legendre_q) lives in sf_machine_plog.c with its complex twin. */
 
 /* ---- Airy ---------------------------------------------------------------

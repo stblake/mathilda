@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -4081,6 +4081,40 @@ erf·erfi formula: its lattice needs the integral of the duplication-formula
 function, `∫ y² (e^(y²) erf y − e^(−y²) erfi y) dy`, which `Integrate`
 declines (it is elementary in erf y · erfi y only after integration by
 parts), and no contiguity walk crosses the lower 1/2.
+
+## JacobiP
+
+`JacobiP[n, a, b, x]` gives the Jacobi polynomial `P_n^(a,b)(x)`, orthogonal on
+`[-1, 1]` with weight `(1-x)^a (1+x)^b`:
+
+    P_n^(a,b)(x) = Σ_{l=0}^n (n+a+b+1)_l (a+l+1)_(n-l) / (l! (n-l)!) ((x-1)/2)^l
+                 = Binomial[n+a, n] 2F1(-n, n+a+b+1; a+1; (1-x)/2)        (DLMF 18.5.7)
+
+The sum form has no division by a parameter, so it is the polynomial for every
+`a`, `b` (including a negative integer `a` in `[-n, -1]`).
+
+- **Exact polynomial.** An integer `n ≥ 0` with exact rational `a`, `b` gives the
+  expanded polynomial with exact rational coefficients (`O(n)` coefficient
+  operations, then Horner in `(x-1)/2`); an exact rational `x` evaluates it
+  exactly. A symbolic `a` or `b` expands the sum form (degree ≤ 40):
+  `JacobiP[1, a, b, x] = (a - b)/2 + (a + b + 2) x/2`. `JacobiP[0, a, b, x] = 1`
+  and `JacobiP[n, a, b, 1] = Binomial[n + a, n]`. `a = b = 0` is `LegendreP`.
+- **Numerics.** An integer degree with an inexact argument runs the three-term
+  recurrence (DLMF 18.9.2) -- in `double` (`sf_machine_jacobi_p[_c]`) at machine
+  precision, the helper the packed / `NDArray` kernel and `Compile[]` share (exact
+  rational parameters enter as their nearest doubles), else in MPFR, real or
+  complex (complex `a`, `b` too) -- never the expanded polynomial, whose
+  coefficients cancel catastrophically near `x = 1`. A non-integer degree, or the
+  degenerate recurrence `a + b ∈ {-2, -3, …}`, evaluates
+  `Binomial[n+a, n] Hypergeometric2F1[…]`.
+  `JacobiP[300, 3, 1/2, 0.9998] = 100955.529716…` (1 µs),
+  `JacobiP[2.5, 1, 2, 0.3] = -0.814842`.
+- **Derivative.** `D[JacobiP[n, a, b, x], x] = (n + a + b + 1)/2 JacobiP[n - 1,
+  a + 1, b + 1, x]` (DLMF 18.9.15); derivatives in `n`, `a`, `b` stay inert.
+- **Surfaces.** Scalar, `List`, packed `List`, `NDArray` and `Compile[]` (scalar
+  and rank-1) agree bit for bit (`REG_N` four-argument kernel).
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 ## LegendreP
 

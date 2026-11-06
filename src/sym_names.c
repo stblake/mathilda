@@ -242,6 +242,7 @@ const char* SYM_LucasL = NULL;
 const char* SYM_LegendreP = NULL;
 const char* SYM_LegendreQ = NULL;
 const char* SYM_LaguerreL = NULL;
+const char* SYM_JacobiP = NULL;
 const char* SYM_FindIntegerNullVector = NULL;
 const char* SYM_FindMaximum = NULL;
 const char* SYM_FindMinimum = NULL;
@@ -1380,6 +1381,7 @@ void sym_names_init(void) {
     SYM_LegendreP                  = intern_symbol("LegendreP");
     SYM_LegendreQ                  = intern_symbol("LegendreQ");
     SYM_LaguerreL                  = intern_symbol("LaguerreL");
+    SYM_JacobiP                    = intern_symbol("JacobiP");
     SYM_LucasL                     = intern_symbol("LucasL");
     SYM_FindIntegerNullVector      = intern_symbol("FindIntegerNullVector");
     SYM_FindMaximum                = intern_symbol("FindMaximum");

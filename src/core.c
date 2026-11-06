@@ -68,6 +68,7 @@
 #include "chebyshev_t.h"
 #include "chebyshev_u.h"
 #include "laguerre_l.h"
+#include "jacobi_p.h"
 #include "hermite_h.h"
 #include "whittaker.h"
 #include "mathieu.h"
@@ -933,6 +934,7 @@ void core_init(void) {
     chebyshev_t_init();
     chebyshev_u_init();
     laguerre_l_init();
+    jacobi_p_init();
     hermite_h_init();
     whittaker_init();
     mathieu_init();
