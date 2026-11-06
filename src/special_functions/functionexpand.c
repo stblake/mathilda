@@ -31,6 +31,11 @@
  *                Pi^2/4 Log[2] - I Pi Log[2]^2/2 (inversion formula; PolyLog's
  *                own branch, Im < 0 on the cut).
  *
+ *   PolyLog[2, z], z an exact number one anharmonic map (1 - z, 1/z,
+ *                z/(z - 1), ...) away from a root of unity, 1/2 or 2:
+ *                Li_2((1 + I)/2) = 5 Pi^2/96 - Log[2]^2/8 + I (Catalan -
+ *                Pi Log[2]/8), Li_2(1 + I), Li_2(1/2 - I/2), ...
+ *
  *   Log[w] -> I Pi r and Log[1 + w] -> Log[2 Cos[Pi r/2]] + I Pi r/2
  *                (-1 < r < 1) for the same roots of unity w.
  *
@@ -171,6 +176,7 @@ static bool fe_root_of_unity(const Expr* w, int64_t* rn, int64_t* rd) {
 enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_PFQ = 8, FE_ALL = 15 };
 static Expr* fe_walk(const Expr* e, bool* changed, int which);
 static Expr* fe_expand(const Expr* e);
+static Expr* fe_log_reciprocal(const Expr* e, bool* changed);
 
 /* ------------------------------------------------------------------ */
 /*  PolyGamma at 1/2, 1/4, 3/4                                         */
@@ -349,6 +355,99 @@ static Expr* fe_polylog_two(const Expr* e) {
     return NULL;
 }
 
+/* PolyLog[2, z] at an exact Gaussian rational z whose orbit under the six
+ * anharmonic maps z -> {1 - z, 1/z, z/(z - 1), 1/(1 - z), (z - 1)/z} meets a
+ * closed point w: a root of unity (fe_polylog_root), 1/2 or 2.  Li_2(z) is
+ * then Li_2(w) plus elementary terms, by the reflection, Landen and inversion
+ * formulas and their compositions:
+ *     w = 1 - z:        Pi^2/6 - Log[z] Log[1 - z] - Li_2(w)
+ *     w = z/(z - 1):    -Log[1 - z]^2/2 - Li_2(w)
+ *     w = 1/z:          -Pi^2/6 - Log[-z]^2/2 - Li_2(w)
+ *     w = 1/(1 - z):    Pi^2/3 - Log[z] Log[1 - z] + Log[z - 1]^2/2 + Li_2(w)
+ *     w = (z - 1)/z:    -Pi^2/3 - Log[-z]^2/2 + Log[1/z] Log[1 - 1/z] + Li_2(w)
+ * Each holds off the branch cuts of the logs and dilogarithms involved; rather
+ * than track the cuts case by case, the candidate (its Logs split by
+ * ComplexExpand into real and imaginary parts) is accepted only when it agrees
+ * with PolyLog[2, z] to 30 digits -- a wrong branch is off by a multiple of
+ * 2 Pi I Log or Pi^2, never close.  Li_2((1 + I)/2) = 5 Pi^2/96 - Log[2]^2/8
+ * + I (Catalan - Pi Log[2]/8), Li_2(1 + I) = Pi^2/16 + I (Catalan + Pi Log[2]/4).
+ * NULL (nothing owned) when no image is closed. */
+static int fe_li2_depth = 0;
+
+static bool fe_li2_closed_point(const Expr* w) {
+    int64_t rn, rd, n, d;
+    if (fe_root_of_unity(w, &rn, &rd)) return true;
+    if (fe_rational(w, &n, &d) && ((n == 1 && d == 2) || (n == 2 && d == 1))) return true;
+    return false;
+}
+
+/* An exact numeric constant (rationals, Gaussian rationals, radicals, roots
+ * of unity): NumericQ with infinite precision. */
+static bool fe_exact_numeric(const Expr* z) {
+    int64_t n, d;
+    if (fe_rational(z, &n, &d)) return true;
+    if (z->type != EXPR_FUNCTION) return false;
+    Expr* zc = expr_copy((Expr*)z);
+    Expr* ok = fe_apply("(NumericQ[#1] && Precision[#1] === Infinity)&", &zc, 1);
+    expr_free(zc);
+    bool r = ok && ok->type == EXPR_SYMBOL && ok->data.symbol.name == SYM_True;
+    expr_free(ok);
+    return r;
+}
+
+static Expr* fe_polylog2_anharmonic(const Expr* e) {
+    if (!fe_is_head(e, SYM_PolyLog) || e->data.function.arg_count != 2) return NULL;
+    const Expr* ne = e->data.function.args[0];
+    const Expr* z = e->data.function.args[1];
+    if (ne->type != EXPR_INTEGER || ne->data.integer != 2) return NULL;
+    if (fe_li2_depth > 0) return NULL;
+    if (fe_li2_closed_point(z) || !fe_exact_numeric(z)) return NULL;
+    static const char* const maps[5] = {
+        "(1 - #1)&", "(#1/(#1 - 1))&", "(1/#1)&", "(1/(1 - #1))&", "((#1 - 1)/#1)&" };
+    static const char* const forms[5] = {
+        "(Pi^2/6 - Log[#1] Log[1 - #1] - PolyLog[2, #2])&",
+        "(-Log[1 - #1]^2/2 - PolyLog[2, #2])&",
+        "(-Pi^2/6 - Log[-#1]^2/2 - PolyLog[2, #2])&",
+        "(Pi^2/3 - Log[#1] Log[1 - #1] + Log[#1 - 1]^2/2 + PolyLog[2, #2])&",
+        "(-Pi^2/3 - Log[-#1]^2/2 + Log[1/#1] Log[1 - 1/#1] + PolyLog[2, #2])&" };
+    Expr* zc = expr_copy((Expr*)z);
+    Expr* out = NULL;
+    fe_li2_depth++;
+    for (int k = 0; k < 5 && !out; k++) {
+        /* z = 0 or 1 make some maps singular; those z never get here (they
+         * evaluate), and 1/0 would only yield ComplexInfinity, not closed. */
+        Expr* w = fe_apply(maps[k], &zc, 1);
+        if (!w || !fe_li2_closed_point(w)) { expr_free(w); continue; }
+        Expr* args[2] = { zc, w };
+        Expr* cand = fe_apply(forms[k], args, 2);
+        expr_free(w);
+        if (!cand) continue;
+        bool ch = false;
+        Expr* red = fe_walk(cand, &ch, FE_ROOTS);
+        expr_free(cand);
+        Expr* t0 = fe_apply("(ComplexExpand[#1])&", &red, 1);
+        expr_free(red);
+        if (!t0) continue;
+        bool lr = false;                      /* Log[1/2] -> -Log[2] */
+        Expr* t1 = fe_log_reciprocal(t0, &lr);
+        expr_free(t0);
+        Expr* tidy = fe_expand(t1);
+        expr_free(t1);
+        if (!tidy) continue;
+        Expr* chk[2] = { tidy, zc };
+        /* both sides at 40 digits, then compared: N of the (cancelling)
+         * difference itself would chase 40 significant digits of ~0 */
+        Expr* ok = fe_apply("(FreeQ[#1, PolyLog] && "
+                            "TrueQ[Abs[N[#1, 40] - N[PolyLog[2, #2], 40]] < 10^-30])&", chk, 2);
+        bool good = ok && ok->type == EXPR_SYMBOL && ok->data.symbol.name == SYM_True;
+        expr_free(ok);
+        if (good) out = tidy; else expr_free(tidy);
+    }
+    fe_li2_depth--;
+    expr_free(zc);
+    return out;
+}
+
 /* Log[w] -> I Pi r, Log[1 + w] -> Log[2 Cos[Pi r/2]] + I Pi r/2 (|r| < 1). */
 static Expr* fe_log_root(const Expr* e) {
     if (!fe_is_head(e, SYM_Log) || e->data.function.arg_count != 1) return NULL;
@@ -454,6 +553,7 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     if (!s && (which & FE_ROOTS)) {
         s = fe_polylog_root(node);
         if (!s) s = fe_polylog_two(node);
+        if (!s) s = fe_polylog2_anharmonic(node);
         if (!s) s = fe_log_root(node);
     }
     if (!s && (which & (FE_ROOTS | FE_PGAMMA))) s = fe_polygamma_closed(node);
@@ -630,6 +730,76 @@ static Expr* fe_log_reciprocal(const Expr* e, bool* changed) {
     return out;
 }
 
+/* Expand[e] with every Log of an exact Gaussian rational split into real and
+ * imaginary parts (Log[1 + I] -> Log[2]/2 + I Pi/4) and every Log[1/n]
+ * written -Log[n]: endpoint values of a ladder in x +- I come in conjugate
+ * pairs whose imaginary parts then cancel, and Log[1/2] merges with Log[2].
+ * Owned result (never NULL unless evaluation failed). */
+static Expr* fe_tidy_logs(const Expr* e) {
+    Expr* ec = expr_copy((Expr*)e);
+    Expr* g = fe_apply("(#1 /. Log[c_Complex /; Precision[c] === Infinity] :> "
+                       "ComplexExpand[Log[c]])&", &ec, 1);
+    expr_free(ec);
+    bool changed = false;
+    Expr* c0 = fe_log_reciprocal(g ? g : e, &changed);
+    expr_free(g);
+    Expr* c = fe_expand(c0);
+    expr_free(c0);
+    return c;
+}
+
+/* Conjugate pairs of trilogarithms, c (Li_3(z) + Li_3(conj z)) = 2 c Re Li_3(z),
+ * closed when z or 1/z lies on the line Re = 1/2 and the third point of
+ * Landen's identity is closed (a root of unity):
+ *     Li_3(w) + Li_3(1 - w) + Li_3(1 - 1/w)
+ *         = Zeta[3] + Log[w]^3/6 + Pi^2/6 Log[w] - Log[w]^2 Log[1 - w]/2,
+ * with 1 - w = conj w on that line; for Re 1/z = 1/2 the inversion formula
+ *     Li_3(z) = Li_3(1/z) - Pi^2/6 Log[-z] - Log[-z]^3/6
+ * first moves z there.  Li_3(1 + I) + Li_3(1 - I) = Pi^2 Log[2]/16 +
+ * 35 Zeta[3]/32 -- the pair a ladder in 1 +- I x leaves at x = 1
+ * (Int_0^1 Log[1 + x^2]^2/x = Zeta[3]/8).  The real closed form is accepted
+ * only when it agrees with the pair to 30 digits.  Owned result: the
+ * rewritten r, or a copy of r when no pair closed. */
+static Expr* fe_li3_conjugate_pairs(const Expr* r) {
+    Expr* rc = expr_copy((Expr*)r);
+    Expr* zs = fe_apply("(Union[Cases[#1, PolyLog[3, z_ /; NumericQ[z] && "
+                        "Precision[z] === Infinity && TrueQ[Im[z] > 0]] :> z, {0, Infinity}]])&",
+                        &rc, 1);
+    if (!zs || !fe_is_head(zs, SYM_List) || zs->data.function.arg_count == 0) {
+        expr_free(zs); return rc;
+    }
+    for (size_t i = 0; i < zs->data.function.arg_count; i++) {
+        Expr* z = zs->data.function.args[i];
+        Expr* cand = fe_apply(
+            "(With[{z = #1, e3 = Function[u, Log[u]^3/6 + Pi^2/6 Log[u] - Log[u]^2 Log[1 - u]/2]},"
+            " Which[Re[z] == 1/2, Zeta[3] + e3[z] - PolyLog[3, 1 - 1/z],"
+            "  Re[1/z] == 1/2, Zeta[3] + e3[1/z] - PolyLog[3, 1 - z]"
+            "    - (Pi^2/6 Log[-z] + Log[-z]^3/6) - (Pi^2/6 Log[-Conjugate[z]] + Log[-Conjugate[z]]^3/6),"
+            "  True, $Failed]])&", &z, 1);
+        if (!cand || cand->type == EXPR_SYMBOL) { expr_free(cand); continue; }
+        bool ch = false;
+        Expr* red = fe_walk(cand, &ch, FE_ROOTS);
+        expr_free(cand);
+        Expr* re = fe_apply("(Expand[ComplexExpand[Re[#1 /. Log[c_Complex /; Precision[c] === Infinity] :> "
+                            "ComplexExpand[Log[c]]]]])&", &red, 1);
+        expr_free(red);
+        if (!re) continue;
+        Expr* args[3] = { rc, z, re };
+        Expr* nr = fe_apply(
+            "(With[{c1 = Coefficient[Expand[#1], PolyLog[3, #2]],"
+            "       c2 = Coefficient[Expand[#1], PolyLog[3, Conjugate[#2]]]},"
+            " If[c1 =!= 0 && FreeQ[c1, PolyLog] && Expand[c1 - c2] === 0 && FreeQ[#3, PolyLog] &&"
+            "    TrueQ[Abs[N[#3, 40] - N[PolyLog[3, #2] + PolyLog[3, Conjugate[#2]], 40]] < 10^-30],"
+            "  Expand[Expand[#1] - c1 (PolyLog[3, #2] + PolyLog[3, Conjugate[#2]]) + c1 #3], $Failed]])&",
+            args, 3);
+        expr_free(re);
+        if (nr && nr->type != EXPR_SYMBOL) { expr_free(rc); rc = nr; }
+        else expr_free(nr);
+    }
+    expr_free(zs);
+    return rc;
+}
+
 Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
     if (!r) return r;
     /* (1) MeijerG -> named functions. Accepted only when it leaves no MeijerG,
@@ -675,9 +845,18 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
      * PolyLog[3, I] + PolyLog[3, -I] - Zeta[3]/4 -> -7 Zeta[3]/16. */
     if (fe_count_head(r, SYM_PolyLog) + fe_count_head(r, SYM_Log) > 0) {
         bool changed = false;
-        Expr* c = fe_walk(r, &changed, FE_ROOTS);
-        if (changed) { Expr* x = fe_expand(c); expr_free(c); c = x; }
-        if (changed && fe_leaf_count(c) < fe_leaf_count(r) &&
+        Expr* rp = fe_li3_conjugate_pairs(r);
+        if (!expr_eq(rp, r)) changed = true;
+        Expr* c = fe_walk(rp, &changed, FE_ROOTS);
+        expr_free(rp);
+        if (changed) { Expr* x = fe_tidy_logs(c); expr_free(c); c = x; }
+        /* compared with r tidied the same way, so that the logs a closed
+         * dilogarithm brings (Log[1/2], Log[1 + I]) are not counted against it */
+        Expr* rt = changed ? fe_tidy_logs(r) : NULL;
+        size_t rsz = fe_leaf_count(r);
+        if (rt && fe_leaf_count(rt) < rsz) rsz = fe_leaf_count(rt);
+        expr_free(rt);
+        if (changed && c && fe_leaf_count(c) < rsz &&
             fe_count_head(c, SYM_PolyGamma) <= fe_count_head(r, SYM_PolyGamma)) {
             expr_free(r); r = c;
         } else {
@@ -690,10 +869,7 @@ Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
      * Expand merge the like terms; accepted only when the result is strictly
      * smaller, so a value that is not a sum of such groups keeps its form. */
     if (fe_count_head(r, SYM_Log) > 0) {
-        bool changed = false;
-        Expr* c0 = fe_log_reciprocal(r, &changed);
-        Expr* c = fe_expand(c0);
-        expr_free(c0);
+        Expr* c = fe_tidy_logs(r);
         if (c && fe_leaf_count(c) < fe_leaf_count(r)) {
             expr_free(r); r = c;
         } else {

@@ -1989,8 +1989,11 @@ Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
   1/2 < |z| with |ln z| < 2π. At **arbitrary precision** with a real order and real
   −1 < z < 1 (no branch cut), evaluation routes through arb's `acb_polylog`
   (`flint_num_polylog`), ~45× faster than the MPFR series and faster than
-  the reference; machine precision, complex z, |z| ≥ 1, and the real cut [1, ∞) keep
-  the branch-cut-careful MPFR paths. The required ζ values for a complex order use
+  the reference. So does every other z off the cut at arbitrary precision (non-real
+  z, or real z ≤ −1): the cut is [1, ∞) only, so the principal value is unique
+  there and arb's agrees; `N[PolyLog[2, (1 + I)/2], 40]` takes ~1 ms where the
+  MPFR zeta expansion (one `mpfr_zeta` per term) took 0.3–0.6 s. Machine
+  precision and the real cut [1, ∞) keep the branch-cut-careful MPFR paths. The required ζ values for a complex order use
   the ζ functional equation in the left half-plane to stay well-conditioned. For the
   common **integer order** on the real machine/packed path, the Jonquière series'
   ζ(s−k) are constants, read from `static const` tables (ζ at integers ≥2, and the
@@ -3859,6 +3862,20 @@ ones, bottom-up (`src/special_functions/functionexpand.c`):
   `Li_n(1/2)` closed, on the branch PolyLog evaluates (the value approached from
   below the cut, so the imaginary part is negative). Automatic evaluation leaves
   both as they are.
+- **PolyLog[2, z]**, z an exact number one anharmonic map (`1 - z`, `1/z`,
+  `z/(z - 1)`, `1/(1 - z)`, `(z - 1)/z`) away from a root of unity, `1/2` or `2`,
+  by the reflection, Landen and inversion formulas; each candidate is accepted
+  only when it matches `PolyLog[2, z]` to 30 digits (a wrong branch is off by a
+  multiple of `2 Pi I Log` or `Pi^2`). `FunctionExpand[PolyLog[2, (1 + I)/2]]` =
+  `I Catalan + 5/96 Pi^2 - I/8 Pi Log[2] - 1/8 Log[2]^2`,
+  `FunctionExpand[PolyLog[2, 1 + I]]` = `I Catalan + Pi^2/16 + I/4 Pi Log[2]`;
+  `PolyLog[2, 2 I]` stays.
+- In the final pass of a definite integral only: a conjugate pair
+  `c (PolyLog[3, z] + PolyLog[3, Conjugate[z]])` with `Re z = 1/2` or
+  `Re 1/z = 1/2` becomes `2 c Re Li_3(z)` by Landen's three-term identity (and
+  inversion), checked to 30 digits: `Li_3(1 + I) + Li_3(1 - I) =
+  Pi^2 Log[2]/16 + 35 Zeta[3]/32`. The log of an exact Gaussian rational is split
+  into real and imaginary parts there too.
 - **Log[w]** → `I Pi r`, **Log[1 + w]** → `Log[2 Cos[Pi r/2]] + I Pi r/2`
   (`|r| < 1`) for the same roots of unity.
 - **PolyGamma[m, x]**, `x ∈ {1/2, 1/4, 3/4}`, via `ζ(n, 1/2) = (2^n−1) ζ(n)` and

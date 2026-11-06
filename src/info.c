@@ -1561,6 +1561,9 @@ void info_init(void) {
         "(|z| < 1) and outer (|z| > 1) expansions; the log case is left alone.\n"
         "PolyLog[n, w] at an exact root of unity w = E^(I Pi r) (integer n >= 2)\n"
         "becomes Re + I Im in Pi^n, Zeta[n], Catalan, or PolyGamma terms;\n"
+        "PolyLog[2, z], z an exact number one anharmonic map (1 - z, 1/z,\n"
+        "z/(z - 1), ...) from such a w, 1/2 or 2, is closed by the reflection,\n"
+        "Landen and inversion formulas (PolyLog[2, (1 + I)/2], PolyLog[2, 1 + I]);\n"
         "Log[w] and Log[1 + w] become I Pi r and Log[2 Cos[Pi r/2]] + I Pi r/2;\n"
         "PolyGamma[m, 1/2 | 1/4 | 3/4] uses Zeta, Catalan and Pi where closed.\n"
         "FunctionExpand[expr, assum] accepts assumptions (not yet used).");
