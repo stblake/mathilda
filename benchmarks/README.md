@@ -535,6 +535,21 @@ folders, so adding one is a folder and nothing else.
 |---|---|---|
 | 123 | `native-vs-m` | The recursive Dirac trace from Woxi issue #2142 (Rolf Mertig's `diracTr`, verbatim) against `` Experimental`FeynCalc`DiracTr ``, for n = 8, 10, 12, 14 (13!! = 135135 terms), C alone at n = 16 (2027025 terms), and a repeated-index n = 12 trace. Also the issue's `Cases[_, _g, Infinity]` timing on both results. Checks: length, distinct `g`, and the coefficient sum, plus `C === .m`. `medium.frm`, the issue's FORM program, sits alongside for a by-hand FORM column (`time form -q medium.frm`), since the runner has no FORM driver. |
 
+## The ISSAC '97 Systems Challenge (126–135)
+
+One experiment per problem of the ISSAC '97 Systems Challenge, each timing every
+method of the 1997 solution notebook at machine precision, at arbitrary precision
+(the notebook's and a higher one), and exactly where the problem is exact: the
+256 × 256 Hilbert condition number, ∫₁⁶ x^x^x, a barely convergent series, the
+middle coefficient of a degree-6000 polynomial, the largest zero of L₁₀₀₀, a lex
+Gröbner basis, a nested-trig limit with deep cancellation, a PolyLog integral, an
+integral-operator eigenvalue and an ODE blow-up point. Group H. Shared helpers
+(`sig` checks — leading digits and exponent — and a `TimeConstrained`-capped
+`run`) are in `issac97_common.m`; each file sets a `(* bench-timeout: N *)`
+floor that `run_all.py` honours for that file only. The answers, the first run
+and the deficiency register (wrong answers, option handling, absences,
+bottlenecks, each with its fix status) are in [`ISSAC97.md`](ISSAC97.md).
+
 ## Meijer G definite integrals (125)
 
 | # | experiment | what it measures |

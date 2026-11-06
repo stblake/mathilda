@@ -1,3 +1,13 @@
+# ISSAC '97 Systems Challenge benchmark + fixes (from 2026-11-06, v0.6225)
+
+Plan: ~/.claude/plans/let-s-review-the-mathematica-hazy-bumblebee.md
+Benchmark: benchmarks/126-135 (issac97), register + status in benchmarks/ISSAC97.md (the source of truth; update its status column per fix).
+- [x] Step 1: experiments 126-135, run_all bench-timeout + group H, first run both columns
+- [~] Tier 1 wrong answers: W5 NSum (v0.6226); W1-W4 NIntegrate, W6 LinearSolve (agents)
+- [~] Tier 2 options/args: A1-A9 (agents: FindRoot, NDSolve/FindMinimum, linalg)
+- [ ] Tier 3 absences: X1 PolyLog Integrate, X2 Limit (agent), X3 LUBackSubstitution (agent), X4 GaussianQuadratureWeights, X5 FunctionInterpolation
+- [~] Tier 4 bottlenecks: B1-B3 Series/Residue (agent), B4-B5 MPFR linalg (agent), B6 RootCount, B7 NSolve deg 1000, B8 inexact GB, B9, B10
+
 # Roach algorithms: Integrate[..., Method -> "Roach"] (from 2026-11-05, v0.6189)
 
 Plan: ~/.claude/plans/pasted-content-id-62fd-solving-integral-lexical-sparrow.md

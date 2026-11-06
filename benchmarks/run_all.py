@@ -170,8 +170,30 @@ def discover(only=None):
             continue
         out.append({"num": num, "slug": slug, "name": name, "dir": d,
                     "m": mfile, "py": pyfile, "gp": gpfile, "mac": macfile,
-                    "group": group_of(int(num))})
+                    "group": group_of(int(num)),
+                    "timeout": file_timeout(d, mfile)})
     return out
+
+
+TIMEOUT_RE = re.compile(r"\(\*\s*bench-timeout:\s*(\d+)\s*\*\)")
+
+
+def file_timeout(d, mfile):
+    """Per-experiment floor on the per-file timeout, or 0.
+
+    An experiment whose cases are intrinsically long (the ISSAC '97 problems:
+    an 800-digit 256x256 eigenproblem, a degree-1000 root at 100 digits) states
+    `(* bench-timeout: N *)` in the first 4 KiB of its .m file.  The runner uses
+    max(--timeout, N) for that file only, so the global default stays tight for
+    everything else instead of being raised for the whole job."""
+    if not mfile:
+        return 0
+    try:
+        with open(os.path.join(d, mfile), encoding="utf-8", errors="replace") as fh:
+            m = TIMEOUT_RE.search(fh.read(4096))
+    except OSError:
+        return 0
+    return int(m.group(1)) if m else 0
 
 
 def group_of(num):
@@ -204,6 +226,11 @@ def group_of(num):
         # meijerint) are group A by subject; the 1-10 block was full when
         # they were added.
         return "A symbolic (sympy)"
+    if 126 <= num <= 135:
+        # The ISSAC '97 Systems Challenge, one experiment per problem, every
+        # method of the 1997 solution notebook at machine and arbitrary
+        # precision.
+        return "H ISSAC'97 challenge"
     if num == 123:
         # One computation written twice -- Wolfram-language code and the native
         # Experimental` C builtin that must return the identical value.  The
@@ -1473,7 +1500,8 @@ def main():
                 continue
             t_sys = _t.time()
             bar_ui.system(sysname)
-            r = run_one(sysname, e, args.timeout, tick=bar_ui.draw)
+            r = run_one(sysname, e, max(args.timeout, e.get("timeout") or 0),
+                          tick=bar_ui.draw)
             if r is None:
                 continue
             runs[sysname] = r

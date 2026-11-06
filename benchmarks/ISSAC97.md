@@ -1,0 +1,160 @@
+# The ISSAC '97 Systems Challenge (experiments 126–135)
+
+Ten problems posed to the computer algebra systems at ISSAC '97, one experiment
+per problem, each timing **every method** of the 1997 solution notebook at
+machine precision, at arbitrary precision (the notebook's precision and a
+higher one for the cost-vs-digits curve), and exactly where the problem is
+exact. The cases are the notebook's code, modernised only where 1997 syntax no
+longer runs (string method names, `RandomReal`, a 1 × 1 matrix `Jacobian`,
+nodes for `GaussianQuadratureWeights` computed in-file, no plots).
+
+```bash
+python3 benchmarks/run_all.py --only 126,127,128,129,130,131,132,133,134,135 -v
+cd benchmarks/129-issac97-p4-polynomial-coefficient && ../../Mathilda -file polynomial_coefficient.m
+```
+
+Each file sets its own `(* bench-timeout: N *)` floor (the runner uses
+`max(--timeout, N)`), and each case is capped at `$cap` = 120 s by
+`TimeConstrained`. A capped or unevaluated case emits only its CHECK
+(`"timeout"` / `"unevaluated"` / `"failed"`), so it classifies INCOMPLETE and
+never pairs a timing with a non-answer. Checks are leading significant digits
+and the decimal exponent, `sig[v, d] = {leading d digits, exponent}` (the
+answers run from 1e-1 to 1e36300), from `benchmarks/issac97_common.m`.
+
+**Target: Mathilda clearly faster than the baseline column on every case**, at
+machine and at arbitrary precision. Correctness comes first: a fast wrong
+answer is a CHECK-FAIL and its timing is discarded.
+
+## The problems and their answers
+
+| exp | problem | answer |
+|---|---|---|
+| 126 | 2-norm condition number of the 256 × 256 Hilbert matrix | 1.7659543288e389 |
+| 127 | `Integrate[x^x^x, {x, 1, 6}]` | 1.1026649993619406556e36300 |
+| 128 | `Sum[1/(n^Pi + n^2 + n^Sqrt[2] + 1)^(1/3), {n, 1, Infinity}]` | 21.193240377711540943 |
+| 129 | coefficient of x^3000 in (x+1)^2000 (x^2+x+1)^1000 (x^4+x^3+x^2+x+1)^500 | 3.97394226558004e1426 (exact, 1427 digits) |
+| 130 | largest zero of `LaguerreL[1000, x]` | 3943.2473948452711821852759 |
+| 131 | lex Gröbner basis of four dense quadrics in w, x, y, z | shape basis: degree 16 in w, x, y, z linear |
+| 132 | `Limit[f[g[x]]/g[f[x]], x -> 0]`, f, g twelve-term nested Sin/Tan/Sinh/Tanh sums | 3060352455.6720 (exact rational) |
+| 133 | `Integrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}]` | 0.21088285956559351177 (closed form) |
+| 134 | largest eigenvalue of the integral operator with kernel E^(x+y+x^2+y^2+xy+x^2y^2) on [0, 1] | 37.529145560335 |
+| 135 | y'' = x^3 + y^3 + y'^3, y(0) = y'(0) = 0: the blow-up point r and y(r) | r = 1.6443766903388, y(r) = 0.93193876511029 |
+
+The machine contour row of 129 has no machine-precision answer in either
+system: the integrand peaks at ~1e1430, so a system that does not escalate
+returns 0 and one that does but keeps its default precision goal returns a
+rounding-dominated value. It stays CHECK-FAIL until both columns escalate
+fully; the true value is the one above.
+
+## First run (2026-11-06, v0.6225, loaded host — ratios indicative)
+
+Mathilda column at v0.6225, before any fix; the baseline column on the same host
+at the same time. Three rows were measured with a since-corrected case (P5
+Newton: scalar Jacobian; P7 ratio: recomputed series; P8 machine: a 12-digit
+check) and read as CHECK-FAIL/SLOWER here only for that reason.
+
+| case | Mathilda ms | baseline ms | ratio | status |
+|---|---|---|---|---|
+| p1 m1 eigenvalues machine n=10 | 0.1 | 0.1 | 1.23 | AHEAD |
+| p1 m1 eigenvalues wp200 n=64 | 79.0 | 414.1 | 0.19 | AHEAD |
+| p1 m1 eigenvalues wp800 n=256 | 16084 | 164314 | 0.10 | AHEAD |
+| p1 m2 power machine n=10 | 0.8 | 1.1 | 0.75 | AHEAD |
+| p1 m2 power wp800 n=256 | 11141 | 7905 | 1.41 | AHEAD (within 1.5) |
+| p1 m3 LUDecomposition only wp500 n=256 | 3518 | 10738 | 0.33 | AHEAD |
+| p1 m3 LUBackSubstitution wp500 n=256 |  | 12170 |  | ABSENT |
+| p1 m3 LinearSolve machine n=10 | 0.3 | 0.7 | 0.50 | AHEAD |
+| p1 m3 LinearSolve wp500 n=256 | 36371 | 11113 | 3.27 | CHECK-FAIL |
+| p2 m1 NIntegrate machine |  | 6.7 |  | INCOMPLETE |
+| p2 m1 NIntegrate DE wp30 | 0.6 | 12.0 |  | CHECK-FAIL |
+| p2 m1 NIntegrate wp50 | 0.7 | 31.0 |  | CHECK-FAIL |
+| p2 m1 NIntegrate wp100 | 2.0 | 117.8 |  | CHECK-FAIL |
+| p2 m2 ProductLog substitution machine | 0.2 | 23.6 |  | CHECK-FAIL |
+| p2 m2 ProductLog substitution wp30 | 2.3 | 88.2 |  | CHECK-FAIL |
+| p3 NSum machine | 54.4 | 53.3 |  | CHECK-FAIL |
+| p3 NSum wp40 | 345.4 | timeout (120 s) |  | AHEAD |
+| p3 NSum Method->NIntegrate wp120 | 1872 | 2213 | 0.85 | AHEAD |
+| p4 exact Coefficient[Expand] | 149.7 | 16344 | 0.01 | AHEAD |
+| p4 m4 exact CoefficientList square | 30.2 | 1425 | 0.02 | AHEAD |
+| p4 m3 exact Series to order 3000 | 29188 | 1631 | 17.9 | SLOWER |
+| p4 m2 exact Residue | timeout | 3999 |  | INCOMPLETE |
+| p4 m1 contour NIntegrate machine | 0.3 | 1222 |  | CHECK-FAIL (both wrong) |
+| p4 m1 contour Trapezoidal wp400 | 2.3 | 1659 |  | CHECK-FAIL |
+| p5 m1 Newton wp100 | 74.3 | (stale) |  |  |
+| p5 m1 secant wp100 |  | 1108 |  | INCOMPLETE |
+| p5 m1 Newton wp200 | 82.8 | (stale) |  |  |
+| p5 machine FindRoot L1000 |  | (stale) |  | INCOMPLETE |
+| p5 machine FindRoot L100 | 0.1 | (stale) |  |  |
+| p5 m1 RootCount contour wp100 | timeout | unevaluated |  | INCOMPLETE |
+| p5 m2 all 1000 roots in sequence wp100 |  | 30247 |  | INCOMPLETE |
+| p5 NSolve L1000 wp50 | timeout | timeout |  | INCOMPLETE |
+| p6 GroebnerBasis exact lex | 18.0 | 26.2 | 0.69 | AHEAD |
+| p6 GroebnerBasis InexactNumbers machine | 18.5 | 11.2 | 1.66 | SLOWER |
+| p6 NSolve machine | 16.2 | 102.0 | 0.16 | AHEAD |
+| p7 m1 Series f order 25 | 2462 | 1864 | 1.32 | AHEAD (within 1.5) |
+| p7 m1 Series g order 25 | 1817 | 624.4 | 2.91 | SLOWER |
+| p7 m2 numeric approach wp200i | 21.5 | 43.6 | 0.49 | AHEAD |
+| p7 direct Limit | timeout | timeout |  | INCOMPLETE |
+| p8 exact Integrate direct / both substitutions |  | 5833–7258 |  | INCOMPLETE |
+| p8 exact indefinite (both) |  | 3218 |  | INCOMPLETE |
+| p8 NIntegrate wp30 | 167.0 | 155.6 | 1.07 | AHEAD (within 1.5) |
+| p8 NIntegrate wp60 | 1607 | 1090 | 1.47 | AHEAD (within 1.5) |
+| p9 m1 Gauss nodes Golub-Welsch wp20 | 15.3 | 74.4 | 0.21 | AHEAD |
+| p9 m1 Nystrom machine | 17.8 | 16.9 | 1.06 | AHEAD (within 1.5) |
+| p9 m1 Nystrom wp20 | 640.1 | 322.7 | 1.98 | SLOWER |
+| p9 m1 Nystrom wp40 | 665.9 | 391.0 | 1.70 | SLOWER |
+| p9 m2 operator iteration FunctionInterpolation | SKIP | timeout |  | ABSENT |
+| p10 naive NDSolve machine domain end |  | 1.8 |  | INCOMPLETE |
+| p10 m1 inverse function machine / wp40 |  | 1.4 / 77.2 |  | INCOMPLETE |
+| p10 m2 derive polar ODE (Together/Factor) | 4.2 | 2.8 | 1.52 | SLOWER |
+| p10 m2 polar machine / wp30 |  | 6.8 / 431.2 |  | INCOMPLETE |
+
+## Deficiency register
+
+Status: **open**, **fixed vX**. Ordered by fix priority: wrong answers, then
+argument/option handling, then absences, then bottlenecks.
+
+### Wrong answers
+| # | deficiency | status |
+|---|---|---|
+| W1 | NIntegrate at WorkingPrecision 30–100 on x^x^x over [1, 6]: 6.60e25591 for 1.10e36300 (P2) | open |
+| W2 | NIntegrate of the ProductLog-substituted P2 integrand: 0.0 (machine), 7.64e35391 (WP 30) | open |
+| W3 | Trapezoidal NIntegrate at WP 400 on the periodic P4 contour: 1.5457e1428 for 3.9739e1426, after 2 ms (stops early) | open |
+| W4 | machine NIntegrate whose integrand leaves the double range returns unevaluated (P2) or a silent 0.0 (P4) instead of escalating | open |
+| W5 | machine NSum on a series with n^-1.047 terms: 5e-5 relative error, no warning (P3) | **fixed v0.6226** |
+| W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | open |
+
+### Argument and option handling
+| # | deficiency | status |
+|---|---|---|
+| A1 | NDSolve carries `HoldAll`, so `NDSolve[ode, ...]` with the equations in a variable fails with `NDSolve::nodeqs` (P10) | open |
+| A2 | FindMinimum `{t, t0, t1}` (two starting points) read as a constraint: `FindMinimum::nimpl` (P10) | open |
+| A3 | FindRoot/FindMinimum reject Real-valued WorkingPrecision/AccuracyGoal/MaxIterations (`N[FindRoot[...]]` makes them Real): `badopt` (P5, P10) | open |
+| A4 | FindRoot rejects a 1 × 1 matrix `Jacobian -> {{g[x]}}` ("non-real derivative") (P5) | open |
+| A5 | FindRoot secant at WP 100 diverges where |f| ~ 1e867 (P5 m1, and so all of m2) | open |
+| A6 | machine FindRoot on L_1000 (|f| ~ 1e867) fails after 3.3 s instead of escalating (P5) | open |
+| A7 | FindMinimum at WorkingPrecision 30 returns a machine-precision minimum value; MPFR bracket-finding fails on an InterpolatingFunction (P10) | open |
+| A8 | `InterpolatingFunction[...]["Domain"]` (and the other property queries) unevaluated (P10) | open |
+| A9 | `Precision[matrix]` maps over the elements instead of returning the minimum (P1) | open |
+
+### Absences
+| # | deficiency | status |
+|---|---|---|
+| X1 | `Integrate` of polynomial × PolyLog[3, rational function of x], definite and indefinite (P8) | open |
+| X2 | `Limit` of P7 (needs a series-based quotient limit with deep cancellation; the baseline also fails) | open |
+| X3 | `LUBackSubstitution` (P1 m3) | open |
+| X4 | `GaussianQuadratureWeights` (P9 m1, verbatim) | open |
+| X5 | `FunctionInterpolation` (P9 m2) | open |
+
+### Bottlenecks
+| # | deficiency | Mathilda | baseline | status |
+|---|---|---|---|---|
+| B1 | `Residue[p/x^3001, {x, 0}]` of a polynomial (P4) | 176 s | 4.0 s | open |
+| B2 | `Series` of a product of polynomial powers to order 3000 (P4) | 29.2 s | 1.6 s | open |
+| B3 | `Series` of nested Sin/Tan/Sinh/Tanh compositions to order 25 (P7) | 1.8–2.5 s | 0.6–1.9 s | open |
+| B4 | 800-digit 256 × 256 Dot (power method) (P1 m2) | 11.1 s | 7.9 s | open |
+| B5 | MPFR Eigenvalues at 20–40 digits, 64 × 64 nonsymmetric (P9 Nyström) | 640 ms | 323 ms | open |
+| B6 | contour NIntegrate of L'_1000/L_1000 at 100 digits (P5 RootCount) | > 120 s | — | open |
+| B7 | `NSolve[LaguerreL[1000, x] == 0, x, WorkingPrecision -> 50]` | > 600 s | > 120 s | open |
+| B8 | GroebnerBasis with CoefficientDomain -> InexactNumbers (P6) | 18.5 ms | 11.2 ms | open |
+| B9 | NIntegrate at 60 digits on x^2 PolyLog[3, 1/(x+1)] (P8) | 1.6 s | 1.1 s | open |
+| B10 | the polar ODE derivation: Together/Numerator/Factor of a trig rational (P10) | 4.2 ms | 2.8 ms | open |
