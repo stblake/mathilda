@@ -67,12 +67,13 @@
 #include "core.h"           /* tc_deadline_passed, tc_check_deadline */
 #include "gb_f4.h"
 #include "mp_parallel.h"     /* mp_parallel_for */
-#include "mtime.h"           /* mth_mono_seconds: the direct attempt's budget */
+#include <time.h>            /* clock: the direct attempt's budget */
 
 /* Phase timings of the modular routes on stderr: build with
  * -DGB_FLINT_TRACE and set GBDBG (development only). */
 #ifdef GB_FLINT_TRACE
 #include <stdio.h>
+#include "mtime.h"
 #define GF_TRACE(...) do { if (getenv("GBDBG")) fprintf(stderr, __VA_ARGS__); } while (0)
 #define GF_CLOCK() mth_mono_seconds()
 #else
@@ -175,7 +176,7 @@ typedef struct {
     /* a work budget (0: none): gf_run gives up -- `over` -- past this many
      * pairs or once a new element's coefficients exceed this many bits */
     slong budget_pairs; flint_bitcnt_t budget_bits; int over;
-    double budget_seconds;      /* and a wall-clock budget (0: none) */
+    double budget_seconds;      /* and a CPU-time budget (0: none) */
     int expired;                /* the deadline passed inside a reduction */
     GfPair* P;
     slong np, capp;
@@ -549,13 +550,15 @@ static int gf_run(Gf* G) {
     void* s = G->mod ? (void*)ms : (void*)zs;
     int ok = 1;
     slong done_pairs = 0;
-    double t_start = G->budget_seconds > 0 ? mth_mono_seconds() : 0.0;
+    /* CPU time, not wall clock: the attempt must not fail just because the
+     * machine is busy (only this thread runs during it) */
+    clock_t t_start = G->budget_seconds > 0 ? clock() : 0;
     while (G->np > 0) {
         if (tc_deadline_passed()) { ok = 0; break; }
         ++done_pairs;
         if (G->budget_pairs && done_pairs > G->budget_pairs) { G->over = 1; ok = 0; break; }
         if (G->budget_seconds > 0 && (done_pairs & 7) == 0 &&
-            mth_mono_seconds() - t_start > G->budget_seconds) { G->over = 1; ok = 0; break; }
+            (double)(clock() - t_start) / CLOCKS_PER_SEC > G->budget_seconds) { G->over = 1; ok = 0; break; }
         slong k = gf_pick(G);
         GfPair q = G->P[k];
         G->P[k] = G->P[--G->np];
