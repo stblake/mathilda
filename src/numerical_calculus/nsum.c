@@ -1812,8 +1812,12 @@ static int ns_cvz_terms(const NsOpts* o) {
     /* Scale the term count to the TARGET precision, not the guarded working
      * precision: CVZ on a non-completely-monotone (peaked/sawtooth) alternating
      * series is unstable with excess terms — its Chebyshev weights amplify the
-     * deviation — so using guard-inflated bits here would lose accuracy. */
-    double bits = o->prec_mpfr ? (double)o->target_bits : 53.0;
+     * deviation — so using guard-inflated bits here would lose accuracy.
+     * The target's PRECISION, not its guard-padded width (numeric.h): the
+     * guard bits are the rounding margin of the stored result, not digits
+     * CVZ must converge to, and 16 bits more terms was enough to lose 11
+     * digits of a peaked series at WorkingPrecision -> 30. */
+    double bits = o->prec_mpfr ? (double)numeric_width_precision_bits(o->target_bits) : 53.0;
     int n = (int)ceil(bits / 2.54) + 6;
     if (n < 4) n = 4;
     return n;

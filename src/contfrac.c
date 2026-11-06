@@ -51,6 +51,7 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "contfrac.h"
+#include "numeric.h"   /* numeric_width_precision_bits */
 
 #include <gmp.h>
 #include <stdlib.h>
@@ -393,7 +394,10 @@ static void cf_float_mpfr(const mpfr_t x, long pbits, long nlimit, TermVec* out)
 /* Run the float expansion on an Expr that is a Real or MPFR value. */
 static void cf_float_expr(const Expr* x, long nlimit, TermVec* out) {
     if (x->type == EXPR_MPFR) {
-        cf_float_mpfr(x->data.mpfr, (long)mpfr_get_prec(x->data.mpfr), nlimit, out);
+        /* uncertainty from its precision, not its guard-padded width */
+        cf_float_mpfr(x->data.mpfr,
+                      numeric_width_precision_bits((long)mpfr_get_prec(x->data.mpfr)),
+                      nlimit, out);
     } else { /* EXPR_REAL */
         mpfr_t v;
         mpfr_init2(v, DBL_MANT_DIG);

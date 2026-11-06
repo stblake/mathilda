@@ -687,7 +687,11 @@ static bool fr_fd_deriv_mpfr_real(Expr* f, FrVarBind* bind, const mpfr_t x,
     mpfr_inits2(bits, h, xp, fph, fmh, im, (mpfr_ptr)0);
     mpfr_abs(h, x, MPFR_RNDN);
     mpfr_add_ui(h, h, 1, MPFR_RNDN);
-    mpfr_mul_2si(h, h, -(bits / 2), MPFR_RNDN);          /* (|x|+1) * 2^(-bits/2) */
+    /* (|x|+1) * 2^(-p/2), p the PRECISION of the working width: the guard
+     * bits are no digits of f to difference against (numeric.h), and a step
+     * sized on them is lost in an operand of lower precision (Zeta[s] == 1.05
+     * at WorkingPrecision -> 30 differenced to an exact zero) */
+    mpfr_mul_2si(h, h, -(numeric_width_precision_bits(bits) / 2), MPFR_RNDN);
     bool dummy, ok = true;
     Expr* a[1];
     Expr* e;
@@ -724,7 +728,7 @@ static bool fr_fd_deriv_mpfr_complex(Expr* f, FrVarBind* bind,
     mpfr_inits2(bits, h, t, fpr, fpi, fmr, fmi, (mpfr_ptr)0);
     mpfr_hypot(h, zr, zi, MPFR_RNDN);
     mpfr_add_ui(h, h, 1, MPFR_RNDN);
-    mpfr_mul_2si(h, h, -(bits / 2), MPFR_RNDN);
+    mpfr_mul_2si(h, h, -(numeric_width_precision_bits(bits) / 2), MPFR_RNDN);  /* as above */
     bool dummy, ok = true;
     Expr* a[1];
     Expr* e;

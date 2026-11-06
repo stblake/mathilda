@@ -55,6 +55,7 @@
 #include "sym_names.h"
 
 #include <math.h>
+#include <float.h>   /* DBL_MANT_DIG */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -556,8 +557,13 @@ static void airy_ai_core(const acx* z, acx* Ai, acx* Aip, mpfr_prec_t P) {
 static Expr* ai_real_result(const mpfr_t v, mpfr_prec_t out_prec) {
     if (out_prec <= 53) {
         double d = mpfr_get_d(v, ARND);
-        if (isinf(d) && !mpfr_inf_p(v))   /* overflowed double: keep precision */
-            return expr_new_mpfr_copy(v);
+        if (isinf(d) && !mpfr_inf_p(v)) {  /* overflowed double: keep precision */
+            /* the reserved machine width DBL_MANT_DIG (numeric.h), not
+             * the working precision it was computed at */
+            Expr* o = expr_new_mpfr_bits(DBL_MANT_DIG);
+            mpfr_set(o->data.mpfr, v, ARND);
+            return o;
+        }
         return expr_new_real(d);
     }
     Expr* out = expr_new_mpfr_bits(out_prec);
@@ -576,8 +582,10 @@ static Expr* ai_complex_result(const mpfr_t re, const mpfr_t im, mpfr_prec_t out
         double dr = mpfr_get_d(re, ARND), di = mpfr_get_d(im, ARND);
         bool overflow = (isinf(dr) && !mpfr_inf_p(re)) || (isinf(di) && !mpfr_inf_p(im));
         if (overflow) {
-            rr = expr_new_mpfr_copy(re);
-            ii = expr_new_mpfr_copy(im);
+            rr = expr_new_mpfr_bits(DBL_MANT_DIG);      /* as above */
+            ii = expr_new_mpfr_bits(DBL_MANT_DIG);
+            mpfr_set(rr->data.mpfr, re, ARND);
+            mpfr_set(ii->data.mpfr, im, ARND);
             return make_complex(rr, ii);
         }
         rr = expr_new_real(dr);

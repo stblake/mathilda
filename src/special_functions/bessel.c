@@ -53,6 +53,7 @@
 #include "sym_names.h"
 
 #include <math.h>
+#include <float.h>   /* DBL_MANT_DIG */
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -451,7 +452,14 @@ static void bj_core(const ncpx* nu, const ncpx* z, ncpx* J, mpfr_prec_t P) {
 static Expr* bj_real_result(const mpfr_t v, mpfr_prec_t out_prec) {
     if (out_prec <= 53) {
         double d = mpfr_get_d(v, BRND);
-        if (isinf(d) && !mpfr_inf_p(v)) return expr_new_mpfr_copy(v);
+        if (isinf(d) && !mpfr_inf_p(v)) {
+            /* a machine number past the double range: the reserved
+             * DBL_MANT_DIG width (machine precision, numeric.h), not the
+             * working precision it was computed at */
+            Expr* o = expr_new_mpfr_bits(DBL_MANT_DIG);
+            mpfr_set(o->data.mpfr, v, BRND);
+            return o;
+        }
         return expr_new_real(d);
     }
     Expr* out = expr_new_mpfr_bits(out_prec);
@@ -469,8 +477,10 @@ static Expr* bj_make_result(const mpfr_t re, const mpfr_t im, mpfr_prec_t out_pr
         double dr = mpfr_get_d(re, BRND), di = mpfr_get_d(im, BRND);
         bool overflow = (isinf(dr) && !mpfr_inf_p(re)) || (isinf(di) && !mpfr_inf_p(im));
         if (overflow) {
-            rr = expr_new_mpfr_copy(re);
-            ii = expr_new_mpfr_copy(im);
+            rr = expr_new_mpfr_bits(DBL_MANT_DIG);      /* as above */
+            ii = expr_new_mpfr_bits(DBL_MANT_DIG);
+            mpfr_set(rr->data.mpfr, re, BRND);
+            mpfr_set(ii->data.mpfr, im, BRND);
             return make_complex(rr, ii);
         }
         rr = expr_new_real(dr);

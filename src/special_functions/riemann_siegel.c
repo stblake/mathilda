@@ -200,7 +200,7 @@ static Expr* rs_eval(Expr* res, int theta) {
         if (bits > 53) {
             expr_free(v);
             e = theta ? rs_theta_expr(t) : rs_z_expr(t);
-            v = eval_and_free(mk_fn2("N", e, expr_new_real((double)bits * 0.30102999566398120)));
+            v = eval_and_free(mk_fn2("N", e, expr_new_real(numeric_bits_to_digits(bits))));
         }
         if (!v || !expr_is_numeric_quantity(v)) { expr_free(v); return NULL; }
     }

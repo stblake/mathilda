@@ -562,10 +562,12 @@ static bool finv_is_inexact(const Expr* e) {
 }
 
 #ifdef USE_MPFR
-/* Largest MPFR precision (bits) carried by any leaf of `e`; 0 if none. */
+/* Largest MPFR precision (bits) carried by any leaf of `e`; 0 if none. The
+ * precision, not the mantissa width: the lattice scales by 2^bits, and the
+ * guard bits below the precision are not data to fit (numeric.h). */
 static long finv_max_prec_bits(const Expr* e) {
     if (!e) return 0;
-    if (e->type == EXPR_MPFR) return (long)mpfr_get_prec(e->data.mpfr);
+    if (e->type == EXPR_MPFR) return numeric_width_precision_bits((long)mpfr_get_prec(e->data.mpfr));
     long m = 0;
     if (e->type == EXPR_FUNCTION) {
         long h = finv_max_prec_bits(e->data.function.head);
@@ -726,7 +728,8 @@ Expr* builtin_findintegernullvector(Expr* res) {
                 double digits;
                 if (!finv_num_to_double(val, &digits) || digits <= 0.0) return NULL;
                 wp_explicit = true;
-                wp_bits = numeric_digits_to_bits(digits);
+                /* bits of precision: the scale 2^bits of the lattice */
+                wp_bits = numeric_width_precision_bits(numeric_digits_to_bits(digits));
                 if (wp_bits < 8) wp_bits = 8;
             }
         } else if (opt == SYM_ZeroTest) {
@@ -773,13 +776,14 @@ Expr* builtin_findintegernullvector(Expr* res) {
             if (b > ib) ib = b;
         }
 #endif
-        if (ib < 8) ib = numeric_digits_to_bits(mach_digits);
+        if (ib < 8) ib = numeric_width_precision_bits(numeric_digits_to_bits(mach_digits));
         start_bits = cap_bits = ib;
         escalate = false;
     } else {
         double extra = finv_sysreal("$MaxExtraPrecision", 50.0);
-        start_bits = numeric_digits_to_bits(mach_digits);
-        cap_bits   = numeric_digits_to_bits(mach_digits + (extra > 0 ? extra : 0));
+        start_bits = numeric_width_precision_bits(numeric_digits_to_bits(mach_digits));
+        cap_bits   = numeric_width_precision_bits(
+                         numeric_digits_to_bits(mach_digits + (extra > 0 ? extra : 0)));
         if (cap_bits < start_bits) cap_bits = start_bits;
         escalate = true;
     }
