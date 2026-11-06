@@ -51,7 +51,9 @@ nystrom[prec_] := Module[{xs, ws, eOld = 1, eNew, i = 0, c, pts, wts},
     i = i + 1; eOld = eNew];
   eNew];
 
-run["p9 m1 Gauss nodes Golub-Welsch wp20", gaussLegendre01[32, 20], sig[Total[#[[2]]], 15] &, 3];
+(* Check the largest node, not the weight sum: the sum is 1 to working
+   precision, so its leading digits sit on the 0.999.../1.000... rounding edge. *)
+run["p9 m1 Gauss nodes Golub-Welsch wp20", gaussLegendre01[32, 20], sig[Max[#[[1]]], 15] &, 3];
 run["p9 m1 Nystrom machine", nystrom[MachinePrecision], sig[#, 12] &, 3];
 run["p9 m1 Nystrom wp20", nystrom[20], sig[#, 14] &, 3];
 run["p9 m1 Nystrom wp40", nystrom[40], sig[#, 14] &];
