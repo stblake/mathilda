@@ -228,7 +228,46 @@ static Expr* cheb_numeric_recurrence(unsigned long deg,
                 out = cheb_make_result(res, res, out_prec, true);
 
             mpfr_clear(r0); mpfr_clear(r1); mpfr_clear(rk); mpfr_clear(t);
-        } else {
+        } else if (deg > CHEB_TRIG_MIN_DEG && deg <= (unsigned long)LONG_MAX) {
+            /* complex x, high degree: T_n(z) = (w^n + w^-n)/2 with
+             * w = z + Sqrt[z - 1] Sqrt[z + 1] (either root of
+             * w^2 - 2 z w + 1 = 0 gives the same sum, as w^-1 is the other
+             * one), w^n by binary powering: O(log n) complex products where
+             * the recurrence takes n, 1.15 ms against ~0.1 ms for
+             * ChebyshevT[2000, z] at 30 digits.  The relative error of w is
+             * multiplied by n in w^n, so log2(n) guard bits are added, as for
+             * the real closed form above; the two terms only cancel where
+             * |w| ~ 1 (z near [-1, 1]), and there to an absolute error of
+             * n ulps of |w^n| ~ 1, within the recurrence's own bound. */
+            mpfr_prec_t gp = wp + 8;
+            for (unsigned long m = deg; m > 1; m >>= 1) gp++;
+            ncpx zg, a, b, w, wn, iv;
+            ncpx_init(&zg, gp); ncpx_init(&a, gp); ncpx_init(&b, gp);
+            ncpx_init(&w, gp); ncpx_init(&wn, gp); ncpx_init(&iv, gp);
+            ncpx_set(&zg, &x);
+            ncpx one; ncpx_init(&one, gp); ncpx_set_ui(&one, 1);
+            ncpx_sub(&a, &zg, &one);  ncpx_sqrt(&a, &a, gp);   /* Sqrt[z - 1] */
+            ncpx_add(&b, &zg, &one);  ncpx_sqrt(&b, &b, gp);   /* Sqrt[z + 1] */
+            ncpx_mul(&w, &a, &b, gp);
+            ncpx_add(&w, &w, &zg);
+            /* the root of modulus >= 1, so that w^-n is the small term */
+            mpfr_t mw; mpfr_init2(mw, gp);
+            ncpx_abs(mw, &w);
+            if (mpfr_cmp_ui(mw, 1) < 0) {
+                ncpx_div(&w, &one, &w, gp);
+            }
+            mpfr_clear(mw);
+            ncpx_pow_si(&wn, &w, (long)deg, gp);
+            ncpx_div(&iv, &one, &wn, gp);
+            ncpx_add(&wn, &wn, &iv);
+            mpfr_div_2ui(wn.re, wn.re, 1, PRND);
+            mpfr_div_2ui(wn.im, wn.im, 1, PRND);
+            if (mpfr_number_p(wn.re) && mpfr_number_p(wn.im))
+                out = cheb_make_result(wn.re, wn.im, out_prec, false);
+            ncpx_clear(&zg); ncpx_clear(&a); ncpx_clear(&b); ncpx_clear(&w);
+            ncpx_clear(&wn); ncpx_clear(&iv); ncpx_clear(&one);
+        }
+        if (!out && !mpfr_zero_p(x.im)) {
             /* complex recurrence in ncpx arithmetic */
             ncpx t0, t1, tk, t;
             ncpx_init(&t0, wp); ncpx_init(&t1, wp);

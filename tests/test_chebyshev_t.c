@@ -176,9 +176,30 @@ void test_chebyshev_t_attributes() {
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "ChebyshevT not Protected");
 }
 
+/* High degree at a complex arbitrary-precision argument (the closed form
+ * (w^n + w^-n)/2 by binary powering): against Cos[n ArcCos[z]] at 60 digits,
+ * off the real axis, next to it inside and outside [-1, 1], on the imaginary
+ * axis and near the endpoints +-1, odd and even degree. */
+void test_chebyshev_t_complex_high_degree() {
+    const char* zs[] = { "3/5 Exp[I/3]", "3/10 + I/10^10", "2 + 3 I", "-1/2 + I/100",
+                         "-7/10 - I/3", "I", "1 + I/10^6", "-1 - I/10^8" };
+    const char* ns[] = { "65", "2000", "2001" };
+    char buf[512];
+    for (size_t i = 0; i < sizeof(zs) / sizeof(zs[0]); i++)
+        for (size_t k = 0; k < sizeof(ns) / sizeof(ns[0]); k++) {
+            snprintf(buf, sizeof buf,
+                     "With[{v = ChebyshevT[%s, N[%s, 30]], r = N[Cos[%s ArcCos[%s]], 60]}, "
+                     "Abs[v - r] <= 10^-28 Abs[r] && Precision[v] >= 29]",
+                     ns[k], zs[i], ns[k], zs[i]);
+            assert_eval_eq(buf, "True", 0);
+        }
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_chebyshev_t_complex_high_degree);
 
     TEST(test_chebyshev_t_polynomials);
     TEST(test_chebyshev_t_negative_order);
