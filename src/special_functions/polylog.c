@@ -42,6 +42,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef MATHILDA_THREADS
+#include <pthread.h>
+#endif
 
 #include <gmp.h>
 
@@ -615,6 +618,120 @@ static Expr* pl_real_series(const Expr* sre, const Expr* zre,
     return out;
 }
 
+/* zeta(2j) at >= the caller's precision from a process-wide table (the
+ * Jonquiere kernel below needs zeta(2), zeta(4), ... at every call; computing
+ * them costs ~54 us each at 330 bits, the whole budget of the call).  The table
+ * is rebuilt at a higher precision when one is asked for, grown on demand, and
+ * guarded by a mutex in threaded builds. */
+static mpfr_t* g_pl_z2j = NULL;
+static unsigned long g_pl_z2j_n = 0, g_pl_z2j_cap = 0;
+static mpfr_prec_t g_pl_z2j_prec = 0;
+#ifdef MATHILDA_THREADS
+static pthread_mutex_t g_pl_z2j_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
+static void pl_zeta_even(mpfr_t out, unsigned long j) {
+#ifdef MATHILDA_THREADS
+    pthread_mutex_lock(&g_pl_z2j_lock);
+#endif
+    mpfr_prec_t p = mpfr_get_prec(out);
+    if (g_pl_z2j_prec < p) {
+        for (unsigned long i = 0; i < g_pl_z2j_n; i++) mpfr_clear(g_pl_z2j[i]);
+        g_pl_z2j_n = 0;
+        g_pl_z2j_prec = p;
+    }
+    if (j > g_pl_z2j_cap) {
+        unsigned long cap = g_pl_z2j_cap ? 2 * g_pl_z2j_cap : 64;
+        while (cap < j) cap *= 2;
+        g_pl_z2j = (mpfr_t*)realloc(g_pl_z2j, cap * sizeof(mpfr_t));
+        g_pl_z2j_cap = cap;
+    }
+    while (g_pl_z2j_n < j) {
+        mpfr_init2(g_pl_z2j[g_pl_z2j_n], g_pl_z2j_prec);
+        mpfr_zeta_ui(g_pl_z2j[g_pl_z2j_n], 2 * (g_pl_z2j_n + 1), PRND);
+        g_pl_z2j_n++;
+    }
+    mpfr_set(out, g_pl_z2j[j - 1], PRND);
+#ifdef MATHILDA_THREADS
+    pthread_mutex_unlock(&g_pl_z2j_lock);
+#endif
+}
+
+/* Li_n(x) for an integer order n >= 2 and real 1/2 < x < 1, by the real
+ * Jonquiere expansion about x = 1 (DLMF 25.12.12), mu = log x in (-0.7, 0):
+ *     Li_n(x) = mu^(n-1)/(n-1)! (H_(n-1) - log(-mu))
+ *             + sum_{k=0}^{n-2} zeta(n-k) mu^k/k!  -  mu^n/(2 n!)
+ *             + sum_{j>=1} zeta(1-2j) mu^(n-1+2j)/(n-1+2j)!,
+ * the odd negative zeta values being zeta(1-2j) = (-1)^j 2 (2j-1)! zeta(2j)/
+ * (2 Pi)^(2j) (the even ones vanish).  The j-terms fall like (mu/2 Pi)^(2j),
+ * at least 6 bits each, so 330 bits take ~55 terms, each a cheap zeta(2j) ~ 1.
+ * The general complex path (arb's polylog) slows down as x -> 1, where the
+ * DE sampling of NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}] puts most of
+ * its nodes: 2-27 ms a call at 80 digits. */
+static Expr* pl_real_jonquiere(long n, const Expr* zre, mpfr_prec_t out_prec,
+                               mpfr_prec_t wp) {
+    mpfr_t x, mu, S, t, pw, fact, q, A, z2j, twopi;
+    mpfr_inits2(wp, x, mu, S, t, pw, fact, q, A, z2j, twopi, (mpfr_ptr)0);
+    pl_set_mpfr(x, zre);
+    mpfr_log(mu, x, PRND);                        /* mu < 0 */
+    /* head: mu^(n-1)/(n-1)! (H_(n-1) - log(-mu)) */
+    mpfr_set_ui(S, 0, PRND);
+    for (long j = 1; j <= n - 1; j++) {
+        mpfr_set_ui(t, 1, PRND); mpfr_div_ui(t, t, (unsigned long)j, PRND);
+        mpfr_add(S, S, t, PRND);
+    }
+    mpfr_neg(t, mu, PRND); mpfr_log(t, t, PRND);
+    mpfr_sub(S, S, t, PRND);                      /* H - log(-mu) */
+    mpfr_pow_ui(pw, mu, (unsigned long)(n - 1), PRND);
+    mpfr_fac_ui(fact, (unsigned long)(n - 1), PRND);
+    mpfr_div(pw, pw, fact, PRND);                 /* mu^(n-1)/(n-1)! */
+    mpfr_mul(S, S, pw, PRND);
+    /* sum_{k=0}^{n-2} zeta(n-k) mu^k/k! */
+    mpfr_set_ui(A, 1, PRND);                      /* mu^k/k! */
+    for (long k = 0; k <= n - 2; k++) {
+        mpfr_zeta_ui(t, (unsigned long)(n - k), PRND);
+        mpfr_mul(t, t, A, PRND);
+        mpfr_add(S, S, t, PRND);
+        mpfr_mul(A, A, mu, PRND);
+        mpfr_div_ui(A, A, (unsigned long)(k + 1), PRND);
+    }
+    /* k = n: zeta(0) = -1/2 */
+    mpfr_mul(t, pw, mu, PRND);
+    mpfr_div_ui(t, t, (unsigned long)n, PRND);    /* mu^n/n! */
+    mpfr_div_2ui(t, t, 1, PRND);
+    mpfr_sub(S, S, t, PRND);
+    /* j-terms: T_j = 2 (-1)^j zeta(2j) c_j mu^(n-1) q^j, q = (mu/2 Pi)^2,
+     * c_j = (2j-1)!/(n-1+2j)!, c_{j+1}/c_j = 2j(2j+1)/((n+2j)(n+2j+1)) */
+    mpfr_const_pi(twopi, PRND); mpfr_mul_2ui(twopi, twopi, 1, PRND);
+    mpfr_div(q, mu, twopi, PRND); mpfr_sqr(q, q, PRND);
+    mpfr_fac_ui(fact, (unsigned long)(n + 1), PRND);
+    mpfr_ui_div(A, 1, fact, PRND);                /* c_1 */
+    mpfr_mul(A, A, q, PRND);                      /* c_1 q */
+    mpfr_pow_ui(pw, mu, (unsigned long)(n - 1), PRND);
+    mpfr_mul_2ui(pw, pw, 1, PRND);                /* 2 mu^(n-1) */
+    for (unsigned long j = 1; j < 100000UL; j++) {
+        pl_zeta_even(z2j, j);
+        mpfr_mul(t, A, z2j, PRND);
+        mpfr_mul(t, t, pw, PRND);
+        if (j & 1) mpfr_sub(S, S, t, PRND); else mpfr_add(S, S, t, PRND);
+        if (mpfr_zero_p(t) || mpfr_get_exp(t) < mpfr_get_exp(S) - (mpfr_exp_t)wp - 4)
+            break;
+        mpfr_mul_ui(A, A, (unsigned long)(2 * j) * (2 * j + 1), PRND);
+        mpfr_div_ui(A, A, (unsigned long)(n + 2 * (long)j)
+                          * (unsigned long)(n + 2 * (long)j + 1), PRND);
+        mpfr_mul(A, A, q, PRND);
+    }
+    Expr* out;
+    if (out_prec <= 53) {
+        out = expr_new_real(mpfr_get_d(S, PRND));
+    } else {
+        out = expr_new_mpfr_bits(out_prec);
+        mpfr_set(out->data.mpfr, S, PRND);
+    }
+    mpfr_clears(x, mu, S, t, pw, fact, q, A, z2j, twopi, (mpfr_ptr)0);
+    return out;
+}
+
 /* Direct complex power series Li_s(z) = Sum_{k>=1} z^k k^-s, |z| <= 1/2.
  * Returns false if it fails to converge / goes non-finite. */
 static bool pl_series_cx(pcx* out, const pcx* s, const pcx* Z, mpfr_prec_t wp) {
@@ -849,6 +966,15 @@ static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
     double zv = 0.0;
     bool have_zv = z_real && pl_to_double(zre, &zv);
 
+    /* A z within half an ulp of 1 rounds to the double 1.0; whether it lies
+     * below 1 (the real fast path) or on the cut is decided on the exact
+     * value, not on its double (1 - 10^-30 went to the complex kernel: 30 ms
+     * and a spurious + 0. I). */
+    if (z_real && have_zv && zv == 1.0) {
+        mpfr_t zz; mpfr_init2(zz, wp);
+        if (pl_set_mpfr(zz, zre) && mpfr_cmp_ui(zz, 1) < 0) zv = nextafter(1.0, 0.0);
+        mpfr_clear(zz);
+    }
     /* Real fast path: real order, real -1 < z < 1. */
     if (n_real && z_real && have_zv && zv > -1.0 && zv < 1.0) {
         /* Arbitrary precision: arb's acb_polylog is ~2.5x faster than the MPFR
@@ -856,6 +982,10 @@ static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
          * this real -1 < z < 1 region, which has no branch cut, so arb's principal
          * branch matches. Machine precision keeps the series -> double path; a
          * decline falls through to it too. */
+        if (out_prec > 53 && intord >= 2 && zv > 0.5) {
+            Expr* v = pl_real_jonquiere(intord, zre, out_prec, wp);
+            if (v) { expr_free(zero); return v; }
+        }
         if (out_prec > 53) {
             Expr* v = flint_num_polylog(n, z);
             if (v) { expr_free(zero); return v; }

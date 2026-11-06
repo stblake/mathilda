@@ -280,11 +280,48 @@ void test_polylog_attributes() {
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "PolyLog must be Protected");
 }
 
+/* ---- real integer order just below z = 1 (the Jonquiere kernel) ------ *
+ * Checked against identities whose other terms the kernel does not compute
+ * (arguments below 1/2, or negative): Euler's reflection for Li_2, the
+ * three-term identity for Li_3, and the defining series for Li_5. */
+static void check60_zero(const char* expr) {
+    char buf[2048];
+    snprintf(buf, sizeof buf, "Abs[%s] < 10^-60", expr);
+    assert_eval_eq(buf, "True", 0);
+}
+
+void test_polylog_near_one_real() {
+    /* Li_2(z) + Li_2(1 - z) = Pi^2/6 - Log[z] Log[1 - z] */
+    const char* zs[] = { "3/4", "9/10", "1 - 10^-5", "1 - 10^-30", "1 - 10^-60" };
+    for (size_t k = 0; k < sizeof zs / sizeof zs[0]; k++) {
+        char e[1024];
+        snprintf(e, sizeof e,
+                 "With[{z = N[%s, 80]}, PolyLog[2, z] + PolyLog[2, 1 - z] - Pi^2/6 + Log[z] Log[1 - z]]",
+                 zs[k]);
+        check60_zero(e);
+    }
+    /* Li_3(z) + Li_3(1-z) + Li_3(1-1/z) = Zeta[3] + Log[z]^3/6 + Pi^2/6 Log[z]
+     *                                     - Log[z]^2 Log[1-z]/2 */
+    const char* z3[] = { "3/4", "2/3", "99/100", "1 - 10^-30" };
+    for (size_t k = 0; k < sizeof z3 / sizeof z3[0]; k++) {
+        char e[1024];
+        snprintf(e, sizeof e,
+                 "With[{z = N[%s, 80]}, PolyLog[3, z] + PolyLog[3, 1 - z] + PolyLog[3, 1 - 1/z]"
+                 " - Zeta[3] - Log[z]^3/6 - Pi^2/6 Log[z] + Log[z]^2 Log[1 - z]/2]", z3[k]);
+        check60_zero(e);
+    }
+    /* a z below 1 that rounds to the double 1.0 stays real */
+    assert_eval_eq("Head[PolyLog[3, N[1 - 10^-30, 60]]]", "Real", 0);
+    /* higher order, against the defining series at z = 3/4 */
+    check60_zero("With[{z = N[3/4, 80]}, PolyLog[5, z] - Sum[z^k/k^5, {k, 1, 700}]]");
+}
+
 int main() {
     symtab_init();
     core_init();
 
     TEST(test_polylog_low_order);
+    TEST(test_polylog_near_one_real);
     TEST(test_polylog_negative_order);
     TEST(test_polylog_at_one);
     TEST(test_polylog_at_minus_one);
