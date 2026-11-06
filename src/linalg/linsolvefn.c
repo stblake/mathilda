@@ -4,9 +4,12 @@
  * handful of entries), evicting the least recently used. A machine matrix is
  * factored once at construction (SpFactor: UMFPACK / CHOLMOD / LAPACK, see
  * src/sparse/sparse_la_factor.c); each application loads the right-hand side,
- * runs the triangular solves, and builds a packed answer.
+ * runs the triangular solves, and builds a packed answer.  An
+ * arbitrary-precision matrix is factored once at its own precision (an MPFR
+ * LU, ludecomp_mpfr.c) and each application is two triangular solves.
  */
 #include "linsolvefn.h"
+#include "ludecomp_internal.h"
 #include "sparse/sparse_la.h"
 #include "sparse/sparse_internal.h"
 #include "numarray.h"
@@ -27,7 +30,8 @@
 
 typedef struct {
     int64_t key;
-    SpFactor* f;
+    SpFactor* f;      /* machine factor, or NULL */
+    MpfrLU* mp;       /* arbitrary-precision factor, or NULL */
     uint64_t used;
 } CacheEnt;
 
@@ -39,30 +43,38 @@ static bool g_atexit = false;
 void linsolvefn_cache_clear(void) {
     for (int i = 0; i < LSF_CACHE; i++) {
         spf_free(g_cache[i].f);
+        mpfr_lu_free(g_cache[i].mp);
         g_cache[i].f = NULL;
+        g_cache[i].mp = NULL;
         g_cache[i].key = 0;
     }
 }
 
-static SpFactor* cache_get(int64_t key) {
+static bool ent_live(const CacheEnt* e) { return e->f || e->mp; }
+
+static CacheEnt* cache_get(int64_t key) {
     for (int i = 0; i < LSF_CACHE; i++)
-        if (g_cache[i].f && g_cache[i].key == key) {
+        if (ent_live(&g_cache[i]) && g_cache[i].key == key) {
             g_cache[i].used = ++g_tick;
-            return g_cache[i].f;
+            return &g_cache[i];
         }
     return NULL;
 }
 
-static void cache_put(int64_t key, SpFactor* f) {
+/* Store a factor (exactly one of f / mp non-NULL), evicting the least
+ * recently used entry. */
+static void cache_put(int64_t key, SpFactor* f, MpfrLU* mp) {
     if (!g_atexit) { atexit(linsolvefn_cache_clear); g_atexit = true; }
     int victim = 0;
     for (int i = 0; i < LSF_CACHE; i++) {
-        if (!g_cache[i].f) { victim = i; break; }
+        if (!ent_live(&g_cache[i])) { victim = i; break; }
         if (g_cache[i].used < g_cache[victim].used) victim = i;
     }
     spf_free(g_cache[victim].f);
+    mpfr_lu_free(g_cache[victim].mp);
     g_cache[victim].key = key;
     g_cache[victim].f = f;
+    g_cache[victim].mp = mp;
     g_cache[victim].used = ++g_tick;
 }
 
@@ -164,6 +176,21 @@ static SpFactor* factor_of(const Expr* m, Expr* const* opts, size_t nopts, SpfSt
     return f;
 }
 
+/* An arbitrary-precision factor of a square matrix whose inexact entries are
+ * all MPFR (no machine number), at their minimum precision.  NULL when the
+ * matrix is not of that kind, has a non-numeric entry, or the options ask
+ * for something other than the default method. */
+static MpfrLU* mp_factor_of(const Expr* m, int64_t n, Expr* const* opts, size_t nopts,
+                            bool* singular) {
+    *singular = false;
+    SpfWant want;
+    if (!opts_factorable(opts, nopts, &want) || want != SPF_WANT_AUTO) return NULL;
+    if (m->type != EXPR_FUNCTION || common_has_machine_real(m)) return NULL;
+    CommonInexactInfo inf = common_scan_inexact(m);
+    if (!inf.has_inexact || inf.min_bits <= 53) return NULL;
+    return mpfr_lu_factor(m, (int)n, inf.min_bits, singular);
+}
+
 /* ---- construction ------------------------------------------------------- */
 
 /* MatrixRank[m] < n for a matrix with no machine factor (exact, MPFR or
@@ -219,6 +246,25 @@ Expr* linsolvefn_make(const Expr* call) {
     SpfStatus st;
     bool tried;
     SpFactor* f = factor_of(m, opts, nopts, &st, &tried);
+    if (!f && !tried) {
+        /* Arbitrary precision: the factor decides singularity at the
+         * matrix's own precision.  (The exact-rank test below would hand an
+         * MPFR matrix to a machine-precision rank -- a 256 x 256 Hilbert
+         * matrix at 500 digits, condition number 1.8e389, was "singular".) */
+        bool sing = false;
+        MpfrLU* mp = mp_factor_of(m, r, opts, nopts, &sing);
+        if (mp && !sing) {
+            int64_t key = g_next_key++;
+            cache_put(key, NULL, mp);
+            return build_object(r, c, key, m, opts, nopts);
+        }
+        if (mp) {
+            mpfr_lu_free(mp);
+            msg_with_expr("LinearSolve", "sing1",
+                          "The matrix %s is singular so a factorization will not be saved.", m);
+            return build_object(r, c, 0, m, opts, nopts);
+        }
+    }
     if (!f) {
         if (tried && st == SPF_NOTPD) {
             msg_with_expr("LinearSolve", "npdef", "The matrix %s is not positive definite.", m);
@@ -239,7 +285,7 @@ Expr* linsolvefn_make(const Expr* call) {
                           m);
     }
     int64_t key = g_next_key++;
-    cache_put(key, f);
+    cache_put(key, f, NULL);
     return build_object(r, c, key, m, opts, nopts);
 }
 
@@ -314,13 +360,21 @@ Expr* linsolvefn_apply(const Expr* head, Expr* const* args, size_t nargs) {
     int64_t rows = head->data.function.args[0]->data.function.args[0]->type == EXPR_INTEGER
                  ? head->data.function.args[0]->data.function.args[0]->data.integer : -1;
 
-    SpFactor* f = key ? cache_get(key) : NULL;
-    if (key && !f) {
+    CacheEnt* ent = key ? cache_get(key) : NULL;
+    SpFactor* f = ent ? ent->f : NULL;
+    MpfrLU* mp = ent ? ent->mp : NULL;
+    if (key && !ent) {
         /* evicted: factor again from the matrix the object carries */
         SpfStatus st;
         bool tried;
         f = factor_of(m, ol->data.function.args, ol->data.function.arg_count, &st, &tried);
-        if (f) cache_put(key, f);
+        if (f) cache_put(key, f, NULL);
+        else if (!tried) {
+            bool sing = false;
+            mp = mp_factor_of(m, rows, ol->data.function.args, ol->data.function.arg_count, &sing);
+            if (mp && sing) { mpfr_lu_free(mp); mp = NULL; }
+            if (mp) cache_put(key, NULL, mp);
+        }
     }
 
     const Expr* b = args[0];
@@ -353,6 +407,19 @@ Expr* linsolvefn_apply(const Expr* head, Expr* const* args, size_t nargs) {
         return NULL;
     }
 
+    if (mp) {
+        /* The factor's precision is the answer's precision, so a right-hand
+         * side that would lower it (a machine number, fewer MPFR bits) takes
+         * the general path, as do the transposed / conjugated modes. */
+        if (mode == 'N' && b->type == EXPR_FUNCTION && !common_has_machine_real(b)) {
+            CommonInexactInfo ib = common_scan_inexact(b);
+            if (!ib.has_inexact || ib.min_bits >= mpfr_lu_bits(mp)) {
+                Expr* x = mpfr_lu_solve(mp, b);
+                if (x) return x;
+            }
+        }
+        return solve_afresh(m, mode, b, ol);
+    }
     if (!f) return solve_afresh(m, mode, b, ol);
 
     /* a machine factor: load b (complex when either side is) */

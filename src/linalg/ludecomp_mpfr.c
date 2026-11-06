@@ -64,6 +64,22 @@ Expr* mpfr_det_dispatch(Expr* m, int n)
     return NULL;
 }
 
+MpfrLU* mpfr_lu_factor(const Expr* m, int n, long bits, bool* singular)
+{
+    (void)m; (void)n; (void)bits; *singular = false;
+    return NULL;
+}
+
+MpfrLU* mpfr_lu_from_parts(const Expr* lu, const int* perm, int n, long bits)
+{
+    (void)lu; (void)perm; (void)n; (void)bits;
+    return NULL;
+}
+
+Expr* mpfr_lu_solve(const MpfrLU* f, const Expr* b) { (void)f; (void)b; return NULL; }
+long  mpfr_lu_bits(const MpfrLU* f) { (void)f; return 0; }
+void  mpfr_lu_free(MpfrLU* f) { (void)f; }
+
 #else /* USE_MPFR */
 
 /* ------------------------------------------------------------------ *
@@ -966,6 +982,259 @@ Expr* mpfr_det_dispatch(Expr* m, int n)
 
     lum_array_free(A_re, total);
     lum_array_free(A_im, is_complex ? total : 0);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
+ *  A reusable MPFR LU factor.                                          *
+ *                                                                       *
+ *  LinearSolve[m] for an arbitrary-precision m caches one of these (a  *
+ *  LinearSolveFunction then costs two triangular solves per right-hand *
+ *  side instead of a fresh elimination), and LUBackSubstitution builds *
+ *  one from the {lu, p, c} triple LUDecomposition returns.             *
+ * ------------------------------------------------------------------ */
+struct MpfrLU {
+    int n;
+    mpfr_prec_t bits;
+    bool cplx;
+    mpfr_t* re;     /* n*n row-major combined L\U (unit L implicit)      */
+    mpfr_t* im;     /* NULL for a real factor                            */
+    int* perm;      /* 1-indexed: row i of LU is row perm[i] of the matrix */
+};
+
+void mpfr_lu_free(MpfrLU* f)
+{
+    if (!f) return;
+    size_t t = (size_t)f->n * (size_t)f->n;
+    lum_array_free(f->re, t);
+    lum_array_free(f->im, t);
+    free(f->perm);
+    free(f);
+}
+
+long mpfr_lu_bits(const MpfrLU* f) { return f ? (long)f->bits : 0; }
+
+MpfrLU* mpfr_lu_factor(const Expr* m, int n, long bits, bool* singular)
+{
+    *singular = false;
+    if (n <= 0 || bits < 2) return NULL;
+    MpfrLU* f = (MpfrLU*)calloc(1, sizeof *f);
+    if (!f) return NULL;
+    f->n = n;
+    f->bits = (mpfr_prec_t)bits;
+    if (!lum_load_matrix((Expr*)m, n, n, f->bits, &f->re, &f->im, &f->cplx)) {
+        free(f);
+        return NULL;
+    }
+    f->perm = (int*)malloc((size_t)n * sizeof(int));
+    for (int i = 0; i < n; i++) f->perm[i] = i + 1;
+
+    mpfr_t maxabs, mag;
+    mpfr_init2(maxabs, f->bits);
+    mpfr_init2(mag, f->bits);
+    mpfr_set_zero(maxabs, 1);
+    for (size_t k = 0; k < (size_t)n * (size_t)n; k++) {
+        lum_abs(f->re, f->im, k, f->cplx, mag);
+        if (mpfr_cmp(mag, maxabs) > 0) mpfr_set(maxabs, mag, MPFR_RNDN);
+    }
+    bool zero_pivot = false;
+    lum_factor(f->re, f->im, n, n, f->bits, f->cplx, f->perm, &zero_pivot);
+    /* A pivot at or below 64 n 2^(1 - bits) max|m| is the roundoff left by
+     * eliminating a singular matrix, not a value: the same zero tolerance
+     * the numeric row reduction (rref_numeric.c) applies.  It is relative to
+     * the working precision, never to machine epsilon, so a matrix whose
+     * condition number is far beyond 2^53 but below 2^bits is regular. */
+    mpfr_mul_ui(maxabs, maxabs, (unsigned long)(64 * n), MPFR_RNDN);
+    mpfr_mul_2si(maxabs, maxabs, 1 - (long)f->bits, MPFR_RNDN);
+    *singular = zero_pivot;
+    for (int k = 0; k < n && !*singular; k++) {
+        lum_abs(f->re, f->im, (size_t)k * n + k, f->cplx, mag);
+        if (mpfr_cmp(mag, maxabs) <= 0) *singular = true;
+    }
+    mpfr_clear(maxabs);
+    mpfr_clear(mag);
+    return f;
+}
+
+MpfrLU* mpfr_lu_from_parts(const Expr* lu, const int* perm, int n, long bits)
+{
+    if (n <= 0 || bits < 2) return NULL;
+    MpfrLU* f = (MpfrLU*)calloc(1, sizeof *f);
+    if (!f) return NULL;
+    f->n = n;
+    f->bits = (mpfr_prec_t)bits;
+    if (!lum_load_matrix((Expr*)lu, n, n, f->bits, &f->re, &f->im, &f->cplx)) {
+        free(f);
+        return NULL;
+    }
+    f->perm = (int*)malloc((size_t)n * sizeof(int));
+    memcpy(f->perm, perm, (size_t)n * sizeof(int));
+    return f;
+}
+
+/* x -= a * y over (re, im) pairs; an absent imaginary part (NULL) is 0.
+ * t is caller-owned scratch at the working precision. */
+static void mlu_submul(mpfr_ptr xr, mpfr_ptr xi,
+                       mpfr_srcptr ar, mpfr_srcptr ai,
+                       mpfr_srcptr yr, mpfr_srcptr yi, mpfr_ptr t)
+{
+    mpfr_mul(t, ar, yr, MPFR_RNDN);
+    mpfr_sub(xr, xr, t, MPFR_RNDN);
+    if (!xi) return;
+    if (ai && yi) {
+        mpfr_mul(t, ai, yi, MPFR_RNDN);
+        mpfr_add(xr, xr, t, MPFR_RNDN);
+    }
+    if (yi) {
+        mpfr_mul(t, ar, yi, MPFR_RNDN);
+        mpfr_sub(xi, xi, t, MPFR_RNDN);
+    }
+    if (ai) {
+        mpfr_mul(t, ai, yr, MPFR_RNDN);
+        mpfr_sub(xi, xi, t, MPFR_RNDN);
+    }
+}
+
+/* The shape of a right-hand side: a vector of n scalars (*k = 0) or an
+ * n x k matrix.  False for anything else. */
+static bool mlu_rhs_shape(const Expr* b, int n, int* k)
+{
+    if (!b || b->type != EXPR_FUNCTION || b->data.function.head->type != EXPR_SYMBOL ||
+        b->data.function.head->data.symbol.name != SYM_List ||
+        (int)b->data.function.arg_count != n)
+        return false;
+    const Expr* r0 = b->data.function.args[0];
+    bool is_mat = r0->type == EXPR_FUNCTION && r0->data.function.head->type == EXPR_SYMBOL &&
+                  r0->data.function.head->data.symbol.name == SYM_List;
+    if (!is_mat) { *k = 0; return true; }
+    int kk = (int)r0->data.function.arg_count;
+    if (kk == 0) return false;
+    for (int i = 0; i < n; i++) {
+        const Expr* ri = b->data.function.args[i];
+        if (ri->type != EXPR_FUNCTION || ri->data.function.head->type != EXPR_SYMBOL ||
+            ri->data.function.head->data.symbol.name != SYM_List ||
+            (int)ri->data.function.arg_count != kk)
+            return false;
+    }
+    *k = kk;
+    return true;
+}
+
+Expr* mpfr_lu_solve(const MpfrLU* f, const Expr* b)
+{
+    if (!f) return NULL;
+    int n = f->n, k = 0;
+    if (!mlu_rhs_shape(b, n, &k)) return NULL;
+    int w = k ? k : 1;
+    size_t tot = (size_t)n * (size_t)w;
+    mpfr_prec_t bits = f->bits;
+
+    /* Load b[[perm]] (row i of the work array is row perm[i] of b). */
+    bool cplx = f->cplx;
+    for (int i = 0; i < n && !cplx; i++) {
+        const Expr* ri = b->data.function.args[i];
+        for (int c = 0; c < w && !cplx; c++)
+            if (lum_leaf_is_complex(k ? ri->data.function.args[c] : (Expr*)ri)) cplx = true;
+    }
+    mpfr_t* xr = lum_array_alloc(tot, bits);
+    mpfr_t* xi = cplx ? lum_array_alloc(tot, bits) : NULL;
+    mpfr_t tim;
+    mpfr_init2(tim, bits);
+    bool ok = true;
+    for (int i = 0; i < n && ok; i++) {
+        const Expr* ri = b->data.function.args[f->perm[i] - 1];
+        for (int c = 0; c < w && ok; c++) {
+            const Expr* e = k ? ri->data.function.args[c] : ri;
+            size_t o = (size_t)i * w + c;
+            ok = get_approx_mpfr(e, xr[o], tim, NULL);
+            if (ok && cplx) mpfr_set(xi[o], tim, MPFR_RNDN);
+        }
+    }
+    if (!ok) {
+        mpfr_clear(tim);
+        lum_array_free(xr, tot);
+        lum_array_free(xi, cplx ? tot : 0);
+        return NULL;
+    }
+
+    mpfr_t t;
+    mpfr_init2(t, bits);
+    const mpfr_t* Lr = f->re;
+    const mpfr_t* Li = f->im;
+    /* Forward substitution through the unit-diagonal L. */
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < i; j++) {
+            size_t ij = (size_t)i * n + j;
+            if (mpfr_zero_p(Lr[ij]) && (!Li || mpfr_zero_p(Li[ij]))) continue;
+            for (int c = 0; c < w; c++) {
+                size_t xo = (size_t)i * w + c, yo = (size_t)j * w + c;
+                mlu_submul(xr[xo], cplx ? xi[xo] : NULL, Lr[ij], Li ? Li[ij] : NULL,
+                           xr[yo], cplx ? xi[yo] : NULL, t);
+            }
+        }
+    /* Back substitution through U. */
+    mpfr_t dr, di, den, ar, ai;
+    mpfr_inits2(bits, dr, di, den, ar, ai, (mpfr_ptr)0);
+    for (int i = n - 1; i >= 0; i--) {
+        for (int j = i + 1; j < n; j++) {
+            size_t ij = (size_t)i * n + j;
+            if (mpfr_zero_p(Lr[ij]) && (!Li || mpfr_zero_p(Li[ij]))) continue;
+            for (int c = 0; c < w; c++) {
+                size_t xo = (size_t)i * w + c, yo = (size_t)j * w + c;
+                mlu_submul(xr[xo], cplx ? xi[xo] : NULL, Lr[ij], Li ? Li[ij] : NULL,
+                           xr[yo], cplx ? xi[yo] : NULL, t);
+            }
+        }
+        size_t ii = (size_t)i * n + i;
+        if (!cplx) {
+            for (int c = 0; c < w; c++)
+                mpfr_div(xr[(size_t)i * w + c], xr[(size_t)i * w + c], Lr[ii], MPFR_RNDN);
+            continue;
+        }
+        /* 1/(dr + i di) = (dr - i di)/(dr^2 + di^2) */
+        mpfr_set(dr, Lr[ii], MPFR_RNDN);
+        if (Li) mpfr_set(di, Li[ii], MPFR_RNDN); else mpfr_set_zero(di, 1);
+        mpfr_sqr(den, dr, MPFR_RNDN);
+        mpfr_sqr(t, di, MPFR_RNDN);
+        mpfr_add(den, den, t, MPFR_RNDN);
+        for (int c = 0; c < w; c++) {
+            size_t o = (size_t)i * w + c;
+            mpfr_set(ar, xr[o], MPFR_RNDN);
+            mpfr_set(ai, xi[o], MPFR_RNDN);
+            mpfr_mul(xr[o], ar, dr, MPFR_RNDN);
+            mpfr_mul(t, ai, di, MPFR_RNDN);
+            mpfr_add(xr[o], xr[o], t, MPFR_RNDN);
+            mpfr_div(xr[o], xr[o], den, MPFR_RNDN);
+            mpfr_mul(xi[o], ai, dr, MPFR_RNDN);
+            mpfr_mul(t, ar, di, MPFR_RNDN);
+            mpfr_sub(xi[o], xi[o], t, MPFR_RNDN);
+            mpfr_div(xi[o], xi[o], den, MPFR_RNDN);
+        }
+    }
+    mpfr_clears(dr, di, den, ar, ai, (mpfr_ptr)0);
+    mpfr_clear(t);
+
+    /* Build the answer: a vector, or an n x k matrix. */
+    mpfr_set_zero(tim, 1);
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        if (!k) {
+            rows[i] = lum_make_scalar(xr[i], cplx ? xi[i] : tim, cplx);
+            continue;
+        }
+        Expr** el = (Expr**)malloc(sizeof(Expr*) * (size_t)k);
+        for (int c = 0; c < k; c++) {
+            size_t o = (size_t)i * k + c;
+            el[c] = lum_make_scalar(xr[o], cplx ? xi[o] : tim, cplx);
+        }
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), el, (size_t)k);
+        free(el);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+    free(rows);
+    mpfr_clear(tim);
+    lum_array_free(xr, tot);
+    lum_array_free(xi, cplx ? tot : 0);
     return out;
 }
 

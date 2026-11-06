@@ -288,6 +288,7 @@ EXEMPT = {
     "MinMax": "returns a pair",
     "Quartiles": "returns a triple",
     "LUDecomposition": "returns a heterogeneous triple",
+    "LUBackSubstitution": "consumes LUDecomposition's heterogeneous triple {lu, p, c}, which no compiled register carries",
     "QRDecomposition": "returns a pair of matrices",
     "JordanDecomposition": "returns a pair of matrices",
     "SchurDecomposition": "returns a pair/tuple of matrices",

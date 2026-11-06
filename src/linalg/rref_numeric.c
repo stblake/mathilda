@@ -349,6 +349,22 @@ Expr* rref_numeric_rowreduce(const Expr* m0, long bits)
     return out;
 }
 
+int rref_numeric_rank(const Expr* m0, long bits)
+{
+    Expr* m = nm_boxed(m0);
+    int r, c; bool is_vec;
+    if (!nm_shape(m, &r, &c, &is_vec) || is_vec) { expr_free(m); return -1; }
+    NMat A;
+    if (!nm_alloc(&A, r, c, la_has_complex(m), (mpfr_prec_t)bits)) { expr_free(m); return -1; }
+    if (!nm_load_block(&A, m, 0)) { nm_free(&A); expr_free(m); return -1; }
+    expr_free(m);
+    int* piv = (int*)malloc(sizeof(int) * (size_t)(r < c ? r : c) + sizeof(int));
+    int rank = nm_rref(&A, c, piv, NULL);
+    free(piv);
+    nm_free(&A);
+    return rank;
+}
+
 Expr* rref_numeric_linearsolve(const Expr* m0, const Expr* b0, long bits, bool* nosol)
 {
     *nosol = false;
@@ -567,6 +583,7 @@ Expr* rref_numeric_nullspace(const Expr* m0, long bits)
 
 long rref_numeric_bits(const Expr* m, const Expr* b) { (void)m; (void)b; return 0; }
 Expr* rref_numeric_rowreduce(const Expr* m, long bits) { (void)m; (void)bits; return NULL; }
+int rref_numeric_rank(const Expr* m, long bits) { (void)m; (void)bits; return -1; }
 Expr* rref_numeric_nullspace(const Expr* m, long bits) { (void)m; (void)bits; return NULL; }
 Expr* rref_numeric_linearsolve(const Expr* m, const Expr* b, long bits, bool* nosol)
 { (void)m; (void)b; (void)bits; *nosol = false; return NULL; }

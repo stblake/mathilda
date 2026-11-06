@@ -41,6 +41,12 @@ long rref_numeric_bits(const Expr* m, const Expr* b);
 /* RowReduce[m]. */
 Expr* rref_numeric_rowreduce(const Expr* m, long bits);
 
+/* MatrixRank[m]: the number of pivots the elimination above accepts, or -1
+ * to decline.  At arbitrary precision this is the rank to working precision:
+ * N[HilbertMatrix[40], 100] has rank 40 (its condition number, ~1e58, is far
+ * beyond 2^53 but far below 10^100). */
+int rref_numeric_rank(const Expr* m, long bits);
+
 /* NullSpace[m]: an orthonormal basis (the reference's normalisation), {} for
  * a matrix of full column rank. */
 Expr* rref_numeric_nullspace(const Expr* m, long bits);

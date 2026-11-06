@@ -138,4 +138,26 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols);
  * ------------------------------------------------------------------ */
 Expr* mpfr_det_dispatch(Expr* m, int n);
 
+/* ---------------------------------------------------------------------
+ * A reusable arbitrary-precision LU factor (opaque).
+ *
+ * mpfr_lu_factor     factors the n x n numeric matrix m at `bits` (partial
+ *                    pivoting, as lu_mpfr_dispatch).  *singular is set when a
+ *                    pivot is zero to working precision: |pivot| <=
+ *                    64 n 2^(1 - bits) max|m|.  NULL when an entry is not a
+ *                    number (or USE_MPFR is off).
+ * mpfr_lu_from_parts rebuilds a factor from LUDecomposition's lu matrix and
+ *                    its 1-indexed permutation, at `bits`.
+ * mpfr_lu_solve      solves m.x == b for a vector b (a List of n numbers) or
+ *                    an n x k matrix b (a List of n Lists), at the factor's
+ *                    precision; complex when either side is.  NULL when b
+ *                    has the wrong shape or a non-numeric entry.  Borrows b.
+ * ------------------------------------------------------------------ */
+typedef struct MpfrLU MpfrLU;
+MpfrLU* mpfr_lu_factor(const Expr* m, int n, long bits, bool* singular);
+MpfrLU* mpfr_lu_from_parts(const Expr* lu, const int* perm, int n, long bits);
+Expr*   mpfr_lu_solve(const MpfrLU* f, const Expr* b);
+long    mpfr_lu_bits(const MpfrLU* f);
+void    mpfr_lu_free(MpfrLU* f);
+
 #endif /* LUDECOMP_INTERNAL_H */

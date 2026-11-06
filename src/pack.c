@@ -832,7 +832,7 @@ static void pack_mark_aware_heads(void) {
         "Det", "Inverse", "PseudoInverse", "LinearSolve", "LeastSquares",
         "RowReduce", "NullSpace", "MatrixRank", "MatrixPower",
         "MatrixExp", "MatrixLog", "MatrixFunction",
-        "LUDecomposition", "QRDecomposition", "SingularValueDecomposition",
+        "LUDecomposition", "LUBackSubstitution", "QRDecomposition", "SingularValueDecomposition",
         "JordanDecomposition", "SchurDecomposition", "CholeskyDecomposition",
         "SingularValueList", "Minors", "Adjugate", "Orthogonalize",
         "HessenbergDecomposition", "Eigensystem",

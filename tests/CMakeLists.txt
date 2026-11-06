@@ -776,6 +776,7 @@ set(COMMON_SRC
     ../src/linalg/ludecomp.c
     ../src/linalg/ludecomp_machine.c
     ../src/linalg/ludecomp_mpfr.c
+    ../src/linalg/lubacksub.c
     ../src/linalg/svdecomp.c
     ../src/linalg/svdecomp_machine.c
     ../src/linalg/svdecomp_mpfr.c
@@ -3256,6 +3257,16 @@ else()
     target_link_libraries(mateigen_feast_tests gmp m)
 endif()
 add_test(NAME mateigen_feast_tests COMMAND mateigen_feast_tests)
+
+add_executable(mp_linalg_tests test_mp_linalg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mp_linalg_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(mp_linalg_tests gmp m ${ECM_LIB})
+    add_dependencies(mp_linalg_tests build_ecm)
+else()
+    target_link_libraries(mp_linalg_tests gmp m)
+endif()
+add_test(NAME mp_linalg_tests COMMAND mp_linalg_tests)
 
 add_executable(linearsolve_tests test_linearsolve.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(linearsolve_tests PRIVATE ../src)

@@ -773,7 +773,14 @@ Expr* builtin_conjugate(Expr* res) {
         return make_complex(expr_copy(re), minus_im);
     }
     int64_t n, d;
-    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
+    /* Every real number atom is Conjugate-fixed. BigInt and MPFR must be
+     * answered here: the machine-real test below rounds to a double, so an
+     * MPFR beyond 1.8e308 (Conjugate[N[10^400, 30]]) stayed unevaluated. */
+    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT ||
+#ifdef USE_MPFR
+        arg->type == EXPR_MPFR ||
+#endif
+        is_rational(arg, &n, &d)) {
         return expr_copy(arg);
     }
     /* Symbolic expressions that numericalize to a machine real are

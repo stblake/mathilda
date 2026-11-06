@@ -1098,6 +1098,8 @@ void core_init(void) {
     qrdecomp_init();
     void ludecomp_init(void);
     ludecomp_init();
+    void lubacksub_init(void);
+    lubacksub_init();
     void svdecomp_init(void);
     svdecomp_init();
     void jordandecomp_init(void);

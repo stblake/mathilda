@@ -1409,6 +1409,13 @@ Gives the rank of a matrix.
     max-modulus, and the result is eliminated numerically
     (`MatrixRank[{{a, 2. a}, {1., 2.}}]` is `1`, `MatrixRank[{{a, 1.}, {1., a}}]`
     is `2`).
+  - *Arbitrary-precision path* (every inexact leaf MPFR, default
+    `Tolerance`): partial-pivot elimination at the matrix's own precision
+    `p` bits, a pivot counting as zero at
+    `64 max(rows, cols) 2^(1 - p) Max[|entries|]` (the numeric `RowReduce`
+    rule). `MatrixRank[N[HilbertMatrix[40], 100]]` is `40` (condition number
+    `~10^58`: far beyond machine precision, far within 100 digits); until
+    v0.6226 it was rounded to doubles and answered `21`.
 - **Tolerance** accepted forms:
   - `Tolerance -> Automatic` (default) — `max(rows, cols) *
     MachineEpsilon * Max[|entries|]` for inexact matrices; `0`
@@ -2194,6 +2201,52 @@ Out[3]= <real condition estimate, ~20-30 for the example matrix>
 >   MPFR arrays (paired re/im for complex), largest-magnitude pivot
 >   selection, ‖A‖∞ * ‖A⁻¹‖∞ condition estimate.
 
+## LUBackSubstitution
+Solves a linear system from an LU decomposition.
+- `LUBackSubstitution[{lu, p, c}, b]` — the `x` with `m . x == b`, where
+  `{lu, p, c} = LUDecomposition[m]`; `b` is a vector, or a matrix whose `k`-th
+  solution column solves `m . x == b[[All, k]]`.
+
+**Features**:
+- `Protected`.
+- Two triangular solves on `b[[p]]`: forward through the unit lower triangle
+  of `lu`, back through its upper triangle. `O(n^2)` per right-hand side, so
+  factoring once and solving many times costs one elimination.
+- The answer has the precision of `lu` and `b` together, as arithmetic does:
+  - **machine** (a machine number on either side): doubles read straight off
+    a packed array / `NDArray` or a list, real or complex; the result is packed
+    and keeps `b`'s presentation (an `NDArray` `b` gives an `NDArray`);
+  - **arbitrary precision** (MPFR entries, no machine number): MPFR at the
+    smaller of the two precisions, real or complex — the same solver an
+    arbitrary-precision `LinearSolveFunction` applies;
+  - **exact / symbolic**: through the evaluator, exact throughout (no
+    simplification beyond evaluation).
+- Messages (the call stays unevaluated): `LUBackSubstitution::matsq` when
+  `lu` is not a non-empty square matrix (a rectangular decomposition),
+  `LUBackSubstitution::lslc` when `b` does not have `Length[lu]` rows,
+  `LUBackSubstitution::singlu` when `U` has a zero on its diagonal. A first
+  argument that is not a three-element list, or a `p` that is not a
+  permutation of `1..n`, leaves the call unevaluated silently.
+- Not lowered by `Compile[]`: its first argument is the heterogeneous triple
+  `LUDecomposition` returns (exempt for the same reason).
+- Lives in `src/linalg/lubacksub.c`.
+
+```
+In[1]:= LUBackSubstitution[LUDecomposition[{{1, 2}, {3, 4}}], {5, 6}]
+Out[1]= {-4, 9/2}
+
+In[2]:= LUBackSubstitution[LUDecomposition[{{1, 2}, {3, 4}}], {{5, 1}, {6, 0}}]
+Out[2]= {{-4, -2}, {9/2, 3/2}}
+
+In[3]:= LUBackSubstitution[LUDecomposition[{{1, 2 I}, {3, 4}}], {1, 1}]
+Out[3]= {7/13 + (4 I)/13, -2/13 - (3 I)/13}
+
+In[4]:= h = N[HilbertMatrix[256], 500];
+        x = LUBackSubstitution[LUDecomposition[h], N[ConstantArray[1, 256], 500]];
+        Precision[x]
+Out[4]= 500.
+```
+
 ## SingularValueDecomposition
 Gives the singular value decomposition of a matrix.
 - `SingularValueDecomposition[m]` — returns `{u, sigma, v}` such that
@@ -2843,10 +2896,18 @@ Out[8]= {6, 4, 5}
   `f["ConditionNumber"]` (1-norm estimate). A machine matrix, dense or
   SparseArray, is factored once (UMFPACK / CHOLMOD / LAPACK, see below) and the
   factor kept in a small LRU cache keyed by `key`; because the object carries
-  `m`, an evicted factor is recomputed transparently. Exact, MPFR and symbolic
-  matrices, the `"Krylov"` method, and singular (`LinearSolve::sing1`) or
-  rectangular (`LinearSolve::sqmat1`) matrices make an object that solves
-  afresh on every application, as the reference does. Errors:
+  `m`, an evicted factor is recomputed transparently. An **arbitrary-precision**
+  square matrix (MPFR entries, no machine number) is likewise factored once,
+  by an MPFR LU at its own precision, and each application is two triangular
+  solves at that precision (`O(n^2)`; a right-hand side carrying a machine
+  number or fewer digits solves afresh). Its singularity test is a pivot at
+  or below `64 n 2^(1 - bits) max|m_ij|`, relative to the working precision:
+  `LinearSolve[N[HilbertMatrix[256], 500]]` (condition number `1.8*10^389`) is
+  regular. (Through v0.6225 an MPFR matrix went through a machine-precision
+  `MatrixRank`, was reported `LinearSolve::sing1`, and every application
+  re-eliminated.) Exact and symbolic matrices, the `"Krylov"` method, and
+  singular (`LinearSolve::sing1`) or rectangular (`LinearSolve::sqmat1`)
+  matrices make an object that solves afresh on every application. Errors:
   `LinearSolveFunction::lslc` (wrong length), `LinearSolve::notrhsm` (bad mode).
 - **Machine methods**, for a dense or SparseArray machine matrix:
   `Method -> "Multifrontal"` (sparse LU), `"Cholesky"` (`LinearSolve::npdef`

@@ -26,7 +26,10 @@
  *     gives the rank with no precision concerns.
  *
  * Default tolerance (when Tolerance -> Automatic, the default):
- *   - If the matrix contains any Real / MPFR leaf:
+ *   - If every inexact leaf is MPFR (precision p bits > 53): partial-
+ *     pivot elimination at p bits (rref_numeric_rank), a pivot counting
+ *     as zero at 64 max(rows, cols) 2^(1-p) max(|entries|).
+ *   - If the matrix contains a machine Real leaf:
  *       tol = max(rows, cols) * DBL_EPSILON * max(|entries|)
  *     (the standard "rank-by-SVD" surrogate; we substitute max(|entries|)
  *     for the largest singular value, which is exact in the row /
@@ -45,6 +48,7 @@
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "linsolve.h"
+#include "rref_numeric.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -497,6 +501,16 @@ Expr* builtin_matrixrank(Expr* res) {
     }
 
     int rank_value = -1;
+
+    /* Arbitrary precision, default tolerance: eliminate at the matrix's own
+     * precision.  The double path below would round every entry to 53 bits
+     * (and underflow entries below 1e-308), then judge pivots against machine
+     * epsilon -- MatrixRank[N[HilbertMatrix[40], 100]] was 21, not 40. */
+    if (inexact && opts.tol_is_automatic) {
+        long bits = rref_numeric_bits(m, NULL);
+        if (bits > 53) rank_value = rref_numeric_rank(m, bits);
+        if (rank_value >= 0) numerical_path = false;
+    }
 
     if (numerical_path) {
         cplx_t* M = matrix_to_cplx(flat, rows, cols);
