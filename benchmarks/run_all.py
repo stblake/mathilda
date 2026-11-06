@@ -231,6 +231,12 @@ def group_of(num):
         # method of the 1997 solution notebook at machine and arbitrary
         # precision.
         return "H ISSAC'97 challenge"
+    if 136 <= num <= 145:
+        # The ISSAC '97 holdout: ten families of ten NEW problems probing the
+        # same capabilities as 126-135 on different instances, so a fix tuned
+        # to the challenge inputs shows up here as a failure.  True answers and
+        # their provenance are in ISSAC97_HOLDOUT.md.
+        return "I ISSAC'97 holdout"
     if num == 123:
         # One computation written twice -- Wolfram-language code and the native
         # Experimental` C builtin that must return the identical value.  The

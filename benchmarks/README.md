@@ -550,6 +550,25 @@ floor that `run_all.py` honours for that file only. The answers, the first run
 and the deficiency register (wrong answers, option handling, absences,
 bottlenecks, each with its fix status) are in [`ISSAC97.md`](ISSAC97.md).
 
+## The ISSAC '97 holdout (136–145)
+
+An anti-overfitting holdout for 126–135: 100 new problems, ten families of ten,
+one experiment per family, each family probing what one challenge problem probes
+on different instances — ill-conditioned matrices (136), hard definite integrals
+(137), slowly convergent series (138), exact coefficients and residues (139),
+roots of orthogonal polynomials and special functions (140), polynomial systems
+(141), limits with massive cancellation (142), polylogarithmic integrals (143),
+operator eigenvalues (144) and ODE singularities (145). Every problem has a
+machine case (a stated reduced instance where a double cannot carry the full
+one) and an arbitrary-precision case, plus an exact case in 139, 141, 142 and
+143. Same harness and `issac97_common.m` helpers as 126–135. Group I. Each true
+answer was established independently of both systems (closed forms, integer
+arithmetic, mpmath recomputation, Sturm counts, published tables);
+`issac97_holdout_table.py` classifies a run against those true answers rather
+than against the other column, so a CHECK-FAIL names the system that is wrong.
+Problems, answers, provenance and the baseline run are in
+[`ISSAC97_HOLDOUT.md`](ISSAC97_HOLDOUT.md).
+
 ## Meijer G definite integrals (125)
 
 | # | experiment | what it measures |
