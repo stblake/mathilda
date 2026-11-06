@@ -98,9 +98,10 @@ static Expr* nd_pde_lit(const char* fname, int a, int b,
     return expr_new_function(d2, ar, 2);
 }
 
-/* NDSolve is HoldAll, so a derivative written with D — D[u[t,x],t],
- * D[u[t,x],{x,2}] — arrives unevaluated instead of as the Derivative[a,b][u]
- * form the matcher expects.  Return a structural copy of `e` in which every
+/* NDSolve evaluates its arguments, so D[u[t,x],t] normally arrives already as
+ * Derivative[1,0][u][t,x]; a D[...] that is still unevaluated (an equation
+ * built inside a held context and passed on) does not, and the matcher expects
+ * the Derivative[a,b][u] form.  Return a structural copy of `e` in which every
  * D[...] node is evaluated (canonicalizing it to Derivative form) while the
  * surrounding structure (Equal, the boundary/initial values, ...) is left
  * intact — so an equation like Derivative[1,0][u][t,x] == ... is never

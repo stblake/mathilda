@@ -498,7 +498,7 @@ void ndsolve_init(void) {
     OPT_DependentVariables = intern_symbol("DependentVariables");
 
     symtab_add_builtin("NDSolve", builtin_ndsolve);
-    symtab_get_def("NDSolve")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("NDSolve")->attributes |= ATTR_PROTECTED;
 
     /* Options[NDSolve] — defaults mirror nd_opts_default() (see
      * ndsolve_common.c): every value shown here is the resolved behavior when
@@ -553,7 +553,7 @@ void ndsolve_init(void) {
         const NdStepper* S = nd_stepper_at(i);
         snprintf(buf, sizeof(buf), "NDSolve`%s", S->name);
         symtab_add_builtin(buf, builtin_ndsolve_method);
-        symtab_get_def(buf)->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+        symtab_get_def(buf)->attributes |= ATTR_PROTECTED;
         symtab_set_docstring(buf, S->doc);
     }
     /* Wolfram-facing method-name aliases (resolved by nd_lookup_stepper). */
@@ -563,7 +563,7 @@ void ndsolve_init(void) {
     for (size_t i = 0; i < sizeof(aliases)/sizeof(aliases[0]); i++) {
         snprintf(buf, sizeof(buf), "NDSolve`%s", aliases[i]);
         symtab_add_builtin(buf, builtin_ndsolve_method);
-        symtab_get_def(buf)->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+        symtab_get_def(buf)->attributes |= ATTR_PROTECTED;
         symtab_set_docstring(buf,
             "NDSolve`<method>[eqns, u, {x, xmin, xmax}] — solve forcing this "
             "time-integration method (see NDSolve).");
@@ -571,7 +571,7 @@ void ndsolve_init(void) {
 
     /* PDE controller: the Method-of-Lines spatial discretization. */
     symtab_add_builtin("NDSolve`MethodOfLines", builtin_ndsolve_method);
-    symtab_get_def("NDSolve`MethodOfLines")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("NDSolve`MethodOfLines")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("NDSolve`MethodOfLines",
         "NDSolve`MethodOfLines[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]\n"
         "\tsolves a partial differential equation by the method of lines: the\n"
