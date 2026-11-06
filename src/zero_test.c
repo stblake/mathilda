@@ -26,7 +26,9 @@
  *             precision (machine → 200 → 500 → 1000 bits) and retry.
  *             A non-zero result stays roughly constant across precisions;
  *             a true zero shrinks geometrically. Surviving the full ladder
- *             implies "True".
+ *             implies "True".  Every magnitude (residual, scale, threshold)
+ *             is a log2, so values far outside the double range -- Pi/3^700,
+ *             10^500 Pi -- are measured, not rounded to 0 or Inf.
  *
  *   Stage 3 — Schwartz–Zippel. For inputs with free symbols, substitute
  *             each free symbol with a random REAL rational of moderate
@@ -182,6 +184,13 @@ static const int ZT_OVERFLOW_SHELL_BITS[] = { ZT_NUMERATOR_BITS, 4, 2, 1, 0 };
  * realistic cancellation depth, yet far below the first MPFR rung (200 bits)
  * so a true zero triggers it at that rung. */
 #define ZT_DEEP_ZERO_BITS 96
+
+/* A symbol-free constant at a huge operand scale whose residual is still
+ * falling at the top of the ladder is read once more, at enough precision to
+ * resolve an absolute 2^-ZT_CONST_ABS_BITS against that scale (see
+ * decide_numeric_huge_scale), but never above ZT_CONST_MAX_BITS. */
+#define ZT_CONST_ABS_BITS 1000
+#define ZT_CONST_MAX_BITS 65536
 
 /* ------------------------------------------------------------------ */
 /*  Forward declarations                                              */
@@ -719,48 +728,99 @@ static ZeroTestResult decide_rational(const Expr* e) {
 /*  Stage 2: numeric precision ladder                                 */
 /* ------------------------------------------------------------------ */
 
-/* Extract |v| as a double. Handles Integer, BigInt, Real, MPFR, and
- * Complex[re, im] (returns hypot of magnitudes). Returns false if the
- * input is not a recognized numeric form (e.g. still contains symbols). */
-static bool expr_abs_double(const Expr* e, double* out) {
-    if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = fabs((double)e->data.integer); return true; }
-    if (e->type == EXPR_REAL)    { *out = fabs(e->data.real);             return true; }
-    if (e->type == EXPR_BIGINT)  { *out = fabs(mpz_get_d(e->data.bigint));return true; }
+/* ------------------------------------------------------------------ */
+/*  Magnitudes                                                         */
+/* ------------------------------------------------------------------ */
+
+/* Every magnitude in the numeric stages -- a residual |z|, an operand scale,
+ * a threshold -- is carried as its base-2 LOGARITHM, never as the value
+ * itself.  A double holds |v| only in [2^-1074, 2^1024): read as a double, a
+ * residual of 3.4e-334 (Pi/3^700) is 0 and "zero", and an operand scale of
+ * 10^500 is Inf, which turns every relative test into Inf/NaN arithmetic.  The
+ * numeric values themselves are not so limited -- machine numericalization
+ * promotes an out-of-range result to an extended-exponent MPFR, and the MPFR
+ * rungs have a 2^(+-2^62) exponent range -- so the magnitudes must not be
+ * either.  As a log2 a double spans every magnitude MPFR can represent, a
+ * product of magnitudes is a sum, a ratio a difference and "x below scale *
+ * 2^-k" is "x < scale - k".
+ *
+ * Conventions: log2(0) = -INFINITY (an exact zero residual); +INFINITY stands
+ * for a value no number represents (an IEEE Inf/NaN, a pole). */
+
+/* log2(2^a + 2^b), exact zeros (-Inf) absorbed. */
+static double zt_l2_add(double a, double b) {
+    if (a == -INFINITY) return b;
+    if (b == -INFINITY) return a;
+    double hi = a > b ? a : b, lo = a > b ? b : a;
+    if (!isfinite(hi)) return hi;
+    return hi + log2(1.0 + exp2(lo - hi));
+}
+
+/* log2 sqrt(2^(2a) + 2^(2b)): the modulus of re + i im from log2|re|, log2|im|. */
+static double zt_l2_hypot(double a, double b) {
+    if (a == -INFINITY) return b;
+    if (b == -INFINITY) return a;
+    double hi = a > b ? a : b, lo = a > b ? b : a;
+    if (!isfinite(hi)) return hi;
+    return hi + 0.5 * log2(1.0 + exp2(2.0 * (lo - hi)));
+}
+
+/* log2 |z| of an MPFR value: exact over the whole exponent range. */
 #ifdef USE_MPFR
-    if (e->type == EXPR_MPFR) {
-        *out = fabs(mpfr_get_d(e->data.mpfr, MPFR_RNDN));
-        /* mpfr_get_d underflows extremely small values to 0.0; this is
-         * the behaviour we want when checking "is this approximately
-         * zero?", so no special-case is needed. */
+static double zt_l2_mpfr(mpfr_srcptr v) {
+    if (mpfr_zero_p(v)) return -INFINITY;
+    if (!mpfr_number_p(v)) return INFINITY;
+    long ex = 0;
+    double m = mpfr_get_d_2exp(&ex, v, MPFR_RNDN);
+    return (double)ex + log2(fabs(m));
+}
+#endif
+
+/* log2 |z| of a GMP integer, whatever its size. */
+static double zt_l2_mpz(const mpz_t z) {
+    if (mpz_sgn(z) == 0) return -INFINITY;
+    long ex = 0;
+    double m = mpz_get_d_2exp(&ex, z);
+    return (double)ex + log2(fabs(m));
+}
+
+/* log2 |v| for a numeric value: Integer, BigInt, Real, MPFR, Rational of
+ * either kind of part (also the Rational[1., 1.*^30] shape numericalize
+ * emits), and Complex[re, im] (its modulus).  Returns false if the input is
+ * not a recognized numeric form (e.g. still contains symbols). */
+static bool expr_log2_abs(const Expr* e, double* out) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) {
+        *out = e->data.integer == 0 ? -INFINITY
+                                    : log2(fabs((double)e->data.integer));
         return true;
     }
+    if (e->type == EXPR_REAL) {
+        double v = e->data.real;
+        *out = v == 0.0 ? -INFINITY : (isfinite(v) ? log2(fabs(v)) : INFINITY);
+        return true;
+    }
+    if (e->type == EXPR_BIGINT) { *out = zt_l2_mpz(e->data.bigint); return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) { *out = zt_l2_mpfr(e->data.mpfr); return true; }
 #endif
     Expr* re = NULL; Expr* im = NULL;
     if (is_complex((Expr*)e, &re, &im)) {
         double mr = 0.0, mi = 0.0;
-        if (!expr_abs_double(re, &mr)) return false;
-        if (!expr_abs_double(im, &mi)) return false;
-        *out = hypot(mr, mi);
+        if (!expr_log2_abs(re, &mr)) return false;
+        if (!expr_log2_abs(im, &mi)) return false;
+        *out = zt_l2_hypot(mr, mi);
         return true;
     }
-    int64_t rn = 0, rd = 1;
-    if (is_rational((Expr*)e, &rn, &rd)) {
-        if (rd == 0) return false;
-        *out = fabs((double)rn / (double)rd);
-        return true;
-    }
-    /* Rational[n, d] with non-int64 args (e.g. Rational[1.0, 1e+30] that
-     * numericalize emits for bigint-denominator rationals at machine
-     * precision). Recurse on components. */
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
         e->data.function.head && e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_Rational) {
         double mn = 0.0, md = 0.0;
-        if (!expr_abs_double(e->data.function.args[0], &mn)) return false;
-        if (!expr_abs_double(e->data.function.args[1], &md)) return false;
-        if (md == 0.0) return false;
-        *out = mn / md;
+        if (!expr_log2_abs(e->data.function.args[0], &mn)) return false;
+        if (!expr_log2_abs(e->data.function.args[1], &md)) return false;
+        if (md == -INFINITY) return false;
+        *out = (mn == -INFINITY) ? -INFINITY
+             : (isfinite(mn) && isfinite(md)) ? mn - md : INFINITY;
         return true;
     }
     return false;
@@ -826,24 +886,27 @@ static bool is_algebraic_expr(const Expr* e) {
     return false;
 }
 
-/* Estimate the operand-magnitude scale of `e` at machine precision. This
- * is the denominator in the cancellation-aware ambiguity threshold:
- * results below scale * 2^(-p/2) are indistinguishable from rounding
- * noise, so we treat them as "ambiguous" rather than zero.
+/* Estimate the operand-magnitude scale of `e`, as log2 (see "Magnitudes"
+ * above). This is the denominator in the cancellation-aware ambiguity
+ * threshold: results below scale * 2^(-p/2) are indistinguishable from
+ * rounding noise, so we treat them as "ambiguous" rather than zero.
  *
  * The estimate uses head-aware recursion so it captures *additive*
  * cancellation (Plus) without spuriously inflating purely multiplicative
  * forms (Times, Rational, Power), where no cancellation can occur:
  *   - Plus[a, b, …]    -> Σ |a_i|       (potential cancellation)
  *   - Times[a, b, …]   -> Π |a_i|       (exact product magnitude)
- *   - Power[a, b]      -> |a|^|b|       (treating exponent magnitude)
+ *   - Power[a, b]      -> |a|^b         (signed exponent)
  *   - Rational[n, d]   -> |n| / |d|
  *   - Complex[re, im]  -> hypot(|re|, |im|)
  *   - generic f[args]  -> Σ |a_i|       (conservative)
- * Numeric leaves give |value|; named constants (Pi, E, …) get their
- * numeric value at machine precision; free symbols default to 1. */
-static double magnitude_scale(const Expr* e) {
-    if (!e) return 1.0;
+ * Numeric leaves give |value| (an exact zero leaf -Inf, so Complex[0, 10^-20]
+ * scores 10^-20); named constants (Pi, E, …) get their numeric value at
+ * machine precision; free symbols default to 1 (log2 0).  A compound node
+ * whose estimate vanishes scores 1, as a scale of 0 would void every relative
+ * test; magnitude_scale, the entry point, is therefore always finite. */
+static double magnitude_scale_l2(const Expr* e) {
+    if (!e) return 0.0;
 
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL ||
         e->type == EXPR_BIGINT
@@ -852,30 +915,29 @@ static double magnitude_scale(const Expr* e) {
 #endif
         ) {
         double m = 0.0;
-        if (expr_abs_double(e, &m)) return m;
-        return 1.0;
+        if (expr_log2_abs(e, &m) && m != INFINITY) return m;
+        return 0.0;
     }
 
     if (e->type == EXPR_SYMBOL) {
         if (is_known_constant(e->data.symbol.name)) {
             Expr* n = numericalize(e, numeric_machine_spec());
             double m = 0.0;
-            if (n && expr_abs_double(n, &m)) { expr_free(n); return m > 0.0 ? m : 1.0; }
+            bool ok = n && expr_log2_abs(n, &m) && isfinite(m);
             if (n) expr_free(n);
+            if (ok) return m;
         }
-        return 1.0;
+        return 0.0;
     }
 
     if (e->type == EXPR_FUNCTION) {
         Expr* re = NULL; Expr* im = NULL;
-        if (is_complex((Expr*)e, &re, &im)) {
-            double mr = magnitude_scale(re);
-            double mi = magnitude_scale(im);
-            return hypot(mr, mi);
-        }
-        int64_t rn = 0, rd = 1;
-        if (is_rational((Expr*)e, &rn, &rd) && rd != 0) {
-            return fabs((double)rn / (double)rd);
+        if (is_complex((Expr*)e, &re, &im))
+            return zt_l2_hypot(magnitude_scale_l2(re), magnitude_scale_l2(im));
+        if (is_rational_like(e)) {
+            double m = 0.0;
+            if (expr_log2_abs(e, &m) && m != INFINITY) return m;
+            return 0.0;
         }
 
         const Expr* head = e->data.function.head;
@@ -883,58 +945,66 @@ static double magnitude_scale(const Expr* e) {
                                 ? head->data.symbol.name : NULL;
         size_t argc = e->data.function.arg_count;
 
-        if (head_name == SYM_Plus) {
-            double sum = 0.0;
-            for (size_t i = 0; i < argc; ++i) sum += magnitude_scale(e->data.function.args[i]);
-            return sum > 0.0 ? sum : 1.0;
-        }
         if (head_name == SYM_Times) {
-            double prod = 1.0;
-            for (size_t i = 0; i < argc; ++i) prod *= magnitude_scale(e->data.function.args[i]);
-            if (!isfinite(prod) || prod <= 0.0) return 1.0;
-            return prod;
+            double prod = 0.0;
+            for (size_t i = 0; i < argc; ++i) prod += magnitude_scale_l2(e->data.function.args[i]);
+            return isfinite(prod) ? prod : 0.0;
         }
         if (head_name == SYM_Power && argc == 2) {
-            double base = magnitude_scale(e->data.function.args[0]);
-            if (base <= 0.0) base = 1.0;
+            double base = magnitude_scale_l2(e->data.function.args[0]);
+            if (base == -INFINITY) base = 0.0;
             /* Use the SIGNED exponent value, not its magnitude: Power[x, -1] has
              * magnitude 1/x, not x.  Scoring a reciprocal/denominator as x^|−1|
              * grossly inflates the operand scale of any expression with a
              * denominator, which then drowns a genuine non-zero below the
-             * cancellation noise floor (a Schwartz-Zippel false zero). */
+             * cancellation noise floor (a Schwartz-Zippel false zero).  A
+             * symbolic exponent is scored by its own magnitude. */
             double expv;
             if (!expr_signed_double(e->data.function.args[1], &expv))
-                expv = magnitude_scale(e->data.function.args[1]); /* symbolic exp */
-            double v = pow(base, expv);
-            if (!isfinite(v) || v <= 0.0) return base; /* fall back */
+                expv = exp2(magnitude_scale_l2(e->data.function.args[1]));
+            double v = base * expv;
+            if (!isfinite(v)) return base; /* fall back */
             return v;
         }
         if (head_name == SYM_Rational && argc == 2) {
-            double n = magnitude_scale(e->data.function.args[0]);
-            double d = magnitude_scale(e->data.function.args[1]);
-            if (d <= 0.0) return n > 0.0 ? n : 1.0;
-            double v = n / d;
-            if (!isfinite(v)) return 1.0;
-            return v > 0.0 ? v : 1.0;
+            double n = magnitude_scale_l2(e->data.function.args[0]);
+            double d = magnitude_scale_l2(e->data.function.args[1]);
+            if (d == -INFINITY) return n == -INFINITY ? 0.0 : n;
+            double v = n - d;
+            return isfinite(v) ? v : 0.0;
         }
         if (head_name == SYM_Sqrt && argc == 1) {
-            double v = magnitude_scale(e->data.function.args[0]);
-            return v > 0.0 ? sqrt(v) : 1.0;
+            double v = magnitude_scale_l2(e->data.function.args[0]);
+            return v == -INFINITY ? 0.0 : 0.5 * v;
+        }
+        /* Exp[a], a real number: |E^a| = 2^(a log2 E), as Power[E, a] above
+         * (the generic rule would score Exp[-10^4] as 10^4, not e^-10^4). */
+        if (head_name == SYM_Exp && argc == 1) {
+            double a = 0.0;
+            if (expr_signed_double(e->data.function.args[0], &a) && isfinite(a))
+                return a * 1.4426950408889634;   /* log2 E */
         }
 
-        /* Generic function (Sin, Cos, Log, Exp, user-defined, …): treat
-         * the result magnitude as approximately the sum of operand
-         * magnitudes.  Adequate for the threshold heuristic. */
-        double sum = 0.0;
-        for (size_t i = 0; i < argc; ++i) sum += magnitude_scale(e->data.function.args[i]);
-        return sum > 0.0 ? sum : 1.0;
+        /* Plus: the L1 norm of the terms.  Generic function (Sin, Cos, Log,
+         * Exp, user-defined, …): treat the result magnitude as approximately
+         * the sum of operand magnitudes.  Adequate for the threshold
+         * heuristic. */
+        double sum = -INFINITY;
+        for (size_t i = 0; i < argc; ++i)
+            sum = zt_l2_add(sum, magnitude_scale_l2(e->data.function.args[i]));
+        return isfinite(sum) ? sum : 0.0;
     }
 
-    return 1.0;
+    return 0.0;
 }
 
-/* "Definitely non-zero" threshold. At precision p, anything that exceeds
- * scale * 2^(-p + ZT_NONZERO_HEADROOM) is well above the rounding-noise
+static double magnitude_scale(const Expr* e) {
+    double m = magnitude_scale_l2(e);
+    return isfinite(m) ? m : 0.0;
+}
+
+/* "Definitely non-zero" threshold, as log2. At precision p, anything that
+ * exceeds scale * 2^(-p + ZT_NONZERO_HEADROOM) is well above the rounding-noise
  * floor and is a confident False verdict. Tuned to forgive ~30 bits of
  * cancellation so transcendental identities that cancel down to machine
  * epsilon still survive the first rung. */
@@ -942,7 +1012,7 @@ static double magnitude_scale(const Expr* e) {
 static double nonzero_threshold(double scale, long p_bits) {
     long shift = p_bits - ZT_NONZERO_HEADROOM;
     if (shift <= 0) return INFINITY;          /* never reject at trivial precision */
-    return scale * ldexp(1.0, -(int)shift);
+    return scale - (double)shift;
 }
 
 /* Rung-0 (machine) obvious-non-zero gate. A residual exceeding scale * 2^-N is
@@ -1090,50 +1160,67 @@ static NumericSpec spec_at_bits(long bits) {
  * estimate which is generally tight enough (e.g. Sin[Pi] has scale Pi,
  * |result| 1.2e-16, threshold ~4e-7 → ambiguous → climb). */
 static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
-    if (!e) return 1.0;
+    if (!e) return 0.0;
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol.name == SYM_Plus) {
-        double sum = 0.0;
+        double sum = -INFINITY;
         for (size_t i = 0; i < e->data.function.arg_count; ++i) {
             Expr* n = spec.mode == NUMERIC_MODE_MACHINE
                     ? numericalize_machine_unplanned(e->data.function.args[i])
                     : numericalize(e->data.function.args[i], spec);
             if (n) {
                 double m = 0.0;
-                if (expr_abs_double(n, &m) && isfinite(m)) sum += m;
+                if (expr_log2_abs(n, &m) && isfinite(m)) sum = zt_l2_add(sum, m);
                 expr_free(n);
             }
         }
-        if (sum > 0.0 && isfinite(sum)) return sum;
+        if (isfinite(sum)) return sum;
         /* Fall through to the static estimate. */
     }
-    double m = magnitude_scale(e);
-    if (!isfinite(m) || m <= 0.0) return 1.0;
-    return m;
+    return magnitude_scale(e);
+}
+
+/* True iff a numeric value carries a machine real anywhere (Complex parts
+ * included).  At an MPFR rung that is the mark of a head that ignored the
+ * requested precision: machine reals contaminate every sum or product they
+ * enter. */
+static bool zt_has_machine_real(const Expr* z) {
+    if (!z) return false;
+    if (z->type == EXPR_REAL) return true;
+    if (z->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < z->data.function.arg_count; ++i)
+        if (zt_has_machine_real(z->data.function.args[i])) return true;
+    return false;
 }
 
 /* Test the expression at a single precision rung. Returns FALSE if the
  * residual decisively exceeds the noise floor; TRUE if the residual is
  * indistinguishable from zero (very small relative to scale); UNKNOWN
- * if the numericalize couldn't reduce. *out_mag receives the residual
- * magnitude when non-UNKNOWN, otherwise 0.0. *out_scale (when non-NULL)
- * receives the operand-magnitude scale used for the threshold.
+ * if the numericalize couldn't reduce. *out_mag receives log2 of the
+ * residual magnitude when non-UNKNOWN (-Inf for an exact zero, +Inf for a
+ * pole), otherwise -Inf. *out_scale (when non-NULL) receives the log2
+ * operand-magnitude scale used for the threshold.  *out_pinned (when
+ * non-NULL) is set when an MPFR rung's value came back as a machine real:
+ * some head evaluated at machine precision whatever was asked, so this rung
+ * is no more accurate than the machine one.
  *
- * `in_scale`: when >= 0, the caller supplies a precomputed operand scale and
+ * `in_scale`: when not NaN, the caller supplies a precomputed operand scale and
  * we SKIP the (expensive) per-argument numericalization in magnitude_scale_at.
  * The operand magnitude is essentially precision-independent (it is a sum/
  * product of operand values, not a cancelling residual), so a scale computed
  * once at machine precision is reused for every higher rung — this removes a
  * redundant full second numericalization pass at each MPFR rung, the dominant
  * cost on large (tens-of-thousands-of-leaves) antiderivative round-trips.
- * Pass a negative value to compute the scale at this rung's precision. */
+ * Pass NaN to compute the scale at this rung's precision. */
 static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
                                          double* out_mag, double* out_scale,
-                                         double in_scale, bool* out_overflow) {
-    *out_mag = 0.0;
-    if (out_scale) *out_scale = 1.0;
+                                         double in_scale, bool* out_overflow,
+                                         bool* out_pinned) {
+    *out_mag = -INFINITY;
+    if (out_scale) *out_scale = 0.0;
     if (out_overflow) *out_overflow = false;
+    if (out_pinned) *out_pinned = false;
     Expr* z = numericalize_at(e, bits);
     if (!z) return ZERO_TEST_UNKNOWN;
     if (expr_is_infinity(z)) {
@@ -1152,9 +1239,9 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
         for (int i = 0; i + 1 < PRECISION_LADDER_LEN; ++i)
             if (PRECISION_LADDER[i] >= bits || (i == 0 && bits <= 53))
                 return evaluate_rung_core(e, PRECISION_LADDER[i + 1], out_mag, out_scale,
-                                          in_scale, out_overflow);
+                                          in_scale, out_overflow, out_pinned);
         *out_mag = INFINITY;
-        if (out_scale) *out_scale = 1.0;
+        if (out_scale) *out_scale = 0.0;
         return ZERO_TEST_FALSE;
     }
     if (!is_pure_numeric(z)) {
@@ -1172,9 +1259,10 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
         return ZERO_TEST_UNKNOWN;
     }
     double mag = 0.0;
-    bool ok = expr_abs_double(z, &mag);
+    bool ok = expr_log2_abs(z, &mag);
+    if (out_pinned && bits > 53) *out_pinned = zt_has_machine_real(z);
     expr_free(z);
-    if (ok && !isfinite(mag)) {
+    if (ok && mag == INFINITY) {
         /* Numeric but OUT OF RANGE: a symbol-dependent exponent drove E/Gamma/…
          * past the IEEE/MPFR range (+/-Inf), or two independently-overflowing
          * subterms produced a NaN. This POINT carries no information: it is a
@@ -1194,8 +1282,8 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
     if (!ok) return ZERO_TEST_UNKNOWN;
     *out_mag = mag;
 
-    double scale = (in_scale >= 0.0) ? in_scale
-                                     : magnitude_scale_at(e, spec_at_bits(bits));
+    double scale = !isnan(in_scale) ? in_scale
+                                    : magnitude_scale_at(e, spec_at_bits(bits));
     if (out_scale) *out_scale = scale;
     double tol = nonzero_threshold(scale, bits);
     if (mag > tol) return ZERO_TEST_FALSE;
@@ -1213,10 +1301,11 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
  * holds across the core's several early returns. */
 static ZeroTestResult evaluate_rung(const Expr* e, long bits,
                                     double* out_mag, double* out_scale,
-                                    double in_scale, bool* out_overflow) {
+                                    double in_scale, bool* out_overflow,
+                                    bool* out_pinned) {
     arith_warnings_mute_push();
     ZeroTestResult r = evaluate_rung_core(e, bits, out_mag, out_scale,
-                                          in_scale, out_overflow);
+                                          in_scale, out_overflow, out_pinned);
     arith_warnings_mute_pop();
     return r;
 }
@@ -1282,7 +1371,7 @@ static Expr* zt_exactify_reals(const Expr* e) {
 }
 
 static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
-                                                double scale) {
+                                                double scale, bool constant) {
     /* Climb on the exact point: the MPFR rungs then carry real precision. */
     Expr* exact = zt_exactify_reals(e);
     if (exact) e = exact;
@@ -1302,25 +1391,44 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
         for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
             double m = 0.0;
             top = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
-                                scale > 0.0 ? scale : -1.0, NULL);
+                                isfinite(scale) ? scale : NAN, NULL, NULL);
             if (top == ZERO_TEST_UNKNOWN) { top = ZERO_TEST_TRUE; break; }  /* MPFR gone: lenient */
             ms[i] = m; got = i;
         }
         if (got >= 2) {
             long gained = PRECISION_LADDER[got] - PRECISION_LADDER[got - 1];
-            if (ms[got] <= ms[got - 1] * ldexp(1.0, (int)(-gained / 2))) top = ZERO_TEST_TRUE;
+            if (ms[got] <= ms[got - 1] - (double)(gained / 2)) top = ZERO_TEST_TRUE;
         }
         expr_free(exact);
         return top;
     }
+    bool plateaued = false;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
         /* Reuse the machine-precision operand scale (precision-independent). */
         rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
-                           scale > 0.0 ? scale : -1.0, NULL);
-        if (rr == ZERO_TEST_UNKNOWN) { rr = ZERO_TEST_TRUE; break; }  /* MPFR gone: lenient */
-        if (m >= prev * 0.5) break;       /* plateaued: value resolved, trust rung */
+                           isfinite(scale) ? scale : NAN, NULL, NULL);
+        if (rr == ZERO_TEST_UNKNOWN) { rr = ZERO_TEST_TRUE; plateaued = true; break; }  /* MPFR gone: lenient */
+        if (m >= prev - 1.0) { plateaued = true; break; }  /* value resolved, trust rung */
         prev = m;
+    }
+    /* A CONSTANT whose residual is still falling at the top rung has not been
+     * resolved: the top rung's floor sits at scale * 2^-970, and at a scale of
+     * e^10^4 that is 2^13457 -- Exp[10^4] (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1) + 1,
+     * which is 1, read as 0.  A sample point is re-drawn instead; a constant
+     * cannot be, so it is read once more at the precision that resolves an
+     * absolute 2^-ZT_CONST_ABS_BITS against its scale, and that rung's floor
+     * decides (a zero has fallen below it, a value holds above it). */
+    if (constant && !plateaued && rr == ZERO_TEST_TRUE && isfinite(scale)) {
+        double want = scale + (double)ZT_CONST_ABS_BITS + ZT_NONZERO_HEADROOM;
+        if (want > (double)PRECISION_LADDER[PRECISION_LADDER_LEN - 1] &&
+            want <= (double)ZT_CONST_MAX_BITS) {
+            double m = 0.0;
+            bool pinned = false;
+            ZeroTestResult top = evaluate_rung(e, (long)ceil(want), &m, NULL,
+                                               scale, NULL, &pinned);
+            if (top != ZERO_TEST_UNKNOWN && !pinned) rr = top;
+        }
     }
     return rr;   /* the plateau rung's verdict, or the top-rung floor's */
 }
@@ -1373,14 +1481,14 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
         ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
-                                          scale > 0.0 ? scale : -1.0, NULL);
+                                          isfinite(scale) ? scale : NAN, NULL, NULL);
         /* an undecidable rung (Indeterminate from a still-cancelling 0 * Infinity,
          * or MPFR unavailable) says nothing: try the next one */
         if (rr == ZERO_TEST_UNKNOWN) continue;
         /* an MPFR-rung pole is a genuine pole (evaluate_rung_core already defers
          * a machine-precision 0.0 denominator up the ladder): non-zero */
-        if (!isfinite(m)) { got = -1; break; }
-        if (scale > 0.0 && m < scale * ldexp(1.0, -ZT_DEEP_ZERO_BITS)) {
+        if (m == INFINITY) { got = -1; break; }
+        if (isfinite(scale) && m < scale - ZT_DEEP_ZERO_BITS) {
             verdict = ZERO_TEST_TRUE;
             got = -1;                     /* decided: skip the trend tests */
             break;
@@ -1390,11 +1498,11 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
     if (got >= 1) {
         /* a residual that collapsed by 2^60 or more from its machine value over
          * the ladder was cancellation noise all along */
-        if (ms[got - 1] < mag * ldexp(1.0, -60)) verdict = ZERO_TEST_TRUE;
+        if (ms[got - 1] < mag - 60.0) verdict = ZERO_TEST_TRUE;
         /* the top two decided rungs: a zero falls by >= half the bits added */
         else if (got >= 2) {
             long gained = bits[got - 1] - bits[got - 2];
-            if (ms[got - 1] <= ms[got - 2] * ldexp(1.0, (int)(-gained / 2)))
+            if (ms[got - 1] <= ms[got - 2] - (double)(gained / 2))
                 verdict = ZERO_TEST_TRUE;
         }
         /* Still at or below the top rung's precision floor, measured against the
@@ -1410,8 +1518,8 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
         if (verdict == ZERO_TEST_FALSE && out_overflow) {
             double s_struct = magnitude_scale(e);
             long top = bits[got - 1];
-            if (isfinite(s_struct) && s_struct > 0.0 && top > ZT_NONZERO_HEADROOM &&
-                ms[got - 1] < s_struct * ldexp(1.0, -(int)(top - ZT_NONZERO_HEADROOM))) {
+            if (isfinite(s_struct) && top > ZT_NONZERO_HEADROOM &&
+                ms[got - 1] < s_struct - (double)(top - ZT_NONZERO_HEADROOM)) {
                 *out_overflow = true;
                 verdict = ZERO_TEST_UNKNOWN;
             }
@@ -1422,38 +1530,69 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
 }
 
 static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
-    double mag = 0.0, scale = 1.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
-                                     out_overflow);
-    if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
+    double mag = -INFINITY, scale = 0.0;
+    bool ovf = false;
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, NAN,
+                                     &ovf, NULL);
+    if (out_overflow) *out_overflow = ovf;
+    if (r == ZERO_TEST_UNKNOWN) {
+        /* A constant whose machine value left the representable range (Inf - Inf
+         * = NaN in 10^500 (Pi + 10^-30) - 10^500 Pi when a term stays a double)
+         * cannot be re-drawn like a sample point, and an out-of-range value is
+         * never evidence of a zero: read it on the MPFR rungs instead, whose
+         * exponent range holds it.  A sample point (out_overflow given) goes
+         * back to the sampler's shell re-draw as before. */
+        if (ovf && !out_overflow) {
+            double m1 = -INFINITY, s1 = 0.0;
+            ZeroTestResult r1 = evaluate_rung(e, PRECISION_LADDER[1], &m1, &s1,
+                                              NAN, NULL, NULL);
+            if (r1 == ZERO_TEST_UNKNOWN || !isfinite(m1)) return ZERO_TEST_UNKNOWN;
+            return zt_resolve_machine_nonzero(e, m1, s1, NULL);
+        }
+        return ZERO_TEST_UNKNOWN;
+    }
 
     /* Huge-scale deep-cancellation guard (#5): at an astronomically large
      * operand scale, a machine residual above the obvious gate may be a
      * catastrophic-cancellation artifact rather than a genuine value, so the
      * fast reject below is NOT sound here — climb the full ladder instead. */
-    if (scale > 0.0 && scale >= ldexp(1.0, ZT_HUGE_SCALE_BITS) &&
-        mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
-        return decide_numeric_huge_scale(e, mag, scale);
+    if (scale >= ZT_HUGE_SCALE_BITS && mag > scale - ZT_OBVIOUS_NONZERO_BITS)
+        return decide_numeric_huge_scale(e, mag, scale, out_overflow == NULL);
 
-    if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
+    if (mag > scale - ZT_OBVIOUS_NONZERO_BITS)
         return zt_resolve_machine_nonzero(e, mag, scale, out_overflow);
 
     double prev_mag = mag;
     bool honored = false;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
-        double m = 0.0;
+        double m = -INFINITY;
+        bool pinned = false;
         /* Reuse the machine-precision operand scale (precision-independent) so
          * each higher rung numericalizes the tree ONCE, not twice. */
         /* Higher rungs never overflow when rung 0 did not (MPFR's exponent range
          * exceeds the double's), so no out_overflow is threaded here. */
         ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
-                                          scale > 0.0 ? scale : -1.0, NULL);
+                                          scale, NULL, &pinned);
         if (rr == ZERO_TEST_UNKNOWN) {
             /* MPFR path unavailable beyond here — accept the lenient machine
              * verdict (the rung-0 residual was below the non-zero gate). */
             return ZERO_TEST_TRUE;
         }
-        if (m < prev_mag * 0.5) {
+        if (prev_mag == -INFINITY && m != -INFINITY && !pinned) {
+            /* The rung below came out an EXACT zero and this one, evaluated at
+             * its full precision (no machine-pinned head in the value), did not.
+             * An exact zero at the lower rung is no baseline: the residual has
+             * nothing to plateau against, and the lenient "never shrank" verdict
+             * below would read any value as a zero -- Exp[1 + 10^-20] - E is 0.
+             * at machine precision and 2.7*10^-20 at 200 bits.  The change itself
+             * proves the precision is honoured, so this rung becomes the
+             * baseline and the next rung decides: a cancellation zero keeps
+             * falling, a value holds and is judged against that rung's floor. */
+            honored = true;
+            prev_mag = m;
+            continue;
+        }
+        if (m < prev_mag - 1.0) {
             /* Residual shrank: precision honoured, still consistent with zero. */
             honored = true;
             prev_mag = m;
@@ -1465,7 +1604,7 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
              * FAILURES.md case B2): it does not change any verdict — a genuine
              * non-zero cannot shrink below its own magnitude — only the number of
              * rungs climbed for a confirmed zero. */
-            if (scale > 0.0 && m < scale * ldexp(1.0, -ZT_DEEP_ZERO_BITS))
+            if (m < scale - ZT_DEEP_ZERO_BITS)
                 return ZERO_TEST_TRUE;
             continue;
         }
@@ -1485,8 +1624,7 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
          * for a cancellation-hidden zero.  Otherwise (transcendental heads whose
          * MPFR path may silently stay at machine precision, or a residual down at
          * the noise floor) keep the lenient machine verdict (zero). */
-        if (is_algebraic_expr(e) && scale > 0.0 &&
-            m > scale * ldexp(1.0, -ZT_ALG_NONZERO_BITS))
+        if (is_algebraic_expr(e) && m > scale - ZT_ALG_NONZERO_BITS)
             return ZERO_TEST_FALSE;
         return ZERO_TEST_TRUE;
     }
@@ -1500,17 +1638,17 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
  * cancellation check is deferred to the confirm phase's full ladder, so a
  * borderline-cancelling true-zero point is NOT falsely rejected by the screen. */
 static ZeroTestResult screen_point(const Expr* e, bool* out_overflow) {
-    double mag = 0.0, scale = 1.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0,
-                                     out_overflow);
+    double mag = -INFINITY, scale = 0.0;
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, NAN,
+                                     out_overflow, NULL);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
-    if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS)) {
+    if (mag > scale - ZT_OBVIOUS_NONZERO_BITS) {
         /* Huge-scale deep-cancellation guard (#5): at an astronomically large
          * operand scale the machine FALSE may be a catastrophic-cancellation
          * artifact.  Don't settle the screen on it — return UNKNOWN so sz_trial
          * escalates this point to the full ladder (decide_numeric ->
          * decide_numeric_huge_scale), which climbs MPFR to adjudicate. */
-        if (scale >= ldexp(1.0, ZT_HUGE_SCALE_BITS)) return ZERO_TEST_UNKNOWN;
+        if (scale >= ZT_HUGE_SCALE_BITS) return ZERO_TEST_UNKNOWN;
         /* Deep cancellation below the top-level scale: confirm up the ladder. */
         return zt_resolve_machine_nonzero(e, mag, scale, out_overflow);
     }

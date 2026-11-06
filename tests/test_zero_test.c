@@ -1117,6 +1117,54 @@ static void test_huge_cancel_genuine_nonzero_stays_false(void) {
      * MPFR rung and rejects after a single extra evaluation. */
     assert_pzq("PossibleZeroQ[Cosh[14]^30 + (1 - Tanh[14]^2)^(-15)]", "False");
 }
+/* Group 22 -- magnitudes outside the double range.  The numeric stages read
+ * every magnitude through a double, so a value below 2^-1074 was 0 ("zero")
+ * and an operand scale above 2^1024 was Inf.  Every expected value here is
+ * independent of the implementation: c 10^-k and c 10^k are non-zero for any
+ * non-zero c; Exp[-10^4] - Exp[-10^4 - 10^-20] = e^-10^4 (1 - e^-10^-20) > 0;
+ * 10^500 (Pi + 10^-30) - 10^500 Pi = 10^470; Exp[1 + 10^-20] - E =
+ * E (e^10^-20 - 1) ~ 2.7 10^-20; Sin^2 + Cos^2 - 1 = 0 at any scale. */
+static void test_range_tiny_and_huge_constants_nonzero(void) {
+    static const char* cs[] = { "Pi", "E", "Sqrt[2]", "Log[3]", "Zeta[3]", "1/7" };
+    static const char* ks[] = { "300", "309", "400", "1000", "10^5" };
+    char buf[128];
+    for (size_t i = 0; i < sizeof cs / sizeof cs[0]; ++i)
+        for (size_t j = 0; j < sizeof ks / sizeof ks[0]; ++j) {
+            snprintf(buf, sizeof buf, "PossibleZeroQ[%s 10^-%s]", cs[i], ks[j]);
+            assert_pzq(buf, "False");
+            snprintf(buf, sizeof buf, "PossibleZeroQ[%s 10^%s]", cs[i], ks[j]);
+            assert_pzq(buf, "False");
+        }
+    assert_pzq("PossibleZeroQ[Pi/3^700]", "False");
+    assert_pzq("PossibleZeroQ[I Pi/3^700]", "False");
+    assert_pzq("PossibleZeroQ[I Pi/10^20]", "False");
+    assert_pzq("PossibleZeroQ[(1 + I) Exp[-10^4]]", "False");
+    assert_pzq("PossibleZeroQ[Pi/3^700 + E/3^700]", "False");
+    assert_pzq("PossibleZeroQ[Pi/3^700 + Log[2]/3^800]", "False");
+}
+static void test_range_differences(void) {
+    assert_pzq("PossibleZeroQ[Exp[-10^4] - Exp[-10^4 - 10^-20]]", "False");
+    assert_pzq("PossibleZeroQ[10^500 (Pi + 10^-30) - 10^500 Pi]", "False");
+    assert_pzq("PossibleZeroQ[Expand[10^500 (Pi + 10^-30)] - 10^500 Pi]", "False");
+    assert_pzq("PossibleZeroQ[I 10^500 (Pi + 10^-30) - I 10^500 Pi]", "False");
+    /* an exact machine zero followed by a resolved value is no plateau */
+    assert_pzq("PossibleZeroQ[Exp[1 + 10^-20] - E]", "False");
+    /* 1, hidden under a residual of e^10^4 2^-1000 at the top ladder rung */
+    assert_pzq("PossibleZeroQ[Exp[10^4] (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1) + 1]", "False");
+}
+static void test_range_true_zeros_stay_zero(void) {
+    assert_pzq("PossibleZeroQ[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1]", "True");
+    assert_pzq("PossibleZeroQ[Exp[10^4] (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1)]", "True");
+    assert_pzq("PossibleZeroQ[Exp[-10^4] (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1)]", "True");
+    assert_pzq("PossibleZeroQ[(Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1)/3^700]", "True");
+    assert_pzq("PossibleZeroQ[10^500 (Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2])]", "True");
+    assert_pzq("PossibleZeroQ[(Sin[x]^2 + Cos[x]^2 - 1)/3^700]", "True");
+}
+static void test_range_symbolic_tiny_factor(void) {
+    assert_pzq("PossibleZeroQ[x Pi/3^700]", "False");
+    assert_pzq("PossibleZeroQ[x Exp[-10^4]]", "False");
+    assert_pzq("PossibleZeroQ[Sin[x]/10^400]", "False");
+}
 static void test_huge_cancel_preserves_normal_identities(void) {
     /* Moderate-scale hyperbolic identities (below the huge gate) are unchanged. */
     assert_pzq("PossibleZeroQ[1/(1 - Tanh[x]^2) - Cosh[x]^2]", "True");
@@ -1425,6 +1473,11 @@ int main(void) {
     TEST(test_huge_cancel_genuine_nonzero_stays_false);
     TEST(test_huge_cancel_preserves_normal_identities);
     TEST(test_huge_cancel_machine_point_exact_climb);
+    /* Group 22 — magnitudes outside the double range */
+    TEST(test_range_tiny_and_huge_constants_nonzero);
+    TEST(test_range_differences);
+    TEST(test_range_true_zeros_stay_zero);
+    TEST(test_range_symbolic_tiny_factor);
     /* Group 21 — non-holomorphic heads sampled at complex points */
     TEST(test_deep_cancellation_zero_is_true);
     TEST(test_ladder_on_exact_point_top_rungs);

@@ -388,6 +388,22 @@ Pipeline (each stage exits early on a definite verdict):
      principal values there count, so an identity that fails only on a cut,
      such as `Sqrt[(1 - x)/(1 + x)] (1 + x) - Sqrt[1 - x^2]` on `x < -1`, is
      `False`.
+   - **Magnitudes are base-2 logarithms**, never doubles: the residual, the
+     operand scale and every threshold. Read as a double, a value below
+     `2^-1074` was 0 and a scale above `2^1024` was `Inf`, so
+     `PossibleZeroQ[Pi/3^700]`, `PossibleZeroQ[Zeta[3] 10^400]`,
+     `PossibleZeroQ[I Pi/10^20]` and `PossibleZeroQ[Exp[-10^4] - Exp[-10^4 -
+     10^-20]]` were `True`. All are now `False`; `Exp[10^4] (Sin[Pi/7]^2 +
+     Cos[Pi/7]^2 - 1)` and its tiny counterpart stay `True`.
+   - **An exact machine zero is no baseline.** When the machine residual is
+     exactly `0.` and the next rung (at full precision) is not, that rung is
+     the baseline and the one above decides: `Exp[1 + 10^-20] - E` is `0.` at
+     machine precision and `2.7 10^-20` at 200 bits, and was `True`.
+   - **A constant still falling at the top rung** at a huge operand scale is
+     read once more at `scale + 1030` bits (at most 65536), whose floor decides:
+     `Exp[10^4] (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1) + 1`, which is 1, was `True`.
+     A constant whose machine value overflowed to `Inf`/`NaN` is read on the
+     MPFR rungs instead of returning undecided.
 4. **Schwartz–Zippel** — for inputs with free symbols, substitute
    random **real** samples of moderate magnitude and recurse into the
    numeric stage, in two phases.
