@@ -580,6 +580,11 @@ static ZeroTestResult decide_structural(const Expr* e) {
         /* Rational[n, d] is structurally zero iff numerator is zero. */
         int64_t n = 0, d = 1;
         if (is_rational((Expr*)e, &n, &d)) return n == 0 ? ZERO_TEST_TRUE : ZERO_TEST_FALSE;
+        /* ... and of any size: a canonical Rational with a BigInt part is never
+         * zero.  Left to the numeric stage, 2^2000/3^1300 (~6e-19) read as 0,
+         * its BigInt parts overflowing the double operand scale. */
+        if (is_rational_like(e))
+            return integer_is_zero(e->data.function.args[0]) ? ZERO_TEST_TRUE : ZERO_TEST_FALSE;
     }
 
     return ZERO_TEST_UNKNOWN;

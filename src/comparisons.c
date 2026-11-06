@@ -403,12 +403,17 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     }
 }
 
+/* A literal datum whose comparison verdict is final: a number atom, a string,
+ * or an exact rational of ANY size.  A rational with a BigInt part counts:
+ * compare_numeric decides it exactly in GMP, and the exact zero test it would
+ * otherwise be re-checked by reads 2^2000/3^1300 at machine precision, where
+ * a denominator past the double range makes it 0 -- so Equal[2^2000/3^1300, 0]
+ * was True (and every rational beyond 1e308 in the denominator tested equal
+ * to 0). */
 static bool is_raw_data(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_STRING) return true;
-    int64_t n, d;
-    if (is_rational(e, &n, &d)) return true;
-    return false;
+    return is_rational_like(e);
 }
 
 /*

@@ -63,6 +63,22 @@ static void assert_outputform(const char* input, const char* expected) {
     assert_eval_eq(input, expected, 0);
 }
 
+/* Tan's Maclaurin coefficients against the closed form
+ *     [x^(2n-1)] Tan[x] = (-1)^(n-1) 2^(2n) (2^(2n) - 1) B_(2n) / (2n)!
+ * up to x^401, whose coefficient (~2.89e-79, the zigzag number T_401/401!)
+ * is a rational with a denominator far beyond the double range.  Each one
+ * must also test unequal to 0: Equal used to read such a rational at machine
+ * precision, where it is 0, so a nonzero coefficient tested Equal to 0. */
+static void test_series_tan_coefficients_bernoulli(void) {
+    assert_fullform("And @@ Table[SeriesCoefficient[Tan[x], {x, 0, 2 n - 1}] === "
+                    "(-1)^(n - 1) 2^(2 n) (2^(2 n) - 1) BernoulliB[2 n]/(2 n)!, "
+                    "{n, {1, 2, 3, 10, 50, 120, 201}}]", "True");
+    assert_fullform("With[{c = SeriesCoefficient[Tan[x], {x, 0, 401}]}, "
+                    "{c == 0, c > 0, Round[10^18 N[c 10^79, 30]]}]",
+                    "List[False, True, 2889611317106376218]");
+    assert_fullform("SeriesCoefficient[Tan[x], {x, 0, 400}]", "0");
+}
+
 /* 1. Taylor: Series[Exp[x], {x, 0, 10}] */
 static void test_series_taylor_exp(void) {
     setup_full();
@@ -2820,6 +2836,7 @@ int main(void) {
     TEST(test_series_stress_08);
     TEST(test_series_stress_09);
     TEST(test_series_branch_phase);
+    TEST(test_series_tan_coefficients_bernoulli);
 
     printf("All series tests passed.\n");
     return 0;

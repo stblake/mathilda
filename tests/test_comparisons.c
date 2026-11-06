@@ -349,6 +349,24 @@ void test_compare_bigint_adjacent() {
     check_compare_yields("Less[3/4, 4/5]",                  "True");
 }
 
+/* Exact rationals beyond the double range compare exactly: a BigInt
+ * denominator past ~1e308 made the value 0 at machine precision, and the
+ * exact zero test Equal consulted then confirmed 2^2000/3^1300 == 0 (the
+ * value is ~6.34e-19).  PossibleZeroQ, which shares the test, likewise. */
+void test_compare_rational_beyond_double_range() {
+    check_compare_yields("Equal[2^2000/3^1300, 0]",          "False");
+    check_compare_yields("Equal[0, 2^2000/3^1300]",          "False");
+    check_compare_yields("Unequal[2^2000/3^1300, 0]",        "True");
+    check_compare_yields("Equal[1/3^700, 0]",                "False");
+    check_compare_yields("Equal[-1/3^700, 0]",               "False");
+    check_compare_yields("Equal[1/3^700, 1/3^701]",          "False");
+    check_compare_yields("Equal[1/3^700, 3/3^701]",          "True");
+    check_compare_yields("Greater[2^2000/3^1300, 0]",        "True");
+    check_compare_yields("Less[2^2000/3^1300, 10^-18]",      "True");
+    check_compare_yields("PossibleZeroQ[2^2000/3^1300]",     "False");
+    check_compare_yields("PossibleZeroQ[1/3^700 - 3/3^701]", "True");
+}
+
 /* IEEE 754 / ISO 60559: a NaN is unordered with every value, itself
  * included.  Indeterminate is Mathilda's NaN, so Equal / Less / LessEqual /
  * Greater / GreaterEqual all yield False against it and Unequal yields True.
@@ -731,6 +749,7 @@ int main() {
     TEST(test_lessequal_mixed);
     TEST(test_greater_unevaluated);
     TEST(test_compare_bigint_adjacent);
+    TEST(test_compare_rational_beyond_double_range);
     TEST(test_indeterminate_ieee_unordered);
     TEST(test_variadic_comparison_chains);
     TEST(test_equal_lists_tolerance);
