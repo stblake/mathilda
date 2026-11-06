@@ -613,6 +613,46 @@ static void test_trapezoidal_periodic(void) {
                CONTOUR_TRUE, "10^-28");
 }
 
+/* ---- Strong algebraic endpoint singularities, option values, non-numeric
+ * integrands ---- */
+static void test_power_singularity(void) {
+    /* x^(a-1) E^-x on [0, 1], a = 1/1000: half the integral lies below 1e-301.
+     * Reference: the closed form Gamma[a] - Gamma[a, 1]. */
+    ASSERT_REL("NIntegrate[x^(-999/1000) E^-x, {x, 0, 1}]",
+               "Gamma[1/1000] - Gamma[1/1000, 1]", "10^-12");
+    ASSERT_REL("NIntegrate[x^(-999/1000) E^-x, {x, 0, 1}, WorkingPrecision -> 40]",
+               "Gamma[1/1000] - Gamma[1/1000, 1]", "10^-28");
+    /* at the upper endpoint, next to a non-zero end: (1-x)^(-9/10) = t^(-9/10) */
+    ASSERT_REL("NIntegrate[(1 - x)^(-9/10), {x, 0, 1}, WorkingPrecision -> 30]", "10", "10^-19");
+    ASSERT_REL("NIntegrate[(1 - x)^(-9/10) Cos[x], {x, 0, 1}, WorkingPrecision -> 30]",
+               "10 NIntegrate[Cos[1 - u^10], {u, 0, 1}, WorkingPrecision -> 40]", "10^-19");
+}
+
+static void test_option_values_and_nonnumeric(void) {
+    /* option values are evaluated (NIntegrate is HoldAll) */
+    ASSERT_CLOSE("Block[{i = 1}, NIntegrate[Exp[y], {y, 0, 1}, PrecisionGoal -> i]]",
+                 "E - 1", 1e-6);
+    ASSERT_REL("Block[{w = 20}, NIntegrate[Exp[y], {y, 0, 1}, WorkingPrecision -> w + 5]]",
+               "E - 1", "10^-14");
+    /* no numeric value: unevaluated (was 0.) */
+    ASSERT_EQ_STR("Quiet[NIntegrate[ff[x], {x, 0, 1}]]", "NIntegrate[ff[x], {x, 0, 1}]");
+    ASSERT_EQ_STR("Quiet[NIntegrate[ff[x], {x, 0, 1}, WorkingPrecision -> 30]]",
+                  "NIntegrate[ff[x], {x, 0, 1}, WorkingPrecision -> 30]");
+    /* machine-number values at WorkingPrecision: stops at their accuracy
+     * (precw) instead of refining level after level */
+    ASSERT_EQ_STR("Module[{h}, h[x_?NumericQ] := N[Exp[x]]; "
+                  "Abs[Quiet[NIntegrate[h[x], {x, 0, 1}, WorkingPrecision -> 25]] - (E - 1)] < 10^-14]",
+                  "True");
+}
+
+static void test_polylog_integrand(void) {
+    /* PolyLog near z = 1 at 60 digits; reference: the closed form
+     * of Integrate[x^2 PolyLog[3, 1/(x+1)], {x, 0, 1}] */
+    ASSERT_REL("NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}, WorkingPrecision -> 60]",
+               "-17/108 - Pi^2/36 + 35/27 Log[2] - Pi^2 Log[2]/18 - 4/9 Log[2]^2 + Log[2]^3/9 + Zeta[3]/4",
+               "10^-45");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -647,6 +687,9 @@ int main(void) {
     TEST(test_beyond_double_range);
     TEST(test_mpfr_quadrature_gauges);
     TEST(test_trapezoidal_periodic);
+    TEST(test_power_singularity);
+    TEST(test_option_values_and_nonnumeric);
+    TEST(test_polylog_integrand);
 
     printf("All nint_tests passed.\n");
     return 0;

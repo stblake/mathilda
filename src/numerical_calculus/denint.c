@@ -86,12 +86,12 @@ static bool den_run_machine(DenTermMachine term, void* tctx, double tmax,
     if (max_levels < 1) max_levels = 1;
     double h = 1.0;
     double _Complex prev = 0.0, best = 0.0;
-    bool have_prev = false;
+    bool have_prev = false, any = false;
     *abserr = INFINITY;
 
     for (int level = 0; level <= max_levels; level++, h *= 0.5) {
         double _Complex sum = 0.0, c0;
-        if (term(NULL, tctx, 0.0, &c0)) sum = c0;
+        if (term(NULL, tctx, 0.0, &c0)) { sum = c0; any = true; }
         double maxterm = cabs(sum);
         const double lcenter = de_log2_mag(maxterm);   /* the t = 0 term */
         for (int side = -1; side <= 1; side += 2) {
@@ -104,6 +104,7 @@ static bool den_run_machine(DenTermMachine term, void* tctx, double tmax,
                 if (fabs(t) > tmax) break;
                 double _Complex tm;
                 if (!term(NULL, tctx, t, &tm)) break;
+                any = true;
                 int act = de_tail_step(&g, fabs(t), cabs(tm), &maxterm,
                                        DEN_REL_FLOOR);
                 if (act == DE_TAIL_ROLLBACK_STOP) { sum = ckpt; break; }
@@ -117,12 +118,15 @@ static bool den_run_machine(DenTermMachine term, void* tctx, double tmax,
         if (have_prev) {
             double diff = cabs(Ival - prev);
             *abserr = diff;
-            if (diff <= reltol * cabs(Ival) + 1e-300) { *result = Ival; return true; }
+            if (diff <= reltol * cabs(Ival) + 1e-300) {
+                if (!any) break;               /* no numeric sample at all */
+                *result = Ival; return true;
+            }
         }
         prev = Ival;
         have_prev = true;
     }
-    *result = best;
+    *result = any ? best : NAN + NAN * I;
     return false;
 }
 
@@ -253,6 +257,8 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
     double h = 1.0;
     bool have_prev = false, converged = false;
     double lprevd = INFINITY;          /* log2 of the previous level difference */
+    int stalled = 0;                   /* consecutive levels without progress  */
+    bool any = false;                  /* some sample was numeric              */
     double tcut[2] = { tmax, tmax };   /* settled |t| span per side            */
     double lmax = -INFINITY;           /* log2 of the largest term so far      */
     double lcenter = -INFINITY;
@@ -263,6 +269,7 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
             bool ok0 = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, 0.0, tr, ti)
                                 : den_ss_term_mpfr(f, ctx, sc, 0.0, tr, ti);
             if (ok0) {
+                any = true;
                 mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
                 mpfr_add(sum_im, sum_im, ti, MPFR_RNDN);
                 lmax = de_mpfr_log2_l1(tr, ti);
@@ -290,6 +297,7 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
                 bool ok = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, t, tr, ti)
                                    : den_ss_term_mpfr(f, ctx, sc, t, tr, ti);
                 if (!ok) break;
+                any = true;
                 double lt = de_mpfr_log2_l1(tr, ti);
                 int act = de_tail_step_log2(&g, fabs(t), lt, &lmax_lvl, lfloor);
                 if (lt > lmax) lmax = lt;
@@ -327,6 +335,16 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
                                            lmax + log2(h), bits)) {
                 converged = true; break;
             }
+            /* Noise floor: an integrand whose values carry fewer digits than
+             * the goal (machine numbers inside a WorkingPrecision -> 25 run)
+             * stops improving; each further level doubles the cost for
+             * nothing, so after two levels without a bit of progress the best
+             * estimate is returned unconverged (the caller warns). */
+            if (level >= 4 && !(ld < lprevd - 1.0)) {
+                if (++stalled >= 2) break;
+            } else {
+                stalled = 0;
+            }
             lprevd = ld;
         }
         mpfr_set(prev_re, I_re, MPFR_RNDN);
@@ -334,6 +352,12 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
         have_prev = true;
     }
 
+    /* No sample was a number: there is no estimate (an all-failing sum of
+     * zero is not the integral 0). */
+    if (!any) {
+        mpfr_set_nan(out_re); mpfr_set_nan(out_im);
+        converged = false;
+    }
     mpfr_clears(sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di,
                 ck_re, ck_im, (mpfr_ptr)0);
     return converged;

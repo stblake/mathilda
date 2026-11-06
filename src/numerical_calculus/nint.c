@@ -130,6 +130,10 @@ static bool ni_to_complex(Expr* e, double _Complex* out) {
  * builtin_nintegrate saves and restores both, so nested (iterated) integrals
  * keep their own verdicts. */
 static bool g_ni_beyond = false;
+/* Fewest bits carried by an MPFR-pass sample value (0: none seen).  An
+ * integrand that returns machine numbers inside a WorkingPrecision run cannot
+ * deliver the requested digits; builtin_nintegrate reports it (precw). */
+static long g_ni_sample_bits = 0;
 static bool g_ni_escalated = false;
 
 /* True when the numericalised sample `e` is a number outside the double range
@@ -314,7 +318,12 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
      * the compiled body returns f[value] at the working precision — or NULL to
      * interpret this point (non-finite, or the interpreter would go complex where
      * a real was expected), exactly the machine path's contract below. */
-    if (c->ac_prec) {
+    /* The compiled program loads its argument at the working precision; an
+     * abscissa carrying more bits (the power map next to a non-zero endpoint)
+     * would lose exactly the bits that hold its distance to the endpoint, so
+     * it is interpreted. */
+    if (c->ac_prec && !(value->type == EXPR_MPFR
+                        && (long)mpfr_get_prec(value->data.mpfr) > (long)c->spec.bits)) {
         Expr* r = autocompiled_eval_mpfr(c->ac_prec, (const Expr* const*)&value);
         if (r) { expr_free(value); return r; }
     }
@@ -342,6 +351,22 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
     Expr* raw = eval_and_free(expr_copy(c->body));
     arith_warnings_mute_pop();
     if (!raw) return NULL;
+#ifdef USE_MPFR
+    /* The precision the integrand itself delivered, before numericalize
+     * dresses a machine number up at the working precision. */
+    if (c->spec.mode == NUMERIC_MODE_MPFR) {
+        long nb = 0;
+        Expr *nre, *nim;
+        const Expr* parts[2] = { raw, NULL };
+        if (is_complex(raw, &nre, &nim)) { parts[0] = nre; parts[1] = nim; }
+        for (int i = 0; i < 2 && parts[i]; i++) {
+            long pb = parts[i]->type == EXPR_REAL ? 53
+                    : parts[i]->type == EXPR_MPFR ? (long)mpfr_get_prec(parts[i]->data.mpfr) : 0;
+            if (pb && (!nb || pb < nb)) nb = pb;
+        }
+        if (nb && (!g_ni_sample_bits || nb < g_ni_sample_bits)) g_ni_sample_bits = nb;
+    }
+#endif
     Expr* num = numericalize(raw, c->spec);
     expr_free(raw);
     return num;
@@ -723,10 +748,29 @@ static void ni_apply_method_subopt(Expr* sub, NiOpts* o) {
     }
 }
 
+static bool ni_apply_option_value(const char* name, Expr* rhs, NiOpts* o);
+
 static bool ni_apply_option(Expr* rule, NiOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
     const char* name = lhs->data.symbol.name;
+    /* NIntegrate is HoldAll, so option values arrive unevaluated: the numeric
+     * settings are evaluated first (PrecisionGoal -> i with i = 1 stayed
+     * unevaluated).  Method keeps its literal form (the parsed options borrow
+     * its strings), Exclusions is read structurally, and the monitors are
+     * expressions in the integration variable. */
+    if (name == SYM_WorkingPrecision || name == SYM_AccuracyGoal
+        || name == SYM_PrecisionGoal || name == SYM_MaxRecursion
+        || name == SYM_MinRecursion || name == SYM_MaxPoints) {
+        Expr* v = eval_and_free(expr_copy(rhs));
+        bool ok = v && ni_apply_option_value(name, v, o);
+        expr_free(v);
+        return ok;
+    }
+    return ni_apply_option_value(name, rhs, o);
+}
+
+static bool ni_apply_option_value(const char* name, Expr* rhs, NiOpts* o) {
 
     if (name == SYM_Method) {
         Expr* m = rhs;
@@ -1565,6 +1609,141 @@ static bool ni_mpfr_graded(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
     return true;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Strong algebraic endpoint singularities at WorkingPrecision         *
+ * ------------------------------------------------------------------ *
+ *
+ * f ~ C |x - a|^p with -1 < p << 0 keeps a share ~ d^(1+p) of its integral
+ * within distance d of the endpoint: for x^(-999/1000) E^-x on [0, 1] half of
+ * the integral lies below x = 10^-301 and a tenth below 10^-1000.  No rule
+ * that samples x can reach that (tanh-sinh's nodes stop near 10^-150 at 40
+ * digits, a double stops at 10^-308), so the singular power is mapped away:
+ * x = a + span u^(1/q), q = 1 + p, turns f dx into a function of u that is
+ * regular at u = 0 (f(x) span u^(1/q - 1)/q -> C span^q/q), and tanh-sinh
+ * integrates that.  p is read off log2|f| at three distances 2^-k1 span >
+ * 2^-k2 span > 2^-k3 span from the endpoint (consistent slopes required), so
+ * only a clean power law qualifies; an inexact p leaves a mild u^(p - p')
+ * remainder, which tanh-sinh absorbs. */
+typedef struct {
+    NiCtx*      c;
+    mpfr_srcptr end;    /* the singular endpoint                         */
+    mpfr_srcptr span;   /* b - a                                         */
+    int         side;   /* +1: endpoint a (x = a + ...), -1: endpoint b  */
+    mpfr_t      invq;   /* 1/q                                           */
+    mpfr_t      jac;    /* span/q                                        */
+    mpfr_t      x, w;   /* scratch                                       */
+} NiPowMap;
+
+static bool ni_sample_powmap(void* vctx, const mpfr_t u, mpfr_t out_re, mpfr_t out_im) {
+    NiPowMap* m = (NiPowMap*)vctx;
+    if (mpfr_sgn(u) <= 0) return false;
+    mpfr_pow(m->w, u, m->invq, MPFR_RNDN);               /* u^(1/q) */
+    /* Next to a non-zero endpoint the abscissa carries the extra bits that
+     * keep its distance from the endpoint exact (1 - u^10 at 164 bits would
+     * leave 1 - x with only 164 - 33 log2(1/u) good bits, and the singular
+     * factor (1 - x)^p turns that into noise); the integrand then sees the
+     * true distance whatever precision it computes at. */
+    mpfr_prec_t xp = mpfr_get_prec(m->w);
+    if (!mpfr_zero_p(m->end) && mpfr_regular_p(m->w)) {
+        long gap = (long)mpfr_get_exp(m->end)
+                 - ((long)mpfr_get_exp(m->w) + (long)mpfr_get_exp(m->span));
+        if (gap > 0) xp += (mpfr_prec_t)gap + 8;
+        /* Capped at 8x the working precision: a node closer than that to the
+         * endpoint is dropped (tail truncation), as every sampled rule drops
+         * the abscissae that round onto a singular endpoint. */
+        if (xp > 8 * mpfr_get_prec(m->w)) xp = 8 * mpfr_get_prec(m->w);
+    }
+    mpfr_set_prec(m->x, xp);
+    mpfr_mul(m->x, m->w, m->span, MPFR_RNDN);
+    if (m->side > 0) mpfr_add(m->x, m->end, m->x, MPFR_RNDN);
+    else             mpfr_sub(m->x, m->end, m->x, MPFR_RNDN);
+    if (mpfr_equal_p(m->x, m->end)) return false;         /* below the precision */
+    if (!ni_sample_mpfr(m->c, m->x, out_re, out_im)) return false;
+    mpfr_div(m->w, m->w, u, MPFR_RNDN);                   /* u^(1/q - 1) */
+    mpfr_mul(m->w, m->w, m->jac, MPFR_RNDN);
+    mpfr_mul(out_re, out_re, m->w, MPFR_RNDN);
+    mpfr_mul(out_im, out_im, m->w, MPFR_RNDN);
+    return true;
+}
+
+/* The power p of a clean |x - end|^p law at an endpoint, read off log|f| at
+ * three distances (in MPFR: the slope must be good to the working precision,
+ * since an error e in q = 1 + p leaves a factor u^(e/q) in the mapped
+ * integrand); false when the two slopes disagree (not a power law there) or a
+ * probe fails. */
+static bool ni_mpfr_endpoint_power(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
+                                   int side, long bits, mpfr_t p_out) {
+    /* the probes must stay representable next to a non-zero endpoint */
+    long room = bits - 8;
+    if (!mpfr_zero_p(end))
+        room = bits - 8 - ((long)mpfr_get_exp(end) - (long)mpfr_get_exp(span));
+    long k3 = room < 240 ? room : 240;
+    if (k3 < 48) return false;
+    long ks[3] = { k3 / 4, k3 / 2, k3 };
+    mpfr_t x, vr, vi, l[3], s1, s2;
+    mpfr_inits2(bits, x, vr, vi, l[0], l[1], l[2], s1, s2, (mpfr_ptr)0);
+    bool ok = true;
+    for (int i = 0; i < 3 && ok; i++) {
+        mpfr_div_2si(x, span, ks[i], MPFR_RNDN);
+        if (side > 0) mpfr_add(x, end, x, MPFR_RNDN); else mpfr_sub(x, end, x, MPFR_RNDN);
+        if (!ni_sample_mpfr(ctx, x, vr, vi)) { ok = false; break; }
+        mpfr_hypot(vr, vr, vi, MPFR_RNDN);
+        if (!mpfr_regular_p(vr)) { ok = false; break; }
+        mpfr_log2(l[i], vr, MPFR_RNDN);
+    }
+    if (ok) {
+        mpfr_sub(s1, l[1], l[0], MPFR_RNDN);
+        mpfr_div_si(s1, s1, -(ks[1] - ks[0]), MPFR_RNDN);   /* p from probes 0, 1 */
+        mpfr_sub(s2, l[2], l[1], MPFR_RNDN);
+        mpfr_div_si(s2, s2, -(ks[2] - ks[1]), MPFR_RNDN);   /* p from probes 1, 2 */
+        double p1 = mpfr_get_d(s1, MPFR_RNDN), p2 = mpfr_get_d(s2, MPFR_RNDN);
+        ok = fabs(p1 - p2) <= 1e-3 * (1.0 + fabs(p2));
+        if (ok) mpfr_set(p_out, s2, MPFR_RNDN);
+    }
+    mpfr_clears(x, vr, vi, l[0], l[1], l[2], s1, s2, (mpfr_ptr)0);
+    return ok;
+}
+
+static bool ni_mpfr_powsing(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
+                            const NiOpts* o, mpfr_t re, mpfr_t im,
+                            double* abserr, bool* conv) {
+    long bits = o->bits;
+    mpfr_t span;
+    mpfr_init2(span, bits);
+    mpfr_sub(span, bm, am, MPFR_RNDN);
+    bool done = false;
+    for (int side = 1; side >= -1 && !done; side -= 2) {
+        mpfr_t pm;
+        mpfr_init2(pm, bits);
+        if (!ni_mpfr_endpoint_power(ctx, side > 0 ? am : bm, span, side, bits, pm)) {
+            mpfr_clear(pm);
+            continue;
+        }
+        double p = mpfr_get_d(pm, MPFR_RNDN);
+        if (!(p < -0.5 && p > -1.0)) { mpfr_clear(pm); continue; }
+        NiPowMap m;
+        m.c = ctx; m.end = side > 0 ? am : bm; m.span = span; m.side = side;
+        mpfr_inits2(bits, m.invq, m.jac, m.x, m.w, (mpfr_ptr)0);
+        mpfr_add_ui(m.invq, pm, 1, MPFR_RNDN);               /* q */
+        mpfr_clear(pm);
+        mpfr_div(m.jac, span, m.invq, MPFR_RNDN);            /* span/q */
+        mpfr_ui_div(m.invq, 1, m.invq, MPFR_RNDN);           /* 1/q */
+        mpfr_t u0, u1;
+        mpfr_inits2(bits, u0, u1, (mpfr_ptr)0);
+        mpfr_set_ui(u0, 0, MPFR_RNDN);
+        mpfr_set_ui(u1, 1, MPFR_RNDN);
+        *conv = denint_tanhsinh_mpfr(ni_sample_powmap, &m, u0, u1, bits,
+                                     ni_mpfr_reltol(o), ni_mpfr_levels(o),
+                                     re, im, abserr);
+        /* side < 0: x = b - span u^(1/q) runs from b to a as u goes 0 -> 1,
+         * and dx = -(span/q) u^(1/q-1) du, so the orientation cancels */
+        mpfr_clears(u0, u1, m.invq, m.jac, m.x, m.w, (mpfr_ptr)0);
+        done = mpfr_number_p(re) && mpfr_number_p(im);
+    }
+    mpfr_clear(span);
+    return done;
+}
+
 /* ∫_a^b f at the MPFR working precision, ctx already in MPFR mode: an explicit
  * fixed rule, Levin collocation for a detected oscillatory kernel, else the
  * endpoint-robust tanh-sinh rule.  (re, im) are initialised by the caller at
@@ -1601,6 +1780,8 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
             }
         }
         if (!got && (o->method == NI_AUTO || o->method == NI_DE))
+            got = ni_mpfr_powsing(ctx, am, bm, o, re, im, abserr, &conv);
+        if (!got && (o->method == NI_AUTO || o->method == NI_DE))
             got = ni_mpfr_graded(ctx, am, bm, o, re, im, abserr, &conv);
         if (!got)
             conv = denint_tanhsinh_mpfr(ni_sample_mpfr, ctx, am, bm, bits,
@@ -1609,6 +1790,37 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
     }
     mpfr_clears(am, bm, (mpfr_ptr)0);
     return conv;
+}
+#endif
+
+#ifdef USE_MPFR
+/* Machine precision cannot integrate a power singularity |x - a|^p whose
+ * mass lies below the double range: a share ~2^(-1022 q), q = 1 + p, sits
+ * closer to the endpoint than the smallest normal double, which is half of
+ * the integral for x^(-999/1000) E^-x on [0, 1] (the rules returned 131 and
+ * 538 for 999.2).  Detected like the MPFR path does (consistent log-log slopes
+ * at three distances), such an integral is handed to the MPFR pass, whose
+ * power substitution takes the singular factor exactly. */
+static bool ni_machine_power_below_range(NiCtx* c, double a, double b) {
+    double span = b - a;
+    for (int side = 1; side >= -1; side -= 2) {
+        double end = side > 0 ? a : b;
+        double l[3];
+        const int ks[3] = { 12, 24, 36 };
+        bool ok = true;
+        for (int i = 0; i < 3 && ok; i++) {
+            double x = end + side * ldexp(span, -ks[i]);
+            double _Complex v;
+            if (x == end || !ni_sample_machine(c, x, &v) || !(cabs(v) > 0.0)) ok = false;
+            else l[i] = log2(cabs(v));
+        }
+        if (!ok) continue;
+        double p1 = -(l[1] - l[0]) / 12.0, p2 = -(l[2] - l[1]) / 12.0;
+        if (!(fabs(p1 - p2) <= 1e-3 * (1.0 + fabs(p2)))) continue;
+        double q = 1.0 + p2;
+        if (q > 0.0 && 1022.0 * q < 60.0) return true;
+    }
+    return false;
 }
 #endif
 
@@ -1647,6 +1859,16 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
     }
 #endif
 
+#ifdef USE_MPFR
+    if (o->method == NI_AUTO && !g_ni_escalated
+        && ni_machine_power_below_range(&ctx, a, b)) {
+        g_ni_beyond = true;               /* re-run on the MPFR path */
+        ni_bind_restore(&bind);
+        autocompiled_free(ctx.ac);
+        autocompiled_free(ctx.ac_prec);
+        return NULL;
+    }
+#endif
     NiAtt best = ni_core_finite(&ctx, a, b, o);
     ni_bind_restore(&bind);
     autocompiled_free(ctx.ac);
@@ -2537,6 +2759,29 @@ static Expr* ni_run_pv(Expr* body, const char* var, double a, double b,
     return ni_from_complex_d(total);
 }
 
+/* False, with NIntegrate::inumr, when the integrand has no numeric value at
+ * two interior points of [a, b] (an unknown function, a broken interpolant). */
+static bool ni_check_numeric(Expr* body, const char* var, double a, double b) {
+    NiBind bind;
+    ni_bind_snapshot(&bind, var);
+    NiCtx ctx;
+    ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
+    const double fr[2] = { 0.3819660112501051, 0.6180339887498949 };
+    bool numeric = false;
+    for (int i = 0; i < 2 && !numeric; i++) {
+        Expr* num = ni_eval_at(&ctx, expr_new_real(a + fr[i] * (b - a)));
+        double _Complex v;
+        if (num && (ni_to_complex(num, &v) || ni_beyond_double(num))) numeric = true;
+        expr_free(num);
+    }
+    ni_bind_restore(&bind);
+    if (!numeric)
+        ni_warn("inumr", "the integrand has evaluated to non-numerical values "
+                "for all sampling points in the region with boundaries {{%.17g, %.17g}}.",
+                a, b);
+    return numeric;
+}
+
 /* Integrate res = NIntegrate[f, specs..., opts...] with the parsed options:
  * the dispatch onto Monte-Carlo, cubature, iterated, contour and 1-D paths. */
 static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* op) {
@@ -2630,6 +2875,15 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
         double a, b;
         bool real_finite = ni_to_double_real(amin, &a) && ni_to_double_real(amax, &b);
         double pts[64]; int npts = 0;
+        /* An integrand with no numeric value at interior points has no
+         * integral to approximate: unevaluated with NIntegrate::inumr (the
+         * machine cascade's last rules used to sum nothing and report 0.). */
+        if (real_finite && a != b && !ni_check_numeric(eff_body, var, a, b)) {
+            expr_free(amin);
+            expr_free(amax);
+            expr_free(inner);
+            return NULL;
+        }
         if (real_finite && (o.method == NI_PV || o.exclusions)) {
             double lo = a < b ? a : b, hi = a < b ? b : a;
             ni_extract_points(o.exclusions, var, lo, hi, pts, &npts, 64);
@@ -2764,8 +3018,10 @@ Expr* builtin_nintegrate(Expr* res) {
     /* Machine pass; when a sample left the double range, the pass is replaced
      * by an MPFR pass at machine-equivalent precision (see g_ni_beyond). */
     bool saved_beyond = g_ni_beyond, saved_escalated = g_ni_escalated;
+    long saved_sbits = g_ni_sample_bits;
     g_ni_beyond = false;
     g_ni_escalated = false;
+    g_ni_sample_bits = 0;
     Expr* out = ni_integrate(res, argc, pos_end, &o);
 #ifdef USE_MPFR
     if (!o.prec_mpfr && g_ni_beyond) {
@@ -2784,8 +3040,18 @@ Expr* builtin_nintegrate(Expr* res) {
         out = mo;
     }
 #endif
+    /* WorkingPrecision asked of an integrand whose values carry fewer digits:
+     * the rules stop at the noise floor of those values (they no longer spin
+     * through every level), and the shortfall is reported. */
+    if (out && o.prec_mpfr && g_ni_sample_bits > 0
+        && g_ni_sample_bits < o.target_bits && !arith_warnings_muted())
+        ni_warn("precw", "the precision of the integrand values (%.3g digits) is "
+                "less than the WorkingPrecision (%.3g digits).",
+                numeric_bits_to_digits(g_ni_sample_bits),
+                numeric_bits_to_digits(o.target_bits));
     g_ni_beyond = saved_beyond;
     g_ni_escalated = saved_escalated;
+    g_ni_sample_bits = saved_sbits;
     return out;
 }
 
