@@ -1002,8 +1002,17 @@ static bool ni_fourier_detect(const Expr* body, const char* var,
     /* The held integrand is unevaluated, so its product is nested
      * (Times[Times[x,Sin[x]],Power[…]]); flatten a copy so the single-level
      * factor scan in levin_detect_kernel sees the trig factor. */
+    /* expr_copy only shares the node, and eval_flatten_args rewrites the args
+     * of whatever node it is given whatever its head: on Exp[-x^2] it turned
+     * the shared integrand into Power[E, -1, x^2] = E^((-1)^(x^2)), so every
+     * WorkingPrecision half-line integral sampled after this probe evaluated
+     * a different function (Exp[-x] on [0, oo) gave 4.6e619).  Flatten only a
+     * Times, and only a private top-level node. */
     Expr* fb = expr_copy((Expr*)body);
-    eval_flatten_args(fb, SYM_Times);
+    if (levin_is_head(fb, SYM_Times)) {
+        fb = expr_unshare(fb);
+        eval_flatten_args(fb, SYM_Times);
+    }
     bool ok = levin_detect_kernel(fb, var, &k, &g, &amp);
     expr_free(fb);
     if (!ok) return false;
