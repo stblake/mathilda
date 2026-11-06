@@ -4870,7 +4870,10 @@ global symbol table is not perturbed during iteration.
 - `FindRoot[lhs == rhs, {x, x0}]` -- equation form (normalised to
   `lhs - rhs`).
 - `FindRoot[f, {x, x0, x1}]` -- secant from two starts (no derivative
-  needed).
+  needed), safeguarded by bracketing: as soon as two consecutive iterates
+  (the starts included) have function values of opposite sign, the search
+  continues by Brent's method inside that bracket, so it returns a root
+  between them instead of extrapolating across sign changes to a distant one.
 - `FindRoot[f, {x, xstart, xmin, xmax}]` -- Brent's method on the
   bracket `[xmin, xmax]`.
 - `FindRoot[{f1, ..., fn}, {{x, x0}, {y, y0}, ...}]` -- multivariate
@@ -4899,6 +4902,23 @@ The `Method` option overrides this when explicit (`"Newton"`,
 `"Secant"`, or `"Brent"`).  `Method -> "Brent"` accepts either a
 4-element bracket spec or a 2-start spec used as `[a, b]`.
 
+All three scalar methods run at the requested `WorkingPrecision`: with a
+digit count above machine precision every value, step and convergence test
+is an MPFR number, so a function far outside the double range (`L_1000` is
+~1e867 near its largest zero) is handled like any other.  Brent stops when
+`|f(b)| <= 10^-AccuracyGoal` and the next interpolation step is shorter than
+`10^-AccuracyGoal + |b| 10^-PrecisionGoal` (that step is taken, and lands at
+superlinear accuracy: full working precision under the default goals), or
+when the bracket has shrunk to the goal or to the working precision.
+
+**Machine overflow.** A machine-precision real solve whose function or
+derivative value leaves the double range is rerun at 106 bits of MPFR and the
+root returned as a machine number: `FindRoot[LaguerreL[1000, x], {x, 4002}]`
+gives `{x -> 3943.25}` (`3943.247394845271`).  In that rerun an automatic
+symbolic derivative is checked once against a central difference, and the
+difference quotient is used when they disagree (the expanded
+`D[LaguerreL[1000, x], x]` loses ~250 digits to cancellation there).
+
 When the symbolic derivative `D[f, x]` cannot be reduced to a
 numericalizable form — `D` returns an inert `Derivative[..]` head, as for
 `Zeta'`, `HurwitzZeta`'s order derivative, `PolyGamma`, etc. — the Newton
@@ -4924,14 +4944,19 @@ etc.
 | Option              | Default        | Effect |
 |---------------------|----------------|--------|
 | `Method`            | `Automatic`    | `"Newton"`, `"Secant"`, `"Brent"`, or `Automatic`. |
-| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR). |
-| `MaxIterations`     | `100`          | Iteration limit. |
+| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a positive digit count -- Integer, Rational or Real, so the `100.` that `N` makes of `100` is accepted (>= ~16 routes through MPFR). |
+| `MaxIterations`     | `100`          | Iteration limit: a positive integer, an integer-valued Real, or `Infinity`. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `|f| < 10^{-n}`. `Infinity` disables this criterion. `Automatic` resolves to `WorkingPrecision/2`. |
 | `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `|step| < |x| * 10^{-n}`.  Same defaults / specials as `AccuracyGoal`. |
 | `DampingFactor`     | `1`            | Multiplier on the Newton step.  Useful for repeated roots (set to the multiplicity for quadratic convergence). |
-| `Jacobian`          | `Automatic`    | A symbolic expression (scalar form) or `n*n` nested list (system form) that overrides the call to `D[]`. |
+| `Jacobian`          | `Automatic`    | An `n x n` matrix for `n` equations -- `{{d}}` for one equation, or the bare expression `d` -- overriding the call to `D[]`.  Entries are evaluated per point, so they need only be numeric once the variables have values (`g[x]` with a `?NumberQ` guard).  Any other shape: `FindRoot::jacsh`. |
 | `StepMonitor`       | `None`         | A held expression evaluated after each step. |
-| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any of its derivatives) is evaluated. |
+| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any of its derivatives) is evaluated (the compiled fast path is bypassed so every evaluation is seen). |
+
+The scalar option values (`Method`, `WorkingPrecision`, `MaxIterations`,
+`AccuracyGoal`, `PrecisionGoal`, `DampingFactor`) are evaluated before use, so
+`MaxIterations -> 2 n` works inside `Block`/`Module`; `Jacobian` and the
+monitors stay held.
 
 ### Diagnostics (stderr)
 
@@ -4941,7 +4966,8 @@ etc.
 | `FindRoot::ivar`    | Malformed variable spec. |
 | `FindRoot::nlnum`   | `f` or its derivative did not evaluate to a number. |
 | `FindRoot::cvmit`   | `MaxIterations` exhausted (the last iterate is still returned). |
-| `FindRoot::noconv`  | Divergence (non-finite step). |
+| `FindRoot::noconv`  | Divergence (non-finite step), or a horizontal secant. |
+| `FindRoot::jacsh`   | A `Jacobian` that is not an `n x n` matrix for `n` equations. |
 | `FindRoot::brnoth`  | Brent given non-bracketing endpoints. |
 | `FindRoot::badopt`  | Unknown option name or invalid value. |
 | `FindRoot::badmeth` | Unknown `Method` value. |

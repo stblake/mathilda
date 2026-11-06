@@ -44,6 +44,48 @@ bool nc_parse_goal(const Expr* v, double* digits_out) {
     return false;
 }
 
+bool nc_parse_working_precision(const Expr* v, double* digits_out, bool* machine) {
+    if (!v || !digits_out || !machine) return false;
+    if (v->type == EXPR_SYMBOL) {
+        if (v->data.symbol.name != SYM_MachinePrecision) return false;
+        *machine = true;
+        *digits_out = NUMERIC_MACHINE_PRECISION_DIGITS;
+        return true;
+    }
+    double d;
+    if (!nc_to_double(v, &d) || !(d > 0.0) || !isfinite(d)) return false;
+    *machine = false;
+    *digits_out = d;
+    return true;
+}
+
+bool nc_parse_positive_count(const Expr* v, int64_t* out) {
+    if (!v || !out) return false;
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity) {
+        *out = INT64_MAX;
+        return true;
+    }
+    if (v->type == EXPR_INTEGER) {
+        if (v->data.integer <= 0) return false;
+        *out = v->data.integer;
+        return true;
+    }
+    if (v->type == EXPR_BIGINT) {
+        if (mpz_sgn(v->data.bigint) <= 0) return false;
+        *out = INT64_MAX;             /* larger than any reachable count */
+        return true;
+    }
+    if (v->type != EXPR_REAL
+#ifdef USE_MPFR
+        && v->type != EXPR_MPFR
+#endif
+        ) return false;
+    double d;
+    if (!nc_to_double(v, &d) || !(d >= 1.0) || d != floor(d)) return false;
+    *out = (d >= 9.0e18) ? INT64_MAX : (int64_t)d;
+    return true;
+}
+
 double nc_resolve_goal(double goal_digits, double wp_digits) {
     if (goal_digits < 0.0) {                 /* NC_GOAL_AUTO or NC_GOAL_MACHINE */
         /* Automatic seeks near-full working precision: two guard digits below

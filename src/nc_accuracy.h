@@ -26,6 +26,7 @@
 
 #include <stdbool.h>
 #include <math.h>
+#include <stdint.h>
 #include "expr.h"
 
 /* Symbolic goal settings, encoded as digit counts so a plain `double` field
@@ -43,6 +44,20 @@
  * Returns false (leaving *digits_out untouched) for any other value, so the
  * caller can report an invalid-option error. */
 bool nc_parse_goal(const Expr* v, double* digits_out);
+
+/* Parse a WorkingPrecision option value.  MachinePrecision sets *machine and
+ * leaves *digits_out at NUMERIC_MACHINE_PRECISION_DIGITS; any positive real
+ * number -- Integer, Rational, BigInt, Real, or an arbitrary-precision Real --
+ * is a digit count.  Real values are accepted because N[expr, n] numericalizes
+ * the option values of an unevaluated call it is applied to (WorkingPrecision
+ * -> 100 arrives as 100.), and a digit count is a real quantity anyway.
+ * Returns false for anything else. */
+bool nc_parse_working_precision(const Expr* v, double* digits_out, bool* machine);
+
+/* Parse a MaxIterations-style count: a positive integer, or a positive
+ * integer-valued real (100. from N, as above).  Infinity maps to INT64_MAX.
+ * Returns false for anything else, including a non-integral real. */
+bool nc_parse_positive_count(const Expr* v, int64_t* out);
 
 /* Resolve a goal (possibly NC_GOAL_AUTO) to a concrete digit count given the
  * working precision in decimal digits (machine precision ==

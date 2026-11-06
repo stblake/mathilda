@@ -37,6 +37,7 @@
 #include "findroot.h"
 #include "../modular.h"
 
+#include <float.h>
 #include <math.h>
 #include <complex.h>
 #include <stdbool.h>
@@ -111,7 +112,17 @@ typedef struct {
      * derivative) is evaluated at the working precision instead of interpreted per
      * Newton step.  NULL unless scalar/MPFR/real.  Same faithful-degrade contract. */
     AutoCompiled* ac_f_prec;
+    /* Set by a machine-precision real solver that met a function or derivative
+     * value outside the double range (an MPFR / BigInt value whose magnitude
+     * overflows to inf); the entry point then reruns the solve in MPFR.  NULL
+     * when no escalation is possible (complex search, already MPFR). */
+    bool*         overflow;
+    /* True for the MPFR rerun of a machine solve that overflowed. */
+    bool          escalated;
 } FrOpts;
+
+/* Working precision of that rerun: a little over twice machine precision. */
+#define FR_ESCALATION_BITS 106
 
 /* Per-variable temporary OwnValue snapshot, restored on exit. */
 typedef struct {
@@ -229,32 +240,23 @@ static Expr* fr_expr_from_complex_mpfr(const mpfr_t re, const mpfr_t im) {
  * Returns false on malformed values. */
 static bool fr_parse_working_precision(Expr* val,
                                        FrPrecMode* mode, long* bits) {
-    if (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_MachinePrecision) {
-        *mode = FR_PREC_MACHINE;
-        *bits = 0;
-        return true;
-    }
-    double digits = 0.0;
-    int64_t rn, rd;
-    if (val->type == EXPR_INTEGER)      digits = (double)val->data.integer;
-    else if (val->type == EXPR_REAL)    digits = val->data.real;
-    else if (is_rational((Expr*)val, &rn, &rd)) digits = (double)rn / (double)rd;
-    else return false;
-    if (digits <= 0.0) return false;
+    double digits;
+    bool machine;
+    if (!nc_parse_working_precision(val, &digits, &machine)) return false;
 #ifdef USE_MPFR
-    if (digits <= NUMERIC_MACHINE_PRECISION_DIGITS) {
+    if (machine || digits <= NUMERIC_MACHINE_PRECISION_DIGITS) {
         *mode = FR_PREC_MACHINE;
         *bits = 0;
     } else {
         *mode = FR_PREC_MPFR;
         *bits = numeric_digits_to_bits(digits);
     }
-    return true;
 #else
+    (void)digits; (void)machine;
     *mode = FR_PREC_MACHINE;
     *bits = 0;
-    return true;
 #endif
+    return true;
 }
 
 /* Decode an AccuracyGoal / PrecisionGoal value to a digit count.  Delegates to
@@ -268,10 +270,28 @@ static bool fr_parse_goal(Expr* val, double* digits_out) {
 
 /* Apply a recognised Rule[opt, val] to `opts`. Returns false if the
  * value is structurally invalid for the option's role. */
+static bool fr_apply_option_value(const char* name, Expr* rhs, FrOpts* opts);
+
 static bool fr_apply_option(Expr* rule, FrOpts* opts) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
     const char* name = lhs->data.symbol.name;
+    /* FindRoot is HoldAll, so option values arrive unevaluated.  The scalar
+     * settings are evaluated first (MaxIterations -> 2 n, WorkingPrecision ->
+     * $MachinePrecision + 10); Jacobian and the monitors stay held -- they are
+     * expressions in the search variables, evaluated per point. */
+    if (name == SYM_Method || name == SYM_WorkingPrecision
+        || name == SYM_MaxIterations || name == SYM_AccuracyGoal
+        || name == SYM_PrecisionGoal || name == SYM_DampingFactor) {
+        Expr* v = eval_and_free(expr_copy(rhs));
+        bool ok = v && fr_apply_option_value(name, v, opts);
+        expr_free(v);
+        return ok;
+    }
+    return fr_apply_option_value(name, rhs, opts);
+}
+
+static bool fr_apply_option_value(const char* name, Expr* rhs, FrOpts* opts) {
 
     if (name == SYM_Method) {
         if (rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_Automatic) {
@@ -294,15 +314,17 @@ static bool fr_apply_option(Expr* rule, FrOpts* opts) {
         return true;
     }
     if (name == SYM_MaxIterations) {
-        if (rhs->type == EXPR_INTEGER && rhs->data.integer > 0) {
-            opts->max_iter = rhs->data.integer;
-            return true;
-        }
+        if (nc_parse_positive_count(rhs, &opts->max_iter)) return true;
         fr_warn("badopt", "MaxIterations must be a positive integer");
         return false;
     }
-    if (name == SYM_AccuracyGoal)   return fr_parse_goal(rhs, &opts->acc_goal_digits);
-    if (name == SYM_PrecisionGoal)  return fr_parse_goal(rhs, &opts->prec_goal_digits);
+    if (name == SYM_AccuracyGoal || name == SYM_PrecisionGoal) {
+        double* slot = (name == SYM_AccuracyGoal) ? &opts->acc_goal_digits
+                                                  : &opts->prec_goal_digits;
+        if (fr_parse_goal(rhs, slot)) return true;
+        fr_warn("badopt", "invalid %s value", name);
+        return false;
+    }
     if (name == SYM_DampingFactor) {
         double d;
         if (!fr_expr_to_double_real(rhs, &d) || d <= 0.0) {
@@ -528,8 +550,10 @@ static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
     /* Compiled fast path — the main function only (pointer identity).  A
      * non-finite / non-real compiled result falls through to the interpreter
      * (which supplies the complex/singular value the iteration then handles,
-     * exactly as before). */
-    if (f == opts->main_f) {
+     * exactly as before).  Not taken under an EvaluationMonitor: the monitor
+     * must run once per evaluation with the variables bound, which only the
+     * interpreted path does. */
+    if (f == opts->main_f && !opts->eval_monitor) {
         Expr* c = fr_try_compiled(opts->ac_f, values, n, spec);
         if (c) return c;
 #ifdef USE_MPFR
@@ -718,6 +742,19 @@ static Expr* fr_build_rule_list(Expr* const* vars, Expr** vals, size_t n) {
     return list;
 }
 
+/* A machine solver's value check: true when `v` (a function or derivative
+ * value extracted from a numeric result) is not a finite double.  Mathilda's
+ * machine reals are always finite, so a non-finite `v` is an arbitrary-
+ * precision value -- |L_1000(4002.)| ~ 1e867 -- whose magnitude overflowed the
+ * conversion.  The solve cannot continue in doubles; record it so the entry
+ * point reruns at arbitrary precision, or report divergence when it cannot. */
+static bool fr_overflowed(double v, const FrOpts* opts) {
+    if (isfinite(v)) return false;
+    if (opts->overflow) *opts->overflow = true;
+    else fr_warn("noconv", "divergence (value outside the machine range)");
+    return true;
+}
+
 /* ------------------------------------------------------------------ *
  *  Machine-precision scalar Newton (real)                             *
  * ------------------------------------------------------------------ */
@@ -742,6 +779,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         bool ok_f = fr_expr_to_double_real(fv_expr, &fv);
         expr_free(fv_expr);
         if (!ok_f) { fr_warn("nlnum", "non-real f during iteration"); return NULL; }
+        if (fr_overflowed(fv, opts)) return NULL;
         resid = fabs(fv);
         /* Pre-step convergence check: if we are already at the root, stop.
          * Also avoids the f'(x*) = 0 case for repeated roots. */
@@ -761,6 +799,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
             fr_warn("nlnum", "could not evaluate finite-difference derivative");
             return NULL;
         }
+        if (fr_overflowed(dv, opts)) return NULL;
         if (dv == 0.0) { fr_warn("dsing", "derivative vanished"); return NULL; }
         double step = opts->damping * fv / dv;
         if (!isfinite(step)) { fr_warn("noconv", "divergence (non-finite step)"); return NULL; }
@@ -835,9 +874,101 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
 }
 
 /* ------------------------------------------------------------------ *
+ *  Brent's method (machine-precision real)                            *
+ * ------------------------------------------------------------------ */
+
+/* Evaluate f at the machine point x into *out.  False (after a message, or
+ * after recording an overflow for escalation) when the value is not a finite
+ * real double. */
+static bool fr_eval_real_d(Expr* f, FrVarBind* bind, double x,
+                           const FrOpts* opts, double* out) {
+    Expr* a[1] = { expr_new_real(x) };
+    Expr* e = fr_eval_with_bindings(f, bind, a, 1, opts);
+    expr_free(a[0]);
+    bool ok = e && fr_expr_to_double_real(e, out);
+    expr_free(e);
+    if (!ok) { fr_warn("nlnum", "non-real f during iteration"); return false; }
+    return !fr_overflowed(*out, opts);
+}
+
+/* Brent's method in doubles from a bracket [a, b] with fa, fb already
+ * evaluated and of opposite signs: the machine twin of fr_brent_mpfr_core,
+ * with the same steps and the same stopping rules (see there), the working
+ * precision's resolution being DBL_EPSILON.  `iters` caps the evaluations. */
+static Expr* fr_brent_real_core(Expr* f, FrVarBind* bind,
+                                double a, double fa, double b, double fb,
+                                int64_t iters, const FrOpts* opts) {
+    double tol_acc  = isinf(opts->acc_goal_digits)  ? 0.0 : pow(10.0, -opts->acc_goal_digits);
+    double tol_prec = isinf(opts->prec_goal_digits) ? 0.0 : pow(10.0, -opts->prec_goal_digits);
+    double c = b, fc = fb, d = b - a, e = d;
+    for (int64_t k = 0; ; k++) {
+        if ((fb > 0.0 && fc > 0.0) || (fb < 0.0 && fc < 0.0)) {
+            c = a; fc = fa; d = b - a; e = d;
+        }
+        if (fabs(fc) < fabs(fb)) {
+            a = b; fa = fb; b = c; fb = fc; c = a; fc = fa;
+        }
+        double goal = tol_acc + fabs(b) * tol_prec;
+        double tol1 = 2.0 * DBL_EPSILON * fabs(b);
+        double xm = 0.5 * (c - b);
+        if (fb == 0.0 || fabs(xm) <= tol1 + 0.5 * goal) return expr_new_real(b);
+        if (k >= iters) {
+            fr_warn("cvmit", "failed to converge within %lld iterations",
+                    (long long)opts->max_iter);
+            fr_warn_goal(opts, 2.0 * fabs(xm), fabs(b));
+            return expr_new_real(b);
+        }
+        bool interpolate = false;
+        if (fabs(e) >= tol1 && fabs(fa) > fabs(fb)) {
+            double p, q, r, sr = fb / fa;
+            if (a == c) {                                   /* secant            */
+                p = 2.0 * xm * sr;
+                q = 1.0 - sr;
+            } else {                                        /* inverse quadratic */
+                q = fa / fc;
+                r = fb / fc;
+                p = sr * (2.0 * xm * q * (q - r) - (b - a) * (r - 1.0));
+                q = (q - 1.0) * (r - 1.0) * (sr - 1.0);
+            }
+            if (p > 0.0) q = -q;
+            p = fabs(p);
+            double min1 = 3.0 * xm * q - fabs(tol1 * q), min2 = fabs(e * q);
+            if (2.0 * p < (min1 < min2 ? min1 : min2) && q != 0.0) {
+                e = d;
+                d = p / q;
+                interpolate = true;
+            }
+        }
+        if (!interpolate) { d = xm; e = d; }                /* bisection         */
+        bool final_step = interpolate && fabs(d) <= goal && fabs(fb) <= tol_acc;
+        a = b; fa = fb;
+        if (fabs(d) > tol1) b += d;
+        else                b += (xm > 0.0 ? tol1 : -tol1);
+        if (!fr_eval_real_d(f, bind, b, opts, &fb)) return NULL;
+        if (final_step) return expr_new_real(b);
+        fr_fire_monitor(opts->step_monitor);
+    }
+}
+
+static Expr* fr_run_brent_real(Expr* f, FrVarBind* bind,
+                               double xa, double xb, const FrOpts* opts) {
+    double fa, fb;
+    if (!fr_eval_real_d(f, bind, xa, opts, &fa)
+        || !fr_eval_real_d(f, bind, xb, opts, &fb)) return NULL;
+    if (fa * fb > 0.0) {
+        fr_warn("brnoth", "function values at bracket endpoints have the same sign");
+        return NULL;
+    }
+    return fr_brent_real_core(f, bind, xa, fa, xb, fb, opts->max_iter, opts);
+}
+
+/* ------------------------------------------------------------------ *
  *  Secant (machine-precision real)                                    *
  * ------------------------------------------------------------------ */
 
+/* The secant iteration, safeguarded by bracketing exactly as the MPFR one
+ * (fr_run_secant_mpfr_real): a sign change between consecutive iterates hands
+ * the bracket to Brent's method. */
 static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
                                 double x0, double x1,
                                 const FrOpts* opts) {
@@ -854,6 +985,8 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
         expr_free(fa_e); fr_warn("nlnum", "non-real f at start point"); return NULL;
     }
     expr_free(fa_e);
+    if (fr_overflowed(fa, opts)) return NULL;
+    if (fa == 0.0) return expr_new_real(xa);
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_real(xb);
@@ -865,9 +998,18 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
             expr_free(fb_e); fr_warn("nlnum", "non-real f during iteration"); return NULL;
         }
         expr_free(fb_e);
+        if (fr_overflowed(fb, opts)) return NULL;
         resid = fabs(fb);
+        if (fb == 0.0) return expr_new_real(xb);
+        /* Bracketed (see fr_run_secant_mpfr_real): continue by Brent. */
+        if ((fa < 0.0 && fb > 0.0) || (fa > 0.0 && fb < 0.0))
+            return fr_brent_real_core(f, bind, xa, fa, xb, fb, opts->max_iter - k, opts);
         double denom = fb - fa;
-        if (denom == 0.0) { fr_warn("noconv", "secant denominator vanished"); return NULL; }
+        if (denom == 0.0) {
+            if (xa == xb) return expr_new_real(xb);
+            fr_warn("noconv", "secant denominator vanished");
+            return NULL;
+        }
         double step = opts->damping * fb * (xb - xa) / denom;
         if (!isfinite(step)) { fr_warn("noconv", "divergence (non-finite step)"); return NULL; }
         xa = xb;
@@ -882,87 +1024,6 @@ static Expr* fr_run_secant_real(Expr* f, FrVarBind* bind,
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
     fr_warn_goal(opts, resid, fabs(xb));
-    return expr_new_real(xb);
-}
-
-/* ------------------------------------------------------------------ *
- *  Brent's method (machine-precision real)                            *
- * ------------------------------------------------------------------ */
-
-static Expr* fr_run_brent_real(Expr* f, FrVarBind* bind,
-                               double xa, double xb, const FrOpts* opts) {
-    double tol_acc  = pow(10.0, -opts->acc_goal_digits);
-
-    Expr* xv = expr_new_real(xa);
-    Expr* a0[1] = { xv };
-    Expr* fa_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
-    expr_free(xv);
-    xv = expr_new_real(xb);
-    Expr* a1[1] = { xv };
-    Expr* fb_e = fr_eval_with_bindings(f, bind, a1, 1, opts);
-    expr_free(xv);
-    double fa, fb;
-    if (!fa_e || !fb_e
-        || !fr_expr_to_double_real(fa_e, &fa)
-        || !fr_expr_to_double_real(fb_e, &fb)) {
-        expr_free(fa_e); expr_free(fb_e);
-        fr_warn("nlnum", "non-real f at bracket endpoints");
-        return NULL;
-    }
-    expr_free(fa_e); expr_free(fb_e);
-
-    if (fa * fb > 0.0) {
-        fr_warn("brnoth", "function values at bracket endpoints have the same sign");
-        return NULL;
-    }
-    if (fabs(fa) < fabs(fb)) { double t=xa; xa=xb; xb=t; t=fa; fa=fb; fb=t; }
-    double xc = xa, fc = fa;
-    double s = xb, fs = 0.0;
-    double d = 0.0;
-    bool used_bisection = true;
-
-    for (int64_t k = 0; k < opts->max_iter; k++) {
-        if (fa != fc && fb != fc) {
-            /* Inverse quadratic interpolation. */
-            s = xa*fb*fc / ((fa-fb)*(fa-fc))
-              + xb*fa*fc / ((fb-fa)*(fb-fc))
-              + xc*fa*fb / ((fc-fa)*(fc-fb));
-        } else {
-            /* Secant. */
-            s = xb - fb * (xb - xa) / (fb - fa);
-        }
-        double mid = (3*xa + xb) / 4.0;
-        bool cond1 = (s < fmin(mid, xb)) || (s > fmax(mid, xb));
-        bool cond2 = used_bisection && fabs(s - xb) >= fabs(xb - xc) / 2.0;
-        bool cond3 = !used_bisection && fabs(s - xb) >= fabs(xc - d) / 2.0;
-        bool cond4 = used_bisection && fabs(xb - xc) < tol_acc;
-        bool cond5 = !used_bisection && fabs(xc - d) < tol_acc;
-        if (cond1 || cond2 || cond3 || cond4 || cond5) {
-            s = (xa + xb) / 2.0;
-            used_bisection = true;
-        } else {
-            used_bisection = false;
-        }
-        Expr* sv = expr_new_real(s);
-        Expr* aS[1] = { sv };
-        Expr* fs_e = fr_eval_with_bindings(f, bind, aS, 1, opts);
-        expr_free(sv);
-        if (!fs_e || !fr_expr_to_double_real(fs_e, &fs)) {
-            expr_free(fs_e);
-            fr_warn("nlnum", "non-real f during iteration"); return NULL;
-        }
-        expr_free(fs_e);
-        d  = xc;
-        xc = xb; fc = fb;
-        if (fa * fs < 0.0) { xb = s; fb = fs; }
-        else               { xa = s; fa = fs; }
-        if (fabs(fa) < fabs(fb)) { double t=xa; xa=xb; xb=t; t=fa; fa=fb; fb=t; }
-        fr_fire_monitor(opts->step_monitor);
-        if (fb == 0.0 || fabs(xb - xa) < tol_acc) return expr_new_real(xb);
-    }
-    fr_warn("cvmit", "failed to converge within %lld iterations",
-            (long long)opts->max_iter);
-    fr_warn_goal(opts, fabs(fb), fabs(xb));
     return expr_new_real(xb);
 }
 
@@ -1008,6 +1069,40 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
     Expr* result = NULL;
     bool converged = false;
     double resid = INFINITY;    /* last |f(x)|, the goal-shortfall error estimate */
+
+    /* An escalated solve (the machine run overflowed) is by construction one
+     * where f takes extreme values, and there an automatic symbolic derivative
+     * is often numerically useless: D[LaguerreL[1000, x], x] is the expanded
+     * degree-999 power-basis polynomial, whose terms near x = 4000 reach 1e1120
+     * while their sum is 1e867 -- 250 digits of cancellation.  Check it once
+     * against a central difference at the start point and use the difference
+     * quotient throughout when the two disagree. */
+    if (opts->escalated && df && !opts->jacobian) {
+        mpfr_t fd;
+        mpfr_init2(fd, bits);
+        bool fd_ok = fr_fd_deriv_mpfr_real(f, bind, x, opts, bits, fd);
+        bool sym_ok = false;
+        if (fd_ok) {
+            Expr* xv = expr_new_mpfr_copy(x);
+            Expr* a1[1] = { xv };
+            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1, opts);
+            expr_free(xv);
+            mpfr_t im_d;
+            mpfr_init2(im_d, bits);
+            if (dv_e && get_approx_mpfr(dv_e, dv, im_d, &inexact_dummy)
+                && mpfr_zero_p(im_d) && mpfr_number_p(dv)) {
+                mpfr_sub(tmp, dv, fd, MPFR_RNDN);       /* |sym - fd| <= 1e-6 |fd| */
+                mpfr_abs(tmp, tmp, MPFR_RNDN);
+                mpfr_abs(step, fd, MPFR_RNDN);
+                mpfr_mul_d(step, step, 1e-6, MPFR_RNDN);
+                sym_ok = mpfr_cmp(tmp, step) <= 0;
+            }
+            mpfr_clear(im_d);
+            expr_free(dv_e);
+        }
+        mpfr_clear(fd);
+        if (fd_ok && !sym_ok) df = NULL;
+    }
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_mpfr_copy(x);
@@ -1087,6 +1182,290 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
     }
 cleanup:
     mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, (mpfr_ptr)0);
+    return result;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Secant at arbitrary precision (real)                               *
+ * ------------------------------------------------------------------ */
+
+/* Set the absolute / relative tolerances 10^-AccuracyGoal, 10^-PrecisionGoal
+ * (an Infinity goal disables its criterion: tolerance 0). */
+static void fr_mpfr_goal_tols(const FrOpts* opts, mpfr_t tol_acc, mpfr_t tol_prec) {
+    if (isinf(opts->acc_goal_digits)) mpfr_set_zero(tol_acc, +1);
+    else {
+        mpfr_set_ui(tol_acc, 10, MPFR_RNDN);
+        mpfr_pow_si(tol_acc, tol_acc, -(long)opts->acc_goal_digits, MPFR_RNDN);
+    }
+    if (isinf(opts->prec_goal_digits)) mpfr_set_zero(tol_prec, +1);
+    else {
+        mpfr_set_ui(tol_prec, 10, MPFR_RNDN);
+        mpfr_pow_si(tol_prec, tol_prec, -(long)opts->prec_goal_digits, MPFR_RNDN);
+    }
+}
+
+/* Evaluate f at the real MPFR point x into `out` (pre-init2'd).  False when
+ * the value is not a real number. */
+static bool fr_eval_mpfr_real(Expr* f, FrVarBind* bind, const mpfr_t x,
+                              const FrOpts* opts, long bits, mpfr_t out) {
+    Expr* a[1] = { expr_new_mpfr_copy(x) };
+    Expr* e = fr_eval_with_bindings(f, bind, a, 1, opts);
+    expr_free(a[0]);
+    if (!e) return false;
+    mpfr_t im;
+    mpfr_init2(im, bits);
+    bool dummy;
+    bool ok = get_approx_mpfr(e, out, im, &dummy) && mpfr_zero_p(im)
+              && mpfr_number_p(out);
+    mpfr_clear(im);
+    expr_free(e);
+    return ok;
+}
+
+/* Brent's method at the working precision, from a bracket [a, b] whose
+ * function values fa, fb (already evaluated) have opposite signs.  The
+ * classical algorithm (inverse quadratic interpolation / secant, each step
+ * accepted only while it stays inside the bracket and shrinks it fast enough,
+ * else bisection), so it can never leave the bracket and always converges to a
+ * root inside it.  With tol = 10^-AccuracyGoal + |b| 10^-PrecisionGoal it stops
+ *   - when the residual |f(b)| is under 10^-AccuracyGoal and the next
+ *     interpolation step is shorter than tol: that final step is taken and the
+ *     point it reaches returned.  The iteration is then in its superlinear
+ *     phase, so that point is far more accurate than tol (a bracket-width test
+ *     alone stops at ~tol: half the working precision under the default
+ *     goals);
+ *   - when the bracket half-width falls under 2^(1-bits) |b| + tol/2, at the
+ *     goal or at the working precision, whichever comes first -- an
+ *     absolute-only test never terminates for an AccuracyGoal beyond what the
+ *     working precision can resolve at |b|.
+ * `iters` caps the evaluations.  Returns the best iterate, or NULL (with a
+ * message) on failure. */
+static Expr* fr_brent_mpfr_core(Expr* f, FrVarBind* bind,
+                                const mpfr_t a0, const mpfr_t fa0,
+                                const mpfr_t b0, const mpfr_t fb0,
+                                int64_t iters, const FrOpts* opts) {
+    long bits = opts->wp_bits;
+    mpfr_t a, b, c, fa, fb, fc, d, e, p, q, r, s, tol1, xm, t1, t2,
+           tol_acc, tol_prec, eps, goal;
+    mpfr_inits2(bits, a, b, c, fa, fb, fc, d, e, p, q, r, s, tol1, xm, t1, t2,
+                tol_acc, tol_prec, eps, goal, (mpfr_ptr)0);
+    fr_mpfr_goal_tols(opts, tol_acc, tol_prec);
+    mpfr_set_ui_2exp(eps, 1, 1 - bits, MPFR_RNDN);
+    mpfr_set(a, a0, MPFR_RNDN);  mpfr_set(fa, fa0, MPFR_RNDN);
+    mpfr_set(b, b0, MPFR_RNDN);  mpfr_set(fb, fb0, MPFR_RNDN);
+    mpfr_set(c, b, MPFR_RNDN);   mpfr_set(fc, fb, MPFR_RNDN);
+    mpfr_sub(d, b, a, MPFR_RNDN); mpfr_set(e, d, MPFR_RNDN);
+    Expr* result = NULL;
+
+    for (int64_t k = 0; ; k++) {
+        if (mpfr_sgn(fb) * mpfr_sgn(fc) > 0) {          /* re-bracket with a  */
+            mpfr_set(c, a, MPFR_RNDN); mpfr_set(fc, fa, MPFR_RNDN);
+            mpfr_sub(d, b, a, MPFR_RNDN); mpfr_set(e, d, MPFR_RNDN);
+        }
+        if (mpfr_cmpabs(fc, fb) < 0) {                  /* b = best iterate   */
+            mpfr_set(a, b, MPFR_RNDN); mpfr_set(fa, fb, MPFR_RNDN);
+            mpfr_swap(b, c);           mpfr_swap(fb, fc);
+            mpfr_set(c, a, MPFR_RNDN); mpfr_set(fc, fa, MPFR_RNDN);
+        }
+        /* goal = tol_acc + |b| tol_prec.  tol1 = eps |b| is the resolution of
+         * the working precision: the shortest step taken and the scale of the
+         * interpolation acceptance tests.  It deliberately excludes the goal --
+         * a goal-sized minimum step would push the final, superlinearly
+         * accurate interpolation step off its target by ~goal. */
+        mpfr_abs(t1, b, MPFR_RNDN);
+        mpfr_mul(goal, t1, tol_prec, MPFR_RNDN);
+        mpfr_add(goal, goal, tol_acc, MPFR_RNDN);
+        mpfr_mul(tol1, t1, eps, MPFR_RNDN);
+        mpfr_sub(xm, c, b, MPFR_RNDN);
+        mpfr_div_2ui(xm, xm, 1, MPFR_RNDN);
+        mpfr_div_2ui(t2, goal, 1, MPFR_RNDN);
+        mpfr_add(t2, t2, tol1, MPFR_RNDN);               /* tol1 + goal / 2 */
+        if (mpfr_zero_p(fb) || mpfr_cmpabs(xm, t2) <= 0) {
+            result = expr_new_mpfr_copy(b);
+            break;
+        }
+        if (k >= iters) {
+            fr_warn("cvmit", "failed to converge within %lld iterations",
+                    (long long)opts->max_iter);
+            mpfr_abs(t1, b, MPFR_RNDN);
+            mpfr_abs(t2, xm, MPFR_RNDN);
+            fr_warn_goal(opts, 2.0 * mpfr_get_d(t2, MPFR_RNDN), mpfr_get_d(t1, MPFR_RNDN));
+            result = expr_new_mpfr_copy(b);
+            break;
+        }
+        bool interpolate = false;
+        if (mpfr_cmpabs(e, tol1) >= 0 && mpfr_cmpabs(fa, fb) > 0) {
+            mpfr_div(s, fb, fa, MPFR_RNDN);
+            if (mpfr_equal_p(a, c)) {                   /* secant             */
+                mpfr_mul(p, xm, s, MPFR_RNDN); mpfr_mul_2ui(p, p, 1, MPFR_RNDN);
+                mpfr_ui_sub(q, 1, s, MPFR_RNDN);
+            } else {                                    /* inverse quadratic  */
+                mpfr_div(q, fa, fc, MPFR_RNDN);
+                mpfr_div(r, fb, fc, MPFR_RNDN);
+                /* p = s (2 xm q (q - r) - (b - a)(r - 1)) */
+                mpfr_sub(t1, q, r, MPFR_RNDN);
+                mpfr_mul(t1, t1, q, MPFR_RNDN);
+                mpfr_mul(t1, t1, xm, MPFR_RNDN);
+                mpfr_mul_2ui(t1, t1, 1, MPFR_RNDN);
+                mpfr_sub(t2, b, a, MPFR_RNDN);
+                mpfr_sub_ui(p, r, 1, MPFR_RNDN);
+                mpfr_mul(t2, t2, p, MPFR_RNDN);
+                mpfr_sub(t1, t1, t2, MPFR_RNDN);
+                mpfr_mul(p, s, t1, MPFR_RNDN);
+                /* q = (q - 1)(r - 1)(s - 1) */
+                mpfr_sub_ui(q, q, 1, MPFR_RNDN);
+                mpfr_sub_ui(t1, r, 1, MPFR_RNDN);
+                mpfr_mul(q, q, t1, MPFR_RNDN);
+                mpfr_sub_ui(t1, s, 1, MPFR_RNDN);
+                mpfr_mul(q, q, t1, MPFR_RNDN);
+            }
+            if (mpfr_sgn(p) > 0) mpfr_neg(q, q, MPFR_RNDN);
+            mpfr_abs(p, p, MPFR_RNDN);
+            /* accept if 2p < min(3 xm q - |tol1 q|, |e q|) */
+            mpfr_mul(t1, xm, q, MPFR_RNDN); mpfr_mul_ui(t1, t1, 3, MPFR_RNDN);
+            mpfr_mul(t2, tol1, q, MPFR_RNDN); mpfr_abs(t2, t2, MPFR_RNDN);
+            mpfr_sub(t1, t1, t2, MPFR_RNDN);
+            mpfr_mul(t2, e, q, MPFR_RNDN); mpfr_abs(t2, t2, MPFR_RNDN);
+            if (mpfr_cmp(t2, t1) < 0) mpfr_set(t1, t2, MPFR_RNDN);
+            mpfr_mul_2ui(t2, p, 1, MPFR_RNDN);
+            if (mpfr_cmp(t2, t1) < 0 && !mpfr_zero_p(q)) {
+                mpfr_set(e, d, MPFR_RNDN);
+                mpfr_div(d, p, q, MPFR_RNDN);
+                interpolate = true;
+            }
+        }
+        if (!interpolate) {                              /* bisection          */
+            mpfr_set(d, xm, MPFR_RNDN);
+            mpfr_set(e, d, MPFR_RNDN);
+        }
+        bool final_step = interpolate && mpfr_cmpabs(d, goal) <= 0
+                          && mpfr_cmpabs(fb, tol_acc) <= 0;
+        mpfr_set(a, b, MPFR_RNDN); mpfr_set(fa, fb, MPFR_RNDN);
+        if (mpfr_cmpabs(d, tol1) > 0) mpfr_add(b, b, d, MPFR_RNDN);
+        else if (mpfr_sgn(xm) > 0)    mpfr_add(b, b, tol1, MPFR_RNDN);
+        else                          mpfr_sub(b, b, tol1, MPFR_RNDN);
+        if (!fr_eval_mpfr_real(f, bind, b, opts, bits, fb)) {
+            fr_warn("nlnum", "non-real f during iteration");
+            break;
+        }
+        if (final_step) { result = expr_new_mpfr_copy(b); break; }
+        fr_fire_monitor(opts->step_monitor);
+    }
+    mpfr_clears(a, b, c, fa, fb, fc, d, e, p, q, r, s, tol1, xm, t1, t2,
+                tol_acc, tol_prec, eps, goal, (mpfr_ptr)0);
+    return result;
+}
+
+/* Method -> "Brent" at the working precision: evaluate the two bracket
+ * endpoints and run fr_brent_mpfr_core. */
+static Expr* fr_run_brent_mpfr_real(Expr* f, FrVarBind* bind,
+                                    Expr* a_expr, Expr* b_expr,
+                                    const FrOpts* opts) {
+    long bits = opts->wp_bits;
+    mpfr_t a, b, fa, fb, im;
+    mpfr_inits2(bits, a, b, fa, fb, im, (mpfr_ptr)0);
+    bool dummy;
+    Expr* result = NULL;
+    if (!get_approx_mpfr(a_expr, a, im, &dummy) || !mpfr_zero_p(im)
+        || !get_approx_mpfr(b_expr, b, im, &dummy) || !mpfr_zero_p(im)) {
+        fr_warn("nlnum", "Brent endpoints must be real numbers");
+    } else if (!fr_eval_mpfr_real(f, bind, a, opts, bits, fa)
+               || !fr_eval_mpfr_real(f, bind, b, opts, bits, fb)) {
+        fr_warn("nlnum", "non-real f at bracket endpoints");
+    } else if (mpfr_sgn(fa) * mpfr_sgn(fb) > 0) {
+        fr_warn("brnoth", "function values at bracket endpoints have the same sign");
+    } else {
+        result = fr_brent_mpfr_core(f, bind, a, fa, b, fb, opts->max_iter, opts);
+    }
+    mpfr_clears(a, b, fa, fb, im, (mpfr_ptr)0);
+    return result;
+}
+
+/* The secant iteration x_{k+1} = x_k - f_k (x_k - x_{k-1}) / (f_k - f_{k-1}),
+ * safeguarded by bracketing: as soon as two consecutive iterates have function
+ * values of opposite sign (the two starting values included), a root is known
+ * to lie between them and the search continues by Brent's method on that
+ * bracket, which cannot leave it.  An unguarded secant step from a bracket can
+ * extrapolate across many sign changes and land on a far-away root -- or on
+ * none.  Carried entirely in MPFR at the working precision.  Every quantity -- the
+ * function values, their difference, the step and the convergence tests --
+ * stays an MPFR number: a function whose magnitude leaves the double range
+ * (L_1000 is ~1e867 near its largest zero) is handled as any other, where a
+ * double intermediate overflows to inf/inf.  Same stopping rule as the
+ * machine secant: the residual and the step both under 10^-AccuracyGoal, or
+ * the step under |x| 10^-PrecisionGoal. */
+static Expr* fr_run_secant_mpfr_real(Expr* f, FrVarBind* bind,
+                                     Expr* x0_expr, Expr* x1_expr,
+                                     const FrOpts* opts) {
+    long bits = opts->wp_bits;
+    mpfr_t xa, xb, fa, fb, denom, step, tmp, scale, im, tol_acc, tol_prec;
+    mpfr_inits2(bits, xa, xb, fa, fb, denom, step, tmp, scale, im,
+                tol_acc, tol_prec, (mpfr_ptr)0);
+    fr_mpfr_goal_tols(opts, tol_acc, tol_prec);
+    Expr* result = NULL;
+    bool dummy;
+    double resid = INFINITY;    /* last |f(xb)|, the goal-shortfall error estimate */
+
+    if (!get_approx_mpfr(x0_expr, xa, im, &dummy) || !mpfr_zero_p(im)
+        || !get_approx_mpfr(x1_expr, xb, im, &dummy) || !mpfr_zero_p(im)) {
+        fr_warn("nlnum", "Secant starting points must be real numbers");
+        goto cleanup;
+    }
+    if (!fr_eval_mpfr_real(f, bind, xa, opts, bits, fa)) {
+        fr_warn("nlnum", "non-real f at start point");
+        goto cleanup;
+    }
+    if (mpfr_zero_p(fa)) { result = expr_new_mpfr_copy(xa); goto cleanup; }
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        if (!fr_eval_mpfr_real(f, bind, xb, opts, bits, fb)) {
+            fr_warn("nlnum", "non-real f during iteration");
+            goto cleanup;
+        }
+        mpfr_abs(tmp, fb, MPFR_RNDN);
+        resid = mpfr_get_d(tmp, MPFR_RNDN);
+        if (mpfr_zero_p(fb)) { result = expr_new_mpfr_copy(xb); goto cleanup; }
+        if (mpfr_sgn(fa) * mpfr_sgn(fb) < 0) {          /* bracketed: Brent */
+            result = fr_brent_mpfr_core(f, bind, xa, fa, xb, fb,
+                                        opts->max_iter - k, opts);
+            goto cleanup;
+        }
+        mpfr_sub(denom, fb, fa, MPFR_RNDN);
+        if (mpfr_zero_p(denom)) {
+            /* f_k == f_{k-1}: either the two iterates coincide (converged to
+             * the working precision) or the secant is horizontal. */
+            if (mpfr_equal_p(xa, xb)) { result = expr_new_mpfr_copy(xb); goto cleanup; }
+            fr_warn("noconv", "secant denominator vanished");
+            goto cleanup;
+        }
+        mpfr_sub(step, xb, xa, MPFR_RNDN);
+        mpfr_mul(step, step, fb, MPFR_RNDN);
+        mpfr_div(step, step, denom, MPFR_RNDN);
+        mpfr_mul_d(step, step, opts->damping, MPFR_RNDN);
+        if (!mpfr_number_p(step)) {
+            fr_warn("noconv", "divergence (non-finite step)");
+            goto cleanup;
+        }
+        mpfr_swap(xa, xb);              /* xa <- x_k                       */
+        mpfr_swap(fa, fb);              /* fa <- f_k                       */
+        mpfr_sub(xb, xa, step, MPFR_RNDN);
+        fr_fire_monitor(opts->step_monitor);
+
+        mpfr_abs(step, step, MPFR_RNDN);
+        bool acc_ok = mpfr_cmp(tmp, tol_acc) < 0 && mpfr_cmp(step, tol_acc) < 0;
+        mpfr_abs(scale, xb, MPFR_RNDN);
+        mpfr_mul(scale, scale, tol_prec, MPFR_RNDN);
+        bool prec_ok = mpfr_cmp(step, scale) < 0;
+        if (acc_ok || prec_ok) { result = expr_new_mpfr_copy(xb); goto cleanup; }
+    }
+    fr_warn("cvmit", "failed to converge within %lld iterations",
+            (long long)opts->max_iter);
+    result = expr_new_mpfr_copy(xb);
+    mpfr_abs(tmp, xb, MPFR_RNDN);
+    fr_warn_goal(opts, resid, mpfr_get_d(tmp, MPFR_RNDN));
+cleanup:
+    mpfr_clears(xa, xb, fa, fb, denom, step, tmp, scale, im,
+                tol_acc, tol_prec, (mpfr_ptr)0);
     return result;
 }
 
@@ -1273,6 +1652,43 @@ static Expr* fr_normalize_eqn_list(Expr* eqlist) {
     return out;
 }
 
+/* True if `e` is a List of exactly `n` elements. */
+static bool fr_is_list_n(const Expr* e, size_t n) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List
+        && e->data.function.arg_count == n;
+}
+
+/* A user Jacobian for n equations in n unknowns is an n x n matrix (a List of
+ * n Lists of n entries).  The entries are held expressions in the variables,
+ * evaluated per point, so they need only be numeric once the variables are
+ * bound (g[x] with a ?NumberQ guard).  Reports FindRoot::jacsh otherwise. */
+static bool fr_jacobian_shape_ok(const Expr* J, size_t n) {
+    bool ok = fr_is_list_n(J, n);
+    for (size_t i = 0; ok && i < n; i++)
+        ok = fr_is_list_n(J->data.function.args[i], n);
+    if (!ok)
+        fr_warn("jacsh", "the Jacobian must be a %zu x %zu matrix for %zu "
+                "equation%s", n, n, n, n == 1 ? "" : "s");
+    return ok;
+}
+
+/* The derivative expression for one equation: the 1 x 1 matrix form {{d}} is
+ * the portable spelling (it is what a system of one equation takes), the bare
+ * expression d the scalar one.  Returns a fresh copy, or NULL after a jacsh
+ * message for any other List shape. */
+static Expr* fr_scalar_jacobian(const Expr* J) {
+    if (fr_is_list_n(J, 1) && fr_is_list_n(J->data.function.args[0], 1))
+        return expr_copy(J->data.function.args[0]->data.function.args[0]);
+    if (J->type == EXPR_FUNCTION && J->data.function.head->type == EXPR_SYMBOL
+        && J->data.function.head->data.symbol.name == SYM_List) {
+        fr_jacobian_shape_ok(J, 1);
+        return NULL;
+    }
+    return expr_copy((Expr*)J);
+}
+
 static Expr* fr_run_newton_system_real(Expr* flist_normalized,
                                        Expr** vars, size_t n,
                                        FrVarBind* binds,
@@ -1280,6 +1696,7 @@ static Expr* fr_run_newton_system_real(Expr* flist_normalized,
                                        const FrOpts* opts) {
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
+    if (opts->jacobian && !fr_jacobian_shape_ok(opts->jacobian, n)) return NULL;
 
     /* Pre-compute Jacobian symbolically: matrix[i][j] = D[f_i, var_j].
      * jz[i*n+j] flags the STRUCTURALLY-ZERO entries: for a sparse system (a
@@ -1504,6 +1921,85 @@ cleanup:
  *  Entry point                                                        *
  * ------------------------------------------------------------------ */
 
+/* One scalar root-finding problem, as the entry point decoded it.  All
+ * pointers borrowed. */
+typedef struct {
+    FrMethod   method;
+    FrSpecKind kind;
+    Expr*      f;                /* normalised function                  */
+    Expr *x0, *x1, *xmin, *xmax; /* evaluated spec values (some NULL)    */
+    Expr*      deriv;            /* Newton derivative, or NULL for FD    */
+    bool       want_complex;
+} FrScalarProblem;
+
+/* Run the chosen scalar method at opts->prec_mode.  Returns the root value
+ * (caller owns) or NULL after a message -- or, for a machine solve that set
+ * *opts->overflow, NULL silently so the caller can rerun in MPFR. */
+static Expr* fr_solve_scalar(const FrScalarProblem* P, FrVarBind* bind,
+                             const FrOpts* opts) {
+    if (P->method == FR_METHOD_BRENT) {
+        /* Brent accepts a {var, x0, x1} pair as the bracket, or a
+         * full {var, xstart, xmin, xmax} spec. */
+        Expr *ea, *eb;
+        if (P->kind == FR_SPEC_BRACKET)        { ea = P->xmin; eb = P->xmax; }
+        else if (P->kind == FR_SPEC_TWO_START) { ea = P->x0;   eb = P->x1;   }
+        else {
+            fr_warn("brnoth", "Brent requires {var, a, b} or {var, xstart, xmin, xmax}");
+            return NULL;
+        }
+#ifdef USE_MPFR
+        if (opts->prec_mode == FR_PREC_MPFR) {
+            return fr_run_brent_mpfr_real(P->f, bind, ea, eb, opts);
+        }
+#endif
+        double a, b;
+        if (!fr_expr_to_double_real(ea, &a) || !fr_expr_to_double_real(eb, &b)) {
+            fr_warn("nlnum", "Brent endpoints must be real numbers");
+            return NULL;
+        }
+        return fr_run_brent_real(P->f, bind, a, b, opts);
+    } else if (P->method == FR_METHOD_SECANT) {
+        if (P->kind != FR_SPEC_TWO_START) {
+            fr_warn("argt", "Secant requires a {var, x0, x1} spec");
+            return NULL;
+        }
+#ifdef USE_MPFR
+        if (opts->prec_mode == FR_PREC_MPFR) {
+            return fr_run_secant_mpfr_real(P->f, bind, P->x0, P->x1, opts);
+        }
+#endif
+        double x0, x1;
+        if (!fr_expr_to_double_real(P->x0, &x0)
+            || !fr_expr_to_double_real(P->x1, &x1)) {
+            fr_warn("nlnum", "Secant starting points must be real numbers");
+            return NULL;
+        }
+        return fr_run_secant_real(P->f, bind, x0, x1, opts);
+    } else {
+#ifdef USE_MPFR
+        if (opts->prec_mode == FR_PREC_MPFR) {
+            if (P->want_complex)
+                return fr_run_newton_mpfr_complex(P->f, P->deriv, bind, P->x0, opts);
+            return fr_run_newton_mpfr_real(P->f, P->deriv, bind, P->x0, opts);
+        }
+#endif
+        if (P->want_complex) {
+            double complex z0;
+            if (!fr_expr_to_complex(P->x0, &z0)) {
+                fr_warn("nlnum", "start point not numeric");
+                return NULL;
+            }
+            return fr_run_newton_complex(P->f, P->deriv, bind, z0, opts);
+        }
+        double x0d;
+        if (!fr_expr_to_double_real(P->x0, &x0d)) {
+            fr_warn("nlnum", "start point not numeric");
+            return NULL;
+        }
+        return fr_run_newton_real(P->f, P->deriv, bind, x0d, opts);
+    }
+}
+
 Expr* builtin_findroot(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1551,6 +2047,8 @@ Expr* builtin_findroot(Expr* res) {
     opts.eval_monitor = NULL;
     opts.main_f = NULL;
     opts.ac_f = NULL; opts.ac_f_prec = NULL;
+    opts.overflow = NULL;
+    opts.escalated = false;
 
     for (size_t i = pos_end; i < argc; i++) {
         if (!fr_apply_option(res->data.function.args[i], &opts)) return NULL;
@@ -1696,78 +2194,51 @@ Expr* builtin_findroot(Expr* res) {
 #endif
     }
 
-    if (method == FR_METHOD_BRENT) {
-        /* Brent accepts a {var, x0, x1} pair as the bracket, or a
-         * full {var, xstart, xmin, xmax} spec. */
-        double a, b;
-        if (kind == FR_SPEC_BRACKET) {
-            if (!fr_expr_to_double_real(xmin_e, &a)
-                || !fr_expr_to_double_real(xmax_e, &b)) {
-                fr_warn("nlnum", "Brent endpoints must be real numbers");
-                goto scalar_cleanup;
-            }
-        } else if (kind == FR_SPEC_TWO_START) {
-            if (!fr_expr_to_double_real(x0_e, &a)
-                || !fr_expr_to_double_real(x1_e, &b)) {
-                fr_warn("nlnum", "Brent endpoints must be real numbers");
-                goto scalar_cleanup;
-            }
+    /* Newton's derivative, computed once (an escalated rerun reuses it).  When
+     * the symbolic derivative is unavailable -- D returns an inert
+     * Derivative[..] (e.g. Zeta', PolyGamma order derivatives) -- Newton falls
+     * back to a finite-difference derivative (deriv == NULL signals that). */
+    Expr* deriv = NULL;
+    if (method == FR_METHOD_NEWTON) {
+        if (opts.jacobian) {
+            deriv = fr_scalar_jacobian(opts.jacobian);
+            if (!deriv) goto scalar_cleanup;
         } else {
-            fr_warn("brnoth", "Brent requires {var, a, b} or {var, xstart, xmin, xmax}");
-            goto scalar_cleanup;
-        }
-        result = fr_run_brent_real(fnorm, &bind, a, b, &opts);
-    } else if (method == FR_METHOD_SECANT) {
-        if (kind != FR_SPEC_TWO_START) {
-            fr_warn("argt", "Secant requires a {var, x0, x1} spec");
-            goto scalar_cleanup;
-        }
-        double x0, x1;
-        if (!fr_expr_to_double_real(x0_e, &x0)
-            || !fr_expr_to_double_real(x1_e, &x1)) {
-            fr_warn("nlnum", "Secant starting points must be real numbers");
-            goto scalar_cleanup;
-        }
-        result = fr_run_secant_real(fnorm, &bind, x0, x1, &opts);
-    } else {
-        /* Newton scalar (kind ignored beyond x0).  When the symbolic derivative
-         * is unavailable -- D returns an inert Derivative[..] (e.g. Zeta',
-         * PolyGamma order derivatives) -- fall back to a finite-difference
-         * derivative inside the Newton iteration (deriv == NULL signals that). */
-        Expr* deriv = opts.jacobian ? expr_copy(opts.jacobian)
-                                    : fr_compute_derivative(fnorm, var);
-        if (deriv && !opts.jacobian && fr_has_inert_derivative(deriv)) {
-            expr_free(deriv);
-            deriv = NULL;
-        }
-#ifdef USE_MPFR
-        if (opts.prec_mode == FR_PREC_MPFR) {
-            if (want_complex) {
-                result = fr_run_newton_mpfr_complex(fnorm, deriv, &bind, x0_e, &opts);
-            } else {
-                result = fr_run_newton_mpfr_real(fnorm, deriv, &bind, x0_e, &opts);
-            }
-        } else
-#endif
-        {
-            if (want_complex) {
-                double complex z0;
-                if (!fr_expr_to_complex(x0_e, &z0)) {
-                    fr_warn("nlnum", "start point not numeric");
-                    expr_free(deriv); goto scalar_cleanup;
-                }
-                result = fr_run_newton_complex(fnorm, deriv, &bind, z0, &opts);
-            } else {
-                double x0d;
-                if (!fr_expr_to_double_real(x0_e, &x0d)) {
-                    fr_warn("nlnum", "start point not numeric");
-                    expr_free(deriv); goto scalar_cleanup;
-                }
-                result = fr_run_newton_real(fnorm, deriv, &bind, x0d, &opts);
+            deriv = fr_compute_derivative(fnorm, var);
+            if (deriv && fr_has_inert_derivative(deriv)) {
+                expr_free(deriv);
+                deriv = NULL;
             }
         }
-        expr_free(deriv);
     }
+
+    FrScalarProblem prob = { method, kind, fnorm, x0_e, x1_e, xmin_e, xmax_e,
+                             deriv, want_complex };
+    bool overflow = false;
+    if (!want_complex && opts.prec_mode == FR_PREC_MACHINE) opts.overflow = &overflow;
+    result = fr_solve_scalar(&prob, &bind, &opts);
+#ifdef USE_MPFR
+    if (!result && overflow) {
+        /* A machine solve met a value outside the double range (|L_1000| ~
+         * 1e867 near its largest zero): rerun the same method in MPFR, whose
+         * exponent range is unbounded, at a little over twice machine
+         * precision, and hand back a machine number.  The goals stay the
+         * machine ones resolved above. */
+        opts.overflow = NULL;
+        opts.prec_mode = FR_PREC_MPFR;
+        opts.wp_bits = FR_ESCALATION_BITS;
+        opts.escalated = true;
+        Expr* r = fr_solve_scalar(&prob, &bind, &opts);
+        if (r && r->type == EXPR_MPFR && mpfr_number_p(r->data.mpfr)
+            && isfinite(mpfr_get_d(r->data.mpfr, MPFR_RNDN))) {
+            result = expr_new_real(mpfr_get_d(r->data.mpfr, MPFR_RNDN));
+            expr_free(r);
+        } else {
+            result = r;          /* a root beyond the double range stays MPFR */
+        }
+    }
+#endif
+    expr_free(deriv);
 
 scalar_cleanup:
     fr_bind_restore(&bind);

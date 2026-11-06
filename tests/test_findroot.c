@@ -363,6 +363,159 @@ static void test_stress_secant_quadratic(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 14. Secant / Brent at arbitrary precision                           */
+/* ------------------------------------------------------------------ */
+
+/* 10^400 (x^2 - 2) exceeds the double range everywhere: the secant must stay
+ * in MPFR end to end.  Root Sqrt[2]; {2, 3} does not bracket it, so this runs
+ * secant steps first and Brent after the first sign change. */
+static void test_secant_mpfr_beyond_double_range(void) {
+    mute_stderr_once();
+    check_true("With[{r = x /. FindRoot[10^400 (x^2 - 2), {x, 2, 3}, "
+               "WorkingPrecision -> 50]}, "
+               "Abs[r - Sqrt[2]] < 10^-45 && Precision[r] > 49]");
+}
+
+/* The largest zero of L_1000 (|L_1000| ~ 1e867 near it) by the secant method
+ * from {4002, 4003} at 100 digits.  Checked independently: the Newton
+ * correction L_1000/L_1000' recomputed at 200 digits is below 10^-80, and the
+ * leading digits agree with 3943.24739484527095238972810775. */
+static void test_secant_mpfr_laguerre_1000(void) {
+    mute_stderr_once();
+    check_true("Module[{f, r, y}, "
+               "f[(t_)?NumberQ] := LaguerreL[1000, SetPrecision[t, 100]]; "
+               "r = x /. FindRoot[Evaluate[f[x]], {x, 4002, 4003}, "
+               "WorkingPrecision -> 100, AccuracyGoal -> 1000, MaxIterations -> 100]; "
+               "y = SetPrecision[r, 200]; "
+               "Abs[LaguerreL[1000, y]/LaguerreL[999, 1, y]] < 10^-80 && "
+               "Abs[r - 394324739484527095238972810775/10^26] < 10^-25]");
+}
+
+/* A plain secant step from the bracket {-10, 20} of ArcTan[x - 1] extrapolates
+ * away from the root (the next secant is nearly flat) and diverges; once two
+ * iterates straddle a sign change the search must stay inside them. */
+static void test_secant_bracket_safeguard(void) {
+    mute_stderr_once();
+    check_true("Abs[(x /. FindRoot[ArcTan[x - 1], {x, -10, 20}]) - 1] < 10^-10");
+    check_true("Abs[(x /. FindRoot[ArcTan[x - 1], {x, -10, 20}, "
+               "WorkingPrecision -> 30]) - 1] < 10^-25");
+}
+
+/* Starts that bracket exactly one zero of ChebyshevT[50, x] (zeros
+ * Cos[(2k - 1) Pi/100]) return that zero -- not a neighbour reached by
+ * extrapolating across sign changes. */
+static void test_secant_bracketed_root_is_kept(void) {
+    mute_stderr_once();
+    check_true("With[{r = N[Cos[25 Pi/100], 40], g = N[Pi/100, 40]}, "
+               "Abs[(x /. FindRoot[ChebyshevT[50, x], {x, r - 0.45 g, r + 0.9 g}]) - r] < 10^-12 && "
+               "Abs[(x /. FindRoot[ChebyshevT[50, x], {x, r - 0.45 g, r + 0.9 g}, "
+               "WorkingPrecision -> 40]) - r] < 10^-35]");
+}
+
+/* Brent at WorkingPrecision -> 40 works in MPFR and, under the default goals,
+ * returns the full working precision (the step that meets the goal is taken
+ * and lands at superlinear accuracy); explicit loose goals stop it early. */
+static void test_brent_mpfr_precision(void) {
+    mute_stderr_once();
+    check_true("With[{r = x /. FindRoot[x^2 - 2, {x, 1, 2}, WorkingPrecision -> 40, "
+               "Method -> \"Brent\"]}, Abs[r - Sqrt[2]] < 10^-38 && Precision[r] > 39]");
+    check_true("With[{r = x /. FindRoot[x^2 - 2, {x, 1, 2}, WorkingPrecision -> 40, "
+               "AccuracyGoal -> 5, PrecisionGoal -> 5]}, "
+               "Abs[r - Sqrt[2]] < 10^-5 && Abs[r - Sqrt[2]] > 10^-30]");
+}
+
+/* The compiled fast path must not swallow EvaluationMonitor. */
+static void test_evaluation_monitor_compiled_path(void) {
+    mute_stderr_once();
+    check_true("Module[{c = 0}, FindRoot[x^2 - 2, {x, 1, 2}, WorkingPrecision -> 40, "
+               "EvaluationMonitor :> c++]; c >= 5]");
+    check_true("Module[{c = 0}, FindRoot[x^2 - 2, {x, 1.}, EvaluationMonitor :> c++]; c >= 3]");
+}
+
+/* ------------------------------------------------------------------ */
+/* 15. Real-valued option values                                       */
+/* ------------------------------------------------------------------ */
+
+static void test_real_valued_options(void) {
+    mute_stderr_once();
+    /* the same solve as with Integer values, meeting the 20-digit goal */
+    check_true("With[{r = x /. FindRoot[x^2 - 2, {x, 1}, WorkingPrecision -> 30., "
+               "AccuracyGoal -> 20., PrecisionGoal -> 20., MaxIterations -> 20.], "
+               "s = x /. FindRoot[x^2 - 2, {x, 1}, WorkingPrecision -> 30, "
+               "AccuracyGoal -> 20, PrecisionGoal -> 20, MaxIterations -> 20]}, "
+               "r === s && Abs[r - Sqrt[2]] < 10^-20 && Precision[r] > 29]");
+    /* an arbitrary-precision WorkingPrecision value, as N[.., n] produces */
+    check_true("Abs[(x /. FindRoot[x^2 - 2, {x, 1, 2}, WorkingPrecision -> N[40, 20]]) "
+               "- Sqrt[2]] < 10^-35");
+    /* N applied to a FindRoot result */
+    check_true("With[{r = x /. N[FindRoot[x^2 - 2, {x, 1, 2}, WorkingPrecision -> 40, "
+               "AccuracyGoal -> 40, MaxIterations -> 100], 12]}, "
+               "Abs[r - Sqrt[2]] < 10^-11 && 11.5 < Precision[r] < 13]");
+    /* a non-integral count stays an error */
+    check_eq("Head[FindRoot[x^2 - 2, {x, 1}, MaxIterations -> 20.5]]", "FindRoot");
+    check_eq("Head[FindRoot[x^2 - 2, {x, 1}, WorkingPrecision -> -3.]]", "FindRoot");
+}
+
+/* FindRoot is HoldAll; scalar option values are evaluated before use. */
+static void test_option_values_evaluated(void) {
+    mute_stderr_once();
+    check_true("Block[{n = 10}, With[{r = x /. FindRoot[x^2 - 2, {x, 1}, "
+               "MaxIterations -> 2 n, WorkingPrecision -> 3 n]}, "
+               "Abs[r - Sqrt[2]] < 10^-15 && Precision[r] > 29]]");
+}
+
+/* ------------------------------------------------------------------ */
+/* 16. Machine solve that leaves the double range                      */
+/* ------------------------------------------------------------------ */
+
+/* L_1000(4002.) ~ 3e867 overflows a double; the solve escalates to MPFR and
+ * returns a machine number (leading digits as in the 100-digit test). */
+static void test_machine_overflow_escalates(void) {
+    mute_stderr_once();
+    check_true("With[{r = x /. FindRoot[LaguerreL[1000, x], {x, 4002}]}, "
+               "Precision[r] === MachinePrecision && "
+               "Abs[r - 39432473948452709523897/10^19] < 10^-9]");
+    /* secant: superlinear, so held to the machine goals (relative 10^-8) */
+    check_true("With[{r = x /. FindRoot[LaguerreL[1000, x], {x, 4002, 4003}]}, "
+               "Precision[r] === MachinePrecision && "
+               "Abs[r - 39432473948452709523897/10^19] < 4*10^-5]");
+    /* e^(1000 x) - 2 from x = 1: e^1000 ~ 2e434. Root Log[2]/1000. */
+    check_true("Abs[(x /. FindRoot[Exp[1000 x] - 2, {x, 1}, MaxIterations -> 2000]) "
+               "- Log[2]/1000] < 10^-10");   /* |f| < 10^-8, f' = 2000 */
+}
+
+/* ------------------------------------------------------------------ */
+/* 17. Jacobian as a matrix                                            */
+/* ------------------------------------------------------------------ */
+
+static void test_jacobian_matrix_forms(void) {
+    mute_stderr_once();
+    /* 1 x 1 matrix for one equation, entries numeric only at a number */
+    check_true("Module[{f, g, r, y}, "
+               "f[(t_)?NumberQ] := LaguerreL[1000, SetPrecision[t, 100]]; "
+               "g[(t_)?NumberQ] := -LaguerreL[999, 1, SetPrecision[t, 100]]; "
+               "r = x /. FindRoot[Evaluate[f[x]], {x, 4002}, WorkingPrecision -> 100, "
+               "AccuracyGoal -> 1000, MaxIterations -> 50, Jacobian -> {{g[x]}}]; "
+               "y = SetPrecision[r, 200]; "
+               "Abs[LaguerreL[1000, y]/LaguerreL[999, 1, y]] < 10^-80]");
+    /* machine: the matrix and the bare form agree, and the result is a zero */
+    check_true("With[{a = x /. FindRoot[LaguerreL[100, x], {x, 402}, "
+               "Jacobian -> {{-LaguerreL[99, 1, x]}}], "
+               "b = x /. FindRoot[LaguerreL[100, x], {x, 402}, "
+               "Jacobian -> -LaguerreL[99, 1, x]]}, "
+               "Abs[a - b] < 10^-9 && Abs[LaguerreL[100, SetPrecision[a, 60]]/"
+               "LaguerreL[99, 1, SetPrecision[a, 60]]] < 10^-9]");
+    /* one-equation system with a 1 x 1 matrix; a 2 x 2 system */
+    check_true("Abs[(x /. FindRoot[{x^2 - 2}, {{x, 1}}, Jacobian -> {{2 x}}]) - Sqrt[2]] < 10^-8");
+    check_true("Max[Abs[({x, y} /. FindRoot[{x^2 + y - 3, x - y + 1}, {{x, 0.5}, {y, 0.5}}, "
+               "Jacobian -> {{2 x, 1}, {1, -1}}]) - {1, 2}]] < 10^-8");
+    /* wrong shapes are rejected, not indexed */
+    check_eq("Head[FindRoot[x^2 - 2, {x, 1}, Jacobian -> {{2 x, 1}}]]", "FindRoot");
+    check_eq("Head[FindRoot[{x^2 + y - 3, x - y + 1}, {{x, 0.5}, {y, 0.5}}, "
+             "Jacobian -> {{2 x, 1}}]]", "FindRoot");
+}
+
+/* ------------------------------------------------------------------ */
 /* 13. Memory: many calls in a row (smoke test for leaks)              */
 /* ------------------------------------------------------------------ */
 
@@ -435,6 +588,17 @@ int main(void) {
     TEST(test_stress_high_precision_pi);
     TEST(test_stress_brent_transcendental);
     TEST(test_stress_secant_quadratic);
+
+    TEST(test_secant_mpfr_beyond_double_range);
+    TEST(test_secant_mpfr_laguerre_1000);
+    TEST(test_secant_bracket_safeguard);
+    TEST(test_secant_bracketed_root_is_kept);
+    TEST(test_brent_mpfr_precision);
+    TEST(test_evaluation_monitor_compiled_path);
+    TEST(test_real_valued_options);
+    TEST(test_option_values_evaluated);
+    TEST(test_machine_overflow_escalates);
+    TEST(test_jacobian_matrix_forms);
 
     TEST(test_no_leak_many_calls);
 

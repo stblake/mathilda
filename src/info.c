@@ -609,7 +609,8 @@ void info_init(void) {
         "FindRoot[lhs == rhs, {x, x0}]\n"
         "\tsearches for a numerical solution to the equation.\n"
         "FindRoot[f, {x, x0, x1}]\n"
-        "\tuses a variant of the secant method with x0 and x1 as the first two approximations.\n"
+        "\tuses the secant method with x0 and x1 as the first two approximations, "
+        "switching to Brent's method once two iterates bracket a root.\n"
         "FindRoot[f, {x, xstart, xmin, xmax}]\n"
         "\tuses Brent's method on the bracket [xmin, xmax].\n"
         "FindRoot[{f1, f2, ...}, {{x, x0}, {y, y0}, ...}]\n"
@@ -617,9 +618,12 @@ void info_init(void) {
         "Options: Method (Automatic | 'Newton' | 'Secant' | 'Brent'). The default is "
         "Automatic, which selects by the starting spec: Newton for {x, x0}, a secant "
         "variant for {x, x0, x1}, and Brent for the bracket {x, xstart, xmin, xmax}. "
-        "Further options: WorkingPrecision, MaxIterations, AccuracyGoal, PrecisionGoal, "
-        "DampingFactor, Jacobian, StepMonitor, EvaluationMonitor.  FindRoot has HoldAll "
-        "and effectively uses Block to localize variables.");
+        "Further options: WorkingPrecision (digit count, Integer or Real), MaxIterations "
+        "(positive integer), AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian (an "
+        "n x n matrix for n equations; {{d}} or d for one), StepMonitor, "
+        "EvaluationMonitor.  Every method runs at WorkingPrecision; a machine solve "
+        "whose values overflow a double is rerun in arbitrary precision.  FindRoot has "
+        "HoldAll and effectively uses Block to localize variables.");
 
     symtab_set_docstring("NResidue",
         "NResidue[expr, {z, z0}]\n"
