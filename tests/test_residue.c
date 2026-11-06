@@ -225,6 +225,43 @@ static void test_rational_over_q_poles(void) {
     check_eq("Residue[1/((z - 2)^3 (z + 1)), {z, 0}]", "0");
 }
 
+
+/* High-order poles of a trig function with a SYMBOLIC argument scale.
+ * Pi Cot[Pi z] = 1/z - 2 sum_k Zeta[2k] z^(2k-1), so the residue of
+ * Pi Cot[Pi z]/z^(2k) at 0 is -2 Zeta[2k]; Pi Csc[Pi z] = 1/z +
+ * 2 sum_k (1 - 2^(1-2k)) Zeta[2k] z^(2k-1).  The series inverse of
+ * Sin[Pi z] (coefficients Pi^(2j+1) r_j) used to stop after two terms, so
+ * every such residue past the third order was unreadable. */
+static void test_scaled_trig_high_order_poles(void) {
+    check_eq("Residue[Pi Cot[Pi z]/z^10, {z, 0}] == -2 Zeta[10]", "True");
+    check_eq("Residue[Pi Cot[Pi z]/z^40, {z, 0}] == -2 Zeta[40]", "True");
+    check_eq("Residue[Pi Csc[Pi z]/z^20, {z, 0}] == 2 (1 - 2^-19) Zeta[20]", "True");
+    check_eq("Residue[Cot[a z]/z^6, {z, 0}]", "-2/945 a^5");
+    check_eq("Series[Tan[Pi z], {z, 0, 7}]",
+             "Pi z + 1/3 Pi^3 z^3 + 2/15 Pi^5 z^5 + 17/315 Pi^7 z^7 + O[z]^8");
+}
+
+/* Essential singularities of the e^(b/(z - z0)) type: the residue is the
+ * convergent double series sum_m a^m b^(m+nu)/(m! (m+nu)!), nu = j + 1, of
+ * w^j e^(a w + b/w) -- a modified Bessel function -- or b^nu/nu! when a = 0.
+ * e^(1/z) = sum z^-n/n!: Residue[E^(1/z)] = 1, Residue[z E^(1/z)] = 1/2;
+ * z^2 E^(1/(z-1)) = (1 + w)^2 e^(1/w): 1 + 2 (1/2) + 1/6 = 13/6. */
+static void test_essential_singularities(void) {
+    check_eq("Residue[Exp[1/z], {z, 0}]", "1");
+    check_eq("Residue[z Exp[1/z], {z, 0}]", "1/2");
+    check_eq("Residue[z^2 Exp[1/(z - 1)], {z, 1}]", "13/6");
+    check_eq("Residue[z^20 Exp[z + 1/z], {z, 0}]", "BesselI[21, 2]");
+    check_eq("Residue[Exp[z + a/z]/z^2, {z, 0}]", "BesselI[1, 2 Sqrt[a]]/Sqrt[a]");
+    /* the closed form against the direct series sum 1/(k! (k+21)!) */
+    check_eq("Abs[N[Residue[z^20 Exp[z + 1/z], {z, 0}], 30]"
+             " - N[Sum[1/(k! (k + 21)!), {k, 0, 60}], 30]] < 10^-45", "True");
+    /* a negative exponent coefficient and a polynomial cofactor, against a
+     * contour integral on |z| = 1 (Cauchy) */
+    check_eq("Abs[Residue[(1 + z^2) Exp[3 z - 2/z]/z^3, {z, 0}]"
+             " - NIntegrate[((1 + z^2) Exp[3 z - 2/z]/z^3 /. z -> Exp[I t]) Exp[I t],"
+             " {t, 0, 2 Pi}]/(2 Pi)] < 10^-8", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -240,6 +277,8 @@ int main(void) {
     TEST(test_numeric_crosscheck);
     TEST(test_roots_of_unity_higher_order);
     TEST(test_rational_over_q_poles);
+    TEST(test_scaled_trig_high_order_poles);
+    TEST(test_essential_singularities);
 
     printf("All Residue tests passed!\n");
     return 0;

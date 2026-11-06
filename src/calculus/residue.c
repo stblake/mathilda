@@ -373,6 +373,228 @@ static bool residue_rational_over_q(const Expr* e, const Expr* z) {
     return true;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Essential singularity: Laurent polynomial times Exp[c + a w + b/w]   *
+ * ------------------------------------------------------------------ *
+ *
+ * No Laurent series with a finite principal part exists at an essential
+ * singularity, so the series engine cannot read the residue there.  For
+ * f = P(w) e^(c + a w + b/w), w = z - z0, P a Laurent polynomial in w, the
+ * residue is a convergent double series with a closed form.  Writing
+ * e^(a w) = sum a^m w^m/m! and e^(b/w) = sum b^n w^-n/n!, the w^-1 coefficient
+ * of w^j e^(a w + b/w) collects the pairs with j + m - n = -1:
+ *     R_nu = sum_m a^m b^(m+nu)/(m! (m+nu)!),   nu = j + 1,
+ * the series of the modified Bessel function,
+ *     nu >= 0:  R_nu = b^nu (a b)^(-nu/2) I_nu(2 Sqrt[a b]),
+ *     nu <  0:  R_nu = a^-nu (a b)^(nu/2) I_-nu(2 Sqrt[a b])
+ * ((a b)^(-n/2) I_n(2 Sqrt[a b]) = sum (a b)^m/(m! (m+n)!) is single-valued,
+ * so the branch of the square root is immaterial).  At a = 0 only m = 0
+ * survives: R_nu = b^nu/nu! for nu >= 0, else 0.  The residue is
+ * e^c sum_j p_j R_(j+1). */
+
+static bool residue_free_of(const Expr* e, const Expr* w) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) return !expr_eq((Expr*)e, (Expr*)w);
+    if (e->type != EXPR_FUNCTION) return true;
+    if (!residue_free_of(e->data.function.head, w)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!residue_free_of(e->data.function.args[i], w)) return false;
+    return true;
+}
+
+static bool residue_head_is(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
+}
+
+/* Split a monomial term t = coef * w^j (coef free of w, j an integer).
+ * Returns the owned coefficient and sets *j, or NULL if t is not of that form. */
+static Expr* residue_monomial(Expr* t, Expr* w, int64_t* j) {
+    Expr* one[1] = { t };
+    Expr** fs = one;
+    size_t n = 1;
+    if (residue_head_is(t, SYM_Times)) {
+        fs = t->data.function.args;
+        n = t->data.function.arg_count;
+    }
+    *j = 0;
+    Expr** keep = malloc((n ? n : 1) * sizeof(Expr*));
+    if (!keep) return NULL;
+    size_t nk = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = fs[i];
+        if (expr_eq(f, w)) { *j += 1; continue; }
+        if (residue_head_is(f, SYM_Power) && f->data.function.arg_count == 2 &&
+            expr_eq(f->data.function.args[0], w) &&
+            f->data.function.args[1]->type == EXPR_INTEGER) {
+            *j += f->data.function.args[1]->data.integer;
+            continue;
+        }
+        if (!residue_free_of(f, w)) {
+            for (size_t k = 0; k < nk; k++) expr_free(keep[k]);
+            free(keep);
+            return NULL;
+        }
+        keep[nk++] = expr_copy(f);
+    }
+    Expr* c = nk == 0 ? expr_new_integer(1)
+            : nk == 1 ? keep[0]
+            : expr_new_function(expr_new_symbol(SYM_Times), keep, nk);
+    free(keep);
+    return c;
+}
+
+/* R_nu of the comment above, unevaluated (a, b borrowed). */
+static Expr* residue_bessel_term(Expr* a, Expr* b, int64_t nu) {
+    if (a->type == EXPR_INTEGER && a->data.integer == 0) {
+        if (nu < 0) return expr_new_integer(0);
+        Expr* fact = expr_new_function(expr_new_symbol(SYM_Factorial),
+                         (Expr*[]){ expr_new_integer(nu) }, 1);
+        return expr_new_function(expr_new_symbol(SYM_Times),
+                   (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                                  (Expr*[]){ expr_copy(b), expr_new_integer(nu) }, 2),
+                              expr_new_function(expr_new_symbol(SYM_Power),
+                                  (Expr*[]){ fact, expr_new_integer(-1) }, 2) }, 2);
+    }
+    int64_t m = nu >= 0 ? nu : -nu;
+    Expr* ab = expr_new_function(expr_new_symbol(SYM_Times),
+                   (Expr*[]){ expr_copy(a), expr_copy(b) }, 2);
+    Expr* lead = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ expr_copy(nu >= 0 ? b : a), expr_new_integer(m) }, 2);
+    Expr* half = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ expr_new_integer(-m),
+                                expr_new_function(expr_new_symbol(SYM_Power),
+                                    (Expr*[]){ expr_new_integer(2), expr_new_integer(-1) }, 2) }, 2);
+    Expr* scale = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_copy(ab), half }, 2);
+    Expr* arg = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(2),
+                               expr_new_function(expr_new_symbol(SYM_Sqrt),
+                                   (Expr*[]){ ab }, 1) }, 2);
+    Expr* bes = expr_new_function(expr_new_symbol(SYM_BesselI),
+                    (Expr*[]){ expr_new_integer(m), arg }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+               (Expr*[]){ lead, scale, bes }, 3);
+}
+
+/* Split an expanded expression into (coefficient, w-exponent) monomials.
+ * Returns the count (0 on a non-monomial term); coefs owned by the caller. */
+#define RESIDUE_MAX_TERMS 4096
+static size_t residue_split_terms(Expr* e, Expr* w, Expr** coefs, int64_t* exps) {
+    Expr* one[1] = { e };
+    Expr** ts = one;
+    size_t nt = 1;
+    if (residue_head_is(e, SYM_Plus)) { ts = e->data.function.args; nt = e->data.function.arg_count; }
+    if (nt > RESIDUE_MAX_TERMS) return 0;
+    for (size_t i = 0; i < nt; i++) {
+        coefs[i] = residue_monomial(ts[i], w, &exps[i]);
+        if (!coefs[i]) {
+            for (size_t k = 0; k < i; k++) expr_free(coefs[k]);
+            return 0;
+        }
+    }
+    return nt;
+}
+
+static Expr* residue_exp_essential(Expr* f, Expr* z, Expr* z0) {
+    Expr* w = expr_new_symbol("Residue`$w");
+    Expr* shift = expr_new_function(expr_new_symbol(SYM_Plus),
+                      (Expr*[]){ expr_copy(z0), expr_copy(w) }, 2);
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                     (Expr*[]){ expr_copy(z), shift }, 2);
+    Expr* fs = residue_eval2("ReplaceAll", expr_copy(f), rule);
+    Expr* out = NULL;
+    Expr *ex = NULL, *Pe = NULL, *a = NULL, *b = NULL, *c = NULL;
+    Expr** coefs = NULL;
+    int64_t* exps = NULL;
+    if (!fs) goto done;
+    {
+        /* Separate the exponential factors (E^g, g depending on w) from the rest. */
+        Expr* one[1] = { fs };
+        Expr** fl = one;
+        size_t n = 1;
+        if (residue_head_is(fs, SYM_Times)) { fl = fs->data.function.args; n = fs->data.function.arg_count; }
+        Expr** rest = malloc(n * sizeof(Expr*));
+        Expr** ex_t = malloc(n * sizeof(Expr*));
+        size_t nr = 0, ne = 0;
+        for (size_t i = 0; i < n; i++) {
+            Expr* g = fl[i];
+            if (residue_head_is(g, SYM_Power) && g->data.function.arg_count == 2 &&
+                g->data.function.args[0]->type == EXPR_SYMBOL &&
+                g->data.function.args[0]->data.symbol.name == SYM_E &&
+                !residue_free_of(g->data.function.args[1], w))
+                ex_t[ne++] = expr_copy(g->data.function.args[1]);
+            else
+                rest[nr++] = expr_copy(g);
+        }
+        if (ne == 0) {
+            for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+            free(rest); free(ex_t);
+            goto done;
+        }
+        Expr* expo = ne == 1 ? ex_t[0] : expr_new_function(expr_new_symbol(SYM_Plus), ex_t, ne);
+        Expr* P = nr == 0 ? expr_new_integer(1)
+                : nr == 1 ? rest[0] : expr_new_function(expr_new_symbol(SYM_Times), rest, nr);
+        free(rest); free(ex_t);
+        ex = residue_eval1("Expand", expo);
+        Pe = residue_eval1("Expand", P);
+    }
+    if (!ex || !Pe) goto done;
+    coefs = malloc(RESIDUE_MAX_TERMS * sizeof(Expr*));
+    exps = malloc(RESIDUE_MAX_TERMS * sizeof(int64_t));
+    if (!coefs || !exps) goto done;
+    {
+        /* exponent = c + a w + b/w, exactly */
+        size_t nt = residue_split_terms(ex, w, coefs, exps);
+        if (nt == 0) goto done;
+        Expr** part[3];
+        size_t np[3] = { 0, 0, 0 };
+        bool ok = true;
+        for (int k = 0; k < 3; k++) part[k] = malloc(nt * sizeof(Expr*));
+        for (size_t i = 0; i < nt; i++) {
+            if (exps[i] < -1 || exps[i] > 1) { ok = false; expr_free(coefs[i]); continue; }
+            part[exps[i] + 1][np[exps[i] + 1]++] = coefs[i];
+        }
+        Expr* v[3];
+        for (int k = 0; k < 3; k++) {
+            if (!ok) { for (size_t i = 0; i < np[k]; i++) expr_free(part[k][i]); v[k] = NULL; }
+            else if (np[k] == 0) v[k] = expr_new_integer(0);
+            else v[k] = eval_and_free(np[k] == 1 ? part[k][0]
+                          : expr_new_function(expr_new_symbol(SYM_Plus), part[k], np[k]));
+            free(part[k]);
+        }
+        b = v[0]; c = v[1]; a = v[2];
+        if (!ok || !a || !b || !c) goto done;
+        if (b->type == EXPR_INTEGER && b->data.integer == 0) goto done;   /* not essential */
+    }
+    {
+        /* P = sum_j p_j w^j, a Laurent polynomial in w */
+        size_t nt = residue_split_terms(Pe, w, coefs, exps);
+        if (nt == 0) goto done;
+        Expr** acc = malloc(nt * sizeof(Expr*));
+        for (size_t i = 0; i < nt; i++)
+            acc[i] = expr_new_function(expr_new_symbol(SYM_Times),
+                         (Expr*[]){ coefs[i], residue_bessel_term(a, b, exps[i] + 1) }, 2);
+        Expr* sum = nt == 1 ? acc[0] : expr_new_function(expr_new_symbol(SYM_Plus), acc, nt);
+        free(acc);
+        Expr* ec = expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ expr_new_symbol(SYM_E), expr_copy(c) }, 2);
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                              (Expr*[]){ ec, sum }, 2));
+    }
+done:
+    free(coefs);
+    free(exps);
+    if (fs) expr_free(fs);
+    if (ex) expr_free(ex);
+    if (Pe) expr_free(Pe);
+    if (a) expr_free(a);
+    if (b) expr_free(b);
+    if (c) expr_free(c);
+    expr_free(w);
+    return out;
+}
+
 Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     if (!f || !z || !z0 || z->type != EXPR_SYMBOL) return NULL;
 
@@ -410,6 +632,13 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
         expr_free(w);
         expr_free(zero);
         return result;
+    }
+
+    /* An essential singularity of e^(b/(z - z0)) type: no Laurent series with
+     * a finite principal part exists, so the residue is read in closed form. */
+    {
+        Expr* ess = residue_exp_essential(f, z, z0);
+        if (ess) return ess;
     }
 
     /* Transcendental / special-function integrand: expand directly about z0 so
