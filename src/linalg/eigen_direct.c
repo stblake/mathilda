@@ -23,6 +23,10 @@
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
+#if defined(USE_MPFR) && defined(USE_FLINT)
+#include <flint/flint.h>
+#include <flint/arb.h>
+#endif
 
 
 /* LAPACK-HOOK: replace with dsytrd when USE_LAPACK is set.
@@ -2397,9 +2401,183 @@ static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
  *
  * Workspace: `u` (length n), optional `Q` (n*n) for back-transformation,
  * `tmp` provides >= 8 scratch cells re-used inside the function. */
+#ifdef USE_FLINT
+/* The same reduction with every inner product fused.
+ *
+ * Step k, with u the unit Householder vector on indices k+1..n-1 and
+ * P = I - 2 u u^T:
+ *     v = A u (every row),   w = A^T u (columns k+1..),   c = u . v,
+ *     P A P = A - u y^T - x u^T,   x = 2 (v - c u),  y = 2 (w - c u),
+ * so each entry of the trailing columns is ONE two-term fused update (one
+ * term on rows 0..k, where u is zero) and v, w are length n-k-1 fused dot
+ * products: arb_approx_dot accumulates in fixed point and rounds once,
+ * ~15 ns a term at 20-40 digits against ~60-100 ns for an mpfr_mul + mpfr_add
+ * pair (each paying MPFR's thread-local flag traffic).  The pairwise version
+ * cost 8 MPFR operations per entry per step.  Rows are split over threads
+ * when a step is large enough (mp_parallel_for).
+ *
+ * Same reflectors as the pairwise version (alpha = -sign(x_k+1) ||x||);
+ * every entry is rounded once per step instead of after each partial sum. */
+typedef struct {
+    arb_ptr A, Q;          /* n x n row-major midpoints */
+    arb_srcptr u;          /* length n; read on k+1..n-1 */
+    arb_ptr v, w;          /* A u per row, A^T u per column */
+    arb_ptr PU, PJ;        /* per-row (u_i, x_i), per-column (y_j, u_j) */
+    size_t n, k;
+    slong prec;
+} HessArb;
+
+/* v_i = A[i, k+1..] . u[k+1..] */
+static void hess_arb_rowdot(void* p, int64_t lo, int64_t hi, int chunk)
+{
+    HessArb* h = (HessArb*)p;
+    (void)chunk;
+    size_t n = h->n, k = h->k;
+    for (int64_t i = lo; i < hi; i++)
+        arb_approx_dot(h->v + i, NULL, 0, h->A + (size_t)i * n + k + 1, 1,
+                       h->u + k + 1, 1, (slong)(n - k - 1), h->prec);
+}
+
+/* w_j = u[k+1..] . A[k+1.., j], for j = k+1 + [lo, hi) */
+static void hess_arb_coldot(void* p, int64_t lo, int64_t hi, int chunk)
+{
+    HessArb* h = (HessArb*)p;
+    (void)chunk;
+    size_t n = h->n, k = h->k;
+    for (int64_t t = lo; t < hi; t++) {
+        size_t j = k + 1 + (size_t)t;
+        arb_approx_dot(h->w + j, NULL, 0, h->u + k + 1, 1,
+                       h->A + (k + 1) * n + j, (slong)n, (slong)(n - k - 1), h->prec);
+    }
+}
+
+/* A[i, k+1..] -= u_i y_j + x_i u_j */
+static void hess_arb_update(void* p, int64_t lo, int64_t hi, int chunk)
+{
+    HessArb* h = (HessArb*)p;
+    (void)chunk;
+    size_t n = h->n, k = h->k;
+    for (int64_t i = lo; i < hi; i++) {
+        arb_ptr row = h->A + (size_t)i * n;
+        if ((size_t)i <= k) {
+            for (size_t j = k + 1; j < n; j++)
+                arb_approx_dot(row + j, row + j, 1, h->PU + 2 * i + 1, 1,
+                               h->PJ + 2 * j + 1, 1, 1, h->prec);
+        } else {
+            for (size_t j = k + 1; j < n; j++)
+                arb_approx_dot(row + j, row + j, 1, h->PU + 2 * i, 1,
+                               h->PJ + 2 * j, 1, 2, h->prec);
+        }
+    }
+}
+
+/* Q[i, k+1..] -= 2 (Q[i, k+1..] . u) u_j */
+static void hess_arb_q(void* p, int64_t lo, int64_t hi, int chunk)
+{
+    HessArb* h = (HessArb*)p;
+    (void)chunk;
+    size_t n = h->n, k = h->k;
+    arb_t s;
+    arb_init(s);
+    for (int64_t i = lo; i < hi; i++) {
+        arb_ptr row = h->Q + (size_t)i * n;
+        arb_approx_dot(s, NULL, 0, row + k + 1, 1, h->u + k + 1, 1,
+                       (slong)(n - k - 1), h->prec);
+        arf_mul_2exp_si(arb_midref(s), arb_midref(s), 1);
+        for (size_t j = k + 1; j < n; j++)
+            arb_approx_dot(row + j, row + j, 1, s, 1, h->u + j, 1, 1, h->prec);
+    }
+    arb_clear(s);
+}
+
+static void direct_hessenberg_real_arb(mpfr_t* Am, size_t n, mpfr_prec_t bits,
+                                       mpfr_t* Qm)
+{
+    slong prec = (slong)bits;
+    arb_ptr A = _arb_vec_init((slong)(n * n));
+    arb_ptr Q = Qm ? _arb_vec_init((slong)(n * n)) : NULL;
+    arb_ptr u = _arb_vec_init((slong)n);
+    arb_ptr v = _arb_vec_init((slong)n);
+    arb_ptr w = _arb_vec_init((slong)n);
+    arb_ptr PU = _arb_vec_init((slong)(2 * n));
+    arb_ptr PJ = _arb_vec_init((slong)(2 * n));
+    for (size_t i = 0; i < n * n; i++) arf_set_mpfr(arb_midref(A + i), Am[i]);
+    if (Q) for (size_t i = 0; i < n * n; i++) arf_set_mpfr(arb_midref(Q + i), Qm[i]);
+    arb_t sigma, c;
+    arf_t nrm, alpha, t;
+    arb_init(sigma); arb_init(c);
+    arf_init(nrm); arf_init(alpha); arf_init(t);
+    HessArb h;
+    h.A = A; h.Q = Q; h.u = u; h.v = v; h.w = w; h.PU = PU; h.PJ = PJ;
+    h.n = n; h.prec = prec;
+    double limbs = (double)bits / 64.0;
+
+    for (size_t k = 0; k + 2 < n; k++) {
+        size_t m = n - k - 1;
+        arb_srcptr col = A + (k + 1) * n + k;
+        arb_approx_dot(sigma, NULL, 0, col, (slong)n, col, (slong)n, (slong)m, prec);
+        if (arf_is_zero(arb_midref(sigma))) continue;
+        arf_srcptr xk1 = arb_midref(A + (k + 1) * n + k);
+        arf_sqrt(nrm, arb_midref(sigma), prec, ARF_RND_NEAR);
+        if (arf_sgn(xk1) >= 0) arf_neg(alpha, nrm); else arf_set(alpha, nrm);
+        arf_sub(arb_midref(u + k + 1), xk1, alpha, prec, ARF_RND_NEAR);
+        for (size_t i = k + 2; i < n; i++)
+            arf_set(arb_midref(u + i), arb_midref(A + i * n + k));
+        arb_approx_dot(c, NULL, 0, u + k + 1, 1, u + k + 1, 1, (slong)m, prec);
+        if (arf_is_zero(arb_midref(c))) continue;
+        arf_sqrt(t, arb_midref(c), prec, ARF_RND_NEAR);
+        for (size_t i = k + 1; i < n; i++)
+            arf_div(arb_midref(u + i), arb_midref(u + i), t, prec, ARF_RND_NEAR);
+
+        h.k = k;
+        double work = (double)n * (double)m * limbs * limbs;
+        mp_parallel_for(hess_arb_rowdot, &h, (int64_t)n, work);
+        mp_parallel_for(hess_arb_coldot, &h, (int64_t)m, work);
+        arb_approx_dot(c, NULL, 0, u + k + 1, 1, v + k + 1, 1, (slong)m, prec);
+        for (size_t i = 0; i < n; i++) {
+            /* x_i = 2 (v_i - c u_i), with u_i = 0 for i <= k */
+            if (i > k) {
+                arb_approx_dot(PU + 2 * i + 1, v + i, 1, c, 1, u + i, 1, 1, prec);
+                arf_mul_2exp_si(arb_midref(PU + 2 * i + 1), arb_midref(PU + 2 * i + 1), 1);
+                arf_set(arb_midref(PU + 2 * i), arb_midref(u + i));
+                /* y_j = 2 (w_j - c u_j) */
+                arb_approx_dot(PJ + 2 * i, w + i, 1, c, 1, u + i, 1, 1, prec);
+                arf_mul_2exp_si(arb_midref(PJ + 2 * i), arb_midref(PJ + 2 * i), 1);
+                arf_set(arb_midref(PJ + 2 * i + 1), arb_midref(u + i));
+            } else {
+                arf_mul_2exp_si(arb_midref(PU + 2 * i + 1), arb_midref(v + i), 1);
+            }
+        }
+        mp_parallel_for(hess_arb_update, &h, (int64_t)n, 2.0 * work);
+        if (Q) mp_parallel_for(hess_arb_q, &h, (int64_t)n, 2.0 * work);
+
+        arf_set(arb_midref(A + (k + 1) * n + k), alpha);
+        for (size_t i = k + 2; i < n; i++) arf_zero(arb_midref(A + i * n + k));
+    }
+
+    for (size_t i = 0; i < n * n; i++) arf_get_mpfr(Am[i], arb_midref(A + i), MPFR_RNDN);
+    if (Q) for (size_t i = 0; i < n * n; i++) arf_get_mpfr(Qm[i], arb_midref(Q + i), MPFR_RNDN);
+    arb_clear(sigma); arb_clear(c);
+    arf_clear(nrm); arf_clear(alpha); arf_clear(t);
+    _arb_vec_clear(A, (slong)(n * n));
+    if (Q) _arb_vec_clear(Q, (slong)(n * n));
+    _arb_vec_clear(u, (slong)n);
+    _arb_vec_clear(v, (slong)n);
+    _arb_vec_clear(w, (slong)n);
+    _arb_vec_clear(PU, (slong)(2 * n));
+    _arb_vec_clear(PJ, (slong)(2 * n));
+}
+#endif /* USE_FLINT */
+
 void direct_hessenberg_real_M(mpfr_t* A, size_t n, mpfr_prec_t bits,
                                        mpfr_t* u, mpfr_t* Q,
                                        mpfr_t* tmp /* >= 8 cells */) {
+#ifdef USE_FLINT
+    /* every entry the same bit size (the callers allocate at `bits`) */
+    (void)u; (void)tmp;
+    direct_hessenberg_real_arb(A, n, bits, Q);
+    return;
+#endif
     (void)bits;
     mpfr_t* sigma  = &tmp[0];
     mpfr_t* xk1    = &tmp[1];
@@ -2495,6 +2673,13 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
                                     size_t q, size_t p, mpfr_t* Q,
                                     bool exceptional,
                                     mpfr_t* tmp /* >= 14 cells */) {
+    /* With no Q the caller wants eigenvalues only: the reflectors then need
+     * reach no further than the active block H[q..p-1, q..p-1] (rows above q
+     * and columns from p on hold the couplings to blocks already split off,
+     * which carry no eigenvalue information), as LAPACK's dlahqr with
+     * WANTT = false.  With Q the whole Schur form T is maintained. */
+    size_t col_end   = Q ? n : p;
+    size_t row_start = Q ? 0 : q;
     mpfr_t* s_tr   = &tmp[0];   /* trace of trailing 2x2 */
     mpfr_t* t_det  = &tmp[1];   /* det of trailing 2x2   */
     mpfr_t* x      = &tmp[2];
@@ -2602,7 +2787,7 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
 
         /* Left: rows (k, k+1, k+2). */
         size_t col_start = (k > q) ? k - 1 : q;
-        for (size_t j = col_start; j < n; j++) {
+        for (size_t j = col_start; j < col_end; j++) {
             mpfr_mul(*s0, *u1, H[k * n + j], MPFR_RNDN);
             mpfr_mul(*prod, *u2, H[(k + 1) * n + j], MPFR_RNDN);
             mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
@@ -2618,7 +2803,7 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
         }
         /* Right: cols (k, k+1, k+2). */
         size_t row_end = (k + 3 < p) ? (k + 3) : (p - 1);
-        for (size_t i = 0; i <= row_end; i++) {
+        for (size_t i = row_start; i <= row_end; i++) {
             mpfr_mul(*s0, H[i * n + k], *u1, MPFR_RNDN);
             mpfr_mul(*prod, H[i * n + (k + 1)], *u2, MPFR_RNDN);
             mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
@@ -2678,7 +2863,7 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
         mpfr_div(*u2, *u2, *un, MPFR_RNDN);
 
         size_t col_start = k - 1;
-        for (size_t j = col_start; j < n; j++) {
+        for (size_t j = col_start; j < col_end; j++) {
             mpfr_mul(*s0, *u1, H[k * n + j], MPFR_RNDN);
             mpfr_mul(*prod, *u2, H[(k + 1) * n + j], MPFR_RNDN);
             mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
@@ -2688,7 +2873,7 @@ static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
             mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
             mpfr_sub(H[(k + 1) * n + j], H[(k + 1) * n + j], *prod, MPFR_RNDN);
         }
-        for (size_t i = 0; i < p; i++) {
+        for (size_t i = row_start; i < p; i++) {
             mpfr_mul(*s0, H[i * n + k], *u1, MPFR_RNDN);
             mpfr_mul(*prod, H[i * n + (k + 1)], *u2, MPFR_RNDN);
             mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
@@ -2817,9 +3002,23 @@ static void direct_split_2x2_real_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
 /* MPFR Francis QR sweep driver -- analogous to direct_qr_real_general.
  * Returns 0 on success, -1 if max sweeps exceeded.
  * Caller-supplied `tmp` workspace must have >= 14 cells (Francis step). */
+/* `abs_floor` (may be NULL): also deflate at a subdiagonal no larger than
+ * this absolute bound.  See direct_real_general_mpfr. */
+static int direct_qr_real_general_floor_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                          mpfr_t* eval_re, mpfr_t* eval_im,
+                                          mpfr_t* Q, mpfr_t* tmp,
+                                          mpfr_srcptr abs_floor);
+
 int direct_qr_real_general_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
                                       mpfr_t* eval_re, mpfr_t* eval_im,
                                       mpfr_t* Q, mpfr_t* tmp /* >= 14 cells */) {
+    return direct_qr_real_general_floor_M(H, n, bits, eval_re, eval_im, Q, tmp, NULL);
+}
+
+static int direct_qr_real_general_floor_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                          mpfr_t* eval_re, mpfr_t* eval_im,
+                                          mpfr_t* Q, mpfr_t* tmp /* >= 14 cells */,
+                                          mpfr_srcptr abs_floor) {
     const size_t max_iter = 60 * n + 30;
     size_t iter = 0;
     size_t p = n;
@@ -2856,7 +3055,8 @@ int direct_qr_real_general_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
             mpfr_add(tol_val, abs_a, abs_b, MPFR_RNDN);
             mpfr_mul(tol_val, tol_val, rel_tol, MPFR_RNDN);
             mpfr_abs(abs_a, H[q * n + (q - 1)], MPFR_RNDN);
-            if (mpfr_cmp(abs_a, tol_val) <= 0) {
+            if (mpfr_cmp(abs_a, tol_val) <= 0 ||
+                (abs_floor && mpfr_cmp(abs_a, abs_floor) <= 0)) {
                 mpfr_set_zero(H[q * n + (q - 1)], 1);
                 break;
             }
@@ -3421,6 +3621,34 @@ static Expr* direct_real_general_mpfr(const MatM* A, MateigenWant want,
     mpfr_t* u   = mpfr_array_alloc(n, bits);
     mpfr_t* tmp = mpfr_array_alloc(14, bits);
 
+    /* Deflation floor u ||A||_F, u = 2^-bits the unit roundoff.  A
+     * subdiagonal below it is smaller than the rounding error of storing
+     * the matrix itself (||fl(A) - A||_F <= u ||A||_F), so zeroing it is a
+     * perturbation no larger than the input's own uncertainty, and well
+     * inside the O(n u ||A||) backward error the Householder reduction has
+     * already committed (orthogonal similarity keeps ||H||_F = ||A||_F).
+     * Without it the relative test alone (|h_k,k-1| against the
+     * neighbouring diagonal) waits for convergence of the eigenvalues at
+     * the rounding level: a numerically low-rank matrix (a smooth kernel's
+     * Nystrom matrix, 64 x 64 at 20 digits) has a trailing block of
+     * ~50 noise eigenvalues of size u ||A||, and the QR iteration spent
+     * 70 of its 83 sweeps converging them to noise.  13 sweeps with the
+     * floor; the eigenvalues above the noise are unchanged. */
+    mpfr_t floor_v;
+    mpfr_init2(floor_v, bits);
+    {
+        mpfr_t t;
+        mpfr_init2(t, bits);
+        mpfr_set_zero(floor_v, 1);
+        for (size_t i = 0; i < n * n; i++) {
+            mpfr_sqr(t, H[i], MPFR_RNDN);
+            mpfr_add(floor_v, floor_v, t, MPFR_RNDN);
+        }
+        mpfr_sqrt(floor_v, floor_v, MPFR_RNDN);
+        mpfr_div_2si(floor_v, floor_v, (long)bits, MPFR_RNDN);
+        mpfr_clear(t);
+    }
+
     if (n >= 3) direct_hessenberg_real_M(H, n, bits, u, Q, tmp);
 
     mpfr_t* eval_re = mpfr_array_alloc(n, bits);
@@ -3429,7 +3657,9 @@ static Expr* direct_real_general_mpfr(const MatM* A, MateigenWant want,
         mpfr_set_zero(eval_re[i], 1);
         mpfr_set_zero(eval_im[i], 1);
     }
-    int qr_status = direct_qr_real_general_M(H, n, bits, eval_re, eval_im, Q, tmp);
+    int qr_status = direct_qr_real_general_floor_M(H, n, bits, eval_re, eval_im, Q, tmp,
+                                                   floor_v);
+    mpfr_clear(floor_v);
 
     if (qr_status != 0) {
         mpfr_array_free(H, n * n);
