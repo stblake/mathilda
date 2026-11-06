@@ -49,6 +49,7 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "common.h"
 #include "linsolvefn.h"
+#include "ludecomp_internal.h"   /* MpfrLU: square MPFR systems */
 #include "sparse/sparse_la.h"
 
 #include <stdbool.h>
@@ -1358,6 +1359,22 @@ Expr* builtin_linearsolve(Expr* res) {
      * the boxed symbolic elimination (a 54 x 54 complex system took > 10 s). */
     if (res->data.function.arg_count == 2) {
         long nbits = rref_numeric_bits(res->data.function.args[0], res->data.function.args[1]);
+        /* A square arbitrary-precision system: one LU (n^3/3 fused
+         * multiply-adds, threaded) and two triangular solves, against the
+         * n^3 of Gauss-Jordan.  A matrix singular to working precision falls
+         * through to the elimination, which handles the free variables. */
+        const Expr* m0 = res->data.function.args[0];
+        if (nbits > 53 && m0->type == EXPR_FUNCTION && !common_has_machine_real(m0) &&
+            !common_has_machine_real(res->data.function.args[1])) {
+            int64_t dm[3];
+            if (get_tensor_dims((Expr*)m0, dm) == 2 && dm[0] == dm[1] && dm[0] > 1) {
+                bool sing = false;
+                MpfrLU* f = mpfr_lu_factor(m0, (int)dm[0], nbits, &sing);
+                Expr* x = (f && !sing) ? mpfr_lu_solve(f, res->data.function.args[1]) : NULL;
+                mpfr_lu_free(f);
+                if (x) return x;
+            }
+        }
         if (nbits) {
             bool nosol = false;
             Expr* x = rref_numeric_linearsolve(res->data.function.args[0],

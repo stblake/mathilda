@@ -183,6 +183,10 @@ long numeric_min_inexact_bits(const Expr* e);
  * These helpers are used by Plus, Times, Power, and the transcendental
  * builtins to take the arbitrary-precision numeric path when any operand
  * carries MPFR precision. */
+/* Record that an MPFR sum computed outside numeric_mpfr_add (a fused dot
+ * product, say) lost `lost` leading bits to cancellation, so N[expr, p]'s
+ * adaptive precision sees it as it sees a cancelling Plus. */
+void numeric_note_cancellation_bits(long lost);
 Expr* numeric_mpfr_add (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_sub (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_mul (const Expr* a, const Expr* b, long default_bits);

@@ -12,6 +12,7 @@
 #include "ndarray.h"
 #include "pack.h"
 #include "ndlinalg.h"   /* linalg_pack_machine_operand: contagion packing */
+#include "dot_mpfr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -297,6 +298,16 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
         if (conv_a) expr_free(conv_a);
         if (conv_b) expr_free(conv_b);
         return NULL;
+    }
+
+    /* Arbitrary-precision vectors / matrices: fused MPFR dot products. */
+    if (rankA <= 2 && rankB <= 2 && K > 0) {
+        Expr* fused = dot_mpfr(a, b);
+        if (fused) {
+            if (conv_a) expr_free(conv_a);
+            if (conv_b) expr_free(conv_b);
+            return fused;
+        }
     }
 
     int64_t N_A = 1; for(int i=0; i<rankA; i++) N_A *= dimsA[i];

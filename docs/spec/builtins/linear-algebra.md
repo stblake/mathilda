@@ -551,6 +551,13 @@ Gives products of vectors, matrices, and tensors.
   parser's precedence: `(a b) . c`, `(-a) . b`, `(1/2) . a`, `a^2 . b`,
   `(a . b)^2`, `a . b + c`.
 - Gives an error message `Dot::dotsh` if the shapes of the inputs are not compatible.
+- **Arbitrary precision.** Vectors and matrices of MPFR numbers (one operand
+  all MPFR, the other MPFR or nonzero exact numbers) contract as fused dot
+  products: each output element is one dot product of the operands' mantissas
+  (FLINT's `arb_approx_dot`, else `mpfr_dot`), rounded once, with large
+  products split over threads. The answer has the smaller operand precision,
+  as `Times` / `Plus` give. A 256 x 256 matrix times a vector at 800 digits
+  takes ~0.02 s (0.35 s through per-element `Times` / `Plus` in v0.6225).
 - **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
   auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the
   `vector·vector` inner product to a scalar (`V_NDFN2`), real and complex.
@@ -2143,8 +2150,15 @@ Gives the LU decomposition of a matrix.
     fast path: `dgetrf` / `zgetrf` for the factorisation, plus
     `dgecon` / `zgecon` (with `dlange` / `zlange` for ‖A‖∞) for the
     condition estimate.
-  - **MPFR inputs (`min_bits > 53`)** use a hand-rolled Doolittle
-    kernel over row-major MPFR arrays (paired re/im for complex).
+  - **MPFR inputs (`min_bits > 53`)** use a hand-rolled kernel over
+    row-major MPFR arrays (paired re/im for complex). A real matrix (with
+    FLINT) is eliminated in Crout's order: each entry of `L` and `U` is one
+    fused dot product (`arb_approx_dot`, rounded once), and the independent
+    dot products of each step run on worker threads -- the same pivots and
+    permutation as the right-looking Doolittle loop, which complex matrices
+    keep. A 256 x 256 matrix at 500 digits factors ~4.5x faster than the
+    v0.6225 Doolittle loop (2.5 s against 11.3-13.5 s, back to back on one
+    loaded 16-core machine; 3.5 s for the old loop unloaded).
     For real matrices the condition number is estimated by the
     Hager-Higham one-norm iteration on `A^{-T}` (LAPACK's `*lacn2`
     strategy; typically 2-5 triangular-solve pairs, each `O(n^2)`).
@@ -2905,7 +2919,10 @@ Out[8]= {6, 4, 5}
   `LinearSolve[N[HilbertMatrix[256], 500]]` (condition number `1.8*10^389`) is
   regular. (Through v0.6225 an MPFR matrix went through a machine-precision
   `MatrixRank`, was reported `LinearSolve::sing1`, and every application
-  re-eliminated.) Exact and symbolic matrices, the `"Krylov"` method, and
+  re-eliminated.) A square arbitrary-precision `LinearSolve[m, b]` takes the
+  same LU and two triangular solves (`n^3/3` fused multiply-adds instead of
+  Gauss-Jordan's `n^3`); a matrix singular to working precision falls back to
+  the tolerance-aware elimination. Exact and symbolic matrices, the `"Krylov"` method, and
   singular (`LinearSolve::sing1`) or rectangular (`LinearSolve::sqmat1`)
   matrices make an object that solves afresh on every application. Errors:
   `LinearSolveFunction::lslc` (wrong length), `LinearSolve::notrhsm` (bad mode).

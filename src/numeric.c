@@ -214,6 +214,10 @@ static void note_cancellation(const mpfr_t x, const mpfr_t y, const mpfr_t s) {
     if (lost > g_numeric_cancel_bits) g_numeric_cancel_bits = lost;
 }
 
+void numeric_note_cancellation_bits(long lost) {
+    if (lost > g_numeric_cancel_bits) g_numeric_cancel_bits = lost;
+}
+
 static Expr* mpfr_binop(const Expr* a, const Expr* b, long default_bits,
                         MpfrBinaryOp op) {
     long bits = numeric_combined_bits(a, b, default_bits);

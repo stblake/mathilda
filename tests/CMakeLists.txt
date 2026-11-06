@@ -748,6 +748,8 @@ set(COMMON_SRC
     ../src/linalg/tensorproduct.c
     ../src/linalg/util.c
     ../src/linalg/dot.c
+    ../src/linalg/dot_mpfr.c
+    ../src/linalg/mp_parallel.c
     ../src/linalg/det.c
     ../src/linalg/flint_mat_bridge.c
     ../src/linalg/cross.c
