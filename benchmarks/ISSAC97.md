@@ -195,7 +195,7 @@ the ones where Mathilda is wrong, incomplete or slower; "neither" = both wrong):
 | Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | **fixed v0.6248** (h7.2 4096/729, h7.3 9765625/1048576, h7.10 1/64; the h7.3 machine point was the baseline wrong) |
 | N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | **fixed v0.6283** (rows now ask with $MaxExtraPrecision = 1000; correct) |
 | Integrate | h8.5, h8.8 unevaluated | **fixed v0.6278-v0.6281** (143: 30/30 correct and AHEAD; h8.5 55 ms vs 1.5 s, h8.8 99 ms vs 13.8 s) |
-| eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
+| eigenproblem | h9.9 sine Galerkin wp40 n = 200 (Mathilda wrong: MPFR pencils fell to LAPACK doubles) | **fixed v0.6308** (correct, 1.5 s vs 26 s) |
 | NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 were the baseline wrong (Mathilda correct); h10.7 singular endpoint (Mathilda 2.96e113) and h10.3/h10.4 Lane-Emden wp30 SLOWER | **fixed v0.6258-v0.6260** (h10.7 correct to 23 digits; Lane-Emden 1.7 s -> 30 ms, 4.3 s -> 0.11 s); h10.7's start data corrected in the benchmark |
 
 ## Run at v0.6293 (2026-11-06 evening, load ~3-5, both columns fresh)
@@ -228,3 +228,6 @@ NIntegrate / contour wave 3 (v0.6300-v0.6307): 14 of 15 rows now ahead (h2.3 mac
 0.11 vs 9.9 ms, h2.7 0.13 / 8.9 vs 3.9 / 9.0, h4.4 machine 8.5 vs 24.5, h4.4 wp40 613 vs
 1168, P4 Trapezoidal wp400 114 vs 182). Still SLOWER: h2.5 wp40 (~110 vs 15 ms; needs an
 adaptive Gauss-Kronrod rule on [0, oo) at high precision); h2.6 wp40 at parity.
+N at a point / eigen wave 3 (v0.6308-v0.6316): h7.3 N 286 -> 5.6 ms (vs 12), h7.4/h7.5/h7.9/h7.10
+ahead; still behind at sub-ms: h7.1 N 0.22 vs 0.17, h7.6 0.17 vs 0.09; P7 m2 11.4 vs 8.0 and h9.9 machine
+8.7 vs 4.6 (evaluator cost: agent); P10 Together 3.4 vs 2.8 (agent); h2.5 wp40 (agent).
