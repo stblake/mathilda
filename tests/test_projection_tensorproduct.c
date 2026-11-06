@@ -50,7 +50,7 @@ static void test_projection(void) {
     chk_msg("Projection[{1,2},{1,2,3}]", "Projection::prnv");
     chk("Head[Quiet[Projection[{1,2},{1,2,3}]]]", "Projection");
     /* Precision of a vector is one number, the least over its entries */
-    chk("Precision[Projection[N[{1,2},30],{1,1}]]", "30.103");
+    chk("Precision[Projection[N[{1,2},30],{1,1}]]", "30.0");
     chk_true("Chop[Projection[{1.+I, 2.}, {1., I}] - Projection[{1+I, 2}, {1, I}]] == {0, 0}");
     /* sparse: a sparse v gives a sparse answer, a sparse u a dense one */
     chk("Head[Projection[SparseArray[{1->3,3->4},4], {1.,2.,3.,4.}]]", "List");

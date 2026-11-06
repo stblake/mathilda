@@ -197,7 +197,21 @@ its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
   already-higher-precision value is still **lowered** (`N[N[Pi, 100], 20]` → 20
   digits). Contrast `SetPrecision[x, p]`, which *does* pad an approximate value
   up to `p` digits. Example: `N[{1., 1, 1.0`30}, 50]` has precisions
-  `{MachinePrecision, 50.272, 30.103}`.
+  `{MachinePrecision, 50., 30.}`.
+- **Guard bits.** An arbitrary-precision number's precision (what
+  `Precision` reports, the digits shown, the tolerance of `Equal`) is not its
+  mantissa width: the mantissa carries 16 guard bits beyond it, so the
+  rounding error of the arithmetic that produced the value lies far below the
+  last displayed digit. `N[x, d]` therefore shows the correctly rounded `d`
+  digits (`N[Sqrt[2], 50]` ends `...753769`; stored with no guard bits it ended
+  `...753770`, as 68 of `N[Sqrt[k], d]` for `k < 100`, `d` in 20/30/50/100
+  did). The precision of a value made by `N[x, d]`, `SetPrecision[x, d]` or a
+  literal `` x`d `` is exactly `d` (`Precision[N[Pi, 30]]` is `30.`; it was
+  `30.103`, the bit count rounded up); arithmetic results take theirs from the
+  operands as before (`Precision[N[Pi, 30] N[E, 40]]` is `30.`). A machine
+  number past the double range (`N[Exp[1000]]`) keeps `$MachinePrecision` and
+  no guard. `InputForm` writes every mantissa digit, guard included, with the
+  precision mark, so it re-reads to the identical number.
 - Inexact contagion is unaffected: mixing a machine real with a
   higher-precision value collapses to machine precision
   (`1. + N[Pi, 100]` → `4.14159`), since `MachinePrecision` is the floor.

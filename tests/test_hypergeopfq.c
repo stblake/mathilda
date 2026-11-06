@@ -134,7 +134,8 @@ static void test_named_closed_forms(void) {
 
 /* 2F1 at arbitrary precision outside the unit disc (off the cut). */
 static void test_2f1_mpfr_continuation(void) {
-    assert_eval_startswith("N[HypergeometricPFQ[{2/3,11/12},{5/3},-1],20]", "0.76419793513910566523");
+    /* 0.76419793513910566523|6578... (40 digits): 20 shown digits round up */
+    assert_eval_startswith("N[HypergeometricPFQ[{2/3,11/12},{5/3},-1],20]", "0.76419793513910566524");
     assert_eval_startswith("N[HypergeometricPFQ[{2/3,11/12},{5/3},-2],20]", "0.64424468650536985019");
 }
 

@@ -487,9 +487,10 @@ static int parse_precision_suffix(ParserState* s, double* out_digits, bool* has_
 static Expr* build_precision_literal(const char* mantissa_str, double digits,
                                      bool accuracy_mode) {
 #ifdef USE_MPFR
-    /* Convert digits → bits. For precision mode, bits = ceil(d * log2(10)).
+    /* Convert digits → bits: the mantissa width numeric_digits_to_bits gives
+     * the precision (ceil(d log2 10) bits plus the guard bits, numeric.h).
      * For accuracy mode the precision needed is approximately
-     *     bits ≈ ceil((d + log10|value|) * log2(10))
+     *     d + log10|value| digits
      * We first parse the value at a generous precision to measure its
      * magnitude, then re-round at the final precision. */
     long bits_prec;
@@ -509,11 +510,11 @@ static Expr* build_precision_literal(const char* mantissa_str, double digits,
         }
         double total_digits = digits + log10_abs + lead_digit;
         if (total_digits < 1.0) total_digits = 1.0;
-        bits_prec = (long)ceil(total_digits * 3.3219280948873626);
+        bits_prec = numeric_digits_to_bits(total_digits);
         mpfr_clear(tmp);
     } else {
         if (digits < 1.0) digits = 1.0;
-        bits_prec = (long)ceil(digits * 3.3219280948873626);
+        bits_prec = numeric_digits_to_bits(digits);
     }
     if (bits_prec < 2) bits_prec = 2;
     return expr_new_mpfr_from_str(mantissa_str, (mpfr_prec_t)bits_prec);
@@ -707,7 +708,7 @@ static Expr* parse_number(ParserState* s) {
         /* Compute implied precision in decimal digits from the mantissa:
          *     implied = frac_digits + log10(|mantissa_value|)
          * If implied ≤ MachinePrecision, keep a machine double; otherwise
-         * build an MPFR at ceil(implied * log2(10)) bits, fed directly
+         * build an MPFR of that precision (numeric_digits_to_bits), fed directly
          * from the literal text so we don't lose precision via a double
          * round-trip. Pure dot-less reals (no fractional part typed) and
          * zero mantissas always stay machine precision. */
@@ -744,8 +745,7 @@ static Expr* parse_number(ParserState* s) {
                  * (Precision[1.00000000000000001] is 17.), at the implied
                  * precision. */
                 if (implied > 0.0) {
-                    mpfr_bits = (long)ceil(implied * 3.3219280948873626);
-                    if (mpfr_bits < 2) mpfr_bits = 2;
+                    mpfr_bits = numeric_digits_to_bits(implied);
                 }
             }
         }

@@ -1408,7 +1408,7 @@ static void test_approx_pure_exact_untouched(void) {
  * (e.g. `7.0`) so a string match would hide the precision. */
 static void test_approx_mpfr_precision_propagation(void) {
     run_test("Precision[(Solve[N[1, 30] x == 7, x][[1]][[1]])[[2]]]",
-             "30.103");
+             "30.0");
 }
 
 /* Mixed Real (53 bits) + MPFR (100 bits): the minimum precision wins,

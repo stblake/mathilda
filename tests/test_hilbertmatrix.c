@@ -174,14 +174,14 @@ static void test_exact_entries_have_infinite_precision(void) {
 /* --- WorkingPrecision -> digit count (MPFR) -------------------------- */
 
 static void test_mpfr_precision_carried(void) {
-    /* 30-digit entries report Precision ~ 30.103 (= 30 / log10(2) bits
-     * back to digits). */
+    /* 30-digit entries report Precision 30 exactly (the width N[x, 30]
+     * gives reads back as 30 digits). */
     assert_eval_startswith(
         "Precision[HilbertMatrix[3, WorkingPrecision -> 30][[1, 1]]]",
-        "30.1");
+        "30.0");
     assert_eval_startswith(
         "Precision[HilbertMatrix[3, WorkingPrecision -> 30][[2, 3]]]",
-        "30.1");
+        "30.0");
 }
 
 static void test_mpfr_terminating_entries_exact(void) {

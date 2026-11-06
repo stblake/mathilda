@@ -77,10 +77,48 @@ typedef struct {
 #define NUMERIC_LOG10_2 0.30102999566398119521
 #define NUMERIC_MACHINE_PRECISION_DIGITS ((double)DBL_MANT_DIG * NUMERIC_LOG10_2)
 
-/* Digit / bit conversions for MPFR precision. Both round up so the target
- * carries at least the requested amount of information. */
+/* Precision and mantissa width of an arbitrary-precision number.
+ *
+ * A number's PRECISION -- what Precision[] reports, the digits the printer
+ * shows, the tolerance Equal/Less apply -- is not its MPFR mantissa width.
+ * The mantissa carries NUMERIC_PREC_GUARD_BITS more bits than the precision,
+ * so the rounding error of the arithmetic that produced the value (half an ulp
+ * per correctly rounded operation) sits 2^-16 below the last displayed digit
+ * instead of on it. Without them, N[Sqrt[2], 50] stored the correctly rounded
+ * 167-bit value, whose 50-digit rounding is ...753770 where Sqrt[2] is
+ * ...7537694807: a 2^-167 rounding is up to 1.5 units of the 50th digit.
+ *
+ * The precision is a function of the width, not a separate field: every MPFR
+ * kernel already sizes its result from its operands' widths (min for Times,
+ * the operand's for Sin, ...), so a fixed offset rides through all of them
+ * untouched, and the precision of the result follows from its width by the
+ * same rule. Why 16: a result with displayed unit u carries an error of at
+ * most k 2^-16 u after k roundings, so a last digit is misrounded only when
+ * the true value lies within that of a rounding boundary (about k in 33000);
+ * 16 bits stay inside the last limb for most precisions (30 digits: 100 ->
+ * 116 bits, two limbs either way), so the cost is nearly nil.
+ *
+ * One width is reserved: DBL_MANT_DIG (53) bits is a MACHINE number whose
+ * value left the double exponent range (N[Exp[1000]], 1001!.), which keeps a
+ * machine number's precision and carries no guard. A precision whose width
+ * would be 53 is stored at 54 instead.
+ *
+ *   numeric_digits_to_bits(d)       the width that carries d digits
+ *                                   (ceil(d log2 10) bits of precision + guard)
+ *   numeric_bits_to_digits(w)       the precision in digits of a w-bit value:
+ *                                   exactly d when w is the width of d whole
+ *                                   digits (Precision[N[Pi, 30]] is 30.)
+ *   numeric_width_precision_bits(w) the precision in bits of a w-bit value
+ *   numeric_precision_bits_width(p) the width that carries p bits of precision
+ *
+ * Widths and differences of widths may be compared and combined freely (the
+ * guard cancels); an ABSOLUTE count of known bits -- the precision a value is
+ * reported at, an accuracy, a tolerance -- converts through these. */
+#define NUMERIC_PREC_GUARD_BITS 16
 long numeric_digits_to_bits(double digits);
 double numeric_bits_to_digits(long bits);
+long numeric_width_precision_bits(long width);
+long numeric_precision_bits_width(long prec_bits);
 
 /* The IEEE-754 double nearest the exact rational q, ties to even, with
  * gradual underflow: the same double a correctly rounded decimal literal of

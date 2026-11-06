@@ -140,7 +140,7 @@ void test_besseli_arbitrary_real() {
         "11.3019219521363304963562701832171025");
     /* Half-integer at high precision; spec: I_{1/2}(2) to 40 digits. */
     assert_eval_startswith("N[BesselI[1/2, 2], 40]",
-        "2.046236863089055036605183612020732319267");
+        "2.046236863089055036605183612020732319268");  /* ...319267|54 */
 }
 
 /* ---- closed-form oracle: half-integer order ------------------------- */

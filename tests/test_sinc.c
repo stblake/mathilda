@@ -109,7 +109,7 @@ void test_sinc_machine_complex() {
 
 void test_sinc_arbitrary_complex() {
     assert_eval_startswith("N[Sinc[1 + I], 30]",
-        "0.96671074810035670154056228439");
+        "0.966710748100356701540562284400");  /* ...28439|966 */
 }
 
 /* ---- derivatives ---------------------------------------------------- */

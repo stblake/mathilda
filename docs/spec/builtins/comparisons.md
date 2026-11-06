@@ -65,8 +65,9 @@ Tests whether two (or more) expressions are mathematically equal.
   Before this, an arbitrary-precision operand was read as a double and compared
   at the machine tolerance, so `N[1 - 1192/10^30, 30] == 1` was `True` and
   `N[1 - 1192/10^30, 30] < 1` was `False`.
-  `N[x, d]` carries `ceil(d log2 10)` bits (`Precision[N[1, 30]]` is 30.103),
-  so the window at 1 is `2^(7 - 100) ~ 1.0 10^-28` at 30 digits.
+  `N[x, d]` has a precision of `ceil(d log2 10)` bits (`Precision[N[1, 30]]`
+  is 30.; the mantissa's 16 guard bits do not count), so the window at 1 is
+  `2^(7 - 100) ~ 1.0 10^-28` at 30 digits.
 - The ordering heads agree with it: inside the window `x < y` is `False` and
   `x <= y` is `True`; outside it the sign of `x - y` decides. The window holds
   beyond the double range too (`N[10^3000, 30] == N[10^3000 (1 + 10^-29), 30]`).

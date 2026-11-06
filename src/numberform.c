@@ -25,6 +25,7 @@
 #include "eval.h"
 #include "ndarray.h"     /* is_packed_list / ndarray_to_nested_list */
 #include "print.h"       /* mth_out(): the print-subsystem output sink */
+#include "numeric.h"     /* numeric_bits_to_digits */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +37,6 @@
 #include <mpfr.h>
 #endif
 
-#define NF_LOG2_10 3.3219280948873626
 
 /* Rendering the result of a user NumberFormat function to an OutputForm string
  * (raw strings, Row concatenation, active NumberForm context suspended). Lives
@@ -155,7 +155,8 @@ static bool nf_digits_of(const Expr* e, long count, char** outdigits,
 static long nf_capacity(const Expr* e) {
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) {
-        long c = (long)((double)mpfr_get_prec(e->data.mpfr) / NF_LOG2_10);
+        /* the digits of its precision, not of its (guarded) mantissa width */
+        long c = (long)(numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr)) + 1e-9);
         return c < 1 ? 1 : c;
     }
 #endif

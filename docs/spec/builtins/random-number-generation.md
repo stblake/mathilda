@@ -145,7 +145,7 @@ In[5]:= RandomComplex[x]
 Out[5]= RandomComplex[x]
 
 In[6]:= SeedRandom[42]; z = RandomComplex[1 + I, WorkingPrecision -> 30]; {Precision[Re[z]], Precision[Im[z]]}
-Out[6]= {30.103, 30.103}
+Out[6]= {30., 30.}
 
 In[7]:= SeedRandom[7]; pts = RandomComplex[{-1 - 2 I, 3 + I}, 10^5]; {PackedArrayQ[pts], MinMax[Re[pts]], MinMax[Im[pts]]}
 Out[7]= {True, {-0.999983, 2.99996}, {-1.99997, 0.999965}}

@@ -382,7 +382,9 @@ static bool rz_number2(const Expr* e, mpq_t x, long* prec, long* ulp_e, long* ul
         case EXPR_MPFR: {
             mpfr_srcptr v = e->data.mpfr;
             if (!mpfr_number_p(v)) return false;
-            *prec = (long)mpfr_get_prec(v);
+            /* the precision (rz_default's noise threshold), not the width:
+             * the guard bits below it are not digits (numeric.h) */
+            *prec = numeric_width_precision_bits((long)mpfr_get_prec(v));
             if (mpfr_zero_p(v)) { mpq_set_ui(x, 0, 1); return true; }
             mpz_t m;
             mpz_init(m);

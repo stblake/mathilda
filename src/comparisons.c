@@ -193,7 +193,9 @@ static bool cmp_load_atom(const Expr* e, CmpPart* p, bool force_exact) {
     } else if (e->type == EXPR_MPFR) {
         if (!mpfr_number_p(e->data.mpfr)) return false;
         mpfr_set(p->v, e->data.mpfr, MPFR_RNDN);
-        p->kind = CMP_PART_MPFR; p->bits = (long)mpfr_get_prec(e->data.mpfr);
+        /* its precision, not the guard-padded mantissa width (numeric.h) */
+        p->kind = CMP_PART_MPFR;
+        p->bits = numeric_width_precision_bits((long)mpfr_get_prec(e->data.mpfr));
     } else {
         mpq_t q;
         mpq_init(q);

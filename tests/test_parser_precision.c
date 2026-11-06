@@ -38,6 +38,7 @@
 #include "test_utils.h"
 #include "parse.h"
 #include "print.h"
+#include "numeric.h"   /* numeric_width_precision_bits */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,7 +88,8 @@ static void assert_parses_as_mpfr(const char* src) {
 }
 
 /* Verify an MPFR literal has approximately `expected_bits` bits of
- * precision.  Tolerance handles small bit-quantization slop near the
+ * precision (the precision its mantissa width carries: the width holds
+ * NUMERIC_PREC_GUARD_BITS more, numeric.h).  Tolerance handles small bit-quantization slop near the
  * boundary, but we keep it tight (≤ 2 bits) so accidental mis-binning
  * is still detected. */
 static void assert_parses_as_mpfr_bits(const char* src,
@@ -96,7 +98,7 @@ static void assert_parses_as_mpfr_bits(const char* src,
     ASSERT_MSG(p != NULL, "parse failed for: %s", src);
     ASSERT_MSG(p->type == EXPR_MPFR,
         "expected EXPR_MPFR, got type %d for: %s", (int)p->type, src);
-    long got = (long)mpfr_get_prec(p->data.mpfr);
+    long got = numeric_width_precision_bits((long)mpfr_get_prec(p->data.mpfr));
     long delta = got - expected_bits;
     if (delta < 0) delta = -delta;
     ASSERT_MSG(delta <= tol,
@@ -449,7 +451,7 @@ static void test_frac_only_high_precision(void) {
     /* The value should match mpfr_set_str at ~97 bits. */
     Expr* p = parse_expression(".123456789012345678901234567890");
     ASSERT_MSG(p != NULL && p->type == EXPR_MPFR, "parse failed");
-    long bits = (long)mpfr_get_prec(p->data.mpfr);
+    long bits = numeric_width_precision_bits((long)mpfr_get_prec(p->data.mpfr));
     ASSERT_MSG(bits >= 95 && bits <= 100,
         "expected ~97 bits for 30-digit fraction, got %ld", bits);
     expr_free(p);
@@ -480,10 +482,11 @@ static void test_very_long_literal(void) {
 static void test_zero_accuracy_and_scaled_mark(void) {
     /* N[0, 30] is the exact 0; SetPrecision gives a zero its accuracy */
     assert_eval_eq("Accuracy[0``30] == Accuracy[SetPrecision[0, 30]]", "True", 0);
-    assert_eval_startswith("Accuracy[0``30]", "30.10");
+    assert_eval_startswith("Accuracy[0``30]", "30.0");
     assert_eval_eq("3.355`2.*^-61 === SetPrecision[3355/1000 10^-61, 2.]", "True", 0);
-    assert_eval_eq("1.0000000000000000000000000000004`30.*^50 === N[10^50, 30]", "True", 0);
-    assert_eval_eq("Precision[1.0000000000000000000000000000004`30.*^50] == Precision[N[10^50, 30]]", "True", 0);
+    /* InputForm's spelling of N[10^50, 30] (its 116 bits: 10^50 - 2^50) */
+    assert_eval_eq("9.99999999999999999999999999999999989`30.*^49 === N[10^50, 30]", "True", 0);
+    assert_eval_eq("Precision[9.99999999999999999999999999999999989`30.*^49] == Precision[N[10^50, 30]]", "True", 0);
     assert_eval_eq("-2.5`40*^-30 === SetPrecision[-25/10 10^-30, 40]", "True", 0);
 }
 #endif

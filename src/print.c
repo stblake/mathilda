@@ -26,6 +26,7 @@
 #include "linear_boxes.h"   /* box control characters print as escapes */
 #include "utf8.h"
 #include "common.h"        /* builtin_arg_error */
+#include "numeric.h"       /* numeric_bits_to_digits: precision of an MPFR width */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -438,24 +439,23 @@ static void print_function_fullform(Expr* e) {
  * is written by its accuracy, 0``a.
  */
 #define MTH_LOG10_2 0.30102999566398119521
-#define MTH_LOG2_10 3.3219280948873626      /* the parser's digits -> bits factor */
 
 /* Whole decimal digits (>= 1) carried by a `bits`-bit value: the accuracy
- * shown for an inexact zero. */
+ * shown for an inexact zero. `bits` is the mantissa width; the precision it
+ * carries excludes the guard bits (numeric.h). */
 static long mpfr_known_digits(mpfr_prec_t bits) {
-    long d = (long)floor((double)bits * MTH_LOG10_2 + 1e-9);
+    long d = (long)floor(numeric_bits_to_digits((long)bits) + 1e-9);
     return d < 1 ? 1 : d;
 }
 
 /* Significant digits (>= 1) displayed for a nonzero finite `bits`-bit value
  * whose leading digits, truncated, are D17 (at least one digit): see the
  * block comment above. With f = log10 of the mantissa d.ddd (0 <= f < 1),
- * floor(L) - floor(L - p) = -floor(f - p). */
+ * floor(L) - floor(L - p) = -floor(f - p), which is p itself for a whole
+ * precision. p is the precision of the width, not the width (guard bits). */
 static long mpfr_display_digits(mpfr_prec_t bits, const char* D17) {
-    long d = (long)floor((double)bits * MTH_LOG10_2 + 1e-9);
-    if (d >= 1 && (mpfr_prec_t)ceil((double)d * MTH_LOG2_10) == bits)
-        return d;                                   /* whole precision: n = p */
-    double p = (double)bits * MTH_LOG10_2;
+    double p = numeric_bits_to_digits((long)bits);
+    if (p == floor(p) && p >= 1.0) return (long)p;      /* whole precision: n = p */
     double m = 0.0, scale = 1.0;
     for (const char* q = D17; *q; q++, scale /= 10.0) m += (*q - '0') * scale;
     double f = m > 1.0 ? log10(m) : 0.0;
@@ -554,22 +554,21 @@ static void print_mpfr_display(const mpfr_t x, bool tex) {
 }
 
 /* The precision (accuracy, for a zero) mark that parse.c reads back to
- * exactly `bits` bits: bits = ceil(mark * log2 10). The whole number of
- * digits when it does (N[x, 30] -> 30.), else the shortest decimal that
+ * exactly `bits` bits: bits = numeric_digits_to_bits(mark). The whole number
+ * of digits when it does (N[x, 30] -> 30.), else the shortest decimal that
  * does, checked through the same text -> double the parser performs. */
 static void mpfr_put_precision_mark(mpfr_prec_t bits) {
-    double x = (double)bits * MTH_LOG10_2;
+    double x = numeric_bits_to_digits((long)bits);
     char t[48];
-    long d = (long)floor(x + 1e-9);
-    if (d >= 1 && (mpfr_prec_t)ceil((double)d * MTH_LOG2_10) == bits) {
-        printf("%ld.", d);
+    if (x == floor(x) && x >= 1.0) {
+        printf("%ld.", (long)x);
         return;
     }
     for (int k = 1; k <= 17; k++) {
         double scale = pow(10.0, k);
         snprintf(t, sizeof t, "%.*f", k, floor(x * scale) / scale);
         double m = strtod(t, NULL);
-        if (m >= 1.0 && (mpfr_prec_t)ceil(m * MTH_LOG2_10) == bits) {
+        if (m >= 1.0 && numeric_digits_to_bits(m) == (long)bits) {
             fputs(t, MTH_POUT);
             return;
         }

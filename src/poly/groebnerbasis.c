@@ -982,7 +982,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         G = gb_strong_buchberger(F, nF, &out_n);
     } else if (opt.domain == GB_DOM_INEXACT && opt.method != GB_METHOD_WALK
                && n_elim == 0 && n_params == 0
-               && gb_flint_lex_inexact(F, nF, (long)((opt.inexact_prec * 33219L) / 10000L) + 1,
+               && gb_flint_lex_inexact(F, nF, numeric_digits_to_bits((double)opt.inexact_prec),
                                        &G, &out_n)) {
         /* InexactNumbers, Lex, zero-dimensional: the coefficients come from
          * a numeric FGLM whose precision is checked (gb_flint.c) instead of
@@ -1083,8 +1083,8 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (opt.domain == GB_DOM_INEXACT) {
 #ifdef USE_MPFR
         /* Approximate-arithmetic output: monic, MPFR coefficients at the
-         * requested decimal precision.  bits = ceil(prec * log2(10)). */
-        mpfr_prec_t bits = (mpfr_prec_t)((opt.inexact_prec * 33219L) / 10000L) + 1;
+         * requested decimal precision (its mantissa width, guard included). */
+        mpfr_prec_t bits = (mpfr_prec_t)numeric_digits_to_bits((double)opt.inexact_prec);
         for (size_t i = 0; i < out_n; i++) {
             items[i] = gb_to_expr_inexact(G[i], all_vars, bits);
         }

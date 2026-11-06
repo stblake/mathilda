@@ -17,6 +17,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* ------------------------------------------------------------------------
  *  Phase 1: machine-precision N[]
@@ -387,7 +390,7 @@ static void test_accuracy_builtin(void) {
      * It used to be the bare 100 bits whatever the operands' size. */
     assert_eval_startswith("Accuracy[N[1/34, 30] - N[1/34, 30]]", "31.6");
     assert_eval_startswith("Accuracy[N[10^10, 30] - N[10^10, 30]]", "19.8");
-    assert_eval_startswith("Accuracy[N[1, 30] - N[1, 30]]", "30.1");
+    assert_eval_startswith("Accuracy[N[1, 30] - N[1, 30]]", "30.0");
     assert_eval_startswith("Accuracy[N[1/34, 30] - N[1/34, 40]]", "31.6");
     /* N[x, p] does not change an approximate zero: it has no precision to
      * lower, only its accuracy (was cut to p digits, so a certified tiny
@@ -645,6 +648,59 @@ static void test_mpfr_complex_corner_cases(void) {
         "Precision[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]", "50.");
 }
 
+/* Guard bits: N[x, d] stores its value with NUMERIC_PREC_GUARD_BITS more
+ * mantissa bits than its precision, so the d digits it shows are the true
+ * value's correct rounding. Without them the stored ceil(d log2 10)-bit value
+ * carried an error of up to 1.5 units of the last digit: N[Sqrt[2], 50] ended
+ * ...753770 (Sqrt[2] = ...75376948...), N[FresnelC[1], 40] ...366307
+ * (...3663062570...). The expected digits are computed here, independently,
+ * by MPFR at 400 bits and rounded once to d significant digits. */
+static void guard_expect_sqrt(int k, int d, char* out, size_t cap) {
+    mpfr_t r;
+    mpfr_init2(r, 400);
+    mpfr_set_ui(r, (unsigned long)k, MPFR_RNDN);
+    mpfr_sqrt(r, r, MPFR_RNDN);
+    /* d significant digits, positional (1 <= Sqrt[k] < 10 here) */
+    mpfr_snprintf(out, cap, "%.*Rf", d - 1, r);
+    mpfr_clear(r);
+}
+
+static void test_n_guard_bits_display(void) {
+    assert_eval_eq("N[Sqrt[2], 50]",
+                   "1.4142135623730950488016887242096980785696718753769", 0);
+    assert_eval_eq("N[FresnelC[1], 40]",
+                   "0.7798934003768228294742064136526901366306", 0);
+    /* every Sqrt[k] < 100 at 20, 30, 50 and 100 digits (the old storage
+     * misrounded 68 of these 360) */
+    static const int ds[] = { 20, 30, 50, 100 };
+    char want[256], in[64];
+    for (int k = 2; k < 100; k++) {
+        int r = 1; while (r * r < k) r++;
+        if (r * r == k) continue;          /* exact squares print as integers */
+        for (size_t j = 0; j < sizeof ds / sizeof ds[0]; j++) {
+            guard_expect_sqrt(k, ds[j], want, sizeof want);
+            snprintf(in, sizeof in, "N[Sqrt[%d], %d]", k, ds[j]);
+            assert_eval_eq(in, want, 0);
+        }
+    }
+    /* the precision is the requested one, not the mantissa width: exactly d
+     * for N[x, d], and the min of the operands' through Times */
+    assert_eval_eq("Precision[N[Pi, 30]] === 30.", "True", 0);
+    assert_eval_eq("Precision[N[Pi, 30] N[E, 40]] === 30.", "True", 0);
+    assert_eval_eq("Precision[SetPrecision[2, 25]] === 25.", "True", 0);
+    assert_eval_eq("Precision[1.`40] === 40.", "True", 0);
+    assert_eval_eq("Precision[N[Exp[1000]]] == $MachinePrecision", "True", 0);
+    assert_eval_eq("Precision[N[Sqrt[2], 11]] === 11.", "True", 0);
+    /* InputForm re-reads to the identical value and precision */
+    assert_eval_eq("With[{v = N[Sqrt[3], 45]}, ToExpression[ToString[v, InputForm]] === v]",
+                   "True", 0);
+    /* the guard is invisible to Equal: the tolerance is still that of 30
+     * digits less the 7 ignored bits (a difference of 10^-31 is equal, one of
+     * 10^-26 is not) */
+    assert_eval_eq("N[Pi, 30] == N[Pi, 30] + 10^-31", "True", 0);
+    assert_eval_eq("N[Pi, 30] == N[Pi, 30] + 10^-26", "False", 0);
+}
+
 #endif /* USE_MPFR */
 
 /* N inside a position the head HOLDS numericalizes the structure but never
@@ -711,6 +767,7 @@ int main(void) {
     TEST(test_n_exact_zero_parts);
     TEST(test_barnesg_arbitrary_precision);
     TEST(test_mpfr_complex_corner_cases);
+    TEST(test_n_guard_bits_display);
     TEST(test_n_does_not_evaluate_held_arguments);
 #endif
 

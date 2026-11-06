@@ -52,14 +52,37 @@
 
 static const double LOG2_10 = 3.3219280948873626;
 
+/* See numeric.h: a w-bit mantissa carries w - NUMERIC_PREC_GUARD_BITS bits of
+ * precision, except the reserved machine width DBL_MANT_DIG (no guard) and the
+ * width one above it, which stands in for the precision that would land on 53. */
+long numeric_precision_bits_width(long prec_bits) {
+    if (prec_bits < 1) prec_bits = 1;
+    long w = prec_bits + NUMERIC_PREC_GUARD_BITS;
+    if (w == (long)DBL_MANT_DIG) w++;
+    return w;
+}
+
+long numeric_width_precision_bits(long width) {
+    if (width == (long)DBL_MANT_DIG) return (long)DBL_MANT_DIG;
+    if (width == (long)DBL_MANT_DIG + 1) return (long)DBL_MANT_DIG - NUMERIC_PREC_GUARD_BITS;
+    return width > NUMERIC_PREC_GUARD_BITS ? width - NUMERIC_PREC_GUARD_BITS : 1;
+}
+
 long numeric_digits_to_bits(double digits) {
-    if (digits <= 0.0) return 1;
-    return (long)ceil(digits * LOG2_10);
+    if (!(digits > 0.0)) return numeric_precision_bits_width(1);
+    if (digits > 1e15) digits = 1e15;
+    return numeric_precision_bits_width((long)ceil(digits * LOG2_10));
 }
 
 double numeric_bits_to_digits(long bits) {
     if (bits <= 0) return 0.0;
-    return (double)bits / LOG2_10;
+    double p = (double)numeric_width_precision_bits(bits) / LOG2_10;
+    if (bits != (long)DBL_MANT_DIG) {
+        /* the width N[x, d] gives for a whole d reads back as exactly d */
+        long d = (long)floor(p + 1e-9);
+        if (d >= 1 && numeric_digits_to_bits((double)d) == bits) return (double)d;
+    }
+    return p;
 }
 
 /* ------------------------------------------------------------------------
@@ -192,14 +215,29 @@ long numeric_min_inexact_bits(const Expr* e) {
 
 typedef int (*MpfrBinaryOp)(mpfr_t, const mpfr_t, const mpfr_t, mpfr_rnd_t);
 
-/* An approximate zero carries only accuracy: its bit precision IS its
- * accuracy in bits (Accuracy[0 at p bits] = p / log2 10 digits). When x + y
+/* An approximate zero carries only accuracy: the precision of its width IS
+ * its accuracy in bits (Accuracy[0``a] = a; the width carries the guard bits
+ * on top, numeric.h). When x + y
  * cancels exactly, the zero knows the sum only as well as the operands knew
  * their values, p - log2 max(|x|, |y|) bits below the units place -- not the
  * bare p bits it was computed with, which would make N[1/34, 30] -
  * N[1/34, 30] ~ 2^-100 uncertain where it is ~ 2^-105, and N[10^10, 30] -
  * N[10^10, 30] ~ 2^-100 where it is ~ 2^-67. Rounded down, so the accuracy
  * is never overstated. */
+/* The precision in bits of a width, as a double for the accuracy formulas. */
+static double width_prec(mpfr_prec_t w) {
+    return (double)numeric_width_precision_bits((long)w);
+}
+
+/* Make `z` a zero of accuracy `acc` bits (stored at the width that carries
+ * it), unless the accuracy is absurd. */
+static void set_zero_accuracy(mpfr_t z, double acc) {
+    if (acc < 1.0) acc = 1.0;
+    if (acc > (double)MPFR_PREC_MAX / 4) return;
+    mpfr_set_prec(z, (mpfr_prec_t)numeric_precision_bits_width((long)acc));
+    mpfr_set_zero(z, +1);
+}
+
 static void cancelled_zero_accuracy(mpfr_t s, const mpfr_t x, const mpfr_t y) {
     if (!mpfr_zero_p(s) || (!mpfr_regular_p(x) && !mpfr_regular_p(y))) return;
     const mpfr_srcptr big = !mpfr_regular_p(y) ? x
@@ -207,11 +245,7 @@ static void cancelled_zero_accuracy(mpfr_t s, const mpfr_t x, const mpfr_t y) {
                           : (mpfr_cmpabs(x, y) >= 0 ? x : y);
     long e;
     double m = mpfr_get_d_2exp(&e, big, MPFR_RNDN);
-    double acc = floor((double)mpfr_get_prec(s) - ((double)e + log2(fabs(m))));
-    if (acc < (double)MPFR_PREC_MIN) acc = (double)MPFR_PREC_MIN;
-    if (acc > (double)MPFR_PREC_MAX / 2) return;
-    mpfr_set_prec(s, (mpfr_prec_t)acc);
-    mpfr_set_zero(s, +1);
+    set_zero_accuracy(s, floor(width_prec(mpfr_get_prec(s)) - ((double)e + log2(fabs(m)))));
 }
 
 /* The scaled accuracy of an approximate zero in a product or quotient. A
@@ -230,23 +264,20 @@ static void scaled_zero_accuracy(mpfr_t out, const Expr* za, const Expr* zb,
     double acc;
     if (x0 && y0) {
         if (is_div) return;
-        acc = (double)mpfr_get_prec(za->data.mpfr) + (double)mpfr_get_prec(zb->data.mpfr);
+        acc = width_prec(mpfr_get_prec(za->data.mpfr)) + width_prec(mpfr_get_prec(zb->data.mpfr));
     } else if (x0 && mpfr_regular_p(y)) {
         long e;
         double m = mpfr_get_d_2exp(&e, y, MPFR_RNDN);
         double l = (double)e + log2(fabs(m));
-        acc = floor((double)mpfr_get_prec(za->data.mpfr) + (is_div ? l : -l));
+        acc = floor(width_prec(mpfr_get_prec(za->data.mpfr)) + (is_div ? l : -l));
     } else if (y0 && !is_div && mpfr_regular_p(x)) {
         long e;
         double m = mpfr_get_d_2exp(&e, x, MPFR_RNDN);
-        acc = floor((double)mpfr_get_prec(zb->data.mpfr) - ((double)e + log2(fabs(m))));
+        acc = floor(width_prec(mpfr_get_prec(zb->data.mpfr)) - ((double)e + log2(fabs(m))));
     } else {
         return;
     }
-    if (acc < (double)MPFR_PREC_MIN) acc = (double)MPFR_PREC_MIN;
-    if (acc > (double)MPFR_PREC_MAX / 2) return;
-    mpfr_set_prec(out, (mpfr_prec_t)acc);
-    mpfr_set_zero(out, +1);
+    set_zero_accuracy(out, acc);
 }
 
 /* Generic MPFR binary dispatcher. Handles the common shape: extract real
@@ -834,7 +865,7 @@ static Expr* n_value(const Expr* e, const char* tag, NumericSpec spec) {
         Expr* a[2] = { expr_copy((Expr*)e), mp };
         call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
     } else {
-        Expr* a[2] = { expr_copy((Expr*)e), expr_new_integer((int64_t)(spec.bits * 0.30102999566398120 + 0.5)) };
+        Expr* a[2] = { expr_copy((Expr*)e), expr_new_integer((int64_t)floor(numeric_bits_to_digits(spec.bits) + 0.5)) };  /* the precision, not the guarded width */
         call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
     }
     Expr* v = NULL;
@@ -2251,7 +2282,9 @@ static Expr* expr_cap_verdict(const Expr* cur, const Expr* ref, const Expr* firs
             if (!shrink) {
                 *unsettled = true;
                 if (good < 1) good = 1;
-                Expr* k = expr_new_mpfr_bits((mpfr_prec_t)(good < bits ? good : bits));
+                /* `good` bits are known: the precision, stored with its guard */
+                long kw = numeric_precision_bits_width(good);
+                Expr* k = expr_new_mpfr_bits((mpfr_prec_t)(kw < bits ? kw : bits));
                 if (!k) return expr_copy((Expr*)cur);
                 mpfr_set(k->data.mpfr, c, MPFR_RNDN);
                 return k;

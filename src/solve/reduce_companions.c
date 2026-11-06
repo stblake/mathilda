@@ -552,9 +552,9 @@ static bool fi_approx_equal_at(const Expr* node, const Expr* pt) {
     long b = bl > 0 && (br <= 0 || bl <= br) ? bl : br;
     bool ok = false;
     if (b > 0) {
-        double digits = (double)b / 3.3219280948873626 / 2.0;
+        double full = numeric_bits_to_digits(b);           /* its precision */
+        double digits = full / 2.0;
         double mach = (double)DBL_MANT_DIG / 3.3219280948873626;
-        double full = (double)b / 3.3219280948873626;
         if (digits < mach) digits = full < mach ? full : mach;
         Expr* nl[2] = { L, expr_new_real(digits) };
         Expr* nr[2] = { R, expr_new_real(digits) };

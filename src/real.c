@@ -170,7 +170,8 @@ static size_t rd_available_digits(const Expr* x, unsigned long b_ulong) {
     }
 #ifdef USE_MPFR
     if (x->type == EXPR_MPFR) {
-        double d = (double)mpfr_get_prec(x->data.mpfr) / log2b;
+        /* digits of its precision, not of the guard-padded width */
+        double d = (double)numeric_width_precision_bits((long)mpfr_get_prec(x->data.mpfr)) / log2b;
         return (size_t)(d + 0.5);
     }
 #endif
@@ -933,13 +934,13 @@ Expr* builtin_realdigits(Expr* res) {
             /* Inexact zero: digits are all 0 within accuracy.  We follow
              * Mathematica's form {{0}, -Floor[Accuracy[0.]]}.  Accuracy of
              * machine 0. is MachinePrecision + (-log10($MinMachineNumber))
-             * ≈ 323.607, giving -323.  Accuracy of MPFR 0 with p_bits is
-             * p_bits / log2(10).  Keep this in sync with accuracy_of() in
-             * src/precision.c. */
+             * ≈ 323.607, giving -323.  Accuracy of an MPFR 0 is the
+             * precision its width carries (numeric_bits_to_digits).  Keep
+             * this in sync with accuracy_of() in src/precision.c. */
             double acc_digits;
 #ifdef USE_MPFR
             if (x_expr->type == EXPR_MPFR) {
-                acc_digits = (double)mpfr_get_prec(x_expr->data.mpfr) / log2(10.0);
+                acc_digits = numeric_bits_to_digits((long)mpfr_get_prec(x_expr->data.mpfr)) + 1e-9;
             } else
 #endif
             {
@@ -1817,13 +1818,14 @@ Expr* builtin_real_exponent(Expr* res) {
      * Mathematica's convention is RealExponent[0_inexact] = log_b(MinPositive)
      * where MinPositive is the smallest representable nonzero magnitude at
      * the input's precision.  For machine 0. that is DBL_MIN (≈ 2.225e-308),
-     * giving log10 ≈ -307.65.  For MPFR 0 @ p bits the analog is 10^(-p_d)
-     * where p_d = p/log2(10), giving -p_d.  Division by log10(b) converts
+     * giving log10 ≈ -307.65.  For an MPFR 0 of accuracy p_d digits
+     * (numeric_bits_to_digits of its width) the analog is 10^(-p_d), giving
+     * -p_d.  Division by log10(b) converts
      * to base b. */
     if (x_inexact_zero) {
         double log10_min;
         if (x_use->type == EXPR_MPFR) {
-            log10_min = -(double)mpfr_get_prec(x_use->data.mpfr) / log2(10.0);
+            log10_min = -numeric_bits_to_digits((long)mpfr_get_prec(x_use->data.mpfr));
         } else {
             log10_min = log10(DBL_MIN);
         }

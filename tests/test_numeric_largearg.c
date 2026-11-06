@@ -305,8 +305,8 @@ static void test_two_arg_low_precision(void) {
  * the digits that were asked for, not the working precision used to get
  * them. */
 static void test_two_arg_precision_is_preserved(void) {
-    assert_prints("Precision[N[Sin[10^25], 30]]", "30.103");
-    assert_prints("Precision[N[Sin[10^25], 50]]", "50.272");
+    assert_prints("Precision[N[Sin[10^25], 30]]", "30.0");
+    assert_prints("Precision[N[Sin[10^25], 50]]", "50.0");
     assert_prints("Precision[N[Sin[10^25]]]", "MachinePrecision");
 }
 
@@ -341,9 +341,11 @@ static void test_fast_path_unchanged(void) {
 
     /* Bare N[expr] targets machine precision even for an already-approximate
      * argument: N[N[Pi, 100]] collapses to a machine number, and Sin of a
-     * 100-digit Pi (tiny, ~1e-101) comes back at machine precision. */
+     * 100-digit Pi comes back at machine precision: it is Pi - x for the
+     * stored x, the 349-bit (333 + 16 guard) rounding of Pi, whose exact
+     * difference is 1.6575855913e-105 (it was -8.2855161544e-101 at 333). */
     assert_prints("N[N[Pi, 100]]", "3.14159");
-    assert_prints_prefix("N[Sin[N[Pi, 100]]]", "-8.28552e-101");
+    assert_prints_prefix("N[Sin[N[Pi, 100]]]", "1.65759e-105");
     assert_prints("Precision[N[Pi]]", "MachinePrecision");
 
     /* An inexact machine Real *is* its own exact binary value, so Sin of it

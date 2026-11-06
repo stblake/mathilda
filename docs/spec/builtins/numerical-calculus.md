@@ -1748,7 +1748,7 @@ optimising variable assignments.
 
 At `WorkingPrecision -> p` both the value and the coordinates are `p`-digit
 numbers (`Precision[First[FindMinimum[(t - 1)^2 + 1, {t, 0},
-WorkingPrecision -> 30]]]` is `30.103`, the binary precision rounded up). The
+WorkingPrecision -> 30]]]` is `30.`). The
 display drops trailing zeros of every arbitrary-precision number, so that value
 prints as `1.0`; `N[1, 30]` prints the same way.
 

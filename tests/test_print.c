@@ -499,8 +499,10 @@ void test_mpfr_display_digits() {
         {"ToString[{1.0, 0.25, 1.64438}]", "{1.0, 0.25, 1.64438}"},
         {"ToString[N[1, 30], InputForm]", "1.`30."},
         {"ToString[N[1/4, 20], InputForm]", "0.25`20."},
+        /* 10^50 lies halfway between two 116-bit values (5^50 has 117 bits):
+         * ties to even gives 10^50 - 2^50, written with all 36 digits */
         {"ToString[N[10^50, 30], InputForm]",
-         "1.0000000000000000000000000000004`30.*^50"},
+         "9.99999999999999999999999999999999989`30.*^49"},
         {"ToString[N[1 + 2 I, 25], InputForm]", "1.`25. + 2.`25.*I"},
         {"ToString[0``30, InputForm]", "0``30."},
         {"ToString[TeXForm[N[10^50, 30]]]",

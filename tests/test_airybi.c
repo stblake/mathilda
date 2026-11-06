@@ -271,7 +271,7 @@ void test_airybiprime_arbitrary_real() {
         "9.4214233173343017555823088857282415621646345227564");
     /* Backtick-precision input tracks exactly (30 significant digits). */
     assert_eval_startswith("AiryBiPrime[2.5`30]",
-        "9.42142331733430175558230888572");
+        "9.42142331733430175558230888573");  /* ...888572|82 */
     /* Explicit-zeros literal: Mathilda tracks ~21 trustworthy digits here (the
      * literal form pins a tighter working precision than the `30/N paths, so
      * the last couple of printed digits are unreliable -- cf. N's unpinned

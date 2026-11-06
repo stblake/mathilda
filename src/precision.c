@@ -6,7 +6,8 @@
  *   - Exact leaves (Integer, BigInt, Rational, symbols with no numeric
  *     value) → Infinity.
  *   - EXPR_REAL                                                 → MachinePrecision.
- *   - EXPR_MPFR (Phase 2)                                       → prec bits / log2(10).
+ *   - EXPR_MPFR (Phase 2)                                       → numeric_bits_to_digits(width):
+ *     the precision, which is the width less the guard bits (numeric.h).
  *   - Complex[a, b]                                             → min(Precision[a], Precision[b]).
  *   - Compound f[...] (generic)                                 → min of component precisions.
  *
@@ -15,7 +16,7 @@
  *   Exact values (Integer, BigInt, Rational, symbolic constants) → Infinity.
  *   Inexact zeros are finite:
  *     - Machine 0.0 → MachinePrecision − log10(DBL_MIN) ≈ 323.607.
- *     - MPFR 0 with bit-precision p → p / log2(10) digits (matches MMA's
+ *     - MPFR 0 of precision p (numeric_bits_to_digits) → p digits (matches
  *       Accuracy[0``p] = p).
  */
 
@@ -39,7 +40,6 @@
 #include <mpfr.h>
 #endif
 
-static const double LOG2_10 = 3.3219280948873626;
 
 /* Sentinel doubles for the symbolic "precision" values. */
 static Expr* make_infinity(void)         { return expr_new_symbol(SYM_Infinity); }
@@ -104,7 +104,8 @@ static Expr* precision_of(const Expr* e) {
             return make_machineprecision();
 #ifdef USE_MPFR
         case EXPR_MPFR: {
-            double digits = (double)mpfr_get_prec(e->data.mpfr) / LOG2_10;
+            /* the precision, not the mantissa width (numeric.h: guard bits) */
+            double digits = numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr));
             return expr_new_real(digits);
         }
 #endif
@@ -210,7 +211,7 @@ static Expr* accuracy_of(const Expr* e) {
             return expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS - expr_log10_abs(e));
 #ifdef USE_MPFR
         case EXPR_MPFR: {
-            double prec_digits = (double)mpfr_get_prec(e->data.mpfr) / LOG2_10;
+            double prec_digits = numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr));
             if (mpfr_zero_p(e->data.mpfr)) return expr_new_real(prec_digits);
             return expr_new_real(prec_digits - expr_log10_abs(e));
         }
