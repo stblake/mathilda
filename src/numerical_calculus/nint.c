@@ -309,6 +309,10 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
 #ifdef USE_MPFR
         else if (c->spec.mode == NUMERIC_MODE_MPFR && c->spec.bits > 0) {
             c->ac_prec = autocompile_new_prec(c->body, vs, 1, (long)c->spec.bits);
+            /* a complex-valued integrand of a real variable (a contour
+             * parametrised by its angle) compiles in the complex domain */
+            if (!c->ac_prec)
+                c->ac_prec = autocompile_new_prec_z(c->body, vs, 1, (long)c->spec.bits);
         }
 #endif
         expr_free(vsym);
