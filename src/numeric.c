@@ -214,6 +214,41 @@ static void cancelled_zero_accuracy(mpfr_t s, const mpfr_t x, const mpfr_t y) {
     mpfr_set_zero(s, +1);
 }
 
+/* The scaled accuracy of an approximate zero in a product or quotient. A
+ * zero known to within 2^-a (a bits of accuracy, its bit precision) times a
+ * nonzero y is known to within |y| 2^-a, so the product keeps a - log2|y|
+ * bits; 0/y keeps a + log2|y|; 0 times 0 adds the two accuracies. The bits
+ * the operation was computed with say nothing about a zero's uncertainty:
+ * without this, 0``80 N[10^50, 100] stayed 0``80 (it is 0``30) and
+ * 0``80 / 10^35 stayed 0``80 (it is 0``115). Rounded down, so never
+ * overstated; `za`/`zb` are the operands as given (a zero's own bits). */
+static void scaled_zero_accuracy(mpfr_t out, const Expr* za, const Expr* zb,
+                                 const mpfr_t x, const mpfr_t y, bool is_div) {
+    if (!mpfr_zero_p(out)) return;
+    const bool x0 = za->type == EXPR_MPFR && mpfr_zero_p(za->data.mpfr);
+    const bool y0 = zb->type == EXPR_MPFR && mpfr_zero_p(zb->data.mpfr);
+    double acc;
+    if (x0 && y0) {
+        if (is_div) return;
+        acc = (double)mpfr_get_prec(za->data.mpfr) + (double)mpfr_get_prec(zb->data.mpfr);
+    } else if (x0 && mpfr_regular_p(y)) {
+        long e;
+        double m = mpfr_get_d_2exp(&e, y, MPFR_RNDN);
+        double l = (double)e + log2(fabs(m));
+        acc = floor((double)mpfr_get_prec(za->data.mpfr) + (is_div ? l : -l));
+    } else if (y0 && !is_div && mpfr_regular_p(x)) {
+        long e;
+        double m = mpfr_get_d_2exp(&e, x, MPFR_RNDN);
+        acc = floor((double)mpfr_get_prec(zb->data.mpfr) - ((double)e + log2(fabs(m))));
+    } else {
+        return;
+    }
+    if (acc < (double)MPFR_PREC_MIN) acc = (double)MPFR_PREC_MIN;
+    if (acc > (double)MPFR_PREC_MAX / 2) return;
+    mpfr_set_prec(out, (mpfr_prec_t)acc);
+    mpfr_set_zero(out, +1);
+}
+
 /* Generic MPFR binary dispatcher. Handles the common shape: extract real
  * MPFR operands from `a` and `b`, apply `op`, return a fresh EXPR_MPFR.
  * Returns NULL if either operand isn't a pure real (Complex → caller
@@ -271,6 +306,8 @@ static Expr* mpfr_binop(const Expr* a, const Expr* b, long default_bits,
     if (op == mpfr_add || op == mpfr_sub) {
         note_cancellation(ra, rb, out);
         cancelled_zero_accuracy(out, ra, rb);
+    } else if (op == mpfr_mul || op == mpfr_div) {
+        scaled_zero_accuracy(out, a, b, ra, rb, op == mpfr_div);
     }
     mpfr_clear(ra); mpfr_clear(ia);
     mpfr_clear(rb); mpfr_clear(ib);
@@ -1282,6 +1319,11 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
              * under N[.., 50] but a 50-digit value still reduces under
              * N[.., 30]. */
             {
+                /* An approximate zero has no precision, only accuracy (its
+                 * bits), which N[x, p] does not change: N[0``80, 20] is
+                 * 0``80, not a zero known only to 20 digits. */
+                if (spec.mode == NUMERIC_MODE_MPFR_CAP && mpfr_zero_p(e->data.mpfr))
+                    return expr_new_mpfr_copy(e->data.mpfr);
                 long cur    = (long)mpfr_get_prec(e->data.mpfr);
                 long target = spec.bits;
                 if (spec.mode == NUMERIC_MODE_MPFR_CAP && cur < target) {
@@ -1604,6 +1646,9 @@ static bool numeric_needs_round(const Expr* e, NumericSpec out) {
     if (!e) return false;
     if (e->type == EXPR_MPFR) {
         if (out.mode == NUMERIC_MODE_MACHINE) return true;
+        /* a zero's bits are its accuracy, which rounding to p digits of
+         * precision does not touch (see numericalize's EXPR_MPFR branch) */
+        if (mpfr_zero_p(e->data.mpfr)) return false;
         return out.bits > 0 && (long)mpfr_get_prec(e->data.mpfr) > out.bits;
     }
     if (e->type != EXPR_FUNCTION) return false;

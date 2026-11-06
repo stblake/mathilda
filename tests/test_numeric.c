@@ -389,6 +389,18 @@ static void test_accuracy_builtin(void) {
     assert_eval_startswith("Accuracy[N[10^10, 30] - N[10^10, 30]]", "19.8");
     assert_eval_startswith("Accuracy[N[1, 30] - N[1, 30]]", "30.1");
     assert_eval_startswith("Accuracy[N[1/34, 30] - N[1/34, 40]]", "31.6");
+    /* N[x, p] does not change an approximate zero: it has no precision to
+     * lower, only its accuracy (was cut to p digits, so a certified tiny
+     * difference became a zero known only to 10^-p) */
+    assert_eval_startswith("Accuracy[N[SetPrecision[0, 80], 20]]", "80.");
+    assert_eval_startswith("Accuracy[N[SetPrecision[0, 10], 20]]", "10.");
+    assert_eval_eq("N[N[1/3, 50] - N[1/3, 50], 20] < 10^-45", "True", 0);
+    /* a zero known to within 2^-a, times y, is known to within |y| 2^-a:
+     * accuracy a - log10|y| (rounded down to bits); 0/y gains log10|y| */
+    assert_eval_startswith("Accuracy[SetPrecision[0, 80] N[10^50, 100]]", "29.");
+    assert_eval_startswith("Accuracy[SetPrecision[0, 80] 10^50]", "29.");
+    assert_eval_startswith("Accuracy[SetPrecision[0, 80]/10^35]", "114.");
+    assert_eval_eq("SetPrecision[0, 80] 10^50 < 10^-40", "False", 0);
 }
 
 static void test_set_precision(void) {
@@ -490,11 +502,16 @@ static void test_n_adaptive_certification(void) {
     /* (Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 = -17/2520 - 31/14175 x^2
      * + O(x^4): ~205 bits cancel after Log loses ~67 near 1. Its last step to
      * the cap (330 -> 331 bits) certified 18 wrong digits; now N::meprec at the
-     * default limit, and correct with more room. */
+     * default limit, and correct with more room. 30 digits of a value of
+     * size 6.7*10^-3 know it to within ~6.7*10^-33 (Accuracy 32.17), so the
+     * difference from the exact value is a zero of that accuracy and cannot
+     * be shown below 10^-33; 10^-31 is the bound 30 digits can certify. */
     assert_eval_eq("Check[N[(Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 /. x -> 10^-10, 30], meprecFired]",
                    "meprecFired", 0);
     assert_eval_eq("Block[{$MaxExtraPrecision = 100}, Abs[N[(Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 "
-                   "/. x -> 10^-10, 30] - (-17/2520 - 31/14175 10^-20)] < 10^-33]", "True", 0);
+                   "/. x -> 10^-10, 30] - (-17/2520 - 31/14175 10^-20)] < 10^-31]", "True", 0);
+    assert_eval_eq("Block[{$MaxExtraPrecision = 100}, Abs[N[(Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 "
+                   "/. x -> 10^-10, 30] - (-17/2520 - 31/14175 10^-20)] < 10^-33]", "False", 0);
     /* b^n with a huge exact n multiplies the base's rounding error by n:
      * (1 + 10^-40)^(10^40) - E = -E/2 10^-40 (1 - 11/12 10^-40 + ...); was
      * 3.5575743793 with no message */

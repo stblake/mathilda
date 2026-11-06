@@ -77,7 +77,10 @@ Tests whether two (or more) expressions are mathematically equal.
   (`1. == 1. + 10.^-14 == 1. + 2 10.^-14` is `False`).
 - An exact cancellation leaves an approximate zero as accurate as its
   operands: `N[1/34, 30] - N[1/34, 30]` has accuracy above 31 digits, not 30,
-  so it is `< 10^-31`.
+  so it is `< 10^-31`. The zero keeps that accuracy through `N[z, p]`
+  (an approximate zero has no precision to lower: `N[0``80, 20]` is `0``80`),
+  and a product or quotient scales it: `0``80 * 10^50` is `0``30` (known to
+  within `10^-30`, so not `< 10^-40`), `0``80 / 10^35` is `0``115`.
 - Two exact rationals compare exactly, whatever the size of their parts
   (v0.477): `1 == 1 + 10^-20` is `False`. It used to reach the tolerant
   machine comparison and test `True`.
