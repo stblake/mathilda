@@ -388,6 +388,10 @@ BASELINE = {
     # A_NDFN table can carry.
     "ArrayPad", "ArrayReshape",
     # A callback lowering, as Map / Select / Fold already have.
+    # SameQ / UnsameQ on packed arrays (packed-aware since v0.6221, so a
+    # packed === packed test no longer unpacks): whole-array identity giving one
+    # Boolean; the array-shape lowering needs a tensor-compare op Compile lacks.
+    "SameQ", "UnsameQ",
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",
     # PrimePowerQ: the SCALAR form compiles (OP_PPQ_I, int -> CT_BOOL, the
