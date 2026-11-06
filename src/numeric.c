@@ -1355,34 +1355,28 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     }
 
 #ifdef USE_MPFR
-    /* E^y at arbitrary precision is Exp[y]: the generic rebuild below
-     * computed e = exp(1) first and then e^y = exp(y log e), a log (AGM) and
-     * two exponentials for one -- every entry of an N[Table[Exp[-k/25], ..]]
-     * whose planner raised the working precision paid ~5 us for it.  Same
-     * operand precisions as Power[e, y] (the larger of the two), real
-     * non-integer exponents only (integer ones stay verbatim, as below). */
-    if (numeric_spec_is_mpfr(spec) && g_n_held_depth == 0 &&
-        e->data.function.arg_count == 2 &&
-        e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol.name == SYM_Power &&
-        e->data.function.args[0]->type == EXPR_SYMBOL &&
-        e->data.function.args[0]->data.symbol.name == SYM_E &&
-        e->data.function.args[1]->type != EXPR_INTEGER &&
-        e->data.function.args[1]->type != EXPR_BIGINT) {
+    /* E^y at arbitrary precision is exp(y), one correctly rounded call.  The
+     * generic rebuild numericalized E itself (an exp(1)) and then evaluated
+     * Power[e, y] as exp(y log e) -- three transcendental evaluations for
+     * every Exp[..] N meets, at every precision of its adaptive climb.  An
+     * approximate machine exponent, a complex one, or an exp outside the
+     * MPFR range takes the generic path. */
+    if (numeric_spec_is_mpfr(spec) && g_n_held_depth == 0
+        && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Power
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == SYM_E) {
         Expr* y = numericalize_rec(e->data.function.args[1], spec);
-        if (y && y->type == EXPR_MPFR && mpfr_number_p(y->data.mpfr) &&
-            !mpfr_integer_p(y->data.mpfr)) {
-            long bits = spec.bits;
-            if ((long)mpfr_get_prec(y->data.mpfr) > bits) bits = (long)mpfr_get_prec(y->data.mpfr);
-            mpfr_t r;
-            mpfr_init2(r, (mpfr_prec_t)bits);
-            mpfr_exp(r, y->data.mpfr, MPFR_RNDN);
-            expr_free(y);
-            if (mpfr_number_p(r) && !mpfr_zero_p(r)) return expr_new_mpfr_move(r);
-            mpfr_clear(r);       /* over/underflow: the generic path's rules */
-        } else if (y) {
-            expr_free(y);
+        if (y && y->type == EXPR_MPFR && mpfr_number_p(y->data.mpfr)) {
+            Expr* r = numeric_mpfr_apply_unary(y, 0, mpfr_exp);
+            if (r && r->type == EXPR_MPFR && mpfr_number_p(r->data.mpfr)) {
+                expr_free(y);
+                return r;
+            }
+            if (r) expr_free(r);
         }
+        if (y) expr_free(y);
     }
 #endif
 
