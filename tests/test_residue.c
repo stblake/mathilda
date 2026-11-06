@@ -202,6 +202,29 @@ static void test_roots_of_unity_higher_order(void) {
                         "1/72 (-5 - (5*I) Sqrt[3])");
 }
 
+
+/* Rational functions over Q at rational points: the residue is one Laurent
+ * coefficient, read off a single exact expansion.  Expected values from
+ * binomial closed forms and from Coefficient[Expand[..]]. */
+static void test_rational_over_q_poles(void) {
+    /* p(z)/z^k at 0: the z^(k-1) coefficient of p. */
+    check_eq("Residue[(1 + z)^50/z^21, {z, 0}] == Binomial[50, 20]", "True");
+    check_eq("Residue[(1 + z^2)^30/z^31, {z, 0}] == Binomial[30, 15]", "True");
+    check_eq("With[{p = (1 + z)^300 (1 + z + z^2)^150 (1 + z + z^2 + z^3 + z^4)^75}, "
+             "Residue[p/z^451, {z, 0}] == Coefficient[Expand[p], z, 450]]", "True");
+    /* A pole at a nonzero rational point: (z + 1)^40 about z = 1/2 has
+     * (z - 1/2)^k coefficients Binomial[40, k] (3/2)^(40 - k). */
+    check_eq("Residue[(z + 1)^40/(z - 1/2)^25, {z, 1/2}] == Binomial[40, 24] (3/2)^16",
+             "True");
+    /* 1/((z - 2)^3 (z + 1)): (1/2) d^2/dz^2 (z + 1)^-1 at 2 = 1/27; the simple
+     * pole at -1 gives 1/(-3)^3. */
+    check_eq("Residue[1/((z - 2)^3 (z + 1)), {z, 2}]", "1/27");
+    check_eq("Residue[1/((z - 2)^3 (z + 1)), {z, -1}]", "-1/27");
+    /* An analytic point and a removable singularity have residue 0. */
+    check_eq("Residue[(z^2 - 1)/(z - 1), {z, 1}]", "0");
+    check_eq("Residue[1/((z - 2)^3 (z + 1)), {z, 0}]", "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -216,6 +239,7 @@ int main(void) {
     TEST(test_bad_arguments);
     TEST(test_numeric_crosscheck);
     TEST(test_roots_of_unity_higher_order);
+    TEST(test_rational_over_q_poles);
 
     printf("All Residue tests passed!\n");
     return 0;

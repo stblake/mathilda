@@ -349,8 +349,47 @@ static bool residue_has_pole_at(Expr* f, Expr* z, Expr* z0) {
     return zero;
 }
 
+/* True iff `e` is an Integer, BigInt or Rational. */
+static bool residue_is_rational_number(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Rational;
+}
+
+/* True iff `e` is built from z, rational numbers, Plus, Times and integer
+ * Powers -- a rational function of z over Q, in any (unexpanded) spelling. */
+static bool residue_rational_over_q(const Expr* e, const Expr* z) {
+    if (residue_is_rational_number(e)) return true;
+    if (e->type == EXPR_SYMBOL) return expr_eq(e, z);
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Power)
+        return n == 2 && e->data.function.args[1]->type == EXPR_INTEGER &&
+               residue_rational_over_q(e->data.function.args[0], z);
+    if (h != SYM_Plus && h != SYM_Times) return false;
+    for (size_t i = 0; i < n; i++)
+        if (!residue_rational_over_q(e->data.function.args[i], z)) return false;
+    return true;
+}
+
 Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     if (!f || !z || !z0 || z->type != EXPR_SYMBOL) return NULL;
+
+    /* A rational function over Q at a rational point: the residue is ONE
+     * Laurent coefficient, read off a single expansion about z0.  The series
+     * engine expands such an f in exact rational arithmetic (every
+     * coefficient rational, every truncation order tracked exactly), so the
+     * coefficient it reports is the coefficient -- none of the cross-checking
+     * below, which guards symbolic coefficients, and no shift-and-Expand,
+     * which exists to expose an ALGEBRAIC pole location.  For p(z)/z^k at 0
+     * this is the z^(k-1) coefficient of p, at the cost of one truncated
+     * product of p's factors. */
+    if (residue_is_rational_number(z0) && residue_rational_over_q(f, z)) {
+        int64_t used = 0, pm = 0;
+        Expr* r = residue_coeff_resolved(f, z, z0, 0, &used, &pm);
+        if (r) return r;
+    }
 
     if (residue_is_rational_in(f, z)) {
         /* Simple-pole fast path: Res = P(z0)/Q'(z0) when Q has a simple zero at

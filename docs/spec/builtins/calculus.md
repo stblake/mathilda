@@ -735,6 +735,15 @@ the direct expansion reports an analytic point but the denominator of `Together[
 vanishes at `z0`, `Residue` re-expands the shifted integrand `f /. z -> z0 + w`,
 where `z^p` becomes an analytic binomial `(z0+w)^p` and the pole sits in `w`.
 
+A **rational function over Q at a rational point** (built from `z`, rational
+numbers, `Plus`, `Times` and integer powers, in any unexpanded spelling) skips
+all of the above: its expansion runs in exact rational arithmetic, so the
+residue is the single `(z - z0)^-1` coefficient of one expansion about `z0`.
+For `p(z)/z^k` at `0` that is the `z^(k-1)` coefficient of `p`, at the cost of
+one truncated product of `p`'s factors:
+`Residue[p/x^3001, {x, 0}]` for `p = (x + 1)^2000 (x^2 + x + 1)^1000 (x^4 + x^3
++ x^2 + x + 1)^500` (a 1427-digit integer) takes about 0.2 s.
+
 ```
 In[1]:= Residue[1/z, {z, 0}]
 Out[1]= 1
