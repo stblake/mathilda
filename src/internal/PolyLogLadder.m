@@ -317,7 +317,154 @@ PolyLogLadder`Check[F_, f_, x_Symbol] := Module[{syms, inst, d, ok = True},
 
 PolyLogLadder`Integrate[f_, x_Symbol] := Module[{r},
   r = PolyLogLadder`Run[f, x];
+  If[r === $Failed, r = PolyLogLadder`PLRun[f, x]];
   If[r === $Failed, r = PolyLogLadder`TrigRun[f, x]];
   If[r === $Failed, r = PolyLogLadder`LTRun[f, x]];
   If[r === $Failed || ! FreeQ[r, Integrate], Return[$Failed]];
   If[PolyLogLadder`Check[r, f, x], r, $Failed]];
+
+
+(* ---------------------------------------------------------------------------
+   POLYLOG ROUTE.  f = R0(x) + Sum_i R_i(x) PolyLog[n_i, a_i(x)], every R
+   rational in x, every n_i an integer >= 2 and every a_i either
+
+     Moebius      a = (al x + be)/(ga x + de), al de - be ga != 0, or
+     monomial     a = c x^k, k an integer, |k| >= 2.
+
+   METHOD.  Integration by parts lowers the polylogarithm's order one step at a
+   time, d/dt Li_n(w) = Li_(n-1)(w) w'/w, down to Li_1(w) = -Log[1 - w], where
+   the log-kernel ladder above (or the cascade) finishes.  To keep w'/w simple
+   the Moebius case first substitutes u = a(x) (x = (de u - be)/(al - ga u) is
+   Moebius again, so the integrand stays rational: Q(u) = R(x(u)) x'(u)); then
+   w = u and w'/w = 1/u.  A monomial argument keeps t = x, with w'/w = k/x.
+   In both cases, with Q = r/t + s/(t - 1) + Q~ (partial fractions in t) and
+   P = INT Q~ dt:
+
+     INT Q Li_n(w) dt = (r/k) Li_(n+1)(w) + P Li_n(w) - k INT (P/t) Li_(n-1)(w) dt
+                        + s U_n(t),
+
+   which needs P rational: every pole of Q other than t = 0 (and t = 1 when
+   w = t) must have zero residue.  It always does when R is a polynomial and
+   the argument Moebius (x^m dx is exact); a nonzero residue at another point
+   leaves INT Li_n(w)/(t - c) dt, which is not a classical polylogarithm, and
+   the route declines.  The t = 1 pole (w = t only) closes for n <= 3:
+
+     U_n = INT Li_n(t)/(t - 1) dt
+     U_2 = Log[1 - t] Li_2(t) + INT Log[1 - t]^2/t dt        (the log ladder)
+     U_3 = Log[1 - t] Li_3(t) + Li_2(t)^2/2.
+
+   Each identity differentiates back exactly; the stage re-checks the result
+   by differentiation regardless.
+   --------------------------------------------------------------------------- *)
+
+PolyLogLadder`plSavedContextPath = $ContextPath;
+$ContextPath = {"System`"};
+Begin["PolyLogLadder`Private`"];
+
+PolyLogLadder`PLRatQ[e_, t_] := With[{tg = Together[e]},
+  PolynomialQ[Numerator[tg], t] && PolynomialQ[Denominator[tg], t]];
+
+(* U_n(t) = INT PolyLog[n, t]/(t - 1) dt, or $Failed. *)
+PolyLogLadder`PLUnitPole[2, t_] := With[{sub = PolyLogLadder`Run[Log[1 - t]^2/t, t]},
+  If[sub === $Failed, $Failed, Log[1 - t] PolyLog[2, t] + sub]];
+PolyLogLadder`PLUnitPole[3, t_] := Log[1 - t] PolyLog[3, t] + PolyLog[2, t]^2/2;
+PolyLogLadder`PLUnitPole[_, _] := $Failed;
+
+(* INT Q(t) PolyLog[n, w] dt, w = t (k = 1) or w = c t^k: t w'/w = k. *)
+PolyLogLadder`PLCore[Q_, n_Integer, w_, t_Symbol, k_Integer] := Catch[Module[
+  {qq = Together[Q], ap, terms, r = 0, s = 0, pp = 0, pt, sub, us, res},
+  If[qq === 0, Return[0]];
+  If[n == 1,
+    res = If[w === t, PolyLogLadder`Run[-qq Log[1 - t], t], Integrate[-qq Log[1 - w], t]];
+    If[res === $Failed || ! FreeQ[res, Integrate], Throw[$Failed, PolyLogLadder`plfail]];
+    Return[res]];
+  ap = Apart[qq, t];
+  terms = If[Head[ap] === Plus, List @@ ap, {ap}];
+  Do[
+    Which[
+      FreeQ[Together[tm t], t], r += Together[tm t],
+      w === t && FreeQ[Together[tm (t - 1)], t], s += Together[tm (t - 1)],
+      True,
+        pt = Integrate[tm, t];
+        If[! FreeQ[pt, Integrate] || ! PolyLogLadder`PLRatQ[pt, t], Throw[$Failed, PolyLogLadder`plfail]];
+        pp += pt],
+    {tm, terms}];
+  pp = Together[pp];
+  sub = PolyLogLadder`PLCore[pp/t, n - 1, w, t, k];
+  If[sub === $Failed, Throw[$Failed, PolyLogLadder`plfail]];
+  res = r/k PolyLog[n + 1, w] + pp PolyLog[n, w] - k sub;
+  If[s =!= 0,
+    us = PolyLogLadder`PLUnitPole[n, t];
+    If[us === $Failed, Throw[$Failed, PolyLogLadder`plfail]];
+    res += s us];
+  res], PolyLogLadder`plfail];
+
+(* INT R(x) PolyLog[n, a] dx for one kernel, or $Failed. *)
+PolyLogLadder`PLKernel[R_, n_Integer, a_, x_Symbol] := Module[
+  {at = Together[a], nu, dn, al, be, ga, d0, u, xs, qu, g, kk},
+  nu = Numerator[at]; dn = Denominator[at];
+  If[PolynomialQ[nu, x] && PolynomialQ[dn, x] && Exponent[nu, x] <= 1 && Exponent[dn, x] <= 1,
+    al = Coefficient[nu, x, 1]; be = Coefficient[nu, x, 0];
+    ga = Coefficient[dn, x, 1]; d0 = Coefficient[dn, x, 0];
+    If[PolyLogLadder`ZeroQ[al d0 - be ga], Return[$Failed]];
+    u = Unique["PolyLogLadder`u"];
+    xs = (d0 u - be)/(al - ga u);
+    qu = Together[(R /. x -> xs) D[xs, u]];
+    g = PolyLogLadder`PLCore[qu, n, u, u, 1];
+    Return[If[g === $Failed, $Failed, g /. u -> a]]];
+  (* monomial c x^k *)
+  kk = Together[x D[a, x]/a];
+  If[! IntegerQ[kk] || Abs[kk] < 2 || ! FreeQ[Together[a/x^kk], x], Return[$Failed]];
+  PolyLogLadder`PLCore[R, n, a, x, kk]];
+
+PolyLogLadder`PLRun[f_, x_Symbol] := Catch[Module[{pls, ks, g, r0, res = 0, ri, piece},
+  pls = Union[Cases[f, PolyLog[_, v_] /; ! FreeQ[v, x], {0, Infinity}]];
+  If[pls === {}, Throw[$Failed, PolyLogLadder`plfail]];
+  If[! AllTrue[pls, IntegerQ[#[[1]]] && #[[1]] >= 2 &], Throw[$Failed, PolyLogLadder`plfail]];
+  ks = Table[Unique["PolyLogLadder`K"], {Length[pls]}];
+  g = f /. Thread[pls -> ks];
+  If[! FreeQ[g, PolyLog], Throw[$Failed, PolyLogLadder`plfail]];
+  r0 = g /. Thread[ks -> 0];
+  Do[
+    ri = D[g, ks[[i]]];
+    If[! FreeQ[ri, Alternatives @@ ks] || ! PolyLogLadder`PLRatQ[ri, x], Throw[$Failed, PolyLogLadder`plfail]];
+    piece = PolyLogLadder`PLKernel[ri, pls[[i, 1]], pls[[i, 2]], x];
+    If[piece === $Failed, Throw[$Failed, PolyLogLadder`plfail]];
+    res += piece,
+    {i, Length[ks]}];
+  (* linear in the kernels, rational remainder *)
+  If[! PolyLogLadder`ZeroQ[g - r0 - Total[Table[D[g, ks[[i]]] ks[[i]], {i, Length[ks]}]]],
+    Throw[$Failed, PolyLogLadder`plfail]];
+  If[! PolyLogLadder`ZeroQ[r0],
+    If[! PolyLogLadder`PLRatQ[r0, x], Throw[$Failed, PolyLogLadder`plfail]];
+    piece = Integrate[r0, x];
+    If[! FreeQ[piece, Integrate], Throw[$Failed, PolyLogLadder`plfail]];
+    res += piece];
+  PolyLogLadder`PLTidy[res, x]], PolyLogLadder`plfail];
+
+(* Presentation only, and every step an identity on the whole complex plane:
+   ArcTanh[v] = (Log[1 + v] - Log[1 - v])/2 (the principal branches agree);
+   kernel arguments over one denominator (the same number, so no branch moves);
+   a positive rational content pulled out of a Log, Log[c u] = Log[c] + Log[u]
+   for c > 0; then the antiderivative collected in its kernels with factored
+   coefficients.  The Log form lets the singular pieces at an endpoint cancel
+   term by term (c(x) Log[1 - x] with c(1) = 0), where ArcTanh[1 - 2 x] next to
+   Log[1 - x] leaves the cancellation to a limit of two divergent kernels. *)
+PolyLogLadder`PLLogSplit[v_, x_] := Module[{tv = Together[v], nu, dn, cn, cd, k},
+  nu = Numerator[tv]; dn = Denominator[tv];
+  If[! PolynomialQ[nu, x] || ! PolynomialQ[dn, x], Return[Log[tv]]];
+  cn = CoefficientList[nu, x]; cd = CoefficientList[dn, x];
+  If[! AllTrue[Join[cn, cd], IntegerQ], Return[Log[tv]]];
+  k = (GCD @@ cn)/(GCD @@ cd);
+  (* keep the sign with the polynomial: only a positive content splits off *)
+  If[k === 1 || ! TrueQ[k > 0], Log[tv], Log[k] + Log[Together[tv/k]]]];
+
+PolyLogLadder`PLTidy[e_, x_Symbol] := Module[{g, ks},
+  g = e /. ArcTanh[v_] /; ! FreeQ[v, x] :> (Log[1 + v] - Log[1 - v])/2;
+  g = g /. {Log[v_] /; ! FreeQ[v, x] :> PolyLogLadder`PLLogSplit[v, x],
+            PolyLog[m_, v_] :> PolyLog[m, Together[v]]};
+  ks = Union[Cases[g, kn : (Log | PolyLog | ArcTan)[__] /; ! FreeQ[kn, x], {0, Infinity}]];
+  If[ks === {}, Together[g], Collect[Expand[g], ks, Factor]]];
+
+End[];
+$ContextPath = PolyLogLadder`plSavedContextPath;

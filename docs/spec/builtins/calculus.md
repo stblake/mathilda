@@ -2236,6 +2236,7 @@ monotonically down.
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.
     - `P(x) Log[G]`, where P is a polynomial and G a rational function of trig/hyperbolic functions of linear arguments (v0.459). With T = E^(base x) and G = K T^e Prod (T - rho)^m, Log[G] = D + e base x + Sum m Log[1 - T/rho]. Here D = Log[K Prod (-rho)^m] + 2 Pi I n is an exact piecewise constant whose integer n is read at a sample point. Each `x^n Log[1 - T/rho]` is the exponential ladder. Examples: `Integrate[Log[Sin[x]], x] = (Log[1/2] + I Pi/2) x - I x^2/2 + I PolyLog[2, E^(I x)] + I PolyLog[2, -E^(I x)]`, and `Integrate[x Log[Sin[x]], {x, 0, Pi}] = -Pi^2 Log[2]/2`. Newton-Leibniz always cross-checks continuity for an antiderivative with PolyLog/Log of an exponential, because a branch jump of D inside the interval is caught there.
+    - `R0(x) + Sum R_i(x) PolyLog[n_i, a_i(x)]`, R rational, `n_i` an integer >= 2, each `a_i` either Moebius `(al x + be)/(ga x + de)` or a monomial `c x^k` (`|k| >= 2`). Integration by parts lowers the order one step at a time (d/dt Li_n(w) = Li_(n-1)(w) w'/w) down to `Li_1(w) = -Log[1 - w]`, which the log ladder above finishes. A Moebius argument is substituted first (u = a(x); x(u) is Moebius, so the integrand stays rational in u and w'/w = 1/u). With partial fractions `Q = r/t + s/(t - 1) + Q~` and `P = INT Q~`, `INT Q Li_n(w) = (r/k) Li_(n+1)(w) + P Li_n(w) - k INT (P/t) Li_(n-1)(w) + s U_n`, which needs every other pole of Q to have zero residue (always so for a polynomial R and a Moebius argument). The unit pole closes for n <= 3 (`U_3 = Log[1 - t] Li_3(t) + Li_2(t)^2/2`); `INT Li_n(t)/(t - c)` for other c is not a classical polylogarithm and declines. The antiderivative is written with Log rather than ArcTanh, its kernels collected with factored coefficients, so the singular pieces at an endpoint cancel term by term. Examples: `Integrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}]` = `1/4 Zeta[3] - 1/18 Pi^2 Log[2] + 1/9 Log[2]^3 - 4/9 Log[2]^2 + 35/27 Log[2] - 1/36 Pi^2 - 17/108` (ISSAC '97 problem 8, 0.03-0.2 s, also in its two substituted forms), `Integrate[x PolyLog[3, x], {x, 0, 1}]` = `3/16 - Pi^2/24 + Zeta[3]/2`, `Integrate[x^3 PolyLog[3, -x^2], x]`.
     - Examples: `Integrate[Log[x]/(1 + x^2), x]` and `Integrate[x^2 Csc[x], x]` close. `Integrate[Log[x]/(1 + x^2), {x, 0, 1}]` is `-Catalan` and `Integrate[x Csc[x], {x, 0, Pi/2}]` is `2 Catalan`.
     - In the automatic cascade it runs after `CRCTable`, before `LogByParts`.
   - `"Holonomic"` (indefinite; v0.461): integrands built from Bessel `J`/`Y`/`I`/`K`, Airy and `Sin`/`Cos` kernels of linear argument (`src/internal/Holonomic.m`). There are two routes, both exact:
@@ -2920,7 +2921,14 @@ negative of the integral) is accepted only when a numeric
 `NIntegrate` cross-check agrees; otherwise the integral is left unevaluated
 rather than risking a wrong value. As a final net, a real-looking integrand
 whose folded value has a **provably-nonzero imaginary part** is treated as a
-branch-crossing artifact (`Integrate::idiv`), never returned as a complex number.
+branch-crossing artifact (`Integrate::idiv`), never returned as a complex number
+-- unless the integrand itself takes non-real values inside the interval
+(sampled at seven interior points): `PolyLog[2, x]` past `x = 1`, `Sqrt[x - 1]`
+on `(0, 2)`, `Log[x]` on `(-1, 1)`. Then the value is complex legitimately and is
+accepted when it agrees with a complex `NIntegrate`:
+`Integrate[x PolyLog[2, x], {x, 0, 2}]` = `-1 + 3/4 I Pi + 2 PolyLog[2, 2]`,
+`Integrate[Sqrt[x - 1], {x, 0, 2}]` = `2/3 + 2/3 I`,
+`Integrate[Log[x], {x, -1, 1}]` = `-2 + I Pi`.
 
 **Never-vanishing denominator factors.** The pole scan solves each factor of
 `Denominator[Together[f]]` separately and skips `E^u` factors, which never
