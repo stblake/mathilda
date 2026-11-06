@@ -4,6 +4,7 @@
 #include "interval.h"
 #include "times.h"
 #include "numeric.h"
+#include "logexp.h"
 #include "common.h"
 #include "sym_names.h"
 #include "trig_canon.h"
@@ -853,6 +854,17 @@ Expr* builtin_power(Expr* res) {
 
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
+
+    /* E^z for an MPFR z is exp(z), through the kernel Exp[z] uses.  Left to
+     * the generic path, the call declines and is retried with E numericalized
+     * to z's precision, i.e. computed as N[E, p]^z: the rounding error of E
+     * (relative 2^-p) is multiplied by z, so the result is off by a few ulps
+     * from the correctly rounded exp(z) -- and not equal to Exp[z], nor to the
+     * compiled MPFR code, which lowers E^z as exp(z). */
+    if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
+        Expr* r = logexp_mpfr_exp(exp);
+        if (r) return r;
+    }
 
     /* E^(I q Pi) with q an integer or half-integer: +-1 or +-I, as Exp[] and
      * Mathematica give (E^(I Pi) = -1, E^(-I Pi/2) = -I).  Exp[] already did

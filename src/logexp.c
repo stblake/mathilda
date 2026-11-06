@@ -486,6 +486,25 @@ Expr* builtin_log(Expr* res) {
  * builtin_exp:
  * Implements the evaluation logic for the 'Exp' function.
  */
+Expr* logexp_mpfr_exp(const Expr* z) {
+#ifdef USE_MPFR
+    if (numeric_expr_is_mpfr(z)) {
+        /* Real MPFR path first: pure real input takes mpfr_exp directly
+         * and returns EXPR_MPFR. */
+        Expr* r = numeric_mpfr_apply_unary(z, 0, mpfr_exp);
+        if (r) return r;
+        /* Otherwise complex MPFR: Complex[MPFR, MPFR] (or a real with
+         * inexact imag component) goes through the complex helper,
+         * which uses exp(a)(cos(b) + i sin(b)) at the working
+         * precision and collapses on zero-imag-out. */
+        return numeric_mpfr_apply_complex_unary(z, 0, mpfr_complex_exp);
+    }
+#else
+    (void)z;
+#endif
+    return NULL;
+}
+
 Expr* builtin_exp(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1)
@@ -547,20 +566,10 @@ Expr* builtin_exp(Expr* res) {
         }
     }
 
-#ifdef USE_MPFR
-    if (numeric_expr_is_mpfr(z)) {
-        /* Real MPFR path first: pure real input takes mpfr_exp directly
-         * and returns EXPR_MPFR. */
-        Expr* r = numeric_mpfr_apply_unary(z, 0, mpfr_exp);
-        if (r) return r;
-        /* Otherwise complex MPFR: Complex[MPFR, MPFR] (or a real with
-         * inexact imag component) goes through the complex helper,
-         * which uses exp(a)(cos(b) + i sin(b)) at the working
-         * precision and collapses on zero-imag-out. */
-        r = numeric_mpfr_apply_complex_unary(z, 0, mpfr_complex_exp);
+    {
+        Expr* r = logexp_mpfr_exp(z);
         if (r) return r;
     }
-#endif
     // Approximate numerical evaluation
     double complex c;
     bool inexact = false;

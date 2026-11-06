@@ -285,6 +285,28 @@ static void test_log_base_exact_rational(void) {
     assert_eval_eq("Log[6, 12]", "Times[Power[Log[6], -1], Log[12]]", 1);
 }
 
+/* E^z for an MPFR z is exp(z) computed directly, not N[E, p]^z: the second
+ * multiplies E's rounding error by z and missed the correctly rounded value by
+ * an ulp in about half the cells, so E^z, Exp[z] and the compiled MPFR code
+ * (which lowers E^z as exp) disagreed -- Outer[K, pts, pts] of a kernel
+ * K[x_, y_] := E^(...) was not the cell-by-cell interpreter value.  The
+ * reference value is exp evaluated at three times the precision and rounded
+ * back, independent of either spelling. */
+static void test_e_power_mpfr_is_exp(void) {
+    assert_eval_eq("cr[x_, p_] := SetPrecision[Exp[SetPrecision[x, 3 p]], p]; "
+                   "And @@ Flatten[Table[With[{x = N[k/7 - 3, p]}, E^x === cr[x, p]], "
+                   "{p, {20, 45, 100}}, {k, 1, 40, 3}]]", "True", 0);
+    assert_eval_eq("And @@ Flatten[Table[With[{x = N[k/7 - 3, p]}, E^x === Exp[x]], "
+                   "{p, {20, 45, 100}}, {k, 1, 40, 3}]]", "True", 0);
+    assert_eval_eq("And @@ Flatten[Table[With[{z = N[k/7 - 3 + I (2 - k/5), p]}, E^z === Exp[z]], "
+                   "{p, {20, 45}}, {k, 1, 40, 3}]]", "True", 0);
+    /* compiled cells (Outer of a single-rule kernel) == the interpreter */
+    assert_eval_eq("ek[x_, y_] := E^(x + y + x^2 + y^2 + x y + x^2 y^2); "
+                   "And @@ Table[With[{op = N[Range[24]/25, p], oq = N[Range[17]/7 - 1, p]}, "
+                   "Outer[ek, op, oq] === Table[ek[u, v], {u, op}, {v, oq}]], {p, {20, 45}}]",
+                   "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -294,6 +316,7 @@ int main() {
     TEST(test_exp_log_mpfr_complex);
     TEST(test_log10_log2);
     TEST(test_log_base_exact_rational);
+    TEST(test_e_power_mpfr_is_exp);
     printf("All logexp tests passed!\n");
 
     return 0;
