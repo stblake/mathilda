@@ -1592,109 +1592,150 @@ static int gf_shape_contains(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mp
     return ok;
 }
 
+#define GF_QUOT_PRIMES 4096
+
+/* One candidate from the residues: g_k = N / d with the running common
+ * denominator, then exactly verified (H | N B - d A_k).  1 when every g_k
+ * passed. */
+static int gf_quot_candidate(fmpq_poly_struct* g, const fmpz_poly_struct* A, slong na,
+                             const fmpz_poly_struct* B, const fmpz_poly_struct* H,
+                             const fmpz* crt, slong D, const fmpz_t M) {
+    fmpz_poly_t N, X, Q; fmpz_poly_init(N); fmpz_poly_init(X); fmpz_poly_init(Q);
+    fmpz_t d, v, half, gq, m; fmpz_init(d); fmpz_init(v); fmpz_init(half); fmpz_init(gq); fmpz_init(m);
+    fmpq_t r; fmpq_init(r);
+    fmpz_fdiv_q_2exp(half, M, 1);
+    int all = 1;
+    fmpz_one(d);                     /* shared across the g_k: usually one denominator */
+    for (slong k = 0; k < na && all; k++) {
+        fmpz_poly_zero(N);
+        for (slong j = 0; j < D && all; j++) {
+            const fmpz* x = crt + k * D + j;
+            if (fmpz_is_zero(x)) continue;
+            /* the symmetric residue of d x is the numerator when it lies
+             * inside the reconstruction bound |n|, d < sqrt(M / 2), where
+             * the reconstruction is unique */
+            fmpz_mul(v, x, d);
+            fmpz_mod(v, v, M);
+            if (fmpz_cmp(v, half) > 0) fmpz_sub(v, v, M);
+            flint_bitcnt_t bv = fmpz_bits(v), bd = fmpz_bits(d);
+            if (2 * (bv > bd ? bv : bd) + 2 < fmpz_bits(M)) { fmpz_poly_set_coeff_fmpz(N, j, v); continue; }
+            if (!fmpq_reconstruct_fmpz(r, x, M)) { all = 0; break; }
+            /* d <- lcm(d, den r), N rescaled */
+            fmpz_gcd(gq, d, fmpq_denref(r));
+            fmpz_divexact(m, fmpq_denref(r), gq);
+            fmpz_poly_scalar_mul_fmpz(N, N, m);
+            fmpz_mul(d, d, m);
+            fmpz_divexact(m, d, fmpq_denref(r));
+            fmpz_mul(v, fmpq_numref(r), m);
+            fmpz_poly_set_coeff_fmpz(N, j, v);
+        }
+        if (all) {
+            /* exact: H | N B - d A_k */
+            fmpz_poly_mul(X, N, B);
+            fmpz_poly_scalar_submul_fmpz(X, A + k, d);
+            all = fmpz_poly_is_zero(X) || fmpz_poly_divides(Q, X, H);
+        }
+        if (all) {
+            fmpq_poly_set_fmpz_poly(g + k, N);
+            fmpq_poly_scalar_div_fmpz(g + k, g + k, d);
+        }
+    }
+    fmpq_clear(r);
+    fmpz_clear(d); fmpz_clear(v); fmpz_clear(half); fmpz_clear(gq); fmpz_clear(m);
+    fmpz_poly_clear(N); fmpz_poly_clear(X); fmpz_poly_clear(Q);
+    return all;
+}
+
 /* g_k = A_k / B mod H over Q (k < na), for H primitive and B a unit mod H.
  * The g_k are about D times the size of H, A, B, which makes the extended
  * gcd over Z slow (its cofactor carries the resultant, twice that size again)
  * and p-adic lifting slow too (every step is a division with remainder at
  * the full precision).  Their images are cheap instead: per 62-bit prime one
- * inverse of B mod (H, p) and one product, O(D^2).  So: images, CRT, and at
- * geometric checkpoints a rational reconstruction with a running common
- * denominator (the g_k share theirs: one reconstruction usually serves all
- * coefficients), each candidate VERIFIED exactly -- H divides N B - d A_k for
- * g_k = N / d -- before it is accepted.  An inverse mod p also proves B a
- * unit mod H over Q (res(H, B) is nonzero mod p).  Returns 1 with g set, 0 to
- * decline (no certified answer within the prime budget, or the deadline). */
-#define GF_QUOT_PRIMES 4096
+ * inverse of B mod (H, p) and one product, O(D^2).  So the images are
+ * collected for a batch of primes -- sized from the expected D times the
+ * inputs' size, doubled while it is short -- combined by one subproduct-tree
+ * CRT per coefficient (fmpz_multi_CRT_ui), and rationally reconstructed with a
+ * running common denominator (the g_k share theirs: one reconstruction
+ * usually serves all coefficients).  Each candidate is VERIFIED exactly --
+ * H divides N B - d A_k for g_k = N / d -- before it is accepted.  An inverse
+ * mod p also proves B a unit mod H over Q (res(H, B) is nonzero mod p).
+ * Returns 1 with g set, 0 to decline (no certified answer within the prime
+ * budget, or the deadline). */
 static int gf_quotients(fmpq_poly_struct* g, const fmpz_poly_struct* A, slong na,
                         const fmpz_poly_struct* B, const fmpz_poly_struct* H) {
     slong D = fmpz_poly_degree(H);
     if (D < 1 || na < 1) return 0;
     const fmpz* lc = H->coeffs + D;
     slong L = na * D;
+    /* the expected size of the g_k, numerator and denominator */
+    flint_bitcnt_t hb = (flint_bitcnt_t)FLINT_ABS(fmpz_poly_max_bits(H));
+    flint_bitcnt_t bb = (flint_bitcnt_t)FLINT_ABS(fmpz_poly_max_bits(B));
+    for (slong k = 0; k < na; k++) {
+        flint_bitcnt_t ab = (flint_bitcnt_t)FLINT_ABS(fmpz_poly_max_bits(A + k));
+        if (ab > bb) bb = ab;
+    }
+    slong want = (slong)((2 * (flint_bitcnt_t)D * (hb > bb ? hb : bb)) / 61 / 2) + 4;
+    if (want > GF_QUOT_PRIMES) want = GF_QUOT_PRIMES;
+    slong cap = GF_QUOT_PRIMES, rcap = 0, np = 0, nfail = 0;
+    ulong* primes = NULL;
+    ulong* res = NULL;                                  /* res[i L + c]: prime i, coefficient c */
+    ulong* col = NULL;
     fmpz* crt = _fmpz_vec_init(L);
-    fmpz_t M; fmpz_init_set_ui(M, 1);
     nmod_poly_t Hp, Bp, Tp, Ap; nmod_poly_init(Hp, 2); nmod_poly_init(Bp, 2);
     nmod_poly_init(Tp, 2); nmod_poly_init(Ap, 2);
-    fmpz_poly_t N, X, Q; fmpz_poly_init(N); fmpz_poly_init(X); fmpz_poly_init(Q);
-    fmpz_t d, v, half, gq, m; fmpz_init(d); fmpz_init(v); fmpz_init(half); fmpz_init(gq); fmpz_init(m);
-    fmpq_t r; fmpq_init(r);
-    flint_bitcnt_t next = 128;
-    int ok = 0, nfail = 0;
     ulong p = UWORD(1) << 62;
-    for (slong it = 0; it < GF_QUOT_PRIMES && !ok; it++) {
-        if ((it & 63) == 63 && tc_deadline_passed()) break;
-        p = n_nextprime(p, 1);
-        if (fmpz_fdiv_ui(lc, p) == 0) continue;
-        nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
-        nmod_poly_init(Hp, p); nmod_poly_init(Bp, p); nmod_poly_init(Tp, p); nmod_poly_init(Ap, p);
-        fmpz_poly_get_nmod_poly(Hp, H);
-        fmpz_poly_get_nmod_poly(Bp, B);
-        if (!nmod_poly_invmod(Tp, Bp, Hp)) {                /* res(H, B) = 0 mod p */
-            if (fmpz_is_one(M) && ++nfail >= 8) break;
-            continue;
+    int ok = 0;
+    while (!ok && np < cap) {
+        /* images up to `want` primes */
+        if (want > rcap) {
+            rcap = want;
+            primes = flint_realloc(primes, (size_t)rcap * sizeof(ulong));
+            res = flint_realloc(res, (size_t)rcap * (size_t)L * sizeof(ulong));
+            col = flint_realloc(col, (size_t)rcap * sizeof(ulong));
         }
-        /* CRT, Garner style: x += M ((r - x) M^-1 mod p), M^-1 once per prime */
-        nmod_t mod; nmod_init(&mod, p);
-        ulong minv = n_invmod(fmpz_fdiv_ui(M, p), p);
-        for (slong k = 0; k < na; k++) {
-            fmpz_poly_get_nmod_poly(Ap, A + k);
-            nmod_poly_mulmod(Ap, Ap, Tp, Hp);
-            for (slong j = 0; j < D; j++) {
-                fmpz* x = crt + k * D + j;
-                ulong t = nmod_sub(nmod_poly_get_coeff_ui(Ap, j), fmpz_fdiv_ui(x, p), mod);
-                t = nmod_mul(t, minv, mod);
-                if (t) fmpz_addmul_ui(x, M, t);
+        while (np < want && np < cap) {
+            if ((np & 63) == 63 && tc_deadline_passed()) goto out;
+            p = n_nextprime(p, 1);
+            if (fmpz_fdiv_ui(lc, p) == 0) continue;
+            nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
+            nmod_poly_init(Hp, p); nmod_poly_init(Bp, p); nmod_poly_init(Tp, p); nmod_poly_init(Ap, p);
+            fmpz_poly_get_nmod_poly(Hp, H);
+            fmpz_poly_get_nmod_poly(Bp, B);
+            if (!nmod_poly_invmod(Tp, Bp, Hp)) {            /* res(H, B) = 0 mod p */
+                if (np == 0 && ++nfail >= 8) goto out;
+                continue;
             }
+            for (slong k = 0; k < na; k++) {
+                fmpz_poly_get_nmod_poly(Ap, A + k);
+                nmod_poly_mulmod(Ap, Ap, Tp, Hp);
+                for (slong j = 0; j < D; j++) res[np * L + k * D + j] = nmod_poly_get_coeff_ui(Ap, j);
+            }
+            primes[np++] = p;
         }
-        fmpz_mul_ui(M, M, p);
-        if (fmpz_bits(M) < next) continue;
-        next = next + next / 2;
-        /* a candidate: reconstruct each g_k, then verify it exactly */
-        fmpz_fdiv_q_2exp(half, M, 1);
-        int all = 1;
-        for (slong k = 0; k < na && all; k++) {
-            fmpz_one(d);
-            fmpz_poly_zero(N);
-            for (slong j = 0; j < D && all; j++) {
-                const fmpz* x = crt + k * D + j;
-                if (fmpz_is_zero(x)) continue;
-                /* the symmetric residue of d x is the numerator when it lies
-                 * inside the reconstruction bound |n|, d < sqrt(M / 2), where
-                 * the reconstruction is unique */
-                fmpz_mul(v, x, d);
-                fmpz_mod(v, v, M);
-                if (fmpz_cmp(v, half) > 0) fmpz_sub(v, v, M);
-                flint_bitcnt_t bv = fmpz_bits(v), bd = fmpz_bits(d);
-                if (2 * (bv > bd ? bv : bd) + 2 < fmpz_bits(M)) { fmpz_poly_set_coeff_fmpz(N, j, v); continue; }
-                if (!fmpq_reconstruct_fmpz(r, x, M)) { all = 0; break; }
-                /* d <- lcm(d, den r), N rescaled */
-                fmpz_gcd(gq, d, fmpq_denref(r));
-                fmpz_divexact(m, fmpq_denref(r), gq);
-                fmpz_poly_scalar_mul_fmpz(N, N, m);
-                fmpz_mul(d, d, m);
-                fmpz_divexact(m, d, fmpq_denref(r));
-                fmpz_mul(v, fmpq_numref(r), m);
-                fmpz_poly_set_coeff_fmpz(N, j, v);
-            }
-            if (all) {
-                /* exact: H | N B - d A_k */
-                fmpz_poly_mul(X, N, B);
-                fmpz_poly_scalar_submul_fmpz(X, A + k, d);
-                all = fmpz_poly_is_zero(X) || fmpz_poly_divides(Q, X, H);
-            }
-            if (all) {
-                fmpq_poly_set_fmpz_poly(g + k, N);
-                fmpq_poly_scalar_div_fmpz(g + k, g + k, d);
-            }
+        if (np == 0) break;
+        /* one CRT per coefficient over all np primes */
+        fmpz_comb_t comb; fmpz_comb_temp_t ct;
+        fmpz_comb_init(comb, primes, np);
+        fmpz_comb_temp_init(ct, comb);
+        for (slong c = 0; c < L; c++) {
+            for (slong i = 0; i < np; i++) col[i] = res[i * L + c];
+            fmpz_multi_CRT_ui(crt + c, col, comb, ct, 0);
         }
-        ok = all;
+        fmpz_comb_temp_clear(ct);
+        fmpz_t M; fmpz_init_set_ui(M, 1);
+        for (slong i = 0; i < np; i++) fmpz_mul_ui(M, M, primes[i]);
+        double qc0 = GF_CLOCK();
+        ok = gf_quot_candidate(g, A, na, B, H, crt, D, M);
+        GF_TRACE("[quot] np %ld bits %ld (est %ld) ok %d candidate %.2f ms\n", (long)np, (long)fmpz_bits(M), (long)(2 * D * (hb > bb ? hb : bb)), ok, 1000*(GF_CLOCK()-qc0)); (void)qc0;
+        fmpz_clear(M);
+        fmpz_comb_clear(comb);
+        want = 2 * np;
+        if (want > cap) want = cap;
     }
-    fmpq_clear(r);
-    fmpz_clear(d); fmpz_clear(v); fmpz_clear(half); fmpz_clear(gq); fmpz_clear(m);
-    fmpz_poly_clear(N); fmpz_poly_clear(X); fmpz_poly_clear(Q);
+out:
     nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
     _fmpz_vec_clear(crt, L);
-    fmpz_clear(M);
+    flint_free(res); flint_free(primes); flint_free(col);
     return ok;
 }
 
@@ -1727,6 +1768,7 @@ static GBPoly* gf_shape_gbpoly(slong var, const fmpz_t a, const fmpz* B, slong l
 
 /* The driver.  1 with *out set (the reduced Lex basis, ascending), 0 to
  * decline; *timed_out when the deadline passed (nothing is held). */
+static double sh_img; static long sh_np;
 static int gf_shape_on = 1;
 static long gf_shape_hits = 0;
 long gb_flint_shape_route(int on) { gf_shape_on = on; return gf_shape_hits; }
@@ -1736,6 +1778,7 @@ static int gf_lex_shape(GBPoly* const* F, size_t nF, const GBPoly* f0, GBPoly***
     slong nv = f0->n_vars;
     *timed_out = 0;
     if (!gf_shape_on || getenv("MATHILDA_GB_SHAPE_OFF")) return 0;
+    sh_img = 0; sh_np = 0;
     /* the inputs over Z, primitive */
     Gf Zg; gf_init(&Zg, 0, 0, nv, ORD_DEGREVLEX);
     fmpz_mpoly_struct* Fz = flint_malloc((size_t)(nF ? nF : 1) * sizeof(fmpz_mpoly_struct));
@@ -1757,7 +1800,9 @@ static int gf_lex_shape(GBPoly* const* F, size_t nF, const GBPoly* f0, GBPoly***
         if (tc_deadline_passed()) { *timed_out = 1; break; }
         p = n_nextprime(p, 1);
         ulong* vals = NULL;
+        double ti0 = GF_CLOCK();
         slong d = gf_shape_image(Fz, n, Zg.Z, p, &vals);
+        sh_img += GF_CLOCK() - ti0; sh_np++;
         if (d == -2) { *timed_out = 1; break; }
         if (d == -1) {                         /* not zero-dimensional / not shape mod p */
             flint_free(vals);
@@ -1865,8 +1910,12 @@ static int gf_lex_shape(GBPoly* const* F, size_t nF, const GBPoly* f0, GBPoly***
             /* the g_i (and the proof that B, i.e. h', is a unit mod H) */
             fmpq_poly_struct* g = flint_malloc((size_t)nx * sizeof(fmpq_poly_struct));
             for (slong i = 0; i < nx; i++) fmpq_poly_init(g + i);
+            double tq0 = GF_CLOCK();
             int cert = gf_quotients(g, A, nx, B, H);
+            double tq1 = GF_CLOCK();
             if (cert) cert = gf_shape_contains(Fz, n, Zg.Z, H, A, B);
+            GF_TRACE("[shape] primes %ld images %.2f ms quotients %.2f contains %.2f\n", (long)sh_np, 1000*sh_img, 1000*(tq1-tq0), 1000*(GF_CLOCK()-tq1));
+            (void)tq0; (void)tq1;
             if (!cert && tc_deadline_passed()) *timed_out = 1;
             if (cert) {
                 GBPoly** R = malloc((size_t)nv * sizeof(GBPoly*));
