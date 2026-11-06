@@ -20,6 +20,7 @@
 #include "symtab.h"
 #include "test_utils.h"
 #include "gb_flint.h"
+#include "gb_f4.h"
 
 /* FullForm string match. */
 static void check_eq(const char* input, const char* expected) {
@@ -722,6 +723,60 @@ static void test_flint_engine_matches_classical(void) {
 
 
 /* ------------------------------------------------------------------ */
+/* F4 over GF(p) (gb_f4.c) against the Buchberger engine              */
+/* ------------------------------------------------------------------ */
+
+#ifdef USE_FLINT
+static void check_f4_matches_buchberger(const char* input) {
+    gb_f4_enable(0);
+    Expr* e = parse_expression(input);
+    Expr* res = evaluate(e);
+    char* ref = expr_to_string_fullform(res);
+    expr_free(e); expr_free(res);
+    gb_f4_enable(1);
+    e = parse_expression(input);
+    res = evaluate(e);
+    char* got = expr_to_string_fullform(res);
+    expr_free(e); expr_free(res);
+    if (strcmp(ref, got) != 0)
+        fprintf(stdout, "FAIL: %s\n  buchberger: %.300s\n  f4:         %.300s\n", input, ref, got);
+    ASSERT_STR_EQ(got, ref);
+    free(ref); free(got);
+}
+#endif
+
+/* The reduced basis is unique: F4 and Buchberger agree on every order, small
+ * (< 2^32: one-word accumulators) and 62-bit primes (two-word accumulators),
+ * zero- and positive-dimensional ideals, the unit ideal, inputs that are not
+ * interreduced (equal and divisible leading monomials). */
+static void test_f4_matches_buchberger(void) {
+#ifdef USE_FLINT
+    static const char* const sys[] = {
+        "{a + b + c + d, a b + b c + c d + d a, a b c + b c d + c d a + d a b, a b c d - 1}, {a, b, c, d}",
+        "{a + b + c + d + e, a b + b c + c d + d e + e a, a b c + b c d + c d e + d e a + e a b, "
+        "a b c d + b c d e + c d e a + d e a b + e a b c, a b c d e - 1}, {a, b, c, d, e}",
+        "{x + 2 y + 2 z - 1, x^2 + 2 y^2 + 2 z^2 - x, 2 x y + 2 y z - y}, {x, y, z}",
+        "{x^2 + y^2 + z^2 - 1, x - y z}, {x, y, z}",
+        "{x^5 + y^4 + z^3 - 1, x^3 + y^3 + z^2 - 1}, {x, y, z}",
+        "{x y - 1, x + y, x^2 - y^2 + 3}, {x, y}",
+        "{x^2 + x y, x^2 + x y + y, x y^2 - 1, x^2 y}, {x, y}",
+        "{3 x^2 y + 2 x y + y + 9 x^2 + 5 x - 3, 2 x^3 y - x y - y + 6 x^3 - 2 x^2 - 3 x + 3, "
+        "x^3 y + x^2 y + 3 x^3 + 2 x^2}, {x, y}",
+    };
+    static const char* const ord[] = {"Lexicographic", "DegreeLexicographic", "DegreeReverseLexicographic"};
+    static const char* const mod[] = {"32003", "2147483647", "4611686018427388039"};
+    char buf[4096];
+    for (size_t i = 0; i < sizeof sys / sizeof sys[0]; i++)
+        for (size_t o = 0; o < 3; o++)
+            for (size_t m = 0; m < 3; m++) {
+                snprintf(buf, sizeof buf, "GroebnerBasis[%s, MonomialOrder -> %s, Modulus -> %s]",
+                         sys[i], ord[o], mod[m]);
+                check_f4_matches_buchberger(buf);
+            }
+#endif
+}
+
+/* ------------------------------------------------------------------ */
 /* The modular shape-position Lex route (gb_flint.c, gf_lex_shape)    */
 /* ------------------------------------------------------------------ */
 
@@ -919,6 +974,7 @@ int main(void) {
     TEST(test_grevlex_handles_hard_lex_input);
     TEST(test_flint_engine_matches_classical);
     TEST(test_inexact_numeric_fglm_matches_exact);
+    TEST(test_f4_matches_buchberger);
     TEST(test_shape_route_random_systems);
     TEST(test_shape_route_unlucky_prime);
     TEST(test_shape_route_declines);
