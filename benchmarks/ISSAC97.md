@@ -240,3 +240,14 @@ Groebner engine (v0.6326-v0.6334): F4 mod p, certified multi-modular DRL/DegLex/
 Lex mod p by FGLM. Holdout 141 and ISSAC 131 all AHEAD (h6.8 27-36 vs 40 ms, h6.3 56 vs 260, P6 5 vs 23); benchmark
 122 families 39 of 40 ahead (cyclic-7 DRL 9.7 s vs 440 s, katsura-8 DRL 4.0 vs 23.2 s, katsura-7 Lex 6.9 vs 38.7 s);
 behind: dense 4 quadrics with 6-digit coefficients in DRL (19 vs 8 ms).
+
+## Run at v0.6334 (2026-11-07, fresh baseline for 132/142 as single runs)
+
+**ISSAC '97 (126-135):** 51 AHEAD, 2 SLOWER, 0 Mathilda wrong; 6 rows differ, all with
+the baseline wrong or timed out; 1 INCOMPLETE in both (P5 RootCount, B6). SLOWER: P1 m2
+power machine 0.615 vs 0.581 ms; P7 m2 numeric approach 13.7 vs 9.5 ms.
+
+**Holdout A (136-145):** 226 AHEAD / 2 SLOWER / 0 INCOMPLETE / 12 CHECK-FAIL, and in all 12
+Mathilda matches the true answer (the baseline is wrong): Mathilda is correct on all 240
+cases. SLOWER: h6.6 NSolve machine 49 vs 29 ms; h7.6 N 0.2 vs 0.1 ms.
+(v0.6225: 127 / 49 / 18 / 46, Mathilda wrong in 31.)
