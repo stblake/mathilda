@@ -27,6 +27,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <float.h>
 
 #include "expr.h"
 #include "eval.h"
@@ -35,6 +36,7 @@
 #include "solvepoly.h"   /* roots-of-unity form off inside FindInstance */
 #include "sym_names.h"
 #include "message.h"           /* mth_msg_suppress_push/pop: quiet internal probes */
+#include "numeric.h"           /* numeric_min_inexact_bits */
 #include "reduce_real_util.h"   /* rru_rational_between, rru_sign_of, rru_approx_double */
 
 /* ------------------------------------------------------------------ *
@@ -533,6 +535,41 @@ static bool fi_operand_defined(const Expr* operand, const Expr* pt) {
     return !bad;
 }
 
+/* Does Equal[L, R] hold at an APPROXIMATE point to the precision the point
+ * can certify?  Fixed-precision evaluation does not track the condition of
+ * the equation: at a 50-digit root of Tan[x] == x near x = 10^6, Tan' ~ 10^12
+ * turns the root's last-digit uncertainty into a residual of ~10^-38
+ * relative, which Equal -- comparing at the 50 digits both sides claim --
+ * rightly calls unequal. So an inexact witness is accepted when the two sides
+ * agree to half their precision (never less than machine precision, the
+ * tolerance this gate effectively applied before Equal honoured
+ * arbitrary-precision operands). Exact sides (an exact point) decline:
+ * Equal has already decided them. */
+static bool fi_approx_equal_at(const Expr* node, const Expr* pt) {
+    Expr* L = fi_replace(argn(node, 0), pt);
+    Expr* R = fi_replace(argn(node, 1), pt);
+    long bl = numeric_min_inexact_bits(L), br = numeric_min_inexact_bits(R);
+    long b = bl > 0 && (br <= 0 || bl <= br) ? bl : br;
+    bool ok = false;
+    if (b > 0) {
+        double digits = (double)b / 3.3219280948873626 / 2.0;
+        double mach = (double)DBL_MANT_DIG / 3.3219280948873626;
+        double full = (double)b / 3.3219280948873626;
+        if (digits < mach) digits = full < mach ? full : mach;
+        Expr* nl[2] = { L, expr_new_real(digits) };
+        Expr* nr[2] = { R, expr_new_real(digits) };
+        L = NULL; R = NULL;
+        Expr* eq[2] = { expr_new_function(expr_new_symbol(SYM_N), nl, 2),
+                        expr_new_function(expr_new_symbol(SYM_N), nr, 2) };
+        Expr* r = fi_eval_take(expr_new_function(expr_new_symbol(SYM_Equal), eq, 2));
+        ok = fi_is_sym(r, SYM_True);
+        expr_free(r);
+    }
+    if (L) expr_free(L);
+    if (R) expr_free(R);
+    return ok;
+}
+
 /* Three-valued, definedness-aware truth of a (possibly compound) statement at
  * the point: 1 = defined and true, 0 = defined and false, -1 = undefined or
  * undecided.  Mirrors the logical structure of fi_num_true but decides EXACTLY
@@ -575,6 +612,7 @@ static int fi_defined_truth(const Expr* node, const Expr* pt) {
             Expr* sub = fi_replace(node, pt);
             int r = fi_is_sym(sub, SYM_True) ? 1 : (fi_is_sym(sub, SYM_False) ? 0 : -1);
             expr_free(sub);
+            if (r != 1 && h == SYM_Equal && fi_approx_equal_at(node, pt)) r = 1;
             return r;
         }
     }
