@@ -552,12 +552,16 @@ Gives products of vectors, matrices, and tensors.
   `(a . b)^2`, `a . b + c`.
 - Gives an error message `Dot::dotsh` if the shapes of the inputs are not compatible.
 - **Arbitrary precision.** Vectors and matrices of MPFR numbers (one operand
-  all MPFR, the other MPFR or nonzero exact numbers) contract as fused dot
+  all MPFR, the other MPFR or exact numbers, zeros included) contract as fused dot
   products: each output element is one dot product of the operands' mantissas
   (FLINT's `arb_approx_dot`, else `mpfr_dot`), rounded once, with large
   products split over threads. The answer has the smaller operand precision,
   as `Times` / `Plus` give. A 256 x 256 matrix times a vector at 800 digits
   takes ~0.02 s (0.35 s through per-element `Times` / `Plus` in v0.6225).
+  An exact zero in the other operand is an MPFR zero at its partner's
+  precision (as `0 x` is), so `m . DiagonalMatrix[w]` of an MPFR `m` is the
+  fused path too: 64 x 64 at 20 digits 7 ms, was 1.4 s through `Times` /
+  `Plus`.
 - **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
   auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the
   `vector·vector` inner product to a scalar (`V_NDFN2`), real and complex.

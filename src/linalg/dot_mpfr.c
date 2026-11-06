@@ -13,11 +13,16 @@
  * products are split by rows over worker threads.
  *
  * Domain: both operands of rank 1 or 2 (rectangular Lists), at least one of
- * them entirely MPFR reals, the other MPFR reals or nonzero exact Integers /
+ * them entirely MPFR reals, the other MPFR reals or exact Integers /
  * Rationals.  So every product has an MPFR factor and every output element is
- * an MPFR number, exactly as the generic path would give.  Anything else -- a
- * machine Real (contagion to machine precision), a Complex, a symbol, an exact
- * zero (Times[0, x] is an exact 0) -- declines to the generic path.
+ * an MPFR number, exactly as the generic path would give.  An exact 0 is
+ * admitted: Times[0, x] of an MPFR x is an MPFR zero at x's precision, so it
+ * contributes nothing to the sum and imposes x's precision, which is what the
+ * fused sum with that leaf read as an MPFR zero does (a DiagonalMatrix or any
+ * other sparse exact operand: m . DiagonalMatrix[w] declined to n^3 symbolic
+ * Times / Plus before, 1.4 s at 64 x 64).  Anything else -- a machine Real
+ * (contagion to machine precision), a Complex, a symbol -- declines to the
+ * generic path.
  *
  * Precision follows the scalar arithmetic: Times and Plus of MPFR numbers
  * answer at the smaller operand precision (an exact factor imposes none), so
@@ -61,7 +66,7 @@ enum { DL_BAD = 0, DL_MPFR = 1, DL_EXACT = 2 };
 static int dotm_leaf(const Expr* e)
 {
     if (e->type == EXPR_MPFR) return DL_MPFR;
-    if (e->type == EXPR_INTEGER) return e->data.integer != 0 ? DL_EXACT : DL_BAD;
+    if (e->type == EXPR_INTEGER) return DL_EXACT;
     if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint) != 0 ? DL_EXACT : DL_BAD;
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
         e->data.function.head->type == EXPR_SYMBOL &&
