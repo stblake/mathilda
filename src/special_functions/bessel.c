@@ -402,6 +402,12 @@ static void bj_core(const ncpx* nu, const ncpx* z, ncpx* J, mpfr_prec_t P) {
     double arg = mpfr_get_d(am, BRND);
     mpfr_clear(rm); mpfr_clear(am);
 
+    /* a NaN argument has no value to compute */
+    if (isnan(rd) || isnan(arg)) {
+        mpfr_set_nan(J->re); mpfr_set_nan(J->im);
+        return;
+    }
+
     /* z == 0: J_0(0) = 1, J_nu(0) = 0 for Re(nu) > 0, else undefined. */
     if (rd == 0.0) {
         if (mpfr_zero_p(nu->re) && mpfr_zero_p(nu->im)) ncpx_set_ui(J, 1);
@@ -429,9 +435,11 @@ static void bj_core(const ncpx* nu, const ncpx* z, ncpx* J, mpfr_prec_t P) {
     } else {
         /* Power series. Guard absorbs the ~e^{|z|} (up to e^{2|z/2|})
          * partial-sum cancellation; capped against pathological arguments. */
-        long guard = 64 + (long)(2.0 * rd / M_LN2);
+        /* capped in double, before the conversion: a huge (or NaN) rd
+         * would overflow the cast to a negative precision */
+        double guard = 64.0 + 2.0 * rd / M_LN2;
+        if (!(guard <= 300000.0)) guard = 300000.0;
         mpfr_prec_t wp = P + (mpfr_prec_t)guard;
-        if (wp > P + 300000) wp = P + 300000;
         ncpx j; ncpx_init(&j, wp);
         bj_series(&j, nu, z, wp);
         ncpx_set(J, &j);
@@ -869,9 +877,11 @@ static void bk_core(const ncpx* nu, const ncpx* z, ncpx* K, mpfr_prec_t P,
 
     if (int_order) {
         /* Logarithmic series. Guard absorbs the ~e^{|z|} I_n cancellation. */
-        long guard = 64 + (long)(2.0 * rd / M_LN2);
+        /* capped in double, before the conversion: a huge (or NaN) rd
+         * would overflow the cast to a negative precision */
+        double guard = 64.0 + 2.0 * rd / M_LN2;
+        if (!(guard <= 300000.0)) guard = 300000.0;
         mpfr_prec_t wp = P + (mpfr_prec_t)guard;
-        if (wp > P + 300000) wp = P + 300000;
         ncpx k; ncpx_init(&k, wp);
         bk_logseries(an, z, &k, wp);
         ncpx_set(K, &k);
@@ -892,9 +902,10 @@ static void bk_core(const ncpx* nu, const ncpx* z, ncpx* K, mpfr_prec_t P,
         double smag2 = sa * sa * chb * chb + ca * ca * shb * shb;
         if (smag2 > 0.0 && smag2 < 1.0) sloss = -0.5 * log(smag2) / M_LN2;
     }
-    long guard = 64 + (long)(2.0 * rd / M_LN2) + (long)sloss;
+    /* capped in double, before the conversion (see bj_core) */
+    double guard = 64.0 + 2.0 * rd / M_LN2 + sloss;
+    if (!(guard <= 300000.0)) guard = 300000.0;
     mpfr_prec_t wp = P + (mpfr_prec_t)guard;
-    if (wp > P + 300000) wp = P + 300000;
     ncpx k; ncpx_init(&k, wp);
     bk_connection(nu, z, &k, wp);
     ncpx_set(K, &k);
@@ -1075,9 +1086,11 @@ static void bi_core(const ncpx* nu, const ncpx* z, ncpx* I, mpfr_prec_t P) {
     } else {
         /* Power series. Guard absorbs the ~e^{|z|} partial-sum cancellation
          * that can arise for complex z (real positive z does not cancel). */
-        long guard = 64 + (long)(2.0 * rd / M_LN2);
+        /* capped in double, before the conversion: a huge (or NaN) rd
+         * would overflow the cast to a negative precision */
+        double guard = 64.0 + 2.0 * rd / M_LN2;
+        if (!(guard <= 300000.0)) guard = 300000.0;
         mpfr_prec_t wp = P + (mpfr_prec_t)guard;
-        if (wp > P + 300000) wp = P + 300000;
         ncpx i; ncpx_init(&i, wp);
         bk_iseries(&i, nu, z, wp);    /* shared modified-Bessel I power series */
         ncpx_set(I, &i);
@@ -1439,9 +1452,11 @@ static void by_core(const ncpx* nu, const ncpx* z, ncpx* Y, mpfr_prec_t P,
 
     if (int_order) {
         /* Logarithmic series. Guard absorbs the ~e^{|z|} J_n cancellation. */
-        long guard = 64 + (long)(2.0 * rd / M_LN2);
+        /* capped in double, before the conversion: a huge (or NaN) rd
+         * would overflow the cast to a negative precision */
+        double guard = 64.0 + 2.0 * rd / M_LN2;
+        if (!(guard <= 300000.0)) guard = 300000.0;
         mpfr_prec_t wp = P + (mpfr_prec_t)guard;
-        if (wp > P + 300000) wp = P + 300000;
         ncpx y; ncpx_init(&y, wp);
         by_logseries(an, z, &y, wp);
         ncpx_set(Y, &y);
@@ -1462,9 +1477,10 @@ static void by_core(const ncpx* nu, const ncpx* z, ncpx* Y, mpfr_prec_t P,
         double smag2 = sa * sa * chb * chb + ca * ca * shb * shb;
         if (smag2 > 0.0 && smag2 < 1.0) sloss = -0.5 * log(smag2) / M_LN2;
     }
-    long guard = 64 + (long)(2.0 * rd / M_LN2) + (long)sloss;
+    /* capped in double, before the conversion (see bj_core) */
+    double guard = 64.0 + 2.0 * rd / M_LN2 + sloss;
+    if (!(guard <= 300000.0)) guard = 300000.0;
     mpfr_prec_t wp = P + (mpfr_prec_t)guard;
-    if (wp > P + 300000) wp = P + 300000;
     ncpx y; ncpx_init(&y, wp);
     by_connection(nu, z, &y, wp);
     ncpx_set(Y, &y);

@@ -88,10 +88,29 @@ static void test_nested_timeconstrained(void) {
 static void test_numerical_methods(void) {
     assert_eval_eq("{TimeConstrained[NSum[1/(m^2 + Sin[m]), {m, 1, Infinity}, WorkingPrecision -> 60], 0.1, ab], m}",
                    "{ab, m}", 0);
-    assert_eval_eq("{TimeConstrained[NIntegrate[Sin[x^2] Exp[-x/1000] BesselJ[3, x], {x, 0, Infinity}, WorkingPrecision -> 40], 0.2, ab], x}",
+    /* WorkingPrecision -> 400 keeps the integral well past the budget (at 40
+     * digits it now finishes in ~0.2 s, inside it). */
+    assert_eval_eq("{TimeConstrained[NIntegrate[Sin[x^2] Exp[-x/1000] BesselJ[3, x], {x, 0, Infinity}, WorkingPrecision -> 400], 0.2, ab], x}",
                    "{ab, x}", 0);
-    assert_eval_eq("xr = 3; {TimeConstrained[NIntegrate[Sin[xr^2] Exp[-xr/1000] BesselJ[3, xr], {xr, 0, Infinity}, WorkingPrecision -> 40], 0.2, ab], xr}",
+    assert_eval_eq("xr = 3; {TimeConstrained[NIntegrate[Sin[xr^2] Exp[-xr/1000] BesselJ[3, xr], {xr, 0, Infinity}, WorkingPrecision -> 400], 0.2, ab], xr}",
                    "{ab, 3}", 0);
+}
+
+/* A timeout that lands while MPFR recomputes a cached constant (pi, log 2,
+ * Euler's gamma) at a higher precision must not leave the cache poisoned:
+ * N[Pi, 30] was Indeterminate for the rest of the session after a timed-out
+ * N[Pi, 2000000], and a later Levin rule built its nodes from that NaN pi
+ * (BesselJ then aborted the kernel on a negative MPFR precision). */
+static void test_mpfr_constant_cache_after_timeout(void) {
+    assert_eval_eq("TimeConstrained[N[Pi, 2000000], 0.05, ab]", "ab", 0);
+    assert_eval_eq("N[Pi, 30]", "3.14159265358979323846264338328", 0);
+    assert_eval_eq("TimeConstrained[N[EulerGamma, 300000], 0.05, ab]", "ab", 0);
+    assert_eval_eq("N[EulerGamma, 30]", "0.577215664901532860606512090082", 0);
+    assert_eval_eq("TimeConstrained[N[Log[2], 3000000], 0.05, ab]", "ab", 0);
+    assert_eval_eq("N[Log[2], 30]", "0.693147180559945309417232121458", 0);
+    /* a NaN argument of the arbitrary-precision BesselJ is a NaN, not a crash */
+    assert_eval_eq("TimeConstrained[N[Pi, 2000000], 0.05, ab]", "ab", 0);
+    assert_eval_eq("Abs[N[BesselJ[3, Pi/7], 30] - 185968813646768863267810859058/10^32] < 10^-31", "True", 0);
 }
 
 /* Each N-function, driven slowly enough to time out (a body that is slow to
@@ -131,6 +150,7 @@ int main(void) {
     TEST(test_nested_timeconstrained);
     TEST(test_numerical_methods);
     TEST(test_numerical_methods_slow_body);
+    TEST(test_mpfr_constant_cache_after_timeout);
     printf("All tc_binding_unwind tests passed.\n");
     return 0;
 }

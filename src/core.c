@@ -5161,7 +5161,21 @@ static void tc_alloc_safepoint(void) {
     if (tc_timed_out && tc_on_main_thread()) TC_LONGJMP(tc_jmp_env);
 }
 
-/* GMP memory functions: the system allocator wrapped in the busy guard so an
+/* tc_alloc_safepoint_after_malloc_only: the deferred jump is taken after a
+ * fresh allocation, never after a realloc or a free. A jump out of an
+ * allocation hook returns to nobody, so the caller never stores what the hook
+ * did: after malloc the new block is merely leaked, but after realloc the
+ * object being resized still points at the block realloc just released, and
+ * after free the object being released still points at freed memory. For a
+ * temporary of the abandoned computation that is harmless; for an object that
+ * outlives it -- MPFR's per-thread constant caches, which mpfr_set_prec
+ * grows by realloc before recomputing in place -- it is a dangling pointer
+ * that the next use or release of the object dereferences (the free in
+ * tc_mpfr_state_reset trapped in libmalloc on exactly that). A computation
+ * that only reallocates is still stopped: by the evaluator's poll, the next
+ * malloc, or the asynchronous unwind after TC_ASYNC_GRACE_US.
+ *
+ * GMP memory functions: the system allocator wrapped in the busy guard so an
  * interrupting SIGPROF is deferred past libmalloc's critical section (see the
  * tc_gmp_alloc_busy comment above).  Match __gmp_default_allocate's contract:
  * GMP never passes a NULL pointer to realloc/free and requires allocate to
@@ -5181,7 +5195,7 @@ static void* tc_gmp_reallocate(void* ptr, size_t old_size, size_t new_size) {
     void* p = realloc(ptr, new_size);
     tc_gmp_alloc_busy = 0;
     if (!p && new_size) { fputs("Mathilda: GMP memory exhausted\n", stderr); abort(); }
-    tc_alloc_safepoint();
+    /* no safe point: see tc_alloc_safepoint_after_malloc_only */
     return p;
 }
 
@@ -5190,7 +5204,6 @@ static void tc_gmp_deallocate(void* ptr, size_t size) {
     tc_gmp_alloc_busy = 1;
     free(ptr);
     tc_gmp_alloc_busy = 0;
-    tc_alloc_safepoint();
 }
 
 #ifdef USE_FLINT
@@ -5227,7 +5240,7 @@ static void* tc_flint_reallocate(void* ptr, size_t size) {
     void* p = realloc(ptr, size);
     tc_gmp_alloc_busy = 0;
     if (!p && size) { fputs("Mathilda: FLINT memory exhausted\n", stderr); abort(); }
-    tc_alloc_safepoint();
+    /* no safe point: see tc_alloc_safepoint_after_malloc_only */
     return p;
 }
 
@@ -5235,7 +5248,6 @@ static void tc_flint_deallocate(void* ptr) {
     tc_gmp_alloc_busy = 1;
     free(ptr);
     tc_gmp_alloc_busy = 0;
-    tc_alloc_safepoint();
 }
 #endif
 
@@ -5342,8 +5354,41 @@ void tc_register_unwind_counter(int* counter) {
         tc_unwind_counters[tc_n_unwind_counters++] = counter;
 }
 
+/* MPFR state a jump out of the middle of an MPFR call leaves behind.
+ *
+ * (1) The constant caches. mpfr_const_pi / _log2 / _euler / _catalan keep one
+ *     cached value per thread; a request above the cached precision first
+ *     raises the cache's precision (mpfr_set_prec, which makes the value NaN)
+ *     and then recomputes it in place. A timeout that unwinds during that
+ *     recomputation -- at a GMP allocation safe point, or asynchronously --
+ *     leaves a cache that claims the higher precision and holds NaN, so every
+ *     later mpfr_const_pi at or below it returns NaN for the rest of the
+ *     session: a NaN Levin node after a timed-out NSum reached BesselJ as a
+ *     NaN argument, whose power-series guard (long)(2 rd / log 2) was then
+ *     LONG_MIN, and mpfr_init2 aborted the kernel on the negative precision.
+ *     Freeing the caches makes the next request recompute from scratch.
+ * (2) The exponent range. Most MPFR functions widen it on entry
+ *     (MPFR_SAVE_EXPO_MARK) and restore it on exit; an unwound call never
+ *     restores it, so the range is put back to the one in force before the
+ *     body ran. */
+#ifdef USE_MPFR
+static void tc_mpfr_state_reset(mpfr_exp_t emin, mpfr_exp_t emax) {
+    mpfr_free_cache();
+    mpfr_set_emin(emin);
+    mpfr_set_emax(emax);
+}
+#define TC_MPFR_STATE_SAVE() \
+    volatile mpfr_exp_t saved_emin = mpfr_get_emin(); \
+    volatile mpfr_exp_t saved_emax = mpfr_get_emax()
+#define TC_MPFR_STATE_RESET() tc_mpfr_state_reset(saved_emin, saved_emax)
+#else
+#define TC_MPFR_STATE_SAVE() do { } while (0)
+#define TC_MPFR_STATE_RESET() do { } while (0)
+#endif
+
 static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
     Expr* volatile result = NULL;
+    TC_MPFR_STATE_SAVE();
     /* Transient per-body state a timeout siglongjmp would otherwise abandon --
      * the async-jump-defer count (tc_async_deferred) and the message-suppression
      * depth -- captured before the body and restored after the jump, so a body's
@@ -5379,7 +5424,8 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
         tc_body_live = 0; \
         for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i]; \
         match_set_rule_head(saved_rule_head); \
-        flint_cert_binding_clear(); } while (0)
+        flint_cert_binding_clear(); \
+        TC_MPFR_STATE_RESET(); } while (0)
     /* setjmp may only be a whole controlling expression (C99 7.13.1.1), so the
      * two modes are two branches rather than one conditional call */
     if (savemask) {
