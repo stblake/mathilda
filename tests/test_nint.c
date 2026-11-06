@@ -851,6 +851,20 @@ static void test_rotated_halfline_wp(void) {
     ASSERT_CLOSE("NIntegrate[Sin[x] Cos[x/2]/x, {x, 0, Infinity}, WorkingPrecision -> 30]",
                  "Pi/2", 1e-24);
     ASSERT_CLOSE("NIntegrate[BesselJ[0, x] Cos[x/2], {x, 0, Infinity}]", "2/Sqrt[3]", 1e-7);
+/* Exact constants of the integrand numericalized once (ni_prenumericalize):
+ * a Cauchy coefficient whose weight (99/100 E^(I t))^-200 evaluates to the
+ * exact rational (100/99)^200 times E^(-200 I t), [z^200] 1/(1 - z) = 1 and
+ * [z^20] 1/(1 - z)^2 = 21; constants in sums and products of the variable;
+ * a constant under a holding head is left alone. */
+static void test_prenumericalized_constants_wp(void) {
+    ASSERT_REL("Re[NIntegrate[1/(1 - 99/100 Exp[I t]) (99/100 Exp[I t])^(-200), {t, 0, 2 Pi}, "
+               "Method -> \"Trapezoidal\", WorkingPrecision -> 40]]/(2 Pi)", "1", "10^-25");
+    ASSERT_REL("Re[NIntegrate[1/(1 - 1/2 Exp[I t])^2 (1/2 Exp[I t])^(-20), {t, 0, 2 Pi}, "
+               "WorkingPrecision -> 40]]/(2 Pi)", "21", "10^-25");
+    ASSERT_REL("NIntegrate[1/3 + Sqrt[2] x + Pi x^2, {x, 0, 1}, WorkingPrecision -> 40]",
+               "1/3 + Sqrt[2]/2 + Pi/3", "10^-30");
+    ASSERT_REL("NIntegrate[ReleaseHold[Hold[1/3] + x], {x, 0, 1}, WorkingPrecision -> 40]",
+               "1/3 + 1/2", "10^-30");
 }
 
 static void test_symbolic_swell(void) {
@@ -953,6 +967,7 @@ int main(void) {
     TEST(test_tiny_integrand_scale);
     TEST(test_rotated_halfline_wp);
     TEST(test_vertex_singularity);
+    TEST(test_prenumericalized_constants_wp);
 
     printf("All nint_tests passed.\n");
     return 0;

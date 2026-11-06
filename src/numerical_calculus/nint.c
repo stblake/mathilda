@@ -45,6 +45,7 @@
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
 #include "core.h"     /* leaf_count_internal */
+#include "common.h"   /* common_scan_inexact */
 #include "message.h"  /* mth_msg_suppress_push, mth_msg_fired_count */
 #include "eval.h"
 #include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
@@ -3451,8 +3452,94 @@ static Expr* ni_try_levin_nd(Expr* body, Expr** specs, size_t nspecs,
 }
 
 /* Route a single {x, xmin, xmax} integral by the kinds of its bounds. */
+#ifdef USE_MPFR
+/* True when `e` mentions the symbol `var` (head positions included). */
+static bool ni_mentions(const Expr* e, const char* var) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == var;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ni_mentions(e->data.function.head, var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ni_mentions(e->data.function.args[i], var)) return true;
+    return false;
+}
+
+/* The integrand with every exact numeric constant that is a factor of a
+ * product or a term of a sum depending on `var` replaced by its value at the
+ * working precision, once, instead of at every sample.  At a sample the
+ * other operand of such a Times or Plus is an MPFR number, so contagion
+ * would numericalize the constant at that same precision anyway; doing it
+ * per sample re-ran it every time.  (99/100 E^(I t))^-10000, a contour
+ * integral's Cauchy weight, evaluates to (100/99)^10000 E^(-10000 I t), and
+ * the 66000-bit rational cost 2 ms a sample -- a gcd to scan it and a long
+ * division to round it -- over the 32769 samples of a trapezoidal rule.
+ * Only numeric, non-atomic or Rational / big constants are replaced (a small
+ * integer coefficient is left as it is: exponents and arguments are never
+ * touched, since only Times and Plus operands are), and nothing under a
+ * holding head is entered.  Returns a new reference (the input itself when
+ * nothing changes). */
+static Expr* ni_prenumericalize(Expr* e, const char* var, NumericSpec spec) {
+    if (!e || e->type != EXPR_FUNCTION || !ni_mentions(e, var)) return expr_copy(e);
+    Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        uint32_t at = symtab_get_def(h->data.symbol.name)->attributes;
+        if (at & (ATTR_HOLDALL | ATTR_HOLDFIRST | ATTR_HOLDREST | ATTR_HOLDALLCOMPLETE))
+            return expr_copy(e);
+    }
+    bool arith = h->type == EXPR_SYMBOL &&
+                 (h->data.symbol.name == SYM_Times || h->data.symbol.name == SYM_Plus);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* x = e->data.function.args[i];
+        Expr* y = NULL;
+        if (arith && !ni_mentions(x, var) && x->type != EXPR_INTEGER &&
+            x->type != EXPR_REAL && x->type != EXPR_MPFR &&
+            expr_is_numeric_quantity(x)) {
+            CommonInexactInfo xi = common_scan_inexact(x);
+            if (!xi.has_inexact) {
+                y = numericalize(x, spec);
+                if (y && !(y->type == EXPR_MPFR || is_complex(y, NULL, NULL))) {
+                    expr_free(y);
+                    y = NULL;
+                }
+            }
+        }
+        if (!y) y = ni_prenumericalize(x, var, spec);
+        if (y != x) changed = true;
+        a[i] = y;
+    }
+    if (!changed) {
+        for (size_t i = 0; i < n; i++) expr_free(a[i]);
+        free(a);
+        return expr_copy(e);
+    }
+    Expr* out = expr_new_function(expr_copy(h), a, n);
+    free(a);
+    return out;
+}
+#endif
+
+static Expr* ni_dispatch_1d_impl(Expr* body, const char* var,
+                                 Expr* amin, Expr* amax, const NiOpts* o);
+
 static Expr* ni_dispatch_1d(Expr* body, const char* var,
                             Expr* amin, Expr* amax, const NiOpts* o) {
+#ifdef USE_MPFR
+    if (o->prec_mpfr && o->bits > 0) {
+        NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = o->bits;
+        Expr* pb = ni_prenumericalize(body, var, sp);
+        Expr* r = ni_dispatch_1d_impl(pb, var, amin, amax, o);
+        expr_free(pb);
+        return r;
+    }
+#endif
+    return ni_dispatch_1d_impl(body, var, amin, amax, o);
+}
+
+static Expr* ni_dispatch_1d_impl(Expr* body, const char* var,
+                                 Expr* amin, Expr* amax, const NiOpts* o) {
     NiBound lo, hi;
     ni_classify(amin, &lo);
     ni_classify(amax, &hi);
