@@ -614,7 +614,19 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   summand that is not analytic where the formula needs it.  An undamped phase
   with a non-decaying amplitude (`Sin[n]`) is left to the ordinary dispatch.
   This also catches alternating sums the numeric sign probe misses because the
-  first term is zero (`(-1)^n Log[n]/n`).
+  first term is zero (`(-1)^n Log[n]/n`).  **Bessel factors** `BesselJ[ν, c n + d]`,
+  `BesselY[ν, c n + d]` (`c > 0`) carry a hidden phase and are split the same way
+  through the scaled Hankel functions, `J = (e^(iz) S₁ + e^(−iz) S₂)/2`, with
+  `S₁,₂` evaluated on the rotated contour through `BesselK` (no `J + iY`
+  cancellation): `Σ_{n≥1} BesselJ[0, n] = 1/2`, `Σ BesselJ[1, n]/n = 3/4`.
+- **Dirichlet series** (part of `Automatic`, infinite iterator, unit step, lower
+  bound a positive integer) -- a summand `g(n)/n^s` with `g` an arithmetic
+  function (`DivisorSigma`, `EulerPhi`, `MoebiusMu`, `LiouvilleLambda`, and the
+  powers/`Abs` `Sum` knows) is not smooth in `n`, so no tail model applies; its
+  Dirichlet generating function (`Σ d(n)/n^s = ζ(s)²`, `Σ φ(n)/n^s = ζ(s−1)/ζ(s)`,
+  `Σ σ_a(n)/n^s = ζ(s)ζ(s−a)`, ...) is taken from `Sum` at the working precision,
+  less the head terms below the lower bound; the identity is used only where the
+  series converges absolutely (`Re s > σ_a`).
 - **`Automatic`** (default) -- probes the first terms, and (when the head is not
   already monotone) a geometric far-tail ladder that locates a late peak or
   sustained growth far beyond the head window.  Chooses `AlternatingSigns` for a
@@ -631,8 +643,12 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   detected by evaluating it at two non-integer index points and routed straight
   to partial-sum extrapolation, with the head-term count raised (to 100) so the
   irregular, slowly-converging prime-type tail (`Σ 1/Prime[n]^2 → 0.45225`) is
-  well seeded.  Per-sample messages from these internal trial evaluations are
-  muted throughout.
+  well seeded.  Because such partial sums carry an irregular arithmetic
+  remainder, the extrapolation's own last-step difference is not an error
+  estimate: the sum is extrapolated from two head lengths (N and 2N) and the
+  accuracy-goal test sees their difference, so an inaccurate result comes with a
+  truthful `NSum::accgl`.  Per-sample messages from these internal trial
+  evaluations are muted throughout.
 
 A **large finite** sum is evaluated as the difference of two infinite tails,
 `Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
@@ -821,8 +837,12 @@ A held `D[...]` has no value at a number, so its evaluated form is used.
 | finite real, endpoint singularity | tanh-sinh double-exponential |
 | arbitrary `WorkingPrecision` (> machine), finite real | at the target precision + guard bits (MPFR): a power-law endpoint is mapped away, a boundary layer is split into graded Clenshaw-Curtis pieces, an integrand analytic on the interval is taken by a bounded Clenshaw-Curtis probe (N <= 128, kept only when converged to every target digit), Levin collocation goes first only over at least 4 periods, a narrow peak, near-pole or endpoint scale feature takes the recentred double-exponential rule (below), else tanh-sinh |
 | machine precision, integrand leaves the double range in the bulk of the interval (e.g. `x^x^x` on `[1, 6]` reaches 2.7e36305; a Laurent polynomial on the unit circle whose powers give `Overflow[]`) | the machine pass is discarded and the integral re-run on the MPFR path at machine-equivalent precision (53 bits + guard); the result is a 53-bit Real, the representation machine arithmetic itself uses beyond 1.8e308.  A sample within 1e-10 of the span from an endpoint (an endpoint singularity) does not trigger this. |
+| arbitrary `WorkingPrecision`, finite real, removable endpoint singularity (e.g. `(E^x - 1 - x)/x^2` at 0) | a sample within `2^-20` of the span of an endpoint is re-evaluated with the abscissa widened by the bits its cancellation eats (checked by agreement at doubled extra precision); an endpoint found free of cancellation is not checked again |
+| arbitrary `WorkingPrecision`, finite real, interior non-analytic point (`Log[Abs[x^2 - 2]]`, `Abs[x - 1/3]`, `Sqrt[Abs[x^3 - 2]]`) | the real roots inside the range of every polynomial argument of `Log`, `Abs` and non-integer / negative powers become exact breakpoints (`Sqrt[2]`, `Root` objects) |
+| machine precision, integrand far below 1 in size | the default `AccuracyGoal` floor (`10^-MachinePrecision`) is taken relative to the integrand's scale (max `|f|` over seven interior points × range length) when that scale is below 1, so a 1e-54 integrand is integrated to its `PrecisionGoal` instead of stopping at the first panel; an explicit `AccuracyGoal` is absolute |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh; at `WorkingPrecision` a narrow or off-centre peak on `[a, oo)` takes the recentred double-exponential rule (below) |
-| semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx` | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros), at machine precision and at any `WorkingPrecision` — hundreds of digits in a few thousand samples; a power-law phase `A(x) Sin[c x^n]` reaches it through the phase variable `t = c x^n` |
+| `WorkingPrecision`, `[a, oo)`, a finite sum of linear-phase groups (several frequencies, `BesselJ`/`BesselY` factors: `BesselJ[0, x] Cos[x/2]`) | contour rotation: beyond a base point `X0` each group `A(x) e^(λx)` with `Im λ ≠ 0` is integrated on the ray `X0 + i sign(Im λ) t` (exponential decay, exp-sinh); `[a, X0]` is an ordinary finite integral.  Applied only when every amplitude is provably analytic in the swept quarter plane (sums, products, `BesselK` of a linear argument, powers/logs of constants or polynomials, `X0` right of every polynomial root) |
+| semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx`, `amp` itself non-oscillatory | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros), at machine precision and at any `WorkingPrecision` — hundreds of digits in a few thousand samples; a power-law phase `A(x) Sin[c x^n]` reaches it through the phase variable `t = c x^n` |
 | oscillatory (many periods / slow tail), general | integrate between zeros + Wynn epsilon (finite: half-period panels; MPFR-accelerated at high `WorkingPrecision`) |
 | doubly-infinite, non-decaying oscillation (e.g. `Exp[I x^2]`, `Cos[x^2]`) | split at 0, each half integrated between the zeros + Wynn epsilon (sinh-sinh fallback) |
 | oscillatory endpoint singularity (e.g. `Cos[Log[x]/x]/x` at 0) | exponential endpoint map `x = a + (b−a)e^{−t}` onto a half line, then integrate between the (accelerating) zeros + Wynn epsilon |
