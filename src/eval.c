@@ -316,10 +316,19 @@ static inline bool ground_head_name(const char* n) {
 static inline bool is_ground_now(const Expr* a) {
     switch (a->type) {
         case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+#ifdef USE_MPFR
+        /* An arbitrary-precision number is an atom like a machine one:
+         * evaluate_step returns it unchanged (eval_is_terminal_value).  Left
+         * out, a List of them was never GROUND, so every read of a stored
+         * MPFR matrix re-walked all of it: X2[[i, j]] over a 104 x 104
+         * 50-digit matrix cost 180 us a call, the whole of a 100 x 100
+         * Table[... X2[[i, j]] ...] 3.5 s. */
+        case EXPR_MPFR:
+#endif
             return true;
         case EXPR_FUNCTION:
             return eval_ground_valid(a);
-        default:            /* bare SYMBOL, NDARRAY, COMPILED, MPFR: conservative */
+        default:            /* bare SYMBOL, NDARRAY, COMPILED: conservative */
             return false;
     }
 }
@@ -519,6 +528,9 @@ static inline bool inert_bare_symbol(const SymbolDef* d) {
 static inline bool is_inert_now(Expr* a) {
     switch (a->type) {
         case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+#ifdef USE_MPFR
+        case EXPR_MPFR:     /* an atom, as for GROUND (is_ground_now) */
+#endif
             return true;
         case EXPR_SYMBOL: {
             /* A leaf's builtin never runs -- a bare symbol evaluates only
@@ -590,6 +602,9 @@ static bool stamp_list_literal_rec(Expr* e) {
         if (!a) { all = false; continue; }
         switch (a->type) {           /* atoms inline: no call per element */
             case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+#ifdef USE_MPFR
+            case EXPR_MPFR:
+#endif
                 break;
             case EXPR_FUNCTION:
                 if (!stamp_list_literal_rec(args[i])) all = false;
@@ -612,7 +627,11 @@ bool eval_node_reusable(const Expr* e) {
         return d && !d->own_values;
     }
     return e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT ||
-           e->type == EXPR_STRING;
+           e->type == EXPR_STRING
+#ifdef USE_MPFR
+           || e->type == EXPR_MPFR
+#endif
+           ;
 }
 
 void eval_mark_fixed_point(Expr* e) {

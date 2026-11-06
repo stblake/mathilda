@@ -612,7 +612,14 @@ static void test_ground_flag_on_constructors(void) {
         "<|\"a\" -> 1, \"b\" -> 2|>",/* Association            */
         "3/4",                        /* Rational               */
         "2 + 3 I",                    /* Complex                */
-        "{1, {2, 3}, <|\"k\" -> 4|>}" /* nested constructors    */
+        "{1, {2, 3}, <|\"k\" -> 4|>}", /* nested constructors   */
+#ifdef USE_MPFR
+        /* arbitrary-precision leaves are atoms too: a stored MPFR matrix
+         * must not be re-walked on every read */
+        "N[{{1, 2}, {3, 4}}, 40]",
+        "N[{1, Pi, 2 + I}, 30]",
+        "{0, N[Sqrt[2], 50]}",
+#endif
     };
     for (size_t i = 0; i < sizeof(ground_srcs)/sizeof(ground_srcs[0]); i++) {
         Expr* p = parse_expression(ground_srcs[i]);
