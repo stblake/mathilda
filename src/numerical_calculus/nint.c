@@ -43,6 +43,8 @@
 
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
+#include "core.h"     /* leaf_count_internal */
+#include "message.h"  /* mth_msg_suppress_push, mth_msg_fired_count */
 #include "eval.h"
 #include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
@@ -3339,6 +3341,77 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
     return out;
 }
 
+/* Symbolic processing must not make the integrand costlier to sample than the
+ * integrand as written.  Evaluating it with the variables unbound can expand
+ * a compact closed form into a huge one: LaguerreL[1000, r E^(I phi)] becomes
+ * its degree-1000 polynomial in E^(I phi), which costs a thousand terms per
+ * sample and, worse, cancels catastrophically (|L_1000| ~ 1e1018 against
+ * terms of 1e2500 at r = 3940), where the held form is evaluated pointwise by
+ * the stable three-term recurrence.  So when the evaluated integrand is many
+ * times larger than the held one, the held one is kept -- provided it has a
+ * numeric value with the variables bound to interior points of their ranges
+ * (it would not if, say, it were a held D[f[x], x], which only means something
+ * symbolically).  The probe is silent: its messages, if any, are muted and
+ * kept out of Check[]. */
+#define NI_SWELL_RATIO  16
+#define NI_SWELL_MIN    256
+static bool ni_symbolic_swell(Expr* held, Expr* evald) {
+    int64_t lh = leaf_count_internal(held, true);
+    int64_t le = leaf_count_internal(evald, true);
+    return le > NI_SWELL_MIN && le > NI_SWELL_RATIO * lh;
+}
+
+static bool ni_held_body_numeric(Expr* body, Expr** specs, size_t nspecs) {
+    if (nspecs == 0 || nspecs > 16) return false;
+    NiBind binds[16]; size_t nb = 0;
+    bool ok = true;
+    unsigned long fired = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    for (size_t i = 0; i < nspecs && ok; i++) {
+        Expr* sp = specs[i];
+        if (sp->type != EXPR_FUNCTION || sp->data.function.arg_count < 3 ||
+            sp->data.function.args[0]->type != EXPR_SYMBOL) { ok = false; break; }
+        Expr* lo = ni_num_endpoint(sp->data.function.args[1]);
+        Expr* hi = ni_num_endpoint(sp->data.function.args[2]);
+        NiBound bl, bh;
+        bl.kind = bh.kind = NI_B_BAD;
+        if (lo) ni_classify(lo, &bl);
+        if (hi) ni_classify(hi, &bh);
+        expr_free(lo); expr_free(hi);
+        /* an interior point: the golden section of a finite range, one unit
+         * inside a half line, near the origin on the whole line */
+        double _Complex pt;
+        bool lf = (bl.kind == NI_B_FIN || bl.kind == NI_B_CPLX);
+        bool hf = (bh.kind == NI_B_FIN || bh.kind == NI_B_CPLX);
+        if (lf && hf)                                   pt = bl.z + 0.3819660112501051 * (bh.z - bl.z);
+        else if (lf && bh.kind == NI_B_PINF)            pt = bl.z + 0.6180339887498949;
+        else if (hf && bl.kind == NI_B_NINF)            pt = bh.z - 0.6180339887498949;
+        else if (bl.kind == NI_B_NINF && bh.kind == NI_B_PINF) pt = 0.3819660112501051;
+        else { ok = false; break; }
+        ni_bind_snapshot(&binds[nb], sp->data.function.args[0]->data.symbol.name);
+        nb++;
+        ni_bind_set(&binds[nb - 1], ni_from_complex_d(pt));
+    }
+    if (ok) {
+        /* every variable is bound; the context binding only names one of them,
+         * so evaluate the body directly at the bound values */
+        eval_clock_bump();
+        arith_warnings_mute_push();
+        Expr* raw = eval_and_free(expr_copy(body));
+        arith_warnings_mute_pop();
+        Expr* num = raw ? numericalize(raw, numeric_machine_spec()) : NULL;
+        if (raw) expr_free(raw);
+        double _Complex v;
+        ok = num && (ni_to_complex(num, &v) || ni_beyond_double(num));
+        if (num) expr_free(num);
+    }
+    /* the binding frames are a stack: pop innermost first */
+    while (nb > 0) ni_bind_restore(&binds[--nb]);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired);
+    return ok;
+}
+
 Expr* builtin_nintegrate(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -3376,6 +3449,13 @@ Expr* builtin_nintegrate(Expr* res) {
         Expr* eb = evaluate(body);
         mth_block_leave(frame);
         for (size_t i = 0; i < nv; i++) expr_free(vars[i]);
+        /* an expansion that swells the integrand is not used when the held
+         * integrand samples numerically (ni_symbolic_swell) */
+        if (eb && ni_symbolic_swell(body, eb) &&
+            ni_held_body_numeric(body, res->data.function.args + 1, pos_end - 1)) {
+            expr_free(eb);
+            eb = NULL;
+        }
         if (eb && !expr_eq(eb, body)) {
             Expr** args = malloc(argc * sizeof(Expr*));
             args[0] = eb;

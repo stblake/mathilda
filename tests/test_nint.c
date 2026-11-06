@@ -775,6 +775,34 @@ static void test_narrow_features_wp(void) {
                "2 EllipticK[-4]/Pi", "10^-20");
 }
 
+static void test_symbolic_swell(void) {
+    /* Symbolic processing that swells the integrand is not used when the held
+     * integrand samples numerically.  Expanding LegendreP[200, x]^2 gives a
+     * degree-400 polynomial whose terms (~1e117) cancel to O(1): the
+     * expanded integrand returned garbage with NIntegrate::accgl.  Norms by
+     * orthogonality: int_{-1}^{1} P_n^2 = 2/(2n + 1). */
+    ASSERT_REL("NIntegrate[LegendreP[200, x]^2, {x, -1, 1}]", "2/401", "10^-10");
+    ASSERT_REL("NIntegrate[LegendreP[400, Cos[t]]^2 Sin[t], {t, 0, Pi}, WorkingPrecision -> 30]",
+               "2/801", "10^-20");
+    /* Argument principle for the zeros of L_n (all real and positive) inside
+     * |z| = r: (1/(2 Pi I)) oint L_n'/L_n dz, L_n' = -L_{n-1}^(1).  The count
+     * is checked against the real zeros located by NSolve. */
+    assert_eval_eq("Round[Im[NIntegrate[(-(LaguerreL[59, 1, 10 E^(I phi)]/LaguerreL[60, 10 E^(I phi)])) "
+                   "I 10 E^(I phi), {phi, 0, Pi, 2 Pi}, WorkingPrecision -> 30]]/(2 Pi)] == "
+                   "Count[x /. NSolve[LaguerreL[60, x] == 0, x, WorkingPrecision -> 60], r_ /; Re[r] < 10] == 15",
+                   "True", 0);
+    /* the held form is the same function: a held Expand / Sum samples to the
+     * value of the expanded integrand */
+    ASSERT_REL("NIntegrate[Expand[(1 + x)^40], {x, 0, 1}, WorkingPrecision -> 30]",
+               "(2^41 - 1)/41", "10^-25");
+    ASSERT_REL("NIntegrate[Sum[x^k/k!, {k, 0, 60}], {x, 0, 1}, WorkingPrecision -> 30]",
+               "Sum[1/(k + 1)!, {k, 0, 60}]", "10^-25");
+    ASSERT_REL("NIntegrate[Expand[(x + y)^30], {x, 0, 1}, {y, 0, 1}]", "(2^32 - 2)/(31 32)", "10^-10");
+    /* a held derivative has no numeric value at a number: the evaluated form
+     * is used, as before */
+    ASSERT_CLOSE("NIntegrate[D[Sin[x]^2 Cos[x]^30, x], {x, 0, 1}]", "N[Sin[1]^2 Cos[1]^30, 30]", 1e-15);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -816,6 +844,7 @@ int main(void) {
     TEST(test_contour_wp_compiled);
     TEST(test_fourier_and_smooth_wp);
     TEST(test_narrow_features_wp);
+    TEST(test_symbolic_swell);
 
     printf("All nint_tests passed.\n");
     return 0;
