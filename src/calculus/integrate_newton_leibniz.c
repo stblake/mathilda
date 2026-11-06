@@ -768,6 +768,63 @@ static bool nl_crosscheck_ok(Expr* f, Expr* x, Expr* a, Expr* b, Expr* V) {
     return fabs(vd - nd) <= 1e-3 * (1.0 + fabs(vd));
 }
 
+/* N[e] as a complex double (re, im); false unless it is a finite number. */
+static bool nl_complex_double(Expr* e, double* re, double* im) {
+    Expr* nv = eval_take(mk_fn1("Quiet", mk_fn1("N", expr_copy(e))));
+    if (!nv) return false;
+    Expr *pr = NULL, *pi = NULL;
+    bool ok;
+    if (is_complex(nv, &pr, &pi)) {
+        ok = nl_real_double(pr, re) && nl_real_double(pi, im);
+    } else {
+        *im = 0.0;
+        ok = nl_real_double(nv, re);
+    }
+    expr_free(nv);
+    return ok && isfinite(*re) && isfinite(*im);
+}
+
+/* True when the integrand itself takes non-real values inside (a, b): sampled
+ * at seven interior points of a finite real interval.  A polylogarithm past its
+ * branch point (PolyLog[2, x] for x > 1), a radical of a sign-changing radicand
+ * or a Log of a negative argument is complex there, so its definite integral is
+ * legitimately complex -- not the artifact of a branch crossing that a complex
+ * value of a REAL integrand is (step 4b'). */
+static bool nl_complex_valued_inside(Expr* f, Expr* x, Expr* a, Expr* b) {
+    double av, bv;
+    if (nl_numeric(a, &av) != 1 || nl_numeric(b, &bv) != 1) return false;
+    bool found = false;
+    arith_warnings_mute_push();
+    for (int i = 0; i < 7 && !found; i++) {
+        double xv = av + (bv - av) * ((double)i + 0.37) / 7.0;
+        Expr* sub = eval_take(mk_fn1("Quiet", mk_fn2("ReplaceAll", expr_copy(f),
+                                     mk_fn2("Rule", expr_copy(x), expr_new_real(xv)))));
+        double re, im;
+        if (sub && nl_complex_double(sub, &re, &im) && fabs(im) > 1e-9 * (1.0 + fabs(re)))
+            found = true;
+        if (sub) expr_free(sub);
+    }
+    arith_warnings_mute_pop();
+    return found;
+}
+
+/* The complex counterpart of nl_crosscheck_ok, for an integrand that is complex
+ * on part of (a, b): N[V] against NIntegrate as complex numbers. */
+static bool nl_crosscheck_complex_ok(Expr* f, Expr* x, Expr* a, Expr* b, Expr* V) {
+    double vr, vi, nr, ni_;
+    if (!nl_complex_double(V, &vr, &vi)) return false;
+    arith_warnings_mute_push();
+    Expr* spec = mk_fn3("List", expr_copy(x), expr_copy(a), expr_copy(b));
+    Expr* ni = eval_take(mk_fn1("Quiet", mk_fn2("NIntegrate", expr_copy(f), spec)));
+    arith_warnings_mute_pop();
+    bool ok = ni && nl_complex_double(ni, &nr, &ni_);
+    if (ni) expr_free(ni);
+    if (!ok) return false;
+    double mag = sqrt(vr * vr + vi * vi);
+    /* the real check's tolerance: a branch jump is O(Pi), quadrature noise far less */
+    return hypot(vr - nr, vi - ni_) <= 1e-3 * (1.0 + mag);
+}
+
 /* Evaluate `expr` with x := xv (a machine real), classifying like nl_numeric:
  * 0 = not a real number, 1 = finite real (in *out), 2/3 = +/-Infinity. */
 static int nl_eval_num_at(Expr* expr, Expr* x, double xv, double* out) {
@@ -1349,10 +1406,22 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * so the integral actually diverges (or needs a principal value).  Tested
      * NUMERICALLY (symbolic Im[.] cannot see the CosIntegral branch); emit idiv
      * and decline rather than return the complex artifact. */
+    bool f_complex = false;
     if (!contains_head(f, "Complex") && nl_numeric_is_complex(total)) {
-        integrate_emit_idiv(f, a, b);
-        expr_free(total);
-        return NULL;
+        /* ...unless the integrand is itself complex inside (a, b): then the
+         * value is complex legitimately, and is accepted only if it agrees with
+         * a complex NIntegrate (the branch convention of the antiderivative
+         * must match the integrand's on the whole interval). */
+        f_complex = nl_complex_valued_inside(f, x, a, b);
+        if (!f_complex) {
+            integrate_emit_idiv(f, a, b);
+            expr_free(total);
+            return NULL;
+        }
+        if (!nl_crosscheck_complex_ok(f, x, a, b, total)) {
+            expr_free(total);
+            return NULL;
+        }
     }
 
     /* 4b''. Real form.  A real integrand's value, telescoped from a complex-
@@ -1391,7 +1460,7 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * NIntegrate cross-check agrees when either the antiderivative is jump-risk
      * (branch/step form) or pole detection was incomplete (bounds must be
      * numeric or +/-Infinity); otherwise bail rather than risk a wrong number. */
-    if (F_triggers || force_validate) {
+    if ((F_triggers || force_validate) && !f_complex) {
         double av, bv;
         bool bounds_num = nl_numeric(a, &av) && nl_numeric(b, &bv);
         if (!bounds_num || !nl_crosscheck_ok(f, x, a, b, total)) {
