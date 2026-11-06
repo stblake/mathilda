@@ -584,9 +584,20 @@ void ncpx_cos(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
  * a non-finite result, which a compiled caller declines. */
 void ncpx_trig_ratio(ncpx* out, const ncpx* z, int which, mpfr_prec_t wp) {
     ncpx s, c;
-    ncpx_init(&s, wp + 8); ncpx_init(&c, wp + 8);
-    ncpx_sin(&s, z, wp + 8);
-    ncpx_cos(&c, z, wp + 8);
+    mpfr_prec_t gp = wp + 8;
+    ncpx_init(&s, gp); ncpx_init(&c, gp);
+    /* one sin_cos of Re z and one sinh_cosh of Im z serve both:
+     * sin z = sin a cosh b + i cos a sinh b, cos z = cos a cosh b - i sin a sinh b */
+    mpfr_t sa, ca, sh, ch;
+    mpfr_inits2(gp, sa, ca, sh, ch, (mpfr_ptr)0);
+    mpfr_sin_cos(sa, ca, z->re, NRND);
+    mpfr_sinh_cosh(sh, ch, z->im, NRND);
+    mpfr_mul(s.re, sa, ch, NRND);
+    mpfr_mul(s.im, ca, sh, NRND);
+    mpfr_mul(c.re, ca, ch, NRND);
+    mpfr_mul(c.im, sa, sh, NRND);
+    mpfr_neg(c.im, c.im, NRND);
+    mpfr_clears(sa, ca, sh, ch, (mpfr_ptr)0);
     switch (which) {
         case 0: ncpx_div(out, &s, &c, wp); break;
         case 2: { ncpx_set_ui(&s, 1); ncpx_div(out, &s, &c, wp); break; }
@@ -598,16 +609,38 @@ void ncpx_trig_ratio(ncpx* out, const ncpx* z, int which, mpfr_prec_t wp) {
 
 /* out = sqrt(z), principal branch (Re >= 0), via polar form. */
 void ncpx_sqrt(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
-    mpfr_t r, th, c, s;
-    mpfr_inits2(wp, r, th, c, s, (mpfr_ptr)0);
+    /* Algebraic form, no atan2 / sin_cos: with r = |z|, z = a + i b,
+     *   a >= 0:  u = sqrt((r + a)/2),  v = b/(2u);
+     *   a <  0:  w = sqrt((r - a)/2),  u = |b|/(2w),  v = sign(b) w,
+     * each branch free of cancellation (r + a and r - a add like signs).  The
+     * sign of b, a signed zero included, picks the side of the cut, as
+     * atan2(b, a)/2 did: sqrt(-4 - 0 i) = -2 i. */
+    mpfr_prec_t gp = wp + 4;
+    mpfr_t r, u, w;
+    mpfr_inits2(gp, r, u, w, (mpfr_ptr)0);
     mpfr_hypot(r, z->re, z->im, NRND);
-    mpfr_atan2(th, z->im, z->re, NRND);
-    mpfr_sqrt(r, r, NRND);
-    mpfr_div_2ui(th, th, 1, NRND);         /* arg/2, in (-pi/2, pi/2] */
-    mpfr_sin_cos(s, c, th, NRND);
-    mpfr_mul(out->re, r, c, NRND);
-    mpfr_mul(out->im, r, s, NRND);
-    mpfr_clears(r, th, c, s, (mpfr_ptr)0);
+    if (mpfr_zero_p(r)) {
+        mpfr_set_zero(out->re, 1); mpfr_set_zero(out->im, 1);
+    } else if (mpfr_sgn(z->re) >= 0) {
+        mpfr_add(u, r, z->re, NRND);
+        mpfr_div_2ui(u, u, 1, NRND);
+        mpfr_sqrt(u, u, NRND);
+        mpfr_div(w, z->im, u, NRND);
+        mpfr_div_2ui(w, w, 1, NRND);
+        mpfr_set(out->re, u, NRND);
+        mpfr_set(out->im, w, NRND);
+    } else {
+        mpfr_sub(w, r, z->re, NRND);
+        mpfr_div_2ui(w, w, 1, NRND);
+        mpfr_sqrt(w, w, NRND);
+        mpfr_abs(u, z->im, NRND);
+        mpfr_div(u, u, w, NRND);
+        mpfr_div_2ui(u, u, 1, NRND);
+        mpfr_set(out->re, u, NRND);
+        if (mpfr_signbit(z->im)) mpfr_neg(w, w, NRND);
+        mpfr_set(out->im, w, NRND);
+    }
+    mpfr_clears(r, u, w, (mpfr_ptr)0);
 }
 
 /* out = z^e (principal branch) for a real exponent e:

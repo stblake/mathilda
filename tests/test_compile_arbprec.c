@@ -112,6 +112,11 @@ int main(void) {
                "mpfr complex: Csc/Tan/Sec/Cot @ 40");
     check_true("(\"Compiled\" /. CompileDiagnostics[{{z, _Complex}}, Csc[z]^3 + Tan[z], "
                "WorkingPrecision -> 40]) === True", "diag: complex reciprocal trig lowers");
+    /* complex Sqrt (algebraic form): every quadrant, the principal branch */
+    run("cS = Compile[{{z, _Complex}}, Sqrt[z], WorkingPrecision -> 40]");
+    check_true("Abs[cS[N[3 - 4 I, 40]] - (2 - I)] < 10^-35 && Abs[cS[N[-3 + 4 I, 40]] - (1 + 2 I)] < 10^-35"
+               " && Abs[cS[N[-3 - 4 I, 40]] - (1 - 2 I)] < 10^-35 && Abs[cS[N[5/4 + 3 I, 40]] - (3/2 + I)] < 10^-35",
+               "mpfr complex: Sqrt in all quadrants @ 40");
     run("rT = Compile[{{x, _Real}}, Csc[x] + Sec[x] + Cot[x], WorkingPrecision -> 40]");
     run("x3 = N[6/5, 40]");
     check_true("Abs[rT[x3]/(Csc[x3] + Sec[x3] + Cot[x3]) - 1] < 10^-35", "mpfr real: Csc/Sec/Cot @ 40");
