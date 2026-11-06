@@ -48,7 +48,7 @@
 #include "dequad.h"
 #include "denint.h"
 #include "gkadapt.h"
-#include "sym_intern.h"   /* the scaled-Hankel placeholder heads */
+#include "nc_phase.h"    /* phase splitting, Bessel -> Hankel */
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -2333,94 +2333,9 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
  *  summand that is not analytic where the formula needs it.             *
  * ------------------------------------------------------------------ */
 
-static bool ns_free_of(const Expr* e, const char* var) {
-    if (!e) return true;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol.name != var;
-    if (e->type != EXPR_FUNCTION) return true;
-    if (!ns_free_of(e->data.function.head, var)) return false;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (!ns_free_of(e->data.function.args[i], var)) return false;
-    return true;
-}
-
 static bool ns_has_head(const Expr* e, const char* h) {
     return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == h;
-}
-
-/* A var-dependent phase anywhere in `e`: b^ex with b free of var and ex not,
- * or a circular function of var. */
-static bool ns_has_phase(const Expr* e, const char* var) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    if (ns_has_head(e, SYM_Power) && e->data.function.arg_count == 2
-        && ns_free_of(e->data.function.args[0], var)
-        && !ns_free_of(e->data.function.args[1], var))
-        return true;
-    if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol.name;
-        if ((h == SYM_Sin || h == SYM_Cos || h == SYM_Tan || h == SYM_Cot
-             || h == SYM_Sec || h == SYM_Csc) && !ns_free_of(e, var))
-            return true;
-        /* J_nu(z), Y_nu(z) of a real argument oscillate like e^(+-i z): a hidden
-         * linear phase when z is linear in the index (ns_bessel_to_hankel). */
-        if ((h == SYM_BesselJ || h == SYM_BesselY) && e->data.function.arg_count == 2
-            && !ns_free_of(e->data.function.args[1], var))
-            return true;
-    }
-    if (ns_has_phase(e->data.function.head, var)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (ns_has_phase(e->data.function.args[i], var)) return true;
-    return false;
-}
-
-/* Split one evaluated product term into F(var)·e^(lam·var), F phase-free.
- * Returns F (new) and sets *lam (new, exact), or NULL when the term's phase
- * is not linear in var or is not a top-level factor. */
-static Expr* ns_strip_phase(const Expr* term, const char* var, Expr** lam) {
-    Expr* const* fs;
-    Expr* one[1];
-    size_t n;
-    if (ns_has_head(term, SYM_Times)) {
-        fs = term->data.function.args; n = term->data.function.arg_count;
-    } else {
-        one[0] = (Expr*)term; fs = one; n = 1;
-    }
-    Expr** keep = malloc(sizeof(Expr*) * n);
-    if (!keep) return NULL;
-    size_t nk = 0;
-    Expr* L = expr_new_integer(0);
-    bool ok = true;
-    for (size_t i = 0; i < n && ok; i++) {
-        Expr* f = fs[i];
-        if (ns_has_head(f, SYM_Power) && f->data.function.arg_count == 2
-            && ns_free_of(f->data.function.args[0], var)
-            && !ns_free_of(f->data.function.args[1], var)) {
-            Expr* b = f->data.function.args[0];
-            Expr* ex = f->data.function.args[1];
-            Expr* c = eval_and_free(ns_mk2("D", expr_copy(ex), expr_new_symbol(var)));
-            if (!c || !ns_free_of(c, var)) { expr_free(c); ok = false; break; }
-            L = eval_and_free(ns_mk2("Plus", L,
-                                     ns_mk2("Times", c, ns_mk1("Log", expr_copy(b)))));
-            /* b^(c var + d) = b^d · e^(c Log[b] var) for the principal power. */
-            Expr* ex0 = eval_and_free(ns_mk2("ReplaceAll", expr_copy(ex),
-                                             ns_mk2("Rule", expr_new_symbol(var),
-                                                    expr_new_integer(0))));
-            keep[nk++] = ns_mk2("Power", expr_copy(b), ex0);
-        } else {
-            keep[nk++] = expr_copy(f);
-        }
-    }
-    if (!ok) {
-        for (size_t i = 0; i < nk; i++) expr_free(keep[i]);
-        free(keep); expr_free(L);
-        return NULL;
-    }
-    Expr* s = expr_new_function(expr_new_symbol(SYM_Times), keep, nk);
-    free(keep);
-    s = eval_and_free(s);
-    if (!s || ns_has_phase(s, var)) { expr_free(s); expr_free(L); return NULL; }
-    *lam = L;
-    return s;
 }
 
 typedef struct {
@@ -2660,139 +2575,6 @@ static void ns_phase_groups_free(NsPhaseGroup* G, int ng) {
     free(G);
 }
 
-/* Bessel functions as phase-carrying factors.
- *
- * J_nu(z) and Y_nu(z) of a real argument oscillate like cos, sin(z - phase):
- * Sum J_0(n) is Sin[n]/Sqrt[n]-like, but the phase is hidden inside the
- * function, so neither the symbolic split above nor any partial-sum model sees
- * it (the extrapolators returned 0.3348 for Sum_{n>=1} J_0(n) = 1/2).  The phase
- * is made explicit through the Hankel functions,
- *     J = (H1 + H2)/2,   Y = (H1 - H2)/(2 i),   H1,2(z) = e^(+-i z) S1,2(z),
- * where the scaled Hankel functions S1(z) = H1(z) e^(-i z) and S2(z) = H2(z) e^(i z)
- * are analytic and non-oscillatory for Re z > 0 (S ~ Sqrt[2/(Pi z)] e^(-+i(nu Pi/2
- * + Pi/4))).  With z = c n + d, c > 0, each half is a linear-phase group
- * e^(+-i c n) F(n), which the Abel-Plana rotation sums with exponentially
- * decaying kernels.  On the rotated contour z = c(n0 +- i y) + d the products
- * H1 e^(-i z) are evaluated without cancellation through the modified Bessel
- * function, H1_nu(w) = (2/Pi) i^(-nu-1) K_nu(-i w) and
- * H2_nu(w) = (2/Pi) i^(nu+1) K_nu(i w), valid for -Pi/2 < arg w <= Pi and
- * -Pi < arg w <= Pi/2 respectively -- the whole right half-plane.  (J + i Y
- * there would cancel e^(2 Im w) to leave e^(-Im w).)
- *
- * During the split the scaled functions are inert placeholder heads, so the
- * phase stripping sees only the explicit e^(+-i z) factors; they are expanded to
- * the K_nu form once the groups are formed. */
-static const char* ns_hs_head(int kind) {
-    static const char* h1 = NULL;
-    static const char* h2 = NULL;
-    if (!h1) { h1 = intern_symbol("NSum`HankelScaled1"); h2 = intern_symbol("NSum`HankelScaled2"); }
-    return kind == 1 ? h1 : h2;
-}
-
-/* Copy of e with every BesselJ/BesselY whose argument depends on var replaced
- * by its Hankel decomposition.  *bad is set when such a factor is not of the
- * supported form (order depending on var, argument not real-linear in var with
- * a positive slope, or not in the right half-plane from n_check on). */
-static Expr* ns_bessel_to_hankel(const Expr* e, const char* var, double n_check, bool* bad) {
-    if (*bad) return NULL;
-    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
-    const Expr* hd = e->data.function.head;
-    size_t n = e->data.function.arg_count;
-    if (hd->type == EXPR_SYMBOL
-        && (hd->data.symbol.name == SYM_BesselJ || hd->data.symbol.name == SYM_BesselY)
-        && n == 2 && !ns_free_of(e->data.function.args[1], var)) {
-        Expr* nu = e->data.function.args[0];
-        Expr* z = e->data.function.args[1];
-        double _Complex cd, zc;
-        if (!ns_free_of(nu, var)) { *bad = true; return NULL; }
-        Expr* c = eval_and_free(ns_mk2("D", expr_copy(z), expr_new_symbol(var)));
-        bool lin = c && ns_free_of(c, var) && ns_const_machine(expr_copy(c), &cd)
-                   && cimag(cd) == 0.0 && creal(cd) > 0.0;
-        expr_free(c);
-        if (lin) {
-            Expr* zn = ns_mk2("ReplaceAll", expr_copy(z),
-                              ns_mk2("Rule", expr_new_symbol(var), expr_new_real(n_check)));
-            lin = ns_const_machine(zn, &zc) && cimag(zc) == 0.0 && creal(zc) > 0.0;
-        }
-        if (!lin) { *bad = true; return NULL; }
-        bool is_y = (hd->data.symbol.name == SYM_BesselY);
-        Expr* iz = ns_mk2("Times", expr_new_symbol(SYM_I), expr_copy(z));
-        Expr* miz = ns_mk2("Times", expr_new_integer(-1), expr_copy(iz));
-        Expr* t1 = ns_mk2("Times", ns_mk2("Power", expr_new_symbol(SYM_E), iz),
-                          ns_mk2(ns_hs_head(1), expr_copy(nu), expr_copy(z)));
-        Expr* t2 = ns_mk2("Times", ns_mk2("Power", expr_new_symbol(SYM_E), miz),
-                          ns_mk2(ns_hs_head(2), expr_copy(nu), expr_copy(z)));
-        if (is_y) t2 = ns_mk2("Times", expr_new_integer(-1), t2);
-        /* J: 1/2 (t1 + t2);  Y: 1/(2 i) (t1 - t2) = -i/2 (t1 - t2) */
-        Expr* pref = is_y ? ns_mk2("Times", ns_mk2("Rational", expr_new_integer(-1), expr_new_integer(2)),
-                                   expr_new_symbol(SYM_I))
-                          : ns_mk2("Rational", expr_new_integer(1), expr_new_integer(2));
-        return ns_mk2("Times", pref, ns_mk2("Plus", t1, t2));
-    }
-    Expr* nh = ns_bessel_to_hankel(hd, var, n_check, bad);
-    Expr** v = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!v) { expr_free(nh); *bad = true; return NULL; }
-    for (size_t i = 0; i < n; i++) {
-        v[i] = ns_bessel_to_hankel(e->data.function.args[i], var, n_check, bad);
-        if (*bad) {
-            for (size_t j = 0; j < i; j++) expr_free(v[j]);
-            free(v); expr_free(nh);
-            return NULL;
-        }
-    }
-    Expr* out = expr_new_function(nh, v, n);
-    free(v);
-    return out;
-}
-
-/* Copy of e with the placeholder heads replaced by their modified-Bessel form:
- *   S1_nu(z) = (2/Pi) I^(-nu-1) K_nu(-I z) E^(-I z),
- *   S2_nu(z) = (2/Pi) I^(nu+1)  K_nu(I z)  E^(I z).
- * (A fresh tree: nodes are shared by reference count, never edited in place.) */
-static bool ns_has_hs(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    const Expr* hd = e->data.function.head;
-    if (hd->type == EXPR_SYMBOL
-        && (hd->data.symbol.name == ns_hs_head(1) || hd->data.symbol.name == ns_hs_head(2)))
-        return true;
-    if (ns_has_hs(hd)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (ns_has_hs(e->data.function.args[i])) return true;
-    return false;
-}
-
-static Expr* ns_hankel_expand(const Expr* e) {
-    if (!ns_has_hs(e)) return expr_copy((Expr*)e);
-    const Expr* hd = e->data.function.head;
-    size_t n = e->data.function.arg_count;
-    int kind = 0;
-    if (hd->type == EXPR_SYMBOL && n == 2)
-        kind = hd->data.symbol.name == ns_hs_head(1) ? 1
-             : hd->data.symbol.name == ns_hs_head(2) ? 2 : 0;
-    if (kind) {
-        const Expr* nu = e->data.function.args[0];
-        const Expr* z = e->data.function.args[1];
-        int sg = (kind == 1) ? -1 : 1;
-        Expr* isz = ns_mk2("Times", ns_mk2("Times", expr_new_integer(sg), expr_new_symbol(SYM_I)),
-                           expr_copy((Expr*)z));
-        Expr* ipow = ns_mk2("Power", expr_new_symbol(SYM_I),
-                            ns_mk2("Times", expr_new_integer(sg),
-                                   ns_mk2("Plus", expr_copy((Expr*)nu), expr_new_integer(1))));
-        return ns_mk2("Times",
-                      ns_mk2("Times", ns_mk2("Times", expr_new_integer(2),
-                                             ns_mk2("Power", expr_new_symbol(SYM_Pi),
-                                                    expr_new_integer(-1))), ipow),
-                      ns_mk2("Times", ns_mk2(SYM_BesselK, expr_copy((Expr*)nu), expr_copy(isz)),
-                             ns_mk2("Power", expr_new_symbol(SYM_E), isz)));
-    }
-    Expr** v = malloc(sizeof(Expr*) * (n ? n : 1));
-    if (!v) return expr_copy((Expr*)e);
-    for (size_t i = 0; i < n; i++) v[i] = ns_hankel_expand(e->data.function.args[i]);
-    Expr* out = expr_new_function(ns_hankel_expand(hd), v, n);
-    free(v);
-    return out;
-}
-
 /* Attempt the phase split for an infinite Automatic sum.  Returns the sum, or
  * NULL when the summand has no oscillatory linear phase (or cannot be split),
  * in which case the caller proceeds with the ordinary method dispatch. */
@@ -2801,11 +2583,11 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
     double dlo, ddi;
     if (!ns_to_double_real(imin, &dlo) || !ns_to_double_real(di, &ddi) || !(ddi > 0.0))
         return NULL;
-    if (!ns_has_phase(body, var) || ns_body_is_blackbox(body)) return NULL;
+    if (!nc_has_phase(body, var) || ns_body_is_blackbox(body)) return NULL;
 
     /* Bessel factors carry their phase implicitly: make it explicit first. */
     bool hk_bad = false;
-    Expr* hk = ns_bessel_to_hankel(body, var, dlo + 16.0 * ddi, &hk_bad);
+    Expr* hk = nc_bessel_to_hankel(body, var, dlo + 16.0 * ddi, &hk_bad);
     if (hk_bad) return NULL;
 
     NsBind bind; ns_bind_snapshot(&bind, var);
@@ -2821,7 +2603,7 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
         else { one[0] = ex; ts = one; nt = 1; }
         for (size_t i = 0; i < nt && ok; i++) {
             Expr* lam = NULL;
-            Expr* s = ns_strip_phase(ts[i], var, &lam);
+            Expr* s = nc_strip_phase(ts[i], var, &lam);
             double _Complex ld;
             if (!s || !ns_const_machine(expr_copy(lam), &ld)) {
                 expr_free(s); expr_free(lam); ok = false; break;
@@ -2848,9 +2630,9 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
         }
     }
     for (int j = 0; ok && j < ng; j++) {
-        if (ns_has_hs(G[j].smooth) || ns_has_hs(G[j].orig)) {
-            Expr* s2 = ns_hankel_expand(G[j].smooth);
-            Expr* o2 = ns_hankel_expand(G[j].orig);
+        if (nc_has_hankel(G[j].smooth) || nc_has_hankel(G[j].orig)) {
+            Expr* s2 = nc_hankel_expand(G[j].smooth);
+            Expr* o2 = nc_hankel_expand(G[j].orig);
             expr_free(G[j].smooth); expr_free(G[j].orig);
             G[j].smooth = s2; G[j].orig = o2;
         }
