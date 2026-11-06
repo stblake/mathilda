@@ -41,6 +41,14 @@ int srp_pow_trunc(Expr* const* a, size_t na, uint64_t e, size_t n, Expr** out);
 int srp_compose_series(Expr* const* k, size_t nk, Expr* const* u, size_t nu,
                        size_t n, Expr** out);
 
+/* out = a^(p/q) mod t^n for a rational exponent p/q (q >= 1), where a[0] == 1
+ * (returns 0 otherwise): the principal branch, (1 + u)^(p/q) with
+ * 1^(p/q) = 1.  A sparse a (the binomial (1 - 4 t)^(-1/2), a trinomial)
+ * runs J. C. P. Miller's recurrence in O(n * nnz) rational operations; a
+ * dense one goes through exp((p/q) log a), quasi-linear in FLINT. */
+int srp_pow_rational(Expr* const* a, size_t na, int64_t p, int64_t q, size_t n,
+                     Expr** out);
+
 /* a + b and a * b of two rational numbers, as fresh owned Exprs; NULL when
  * either is not a rational number. */
 Expr* srp_add2(const Expr* a, const Expr* b);

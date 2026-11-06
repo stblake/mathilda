@@ -147,6 +147,104 @@ int srp_compose_series(Expr* const* k, size_t nk, Expr* const* u, size_t nu,
     return ok;
 }
 
+int srp_pow_rational(Expr* const* a, size_t na, int64_t p, int64_t q, size_t n,
+                     Expr** out) {
+    if (na == 0 || q < 1 || !all_rational(a, na)) return 0;
+    fmpq_poly_t A;
+    fmpq_poly_init(A);
+    load(a, na, A);
+    fmpq_t a0;
+    fmpq_init(a0);
+    fmpq_poly_get_coeff_fmpq(a0, A, 0);
+    int ok = fmpq_is_one(a0);
+    fmpq_clear(a0);
+    if (!ok) { fmpq_poly_clear(A); return 0; }
+    if (n == 0) { fmpq_poly_clear(A); return 1; }
+    slong len = fmpq_poly_length(A);
+    if (len > (slong)n) { fmpq_poly_truncate(A, (slong)n); len = (slong)n; }
+    /* Nonzero coefficients of t^1 .. t^(len-1). */
+    slong nnz = 0;
+    for (slong k = 1; k < len; k++) {
+        fmpq_t c; fmpq_init(c);
+        fmpq_poly_get_coeff_fmpq(c, A, k);
+        if (!fmpq_is_zero(c)) nnz++;
+        fmpq_clear(c);
+    }
+    if (nnz == 0 || p == 0) {
+        out[0] = expr_new_integer(1);
+        for (size_t i = 1; i < n; i++) out[i] = expr_new_integer(0);
+        fmpq_poly_clear(A);
+        return 1;
+    }
+    if (nnz <= 16) {
+        /* g = f^alpha, f(0) = 1:  m g_m = sum_k (alpha k - (m - k)) f_k g_(m-k),
+         * i.e. g_m = sum_k (p k - q (m - k)) f_k g_(m-k) / (q m). */
+        slong* idx = flint_malloc(sizeof(slong) * (size_t)nnz);
+        fmpq* f = flint_malloc(sizeof(fmpq) * (size_t)nnz);
+        fmpq* g = flint_malloc(sizeof(fmpq) * n);
+        slong j = 0;
+        for (slong k = 1; k < len; k++) {
+            fmpq_t c; fmpq_init(c);
+            fmpq_poly_get_coeff_fmpq(c, A, k);
+            if (!fmpq_is_zero(c)) {
+                idx[j] = k;
+                fmpq_init(f + j);
+                fmpq_set(f + j, c);
+                j++;
+            }
+            fmpq_clear(c);
+        }
+        for (size_t m = 0; m < n; m++) fmpq_init(g + m);
+        fmpq_one(g + 0);
+        fmpq_t s, t;
+        fmpz_t w, v;
+        fmpq_init(s); fmpq_init(t); fmpz_init(w); fmpz_init(v);
+        for (slong m = 1; m < (slong)n; m++) {
+            fmpq_zero(s);
+            for (slong i = 0; i < nnz && idx[i] <= m; i++) {
+                slong k = idx[i];
+                if (fmpq_is_zero(g + (m - k))) continue;
+                /* w = p k - q (m - k), exact in fmpz (no int64 overflow). */
+                fmpz_set_si(w, p);
+                fmpz_mul_si(w, w, k);
+                fmpz_set_si(v, q);
+                fmpz_mul_si(v, v, m - k);
+                fmpz_sub(w, w, v);
+                if (fmpz_is_zero(w)) continue;
+                fmpq_mul(t, f + i, g + (m - k));
+                fmpq_mul_fmpz(t, t, w);
+                fmpq_add(s, s, t);
+            }
+            fmpz_set_si(w, q);
+            fmpz_mul_si(w, w, m);
+            fmpq_div_fmpz(g + m, s, w);
+        }
+        for (size_t m = 0; m < n; m++) {
+            out[m] = fb_fmpq_to_expr(g + m);
+            fmpq_clear(g + m);
+        }
+        for (slong i = 0; i < nnz; i++) fmpq_clear(f + i);
+        fmpq_clear(s); fmpq_clear(t); fmpz_clear(w); fmpz_clear(v);
+        flint_free(idx); flint_free(f); flint_free(g);
+        fmpq_poly_clear(A);
+        return 1;
+    }
+    /* Dense: exp(alpha log f), both exact over Q since f(0) = 1. */
+    fmpq_poly_t L, R;
+    fmpq_poly_init(L); fmpq_poly_init(R);
+    fmpq_poly_log_series(L, A, (slong)n);
+    fmpq_t al;
+    fmpq_init(al);
+    fmpq_set_si(al, p, (ulong)q);
+    fmpq_poly_scalar_mul_fmpq(L, L, al);
+    fmpq_clear(al);
+    fmpq_poly_exp_series(R, L, (slong)n);
+    store(R, n, out);
+    fmpq_poly_clear(L); fmpq_poly_clear(R);
+    fmpq_poly_clear(A);
+    return 1;
+}
+
 static Expr* binop(const Expr* a, const Expr* b, int mul) {
     if (!srp_is_rational(a) || !srp_is_rational(b)) return NULL;
     fmpq_t x, y;
@@ -177,6 +275,10 @@ int srp_pow_trunc(Expr* const* a, size_t na, uint64_t e, size_t n, Expr** out) {
 int srp_compose_series(Expr* const* k, size_t nk, Expr* const* u, size_t nu,
                        size_t n, Expr** out) {
     (void)k; (void)nk; (void)u; (void)nu; (void)n; (void)out; return 0;
+}
+int srp_pow_rational(Expr* const* a, size_t na, int64_t p, int64_t q, size_t n,
+                     Expr** out) {
+    (void)a; (void)na; (void)p; (void)q; (void)n; (void)out; return 0;
 }
 Expr* srp_add2(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* srp_mul2(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }

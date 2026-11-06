@@ -79,6 +79,31 @@ static void test_series_tan_coefficients_bernoulli(void) {
     assert_fullform("SeriesCoefficient[Tan[x], {x, 0, 400}]", "0");
 }
 
+/* (1 + u)^(p/q) with rational coefficients, in exact rationals: the sparse
+ * recurrence and the dense exp(alpha log) arm, plus a radical times a
+ * rational factor (which must not be merged over one denominator first).
+ * Expected values: the central binomial partial sums (integer arithmetic),
+ * and coefficients from an independent rational-arithmetic implementation
+ * of Miller's recurrence (numerator / denominator mod 10^9). */
+static void test_series_rational_power_exact(void) {
+    assert_fullform("SeriesCoefficient[1/(Sqrt[1 - 4 x] (1 - x)), {x, 0, 1500}] === "
+                    "Sum[Binomial[2 k, k], {k, 0, 1500}]", "True");
+    assert_fullform("Table[SeriesCoefficient[1/Sqrt[1 - 4 x], {x, 0, k}] === Binomial[2 k, k], "
+                    "{k, {0, 1, 7, 300}}]", "List[True, True, True, True]");
+    assert_fullform("With[{c = SeriesCoefficient[(1 - x - x^2)^(1/3), {x, 0, 300}]}, "
+                    "{Mod[Numerator[c], 10^9], Mod[Denominator[c], 10^9]}]",
+                    "List[482925610, 59631361]");
+    assert_fullform("With[{c = SeriesCoefficient[(1 + 2 x + 6 x^2)^(1/7), {x, 0, 40}]}, "
+                    "{Mod[Numerator[c], 10^9], Mod[Denominator[c], 10^9]}]",
+                    "List[468646400, 937784807]");
+    /* dense base (21 nonzero terms): the exp/log arm */
+    assert_fullform("SeriesCoefficient[Sum[x^k, {k, 0, 20}]^(-3/2), {x, 0, 100}]",
+                    "Rational[264015114549571162128944152778048417583245185209017385645, "
+                    "200867255532373784442745261542645325315275374222849104412672]");
+    assert_outputform("Series[(4 + x)^(1/2), {x, 0, 3}]", "2 + 1/4 x - 1/64 x^2 + 1/512 x^3 + O[x]^4");
+    assert_outputform("Series[(x + x^2)^(1/2), {x, 0, 3}]", "Sqrt[x] + 1/2 x^(3/2) - 1/8 x^(5/2) + O[x]^(7/2)");
+}
+
 /* 1. Taylor: Series[Exp[x], {x, 0, 10}] */
 static void test_series_taylor_exp(void) {
     setup_full();
@@ -2837,6 +2862,7 @@ int main(void) {
     TEST(test_series_stress_09);
     TEST(test_series_branch_phase);
     TEST(test_series_tan_coefficients_bernoulli);
+    TEST(test_series_rational_power_exact);
 
     printf("All series tests passed.\n");
     return 0;

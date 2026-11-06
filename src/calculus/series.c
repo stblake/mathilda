@@ -1112,6 +1112,37 @@ static SeriesObj* so_pow_1plus_alpha_monomial(SeriesObj* u, Expr* alpha) {
  * Returns a series whose exponents are multiples of u.nmin up to
  * u.order (in u.den), i.e. in the original common denominator. */
 static SeriesObj* so_pow_1plus_alpha(SeriesObj* u, Expr* alpha) {
+    /* Exact arm: a rational exponent and rational coefficients -- (1 + u)^(p/q)
+     * in FLINT rationals (Miller's recurrence, or exp(alpha log) when dense),
+     * with no evaluator call per coefficient.  The monomial path below spent
+     * ~4 simp() calls per coefficient on growing rationals (14 ms for
+     * (1 - 4 x)^(-1/2) to x^1500), the Horner path O(N) series products. */
+    {
+        int64_t p, q;
+        if (u->nmin >= 1 && u->order > 0 && is_rational(alpha, &p, &q) && q > 1) {
+            size_t L = (size_t)u->order;
+            Expr** f = malloc(sizeof(Expr*) * L);
+            bool ok = f != NULL;
+            for (size_t j = 0; ok && j < L; j++) {
+                int64_t i = (int64_t)j - u->nmin;
+                f[j] = j == 0 ? expr_new_integer(1)
+                     : (i >= 0 && (size_t)i < u->coef_count) ? expr_copy(u->coefs[i])
+                     : expr_new_integer(0);
+            }
+            SeriesObj* r = ok ? so_alloc(u->x, u->x0, 0, u->order, u->den) : NULL;
+            Expr** g = r && r->coef_count ? malloc(sizeof(Expr*) * r->coef_count) : NULL;
+            if (g && srp_pow_rational(f, L, p, q, r->coef_count, g)) {
+                for (size_t j = 0; j < r->coef_count; j++) so_set_coef(r, j, g[j]);
+                free(g);
+                for (size_t j = 0; j < L; j++) expr_free(f[j]);
+                free(f);
+                return r;
+            }
+            free(g);
+            if (r) so_free(r);
+            if (f) { for (size_t j = 0; j < L; j++) expr_free(f[j]); free(f); }
+        }
+    }
     /* Fast path: u is a monomial (0 or 1 non-zero coefficient). */
     {
         SeriesObj* fast = so_pow_1plus_alpha_monomial(u, alpha);
@@ -4393,6 +4424,20 @@ static bool is_rational_function_over_q(const Expr* e, const Expr* x) {
 }
 #endif
 
+/* True iff `e` contains Power[base, p/q] (q > 1) with base involving x. */
+static bool has_fractional_power_of_x(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (has_symbol_head(e, "Power") && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type != EXPR_INTEGER &&
+        !expr_free_of(e->data.function.args[0], x)) {
+        int64_t p, q;
+        if (is_rational(e->data.function.args[1], &p, &q) && q != 1) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_fractional_power_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 static Expr* try_apart_preprocess(Expr* f, Expr* x) {
     if (!has_negative_power_in(f, x)) return NULL;
 #ifdef USE_FLINT
@@ -4416,6 +4461,16 @@ static Expr* try_apart_preprocess(Expr* f, Expr* x) {
     Expr* result = eval_and_free(call);
     if (!result) return NULL;
     if (expr_eq(result, f)) { expr_free(result); return NULL; }
+    /* With a radical of x in f (Sqrt[1 - 4 x]), Apart reads it as one more
+     * coefficient and, finding nothing to split, can only merge the factors
+     * over one denominator: 1/(Sqrt[1 - 4 x] (1 - x)) came back as
+     * 1/(Sqrt[1 - 4 x] - x Sqrt[1 - 4 x]), whose dense series then had to be
+     * inverted -- 3/4 of SeriesCoefficient[..., {x, 0, 1500}].  Only a sum is
+     * a decomposition worth expanding instead of the input. */
+    if (has_fractional_power_of_x(f, x) && !has_symbol_head(result, "Plus")) {
+        expr_free(result);
+        return NULL;
+    }
     return result;
 }
 
