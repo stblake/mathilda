@@ -1938,6 +1938,43 @@ static bool def_has_undefined_function(const Expr* e, const Expr* x) {
  * Reduces innermost-first (the last spec is the inner integral) so an inner
  * bound may depend on an outer variable.  Returns NULL (unevaluated) if any
  * stage cannot be evaluated. */
+/* Definite stage: Log Gamma against a trigonometric polynomial of period 1
+ * over [0, 1] (src/internal/KummerLogGamma.m), by the moments of Kummer's
+ * Fourier series of Log Gamma: INT_0^1 LogGamma[x] Sin[2 Pi k x] dx =
+ * (EulerGamma + Log[2 Pi k])/(2 Pi k), the Cos moment 1/(4 k), Raabe's
+ * Log[2 Pi]/2 for the constant.  Loaded lazily; only the interval {x, 0, 1}
+ * and an integrand carrying LogGamma or Gamma reach the package.  $Failed
+ * or a surviving Integrate is a decline. */
+static unsigned klg_load_gen = 0;   /* symtab_generation() of the attempt */
+static bool klg_load_succeeded = false;
+
+static Expr* try_kummer_loggamma(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!(b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
+    if (!result_contains_head(f, "LogGamma") && !result_contains_head(f, "Gamma")) return NULL;
+    if (klg_load_gen != symtab_generation()) {
+        klg_load_gen = symtab_generation();
+        mth_msg_suppress_push();
+        klg_load_succeeded = mathilda_load_module("KummerLogGamma.m") != 0;
+        mth_msg_suppress_pop();
+        if (!klg_load_succeeded)
+            mth_message("Integrate`KummerLogGamma", "nofile",
+                "cannot locate src/internal/KummerLogGamma.m on disk.");
+    }
+    if (!klg_load_succeeded) return NULL;
+    mth_msg_suppress_push();
+    Expr* r = call_stage("KummerLogGamma`Run", f, x);
+    mth_msg_suppress_pop();
+    if (!r) return NULL;
+    if ((r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarFailed) ||
+        result_contains_head(r, "Integrate") ||
+        result_contains_head(r, "KummerLogGamma`Run")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 /* Definite stage: Meijer G convolution (src/internal/MeijerConvolution.m),
  * loaded lazily.  Half-line (0, Infinity) only; any atom result (the package's
  * $Failed) or a surviving Integrate is a decline. */
@@ -2303,6 +2340,11 @@ static Expr* integrate_definite(Expr* res) {
             /* Raabe's integral: Integrate[Log[Gamma[x]], {x, t, t+1}]. */
             if (!r && !has_undef && mech == METHOD_AUTOMATIC)
                 r = integrate_raabe_try(cur, x, a, b, assumptions);
+            /* Kummer's Fourier series: Log Gamma times a period-1
+             * trigonometric polynomial over [0, 1] (Raabe's LogGamma[x]
+             * spelling included). */
+            if (!r && !has_undef && mech == METHOD_AUTOMATIC)
+                r = try_kummer_loggamma(cur, x, a, b);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue does not own.  Under Automatic it runs

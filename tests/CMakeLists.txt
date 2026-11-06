@@ -5961,6 +5961,18 @@ else()
 endif()
 add_test(NAME integrate_meijerconv_tests COMMAND integrate_meijerconv_tests)
 
+# KummerLogGamma definite-integration stage (src/internal/KummerLogGamma.m):
+# LogGamma times a period-1 trigonometric polynomial over [0, 1].
+add_executable(integrate_kummer_tests test_integrate_kummer.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_kummer_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_kummer_tests gmp m ${ECM_LIB})
+    add_dependencies(integrate_kummer_tests build_ecm)
+else()
+    target_link_libraries(integrate_kummer_tests gmp m)
+endif()
+add_test(NAME integrate_kummer_tests COMMAND integrate_kummer_tests)
+
 # Elliptic definite-integration stage (src/calculus/integrate_elliptic.c):
 # R(x, Sqrt[P]) with P cubic/quartic via Carlson -> Legendre.
 add_executable(integrate_elliptic_tests test_integrate_elliptic.c $<TARGET_OBJECTS:mathilda_common>)

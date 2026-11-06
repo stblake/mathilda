@@ -2113,6 +2113,16 @@ monotonically down.
     - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
     - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
     - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
+  - Kummer's Fourier series (definite, `{x, 0, 1}`, Automatic only): `LogGamma[x]`
+    (or `Log[Gamma[x]]`, or the reflected `LogGamma[1 - x]`) times a trigonometric
+    polynomial of period 1 (`Sin`/`Cos` of integer multiples of `2 Pi x`, their
+    powers and products, constants), plus terms free of LogGamma, which go back
+    to Integrate (`src/internal/KummerLogGamma.m`).  The moments of
+    `LogGamma[x] = Log[2 Pi]/2 + Sum_n (Cos[2 Pi n x]/(2 n) + (EulerGamma + Log[2 Pi n]) Sin[2 Pi n x]/(Pi n))`
+    give the value exactly: `Integrate[LogGamma[x] Sin[2 Pi x], {x, 0, 1}]` is
+    `EulerGamma/(2 Pi) + Log[2 Pi]/(2 Pi)`, the `Cos[2 Pi k x]` moment `1/(4 k)`,
+    and `Integrate[LogGamma[x], {x, 0, 1}]` Raabe's `Log[2 Pi]/2`.  Any other
+    `x` dependence of the weight (a non-integer frequency, a polynomial) is a decline.
   - `"Roach"` (definite, any real interval, v0.6206; indefinite, v0.6223): Kelly Roach's Meijer G
     algorithm (*Meijer G Function Representations*, ISSAC '97 §5; *Solving
     Integrals with the Quantum Computer Algebra System*, 2008). Code in
