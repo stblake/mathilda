@@ -125,7 +125,15 @@ typedef struct { const char* label; const char* expr; double baseline_norm; } Be
  * throughput work. These three baselines were taken on the x86-64 host used for
  * that doc, not the M-series host of the rows above; the norm is machine-
  * normalised but not perfectly portable, so they may read a little lower on
- * M-series (extra gate slack, never a false fail). */
+ * M-series (extra gate slack, never a false fail).
+ *
+ * 2026-11-07  Every baseline x1.65: the calibration itself got 1.65x faster.
+ * Packing cannot touch it, but exact arithmetic can: v0.6319 made a canonical
+ * Rational a terminal value (no fixed-point re-evaluation), and Table[k/3, ...]
+ * is exactly a list of fresh Rationals (11.2 ms -> 6.8 ms, the same load, the
+ * workloads' absolute times unchanged or faster). Dividing by the faster unit
+ * raised every norm 1.65x, a gate 1.65x tighter than recorded; the factor
+ * restores the recorded absolute budgets. */
 static Bench BENCHES[] = {
     /* 8000 structurally DISTINCT undefined nodes hh[k, k] (k differs each row),
      * so no eval-clock cache hit or refcount DAG-sharing collapses them. No rule
@@ -133,46 +141,46 @@ static Bench BENCHES[] = {
      * apply_down_values miss + builtin-lookup miss. The cleanest dispatch signal
      * in the set. (A Nest[f[u,u]] tree would instead share args by refcount and
      * collapse to a ~13-node DAG -- not a dispatch test.) */
-    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.36 },
+    { "pure dispatch (8k distinct)", "Length[Table[hh[k, k], {k, 8000}]]", 0.59 },
 
     /* 4000 sequential DownValue rewrites g[k] -> k+1. Exercises
      * apply_down_values + get_attributes on the user symbol g every step. */
-    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.20 },
+    { "downvalue rewrite (Nest 4k)", "Nest[g, 0, 4000]", 0.33 },
 
     /* Listable threading of Cos over a 4000-element list: 4000 threaded
      * sub-evaluations, each dispatching Cos[k] (stays symbolic). */
-    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.12 },
+    { "listable thread (Cos 4k)", "Length[Cos[Range[4000]]]", 0.20 },
 
     /* Build a 1200-term Plus and let Orderless sort it: stresses eval_sort_args
      * + expr_compare in addition to per-term dispatch. */
-    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.27 },
+    { "orderless sort (Plus 1200)", "Length[Plus @@ Table[c[k] x, {k, 1200}]]", 0.45 },
 
     /* Pairwise fold of a 400-element list to a fixed point via ReplaceRepeated:
      * ~399 rewrites, each a full matcher + re-evaluation pass (O(n^2), so kept
      * small). Stresses the pattern matcher, not just dispatch. */
-    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 7.20 },
+    { "replacerepeated fold (400)", "First[Range[400] //. {a_, b_, r___} :> {a + b, r}]", 11.88 },
 
     /* 3000 sequential Plus re-evaluations (each Nest step re-evaluates the
      * running sum). Exercises Flat/Orderless combination on every pass. */
-    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 0.35 },
+    { "nested plus collapse (3k)", "Nest[# + a &, x, 3000] /. a -> 0", 0.58 },
 
     /* Naive fib[24]: exponential DownValue dispatch on a trivial body -- the
      * flagship per-call dispatch signal from MATHILDA_EVALUATOR_PERFORMANCE.md.
      * Definition installed in main(). */
-    { "naive recursion (fib 24)", "fib[24]", 13.5 },
+    { "naive recursion (fib 24)", "fib[24]", 22.27 },
 
     /* Case B (typed): the matcher per-attempt constant. Both engines walk the
      * identical search space, so the row isolates the evaluator constant behind
      * each guard evaluation (Length/Plus/Equal per attempt). */
     { "matcher constant (Case B)",
       "MatchQ[Range[500], {xx : Repeated[_Integer], yy : Repeated[_Integer], "
-      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 1.05 },
+      "zz : Repeated[_Integer]} /; 3 Length[{xx}] + 5 Length[{yy}] == Length[{zz}]]", 1.73 },
 
     /* Orderless canonicalisation of a 2000-term symbolic sum built via Apply --
      * the arithmetic sentinel this optimisation targeted (Table build + Apply +
      * Plus grouping). The 1200-term sibling above tracks the same shape; this
      * pins the doc's headline size. */
-    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.40 },
+    { "orderless sort (Plus 2000)", "Length[Plus @@ Table[c[k] x, {k, 2000}]]", 0.66 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 

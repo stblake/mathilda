@@ -107,52 +107,60 @@ typedef struct { const char* label; const char* expr; double baseline_norm; } Be
  *
  * Each row's SLOW path (the one this gate exists to catch) is noted, so that a
  * failure is self-diagnosing: if a row trips, the named opt-in is what to check
- * in src/pack.c's AWARE / INT64_OK lists. */
+ * in src/pack.c's AWARE / INT64_OK lists.
+ *
+ * 2026-11-07  Every baseline x1.72: the calibration (below) got 1.72x faster,
+ * not the workloads slower. Packing cannot touch a list of Rationals, but
+ * exact arithmetic can: v0.6319 made a canonical Rational a terminal value (no
+ * fixed-point re-evaluation), and Table[k/3, {k, 1200}] is exactly a list of
+ * fresh Rationals (0.96 ms -> 0.56 ms, the same load). Every row's absolute
+ * time was unchanged, yet 14 of 21 norms read 2.5-4x and the gate failed; the
+ * factor restores the recorded absolute budgets. */
 static Bench BENCHES[] = {
     /* ---- the structural family: native buffer walks in src/ndstruct.c ----
      * Slow path for all of these is ndstruct_delist_repack -- one Expr per
      * element, the generic List implementation, then a re-sniff and re-pack. */
-    { "RotateLeft matrix (200^2)",   "Length[RotateLeft[pm, {1, 0}]]",        0.0150 },
-    { "RotateLeft vector (10^5)",    "Length[RotateLeft[pv, 3]]",             0.0348 },
-    { "Reverse matrix (200^2)",      "Length[Reverse[pm]]",                   0.0089 },
-    { "Join two vectors (10^5)",     "Length[Join[pv, pv]]",                  0.0342 },
-    { "Partition (10^5, 2)",         "Length[Partition[pv, 2]]",              0.0177 },
-    { "Differences (10^5)",          "Length[Differences[pv]]",               0.4717 },
-    { "Riffle Real sep (10^5)",      "Length[Riffle[pv, 0.]]",                0.3850 },
-    { "PadRight Real fill (10^5)",   "Length[PadRight[pv, 100001, 0.]]",      0.0177 },
+    { "RotateLeft matrix (200^2)",   "Length[RotateLeft[pm, {1, 0}]]",        0.0258 },
+    { "RotateLeft vector (10^5)",    "Length[RotateLeft[pv, 3]]",             0.0599 },
+    { "Reverse matrix (200^2)",      "Length[Reverse[pm]]",                   0.0153 },
+    { "Join two vectors (10^5)",     "Length[Join[pv, pv]]",                  0.0588 },
+    { "Partition (10^5, 2)",         "Length[Partition[pv, 2]]",              0.0304 },
+    { "Differences (10^5)",          "Length[Differences[pv]]",               0.8113 },
+    { "Riffle Real sep (10^5)",      "Length[Riffle[pv, 0.]]",                0.6622 },
+    { "PadRight Real fill (10^5)",   "Length[PadRight[pv, 100001, 0.]]",      0.0304 },
 
     /* ---- the iteration family (Nest et al.) ----
      * Slow path: the gate materialises the state on EVERY iteration, so the cost
      * is O(iterations x elements) instead of O(elements). Was 118x. */
-    { "Nest over packed (20x)",      "Length[Nest[Reverse, pm, 20]]",         0.1593 },
-    { "FoldList over packed (10^4)", "Length[FoldList[Plus, 0., fv]]",        2.2774 },
+    { "Nest over packed (20x)",      "Length[Nest[Reverse, pm, 20]]",         0.2740 },
+    { "FoldList over packed (10^4)", "Length[FoldList[Plus, 0., fv]]",        3.9171 },
 
     /* ---- user DownValues that bind opaquely (dv_binds_opaquely, src/eval.c) --
      * Slow path: a user symbol has no packed_aware bit, so `jac[u_]` used to
      * materialise on every call. Was 158x on the composite stencil below. */
-    { "user f[v_] over packed",      "Length[usr[pv]]",                       0.0238 },
-    { "Jacobi stencil (200^2, 20)",  "Length[Nest[jac, pm, 20]]",             3.1153 },
+    { "user f[v_] over packed",      "Length[usr[pv]]",                       0.0409 },
+    { "Jacobi stencil (200^2, 20)",  "Length[Nest[jac, pm, 20]]",             5.3583 },
 
     /* ---- linear algebra (the 26 heads; ndla_* in src/linalg/ndlinalg.c) ----
      * Slow path is not merely slow: with the buffer materialised first,
      * linalg_call_has_ndarray reads false and a machine-real solve takes the
      * exact fraction-free path, which recurses. This row is a crash canary. */
-    { "LinearSolve (120^2)",         "Length[LinearSolve[sm, sv]]",           0.1041 },
-    { "Det (120^2)",                 "Head[Det[sm]]",                         0.1305 },
-    { "Inverse (120^2)",             "Length[Inverse[sm]]",                   0.3974 },
+    { "LinearSolve (120^2)",         "Length[LinearSolve[sm, sv]]",           0.1791 },
+    { "Det (120^2)",                 "Head[Det[sm]]",                         0.2245 },
+    { "Inverse (120^2)",             "Length[Inverse[sm]]",                   0.6835 },
 
     /* ---- reductions and order statistics already on the buffer ----
      * Regression guards for paths that are currently fast. */
-    { "Total (10^5)",                "Total[pv]",                             0.0231 },
-    { "Sort (10^5)",                 "Length[Sort[pv]]",                      1.7303 },
-    { "Accumulate (10^5)",           "Length[Accumulate[pv]]",                0.5034 },
+    { "Total (10^5)",                "Total[pv]",                             0.0397 },
+    { "Sort (10^5)",                 "Length[Sort[pv]]",                      2.9761 },
+    { "Accumulate (10^5)",           "Length[Accumulate[pv]]",                0.8658 },
 
     /* ---- exact int64 buffers ----
      * Slow path: any head not on INT64_OK materialises an integer buffer. The
      * answers must stay exact Integers either way, so only the timing tells. */
-    { "Total int64 (10^5)",          "Head[Total[iv]]",                       0.0225 },
-    { "RotateLeft int64 (10^5)",     "Length[RotateLeft[iv, 3]]",             0.0348 },
-    { "Differences int64 (10^5)",    "Length[Differences[iv]]",               0.0489 },
+    { "Total int64 (10^5)",          "Head[Total[iv]]",                       0.0387 },
+    { "RotateLeft int64 (10^5)",     "Length[RotateLeft[iv, 3]]",             0.0599 },
+    { "Differences int64 (10^5)",    "Length[Differences[iv]]",               0.0841 },
 };
 #define N_BENCH ((int)(sizeof(BENCHES) / sizeof(BENCHES[0])))
 
