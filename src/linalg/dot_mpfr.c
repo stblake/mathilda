@@ -28,7 +28,8 @@
  * answer at the smaller operand precision (an exact factor imposes none), so
  * output (r, s) gets min(min_k prec a_rk, min_k prec b_ks) over the MPFR
  * entries.  Cancellation in each sum is
- * reported to numeric_note_cancellation_bits, as a cancelling Plus would.
+ * reported to numeric_note_cancellation_bits (bits lost and bits kept), as a
+ * cancelling Plus would, so it takes part in N[expr, p]'s certification.
  *
  * Threads: mp_parallel_for (mp_parallel.c); the workers touch nothing but
  * MPFR / arb numbers (no Expr, no evaluator).
@@ -147,13 +148,14 @@ typedef struct {
     int64_t K, S;
     mpfr_t* C;          /* R x S, initialised by the caller at the right bits */
     long lost[MP_PAR_MAX];  /* worst cancellation per chunk */
+    long left[MP_PAR_MAX];  /* fewest bits a cancelling sum kept, per chunk */
 } DotmJob;
 
 /* Rows [lo, hi) of C. */
 static void dotm_rows(void* p, int64_t lo, int64_t hi, int chunk)
 {
     DotmJob* j = (DotmJob*)p;
-    long worst = 0;
+    long worst = 0, fewest = LONG_MAX;
 #ifdef USE_FLINT
     arb_ptr row = _arb_vec_init((slong)j->K);
     arb_t acc;
@@ -186,6 +188,10 @@ static void dotm_rows(void* p, int64_t lo, int64_t hi, int chunk)
             long l = mpfr_zero_p(out) ? (long)mpfr_get_prec(out)
                    : mpfr_regular_p(out) ? top - (long)mpfr_get_exp(out) : 0;
             if (l > worst) worst = l;
+            if (l > 0) {
+                long kept = mpfr_zero_p(out) ? 0 : (long)mpfr_get_prec(out) - l;
+                if (kept < fewest) fewest = kept;
+            }
         }
     }
 #ifdef USE_FLINT
@@ -193,6 +199,7 @@ static void dotm_rows(void* p, int64_t lo, int64_t hi, int chunk)
     _arb_vec_clear(row, (slong)j->K);
 #endif
     j->lost[chunk] = worst;
+    j->left[chunk] = fewest;
 }
 
 Expr* dot_mpfr(const Expr* a, const Expr* b)
@@ -286,9 +293,12 @@ Expr* dot_mpfr(const Expr* a, const Expr* b)
         double limbs = (double)maxbits / 64.0;
         int nc = mp_parallel_for(dotm_rows, &job, nrows,
                                  (double)nrows * (double)job.S * (double)K * limbs * limbs);
-        long worst = 0;
-        for (int i = 0; i < nc; i++) if (job.lost[i] > worst) worst = job.lost[i];
-        if (worst > 0) numeric_note_cancellation_bits(worst);
+        long worst = 0, fewest = LONG_MAX;
+        for (int i = 0; i < nc; i++) {
+            if (job.lost[i] > worst) worst = job.lost[i];
+            if (job.left[i] < fewest) fewest = job.left[i];
+        }
+        if (worst > 0) numeric_note_cancellation_bits(worst, fewest);
 #ifdef USE_FLINT
         _arb_vec_clear(fB, (slong)nb);
 #endif

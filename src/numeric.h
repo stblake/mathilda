@@ -188,9 +188,11 @@ long numeric_min_inexact_bits(const Expr* e);
  * builtins to take the arbitrary-precision numeric path when any operand
  * carries MPFR precision. */
 /* Record that an MPFR sum computed outside numeric_mpfr_add (a fused dot
- * product, say) lost `lost` leading bits to cancellation, so N[expr, p]'s
- * adaptive precision sees it as it sees a cancelling Plus. */
-void numeric_note_cancellation_bits(long lost);
+ * product, say) lost `lost` leading bits to cancellation and kept `left`
+ * (its result's precision less `lost`; 0 when it cancelled to an exact zero),
+ * so N[expr, p]'s adaptive precision sees it as it sees a cancelling Plus:
+ * `lost` sizes the next step, `left` must reach p to certify a pass. */
+void numeric_note_cancellation_bits(long lost, long left);
 Expr* numeric_mpfr_add (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_sub (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_mul (const Expr* a, const Expr* b, long default_bits);

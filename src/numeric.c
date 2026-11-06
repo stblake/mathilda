@@ -223,8 +223,12 @@ static void note_cancellation(const mpfr_t x, const mpfr_t y, const mpfr_t s) {
     }
 }
 
-void numeric_note_cancellation_bits(long lost) {
+void numeric_note_cancellation_bits(long lost, long left) {
     if (lost > g_numeric_cancel_bits) g_numeric_cancel_bits = lost;
+    if (lost > 0) {
+        if (left < 0) left = 0;
+        if (left < g_numeric_cancel_left) g_numeric_cancel_left = left;
+    }
 }
 
 static Expr* mpfr_binop(const Expr* a, const Expr* b, long default_bits,
