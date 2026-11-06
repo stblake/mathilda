@@ -124,6 +124,7 @@ argument/option handling, then absences, then bottlenecks.
 | W7 | machine complex powers past the double range give `Overflow[]` (`(1.0 + 2.0 I)^1000`) where machine reals switch to MPFR; NIntegrate now escalates around it (P4) | open |
 | W8 | the half-line Fourier probe rewrote the integrand in place (`Exp[-x^2]` -> `Power[E, -1, x^2]`): every WP integral over [0, oo) wrong (found via P2) | **fixed v0.6234** |
 | W9 | MPFR endpoints taken as doubles (`2 Pi` off by 2.4e-16); one-sided tail cut before a climbing side's bulk (`(1 + Cos[x])^2000` lost half) (found via P4) | **fixed v0.6235** |
+| W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | open (agent) |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | open |
 
 ### Argument and option handling
@@ -143,7 +144,7 @@ argument/option handling, then absences, then bottlenecks.
 ### Absences
 | # | deficiency | status |
 |---|---|---|
-| X1 | `Integrate` of polynomial × PolyLog[3, rational function of x], definite and indefinite (P8) | open |
+| X1 | `Integrate` of polynomial × PolyLog[3, rational function of x], definite and indefinite (P8) | **fixed v0.6237** (0.05-0.28 s per row; v0.6238 complex values, v0.6239 FunctionExpand) |
 | X2 | `Limit` of P7 (needs a series-based quotient limit with deep cancellation; the baseline also fails) | open |
 | X3 | `LUBackSubstitution` (P1 m3) | open |
 | X4 | `GaussianQuadratureWeights` (P9 m1, verbatim) | open |
