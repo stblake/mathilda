@@ -77,10 +77,14 @@ static int in_ranges(uintptr_t pc) {
 #ifdef TC_UNWIND_MACOS
 /* The libsystem images an unwind must not leave: the allocator, the
  * platform layer it calls into (memmove, os_unfair_lock), libc (stdio), and
- * pthread (mutexes). */
+ * pthread (mutexes) -- and, in a sanitizer build, the sanitizer runtime,
+ * whose malloc replaces the system one and holds its own locks (a jump out
+ * of ASan's allocator left its stack-depot lock taken, and the next
+ * allocation spun forever). */
 static const char* const k_images[] = {
     "/libsystem_malloc.dylib", "/libsystem_platform.dylib",
-    "/libsystem_c.dylib", "/libsystem_pthread.dylib"
+    "/libsystem_c.dylib", "/libsystem_pthread.dylib",
+    "/libasan.", "/libubsan.", "/libclang_rt.asan_", "/libclang_rt.ubsan_"
 };
 
 static void find_ranges(void) {
