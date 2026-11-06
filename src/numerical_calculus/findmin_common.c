@@ -1223,9 +1223,13 @@ bool fm_symbol_is_free(Expr* s) {
 bool fm_is_var_atom(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) return true;
+    /* An indexed accessor v[k] -- but never a numeric quantity: the held
+     * spec {p, -1/10, 1/10} carries Times[-1, Power[10, -1]] and
+     * Power[10, -1], which are starting values, not two more variables. */
     return e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name != SYM_List;
+        && e->data.function.head->data.symbol.name != SYM_List
+        && !expr_is_numeric_quantity(e);
 }
 
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
