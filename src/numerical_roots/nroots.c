@@ -164,12 +164,35 @@ static bool nr_expr_to_ncpx(Expr* e, ncpx* out) {
     return false;
 }
 
-/* Exact rational coefficient -> numerator / denominator (false if inexact or
- * not a rational number). */
+/* A real coefficient -> numerator / denominator, exactly: integers and
+ * rationals as they are, and a machine or MPFR real as the dyadic rational it
+ * is (a binary float is m 2^e exactly).  Taking a real coefficient at its
+ * exact value lets the adaptive engine find the roots of the polynomial as
+ * given, to the requested precision; at a fixed working precision a
+ * cancelling expansion (N[LaguerreL[200, x]]) never converged.  false for a
+ * non-real or non-numeric coefficient (and a non-finite real). */
 static bool nr_exact_rational(Expr* e, mpz_t num, mpz_t den) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { mpz_set_si(num, (long)e->data.integer); mpz_set_ui(den, 1); return true; }
-    if (e->type == EXPR_BIGINT)  { mpz_set(num, e->data.bigint); mpz_set_ui(den, 1); return true; }
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        expr_to_mpz(e, num); mpz_set_ui(den, 1); return true;
+    }
+    if (e->type == EXPR_REAL) {
+        if (!isfinite(e->data.real)) return false;
+        mpq_t q; mpq_init(q);
+        mpq_set_d(q, e->data.real);
+        mpz_set(num, mpq_numref(q)); mpz_set(den, mpq_denref(q));
+        mpq_clear(q);
+        return true;
+    }
+    if (e->type == EXPR_MPFR) {
+        if (!mpfr_number_p(e->data.mpfr)) return false;
+        if (mpfr_zero_p(e->data.mpfr)) { mpz_set_ui(num, 0); mpz_set_ui(den, 1); return true; }
+        mpfr_exp_t ex = mpfr_get_z_2exp(num, e->data.mpfr);   /* value = num 2^ex */
+        mpz_set_ui(den, 1);
+        if (ex >= 0) mpz_mul_2exp(num, num, (mp_bitcnt_t)ex);
+        else         mpz_mul_2exp(den, den, (mp_bitcnt_t)(-ex));
+        return true;
+    }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational
         && e->data.function.arg_count == 2) {
@@ -182,8 +205,9 @@ static bool nr_exact_rational(Expr* e, mpz_t num, mpz_t den) {
     return false;
 }
 
-/* The polynomial sum c_k x^k with exact rational coefficients, scaled by the
- * lcm of the denominators to an integer polynomial with the same roots; NULL when any coefficient is not an exact rational. */
+/* The polynomial sum c_k x^k with exact rational (or exactly converted real)
+ * coefficients, scaled by the lcm of the denominators to an integer
+ * polynomial with the same roots; NULL when a coefficient is not real. */
 static ZUPoly* nr_coeffs_to_zupoly(Expr** coeffs, int d) {
     mpz_t* num = (mpz_t*)malloc(sizeof(mpz_t) * (size_t)(d + 1));
     mpz_t den, L;
