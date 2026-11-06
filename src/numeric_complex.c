@@ -578,6 +578,24 @@ void ncpx_cos(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
     mpfr_clears(sa, ca, sh, ch, (mpfr_ptr)0);
 }
 
+/* out = tan, csc, sec or cot of z (which = 0, 1, 2, 3) as a quotient of the
+ * componentwise-accurate sin and cos above (8 guard bits): tan = sin/cos,
+ * csc = 1/sin, sec = 1/cos, cot = cos/sin.  A pole gives a zero divisor, hence
+ * a non-finite result, which a compiled caller declines. */
+void ncpx_trig_ratio(ncpx* out, const ncpx* z, int which, mpfr_prec_t wp) {
+    ncpx s, c;
+    ncpx_init(&s, wp + 8); ncpx_init(&c, wp + 8);
+    ncpx_sin(&s, z, wp + 8);
+    ncpx_cos(&c, z, wp + 8);
+    switch (which) {
+        case 0: ncpx_div(out, &s, &c, wp); break;
+        case 2: { ncpx_set_ui(&s, 1); ncpx_div(out, &s, &c, wp); break; }
+        case 3: ncpx_div(out, &c, &s, wp); break;
+        default: { ncpx_set_ui(&c, 1); ncpx_div(out, &c, &s, wp); break; }
+    }
+    ncpx_clear(&s); ncpx_clear(&c);
+}
+
 /* out = sqrt(z), principal branch (Re >= 0), via polar form. */
 void ncpx_sqrt(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
     mpfr_t r, th, c, s;
@@ -608,28 +626,53 @@ void ncpx_pow_d(ncpx* out, const ncpx* z, double e, mpfr_prec_t wp) {
     mpfr_clears(r, th, c, s, ex, (mpfr_ptr)0);
 }
 
-/* out = z^k for an integer k, by binary powering (a division for k < 0):
- * only multiplications, so no atan2 / pow / sin_cos per call, and exact for
- * a Gaussian-integer z within the precision.  The squarings carry
- * 2 bitlength(|k|) guard bits for their accumulated rounding. */
-void ncpx_pow_si(ncpx* out, const ncpx* z, long k, mpfr_prec_t wp) {
-    unsigned long m = k < 0 ? 0UL - (unsigned long)k : (unsigned long)k;
-    mpfr_prec_t g = 0;
-    for (unsigned long t = m; t; t >>= 1) g += 2;
+/* d = a * b on caller-owned scratch t[4] (no allocation per product); d may
+ * alias a or b. */
+static void ncpx_mul_scr(ncpx* d, const ncpx* a, const ncpx* b, mpfr_t* t) {
+    mpfr_mul(t[0], a->re, b->re, NRND);
+    mpfr_mul(t[1], a->im, b->im, NRND);
+    mpfr_mul(t[2], a->re, b->im, NRND);
+    mpfr_mul(t[3], a->im, b->re, NRND);
+    mpfr_sub(d->re, t[0], t[1], NRND);
+    mpfr_add(d->im, t[2], t[3], NRND);
+}
+
+/* out = z^n for an integer n, by binary powering: about 2 log2|n| complex
+ * products instead of the polar form's hypot, atan2, pow and sin_cos -- the
+ * dominant cost of a compiled polynomial factor (x + 2)^1500 sampled on a
+ * contour at hundreds of digits.  It is also the more accurate route: the
+ * polar angle n arg z carries n times the angle's rounding error, the products
+ * only O(log n) roundings, which the guard bits below absorb.  n < 0 inverts
+ * once at the end; 0^n for n < 0 is a division by zero (non-finite, so a
+ * compiled caller falls back), and z^0 = 1. */
+void ncpx_pow_si(ncpx* out, const ncpx* z, long n, mpfr_prec_t wp) {
+    unsigned long m = (n < 0) ? 0UL - (unsigned long)n : (unsigned long)n;
+    mpfr_prec_t gp = wp + 8;
+    for (unsigned long k = m; k; k >>= 1) gp++;
     ncpx b, r;
-    ncpx_init(&b, wp + g); ncpx_init(&r, wp + g);
+    mpfr_t t[4];
+    ncpx_init(&b, gp); ncpx_init(&r, gp);
+    for (int i = 0; i < 4; i++) mpfr_init2(t[i], gp);
     ncpx_set(&b, z);
-    ncpx_set_ui(&r, 1);
-    for (unsigned long t = m; t; t >>= 1) {
-        if (t & 1UL) ncpx_mul(&r, &r, &b, wp + g);
-        if (t > 1UL) ncpx_mul(&b, &b, &b, wp + g);
+    mpfr_set_ui(r.re, 1, NRND); mpfr_set_ui(r.im, 0, NRND);
+    bool first = true;
+    for (; m; m >>= 1) {
+        if (m & 1UL) {
+            if (first) { ncpx_set(&r, &b); first = false; }
+            else ncpx_mul_scr(&r, &r, &b, t);
+        }
+        if (m > 1UL) ncpx_mul_scr(&b, &b, &b, t);
     }
-    if (k < 0) {
-        ncpx_set_ui(&b, 1);
-        ncpx_div(&r, &b, &r, wp + g);
+    if (n < 0) {
+        ncpx one;
+        ncpx_init(&one, gp);
+        mpfr_set_ui(one.re, 1, NRND); mpfr_set_ui(one.im, 0, NRND);
+        ncpx_div(&r, &one, &r, gp);
+        ncpx_clear(&one);
     }
     mpfr_set(out->re, r.re, NRND);
     mpfr_set(out->im, r.im, NRND);
+    for (int i = 0; i < 4; i++) mpfr_clear(t[i]);
     ncpx_clear(&b); ncpx_clear(&r);
 }
 

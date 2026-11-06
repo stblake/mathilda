@@ -672,6 +672,31 @@ static void test_phase_substitution(void) {
                "Cos[2]/2 - Pi/2 + SinIntegral[2]", "10^-19");
 }
 
+/* ---- Cauchy contour integrals at WorkingPrecision (compiled complex MPFR) ----
+ * The trapezoidal rule on N points of a trig polynomial is exact once N exceeds
+ * its band, so each is a coefficient to all digits.  The bodies exercise the
+ * compiled complex-MPFR integer power (binary powering), a bignum Rational
+ * coefficient ((99/100)^k), and Tan / Csc of a complex argument.  Expected
+ * values: exact integer / rational arithmetic in Python (sum C(n,j)
+ * C(n-j,n-2j); the series of tan from t' = 1 + t^2; [t^20] (1 - t^2)^(-1/2) =
+ * C(20,10)/2^20 for the residue of Csc^21 at 0). */
+#define NI_CW "cw[f_, k_, r_, wp_] := Re[NIntegrate[Evaluate[(f /. x -> r E^(I t)) E^(-I k t)], " \
+              "{t, 0, 2 Pi}, Method -> \"Trapezoidal\", WorkingPrecision -> wp, "             \
+              "PrecisionGoal -> 16, MaxRecursion -> 14]]/(2 Pi r^k); "
+#define NI_C200 "9168205127076471545205440477960770886979628912652148138101796804930035476232905514720690661207"
+static void test_contour_wp_compiled(void) {
+    ASSERT_EQ_STR(NI_CW "Abs[cw[(1 + x + x^2)^200, 200, 1, 30]/" NI_C200 " - 1] < 10^-20", "True");
+    ASSERT_EQ_STR(NI_CW "Abs[cw[(1 + x + x^2)^200, 200, 99/100, 30]/" NI_C200 " - 1] < 10^-20", "True");
+    /* negative powers: [x^300] of the coin-change series = 11080130 */
+    ASSERT_EQ_STR(NI_CW "Abs[cw[1/((1 - x) (1 - x^2) (1 - x^3) (1 - x^5) (1 - x^7) (1 - x^11)), "
+                  "300, 9/10, 30] - 11080130] < 10^-12", "True");
+    ASSERT_EQ_STR(NI_CW "Abs[cw[Tan[x], 41, 3/2, 30]/(1410211493828985228276049834684/"
+                  "121699582862361447435141825020548828125) - 1] < 10^-20", "True");
+    ASSERT_EQ_STR("Abs[Re[NIntegrate[Evaluate[(1/Sin[x]^21 /. x -> E^(I t)) E^(I t)], {t, 0, 2 Pi}, "
+                  "Method -> \"Trapezoidal\", WorkingPrecision -> 30, PrecisionGoal -> 16, "
+                  "MaxRecursion -> 14]]/(2 Pi) - 46189/262144] < 10^-20", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -710,6 +735,7 @@ int main(void) {
     TEST(test_option_values_and_nonnumeric);
     TEST(test_polylog_integrand);
     TEST(test_phase_substitution);
+    TEST(test_contour_wp_compiled);
 
     printf("All nint_tests passed.\n");
     return 0;

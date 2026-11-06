@@ -216,6 +216,9 @@ static const void* mgd_real_unary_fn(const char* h) {
     if (h == SYM_Sin) return (const void*)mpfr_sin;
     if (h == SYM_Cos) return (const void*)mpfr_cos;
     if (h == SYM_Tan) return (const void*)mpfr_tan;
+    if (h == SYM_Csc) return (const void*)mpfr_csc;
+    if (h == SYM_Sec) return (const void*)mpfr_sec;
+    if (h == SYM_Cot) return (const void*)mpfr_cot;
     if (h == SYM_Sinh) return (const void*)mpfr_sinh;
     if (h == SYM_Cosh) return (const void*)mpfr_cosh;
     if (h == SYM_Tanh) return (const void*)mpfr_tanh;
@@ -236,6 +239,12 @@ static int mgd_complex_unary_sel(const char* h, bool* to_real) {
     if (h == SYM_Sin) return MGC_SIN;
     if (h == SYM_Cos) return MGC_COS;
     if (h == SYM_Sqrt) return MGC_SQRT;
+    /* the reciprocal trig functions: 1/Sin[x]^201 evaluates to Csc[x]^201, so
+     * without them a residue contour on |x| = 1 was interpreted per sample */
+    if (h == SYM_Tan) return MGC_TAN;
+    if (h == SYM_Csc) return MGC_CSC;
+    if (h == SYM_Sec) return MGC_SEC;
+    if (h == SYM_Cot) return MGC_COT;
     if (h == SYM_Abs) { *to_real = true; return MGC_ABS; }
     if (h == SYM_Arg) { *to_real = true; return MGC_ARG; }
     return -1;

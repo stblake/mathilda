@@ -157,8 +157,9 @@ void ncpx_log  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
 void ncpx_sin  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
 void ncpx_cos  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
 void ncpx_sqrt (ncpx* out, const ncpx* z, mpfr_prec_t wp);
+void ncpx_trig_ratio(ncpx* out, const ncpx* z, int which, mpfr_prec_t wp); /* 0 tan 1 csc 2 sec 3 cot */
 void ncpx_pow_d(ncpx* out, const ncpx* z, double e, mpfr_prec_t wp);          /* z^e, real e        */
-void ncpx_pow_si(ncpx* out, const ncpx* z, long k, mpfr_prec_t wp);          /* z^k, integer k     */
+void ncpx_pow_si(ncpx* out, const ncpx* z, long n, mpfr_prec_t wp);           /* z^n, binary powering */
 void ncpx_pow  (ncpx* out, const ncpx* z, const ncpx* w, mpfr_prec_t wp);     /* z^w = exp(w log z) */
 
 #endif /* USE_MPFR */

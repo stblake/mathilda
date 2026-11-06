@@ -1419,6 +1419,9 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                             case MGC_SIN:  ncpx_sin(d, x, wp);   break;
                             case MGC_COS:  ncpx_cos(d, x, wp);   break;
                             case MGC_SQRT: ncpx_sqrt(d, x, wp);  break;
+                            case MGC_TAN: case MGC_CSC: case MGC_SEC: case MGC_COT:
+                                ncpx_trig_ratio(d, x, (int)(sel - MGC_TAN), wp);
+                                break;
                             default: goto vm_fail;
                         }
                     }

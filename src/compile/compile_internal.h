@@ -671,7 +671,8 @@ bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e);
  * (compile_mgd.c) and switched on by the VM (compile_vm.c), so it is shared. */
 enum { MGC_ADD = 0, MGC_SUB, MGC_MUL, MGC_DIV, MGC_POW,          /* binary */
        MGC_NEG, MGC_EXP, MGC_LOG, MGC_SIN, MGC_COS, MGC_SQRT,    /* -> complex */
-       MGC_ABS, MGC_ARG };                                       /* -> real   */
+       MGC_ABS, MGC_ARG,                                         /* -> real   */
+       MGC_TAN, MGC_CSC, MGC_SEC, MGC_COT };                     /* -> complex */
 
 /* Association value <-> machine-scalar coercions, shared between the emit side
  * (compile_assoc.c) and the VM (compile_vm.c: vm_assoc_values builds a packed
