@@ -427,6 +427,60 @@ static void test_pow_si(void) {
     ncpx_clear(&z); ncpx_clear(&r); ncpx_clear(&w); ncpx_clear(&o);
 }
 
+
+/* tan/cot/tanh/coth next to a pole or zero, a hair off the real (imaginary)
+ * axis: a = -Pi/2 rounded to PREC bits, b = 1e-30.  The double-angle
+ * denominator cos 2a + cosh 2b cancels to 0 there (tan came out as an
+ * overflow and cot = 1/tan as NaN).  Reference: the quotients sin/cos and
+ * cos/sin of the same (exactly representable) point at 512 bits, where the
+ * complex sin and cos are products of accurately computed real factors. */
+static void check_tan_family_at(const mpfr_t a, const mpfr_t b, bool hyp) {
+    mpfr_t A, B, s_re, s_im, c_re, c_im, r_re, r_im, got_re, got_im;
+    mpfr_inits2(512, A, B, s_re, s_im, c_re, c_im, r_re, r_im, (mpfr_ptr)NULL);
+    mpfr_inits2(PREC, got_re, got_im, (mpfr_ptr)NULL);
+    mpfr_set(A, a, MPFR_RNDN);
+    mpfr_set(B, b, MPFR_RNDN);
+    if (hyp) { mpfr_complex_sinh(s_re, s_im, A, B); mpfr_complex_cosh(c_re, c_im, A, B); }
+    else     { mpfr_complex_sin(s_re, s_im, A, B);  mpfr_complex_cos(c_re, c_im, A, B); }
+    for (int co = 0; co <= 1; co++) {
+        if (co) mpfr_complex_div(r_re, r_im, c_re, c_im, s_re, s_im);
+        else    mpfr_complex_div(r_re, r_im, s_re, s_im, c_re, c_im);
+        if (hyp) { if (co) mpfr_complex_coth(got_re, got_im, a, b); else mpfr_complex_tanh(got_re, got_im, a, b); }
+        else     { if (co) mpfr_complex_cot(got_re, got_im, a, b);  else mpfr_complex_tan(got_re, got_im, a, b); }
+        ASSERT(mpfr_number_p(got_re) && mpfr_number_p(got_im));
+        mpfr_t e_re, e_im;
+        mpfr_inits2(PREC, e_re, e_im, (mpfr_ptr)NULL);
+        mpfr_set(e_re, r_re, MPFR_RNDN);
+        mpfr_set(e_im, r_im, MPFR_RNDN);
+        assert_mpfr_close(got_re, e_re, "tan family near pole .re");
+        assert_mpfr_close(got_im, e_im, "tan family near pole .im");
+        mpfr_clears(e_re, e_im, (mpfr_ptr)NULL);
+    }
+    mpfr_clears(A, B, s_re, s_im, c_re, c_im, r_re, r_im, got_re, got_im, (mpfr_ptr)NULL);
+}
+
+static void test_tan_family_near_poles(void) {
+    mpfr_t a, b;
+    mpfr_inits2(PREC, a, b, (mpfr_ptr)NULL);
+    /* tan / cot at -Pi/2 + 1e-30 i, and at Pi + 1e-30 i (a zero of tan) */
+    mpfr_const_pi(a, MPFR_RNDN); mpfr_div_2ui(a, a, 1, MPFR_RNDN); mpfr_neg(a, a, MPFR_RNDN);
+    mpfr_set_str(b, "1e-30", 10, MPFR_RNDN);
+    check_tan_family_at(a, b, false);
+    mpfr_const_pi(a, MPFR_RNDN);
+    check_tan_family_at(a, b, false);
+    /* tanh / coth at 1e-30 + i Pi/2 and 1e-30 + i Pi */
+    mpfr_set_str(a, "1e-30", 10, MPFR_RNDN);
+    mpfr_const_pi(b, MPFR_RNDN); mpfr_div_2ui(b, b, 1, MPFR_RNDN);
+    check_tan_family_at(a, b, true);
+    mpfr_const_pi(b, MPFR_RNDN);
+    check_tan_family_at(a, b, true);
+    /* a generic point, both families */
+    mpfr_set_d(a, 0.3, MPFR_RNDN); mpfr_set_d(b, -0.7, MPFR_RNDN);
+    check_tan_family_at(a, b, false);
+    check_tan_family_at(a, b, true);
+    mpfr_clears(a, b, (mpfr_ptr)NULL);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -449,6 +503,7 @@ int main(void) {
     TEST(test_apply_complex_unary_through_expr);
     TEST(test_apply_complex_unary_keeps_complex_when_im_nonzero);
     TEST(test_csc_is_one_over_sin);
+    TEST(test_tan_family_near_poles);
     TEST(test_pow_si);
     printf("All numeric_complex tests passed.\n");
     return 0;

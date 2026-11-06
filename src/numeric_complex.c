@@ -180,26 +180,46 @@ void mpfr_complex_cos(mpfr_t out_re, mpfr_t out_im,
     mpfr_clears(sa, ca, sb, cb, (mpfr_ptr)NULL);
 }
 
-/* tan(a+bi) = (sin(2a) + i sinh(2b)) / (cos(2a) + cosh(2b))
+/* tan, cot, tanh, coth of a + bi, all from one cancellation-free form.
  *
- * The 2a / 2b form keeps the denominator strictly positive (cos+cosh
- * is bounded below by cosh(2b) - 1 > 0 for |b| > 0 and exactly 0 only at
- * the poles where the symbolic Sin/Cos paths have already handled the
- * input), and avoids the sin(a)cos(a)/cos(a)^2 cancellation that would
- * appear in the naive form for arguments near pi/2. */
+ *   tan(a+bi)  = (sin a cos a + i sinh b cosh b) / (cos^2 a + sinh^2 b)
+ *   cot(a+bi)  = (sin a cos a - i sinh b cosh b) / (sin^2 a + sinh^2 b)
+ *   tanh(a+bi) = (sinh a cosh a + i sin b cos b) / (sinh^2 a + cos^2 b)
+ *   coth(a+bi) = (sinh a cosh a - i sin b cos b) / (sinh^2 a + sin^2 b)
+ *
+ * The denominator is a sum of two squares, each computed to full relative
+ * precision, so it never cancels.  The double-angle spelling
+ * (cos 2a + cosh 2b) cancels to nothing next to a pole of tan
+ * (a = -Pi/2 + d, b tiny: -1 + 1 at 200 bits), giving 0/0 or x/0 at a point
+ * 1e-65 from the real axis -- tan came back as Overflow[] and cot, taken as
+ * 1/tan there, as Indeterminate, although cot(-Pi/2 + i 1e-65) is a perfectly
+ * ordinary 0 - 1e-65 i.  `hyp` selects tanh/coth (a, b swap roles between the
+ * circular and hyperbolic factors); `co` selects cot/coth. */
+static void complex_tan_family(mpfr_t out_re, mpfr_t out_im,
+                               const mpfr_t a, const mpfr_t b, bool hyp, bool co) {
+    mpfr_prec_t p = mpfr_get_prec(out_re) + 8;
+    mpfr_t sc, cc, sh, ch, num_re, num_im, d1, d2;
+    mpfr_inits2(p, sc, cc, sh, ch, num_re, num_im, d1, d2, (mpfr_ptr)NULL);
+    /* circular part on the real (tan) or imaginary (tanh) component */
+    mpfr_sin_cos(sc, cc, hyp ? b : a, MPFR_RNDN);
+    mpfr_sinh_cosh(sh, ch, hyp ? a : b, MPFR_RNDN);
+    mpfr_mul(num_re, sc, cc, MPFR_RNDN);   /* sin cos       */
+    mpfr_mul(num_im, sh, ch, MPFR_RNDN);   /* sinh cosh     */
+    /* the hyperbolic factor's square, and the circular one: cos^2 for tan /
+     * tanh, sin^2 for cot / coth */
+    mpfr_sqr(d1, sh, MPFR_RNDN);
+    mpfr_sqr(d2, co ? sc : cc, MPFR_RNDN);
+    mpfr_add(d1, d1, d2, MPFR_RNDN);
+    if (hyp) mpfr_swap(num_re, num_im);    /* tanh: sinh cosh is the real part */
+    if (co) mpfr_neg(num_im, num_im, MPFR_RNDN);
+    mpfr_div(out_re, num_re, d1, MPFR_RNDN);
+    mpfr_div(out_im, num_im, d1, MPFR_RNDN);
+    mpfr_clears(sc, cc, sh, ch, num_re, num_im, d1, d2, (mpfr_ptr)NULL);
+}
+
 void mpfr_complex_tan(mpfr_t out_re, mpfr_t out_im,
                       const mpfr_t a, const mpfr_t b) {
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t two_a, two_b, sin2a, cos2a, sinh2b, cosh2b, den;
-    mpfr_inits2(p, two_a, two_b, sin2a, cos2a, sinh2b, cosh2b, den, (mpfr_ptr)NULL);
-    mpfr_mul_2ui(two_a, a, 1, MPFR_RNDN);
-    mpfr_mul_2ui(two_b, b, 1, MPFR_RNDN);
-    mpfr_sin_cos(sin2a, cos2a, two_a, MPFR_RNDN);
-    mpfr_sinh_cosh(sinh2b, cosh2b, two_b, MPFR_RNDN);
-    mpfr_add(den, cos2a, cosh2b, MPFR_RNDN);
-    mpfr_div(out_re, sin2a, den, MPFR_RNDN);
-    mpfr_div(out_im, sinh2b, den, MPFR_RNDN);
-    mpfr_clears(two_a, two_b, sin2a, cos2a, sinh2b, cosh2b, den, (mpfr_ptr)NULL);
+    complex_tan_family(out_re, out_im, a, b, false, false);
 }
 
 void mpfr_complex_sinh(mpfr_t out_re, mpfr_t out_im,
@@ -232,17 +252,7 @@ void mpfr_complex_cosh(mpfr_t out_re, mpfr_t out_im,
  * of the tan identity, same stability rationale. */
 void mpfr_complex_tanh(mpfr_t out_re, mpfr_t out_im,
                        const mpfr_t a, const mpfr_t b) {
-    mpfr_prec_t p = mpfr_get_prec(out_re);
-    mpfr_t two_a, two_b, sinh2a, cosh2a, sin2b, cos2b, den;
-    mpfr_inits2(p, two_a, two_b, sinh2a, cosh2a, sin2b, cos2b, den, (mpfr_ptr)NULL);
-    mpfr_mul_2ui(two_a, a, 1, MPFR_RNDN);
-    mpfr_mul_2ui(two_b, b, 1, MPFR_RNDN);
-    mpfr_sinh_cosh(sinh2a, cosh2a, two_a, MPFR_RNDN);
-    mpfr_sin_cos(sin2b, cos2b, two_b, MPFR_RNDN);
-    mpfr_add(den, cosh2a, cos2b, MPFR_RNDN);
-    mpfr_div(out_re, sinh2a, den, MPFR_RNDN);
-    mpfr_div(out_im, sin2b, den, MPFR_RNDN);
-    mpfr_clears(two_a, two_b, sinh2a, cosh2a, sin2b, cos2b, den, (mpfr_ptr)NULL);
+    complex_tan_family(out_re, out_im, a, b, true, false);
 }
 
 /* --------------------------------------------------------------------
@@ -413,10 +423,10 @@ static void inverse_of_reciprocal(mpfr_t out_re, mpfr_t out_im,
     mpfr_clears(inv_re, inv_im, one, zero, (mpfr_ptr)NULL);
 }
 
-void mpfr_complex_cot (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_tan,  a, b); }
+void mpfr_complex_cot (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, false, true); }
 void mpfr_complex_sec (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_cos,  a, b); }
 void mpfr_complex_csc (mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_sin,  a, b); }
-void mpfr_complex_coth(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_tanh, a, b); }
+void mpfr_complex_coth(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { complex_tan_family(r, i, a, b, true, true); }
 void mpfr_complex_sech(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_cosh, a, b); }
 void mpfr_complex_csch(mpfr_t r, mpfr_t i, const mpfr_t a, const mpfr_t b) { reciprocal_of(r, i, mpfr_complex_sinh, a, b); }
 
