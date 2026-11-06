@@ -300,9 +300,23 @@ static long g_numeric_cancel_bits = 0;
  * zero (which keeps nothing). N[expr, p] certifies a pass only when this is
  * at least p: an exact 0. from a cancellation agrees with every other one. */
 static long g_numeric_cancel_left = LONG_MAX;
+/* The deepest operand an MPFR addition since the last reset absorbed whole:
+ * the exponent gap, in bits, between a sum's operands when the smaller lies
+ * entirely below the result's precision (1/1000 - E^-1000 at 200 bits drops
+ * an operand 1433 bits down).  When a pass then cancels to zero, the value
+ * that vanished may be exactly such an absorbed part, and this is how much
+ * precision it takes to see it -- N's next step uses it instead of only
+ * doubling (see numericalize_top). */
+static long g_numeric_absorb_bits = 0;
 
 static void note_cancellation(const mpfr_t x, const mpfr_t y, const mpfr_t s) {
     if (!mpfr_regular_p(x) && !mpfr_regular_p(y)) return;
+    if (mpfr_regular_p(x) && mpfr_regular_p(y)) {
+        long ex = (long)mpfr_get_exp(x), ey = (long)mpfr_get_exp(y);
+        long gap = ex > ey ? ex - ey : ey - ex;
+        if (gap > (long)mpfr_get_prec(s) && gap > g_numeric_absorb_bits)
+            g_numeric_absorb_bits = gap;
+    }
     long top = LONG_MIN;
     if (mpfr_regular_p(x)) top = (long)mpfr_get_exp(x);
     if (mpfr_regular_p(y) && (long)mpfr_get_exp(y) > top) top = (long)mpfr_get_exp(y);
@@ -2659,9 +2673,12 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     bool raised = numeric_plan_working_spec(&s, spec, &work);
     long saved_cancel = g_numeric_cancel_bits;
     long saved_left = g_numeric_cancel_left;
+    long saved_absorb = g_numeric_absorb_bits;
     g_numeric_cancel_bits = 0;
+    g_numeric_absorb_bits = 0;
     Expr* r = numericalize_pass(e, work);
     long cancelled = g_numeric_cancel_bits;
+    long absorbed = g_numeric_absorb_bits;
     /* Adaptive precision is the promise of the N builtin's N[expr, p] (the
      * capping mode is produced solely by N); internal working-precision
      * numericalizations keep a single evaluation. */
@@ -2688,14 +2705,22 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
         /* The two most recent results, newest first, with their precisions
          * and pass cancellations; `first` is the shrink reference at the cap. */
         Expr* prev = r_raw;  long Wp = raised ? work.bits : p;  long Lp = cancelled;
+        long Ap = absorbed;
         Expr* prev2 = NULL;  long Wp2 = 0;
         Expr* first = expr_copy(r_raw);
         while (prev) {
             long W2 = Wp + 64;
             if (Lp < Wp) {                       /* a measured loss: go where it is covered */
                 if (p + amp + Lp + 32 > W2) W2 = p + amp + Lp + 32;
-            } else if (Wp - p > 64) {            /* cancelled to zero: double the extra */
-                W2 = Wp + (Wp - p);
+            } else {
+                /* cancelled to zero: double the extra precision -- or, when
+                 * an addition of the pass absorbed an operand whole, go where
+                 * that operand is seen (Exp[x] (Exp[1/x - Exp[-x]] -
+                 * Exp[1/x]) at x = 1000: the E^-1000 that 1/x absorbed is the
+                 * whole answer; one step to ~1500 bits instead of five
+                 * doublings) */
+                if (Wp - p > 64) W2 = Wp + (Wp - p);
+                if (Ap > 0 && p + amp + Ap + 64 > W2) W2 = p + amp + Ap + 64;
             }
             /* the pass at the cap is compared with one 64 bits below it */
             if (W2 > Wmax - 64 && Wp < Wmax - 64) W2 = Wmax - 64;
@@ -2704,11 +2729,14 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             NumericSpec w = work; w.bits = W2;   /* work's mode: CAP keeps inexact leaves as they are */
             g_numeric_cancel_bits = 0;
             g_numeric_cancel_left = LONG_MAX;
+            g_numeric_absorb_bits = 0;
             g_numeric_reevaluations++;
             Expr* cur = numericalize_pass(e, w);
             long Lc = g_numeric_cancel_bits;
             long Kc = g_numeric_cancel_left;
+            long Ac = g_numeric_absorb_bits;
             if (Lc > cancelled) cancelled = Lc;
+            if (Ac > absorbed) absorbed = Ac;
             if (!cur) break;
             /* A higher precision that comes back WORSE (a kernel that fails
              * there: N[BarnesG[37/10], 80] was Overflow[]) ends the climb on
@@ -2752,7 +2780,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
             }
             expr_free(prev2);
             prev2 = prev;  Wp2 = Wp;
-            prev = cur;    Wp = W2;  Lp = Lc;
+            prev = cur;    Wp = W2;  Lp = Lc;  Ap = Ac;
         }
         expr_free(prev2);
         expr_free(first);
@@ -2764,6 +2792,7 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     /* an enclosing numericalization sees the worst cancellation of any pass */
     g_numeric_cancel_bits = saved_cancel > cancelled ? saved_cancel : cancelled;
     if (saved_left < g_numeric_cancel_left) g_numeric_cancel_left = saved_left;
+    g_numeric_absorb_bits = saved_absorb > absorbed ? saved_absorb : absorbed;
 
     /* A machine double has a 53-bit mantissa but only a ~1e308 exponent
      * range, so Exp[1000] flushes to inf and Exp[-1000] to zero even though
