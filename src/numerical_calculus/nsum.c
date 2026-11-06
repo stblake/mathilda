@@ -45,6 +45,7 @@
 #include "numeric.h"
 #include "seqaccel.h"
 #include "dequad.h"
+#include "denint.h"
 #include "gkadapt.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -949,6 +950,214 @@ static bool ns_tail_integral_algebraic_machine(NsCtx* c, double Nd,
     return true;
 }
 
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  Tail integral for logarithmically slow summands                    *
+ *                                                                     *
+ *  1/(x Log[x]^2) and 1/(x Log[x] Log[Log[x]]^2) are not power laws: *
+ *  int_X^oo f = 1/Log[X] (resp. 1/Log[Log[X]]) is still 1e-3 (0.17)   *
+ *  at the largest double, so neither the power-law split above nor     *
+ *  exp-sinh can reach the remainder, and the MPFR exp-sinh rule refines *
+ *  forever on an integrand that never ends.  After d logarithmic        *
+ *  substitutions x = E_d(t) (E_0 = t, E_(i+1) = e^(E_i)),                *
+ *      int_N^oo f(x) dx = int_(L_d N)^oo g_d(t) dt,                      *
+ *      g_d(t) = f(E_d(t)) E_d(t) E_(d-1)(t) ... E_1(t),                  *
+ *  the slowly varying factors become algebraic: g_1 = 1/t^2 for the first*
+ *  example, g_2 = 1/t^2 for the second.  The power-law split is then     *
+ *  applied in t (abscissa s = log t, integrand h(s) = g(e^s) e^s):        *
+ *      S(T) = int_(log t_N)^(log T) h ds + T g(T)/(p(T) - 1),             *
+ *  p(T) = -log2(g(2T)/g(T)), on the ladder T_j = t_N 4^j, until two       *
+ *  successive splits agree.  E_d(t) is far outside the double range, so  *
+ *  the summand is sampled at MPFR precision, whose exponent range         *
+ *  reaches x = 2^(2^30): T up to ~7e8 for d = 1 and ~20 for d = 2.       *
+ *  The last split difference is the error estimate.                     *
+ * ------------------------------------------------------------------ */
+
+typedef struct {
+    NsCtx  c;        /* the summand context, spec forced to MPFR at `bits` */
+    int    depth;
+    long   bits;
+} NsLogSub;
+
+/* h(s) = f(E_d(e^s)) · E_d · ... · E_1 · e^s at MPFR precision. */
+static bool ns_logsub_h_mpfr(void* vc, const mpfr_t s, mpfr_t out_re, mpfr_t out_im) {
+    NsLogSub* L = vc;
+    mpfr_prec_t p = (mpfr_prec_t)L->bits;
+    mpfr_t x, J;
+    mpfr_inits2(p, x, J, (mpfr_ptr)0);
+    mpfr_exp(x, s, MPFR_RNDN);                    /* t = e^s            */
+    mpfr_set(J, x, MPFR_RNDN);                    /* dt/ds = t          */
+    for (int i = 0; i < L->depth; i++) {
+        mpfr_exp(x, x, MPFR_RNDN);                /* E_(i+1) = e^(E_i)  */
+        mpfr_mul(J, J, x, MPFR_RNDN);
+    }
+    bool ok = mpfr_number_p(x) && mpfr_number_p(J) && !mpfr_zero_p(x);
+    if (ok) {
+        Expr* num = ns_eval_at(&L->c, expr_new_mpfr_copy(x));
+        bool inexact;
+        ok = num && get_approx_mpfr(num, out_re, out_im, &inexact);
+        expr_free(num);
+        if (ok) {
+            mpfr_mul(out_re, out_re, J, MPFR_RNDN);
+            mpfr_mul(out_im, out_im, J, MPFR_RNDN);
+            ok = mpfr_number_p(out_re) && mpfr_number_p(out_im);
+        }
+    }
+    mpfr_clears(x, J, (mpfr_ptr)0);
+    return ok;
+}
+
+/* Machine view of h(s) for the Gauss–Kronrod pieces. */
+static bool ns_logsub_h_machine(void* vc, double s, double _Complex* out) {
+    NsLogSub* L = vc;
+    mpfr_prec_t p = (mpfr_prec_t)L->bits;
+    mpfr_t sm, re, im;
+    mpfr_inits2(p, sm, re, im, (mpfr_ptr)0);
+    mpfr_set_d(sm, s, MPFR_RNDN);
+    bool ok = ns_logsub_h_mpfr(vc, sm, re, im);
+    if (ok) {
+        *out = mpfr_get_d(re, MPFR_RNDN) + I * mpfr_get_d(im, MPFR_RNDN);
+        ok = isfinite(creal(*out)) && isfinite(cimag(*out));
+    }
+    mpfr_clears(sm, re, im, (mpfr_ptr)0);
+    return ok;
+}
+
+/* int_(log t_N)^oo h ds for one depth.  `Nbase` is the tail start N (> e^e for
+ * depth 2 to keep L_d N real and positive).  `machine` integrates the pieces
+ * in double (the samples are still MPFR); otherwise tanh-sinh at `bits`.
+ * Writes the value and its error estimate; returns false if the ladder could
+ * not be built (non-numeric samples, not a decaying power law in t). */
+static bool ns_tail_logsub(const NsCtx* c0, const mpfr_t Nbase, int depth, long bits,
+                           bool machine, double reltol,
+                           mpfr_t out_re, mpfr_t out_im, double* err) {
+    *err = INFINITY;
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    NsLogSub L;
+    L.c = *c0;
+    L.c.spec.mode = NUMERIC_MODE_MPFR; L.c.spec.bits = bits;
+    L.c.ac = NULL; L.c.ac_prec_z = NULL;
+    L.c.ac_prec = NULL;
+    {
+        Expr* vsym = expr_new_symbol(c0->bind->name);
+        const Expr* vs[1] = { vsym };
+        L.c.ac_prec = autocompile_new_prec(c0->body, vs, 1, bits);
+        expr_free(vsym);
+    }
+    L.depth = depth; L.bits = bits;
+
+    mpfr_t tN, s0, s1, s2, h1r, h1i, h2r, h2i, acc_r, acc_i, pr, pi_, Sr, Si, Sp_r, Sp_i, tmp;
+    mpfr_inits2(p, tN, s0, s1, s2, h1r, h1i, h2r, h2i, acc_r, acc_i, pr, pi_,
+                Sr, Si, Sp_r, Sp_i, tmp, (mpfr_ptr)0);
+    bool ok = true;
+    mpfr_set(tN, Nbase, MPFR_RNDN);
+    for (int i = 0; i < depth && ok; i++) {
+        if (mpfr_cmp_ui(tN, 1) <= 0) ok = false;
+        else mpfr_log(tN, tN, MPFR_RNDN);
+    }
+    if (ok && mpfr_sgn(tN) <= 0) ok = false;
+    if (ok) mpfr_log(s0, tN, MPFR_RNDN);          /* s = log t */
+    mpfr_set_ui(acc_r, 0, MPFR_RNDN); mpfr_set_ui(acc_i, 0, MPFR_RNDN);
+    double qerr = 0.0, d_last = INFINITY, d_prev = INFINITY, hscale = 0.0;
+    bool have_prev = false, converged = false;
+    /* Ladder ratio q and power-probe ratio r: depth 2 has only t <= ~20 in
+     * range, so it needs a finer ladder than depth 1 (t <= ~7e8). */
+    const double ln4 = log(depth == 1 ? 4.0 : 1.5), ln2 = log(depth == 1 ? 2.0 : 1.1);
+    for (int j = 1; ok && j <= 40; j++) {
+        /* piece [s0 + (j-1) ln4, s0 + j ln4] */
+        mpfr_set_d(tmp, (double)(j - 1) * ln4, MPFR_RNDN); mpfr_add(s1, s0, tmp, MPFR_RNDN);
+        mpfr_set_d(tmp, (double)j * ln4, MPFR_RNDN);       mpfr_add(s2, s0, tmp, MPFR_RNDN);
+        if (machine) {
+            /* Absolute floor from the integrand's scale at the start: the
+             * pieces shrink geometrically and a relative test alone would
+             * chase roundoff on the small ones. */
+            if (j == 1) {
+                double _Complex h0;
+                hscale = ns_logsub_h_machine(&L, mpfr_get_d(s0, MPFR_RNDN), &h0) ? cabs(h0) : 0.0;
+            }
+            GkResult q = gk_integrate_machine(ns_logsub_h_machine, &L,
+                                              mpfr_get_d(s1, MPFR_RNDN), mpfr_get_d(s2, MPFR_RNDN),
+                                              fmax(1e-300, 1e-16 * hscale), 1e-13, 50, 0, false);
+            if (q.status == GK_NONNUMERIC) break;
+            mpfr_set_d(pr, creal(q.value), MPFR_RNDN); mpfr_set_d(pi_, cimag(q.value), MPFR_RNDN);
+            qerr += q.abs_err;
+        } else {
+            double ae = INFINITY;
+            denint_tanhsinh_mpfr(ns_logsub_h_mpfr, &L, s1, s2, bits, 0.1 * reltol, 12,
+                                 pr, pi_, &ae);
+            if (!isfinite(ae) || !mpfr_number_p(pr) || !mpfr_number_p(pi_)) break;
+            qerr += ae;
+        }
+        mpfr_add(acc_r, acc_r, pr, MPFR_RNDN); mpfr_add(acc_i, acc_i, pi_, MPFR_RNDN);
+        /* remainder at T = e^(s2): h(log T)·ln r / ln(h(log T)/h(log rT)) */
+        mpfr_set_d(tmp, ln2, MPFR_RNDN); mpfr_add(s1, s2, tmp, MPFR_RNDN);
+        if (!ns_logsub_h_mpfr(&L, s2, h1r, h1i) || !ns_logsub_h_mpfr(&L, s1, h2r, h2i)) break;
+        if (mpfr_sgn(h1r) == 0) break;
+        double h1 = mpfr_get_d(h1r, MPFR_RNDN), h2 = mpfr_get_d(h2r, MPFR_RNDN);
+        double h1im = mpfr_get_d(h1i, MPFR_RNDN), h2im = mpfr_get_d(h2i, MPFR_RNDN);
+        /* a power law in t: same sign, real ratio in (0, 1) */
+        if (!(h2 / h1 > 0.0 && h2 / h1 < 1.0)
+            || fabs(h1im) > 1e-10 * fabs(h1) || fabs(h2im) > 1e-10 * fabs(h2)) {
+            have_prev = false; continue;
+        }
+        mpfr_div(tmp, h1r, h2r, MPFR_RNDN);
+        mpfr_log(tmp, tmp, MPFR_RNDN);              /* ln(h1/h2) = (p - 1) ln 2 */
+        mpfr_t rem; mpfr_init2(rem, p);
+        mpfr_set_d(rem, ln2, MPFR_RNDN);            /* ln r (exact enough: */
+        mpfr_mul(rem, rem, h1r, MPFR_RNDN);         /*  r is the probe step) */
+        mpfr_div(rem, rem, tmp, MPFR_RNDN);
+        mpfr_add(Sr, acc_r, rem, MPFR_RNDN);
+        mpfr_set(Si, acc_i, MPFR_RNDN);
+        mpfr_clear(rem);
+        if (have_prev) {
+            mpfr_sub(tmp, Sr, Sp_r, MPFR_RNDN);
+            d_prev = d_last;
+            d_last = fabs(mpfr_get_d(tmp, MPFR_RNDN));
+            double scale = fabs(mpfr_get_d(Sr, MPFR_RNDN)) + 1e-300;
+            if (d_last <= reltol * scale && d_prev <= 10.0 * reltol * scale) {
+                converged = true; break;
+            }
+            /* Not settling geometrically: the slowly varying factor survives
+             * at this depth (a Log[Log[x]] seen from depth 1); give up on it. */
+            if (j >= 3 && isfinite(d_prev) && d_last > 0.5 * d_prev) break;
+        }
+        mpfr_set(Sp_r, Sr, MPFR_RNDN); mpfr_set(Sp_i, Si, MPFR_RNDN);
+        have_prev = true;
+    }
+    bool have = ok && isfinite(d_last);
+    if (have) {
+        mpfr_set(out_re, Sr, MPFR_RNDN);
+        mpfr_set(out_im, Si, MPFR_RNDN);
+        *err = d_last + qerr;
+    }
+    (void)converged;
+    mpfr_clears(tN, s0, s1, s2, h1r, h1i, h2r, h2i, acc_r, acc_i, pr, pi_,
+                Sr, Si, Sp_r, Sp_i, tmp, (mpfr_ptr)0);
+    autocompiled_free(L.c.ac_prec);
+    return have;
+}
+
+/* Best log-substituted tail over depths 1 and 2 (the smaller error wins). */
+static bool ns_tail_logsub_best(const NsCtx* c, const mpfr_t Nbase, long bits, bool machine,
+                                double reltol, mpfr_t out_re, mpfr_t out_im, double* err) {
+    *err = INFINITY;
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    mpfr_t r, i;
+    mpfr_inits2(p, r, i, (mpfr_ptr)0);
+    bool any = false;
+    for (int d = 1; d <= 2; d++) {
+        double e;
+        if (ns_tail_logsub(c, Nbase, d, bits, machine, reltol, r, i, &e) && e < *err) {
+            mpfr_set(out_re, r, MPFR_RNDN); mpfr_set(out_im, i, MPFR_RNDN);
+            *err = e; any = true;
+            if (e <= 10.0 * reltol * (fabs(mpfr_get_d(r, MPFR_RNDN)) + 1e-300)) break;
+        }
+    }
+    mpfr_clears(r, i, (mpfr_ptr)0);
+    return any;
+}
+#endif /* USE_MPFR */
+
 /* ------------------------------------------------------------------ *
  *  Numerical contour (circle-DFT) derivatives for the EM corrections  *
  *                                                                     *
@@ -1131,7 +1340,27 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
         integ = abserr <= 1e-12 * cabs(Iv);
         far_mass = 0.0;                       /* the remainder is accounted for */
     } else {
-        integ = dequad_halfline_machine(ns_sample_x_machine, c, Nd, 1e-12, 14, &Iv, &abserr);
+        bool done = false;
+#ifdef USE_MPFR
+        /* Still live at the farthest double (a logarithmic factor): the tail
+         * integral in log-substituted variables, sampled at MPFR range. */
+        if (far_mass > 1e-15) {
+            mpfr_t Nb, lr, li;
+            mpfr_inits2(96, Nb, lr, li, (mpfr_ptr)0);
+            mpfr_set_d(Nb, Nd, MPFR_RNDN);
+            double le;
+            if (ns_tail_logsub_best(c, Nb, 96, true, 1e-14, lr, li, &le)) {
+                double _Complex v = mpfr_get_d(lr, MPFR_RNDN) + I * mpfr_get_d(li, MPFR_RNDN);
+                if (le < far_mass) {
+                    Iv = v; abserr = le; far_mass = 0.0;
+                    integ = true; done = true;
+                }
+            }
+            mpfr_clears(Nb, lr, li, (mpfr_ptr)0);
+        }
+#endif
+        if (!done)
+            integ = dequad_halfline_machine(ns_sample_x_machine, c, Nd, 1e-12, 14, &Iv, &abserr);
     }
     double relerr = abserr / (cabs(Iv) + 1e-300);
     if (!integ && relerr > 1e-6) { expr_free(Nval); return NULL; }   /* fall back */
@@ -1431,7 +1660,30 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
     if (mlev > 22) mlev = 22;
 
     double abserr = INFINITY; bool integ = false;
+    double tail_err = 0.0;      /* certified-by-ladder tail error (log route) */
+    bool logsub = false;
     if (ok) {
+        /* A summand still carrying mass at x = 2^(2^29) has a logarithmically
+         * slow tail (1/(x Log[x]^2)): exp-sinh would refine without end on it.
+         * Integrate it in log-substituted variables instead. */
+        mpfr_t xf, fr, fi;
+        mpfr_inits2(p, xf, fr, fi, (mpfr_ptr)0);
+        mpfr_set_ui_2exp(xf, 1, (mpfr_exp_t)1 << 29, MPFR_RNDN);
+        double far = 0.0;
+        if (ns_sample_x_mpfr(c, xf, fr, fi)) {
+            mpfr_mul(fr, fr, xf, MPFR_RNDN); mpfr_mul(fi, fi, xf, MPFR_RNDN);
+            far = ns_l1_d(fr, fi);
+        }
+        double scale = ns_l1_d(fN_r, fN_i) * fabs(Nd) + 1e-300;
+        if (far > reltol * scale) {
+            double le;
+            if (ns_tail_logsub_best(c, Na, bits, false, 1e-3 * reltol, Iv_r, Iv_i, &le)) {
+                logsub = true; integ = true; abserr = le; tail_err = le;
+            }
+        }
+        mpfr_clears(xf, fr, fi, (mpfr_ptr)0);
+    }
+    if (ok && !logsub) {
         integ = dequad_halfline_mpfr(ns_sample_x_mpfr, c, Na, bits, reltol, mlev,
                                      Iv_r, Iv_i, &abserr);
         double relerr = abserr / (ns_l1_d(Iv_r, Iv_i) + 1e-300);
@@ -1533,8 +1785,9 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
                 if (fabs(mpfr_get_d(ti, MPFR_RNDN)) < thr) mpfr_set_zero(ti, 1);
             }
             out = ns_from_complex_mpfr(tr, ti);
-            if (ns_goal_active(o) && !met && napplied > 0 && isfinite(prev_mag) && prev_mag > tol)
-                nc_warn_goal("NSum", prev_mag, tol);
+            double est = tail_err
+                         + ((!met && napplied > 0 && isfinite(prev_mag)) ? prev_mag : 0.0);
+            if (ns_goal_active(o) && est > tol) nc_warn_goal("NSum", est, tol);
         }
     }
 

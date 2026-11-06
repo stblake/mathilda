@@ -566,8 +566,17 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   (`1/(n^Pi + n^2 + n^Sqrt[2] + 1)^(1/3)`: `p = Pi/3`), which exp-sinh lost
   silently; it is now summed to full machine precision.  When the summand is
   not a power law but is still non-negligible at the farthest reachable point
-  (`1/(n Log[n]^2)`), that mass enters the error estimate and `NSum::accgl` is
-  issued.  The
+  (`1/(n Log[n]^2)`), the tail is integrated after one or two **logarithmic
+  substitutions** `x = e^t`, `x = e^(e^t)` (the integrand becomes
+  `f(E_d(t)) E_d(t)…E_1(t)`, `1/t^2` for both `1/(x Log[x]^2)` and
+  `1/(x Log[x] Log[Log[x]]^2)`), with the summand sampled at MPFR precision so
+  that `x` may reach `2^(2^30)`, and the same power-law split applied in `t` on a
+  ladder until two successive splits agree; their difference is the error
+  estimate.  The `WorkingPrecision` path takes this route when the summand still
+  carries mass at `x = 2^(2^29)` (it used to refine exp-sinh without end).  When
+  no depth settles, the remaining mass enters the error estimate and
+  `NSum::accgl` is issued (e.g. `1/Log[n] - 1/Log[n+1]`, whose continuous
+  extension cancels to nothing at the huge `x` the tail needs).  The
   derivative corrections are **hybrid**: symbolic `D` + `BernoulliB` while the
   derivative tree stays small (robust, and the original path for simple
   summands), switching to **numerical contour (circle-DFT) derivatives** once it

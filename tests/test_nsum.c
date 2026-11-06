@@ -281,6 +281,34 @@ static void test_alternating_log(void) {
                  "(1 - Sqrt[2]) Zeta[1/2]", 1e-26);
 }
 
+/* Logarithmically slow tails: the Euler–Maclaurin tail integral in
+ * log-substituted variables.  Expected values: Euler–Maclaurin at base 10^4
+ * with the tail integral in closed form (int_N^oo dx/(x Log[x]^k) =
+ * 1/((k-1) Log[N]^(k-1))), the first terms summed directly — an independent
+ * route (the h3 values are the ISSAC holdout's, from N = 10^4 and 2·10^4). */
+static void test_slow_log_tails(void) {
+    ASSERT_CLOSE("NSum[1/(n Log[n]^2),{n,2,Infinity}]", "2.109742801236891974479257198", 1e-12);
+    ASSERT_CLOSE("NSum[1/(n Log[n] Log[Log[n]]^2),{n,3,Infinity}]",
+                 "38.40676809282178631849374770", 1e-10);
+    ASSERT_CLOSE("NSum[1/(n Log[n]^3),{n,2,Infinity}]",
+                 "N[Total[Table[1/(n Log[n]^3), {n, 2, 9999}]] + 1/(2 Log[10^4]^2)"
+                 " + (1/(n Log[n]^3) /. n -> 10^4)/2"
+                 " - (1/12) (D[1/(n Log[n]^3), n] /. n -> 10^4)"
+                 " + (1/720) (D[1/(n Log[n]^3), {n, 3}] /. n -> 10^4), 20]", 1e-12);
+    ASSERT_CLOSE("NSum[1/(n Log[n]^2),{n,2,Infinity},WorkingPrecision->30]",
+                 "2.109742801236891974479257198`30", 1e-24);
+    ASSERT_CLOSE("NSum[1/(n Log[n] Log[Log[n]]^2),{n,3,Infinity},WorkingPrecision->30]",
+                 "38.40676809282178631849374770`30", 1e-22);
+    /* 1/Log[n] - 1/Log[n+1] telescopes to 1/Log[2], but its continuous
+     * extension cancels to nothing at the huge x the tail needs: no method can
+     * certify it, so it must warn rather than be silently wrong. */
+    char* s = eval_str("Quiet[Check[If[Abs[NSum[1/Log[n] - 1/Log[n+1],{n,2,Infinity}]"
+                       " - 1/Log[2]] < 10^-10, ok, bad], warned]]");
+    ASSERT_MSG(strcmp(s, "ok") == 0 || strcmp(s, "warned") == 0,
+               "1/Log[n] - 1/Log[n+1]: silently inaccurate: %s", s);
+    free(s);
+}
+
 static void test_unevaluated_forms(void) {
     char* s1 = eval_str("NSum[1/i^2,{i,1,n}]");         /* symbolic upper bound */
     ASSERT_MSG(strstr(s1, "NSum[") != NULL, "symbolic bound should stay: %s", s1);
@@ -316,6 +344,7 @@ static void test_memory_loop(void) {
         "NSum[1./Prime[i]^2,{i,1,Infinity}]",   /* integer-only: continuity probe */
         "NSum[Sin[n]/n,{n,1,Infinity}]",        /* phase split, Abel–Plana */
         "NSum[(-1)^n Log[n]/n,{n,1,Infinity}]", /* phase split, CVZ */
+        "NSum[1/(n Log[n]^2),{n,2,Infinity}]",  /* log-substituted tail */
     };
     /* 3 passes suffice for leak detection; the complex Log[x]/x^(2+2I) summand
      * is the slowest path (oscillatory Euler–Maclaurin), so keep the count low. */
@@ -351,6 +380,7 @@ int main(void) {
     TEST(test_slow_log_honest);
     TEST(test_trig_oscillatory);
     TEST(test_alternating_log);
+    TEST(test_slow_log_tails);
     TEST(test_unevaluated_forms);
     TEST(test_attributes);
     TEST(test_memory_loop);
