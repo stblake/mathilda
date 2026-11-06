@@ -536,9 +536,25 @@ static void test_no_leak_many_calls(void) {
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
+/* Newton with the compiled symbolic derivative: Wilkinson's perturbed
+ * polynomial prod (x - k) - 2^-23 x^19 from x = 21 (its real root next to 21)
+ * against an independent 40-digit solve (MPFR, a different path), and the
+ * compiled 20-term derivative against the interpreted one at a few points. */
+static void test_root_compiled_derivative(void) {
+    check_true("Module[{p = Product[x - k, {k, 1, 20}] - x^19/2^23, r, r40}, "
+               "r = x /. FindRoot[Evaluate[p], {x, 21.}]; "
+               "r40 = x /. FindRoot[Evaluate[p], {x, 21}, WorkingPrecision -> 40]; "
+               "Abs[r - r40] < 10^-12 && Abs[r40 - 20.846908101] < 10^-8]");
+    check_true("Module[{d = D[Product[x - k, {k, 1, 20}] - x^19/2^23, x], cf}, "
+               "cf = Compile[{{x, _Real}}, Evaluate[d]]; "
+               "And @@ Table[Abs[cf[v] - (d /. x -> v)] <= 10^-12 Abs[d /. x -> v], {v, {0.5, 7.25, 20.85, 21.}}]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_root_compiled_derivative);
 
     TEST(test_root_quadratic);
     TEST(test_root_sin);

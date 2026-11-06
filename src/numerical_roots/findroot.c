@@ -112,6 +112,14 @@ typedef struct {
      * derivative) is evaluated at the working precision instead of interpreted per
      * Newton step.  NULL unless scalar/MPFR/real.  Same faithful-degrade contract. */
     AutoCompiled* ac_f_prec;
+    /* The same two fast paths for Newton's symbolic derivative (main_d is the
+     * Expr they compile).  Without them every Newton step evaluated f' in the
+     * interpreter while f ran compiled: for the 20-factor Wilkinson product the
+     * 20-term derivative cost 0.33 ms an evaluation, against 0.28 ms to
+     * compile it once. */
+    Expr*         main_d;        /* borrowed */
+    AutoCompiled* ac_d;          /* owned; NULL unless scalar/machine/real */
+    AutoCompiled* ac_d_prec;     /* owned; NULL unless scalar/MPFR/real */
     /* Set by a machine-precision real solver that met a function or derivative
      * value outside the double range (an MPFR / BigInt value whose magnitude
      * overflows to inf); the entry point then reruns the solve in MPFR.  NULL
@@ -563,15 +571,16 @@ static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
      * exactly as before).  Not taken under an EvaluationMonitor: the monitor
      * must run once per evaluation with the variables bound, which only the
      * interpreted path does. */
-    if (f == opts->main_f && !opts->eval_monitor) {
-        Expr* c = fr_try_compiled(opts->ac_f, values, n, spec);
+    if ((f == opts->main_f || (opts->main_d && f == opts->main_d)) && !opts->eval_monitor) {
+        bool is_d = f != opts->main_f;
+        Expr* c = fr_try_compiled(is_d ? opts->ac_d : opts->ac_f, values, n, spec);
         if (c) return c;
 #ifdef USE_MPFR
         /* Compiled MPFR fast path: `values` are numeric Exprs (EXPR_MPFR); the
          * compiled body returns f at the working precision, or NULL to interpret. */
-        if (opts->ac_f_prec && spec.mode == NUMERIC_MODE_MPFR
-            && n == autocompiled_num_vars(opts->ac_f_prec)) {
-            Expr* cm = autocompiled_eval_mpfr(opts->ac_f_prec, (const Expr* const*)values);
+        AutoCompiled* acp = is_d ? opts->ac_d_prec : opts->ac_f_prec;
+        if (acp && spec.mode == NUMERIC_MODE_MPFR && n == autocompiled_num_vars(acp)) {
+            Expr* cm = autocompiled_eval_mpfr(acp, (const Expr* const*)values);
             if (cm) return cm;
         }
 #endif
@@ -2226,6 +2235,8 @@ Expr* builtin_findroot(Expr* res) {
     opts.eval_monitor = NULL;
     opts.main_f = NULL;
     opts.ac_f = NULL; opts.ac_f_prec = NULL;
+    opts.main_d = NULL;
+    opts.ac_d = NULL; opts.ac_d_prec = NULL;
     opts.overflow = NULL;
     opts.escalated = false;
 
@@ -2391,6 +2402,21 @@ Expr* builtin_findroot(Expr* res) {
         }
     }
 
+    /* Compile the derivative wherever the function compiled above. */
+    if (deriv && !want_complex) {
+        const Expr* vs[1] = { var };
+        if (opts.prec_mode == FR_PREC_MACHINE && opts.ac_f) {
+            opts.ac_d = autocompile_new(deriv, vs, 1);
+            opts.main_d = deriv;
+        }
+#ifdef USE_MPFR
+        else if (opts.prec_mode == FR_PREC_MPFR && opts.wp_bits > 0 && opts.ac_f_prec) {
+            opts.ac_d_prec = autocompile_new_prec(deriv, vs, 1, (long)opts.wp_bits);
+            opts.main_d = deriv;
+        }
+#endif
+    }
+
     FrScalarProblem prob = { method, kind, fnorm, x0_e, x1_e, xmin_e, xmax_e,
                              deriv, want_complex };
     bool overflow = false;
@@ -2423,6 +2449,8 @@ scalar_cleanup:
     fr_bind_restore(&bind);
     autocompiled_free(opts.ac_f);
     autocompiled_free(opts.ac_f_prec);
+    autocompiled_free(opts.ac_d);
+    autocompiled_free(opts.ac_d_prec);
     expr_free(fnorm);
     expr_free(x0_e); expr_free(x1_e); expr_free(xmin_e); expr_free(xmax_e);
 
