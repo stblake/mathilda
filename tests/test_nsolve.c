@@ -237,6 +237,24 @@ static void test_poly_systems_complete(void) {
     ASSERT_TRUE("Length[NSolve[{a + b + c + d + e, a b + b c + c d + d e + e a, "
                 "a b c + b c d + c d e + d e a + e a b, a b c d + b c d e + c d e a + d e a b + e a b c, "
                 "a b c d e - 1}, {a, b, c, d, e}]] == 70");
+    /* Machine solutions come from a double-precision Newton polish of the
+     * LAPACK eigenvector seeds: each must still be a machine number at full
+     * double accuracy, all 70 distinct. */
+    const char* cyc5 = "{a + b + c + d + e, a b + b c + c d + d e + e a, "
+        "a b c + b c d + c d e + d e a + e a b, a b c d + b c d e + c d e a + d e a b + e a b c, "
+        "a b c d e - 1}";
+    snprintf(buf, sizeof buf,
+        "Module[{s = NSolve[%s, {a, b, c, d, e}]}, Length[s] == 70 && "
+        "Length[Union[Round[10^8 {a, b, c, d, e} /. s]]] == 70 && "
+        "Max[Abs[%s /. s]] < 10^-13 && "
+        "Union[Flatten[Precision /@ ({a, b, c, d, e} /. s)]] === {MachinePrecision}]", cyc5, cyc5);
+    ASSERT_TRUE(buf);
+    /* Closed form: x^2 + y^2 = 5, x y = 2 at (1, 2), (2, 1), (-1, -2), (-2, -1). */
+    ASSERT_TRUE("Module[{s = Sort[{x, y} /. NSolve[{x^2 + y^2 == 5, x y == 2}, {x, y}]]}, "
+                "Max[Abs[s - {{-2, -1}, {-1, -2}, {1, 2}, {2, 1}}]] < 10^-14]");
+    /* Complex conjugate pairs: x^2 + 1 = 0, y = x + 3 -> x = +-I. */
+    ASSERT_TRUE("Module[{s = Sort[{x, y} /. NSolve[{x^2 + 1 == 0, y - x == 3}, {x, y}]]}, "
+                "Max[Abs[s - Sort[{{-I, 3 - I}, {I, 3 + I}}]]] < 10^-14]");
 }
 
 int main(void) {
