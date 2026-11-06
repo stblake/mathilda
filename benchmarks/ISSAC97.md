@@ -183,7 +183,7 @@ the ones where Mathilda is wrong, incomplete or slower; "neither" = both wrong):
 | area | cases | status |
 |---|---|---|
 | NIntegrate | h2.3 machine + wp40 (70 s), h2.7 wp40 timeout, h2.8 (neither) (h2.9 was the baseline wrong) | open (NIntegrate agent) |
-| NSum | h3.2, h3.4, h3.6, h3.7, h3.8 machine wrong; h3.2/3.4/3.7/3.8 wp30 timeouts | open |
+| NSum | h3.2, h3.4, h3.6, h3.7, h3.8 machine wrong; h3.2/3.4/3.7/3.8 wp30 timeouts | **fixed v0.6261-v0.6263** (all 20 rows correct; h3.6 wp30 still SLOWER, 3.3x by wall under load) |
 | SeriesCoefficient / Residue | h4.4, h4.8, h4.9 (Tan, k = 401) wrong; h4.5 Residue timeout; h4.10 Residue wrong | **fixed v0.6245–v0.6247** (all correct; h4.8 283 ms vs 106 ms still SLOWER) |
 | FindRoot / special functions (agent) | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | open |
 | NSolve | h6.5, h6.7 machine: solutions missing | **fixed v0.6256** (all ten systems complete; h6.5 91 ms vs 98.5) |
