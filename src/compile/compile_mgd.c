@@ -330,6 +330,32 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
         *out = mgd_bin(c, x, y, (const void*)mpfr_div, MGC_DIV); return c->ok;
     }
     if (h == SYM_Power && n == 2) {
+        /* E^x is exp(x): lowering it as a general power would take log E (an
+         * AGM at the working precision) and, for a complex x, a complex log and
+         * exp, on every evaluation. */
+        if (a[0]->type == EXPR_SYMBOL && a[0]->data.symbol.name == SYM_E) {
+            Expr* av[1] = { expr_copy(a[1]) };
+            Expr* t = expr_new_function(expr_new_symbol(SYM_Exp), av, 1);
+            bool ok = emit_mgd_real(c, t, out);
+            expr_free(t);
+            return ok && c->ok;
+        }
+        /* b^(p/2) = Sqrt[b]^p exactly on the principal branch (both are
+         * exp((p/2) Log b)): a square root and a few multiplications instead
+         * of a log and an exp. */
+        {
+            int64_t pn, pd;
+            if (is_rational(a[1], &pn, &pd) && pd == 2 && pn >= -64 && pn <= 64) {
+                Expr* av[1] = { expr_copy(a[0]) };
+                Expr* t = expr_new_function(expr_new_symbol(SYM_Sqrt), av, 1);
+                Val sq;
+                bool ok = emit_mgd_real(c, t, &sq);
+                expr_free(t);
+                if (!ok || !c->ok) return false;
+                *out = (pn == 1) ? sq : mgd_powi(c, sq, (long)pn);
+                return c->ok;
+            }
+        }
         Val base; if (!emit_mgd_real(c, a[0], &base)) return false;
         long ni;
         if (mgd_small_int(a[1], &ni)) { *out = mgd_powi(c, base, ni); return c->ok; }
