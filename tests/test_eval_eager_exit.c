@@ -156,11 +156,13 @@ static void test_repeated_evaluate_uses_timestamp_path(void) {
     /* Re-evaluating the result must (a) be a no-op semantically,
      * (b) leave the timestamp untouched and equal to the live clock. */
     uint64_t clock_before = eval_clock_get();
-    uint64_t stamp = first->last_evaluated_at;
+    /* The stamp proper, flags masked off: a sum of Sin/Cos/Tan of a
+     * valueless symbol also carries the INERT bit. */
+    uint64_t stamp = eval_node_stamp(first);
     ASSERT_MSG(stamp == clock_before, "first evaluation did not stamp");
 
     Expr* second = evaluate(first);
-    ASSERT_MSG(second->last_evaluated_at == clock_before,
+    ASSERT_MSG(eval_node_stamp(second) == clock_before,
                "timestamp moved on a no-op re-evaluation");
 
     /* Output must be byte-stable. */

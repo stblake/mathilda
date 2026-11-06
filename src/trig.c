@@ -661,7 +661,8 @@ static Expr* exact_csc(int64_t n, int64_t d) {
  * (ArcSin[Sin[x]], etc.) because those only reduce to x on each function's
  * principal domain. */
 static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
-    if (head_is(arg, intern_symbol(inverse_name)) &&
+    /* inverse_name is an interned SYM_* pointer: no string hash per call */
+    if (head_is(arg, inverse_name) &&
         arg->data.function.arg_count == 1) {
         return expr_copy(arg->data.function.args[0]);
     }
@@ -686,7 +687,7 @@ Expr* builtin_sin(Expr* res) {
     { Expr* ax = numeric_mpfr_imag_axis(arg, "Sinh"); if (ax) return ax; }
 #endif
 
-    { Expr* inv = strip_inverse_call(arg, "ArcSin"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcSin); if (inv) return inv; }
 
     // Sin[ArcCos[x]] -> Sqrt[1-x^2], Sin[ArcTan[x]] -> x/Sqrt[1+x^2]
     { Expr* f = try_simp_forward_of_inverse("Sin", arg); if (f) return f; }
@@ -740,7 +741,7 @@ Expr* builtin_cos(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Cos", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcCos"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcCos); if (inv) return inv; }
 
     // Cos[ArcSin[x]] -> Sqrt[1-x^2], Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]
     { Expr* f = try_simp_forward_of_inverse("Cos", arg); if (f) return f; }
@@ -798,7 +799,7 @@ Expr* builtin_tan(Expr* res) {
     { Expr* ax = numeric_mpfr_imag_axis(arg, "Tanh"); if (ax) return ax; }
 #endif
 
-    { Expr* inv = strip_inverse_call(arg, "ArcTan"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcTan); if (inv) return inv; }
 
     // Tan[ArcSin[x]] -> x/Sqrt[1-x^2], Tan[ArcCos[x]] -> Sqrt[1-x^2]/x,
     // Tan[ArcCot[x]] -> 1/x.
@@ -853,7 +854,7 @@ Expr* builtin_cot(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Cot", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcCot"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcCot); if (inv) return inv; }
 
     // Cot[ArcTan[x]] -> 1/x
     { Expr* f = try_simp_forward_of_inverse("Cot", arg); if (f) return f; }
@@ -907,7 +908,7 @@ Expr* builtin_sec(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Sec", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcSec"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcSec); if (inv) return inv; }
     { Expr* f = try_simp_forward_of_inverse("Sec", arg); if (f) return f; }
 
     // Sec is even: Sec[-x] -> Sec[x]
@@ -959,7 +960,7 @@ Expr* builtin_csc(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Csc", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcCsc"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcCsc); if (inv) return inv; }
     { Expr* f = try_simp_forward_of_inverse("Csc", arg); if (f) return f; }
 
     // Csc is odd: Csc[-x] -> -Csc[x]

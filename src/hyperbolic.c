@@ -284,7 +284,8 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
  * holds over the complex numbers. The opposite direction is NOT folded
  * because those only reduce on each function's principal domain. */
 static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
-    if (head_is(arg, intern_symbol(inverse_name)) &&
+    /* inverse_name is an interned SYM_* pointer: no string hash per call */
+    if (head_is(arg, inverse_name) &&
         arg->data.function.arg_count == 1) {
         return expr_copy(arg->data.function.args[0]);
     }
@@ -338,7 +339,7 @@ Expr* builtin_sinh(Expr* res) {
     { Expr* ax = numeric_mpfr_imag_axis(arg, "Sin"); if (ax) return ax; }
 #endif
 
-    { Expr* inv = strip_inverse_call(arg, "ArcSinh"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcSinh); if (inv) return inv; }
 
     // Sinh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1], Sinh[ArcTanh[x]] -> x/Sqrt[1-x^2]
     { Expr* f = try_simp_forward_of_inverse_hyp("Sinh", arg); if (f) return f; }
@@ -382,7 +383,7 @@ Expr* builtin_cosh(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Cosh", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcCosh"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcCosh); if (inv) return inv; }
 
     // Cosh[ArcSinh[x]] -> Sqrt[1+x^2], Cosh[ArcTanh[x]] -> 1/Sqrt[1-x^2]
     { Expr* f = try_simp_forward_of_inverse_hyp("Cosh", arg); if (f) return f; }
@@ -426,7 +427,7 @@ Expr* builtin_tanh(Expr* res) {
     { Expr* ax = numeric_mpfr_imag_axis(arg, "Tan"); if (ax) return ax; }
 #endif
 
-    { Expr* inv = strip_inverse_call(arg, "ArcTanh"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcTanh); if (inv) return inv; }
 
     // Tanh[ArcSinh[x]] -> x/Sqrt[1+x^2], Tanh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1]/x,
     // Tanh[ArcCoth[x]] -> 1/x.
@@ -468,7 +469,7 @@ Expr* builtin_coth(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Coth", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcCoth"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcCoth); if (inv) return inv; }
 
     // Coth[ArcTanh[x]] -> 1/x
     { Expr* f = try_simp_forward_of_inverse_hyp("Coth", arg); if (f) return f; }
@@ -509,7 +510,7 @@ Expr* builtin_sech(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Sech", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcSech"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcSech); if (inv) return inv; }
 
     // Sech is even: Sech[-x] -> Sech[x]
     { Expr* f = even_fold(arg, "Sech"); if (f) return f; }
@@ -546,7 +547,7 @@ Expr* builtin_csch(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Csch", arg); if (r) return r; }
 
-    { Expr* inv = strip_inverse_call(arg, "ArcCsch"); if (inv) return inv; }
+    { Expr* inv = strip_inverse_call(arg, SYM_ArcCsch); if (inv) return inv; }
 
     // Csch is odd: Csch[-x] -> -Csch[x]
     { Expr* f = odd_fold(arg, "Csch"); if (f) return f; }

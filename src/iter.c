@@ -355,8 +355,12 @@ IterShadow iter_spec_shadow(Expr* var) {
 void iter_bind(Expr* var, Expr* value) {
     if (iter_var_is_indexed(var))
         symtab_add_down_value_as(var->data.function.head->data.symbol.name, var, value, false);
-    else
-        symtab_add_own_value(var->data.symbol.name, var, value);
+    else {
+        /* the node's cached definition: no name hash per iteration */
+        SymbolDef* d = var->data.symbol.def;
+        if (!d) { d = symtab_get_def(var->data.symbol.name); var->data.symbol.def = d; }
+        symtab_add_own_value_def(d, var, value);
+    }
 }
 
 void iter_spec_restore(Expr* var, IterShadow token) {

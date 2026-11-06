@@ -881,6 +881,26 @@ static void test_dep_certified_call_invalidated_by_its_dependencies(void) {
                 "k9, e9, cnt10, k10, k11, dt13, gl13, k13, e13, in14, gl14, out14, e14, f15, e15]", "Null");
 }
 
+/* A circular or hyperbolic residue is a fixed point resting only on its
+ * argument: it survives an unrelated binding (a Table iterator) and is
+ * invalidated by a binding of a symbol it contains or a rule for its head. */
+static void test_inert_trig_heads(void) {
+    eval_str_is("Clear[te, tx, tk]; te = Cos[6/5] Sin[tx]^2 + Tanh[tx]; Length[te]", "2");
+    Expr* sym = parse_expression("te");
+    Expr* v1 = evaluate(sym);
+    eval_str_is("tk = 1; tk = 2; Sum[tk, {tk, 3}]", "6");
+    Expr* v2 = evaluate(sym);
+    ASSERT(v1 == v2);                 /* reused, not re-evaluated */
+    expr_free(v1); expr_free(v2); expr_free(sym);
+    /* Sin[Pi/2] = 1, Cos[Pi/2] = 0 */
+    eval_str_is("ts = Sin[ty] + Cos[ty]; ts; ty = Pi/2; ts", "1");
+    eval_str_is("tt = Tan[tz] + 1; tt; Unprotect[Tan]; Tan[tz] = 5; Protect[Tan]; tt", "6");
+    eval_str_is("Unprotect[Tan]; Clear[Tan]; Protect[Tan]; Tan[tz]", "Tan[tz]");
+    eval_str_is("Table[-Cos[6/5] Sin[6/5]^k, {k, 3}]",
+                "{-Cos[6/5] Sin[6/5], -Cos[6/5] Sin[6/5]^2, -Cos[6/5] Sin[6/5]^3}");
+    eval_str_is("Clear[te, tx, tk, ts, ty, tt, tz]", "Null");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -909,6 +929,7 @@ int main(void) {
     TEST(test_declining_call_reports_once);
     TEST(test_inert_survives_unrelated_binding);
     TEST(test_inert_invalidated_by_what_it_relies_on);
+    TEST(test_inert_trig_heads);
     TEST(test_dep_certified_call_invalidated_by_its_dependencies);
 
     printf("All eval-timestamp tests passed!\n");

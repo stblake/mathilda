@@ -355,7 +355,18 @@ static bool node_compute_ground(const Expr* e) {
  * and every rule change advances it unconditionally, so a stale INERT stamp is
  * never reused. */
 static inline bool inert_builtin_head(const char* n) {
-    return n == SYM_Plus || n == SYM_Times || n == SYM_Power;
+    if (n == SYM_Plus || n == SYM_Times || n == SYM_Power) return true;
+    /* The circular and hyperbolic functions are the same kind of head: their
+     * builtins rewrite a call from its argument alone (special values, parity,
+     * f[g^-1[x]], machine and MPFR numerics at the argument's own precision)
+     * and read no symbol value, option or other global.  A residue such as
+     * Cos[6/5] or Sin[x] is therefore as settled as x^2 -- without this, every
+     * product containing one (-Cos[t] Sin[t]^k, Sin[Pi k/2]/(Pi k)) lost its
+     * stamp at each iterator binding and was re-collected in full, element by
+     * element, when Table handed back its list. */
+    return n == SYM_Sin || n == SYM_Cos || n == SYM_Tan || n == SYM_Cot ||
+           n == SYM_Sec || n == SYM_Csc || n == SYM_Sinh || n == SYM_Cosh ||
+           n == SYM_Tanh || n == SYM_Coth || n == SYM_Sech || n == SYM_Csch;
 }
 
 /* ---- Dependency-recorded fixed points -------------------------------------
@@ -2576,8 +2587,12 @@ static bool eval_mentions_symbols_of(const Expr* e, const Expr* lhs) {
 
 /* Are `res`'s arguments still exactly the `n` pointers in `snap`? */
 static inline bool eval_args_untouched(const Expr* res, Expr* const* snap, size_t n) {
-    return res->type == EXPR_FUNCTION && res->data.function.arg_count == n &&
-           (n == 0 || memcmp(snap, res->data.function.args, sizeof(Expr*) * n) == 0);
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != n) return false;
+    /* an inline loop: n is a handful of pointers, and the libc memcmp call
+     * showed up on every evaluation step */
+    for (size_t i = 0; i < n; i++)
+        if (snap[i] != res->data.function.args[i]) return false;
+    return true;
 }
 
 /* Does the sparse gate have anything to convert in this call: a SparseArray
@@ -2624,9 +2639,25 @@ static inline bool eval_is_terminal_value(const Expr* v) {
             return true;
         case EXPR_FUNCTION: {
             const Expr* h = v->data.function.head;
-            if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Complex ||
-                v->data.function.arg_count != 2)
+            if (h->type != EXPR_SYMBOL || v->data.function.arg_count != 2)
                 return false;
+            if (h->data.symbol.name == SYM_Rational) {
+                /* A canonical machine Rational -- denominator > 1, coprime to
+                 * the numerator -- is what builtin_rational declines on; its
+                 * parts are atoms (no UpValue can attach) and Rational is
+                 * Protected (the cached def is checked for a DownValue all
+                 * the same).  Every exact-arithmetic builtin answering with a
+                 * fraction would otherwise pay one confirming step. */
+                const Expr* n = v->data.function.args[0];
+                const Expr* d = v->data.function.args[1];
+                const SymbolDef* rd = h->data.symbol.def;
+                if (!rd || rd->down_values || n->type != EXPR_INTEGER ||
+                    d->type != EXPR_INTEGER)
+                    return false;
+                int64_t nn = n->data.integer, dd = d->data.integer;
+                return dd > 1 && nn != 0 && nn != INT64_MIN && gcd(nn, dd) == 1;
+            }
+            if (h->data.symbol.name != SYM_Complex) return false;
             const Expr* re = v->data.function.args[0];
             const Expr* im = v->data.function.args[1];
             return re->type == EXPR_REAL && im->type == EXPR_REAL &&
@@ -2661,6 +2692,22 @@ void eval_unwind_consumed(void) {
 }
 
 static Expr* evaluate_step_core(Expr* e, bool* changed);
+
+/* evaluate() of a symbol that has no OwnValue is the symbol itself, and the
+ * only side effect of finding that out is the dependency note
+ * (apply_own_values).  Every call head and most symbolic arguments are such
+ * symbols, and the general path -- recursion-depth bookkeeping, trace frame,
+ * deadline tick, a fixed-point loop around one evaluate_step -- was a
+ * measurable share of a small exact product's cost.  Returns NULL (take the
+ * general path) for anything else, while tracing, and for a symbol whose
+ * definition is not yet cached on the node. */
+static inline Expr* eval_valueless_symbol(Expr* s) {
+    if (s->type != EXPR_SYMBOL || TRACE_ACTIVE()) return NULL;
+    SymbolDef* d = s->data.symbol.def;
+    if (!d || d->own_values) return NULL;
+    eval_dep_note(d);
+    return expr_copy(s);
+}
 
 Expr* evaluate_step(Expr* e, bool* changed) {
     Expr* saved = g_pending_unwind;
@@ -2715,7 +2762,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * "head changed" signal, and we only fall through to the
              * structural compare if needed. */
             Expr* orig_head = e->data.function.head;
-            Expr* head = evaluate(orig_head);
+            Expr* head = eval_valueless_symbol(orig_head);
+            if (!head) head = evaluate(orig_head);
             if (head != orig_head) *changed = true;
 
             uint32_t attrs = ATTR_NONE;
@@ -2853,6 +2901,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
 #endif
                             new_args[i] = expr_copy(orig_arg);
                             continue;   /* atoms are never Throw/Goto sentinels */
+                        case EXPR_SYMBOL: {
+                            /* valueless symbol: itself, never a sentinel */
+                            Expr* vs = eval_valueless_symbol(orig_arg);
+                            if (vs) { new_args[i] = vs; continue; }
+                            break;
+                        }
                         default: break;
                     }
                     if (i == 0 && head->type == EXPR_SYMBOL &&
