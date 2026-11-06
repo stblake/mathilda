@@ -799,6 +799,9 @@ typedef struct {
     long   bits;            /* MPFR internal working precision (guarded)      */
     long   target_bits;     /* user-requested precision; result rounded back  */
     double acc_goal;        /* AccuracyGoal digits (nc_accuracy.h sentinels)  */
+    bool   acc_goal_user;   /* AccuracyGoal given explicitly (else the default
+                             * floor is rescaled to the integrand, see
+                             * ni_scale_accuracy_floor)                       */
     double prec_goal;       /* PrecisionGoal digits (nc_accuracy.h sentinels) */
     int    max_recursion;   /* -1 => Automatic                                */
     int    min_recursion;   /* default 0                                      */
@@ -988,7 +991,10 @@ static bool ni_apply_option_value(const char* name, Expr* rhs, NiOpts* o) {
         }
         return true;
     }
-    if (name == SYM_AccuracyGoal)  return ni_parse_goal(rhs, &o->acc_goal);
+    if (name == SYM_AccuracyGoal) {
+        o->acc_goal_user = true;
+        return ni_parse_goal(rhs, &o->acc_goal);
+    }
     if (name == SYM_PrecisionGoal) return ni_parse_goal(rhs, &o->prec_goal);
     if (name == SYM_MaxRecursion)  return ni_parse_int(rhs, &o->max_recursion, true);
     if (name == SYM_MinRecursion)  return ni_parse_int(rhs, &o->min_recursion, true);
@@ -3300,6 +3306,49 @@ static int ni_interior_singular_points(Expr* body, const char* var, double a, do
 }
 #endif /* USE_MPFR */
 
+/* The default AccuracyGoal is a ~16-digit ABSOLUTE floor, 10^-15.95: the
+ * combined tolerance 10^-a + |I| 10^-p is met as soon as the error is below it.
+ * That is a statement about the integrand's units, not about the integral: for
+ * an integrand of size 1e-54 (Gamma[z]^3 on a circle about z = -20, a residue
+ * of 3.19e-54) the floor is met by any estimate at all, and the rules stopped
+ * after their first panel, three digits off.  When the user has not set
+ * AccuracyGoal, the floor is therefore taken relative to the integrand's own
+ * scale -- max |f| over a few interior points times the length of the range --
+ * whenever that scale is below 1 (a larger integrand keeps the absolute floor,
+ * which its relative goal dominates anyway).  The scaled floor plays the same
+ * role at every magnitude: it lets an integral that cancels to ~0 against an
+ * O(1) integrand stop, without letting a tiny integrand stop early. */
+static void ni_scale_accuracy_floor(Expr* body, const char* var, double a, double b,
+                                    NiOpts* o) {
+    if (o->acc_goal_user || o->prec_mpfr || !(o->acc_goal > 0.0) || !isfinite(o->acc_goal))
+        return;
+    double span = fabs(b - a);
+    if (!(span > 0.0) || !isfinite(span)) return;
+    NiBind bind;
+    ni_bind_snapshot(&bind, var);
+    NiCtx ctx;
+    ni_ctx_init(&ctx, body, &bind, numeric_machine_spec());
+    static const double fr[7] = { 0.0731, 0.2113, 0.3473, 0.5, 0.6527, 0.7887, 0.9269 };
+    double mag = 0.0;
+    bool any = false;
+    arith_warnings_mute_push();
+    for (int i = 0; i < 7; i++) {
+        Expr* num = ni_eval_at(&ctx, expr_new_real(a + fr[i] * (b - a)));
+        double _Complex v;
+        if (num && ni_to_complex(num, &v) && isfinite(creal(v)) && isfinite(cimag(v))) {
+            double m = cabs(v);
+            if (m > mag) mag = m;
+            any = true;
+        }
+        expr_free(num);
+    }
+    arith_warnings_mute_pop();
+    ni_bind_restore(&bind);
+    double scale = mag * span;
+    if (!any || !(scale > 0.0) || scale >= 1.0) return;
+    o->acc_goal += -log10(scale);
+}
+
 /* ------------------------------------------------------------------ *
  *  Phase substitution for a power-law phase                           *
  * ------------------------------------------------------------------ *
@@ -3599,6 +3648,8 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
             expr_free(inner);
             return NULL;
         }
+        if (real_finite && a != b && nspecs == 1)
+            ni_scale_accuracy_floor(eff_body, var, a, b, &o);
         /* a power-law phase: integrate in the phase variable */
         if (o.method == NI_AUTO && nspecs == 1 && !o.exclusions) {
             Expr* ps = ni_try_phase_substitution(eff_body, var, spec0->data.function.args[1],
@@ -3830,6 +3881,7 @@ Expr* builtin_nintegrate(Expr* res) {
      * only relaxes the combined tolerance 10^-a + |x| 10^-p, since a finite a
      * adds a positive term where the old Automatic contributed none. */
     o.acc_goal = NUMERIC_MACHINE_PRECISION_DIGITS; o.prec_goal = -1.0;
+    o.acc_goal_user = false;
     o.max_recursion = -1; o.min_recursion = 0; o.max_points = -1;
     o.exclusions = NULL;
     o.rule_type = 0; o.romberg = true; o.nc_points = 3;

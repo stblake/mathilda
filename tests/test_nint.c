@@ -815,6 +815,23 @@ static void test_interior_singular_points_wp(void) {
                  "2 E^(1/3) - E/3 - 4/3", 1e-27);
 }
 
+/* The default AccuracyGoal floor is relative to the integrand's scale: an
+ * integrand of size 1e-40 is integrated to its PrecisionGoal, not stopped at
+ * an absolute 1e-16.  Closed forms: int_{-1}^1 dx/(c + x^2) = (2/Sqrt[c])
+ * ArcTan[1/Sqrt[c]]; int_0^1 Sqrt[x] Log[x] = -4/9; the residue of Gamma^3 at
+ * -20, (1/20!^3)((9/2)(H_20 - EulerGamma)^2 + Pi^2/4 + (3/2) H_20^(2)), as a
+ * Cauchy integral on |z + 20| = 1/2 (was 3.1745e-54 for 3.18865e-54). */
+static void test_tiny_integrand_scale(void) {
+    ASSERT_CLOSE("NIntegrate[10^-40/(10^-4 + x^2), {x, -1, 1}]/(10^-40 2 100 ArcTan[100])",
+                 "1", 1e-9);
+    ASSERT_CLOSE("NIntegrate[10^-30 Sqrt[x] Log[x], {x, 0, 1}]/(-4/9 10^-30)", "1", 1e-8);
+    ASSERT_CLOSE("Re[NIntegrate[Gamma[-20 + Exp[I t]/2]^3 Exp[I t]/2, {t, 0, 2 Pi}]/(2 Pi)]"
+                 "/((1/20!^3) ((9/2) (HarmonicNumber[20] - EulerGamma)^2 + Pi^2/4"
+                 " + (3/2) HarmonicNumber[20, 2]))", "1", 1e-9);
+    /* an O(1) integrand that cancels to 0 keeps the absolute floor */
+    ASSERT_CLOSE("NIntegrate[Sin[x], {x, 0, 2 Pi}]", "0", 1e-12);
+}
+
 static void test_symbolic_swell(void) {
     /* Symbolic processing that swells the integrand is not used when the held
      * integrand samples numerically.  Expanding LegendreP[200, x]^2 gives a
@@ -887,6 +904,7 @@ int main(void) {
     TEST(test_symbolic_swell);
     TEST(test_endpoint_cancellation_wp);
     TEST(test_interior_singular_points_wp);
+    TEST(test_tiny_integrand_scale);
 
     printf("All nint_tests passed.\n");
     return 0;
