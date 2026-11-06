@@ -1924,6 +1924,46 @@ In[6]:= ToRadicals[Root[Function[#^2 - 2], 2] < 3]      (* threading *)
 Out[6]= True
 ```
 
+## CountRoots
+
+`CountRoots[poly, x]` is the number of real roots of the univariate polynomial
+`poly`, counted with multiplicity. `CountRoots[poly, {x, a, b}]` counts the
+roots in the closed interval `[a, b]` (real `a`, `b`, either end may be
+`-Infinity` / `Infinity`), or, when `a` or `b` is complex, in the closed
+rectangle with opposite corners `a` and `b`.
+
+```
+In[1]:= CountRoots[Product[x - k, {k, 1, 20}] - x^19/2^23, x]
+Out[1]= 10
+In[2]:= CountRoots[x^40 - 2 (10 x - 1)^2, {x, 0, 1/5}]   (* two roots 1.4*10^-21 apart *)
+Out[2]= 2
+In[3]:= CountRoots[(x - 1)^2 (x - 3), {x, 1, 3}]
+Out[3]= 3
+In[4]:= CountRoots[x^12 - 1, {x, 0, 1 + I}]                (* 1, I on corners; 2 inside *)
+Out[4]= 4
+```
+
+- The count is exact. `poly` is split into its squarefree decomposition
+  `c prod f_i^e_i`; each `f_i` contributes `e_i` times its number of distinct
+  roots.
+- Real intervals: Sturm's theorem on each `f_i` (primitive pseudo-remainder
+  sequence, signs restored), plus one when `f_i(a) = 0`; infinite ends by the
+  signs of the leading terms.
+- Rectangles: the roots on the boundary are counted exactly (on the edge
+  `Im z = c`, `f(t + I c) = U(t) + I V(t)` and the roots are the real roots of
+  `gcd(U, V)`; corners counted once); the interior from certified isolating
+  balls of all roots, raising the precision until every ball meeting the
+  boundary is accounted for by an exact boundary root.
+- Coefficients: rational numbers; an approximate coefficient or end stands for
+  its exact binary value. Gaussian rational coefficients for a real count (the
+  real roots of `gcd(Re p, Im p)`).
+- Unevaluated: a second variable (`CountRoots::nuniv`), a non-polynomial or an
+  irrational coefficient such as `Sqrt[2]` (`CountRoots::nmet`; not yet
+  supported), a rectangle with non-real coefficients. Both messages go through
+  the message funnel.
+- Attributes: `Protected`. Symbolic (an Integer out), so no packed / NDArray /
+  `Compile` surface.
+
 ## Solve`SolveLinearSystem
 
 The linear-system specialist invoked by `Solve` for multi-variable inputs
