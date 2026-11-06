@@ -125,7 +125,7 @@ argument/option handling, then absences, then bottlenecks.
 | W8 | the half-line Fourier probe rewrote the integrand in place (`Exp[-x^2]` -> `Power[E, -1, x^2]`): every WP integral over [0, oo) wrong (found via P2) | **fixed v0.6234** |
 | W9 | MPFR endpoints taken as doubles (`2 Pi` off by 2.4e-16); one-sided tail cut before a climbing side's bulk (`(1 + Cos[x])^2000` lost half) (found via P4) | **fixed v0.6235** |
 | W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | open (agent) |
-| W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | open |
+| W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
 | # | deficiency | status |
@@ -139,14 +139,14 @@ argument/option handling, then absences, then bottlenecks.
 | A7 | FindMinimum at WorkingPrecision 30 returns a machine-precision minimum value; MPFR bracket-finding fails on an InterpolatingFunction (P10) | **fixed v0.6233 (value precision: the number carries 30 digits; the printer drops trailing zeros, see P1)** |
 | A8 | `InterpolatingFunction[...]["Domain"]` (and the other property queries) unevaluated (P10) | **fixed v0.6231** |
 | A10 | the printer drops trailing zeros of arbitrary-precision reals: `N[1, 30]` prints `1.0` (P10) | open |
-| A9 | `Precision[matrix]` maps over the elements instead of returning the minimum (P1) | open |
+| A9 | `Precision[matrix]` maps over the elements instead of returning the minimum (P1) | **fixed v0.6240** |
 
 ### Absences
 | # | deficiency | status |
 |---|---|---|
 | X1 | `Integrate` of polynomial × PolyLog[3, rational function of x], definite and indefinite (P8) | **fixed v0.6237** (0.05-0.28 s per row; v0.6238 complex values, v0.6239 FunctionExpand) |
 | X2 | `Limit` of P7 (needs a series-based quotient limit with deep cancellation; the baseline also fails) | open |
-| X3 | `LUBackSubstitution` (P1 m3) | open |
+| X3 | `LUBackSubstitution` (P1 m3) | **fixed v0.6241** |
 | X4 | `GaussianQuadratureWeights` (P9 m1, verbatim) | open |
 | X5 | `FunctionInterpolation` (P9 m2) | open |
 
@@ -156,7 +156,7 @@ argument/option handling, then absences, then bottlenecks.
 | B1 | `Residue[p/x^3001, {x, 0}]` of a polynomial (P4) | 176 s | 4.0 s | open |
 | B2 | `Series` of a product of polynomial powers to order 3000 (P4) | 29.2 s | 1.6 s | open |
 | B3 | `Series` of nested Sin/Tan/Sinh/Tanh compositions to order 25 (P7) | 1.8–2.5 s | 0.6–1.9 s | open |
-| B4 | 800-digit 256 × 256 Dot (power method) (P1 m2) | 11.1 s | 7.9 s | open |
+| B4 | 800-digit 256 × 256 Dot (power method) (P1 m2) | 11.1 s | 7.9 s | **fixed v0.6242 (800-digit power method 11.1 s -> ~3 s)** |
 | B5 | MPFR Eigenvalues at 20–40 digits, 64 × 64 nonsymmetric (P9 Nyström) | 640 ms | 323 ms | open |
 | B6 | contour NIntegrate of L'_1000/L_1000 at 100 digits (P5 RootCount): the integrand is evaluated symbolically once, which expands LaguerreL[1000, rho E^(I phi)] into its degree-1000 polynomial (~93 ms and ~250 digits of cancellation per sample); needs sampling of the unexpanded form or precision-loss detection | > 120 s | unevaluated (same expansion) | open |
 | B7 | `NSolve[LaguerreL[1000, x] == 0, x, WorkingPrecision -> 50]` | > 600 s | > 120 s | open |
