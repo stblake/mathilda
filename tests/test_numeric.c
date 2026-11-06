@@ -563,6 +563,11 @@ static void test_inverse_trig_numeric_arguments(void) {
     assert_eval_eq("ArcSin[1/2] === Pi/6", "True", 0);
     assert_eval_eq("ArcTan[1] === Pi/4", "True", 0);
     assert_eval_eq("ArcCos[-1/2] === 2 Pi/3", "True", 0);
+    /* the bare rationals among the table values, and radical ones */
+    assert_eval_eq("{ArcSec[2], ArcCsc[-2], ArcSin[-1/2], ArcCos[Sqrt[3]/2], ArcTan[2 - Sqrt[3]]}"
+                   " === {Pi/3, -Pi/6, -Pi/6, Pi/6, Pi/12}", "True", 0);
+    /* a non-table argument stays as it is */
+    assert_eval_eq("ArcSin[1/3] === ArcSin[1/3] && Head[ArcSin[ArcTan[1/10^8]]] === ArcSin", "True", 0);
     assert_eval_eq("Abs[ArcSin[0.5] - Pi/6] < 10^-15", "True", 0);
     assert_eval_eq("Abs[ArcCos[0.5] - Pi/3] < 10^-15", "True", 0);
     assert_eval_eq("Abs[ArcTan[1.] - Pi/4] < 10^-15", "True", 0);

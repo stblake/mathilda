@@ -997,26 +997,43 @@ Expr* builtin_csc(Expr* res) {
     return NULL;
 }
 
-/* True when `arg` carries an approximate number at its top (a machine or
- * MPFR real, or a Complex with an approximate part).  The exact inverse
- * tables below compare the argument with the exact values Sin/Cos/Tan/...
- * take at rational multiples of Pi -- integers, rationals and radicals,
- * never an approximate number -- so such an argument cannot match, and
- * building the ~70 table values to find that out cost ~8 us of every machine
- * ArcSin[0.1] (60x the libm call) and of every MPFR call N makes. */
-static bool exact_inverse_table_cannot_match(const Expr* arg) {
-    if (arg->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
-    if (arg->type == EXPR_MPFR) return true;
-#endif
-    Expr *re, *im;
-    if (is_complex((Expr*)arg, &re, &im)) {
-        if (re->type == EXPR_REAL || im->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
-        if (re->type == EXPR_MPFR || im->type == EXPR_MPFR) return true;
-#endif
+/* True when `arg` could be one of the exact values Sin/Cos/Tan/... take at
+ * rational multiples of Pi that the inverse tables below compare it with:
+ * those are built from integers by Plus, Times, Power and Rational (radicals
+ * and rationals), or are ComplexInfinity at a pole.  Anything else -- an
+ * approximate number, a symbol, a call such as ArcTan[1/10^8] -- cannot
+ * match, and building the ~70 table values to find that out cost ~8 us of
+ * every machine ArcSin[0.1] (60x the libm call), of every MPFR call N makes,
+ * and of every unevaluated ArcSin[ArcTan[x]] re-evaluated. */
+static bool exact_inverse_table_candidate(const Expr* e, int depth) {
+    if (depth > 8) return false;            /* deeper than any table value */
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return true;
+        case EXPR_SYMBOL: return e->data.symbol.name == SYM_ComplexInfinity;
+        case EXPR_FUNCTION: {
+            const Expr* h = e->data.function.head;
+            if (h->type != EXPR_SYMBOL) return false;
+            const char* hn = h->data.symbol.name;
+            if (hn != SYM_Plus && hn != SYM_Times && hn != SYM_Power &&
+                hn != SYM_Rational && hn != SYM_Complex) return false;
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!exact_inverse_table_candidate(e->data.function.args[i], depth + 1))
+                    return false;
+            return true;
+        }
+        default: return false;              /* Real, MPFR, String, ... */
     }
-    return false;
+}
+
+static bool exact_inverse_table_cannot_match(const Expr* arg) {
+    /* The only bare rationals among the values: 0, +-1, +-2 (Sec, Csc at
+     * Pi/3, Pi/6), +-1/2. */
+    if (arg->type == EXPR_INTEGER)
+        return arg->data.integer < -2 || arg->data.integer > 2;
+    if (arg->type == EXPR_BIGINT) return true;
+    int64_t n, d;
+    if (is_rational((Expr*)arg, &n, &d)) return !((n == 1 || n == -1) && d == 2);
+    return !exact_inverse_table_candidate(arg, 0);
 }
 
 static Expr* exact_arcsin(Expr* arg) {
