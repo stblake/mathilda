@@ -187,6 +187,8 @@ static void nd_problem_free(NdProblem* P) {
         free(P->jac);
     }
     free(P->Y0);
+    expr_free(P->t0_expr); expr_free(P->tmin_expr); expr_free(P->tmax_expr);
+    if (P->Y0_expr) { for (size_t i = 0; i < P->y0_expr_n; i++) expr_free(P->Y0_expr[i]); free(P->Y0_expr); }
     free(P->bind_y);
     free(P->fun_names);
     free(P->fun_state0);
@@ -370,6 +372,10 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
 
     /* ---- initial conditions -> Y0 (Y0im for complex ICs), t0 ---- */
     P.Y0 = calloc(d, sizeof(double));
+    P.Y0_expr = calloc(d, sizeof(Expr*));
+    P.y0_expr_n = d;
+    P.tmin_expr = expr_copy(range->data.function.args[1]);
+    P.tmax_expr = expr_copy(range->data.function.args[2]);
     double* Y0im = calloc(d, sizeof(double));
     bool* have_ic = calloc(d, sizeof(bool));
     double t0 = tmin; bool t0_set = false;
@@ -388,12 +394,16 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         for (k = 0; k < nfun; k++) if (fn == fnames[k]) { fk = true; break; }
         if (!fk || ord >= maxorder[k]) continue;
         double pt;
-        if (nd_eval_to_double((Expr*)arg, o.spec, &pt)) { t0 = pt; t0_set = true; }
+        if (nd_eval_to_double((Expr*)arg, o.spec, &pt)) {
+            t0 = pt; t0_set = true;
+            expr_free(P.t0_expr); P.t0_expr = expr_copy((Expr*)arg);
+        }
         double re, im = 0.0;
         if (nd_eval_to_double(val, o.spec, &re)) { /* real IC */ }
         else if (!nd_split_reim(val, o.spec, &re, &im)) continue;   /* complex IC */
         size_t gi = base[k] + (size_t)ord;
         P.Y0[gi] = re; Y0im[gi] = im; have_ic[gi] = true;
+        expr_free(P.Y0_expr[gi]); P.Y0_expr[gi] = expr_copy(val);
     }
     (void)t0_set;
     bool ic_ok = true;
@@ -543,6 +553,9 @@ void ndsolve_init(void) {
         "NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}] solves a partial\n"
         "\tdifferential equation over a rectangular region by the method of lines,\n"
         "\tgiving a 2-D InterpolatingFunction applied as u[t, x].\n"
+        "\tThe arguments are evaluated (equations may be held in a symbol).\n"
+        "\tAt WorkingPrecision above machine precision the Automatic method is\n"
+        "\ta Taylor-series integrator when the right-hand side is elementary.\n"
         "\tOptions: Method, WorkingPrecision, AccuracyGoal, PrecisionGoal,\n"
         "\tMaxSteps, MaxStepSize, MaxStepFraction, StartingStepSize,\n"
         "\tInterpolationOrder, StepMonitor, EvaluationMonitor.");

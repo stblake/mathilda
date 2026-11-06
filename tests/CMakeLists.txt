@@ -1169,6 +1169,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_implicit.c
     ../src/numerical_calculus/ndsolve_adams.c
     ../src/numerical_calculus/ndsolve_mpfr.c
+    ../src/numerical_calculus/ndsolve_taylor.c
     ../src/numerical_calculus/ndsolve_mol.c
     ../src/numerical_calculus/ndsolve_stencil.c
     ../src/numerical_calculus/ndsolve_operator.c
@@ -1874,6 +1875,9 @@ target_include_directories(ndsolve_pde_tests PRIVATE ../src ../src/numerical_cal
 
 add_executable(ndsolve_compile_tests test_ndsolve_compile.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ndsolve_compile_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(ndsolve_taylor_tests test_ndsolve_taylor.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ndsolve_taylor_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(compile_tests test_compile.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(compile_tests PRIVATE ../src ../src/compile)

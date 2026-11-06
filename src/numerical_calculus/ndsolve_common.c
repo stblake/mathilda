@@ -9,6 +9,7 @@
 #include <float.h>
 #include <string.h>
 #include "ndsolve_compile.h"    /* nonlinear RHS bytecode compiler */
+#include "ndsolve_taylor.h"     /* node derivatives for the dense output */
 #ifdef USE_LAPACK
 #include "../linalg/lapack.h"   /* dgbtrf_/dgbtrs_/dgetrf_/dgetrs_ */
 #endif
@@ -864,18 +865,27 @@ NdStatus nd_integrate(NdProblem* P, const NdStepper* S, const NdOpts* o, NdSolut
  * ------------------------------------------------------------------ */
 
 /* Build the InterpolatingFunction for one scalar component (real path):
- * Hermite triples {{t_i}, y_i, y'_i} passed to the Interpolation builtin. */
-static Expr* nd_build_component(const NdSolution* sol, size_t comp) {
+ * Hermite rows {{t_i}, y_i, y'_i} passed to the Interpolation builtin, or,
+ * when the higher node derivatives are known (hd != NULL, K - 1 of them per
+ * component), {{t_i}, y_i, y'_i, y''_i, ..., y^(K)_i}: a degree-(2K+1)
+ * Hermite interpolant. */
+static Expr* nd_build_component(const NdSolution* sol, size_t comp,
+                                const double* hd, int K) {
     size_t n = sol->n, d = sol->d;
     if (n < 2) return NULL;
+    if (!hd) K = 1;
     Expr** entries = malloc(sizeof(Expr*) * n);
+    Expr** row = malloc(sizeof(Expr*) * (size_t)(K + 2));
     for (size_t i = 0; i < n; i++) {
         Expr* coord_el = expr_new_real(sol->ts[i]);
-        Expr* coord = expr_new_function(expr_new_symbol(SYM_List), &coord_el, 1);
-        Expr* trip[3] = { coord, expr_new_real(sol->Ys[i*d + comp]),
-                          expr_new_real(sol->dYs[i*d + comp]) };
-        entries[i] = expr_new_function(expr_new_symbol(SYM_List), trip, 3);
+        row[0] = expr_new_function(expr_new_symbol(SYM_List), &coord_el, 1);
+        row[1] = expr_new_real(sol->Ys[i*d + comp]);
+        row[2] = expr_new_real(sol->dYs[i*d + comp]);
+        for (int k = 2; k <= K; k++)
+            row[k + 1] = expr_new_real(hd[(i*d + comp) * (size_t)(K - 1) + (size_t)(k - 2)]);
+        entries[i] = expr_new_function(expr_new_symbol(SYM_List), row, (size_t)(K + 2));
     }
+    free(row);
     Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, n);
     free(entries);
     Expr* call = expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1);
@@ -884,15 +894,60 @@ static Expr* nd_build_component(const NdSolution* sol, size_t comp) {
     return ifun;
 }
 
+/* Exact higher derivatives y'', ..., y^(K) at every node, by Taylor-mode
+ * differentiation of the RHS at the node state (ndsolve_taylor.c), so the
+ * InterpolatingFunction between nodes is a degree-(2K+1) Hermite interpolant
+ * rather than a cubic.  The node values carry the integration error; the
+ * cubic's own O(h^4) error between nodes was ~250x larger than that at the
+ * default goals (a minimum located on the solution moved in the 6th digit).
+ * Returns a malloc'd array hd[(i*d + c)*(K-1) + (k-2)], or NULL when the RHS
+ * is outside the tape's vocabulary, a node derivative is undefined, or an
+ * explicit InterpolationOrder <= 3 asked for the cubic. */
+#define ND_DENSE_K 3
+static double* nd_node_derivatives(NdProblem* P, const NdOpts* o,
+                                   const NdSolution* sol) {
+#ifdef USE_MPFR
+    if (o && o->interp_order >= 0 && o->interp_order <= 3) return NULL;
+    size_t n = sol->n, d = sol->d;
+    if (n < 2 || d != P->d || !P->f || !P->ysym) return NULL;
+    NdTaylorTape* TT = nd_taylor_build(P->f, P->d, P->ysym, P->tvar, 64);
+    if (!TT) return NULL;
+    int K = ND_DENSE_K;
+    double* hd = malloc(sizeof(double) * n * d * (size_t)(K - 1));
+    double* C = malloc(sizeof(double) * d * (size_t)(K + 1));
+    bool ok = hd && C;
+    for (size_t i = 0; i < n && ok; i++) {
+        if (!nd_taylor_coeffs_d(TT, sol->ts[i], sol->Ys + i * d, K, C)) { ok = false; break; }
+        for (size_t c = 0; c < d; c++) {
+            double fact = 1.0;
+            for (int k = 2; k <= K; k++) {
+                fact *= k;
+                hd[(i*d + c) * (size_t)(K - 1) + (size_t)(k - 2)] = fact * C[(size_t)k * d + c];
+            }
+        }
+    }
+    free(C);
+    nd_taylor_free(TT);
+    if (!ok) { free(hd); return NULL; }
+    return hd;
+#else
+    (void)P; (void)o; (void)sol;
+    return NULL;
+#endif
+}
+
 Expr* nd_build_result(NdProblem* P, const NdOpts* o, const NdSolution* sol) {
-    (void)o;
     if (sol->n < 2) return NULL;
+    double* hd = nd_node_derivatives(P, o, sol);
     Expr** rules = malloc(sizeof(Expr*) * P->nfun);
     size_t nr = 0;
     for (size_t k = 0; k < P->nfun; k++) {
         size_t comp = P->fun_state0[k];
-        Expr* ifun = nd_build_component(sol, comp);
-        if (!ifun) { for (size_t q = 0; q < nr; q++) expr_free(rules[q]); free(rules); return NULL; }
+        Expr* ifun = nd_build_component(sol, comp, hd, ND_DENSE_K);
+        if (!ifun) {
+            for (size_t q = 0; q < nr; q++) expr_free(rules[q]);
+            free(rules); free(hd); return NULL;
+        }
         /* lhs: u  or  u[x] when fun_applied */
         Expr* lhs;
         if (P->fun_applied) {
@@ -907,6 +962,7 @@ Expr* nd_build_result(NdProblem* P, const NdOpts* o, const NdSolution* sol) {
         Expr* rargs[2] = { lhs, ifun };
         rules[nr++] = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
     }
+    free(hd);
     Expr* inner = expr_new_function(expr_new_symbol(SYM_List), rules, nr);
     free(rules);
     Expr* outer = expr_new_function(expr_new_symbol(SYM_List), &inner, 1);
@@ -920,8 +976,8 @@ Expr* nd_build_result_complex(NdProblem* P, const NdOpts* o, const NdSolution* s
     size_t nr = 0;
     for (size_t k = 0; k < P->nfun; k++) {
         size_t comp = P->fun_state0[k];
-        Expr* ifRe = nd_build_component(sol, 2 * comp);
-        Expr* ifIm = nd_build_component(sol, 2 * comp + 1);
+        Expr* ifRe = nd_build_component(sol, 2 * comp, NULL, 1);
+        Expr* ifIm = nd_build_component(sol, 2 * comp + 1, NULL, 1);
         if (!ifRe || !ifIm) {
             expr_free(ifRe); expr_free(ifIm);
             for (size_t q = 0; q < nr; q++) expr_free(rules[q]);

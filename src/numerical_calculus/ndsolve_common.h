@@ -152,6 +152,15 @@ struct NdProblem {
     const char* tvar;       /* interned independent-variable name (borrowed)  */
     double   t0, tmin, tmax;
     double*  Y0;            /* array[d] (owned)                               */
+    /* The same data as given, before rounding to double (owned, each may be
+     * NULL): the arbitrary-precision driver reads the initial point, the
+     * initial state and the interval ends from these at the working
+     * precision, so a 40-digit initial condition is not cut to 16 digits. */
+    Expr*    t0_expr;
+    Expr*    tmin_expr;
+    Expr*    tmax_expr;
+    Expr**   Y0_expr;       /* array[y0_expr_n] or NULL                       */
+    size_t   y0_expr_n;
 
     /* resolved tolerances, set by the driver before stepping (for implicit
      * steppers' Newton convergence test). */

@@ -1111,6 +1111,15 @@ on `xmin ≤ x ≤ xmax`, returning a list of rules
 - `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}, {y, ymin, ymax}]` — a PDE
   in two spatial dimensions, giving a 3-D `InterpolatingFunction` `u[t, x, y]`.
 
+Attributes: `Protected` (and the same for every `NDSolve`Method` builtin).
+The arguments are evaluated before NDSolve reads them, so the equations, the
+dependent variables and the range may come from symbols or expressions:
+`ode = {y'[x] == z[x], z'[x] == -y[x], y[0] == 0, z[0] == 1};
+NDSolve[ode, {y, z}, {x, 0, 2}]`. (NDSolve used to be `HoldAll`, which
+left `ode` an unevaluated symbol: `NDSolve::nodeqs`.) As a consequence, a
+global value of the independent or a dependent variable is substituted before
+NDSolve sees the equations; use fresh names or `Block`.
+
 Equations are stated with derivatives (`u'[x]`, `u''[x]`, i.e. `Derivative`, not
 `Dt`). Higher-order equations are automatically reduced to a first-order system
 (state `[u, u', …, u^(n-1)]`); the ODEs must be solvable (linearly) for the
@@ -1135,7 +1144,16 @@ The symbolic right-hand side is evaluated at numeric points by Block-localizing
 the reduced-state symbols and the independent variable (the NIntegrate binding
 pattern); implicit steppers reuse a symbolic/finite-difference Jacobian and a
 dense Gaussian-elimination solve (the FindRoot pattern). Output is built as
-cubic-Hermite `{{t_i}, y_i, y'_i}` triples fed to `Interpolation`.
+Hermite rows `{{t_i}, y_i, y'_i, y''_i, y'''_i}` fed to `Interpolation`: the
+higher node derivatives are exact functions of the node state, obtained by
+Taylor-mode automatic differentiation of the right-hand side
+(`ndsolve_taylor.c`), so the solution between nodes is a degree-7 Hermite
+interpolant whose error is the node error rather than a cubic's `O(h^4)`
+(`y' == -y` at the default goals: 1.5e-7 between nodes as a cubic, 9e-10 now;
+the derivative of `y'' == -y` over `[0, 20]`: 5.8e-6, now 2.3e-8). An RHS
+outside the differentiator's vocabulary (see **Arbitrary precision**), a
+complex-valued system, or `InterpolationOrder -> 3` keeps the cubic
+`{{t_i}, y_i, y'_i}` rows.
 
 ### Methods
 
@@ -1181,7 +1199,8 @@ here at cruder accuracy goals.)
 `Method`, `WorkingPrecision` (machine default; higher selects the MPFR
 integrator), `AccuracyGoal`/`PrecisionGoal` (Automatic = WorkingPrecision/2),
 `MaxSteps` (default 10000), `MaxStepSize`, `MaxStepFraction` (1/10),
-`StartingStepSize`, `InterpolationOrder` (Automatic = 3, cubic Hermite),
+`StartingStepSize`, `InterpolationOrder` (Automatic = degree 7 at machine
+precision, `2K+1` at higher precision; `3` keeps the cubic Hermite),
 `StepMonitor`, `EvaluationMonitor`.
 
 `Options[NDSolve]` returns the full default list; the `Automatic` sentinels
@@ -1192,7 +1211,31 @@ above are what the solver resolves internally when an option is omitted.
 `WorkingPrecision -> p` (with `p > $MachinePrecision`) runs a dedicated MPFR
 integrator whose state, independent variable, and step size are all carried at a
 guard-padded precision, so non-autonomous right-hand sides are evaluated at full
-precision. Explicit methods use the adaptive DOPRI5 pair (or fixed RK4);
+precision. The initial point, the initial values and the interval ends are read
+at that precision from the expressions given (`y[N[1/3, 50]] == N[1/7, 50]` is
+not cut to 16 digits).
+
+**Taylor series (the Automatic method).** With `Method` Automatic, a right-hand
+side built from `+`, `*`, powers with a constant exponent (integer powers by
+multiplication, so `y^3` is fine where `y = 0`), `Exp`, `Log`, `Sqrt`, `Sin`,
+`Cos`, `Tan`, `Sinh`, `Cosh`, `Tanh` and `ArcTan` is integrated by a
+Taylor-series method: at every step the solution's Taylor coefficients to order
+`p ≈ ln(1/tol)/2 + 2` (at most 31) are computed exactly by automatic
+differentiation, the step is the radius where the last two terms fall below the
+tolerance, `h = 0.9 min_{k=p-1,p} (tol/|c_k|)^(1/k)`, and the node keeps its
+derivatives through order `K = (p+1)/2`, so the `InterpolatingFunction` is a
+degree-`2K+1` Hermite interpolant as accurate between nodes as at them.
+Subexpressions that repeat (`Sin[p]`, `rho[p]^2`, …) are one node of the
+differentiation tape, and `a^n` shares the powers of `a`. At 40 digits the
+ISSAC '97 problem 10 system (`y'' == x^3 + y^3 + y'^3`) needs 13 steps to
+`x = 6/5` and the polar form of it 35 steps over `[-Pi/2, Pi/4]`; closed-form
+checks (`1/(1-x)`, `Exp[Sin[x]]`, `ArcTan`, `Sec`, `Cosh`, `Exp[Exp[x]]`,
+`Cos` over `[0, 10]` at 50 digits) agree to the goal between nodes. A
+singularity shows as the step collapsing (`NDSolve::ndsz`), and the solution
+ends there. Outside that vocabulary, with an `EvaluationMonitor`, or with a
+named method, the Runge-Kutta/BDF integrators below are used.
+
+Explicit methods use the adaptive DOPRI5 pair (or fixed RK4);
 **stiff (implicit/multistep) methods run the MPFR variable-order BDF** — the
 state, node times, coefficients, Newton residual and linear solve are all MPFR
 (the Jacobian stays double, since its accuracy only affects Newton's convergence
@@ -1449,6 +1492,18 @@ symbol bound to a whole spec list (`vars = {{x, 1}, {y, 2}}`) is resolved.
 `{f_min, {var1 -> v1, ..., varN -> vN}}` -- a 2-element list whose first
 element is the function value and whose second is the rule list for the
 optimising variable assignments.
+
+At `WorkingPrecision -> p` both the value and the coordinates are `p`-digit
+numbers (`Precision[First[FindMinimum[(t - 1)^2 + 1, {t, 0},
+WorkingPrecision -> 30]]]` is `30.103`, the binary precision rounded up). The
+display drops trailing zeros of every arbitrary-precision number, so that value
+prints as `1.0`; `N[1, 30]` prints the same way.
+
+The starting values of `{x, x0}` / `{x, x0, x1}` may be any numeric quantity
+(`{p, -1/10, 1/10}`, `{x, Pi/9, Pi/5}`): a numeric expression is a starting
+value, never an indexed variable `v[k]`. (The held `-1/10` is
+`Times[-1, Power[10, -1]]`; read as an accessor it turned the spec into three
+variables.)
 
 ### Method dispatch
 

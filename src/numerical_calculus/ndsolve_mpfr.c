@@ -16,6 +16,9 @@
 #include "../arithmetic.h"
 #include "../compile/autocompile.h"   /* autocompile_new_prec / autocompiled_eval_mpfr */
 #include "../sym_intern.h"            /* expr_new_symbol for the independent variable */
+#include "../interp.h"                /* INTERP_MAX_SUPPLIED */
+#include "ndsolve_taylor.h"
+#include "../message.h"                /* mth_message: Quiet/Check funnel */
 #include <math.h>
 #include <float.h>
 #include <stdlib.h>
@@ -219,22 +222,31 @@ static bool rk4_mpfr(NdProblem* P, const mpfr_t t, mpfr_t* Y, const mpfr_t h,
     return ok;
 }
 
-/* ---- mpfr solution store ---- */
-typedef struct { size_t n, cap, d; long bits; mpfr_t* t; mpfr_t* Y; mpfr_t* dY; } MpSol;
-static void mpsol_init(MpSol* s, size_t d, long bits) { s->n=s->cap=0; s->d=d; s->bits=bits; s->t=NULL; s->Y=NULL; s->dY=NULL; }
+/* ---- mpfr solution store ----
+ * Each node carries t, Y and Y'; a node produced by the Taylor integrator also
+ * carries the higher derivatives Y'', ..., Y^(K) (hd, K - 1 per component),
+ * which the result hands to Interpolation as a degree-(2K+1) Hermite table. */
+typedef struct { size_t n, cap, d; long bits; int K; mpfr_t* t; mpfr_t* Y; mpfr_t* dY; mpfr_t* hd; } MpSol;
+static void mpsol_init(MpSol* s, size_t d, long bits) { s->n=s->cap=0; s->d=d; s->bits=bits; s->K=1; s->t=NULL; s->Y=NULL; s->dY=NULL; s->hd=NULL; }
+static size_t mpsol_nhd(const MpSol* s) { return s->K > 1 ? (size_t)(s->K - 1) * s->d : 0; }
 static void mpsol_free(MpSol* s) {
+    size_t nh = mpsol_nhd(s);
     for (size_t i = 0; i < s->n; i++) mpfr_clear(s->t[i]);
     for (size_t i = 0; i < s->n * s->d; i++) { mpfr_clear(s->Y[i]); mpfr_clear(s->dY[i]); }
-    free(s->t); free(s->Y); free(s->dY);
+    for (size_t i = 0; i < s->n * nh; i++) mpfr_clear(s->hd[i]);
+    free(s->t); free(s->Y); free(s->dY); free(s->hd);
+}
+static void mpsol_grow(MpSol* s) {
+    if (s->n < s->cap) return;
+    size_t nc = s->cap ? s->cap*2 : 64;
+    s->t  = realloc(s->t,  sizeof(mpfr_t) * nc);
+    s->Y  = realloc(s->Y,  sizeof(mpfr_t) * nc * s->d);
+    s->dY = realloc(s->dY, sizeof(mpfr_t) * nc * s->d);
+    if (mpsol_nhd(s)) s->hd = realloc(s->hd, sizeof(mpfr_t) * nc * mpsol_nhd(s));
+    s->cap = nc;
 }
 static void mpsol_push(MpSol* s, const mpfr_t t, mpfr_t* Y, mpfr_t* dY) {
-    if (s->n == s->cap) {
-        size_t nc = s->cap ? s->cap*2 : 64;
-        s->t  = realloc(s->t,  sizeof(mpfr_t) * nc);
-        s->Y  = realloc(s->Y,  sizeof(mpfr_t) * nc * s->d);
-        s->dY = realloc(s->dY, sizeof(mpfr_t) * nc * s->d);
-        s->cap = nc;
-    }
+    mpsol_grow(s);
     mpfr_init2(s->t[s->n], s->bits); mpfr_set(s->t[s->n], t, MPFR_RNDN);
     for (size_t i = 0; i < s->d; i++) {
         mpfr_init2(s->Y[s->n*s->d + i],  s->bits); mpfr_set(s->Y[s->n*s->d + i],  Y[i],  MPFR_RNDN);
@@ -242,13 +254,35 @@ static void mpsol_push(MpSol* s, const mpfr_t t, mpfr_t* Y, mpfr_t* dY) {
     }
     s->n++;
 }
-/* insertion sort by ascending t + drop duplicates */
+/* Push a node from its Taylor coefficients C[k*d + i] (k = 0..K): the
+ * derivatives are Y^(k) = k! C_k. */
+static void mpsol_push_taylor(MpSol* s, const mpfr_t t, mpfr_t* C) {
+    mpsol_grow(s);
+    size_t d = s->d, nh = mpsol_nhd(s), n = s->n;
+    mpfr_init2(s->t[n], s->bits); mpfr_set(s->t[n], t, MPFR_RNDN);
+    mpfr_t fact; mpfr_init2(fact, s->bits);
+    for (size_t i = 0; i < d; i++) {
+        mpfr_init2(s->Y[n*d + i],  s->bits); mpfr_set(s->Y[n*d + i],  C[i],     MPFR_RNDN);
+        mpfr_init2(s->dY[n*d + i], s->bits); mpfr_set(s->dY[n*d + i], C[d + i], MPFR_RNDN);
+        mpfr_set_ui(fact, 1, MPFR_RNDN);
+        for (int k = 2; k <= s->K; k++) {
+            mpfr_mul_ui(fact, fact, (unsigned long)k, MPFR_RNDN);
+            mpfr_ptr dst = s->hd[n*nh + i*(size_t)(s->K - 1) + (size_t)(k - 2)];
+            mpfr_init2(dst, s->bits);
+            mpfr_mul(dst, C[(size_t)k*d + i], fact, MPFR_RNDN);
+        }
+    }
+    mpfr_clear(fact);
+    s->n++;
+}
+/* insertion sort by ascending t */
 static void mpsol_sort(MpSol* s) {
-    size_t d = s->d;
+    size_t d = s->d, nh = mpsol_nhd(s);
     for (size_t i = 1; i < s->n; i++) {
         for (size_t j = i; j > 0 && mpfr_cmp(s->t[j-1], s->t[j]) > 0; j--) {
             mpfr_swap(s->t[j-1], s->t[j]);
             for (size_t c = 0; c < d; c++) { mpfr_swap(s->Y[(j-1)*d+c], s->Y[j*d+c]); mpfr_swap(s->dY[(j-1)*d+c], s->dY[j*d+c]); }
+            for (size_t c = 0; c < nh; c++) mpfr_swap(s->hd[(j-1)*nh+c], s->hd[j*nh+c]);
         }
     }
 }
@@ -613,17 +647,25 @@ static Expr* mpfr_build_result(NdProblem* P, const MpSol* sol, long out_bits) {
     for (size_t kf = 0; kf < P->nfun; kf++) {
         size_t comp = P->fun_state0[kf];
         Expr** entries = malloc(sizeof(Expr*) * n);
+        int K = sol->K > 1 ? sol->K : 1;
+        size_t nh = mpsol_nhd(sol);
+        Expr** row = malloc(sizeof(Expr*) * (size_t)(K + 2));
+        mpfr_t rv; mpfr_init2(rv, out_bits);
         for (size_t i = 0; i < n; i++) {
-            mpfr_t rt, rv, rd; mpfr_init2(rt, out_bits); mpfr_init2(rv, out_bits); mpfr_init2(rd, out_bits);
-            mpfr_set(rt, sol->t[i], MPFR_RNDN);
-            mpfr_set(rv, sol->Y[i*d + comp], MPFR_RNDN);
-            mpfr_set(rd, sol->dY[i*d + comp], MPFR_RNDN);
-            Expr* coord_el = expr_new_mpfr_copy(rt);
-            Expr* coord = expr_new_function(expr_new_symbol(SYM_List), &coord_el, 1);
-            Expr* trip[3] = { coord, expr_new_mpfr_copy(rv), expr_new_mpfr_copy(rd) };
-            entries[i] = expr_new_function(expr_new_symbol(SYM_List), trip, 3);
-            mpfr_clear(rt); mpfr_clear(rv); mpfr_clear(rd);
+            /* {{t}, y, y', y'', ..., y^(K)}: a Hermite table of degree 2K+1 */
+            mpfr_set(rv, sol->t[i], MPFR_RNDN);
+            Expr* coord_el = expr_new_mpfr_copy(rv);
+            row[0] = expr_new_function(expr_new_symbol(SYM_List), &coord_el, 1);
+            mpfr_set(rv, sol->Y[i*d + comp], MPFR_RNDN);  row[1] = expr_new_mpfr_copy(rv);
+            mpfr_set(rv, sol->dY[i*d + comp], MPFR_RNDN); row[2] = expr_new_mpfr_copy(rv);
+            for (int k = 2; k <= K; k++) {
+                mpfr_set(rv, sol->hd[i*nh + comp*(size_t)(K - 1) + (size_t)(k - 2)], MPFR_RNDN);
+                row[k + 1] = expr_new_mpfr_copy(rv);
+            }
+            entries[i] = expr_new_function(expr_new_symbol(SYM_List), row, (size_t)(K + 2));
         }
+        mpfr_clear(rv);
+        free(row);
         Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, n);
         free(entries);
         Expr* ifun = eval_and_free(expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1));
@@ -664,20 +706,183 @@ static bool mp_eval_expr(NdProblem* P, Expr* e, mpfr_t out, long bits) {
     return ok;
 }
 
+/* Value of a stored problem expression (an initial condition, an interval
+ * end) at `bits`; `fallback` (the double the front-end already parsed) when
+ * the expression is absent or does not evaluate to that real number. */
+static void mp_from_expr(Expr* e, double fallback, mpfr_t out, long bits) {
+    if (e) {
+        NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits;
+        Expr* num = numericalize(e, spec);
+        mpfr_t im; mpfr_init2(im, bits);
+        bool inexact = false;
+        bool ok = num && get_approx_mpfr(num, out, im, &inexact)
+                  && mpfr_number_p(out) && mpfr_zero_p(im)
+                  && fabs(mpfr_get_d(out, MPFR_RNDN) - fallback)
+                         <= 1e-12 * (fabs(fallback) + 1.0);
+        mpfr_clear(im);
+        expr_free(num);
+        if (ok) return;
+    }
+    mpfr_set_d(out, fallback, MPFR_RNDN);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Taylor-series integrator (MPFR)                                    *
+ * ------------------------------------------------------------------ *
+ * At each node the solution's Taylor coefficients C_0..C_p are computed by
+ * automatic differentiation of the RHS (ndsolve_taylor.c).  The step is the
+ * radius at which the last two terms fall below the tolerance,
+ *     h = 0.9 min_{k = p-1, p} (1 / max_i (|C_k,i| / sc_i))^(1/k),
+ *     sc_i = atol + rtol |Y_i|,
+ * and the order p ~ ln(1/tol)/2 balances the O(p^2) work per step against the
+ * step length (the usual optimum for a Taylor method).  Every node keeps its
+ * exact derivatives up to order K = (p+1)/2, so the two-point Hermite
+ * interpolant of degree 2K+1 >= p between consecutive nodes is as accurate as
+ * the step itself: the high-order dense output a minimisation or root search
+ * over the resulting InterpolatingFunction needs. */
+static int mp_taylor_order(NdTol tol) {
+    double eps = tol.atol + tol.rtol;
+    if (!(eps > 0.0)) eps = 1e-300;
+    int p = (int)ceil(-log(eps) / 2.0) + 2;
+    if (p < 6) p = 6;
+    if (p > 2 * INTERP_MAX_SUPPLIED + 1) p = 2 * INTERP_MAX_SUPPLIED + 1;
+    return p;
+}
+
+/* ln max_i (|C_k,i| / sc_i), -HUGE_VAL when every coefficient is zero. */
+static double mp_taylor_lnorm(size_t d, mpfr_t* C, int k, mpfr_t* Y, NdTol tol) {
+    double best = -HUGE_VAL;
+    for (size_t i = 0; i < d; i++) {
+        mpfr_ptr c = C[(size_t)k * d + i];
+        if (mpfr_zero_p(c)) continue;
+        long ex;
+        double m = mpfr_get_d_2exp(&ex, c, MPFR_RNDN);
+        double lc = log(fabs(m)) + (double)ex * log(2.0);
+        double ay = fabs(mpfr_get_d(Y[i], MPFR_RNDN));
+        double sc = tol.atol + tol.rtol * ay;
+        if (!(sc > 0.0)) sc = 1e-300;
+        double v = lc - log(sc);
+        if (v > best) best = v;
+    }
+    return best;
+}
+
+/* Integrate from (t0, Y0) to `target` (either direction), pushing a node with
+ * its Taylor data at every step (and at t0 itself when push_first). */
+static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
+                                MpSol* sol, NdTol tol, int p,
+                                const mpfr_t t0, mpfr_t* Y0, const mpfr_t target,
+                                bool push_first, long bits, int64_t* budget) {
+    size_t d = P->d;
+    int cmp0 = mpfr_cmp(target, t0);
+    if (cmp0 == 0) return ND_OK;
+    double dir = (cmp0 > 0) ? 1.0 : -1.0;
+    double span = fabs(P->tmax - P->tmin);
+    double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
+    double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
+    double first = (o->starting_step > 0.0) ? o->starting_step : HUGE_VAL;
+    long ubits = bits > 1000 ? 1000 : bits;
+
+    mpfr_t t, h, rem;
+    mpfr_inits2(bits, t, h, rem, (mpfr_ptr)0);
+    mpfr_set(t, t0, MPFR_RNDN);
+    mpfr_t* Y = mp_vec(d, bits);
+    mpfr_t* C = mp_vec((size_t)(p + 1) * d, bits);
+    for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Y0[i], MPFR_RNDN);
+
+    NdStatus st = ND_OK;
+    bool first_node = true;
+    for (;;) {
+        if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
+        if (!first_node || push_first) {
+            mpsol_push_taylor(sol, t, C);
+            if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+        }
+        mpfr_sub(rem, target, t, MPFR_RNDN);
+        double remd = mpfr_get_d(rem, MPFR_RNDN);
+        if (mpfr_zero_p(rem) || dir * remd <= 0.0) break;
+        remd = fabs(remd);
+
+        /* step from the two trailing terms */
+        double hm = HUGE_VAL;
+        for (int k = p - 1; k <= p; k++) {
+            double ln = mp_taylor_lnorm(d, C, k, Y, tol);
+            if (ln == -HUGE_VAL) continue;
+            double hk = exp(-ln / (double)k);
+            if (hk < hm) hm = hk;
+        }
+        hm *= 0.9;
+        if (hm > h_cap) hm = h_cap;
+        if (hm > frac_cap) hm = frac_cap;
+        if (first_node && hm > first) hm = first;
+        first_node = false;
+        /* step-size underflow: the solution is running into a singularity */
+        double tscale = fabs(mpfr_get_d(t, MPFR_RNDN)) + span;
+        if (!(hm > tscale * ldexp(1.0, -(int)ubits + 8))) { st = ND_ERR_STEPSIZE; break; }
+        if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
+        bool last = (hm >= remd);
+        if (last) mpfr_set(h, rem, MPFR_RNDN);
+        else      mpfr_set_d(h, dir * hm, MPFR_RNDN);
+
+        /* Y(t + h) = sum_k C_k h^k  (Horner) */
+        for (size_t i = 0; i < d && st == ND_OK; i++) {
+            mpfr_set(Y[i], C[(size_t)p * d + i], MPFR_RNDN);
+            for (int k = p - 1; k >= 0; k--)
+                mpfr_fma(Y[i], Y[i], h, C[(size_t)k * d + i], MPFR_RNDN);
+            if (!mpfr_number_p(Y[i])) st = ND_ERR_SAMPLE;
+        }
+        if (st != ND_OK) break;
+        if (last) mpfr_set(t, target, MPFR_RNDN);
+        else      mpfr_add(t, t, h, MPFR_RNDN);
+    }
+    mp_vec_free(Y, d); mp_vec_free(C, (size_t)(p + 1) * d);
+    mpfr_clears(t, h, rem, (mpfr_ptr)0);
+    return st;
+}
+
 /* Run the shared mpfr integration of P into `sol`; returns the status. */
 static NdStatus mpfr_integrate(NdProblem* P, const NdOpts* o, const NdStepper* S,
-                               MpSol* sol, long bits) {
+                               MpSol* sol, long bits, bool allow_taylor) {
     NdTol tol = nd_resolve_tol(o);
     /* Stiff (implicit / multistep) methods use the MPFR BDF; explicit methods use
      * the DOPRI5/RK4 path.  RK4 alone is the fixed-step explicit request. */
     bool implicit = S && (S->flags & (ND_IMPLICIT | ND_MULTISTEP));
     bool adaptive = !(S && S->name && strcmp(S->name, "RK4") == 0);
-    mpfr_t t0m; mpfr_init2(t0m, bits); mpfr_set_d(t0m, P->t0, MPFR_RNDN);
+    mpfr_t t0m; mpfr_init2(t0m, bits);
+    mp_from_expr(P->t0_expr, P->t0, t0m, bits);
     mpfr_t* Y0 = mp_vec(P->d, bits);
     mpfr_t* f0 = mp_vec(P->d, bits);
-    for (size_t i = 0; i < P->d; i++) mpfr_set_d(Y0[i], P->Y0[i], MPFR_RNDN);
+    for (size_t i = 0; i < P->d; i++)
+        mp_from_expr(P->Y0_expr && i < P->y0_expr_n ? P->Y0_expr[i] : NULL,
+                     P->Y0[i], Y0[i], bits);
     NdStatus st = ND_OK;
-    if (!nd_rhs_mpfr(P, t0m, Y0, f0, bits)) st = ND_ERR_SAMPLE;
+    /* Automatic method at arbitrary precision: the Taylor-series integrator
+     * when the RHS is in its vocabulary (high order, exact node derivatives),
+     * else the explicit Runge-Kutta below.  A named method is honoured. */
+    NdTaylorTape* TT = NULL;
+    if (allow_taylor && !o->method && !P->eval_monitor)
+        TT = nd_taylor_build(P->f, P->d, P->ysym, P->tvar, bits);
+    if (TT) {
+        P->tol.rtol = tol.rtol; P->tol.atol = tol.atol;
+        int p = mp_taylor_order(tol);
+        sol->K = (p + 1) / 2;
+        if (sol->K > INTERP_MAX_SUPPLIED) sol->K = INTERP_MAX_SUPPLIED;
+        int64_t budget = (o->max_steps > 0) ? o->max_steps : ND_AUTO_MAX_STEPS;
+        mpfr_t tend; mpfr_init2(tend, bits);
+        bool pushed = false;
+        if (P->tmax > P->t0) {
+            mp_from_expr(P->tmax_expr, P->tmax, tend, bits);
+            st = mpfr_taylor_dir(P, o, TT, sol, tol, p, t0m, Y0, tend, true, bits, &budget);
+            pushed = true;
+        }
+        if (P->tmin < P->t0) {
+            mp_from_expr(P->tmin_expr, P->tmin, tend, bits);
+            NdStatus s2 = mpfr_taylor_dir(P, o, TT, sol, tol, p, t0m, Y0, tend, !pushed, bits, &budget);
+            if (st == ND_OK) st = s2;
+        }
+        mpfr_clear(tend);
+        nd_taylor_free(TT);
+    } else if (!nd_rhs_mpfr(P, t0m, Y0, f0, bits)) st = ND_ERR_SAMPLE;
     else {
         P->tol.rtol = tol.rtol; P->tol.atol = tol.atol;
         mpsol_push(sol, t0m, Y0, f0);
@@ -701,7 +906,7 @@ Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
     long out_bits = o->wp_bits > 53 ? o->wp_bits : 53;
     long bits = out_bits + 64;
     MpSol sol; mpsol_init(&sol, P->d, bits);
-    NdStatus st = mpfr_integrate(P, o, S, &sol, bits);
+    NdStatus st = mpfr_integrate(P, o, S, &sol, bits, false);   /* MoL: Runge-Kutta / BDF */
     (void)st;
     size_t n = sol.n, d = sol.d, nx = g->nx;
     Expr* result = NULL;
@@ -760,8 +965,16 @@ Expr* nd_solve_mpfr(NdProblem* P, const NdOpts* o, const NdStepper* S) {
     long out_bits = o->wp_bits > 53 ? o->wp_bits : 53;
     long bits = out_bits + 64;               /* guard digits */
     MpSol sol; mpsol_init(&sol, P->d, bits);
-    NdStatus st = mpfr_integrate(P, o, S, &sol, bits);   /* routes explicit/implicit */
-    (void)st;
+    NdStatus st = mpfr_integrate(P, o, S, &sol, bits, true);    /* routes explicit/implicit */
+    /* The solution is returned up to where the integration reached either
+     * way; say why it ends short (its "Domain" shows where), as the machine
+     * driver does. */
+    if (st == ND_ERR_STEPSIZE)
+        mth_message("NDSolve", "ndsz", "step size effectively zero; singularity or stiffness suspected");
+    else if (st == ND_ERR_MAXSTEPS)
+        mth_message("NDSolve", "mxst", "maximum number of steps reached; returning partial solution");
+    else if (st == ND_ERR_SAMPLE && sol.n >= 2)
+        mth_message("NDSolve", "nrnum", "right-hand side did not evaluate to a number");
     Expr* result = mpfr_build_result(P, &sol, out_bits);
     mpsol_free(&sol);
     return result;
