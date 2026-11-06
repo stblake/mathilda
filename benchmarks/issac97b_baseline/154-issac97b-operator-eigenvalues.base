@@ -2,47 +2,47 @@ REQUIRE	Eigenvalues	present
 REQUIRE	Eigensystem	present
 REQUIRE	FindRoot	present
 REQUIRE	MathieuCharacteristicA	present
-BENCH	b9.1 secular FindRoot wp40	0.59
+BENCH	b9.1 secular FindRoot wp40	0.586
 CHECK	b9.1 secular FindRoot wp40	{738810809416454997, -1}
-BENCH	b9.1 Nystrom Richardson machine	991.046
+BENCH	b9.1 Nystrom Richardson machine	988.788
 CHECK	b9.1 Nystrom Richardson machine	{73881081, -1}
-BENCH	b9.2 Gauss-Hermite Nystrom wp30	372.304
+BENCH	b9.2 Gauss-Hermite Nystrom wp30	377.474
 CHECK	b9.2 Gauss-Hermite Nystrom wp30	{312500000000000, -2}
-BENCH	b9.2 Gauss-Hermite Nystrom machine	47.337
+BENCH	b9.2 Gauss-Hermite Nystrom machine	46.775
 CHECK	b9.2 Gauss-Hermite Nystrom machine	{3125000000, -2}
-BENCH	b9.3 trapezoid Nystrom wp30 N=256	17451.6
+BENCH	b9.3 trapezoid Nystrom wp30 N=256	17698.6
 CHECK	b9.3 trapezoid Nystrom wp30 N=256	{7290000000, -1}
-BENCH	b9.3 trapezoid Nystrom machine N=256	605.139
+BENCH	b9.3 trapezoid Nystrom machine N=256	585.828
 CHECK	b9.3 trapezoid Nystrom machine N=256	{729000000, -1}
-BENCH	b9.4 Eigenvalues wp50 N=150	4667.46
+BENCH	b9.4 Eigenvalues wp50 N=150	4658.19
 CHECK	b9.4 Eigenvalues wp50 N=150	{91798838929666748450, 3}
-BENCH	b9.4 Eigenvalues machine N=500	12.613
+BENCH	b9.4 Eigenvalues machine N=500	13.867
 CHECK	b9.4 Eigenvalues machine N=500	{1015240107, 5}
-BENCH	b9.5 Eigenvalues wp60 n=60	432.042
+BENCH	b9.5 Eigenvalues wp60 n=60	429.659
 CHECK	b9.5 Eigenvalues wp60 n=60	{600000000000000, 1}
-BENCH	b9.5 Eigenvalues machine n=20	0.54
+BENCH	b9.5 Eigenvalues machine n=20	0.538
 CHECK	b9.5 Eigenvalues machine n=20	{200000, 1}
-BENCH	b9.6 Fourier matrix wp40	78.547
+BENCH	b9.6 Fourier matrix wp40	77.324
 CHECK	b9.6 Fourier matrix wp40	{-402567795465667873, 1}
-BENCH	b9.6 Fourier matrix machine	1.389
+BENCH	b9.6 Fourier matrix machine	1.32
 CHECK	b9.6 Fourier matrix machine	{-402567795466, 1}
-BENCH	b9.6 MathieuCharacteristicA wp30	0.004
+BENCH	b9.6 MathieuCharacteristicA wp30	0.234
 CHECK	b9.6 MathieuCharacteristicA wp30	{-40256779546567, 1}
-BENCH	b9.6 MathieuCharacteristicA machine	0.003
+BENCH	b9.6 MathieuCharacteristicA machine	0.01
 CHECK	b9.6 MathieuCharacteristicA machine	{-402567795466, 1}
-BENCH	b9.7 harmonic basis wp50 N=100	1653.14
+BENCH	b9.7 harmonic basis wp50 N=100	1626.92
 CHECK	b9.7 harmonic basis wp50 N=100	{10603620904841828996, 0}
-BENCH	b9.7 harmonic basis machine N=60	7.304
+BENCH	b9.7 harmonic basis machine N=60	9.093
 CHECK	b9.7 harmonic basis machine N=60	{106036209, 0}
-BENCH	b9.8 Gauss-Legendre Nystrom wp40	141.545
+BENCH	b9.8 Gauss-Legendre Nystrom wp40	137.45
 CHECK	b9.8 Gauss-Legendre Nystrom wp40	{110210987014802312, -1}
-BENCH	b9.8 Gauss-Legendre Nystrom machine	7.715
+BENCH	b9.8 Gauss-Legendre Nystrom machine	7.392
 CHECK	b9.8 Gauss-Legendre Nystrom machine	{1102109870, -1}
-BENCH	b9.9 Eigenvalues wp40 N=10	638.714
+BENCH	b9.9 Eigenvalues wp40 N=10	590.976
 CHECK	b9.9 Eigenvalues wp40 N=10	{162028105542010440, -1}
-BENCH	b9.9 Eigenvalues machine N=40	178.225
+BENCH	b9.9 Eigenvalues machine N=40	174.84
 CHECK	b9.9 Eigenvalues machine N=40	{11736795, -2}
-BENCH	b9.10 Eigenvalues pencil wp40 N=60	718.478
+BENCH	b9.10 Eigenvalues pencil wp40 N=60	712.031
 CHECK	b9.10 Eigenvalues pencil wp40 N=60	{100022105340798863, 0}
-BENCH	b9.10 Eigenvalues pencil machine N=400	470.586
+BENCH	b9.10 Eigenvalues pencil machine N=400	457.579
 CHECK	b9.10 Eigenvalues pencil machine N=400	{10000051, 0}

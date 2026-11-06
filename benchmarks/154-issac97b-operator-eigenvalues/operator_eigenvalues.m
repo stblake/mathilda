@@ -126,8 +126,8 @@ mathieuM[n_, q_] := Table[Which[i == j, (2 (i - 1))^2, Abs[i - j] == 1, If[Min[i
   {i, n}, {j, n}];
 run["b9.6 Fourier matrix wp40", Min[Eigenvalues[N[mathieuM[40, 25], 40]]], mc[18], 3];
 run["b9.6 Fourier matrix machine", Min[Eigenvalues[N[mathieuM[30, 25]]]], mc[12], 3];
-run["b9.6 MathieuCharacteristicA wp30", N[MathieuCharacteristicA[0, 25], 30], mc[14], 3];
-run["b9.6 MathieuCharacteristicA machine", MathieuCharacteristicA[0, 25.], mc[12], 3];
+run["b9.6 MathieuCharacteristicA wp30", N[MathieuCharacteristicA[0, 25], 30], mc[14]];
+run["b9.6 MathieuCharacteristicA machine", MathieuCharacteristicA[0, 25.], mc[12]];
 
 (* ---- b9.7 quartic oscillator in a harmonic basis ---------------------- *)
 quartH[n_, w_, prec_] := Module[{m = n + 4, X, X2, X4},

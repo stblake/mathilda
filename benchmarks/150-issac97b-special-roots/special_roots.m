@@ -90,11 +90,11 @@ run["b5.3 BesselJZero wp30", N[BesselJZero[0, 1000], 30], mc[14], 3];
 
 run["b5.4 FindRoot wp30", FindRoot[RiemannSiegelZ[t], {t, 14194/10}, WorkingPrecision -> 30], sig[realOf[ruleVal[#, t]], 14] &, 3];
 run["b5.4 FindRoot machine", FindRoot[RiemannSiegelZ[t], {t, 1419.4}], sig[realOf[ruleVal[#, t]], 10] &, 3];
-run["b5.4 ZetaZero wp30", N[Im[ZetaZero[1000]], 30], mc[14], 3];
+run["b5.4 ZetaZero wp30", N[Im[ZetaZero[1000]], 30], mc[14]];
 
 run["b5.5 FindRoot wp40", FindRoot[AiryAi[x], {x, -177}, WorkingPrecision -> 40], rv[18], 3];
 run["b5.5 FindRoot machine", FindRoot[AiryAi[x], {x, -177.}], rv[9], 3];
-run["b5.5 AiryAiZero wp30", N[AiryAiZero[500], 30], mc[14], 3];
+run["b5.5 AiryAiZero wp30", N[AiryAiZero[500], 30], mc[14]];
 
 run["b5.6 FindRoot wp40", FindRoot[Gamma[x] == 10^100, {x, 70}, WorkingPrecision -> 40], rv[18], 3];
 run["b5.6 FindRoot machine", FindRoot[Gamma[x] == 10^100, {x, 70.}], rv[10], 3];

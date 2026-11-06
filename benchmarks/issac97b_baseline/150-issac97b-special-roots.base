@@ -10,7 +10,7 @@ REQUIRE	AiryAi	present
 REQUIRE	AiryAiZero	present
 REQUIRE	CountRoots	present
 REQUIRE	NSolve	present
-BENCH	b5.1 FindRoot wp60	213.505
+BENCH	b5.1 FindRoot wp60	122.504
 CHECK	b5.1 FindRoot wp60	{4420915249799639770159036, 1}
 
 FindRoot::lstol: The line search decreased the step size to within tolerance specified by AccuracyGoal and PrecisionGoal but was unable to find a sufficient decrease in the merit function. You may need more than MachinePrecision digits of working precision to meet these tolerances.
@@ -20,51 +20,51 @@ FindRoot::lstol: The line search decreased the step size to within tolerance spe
 FindRoot::lstol: The line search decreased the step size to within tolerance specified by AccuracyGoal and PrecisionGoal but was unable to find a sufficient decrease in the merit function. You may need more than MachinePrecision digits of working precision to meet these tolerances.
 
 General::stop: Further output of FindRoot::lstol will be suppressed during this calculation.
-BENCH	b5.1 FindRoot machine n=100	3.463
+BENCH	b5.1 FindRoot machine n=100	1.273
 CHECK	b5.1 FindRoot machine n=100	{1340648734, 1}
-BENCH	b5.2 FindRoot wp40	85.516
+BENCH	b5.2 FindRoot wp40	46.335
 CHECK	b5.2 FindRoot wp40	{157001048008319383, -3}
-BENCH	b5.2 FindRoot machine	0.314
+BENCH	b5.2 FindRoot machine	0.358
 CHECK	b5.2 FindRoot machine	{1570010480, -3}
-BENCH	b5.3 FindRoot wp40	1.619
+BENCH	b5.3 FindRoot wp40	0.814
 CHECK	b5.3 FindRoot wp40	{314080729522507863, 3}
-BENCH	b5.3 FindRoot machine	0.586
+BENCH	b5.3 FindRoot machine	0.305
 CHECK	b5.3 FindRoot machine	{3140807295, 3}
-BENCH	b5.3 BesselJZero wp30	0.047
+BENCH	b5.3 BesselJZero wp30	0.01
 CHECK	b5.3 BesselJZero wp30	{31408072952251, 3}
-BENCH	b5.4 FindRoot wp30	208.635
+BENCH	b5.4 FindRoot wp30	143.467
 CHECK	b5.4 FindRoot wp30	{14194224809460, 3}
-BENCH	b5.4 FindRoot machine	1.765
+BENCH	b5.4 FindRoot machine	1.193
 CHECK	b5.4 FindRoot machine	{1419422481, 3}
-BENCH	b5.4 ZetaZero wp30	0.013
+BENCH	b5.4 ZetaZero wp30	148.37
 CHECK	b5.4 ZetaZero wp30	{14194224809460, 3}
-BENCH	b5.5 FindRoot wp40	1.077
+BENCH	b5.5 FindRoot wp40	0.792
 CHECK	b5.5 FindRoot wp40	{-177009251046479207, 2}
-BENCH	b5.5 FindRoot machine	0.276
+BENCH	b5.5 FindRoot machine	0.217
 CHECK	b5.5 FindRoot machine	{-177009251, 2}
-BENCH	b5.5 AiryAiZero wp30	0.007
+BENCH	b5.5 AiryAiZero wp30	2.347
 CHECK	b5.5 AiryAiZero wp30	{-17700925104648, 2}
-BENCH	b5.6 FindRoot wp40	2.499
+BENCH	b5.6 FindRoot wp40	1.884
 CHECK	b5.6 FindRoot wp40	{709575744573535461, 1}
-BENCH	b5.6 FindRoot machine	0.589
+BENCH	b5.6 FindRoot machine	0.462
 CHECK	b5.6 FindRoot machine	{7095757446, 1}
-BENCH	b5.7 CountRoots exact	3.809
+BENCH	b5.7 CountRoots exact	3.032
 CHECK	b5.7 CountRoots exact	10
-BENCH	b5.7 NSolve wp40	9.971
+BENCH	b5.7 NSolve wp40	7.548
 CHECK	b5.7 NSolve wp40	{10, {208469081014822569, 1}}
-BENCH	b5.7 FindRoot machine	1.18
+BENCH	b5.7 FindRoot machine	0.925
 CHECK	b5.7 FindRoot machine	{2084690810, 1}
-BENCH	b5.8 FindRoot wp40	62.977
+BENCH	b5.8 FindRoot wp40	47.497
 CHECK	b5.8 FindRoot wp40	{999937218866126282, -1}
-BENCH	b5.8 FindRoot machine	9.718
+BENCH	b5.8 FindRoot machine	7.978
 CHECK	b5.8 FindRoot machine	{9999372189, -1}
-BENCH	b5.9 CountRoots exact	0.888
+BENCH	b5.9 CountRoots exact	0.682
 CHECK	b5.9 CountRoots exact	2
-BENCH	b5.9 NSolve wp80	7.648
+BENCH	b5.9 NSolve wp80	6.733
 CHECK	b5.9 NSolve wp80	{14142135623731, -21}
-BENCH	b5.9 NSolve machine n=8	1.851
+BENCH	b5.9 NSolve machine n=8	2.292
 CHECK	b5.9 NSolve machine n=8	{141, -5}
-BENCH	b5.10 FindRoot wp30	11.527
+BENCH	b5.10 FindRoot wp30	8.66
 CHECK	b5.10 FindRoot wp30	{{14506161632437, 0}, {18809430001533, 0}}
-BENCH	b5.10 FindRoot machine	3.736
+BENCH	b5.10 FindRoot machine	2.981
 CHECK	b5.10 FindRoot machine	{{14506162, 0}, {18809430, 0}}
