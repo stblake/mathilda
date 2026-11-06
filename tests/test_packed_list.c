@@ -1898,12 +1898,12 @@ void test_exact_int64_arithmetic_on_a_buffer(void) {
     assert_eval_eq("Variance[Range[300]]", "7525", 0);
     assert_eval_eq("Quartiles[Range[300]]", "{151/2, 301/2, 451/2}", 0);
     assert_eval_eq("Take[Clip[Range[300], {3, 7}], 4]", "{3, 3, 3, 4}", 0);
-    /* Precision is Listable in Mathilda, so a list answers per element -- the
-     * point is that the packed list agrees with the plain one, not that it
-     * collapses to a scalar. Its buffer fast path DID collapse it, which is why
-     * Precision and Accuracy are on pack.c's NOT_AWARE list. */
-    assert_eval_eq("First[Precision[Range[300]]]", "Infinity", 0);
-    assert_eval_eq("Length[Precision[Range[300]]]", "300", 0);
+    /* Precision / Accuracy of a list are ONE number, the minimum over its
+     * elements (not Listable): the packed buffer answers from its dtype and
+     * must agree with the plain list. */
+    assert_eval_eq("Precision[Range[300]]", "Infinity", 0);
+    assert_eval_eq("Accuracy[Range[300]]", "Infinity", 0);
+    assert_eval_eq("Precision[Range[1., 300.]]", "MachinePrecision", 0);
     same_as_plain("Precision[Range[1., 300.]]", "Precision[Table[1. k, {k, 300}]]");
     same_as_plain("Accuracy[Range[1., 300.]]", "Accuracy[Table[1. k, {k, 300}]]");
     /* Same class, found by the same sweep: a real-closed kernel keeps the

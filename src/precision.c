@@ -28,6 +28,7 @@
 #include "numeric.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "sparse/sparse.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -75,6 +76,19 @@ static Expr* precision_min(Expr* a, Expr* b) {
     expr_free(a); return b;
 }
 
+/* min over the background and the stored values of a SparseArray of
+ * f(value): the precision / accuracy of the array it represents. */
+static Expr* sparse_min_of(const Expr* e, Expr* (*f)(const Expr*)) {
+    const SparseArray* sa = sp_of(e);
+    Expr* best = f(sa->bg);
+    for (int64_t k = 0; k < sa->pat->nnz; ++k) {
+        Expr* v = sp_value_expr(sa, k);
+        best = precision_min(best, f(v));
+        expr_free(v);
+    }
+    return best;
+}
+
 /* ------------------------------------------------------------------------
  *  precision_of — internal
  * ---------------------------------------------------------------------- */
@@ -98,15 +112,17 @@ static Expr* precision_of(const Expr* e) {
             /* Numeric constants (Pi, E, …) are exact when left symbolic. */
             return make_infinity();
         case EXPR_NDARRAY:
-            /* Dense machine-precision ndarray: every entry is a double. */
+            /* A float/complex buffer holds machine numbers; an int64 or bool
+             * buffer holds exact Integers / True / False. */
+            if (e->data.ndarray.dtype == NDT_INT64 || e->data.ndarray.dtype == NDT_BOOL)
+                return make_infinity();
             return make_machineprecision();
         case EXPR_COMPILED:
             /* Opaque object; carries no numeric value → exact. */
             return make_infinity();
         case EXPR_SPARSE:
-            /* Precision of the array it represents (handled by the caller's
-             * sparse branch); an unhandled path sees it as exact. */
-            return make_infinity();
+            /* Precision of the array it represents. */
+            return sparse_min_of(e, precision_of);
         case EXPR_FUNCTION: {
             /* Rational is exact; Complex reduces to min of parts;
              * anything else — conservatively take the min across parts. */
@@ -200,12 +216,15 @@ static Expr* accuracy_of(const Expr* e) {
         }
 #endif
         case EXPR_COMPILED:
-        case EXPR_SPARSE:
             /* Opaque object; carries no numeric value → exact (infinite accuracy). */
             return make_infinity();
+        case EXPR_SPARSE:
+            return sparse_min_of(e, accuracy_of);
         case EXPR_NDARRAY: {
             /* Machine-precision doubles: minimum accuracy across all entries,
              * matching the per-component minimum taken for lists. */
+            if (e->data.ndarray.dtype == NDT_INT64 || e->data.ndarray.dtype == NDT_BOOL)
+                return make_infinity();   /* exact entries */
             size_t n = 1;
             for (int i = 0; i < e->data.ndarray.rank; ++i) {
                 n *= (size_t)e->data.ndarray.dims[i];
@@ -354,8 +373,11 @@ void precision_init(void) {
     symtab_add_builtin("SetPrecision", builtin_set_precision);
     symtab_add_builtin("SetAccuracy",  builtin_set_accuracy);
 
-    symtab_get_def("Precision")   ->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
-    symtab_get_def("Accuracy")    ->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
+    /* Not Listable: Precision / Accuracy of a list (any expression) is ONE
+     * number, the minimum over its numeric parts, so Precision[N[m, 30]] of a
+     * matrix is 30., not a matrix of 30.s. */
+    symtab_get_def("Precision")   ->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Accuracy")    ->attributes |= ATTR_PROTECTED;
     symtab_get_def("SetPrecision")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
     symtab_get_def("SetAccuracy") ->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
 
@@ -364,13 +386,16 @@ void precision_init(void) {
         "\tReturns the number of decimal digits of precision in x.\n"
         "\tExact numbers return Infinity; machine-precision reals return\n"
         "\tthe symbol MachinePrecision; MPFR values return their declared\n"
-        "\tprecision in decimal digits.");
+        "\tprecision in decimal digits. For a list, matrix or any compound\n"
+        "\texpression, the minimum precision of its numbers (one scalar).");
     symtab_set_docstring("Accuracy",
         "Accuracy[x]\n"
         "\tReturns the number of digits of accuracy in x — equal to\n"
         "\tPrecision[x] − Log10[Abs[x]]. Exact numbers (including exact 0)\n"
         "\treturn Infinity. Inexact zeros are finite: machine 0. returns\n"
-        "\t≈ 323.607; MPFR 0 of precision p returns p digits.");
+        "\t≈ 323.607; MPFR 0 of precision p returns p digits. For a list,\n"
+        "\tmatrix or any compound expression, the minimum accuracy of its\n"
+        "\tnumbers (one scalar).");
     symtab_set_docstring("SetPrecision",
         "SetPrecision[x, n]\n"
         "\tReturns an expression equivalent to x with numeric values\n"

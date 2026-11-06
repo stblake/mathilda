@@ -991,6 +991,10 @@ static void pack_mark_aware_heads(void) {
          * ToCharacterCode produces exactly such a buffer, so
          * FromCharacterCode[ToCharacterCode[s]] never boxes a code. */
         "FromCharacterCode",
+        /* Precision / Accuracy read the buffer's dtype (and, for Accuracy, the
+         * magnitudes) straight off it: one scalar for the whole array. They
+         * came off NOT_AWARE when they stopped being Listable. */
+        "Precision", "Accuracy",
     };
     for (size_t i = 0; i < sizeof(AWARE) / sizeof(AWARE[0]); i++)
         symtab_set_packed_aware(AWARE[i]);
@@ -1011,9 +1015,9 @@ static void pack_mark_aware_heads(void) {
      *       Clip[x] clamps to [-1, 1] using the EXACT bounds, so a clipped
      *       element comes back as the Integer 1 -- Clip[{1., 2., 3.}] is
      *       {1., 1, 1}. The buffer makes all three Real.
-     *   Precision, Accuracy
-     *       Listable in Mathilda, so the list answers with one value PER
-     *       ELEMENT while the buffer path answers with a single scalar.
+     *   (Precision, Accuracy were here while they were Listable: the list
+     *       answered with one value PER ELEMENT, the buffer with one scalar.
+     *       They are no longer Listable and are on AWARE.)
      *
      * The kernel heads acquire packed_aware implicitly from
      * symtab_set_ndarray_*_kernel, so they need clearing rather than omitting.
@@ -1036,7 +1040,6 @@ static void pack_mark_aware_heads(void) {
          * Clip left this list on 2026-07-31 for the same reason -- the exactness
          * problem was real but belonged to the BOUNDS, not to the head. See the
          * note beside it in AWARE. */
-        "Precision", "Accuracy",
         /* Quotient joined this list on 2026-07-30 and came OFF it on
          * 2026-08-01, the same way Floor and friends did. It was here because
          * real in / exact Integer out could not be expressed -- and it was
@@ -1049,8 +1052,11 @@ static void pack_mark_aware_heads(void) {
          * NDUnaryKernel (ndarray.h) and NDKB_Quotient supplies both arms, so
          * the buffer path produces those exact Integers itself instead of
          * having to be kept away from the data. */
+        /* Empty since Precision and Accuracy left (see above); NULL-ended
+         * because C99 has no empty initialiser. */
+        NULL
     };
-    for (size_t i = 0; i < sizeof(NOT_AWARE) / sizeof(NOT_AWARE[0]); i++)
+    for (size_t i = 0; NOT_AWARE[i]; i++)
         symtab_clear_packed_aware(NOT_AWARE[i]);
 
     /* Exact on an int64 buffer as well -- see SymbolDef.packed_int64_ok. This
@@ -1086,6 +1092,8 @@ static void pack_mark_aware_heads(void) {
         /* Read rank/dims/dtype only, never an element. */
         "Length", "Dimensions", "Depth", "Head", "ByteCount",
         "NDArrayQ", "PackedArrayQ", "DataType",
+        /* An int64 buffer holds exact Integers: Infinity, from the dtype. */
+        "Precision", "Accuracy",
         /* N reads every element, but its answer on an int64 buffer IS a real
          * array -- the machine reals the interpreter's N gives element by
          * element -- so nothing truncates and no element's head changes. Its

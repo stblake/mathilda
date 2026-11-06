@@ -108,6 +108,16 @@ An expression that cancels nothing is evaluated once, as before. Examples:
 once.
 
 **Precision semantics**:
+- `Precision[expr]` and `Accuracy[expr]` are one number for any expression,
+  the **minimum** over its numbers (they are not `Listable`): exact parts
+  impose nothing, a machine number makes it `MachinePrecision`.
+  `Precision[N[HilbertMatrix[4], 30]]` is `30.`, `Precision[{1, 2.5`20, N[1, 30]}]`
+  is `20.`, `Precision[{1, 2.5, N[1, 30]}]` is `MachinePrecision`,
+  `Precision[{1, 2}]` and `Precision[x]` are `Infinity`,
+  `Accuracy[{1.5, 100.`30}]` is `15.7785`. A packed array is read from its
+  buffer (an integer array is exact: `Infinity`); a `SparseArray` takes the
+  minimum over its background and stored values. (Through v0.6225 both were
+  `Listable`, so a matrix answered a matrix of precisions.)
 - **Machine rounding is IEEE round-to-nearest, ties to even, with gradual
   underflow** (v0.6179). An exact rational becomes the double a correctly
   rounded decimal literal of it would give, through exactly one rounding
