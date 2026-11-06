@@ -224,3 +224,7 @@ NSum h3.6; exact lex GroebnerBasis (h6.3/6.7/6.8/6.10, up to 6.2x); N at a point
 Wave 3 so far: h1.2 / h1.4 singular values at 100 / 60 digits now 74 / 652 ms vs
 91 / 695 (v0.6294); h4.7 Coefficient[Expand] 5 vs 26 ms, h4.8 12 vs 35 ms, h3.6 wp30
 25 vs 33 ms (v0.6297-v0.6299); h4.9 was never wrong (W16).
+NIntegrate / contour wave 3 (v0.6300-v0.6307): 14 of 15 rows now ahead (h2.3 machine
+0.11 vs 9.9 ms, h2.7 0.13 / 8.9 vs 3.9 / 9.0, h4.4 machine 8.5 vs 24.5, h4.4 wp40 613 vs
+1168, P4 Trapezoidal wp400 114 vs 182). Still SLOWER: h2.5 wp40 (~110 vs 15 ms; needs an
+adaptive Gauss-Kronrod rule on [0, oo) at high precision); h2.6 wp40 at parity.
