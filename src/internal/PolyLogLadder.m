@@ -115,19 +115,136 @@ PolyLogLadder`PoleTerm[b_, j_, k_, W_] := Module[{sub},
       If[sub === $Failed, $Failed,
         Log[W]^k (W - b)^(1 - j)/(1 - j) - k/(1 - j) sub]]];
 
+(* LOG ARGUMENTS BEYOND LINEAR.
+
+   Splitting.  Log[P], P a polynomial of degree >= 2 with real numeric
+   coefficients and no real root, is a sum of linear logs over its (non-real,
+   conjugate-paired) roots r.  For real x and any real point p,
+     Log[P(x)] = Log[P(p)] + Sum_r m_r Log[(x - r)/(p - r)]
+   exactly: conjugate factors have arguments summing to exactly 0, and
+   P(x)/P(p) > 0.  So Log[1 + x^2] = Log[1 - I x] + Log[1 + I x] (p = 0).  The
+   point p is chosen per term of R's partial fractions: a term with its pole at
+   a rational p is split at that p, so every kernel equals 1 at the pole and the
+   ladder's Log[W] Log[1 - W] is 0 there instead of two divergent logs whose
+   coefficients cancel only after the values are simplified (Int_0^1
+   Log[1 + x + x^2]/x = Pi^2/9 depends on it); every other term is split at
+   p = 0 (Log[P(0)] = Log of the constant term).
+
+   Moebius kernels.  A kernel Log[M], M = (al x + be)/(ga x + de), is integrated
+   in u = M: x = (de u - be)/(al - ga u) is Moebius again, so R(x) dx stays a
+   rational R(x(u)) x'(u) du and the ladder applies in u.  Replacing (M, Log[M])
+   by (1/M, -Log[M]) is exact too (d/dx -Log[M] = (1/M)'/(1/M)); the orientation
+   with |u| <= 1 at the stage's sample point 37/100 is taken, which keeps
+   PolyLog[n, u/c] off its cut on [0, 1] for the common kernels.
+
+   Polarisation.  A product of two distinct linear kernels is
+     L_i L_j = (L_i^2 + L_j^2 - (L_i - L_j)^2)/2,
+   and L_i - L_j = Log[w_i] - Log[w_j] differs from Log[w_i/w_j] by a constant
+   (2 Pi I n, piecewise), so it is handled as the Moebius kernel u = w_i/w_j
+   with Log[u] replaced by L_i - L_j in the ladder's answer: the ladder uses
+   only d/du Log[u] = 1/u, which L_i - L_j satisfies exactly, so the answer
+   differentiates back to R (L_i - L_j)^2 everywhere, with no branch to track.
+   Int_0^1 Log[1 - x] Log[1 + x]/x = -5 Zeta[3]/8 this way. *)
+
+(* {roots with multiplicities} of a splittable P, or $Failed *)
+PolyLogLadder`SplitRoots[u_, x_] := Module[{p = Expand[u], cl, rts},
+  If[! PolynomialQ[p, x] || Exponent[p, x] < 2, Return[$Failed]];
+  cl = CoefficientList[p, x];
+  If[! AllTrue[cl, NumericQ[#] && TrueQ[Im[#] == 0] &], Return[$Failed]];
+  rts = PolyLogLadder`RootsMult[p, x];
+  If[rts === $Failed, Return[$Failed]];
+  If[! AllTrue[rts, TrueQ[Abs[Im[N[#[[1]], 30]]] > 10^-20] &], Return[$Failed]];
+  rts];
+
+(* Log[P(x)] split at the real point p0 *)
+PolyLogLadder`SplitAt[u_, rts_, x_, p0_] :=
+  Log[u /. x -> p0] + Total[(#[[2]] Log[Together[(x - #[[1]])/(p0 - #[[1]])]]) & /@ rts];
+
+(* the rational real pole of a partial-fraction term, or None *)
+PolyLogLadder`TermPole[t_, x_] := Module[{d = Denominator[Together[t]], fl},
+  If[FreeQ[d, x], Return[None]];
+  fl = Select[FactorList[d], ! FreeQ[#[[1]], x] &];
+  If[Length[fl] == 1 && Exponent[fl[[1, 1]], x] == 1,
+    -Coefficient[fl[[1, 1]], x, 0]/Coefficient[fl[[1, 1]], x, 1], None]];
+
+(* f with every splittable Log[P] replaced by linear logs, split per pole *)
+PolyLogLadder`SplitAll[f_, x_] := Catch[Module[{logs, sp, lam, g, others, osym, out = 0, terms},
+  logs = Union[Cases[f, Log[u_] /; ! FreeQ[u, x], {0, Infinity}]];
+  sp = Select[{#, PolyLogLadder`SplitRoots[#[[1]], x]} & /@
+         Select[logs, PolynomialQ[#[[1]], x] && Exponent[#[[1]], x] >= 2 &], #[[2]] =!= $Failed &];
+  If[sp === {}, Throw[f, PolyLogLadder`split]];
+  lam = Table[Unique["PolyLogLadder`S"], {Length[sp]}];
+  others = Complement[logs, sp[[All, 1]]];
+  osym = Table[Unique["PolyLogLadder`O"], {Length[others]}];
+  g = Expand[f /. Thread[sp[[All, 1]] -> lam] /. Thread[others -> osym]];
+  If[! PolynomialQ[g, lam], Throw[f, PolyLogLadder`split]];
+  terms = If[Head[g] === Plus, List @@ g, {g}];
+  (* group by the monomial in the split kernels, partial fractions in x *)
+  Do[
+    With[{mono = Times @@ (lam^Exponent[t, lam])},
+      If[mono === 1, out += t,
+        Do[
+          With[{p0 = PolyLogLadder`TermPole[a, x]},
+            With[{pp = If[p0 === None || ! TrueQ[Im[p0] == 0], 0, p0]},
+              out += a (mono /. Thread[lam -> (PolyLogLadder`SplitAt[#[[1, 1]], #[[2]], x, pp] & /@ sp)])]],
+          {a, With[{ap = Apart[Together[t/mono], x]}, If[Head[ap] === Plus, List @@ ap, {ap}]]}]]],
+    {t, terms}];
+  out /. Thread[osym -> others]], PolyLogLadder`split];
+
+(* {al, be, ga, de} of a Moebius M(x) = (al x + be)/(ga x + de), or $Failed. *)
+PolyLogLadder`Moebius[m_, x_] := Module[{t = Together[m], nu, dn, c},
+  nu = Numerator[t]; dn = Denominator[t];
+  If[! PolynomialQ[nu, x] || ! PolynomialQ[dn, x] || Exponent[nu, x] > 1 || Exponent[dn, x] > 1,
+    Return[$Failed]];
+  c = {Coefficient[nu, x, 1], Coefficient[nu, x, 0], Coefficient[dn, x, 1], Coefficient[dn, x, 0]};
+  If[PolyLogLadder`ZeroQ[c[[1]] c[[4]] - c[[2]] c[[3]]], $Failed, c]];
+
+(* INT R(x) Lam^k dx, Lam a function with d/dx Lam = M'/M for the Moebius M
+   (Lam = Log[M] itself, or a difference of two linear logs). *)
+PolyLogLadder`KernelPiece[R_, k_, m_, lam_, x_] := Module[{c, u, xs, piece},
+  c = PolyLogLadder`Moebius[m, x];
+  If[c === $Failed, Return[$Failed]];
+  u = Unique["PolyLogLadder`W"];
+  xs = (c[[4]] u - c[[2]])/(c[[1]] - c[[3]] u);
+  piece = PolyLogLadder`Ladder[Together[(R /. x -> xs) D[xs, u]], u, k];
+  If[piece === $Failed, Return[$Failed]];
+  (piece /. Log[u] -> lam) /. u -> m];
+
+(* the same, oriented |u(37/100)| <= 1 when M is real (real coefficients):
+   then u is real on the real line, and the ladder's Log[1 - u/c] and
+   PolyLog[n, u/c] can only jump where u/c reaches 0 or 1 -- a singularity of
+   the integrand itself.  A complex M (a split kernel 1 + I x) keeps u = M:
+   1/(1 + I x) runs along an arc on which those pieces can cross a cut
+   unseen. *)
+PolyLogLadder`OrientedPiece[R_, k_, m_, lam_, x_] := Module[{mv, cs},
+  cs = PolyLogLadder`Moebius[m, x];
+  If[cs === $Failed || ! AllTrue[cs, NumericQ[#] && TrueQ[Im[#] == 0] &],
+    Return[PolyLogLadder`KernelPiece[R, k, m, lam, x]]];
+  mv = N[Abs[m /. x -> 37/100], 20];
+  If[NumericQ[mv] && TrueQ[mv > 1],
+    PolyLogLadder`KernelPiece[(-1)^k R, k, Together[1/m], -lam, x],
+    PolyLogLadder`KernelPiece[R, k, m, lam, x]]];
+
 (* Main entry: the log-kernel class. *)
-PolyLogLadder`Run[f_, x_Symbol] := Catch[Module[
-  {logs, Ls, g, rules, deg, res = 0, r0, w, a, b, W, piece, coeffs, chk},
+PolyLogLadder`Run[f0_, x_Symbol] := Catch[Module[
+  {f = f0, logs, Ls, g, rules, deg, res = 0, r0, piece, coeffs, chk, lin, cross, pr, wi, wj},
   logs = Union[Cases[f, Log[u_] /; ! FreeQ[u, x], {0, Infinity}]];
   If[logs === {}, Return[$Failed]];
-  (* every log kernel linear in x *)
-  If[! AllTrue[logs, PolynomialQ[#[[1]], x] && Exponent[#[[1]], x] == 1 &], Return[$Failed]];
+  (* split the log of a real polynomial without real roots into linear logs *)
+  If[AnyTrue[logs, PolynomialQ[#[[1]], x] && Exponent[#[[1]], x] >= 2 &],
+    f = PolyLogLadder`SplitAll[f, x];
+    logs = Union[Cases[f, Log[u_] /; ! FreeQ[u, x], {0, Infinity}]]];
+  (* every log kernel Moebius in x (linear the common case) *)
+  If[! AllTrue[logs, PolyLogLadder`Moebius[#[[1]], x] =!= $Failed &], Return[$Failed]];
+  lin = (PolynomialQ[#[[1]], x] && Exponent[#[[1]], x] == 1) & /@ logs;
   Ls = Table[Unique["PolyLogLadder`L"], {Length[logs]}];
   rules = Thread[logs -> Ls];
   g = f /. rules;
   (* rational in x, polynomial in the kernels *)
-  If[! FreeQ[g /. Thread[Ls -> 1], Log | Exp | Power[E, _] | Sin | Cos | Tan | Cot | Sec | Csc |
-        Sinh | Cosh | Tanh | Coth | Sech | Csch | ArcTan | ArcSin | ArcCos | PolyLog], Return[$Failed]];
+  (* (constant logs such as the Log[P(p)] of a split are coefficients) *)
+  If[! FreeQ[g /. Thread[Ls -> 1], (Log | Exp | Sin | Cos | Tan | Cot | Sec | Csc |
+        Sinh | Cosh | Tanh | Coth | Sech | Csch | ArcTan | ArcSin | ArcCos | PolyLog)[___, v_, ___] /; ! FreeQ[v, x]] ||
+     ! FreeQ[g, Power[E, v_] /; ! FreeQ[v, x]], Return[$Failed]];
   g = Expand[g];
   If[! AllTrue[Ls, PolynomialQ[g, #] &], Return[$Failed]];
   coeffs = {};
@@ -138,17 +255,31 @@ PolyLogLadder`Run[f_, x_Symbol] := Catch[Module[
       AppendTo[coeffs, {i, kk, Coefficient[g /. Thread[Delete[Ls, i] -> 0], Ls[[i]], kk]}],
       {kk, 1, deg}],
     {i, Length[Ls]}];
-  (* no cross terms between different kernels *)
-  chk = Together[g - r0 - Total[(Ls[[#[[1]]]]^#[[2]] #[[3]]) & /@ coeffs]];
+  (* bilinear cross terms of two linear kernels; nothing of higher mixed degree *)
+  cross = {};
+  Do[
+    If[lin[[i]] && lin[[j]],
+      pr = Coefficient[Coefficient[g, Ls[[i]], 1], Ls[[j]], 1] /. Thread[Ls -> 0];
+      If[! PolyLogLadder`ZeroQ[pr], AppendTo[cross, {i, j, pr}]]],
+    {i, Length[Ls]}, {j, i + 1, Length[Ls]}];
+  chk = Together[g - r0 - Total[(Ls[[#[[1]]]]^#[[2]] #[[3]]) & /@ coeffs] -
+                 Total[(Ls[[#[[1]]]] Ls[[#[[2]]]] #[[3]]) & /@ cross]];
   If[! PolyLogLadder`ZeroQ[chk], Return[$Failed]];
+  (* L_i L_j = (L_i^2 + L_j^2 - (L_i - L_j)^2)/2 *)
+  Do[
+    With[{i = c[[1]], j = c[[2]], R = c[[3]]},
+      AppendTo[coeffs, {i, 2, R/2}];
+      AppendTo[coeffs, {j, 2, R/2}];
+      wi = logs[[i, 1]]; wj = logs[[j, 1]];
+      piece = PolyLogLadder`OrientedPiece[-R/2, 2, Together[wi/wj], logs[[i]] - logs[[j]], x];
+      If[piece === $Failed, Throw[$Failed, PolyLogLadder`fail]];
+      res += piece],
+    {c, cross}];
   Do[
     With[{i = c[[1]], kk = c[[2]], R = c[[3]]},
-      w = logs[[i, 1]];
-      a = Coefficient[w, x, 1]; b = Coefficient[w, x, 0];
-      W = Unique["PolyLogLadder`W"];
-      piece = PolyLogLadder`Ladder[Together[(R /. x -> (W - b)/a)/a], W, kk];
+      piece = PolyLogLadder`OrientedPiece[R, kk, logs[[i, 1]], logs[[i]], x];
       If[piece === $Failed, Throw[$Failed, PolyLogLadder`fail]];
-      res += piece /. W -> w],
+      res += piece],
     {c, coeffs}];
   If[! PolyLogLadder`ZeroQ[r0],
     piece = Integrate[r0, x];

@@ -215,6 +215,86 @@ static void test_polylog_branch(void) {
     check_eq("Integrate[Tan[x], {x, 0, 2}]", "Integrate[Tan[x], {x, 0, 2}]");
 }
 
+/* Integrate[f, {x, a, b}] equals `expected` exactly, and `expected` itself
+ * agrees with a 40-digit NIntegrate to 30 digits (so the closed form is
+ * checked independently of the code under test). */
+static void check_definite_closed(const char* f, const char* a, const char* b,
+                                  const char* expected) {
+    check_definite_exact(f, a, b, expected);
+    char buf[1024];
+    snprintf(buf, sizeof buf,
+             "Abs[N[%s, 40] - NIntegrate[%s, {x, %s, %s}, WorkingPrecision -> 40]] < 10^-30",
+             expected, f, a, b);
+    check_eq(buf, "True");
+}
+
+/* Log of a real polynomial without real roots, split over its conjugate roots
+ * (Log[1 + x^2] = Log[1 - I x] + Log[1 + I x] on the real line), and products
+ * of two linear logs, polarised into squares with the Moebius kernel
+ * Log[w_i] - Log[w_j].  Closed forms derived by hand: x = Tan[t] for the
+ * 1/(1 + x^2) weights (Int_0^(Pi/4) Log[Cos[t]] = -Pi Log[2]/4 + Catalan/2),
+ * termwise series (Int_0^1 x^(n-1) Log[x] = -1/n^2) and the polarisation
+ * 2 Log[1 - x] Log[1 + x] = Log[1 - x]^2 + Log[1 + x]^2 - Log[(1 - x)/(1 + x)]^2
+ * with u = (1 - x)/(1 + x) (Int_0^1 Log[u]^2 2/(1 - u^2) = 7 Zeta[3]/2). */
+static void test_log_quadratic_and_products(void) {
+    /* rational x Log[quadratic] */
+    check_definite_closed("Log[1 + x^2]/(1 + x^2)", "0", "1", "Pi Log[2]/2 - Catalan");
+    check_definite_closed("Log[1 + x^2]/x", "0", "1", "Pi^2/24");
+    check_definite_closed("Log[1 + x^2]/(1 + x)", "0", "1", "3/4 Log[2]^2 - Pi^2/48");
+    check_definite_closed("x Log[1 + x^2]/(1 + x^2)", "0", "1", "Log[2]^2/4");
+    /* 1 + x + x^2 = (x - w)(x - w^2), w a primitive cube root of unity:
+     * Log[1 - x^3] - Log[1 - x] termwise, -Pi^2/18 + Pi^2/6 */
+    check_definite_closed("Log[1 + x + x^2]/x", "0", "1", "Pi^2/9");
+    /* x = Tan[t]: Int_0^(Pi/4) -2 Cos[t]^2 Log[Cos[t]] */
+    check_definite_closed("Log[1 + x^2]/(1 + x^2)^2", "0", "1",
+                          "1/4 - Catalan/2 - Pi/8 + Log[2]/4 + Pi Log[2]/4");
+    /* products of two logs */
+    check_definite_closed("Log[1 - x] Log[1 + x]/x", "0", "1", "-5 Zeta[3]/8");
+    check_definite_closed("Log[x] Log[1 + x]/x", "0", "1", "-3 Zeta[3]/4");
+    check_definite_closed("Log[1 - x] Log[1 + x]", "0", "1",
+                          "2 - Pi^2/6 + Log[2]^2 - 2 Log[2]");
+    check_definite_closed("Log[1 - x] Log[1 + x]/(1 + x)", "0", "1",
+                          "Zeta[3]/8 - Pi^2 Log[2]/12 + Log[2]^3/3");
+    /* t = x^2: (1/4) Int_0^1 Log[t] Log[1 + t]/t, (1/2) Int_0^1 Log[1 + t]^2/t */
+    check_definite_closed("Log[x] Log[1 + x^2]/x", "0", "1", "-3 Zeta[3]/16");
+    check_definite_closed("Log[1 + x^2]^2/x", "0", "1", "Zeta[3]/8");
+    /* real kernels oriented |u| <= 1: a real closed form, no PolyLog on its cut */
+    check_definite_numeric("Log[1 + x] Log[2 + x]/(1 + x)", "0", "1");
+    check_eq("FreeQ[Integrate[Log[1 + x] Log[2 + x]/(1 + x), {x, 0, 1}], Complex]", "True");
+    /* a Moebius kernel: 2 Sum 1/(2k + 1)^2 */
+    check_definite_closed("Log[(1 + x)/(1 - x)]/x", "0", "1", "Pi^2/4");
+    /* antiderivatives differentiate back */
+    check_antideriv_pzq("Log[1 + x^2]/(1 + x^2)");
+    check_antideriv_pzq("Log[1 - x] Log[1 + x]/x");
+    check_antideriv("Log[1 + x + x^2]/x");
+    check_antideriv("Log[x^2 + 2 x + 5]/(x + 3)");
+    check_antideriv("Log[2 + x] Log[3 - x]/(x + 1)");
+}
+
+/* The values those ladders leave at the endpoints. */
+static void test_polylog_values(void) {
+    /* anharmonic images of a closed point: (1 + I)/2 -> -I (Landen),
+     * 1 + I -> -I (reflection) */
+    check_eq("FunctionExpand[PolyLog[2, (1 + I)/2]]",
+             "I Catalan + 5/96 Pi^2 + (-1/8*I) Pi Log[2] - 1/8 Log[2]^2");
+    check_eq("FunctionExpand[PolyLog[2, 1 + I]]", "I Catalan + 1/16 Pi^2 + (1/4*I) Pi Log[2]");
+    check_eq("Abs[N[FunctionExpand[PolyLog[2, 1/2 - I/2]] - PolyLog[2, 1/2 - I/2], 40]] < 10^-35", "True");
+    check_eq("Abs[N[FunctionExpand[PolyLog[2, 1 + (-1)^(1/3)]] - PolyLog[2, 1 + (-1)^(1/3)], 40]] < 10^-35",
+             "True");
+    /* no closed image: left alone */
+    check_eq("FunctionExpand[PolyLog[2, 2 I]] === PolyLog[2, 2 I]", "True");
+    /* complex PolyLog at arbitrary precision (arb off the cut) agrees with the
+     * closed form; Li_2(-2) through the same route */
+    check_eq("Abs[N[PolyLog[2, (1 + I)/2], 50] - N[I Catalan + 5/96 Pi^2 - I/8 Pi Log[2] - Log[2]^2/8, 50]]"
+             " < 10^-45", "True");
+    check_eq("Abs[N[PolyLog[2, -2], 30] - N[-Pi^2/6 - Log[2]^2/2 - PolyLog[2, -1/2], 30]] < 10^-25", "True");
+    /* the series of PolyLog at 0, and the endpoint limit it decides */
+    check_eq("Normal[Series[PolyLog[2, t], {t, 0, 3}]]", "t + 1/4 t^2 + 1/9 t^3");
+    check_eq("Normal[Series[PolyLog[3, 2 t^2], {t, 0, 4}]]", "2 t^2 + 1/2 t^4");
+    check_eq("Limit[Log[t] PolyLog[2, t], t -> 0]", "0");
+    check_eq("Limit[Log[1 - x] PolyLog[2, 1 - x], x -> 1, Direction -> \"FromBelow\"]", "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -227,6 +307,8 @@ int main(void) {
     TEST(test_polylog_kernel_antiderivatives);
     TEST(test_polylog_kernel_definite);
     TEST(test_polylog_branch);
+    TEST(test_log_quadratic_and_products);
+    TEST(test_polylog_values);
 
     printf("All Integrate PolyLogLadder tests passed!\n");
     return 0;
