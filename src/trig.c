@@ -997,7 +997,30 @@ Expr* builtin_csc(Expr* res) {
     return NULL;
 }
 
+/* True when `arg` carries an approximate number at its top (a machine or
+ * MPFR real, or a Complex with an approximate part).  The exact inverse
+ * tables below compare the argument with the exact values Sin/Cos/Tan/...
+ * take at rational multiples of Pi -- integers, rationals and radicals,
+ * never an approximate number -- so such an argument cannot match, and
+ * building the ~70 table values to find that out cost ~8 us of every machine
+ * ArcSin[0.1] (60x the libm call) and of every MPFR call N makes. */
+static bool exact_inverse_table_cannot_match(const Expr* arg) {
+    if (arg->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR) return true;
+#endif
+    Expr *re, *im;
+    if (is_complex((Expr*)arg, &re, &im)) {
+        if (re->type == EXPR_REAL || im->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+        if (re->type == EXPR_MPFR || im->type == EXPR_MPFR) return true;
+#endif
+    }
+    return false;
+}
+
 static Expr* exact_arcsin(Expr* arg) {
+    if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
@@ -1016,6 +1039,7 @@ static Expr* exact_arcsin(Expr* arg) {
 }
 
 static Expr* exact_arccos(Expr* arg) {
+    if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
@@ -1034,6 +1058,7 @@ static Expr* exact_arccos(Expr* arg) {
 }
 
 static Expr* exact_arctan(Expr* arg) {
+    if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
@@ -1052,6 +1077,7 @@ static Expr* exact_arctan(Expr* arg) {
 }
 
 static Expr* exact_arccot(Expr* arg) {
+    if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
@@ -1070,6 +1096,7 @@ static Expr* exact_arccot(Expr* arg) {
 }
 
 static Expr* exact_arcsec(Expr* arg) {
+    if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
@@ -1088,6 +1115,7 @@ static Expr* exact_arcsec(Expr* arg) {
 }
 
 static Expr* exact_arccsc(Expr* arg) {
+    if (exact_inverse_table_cannot_match(arg)) return NULL;
     int64_t ds[] = {1, 2, 3, 4, 5, 6, 10, 12};
     for (int i = 0; i < 8; i++) {
         int64_t d = ds[i];
