@@ -270,6 +270,13 @@ static Val mgd_bin(Ctx* c, Val a, Val b, const void* real_fn, int cplx_sel) {
     return r;
 }
 
+/* r = x^(1/q) for x >= 0 (q, a small positive integer, carried as an MPFR
+ * constant so the RBIN signature serves); NaN for x < 0. */
+static int mgd_real_rootn(mpfr_ptr r, mpfr_srcptr x, mpfr_srcptr q, mpfr_rnd_t rnd) {
+    if (mpfr_sgn(x) < 0) { mpfr_set_nan(r); return 0; }
+    return mpfr_rootn_ui(r, x, mpfr_get_ui(q, MPFR_RNDN), rnd);
+}
+
 /* base^n for a machine-int exponent n. */
 static Val mgd_powi(Ctx* c, Val base, long n) {
     Slot k; memset(&k, 0, sizeof k); k.i = (long long)n;
@@ -463,6 +470,25 @@ static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
         Val base; if (!emit_mgd_real(c, a[0], &base)) return false;
         long ni;
         if (mgd_small_int(a[1], &ni)) { *out = mgd_powi(c, base, ni); return c->ok; }
+        /* b^(p/q), real b, 3 <= q <= 64, |p| <= 64: the q-th root (a Newton
+         * iteration, correctly rounded) and p products instead of exp(p/q log b)
+         * -- an AGM log and an exp at the working precision.  A negative base
+         * yields NaN, so the point is interpreted (its principal power is
+         * complex), exactly as the log/exp route declines it. */
+        {
+            int64_t pn, pd;
+            if (base.type == CT_BIGREAL && is_rational(a[1], &pn, &pd)
+                && pd >= 3 && pd <= 64 && pn >= -64 && pn <= 64) {
+                Expr* qe = expr_new_integer(pd);
+                int qc = mgd_new_mpfr_const_expr(c, qe);
+                expr_free(qe);
+                if (qc < 0) return false;
+                Val q = { qc, true, CT_BIGREAL, false };
+                Val r = mgd_bin(c, base, q, (const void*)mgd_real_rootn, MGC_POW);
+                *out = (pn == 1) ? r : mgd_powi(c, r, (long)pn);
+                return c->ok;
+            }
+        }
         Val ex; if (!emit_mgd_real(c, a[1], &ex)) return false;
         *out = mgd_bin(c, base, ex, (const void*)numeric_mpfr_pow_fast, MGC_POW); return c->ok;
     }
