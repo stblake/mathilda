@@ -285,8 +285,79 @@ static Val mgd_powi(Ctx* c, Val base, long n) {
     return r;
 }
 
-/* The MPFR real/complex domain. */
+static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out);
+
+/* x = k * unit * rest with a numeric leading factor k*unit, k an integer,
+ * 2 <= |k| <= 64 or k = -1, unit = 1 or a primitive Gaussian integer: returns
+ * Power[Exp[unit rest], k] (caller frees), else NULL. */
+static Expr* mgd_exp_harmonic(const Expr* x) {
+    if (x->type != EXPR_FUNCTION || x->data.function.head->type != EXPR_SYMBOL
+        || x->data.function.head->data.symbol.name != SYM_Times
+        || x->data.function.arg_count < 2) return NULL;
+    const Expr* c0 = x->data.function.args[0];
+    int64_t re = 0, im = 0;
+    Expr *cr, *ci;
+    if (c0->type == EXPR_INTEGER) re = c0->data.integer;
+    else if (is_complex((Expr*)c0, &cr, &ci) && cr->type == EXPR_INTEGER
+             && ci->type == EXPR_INTEGER) { re = cr->data.integer; im = ci->data.integer; }
+    else return NULL;
+    int64_t g = re < 0 ? -re : re, b = im < 0 ? -im : im;
+    while (b) { int64_t r = g % b; g = b; b = r; }      /* gcd(|re|, |im|) */
+    if (g == 0) return NULL;
+    /* the sign goes into k so that unit's first nonzero part is positive */
+    int64_t k = ((re != 0 ? re : im) < 0) ? -g : g;
+    if (!(k == -1 || (k >= 2 && k <= 64) || (k <= -2 && k >= -64))) return NULL;
+    int64_t ur = re / k, ui = im / k;
+    size_t n = x->data.function.arg_count;
+    Expr** args = malloc(n * sizeof *args);
+    if (!args) return NULL;
+    size_t m = 0;
+    if (!(ur == 1 && ui == 0))
+        args[m++] = (ui == 0) ? expr_new_integer(ur)
+                              : make_complex(expr_new_integer(ur), expr_new_integer(ui));
+    for (size_t i = 1; i < n; i++) args[m++] = expr_copy(x->data.function.args[i]);
+    Expr* u = (m == 1) ? args[0] : expr_new_function(expr_new_symbol(SYM_Times), args, m);
+    free(args);
+    Expr* ev[1] = { u };
+    Expr* ex = expr_new_function(expr_new_symbol(SYM_Exp), ev, 1);
+    Expr* pv[2] = { ex, expr_new_integer(k) };
+    return expr_new_function(expr_new_symbol(SYM_Power), pv, 2);
+}
+
+/* The MPFR real/complex domain, with value numbering: a compound subtree that
+ * was already lowered is not lowered again.  The managed programs skip the
+ * optimiser's CSE (it never sees a managed register), so before this a contour
+ * body (1 + E^(I t))^2000 (1 + E^(I t) + E^(2 I t))^1000 ... evaluated E^(I t)
+ * -- an MPFR sin_cos at the working precision -- once per occurrence. */
 static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
+    if (!c->ok) return false;
+    if (e->type != EXPR_FUNCTION) return emit_mgd_real_node(c, e, out);
+    uint64_t h = (uint64_t)expr_hash(e);
+    for (int i = 0; i < c->nmgd_memo; i++)
+        if (c->mgd_memo_hash[i] == h && expr_eq(c->mgd_memo_key[i], e)) {
+            *out = c->mgd_memo_val[i];
+            return true;
+        }
+    if (!emit_mgd_real_node(c, e, out) || !c->ok) return false;
+    if (c->nmgd_memo == c->mgd_memo_cap) {
+        int nc = c->mgd_memo_cap ? 2 * c->mgd_memo_cap : 32;
+        Expr** nk = realloc(c->mgd_memo_key, (size_t)nc * sizeof *nk);
+        if (nk) c->mgd_memo_key = nk;
+        uint64_t* nh = realloc(c->mgd_memo_hash, (size_t)nc * sizeof *nh);
+        if (nh) c->mgd_memo_hash = nh;
+        Val* nv = realloc(c->mgd_memo_val, (size_t)nc * sizeof *nv);
+        if (nv) c->mgd_memo_val = nv;
+        if (!nk || !nh || !nv) return true;          /* no memo: still correct */
+        c->mgd_memo_cap = nc;
+    }
+    c->mgd_memo_key[c->nmgd_memo] = expr_copy((Expr*)e);
+    c->mgd_memo_hash[c->nmgd_memo] = h;
+    c->mgd_memo_val[c->nmgd_memo] = *out;
+    c->nmgd_memo++;
+    return true;
+}
+
+static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
     if (!c->ok) return false;
     /* leaf: declared argument */
     if (e->type == EXPR_SYMBOL) {
@@ -359,8 +430,16 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
          * AGM at the working precision) and, for a complex x, a complex log and
          * exp, on every evaluation. */
         if (a[0]->type == EXPR_SYMBOL && a[0]->data.symbol.name == SYM_E) {
-            Expr* av[1] = { expr_copy(a[1]) };
-            Expr* t = expr_new_function(expr_new_symbol(SYM_Exp), av, 1);
+            /* E^(k u) for an integer multiple k of a unit coefficient (1 or a
+             * Gaussian-integer direction such as I) is lowered as (E^u)^k: with
+             * value numbering, the harmonics E^(2 I t), E^(3 I t), ... of a
+             * contour body share one exponential, each costing a few products
+             * instead of an MPFR sin_cos at the working precision. */
+            Expr* t = mgd_exp_harmonic(a[1]);
+            if (!t) {
+                Expr* av[1] = { expr_copy(a[1]) };
+                t = expr_new_function(expr_new_symbol(SYM_Exp), av, 1);
+            }
             bool ok = emit_mgd_real(c, t, out);
             expr_free(t);
             return ok && c->ok;
@@ -494,6 +573,10 @@ bool emit_mgd(Ctx* c, const Expr* e, Val* out) {
     bool ok = (c->prec_bits > 0) ? emit_mgd_real(c, e, out)
             : c->allow_bigint    ? emit_mgd_int(c, e, out)
             : false;
+    for (int i = 0; i < c->nmgd_memo; i++) expr_free(c->mgd_memo_key[i]);
+    free(c->mgd_memo_key); free(c->mgd_memo_hash); free(c->mgd_memo_val);
+    c->mgd_memo_key = NULL; c->mgd_memo_hash = NULL; c->mgd_memo_val = NULL;
+    c->nmgd_memo = c->mgd_memo_cap = 0;
     if ((!ok || !c->ok) && !c->bail_node) c->bail_node = e;
     return ok && c->ok;
 }

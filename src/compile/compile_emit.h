@@ -140,6 +140,14 @@ typedef struct {
     int  mgd_type_cap;
     MgdConst* mgd_consts;   /* program-owned literal containers; handed to program*/
     int  nmgd_consts, mgd_consts_cap;
+    /* Value numbering of the managed real/complex emitter: a subtree already
+     * lowered (keys are refcount copies, hashes alongside) maps to its register.
+     * Sound because managed registers are bump-allocated, written once, and the
+     * managed program is straight-line.  Set up and torn down by emit_mgd. */
+    Expr**   mgd_memo_key;
+    uint64_t* mgd_memo_hash;
+    Val*     mgd_memo_val;
+    int      nmgd_memo, mgd_memo_cap;
 } Ctx;
 
 /* ------------------------------------------------------------------ *

@@ -93,6 +93,29 @@ int main(void) {
     run("z1 = N[1 + I, 40]");
     check_true("cM[z1] == (z1*z1 + z1)", "mpfr complex: z^2+z @ 40");
 
+    /* Contour-shaped complex bodies: integer powers by binary powering, shared
+     * subtrees lowered once (value numbering), E^(k I t) as (E^(I t))^k, a
+     * bignum Rational coefficient, and the reciprocal trig functions -- each
+     * against the interpreter on the same body at the same precision. */
+    run("cH = Compile[{{t, _Real}}, (1 + E^(I t))^200 (1 + E^(I t) + E^(2 I t))^70 E^(-3 I t) "
+        "+ E^(-I t) + (2 + 3^40/7^30 E^(5 I t))^-9, WorkingPrecision -> 60]");
+    run("t0 = N[3/7, 60]");
+    check_true("Abs[cH[t0]/((1 + E^(I t0))^200 (1 + E^(I t0) + E^(2 I t0))^70 E^(-3 I t0) "
+               "+ E^(-I t0) + (2 + 3^40/7^30 E^(5 I t0))^-9) - 1] < 10^-50",
+               "mpfr complex: powers, shared harmonics, bignum rational @ 60");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{t, _Complex}}, Evaluate[(1 + E^(I t))^200 "
+               "E^(-3 I t) + 3^40/7^30], WorkingPrecision -> 40]) === True",
+               "diag: harmonics and a bignum Rational lower");
+    run("cT = Compile[{{z, _Complex}}, Csc[z]^3 + Tan[z] + Sec[z] - Cot[z], WorkingPrecision -> 40]");
+    run("z2 = N[7/10 + 2 I/5, 40]");
+    check_true("Abs[cT[z2]/(Csc[z2]^3 + Tan[z2] + Sec[z2] - Cot[z2]) - 1] < 10^-35",
+               "mpfr complex: Csc/Tan/Sec/Cot @ 40");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{z, _Complex}}, Csc[z]^3 + Tan[z], "
+               "WorkingPrecision -> 40]) === True", "diag: complex reciprocal trig lowers");
+    run("rT = Compile[{{x, _Real}}, Csc[x] + Sec[x] + Cot[x], WorkingPrecision -> 40]");
+    run("x3 = N[6/5, 40]");
+    check_true("Abs[rT[x3]/(Csc[x3] + Sec[x3] + Cot[x3]) - 1] < 10^-35", "mpfr real: Csc/Sec/Cot @ 40");
+
     /* Interpreter fallback on an unsupported head, still correct at precision. */
     run("gF = Compile[{{x, _Real}}, Gamma[x], WorkingPrecision -> 30]");
     run("xg = N[7/2, 30]");
