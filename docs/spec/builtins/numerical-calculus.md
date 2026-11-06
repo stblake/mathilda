@@ -1371,7 +1371,7 @@ not cut to 16 digits).
 **Taylor series (the Automatic method).** With `Method` Automatic, a right-hand
 side built from `+`, `*`, powers with a constant exponent (integer powers by
 multiplication, so `y^3` is fine where `y = 0`), `Exp`, `Log`, `Sqrt`, `Sin`,
-`Cos`, `Tan`, `Sinh`, `Cosh`, `Tanh` and `ArcTan` is integrated by a
+`Cos`, `Tan`, `Sinh`, `Cosh`, `Tanh`, `ArcTan` and `Abs` is integrated by a
 Taylor-series method: at every step the solution's Taylor coefficients to order
 `p ≈ ln(1/tol)/2 + 2` (at most 31) are computed exactly by automatic
 differentiation, the step is the radius where the last two terms fall below the
@@ -1385,10 +1385,34 @@ ISSAC '97 problem 10 system (`y'' == x^3 + y^3 + y'^3`) needs 13 steps to
 checks (`1/(1-x)`, `Exp[Sin[x]]`, `ArcTan`, `Sec`, `Cosh`, `Exp[Exp[x]]`,
 `Cos` over `[0, 10]` at 50 digits) agree to the goal between nodes. A
 singularity shows as the step collapsing (`NDSolve::ndsz`), and the solution
-ends there. Outside that vocabulary, with an `EvaluationMonitor`, or with a
+ends there: "effectively zero" is a step below a few hundred ulps of `t` at the
+*returned* precision, so toward a singular endpoint (the Gauss equation
+`x (1 - x) y'' + ... == 0` integrated to `x = 1`) the solution stops ~10^-27
+short of it at 30 digits instead of producing nodes that round onto the
+endpoint. Evaluating such a solution past its end (with `dmval`) falls back
+to the end node's own series where the continued interpolant departs from it
+(see `InterpolatingFunction`), which recovers `y(1)` to the working precision
+when `y` is continuous there; `y'(1)`, which has an unbounded derivative, only
+to `(10^-27)^(1/6)`.
+
+`Abs[a]` is `s a` with `s` the sign of `a` on the side being integrated into;
+its Taylor series is exact up to the next zero of `a`, so a step that would
+cross a zero of an `Abs` argument is cut to end on it (the zero of the step's
+series for `a`, by bisection to the working precision), and the next step
+starts on the other branch. A fractional power of that zero (`Abs[y]^(3/2)`,
+Lane-Emden `n = 3/2`) has no Taylor series at all; that point is crossed by
+adaptive DOPRI5 steps (the nodes still carry their exact derivatives) until
+the series step is the longer again. Lane-Emden `n = 3` and `n = 3/2` to their
+first zeros at 30 digits: 1.7 s and 4.4 s with DOPRI5, 0.04 s and 0.1 s now,
+the zeros correct to 21 digits. Outside that vocabulary, with an `EvaluationMonitor`, or with a
 named method, the Runge-Kutta/BDF integrators below are used.
 
-Explicit methods use the adaptive DOPRI5 pair (or fixed RK4);
+Explicit methods use the adaptive DOPRI5 pair (or fixed RK4), its tableau
+rounded once to the working precision from the exact rationals (the double
+tableau satisfies the order conditions only to ~1e-17, which was the floor of
+the answer however high `WorkingPrecision` was set), started from the initial
+point and values at the working precision and landing exactly on the interval
+end;
 **stiff (implicit/multistep) methods run the MPFR variable-order BDF** — the
 state, node times, coefficients, Newton residual and linear solve are all MPFR
 (the Jacobian stays double, since its accuracy only affects Newton's convergence

@@ -257,6 +257,88 @@ static void test_singularity_problem(void) {
 #endif
 }
 
+/* ------------------------------------------------------------------ */
+/* 7. ODE singularities at working precision: closed forms checked to   */
+/*    the requested digits (Runge-Kutta start data, Abs kinks, blow-up, */
+/*    a singular endpoint, extrapolation past the data)                 */
+/* ------------------------------------------------------------------ */
+static void test_wp_singular_family(void) {
+#ifdef USE_MPFR
+    /* The Runge-Kutta path at working precision reads its start, initial
+     * values and end at that precision and uses the exact DOPRI5 tableau: an
+     * exact y(0) = 1/3 used to be rounded to a double (16 digits at most). */
+    check_ge(DIG("y[1] /. First[NDSolve[{y'[x] == -y[x], y[0] == 1/3}, y, {x, 0, 1}, WorkingPrecision -> 30, "
+                 "PrecisionGoal -> 20, AccuracyGoal -> 20, Method -> \"ExplicitRungeKutta\"]]", "Exp[-1]/3"), 19);
+    /* y' = y^2, y(1/7) = 7/13: y = 1/(2 - x) */
+    check_ge(DIG("y[3/2] /. First[NDSolve[{y'[x] == y[x]^2, y[1/7] == 7/13}, y, {x, 1/7, 3/2}, WorkingPrecision -> 30, "
+                 "PrecisionGoal -> 20, AccuracyGoal -> 20, Method -> \"ExplicitRungeKutta\"]]", "2"), 18);
+    /* Lane-Emden n = 1 written with Abs: y = Sin[x]/x up to the kink at Pi,
+     * and y = -Sinh[x - Pi]/x past it (|y| = -y there).  The step lands on
+     * the zero of the Abs argument, so the series never straddles it. */
+    run("leS[wp_, pg_] := NDSolve[{y''[x] + 2 y'[x]/x + Abs[y[x]] == 0, y[1/10] == Sin[1/10] 10, "
+        "y'[1/10] == (Cos[1/10]/10 - Sin[1/10]) 100}, y, {x, 1/10, 7/2}, WorkingPrecision -> wp, "
+        "PrecisionGoal -> pg, AccuracyGoal -> pg]");
+    run("le30 = leS[30, 20]; le50 = leS[50, 40];");
+    check_ge(DIG("x /. FindRoot[Evaluate[y[x] /. First[le30]], {x, 3}, WorkingPrecision -> 30, "
+                 "AccuracyGoal -> 25, PrecisionGoal -> 25]", "Pi"), 19);
+    check_ge(DIG("x /. FindRoot[Evaluate[y[x] /. First[le50]], {x, 3}, WorkingPrecision -> 50, "
+                 "AccuracyGoal -> 45, PrecisionGoal -> 45]", "Pi"), 39);
+    check_ge(DIG("y[3] /. First[le50]", "Sin[3]/3"), 39);
+    check_ge(DIG("y[7/2] /. First[le30]", "-Sinh[7/2 - Pi]/(7/2)"), 19);
+    check_ge(DIG("y[7/2] /. First[le50]", "-Sinh[7/2 - Pi]/(7/2)"), 39);
+    check_ge(DIG("y'[33/10] /. First[le50]", "(D[-Sinh[t - Pi]/t, t] /. t -> 33/10)"), 38);
+    /* Lane-Emden n = 3 (Abs[y]^3, a sign flip at the kink) and n = 3/2
+     * (Abs[y]^(3/2): no series at the zero, crossed by Runge-Kutta): first
+     * zeros xi_1 (published to 27 digits) from the series start at 10^-6 */
+    run("leN[n_, xe_, g_] := Module[{x0 = 10^-6, s}, s = NDSolve[{y''[x] + 2 y'[x]/x + Abs[y[x]]^n == 0, "
+        "y[x0] == 1 - x0^2/6 + n x0^4/120, y'[x0] == -x0/3 + n x0^3/30}, y, {x, x0, xe}, "
+        "WorkingPrecision -> 30, PrecisionGoal -> 20, AccuracyGoal -> 20]; "
+        "x /. FindRoot[Evaluate[y[x] /. First[s]], {x, g}, WorkingPrecision -> 30, AccuracyGoal -> 25, PrecisionGoal -> 25]]");
+    check_ge(DIG("leN[3, 7, 69/10]", "6.896848619376960375454528187`30"), 19);
+    check_ge(DIG("leN[3/2, 37/10, 365/100]", "3.653753736219122424609094280`30"), 19);
+    /* Riccati blow-up y' = 1 + y^2 (y = Tan[x]): the naive solution stops
+     * short of Pi/2; the reciprocal u = 1/y, u' = -(1 + u^2) from x = 1 is
+     * regular through it and its zero is Pi/2 to the working precision. */
+    run("ric[wp_] := Module[{s1, y1, s2}, s1 = NDSolve[{y'[x] == 1 + y[x]^2, y[0] == 0}, y, {x, 0, 1}, "
+        "WorkingPrecision -> wp, PrecisionGoal -> wp - 10, AccuracyGoal -> wp - 10]; y1 = y[1] /. First[s1]; "
+        "s2 = NDSolve[{u'[x] == -(1 + u[x]^2), u[1] == 1/y1}, u, {x, 1, 2}, WorkingPrecision -> wp, "
+        "PrecisionGoal -> wp - 10, AccuracyGoal -> wp - 10]; "
+        "x /. FindRoot[Evaluate[u[x] /. First[s2]], {x, 3/2}, WorkingPrecision -> wp, AccuracyGoal -> wp - 5, PrecisionGoal -> wp - 5]]");
+    check_ge(DIG("ric[30]", "Pi/2"), 19);
+    check_ge(DIG("ric[50]", "Pi/2"), 39);
+    check_ge(DIG("Quiet[Last[First[(y /. First[NDSolve[{y'[x] == 1 + y[x]^2, y[0] == 0}, y, {x, 0, 2}, "
+                 "WorkingPrecision -> 30, PrecisionGoal -> 20, AccuracyGoal -> 20]])[\"Domain\"]]]]", "Pi/2"), 5);
+    /* Bessel J0 from exact data at x0 = 1/1000: y(10) = BesselJ[0, 10] */
+    check_ge(DIG("y[10] /. First[NDSolve[{x y''[x] + y'[x] + x y[x] == 0, y[1/1000] == BesselJ[0, 1/1000], "
+                 "y'[1/1000] == -BesselJ[1, 1/1000]}, y, {x, 1/1000, 10}, WorkingPrecision -> 50, "
+                 "PrecisionGoal -> 40, AccuracyGoal -> 40]]", "BesselJ[0, 10]"), 39);
+    /* Gauss hypergeometric equation integrated to its singular point x = 1
+     * (y ~ A + B (1 - x)^(7/6)): the steps shrink geometrically, the solution
+     * stops a few hundred ulps short of 1 at the returned precision (nodes no
+     * longer collapse onto 1), and y[1] is extrapolated from the end node's
+     * own series: 2F1(1/3, 1/2; 2; 1). */
+    run("gS[wp_] := NDSolve[{x (1 - x) y''[x] + (2 - 11/6 x) y'[x] - 1/6 y[x] == 0, "
+        "y[1/1000] == Hypergeometric2F1[1/3, 1/2, 2, 1/1000], "
+        "y'[1/1000] == 1/12 Hypergeometric2F1[4/3, 3/2, 3, 1/1000]}, y, {x, 1/1000, 1}, "
+        "WorkingPrecision -> wp, PrecisionGoal -> wp - 10, AccuracyGoal -> wp - 10]");
+    run("g30 = Quiet[gS[30]]; g50 = Quiet[gS[50]];");
+    check_ge(DIG("Quiet[y[1] /. First[g30]]", "Hypergeometric2F1[1/3, 1/2, 2, 1]"), 19);
+    check_ge(DIG("Quiet[y[1] /. First[g50]]", "Hypergeometric2F1[1/3, 1/2, 2, 1]"), 39);
+    check_ge(DIG("y[1/2] /. First[g50]", "Hypergeometric2F1[1/3, 1/2, 2, 1/2]"), 39);
+    /* the domain ends short of 1, but within 10^-20 of it */
+    check_ge("-Log[10, 1 - Last[First[(y /. First[g30])[\"Domain\"]]]]", 20);
+    check_eq("Sign[1 - Last[First[(y /. First[g30])[\"Domain\"]]]]", "1");
+    /* evaluating past the end says so (dmval, which Check sees) */
+    check_eq("Check[y[1] /. First[g30], \"ext\"]", "\"ext\"");
+    /* ...while a table of an entire function keeps the last interval's
+     * interpolant a width or so out, which is far better there than the end
+     * node's Taylor polynomial (~1e-31 against ~1e-14 for Exp at 11/10). */
+    run("ipE = Interpolation[Table[{{x}, Sequence @@ Table[N[Exp[x], 40], {9}]}, {x, 0, 1, 1/10}]];");
+    check_ge(DIG("Quiet[ipE[11/10]]", "Exp[11/10]"), 29);
+    check_ge(DIG("Quiet[ipE[-1/20]]", "Exp[-1/20]"), 33);
+#endif
+}
+
 int main(void) {
     test_mute_messages();
     symtab_init();
@@ -268,6 +350,7 @@ int main(void) {
     TEST(test_machine_dense_output);
     TEST(test_findmin_forms);
     TEST(test_singularity_problem);
+    TEST(test_wp_singular_family);
 
     if (failures == 0) printf("\nAll NDSolve Taylor / dense-output / property tests passed.\n");
     else printf("\n%d checks FAILED.\n", failures);

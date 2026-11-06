@@ -139,6 +139,18 @@ static bool nd_rhs_mpfr(NdProblem* P, const mpfr_t t, mpfr_t* Y, mpfr_t* out, lo
     return ok;
 }
 
+/* The precision at which a step size is "effectively zero": the precision the
+ * solution's abscissae are returned at (the working bits less the 64 guard
+ * bits nd_solve_mpfr adds), not the guard-padded one.  A step below a few
+ * hundred ulps of t at the returned precision would give nodes that round to
+ * the same abscissa -- toward a singular point the steps shrink geometrically
+ * and the integrator went on 16 digits past the returned precision, where
+ * the nodes collapsed onto the endpoint with derivatives of order 10^1000. */
+static long mp_resolution_bits(long bits) {
+    long r = bits > 64 + 53 ? bits - 64 : 53;
+    return r > 1000 ? 1000 : r;
+}
+
 /* Scalar WRMS error from mpfr e against a double-scale sc_i = atol+rtol*max|y|. */
 static double mp_wrms(size_t d, mpfr_t* e, mpfr_t* y, mpfr_t* yn, NdTol tol) {
     double sum = 0.0;
@@ -636,7 +648,7 @@ static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
     if (cmp0 == 0) return ND_OK;
     double dir = (cmp0 > 0) ? 1.0 : -1.0;
     double span = fabs(P->tmax - P->tmin);
-    long ubits = bits > 1000 ? 1000 : bits;
+    long ubits = mp_resolution_bits(bits);
 
     mpfr_t t, h, rem;
     mpfr_inits2(bits, t, h, rem, (mpfr_ptr)0);
@@ -907,7 +919,7 @@ static NdStatus mp_cross_singular(NdProblem* P, const NdOpts* o, NdTaylorTape* T
     size_t d = P->d;
     int dir = mpfr_cmp(target, t) > 0 ? 1 : -1;
     double span = fabs(P->tmax - P->tmin);
-    long ubits = bits > 1000 ? 1000 : bits;
+    long ubits = mp_resolution_bits(bits);
     MpDopri T;
     mp_dopri_init(&T, bits);
     mpfr_t h, rem, tn;
@@ -972,7 +984,7 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
     double first = (o->starting_step > 0.0) ? o->starting_step : HUGE_VAL;
-    long ubits = bits > 1000 ? 1000 : bits;
+    long ubits = mp_resolution_bits(bits);
 
     mpfr_t t, h, rem, root;
     mpfr_inits2(bits, t, h, rem, root, (mpfr_ptr)0);

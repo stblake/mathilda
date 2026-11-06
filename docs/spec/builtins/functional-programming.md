@@ -243,7 +243,16 @@ singularity reports the stopping point (`y' == 1 + y^2, y(0) == 0` gives
   the argument's, if lower) precision, and a machine-number argument gives a
   machine number, computed at the data's precision and rounded once.
 - An argument outside `domain` is extrapolated from the nearest window, and an
-  `InterpolatingFunction::dmval` warning is issued.
+  `InterpolatingFunction::dmval` warning is issued (at machine and at
+  arbitrary precision alike, so `Check` sees it).  A one-dimensional
+  arbitrary-precision table with derivatives at every node (an `NDSolve`
+  solution at `WorkingPrecision`) continues the last interval's two-point
+  interpolant unless it departs from the end node's own Taylor polynomial
+  `sum_a y^(a)(x_e) (x - x_e)^a / a!` by more than that polynomial's last two
+  terms; then the Taylor polynomial is returned.  Near a singularity just past
+  the data the interpolant's degree `2K+1` amplifies the data by
+  `((x - x_e)/h)^(2K+1)` and nothing of it is left a few widths out, while for
+  an analytic continuation it is the better of the two.
 - A symbolic argument, a wrong number of arguments (≠ `m`), or a malformed
   object (fewer than two grid points in a dimension, an incomplete tensor grid,
   non-numeric data) leaves the application unevaluated.

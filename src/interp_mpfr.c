@@ -24,6 +24,7 @@
 #include "expr.h"
 #include "sym_names.h"
 #include "numeric.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #define RND MPFR_RNDN
 
@@ -706,8 +707,59 @@ static void hermite_tensor_eval_m(const MFun* g, mpfr_t* T, size_t dcount, size_
  * data's own precision cancels ~2k+1 bits.  For an NDSolve table of degree 27
  * at 30 digits that left ~22 good digits, and a minimum located on the
  * interpolant moved by sqrt(1e-22) -- the last digits of the abscissa. */
+static bool hermite_1d_interp_m(const MFun* g, const int* cpath, int vrank, int k,
+                                const mpfr_t x, int der, mpfr_t out, long prec);
+
+/* Outside the data: the end node's own Taylor polynomial
+ *     T(x) = sum_{a <= k} y^(a)(x_e) (x - x_e)^a / a!
+ * carries an error indicator, its last two terms E.  The last interval's
+ * two-point interpolant continued past its end is the better extrapolant
+ * while the solution is analytic well beyond (x - x_e plus the interval
+ * width), and the worse one near a singularity: there its degree 2k+1
+ * amplifies the data like ((x - x_e)/h)^(2k+1) and nothing is left of it a
+ * few widths out (an NDSolve solution stopped just short of a singular
+ * endpoint).  So the interpolant is kept unless it departs from T by more
+ * than T's own indicator, in which case T is returned. */
 static bool hermite_1d_eval_m(const MFun* g, const int* cpath, int vrank, int k,
                               const mpfr_t x, int der, mpfr_t out, long prec) {
+    if (!hermite_1d_interp_m(g, cpath, vrank, k, x, der, out, prec)) return false;
+    size_t nlast = g->nk[0] - 1;
+    bool below = mpfr_less_p(x, g->grid[0][0]);
+    if (!below && !mpfr_greater_p(x, g->grid[0][nlast])) return true;
+    size_t e = below ? 0 : nlast;
+    mpfr_t dx, val, term, acc, ind, diff;
+    mpfr_inits2(prec + 32, dx, val, term, acc, ind, diff, (mpfr_ptr)0);
+    mpfr_sub(dx, x, g->grid[0][e], RND);
+    mpfr_set_zero(acc, 1);
+    mpfr_set_zero(ind, 1);
+    bool ok = true;
+    /* Horner in dx over a = k .. der: acc = acc dx / (a - der + 1) + y^(a);
+     * the indicator is |acc| after the first two terms, carried to dx^(a-der) */
+    for (int a = k; a >= der && ok; a--) {
+        int aa[1] = { a };
+        if (!extract_supplied_m(g->entryAt[e], 1, cpath, vrank, aa, a, val)) { ok = false; break; }
+        mpfr_mul(term, acc, dx, RND);
+        mpfr_div_si(term, term, a - der + 1, RND);
+        mpfr_add(acc, term, val, RND);
+        mpfr_mul(ind, ind, dx, RND);
+        mpfr_div_si(ind, ind, a - der + 1, RND);
+        if (a >= k - 1) mpfr_set(ind, acc, RND);
+        mpfr_abs(ind, ind, RND);
+    }
+    if (ok) {
+        mpfr_sub(diff, out, acc, RND);
+        mpfr_abs(diff, diff, RND);
+        mpfr_mul_ui(ind, ind, 4, RND);
+        if (mpfr_greater_p(diff, ind)) mpfr_set(out, acc, RND);
+    }
+    mpfr_clears(dx, val, term, acc, ind, diff, (mpfr_ptr)0);
+    return ok;
+}
+
+/* The two-point Hermite interpolant on the interval bracketing x (the last
+ * or first interval, continued, outside the data). */
+static bool hermite_1d_interp_m(const MFun* g, const int* cpath, int vrank, int k,
+                                const mpfr_t x, int der, mpfr_t out, long prec) {
     long wprec = prec + 2 * k + 32;
     mpfr_t* basis = basis_cached_m(k, wprec);
     size_t i = bracket_m(g->grid[0], g->nk[0], x);
@@ -870,6 +922,10 @@ Expr* interp_eval_mpfr(Expr* domain, Expr* table, size_t m,
         }
     }
     mpfr_clear(u);
+    for (size_t k = 0; k < m; k++)
+        if (!f.periodic[k] && (mpfr_less_p(p[k], f.grid[k][0])
+                               || mpfr_greater_p(p[k], f.grid[k][f.nk[k] - 1])))
+            mth_message("InterpolatingFunction", "dmval", "Input value %g lies outside the range of data in the interpolating function. Extrapolation will be used.", mpfr_get_d(p[k], RND));
 
     size_t vshape[16];
     int vrank;

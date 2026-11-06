@@ -2179,6 +2179,20 @@ static Expr* interp_finish_object(Expr* domain, Expr* table, size_t m,
     return object;
 }
 
+/* Order of two abscissae that are equal as doubles: arbitrary-precision
+ * nodes closer together than a double resolves (an NDSolve solution running
+ * into a singular point at 30 digits) are still distinct, and the domain must
+ * end at the true extreme node.  0 when either is not an MPFR number. */
+static int coord_exact_cmp(const Expr* a, const Expr* b) {
+#ifdef USE_MPFR
+    if (a && b && a->type == EXPR_MPFR && b->type == EXPR_MPFR)
+        return mpfr_cmp(a->data.mpfr, b->data.mpfr);
+#else
+    (void)a; (void)b;
+#endif
+    return 0;
+}
+
 static Expr* builtin_interpolation_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2283,8 +2297,10 @@ static Expr* builtin_interpolation_impl(Expr* res) {
         for (size_t k = 0; k < m; k++) {
             if (i == 0) { dmin[k] = dmax[k] = coord[k]; dminE[k] = dmaxE[k] = coordE[k]; }
             else {
-                if (coord[k] < dmin[k]) { dmin[k] = coord[k]; dminE[k] = coordE[k]; }
-                if (coord[k] > dmax[k]) { dmax[k] = coord[k]; dmaxE[k] = coordE[k]; }
+                if (coord[k] < dmin[k] || (coord[k] == dmin[k] && coord_exact_cmp(coordE[k], dminE[k]) < 0))
+                    { dmin[k] = coord[k]; dminE[k] = coordE[k]; }
+                if (coord[k] > dmax[k] || (coord[k] == dmax[k] && coord_exact_cmp(coordE[k], dmaxE[k]) > 0))
+                    { dmax[k] = coord[k]; dmaxE[k] = coordE[k]; }
             }
         }
 
