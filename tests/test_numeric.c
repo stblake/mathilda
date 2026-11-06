@@ -95,6 +95,35 @@ static void test_n_unknown_symbols_pass_through(void) {
     assert_eval_eq("N[Infinity]",  "Infinity", 0);
 }
 
+/* The working-precision planner's machine-integer Rational scan (no GMP):
+ * a non-dyadic rational's magnitude still raises the evaluation (Sin of a
+ * 15-digit argument must not inherit the argument's rounding error), a
+ * dyadic one does not need to, and an inexact integer leaf still counts.
+ * Expected values: 60-digit evaluations by an independent library. */
+static void test_n_plan_machine_rationals(void) {
+    assert_eval_eq("Abs[N[Sin[(10^15 + 1)/3]] - 0.01063131189606997605411337464807559990955] < 10^-17",
+                   "True", 0);
+    assert_eval_eq("Abs[N[Sin[2^60 + 1]] + 0.91732943534747918303971392200955657824] < 10^-15",
+                   "True", 0);
+    assert_eval_eq("N[Sin[3/4]] == Sin[0.75]", "True", 0);
+    assert_eval_eq("N[{1/2, 1/3, -5/8, 7}]", "{0.5, 0.333333, -0.625, 7.0}", 0);
+    assert_eval_eq("N[{1/3, 1/7}, 30] == {N[1/3, 30], N[1/7, 30]}", "True", 0);
+}
+
+/* N[E^y, p] goes straight to exp(y): values against 60-digit references,
+ * precisions as for Power[e, y]. */
+static void test_n_exp_power(void) {
+    assert_eval_eq("Abs[N[E^(1/3), 50] - "
+                   "1.39561242508608952862812531960258683759790651519940698261752`60] < 10^-48",
+                   "True", 0);
+    assert_eval_eq("Abs[N[E^(-81/25), 50] - "
+                   "0.0391638950989870737397710903657551404259278563463088657555005`60] < 10^-50",
+                   "True", 0);
+    assert_eval_eq("Precision[N[E^(1/3), 30]]", "30.0", 0);
+    assert_eval_eq("Abs[N[E^(-81/25)] - 0.039163895098987073739771] < 10^-17", "True", 0);
+    assert_eval_eq("N[E^(1/2), 40] == N[Sqrt[E], 40]", "True", 0);
+}
+
 static void test_n_on_sin_cos(void) {
     assert_eval_eq("N[Sin[1]]", "0.841471", 0);
     assert_eval_eq("N[Cos[1]]", "0.540302", 0);
@@ -735,6 +764,8 @@ int main(void) {
     TEST(test_n_constants);
     TEST(test_new_constants_identity);
     TEST(test_n_unknown_symbols_pass_through);
+    TEST(test_n_plan_machine_rationals);
+    TEST(test_n_exp_power);
     TEST(test_n_on_sin_cos);
     TEST(test_n_descend_then_reevaluate);
     TEST(test_n_listable);

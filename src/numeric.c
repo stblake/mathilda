@@ -1152,6 +1152,38 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         if (r) return r;
     }
 
+#ifdef USE_MPFR
+    /* E^y at arbitrary precision is Exp[y]: the generic rebuild below
+     * computed e = exp(1) first and then e^y = exp(y log e), a log (AGM) and
+     * two exponentials for one -- every entry of an N[Table[Exp[-k/25], ..]]
+     * whose planner raised the working precision paid ~5 us for it.  Same
+     * operand precisions as Power[e, y] (the larger of the two), real
+     * non-integer exponents only (integer ones stay verbatim, as below). */
+    if (numeric_spec_is_mpfr(spec) && g_n_held_depth == 0 &&
+        e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        e->data.function.args[0]->data.symbol.name == SYM_E &&
+        e->data.function.args[1]->type != EXPR_INTEGER &&
+        e->data.function.args[1]->type != EXPR_BIGINT) {
+        Expr* y = numericalize_rec(e->data.function.args[1], spec);
+        if (y && y->type == EXPR_MPFR && mpfr_number_p(y->data.mpfr) &&
+            !mpfr_integer_p(y->data.mpfr)) {
+            long bits = spec.bits;
+            if ((long)mpfr_get_prec(y->data.mpfr) > bits) bits = (long)mpfr_get_prec(y->data.mpfr);
+            mpfr_t r;
+            mpfr_init2(r, (mpfr_prec_t)bits);
+            mpfr_exp(r, y->data.mpfr, MPFR_RNDN);
+            expr_free(y);
+            if (mpfr_number_p(r) && !mpfr_zero_p(r)) return expr_new_mpfr_move(r);
+            mpfr_clear(r);       /* over/underflow: the generic path's rules */
+        } else if (y) {
+            expr_free(y);
+        }
+    }
+#endif
+
     /* General function f[a, b, ...] — rebuild with numericalized args, then
      * feed the result to the evaluator to trigger any numeric fast paths in
      * the per-function builtins (e.g. trig.c's csin, power.c's cpow). */
@@ -1468,7 +1500,37 @@ static void scan_exact_leaves(const Expr* e, ExactScan* s);
 /* Rational[n, d] with integer-like components, of any size. Dyadic
  * denominators are finitely representable and go in the `finite_bits`
  * bucket; everything else lands in `amplify_bits`. */
+static long u64_bitlen(uint64_t a) {
+    long bits = 0;
+    for (; a; a >>= 1) bits++;
+    return bits;
+}
+
 static void scan_rational(const Expr* num, const Expr* den, ExactScan* s) {
+    /* Machine-integer parts (every Rational of a Table of 1/(i + j - 1),
+     * ((i - 1)/(n - 1))^k, ...): the same three answers without a single
+     * GMP allocation -- the mpq path below cost ~1 us a leaf, more than
+     * the conversion N then does. */
+    if (num->type == EXPR_INTEGER && den->type == EXPR_INTEGER &&
+        num->data.integer != INT64_MIN && den->data.integer > 0) {
+        int64_t n = num->data.integer;
+        if (n == 0) { s->has_zero = true; return; }
+        uint64_t a = n < 0 ? (uint64_t)(-n) : (uint64_t)n;
+        uint64_t b = (uint64_t)den->data.integer;
+        uint64_t x = a, y = b;
+        while (y) { uint64_t t = x % y; x = y; y = t; }
+        a /= x; b /= x;                                   /* canonical */
+        if (b == 1) {
+            long l = i64_lossy_bits((int64_t)a);
+            if (l > s->finite_bits) s->finite_bits = l;
+            return;
+        }
+        /* a / 2^k is its own double exactly when a is */
+        if ((b & (b - 1)) == 0 && i64_lossy_bits((int64_t)a) == 0) return;
+        long mag = u64_bitlen(a) - u64_bitlen(b);
+        if (mag > s->amplify_bits) s->amplify_bits = mag;
+        return;
+    }
     mpq_t q;
     /* expr_to_mpz *initialises* its target (mpz_init_set), so it must be
      * handed raw slots. An mpq_init first would allocate limbs that the
