@@ -725,9 +725,19 @@ static bool ni_apply_option(Expr* rule, NiOpts* o) {
     if (name == SYM_Method) {
         Expr* m = rhs;
         /* Method -> {"name", subopts...} or Method -> "name" or symbol. */
-        if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL
+        bool is_list = m->type == EXPR_FUNCTION
+            && m->data.function.head->type == EXPR_SYMBOL
             && m->data.function.head->data.symbol.name == SYM_List
-            && m->data.function.arg_count >= 1) {
+            && m->data.function.arg_count >= 1;
+        /* "Trapezoidal" is the plain nested trapezoidal rule, doubled until
+         * two levels agree: the method for a periodic integrand over a period,
+         * where it converges exponentially and a Romberg table (the
+         * "TrapezoidalRule" default) would only mix in the aliased coarse
+         * levels.  An explicit "RombergQuadrature" sub-option still wins. */
+        Expr* mn = is_list ? m->data.function.args[0] : m;
+        if (mn->type == EXPR_STRING && !strcmp(mn->data.string, "Trapezoidal"))
+            o->romberg = false;
+        if (is_list) {
             for (size_t i = 1; i < m->data.function.arg_count; i++)
                 ni_apply_method_subopt(m->data.function.args[i], o);
             m = m->data.function.args[0];
@@ -1224,13 +1234,18 @@ static bool ni_try_levin_collocation_mpfr(NiCtx* ctx, double a, double b,
  * of levels; the un-extrapolated Riemann sums need far more panels, so they get
  * more levels but a bounded evaluation count to stop an over-tight PrecisionGoal
  * from grinding indefinitely. */
+/* Level budget of the equally-spaced rules.  ncrule starts from 4 panels and
+ * compares it with 8; MaxRecursion -> r allows 2^(r+3) panels, i.e. r + 1
+ * doublings past the first rule (8193 nodes at r = 10, enough to integrate a
+ * trigonometric polynomial of degree up to 8192 exactly by the trapezoidal
+ * rule).  Automatic keeps the former caps of 2^24 (Riemann) and 2^20 panels. */
 static void ni_ncr_budget(const NiOpts* o, int* max_levels, long* max_eval) {
     int r = o->max_recursion;
     if (o->method == NI_RIEMANN) {
-        *max_levels = (r < 0) ? 24 : (r > 30 ? 30 : (r < 6 ? 6 : r));
+        *max_levels = (r < 0) ? 22 : (r > 28 ? 29 : (r < 5 ? 6 : r + 1));
         *max_eval   = (o->max_points > 0) ? o->max_points : 4000000;
     } else {
-        *max_levels = (r < 0) ? 20 : (r > 30 ? 30 : (r < 4 ? 4 : r));
+        *max_levels = (r < 0) ? 18 : (r > 28 ? 29 : (r < 3 ? 4 : r + 1));
         *max_eval   = (o->max_points > 0) ? o->max_points : 0;
     }
 }
@@ -2653,7 +2668,8 @@ void nintegrate_init(void) {
     symtab_set_docstring("NIntegrate",
         "NIntegrate[f, {x, a, b}] numerically integrates f over a..b. Bounds may "
         "be real, complex (a straight-line/contour) or infinite. Options: Method "
-        "(\"GlobalAdaptive\", \"DoubleExponential\", \"TrapezoidalRule\", "
+        "(\"GlobalAdaptive\", \"DoubleExponential\", \"Trapezoidal\" (plain "
+        "doubling, for periodic integrands), \"TrapezoidalRule\", "
         "\"RiemannRule\", \"NewtonCotesRule\", \"LevinRule\", "
         "\"OscillatorySingularity\", \"MonteCarlo\", \"PrincipalValue\", ...), "
         "WorkingPrecision, PrecisionGoal, AccuracyGoal, MaxRecursion, MaxPoints, "

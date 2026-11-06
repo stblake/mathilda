@@ -791,7 +791,7 @@ integrand evaluated/numericalised at each sample point.
 | complex `xmin`/`xmax` or extra nodes | straight-line / piecewise-linear contour; complex ∞ gives a ray |
 
 Named methods are accepted as strings: `"GlobalAdaptive"`, `"GaussKronrodRule"`,
-`"DoubleExponential"`, `"TrapezoidalRule"`, `"RiemannRule"`, `"NewtonCotesRule"`,
+`"DoubleExponential"`, `"Trapezoidal"`, `"TrapezoidalRule"`, `"RiemannRule"`, `"NewtonCotesRule"`,
 `"LevinRule"`, `"OscillatorySingularity"`, `"MonteCarlo"`, `"QuasiMonteCarlo"`,
 `"AdaptiveMonteCarlo"`, `"PrincipalValue"`.  `"OscillatorySingularity"`
 forces the exponential endpoint-map + integrate-between-the-zeros engine on the
@@ -865,6 +865,24 @@ They take Method sub-options in the `Method -> {"rule", "opt" -> val, …}` form
 
 The Riemann rectangle rules are first order (midpoint second order) and are not
 extrapolated; Trapezoidal and Newton–Cotes drive a Romberg table by default.
+
+Refinement starts from 4 panels (blocks, for Newton–Cotes) and the first
+convergence test compares 4 with 8: from 1 and 2 panels two coarse levels can
+agree by aliasing alone (`Sin[x]^2` on `[0, 2 Pi]` samples only its zeros).
+`MaxRecursion -> r` allows `2^(r+3)` panels; Automatic allows `2^20` (`2^24` for
+the Riemann rules).  The trapezoidal levels are nested, so each doubling
+evaluates only the new midpoints.
+
+`"Trapezoidal"` is the plain nested trapezoidal rule, doubled until two
+successive levels agree to `PrecisionGoal` — the method for a periodic integrand
+over a whole period, where it converges exponentially and is exact once the node
+count exceeds the degree of a trigonometric polynomial.  It does not build a
+Romberg table (which would only mix the aliased coarse levels into the answer);
+`Method -> {"Trapezoidal", "RombergQuadrature" -> True}` restores it.  E.g. the
+coefficient of `x^3000` in a degree-6000 polynomial as a 400-digit contour
+integral, `Im[NIntegrate[p/x^3001 I x /. x -> E^(I phi), {phi, 0, 2 Pi},
+Method -> "Trapezoidal", WorkingPrecision -> 400, PrecisionGoal -> 16,
+MaxRecursion -> 10]]/(2 Pi)`, converges at 8192 panels to the exact integer coefficient (checked to 80 digits).
 
 ### Arbitrary-precision drivers
 

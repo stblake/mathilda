@@ -592,6 +592,24 @@ static void test_mpfr_quadrature_gauges(void) {
                "1", "10^-45");
 }
 
+static void test_trapezoidal_periodic(void) {
+    /* Coarse levels agree by aliasing: 1 and 2 panels sample Sin[x]^2 only at
+     * its zeros.  Refinement starts from 4 panels. */
+    ASSERT_CLOSE("NIntegrate[Sin[x]^2, {x, 0, 2 Pi}, Method -> \"Trapezoidal\"]", "Pi", 1e-9);
+    ASSERT_CLOSE("NIntegrate[Sin[x]^2, {x, 0, 2 Pi}, Method -> \"TrapezoidalRule\"]", "Pi", 1e-9);
+    /* "Trapezoidal" is plain doubling (no Romberg table, which mixes in the
+     * aliased coarse levels of a periodic integrand); MaxRecursion -> r allows
+     * 2^(r+3) panels. */
+    ASSERT_REL("NIntegrate[Exp[Cos[x]], {x, 0, 2 Pi}, Method -> \"Trapezoidal\", "
+               "WorkingPrecision -> 40, PrecisionGoal -> 30, MaxRecursion -> 3]",
+               "2 Pi BesselI[0, 1]", "10^-35");
+    /* Exact once the node count exceeds the Laurent degree 3000: two levels
+     * agree to 400 digits (stopped at 2 panels and returned 1.5e1428). */
+    ASSERT_REL("Im[NIntegrate[" CONTOUR_BODY ", {phi, 0, 2 Pi}, Method -> \"Trapezoidal\", "
+               "WorkingPrecision -> 400, PrecisionGoal -> 16, MaxRecursion -> 10]]/(2 Pi)",
+               CONTOUR_TRUE, "10^-28");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -625,6 +643,7 @@ int main(void) {
     TEST(test_de_interior_zeros);
     TEST(test_beyond_double_range);
     TEST(test_mpfr_quadrature_gauges);
+    TEST(test_trapezoidal_periodic);
 
     printf("All nint_tests passed.\n");
     return 0;

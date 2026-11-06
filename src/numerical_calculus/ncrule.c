@@ -51,15 +51,26 @@ static int ncr_order(NcrRuleKind kind, int p) {
     return 2;
 }
 
+/* The refinement starts from 2^NCR_BASE_LEVEL panels (blocks, for
+ * Newton-Cotes), so the first convergence test compares 4 against 8 panels.
+ * From 1 and 2 panels two coarse levels could agree by aliasing alone:
+ * Sin[x]^2 on [0, 2 Pi] samples 0 at x = 0, Pi, 2 Pi, and the trapezoidal
+ * rule "converged" to 1e-31 for Pi.  The caller's level count counts doublings
+ * beyond this base. */
+#define NCR_BASE_LEVEL 2
+
 /* Number of panels (subintervals) at refinement level j. */
 static long ncr_panels(NcrRuleKind kind, int p, int j) {
+    j += NCR_BASE_LEVEL;
     return (kind == NCR_NEWTONCOTES) ? ((long)p << j) : ((long)1 << j);
 }
 
-/* Integrand evaluations a level's estimate will perform (for budgeting). */
-static long ncr_level_evals(NcrRuleKind kind, int p, long n) {
+/* Integrand evaluations a level's estimate will perform (for budgeting).  The
+ * trapezoidal levels are nested: past the first, a level evaluates only the
+ * n/2 midpoints of the previous one. */
+static long ncr_level_evals(NcrRuleKind kind, int p, long n, bool first) {
     if (kind == NCR_NEWTONCOTES) return (n / p) * (p + 1);
-    if (kind == NCR_TRAPEZOIDAL) return n + 1;
+    if (kind == NCR_TRAPEZOIDAL) return first ? n + 1 : n / 2;
     return n;                                   /* Riemann */
 }
 
@@ -116,6 +127,29 @@ static bool ncr_estimate(GkSampleMachine f, void* ctx, double a, double b,
     return true;
 }
 
+/* Nested trapezoidal sum over n panels: f(a)/2 + f(b)/2 + the interior
+ * samples.  With `first` the whole sum is formed; otherwise *sum holds the
+ * n/2-panel sum and only the new (odd) nodes are added. */
+static bool ncr_trap_sum(GkSampleMachine f, void* ctx, double a, double b,
+                         long n, bool first, double _Complex* sum) {
+    double span = b - a;
+    double _Complex v;
+    if (first) {
+        *sum = 0.0;
+        if (!f(ctx, a, &v)) return false;
+        *sum += 0.5 * v;
+        if (!f(ctx, b, &v)) return false;
+        *sum += 0.5 * v;
+    }
+    long step = first ? 1 : 2;
+    for (long k = 1; k < n; k += step) {
+        double x = a + ((double)k / (double)n) * span;
+        if (!f(ctx, x, &v)) return false;
+        *sum += v;
+    }
+    return true;
+}
+
 bool ncr_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
                            NcrRuleKind kind, int nc_points, bool romberg,
                            double reltol, double abstol,
@@ -132,17 +166,24 @@ bool ncr_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
     if (max_levels > NCR_MAX_LEVELS) max_levels = NCR_MAX_LEVELS;
 
     double _Complex prev[NCR_MAX_LEVELS + 1], cur[NCR_MAX_LEVELS + 1];
-    double _Complex best = 0.0, best_prev = 0.0;
+    double _Complex best = 0.0, best_prev = 0.0, tsum = 0.0;
     bool have_prev = false;
     long evals = 0;
 
     for (int j = 0; j <= max_levels; j++) {
         long n = ncr_panels(kind, p, j);
-        long lvl_evals = ncr_level_evals(kind, p, n);
+        long lvl_evals = ncr_level_evals(kind, p, n, j == 0);
         if (have_prev && max_eval > 0 && evals + lvl_evals > max_eval) break;
 
         double _Complex E;
-        if (!ncr_estimate(f, ctx, a, b, kind, p, n, &E)) {
+        bool ok;
+        if (kind == NCR_TRAPEZOIDAL) {
+            ok = ncr_trap_sum(f, ctx, a, b, n, j == 0, &tsum);
+            E = ((b - a) / (double)n) * tsum;
+        } else {
+            ok = ncr_estimate(f, ctx, a, b, kind, p, n, &E);
+        }
+        if (!ok) {
             if (!have_prev) { *result = NAN + NAN * I; return false; }  /* none */
             break;                              /* keep best so far    */
         }
@@ -254,6 +295,37 @@ static bool ncr_estimate_mpfr(DeQuadSampleMPFR f, void* ctx,
     return ok;
 }
 
+/* MPFR twin of ncr_trap_sum: (sr, si) is the running nested sum. */
+static bool ncr_trap_sum_mpfr(DeQuadSampleMPFR f, void* ctx,
+                              const mpfr_t a, const mpfr_t b, const mpfr_t span,
+                              long n, bool first, long bits,
+                              mpfr_t sr, mpfr_t si) {
+    mpfr_t x, vr, vi, t;
+    mpfr_inits2((mpfr_prec_t)bits, x, vr, vi, t, (mpfr_ptr)0);
+    bool ok = true;
+    if (first) {
+        mpfr_set_zero(sr, 1);
+        mpfr_set_zero(si, 1);
+        if (f(ctx, a, vr, vi)) {
+            mpfr_div_2ui(t, vr, 1, MPFR_RNDN); mpfr_add(sr, sr, t, MPFR_RNDN);
+            mpfr_div_2ui(t, vi, 1, MPFR_RNDN); mpfr_add(si, si, t, MPFR_RNDN);
+        } else ok = false;
+        if (ok && f(ctx, b, vr, vi)) {
+            mpfr_div_2ui(t, vr, 1, MPFR_RNDN); mpfr_add(sr, sr, t, MPFR_RNDN);
+            mpfr_div_2ui(t, vi, 1, MPFR_RNDN); mpfr_add(si, si, t, MPFR_RNDN);
+        } else ok = false;
+    }
+    long step = first ? 1 : 2;
+    for (long k = 1; k < n && ok; k += step) {
+        ncr_node_mpfr(x, a, b, span, k, n, t);
+        if (!f(ctx, x, vr, vi)) { ok = false; break; }
+        mpfr_add(sr, sr, vr, MPFR_RNDN);
+        mpfr_add(si, si, vi, MPFR_RNDN);
+    }
+    mpfr_clears(x, vr, vi, t, (mpfr_ptr)0);
+    return ok;
+}
+
 bool ncr_integrate_mpfr(DeQuadSampleMPFR f, void* ctx,
                         const mpfr_t a, const mpfr_t b,
                         NcrRuleKind kind, int nc_points, bool romberg, long bits,
@@ -280,8 +352,9 @@ bool ncr_integrate_mpfr(DeQuadSampleMPFR f, void* ctx,
         mpfr_init2(prev_re[m], (mpfr_prec_t)bits); mpfr_init2(prev_im[m], (mpfr_prec_t)bits);
         mpfr_init2(cur_re[m],  (mpfr_prec_t)bits); mpfr_init2(cur_im[m],  (mpfr_prec_t)bits);
     }
+    mpfr_t ts_re, ts_im;   /* nested trapezoidal sum */
     mpfr_inits2((mpfr_prec_t)bits, span, best_re, best_im, bp_re, bp_im,
-                d_re, d_im, mag, (mpfr_ptr)0);
+                d_re, d_im, mag, ts_re, ts_im, (mpfr_ptr)0);
     mpfr_sub(span, b, a, MPFR_RNDN);
 
     bool have_prev = false, converged = false;
@@ -289,11 +362,23 @@ bool ncr_integrate_mpfr(DeQuadSampleMPFR f, void* ctx,
 
     for (int j = 0; j <= L; j++) {
         long n = ncr_panels(kind, p, j);
-        long lvl_evals = ncr_level_evals(kind, p, n);
+        long lvl_evals = ncr_level_evals(kind, p, n, j == 0);
         if (have_prev && max_eval > 0 && evals + lvl_evals > max_eval) break;
 
-        if (!ncr_estimate_mpfr(f, ctx, a, b, span, kind, p, n, bits,
-                               cur_re[0], cur_im[0])) {
+        bool ok;
+        if (kind == NCR_TRAPEZOIDAL) {
+            ok = ncr_trap_sum_mpfr(f, ctx, a, b, span, n, j == 0, bits,
+                                   ts_re, ts_im);
+            if (ok) {
+                mpfr_div_si(d_re, span, n, MPFR_RNDN);       /* h = span / n */
+                mpfr_mul(cur_re[0], ts_re, d_re, MPFR_RNDN);
+                mpfr_mul(cur_im[0], ts_im, d_re, MPFR_RNDN);
+            }
+        } else {
+            ok = ncr_estimate_mpfr(f, ctx, a, b, span, kind, p, n, bits,
+                                   cur_re[0], cur_im[0]);
+        }
+        if (!ok) {
             if (!have_prev) {                   /* non-numeric: signal NaN    */
                 mpfr_set_nan(out_re); mpfr_set_nan(out_im);
                 goto done;
@@ -320,10 +405,15 @@ bool ncr_integrate_mpfr(DeQuadSampleMPFR f, void* ctx,
             mpfr_sub(d_im, best_im, bp_im, MPFR_RNDN);
             mpfr_hypot(d_re, d_re, d_im, MPFR_RNDN);
             mpfr_hypot(mag, best_re, best_im, MPFR_RNDN);
-            double err = mpfr_get_d(d_re, MPFR_RNDN);
-            double bmag = mpfr_get_d(mag, MPFR_RNDN);
-            *abserr = err;
-            if (err <= abstol || err <= reltol * bmag) { converged = true; break; }
+            *abserr = mpfr_get_d(d_re, MPFR_RNDN);
+            /* Compared in MPFR, not through doubles: an integral beyond the
+             * double range made both sides Inf and Inf <= reltol * Inf passed
+             * at the first comparison (a 400-digit trapezoidal rule on a
+             * periodic integrand of size 1e1428 stopped at 2 panels). */
+            mpfr_mul_d(mag, mag, reltol, MPFR_RNDN);
+            if (mpfr_cmp_d(d_re, abstol) <= 0 || mpfr_lessequal_p(d_re, mag)) {
+                converged = true; break;
+            }
         }
         for (int m = 0; m <= j; m++) {
             mpfr_set(prev_re[m], cur_re[m], MPFR_RNDN);
@@ -342,7 +432,8 @@ done:
         mpfr_clear(prev_re[m]); mpfr_clear(prev_im[m]);
         mpfr_clear(cur_re[m]);  mpfr_clear(cur_im[m]);
     }
-    mpfr_clears(span, best_re, best_im, bp_re, bp_im, d_re, d_im, mag, (mpfr_ptr)0);
+    mpfr_clears(span, best_re, best_im, bp_re, bp_im, d_re, d_im, mag,
+                ts_re, ts_im, (mpfr_ptr)0);
     return converged;
 }
 
