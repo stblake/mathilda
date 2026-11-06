@@ -831,6 +831,49 @@ done:
     return out;
 }
 
+/* Integer base to a machine-integer exponent e != 0: the exact power, a
+ * BigInt on overflow, or (e < 0) the reciprocal Rational.  NULL only when the
+ * bignum power fails or e == 0 (left to the caller's 0^0 / x^0 handling). */
+static Expr* power_int_int(const Expr* base, int64_t e) {
+    int64_t b = base->data.integer;
+    if (e > 0) {
+        bool overflow = false;
+        int64_t res_val = ipow(b, e, &overflow);
+        if (overflow) return bigint_pow(base, e);
+        return expr_new_integer(res_val);
+    }
+    if (e < 0) {
+        bool overflow = false;
+        int64_t res_val = ipow(b, -e, &overflow);
+        if (overflow) {
+            Expr* denom = bigint_pow(base, -e);
+            if (!denom) return NULL;
+            Expr* r_args[2] = { expr_new_integer(1), denom };
+            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
+        }
+        return make_rational(1, res_val);
+    }
+    return NULL;
+}
+
+/* A machine Rational (or Integer) base to a machine-integer exponent e != 0,
+ * in int64 arithmetic; NULL on overflow (the bignum path below takes it). */
+static Expr* power_rational_int(const Expr* base, int64_t e) {
+    int64_t bn, bd;
+    if (!is_rational(base, &bn, &bd) || e == 0) return NULL;
+    bool overflow = false;
+    if (e > 0) {
+        int64_t res_n = ipow(bn, e, &overflow);
+        int64_t res_d = ipow(bd, e, &overflow);
+        if (!overflow) return make_rational(res_n, res_d);
+    } else {
+        int64_t res_n = ipow(bn, -e, &overflow);
+        int64_t res_d = ipow(bd, -e, &overflow);
+        if (!overflow) return make_rational(res_d, res_n);
+    }
+    return NULL;
+}
+
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -854,6 +897,27 @@ Expr* builtin_power(Expr* res) {
 
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
+
+    /* Exact number to a machine-integer power, ahead of the ~40 shape tests
+     * below, none of which can act on it: an integer or machine Rational base
+     * (neither 0 nor 1) to an integer exponent other than 0 and 1 is computed
+     * by exactly the blocks further down (the integer / rational-base cases),
+     * which this calls directly.  1/(i + j - 1), (i/5)^2 and every literal
+     * 1/k a Table body parses to Power[k, -1] land here. */
+    if (exp->type == EXPR_INTEGER && exp->data.integer != 0 && exp->data.integer != 1) {
+        if (base->type == EXPR_INTEGER && base->data.integer != 0 && base->data.integer != 1) {
+            Expr* r = power_int_int(base, exp->data.integer);
+            if (r) return r;
+        } else if (base->type == EXPR_FUNCTION && base->data.function.arg_count == 2 &&
+                   base->data.function.head->type == EXPR_SYMBOL &&
+                   base->data.function.head->data.symbol.name == SYM_Rational &&
+                   base->data.function.args[0]->type == EXPR_INTEGER &&
+                   base->data.function.args[1]->type == EXPR_INTEGER &&
+                   base->data.function.args[0]->data.integer != 0) {
+            Expr* r = power_rational_int(base, exp->data.integer);
+            if (r) return r;
+        }
+    }
 
     /* E^z for an MPFR z is exp(z), through the kernel Exp[z] uses.  Left to
      * the generic path, the call declines and is retried with E numericalized
@@ -1379,43 +1443,16 @@ Expr* builtin_power(Expr* res) {
     }
 
     if (base->type == EXPR_INTEGER && exp->type == EXPR_INTEGER) {
-        int64_t b = base->data.integer;
-        int64_t e = exp->data.integer;
-        if (e > 0) {
-            bool overflow = false;
-            int64_t res_val = ipow(b, e, &overflow);
-            if (overflow) return bigint_pow(base, e);
-            return expr_new_integer(res_val);
-        }
-        if (e < 0) {
-            bool overflow = false;
-            int64_t res_val = ipow(b, -e, &overflow);
-            if (overflow) {
-                Expr* denom = bigint_pow(base, -e);
-                if (!denom) return NULL;
-                Expr* r_args[2] = { expr_new_integer(1), denom };
-                return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
-            }
-            return make_rational(1, res_val);
-        }
+        Expr* r = power_int_int(base, exp->data.integer);
+        if (r || exp->data.integer != 0) return r;
     }
 
-    int64_t bn, bd, e;
-    if (is_rational(base, &bn, &bd) && exp->type == EXPR_INTEGER) {
-        e = exp->data.integer;
-        if (e == 0) return expr_new_integer(1);
-        if (e > 0) {
-            bool overflow = false;
-            int64_t res_n = ipow(bn, e, &overflow);
-            int64_t res_d = ipow(bd, e, &overflow);
-            if (!overflow) return make_rational(res_n, res_d);
-        } else {
-            bool overflow = false;
-            int64_t res_n = ipow(bn, -e, &overflow);
-            int64_t res_d = ipow(bd, -e, &overflow);
-            if (!overflow) return make_rational(res_d, res_n);
-        }
+    if (is_rational(base, NULL, NULL) && exp->type == EXPR_INTEGER) {
+        if (exp->data.integer == 0) return expr_new_integer(1);
+        Expr* r = power_rational_int(base, exp->data.integer);
+        if (r) return r;
     }
+    int64_t bn, bd;
 
     /* Bigint-aware Rational-base / integer-exponent path.  Triggers
      * when the int64 is_rational above fails because either the
@@ -1460,6 +1497,17 @@ Expr* builtin_power(Expr* res) {
         expr_to_mpz(num_expr, bnum);
         expr_to_mpz(den_expr, bden);
         mpz_init(rnum); mpz_init(rden);
+        /* gcd(n^e, d^e) = gcd(n, d)^e: a coprime (canonical) base has coprime
+         * powers, so the reduction below -- a gcd of the two e-th powers, the
+         * dominant cost of (i/n)^j for j in the tens -- is needed only when
+         * the base itself was not reduced.  Testing the base is cheap. */
+        bool base_coprime;
+        {
+            mpz_t g0; mpz_init(g0);
+            mpz_gcd(g0, bnum, bden);
+            base_coprime = mpz_cmp_ui(g0, 1) == 0;
+            mpz_clear(g0);
+        }
         mpz_pow_ui(rnum, bnum, (unsigned long)e_abs);
         mpz_pow_ui(rden, bden, (unsigned long)e_abs);
         mpz_clear(bnum); mpz_clear(bden);
@@ -1476,13 +1524,15 @@ Expr* builtin_power(Expr* res) {
         }
 
         /* Cancel common factor. */
-        mpz_t g; mpz_init(g);
-        mpz_gcd(g, rnum, rden);
-        if (mpz_cmp_ui(g, 1) != 0) {
-            mpz_divexact(rnum, rnum, g);
-            mpz_divexact(rden, rden, g);
+        if (!base_coprime) {
+            mpz_t g; mpz_init(g);
+            mpz_gcd(g, rnum, rden);
+            if (mpz_cmp_ui(g, 1) != 0) {
+                mpz_divexact(rnum, rnum, g);
+                mpz_divexact(rden, rden, g);
+            }
+            mpz_clear(g);
         }
-        mpz_clear(g);
 
         /* If denominator is 1, return the plain (possibly demoted) integer. */
         if (mpz_cmp_ui(rden, 1) == 0) {
@@ -1564,8 +1614,27 @@ Expr* builtin_power(Expr* res) {
     if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol.name == SYM_Times) {
         size_t bc = base->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * bc);
+        int64_t en = exp->data.integer;
         for (size_t i = 0; i < bc; i++) {
-            Expr* p_args[2] = { expr_copy(base->data.function.args[i]), expr_copy(exp) };
+            Expr* f = base->data.function.args[i];
+            /* A machine-integer or machine-Rational factor (the coefficient
+             * of (3 Pi)^-1) is raised here, exactly as the evaluator would
+             * raise the Power[f, n] built otherwise -- one evaluation step
+             * fewer per number. */
+            Expr* fv = NULL;
+            if (en != 0 && en != 1) {
+                if (f->type == EXPR_INTEGER && f->data.integer != 0 && f->data.integer != 1)
+                    fv = power_int_int(f, en);
+                else if (f->type == EXPR_FUNCTION && f->data.function.arg_count == 2 &&
+                         f->data.function.head->type == EXPR_SYMBOL &&
+                         f->data.function.head->data.symbol.name == SYM_Rational &&
+                         f->data.function.args[0]->type == EXPR_INTEGER &&
+                         f->data.function.args[1]->type == EXPR_INTEGER &&
+                         f->data.function.args[0]->data.integer != 0)
+                    fv = power_rational_int(f, en);
+            }
+            if (fv) { new_args[i] = fv; continue; }
+            Expr* p_args[2] = { expr_copy(f), expr_copy(exp) };
             new_args[i] = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
         }
         Expr* result = expr_new_function(expr_new_symbol(SYM_Times), new_args, bc);

@@ -309,6 +309,14 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
 
     *can_compare = false;
 
+    /* Two machine integers: compare in place.  Every guard and the GMP route
+     * below give exactly this order for them, at the cost of two mpz
+     * allocations per i == j / j > i test in a Table body. */
+    if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
+        *can_compare = true;
+        return (a->data.integer > b->data.integer) - (a->data.integer < b->data.integer);
+    }
+
     /* The real infinities order against each other and against every real
      * number, as in the reference: 0 < Infinity, -Infinity < Pi, Infinity <=
      * Infinity. A complex or symbolic other side stays undecided. */

@@ -15,6 +15,15 @@ int g_arith_warnings_muted = 0;
 int64_t gcd(int64_t a, int64_t b) {
     a = llabs(a);
     b = llabs(b);
+    /* Operands that fit in 32 bits -- every Rational a Table of small exact
+     * entries builds -- run the Euclidean loop on 32-bit words: a 64-bit
+     * divide costs several times a 32-bit one on x86-64, and this gcd sits
+     * under every make_rational. */
+    if ((uint64_t)a <= UINT32_MAX && (uint64_t)b <= UINT32_MAX) {
+        uint32_t x = (uint32_t)a, y = (uint32_t)b;
+        while (y) { uint32_t t = x % y; x = y; y = t; }
+        return (int64_t)x;
+    }
     while (b) {
         a %= b;
         int64_t tmp = a;
@@ -115,6 +124,10 @@ Expr* builtin_rational(Expr* res) {
             return expr_new_symbol(SYM_ComplexInfinity);
         }
         
+        /* Already canonical (d > 1, coprime): the common case -- every
+         * evaluation of a Rational an arithmetic builtin produced lands here.
+         * Decline without building and freeing the reduced copy. */
+        if (d > 1 && n != 0 && n != INT64_MIN && gcd(n, d) == 1) return NULL;
         Expr* r = make_rational(n, d);
         if (r && r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL && r->data.function.head->data.symbol.name == SYM_Rational) {
             Expr* rn = r->data.function.args[0];
