@@ -101,6 +101,12 @@ Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi,
  * cut on z from -infinity to 0, integer b handled natively). Used for the MPFR /
  * complex / z<=0 numerics of HypergeometricU and (through the confluent template)
  * WhittakerW. */
+/* RiemannSiegelZ[t] (theta = 0) / RiemannSiegelTheta[t] (theta = 1), real or
+ * complex t, through acb_dirichlet_hardy_z / _theta. */
+Expr* flint_num_hardy(const Expr* t, int theta);
+/* Their machine twin at t = tr + i ti: false when FLINT is absent or the value
+ * is not finite. */
+bool  flint_hardy_d(int theta, double tr, double ti, double* rr, double* ri);
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
 
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve

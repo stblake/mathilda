@@ -550,6 +550,7 @@ set(COMMON_SRC
     ../src/special_functions/chebyshev_u.c
     ../src/special_functions/laguerre_l.c
     ../src/special_functions/jacobi_p.c
+    ../src/special_functions/riemann_siegel.c
     ../src/special_functions/hermite_h.c
     ../src/special_functions/whittaker.c
     ../src/special_functions/hypergeometricu.c
@@ -4336,6 +4337,9 @@ add_test(NAME struveh_tests COMMAND struveh_tests)
 add_executable(struvel_anger_kelvin_tests test_struvel_anger_kelvin.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(struvel_anger_kelvin_tests PRIVATE ../src)
 add_test(NAME struvel_anger_kelvin_tests COMMAND struvel_anger_kelvin_tests)
+add_executable(special_roots_tests test_special_roots.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(special_roots_tests PRIVATE ../src)
+add_test(NAME special_roots_tests COMMAND special_roots_tests)
 
 add_executable(elliptic_machine_tests test_elliptic_machine.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(elliptic_machine_tests PRIVATE ../src)

@@ -1859,6 +1859,45 @@ bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
     return ok;
 }
 
+/* Hardy's Z function and the Riemann-Siegel theta function of the Riemann zeta
+ * function (G = chi = NULL), one term of the series (len = 1). */
+static void nb_hardy_z(acb_t r, const acb_t t, slong prec) {
+    acb_dirichlet_hardy_z(r, t, NULL, NULL, 1, prec);
+}
+static void nb_hardy_theta(acb_t r, const acb_t t, slong prec) {
+    acb_dirichlet_hardy_theta(r, t, NULL, NULL, 1, prec);
+}
+
+Expr* flint_num_hardy(const Expr* t, int theta) {
+    return nb_eval1(t, theta ? nb_hardy_theta : nb_hardy_z);
+}
+
+/* The machine twin: t = tr + i ti loaded exactly, evaluated with the same
+ * precision ladder as nb_eval at a 53-bit target, rounded to doubles.  Z(t)
+ * near one of its zeros comes back as a tight ball around zero, accepted as
+ * nb_should_retry accepts it. */
+bool flint_hardy_d(int theta, double tr, double ti, double* rr, double* ri) {
+    if (!isfinite(tr) || !isfinite(ti)) return false;
+    acb_t T, R;
+    acb_init(T); acb_init(R);
+    arb_set_d(acb_realref(T), tr);
+    arb_set_d(acb_imagref(T), ti);
+    bool ok = false;
+    for (int attempt = 0; ; attempt++) {
+        slong wp = (53 + NB_GUARD) << attempt;
+        if (theta) nb_hardy_theta(R, T, wp); else nb_hardy_z(R, T, wp);
+        if (nb_should_retry(R, 53, attempt)) continue;
+        if (nb_emit_bits(R, 53) > 0) {
+            *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+            *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+            ok = isfinite(*rr) && isfinite(*ri);
+        }
+        break;
+    }
+    acb_clear(T); acb_clear(R);
+    return ok;
+}
+
 /* x_i loaded exactly: (hi + lo) + i (hi + lo) needs at most ~2 * 53 bits plus
  * the exponent gap, well inside the working precision. */
 static void mg_laurent_load(acb_t X, const double* x, slong prec) {
@@ -2479,6 +2518,10 @@ Expr* flint_num_meijerg(const Expr* const* a, size_t n, size_t p,
                         const Expr* const* b, size_t m, size_t q,
                         const Expr* z, const Expr* r) {
     (void)a; (void)n; (void)p; (void)b; (void)m; (void)q; (void)z; (void)r; return NULL;
+}
+Expr* flint_num_hardy(const Expr* t, int theta) { (void)t; (void)theta; return NULL; }
+bool flint_hardy_d(int theta, double tr, double ti, double* rr, double* ri) {
+    (void)theta; (void)tr; (void)ti; (void)rr; (void)ri; return false;
 }
 bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
                      const double* br, const double* bi, size_t m, size_t q,

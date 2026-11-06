@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -4115,6 +4115,40 @@ The sum form has no division by a parameter, so it is the polynomial for every
   and rank-1) agree bit for bit (`REG_N` four-argument kernel).
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+## RiemannSiegelTheta and RiemannSiegelZ
+
+`RiemannSiegelTheta[t]` is the Riemann–Siegel theta function
+`θ(t) = Im LogGamma(1/4 + i t/2) - t Log(π)/2` (for complex `t`, the analytic
+continuation `(LogGamma(1/4 + i t/2) - LogGamma(1/4 - i t/2))/(2 i) - t Log(π)/2`);
+`RiemannSiegelZ[t]` is Hardy's function `Z(t) = Exp(i θ(t)) Zeta(1/2 + i t)`,
+real for real `t`, with `|Z(t)| = |Zeta(1/2 + i t)|`, so its real zeros are the
+zeros of `Zeta` on the critical line (the 10th at `49.7738324776723021819…`).
+`θ` is odd and `Z` even.
+
+- `RiemannSiegelTheta[0] = 0`, `RiemannSiegelZ[0] = Zeta[1/2]`; other exact
+  arguments stay symbolic.
+- Machine, arbitrary-precision and complex arguments evaluate through arb's
+  `acb_dirichlet_hardy_theta` / `acb_dirichlet_hardy_z` behind the bridge's
+  precision ladder (so `Z` next to a zero is a tight ball around 0, and a large
+  `t` climbs precision to keep its digits). A real argument answers a real
+  number. The machine helper (`sf_machine_riemann_siegel_z[_c]`, `_theta[_c]`,
+  arb at a 53-bit target rounded to `double`) is shared by the scalar path, the
+  packed / `NDArray` kernels and `Compile[]`, so the surfaces agree bit for bit.
+  Without FLINT the defining expressions over `LogGamma` and `Zeta` are evaluated
+  numerically (and the packed / `Compile[]` kernels decline to the interpreter).
+- `FindRoot[z[t], {t, 4977/100}]` with `z[t_?NumericQ] := RiemannSiegelZ[t]`
+  gives the 10th zeta zero at machine precision and to 50 digits.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```
+In[1]:= RiemannSiegelZ[{1., 20.5}]
+Out[1]= {-0.736305, 0.599329}
+
+In[2]:= RiemannSiegelTheta[10.]
+Out[2]= -3.06707
+```
 
 ## LegendreP
 

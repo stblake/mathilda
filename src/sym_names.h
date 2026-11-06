@@ -234,6 +234,8 @@ extern const char* SYM_LegendreP;
 extern const char* SYM_LegendreQ;
 extern const char* SYM_LaguerreL;
 extern const char* SYM_JacobiP;
+extern const char* SYM_RiemannSiegelZ;
+extern const char* SYM_RiemannSiegelTheta;
 extern const char* SYM_FindIntegerNullVector;
 extern const char* SYM_FindMaximum;
 extern const char* SYM_FindMinimum;

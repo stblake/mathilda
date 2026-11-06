@@ -48,6 +48,7 @@
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
 #include "special_functions/surd.h"          /* Surd binary kernel (sf_surd_r) */
 #include "special_functions/besseljzero.h"   /* BesselJZero binary kernel */
+#include "special_functions/riemann_siegel.h" /* RiemannSiegelZ / Theta unary kernels */
 #include "special_functions/sf_machine_nielsen.h" /* Nielsen PolyLog n-ary kernel */
 #include <complex.h>
 #include <math.h>
@@ -697,6 +698,12 @@ static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, t
 /* Zeta's complex arm: the same sf_zeta_c the scalar builtin calls. */
 static bool ndk_Zeta_c(double sr, double si, double* rr, double* ri) { return sf_zeta_c(sr, si, rr, ri); }
 static const NDUnaryKernel NDKU_Zeta           = { ndk_Zeta_c, ndk_Zeta_r,     true, false, NULL, NULL, false, NULL };
+/* RiemannSiegelZ / RiemannSiegelTheta: the scalar builtins' machine helpers
+ * (arb at a 53-bit target), real and complex arms. */
+static bool ndk_RSZ_c(double a, double b, double* r, double* i) { return sf_machine_riemann_siegel_z_c(a, b, r, i); }
+static bool ndk_RST_c(double a, double b, double* r, double* i) { return sf_machine_riemann_siegel_theta_c(a, b, r, i); }
+static const NDUnaryKernel NDKU_RiemannSiegelZ     = { ndk_RSZ_c, sf_machine_riemann_siegel_z,     true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_RiemannSiegelTheta = { ndk_RST_c, sf_machine_riemann_siegel_theta, true, false, NULL, NULL, false, NULL };
 static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false, NULL, NULL, false, NULL };
 static const NDUnaryKernel NDKU_LucasL         = { NULL, ndk_LucasL_r,         true, false, NULL, NULL, false, NULL };
 /* Airy: real and complex arms of the shared kernels (sf_machine_bessel.c). */
@@ -1156,6 +1163,7 @@ void ndkernels_init(void) {
     REG_U(FresnelC);      REG_U(FresnelS);
     REG_U(PolyGamma);     REG_U(HarmonicNumber);
     REG_U(Zeta);          REG_U(Fibonacci);    REG_U(LucasL);
+    REG_U(RiemannSiegelZ); REG_U(RiemannSiegelTheta);
     REG_B(PolyGamma,   NDKB_PolyGamma);
     REG_B(HurwitzZeta, NDKB_HurwitzZeta);
     REG_B(Zeta,        NDKB_Zeta);        /* Zeta[s, a] (array s or a) */
