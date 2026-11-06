@@ -858,7 +858,18 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
     else if (total_leaves <= 20)  N_cap = 16;
     else if (total_leaves <= 60)  N_cap = 6;
     else                           N_cap = 4;
-    if (N > N_cap) N = N_cap;
+    /* Purely numeric coefficients never take the cap (see so_is_purely_numeric:
+     * they cannot blow up symbolically).  A capped inversion is TRUNCATED: its
+     * O-term moves down to the last computed term, so the series never claims
+     * coefficients it did not compute (they used to read as 0 -- the x^80
+     * coefficient of 1/(1 - x - x^2) came out 0 instead of Fibonacci[81]). */
+    bool coefs_all_numeric = true;
+    for (size_t i = 0; i < a->coef_count; i++) {
+        if (is_lit_zero(a->coefs[i])) continue;
+        if (!so_is_purely_numeric(a->coefs[i])) { coefs_all_numeric = false; break; }
+    }
+    bool capped = false;
+    if (!coefs_all_numeric && N > N_cap) { N = N_cap; capped = true; }
     Expr** b = calloc(N, sizeof(Expr*));
     Expr* inv_a0 = simp(mk_power(expr_copy(a->coefs[0]), expr_new_integer(-1)));
     b[0] = expr_copy(inv_a0);
@@ -872,12 +883,6 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
      * For non-numeric inputs we fall back to the batched path, which exists
      * to prevent super-linear evaluation time when coefficients are
      * polynomials in independent symbolic constants like Log[2], Log[3]. */
-    bool coefs_all_numeric = true;
-    for (size_t i = 0; i < a->coef_count; i++) {
-        if (is_lit_zero(a->coefs[i])) continue;
-        if (!so_is_purely_numeric(a->coefs[i])) { coefs_all_numeric = false; break; }
-    }
-
     for (size_t k = 1; k < N; k++) {
         if (coefs_all_numeric) {
             Expr* sum = expr_new_integer(0);
@@ -925,8 +930,12 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
     }
     expr_free(inv_a0);
 
-    SeriesObj* r = so_alloc(a->x, a->x0, -a->nmin, a->order - 2 * a->nmin, a->den);
-    for (size_t i = 0; i < N && i < r->coef_count; i++) so_set_coef(r, i, b[i]);
+    int64_t r_order = capped ? -a->nmin + (int64_t)N : a->order - 2 * a->nmin;
+    SeriesObj* r = so_alloc(a->x, a->x0, -a->nmin, r_order, a->den);
+    for (size_t i = 0; i < N; i++) {
+        if (i < r->coef_count) so_set_coef(r, i, b[i]);
+        else expr_free(b[i]);
+    }
     free(b);
     so_free(a);
     return r;
