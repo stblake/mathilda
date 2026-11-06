@@ -130,6 +130,8 @@ argument/option handling, then absences, then bottlenecks.
 | W13 | `N[0, 30]` (and inexact zero parts such as Re of `N[Erf[I], 30]`) is an inexact zero `0.e-30` where an exact 0 is expected; `N[10^-7, 12]` stores no guard bits and displays its binary value `9.99999999999e-08` (found by the printer fix) | **fixed v0.6285** (exact zeros stay exact; N[10^-7, 12] is the correctly rounded 40-bit value, displayed correctly) |
 | W14 | printer follow-ups to v0.6264: a MachinePrecision number past the double range prints 15 digits with trailing zeros (`1.00000000000000e+400`, numloop_tests); a non-whole precision one digit short; MPFR -0 loses its sign | **fixed v0.6289** (digit count floor(L) - floor(L - p); a 53-bit number past the double range shows its digits; inexact zero unsigned) |
 | W15 | `N[x, n]` stores exactly ceil(n log2 10) bits with no guard bits, so the last displayed digit can be wrong (`N[Sqrt[2], 50]` ends ...770, true ...769); also a timeout during MPFR's constant computation poisoned the Pi cache (fixed v0.6291) | **fixed v0.6292-v0.6293** (16 guard bits; precision = width - 16; wrong last digits 68/360 -> 0; Precision[N[Pi, 30]] = 30.) |
+| W16 | `1/3^700 == 0` and `PossibleZeroQ[1/3^700]` True (exact rationals beyond the double range read as 0; made h4.9 look wrong) | **fixed v0.6296** |
+| W17 | `PossibleZeroQ[Pi/3^700]` and `Pi/3^700 == 0` True: the zero test's numeric stage measures magnitudes in doubles (1e-334 underflows) | open |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
@@ -218,3 +220,7 @@ Wave 3 (every SLOWER case, by area): arbitrary-precision SVD/eigen (h1.2 9.8x, h
 Trapezoidal rows h4.3/4.4/4.8/4.9/4.10 and P4); exact coefficients (h4.7, h4.8) and
 NSum h3.6; exact lex GroebnerBasis (h6.3/6.7/6.8/6.10, up to 6.2x); N at a point
 (h7.x, re-measured as single runs), FindRoot h5.9, sine Galerkin h9.9, P7, P10.
+
+Wave 3 so far: h1.2 / h1.4 singular values at 100 / 60 digits now 74 / 652 ms vs
+91 / 695 (v0.6294); h4.7 Coefficient[Expand] 5 vs 26 ms, h4.8 12 vs 35 ms, h3.6 wp30
+25 vs 33 ms (v0.6297-v0.6299); h4.9 was never wrong (W16).
