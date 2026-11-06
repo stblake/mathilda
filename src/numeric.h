@@ -146,6 +146,10 @@ static inline bool numeric_spec_caps_inexact(NumericSpec spec) {
 Expr* numericalize(const Expr* e, NumericSpec spec);
 /* Machine precision without the working-precision plan (for screening; see numeric.c). */
 Expr* numericalize_machine_unplanned(const Expr* e);
+/* Re-evaluations N[expr, p]'s adaptive precision has run since startup (the
+ * first evaluation of each N is not counted). Monotone; for tests that pin
+ * "an expression that cancels nothing is evaluated once". */
+long numeric_adaptive_reevaluations(void);
 
 /* Look up a named constant (Pi, E, …). Returns true and fills *out if the
  * symbol is a recognized numeric constant; false otherwise. Exposed so the

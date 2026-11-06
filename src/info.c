@@ -5859,6 +5859,16 @@ void info_init(void) {
         "\n"
         "Derived from the platform's DBL_MANT_DIG -- typically 53*Log[10,2]\n"
         "(~ 15.9546) on IEEE 754 systems.");
+    symtab_set_docstring("$MaxExtraPrecision",
+        "$MaxExtraPrecision\n"
+        "\tgives the most decimal digits of working precision beyond the\n"
+        "\trequested precision that N[expr, n] (and other adaptive numeric\n"
+        "\tsearches) may add to compensate for cancellation. Default 50.\n"
+        "\n"
+        "When n + $MaxExtraPrecision digits do not certify n correct digits,\n"
+        "N issues N::meprec and returns what the last precision gave (a zero\n"
+        "part as 0., another part at the digits it can claim). Settable, e.g.\n"
+        "Block[{$MaxExtraPrecision = 1000}, N[expr, 30]].");
     symtab_set_docstring("$MachineEpsilon",
         "$MachineEpsilon\n"
         "\tgives the difference between 1.0 and the next-nearest number\n"

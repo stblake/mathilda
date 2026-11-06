@@ -203,6 +203,11 @@ typedef int (*MpfrBinaryOp)(mpfr_t, const mpfr_t, const mpfr_t, mpfr_rnd_t);
  * guard headroom -- the only way a guarded result can fall short of p digits
  * through arithmetic -- so an expression that does not cancel pays nothing. */
 static long g_numeric_cancel_bits = 0;
+/* The fewest bits any cancelling addition since the last reset kept: its
+ * result's precision less the bits it lost, 0 for a cancellation to an exact
+ * zero (which keeps nothing). N[expr, p] certifies a pass only when this is
+ * at least p: an exact 0. from a cancellation agrees with every other one. */
+static long g_numeric_cancel_left = LONG_MAX;
 
 static void note_cancellation(const mpfr_t x, const mpfr_t y, const mpfr_t s) {
     if (!mpfr_regular_p(x) && !mpfr_regular_p(y)) return;
@@ -212,6 +217,10 @@ static void note_cancellation(const mpfr_t x, const mpfr_t y, const mpfr_t s) {
     long lost = mpfr_zero_p(s) ? (long)mpfr_get_prec(s)
               : mpfr_regular_p(s) ? top - (long)mpfr_get_exp(s) : 0;
     if (lost > g_numeric_cancel_bits) g_numeric_cancel_bits = lost;
+    if (lost > 0) {
+        long left = mpfr_zero_p(s) ? 0 : (long)mpfr_get_prec(s) - lost;
+        if (left < g_numeric_cancel_left) g_numeric_cancel_left = left;
+    }
 }
 
 void numeric_note_cancellation_bits(long lost) {
@@ -1229,6 +1238,10 @@ typedef struct {
      * amplified by |x|, so they need that many bits *on top of* the output
      * precision. Zero for |x| < 2, where the amplification is nil. */
     long amplify_bits;
+    /* Max log2|n| over exact exponents of Power[b, n]: the base's relative
+     * error times |n|. Applied to arbitrary-precision requests only, so a
+     * machine N[b^n] keeps its machine evaluation. */
+    long power_amplify_bits;
     bool has_call;         /* a real function application, not just a number */
     bool has_infinity;     /* Infinity / ComplexInfinity / DirectedInfinity */
     bool has_zero;         /* an exact or inexact zero leaf */
@@ -1364,6 +1377,35 @@ static void scan_exact_leaves(const Expr* e, ExactScan* s) {
                         scan_exact_leaves(e->data.function.args[i], s);
                     return;
                 }
+                /* b^n with an exact exponent multiplies the relative error of
+                 * b by |n|: (1 + 10^-40)^(10^40) at 98 working bits, where
+                 * the base is rounded at 2^-98 and the exponent is 2^133,
+                 * came back 6.27 instead of E. Such a power is left
+                 * unevaluated only when n is huge, so its size is the
+                 * amplification. */
+                if (h == SYM_Power && e->data.function.arg_count == 2) {
+                    const Expr* n = e->data.function.args[1];
+                    long mag = 0;
+                    if (expr_is_integer_like(n)) {
+                        mpz_t z;
+                        expr_to_mpz(n, z);
+                        if (mpz_sgn(z) != 0) mag = (long)mpz_sizeinbase(z, 2);
+                        mpz_clear(z);
+                    } else if (n->type == EXPR_FUNCTION && n->data.function.head->type == EXPR_SYMBOL
+                               && n->data.function.head->data.symbol.name == SYM_Rational
+                               && n->data.function.arg_count == 2
+                               && expr_is_integer_like(n->data.function.args[0])
+                               && expr_is_integer_like(n->data.function.args[1])) {
+                        mpz_t a, d;
+                        expr_to_mpz(n->data.function.args[0], a);
+                        expr_to_mpz(n->data.function.args[1], d);
+                        if (mpz_sgn(a) != 0)
+                            mag = (long)mpz_sizeinbase(a, 2) - (long)mpz_sizeinbase(d, 2);
+                        mpz_clear(a);
+                        mpz_clear(d);
+                    }
+                    if (mag > s->power_amplify_bits) s->power_amplify_bits = mag;
+                }
             }
             s->has_call = true;
             scan_exact_leaves(head, s);
@@ -1399,8 +1441,11 @@ static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
                         ? spec.bits : (long)DBL_MANT_DIG;
 
     long required = s->finite_bits;
-    if (s->amplify_bits > 0) {
-        long amplified = out_bits + s->amplify_bits + NUMERIC_GUARD_BITS;
+    long amplify = s->amplify_bits;
+    if (numeric_spec_is_mpfr(spec) && s->power_amplify_bits > amplify)
+        amplify = s->power_amplify_bits;
+    if (amplify > 0) {
+        long amplified = out_bits + amplify + NUMERIC_GUARD_BITS;
         if (amplified > required) required = amplified;
     }
 
@@ -1428,7 +1473,7 @@ static bool numeric_plan_working_spec(const ExactScan* s, NumericSpec spec,
      * same ladder elsewhere. */
     if (!numeric_spec_is_mpfr(spec) && required <= out_bits) return false;
     if (numeric_spec_is_mpfr(spec) && required <= out_bits
-        && s->finite_bits <= 0 && s->amplify_bits <= 0) {
+        && s->finite_bits <= 0 && amplify <= 0) {
         required = out_bits + NUMERIC_GUARD_BITS;
     }
     if (required <= out_bits) return false;   /* already precise enough */
@@ -1903,6 +1948,20 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call) {
  * ---------------------------------------------------------------------- */
 static Expr* numericalize_top(const Expr* e, NumericSpec spec);
 
+/* Set by the N builtin for the numericalization it is about to run and
+ * consumed by the first numericalize_top that sees it, so a nested one does
+ * not. A part that vanishes at the precision limit is reported (N::meprec)
+ * only to N's own caller: it cannot be told from a nonzero value below the
+ * noise there, and N[expr, p] promised p digits of it. Contagion inside
+ * Plus/Times (N[1, 30] + (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1)), which only needs
+ * the part to the precision of its partner, keeps it as a silent 0. */
+static bool g_numeric_from_n = false;
+
+/* Count of adaptive re-evaluations (numeric.h). */
+static long g_numeric_reevaluations = 0;
+long numeric_adaptive_reevaluations(void) { return g_numeric_reevaluations; }
+
+
 #ifdef USE_MPFR
 /* ---- adaptive precision for N[expr, p] ------------------------------------
  *
@@ -1913,11 +1972,38 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec);
  * p = 32 (170 working bits): N[Cos[10^-20] - 1] had 11 good digits of 32 and
  * at p = 20 came back as an exact 0.0 (true value -5*10^-41); the exact zeros
  * E^(I Pi/4) - (-1)^(1/4) and Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1 came back as
- * 10^-52-size "values". So evaluate again with more
- * working bits until two successive results agree to p digits, up to p +
- * $MaxExtraPrecision digits. A part that keeps shrinking as the precision
- * rises is a cancellation to zero and becomes 0 at the requested precision;
- * any other part that never settles is kept with N::meprec. */
+ * 10^-52-size "values".
+ *
+ * So N re-evaluates at a higher working precision W until the result is
+ * certified, up to p + $MaxExtraPrecision digits (plus the guard). A result at
+ * W is certified when
+ *   (a) it agrees with an evaluation at least 32 bits lower to p bits, either
+ *       directly or by extrapolation: a loss of L bits leaves W - L good bits
+ *       at every W, so a lower result that agrees on A bits has lost
+ *       W_lo - A and the upper one has A + (W - W_lo) good bits (less a
+ *       16-bit margin, and only from A >= 32 so noise cannot pass); and
+ *   (b) every cancelling addition of the pass itself kept at least p bits
+ *       (g_numeric_cancel_left): one that cancelled to an exact zero kept
+ *       none, so two zeros never certify each other.
+ * (b) is what makes an exact zero honest. E^1000 (E^(1/1000 - E^-1000) -
+ * E^(1/1000)) is an exact 0.0 at every W below ~1450 bits (E^-1000 is absorbed
+ * by 1/1000, the two exponentials are then equal) and two such zeros "agreed",
+ * so N answered 0.0 for -1.001...; (a)'s 32-bit gap is what keeps a final
+ * short step to the cap (330 -> 331 bits) from agreeing on rounding noise,
+ * which certified 18 wrong digits of N[(Log[Cos[x]] + x^2/2 + x^4/12 +
+ * x^6/45)/x^8 /. x -> 10^-10, 30].
+ *
+ * Each step goes to at least W + 64 and, when the pass cancelled L < W bits,
+ * to p + L + 32, the precision that cancellation needs; after a cancellation
+ * to zero (L unknown) the extra precision doubles.
+ *
+ * At the cap a part is kept if it is certified by (a). A part that is zero, or
+ * keeps shrinking as W rises, is 0 to the precision reached: it is returned as
+ * 0. and, to the N builtin's caller, N::meprec says it is not certified -- a
+ * value below the noise at the limit (E^1000 (E^(1/1000 - E^-1000) -
+ * E^(1/1000)), or (1 + 10^-40)^(10^40) - E at 10 digits) shrinks with W
+ * exactly as the residue of an algebraic zero does. Any other unsettled part
+ * is kept at the bits it can claim, with N::meprec. */
 
 /* Leading bits on which two MPFR values agree (a large number when equal). */
 static long mpfr_agree_bits(const mpfr_t a, const mpfr_t b) {
@@ -1952,33 +2038,76 @@ static long expr_agree_bits(const Expr* a, const Expr* b) {
     return m;
 }
 
-/* `cur` with every MPFR leaf that has not settled to `bits` and is shrinking
- * relative to `prev` -- the FIRST evaluation, at least one 64-bit step below,
- * so the test does not depend on how short the last step to the cap was --
- * (by at least 2^16) replaced by a zero of `bits`
- * precision: the residue of an exact cancellation. Sets *unsettled when a
- * non-shrinking leaf has not settled either. A fresh tree, never mutating. */
-static Expr* expr_zero_vanishing(const Expr* cur, const Expr* prev, long bits, bool* unsettled) {
-    if (cur->type == EXPR_MPFR && prev && prev->type == EXPR_MPFR) {
-        if (mpfr_agree_bits(cur->data.mpfr, prev->data.mpfr) >= bits) return expr_copy((Expr*)cur);
-        bool shrink = mpfr_zero_p(cur->data.mpfr)
-            || (!mpfr_zero_p(prev->data.mpfr) && mpfr_number_p(prev->data.mpfr)
-                && mpfr_get_exp(cur->data.mpfr) <= mpfr_get_exp(prev->data.mpfr) - 16);
-        if (!shrink) { *unsettled = true; return expr_copy((Expr*)cur); }
+/* Bits of `bits` an evaluation at W can claim from agreeing on `agree`
+ * leading bits with one `gap` bits lower (see the block comment above):
+ * `agree` itself, or the extrapolated agree + gap - 16 when agree >= 32. */
+static long adaptive_good_bits(long agree, long gap) {
+    if (agree >= (1L << 29)) return agree;          /* identical */
+    if (agree >= 32 && gap >= 32) {
+        long g = agree + gap - 16;
+        if (g > agree) return g;
+    }
+    return agree;
+}
+
+/* The verdict at the precision cap, part by part: `cur` (at the cap) against
+ * `ref` (at least 32 bits lower) and `first` (the first evaluation). A fresh
+ * tree, never mutating. A certified MPFR leaf is kept. A zero or shrinking
+ * one -- or one whose `ref` is zero while some addition of the pass at the cap
+ * kept at most 16 bits (`total_cancel`: noise in the last bits) -- becomes a
+ * zero of `bits` precision and sets *vanished. Any other unsettled leaf is
+ * kept at the bits it can claim (at least 1) and sets *unsettled, as does a
+ * part whose shape changed. */
+static Expr* expr_cap_verdict(const Expr* cur, const Expr* ref, const Expr* first,
+                              long gap, long bits, bool total_cancel,
+                              bool* vanished, bool* unsettled) {
+    if (cur->type == EXPR_MPFR && ref && ref->type == EXPR_MPFR) {
+        const mpfr_srcptr c = cur->data.mpfr, r = ref->data.mpfr;
+        if (!mpfr_zero_p(c)) {
+            long good = adaptive_good_bits(mpfr_agree_bits(c, r), gap);
+            if (good >= bits) return expr_copy((Expr*)cur);
+            /* shrinking: smaller than the lower evaluation by half the
+             * precision gained (noise of size 2^-W shrinks by all of it) and
+             * smaller than the first evaluation too */
+            long drop = gap / 2 > 16 ? gap / 2 : 16;
+            bool shrink;
+            if (mpfr_zero_p(r)) {
+                shrink = total_cancel;
+            } else {
+                shrink = mpfr_regular_p(r)
+                    && mpfr_get_exp(c) <= mpfr_get_exp(r) - drop
+                    && (!first || first->type != EXPR_MPFR
+                        || !mpfr_regular_p(first->data.mpfr)
+                        || mpfr_get_exp(c) <= mpfr_get_exp(first->data.mpfr) - 16);
+            }
+            if (!shrink) {
+                *unsettled = true;
+                if (good < 1) good = 1;
+                Expr* k = expr_new_mpfr_bits((mpfr_prec_t)(good < bits ? good : bits));
+                if (!k) return expr_copy((Expr*)cur);
+                mpfr_set(k->data.mpfr, c, MPFR_RNDN);
+                return k;
+            }
+        }
+        *vanished = true;
         Expr* z = expr_new_mpfr_bits((mpfr_prec_t)bits);
         if (z) mpfr_set_zero(z->data.mpfr, 1);
         return z ? z : expr_copy((Expr*)cur);
     }
-    if (cur->type != EXPR_FUNCTION || !prev || prev->type != EXPR_FUNCTION
-        || cur->data.function.arg_count != prev->data.function.arg_count) {
-        if (expr_agree_bits(cur, prev) < bits) *unsettled = true;
+    if (cur->type != EXPR_FUNCTION || !ref || ref->type != EXPR_FUNCTION
+        || cur->data.function.arg_count != ref->data.function.arg_count) {
+        if (expr_agree_bits(cur, ref) < bits) *unsettled = true;
         return expr_copy((Expr*)cur);
     }
+    bool first_ok = first && first->type == EXPR_FUNCTION
+        && first->data.function.arg_count == cur->data.function.arg_count;
     size_t n = cur->data.function.arg_count;
     Expr** args = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
     if (!args) return expr_copy((Expr*)cur);
     for (size_t i = 0; i < n; i++)
-        args[i] = expr_zero_vanishing(cur->data.function.args[i], prev->data.function.args[i], bits, unsettled);
+        args[i] = expr_cap_verdict(cur->data.function.args[i], ref->data.function.args[i],
+                                   first_ok ? first->data.function.args[i] : NULL,
+                                   gap, bits, total_cancel, vanished, unsettled);
     Expr* out = expr_new_function(expr_copy(cur->data.function.head), args, n);
     free(args);
     return out;
@@ -2057,6 +2186,8 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
 #ifndef USE_MPFR
     return numericalize_rec(e, spec);
 #else
+    const bool from_n = g_numeric_from_n;
+    g_numeric_from_n = false;
     ExactScan s;
     memset(&s, 0, sizeof(s));
     scan_exact_leaves(e, &s);
@@ -2064,32 +2195,57 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     NumericSpec work;
     bool raised = numeric_plan_working_spec(&s, spec, &work);
     long saved_cancel = g_numeric_cancel_bits;
+    long saved_left = g_numeric_cancel_left;
     g_numeric_cancel_bits = 0;
     Expr* r = numericalize_rec(e, work);
     long cancelled = g_numeric_cancel_bits;
-    g_numeric_cancel_bits = saved_cancel > cancelled ? saved_cancel : cancelled;
     /* Adaptive precision is the promise of the N builtin's N[expr, p] (the
      * capping mode is produced solely by N); internal working-precision
      * numericalizations keep a single evaluation. */
+    /* The headroom a cancellation may use is what the working precision has
+     * above p LESS the bits planned for amplification by a large exact leaf
+     * or exponent: those are spent by the leaf, not available to the sum.
+     * N[(1 + 10^-40)^(10^40) - E, 10] ran at 231 bits, 133 of them taken by
+     * the power, and its 133-bit cancellation passed as "within the guard". */
+    long amp = s.amplify_bits > s.power_amplify_bits ? s.amplify_bits : s.power_amplify_bits;
+    if (amp < 0 || !raised) amp = 0;
+    long headroom = (raised ? work.bits : spec.bits) - spec.bits - amp;
+    if (headroom < 0) headroom = 0;
     bool adaptive = spec.mode == NUMERIC_MODE_MPFR_CAP && spec.bits > 0 && r && expr_has_plus(e)
-        && cancelled > (raised ? work.bits : spec.bits) - spec.bits;   /* lost past the guard */
+        && cancelled > headroom;   /* lost past the guard */
     Expr* r_raw = adaptive ? expr_copy(r) : NULL;   /* the result at W, unrounded */
     if (raised) r = numeric_round_result(r, spec);
 
-    /* Adaptive precision (see mpfr_agree_bits): only an N[expr, p] whose
-     * expression can cancel pays for a second evaluation. */
+    /* Adaptive precision (see the block comment above mpfr_agree_bits): only
+     * an N[expr, p] whose expression cancelled pays for a second evaluation. */
     if (adaptive) {
-        long W = raised ? work.bits : spec.bits;
+        const long p = spec.bits;
         double mep_digits = 50.0;
-        long Wmax = spec.bits + numeric_max_extra_bits(&mep_digits) + NUMERIC_GUARD_BITS;
-        Expr* prev = r_raw;               /* unrounded result at W */
-        Expr* first = expr_copy(r_raw);   /* the shrink reference at the cap */
+        const long Wmax = p + numeric_max_extra_bits(&mep_digits) + NUMERIC_GUARD_BITS;
+        /* The two most recent results, newest first, with their precisions
+         * and pass cancellations; `first` is the shrink reference at the cap. */
+        Expr* prev = r_raw;  long Wp = raised ? work.bits : p;  long Lp = cancelled;
+        Expr* prev2 = NULL;  long Wp2 = 0;
+        Expr* first = expr_copy(r_raw);
         while (prev) {
-            long W2 = W + 64;
+            long W2 = Wp + 64;
+            if (Lp < Wp) {                       /* a measured loss: go where it is covered */
+                if (p + amp + Lp + 32 > W2) W2 = p + amp + Lp + 32;
+            } else if (Wp - p > 64) {            /* cancelled to zero: double the extra */
+                W2 = Wp + (Wp - p);
+            }
+            /* the pass at the cap is compared with one 64 bits below it */
+            if (W2 > Wmax - 64 && Wp < Wmax - 64) W2 = Wmax - 64;
             if (W2 > Wmax) W2 = Wmax;
-            if (W2 <= W) break;
+            if (W2 <= Wp) break;
             NumericSpec w = work; w.bits = W2;   /* work's mode: CAP keeps inexact leaves as they are */
+            g_numeric_cancel_bits = 0;
+            g_numeric_cancel_left = LONG_MAX;
+            g_numeric_reevaluations++;
             Expr* cur = numericalize_rec(e, w);
+            long Lc = g_numeric_cancel_bits;
+            long Kc = g_numeric_cancel_left;
+            if (Lc > cancelled) cancelled = Lc;
             if (!cur) break;
             /* A higher precision that comes back WORSE (a kernel that fails
              * there: N[BarnesG[37/10], 80] was Overflow[]) ends the climb on
@@ -2099,37 +2255,52 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
                 expr_free(cur);
                 break;
             }
-            long agree = expr_agree_bits(cur, prev);
-            if (agree >= spec.bits) {                 /* settled: p good digits */
+            /* compare with the newest result at least 32 bits lower */
+            const Expr* ref = prev;  long Wr = Wp;
+            if (W2 - Wp < 32 && prev2) { ref = prev2; Wr = Wp2; }
+            long gap = W2 - Wr;
+            long good = adaptive_good_bits(expr_agree_bits(cur, ref), gap);
+            if (good >= p && Kc >= p + amp) {     /* certified: p good digits */
                 expr_free(prev);
                 prev = cur;
                 break;
             }
-            if (W2 >= Wmax) {                          /* at the cap */
-                bool unsettled = false;
-                Expr* z = expr_zero_vanishing(cur, first, spec.bits, &unsettled);
+            if (W2 >= Wmax) {                    /* at the cap */
+                bool vanished = false, unsettled = false;
+                Expr* z = expr_cap_verdict(cur, ref, first, gap, p, Kc <= 16,
+                                           &vanished, &unsettled);
+                /* Overflow[] / Indeterminate at the cap is a division by a
+                 * difference that cancelled to zero at every precision tried
+                 * (f[g[x]]/g[f[x]] at x deep in the cancellation): it is not
+                 * an answer either. */
+                if (expr_has_nonfinite_real(cur) || expr_has_overflow_or_indeterminate(cur))
+                    unsettled = true;
                 expr_free(cur);
                 expr_free(prev);
                 prev = z;
-                if (unsettled) {
-                    char* s = expr_to_string((Expr*)e);
+                if (unsettled || (vanished && from_n)) {
+                    char* str = expr_to_string((Expr*)e);
                     mth_message("N", "meprec",
                         "Internal precision limit $MaxExtraPrecision = %g reached while evaluating %s.",
-                        mep_digits, s ? s : "");
-                    free(s);
+                        mep_digits, str ? str : "");
+                    free(str);
                 }
                 break;
             }
-            expr_free(prev);
-            prev = cur;
-            W = W2;
+            expr_free(prev2);
+            prev2 = prev;  Wp2 = Wp;
+            prev = cur;    Wp = W2;  Lp = Lc;
         }
+        expr_free(prev2);
         expr_free(first);
         if (prev) {
             expr_free(r);
             r = numeric_round_result(prev, spec);
         }
     }
+    /* an enclosing numericalization sees the worst cancellation of any pass */
+    g_numeric_cancel_bits = saved_cancel > cancelled ? saved_cancel : cancelled;
+    if (saved_left < g_numeric_cancel_left) g_numeric_cancel_left = saved_left;
 
     /* A machine double has a 53-bit mantissa but only a ~1e308 exponent
      * range, so Exp[1000] flushes to inf and Exp[-1000] to zero even though
@@ -2533,7 +2704,10 @@ Expr* builtin_n(Expr* res) {
      * (see eval.c around the builtin dispatch site), so we must NOT free
      * it ourselves. Returning NULL means "keep `res` unevaluated" — the
      * evaluator retains ownership in that path. */
-    return numericalize(res->data.function.args[0], spec);
+    g_numeric_from_n = true;
+    Expr* out = numericalize(res->data.function.args[0], spec);
+    g_numeric_from_n = false;
+    return out;
 }
 
 /* ------------------------------------------------------------------------
@@ -2838,7 +3012,9 @@ void numeric_init(void) {
         "N[expr, n]\n"
         "\tGives a numerical approximation to n decimal digits. Requires\n"
         "\ta USE_MPFR build; without it, a warning is emitted and machine\n"
-        "\tprecision is used.\n"
+        "\tprecision is used. When the evaluation cancels, the working\n"
+        "\tprecision rises until n digits are certified, up to n +\n"
+        "\t$MaxExtraPrecision digits (N::meprec beyond that).\n"
         "N[expr, {p, a}]\n"
         "\tPrecision goal p and accuracy goal a; p is used (a when p is Infinity).\n");
 

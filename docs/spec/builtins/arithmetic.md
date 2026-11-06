@@ -90,22 +90,49 @@ a held branch.
 
 **Adaptive precision**: `N[expr, p]` aims for `p` good digits. Cancellation
 in a sum loses leading digits, so when an addition during the evaluation lost
-more bits than the working precision's guard, `N` evaluates again with 64 more
-working bits, and repeats until two successive results agree to `p` digits.
-The limit is `p + $MaxExtraPrecision` digits (default 50). A part that keeps
-shrinking as the precision rises is the residue of an exact cancellation, and
-it is `0` at precision `p`. Any other part that never settles is kept, and `N`
-emits `N::meprec` ("Internal precision limit $MaxExtraPrecision = 50.
-reached while evaluating ..."). If a higher precision comes back worse
-(`Overflow[]`, a non-finite value), `N` stops and keeps the last good result.
-An expression that cancels nothing is evaluated once, as before. Examples:
-`N[Cos[10^-20] - 1, 20]` is `-4.99999999999999999999*10^-41` (it was an exact
-`0.0`); `N[E^(I Pi/4) - (-1)^(1/4), 32]` and
-`N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40]` are `0` (they were `10^-52`- and
-`10^-60`-size "values"). Machine-number inputs gain no digits, so
-`N[0.1 + 0.2 - 0.3, 32]` stays `5.55112*10^-17`. Only the `N` builtin's
-`N[expr, p]` adapts; internal working-precision numericalization evaluates
-once.
+more bits than the working precision's guard (the part not already planned for
+a large exact leaf or exponent), `N` evaluates again at a higher working
+precision: at least 64 bits more, and directly to `p` plus the measured loss
+when the pass lost fewer bits than it had (after a cancellation to an exact
+zero, which measures nothing, the extra precision doubles). A result is
+*certified* when (a) it agrees to `p` digits with an evaluation at least 32
+bits lower -- directly, or by extrapolation, since a fixed loss of `L` bits
+leaves `W - L` good bits at every working precision `W` -- and (b) the worst
+cancellation of its own pass left `p` bits. (b) is what keeps an exact `0.`
+from certifying another exact `0.`: `N[E^1000 (E^(1/1000 - E^-1000) -
+E^(1/1000)), 30]` is a zero at every precision below ~1450 bits and was
+answered `0.0`; (a)'s gap is what keeps a short last step to the cap from
+agreeing on rounding noise.
+
+The limit is `p + $MaxExtraPrecision` digits (default 50, settable:
+`Block[{$MaxExtraPrecision = 1000}, N[expr, 30]]`). At the limit a part that
+is certified is kept; a part that is zero, or keeps shrinking as the precision
+rises, is `0.` -- a value of size `2^(T - W)` at every `W` cannot be told
+from an exact zero times `2^T` by evaluation -- and any other unsettled part is
+kept at the digits it can claim; in both cases (and for an `Overflow[]` or
+`Indeterminate` at the limit, a division by such a zero) `N` emits
+`N::meprec` ("Internal precision limit $MaxExtraPrecision = 50 reached while
+evaluating ..."), which `Check` and `Quiet` see. The message for a vanished
+part is `N`'s own: the numericalization of an exact operand inside an inexact
+`Plus`/`Times` (`N[1, 30] + (Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1)`) keeps it as a
+silent `0.`, since only the partner's precision is needed there. If a higher precision comes
+back worse (`Overflow[]`, a non-finite value) than a lower one, `N` stops and
+keeps the last good result. An expression that cancels nothing is evaluated
+once. A power `b^n` with a huge exact `n` (left unevaluated because it is
+huge) multiplies the base's rounding error by `n`, so `N[b^n, p]` plans
+`log2|n|` extra bits for it. Examples: `N[Cos[10^-20] - 1, 20]` is
+`-4.99999999999999999999*10^-41`; `N[(Exp[10^-30] - 1) 10^30 - 1, 20]` is
+`5.*10^-31` (two 100-bit cancellations); `N[E^1000 (E^(1/1000 - E^-1000) -
+E^(1/1000)), 30]` needs ~435 extra digits, so it is `0.` with `N::meprec`, and
+`-1.00100050016670834166805575399` under `$MaxExtraPrecision = 1000`;
+`N[(Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 /. x -> 10^-10, 30]` needs ~82
+extra digits (was 18 good digits reported as 30, silently);
+`N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40]` is `0.` with `N::meprec`.
+Machine-number inputs gain no digits, so `N[0.1 + 0.2 - 0.3, 32]` stays
+`5.55112*10^-17`. Only the `N` builtin's `N[expr, p]` adapts; internal
+working-precision numericalization evaluates once. Arithmetic on numbers that
+are already inexact does not track cancellation: with `a = N[E^1000, 30]`,
+`a - (a - 1)` is `0.` and its `Precision` is the operands' 30.1.
 
 **Precision semantics**:
 - `Precision[expr]` and `Accuracy[expr]` are one number for any expression,

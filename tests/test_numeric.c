@@ -8,6 +8,7 @@
 #include "core.h"
 #include "eval.h"
 #include "expr.h"
+#include "numeric.h"
 #include "parse.h"
 #include "print.h"
 #include "symtab.h"
@@ -447,6 +448,84 @@ static void test_n_adaptive_precision(void) {
     assert_eval_startswith("N[0.1 + 0.2 - 0.3, 32]", "5.55112e-17");
 }
 
+/* The adaptive climb certifies a result only when it agrees with one at
+ * least 32 bits lower AND the pass's own worst cancellation left p bits, so an
+ * exact 0.0 produced by a cancellation never certifies itself, and a short
+ * last step to the cap cannot agree on rounding noise. Expected values are
+ * closed forms, not this code's output. */
+static void test_n_adaptive_certification(void) {
+    /* E^1000 (E^(a - E^-1000) - E^a) = -E^a (1 - E^-1000/2 + ...): ~1450 bits
+     * cancel. Was an exact 0.0 at every $MaxExtraPrecision. */
+    assert_eval_eq("Block[{$MaxExtraPrecision = 1000}, Abs[N[E^1000 (E^(1/1000 - E^-1000) - E^(1/1000)), 30]"
+                   "/N[-E^(1/1000), 40] - 1] < 10^-29]", "True", 0);
+    assert_eval_eq("Block[{$MaxExtraPrecision = 1000}, Abs[N[E^1000 (E^(3/7 - E^-1000) - E^(3/7)), 25]"
+                   "/N[-E^(3/7), 40] - 1] < 10^-24]", "True", 0);
+    /* beyond the default 50 extra digits: N::meprec, not a silent 0.0 */
+    assert_eval_eq("Check[N[E^1000 (E^(1/1000 - E^-1000) - E^(1/1000)), 30], meprecFired]",
+                   "meprecFired", 0);
+    /* a division by such a difference is not an answer either */
+    assert_eval_eq("Check[N[1/(E^(1/1000 - E^-1000) - E^(1/1000)), 30], meprecFired]",
+                   "meprecFired", 0);
+    /* within the limit: E^(a - E^-100) - E^a = -E^a E^-100 (1 - E^-100/2) */
+    assert_eval_eq("Abs[N[E^(1/1000 - E^-100) - E^(1/1000), 30]/N[-E^(1/1000 - 100), 40] - 1] < 10^-29",
+                   "True", 0);
+    /* nested differences: (E^x - 1)/x - 1 = x/2 + x^2/6 + ..., x = 10^-30,
+     * 100 bits cancel twice; the climb's last step is a short one */
+    assert_eval_eq("Abs[N[(Exp[10^-30] - 1) 10^30 - 1, 20]/(5*10^-31) - 1] < 10^-19", "True", 0);
+    assert_eval_eq("Check[N[(Exp[10^-30] - 1) 10^30 - 1, 20]; ok, meprecFired]", "ok", 0);
+    /* (Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 = -17/2520 - 31/14175 x^2
+     * + O(x^4): ~205 bits cancel after Log loses ~67 near 1. Its last step to
+     * the cap (330 -> 331 bits) certified 18 wrong digits; now N::meprec at the
+     * default limit, and correct with more room. */
+    assert_eval_eq("Check[N[(Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 /. x -> 10^-10, 30], meprecFired]",
+                   "meprecFired", 0);
+    assert_eval_eq("Block[{$MaxExtraPrecision = 100}, Abs[N[(Log[Cos[x]] + x^2/2 + x^4/12 + x^6/45)/x^8 "
+                   "/. x -> 10^-10, 30] - (-17/2520 - 31/14175 10^-20)] < 10^-33]", "True", 0);
+    /* b^n with a huge exact n multiplies the base's rounding error by n:
+     * (1 + 10^-40)^(10^40) - E = -E/2 10^-40 (1 - 11/12 10^-40 + ...); was
+     * 3.5575743793 with no message */
+    assert_eval_eq("Block[{$MaxExtraPrecision = 100}, Abs[N[(1 + 10^-40)^(10^40) - E, 10]"
+                   "/(-E/2 10^-40) - 1] < 10^-9]", "True", 0);
+    assert_eval_eq("Check[N[(1 + 10^-40)^(10^40) - E, 10], meprecFired]", "meprecFired", 0);
+    assert_eval_eq("Abs[N[(1 + 10^-40)^(10^40), 30]/N[E, 40] - 1] < 10^-29", "True", 0);
+    /* a large argument is not a cancellation: Sin[10^30] to 20 digits */
+    assert_eval_startswith("N[Sin[10^30], 20]", "-0.0901169019121380580");
+    /* an exact zero is 0 at the precision reached; it cannot be told from
+     * 0 times a huge factor, so N says it is not certified */
+    assert_eval_eq("Quiet[N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40]] == 0", "True", 0);
+    assert_eval_eq("Check[N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40], meprecFired]", "meprecFired", 0);
+    /* a part that is not cancelling is unaffected by one that is */
+    assert_eval_eq("Abs[Quiet[N[Pi + (Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]), 30]] - N[Pi, 40]] < 10^-29",
+                   "True", 0);
+}
+
+/* An N[expr, p] that cancels nothing is evaluated exactly once. */
+static void test_n_adaptive_single_pass(void) {
+    const char* cases[] = {
+        "N[Pi + E, 30]", "N[Sqrt[2] - 1, 50]", "N[Sin[1] + Cos[1] - 1, 30]",
+        "N[Exp[-200] + Log[3], 40]", "N[{1/3 + Pi, 2 - E}, 25]", "N[Sin[10^30], 20]",
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        long before = numeric_adaptive_reevaluations();
+        Expr* in = parse_expression(cases[i]);
+        Expr* r = evaluate(in);
+        expr_free(in);
+        expr_free(r);
+        long after = numeric_adaptive_reevaluations();
+        if (after != before) {
+            fprintf(stderr, "  %s re-evaluated %ld times\n", cases[i], after - before);
+        }
+        ASSERT(after == before);
+    }
+    /* and a cancelling one does re-evaluate */
+    long before = numeric_adaptive_reevaluations();
+    Expr* in = parse_expression("N[Cos[10^-20] - 1, 20]");
+    Expr* r = evaluate(in);
+    expr_free(in);
+    expr_free(r);
+    ASSERT(numeric_adaptive_reevaluations() > before);
+}
+
 /* Phase 8: end-to-end MPFR-complex corner cases. The infrastructure
  * landed in earlier phases (per-builtin wirings + numeric_mpfr_complex_pow);
  * this test fixes the behaviour at the REPL level so future regressions
@@ -552,6 +631,8 @@ int main(void) {
     TEST(test_listable_prec);
     TEST(test_n_prec_complex_pow);
     TEST(test_n_adaptive_precision);
+    TEST(test_n_adaptive_certification);
+    TEST(test_n_adaptive_single_pass);
     TEST(test_barnesg_arbitrary_precision);
     TEST(test_mpfr_complex_corner_cases);
     TEST(test_n_does_not_evaluate_held_arguments);

@@ -423,7 +423,7 @@ PolyLogLadder`LTRun[f_, x_Symbol] := Catch[Module[{logs, Ls, g, P, G, args, cs, 
   dexact = Module[{K, C0, Dn, n},
     K = Coefficient[num, T, Exponent[num, T]]/Coefficient[den, T, Exponent[den, T]];
     C0 = K Times @@ ((-#[[1]])^#[[2]] & /@ roots);
-    Dn = N[((Log[G] - L) /. x -> 37/100) - Log[C0], 20];
+    Dn = Quiet[N[((Log[G] - L) /. x -> 37/100) - Log[C0], 20]];   (* Re[Dn] is a zero *)
     If[! NumericQ[Dn] || Abs[Re[Dn]] > 10^-8, Log[G] - L,
       n = Round[Im[Dn]/(2 Pi)];
       If[Abs[Im[Dn] - 2 Pi n] > 10^-8, Log[G] - L, Log[C0] + 2 Pi I n]]];
@@ -441,7 +441,7 @@ PolyLogLadder`Check[F_, f_, x_Symbol] := Module[{syms, inst, d, ok = True},
   inst = Thread[syms -> Take[{23/29, 31/37, 13/17, 41/43, 7/11, 19/23, 29/31, 3/7}, UpTo[Length[syms]]]];
   If[Length[inst] < Length[syms], Return[False]];
   Do[
-    d = N[(D[F, x] - f) /. inst /. x -> pt, 30];
+    d = Quiet[N[(D[F, x] - f) /. inst /. x -> pt, 30]];   (* a zero residual: N::meprec expected *)
     If[! NumericQ[d] || Abs[d] > 10^-12 (1 + Abs[N[f /. inst /. x -> pt, 30]]), ok = False],
     {pt, {37/100, 71/100}}];
   ok];
