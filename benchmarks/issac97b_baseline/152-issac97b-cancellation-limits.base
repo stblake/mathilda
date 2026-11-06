@@ -1,0 +1,75 @@
+REQUIRE	Limit	present
+REQUIRE	Series	present
+REQUIRE	SeriesCoefficient	present
+REQUIRE	LogGamma	present
+REQUIRE	Zeta	present
+REQUIRE	StieltjesGamma	present
+REQUIRE	HarmonicNumber	present
+REQUIRE	BesselJ	present
+REQUIRE	Erfc	present
+
+Limit::ztest1: Unable to decide whether numeric quantity PolyGamma[2, 1] + 2 Zeta[3] is equal to zero. Assuming it is.
+BENCH	b7.1 Limit exact	242.83
+CHECK	b7.1 Limit exact	{270580808427785, -1}
+BENCH	b7.1 approach wp300	3.767
+CHECK	b7.1 approach wp300	{270580808428, -1}
+BENCH	b7.1 Neville machine	0.582
+CHECK	b7.1 Neville machine	{2706, -1}
+BENCH	b7.2 Limit exact	191.715
+CHECK	b7.2 Limit exact	{-738905609893065, 0}
+BENCH	b7.2 Neville wp600	1.724
+CHECK	b7.2 Neville wp600	{-7389056099, 0}
+BENCH	b7.2 Neville machine	0.082
+CHECK	b7.2 Neville machine	{-74, 0}
+BENCH	b7.3 Limit exact	208.436
+CHECK	b7.3 Limit exact	{100000000000000, 0}
+BENCH	b7.3 Series exact	17.672
+CHECK	b7.3 Series exact	{100000000000000, 0}
+BENCH	b7.3 approach wp200	0.541
+CHECK	b7.3 approach wp200	{100000000000, 0}
+BENCH	b7.3 Neville machine	0.113
+CHECK	b7.3 Neville machine	{10000, 0}
+BENCH	b7.4 Limit exact	50.549
+CHECK	b7.4 Limit exact	{728158454836767, -2}
+BENCH	b7.4 approach wp100	5.257
+CHECK	b7.4 approach wp100	{728158454837, -2}
+BENCH	b7.4 Neville machine	0.335
+CHECK	b7.4 Neville machine	{72816, -2}
+BENCH	b7.5 Limit exact	91.202
+CHECK	b7.5 Limit exact	{333333333333333, -1}
+BENCH	b7.5 approach wp150	0.609
+CHECK	b7.5 approach wp150	{333333333333, -1}
+BENCH	b7.5 Neville machine	0.198
+CHECK	b7.5 Neville machine	{33333333, -1}
+BENCH	b7.6 Limit exact	67.651
+CHECK	b7.6 Limit exact	{100000000000000, 0}
+BENCH	b7.6 approach wp150	0.931
+CHECK	b7.6 approach wp150	{100000000000, 0}
+BENCH	b7.6 sample machine x=1e-8	0.034
+CHECK	b7.6 sample machine x=1e-8	{10000, 0}
+BENCH	b7.7 Limit exact	102.668
+CHECK	b7.7 Limit exact	{-833333333333333, -2}
+BENCH	b7.7 approach wp150	0.804
+CHECK	b7.7 approach wp150	{-833333333333, -2}
+BENCH	b7.7 Neville machine	0.225
+CHECK	b7.7 Neville machine	{-8333333, -2}
+BENCH	b7.8 Limit exact	77.298
+CHECK	b7.8 Limit exact	{-225694444444444, -3}
+BENCH	b7.8 Series exact	7.387
+CHECK	b7.8 Series exact	{-225694444444444, -3}
+BENCH	b7.8 approach wp250	1.218
+CHECK	b7.8 approach wp250	{-225694444444, -3}
+BENCH	b7.8 Neville machine	0.245
+CHECK	b7.8 Neville machine	{-226, -3}
+BENCH	b7.9 Limit exact	93.826
+CHECK	b7.9 Limit exact	{-187500000000000, 0}
+BENCH	b7.9 Neville wp100	1.725
+CHECK	b7.9 Neville wp100	{-187500000000, 0}
+BENCH	b7.9 Neville machine	0.158
+CHECK	b7.9 Neville machine	{-1875, 0}
+BENCH	b7.10 Limit exact	163.984
+CHECK	b7.10 Limit exact	{218357912107657, -1}
+BENCH	b7.10 approach wp100	0.796
+CHECK	b7.10 approach wp100	{218357912108, -1}
+BENCH	b7.10 Neville machine	0.264
+CHECK	b7.10 Neville machine	{2183579, -1}

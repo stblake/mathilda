@@ -1,0 +1,61 @@
+REQUIRE	NSum	present
+REQUIRE	HarmonicNumber	present
+REQUIRE	DivisorSigma	present
+REQUIRE	EulerPhi	present
+REQUIRE	BesselJ	present
+BENCH	b3.1 NSum machine	91.9
+CHECK	b3.1 NSum machine	{9242999, -1}
+BENCH	b3.1 NSum wp30	123.542
+CHECK	b3.1 NSum wp30	{924299897223, -1}
+BENCH	b3.2 NSum machine	27.652
+CHECK	b3.2 NSum machine	{210974, 0}
+BENCH	b3.2 NSum wp30	100.983
+CHECK	b3.2 NSum wp30	{210974280124, 0}
+BENCH	b3.3 NSum machine	58.384
+CHECK	b3.3 NSum machine	{107080, 0}
+BENCH	b3.3 NSum wp30	99.814
+CHECK	b3.3 NSum wp30	{10707963268, 0}
+BENCH	b3.4 NSum machine	33.574
+CHECK	b3.4 NSum machine	{937548, -1}
+BENCH	b3.4 NSum wp30	65.812
+CHECK	b3.4 NSum wp30	{937548254316, -1}
+BENCH	b3.5 NSum machine	246.772
+CHECK	b3.5 NSum machine	{2404114, 0}
+BENCH	b3.5 NSum wp30	632.261
+CHECK	b3.5 NSum wp30	{240411380632, 0}
+BENCH	b3.6 NSum machine	89.755
+CHECK	b3.6 NSum machine	{6048986, -1}
+BENCH	b3.6 NSum wp30	88.115
+CHECK	b3.6 NSum wp30	{604898643422, -1}
+BENCH	b3.7 NSum machine	99.865
+CHECK	b3.7 NSum machine	{1598689, -1}
+BENCH	b3.7 NSum wp30	105.457
+CHECK	b3.7 NSum wp30	{159868903742, -1}
+
+NumericalMath`NSequenceLimit::seqlim: The general form of the sequence could not be determined, and the result may be incorrect.
+
+NumericalMath`NSequenceLimit::seqlim: The general form of the sequence could not be determined, and the result may be incorrect.
+
+NumericalMath`NSequenceLimit::seqlim: The general form of the sequence could not be determined, and the result may be incorrect.
+
+General::stop: Further output of NumericalMath`NSequenceLimit::seqlim will be suppressed during this calculation.
+BENCH	b3.8 NSum machine	243.533
+CHECK	b3.8 NSum machine	{248120, 0}
+BENCH	b3.8 NSum wp30	284.664
+CHECK	b3.8 NSum wp30	{248120186455, 0}
+
+EulerPhi::int: Integer expected at position 1 in EulerPhi[16.].
+
+EulerPhi::int: Integer expected at position 1 in EulerPhi[17.].
+
+EulerPhi::int: Integer expected at position 1 in EulerPhi[18.].
+
+General::stop: Further output of EulerPhi::int will be suppressed during this calculation.
+BENCH	b3.9 NSum machine	257.266
+CHECK	b3.9 NSum machine	{134158, 0}
+BENCH	b3.9 NSum wp30	262.206
+CHECK	b3.9 NSum wp30	{134157618212, 0}
+BENCH	b3.10 NSum machine	37904.7
+CHECK	b3.10 NSum machine	{50000, -1}
+BENCH	b3.10 NSum wp30	43368.9
+CHECK	b3.10 NSum wp30	{500000000000, -1}

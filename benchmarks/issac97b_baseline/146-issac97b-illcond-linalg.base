@@ -1,0 +1,61 @@
+REQUIRE	Eigenvalues	present
+REQUIRE	SingularValueList	present
+REQUIRE	LinearSolve	present
+REQUIRE	LeastSquares	present
+REQUIRE	Det	present
+BENCH	b1.1 Eigenvalues machine	0.188
+CHECK	b1.1 Eigenvalues machine	{41552, 9}
+BENCH	b1.1 Eigenvalues wp200	554.312
+CHECK	b1.1 Eigenvalues wp200	{10527054388019842647, 69}
+BENCH	b1.2 SingularValueList machine	0.145
+CHECK	b1.2 SingularValueList machine	{23840, 10}
+BENCH	b1.2 SingularValueList wp150	86.01
+CHECK	b1.2 SingularValueList wp150	{23704575934741660873, 59}
+BENCH	b1.3 LinearSolve exact	31.175
+CHECK	b1.3 LinearSolve exact	{{121163222332800, 8}, 525390625, 795045632}
+BENCH	b1.3 LinearSolve wp100	20.487
+CHECK	b1.3 LinearSolve wp100	{12116322233280017375, 8}
+BENCH	b1.3 LinearSolve machine	0.546
+CHECK	b1.3 LinearSolve machine	{151319, 2}
+BENCH	b1.4 SingularValueList machine	0.797
+CHECK	b1.4 SingularValueList machine	{99569, -6}
+BENCH	b1.4 SingularValueList wp100	1143.63
+CHECK	b1.4 SingularValueList wp100	{10267235976092725403, -47}
+BENCH	b1.5 Eigenvalues machine	0.339
+CHECK	b1.5 Eigenvalues machine	{3103, -2}
+BENCH	b1.5 Eigenvalues wp150	386.682
+CHECK	b1.5 Eigenvalues wp150	{75090659817199666518, -3}
+BENCH	b1.6 LeastSquares exact	48.582
+CHECK	b1.6 LeastSquares exact	{{480676444923389, 3}, 250000000, 891207541}
+BENCH	b1.6 LeastSquares wp60	144.919
+CHECK	b1.6 LeastSquares wp60	{48067644492338907213, 3}
+BENCH	b1.6 LeastSquares machine	1.223
+CHECK	b1.6 LeastSquares machine	{11906073, 1}
+BENCH	b1.7 Det exact	16.659
+CHECK	b1.7 Det exact	1
+BENCH	b1.7 Det wp120	6.547
+CHECK	b1.7 Det wp120	True
+
+Det::luc: Result for Det of badly conditioned matrix {{1., 1., 2., 5., 14., 42., 132.}, {1., 2., 5., 14., 42., 132., 429.}, {2., 5., 14., 42., 132., 429., 1430.}, {5., 14., 42., 132., 429., 1430., 4862.}, {14., 42., 132., 429., 1430., 4862., 16796.}, {42., 132., 429., 1430., 4862., 16796., 58786.}, {132., 429., 1430., 4862., 16796., 58786., 208012.}} may contain significant numerical errors.
+
+Det::luc: Result for Det of badly conditioned matrix {{1., 1., 2., 5., 14., 42., 132.}, {1., 2., 5., 14., 42., 132., 429.}, {2., 5., 14., 42., 132., 429., 1430.}, {5., 14., 42., 132., 429., 1430., 4862.}, {14., 42., 132., 429., 1430., 4862., 16796.}, {42., 132., 429., 1430., 4862., 16796., 58786.}, {132., 429., 1430., 4862., 16796., 58786., 208012.}} may contain significant numerical errors.
+
+Det::luc: Result for Det of badly conditioned matrix {{1., 1., 2., 5., 14., 42., 132.}, {1., 2., 5., 14., 42., 132., 429.}, {2., 5., 14., 42., 132., 429., 1430.}, {5., 14., 42., 132., 429., 1430., 4862.}, {14., 42., 132., 429., 1430., 4862., 16796.}, {42., 132., 429., 1430., 4862., 16796., 58786.}, {132., 429., 1430., 4862., 16796., 58786., 208012.}} may contain significant numerical errors.
+
+General::stop: Further output of Det::luc will be suppressed during this calculation.
+BENCH	b1.7 Det machine	0.293
+CHECK	b1.7 Det machine	True
+BENCH	b1.8 Eigenvalues machine	1.746
+CHECK	b1.8 Eigenvalues machine	{1778, -8}
+BENCH	b1.8 Eigenvalues wp120	172.793
+CHECK	b1.8 Eigenvalues wp120	{12490356420056808796, -29}
+BENCH	b1.9 Eigenvalues machine	0.486
+CHECK	b1.9 Eigenvalues machine	{7428823, -5}
+BENCH	b1.9 Eigenvalues wp60	130.776
+CHECK	b1.9 Eigenvalues wp60	{127207212049089, -37}
+BENCH	b1.10 Det exact	9.699
+CHECK	b1.10 Det exact	{{285774516383174, -655}, 0, 710434969}
+BENCH	b1.10 Det wp300	11.795
+CHECK	b1.10 Det wp300	{28577451638317412094, -655}
+BENCH	b1.10 Det machine	0.08
+CHECK	b1.10 Det machine	{85416, -21}

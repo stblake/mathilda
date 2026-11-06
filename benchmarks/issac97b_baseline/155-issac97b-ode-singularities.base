@@ -1,0 +1,76 @@
+REQUIRE	NDSolve	present
+REQUIRE	FindRoot	present
+REQUIRE	InterpolatingFunction	present
+REQUIRE	EllipticK	present
+REQUIRE	AiryAi	present
+REQUIRE	AiryAiPrime	present
+
+NDSolve::ndsz: At x == 2.00315, step size is effectively zero; singularity or stiff system suspected.
+
+NDSolve::ndsz: At x == 2.00315, step size is effectively zero; singularity or stiff system suspected.
+
+NDSolve::ndsz: At x == 2.00315, step size is effectively zero; singularity or stiff system suspected.
+
+General::stop: Further output of NDSolve::ndsz will be suppressed during this calculation.
+BENCH	b10.1 naive domain end machine	2.292
+CHECK	b10.1 naive domain end machine	{2003, 0}
+
+                                                                             2     2    19
+NDSolve::precw: The precision of the differential equation ({{w'[x] == -1 - x  w[x] , w[--] == 0.104526025570920672779461212254874054028}, {}, {}, {}, {}}) is less than WorkingPrecision (40.).
+                                                                                        10
+
+                                                                             2     2    19
+NDSolve::precw: The precision of the differential equation ({{w'[x] == -1 - x  w[x] , w[--] == 0.104526025570920672779461212254874054028}, {}, {}, {}, {}}) is less than WorkingPrecision (40.).
+                                                                                        10
+
+                                                                             2     2    19
+NDSolve::precw: The precision of the differential equation ({{w'[x] == -1 - x  w[x] , w[--] == 0.104526025570920672779461212254874054028}, {}, {}, {}, {}}) is less than WorkingPrecision (40.).
+                                                                                        10
+
+General::stop: Further output of NDSolve::precw will be suppressed during this calculation.
+BENCH	b10.1 reciprocal switch wp40	74.995
+CHECK	b10.1 reciprocal switch wp40	{200314735943, 0}
+BENCH	b10.1 reciprocal switch machine	1.866
+CHECK	b10.1 reciprocal switch machine	{200315, 0}
+BENCH	b10.2 EllipticK exact	0.036
+CHECK	b10.2 EllipticK exact	{245111152981069, 1}
+BENCH	b10.2 NDSolve quarter period wp40	65.89
+CHECK	b10.2 NDSolve quarter period wp40	{245111152981069, 1}
+BENCH	b10.2 NDSolve quarter period machine	1.122
+CHECK	b10.2 NDSolve quarter period machine	{245111, 1}
+BENCH	b10.3 NDSolve x(20) wp40	1802.16
+CHECK	b10.3 NDSolve x(20) wp40	{13793200, 1}
+BENCH	b10.3 NDSolve x(5) machine	1.898
+CHECK	b10.3 NDSolve x(5) machine	{-6512, 0}
+BENCH	b10.4 series start + FindRoot wp30	23.332
+CHECK	b10.4 series start + FindRoot wp30	{6896848619377, 0}
+BENCH	b10.4 series start + FindRoot machine	1.328
+CHECK	b10.4 series start + FindRoot machine	{689685, 0}
+BENCH	b10.5 Toepfer wp30	31.152
+CHECK	b10.5 Toepfer wp30	{3320573362152, -1}
+BENCH	b10.5 Toepfer machine	1.013
+CHECK	b10.5 Toepfer machine	{332057, -1}
+BENCH	b10.6 NDSolve y(8) wp50	1173.2
+CHECK	b10.6 NDSolve y(8) wp50	{46922076, -8}
+BENCH	b10.6 NDSolve y(3) machine	0.765
+CHECK	b10.6 NDSolve y(3) machine	{659, -3}
+BENCH	b10.7 naive domain end machine	2.948
+CHECK	b10.7 naive domain end machine	{297, 0}
+BENCH	b10.7 energy tail wp30	67.186
+CHECK	b10.7 energy tail wp30	{2974477425402, 0}
+BENCH	b10.7 energy tail machine	1.233
+CHECK	b10.7 energy tail machine	{297448, 0}
+BENCH	b10.8 bisection shooting wp30	8711.68
+CHECK	b10.8 bisection shooting wp30	{-158807260, 0}
+BENCH	b10.8 bisection shooting machine	109.544
+CHECK	b10.8 bisection shooting machine	{-158807, 0}
+BENCH	b10.9 naive domain end machine	2.071
+CHECK	b10.9 naive domain end machine	{2221, 0}
+BENCH	b10.9 inverse function wp30	88.513
+CHECK	b10.9 inverse function wp30	{2221441469079, 0}
+BENCH	b10.9 inverse function machine	1.791
+CHECK	b10.9 inverse function machine	{222144, 0}
+BENCH	b10.10 NDSolve e=0.99 wp30	484.163
+CHECK	b10.10 NDSolve e=0.99 wp30	{{-905786813, -1}, {140566255, -1}}
+BENCH	b10.10 NDSolve e=0.9 machine	3.051
+CHECK	b10.10 NDSolve e=0.9 machine	{{-7147, -1}, {4283, -1}}

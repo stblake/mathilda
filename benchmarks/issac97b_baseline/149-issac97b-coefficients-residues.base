@@ -1,0 +1,64 @@
+REQUIRE	SeriesCoefficient	present
+REQUIRE	Coefficient	present
+REQUIRE	Residue	present
+REQUIRE	NIntegrate	present
+REQUIRE	ChebyshevT	present
+BENCH	b4.1 SeriesCoefficient exact	34800.2
+CHECK	b4.1 SeriesCoefficient exact	{{240614678640326, 31}, 149727991}
+CHECK	b4.1 contour wp60	"timeout"
+BENCH	b4.1 contour machine n=100	4654.09
+CHECK	b4.1 contour machine n=100	{190569, 8}
+BENCH	b4.2 SeriesCoefficient exact	3313.47
+CHECK	b4.2 SeriesCoefficient exact	{{453899084277566, -79}, 870274057, 0}
+BENCH	b4.2 contour wp160	649.32
+CHECK	b4.2 contour wp160	{453899084277566, -79}
+BENCH	b4.2 contour machine n=20	143.662
+CHECK	b4.2 contour machine n=20	{152234, -4}
+BENCH	b4.3 Residue exact	1168.94
+CHECK	b4.3 Residue exact	{318864502745108, -54}
+BENCH	b4.3 contour wp40	746.976
+CHECK	b4.3 contour wp40	{318864502745108, -54}
+BENCH	b4.3 contour machine	344.387
+CHECK	b4.3 contour machine	{3189, -54}
+BENCH	b4.4 SeriesCoefficient exact	3098.76
+CHECK	b4.4 SeriesCoefficient exact	{{139946140451000, 11}, 946140451}
+BENCH	b4.4 contour wp80	22417.
+CHECK	b4.4 contour wp80	{13994614045, 11}
+BENCH	b4.4 contour machine n=100	560.821
+CHECK	b4.4 contour machine n=100	{293, 2}
+BENCH	b4.5 SeriesCoefficient exact	85.51
+CHECK	b4.5 SeriesCoefficient exact	{{611327659767719, 472}, 466468457}
+BENCH	b4.5 contour wp100	767.921
+CHECK	b4.5 contour wp100	{611327659767719, 472}
+BENCH	b4.5 contour machine n=30	120.885
+CHECK	b4.5 contour machine n=30	{16974, 12}
+BENCH	b4.6 SeriesCoefficient exact	36328.8
+CHECK	b4.6 SeriesCoefficient exact	{{-303284129702400, 16}, 29760000}
+CHECK	b4.6 contour wp40	"timeout"
+
+NIntegrate::slwcon: Numerical integration converging too slowly; suspect one of the following: singularity, value of the integration is 0, highly oscillatory integrand, or WorkingPrecision too small.
+BENCH	b4.6 contour machine	57545.8
+CHECK	b4.6 contour machine	{-303284, 16}
+CHECK	b4.7 Residue exact	"unevaluated"
+BENCH	b4.7 contour wp50	62.61
+CHECK	b4.7 contour wp50	{204822323834388, -20}
+BENCH	b4.7 contour machine z^3	43.964
+CHECK	b4.7 contour machine z^3	{507286, -2}
+BENCH	b4.8 Coefficient exact	129.005
+CHECK	b4.8 Coefficient exact	{{700127388815131, 713}, 388014080}
+BENCH	b4.8 contour wp30	318.371
+CHECK	b4.8 contour wp30	{700127388815131, 713}
+BENCH	b4.8 contour machine n=40	78.276
+CHECK	b4.8 contour machine n=40	{210030, 13}
+BENCH	b4.9 SeriesCoefficient exact	11677.9
+CHECK	b4.9 SeriesCoefficient exact	{{160607260103999, 843}, 229457772}
+BENCH	b4.9 contour wp40	848.538
+CHECK	b4.9 contour wp40	{160607260103999, 843}
+BENCH	b4.9 contour machine n=30	295.383
+CHECK	b4.9 contour machine n=30	{846749, 23}
+BENCH	b4.10 Residue exact	160.129
+CHECK	b4.10 Residue exact	{-200000000000182, 0}
+BENCH	b4.10 contour wp40	97.039
+CHECK	b4.10 contour wp40	{-200000000000182, 0}
+BENCH	b4.10 contour machine z^10	121.947
+CHECK	b4.10 contour machine z^10	{-200199, 0}
