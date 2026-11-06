@@ -817,9 +817,18 @@ typedef struct DenestMemo {
 /* Single-threaded REPL: file-static state is safe. The top-level
  * simp_denest_sqrt entry seeds these and tears them down; re-entry from
  * an evaluator-driven sub-Simplify just shares the existing slot so we
- * never bypass the depth cap. */
+ * never bypass the depth cap.
+ *
+ * The memo is static storage, not the top-level call's C frame, and the
+ * budget is a registered TimeConstrained unwind counter: a timeout that
+ * siglongjmps out of a denesting skips the teardown, and used to leave the
+ * budget raised (every later call then took the re-entry branch) with the
+ * memo pointer aimed at the dead frame. The next top-level call drops what an
+ * unwound one left in the memo. */
 static int g_denest_budget = 0;
+static DenestMemo g_denest_memo_store;     /* zero-initialised */
 static DenestMemo* g_denest_memo = NULL;
+int* simp_denest_budget_counter(void) { return &g_denest_budget; }
 
 static bool denest_memo_lookup(const Expr* radicand,
                                Expr** out_val,
@@ -2123,20 +2132,17 @@ Expr* simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx) {
     clock_t t0 = dbg ? clock() : 0;
 
     bool top_level = (g_denest_budget == 0);
-    DenestMemo memo;
     if (top_level) {
-        memo.entries = NULL;
-        memo.count = 0;
-        memo.capacity = 0;
+        denest_memo_clear(&g_denest_memo_store);   /* left by an unwound call */
         g_denest_budget = DENEST_MAX_DEPTH;
-        g_denest_memo = &memo;
+        g_denest_memo = &g_denest_memo_store;
     }
 
     Expr* r = simp_denest_sqrt_walk(e, ctx);
     Expr* out = r ? r : expr_copy((Expr*)e);
 
     if (top_level) {
-        denest_memo_clear(&memo);
+        denest_memo_clear(&g_denest_memo_store);
         g_denest_memo = NULL;
         g_denest_budget = 0;
     }

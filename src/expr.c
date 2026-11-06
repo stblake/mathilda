@@ -63,8 +63,26 @@ char* mathilda_strdup(const char* s) {
  *  registered with atexit() on first use so every binary leaves a clean heap
  *  for valgrind. Nodes still in use at exit are freed by their owners exactly
  *  as before — the pool only holds nodes that have already been expr_free'd.
+ *
+ *  Under AddressSanitizer (or with -DMTH_EXPR_NO_POOL, for MallocScribble /
+ *  Guard Malloc runs) both pools are disabled: a recycled node is never
+ *  poisoned, so a use-after-free of an Expr would read a live, unrelated node
+ *  instead of being reported.
  * ---------------------------------------------------------------------- */
+#if !defined(MTH_EXPR_NO_POOL)
+#  if defined(__SANITIZE_ADDRESS__)
+#    define MTH_EXPR_NO_POOL 1
+#  elif defined(__has_feature)
+#    if __has_feature(address_sanitizer)
+#      define MTH_EXPR_NO_POOL 1
+#    endif
+#  endif
+#endif
+#ifdef MTH_EXPR_NO_POOL
+#define EXPR_POOL_CAP 0
+#else
 #define EXPR_POOL_CAP 8192                /* max recycled nodes held (~0.5 MB) */
+#endif
 static Expr*  g_expr_pool = NULL;         /* free-list head */
 static size_t g_expr_pool_size = 0;       /* current free-list length */
 static bool   g_expr_pool_atexit_registered = false;
@@ -134,7 +152,11 @@ static void expr_release_node(Expr* e) {
  *  to malloc/free. Each bucket is capped so a big transient batch drains to
  *  fresh malloc (same locality rationale as the node pool's cap). */
 #define EXPR_ARGS_POOL_MAXLEN   8      /* pool arrays of 1..8 slots */
+#ifdef MTH_EXPR_NO_POOL
+#define EXPR_ARGS_POOL_CAP_EACH 0      /* sanitizer build: see the node pool */
+#else
 #define EXPR_ARGS_POOL_CAP_EACH 1024   /* max recycled arrays per length */
+#endif
 static Expr** g_args_pool[EXPR_ARGS_POOL_MAXLEN + 1];   /* [len] -> free-list head */
 static size_t g_args_pool_size[EXPR_ARGS_POOL_MAXLEN + 1];
 

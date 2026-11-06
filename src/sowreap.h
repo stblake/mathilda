@@ -16,5 +16,7 @@
 
 Expr* builtin_sow(Expr* res);
 Expr* builtin_reap(Expr* res);
+/* The Reap nesting depth, a TimeConstrained unwind counter (core_init). */
+int* sowreap_depth_counter(void);
 
 #endif /* SOWREAP_H */

@@ -13,6 +13,7 @@
 #include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
+#include "core.h"        /* tc_register_unwind_counter: NMemo depth */
 #include "symtab.h"
 #include "match.h"
 #include "sym_names.h"
@@ -1059,7 +1060,17 @@ static bool g_n_contagion = false;
  * the contagion mode.  The memo lives for one pass of numericalize_top --
  * a nested numericalize_top, which reads the pass's cancellation statistics,
  * gets its own -- so the statistics a hit skips were recorded by the first
- * evaluation in the same pass. */
+ * evaluation in the same pass.
+ *
+ * The memos live in a static stack indexed by the pass nesting depth, not in
+ * the pass's C frame: a TimeConstrained timeout (or a FLINT exception) unwinds
+ * out of the middle of a pass by siglongjmp, skipping the teardown, and a
+ * pointer to a memo in that dead frame would survive it -- the next numeric
+ * call outside a pass (N's MPFR retry of a machine overflow) then read the
+ * abandoned stack as a table and crashed.  The depth is a registered unwind
+ * counter, so the jump puts it back to the enclosing pass's; the level the
+ * unwound pass used still holds its entries, which are dropped when a pass
+ * next opens that level. */
 typedef struct {
     Expr* key;          /* owned copy (a refcount) of the exact subtree */
     Expr* val;          /* owned numericalized value */
@@ -1072,19 +1083,29 @@ typedef struct {
 typedef struct {
     NMemoEntry* tab;    /* open addressing, cap a power of two */
     size_t cap, count;
+    bool on;            /* this pass memoizes (an arbitrary-precision pass) */
 } NMemo;
 
-static NMemo* g_nmemo = NULL;
+#define NMEMO_MAX_DEPTH 32   /* deeper passes run without a memo */
+static NMemo g_nmemo_stack[NMEMO_MAX_DEPTH];
+static int g_nmemo_depth = 0;    /* open passes; restored by a timeout unwind */
+
+/* The innermost open pass's memo, or NULL when it does not memoize. */
+static NMemo* nmemo_current(void) {
+    int d = g_nmemo_depth;
+    if (d <= 0 || d > NMEMO_MAX_DEPTH || !g_nmemo_stack[d - 1].on) return NULL;
+    return &g_nmemo_stack[d - 1];
+}
 
 static bool nmemo_eligible(const Expr* e) {
-    if (!g_nmemo || g_n_held_depth > 0 || e->data.function.arg_count == 0) return false;
+    if (!nmemo_current() || g_n_held_depth > 0 || e->data.function.arg_count == 0) return false;
     const Expr* h = e->data.function.head;
     return h && h->type == EXPR_SYMBOL
         && (get_attributes(h->data.symbol.name) & ATTR_NUMERICFUNCTION);
 }
 
 static Expr* nmemo_find(const Expr* e, uint64_t h, NumericSpec spec) {
-    NMemo* m = g_nmemo;
+    NMemo* m = nmemo_current();
     if (!m->cap) return NULL;
     for (size_t i = (size_t)h & (m->cap - 1);; i = (i + 1) & (m->cap - 1)) {
         NMemoEntry* t = &m->tab[i];
@@ -1096,8 +1117,8 @@ static Expr* nmemo_find(const Expr* e, uint64_t h, NumericSpec spec) {
 }
 
 static void nmemo_put(const Expr* e, uint64_t h, NumericSpec spec, const Expr* val) {
-    NMemo* m = g_nmemo;
-    if (!val) return;
+    NMemo* m = nmemo_current();
+    if (!val || !m) return;
     if (2 * (m->count + 1) > m->cap) {
         size_t nc = m->cap ? 2 * m->cap : 64;
         NMemoEntry* nt = (NMemoEntry*)calloc(nc, sizeof(NMemoEntry));
@@ -1108,9 +1129,11 @@ static void nmemo_put(const Expr* e, uint64_t h, NumericSpec spec, const Expr* v
             while (nt[j].key) j = (j + 1) & (nc - 1);
             nt[j] = m->tab[i];
         }
-        free(m->tab);
+        /* install before releasing: the table is reachable after an unwind */
+        NMemoEntry* old = m->tab;
         m->tab = nt;
         m->cap = nc;
+        free(old);
     }
     size_t j = (size_t)h & (m->cap - 1);
     while (m->tab[j].key) j = (j + 1) & (m->cap - 1);
@@ -1126,10 +1149,35 @@ static void nmemo_put(const Expr* e, uint64_t h, NumericSpec spec, const Expr* v
 
 static void nmemo_clear(NMemo* m) {
     for (size_t i = 0; i < m->cap; i++)
-        if (m->tab[i].key) { expr_free(m->tab[i].key); expr_free(m->tab[i].val); }
-    free(m->tab);
+        if (m->tab[i].key) {
+            Expr* k = m->tab[i].key;
+            Expr* v = m->tab[i].val;
+            m->tab[i].key = m->tab[i].val = NULL;
+            expr_free(k); expr_free(v);
+        }
+    NMemoEntry* old = m->tab;
     m->tab = NULL;
     m->cap = m->count = 0;
+    free(old);
+}
+
+/* Open a pass's memo level (memoizing iff `on`) / close it.  Opening clears
+ * what an unwound pass left at the level. */
+static void nmemo_push(bool on) {
+    int d = g_nmemo_depth;
+    if (d >= 0 && d < NMEMO_MAX_DEPTH) {
+        nmemo_clear(&g_nmemo_stack[d]);
+        g_nmemo_stack[d].on = on;
+    }
+    g_nmemo_depth = d + 1;
+}
+
+static void nmemo_pop(void) {
+    int d = --g_nmemo_depth;
+    if (d >= 0 && d < NMEMO_MAX_DEPTH) {
+        g_nmemo_stack[d].on = false;
+        nmemo_clear(&g_nmemo_stack[d]);
+    }
 }
 
 static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec);
@@ -2643,18 +2691,15 @@ static Expr* numericalize_contagion(const Expr* e, NumericSpec spec) {
 /* One evaluation of `e` at `spec` with its own subexpression memo (see
  * NMemo), restoring the enclosing pass's memo afterwards. */
 static Expr* numericalize_pass(const Expr* e, NumericSpec spec) {
-    NMemo memo = { NULL, 0, 0 };
-    NMemo* saved = g_nmemo;
     /* Machine-precision passes run without it: a machine call costs about
      * what the lookup does, so only an arbitrary-precision pass gains. */
 #ifdef USE_MPFR
-    g_nmemo = numeric_spec_is_mpfr(spec) ? &memo : NULL;
+    nmemo_push(numeric_spec_is_mpfr(spec));
 #else
-    g_nmemo = NULL;
+    nmemo_push(false);
 #endif
     Expr* r = numericalize_rec(e, spec);
-    g_nmemo = saved;
-    nmemo_clear(&memo);
+    nmemo_pop();
     return r;
 }
 
@@ -3494,6 +3539,7 @@ Expr* builtin_machinenumberq(Expr* res) {
  *  Registration
  * ---------------------------------------------------------------------- */
 void numeric_init(void) {
+    tc_register_unwind_counter(&g_nmemo_depth);   /* see NMemo */
     symtab_add_builtin("N", builtin_n);
     /* Not Listable (the reference's N is only Protected): numericalize
      * descends into lists itself, and N[x, {p, a}] is a precision/accuracy

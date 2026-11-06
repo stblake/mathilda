@@ -97,6 +97,7 @@ void simp_init(void) {
 
     symtab_add_builtin("Simplify", builtin_simplify);
     tc_register_unwind_counter(&g_simp_inexact_depth);
+    tc_register_unwind_counter(simp_denest_budget_counter());
     /* Simplify is NOT Listable: a List in the second (assumption) argument
      * must be treated as a conjunction of facts, not split into one Simplify
      * call per fact. Threading over a List in the first (expression)

@@ -156,6 +156,8 @@ Expr* transform_halfangle(const Expr* e);
 
 Expr* simp_radicals(const Expr* e);
 Expr* simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx);
+/* The denesting depth budget, a TimeConstrained unwind counter (simp_init). */
+int* simp_denest_budget_counter(void);
 
 /* Assumption-gated radical-product combine: Sqrt[a] Sqrt[b] -> Sqrt[a b] (and
  * a^(p/q) b^(p/q) -> (a b)^(p/q)) when every base is provably non-negative. */

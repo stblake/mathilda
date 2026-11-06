@@ -1328,6 +1328,7 @@ void core_init(void) {
     tc_register_unwind_counter(eval_nfmemo_depth_counter());
 #endif
     tc_register_unwind_counter(solvepoly_roots_of_unity_off_counter());
+    tc_register_unwind_counter(sowreap_depth_counter());
 }
 
 Expr* builtin_compoundexpression(Expr* res) {
@@ -5347,14 +5348,19 @@ double tc_deadline_remaining(void) {
  * rare leak is the unavoidable consequence of siglongjmp unwinding.  Marked
  * TC_NOINLINE so the isolation cannot be undone by the optimiser. */
 /* Registered nesting counters, restored across a timeout unwind (see core.h). */
-#define TC_MAX_UNWIND_COUNTERS 32
+#define TC_MAX_UNWIND_COUNTERS 64
 static int* tc_unwind_counters[TC_MAX_UNWIND_COUNTERS];
 static int  tc_n_unwind_counters = 0;
 void tc_register_unwind_counter(int* counter) {
     for (int i = 0; i < tc_n_unwind_counters; i++)
         if (tc_unwind_counters[i] == counter) return;
-    if (tc_n_unwind_counters < TC_MAX_UNWIND_COUNTERS)
-        tc_unwind_counters[tc_n_unwind_counters++] = counter;
+    /* A counter dropped here would silently stay raised after a timeout: an
+     * init-time programming error, so fail at startup rather than at random. */
+    if (tc_n_unwind_counters >= TC_MAX_UNWIND_COUNTERS) {
+        fputs("Mathilda: too many TimeConstrained unwind counters; raise TC_MAX_UNWIND_COUNTERS\n", stderr);
+        abort();
+    }
+    tc_unwind_counters[tc_n_unwind_counters++] = counter;
 }
 
 /* MPFR state a jump out of the middle of an MPFR call leaves behind.

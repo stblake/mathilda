@@ -619,6 +619,25 @@ static void test_eval_sum_common_numeric_calls(void) {
     ASSERT(mth_msg_fired_count() - before >= 2);
 }
 
+/* A TimeConstrained timeout in the middle of an arbitrary-precision N pass
+ * skips the pass's teardown.  The pass's subexpression memo must not outlive
+ * it: the memo pointer used to be left aimed at the dead C frame, and the next
+ * numeric call made outside a pass -- N's MPFR recomputation of a machine
+ * overflow -- read that stack as a table and crashed the kernel.  E^1000 =
+ * 1.9700711140170469939e434 and E^1000 (E Sin[1/3] + Cos[5]/E) =
+ * 1.9577796136580...e434 (Sin[1/3] = 0.32719469679615, Cos[5] =
+ * 0.28366218546323). */
+static void test_n_memo_survives_timeout(void) {
+    for (int i = 0; i < 3; i++) {
+        assert_eval_eq("TimeConstrained[Do[N[Sum[Sin[k + Sqrt[2]]^Exp[1/k], {k, 1, 60}], 2000], "
+                       "{10^6}], 0.2, $Aborted]", "$Aborted", 0);
+        assert_eval_eq("Abs[N[Exp[1000] + Sin[2]]/1.9700711140170469939`20*^434 - 1] < 10^-14",
+                       "True", 0);
+        assert_eval_eq("Abs[N[Exp[1001] Sin[1/3] + Cos[5] Exp[999]]/1.957779613658`12*^434 - 1] < 10^-11",
+                       "True", 0);
+    }
+}
+
 static void test_n_composition_common_subexpressions(void) {
     assert_eval_eq(
         "f2[x_] = Tan[Sin[x]] - Sin[Tan[x]]; g2[x_] = Tan[Tanh[x]] - Tanh[Tan[x]]; "
@@ -934,6 +953,7 @@ int main(void) {
     TEST(test_inverse_trig_numeric_arguments);
     TEST(test_n_composition_common_subexpressions);
     TEST(test_eval_sum_common_numeric_calls);
+    TEST(test_n_memo_survives_timeout);
 #endif
 
     printf("All numeric_tests passed.\n");

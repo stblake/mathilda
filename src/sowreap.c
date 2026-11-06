@@ -28,11 +28,15 @@
  * ---------------
  * Per the design, values and tag-groups are singly linked lists of Expr, which
  * give O(1) ordered append and preserve Sow order exactly. Each Reap frame
- * lives on builtin_reap's C stack and is linked into a file-global stack via
- * `prev`, so push/pop is a pointer write and the frame struct itself needs no
- * heap allocation. The system is single-threaded, so a plain global head is
- * sufficient. Every return path of builtin_reap pops its frame, keeping the
- * stack strictly balanced (LIFO).
+ * lives on builtin_reap's C stack and is pushed onto a file-global array of
+ * frame pointers, so push/pop is a pointer write and the frame struct itself
+ * needs no heap allocation. The system is single-threaded. Every return path
+ * of builtin_reap pops its frame, keeping the stack strictly balanced (LIFO).
+ * The one exception is a TimeConstrained timeout, which siglongjmps past
+ * builtin_reap's pop: the depth is therefore a registered unwind counter, so
+ * the jump puts it back and the dead frames above it are never read (a linked
+ * list head would have been left pointing into the abandoned C stack, and the
+ * next Sow walked it).
  */
 
 #include <stdbool.h>
@@ -73,11 +77,13 @@ typedef struct ReapFrame {
     bool     is_list;        /* was the pattern argument a List? controls nesting */
     Expr*    f;              /* borrowed handler, or NULL */
     bool     own_pattern;    /* true when slots[0].pattern is our synthesized _ */
-    struct ReapFrame* prev;
 } ReapFrame;
 
-/* Innermost active Reap, or NULL. Single-threaded: a plain global suffices. */
-static ReapFrame* g_reap_top = NULL;
+/* Active Reap frames, innermost last (see the header comment). */
+static ReapFrame** g_reap_stack = NULL;
+static int g_reap_cap = 0;
+static int g_reap_depth = 0;
+int* sowreap_depth_counter(void) { return &g_reap_depth; }
 
 /* ------------------------------------------------------------------ */
 /* Frame teardown                                                      */
@@ -136,7 +142,8 @@ static void slot_record(SowSlot* slot, Expr* tag, Expr* value) {
  * record the value in each matching slot of that frame. If no frame matches,
  * the value is silently discarded (Sow still returns it to the caller). */
 static void sow_route(Expr* tag, Expr* value) {
-    for (ReapFrame* fr = g_reap_top; fr; fr = fr->prev) {
+    for (int d = g_reap_depth - 1; d >= 0; d--) {
+        ReapFrame* fr = g_reap_stack[d];
         bool frame_matched = false;
         for (size_t i = 0; i < fr->nslots; i++) {
             MatchEnv* env = env_new();
@@ -268,10 +275,16 @@ Expr* builtin_reap(Expr* res) {
     }
 
     /* Push, evaluate the held body, pop. */
-    frame.prev = g_reap_top;
-    g_reap_top = &frame;
+    if (g_reap_depth >= g_reap_cap) {
+        int nc = g_reap_cap ? 2 * g_reap_cap : 16;
+        ReapFrame** ns = realloc(g_reap_stack, (size_t)nc * sizeof(ReapFrame*));
+        if (!ns) { reap_frame_free_contents(&frame); return NULL; }
+        g_reap_stack = ns;
+        g_reap_cap = nc;
+    }
+    g_reap_stack[g_reap_depth++] = &frame;
     Expr* result = evaluate(res->data.function.args[0]); /* borrows held body */
-    g_reap_top = frame.prev;
+    g_reap_depth--;
 
     /* A Throw crossing the Reap unwinds: discard sown values, propagate. */
     if (eval_is_inflight_unwind(result)) {

@@ -107,6 +107,19 @@ void test_throw_across_reap() {
     assert_eval_eq("Reap[Catch[Sow[1]; Throw[q]; Sow[2]]]", "{q, {{1}}}", 0);
 }
 
+/* ----- A TimeConstrained timeout inside a Reap -----
+ * The timeout siglongjmps past the Reap's pop; the frame stack must come back
+ * to the enclosing Reap (a Sow after it used to walk the abandoned C frame and
+ * crash the kernel). */
+void test_timeout_inside_reap() {
+    assert_eval_eq("TimeConstrained[Reap[Do[Sow[i], {i, 10^9}]], 0.1, $Aborted]", "$Aborted", 0);
+    assert_eval_eq("Sow[5]", "5", 0);                       /* no live Reap */
+    assert_eval_eq("Reap[Sow[1]; Sow[2]]", "{2, {{1, 2}}}", 0);
+    /* an enclosing Reap still collects what is sown after the inner one died */
+    assert_eval_eq("Reap[Sow[0]; TimeConstrained[Reap[Do[Sow[i], {i, 10^9}]], 0.1, $Aborted]; Sow[7]]",
+                   "{7, {{0, 7}}}", 0);
+}
+
 /* ----- Attributes and arity errors ----- */
 void test_attributes_and_errors() {
     assert_eval_eq("Attributes[Sow]", "{Protected}", 0);
@@ -130,6 +143,7 @@ int main() {
     TEST(test_sow_returns);
     TEST(test_nested);
     TEST(test_throw_across_reap);
+    TEST(test_timeout_inside_reap);
     TEST(test_attributes_and_errors);
 
     printf("All sow/reap tests passed!\n");
