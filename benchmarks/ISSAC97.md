@@ -125,6 +125,8 @@ argument/option handling, then absences, then bottlenecks.
 | W8 | the half-line Fourier probe rewrote the integrand in place (`Exp[-x^2]` -> `Power[E, -1, x^2]`): every WP integral over [0, oo) wrong (found via P2) | **fixed v0.6234** |
 | W9 | MPFR endpoints taken as doubles (`2 Pi` off by 2.4e-16); one-sided tail cut before a climbing side's bulk (`(1 + Cos[x])^2000` lost half) (found via P4) | **fixed v0.6235** |
 | W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | **fixed v0.6249** |
+| W11 | Equal/Less of arbitrary-precision reals use a machine-sized tolerance: `N[1 - 10^-20, 30] < 1` is False and `== 1` True (found via holdout 145) | open (agent) |
+| W12 | `N[expr, n]` with deep cancellation returned 0 or wrong digits silently (h7.4/h7.5/h7.8; two exact zeros counted as agreement) | open (agent; N::meprec at the default cap) |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
@@ -189,4 +191,4 @@ the ones where Mathilda is wrong, incomplete or slower; "neither" = both wrong):
 | N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | open |
 | Integrate | h8.5, h8.8 unevaluated | open (agent) |
 | eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
-| NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 were the baseline wrong (Mathilda correct); h10.7 Gauss at x = 1 (neither: the case's own start data drop a factor of 2, see below); h10.3/h10.4 Lane-Emden wp30 SLOWER | open (agent) |
+| NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 were the baseline wrong (Mathilda correct); h10.7 singular endpoint (Mathilda 2.96e113) and h10.3/h10.4 Lane-Emden wp30 SLOWER | **fixed v0.6258-v0.6260** (h10.7 correct to 23 digits; Lane-Emden 1.7 s -> 30 ms, 4.3 s -> 0.11 s); h10.7's start data corrected in the benchmark |
