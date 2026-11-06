@@ -343,6 +343,16 @@ static int64_t binomial_expand_cap(const Expr* n) {
  *   6. Complex numeric operand (a Complex[..] with an inexact part): the
  *      Gamma quotient evaluated as an expression, reusing Gamma's complex
  *      kernels -- N[Binomial[1/2 + I/3, 1/4]]. */
+/* r = Binomial[n, k] for n >= 0.  With n a machine word, mpz_bin_uiui:
+ * GMP's dedicated algorithm (a table / limb-product / prime-sieve split by
+ * size), ~1 us for Binomial[355, 150] against ~7 us for the general
+ * mpz_bin_ui (a rising-factorial product) -- which made the 3 n^2 binomials
+ * of an exact 256 x 256 inverse Hilbert matrix cost 1.9 s.  r may alias n. */
+static void binomial_mpz_ui(mpz_t r, const mpz_t n, unsigned long k) {
+    if (mpz_fits_ulong_p(n)) mpz_bin_uiui(r, mpz_get_ui(n), k);
+    else                     mpz_bin_ui(r, n, k);
+}
+
 Expr* builtin_binomial(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* arg_n = res->data.function.args[0];
@@ -367,7 +377,7 @@ Expr* builtin_binomial(Expr* res) {
                 Expr* out = NULL;
                 if (mpz_fits_ulong_p(k)) {
                     unsigned long kk = mpz_get_ui(k);
-                    mpz_bin_ui(top, top, kk);
+                    binomial_mpz_ui(top, top, kk);
                     if (kk & 1UL) mpz_neg(top, top);
                     out = expr_bigint_normalize(expr_new_bigint_from_mpz(top));
                 }
@@ -406,11 +416,11 @@ Expr* builtin_binomial(Expr* res) {
             mpz_neg(shifted, n);
             mpz_add(shifted, shifted, m);
             mpz_sub_ui(shifted, shifted, 1);
-            mpz_bin_ui(r, shifted, mk);
+            binomial_mpz_ui(r, shifted, mk);
             if (mk & 1UL) mpz_neg(r, r);
             mpz_clear(shifted);
         } else {
-            mpz_bin_ui(r, n, mk);
+            binomial_mpz_ui(r, n, mk);
         }
         Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
         mpz_clears(n, m, r, NULL);

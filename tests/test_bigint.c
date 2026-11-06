@@ -187,6 +187,22 @@ int main(void) {
 
     // Additional GMP integration tests
     assert_eval_eq("Binomial[100, 50]", "100891344545564193334812497256", 0);
+    /* Binomial of big arguments (machine-word indices take mpz_bin_uiui):
+     * against the factorial quotient, Pascal's rule, the row sum 2^n, the
+     * symmetry, and the extensions to negative arguments */
+    assert_eval_eq("Table[Binomial[n, k] == n!/(k! (n - k)!), {n, {255, 256, 355, 511, 1000}}, "
+                   "{k, {0, 1, 2, 100, 128, 150, 255}}] // Flatten // Union", "{True}", 0);
+    assert_eval_eq("Union[Table[Binomial[400, k] == Binomial[399, k - 1] + Binomial[399, k], {k, 1, 399}]]",
+                   "{True}", 0);
+    assert_eval_eq("Sum[Binomial[300, k], {k, 0, 300}] == 2^300", "True", 0);
+    assert_eval_eq("Binomial[355, 150] == Binomial[355, 205]", "True", 0);
+    assert_eval_eq("Binomial[3000, 1500] == 3000!/(1500!)^2", "True", 0);
+    assert_eval_eq("{Binomial[300, 301], Binomial[300, -1], Binomial[0, 0]}", "{0, 0, 1}", 0);
+    assert_eval_eq("Binomial[-5, 3]", "-35", 0);
+    assert_eval_eq("Binomial[-300, 4] == (-300) (-301) (-302) (-303)/24", "True", 0);
+    assert_eval_eq("{Binomial[-1, -1], Binomial[-2, -5]}", "{1, -4}", 0);
+    assert_eval_eq("Binomial[2^70 + 1, 2] == (2^70 + 1) 2^70/2", "True", 0);
+    assert_eval_eq("Binomial[2^64 + 7, 3] == (2^64 + 7) (2^64 + 6) (2^64 + 5)/6", "True", 0);
     assert_eval_eq("PowerMod[2, 100, 101]", "1", 0); // Fermat's Little Theorem: 2^(101-1) mod 101 = 1
     assert_eval_eq("PowerMod[2, 10, 3]", "1", 0);
     assert_eval_eq("PowerMod[3, -2, 7]", "4", 0);
