@@ -138,6 +138,7 @@ Produces the power-series expansion of an expression about a point.
   `Series[PolyGamma[s], {s,0,1}]` is `−1/s − EulerGamma + Pi² s/6 + O[s]^2`.
   Before, these were left unevaluated, and so `Limit` could not resolve
   `Limit[Gamma[s] Sin[s], s → 0]`.
+- `PolyLog[s, u]` (order `s` free of the variable) expands where `u` vanishes by its defining series `Sum u^k/k^s`, composed through `u`'s own series: `Series[PolyLog[2, t], {t, 0, 3}]` = `t + t^2/4 + t^3/9 + O[t]^4`, `Series[PolyLog[3, 2 t^2], {t, 0, 4}]` = `2 t^2 + t^4/2 + O[t]^5`. Taylor via `D` cannot reach it (`Li_(s-1)(u) u'/u` is 0/0 at `u = 0`), so this also decides limits such as `Limit[Log[t] PolyLog[2, t], t -> 0]` = `0`, the endpoint values of the polylogarithm ladder.
 - Symbolic parameters in exponents are supported: `Series[(1 + x)^n, {x, 0, 4}]` returns the binomial expansion with `n` kept unexpanded.
 - Approximate numeric coefficients flow through series arithmetic unchanged.
 - For unknown heads (e.g. `f[x]` where `f` has no rules), the engine falls back to naive Taylor via `D` at the expansion point; the coefficients appear as `Derivative[k][f][x0]`.

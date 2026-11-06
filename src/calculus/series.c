@@ -3262,6 +3262,40 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 if (r) return r;
             }
         }
+        /* ---- PolyLog[s, u] with u(x0) = 0: the defining series ----
+         * Li_s(u) = Sum_{k>=1} u^k/k^s, composed through u's own series (the
+         * order s free of x, any value).  Taylor-via-D cannot get here: the
+         * derivative Li_(s-1)(u) u'/u is 0/0 at u = 0, so Series[PolyLog[2, t],
+         * {t, 0, 3}] and every Limit of Log[t] PolyLog[2, t] at t = 0 (an
+         * endpoint value of the polylogarithm ladder) used to stay unevaluated. */
+        if (head && head == SYM_PolyLog && e->data.function.arg_count == 2 &&
+            expr_free_of(e->data.function.args[0], ctx->x) &&
+            !expr_free_of(e->data.function.args[1], ctx->x)) {
+            SeriesObj* inner = series_expand_nested(e->data.function.args[1], ctx);
+            if (inner) {
+                Expr* c; SeriesObj* u;
+                so_split_constant(inner, &c, &u);
+                bool zero = is_lit_zero(c);
+                expr_free(c);
+                SeriesObj* r = NULL;
+                if (zero && u->nmin >= 1) {
+                    int64_t N = (u->order - u->nmin) / u->nmin + 2;
+                    if (N < 2) N = 2;
+                    Expr** k = calloc((size_t)N, sizeof(Expr*));
+                    k[0] = expr_new_integer(0);
+                    for (int64_t j = 1; j < N; j++)
+                        k[j] = simp(mk_power(expr_new_integer(j),
+                                    mk_times(expr_new_integer(-1),
+                                             expr_copy(e->data.function.args[0]))));
+                    r = so_compose_scalar_kernel(k, (size_t)N, u);
+                    for (int64_t j = 0; j < N; j++) expr_free(k[j]);
+                    free(k);
+                }
+                so_free(u);
+                so_free(inner);
+                if (r) return r;
+            }
+        }
         /* ---- Reciprocal heads (Sec, Csc, Cot, Sech, Csch, Coth) ---- */
         {
             Expr* rewrite = rewrite_reciprocal_head(e);
