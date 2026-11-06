@@ -775,6 +775,30 @@ static void test_narrow_features_wp(void) {
                "2 EllipticK[-4]/Pi", "10^-20");
 }
 
+/* A removable singularity at an endpoint cancels catastrophically at the
+ * deepest tanh-sinh nodes (relative distance 2^-300 at 30 digits): the
+ * samples must be recomputed with the bits the cancellation eats.  Closed
+ * forms by termwise integration of the Taylor series:
+ *   int_0^1 (e^x - 1 - x)/x^2 = sum_{k>=2} 1/(k! (k-1)),
+ *   int_0^1 (e^x - 1 - x - x^2/2)/x^3 = sum_{k>=3} 1/(k! (k-2)),
+ * (truncated at k = 60, 70: the remainder is below 10^-80), the mirror image
+ * at the upper endpoint, and int_0^2 (1 - cos x)/x^2 = Si(2) - (1 - cos 2)/2
+ * (by parts).  Before: -188.488 for 0.59962. */
+static void test_endpoint_cancellation_wp(void) {
+    ASSERT_CLOSE("NIntegrate[(Exp[x] - 1 - x)/x^2, {x, 0, 1}, WorkingPrecision -> 30]",
+                 "Sum[1/(k! (k - 1)), {k, 2, 60}]", 1e-24);
+    ASSERT_CLOSE("NIntegrate[(Exp[1 - x] - 1 - (1 - x))/(1 - x)^2, {x, 0, 1}, "
+                 "WorkingPrecision -> 30]", "Sum[1/(k! (k - 1)), {k, 2, 60}]", 1e-24);
+    ASSERT_CLOSE("NIntegrate[(Exp[x] - 1 - x - x^2/2)/x^3, {x, 0, 1}, WorkingPrecision -> 40]",
+                 "Sum[1/(k! (k - 2)), {k, 3, 70}]", 1e-33);
+    ASSERT_CLOSE("NIntegrate[(1 - Cos[x])/x^2, {x, 0, 2}, WorkingPrecision -> 30]",
+                 "SinIntegral[2] - (1 - Cos[2])/2", 1e-24);
+    /* no message: the samples are now accurate (the cancelled zeros used to
+     * be reported as a 1-bit integrand precision) */
+    ASSERT_EQ_STR("Check[NIntegrate[(Exp[x] - 1 - x)/x^2, {x, 0, 1}, WorkingPrecision -> 30]; ok, "
+                  "warned]", "ok");
+}
+
 static void test_symbolic_swell(void) {
     /* Symbolic processing that swells the integrand is not used when the held
      * integrand samples numerically.  Expanding LegendreP[200, x]^2 gives a
@@ -845,6 +869,7 @@ int main(void) {
     TEST(test_fourier_and_smooth_wp);
     TEST(test_narrow_features_wp);
     TEST(test_symbolic_swell);
+    TEST(test_endpoint_cancellation_wp);
 
     printf("All nint_tests passed.\n");
     return 0;

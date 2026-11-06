@@ -258,6 +258,17 @@ typedef struct {
      * used to tell an out-of-range sample in the bulk of the interval from one
      * at an endpoint singularity (ni_note_beyond). */
     double ep_lo, ep_hi;
+#ifdef USE_MPFR
+    /* Endpoint cancellation guard of the MPFR finite-interval rules (see
+     * ni_sample_mpfr_guarded): the exact endpoints of the range being
+     * integrated (borrowed, valid while gd_on), and per endpoint whether its
+     * deep samples were found free of cancellation (1), cancelling at
+     * gd_rate lost bits per bit of distance (2), or not yet probed (0). */
+    bool        gd_on;
+    mpfr_srcptr gd_a, gd_b;
+    int         gd_state[2];
+    double      gd_rate[2];
+#endif
 } NiCtx;
 
 static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
@@ -266,6 +277,11 @@ static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
     c->map_mode = NI_MAP_AFFINE; c->end_a = 0.0; c->span = 0.0;
     c->ac_enabled = false; c->ac_tried = false; c->ac = NULL; c->ac_prec = NULL;
     c->ep_lo = -INFINITY; c->ep_hi = INFINITY;
+#ifdef USE_MPFR
+    c->gd_on = false; c->gd_a = NULL; c->gd_b = NULL;
+    c->gd_state[0] = c->gd_state[1] = 0;
+    c->gd_rate[0] = c->gd_rate[1] = 0.0;
+#endif
 }
 
 /* Point a (value-copied) context at a different body.  The lazily-compiled `ac`
@@ -477,12 +493,166 @@ static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
 /* MPFR sample callback: f at the real abscissa x (mapped by the real part of
  * the affine map — MPFR is used for real integration ranges).  (out_re,out_im)
  * are pre-initialised at the working precision by the DE kernel. */
+/* f at the abscissa xm with every number in the evaluation carried at `prec`
+ * bits (the abscissa is widened exactly; the interpreter computes at the
+ * precision of its operands).  The compiled program, built for the working
+ * precision, is bypassed.  (re, im) are initialised by the caller. */
+static bool ni_eval_mpfr_at_prec(NiCtx* c, const mpfr_t xm, long prec, mpfr_t re, mpfr_t im) {
+    if ((long)mpfr_get_prec(xm) > prec) prec = (long)mpfr_get_prec(xm);
+    mpfr_t xw;
+    mpfr_init2(xw, (mpfr_prec_t)prec);
+    mpfr_set(xw, xm, MPFR_RNDN);                      /* exact: prec >= prec(xm) */
+    Expr* xe = expr_new_mpfr_copy(xw);
+    mpfr_clear(xw);
+    NumericSpec saved = c->spec;
+    AutoCompiled* saved_ac = c->ac_prec;
+    bool saved_en = c->ac_enabled;
+    c->spec.bits = prec;
+    c->ac_prec = NULL;
+    c->ac_enabled = false;
+    Expr* num = ni_eval_at(c, xe);
+    c->spec = saved;
+    c->ac_prec = saved_ac;
+    c->ac_enabled = saved_en;
+    if (!num) return false;
+    bool inexact;
+    bool ok = get_approx_mpfr(num, re, im, &inexact);
+    if (ok && (!mpfr_number_p(re) || !mpfr_number_p(im))) ok = false;
+    expr_free(num);
+    return ok;
+}
+
+/* log2 of the relative difference |u - v|/|v| of two complex MPFR values
+ * (-INFINITY when equal; 0 when v is zero and u is not). */
+static double ni_mpfr_rel_log2(const mpfr_t ur, const mpfr_t ui, const mpfr_t vr, const mpfr_t vi) {
+    mpfr_prec_t p = mpfr_get_prec(vr);
+    if (mpfr_get_prec(ur) > p) p = mpfr_get_prec(ur);
+    mpfr_t dr, di;
+    mpfr_inits2(p + 8, dr, di, (mpfr_ptr)0);
+    mpfr_sub(dr, ur, vr, MPFR_RNDN);
+    mpfr_sub(di, ui, vi, MPFR_RNDN);
+    double ld = de_mpfr_log2_l1(dr, di);
+    double lv = de_mpfr_log2_l1(vr, vi);
+    mpfr_clears(dr, di, (mpfr_ptr)0);
+    if (!isfinite(ld) && ld < 0) return -INFINITY;
+    if (!isfinite(lv)) return 0.0;
+    return ld - lv;
+}
+
+/* Endpoint cancellation guard.
+ *
+ * The interpreter evaluates at the precision of its operands and does not track
+ * the digits a subtraction cancels.  tanh-sinh puts its last nodes at relative
+ * distance 2^-L from an endpoint with L in the hundreds, and an integrand with a
+ * removable singularity there loses about m L bits at such a node, m the order
+ * of the cancellation: (E^x - 1 - x)/x^2 at x = 10^-40 and 30 digits evaluates
+ * to -1e40, not 1/2, and NIntegrate returned -188.49 for 0.59962.  The node's
+ * weight (~2^-L) does not save it, since the noise grows like 2^(mL).
+ *
+ * So a sample within 2^-20 of the span of an endpoint is checked by evaluating
+ * it again with the abscissa widened by L + 32 bits (doubling the extra bits
+ * until two evaluations agree to the target precision).  The bits the
+ * working-precision value lost give the endpoint's cancellation rate (lost bits
+ * per bit of distance): an endpoint whose first deep sample lost nothing is
+ * marked clean and never checked again (a genuine x^-1/2 singularity, or a
+ * regular integrand, pays one extra evaluation); a cancelling one is evaluated
+ * from then on directly at the precision its rate predicts, plus a check. */
+#define NI_GD_MIN_L     20.0
+#define NI_GD_MAX_EXTRA 16384L
+static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpfr_t out_im,
+                                   bool* handled) {
+    *handled = false;
+    if (!c->gd_on || !c->gd_a || !c->gd_b || c->spec.mode != NUMERIC_MODE_MPFR) return false;
+    long p = c->spec.bits;
+    mpfr_t t;
+    mpfr_init2(t, mpfr_get_prec(xm) + 8);
+    mpfr_sub(t, xm, c->gd_a, MPFR_RNDN);
+    double la = de_mpfr_log2_abs(t);
+    mpfr_sub(t, c->gd_b, xm, MPFR_RNDN);
+    double lb = de_mpfr_log2_abs(t);
+    mpfr_sub(t, c->gd_b, c->gd_a, MPFR_RNDN);
+    double ls = de_mpfr_log2_abs(t);
+    mpfr_clear(t);
+    int side = (la <= lb) ? 0 : 1;
+    double L = ls - (side == 0 ? la : lb);
+    if (!(L >= NI_GD_MIN_L) || !isfinite(L) || c->gd_state[side] == 1) return false;
+    *handled = true;
+    /* The probe evaluations' own precision is not the integrand's: a value that
+     * cancelled to a 1-bit zero at the working precision is replaced by the
+     * agreed one, so none of them may lower the delivered-precision record. */
+    long sbits_saved = g_ni_sample_bits;
+
+    long tb = p - 64 > 53 ? p - 64 : 53;              /* the target precision */
+    double agree_l2 = -(double)tb - 8.0;
+    mpfr_t pr, pi, cr, ci;
+    mpfr_inits2((mpfr_prec_t)p, pr, pi, (mpfr_ptr)0);
+    long extra;
+    bool have_prev;
+    if (c->gd_state[side] == 2) {
+        extra = (long)ceil(c->gd_rate[side] * L) + 32;
+        if (extra > NI_GD_MAX_EXTRA) extra = NI_GD_MAX_EXTRA;
+        mpfr_set_prec(pr, (mpfr_prec_t)(p + extra));
+        mpfr_set_prec(pi, (mpfr_prec_t)(p + extra));
+        have_prev = ni_eval_mpfr_at_prec(c, xm, p + extra, pr, pi);
+        extra *= 2;
+    } else {
+        have_prev = ni_eval_mpfr_at_prec(c, xm, p, pr, pi);
+        extra = (long)ceil(L) + 32;
+    }
+    mpfr_t v0r, v0i;                                  /* the first value, for the rate */
+    mpfr_inits2(mpfr_get_prec(pr), v0r, v0i, (mpfr_ptr)0);
+    if (have_prev) { mpfr_set(v0r, pr, MPFR_RNDN); mpfr_set(v0i, pi, MPFR_RNDN); }
+    mpfr_inits2((mpfr_prec_t)p, cr, ci, (mpfr_ptr)0);
+    bool ok = false;
+    for (int it = 0; it < 8; it++) {
+        mpfr_set_prec(cr, (mpfr_prec_t)(p + extra));
+        mpfr_set_prec(ci, (mpfr_prec_t)(p + extra));
+        bool got = ni_eval_mpfr_at_prec(c, xm, p + extra, cr, ci);
+        if (got && have_prev && ni_mpfr_rel_log2(pr, pi, cr, ci) <= agree_l2) { ok = true; break; }
+        if (got) {
+            mpfr_set_prec(pr, mpfr_get_prec(cr)); mpfr_set_prec(pi, mpfr_get_prec(ci));
+            mpfr_set(pr, cr, MPFR_RNDN); mpfr_set(pi, ci, MPFR_RNDN);
+            have_prev = true;
+        }
+        if (extra >= NI_GD_MAX_EXTRA) { ok = got; break; }
+        extra *= 2;
+        if (extra > NI_GD_MAX_EXTRA) extra = NI_GD_MAX_EXTRA;
+    }
+    if (ok) {
+        /* bits the first evaluation lost, against the agreed value */
+        double lost = 0.0;
+        if (mpfr_number_p(v0r) && mpfr_number_p(v0i)) {
+            double rl = ni_mpfr_rel_log2(v0r, v0i, cr, ci);
+            double v0p = (double)mpfr_get_prec(v0r);
+            lost = isfinite(rl) ? v0p + rl : 0.0;
+            if (lost < 0.0) lost = 0.0;
+        }
+        if (c->gd_state[side] == 0) {
+            if (lost < 8.0) c->gd_state[side] = 1;
+            else { c->gd_state[side] = 2; c->gd_rate[side] = lost / L; }
+        } else if (lost / L > c->gd_rate[side] && c->gd_state[side] == 2
+                   && mpfr_get_prec(v0r) == (mpfr_prec_t)p) {
+            c->gd_rate[side] = lost / L;
+        }
+        mpfr_set(out_re, cr, MPFR_RNDN);
+        mpfr_set(out_im, ci, MPFR_RNDN);
+    }
+    mpfr_clears(pr, pi, cr, ci, v0r, v0i, (mpfr_ptr)0);
+    g_ni_sample_bits = sbits_saved;
+    return ok;
+}
+
 static bool ni_sample_mpfr(void* vctx, const mpfr_t x, mpfr_t out_re, mpfr_t out_im) {
     NiCtx* c = (NiCtx*)vctx;
     mpfr_t xm;
     mpfr_init2(xm, mpfr_get_prec(x));
     mpfr_mul_d(xm, x, creal(c->x_scale), MPFR_RNDN);
     mpfr_add_d(xm, xm, creal(c->x_shift), MPFR_RNDN);
+    if (c->gd_on) {
+        bool handled;
+        bool ok = ni_sample_mpfr_guarded(c, xm, out_re, out_im, &handled);
+        if (handled) { mpfr_clear(xm); return ok; }
+    }
     Expr* xe = expr_new_mpfr_copy(xm);
     mpfr_clear(xm);
     Expr* num = ni_eval_at(c, xe);
@@ -1896,6 +2066,18 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
     ni_endpoint_mpfr(o, b, bm);
     bool conv;
     *abserr = 0.0;
+    /* Endpoint cancellation guard for every rule below (ni_sample_mpfr_guarded);
+     * only for the plain real abscissa map, whose x is the integration variable. */
+    bool gd_saved = ctx->gd_on;
+    mpfr_srcptr gda_saved = ctx->gd_a, gdb_saved = ctx->gd_b;
+    int gs0 = ctx->gd_state[0], gs1 = ctx->gd_state[1];
+    double gr0 = ctx->gd_rate[0], gr1 = ctx->gd_rate[1];
+    if (ctx->map_mode == NI_MAP_AFFINE && creal(ctx->x_scale) == 1.0
+        && creal(ctx->x_shift) == 0.0) {
+        ctx->gd_on = true; ctx->gd_a = am; ctx->gd_b = bm;
+        ctx->gd_state[0] = ctx->gd_state[1] = 0;
+        ctx->gd_rate[0] = ctx->gd_rate[1] = 0.0;
+    }
     if (o->method == NI_TRAP || o->method == NI_RIEMANN
         || o->method == NI_NEWTONCOTES) {
         NcrRuleKind kind = (o->method == NI_TRAP) ? NCR_TRAPEZOIDAL
@@ -1974,6 +2156,9 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
             mpfr_clears(lre, lim, (mpfr_ptr)0);
         }
     }
+    ctx->gd_on = gd_saved; ctx->gd_a = gda_saved; ctx->gd_b = gdb_saved;
+    ctx->gd_state[0] = gs0; ctx->gd_state[1] = gs1;
+    ctx->gd_rate[0] = gr0; ctx->gd_rate[1] = gr1;
     mpfr_clears(am, bm, (mpfr_ptr)0);
     return conv;
 }
