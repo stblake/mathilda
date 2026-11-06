@@ -236,3 +236,7 @@ Evaluator wave 3 (v0.6317-v0.6319): exact Table entries 1.5-6x faster (Kahan 6.2
 3.3 vs 4.0 ms (ahead), h1.7 even; h1.2 / h1.10 machine still behind (machine N of E^(-k/25) goes through MPFR).
 Narrow features (v0.6324): h2.5 wp40 2.6 vs 15.3 ms, h2.6 2.0 vs 10.7 ms; holdout 137 all AHEAD or baseline-wrong.
 Together kernels (v0.6322-v0.6323): P10 polar ODE derivation 1.7 vs 2.8 ms.
+Groebner engine (v0.6326-v0.6334): F4 mod p, certified multi-modular DRL/DegLex/Lex over Q, shape-position Lex,
+Lex mod p by FGLM. Holdout 141 and ISSAC 131 all AHEAD (h6.8 27-36 vs 40 ms, h6.3 56 vs 260, P6 5 vs 23); benchmark
+122 families 39 of 40 ahead (cyclic-7 DRL 9.7 s vs 440 s, katsura-8 DRL 4.0 vs 23.2 s, katsura-7 Lex 6.9 vs 38.7 s);
+behind: dense 4 quadrics with 6-digit coefficients in DRL (19 vs 8 ms).
