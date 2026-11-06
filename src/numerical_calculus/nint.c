@@ -2782,6 +2782,200 @@ static bool ni_check_numeric(Expr* body, const char* var, double a, double b) {
     return numeric;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Phase substitution for a power-law phase                           *
+ * ------------------------------------------------------------------ *
+ *
+ * An integrand A(x) K(c x^n), K = Sin or Cos, oscillates ever faster toward
+ * an endpoint -- at x = 0 for n < 0 (Sin[1/x] on [0, 1]: infinitely many
+ * oscillations; the adaptive rule reported 0.504166 "converged" for
+ * 0.5040671) or at infinity for n > 1 (Sin[x^3] on [0, oo): the lobes shrink
+ * like k^(-2/3), each a full panel at WorkingPrecision -> 40, which never
+ * finished).  In the phase t = c x^n the oscillation is uniform:
+ *     int A(x) K(c x^n) dx = int_{t0}^oo A((t/c)^(1/n)) (t/c)^(1/n)/(|n| t) K(t) dt,
+ * a semi-infinite Fourier integral with frequency 1, which the half-line
+ * Fourier rules (Ooura-Mori at WorkingPrecision, between the zeros at machine
+ * precision) resolve.  t0 = 0 (n > 0 on [0, oo)) or c b^n (n < 0 on [0, b]);
+ * for t0 > 0, K(t0 + s) is expanded into Cos[s] and Sin[s] so each part keeps
+ * the aligned phase those rules need.  Returns the evaluated sum, or NULL
+ * when the integrand or range is not of this form. */
+
+/* evaluate f[args...] (args consumed) with `var` detached from any binding */
+static Expr* ni_ev(const char* head, Expr** args, size_t n, const char* var) {
+    Expr* call = expr_new_function(expr_new_symbol(head), args, n);
+    int vtok = mth_bind_push_name(var, 0);
+    eval_clock_bump();
+    Expr* r = eval_and_free(call);
+    mth_bind_pop(vtok);
+    eval_clock_bump();
+    return r;
+}
+static Expr* ni_ev2(const char* head, Expr* a, Expr* b, const char* var) {
+    Expr* args[2] = { a, b };
+    return ni_ev(head, args, 2, var);
+}
+static Expr* ni_ev1(const char* head, Expr* a, const char* var) {
+    Expr* args[1] = { a };
+    return ni_ev(head, args, 1, var);
+}
+
+static Expr* ni_try_phase_substitution(Expr* body, const char* var, Expr* amin,
+                                       Expr* amax, Expr* const* opts, size_t nopts) {
+    LevinKernel k; Expr* g = NULL; Expr* amp = NULL;
+    Expr* fb = expr_copy(body);
+    if (levin_is_head(fb, SYM_Times)) {
+        fb = expr_unshare(fb);
+        eval_flatten_args(fb, SYM_Times);
+    }
+    bool ok = levin_detect_kernel(fb, var, &k, &g, &amp);
+    expr_free(fb);
+    if (!ok) return NULL;
+    if (k != LEVIN_KERNEL_SIN && k != LEVIN_KERNEL_COS) { expr_free(g); expr_free(amp); return NULL; }
+    Expr* out = NULL;
+    /* n = x g'/g must be a number, c = g/x^n a positive number */
+    Expr* gp = levin_phase_derivative(g, var);
+    Expr* nE = gp ? ni_ev1(SYM_Together,
+                           ni_ev2(SYM_Times, expr_new_symbol(var),
+                                  ni_ev2(SYM_Times, gp, ni_ev2(SYM_Power, expr_copy(g),
+                                                              expr_new_integer(-1), var), var),
+                                  var), var) : NULL;
+    double nd = 0.0, cd = 0.0, ad = 0.0, bd = 0.0;
+    bool b_inf = false;
+    Expr* cE = NULL;
+    if (!nE || levin_occurs(nE, var) || !ni_to_double_real(nE, &nd) || nd == 0.0 || nd == 1.0)
+        goto done;
+    cE = ni_ev1(SYM_Together, ni_ev2(SYM_Times, expr_copy(g),
+                ni_ev2(SYM_Power, expr_new_symbol(var),
+                       ni_ev2(SYM_Times, expr_new_integer(-1), expr_copy(nE), var), var), var), var);
+    if (!cE || levin_occurs(cE, var)) goto done;
+    {
+        Expr* cN = numericalize(cE, numeric_machine_spec());
+        bool okc = cN && ni_to_double_real(cN, &cd);
+        expr_free(cN);
+        if (!okc || !(cd != 0.0)) goto done;
+    }
+    {
+        Expr* aN = ni_num_endpoint(amin);
+        bool oka = aN && ni_to_double_real(aN, &ad);
+        expr_free(aN);
+        double _Complex dir;
+        if (ni_infinity_dir(amax, &dir) && creal(dir) > 0 && cimag(dir) == 0) b_inf = true;
+        else {
+            Expr* bN = ni_num_endpoint(amax);
+            bool okb = bN && ni_to_double_real(bN, &bd);
+            expr_free(bN);
+            if (!okb) goto done;
+        }
+        if (!oka || ad != 0.0) goto done;
+        if (nd > 1.0 && !b_inf) goto done;            /* phase grows toward oo */
+        if (nd < 0.0 && (b_inf || !(bd > 0.0))) goto done;   /* toward x = 0 */
+        if (nd > 0.0 && nd < 1.0) goto done;
+    }
+    {
+        /* sign of c: K(-t) = -Sin t / Cos t */
+        double ksign = 1.0;
+        if (cd < 0.0) {
+            cE = ni_ev2(SYM_Times, expr_new_integer(-1), cE, var);
+            if (k == LEVIN_KERNEL_SIN) ksign = -1.0;
+        }
+        /* x(t) = (t/c)^(1/n);  A(x(t)) x(t)/(|n| t) */
+        Expr* xt = ni_ev2(SYM_Power, ni_ev2(SYM_Times, expr_new_symbol(var),
+                          ni_ev2(SYM_Power, expr_copy(cE), expr_new_integer(-1), var), var),
+                          ni_ev2(SYM_Power, expr_copy(nE), expr_new_integer(-1), var), var);
+        Expr* rule = ni_ev2(SYM_Rule, expr_new_symbol(var), expr_copy(xt), var);
+        Expr* ampt = ni_ev2(SYM_ReplaceAll, expr_copy(amp), rule, var);
+        Expr* jac = ni_ev2(SYM_Times, xt,
+                           ni_ev2(SYM_Power, ni_ev2(SYM_Times,
+                                  ni_ev1(SYM_Abs, expr_copy(nE), var), expr_new_symbol(var), var),
+                                  expr_new_integer(-1), var), var);
+        Expr* B = ni_ev2(SYM_Times, ampt, jac, var);       /* B(t) */
+        /* t0: c b^n for n < 0.  For n > 1 the substitution would create an
+         * algebraic singularity t^(1/n - 1) at t = 0 where the original is
+         * smooth (Sin[x^3] ~ x^3), so the first lobe x in [0, (Pi/c)^(1/n)] is
+         * integrated as it stands and the phase variable starts at t0 = Pi. */
+        Expr* head_part = NULL;
+        Expr* t0 = (nd > 0.0) ? expr_new_symbol(SYM_Pi)
+                 : ni_ev2(SYM_Times, expr_copy(cE), ni_ev2(SYM_Power, expr_copy(amax),
+                                                           expr_copy(nE), var), var);
+        if (nd > 0.0) {
+            Expr* x1 = ni_ev2(SYM_Power, ni_ev2(SYM_Times, expr_new_symbol(SYM_Pi),
+                              ni_ev2(SYM_Power, expr_copy(cE), expr_new_integer(-1), var), var),
+                              ni_ev2(SYM_Power, expr_copy(nE), expr_new_integer(-1), var), var);
+            Expr** args = malloc((2 + nopts) * sizeof(Expr*));
+            args[0] = expr_copy(body);
+            Expr* sp[3] = { expr_new_symbol(var), expr_new_integer(0), x1 };
+            args[1] = expr_new_function(expr_new_symbol(SYM_List), sp, 3);
+            for (size_t j = 0; j < nopts; j++) args[2 + j] = expr_copy(opts[j]);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_NIntegrate), args, 2 + nopts);
+            free(args);
+            head_part = eval_and_free(call);
+            if (!head_part || levin_is_head(head_part, SYM_NIntegrate)) {
+                expr_free(head_part); expr_free(t0); expr_free(B);
+                goto done;
+            }
+        }
+        double t0d = 0.0;
+        { Expr* tN = numericalize(expr_copy(t0), numeric_machine_spec());
+          ni_to_double_real(tN, &t0d); expr_free(tN); }
+        /* parts: (coefficient, kernel head) over s in [0, oo), B(t0 + s) */
+        Expr* Bs = B;
+        if (t0d != 0.0) {
+            Expr* r2 = ni_ev2(SYM_Rule, expr_new_symbol(var),
+                              ni_ev2(SYM_Plus, expr_copy(t0), expr_new_symbol(var), var), var);
+            Bs = ni_ev2(SYM_ReplaceAll, B, r2, var);
+        }
+        const char* kh = (k == LEVIN_KERNEL_SIN) ? SYM_Sin : SYM_Cos;
+        Expr* coef[2]; const char* kern[2]; int nparts;
+        if (t0d == 0.0) {
+            coef[0] = expr_new_integer(1); kern[0] = kh; nparts = 1;
+        } else if (k == LEVIN_KERNEL_SIN) {     /* Sin[t0+s] = Sin t0 Cos s + Cos t0 Sin s */
+            coef[0] = ni_ev1(SYM_Sin, expr_copy(t0), var); kern[0] = SYM_Cos;
+            coef[1] = ni_ev1(SYM_Cos, expr_copy(t0), var); kern[1] = SYM_Sin; nparts = 2;
+        } else {                                /* Cos[t0+s] = Cos t0 Cos s - Sin t0 Sin s */
+            coef[0] = ni_ev1(SYM_Cos, expr_copy(t0), var); kern[0] = SYM_Cos;
+            coef[1] = ni_ev2(SYM_Times, expr_new_integer(-1),
+                             ni_ev1(SYM_Sin, expr_copy(t0), var), var); kern[1] = SYM_Sin; nparts = 2;
+        }
+        Expr* total = NULL;
+        bool good = true;
+        for (int i = 0; i < nparts; i++) {
+            Expr* integrand = ni_ev2(SYM_Times, expr_copy(Bs),
+                                     ni_ev1(kern[i], expr_new_symbol(var), var), var);
+            Expr** args = malloc((2 + nopts) * sizeof(Expr*));
+            args[0] = integrand;
+            Expr* sp[3] = { expr_new_symbol(var), expr_new_integer(0), expr_new_symbol(SYM_Infinity) };
+            args[1] = expr_new_function(expr_new_symbol(SYM_List), sp, 3);
+            for (size_t j = 0; j < nopts; j++) args[2 + j] = expr_copy(opts[j]);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_NIntegrate), args, 2 + nopts);
+            free(args);
+            Expr* r = eval_and_free(call);
+            if (!r || levin_is_head(r, SYM_NIntegrate)) { expr_free(r); good = false; }
+            else {
+                Expr* term = ni_ev2(SYM_Times, coef[i], r, var);
+                coef[i] = NULL;
+                total = total ? ni_ev2(SYM_Plus, total, term, var) : term;
+            }
+            if (!good) break;
+        }
+        for (int i = 0; i < nparts; i++) expr_free(coef[i]);
+        expr_free(Bs);
+        expr_free(t0);
+        if (good && total) {
+            out = (ksign < 0) ? ni_ev2(SYM_Times, expr_new_integer(-1), total, var) : total;
+            total = NULL;
+            if (head_part) { out = ni_ev2(SYM_Plus, head_part, out, var); head_part = NULL; }
+        }
+        expr_free(total);
+        expr_free(head_part);
+    }
+done:
+    expr_free(cE);
+    expr_free(nE);
+    expr_free(g);
+    expr_free(amp);
+    return out;
+}
+
 /* Integrate res = NIntegrate[f, specs..., opts...] with the parsed options:
  * the dispatch onto Monte-Carlo, cubature, iterated, contour and 1-D paths. */
 static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* op) {
@@ -2883,6 +3077,19 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
             expr_free(amax);
             expr_free(inner);
             return NULL;
+        }
+        /* a power-law phase: integrate in the phase variable */
+        if (o.method == NI_AUTO && nspecs == 1 && !o.exclusions) {
+            Expr* ps = ni_try_phase_substitution(eff_body, var, spec0->data.function.args[1],
+                                                 spec0->data.function.args[2],
+                                                 &res->data.function.args[pos_end],
+                                                 argc - pos_end);
+            if (ps) {
+                expr_free(amin);
+                expr_free(amax);
+                expr_free(inner);
+                return ps;
+            }
         }
         if (real_finite && (o.method == NI_PV || o.exclusions)) {
             double lo = a < b ? a : b, hi = a < b ? b : a;

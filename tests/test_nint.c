@@ -653,6 +653,21 @@ static void test_polylog_integrand(void) {
                "10^-45");
 }
 
+/* ---- power-law phases: integrated in the phase variable ---- *
+ * Closed forms: Sin[1] - CosIntegral[1]; Gamma[4/3]/2 (= Gamma[1 + 1/n]
+ * Sin[Pi/(2n)], n = 3); int_0^1 x Cos[2/x^2] dx = int_2^oo Cos[t]/t^2 dt
+ * = Cos[2]/2 - Pi/2 + SinIntegral[2]. */
+static void test_phase_substitution(void) {
+    ASSERT_REL("NIntegrate[Sin[1/x], {x, 0, 1}]", "Sin[1] - CosIntegral[1]", "10^-8");
+    ASSERT_REL("NIntegrate[Sin[1/x], {x, 0, 1}, WorkingPrecision -> 40]",
+               "Sin[1] - CosIntegral[1]", "10^-28");
+    ASSERT_REL("NIntegrate[Sin[x^3], {x, 0, Infinity}]", "Gamma[4/3]/2", "10^-8");
+    ASSERT_REL("NIntegrate[Sin[x^3], {x, 0, Infinity}, WorkingPrecision -> 40]",
+               "Gamma[4/3]/2", "10^-28");
+    ASSERT_REL("NIntegrate[x Cos[2/x^2], {x, 0, 1}, WorkingPrecision -> 30]",
+               "Cos[2]/2 - Pi/2 + SinIntegral[2]", "10^-19");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -690,6 +705,7 @@ int main(void) {
     TEST(test_power_singularity);
     TEST(test_option_values_and_nonnumeric);
     TEST(test_polylog_integrand);
+    TEST(test_phase_substitution);
 
     printf("All nint_tests passed.\n");
     return 0;
