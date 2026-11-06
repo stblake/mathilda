@@ -23,6 +23,9 @@
 #include <stdio.h>
 #include <math.h>       /* isfinite — Outer's buffer path abandons on overflow */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "symtab.h"
+#include "attr.h"
+#include "compile/autocompile.h"   /* Outer: compiled cells */
 
 typedef struct {
     int64_t min;
@@ -2339,6 +2342,184 @@ static Expr* nd_outer2(const Expr* f, const Expr* a, const Expr* b) {
     return expr_new_ndarray_like(nd_present_src2(a, b), 2, dims, out, NDT_FLOAT64);
 }
 
+/* Outer[f, v1, ..., vk] of flat numeric vectors, f applied by compiled code.
+ *
+ * The generic path builds one f[a, b] node per output cell and evaluates it:
+ * for a kernel matrix Outer[K, pts, pts] with K[x_, y_] := E^(x + y + ...)
+ * that is a pattern match, a substitution and a symbolic Plus / Power per
+ * cell, ~10 us at machine precision and ~60 us at 20 digits (64 x 64: 40 ms /
+ * 260 ms).  When applying f is a pure substitution into a body -- a
+ * Function[{x, y}, body], or a symbol whose ONLY definition is
+ * f[x_, y_, ...] := body with plain distinct blanks -- the body is compiled
+ * once over those variables (autocompile: machine reals, or MPFR at the
+ * operands' common precision) and run per cell.  Same values as the
+ * interpreter evaluating the same body at the same precision; any cell the
+ * compiled code declines (non-finite, complex, non-numeric) is evaluated by
+ * the interpreter, and a body outside the compilable subset leaves the whole
+ * Outer on the generic path.
+ *
+ * Declined (generic path): a definition with any other rule, a condition,
+ * a typed or optional pattern, an Orderless / Flat head (argument order is
+ * then not the binding order), mixed machine / MPFR operands or MPFR
+ * operands of different precisions (the interpreter's per-operation
+ * precision would then differ from one fixed working precision), nested
+ * operands (the cells are then sub-lists), and level specifications. */
+
+/* The body and parameter symbols of f applied to `k` arguments, borrowed
+ * from f / its definition; false when application is not a substitution. */
+static bool outer_fn_body(const Expr* f, size_t k, const Expr** body,
+                          const Expr** vars)
+{
+    if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+        f->data.function.head->data.symbol.name == SYM_Function &&
+        f->data.function.arg_count == 2) {
+        const Expr* ps = f->data.function.args[0];
+        if (ps->type == EXPR_SYMBOL) {
+            if (k != 1) return false;
+            vars[0] = ps;
+        } else if (ps->type == EXPR_FUNCTION && ps->data.function.head->type == EXPR_SYMBOL &&
+                   ps->data.function.head->data.symbol.name == SYM_List &&
+                   ps->data.function.arg_count == k) {
+            for (size_t i = 0; i < k; i++) {
+                if (ps->data.function.args[i]->type != EXPR_SYMBOL) return false;
+                vars[i] = ps->data.function.args[i];
+            }
+        } else {
+            return false;
+        }
+        *body = f->data.function.args[1];
+    } else if (f->type == EXPR_SYMBOL) {
+        SymbolDef* def = symtab_lookup(f->data.symbol.name);
+        if (!def || def->builtin_func || !def->down_values || def->down_values->next)
+            return false;
+        if (def->attributes & (ATTR_ORDERLESS | ATTR_FLAT)) return false;
+        const Rule* r = def->down_values;
+        if (r->scoped_cond) return false;
+        const Expr* lhs = r->pattern;
+        if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+            lhs->data.function.head->data.symbol.name == SYM_HoldPattern &&
+            lhs->data.function.arg_count == 1)
+            lhs = lhs->data.function.args[0];
+        if (lhs->type != EXPR_FUNCTION || lhs->data.function.arg_count != k ||
+            lhs->data.function.head->type != EXPR_SYMBOL ||
+            lhs->data.function.head->data.symbol.name != f->data.symbol.name)
+            return false;
+        for (size_t i = 0; i < k; i++) {
+            const Expr* p = lhs->data.function.args[i];
+            if (p->type != EXPR_FUNCTION || p->data.function.arg_count != 2 ||
+                p->data.function.head->type != EXPR_SYMBOL ||
+                p->data.function.head->data.symbol.name != SYM_Pattern ||
+                p->data.function.args[0]->type != EXPR_SYMBOL)
+                return false;
+            const Expr* b = p->data.function.args[1];
+            if (b->type != EXPR_FUNCTION || b->data.function.arg_count != 0 ||
+                b->data.function.head->type != EXPR_SYMBOL ||
+                b->data.function.head->data.symbol.name != SYM_Blank)
+                return false;
+            vars[i] = p->data.function.args[0];
+        }
+        *body = r->replacement;
+        if ((*body)->type == EXPR_FUNCTION && (*body)->data.function.head->type == EXPR_SYMBOL &&
+            (*body)->data.function.head->data.symbol.name == SYM_Condition)
+            return false;
+    } else {
+        return false;
+    }
+    for (size_t i = 0; i < k; i++)
+        for (size_t j = 0; j < i; j++)
+            if (vars[i]->data.symbol.name == vars[j]->data.symbol.name) return false;
+    return true;
+}
+
+/* Nested List of the cells [off, off + prod dims) (row-major), adopting them. */
+static Expr* outer_nest(Expr** cells, const size_t* dims, size_t k, size_t* off)
+{
+    size_t n = dims[0];
+    Expr** el = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        el[i] = k == 1 ? cells[(*off)++] : outer_nest(cells, dims + 1, k - 1, off);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), el, n);
+    free(el);
+    return out;
+}
+
+#define OUTER_COMPILED_MAX_TENSORS 8
+
+static Expr* outer_compiled(Expr* f, Expr** tensors, size_t k)
+{
+    if (k == 0 || k > OUTER_COMPILED_MAX_TENSORS || !autocompile_enabled()) return NULL;
+    const Expr* body = NULL;
+    const Expr* vars[OUTER_COMPILED_MAX_TENSORS];
+    size_t dims[OUTER_COMPILED_MAX_TENSORS];
+    size_t total = 1;
+    /* operand class: 1 = machine reals, 2 = MPFR reals at one precision */
+    int cls = 0;
+    mpfr_prec_t bits = 0;
+    for (size_t t = 0; t < k; t++) {
+        const Expr* v = tensors[t];
+        if (v->type != EXPR_FUNCTION || v->data.function.head->type != EXPR_SYMBOL ||
+            v->data.function.head->data.symbol.name != SYM_List ||
+            v->data.function.arg_count == 0)
+            return NULL;
+        dims[t] = v->data.function.arg_count;
+        for (size_t i = 0; i < dims[t]; i++) {
+            const Expr* x = v->data.function.args[i];
+            int c = x->type == EXPR_REAL ? 1 :
+#ifdef USE_MPFR
+                    x->type == EXPR_MPFR ? 2 :
+#endif
+                    0;
+            if (c == 0 || (cls && c != cls)) return NULL;
+            cls = c;
+#ifdef USE_MPFR
+            if (c == 2) {
+                mpfr_prec_t p = mpfr_get_prec(x->data.mpfr);
+                if (bits && p != bits) return NULL;
+                bits = p;
+            }
+#endif
+        }
+        total *= dims[t];
+    }
+    /* a handful of cells is not worth a compilation */
+    if (total < 16 || !outer_fn_body(f, k, &body, vars)) return NULL;
+
+    AutoCompiled* ac = cls == 1 ? autocompile_new(body, vars, k)
+                                : autocompile_new_prec(body, vars, k, (long)bits);
+    if (!ac) return NULL;
+
+    Expr** cells = (Expr**)malloc(sizeof(Expr*) * total);
+    size_t idx[OUTER_COMPILED_MAX_TENSORS] = {0};
+    double xs[OUTER_COMPILED_MAX_TENSORS];
+    const Expr* xe[OUTER_COMPILED_MAX_TENSORS];
+    for (size_t c = 0; c < total; c++) {
+        for (size_t t = 0; t < k; t++) {
+            xe[t] = tensors[t]->data.function.args[idx[t]];
+            if (cls == 1) xs[t] = xe[t]->data.real;
+        }
+        Expr* y = cls == 1 ? autocompiled_eval_boxed(ac, xs) : autocompiled_eval_mpfr(ac, xe);
+        if (!y) {
+            /* this cell on the interpreter: whatever f gives there */
+            Expr** a = (Expr**)malloc(sizeof(Expr*) * k);
+            for (size_t t = 0; t < k; t++) a[t] = expr_copy((Expr*)xe[t]);
+            Expr* call = expr_new_function(expr_copy(f), a, k);
+            free(a);
+            y = evaluate(call);
+            expr_free(call);
+        }
+        cells[c] = y;
+        for (size_t t = k; t-- > 0;) {        /* odometer, last index fastest */
+            if (++idx[t] < dims[t]) break;
+            idx[t] = 0;
+        }
+    }
+    autocompiled_free(ac);
+    size_t off = 0;
+    Expr* out = outer_nest(cells, dims, k, &off);
+    free(cells);
+    return out;
+}
+
 Expr* builtin_outer(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -2397,7 +2578,12 @@ Expr* builtin_outer(Expr* res) {
     }
     
     Expr** tensors = &res->data.function.args[1];
-    
+
+    if (num_depths == 0) {
+        Expr* fast = outer_compiled(f, tensors, num_tensors);
+        if (fast) return fast;
+    }
+
     int64_t* target_depths = malloc(sizeof(int64_t) * num_tensors);
     for (size_t i = 0; i < num_tensors; i++) target_depths[i] = INT64_MAX;
 
