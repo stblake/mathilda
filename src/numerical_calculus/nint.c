@@ -2495,27 +2495,66 @@ static Expr* ni_ev(const char* head, Expr** args, size_t n, const char* var);
 static Expr* ni_ev2(const char* head, Expr* a, Expr* b, const char* var);
 static bool ni_free_of_var(const Expr* e, const char* var) { return !levin_occurs(e, var); }
 
+/* Degree of u as a polynomial in var with numeric coefficients, read off the
+ * tree (sums, products, non-negative integer powers, numbers and the numeric
+ * constants), or -1 when u is not one.  A structural test, so the singular
+ * point scans cost no evaluation unless a root is actually sought. */
+static int ni_numeric_poly_degree(const Expr* u, const char* var) {
+    if (!u) return -1;
+    switch (u->type) {
+    case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_MPFR: return 0;
+    case EXPR_SYMBOL: {
+        const char* n = u->data.symbol.name;
+        if (n == var) return 1;
+        return (n == SYM_Pi || n == SYM_E || n == SYM_I || n == SYM_EulerGamma
+                || n == SYM_Catalan || n == SYM_GoldenRatio || n == SYM_Degree) ? 0 : -1;
+    }
+    case EXPR_FUNCTION: break;
+    default: return -1;
+    }
+    const Expr* hd = u->data.function.head;
+    if (hd->type != EXPR_SYMBOL) return -1;
+    const char* h = hd->data.symbol.name;
+    size_t n = u->data.function.arg_count;
+    if (h == SYM_Rational || h == SYM_Complex) return 0;
+    if (h == SYM_Plus || h == SYM_Times) {
+        int d = 0;
+        for (size_t i = 0; i < n; i++) {
+            int di = ni_numeric_poly_degree(u->data.function.args[i], var);
+            if (di < 0) return -1;
+            d = (h == SYM_Plus) ? (di > d ? di : d) : d + di;
+            if (d > 4 * NI_SING_MAX_DEGREE) return -1;
+        }
+        return d;
+    }
+    if (h == SYM_Power && n == 2) {
+        const Expr* b = u->data.function.args[0];
+        const Expr* e = u->data.function.args[1];
+        if (ni_free_of_var(b, var) && ni_free_of_var(e, var))
+            return (ni_numeric_poly_degree(b, var) == 0 && ni_numeric_poly_degree(e, var) == 0)
+                   ? 0 : -1;                        /* a numeric constant, e.g. 2^(1/3) */
+        if (e->type != EXPR_INTEGER || e->data.integer < 0 || e->data.integer > NI_SING_MAX_DEGREE)
+            return -1;
+        int db = ni_numeric_poly_degree(b, var);
+        return db < 0 ? -1 : db * (int)e->data.integer;
+    }
+    if (ni_free_of_var(u, var)) {
+        /* Sqrt[2] is Power; anything else free of var must be a numeric function
+         * of numeric constants (Log[2], Sin[1]) */
+        for (size_t i = 0; i < n; i++)
+            if (ni_numeric_poly_degree(u->data.function.args[i], var) != 0) return -1;
+        return 0;
+    }
+    return -1;
+}
+
 typedef struct { double maxre; bool ok; const char* var; int nroots; } NiRotScan;
 
 static void ni_rot_poly_roots(Expr* u, NiRotScan* sc, double a) {
     const char* var = sc->var;
-    Expr* pq = ni_ev(SYM_PolynomialQ, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
-    bool poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
-    expr_free(pq);
-    if (poly) {
-        Expr* dg = ni_ev(SYM_Exponent, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
-        poly = dg && dg->type == EXPR_INTEGER && dg->data.integer >= 0
-               && dg->data.integer <= NI_SING_MAX_DEGREE;
-        bool constant = dg && dg->type == EXPR_INTEGER && dg->data.integer == 0;
-        expr_free(dg);
-        if (constant) return;
-    }
-    if (poly) {
-        Expr* vs = ni_ev(SYM_Variables, (Expr*[]){ expr_copy(u) }, 1, var);
-        poly = vs && vs->type == EXPR_FUNCTION && vs->data.function.arg_count == 1;
-        expr_free(vs);
-    }
-    if (!poly) { sc->ok = false; return; }
+    int deg = ni_numeric_poly_degree(u, var);
+    if (deg == 0) return;
+    if (deg < 0 || deg > NI_SING_MAX_DEGREE) { sc->ok = false; return; }
     Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                                  (Expr*[]){ expr_copy(u), expr_new_integer(0) }, 2);
     Expr* sol = ni_ev(SYM_Solve, (Expr*[]){ eq, expr_new_symbol(var) }, 2, var);
@@ -3668,6 +3707,42 @@ static void ni_sing_collect(const Expr* e, const char* var, Expr** us, int* nu) 
     for (size_t i = 0; i < n; i++) ni_sing_collect(e->data.function.args[i], var, us, nu);
 }
 
+/* Screen before the exact Solve: false only when the linear or quadratic u
+ * certainly has no real root in [a, b] (the common 1/(c + x^2), Log[x - c]
+ * with c outside), read off its coefficients from three machine values; any
+ * doubt, or a higher degree, answers true. */
+static bool ni_poly_may_vanish_on(Expr* u, const char* var, int deg, double a, double b) {
+    if (deg > 2) return true;
+    double v[3];
+    const double xs[3] = { 0.0, 1.0, -1.0 };
+    for (int i = 0; i < 3; i++) {
+        Expr* r = ni_ev(SYM_ReplaceAll, (Expr*[]){ expr_copy(u),
+                        expr_new_function(expr_new_symbol(SYM_Rule),
+                                          (Expr*[]){ expr_new_symbol(var),
+                                                     expr_new_integer((int64_t)xs[i]) }, 2) },
+                        2, var);
+        Expr* num = r ? numericalize(r, numeric_machine_spec()) : NULL;
+        expr_free(r);
+        bool ok = num && ni_to_double_real(num, &v[i]) && isfinite(v[i]);
+        expr_free(num);
+        if (!ok) return true;                 /* complex coefficients etc. */
+    }
+    double c0 = v[0], c1 = 0.5 * (v[1] - v[2]), c2 = 0.5 * (v[1] + v[2]) - v[0];
+    double scale = fabs(c0) + fabs(c1) + fabs(c2);
+    if (!(scale > 0.0)) return true;
+    double tol = 1e-8 * (1.0 + fabs(a) + fabs(b));
+    if (deg == 1 || fabs(c2) <= 1e-12 * scale) {
+        if (fabs(c1) <= 1e-12 * scale) return true;
+        double r = -c0 / c1;
+        return r >= a - tol && r <= b + tol;
+    }
+    double disc = c1 * c1 - 4.0 * c2 * c0;
+    if (disc < -1e-8 * (c1 * c1 + fabs(4.0 * c2 * c0))) return false;   /* complex pair */
+    double sq = sqrt(disc > 0.0 ? disc : 0.0);
+    double r1 = (-c1 - sq) / (2.0 * c2), r2 = (-c1 + sq) / (2.0 * c2);
+    return (r1 >= a - tol && r1 <= b + tol) || (r2 >= a - tol && r2 <= b + tol);
+}
+
 /* Exact real roots in (a, b) of the polynomial factors of the integrand's
  * singular arguments, sorted, appended to roots[] (owned) with their doubles. */
 static int ni_interior_singular_points(Expr* body, const char* var, double a, double b,
@@ -3677,22 +3752,10 @@ static int ni_interior_singular_points(Expr* body, const char* var, double a, do
     ni_sing_collect(body, var, us, &nu);
     for (int i = 0; i < nu; i++) {
         Expr* u = us[i];
-        Expr* pq = ni_ev(SYM_PolynomialQ, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
-        bool poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
-        expr_free(pq);
-        if (poly) {
-            Expr* dg = ni_ev(SYM_Exponent, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
-            poly = dg && dg->type == EXPR_INTEGER && dg->data.integer >= 1
-                   && dg->data.integer <= NI_SING_MAX_DEGREE;
-            expr_free(dg);
-        }
         /* numeric coefficients only: the roots must be numbers */
-        if (poly) {
-            Expr* vs = ni_ev(SYM_Variables, (Expr*[]){ expr_copy(u) }, 1, var);
-            poly = vs && vs->type == EXPR_FUNCTION && vs->data.function.arg_count == 1;
-            expr_free(vs);
-        }
-        if (!poly) continue;
+        int deg = ni_numeric_poly_degree(u, var);
+        if (deg < 1 || deg > NI_SING_MAX_DEGREE) continue;
+        if (!ni_poly_may_vanish_on(u, var, deg, a, b)) continue;
         Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                                      (Expr*[]){ expr_copy(u), expr_new_integer(0) }, 2);
         Expr* sol = ni_ev(SYM_Solve, (Expr*[]){ eq, expr_new_symbol(var),
