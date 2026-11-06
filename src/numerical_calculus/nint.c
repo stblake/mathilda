@@ -19,6 +19,7 @@
 #include "gkadapt.h"
 #include "denint.h"
 #include "dequad.h"
+#include "nc_phase.h"      /* linear-phase groups, Bessel -> Hankel */
 #include "oscint.h"
 #include "oscde.h"
 #include "mcint.h"
@@ -1354,7 +1355,14 @@ static bool ni_fourier_detect(const Expr* body, const char* var,
     bool ok = levin_detect_kernel(fb, var, &k, &g, &amp);
     expr_free(fb);
     if (!ok) return false;
+    /* The rule's nodes sit on the zeros of the one kernel, which presumes an
+     * amplitude that does not oscillate itself: BesselJ[0, x] Cos[x/2] (two
+     * frequencies) ground through every level, 26 s at 30 digits, before
+     * failing.  Such an integrand is a sum of phase groups for the contour
+     * rotation instead. */
+    bool amp_osc = amp && nc_has_phase(amp, var);
     expr_free(amp);
+    if (amp_osc) { expr_free(g); return false; }
     if (k != LEVIN_KERNEL_SIN && k != LEVIN_KERNEL_COS) { expr_free(g); return false; }
 
     /* ω = d g / d var must be a nonzero real constant (linear phase). */
@@ -2362,6 +2370,256 @@ static Expr* ni_run_ray(Expr* body, const char* var, double _Complex z0,
 /* Semi-infinite range via exp-sinh.  `a` is the half-line lower limit in the
  * sampling variable; reflect=true binds the integrand variable to -u (mapping a
  * (-∞, b] range onto [-b, ∞)); the overall result is multiplied by `sign`. */
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  Oscillatory half lines at WorkingPrecision: contour rotation       *
+ * ------------------------------------------------------------------ *
+ *
+ * An integrand on [a, oo) that is a finite sum of linear-phase groups,
+ *     f(x) = sum_j A_j(x) e^(lam_j x),  A_j non-oscillatory,
+ * (Sin, Cos and complex exponentials through TrigToExp; BesselJ and BesselY
+ * through the scaled Hankel functions, nc_phase.c) is integrated without
+ * resolving a single oscillation.  Beyond a base point X0 every group with
+ * Im lam != 0 is moved onto the vertical ray X0 + i s t, s = sign(Im lam),
+ * where its factor e^(lam x) decays like e^(-|Im lam| t):
+ *     int_X0^oo A e^(lam x) dx = i s int_0^oo A(X0 + i s t) e^(lam (X0 + i s t)) dt,
+ * exact by Cauchy's theorem when A is analytic and of sub-exponential growth in
+ * the quarter plane Re x >= X0, s Im x >= 0.  A group with Im lam = 0 stays on
+ * the real axis; [a, X0] is an ordinary finite integral of f.
+ *
+ * Partial-sum extrapolation between the zeros, the previous route, has no
+ * model for several frequencies at once: J_0(x) Cos[x/2] (frequencies 1/2 and
+ * 3/2) ran past 100 s at 30 digits; and on a single frequency it stopped near
+ * 21 digits.  On the rotated rays exp-sinh converges double-exponentially.
+ *
+ * Analyticity is established, not assumed: each amplitude may contain only
+ * sums, products, the placeholder Bessel K of a linear argument, and powers and
+ * logarithms whose base is a numeric constant or a polynomial in x (or a
+ * non-negative integer power of an allowed expression).  The polynomials' roots
+ * (all of them, complex ones included) are the only possible singularities;
+ * X0 is placed to the right of every one, and an integrand with such a root on
+ * the real axis inside the range is left to the other rules. */
+#define NI_ROT_MAX_GROUPS 16
+#define NI_SING_MAX_DEGREE 24   /* polynomial singular arguments (also below) */
+
+static Expr* ni_ev(const char* head, Expr** args, size_t n, const char* var);
+static Expr* ni_ev2(const char* head, Expr* a, Expr* b, const char* var);
+static bool ni_free_of_var(const Expr* e, const char* var) { return !levin_occurs(e, var); }
+
+typedef struct { double maxre; bool ok; const char* var; int nroots; } NiRotScan;
+
+static void ni_rot_poly_roots(Expr* u, NiRotScan* sc, double a) {
+    const char* var = sc->var;
+    Expr* pq = ni_ev(SYM_PolynomialQ, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
+    bool poly = pq && pq->type == EXPR_SYMBOL && pq->data.symbol.name == SYM_True;
+    expr_free(pq);
+    if (poly) {
+        Expr* dg = ni_ev(SYM_Exponent, (Expr*[]){ expr_copy(u), expr_new_symbol(var) }, 2, var);
+        poly = dg && dg->type == EXPR_INTEGER && dg->data.integer >= 0
+               && dg->data.integer <= NI_SING_MAX_DEGREE;
+        bool constant = dg && dg->type == EXPR_INTEGER && dg->data.integer == 0;
+        expr_free(dg);
+        if (constant) return;
+    }
+    if (poly) {
+        Expr* vs = ni_ev(SYM_Variables, (Expr*[]){ expr_copy(u) }, 1, var);
+        poly = vs && vs->type == EXPR_FUNCTION && vs->data.function.arg_count == 1;
+        expr_free(vs);
+    }
+    if (!poly) { sc->ok = false; return; }
+    Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                                 (Expr*[]){ expr_copy(u), expr_new_integer(0) }, 2);
+    Expr* sol = ni_ev(SYM_Solve, (Expr*[]){ eq, expr_new_symbol(var) }, 2, var);
+    if (!sol || sol->type != EXPR_FUNCTION || sol->data.function.head->type != EXPR_SYMBOL
+        || sol->data.function.head->data.symbol.name != SYM_List) {
+        expr_free(sol); sc->ok = false; return;
+    }
+    for (size_t j = 0; j < sol->data.function.arg_count && sc->ok; j++) {
+        Expr* rs = sol->data.function.args[j];
+        Expr* r = (rs->type == EXPR_FUNCTION && rs->data.function.arg_count == 1)
+                  ? rs->data.function.args[0] : NULL;
+        if (!r || r->type != EXPR_FUNCTION || r->data.function.arg_count != 2) { sc->ok = false; break; }
+        Expr* num = numericalize(r->data.function.args[1], numeric_machine_spec());
+        double _Complex z;
+        if (!num || !ni_to_complex(num, &z)) sc->ok = false;
+        else {
+            /* a real singularity on the path itself: not this method's */
+            if (fabs(cimag(z)) <= 1e-12 * (1.0 + fabs(creal(z))) && creal(z) > a) sc->ok = false;
+            if (creal(z) > sc->maxre) sc->maxre = creal(z);
+            sc->nroots++;
+        }
+        expr_free(num);
+    }
+    expr_free(sol);
+}
+
+/* Walk an amplitude: every head must be in the analytic whitelist. */
+static void ni_rot_scan(Expr* e, NiRotScan* sc, double a) {
+    if (!sc->ok || !e) return;
+    if (e->type != EXPR_FUNCTION) return;            /* numbers and symbols */
+    if (ni_free_of_var(e, sc->var)) return;         /* a constant subexpression */
+    const Expr* hd = e->data.function.head;
+    if (hd->type != EXPR_SYMBOL) { sc->ok = false; return; }
+    const char* h = hd->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Plus || h == SYM_Times) {
+        for (size_t i = 0; i < n; i++) ni_rot_scan(e->data.function.args[i], sc, a);
+        return;
+    }
+    if (h == SYM_Power && n == 2) {
+        Expr* b = e->data.function.args[0];
+        Expr* p = e->data.function.args[1];
+        if (!ni_free_of_var(p, sc->var)) {
+            /* b^(var-dependent): only a constant base, e^(g x) with g analytic */
+            if (!ni_free_of_var(b, sc->var)) { sc->ok = false; return; }
+            ni_rot_scan(p, sc, a);
+            return;
+        }
+        if (p->type == EXPR_INTEGER && p->data.integer >= 0) { ni_rot_scan(b, sc, a); return; }
+        ni_rot_poly_roots(b, sc, a);
+        return;
+    }
+    if (h == SYM_Log && n == 1) { ni_rot_poly_roots(e->data.function.args[0], sc, a); return; }
+    if (h == SYM_BesselK && n == 2 && ni_free_of_var(e->data.function.args[0], sc->var)) {
+        /* K_nu(w): branch point at w = 0 only; w is linear here */
+        ni_rot_poly_roots(e->data.function.args[1], sc, a);
+        return;
+    }
+    sc->ok = false;
+}
+
+/* int over the ray X0 + i s t (s = +-1) of A e^(lam x), or, for s = 0, over the
+ * real half line [X0, oo), at the working precision; adds into (re, im). */
+static bool ni_rot_ray(NiBind* bind, const char* var, Expr* A, Expr* lam, int64_t X0, int s,
+                       const NiOpts* o, mpfr_t re, mpfr_t im, double* err) {
+    ni_bind_clear_temp(symtab_get_def(var));
+    Expr* X0e = expr_new_integer(X0);
+    Expr* z = s ? ni_ev2(SYM_Plus, expr_copy(X0e),
+                         ni_ev2(SYM_Times, expr_new_integer(s),
+                                ni_ev2(SYM_Times, expr_new_symbol(SYM_I), expr_new_symbol(var), var),
+                                var), var)
+                : ni_ev2(SYM_Plus, expr_copy(X0e), expr_new_symbol(var), var);
+    expr_free(X0e);
+    Expr* Az = ni_ev(SYM_ReplaceAll, (Expr*[]){ expr_copy(A),
+                     expr_new_function(expr_new_symbol(SYM_Rule),
+                                       (Expr*[]){ expr_new_symbol(var), expr_copy(z) }, 2) },
+                     2, var);
+    Expr* ph = ni_ev2(SYM_Power, expr_new_symbol(SYM_E), ni_ev2(SYM_Times, expr_copy(lam), z, var), var);
+    Expr* G = ni_ev2(SYM_Times, Az, ph, var);
+    if (s) G = ni_ev2(SYM_Times, ni_ev2(SYM_Times, expr_new_integer(s), expr_new_symbol(SYM_I), var),
+                      G, var);
+    if (!G) return false;
+    NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = o->bits;
+    NiCtx gc;
+    ni_ctx_init(&gc, G, bind, sp);
+    gc.ac_enabled = true;
+    mpfr_t a0, rr, ri;
+    mpfr_inits2(o->bits, a0, rr, ri, (mpfr_ptr)0);
+    mpfr_set_zero(a0, 1);
+    double e = INFINITY;
+    bool conv = dequad_halfline_mpfr(ni_sample_mpfr, &gc, a0, o->bits, ni_mpfr_reltol(o) * 1e-2,
+                                     ni_mpfr_levels(o), rr, ri, &e);
+    bool ok = mpfr_number_p(rr) && mpfr_number_p(ri);
+    if (ok) {
+        mpfr_add(re, re, rr, MPFR_RNDN);
+        mpfr_add(im, im, ri, MPFR_RNDN);
+        *err += e;
+    }
+    mpfr_clears(a0, rr, ri, (mpfr_ptr)0);
+    autocompiled_free(gc.ac);
+    autocompiled_free(gc.ac_prec);
+    expr_free(G);
+    return ok && conv;
+}
+
+/* Returns true with (re, im, *abserr) set when the rotation applied and
+ * converged; false (nothing usable written) otherwise.  ctx is the half-line
+ * context (affine, unreflected), bind its variable frame. */
+static bool ni_try_rotated_halfline_mpfr(NiCtx* ctx, NiBind* bind, Expr* body, const char* var,
+                                         double a, const NiOpts* o,
+                                         mpfr_t re, mpfr_t im, double* abserr) {
+    if (!nc_has_phase(body, var)) return false;
+    ni_bind_clear_temp(symtab_get_def(var));
+    double nchk = (a > 0.0 ? a : 0.0) + 1.0;
+    bool bad = false;
+    Expr* hk = nc_bessel_to_hankel(body, var, nchk, &bad);
+    if (bad || !hk) { expr_free(hk); return false; }
+    Expr* ex = ni_ev(SYM_Expand, (Expr*[]){ ni_ev(SYM_TrigToExp, (Expr*[]){ hk }, 1, var) }, 1, var);
+    if (!ex) return false;
+    Expr* lams[NI_ROT_MAX_GROUPS];
+    double _Complex lamd[NI_ROT_MAX_GROUPS];
+    Expr* amps[NI_ROT_MAX_GROUPS];
+    int ng = 0;
+    bool ok = true;
+    Expr* const* ts; Expr* one[1]; size_t nt;
+    if (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL
+        && ex->data.function.head->data.symbol.name == SYM_Plus) {
+        ts = ex->data.function.args; nt = ex->data.function.arg_count;
+    } else { one[0] = ex; ts = one; nt = 1; }
+    for (size_t i = 0; i < nt && ok; i++) {
+        Expr* lam = NULL;
+        Expr* f = nc_strip_phase(ts[i], var, &lam);
+        double _Complex ld = 0.0;
+        Expr* ln = lam ? numericalize(lam, numeric_machine_spec()) : NULL;
+        bool lok = ln && ni_to_complex(ln, &ld);
+        expr_free(ln);
+        if (!f || !lok || creal(ld) > 1e-12) { expr_free(f); expr_free(lam); ok = false; break; }
+        int j = 0;
+        for (; j < ng; j++) if (cabs(lamd[j] - ld) <= 1e-12 * (1.0 + cabs(ld))) break;
+        if (j == ng) {
+            if (ng == NI_ROT_MAX_GROUPS) { expr_free(f); expr_free(lam); ok = false; break; }
+            lams[ng] = lam; lamd[ng] = ld; amps[ng] = f; ng++;
+        } else {
+            expr_free(lam);
+            amps[j] = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ amps[j], f }, 2);
+        }
+    }
+    expr_free(ex);
+    int nosc = 0;
+    NiRotScan sc; sc.maxre = -INFINITY; sc.ok = ok; sc.var = var; sc.nroots = 0;
+    for (int j = 0; j < ng && sc.ok; j++) {
+        Expr* ae = nc_hankel_expand(amps[j]);
+        expr_free(amps[j]);
+        amps[j] = ni_ev(SYM_Together, (Expr*[]){ ae }, 1, var);  /* poles show as denominators */
+        if (!amps[j]) { sc.ok = false; break; }
+        ni_rot_scan(amps[j], &sc, a);
+        if (fabs(cimag(lamd[j])) > 1e-12) nosc++;
+    }
+    bool done = false;
+    if (sc.ok && nosc > 0) {
+        double x0 = a + 1.0;
+        if (isfinite(sc.maxre) && sc.maxre + 1.0 > x0) x0 = sc.maxre + 1.0;
+        if (x0 < nchk) x0 = nchk;
+        int64_t X0 = (int64_t)ceil(x0);
+        long bits = o->bits;
+        mpfr_t tr, ti, pr, pi;
+        mpfr_inits2(bits, tr, ti, pr, pi, (mpfr_ptr)0);
+        mpfr_set_zero(tr, 1); mpfr_set_zero(ti, 1);
+        double err = 0.0;
+        bool all = true;
+        /* [a, X0]: the integrand itself */
+        if ((double)X0 > a) {
+            double ferr = 0.0;
+            if (!ni_mpfr_finite(ctx, a, (double)X0, o, pr, pi, &ferr)) all = false;
+            if (!mpfr_number_p(pr) || !mpfr_number_p(pi)) all = false;
+            else { mpfr_add(tr, tr, pr, MPFR_RNDN); mpfr_add(ti, ti, pi, MPFR_RNDN); err += ferr; }
+        }
+        for (int j = 0; j < ng && all; j++) {
+            int s = cimag(lamd[j]) > 1e-12 ? 1 : cimag(lamd[j]) < -1e-12 ? -1 : 0;
+            if (!ni_rot_ray(bind, var, amps[j], lams[j], X0, s, o, tr, ti, &err)) all = false;
+        }
+        if (all) {
+            mpfr_set(re, tr, MPFR_RNDN); mpfr_set(im, ti, MPFR_RNDN);
+            *abserr = err;
+            done = true;
+        }
+        mpfr_clears(tr, ti, pr, pi, (mpfr_ptr)0);
+    }
+    for (int j = 0; j < ng; j++) { expr_free(lams[j]); expr_free(amps[j]); }
+    return done;
+}
+#endif /* USE_MPFR */
+
 static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
                                 bool reflect, double sign, const NiOpts* o) {
     NiBind bind;
@@ -2400,6 +2658,10 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
                 conv = oscde_fourier_mpfr(ni_sample_mpfr, &ctx, fomega, fkind,
                                           bits, mreltol, 16, re, im, &abserr);
         }
+        /* Any other sum of linear-phase groups (several frequencies, Bessel
+         * factors): rotate each group off the real axis. */
+        if (!conv && o->method == NI_AUTO && !reflect)
+            conv = ni_try_rotated_halfline_mpfr(&ctx, &bind, body, var, a, o, re, im, &abserr);
 
         /* A narrow or far-off-centre feature (exp(-x^2 - b/x^2), x^n e^-x,
          * a Lorentzian peak): the exp-sinh rule recentred on it (denint.h). */
@@ -3197,12 +3459,9 @@ static bool ni_check_numeric(Expr* body, const char* var, double a, double b) {
  * roots are kept exact (Sqrt[2], Root objects), so the MPFR endpoint of each
  * piece is the singular point to the working precision (ni_endpoint_mpfr). */
 #define NI_SING_MAX 32
-#define NI_SING_MAX_DEGREE 24
 
 #ifdef USE_MPFR
 
-static Expr* ni_ev(const char* head, Expr** args, size_t n, const char* var);
-static bool ni_free_of_var(const Expr* e, const char* var) { return !levin_occurs(e, var); }
 
 static void ni_sing_collect(const Expr* e, const char* var, Expr** us, int* nu) {
     if (!e || e->type != EXPR_FUNCTION || *nu >= NI_SING_MAX) return;

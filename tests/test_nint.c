@@ -832,6 +832,27 @@ static void test_tiny_integrand_scale(void) {
     ASSERT_CLOSE("NIntegrate[Sin[x], {x, 0, 2 Pi}]", "0", 1e-12);
 }
 
+/* Oscillatory half lines at WorkingPrecision with several frequencies or a
+ * Bessel factor: each linear-phase group is rotated off the real axis.
+ * Closed forms (Weber / Sonine): int_0^oo J_0(x) cos(b x) = (1 - b^2)^(-1/2)
+ * for b < 1, int_0^oo J_0(x) sin(b x) = (b^2 - 1)^(-1/2) for b > 1,
+ * int_0^oo J_0 = int_0^oo J_1(x)/x = 1, int_0^oo sin x cos(b x)/x = Pi/2 for
+ * |b| < 1.  J_0(x) Cos[x/2] took 26 s in the Fourier rule (its amplitude
+ * oscillates) and more than 100 s between the zeros before. */
+static void test_rotated_halfline_wp(void) {
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, x] Cos[x/2], {x, 0, Infinity}, WorkingPrecision -> 30]",
+                 "2/Sqrt[3]", 1e-24);
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, x] Sin[2 x], {x, 0, Infinity}, WorkingPrecision -> 30]",
+                 "1/Sqrt[3]", 1e-24);
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, x], {x, 0, Infinity}, WorkingPrecision -> 30]",
+                 "1", 1e-24);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1, x]/x, {x, 0, Infinity}, WorkingPrecision -> 30]",
+                 "1", 1e-24);
+    ASSERT_CLOSE("NIntegrate[Sin[x] Cos[x/2]/x, {x, 0, Infinity}, WorkingPrecision -> 30]",
+                 "Pi/2", 1e-24);
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, x] Cos[x/2], {x, 0, Infinity}]", "2/Sqrt[3]", 1e-7);
+}
+
 static void test_symbolic_swell(void) {
     /* Symbolic processing that swells the integrand is not used when the held
      * integrand samples numerically.  Expanding LegendreP[200, x]^2 gives a
@@ -905,6 +926,7 @@ int main(void) {
     TEST(test_endpoint_cancellation_wp);
     TEST(test_interior_singular_points_wp);
     TEST(test_tiny_integrand_scale);
+    TEST(test_rotated_halfline_wp);
 
     printf("All nint_tests passed.\n");
     return 0;
