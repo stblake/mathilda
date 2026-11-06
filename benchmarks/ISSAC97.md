@@ -124,7 +124,7 @@ argument/option handling, then absences, then bottlenecks.
 | W7 | machine complex powers past the double range give `Overflow[]` (`(1.0 + 2.0 I)^1000`) where machine reals switch to MPFR; NIntegrate now escalates around it (P4) | open |
 | W8 | the half-line Fourier probe rewrote the integrand in place (`Exp[-x^2]` -> `Power[E, -1, x^2]`): every WP integral over [0, oo) wrong (found via P2) | **fixed v0.6234** |
 | W9 | MPFR endpoints taken as doubles (`2 Pi` off by 2.4e-16); one-sided tail cut before a climbing side's bulk (`(1 + Cos[x])^2000` lost half) (found via P4) | **fixed v0.6235** |
-| W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | open (agent) |
+| W10 | `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> "FromBelow"]` = 2 I Pi (true 0); two-sided gives Indeterminate (found via P8) | **fixed v0.6249** |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
@@ -145,17 +145,17 @@ argument/option handling, then absences, then bottlenecks.
 | # | deficiency | status |
 |---|---|---|
 | X1 | `Integrate` of polynomial × PolyLog[3, rational function of x], definite and indefinite (P8) | **fixed v0.6237** (0.05-0.28 s per row; v0.6238 complex values, v0.6239 FunctionExpand) |
-| X2 | `Limit` of P7 (needs a series-based quotient limit with deep cancellation; the baseline also fails) | open |
+| X2 | `Limit` of P7 (needs a series-based quotient limit with deep cancellation; the baseline also fails) | **fixed v0.6248 (~0.3 s)** |
 | X3 | `LUBackSubstitution` (P1 m3) | **fixed v0.6241** |
-| X4 | `GaussianQuadratureWeights` (P9 m1, verbatim) | open |
-| X5 | `FunctionInterpolation` (P9 m2) | open |
+| X4 | `GaussianQuadratureWeights` (P9 m1, verbatim) | **fixed v0.6243** |
+| X5 | `FunctionInterpolation` (P9 m2) | **fixed v0.6244 (m2 needs NIntegrate to evaluate option values: open)** |
 
 ### Bottlenecks
 | # | deficiency | Mathilda | baseline | status |
 |---|---|---|---|---|
-| B1 | `Residue[p/x^3001, {x, 0}]` of a polynomial (P4) | 176 s | 4.0 s | open |
-| B2 | `Series` of a product of polynomial powers to order 3000 (P4) | 29.2 s | 1.6 s | open |
-| B3 | `Series` of nested Sin/Tan/Sinh/Tanh compositions to order 25 (P7) | 1.8–2.5 s | 0.6–1.9 s | open |
+| B1 | `Residue[p/x^3001, {x, 0}]` of a polynomial (P4) | 176 s | 4.0 s | **fixed v0.6247 (176 s -> ~0.24 s)** |
+| B2 | `Series` of a product of polynomial powers to order 3000 (P4) | 29.2 s | 1.6 s | **fixed v0.6246 (29 s -> ~0.15 s)** |
+| B3 | `Series` of nested Sin/Tan/Sinh/Tanh compositions to order 25 (P7) | 1.8–2.5 s | 0.6–1.9 s | **fixed v0.6246 (~2 s -> ~30 ms)** |
 | B4 | 800-digit 256 × 256 Dot (power method) (P1 m2) | 11.1 s | 7.9 s | **fixed v0.6242 (800-digit power method 11.1 s -> ~3 s)** |
 | B5 | MPFR Eigenvalues at 20–40 digits, 64 × 64 nonsymmetric (P9 Nyström) | 640 ms | 323 ms | open |
 | B6 | contour NIntegrate of L'_1000/L_1000 at 100 digits (P5 RootCount): the integrand is evaluated symbolically once, which expands LaguerreL[1000, rho E^(I phi)] into its degree-1000 polynomial (~93 ms and ~250 digits of cancellation per sample); needs sampling of the unexpanded form or precision-loss detection | > 120 s | unevaluated (same expansion) | open |
@@ -180,10 +180,10 @@ The holdout ([`ISSAC97_HOLDOUT.md`](ISSAC97_HOLDOUT.md)) at v0.6225: 127 AHEAD,
 |---|---|---|
 | NIntegrate | h2.3 machine + wp40 (70 s), h2.7 wp40 timeout, h2.8 (neither), h2.9 wp40 x^1000 E^-x wrong | open (NIntegrate agent) |
 | NSum | h3.2, h3.4, h3.6, h3.7, h3.8 machine wrong; h3.2/3.4/3.7/3.8 wp30 timeouts | open |
-| SeriesCoefficient / Residue | h4.4, h4.8, h4.9 (Tan, k = 401) wrong; h4.5 Residue timeout; h4.10 Residue wrong | open (Series agent; the 64-term inversion fix is not yet on main) |
+| SeriesCoefficient / Residue | h4.4, h4.8, h4.9 (Tan, k = 401) wrong; h4.5 Residue timeout; h4.10 Residue wrong | **fixed v0.6245–v0.6247** (all correct; h4.8 283 ms vs 106 ms still SLOWER) |
 | FindRoot / special functions | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | open |
 | NSolve | h6.5, h6.7 machine: solutions missing | open (NSolve agent) |
-| Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | open (Series agent) |
+| Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | **fixed v0.6248** (h7.2 4096/729, h7.3 9765625/1048576, h7.10 1/64; the h7.3 machine point was the baseline wrong) |
 | N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | open |
 | Integrate | h8.5, h8.8 unevaluated | open |
 | eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
