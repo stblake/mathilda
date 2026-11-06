@@ -18,6 +18,17 @@
  * evaluate() folds even zetas (Zeta[6] -> Pi^6/945) while odd zetas stay
  * symbolic.  s may be a symbol or a number; it must be free of k.
  *
+ * Convergence.  Each identity holds only where the series converges.  For a
+ * numeric s the series is required to converge absolutely, Re s > sigma_a:
+ * sigma_a = 1 for mu, |mu|, mu^2, lambda, d and d^2; 2 for phi; 1 + max(0, Re a)
+ * for sigma_a.  Outside that half-plane the zeta ratio is the analytic
+ * continuation, not the sum (EulerPhi[k]/k^(3/2) diverges, while
+ * Zeta[1/2]/Zeta[3/2] is a finite negative number), so the stage declines.  The
+ * one boundary point kept is s = 1 for mu and lambda, where the series
+ * converges conditionally to 0 (the prime number theorem), which 1/Zeta[1] and
+ * Zeta[2]/Zeta[1] evaluate to.  A symbolic s keeps the closed form, valid on
+ * the convergence region.
+ *
  * Placed before Sum`Rational in the cascade: these summands carry a
  * non-polynomial factor, so Sum`Rational declines them anyway, but Dirichlet
  * recognises them directly and avoids a wasted Apart.
@@ -33,6 +44,8 @@
 #include "attr.h"
 #include "arithmetic.h"   /* is_infinity_sym */
 #include "sym_names.h"
+#include "numeric.h"      /* numericalize: the convergence test on a numeric s */
+#include <math.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -137,6 +150,49 @@ static Expr* d_closed_form(Expr* g_base, int g_pow, bool abs_flag,
     return NULL;
 }
 
+/* Real part of a numeric expression as a double; false when not numeric. */
+static bool d_real_part(const Expr* e, double* out) {
+    Expr* re = sum_eval("Re", (Expr*[]){ expr_copy((Expr*)e) }, 1);
+    Expr* num = re ? numericalize(re, numeric_machine_spec()) : NULL;
+    expr_free(re);
+    bool ok = false;
+    if (num && num->type == EXPR_REAL) { *out = num->data.real; ok = isfinite(*out); }
+    else if (num && num->type == EXPR_INTEGER) { *out = (double)num->data.integer; ok = true; }
+    expr_free(num);
+    return ok;
+}
+
+/* Does the recognised series converge at the exponent s?  True for a symbolic
+ * s (the closed form then states the value on the convergence region); for a
+ * numeric s, absolute convergence Re s > sigma_a, plus the conditionally
+ * convergent boundary s = 1 of mu and lambda (see the header). */
+static bool d_converges(Expr* g_base, int g_pow, bool abs_flag, Expr* var, Expr* s) {
+    double rs;
+    if (!d_real_part(s, &rs)) return true;           /* symbolic s */
+    double sigma = 1.0;
+    bool boundary_ok = false;
+    Expr* a = NULL;
+    if (d_is_call1(g_base, SYM_MoebiusMu, var)) {
+        boundary_ok = (g_pow == 1 && !abs_flag);
+    } else if (d_is_call1(g_base, SYM_LiouvilleLambda, var)) {
+        boundary_ok = (g_pow == 1);
+    } else if (d_is_eulerphi(g_base, var)) {
+        sigma = 2.0;
+    } else if (d_is_divisorsigma(g_base, var, &a)) {
+        double ra;
+        if (!d_real_part(a, &ra)) return false;      /* order symbolic, s numeric */
+        if (g_pow == 1 && ra > 0.0) sigma = 1.0 + ra;
+    }
+    if (rs > sigma) return true;
+    if (boundary_ok && rs == 1.0) {
+        Expr* im = sum_eval("Im", (Expr*[]){ expr_copy(s) }, 1);
+        bool zero_im = im && im->type == EXPR_INTEGER && im->data.integer == 0;
+        expr_free(im);
+        return zero_im;
+    }
+    return false;
+}
+
 Expr* builtin_sum_dirichlet(Expr* res);
 
 Expr* builtin_sum_dirichlet(Expr* res) {
@@ -225,7 +281,8 @@ Expr* builtin_sum_dirichlet(Expr* res) {
         return NULL;
     }
 
-    Expr* form = d_closed_form(g_base, g_pow, abs_flag, var, s);
+    Expr* form = d_converges(g_base, g_pow, abs_flag, var, s)
+                 ? d_closed_form(g_base, g_pow, abs_flag, var, s) : NULL;
     expr_free(s);
     expr_free(fn);          /* g_base aliased into fn; safe now that form is built */
     if (!form) { if (coeff) expr_free(coeff); return NULL; }

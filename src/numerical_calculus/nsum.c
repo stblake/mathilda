@@ -40,6 +40,7 @@
 #include "arithmetic.h"   /* is_complex, make_complex, is_rational */
 #include "attr.h"
 #include "compile/autocompile.h"   /* machine fast path for the summand */
+#include "core.h"         /* tc_register_unwind_counter */
 #include "eval.h"
 #include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
@@ -67,10 +68,14 @@
  *  Diagnostics                                                        *
  * ------------------------------------------------------------------ */
 
+/* > 0 while an internal second estimate runs whose failure is not the user's
+ * (ns_wynn_nonsmooth): its messages are muted and kept out of Check[]. */
+static int g_ns_quiet = 0;
+
 static void ns_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    mth_message_v(0, "NSum", tag, fmt, ap);
+    mth_message_v(g_ns_quiet > 0, "NSum", tag, fmt, ap);
     va_end(ap);
 }
 
@@ -534,8 +539,11 @@ static int ns_seq_len(const NsOpts* o) {
  *  Method: WynnEpsilon (partial-sum extrapolation)                    *
  * ------------------------------------------------------------------ */
 
-/* Machine path. count<0 means infinite; otherwise terms beyond `count` are 0. */
-static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o) {
+/* Machine path. count<0 means infinite; otherwise terms beyond `count` are 0.
+ * With err_out non-NULL the extrapolation's own error estimate is stored there
+ * and the goal warning is left to the caller (which may know the estimate is
+ * not to be trusted, see ns_sum_infinite). */
+static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o, double* err_out) {
     int head = o->nsum_terms < 0 ? 0 : o->nsum_terms;
     int L = ns_seq_len(o);
     double _Complex* P = malloc(sizeof(double _Complex) * (size_t)L);
@@ -572,7 +580,8 @@ static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o) {
         ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
         return NULL;
     }
-    if (ns_goal_active(o)) {
+    if (err_out) *err_out = step;
+    else if (ns_goal_active(o)) {
         double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(result), ns_wp_digits(o));
         if (step > tol) nc_warn_goal("NSum", step, tol);
     }
@@ -580,7 +589,7 @@ static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o) {
 }
 
 #ifdef USE_MPFR
-static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o) {
+static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o, double* err_out) {
     int head = o->nsum_terms < 0 ? 0 : o->nsum_terms;
     int L = ns_seq_len(o);
     long bits = o->bits;
@@ -621,7 +630,8 @@ static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o) {
         double step = 0.0; bool finite = false;
         bool got = seqaccel_wynn_mpfr(Pr, Pi, L, o->wynn, bits, rr, ri, &step, &finite);
         if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample)) {
-            if (ns_goal_active(o)) {
+            if (err_out) *err_out = step;
+            else if (ns_goal_active(o)) {
                 double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_l1_d(rr, ri), ns_wp_digits(o));
                 if (step > tol) nc_warn_goal("NSum", step, tol);
             }
@@ -2068,11 +2078,65 @@ static Expr* ns_direct(NsCtx* c, long count, const NsOpts* o) {
 #endif
 }
 
+static double ns_expr_mag(const Expr* e);
+
+/* Partial-sum extrapolation for a summand defined only at the integers
+ * (DivisorSigma[0, n]/n^2, 1/Prime[n]^2, ...).  Such a summand is not a smooth
+ * function of n, so its partial sums carry an irregular, arithmetic remainder
+ * (d(n) jumps between 2 and ~n^eps): Wynn's epsilon algorithm has no model for
+ * it, and the last-step difference it reports as its error describes the
+ * transform's own convergence, not the distance to the sum.  On
+ * Sum[DivisorSigma[0, n]/n^2] it reported 1.2e-7 for an answer 0.064 off.
+ * The extrapolation is therefore run from two head lengths, N and 2N; both are
+ * estimates of the same sum, so their difference bounds the error of the
+ * better one honestly, and that (not the step) is what the accuracy-goal test
+ * sees.  A summand with a genuine closed form never reaches here (see
+ * ns_dirichlet); one that does gets the best value and a truthful warning. */
+static Expr* ns_wynn_nonsmooth(NsCtx* c, const NsOpts* o) {
+    double e1 = INFINITY, e2 = INFINITY;
+#ifdef USE_MPFR
+    Expr* w1 = o->prec_mpfr ? ns_wynn_mpfr(c, -1, o, &e1) : ns_wynn_machine(c, -1, o, &e1);
+#else
+    Expr* w1 = ns_wynn_machine(c, -1, o, &e1);
+#endif
+    if (!w1) return NULL;
+    NsOpts o2 = *o;
+    o2.nsum_terms = 2 * (o->nsum_terms > 0 ? o->nsum_terms : 1);
+    g_ns_quiet++;                      /* the first estimate stands if this fails */
+#ifdef USE_MPFR
+    Expr* w2 = o->prec_mpfr ? ns_wynn_mpfr(c, -1, &o2, &e2) : ns_wynn_machine(c, -1, &o2, &e2);
+#else
+    Expr* w2 = ns_wynn_machine(c, -1, &o2, &e2);
+#endif
+    g_ns_quiet--;
+    Expr* out;
+    double err;
+    if (w2) {
+        Expr* d = eval_and_free(ns_mk2("Plus", expr_copy(w2),
+                                       ns_mk2("Times", expr_new_integer(-1), expr_copy(w1))));
+        double dm = ns_expr_mag(d);
+        expr_free(d);
+        err = (e2 > dm) ? e2 : dm;
+        out = w2;
+        expr_free(w1);
+    } else {
+        out = w1;
+        err = e1;
+    }
+    if (ns_goal_active(o)) {
+        double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out),
+                                     ns_wp_digits(o));
+        if (err > tol) nc_warn_goal("NSum", err, tol);
+    }
+    return out;
+}
+
 /* Sum the infinite series Σ_{k≥0} f(imin + k·di) by method dispatch.  When
  * `do_verify`, a clearly divergent series returns the ComplexInfinity symbol. */
 static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verify) {
     const char* method = o->method;
     bool is_auto = (o->method == SYM_Automatic);
+    bool continuous = true;
     long settle = -1;
     if (do_verify || method == SYM_Automatic) {
         NsProfile prof;
@@ -2083,6 +2147,7 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
         }
         if (method == SYM_Automatic) method = ns_choose_method(&prof);
         settle = prof.settle;
+        continuous = prof.continuous;
         /* An integer-only summand cannot use Euler–Maclaurin, so its whole
          * accuracy rests on partial-sum extrapolation.  The prime-indexed tails
          * (1/Prime[n]^s) converge slowly and their partial sums are irregular, so
@@ -2124,11 +2189,15 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
 #endif
         used = (out != NULL);                           /* else fall back to Wynn */
     }
+    if (!used && is_auto && !continuous) {
+        out = ns_wynn_nonsmooth(c, o);
+        used = (out != NULL);
+    }
     if (!used) {
 #ifdef USE_MPFR
-        out = o->prec_mpfr ? ns_wynn_mpfr(c, -1, o) : ns_wynn_machine(c, -1, o);
+        out = o->prec_mpfr ? ns_wynn_mpfr(c, -1, o, NULL) : ns_wynn_machine(c, -1, o, NULL);
 #else
-        out = ns_wynn_machine(c, -1, o);
+        out = ns_wynn_machine(c, -1, o, NULL);
 #endif
         /* Automatic last resort: when Wynn does not converge, give Levin's
          * u-transform a shot.  Purely additive — an existing Wynn result is
@@ -2946,8 +3015,81 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
 }
 
 /* ------------------------------------------------------------------ *
- *  Iterator-spec parsing                                              *
- * ------------------------------------------------------------------ */
+ *  Dirichlet series of arithmetic functions                           *
+ * ------------------------------------------------------------------ *
+ *
+ * A summand g(n)/n^s with g an arithmetic function (DivisorSigma, EulerPhi,
+ * MoebiusMu, LiouvilleLambda) is not a smooth function of n: d(n) is 2 at
+ * every prime and large at highly composite n, phi(n)/n swings between 0 and 1.
+ * Nothing that models the tail as smooth (Euler-Maclaurin's integral, the
+ * partial-sum transforms) applies, and the tail of such a sum decays only like
+ * a power of 1/N with an irregular remainder, so no affordable amount of direct
+ * summation reaches machine accuracy either (Sum d(n)/n^2 truncated at 10^6
+ * is still off by ~1e-5).  These series are exactly the Dirichlet generating
+ * functions of the multiplicative functions, which Sum`Dirichlet closes in
+ * zeta values -- d -> Zeta[s]^2, phi -> Zeta[s - 1]/Zeta[s], sigma_a ->
+ * Zeta[s] Zeta[s - a], mu -> 1/Zeta[s], lambda -> Zeta[2 s]/Zeta[s], ... --
+ * declining outside the half-plane of convergence.  The identity is exact, so
+ * the sum is that closed form at the working precision, less the head terms
+ * below the lower bound. */
+static bool ns_has_arith_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_DivisorSigma || h == SYM_EulerPhi || h == SYM_MoebiusMu
+            || h == SYM_LiouvilleLambda)
+            return true;
+    }
+    if (ns_has_arith_head(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ns_has_arith_head(e->data.function.args[i])) return true;
+    return false;
+}
+
+#define NS_DIRICHLET_MAX_HEAD 100000   /* head terms below imin summed exactly */
+
+static Expr* ns_dirichlet(Expr* body, const char* var, Expr* imin, Expr* di,
+                          const NsOpts* o) {
+    if (!(di->type == EXPR_INTEGER && di->data.integer == 1)) return NULL;
+    if (imin->type != EXPR_INTEGER || imin->data.integer < 1
+        || imin->data.integer > NS_DIRICHLET_MAX_HEAD)
+        return NULL;
+    if (!ns_has_arith_head(body)) return NULL;
+
+    NsBind bind; ns_bind_snapshot(&bind, var);        /* the index stays symbolic */
+    Expr* args[4] = { expr_copy(body), expr_new_symbol(var),
+                      expr_new_integer(1), expr_new_symbol(SYM_Infinity) };
+    Expr* cf = eval_and_free(expr_new_function(expr_new_symbol("Sum`Dirichlet"), args, 4));
+    NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+    if (o->prec_mpfr) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = o->bits; }
+#else
+    (void)o;
+#endif
+    Expr* out = NULL;
+    Expr* num = cf ? numericalize(cf, spec) : NULL;
+    expr_free(cf);
+    if (num && ns_expr_mag(num) < INFINITY) {
+        /* Subtract the terms below the lower bound, exactly. */
+        Expr* head = expr_new_integer(0);
+        for (int64_t k = 1; head && k < imin->data.integer; k++) {
+            ns_bind_set(&bind, expr_new_integer(k));
+            Expr* t = eval_and_free(expr_copy(body));
+            if (!t) { expr_free(head); head = NULL; break; }
+            head = eval_and_free(ns_mk2("Plus", head, t));
+        }
+        if (head) {
+            Expr* diff = eval_and_free(ns_mk2("Plus", num,
+                                              ns_mk2("Times", expr_new_integer(-1), head)));
+            num = NULL;
+            out = diff ? numericalize(diff, spec) : NULL;
+            expr_free(diff);
+        }
+    }
+    expr_free(num);
+    ns_bind_restore(&bind);
+    return out;
+}
 
 /* ------------------------------------------------------------------ *
  *  Iterator-spec parsing                                              *
@@ -3060,9 +3202,13 @@ Expr* builtin_nsum(Expr* res) {
     }
 
     Expr* out = NULL;
+    /* Dirichlet series of arithmetic functions have exact zeta closed forms and
+     * no smooth tail model (see ns_dirichlet). */
+    if (!bad && infinite && o.method == SYM_Automatic && nspecs == 1)
+        out = ns_dirichlet(eff_body, var, imin, di, &o);
     /* Linear-phase summands (Sin[n]/n, (-1)^n Log[n]/n) are split by frequency
      * before the ordinary dispatch, which cannot sum them (see ns_phase_split). */
-    if (!bad && infinite && o.method == SYM_Automatic && nspecs == 1)
+    if (!out && !bad && infinite && o.method == SYM_Automatic && nspecs == 1)
         out = ns_phase_split(eff_body, var, imin, imax_e, di, &o);
     if (!bad && !out)
         out = ns_run_single(eff_body, var, imin, imax_e, di, infinite, count, &o);
@@ -3092,4 +3238,6 @@ void nsum_init(void) {
     /* HoldAll: the summand and the iterator specs must not be pre-evaluated;
      * the index is Block-localised internally. Not Listable. */
     symtab_get_def("NSum")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    /* a timeout inside the muted second estimate must not leave NSum silent */
+    tc_register_unwind_counter(&g_ns_quiet);
 }

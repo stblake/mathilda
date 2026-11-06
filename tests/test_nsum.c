@@ -262,6 +262,63 @@ static void test_trig_oscillatory(void) {
                  "Pi^2/6 - Pi/2 + 1/4", 1e-26);
 }
 
+/* Dirichlet series of arithmetic functions: the summand is not a smooth
+ * function of n, so no smooth tail model applies (the extrapolators returned
+ * 2.6421 for zeta(2)^2 = 2.70581 and claimed 1e-7).  Closed forms are the
+ * Dirichlet generating functions: sum d(n)/n^s = zeta(s)^2, sum sigma_a(n)/n^s
+ * = zeta(s) zeta(s - a), sum phi(n)/n^s = zeta(s - 1)/zeta(s), sum mu(n)/n^s =
+ * 1/zeta(s), sum lambda(n)/n^s = zeta(2 s)/zeta(s); a lower bound above 1
+ * removes the head terms d(1)/1 + d(2)/2^2 = 3/2, phi(1) + phi(2)/8 = 9/8. */
+static void test_dirichlet_series(void) {
+    ASSERT_CLOSE("NSum[DivisorSigma[0, n]/n^2, {n, 1, Infinity}]", "Pi^4/36", 1e-13);
+    ASSERT_CLOSE("NSum[DivisorSigma[0, n]/n^3, {n, 1, Infinity}]",
+                 "1.44494079843363423391368507881", 1e-13);      /* zeta(3)^2 */
+    ASSERT_CLOSE("NSum[DivisorSigma[1, n]/n^3, {n, 1, Infinity}]",
+                 "Zeta[3] Pi^2/6", 1e-13);
+    ASSERT_CLOSE("NSum[EulerPhi[n]/n^3, {n, 1, Infinity}]",
+                 "1.368432777620205875736766", 1e-13);           /* zeta(2)/zeta(3) */
+    ASSERT_CLOSE("NSum[MoebiusMu[n]/n^2, {n, 1, Infinity}]", "6/Pi^2", 1e-13);
+    ASSERT_CLOSE("NSum[LiouvilleLambda[n]/n^2, {n, 1, Infinity}]", "(Pi^4/90)/(Pi^2/6)", 1e-13);
+    ASSERT_CLOSE("NSum[DivisorSigma[0, n]/n^2, {n, 3, Infinity}]", "Pi^4/36 - 3/2", 1e-13);
+    ASSERT_CLOSE("NSum[EulerPhi[n]/n^3, {n, 3, Infinity}]",
+                 "1.368432777620205875736766 - 9/8", 1e-13);
+    /* arbitrary precision: the closed form at the working precision */
+    ASSERT_CLOSE("NSum[DivisorSigma[0, n]/n^2, {n, 1, Infinity}, WorkingPrecision -> 30]",
+                 "Pi^4/36", 1e-27);
+    ASSERT_CLOSE("NSum[EulerPhi[n]/n^3, {n, 1, Infinity}, WorkingPrecision -> 30]",
+                 "1.36843277762020587573676585398`30", 1e-27);
+    /* outside the half-plane of convergence the zeta ratio is not the sum:
+     * Sum declines (EulerPhi[n]/n^(3/2) diverges, Zeta[1/2]/Zeta[3/2] < 0) */
+    char* s = eval_str("Head[Sum[EulerPhi[n]/n^(3/2), {n, 1, Infinity}]]");
+    ASSERT_MSG(strcmp(s, "Sum") == 0, "divergent phi series closed: %s", s);
+    free(s);
+    s = eval_str("Head[Sum[DivisorSigma[2, n]/n^3, {n, 1, Infinity}]]");
+    ASSERT_MSG(strcmp(s, "Sum") == 0, "divergent sigma_2 series closed: %s", s);
+    free(s);
+    /* the conditionally convergent boundary s = 1 of mu is kept: sum mu(n)/n = 0 */
+    s = eval_str("Sum[MoebiusMu[n]/n, {n, 1, Infinity}]");
+    ASSERT_MSG(strcmp(s, "0") == 0, "sum mu(n)/n: %s", s);
+    free(s);
+}
+
+/* An integer-only summand with no closed form: the partial-sum extrapolation
+ * must either be right or say it is not.  sum Omega(n)/n^3 = zeta(3) P_omega,
+ * P_omega = sum_p 1/(p^3 - 1) = sum_k P(3k) = 0.194118169832633792 (prime zeta
+ * values, computed independently), i.e. 0.2333410860760, and the
+ * prime zeta P(2) = 0.452247420041065498506543. */
+static void test_nonsmooth_honest(void) {
+    char* s = eval_str("Quiet[Check[If[Abs[NSum[PrimeOmega[n]/n^3,{n,1,Infinity}]"
+                       " - 0.233341086076023955302] < 10^-10, ok, bad], warned]]");
+    ASSERT_MSG(strcmp(s, "ok") == 0 || strcmp(s, "warned") == 0,
+               "PrimeOmega[n]/n^3: silently inaccurate: %s", s);
+    free(s);
+    s = eval_str("Quiet[Check[If[Abs[NSum[1/Prime[n]^2,{n,1,Infinity}]"
+                 " - 0.452247420041065498506543] < 10^-10, ok, bad], warned]]");
+    ASSERT_MSG(strcmp(s, "ok") == 0 || strcmp(s, "warned") == 0,
+               "1/Prime[n]^2: silently inaccurate: %s", s);
+    free(s);
+}
+
 /* Bessel summands: J_nu(c n), Y_nu(c n) oscillate like e^(+-i c n), a phase the
  * symbolic split finds only through the Hankel decomposition.  Closed forms
  * from Poisson summation: sum_{n>=1} J_0(n x) = -1/2 + (1/x)(1 + 2 sum_{m >= 1,
@@ -403,6 +460,8 @@ int main(void) {
     TEST(test_slow_algebraic_machine);
     TEST(test_slow_log_honest);
     TEST(test_trig_oscillatory);
+    TEST(test_dirichlet_series);
+    TEST(test_nonsmooth_honest);
     TEST(test_bessel_oscillatory);
     TEST(test_alternating_log);
     TEST(test_slow_log_tails);
