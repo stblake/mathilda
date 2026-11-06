@@ -78,11 +78,37 @@ void test_simplify_factor_tie_issue126(void) {
     /* a bare-sum numerator keeps its form on a tie */
     assert_eval_eq("(Simplify[(2 - 2 a)/(1 + b)]) === ((2 - 2 a)/(1 + b))", "True", 0);
     assert_eval_eq("(Simplify[(1 + x)/(1 - x)]) === ((1 + x)/(1 - x))", "True", 0);
+    /* #126, second follow-up: a quotient term of a sum takes its tie form
+     * too; a combined form that is strictly simpler still wins */
+    assert_eval_eq("(Simplify[((4 - 4 eps) y)/(-1 + y^2) + z]) === ((-4 (-1 + eps) y)/(-1 + y^2) + z)", "True", 0);
+    assert_eval_eq("(Simplify[((6 - 6 a) b)/(1 + b) + c/(1 + b)]) === ((6 b - 6 a b + c)/(1 + b))", "True", 0);
     /* numeric pair flip is score-gated: stays -2 (-2 + eps) (-2 + x) */
     assert_eval_eq("Simplify[(-2 + x) (4 - 2 eps)]", "-2 (-2 + eps) (-2 + x)", 0);
     /* a sum input keeps the cheaper partially-factored form */
     assert_eval_eq("SimplifyCount[Simplify[(1 - eps) eps + (-16 - 4 z) z eps]]",
                    "15", 0);
+}
+
+/* #126, second follow-up: powers.  (-2)^x/2 evaluates to (-1)^x 2^(-1 + x)
+ * (Times); a positive content leaves a power of a sum, (c u)^e = c^e u^e
+ * (PowerContent); a number leaves the exponent of a negative base,
+ * c^(k + r) = c^k c^r (NegativeBasePower).  A child's win that the parent's
+ * evaluation undoes does not make the result costlier than the input. */
+void test_simplify_powers_issue126(void) {
+    assert_eval_eq("ClearAll[a, b, eps, n, x]", "Null", 0);
+    assert_eval_eq("Simplify[(-2)^x/2]", "Times[Power[-1, x], Power[2, Plus[-1, x]]]", 1);
+    assert_eval_eq("Simplify[(4^eps (a + b)^eps)/(4 a + 4 b)^eps]", "1", 0);
+    assert_eval_eq("Simplify[(4^eps (a + b)^eps)/(4 a + 4 b)^eps] === 1", "True", 0);
+    assert_eval_eq("Simplify[(4 a + 4 b)^eps]", "4^eps (a + b)^eps", 0);
+    assert_eval_eq("Simplify[Sqrt[4 a + 4 b]]", "2 Sqrt[a + b]", 0);
+    assert_eval_eq("Simplify[(4 a + 4 b)^eps (a + b)^eps]", "4^eps (a + b)^(2 eps)", 0);
+    assert_eval_eq("Simplify[(2 a + 2 b)^n (a + b)^(-n)]", "2^n", 0);
+    /* (-4 a - 4 b)^e: content 4 leaves (-a - b)^e, costlier, so it stays,
+     * and the product is not made costlier by its bottom-up rebuild */
+    assert_eval_eq("Simplify[(-4 a - 4 b)^eps/(a + b)^eps]", "(-4 a - 4 b)^eps/(a + b)^eps", 0);
+    assert_eval_eq("Simplify[(-1)^(2 + n) a]", "(-1)^n a", 0);
+    assert_eval_eq("Simplify[(-1)^(1 + x) a]", "-(-1)^x a", 0);
+    assert_eval_eq("Simplify[-((-4)^(-1 + x) 3^x)]", "(-3)^x 4^(-1 + x)", 0);
 }
 
 /* ---- Cyclotomic / algebraic-number (Phase 1) ---- */
@@ -1267,6 +1293,7 @@ int main(void) {
     TEST(test_simplify_rational);
     TEST(test_simplify_collect_by_variable);
     TEST(test_simplify_factor_tie_issue126);
+    TEST(test_simplify_powers_issue126);
     TEST(test_simplify_pythagorean);
     TEST(test_simplify_double_angle);
     TEST(test_simplify_exp_sinh_ratio);

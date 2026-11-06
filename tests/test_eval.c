@@ -933,6 +933,36 @@ void test_power_of_product_split_o3() {
     assert_eval_eq("(x^a (I x)^b)", "Times[Power[Times[Complex[0, 1], x], b], Power[x, a]]", 1);
 }
 
+/* Issue #126 follow-up: a negative rational base joins the coprime basis
+ * through its magnitude, (-n)^e = (-1)^e n^e, and its sign goes back onto a
+ * basis element of its own value whose exponent is still e (expected values
+ * are the reference's evaluation). */
+void test_negative_base_power_coprime_basis_o4() {
+    assert_eval_eq("ClearAll[a, b, n, x, y]", "Null", 0);
+    assert_eval_eq("{(-2)^x/2, (-6)^x/3, (-6)^x/4, (-2)^x (-8)^y, (-2)^x (-3)^x, (-2)^x (-4)^x}",
+                   "List[Times[Power[-1, x], Power[2, Plus[-1, x]]], Times[Power[-2, x], Power[3, Plus[-1, x]]], "
+                   "Times[Power[-3, x], Power[2, Plus[-2, x]]], Times[Power[-1, Plus[x, y]], Power[2, Plus[x, Times[3, y]]]], "
+                   "Times[Power[-3, x], Power[-2, x]], Times[Power[-1, Times[2, x]], Power[2, Times[3, x]]]]", 1);
+    /* a coefficient equal to the base merges; one sharing nothing stays */
+    assert_eval_eq("{(-3)^x (-3), (-2)^x 3, (-6)^(2x) 4^(2x) 9, (-8)^y (-1/2)^n 2^n/3, (-9)^(x+1) (-12)^x 4}",
+                   "List[Power[-3, Plus[1, x]], Times[3, Power[-2, x]], "
+                   "Times[Power[-8, Times[2, x]], Power[3, Plus[2, Times[2, x]]]], "
+                   "Times[Rational[1, 3], Power[-8, y], Power[-1, n]], "
+                   "Times[Power[-1, Plus[1, Times[2, x]]], Power[3, Plus[2, Times[3, x]]], Power[4, Plus[1, x]]]]", 1);
+    /* the coefficient meets the smallest interacting base first: merged
+     * then split, or split as written; numbers combine before either */
+    assert_eval_eq("{(-1/2)^x (-1/2) 4, (-1/2)^(2x) (-8)^x (-1/2) a, (-4)^(n+2) (-4) 2^(2x), (-2/3)^x 3, (-2)^x 2^x}",
+                   "List[Times[-1, Power[-1, x], Power[2, Plus[1, Times[-1, x]]]], "
+                   "Times[-1, Power[-1, Times[3, x]], Power[2, Plus[-1, x]], a], "
+                   "Times[Power[-1, Plus[3, n]], Power[2, Plus[6, Times[2, n], Times[2, x]]]], "
+                   "Times[Power[-2, x], Power[3, Plus[1, Times[-1, x]]]], Power[-4, x]]", 1);
+    /* the two spellings now meet; the basis is taken of values already
+     * merged under one exponent (24 and 9 refine to {3, 8}) */
+    assert_eval_eq("{(-2)^x/2 - (-1)^x 2^(x-1), 6^x 4^x 9, 2^x 18^x 3^y, 2^a 8^a 4^b, 2^x 2^x 4^y}",
+                   "List[0, Times[Power[3, Plus[2, x]], Power[8, x]], Times[Power[3, Plus[Times[2, x], y]], Power[4, x]], "
+                   "Power[4, Plus[Times[2, a], b]], Power[2, Plus[Times[2, x], Times[2, y]]]]", 1);
+}
+
 /* Numeric powers whose bases share factors are written over one coprime
  * basis when an exponent is symbolic (expected values are the reference's);
  * bases that share nothing stay. */
@@ -1059,6 +1089,7 @@ int main() {
     TEST(test_numeric_base_power_merge_v594);
     TEST(test_power_of_product_split_o3);
     TEST(test_numeric_power_coprime_basis_o4);
+    TEST(test_negative_base_power_coprime_basis_o4);
     TEST(test_downvalue_order_conditions);
     TEST(test_optionspattern_position_and_syntactic_negative);
     printf("All tests passed!\n");

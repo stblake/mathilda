@@ -642,8 +642,21 @@ static Expr* o3_split_one(Expr* const* args, size_t n, size_t k) {
  * The basis comes from gcds alone (no integer factoring), so huge bases cost
  * only gcds: FeynCalc's FactorList2 check multiplies m^-7 (p/m^4)^a
  * (r/m^3)^b, which must collapse to p^a r^b.  Bases that share nothing stay
- * as they are (3 4^a, 2^a 3^b). */
-typedef struct { mpz_t v; Expr* e; } O4Atom;      /* v^e, v > 1 */
+ * as they are (3 4^a, 2^a 3^b).
+ *
+ * A negative rational base takes part through its magnitude: (-n)^e is
+ * (-1)^e n^e for every complex e (arg(-1) + arg(n) = Pi lies in (-Pi, Pi]),
+ * so the sign rides along as (-1)^e while n^e joins the basis.  That sign
+ * goes back onto a basis element whose exponent is still exactly e, else it
+ * stays a separate (-1)^e: (-6)^a/3 is (-2)^a 3^(-1 + a), (-6)^a/4 is
+ * (-3)^a 2^(-2 + a), (-2)^a/2 is (-1)^a 2^(-1 + a), and (-2)^a (-8)^b is
+ * (-1)^(a + b) 2^(a + 3 b).  Two negative powers under one exponent cannot
+ * merge their magnitudes ((-2)^a (-3)^a is not 6^a), so they are kept apart
+ * when deciding whether anything is shared: (-2)^a (-3)^a stays, while
+ * (-2)^a (-4)^a is (-1)^(2 a) 2^(3 a).  A coefficient equal to the base is
+ * the plain same-base merge, (-3)^a (-3) being (-3)^(1 + a). */
+typedef struct { mpz_t v; Expr* e; int src; } O4Atom;  /* v^e, v > 1; src: the
+                                    negative-base arg it came from, or -1 */
 
 static bool o4_rat_parts(const Expr* x, mpz_t num, mpz_t den) {
     if (expr_is_integer_like(x)) {
@@ -662,38 +675,140 @@ static bool o4_rat_parts(const Expr* x, mpz_t num, mpz_t den) {
     return false;
 }
 
-/* Is a a candidate power: a positive rational base, an exponent that is not
- * an integer?  *sym when the exponent is not numeric at all. */
-static bool o4_power(const Expr* a, bool* sym) {
+/* Is a a candidate power: a rational base other than 0 and +-1, an exponent
+ * that is not an integer?  *sym when the exponent is not numeric at all, *neg
+ * when the base is negative. */
+static bool o4_power(const Expr* a, bool* sym, bool* neg) {
     if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL ||
         a->data.function.head->data.symbol.name != SYM_Power || a->data.function.arg_count != 2) return false;
     const Expr* b = a->data.function.args[0];
     const Expr* e = a->data.function.args[1];
     if (expr_is_integer_like(e)) return false;
     mpz_t n, d; mpz_init(n); mpz_init(d);
-    bool ok = o4_rat_parts(b, n, d) && mpz_sgn(n) > 0 &&
-              !(mpz_cmp_ui(n, 1) == 0 && mpz_cmp_ui(d, 1) == 0);
+    bool ok = o4_rat_parts(b, n, d) &&
+              !(mpz_cmpabs_ui(n, 1) == 0 && mpz_cmp_ui(d, 1) == 0);
+    bool negative = ok && mpz_sgn(n) < 0;
     mpz_clear(n); mpz_clear(d);
     if (!ok) return false;
     *sym = !expr_is_numeric_like(e);
+    *neg = negative;
     return true;
 }
 
-static void o4_add(O4Atom** at, size_t* na, size_t* cap, const mpz_t v, Expr* e) {
+static void o4_add(O4Atom** at, size_t* na, size_t* cap, const mpz_t v, Expr* e, int src) {
     if (mpz_cmp_ui(v, 1) == 0) { expr_free(e); return; }
     if (*na == *cap) { *cap = *cap ? 2 * *cap : 8; *at = realloc(*at, *cap * sizeof(O4Atom)); }
     mpz_init_set((*at)[*na].v, v);
     (*at)[*na].e = e;
+    (*at)[*na].src = src;
     (*na)++;
+}
+
+/* The same-base cases O4 leaves to the grouping pass, or merges itself.
+ *
+ * Sets *defer when two negative powers share a base, which grouping merges
+ * ((-2)^a (-2)^b -> (-2)^(a + b)) before O4 should split them.
+ *
+ * Returns the merged product, evaluated, when the rational coefficient (all
+ * number factors multiplied together, as they are before anything else)
+ * equals the base of a negative power: (-3)^a (-3) is (-3)^(1 + a).  The
+ * reference meets the factors in canonical order (numeric bases increasing),
+ * so the coefficient merges only with the FIRST power whose base shares a
+ * prime with it; when that is another power, the split comes first.  So (-4)^(2 + n) (-4) 2^(2 x) is
+ * (-1)^(3 + n) 2^(6 + 2 n + 2 x) (merged, then split), while
+ * (-8)^a (-1/2)^(2 a) (-1/2) is -(-1)^(3 a) 2^(-1 + a) (split as written),
+ * and (-1/2)^a (-1/2) 4 has the coefficient -2, so no merge at all. */
+static Expr* o4_negative_same_base(Expr* const* args, size_t n, bool* defer) {
+    *defer = false;
+    for (size_t i = 0; i < n; i++) {
+        bool s, ng;
+        if (!o4_power(args[i], &s, &ng) || !ng || !s) continue;
+        for (size_t j = i + 1; j < n; j++) {
+            bool s2, ng2;
+            if (o4_power(args[j], &s2, &ng2) && ng2 &&
+                expr_eq(args[j]->data.function.args[0], args[i]->data.function.args[0]))
+                *defer = true;
+        }
+    }
+    if (*defer) return NULL;
+
+    /* the coefficient */
+    mpq_t q, t; mpq_init(q); mpq_init(t);
+    mpq_set_ui(q, 1, 1);
+    mpz_t num, den; mpz_init(num); mpz_init(den);
+    size_t ncoef = 0;
+    for (size_t k = 0; k < n; k++) {
+        bool s, ng;
+        if (o4_power(args[k], &s, &ng) || !o4_rat_parts(args[k], num, den)) continue;
+        mpq_set_num(t, num); mpq_set_den(t, den); mpq_canonicalize(t);
+        mpq_mul(q, q, t);
+        ncoef++;
+    }
+    Expr* r = NULL;
+    if (ncoef > 0 && mpq_sgn(q) < 0) {
+        /* |num q| * den q: the primes of the coefficient */
+        mpz_t cq, bq, g;
+        mpz_init(cq); mpz_init(bq); mpz_init(g);
+        mpz_mul(cq, mpq_numref(q), mpq_denref(q));
+        mpz_abs(cq, cq);
+        /* the interacting power with the smallest base (the reference's
+         * canonical order puts numeric bases in increasing order) */
+        size_t first = n;
+        mpq_t fb; mpq_init(fb);
+        for (size_t i = 0; i < n; i++) {
+            bool s, ng;
+            if (!o4_power(args[i], &s, &ng) || !s) continue;
+            o4_rat_parts(args[i]->data.function.args[0], num, den);
+            mpz_mul(bq, num, den);
+            mpz_abs(bq, bq);
+            mpz_gcd(g, bq, cq);
+            if (mpz_cmp_ui(g, 1) <= 0) continue;
+            mpq_set_num(t, num); mpq_set_den(t, den); mpq_canonicalize(t);
+            if (first == n || mpq_cmp(t, fb) < 0) { first = i; mpq_set(fb, t); }
+        }
+        if (first < n && mpq_equal(fb, q)) {
+            size_t i = first;
+            Expr** fa = malloc(n * sizeof(Expr*));
+            size_t nn = 0;
+            for (size_t k = 0; k < n; k++) {
+                bool s3, ng3;
+                if (k == i)
+                    fa[nn++] = expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy(args[i]->data.function.args[0]),
+                                   expr_new_function(expr_new_symbol(SYM_Plus),
+                                       (Expr*[]){ expr_new_integer(1),
+                                                  expr_copy(args[i]->data.function.args[1]) }, 2) }, 2);
+                else if (o4_power(args[k], &s3, &ng3) || !o4_rat_parts(args[k], num, den))
+                    fa[nn++] = expr_copy(args[k]);
+            }
+            Expr* p = nn == 1 ? fa[0] : expr_new_function(expr_new_symbol(SYM_Times), fa, nn);
+            free(fa);
+            r = eval_and_free(p);
+        }
+        mpq_clear(fb);
+        mpz_clear(cq); mpz_clear(bq); mpz_clear(g);
+    }
+    mpq_clear(q); mpq_clear(t); mpz_clear(num); mpz_clear(den);
+    return r;
 }
 
 static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
     size_t nsym = 0;
-    for (size_t i = 0; i < n; i++) { bool s; if (o4_power(args[i], &s) && s) nsym++; }
+    size_t nneg = 0;
+    for (size_t i = 0; i < n; i++) {
+        bool s, ng;
+        if (o4_power(args[i], &s, &ng)) { if (s) nsym++; if (ng) nneg++; }
+    }
     if (nsym == 0) return NULL;
     static int off = -1;                 /* MATHILDA_NO_O4: A/B kill switch */
     if (off < 0) off = getenv("MATHILDA_NO_O4") != NULL;
     if (off) return NULL;
+    if (nneg) {
+        bool defer;
+        Expr* merged = o4_negative_same_base(args, n, &defer);
+        if (merged) return merged;
+        if (defer) return NULL;
+    }
 
     /* atoms: v^e from every candidate power and from the rational coefficient */
     O4Atom* at = NULL; size_t na = 0, cap = 0;
@@ -701,59 +816,94 @@ static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
     int sign = 1;
     mpz_t num, den; mpz_init(num); mpz_init(den);
     for (size_t i = 0; i < n; i++) {
-        bool s;
-        if (o4_power(args[i], &s)) {
+        bool s, ng;
+        if (o4_power(args[i], &s, &ng)) {
             o4_rat_parts(args[i]->data.function.args[0], num, den);
+            if (ng) mpz_neg(num, num);           /* (-n)^e: n^e here, (-1)^e below */
+            int src = ng ? (int)i : -1;
             Expr* e = args[i]->data.function.args[1];
-            o4_add(&at, &na, &cap, num, expr_copy(e));
+            o4_add(&at, &na, &cap, num, expr_copy(e), src);
             o4_add(&at, &na, &cap, den, eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-                       (Expr*[]){ expr_new_integer(-1), expr_copy(e) }, 2)));
+                       (Expr*[]){ expr_new_integer(-1), expr_copy(e) }, 2)), src);
             used[i] = true;
         } else if (o4_rat_parts(args[i], num, den)) {
             if (mpz_sgn(num) < 0) { sign = -sign; mpz_neg(num, num); }
-            o4_add(&at, &na, &cap, num, expr_new_integer(1));
-            o4_add(&at, &na, &cap, den, expr_new_integer(-1));
+            o4_add(&at, &na, &cap, num, expr_new_integer(1), -1);
+            o4_add(&at, &na, &cap, den, expr_new_integer(-1), -1);
             used[i] = true;
         }
     }
-    /* interaction: two atoms with different exponents whose values share a
-     * factor.  Atoms with equal exponents are multiplied together first, as
-     * the reference merges 2^a 8^a into 16^a before anything else; only a
-     * factor still shared across different exponents calls for the basis.
-     * At least one of the two must have a symbolic exponent: 17 Sqrt[17]
+    /* Merging, in the reference's order:
+     *  1. powers of one base add their exponents (2 2^a is 2^(1 + a),
+     *     2^a 2^a is 2^(2 a)); a negative power's magnitude joins a positive
+     *     power only to cancel it ((-1/2)^n 2^n is (-1)^n), and two negative
+     *     powers never meet here (one base was left to the grouping pass);
+     *  2. values under one exponent multiply together (2^a 8^a is 16^a);
+     *     atoms of two different negative powers never do: (-2)^a (-3)^a is
+     *     not 6^a times any sign;
+     *  3. the coprime basis is taken of the values that remain, so 6^x 4^x 9
+     *     is 8^x 3^(2 + x) (24 and 9 refine to {3, 8}) and 2^a 8^a 4^b is
+     *     4^(2 a + b), as in the reference.
+     * Anything to do: a merge in step 1, or two entries after step 2 whose
+     * values share a factor.  Either needs a symbolic exponent: 17 Sqrt[17]
      * would otherwise be rewritten 17^(3/2), which evaluates straight back
      * to 17 Sqrt[17] -- an endless loop through Times. */
     bool share = false;
     mpz_t g; mpz_init(g);
-    {
-        size_t nm = 0;
-        mpz_t* mv = malloc((na ? na : 1) * sizeof(mpz_t));
-        Expr** me = malloc((na ? na : 1) * sizeof(Expr*));
-        bool* ms = malloc((na ? na : 1) * sizeof(bool));
-        for (size_t i = 0; i < na; i++) {
-            size_t k = 0;
-            while (k < nm && !expr_eq(me[k], at[i].e)) k++;
-            if (k == nm) { mpz_init_set(mv[nm], at[i].v); me[nm] = at[i].e; ms[nm] = !expr_is_numeric_like(at[i].e); nm++; }
-            else mpz_mul(mv[k], mv[k], at[i].v);
+    for (size_t i = 0; i < na; i++) {                        /* step 1 */
+        if (!at[i].e) continue;
+        for (size_t j = i + 1; j < na; j++) {
+            if (!at[j].e || mpz_cmp(at[i].v, at[j].v) != 0) continue;
+            /* never two negative sources (each keeps its own sign); a
+             * negative source's atom meets a positive one only when they
+             * cancel exactly: (-1/2)^n 2^n is (-1)^n, while (-2)^a 2^a is
+             * left to merge as (-4)^a */
+            if (at[i].src >= 0 && at[j].src >= 0) continue;
+            Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ expr_copy(at[i].e), expr_copy(at[j].e) }, 2));
+            bool cancels = sum->type == EXPR_INTEGER && sum->data.integer == 0;
+            if ((at[i].src >= 0 || at[j].src >= 0) && !cancels) { expr_free(sum); continue; }
+            if (!expr_is_numeric_like(at[i].e) || !expr_is_numeric_like(at[j].e)) share = true;
+            expr_free(at[i].e);
+            expr_free(at[j].e);
+            at[i].e = sum;
+            if (at[j].src >= 0) at[i].src = at[j].src;
+            at[j].e = NULL;
         }
-        for (size_t i = 0; i < nm && !share; i++)
-            for (size_t j = i + 1; j < nm && !share; j++) {
-                if (!ms[i] && !ms[j]) continue;
-                mpz_gcd(g, mv[i], mv[j]);
-                if (mpz_cmp_ui(g, 1) > 0) share = true;
-            }
-        for (size_t i = 0; i < nm; i++) mpz_clear(mv[i]);
-        free(mv); free(me); free(ms);
     }
+    size_t nm = 0;                                           /* step 2 */
+    mpz_t* mv = malloc((na ? na : 1) * sizeof(mpz_t));
+    Expr** me = malloc((na ? na : 1) * sizeof(Expr*));
+    bool* ms = malloc((na ? na : 1) * sizeof(bool));
+    int* msrc = malloc((na ? na : 1) * sizeof(int));
+    for (size_t i = 0; i < na; i++) {
+        if (!at[i].e || (at[i].e->type == EXPR_INTEGER && at[i].e->data.integer == 0)) continue;
+        size_t k = 0;
+        while (k < nm && !(expr_eq(me[k], at[i].e) &&
+                           (at[i].src < 0 || msrc[k] < 0 || msrc[k] == at[i].src))) k++;
+        if (k == nm) {
+            mpz_init_set(mv[nm], at[i].v); me[nm] = at[i].e;
+            ms[nm] = !expr_is_numeric_like(at[i].e); msrc[nm] = at[i].src; nm++;
+        } else {
+            mpz_mul(mv[k], mv[k], at[i].v);
+            if (at[i].src >= 0) msrc[k] = at[i].src;
+        }
+    }
+    for (size_t i = 0; i < nm && !share; i++)
+        for (size_t j = i + 1; j < nm && !share; j++) {
+            if (!ms[i] && !ms[j]) continue;
+            mpz_gcd(g, mv[i], mv[j]);
+            if (mpz_cmp_ui(g, 1) > 0) share = true;
+        }
     Expr* out = NULL;
     if (share) {
-        /* coprime basis by gcd refinement */
-        size_t nb = 0, bcap = na * 2 + 4;
+        /* step 3: coprime basis of the merged values by gcd refinement */
+        size_t nb = 0, bcap = nm * 2 + 4;
         mpz_t* B = malloc(bcap * sizeof(mpz_t));
-        for (size_t i = 0; i < na; i++) {
-            bool dup = false;
-            for (size_t k = 0; k < nb && !dup; k++) dup = mpz_cmp(B[k], at[i].v) == 0;
-            if (!dup) mpz_init_set(B[nb++], at[i].v);
+        for (size_t i = 0; i < nm; i++) {
+            bool dup = mpz_cmp_ui(mv[i], 1) == 0;
+            for (size_t k = 0; k < nb && !dup; k++) dup = mpz_cmp(B[k], mv[i]) == 0;
+            if (!dup) mpz_init_set(B[nb++], mv[i]);
         }
         bool again = true;
         while (again) {
@@ -790,29 +940,63 @@ static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
         for (size_t k = 0; k < nb; k++) X[k] = expr_new_integer(0);
         bool ok = true;
         mpz_t r; mpz_init(r);
-        for (size_t i = 0; i < na && ok; i++) {
-            mpz_set(r, at[i].v);
+        for (size_t i = 0; i < nm && ok; i++) {
+            mpz_set(r, mv[i]);
             for (size_t k = 0; k < nb; k++) {
                 long c = 0;
                 while (mpz_divisible_p(r, B[k])) { mpz_divexact(r, r, B[k]); c++; }
                 if (c)
                     X[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                         (Expr*[]){ X[k], eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-                            (Expr*[]){ expr_new_integer((int64_t)c), expr_copy(at[i].e) }, 2)) }, 2));
+                            (Expr*[]){ expr_new_integer((int64_t)c), expr_copy(me[i]) }, 2)) }, 2));
             }
             if (mpz_cmp_ui(r, 1) != 0) ok = false;
         }
         mpz_clear(r);
         for (size_t k = 0; k < nb; k++) { Expr* x = expr_expand(X[k]); expr_free(X[k]); X[k] = x; }
         if (ok) {
-            size_t cap2 = n + nb + 1, nn = 0;
+            size_t cap2 = 2 * n + nb + 1, nn = 0;
             Expr** fa = malloc(cap2 * sizeof(Expr*));
             if (sign < 0) fa[nn++] = expr_new_integer(-1);
+            /* each negative power's sign: onto a basis element of its own
+             * value whose exponent is still its own, else into one
+             * (-1)^(e1 + e2 + ...).  Its own value: (-6)^a/3 is
+             * (-2)^a 3^(-1 + a), (-6)^(2 a) 4^(2 a) 9 is (-8)^(2 a) 3^(2 + 2 a)
+             * (6 and 4 merged under one exponent), but in
+             * (-9)^(1 + a) (-12)^a 4 the 4^(1 + a) comes from the 4, so the
+             * signs stay as (-1)^(1 + 2 a).  One power, not several: the
+             * grouping pass would fold a -1 coefficient into a merge of (-1)
+             * powers ((-1)^(1 + 3 a)), where the reference keeps -(-1)^(3 a). */
+            bool* signed_b = calloc(nb ? nb : 1, sizeof(bool));
+            Expr* sgn_e = NULL;
+            for (size_t i = 0; i < n; i++) {
+                bool s, ng;
+                if (!used[i] || !o4_power(args[i], &s, &ng) || !ng) continue;
+                Expr* e = args[i]->data.function.args[1];
+                Expr* ee = expr_expand(e);
+                size_t k = 0;
+                for (; k < nb; k++) {
+                    if (signed_b[k] || !expr_eq(X[k], ee)) continue;
+                    bool own = false;
+                    for (size_t m = 0; m < nm && !own; m++)
+                        own = msrc[m] == (int)i && mpz_divisible_p(mv[m], B[k]);
+                    if (own) break;
+                }
+                expr_free(ee);
+                if (k < nb) signed_b[k] = true;
+                else sgn_e = sgn_e ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                         (Expr*[]){ sgn_e, expr_copy(e) }, 2))
+                                   : expr_copy(e);
+            }
+            if (sgn_e) fa[nn++] = expr_new_function(expr_new_symbol(SYM_Power),
+                                     (Expr*[]){ expr_new_integer(-1), sgn_e }, 2);
             for (size_t k = 0; k < nb; k++) {
                 if (X[k]->type == EXPR_INTEGER && X[k]->data.integer == 0) continue;
+                if (signed_b[k]) mpz_neg(B[k], B[k]);
                 fa[nn++] = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_mpz(B[k])), expr_copy(X[k]) }, 2);
             }
+            free(signed_b);
             for (size_t i = 0; i < n; i++) if (!used[i]) fa[nn++] = expr_copy(args[i]);
             out = nn == 0 ? expr_new_integer(1)
                           : expr_new_function(expr_new_symbol(SYM_Times), fa, nn);
@@ -821,8 +1005,10 @@ static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
         for (size_t k = 0; k < nb; k++) { mpz_clear(B[k]); expr_free(X[k]); }
         free(B); free(X);
     }
+    for (size_t i = 0; i < nm; i++) mpz_clear(mv[i]);
+    free(mv); free(me); free(ms); free(msrc);
     mpz_clear(g); mpz_clear(num); mpz_clear(den);
-    for (size_t i = 0; i < na; i++) { mpz_clear(at[i].v); expr_free(at[i].e); }
+    for (size_t i = 0; i < na; i++) { mpz_clear(at[i].v); if (at[i].e) expr_free(at[i].e); }
     free(at); free(used);
     return out ? eval_and_free(out) : NULL;
 }

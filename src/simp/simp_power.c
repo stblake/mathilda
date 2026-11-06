@@ -596,6 +596,226 @@ Expr* transform_power_distribute(const Expr* e,
 }
 
 /* ----------------------------------------------------------------------- */
+/* PowerContent: (c u)^e -> c^e u^e for the positive content c of a sum    */
+/* ----------------------------------------------------------------------- */
+
+/* A sum base with positive rational content c != 1 under a non-integer
+ * exponent:
+ *      Power[Plus[c t1, ..., c tn], e]  ->  c^e * Power[Plus[t1, ..., tn], e]
+ * Soundness: c > 0, so arg(c u) = arg(u) and (c u)^e = c^e u^e on the
+ * principal branch for every complex u and e.  The content is the positive
+ * gcd of the terms' rational coefficients, so the sign of the sum is left
+ * inside: (-4 a - 4 b)^e gives 4^e (-a - b)^e, never (-4)^e (a + b)^e.
+ *
+ * Why: the content is otherwise invisible inside a power.  Factor and
+ * FactorTerms do not run on expressions with non-integer powers, and Times
+ * only splits a power of an explicit product, so 4^e (a + b)^e and
+ * (4 a + 4 b)^e never met: (4^e (a + b)^e)/(4 a + 4 b)^e stayed as it was
+ * (issue #126).  Rewritten, it evaluates to 1, and Sqrt[4 a + 4 b] becomes
+ * 2 Sqrt[a + b].  Integer exponents are left to the polynomial pipeline
+ * (Factor reaches them there).  Inexact coefficients are left alone. */
+
+/* The coefficient of a term as a rational in q, or false for an inexact /
+ * complex coefficient.  A term with no numeric factor has coefficient 1. */
+static bool power_content_term_coeff(const Expr* t, mpq_t q) {
+    const Expr* c = t;
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+        t->data.function.head->data.symbol.name == SYM_Times && t->data.function.arg_count > 0)
+        c = t->data.function.args[0];
+    if (expr_is_integer_like(c)) {
+        mpz_t z; expr_to_mpz(c, z);
+        mpq_set_z(q, z); mpz_clear(z);
+        return true;
+    }
+    if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+        c->data.function.head->data.symbol.name == SYM_Rational && c->data.function.arg_count == 2 &&
+        expr_is_integer_like(c->data.function.args[0]) && expr_is_integer_like(c->data.function.args[1])) {
+        mpz_t n, d;
+        expr_to_mpz(c->data.function.args[0], n);
+        expr_to_mpz(c->data.function.args[1], d);
+        mpq_set_num(q, n); mpq_set_den(q, d); mpq_canonicalize(q);
+        mpz_clear(n); mpz_clear(d);
+        return true;
+    }
+    /* any other leading factor: a number we cannot take content from (Real,
+     * Complex) or a non-number (coefficient 1) */
+    if (c->type == EXPR_REAL || head_is(c, SYM_Complex)) return false;
+#ifdef USE_MPFR
+    if (c->type == EXPR_MPFR) return false;
+#endif
+    mpq_set_ui(q, 1, 1);
+    return true;
+}
+
+/* The positive rational content of the Plus p as an Expr, or NULL when it is
+ * 1 or cannot be taken. */
+static Expr* power_content_of_sum(const Expr* p) {
+    mpz_t g, l;                     /* gcd of numerators, lcm of denominators */
+    mpz_init(g); mpz_init(l);
+    mpz_set_ui(l, 1);
+    mpq_t q; mpq_init(q);
+    bool ok = true;
+    for (size_t i = 0; i < p->data.function.arg_count && ok; i++) {
+        if (!power_content_term_coeff(p->data.function.args[i], q)) { ok = false; break; }
+        mpz_gcd(g, g, mpq_numref(q));
+        mpz_lcm(l, l, mpq_denref(q));
+    }
+    Expr* out = NULL;
+    if (ok && mpz_sgn(g) != 0 && !(mpz_cmp_ui(g, 1) == 0 && mpz_cmp_ui(l, 1) == 0)) {
+        Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(g));
+        Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(l));
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational),
+                                              (Expr*[]){ num, den }, 2));
+    }
+    mpq_clear(q); mpz_clear(g); mpz_clear(l);
+    return out;
+}
+
+static bool power_content_candidate(const Expr* e) {
+    return head_is(e, SYM_Power) && e->data.function.arg_count == 2 &&
+           head_is(e->data.function.args[0], SYM_Plus) &&
+           !expr_is_integer_like(e->data.function.args[1]);
+}
+
+static bool has_power_content(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (power_content_candidate(e)) {
+        Expr* c = power_content_of_sum(e->data.function.args[0]);
+        if (c) { expr_free(c); return true; }
+    }
+    if (has_power_content(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_power_content(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* power_content_walk(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr* head = power_content_walk(e->data.function.head);
+    Expr** args = n ? malloc(sizeof(Expr*) * n) : NULL;
+    for (size_t i = 0; i < n; i++) args[i] = power_content_walk(e->data.function.args[i]);
+    Expr* out = expr_new_function(head, args, n);
+    free(args);
+    if (!power_content_candidate(out)) return out;
+    Expr* sum = out->data.function.args[0];
+    Expr* c = power_content_of_sum(sum);
+    if (!c) return out;
+    /* u = sum / c, term by term (Times does not distribute over Plus) */
+    size_t m = sum->data.function.arg_count;
+    Expr** terms = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++)
+        terms[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy(c), expr_new_integer(-1) }, 2)),
+                       expr_copy(sum->data.function.args[i]) }, 2));
+    Expr* u = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, m));
+    free(terms);
+    Expr* ex = out->data.function.args[1];
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ c, expr_copy(ex) }, 2),
+                   expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ u, expr_copy(ex) }, 2) }, 2);
+    expr_free(out);
+    return r;
+}
+
+/* NULL when no power of a sum carries a content; otherwise the rewritten,
+ * evaluated expression. */
+Expr* transform_power_content(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+    if (!has_power_content(e)) return NULL;
+    Expr* result = eval_and_free(power_content_walk(e));
+    if (dbg) simp_debug_log("PowerContent", e, result, simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+/* ----------------------------------------------------------------------- */
+/* NegativeBasePower: c^(k + r) -> c^k c^r, c < 0 rational, k exact     */
+/* ----------------------------------------------------------------------- */
+
+/* Soundness: c^z is Exp[z Log[c]] on the principal branch, so
+ * c^(k + r) = c^k c^r for every c != 0 and every complex k and r.  With k an
+ * exact number, c^k evaluates (to a rational, -1, I, ...) or stays a
+ * numeric radical:
+ *     (-1)^(2 + n) -> (-1)^n,    (-1)^(1 + x) a -> -(-1)^x a,
+ *     (-1)^(1/2 + x) -> I (-1)^x,
+ *     -(-4)^(-1 + x) 3^x -> (-4)^x 3^x/4 -> (-3)^x 4^(-1 + x).
+ * Why: Times writes a split negative power's sign as (-1)^e with e as it
+ * came ((-2)^(n + 2) (-4) x is (-1)^(3 + n) 2^(4 + n) x), and nothing else
+ * takes the number out of the exponent of a negative base, where Times
+ * cannot fold it back in (for a positive base it does: 2 2^x is 2^(1 + x)).
+ * The rewrite is score-gated by the caller; (-1)^(3 + 2 x) stays,
+ * -(-1)^(2 x) being costlier. */
+static bool negative_base_power_split(const Expr* e, Expr** k_out, Expr** r_out) {
+    if (!head_is(e, SYM_Power) || e->data.function.arg_count != 2) return false;
+    const Expr* b = e->data.function.args[0];
+    const Expr* x = e->data.function.args[1];
+    int64_t bn, bd;
+    bool neg_base = (b->type == EXPR_INTEGER && b->data.integer < 0) ||
+                    (is_rational((Expr*)b, &bn, &bd) && bn < 0);
+    if (!neg_base || !head_is(x, SYM_Plus)) return false;
+    size_t n = x->data.function.arg_count;
+    Expr** ks = malloc(sizeof(Expr*) * n);
+    Expr** rs = malloc(sizeof(Expr*) * n);
+    size_t nk = 0, nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = x->data.function.args[i];
+        if (expr_is_integer_like(t) || is_rational(t, NULL, NULL)) ks[nk++] = expr_copy(t);
+        else rs[nr++] = expr_copy(t);
+    }
+    if (nk == 0 || nr == 0) {
+        for (size_t i = 0; i < nk; i++) expr_free(ks[i]);
+        for (size_t i = 0; i < nr; i++) expr_free(rs[i]);
+        free(ks); free(rs);
+        return false;
+    }
+    *k_out = nk == 1 ? ks[0] : eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ks, nk));
+    *r_out = nr == 1 ? rs[0] : expr_new_function(expr_new_symbol(SYM_Plus), rs, nr);
+    free(ks); free(rs);
+    return true;
+}
+
+static bool has_negative_base_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr *k, *r;
+    if (negative_base_power_split(e, &k, &r)) { expr_free(k); expr_free(r); return true; }
+    if (has_negative_base_power(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_negative_base_power(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* negative_base_power_walk(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr* head = negative_base_power_walk(e->data.function.head);
+    Expr** args = n ? malloc(sizeof(Expr*) * n) : NULL;
+    for (size_t i = 0; i < n; i++) args[i] = negative_base_power_walk(e->data.function.args[i]);
+    Expr* out = expr_new_function(head, args, n);
+    free(args);
+    Expr *k, *r;
+    if (!negative_base_power_split(out, &k, &r)) return out;
+    Expr* b = out->data.function.args[0];
+    Expr* res = expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(b), k }, 2),
+                   expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(b), r }, 2) }, 2);
+    expr_free(out);
+    return res;
+}
+
+/* NULL when no c^(k + r) with c < 0 occurs; otherwise the rewritten,
+ * evaluated expression. */
+Expr* transform_negative_base_power(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+    if (!has_negative_base_power(e)) return NULL;
+    Expr* result = eval_and_free(negative_base_power_walk(e));
+    if (dbg) simp_debug_log("NegativeBasePower", e, result, simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+/* ----------------------------------------------------------------------- */
 /* RadicalCanon: split Power[Rational[a,b],q] and rationalise -p/q powers  */
 /* ----------------------------------------------------------------------- */
 

@@ -318,6 +318,20 @@ Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
         Expr* new_head = expr_copy((Expr*)head);
         Expr* rebuilt = expr_new_function(new_head, new_args, argc);
         canonical = evaluate(rebuilt);
+        /* The children's wins can be undone by the parent's evaluation:
+         * Simplify takes (-4 a - 4 b)^e to (-4 (a + b))^e (11 -> 8), which in
+         * a product Times evaluates to 4^e (-a - b)^e (15), so
+         * (-4 a - 4 b)^e/(a + b)^e came back at 23 from 20 (issue #126).
+         * When evaluation alone lifts the rebuilt node above the original,
+         * the original node goes on instead.  A child rewrite that is
+         * costlier by design (a special-function canonical form) raises the
+         * unevaluated rebuild too, and is kept. */
+        size_t s_canon = score_with_func(canonical, complexity_func);
+        if (s_canon > score_with_func(input, complexity_func) &&
+            s_canon > score_with_func(rebuilt, complexity_func)) {
+            expr_free(canonical);
+            canonical = expr_copy((Expr*)input);
+        }
         expr_free(rebuilt);
     } else {
         for (size_t i = 0; i < argc; i++) expr_free(new_args[i]);

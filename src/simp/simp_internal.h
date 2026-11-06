@@ -224,6 +224,8 @@ bool has_pythag_head(const Expr* e);
 Expr* transform_prime_rebase(const Expr* e);
 Expr* transform_power_oneify(const Expr* e);
 Expr* transform_power_distribute(const Expr* e, const AssumeCtx* ctx);
+Expr* transform_power_content(const Expr* e);
+Expr* transform_negative_base_power(const Expr* e);
 Expr* transform_radical_canon(const Expr* e);
 
 /* Assumption-gated power->exp normalization: Power[base, exp] -> Exp[exp Log[base]]

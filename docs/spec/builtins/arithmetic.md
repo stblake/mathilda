@@ -515,8 +515,35 @@ Symbolic product.
   - Examples: `4^a 6^b` is `2^(2 a + b) 3^b`, `8 2^a 4^b` is
     `2^(3 + a + 2 b)`, `12 2^n` is `3 2^(2 + n)`, `4^a/2` is `2^(-1 + 2 a)`, and
     `(2/3)^a (9/4)^b` is `(2/3)^(a - 2 b)`.
-  - Powers with equal exponents are multiplied first, so `2^a 8^a` is `16^a`;
-    the equal-exponent merge then recombines what ends up equal or opposite.
+  - Powers of one base add their exponents first (`2 2^a` is `2^(1 + a)`),
+    then powers with equal exponents are multiplied, so `2^a 8^a` is `16^a`;
+    the basis is taken of the values that remain (v0.6225), so `6^x 4^x 9` is
+    `8^x 3^(2 + x)` (24 and 9 refine to {3, 8}) and `2^a 8^a 4^b` is
+    `4^(2 a + b)`. The equal-exponent merge then recombines what ends up equal
+    or opposite.
+  - **Negative rational bases** (v0.6225, issue #126) join through their
+    magnitude: `(-n)^e` is `(-1)^e n^e` for every complex `e`. The sign goes
+    back onto a basis element of the power's own value whose exponent is
+    still `e`, else into one `(-1)^(e1 + e2 + ...)`: `(-2)^x/2` is
+    `(-1)^x 2^(-1 + x)`, `(-6)^x/3` is `(-2)^x 3^(-1 + x)`, `(-6)^x/4` is
+    `(-3)^x 2^(-2 + x)`, `(-2)^x (-8)^y` is `(-1)^(x + y) 2^(x + 3 y)`, and
+    `(-9)^(1 + x) (-12)^x 4` is `(-1)^(1 + 2 x) 3^(2 + 3 x) 4^(1 + x)`. So
+    `(-2)^x/2 - (-1)^x 2^(x - 1)` is `0`.
+    - Two negative powers under one exponent never multiply their
+      magnitudes: `(-2)^x (-3)^x` stays, `(-2)^x (-4)^x` is
+      `(-1)^(2 x) 2^(3 x)`. A negative power's magnitude meets a positive
+      power of the same value only to cancel it: `(-1/2)^n 2^n` is `(-1)^n`,
+      while `(-2)^x 2^x` is `(-4)^x`.
+    - The number factors are multiplied first, and that coefficient merges
+      with a negative power of the same base only when that power is the
+      first (smallest base) to share a prime with it: `(-3)^x (-3)` is
+      `(-3)^(1 + x)` and `(-4)^(2 + n) (-4) 2^(2 x)` is
+      `(-1)^(3 + n) 2^(6 + 2 n + 2 x)`, while `(-1/2)^(2 x) (-8)^x (-1/2)` is
+      `-(-1)^(3 x) 2^(-1 + x)` and `(-1/2)^x (-1/2) 4` (coefficient `-2`) is
+      `-(-1)^x 2^(1 - x)`.
+    - Not yet: a negative base under a rational exponent (`(-2)^(1/3)/2`,
+      which the reference writes `(-1)^(1/3) 2^(-2/3)`), and Gaussian-integer
+      coefficients (`(-2)^x/(2 I)`).
   - The basis comes from gcds alone. A product of huge prime powers such as
     `m^-7 (p/m^4)^(-1 - 3 e) (r/m^3)^(-1 + 4 e)` collapses with no integer
     factoring.

@@ -953,6 +953,46 @@ static Expr* simp_pipeline_polynomial(const Expr* input,
  * No round loop. Every meaningful win on a rational expression is one
  * of these transforms applied directly.
  */
+/* The sum `input` with every quotient term (a Times with a sum raised to a
+ * negative power) simplified on its own; NULL when no term changes. */
+static bool term_has_sum_denominator(const Expr* t) {
+    if (!head_is(t, SYM_Times)) return false;
+    for (size_t i = 0; i < t->data.function.arg_count; i++) {
+        const Expr* f = t->data.function.args[i];
+        if (head_is(f, SYM_Power) && f->data.function.arg_count == 2 &&
+            head_is(f->data.function.args[0], SYM_Plus) &&
+            exact_number_sign(f->data.function.args[1]) == -1) return true;
+    }
+    return false;
+}
+
+static Expr* simp_rational_termwise(const Expr* input, const AssumeCtx* ctx,
+                                    const Expr* complexity_func) {
+    size_t n = input->data.function.arg_count;
+    bool any = false;
+    for (size_t i = 0; i < n && !any; i++) any = term_has_sum_denominator(input->data.function.args[i]);
+    if (!any) return NULL;
+    Expr** terms = malloc(sizeof(Expr*) * n);
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* t = input->data.function.args[i];
+        if (term_has_sum_denominator(t)) {
+            terms[i] = simp_dispatch(t, ctx, complexity_func);
+            if (!expr_eq(terms[i], (Expr*)t)) changed = true;
+        } else {
+            terms[i] = expr_copy((Expr*)t);
+        }
+    }
+    if (!changed) {
+        for (size_t i = 0; i < n; i++) expr_free(terms[i]);
+        free(terms);
+        return NULL;
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
+    free(terms);
+    return eval_and_free(r);
+}
+
 static Expr* simp_pipeline_rational(const Expr* input,
                                     const AssumeCtx* ctx,
                                     const Expr* complexity_func) {
@@ -1077,6 +1117,27 @@ static Expr* simp_pipeline_rational(const Expr* input,
             CandSet next; cs_init(&next);
             try_collect_per_variable(col_src, bs, &next, &best, &bs, complexity_func);
             cs_free(&next);
+        }
+    }
+
+    /* Term by term (issue #126): a sum none of whose whole-expression forms
+     * improved on it gets each quotient term simplified on its own, so the
+     * per-term tie rules above apply as they do to a lone quotient:
+     * ((4 - 4 eps) y)/(-1 + y^2) + z -> (-4 (-1 + eps) y)/(-1 + y^2) + z,
+     * as in the reference.  Taken at no worse score and only while the
+     * input is still the best, so a combined form that is strictly simpler
+     * (((6 - 6 a) b)/(1 + b) + c/(1 + b) -> (6 b - 6 a b + c)/(1 + b)) wins. */
+    if (head_is(input, SYM_Plus) && expr_eq(best, (Expr*)input)) {
+        Expr* tw = simp_rational_termwise(input, ctx, complexity_func);
+        if (tw) {
+            size_t ts = score_with_func(tw, complexity_func);
+            if (ts <= bs && !expr_eq(tw, best)) {
+                expr_free(best);
+                best = tw;
+                bs = ts;
+            } else {
+                expr_free(tw);
+            }
         }
     }
 
@@ -1695,6 +1756,46 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                 size_t s_alt = score_with_func(alt, complexity_func);
                 size_t s_in = score_with_func(input, complexity_func);
                 if (s_alt < s_in) {
+                    Expr* result = simp_dispatch(alt, ctx, complexity_func);
+                    expr_free(alt);
+                    return result;
+                }
+            }
+            expr_free(alt);
+        }
+    }
+    /* PowerContent: (c u)^e -> c^e u^e for the positive rational content c
+     * of a sum base (non-integer e).  Ties go to the rewrite, as in the
+     * reference (Simplify[(4 a + 4 b)^e] is 4^e (a + b)^e); the result is
+     * its own fixed point (the sums are left content-free), so the
+     * recursion stops after one step. */
+    {
+        Expr* alt = transform_power_content(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_alt = score_with_func(alt, complexity_func);
+                size_t s_in = score_with_func(input, complexity_func);
+                if (s_alt <= s_in) {
+                    Expr* result = simp_dispatch(alt, ctx, complexity_func);
+                    expr_free(alt);
+                    return result;
+                }
+            }
+            expr_free(alt);
+        }
+    }
+    /* NegativeBasePower: c^(k + r) -> c^k c^r for a negative rational c and
+     * an exact number k.  Ties go to the rewrite, as in the reference
+     * (Simplify[(-1)^(2 + n) a] is (-1)^n a, Simplify[(-1)^(1 + x) a] is
+     * -(-1)^x a); the result has no number left in such an exponent, so the
+     * recursion stops after one step. */
+    {
+        Expr* alt = transform_negative_base_power(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_alt = score_with_func(alt, complexity_func);
+                size_t s_in = score_with_func(input, complexity_func);
+                if (s_alt <= s_in) {
                     Expr* result = simp_dispatch(alt, ctx, complexity_func);
                     expr_free(alt);
                     return result;
