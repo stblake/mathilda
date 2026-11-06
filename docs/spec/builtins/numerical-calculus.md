@@ -779,6 +779,7 @@ integrand evaluated/numericalised at each sample point.
 | finite real, smooth | globally-adaptive Gauss-Kronrod (G7-K15) with QAGS Wynn extrapolation |
 | finite real, endpoint singularity | tanh-sinh double-exponential |
 | arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
+| machine precision, integrand leaves the double range in the bulk of the interval (e.g. `x^x^x` on `[1, 6]` reaches 2.7e36305; a Laurent polynomial on the unit circle whose powers give `Overflow[]`) | the machine pass is discarded and the integral re-run on the MPFR path at machine-equivalent precision (53 bits + guard); the result is a 53-bit Real, the representation machine arithmetic itself uses beyond 1.8e308.  A sample within 1e-10 of the span from an endpoint (an endpoint singularity) does not trigger this. |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
 | semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx` | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros) — the fast, high-precision path (hundreds of digits in a few thousand samples) |
 | oscillatory (many periods / slow tail), general | integrate between zeros + Wynn epsilon (finite: half-period panels; MPFR-accelerated at high `WorkingPrecision`) |
@@ -864,6 +865,20 @@ They take Method sub-options in the `Method -> {"rule", "opt" -> val, …}` form
 
 The Riemann rectangle rules are first order (midpoint second order) and are not
 extrapolated; Trapezoidal and Newton–Cotes drive a Romberg table by default.
+
+### Arbitrary-precision drivers
+
+The MPFR tanh-sinh, exp-sinh, sinh-sinh and equally-spaced drivers judge their
+tails and level-to-level convergence on log2 magnitudes (or directly in MPFR),
+never through doubles, so an integrand anywhere in MPFR's exponent range is
+handled (through doubles a term beyond 1.8e308 was `Inf`, and `Inf <= reltol Inf`
+passed the convergence test at the first comparison).  The double-exponential
+tail cuts wait until a side has been significant — its largest term, seeded with
+the shared `t = 0` term, has reached a tenth of the level maximum — so a side
+that starts at a deep zero and climbs (`(1 + Cos[x])^2000` on `[0, 2 Pi]`, zero of
+order 4000 at the centre) is not cut before its own bulk.  Endpoints are taken
+at the working precision from the iterator as written (`2 Pi`, not its double),
+and a `{x, x0, x1, …}` list of real nodes runs each segment on the MPFR path.
 (the reference's same-named methods plug these as *local* rules into the adaptive
 strategy, so its crude-`PrecisionGoal` values come from non-uniform subdivision;
 the values here are the well-defined uniform-composite estimates.)
@@ -889,8 +904,13 @@ reach the goal), `NIntegrate::method`, `NIntegrate::badopt`.
 ### Limitations
 
 Monte-Carlo and complex-contour paths are machine precision (high
-`WorkingPrecision` applies to real ranges).  Finite-range MPFR bounds are taken
-to machine precision (exact for rational bounds).  The oscillatory zero finder
+`WorkingPrecision` applies to real ranges, including a list of real nodes).  An
+endpoint the driver introduces itself (an `Exclusions` split point) is taken to
+machine precision.  An integrand that symbolic evaluation expands into an
+ill-conditioned form (e.g. `LaguerreL[1000, 3940 E^(I phi)]`, which evaluates to
+its explicit degree-1000 polynomial in `E^(I phi)`, losing ~250 digits to
+cancellation at each sample) is sampled in that form; no precision-loss
+detection raises the sample precision.  The oscillatory zero finder
 tracks a drifting local period (the lobe step adapts to the last zero-to-zero
 gap), so an *endpoint* chirp is handled via the `"OscillatorySingularity"`
 transform; an *interior* chirp such as `Sin[x^2]` over a wide finite range is not

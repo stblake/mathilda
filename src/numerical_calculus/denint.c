@@ -93,10 +93,11 @@ static bool den_run_machine(DenTermMachine term, void* tctx, double tmax,
         double _Complex sum = 0.0, c0;
         if (term(NULL, tctx, 0.0, &c0)) sum = c0;
         double maxterm = cabs(sum);
+        const double lcenter = de_log2_mag(maxterm);   /* the t = 0 term */
         for (int side = -1; side <= 1; side += 2) {
             /* Floor cut over a t-window, noise cut confirmed before it is
              * taken: an interior zero is not the tail (DeTailGuard, dequad.h). */
-            DeTailGuard g; de_tail_guard_init(&g);
+            DeTailGuard g; de_tail_guard_init(&g, lcenter);
             double _Complex ckpt = 0.0;
             for (int k = 1; ; k++) {
                 double t = side * k * h;
@@ -162,9 +163,6 @@ static void den_scratch_clear(DenMpfrScratch* sc) {
                 sc->tmp, sc->weight, sc->x, sc->fr, sc->fi, sc->half,
                 sc->a, sc->b, (mpfr_ptr)0);
 }
-static double den_l1_d(const mpfr_t re, const mpfr_t im) {
-    return fabs(mpfr_get_d(re, MPFR_RNDN)) + fabs(mpfr_get_d(im, MPFR_RNDN));
-}
 
 /* tanh-sinh MPFR term at parameter tv. */
 static bool den_ts_term_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
@@ -228,7 +226,7 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
     if (reltol <= 0.0) reltol = 1e-13;
     if (max_levels < 1) max_levels = 1;
     mpfr_prec_t p = (mpfr_prec_t)bits;
-    double floor_rel = ldexp(1.0, -(int)bits - 4);
+    double lfloor = -(double)bits - 4.0;   /* log2 of the relative tail floor */
 
     mpfr_t sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, dr, di;
     mpfr_t ck_re, ck_im;   /* noise checkpoint (DeTailGuard) */
@@ -242,24 +240,25 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
     for (int level = 0; level <= max_levels; level++, h *= 0.5) {
         mpfr_set_ui(sum_re, 0, MPFR_RNDN);
         mpfr_set_ui(sum_im, 0, MPFR_RNDN);
-        double maxterm = 0.0;
+        double lmax = -INFINITY;   /* log2 of the level's largest term */
         bool ok0 = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, 0.0, tr, ti)
                             : den_ss_term_mpfr(f, ctx, sc, 0.0, tr, ti);
         if (ok0) {
             mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
             mpfr_add(sum_im, sum_im, ti, MPFR_RNDN);
-            maxterm = den_l1_d(tr, ti);
+            lmax = de_mpfr_log2_l1(tr, ti);
         }
+        const double lcenter = lmax;                   /* the t = 0 term */
         for (int side = -1; side <= 1; side += 2) {
-            DeTailGuard g; de_tail_guard_init(&g);   /* windowed cuts, dequad.h */
+            DeTailGuard g; de_tail_guard_init(&g, lcenter);   /* dequad.h */
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > tmax) break;
                 bool ok = tanhsinh ? den_ts_term_mpfr(f, ctx, sc, t, tr, ti)
                                    : den_ss_term_mpfr(f, ctx, sc, t, tr, ti);
                 if (!ok) break;
-                int act = de_tail_step(&g, fabs(t), den_l1_d(tr, ti), &maxterm,
-                                       floor_rel);
+                int act = de_tail_step_log2(&g, fabs(t), de_mpfr_log2_l1(tr, ti),
+                                            &lmax, lfloor);
                 if (act == DE_TAIL_ROLLBACK_STOP) {
                     mpfr_set(sum_re, ck_re, MPFR_RNDN);
                     mpfr_set(sum_im, ck_im, MPFR_RNDN);
@@ -281,9 +280,11 @@ static bool den_run_mpfr(DeQuadSampleMPFR f, void* ctx, DenMpfrScratch* sc,
         if (have_prev) {
             mpfr_sub(dr, I_re, prev_re, MPFR_RNDN);
             mpfr_sub(di, I_im, prev_im, MPFR_RNDN);
-            double diff = den_l1_d(dr, di), mag = den_l1_d(I_re, I_im);
-            *abserr = diff;
-            if (diff <= reltol * mag + 1e-300) { converged = true; break; }
+            *abserr = de_mpfr_l1_d(dr, di);
+            if (de_mpfr_level_converged(dr, di, I_re, I_im, reltol,
+                                        lmax + log2(h), bits)) {
+                converged = true; break;
+            }
         }
         mpfr_set(prev_re, I_re, MPFR_RNDN);
         mpfr_set(prev_im, I_im, MPFR_RNDN);

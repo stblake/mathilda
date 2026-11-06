@@ -58,6 +58,7 @@ bool dequad_halfline_machine(DeQuadSampleMachine f, void* ctx, double a,
         double _Complex sum = 0.0, c0;
         if (deq_term_machine(f, ctx, a, 0.0, &c0)) sum = c0;
         double maxterm = cabs(sum);
+        const double lcenter = de_log2_mag(maxterm);   /* the t = 0 term */
 
         /* Each tail: add terms until they have stayed below the relative floor,
          * or — crucially for integrands that hit a roundoff noise floor while
@@ -67,7 +68,7 @@ bool dequad_halfline_machine(DeQuadSampleMachine f, void* ctx, double a,
          * before it is taken, so an interior zero of the integrand is not
          * mistaken for the tail (DeTailGuard, dequad.h). */
         for (int side = -1; side <= 1; side += 2) {
-            DeTailGuard g; de_tail_guard_init(&g);
+            DeTailGuard g; de_tail_guard_init(&g, lcenter);
             double _Complex ckpt = 0.0;
             for (int k = 1; ; k++) {
                 double t = side * k * h;
@@ -143,10 +144,6 @@ static bool deq_term_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
     return true;
 }
 
-/* |re| + |im| as a double, for the relative tail/convergence gauges. */
-static double deq_l1_d(const mpfr_t re, const mpfr_t im) {
-    return fabs(mpfr_get_d(re, MPFR_RNDN)) + fabs(mpfr_get_d(im, MPFR_RNDN));
-}
 
 bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
                           long bits, double reltol, int max_levels,
@@ -161,7 +158,7 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
      * near 1) only crosses the floor at large t, so the cap must be generous.
      * MPFR's wide exponent range tolerates the huge exp((π/2) sinh t). */
     double tmax = 6.5 + 1.1 * log((double)bits);
-    double floor_rel = ldexp(1.0, -(int)bits - 4);
+    double lfloor = -(double)bits - 4.0;   /* log2 of the relative tail floor */
 
     mpfr_t sum_re, sum_im, I_re, I_im, prev_re, prev_im, tr, ti, diff_re, diff_im;
     mpfr_t ck_re, ck_im;   /* noise checkpoint (DeTailGuard) */
@@ -175,20 +172,21 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
     for (int level = 0; level <= max_levels; level++, h *= 0.5) {
         mpfr_set_ui(sum_re, 0, MPFR_RNDN);
         mpfr_set_ui(sum_im, 0, MPFR_RNDN);
-        double maxterm = 0.0;
+        double lmax = -INFINITY;   /* log2 of the level's largest term */
         if (deq_term_mpfr(f, ctx, a, &sc, 0.0, tr, ti)) {
             mpfr_add(sum_re, sum_re, tr, MPFR_RNDN);
             mpfr_add(sum_im, sum_im, ti, MPFR_RNDN);
-            maxterm = deq_l1_d(tr, ti);
+            lmax = de_mpfr_log2_l1(tr, ti);
         }
+        const double lcenter = lmax;                   /* the t = 0 term */
         for (int side = -1; side <= 1; side += 2) {
-            DeTailGuard g; de_tail_guard_init(&g);   /* windowed cuts, dequad.h */
+            DeTailGuard g; de_tail_guard_init(&g, lcenter);   /* dequad.h */
             for (int k = 1; ; k++) {
                 double t = side * k * h;
                 if (fabs(t) > tmax) break;
                 if (!deq_term_mpfr(f, ctx, a, &sc, t, tr, ti)) break;
-                int act = de_tail_step(&g, fabs(t), deq_l1_d(tr, ti), &maxterm,
-                                       floor_rel);
+                int act = de_tail_step_log2(&g, fabs(t), de_mpfr_log2_l1(tr, ti),
+                                            &lmax, lfloor);
                 if (act == DE_TAIL_ROLLBACK_STOP) {
                     mpfr_set(sum_re, ck_re, MPFR_RNDN);
                     mpfr_set(sum_im, ck_im, MPFR_RNDN);
@@ -211,10 +209,11 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
         if (have_prev) {
             mpfr_sub(diff_re, I_re, prev_re, MPFR_RNDN);
             mpfr_sub(diff_im, I_im, prev_im, MPFR_RNDN);
-            double diff = deq_l1_d(diff_re, diff_im);
-            double mag = deq_l1_d(I_re, I_im);
-            *abserr = diff;
-            if (diff <= reltol * mag + 1e-300) { converged = true; break; }
+            *abserr = de_mpfr_l1_d(diff_re, diff_im);
+            if (de_mpfr_level_converged(diff_re, diff_im, I_re, I_im, reltol,
+                                        lmax + log2(h), bits)) {
+                converged = true; break;
+            }
         }
         mpfr_set(prev_re, I_re, MPFR_RNDN);
         mpfr_set(prev_im, I_im, MPFR_RNDN);

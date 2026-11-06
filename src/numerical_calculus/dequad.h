@@ -91,13 +91,23 @@ bool dequad_halfline_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a,
 #define DE_TAIL_DECAYED       0.1     /* "decayed": term <= this * maxterm      */
 #define DE_TAIL_NOISE_GROWTH  1e4     /* confirm noise: term > this * envelope  */
 
+/* The guard works on log2 magnitudes, so the same classification serves the
+ * machine drivers and the MPFR drivers, whose terms can lie anywhere in MPFR's
+ * exponent range.  Read through doubles, a term beyond 1.8e308 became +Inf and
+ * one below 2.2e-308 became 0: an overflowing term "rose without bound" and was
+ * cut as noise, and Inf <= reltol * Inf then passed the convergence test, so
+ * NIntegrate[x^x^x, {x, 1, 6}, WorkingPrecision -> 30] stopped at the first
+ * term past 1e308 and returned 6.6e25591 for 1.10e36300.  Every field holding
+ * a magnitude below holds its log2 (-Inf for zero). */
 typedef struct {
     double floor_t;   /* |t| at which the current floor-level run began (<0: none) */
     double dec_t;     /* |t| at which the current decayed run began (<0: none)     */
-    double dec_env;   /* largest term in the current decayed run                  */
-    double prev_m;    /* magnitude of the previous term on this side              */
+    double dec_env;   /* log2 of the largest term in the current decayed run      */
+    double prev_m;    /* log2 magnitude of the previous term on this side         */
+    double side_max;  /* log2 of the largest term so far on this side, seeded with
+                       * the shared t = 0 term                                    */
     bool   armed;     /* a noise checkpoint is held by the caller                 */
-    double arm_env;   /* envelope of the decayed run that armed it                */
+    double arm_env;   /* log2 envelope of the decayed run that armed it           */
 } DeTailGuard;
 
 enum {
@@ -107,34 +117,54 @@ enum {
     DE_TAIL_ROLLBACK_STOP   /* noise confirmed: restore the checkpoint and stop  */
 };
 
-static inline void de_tail_guard_init(DeTailGuard* g) {
-    g->floor_t = -1.0; g->dec_t = -1.0; g->dec_env = 0.0;
-    g->prev_m = INFINITY; g->armed = false; g->arm_env = 0.0;
+/* lcenter: log2 magnitude of the level's t = 0 term (-Inf if none). */
+static inline void de_tail_guard_init(DeTailGuard* g, double lcenter) {
+    g->floor_t = -1.0; g->dec_t = -1.0; g->dec_env = -INFINITY;
+    g->prev_m = INFINITY; g->side_max = lcenter;
+    g->armed = false; g->arm_env = -INFINITY;
 }
 
-/* Classify the term of magnitude m at |t| = at, given the largest term seen so
- * far this level (*maxterm, updated here).  floor_rel is the relative floor. */
-static inline int de_tail_step(DeTailGuard* g, double at, double m,
-                               double* maxterm, double floor_rel) {
-    if (g->armed && m > DE_TAIL_NOISE_GROWTH * g->arm_env)
+/* log2 of a nonnegative double magnitude (-Inf for zero). */
+static inline double de_log2_mag(double m) {
+    return (m > 0.0) ? log2(m) : -INFINITY;
+}
+
+/* Classify the term of log2 magnitude lm at |t| = at, given the log2 of the
+ * largest term seen so far this level (*lmax, updated here).  lfloor is the
+ * log2 of the relative floor. */
+static inline int de_tail_step_log2(DeTailGuard* g, double at, double lm,
+                                    double* lmax, double lfloor) {
+    static const double L_GROWTH  = 13.287712379549449;   /* log2(1e4)  */
+    static const double L_DECAYED = -3.3219280948873622;  /* log2(0.1)  */
+    if (g->armed && lm > L_GROWTH + g->arm_env)
         return DE_TAIL_ROLLBACK_STOP;
     int act = DE_TAIL_ADD;
     if (!g->armed && g->dec_t >= 0.0 && at - g->dec_t >= DE_TAIL_WINDOW
-        && m > 4.0 * g->prev_m) {
+        && lm > 2.0 + g->prev_m) {
         g->armed = true;
         g->arm_env = g->dec_env;
         act = DE_TAIL_CHECKPOINT;
     }
-    if (m > *maxterm) *maxterm = m;
-    double mx = *maxterm;
-    g->prev_m = m;
-    if (mx > 0.0 && m <= DE_TAIL_DECAYED * mx) {
-        if (g->dec_t < 0.0) { g->dec_t = at; g->dec_env = m; }
-        else if (m > g->dec_env) g->dec_env = m;
+    if (lm > *lmax) *lmax = lm;
+    double mx = *lmax;
+    g->prev_m = lm;
+    /* Both cuts read "the tail of this side", so they wait until the side has
+     * been significant: its largest term (seeded with the shared t = 0 term)
+     * has reached the decayed band of the level maximum.  The level maximum
+     * alone is shared with the other side, so a side whose integrand starts at
+     * a deep zero and climbs (the order-2000 zero of (1 + e^(i phi))^2000 at
+     * the centre of [0, 2 Pi]) sat below the other side's peak for a whole
+     * window and was cut before its own bulk: half the integral was lost.  A
+     * side that starts at or rises to a significant term is unaffected. */
+    if (lm > g->side_max) g->side_max = lm;
+    bool have_max = mx > -INFINITY && g->side_max > L_DECAYED + mx;
+    if (have_max && lm <= L_DECAYED + mx) {
+        if (g->dec_t < 0.0) { g->dec_t = at; g->dec_env = lm; }
+        else if (lm > g->dec_env) g->dec_env = lm;
     } else {
         g->dec_t = -1.0;
     }
-    if (mx > 0.0 && m <= floor_rel * mx) {
+    if (have_max && lm <= lfloor + mx) {
         if (g->floor_t < 0.0) g->floor_t = at;
         if (at - g->floor_t >= DE_TAIL_WINDOW && act == DE_TAIL_ADD)
             return DE_TAIL_ADD_STOP;
@@ -143,5 +173,56 @@ static inline int de_tail_step(DeTailGuard* g, double at, double m,
     }
     return act;
 }
+
+/* Linear-magnitude front end for the machine drivers: m and *maxterm are plain
+ * magnitudes, floor_rel the relative floor. */
+static inline int de_tail_step(DeTailGuard* g, double at, double m,
+                               double* maxterm, double floor_rel) {
+    double lmax = de_log2_mag(*maxterm);
+    int act = de_tail_step_log2(g, at, de_log2_mag(m), &lmax, de_log2_mag(floor_rel));
+    if (m > *maxterm) *maxterm = m;
+    return act;
+}
+
+#ifdef USE_MPFR
+/* log2 |v| over MPFR's whole exponent range (-Inf for zero). */
+static inline double de_mpfr_log2_abs(const mpfr_t v) {
+    if (mpfr_zero_p(v) || !mpfr_number_p(v)) return -INFINITY;
+    long e;
+    double d = mpfr_get_d_2exp(&e, v, MPFR_RNDN);       /* 0.5 <= |d| < 1 */
+    return log2(fabs(d)) + (double)e;
+}
+
+/* log2(|re| + |im|), the gauge the MPFR drivers use for terms and level
+ * differences: no overflow to Inf, no underflow to 0. */
+static inline double de_mpfr_log2_l1(const mpfr_t re, const mpfr_t im) {
+    double lr = de_mpfr_log2_abs(re), li = de_mpfr_log2_abs(im);
+    double hi = lr > li ? lr : li, lo = lr > li ? li : lr;
+    if (hi == -INFINITY) return -INFINITY;
+    return hi + log2(1.0 + exp2(lo - hi));
+}
+
+/* Level-to-level convergence test of the MPFR drivers, scale-free: the
+ * difference d of two successive estimates I is accepted when
+ * |d| <= reltol |I|, or when |d| is at the rounding noise of the level's
+ * largest term (log2 lmax_term, already multiplied by the step) at `bits`
+ * precision, which is all an integral that cancels to ~0 can show. */
+static inline bool de_mpfr_level_converged(const mpfr_t d_re, const mpfr_t d_im,
+                                           const mpfr_t I_re, const mpfr_t I_im,
+                                           double reltol, double lterm_scaled,
+                                           long bits) {
+    double ld = de_mpfr_log2_l1(d_re, d_im);
+    if (ld == -INFINITY) return true;
+    if (ld <= log2(reltol) + de_mpfr_log2_l1(I_re, I_im)) return true;
+    return lterm_scaled > -INFINITY && ld <= lterm_scaled - (double)bits + 8.0;
+}
+
+/* The level difference as a double magnitude for the drivers' *abserr out
+ * parameter (saturates at the double range; the convergence decision itself
+ * never goes through it). */
+static inline double de_mpfr_l1_d(const mpfr_t re, const mpfr_t im) {
+    return fabs(mpfr_get_d(re, MPFR_RNDN)) + fabs(mpfr_get_d(im, MPFR_RNDN));
+}
+#endif /* USE_MPFR */
 
 #endif /* MATHILDA_DEQUAD_H */

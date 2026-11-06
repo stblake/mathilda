@@ -503,6 +503,95 @@ static void test_de_interior_zeros(void) {
                  "WorkingPrecision -> 20]", "N[-Pi/4, 40]", 1e-18);
 }
 
+/* ---- Integrals outside the double range, and the MPFR driver gauges ----
+ * Expected values are independent of NIntegrate: closed forms, an exact
+ * coefficient extraction (the Laurent coefficient below was computed with
+ * exact integer polynomial arithmetic), and a separate 50-digit quadrature of
+ * x^x^x split at its boundary layer. */
+
+/* |result / expected - 1| < tol, the result computed once. */
+static bool rel_close(const char* input, const char* expected, const char* tol) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+             "With[{r = (%s)}, NumberQ[r] && N[Abs[r/(%s) - 1], 20] < %s]",
+             input, expected, tol);
+    char* s = eval_str(buf);
+    bool ok = (strcmp(s, "True") == 0);
+    if (!ok) fprintf(stderr, "  rel_close FAIL: %s vs %s (rel tol %s) => %s\n",
+                     input, expected, tol, s);
+    free(s);
+    return ok;
+}
+#define ASSERT_REL(input, expected, tol)                                     \
+    ASSERT_MSG(rel_close((input), (expected), (tol)),                        \
+               "%s ~= %s (rel tol %s)", (input), (expected), (tol))
+
+#define XXX_TRUE "1.10266499936194065557541124033087278915258846709*10^36300"
+#define CONTOUR_BODY "(((x+1)^2000 (x^2+x+1)^1000 (x^4+x^3+x^2+x+1)^500/x^3001 " \
+                     "/. x -> E^(I phi)) I E^(I phi))"
+/* Im[contour integral]/(2 Pi) = coefficient of x^3000 in the numerator. */
+#define CONTOUR_TRUE "3.97394226558004303969667626329*10^1426"
+
+static void test_beyond_double_range(void) {
+    /* WorkingPrecision: the tail/convergence gauges no longer pass through
+     * doubles (an overflowing term was Inf and Inf <= reltol Inf "converged";
+     * this returned 6.6e25591). */
+    ASSERT_REL("NIntegrate[x^x^x, {x, 1, 6}, WorkingPrecision -> 30]",
+               XXX_TRUE, "10^-25");
+    ASSERT_REL("NIntegrate[x^x^x, {x, 1, 6}, WorkingPrecision -> 30, "
+               "PrecisionGoal -> 7, MaxRecursion -> 20, Method -> \"DoubleExponential\"]",
+               XXX_TRUE, "10^-7");
+    ASSERT_REL("NIntegrate[x^x^x, {x, 1, 6}, WorkingPrecision -> 50, PrecisionGoal -> 40]",
+               XXX_TRUE, "10^-40");
+    /* Machine precision: a sample beyond 1.8e308 re-runs the integral on the
+     * MPFR path at machine-equivalent precision (was unevaluated). */
+    ASSERT_REL("NIntegrate[x^x^x, {x, 1, 6}]", XXX_TRUE, "10^-10");
+    ASSERT_EQ_STR("Precision[NIntegrate[x^x^x, {x, 1, 6}]] < 17", "True");
+    ASSERT_REL("NIntegrate[Exp[1000 x], {x, 0, 1}]", "(E^1000 - 1)/1000", "10^-10");
+    /* The same integral after x^x -> z: a boundary layer turned into a
+     * ProductLog integrand over [1, 6^6] (was 0. and 7.6e35391). */
+    ASSERT_REL("With[{s = (Log[z]/ProductLog[Log[z]])^z D[Log[z]/ProductLog[Log[z]], z]}, "
+               "NIntegrate[s, {z, 1, 6^6}]]", XXX_TRUE, "10^-10");
+    ASSERT_REL("With[{s = (Log[z]/ProductLog[Log[z]])^z D[Log[z]/ProductLog[Log[z]], z]}, "
+               "NIntegrate[s, {z, 1, 6^6}, WorkingPrecision -> 30, PrecisionGoal -> 20]]",
+               XXX_TRUE, "10^-20");
+    /* A complex machine integrand whose powers overflow (Overflow[] samples
+     * used to be dropped, giving a silent 0.). */
+    ASSERT_REL("Im[NIntegrate[" CONTOUR_BODY ", {phi, 0, 2 Pi}]]/(2 Pi)",
+               CONTOUR_TRUE, "10^-10");
+    /* An endpoint singularity is not an overflow of the bulk: still the
+     * oscillatory endpoint transform, at machine precision. */
+    ASSERT_CLOSE("NIntegrate[Cos[Log[x]/x]/x, {x, 0, 1}]", "0.32336743", 1e-5);
+    ASSERT_EQ_STR("Precision[NIntegrate[Cos[Log[x]/x]/x, {x, 0, 1}]]", "MachinePrecision");
+}
+
+static void test_mpfr_quadrature_gauges(void) {
+    /* A side that starts at a deep zero and climbs: (1 + Cos[x])^2000 vanishes
+     * to order 4000 at the centre of [0, 2 Pi]; the cuts used to read the
+     * other side's peak and dropped this side's bulk (half the integral).
+     * Closed form: 2 Pi Binomial[2 n, n]/2^n. */
+    ASSERT_REL("NIntegrate[(1 + Cos[x])^2000, {x, 0, 2 Pi}, WorkingPrecision -> 30]",
+               "2 Pi Binomial[4000, 2000]/2^2000", "10^-25");
+    ASSERT_REL("Im[NIntegrate[" CONTOUR_BODY ", {phi, 0, 2 Pi}, WorkingPrecision -> 30]]/(2 Pi)",
+               CONTOUR_TRUE, "10^-25");
+    /* Exact endpoints at WorkingPrecision: 2 Pi as a double cut 2.4e-16 off
+     * the period (relative error 1e-16 at any precision). */
+    ASSERT_REL("NIntegrate[Exp[Cos[x]], {x, 0, 2 Pi}, WorkingPrecision -> 40]",
+               "2 Pi BesselI[0, 1]", "10^-35");
+    /* Real contour nodes at WorkingPrecision run each segment in MPFR (the
+     * segments were computed in doubles). */
+    ASSERT_REL("NIntegrate[Exp[Cos[x]], {x, 0, Pi, 2 Pi}, WorkingPrecision -> 40]",
+               "2 Pi BesselI[0, 1]", "10^-35");
+    ASSERT_EQ_STR("Precision[NIntegrate[Exp[Cos[x]], {x, 0, Pi, 2 Pi}, "
+                  "WorkingPrecision -> 40]] >= 40", "True");
+    /* The half-line Fourier probe flattened Times into the shared integrand:
+     * Exp[-x^2] became E^((-1)^(x^2)) for every later sample. */
+    ASSERT_REL("NIntegrate[Exp[-x^2], {x, 0, Infinity}, WorkingPrecision -> 50]",
+               "Sqrt[Pi]/2", "10^-45");
+    ASSERT_REL("NIntegrate[Exp[-x], {x, 0, Infinity}, WorkingPrecision -> 50]",
+               "1", "10^-45");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -534,6 +623,8 @@ int main(void) {
     TEST(test_levin_rule);
     TEST(test_symbolic_preevaluation);
     TEST(test_de_interior_zeros);
+    TEST(test_beyond_double_range);
+    TEST(test_mpfr_quadrature_gauges);
 
     printf("All nint_tests passed.\n");
     return 0;
