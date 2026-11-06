@@ -102,7 +102,8 @@ static void test_numeric_machine(void) {
 static void test_numeric_mpfr(void) {
     /* Arbitrary precision tracks the request. */
     assert_eval_startswith("N[Fibonacci[15/17], 50]", "0.9565199139243112250858226342769229864860");
-    assert_eval_startswith("N[Fibonacci[15/17], 35]", "0.95651991392431122508582263427692298");
+    /* 0.95651991392431122508582263427692298649... rounds up at 35 digits */
+    assert_eval_eq("N[Fibonacci[15/17], 35]", "0.95651991392431122508582263427692299", 0);
 }
 #endif
 

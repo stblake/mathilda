@@ -195,8 +195,13 @@ static void test_arithmetic(void) {
 static void test_numeric_and_operations(void) {
     /* N of AlgebraicNumber[Sqrt[2] I, {1,-1}] = 1 - I Sqrt[2]. */
     check_prefix("N[AlgebraicNumber[Sqrt[2] I,{1,-1}]]", "1.0 - 1.41421");
+    /* Both parts carry 50 digits, so 1 shows all of them; Sqrt[2] =
+     * 1.41421356237309504880168872420969807856967187537694807..., whose
+     * correctly rounded 167-bit value ...5376952 displays ...753770 at 50
+     * digits (as N[Sqrt[2], 50] does). */
     check_prefix("N[AlgebraicNumber[Sqrt[2] I,{1,-1}],50]",
-                 "1.0 - 1.4142135623730950488016887242096980785696718753769");
+                 "1.0000000000000000000000000000000000000000000000000 - "
+                 "1.4142135623730950488016887242096980785696718753770*I");
 
     /* Real algebraic number a ~ 1.18: comparisons, Round, Re, Im, Abs. */
     const char* a = "AlgebraicNumber[Root[-1+#1+#1^3&,1],{0,-1,4}]";

@@ -261,8 +261,10 @@ static void test_nl_exponential_denominator(void) {
     check_quiet("Integrate[Exp[-t]/t^2, {t, 1, Infinity}]", "1/E + ExpIntegralEi[-1]");
     check_quiet("Integrate[Exp[-x t]/t^2, {t, 1, Infinity}, Assumptions -> x > 0]",
                 "E^(-x) + x ExpIntegralEi[-x]");
-    /* Equal to the reference form numerically, to 30 digits. */
-    check_quiet("Abs[N[(E^(-x) + x ExpIntegralEi[-x]) - (E^-x - x Gamma[0, x]) /. x -> 7/3, 30]] < 10^-28",
+    /* Equal to the other form. The difference is an exact zero, which
+     * N[.., 30] cannot certify (N::meprec at the precision cap), so it is
+     * tested as a zero. */
+    check_quiet("PossibleZeroQ[(E^(-x) + x ExpIntegralEi[-x]) - (E^-x - x Gamma[0, x]) /. x -> 7/3]",
                 "True");
     /* DiffUnderInt pinned: declines, silently and quickly (no idiv from its
      * probes, no base outside x > 0). */

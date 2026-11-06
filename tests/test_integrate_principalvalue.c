@@ -133,9 +133,12 @@ static void test_pv_symbolic_pole(void) {
                 "-Log[a] + Log[b]");
     check_quiet("Integrate[x/(x-a), {x, 0, 3a}, PrincipalValue -> True, Assumptions -> a > 0]",
                 "a (3 + Log[2])");
-    /* 0 < a < b: the all-equal sample a = b = 2 used to reject this real PV. */
-    check_quiet("Chop[N[(Integrate[1/(x-a), {x, 0, b}, PrincipalValue -> True, "
-                "Assumptions -> 0 < a < b] - Log[b/a - 1]) /. {a -> 2, b -> 7}, 30]]", "0");
+    /* 0 < a < b: the all-equal sample a = b = 2 used to reject this real PV.
+     * The difference is an exact zero (-Log[2] - Log[5/2] + Log[25]/2), which
+     * N[.., 30] cannot certify (N::meprec at the precision cap), so it is
+     * tested exactly. */
+    check_quiet("PossibleZeroQ[(Integrate[1/(x-a), {x, 0, b}, PrincipalValue -> True, "
+                "Assumptions -> 0 < a < b] - Log[b/a - 1]) /. {a -> 2, b -> 7}]", "True");
     /* Even-order symbolic pole: no PV. */
     check_eq("Quiet[Integrate[1/(x-a)^2, {x, 0, 2a}, PrincipalValue -> True, Assumptions -> a > 0]]",
              "Integrate[1/(-a + x)^2, {x, 0, 2 a}, PrincipalValue -> True, Assumptions -> a > 0]");

@@ -433,7 +433,12 @@ void test_central_moment() {
     /* --- approximate input -> approximate output --- */
     assert_eval_eq("CentralMoment[{1.,2.,3.,4.},2]", "1.25", 0);
     /* arbitrary precision is preserved (routes through the MPFR symbolic path) */
-    assert_eval_startswith("CentralMoment[N[{1,2,3},30],2]", "0.66666666666666666666666666666");
+    /* 2 - 2 at 30 digits is a zero known to 10^-29.8 (its operands'
+     * accuracy), so the moment carries 29.8 digits: 29 are shown, and 2/3
+     * to 29 digits rounds up. */
+    assert_eval_eq("CentralMoment[N[{1,2,3},30],2]", "0.66666666666666666666666666667", 0);
+    assert_eval_eq("Precision[CentralMoment[N[{1,2,3},30],2]] > 29.5", "True", 0);
+    assert_eval_eq("Abs[CentralMoment[N[{1,2,3},30],2] - 2/3] < 10^-29", "True", 0);
 
     /* --- symbolic data --- */
     assert_eval_eq("Simplify[CentralMoment[{a,b},2]]", "1/4 (a - b)^2", 0);

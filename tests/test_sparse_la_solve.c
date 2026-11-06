@@ -279,7 +279,8 @@ static void test_matrixexp(void) {
     /* an arbitrary-precision SparseArray: SparseArray (reference); the action
      * keeps the precision (dense path) */
     chk("Head[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30]]]", "SparseArray");
-    chk("Precision[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30], {1,1}]]", "{30.103, 30.103}");
+    /* Precision of a vector is one number, the least over its entries */
+    chk("Precision[MatrixExp[N[SparseArray[{{1,1}->1,{2,2}->2}],30], {1,1}]]", "30.103");
     chk_true("With[{s = SparseArray[{{1,1}->1.,{2,2}->2.,{1,2}->0.5}, {2,2}]}, "
              "Max[Abs[Normal[MatrixExp[s]] - MatrixExp[Normal[s]]]] < 10^-14]");
     /* the action on a vector, on SpMV: real, complex, against the dense action */

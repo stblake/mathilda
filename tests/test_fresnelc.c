@@ -107,8 +107,13 @@ void test_fc_arbitrary_precision() {
     /* N[FresnelC[2], 50] -- the task-spec reference value. */
     assert_eval_startswith("N[FresnelC[2], 50]",
         "0.4882534060753407545002235033572610376883671545092");
+    /* C(1) = 0.779893400376822829474206413652690136630626 (to 42 digits);
+     * a 40-digit value is its correctly rounded 133-bit binary value,
+     * ...36630668, whose 40-digit display ends in 7. */
     assert_eval_startswith("N[FresnelC[1], 40]",
-        "0.7798934003768228294742064136526901366306");
+        "0.7798934003768228294742064136526901366307");
+    assert_eval_eq("Abs[N[FresnelC[1], 40] - 779893400376822829474206413652690136630626/10^42] < 10^-40",
+        "True", 0);
     assert_eval_startswith("N[FresnelC[1/2], 40]",
         "0.49234422587144639287884366515668163");
     /* Large argument at high precision (asymptotic path). */

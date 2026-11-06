@@ -2530,8 +2530,11 @@ static void test_series_branch_phase(void) {
     check_quiet("Series[Sqrt[x^2 - 1], {x, 1, 2}] === SeriesData[x, 1, {Sqrt[2], 0, 1/(2 Sqrt[2]), 0}, 1, 5, 2]", "True");
     check_quiet("Series[Sqrt[x^2 + 1], {x, Infinity, 2}] === SeriesData[x^(-1), 0, {1, 0, 1/2, 0}, -1, 3, 1]", "True");
     /* Every expansion agrees with its function on BOTH real sides of 0 and
-     * on the imaginary axis (the old principal-root reduction failed at -10^-3). */
-    check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 3}]] - f) /. x -> p, 30]], {p, {-1/1000, 1/1000, -I/1000}}]], {f, {Sqrt[x^2], Sqrt[4 x^2], Sqrt[-x^2], Sqrt[x^2 + x^3], Sqrt[Sin[x]^2], (x^2)^(1/3), Sqrt[x^4], Sqrt[x^3], Sqrt[1-Cos[x]], Sqrt[-x^2+x^3], (x^4+x^5)^(1/4), Sqrt[x], Sqrt[2 x], Sqrt[-x], Sqrt[2x + x^2], Sqrt[Sin[x]], Log[x^2], Log[x^2 + x^3], Log[-x], Log[Sin[x]^2], Log[-2 x + x^2], Log[x^3+x^4], Log[1/x], Sqrt[x^2] Exp[x], (x^2)^(1/3) Cos[x], 1/Sqrt[x^2+x^4]}}]] < 10^-8", "True");
+     * on the imaginary axis (the old principal-root reduction failed at -10^-3).
+     * Machine N: several residuals have an exact-zero imaginary part, which
+     * N[.., 30] reports as uncertified (N::meprec); the residuals are ~1e-12
+     * against terms of size ~10, well inside a double. */
+    check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 3}]] - f) /. x -> p]], {p, {-1/1000, 1/1000, -I/1000}}]], {f, {Sqrt[x^2], Sqrt[4 x^2], Sqrt[-x^2], Sqrt[x^2 + x^3], Sqrt[Sin[x]^2], (x^2)^(1/3), Sqrt[x^4], Sqrt[x^3], Sqrt[1-Cos[x]], Sqrt[-x^2+x^3], (x^4+x^5)^(1/4), Sqrt[x], Sqrt[2 x], Sqrt[-x], Sqrt[2x + x^2], Sqrt[Sin[x]], Log[x^2], Log[x^2 + x^3], Log[-x], Log[Sin[x]^2], Log[-2 x + x^2], Log[x^3+x^4], Log[1/x], Sqrt[x^2] Exp[x], (x^2)^(1/3) Cos[x], 1/Sqrt[x^2+x^4]}}]] < 10^-8", "True");
 
     /* ArcTan/ArcCot/ArcTanh/ArcCoth half-Pi constants take the sign of the
      * whole leading monomial: Sign[x] for ArcTan[1/x], none for 1/x^2. */
@@ -2546,7 +2549,7 @@ static void test_series_branch_phase(void) {
     check_quiet("Series[Sqrt[E^(4 c)] + x, {x, 0, 1}, Assumptions -> x > 0] === SeriesData[x, 0, {Sqrt[E^(4 c)], 1}, 0, 2, 1]", "True");
     check_quiet("Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a > 0] === SeriesData[x, 0, {a, 1/(2 a), -1/(8 a^3)}, 0, 3, 1]", "True");
     check_quiet("Series[ArcTan[x/(1 - Sqrt[3])], {x, Infinity, 2}] === SeriesData[x^(-1), 0, {-Pi/2, -1 + Sqrt[3], 0}, 0, 3, 1]", "True");
-    check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 2}]] - f) /. x -> p, 30]], {p, {-1/1000, 1/1000}}]], {f, {ArcTan[1/x], ArcTan[1/x^3], ArcCot[x], ArcTanh[1/x], ArcCoth[x], ArcTan[1 + 2/x], ArcTan[1/Sin[x]]}}]] < 10^-6", "True");
+    check_quiet("Max[Table[Max[Table[Abs[N[(Normal[Series[f, {x, 0, 2}]] - f) /. x -> p]], {p, {-1/1000, 1/1000}}]], {f, {ArcTan[1/x], ArcTan[1/x^3], ArcCot[x], ArcTanh[1/x], ArcCoth[x], ArcTan[1 + 2/x], ArcTan[1/Sin[x]]}}]] < 10^-6", "True");
 }
 
 /* Family B with a non-unit inner slope q, and from every direction.  The
@@ -2562,10 +2565,13 @@ static void test_series_familyb_slope_and_sheet(void) {
         "ArcTan[x], -I", "ArcCot[x], -I", "ArcCoth[x], -1"
     };
     char buf[512];
+    /* Machine N: on the real axis (th = 0, Pi) the residual's imaginary part
+     * is an exact zero, which N[.., 20] reports as uncertified (N::meprec);
+     * the residual is ~1e-12 against terms of size 1, well inside a double. */
     for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
         snprintf(buf, sizeof buf,
             "Module[{f = {%s}, s}, s = Normal[Series[f[[1]], {x, f[[2]], 3}]]; "
-            "Max[Table[Abs[N[(s - f[[1]]) /. x -> f[[2]] + 10^-3 Exp[I th], 20]], "
+            "Max[Table[Abs[N[(s - f[[1]]) /. x -> f[[2]] + 10^-3 Exp[I th]]], "
             "{th, {0, 1, 2, 3, Pi, -1, -2, -3}}]] < 10^-11]", cases[i]);
         check_quiet(buf, "True");
     }

@@ -148,9 +148,12 @@ void test_shi_arbitrary_complex() {
     assert_eval_startswith("N[SinhIntegral[5/2 + I], 30]",
         "2.84649469840186263382040071740");
     /* Imaginary-axis Stokes constant: Shi(i y) -> i Pi/2, residual is i Si-tail.
-     * With an explicit-precision argument the ~1e-61 residual survives. */
+     * With an explicit-precision argument the ~1e-61 residual survives. The
+     * real part is SinhIntegral's own approximate zero, known to 10^-120
+     * (Shi is purely imaginary on the imaginary axis); N[.., 20] does not
+     * lower a zero's accuracy, so it prints 0.e-120. */
     assert_eval_startswith("N[SinhIntegral[I*10^60`120] - I Pi/2, 20]",
-        "0.e-20 + 5.5718294824856670897");
+        "0.e-120 + 5.5718294824856670897e-61*I");
 }
 
 /* ---- derivatives ---------------------------------------------------- */
