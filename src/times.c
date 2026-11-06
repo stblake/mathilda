@@ -1159,6 +1159,124 @@ static Expr* times_opaque_fast(Expr* res) {
     return out;
 }
 
+/* A factor of a product the collector has just assembled that a second pass of
+ * the collector would hand back unchanged: an exact number in the leading
+ * coefficient slot, a symbol without a value, or an evaluated fixed point whose
+ * head none of the special passes keys on.  Deliberately conservative -- the
+ * shapes excluded here are exactly the ones the order-dependent passes work on:
+ *   - inexact numbers (contagion), Complex, Interval, the infinities and I;
+ *   - List / Association / SparseArray (Listable threading), Times (Flat),
+ *     SeriesData, DirectedInfinity, Rational and Complex outside the
+ *     coefficient slot;
+ *   - a Power of a numeric quantity to a non-integer exponent, and any Power
+ *     whose base is a number (radical canonicalisation, radical fusion,
+ *     numeric-base merging, the O3/O4 splits). */
+static bool times_certifiable_factor(Expr* a, bool lead) {
+    switch (a->type) {
+        case EXPR_INTEGER:
+            return lead && a->data.integer != 0 && a->data.integer != 1;
+        case EXPR_BIGINT:
+            return lead;
+        case EXPR_SYMBOL: {
+            const char* s = a->data.symbol.name;
+            if (s == SYM_I || s == SYM_Infinity || s == SYM_ComplexInfinity ||
+                s == SYM_Indeterminate)
+                return false;
+            return eval_node_reusable(a);
+        }
+        case EXPR_FUNCTION:
+            break;
+        default:
+            return false;
+    }
+    Expr* h = a->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    if (hn == SYM_Rational) {
+        /* the folded coefficient: canonical by construction */
+        return lead && a->data.function.arg_count == 2 &&
+               expr_is_integer_like(a->data.function.args[0]) &&
+               expr_is_integer_like(a->data.function.args[1]);
+    }
+    if (hn == SYM_Times || hn == SYM_List || hn == SYM_Association ||
+        hn == SYM_SparseArray || hn == SYM_SeriesData || hn == SYM_Complex ||
+        hn == SYM_Interval || hn == SYM_DirectedInfinity || hn == SYM_Overflow)
+        return false;
+    if (hn == SYM_Power) {
+        if (a->data.function.arg_count != 2) return false;
+        Expr* b = a->data.function.args[0];
+        Expr* e = a->data.function.args[1];
+        if (b->type != EXPR_SYMBOL && b->type != EXPR_FUNCTION) return false;
+        if (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+            (b->data.function.head->data.symbol.name == SYM_Rational ||
+             b->data.function.head->data.symbol.name == SYM_Complex))
+            return false;
+        if (e->type != EXPR_INTEGER && expr_is_numeric_quantity(b)) return false;
+    }
+    return eval_node_reusable(a);
+}
+
+/* Stamp the collector's freshly built product as a fixed point when a second
+ * pass could only re-derive it (see times_certifiable_factor), as builtin_plus
+ * does for its sums.  Without this the evaluator's fixed-point loop re-runs the
+ * whole collector on every product it returns, purely to find it unchanged --
+ * the dominant per-entry cost of an exact matrix built in a Table body
+ * (-Cos[t] Sin[t]^k, Sin[Pi k/2]/(Pi k), 1/(3 Pi)).  Requires an Orderless
+ * Times with no rules of its own and no UpValues anywhere.
+ * MATHILDA_TIMES_FAST_CHECK=1 re-runs the collector on each certified product
+ * and aborts if it is not reproduced. */
+static void times_certify_result(Expr* input, Expr* out, bool orderless) {
+    if (!orderless || symtab_up_value_count != 0 || out->type != EXPR_FUNCTION) return;
+    size_t k = out->data.function.arg_count;
+    if (k < 2) return;
+    SymbolDef* td = out->data.function.head->data.symbol.def;   /* cached on the node */
+    if (!td) td = symtab_get_def(SYM_Times);
+    if (!td || td->down_values || td->sub_values || td->own_values) return;
+    /* Every factor but the folded coefficient must be one of the input
+     * factors, untouched.  A factor the passes built -- a merged group, a
+     * re-emitted trig ratio, a rewritten radical -- may meet another factor
+     * only on a second pass: (a^-1)^(1/3) (a^-1)^(2/3) a collects to
+     * a^-1 a, which only the next pass cancels. */
+    size_t nin = input->data.function.arg_count;
+    for (size_t i = 0; i < k; i++) {
+        Expr* f = out->data.function.args[i];
+        if (!times_certifiable_factor(f, i == 0)) return;
+        if (f->type == EXPR_INTEGER || f->type == EXPR_BIGINT || is_rational(f, NULL, NULL) ||
+            (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+             f->data.function.head->data.symbol.name == SYM_Rational))
+            continue;                     /* the coefficient (lead slot only) */
+        bool original = false;
+        for (size_t j = 0; j < nin && !original; j++)
+            original = input->data.function.args[j] == f;
+        if (!original) return;
+    }
+
+    static int check = -1;
+    static int checking = 0;
+    if (check < 0) check = getenv("MATHILDA_TIMES_FAST_CHECK") ? 1 : 0;
+    if (check && !checking) {
+        checking++;
+        Expr* again = builtin_times(out);
+        checking--;
+        if (again && !expr_eq(again, out)) {
+            char* a = expr_to_string_fullform(out);
+            char* b = expr_to_string_fullform(again);
+            char* c = expr_to_string_fullform(input);
+            fprintf(stderr, "MATHILDA_TIMES_FAST_CHECK certified %s (from %s) re-collects to %s\n",
+                    a, c, b);
+            abort();
+        }
+        expr_free(again);
+    }
+    /* The folded coefficient is usually a fresh Rational: stamp it too (it
+     * is GROUND), so the product can carry the INERT bit and survive the
+     * next iterator binding instead of being re-collected. */
+    Expr* lead = out->data.function.args[0];
+    if (lead->type == EXPR_FUNCTION && !eval_node_reusable(lead))
+        eval_mark_fixed_point(lead);
+    eval_mark_fixed_point(out);
+}
+
 Expr* builtin_times(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -2352,7 +2470,29 @@ Expr* builtin_times(Expr* res) {
         if (groups[i].exponent->type == EXPR_INTEGER && groups[i].exponent->data.integer == 1) {
             final_args[idx++] = groups[i].base; expr_free(groups[i].exponent);
         } else {
-            final_args[idx++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){groups[i].base, groups[i].exponent}, 2));
+            /* A group that is still exactly one input factor b^e -- the same
+             * base and exponent nodes, untouched by every pass above -- is
+             * that factor.  When the factor is an evaluated fixed point,
+             * re-evaluating a rebuilt Power[b, e] could only re-derive it:
+             * hand back the factor instead (a full Power dispatch saved per
+             * power in every product, e.g. -Cos[t] Sin[t]^k). */
+            Expr* same = NULL;
+            for (size_t a = 0; a < n && !same; a++) {
+                Expr* f = res->data.function.args[a];
+                if (f->type == EXPR_FUNCTION && f->data.function.arg_count == 2 &&
+                    f->data.function.args[0] == groups[i].base &&
+                    f->data.function.args[1] == groups[i].exponent &&
+                    f->data.function.head->type == EXPR_SYMBOL &&
+                    f->data.function.head->data.symbol.name == SYM_Power &&
+                    eval_node_reusable(f))
+                    same = f;
+            }
+            if (same) {
+                expr_free(groups[i].base); expr_free(groups[i].exponent);
+                final_args[idx++] = expr_copy(same);
+            } else {
+                final_args[idx++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){groups[i].base, groups[i].exponent}, 2));
+            }
         }
     }
     if (heap_bufs) free(groups);
@@ -2411,5 +2551,6 @@ Expr* builtin_times(Expr* res) {
     }
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
     if (heap_bufs) free(final_args);
+    times_certify_result(res, result, orderless);
     return result;
 }

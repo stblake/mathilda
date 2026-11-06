@@ -226,6 +226,42 @@ void trig_canon_groups(BasePower* groups, size_t* group_count) {
     size_t n = *group_count;
     if (n == 0) return;
 
+    /* Pre-scan: decide without allocating whether any rewrite can happen.  The
+     * passes below rewrite only a bucket that is NOT already canonical, and a
+     * bucket is canonical when every contributor has a positive exponent and
+     * the bucket is a lone factor (Sin^k, Tan^k, Sec^k, ...) or the pair
+     * Sin^a Cos^b (Sinh^a Cosh^b) -- exactly what canonical_emit gives back
+     * for a, b > 0.  That covers every product with no trig factor at all and
+     * the common -Cos[t] Sin[t]^k, which used to build (and discard) the
+     * canonical emit for every product it saw. */
+    {
+        bool may_rewrite = false;
+        for (size_t i = 0; i < n && !may_rewrite; i++) {
+            Expr* ai = NULL;
+            int si = 0, ci = 0, ki = 0;
+            if (!classify(groups[i].base, &ai, &si, &ci, &ki)) continue;
+            Expr* ei = groups[i].exponent;
+            if (!ei || ei->type != EXPR_INTEGER) continue;     /* never bucketed */
+            if (ei->data.integer > TRIG_CANON_EXP_BOUND ||
+                ei->data.integer < -TRIG_CANON_EXP_BOUND) continue;
+            if (ei->data.integer <= 0) { may_rewrite = true; break; }
+            for (size_t j = 0; j < i; j++) {
+                Expr* aj = NULL;
+                int sj = 0, cj = 0, kj = 0;
+                if (!classify(groups[j].base, &aj, &sj, &cj, &kj)) continue;
+                Expr* ej = groups[j].exponent;
+                if (!ej || ej->type != EXPR_INTEGER ||
+                    ej->data.integer > TRIG_CANON_EXP_BOUND) continue;
+                if (kj != ki || !expr_eq(aj, ai)) continue;
+                /* same bucket: canonical only as a distinct Sin/Cos pair */
+                bool pair = (si == 1 && ci == 0 && sj == 0 && cj == 1) ||
+                            (si == 0 && ci == 1 && sj == 1 && cj == 0);
+                if (!pair) { may_rewrite = true; break; }
+            }
+        }
+        if (!may_rewrite) return;
+    }
+
     Bucket* buckets = NULL;
     size_t bucket_count = 0;
     size_t bucket_cap = 0;

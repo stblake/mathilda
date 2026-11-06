@@ -469,11 +469,29 @@ int expr_compare(const Expr* a, const Expr* b) {
     if (a->type == EXPR_FUNCTION && b->type == EXPR_FUNCTION) {
         const Expr* ha = a->data.function.head;
         const Expr* hb = b->data.function.head;
-        if (ha && hb && ha->type == EXPR_SYMBOL && hb->type == EXPR_SYMBOL &&
-            ha->data.symbol.name == hb->data.symbol.name) {
+        if (ha && hb && ha->type == EXPR_SYMBOL && hb->type == EXPR_SYMBOL) {
             const char* h = ha->data.symbol.name;
-            if (h != SYM_Times && h != SYM_Plus && h != SYM_Power &&
-                h != SYM_Complex && h != SYM_Rational) {
+            const char* g = hb->data.symbol.name;
+            /* Two calls whose (symbolic) heads are both outside the number,
+             * product, power and sum tiers -- and are not the infinity
+             * symbols, which alias -- reach step 6 with nothing in between:
+             * heads, then length, then arguments.  Cos[t] against Sin[t]
+             * (every trig product sorts it) used to walk the whole preamble
+             * once for the calls and once more for their heads. */
+            bool plain_h = h != SYM_Times && h != SYM_Plus && h != SYM_Power &&
+                           h != SYM_Complex && h != SYM_Rational &&
+                           h != SYM_Infinity && h != SYM_ComplexInfinity;
+            bool plain_g = g == h ? plain_h
+                         : g != SYM_Times && g != SYM_Plus && g != SYM_Power &&
+                           g != SYM_Complex && g != SYM_Rational &&
+                           g != SYM_Infinity && g != SYM_ComplexInfinity;
+            if (plain_h && plain_g && h != g) {
+                int c = symbol_cmp(ha, hb);
+                if (c) return c;
+                /* equal collation of different names cannot happen
+                 * (symbol_cmp falls back to strcmp), but stay exact */
+            }
+            if (plain_h && plain_g && h == g) {
                 size_t ac = a->data.function.arg_count;
                 size_t bc = b->data.function.arg_count;
                 if (ac != bc) return (ac < bc) ? -1 : 1;
@@ -665,26 +683,35 @@ static int sort_cmp_expr_ptrs(const void* a, const void* b) {
  * the canonical order, so stability is immaterial. */
 void expr_orderless_sort(Expr** args, size_t n) {
     if (!args || n < 2) return;
-    size_t cap = 16, nr = 0;
-    size_t* runs = malloc(sizeof(size_t) * cap);
-    if (!runs) { qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs); return; }
+    /* The run starts and the merge buffer live on the stack for the small
+     * argument lists every Plus/Times call sorts (the common case is n = 2 or
+     * 3, usually already in order): two malloc/free pairs per product were a
+     * visible share of exact arithmetic in a Table body. */
+    enum { SORT_SMALL = 16 };
+    size_t runs_stack[SORT_SMALL];
+    Expr* tmp_stack[SORT_SMALL];
+    size_t cap = SORT_SMALL, nr = 0;
+    size_t* runs = runs_stack;
     runs[nr++] = 0;
     bool unordered = false;                 /* too many runs: plain qsort */
     for (size_t i = 1; i < n; i++) {
         if (expr_compare(args[i - 1], args[i]) > 0) {
             if (nr >= 2 && nr > n / 8) { unordered = true; break; }
             if (nr == cap) {
-                size_t* r2 = realloc(runs, sizeof(size_t) * cap * 2);
+                size_t* r2 = malloc(sizeof(size_t) * cap * 2);
                 if (!r2) { unordered = true; break; }
+                memcpy(r2, runs, sizeof(size_t) * nr);
+                if (runs != runs_stack) free(runs);
                 runs = r2; cap *= 2;
             }
             runs[nr++] = i;
         }
     }
-    if (!unordered && nr == 1) { free(runs); return; }
-    Expr** tmp = unordered ? NULL : malloc(sizeof(Expr*) * n);
+    if (!unordered && nr == 1) { if (runs != runs_stack) free(runs); return; }
+    Expr** tmp = unordered ? NULL
+               : (n <= SORT_SMALL ? tmp_stack : malloc(sizeof(Expr*) * n));
     if (!tmp) {
-        free(runs);
+        if (runs != runs_stack) free(runs);
         qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
         return;
     }
@@ -707,8 +734,8 @@ void expr_orderless_sort(Expr** args, size_t n) {
         Expr** t = src; src = dst; dst = t;
     }
     if (src != args) memcpy(args, src, sizeof(Expr*) * n);
-    free(tmp);
-    free(runs);
+    if (tmp != tmp_stack) free(tmp);
+    if (runs != runs_stack) free(runs);
 }
 
 /* ==================================================================== */
