@@ -39,4 +39,10 @@ int gb_flint_lex_inexact(GBPoly* const* F, size_t n, long bits,
 int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
                       int** B_out, int* d_out, mpq_t** M_out);
 
+/* Lex over Q: the modular shape-position route first (on = 1, the default)
+ * or not (0) -- for A/B tests against the exact routes; the environment
+ * variable MATHILDA_GB_SHAPE_OFF does the same.  Returns the number of bases
+ * the route has produced so far in this process. */
+long gb_flint_shape_route(int on);
+
 #endif /* GB_FLINT_H */

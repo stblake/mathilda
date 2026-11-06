@@ -59,6 +59,9 @@
 #include <flint/nmod_vec.h>
 #include <flint/nmod.h>
 #include <flint/nmod_mpoly.h>
+#include <flint/nmod_poly.h>
+#include <flint/fmpq_poly.h>
+#include <flint/fmpz_poly.h>
 #include <flint/ulong_extras.h>
 
 #include "core.h"           /* tc_deadline_passed, tc_check_deadline */
@@ -883,7 +886,11 @@ static void gff_clear(GfFglm* R) {
     flint_free(R->rel_c); flint_free(R->rel_n); flint_free(R->rel_ex);
 }
 
-static int gf_fglm_mod(const ulong* M, slong nv, slong D, slong one_idx, nmod_t mod, GfFglm* R) {
+/* shape_only: give up (0, *not_shape set) as soon as a monomial other than a
+ * power of the last variable is accepted -- the basis is then not in shape
+ * position, which is all the shape route needs to know. */
+static int gf_fglm_mod(const ulong* M, slong nv, slong D, slong one_idx, nmod_t mod, GfFglm* R,
+                       int shape_only, int* not_shape) {
     gfm_init(&R->stair, nv);
     R->rel_ex = NULL; R->nrel = R->crel = 0; R->rel_n = NULL; R->rel_c = NULL;
     /* candidates: monomial, its predecessor (accepted index) and variable */
@@ -951,6 +958,11 @@ static int gf_fglm_mod(const ulong* M, slong nv, slong D, slong one_idx, nmod_t 
             continue;
         }
         if (na == D) { ok = 0; break; }                   /* rank > D: impossible */
+        if (shape_only) {
+            int pure = 1;
+            for (slong w = 0; w + 1 < nv && pure; w++) pure = m[w] == 0;
+            if (!pure) { *not_shape = 1; ok = 0; break; }
+        }
         /* accept m: row normalised at its pivot; comb = (e_m - lam) / pivot */
         ulong inv = n_invmod(vr[pv], mod.n);
         _nmod_vec_scalar_mul_nmod(vr, vr, D, inv, mod);
@@ -1031,7 +1043,7 @@ static int gf_fglm(Gf* Dg, const slong* idx, slong ng, fmpz_mpoly_struct** out, 
                 mc[r] = fmpz_is_zero(col + r) ? 0 : nmod_mul(fmpz_fdiv_ui(col + r, p), di, mod);
         }
         GfFglm R;
-        if (!gf_fglm_mod(Mp, nv, D, 0, mod, &R)) continue;
+        if (!gf_fglm_mod(Mp, nv, D, 0, mod, &R, 0, NULL)) continue;
         if (!have) {
             ref = R; have = 1;
             for (slong k = 0; k < ref.nrel; k++) ncoef += ref.rel_n[k];
@@ -1137,6 +1149,723 @@ static int gf_fglm(Gf* Dg, const slong* idx, slong ng, fmpz_mpoly_struct** out, 
     _fmpz_vec_clear(num, nv * D * D);
     _fmpz_vec_clear(den, nv * D);
     gfm_clear(&S);
+    return done;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Lex over Q, zero-dimensional, shape position: modular throughout   */
+/* ------------------------------------------------------------------ */
+
+/* The exact route above pays for three things the answer does not need: the
+ * DRL basis over Q (fraction-free, its coefficients grow), multiplication
+ * matrices over Q that every prime must reduce, and a CRT on the Lex basis
+ * coefficients themselves.  In shape position -- the reduced Lex basis is
+ *
+ *      h(w),  x_i - g_i(w)  (i < n-1),     w the last variable, deg h = D,
+ *
+ * the generic case for a zero-dimensional ideal -- the g_i are roughly D
+ * times the size of h (a dense system of 4 quadrics with 6-digit coefficients:
+ * h has 644-bit coefficients, the g_i 7950-bit ones; 257 primes).  Their
+ * rational univariate representation q_i = g_i h' mod h is the size of h, so
+ *
+ *  1. per 62-bit prime p: the DRL basis of F mod p (no growth), its
+ *     multiplication matrices mod p, FGLM mod p; the image has to be in shape
+ *     position with h squarefree mod p, and q_i = g_i h' mod h;
+ *  2. h and the q_i by CRT and rational reconstruction (the first failing
+ *     coefficient is retried alone each prime; a full candidate must match
+ *     the next prime's image before it is tried);
+ *  3. over Q: g_i = q_i (h')^-1 mod h;
+ *  4. CERTIFIED, exactly:
+ *     (a) G = {h, x_i - g_i} is a reduced Lex Groebner basis: its leading
+ *         monomials w^D, x_i are pairwise coprime (product criterion) and
+ *         deg g_i < D;
+ *     (b) F lies in <G>:  h'^d f(q_1/h', ..., w) = 0 mod h  for every input f
+ *         (d its degree in x_1..x_{n-1}; h' is a unit mod h);
+ *     (c) dim Q[X]/<F> <= D: for the homogenisation F^h (integer
+ *         coefficients) the Hilbert function of Q[X,t]/<F^h> is at most that
+ *         of F_p[X,t]/<F^h mod p> in every degree (a Macaulay matrix's rank
+ *         can only drop mod p), and it bounds the affine Hilbert function of
+ *         <F>.  The DRL basis of F^h mod p (t last) is computed once: when its
+ *         t-free leading monomials hold a pure power of every x_v (no
+ *         solutions at infinity mod p), that Hilbert function is eventually
+ *         the number D_p of standard monomials of its leading monomials at
+ *         t = 1.  D_p = D is required.
+ *     Then <F> is in <G>, both quotients have dimension D, so <F> = <G>, and
+ *     G is THE reduced Lex basis -- identical to what the exact route returns.
+ *
+ * Declines (the exact routes run) when the ideal is not zero-dimensional mod
+ * the first primes, not in shape position, h is not squarefree, (c) fails
+ * (solutions at infinity, as for cyclic-n), or no certified candidate appears
+ * within GF_FGLM_PRIMES primes. */
+
+/* Load the integer polynomials Fz[0..n) (context Zc, nv variables) into the
+ * GF(p) engine G and run it to the reduced basis, as gf_engine.  With homog,
+ * G has nv + 1 variables and each f is homogenised by the last one. */
+static int gf_engine_from_z(Gf* G, const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpoly_ctx_struct* Zc,
+                            int homog, slong** idx, slong* nr, int* timed_out) {
+    slong nv = Zc->minfo->nvars;
+    ulong p = G->M->mod.n;
+    ulong* ex = flint_malloc((size_t)(nv + 1) * sizeof(ulong));
+    nmod_mpoly_t h; nmod_mpoly_init(h, G->M);
+    int ok = 1;
+    for (slong i = 0; i < n && ok; i++) {
+        const fmpz_mpoly_struct* f = Fz + i;
+        slong d = fmpz_mpoly_total_degree_si(f, Zc);
+        nmod_mpoly_zero(h, G->M);
+        for (slong t = 0; t < f->length; t++) {
+            ulong c = fmpz_fdiv_ui(f->coeffs + t, p);
+            if (!c) continue;
+            fmpz_mpoly_get_term_exp_ui(ex, f, t, Zc);
+            if (homog) {
+                ulong s = 0;
+                for (slong v = 0; v < nv; v++) s += ex[v];
+                ex[nv] = (ulong)d - s;
+            }
+            nmod_mpoly_push_term_ui_ui(h, c, ex, G->M);
+        }
+        nmod_mpoly_sort_terms(h, G->M);
+        nmod_mpoly_combine_like_terms(h, G->M);
+        gf_reduce(G, h, -1, 0);
+        if (G->expired) { ok = 0; break; }
+        if (nmod_mpoly_is_zero(h, G->M)) continue;
+        gf_add(G, h, (ulong)d);
+    }
+    nmod_mpoly_clear(h, G->M);
+    flint_free(ex);
+    if (ok) ok = gf_run(G);
+    if (ok) {
+        *idx = flint_malloc((size_t)(G->nb ? G->nb : 1) * sizeof(slong));
+        *nr = gf_final(G, *idx);
+        if (G->expired) { ok = 0; flint_free(*idx); *idx = NULL; *nr = 0; }
+    }
+    *timed_out = !ok && tc_deadline_passed();
+    return ok;
+}
+
+/* The number of standard monomials of the monomial ideal generated by the
+ * nl exponent vectors lms[k * stride + 0..nv), or -1 when it is not
+ * zero-dimensional or the count exceeds maxd. */
+static slong gf_count_standard(const ulong* lms, slong nl, slong stride, slong nv, slong maxd) {
+    for (slong v = 0; v < nv; v++) {                      /* a pure power per variable */
+        int pure = 0;
+        for (slong i = 0; i < nl && !pure; i++) {
+            const ulong* l = lms + i * stride;
+            pure = l[v] > 0;
+            for (slong w = 0; w < nv && pure; w++) if (w != v && l[w]) pure = 0;
+        }
+        if (!pure) return -1;
+    }
+    GfMon S; gfm_init(&S, nv);
+    ulong* e = flint_calloc((size_t)nv, sizeof(ulong));
+    gfm_add(&S, e);
+    slong res = 0;
+    for (slong i = 0; i < S.n && res >= 0; i++) {
+        for (slong v = 0; v < nv; v++) {
+            memcpy(e, S.ex + i * nv, (size_t)nv * sizeof(ulong));
+            e[v]++;
+            int div = 0;
+            for (slong k = 0; k < nl && !div; k++) div = gf_divides(lms + k * stride, e, nv);
+            if (div || gfm_find(&S, e) >= 0) continue;
+            gfm_add(&S, e);
+            if (S.n > maxd) { res = -1; break; }
+        }
+    }
+    if (res >= 0) res = S.n;
+    flint_free(e); gfm_clear(&S);
+    return res;
+}
+
+/* Certificate (c): the number of solutions mod p, counted by the DRL basis of
+ * the homogenised system, when there are none at infinity; else -1. */
+static slong gf_homog_count(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpoly_ctx_struct* Zc,
+                            ulong p, slong maxd, int* timed_out) {
+    slong nv = Zc->minfo->nvars;
+    Gf H; gf_init(&H, 1, p, nv + 1, ORD_DEGREVLEX);
+    slong* idx = NULL; slong nr = 0, res = -1;
+    if (gf_engine_from_z(&H, Fz, n, Zc, 1, &idx, &nr, timed_out)) {
+        /* the t-free leading monomials must be zero-dimensional in x ... */
+        ulong* L0 = flint_malloc((size_t)((nr ? nr : 1) * (nv + 1)) * sizeof(ulong));
+        slong n0 = 0;
+        for (slong i = 0; i < nr; i++)
+            if (H.lm[idx[i] * (nv + 1) + nv] == 0)
+                memcpy(L0 + (n0++) * (nv + 1), H.lm + idx[i] * (nv + 1), (size_t)(nv + 1) * sizeof(ulong));
+        if (gf_count_standard(L0, n0, nv + 1, nv, maxd) >= 0) {
+            /* ... then the count is that of all leading monomials at t = 1 */
+            ulong* L = flint_malloc((size_t)((nr ? nr : 1) * (nv + 1)) * sizeof(ulong));
+            for (slong i = 0; i < nr; i++) memcpy(L + i * (nv + 1), H.lm + idx[i] * (nv + 1), (size_t)(nv + 1) * sizeof(ulong));
+            res = gf_count_standard(L, nr, nv + 1, nv, maxd);
+            flint_free(L);
+        }
+        flint_free(L0);
+    }
+    flint_free(idx);
+    gf_clear(&H);
+    return res;
+}
+
+/* The multiplication matrices mod p of the reduced GF(p) DRL basis
+ * idx[0..ng) on its staircase S: M[(v D + c) D + r] = coefficient of
+ * standard monomial r in NF(x_v b_c) (the layout gf_fglm_mod reads). */
+static int gf_mult_matrices_mod(Gf* G, const slong* idx, slong ng, const GfMon* S, ulong* M,
+                                slong v_lo, slong v_hi) {
+    slong nv = G->nv, D = S->n;
+    memset(M + v_lo * D * D, 0, (size_t)((v_hi - v_lo) * D * D) * sizeof(ulong));
+    ulong* e = flint_malloc((size_t)nv * sizeof(ulong));
+    ulong* te = flint_malloc((size_t)nv * sizeof(ulong));
+    slong nred = gf_reducers(G, -1, 1);
+    nmod_mpoly_t m, R; nmod_mpoly_init(m, G->M); nmod_mpoly_init(R, G->M);
+    int ok = 1;
+    for (slong v = v_lo; v < v_hi && ok; v++) {
+        for (slong c = 0; c < D && ok; c++) {
+            ulong* col = M + (v * D + c) * D;
+            memcpy(e, S->ex + c * nv, (size_t)nv * sizeof(ulong));
+            e[v]++;
+            slong k = gfm_find(S, e);
+            if (k >= 0) { col[k] = 1; continue; }
+            slong b = -1;
+            for (slong i = 0; i < ng && b < 0; i++)
+                if (memcmp(G->lm + idx[i] * nv, e, (size_t)nv * sizeof(ulong)) == 0) b = idx[i];
+            const nmod_mpoly_struct* src;
+            slong t0;
+            if (b >= 0) { src = G->mb + b; t0 = 1; }        /* monic: e = -tail */
+            else {
+                nmod_mpoly_zero(m, G->M);
+                nmod_mpoly_set_coeff_ui_ui(m, 1, e, G->M);
+                nmod_mpoly_divrem_ideal(G->mq, R, m, G->mr, nred, G->M);
+                src = R; t0 = 0;
+            }
+            for (slong t = t0; t < src->length; t++) {
+                nmod_mpoly_get_term_exp_ui(te, src, t, G->M);
+                slong r = gfm_find(S, te);
+                if (r < 0) { ok = 0; break; }
+                col[r] = t0 ? nmod_neg(src->coeffs[t], G->M->mod) : src->coeffs[t];
+            }
+        }
+    }
+    nmod_mpoly_clear(m, G->M); nmod_mpoly_clear(R, G->M);
+    flint_free(e); flint_free(te);
+    return ok;
+}
+
+/* Are u, M u, ..., M^(D-1) u independent, u the unit vector of the
+ * standard monomial 1 (index 0) and M the D x D matrix (column c at M + c D)? */
+static int gf_krylov_full(const ulong* M, slong D, nmod_t mod) {
+    ulong* rows = flint_malloc((size_t)(D * D) * sizeof(ulong));
+    slong* piv = flint_malloc((size_t)D * sizeof(slong));
+    ulong* u = flint_calloc((size_t)D, sizeof(ulong));
+    ulong* nu = flint_malloc((size_t)D * sizeof(ulong));
+    u[0] = 1;
+    int ok = 1;
+    for (slong k = 0; k < D && ok; k++) {
+        ulong* r = rows + k * D;
+        memcpy(r, u, (size_t)D * sizeof(ulong));
+        for (slong t = 0; t < k; t++) {
+            ulong a = r[piv[t]];
+            if (a) _nmod_vec_scalar_addmul_nmod(r, rows + t * D, D, nmod_neg(a, mod), mod);
+        }
+        slong pv = -1;
+        for (slong i = 0; i < D && pv < 0; i++) if (r[i]) pv = i;
+        if (pv < 0) { ok = 0; break; }
+        _nmod_vec_scalar_mul_nmod(r, r, D, n_invmod(r[pv], mod.n), mod);
+        piv[k] = pv;
+        memset(nu, 0, (size_t)D * sizeof(ulong));
+        for (slong c = 0; c < D; c++)
+            if (u[c]) _nmod_vec_scalar_addmul_nmod(nu, M + c * D, D, u[c], mod);
+        memcpy(u, nu, (size_t)D * sizeof(ulong));
+    }
+    flint_free(rows); flint_free(piv); flint_free(u); flint_free(nu);
+    return ok;
+}
+
+/* One prime: the shape-position image  vals[0..D) = the coefficients of
+ * h - w^D (h monic), vals[(1 + i) D + j] = coefficient j of q_i = g_i h' mod h
+ * for the variables i = 0..nv-2.  Returns D, 0 when the prime is unusable
+ * (a denominator, an unlucky staircase, h not squarefree mod p), -1 when the
+ * ideal mod p is not zero-dimensional or not in shape position, -2 when the
+ * deadline passed. */
+static slong gf_shape_image(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpoly_ctx_struct* Zc,
+                            ulong p, ulong** vals_out) {
+    slong nv = Zc->minfo->nvars;
+    Gf G; gf_init(&G, 1, p, nv, ORD_DEGREVLEX);
+    slong* idx = NULL; slong ng = 0; int to = 0;
+    slong res = -1;
+    *vals_out = NULL;
+    int eok = gf_engine_from_z(&G, Fz, n, Zc, 0, &idx, &ng, &to);
+    if (!eok) {
+        res = to ? -2 : 0;
+        goto done;
+    }
+    for (slong i = 0; i < ng; i++) if (gf_is_unit(&G, idx[i])) { res = -1; goto done; }
+    {
+        GfMon S; gfm_init(&S, nv);
+        if (!gf_staircase(&G, idx, ng, &S, GF_FGLM_MAXD)) { gfm_clear(&S); res = -1; goto done; }
+        slong D = S.n;
+        ulong* M = flint_malloc((size_t)(nv * D * D) * sizeof(ulong));
+        GfFglm R;
+        /* shape position needs 1, w, ..., w^(D-1) independent mod I: the
+         * Krylov test on M_w alone declines a non-shape ideal before the
+         * other matrices are built */
+        int ok = gf_mult_matrices_mod(&G, idx, ng, &S, M, nv - 1, nv);
+        if (ok && !gf_krylov_full(M + (nv - 1) * D * D, D, G.M->mod)) {
+            flint_free(M); gfm_clear(&S); res = -1; goto done;
+        }
+        ok = ok && gf_mult_matrices_mod(&G, idx, ng, &S, M, 0, nv - 1);
+        int nsh = 0;
+        ok = ok && gf_fglm_mod(M, nv, D, 0, G.M->mod, &R, 1, &nsh);
+        if (nsh) { flint_free(M); gfm_clear(&S); res = -1; goto done; }
+        flint_free(M); gfm_clear(&S);
+        if (!ok) { res = 0; goto done; }
+        /* shape position: staircase 1, w, ..., w^(D-1); relations w^D, x_i */
+        int shape = R.stair.n == D && R.nrel == nv;
+        for (slong j = 0; j < R.stair.n && shape; j++)
+            for (slong v = 0; v < nv && shape; v++)
+                shape = R.stair.ex[j * nv + v] == (v == nv - 1 ? (ulong)j : 0);
+        slong* relof = flint_malloc((size_t)nv * sizeof(slong));   /* variable -> relation */
+        for (slong v = 0; v < nv; v++) relof[v] = -1;
+        for (slong k = 0; k < R.nrel && shape; k++) {
+            const ulong* l = R.rel_ex + k * nv;
+            slong var = -1, deg = 0, nz = 0;
+            for (slong v = 0; v < nv; v++) if (l[v]) { var = v; deg = (slong)l[v]; nz++; }
+            shape = nz == 1 && R.rel_n[k] == D &&
+                    (var == nv - 1 ? deg == D : deg == 1) && relof[var] < 0;
+            if (shape) relof[var] = k;
+        }
+        if (!shape) { flint_free(relof); gff_clear(&R); res = -1; goto done; }
+        nmod_poly_t h, dh, inv, g, q;
+        nmod_poly_init(h, p); nmod_poly_init(dh, p); nmod_poly_init(inv, p);
+        nmod_poly_init(g, p); nmod_poly_init(q, p);
+        const ulong* hc = R.rel_c[relof[nv - 1]];             /* w^D = sum c_j w^j */
+        for (slong j = 0; j < D; j++) nmod_poly_set_coeff_ui(h, j, nmod_neg(hc[j], G.M->mod));
+        nmod_poly_set_coeff_ui(h, D, 1);
+        nmod_poly_derivative(dh, h);
+        if (!nmod_poly_invmod(inv, dh, h) && D > 0) res = 0;   /* h not squarefree mod p */
+        else {
+            ulong* vals = flint_calloc((size_t)(nv * D > 0 ? nv * D : 1), sizeof(ulong));
+            for (slong j = 0; j < D; j++) vals[j] = nmod_neg(hc[j], G.M->mod);
+            for (slong i = 0; i + 1 < nv; i++) {
+                const ulong* gc = R.rel_c[relof[i]];           /* x_i = g_i(w) */
+                nmod_poly_zero(g);
+                for (slong j = 0; j < D; j++) nmod_poly_set_coeff_ui(g, j, gc[j]);
+                nmod_poly_mulmod(q, g, dh, h);
+                for (slong j = 0; j < D; j++) vals[(1 + i) * D + j] = nmod_poly_get_coeff_ui(q, j);
+            }
+            *vals_out = vals;
+            res = D;
+        }
+        nmod_poly_clear(h); nmod_poly_clear(dh); nmod_poly_clear(inv);
+        nmod_poly_clear(g); nmod_poly_clear(q);
+        flint_free(relof);
+        gff_clear(&R);
+    }
+done:
+    flint_free(idx);
+    gf_clear(&G);
+    return res;
+}
+
+/* Certificate (b), over Z.  With h = H / lc(H) (H primitive) and
+ * q_i = Q_i / c_i, the substitution is x_i = q_i / h' = A_i / B with the
+ * common denominator B = C H' (C = lcm c_i) and A_i = lc(H) (C / c_i) Q_i; B
+ * is a unit mod H (H is squarefree: checked by the caller).  So f lies in <G>
+ * exactly when H divides
+ *      P = sum_terms coef prod_i A_i^(a_i) B^(d - |a|) w^b,
+ * d the degree of f in x_0..x_{n-2} -- an integer polynomial of degree about
+ * d D, with no reduction mod H and no rational arithmetic on the way (the
+ * residues mod h are D times the size of h: why this is not done in
+ * Q[w]/h). */
+static int gf_shape_contains(const fmpz_mpoly_struct* Fz, slong n, const fmpz_mpoly_ctx_struct* Zc,
+                             const fmpz_poly_struct* H, const fmpz_poly_struct* A,
+                             const fmpz_poly_struct* B) {
+    slong nv = Zc->minfo->nvars, nx = nv - 1;
+    ulong* ex = flint_malloc((size_t)nv * sizeof(ulong));
+    slong* emax = flint_calloc((size_t)(nx ? nx : 1), sizeof(slong));
+    slong dmax = 0;
+    for (slong i = 0; i < n; i++)
+        for (slong k = 0; k < Fz[i].length; k++) {
+            fmpz_mpoly_get_term_exp_ui(ex, Fz + i, k, Zc);
+            slong s = 0;
+            for (slong v = 0; v < nx; v++) { s += (slong)ex[v]; if ((slong)ex[v] > emax[v]) emax[v] = (slong)ex[v]; }
+            if (s > dmax) dmax = s;
+        }
+    /* powers: Ap[v][e] = A_v^e (e <= emax[v]), Bp[e] = B^e (e <= dmax) */
+    fmpz_poly_struct** Ap = flint_malloc((size_t)(nx ? nx : 1) * sizeof(fmpz_poly_struct*));
+    for (slong v = 0; v < nx; v++) {
+        Ap[v] = flint_malloc((size_t)(emax[v] + 1) * sizeof(fmpz_poly_struct));
+        for (slong e = 0; e <= emax[v]; e++) {
+            fmpz_poly_init(Ap[v] + e);
+            if (e == 0) fmpz_poly_one(Ap[v]);
+            else fmpz_poly_mul(Ap[v] + e, Ap[v] + e - 1, A + v);
+        }
+    }
+    fmpz_poly_struct* Bp = flint_malloc((size_t)(dmax + 1) * sizeof(fmpz_poly_struct));
+    for (slong e = 0; e <= dmax; e++) {
+        fmpz_poly_init(Bp + e);
+        if (e == 0) fmpz_poly_one(Bp);
+        else fmpz_poly_mul(Bp + e, Bp + e - 1, B);
+    }
+    fmpz_poly_t P, t, Q, fw; fmpz_poly_init(P); fmpz_poly_init(t); fmpz_poly_init(Q); fmpz_poly_init(fw);
+    ulong* ex2 = flint_malloc((size_t)nv * sizeof(ulong));
+    int ok = 1;
+    for (slong i = 0; i < n && ok; i++) {
+        const fmpz_mpoly_struct* f = Fz + i;
+        slong d = 0;
+        for (slong k = 0; k < f->length; k++) {
+            fmpz_mpoly_get_term_exp_ui(ex, f, k, Zc);
+            slong s = 0;
+            for (slong v = 0; v < nx; v++) s += (slong)ex[v];
+            if (s > d) d = s;
+        }
+        /* the terms grouped by their x-part: one product per x-monomial,
+         * times its coefficient polynomial in w */
+        fmpz_poly_zero(P);
+        char* used = flint_calloc((size_t)(f->length ? f->length : 1), 1);
+        for (slong k = 0; k < f->length && ok; k++) {
+            if (used[k]) continue;
+            if (tc_deadline_passed()) { ok = 0; break; }
+            fmpz_mpoly_get_term_exp_ui(ex, f, k, Zc);
+            fmpz_poly_zero(fw);
+            for (slong j = k; j < f->length; j++) {
+                if (used[j]) continue;
+                fmpz_mpoly_get_term_exp_ui(ex2, f, j, Zc);
+                if (memcmp(ex, ex2, (size_t)nx * sizeof(ulong))) continue;
+                used[j] = 1;
+                fmpz_poly_set_coeff_fmpz(fw, (slong)ex2[nv - 1], f->coeffs + j);
+            }
+            slong s = 0;
+            fmpz_poly_set(t, fw);
+            for (slong v = 0; v < nx; v++)
+                if (ex[v]) { fmpz_poly_mul(t, t, Ap[v] + ex[v]); s += (slong)ex[v]; }
+            if (d > s) fmpz_poly_mul(t, t, Bp + (d - s));
+            fmpz_poly_add(P, P, t);
+        }
+        flint_free(used);
+        if (ok) ok = fmpz_poly_is_zero(P) || fmpz_poly_divides(Q, P, H);
+    }
+    fmpz_poly_clear(P); fmpz_poly_clear(t); fmpz_poly_clear(Q); fmpz_poly_clear(fw);
+    flint_free(ex2);
+    for (slong v = 0; v < nx; v++) {
+        for (slong e = 0; e <= emax[v]; e++) fmpz_poly_clear(Ap[v] + e);
+        flint_free(Ap[v]);
+    }
+    for (slong e = 0; e <= dmax; e++) fmpz_poly_clear(Bp + e);
+    flint_free(Ap); flint_free(Bp); flint_free(emax); flint_free(ex);
+    return ok;
+}
+
+/* g_k = A_k / B mod H over Q (k < na), for H primitive and B a unit mod H.
+ * The g_k are about D times the size of H, A, B, which makes the extended
+ * gcd over Z slow (its cofactor carries the resultant, twice that size again)
+ * and p-adic lifting slow too (every step is a division with remainder at
+ * the full precision).  Their images are cheap instead: per 62-bit prime one
+ * inverse of B mod (H, p) and one product, O(D^2).  So: images, CRT, and at
+ * geometric checkpoints a rational reconstruction with a running common
+ * denominator (the g_k share theirs: one reconstruction usually serves all
+ * coefficients), each candidate VERIFIED exactly -- H divides N B - d A_k for
+ * g_k = N / d -- before it is accepted.  An inverse mod p also proves B a
+ * unit mod H over Q (res(H, B) is nonzero mod p).  Returns 1 with g set, 0 to
+ * decline (no certified answer within the prime budget, or the deadline). */
+#define GF_QUOT_PRIMES 4096
+static int gf_quotients(fmpq_poly_struct* g, const fmpz_poly_struct* A, slong na,
+                        const fmpz_poly_struct* B, const fmpz_poly_struct* H) {
+    slong D = fmpz_poly_degree(H);
+    if (D < 1 || na < 1) return 0;
+    const fmpz* lc = H->coeffs + D;
+    slong L = na * D;
+    fmpz* crt = _fmpz_vec_init(L);
+    fmpz_t M; fmpz_init_set_ui(M, 1);
+    nmod_poly_t Hp, Bp, Tp, Ap; nmod_poly_init(Hp, 2); nmod_poly_init(Bp, 2);
+    nmod_poly_init(Tp, 2); nmod_poly_init(Ap, 2);
+    fmpz_poly_t N, X, Q; fmpz_poly_init(N); fmpz_poly_init(X); fmpz_poly_init(Q);
+    fmpz_t d, v, half, gq, m; fmpz_init(d); fmpz_init(v); fmpz_init(half); fmpz_init(gq); fmpz_init(m);
+    fmpq_t r; fmpq_init(r);
+    flint_bitcnt_t next = 128;
+    int ok = 0, nfail = 0;
+    ulong p = UWORD(1) << 62;
+    for (slong it = 0; it < GF_QUOT_PRIMES && !ok; it++) {
+        if ((it & 63) == 63 && tc_deadline_passed()) break;
+        p = n_nextprime(p, 1);
+        if (fmpz_fdiv_ui(lc, p) == 0) continue;
+        nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
+        nmod_poly_init(Hp, p); nmod_poly_init(Bp, p); nmod_poly_init(Tp, p); nmod_poly_init(Ap, p);
+        fmpz_poly_get_nmod_poly(Hp, H);
+        fmpz_poly_get_nmod_poly(Bp, B);
+        if (!nmod_poly_invmod(Tp, Bp, Hp)) {                /* res(H, B) = 0 mod p */
+            if (fmpz_is_one(M) && ++nfail >= 8) break;
+            continue;
+        }
+        /* CRT, Garner style: x += M ((r - x) M^-1 mod p), M^-1 once per prime */
+        nmod_t mod; nmod_init(&mod, p);
+        ulong minv = n_invmod(fmpz_fdiv_ui(M, p), p);
+        for (slong k = 0; k < na; k++) {
+            fmpz_poly_get_nmod_poly(Ap, A + k);
+            nmod_poly_mulmod(Ap, Ap, Tp, Hp);
+            for (slong j = 0; j < D; j++) {
+                fmpz* x = crt + k * D + j;
+                ulong t = nmod_sub(nmod_poly_get_coeff_ui(Ap, j), fmpz_fdiv_ui(x, p), mod);
+                t = nmod_mul(t, minv, mod);
+                if (t) fmpz_addmul_ui(x, M, t);
+            }
+        }
+        fmpz_mul_ui(M, M, p);
+        if (fmpz_bits(M) < next) continue;
+        next = next + next / 2;
+        /* a candidate: reconstruct each g_k, then verify it exactly */
+        fmpz_fdiv_q_2exp(half, M, 1);
+        int all = 1;
+        for (slong k = 0; k < na && all; k++) {
+            fmpz_one(d);
+            fmpz_poly_zero(N);
+            for (slong j = 0; j < D && all; j++) {
+                const fmpz* x = crt + k * D + j;
+                if (fmpz_is_zero(x)) continue;
+                /* the symmetric residue of d x is the numerator when it lies
+                 * inside the reconstruction bound |n|, d < sqrt(M / 2), where
+                 * the reconstruction is unique */
+                fmpz_mul(v, x, d);
+                fmpz_mod(v, v, M);
+                if (fmpz_cmp(v, half) > 0) fmpz_sub(v, v, M);
+                flint_bitcnt_t bv = fmpz_bits(v), bd = fmpz_bits(d);
+                if (2 * (bv > bd ? bv : bd) + 2 < fmpz_bits(M)) { fmpz_poly_set_coeff_fmpz(N, j, v); continue; }
+                if (!fmpq_reconstruct_fmpz(r, x, M)) { all = 0; break; }
+                /* d <- lcm(d, den r), N rescaled */
+                fmpz_gcd(gq, d, fmpq_denref(r));
+                fmpz_divexact(m, fmpq_denref(r), gq);
+                fmpz_poly_scalar_mul_fmpz(N, N, m);
+                fmpz_mul(d, d, m);
+                fmpz_divexact(m, d, fmpq_denref(r));
+                fmpz_mul(v, fmpq_numref(r), m);
+                fmpz_poly_set_coeff_fmpz(N, j, v);
+            }
+            if (all) {
+                /* exact: H | N B - d A_k */
+                fmpz_poly_mul(X, N, B);
+                fmpz_poly_scalar_submul_fmpz(X, A + k, d);
+                all = fmpz_poly_is_zero(X) || fmpz_poly_divides(Q, X, H);
+            }
+            if (all) {
+                fmpq_poly_set_fmpz_poly(g + k, N);
+                fmpq_poly_scalar_div_fmpz(g + k, g + k, d);
+            }
+        }
+        ok = all;
+    }
+    fmpq_clear(r);
+    fmpz_clear(d); fmpz_clear(v); fmpz_clear(half); fmpz_clear(gq); fmpz_clear(m);
+    fmpz_poly_clear(N); fmpz_poly_clear(X); fmpz_poly_clear(Q);
+    nmod_poly_clear(Hp); nmod_poly_clear(Bp); nmod_poly_clear(Tp); nmod_poly_clear(Ap);
+    _fmpz_vec_clear(crt, L);
+    fmpz_clear(M);
+    return ok;
+}
+
+/* A GBPoly of  a x_var - B(w)  (var < 0: B(w) alone), from the integer
+ * numerator B and the positive integer a, shaped like `like`. */
+static GBPoly* gf_shape_gbpoly(slong var, const fmpz_t a, const fmpz* B, slong lenB, const GBPoly* like) {
+    slong nv = like->n_vars;
+    GBPoly* r = gb_poly_new(like->n_vars, like->order, like->elim_pivot);
+    if (like->wmat) gb_poly_set_wmat(r, like->wmat);
+    int* ie = calloc((size_t)nv, sizeof(int));
+    mpq_t c; mpq_init(c);
+    gb_poly_reserve(r, (size_t)lenB + 1);
+    if (var >= 0) {
+        fmpz_get_mpz(mpq_numref(c), a); mpz_set_ui(mpq_denref(c), 1);
+        ie[var] = 1;
+        gb_poly_push_term(r, ie, c);
+        ie[var] = 0;
+    }
+    for (slong j = lenB - 1; j >= 0; j--) {
+        if (fmpz_is_zero(B + j)) continue;
+        fmpz_get_mpz(mpq_numref(c), B + j); mpz_set_ui(mpq_denref(c), 1);
+        if (var >= 0) mpz_neg(mpq_numref(c), mpq_numref(c));
+        ie[nv - 1] = (int)j;
+        gb_poly_push_term(r, ie, c);
+    }
+    mpq_clear(c); free(ie);
+    gb_poly_normalize(r);
+    return r;
+}
+
+/* The driver.  1 with *out set (the reduced Lex basis, ascending), 0 to
+ * decline; *timed_out when the deadline passed (nothing is held). */
+static int gf_shape_on = 1;
+static long gf_shape_hits = 0;
+long gb_flint_shape_route(int on) { gf_shape_on = on; return gf_shape_hits; }
+
+static int gf_lex_shape(GBPoly* const* F, size_t nF, const GBPoly* f0, GBPoly*** out, size_t* out_n,
+                        int* timed_out) {
+    slong nv = f0->n_vars;
+    *timed_out = 0;
+    if (!gf_shape_on || getenv("MATHILDA_GB_SHAPE_OFF")) return 0;
+    /* the inputs over Z, primitive */
+    Gf Zg; gf_init(&Zg, 0, 0, nv, ORD_DEGREVLEX);
+    fmpz_mpoly_struct* Fz = flint_malloc((size_t)(nF ? nF : 1) * sizeof(fmpz_mpoly_struct));
+    slong n = 0;
+    for (size_t i = 0; i < nF; i++) {
+        if (!F[i]->n_terms) continue;
+        fmpz_mpoly_init(Fz + n, Zg.Z);
+        gf_from_gbpoly(&Zg, Fz + n, F[i], 0);
+        gf_normalise(&Zg, Fz + n);
+        n++;
+    }
+    int done = 0;
+    slong D = -1, L = 0, Lalloc = 0, kfail = 0, misses = 0, unusable = 0, alt = -1;
+    fmpz* crt = NULL; fmpq* rec = NULL; int have_rec = 0;
+    fmpz_t mprod; fmpz_init(mprod);
+    slong homog = -2;                         /* certificate (c): not yet run */
+    ulong p = UWORD(1) << 62;
+    for (slong it = 0; it < GF_FGLM_PRIMES && !done; it++) {
+        if (tc_deadline_passed()) { *timed_out = 1; break; }
+        p = n_nextprime(p, 1);
+        ulong* vals = NULL;
+        slong d = gf_shape_image(Fz, n, Zg.Z, p, &vals);
+        if (d == -2) { *timed_out = 1; break; }
+        if (d == -1) {                         /* not zero-dimensional / not shape mod p */
+            flint_free(vals);
+            /* a lucky prime is the rule: two that agree decline */
+            if (++misses >= (D < 0 ? 2 : 4)) break;
+            continue;
+        }
+        if (d == 0) {                          /* an unusable prime */
+            flint_free(vals);
+            if (++unusable >= 8) break;
+            continue;
+        }
+        unusable = 0;
+        if (D < 0) {
+            D = d; L = nv * D; Lalloc = L;
+            crt = _fmpz_vec_init(L);
+            rec = flint_malloc((size_t)L * sizeof(fmpq));
+            for (slong k = 0; k < L; k++) fmpq_init(rec + k);
+            for (slong k = 0; k < L; k++) fmpz_set_ui(crt + k, vals[k]);
+            fmpz_set_ui(mprod, p);
+            flint_free(vals);
+            continue;
+        }
+        if (d != D) {
+            /* unlucky -- or the reference was: two primes that agree with
+             * each other and not with it replace it */
+            if (d == alt) {
+                D = d; L = nv * D;
+                for (slong k = 0; k < Lalloc; k++) fmpq_clear(rec + k);
+                _fmpz_vec_clear(crt, Lalloc);
+                flint_free(rec);
+                Lalloc = L;
+                crt = _fmpz_vec_init(L);
+                rec = flint_malloc((size_t)L * sizeof(fmpq));
+                for (slong k = 0; k < L; k++) fmpq_init(rec + k);
+                for (slong k = 0; k < L; k++) fmpz_set_ui(crt + k, vals[k]);
+                fmpz_set_ui(mprod, p);
+                have_rec = 0; kfail = 0; alt = -1;
+                flint_free(vals);
+                continue;
+            }
+            alt = d;
+            flint_free(vals);
+            if (++misses >= 8) break;
+            continue;
+        }
+        /* a candidate must reproduce this prime's image before it is tried */
+        int try_cand = 0;
+        if (have_rec) {
+            nmod_t mod; nmod_init(&mod, p);
+            int agree = 1;
+            for (slong k = 0; k < L && agree; k++) {
+                ulong dn = fmpz_fdiv_ui(fmpq_denref(rec + k), p);
+                if (!dn) { agree = 0; break; }
+                ulong v = nmod_mul(fmpz_fdiv_ui(fmpq_numref(rec + k), p), n_invmod(dn, p), mod);
+                agree = v == vals[k];
+            }
+            have_rec = 0;
+            try_cand = agree;
+        }
+        if (try_cand) {
+            if (homog == -2) {
+                int to = 0;
+                homog = gf_homog_count(Fz, n, Zg.Z, n_nextprime(UWORD(1) << 61, 1), GF_FGLM_MAXD, &to);
+                if (to) { *timed_out = 1; flint_free(vals); break; }
+                if (homog != D) {              /* a second prime before giving up */
+                    homog = gf_homog_count(Fz, n, Zg.Z, n_nextprime(UWORD(3) << 60, 1), GF_FGLM_MAXD, &to);
+                    if (to) { *timed_out = 1; flint_free(vals); break; }
+                }
+            }
+            if (homog != D) { flint_free(vals); break; }    /* decline */
+            /* over Z: H = h made primitive (h monic: its numerator, lc =
+             * the denominator > 0); q_i = Q_i / c_i; the substitution
+             * x_i = q_i / h' = A_i / B with B = C H' (C = lcm c_i) and
+             * A_i = lc(H) (C / c_i) Q_i */
+            fmpq_poly_t h; fmpq_poly_init(h);
+            for (slong j = 0; j < D; j++) fmpq_poly_set_coeff_fmpq(h, j, rec + j);
+            fmpq_poly_set_coeff_si(h, D, 1);
+            fmpz_poly_t H, B; fmpz_poly_init(H); fmpz_poly_init(B);
+            fmpq_poly_get_numerator(H, h);
+            fmpz_poly_derivative(B, H);
+            const fmpz* lc = H->coeffs + D;
+            slong nx = nv - 1;
+            fmpz_poly_struct* A = flint_malloc((size_t)nx * sizeof(fmpz_poly_struct));
+            fmpz* cq = _fmpz_vec_init(nx);
+            fmpz_t C, m; fmpz_init_set_ui(C, 1); fmpz_init(m);
+            {
+                fmpq_poly_t qi; fmpq_poly_init(qi);
+                for (slong i = 0; i < nx; i++) {
+                    fmpq_poly_zero(qi);
+                    for (slong j = 0; j < D; j++) fmpq_poly_set_coeff_fmpq(qi, j, rec + (1 + i) * D + j);
+                    fmpz_poly_init(A + i);
+                    fmpq_poly_get_numerator(A + i, qi);
+                    fmpz_set(cq + i, fmpq_poly_denref(qi));
+                    fmpz_lcm(C, C, cq + i);
+                }
+                fmpq_poly_clear(qi);
+            }
+            for (slong i = 0; i < nx; i++) {
+                fmpz_divexact(m, C, cq + i);
+                fmpz_mul(m, m, lc);
+                fmpz_poly_scalar_mul_fmpz(A + i, A + i, m);
+            }
+            fmpz_poly_scalar_mul_fmpz(B, B, C);
+            /* the g_i (and the proof that B, i.e. h', is a unit mod H) */
+            fmpq_poly_struct* g = flint_malloc((size_t)nx * sizeof(fmpq_poly_struct));
+            for (slong i = 0; i < nx; i++) fmpq_poly_init(g + i);
+            int cert = gf_quotients(g, A, nx, B, H);
+            if (cert) cert = gf_shape_contains(Fz, n, Zg.Z, H, A, B);
+            if (!cert && tc_deadline_passed()) *timed_out = 1;
+            if (cert) {
+                GBPoly** R = malloc((size_t)nv * sizeof(GBPoly*));
+                fmpz_t one; fmpz_init_set_ui(one, 1);
+                R[0] = gf_shape_gbpoly(-1, one, H->coeffs, H->length, f0);
+                /* x_i - num/den  ->  den x_i - num (coprime, den > 0) */
+                for (slong i = nx - 1, k = 1; i >= 0; i--, k++)
+                    R[k] = gf_shape_gbpoly(i, fmpq_poly_denref(g + i), g[i].coeffs, g[i].length, f0);
+                fmpz_clear(one);
+                *out = R; *out_n = (size_t)nv; done = 1;
+                gf_shape_hits++;
+            }
+            for (slong i = 0; i < nx; i++) { fmpq_poly_clear(g + i); fmpz_poly_clear(A + i); }
+            flint_free(g); flint_free(A);
+            _fmpz_vec_clear(cq, nx);
+            fmpz_clear(C); fmpz_clear(m);
+            fmpz_poly_clear(H); fmpz_poly_clear(B);
+            fmpq_poly_clear(h);
+            if (done || *timed_out) { flint_free(vals); break; }
+        }
+        /* CRT in this prime */
+        for (slong k = 0; k < L; k++) fmpz_CRT_ui(crt + k, crt + k, mprod, vals[k], p, 0);
+        fmpz_mul_ui(mprod, mprod, p);
+        flint_free(vals);
+        /* reconstruct: the coefficient that failed last first, alone */
+        if (!fmpq_reconstruct_fmpz(rec + kfail, crt + kfail, mprod)) continue;
+        int all = 1;
+        for (slong k = 0; k < L; k++) {
+            if (k == kfail) continue;
+            if (!fmpq_reconstruct_fmpz(rec + k, crt + k, mprod)) { all = 0; kfail = k; break; }
+        }
+        have_rec = all;
+    }
+    if (crt) _fmpz_vec_clear(crt, Lalloc);
+    if (rec) { for (slong k = 0; k < Lalloc; k++) fmpq_clear(rec + k); flint_free(rec); }
+    fmpz_clear(mprod);
+    for (slong i = 0; i < n; i++) fmpz_mpoly_clear(Fz + i, Zg.Z);
+    flint_free(Fz);
+    gf_clear(&Zg);
     return done;
 }
 
@@ -1337,7 +2066,7 @@ static int gf_fglm_inexact(Gf* Dg, const slong* idx, slong ng, long bits,
                 mc[r] = fmpz_is_zero(c + r) ? 0 : nmod_mul(fmpz_fdiv_ui(c + r, p), di, mod);
         }
         GfFglm Rm;
-        if (!gf_fglm_mod(Mp, nv, D, 0, mod, &Rm)) continue;
+        if (!gf_fglm_mod(Mp, nv, D, 0, mod, &Rm, 0, NULL)) continue;
         if (!have) { ref = Rm; have = 1; continue; }
         if (gff_same_shape(&ref, &Rm, nv)) agreed = 1;
         else { gff_clear(&ref); ref = Rm; }            /* keep the newer one */
@@ -1470,6 +2199,13 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
      * directly; the run is given a work budget, and only when it is exceeded
      * (the coefficient growth Lex suffers) does the basis come from the DRL
      * basis by FGLM, for a zero-dimensional ideal. */
+    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
+        size_t ns = 0;
+        int ok = gf_lex_shape(F, n, f0, &R, &ns, &timed_out);
+        if (timed_out) tc_check_deadline();
+        if (ok) { *out = R; *out_n = ns; return 1; }
+        R = NULL;
+    }
     if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF")) {
         Gf L; gf_init(&L, 0, 0, f0->n_vars, ORD_LEX);
         L.budget_pairs = GF_LEX_BUDGET_PAIRS; L.budget_bits = GF_LEX_BUDGET_BITS;
@@ -1653,6 +2389,8 @@ int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
 }
 
 #else  /* !USE_FLINT */
+
+long gb_flint_shape_route(int on) { (void)on; return 0; }
 
 int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
                       int** B_out, int* d_out, mpq_t** M_out) {

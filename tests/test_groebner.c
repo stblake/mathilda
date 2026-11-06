@@ -19,6 +19,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "test_utils.h"
+#include "gb_flint.h"
 
 /* FullForm string match. */
 static void check_eq(const char* input, const char* expected) {
@@ -719,6 +720,113 @@ static void test_flint_engine_matches_classical(void) {
              "8");
 }
 
+
+/* ------------------------------------------------------------------ */
+/* The modular shape-position Lex route (gb_flint.c, gf_lex_shape)    */
+/* ------------------------------------------------------------------ */
+
+/* FullForm of GroebnerBasis[input] with the shape route on or off. */
+static char* gb_fullform(const char* input, int shape_on) {
+    gb_flint_shape_route(shape_on);
+    Expr* e = parse_expression(input);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string_fullform(res);
+    expr_free(e);
+    expr_free(res);
+    gb_flint_shape_route(1);
+    return got;
+}
+
+/* The route's basis equals the exact routes' basis (the reduced Lex basis is
+ * unique, so equal FullForm), and the route did (or did not) produce it. */
+static void check_shape_matches_exact(const char* input, int expect_route) {
+    char* exact = gb_fullform(input, 0);
+    long before = gb_flint_shape_route(1);
+    char* shape = gb_fullform(input, 1);
+    long after = gb_flint_shape_route(1);
+    if (strcmp(exact, shape) != 0)
+        fprintf(stdout, "FAIL: %s\n  exact: %.300s\n  shape: %.300s\n", input, exact, shape);
+    ASSERT_STR_EQ(shape, exact);
+    if ((after > before) != expect_route) {
+        fprintf(stdout, "FAIL: %s: shape route %s\n", input, expect_route ? "did not run" : "ran");
+        ASSERT_STR_EQ(expect_route ? "declined" : "ran", expect_route ? "ran" : "declined");
+    }
+    free(exact); free(shape);
+}
+
+/* A deterministic dense polynomial in v[0..nv) of total degree deg, every
+ * monomial up to that degree with a nonzero coefficient in [-cmax, cmax]. */
+static unsigned long long shape_lcg = 0x9e3779b97f4a7c15ULL;
+static long shape_coeff(long cmax) {
+    for (;;) {
+        shape_lcg = shape_lcg * 6364136223846793005ULL + 1442695040888963407ULL;
+        long c = (long)((shape_lcg >> 33) % (unsigned long long)(2 * cmax + 1)) - cmax;
+        if (c) return c;
+    }
+}
+static void shape_poly(char* buf, size_t cap, const char* const* v, int nv, int deg, long cmax) {
+    int e[6] = {0, 0, 0, 0, 0, 0};
+    size_t len = strlen(buf);
+    int first = 1;
+    for (;;) {
+        int tot = 0;
+        for (int i = 0; i < nv; i++) tot += e[i];
+        if (tot <= deg) {
+            len += (size_t)snprintf(buf + len, cap - len, "%s(%ld)", first ? "" : " + ", shape_coeff(cmax));
+            for (int i = 0; i < nv; i++)
+                if (e[i]) len += (size_t)snprintf(buf + len, cap - len, "*%s^%d", v[i], e[i]);
+            first = 0;
+        }
+        int k = 0;
+        while (k < nv && ++e[k] > deg) e[k++] = 0;
+        if (k == nv) break;
+    }
+}
+
+/* Random zero-dimensional systems (generic, so in shape position), 2-4
+ * variables, mixed degrees, 1-digit and 6-digit coefficients: the modular
+ * route returns the exact routes' basis. */
+static void test_shape_route_random_systems(void) {
+    static const char* const V[] = {"x", "y", "z", "w"};
+    static const int sys[][6] = {           /* nv, degrees..., 6-digit? */
+        {2, 2, 3, 0, 0, 0}, {2, 4, 3, 0, 0, 0}, {2, 3, 3, 0, 0, 1}, {3, 2, 2, 2, 0, 0},
+        {3, 2, 2, 3, 0, 0}, {3, 2, 2, 2, 0, 1}, {4, 2, 2, 2, 2, 0}, {4, 2, 2, 2, 2, 1},
+    };
+    for (size_t t = 0; t < sizeof sys / sizeof sys[0]; t++) {
+        int nv = sys[t][0];
+        long cmax = sys[t][5] ? 999999 : 9;
+        char buf[16384];
+        snprintf(buf, sizeof buf, "GroebnerBasis[{");
+        for (int i = 0; i < nv; i++) {
+            if (i) strcat(buf, ", ");
+            shape_poly(buf, sizeof buf, V, nv, sys[t][1 + i], cmax);
+        }
+        strcat(buf, "}, {");
+        for (int i = 0; i < nv; i++) { if (i) strcat(buf, ", "); strcat(buf, V[i]); }
+        strcat(buf, "}]");
+        check_shape_matches_exact(buf, 1);
+    }
+}
+
+/* The first prime the route uses, NextPrime[2^62], is unlucky for
+ * p x^2 + x - y: modulo it the system has 2 solutions, over Q 4.  The next
+ * primes agree with each other and replace the reference. */
+static void test_shape_route_unlucky_prime(void) {
+    check_shape_matches_exact("GroebnerBasis[{NextPrime[2^62] x^2 + x - y, y^2 - 2}, {y, x}]", 1);
+    check_shape_matches_exact(
+        "GroebnerBasis[{NextPrime[2^62] x^2 + x - y + z, y^2 - 2 + x z, z^2 - 3 x - 1}, {z, y, x}]", 1);
+}
+
+/* Where the route must decline, the exact routes answer: not in shape
+ * position (cyclic-4, a grid of points), solutions at infinity (the dimension
+ * certificate fails), positive-dimensional. */
+static void test_shape_route_declines(void) {
+    check_shape_matches_exact("GroebnerBasis[{a + b + c + d, a b + b c + c d + d a, "
+                              "a b c + b c d + c d a + d a b, a b c d - 1}, {a, b, c, d}]", 0);
+    check_shape_matches_exact("GroebnerBasis[{x^2 - 1, y^2 - 1}, {x, y}]", 0);
+    check_shape_matches_exact("GroebnerBasis[{x y - 1, y^2 - 2}, {x, y}]", 0);
+    check_shape_matches_exact("GroebnerBasis[{x^2 + y^2 + z^2 - 1, x - y z}, {x, y, z}]", 0);
+}
 /* ------------------------------------------------------------------ */
 
 /* InexactNumbers on a zero-dimensional Lex problem goes through the numeric
@@ -811,6 +919,9 @@ int main(void) {
     TEST(test_grevlex_handles_hard_lex_input);
     TEST(test_flint_engine_matches_classical);
     TEST(test_inexact_numeric_fglm_matches_exact);
+    TEST(test_shape_route_random_systems);
+    TEST(test_shape_route_unlucky_prime);
+    TEST(test_shape_route_declines);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");
