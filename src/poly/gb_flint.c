@@ -2555,6 +2555,23 @@ static void gf_crt_merge(fmpz_mpoly_t H, const fmpz_mpoly_ctx_t Z, const fmpz_t 
                          const nmod_mpoly_ctx_t Mc, ulong minv, ulong* e1, ulong* e2, int ord) {
     slong nv = Z->minfo->nvars;
     nmod_t mod = Mc->mod;
+    /* the usual case: the same support as before -- updated in place */
+    if (H->length == A->length) {
+        int same = 1;
+        for (slong k = 0; k < H->length && same; k++) {
+            fmpz_mpoly_get_term_exp_ui(e1, H, k, Z);
+            nmod_mpoly_get_term_exp_ui(e2, A, k, Mc);
+            same = memcmp(e1, e2, (size_t)nv * sizeof(ulong)) == 0;
+        }
+        if (same) {
+            for (slong k = 0; k < H->length; k++) {
+                fmpz* c = H->coeffs + k;
+                ulong t = nmod_mul(nmod_sub(A->coeffs[k], fmpz_fdiv_ui(c, mod.n), mod), minv, mod);
+                if (t) fmpz_addmul_ui(c, M, t);
+            }
+            return;
+        }
+    }
     fmpz_mpoly_t R; fmpz_mpoly_init(R, Z);
     fmpz_t c; fmpz_init(c);
     slong i = 0, j = 0;
@@ -2717,7 +2734,7 @@ static int gf_verify_basis(Gf* V, const fmpz_mpoly_struct* C, slong nc,
 }
 
 /* A batch of GF(p) images, computed on worker threads. */
-#define GF_IMG_BATCH 8
+#define GF_IMG_BATCH 16
 typedef struct {
     ulong p; slong k; int taken;
     nmod_mpoly_ctx_t Mc; nmod_mpoly_struct* A;
@@ -2829,11 +2846,12 @@ static int gf_lift(Gf* Zg, const fmpz_mpoly_struct* Fz, slong n, int ord, int hs
     fmpz_mpoly_struct* C = NULL; int have_cand = 0;        /* the candidate */
     fmpz_t M; fmpz_init(M);
     flint_bitcnt_t next = 64;
+    slong rr_fail = 0;
     ulong* e1 = flint_malloc((size_t)nv * sizeof(ulong));
     ulong* e2 = flint_malloc((size_t)nv * sizeof(ulong));
     ulong p = UWORD(1) << 62;
     /* the images come in batches computed on worker threads: 1 (the
-     * reference), then 2, 4, 8 at a time */
+     * reference), then 2, 4, 8, 16 at a time */
     GfImgJob B; memset(&B, 0, sizeof B);
     B.Fz = Fz; B.n = n; B.Zc = Zg->Z; B.ord = ord; B.nv = nv;
     slong bnext = 0, bsize = 1;
@@ -2847,7 +2865,7 @@ static int gf_lift(Gf* Zg, const fmpz_mpoly_struct* Fz, slong n, int ord, int hs
             mp_parallel_for(gf_img_task, &B, B.nb, B.nb > 1 ? 1e12 : 0.0);
             dbg_f4 += GF_CLOCK() - q0;
             bnext = 0;
-            if (bsize < 8) bsize *= 2;
+            if (bsize < GF_IMG_BATCH) bsize *= 2;
         }
         GfImg* I = B.s + bnext++;
         p = I->p;
@@ -2883,7 +2901,7 @@ static int gf_lift(Gf* Zg, const fmpz_mpoly_struct* Fz, slong n, int ord, int hs
             if (have_cand) { for (slong i = 0; i < ne; i++) fmpz_mpoly_clear(C + i, Zg->Z); flint_free(C); C = NULL; have_cand = 0; }
             flint_free(ref_lm); ref_lm = NULL; ne = -1;
             flint_free(alt_lm); alt_lm = NULL; alt_ne = -1;
-            next = 64;
+            next = 64; rr_fail = 0;
         }
         if (ne < 0) {                                       /* the reference */
             ne = k; ref_lm = lm; lm = NULL;
@@ -2961,15 +2979,16 @@ static int gf_lift(Gf* Zg, const fmpz_mpoly_struct* Fz, slong n, int ord, int hs
         /* reconstruct a candidate */
         double r0 = GF_CLOCK();
         C = flint_malloc((size_t)ne * sizeof(fmpz_mpoly_struct));
-        int all = 1;
-        slong i;
-        for (i = 0; i < ne && all; i++) {
-            fmpz_mpoly_init(C + i, Zg->Z);
-            all = gf_rr_poly(C + i, H + i, Zg->Z, M, e1);
+        for (slong i = 0; i < ne; i++) fmpz_mpoly_init(C + i, Zg->Z);
+        /* the element that failed last first: it usually fails again */
+        int all = gf_rr_poly(C + rr_fail, H + rr_fail, Zg->Z, M, e1);
+        for (slong i = 0; i < ne && all; i++) {
+            if (i == rr_fail) continue;
+            if (!(all = gf_rr_poly(C + i, H + i, Zg->Z, M, e1))) rr_fail = i;
         }
         if (all) have_cand = 1;
         else {
-            for (slong j = 0; j < i; j++) fmpz_mpoly_clear(C + j, Zg->Z);
+            for (slong j = 0; j < ne; j++) fmpz_mpoly_clear(C + j, Zg->Z);
             flint_free(C); C = NULL;
         }
         dbg_rr += GF_CLOCK() - r0;
