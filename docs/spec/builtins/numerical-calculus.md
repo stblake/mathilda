@@ -807,10 +807,10 @@ integrand evaluated/numericalised at each sample point.
 |--------------------|--------|
 | finite real, smooth | globally-adaptive Gauss-Kronrod (G7-K15) with QAGS Wynn extrapolation |
 | finite real, endpoint singularity | tanh-sinh double-exponential |
-| arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
+| arbitrary `WorkingPrecision` (> machine), finite real | at the target precision + guard bits (MPFR): a power-law endpoint is mapped away, a boundary layer is split into graded Clenshaw-Curtis pieces, an integrand analytic on the interval is taken by a bounded Clenshaw-Curtis probe (N <= 128, kept only when converged to every target digit), Levin collocation goes first only over at least 4 periods, else tanh-sinh |
 | machine precision, integrand leaves the double range in the bulk of the interval (e.g. `x^x^x` on `[1, 6]` reaches 2.7e36305; a Laurent polynomial on the unit circle whose powers give `Overflow[]`) | the machine pass is discarded and the integral re-run on the MPFR path at machine-equivalent precision (53 bits + guard); the result is a 53-bit Real, the representation machine arithmetic itself uses beyond 1.8e308.  A sample within 1e-10 of the span from an endpoint (an endpoint singularity) does not trigger this. |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
-| semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx` | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros) — the fast, high-precision path (hundreds of digits in a few thousand samples) |
+| semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx` | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros), at machine precision and at any `WorkingPrecision` — hundreds of digits in a few thousand samples; a power-law phase `A(x) Sin[c x^n]` reaches it through the phase variable `t = c x^n` |
 | oscillatory (many periods / slow tail), general | integrate between zeros + Wynn epsilon (finite: half-period panels; MPFR-accelerated at high `WorkingPrecision`) |
 | doubly-infinite, non-decaying oscillation (e.g. `Exp[I x^2]`, `Cos[x^2]`) | split at 0, each half integrated between the zeros + Wynn epsilon (sinh-sinh fallback) |
 | oscillatory endpoint singularity (e.g. `Cos[Log[x]/x]/x` at 0) | exponential endpoint map `x = a + (b−a)e^{−t}` onto a half line, then integrate between the (accelerating) zeros + Wynn epsilon |
