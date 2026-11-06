@@ -251,3 +251,17 @@ power machine 0.615 vs 0.581 ms; P7 m2 numeric approach 13.7 vs 9.5 ms.
 Mathilda matches the true answer (the baseline is wrong): Mathilda is correct on all 240
 cases. SLOWER: h6.6 NSolve machine 49 vs 29 ms; h7.6 N 0.2 vs 0.1 ms.
 (v0.6225: 127 / 49 / 18 / 46, Mathilda wrong in 31.)
+
+## Sealed holdout B (146-155), run once at v0.6340 (2026-11-07)
+
+258 new cases that no fix agent saw, classified against the true answers
+([`ISSAC97_HOLDOUT_B_RESULTS_v0.6340.md`](ISSAC97_HOLDOUT_B_RESULTS_v0.6340.md)):
+Mathilda correct 212/258 (baseline 242/258); where both are correct (205), Mathilda faster
+in 192. Generalised well: linear algebra 24/24, polynomial systems 30/30 (baseline 28/30),
+closed-form integrals 29/30. Gaps: cancellation limits 14/32 (Limit unevaluated on most new
+limit types); absent ZetaZero, AiryAiZero, MathieuCharacteristicA, CountRoots (wrong on one);
+13 wrong answers (NSum b3.8/b3.9/b3.10, NIntegrate b2.6/b2.8 at 30 digits, contour b4.3,
+Limit b7.1 -> ComplexInfinity, NDSolve b10.6 at 50 digits, b10.8 shooting -- the last also
+wrong in the baseline). Verdict: speed generalises; correctness partly overfit to the
+families worked on. Next: wave 4 on these gaps (B then becomes training data) and a fresh
+sealed holdout C to re-measure.
