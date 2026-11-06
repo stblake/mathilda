@@ -613,6 +613,20 @@ static int rf_push_gen(Rf* R, slong v, slong e, RfCtx* C) {
     return ok;
 }
 
+/* The exponent of the generator factor x_v in R (0 when it has none). */
+static slong rf_gen_exp(const Rf* R, slong v, const RfCtx* C) {
+    ulong* ex = malloc(C->n * sizeof(ulong));
+    if (!ex) return 0;
+    slong k = 0;
+    for (slong i = 0; i < R->n && !k; i++) {
+        if (!rf_is_mono(&R->f[i].p)) continue;
+        fmpz_mpoly_get_term_exp_ui(ex, &R->f[i].p, 0, C->ctx);
+        if (ex[v]) k = R->f[i].e;
+    }
+    free(ex);
+    return k;
+}
+
 /* Split each denominator factor into its monomial content and the rest. */
 static int rf_split_den_monomials(Rf* R, RfCtx* C) {
     const fmpz_mpoly_ctx_struct* ctx = C->ctx;
@@ -646,8 +660,14 @@ static int rf_split_den_monomials(Rf* R, RfCtx* C) {
         C->inherit_flip = fl;
         ok = rf_push(R, q, e, C);
         C->inherit_flip = 0;
-        for (slong v = 0; v < nv && ok; v++)
-            if (ex[v]) ok = rf_push_gen(R, v, e * (slong)ex[v], C);
+        for (slong v = 0; v < nv && ok; v++) {
+            if (!ex[v]) continue;
+            /* the content meets a numerator power of its generator: that is a
+             * cancellation, which Cancel's "nothing to cancel" test counts
+             * (Cancel[c/(c + c^2) + s] in the expanded form is 1/(1 + c) + s) */
+            if (rf_gen_exp(R, v, C) > 0) C->splits++;
+            ok = rf_push_gen(R, v, e * (slong)ex[v], C);
+        }
         i = -1;                                    /* the list was reordered */
     }
     fmpz_mpoly_clear(m, ctx); fmpz_mpoly_clear(q, ctx);

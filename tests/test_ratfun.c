@@ -23,6 +23,7 @@
 #include "core.h"
 #include "print.h"
 #include "test_utils.h"
+#include "poly/ratfun.h"
 
 static char* eval_str(const char* input) {
     Expr* e = parse_expression(input);
@@ -251,6 +252,36 @@ void test_kernel_atoms(void) {
     assert_true("Together[Csc[x] + Sec[x]] === Csc[x] + Sec[x]");
 }
 
+/* The engine called directly from C, outside any Together/Cancel dispatch:
+ * the expanded form its internal callers read.  `fn` is ratfun_together or
+ * ratfun_cancel; the result is compared (SameQ) with `expected`. */
+static void assert_internal(Expr* (*fn)(const Expr*), const char* input, const char* expected) {
+    Expr* in = evaluate(parse_expression(input));
+    Expr* r = fn(in);
+    Expr* want = evaluate(parse_expression(expected));
+    int ok = r && expr_eq(r, want);
+    char* s = r ? expr_to_string(r) : NULL;
+    if (!ok) { printf("FAIL: internal %s\n  expected: %s\n  got:      %s\n", input, expected, s ? s : "(declined)"); g_failures++; }
+    else printf("PASS: internal %s -> %s\n", input, s);
+    free(s);
+    if (r) expr_free(r);
+    expr_free(in); expr_free(want);
+}
+
+/* Kernel atoms and a monomial cancellation in the expanded (internal) form. */
+void test_internal_kernels(void) {
+    /* c/(c + c^2) cancels c: the term is rewritten, not kept as written */
+    assert_internal(ratfun_cancel, "c/(c^2 + c) + s", "1/(1 + c) + s");
+    assert_internal(ratfun_cancel, "Cos[x]/(Cos[x]^2 + Cos[x]) + Sin[x]", "1/(1 + Cos[x]) + Sin[x]");
+    /* nothing cancels: the term stays as written */
+    assert_internal(ratfun_cancel, "x + 1/(1 - x^2)", "x + 1/(1 - x^2)");
+    /* 1/(s - c) - 1/(s + c) = -2c/(c^2 - s^2), the sign of the plain-symbol form */
+    assert_internal(ratfun_together, "1/(Sin[x] - Cos[x]) - 1/(Sin[x] + Cos[x])",
+                    "(-2 Cos[x])/(Cos[x]^2 - Sin[x]^2)");
+    assert_internal(ratfun_together, "f'[x]/f[x] + 1/(f[x] + f''[x])",
+                    "(f[x] + f[x] f'[x] + f'[x] f''[x])/(f[x]^2 + f[x] f''[x])");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -266,6 +297,7 @@ int main(void) {
     TEST(test_internal_form);
     TEST(test_gaussian);
     TEST(test_kernel_atoms);
+    TEST(test_internal_kernels);
     TEST(test_stress);
     if (g_failures) {
         printf("%d ratfun test(s) FAILED\n", g_failures);

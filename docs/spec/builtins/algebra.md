@@ -66,7 +66,9 @@ Cancels out common factors in the numerator and denominator of an expression.
   `Cancel[(Sin[x]^2 - Cos[x]^2)/(Sin[x] - Cos[x])]` is `Cos[x] + Sin[x]` and
   `Cancel[(f'[x]^2 - f[x]^2)/(f'[x] + f[x])]` is `-f[x] + f'[x]`. An answer
   that would leave such a trig atom alone in a denominator (where evaluation
-  would rewrite it to `Csc`/`Sec`/`Tan`) keeps the other paths.
+  would rewrite it to `Csc`/`Sec`/`Tan`) keeps the other paths. Also fixed: an
+  internal (expanded-form) `Cancel` kept a term whose only cancellation was a
+  monomial as written (`c/(c + c^2)` is `1/(1 + c)`).
 - **`Modulus -> p`** (v0.6072) cancels over the integers modulo a prime `p`.
   `Modulus -> 0` is the default; a composite modulus is `Cancel::modp` and the
   call stays unevaluated; a nonzero modulus with an `Extension` is
