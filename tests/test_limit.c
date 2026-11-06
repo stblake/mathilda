@@ -1211,6 +1211,22 @@ static void test_limit_high_order_cancellation(void) {
     check("Limit[x Sin[1/x], x -> 0]", "0");
 }
 
+/* A composed branch-point expansion with the side unknown holds on the
+ * x > a sheet only.  For 0 < z < 1, 2 ArcTanh[1 - 2 z] = Log[(1 - z)/z], so
+ * 2 ArcTanh[1 - 2 z] - Log[1 - z] = -Log[z] -> 0; for z > 1 both terms carry
+ * I Pi and cancel to the same real -Log[z].  The one-sheet value 2 I Pi was
+ * returned from below. */
+static void test_limit_branch_sheet_per_side(void) {
+    check("Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> \"FromBelow\"]", "0");
+    check("Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1, Direction -> \"FromAbove\"]", "0");
+    check("Limit[2 ArcTanh[1 - 2 z] - Log[1 - z], z -> 1]", "0");
+    /* Log[x - 1] - Log[1 - x]: for x > 1, Log[1 - x] = Log[x - 1] + I Pi, so
+     * -I Pi from above; for x < 1, Log[x - 1] = Log[1 - x] + I Pi, so I Pi
+     * from below. */
+    check("Limit[Log[x - 1] - Log[1 - x], x -> 1, Direction -> \"FromAbove\"]", "-I Pi");
+    check("Limit[Log[x - 1] - Log[1 - x], x -> 1, Direction -> \"FromBelow\"]", "I Pi");
+}
+
 /* ISSAC '97 problem 7: f, g signed sums of twelve 3-fold compositions of
  * Sin/Tan/Sinh/Tanh with f ~ a x^15, a = 7769/3274425 and g ~ b x^11,
  * b = 4/63, so f(g(x))/g(f(x)) -> a b^15/(b a^11). */
@@ -1272,6 +1288,7 @@ int main(void) {
     TEST(test_limit_branch_stress);
     TEST(test_limit_high_order_cancellation);
     TEST(test_limit_issac97_p7);
+    TEST(test_limit_branch_sheet_per_side);
 
     printf("All limit tests passed.\n");
     return 0;

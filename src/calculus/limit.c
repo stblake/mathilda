@@ -1386,11 +1386,32 @@ apply_prefactor:
  * `assum` (borrowed, may be NULL) is passed as the Series Assumptions option.
  * *stuck is set when the expansion's coefficients still depend on x (escalating
  * the order cannot help then). */
+/* Do the coefficients (or a prefactor) of the series `s` -- not merely its
+ * expansion variable -- mention x?  Such an expansion (Log[x - a] terms, a
+ * branch phase) holds on one sheet only: a composed ArcTanh/Log at a branch
+ * point is expanded on the x > a side when the side is not known. */
+static bool contains_imaginary_unit(Expr* e);  /* defined below */
+
+static bool series_coefs_mention(Expr* s, Expr* x) {
+    if (!s) return false;
+    if (head_is(s, SYM_SeriesData) && s->data.function.arg_count == 6)
+        return expr_contains(s->data.function.args[2], x);
+    if (head_is(s, SYM_Times)) {
+        for (size_t i = 0; i < s->data.function.arg_count; i++)
+            if (series_coefs_mention(s->data.function.args[i], x) ||
+                (!head_is(s->data.function.args[i], SYM_SeriesData) &&
+                 expr_contains(s->data.function.args[i], x)))
+                return true;
+    }
+    return false;
+}
+
 static Expr* series_probe_limit(Expr* f_use, Expr* x_use, Expr* x0_use,
                                 int effective_dir, LimitCtx* ctx,
-                                Expr* assum, bool* stuck_out) {
+                                Expr* assum, bool* stuck_out, bool* sheeted_out) {
     Expr* result = NULL;
     bool stuck = false;
+    if (sheeted_out) *sheeted_out = false;
     for (int64_t k = LIMIT_SERIES_START_ORDER;
          k <= LIMIT_SERIES_MAX_ORDER;
          k *= 2) {
@@ -1421,6 +1442,7 @@ static Expr* series_probe_limit(Expr* f_use, Expr* x_use, Expr* x0_use,
          * and is expensive (O(k^3) for common heads). Short-circuit and hand
          * off to the caller / the later layers. */
         stuck = (result == NULL) && s && expr_contains(s, x_use);
+        if (result && sheeted_out) *sheeted_out = series_coefs_mention(s, x_use);
         expr_free(s);
         if (result) break;
         if (stuck) break;
@@ -1490,9 +1512,30 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
         effective_dir = LIMIT_DIR_FROMABOVE;
     }
 
-    bool stuck = false;
+    bool stuck = false, sheeted = false;
     Expr* result = series_probe_limit(f_use, x_use, x0_use, effective_dir,
-                                      ctx, NULL, &stuck);
+                                      ctx, NULL, &stuck, &sheeted);
+    /* A nonzero value read off a one-sheet expansion (coefficients carrying
+     * Log[x - a] or a phase) is the x > a side's value only: re-derive it per
+     * side below.  2 ArcTanh[1 - 2 z] - Log[1 - z] at z -> 1 expands, side
+     * unknown, as the z > 1 sheet's Log[-1 + z] - Log[1 - z] + I Pi, which
+     * from below is 2 I Pi; with the side assumed both sheets give 0.
+     * Re-derived are a finite NON-REAL value -- a sheet change shifts the
+     * value by a branch offset (I Pi, a phase (-1)^r), so a real one is not
+     * sheet-dependent -- and Indeterminate (the two-sided read of the sum
+     * above).  A zero (positive leading exponent) or an infinite value is
+     * the same on every sheet; re-deriving those re-entered this layer
+     * recursively through the per-side probes of every Log-carrying
+     * subterm, and limit_tests went from 9 s to over 120 s. */
+    Expr* sheet_result = NULL;
+    if (result && sheeted &&
+        (is_indeterminate(result) ||
+         (!is_lit_zero(result) && !is_divergent(result) &&
+          contains_imaginary_unit(result)))) {
+        sheet_result = result;
+        result = NULL;
+        stuck = true;
+    }
 
     /* A coefficient that still depends on x at a FINITE point is typically the
      * branch phase of a fractional power of a vanishing base: Series[Sqrt[x^2],
@@ -1508,16 +1551,16 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
         if (d == LIMIT_DIR_FROMABOVE || d == LIMIT_DIR_FROMBELOW) {
             Expr* as = series_side_assumption(ctx, d);
             bool st2 = false;
-            result = series_probe_limit(f_use, x_use, x0_use, d, ctx, as, &st2);
+            result = series_probe_limit(f_use, x_use, x0_use, d, ctx, as, &st2, NULL);
             expr_free(as);
         } else if (d == LIMIT_DIR_TWOSIDED || d == LIMIT_DIR_REALS) {
             Expr* asL = series_side_assumption(ctx, -1);
             Expr* asR = series_side_assumption(ctx, +1);
             bool st2 = false;
             Expr* L = series_probe_limit(f_use, x_use, x0_use,
-                                         LIMIT_DIR_FROMBELOW, ctx, asL, &st2);
+                                         LIMIT_DIR_FROMBELOW, ctx, asL, &st2, NULL);
             Expr* R = series_probe_limit(f_use, x_use, x0_use,
-                                         LIMIT_DIR_FROMABOVE, ctx, asR, &st2);
+                                         LIMIT_DIR_FROMABOVE, ctx, asR, &st2, NULL);
             expr_free(asL); expr_free(asR);
             /* One side resolved and the other did not (e.g. Log[x^2] - 2 Log[x]
              * is identically 0 for x > 0, an all-zero series the leading-term
@@ -1538,6 +1581,19 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
             if (L) expr_free(L);
             if (R) expr_free(R);
         }
+    }
+
+    /* The one-sheet value stands where its sheet is the approach: x > a
+     * (FromAbove, and the 1/x > 0 of an infinite point), or a direction the
+     * per-side re-derivation does not cover.  From below, or two-sided, it
+     * is not evidence of anything, and is dropped. */
+    if (sheet_result) {
+        bool sheet_ok = y_sym || is_divergent(ctx->point) ||
+                        ctx->dir == LIMIT_DIR_FROMABOVE ||
+                        !(ctx->dir == LIMIT_DIR_FROMBELOW || ctx->dir == LIMIT_DIR_TWOSIDED ||
+                          ctx->dir == LIMIT_DIR_REALS);
+        if (!result && sheet_ok) result = sheet_result;
+        else expr_free(sheet_result);
     }
 
     if (f_owned)  expr_free(f_owned);

@@ -694,6 +694,17 @@ late small-argument rule `H[g] ~ g` (`Sin`, `Tan`, `ArcTan`, ...) is applied
 only to a multiplicative factor, where it is exact for the limit; inside a sum
 the dropped `O(g^3)` can be the leading term after cancellation.
 
+**One-sheet expansions.** With the side unknown, Series expands a composed
+branch point (`ArcTanh`, `Log` inside a sum) on the `x > x0` sheet, leaving
+`x` in its coefficients. When the value read off such an expansion is
+non-real or `Indeterminate`, the Series layer re-derives it per side, with
+`x < x0` or `x > x0` assumed. If that fails, the one-sheet value is kept only
+for `"FromAbove"` and infinite points. Real, zero and infinite values hold on
+every sheet and are used as they are. `Limit[2 ArcTanh[1 - 2 z] - Log[1 - z],
+z -> 1]` is `0` from either side (it was `2 I Pi` from below), and
+`Limit[Log[x - 1] - Log[1 - x], x -> 1]` is `-I Pi` from above and `I Pi`
+from below.
+
 ## Residue
 
 `Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity
