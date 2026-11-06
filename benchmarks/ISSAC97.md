@@ -133,6 +133,7 @@ argument/option handling, then absences, then bottlenecks.
 | W16 | `1/3^700 == 0` and `PossibleZeroQ[1/3^700]` True (exact rationals beyond the double range read as 0; made h4.9 look wrong) | **fixed v0.6296** |
 | W17 | `PossibleZeroQ[Pi/3^700]` and `Pi/3^700 == 0` True: the zero test's numeric stage measures magnitudes in doubles (1e-334 underflows) | **fixed v0.6320-v0.6321** (log2 magnitudes throughout the zero test; Equal/Less of exact quantities beyond the double; also Log[3] 10^309, Exp[1 + 10^-20] - E, Pi + 10^-20 == Pi) |
 | W18 | NIntegrate: a weak second peak next to a strong one (1e-6 of the mass) and an interior kink `Abs[x - 1/3]` on [0, 1] are wrong at ~1e-11 (with a convergence warning, not silent) | open |
+| W19 | NIntegrate at WorkingPrecision with a MACHINE constant in a cancelling integrand (`(Exp[x] - 1 - x - 0.5 x^2)/x^3`, WP 40) is off by 1.5e-7 and still reports Precision 40 (NIntegrate::accgl fires); precision should be capped to what the machine constant allows | open |
 | W6 | LinearSolve on N[Hilbert[256], 500] reports `LinearSolve::sing1` and returns garbage (P1) | **fixed v0.6241** |
 
 ### Argument and option handling
