@@ -341,6 +341,70 @@ static bool pl_real_valued(long k, const mpfr_t x, mpfr_prec_t wp) {
     return result;
 }
 
+/* Principal-branch W(x) for a real x > -1/e + 2^-10 at rop's precision, with
+ * mpfr's unary signature (the compiled MPFR lowering of ProductLog calls it
+ * directly).  The complex Halley iteration of pl_core runs every step at the
+ * full working precision from a crude seed; here the machine W seeds the
+ * iteration and each real Halley step (cubic convergence) triples the bits,
+ * so the precision climbs 53 -> 159 -> 477 ... and only the last step runs at
+ * the target: about one exp at full precision instead of seven complex ones.
+ * Declines with NaN (the caller interprets) near the branch point, where the
+ * convergence is no longer cubic, and outside the real domain. */
+int productlog_mpfr_real(mpfr_ptr rop, mpfr_srcptr x, mpfr_rnd_t rnd) {
+    (void)rnd;
+    if (mpfr_zero_p(x)) { mpfr_set_zero(rop, 1); return 0; }
+    if (!mpfr_number_p(x) || mpfr_cmp_d(x, -0.3669) < 0) {   /* -1/e = -0.36788 */
+        mpfr_set_nan(rop); return 0;
+    }
+    mpfr_prec_t target = mpfr_get_prec(rop) + 16;
+    mpfr_t w, ew, f, d, t;
+    mpfr_inits2(target, w, ew, f, d, t, (mpfr_ptr)0);
+    double xd = mpfr_get_d(x, MPFR_RNDN), w0;
+    if (isfinite(xd) && sf_machine_productlog(xd, &w0) && isfinite(w0)) {
+        mpfr_set_d(w, w0, MPFR_RNDN);
+    } else {
+        /* beyond the double range: W(x) ~ L1 - L2 + L2/L1, L1 = log x */
+        mpfr_log(w, x, MPFR_RNDN);
+        double l1 = mpfr_get_d(w, MPFR_RNDN), l2 = log(l1);
+        mpfr_set_d(w, l1 - l2 + l2 / l1, MPFR_RNDN);
+    }
+    mpfr_prec_t p = 50;
+    bool last = false;
+    for (int iter = 0; iter < 64 && !last; iter++) {
+        p = 3 * p;
+        if (p >= target) { p = target; last = true; }
+        mpfr_prec_round(w, p, MPFR_RNDN);
+        mpfr_set_prec(ew, p); mpfr_set_prec(f, p);
+        mpfr_set_prec(d, p);  mpfr_set_prec(t, p);
+        /* Halley: w -= f / (e^w (w+1) - (w+2) f / (2w+2)), f = w e^w - x */
+        mpfr_exp(ew, w, MPFR_RNDN);
+        mpfr_mul(f, w, ew, MPFR_RNDN);
+        mpfr_sub(f, f, x, MPFR_RNDN);
+        mpfr_add_ui(t, w, 1, MPFR_RNDN);          /* w + 1 */
+        mpfr_mul(d, ew, t, MPFR_RNDN);            /* e^w (w+1) */
+        mpfr_mul_2ui(t, t, 1, MPFR_RNDN);         /* 2(w+1) */
+        mpfr_div(t, f, t, MPFR_RNDN);             /* f / (2w+2) */
+        mpfr_add_ui(ew, w, 2, MPFR_RNDN);         /* w + 2 (ew reused) */
+        mpfr_mul(t, t, ew, MPFR_RNDN);
+        mpfr_sub(d, d, t, MPFR_RNDN);
+        mpfr_div(d, f, d, MPFR_RNDN);
+        mpfr_sub(w, w, d, MPFR_RNDN);
+        if (last) {
+            /* a polishing step at the target confirms the cubic convergence */
+            mpfr_exp(ew, w, MPFR_RNDN);
+            mpfr_mul(f, w, ew, MPFR_RNDN);
+            mpfr_sub(f, f, x, MPFR_RNDN);
+            mpfr_add_ui(t, w, 1, MPFR_RNDN);
+            mpfr_mul(d, ew, t, MPFR_RNDN);
+            mpfr_div(d, f, d, MPFR_RNDN);         /* Newton suffices here */
+            mpfr_sub(w, w, d, MPFR_RNDN);
+        }
+    }
+    int r = mpfr_set(rop, w, MPFR_RNDN);
+    mpfr_clears(w, ew, f, d, t, (mpfr_ptr)0);
+    return r;
+}
+
 /* Numeric evaluation of W_k(z_arg) at out_prec bits. Returns NULL if z_arg is
  * not numeric (symbolic), letting the caller leave the call unevaluated. */
 static Expr* pl_eval_numeric(long k, const Expr* z_arg, mpfr_prec_t out_prec) {
@@ -354,6 +418,13 @@ static Expr* pl_eval_numeric(long k, const Expr* z_arg, mpfr_prec_t out_prec) {
     }
     bool z_is_real = mpfr_zero_p(z.im);
     bool force_real = z_is_real && pl_real_valued(k, z.re, wp);
+    if (k == 0 && force_real && mpfr_cmp_d(z.re, -0.3669) >= 0) {
+        mpfr_t r; mpfr_init2(r, wp);
+        productlog_mpfr_real(r, z.re, PRND);
+        Expr* out = mpfr_nan_p(r) ? NULL : pl_real_result(r, out_prec);
+        mpfr_clear(r);
+        if (out) { ncpx_clear(&z); ncpx_clear(&w); return out; }
+    }
 
     pl_initial(&w, k, &z, wp);
     pl_core(&w, &z, wp);

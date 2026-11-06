@@ -15,5 +15,11 @@
  * D[ProductLog[z], z] = ProductLog[z] / (z (1 + ProductLog[z])). */
 Expr* builtin_productlog(Expr* res);
 void  productlog_init(void);
+#ifdef USE_MPFR
+#include <mpfr.h>
+/* Real principal-branch W at rop's precision (mpfr unary signature); NaN when
+ * x is outside (-1/e + 2^-10, oo) or not a number. */
+int productlog_mpfr_real(mpfr_ptr rop, mpfr_srcptr x, mpfr_rnd_t rnd);
+#endif
 
 #endif /* PRODUCTLOG_H */

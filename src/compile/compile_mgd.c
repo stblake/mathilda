@@ -13,6 +13,8 @@
 #include "../sym_names.h"         /* SYM_Plus, SYM_Times, ...: used in every build */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx, numeric_mpfr_* — the managed containers */
+#include "../numeric.h"          /* numeric_mpfr_pow_fast */
+#include "../special_functions/productlog.h"   /* productlog_mpfr_real */
 #endif
 #include <math.h>
 #include <string.h>
@@ -209,6 +211,8 @@ static const void* mgd_real_unary_fn(const char* h) {
     if (h == SYM_ArcCos) return (const void*)mpfr_acos;
     if (h == SYM_ArcTan) return (const void*)mpfr_atan;
     if (h == SYM_Abs) return (const void*)mpfr_abs;
+    /* NaN outside its real domain: the VM declines and the point is interpreted */
+    if (h == SYM_ProductLog) return (const void*)productlog_mpfr_real;
     return NULL;
 }
 /* Complex elementary-function head -> MG_CUN selector, or -1.  The result of Abs
@@ -360,7 +364,7 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
         long ni;
         if (mgd_small_int(a[1], &ni)) { *out = mgd_powi(c, base, ni); return c->ok; }
         Val ex; if (!emit_mgd_real(c, a[1], &ex)) return false;
-        *out = mgd_bin(c, base, ex, (const void*)mpfr_pow, MGC_POW); return c->ok;
+        *out = mgd_bin(c, base, ex, (const void*)numeric_mpfr_pow_fast, MGC_POW); return c->ok;
     }
     if (h == SYM_Minus && n == 1) {
         Val x; if (!emit_mgd_real(c, a[0], &x)) return false;

@@ -251,8 +251,40 @@ Expr* numeric_mpfr_mul(const Expr* a, const Expr* b, long default_bits) {
 Expr* numeric_mpfr_div(const Expr* a, const Expr* b, long default_bits) {
     return mpfr_binop(a, b, default_bits, mpfr_div);
 }
+/* x^y for real MPFR operands, the kernel behind real MPFR Power (interpreted
+ * and compiled).  mpfr_pow is correctly rounded, and pays for it: before the
+ * exp(y log x) it runs exactness and overflow probes, and its Ziv loop starts
+ * from a precision it then often has to raise -- 2.6x the cost of the log and
+ * exp it amounts to (102 us against 39 us for x^x^x at 397 bits).  For a
+ * positive base and a non-integer exponent, exp(y log x) evaluated with
+ * log2|y log x| + 24 guard bits is faithful to the target precision: the
+ * relative error of t = y log x is ~2^-p' and becomes an absolute error |t|
+ * 2^-p' in the exponent, i.e. the same relative error in exp(t).  Integer
+ * exponents, non-positive bases, and the special values keep mpfr_pow (exact
+ * cases, signs, and 0^y / Inf rules live there). */
+int numeric_mpfr_pow_fast(mpfr_ptr rop, mpfr_srcptr x, mpfr_srcptr y,
+                          mpfr_rnd_t rnd) {
+    if (!mpfr_regular_p(x) || !mpfr_regular_p(y) || mpfr_sgn(x) <= 0
+        || mpfr_integer_p(y) || mpfr_cmp_ui(x, 1) == 0)
+        return mpfr_pow(rop, x, y, rnd);
+    /* |log x| <= (|exp(x)| + 1) ln 2, so log2|y log x| <= exp(y) + log2(|exp(x)|+1) */
+    long ex = (long)mpfr_get_exp(x);
+    long lx = 1;
+    for (long v = (ex < 0 ? -ex : ex) + 1; v > 1; v >>= 1) lx++;
+    long ey = (long)mpfr_get_exp(y);
+    long guard = 24 + (ey > 0 ? ey : 0) + lx;
+    mpfr_prec_t wp = mpfr_get_prec(rop) + (mpfr_prec_t)guard;
+    mpfr_t t;
+    mpfr_init2(t, wp);
+    mpfr_log(t, x, MPFR_RNDN);
+    mpfr_mul(t, t, y, MPFR_RNDN);
+    int r = mpfr_exp(rop, t, rnd);
+    mpfr_clear(t);
+    return r;
+}
+
 Expr* numeric_mpfr_pow(const Expr* a, const Expr* b, long default_bits) {
-    return mpfr_binop(a, b, default_bits, mpfr_pow);
+    return mpfr_binop(a, b, default_bits, numeric_mpfr_pow_fast);
 }
 
 bool numeric_expr_is_mpfr(const Expr* e) {

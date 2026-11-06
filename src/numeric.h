@@ -192,6 +192,10 @@ Expr* numeric_mpfr_sub (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_mul (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_div (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_pow (const Expr* a, const Expr* b, long default_bits);
+/* Real MPFR x^y with mpfr_pow's signature: faithful exp(y log x) for x > 0 and
+ * non-integer y, mpfr_pow otherwise (see numeric.c). */
+int numeric_mpfr_pow_fast(mpfr_ptr rop, mpfr_srcptr x, mpfr_srcptr y,
+                          mpfr_rnd_t rnd);
 
 /* Complex power at MPFR precision via polar form, used by `Power` when
  * `numeric_mpfr_pow` can't apply (negative real base with fractional
