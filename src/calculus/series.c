@@ -828,6 +828,64 @@ static bool so_is_purely_numeric(Expr* e) {
     return false;
 }
 
+/* Series inverse with symbolic coefficients, past the term count the plain
+ * recurrence below is allowed.  The recurrence runs on the numerators
+ * c_k = b_k a0^(k+1), which are POLYNOMIALS in the coefficients,
+ *     c_0 = 1,   c_k = -sum_{i=1..k} a_i a0^(i-1) c_(k-i),
+ * each kept canonical by Expand, so the work per term is the size of one
+ * canonical polynomial rather than of a nest of unsimplified reciprocals
+ * (the super-linear growth on 1/(2^x - 3^x) the plain path's cap guards
+ * against); b_k = c_k a0^-(k+1).  The cap alone cut 1/Sin[Pi z] (coefficients
+ * Pi^(2j+1) r_j) to two terms, so Cot[Pi z] came back as
+ * 1/(Pi z) - Pi z/3 + O[z]^3 at every requested order and the residue of
+ * Pi Cot[Pi z]/z^10 at 0 was unreadable.  The expansion stops early only
+ * when a numerator outgrows a size budget, and a truncated result moves its
+ * O-term down to the last computed term.  Consumes a. */
+#define SO_INV_POLY_LEAF_BUDGET 20000
+static SeriesObj* so_inv_symbolic_poly(SeriesObj* a, size_t N) {
+    Expr** c = calloc(N, sizeof(Expr*));
+    Expr** a0p = calloc(N, sizeof(Expr*));     /* a0p[i] = a0^(i-1) */
+    size_t got = 1;
+    c[0] = expr_new_integer(1);
+    if (N > 1) a0p[1] = expr_new_integer(1);
+    for (size_t k = 1; k < N; k++) {
+        if (k >= 2) a0p[k] = simp(mk_fn1("Expand", mk_times(expr_copy(a0p[k - 1]),
+                                                           expr_copy(a->coefs[0]))));
+        size_t pc = 0;
+        Expr** parts = calloc(k, sizeof(Expr*));
+        for (size_t i = 1; i <= k; i++) {
+            if (i >= a->coef_count) break;
+            if (is_lit_zero(a->coefs[i]) || is_lit_zero(c[k - i])) continue;
+            parts[pc++] = mk_times(expr_copy(a->coefs[i]),
+                                   mk_times(expr_copy(a0p[i]), expr_copy(c[k - i])));
+        }
+        Expr* sum;
+        if (pc == 0)      sum = expr_new_integer(0);
+        else if (pc == 1) sum = parts[0];
+        else              sum = expr_new_function(mk_symbol("Plus"), parts, pc);
+        free(parts);
+        Expr* ck = simp(mk_fn1("Expand", mk_times(expr_new_integer(-1), sum)));
+        c[k] = ck ? ck : expr_new_integer(0);
+        got = k + 1;
+        if (so_leaf_count(c[k]) > SO_INV_POLY_LEAF_BUDGET) break;
+    }
+    int64_t r_order = got < N ? -a->nmin + (int64_t)got : a->order - 2 * a->nmin;
+    SeriesObj* r = so_alloc(a->x, a->x0, -a->nmin, r_order, a->den);
+    for (size_t k = 0; k < got; k++) {
+        Expr* bk = is_lit_zero(c[k]) ? c[k]
+                 : simp(mk_times(c[k], mk_power(expr_copy(a->coefs[0]),
+                                                expr_new_integer(-(int64_t)(k + 1)))));
+        if (!bk) bk = expr_new_integer(0);
+        if (k < r->coef_count) so_set_coef(r, k, bk);
+        else expr_free(bk);
+    }
+    for (size_t k = 0; k < N; k++) if (a0p[k]) expr_free(a0p[k]);
+    free(c);
+    free(a0p);
+    so_free(a);
+    return r;
+}
+
 static SeriesObj* so_inv(SeriesObj* a_in) {
     SeriesObj* a = so_copy_trimmed(a_in);
     if (a->coef_count == 0) { so_free(a); return NULL; }
@@ -910,8 +968,11 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
         if (is_lit_zero(a->coefs[i])) continue;
         if (!so_is_purely_numeric(a->coefs[i])) { coefs_all_numeric = false; break; }
     }
+    /* Past the cap, the polynomial-numerator recurrence computes the full
+     * order (so_inv_symbolic_poly); below it the plain recurrence is kept, so
+     * every short expansion keeps its established coefficient spelling. */
+    if (!coefs_all_numeric && N > N_cap) return so_inv_symbolic_poly(a, N);
     bool capped = false;
-    if (!coefs_all_numeric && N > N_cap) { N = N_cap; capped = true; }
     Expr** b = calloc(N, sizeof(Expr*));
     Expr* inv_a0 = simp(mk_power(expr_copy(a->coefs[0]), expr_new_integer(-1)));
     b[0] = expr_copy(inv_a0);
