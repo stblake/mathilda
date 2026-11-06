@@ -292,11 +292,12 @@ static void test_stress_honest_abstentions(void) {
     assert_eval_startswith(
         "Limit[(Gamma[x + 1/Gamma[x]] - Gamma[x])/Log[x], x -> Infinity, "
         "Method -> \"Gruntz\"]", "Limit[");
-    /* Gamma ratio Gamma[x+1]/(x Gamma[x]) = 1 exactly, but the engine has no
-     * bare-Gamma-ratio asymptotic and abstains. */
+    /* Gamma ratio Gamma[x+1]/(x Gamma[x]) = 1 exactly (Gamma[x + 1] = x Gamma[x]):
+     * the Stirling expansions of the two Gammas, each carried with its
+     * remainder at +-1, agree on 1 once the remainder no longer reaches it. */
     assert_eval_startswith(
         "Limit[Gamma[x + 1]/(x Gamma[x]), x -> Infinity, Method -> \"Gruntz\"]",
-        "Limit[");
+        "1");
     /* psi-tower (thesis 8.33): exp exp psi psi needs multi-level 1/(2x) tracking. */
     assert_eval_startswith(
         "Limit[Exp[Exp[PolyGamma[0, PolyGamma[0, x]]]]/x, x -> Infinity, "

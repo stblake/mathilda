@@ -1612,19 +1612,81 @@ static bool is_neg_infinity(const Expr* r) {
            (is_sym_name(b, "Infinity") && a->type == EXPR_INTEGER && a->data.integer < 0);
 }
 
-/* Normal[Series[head[y], {y, Infinity, nterms}]] with y -> arg. Returns a
- * fresh owned expr; on a Series failure it degrades to head[arg] (which the
- * engine then leaves unevaluated -- never wrong). */
+/* The remainder coefficient of the isolation pass: every truncated
+ * asymptotic expansion carries its O-term as c R (R the O-term monomial,
+ * c = +1 or -1).  The remainder of an asymptotic series is a_(n+1) R (1 +
+ * o(1)), so a limit it reaches is reached linearly in c and differs between
+ * c = 1 and c = -1; a limit that agrees for both did not depend on what was
+ * dropped.  Two truncation orders agreeing is no such certificate -- both can
+ * be short of the cancellation (x^6 (Sqrt[Pi] x E^(x^2) Erfc[x] - 1 +
+ * 1/(2 x^2) - 3/(4 x^4)) read -Infinity at 3 and 4 terms; it is -15/8).  The
+ * coefficient is a number rather than a symbol so the engine can still sign
+ * a nested argument (Gamma[Gamma[x]]). */
+static int g_semi_c = 1;
+static Expr* semi_remainder_coef(void) { return mk_int(g_semi_c); }
+
+/* SeriesData[v, x0, cs, nmin, nmax, den] -> v^(nmax/den) (mono) or 0. */
+static Expr* semi_sd_swap(const Expr* e, bool mono) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is(e, SYM_SeriesData) && e->data.function.arg_count == 6) {
+        if (!mono) return mk_int(0);
+        return mk_pow(expr_copy(e->data.function.args[0]),
+                      mk_times(expr_copy(e->data.function.args[4]),
+                               mk_pow(expr_copy(e->data.function.args[5]), mk_int(-1))));
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = semi_sd_swap(e->data.function.args[i], mono);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+static bool semi_has_sd(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_SeriesData)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (semi_has_sd(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Normal[S] + c (S|SD->O-monomial - S|SD->0), S the Series of the call fd in
+ * the dummy d at Infinity, with d -> arg.  On a Series failure it degrades to
+ * the call itself (which the engine then leaves unevaluated -- never wrong). */
+static Expr* semi_expand_series(Expr* fd, Expr* d, const Expr* arg, int nterms) {
+    Expr* spec = expr_new_function(mk_sym("List"),
+        (Expr*[]){ expr_copy(d), mk_sym("Infinity"), mk_int(nterms) }, 3);
+    Expr* S = simp(mk_fn2("Series", expr_copy(fd), spec));
+    Expr* out;
+    if (S && semi_has_sd(S)) {
+        Expr* norm = simp(mk_fn1("Normal", expr_copy(S)));
+        Expr* r1 = semi_sd_swap(S, true);
+        Expr* r0 = semi_sd_swap(S, false);
+        Expr* rem = simp(mk_plus(r1, mk_neg(r0)));
+        out = simp(mk_plus(norm, mk_times(semi_remainder_coef(), rem)));
+    } else if (S && head_is(fd, SYM_Zeta) && !head_is(S, SYM_Series)) {
+        /* Zeta at Infinity is the truncated Dirichlet sum 1 + 2^-y + ... +
+         * (n+1)^-y, no SeriesData: its remainder is (n+2)^-y. */
+        out = simp(mk_plus(expr_copy(S),
+                   mk_times(semi_remainder_coef(),
+                            mk_pow(mk_int(nterms + 2), mk_neg(expr_copy(d))))));
+    } else {
+        out = expr_copy(fd);
+    }
+    if (S) expr_free(S);
+    expr_free(fd);
+    Expr* sub = xreplace(out, d, arg);
+    expr_free(out);
+    expr_free(d);
+    return simp(sub);
+}
+
+/* Normal[Series[head[y], {y, Infinity, nterms}]] (+ the remainder) with
+ * y -> arg.  Returns a fresh owned expr. */
 static Expr* asymptotic_expansion(const char* head, const Expr* arg, int nterms) {
     Expr* d = fresh_dummy();
     Expr* fd = mk_fn1(head, expr_copy(d));
-    Expr* spec = expr_new_function(mk_sym("List"),
-        (Expr*[]){ expr_copy(d), mk_sym("Infinity"), mk_int(nterms) }, 3);
-    Expr* norm = simp(mk_fn1("Normal", mk_fn2("Series", fd, spec)));
-    Expr* sub  = xreplace(norm, d, arg);
-    expr_free(norm);
-    expr_free(d);
-    return simp(sub);
+    return semi_expand_series(fd, d, arg, nterms);
 }
 
 /* Like asymptotic_expansion but for a 2-arg head head[order, y] (PolyGamma,
@@ -1634,13 +1696,7 @@ static Expr* asymptotic_expansion_2arg(const char* head, const Expr* order,
                                        const Expr* arg, int nterms) {
     Expr* d = fresh_dummy();
     Expr* fd = mk_fn2(head, expr_copy((Expr*)order), expr_copy(d));
-    Expr* spec = expr_new_function(mk_sym("List"),
-        (Expr*[]){ expr_copy(d), mk_sym("Infinity"), mk_int(nterms) }, 3);
-    Expr* norm = simp(mk_fn1("Normal", mk_fn2("Series", fd, spec)));
-    Expr* sub  = xreplace(norm, d, arg);
-    expr_free(norm);
-    expr_free(d);
-    return simp(sub);
+    return semi_expand_series(fd, d, arg, nterms);
 }
 
 /* Rewrite every semi-tractable node F[g] (g -> +/-oo) as its exp-log
@@ -1738,48 +1794,51 @@ static bool same_limit_value(const Expr* a, const Expr* b) {
     return z;
 }
 
-/* Compute the limit at several asymptotic orders and accept a value only once
- * two orders concur (a lone order could be a truncation artefact). The needed
- * cancellation depth for these singularities is small, so we sweep a dense low
- * range: higher orders put ever-longer truncated series into denominators,
- * which the engine may fail to expand -- but as long as any two orders agree
- * on a clean value we trust it, and otherwise report an honest gap (NULL). */
-static Expr* gruntz_semitractable_limit(const Expr* e0, const Expr* x) {
-    static const int NS[] = { 3, 4, 5 };
-    enum { NORD = (int)(sizeof(NS) / sizeof(NS[0])) };
-    Expr* vals[NORD];
-    int nv = 0;
-    for (int i = 0; i < NORD; i++) {
-        /* Each order gets a full work budget: the isolation-classification and
-         * the main limit must not share (or exhaust) a single call's budget,
-         * else a later order spuriously fails. */
-        g_fail = 0; g_work = 0; cache_clear_all();
-        Expr* iso = isolate_semitractable(e0, x, NS[i]);
-        iso = gz_powerexpand(iso, x);
-        /* Split constant-base shifted exponents (e.g. Zeta's isolated
-         * 2^-(x+1) -> (1/2) 2^-x) so same-class ratios line up on one scale. */
-        { Expr* sp = gz_split_const_exp(iso, x); expr_free(iso); iso = sp; }
-        /* Distribute so the constant parts of the asymptotic expansions (e.g.
-         * the leading 1 in Erf -> 1 + ...) cancel across a difference before
-         * the engine sees it; otherwise the engine must resolve a spurious
-         * leading cancellation by deep series expansion and can give up. */
-        iso = simp(mk_fn1("Expand", iso));
-        g_fail = 0; g_work = 0; cache_clear_all();
-        Expr* r = limitinf(iso, x);
-        expr_free(iso);
-        if (g_fail || !r || has_x(r, x) || !gz_result_ok(r)) {
-            if (r) expr_free(r);
-            continue;
-        }
-        for (int k = 0; k < nv; k++) {
-            if (same_limit_value(vals[k], r)) {
-                for (int j = 0; j < nv; j++) expr_free(vals[j]);
-                return r;   /* two orders concur -> trust it */
-            }
-        }
-        if (nv < NORD) vals[nv++] = r; else expr_free(r);
+/* The limit of e0 with every semi-tractable node replaced by its expansion
+ * to nterms terms plus c times its remainder; NULL on failure. */
+static Expr* semitractable_at(const Expr* e0, const Expr* x, int nterms, int c) {
+    g_semi_c = c;
+    /* Each pass gets a full work budget: the isolation-classification and
+     * the main limit must not share (or exhaust) a single call's budget,
+     * else a later order spuriously fails. */
+    g_fail = 0; g_work = 0; cache_clear_all();
+    Expr* iso = isolate_semitractable(e0, x, nterms);
+    g_semi_c = 1;
+    iso = gz_powerexpand(iso, x);
+    /* Split constant-base shifted exponents (e.g. Zeta's isolated
+     * 2^-(x+1) -> (1/2) 2^-x) so same-class ratios line up on one scale. */
+    { Expr* sp = gz_split_const_exp(iso, x); expr_free(iso); iso = sp; }
+    /* Distribute so the constant parts of the asymptotic expansions (e.g.
+     * the leading 1 in Erf -> 1 + ...) cancel across a difference before
+     * the engine sees it; otherwise the engine must resolve a spurious
+     * leading cancellation by deep series expansion and can give up. */
+    iso = simp(mk_fn1("Expand", iso));
+    g_fail = 0; g_work = 0; cache_clear_all();
+    Expr* r = limitinf(iso, x);
+    expr_free(iso);
+    if (g_fail || !r || has_x(r, x) || !gz_result_ok(r)) {
+        if (r) expr_free(r);
+        return NULL;
     }
-    for (int j = 0; j < nv; j++) expr_free(vals[j]);
+    return r;
+}
+
+/* Compute the limit at increasing asymptotic orders, each with the remainder
+ * carried as +R and as -R (semi_remainder_coef): a value both agree on did
+ * not depend on the truncation and is accepted; otherwise the next order is
+ * tried, and when none agrees the result is an honest gap (NULL). */
+static Expr* gruntz_semitractable_limit(const Expr* e0, const Expr* x) {
+    static const int NS[] = { 3, 4, 5, 8 };
+    enum { NORD = (int)(sizeof(NS) / sizeof(NS[0])) };
+    for (int i = 0; i < NORD; i++) {
+        Expr* rp = semitractable_at(e0, x, NS[i], 1);
+        if (!rp) continue;
+        Expr* rm = semitractable_at(e0, x, NS[i], -1);
+        bool ok = rm && same_limit_value(rp, rm);
+        if (rm) expr_free(rm);
+        if (ok) return rp;
+        expr_free(rp);
+    }
     return NULL;
 }
 

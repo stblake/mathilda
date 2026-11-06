@@ -3222,9 +3222,13 @@ static Expr* layer_dominant_product(Expr* f, LimitCtx* ctx) {
 /* (x/2)^a cannot live in a SeriesData, and a Gamma series hook would       */
 /* reintroduce the documented tower hang). Each rewrites a special-function */
 /* shape to its leading term (free of the special function) and recurses.   */
-/* Dropping sub-leading corrections is sound for a limit: they are strictly */
-/* lower order, so they either vanish or cancel to a lower-order tail that  */
-/* still vanishes. */
+/* Dropping the sub-leading corrections is NOT sound by itself: where the   */
+/* expression cancels the leading term (x^2 (Sqrt[Pi] x E^(x^2) Erfc[x] -1) */
+/* -> -1/2, x (Gamma[x] E^x x^(1/2 - x)/Sqrt[2 Pi] - 1) -> 1/12) the        */
+/* dropped correction IS the answer, and the truncated form read 0.  Every  */
+/* rewrite therefore carries its remainder as c R, c a fresh symbol and R   */
+/* the order of the first dropped term (sfa_finish): a limit that depends   */
+/* on c depended on what was dropped, and the rewrite declines.             */
 /* ---------------------------------------------------------------------- */
 
 /* head is symbol `nm` with the given arg count (argc < 0: any). */
@@ -3241,6 +3245,122 @@ static Expr* find_fn_subterm(Expr* e, const char* nm, int argc, Expr* x) {
     if (head_name_is(e, nm, argc) && expr_contains(e, x)) return e;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* r = find_fn_subterm(e->data.function.args[i], nm, argc, x);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* The fresh remainder symbol of the special-function rewrites. */
+static Expr* sfa_remainder_symbol(void) { return mk_sym("Limit`sfaRemainder$"); }
+
+/* Does `target` enter f only as a factor -- f a product of powers, with
+ * exponents free of x, of target and of target-free factors?  Then
+ * target ~ approx gives f ~ f[target -> approx] (the ratio tends to 1) and
+ * the leading term alone is exact for the limit. */
+static bool sfa_only_multiplicative(Expr* f, Expr* target, Expr* x) {
+    if (expr_eq(f, target)) return true;
+    if (!expr_contains(f, target)) return true;
+    if (head_is(f, SYM_Times)) {
+        for (size_t i = 0; i < f->data.function.arg_count; i++)
+            if (!sfa_only_multiplicative(f->data.function.args[i], target, x)) return false;
+        return true;
+    }
+    if (head_is(f, SYM_Power) && f->data.function.arg_count == 2)
+        return free_of(f->data.function.args[1], x) &&
+               sfa_only_multiplicative(f->data.function.args[0], target, x);
+    return false;
+}
+
+/* Replace `target` in f by approx + c rem (c the remainder symbol; rem the
+ * order of the first dropped term, NULL when approx is exact) and take the
+ * limit.  The answer stands only if it is free of c: then the dropped part,
+ * of order rem, cannot have contributed.  Where target is only a factor of f
+ * the remainder cannot contribute and is not carried.  approx and rem are
+ * consumed. */
+static Expr* sfa_finish(Expr* f, LimitCtx* ctx, Expr* target, Expr* approx, Expr* rem) {
+    if (rem && sfa_only_multiplicative(f, target, ctx->x)) { expr_free(rem); rem = NULL; }
+    Expr* c = sfa_remainder_symbol();
+    Expr* repl = rem ? simp(mk_fn2("Plus", approx, mk_fn2("Times", expr_copy(c), rem)))
+                     : approx;
+    Expr* f2 = subst_eval(f, target, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    if (r && (expr_contains(r, c) || is_indeterminate(r))) { expr_free(r); r = NULL; }
+    expr_free(c);
+    return r;
+}
+
+/* The O-term of a Series result as a monomial: every SeriesData[v, x0, cs,
+ * nmin, nmax, den] replaced by v^(nmax/den) (mono) or by 0, the remainder
+ * being the difference -- so a multiplicative prefactor (E^(-y^2) of Erfc)
+ * rides along and an additive growth head (LogGamma's (y - 1/2) Log[y])
+ * cancels out.  Owned. */
+static Expr* sfa_seriesdata_swap(Expr* e, bool mono) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (head_is(e, SYM_SeriesData) && e->data.function.arg_count == 6) {
+        if (!mono) return mk_int(0);
+        Expr* v = e->data.function.args[0];
+        return mk_fn2("Power", expr_copy(v),
+                      mk_fn2("Times", expr_copy(e->data.function.args[4]),
+                             mk_fn2("Power", expr_copy(e->data.function.args[5]), mk_int(-1))));
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = sfa_seriesdata_swap(e->data.function.args[i], mono);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+static bool sfa_has_seriesdata(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_SeriesData)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sfa_has_seriesdata(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The asymptotic expansion of `target` = H[..., z] (z its last argument,
+ * z -> +Infinity) to order n, from Series at Infinity in a dummy y: *approx
+ * the truncated sum and *rem its O-term monomial, both with y -> z.  False
+ * (nothing set) when Series has no expansion there. */
+static bool sfa_series_at_infinity(Expr* target, Expr* z, int64_t n,
+                                   Expr** approx, Expr** rem) {
+    size_t ac = target->data.function.arg_count;
+    Expr* y = mk_sym("Limit`sfaY$");
+    Expr** a = (Expr**)malloc(ac * sizeof(Expr*));
+    for (size_t i = 0; i + 1 < ac; i++) a[i] = expr_copy(target->data.function.args[i]);
+    a[ac - 1] = expr_copy(y);
+    Expr* fy = expr_new_function(expr_copy(target->data.function.head), a, ac);
+    free(a);
+    Expr* spec = expr_new_function(mk_sym("List"),
+        (Expr*[]){ expr_copy(y), mk_sym("Infinity"), mk_int(n) }, 3);
+    Expr* S = simp(mk_fn2("Series", fy, spec));
+    bool ok = S && sfa_has_seriesdata(S) && !head_is(S, SYM_Series);
+    if (ok) {
+        Expr* rule = mk_fn2("Rule", expr_copy(y), expr_copy(z));
+        Expr* nm = simp(mk_fn1("Normal", expr_copy(S)));
+        *approx = simp(mk_fn2("ReplaceAll", nm, expr_copy(rule)));
+        Expr* r1 = sfa_seriesdata_swap(S, true);
+        Expr* r0 = sfa_seriesdata_swap(S, false);
+        Expr* d = simp(mk_fn2("Plus", r1, mk_fn2("Times", mk_int(-1), r0)));
+        *rem = simp(mk_fn2("ReplaceAll", d, rule));
+    }
+    if (S) expr_free(S);
+    expr_free(y);
+    return ok;
+}
+
+/* Asymptotic rewrite of `target` at +Infinity through Series, at increasing
+ * order until the limit no longer depends on the dropped remainder. */
+static Expr* sfa_series_rewrite(Expr* f, LimitCtx* ctx, Expr* target, Expr* z) {
+    static const int64_t ORD[] = { 1, 3, 6, 10 };
+    for (size_t k = 0; k < sizeof(ORD) / sizeof(ORD[0]); k++) {
+        Expr* approx = NULL; Expr* rem = NULL;
+        if (!sfa_series_at_infinity(target, z, ORD[k], &approx, &rem)) return NULL;
+        Expr* r = sfa_finish(f, ctx, target, approx, rem);
         if (r) return r;
     }
     return NULL;
@@ -3278,7 +3398,10 @@ static Expr* sfa_gamma_ratio(Expr* f, LimitCtx* ctx) {
         if ((int)i == num || (int)i == den) continue;
         args[k++] = expr_copy(f->data.function.args[i]);
     }
-    args[k++] = simp(mk_fn2("Power", expr_copy(ctx->x), shift));
+    /* Gamma[A]/Gamma[B] = A^(A-B) (1 + O(1/A)): the power of A itself (not of
+     * x: Gamma[2 x + 1]/Gamma[2 x] is 2 x).  The pair is a factor of the
+     * product f, so the O(1/A) cannot reach the limit. */
+    args[k++] = simp(mk_fn2("Power", expr_copy(A), shift));
     Expr* f2 = simp(expr_new_function(mk_sym("Times"), args, k));
     free(args);
     LimitCtx sub = *ctx; sub.depth += 1;
@@ -3306,12 +3429,10 @@ static Expr* sfa_zeta(Expr* f, LimitCtx* ctx) {
         mk_fn2("Power", expr_copy(q), mk_neg(expr_copy(s))),
         mk_fn2("Power", mk_int(2), mk_int(-1)));
     Expr* repl = simp(mk_fn2("Plus", term1, term2));
-    Expr* f2 = subst_eval(f, z, repl);
-    expr_free(repl);
-    LimitCtx sub = *ctx; sub.depth += 1;
-    Expr* r = compute_limit(f2, &sub);
-    expr_free(f2);
-    return r;
+    /* next term: s q^(-s-1)/12 */
+    Expr* rem = simp(mk_fn2("Power", expr_copy(q),
+                            mk_fn2("Plus", mk_neg(expr_copy(s)), mk_int(-1))));
+    return sfa_finish(f, ctx, z, repl, rem);
 }
 
 /* #32: BesselJ[nu, z] ~ (z/2)^nu / Gamma[nu+1] as z->0 (nu free of x and
@@ -3336,12 +3457,10 @@ static Expr* sfa_bessel(Expr* f, LimitCtx* ctx) {
             mk_fn2("Power", mk_int(2), mk_neg(expr_copy(nu)))),
         mk_fn2("Power", mk_fn1("Gamma", mk_fn2("Plus", expr_copy(nu), mk_int(1))),
                mk_int(-1))));
-    Expr* f2 = subst_eval(f, bj, repl);
-    expr_free(repl);
-    LimitCtx sub = *ctx; sub.depth += 1;
-    Expr* r = compute_limit(f2, &sub);
-    expr_free(f2);
-    return r;
+    /* relative correction -z^2/(4 (nu + 1)): remainder repl z^2 */
+    Expr* rem = simp(mk_fn2("Times", expr_copy(repl),
+                            mk_fn2("Power", expr_copy(z), mk_int(2))));
+    return sfa_finish(f, ctx, bj, repl, rem);
 }
 
 /* #38/#39: Erfc[z] ~ Exp[-z^2]/(z Sqrt[Pi]) as z -> +Infinity. */
@@ -3356,18 +3475,10 @@ static Expr* sfa_erfc(Expr* f, LimitCtx* ctx) {
     bool zpos = lz && is_infinity_sym(lz);
     if (lz) expr_free(lz);
     if (!zpos) return NULL;
-    Expr* repl = simp(mk_fn2("Times",
-        mk_fn2("Times",
-            mk_fn1("Exp", mk_neg(mk_fn2("Power", expr_copy(z), mk_int(2)))),
-            mk_fn2("Power", expr_copy(z), mk_int(-1))),
-        mk_fn2("Power", mk_sym("Pi"),
-               mk_fn2("Times", mk_int(-1), mk_fn2("Power", mk_int(2), mk_int(-1))))));
-    Expr* f2 = subst_eval(f, e, repl);
-    expr_free(repl);
-    LimitCtx sub = *ctx; sub.depth += 1;
-    Expr* r = compute_limit(f2, &sub);
-    expr_free(f2);
-    return r;
+    /* E^(-z^2)/Sqrt[Pi] (1/z - 1/(2 z^3) + 3/(4 z^5) - ...), as many terms as
+     * the expression cancels: x^6 (Sqrt[Pi] x E^(x^2) Erfc[x] - 1 + 1/(2 x^2)
+     * - 3/(4 x^4)) -> -15/8 needs four. */
+    return sfa_series_rewrite(f, ctx, e, z);
 }
 
 /* #40: incomplete Gamma[s, z] ~ z^(s-1) Exp[-z] as z -> +Infinity. */
@@ -3395,12 +3506,11 @@ static Expr* sfa_incomplete_gamma(Expr* f, LimitCtx* ctx) {
         mk_fn2("Plus", mk_int(1),
                mk_fn2("Times", simp(mk_fn2("Plus", expr_copy(s), mk_int(-1))),
                       mk_fn2("Power", expr_copy(z), mk_int(-1))))));
-    Expr* f2 = subst_eval(f, e, repl);
-    expr_free(repl);
-    LimitCtx sub = *ctx; sub.depth += 1;
-    Expr* r = compute_limit(f2, &sub);
-    expr_free(f2);
-    return r;
+    /* next term (s-1)(s-2) z^(s-3) E^(-z) */
+    Expr* rem = simp(mk_fn2("Times",
+        mk_fn2("Power", expr_copy(z), simp(mk_fn2("Plus", expr_copy(s), mk_int(-3)))),
+        mk_fn1("Exp", mk_neg(expr_copy(z)))));
+    return sfa_finish(f, ctx, e, repl, rem);
 }
 
 /* #33: BesselY[nu, z] ~ -(Gamma[nu]/Pi) (2/z)^nu as z -> 0+ (nu > 0). Written
@@ -3422,12 +3532,14 @@ static Expr* sfa_bessely(Expr* f, LimitCtx* ctx) {
                           mk_fn2("Power", mk_sym("Pi"), mk_int(-1)))),
             mk_fn2("Power", mk_int(2), expr_copy(nu))),
         mk_fn2("Power", expr_copy(z), mk_neg(expr_copy(nu)))));
-    Expr* f2 = subst_eval(f, e, repl);
-    expr_free(repl);
-    LimitCtx sub = *ctx; sub.depth += 1;
-    Expr* r = compute_limit(f2, &sub);
-    expr_free(f2);
-    return r;
+    /* The relative correction is O(z^2) for nu > 1, O(z^2 Log[z]) at nu = 1
+     * and O(z^(2 nu)) for 0 < nu < 1: carry all three. */
+    Expr* rel = mk_fn2("Plus",
+        mk_fn2("Power", expr_copy(z), mk_fn2("Times", mk_int(2), expr_copy(nu))),
+        mk_fn2("Times", mk_fn2("Power", expr_copy(z), mk_int(2)),
+               mk_fn2("Plus", mk_int(1), mk_neg(mk_fn1("Log", expr_copy(z))))));
+    Expr* rem = simp(mk_fn2("Times", expr_copy(repl), rel));
+    return sfa_finish(f, ctx, e, repl, rem);
 }
 
 /* #31: Stirling Gamma[z] ~ Sqrt[2 Pi] z^(z - 1/2) Exp[-z] as z -> +Infinity.
@@ -3454,16 +3566,48 @@ static Expr* sfa_gamma_stirling(Expr* f, LimitCtx* ctx) {
             mk_fn2("Power", expr_copy(z),
                    simp(mk_fn2("Plus", expr_copy(z), halfneg)))),    /* z^(z - 1/2) */
         mk_fn1("Exp", mk_neg(expr_copy(z)))));
+    /* Gamma[z] = Stirling (1 + 1/(12 z) + O(1/z^2)): remainder repl/z */
+    Expr* rem = simp(mk_fn2("Times", expr_copy(repl),
+                            mk_fn2("Power", expr_copy(z), mk_int(-1))));
+    return sfa_finish(f, ctx, e, repl, rem);
+}
+
+/* HarmonicNumber[u] = PolyGamma[0, u + 1] + EulerGamma and, for r != 1,
+ * HarmonicNumber[u, r] = Zeta[r] - Zeta[r, u + 1]: exact identities (no
+ * remainder) that hand an argument u -> +Infinity to the digamma / Hurwitz
+ * zeta asymptotics, n^2 (H_n - Log[n] - EulerGamma - 1/(2 n)) -> -1/12. */
+static Expr* sfa_harmonic(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* e = find_fn_subterm(f, "HarmonicNumber", 1, ctx->x);
+    if (!e) e = find_fn_subterm(f, "HarmonicNumber", 2, ctx->x);
+    if (!e) return NULL;
+    Expr* u = e->data.function.args[0];
+    Expr* r = e->data.function.arg_count == 2 ? e->data.function.args[1] : NULL;
+    if (free_of(u, ctx->x) || (r && !free_of(r, ctx->x))) return NULL;
+    bool order1 = !r || (r->type == EXPR_INTEGER && r->data.integer == 1);
+    if (!order1 && !expr_is_numeric_quantity(r)) return NULL;   /* r = 1 undecided */
+    LimitCtx sl = *ctx; sl.depth += 1;
+    Expr* uc = expr_copy(u);
+    Expr* lu = compute_limit(uc, &sl); expr_free(uc);
+    bool upos = lu && is_infinity_sym(lu);
+    if (lu) expr_free(lu);
+    if (!upos) return NULL;
+    Expr* u1 = mk_fn2("Plus", expr_copy(u), mk_int(1));
+    Expr* repl = order1
+        ? simp(mk_fn2("Plus", mk_fn2("PolyGamma", mk_int(0), u1), mk_sym("EulerGamma")))
+        : simp(mk_fn2("Plus", mk_fn1("Zeta", expr_copy(r)),
+                      mk_neg(mk_fn2("Zeta", expr_copy(r), u1))));
     Expr* f2 = subst_eval(f, e, repl);
     expr_free(repl);
     LimitCtx sub = *ctx; sub.depth += 1;
-    Expr* r = compute_limit(f2, &sub);
+    Expr* res = compute_limit(f2, &sub);
     expr_free(f2);
-    return r;
+    return res;
 }
 
 static Expr* layer_special_fn_asymptotic(Expr* f, LimitCtx* ctx) {
     Expr* r;
+    if ((r = sfa_harmonic(f, ctx)))          return r;
     if ((r = sfa_gamma_ratio(f, ctx)))       return r;
     if ((r = sfa_gamma_stirling(f, ctx)))    return r;
     if ((r = sfa_zeta(f, ctx)))              return r;

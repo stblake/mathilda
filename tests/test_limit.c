@@ -1243,6 +1243,87 @@ static void test_limit_issac97_p7(void) {
           "True");
 }
 
+/* Deep cancellations of the ISSAC '97 holdout family 7, each pinned on a
+ * family with a closed form derived by hand (and confirmed with mpmath at 40
+ * digits at a sample point 1e-15 / 1e8 from the limit). */
+
+/* log Gamma(1+x) = -gamma x + Sum_{k>=2} (-1)^k zeta(k) x^k/k: the Series
+ * coefficient PolyGamma[2, 1]/6 + Zeta[3]/3 at x^3 is an unnormalised zero,
+ * and reading it as the leading term gave ComplexInfinity. */
+static void test_limit_loggamma_taylor_cancellation(void) {
+    check("Limit[(LogGamma[1 + x] + EulerGamma x - Zeta[2] x^2/2 + Zeta[3] x^3/3)/x^4, x -> 0]",
+          "1/360 Pi^4");
+    check("PossibleZeroQ[Limit[(LogGamma[1 + x] + EulerGamma x - Zeta[2] x^2/2 + "
+          "Zeta[3] x^3/3 - Zeta[4] x^4/4)/x^5, x -> 0] + Zeta[5]/5]", "True");
+}
+
+/* zeta(s) = 1/(s-1) + Sum_k (-1)^k gamma_k (s-1)^k/k!, through a composed
+ * argument (1 + 1/n at n -> Infinity). */
+static void test_limit_zeta_laurent_stieltjes(void) {
+    check("Limit[n (Zeta[1 + 1/n] - n - EulerGamma), n -> Infinity]", "-StieltjesGamma[1]");
+    check("Limit[(Zeta[x] - 1/(x - 1) - EulerGamma)/(x - 1), x -> 1]", "-StieltjesGamma[1]");
+    check("Limit[n^2 (Zeta[1 + 1/n] - n - EulerGamma + StieltjesGamma[1]/n), n -> Infinity]",
+          "1/2 StieltjesGamma[2]");
+    check("NumericQ[-StieltjesGamma[1]]", "True");
+}
+
+/* x^(x^x) = x Exp[(x^x - 1) Log[x]], x^x - 1 = x Log[x] + ...: the Gruntz
+ * rewrite moved an exponential up into a power of another dummy (a NULL
+ * exponent and a crash), and its leading coefficient vanished only after
+ * the log scale was restored. */
+static void test_limit_power_tower_at_zero(void) {
+    check("Limit[(x^(x^x) - x)/(x^2 Log[x]^2), x -> 0, Direction -> \"FromAbove\"]", "1");
+    check("Limit[(x^(x^x) - x)/(x^2 Log[x]^2), x -> 0, Direction -> \"FromAbove\", "
+          "Method -> \"Gruntz\"]", "1");
+    check("Limit[(x^(x^x) - x)/(x^2 Log[x]), x -> 0, Direction -> \"FromAbove\"]", "-Infinity");
+}
+
+/* H_n = Log[n] + gamma + 1/(2n) - 1/(12 n^2) + 1/(120 n^4) - ... and
+ * H_n^(2) = Pi^2/6 - 1/n + ... */
+static void test_limit_harmonic_asymptotics(void) {
+    check("Limit[n^2 (HarmonicNumber[n] - Log[n] - EulerGamma - 1/(2 n)), n -> Infinity]", "-1/12");
+    check("Limit[n^4 (HarmonicNumber[n] - Log[n] - EulerGamma - 1/(2 n) + 1/(12 n^2)), "
+          "n -> Infinity]", "1/120");
+    check("Limit[HarmonicNumber[2 n] - HarmonicNumber[n], n -> Infinity]", "Log[2]");
+    check("Limit[n (HarmonicNumber[n, 2] - Pi^2/6), n -> Infinity]", "-1");
+}
+
+/* Special-function leading terms with the remainder carried: where the
+ * expression cancels the leading term the dropped correction is the answer
+ * (each of these read 0 or +-Infinity with the bare leading term). */
+static void test_limit_asymptotic_remainder(void) {
+    /* Sqrt[Pi] x E^(x^2) Erfc[x] = Sum (-1)^m (2m-1)!!/(2 x^2)^m */
+    check("Limit[x^6 (Sqrt[Pi] x Exp[x^2] Erfc[x] - 1 + 1/(2 x^2) - 3/(4 x^4)), x -> Infinity]",
+          "-15/8");
+    check("Limit[x^6 (Sqrt[Pi] x Exp[x^2] Erfc[x] - 1 + 1/(2 x^2) - 3/(4 x^4)), x -> Infinity, "
+          "Method -> \"Gruntz\"]", "-15/8");
+    check("Limit[x^2 (Sqrt[Pi] x Exp[x^2] Erfc[x] - 1), x -> Infinity]", "-1/2");
+    check("Limit[x Exp[x^2] Erfc[x], x -> Infinity]", "1/Sqrt[Pi]");
+    /* Stirling: Gamma[x] = Sqrt[2 Pi] x^(x - 1/2) E^-x (1 + 1/(12 x) + ...) */
+    check("Limit[x (Gamma[x] Exp[x] x^(1/2 - x)/Sqrt[2 Pi] - 1), x -> Infinity]", "1/12");
+    check("Limit[Gamma[x] Exp[x] x^(1/2 - x), x -> Infinity]", "Sqrt[2 Pi]");
+    /* Gamma[A]/Gamma[B] ~ A^(A - B), not x^(A - B) */
+    check("Limit[Gamma[2 x + 1]/Gamma[2 x]/x, x -> Infinity]", "2");
+    check("Limit[x (Gamma[x + 1/2]/(Gamma[x] Sqrt[x]) - 1), x -> Infinity]", "-1/8");
+    /* E^x x Gamma[0, x] = 1 - 1/x + 2/x^2 - ... */
+    check("Limit[x (x Gamma[0, x] Exp[x] - 1), x -> Infinity]", "-1");
+    /* Hurwitz zeta: q^(1-s)/(s-1) + q^(-s)/2 + s q^(-s-1)/12 + ... */
+    check("Limit[x^(3/2) Zeta[3/2, x] - 2 x, x -> Infinity]", "1/2");
+    /* BesselJ[1, x] = x/2 - x^3/16 + ... */
+    check("Limit[(BesselJ[1, x] - x/2)/x^3, x -> 0, Direction -> \"FromAbove\"]", "-1/16");
+}
+
+/* 2 J_1(sin x) and sin(2 J_1(x)) agree through x^5; the power mean
+ * (((a^x + b^x + c^x)/3)^(1/x) - (abc)^(1/3))/x -> (abc)^(1/3) Var(log)/2. */
+static void test_limit_composed_cancellation(void) {
+    check("Limit[(2 BesselJ[1, Sin[x]] - Sin[2 BesselJ[1, x]])/x^7, x -> 0]", "-13/5760");
+    check("PossibleZeroQ[Limit[(((2^x + 3^x)/2)^(1/x) - Sqrt[6])/x, x -> 0] - "
+          "Sqrt[6] Log[3/2]^2/8]", "True");
+    check("Module[{L = {Log[2], Log[3], Log[5]}, m}, m = Total[L]/3; "
+          "PossibleZeroQ[Limit[(((2^x + 3^x + 5^x)/3)^(1/x) - 30^(1/3))/x, x -> 0] - "
+          "30^(1/3) Total[(L - m)^2]/6]]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1289,6 +1370,12 @@ int main(void) {
     TEST(test_limit_high_order_cancellation);
     TEST(test_limit_issac97_p7);
     TEST(test_limit_branch_sheet_per_side);
+    TEST(test_limit_loggamma_taylor_cancellation);
+    TEST(test_limit_zeta_laurent_stieltjes);
+    TEST(test_limit_power_tower_at_zero);
+    TEST(test_limit_harmonic_asymptotics);
+    TEST(test_limit_asymptotic_remainder);
+    TEST(test_limit_composed_cancellation);
 
     printf("All limit tests passed.\n");
     return 0;

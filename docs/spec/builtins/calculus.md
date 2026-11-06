@@ -705,6 +705,35 @@ z -> 1]` is `0` from either side (it was `2 I Pi` from below), and
 `Limit[Log[x - 1] - Log[1 - x], x -> 1]` is `-I Pi` from above and `I Pi`
 from below.
 
+**Hidden zeros in a leading coefficient.** A Series coefficient that is a
+closed-form constant but not a literal number is zero-tested before it is read
+as the leading term: Series keeps special-function values at their special
+points unnormalised, so `2 PolyGamma[2, 1] + 4 Zeta[3]` (zero) used to be read
+as a pole. `Limit[(LogGamma[1 + x] + EulerGamma x - Zeta[2] x^2/2 + Zeta[3]
+x^3/3)/x^4, x -> 0]` is `Pi^4/360` (it was `ComplexInfinity`). The Gruntz
+engine does the same for its coefficients in the slower scales, after the log
+scale is restored, so `Limit[(x^(x^x) - x)/(x^2 Log[x]^2), x -> 0, Direction ->
+"FromAbove"]` is `1` (it crashed).
+
+**Special-function asymptotics carry their remainder.** The leading-term
+rewrites of `Erfc`, `Gamma` (Stirling), incomplete `Gamma`, Hurwitz `Zeta` at
+`+Infinity` and `BesselJ`/`BesselY` at `0+` substitute `approx + c R`, `R` the
+order of the first dropped term and `c` a fresh symbol, unless the function is
+only a factor of the expression; a limit that depends on `c` depended on what
+was dropped and the rewrite declines. `Erfc` is expanded through Series at
+increasing order until the limit is free of `c`: `Limit[x^6 (Sqrt[Pi] x
+E^(x^2) Erfc[x] - 1 + 1/(2 x^2) - 3/(4 x^4)), x -> Infinity]` is `-15/8` (it
+was `Infinity`), `Limit[x^2 (Sqrt[Pi] x E^(x^2) Erfc[x] - 1), x -> Infinity]`
+is `-1/2` and `Limit[x (Gamma[x] E^x x^(1/2 - x)/Sqrt[2 Pi] - 1), x ->
+Infinity]` is `1/12` (both were `0`). `Gamma[A]/Gamma[B]` is `A^(A - B)`, not
+`x^(A - B)`. Under `Method -> "Gruntz"` the semi-tractable expansions carry the
+remainder as `+R` and `-R` and a value is accepted only when both agree.
+`HarmonicNumber[u]` with `u -> Infinity` is rewritten exactly as
+`PolyGamma[0, u + 1] + EulerGamma` (`HarmonicNumber[u, r]` as `Zeta[r] -
+Zeta[r, u + 1]`): `Limit[n^2 (HarmonicNumber[n] - Log[n] - EulerGamma -
+1/(2 n)), n -> Infinity]` is `-1/12`. `Limit[n (Zeta[1 + 1/n] - n -
+EulerGamma), n -> Infinity]` is `-StieltjesGamma[1]`.
+
 ## Residue
 
 `Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity
