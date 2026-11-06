@@ -710,9 +710,14 @@ static int kx_collect(Expr* e, KxGens* g, size_t* nkern) {
             const Expr* h = e->data.function.head;
             const char* n = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
             size_t na = e->data.function.arg_count;
+            /* A canonical Rational may carry GMP parts (the Stirling and
+             * exponential-series coefficients of a padded Series do). */
             if (n == SYM_Rational)
-                return na == 2 && e->data.function.args[0]->type == EXPR_INTEGER &&
-                       e->data.function.args[1]->type == EXPR_INTEGER;
+                return na == 2 &&
+                       (e->data.function.args[0]->type == EXPR_INTEGER ||
+                        e->data.function.args[0]->type == EXPR_BIGINT) &&
+                       (e->data.function.args[1]->type == EXPR_INTEGER ||
+                        e->data.function.args[1]->type == EXPR_BIGINT);
             if (n == SYM_Plus || n == SYM_Times) {
                 for (size_t i = 0; i < na; i++)
                     if (!kx_collect(e->data.function.args[i], g, nkern)) return 0;
@@ -757,8 +762,12 @@ static int kx_monomial(Expr* e, KxGens* g, fmpq_t c, ulong* exps) {
             const char* n = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
             if (n == SYM_Rational) {
                 fmpq_t q; fmpq_init(q);
-                fmpz_set_si(fmpq_numref(q), e->data.function.args[0]->data.integer);
-                fmpz_set_si(fmpq_denref(q), e->data.function.args[1]->data.integer);
+                const Expr* rn = e->data.function.args[0];
+                const Expr* rd = e->data.function.args[1];
+                if (rn->type == EXPR_BIGINT) fmpz_set_mpz(fmpq_numref(q), rn->data.bigint);
+                else fmpz_set_si(fmpq_numref(q), rn->data.integer);
+                if (rd->type == EXPR_BIGINT) fmpz_set_mpz(fmpq_denref(q), rd->data.bigint);
+                else fmpz_set_si(fmpq_denref(q), rd->data.integer);
                 fmpq_canonicalise(q);
                 fmpq_mul(c, c, q); fmpq_clear(q);
                 return 1;

@@ -350,3 +350,16 @@ In[2]:= SeriesCoefficient[Exp[x], {x, 0, 5}]
 Out[2]= 1/120
 ```
 
+**Special compositions (2026-11).** `Zeta[u]` with `u(x0) = 1` expands
+through the Laurent series that defines the Stieltjes constants, composed
+through `u` (`Series[Zeta[1 + Sin[x]], {x, 0, 1}]` is `1/x + EulerGamma + (1/6
+- StieltjesGamma[1]) x + O[x]^2`; `Zeta[1 + 1/n]` at `n -> Infinity`).
+`HarmonicNumber[x]` at `Infinity` is `Log[x] + EulerGamma + 1/(2x) -
+Sum B_(2k)/(2k) x^(-2k)`. `BesselJ[n, u]` / `BesselI[n, u]` (`n` a literal
+integer) with `u(x0) = 0` compose their defining power series through `u`
+instead of differentiating the composite (`Series[BesselJ[1, Sin[x]], {x, 0,
+5}]` is `x/2 - 7/48 x^3 + 73/1920 x^5 + O[x]^6`). `Exp` and `Log` of a series
+whose coefficients are not all rational (`Log[2]`, `Pi`, parameters) use the
+O(n^2) recurrences of `E' = u' E` and `(1 + v) L' = v'`, each coefficient
+expanded in packed FLINT arithmetic, in place of composing the kernel:
+`Series[((2^x + 3^x + 5^x)/3)^(1/x), {x, 0, 4}]` takes 0.25 s (it took 24 s).

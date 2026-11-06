@@ -25,6 +25,7 @@
 
 #include "series.h"
 #include "series_ratpoly.h" /* FLINT truncated-series arithmetic over Q */
+#include "../poly/flint_bridge.h" /* packed expansion of the recurrence coefficients */
 #include "../special_functions/meijer_g.h" /* meijerg_series_terms */
 #include "../sparse/sparse.h"
 #include "../message.h"    /* mth_message: the Quiet[]/Check[] funnel for Series::ivar. */
@@ -1760,6 +1761,80 @@ static void so_split_constant(SeriesObj* s_in, Expr** c_out, SeriesObj** u_out) 
     *u_out = u;
 }
 
+/* Does any coefficient of s fall outside Q?  Then the FLINT compose arm of
+ * so_compose_scalar_kernel cannot run and its Horner fallback costs N full
+ * series products, each coefficient a product of sums that grows until
+ * Expand collapses it. */
+static bool so_has_symbolic_coefs(SeriesObj* s) {
+    for (size_t i = 0; i < s->coef_count; i++)
+        if (!srp_is_rational(s->coefs[i])) return true;
+    return false;
+}
+
+/* One coefficient of a recurrence, expanded (the recurrences below feed
+ * every coefficient back into the later ones, so an unexpanded one would
+ * nest).  The raw sum of products is a polynomial over Q in its constant
+ * atoms (Log[2], Pi, a parameter) whenever the series' coefficients are, and
+ * then goes to FLINT in one packed expansion: neither evaluating the
+ * unexpanded products nor the term-by-term distributor (which an Expand of
+ * two 1000-term factors falls back to, past its size estimate) is paid.
+ * Anything else is evaluated and Expanded. */
+static Expr* so_recur_finish(Expr* sum) {
+    Expr* fast = flint_expand_polynomial(sum);
+    if (!fast) fast = flint_expand_polynomial_kernels(sum);
+    if (fast) { expr_free(sum); return simp(fast); }
+    Expr* v = simp(sum);
+    if (so_leaf_count(v) > 48) v = simp(mk_fn1("Expand", v));
+    return v;
+}
+
+/* exp(u), u(x0) = 0 (u->nmin >= 1), by the recurrence of E' = u' E:
+ *     e_0 = 1,   e_n = (1/n) Sum_{j=1..n} j u_j e_{n-j}
+ * (indices in units of t = (x - x0)^(1/den)): O(order^2) coefficient
+ * products where composing the exponential kernel costs O(order^3).  Known
+ * to O(t^order), as u is. */
+static SeriesObj* so_exp_recurrence(SeriesObj* u) {
+    SeriesObj* r = so_alloc(u->x, u->x0, 0, u->order, u->den);
+    if (r->coef_count == 0) return r;
+    so_set_coef(r, 0, expr_new_integer(1));
+    for (size_t n = 1; n < r->coef_count; n++) {
+        Expr* sum = expr_new_integer(0);
+        for (size_t j = 1; j <= n; j++) {
+            int64_t idx = (int64_t)j - u->nmin;
+            if (idx < 0 || (size_t)idx >= u->coef_count) continue;
+            Expr* uj = u->coefs[idx];
+            Expr* ep = r->coefs[n - j];
+            if (is_lit_zero(uj) || is_lit_zero(ep)) continue;
+            sum = mk_plus(sum, mk_times(make_rational((int64_t)j, (int64_t)n),
+                                        mk_times(expr_copy(uj), expr_copy(ep))));
+        }
+        so_set_coef(r, n, so_recur_finish(sum));
+    }
+    return r;
+}
+
+/* log(1 + v), v(x0) = 0 (v->nmin >= 1), by the recurrence of (1 + v) L' = v':
+ *     L_0 = 0,   L_n = v_n - (1/n) Sum_{k=1..n-1} k L_k v_{n-k}. */
+static SeriesObj* so_log1p_recurrence(SeriesObj* v) {
+    SeriesObj* r = so_alloc(v->x, v->x0, 0, v->order, v->den);
+    for (size_t n = 1; n < r->coef_count; n++) {
+        int64_t vi = (int64_t)n - v->nmin;
+        Expr* sum = (vi >= 0 && (size_t)vi < v->coef_count)
+                  ? expr_copy(v->coefs[vi]) : expr_new_integer(0);
+        for (size_t k = 1; k < n; k++) {
+            int64_t idx = (int64_t)(n - k) - v->nmin;
+            if (idx < 0 || (size_t)idx >= v->coef_count) continue;
+            Expr* vk = v->coefs[idx];
+            Expr* lk = r->coefs[k];
+            if (is_lit_zero(vk) || is_lit_zero(lk)) continue;
+            sum = mk_plus(sum, mk_times(make_rational(-(int64_t)k, (int64_t)n),
+                                        mk_times(expr_copy(lk), expr_copy(vk))));
+        }
+        so_set_coef(r, n, so_recur_finish(sum));
+    }
+    return r;
+}
+
 /* Apply Exp to a series. Exp[c + u] = Exp[c] * Exp[u]. */
 static SeriesObj* so_apply_exp(SeriesObj* s) {
     Expr* c; SeriesObj* u;
@@ -1767,9 +1842,14 @@ static SeriesObj* so_apply_exp(SeriesObj* s) {
     int64_t N = (u->order - u->nmin) / (u->nmin > 0 ? u->nmin : 1) + 1;
     if (N < 1) N = 1;
     if (u->nmin < 1) { expr_free(c); so_free(u); return NULL; }
-    Expr** k = kernel_coefs("Exp", (size_t)N);
-    SeriesObj* ex_u = so_compose_scalar_kernel(k, (size_t)N, u);
-    kernel_coefs_free(k, (size_t)N);
+    SeriesObj* ex_u;
+    if (so_has_symbolic_coefs(u)) {
+        ex_u = so_exp_recurrence(u);
+    } else {
+        Expr** k = kernel_coefs("Exp", (size_t)N);
+        ex_u = so_compose_scalar_kernel(k, (size_t)N, u);
+        kernel_coefs_free(k, (size_t)N);
+    }
     Expr* ex_c = simp(mk_fn1("Exp", c));
     SeriesObj* r = so_scalar_mul(ex_c, ex_u);
     expr_free(ex_c); so_free(u); so_free(ex_u);
@@ -1791,9 +1871,14 @@ static SeriesObj* so_apply_log(SeriesObj* s) {
     expr_free(inv_c);
     int64_t N = (u_over_c->order - u_over_c->nmin) / (u_over_c->nmin > 0 ? u_over_c->nmin : 1) + 2;
     if (N < 2) N = 2;
-    Expr** k = kernel_coefs("Log1p", (size_t)N);
-    SeriesObj* log_term = so_compose_scalar_kernel(k, (size_t)N, u_over_c);
-    kernel_coefs_free(k, (size_t)N);
+    SeriesObj* log_term;
+    if (so_has_symbolic_coefs(u_over_c)) {
+        log_term = so_log1p_recurrence(u_over_c);
+    } else {
+        Expr** k = kernel_coefs("Log1p", (size_t)N);
+        log_term = so_compose_scalar_kernel(k, (size_t)N, u_over_c);
+        kernel_coefs_free(k, (size_t)N);
+    }
     so_free(u_over_c); so_free(u);
     Expr* log_c = simp(mk_fn1("Log", c));
     SeriesObj* c_series = so_from_constant(log_c, log_term->x, log_term->x0, log_term->order, log_term->den);
@@ -3358,6 +3443,54 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                         k[j] = simp(mk_power(expr_new_integer(j),
                                     mk_times(expr_new_integer(-1),
                                              expr_copy(e->data.function.args[0]))));
+                    r = so_compose_scalar_kernel(k, (size_t)N, u);
+                    for (int64_t j = 0; j < N; j++) expr_free(k[j]);
+                    free(k);
+                }
+                so_free(u);
+                so_free(inner);
+                if (r) return r;
+            }
+        }
+        /* ---- BesselJ[n, u] / BesselI[n, u], n a literal integer, u(x0) = 0:
+         * the defining power series composed through u's own series,
+         *     J_n(u) = Sum_k (-1)^k (u/2)^(n+2k) / (k! (n+k)!),  n >= 0,
+         *     I_n(u) = the same without (-1)^k,  J_-n = (-1)^n J_n, I_-n = I_n,
+         * one composition of exact rational kernels where Taylor-via-D took a
+         * derivative of the whole composite per padded order (2 BesselJ[1,
+         * Sin[x]] - Sin[2 BesselJ[1, x]], which cancels to x^7). ---- */
+        if (head && (head == SYM_BesselJ || head == SYM_BesselI) &&
+            e->data.function.arg_count == 2 &&
+            e->data.function.args[0]->type == EXPR_INTEGER &&
+            e->data.function.args[0]->data.integer >= -64 &&
+            e->data.function.args[0]->data.integer <= 64 &&
+            !expr_free_of(e->data.function.args[1], ctx->x)) {
+            SeriesObj* inner = series_expand_nested(e->data.function.args[1], ctx);
+            if (inner) {
+                Expr* c; SeriesObj* u;
+                so_split_constant(inner, &c, &u);
+                bool zero = is_lit_zero(c);
+                expr_free(c);
+                SeriesObj* r = NULL;
+                if (zero && u->nmin >= 1) {
+                    int64_t nu = e->data.function.args[0]->data.integer;
+                    bool is_j = head == SYM_BesselJ;
+                    int64_t n = nu < 0 ? -nu : nu;
+                    int64_t refl = (nu < 0 && is_j && (n % 2)) ? -1 : 1;
+                    int64_t N = (u->order - u->nmin) / u->nmin + 2;
+                    if (N < n + 1) N = n + 1;
+                    Expr** k = calloc((size_t)N, sizeof(Expr*));
+                    for (int64_t j = 0; j < N; j++) k[j] = expr_new_integer(0);
+                    for (int64_t kk = 0; n + 2 * kk < N; kk++) {
+                        int64_t m = n + 2 * kk;
+                        int64_t sg = refl * ((is_j && (kk % 2)) ? -1 : 1);
+                        Expr* den = mk_times(mk_power(expr_new_integer(2), expr_new_integer(m)),
+                                     mk_times(mk_fn1("Factorial", expr_new_integer(kk)),
+                                              mk_fn1("Factorial", expr_new_integer(n + kk))));
+                        expr_free(k[m]);
+                        k[m] = simp(mk_times(expr_new_integer(sg),
+                                             mk_power(den, expr_new_integer(-1))));
+                    }
                     r = so_compose_scalar_kernel(k, (size_t)N, u);
                     for (int64_t j = 0; j < N; j++) expr_free(k[j]);
                     free(k);

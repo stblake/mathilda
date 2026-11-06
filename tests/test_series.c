@@ -2678,6 +2678,30 @@ static void test_series_rational_exact_arm(void) {
         "True", 0);
 }
 
+/* Zeta's pole composed through an argument u(x0) = 1; HarmonicNumber at
+ * Infinity; BesselJ/BesselI of a vanishing argument by their defining
+ * series (coefficients by hand: J_1(u) = u/2 - u^3/16 + u^5/384, u = Sin[x]);
+ * Exp/Log of a series with non-rational coefficients by recurrence. */
+static void test_series_special_compositions(void) {
+    setup_full();
+    assert_outputform("Series[Zeta[1 + x], {x, 0, 2}]",
+        "1/x + EulerGamma - StieltjesGamma[1] x + 1/2 StieltjesGamma[2] x^2 + O[x]^3");
+    assert_outputform("Series[Zeta[1 + Sin[x]], {x, 0, 1}]",
+        "1/x + EulerGamma + (1/6 - StieltjesGamma[1]) x + O[x]^2");
+    assert_outputform("Series[HarmonicNumber[n], {n, Infinity, 4}]",
+        "EulerGamma + Log[n] + 1/(2 n) - 1/(12 n^2) + 1/(120 n^4) + O[1/n]^5");
+    assert_outputform("Series[BesselJ[1, Sin[x]], {x, 0, 5}]",
+        "1/2 x - 7/48 x^3 + 73/1920 x^5 + O[x]^6");
+    assert_outputform("Series[BesselJ[-1, x], {x, 0, 3}]", "-1/2 x + 1/16 x^3 + O[x]^4");
+    assert_outputform("Series[BesselI[2, x], {x, 0, 4}]", "1/8 x^2 + 1/96 x^4 + O[x]^5");
+    assert_outputform("SeriesCoefficient[2 BesselJ[1, Sin[x]] - Sin[2 BesselJ[1, x]], {x, 0, 7}]",
+        "-13/5760");
+    /* exp(a x) at order 3 and log(1 + a x) with a = Log[2]: Log[2]^k/k!, (-1)^(k+1) Log[2]^k/k */
+    assert_outputform("Series[2^x, {x, 0, 3}] - Series[Exp[Log[2] x], {x, 0, 3}]", "O[x]^4");
+    assert_outputform("Series[Log[1 + Log[2] x], {x, 0, 3}]",
+        "Log[2] x - 1/2 Log[2]^2 x^2 + 1/3 Log[2]^3 x^3 + O[x]^4");
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -2863,6 +2887,7 @@ int main(void) {
     TEST(test_series_branch_phase);
     TEST(test_series_tan_coefficients_bernoulli);
     TEST(test_series_rational_power_exact);
+    TEST(test_series_special_compositions);
 
     printf("All series tests passed.\n");
     return 0;
