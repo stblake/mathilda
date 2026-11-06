@@ -332,6 +332,38 @@ static bool has_oscillation(const Expr* e, const Expr* x) {
     return false;
 }
 
+/* Can `e` oscillate as x -> point (a FINITE point)?  An oscillation is a
+ * phase that runs off to infinity: an oscillatory head, or E^z with an
+ * imaginary z, whose x-dependent argument diverges at the point.  A phase
+ * that substitutes to a finite value there tends to that value (the argument
+ * is continuous where the substituted tree is finite), so the head tends to a
+ * limit and contributes no oscillation; every such node -- nested ones
+ * included -- is checked. */
+static bool phase_diverges_at(const Expr* e, const Expr* x, const Expr* point) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* z = NULL;
+    bool node = is_oscillatory_head(e) ||
+                (is_exponential(e, &z) && has_imaginary(z));
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* a = e->data.function.args[i];
+        if (!expr_has(a, x)) continue;
+        if (phase_diverges_at(a, x, point)) return true;
+        if (!node) continue;
+        Expr* rule = mk_fn2("Rule", expr_copy((Expr*)x), expr_copy((Expr*)point));
+        Expr* v = simp(mk_fn2("ReplaceAll", expr_copy((Expr*)a), rule));
+        bool bad = !v || has_divergence(v) || expr_has(v, x);
+        if (v) expr_free(v);
+        if (bad) return true;
+    }
+    if (has_oscillation(e->data.function.head, x)) return true;
+    return false;
+}
+
+bool limit_osc_may_oscillate_at(const Expr* f, const Expr* x, const Expr* point) {
+    if (!f || !x || !point) return true;
+    return phase_diverges_at(f, x, point);
+}
+
 /* ---------------------------------------------------------------------- */
 /* Group table                                                             */
 /* ---------------------------------------------------------------------- */

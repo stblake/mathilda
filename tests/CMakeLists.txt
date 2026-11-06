@@ -861,6 +861,7 @@ set(COMMON_SRC
     ../src/calculus/deriv.c
     ../src/calculus/minimize.c
     ../src/calculus/limit.c
+    ../src/calculus/limit_leadterm.c
     ../src/calculus/limit_osc.c
     ../src/calculus/gruntz.c
     ../src/calculus/residue.c

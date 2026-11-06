@@ -673,6 +673,27 @@ Out[24]= 1
 
 **v0.6033.** The Series layer settles a positive leading exponent whose coefficient mentions x only through logarithms: `Limit[x Log[1 - E^(-I x)], x -> 0]` is `0`.
 
+**Leading terms at a finite point.** After the Series layer, a limit at a
+finite point is read off the leading term `c (x - x0)^p` (`c` provably
+nonzero): `c` for `p = 0`, `0` for `p > 0`. The term is built structurally --
+products multiply leading terms, integer powers raise them, and a composition
+`F(G(x))` whose inner `G ~ b (x - x0)^q` vanishes (`q > 0`) has leading term
+`a b^s (x - x0)^(s q)` from `F(y) ~ a y^s` at `y = 0` (`s` an integer, `a`
+nonzero) -- and a truncated Series is used only for the sums that must cancel,
+to the order the cancellation needs. `Limit[f[g[x]]/g[f[x]], x -> 0]` for the
+ISSAC '97 problem 7 pair, both sides cancelling to `x^165`, is
+`2451447860952057740817096729600000000000000000000/801034487517232030831498951509084442801`
+in under a second. A factor with no term through order 64 that the zero tester
+also finds zero is identically zero (`Limit[(Sin[x]^2 + Cos[x]^2 - 1)/x^5, x -> 0]`
+is `0`).
+
+At a finite point the oscillatory layer runs only when some phase -- the
+argument of `Sin`/`Cos`/... or the imaginary exponent of `E^z` -- diverges
+there (`Sin[1/x]` at 0); a phase finite at the point cannot oscillate. The
+late small-argument rule `H[g] ~ g` (`Sin`, `Tan`, `ArcTan`, ...) is applied
+only to a multiplicative factor, where it is exact for the limit; inside a sum
+the dropped `O(g^3)` can be the leading term after cancellation.
+
 ## Residue
 
 `Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity

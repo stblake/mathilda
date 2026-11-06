@@ -1186,6 +1186,47 @@ static void test_limit_dominant_exact_growth(void) {
     check("Limit[Log[x^3 + x] - 3 Log[x], x -> Infinity]", "0");
 }
 
+
+/* Limits of quotients whose two sides cancel to a high order, resolved from
+ * leading terms (limit_leadterm.c).  With F(y) = Tan[Sin[y]] - Sin[Tan[y]]
+ * ~ y^7/30 and G(x) = Sinh[x] - Sin[x] ~ x^3/3, F(G(x)) ~ (1/30)(1/3)^7 x^21
+ * and G(F(x)) ~ (1/3)(1/30)^3 x^21. */
+static void test_limit_high_order_cancellation(void) {
+    check("Limit[(Tan[Sin[x]] - Sin[Tan[x]])/x^7, x -> 0]", "1/30");
+    check("Limit[(Tan[Sin[Sinh[x] - Sin[x]]] - Sin[Tan[Sinh[x] - Sin[x]]])/x^21, x -> 0]",
+          "1/65610");
+    check("Limit[(Tan[Sin[Sinh[x] - Sin[x]]] - Sin[Tan[Sinh[x] - Sin[x]]])/"
+          "(Sinh[Tan[Sin[x]] - Sin[Tan[x]]] - Sin[Tan[Sin[x]] - Sin[Tan[x]]]), x -> 0]",
+          "100/81");
+    /* The same at a nonzero point: x -> 1 with the inner argument x - 1. */
+    check("Limit[(Tan[Sin[x - 1]] - Sin[Tan[x - 1]])/(x - 1)^7, x -> 1]", "1/30");
+    /* A vanishing quotient and an identically cancelled numerator. */
+    check("Limit[(Tan[Sin[x]] - Sin[Tan[x]])/x^6, x -> 0]", "0");
+    check("Limit[(Sin[Sinh[x]]^2 + Cos[Sinh[x]]^2 - 1)/x^5, x -> 0]", "0");
+    /* The composition rule needs the inner argument to vanish: here it tends
+     * to 1, and the limit is the derivative Cos[1]. */
+    check("Limit[(Sin[1 + x] - Sin[1])/x, x -> 0]", "Cos[1]");
+    /* Genuine oscillation at a finite point still reaches the oscillatory
+     * layer (its phase 1/x diverges). */
+    check("Limit[x Sin[1/x], x -> 0]", "0");
+}
+
+/* ISSAC '97 problem 7: f, g signed sums of twelve 3-fold compositions of
+ * Sin/Tan/Sinh/Tanh with f ~ a x^15, a = 7769/3274425 and g ~ b x^11,
+ * b = 4/63, so f(g(x))/g(f(x)) -> a b^15/(b a^11). */
+static void test_limit_issac97_p7(void) {
+    check("Module[{f, g}, "
+          "f[x_] = Tan[Tanh[Sin[x]]] + Tanh[Sin[Tan[x]]] + Sin[Tan[Tanh[x]]] - Tan[Sin[Tanh[x]]] - "
+          "Sin[Tanh[Tan[x]]] - Tanh[Tan[Sin[x]]] - Tan[Sinh[Tanh[x]]] - Sinh[Tanh[Tan[x]]] - "
+          "Tanh[Tan[Sinh[x]]] + Tan[Tanh[Sinh[x]]] + Tanh[Sinh[Tan[x]]] + Sinh[Tan[Tanh[x]]]; "
+          "g[x_] = Sinh[Tanh[Sin[x]]] + Tanh[Sin[Sinh[x]]] + Sin[Sinh[Tanh[x]]] - Sinh[Sin[Tanh[x]]] - "
+          "Sin[Tanh[Sinh[x]]] - Tanh[Sinh[Sin[x]]] - Tan[Sinh[Sin[x]]] - Sinh[Sin[Tan[x]]] - "
+          "Sin[Tan[Sinh[x]]] + Tan[Sin[Sinh[x]]] + Sin[Sinh[Tan[x]]] + Sinh[Tan[Sin[x]]]; "
+          "Limit[f[g[x]]/g[f[x]], x -> 0] === "
+          "(7769/3274425) (4/63)^15/((4/63) (7769/3274425)^11)]",
+          "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1229,6 +1270,8 @@ int main(void) {
     TEST(test_method_heads);
     TEST(test_sqrt_square_branch_phase);
     TEST(test_limit_branch_stress);
+    TEST(test_limit_high_order_cancellation);
+    TEST(test_limit_issac97_p7);
 
     printf("All limit tests passed.\n");
     return 0;

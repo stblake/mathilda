@@ -49,6 +49,7 @@
                           * Assumptions -> n > 0], ambient Assuming[]/$Assumptions) */
 #include "gruntz.h"       /* Gruntz mrv-algorithm limit engine (layer_gruntz) */
 #include "limit_osc.h"    /* oscillatory normal form (layer_oscillatory)     */
+#include "limit_leadterm.h" /* leading-term limits (layer_leading_term)       */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "numeric.h"   /* expr_is_numeric_quantity: Limit::ivar */
 /* Note: Series and D are invoked symbolically (through the evaluator),
@@ -1543,6 +1544,16 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
     if (x0_owned) expr_free(x0_owned);
     if (y_sym)    expr_free(y_sym);
     return result;
+}
+
+/* Leading-term limit at a finite point (limit_leadterm.c). */
+static Expr* layer_leading_term(Expr* f, LimitCtx* ctx) {
+    if (!ctx->x || ctx->x->type != EXPR_SYMBOL || is_divergent(ctx->point) ||
+        !free_of(ctx->point, ctx->x))
+        return NULL;
+    if (contains_head_symbol(f, SYM_Max) || contains_head_symbol(f, SYM_Min))
+        return NULL;
+    return limit_leading_term_value(f, ctx->x, ctx->point);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -3888,6 +3899,10 @@ static Expr* layer_oscillatory(Expr* f, LimitCtx* ctx) {
     if (!expr_is_numeric_like(ctx->point) || head_is(ctx->point, SYM_Complex))
         return NULL;
     if (ctx->depth >= LIMIT_MAX_DEPTH - 1) return NULL;
+    /* Nothing can oscillate when every phase has a finite value at the point;
+     * building the normal form (TrigToExp + Expand of all of f) would then
+     * only cost -- 20 s on a sum of nested Sin/Tan compositions at 0. */
+    if (!limit_osc_may_oscillate_at(f, ctx->x, ctx->point)) return NULL;
 
     if (ctx->dir == LIMIT_DIR_FROMABOVE) return osc_at_finite_side(f, ctx, +1);
     if (ctx->dir == LIMIT_DIR_FROMBELOW) return osc_at_finite_side(f, ctx, -1);
@@ -4079,9 +4094,19 @@ static bool is_linearizable_head(Expr* e) {
            head_name_is(e, "ArcSinh", 1) || head_name_is(e, "ArcTanh", 1);
 }
 
-/* First subterm H[g] with H in the ~identity family and g -> 0 (g contains x). */
+/* First H[g] with H in the ~identity family and g -> 0 (g contains x) that is
+ * a MULTIPLICATIVE factor of e: reached through Times arguments and the bases
+ * of x-free powers only.  There H[g] = g (1 + o(1)) carries over to the
+ * limit; inside a sum it does not -- the dropped o(g) can be the leading
+ * term after cancellation, and Sin[x]^2 + Cos[x]^2 - 1 linearized to x^2 +
+ * Cos[x]^2 - 1 made Limit[(Sin[x]^2 + Cos[x]^2 - 1)/x^5, x -> 0] come out
+ * ComplexInfinity instead of 0. */
 static Expr* find_linearizable(Expr* e, LimitCtx* ctx) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        if (!free_of(e->data.function.args[1], ctx->x)) return NULL;
+        return find_linearizable(e->data.function.args[0], ctx);
+    }
     if (is_linearizable_head(e) && expr_contains(e->data.function.args[0], ctx->x)) {
         Expr* g = e->data.function.args[0];
         LimitCtx sub = *ctx; sub.depth += 1;
@@ -4090,7 +4115,9 @@ static Expr* find_linearizable(Expr* e, LimitCtx* ctx) {
         bool zero = lg && is_lit_zero(lg);
         if (lg) expr_free(lg);
         if (zero) return e;
+        return NULL;
     }
+    if (!head_is(e, SYM_Times)) return NULL;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* r = find_linearizable(e->data.function.args[i], ctx);
         if (r) return r;
@@ -4105,7 +4132,7 @@ static Expr* find_linearizable(Expr* e, LimitCtx* ctx) {
  * L'Hospital so it never pre-empts an exact expansion (and so an adversarial
  * sub-leading probe like (Sin[x]-x)/x^3 is resolved by Series first, not here).
  * Dropping the O(g^3) tail is sound for the limit -- it vanishes relative to
- * the leading term. */
+ * the leading term -- for a multiplicative factor (see find_linearizable). */
 static Expr* layer_small_arg_linearize(Expr* f, LimitCtx* ctx) {
     Expr* h = find_linearizable(f, ctx);
     if (!h) return NULL;
@@ -4291,6 +4318,12 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
 
     /* Layer 2: series-based evaluation -- the workhorse. */
     TRY(LIMIT_M_SERIES, layer2_series(f, ctx));
+
+    /* Leading terms at a finite point, composed structurally (products,
+     * powers, F(G(x)) with G -> 0) so a deep cancellation is resolved at the
+     * order it needs and no further: f(g(x))/g(f(x)) with both sides
+     * cancelling to x^165. */
+    TRY(LIMIT_M_SERIES, layer_leading_term(f, ctx));
 
     /* Gruntz's mrv algorithm. Reached exclusively under Method->"Gruntz",
      * and as a last-resort fallback under Automatic (fires only when the

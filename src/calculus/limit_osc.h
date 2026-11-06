@@ -23,6 +23,7 @@
 #ifndef MATHILDA_LIMIT_OSC_H
 #define MATHILDA_LIMIT_OSC_H
 
+#include <stdbool.h>
 #include "expr.h"
 
 /* Compute Limit[g, x -> point] in the caller's context.
@@ -42,5 +43,10 @@ typedef Expr* (*LimitOscSubFn)(Expr* g, void* ctx);
  * abstain. */
 Expr* limit_oscillatory(Expr* f, Expr* x, Expr* point,
                         LimitOscSubFn sub, void* subctx);
+
+/* At a FINITE point: false when no phase of f (the argument of an
+ * oscillatory head, or the imaginary exponent of E^z) diverges there, so the
+ * oscillatory normal form has nothing to decide and need not be built. */
+bool limit_osc_may_oscillate_at(const Expr* f, const Expr* x, const Expr* point);
 
 #endif /* MATHILDA_LIMIT_OSC_H */
