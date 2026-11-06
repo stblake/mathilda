@@ -208,14 +208,23 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
 
     /* ---- options (trailing) ---- */
     NdOpts o; nd_opts_default(&o);
-    /* Default AccuracyGoal -> MachinePrecision (a ~15.95-digit absolute-error
-     * floor); PrecisionGoal stays Automatic (-> WorkingPrecision/2).  Set before
-     * option parsing so an explicit AccuracyGoal-> still overrides it. */
-    o.acc_goal = NUMERIC_MACHINE_PRECISION_DIGITS;
+    /* Default goals.  PrecisionGoal is Automatic (-> WorkingPrecision/2).  At
+     * machine precision the default AccuracyGoal is MachinePrecision (a
+     * ~15.95-digit absolute-error floor); at a higher WorkingPrecision it is
+     * Automatic too (-> WorkingPrecision/2).  A fixed 1e-16 absolute floor
+     * there would cap every small-valued solution at machine accuracy
+     * whatever the working precision: a decaying solution (Airy Ai integrated
+     * forward to x = 8, ~5e-8) kept only ~8 correct digits at
+     * WorkingPrecision 50, and an unstable direction amplified the floor's
+     * error.  NaN marks "not given", so an explicit AccuracyGoal -> ... (any
+     * value, MachinePrecision included) still overrides either default. */
+    o.acc_goal = NAN;
     size_t pos_end = argc;
     while (pos_end > 3 && nd_is_option(A[pos_end - 1])) pos_end--;
     /* allow exactly 3 positional args; options after */
     for (size_t i = 3; i < argc; i++) if (nd_is_option(A[i])) nd_apply_option(A[i], &o);
+    if (isnan(o.acc_goal))
+        o.acc_goal = o.wp_bits > 53 ? -1.0 : NUMERIC_MACHINE_PRECISION_DIGITS;
     /* "MethodOfLines" is a PDE controller, not a time-integration stepper — it
      * must not clobber a Method-> time-integration choice given alongside it. */
     if (forced_method && strcmp(forced_method, "MethodOfLines") != 0)

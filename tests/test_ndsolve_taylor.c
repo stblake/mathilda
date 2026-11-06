@@ -339,6 +339,63 @@ static void test_wp_singular_family(void) {
 #endif
 }
 
+/* ------------------------------------------------------------------ */
+/* 8. Default goals at arbitrary precision, exact numeric query points,   */
+/*    Max/Min in the series vocabulary                                     */
+/* ------------------------------------------------------------------ */
+static void test_wp_goals_points_maxmin(void) {
+#ifdef USE_MPFR
+    /* The default AccuracyGoal at WorkingPrecision -> 50 is 25 digits, not a
+     * machine 1e-16 absolute floor.  Ai integrated forward from its exact
+     * values at 0 decays to 4.7e-8 at x = 8 while errors grow like Bi/Ai
+     * (2.5e13): the floor left 7 correct digits, the default goals keep 14. */
+    check_ge("-Log[10, Abs[(v[8] /. First[NDSolve[{v''[x] == x v[x], v[0] == AiryAi[0], "
+             "v'[0] == AiryAiPrime[0]}, v, {x, 0, 8}, WorkingPrecision -> 50]])/AiryAi[8] - 1]]", 13);
+    /* the same goals on a stable problem: relative 10^-25 local error */
+    check_ge("-Log[10, Abs[(v[3] /. First[NDSolve[{v'[x] == x v[x], v[0] == 1}, v, {x, 0, 3}, "
+             "WorkingPrecision -> 50]])/Exp[9/2] - 1]]", 24);
+    /* an explicit AccuracyGoal is still honoured: a 16-digit absolute floor
+     * on a solution of size Exp[9/2] = 90 leaves ~19 relative digits */
+    check_eq("-Log[10, Abs[(v[3] /. First[NDSolve[{v'[x] == x v[x], v[0] == 1}, v, {x, 0, 3}, "
+             "WorkingPrecision -> 50, AccuracyGoal -> 16]])/Exp[9/2] - 1]] < 23", "True");
+    /* An exact numeric, non-rational query point is a point of the domain. */
+    run("sE = NDSolve[{y'[t] == y[t], y[0] == 1}, y, {t, 0, 1/2 + Pi}];");
+    check_close("y[Pi] /. First[sE]", exp(M_PI), 1e-5 * exp(M_PI));
+    check_close("y[1/2 + Pi] /. First[sE]", exp(0.5 + M_PI), 1e-5 * exp(0.5 + M_PI));
+    check_close("y[Sqrt[2]] /. First[sE]", exp(sqrt(2.0)), 1e-5 * exp(sqrt(2.0)));
+    run("sE30 = NDSolve[{y'[t] == y[t], y[0] == 1}, y, {t, 0, 1/2 + Pi}, WorkingPrecision -> 30];");
+    check_ge(DIG("y[1/2 + Pi] /. First[sE30]", "Exp[1/2 + Pi]"), 13);
+    check_eq("Precision[y[Pi] /. First[sE30]] > 20", "True");
+    /* a complex point is not in the domain: left alone */
+    check_eq("MatchQ[y[I] /. First[sE], _InterpolatingFunction[_]]", "True");
+    /* Kepler, e = 9/10, queried at t = 2 Pi + 1/2: Kepler's equation
+     * E - e Sin[E] = 1/2 gives x = Cos[E] - e = -0.71469364589984922808 */
+    check_close("Module[{s = NDSolve[{kx''[t] == -kx[t]/(kx[t]^2 + ky[t]^2)^(3/2), "
+                "ky''[t] == -ky[t]/(kx[t]^2 + ky[t]^2)^(3/2), kx[0] == 1/10, ky[0] == 0, "
+                "kx'[0] == 0, ky'[0] == Sqrt[19]}, {kx, ky}, {t, 0, 2 Pi + 1/2}, MaxSteps -> 10^6]}, "
+                "kx[2 Pi + 1/2] /. First[s]]", -0.71469364589984922808, 1e-4);
+    /* Max / Min run on the series integrator.  p'' = Max[p, 0]^(3/2),
+     * p(0) = 1, p'(0) = -2: the energy integral gives the zero x* =
+     * INT_0^1 dy/Sqrt[16/5 + 4/5 y^(5/2)], after which p is linear with
+     * slope -Sqrt[16/5]: p(3) = -Sqrt[16/5] (3 - x*) = -4.39886346180787251864 */
+    check_ge(DIG("p[3] /. First[NDSolve[{p''[x] == Max[p[x], 0]^(3/2), p[0] == 1, p'[0] == -2}, "
+                 "p, {x, 0, 3}, WorkingPrecision -> 30, PrecisionGoal -> 20, AccuracyGoal -> 20]]",
+                 "-439886346180787251864/10^20"), 17);
+    /* p' = Min[p, 1/2, x], p(0) = 1: p = 1 + x^2/2 to x = 1/2, then slope 1/2 */
+    check_ge(DIG("p[2] /. First[NDSolve[{p'[x] == Min[p[x], 1/2, x], p[0] == 1}, p, {x, 0, 2}, "
+                 "WorkingPrecision -> 30]]", "15/8"), 25);
+    /* the blow-up of p'' = Max[p, 0]^(3/2)/Sqrt[x] (a too-shallow
+     * Thomas-Fermi shot) is approached in a few hundred series steps, as
+     * for the same equation written without Max, not tens of thousands of
+     * Runge-Kutta steps */
+    run("tfS[rhs_] := Quiet[NDSolve[{p''[x] == rhs, p[1/10^4] == 1 - 317/200 10^-4 + 4/3 10^-6, "
+        "p'[1/10^4] == -317/200 + 2/100}, p, {x, 1/10^4, 60}, MaxSteps -> 10^6, WorkingPrecision -> 30]]");
+    check_eq("Length[(p /. First[tfS[Max[p[x], 0]^(3/2)/Sqrt[x]]])[\"Grid\"]] < 2000", "True");
+    check_ge(DIG("Last[First[(p /. First[tfS[Max[p[x], 0]^(3/2)/Sqrt[x]]])[\"Domain\"]]]",
+                 "Last[First[(p /. First[tfS[p[x]^(3/2)/Sqrt[x]]])[\"Domain\"]]]"), 8);
+#endif
+}
+
 int main(void) {
     test_mute_messages();
     symtab_init();
@@ -351,6 +408,7 @@ int main(void) {
     TEST(test_findmin_forms);
     TEST(test_singularity_problem);
     TEST(test_wp_singular_family);
+    TEST(test_wp_goals_points_maxmin);
 
     if (failures == 0) printf("\nAll NDSolve Taylor / dense-output / property tests passed.\n");
     else printf("\n%d checks FAILED.\n", failures);

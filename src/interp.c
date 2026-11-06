@@ -1825,6 +1825,47 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     int Ksupplied = g_obj_cache.Ksupplied;
     if (Ksupplied < 0) { free(ders); free(orders); free(periodic); return NULL; }
 
+    /* An exact numeric coordinate that is not a rational -- Pi, Sqrt[2],
+     * 1/2 + 2 Pi -- is a point of the domain like any other: evaluate at its
+     * numerical value, taken at the data's precision (machine for machine
+     * data, the table's own precision for arbitrary-precision data, as an
+     * exact rational argument is).  Without this the kernels, which read only
+     * real atoms, left ifn[1/2 + 2 Pi] unevaluated: an NDSolve solution
+     * queried at the end of a {t, 0, 2 Pi + 1/2} range gave no value.  A
+     * coordinate that is numeric but not real (complex) is left alone. */
+    {
+        bool need = false;
+        for (size_t k = 0; k < m && !need; k++)
+            if (!is_scalar_real(call_args[k]) && expr_is_numeric_quantity(call_args[k]))
+                need = true;
+        if (need) {
+            NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+            if (g_obj_cache.is_mpfr) {
+                spec.mode = NUMERIC_MODE_MPFR;
+                spec.bits = g_obj_cache.inexact.min_bits;
+            }
+#endif
+            free(ders); free(orders); free(periodic);
+            Expr** na = malloc(m * sizeof(Expr*));
+            bool ok = na != NULL;
+            for (size_t k = 0; k < m && ok; k++) {
+                na[k] = is_scalar_real(call_args[k]) ? expr_copy(call_args[k])
+                                                     : numericalize(call_args[k], spec);
+                if (!na[k] || !is_scalar_real(na[k])) {
+                    if (na[k]) expr_free(na[k]);
+                    for (size_t j = 0; j < k; j++) expr_free(na[j]);
+                    ok = false;
+                }
+            }
+            if (!ok) { free(na); return NULL; }
+            Expr* r = interp_apply(ifun, na, m);
+            for (size_t k = 0; k < m; k++) expr_free(na[k]);
+            free(na);
+            return r;
+        }
+    }
+
     /* Exact node-coincident value query -> exact stored value.  Skipped for a
      * packed (machine) table: its stored values are float64, and evaluating the
      * interpolant AT a node returns that same double bit-for-bit (the local

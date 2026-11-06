@@ -176,7 +176,10 @@ object's data alone (only the arguments of a call `ifun[x]` are numericalized),
 so `SetPrecision[k[x, y] ifun[y], 25]` is still a valid integrand. The value at
 an arbitrary-precision argument has the precision of the data: a machine table
 gives a machine number (computed by the double kernels), a table of `p`-digit
-values a `p`-digit number.
+values a `p`-digit number. An exact numeric argument that is not a rational
+(`ifun[Pi]`, `ifun[1/2 + 2 Pi]`, `ifun[Sqrt[2]]`) is evaluated at its value
+taken at the data's precision, as an exact rational is; a complex argument is
+left unevaluated.
 
 - `domain`: one interval per dimension, `{{x1min, x1max}, ..., {xmmin, xmmax}}`.
   The number of intervals `m` is the dimensionality.

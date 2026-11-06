@@ -1489,7 +1489,12 @@ here at cruder accuracy goals.)
 ### Options
 
 `Method`, `WorkingPrecision` (machine default; higher selects the MPFR
-integrator), `AccuracyGoal`/`PrecisionGoal` (Automatic = WorkingPrecision/2),
+integrator), `AccuracyGoal`/`PrecisionGoal` (Automatic = WorkingPrecision/2;
+an omitted `AccuracyGoal` is `MachinePrecision` at machine precision and
+WorkingPrecision/2 above it, so a small-valued solution keeps the working
+precision's digits: the forward-integrated Airy `Ai(8) = 4.7e-8` at
+`WorkingPrecision -> 50` is correct to 14 digits, where a fixed machine
+absolute floor left 7),
 `MaxSteps` (default 10000), `MaxStepSize`, `MaxStepFraction` (1/10),
 `StartingStepSize`, `InterpolationOrder` (Automatic = degree 7 at machine
 precision, `2K+1` at higher precision; `3` keeps the cubic Hermite),
@@ -1510,7 +1515,9 @@ not cut to 16 digits).
 **Taylor series (the Automatic method).** With `Method` Automatic, a right-hand
 side built from `+`, `*`, powers with a constant exponent (integer powers by
 multiplication, so `y^3` is fine where `y = 0`), `Exp`, `Log`, `Sqrt`, `Sin`,
-`Cos`, `Tan`, `Sinh`, `Cosh`, `Tanh`, `ArcTan` and `Abs` is integrated by a
+`Cos`, `Tan`, `Sinh`, `Cosh`, `Tanh`, `ArcTan`, `Abs`, `Max` and `Min` (as
+`Max[a, b] = (a + b + Abs[a - b])/2`, so a step ends where the larger argument
+changes, and `Max[y, 0]^(3/2)` on the branch `y < 0` is the zero series) is integrated by a
 Taylor-series method: at every step the solution's Taylor coefficients to order
 `p ≈ ln(1/tol)/2 + 2` (at most 31) are computed exactly by automatic
 differentiation, the step is the radius where the last two terms fall below the

@@ -246,6 +246,48 @@ static int tn_int_power(NdTaylorTape* T, int a, int64_t n) {
 
 static int tn_build_node(NdTaylorTape* T, const Expr* e);
 
+/* Abs[a]: a kink node, registered so a step ends on a zero of a. */
+static int tn_abs(NdTaylorTape* T, int a) {
+    int r = tn_unary(T, TN_ABS, a);
+    if (r < 0) return -1;
+    if (T->nabs == T->capabs) {
+        int nc = T->capabs ? 2 * T->capabs : 4;
+        int* na = realloc(T->absn, sizeof(int) * (size_t)nc);
+        if (!na) return -1;
+        T->absn = na; T->capabs = nc;
+    }
+    T->absn[T->nabs++] = r;
+    return r;
+}
+
+/* a + b + s |a - b| (s = +1 for Max, -1 for Min), halved. */
+static int tn_maxmin(NdTaylorTape* T, int a, int b, bool is_max) {
+    if (a < 0 || b < 0) return -1;
+    mpfr_t c; mpfr_init2(c, T->bits);
+    mpfr_set_si(c, -1, RND);
+    int nb = tn_scale(T, c, b);
+    int dif = tn_new(T, TN_ADD);
+    int* da = malloc(sizeof(int) * 2);
+    int r = -1;
+    if (nb >= 0 && dif >= 0 && da) {
+        da[0] = a; da[1] = nb;
+        T->nodes[dif].args = da; T->nodes[dif].nargs = 2; da = NULL;
+        int ab = tn_abs(T, dif);
+        if (ab >= 0 && !is_max) ab = tn_scale(T, c, ab);
+        int sum = ab >= 0 ? tn_new(T, TN_ADD) : -1;
+        int* sa = sum >= 0 ? malloc(sizeof(int) * 3) : NULL;
+        if (sa) {
+            sa[0] = a; sa[1] = b; sa[2] = ab;
+            T->nodes[sum].args = sa; T->nodes[sum].nargs = 3;
+            mpfr_set_d(c, 0.5, RND);
+            r = tn_scale(T, c, sum);
+        }
+    }
+    free(da);
+    mpfr_clear(c);
+    return r;
+}
+
 static int tn_build(NdTaylorTape* T, const Expr* e) {
     uint64_t h = expr_hash(e);
     for (int i = 0; i < T->nmemo; i++)
@@ -359,20 +401,22 @@ static int tn_build_node(NdTaylorTape* T, const Expr* e) {
         }
         return tn_unary(T, TN_EXP, tn_mul(T, xe, tn_unary(T, TN_LOG, tn_build(T, b))));
     }
+    /* Max / Min fold pairwise through the kink of Abs:
+     *   Max[a, b] = (a + b + Abs[a - b])/2,  Min[a, b] = (a + b - Abs[a - b])/2,
+     * so a step ends where a - b changes sign and each branch is the smooth
+     * series of the larger (smaller) argument -- Max[y, 0]^(3/2) keeps the
+     * high-order series method instead of falling to Runge-Kutta, whose
+     * MPFR steps (41728 of them where the series takes 469) dominated a
+     * Thomas-Fermi shooting run approaching its movable singularity. */
+    if ((h == SYM_Max || h == SYM_Min) && n >= 2) {
+        int acc = tn_build(T, A[0]);
+        for (size_t i = 1; i < n && acc >= 0; i++)
+            acc = tn_maxmin(T, acc, tn_build(T, A[i]), h == SYM_Max);
+        return acc;
+    }
     if (n != 1) return -1;
     if (h == SYM_Exp) return tn_unary(T, TN_EXP, tn_build(T, A[0]));
-    if (h == SYM_Abs) {
-        int r = tn_unary(T, TN_ABS, tn_build(T, A[0]));
-        if (r < 0) return -1;
-        if (T->nabs == T->capabs) {
-            int nc = T->capabs ? 2 * T->capabs : 4;
-            int* na = realloc(T->absn, sizeof(int) * (size_t)nc);
-            if (!na) return -1;
-            T->absn = na; T->capabs = nc;
-        }
-        T->absn[T->nabs++] = r;
-        return r;
-    }
+    if (h == SYM_Abs) return tn_abs(T, tn_build(T, A[0]));
     if (h == SYM_Log) return tn_unary(T, TN_LOG, tn_build(T, A[0]));
     if (h == SYM_Sqrt) {
         mpfr_t al; mpfr_init2(al, T->bits); mpfr_set_d(al, 0.5, RND);
@@ -538,6 +582,16 @@ bool nd_taylor_coeffs(NdTaylorTape* T, const mpfr_t t0, mpfr_t* Y0, int p,
                     break;
                 }
                 if (k == 0) { mpfr_pow(out, a0, nd->c, RND); break; }
+                if (mpfr_zero_p(a0) && mpfr_sgn(nd->c) > 0) {
+                    /* A base that vanishes identically (to this order) has
+                     * the zero series as its positive power: Max[y, 0]^c on
+                     * the branch y < 0, where the base is y + Abs[y] = 0
+                     * exactly. */
+                    bool allz = true;
+                    for (int j = 1; j <= k && allz; j++)
+                        if (!mpfr_zero_p(V(T, nd->a, j))) allz = false;
+                    if (allz) { mpfr_set_zero(out, 1); break; }
+                }
                 if (mpfr_zero_p(a0)) { ok = false; break; }
                 mpfr_set_zero(acc, 1);
                 for (int j = 0; j < k; j++) {
@@ -698,6 +752,13 @@ bool nd_taylor_coeffs_d(NdTaylorTape* T, double t0, const double* Y0, int p,
             case TN_POW: {
                 double a0 = DV(T, nd->a, 0);
                 if (k == 0) { r = pow(a0, nd->cd); break; }
+                if (a0 == 0.0 && nd->cd > 0.0) {
+                    /* identically vanishing base: zero series (as above) */
+                    bool allz = true;
+                    for (int j = 1; j <= k && allz; j++)
+                        if (DV(T, nd->a, j) != 0.0) allz = false;
+                    if (allz) break;   /* r stays 0 */
+                }
                 if (a0 == 0.0) return false;
                 for (int j = 0; j < k; j++)
                     r += (nd->cd * (k - j) - j) * DV(T, nd->a, k - j) * DV(T, n, j);
