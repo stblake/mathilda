@@ -50,6 +50,31 @@ bool denint_tanhsinh_mpfr(DeQuadSampleMPFR f, void* ctx,
                           long bits, double reltol, int max_levels,
                           mpfr_t out_re, mpfr_t out_im, double* abserr);
 
+/* The same with an absolute tolerance: the levels also count as settled once
+ * their difference is <= |abstol| (NULL: relative test only).  Used for a
+ * piece of a split interval whose share of the whole is small. */
+bool denint_tanhsinh_mpfr_abs(DeQuadSampleMPFR f, void* ctx,
+                              const mpfr_t a, const mpfr_t b,
+                              long bits, double reltol, mpfr_srcptr abstol,
+                              int max_levels,
+                              mpfr_t out_re, mpfr_t out_im, double* abserr);
+
+/* Clenshaw-Curtis on [a,b] at `bits` precision, N = 8, 16, ..., 256 nested
+ * Chebyshev points, for an integrand analytic on the interval's own scale
+ * (geometric convergence; tanh-sinh suits endpoint singularities).  `cache`
+ * holds the node/weight tables, built lazily and shared by the calls that
+ * pass it (ccquad_cache_new(bits) / ccquad_cache_free).  Returns true and
+ * writes the result only when it converged (else nothing is written: the
+ * caller falls back to tanh-sinh). */
+#define CC_N0 8
+#define CC_MAX_LEVEL 5
+typedef struct CcCache CcCache;
+CcCache* ccquad_cache_new(long bits);
+void     ccquad_cache_free(CcCache* c);
+bool ccquad_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
+                 long bits, double reltol, mpfr_srcptr abstol, CcCache* cache,
+                 mpfr_t out_re, mpfr_t out_im, double* abserr);
+
 /* sinh-sinh on the whole line at `bits` precision. */
 bool denint_sinhsinh_mpfr(DeQuadSampleMPFR f, void* ctx,
                           long bits, double reltol, int max_levels,

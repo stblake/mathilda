@@ -391,6 +391,12 @@ static void ni_note_beyond(const NiCtx* c, const Expr* num, double x) {
 /* Machine sample callback: f at a (possibly mapped) real abscissa x. */
 static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
     NiCtx* c = (NiCtx*)vctx;
+    /* Once a sample has left the double range the machine pass will be
+     * discarded (see g_ni_beyond): decline every further sample so the rule
+     * cascade unwinds at once instead of running each rule to completion
+     * (x^x^x spent 11000 machine samples before the MPFR pass began). */
+    if (g_ni_beyond && !g_ni_escalated && c->spec.mode == NUMERIC_MODE_MACHINE)
+        return false;
     /* Exponential-endpoint map: the Jacobian d x/d z = span·e^{-z} vanishes at
      * the singular end, taming the integrand there.  Past the underflow horizon
      * (e^{-z} = 0) the abscissa would collapse exactly onto the singular endpoint
@@ -1434,6 +1440,131 @@ static void ni_endpoint_mpfr(const NiOpts* o, double d, mpfr_t out) {
     mpfr_clears(re, im, (mpfr_ptr)0);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Endpoint boundary layers at WorkingPrecision                       *
+ * ------------------------------------------------------------------ *
+ *
+ * An integrand that climbs by many orders of magnitude into one endpoint
+ * (x^x^x on [1, 6] gains 36000 decades, almost all within 1e-5 of x = 6) puts
+ * its whole mass in a layer far thinner than the interval.  tanh-sinh does
+ * cluster nodes at the endpoint, but in its t variable the layer becomes a
+ * double-exponentially sharp step, and resolving that step to 100 digits took
+ * step h = 1/512: 10575 samples.
+ *
+ * The layer is graded instead.  From the midpoint the distance to the endpoint
+ * is divided by 16 while log2|f| keeps rising by more than 4 per step (faster
+ * than any integrable power singularity, whose rise is < 4 per step); each
+ * such point is a breakpoint, the last one sitting where the integrand has
+ * become flat on its own scale.  Every piece then holds an integrand that is
+ * analytic and changes smoothly on the piece's own length: Clenshaw-Curtis
+ * resolves it in 33-257 nested Chebyshev points (tanh-sinh, which needs ~350
+ * at 120 digits even for Exp[-u] on [0, 1], is the fallback for a piece still
+ * too steep).  The pieces are integrated from the endpoint inwards and each
+ * later piece stops once it is below reltol of the running total (an absolute
+ * tolerance), so the far pieces, negligible by hundreds of digits, settle at
+ * the coarsest level.  100 digits of x^x^x on [1, 6]: 1150 samples, was
+ * 10575.  Returns false (nothing written) when no layer is detected. */
+#define NI_LAYER_MAX_STEPS 60
+#define NI_LAYER_SHIFT 4   /* distance ratio 2^4 per step; rise threshold 4 bits */
+
+static double ni_mpfr_log2f(NiCtx* ctx, const mpfr_t x, mpfr_t vr, mpfr_t vi) {
+    if (!ni_sample_mpfr(ctx, x, vr, vi)) return NAN;
+    return de_mpfr_log2_l1(vr, vi);
+}
+
+static bool ni_mpfr_graded(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
+                           const NiOpts* o, mpfr_t re, mpfr_t im,
+                           double* abserr, bool* conv) {
+    long bits = o->bits;
+    mpfr_t span, half, mid, vr, vi;
+    mpfr_inits2(bits, span, half, mid, vr, vi, (mpfr_ptr)0);
+    mpfr_sub(span, bm, am, MPFR_RNDN);
+    mpfr_div_2ui(half, span, 1, MPFR_RNDN);
+    mpfr_add(mid, am, half, MPFR_RNDN);
+
+    /* Breakpoints toward the steeper endpoint, nearest the midpoint first. */
+    mpfr_t pts[NI_LAYER_MAX_STEPS];
+    int npts = 0, side = 0;
+    double lpeak = -INFINITY;
+    double lmid = ni_mpfr_log2f(ctx, mid, vr, vi);
+    for (int sd = 1; sd >= -1 && !isnan(lmid); sd -= 2) {
+        mpfr_t d, x, cand[NI_LAYER_MAX_STEPS];
+        mpfr_inits2(bits, d, x, (mpfr_ptr)0);
+        mpfr_set(d, half, MPFR_RNDN);
+        double lprev = lmid;
+        int k = 0;
+        while (k < NI_LAYER_MAX_STEPS) {
+            mpfr_div_2ui(d, d, NI_LAYER_SHIFT, MPFR_RNDN);
+            if (sd > 0) mpfr_sub(x, bm, d, MPFR_RNDN);
+            else        mpfr_add(x, am, d, MPFR_RNDN);
+            if (mpfr_equal_p(x, sd > 0 ? bm : am)) break;
+            double l = ni_mpfr_log2f(ctx, x, vr, vi);
+            if (isnan(l) || !(l - lprev > (NI_LAYER_SHIFT))) break;
+            mpfr_init2(cand[k], bits);
+            mpfr_set(cand[k], x, MPFR_RNDN);
+            k++;
+            lprev = l;
+        }
+        if (k >= 2 && lprev > lpeak) {
+            for (int i = 0; i < npts; i++) mpfr_clear(pts[i]);
+            for (int i = 0; i < k; i++) {
+                mpfr_init2(pts[i], bits);
+                mpfr_set(pts[i], cand[i], MPFR_RNDN);
+            }
+            npts = k; side = sd; lpeak = lprev;
+        }
+        for (int i = 0; i < k; i++) mpfr_clear(cand[i]);
+        mpfr_clears(d, x, (mpfr_ptr)0);
+    }
+    if (npts == 0) {
+        mpfr_clears(span, half, mid, vr, vi, (mpfr_ptr)0);
+        return false;
+    }
+
+    /* Pieces from the layered endpoint inwards: [pts[K-1], end], [pts[K-2],
+     * pts[K-1]], ..., [mid, pts[0]], [far end, mid] (mirrored for side < 0). */
+    double reltol = ni_mpfr_reltol(o);
+    int levels = ni_mpfr_levels(o);
+    mpfr_t lo, hi, pr, pi, tol;
+    mpfr_inits2(bits, lo, hi, pr, pi, tol, (mpfr_ptr)0);
+    mpfr_set_zero(re, 1); mpfr_set_zero(im, 1);
+    bool all = true;
+    double err = 0.0;
+    CcCache* cc = ccquad_cache_new(bits);
+    for (int i = npts; i >= -1; i--) {
+        /* inner point of the piece, toward the far end (i = -1: the far end) */
+        mpfr_srcptr far_end = (side > 0) ? am : bm, near_end = (side > 0) ? bm : am;
+        mpfr_srcptr inner = (i >= 1) ? pts[i - 1] : (i == 0 ? mid : far_end);
+        mpfr_srcptr outer = (i == npts) ? near_end : (i >= 0 ? pts[i] : mid);
+        if (side > 0) { mpfr_set(lo, inner, MPFR_RNDN); mpfr_set(hi, outer, MPFR_RNDN); }
+        else          { mpfr_set(lo, outer, MPFR_RNDN); mpfr_set(hi, inner, MPFR_RNDN); }
+        mpfr_srcptr at = NULL;
+        if (i < npts) {
+            mpfr_hypot(tol, re, im, MPFR_RNDN);
+            mpfr_mul_d(tol, tol, reltol / 16.0, MPFR_RNDN);
+            if (!mpfr_zero_p(tol)) at = tol;
+        }
+        double perr;
+        /* Clenshaw-Curtis for the smooth piece; tanh-sinh where the piece is
+         * still too steep for 256 Chebyshev points */
+        if (!ccquad_mpfr(ni_sample_mpfr, ctx, lo, hi, bits, reltol, at, cc,
+                         pr, pi, &perr)
+            && !denint_tanhsinh_mpfr_abs(ni_sample_mpfr, ctx, lo, hi, bits, reltol,
+                                         at, levels, pr, pi, &perr))
+            all = false;
+        if (!mpfr_number_p(pr) || !mpfr_number_p(pi)) { all = false; break; }
+        mpfr_add(re, re, pr, MPFR_RNDN);
+        mpfr_add(im, im, pi, MPFR_RNDN);
+        err += perr;
+    }
+    ccquad_cache_free(cc);
+    for (int i = 0; i < npts; i++) mpfr_clear(pts[i]);
+    mpfr_clears(span, half, mid, vr, vi, lo, hi, pr, pi, tol, (mpfr_ptr)0);
+    *abserr = err;
+    *conv = all;
+    return true;
+}
+
 /* ∫_a^b f at the MPFR working precision, ctx already in MPFR mode: an explicit
  * fixed rule, Levin collocation for a detected oscillatory kernel, else the
  * endpoint-robust tanh-sinh rule.  (re, im) are initialised by the caller at
@@ -1469,6 +1600,8 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
                 conv = lconv; got = true;
             }
         }
+        if (!got && (o->method == NI_AUTO || o->method == NI_DE))
+            got = ni_mpfr_graded(ctx, am, bm, o, re, im, abserr, &conv);
         if (!got)
             conv = denint_tanhsinh_mpfr(ni_sample_mpfr, ctx, am, bm, bits,
                                         ni_mpfr_reltol(o), ni_mpfr_levels(o),
@@ -2640,8 +2773,9 @@ Expr* builtin_nintegrate(Expr* res) {
         m.prec_mpfr = true;
         m.target_bits = numeric_digits_to_bits(NUMERIC_MACHINE_PRECISION_DIGITS);
         m.bits = m.target_bits + 64;
-        /* the machine default PrecisionGoal (half the machine digits) */
-        if (!(m.prec_goal > 0.0)) m.prec_goal = 0.5 * NUMERIC_MACHINE_PRECISION_DIGITS;
+        /* PrecisionGoal 12 unless given: the result carries 53 bits, and the
+         * nested rules make the last few digits nearly free */
+        if (!(m.prec_goal > 0.0)) m.prec_goal = 12.0;
         g_ni_beyond = false;
         g_ni_escalated = true;
         Expr* mo = ni_integrate(res, argc, pos_end, &m);

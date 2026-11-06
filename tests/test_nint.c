@@ -489,8 +489,11 @@ static void test_de_interior_zeros(void) {
     /* WorkingPrecision -> 20: tanh-sinh (finite) and exp-sinh (half line). */
     ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, Infinity}, "
                  "WorkingPrecision -> 20]", k0, 1e-18);
+    /* 18 digits is past the default PrecisionGoal (WorkingPrecision - 10), so
+     * ask for it: the graded split of this endpoint-heavy range meets the goal
+     * it is given and stops there */
     ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, 60}, "
-                 "WorkingPrecision -> 20]", k0, 1e-18);
+                 "WorkingPrecision -> 20, PrecisionGoal -> 18]", k0, 1e-18);
     ASSERT_CLOSE("NIntegrate[Exp[-x] BesselJ[0, x]^2, {x, 0, 20}, "
                  "WorkingPrecision -> 20]", "0.642637681745200618177181786944", 1e-18);
     ASSERT_CLOSE("NIntegrate[BesselJ[0, x], {x, 0, 20}, WorkingPrecision -> 20]",
@@ -573,7 +576,7 @@ static void test_mpfr_quadrature_gauges(void) {
     ASSERT_REL("NIntegrate[(1 + Cos[x])^2000, {x, 0, 2 Pi}, WorkingPrecision -> 30]",
                "2 Pi Binomial[4000, 2000]/2^2000", "10^-25");
     ASSERT_REL("Im[NIntegrate[" CONTOUR_BODY ", {phi, 0, 2 Pi}, WorkingPrecision -> 30]]/(2 Pi)",
-               CONTOUR_TRUE, "10^-25");
+               CONTOUR_TRUE, "10^-19");   /* default PrecisionGoal 20 */
     /* Exact endpoints at WorkingPrecision: 2 Pi as a double cut 2.4e-16 off
      * the period (relative error 1e-16 at any precision). */
     ASSERT_REL("NIntegrate[Exp[Cos[x]], {x, 0, 2 Pi}, WorkingPrecision -> 40]",
