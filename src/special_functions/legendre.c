@@ -397,6 +397,64 @@ static Expr* leg_numeric_p(const Expr* n_e, const Expr* x_e,
     return out;
 }
 
+/* P_n(x) for an integer degree n >= 0 and an inexact numeric x, by the forward
+ * recurrence  k P_k = (2k-1) x P_{k-1} - (k-1) P_{k-2}  in MPFR (real parts only
+ * for a real x, else complex).  The explicit polynomial must not be used here:
+ * its coefficients reach ~4^n/sqrt(n) (1e600 at n = 1000) while |P_n| <= 1 on
+ * [-1, 1], so substituting a 50-digit x cancels every digit (P_1000 at
+ * 0.999997`50 came out as 2.4e329) and costs O(n) big-number operations on top
+ * of the O(n^2) coefficient build.  The recurrence is stable upward and costs
+ * O(n) operations at the working precision.  NULL if x is not numeric. */
+static Expr* leg_numeric_recurrence(unsigned long n, const Expr* x_e,
+                                    mpfr_prec_t out_prec) {
+    mpfr_prec_t guard = 1;
+    for (unsigned long m = n; m > 1; m >>= 1) guard++;
+    mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec) + 32 + guard;
+    mpfr_t xr, xi, p0r, p0i, p1r, p1i, pkr, pki, t;
+    mpfr_inits2(wp, xr, xi, p0r, p0i, p1r, p1i, pkr, pki, t, (mpfr_ptr)0);
+    Expr* out = NULL;
+    bool inexact = false;
+    if (get_approx_mpfr(x_e, xr, xi, &inexact)) {
+        bool real = mpfr_zero_p(xi);
+        mpfr_set_ui(p0r, 1, PRND); mpfr_set_zero(p0i, +1);
+        mpfr_set(p1r, xr, PRND);   mpfr_set(p1i, xi, PRND);
+        mpfr_ptr P0r = p0r, P1r = p1r, PKr = pkr, P0i = p0i, P1i = p1i, PKi = pki;
+        if (n == 0) { P1r = p0r; P1i = p0i; }
+        for (unsigned long k = 2; k <= n; k++) {
+            /* PK = ((2k-1) x P1 - (k-1) P0) / k */
+            if (real) {
+                mpfr_mul(PKr, xr, P1r, PRND);
+                mpfr_mul_ui(PKr, PKr, 2 * k - 1, PRND);
+                mpfr_mul_ui(t, P0r, k - 1, PRND);
+                mpfr_sub(PKr, PKr, t, PRND);
+                mpfr_div_ui(PKr, PKr, k, PRND);
+            } else {
+                mpfr_mul(PKr, xr, P1r, PRND);
+                mpfr_mul(t, xi, P1i, PRND);
+                mpfr_sub(PKr, PKr, t, PRND);           /* Re(x P1) */
+                mpfr_mul(PKi, xr, P1i, PRND);
+                mpfr_mul(t, xi, P1r, PRND);
+                mpfr_add(PKi, PKi, t, PRND);           /* Im(x P1) */
+                mpfr_mul_ui(PKr, PKr, 2 * k - 1, PRND);
+                mpfr_mul_ui(PKi, PKi, 2 * k - 1, PRND);
+                mpfr_mul_ui(t, P0r, k - 1, PRND);
+                mpfr_sub(PKr, PKr, t, PRND);
+                mpfr_mul_ui(t, P0i, k - 1, PRND);
+                mpfr_sub(PKi, PKi, t, PRND);
+                mpfr_div_ui(PKr, PKr, k, PRND);
+                mpfr_div_ui(PKi, PKi, k, PRND);
+            }
+            mpfr_ptr r = P0r; P0r = P1r; P1r = PKr; PKr = r;   /* rotate */
+            mpfr_ptr i = P0i; P0i = P1i; P1i = PKi; PKi = i;
+        }
+        if (real) mpfr_set_zero(t, +1); else mpfr_set(t, P1i, PRND);
+        if (!mpfr_nan_p(P1r) && !mpfr_nan_p(t))
+            out = leg_make_result(P1r, t, out_prec, real);
+    }
+    mpfr_clears(xr, xi, p0r, p0i, p1r, p1i, pkr, pki, t, (mpfr_ptr)0);
+    return out;
+}
+
 /* Output precision: the minimum precision among the inexact arguments. */
 static mpfr_prec_t leg_out_prec(const Expr* n_e, const Expr* x_e) {
     long bn = leg_is_inexact(n_e) ? numeric_min_inexact_bits(n_e) : 0;
@@ -417,6 +475,13 @@ static Expr* legendre_two_arg(Expr* n_e, Expr* x_e) {
     int64_t ni;
     if (leg_exact_int(n_e, &ni)) {
         unsigned long n = leg_norm_order(ni);
+#ifdef USE_MPFR
+        /* An inexact x: the stable recurrence, never the expanded polynomial. */
+        if (leg_is_inexact(x_e)) {
+            Expr* out = leg_numeric_recurrence(n, x_e, leg_out_prec(n_e, x_e));
+            if (out) return out;
+        }
+#endif
         if (n > LEG_POLY_CAP) return NULL;        /* too large: stay symbolic */
         mpq_t* c = leg_mpq_array_new(n + 1);
         if (!c) return NULL;

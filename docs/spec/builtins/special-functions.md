@@ -4086,6 +4086,14 @@ default `1`).
   orders use `P_{-1-n} = P_n`. For example `LegendreP[10, x] = -63/256 +
   3465/256 x² - 15015/128 x⁴ + 45045/128 x⁶ - 109395/256 x⁸ + 46189/256 x¹⁰`.
   `LegendreP[n, 1] = 1` for any order, and `LegendreP[2, 2] = 11/2`.
+- **Arbitrary-precision argument, integer degree.** An exact integer order with
+  an inexact argument (beyond the machine helper below: an MPFR `x`, or a degree
+  above 1000) runs the three-term recurrence in MPFR, real or complex, at the
+  argument's precision plus guard bits -- never the expanded polynomial, whose
+  coefficients reach `~4^n/√n` while `|P_n| ≤ 1` on `[-1, 1]`:
+  `LegendreP[1000, 0.999997`50]` substituted into the polynomial gave
+  `2.4×10^329` in 2 s; the recurrence gives `-0.02359077123132523175718700766…`
+  (all 50 digits) in 0.7 ms.
 - **Numerics.** A non-integer order with an inexact argument evaluates through
   the Gauss series `P_n(x) = 2F1(-n, n+1; 1; (1-x)/2)` at machine or
   arbitrary (MPFR) precision, real or complex (requires `|(1-x)/2| < 1`).
