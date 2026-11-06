@@ -365,6 +365,47 @@ static Expr* lag_poly_from_coeffs(mpq_t* c, size_t deg, const Expr* x) {
  *   L_{k+1}[i] = ((2k+1+a) L_k[i] - L_k[i-1] - (k+a) L_{k-1}[i]) / (k+1).
  * Exact rational arithmetic, so no cancellation. */
 static Expr* lag_poly_numeric_a(unsigned long n, const mpq_t a, const Expr* x) {
+    /* Closed form, O(n) coefficient operations instead of the recurrence's
+     * O(n^2):  c_i = (-1)^i binom(n + a, n - i) / i!, so
+     *     c_0 = prod_{j=1..n} (a + j) / j,
+     *     c_{i+1} = -c_i (n - i) / ((i + 1)(a + i + 1)).
+     * The ratio divides by a + i + 1, so it needs a + j != 0 for j = 1..n;
+     * a negative integer in [-n, -1] takes the recurrence below.  (For n = 1000
+     * the recurrence's 10^6 operations on ~3000-digit rationals took seconds,
+     * and D[LaguerreL[1000, x], x] -- FindRoot's derivative -- paid for it.) */
+    bool closed = true;
+    if (mpz_cmp_ui(mpq_denref(a), 1) == 0 && mpz_sgn(mpq_numref(a)) < 0
+        && mpz_cmpabs_ui(mpq_numref(a), n) <= 0)
+        closed = false;
+    if (closed) {
+        mpq_t* c = lag_mpq_array_new(n + 1);
+        if (!c) return NULL;
+        mpq_t t;
+        mpq_init(t);
+        mpq_set_ui(c[0], 1, 1);
+        for (unsigned long j = 1; j <= n; j++) {          /* c_0 */
+            mpq_set_ui(t, j, 1);
+            mpq_add(t, t, a);                             /* a + j        */
+            mpq_mul(c[0], c[0], t);
+            mpq_set_ui(t, j, 1);
+            mpq_div(c[0], c[0], t);
+        }
+        for (unsigned long i = 0; i < n; i++) {
+            mpq_set_ui(t, i + 1, 1);
+            mpq_add(t, t, a);                             /* a + i + 1    */
+            mpz_mul_ui(mpq_numref(t), mpq_numref(t), i + 1);
+            mpq_canonicalize(t);                          /* (i+1)(a+i+1) */
+            mpq_div(c[i + 1], c[i], t);
+            mpz_mul_ui(mpq_numref(c[i + 1]), mpq_numref(c[i + 1]), n - i);
+            mpq_canonicalize(c[i + 1]);
+            mpq_neg(c[i + 1], c[i + 1]);
+        }
+        mpq_clear(t);
+        Expr* poly = lag_poly_from_coeffs(c, n, x);
+        lag_mpq_array_free(c, n + 1);
+        return poly;
+    }
+
     mpq_t* prev = lag_mpq_array_new(n + 1);   /* L_{k-1} */
     mpq_t* cur  = lag_mpq_array_new(n + 1);   /* L_k     */
     mpq_t* nw   = lag_mpq_array_new(n + 1);   /* L_{k+1} */

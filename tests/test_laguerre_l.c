@@ -186,6 +186,35 @@ void test_laguerre_l_attributes() {
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "LaguerreL not Protected");
 }
 
+/* The explicit polynomial agrees with the sum form
+ *   L_n^(a)(x) = Sum_k (-1)^k Binomial[n + a, n - k] x^k / k!
+ * (with Binomial[n + a, n - k] = Pochhammer[k + a + 1, n - k]/(n - k)! for a
+ * rational a) on both construction paths: the O(n) coefficient ratio (a = 0, a rational,
+ * a a negative integer below -n) and the recurrence kept for a negative
+ * integer in [-n, -1]; and D of the degree-1000 expansion is exactly
+ * -L_999^(1) at a rational point. */
+static void test_laguerre_l_explicit_closed_form(void) {
+    const char* cases[] = {
+        "Expand[LaguerreL[300, x] - Sum[(-1)^k Binomial[300, k] x^k/k!, {k, 0, 300}]] === 0",
+        /* Binomial[n + a, n - k] = Pochhammer[k + a + 1, n - k]/(n - k)! */
+        "Expand[LaguerreL[40, 7/3, x] - Sum[(-1)^k Pochhammer[k + 7/3 + 1, 40 - k]/(40 - k)! x^k/k!, {k, 0, 40}]] === 0",
+        "Expand[LaguerreL[30, -45, x] - Sum[(-1)^k Binomial[-15, 30 - k] x^k/k!, {k, 0, 30}]] === 0",
+        "Expand[LaguerreL[30, -12, x] - Sum[(-1)^k Binomial[18, 30 - k] x^k/k!, {k, 0, 30}]] === 0",
+        "(D[LaguerreL[1000, x], x] /. x -> 7/2) === -LaguerreL[999, 1, 7/2]",
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        Expr* e = parse_expression(cases[i]);
+        Expr* r = evaluate(e);
+        char* got = expr_to_string_fullform(r);
+        if (strcmp(got, "True") != 0)
+            fprintf(stdout, "FAIL: %s\n  got: %s\n", cases[i], got);
+        ASSERT_STR_EQ(got, "True");
+        free(got);
+        expr_free(e);
+        expr_free(r);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -201,6 +230,7 @@ int main(void) {
     TEST(test_laguerre_l_surfaces);
     TEST(test_laguerre_l_symbolic);
     TEST(test_laguerre_l_derivative);
+    TEST(test_laguerre_l_explicit_closed_form);
     TEST(test_laguerre_l_argcount);
     TEST(test_laguerre_l_attributes);
 
