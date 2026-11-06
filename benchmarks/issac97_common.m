@@ -35,7 +35,10 @@ sig[v_, d_Integer] := Which[
      result whose precision collapsed) leaves v == 0 undecided, and a bare
      Which would then return itself as the "check value". *)
   TrueQ[v == 0] || Precision[v] === 0. || Precision[v] === 0, {0, 0},
-  True, Module[{a = Abs[N[v]], e},
+  (* Never N[v]: on an arbitrary-precision number N[v] drops to machine
+     precision, and every check past the 16th digit would compare rounding
+     noise.  Exact input gets d + 10 digits; inexact input keeps its own. *)
+  True, Module[{a = If[Precision[v] === Infinity, N[Abs[v], d + 10], Abs[v]], e},
     e = Floor[Log10[a]];
     {Sign[v] Round[a/10^(e - d + 1)], e}]];
 

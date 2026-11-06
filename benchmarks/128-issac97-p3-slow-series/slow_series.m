@@ -27,7 +27,7 @@ term = 1/(n^Pi + n^2 + n^Sqrt[2] + 1)^(1/3);
 
 run["p3 NSum machine", NSum[Evaluate[term], {n, 1, Infinity}], sig[#, 8] &, 3];
 run["p3 NSum wp40", NSum[Evaluate[term], {n, 1, Infinity}, WorkingPrecision -> 40],
-    sig[#, 30] &];
+    sig[#, 18] &];
 run["p3 NSum Method->NIntegrate wp120",
     NSum[Evaluate[term], {n, 1, Infinity}, VerifyConvergence -> False,
          WorkingPrecision -> 120, PrecisionGoal -> 16, Method -> "NIntegrate"],

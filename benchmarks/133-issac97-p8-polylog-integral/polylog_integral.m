@@ -42,6 +42,6 @@ run["p8 exact indefinite subst x+1->z",
 
 run["p8 NIntegrate machine", NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}], sig[#, 9] &, 3];   (* 9: default PrecisionGoal is ~6-10 digits *)
 run["p8 NIntegrate wp30",
-    NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}, WorkingPrecision -> 30], sig[#, 25] &, 3];
+    NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}, WorkingPrecision -> 30], sig[#, 14] &, 3];
 run["p8 NIntegrate wp60",
-    NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}, WorkingPrecision -> 60], sig[#, 50] &];
+    NIntegrate[x^2 PolyLog[3, 1/(x + 1)], {x, 0, 1}, WorkingPrecision -> 60], sig[#, 28] &];
