@@ -47,18 +47,37 @@ static void test_guard_fires_at_user_limit(void) {
     assert_eval_eq("$RecursionLimit = 50", "50", 0);
     assert_eval_eq("Clear[g]", "Null", 0);
     assert_eval_eq("g[x_] := g[x] + 1", "Null", 0);
-    /* Just check that it terminates and produces a Hold[g]-bearing form. */
+    /* It terminates with the recursive CALL held: the guard stops the
+     * g[1] that would re-enter the evaluator, so the result is
+     * k + Hold[g[1]].  A valueless symbol never re-enters, so the head g on
+     * its own is never what gets held (Hold[g][1] was an artifact of the
+     * head being evaluated through the guarded path).  The count of
+     * accumulated +1 terms depends on the precise unwind path and is not
+     * pinned. */
     Expr* parsed = parse_expression("g[1]");
     Expr* evaluated = evaluate(parsed);
     expr_free(parsed);
     char* str = expr_to_string(evaluated);
-    /* The output should contain Hold[g]; we don't pin the exact textual
-     * form because the count of accumulated +1 terms depends on the
-     * precise unwind path. */
-    ASSERT_MSG(strstr(str, "Hold[g]") != NULL,
-               "expected Hold[g] in overflow output, got: %s", str);
+    ASSERT_MSG(strstr(str, "Hold[g[1]]") != NULL,
+               "expected Hold[g[1]] in overflow output, got: %s", str);
+    ASSERT_MSG(strstr(str, "Hold[g]") == NULL,
+               "a bare head must not be held, got: %s", str);
     free(str);
     expr_free(evaluated);
+}
+
+/* Under Trace the valueless-symbol fast path declines (every evaluation gets
+ * a trace frame), so the head g reaches evaluate()'s recursion guard itself.
+ * The guard must give the same answer the fast path does -- the symbol, not
+ * Hold[g] -- or the overflow's shape would depend on whether a trace is
+ * active: the traced run must hold the call g[1], never the bare head. */
+static void test_guard_agrees_under_trace(void) {
+    assert_eval_eq("$RecursionLimit = 50", "50", 0);
+    assert_eval_eq("Clear[g]", "Null", 0);
+    assert_eval_eq("g[x_] := g[x] + 1", "Null", 0);
+    assert_eval_eq("t = ToString[InputForm[Trace[g[1]]]]; "
+                   "{StringContainsQ[t, \"Hold[g[1]]\"], StringContainsQ[t, \"Hold[g][\"]}",
+                   "{True, False}", 0);
 }
 
 int main(void) {
@@ -70,6 +89,7 @@ int main(void) {
     TEST(test_setdelayed_evaluates_at_assign);
     TEST(test_below_minimum_is_rejected);
     TEST(test_guard_fires_at_user_limit);
+    TEST(test_guard_agrees_under_trace);
 
     printf("All $RecursionLimit tests passed!\n");
     symtab_clear();

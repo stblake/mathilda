@@ -4208,8 +4208,24 @@ static Expr* evaluate_core(Expr* e) {
      * recursion limit, wrap the input in Hold[] so it stops re-entering
      * the evaluator, set the sticky overflow flag so all enclosing
      * fixed-point loops bail, and emit a message exactly once per
-     * top-level evaluation. */
+     * top-level evaluation.
+     *
+     * A symbol with no OwnValue is exempt: it evaluates to itself without
+     * re-entering the evaluator, so there is nothing to stop, and holding it
+     * would put the Hold around a bare head (Hold[g][1]) instead of around
+     * the call that recursed (Hold[g[1]]).  This is the answer the
+     * valueless-symbol fast path (eval_valueless_symbol) gives anyway; the
+     * guard must agree with it, or the shape of an overflow result would
+     * depend on whether the symbol node had its definition cached or a
+     * trace was active. */
     if (eval_recursion_depth >= eval_recursion_limit) {
+        if (e->type == EXPR_SYMBOL) {
+            SymbolDef* sd = symtab_node_def(e);
+            if (sd && !sd->own_values) {
+                eval_dep_note(sd);
+                return expr_copy(e);
+            }
+        }
         if (!eval_overflow) {
             mth_message("$RecursionLimit", "reclim", "Recursion depth of %d exceeded.", eval_recursion_limit);
         }
