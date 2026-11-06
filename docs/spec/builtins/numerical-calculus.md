@@ -926,6 +926,48 @@ that starts at a deep zero and climbs (`(1 + Cos[x])^2000` on `[0, 2 Pi]`, zero 
 order 4000 at the centre) is not cut before its own bulk.  Endpoints are taken
 at the working precision from the iterator as written (`2 Pi`, not its double),
 and a `{x, x0, x1, …}` list of real nodes runs each segment on the MPFR path.
+
+The tanh-sinh levels are nested (each halving evaluates only the new odd
+nodes) and a level is accepted on the quadratic-convergence estimate
+`d_L^2/d_(L-1)` once the level differences shrink.  Two levels without a bit of
+progress end the run (a noise floor): an integrand whose values carry fewer
+digits than `WorkingPrecision` (machine numbers inside a `WorkingPrecision -> 25`
+run) returns at the accuracy its values support, with `NIntegrate::precw`.
+
+#### Endpoint boundary layers
+
+An integrand that climbs by many orders of magnitude into one endpoint
+(`x^x^x` on `[1, 6]` gains 36000 decades, almost all within `1e-5` of `x = 6`) is
+graded at WorkingPrecision: from the midpoint the distance to the endpoint is
+divided by 16 while `log2|f|` keeps rising by more than 4 per step, and each such
+point is a breakpoint.  The pieces are integrated from the endpoint inwards by
+nested Clenshaw–Curtis (33–257 Chebyshev points, tables shared by the pieces;
+tanh-sinh for a piece still too steep), each later piece only to an absolute
+tolerance set by the running total.  100 digits of `x^x^x` on `[1, 6]` take about
+1150 samples.
+
+#### Strong algebraic endpoint singularities
+
+`f ~ C |x - a|^p` with `-1 < p < -1/2` keeps a share `~d^(1+p)` of its integral
+within `d` of the endpoint — for `x^(-999/1000) E^-x` on `[0, 1]` half of it below
+`x = 10^-301` — out of reach of any rule that samples `x`.  When `log|f|` has the
+same slope in `log|x - a|` at three distances (read in MPFR), the map
+`x = a + span u^(1/(1+p))` makes the integrand regular in `u`; next to a non-zero
+endpoint the abscissa carries the extra bits that keep its distance to the
+endpoint exact.  At machine precision an integral whose mass lies below the
+double range (`1022 (1 + p) < 60`) is handed to that MPFR path at
+machine-equivalent precision.
+
+#### Power-law phases
+
+`A(x) K(c x^n)` with `K` = `Sin` or `Cos` oscillates ever faster toward `x = 0`
+(`n < 0`, e.g. `Sin[1/x]` on `[0, 1]`) or toward infinity (`n > 1`, e.g. `Sin[x^3]`
+on `[0, Infinity]`).  It is integrated in the phase `t = c x^n`: a
+frequency-1 half-line Fourier integral of `A((t/c)^(1/n)) (t/c)^(1/n)/(|n| t)`
+from `t0` (`c b^n` for `n < 0`; for `n > 1` the first lobe up to
+`(Pi/c)^(1/n)` stays in `x`, where the integrand is smooth, and `t0 = Pi`), with
+`K(t0 + s)` expanded into its `Cos[s]` and `Sin[s]` parts so the half-line Fourier
+rules (Ooura–Mori at WorkingPrecision) apply.
 (the reference's same-named methods plug these as *local* rules into the adaptive
 strategy, so its crude-`PrecisionGoal` values come from non-uniform subdivision;
 the values here are the well-defined uniform-composite estimates.)
@@ -942,11 +984,17 @@ the values here are the well-defined uniform-composite estimates.)
   symmetric mirror rule about each simple pole.
 - A `List` (vector/matrix) integrand threads element-wise.
 
+Option values are evaluated (`PrecisionGoal -> i` with `i = 1`), except `Method`,
+`Exclusions` and the monitors.  An integrand with no numeric value at two
+interior points of a finite range stays unevaluated with `NIntegrate::inumr`.
+
 Options: `WorkingPrecision` (default `MachinePrecision`), `PrecisionGoal`,
 `AccuracyGoal`, `MaxRecursion`, `MinRecursion`, `MaxPoints`, `Method`,
 `Exclusions` (`EvaluationMonitor` accepted and ignored).  Diagnostics:
 `NIntegrate::ncvb` (did not converge), `NIntegrate::maxp` (Monte-Carlo did not
-reach the goal), `NIntegrate::method`, `NIntegrate::badopt`.
+reach the goal), `NIntegrate::method`, `NIntegrate::badopt`, `NIntegrate::inumr`
+(the integrand is not numeric), `NIntegrate::precw` (integrand values carry fewer
+digits than `WorkingPrecision`).
 
 ### Limitations
 
