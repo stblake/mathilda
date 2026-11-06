@@ -537,7 +537,27 @@ static Expr* lag_numeric_recurrence(int64_t n, const Expr* a_e, const Expr* x_e,
         ncpx* res;
         if      (n == 0) res = &l0;
         else if (n == 1) res = &l1;
-        else {
+        else if (real_input) {
+            /* Real a and x (the common case: a root search, a table): the same
+             * recurrence on the real parts alone -- one multiply per product
+             * instead of a complex product's four, and the state rotated by
+             * swaps instead of copies.  ~4x cheaper per step. */
+            mpfr_ptr p0 = l0.re, p1 = l1.re, pu = u.re, pt = t.re;
+            for (int64_t k = 1; k < n; k++) {
+                mpfr_add_ui(pt, a.re, (unsigned long)(2 * k + 1), PRND);
+                mpfr_sub(pt, pt, x.re, PRND);                /* 2k+1+a-x   */
+                mpfr_mul(pu, pt, p1, PRND);                  /* (..) L_k   */
+                mpfr_add_ui(pt, a.re, (unsigned long)k, PRND);
+                mpfr_mul(pt, pt, p0, PRND);                  /* (k+a) L_k-1 */
+                mpfr_sub(pu, pu, pt, PRND);
+                mpfr_div_ui(pu, pu, (unsigned long)(k + 1), PRND);
+                mpfr_ptr tmp = p0; p0 = p1; p1 = pu; pu = tmp;  /* rotate  */
+            }
+            /* p1 holds L_n; move it into l1.re (the three pointers are a
+             * permutation of l0.re, l1.re, u.re). */
+            if (p1 != l1.re) mpfr_set(l1.re, p1, PRND);
+            res = &l1;
+        } else {
             for (int64_t k = 1; k < n; k++) {
                 /* u = ((2k+1) + a - x) L_k */
                 ncpx_set_ui(&t, (unsigned long)(2 * k + 1));
