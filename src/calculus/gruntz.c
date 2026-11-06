@@ -803,7 +803,7 @@ static void rewrite_omega(const Expr* exps, const SubsSet* Omega,
     }
     size_t gidx = (size_t)order[n - 1];
     Expr* g_exp = exp_arg(Omega->key[gidx]);   /* borrowed */
-    int sig = gz_sign(g_exp, x);
+    int sig = g_exp ? gz_sign(g_exp, x) : 0;
     if (g_fail || (sig != 1 && sig != -1)) { GZFAIL();
         free(order); free(heights); free(visiting);
         *f_out = expr_copy((Expr*)exps); *logw_out = mk_int(0); return; }
@@ -814,6 +814,9 @@ static void rewrite_omega(const Expr* exps, const SubsSet* Omega,
     for (size_t t = 0; t < n; t++) {
         size_t i = (size_t)order[t];
         Expr* f_exp = exp_arg(Omega->key[i]);      /* borrowed */
+        if (!f_exp) { GZFAIL(); expr_free(f);
+            free(order); free(heights); free(visiting);
+            *f_out = expr_copy((Expr*)exps); *logw_out = mk_int(0); return; }
         /* c = limitinf(f_exp / g_exp) */
         Expr* ratio = simp(mk_times(expr_copy(f_exp), mk_pow(expr_copy(g_exp), mk_int(-1))));
         Expr* c = limitinf(ratio, x);
@@ -824,6 +827,10 @@ static void rewrite_omega(const Expr* exps, const SubsSet* Omega,
         /* arg = rewrites[var] present ? its exp-arg : f_exp */
         Expr* rw = ss_rewrite_of(Omega, Omega->var[i]);
         Expr* arg = rw ? exp_arg(rw) : f_exp;      /* borrowed */
+        if (!arg) {   /* not an exponential: the rewrite cannot be read */
+            GZFAIL(); expr_free(c); expr_free(f);
+            free(order); free(heights); free(visiting);
+            *f_out = expr_copy((Expr*)exps); *logw_out = mk_int(0); return; }
         /* repl = exp(arg - c*g_exp) * wsym^(wsign*c) */
         Expr* cg = simp(mk_times(expr_copy(c), expr_copy(g_exp)));
         Expr* aminus = simp(mk_plus(expr_copy(arg), mk_neg(cg)));
@@ -845,11 +852,28 @@ static void rewrite_omega(const Expr* exps, const SubsSet* Omega,
 /* Read the leading (coef, exponent) of a Series result in `w`.            */
 /* Returns true and fills c0 (owned), num/den on success.                  */
 /* ---------------------------------------------------------------------- */
+/* Restore the log scale in a coefficient read off a Series in w: the
+ * placeholder `from` (P = -Log[w]) becomes `to` (-log w as a function of x),
+ * and a Log[w] the expansion itself produced becomes log w = -to (the logx
+ * convention).  Owned result; a plain copy when `from` is NULL. */
+static Expr* restore_logscale(const Expr* c, const Expr* w,
+                              const Expr* from, const Expr* to) {
+    if (!from) return expr_copy((Expr*)c);
+    Expr* lw = mk_log(expr_copy((Expr*)w));
+    Expr* lwv = simp(mk_neg(expr_copy((Expr*)to)));
+    Expr* t = xreplace(c, lw, lwv);
+    expr_free(lw); expr_free(lwv);
+    Expr* r = xreplace(t, from, to);
+    expr_free(t);
+    return r;
+}
+
 static bool read_series_leading(Expr* sd, const Expr* w,
-                                Expr** c0, int64_t* num, int64_t* den) {
+                                Expr** c0, int64_t* num, int64_t* den,
+                                const Expr* from, const Expr* to) {
     if (!sd) return false;
     /* constant in w */
-    if (!has_x(sd, w)) { *c0 = expr_copy(sd); *num = 0; *den = 1; return true; }
+    if (!has_x(sd, w)) { *c0 = restore_logscale(sd, w, from, to); *num = 0; *den = 1; return true; }
 
     Expr* prefactor = NULL;
     Expr* s = sd;
@@ -873,11 +897,39 @@ static bool read_series_leading(Expr* sd, const Expr* w,
         den_e->type != EXPR_INTEGER) { if (prefactor) expr_free(prefactor); return false; }
     int64_t nmin = nmin_e->data.integer;
     int64_t dd   = den_e->data.integer;
+    /* The first coefficient that is not zero.  A coefficient is a function
+     * of the slower scales (x, log w), and the rewrite can leave a zero in an
+     * unnormalised spelling -- -1 + E^(A - A') with A, A' equal after
+     * evaluation (x^(x^x) at 0+ moves up to such a pair) -- so a
+     * non-literal coefficient is re-evaluated and, failing a literal 0,
+     * zero-tested.  Taking a hidden zero as the leading term reads the wrong
+     * exponent and coefficient; the tester's TRUE alone skips it. */
     size_t k = 0, kn = coefs->data.function.arg_count;
-    while (k < kn && is_lit_zero(coefs->data.function.args[k])) k++;
-    if (k == kn) { if (prefactor) expr_free(prefactor); return false; } /* escalate */
-    Expr* lead = expr_copy(coefs->data.function.args[k]);
-    if (prefactor) lead = simp(mk_times(prefactor, lead));
+    Expr* lead = NULL;
+    for (; k < kn; k++) {
+        Expr* ck = coefs->data.function.args[k];
+        if (is_lit_zero(ck)) continue;
+        if (ck->type != EXPR_FUNCTION || head_is(ck, SYM_Rational) ||
+            head_is(ck, SYM_Complex)) {
+            lead = restore_logscale(ck, w, from, to);
+            break;
+        }
+        /* `from -> to` (optional) restores a placeholder before the test: a
+         * coefficient can vanish only once it is, -1 + E^(P - x) with the
+         * log-scale P = -Log[w] = x. */
+        Expr* ce = simp(restore_logscale(ck, w, from, to));
+        if (is_lit_zero(ce) || zero_test_decide(ce) == ZERO_TEST_TRUE) {
+            expr_free(ce); continue;
+        }
+        lead = ce;
+        break;
+    }
+    if (!lead) { if (prefactor) expr_free(prefactor); return false; } /* escalate */
+    if (prefactor) {
+        Expr* pf = from ? restore_logscale(prefactor, w, from, to) : prefactor;
+        if (from) expr_free(prefactor);
+        lead = simp(mk_times(pf, lead));
+    }
     *c0  = lead;
     *num = nmin + (int64_t)k;
     *den = dd;
@@ -934,7 +986,7 @@ static Expr* expand_logs(const Expr* e, const Expr* w, const Expr* x, const Expr
                     (Expr*[]){ expr_copy((Expr*)w), mk_int(0), mk_int(order) }, 3);
                 Expr* gsd = simp(series_in_w(expr_copy(G2), vspec, w));
                 Expr* clead; int64_t vnum = 0, vden = 1;
-                bool rok = read_series_leading(gsd, w, &clead, &vnum, &vden);
+                bool rok = read_series_leading(gsd, w, &clead, &vnum, &vden, NULL, NULL);
                 /* H(0) = clead (the leading coefficient); usable only if it is a
                  * clean nonzero constant free of w and of the frozen lw_sym --
                  * otherwise Log[H] itself would carry a Log of the log-scale. */
@@ -1059,9 +1111,8 @@ static bool series_leadterm(const Expr* f, const Expr* wsym, const Expr* x, cons
             (Expr*[]){ expr_copy((Expr*)wsym), mk_int(0), mk_int(ord) }, 3);
         Expr* sd = simp(series_in_w(f4, spec, wsym));
         Expr* c0; int64_t num, den;
-        if (read_series_leading(sd, wsym, &c0, &num, &den)) {
-            Expr* c0r = xreplace(c0, pos_sym, neg_logw);   /* restore -Log[w] */
-            expr_free(c0);
+        if (read_series_leading(sd, wsym, &c0, &num, &den, pos_sym, neg_logw)) {
+            Expr* c0r = c0;                                /* -Log[w] restored */
             if (has_x(c0r, wsym)) { expr_free(c0r); }  /* not a proper series */
             else { *c0_out = c0r; *num_out = num; *den_out = den; ok = true; }
         }
@@ -1090,6 +1141,13 @@ static Expr* collapse_log_exp(const Expr* e) {
     return r;
 }
 static Expr* moveup_expr(const Expr* e, const Expr* x) {
+    /* An exponential keeps its shape: an mrv key or rewrite is read back
+     * through exp_arg, and evaluating the moved-up E^(k Log[d] + ...) can
+     * fold it into a power d^k of another dummy, which is no longer an
+     * exponential (x^(x^x) at 0+ moved up so; rewrite_omega then read a NULL
+     * exponent).  The value is the same; only the outer Power stays unfolded. */
+    Expr* ea = exp_arg(e);
+    if (ea) return mk_exp(moveup_expr(ea, x));
     Expr* ex = mk_exp(expr_copy((Expr*)x));
     Expr* sub = xreplace(e, x, ex);
     expr_free(ex);

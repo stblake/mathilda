@@ -52,6 +52,7 @@
 #include "limit_leadterm.h" /* leading-term limits (layer_leading_term)       */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "numeric.h"   /* expr_is_numeric_quantity: Limit::ivar */
+#include "zero_test.h" /* zero_test_decide: closed-form series coefficients */
 /* Note: Series and D are invoked symbolically (through the evaluator),
  * not via direct C calls, so series.h / deriv.h are intentionally not
  * included here. Adding the Series and Derivative symbols to the symbol
@@ -1215,10 +1216,24 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
     int64_t den  = den_e->data.integer;
     (void)var; (void)x0;
 
-    /* Find first nonzero coefficient index. */
+    /* Find first nonzero coefficient index. A coefficient that is a closed-
+     * form constant but not a literal number (2 PolyGamma[2, 1] + 4 Zeta[3],
+     * E^(Log[30]/3) - 30^(1/3)) is zero-tested: Series does not normalise
+     * special-function values at their special points, so a term the input
+     * cancels exactly can survive as an unsimplified zero, and reading it as
+     * the leading term turns a finite limit into a pole (the LogGamma Taylor
+     * cancellation read ComplexInfinity). Such a coefficient counts as zero
+     * only when the tester proves it; any other verdict keeps it. */
     size_t k = 0;
     size_t kn = coefs->data.function.arg_count;
-    while (k < kn && is_lit_zero(coefs->data.function.args[k])) k++;
+    while (k < kn) {
+        Expr* ck = coefs->data.function.args[k];
+        if (is_lit_zero(ck)) { k++; continue; }
+        if (ck->type == EXPR_FUNCTION && !head_is(ck, SYM_Rational) &&
+            !head_is(ck, SYM_Complex) && expr_is_numeric_quantity(ck) &&
+            zero_test_decide(ck) == ZERO_TEST_TRUE) { k++; continue; }
+        break;
+    }
     if (k == kn) {
         /* All coefficients are literally zero within the computed range.
          * The leading behaviour is below the O-term; we can't read off a
