@@ -1541,6 +1541,70 @@ int gb_flint_buchberger(GBPoly* const* F, size_t n, GBPoly*** out, size_t* out_n
     return gf_basis(F, n, 0, out, out_n);
 }
 
+/* The quotient ring Q[X]/<F> of a zero-dimensional ideal: its standard
+ * monomials (DRL basis, FLINT engine) and the multiplication matrices, for
+ * the eigenvalue method of NSolve.  *B_out: d exponent rows of n_vars ints;
+ * *M_out: n_vars d x d matrices, M[(v d + r) d + c] = the coefficient of
+ * standard monomial r in NF(x_v b_c), as mpq (caller mpq_clears and frees
+ * both).  Returns 1, or 0 to decline (no FLINT, not zero-dimensional,
+ * d > maxd, unit ideal -> *d_out = 0 with return 1). */
+int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
+                      int** B_out, int* d_out, mpq_t** M_out) {
+    *B_out = NULL; *d_out = 0; *M_out = NULL;
+    if (!gf_enabled() || n == 0) return 0;
+    const GBPoly* f0 = NULL;
+    for (size_t i = 0; i < n; i++) if (F[i]->n_terms) { f0 = F[i]; break; }
+    if (!f0 || f0->n_vars < 1) return 0;
+    for (size_t i = 0; i < n; i++)
+        for (size_t t = 0; t < F[i]->n_terms * (size_t)F[i]->n_vars; t++)
+            if (F[i]->exps[t] < 0) return 0;
+    int timed_out = 0, done = 0;
+    slong nv = f0->n_vars;
+    Gf Dg; gf_init(&Dg, 0, 0, nv, ORD_DEGREVLEX);
+    slong* idx = NULL; slong nd = 0;
+    if (gf_engine(&Dg, F, n, 0, &idx, &nd, &timed_out)) {
+        int unit = 0;
+        for (slong i = 0; i < nd && !unit; i++) unit = gf_is_unit(&Dg, idx[i]);
+        if (unit) {
+            done = 1;                                     /* no solutions */
+        } else {
+            GfMon S; gfm_init(&S, nv);
+            if (gf_staircase(&Dg, idx, nd, &S, maxd)) {
+                slong D = S.n;
+                fmpz* num = _fmpz_vec_init(nv * D * D);
+                fmpz* den = _fmpz_vec_init(nv * D);
+                if (gf_mult_matrices(&Dg, idx, nd, &S, num, den) && !Dg.expired) {
+                    int* B = malloc(sizeof(int) * (size_t)(D * nv));
+                    for (slong i = 0; i < D * nv; i++) B[i] = (int)S.ex[i];
+                    mpq_t* M = malloc(sizeof(mpq_t) * (size_t)(nv * D * D));
+                    mpz_t zn, zd; mpz_init(zn); mpz_init(zd);
+                    for (slong v = 0; v < nv; v++)
+                        for (slong c = 0; c < D; c++) {
+                            fmpz_get_mpz(zd, den + v * D + c);
+                            for (slong r = 0; r < D; r++) {
+                                mpq_t* q = M + (v * D + r) * D + c;
+                                mpq_init(*q);
+                                fmpz_get_mpz(zn, num + (v * D + c) * D + r);
+                                mpq_set_num(*q, zn);
+                                mpq_set_den(*q, zd);
+                                mpq_canonicalize(*q);
+                            }
+                        }
+                    mpz_clear(zn); mpz_clear(zd);
+                    *B_out = B; *d_out = (int)D; *M_out = M; done = 1;
+                }
+                _fmpz_vec_clear(num, nv * D * D);
+                _fmpz_vec_clear(den, nv * D);
+            }
+            gfm_clear(&S);
+        }
+    }
+    flint_free(idx);
+    gf_clear(&Dg);
+    if (timed_out) tc_check_deadline();
+    return done;
+}
+
 
 /* CoefficientDomain -> InexactNumbers: the reduced Lex basis of a
  * zero-dimensional ideal over Q with coefficients justified to `bits` bits,
@@ -1589,6 +1653,11 @@ int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
 }
 
 #else  /* !USE_FLINT */
+
+int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
+                      int** B_out, int* d_out, mpq_t** M_out) {
+    (void)F; (void)n; (void)maxd; *B_out = NULL; *d_out = 0; *M_out = NULL; return 0;
+}
 
 int gb_flint_lex_inexact(GBPoly* const* F, size_t n, long bits,
                          GBPoly*** out, size_t* out_n) {

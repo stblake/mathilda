@@ -52,8 +52,10 @@
 #include "numeric_complex.h"
 #include "arithmetic.h"
 #include "poly/groebner.h"
+#include "poly/gb_flint.h"  /* gb_flint_quotient */
 #include "poly/poly.h"        /* is_polynomial, get_degree_poly */
 #include "linalg/eigen.h"
+#include "linalg/lapack.h"  /* mat_lapack_dgeev: double eigenvector seeds */
 #include "nroots.h"           /* builtin_nroots */
 
 /* Safety caps: above these the system path bails (returns NULL) rather than
@@ -197,6 +199,10 @@ static bool build_mult_matrix(int var, const int* B, int d, int nvar,
         for (int k = 0; k < nvar; k++) e[k] = bj[k];
         e[var] += 1;
 
+        /* x_var * B_j itself standard: its normal form is itself. */
+        int self = mono_index(B, d, nvar, e);
+        if (self >= 0) { mpq_set_ui(M[(size_t)self * d + j], 1, 1); continue; }
+
         GBPoly* mono = gb_poly_new(nvar, order, 0);
         gb_poly_push_term_si(mono, e, 1, 1);
         gb_poly_normalize(mono);
@@ -226,6 +232,417 @@ static long nsys_rand(uint64_t* state) {
     return ((*state >> 17) & 1u) ? v : -v;
 }
 
+/* ------------------------------------------------------------------ *
+ *  The original system in evaluation form, for the Newton polish and the
+ *  verification of each eigenvector candidate.
+ * ------------------------------------------------------------------ */
+typedef struct { int nt; int* ex; double* cd; mpq_t* c; } SysP;
+
+static SysP* sys_build(GBPoly* const* F, int nF, int nvar) {
+    SysP* S = (SysP*)malloc(sizeof(SysP) * (size_t)(nF ? nF : 1));
+    for (int i = 0; i < nF; i++) {
+        size_t nt = F[i]->n_terms;
+        S[i].nt = (int)nt;
+        S[i].ex = (int*)malloc(sizeof(int) * (nt ? nt : 1) * (size_t)nvar);
+        S[i].c = (mpq_t*)malloc(sizeof(mpq_t) * (nt ? nt : 1));
+        S[i].cd = (double*)malloc(sizeof(double) * (nt ? nt : 1));
+        memcpy(S[i].ex, F[i]->exps, sizeof(int) * nt * (size_t)nvar);
+        for (size_t t = 0; t < nt; t++) {
+            mpq_init(S[i].c[t]);
+            mpq_set(S[i].c[t], F[i]->coefs[t]);
+            S[i].cd[t] = fabs(mpq_get_d(F[i]->coefs[t]));
+        }
+    }
+    return S;
+}
+
+static void sys_free(SysP* S, int nF) {
+    for (int i = 0; i < nF; i++) {
+        for (int t = 0; t < S[i].nt; t++) mpq_clear(S[i].c[t]);
+        free(S[i].c); free(S[i].ex); free(S[i].cd);
+    }
+    free(S);
+}
+
+/* f_i(x) and (J != NULL) the Jacobian J[i*nv + k] at x, in MPFR complex at
+ * wp; scale[i] = sum |c_t| |x^e_t| (double), the size of the terms whose
+ * cancellation f_i is. */
+static void sys_eval(const SysP* S, int np, int nv, const ncpx* x, mpfr_prec_t wp,
+                     ncpx* f, ncpx* J, double* scale) {
+    int maxd = 0;
+    for (int i = 0; i < np; i++)
+        for (int t = 0; t < S[i].nt; t++)
+            for (int k = 0; k < nv; k++)
+                if (S[i].ex[(size_t)t * nv + k] > maxd) maxd = S[i].ex[(size_t)t * nv + k];
+    int W = maxd + 1;
+    ncpx* pw = (ncpx*)malloc(sizeof(ncpx) * (size_t)nv * (size_t)W);
+    double* ax = (double*)malloc(sizeof(double) * (size_t)nv);
+    for (int k = 0; k < nv; k++) {
+        ncpx_init(&pw[k * W], wp);
+        ncpx_set_ui(&pw[k * W], 1);
+        for (int e = 1; e < W; e++) {
+            ncpx_init(&pw[k * W + e], wp);
+            ncpx_mul(&pw[k * W + e], &pw[k * W + e - 1], &x[k], wp);
+        }
+        /* |x_k| floored at 1: a coordinate that vanishes at the solution makes
+         * every term of some equation vanish (Katsura: u1 = ... = u5 = 0), and
+         * |f| / sum |terms| is then ~1 however accurate the point is.  The
+         * floor measures such coordinates absolutely, as the duplicate test
+         * does. */
+        ax[k] = hypot(mpfr_get_d(x[k].re, MPFR_RNDN), mpfr_get_d(x[k].im, MPFR_RNDN));
+        if (ax[k] < 1.0) ax[k] = 1.0;
+    }
+    ncpx m, cm; ncpx_init(&m, wp); ncpx_init(&cm, wp);
+    mpfr_t cq; mpfr_init2(cq, wp);
+    for (int i = 0; i < np; i++) {
+        ncpx_set_ui(&f[i], 0);
+        if (J) for (int k = 0; k < nv; k++) ncpx_set_ui(&J[(size_t)i * nv + k], 0);
+        double sc = 0.0;
+        for (int t = 0; t < S[i].nt; t++) {
+            const int* e = S[i].ex + (size_t)t * nv;
+            mpfr_set_q(cq, S[i].c[t], MPFR_RNDN);
+            ncpx_set_ui(&m, 1);
+            double am = S[i].cd[t];
+            for (int k = 0; k < nv; k++) {
+                if (e[k]) ncpx_mul(&m, &m, &pw[k * W + e[k]], wp);
+                am *= pow(ax[k], (double)e[k]);
+            }
+            sc += am;
+            mpfr_mul(cm.re, m.re, cq, MPFR_RNDN);
+            mpfr_mul(cm.im, m.im, cq, MPFR_RNDN);
+            ncpx_add(&f[i], &f[i], &cm);
+            if (!J) continue;
+            for (int k = 0; k < nv; k++) {
+                if (!e[k]) continue;
+                /* d/dx_k: e_k c x_k^(e_k-1) prod_{j != k} x_j^e_j */
+                ncpx_set_ui(&m, 1);
+                for (int j = 0; j < nv; j++) {
+                    int ej = (j == k) ? e[j] - 1 : e[j];
+                    if (ej) ncpx_mul(&m, &m, &pw[j * W + ej], wp);
+                }
+                mpfr_mul(cm.re, m.re, cq, MPFR_RNDN);
+                mpfr_mul(cm.im, m.im, cq, MPFR_RNDN);
+                mpfr_mul_si(cm.re, cm.re, e[k], MPFR_RNDN);
+                mpfr_mul_si(cm.im, cm.im, e[k], MPFR_RNDN);
+                ncpx_add(&J[(size_t)i * nv + k], &J[(size_t)i * nv + k], &cm);
+            }
+        }
+        scale[i] = sc;
+    }
+    ncpx_clear(&m); ncpx_clear(&cm); mpfr_clear(cq);
+    for (int k = 0; k < nv * W; k++) ncpx_clear(&pw[k]);
+    free(pw); free(ax);
+}
+
+/* max_i |f_i| / scale_i from an evaluation. */
+static double sys_relres(const ncpx* f, const double* scale, int np) {
+    double worst = 0.0;
+    for (int i = 0; i < np; i++) {
+        double a = hypot(mpfr_get_d(f[i].re, MPFR_RNDN), mpfr_get_d(f[i].im, MPFR_RNDN));
+        double r = scale[i] > 0.0 ? a / scale[i] : a;
+        if (!(r == r)) return INFINITY;
+        if (r > worst) worst = r;
+    }
+    return worst;
+}
+
+/* Solve J d = f (n x n complex) in place by partial-pivot elimination; the
+ * solution overwrites f.  false when J is singular. */
+static bool cpx_solve(ncpx* J, ncpx* f, int n, mpfr_prec_t wp) {
+    ncpx t, q; ncpx_init(&t, wp); ncpx_init(&q, wp);
+    mpfr_t a, b; mpfr_init2(a, wp); mpfr_init2(b, wp);
+    bool ok = true;
+    for (int c = 0; c < n && ok; c++) {
+        int pr = c;
+        ncpx_abs(a, &J[(size_t)c * n + c]);
+        for (int r = c + 1; r < n; r++) {
+            ncpx_abs(b, &J[(size_t)r * n + c]);
+            if (mpfr_cmp(b, a) > 0) { mpfr_set(a, b, MPFR_RNDN); pr = r; }
+        }
+        if (mpfr_zero_p(a)) { ok = false; break; }
+        if (pr != c) {
+            for (int k = 0; k < n; k++) {
+                ncpx_set(&t, &J[(size_t)pr * n + k]);
+                ncpx_set(&J[(size_t)pr * n + k], &J[(size_t)c * n + k]);
+                ncpx_set(&J[(size_t)c * n + k], &t);
+            }
+            ncpx_set(&t, &f[pr]); ncpx_set(&f[pr], &f[c]); ncpx_set(&f[c], &t);
+        }
+        for (int r = c + 1; r < n; r++) {
+            ncpx_div(&q, &J[(size_t)r * n + c], &J[(size_t)c * n + c], wp);
+            for (int k = c; k < n; k++) {
+                ncpx_mul(&t, &q, &J[(size_t)c * n + k], wp);
+                ncpx_sub(&J[(size_t)r * n + k], &J[(size_t)r * n + k], &t);
+            }
+            ncpx_mul(&t, &q, &f[c], wp);
+            ncpx_sub(&f[r], &f[r], &t);
+        }
+    }
+    for (int c = n - 1; c >= 0 && ok; c--) {
+        for (int k = c + 1; k < n; k++) {
+            ncpx_mul(&t, &J[(size_t)c * n + k], &f[k], wp);
+            ncpx_sub(&f[c], &f[c], &t);
+        }
+        ncpx_div(&f[c], &f[c], &J[(size_t)c * n + c], wp);
+    }
+    ncpx_clear(&t); ncpx_clear(&q); mpfr_clear(a); mpfr_clear(b);
+    return ok;
+}
+
+/* Newton on the original (square) system from the eigenvector estimate x,
+ * in place, at wp.  Returns the final relative residual.  At a multiple
+ * solution Newton only creeps; the residual then decides. */
+static double sys_polish(const SysP* S, int n, ncpx* x, mpfr_prec_t wp) {
+    ncpx* f = (ncpx*)malloc(sizeof(ncpx) * (size_t)n);
+    ncpx* J = (ncpx*)malloc(sizeof(ncpx) * (size_t)n * (size_t)n);
+    double* sc = (double*)malloc(sizeof(double) * (size_t)n);
+    for (int i = 0; i < n; i++) ncpx_init(&f[i], wp);
+    for (int i = 0; i < n * n; i++) ncpx_init(&J[i], wp);
+    double floor_rel = pow(2.0, -(double)wp + 8.0);
+    double rr = INFINITY;
+    for (int it = 0; it < 12; it++) {
+        sys_eval(S, n, n, x, wp, f, J, sc);
+        rr = sys_relres(f, sc, n);
+        if (rr <= floor_rel) break;
+        if (!cpx_solve(J, f, n, wp)) break;
+        double step = 0.0, xs = 1.0;
+        for (int k = 0; k < n; k++) {
+            ncpx_sub(&x[k], &x[k], &f[k]);
+            double dk = hypot(mpfr_get_d(f[k].re, MPFR_RNDN), mpfr_get_d(f[k].im, MPFR_RNDN));
+            double xk = hypot(mpfr_get_d(x[k].re, MPFR_RNDN), mpfr_get_d(x[k].im, MPFR_RNDN));
+            if (dk > step) step = dk;
+            if (xk > xs) xs = xk;
+        }
+        if (!(step == step)) { rr = INFINITY; break; }
+        if (step <= floor_rel * xs) {
+            sys_eval(S, n, n, x, wp, f, NULL, sc);
+            rr = sys_relres(f, sc, n);
+            break;
+        }
+    }
+    for (int i = 0; i < n; i++) ncpx_clear(&f[i]);
+    for (int i = 0; i < n * n; i++) ncpx_clear(&J[i]);
+    free(f); free(J); free(sc);
+    return rr;
+}
+
+/* Accepted solutions of one attempt: coordinates (n x nvar ncpx), the
+ * multiplicity of each, the eigenvalue it came from, and the bookkeeping
+ * that decides whether the attempt is complete. */
+typedef struct {
+    int n, cap, nvar, total, lost, rejected;
+    ncpx* x; int* mult; double* lre; double* lim;
+} NsysSols;
+
+static void nsys_sols_clear(NsysSols* s) {
+    for (int i = 0; i < s->n * s->nvar; i++) ncpx_clear(&s->x[i]);
+    free(s->x); free(s->mult); free(s->lre); free(s->lim);
+    memset(s, 0, sizeof *s);
+}
+
+/* One eigenvalue attempt at working precision wp with a fresh random linear
+ * form.  Returns 0 when the eigen solver fails. */
+static int nsys_attempt(mpq_t* Mx, const int* B, int d, int nvar, mpfr_prec_t wp,
+                        uint64_t* st, const SysP* S, int nS,
+                        Expr** polys, int npoly, Expr** vars, int verify,
+                        long target_bits, int use_lapack, NsysSols* out) {
+    (void)B; (void)nS;
+    memset(out, 0, sizeof *out);
+    out->nvar = nvar;
+    long* cform = (long*)malloc(sizeof(long) * (size_t)nvar);
+    /* Coefficients with ~30 random bits: small integers make l(p) = l(q) for
+     * distinct solutions of a structured system (Katsura, cyclic) far too
+     * likely, and a repeated eigenvalue of M_l has no reliable eigenvectors. */
+    for (int i = 0; i < nvar; i++) {
+        long a = nsys_rand(st), b = nsys_rand(st), c = nsys_rand(st);
+        cform[i] = a * 100000000L + b * 10000L + c;   /* |cform| < 2^30 */
+    }
+    mpfr_t* Ml = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d * (size_t)d);
+    for (size_t t = 0; t < (size_t)d * d; t++) mpfr_init2(Ml[t], wp);
+    {
+        mpq_t acc, tmp; mpq_init(acc); mpq_init(tmp);
+        for (size_t cell = 0; cell < (size_t)d * d; cell++) {
+            mpq_set_ui(acc, 0, 1);
+            for (int i = 0; i < nvar; i++) {
+                mpq_set_si(tmp, cform[i], 1000000000UL);
+                mpq_canonicalize(tmp);
+                mpq_mul(tmp, tmp, Mx[(size_t)i * d * d + cell]);
+                mpq_add(acc, acc, tmp);
+            }
+            mpfr_set_q(Ml[cell], acc, MPFR_RNDN);
+        }
+        mpq_clear(acc); mpq_clear(tmp);
+    }
+    free(cform);
+
+    mpfr_t* ev_re = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d);
+    mpfr_t* ev_im = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d);
+    mpfr_t* V_re  = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d * (size_t)d);
+    mpfr_t* V_im  = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d * (size_t)d);
+    for (int i = 0; i < d; i++) { mpfr_init2(ev_re[i], wp); mpfr_init2(ev_im[i], wp); }
+    for (size_t t = 0; t < (size_t)d * d; t++) { mpfr_init2(V_re[t], wp); mpfr_init2(V_im[t], wp); }
+    int est = -1;
+    if (use_lapack) {
+        /* Double-precision eigenvectors (LAPACK dgeev) as Newton seeds: the
+         * polish on the original equations supplies the accuracy, so the
+         * eigenproblem need not be solved at wp.  A seed that misses (an
+         * ill-conditioned eigenvalue) shows up as a rejected or lost
+         * candidate and the caller redoes the attempt in MPFR. */
+        double* A = (double*)malloc(sizeof(double) * (size_t)d * (size_t)d);
+        double* wr = (double*)malloc(sizeof(double) * (size_t)d);
+        double* wi = (double*)malloc(sizeof(double) * (size_t)d);
+        double* VR = (double*)malloc(sizeof(double) * (size_t)d * (size_t)d);
+        for (int r = 0; r < d; r++)
+            for (int c = 0; c < d; c++)
+                A[(size_t)r + (size_t)c * d] = mpfr_get_d(Ml[(size_t)r * d + c], MPFR_RNDN);
+        if (mat_lapack_dgeev(d, A, d, wr, wi, VR, d) == 0) {
+            est = 0;
+            for (int k = 0; k < d; k++) {
+                mpfr_set_d(ev_re[k], wr[k], MPFR_RNDN);
+                mpfr_set_d(ev_im[k], wi[k], MPFR_RNDN);
+                if (wi[k] == 0.0) {
+                    for (int j = 0; j < d; j++) {
+                        mpfr_set_d(V_re[(size_t)k * d + j], VR[(size_t)j + (size_t)k * d], MPFR_RNDN);
+                        mpfr_set_zero(V_im[(size_t)k * d + j], 1);
+                    }
+                } else if (k + 1 < d && wi[k] > 0.0) {
+                    /* a conjugate pair: columns k (real) and k+1 (imaginary) */
+                    for (int j = 0; j < d; j++) {
+                        double re = VR[(size_t)j + (size_t)k * d];
+                        double im = VR[(size_t)j + (size_t)(k + 1) * d];
+                        mpfr_set_d(V_re[(size_t)k * d + j], re, MPFR_RNDN);
+                        mpfr_set_d(V_im[(size_t)k * d + j], im, MPFR_RNDN);
+                        mpfr_set_d(V_re[(size_t)(k + 1) * d + j], re, MPFR_RNDN);
+                        mpfr_set_d(V_im[(size_t)(k + 1) * d + j], -im, MPFR_RNDN);
+                    }
+                    mpfr_set_d(ev_re[k + 1], wr[k + 1], MPFR_RNDN);
+                    mpfr_set_d(ev_im[k + 1], wi[k + 1], MPFR_RNDN);
+                    k++;
+                } else {
+                    est = -1; break;                     /* unpaired: give up */
+                }
+            }
+        }
+        free(A); free(wr); free(wi); free(VR);
+    } else {
+        est = eigen_all_eigenvectors_real_mpfr(Ml, (size_t)d, wp, ev_re, ev_im, V_re, V_im);
+    }
+    for (size_t t = 0; t < (size_t)d * d; t++) mpfr_clear(Ml[t]);
+    free(Ml);
+    if (est != 0) {
+        for (int i = 0; i < d; i++) { mpfr_clear(ev_re[i]); mpfr_clear(ev_im[i]); }
+        for (size_t t = 0; t < (size_t)d * d; t++) { mpfr_clear(V_re[t]); mpfr_clear(V_im[t]); }
+        free(ev_re); free(ev_im); free(V_re); free(V_im);
+        return 0;
+    }
+
+    mpfr_t* MxF = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)nvar * (size_t)d * (size_t)d);
+    for (size_t t = 0; t < (size_t)nvar * d * d; t++) {
+        mpfr_init2(MxF[t], wp);
+        mpfr_set_q(MxF[t], Mx[t], MPFR_RNDN);
+    }
+    double tol = pow(2.0, -0.5 * (double)target_bits);   /* relative residual */
+    double old_tol = pow(10.0, -0.5 * numeric_bits_to_digits(target_bits));
+    if (old_tol < 1e-6) old_tol = 1e-6;
+    double same_tol = 4.0 * tol;                          /* duplicate point  */
+
+    out->cap = d;
+    out->x = (ncpx*)malloc(sizeof(ncpx) * (size_t)d * (size_t)nvar);
+    out->mult = (int*)malloc(sizeof(int) * (size_t)d);
+    out->lre = (double*)malloc(sizeof(double) * (size_t)d);
+    out->lim = (double*)malloc(sizeof(double) * (size_t)d);
+
+    ncpx* vk = (ncpx*)malloc(sizeof(ncpx) * (size_t)d);
+    for (int t = 0; t < d; t++) ncpx_init(&vk[t], wp);
+    ncpx* coord = (ncpx*)malloc(sizeof(ncpx) * (size_t)nvar);
+    for (int i = 0; i < nvar; i++) ncpx_init(&coord[i], wp);
+    ncpx prod, pivot, num;
+    ncpx_init(&prod, wp); ncpx_init(&pivot, wp); ncpx_init(&num, wp);
+    mpfr_t bestm, mag; mpfr_init2(bestm, wp); mpfr_init2(mag, wp);
+
+    for (int k = 0; k < d; k++) {
+        /* x_i(p_k) = (M_{x_i} v_k)[j*] / v_k[j*], j* the largest component */
+        int jstar = 0;
+        mpfr_set_si(bestm, -1, MPFR_RNDN);
+        for (int j = 0; j < d; j++) {
+            mpfr_set(vk[j].re, V_re[(size_t)k * d + j], MPFR_RNDN);
+            mpfr_set(vk[j].im, V_im[(size_t)k * d + j], MPFR_RNDN);
+            mpfr_hypot(mag, vk[j].re, vk[j].im, MPFR_RNDN);
+            if (mpfr_cmp(mag, bestm) > 0) { mpfr_set(bestm, mag, MPFR_RNDN); jstar = j; }
+        }
+        mpfr_set(pivot.re, vk[jstar].re, MPFR_RNDN);
+        mpfr_set(pivot.im, vk[jstar].im, MPFR_RNDN);
+        for (int i = 0; i < nvar; i++) {
+            mpfr_set_zero(num.re, 1); mpfr_set_zero(num.im, 1);
+            const mpfr_t* Mi = MxF + (size_t)i * d * d;
+            for (int m = 0; m < d; m++) {
+                mpfr_mul(prod.re, Mi[(size_t)jstar * d + m], vk[m].re, MPFR_RNDN);
+                mpfr_mul(prod.im, Mi[(size_t)jstar * d + m], vk[m].im, MPFR_RNDN);
+                mpfr_add(num.re, num.re, prod.re, MPFR_RNDN);
+                mpfr_add(num.im, num.im, prod.im, MPFR_RNDN);
+            }
+            ncpx_div(&coord[i], &num, &pivot, wp);
+        }
+
+        /* Polish on the original equations, then verify: relative residual
+         * (the size of f against the terms it cancels) for a square system;
+         * the absolute residual for an overdetermined one. */
+        bool pass;
+        if (S) {
+            double rr = sys_polish(S, nvar, coord, wp);
+            pass = !verify || rr <= tol;
+        } else {
+            double resid = verify ? system_residual(polys, npoly, vars, nvar, coord) : 0.0;
+            pass = !verify || (resid <= old_tol && resid == resid);
+        }
+        if (!pass) { out->rejected++; continue; }
+
+        double lr = mpfr_get_d(ev_re[k], MPFR_RNDN), li = mpfr_get_d(ev_im[k], MPFR_RNDN);
+        int dup = -1;
+        for (int s = 0; s < out->n && dup < 0; s++) {
+            double worst = 0.0;
+            for (int i = 0; i < nvar; i++) {
+                const ncpx* y = out->x + (size_t)s * nvar + i;
+                double dr = mpfr_get_d(coord[i].re, MPFR_RNDN) - mpfr_get_d(y->re, MPFR_RNDN);
+                double di = mpfr_get_d(coord[i].im, MPFR_RNDN) - mpfr_get_d(y->im, MPFR_RNDN);
+                double sy = hypot(mpfr_get_d(y->re, MPFR_RNDN), mpfr_get_d(y->im, MPFR_RNDN));
+                double rel = hypot(dr, di) / (sy > 1.0 ? sy : 1.0);
+                if (rel > worst) worst = rel;
+            }
+            if (worst <= same_tol) dup = s;
+        }
+        if (dup >= 0) {
+            /* A multiple solution: its eigenvalues cluster.  Two
+             * well-separated eigenvalues on one point: a solution lost. */
+            double dl = hypot(lr - out->lre[dup], li - out->lim[dup]);
+            double sl = hypot(lr, li);
+            if (dl <= 0x1p-16 * (1.0 + sl)) { out->mult[dup]++; out->total++; }
+            else out->lost++;
+            continue;
+        }
+        int s = out->n++;
+        for (int i = 0; i < nvar; i++) {
+            ncpx_init(&out->x[(size_t)s * nvar + i], wp);
+            ncpx_set(&out->x[(size_t)s * nvar + i], &coord[i]);
+        }
+        out->mult[s] = 1; out->lre[s] = lr; out->lim[s] = li;
+        out->total++;
+    }
+
+    mpfr_clear(bestm); mpfr_clear(mag);
+    for (int t = 0; t < d; t++) ncpx_clear(&vk[t]);
+    free(vk);
+    for (int i = 0; i < nvar; i++) ncpx_clear(&coord[i]);
+    free(coord);
+    ncpx_clear(&prod); ncpx_clear(&pivot); ncpx_clear(&num);
+    for (size_t t = 0; t < (size_t)nvar * d * d; t++) mpfr_clear(MxF[t]);
+    free(MxF);
+    for (int i = 0; i < d; i++) { mpfr_clear(ev_re[i]); mpfr_clear(ev_im[i]); }
+    for (size_t t = 0; t < (size_t)d * d; t++) { mpfr_clear(V_re[t]); mpfr_clear(V_im[t]); }
+    free(ev_re); free(ev_im); free(V_re); free(V_im);
+    return 1;
+}
+
 Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
                                NSysMethod method, bool reals_only,
                                bool want_machine, long bits, long max_roots,
@@ -251,17 +668,35 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
         return NULL;
     }
 
+    /* 2-5, fast path: the quotient ring (standard monomials and exact
+     * multiplication matrices) straight from the FLINT DRL engine, instead of
+     * a GBPoly basis and one rational reduction per border monomial (that
+     * reduction was a third of a Katsura-5 solve). */
+    int* B = NULL; int d = 0;
+    mpq_t* Mx = NULL;
+    GBPoly** Fsys = F; int nFsys = nF;
+    if (gb_flint_quotient(F, (size_t)nF, NSYS_MAX_DIM, &B, &d, &Mx)) {
+        if (d == 0) {                                 /* <1>: no solutions */
+            for (int i = 0; i < nFsys; i++) gb_poly_free(Fsys[i]);
+            free(Fsys);
+            return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        }
+        goto eigen_stage;
+    }
+
     /* 2. Gröbner basis. */
     size_t nG = 0;
     GBPoly** G = gb_buchberger(F, (size_t)nF, &nG);
-    for (int i = 0; i < nF; i++) gb_poly_free(F[i]);
-    free(F);
-    if (!G || nG == 0) { if (G) gb_basis_free(G, nG); return NULL; }
+    /* The input polynomials stay alive: the candidates are polished and
+     * verified against them (sys_build). */
+#define NSYS_FREE_F() do { for (int i_ = 0; i_ < nFsys; i_++) gb_poly_free(Fsys[i_]); free(Fsys); } while (0)
+    if (!G || nG == 0) { if (G) gb_basis_free(G, nG); NSYS_FREE_F(); return NULL; }
 
     /* Inconsistent system: GB contains a nonzero constant -> no solutions. */
     for (size_t i = 0; i < nG; i++) {
         if (gb_poly_is_constant(G[i]) && !gb_poly_is_zero(G[i])) {
             gb_basis_free(G, nG);
+            NSYS_FREE_F();
             return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         }
     }
@@ -287,11 +722,12 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
     }
     if (!zero_dim || box > (double)NSYS_MAX_BOX) {
         free(bound); gb_basis_free(G, nG);
+        NSYS_FREE_F();
         return NULL;
     }
 
     /* 4. Enumerate the standard-monomial basis B (box minus LM multiples). */
-    int* B = NULL; int d = 0; int Bcap = 0;
+    int Bcap = 0;
     {
         int* e = (int*)calloc((size_t)nvar, sizeof(int));
         bool overflow = false;
@@ -321,12 +757,12 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
             if (k == nvar) break; /* wrapped around -> done */
         }
         free(e);
-        if (overflow || d == 0) { free(B); free(bound); gb_basis_free(G, nG); return NULL; }
+        if (overflow || d == 0) { free(B); free(bound); gb_basis_free(G, nG); NSYS_FREE_F(); return NULL; }
     }
     free(bound);
 
     /* 5. Multiplication matrices M_{x_i} (rational), and a generic M_l. */
-    mpq_t* Mx = (mpq_t*)malloc(sizeof(mpq_t) * (size_t)nvar * (size_t)d * (size_t)d);
+    Mx = (mpq_t*)malloc(sizeof(mpq_t) * (size_t)nvar * (size_t)d * (size_t)d);
     for (size_t t = 0; t < (size_t)nvar * d * d; t++) mpq_init(Mx[t]);
     bool mok = true;
     for (int i = 0; i < nvar && mok; i++) {
@@ -337,169 +773,93 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
     if (!mok) {
         for (size_t t = 0; t < (size_t)nvar * d * d; t++) mpq_clear(Mx[t]);
         free(Mx); free(B);
+        NSYS_FREE_F();
         return NULL;
     }
+#undef NSYS_FREE_F
 
-    /* Working precision: target + guard. */
+eigen_stage:
+    /* 6-7. Eigenvectors of a generic M_l, coordinates, Newton polish on the
+     * original system, verification and multiplicity accounting
+     * (nsys_attempt).  An attempt that rejects a candidate, or in which two
+     * candidates from well-separated eigenvalues land on one solution (a
+     * solution lost: the eigenvector of an ill-conditioned eigenvalue
+     * pointed at a neighbour), is redone with another linear form at twice
+     * the precision; the best attempt is kept.  The quotient dimension d is
+     * the solution count with multiplicity, so the target is known. */
     long target_bits = want_machine ? 53 : bits;
     long guard = target_bits / 2; if (guard < 32) guard = 32;
     mpfr_prec_t wp = (mpfr_prec_t)(target_bits + guard);
-
-    /* Generic linear form l = sum c_i x_i ; M_l = sum c_i M_{x_i} (real). */
     uint64_t st = seed ? (uint64_t)seed : 1234u;
-    long* cform = (long*)malloc(sizeof(long) * (size_t)nvar);
-    for (int i = 0; i < nvar; i++) cform[i] = nsys_rand(&st);
+    SysP* S = (npoly == nvar) ? sys_build(Fsys, nFsys, nvar) : NULL;
 
-    mpfr_t* Ml = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d * (size_t)d);
-    for (size_t t = 0; t < (size_t)d * d; t++) mpfr_init2(Ml[t], wp);
-    {
-        mpq_t acc, tmp; mpq_init(acc); mpq_init(tmp);
-        for (size_t cell = 0; cell < (size_t)d * d; cell++) {
-            mpq_set_ui(acc, 0, 1);
-            for (int i = 0; i < nvar; i++) {
-                mpq_set_si(tmp, cform[i], 1);
-                mpq_mul(tmp, tmp, Mx[(size_t)i * d * d + cell]);
-                mpq_add(acc, acc, tmp);
-            }
-            mpfr_set_q(Ml[cell], acc, MPFR_RNDN);
-        }
-        mpq_clear(acc); mpq_clear(tmp);
+    NsysSols best; memset(&best, 0, sizeof best);
+    for (int attempt = 0; attempt < 5; attempt++) {
+        NsysSols cur;
+        /* First attempt: LAPACK seeds (square systems only: they need the
+         * polish); then MPFR eigenvectors at wp, 2 wp, 4 wp, 8 wp. */
+        int lap = (attempt == 0 && S != NULL);
+        if (attempt == 0 && !lap) continue;
+        int ok = nsys_attempt(Mx, B, d, nvar, wp, &st, S, nFsys, polys, npoly, vars,
+                              verify, target_bits, lap, &cur);
+        if (ok && cur.total > best.total) { nsys_sols_clear(&best); best = cur; }
+        else if (ok) nsys_sols_clear(&cur);
+        if (best.total == d && best.lost == 0 && best.rejected == 0) break;
+        if (attempt > 0) wp *= 2;
     }
-    free(cform);
-
-    /* 6. Eigenvalues + eigenvectors of M_l at MPFR precision. */
-    mpfr_t* ev_re = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d);
-    mpfr_t* ev_im = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d);
-    mpfr_t* V_re  = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d * (size_t)d);
-    mpfr_t* V_im  = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)d * (size_t)d);
-    for (int i = 0; i < d; i++) { mpfr_init2(ev_re[i], wp); mpfr_init2(ev_im[i], wp); }
-    for (size_t t = 0; t < (size_t)d * d; t++) { mpfr_init2(V_re[t], wp); mpfr_init2(V_im[t], wp); }
-
-    int est = eigen_all_eigenvectors_real_mpfr(Ml, (size_t)d, wp,
-                                               ev_re, ev_im, V_re, V_im);
-    for (size_t t = 0; t < (size_t)d * d; t++) mpfr_clear(Ml[t]);
-    free(Ml);
-    if (est != 0) {
-        for (int i = 0; i < d; i++) { mpfr_clear(ev_re[i]); mpfr_clear(ev_im[i]); }
-        for (size_t t = 0; t < (size_t)d * d; t++) { mpfr_clear(V_re[t]); mpfr_clear(V_im[t]); }
-        free(ev_re); free(ev_im); free(V_re); free(V_im);
-        for (size_t t = 0; t < (size_t)nvar * d * d; t++) mpq_clear(Mx[t]);
-        free(Mx); free(B);
-        return NULL;
-    }
-
-    /* 7. Coordinate recovery: for eigenvector row k (v_k), pick its largest
-     *    component j*, then x_i(p_k) = (M_{x_i} v_k)[j*] / v_k[j*]. */
-    double verify_tol = pow(10.0, -0.5 * numeric_bits_to_digits(target_bits));
-    if (verify_tol < 1e-6) verify_tol = 1e-6;
-
-    /* Real multiplication matrices as MPFR (reused for every eigenvector). */
-    mpfr_t* MxF = (mpfr_t*)malloc(sizeof(mpfr_t) * (size_t)nvar * (size_t)d * (size_t)d);
-    for (size_t t = 0; t < (size_t)nvar * d * d; t++) {
-        mpfr_init2(MxF[t], wp);
-        mpfr_set_q(MxF[t], Mx[t], MPFR_RNDN);
-    }
+    if (S) sys_free(S, nFsys);
+    for (int i = 0; i < nFsys; i++) gb_poly_free(Fsys[i]);
+    free(Fsys);
     for (size_t t = 0; t < (size_t)nvar * d * d; t++) mpq_clear(Mx[t]);
     free(Mx);
-
-    Expr** sols = (Expr**)malloc(sizeof(Expr*) * (size_t)d);
-    int nsol = 0;
-
-    ncpx *vk = (ncpx*)malloc(sizeof(ncpx) * (size_t)d);
-    for (int t = 0; t < d; t++) ncpx_init(&vk[t], wp);
-    ncpx *coord = (ncpx*)malloc(sizeof(ncpx) * (size_t)nvar);
-    for (int i = 0; i < nvar; i++) ncpx_init(&coord[i], wp);
-    ncpx acc, prod, pivot, num;
-    ncpx_init(&acc, wp); ncpx_init(&prod, wp); ncpx_init(&pivot, wp); ncpx_init(&num, wp);
-
-    for (int k = 0; k < d && (max_roots < 0 || nsol < max_roots); k++) {
-        /* load v_k and find pivot component. */
-        int jstar = 0; mpfr_t best, mag; mpfr_init2(best, wp); mpfr_init2(mag, wp);
-        mpfr_set_si(best, -1, MPFR_RNDN);
-        for (int j = 0; j < d; j++) {
-            mpfr_set(vk[j].re, V_re[(size_t)k * d + j], MPFR_RNDN);
-            mpfr_set(vk[j].im, V_im[(size_t)k * d + j], MPFR_RNDN);
-            mpfr_hypot(mag, vk[j].re, vk[j].im, MPFR_RNDN);
-            if (mpfr_cmp(mag, best) > 0) { mpfr_set(best, mag, MPFR_RNDN); jstar = j; }
-        }
-        mpfr_clear(best); mpfr_clear(mag);
-        mpfr_set(pivot.re, vk[jstar].re, MPFR_RNDN);
-        mpfr_set(pivot.im, vk[jstar].im, MPFR_RNDN);
-
-        for (int i = 0; i < nvar; i++) {
-            /* num = (M_{x_i} v_k)[jstar] = sum_m MxF[i][jstar][m] * v_k[m] */
-            mpfr_set_zero(num.re, 1); mpfr_set_zero(num.im, 1);
-            const mpfr_t* Mi = MxF + (size_t)i * d * d;
-            for (int m = 0; m < d; m++) {
-                /* prod = Mi[jstar*d+m] * vk[m]  (real * complex) */
-                mpfr_mul(prod.re, Mi[(size_t)jstar * d + m], vk[m].re, MPFR_RNDN);
-                mpfr_mul(prod.im, Mi[(size_t)jstar * d + m], vk[m].im, MPFR_RNDN);
-                mpfr_add(num.re, num.re, prod.re, MPFR_RNDN);
-                mpfr_add(num.im, num.im, prod.im, MPFR_RNDN);
-            }
-            ncpx_div(&coord[i], &num, &pivot, wp);
-        }
-
-        /* Verify residual; drop if too large. */
-        double resid = verify ? system_residual(polys, npoly, vars, nvar, coord) : 0.0;
-        if (verify && (resid > verify_tol || !(resid == resid))) continue;
-
-        /* Reals filter. */
-        if (reals_only) {
-            bool real_ok = true;
-            mpfr_t a; mpfr_init2(a, wp);
-            for (int i = 0; i < nvar; i++) {
-                mpfr_abs(a, coord[i].im, MPFR_RNDN);
-                if (mpfr_get_d(a, MPFR_RNDN) > verify_tol) { real_ok = false; break; }
-            }
-            mpfr_clear(a);
-            if (!real_ok) continue;
-        }
-
-        /* Build {x_i -> value} rule list at the requested precision. */
-        Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)nvar);
-        for (int i = 0; i < nvar; i++) {
-            Expr* val;
-            if (want_machine) {
-                double re = mpfr_get_d(coord[i].re, MPFR_RNDN);
-                double im = mpfr_get_d(coord[i].im, MPFR_RNDN);
-                if (reals_only || fabs(im) <= verify_tol * (1.0 + fabs(re)))
-                    val = expr_new_real(re);
-                else
-                    val = expr_new_function(expr_new_symbol(SYM_Complex),
-                              (Expr*[]){ expr_new_real(re), expr_new_real(im) }, 2);
-            } else {
-                mpfr_t rr, ii; mpfr_init2(rr, target_bits); mpfr_init2(ii, target_bits);
-                mpfr_set(rr, coord[i].re, MPFR_RNDN);
-                if (reals_only) mpfr_set_zero(ii, 1);
-                else            mpfr_set(ii, coord[i].im, MPFR_RNDN);
-                val = numeric_mpfr_make_complex(rr, ii);
-                mpfr_clear(rr); mpfr_clear(ii);
-            }
-            rules[i] = expr_new_function(expr_new_symbol(SYM_Rule),
-                           (Expr*[]){ expr_copy(vars[i]), val }, 2);
-        }
-        sols[nsol++] = expr_new_function(expr_new_symbol(SYM_List), rules, (size_t)nvar);
-        free(rules);
-    }
-
-    /* cleanup */
-    for (int t = 0; t < d; t++) ncpx_clear(&vk[t]);
-    free(vk);
-    for (int i = 0; i < nvar; i++) ncpx_clear(&coord[i]);
-    free(coord);
-    ncpx_clear(&acc); ncpx_clear(&prod); ncpx_clear(&pivot); ncpx_clear(&num);
-    for (size_t t = 0; t < (size_t)nvar * d * d; t++) mpfr_clear(MxF[t]);
-    free(MxF);
-    for (int i = 0; i < d; i++) { mpfr_clear(ev_re[i]); mpfr_clear(ev_im[i]); }
-    for (size_t t = 0; t < (size_t)d * d; t++) { mpfr_clear(V_re[t]); mpfr_clear(V_im[t]); }
-    free(ev_re); free(ev_im); free(V_re); free(V_im);
     free(B);
 
     /* No accepted solution though the quotient ring is non-trivial: signal
      * failure (NULL) so the caller can fall back to the elimination method
      * (rather than reporting a false empty set). */
-    if (nsol == 0 && d > 0) { free(sols); return NULL; }
+    if (best.n == 0 && d > 0) { nsys_sols_clear(&best); return NULL; }
+
+    double verify_tol = pow(2.0, -0.5 * (double)target_bits);
+    Expr** sols = (Expr**)malloc(sizeof(Expr*) * (size_t)(best.total ? best.total : 1));
+    int nsol = 0;
+    for (int s = 0; s < best.n && (max_roots < 0 || nsol < max_roots); s++) {
+        const ncpx* coord = best.x + (size_t)s * nvar;
+        if (reals_only) {
+            bool real_ok = true;
+            for (int i = 0; i < nvar; i++) {
+                double im = fabs(mpfr_get_d(coord[i].im, MPFR_RNDN));
+                double re = fabs(mpfr_get_d(coord[i].re, MPFR_RNDN));
+                if (im > verify_tol * (1.0 + re)) { real_ok = false; break; }
+            }
+            if (!real_ok) continue;
+        }
+        for (int rep = 0; rep < best.mult[s] && (max_roots < 0 || nsol < max_roots); rep++) {
+            Expr** rules = (Expr**)malloc(sizeof(Expr*) * (size_t)nvar);
+            for (int i = 0; i < nvar; i++) {
+                Expr* val;
+                double re = mpfr_get_d(coord[i].re, MPFR_RNDN);
+                double im = mpfr_get_d(coord[i].im, MPFR_RNDN);
+                bool is_real = reals_only || fabs(im) <= verify_tol * (1.0 + fabs(re));
+                if (want_machine) {
+                    if (is_real) val = expr_new_real(re);
+                    else val = expr_new_function(expr_new_symbol(SYM_Complex),
+                                  (Expr*[]){ expr_new_real(re), expr_new_real(im) }, 2);
+                } else {
+                    mpfr_t rr, ii; mpfr_init2(rr, target_bits); mpfr_init2(ii, target_bits);
+                    mpfr_set(rr, coord[i].re, MPFR_RNDN);
+                    if (is_real) mpfr_set_zero(ii, 1);
+                    else         mpfr_set(ii, coord[i].im, MPFR_RNDN);
+                    val = numeric_mpfr_make_complex(rr, ii);
+                    mpfr_clear(rr); mpfr_clear(ii);
+                }
+                rules[i] = expr_new_function(expr_new_symbol(SYM_Rule),
+                               (Expr*[]){ expr_copy(vars[i]), val }, 2);
+            }
+            sols[nsol++] = expr_new_function(expr_new_symbol(SYM_List), rules, (size_t)nvar);
+            free(rules);
+        }
+    }
+    nsys_sols_clear(&best);
 
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), sols, (size_t)nsol);
     free(sols);

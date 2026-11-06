@@ -13,6 +13,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <gmp.h>
 #include "groebner.h"
 
 /* Over Q: F rational GBPolys sharing one order. */
@@ -29,5 +30,13 @@ int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
  * Returns 1 with a fresh basis, 0 to decline (use the exact basis). */
 int gb_flint_lex_inexact(GBPoly* const* F, size_t n, long bits,
                          GBPoly*** out, size_t* out_n);
+
+/* The quotient ring of a zero-dimensional ideal over Q for the eigenvalue
+ * method: d standard monomials of the DRL basis (*B_out, d rows of n_vars
+ * ints) and the multiplication matrices (*M_out, n_vars blocks of d x d mpq,
+ * M[(v d + r) d + c] = coefficient of b_r in NF(x_v b_c)).  Returns 1 (d = 0
+ * for the unit ideal), 0 to decline.  Caller frees both (mpq_clear each). */
+int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
+                      int** B_out, int* d_out, mpq_t** M_out);
 
 #endif /* GB_FLINT_H */

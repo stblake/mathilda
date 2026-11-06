@@ -200,6 +200,45 @@ static void test_memory_loop(void) {
     }
 }
 
+/* Every isolated solution of a polynomial system, counted with multiplicity
+ * by the quotient-ring dimension.  Katsura-5 has 32 solutions (a known
+ * count; among them u0 = 1, u1..u5 = 0, whose coordinates vanish and make
+ * a purely relative residual test reject it); the dense bivariate pair of
+ * degrees 7 and 8 has the Bezout number 56.  Both lost solutions before:
+ * candidates from ill-conditioned eigenvectors were dropped by the residual
+ * test instead of being polished by Newton on the original equations. */
+static void test_poly_systems_complete(void) {
+    const char* katsura =
+        "{-1 + u0 + 2*u1 + 2*u2 + 2*u3 + 2*u4 + 2*u5, -u0 + u0^2 + 2*u1^2 + 2*u2^2 + 2*u3^2 + 2*u4^2 + 2*u5^2, "
+        "-u1 + 2*u0*u1 + 2*u1*u2 + 2*u2*u3 + 2*u3*u4 + 2*u4*u5, u1^2 - u2 + 2*u0*u2 + 2*u1*u3 + 2*u2*u4 + 2*u3*u5, "
+        "2*u1*u2 - u3 + 2*u0*u3 + 2*u1*u4 + 2*u2*u5, u2^2 + 2*u1*u3 - u4 + 2*u0*u4 + 2*u1*u5}";
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+        "Module[{s = NSolve[%s, {u1, u2, u3, u4, u5, u0}]}, Length[s] == 32 && "
+        "Max[Abs[%s /. s]] < 10^-10 && "
+        "Count[s, r_ /; Abs[(u0 /. r) - 1] < 10^-12 && Max[Abs[{u1, u2, u3, u4, u5} /. r]] < 10^-12] == 1 && "
+        "Length[Union[Round[10^8 {u1, u2, u3, u4, u5, u0} /. s]]] == 32]", katsura, katsura);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof buf,
+        "Module[{s = NSolve[%s, {u1, u2, u3, u4, u5, u0}, WorkingPrecision -> 40]}, Length[s] == 32 && "
+        "Max[Abs[%s /. s]] < 10^-35]", katsura, katsura);
+    ASSERT_TRUE(buf);
+    const char* bez =
+        "{6 + 8*x - x^2 + 3*x^3 - 8*x^4 + x^5 + 2*x^6 - 3*x^7 - 2*y - 7*x*y - 5*x^2*y - 5*x^3*y - 3*x^4*y + 8*x^5*y - 7*x^6*y - 9*y^2 - 5*x*y^2 - 6*x^2*y^2 + 9*x^3*y^2 + 3*x^4*y^2 - 9*x^5*y^2 + 8*y^3 - 5*x*y^3 - 5*x^2*y^3 + 8*x^3*y^3 - 3*x^4*y^3 - 9*y^4 - 5*x*y^4 - 4*x^2*y^4 - 5*x^3*y^4 - 4*y^5 - 4*x*y^5 - x^2*y^5 + 2*y^6 + 5*x*y^6 - 8*y^7, "
+        "-7 - 2*x + 7*x^2 + 8*x^3 - 8*x^4 - 4*x^5 - 7*x^6 - 7*x^7 + 2*x^8 + 5*y - 7*x*y + 3*x^2*y - 3*x^3*y - 8*x^4*y + 8*x^5*y - 4*x^6*y - 6*x^7*y + 6*y^2 - 3*x*y^2 + 8*x^2*y^2 - 5*x^3*y^2 - 8*x^4*y^2 + 2*x^5*y^2 - 9*x^6*y^2 - y^3 + 4*x*y^3 - 4*x^2*y^3 + 2*x^3*y^3 + 9*x^4*y^3 - 8*x^5*y^3 - 3*y^4 - 5*x*y^4 + 2*x^2*y^4 + x^3*y^4 - 2*x^4*y^4 - 9*y^5 + 3*x*y^5 - 4*x^2*y^5 - 9*x^3*y^5 + 4*y^6 - 3*x*y^6 - 5*x^2*y^6 + 7*y^7 + 5*x*y^7 + y^8}";
+    snprintf(buf, sizeof buf,
+        "Module[{s = NSolve[%s, {x, y}]}, Length[s] == 56 && "
+        "Length[Union[Round[10^6 {x, y} /. s]]] == 56 && "
+        "Max[Abs[(%s /. s)/(1 + Abs[x /. s]^8 + Abs[y /. s]^8)]] < 10^-10]", bez, bez);
+    ASSERT_TRUE(buf);
+    /* A double solution: (x - 1)^2 == 0, y == 2 counts twice. */
+    ASSERT_TRUE("Length[NSolve[{(x - 1)^2 == 0, y - x == 1}, {x, y}]] == 2");
+    /* Cyclic-5: 70 isolated solutions. */
+    ASSERT_TRUE("Length[NSolve[{a + b + c + d + e, a b + b c + c d + d e + e a, "
+                "a b c + b c d + c d e + d e a + e a b, a b c d + b c d e + c d e a + d e a b + e a b c, "
+                "a b c d e - 1}, {a, b, c, d, e}]] == 70");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -214,6 +253,7 @@ int main(void) {
     TEST(test_verify_solutions);
     TEST(test_radical_verification);
     TEST(test_degree_and_lcm_guards);
+    TEST(test_poly_systems_complete);
     TEST(test_transcendental_seed);
     TEST(test_attributes);
     TEST(test_memory_loop);
