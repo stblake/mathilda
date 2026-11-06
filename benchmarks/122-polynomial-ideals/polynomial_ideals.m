@@ -1,3 +1,4 @@
+(* bench-timeout: 1800 *)
 (* ==========================================================================
    Experiment 122 -- polynomial gcds, lcms and ideals: PolynomialGCD,
    PolynomialLCM, PolynomialReduce, Eliminate, CylindricalDecomposition and
@@ -285,3 +286,66 @@ k6v = {k0, k1, k2, k3, k4, k5, k6};
 kat6 = katsuraSystem[k6v];
 bench["GroebnerBasis, katsura-6, DRL", GroebnerBasis[kat6, k6v, drl];];
 check["GroebnerBasis, katsura-6, DRL", listChk[GroebnerBasis[kat6, k6v, drl], k6v]];
+
+(* ---- GroebnerBasis over Q: the standard families ------------------------- *)
+
+(* The families the Groebner literature measures engines on, in DRL and in
+   Lex, zero-dimensional (katsura, cyclic, eco, noon, reimer, the dense random
+   systems of the ISSAC '97 holdout, experiment 141) and positive-dimensional
+   (the plane-curve elimination above; cyclic-n has positive-dimensional
+   components only from n = 8 on).  Light to heavy within each order, the
+   heaviest last; a case whose single run takes seconds is timed once. *)
+
+ecoSystem[x_List] := Module[{n = Length[x]},
+  Append[Table[Expand[(x[[k]] + Sum[x[[i]] x[[i + k]], {i, 1, n - k - 1}]) x[[n]] - k], {k, 1, n - 1}],
+         Sum[x[[i]], {i, 1, n - 1}] + 1]];
+noonSystem[x_List] := Table[Expand[10 x[[i]] (Total[x^2] - x[[i]]^2) - 11 x[[i]] + 10], {i, Length[x]}];
+reimerSystem[x_List] := Table[Sum[(-1)^(i + 1) 2 x[[i]]^(j + 1), {i, Length[x]}] - 1, {j, 1, Length[x]}];
+
+c7v = {d1, d2, d3, d4, d5, d6, d7}; cyc7 = cyclicSystem[c7v];
+k7v = {k0, k1, k2, k3, k4, k5, k6, k7}; kat7 = katsuraSystem[k7v];
+k8v = {k0, k1, k2, k3, k4, k5, k6, k7, k8}; kat8 = katsuraSystem[k8v];
+e6v = {e1, e2, e3, e4, e5, e6}; eco6 = ecoSystem[e6v];
+e7v = {e1, e2, e3, e4, e5, e6, e7}; eco7 = ecoSystem[e7v];
+e8v = {e1, e2, e3, e4, e5, e6, e7, e8}; eco8 = ecoSystem[e8v];
+n4v = {n1, n2, n3, n4}; noon4 = noonSystem[n4v];
+n5v = {n1, n2, n3, n4, n5}; noon5 = noonSystem[n5v];
+n6v = {n1, n2, n3, n4, n5, n6}; noon6 = noonSystem[n6v];
+r4v = {r1, r2, r3, r4}; reim4 = reimerSystem[r4v];
+r5v = {r1, r2, r3, r4, r5}; reim5 = reimerSystem[r5v];
+(* experiment 141's h6.1, h6.3, h6.8, h6.10: 4 and 5 dense quadrics with
+   1-digit coefficients, 4 with 6-digit ones, 2 quadrics + 2 cubics *)
+dv4 = {x, y, z, w}; dv5 = {v, x, y, z, w};
+dq4 = {6 + 5*w - w^2 + 2*x - 8*w*x - 3*x^2 - 9*y + 8*w*y + 4*x*y + 9*y^2 - 7*z - 9*w*z + 2*x*z - 9*y*z - 8*z^2, -7 - 5*w - 6*w^2 - 2*x - 4*w*x - 6*x^2 + 9*y + 8*w*y + x*y - y^2 + 8*z - 4*w*z - 2*x*z + 4*y*z - 3*z^2, -5 + 9*w - 7*w^2 - 2*x + 8*w*x - 5*x^2 - 4*y - 7*w*y - 6*x*y + 8*y^2 - 9*z + 5*w*z - 7*x*z - y*z - 8*z^2, 6 + 7*w - 5*w^2 + 6*x - 7*w*x + 7*x^2 - 9*y - 9*w*y - 3*x*y + 9*y^2 + 9*z - 9*w*z + 2*x*z - 2*y*z - 5*z^2};
+dq5 = {-3 - 4*v + 7*v^2 - w - 3*v*w + 3*w^2 - 3*x - 9*v*x - 5*w*x + 7*x^2 - 8*y - 5*v*y + 6*w*y + 4*x*y - 3*y^2 - 9*z + 5*v*z - 7*w*z - 9*x*z - 4*y*z - 4*z^2, -4 + 4*v - v^2 - w - v*w - 5*w^2 - 5*x - 7*v*x - w*x - 5*x^2 - 6*y + 9*v*y - 6*w*y - 6*x*y + 9*y^2 - 5*z + 6*v*z + 9*w*z - 8*x*z - 5*y*z - 5*z^2, 8 + 8*v - 6*v^2 + 3*w + 4*v*w + 3*w^2 + 5*x - 4*v*x + 3*w*x - 9*x^2 + 4*y - 2*v*y + 7*w*y + 6*x*y + 8*y^2 + 3*z - 5*v*z + 9*w*z + 3*x*z - 5*y*z + 6*z^2, 9 - 3*v - 2*v^2 + 2*w + 9*v*w + 5*w^2 - 2*x - 2*v*x - 4*w*x + 5*x^2 + 7*y + 5*v*y - 3*w*y + 6*x*y - 3*y^2 - 7*z - 3*v*z - 2*w*z + 6*x*z - 4*y*z + 5*z^2, -9 - v + 3*v^2 - w - 4*v*w + 6*w^2 + 5*x - 5*v*x - 6*w*x + 4*x^2 + 8*y - 6*v*y + w*y - 6*x*y + 7*y^2 - 9*z + 9*v*z + 7*w*z + 8*x*z + 5*y*z + 6*z^2};
+dq6d = {854771 - 564557*w - 899147*w^2 - 615329*x - 308540*w*x + 851798*x^2 + 974711*y + 313139*w*y + 222097*x*y - 880766*y^2 - 410696*z - 632850*w*z - 936705*x*z + 914522*y*z + 926361*z^2, -72493 - 960291*w + 809274*w^2 + 656550*x - 65296*w*x - 932720*x^2 - 294045*y - 410727*w*y - 205850*x*y + 888575*y^2 + 802615*z + 708191*w*z + 321448*x*z - 365950*y*z - 614411*z^2, 68559 + 748792*w - 328623*w^2 - 114720*x + 293330*w*x - 223946*x^2 - 443363*y - 191475*w*y - 21700*x*y + 300870*y^2 - 991793*z + 747752*w*z - 948354*x*z - 300782*y*z + 306202*z^2, -469472 - 21909*w + 482639*w^2 + 248427*x + 66724*w*x - 134523*x^2 + 248804*y - 646416*w*y + 612064*x*y + 863308*y^2 - 136206*z - 389466*w*z + 809411*x*z + 574646*y*z + 478494*z^2};
+dq23 = {-8 + 3*w + 2*w^2 - 2*x + 5*w*x - 2*x^2 + 9*y - 2*w*y - 6*x*y - y^2 + 7*z + 5*w*z + 4*x*z - 2*y*z + 4*z^2, 2 + 8*w - 5*w^2 + 8*x + 5*w*x + 8*x^2 + y + 9*w*y - 7*x*y - 7*y^2 - 2*z - 8*w*z - 8*x*z + 9*y*z - 5*z^2, 7 - 2*w + 5*w^2 + 5*w^3 - 9*x + 6*w*x - 3*w^2*x + 2*x^2 + 3*w*x^2 - x^3 - 8*y - 6*w*y + 2*w^2*y - 3*x*y - 5*w*x*y + 5*x^2*y + 5*y^2 - 6*w*y^2 - x*y^2 + 6*y^3 + 2*z - 5*w*z - 6*w^2*z - 3*x*z - 8*w*x*z - 8*x^2*z - 6*y*z + 7*w*y*z + x*y*z + 7*y^2*z - z^2 - 6*w*z^2 - 2*x*z^2 - 5*y*z^2 + 3*z^3, 5 - 6*w + 6*w^2 - 2*w^3 - 3*x + 2*w*x - 4*w^2*x - 6*x^2 + 3*w*x^2 - 7*x^3 - 4*y + 4*w*y - 6*w^2*y + 7*x*y - w*x*y + 7*x^2*y + 5*y^2 - 4*w*y^2 - 2*x*y^2 - 3*y^3 + z - 3*w*z - 4*w^2*z + 4*x*z + 4*w*x*z + 4*x^2*z - 6*y*z + 7*w*y*z + 7*x*y*z + 2*y^2*z + 9*z^2 + 3*w*z^2 - 7*x*z^2 - 8*y*z^2 - 7*z^3};
+
+famDRL = {
+  {"noon-4", noon4, n4v}, {"eco-6", eco6, e6v}, {"reimer-4", reim4, r4v},
+  {"dense 4 quadrics", dq4, dv4}, {"dense 4 quadrics, 6-digit", dq6d, dv4},
+  {"dense 5 quadrics", dq5, dv5}, {"dense 2 quadrics + 2 cubics", dq23, dv4},
+  {"eco-7", eco7, e7v}, {"noon-5", noon5, n5v}, {"katsura-7", kat7, k7v},
+  {"eco-8", eco8, e8v}, {"reimer-5", reim5, r5v}, {"noon-6", noon6, n6v}};
+famLex = {
+  {"katsura-5", kat5, k5v}, {"reimer-4", reim4, r4v}, {"noon-4", noon4, n4v},
+  {"eco-6", eco6, e6v}, {"dense 4 quadrics", dq4, dv4}, {"dense 4 quadrics, 6-digit", dq6d, dv4},
+  {"dense 5 quadrics", dq5, dv5}, {"dense 2 quadrics + 2 cubics", dq23, dv4},
+  {"eco-7", eco7, e7v}, {"cyclic-6", cyc6, c6v}, {"katsura-6", kat6, k6v},
+  {"noon-5", noon5, n5v}, {"reimer-5", reim5, r5v}};
+
+(* the check reads the basis of the last timed run: one computation fewer *)
+Do[With[{lab = "GroebnerBasis, " <> f[[1]] <> ", DRL", s = f[[2]], vs = f[[3]]},
+   bench[lab, gbRes = GroebnerBasis[s, vs, drl];];
+   check[lab, listChk[gbRes, vs]]], {f, famDRL}];
+Do[With[{lab = "GroebnerBasis, " <> f[[1]] <> ", Lex", s = f[[2]], vs = f[[3]]},
+   bench[lab, gbRes = GroebnerBasis[s, vs];];
+   check[lab, listChk[gbRes, vs]]], {f, famLex}];
+
+(* seconds per run: timed once, after the rest *)
+benchOnce["GroebnerBasis, katsura-8, DRL", gbRes = GroebnerBasis[kat8, k8v, drl];];
+check["GroebnerBasis, katsura-8, DRL", listChk[gbRes, k8v]];
+benchOnce["GroebnerBasis, katsura-7, Lex", gbRes = GroebnerBasis[kat7, k7v];];
+check["GroebnerBasis, katsura-7, Lex", listChk[gbRes, k7v]];
+benchOnce["GroebnerBasis, cyclic-7, DRL", gbRes = GroebnerBasis[cyc7, c7v, drl];];
+check["GroebnerBasis, cyclic-7, DRL", listChk[gbRes, c7v]];

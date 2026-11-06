@@ -2,7 +2,8 @@
 
 This weekly experiment covers PolynomialGCD, PolynomialLCM, PolynomialReduce,
 Eliminate, CylindricalDecomposition and GroebnerBasis at stress sizes. It has
-40 cases, each with an exact integer check.
+69 cases, each with an exact integer check (29 of them the GroebnerBasis
+family sweep below).
 
 ```
 python3 benchmarks/run_all.py --only 122 --check-labels
@@ -87,3 +88,108 @@ Across all four columns, `run_all.py` classifies 37 cases AHEAD, 2 SLOWER and
 
 `results/baseline.json` is the v0.6076 run; `results/final-v0.6080.json` is this
 one.
+
+## GroebnerBasis over Q: the standard families (2026-11-06)
+
+The last section of `polynomial_ideals.m` times the families Groebner engines
+are compared on: katsura-n, cyclic-n, eco-n, noon-n, reimer-n and the dense
+random systems of experiment 141 (four and five quadrics, six-digit
+coefficients, two quadrics and two cubics), in DRL and in Lex. Maxima and
+PARI/GP skip them: the `grobner` package needs 3.8 s on katsura-6 DRL already,
+and PARI has no Groebner bases.
+
+ms, best of three after a warm-up (katsura-8 DRL, katsura-7 Lex and cyclic-7
+DRL: one run). The commercial column is the same file, run the same day.
+`ratio` is Mathilda over the commercial column.
+
+| case | Mathilda | commercial | ratio |
+|---|---|---|---|
+| 3-variable quadratics, Lex | 0.133 | 0.623 | 0.21 |
+| cyclic-5, DRL | 3.77 | 14.8 | 0.25 |
+| katsura-4, DRL | 1.67 | 5.85 | 0.28 |
+| elimination form, plane curve | 0.35 | 1.18 | 0.30 |
+| cyclic-5, Modulus 32003 | 1.26 | 68.7 | 0.02 |
+| katsura-5, DRL | 14.7 | 98.2 | 0.15 |
+| cyclic-5, Lex | 12.2 | 66.0 | 0.18 |
+| cyclic-6, DRL, Modulus 32003 | 5.84 | 228 | 0.03 |
+| cyclic-6, DRL | 55.1 | 291 | 0.19 |
+| katsura-4, Lex | 2.41 | 29.1 | 0.08 |
+| katsura-6, DRL | 48.6 | 691 | 0.07 |
+| noon-4, DRL | 2.55 | 7.25 | 0.35 |
+| eco-6, DRL | 3.73 | 7.72 | 0.48 |
+| reimer-4, DRL | 16.4 | 17.5 | 0.94 |
+| dense 4 quadrics, DRL | 4.24 | 8.21 | 0.52 |
+| dense 4 quadrics, 6-digit, DRL | 19.0 | 7.99 | 2.38 |
+| dense 5 quadrics, DRL | 24.1 | 44.0 | 0.55 |
+| dense 2 quadrics + 2 cubics, DRL | 23.6 | 26.2 | 0.90 |
+| eco-7, DRL | 25.9 | 49.2 | 0.53 |
+| noon-5, DRL | 47.7 | 74.1 | 0.64 |
+| katsura-7, DRL | 241 | 3869 | 0.06 |
+| eco-8, DRL | 126 | 473 | 0.27 |
+| reimer-5, DRL | 262 | 1209 | 0.22 |
+| noon-6, DRL | 326 | 877 | 0.37 |
+| katsura-5, Lex | 17.3 | 253 | 0.07 |
+| reimer-4, Lex | 26.7 | 123 | 0.22 |
+| noon-4, Lex | 31.9 | 214 | 0.15 |
+| eco-6, Lex | 15.5 | 32.7 | 0.48 |
+| dense 4 quadrics, Lex | 5.76 | 25.8 | 0.22 |
+| dense 4 quadrics, 6-digit, Lex | 28.4 | 45.1 | 0.63 |
+| dense 5 quadrics, Lex | 73.5 | 298 | 0.25 |
+| dense 2 quadrics + 2 cubics, Lex | 62.9 | 215 | 0.29 |
+| eco-7, Lex | 112 | 214 | 0.53 |
+| cyclic-6, Lex | 164 | 1171 | 0.14 |
+| katsura-6, Lex | 344 | 2308 | 0.15 |
+| noon-5, Lex | 522 | 5149 | 0.10 |
+| reimer-5, Lex | 906 | 6274 | 0.14 |
+| katsura-8, DRL | 3988 | 23240 | 0.17 |
+| katsura-7, Lex | 6885 | 38673 | 0.18 |
+| cyclic-7, DRL | 9670 | 440186 | 0.02 |
+
+Every Groebner case is AHEAD except the six-digit dense quadrics in DRL.
+
+### The engine
+
+- **F4 over GF(p)** (`src/poly/gb_f4.c`) computes every modular basis:
+  normal-strategy selection under the Gebauer-Moeller criteria, symbolic
+  preprocessing on a monomial hash table, row reduction against the reducer
+  rows and the S-rows already reduced (one-word branch-free accumulation for
+  p < 2^32, two-word 128-bit sums for 62-bit primes), then a heap
+  interreduction. Mod 2^31-1, cyclic-7 DRL takes 0.29 s (Buchberger: 2.8 s) and
+  katsura-8 0.20 s (1.5 s).
+- **Over Q, multi-modular with an exact certificate** (`src/poly/gb_flint.c`):
+  - The images mod 62-bit primes are computed in parallel batches. Unlucky
+    primes, whose leading monomials differ, are dropped.
+  - The images are combined by CRT and rational reconstruction.
+  - The candidate is then proved, never trusted. Every Gebauer-Moeller
+    S-pair and every input must reduce to 0 over Z. In a degree order, the
+    Hilbert series of the leading terms must also equal that of the
+    homogenised system mod p, an upper bound on the ideal's Hilbert function.
+  - When the homogenised system has components at infinity (cyclic, noon,
+    reimer), the leading terms come from a certified basis of the homogenised
+    ideal instead.
+  - In Lex, every element must reduce to 0 by the certified DRL basis. For a
+    zero-dimensional ideal each prime's Lex image comes from FGLM on the F4
+    DRL basis.
+  - In shape position, h and the rational univariate representation are
+    lifted rather than the Lex basis, whose coefficients are D times larger.
+  - Small systems are tried directly first, under a 4 ms budget.
+
+### Where it is behind, and why
+
+- **Dense 4 quadrics, 6-digit coefficients, DRL**: 19 ms against 8.
+  - The reduced DRL basis has about 1860-bit coefficients, so reconstruction
+    needs a 3700-bit modulus: some 60 primes.
+  - The route's time is spread out: about 5 ms of F4 images across 16 worker
+    threads, 1.3 ms of CRT, 2.5 ms of reconstruction, 4 ms of exact
+    verification (26 S-pairs over Z with 1860-bit coefficients), and the 4 ms
+    direct attempt that fails first.
+  - Exact fraction-free Buchberger takes 18 ms, so it is no faster.
+  - The way forward is p-adic lifting of the basis (Hensel), or a cheaper
+    exact verification. Either would remove most of the primes or most of the
+    S-pair reductions.
+- **reimer-4 DRL and dense 2 quadrics + 2 cubics DRL** are level with the
+  commercial column (0.9x). Each is a few ms of fixed cost: the Hilbert check,
+  for reimer-4 the certified homogenised basis, and the verification.
+
+The multi-modular routes use worker threads, so CPU time can be several times
+the wall time shown (cyclic-7 DRL: 9.7 s wall, about 44 s CPU).

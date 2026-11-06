@@ -227,4 +227,36 @@ kat6 : katsuraSystem(k6v)$
 benchOnce("GroebnerBasis, katsura-6, DRL", lambda([], poly_reduced_grobner(kat6, k6v)))$
 check("GroebnerBasis, katsura-6, DRL", listChk(poly_reduced_grobner(kat6, k6v), k6v))$
 
+/* The GroebnerBasis family sweep (the last section of the .m half) is not
+   run here: the grobner package takes 3.8 s on katsura-6 DRL already. */
+skip("GroebnerBasis, noon-4, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, eco-6, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, reimer-4, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 4 quadrics, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 4 quadrics, 6-digit, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 5 quadrics, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 2 quadrics + 2 cubics, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, eco-7, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, noon-5, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, katsura-7, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, eco-8, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, reimer-5, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, noon-6, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, katsura-5, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, reimer-4, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, noon-4, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, eco-6, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 4 quadrics, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 4 quadrics, 6-digit, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 5 quadrics, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, dense 2 quadrics + 2 cubics, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, eco-7, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, cyclic-6, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, katsura-6, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, noon-5, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, reimer-5, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, katsura-8, DRL", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, katsura-7, Lex", "the family sweep: minutes to hours in the grobner package")$
+skip("GroebnerBasis, cyclic-7, DRL", "the family sweep: minutes to hours in the grobner package")$
+
 quit()$
