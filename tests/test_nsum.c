@@ -233,6 +233,54 @@ static void test_slow_log_honest(void) {
     free(s);
 }
 
+/* Linear-phase summands, split by frequency (Abel–Plana per oscillatory
+ * group).  Closed forms: sum sin(a n)/n = (Pi - a)/2 for 0 < a < 2 Pi (a = 7
+ * aliases to 7 - 2 Pi), sum cos(n)/n = -Log[2 Sin[1/2]], the Clausen-type
+ * sum cos(n t)/n^2 = Pi^2/6 - Pi t/2 + t^2/4, sum e^(i n)/n^2 = Li2(e^i),
+ * sum 2^-n cos(n)/n = -Re Log[1 - e^i/2]. */
+static void test_trig_oscillatory(void) {
+    ASSERT_CLOSE("NSum[Sin[n]/n,{n,1,Infinity}]", "(Pi-1)/2", 1e-12);
+    ASSERT_CLOSE("NSum[Sin[2 n]/n,{n,1,Infinity}]", "(Pi-2)/2", 1e-12);
+    ASSERT_CLOSE("NSum[Sin[7 n]/n,{n,1,Infinity}]", "(3 Pi-7)/2", 1e-12);
+    ASSERT_CLOSE("NSum[Cos[n]/n,{n,1,Infinity}]", "-Log[2 Sin[1/2]]", 1e-12);
+    ASSERT_CLOSE("NSum[Cos[n]/n^2,{n,1,Infinity}]", "Pi^2/6 - Pi/2 + 1/4", 1e-12);
+    ASSERT_CLOSE("NSum[Cos[3 n]/n^2,{n,1,Infinity}]", "Pi^2/6 - 3 Pi/2 + 9/4", 1e-12);
+    ASSERT_CLOSE("NSum[Cos[Pi n/3]/n,{n,1,Infinity}]", "0", 1e-12);
+    /* a non-oscillatory part (1/(2 n^2)) next to the e^(+-2 i n) groups */
+    ASSERT_CLOSE("NSum[Sin[n]^2/n^2,{n,1,Infinity}]", "(Pi-1)/2", 1e-12);
+    ASSERT_CLOSE("NSum[E^(I n)/n^2,{n,1,Infinity}]", "PolyLog[2, E^I]", 1e-12);
+    ASSERT_CLOSE("NSum[2^-n Cos[n]/n,{n,1,Infinity}]", "-Re[Log[1 - E^I/2]]", 1e-12);
+    /* 1/Sqrt[n] amplitude: Re Li_(1/2)(e^i), independently evaluated through
+     * the Hurwitz-zeta reflection formula */
+    ASSERT_CLOSE("NSum[Cos[n]/Sqrt[n],{n,1,Infinity}]",
+                 "-0.1941089350921820497391492449", 1e-12);
+    /* arbitrary precision */
+    ASSERT_CLOSE("NSum[Sin[n]/n,{n,1,Infinity},WorkingPrecision->30]", "(Pi-1)/2", 1e-26);
+    ASSERT_CLOSE("NSum[Cos[n]/Sqrt[n],{n,1,Infinity},WorkingPrecision->30]",
+                 "-0.1941089350921820497391492449`30", 1e-25);
+    ASSERT_CLOSE("NSum[Cos[n]/n^2,{n,1,Infinity},WorkingPrecision->30]",
+                 "Pi^2/6 - Pi/2 + 1/4", 1e-26);
+}
+
+/* Alternating summands the numeric sign probe misses (a zero first term,
+ * a magnitude that rises before it falls).  -eta'(s) closed forms:
+ * sum (-1)^n Log[n]/n = EulerGamma Log[2] - Log[2]^2/2, and
+ * sum (-1)^(n+1) Log[n]/n^2 = -(Log[2] Pi^2/12 + Zeta'(2)/2) with
+ * Zeta'(2) = -0.937548254315843753702574094568. */
+static void test_alternating_log(void) {
+    ASSERT_CLOSE("NSum[(-1)^n Log[n]/n,{n,1,Infinity}]",
+                 "EulerGamma Log[2] - Log[2]^2/2", 1e-12);
+    ASSERT_CLOSE("NSum[Cos[Pi n] Log[n]/n,{n,1,Infinity}]",
+                 "EulerGamma Log[2] - Log[2]^2/2", 1e-12);
+    ASSERT_CLOSE("NSum[(-1)^(n+1) Log[n]/n^2,{n,1,Infinity}]",
+                 "-(Log[2] Pi^2/12 - 0.93754825431584375370257409456786/2)", 1e-12);
+    ASSERT_CLOSE("NSum[(-1)^n Log[n]/n,{n,1,Infinity},WorkingPrecision->30]",
+                 "EulerGamma Log[2] - Log[2]^2/2", 1e-26);
+    /* the eta values themselves stay exact through the split */
+    ASSERT_CLOSE("NSum[(-1)^(n+1)/Sqrt[n],{n,1,Infinity},WorkingPrecision->30]",
+                 "(1 - Sqrt[2]) Zeta[1/2]", 1e-26);
+}
+
 static void test_unevaluated_forms(void) {
     char* s1 = eval_str("NSum[1/i^2,{i,1,n}]");         /* symbolic upper bound */
     ASSERT_MSG(strstr(s1, "NSum[") != NULL, "symbolic bound should stay: %s", s1);
@@ -266,6 +314,8 @@ static void test_memory_loop(void) {
         "NSum[(-1)^n (2/n)^k/k^2,{n,2,Infinity},{k,1,n}]",
         "NSum[1/i^2,{i,1,Infinity},WorkingPrecision->30]",
         "NSum[1./Prime[i]^2,{i,1,Infinity}]",   /* integer-only: continuity probe */
+        "NSum[Sin[n]/n,{n,1,Infinity}]",        /* phase split, Abel–Plana */
+        "NSum[(-1)^n Log[n]/n,{n,1,Infinity}]", /* phase split, CVZ */
     };
     /* 3 passes suffice for leak detection; the complex Log[x]/x^(2+2I) summand
      * is the slowest path (oscillatory Euler–Maclaurin), so keep the count low. */
@@ -299,6 +349,8 @@ int main(void) {
     TEST(test_working_precision);
     TEST(test_slow_algebraic_machine);
     TEST(test_slow_log_honest);
+    TEST(test_trig_oscillatory);
+    TEST(test_alternating_log);
     TEST(test_unevaluated_forms);
     TEST(test_attributes);
     TEST(test_memory_loop);

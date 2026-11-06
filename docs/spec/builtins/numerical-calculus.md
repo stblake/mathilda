@@ -587,6 +587,25 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   remainder estimates `ω_k` built from the terms `a_k`: u uses `(β+k) a_k`
   (`β = 1`), t uses `a_k`, v uses `a_k a_{k+1}/(a_k − a_{k+1})`.  Reaches full
   `WorkingPrecision` on smoothly-convergent series (e.g. `Σ 1/n²`).
+- **Phase splitting** (part of `Automatic`, for a single infinite iterator) --
+  a summand with a linear phase (`Sin[a n]`, `Cos[a n]`, `(-1)^n`, `E^(I a n)`,
+  `b^n` with `|b| = 1`) is rewritten by `TrigToExp` + `Expand` as
+  `Σ_j F_j(n) e^(λ_j n)` with each `F_j` phase-free, and the terms are grouped by
+  `λ_j`.  With `Λ = λ di` reduced to `μ`, `Im μ ∈ [0, 2π)` (so an aliased
+  frequency `a > 2π` is handled exactly): a group with `Im μ = 0` joins a
+  non-oscillatory remainder summed by the ordinary methods; `μ = iπ`
+  (alternating) uses Cohen–Villegas–Zagier; any other group uses the
+  **Abel–Plana formula with the contour rotated onto the imaginary axis**,
+  `Σ_k e^(μk) f(k) = f(0)/2 + i ∫_0^∞ [e^(iμy) f(iy) − e^(−iμy−2πy) f(−iy)]/(1 − e^(−2πy)) dy`,
+  whose kernels decay exponentially however slowly the amplitude does
+  (`Sin[n]/n`, `Cos[n]/Sqrt[n]`, `Sin[n]/Log[n+1]`).  A real summand's conjugate
+  groups are summed once.  Sixteen head terms are summed directly first, and the
+  oscillatory part is recomputed from a second base (32 terms); the difference
+  of the two exact identities is the error estimate, which also exposes a
+  summand that is not analytic where the formula needs it.  An undamped phase
+  with a non-decaying amplitude (`Sin[n]`) is left to the ordinary dispatch.
+  This also catches alternating sums the numeric sign probe misses because the
+  first term is zero (`(-1)^n Log[n]/n`).
 - **`Automatic`** (default) -- probes the first terms, and (when the head is not
   already monotone) a geometric far-tail ladder that locates a late peak or
   sustained growth far beyond the head window.  Chooses `AlternatingSigns` for a

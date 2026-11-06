@@ -1968,6 +1968,581 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
 }
 
 /* ------------------------------------------------------------------ *
+ *  Phase splitting: trigonometric and sign-alternating summands       *
+ *                                                                     *
+ *  A summand carrying a linear phase — Sin[a n], Cos[a n], (-1)^n,     *
+ *  E^(I a n) — times a slowly decaying amplitude (Sin[n]/n,            *
+ *  Cos[n]/Sqrt[n], (-1)^n Log[n]/n) defeats every method above: its    *
+ *  continuous extension oscillates, so the Euler–Maclaurin tail        *
+ *  integral and contour derivatives are wrong (an aliased frequency    *
+ *  a > 2 Pi makes the correction series diverge outright), while a      *
+ *  real summand mixes the two frequencies e^(+-i a n), which no single  *
+ *  partial-sum model (Wynn, Levin) fits.  The numeric alternation       *
+ *  detector also misses (-1)^n Log[n]/n, whose first term is 0.         *
+ *                                                                     *
+ *  The summand is therefore split symbolically,                         *
+ *      f(n) = sum_j F_j(n) e^(lam_j n),   F_j free of any phase,        *
+ *  by TrigToExp + Expand and stripping the factors b^(c n + d)          *
+ *  (b free of n) from each term; terms are grouped by lam_j.  With the  *
+ *  index n_k = n0 + k di and Lam = lam di, each group is                 *
+ *      e^(lam n0) sum_k e^(Lam k) f(k),   f(x) = F(n0 + x di),           *
+ *  where f is smooth (analytic for Re x >= 0 once n0 is past the head).  *
+ *  e^(Lam k) depends on Lam only modulo 2 Pi i, so mu = Lam - 2 Pi i m   *
+ *  is taken with Im mu in [0, 2 Pi), and:                                *
+ *    - Im mu = 0 (no oscillation): the original terms join a "rest"     *
+ *      summand summed by the ordinary methods above;                    *
+ *    - mu = i Pi (alternating): Cohen–Villegas–Zagier on the group;     *
+ *    - otherwise the Abel–Plana formula with the contour rotated onto    *
+ *      the imaginary axis (g(x) = e^(mu x) f(x)):                        *
+ *        sum_k g(k) = f(0)/2 + i int_0^oo [e^(i mu y) f(iy)              *
+ *                     - e^(-i mu y - 2 Pi y) f(-iy)] / (1 - e^(-2 Pi y)) dy,*
+ *      valid for 0 < Im mu < 2 Pi, Re mu <= 0 and f analytic and of      *
+ *      sub-exponential growth in Re x >= 0.  Both kernels decay           *
+ *      exponentially, at rates Im mu and 2 Pi - Im mu, so no slow         *
+ *      amplitude (1/Sqrt[n], 1/Log[n]) matters.                           *
+ *  The oscillatory part is computed from two base points n0 (head of     *
+ *  m1 and of m2 terms summed directly); both are exact identities, so    *
+ *  their difference is an honest error estimate that also exposes a     *
+ *  summand that is not analytic where the formula needs it.             *
+ * ------------------------------------------------------------------ */
+
+static bool ns_free_of(const Expr* e, const char* var) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name != var;
+    if (e->type != EXPR_FUNCTION) return true;
+    if (!ns_free_of(e->data.function.head, var)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!ns_free_of(e->data.function.args[i], var)) return false;
+    return true;
+}
+
+static bool ns_has_head(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == h;
+}
+
+/* A var-dependent phase anywhere in `e`: b^ex with b free of var and ex not,
+ * or a circular function of var. */
+static bool ns_has_phase(const Expr* e, const char* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (ns_has_head(e, SYM_Power) && e->data.function.arg_count == 2
+        && ns_free_of(e->data.function.args[0], var)
+        && !ns_free_of(e->data.function.args[1], var))
+        return true;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if ((h == SYM_Sin || h == SYM_Cos || h == SYM_Tan || h == SYM_Cot
+             || h == SYM_Sec || h == SYM_Csc) && !ns_free_of(e, var))
+            return true;
+    }
+    if (ns_has_phase(e->data.function.head, var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ns_has_phase(e->data.function.args[i], var)) return true;
+    return false;
+}
+
+/* Split one evaluated product term into F(var)·e^(lam·var), F phase-free.
+ * Returns F (new) and sets *lam (new, exact), or NULL when the term's phase
+ * is not linear in var or is not a top-level factor. */
+static Expr* ns_strip_phase(const Expr* term, const char* var, Expr** lam) {
+    Expr* const* fs;
+    Expr* one[1];
+    size_t n;
+    if (ns_has_head(term, SYM_Times)) {
+        fs = term->data.function.args; n = term->data.function.arg_count;
+    } else {
+        one[0] = (Expr*)term; fs = one; n = 1;
+    }
+    Expr** keep = malloc(sizeof(Expr*) * n);
+    if (!keep) return NULL;
+    size_t nk = 0;
+    Expr* L = expr_new_integer(0);
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++) {
+        Expr* f = fs[i];
+        if (ns_has_head(f, SYM_Power) && f->data.function.arg_count == 2
+            && ns_free_of(f->data.function.args[0], var)
+            && !ns_free_of(f->data.function.args[1], var)) {
+            Expr* b = f->data.function.args[0];
+            Expr* ex = f->data.function.args[1];
+            Expr* c = eval_and_free(ns_mk2("D", expr_copy(ex), expr_new_symbol(var)));
+            if (!c || !ns_free_of(c, var)) { expr_free(c); ok = false; break; }
+            L = eval_and_free(ns_mk2("Plus", L,
+                                     ns_mk2("Times", c, ns_mk1("Log", expr_copy(b)))));
+            /* b^(c var + d) = b^d · e^(c Log[b] var) for the principal power. */
+            Expr* ex0 = eval_and_free(ns_mk2("ReplaceAll", expr_copy(ex),
+                                             ns_mk2("Rule", expr_new_symbol(var),
+                                                    expr_new_integer(0))));
+            keep[nk++] = ns_mk2("Power", expr_copy(b), ex0);
+        } else {
+            keep[nk++] = expr_copy(f);
+        }
+    }
+    if (!ok) {
+        for (size_t i = 0; i < nk; i++) expr_free(keep[i]);
+        free(keep); expr_free(L);
+        return NULL;
+    }
+    Expr* s = expr_new_function(expr_new_symbol(SYM_Times), keep, nk);
+    free(keep);
+    s = eval_and_free(s);
+    if (!s || ns_has_phase(s, var)) { expr_free(s); expr_free(L); return NULL; }
+    *lam = L;
+    return s;
+}
+
+typedef struct {
+    Expr*          lam;      /* exact phase per unit of the index           */
+    double _Complex lamd;
+    Expr*          smooth;   /* F: sum of the phase-stripped terms           */
+    Expr*          orig;     /* the group's original terms                   */
+    Expr*          mu;       /* lam·di - 2 Pi i m, Im mu in [0, 2 Pi)         */
+    bool           alternating;
+    /* Conjugate pairing: a real summand's e^(+i a n) and e^(-i a n) groups
+     * have F_k(x) = conj(F_j(conj x)), so group k sums to conj(group j) and
+     * is not computed (it halves the work for Sin/Cos summands). */
+    int            mirror_of;   /* j when this group is j's conjugate, else -1 */
+    bool           has_mirror;
+} NsPhaseGroup;
+
+static Expr* ns_add_expr(Expr* acc, Expr* t) {
+    if (!acc) return t;
+    return ns_mk2("Plus", acc, t);
+}
+
+/* Context helper: a summation context for `body` from base `n0`. */
+static void ns_ctx_setup(NsCtx* c, Expr* body, Expr* n0, Expr* di, NsBind* bind,
+                         const NsOpts* o, const char* var, bool compile) {
+    c->body = body; c->imin = n0; c->di = di; c->bind = bind;
+    c->ac = NULL; c->ac_prec = NULL; c->ac_prec_z = NULL;
+#ifdef USE_MPFR
+    if (o->prec_mpfr) { c->spec.mode = NUMERIC_MODE_MPFR; c->spec.bits = o->bits; }
+    else c->spec = numeric_machine_spec();
+#else
+    c->spec = numeric_machine_spec();
+#endif
+    if (compile) {
+        Expr* vsym = expr_new_symbol(var);
+        const Expr* vs[1] = { vsym };
+        if (!o->prec_mpfr) c->ac = autocompile_new(body, vs, 1);
+#ifdef USE_MPFR
+        else if (o->bits > 0) c->ac_prec = autocompile_new_prec(body, vs, 1, (long)o->bits);
+#endif
+        expr_free(vsym);
+    }
+}
+
+static void ns_ctx_teardown(NsCtx* c) {
+    autocompiled_free(c->ac);
+    autocompiled_free(c->ac_prec);
+    c->ac = NULL; c->ac_prec = NULL;
+}
+
+/* Numericalise a var-free expression (consumed) at the context precision. */
+static Expr* ns_numeric_const(Expr* e, const NsCtx* c) {
+    Expr* raw = eval_and_free(e);
+    Expr* num = raw ? numericalize(raw, c->spec) : NULL;
+    expr_free(raw);
+    return num;
+}
+
+/* L1 magnitude of a numeric Expr as a double (INFINITY if not numeric). */
+static double ns_expr_mag(const Expr* e) {
+    if (!e) return INFINITY;
+#ifdef USE_MPFR
+    {
+        Expr *re, *im;
+        if (e->type == EXPR_MPFR) return fabs(mpfr_get_d(e->data.mpfr, MPFR_RNDN));
+        if (is_complex((Expr*)e, &re, &im)) {
+            double r, i;
+            if (ns_to_double_real(re, &r) && ns_to_double_real(im, &i)) return fabs(r) + fabs(i);
+        }
+    }
+#endif
+    double _Complex v;
+    if (ns_to_complex((Expr*)e, &v)) return fabs(creal(v)) + fabs(cimag(v));
+    return INFINITY;
+}
+
+/* One oscillatory group summed from base n0 by Abel–Plana:
+ *   e^(lam n0) [ f(0)/2 + int_0^oo H(y) dy ],
+ *   H(y) = I (e^(I mu y) F(n0 + I di y) - e^(-I mu y - 2 Pi y) F(n0 - I di y))
+ *          / (1 - e^(-2 Pi y)).
+ * *qerr receives the quadrature error estimate. */
+/* F(n0 + sgn·I·di·var), evaluated (var stays symbolic: it is the new variable). */
+static Expr* ns_shift_imag(const Expr* F, const char* var, Expr* n0, Expr* di, int sgn) {
+    Expr* step = ns_mk2("Times", expr_new_integer(sgn),
+                        ns_mk2("Times", expr_new_symbol(SYM_I),
+                               ns_mk2("Times", expr_copy(di), expr_new_symbol(var))));
+    return eval_and_free(ns_mk2("ReplaceAll", expr_copy((Expr*)F),
+                                ns_mk2("Rule", expr_new_symbol(var),
+                                       ns_mk2("Plus", expr_copy(n0), step))));
+}
+
+static Expr* ns_abel_plana_group(const NsPhaseGroup* g, const char* var, Expr* n0,
+                                 Expr* di, NsBind* bind, const NsOpts* o, double* qerr) {
+    *qerr = INFINITY;
+    ns_bind_clear_temp(symtab_get_def(var));       /* symbolic: index unbound */
+    Expr* shp = ns_shift_imag(g->smooth, var, n0, di, +1);
+    Expr* shm = ns_shift_imag(g->smooth, var, n0, di, -1);
+    if (!shp || !shm) { expr_free(shp); expr_free(shm); return NULL; }
+    /* H(y), with y spelled as var. */
+    Expr* imu_y = ns_mk2("Times", expr_new_symbol(SYM_I),
+                         ns_mk2("Times", expr_copy(g->mu), expr_new_symbol(var)));
+    Expr* e1 = ns_mk2("Power", expr_new_symbol(SYM_E), imu_y);
+    Expr* e2 = ns_mk2("Power", expr_new_symbol(SYM_E),
+                      ns_mk2("Plus",
+                             ns_mk2("Times", expr_new_integer(-1), expr_copy(imu_y)),
+                             ns_mk2("Times", ns_mk2("Times", expr_new_integer(-2),
+                                                    expr_new_symbol(SYM_Pi)),
+                                    expr_new_symbol(var))));
+    Expr* num = ns_mk2("Plus", ns_mk2("Times", e1, shp),
+                       ns_mk2("Times", expr_new_integer(-1), ns_mk2("Times", e2, shm)));
+    Expr* den = ns_mk2("Plus", expr_new_integer(1),
+                       ns_mk2("Times", expr_new_integer(-1),
+                              ns_mk2("Power", expr_new_symbol(SYM_E),
+                                     ns_mk2("Times", ns_mk2("Times", expr_new_integer(-2),
+                                                            expr_new_symbol(SYM_Pi)),
+                                            expr_new_symbol(var)))));
+    Expr* H = eval_and_free(ns_mk2("Times", expr_new_symbol(SYM_I),
+                                   ns_mk2("Times", num,
+                                          ns_mk2("Power", den, expr_new_integer(-1)))));
+    if (!H) return NULL;
+
+    /* H needs only modest guard bits: its O(y) cancellation near y = 0 costs
+     * a few bits, and the DE weights there are tiny (the factor-2 guard of the
+     * Euler–Maclaurin path is for a different, larger cancellation). */
+    NsOpts ho = *o;
+    if (ho.prec_mpfr && ho.target_bits > 0) ho.bits = ho.target_bits + 48;
+    NsCtx hc;
+    ns_ctx_setup(&hc, H, n0, di, bind, &ho, var, true);
+    Expr* integral = NULL;
+#ifdef USE_MPFR
+    if (o->prec_mpfr) {
+        mpfr_prec_t p = (mpfr_prec_t)ho.bits;
+        mpfr_t a, rr, ri;
+        mpfr_inits2(p, a, rr, ri, (mpfr_ptr)0);
+        mpfr_set_ui(a, 0, MPFR_RNDN);
+        double digits = numeric_bits_to_digits(o->target_bits);
+        double reltol = pow(10.0, -(0.6 * digits + 4.0));   /* DE: next level squares it */
+        int mlev = 14 + (int)(digits / 8.0);
+        if (mlev > 22) mlev = 22;
+        double ae = INFINITY;
+        dequad_halfline_mpfr(ns_sample_x_mpfr, &hc, a, ho.bits, reltol, mlev, rr, ri, &ae);
+        if (isfinite(ae)) { integral = ns_from_complex_mpfr(rr, ri); *qerr = ae; }
+        mpfr_clears(a, rr, ri, (mpfr_ptr)0);
+    } else
+#endif
+    {
+        /* Gauss–Kronrod near y = 0, where the two terms of H cancel to O(y)
+         * against the O(y) denominator (its nodes stay clear of the endpoint),
+         * then the exp-sinh half-line rule. */
+        GkResult q1 = gk_integrate_machine(ns_sample_x_machine, &hc, 0.0, 2.0,
+                                           1e-300, 1e-15, 200, 0, false);
+        double _Complex v2 = 0.0; double e2r = 0.0;
+        bool ok2 = (q1.status != GK_NONNUMERIC);
+        if (ok2) {
+            dequad_halfline_machine(ns_sample_x_machine, &hc, 2.0, 1e-14, 14, &v2, &e2r);
+            ok2 = isfinite(creal(v2)) && isfinite(cimag(v2)) && isfinite(e2r);
+        }
+        if (ok2) {
+            integral = ns_from_complex_d(q1.value + v2);
+            *qerr = q1.abs_err + e2r;
+        }
+    }
+    ns_ctx_teardown(&hc);
+    expr_free(H);
+    if (!integral) return NULL;
+
+    /* e^(lam n0) (F(n0)/2 + integral) at the context precision. */
+    NsCtx fc;
+    ns_ctx_setup(&fc, g->smooth, n0, di, bind, o, var, false);
+    Expr* f0 = ns_eval_at(&fc, expr_copy(n0));
+    if (!f0) { expr_free(integral); return NULL; }
+    Expr* r = ns_mk2("Times",
+                     ns_mk2("Power", expr_new_symbol(SYM_E),
+                            ns_mk2("Times", expr_copy(g->lam), expr_copy(n0))),
+                     ns_mk2("Plus", ns_mk2("Times", ns_mk2("Power", expr_new_integer(2),
+                                                           expr_new_integer(-1)), f0),
+                            integral));
+    Expr* out = ns_numeric_const(r, &fc);
+    {
+        /* Scale the quadrature error by |e^(lam n0)|. */
+        double _Complex ln0;
+        Expr* t = ns_mk2("Times", expr_copy(g->lam), expr_copy(n0));
+        if (ns_const_machine(t, &ln0)) *qerr *= exp(creal(ln0));
+    }
+    return out;
+}
+
+/* One alternating group (mu = i Pi) from base n0 by Cohen–Villegas–Zagier. */
+static Expr* ns_cvz_group(const NsPhaseGroup* g, const char* var, Expr* n0, Expr* di,
+                          NsBind* bind, const NsOpts* o) {
+    NsCtx cc;
+    ns_ctx_setup(&cc, g->orig, n0, di, bind, o, var, true);
+    int n = ns_cvz_terms(o);
+    Expr* out;
+#ifdef USE_MPFR
+    out = o->prec_mpfr ? ns_cvz_mpfr(&cc, n, o->bits) : ns_cvz_machine(&cc, n);
+#else
+    out = ns_cvz_machine(&cc, n);
+#endif
+    ns_ctx_teardown(&cc);
+    return out;
+}
+
+static Expr* ns_index_at(Expr* imin, Expr* di, long k) {
+    return eval_and_free(ns_mk2("Plus", expr_copy(imin),
+                                ns_mk2("Times", expr_new_integer(k), expr_copy(di))));
+}
+
+/* Sum of every oscillatory group from base index imin + m·di; NULL on failure. */
+static Expr* ns_osc_groups_from(NsPhaseGroup* G, int ng, const char* var, Expr* imin,
+                                Expr* di, long m, NsBind* bind, const NsOpts* o,
+                                double* qerr) {
+    Expr* n0 = ns_index_at(imin, di, m);
+    Expr* acc = NULL;
+    *qerr = 0.0;
+    for (int j = 0; j < ng; j++) {
+        if (!G[j].mu || G[j].mirror_of >= 0) continue;   /* rest / mirrored */
+        ns_bind_clear_temp(symtab_get_def(var));
+        double e = 0.0;
+        Expr* v = G[j].alternating ? ns_cvz_group(&G[j], var, n0, di, bind, o)
+                                   : ns_abel_plana_group(&G[j], var, n0, di, bind, o, &e);
+        if (!v) { expr_free(acc); expr_free(n0); return NULL; }
+        if (G[j].has_mirror) {
+            v = eval_and_free(ns_mk2("Plus", v, ns_mk1("Conjugate", expr_copy(v))));
+            e *= 2.0;
+        }
+        *qerr += e;
+        acc = ns_add_expr(acc, v);
+    }
+    expr_free(n0);
+    return acc ? eval_and_free(acc) : expr_new_integer(0);
+}
+
+static void ns_phase_groups_free(NsPhaseGroup* G, int ng) {
+    for (int j = 0; j < ng; j++) {
+        expr_free(G[j].lam); expr_free(G[j].smooth); expr_free(G[j].orig); expr_free(G[j].mu);
+    }
+    free(G);
+}
+
+/* Attempt the phase split for an infinite Automatic sum.  Returns the sum, or
+ * NULL when the summand has no oscillatory linear phase (or cannot be split),
+ * in which case the caller proceeds with the ordinary method dispatch. */
+static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
+                            Expr* di, const NsOpts* o) {
+    double dlo, ddi;
+    if (!ns_to_double_real(imin, &dlo) || !ns_to_double_real(di, &ddi) || !(ddi > 0.0))
+        return NULL;
+    if (!ns_has_phase(body, var) || ns_body_is_blackbox(body)) return NULL;
+
+    NsBind bind; ns_bind_snapshot(&bind, var);
+    Expr* ex = eval_and_free(ns_mk1("Expand", ns_mk1("TrigToExp", expr_copy(body))));
+    NsPhaseGroup* G = NULL;
+    int ng = 0, cap = 0, nosc = 0;
+    bool ok = ex != NULL;
+    Expr* rest = NULL;
+    Expr* out = NULL;
+    if (ok) {
+        Expr* const* ts; Expr* one[1]; size_t nt;
+        if (ns_has_head(ex, SYM_Plus)) { ts = ex->data.function.args; nt = ex->data.function.arg_count; }
+        else { one[0] = ex; ts = one; nt = 1; }
+        for (size_t i = 0; i < nt && ok; i++) {
+            Expr* lam = NULL;
+            Expr* s = ns_strip_phase(ts[i], var, &lam);
+            double _Complex ld;
+            if (!s || !ns_const_machine(expr_copy(lam), &ld)) {
+                expr_free(s); expr_free(lam); ok = false; break;
+            }
+            int j = 0;
+            for (; j < ng; j++)
+                if (cabs(G[j].lamd - ld) <= 1e-12 * (1.0 + cabs(ld))) break;
+            if (j == ng) {
+                if (ng == cap) {
+                    cap = cap ? 2 * cap : 4;
+                    NsPhaseGroup* nG = realloc(G, sizeof(NsPhaseGroup) * (size_t)cap);
+                    if (!nG) { expr_free(s); expr_free(lam); ok = false; break; }
+                    G = nG;
+                }
+                G[ng].lam = lam; G[ng].lamd = ld; G[ng].smooth = s;
+                G[ng].orig = expr_copy(ts[i]); G[ng].mu = NULL; G[ng].alternating = false;
+                G[ng].mirror_of = -1; G[ng].has_mirror = false;
+                ng++;
+            } else {
+                expr_free(lam);
+                G[j].smooth = ns_mk2("Plus", G[j].smooth, s);
+                G[j].orig = ns_mk2("Plus", G[j].orig, expr_copy(ts[i]));
+            }
+        }
+    }
+    for (int j = 0; ok && j < ng; j++) {
+        G[j].smooth = eval_and_free(G[j].smooth);
+        G[j].orig = eval_and_free(G[j].orig);
+        if (!G[j].smooth || !G[j].orig) ok = false;
+    }
+    /* Classify each group by its per-step phase Lam = lam·di. */
+    for (int j = 0; ok && j < ng; j++) {
+        double _Complex L = G[j].lamd * ddi;
+        if (creal(L) > 1e-12) { ok = false; break; }      /* growing: not ours */
+        if (fabs(cimag(L)) < 1e-12) {                       /* no oscillation */
+            rest = ns_add_expr(rest, expr_copy(G[j].orig));
+            continue;
+        }
+        double twopi = 2.0 * M_PI;
+        double m = floor(cimag(L) / twopi);
+        double th = cimag(L) - m * twopi;
+        if (th < 1e-9 || th > twopi - 1e-9) { ok = false; break; }   /* aliased 1 */
+        G[j].mu = eval_and_free(ns_mk2("Plus", ns_mk2("Times", expr_copy(G[j].lam), expr_copy(di)),
+                     ns_mk2("Times", expr_new_integer(-(int64_t)(2.0 * m)),
+                            ns_mk2("Times", expr_new_symbol(SYM_Pi), expr_new_symbol(SYM_I)))));
+        G[j].alternating = fabs(creal(L)) < 1e-12 && fabs(th - M_PI) < 1e-12;
+        /* An undamped phase needs a decaying amplitude, else the series
+         * diverges (Sin[n]); leave that to the ordinary dispatch. */
+        if (fabs(creal(L)) < 1e-12) {
+            NsCtx fc;
+            ns_ctx_setup(&fc, G[j].smooth, imin, di, &bind, o, var, false);
+            fc.spec = numeric_machine_spec();
+            double _Complex a1, a2;
+            bool d1 = ns_eval_complex_machine(&fc, G[j].smooth, expr_new_real(dlo + 1e4 * ddi), &a1);
+            bool d2 = ns_eval_complex_machine(&fc, G[j].smooth, expr_new_real(dlo + 1e8 * ddi), &a2);
+            if (!d1 || !d2 || !(cabs(a2) < cabs(a1))) { ok = false; break; }
+        }
+        nosc++;
+    }
+    if (ok && nosc == 0) ok = false;
+    /* A plain alternating summand that the sign probe already recognises
+     * (strictly alternating, magnitude decreasing from the first term) is
+     * summed by the ordinary dispatch's single CVZ pass at a fraction of the
+     * cost; the split is for the cases that probe misses. */
+    if (ok && nosc == 1 && !rest) {
+        bool only_alt = false;
+        for (int j = 0; j < ng; j++) if (G[j].mu) only_alt = G[j].alternating;
+        if (only_alt) {
+            NsCtx pc;
+            ns_ctx_setup(&pc, body, imin, di, &bind, o, var, false);
+            pc.spec = numeric_machine_spec();
+            NsProbe pr = ns_probe(&pc, -1);
+            if (pr.ok && ns_is_alternating(&pr) && ns_mag_decreasing(&pr, 0)) ok = false;
+        }
+    }
+    /* Pair conjugate groups (checked numerically at a generic complex point). */
+    for (int j = 0; ok && j < ng; j++) {
+        if (!G[j].mu || G[j].alternating || G[j].mirror_of >= 0 || G[j].has_mirror) continue;
+        for (int k = j + 1; k < ng; k++) {
+            if (!G[k].mu || G[k].alternating || G[k].mirror_of >= 0 || G[k].has_mirror) continue;
+            if (!(cabs(G[k].lamd - conj(G[j].lamd)) <= 1e-12 * (1.0 + cabs(G[j].lamd)))) continue;
+            NsCtx fc;
+            ns_ctx_setup(&fc, G[j].smooth, imin, di, &bind, o, var, false);
+            fc.spec = numeric_machine_spec();
+            double zr = dlo + 2.371, zi = 0.613;
+            double _Complex fj, fk;
+            bool a1 = ns_eval_complex_machine(&fc, G[j].smooth,
+                          make_complex(expr_new_real(zr), expr_new_real(zi)), &fj);
+            bool a2 = ns_eval_complex_machine(&fc, G[k].smooth,
+                          make_complex(expr_new_real(zr), expr_new_real(-zi)), &fk);
+            if (a1 && a2 && cabs(fk - conj(fj)) <= 1e-12 * (cabs(fj) + 1e-300)) {
+                G[k].mirror_of = j; G[j].has_mirror = true;
+                break;
+            }
+        }
+    }
+
+    if (ok) {
+        /* Head summed directly, then the oscillatory part from two bases. */
+        const long m1 = 16, m2 = 32;
+        NsCtx hc;
+        ns_ctx_setup(&hc, body, imin, di, &bind, o, var, true);
+        Expr* head = ns_direct(&hc, m1, o);
+        ns_ctx_teardown(&hc);
+        double qa = 0.0, qb = 0.0;
+        Expr* oscA = head ? ns_osc_groups_from(G, ng, var, imin, di, m1, &bind, o, &qa) : NULL;
+        Expr* oscB = NULL;
+        if (oscA) {
+            /* Base m2: the oscillatory terms m1..m2-1 directly, then the groups. */
+            Expr* osc_orig = NULL;
+            for (int j = 0; j < ng; j++)
+                if (G[j].mu) osc_orig = ns_add_expr(osc_orig, expr_copy(G[j].orig));
+            ns_bind_clear_temp(symtab_get_def(var));   /* symbolic: index unbound */
+            osc_orig = eval_and_free(osc_orig);
+            Expr* n1 = ns_index_at(imin, di, m1);
+            NsCtx mc;
+            ns_ctx_setup(&mc, osc_orig, n1, di, &bind, o, var, false);
+            Expr* mid = ns_direct(&mc, m2 - m1, o);
+            ns_ctx_teardown(&mc);
+            expr_free(n1);
+            Expr* tailB = mid ? ns_osc_groups_from(G, ng, var, imin, di, m2, &bind, o, &qb) : NULL;
+            if (mid && tailB) oscB = eval_and_free(ns_mk2("Plus", mid, tailB));
+            else { expr_free(mid); expr_free(tailB); }
+            expr_free(osc_orig);
+        }
+        ns_bind_restore(&bind);
+
+        Expr* restv = NULL;
+        bool rest_ok = true;
+        if (oscA && oscB && rest) {
+            rest = eval_and_free(rest);
+            Expr* n1 = ns_index_at(imin, di, m1);
+            NsOpts ro = *o;
+            restv = ns_run_single(rest, var, n1, imax, di, true, -1, &ro);
+            expr_free(n1);
+            rest_ok = restv != NULL;
+        }
+        if (head && oscA && oscB && rest_ok) {
+            NsCtx sc;
+            ns_ctx_setup(&sc, body, imin, di, NULL, o, var, false);
+            Expr* dAB = ns_numeric_const(
+                ns_mk2("Plus", expr_copy(oscA), ns_mk2("Times", expr_new_integer(-1),
+                                                       expr_copy(oscB))), &sc);
+            double err = ns_expr_mag(dAB);
+            expr_free(dAB);
+            Expr* tot = ns_mk2("Plus", head, oscA);
+            if (restv) tot = ns_mk2("Plus", tot, restv);
+            head = NULL; oscA = NULL; restv = NULL;
+            out = ns_numeric_const(tot, &sc);
+            /* A real summand gives a real sum: drop the roundoff imaginary part
+             * left by the conjugate frequency pairs. */
+            if (out) {
+                bool real_summand = true;
+                NsBind rb; ns_bind_snapshot(&rb, var);
+                NsCtx pc;
+                ns_ctx_setup(&pc, body, imin, di, &rb, o, var, false);
+                pc.spec = numeric_machine_spec();
+                for (long k = 0; k < 3 && real_summand; k++) {
+                    double _Complex t;
+                    Expr* num = ns_eval_expr_at(&pc, body, ns_index_value(&pc, k));
+                    if (!num || !ns_to_complex(num, &t) || cimag(t) != 0.0) real_summand = false;
+                    expr_free(num);
+                }
+                ns_bind_restore(&rb);
+                if (real_summand) out = ns_numeric_const(ns_mk1("Re", out), &sc);
+            }
+            if (out) {
+                err += qa;
+                if (ns_goal_active(o)) {
+                    double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out),
+                                                 ns_wp_digits(o));
+                    if (err > tol) nc_warn_goal("NSum", err, tol);
+                }
+            }
+        }
+        (void)qb;
+        expr_free(head); expr_free(oscA); expr_free(oscB); expr_free(restv);
+    } else {
+        ns_bind_restore(&bind);
+    }
+    expr_free(rest);
+    expr_free(ex);
+    ns_phase_groups_free(G, ng);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Iterator-spec parsing                                              *
+ * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ *
  *  Iterator-spec parsing                                              *
  * ------------------------------------------------------------------ */
 
@@ -2078,7 +2653,11 @@ Expr* builtin_nsum(Expr* res) {
     }
 
     Expr* out = NULL;
-    if (!bad)
+    /* Linear-phase summands (Sin[n]/n, (-1)^n Log[n]/n) are split by frequency
+     * before the ordinary dispatch, which cannot sum them (see ns_phase_split). */
+    if (!bad && infinite && o.method == SYM_Automatic && nspecs == 1)
+        out = ns_phase_split(eff_body, var, imin, imax_e, di, &o);
+    if (!bad && !out)
         out = ns_run_single(eff_body, var, imin, imax_e, di, infinite, count, &o);
 
     /* Round the guarded internal result back to the requested precision. */
