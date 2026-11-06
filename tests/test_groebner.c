@@ -721,6 +721,35 @@ static void test_flint_engine_matches_classical(void) {
 
 /* ------------------------------------------------------------------ */
 
+/* InexactNumbers on a zero-dimensional Lex problem goes through the numeric
+ * FGLM: the basis must have the exact basis's exponent vectors, and every
+ * coefficient must match the exact basis made monic, to the precision
+ * asked for (ISSAC '97 problem 6: four dense quadrics, shape basis of
+ * degree 16, exact coefficients of ~900 digits). */
+static void test_inexact_numeric_fglm_matches_exact(void) {
+    const char* setup =
+        "eqs6 = {8 w^2 + 5 w x - 4 w y + 2 w z + 3 w + 5 x^2 + 2 x y - 7 x z - 7 x + 7 y^2 - 8 y z - 7 y + 7 z^2 - 8 z + 8, "
+        "3 w^2 - 5 w x - 3 w y - 6 w z + 9 w + 4 x^2 + 2 x y - 2 x z + 7 x + 9 y^2 + 6 y z + 5 y + 7 z^2 + 7 z + 5, "
+        "-2 w^2 + 9 w x + 9 w y - 7 w z - 4 w + 8 x^2 + 9 x y - 3 x z + 8 x + 6 y^2 - 7 y z + 4 y - 6 z^2 + 8 z + 2, "
+        "7 w^2 + 5 w x + 3 w y - 5 w z - 5 w + 2 x^2 + 9 x y - 7 x z + 4 x - 4 y^2 - 5 y z + 6 y - 4 z^2 - 9 z + 2}; "
+        "ex6 = GroebnerBasis[eqs6, {x, y, z, w}]; "
+        "mon6 = Map[(#/First[CoefficientRules[#, {x, y, z, w}]][[2]]) &, ex6]; True";
+    check_true(setup);
+    const char* cmp =
+        "Module[{g = GroebnerBasis[eqs6, {x, y, z, w}, CoefficientDomain -> %s], "
+        "cr, ce}, Length[g] == 4 && "
+        "And @@ Table[cr = CoefficientRules[g[[k]], {x, y, z, w}]; "
+        "ce = CoefficientRules[mon6[[k]], {x, y, z, w}]; "
+        "(cr[[All, 1]] === ce[[All, 1]]) && "
+        "Max[Abs[(cr[[All, 2]] - ce[[All, 2]])/ce[[All, 2]]]] < %s, {k, 4}]]";
+    char buf[2048];
+    snprintf(buf, sizeof buf, cmp, "InexactNumbers", "10^-14");
+    check_true(buf);
+    snprintf(buf, sizeof buf, cmp, "InexactNumbers[40]", "10^-38");
+    check_true(buf);
+    check_true("Precision[GroebnerBasis[eqs6, {x, y, z, w}, CoefficientDomain -> InexactNumbers[40]][[1, 1]]] >= 39");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -781,6 +810,7 @@ int main(void) {
     TEST(test_hard_lex_input_by_fglm);
     TEST(test_grevlex_handles_hard_lex_input);
     TEST(test_flint_engine_matches_classical);
+    TEST(test_inexact_numeric_fglm_matches_exact);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");

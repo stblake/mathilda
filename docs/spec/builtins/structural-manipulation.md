@@ -2127,11 +2127,19 @@ content is preserved (it is ideal data over Z), so a constant generator
 
 `CoefficientDomain -> Polynomials[x, ...]` makes the named symbols
 coefficient-ring variables (equivalent to listing them in
-`ParameterVariables`).  `CoefficientDomain -> InexactNumbers[p]` computes
-the exact basis, makes each polynomial monic, and renders coefficients as
-`p`-digit machine/MPFR reals; inexact (`Real`) input coefficients are
-rationalised before the computation.  This is exact-compute-then-round,
-not a genuine floating-point Buchberger run.
+`ParameterVariables`).  `CoefficientDomain -> InexactNumbers[p]` returns
+a monic basis with `p`-digit machine/MPFR real coefficients; inexact
+(`Real`) input coefficients are rationalised before the computation.  For a
+zero-dimensional ideal in a lexicographic order the coefficients come from
+a numeric FGLM: the DRL basis and the multiplication matrices exactly, the
+lex staircase and leading monomials from modular FGLM runs (two primes
+agreeing), and each relation's coefficients by MPFR linear algebra at two
+precisions that must agree to `p` digits plus a guard (else the precision
+doubles) — not from the exact rationals, whose CRT and rational
+reconstruction are most of the exact computation (ISSAC '97 problem 6: ~900
+digit coefficients, the inexact basis 3x faster than the exact one).
+Otherwise the exact basis is computed and rounded.  Either way the exponent
+vectors are the exact basis's.
 
 `CoefficientDomain -> RationalFunctions` computes the basis over the field
 Q(params), where the parameters (the non-main symbols) are units.  The

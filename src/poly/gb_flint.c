@@ -46,6 +46,7 @@
 #ifdef USE_FLINT
 
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 
 #include <gmp.h>
@@ -1139,6 +1140,292 @@ static int gf_fglm(Gf* Dg, const slong* idx, slong ng, fmpz_mpoly_struct** out, 
     return done;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Lex over Q, zero-dimensional, INEXACT output: numeric FGLM         */
+/* ------------------------------------------------------------------ */
+
+#ifdef USE_MPFR
+/* CoefficientDomain -> InexactNumbers asks for the Lex basis with
+ * coefficients to `bits` bits, not for the exact rationals — and those are
+ * what make the exact route expensive: on a dense shape basis they reach
+ * ~2900 bits of numerator + denominator, ~47 primes of CRT and rational
+ * reconstruction, and that part is two thirds of the run.  Here:
+ *
+ *  1. the DRL basis and the multiplication matrices M_v, exactly (as gf_fglm);
+ *  2. the SHAPE of the Lex basis — its staircase (standard monomials in Lex
+ *     order) and leading monomials — from modular FGLM runs, accepted when
+ *     two primes agree (the exact route's own luckiness criterion);
+ *  3. the coefficients by linear algebra in MPFR: NF(m) = M_v NF(m / x_v)
+ *     for every staircase monomial and leading monomial (each has a divisor
+ *     m / x_v in the staircase), and each relation LM = sum c_i s_i is the
+ *     solution of  V c = NF(LM),  V = [NF(s_1) ... NF(s_D)], by Gaussian
+ *     elimination with partial pivoting.
+ *  4. precision justified, not assumed: the solve runs at P and at P + 64
+ *     bits; every coefficient must agree to bits + 8 bits (relative to the
+ *     largest coefficient of its relation), else P doubles.  A coefficient
+ *     that is zero to that resolution in both runs is an exact zero.
+ *
+ * The result is monic (LM coefficient 1) with dyadic-rational coefficients
+ * (each MPFR value exactly), which gb_to_expr_inexact then rounds to `bits`.
+ * Returns 1 with *out (nout) set, 0 to decline (the exact route runs). */
+#include <mpfr.h>
+
+/* Solve V X = B in place by Gaussian elimination with partial pivoting.
+ * V is D x D (row-major, V[r*D + c]), B is D x nb (row-major).  0 if V is
+ * numerically singular at this precision. */
+static int gfn_solve(mpfr_t* V, mpfr_t* B, slong D, slong nb, mpfr_prec_t P) {
+    mpfr_t t, f; mpfr_init2(t, P); mpfr_init2(f, P);
+    int ok = 1;
+    for (slong c = 0; c < D && ok; c++) {
+        slong pr = c;
+        for (slong r = c + 1; r < D; r++)
+            if (mpfr_cmpabs(V[r * D + c], V[pr * D + c]) > 0) pr = r;
+        if (mpfr_zero_p(V[pr * D + c])) { ok = 0; break; }
+        if (pr != c) {
+            for (slong k = 0; k < D; k++) mpfr_swap(V[pr * D + k], V[c * D + k]);
+            for (slong k = 0; k < nb; k++) mpfr_swap(B[pr * nb + k], B[c * nb + k]);
+        }
+        for (slong r = c + 1; r < D; r++) {
+            if (mpfr_zero_p(V[r * D + c])) continue;
+            mpfr_div(f, V[r * D + c], V[c * D + c], MPFR_RNDN);
+            for (slong k = c; k < D; k++) {
+                mpfr_mul(t, f, V[c * D + k], MPFR_RNDN);
+                mpfr_sub(V[r * D + k], V[r * D + k], t, MPFR_RNDN);
+            }
+            for (slong k = 0; k < nb; k++) {
+                mpfr_mul(t, f, B[c * nb + k], MPFR_RNDN);
+                mpfr_sub(B[r * nb + k], B[r * nb + k], t, MPFR_RNDN);
+            }
+        }
+    }
+    for (slong c = D - 1; c >= 0 && ok; c--) {
+        for (slong k = 0; k < nb; k++) {
+            for (slong j = c + 1; j < D; j++) {
+                mpfr_mul(t, V[c * D + j], B[j * nb + k], MPFR_RNDN);
+                mpfr_sub(B[c * nb + k], B[c * nb + k], t, MPFR_RNDN);
+            }
+            mpfr_div(B[c * nb + k], B[c * nb + k], V[c * D + c], MPFR_RNDN);
+        }
+    }
+    mpfr_clear(t); mpfr_clear(f);
+    return ok;
+}
+
+/* NF vector of monomial e (exponents), from the staircase NF vectors already
+ * computed (nf[i*D ..] for stair index i < have): M_v NF(e / x_v).  The
+ * product is written to out[0..D).  0 if no divisor is in the staircase. */
+static int gfn_nf(const ulong* e, const GfMon* stair, slong have, mpfr_t* nf,
+                  const mpfr_t* M, slong nv, slong D, ulong* tmp, mpfr_t* out,
+                  mpfr_t t) {
+    for (slong v = 0; v < nv; v++) {
+        if (e[v] == 0) continue;
+        memcpy(tmp, e, (size_t)nv * sizeof(ulong));
+        tmp[v]--;
+        slong k = gfm_find(stair, tmp);
+        if (k < 0 || k >= have) continue;
+        const mpfr_t* Mv = M + (size_t)v * (size_t)(D * D);   /* column-major */
+        for (slong r = 0; r < D; r++) mpfr_set_zero(out[r], 1);
+        for (slong c = 0; c < D; c++) {
+            if (mpfr_zero_p(nf[k * D + c])) continue;
+            for (slong r = 0; r < D; r++) {
+                if (mpfr_zero_p(Mv[c * D + r])) continue;
+                mpfr_mul(t, Mv[c * D + r], nf[k * D + c], MPFR_RNDN);
+                mpfr_add(out[r], out[r], t, MPFR_RNDN);
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/* The relation coefficients at precision P: C[q] (initialised by the caller
+ * at P) for q over all relations' coefficients (relation k's rel_n[k] of
+ * them, in order).  Writes the largest |coefficient| of relation k to
+ * scale[k] (log2, -inf if all zero).  0 on failure. */
+static int gfn_coeffs(const fmpz* num, const fmpz* den, slong nv, slong D,
+                      const GfFglm* R, mpfr_prec_t P, mpfr_t* C) {
+    slong nM = nv * D * D, nrel = R->nrel;
+    mpfr_t* M = flint_malloc((size_t)nM * sizeof(mpfr_t));
+    mpfr_t* nf = flint_malloc((size_t)(D * D) * sizeof(mpfr_t));
+    mpfr_t* V = flint_malloc((size_t)(D * D) * sizeof(mpfr_t));
+    mpfr_t* B = flint_malloc((size_t)(D * (nrel ? nrel : 1)) * sizeof(mpfr_t));
+    mpfr_t* col = flint_malloc((size_t)D * sizeof(mpfr_t));
+    ulong* tmp = flint_malloc((size_t)nv * sizeof(ulong));
+    mpfr_t t, dd; mpfr_init2(t, P); mpfr_init2(dd, P);
+    mpz_t z; mpz_init(z);
+    for (slong k = 0; k < nM; k++) mpfr_init2(M[k], P);
+    for (slong k = 0; k < D * D; k++) { mpfr_init2(nf[k], P); mpfr_init2(V[k], P); }
+    for (slong k = 0; k < D * nrel; k++) mpfr_init2(B[k], P);
+    for (slong k = 0; k < D; k++) mpfr_init2(col[k], P);
+    /* M_v column c = num[(v D + c) D ..] / den[v D + c] */
+    for (slong k = 0; k < nv * D; k++) {
+        fmpz_get_mpz(z, den + k);
+        mpfr_set_z(dd, z, MPFR_RNDN);
+        for (slong r = 0; r < D; r++) {
+            fmpz_get_mpz(z, num + k * D + r);
+            mpfr_set_z(M[k * D + r], z, MPFR_RNDN);
+            mpfr_div(M[k * D + r], M[k * D + r], dd, MPFR_RNDN);
+        }
+    }
+    int ok = 1;
+    /* staircase NF vectors, in Lex order (each divisor precedes it) */
+    for (slong i = 0; i < R->stair.n && ok; i++) {
+        const ulong* e = R->stair.ex + i * nv;
+        int one = 1;
+        for (slong v = 0; v < nv; v++) if (e[v]) one = 0;
+        if (one) {
+            for (slong r = 0; r < D; r++) mpfr_set_ui(nf[i * D + r], r == 0, MPFR_RNDN);
+            continue;
+        }
+        ok = gfn_nf(e, &R->stair, i, nf, (const mpfr_t*)M, nv, D, tmp, nf + i * D, t);
+    }
+    /* right-hand sides NF(LM_k) */
+    for (slong k = 0; k < nrel && ok; k++) {
+        ok = gfn_nf(R->rel_ex + k * nv, &R->stair, R->stair.n, nf, (const mpfr_t*)M,
+                    nv, D, tmp, col, t);
+        for (slong r = 0; r < D && ok; r++) mpfr_set(B[r * nrel + k], col[r], MPFR_RNDN);
+    }
+    if (ok) {
+        for (slong i = 0; i < D; i++)
+            for (slong r = 0; r < D; r++) mpfr_set(V[r * D + i], nf[i * D + r], MPFR_RNDN);
+        ok = gfn_solve(V, B, D, nrel, P);
+    }
+    if (ok) {
+        slong q = 0;
+        for (slong k = 0; k < nrel; k++)
+            for (slong i = 0; i < R->rel_n[k]; i++, q++)
+                mpfr_set(C[q], B[i * nrel + k], MPFR_RNDN);
+    }
+    mpz_clear(z);
+    mpfr_clear(t); mpfr_clear(dd);
+    for (slong k = 0; k < nM; k++) mpfr_clear(M[k]);
+    for (slong k = 0; k < D * D; k++) { mpfr_clear(nf[k]); mpfr_clear(V[k]); }
+    for (slong k = 0; k < D * nrel; k++) mpfr_clear(B[k]);
+    for (slong k = 0; k < D; k++) mpfr_clear(col[k]);
+    flint_free(M); flint_free(nf); flint_free(V); flint_free(B); flint_free(col);
+    flint_free(tmp);
+    return ok;
+}
+
+/* Numeric FGLM driver (see the block comment above).  Fills GBPoly results
+ * shaped like `like` in *out (nout). */
+static int gf_fglm_inexact(Gf* Dg, const slong* idx, slong ng, long bits,
+                           const GBPoly* like, GBPoly*** out, slong* nout) {
+    slong nv = Dg->nv;
+    GfMon S; gfm_init(&S, nv);
+    if (!gf_staircase(Dg, idx, ng, &S, GF_FGLM_MAXD)) { gfm_clear(&S); return 0; }
+    slong D = S.n;
+    fmpz* num = _fmpz_vec_init(nv * D * D);
+    fmpz* den = _fmpz_vec_init(nv * D);
+    int ok = gf_mult_matrices(Dg, idx, ng, &S, num, &den[0]) && !Dg->expired;
+    ulong* Mp = ok ? flint_malloc((size_t)(nv * D * D) * sizeof(ulong)) : NULL;
+    /* 2. the shape: two primes that agree */
+    GfFglm ref; int have = 0, agreed = 0;
+    memset(&ref, 0, sizeof ref);
+    ulong p = UWORD(1) << 62;
+    for (slong it = 0; ok && !agreed && it < 12; it++) {
+        p = n_nextprime(p, 1);
+        nmod_t mod; nmod_init(&mod, p);
+        int good = 1;
+        for (slong k = 0; k < nv * D && good; k++) good = fmpz_fdiv_ui(den + k, p) != 0;
+        if (!good) continue;
+        for (slong k = 0; k < nv * D; k++) {
+            ulong di = n_invmod(fmpz_fdiv_ui(den + k, p), p);
+            const fmpz* c = num + k * D;
+            ulong* mc = Mp + k * D;
+            for (slong r = 0; r < D; r++)
+                mc[r] = fmpz_is_zero(c + r) ? 0 : nmod_mul(fmpz_fdiv_ui(c + r, p), di, mod);
+        }
+        GfFglm Rm;
+        if (!gf_fglm_mod(Mp, nv, D, 0, mod, &Rm)) continue;
+        if (!have) { ref = Rm; have = 1; continue; }
+        if (gff_same_shape(&ref, &Rm, nv)) agreed = 1;
+        else { gff_clear(&ref); ref = Rm; }            /* keep the newer one */
+        if (agreed) gff_clear(&Rm);
+    }
+    int done = 0;
+    if (ok && agreed && ref.stair.n == D) {
+        slong ncoef = 0;
+        for (slong k = 0; k < ref.nrel; k++) ncoef += ref.rel_n[k];
+        mpfr_t* C1 = flint_malloc((size_t)(ncoef ? ncoef : 1) * sizeof(mpfr_t));
+        mpfr_t* C2 = flint_malloc((size_t)(ncoef ? ncoef : 1) * sizeof(mpfr_t));
+        mpfr_prec_t P = (mpfr_prec_t)bits + 64;
+        int justified = 0;
+        while (!justified && P <= 16384 && !tc_deadline_passed()) {
+            for (slong q = 0; q < ncoef; q++) { mpfr_init2(C1[q], P); mpfr_init2(C2[q], P + 64); }
+            int c_ok = gfn_coeffs(num, den, nv, D, &ref, P, C1)
+                    && gfn_coeffs(num, den, nv, D, &ref, P + 64, C2);
+            if (c_ok) {
+                /* Each coefficient must agree to bits + 8 bits relative to
+                 * itself.  An exact zero shows up as noise that falls by ~64
+                 * bits between the two runs while staying below the relation's
+                 * scale (its largest coefficient, or the LM's 1) by bits + 8. */
+                justified = 1;
+                mpfr_t dif; mpfr_init2(dif, P + 64);
+                slong q = 0;
+                for (slong k = 0; k < ref.nrel; k++) {
+                    long ls = 1;                           /* the LM's 1 */
+                    for (slong i = 0; i < ref.rel_n[k]; i++)
+                        if (!mpfr_zero_p(C2[q + i]) && (long)mpfr_get_exp(C2[q + i]) > ls)
+                            ls = (long)mpfr_get_exp(C2[q + i]);
+                    for (slong i = 0; i < ref.rel_n[k]; i++, q++) {
+                        if (mpfr_zero_p(C1[q]) && mpfr_zero_p(C2[q])) continue;
+                        long e1 = mpfr_zero_p(C1[q]) ? LONG_MIN / 2 : (long)mpfr_get_exp(C1[q]);
+                        long e2 = mpfr_zero_p(C2[q]) ? LONG_MIN / 2 : (long)mpfr_get_exp(C2[q]);
+                        long emax = e1 > e2 ? e1 : e2;
+                        if (emax <= ls - (long)bits - 8 && e2 <= e1 - 32) {
+                            mpfr_set_zero(C2[q], 1);       /* an exact zero */
+                            continue;
+                        }
+                        mpfr_sub(dif, C1[q], C2[q], MPFR_RNDN);
+                        if (mpfr_zero_p(C2[q])
+                            || (!mpfr_zero_p(dif)
+                                && (long)mpfr_get_exp(dif) > e2 - (long)bits - 8))
+                            justified = 0;
+                    }
+                }
+                mpfr_clear(dif);
+            }
+            if (justified) {
+                GBPoly** G = malloc((size_t)(ref.nrel ? ref.nrel : 1) * sizeof(GBPoly*));
+                int* ie = malloc((size_t)nv * sizeof(int));
+                mpq_t cq; mpq_init(cq);
+                slong q = 0;
+                for (slong k = 0; k < ref.nrel; k++) {
+                    GBPoly* g = gb_poly_new(like->n_vars, like->order, like->elim_pivot);
+                    if (like->wmat) gb_poly_set_wmat(g, like->wmat);
+                    gb_poly_reserve(g, (size_t)ref.rel_n[k] + 1);
+                    for (slong v = 0; v < nv; v++) ie[v] = (int)ref.rel_ex[k * nv + v];
+                    mpq_set_ui(cq, 1, 1);
+                    gb_poly_push_term(g, ie, cq);
+                    for (slong i = 0; i < ref.rel_n[k]; i++, q++) {
+                        if (mpfr_zero_p(C2[q])) continue;
+                        mpfr_neg(C2[q], C2[q], MPFR_RNDN);
+                        mpfr_get_q(cq, C2[q]);            /* exact dyadic value */
+                        for (slong v = 0; v < nv; v++) ie[v] = (int)ref.stair.ex[i * nv + v];
+                        gb_poly_push_term(g, ie, cq);
+                    }
+                    gb_poly_normalize(g);
+                    G[k] = g;
+                }
+                mpq_clear(cq); free(ie);
+                *out = G; *nout = ref.nrel; done = 1;
+            }
+            for (slong q = 0; q < ncoef; q++) { mpfr_clear(C1[q]); mpfr_clear(C2[q]); }
+            if (!c_ok) break;
+            P *= 2;
+        }
+        flint_free(C1); flint_free(C2);
+    }
+    if (have) gff_clear(&ref);
+    flint_free(Mp);
+    _fmpz_vec_clear(num, nv * D * D);
+    _fmpz_vec_clear(den, nv * D);
+    gfm_clear(&S);
+    return done;
+}
+#endif /* USE_MPFR */
+
 /* An fmpz_mpoly (any context of nv variables) as a GBPoly shaped like `like`. */
 static GBPoly* gf_zpoly_to_gbpoly(const fmpz_mpoly_t P, const fmpz_mpoly_ctx_t Z, ulong* ex,
                                   const GBPoly* like) {
@@ -1254,6 +1541,47 @@ int gb_flint_buchberger(GBPoly* const* F, size_t n, GBPoly*** out, size_t* out_n
     return gf_basis(F, n, 0, out, out_n);
 }
 
+
+/* CoefficientDomain -> InexactNumbers: the reduced Lex basis of a
+ * zero-dimensional ideal over Q with coefficients justified to `bits` bits,
+ * by DRL + numeric FGLM (gf_fglm_inexact).  0 declines (not Lex, not
+ * zero-dimensional, no MPFR, or the precision could not be justified): the
+ * caller computes the exact basis and rounds it. */
+int gb_flint_lex_inexact(GBPoly* const* F, size_t n, long bits,
+                         GBPoly*** out, size_t* out_n) {
+#ifdef USE_MPFR
+    if (!gf_enabled() || n == 0 || bits < 1) return 0;
+    const GBPoly* f0 = NULL;
+    for (size_t i = 0; i < n; i++) if (F[i]->n_terms) { f0 = F[i]; break; }
+    if (!f0 || f0->n_vars < 2) return 0;
+    if (gf_flint_order(f0->order, f0->wmat, f0->n_vars) != ORD_LEX) return 0;
+    for (size_t i = 0; i < n; i++)
+        for (size_t t = 0; t < F[i]->n_terms * (size_t)F[i]->n_vars; t++)
+            if (F[i]->exps[t] < 0) return 0;
+    int timed_out = 0, done = 0;
+    Gf Dg; gf_init(&Dg, 0, 0, f0->n_vars, ORD_DEGREVLEX);
+    slong* idx = NULL; slong nd = 0;
+    if (gf_engine(&Dg, F, n, 0, &idx, &nd, &timed_out)) {
+        int unit = 0;
+        for (slong i = 0; i < nd && !unit; i++) unit = gf_is_unit(&Dg, idx[i]);
+        if (!unit) {
+            GBPoly** G = NULL; slong ng = 0;
+            if (gf_fglm_inexact(&Dg, idx, nd, bits, f0, &G, &ng)) {
+                *out = G; *out_n = (size_t)ng; done = 1;
+            }
+        }
+    }
+    flint_free(idx);
+    gf_clear(&Dg);
+    if (timed_out) tc_check_deadline();
+    return done;
+#else
+    (void)F; (void)n; (void)bits; (void)out; (void)out_n;
+    return 0;
+#endif
+}
+
+
 int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
                             GBPoly*** out, size_t* out_n) {
     if (p < 2 || p > (uint64_t)UWORD_MAX || !n_is_prime((ulong)p)) return 0;
@@ -1261,6 +1589,11 @@ int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
 }
 
 #else  /* !USE_FLINT */
+
+int gb_flint_lex_inexact(GBPoly* const* F, size_t n, long bits,
+                         GBPoly*** out, size_t* out_n) {
+    (void)F; (void)n; (void)bits; (void)out; (void)out_n; return 0;
+}
 
 int gb_flint_buchberger(GBPoly* const* F, size_t n, GBPoly*** out, size_t* out_n) {
     (void)F; (void)n; (void)out; (void)out_n; return 0;

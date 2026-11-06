@@ -23,6 +23,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "gbmod.h"
+#include "gb_flint.h"  /* gb_flint_lex_inexact */
 #include "groebner.h"
 #include "internal.h"
 #include "rationalize.h"
@@ -979,6 +980,14 @@ Expr* builtin_groebner_basis(Expr* res) {
         /* Strong Gröbner basis over Z (parameters are ordinary variables
          * in the PID polynomial ring Z[vars]). */
         G = gb_strong_buchberger(F, nF, &out_n);
+    } else if (opt.domain == GB_DOM_INEXACT && opt.method != GB_METHOD_WALK
+               && n_elim == 0 && n_params == 0
+               && gb_flint_lex_inexact(F, nF, (long)((opt.inexact_prec * 33219L) / 10000L) + 1,
+                                       &G, &out_n)) {
+        /* InexactNumbers, Lex, zero-dimensional: the coefficients come from
+         * a numeric FGLM whose precision is checked (gb_flint.c) instead of
+         * from the exact rationals, which is where the exact route spends
+         * most of its time. */
     } else if (opt.method == GB_METHOD_WALK && n_elim == 0 && n_params == 0) {
         G = gb_groebner_walk(F, nF, use_order, wmat_ptr, &out_n);
     } else {

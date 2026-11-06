@@ -22,4 +22,12 @@ int gb_flint_buchberger(GBPoly* const* F, size_t n, GBPoly*** out, size_t* out_n
 int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
                             GBPoly*** out, size_t* out_n);
 
+/* CoefficientDomain -> InexactNumbers: the reduced Lex basis of a
+ * zero-dimensional ideal over Q, monic, with dyadic coefficients justified to
+ * `bits` bits (DRL basis exactly, the Lex shape from modular FGLM, the
+ * coefficients by MPFR linear algebra at two precisions that must agree).
+ * Returns 1 with a fresh basis, 0 to decline (use the exact basis). */
+int gb_flint_lex_inexact(GBPoly* const* F, size_t n, long bits,
+                         GBPoly*** out, size_t* out_n);
+
 #endif /* GB_FLINT_H */
