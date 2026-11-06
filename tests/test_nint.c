@@ -881,6 +881,31 @@ static void test_symbolic_swell(void) {
     ASSERT_CLOSE("NIntegrate[D[Sin[x]^2 Cos[x]^30, x], {x, 0, 1}]", "N[Sin[1]^2 Cos[1]^30, 30]", 1e-15);
 }
 
+/* Integrable point singularities at a vertex of a box.  The cubature bisects
+ * toward the vertex until the integrand can no longer be evaluated in doubles
+ * (3 - Cos[x] - Cos[y] - Cos[z] cancels to 0 near the origin); that region is
+ * then frozen at its estimate instead of abandoning the cubature for the
+ * iterated rule, which never finished.  At WorkingPrecision the same cubature
+ * runs on MPFR-evaluated samples.  Expected values are closed forms: Watson's
+ * simple-cubic integral (the Glasser-Zucker Gamma product), and 1/r on the
+ * unit square / cube by polar / spherical integration over the triangle /
+ * pyramid pieces. */
+static void test_vertex_singularity(void) {
+    const char* watson = "Sqrt[6]/96 Gamma[1/24] Gamma[5/24] Gamma[7/24] Gamma[11/24]";
+    ASSERT_REL("NIntegrate[1/(3 - Cos[x] - Cos[y] - Cos[z]), {x, 0, Pi}, {y, 0, Pi}, {z, 0, Pi}]",
+               watson, "10^-6");
+    ASSERT_REL("NIntegrate[1/(3 - Cos[x] - Cos[y] - Cos[z]), {x, 0, Pi}, {y, 0, Pi}, {z, 0, Pi}, "
+               "WorkingPrecision -> 20, PrecisionGoal -> 8]", watson, "10^-8");
+    ASSERT_REL("NIntegrate[1/Sqrt[x^2 + y^2], {x, 0, 1}, {y, 0, 1}]", "2 Log[1 + Sqrt[2]]", "10^-8");
+    ASSERT_REL("NIntegrate[1/Sqrt[x^2 + y^2 + z^2], {x, 0, 1}, {y, 0, 1}, {z, 0, 1}]",
+               "3/2 Log[2 + Sqrt[3]] - Pi/4", "10^-7");
+    ASSERT_REL("NIntegrate[1/Sqrt[x^2 + y^2 + z^2], {x, 0, 1}, {y, 0, 1}, {z, 0, 1}, "
+               "WorkingPrecision -> 20, PrecisionGoal -> 8]", "3/2 Log[2 + Sqrt[3]] - Pi/4", "10^-8");
+    /* a WorkingPrecision cubature result keeps the requested precision */
+    ASSERT_EQ_STR("Precision[NIntegrate[x y, {x, 0, 1}, {y, 0, 1}, WorkingPrecision -> 20]] >= 19",
+                  "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -927,6 +952,7 @@ int main(void) {
     TEST(test_interior_singular_points_wp);
     TEST(test_tiny_integrand_scale);
     TEST(test_rotated_halfline_wp);
+    TEST(test_vertex_singularity);
 
     printf("All nint_tests passed.\n");
     return 0;

@@ -226,10 +226,20 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
         bool okr = okl && gm_rule(f, ctx, right.c, right.h, d, p, &right.val, &right.err, &right.split);
         if (!okl || !okr) {
             free(left.c); free(left.h); free(right.c); free(right.h);
-            /* re-insert the parent so its contribution is not lost */
-            heap_push(&hp, worst);
-            status = CUB_NONNUMERIC;
-            break;
+            /* A sample of a SUBDIVIDED region failed.  The integrand was numeric
+             * on the parent's points, so this is a point where it cannot be
+             * evaluated in doubles -- typically an integrable vertex
+             * singularity reached after many bisections, where the formula
+             * itself cancels to 0 (3 - Cos[x] - Cos[y] - Cos[z] near the
+             * origin) or overflows.  Abandoning the whole cubature here sent
+             * Watson's integral to the iterated nested rule, which never
+             * finished.  Instead the parent is frozen: its estimate and error
+             * stay in the totals (so a non-negligible frozen region still
+             * reports a missed goal), and it is never split again. */
+            free(worst.c); free(worst.h);
+            n_eval += 2 * per;
+            if (hp.n == 0) break;
+            continue;
         }
         n_eval += 2 * per;
 

@@ -2842,6 +2842,7 @@ typedef struct {
     size_t d;
     NumericSpec spec;
     AutoCompiled* ac;   /* compiled body f(v_1..v_d); NULL = interpreter */
+    AutoCompiled* ac_prec;  /* MPFR-compiled body (spec.mode MPFR), or NULL */
 } NiMcCtx;
 
 /* Compile `body` as a function of the d bound variables (machine reals).  NULL
@@ -2857,8 +2858,47 @@ static AutoCompiled* ni_mc_compile(Expr* body, NiBind* binds, size_t d) {
     return ac;
 }
 
+#ifdef USE_MPFR
+/* MPFR-sampled cubature point: the abscissae are doubles (the rule's nodes),
+ * but the integrand is evaluated at the working precision and only its VALUE is
+ * rounded to a double.  That is what an integrand which cancels near a
+ * singular vertex needs: 3 - Cos[x] - Cos[y] - Cos[z] at r = 1e-8 is 1.5e-16,
+ * all rounding error in doubles and exact to the working precision here. */
+static bool ni_mc_sample_mpfr(NiMcCtx* c, const double* x, size_t d,
+                              double _Complex* out) {
+    Expr* xs[24];
+    if (d > 24) return false;
+    mpfr_t t;
+    mpfr_init2(t, (mpfr_prec_t)c->spec.bits);
+    for (size_t j = 0; j < d; j++) {
+        mpfr_set_d(t, x[j], MPFR_RNDN);
+        xs[j] = expr_new_mpfr_copy(t);
+    }
+    mpfr_clear(t);
+    Expr* num = NULL;
+    if (c->ac_prec) num = autocompiled_eval_mpfr(c->ac_prec, (const Expr* const*)xs);
+    if (!num) {
+        for (size_t j = 0; j < d; j++) ni_bind_set(&c->binds[j], xs[j]);
+        eval_clock_bump();
+        arith_warnings_mute_push();
+        Expr* raw = eval_and_free(expr_copy(c->body));
+        arith_warnings_mute_pop();
+        num = raw ? numericalize(raw, c->spec) : NULL;
+        expr_free(raw);
+    }
+    for (size_t j = 0; j < d; j++) expr_free(xs[j]);
+    if (!num) return false;
+    bool ok = ni_to_complex(num, out) && isfinite(creal(*out)) && isfinite(cimag(*out));
+    expr_free(num);
+    return ok;
+}
+#endif
+
 static bool ni_mc_sample(void* vctx, const double* x, size_t d, double _Complex* out) {
     NiMcCtx* c = (NiMcCtx*)vctx;
+#ifdef USE_MPFR
+    if (c->spec.mode == NUMERIC_MODE_MPFR) return ni_mc_sample_mpfr(c, x, d, out);
+#endif
     /* Compiled fast path: evaluate over the d machine abscissae directly.  A
      * non-finite / non-real compiled result (e.g. the interpreter would return a
      * complex value here) falls through to the interpreter for this point. */
@@ -2918,6 +2958,7 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
     ctx.body = body; ctx.binds = binds; ctx.d = d;
     ctx.spec = numeric_machine_spec();
     ctx.ac = ni_mc_compile(body, binds, d);
+    ctx.ac_prec = NULL;
 
     /* Monte-Carlo precision goal defaults low (≈2 digits), per Mathematica. */
     double reltol = (o->prec_goal > 0.0) ? pow(10.0, -o->prec_goal) : 1e-2;
@@ -2942,6 +2983,20 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
 /* ------------------------------------------------------------------ *
  *  Adaptive Genz-Malik cubature (low-to-moderate dimension)           *
  * ------------------------------------------------------------------ */
+
+/* Largest PrecisionGoal (digits) the MPFR-sampled cubature accepts: its rule
+ * weights and running sums are doubles, and ~13 digits survive the summation
+ * of up to 10^6 samples with room to spare. */
+#define NI_CUB_MPFR_MAX_GOAL 12.0
+static bool ni_cub_mpfr_goal_ok(const NiOpts* o) {
+#ifdef USE_MPFR
+    double rt = ni_mpfr_reltol(o);
+    return rt >= pow(10.0, -NI_CUB_MPFR_MAX_GOAL);
+#else
+    (void)o;
+    return false;
+#endif
+}
 
 /* Try adaptive cubature over the box defined by `specs` (each {v, vmin, vmax}
  * with constant finite real bounds).  Returns NULL — so the caller falls back
@@ -2973,10 +3028,28 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
     NiMcCtx ctx;
     ctx.body = body; ctx.binds = binds; ctx.d = d;
     ctx.spec = numeric_machine_spec();
-    ctx.ac = ni_mc_compile(body, binds, d);
-
+    ctx.ac = NULL; ctx.ac_prec = NULL;
     double reltol, abstol;
     ni_machine_tols(o, &reltol, &abstol);
+#ifdef USE_MPFR
+    if (o->prec_mpfr) {
+        ctx.spec.mode = NUMERIC_MODE_MPFR;
+        ctx.spec.bits = o->bits;
+        const Expr** syms = malloc(d * sizeof(*syms));
+        Expr** owned = malloc(d * sizeof(*owned));
+        if (syms && owned) {
+            for (size_t j = 0; j < d; j++) {
+                owned[j] = expr_new_symbol(binds[j].name); syms[j] = owned[j];
+            }
+            ctx.ac_prec = autocompile_new_prec(body, syms, d, o->bits);
+            for (size_t j = 0; j < d; j++) expr_free(owned[j]);
+        }
+        free(syms); free(owned);
+        reltol = ni_mpfr_reltol(o);
+        abstol = 0.0;
+    } else
+#endif
+    ctx.ac = ni_mc_compile(body, binds, d);
     long max_eval = (o->max_points > 0) ? o->max_points : 0;
 
     double _Complex val; double abserr;
@@ -2985,10 +3058,28 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
 
     for (size_t j = 0; j < d; j++) ni_bind_restore(&binds[j]);
     autocompiled_free(ctx.ac);
+    autocompiled_free(ctx.ac_prec);
     free(a); free(b); free(binds);
 
     if (st == CUB_NONNUMERIC) return NULL;   /* fall back to iterated quadrature */
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
+#ifdef USE_MPFR
+    if (o->prec_mpfr) {
+        /* The sums were accumulated in doubles, which holds the goal (at most
+         * NI_CUB_MPFR_MAX_GOAL digits, see the caller); the result carries the
+         * requested precision as every WorkingPrecision result does. */
+        double rmag = cabs(val);
+        if (st == CUB_NOCONV) ni_warn_goal(o, abserr, rmag);
+        mpfr_t re, im;
+        mpfr_init2(re, (mpfr_prec_t)o->target_bits);
+        mpfr_init2(im, (mpfr_prec_t)o->target_bits);
+        mpfr_set_d(re, creal(val), MPFR_RNDN);
+        mpfr_set_d(im, cimag(val), MPFR_RNDN);
+        Expr* out = ni_mpfr_build(re, im, o->target_bits);
+        mpfr_clears(re, im, (mpfr_ptr)0);
+        return out;
+    }
+#endif
     if (st == CUB_NOCONV) ni_warn_goal(o, abserr, cabs(val));
     return ni_from_complex_d(val);
 }
@@ -3861,7 +3952,11 @@ static Expr* ni_integrate(Expr* res, size_t argc, size_t pos_end, const NiOpts* 
         if (lv) return lv;
     }
 
-    if (o.method == NI_AUTO && nspecs >= 2 && !o.prec_mpfr && !o.exclusions) {
+    /* At WorkingPrecision the cubature runs with MPFR-evaluated samples but
+     * double accumulation, so it is taken only for a precision goal a double
+     * sum still holds; a higher goal keeps the iterated MPFR rules. */
+    if (o.method == NI_AUTO && nspecs >= 2 && !o.exclusions
+        && (!o.prec_mpfr || ni_cub_mpfr_goal_ok(&o))) {
         Expr* cub = ni_try_cubature(body, &res->data.function.args[1], nspecs, &o);
         if (cub) return cub;
     }
