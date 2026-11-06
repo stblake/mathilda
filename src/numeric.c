@@ -2644,7 +2644,13 @@ static Expr* numericalize_contagion(const Expr* e, NumericSpec spec) {
 static Expr* numericalize_pass(const Expr* e, NumericSpec spec) {
     NMemo memo = { NULL, 0, 0 };
     NMemo* saved = g_nmemo;
-    g_nmemo = &memo;
+    /* Machine-precision passes run without it: a machine call costs about
+     * what the lookup does, so only an arbitrary-precision pass gains. */
+#ifdef USE_MPFR
+    g_nmemo = numeric_spec_is_mpfr(spec) ? &memo : NULL;
+#else
+    g_nmemo = NULL;
+#endif
     Expr* r = numericalize_rec(e, spec);
     g_nmemo = saved;
     nmemo_clear(&memo);
