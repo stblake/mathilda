@@ -23,6 +23,7 @@
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx — arbitrary-precision complex containers */
 #endif
+#include "../numeric.h"          /* numeric_mpq_to_double — bignum Rational literals */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -723,16 +724,50 @@ Val arr_ew(Ctx* c, Val a, Val b, CompileType rt, bool is_plus) {
     return arr_op(c, OP_V_EW, a, b, rt, ip);
 }
 
+/* num/den (den NULL for 1) of integer-like atoms, rounded to the nearest
+ * double -- the conversion N[] applies, so a compiled constant bit-matches the
+ * interpreter's (mpz_get_d truncates). */
+static double literal_big_to_double(const Expr* num, const Expr* den) {
+    mpz_t n, d;
+    expr_to_mpz(num, n);                 /* initialises n */
+    if (den) expr_to_mpz(den, d); else mpz_init_set_ui(d, 1);
+    double v = NAN;
+    if (mpz_sgn(d) != 0) {
+        mpq_t q;
+        mpq_init(q);
+        mpq_set_num(q, n); mpq_set_den(q, d);
+        mpq_canonicalize(q);
+        v = numeric_mpq_to_double(q);
+        mpq_clear(q);
+    }
+    mpz_clears(n, d, NULL);
+    return v;
+}
+
 /* numeric literal? -> value + type */
 bool literal(const Expr* e, Slot* imm, CompileType* type) {
     if (e->type == EXPR_INTEGER) { imm->i = e->data.integer; *type = CT_INT; return true; }
     if (e->type == EXPR_REAL)    { imm->r = e->data.real; *type = CT_REAL; return true; }
-    if (e->type == EXPR_BIGINT)  { imm->r = mpz_get_d(e->data.bigint); *type = CT_REAL; return true; }
+    if (e->type == EXPR_BIGINT)  { imm->r = literal_big_to_double(e, NULL); *type = CT_REAL; return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { imm->r = mpfr_get_d(e->data.mpfr, MPFR_RNDN); *type = CT_REAL; return true; }
 #endif
     int64_t nn, dd;
     if (is_rational(e, &nn, &dd)) { imm->r = (double)nn / (double)dd; *type = CT_REAL; return true; }
+    /* A Rational with a bignum numerator or denominator is as much a constant
+     * as 1/3: (99/100)^11 = 8953382542587164451099/10^22 appears in any body
+     * built by substituting an exact radius into a polynomial, and refusing it
+     * sent the whole integrand to the interpreter (a contour integral at
+     * 2 x 10^4 samples, 20x slower).  Rounded to nearest, as N[] rounds it. */
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && e->data.function.arg_count == 2
+        && expr_is_integer_like(e->data.function.args[0])
+        && expr_is_integer_like(e->data.function.args[1])) {
+        double v = literal_big_to_double(e->data.function.args[0], e->data.function.args[1]);
+        if (!isfinite(v)) return false;
+        imm->r = v; *type = CT_REAL; return true;
+    }
     /* Complex[re, im] with numeric parts */
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Complex

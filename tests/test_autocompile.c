@@ -302,6 +302,29 @@ void test_nintegrate_multidim(void) {
     assert_eval_eq("Im[Chop[NIntegrate[Sqrt[x + y - 1], {x, 0, 1}, {y, 0, 1}]]] > 0", "True", 0);
 }
 
+/* A Rational with a bignum numerator or denominator is a constant like any
+ * other: it lowers to the nearest double (the value N[] gives), so a body built
+ * by substituting an exact radius into a polynomial compiles.  It used to be
+ * refused, sending every sample of a Cauchy contour integral to the
+ * interpreter.  Expected doubles: Python float(Fraction(3^40, 7^30)), which is
+ * correctly rounded. */
+void test_bignum_rational_literal_compiles(void) {
+    assert_eval_eq("Lookup[CompileDiagnostics[{{t, _Real}}, 3^40/7^30 + t], \"Compiled\"]", "True", 0);
+    assert_eval_eq("Compile[{{t, _Real}}, 3^40/7^30 t][1.] === 5.393975734097906*^-7", "True", 0);
+    assert_eval_eq("Compile[{{t, _Real}}, -8953382542587164451099/10^22 + 0 t][1.] "
+                   "=== -0.8953382542587165", "True", 0);
+    /* a bignum integer rounds to nearest too (mpz_get_d truncates) */
+    assert_eval_eq("SetPrecision[Compile[{{t, _Real}}, (2^70 + 2^17 + 1) t][1.], Infinity] === 2^70 + 2^18", "True", 0);
+    assert_eval_eq("Lookup[CompileDiagnostics[{{t, _Real}}, "
+                   "Evaluate[E^(-1000 I t)/((1 - (99/100 E^(I t))^11) (1 - 99/100 E^(I t)))]], \"Compiled\"]",
+                   "True", 0);
+    /* [x^1000] 1/((1-x)(1-x^2)(1-x^3)(1-x^5)(1-x^7)(1-x^11)) = 3876087157 (coin
+     * change recurrence), as a contour integral on |x| = 99/100, to 5 digits */
+    assert_eval_eq("With[{f = 1/((1 - x) (1 - x^2) (1 - x^3) (1 - x^5) (1 - x^7) (1 - x^11))}, "
+                   "Round[Re[NIntegrate[Evaluate[(f /. x -> 99/100 E^(I t)) E^(-1000 I t)], "
+                   "{t, 0, 2 Pi}]]/(2 Pi (99/100)^1000)/10^5]]", "38761", 0);
+}
+
 void test_nintegrate_uncompilable(void) {
     /* Zeta has no machine kernel → the integrand stays on the interpreter path;
      * cross-check the machine result against the arbitrary-precision one. */
@@ -658,6 +681,7 @@ int main(void) {
     TEST(test_nintegrate_oscillatory);
     TEST(test_nintegrate_complex_fallback);
     TEST(test_nintegrate_uncompilable);
+    TEST(test_bignum_rational_literal_compiles);
     TEST(test_findroot_parity);
     TEST(test_findroot_complex_and_inert);
     TEST(test_findroot_system);

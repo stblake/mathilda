@@ -118,6 +118,15 @@ static int mgd_new_mpz_const(Ctx* c, const Expr* lit) {
 }
 
 #ifdef USE_MPFR
+/* Rational[p, q] with integer (machine or bignum) parts. */
+static bool mgd_is_exact_rational(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && e->data.function.arg_count == 2
+        && expr_is_integer_like(e->data.function.args[0])
+        && expr_is_integer_like(e->data.function.args[1]);
+}
+
 /* ---- MPFR (real) constant materialisation ---- */
 bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e) {
     switch (e->type) {
@@ -127,14 +136,17 @@ bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e) {
         case EXPR_MPFR:    mpfr_set   (m, e->data.mpfr,          MPFR_RNDN); return true;
         default: break;
     }
-    int64_t nn, dd;
-    if (is_rational(e, &nn, &dd) && dd != 0) {
-        mpfr_t den; mpfr_init2(den, mpfr_get_prec(m));
-        mpfr_set_si(m, (long)nn, MPFR_RNDN);
-        mpfr_set_si(den, (long)dd, MPFR_RNDN);
-        mpfr_div(m, m, den, MPFR_RNDN);
-        mpfr_clear(den);
-        return true;
+    if (mgd_is_exact_rational(e)) {
+        /* exact quotient rounded once (a bignum numerator or denominator --
+         * (99/100)^11 -- is as much a constant as 1/3) */
+        mpq_t q;
+        mpq_init(q);
+        mgd_mpz_from_expr(mpq_numref(q), e->data.function.args[0]);
+        mgd_mpz_from_expr(mpq_denref(q), e->data.function.args[1]);
+        bool ok = mpz_sgn(mpq_denref(q)) != 0;
+        if (ok) { mpq_canonicalize(q); mpfr_set_q(m, q, MPFR_RNDN); }
+        mpq_clear(q);
+        return ok;
     }
     return false;
 }
@@ -303,11 +315,11 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
         Val v = { cst, true, CT_BIGCOMPLEX, false }; *out = v; return true;
     }
     /* rational literal Rational[p, q] */
-    { int64_t nn, dd; if (is_rational(e, &nn, &dd)) {
+    if (mgd_is_exact_rational(e)) {
         int cst = mgd_new_mpfr_const_expr(c, e);
         if (cst < 0) return false;
         Val v = { cst, true, CT_BIGREAL, false }; *out = v; return true;
-    } }
+    }
 
     if (h == SYM_Plus && n >= 1) {
         Val acc; if (!emit_mgd_real(c, a[0], &acc)) return false;
