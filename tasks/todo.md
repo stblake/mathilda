@@ -6,6 +6,16 @@ Benchmark: benchmarks/126-135 (issac97), register + status in benchmarks/ISSAC97
 - [~] Tier 1 wrong answers: W5 NSum (v0.6226); W1-W4 NIntegrate, W6 LinearSolve (agents)
 - [~] Tier 2 options/args: A1-A9 (agents: FindRoot, NDSolve/FindMinimum, linalg)
 - [ ] Tier 3 absences: X1 PolyLog Integrate, X2 Limit (agent), X3 LUBackSubstitution (agent), X4 GaussianQuadratureWeights, X5 FunctionInterpolation
+- [~] Holdout: experiments 136-145, 100 problems (agent); every fix re-checked against its family
+- [~] W17 TOP PRIORITY (user): PossibleZeroQ[Pi/3^700] / Pi/3^700 == 0 True -- zero test magnitudes in doubles; fix + audit every double-magnitude site (agent)
+- [~] GROEBNER (user, 2026-11-06: "we absolutely need highly efficient Groebner bases"): state-of-the-art exact engine over Q -- F4 mod p (GBLA-style elimination), multi-modular CRT + rational reconstruction with a verified lift, DRL -> FGLM/sparse FGLM for zero-dim lex; standard families katsura/cyclic/noon/eco/reimer + dense random, DRL and lex, timed vs baseline in benchmarks/122 (agent)
+- [ ] TARGET (user, 2026-11-06): all 240 holdout-A cases CORRECT and FASTER in Mathilda than the baseline (not just within 1.5x): wave 2 = wrong/incomplete, wave 3 = every SLOWER case by area
+- [~] Holdout B (sealed, agent authoring; branch kept off main until the final run): once the holdout-A fixes land, a fresh 100-problem holdout written by an agent that sees neither the fixes nor holdout A; run on final main only, never fixed against in this campaign (holdout A became training data once its failures were fixed)
+- [ ] Before final holdout-A scoring: re-run the baseline column for 142 and 145 (their h7 N rows and h10.7 changed after the baseline was taken)
+- [x] Before push: nightly-tier check (2026-11-07: no campaign regression; Eigensystem nonsymmetric eigenvectors (pre-existing, exposed at v0.6252) fixed v0.6340; bench_pack/bench_eval rescaled to the faster calibration; dsolve stress, solve_corpus, dsolve_corpus failures identical at v0.6225) -- -- dsolve_stress / dsolve_m5_stress / dsolve_m12_stress stop at their first assertion on main (v0.6316); compare with a v0.6225 build of the same targets; fix any regression from this campaign
+- [x] PUSHED 2026-11-07: main 8edb9c4d..2c780d44 and tags v0.6226-v0.6342 to origin
+- [x] Wave 4 (user, 2026-11-07) done v0.6343-v0.6373; holdout C (sealed) at v0.6373: Mathilda 228/249 vs baseline 231/249, faster in 185 of 215 both-correct; open cases in benchmarks/ISSAC97.md --: holdout B gaps (B becomes training data) + sealed holdout C to re-measure overfitting
+- [x] FINAL: user asked to push commits + tags once everything lands (git fetch --tags; check no remote tag collides; git push origin main --follow-tags)
 - [~] Tier 4 bottlenecks: B1-B3 Series/Residue (agent), B4-B5 MPFR linalg (agent), B6 RootCount, B7 NSolve deg 1000, B8 inexact GB, B9, B10
 
 # Roach algorithms: Integrate[..., Method -> "Roach"] (from 2026-11-05, v0.6189)

@@ -266,3 +266,22 @@ Limit b7.1 -> ComplexInfinity, NDSolve b10.6 at 50 digits, b10.8 shooting -- the
 wrong in the baseline). Verdict: speed generalises; correctness partly overfit to the
 families worked on. Next: wave 4 on these gaps (B then becomes training data) and a fresh
 sealed holdout C to re-measure.
+
+## Final run at v0.6373 (2026-11-07), after wave 4
+
+| set | Mathilda correct | Mathilda faster | notes |
+|---|---|---|---|
+| ISSAC '97 126-135 | every row (7 rows differ; baseline wrong, timed out or unevaluated in all 7) | 53 of 53 comparable rows | P5 RootCount now {999, 1000} (baseline unevaluated) |
+| holdout A 136-145 (240) | 240 / 240 | 228 (12 CHECK-FAIL, baseline wrong in all 12) | 0 SLOWER, 0 INCOMPLETE |
+| holdout B 146-155 (258; training data since wave 4) | 258 / 258 (baseline 243) | 234 of 243 both-correct | [`ISSAC97_HOLDOUT_B_RESULTS_v0.6373.md`](ISSAC97_HOLDOUT_B_RESULTS_v0.6373.md) |
+| **holdout C 156-165 (249; sealed, run once)** | **228 / 249** (3 wrong, 18 no answer); baseline 231 (14 wrong, 4 no answer) | **185 of 215 both-correct** | [`ISSAC97_HOLDOUT_C_RESULTS_v0.6373.md`](ISSAC97_HOLDOUT_C_RESULTS_v0.6373.md) |
+
+Holdout C (unseen by every fix): correctness generalised much better than at holdout B
+(B at v0.6340: 212/258 = 82%; C: 228/249 = 92%, baseline 93%), and Mathilda is right on
+cases the baseline gets wrong (14 baseline wrong answers vs 3). Mathilda's open cases on C:
+wrong -- c4.4 contour machine, c4.6 contour machine (baseline also wrong), c7.2 Limit exact;
+no answer -- c2.1 / c2.5 NIntegrate wp40, c4.2 / c4.3 Trapezoidal wp40, c5.5 / c5.10 FindRoot
+(machine and wp40), c7.1 N wp30 (baseline also none), c7.10 Limit, c8.2 / c8.4 / c8.6 / c8.7
+Integrate (c8.4 / c8.6 also none in the baseline), c10.5 NDSolve BVP (machine, wp32), c10.10
+backward NDSolve (machine, wp40). These are the next campaign's work queue; fixing them makes
+C training data, so a holdout D would be needed to measure again.
