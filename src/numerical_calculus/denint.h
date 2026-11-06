@@ -74,6 +74,12 @@ void     ccquad_cache_free(CcCache* c);
 bool ccquad_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
                  long bits, double reltol, mpfr_srcptr abstol, CcCache* cache,
                  mpfr_t out_re, mpfr_t out_im, double* abserr);
+/* As ccquad_mpfr, stopping at N = CC_N0 * 2^max_level (clamped to CC_MAX_LEVEL):
+ * a bounded probe, which spends at most N + 1 samples before it declines, and
+ * declines early (from N = 32 on) once a doubling gains under 8 bits. */
+bool ccquad_mpfr_upto(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
+                      long bits, double reltol, mpfr_srcptr abstol, CcCache* cache,
+                      int max_level, mpfr_t out_re, mpfr_t out_im, double* abserr);
 
 /* sinh-sinh on the whole line at `bits` precision. */
 bool denint_sinhsinh_mpfr(DeQuadSampleMPFR f, void* ctx,

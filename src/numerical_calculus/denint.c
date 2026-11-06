@@ -481,7 +481,15 @@ static void cc_build(CcCache* c, int l) {
 bool ccquad_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
                  long bits, double reltol, mpfr_srcptr abstol, CcCache* cache,
                  mpfr_t out_re, mpfr_t out_im, double* abserr) {
+    return ccquad_mpfr_upto(f, ctx, a, b, bits, reltol, abstol, cache, CC_MAX_LEVEL,
+                            out_re, out_im, abserr);
+}
+
+bool ccquad_mpfr_upto(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
+                      long bits, double reltol, mpfr_srcptr abstol, CcCache* cache,
+                      int max_level, mpfr_t out_re, mpfr_t out_im, double* abserr) {
     if (!cache || cache->bits != bits) return false;
+    if (max_level > CC_MAX_LEVEL) max_level = CC_MAX_LEVEL;
     mpfr_prec_t p = (mpfr_prec_t)bits;
     long nmax = (long)CC_N0 << CC_MAX_LEVEL;
     mpfr_t* fr = (mpfr_t*)malloc((size_t)(nmax + 1) * sizeof(mpfr_t));
@@ -496,7 +504,7 @@ bool ccquad_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
     double labs = abstol ? de_mpfr_log2_abs(abstol) : -INFINITY;
     double lprevd = INFINITY;
     *abserr = INFINITY;
-    for (int l = 0; l <= CC_MAX_LEVEL && ok; l++) {
+    for (int l = 0; l <= max_level && ok; l++) {
         long n = (long)CC_N0 << l;
         if (cache->have <= l) cc_build(cache, l);
         /* gather f on the level's nodes: stored at index j * (nmax / n) */
@@ -541,6 +549,12 @@ bool ccquad_mpfr(DeQuadSampleMPFR f, void* ctx, const mpfr_t a, const mpfr_t b,
                 || ld <= lI - (double)bits + 8.0) {
                 conv = true;
             }
+            /* a bounded probe (max_level < CC_MAX_LEVEL) gives up as soon as a
+             * doubling stops paying for itself -- under 8 bits gained is the
+             * algebraic convergence of an endpoint singularity, not the
+             * geometric convergence it is looking for */
+            if (!conv && max_level < CC_MAX_LEVEL && l >= 2 && !(ld < lprevd - 8.0))
+                ok = false;
             lprevd = ld;
         }
         mpfr_set(Pr, Ir, MPFR_RNDN);

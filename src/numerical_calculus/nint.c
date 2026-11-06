@@ -1804,7 +1804,30 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
          * only if they do not converge. */
         const double strong = 8.0 * M_PI;
         bool weak = false;
-        if (o->method == NI_LEVIN || o->method == NI_AUTO) {
+        /* An integrand analytic on the interval's own scale (x PolyLog[3, -x]
+         * on [0, 1], the first lobe of Sin[x^3]) converges geometrically under
+         * Clenshaw-Curtis: 33-129 nested Chebyshev samples where tanh-sinh,
+         * built for endpoint singularities, pays 150-350 at 30-40 digits.  A
+         * bounded probe (N <= 128, kept only when it converged) runs first; it
+         * stops as soon as a doubling gains under 8 bits, so on an endpoint
+         * singularity it declines within 33 samples and the cascade below runs
+         * as before. */
+        if (o->method == NI_AUTO) {
+            CcCache* cc = ccquad_cache_new(bits);
+            double cerr;
+            /* asked for every target digit, not just PrecisionGoal: the rule
+             * it replaces overshoots the goal to about full precision, and a
+             * converging Chebyshev sum gets there within its last doubling */
+            long tb = o->target_bits > 0 ? o->target_bits : bits;
+            double prt = pow(2.0, -(double)tb);
+            if (prt > ni_mpfr_reltol(o) || !(prt > 0.0)) prt = ni_mpfr_reltol(o);
+            if (ccquad_mpfr_upto(ni_sample_mpfr, ctx, am, bm, bits, prt,
+                                 NULL, cc, 4, re, im, &cerr)) {
+                got = true; conv = true; *abserr = cerr;
+            }
+            ccquad_cache_free(cc);
+        }
+        if (!got && (o->method == NI_LEVIN || o->method == NI_AUTO)) {
             bool lconv = false;
             if (ni_try_levin_collocation_mpfr(ctx, a, b, o,
                                               o->method == NI_AUTO ? strong : 0.0,
