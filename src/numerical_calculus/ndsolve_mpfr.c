@@ -153,44 +153,84 @@ static double mp_wrms(size_t d, mpfr_t* e, mpfr_t* y, mpfr_t* yn, NdTol tol) {
     return sqrt(sum / (double)d);
 }
 
+/* The Dormand-Prince 5(4) tableau as exact rationals, rounded once to the
+ * working precision.  The double tableau (ndsolve_tableau.h) is exact only to
+ * ~1e-17, so a step built from it satisfies the order conditions only to that
+ * level: the method's own truncation error then floors near 1e-17 however far
+ * the step and the working precision are pushed. */
+typedef struct { long bits; mpfr_t c[7], a[7][6], b[7], e[7]; } MpDopri;
+
+static const long DPQ_C[7][2] = { {0,1}, {1,5}, {3,10}, {4,5}, {8,9}, {1,1}, {1,1} };
+static const long DPQ_A[7][6][2] = {
+    { {0,1} },
+    { {1,5} },
+    { {3,40}, {9,40} },
+    { {44,45}, {-56,15}, {32,9} },
+    { {19372,6561}, {-25360,2187}, {64448,6561}, {-212,729} },
+    { {9017,3168}, {-355,33}, {46732,5247}, {49,176}, {-5103,18656} },
+    { {35,384}, {0,1}, {500,1113}, {125,192}, {-2187,6784}, {11,84} }
+};
+static const long DPQ_B[7][2] = { {35,384}, {0,1}, {500,1113}, {125,192},
+                                  {-2187,6784}, {11,84}, {0,1} };
+static const long DPQ_E[7][2] = { {71,57600}, {0,1}, {-71,16695}, {71,1920},
+                                  {-17253,339200}, {22,525}, {-1,40} };
+
+static void mpq_set_ratio(mpfr_t out, const long q[2]) {
+    mpfr_set_si(out, q[0], MPFR_RNDN);
+    mpfr_div_si(out, out, q[1], MPFR_RNDN);
+}
+static void mp_dopri_init(MpDopri* T, long bits) {
+    T->bits = bits;
+    for (int s = 0; s < 7; s++) {
+        mpfr_init2(T->c[s], bits); mpq_set_ratio(T->c[s], DPQ_C[s]);
+        mpfr_init2(T->b[s], bits); mpq_set_ratio(T->b[s], DPQ_B[s]);
+        mpfr_init2(T->e[s], bits); mpq_set_ratio(T->e[s], DPQ_E[s]);
+        for (int j = 0; j < 6; j++) {
+            mpfr_init2(T->a[s][j], bits);
+            if (j < s) mpq_set_ratio(T->a[s][j], DPQ_A[s][j]);
+            else mpfr_set_zero(T->a[s][j], 1);
+        }
+    }
+}
+static void mp_dopri_clear(MpDopri* T) {
+    for (int s = 0; s < 7; s++) {
+        mpfr_clear(T->c[s]); mpfr_clear(T->b[s]); mpfr_clear(T->e[s]);
+        for (int j = 0; j < 6; j++) mpfr_clear(T->a[s][j]);
+    }
+}
+
 /* One DOPRI5 step in MPFR from (t, Y) by h.  Writes Ynew, and (adaptive) the
  * error estimate into Yerr.  k must hold 7*d mpfr slots. */
-static bool dopri5_mpfr(NdProblem* P, const mpfr_t t, mpfr_t* Y, const mpfr_t h,
-                        mpfr_t* Ynew, mpfr_t* Yerr, mpfr_t* k, long bits) {
+static bool dopri5_mpfr(NdProblem* P, const MpDopri* T, const mpfr_t t, mpfr_t* Y,
+                        const mpfr_t h, mpfr_t* Ynew, mpfr_t* Yerr, mpfr_t* k, long bits) {
     size_t d = P->d;
     mpfr_t* tmp = mp_vec(d, bits);
-    mpfr_t ts, acc, prod;
-    mpfr_init2(ts, bits); mpfr_init2(acc, bits); mpfr_init2(prod, bits);
+    mpfr_t ts, acc, err;
+    mpfr_init2(ts, bits); mpfr_init2(acc, bits); mpfr_init2(err, bits);
     bool ok = nd_rhs_mpfr(P, t, Y, &k[0], bits);
     for (int s = 1; s < 7 && ok; s++) {
         for (size_t i = 0; i < d; i++) {
             mpfr_set_zero(acc, 1);
-            for (int j = 0; j < s; j++) {
-                mpfr_mul_d(prod, k[j*d + i], DP_A[s][j], MPFR_RNDN);
-                mpfr_add(acc, acc, prod, MPFR_RNDN);
-            }
-            mpfr_mul(acc, acc, h, MPFR_RNDN);       /* h * sum a_sj k_j */
-            mpfr_add(tmp[i], Y[i], acc, MPFR_RNDN);
+            for (int j = 0; j < s; j++)
+                if (!mpfr_zero_p(T->a[s][j])) mpfr_fma(acc, k[j*d + i], T->a[s][j], acc, MPFR_RNDN);
+            mpfr_fma(tmp[i], acc, h, Y[i], MPFR_RNDN);    /* Y + h sum a_sj k_j */
         }
-        mpfr_mul_d(ts, h, DP_C[s], MPFR_RNDN);
-        mpfr_add(ts, ts, t, MPFR_RNDN);
+        mpfr_fma(ts, h, T->c[s], t, MPFR_RNDN);
         ok = nd_rhs_mpfr(P, ts, tmp, &k[s*d], bits);
     }
     if (ok) {
         for (size_t i = 0; i < d; i++) {
-            mpfr_t sol, err; mpfr_init2(sol, bits); mpfr_init2(err, bits);
-            mpfr_set_zero(sol, 1); mpfr_set_zero(err, 1);
+            mpfr_set_zero(acc, 1); mpfr_set_zero(err, 1);
             for (int s = 0; s < 7; s++) {
-                mpfr_mul_d(prod, k[s*d + i], DP_B[s], MPFR_RNDN); mpfr_add(sol, sol, prod, MPFR_RNDN);
-                mpfr_mul_d(prod, k[s*d + i], DP_E[s], MPFR_RNDN); mpfr_add(err, err, prod, MPFR_RNDN);
+                if (!mpfr_zero_p(T->b[s])) mpfr_fma(acc, k[s*d + i], T->b[s], acc, MPFR_RNDN);
+                if (!mpfr_zero_p(T->e[s])) mpfr_fma(err, k[s*d + i], T->e[s], err, MPFR_RNDN);
             }
-            mpfr_mul(sol, sol, h, MPFR_RNDN); mpfr_add(Ynew[i], Y[i], sol, MPFR_RNDN);
+            mpfr_fma(Ynew[i], acc, h, Y[i], MPFR_RNDN);
             if (Yerr) mpfr_mul(Yerr[i], err, h, MPFR_RNDN);
-            mpfr_clear(sol); mpfr_clear(err);
         }
     }
     mp_vec_free(tmp, d);
-    mpfr_clear(ts); mpfr_clear(acc); mpfr_clear(prod);
+    mpfr_clear(ts); mpfr_clear(acc); mpfr_clear(err);
     return ok;
 }
 
@@ -442,11 +482,13 @@ static bool mp_newton_bdf(NdProblem* P, const mpfr_t t1, mpfr_t* Ybase, const mp
 /* Variable-step variable-order MPFR BDF in one direction (mirrors the machine
  * bdf_dir: MPFR state + double control). */
 static NdStatus mpfr_bdf_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
-                             double target, long bits, int64_t* budget) {
+                             const mpfr_t t0m, mpfr_t* Y0, const mpfr_t targetm,
+                             long bits, int64_t* budget) {
     size_t d = P->d;
-    double dir = (target > P->t0) ? 1.0 : -1.0;
+    int cmp0 = mpfr_cmp(targetm, t0m);
+    if (cmp0 == 0) return ND_OK;
+    double dir = (cmp0 > 0) ? 1.0 : -1.0;
     double span = fabs(P->tmax - P->tmin);
-    if (fabs(target - P->t0) <= 1e-15 * (span + 1.0)) return ND_OK;
     const int CAP = MP_QMAX + 1;
 
     mpfr_t* yh   = mp_vec((size_t)CAP * d, bits);   /* history states (row 0 = newest) */
@@ -464,31 +506,39 @@ static NdStatus mpfr_bdf_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol to
     double* y0d    = malloc(sizeof(double) * d);
     double* fcur_d = malloc(sizeof(double) * d);
 
-    mpfr_set_d(t, P->t0, MPFR_RNDN);
+    mpfr_set(t, t0m, MPFR_RNDN);
     mpfr_set(th[0], t, MPFR_RNDN);
-    for (size_t i = 0; i < d; i++) { mpfr_set_d(yh[i], P->Y0[i], MPFR_RNDN); y0d[i] = P->Y0[i]; }
+    for (size_t i = 0; i < d; i++) { mpfr_set(yh[i], Y0[i], MPFR_RNDN); y0d[i] = mpfr_get_d(Y0[i], MPFR_RNDN); }
     int m = 1;
     NdStatus st = ND_OK;
-    if (!nd_rhs_real(P, P->t0, y0d, fcur_d)) { st = ND_ERR_SAMPLE; goto done; }
+    double t0d = mpfr_get_d(t0m, MPFR_RNDN);
+    if (!nd_rhs_real(P, t0d, y0d, fcur_d)) { st = ND_ERR_SAMPLE; goto done; }
 
     double h = (o->starting_step > 0.0) ? dir * o->starting_step
-                                        : nd_initial_step(P, o, tol, P->t0, y0d, fcur_d, 1, dir);
+                                        : nd_initial_step(P, o, tol, t0d, y0d, fcur_d, 1, dir);
     if (h == 0.0) h = dir * span / 100.0;
     int qtarget = 1, hold = 0;
     bool no_grow = false;
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
 
-    while (dir * (target - mpfr_get_d(t, MPFR_RNDN)) > 1e-14 * (fabs(mpfr_get_d(t, MPFR_RNDN)) + 1.0)) {
+    for (;;) {
+        /* remaining distance at the working precision; the last step lands on
+         * the target exactly */
+        mpfr_sub(t1m, targetm, t, MPFR_RNDN);
+        double remd = mpfr_get_d(t1m, MPFR_RNDN);
+        if (mpfr_zero_p(t1m) || dir * remd <= 0.0) break;
         double td = mpfr_get_d(t, MPFR_RNDN);
         double hmag = fabs(h);
         if (hmag > h_cap) hmag = h_cap;
         if (hmag > frac_cap) hmag = frac_cap;
         double hs = dir * hmag;
-        if ((td + hs - target) * dir > 0.0) hs = target - td;
-        if (fabs(hs) < 1e-14 * (fabs(td) + 1.0)) { st = ND_ERR_STEPSIZE; break; }
+        bool last = (hmag >= fabs(remd));
+        if (last) hs = remd;
+        else if (fabs(hs) < 1e-14 * (fabs(td) + 1.0)) { st = ND_ERR_STEPSIZE; break; }
         if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
-        mpfr_add_d(t1m, t, hs, MPFR_RNDN);
+        if (last) mpfr_set(t1m, targetm, MPFR_RNDN);
+        else      mpfr_add_d(t1m, t, hs, MPFR_RNDN);
 
         int q;
         bool ok;
@@ -573,51 +623,63 @@ done:
     return st;
 }
 
-/* Integrate one direction toward target with the chosen explicit mpfr method. */
+/* Integrate one direction from (t0, Y0) toward `target` with the chosen
+ * explicit mpfr method.  The start, the initial state and the end are taken
+ * at the working precision (rounding them to a double first would cap the
+ * answer at ~16 digits whatever WorkingPrecision asks for), and the last step
+ * lands on `target` exactly. */
 static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
-                         bool adaptive, double target, long bits, int64_t* budget) {
+                         bool adaptive, const mpfr_t t0, mpfr_t* Y0,
+                         const mpfr_t target, long bits, int64_t* budget) {
     size_t d = P->d;
-    double dir = (target > P->t0) ? 1.0 : -1.0;
+    int cmp0 = mpfr_cmp(target, t0);
+    if (cmp0 == 0) return ND_OK;
+    double dir = (cmp0 > 0) ? 1.0 : -1.0;
     double span = fabs(P->tmax - P->tmin);
-    if (fabs(target - P->t0) <= 1e-15 * (span + 1.0)) return ND_OK;
+    long ubits = bits > 1000 ? 1000 : bits;
 
-    mpfr_t t, h, tgt, hmag, tmpr;
-    mpfr_init2(t, bits); mpfr_init2(h, bits); mpfr_init2(tgt, bits);
-    mpfr_init2(hmag, bits); mpfr_init2(tmpr, bits);
-    mpfr_set_d(t, P->t0, MPFR_RNDN); mpfr_set_d(tgt, target, MPFR_RNDN);
-    double h0 = (o->starting_step > 0.0) ? o->starting_step : nd_fixed_step(P, o, tol, 1.0);
-    mpfr_set_d(h, dir * fabs(h0), MPFR_RNDN);
+    mpfr_t t, h, rem;
+    mpfr_inits2(bits, t, h, rem, (mpfr_ptr)0);
+    mpfr_set(t, t0, MPFR_RNDN);
+    double hcur = (o->starting_step > 0.0) ? o->starting_step : fabs(nd_fixed_step(P, o, tol, 1.0));
 
     mpfr_t* Y  = mp_vec(d, bits);
     mpfr_t* Yn = mp_vec(d, bits);
     mpfr_t* Ye = mp_vec(d, bits);
     mpfr_t* fn = mp_vec(d, bits);
     mpfr_t* k  = mp_vec(7 * d, bits);
-    for (size_t i = 0; i < d; i++) mpfr_set_d(Y[i], P->Y0[i], MPFR_RNDN);
+    for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Y0[i], MPFR_RNDN);
+    MpDopri T;
+    mp_dopri_init(&T, bits);
 
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
     NdStatus st = ND_OK;
 
-    while (dir * (target - mpfr_get_d(t, MPFR_RNDN)) > 1e-14 * (fabs(mpfr_get_d(t, MPFR_RNDN)) + 1.0)) {
-        double hm = fabs(mpfr_get_d(h, MPFR_RNDN));
+    for (;;) {
+        mpfr_sub(rem, target, t, MPFR_RNDN);
+        double remd = mpfr_get_d(rem, MPFR_RNDN);
+        if (mpfr_zero_p(rem) || dir * remd <= 0.0) break;
+        remd = fabs(remd);
+        double hm = hcur;
         if (hm > h_cap) hm = h_cap;
         if (hm > frac_cap) hm = frac_cap;
-        mpfr_set_d(h, dir * hm, MPFR_RNDN);
-        mpfr_sub(tmpr, tgt, t, MPFR_RNDN);           /* remaining */
-        if (dir * (mpfr_get_d(h, MPFR_RNDN) - mpfr_get_d(tmpr, MPFR_RNDN)) > 0.0) mpfr_set(h, tmpr, MPFR_RNDN);
-        if (fabs(mpfr_get_d(h, MPFR_RNDN)) < 1e-300) { st = ND_ERR_STEPSIZE; break; }
+        double tscale = fabs(mpfr_get_d(t, MPFR_RNDN)) + span;
+        if (!(hm > tscale * ldexp(1.0, -(int)ubits + 8))) { st = ND_ERR_STEPSIZE; break; }
+        bool last = (hm >= remd);
+        if (last) mpfr_set(h, rem, MPFR_RNDN);
+        else      mpfr_set_d(h, dir * hm, MPFR_RNDN);
 
         bool ok; double err = 0.0;
-        if (adaptive) ok = dopri5_mpfr(P, t, Y, h, Yn, Ye, k, bits);
+        if (adaptive) ok = dopri5_mpfr(P, &T, t, Y, h, Yn, Ye, k, bits);
         else          ok = rk4_mpfr(P, t, Y, h, Yn, k, bits);
         if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
-        if (!ok) { mpfr_mul_d(h, h, 0.5, MPFR_RNDN);
-                   if (fabs(mpfr_get_d(h, MPFR_RNDN)) < 1e-300) { st = ND_ERR_STEPSIZE; break; } continue; }
+        if (!ok) { hcur = 0.5 * fabs(mpfr_get_d(h, MPFR_RNDN)); continue; }
         if (adaptive) err = mp_wrms(d, Ye, Y, Yn, tol);
-        int q = adaptive ? 5 : 5;
+        const int q = 5;
         if (!adaptive || err <= 1.0) {
-            mpfr_add(t, t, h, MPFR_RNDN);
+            if (last) mpfr_set(t, target, MPFR_RNDN);
+            else      mpfr_add(t, t, h, MPFR_RNDN);
             for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yn[i], MPFR_RNDN);
             if (!nd_rhs_mpfr(P, t, Y, fn, bits)) { st = ND_ERR_SAMPLE; break; }
             mpsol_push(sol, t, Y, fn);
@@ -625,16 +687,19 @@ static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
             double fac = adaptive ? (err > 0.0 ? 0.9 * pow(1.0/err, 1.0/q) : 5.0) : 1.0;
             if (fac < 0.2) fac = 0.2;
             if (fac > 5.0) fac = 5.0;
-            mpfr_mul_d(h, h, fac, MPFR_RNDN);
+            /* a short landing step says nothing about the step the solution allows */
+            if (!(last && fac * fabs(mpfr_get_d(h, MPFR_RNDN)) < hm))
+                hcur = fac * fabs(mpfr_get_d(h, MPFR_RNDN));
         } else {
             double fac = 0.9 * pow(1.0/err, 1.0/q);
             if (fac < 0.2) fac = 0.2;
             if (fac > 1.0) fac = 1.0;
-            mpfr_mul_d(h, h, fac, MPFR_RNDN);
+            hcur = fac * fabs(mpfr_get_d(h, MPFR_RNDN));
         }
     }
+    mp_dopri_clear(&T);
     mp_vec_free(Y, d); mp_vec_free(Yn, d); mp_vec_free(Ye, d); mp_vec_free(fn, d); mp_vec_free(k, 7*d);
-    mpfr_clear(t); mpfr_clear(h); mpfr_clear(tgt); mpfr_clear(hmag); mpfr_clear(tmpr);
+    mpfr_clears(t, h, rem, (mpfr_ptr)0);
     return st;
 }
 
@@ -887,14 +952,19 @@ static NdStatus mpfr_integrate(NdProblem* P, const NdOpts* o, const NdStepper* S
         P->tol.rtol = tol.rtol; P->tol.atol = tol.atol;
         mpsol_push(sol, t0m, Y0, f0);
         int64_t budget = (o->max_steps > 0) ? o->max_steps : ND_AUTO_MAX_STEPS;
-        if (P->tmax > P->t0)
-            st = implicit ? mpfr_bdf_dir(P, o, sol, tol, P->tmax, bits, &budget)
-                          : mpfr_dir(P, o, sol, tol, adaptive, P->tmax, bits, &budget);
+        mpfr_t tend; mpfr_init2(tend, bits);
+        if (P->tmax > P->t0) {
+            mp_from_expr(P->tmax_expr, P->tmax, tend, bits);
+            st = implicit ? mpfr_bdf_dir(P, o, sol, tol, t0m, Y0, tend, bits, &budget)
+                          : mpfr_dir(P, o, sol, tol, adaptive, t0m, Y0, tend, bits, &budget);
+        }
         if (P->tmin < P->t0) {
-            NdStatus s2 = implicit ? mpfr_bdf_dir(P, o, sol, tol, P->tmin, bits, &budget)
-                                   : mpfr_dir(P, o, sol, tol, adaptive, P->tmin, bits, &budget);
+            mp_from_expr(P->tmin_expr, P->tmin, tend, bits);
+            NdStatus s2 = implicit ? mpfr_bdf_dir(P, o, sol, tol, t0m, Y0, tend, bits, &budget)
+                                   : mpfr_dir(P, o, sol, tol, adaptive, t0m, Y0, tend, bits, &budget);
             if (st == ND_OK) st = s2;
         }
+        mpfr_clear(tend);
     }
     mp_vec_free(Y0, P->d); mp_vec_free(f0, P->d); mpfr_clear(t0m);
     mpsol_sort(sol);
