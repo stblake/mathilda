@@ -4968,11 +4968,29 @@ symbolic derivative is checked once against a central difference, and the
 difference quotient is used when they disagree (the expanded
 `D[LaguerreL[1000, x], x]` loses ~250 digits to cancellation there).
 
+**Newton's stopping rule.** A point is accepted when both goals hold there:
+the residual `|f(x)| < 10^-AccuracyGoal` and the step that arrived at it,
+`|dx| < 10^-AccuracyGoal + |x| 10^-PrecisionGoal` (or `f(x)` is exactly 0).
+A passed residual with a long arriving step takes one more step
+(`FindRoot[Sin[x], {x, 3.}]` gives all 16 digits of Pi, not the 8 of the
+iterate where `|f|` first fell under `10^-8`); a passed step test with a
+failing residual keeps polishing until the residual passes, the step reaches
+the working precision's resolution, the steps stop shrinking (the function's
+evaluation noise, e.g. `|L_1000| ~ 1e867`), or 8 polishing steps have been
+taken. The step test alone used to stop a start that was already within the
+step tolerance after one step: `1 - x` at the largest zero of
+`ChebyshevT[2001, x]` (`1 - Cos[Pi/4002] = 3.0811692774e-7`) came out as
+`3.07990e-7`; it is now right to all the digits a double holds.
+
 When the symbolic derivative `D[f, x]` cannot be reduced to a
 numericalizable form — `D` returns an inert `Derivative[..]` head, as for
 `Zeta'`, `HurwitzZeta`'s order derivative, `PolyGamma`, etc. — the Newton
 iteration falls back to a **central finite-difference** derivative
-(`(f(x+h) − f(x−h))/(2h)`) instead of failing with `nlnum`. This covers all
+(`(f(x+h) − f(x−h))/(2h)`) instead of failing with `nlnum`. At machine
+precision `h = (|x| + 1) 10^-7` until Newton's steps become shorter than that,
+then it follows them down to `(|x| + 1) √ε`, so the difference quotient tracks
+the derivative at the root and the convergence is superlinear rather than
+linear. This covers all
 four scalar Newton kernels (real / complex × machine / MPFR), so e.g.
 `FindRoot[Zeta[s] == 1.05, {s, 5}]` → `{s -> 4.61297}` and
 `FindRoot[2^(-s)(Zeta[s] - Zeta[s, 3/2]) == 0, {s, 20 I}]` →
@@ -4995,11 +5013,11 @@ etc.
 | `Method`            | `Automatic`    | `"Newton"`, `"Secant"`, `"Brent"`, or `Automatic`. |
 | `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a positive digit count -- Integer, Rational or Real, so the `100.` that `N` makes of `100` is accepted (>= ~16 routes through MPFR). |
 | `MaxIterations`     | `100`          | Iteration limit: a positive integer, an integer-valued Real, or `Infinity`. |
-| `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `|f| < 10^{-n}`. `Infinity` disables this criterion. `Automatic` resolves to `WorkingPrecision/2`. |
-| `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `|step| < |x| * 10^{-n}`.  Same defaults / specials as `AccuracyGoal`. |
+| `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ the residual goal `|f| < 10^{-n}` (and the absolute part of the step goal). `Infinity` disables this criterion. `Automatic` resolves to `WorkingPrecision/2`. |
+| `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ the step goal `|step| < 10^{-AccuracyGoal} + |x| * 10^{-n}`; Newton accepts a point where both goals hold (see the stopping rule above).  Same defaults / specials as `AccuracyGoal`. |
 | `DampingFactor`     | `1`            | Multiplier on the Newton step.  Useful for repeated roots (set to the multiplicity for quadratic convergence). |
 | `Jacobian`          | `Automatic`    | An `n x n` matrix for `n` equations -- `{{d}}` for one equation, or the bare expression `d` -- overriding the call to `D[]`.  Entries are evaluated per point, so they need only be numeric once the variables have values (`g[x]` with a `?NumberQ` guard).  Any other shape: `FindRoot::jacsh`. |
-| `StepMonitor`       | `None`         | A held expression evaluated after each step. |
+| `StepMonitor`       | `None`         | A held expression evaluated after each step, with the variables bound to the new iterate. |
 | `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any of its derivatives) is evaluated (the compiled fast path is bypassed so every evaluation is seen). |
 
 The scalar option values (`Method`, `WorkingPrecision`, `MaxIterations`,

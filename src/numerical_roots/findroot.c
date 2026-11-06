@@ -460,6 +460,16 @@ static void fr_fire_monitor(Expr* monitor) {
     expr_free(tmp);
 }
 
+/* Run the StepMonitor with the search variable bound to the NEW iterate (the
+ * last binding is otherwise a finite-difference probe point or the previous
+ * iterate).  `value` is borrowed. */
+static void fr_fire_step_monitor(const FrOpts* opts, FrVarBind* bind, Expr* value) {
+    if (!opts->step_monitor) return;
+    fr_bind_set(bind, value);
+    eval_clock_bump();
+    fr_fire_monitor(opts->step_monitor);
+}
+
 /* Build a NumericSpec from FrOpts (used to drive numericalize after
  * each evaluation so constants like E and Pi reduce to numbers even
  * when they sit under a Power head). */
@@ -605,12 +615,28 @@ static bool fr_has_inert_derivative(const Expr* e) {
     return false;
 }
 
+/* The machine finite-difference increment at a point of magnitude `mag`, given
+ * the size of Newton's previous step (INFINITY before the first).  Far from
+ * the root it is (|x| + 1) 1e-7, robust against a function that varies on a
+ * larger scale; once the steps are shorter than that it follows them down to
+ * (|x| + 1) sqrt(eps), so the difference quotient tracks the derivative at the
+ * root and the iteration converges superlinearly instead of linearly (with a
+ * fixed 2e-7 increment and a root at 1 - 3e-7, ChebyshevT[2001, x] took ~13
+ * steps to reach its residual goal). */
+static double fr_fd_increment(double mag, double prev_step) {
+    double h = (mag + 1.0) * 1.0e-7;
+    if (prev_step < h) {
+        double floor_h = (mag + 1.0) * 1.4901161193847656e-8;   /* sqrt(eps) */
+        h = prev_step > floor_h ? prev_step : floor_h;
+    }
+    return h;
+}
+
 /* Central finite-difference derivative f'(x) at a real machine point, used when
- * no usable symbolic derivative is available.  Returns false if f cannot be
- * evaluated to a real number at the two probe points. */
-static bool fr_fd_deriv_real(Expr* f, FrVarBind* bind, double x,
+ * no usable symbolic derivative is available, with increment h.  Returns false
+ * if f cannot be evaluated to a real number at the two probe points. */
+static bool fr_fd_deriv_real(Expr* f, FrVarBind* bind, double x, double h,
                              const FrOpts* opts, double* out) {
-    double h = (fabs(x) + 1.0) * 1.0e-7;
     double fph, fmh;
     Expr* arr[1];
     Expr* e;
@@ -631,9 +657,8 @@ static bool fr_fd_deriv_real(Expr* f, FrVarBind* bind, double x,
 }
 
 /* Central finite-difference derivative f'(z) at a complex machine point. */
-static bool fr_fd_deriv_complex(Expr* f, FrVarBind* bind, double complex z,
+static bool fr_fd_deriv_complex(Expr* f, FrVarBind* bind, double complex z, double h,
                                 const FrOpts* opts, double complex* out) {
-    double h = (cabs(z) + 1.0) * 1.0e-7;
     double complex fph, fmh;
     Expr* arr[1];
     Expr* e;
@@ -759,6 +784,39 @@ static bool fr_overflowed(double v, const FrOpts* opts) {
  *  Machine-precision scalar Newton (real)                             *
  * ------------------------------------------------------------------ */
 
+/* Newton's stopping rule (machine and MPFR, real and complex).
+ *
+ * A point x_k is accepted when BOTH tests pass there: the residual
+ * |f(x_k)| < 10^-AccuracyGoal, and the step that arrived at it,
+ * |x_k - x_{k-1}| < 10^-AccuracyGoal + |x_k| 10^-PrecisionGoal (or f(x_k) is
+ * exactly 0).  Either test alone stops too early:
+ *   - the residual alone accepts the iterate BEFORE the last useful step:
+ *     Sin[x] from 3. reaches f = 2.9e-10 at 3.1415926533 (8 digits of Pi)
+ *     while the next step would give all 16;
+ *   - the step alone only says the iteration has slowed down, and how far x
+ *     still is from the root depends on the rate.  A start within the step
+ *     tolerance of the root passes it after one step, and near the root at
+ *     1 - 3.08e-7 of ChebyshevT[2001, x] Newton's error constant f''/2f' ~
+ *     1/(1 - x) ~ 3e6 leaves ~1e-12 after it: 3 correct digits of 1 - x of
+ *     the 6 a double resolves.
+ * So a passed residual test with a long arriving step takes one more step,
+ * and a passed step test with a failing residual POLISHES: it keeps stepping
+ * until both pass, or the step reaches the working precision's resolution
+ * (|dx| <= FR_NOISE_ULPS ulps of x: further steps cannot move x), or the steps
+ * stop shrinking (|dx| > |previous dx|/2: x is in the noise of f's evaluation,
+ * as it is for |L_1000| ~ 1e867, whose residual never reaches any absolute
+ * goal), or FR_POLISH_MAX steps have been taken.  An ordinary quadratically
+ * convergent solve passes both tests one step after the step test first
+ * passes, so the rule costs one extra evaluation of f. */
+#define FR_NOISE_ULPS 16
+#define FR_POLISH_MAX 8
+
+/* True when a polishing step should end the iteration (see above): `step` and
+ * `prev` are |dx| now and before, `noise` the resolution |x| * ulp. */
+static bool fr_polish_done(double step, double prev, double noise, int polished) {
+    return step <= noise || step > 0.5 * prev || polished >= FR_POLISH_MAX;
+}
+
 /* Returns NULL on failure (NaN, non-numeric eval, MaxIterations with
  * no fallback). On success, returns a fresh EXPR_REAL. */
 static Expr* fr_run_newton_real(Expr* f, Expr* df,
@@ -768,6 +826,8 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
     double resid = INFINITY;    /* last |f(x)|, the goal-shortfall error estimate */
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
+    int polished = -1;          /* < 0: the step test has not passed yet */
+    double prev_step = INFINITY;
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_real(x);
@@ -781,9 +841,10 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         if (!ok_f) { fr_warn("nlnum", "non-real f during iteration"); return NULL; }
         if (fr_overflowed(fv, opts)) return NULL;
         resid = fabs(fv);
-        /* Pre-step convergence check: if we are already at the root, stop.
-         * Also avoids the f'(x*) = 0 case for repeated roots. */
-        if (fabs(fv) < tol_acc) return expr_new_real(x);
+        /* Both tests at x (see above); prev_step is the step that arrived. */
+        bool resid_ok = fabs(fv) < tol_acc;
+        if (fv == 0.0 || (resid_ok && prev_step < tol_acc + fabs(x) * tol_prec))
+            return expr_new_real(x);
 
         double dv;
         if (df) {
@@ -795,20 +856,40 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
             bool ok_d = fr_expr_to_double_real(dv_expr, &dv);
             expr_free(dv_expr);
             if (!ok_d) { fr_warn("nlnum", "non-real derivative"); return NULL; }
-        } else if (!fr_fd_deriv_real(f, bind, x, opts, &dv)) {
+        } else if (!fr_fd_deriv_real(f, bind, x, fr_fd_increment(fabs(x), prev_step),
+                                     opts, &dv)) {
             fr_warn("nlnum", "could not evaluate finite-difference derivative");
             return NULL;
         }
         if (fr_overflowed(dv, opts)) return NULL;
-        if (dv == 0.0) { fr_warn("dsing", "derivative vanished"); return NULL; }
+        if (dv == 0.0) {
+            if (polished >= 0 || resid_ok) return expr_new_real(x);   /* keep x */
+            fr_warn("dsing", "derivative vanished"); return NULL;
+        }
         double step = opts->damping * fv / dv;
-        if (!isfinite(step)) { fr_warn("noconv", "divergence (non-finite step)"); return NULL; }
+        if (!isfinite(step)) {
+            if (polished >= 0 || resid_ok) return expr_new_real(x);
+            fr_warn("noconv", "divergence (non-finite step)"); return NULL;
+        }
         x -= step;
-        fr_fire_monitor(opts->step_monitor);
+        if (opts->step_monitor) {
+            Expr* xv_new = expr_new_real(x);
+            fr_fire_step_monitor(opts, bind, xv_new);
+            expr_free(xv_new);
+        }
 
-        if (fabs(step) < (fabs(x) + 1e-300) * tol_prec)
-            return expr_new_real(x);
+        double astep = fabs(step);
+        if (polished >= 0) {
+            polished++;
+            if (fr_polish_done(astep, prev_step, FR_NOISE_ULPS * DBL_EPSILON * fabs(x),
+                               polished))
+                return expr_new_real(x);
+        } else if (astep < tol_acc + fabs(x) * tol_prec) {
+            polished = 0;                         /* step test passed: polish */
+        }
+        prev_step = astep;
     }
+    if (polished >= 0) return expr_new_real(x);   /* the step test had passed */
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
     fr_warn_goal(opts, resid, fabs(x));
@@ -826,6 +907,8 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
     double resid = INFINITY;    /* last |f(z)|, the goal-shortfall error estimate */
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
+    int polished = -1;          /* see fr_polish_done */
+    double prev_step = INFINITY;
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_d(z);
@@ -838,7 +921,9 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
         expr_free(fv_expr);
         if (!ok_f) { fr_warn("nlnum", "non-numeric value"); return NULL; }
         resid = cabs(fv);
-        if (cabs(fv) < tol_acc) return fr_expr_from_complex_d(z);
+        bool resid_ok = cabs(fv) < tol_acc;       /* both tests, as in the real case */
+        if (fv == 0.0 || (resid_ok && prev_step < tol_acc + cabs(z) * tol_prec))
+            return fr_expr_from_complex_d(z);
 
         double complex dv;
         if (df) {
@@ -850,23 +935,40 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
             bool ok_d = fr_expr_to_complex(dv_expr, &dv);
             expr_free(dv_expr);
             if (!ok_d) { fr_warn("nlnum", "non-numeric derivative"); return NULL; }
-        } else if (!fr_fd_deriv_complex(f, bind, z, opts, &dv)) {
+        } else if (!fr_fd_deriv_complex(f, bind, z, fr_fd_increment(cabs(z), prev_step),
+                                        opts, &dv)) {
             fr_warn("nlnum", "could not evaluate finite-difference derivative");
             return NULL;
         }
-        if (dv == 0.0) { fr_warn("dsing", "derivative vanished"); return NULL; }
+        if (dv == 0.0) {
+            if (polished >= 0 || resid_ok) return fr_expr_from_complex_d(z);
+            fr_warn("dsing", "derivative vanished"); return NULL;
+        }
         double complex step = opts->damping * fv / dv;
         if (!isfinite(creal(step)) || !isfinite(cimag(step))) {
+            if (polished >= 0 || resid_ok) return fr_expr_from_complex_d(z);
             fr_warn("noconv", "divergence (non-finite step)");
             return NULL;
         }
         z -= step;
         double abs_step = cabs(step);
-        fr_fire_monitor(opts->step_monitor);
+        if (opts->step_monitor) {
+            Expr* zv_new = fr_expr_from_complex_d(z);
+            fr_fire_step_monitor(opts, bind, zv_new);
+            expr_free(zv_new);
+        }
 
-        if (abs_step < (cabs(z) + 1e-300) * tol_prec)
-            return fr_expr_from_complex_d(z);
+        if (polished >= 0) {
+            polished++;
+            if (fr_polish_done(abs_step, prev_step, FR_NOISE_ULPS * DBL_EPSILON * cabs(z),
+                               polished))
+                return fr_expr_from_complex_d(z);
+        } else if (abs_step < tol_acc + cabs(z) * tol_prec) {
+            polished = 0;
+        }
+        prev_step = abs_step;
     }
+    if (polished >= 0) return fr_expr_from_complex_d(z);
     fr_warn("cvmit", "failed to converge within %lld iterations",
             (long long)opts->max_iter);
     fr_warn_goal(opts, resid, cabs(z));
@@ -1069,6 +1171,10 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
     Expr* result = NULL;
     bool converged = false;
     double resid = INFINITY;    /* last |f(x)|, the goal-shortfall error estimate */
+    int polished = -1;          /* see fr_polish_done */
+    mpfr_t prev_step;
+    mpfr_init2(prev_step, bits);
+    mpfr_set_inf(prev_step, +1);
 
     /* An escalated solve (the machine run overflowed) is by construction one
      * where f takes extreme values, and there an automatic symbolic derivative
@@ -1122,13 +1228,19 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         if (!ok_f || !fim_zero) {
             fr_warn("nlnum", "non-real f during iteration"); goto cleanup;
         }
-        /* Pre-step convergence check. */
+        /* Both tests at x (see fr_polish_done); prev_step arrived here. */
         mpfr_abs(tmp, fv, MPFR_RNDN);
         resid = mpfr_get_d(tmp, MPFR_RNDN);
-        if (mpfr_cmp(tmp, tol_acc) < 0) {
-            result = expr_new_mpfr_copy(x);
-            converged = true;
-            break;
+        bool resid_ok = mpfr_cmp(tmp, tol_acc) < 0;
+        if (resid_ok || mpfr_zero_p(fv)) {
+            mpfr_abs(step, x, MPFR_RNDN);
+            mpfr_mul(step, step, tol_prec, MPFR_RNDN);
+            mpfr_add(step, step, tol_acc, MPFR_RNDN);       /* step tolerance */
+            if (mpfr_zero_p(fv) || mpfr_cmp(prev_step, step) < 0) {
+                result = expr_new_mpfr_copy(x);
+                converged = true;
+                break;
+            }
         }
 
         if (df) {
@@ -1153,25 +1265,53 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
             fr_warn("nlnum", "could not evaluate finite-difference derivative");
             goto cleanup;
         }
-        if (mpfr_zero_p(dv)) { fr_warn("dsing", "derivative vanished"); goto cleanup; }
+        if (mpfr_zero_p(dv)) {
+            if (polished >= 0 || resid_ok) {
+                result = expr_new_mpfr_copy(x); converged = true; break;
+            }
+            fr_warn("dsing", "derivative vanished"); goto cleanup;
+        }
         mpfr_div(step, fv, dv, MPFR_RNDN);
         mpfr_mul_d(step, step, opts->damping, MPFR_RNDN);
         if (mpfr_nan_p(step) || mpfr_inf_p(step)) {
+            if (polished >= 0 || resid_ok) {
+                result = expr_new_mpfr_copy(x); converged = true; break;
+            }
             fr_warn("noconv", "divergence (non-finite step)"); goto cleanup;
         }
         mpfr_sub(x, x, step, MPFR_RNDN);
         mpfr_abs(tmp, step, MPFR_RNDN);
         mpfr_t scale; mpfr_init2(scale, bits);
         mpfr_abs(scale, x, MPFR_RNDN);
-        mpfr_mul(scale, scale, tol_prec, MPFR_RNDN);
-        bool step_small_prec = mpfr_cmp(tmp, scale) < 0;
+        bool stop = false;
+        if (polished >= 0) {
+            /* fr_polish_done in MPFR: at the resolution, stalled, or capped. */
+            polished++;
+            mpfr_mul_2si(scale, scale, 4 - bits, MPFR_RNDN);      /* 16 ulps of x */
+            mpfr_mul_2si(prev_step, prev_step, -1, MPFR_RNDN);    /* prev / 2     */
+            stop = mpfr_cmp(tmp, scale) <= 0 || mpfr_cmp(tmp, prev_step) > 0
+                   || polished >= FR_POLISH_MAX;
+        } else {
+            mpfr_mul(scale, scale, tol_prec, MPFR_RNDN);
+            mpfr_add(scale, scale, tol_acc, MPFR_RNDN);
+            if (mpfr_cmp(tmp, scale) < 0) polished = 0;          /* step test: polish */
+        }
+        mpfr_set(prev_step, tmp, MPFR_RNDN);
         mpfr_clear(scale);
-        fr_fire_monitor(opts->step_monitor);
-        if (step_small_prec) {
+        if (opts->step_monitor) {
+            Expr* xv_new = expr_new_mpfr_copy(x);
+            fr_fire_step_monitor(opts, bind, xv_new);
+            expr_free(xv_new);
+        }
+        if (stop) {
             result = expr_new_mpfr_copy(x);
             converged = true;
             break;
         }
+    }
+    if (!converged && polished >= 0) {             /* the step test had passed */
+        result = expr_new_mpfr_copy(x);
+        converged = true;
     }
     if (!converged) {
         fr_warn("cvmit", "failed to converge within %lld iterations",
@@ -1181,7 +1321,7 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         fr_warn_goal(opts, resid, mpfr_get_d(tmp, MPFR_RNDN));
     }
 cleanup:
-    mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, (mpfr_ptr)0);
+    mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, prev_step, (mpfr_ptr)0);
     return result;
 }
 
@@ -1549,6 +1689,10 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
     Expr* result = NULL;
     bool converged = false;
     double resid = INFINITY;    /* last |f(z)|, the goal-shortfall error estimate */
+    int polished = -1;          /* see fr_polish_done */
+    mpfr_t prev_step;
+    mpfr_init2(prev_step, bits);
+    mpfr_set_inf(prev_step, +1);
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* zv = fr_expr_from_complex_mpfr(zr, zi);
@@ -1570,10 +1714,17 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
         mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
         mpfr_sqrt(tmp1, tmp1, MPFR_RNDN);
         resid = mpfr_get_d(tmp1, MPFR_RNDN);
-        if (mpfr_cmp(tmp1, tol_acc) < 0) {
-            result = fr_expr_from_complex_mpfr(zr, zi);
-            converged = true;
-            break;
+        bool resid_ok = mpfr_cmp(tmp1, tol_acc) < 0;
+        bool f_zero = mpfr_zero_p(fr_) && mpfr_zero_p(fi);
+        if (resid_ok || f_zero) {                 /* both tests, as in the real case */
+            mpfr_hypot(tmp2, zr, zi, MPFR_RNDN);
+            mpfr_mul(tmp2, tmp2, tol_prec, MPFR_RNDN);
+            mpfr_add(tmp2, tmp2, tol_acc, MPFR_RNDN);
+            if (f_zero || mpfr_cmp(prev_step, tmp2) < 0) {
+                result = fr_expr_from_complex_mpfr(zr, zi);
+                converged = true;
+                break;
+            }
         }
 
         if (df) {
@@ -1596,6 +1747,9 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
         }
         if (!fr_mpc_newton_step(zr, zi, fr_, fi, dr, di,
                                 opts->damping, step_r, step_i, bits)) {
+            if (polished >= 0 || resid_ok) {
+                result = fr_expr_from_complex_mpfr(zr, zi); converged = true; break;
+            }
             fr_warn("dsing", "derivative vanished or divergence"); goto cleanup;
         }
         /* |step| = sqrt(step_r^2 + step_i^2). */
@@ -1609,15 +1763,34 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
         mpfr_mul(scale, zi, zi, MPFR_RNDN);
         mpfr_add(mag, mag, scale, MPFR_RNDN);
         mpfr_sqrt(mag, mag, MPFR_RNDN);
-        mpfr_mul(scale, mag, tol_prec, MPFR_RNDN);
-        bool step_small_prec = mpfr_cmp(tmp1, scale) < 0;
+        bool stop = false;
+        if (polished >= 0) {
+            polished++;
+            mpfr_mul_2si(scale, mag, 4 - bits, MPFR_RNDN);       /* 16 ulps of |z| */
+            mpfr_mul_2si(prev_step, prev_step, -1, MPFR_RNDN);
+            stop = mpfr_cmp(tmp1, scale) <= 0 || mpfr_cmp(tmp1, prev_step) > 0
+                   || polished >= FR_POLISH_MAX;
+        } else {
+            mpfr_mul(scale, mag, tol_prec, MPFR_RNDN);
+            mpfr_add(scale, scale, tol_acc, MPFR_RNDN);
+            if (mpfr_cmp(tmp1, scale) < 0) polished = 0;
+        }
+        mpfr_set(prev_step, tmp1, MPFR_RNDN);
         mpfr_clear(mag); mpfr_clear(scale);
-        fr_fire_monitor(opts->step_monitor);
-        if (step_small_prec) {
+        if (opts->step_monitor) {
+            Expr* zv_new = fr_expr_from_complex_mpfr(zr, zi);
+            fr_fire_step_monitor(opts, bind, zv_new);
+            expr_free(zv_new);
+        }
+        if (stop) {
             result = fr_expr_from_complex_mpfr(zr, zi);
             converged = true;
             break;
         }
+    }
+    if (!converged && polished >= 0) {
+        result = fr_expr_from_complex_mpfr(zr, zi);
+        converged = true;
     }
     if (!converged) {
         fr_warn("cvmit", "failed to converge within %lld iterations",
@@ -1628,7 +1801,7 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
     }
 cleanup:
     mpfr_clears(zr, zi, fr_, fi, dr, di, step_r, step_i,
-                tol_acc, tol_prec, tmp1, tmp2, (mpfr_ptr)0);
+                tol_acc, tol_prec, tmp1, tmp2, prev_step, (mpfr_ptr)0);
     return result;
 }
 #endif /* USE_MPFR */
