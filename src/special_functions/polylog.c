@@ -1001,6 +1001,17 @@ static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
      * that approach direction as a negative zero imaginary part. */
     bool z_on_cut = z_real && have_zv && zv >= 1.0;
 
+    /* Arbitrary precision off the cut: arb's acb_polylog.  The cut is [1, oo)
+     * only, so any z off it (non-real, or real <= -1) has one principal value
+     * and arb's agrees.  The MPFR zeta expansion below costs one mpfr_zeta per
+     * term (0.3-0.6 s for PolyLog[2, (1 + I)/2] at 20-40 digits, against
+     * milliseconds here) -- the cost every Newton-Leibniz endpoint check of a
+     * dilogarithm at a complex point paid. */
+    if (out_prec > 53 && n_real && !z_on_cut && !(z_real && !have_zv)) {
+        Expr* v = flint_num_polylog(n, z);
+        if (v) { expr_free(zero); return v; }
+    }
+
     /* Complex MPFR kernel. */
     pcx s, Z, res;
     pcx_init(&s, wp); pcx_init(&Z, wp); pcx_init(&res, wp);
