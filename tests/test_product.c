@@ -222,6 +222,25 @@ int main(void) {
     /* ---- Unsummable / non-rational body stays held ---- */
     check("Product[f[i], {i, 1, n}]", "Product[f[i], {i, 1, n}]");
 
+    /* ---- Inexact finite products: the compiled loops ----
+     * Product[1 - z^k, {k, 1, 200}] at |z| = 1/2 against Euler's pentagonal
+     * series sum_m (-1)^m z^(m (3m - 1)/2) (the factors past k = 200 and the
+     * series terms past exponent 200 are below 2^-200), at a complex machine
+     * z and at 50 digits (the MPFR loop, factors compiled at their own
+     * precision; z^k by binary powering). */
+    check("With[{z = N[Exp[I/3]/2]}, Abs[Product[1 - z^k, {k, 1, 200}]"
+          " - Sum[(-1)^m z^(m (3 m - 1)/2), {m, -12, 12}]] < 10^-14]", "True");
+    check("With[{z = N[Exp[I/3]/2, 50]}, Abs[Product[1 - z^k, {k, 1, 200}]"
+          " - Sum[(-1)^m z^(m (3 m - 1)/2), {m, -12, 12}]] < 10^-45]", "True");
+    check("With[{z = N[3/4, 50]}, Abs[Product[1 - z^k, {k, 1, 400}]"
+          " - Sum[(-1)^m z^(m (3 m - 1)/2), {m, -17, 17}]] < 10^-45]", "True");
+    /* z^k inside the compiled MPFR factor against the exact power: the
+     * product of z^k for k = 1..10 is z^55 */
+    check("With[{z = N[3/10 + 2/5 I, 50]}, Abs[Product[z^k, {k, 1, 10}]"
+          " - N[(3/10 + 2/5 I)^55, 60]] < 10^-45 Abs[(3/10 + 2/5 I)^55]]", "True");
+    /* precision is kept */
+    check("With[{z = N[Exp[I/3]/2, 50]}, Precision[Product[1 - z^k, {k, 1, 30}]]]", "50.0");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d product checks FAILED\n", failures, checks);
         return 1;

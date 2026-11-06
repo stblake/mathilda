@@ -38,6 +38,7 @@
 #include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
 #include "compile/autocompile.h"   /* machine fast path for finite numeric products */
+#include "numeric.h"   /* get_approx_mpfr */
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -368,6 +369,86 @@ static bool prod_body_probe_inexact(const Expr* e) {
     return false;
 }
 
+#ifdef USE_MPFR
+/* Precision in bits of an arbitrary-precision factor (an MPFR real, or a
+ * Complex with an MPFR part), or 0 when the factor is not of that kind. */
+static long prod_probe_mpfr_bits(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_MPFR) return (long)mpfr_get_prec(e->data.mpfr);
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) {
+        long b = 0;
+        for (int i = 0; i < 2; i++) {
+            const Expr* x = e->data.function.args[i];
+            if (x->type == EXPR_REAL) return 0;
+            if (x->type == EXPR_MPFR) {
+                long xb = (long)mpfr_get_prec(x->data.mpfr);
+                if (!b || xb < b) b = xb;
+            }
+        }
+        return b;
+    }
+    return 0;
+}
+
+/* The arbitrary-precision counterpart of the machine loop below: a finite
+ * product over an integer range whose factor is an MPFR number (a contour
+ * sample of Product[1 - z^k, {k, 1, 1000}] at WorkingPrecision -> 40) runs
+ * the factor compiled at its own precision and multiplies in MPFR, instead of
+ * evaluating 1 - z^k through the interpreter term by term (~50 us a complex
+ * term, most of it in the generic Complex arithmetic).  The factors are
+ * accumulated with 16 guard bits and the product is rounded to `bits`.
+ * Returns NULL (fall through) when the factor does not compile, or a point is
+ * not a finite number. */
+static Expr* product_try_compiled_mpfr(Expr* f, const IterSpec* s, long bits,
+                                       int64_t lo, int64_t hi, int64_t step) {
+    AutoCompiled* ac = autocompile_new_prec(f, (const Expr* const*)&s->var, 1, bits);
+    if (!ac) return NULL;
+    mpfr_prec_t p = (mpfr_prec_t)(bits + 16);
+    mpfr_t ar, ai, tr, ti, x, y;
+    mpfr_inits2(p, ar, ai, tr, ti, x, y, (mpfr_ptr)0);
+    mpfr_set_ui(ar, 1, MPFR_RNDN);
+    mpfr_set_zero(ai, 1);
+    bool ok = true;
+    for (int64_t k = lo; step > 0 ? k <= hi : k >= hi; k += step) {
+        Expr* kv = expr_new_integer(k);
+        Expr* v = autocompiled_eval_mpfr(ac, (const Expr* const*)&kv);
+        expr_free(kv);
+        bool inexact;
+        if (!v || !get_approx_mpfr(v, tr, ti, &inexact)
+            || !mpfr_number_p(tr) || !mpfr_number_p(ti)) {
+            if (v) expr_free(v);
+            ok = false;
+            break;
+        }
+        expr_free(v);
+        /* (ar + i ai)(tr + i ti) */
+        mpfr_mul(x, ar, tr, MPFR_RNDN);
+        mpfr_mul(y, ai, ti, MPFR_RNDN);
+        mpfr_sub(x, x, y, MPFR_RNDN);
+        mpfr_mul(y, ar, ti, MPFR_RNDN);
+        mpfr_mul(ai, ai, tr, MPFR_RNDN);
+        mpfr_add(ai, ai, y, MPFR_RNDN);
+        mpfr_set(ar, x, MPFR_RNDN);
+    }
+    autocompiled_free(ac);
+    Expr* out = NULL;
+    if (ok && mpfr_number_p(ar) && mpfr_number_p(ai)) {
+        mpfr_t r, i;
+        mpfr_init2(r, (mpfr_prec_t)bits);
+        mpfr_init2(i, (mpfr_prec_t)bits);
+        mpfr_set(r, ar, MPFR_RNDN);
+        mpfr_set(i, ai, MPFR_RNDN);
+        out = mpfr_zero_p(i) ? expr_new_mpfr_copy(r)
+            : make_complex(expr_new_mpfr_copy(r), expr_new_mpfr_copy(i));
+        mpfr_clears(r, i, (mpfr_ptr)0);
+    }
+    mpfr_clears(ar, ai, tr, ti, x, y, (mpfr_ptr)0);
+    return out;
+}
+#endif
+
 /*
  * Machine fast path for a finite numeric product whose body is inexact — the
  * mirror of sum_try_compiled.  Returns the scalar product, or NULL to fall
@@ -395,9 +476,19 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
     iter_bind(s->var, first_val);
     Expr* probe = evaluate(f);
     bool inexact = prod_body_probe_inexact(probe);
+#ifdef USE_MPFR
+    long mbits = inexact ? 0 : prod_probe_mpfr_bits(probe);
+#endif
     expr_free(probe);
     expr_free(first_val);
     iter_spec_restore(s->var, saved);
+#ifdef USE_MPFR
+    if (mbits > 0 && !is_real && s->imin->type == EXPR_INTEGER
+        && s->imax->type == EXPR_INTEGER && s->di->type == EXPR_INTEGER
+        && s->di->data.integer != 0 && nterms <= 1.0e7)
+        return product_try_compiled_mpfr(f, s, mbits, s->imin->data.integer,
+                                         s->imax->data.integer, s->di->data.integer);
+#endif
     if (!inexact) return NULL;
 
     if (!is_real) {
@@ -493,16 +584,22 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
         bool index_pred_body =
             prod_body_has_index_predicate(f, s.var->data.symbol.name);
 
+        /* An inexact (machine-number) body first takes the compiled loop: its
+         * closed form would only be evaluated at the same machine numbers, and
+         * the closed-form cascade alone cost 11 ms for
+         * Product[1 - z^k, {k, 1, 1000}] at a complex z (a q-Pochhammer
+         * recognised, then evaluated), where the native loop takes
+         * microseconds -- the whole cost of a contour integral that samples
+         * such a product thousands of times.  An exact body declines at the
+         * one-term probe and keeps the exact closed form. */
+        Expr* comp = product_try_compiled(f, &s, min_val, max_val, di_val, is_real);
+        if (comp) { iter_spec_free(&s); return comp; }
         if (!is_real && di_val == 1.0 && min_val <= max_val && !index_pred_body) {
             IterShadow saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
             if (cf) { iter_spec_free(&s); return cf; }
         }
-        /* No closed form: try the compiled machine loop for an inexact body
-         * before the slow evaluate()-per-factor enumeration. */
-        Expr* comp = product_try_compiled(f, &s, min_val, max_val, di_val, is_real);
-        if (comp) { iter_spec_free(&s); return comp; }
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }
