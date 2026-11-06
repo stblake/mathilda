@@ -164,3 +164,23 @@ argument/option handling, then absences, then bottlenecks.
 | B9 | NIntegrate at 60 digits on x^2 PolyLog[3, 1/(x+1)] (P8): PolyLog[3, z] near z = 1 costs ~20 ms per call at 80 digits | 1.6 s | 1.1 s | open |
 | B11 | P2 after the W1/W4 fixes: machine 71 ms, WP 30 117 ms, WP 50 805 ms, WP 100 3.1 s, ProductLog machine/WP 30 677/1406 ms (load ~100) | | 6.7 / 12 / 31 / 118 / 24 / 88 ms | open (agent) |
 | B10 | the polar ODE derivation: Together/Numerator/Factor of a trig rational (P10) | 4.2 ms | 2.8 ms | open |
+
+## Holdout (experiments 136–145) — failures still open at v0.6242
+
+The holdout ([`ISSAC97_HOLDOUT.md`](ISSAC97_HOLDOUT.md)) at v0.6225: 127 AHEAD,
+49 SLOWER, 18 INCOMPLETE, 46 CHECK-FAIL (Mathilda wrong in 31). At v0.6242
+(after W1–W9, A1–A9, X1, X3, B4): 152 / 42 / 16 / 30. Remaining, by area
+(H = holdout case; "neither" = both systems disagree with the true answer):
+
+| area | cases | status |
+|---|---|---|
+| NIntegrate | h2.3 machine + wp40 (70 s), h2.7 wp40 timeout, h2.8 (neither), h2.9 wp40 x^1000 E^-x wrong | open (NIntegrate agent) |
+| NSum | h3.2, h3.4, h3.6, h3.7, h3.8 machine wrong; h3.2/3.4/3.7/3.8 wp30 timeouts | open |
+| SeriesCoefficient / Residue | h4.4, h4.8, h4.9 (Tan, k = 401) wrong; h4.5 Residue timeout; h4.10 Residue wrong | open (Series agent; the 64-term inversion fix is not yet on main) |
+| FindRoot / special functions | h5.2 LegendreP[1000] wp50 wrong (36 s); h5.3 JacobiP unevaluated; h5.4 Chebyshev machine; h5.10 RiemannSiegelZ absent | open |
+| NSolve | h6.5, h6.7 machine: solutions missing | open (NSolve agent) |
+| Limit | h7.2, h7.10 (neither), h7.3 unevaluated, h7.3 machine point wrong | open (Series agent) |
+| N[expr, 30] with cancellation | h7.4, h7.5, h7.8 (0 or wrong digits; neither) | open |
+| Integrate | h8.5, h8.8 unevaluated | open |
+| eigenproblem | h9.9 sine Galerkin wp40 n = 200 (neither) | open |
+| NDSolve WorkingPrecision 30 | h10.1, h10.8, h10.9 wrong; h10.7 Gauss at x = 1 (neither) | open |
