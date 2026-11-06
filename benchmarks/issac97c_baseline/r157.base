@@ -1,0 +1,83 @@
+REQUIRE	NIntegrate	present
+REQUIRE	BesselJ	present
+
+                                                                                                                               7
+NIntegrate::ncvb: NIntegrate failed to converge to prescribed accuracy after 9 recursive bisections in x near {x} = {4.81037 10 }. NIntegrate obtained 0.162741 and 0.0125041 for the integral and error estimates.
+
+                                                                                                                               7
+NIntegrate::ncvb: NIntegrate failed to converge to prescribed accuracy after 9 recursive bisections in x near {x} = {4.81037 10 }. NIntegrate obtained 0.162741 and 0.0125041 for the integral and error estimates.
+
+                                                                                                                               7
+NIntegrate::ncvb: NIntegrate failed to converge to prescribed accuracy after 9 recursive bisections in x near {x} = {4.81037 10 }. NIntegrate obtained 0.162741 and 0.0125041 for the integral and error estimates.
+
+General::stop: Further output of NIntegrate::ncvb will be suppressed during this calculation.
+BENCH	c2.1 NIntegrate machine	82.474
+CHECK	c2.1 NIntegrate machine	{162741, -1}
+BENCH	c2.1 NIntegrate wp40	824.515
+CHECK	c2.1 NIntegrate wp40	{162740847179163, -1}
+BENCH	c2.2 NIntegrate machine	15.698
+CHECK	c2.2 NIntegrate machine	{624713, -1}
+BENCH	c2.2 NIntegrate wp40	144.925
+CHECK	c2.2 NIntegrate wp40	{624713256427714, -1}
+
+NIntegrate::slwcon: Numerical integration converging too slowly; suspect one of the following: singularity, value of the integration is 0, highly oscillatory integrand, or WorkingPrecision too small.
+
+NIntegrate::slwcon: Numerical integration converging too slowly; suspect one of the following: singularity, value of the integration is 0, highly oscillatory integrand, or WorkingPrecision too small.
+
+NIntegrate::slwcon: Numerical integration converging too slowly; suspect one of the following: singularity, value of the integration is 0, highly oscillatory integrand, or WorkingPrecision too small.
+
+General::stop: Further output of NIntegrate::slwcon will be suppressed during this calculation.
+BENCH	c2.3 NIntegrate machine	3.812
+CHECK	c2.3 NIntegrate machine	{{-156900, 0}, {271756, 0}}
+BENCH	c2.3 NIntegrate wp40	18.13
+CHECK	c2.3 NIntegrate wp40	{{-577277766470118, 0}, {507321750549510, -5}}
+BENCH	c2.4 NIntegrate machine	11.023
+CHECK	c2.4 NIntegrate machine	{137991, 2}
+
+                                                  -40
+NIntegrate::zeroregion: Integration region {{0. 10   , 0}} cannot be further subdivided at the specified working precision. NIntegrate assumes zero integral there and on any further indivisible regions.
+BENCH	c2.4 NIntegrate wp40	101.958
+CHECK	c2.4 NIntegrate wp40	{123144054352814, 2}
+BENCH	c2.5 NIntegrate machine	13.623
+CHECK	c2.5 NIntegrate machine	{714422, -1}
+BENCH	c2.5 NIntegrate wp40	413.51
+CHECK	c2.5 NIntegrate wp40	{714421505810164, -1}
+BENCH	c2.6 NIntegrate machine	20.541
+CHECK	c2.6 NIntegrate machine	{245217, 0}
+BENCH	c2.6 NIntegrate wp40	40.515
+CHECK	c2.6 NIntegrate wp40	{245216991381444, 0}
+BENCH	c2.7 NIntegrate machine	24.91
+CHECK	c2.7 NIntegrate machine	{536591, -1}
+BENCH	c2.7 NIntegrate wp40	1915.85
+CHECK	c2.7 NIntegrate wp40	{536591003574682, -1}
+BENCH	c2.8 NIntegrate machine	4.192
+CHECK	c2.8 NIntegrate machine	{628287, -4}
+BENCH	c2.8 NIntegrate wp40	92.674
+CHECK	c2.8 NIntegrate wp40	{628333351662, -12}
+BENCH	c2.9 NIntegrate machine	14.593
+CHECK	c2.9 NIntegrate machine	{240411, 0}
+CHECK	c2.9 NIntegrate wp40	"timeout"
+
+                                                                                                       x        x        x        x       x       x       x
+                                                                                           Sin[x] Sinc[--] Sinc[--] Sinc[--] Sinc[-] Sinc[-] Sinc[-] Sinc[-]
+                                                                                                       15       13       11       9       7       5       3                                                                                 -6
+NIntegrate::deoncon: DoubleExponentialOscillatory has failed to converge for the integrand ----------------------------------------------------------------- over {0, Infinity}. DoubleExponentialOscillatory obtained 1.5708 and 1.97536 10   for the integral and error estimates.
+                                                                                                                           x
+
+                                                                                                       x        x        x        x       x       x       x
+                                                                                           Sin[x] Sinc[--] Sinc[--] Sinc[--] Sinc[-] Sinc[-] Sinc[-] Sinc[-]
+                                                                                                       15       13       11       9       7       5       3                                                                                 -6
+NIntegrate::deoncon: DoubleExponentialOscillatory has failed to converge for the integrand ----------------------------------------------------------------- over {0, Infinity}. DoubleExponentialOscillatory obtained 1.5708 and 1.97536 10   for the integral and error estimates.
+                                                                                                                           x
+
+                                                                                                       x        x        x        x       x       x       x
+                                                                                           Sin[x] Sinc[--] Sinc[--] Sinc[--] Sinc[-] Sinc[-] Sinc[-] Sinc[-]
+                                                                                                       15       13       11       9       7       5       3                                                                                 -6
+NIntegrate::deoncon: DoubleExponentialOscillatory has failed to converge for the integrand ----------------------------------------------------------------- over {0, Infinity}. DoubleExponentialOscillatory obtained 1.5708 and 1.97536 10   for the integral and error estimates.
+                                                                                                                           x
+
+General::stop: Further output of NIntegrate::deoncon will be suppressed during this calculation.
+BENCH	c2.10 NIntegrate machine	17.586
+CHECK	c2.10 NIntegrate machine	{157080, 0}
+BENCH	c2.10 NIntegrate wp40	100.
+CHECK	c2.10 NIntegrate wp40	{157079632677169, 0}

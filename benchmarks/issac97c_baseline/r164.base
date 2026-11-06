@@ -1,0 +1,47 @@
+REQUIRE	Eigenvalues	present
+REQUIRE	Eigensystem	present
+REQUIRE	NDSolve	present
+REQUIRE	FindRoot	present
+BENCH	c9.1 Eigenvalues machine n=6	0.012
+CHECK	c9.1 Eigenvalues machine n=6	{11801938, 0}
+BENCH	c9.1 Eigenvalues wp300 n=60	777.442
+CHECK	c9.1 Eigenvalues wp300 n=60	{10001997348179769661, 0}
+BENCH	c9.2 shooting machine	17.543
+CHECK	c9.2 shooting machine	{842501, 0}
+BENCH	c9.2 shooting wp40	1441.71
+CHECK	c9.2 shooting wp40	{842500692949920, 0}
+BENCH	c9.3 Nystrom machine n=20	2.785
+CHECK	c9.3 Nystrom machine n=20	{45357286, -1}
+BENCH	c9.3 Nystrom wp50 n=50	1030.23
+CHECK	c9.3 Nystrom wp50 n=50	{45357286412260685568, -1}
+BENCH	c9.4 oscillator basis machine N=40	9.814
+CHECK	c9.4 oscillator basis machine N=40	{11562671, 0}
+BENCH	c9.4 oscillator basis wp60 N=100	8877.25
+CHECK	c9.4 oscillator basis wp60 N=100	{115626707198811, 0}
+BENCH	c9.5 Eigenvalues machine	0.033
+CHECK	c9.5 Eigenvalues machine	{37959985, -2}
+BENCH	c9.5 Eigenvalues wp40	13.137
+CHECK	c9.5 Eigenvalues wp40	{37959984784790660743, -2}
+
+                                                                                                                                                          -8
+FindRoot::brmp: The root has been bracketed as closely as possible with machine precision but the function value exceeds the absolute tolerance 1.05367 10  .
+BENCH	c9.6 shooting machine	72.95
+CHECK	c9.6 shooting machine	{101879, 0}
+BENCH	c9.6 shooting wp40	1394.53
+CHECK	c9.6 shooting wp40	{101879297164747, 0}
+BENCH	c9.7 Eigenvalues machine N=20	0.04
+CHECK	c9.7 Eigenvalues machine N=20	{13530302, 0}
+BENCH	c9.7 Eigenvalues wp60 N=40	87.289
+CHECK	c9.7 Eigenvalues wp60 N=40	{13530301647457348533, 0}
+BENCH	c9.8 Eigenvalues machine n=12	0.067
+CHECK	c9.8 Eigenvalues machine n=12	{11249132, 0}
+BENCH	c9.8 Eigenvalues wp200 n=40	306.177
+CHECK	c9.8 Eigenvalues wp200 n=40	{11836776324023176975, 0}
+BENCH	c9.9 Eigenvalues machine n=8	0.035
+CHECK	c9.9 Eigenvalues machine n=8	{10905077, -1}
+BENCH	c9.9 Eigenvalues wp200 n=30	192.504
+CHECK	c9.9 Eigenvalues wp200 n=30	{10372991973029507106, -2}
+BENCH	c9.10 shooting machine	9.622
+CHECK	c9.10 shooting machine	{975332, 0}
+BENCH	c9.10 shooting wp40	198.394
+CHECK	c9.10 shooting wp40	{975332212475071, 0}

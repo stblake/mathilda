@@ -1,0 +1,50 @@
+REQUIRE	FindRoot	present
+REQUIRE	NSolve	present
+REQUIRE	ProductLog	present
+REQUIRE	StruveH	present
+REQUIRE	HurwitzZeta	present
+REQUIRE	PolyGamma	present
+REQUIRE	KelvinBer	present
+REQUIRE	EllipticK	present
+REQUIRE	EllipticE	present
+REQUIRE	Zeta	present
+BENCH	c5.1 FindRoot machine	0.174
+CHECK	c5.1 FindRoot machine	{-25426414, 0}
+BENCH	c5.1 FindRoot wp40	0.902
+CHECK	c5.1 FindRoot wp40	{-25426413577735264243, 0}
+BENCH	c5.2 FindRoot machine	0.211
+CHECK	c5.2 FindRoot machine	{{-24015851, 0}, {10776300, 1}}
+BENCH	c5.2 FindRoot wp40	1.253
+CHECK	c5.2 FindRoot wp40	{{-24015851048680028842, 0}, {10776299516115070898, 1}}
+BENCH	c5.3 FindRoot machine	4.146
+CHECK	c5.3 FindRoot machine	{43332378, 0}
+BENCH	c5.3 FindRoot wp40	7.084
+CHECK	c5.3 FindRoot wp40	{43332378204064216705, 0}
+BENCH	c5.4 NSolve machine	1.713
+CHECK	c5.4 NSolve machine	{50847, -1}
+BENCH	c5.4 NSolve wp60	253.448
+CHECK	c5.4 NSolve wp60	{620338140950646, -3}
+BENCH	c5.5 FindRoot machine	1.14
+CHECK	c5.5 FindRoot machine	{60209489, 0}
+BENCH	c5.5 FindRoot wp40	29.955
+CHECK	c5.5 FindRoot wp40	{60209489046975966549, 0}
+BENCH	c5.6 FindRoot machine	0.153
+CHECK	c5.6 FindRoot machine	{-26107209, 0}
+BENCH	c5.6 FindRoot wp40	2.048
+CHECK	c5.6 FindRoot wp40	{-26107208684441446500, 0}
+BENCH	c5.7 FindRoot machine	1.053
+CHECK	c5.7 FindRoot machine	{28489178, 0}
+BENCH	c5.7 FindRoot wp40	3.266
+CHECK	c5.7 FindRoot wp40	{28489178207951398527, 0}
+BENCH	c5.8 FindRoot machine	0.173
+CHECK	c5.8 FindRoot machine	{82611477, -1}
+BENCH	c5.8 FindRoot wp40	1.227
+CHECK	c5.8 FindRoot wp40	{82611476598497033618, -1}
+BENCH	c5.9 NSolve machine	1.907
+CHECK	c5.9 NSolve machine	{{-12076, 1}, {71848, -1}}
+BENCH	c5.9 NSolve wp40	15.002
+CHECK	c5.9 NSolve wp40	{{-12075940630412211038, 1}, {71848257151412454217, -1}}
+BENCH	c5.10 FindRoot machine	6.208
+CHECK	c5.10 FindRoot machine	{-27172628, 0}
+BENCH	c5.10 FindRoot wp40	78.84
+CHECK	c5.10 FindRoot wp40	{-27172628292045741016, 0}

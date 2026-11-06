@@ -1,0 +1,94 @@
+REQUIRE	Limit	present
+REQUIRE	Gamma	present
+REQUIRE	Zeta	present
+REQUIRE	Erf	present
+REQUIRE	HarmonicNumber	present
+REQUIRE	PolyLog	present
+REQUIRE	StieltjesGamma	present
+BENCH	c7.1 Limit exact	271.871
+CHECK	c7.1 Limit exact	{78125000000000000000, -3}
+BENCH	c7.1 N machine	1.274
+CHECK	c7.1 N machine	{786110, -3}
+
+General::ovfl: Overflow occurred in computation.
+
+General::ovfl: Overflow occurred in computation.
+
+General::ovfl: Overflow occurred in computation.
+
+General::stop: Further output of General::ovfl will be suppressed during this calculation.
+
+                                                                                                                                                                            3                  600000000000000000005
+                                                                                                                                                             Sqrt[---------------------] Gamma[---------------------]
+                                                                                                                                   2400000000000000000005         300000000000000000001                  6
+                                                                                      90000000000000000000600000000000000000001 (-(----------------------) + --------------------------------------------------------)
+                                                                                                                                   2400000000000000000008                        300000000000000000001
+                                                                                                                                                                           Gamma[---------------------]
+                                                                                                                                                                                           3
+N::meprec: Internal precision limit $MaxExtraPrecision = 50. reached while evaluating --------------------------------------------------------------------------------------------------------------------------------.
+                                                                                                                                                     9
+CHECK	c7.1 N wp30	"unevaluated"
+BENCH	c7.2 Limit exact	29.605
+CHECK	c7.2 Limit exact	{72815845483676724861, -2}
+BENCH	c7.2 N machine	0.094
+CHECK	c7.2 N machine	{72811, -2}
+
+                                                                                                                                                        100000000000000000001
+N::meprec: Internal precision limit $MaxExtraPrecision = 50. reached while evaluating 100000000000000000000 (-100000000000000000000 - EulerGamma + Zeta[---------------------]).
+                                                                                                                                                        100000000000000000000
+BENCH	c7.2 N wp30	1.789
+CHECK	c7.2 N wp30	{90948762417291401136, 9}
+BENCH	c7.3 Limit exact	22.585
+CHECK	c7.3 Limit exact	{-50000000000000000000, -1}
+BENCH	c7.3 N machine	0.079
+CHECK	c7.3 N machine	{-604035, -1}
+
+                                                                                                                                                                                                           1                                  1
+N::meprec: Internal precision limit $MaxExtraPrecision = 50. reached while evaluating 1000000000000000000000000000000000000000000000000000000000000 Log[1000000000000000000000000000000] (-(-------------------------------) ------------------------------------ - Log[Log[1000000000000000000000000000000]] + Log[Log[1000000000000000000000000000001]]).
+                                                                                                                                                                                            1000000000000000000000000000000  Log[1000000000000000000000000000000]
+
+General::stop: Further output of N::meprec will be suppressed during this calculation.
+BENCH	c7.3 N wp30	0.621
+CHECK	c7.3 N wp30	{-50723824136505419713, -1}
+BENCH	c7.4 Limit exact	14.536
+CHECK	c7.4 Limit exact	{12500000000000000000, -1}
+BENCH	c7.4 N machine	0.054
+CHECK	c7.4 N machine	{123759, -1}
+BENCH	c7.4 N wp30	0.281
+CHECK	c7.4 N wp30	{12500000000000000000, -1}
+BENCH	c7.5 Limit exact	27.944
+CHECK	c7.5 Limit exact	{51386301650969986603, -2}
+BENCH	c7.5 N machine	0.07
+CHECK	c7.5 N machine	{513862, -2}
+BENCH	c7.5 N wp30	0.624
+CHECK	c7.5 N wp30	{51386301650969986603, -2}
+BENCH	c7.6 Limit exact	58.902
+CHECK	c7.6 Limit exact	{-83333333333333333333, -2}
+BENCH	c7.6 N machine	0.074
+CHECK	c7.6 N machine	{-833325, -2}
+BENCH	c7.6 N wp30	0.328
+CHECK	c7.6 N wp30	{-83333333333333333333, -2}
+BENCH	c7.7 Limit exact	10.78
+CHECK	c7.7 Limit exact	{10000000000000000000, 0}
+BENCH	c7.7 N machine	0.056
+CHECK	c7.7 N machine	{1000002, 0}
+BENCH	c7.7 N wp30	0.163
+CHECK	c7.7 N wp30	{10000000000000000000, 0}
+BENCH	c7.8 Limit exact	276.844
+CHECK	c7.8 Limit exact	{98905599532797255540, -1}
+BENCH	c7.8 N machine	0.027
+CHECK	c7.8 N machine	{988149, -1}
+BENCH	c7.8 N wp30	1.433
+CHECK	c7.8 N wp30	{98905599532797255539, -1}
+BENCH	c7.9 Limit exact	34.92
+CHECK	c7.9 Limit exact	{10000000000000000000, 0}
+BENCH	c7.9 N machine	0.084
+CHECK	c7.9 N machine	{1000002, 0}
+BENCH	c7.9 N wp30	0.198
+CHECK	c7.9 N wp30	{10000000000000000000, 0}
+BENCH	c7.10 Limit exact	317.71
+CHECK	c7.10 Limit exact	{-10000000000000000000, 0}
+BENCH	c7.10 N machine	0.109
+CHECK	c7.10 N machine	{-1000007, 0}
+BENCH	c7.10 N wp30	1.03
+CHECK	c7.10 N wp30	{-10000000000000000002, 0}

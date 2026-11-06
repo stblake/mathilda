@@ -1,0 +1,79 @@
+REQUIRE	SeriesCoefficient	present
+REQUIRE	Residue	present
+REQUIRE	NIntegrate	present
+REQUIRE	Zeta	present
+REQUIRE	StieltjesGamma	present
+BENCH	c4.1 SeriesCoefficient exact	674.238
+CHECK	c4.1 SeriesCoefficient exact	{{175155936072122, 20}, 30911638}
+BENCH	c4.1 contour machine	1664.18
+CHECK	c4.1 contour machine	{175156, 20}
+BENCH	c4.1 contour Trapezoidal wp40	40409.5
+CHECK	c4.1 contour Trapezoidal wp40	{175155936072122, 20}
+BENCH	c4.2 SeriesCoefficient exact	11.926
+CHECK	c4.2 SeriesCoefficient exact	{{910543459812736, 760}, 453374912}
+
+                                                                                                                                                              112             100                 106
+NIntegrate::ncvb: NIntegrate failed to converge to prescribed accuracy after 9 recursive bisections in t near {t} = {0.404873}. NIntegrate obtained 1.87009 10    - 4.47703 10    I and 2.48279 10    for the integral and error estimates.
+BENCH	c4.2 contour machine n=150	305.217
+CHECK	c4.2 contour machine n=150	{297635, 111}
+BENCH	c4.2 contour Trapezoidal wp40	1017.78
+CHECK	c4.2 contour Trapezoidal wp40	{910543459812736, 760}
+BENCH	c4.3 SeriesCoefficient exact	8.172
+CHECK	c4.3 SeriesCoefficient exact	{{162223628660764, 1529}, 476434592}
+BENCH	c4.3 contour machine n=150	155.19
+CHECK	c4.3 contour machine n=150	{317858, 113}
+BENCH	c4.3 contour Trapezoidal wp40 n=500	811.449
+CHECK	c4.3 contour Trapezoidal wp40 n=500	{152760689379175, 381}
+BENCH	c4.4 Residue exact	111.38
+CHECK	c4.4 Residue exact	{35718693139741481539, -13}
+BENCH	c4.4 contour machine	4.574
+CHECK	c4.4 contour machine	{3571869, -13}
+BENCH	c4.4 contour Trapezoidal wp40	86.224
+CHECK	c4.4 contour Trapezoidal wp40	{35718693139741481539, -13}
+BENCH	c4.5 Residue exact	6.256
+CHECK	c4.5 Residue exact	{12179813078741861975, 0}
+BENCH	c4.5 contour machine	6.955
+CHECK	c4.5 contour machine	{1217981, 0}
+BENCH	c4.5 contour Trapezoidal wp40	44.01
+CHECK	c4.5 contour Trapezoidal wp40	{12179813078741861975, 0}
+BENCH	c4.6 SeriesCoefficient exact	5.117
+CHECK	c4.6 SeriesCoefficient exact	{{183656753280000, 10}, 365675202}
+
+NIntegrate::slwcon: Numerical integration converging too slowly; suspect one of the following: singularity, value of the integration is 0, highly oscillatory integrand, or WorkingPrecision too small.
+
+                                                                                                                                                             11                              9
+NIntegrate::ncvb: NIntegrate failed to converge to prescribed accuracy after 9 recursive bisections in t near {t} = {4.72456}. NIntegrate obtained 1.15057 10   - 0.00515921 I and 9.84373 10  for the integral and error estimates.
+BENCH	c4.6 contour machine	2789.43
+CHECK	c4.6 contour machine	{183119, 10}
+BENCH	c4.6 contour Trapezoidal wp40	60270.3
+CHECK	c4.6 contour Trapezoidal wp40	{18365675328, 10}
+BENCH	c4.7 SeriesCoefficient exact	265.399
+CHECK	c4.7 SeriesCoefficient exact	{{799540643814441, 626}, 27361761}
+BENCH	c4.7 contour machine n=60	19.567
+CHECK	c4.7 contour machine n=60	{347715, 86}
+BENCH	c4.7 contour Trapezoidal wp40	183.734
+CHECK	c4.7 contour Trapezoidal wp40	{799540643814441, 626}
+BENCH	c4.8 Residue exact	7.663
+CHECK	c4.8 Residue exact	{{120858374653720, -8}, 13739, 785096048}
+BENCH	c4.8 contour machine	14.484
+CHECK	c4.8 contour machine	{1208584, -8}
+BENCH	c4.8 contour Trapezoidal wp40	23.489
+CHECK	c4.8 contour Trapezoidal wp40	{12085837465371995233, -8}
+BENCH	c4.9 SeriesCoefficient exact	14.628
+CHECK	c4.9 SeriesCoefficient exact	{{423107565308609, 575}, 536729466}
+BENCH	c4.9 contour machine n=100	10.186
+CHECK	c4.9 contour machine n=100	{240533, 82}
+
+                                                                                                                                                                                                                                          -558                                               -606                                                   -606
+NIntegrate::ncvi: NIntegrate failed to converge to prescribed accuracy after 16 iterated refinements in t in the region {{0, 6.283185307179586476925286766559005768394}}. NIntegrate obtained 2.178823867187290479482479348550407822215 10     - 2.642761319481095772804994738605680542070 10     I and 2.410836603530502672980789064794650597317 10     for the integral and error estimates.
+
+                     -21                                             -558
+General::munfl: 1. 10    2.178823867187290479482479348550407822215 10     is too small to represent as a normalized machine number; precision may be lost.
+BENCH	c4.9 contour Trapezoidal wp40	24888.7
+CHECK	c4.9 contour Trapezoidal wp40	{423107565308609, 575}
+BENCH	c4.10 Residue exact	4.468
+CHECK	c4.10 Residue exact	{{218668424297576, 17}, 228502357, 371842544}
+BENCH	c4.10 contour machine	11.161
+CHECK	c4.10 contour machine	{218668, 17}
+BENCH	c4.10 contour Trapezoidal wp40	7.961
+CHECK	c4.10 contour Trapezoidal wp40	{21866842429757621433, 17}

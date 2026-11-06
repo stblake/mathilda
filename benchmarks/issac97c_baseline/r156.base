@@ -1,0 +1,65 @@
+REQUIRE	SingularValueList	present
+REQUIRE	Eigenvalues	present
+REQUIRE	LinearSolve	present
+REQUIRE	LeastSquares	present
+REQUIRE	Det	present
+REQUIRE	Inverse	present
+REQUIRE	BernoulliB	present
+BENCH	c1.1 Det exact n=30	9.487
+CHECK	c1.1 Det exact n=30	{{215551190904274, 383}, 688963510}
+BENCH	c1.1 SingularValueList machine n=8	0.017
+CHECK	c1.1 SingularValueList machine n=8	{95211, 8}
+BENCH	c1.1 SingularValueList wp300 n=60	175.327
+CHECK	c1.1 SingularValueList wp300 n=60	{65002797341016883364, 123}
+BENCH	c1.2 Det exact n=40	1940.47
+CHECK	c1.2 Det exact n=40	{{457797930774733, -95}, 680396165, 786603587}
+BENCH	c1.2 Eigenvalues machine n=30	0.034
+CHECK	c1.2 Eigenvalues machine n=30	{46375, -9}
+BENCH	c1.2 Eigenvalues wp60 n=120	1779.25
+CHECK	c1.2 Eigenvalues wp60 n=120	{36755466792997523574, -20}
+BENCH	c1.3 Inverse exact n=30	8.308
+CHECK	c1.3 Inverse exact n=30	{{960767920505706, 16}, 378033045}
+BENCH	c1.3 SingularValueList machine n=12	0.023
+CHECK	c1.3 SingularValueList machine n=12	{87523, 7}
+BENCH	c1.3 SingularValueList wp250 n=150	2111.98
+CHECK	c1.3 SingularValueList wp250 n=150	{20233509621854076544, 93}
+BENCH	c1.4 LinearSolve exact n=60	7.126
+CHECK	c1.4 LinearSolve exact n=60	{2305843009213693950, 2147483646}
+BENCH	c1.4 Eigenvalues machine n=20	0.031
+CHECK	c1.4 Eigenvalues machine n=20	{268244, 6}
+BENCH	c1.4 Eigenvalues wp60 n=60	185.997
+CHECK	c1.4 Eigenvalues wp60 n=60	{29493812708853952891, 18}
+BENCH	c1.5 SingularValueList machine n=32	0.073
+CHECK	c1.5 SingularValueList machine n=32	{200000, 6}
+BENCH	c1.5 SingularValueList wp60 n=48	34.627
+CHECK	c1.5 SingularValueList wp60 n=48	{20000000000000000000, 30}
+BENCH	c1.6 Det exact n=50	97.758
+CHECK	c1.6 Det exact n=50	{{549321897796353, -133}, 892345966, 335996330}
+BENCH	c1.6 Eigenvalues machine n=50	0.082
+CHECK	c1.6 Eigenvalues machine n=50	{5007442, -4}
+BENCH	c1.6 Eigenvalues wp60 n=50	166.011
+CHECK	c1.6 Eigenvalues wp60 n=50	{50049380509896397972, -13}
+BENCH	c1.7 Det exact n=14	8.802
+CHECK	c1.7 Det exact n=14	{{-310504102175616, 0}, 351202457, 287719374}
+BENCH	c1.7 SingularValueList machine n=8	0.016
+CHECK	c1.7 SingularValueList machine n=8	{78859266, 3}
+BENCH	c1.7 SingularValueList wp60 n=20	4.844
+CHECK	c1.7 SingularValueList wp60 n=20	{22418545451351758608, 20}
+BENCH	c1.8 LeastSquares exact n=20	17.403
+CHECK	c1.8 LeastSquares exact n=20	{{950000000000500, 10}, 934833507, 98001}
+BENCH	c1.8 LeastSquares machine n=20	0.066
+CHECK	c1.8 LeastSquares machine n=20	{950000, 6}
+BENCH	c1.8 LeastSquares wp80 n=20	6.126
+CHECK	c1.8 LeastSquares wp80 n=20	{95000000000000000000, 30}
+BENCH	c1.9 Det exact n=30	10.899
+CHECK	c1.9 Det exact n=30	{{464623159002509, 766}, 788825102}
+BENCH	c1.9 SingularValueList machine n=6	0.019
+CHECK	c1.9 SingularValueList machine n=6	{35072, 8}
+BENCH	c1.9 SingularValueList wp400 n=60	212.673
+CHECK	c1.9 SingularValueList wp400 n=60	{31446619305684671805, 205}
+BENCH	c1.10 LinearSolve exact n=50	9.093
+CHECK	c1.10 LinearSolve exact n=50	{58683713440195491651, 3}
+BENCH	c1.10 LinearSolve machine n=60	0.061
+CHECK	c1.10 LinearSolve machine n=60	{80816, 6}
+BENCH	c1.10 LinearSolve wp60 n=100	17.703
+CHECK	c1.10 LinearSolve wp60 n=100	{22612778088469054537, 24}

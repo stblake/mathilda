@@ -1,0 +1,62 @@
+REQUIRE	Integrate	present
+REQUIRE	NIntegrate	present
+REQUIRE	LogGamma	present
+REQUIRE	BesselJ	present
+BENCH	c8.1 Integrate exact	2266.54
+CHECK	c8.1 Integrate exact	{-10149416064096536250, 0}
+BENCH	c8.1 NIntegrate machine	2.465
+CHECK	c8.1 NIntegrate machine	{-1014942, 0}
+BENCH	c8.1 NIntegrate wp40	24.607
+CHECK	c8.1 NIntegrate wp40	{-10149416064096536250, 0}
+BENCH	c8.2 Integrate exact	1100.29
+CHECK	c8.2 Integrate exact	{80371984962968171015, -1}
+BENCH	c8.2 NIntegrate machine	3.088
+CHECK	c8.2 NIntegrate machine	{8037198, -1}
+BENCH	c8.2 NIntegrate wp40	58.268
+CHECK	c8.2 NIntegrate wp40	{80371984962968171015, -1}
+BENCH	c8.3 Integrate exact	1137.31
+CHECK	c8.3 Integrate exact	{-32923616284981706824, -1}
+BENCH	c8.3 NIntegrate machine	3.371
+CHECK	c8.3 NIntegrate machine	{-3292362, -1}
+BENCH	c8.3 NIntegrate wp40	8.605
+CHECK	c8.3 NIntegrate wp40	{-32923616284981706824, -1}
+CHECK	c8.4 Integrate exact	"unevaluated"
+BENCH	c8.4 NIntegrate machine	3.263
+CHECK	c8.4 NIntegrate machine	{4053073, -2}
+BENCH	c8.4 NIntegrate wp40	13.887
+CHECK	c8.4 NIntegrate wp40	{40530733397663629110, -2}
+BENCH	c8.5 Integrate exact	2595.46
+CHECK	c8.5 Integrate exact	{52359877559829887308, -1}
+BENCH	c8.5 NIntegrate machine	28.015
+CHECK	c8.5 NIntegrate machine	{5235988, -1}
+BENCH	c8.5 NIntegrate wp40	1118.91
+CHECK	c8.5 NIntegrate wp40	{52359877559829887308, -1}
+CHECK	c8.6 Integrate exact	"unevaluated"
+BENCH	c8.6 NIntegrate machine	2.943
+CHECK	c8.6 NIntegrate machine	{-2604428, -1}
+BENCH	c8.6 NIntegrate wp40	23.139
+CHECK	c8.6 NIntegrate wp40	{-26044280630098844554, -1}
+BENCH	c8.7 Integrate exact	442.167
+CHECK	c8.7 Integrate exact	{21071478956855210834, -1}
+BENCH	c8.7 NIntegrate machine	3.377
+CHECK	c8.7 NIntegrate machine	{2107148, -1}
+BENCH	c8.7 NIntegrate wp40	39.577
+CHECK	c8.7 NIntegrate wp40	{21071478956855210834, -1}
+BENCH	c8.8 Integrate exact	11963.8
+CHECK	c8.8 Integrate exact	{-54116161685556909576, -1}
+BENCH	c8.8 NIntegrate machine	4.049
+CHECK	c8.8 NIntegrate machine	{-5411616, -1}
+BENCH	c8.8 NIntegrate wp40	15.711
+CHECK	c8.8 NIntegrate wp40	{-54116161685556909576, -1}
+BENCH	c8.9 Integrate exact	3143.37
+CHECK	c8.9 Integrate exact	{-26881186784818962497, 0}
+BENCH	c8.9 NIntegrate machine	4.151
+CHECK	c8.9 NIntegrate machine	{-2688119, 0}
+BENCH	c8.9 NIntegrate wp40	22.38
+CHECK	c8.9 NIntegrate wp40	{-26881186784818962497, 0}
+BENCH	c8.10 Integrate exact	1429.1
+CHECK	c8.10 Integrate exact	{-96894614625936938048, -1}
+BENCH	c8.10 NIntegrate machine	2.931
+CHECK	c8.10 NIntegrate machine	{-9689461, -1}
+BENCH	c8.10 NIntegrate wp40	11.314
+CHECK	c8.10 NIntegrate wp40	{-96894614625936938048, -1}

@@ -1,0 +1,45 @@
+REQUIRE	NDSolve	present
+REQUIRE	FindRoot	present
+REQUIRE	InterpolatingFunction	present
+REQUIRE	AiryAi	present
+REQUIRE	AiryAiPrime	present
+BENCH	c10.1 NDSolve pole machine	23.128
+CHECK	c10.1 NDSolve pole machine	{261557, 0}
+BENCH	c10.1 NDSolve pole wp40	2405.7
+CHECK	c10.1 NDSolve pole wp40	{261557120988237, 0}
+BENCH	c10.2 NDSolve pole machine	3.948
+CHECK	c10.2 NDSolve pole machine	{126278, 0}
+BENCH	c10.2 NDSolve pole wp40	2700.38
+CHECK	c10.2 NDSolve pole wp40	{126277886619325, 0}
+BENCH	c10.3 NDSolve pole machine	13.082
+CHECK	c10.3 NDSolve pole machine	{284089, 0}
+BENCH	c10.3 NDSolve pole wp40	5188.53
+CHECK	c10.3 NDSolve pole wp40	{284089482764195, 0}
+BENCH	c10.4 NDSolve stiff machine	5.466
+CHECK	c10.4 NDSolve stiff machine	{40945, 1}
+BENCH	c10.4 NDSolve stiff wp32	559.923
+CHECK	c10.4 NDSolve stiff wp32	{409452029284, 1}
+BENCH	c10.5 NDSolve BVP machine eps=1/100	101.634
+CHECK	c10.5 NDSolve BVP machine eps=1/100	{133598, 0}
+BENCH	c10.5 NDSolve BVP wp32 eps=1/1000	2557.35
+CHECK	c10.5 NDSolve BVP wp32 eps=1/1000	{133359306918, 0}
+BENCH	c10.6 NDSolve chaotic machine T=50	3.172
+CHECK	c10.6 NDSolve chaotic machine T=50	{-70616, 0}
+BENCH	c10.6 NDSolve chaotic wp40 T=100	3018.26
+CHECK	c10.6 NDSolve chaotic wp40 T=100	{965823343087485, 0}
+BENCH	c10.7 NDSolve chaotic machine T=20	3.221
+CHECK	c10.7 NDSolve chaotic machine T=20	{-72512, -1}
+BENCH	c10.7 NDSolve chaotic wp40 T=40	1191.89
+CHECK	c10.7 NDSolve chaotic wp40 T=40	{595491880642410, -1}
+BENCH	c10.8 NDSolve singular start machine	1.82
+CHECK	c10.8 NDSolve singular start machine	{774158, 1}
+BENCH	c10.8 NDSolve singular start wp40	28.697
+CHECK	c10.8 NDSolve singular start wp40	{774157788604427, 1}
+BENCH	c10.9 NDSolve machine	0.92
+CHECK	c10.9 NDSolve machine	{133911, 0}
+BENCH	c10.9 NDSolve wp40	22.011
+CHECK	c10.9 NDSolve wp40	{133910862429233, 0}
+BENCH	c10.10 NDSolve backward machine L=8	2.115
+CHECK	c10.10 NDSolve backward machine L=8	{367062, -1}
+BENCH	c10.10 NDSolve backward wp40 L=20	184.404
+CHECK	c10.10 NDSolve backward wp40 L=20	{367061551548078, -1}

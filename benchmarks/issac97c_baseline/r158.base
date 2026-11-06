@@ -1,0 +1,55 @@
+REQUIRE	NSum	present
+REQUIRE	Prime	present
+REQUIRE	MoebiusMu	present
+REQUIRE	LiouvilleLambda	present
+REQUIRE	HarmonicNumber	present
+REQUIRE	PolyLog	present
+REQUIRE	Zeta	present
+BENCH	c3.1 Sum primes machine	162.587
+CHECK	c3.1 Sum primes machine	{45225, -1}
+BENCH	c3.1 MoebiusMu log-zeta wp50	8.342
+CHECK	c3.1 MoebiusMu log-zeta wp50	{4522474200410654985065434, -1}
+BENCH	c3.2 Sum machine	3543.08
+CHECK	c3.2 Sum machine	{6579736, -1}
+BENCH	c3.2 Sum Infinity wp30	31.949
+CHECK	c3.2 Sum Infinity wp30	{65797362673929057459, -1}
+BENCH	c3.3 NSum machine	134.855
+CHECK	c3.3 NSum machine	{58224053, -1}
+BENCH	c3.3 NSum wp40	136.553
+CHECK	c3.3 NSum wp40	{58224052646501131301, -1}
+BENCH	c3.4 NSum machine	1.203
+CHECK	c3.4 NSum machine	{72378164, 3}
+BENCH	c3.4 NSum wp40	103.524
+CHECK	c3.4 NSum wp40	{74809778690916725276, 3}
+BENCH	c3.5 NSum machine	11.667
+CHECK	c3.5 NSum machine	{210974, 0}
+BENCH	c3.5 NSum wp40	50.335
+CHECK	c3.5 NSum wp40	{210974280123689, 0}
+BENCH	c3.6 NSum machine	36.944
+CHECK	c3.6 NSum machine	{92429990, -1}
+BENCH	c3.6 NSum wp40	37.283
+CHECK	c3.6 NSum wp40	{92429989722293693554, -1}
+
+NIntegrate::deodiv: DoubleExponentialOscillatory returns a finite integral estimate, but the integral might be divergent.
+
+NIntegrate::deodiv: DoubleExponentialOscillatory returns a finite integral estimate, but the integral might be divergent.
+
+NIntegrate::deodiv: DoubleExponentialOscillatory returns a finite integral estimate, but the integral might be divergent.
+
+General::stop: Further output of NIntegrate::deodiv will be suppressed during this calculation.
+BENCH	c3.7 NSum machine	38.253
+CHECK	c3.7 NSum machine	{-194109, -1}
+BENCH	c3.7 PolyLog wp40	12.813
+CHECK	c3.7 PolyLog wp40	{-1941089350921820497391492, -1}
+BENCH	c3.8 NSum machine	100.788
+CHECK	c3.8 NSum machine	{459987, 0}
+BENCH	c3.8 NSum wp40	3496.59
+CHECK	c3.8 NSum wp40	{459987374327234, 0}
+BENCH	c3.9 NSum machine	6.602
+CHECK	c3.9 NSum machine	{10057794, 2}
+BENCH	c3.9 NSum wp40	24.243
+CHECK	c3.9 NSum wp40	{10057794333849687249, 2}
+BENCH	c3.10 NSum machine	14.748
+CHECK	c3.10 NSum machine	{93754825, -1}
+BENCH	c3.10 NSum wp40	29.659
+CHECK	c3.10 NSum wp40	{93754825431584375370, -1}

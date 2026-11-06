@@ -244,6 +244,14 @@ def group_of(num):
         # true answers in ISSAC97_HOLDOUT_B.md; classify with
         # issac97_holdoutb_table.py.
         return "J ISSAC'97 holdout B (sealed)"
+    if 156 <= num <= 165:
+        # The SEALED third holdout: 100 problems in ten families mirroring
+        # 126-135, different in kind from both earlier holdouts, authored
+        # after A and B had been used for fixing and run once at the end as
+        # the fresh overfitting measurement.  Baseline column stored in
+        # issac97c_baseline/*.base; true answers in ISSAC97_HOLDOUT_C.md;
+        # classify with issac97_holdoutc_table.py.
+        return "K ISSAC'97 holdout C (sealed)"
     if num == 123:
         # One computation written twice -- Wolfram-language code and the native
         # Experimental` C builtin that must return the identical value.  The

@@ -1,0 +1,64 @@
+REQUIRE	GroebnerBasis	present
+REQUIRE	NSolve	present
+REQUIRE	Exponent	present
+REQUIRE	Coefficient	present
+BENCH	c6.1 GroebnerBasis exact	2.813
+CHECK	c6.1 GroebnerBasis exact	{3, 2, {333333333333333, -1}}
+BENCH	c6.1 NSolve machine	21.761
+CHECK	c6.1 NSolve machine	{2, {66666667, -1}}
+BENCH	c6.1 NSolve wp40	9.379
+CHECK	c6.1 NSolve wp40	{2, {66666666666666666667, -1}}
+BENCH	c6.2 GroebnerBasis exact	0.947
+CHECK	c6.2 GroebnerBasis exact	{4, 4, {225000000000000, 0}}
+BENCH	c6.2 NSolve machine	14.418
+CHECK	c6.2 NSolve machine	{4, {16584032, 0}}
+BENCH	c6.2 NSolve wp40	12.638
+CHECK	c6.2 NSolve wp40	{4, {16584031954563527223, 0}}
+BENCH	c6.3 GroebnerBasis exact	1.59
+CHECK	c6.3 GroebnerBasis exact	{4, 4, {-531615234375000, -1}}
+BENCH	c6.3 NSolve machine	16.564
+CHECK	c6.3 NSolve machine	{4, {98469341, -1}}
+BENCH	c6.3 NSolve wp40	17.282
+CHECK	c6.3 NSolve wp40	{4, {98469340650065707663, -1}}
+BENCH	c6.4 GroebnerBasis exact	1.524
+CHECK	c6.4 GroebnerBasis exact	{3, 9, {-130000000000000, 2}}
+BENCH	c6.4 NSolve machine	23.878
+CHECK	c6.4 NSolve machine	{9, {15159802, 0}}
+BENCH	c6.4 NSolve wp40	31.137
+CHECK	c6.4 NSolve wp40	{9, {15159802276928205897, 0}}
+BENCH	c6.5 GroebnerBasis exact	2.562
+CHECK	c6.5 GroebnerBasis exact	{2, 16, {310300000000000, 3}}
+BENCH	c6.5 NSolve machine	26.718
+CHECK	c6.5 NSolve machine	{16, {17975934, 0}}
+BENCH	c6.5 NSolve wp40	52.548
+CHECK	c6.5 NSolve wp40	{16, {17975933847293439199, 0}}
+BENCH	c6.6 GroebnerBasis exact	15.643
+CHECK	c6.6 GroebnerBasis exact	{4, 36, {-157584132664729, -4}}
+BENCH	c6.6 NSolve machine	18.562
+CHECK	c6.6 NSolve machine	{36, {11720625, 0}}
+BENCH	c6.6 NSolve wp40	446.61
+CHECK	c6.6 NSolve wp40	{36, {11720624775867845047, 0}}
+BENCH	c6.7 GroebnerBasis exact	7.268
+CHECK	c6.7 GroebnerBasis exact	{4, 14, {137500000000000, -1}}
+BENCH	c6.7 NSolve machine	73.564
+CHECK	c6.7 NSolve machine	{21, {16837210, 0}}
+BENCH	c6.7 NSolve wp40	133.379
+CHECK	c6.7 NSolve wp40	{21, {16837209658523417911, 0}}
+BENCH	c6.8 GroebnerBasis exact	0.808
+CHECK	c6.8 GroebnerBasis exact	{2, 7, {500000000000000, 0}}
+BENCH	c6.8 NSolve machine	14.446
+CHECK	c6.8 NSolve machine	{7, {32355296, 0}}
+BENCH	c6.8 NSolve wp40	18.121
+CHECK	c6.8 NSolve wp40	{7, {32355296106390438821, 0}}
+BENCH	c6.9 GroebnerBasis exact	1.215
+CHECK	c6.9 GroebnerBasis exact	{4, 5, {-357656250000000, 2}}
+BENCH	c6.9 NSolve machine	16.469
+CHECK	c6.9 NSolve machine	{5, {62746944, 0}}
+BENCH	c6.9 NSolve wp40	18.444
+CHECK	c6.9 NSolve wp40	{5, {62746944001722005266, 0}}
+BENCH	c6.10 GroebnerBasis exact	9.477
+CHECK	c6.10 GroebnerBasis exact	{4, 9, {-703226059494087, -2}}
+BENCH	c6.10 NSolve machine	39.424
+CHECK	c6.10 NSolve machine	{9, {39358093, 0}}
+BENCH	c6.10 NSolve wp40	46.384
+CHECK	c6.10 NSolve wp40	{9, {39358093480876038295, 0}}
