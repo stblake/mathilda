@@ -700,7 +700,14 @@ fail:
 bool fm_grad_finite_diff(Expr* f, FmVarBind* binds,
                                 const double* x, size_t n,
                                 const FmOpts* opts, double* g_out) {
-    const double h = 1e-7;
+    /* Central differences: the error is ~h^2 |f'''|/6 (truncation) plus
+     * ~eps |f|/h (rounding, and any noise in f), smallest at h ~ eps^(1/3)
+     * relative.  The former h = 1e-7 balanced neither term -- it is the
+     * FORWARD-difference step -- and amplified the 1e-12-relative noise of a
+     * black-box objective (an NIntegrate inside NMaximize) into a 1e-5
+     * gradient error: argmax[Int_0^oo x^a e^-x sin x dx] came back with 7
+     * digits, 9 at h = cbrt(eps). */
+    const double h = 6.0554544523933395e-06;   /* cbrt(DBL_EPSILON) */
     double* xp = (double*)malloc(sizeof(double) * n);
     for (size_t i = 0; i < n; i++) xp[i] = x[i];
     for (size_t i = 0; i < n; i++) {

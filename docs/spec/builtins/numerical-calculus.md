@@ -2283,7 +2283,10 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
   inequalities); μ starts at 1 and ramps ×10 (max 9 rounds).  The
   matching gradient is `∇f + Σ_k a_k·∇c_k` with active value
   `a_k = λ_k + 2μ·c_k`; each constraint gradient is symbolic at setup and
-  falls back to central differences.  The multipliers let a *moderate* μ
+  falls back to central differences (step `cbrt(eps)·max(1, |x|)`, which
+  balances truncation against rounding/objective noise; the former `10^-7` was
+  the forward-difference step and amplified the noise of an NIntegrate
+  objective: argmax of `Int_0^oo x^a e^-x sin x dx` 7 -> 9 digits).  The multipliers let a *moderate* μ
   reach the constraint surface instead of relying on μ→∞, which is
   ill-conditioned and previously could not restore feasibility on a
   nonlinear/bilinear equality.  With every `λ_k = 0` the terms reduce

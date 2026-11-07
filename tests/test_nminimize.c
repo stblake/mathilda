@@ -1633,6 +1633,17 @@ static void test_nmaximize_parametric_integral(void) {
                "Abs[First[r] - 3.0337325864854936] < 10^-9]");
 }
 
+/* Central-difference step of the gradient of a black box.  h = 1e-7 (the
+ * forward-difference step) turned the ~1e-12 noise of an NIntegrate objective
+ * into a 1e-5 gradient error, and the polished argmax of
+ * Int_0^oo x^a e^-x sin x dx had 7 digits; h = cbrt(eps) gives 9.
+ * Truth 1.61363272808328247 (mpmath, root of the derivative). */
+static void test_nmaximize_blackbox_gradient_step(void) {
+    check_true("Module[{f, r}, f[a_?NumericQ] := NIntegrate[x^a Exp[-x] Sin[x], {x, 0, Infinity}]; "
+               "r = NMaximize[{f[a], 0 <= a <= 3}, a]; "
+               "Abs[(a /. Last[r]) - 1.61363272808328247] < 10^-8]");
+}
+
 static void test_ranges_evaluated_in_table(void) {
     /* NMinimize is not HoldAll, so iterator-bound bounds/ranges evaluate. */
     check_true("With[{r = Table[x /. Last[NMinimize[{(x - a)^2, -5 <= x <= 5}, x]], {a, {1, 2}}]}, "
@@ -1767,6 +1778,7 @@ int main(void) {
     TEST(test_neldermead_feasibility);
     TEST(test_ranges_evaluated_in_table);
     TEST(test_nmaximize_parametric_integral);
+    TEST(test_nmaximize_blackbox_gradient_step);
 
     printf("All NMinimize tests passed.\n");
     return 0;
