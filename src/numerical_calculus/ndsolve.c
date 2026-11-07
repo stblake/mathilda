@@ -361,6 +361,8 @@ static Expr* nd_solve_bvp(Expr** A, size_t argc, Expr** eqitems, size_t neq,
     return out;
 }
 
+static void nd_collect_unknowns(const Expr* e, const char*** names, size_t* n, size_t* cap);
+
 static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
     Expr** A = res->data.function.args;
@@ -449,6 +451,23 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         else eqitems[neq++] = eqall[e];
     }
 
+    /* ---- unknowns the equations differentiate but the call does not list
+     * (NDSolve[{x' == y, y' == -x, ...}, x, ...]): solved for with the rest
+     * and not returned, as the reference does.  They used to be read as
+     * unknown symbols in the right-hand side (NDSolve::nrnum) or their
+     * conditions as boundary conditions. ---- */
+    size_t nreq = nfun;
+    {
+        const char** extra = NULL; size_t ne = 0, ce = 0;
+        for (size_t e = 0; e < neq; e++) nd_collect_unknowns(eqitems[e], &extra, &ne, &ce);
+        for (size_t i = 0; i < ne; i++) {
+            bool have = false;
+            for (size_t k = 0; k < nfun && !have; k++) have = fnames[k] == extra[i];
+            if (!have) { fnames = realloc(fnames, sizeof(char*) * (nfun + 1)); fnames[nfun++] = extra[i]; }
+        }
+        free(extra);
+    }
+
     /* ---- classify + orders ---- */
     int* maxorder = calloc(nfun, sizeof(int));
     bool* is_ode = calloc(neq, sizeof(bool));
@@ -504,7 +523,7 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     NdProblem P; memset(&P, 0, sizeof(P));
     P.d = d; P.spec = o.spec; P.tvar = xvar;
     P.eval_monitor = o.eval_monitor;
-    P.nfun = nfun; P.fun_applied = applied;
+    P.nfun = nreq; P.fun_applied = applied;   /* only the requested ones are returned */
     P.fun_names = fnames;
     P.fun_state0 = malloc(sizeof(size_t) * nfun);
     for (size_t k = 0; k < nfun; k++) P.fun_state0[k] = base[k];

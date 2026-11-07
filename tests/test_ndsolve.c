@@ -279,6 +279,28 @@ static void test_events(void) {
 #endif
 }
 
+/* Unknowns the equations differentiate but the call does not list are solved
+ * for and not returned (they gave NDSolve::nrnum, or a BVP misreading). */
+static void test_unlisted_unknowns(void) {
+    check_close("x[1] /. First[NDSolve[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1, y[0] == 0}, x, {t, 0, 1}]]",
+                cos(1.0), 1e-7);
+    check_close("Length[First[NDSolve[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1, y[0] == 0}, x, {t, 0, 1}]]]",
+                1.0, 0.0);
+    check_close("x[1] /. First[NDSolve[{x'[t] == y[t] + z[t], y'[t] == -x[t], z'[t] == 0, x[0] == 1, "
+                "y[0] == 0, z[0] == 0}, {x, z}, {t, 0, 1}]]", cos(1.0), 1e-7);
+    /* conditions on an unlisted unknown are initial values, not boundary values */
+    check_close("(x /. First[NDSolve[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1, y[0] == 0, "
+                "WhenEvent[x[t] == 0, \"StopIntegration\"]}, x, {t, 0, 5}]])[\"Domain\"][[1, 2]]",
+                0.5 * 3.14159265358979323846, 1e-7);
+    /* a boundary-value problem with an unlisted unknown */
+    check_close("y[1] /. First[NDSolve[{y'[x] == z[x], z'[x] == -y[x], y[0] == 0, y[1] == 1}, y, {x, 0, 1}]]",
+                1.0, 1e-7);
+#ifdef USE_MPFR
+    check_ge("-Log[10, Abs[(x[1] /. First[NDSolve[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1, y[0] == 0}, "
+             "x, {t, 0, 1}, WorkingPrecision -> 30]]) - Cos[1]] + 10^-40]", 13.0);
+#endif
+}
+
 /* NDSolveValue: expr with the solution substituted (it did not exist). */
 static void test_ndsolvevalue(void) {
     check_close("NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, 1}]", exp(1.0), 1e-7);
@@ -320,6 +342,7 @@ int main(void) {
     TEST(test_bvp);
     TEST(test_events);
     TEST(test_ndsolvevalue);
+    TEST(test_unlisted_unknowns);
 
     if (failures == 0) printf("\nAll NDSolve tests passed.\n");
     else printf("\n%d NDSolve checks FAILED.\n", failures);

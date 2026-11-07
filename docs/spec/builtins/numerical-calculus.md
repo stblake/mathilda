@@ -1398,6 +1398,12 @@ on `xmin ≤ x ≤ xmax`, returning a list of rules
 
 - `NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}]` — a coupled system.
 - `NDSolve[eqns, u[x], {x, xmin, xmax}]` — gives `u[x] -> InterpolatingFunction[...][x]`.
+- **Unlisted unknowns.** Every function the equations differentiate is an
+  unknown, listed or not: `NDSolve[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1,
+  y[0] == 0}, x, {t, 0, 1}]` solves for `x` and `y` and returns only
+  `{{x -> InterpolatingFunction[...]}}`, as the reference does. (The unlisted
+  `y` used to be an unknown symbol in the right-hand side, `NDSolve::nrnum`, or
+  its initial values were taken for boundary conditions.)
 - **Boundary-value problems.** When the conditions are not all plain initial
   values `f^(k)[a] == v` at one point — they sit at two or more points
   (`u[0] == 0, u'[1] == 0`), couple state entries (`u[0] + u'[0] == 1`,
