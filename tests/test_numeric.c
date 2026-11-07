@@ -54,6 +54,22 @@ static void test_n_keeps_surd_index(void) {
     assert_eval_eq("Precision[N[Surd[-27, 3], 40]]", "40.0", 0);
 }
 
+/* MPFR x^(k/2) is a square root (correctly rounded for k = +-1, faithful with
+ * guard bits otherwise) and x^n an mpfr_pow_si; MPFR operands at the working
+ * precision are read in place by the binary ops. Values must match the exact
+ * quantity numericalized at the same precision. */
+static void test_mpfr_half_integer_and_integer_powers(void) {
+    assert_eval_eq("With[{x = N[2, 60]}, Abs[x^(1/2) - N[Sqrt[2], 60]] < 10^-59]", "True", 0);
+    assert_eval_eq("With[{x = N[2, 60]}, Abs[x^(-1/2) - N[1/Sqrt[2], 60]] < 10^-59]", "True", 0);
+    assert_eval_eq("With[{x = N[7, 60]}, Abs[x^(5/2) - N[7^(5/2), 60]] < 10^-56]", "True", 0);
+    assert_eval_eq("With[{x = N[7, 60]}, Abs[x^(-7/2) - N[7^(-7/2), 60]] < 10^-62]", "True", 0);
+    assert_eval_eq("With[{x = N[3/10, 60]}, x^2 == N[9/100, 60]]", "True", 0);
+    assert_eval_eq("With[{x = N[3/10, 60]}, Precision[{x^(1/2), x^(-3/2), x^3, x^-2}]]", "60.0", 0);
+    assert_eval_eq("With[{x = N[3/10, 60]}, Abs[x^-3 - N[1000/27, 60]] < 10^-57]", "True", 0);
+    assert_eval_eq("Sqrt[N[-4, 30]]", "2.00000000000000000000000000000*I", 0);
+    assert_eval_eq("N[0, 30]^(1/2)", "0", 0);
+}
+
 static void test_n_integer_leaf(void) {
     assert_eval_eq("N[0]",  "0.0", 0);
     assert_eval_eq("N[5]",  "5.0", 0);
@@ -956,6 +972,7 @@ int main(void) {
     TEST(test_inexact_contagion);
     TEST(test_n_exact_array_packs);
     TEST(test_n_keeps_surd_index);
+    TEST(test_mpfr_half_integer_and_integer_powers);
 
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);

@@ -763,6 +763,13 @@ Exponentiation.
 - Simplifies integer powers of integers.
 - `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and the reference does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
 - Returns `Overflow[]` if the result exceeds 64-bit integer limits.
+- Arbitrary-precision (MPFR) real powers: an integer exponent is `mpfr_pow_si`,
+  a half-integer one `k/2` a square root (`mpfr_sqrt` / `mpfr_rec_sqrt`,
+  correctly rounded for `k = ±1`; for `|k| > 1` the root with `8 + bits(k)`
+  guard bits raised to `k`), other exponents `exp(y log x)` with guard bits.
+  `1/Sqrt[r2]` at 60 digits costs a reciprocal square root instead of a log
+  and an exp (~10x). The MPFR binary operations read an operand already at the
+  working precision in place instead of copying it (results unchanged).
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
 - A negative exact coefficient (other than `-1`) in a product under a rational
   power comes out as its magnitude, the sign staying inside:

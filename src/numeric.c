@@ -344,26 +344,41 @@ void numeric_note_cancellation_bits(long lost, long left) {
 static Expr* mpfr_binop(const Expr* a, const Expr* b, long default_bits,
                         MpfrBinaryOp op) {
     long bits = numeric_combined_bits(a, b, default_bits);
+    /* An MPFR operand already at `bits` is read in place: copying it into a
+     * temporary of the same precision is exact, so the result is unchanged,
+     * and the interpreter's MPFR arithmetic (one binop per Plus / Times /
+     * Power node) no longer pays four init2 + set + clear per operation. */
+    const bool own_a = !(a->type == EXPR_MPFR && (long)mpfr_get_prec(a->data.mpfr) == bits);
+    const bool own_b = !(b->type == EXPR_MPFR && (long)mpfr_get_prec(b->data.mpfr) == bits);
     mpfr_t ra, ia, rb, ib, out;
-    mpfr_init2(ra, bits);  mpfr_init2(ia, bits);
-    mpfr_init2(rb, bits);  mpfr_init2(ib, bits);
-    bool ok_a = get_approx_mpfr(a, ra, ia, NULL);
-    bool ok_b = get_approx_mpfr(b, rb, ib, NULL);
-    if (!ok_a || !ok_b || !mpfr_zero_p(ia) || !mpfr_zero_p(ib)) {
-        mpfr_clear(ra); mpfr_clear(ia);
-        mpfr_clear(rb); mpfr_clear(ib);
-        return NULL;
+    mpfr_srcptr pa = own_a ? ra : a->data.mpfr;
+    mpfr_srcptr pb = own_b ? rb : b->data.mpfr;
+    if (own_a) {
+        mpfr_init2(ra, bits); mpfr_init2(ia, bits);
+        bool ok = get_approx_mpfr(a, ra, ia, NULL) && mpfr_zero_p(ia);
+        mpfr_clear(ia);
+        if (!ok) { mpfr_clear(ra); return NULL; }
+    }
+    if (own_b) {
+        mpfr_init2(rb, bits); mpfr_init2(ib, bits);
+        bool ok = get_approx_mpfr(b, rb, ib, NULL) && mpfr_zero_p(ib);
+        mpfr_clear(ib);
+        if (!ok) {
+            mpfr_clear(rb);
+            if (own_a) mpfr_clear(ra);
+            return NULL;
+        }
     }
     mpfr_init2(out, bits);
-    op(out, ra, rb, MPFR_RNDN);
+    op(out, pa, pb, MPFR_RNDN);
     if (op == mpfr_add || op == mpfr_sub) {
-        note_cancellation(ra, rb, out);
-        cancelled_zero_accuracy(out, ra, rb);
+        note_cancellation(pa, pb, out);
+        cancelled_zero_accuracy(out, pa, pb);
     } else if (op == mpfr_mul || op == mpfr_div) {
-        scaled_zero_accuracy(out, a, b, ra, rb, op == mpfr_div);
+        scaled_zero_accuracy(out, a, b, pa, pb, op == mpfr_div);
     }
-    mpfr_clear(ra); mpfr_clear(ia);
-    mpfr_clear(rb); mpfr_clear(ib);
+    if (own_a) mpfr_clear(ra);
+    if (own_b) mpfr_clear(rb);
     return expr_new_mpfr_move(out);
 }
 
@@ -392,9 +407,40 @@ Expr* numeric_mpfr_div(const Expr* a, const Expr* b, long default_bits) {
  * cases, signs, and 0^y / Inf rules live there). */
 int numeric_mpfr_pow_fast(mpfr_ptr rop, mpfr_srcptr x, mpfr_srcptr y,
                           mpfr_rnd_t rnd) {
+    /* An integer exponent (every x^2 of a squared distance) is
+     * mpfr_pow_si: correctly rounded like mpfr_pow -- so the same result --
+     * without its general-exponent probes. */
+    if (mpfr_regular_p(x) && mpfr_integer_p(y) && mpfr_fits_slong_p(y, MPFR_RNDN))
+        return mpfr_pow_si(rop, x, mpfr_get_si(y, MPFR_RNDN), rnd);
     if (!mpfr_regular_p(x) || !mpfr_regular_p(y) || mpfr_sgn(x) <= 0
         || mpfr_integer_p(y) || mpfr_cmp_ui(x, 1) == 0)
         return mpfr_pow(rop, x, y, rnd);
+    /* A half-integer exponent k/2 (Sqrt, 1/Sqrt[r2] in every Coulomb / Thomson
+     * energy, (x^2 + y^2)^(3/2)) is a square root, not a log and an exp:
+     * mpfr_sqrt / mpfr_rec_sqrt are correctly rounded and ~10x cheaper. For
+     * |k| > 1 the root is taken with 8 + bits(|k|) guard bits and raised to k
+     * (relative error |k| 2^-wp, below half an ulp of the target). */
+    if (mpfr_get_exp(y) <= 7) {                       /* |y| < 64 */
+        mpfr_t y2;
+        mpfr_init2(y2, mpfr_get_prec(y) + 1);
+        mpfr_mul_2ui(y2, y, 1, MPFR_RNDN);            /* exact */
+        bool half = mpfr_integer_p(y2) != 0;
+        long k = half ? mpfr_get_si(y2, MPFR_RNDN) : 0;
+        mpfr_clear(y2);
+        if (half) {                                   /* k odd: y is not an integer */
+            if (k == 1) return mpfr_sqrt(rop, x, rnd);
+            if (k == -1) return mpfr_rec_sqrt(rop, x, rnd);
+            long ak = k < 0 ? -k : k, kb = 0;
+            while (ak) { kb++; ak >>= 1; }
+            mpfr_t s;
+            mpfr_init2(s, mpfr_get_prec(rop) + (mpfr_prec_t)(8 + kb));
+            if (k > 0) mpfr_sqrt(s, x, MPFR_RNDN);
+            else       mpfr_rec_sqrt(s, x, MPFR_RNDN);
+            int r = mpfr_pow_ui(rop, s, (unsigned long)(k < 0 ? -k : k), rnd);
+            mpfr_clear(s);
+            return r;
+        }
+    }
     /* |log x| <= (|exp(x)| + 1) ln 2, so log2|y log x| <= exp(y) + log2(|exp(x)|+1) */
     long ex = (long)mpfr_get_exp(x);
     long lx = 1;
