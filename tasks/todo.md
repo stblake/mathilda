@@ -11,7 +11,7 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] Phase 1-2: encode C2-C10, D1-D20 (exps 167-195) with references (weak: C3 40d, D8 5d, D14 12d, D15 8d, D18 7d, D20 7d)
 - [x] Baseline run of 166-195, status table in SIAM100.md (benchmarks/siam100_results/baseline_v0.6377.md)
 - [x] Phase 3: holdout A written + committed (e1ad3fd0)
-- [ ] Holdout A pre-fix run (v0.6377 binary, running; load peaked >30 from holdout-B refs + fix builds -> DIGITS valid, TIMINGS approximate; if speed verdicts matter, re-time from a `git worktree add <dir> v0.6377` build on a quiet machine)
+- [x] Holdout A pre-fix run DONE: Mathilda 262/600 on target (benchmarks/SIAM100_HOLDOUT_A.md, siam100_results/holdoutA_v0.6377.md) (v0.6377 binary, running; load peaked >30 from holdout-B refs + fix builds -> DIGITS valid, TIMINGS approximate; if speed verdicts matter, re-time from a `git worktree add <dir> v0.6377` build on a quiet machine)
 - [ ] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b (worktree ../Mathilda-holdoutB, exps 226-255, 6 agents writing; WL verify after scratchpad/WL_FREE), baselines only
 - [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
   - [x] v0.6378 NDSolve BVP by shooting (silent wrong answer on two-point conditions)
@@ -32,6 +32,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [x] wave 2 agents (done): absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
+- [ ] Post-fix Mathilda run of 166-225 at v0.6411 (scratchpad/s100post, other systems from archived JSONs) -> next fix queue
+- [ ] Holdout B: WL verification of .m halves (agent; C6-C10 author still writing), then baselines of WL/Py/Maxima/FriCAS on a quiet machine
 - [ ] Phase 6: final run, holdout B once, verdict
 
 Findings so far:
