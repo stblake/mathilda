@@ -40,7 +40,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] v0.6418 #129 Linux startup crash (fortified realpath) + check-c99 rule; v0.6419-21 last digits (QK15 constants, tanh-sinh endpoint panel, FindMinimum Armijo); v0.6422 USE_MPFR=0 + LAPACK-less builds; v0.6423-31 speed (packed N, BigInt borrow, Surd index, NIntegrate quiet guard, MPFR Power, compiled WP FindMinimum, flat Plus/Times, quadratic NRoots, machine Series)
 - [x] v0.6432 FIXED: NIntegrate numericalized a nested symbolic endpoint (Log[2 + Sqrt[3]]) at machine precision under WorkingPrecision -> 60: NIntegrate[1, {x, -L, L}, WP->60] - 2 N[L,60] = 2.7e-16, result labelled `60 (hd7.8 wp50 31d, pre-existing since v0.6377). Sqrt[2], Log[3] endpoints fine.
 - [ ] open: C2 machine 1.7-2.5x (2x2 Det via LAPACK, Select/Tuples); D10 wp50 2.2x (interpreted Fold steps); hd20 machine 1.7-6.6x (exact Table/Series before N); N of an exact array now PACKED (reference: unpacked) -- decide
-- [ ] Linux CI: mp_linalg Outer[og] vs Table bit-identity fails on glibc only (diagnostic added, needs a CI run)
+- [x] Linux CI: Outer vs Table 1-ulp on glibc = interpreter/ND Log used Re clog(x+0I) (glibc: log1p formula) vs VM log -> one helper mth_log_machine_z (v0.6434); basin_hopping seed fragility (918/1000 -> 999/1000, v0.6435); USE_MPFR=0 fm_mpfr_prog_lookup guard (719e5d10)
+- [ ] OPEN (CLAUDE.md surface rule): x^n for n >= 3 -- interpreter pow vs compiled repeated multiplication differ in the last bit on macOS too (x^3 285/1000, x^5 540/1000)
 - [x] Benchmark fairness: C6/hc6/hd15 .m machine tiers now ask PrecisionGoal 12 (PDE 10) like .py/.mac (5e6147e9); WL+Mathilda must be re-run on 171, 201, 220
 - [ ] exposed gap: c6.machine at PG 12 = 19.5 s vs scipy 0.84 s (2-D vertex singularity) -> fix agent running
 - [ ] Phase 6: final run, holdout B once, verdict
