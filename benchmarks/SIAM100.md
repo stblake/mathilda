@@ -128,5 +128,52 @@ here as **N/A**. A tier is never dropped just because Mathilda fails it.
 
 ## Status
 
-The status tables are filled in by `siam100_table.py --md` after each run.
-See below.
+### Baseline, v0.6377 (2026-11-07), before any fix
+
+Full table: `siam100_results/baseline_v0.6377.md`. Raw run: siam100_table.py
+`--run --only 166-195`, serial, but concurrent with holdout-A authoring agents. So:
+- timings are approximate;
+- several wolframscript cells are "—" because of licence contention (c5, c6, c7,
+  c10 machine), and will be re-run on a quiet machine.
+
+Over 76 cases, Mathilda is on target in 48. Correct cases per system:
+
+| system | correct | inexact | wrong | none |
+|---|---|---|---|---|
+| Mathilda | 25 | 9 | 8 | 34 |
+| wolframscript | 21 | 10 | 5 | 40 |
+| Python (scipy/mpmath) | 33 | 6 | 7 | 30 |
+| Maxima | 20 | 2 | 1 | 53 |
+| FriCAS | 14 | 0 | 2 | 60 |
+
+Off target, grouped by cause (the work queue; see tasks/todo.md):
+- **Wrong answer:**
+  - c1.wp50: `NIntegrate` at WP 60 gives −1.19;
+  - d19: constrained `FindMinimum` makes no progress.
+- **Silently ignored option:**
+  - d12, d13: `WhenEvent` in `NDSolve`;
+  - d15: `WorkingPrecision` on a PDE.
+- **MPFR tier absent or timeout:**
+  - c4: `NMinimize` returns only machine digits;
+  - c7: sparse `LinearSolve`;
+  - c9: `FindMaximum` of `NIntegrate`;
+  - c10: `NSum`;
+  - d20: `FindRoot`, "non-real f".
+- **Fewer digits at machine precision:**
+  - c5, c6, c9: 2-D `NIntegrate` and minimax;
+  - c7: sparse solve, 12 digits;
+  - d6, d7: `NIntegrate`;
+  - d9, d20: one digit short of 15.
+- **Absent heads:**
+  - d11: `FindRoot` on vector equations;
+  - d4 `RiemannR`, d14 finite elements, d16 `WaveletPhi`, d17/d18 `NDEigen*`
+    (each scored OK only because no other system answered either).
+- **Slower:**
+  - c3 SVD (2–9×);
+  - c8 wp50 `NSum` (230×);
+  - c10 machine `NSum` (7.7×);
+  - d7 (3–5×);
+  - d9 `MatrixPower` (4×);
+  - d10 `FoldList` (9×);
+  - c2 `NSolve` per bounce (2.6–2.9×);
+  - d20 (3.9×).
