@@ -279,6 +279,28 @@ static void test_events(void) {
 #endif
 }
 
+/* NDSolveValue: expr with the solution substituted (it did not exist). */
+static void test_ndsolvevalue(void) {
+    check_close("NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, 1}]", exp(1.0), 1e-7);
+    check_head("NDSolveValue[{y'[x] == y[x], y[0] == 1}, y, {x, 0, 1}]", "InterpolatingFunction[");
+    check_close("Last[NDSolveValue[{y'[x] == y[x], y[0] == 1}, {y[1], y'[1]}, {x, 0, 1}]]", exp(1.0), 1e-6);
+    check_close("NDSolveValue[{x'[t] == y[t], y'[t] == -x[t], x[0] == 1, y[0] == 0}, "
+                "x[Pi] + y[Pi/2], {t, 0, 4}]", -2.0, 1e-6);
+    check_close("NDSolveValue[{y'[t] == y[t], y[0] == 1, WhenEvent[y[t] == 2, \"StopIntegration\"]}, "
+                "y[\"Domain\"][[1, 2]], {t, 0, 5}]", log(2.0), 1e-7);
+    check_close("NDSolveValue[{D[u[t, x], t] == D[u[t, x], x, x], u[0, x] == Sin[Pi x], u[t, 0] == 0, "
+                "u[t, 1] == 0}, u[0.05, 0.5], {t, 0, 0.05}, {x, 0, 1}]", exp(-9.8696044010893586 * 0.05), 1e-3);
+    check_close("NDSolveValue[{-u''[x] == Exp[2 x], u[0] == 0, u'[1] == 0}, u[1], {x, 0, 1}]",
+                (1.0 + exp(2.0)) / 4.0, 1e-7);
+#ifdef USE_MPFR
+    check_ge("-Log[10, Abs[NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, 1}, "
+             "WorkingPrecision -> 30] - E] + 10^-40]", 25.0);
+#endif
+    /* nothing differentiated: unevaluated (NDSolveValue::dvnf) */
+    check_head("NDSolveValue[{y[x] == 1}, y[1], {x, 0, 1}]", "NDSolveValue[");
+    check_head("Attributes[NDSolveValue]", "List[Protected]");
+}
+
 int main(void) {
     mute_stderr_once();
     symtab_init();
@@ -297,6 +319,7 @@ int main(void) {
     TEST(test_result_shape);
     TEST(test_bvp);
     TEST(test_events);
+    TEST(test_ndsolvevalue);
 
     if (failures == 0) printf("\nAll NDSolve tests passed.\n");
     else printf("\n%d NDSolve checks FAILED.\n", failures);

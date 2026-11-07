@@ -705,6 +705,63 @@ Expr* builtin_ndsolve(Expr* res) {
     return ndsolve_core(res, NULL);
 }
 
+/* Every function the equations differentiate, Derivative[...][g][...] with g a
+ * symbol, in order of first appearance (WhenEvent items are not equations). */
+static void nd_collect_unknowns(const Expr* e, const char*** names, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION || nd_is_when_event(e)) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_FUNCTION && h->data.function.arg_count == 1
+        && h->data.function.args[0]->type == EXPR_SYMBOL
+        && head_is((Expr*)h->data.function.head, SYM_Derivative)) {
+        const char* g = h->data.function.args[0]->data.symbol.name;
+        bool seen = false;
+        for (size_t i = 0; i < *n && !seen; i++) seen = (*names)[i] == g;
+        if (!seen) {
+            if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *names = realloc(*names, sizeof(char*) * *cap); }
+            (*names)[(*n)++] = g;
+        }
+    }
+    nd_collect_unknowns(h, names, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nd_collect_unknowns(e->data.function.args[i], names, n, cap);
+}
+
+/* NDSolveValue[eqns, expr, {x, a, b}, ...]: solve as NDSolve does, for every
+ * function the equations differentiate, and return expr with the solution
+ * substituted (y -> InterpolatingFunction, so y gives the function, y[1] a
+ * number, {y[1], y'[1]} a list).  Left unevaluated when NDSolve is. */
+static Expr* builtin_ndsolvevalue(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+    Expr** A = res->data.function.args;
+    size_t argc = res->data.function.arg_count;
+    const char** names = NULL; size_t n = 0, cap = 0;
+    nd_collect_unknowns(A[0], &names, &n, &cap);
+    if (n == 0) {
+        free(names);
+        mth_message("NDSolveValue", "dvnf", "the equations contain no derivative of an unknown function");
+        return NULL;
+    }
+    Expr** fs = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) fs[i] = expr_new_symbol(names[i]);
+    free(names);
+    Expr** args = malloc(sizeof(Expr*) * argc);
+    args[0] = expr_copy(A[0]);
+    args[1] = expr_new_function(expr_new_symbol(SYM_List), fs, n);
+    free(fs);
+    for (size_t i = 2; i < argc; i++) args[i] = expr_copy(A[i]);
+    Expr* call = expr_new_function(expr_new_symbol(intern_symbol("NDSolve")), args, argc);
+    free(args);
+    Expr* sol = eval_and_free(call);
+    Expr* out = NULL;
+    if (head_is(sol, SYM_List) && sol->data.function.arg_count >= 1
+        && head_is(sol->data.function.args[0], SYM_List)) {
+        Expr* rules = expr_copy(sol->data.function.args[0]);
+        out = eval_and_free(nd_call2(SYM_ReplaceAll, expr_copy(A[1]), rules));
+    }
+    expr_free(sol);
+    return out;
+}
+
 /* One shared wrapper for every NDSolve`Method builtin: read the method from the
  * call's own head (the text after the backtick) and force it. */
 static Expr* builtin_ndsolve_method(Expr* res) {
@@ -778,6 +835,21 @@ void ndsolve_init(void) {
         "\tOptions: Method, WorkingPrecision, AccuracyGoal, PrecisionGoal,\n"
         "\tMaxSteps, MaxStepSize, MaxStepFraction, StartingStepSize,\n"
         "\tInterpolationOrder, StepMonitor, EvaluationMonitor.");
+
+    symtab_add_builtin("NDSolveValue", builtin_ndsolvevalue);
+    symtab_get_def("NDSolveValue")->attributes |= ATTR_PROTECTED;
+    {
+        Expr* nopts = symtab_get_options("NDSolve");
+        if (nopts) symtab_set_options("NDSolveValue", expr_copy(nopts));
+    }
+    symtab_set_docstring("NDSolveValue",
+        "NDSolveValue[eqns, expr, {x, xmin, xmax}]\n"
+        "\tsolves the differential equations eqns numerically, as NDSolve does,\n"
+        "\tfor every function they differentiate, and gives expr with the\n"
+        "\tsolution substituted: NDSolveValue[eqns, y, ...] is the\n"
+        "\tInterpolatingFunction, NDSolveValue[eqns, y[1], ...] a number,\n"
+        "\tNDSolveValue[eqns, {y[1], y'[1]}, ...] a list.  PDE ranges\n"
+        "\t{t, ...}, {x, ...} and every NDSolve option are accepted.");
 
     /* WhenEvent[event, action]: an inert, held event specification read by
      * NDSolve (ndsolve_events.c). */

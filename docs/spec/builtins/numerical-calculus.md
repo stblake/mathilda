@@ -4,7 +4,7 @@ Numerical (as opposed to symbolic) calculus routines: the numerical derivative
 `ND`, numerical integration `NIntegrate`, numerical summation `NSum`, numerical
 products `NProduct`, numerical limits `NLimit`, the numerical series expansion
 `NSeries`, the numerical residue `NResidue`, the numerical differential-
-equation solver `NDSolve`, Gauss–Legendre rules `GaussianQuadratureWeights`,
+equation solvers `NDSolve` and `NDSolveValue`, Gauss–Legendre rules `GaussianQuadratureWeights`,
 and adaptive sampling into an interpolant, `FunctionInterpolation`. They return machine-precision
 or arbitrary-precision (MPFR) numbers, and several succeed on inputs that the
 symbolic engine cannot close — essential singularities, non-elementary
@@ -1827,6 +1827,29 @@ In[7]:= (* wave equation u_tt = u_xx (default adaptive DOPRI5) *)
                  Derivative[1, 0][u][0, x] == 0, u[t, 0] == 0, u[t, 1] == 0},
                 u, {t, 0, 0.5}, {x, 0, 1}]
 ```
+
+## NDSolveValue
+
+`NDSolveValue[eqns, expr, {x, xmin, xmax}, opts]` solves the differential
+equations as `NDSolve` does and gives `expr` with the solution substituted.
+The unknowns are every function the equations differentiate
+(`Derivative[...][u][...]`, in order of appearance; `WhenEvent` items are not
+equations), so `expr` may be the function itself or any expression in it:
+
+```mathematica
+In[1]:= NDSolveValue[{y'[x] == y[x], y[0] == 1}, y[1], {x, 0, 1}]
+Out[1]= 2.71828
+In[2]:= NDSolveValue[{y'[x] == y[x], y[0] == 1}, y, {x, 0, 1}]     (* InterpolatingFunction *)
+In[3]:= NDSolveValue[{y'[x] == y[x], y[0] == 1}, {y[1], y'[1]}, {x, 0, 1}]
+Out[3]= {2.71828, 2.71828}
+```
+
+Every `NDSolve` form is accepted — systems, boundary-value problems, `WhenEvent`
+(`NDSolveValue[{..., WhenEvent[y[t] == 2, "StopIntegration"]}, y["Domain"], ...]`),
+PDE ranges `{t, ...}, {x, ...}`, and all `NDSolve` options (`Options[NDSolveValue]`
+is `Options[NDSolve]`). When `NDSolve` stays unevaluated so does `NDSolveValue`;
+equations with no derivative at all are `NDSolveValue::dvnf`. Attributes:
+`Protected`.
 
 ## FindMinimum / FindMaximum
 
