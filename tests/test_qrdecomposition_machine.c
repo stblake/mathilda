@@ -231,7 +231,7 @@ static void qr_property_check(const char* label, const char* m_src,
 
     /* Extract m. */
     double *m_re, *m_im; int n_rows = 0, n_cols = 0;
-    Expr* m = run(m_src);
+    Expr* m = test_delist(run(m_src));   /* N of an exact matrix comes back packed */
     if (!extract_matrix(m, &m_re, &m_im, &n_rows, &n_cols)) {
         fprintf(stderr, "FAIL %s: could not extract input matrix\n", label);
         g_failures++;
