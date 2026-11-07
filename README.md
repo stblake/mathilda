@@ -1,6 +1,6 @@
 # Mathilda
 
-**A symbolic computer algebra system written in C99.**
+**A small, highly efficient computer algebra system in written in C99.**
 
 [![Build](https://github.com/stblake/mathilda/actions/workflows/build.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/build.yml)
 [![Tests](https://github.com/stblake/mathilda/actions/workflows/tests.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/tests.yml)
