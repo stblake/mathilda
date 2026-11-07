@@ -602,8 +602,12 @@ static void tri_quality(const Mesh* M, int t, double* area, double* ratio, doubl
  * mesh converges only as h^(2 lambda) in the eigenvalue (h^(4/3) at an
  * L-shape's corner) instead of h^4. Grading the mesh as
  *     h(r) ~ h0 (r/R)^(1 - lambda/2)
- * within R (half the shorter adjacent edge) restores the P2 rate (Babuska): the
- * area limit is min(maxA, R^2/4) (r/R)^(2 - lambda), floored at 1e-8 of it. */
+ * within R (the shorter adjacent edge) restores the P2 rate (Babuska): the
+ * area limit is min(maxA, R^2/4) (r/R)^(2 - lambda), floored at 1e-8 of it.
+ * At a mixed-condition corner R is half that: on SIAM Problem 14's pentagon
+ * the full radius cost 1.75x the nodes (2.4 s against 1.1 s a solve) for a
+ * 2.5x smaller error (1.1e-9 against 2.7e-9), not worth it there; at a
+ * re-entrant corner of a Koch snowflake the full radius halves the error. */
 typedef struct { double x, y, R, e; } Corner;
 typedef struct {
     Corner* c; int nc;
@@ -632,7 +636,7 @@ static void grading_init(Grading* G, const FemGeom* g, bool on) {
             if (G->nc == cap) { cap *= 2; G->c = realloc(G->c, sizeof(Corner) * (size_t)cap); }
             Corner* C = &G->c[G->nc++];
             C->x = g->xy[2 * gi]; C->y = g->xy[2 * gi + 1];
-            C->R = 0.5 * (la < lb ? la : lb);
+            C->R = (mixed ? 0.5 : 1.0) * (la < lb ? la : lb);
             C->e = 2.0 - lam;
         }
     }
@@ -843,8 +847,15 @@ bool fem_mesh_build(const FemGeom* g, const FemMeshOpts* o, FemMesh* out, const 
         double area, ratio, lmin, cx, cy;
         tri_quality(&M, t, &area, &ratio, &lmin, &cx, &cy);
         bool big = area > maxA;
-        if (!big && G.nc > 0) big = area > grading_limit(&G, maxA, cx_of(&M, t), cy_of(&M, t));
-        bool skinny = ratio > B && lmin > hmin;
+        /* the minimum edge for quality refinement scales with the graded
+         * size, so graded triangles keep the angle bound */
+        double hloc = hmin;
+        if (G.nc > 0) {
+            double lim = grading_limit(&G, maxA, cx_of(&M, t), cy_of(&M, t));
+            if (!big) big = area > lim;
+            if (lim < maxA) hloc = 1e-3 * sqrt(lim);
+        }
+        bool skinny = ratio > B && lmin > hloc;
         if (!big && !skinny) continue;
         int p = insert_point(&M, t, cx, cy, false, true);
         if (p >= 0) {

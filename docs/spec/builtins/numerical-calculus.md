@@ -1994,8 +1994,9 @@ circumcentres. The largest triangle area is `MaxCellMeasure`, given as
 `"MaxBoundaryCellMeasure"` (the longest boundary edge). The default is
 `area/1500`. **Singular corners are graded**: at a re-entrant corner (interior
 angle `ω > π`, solution `~ r^(π/ω)`) and at a corner where a Dirichlet edge meets
-a natural one (`~ r^(π/(2ω))`), the area limit falls as `(r/R)^(2 - λ)` within half
-the shorter adjacent edge, which restores the `h^4` eigenvalue rate of a smooth
+a natural one (`~ r^(π/(2ω))`), the area limit falls as `(r/R)^(2 - λ)` within the
+shorter adjacent edge `R` (half of it at a mixed corner), keeping the angle bound,
+which restores the `h^4` eigenvalue rate of a smooth
 problem (an L-shape's `λ1` converges as `h^(4/3)` on a uniform mesh: 2e-6 against
 4e-3 at `MaxCellMeasure -> 1/1000`).
 
@@ -2035,10 +2036,10 @@ precision); `NDSolve` over a region computes at machine precision whatever its
 **Accuracy and speed** (default mesh, relative errors against closed forms,
 times including the mesh): square `λ1` 4.7e-7 (0.06 s; the reference's default
 8.5e-7 in 0.38 s), disk `λ1` 3e-7 (7e-6), equilateral triangle `λ4` 1e-5 (4.9e-4),
-annulus `1/2 < r < 1` `λ1` 1.1e-5 (5.3e-4), L-shape `λ1` 2.5e-6 (2.4e-3). SIAM
+annulus `1/2 < r < 1` `λ1` 1.1e-5 (5.3e-4), L-shape `λ1` 8.3e-7 (2.4e-3). SIAM
 Problem 14 (pentagon, mixed conditions, `MaxCellMeasure -> 10^-4`):
-`α = -2.462834743`, 9 digits (the reference 3). Koch snowflake level 5: 39.3711
-in 1.4 s, 0.023 from the fractal's 39.34855 (the reference's default: 0.052 in
+`α = -2.46283472` (truth -2.46283475604), about 8 digits in 12 s (the reference 3 digits in 16 s). Koch snowflake level 5: 39.3724
+in 1.5 s, 0.024 from the fractal's 39.34855 (the reference's default: 0.052 in
 2.1 s); the level-5 polygon's own eigenvalue is about 39.370, so the remaining
 gap is the prefractal, not the discretization.
 
