@@ -32,6 +32,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "pack.h"      /* ndbuild_open: N[exact array] straight into a buffer */
 #include "print.h"     /* expr_to_string: N::meprec text */
 #include "stieltjesgamma.h" /* numeric_stieltjes_n: N of an NHoldFirst constant */
 #if defined(USE_FLINT) && defined(USE_MPFR)
@@ -343,26 +344,41 @@ void numeric_note_cancellation_bits(long lost, long left) {
 static Expr* mpfr_binop(const Expr* a, const Expr* b, long default_bits,
                         MpfrBinaryOp op) {
     long bits = numeric_combined_bits(a, b, default_bits);
+    /* An MPFR operand already at `bits` is read in place: copying it into a
+     * temporary of the same precision is exact, so the result is unchanged,
+     * and the interpreter's MPFR arithmetic (one binop per Plus / Times /
+     * Power node) no longer pays four init2 + set + clear per operation. */
+    const bool own_a = !(a->type == EXPR_MPFR && (long)mpfr_get_prec(a->data.mpfr) == bits);
+    const bool own_b = !(b->type == EXPR_MPFR && (long)mpfr_get_prec(b->data.mpfr) == bits);
     mpfr_t ra, ia, rb, ib, out;
-    mpfr_init2(ra, bits);  mpfr_init2(ia, bits);
-    mpfr_init2(rb, bits);  mpfr_init2(ib, bits);
-    bool ok_a = get_approx_mpfr(a, ra, ia, NULL);
-    bool ok_b = get_approx_mpfr(b, rb, ib, NULL);
-    if (!ok_a || !ok_b || !mpfr_zero_p(ia) || !mpfr_zero_p(ib)) {
-        mpfr_clear(ra); mpfr_clear(ia);
-        mpfr_clear(rb); mpfr_clear(ib);
-        return NULL;
+    mpfr_srcptr pa = own_a ? ra : a->data.mpfr;
+    mpfr_srcptr pb = own_b ? rb : b->data.mpfr;
+    if (own_a) {
+        mpfr_init2(ra, bits); mpfr_init2(ia, bits);
+        bool ok = get_approx_mpfr(a, ra, ia, NULL) && mpfr_zero_p(ia);
+        mpfr_clear(ia);
+        if (!ok) { mpfr_clear(ra); return NULL; }
+    }
+    if (own_b) {
+        mpfr_init2(rb, bits); mpfr_init2(ib, bits);
+        bool ok = get_approx_mpfr(b, rb, ib, NULL) && mpfr_zero_p(ib);
+        mpfr_clear(ib);
+        if (!ok) {
+            mpfr_clear(rb);
+            if (own_a) mpfr_clear(ra);
+            return NULL;
+        }
     }
     mpfr_init2(out, bits);
-    op(out, ra, rb, MPFR_RNDN);
+    op(out, pa, pb, MPFR_RNDN);
     if (op == mpfr_add || op == mpfr_sub) {
-        note_cancellation(ra, rb, out);
-        cancelled_zero_accuracy(out, ra, rb);
+        note_cancellation(pa, pb, out);
+        cancelled_zero_accuracy(out, pa, pb);
     } else if (op == mpfr_mul || op == mpfr_div) {
-        scaled_zero_accuracy(out, a, b, ra, rb, op == mpfr_div);
+        scaled_zero_accuracy(out, a, b, pa, pb, op == mpfr_div);
     }
-    mpfr_clear(ra); mpfr_clear(ia);
-    mpfr_clear(rb); mpfr_clear(ib);
+    if (own_a) mpfr_clear(ra);
+    if (own_b) mpfr_clear(rb);
     return expr_new_mpfr_move(out);
 }
 
@@ -391,9 +407,40 @@ Expr* numeric_mpfr_div(const Expr* a, const Expr* b, long default_bits) {
  * cases, signs, and 0^y / Inf rules live there). */
 int numeric_mpfr_pow_fast(mpfr_ptr rop, mpfr_srcptr x, mpfr_srcptr y,
                           mpfr_rnd_t rnd) {
+    /* An integer exponent (every x^2 of a squared distance) is
+     * mpfr_pow_si: correctly rounded like mpfr_pow -- so the same result --
+     * without its general-exponent probes. */
+    if (mpfr_regular_p(x) && mpfr_integer_p(y) && mpfr_fits_slong_p(y, MPFR_RNDN))
+        return mpfr_pow_si(rop, x, mpfr_get_si(y, MPFR_RNDN), rnd);
     if (!mpfr_regular_p(x) || !mpfr_regular_p(y) || mpfr_sgn(x) <= 0
         || mpfr_integer_p(y) || mpfr_cmp_ui(x, 1) == 0)
         return mpfr_pow(rop, x, y, rnd);
+    /* A half-integer exponent k/2 (Sqrt, 1/Sqrt[r2] in every Coulomb / Thomson
+     * energy, (x^2 + y^2)^(3/2)) is a square root, not a log and an exp:
+     * mpfr_sqrt / mpfr_rec_sqrt are correctly rounded and ~10x cheaper. For
+     * |k| > 1 the root is taken with 8 + bits(|k|) guard bits and raised to k
+     * (relative error |k| 2^-wp, below half an ulp of the target). */
+    if (mpfr_get_exp(y) <= 7) {                       /* |y| < 64 */
+        mpfr_t y2;
+        mpfr_init2(y2, mpfr_get_prec(y) + 1);
+        mpfr_mul_2ui(y2, y, 1, MPFR_RNDN);            /* exact */
+        bool half = mpfr_integer_p(y2) != 0;
+        long k = half ? mpfr_get_si(y2, MPFR_RNDN) : 0;
+        mpfr_clear(y2);
+        if (half) {                                   /* k odd: y is not an integer */
+            if (k == 1) return mpfr_sqrt(rop, x, rnd);
+            if (k == -1) return mpfr_rec_sqrt(rop, x, rnd);
+            long ak = k < 0 ? -k : k, kb = 0;
+            while (ak) { kb++; ak >>= 1; }
+            mpfr_t s;
+            mpfr_init2(s, mpfr_get_prec(rop) + (mpfr_prec_t)(8 + kb));
+            if (k > 0) mpfr_sqrt(s, x, MPFR_RNDN);
+            else       mpfr_rec_sqrt(s, x, MPFR_RNDN);
+            int r = mpfr_pow_ui(rop, s, (unsigned long)(k < 0 ? -k : k), rnd);
+            mpfr_clear(s);
+            return r;
+        }
+    }
     /* |log x| <= (|exp(x)| + 1) ln 2, so log2|y log x| <= exp(y) + log2(|exp(x)|+1) */
     long ex = (long)mpfr_get_exp(x);
     long lx = 1;
@@ -1552,8 +1599,19 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     /* Numericalize args left-to-right. For Power, decide whether to preserve
      * the exponent based on the (already-computed) numericalized base. */
     bool preserve_power_exp = exp_is_int;
+    /* Surd[x, n]: the root index is an integer by definition (Surd::int on
+     * anything else). N keeps it exact, as the reference does and as it keeps
+     * Power's integer exponent: N[Surd[x, 3], 30] is Surd[x, 3]. Numericalizing
+     * it gave Surd[x, 3.`30] -- an invalid call that stays unevaluated and
+     * emits Surd::int at every evaluation; inside a WorkingPrecision NIntegrate
+     * (whose integrand is numericalized first) that was thousands of messages,
+     * each printing a 60-digit argument, and ~half the run time. */
+    const bool surd_index =
+        n == 2 && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Surd
+        && expr_is_integer_like(e->data.function.args[1]);
     for (size_t i = 0; i < n; ++i) {
-        if (i < n_label_held || (series_data && i >= 3) ||
+        if (i < n_label_held || (series_data && i >= 3) || (surd_index && i == 1) ||
             (i == 0 && (nhold & ATTR_NHOLDFIRST)) ||
             (i > 0 && (nhold & ATTR_NHOLDREST))) {
             new_args[i] = expr_copy(e->data.function.args[i]);
@@ -3035,8 +3093,33 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
      * 1.5 - 1.0 a), 1.5 + a - a is 1.5, and 1.5 (2 + a) and 1.5 + Sqrt[2] a
      * keep their exact parts. */
     for (size_t i = 0; i < n; i++) {
-        out[i] = expr_is_numeric_quantity(args[i]) ? numericalize_contagion(args[i], spec)
-                                                   : expr_copy(args[i]);
+        const Expr* a = args[i];
+        /* Machine contagion of a plain number has one answer, the correctly
+         * rounded double, and needs none of numericalize's machinery (exact-
+         * leaf scan, working-precision plan, memo push): {2, 1} - {0.5, 0.1}
+         * spent most of its 1.8 us there, per element. An Integer is (double)v
+         * (round to nearest, as leaf_from_integer); p/q with |p|, |q| <= 2^53
+         * is one IEEE division of exact operands, i.e. correctly rounded, as
+         * the planned path's MPFR quotient rounded to a double is. */
+        if (spec.mode == NUMERIC_MODE_MACHINE) {
+            if (a->type == EXPR_REAL) { out[i] = expr_copy((Expr*)a); continue; }
+            if (a->type == EXPR_INTEGER) { out[i] = expr_new_real((double)a->data.integer); continue; }
+            if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2 &&
+                a->data.function.head->type == EXPR_SYMBOL &&
+                a->data.function.head->data.symbol.name == SYM_Rational &&
+                a->data.function.args[0]->type == EXPR_INTEGER &&
+                a->data.function.args[1]->type == EXPR_INTEGER) {
+                const int64_t p = a->data.function.args[0]->data.integer;
+                const int64_t q = a->data.function.args[1]->data.integer;
+                const int64_t lim = INT64_C(1) << 53;
+                if (q != 0 && p >= -lim && p <= lim && q >= -lim && q <= lim) {
+                    out[i] = expr_new_real((double)p / (double)q);
+                    continue;
+                }
+            }
+        }
+        out[i] = expr_is_numeric_quantity(a) ? numericalize_contagion(a, spec)
+                                             : expr_copy((Expr*)a);
     }
     return true;
 }
@@ -3278,6 +3361,114 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
 /* ------------------------------------------------------------------------
  *  Builtin: N
  * ---------------------------------------------------------------------- */
+/* ------------------------------------------------------------------------
+ *  N[array] -> packed float64, directly.
+ *
+ * N of a large exact rectangular array (a transition matrix of Rationals, an
+ * Integer table) is the common first step of every numeric linear-algebra
+ * workload: N[P] then MatrixPower / Dot / LinearSolve. The generic path walks
+ * it as an expression -- the exact-leaf scan, the working-precision plan, one
+ * boxed Real per element -- and hands back an UNPACKED List, so every consumer
+ * then repacks it (216k elements: 13.5 ms for N, ~3 ms more per repack).
+ *
+ * A rectangular List whose leaves are all machine-convertible numbers --
+ * Integer, Rational of two int64s, machine Real -- has exactly one answer per
+ * element, the correctly rounded double, and needs no plan: write it straight
+ * into a float64 buffer. The doubles are bit-identical to the scalar path's
+ * (an int64 -> double conversion rounds to nearest; p/q with |p|, |q| <= 2^53
+ * is one correctly rounded IEEE division of exact operands; anything wider goes
+ * through the same mpq rounding the scalar Rational branch uses). Any other leaf
+ * (a bigint, Pi, a symbol, an MPFR number, a ragged row) declines, and so does
+ * an array under the packing threshold (ndbuild_open returns NULL): the generic
+ * path then runs unchanged.
+ * ---------------------------------------------------------------------- */
+#define N_PACK_MAX_RANK 16
+
+/* Shape of a rectangular nested List, read off its first elements; 0 if `e`
+ * is not a List. Full rectangularity is checked while filling. */
+static int n_pack_shape(const Expr* e, int64_t* dims) {
+    int rank = 0;
+    while (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List) {
+        if (rank == N_PACK_MAX_RANK || e->data.function.arg_count == 0) return 0;
+        dims[rank++] = (int64_t)e->data.function.arg_count;
+        e = e->data.function.args[0];
+    }
+    return rank;
+}
+
+/* One leaf to its correctly rounded double; false declines. */
+static bool n_pack_leaf(const Expr* x, double* out, bool* exact) {
+    if (x->type == EXPR_INTEGER) { *out = (double)x->data.integer; *exact = true; return true; }
+    if (x->type == EXPR_REAL)    { *out = x->data.real; return true; }
+    if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol.name == SYM_Rational &&
+        x->data.function.arg_count == 2 &&
+        x->data.function.args[0]->type == EXPR_INTEGER &&
+        x->data.function.args[1]->type == EXPR_INTEGER) {
+        const int64_t p = x->data.function.args[0]->data.integer;
+        const int64_t q = x->data.function.args[1]->data.integer;
+        const int64_t lim = INT64_C(1) << 53;
+        if (q == 0) return false;
+        if (p >= -lim && p <= lim && q >= -lim && q <= lim) {
+            *out = (double)p / (double)q;
+        } else {
+            mpq_t r;
+            /* No mpq_init: expr_to_mpz initialises its target (as in the
+             * scalar Rational branch). */
+            expr_to_mpz(x->data.function.args[0], mpq_numref(r));
+            expr_to_mpz(x->data.function.args[1], mpq_denref(r));
+            mpq_canonicalize(r);
+            *out = numeric_mpq_to_double(r);
+            mpq_clear(r);
+        }
+        *exact = true;
+        return true;
+    }
+    return false;
+}
+
+static bool n_pack_fill(const Expr* e, int level, int rank, const int64_t* dims,
+                        double* buf, size_t* pos, bool* exact) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List ||
+        (int64_t)e->data.function.arg_count != dims[level])
+        return false;
+    Expr* const* a = e->data.function.args;
+    const size_t n = e->data.function.arg_count;
+    if (level == rank - 1) {
+        for (size_t i = 0; i < n; i++)
+            if (!n_pack_leaf(a[i], &buf[(*pos)++], exact)) return false;
+        return true;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (!n_pack_fill(a[i], level + 1, rank, dims, buf, pos, exact)) return false;
+    return true;
+}
+
+/* The packed float64 N of `e`, or NULL (not a convertible rectangular array,
+ * nothing exact in it, or under the packing threshold). */
+static Expr* n_pack_exact_array(const Expr* e) {
+    int64_t dims[N_PACK_MAX_RANK];
+    const int rank = n_pack_shape(e, dims);
+    if (rank == 0) return NULL;
+    /* The leaf level must hold numbers, not more Lists of a ragged depth:
+     * n_pack_fill checks each one, so only the shape is needed here. */
+    void* raw = NULL;
+    Expr* node = ndbuild_open(rank, dims, NDT_FLOAT64, &raw);
+    if (!node) return NULL;
+    size_t pos = 0;
+    bool exact = false;
+    if (!n_pack_fill(e, 0, rank, dims, (double*)raw, &pos, &exact) || !exact) {
+        /* Partially (or fully, all-Real) written: this node never escapes.
+         * An all-machine-Real List is already N's answer -- the generic path
+         * returns it as it stands rather than re-presenting it. */
+        expr_free(node);
+        return NULL;
+    }
+    return node;
+}
+
 Expr* builtin_n(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     const size_t argc = res->data.function.arg_count;
@@ -3311,6 +3502,10 @@ Expr* builtin_n(Expr* res) {
      * (see eval.c around the builtin dispatch site), so we must NOT free
      * it ourselves. Returning NULL means "keep `res` unevaluated" — the
      * evaluator retains ownership in that path. */
+    if (spec.mode == NUMERIC_MODE_MACHINE) {
+        Expr* packed = n_pack_exact_array(res->data.function.args[0]);
+        if (packed) return packed;
+    }
     g_numeric_from_n = true;
     Expr* out = numericalize(res->data.function.args[0], spec);
     g_numeric_from_n = false;

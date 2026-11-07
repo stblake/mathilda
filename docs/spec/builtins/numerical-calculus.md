@@ -887,7 +887,7 @@ A held `D[...]` has no value at a number, so its evaluated form is used.
 | finite real, integrable endpoint singularity (`x^alpha`, `Log`, a hidden square root such as `ArcSin[1 - Sin[x]]` at `0`) | the Gauss-Kronrod run's singularity handler: a panel at an end of the range that is still the worst after 4 halvings (`(b-a)/16`), whose last halving gained less than a factor 20, is integrated by tanh-sinh instead of being halved again — once per endpoint, kept only when it converges and agrees with the Kronrod value within the panel's error estimate. Bisecting such an end to the goal stopped ~3 digits beyond it (11 of 15 on `(1 - x^4)^(1/4)`, `Sqrt[x]`); the double-exponential panel brings the result to machine precision (≤ 1 ulp on those) at a few hundred samples. An under-resolved oscillation running into an end (`Exp[x + Sin[Exp[Exp[x + 1/3]]]]` on `[-1, 1]`) takes the same panel, deliberately: 13 digits become 15 for ~40% more samples. When Gauss-Kronrod does not converge, the cascade falls back to tanh-sinh over the whole range |
 | arbitrary `WorkingPrecision` (> machine), finite real | at the target precision + guard bits (MPFR): a power-law endpoint is mapped away, a boundary layer is split into graded Clenshaw-Curtis pieces, an integrand analytic on the interval is taken by a bounded Clenshaw-Curtis probe (N <= 128, kept only when converged to every target digit), Levin collocation goes first only over at least 4 periods, a narrow peak, near-pole or endpoint scale feature takes the recentred double-exponential rule (below), else tanh-sinh |
 | machine precision, integrand leaves the double range in the bulk of the interval (e.g. `x^x^x` on `[1, 6]` reaches 2.7e36305; a Laurent polynomial on the unit circle whose powers give `Overflow[]`) | the machine pass is discarded and the integral re-run on the MPFR path at machine-equivalent precision (53 bits + guard); the result is a 53-bit Real, the representation machine arithmetic itself uses beyond 1.8e308.  A sample within 1e-10 of the span from an endpoint (an endpoint singularity) does not trigger this. |
-| arbitrary `WorkingPrecision`, finite real, removable endpoint singularity (e.g. `(E^x - 1 - x)/x^2` at 0) | a sample within `2^-20` of the span of an endpoint is re-evaluated with the abscissa widened by the bits its cancellation eats (checked by agreement at doubled extra precision); an endpoint found free of cancellation is not checked again. The re-evaluation uses the integrand as given (not the copy whose exact constants were numericalized once at the working precision) with every inexact number widened exactly, since a number holds the arithmetic it enters to its own precision. When a part of the integrand still caps the precision (a machine number), the sample's noise is measured by re-evaluating at 12 fewer bits: a sample with next to no digit left is declined (the tail is truncated there), and the error a kept noisy sample leaves lowers the precision of the result, with `NIntegrate::precw` |
+| arbitrary `WorkingPrecision`, finite real, removable endpoint singularity (e.g. `(E^x - 1 - x)/x^2` at 0) | a sample within `2^-20` of the span of an endpoint is re-evaluated with the abscissa widened by the bits its cancellation eats (checked by agreement at doubled extra precision); an endpoint found free of cancellation is not checked again. The re-evaluation uses the integrand as given (not the copy whose exact constants were numericalized once at the working precision) with every inexact number widened exactly, since a number holds the arithmetic it enters to its own precision. When a part of the integrand still caps the precision (a machine number), the sample's noise is measured by re-evaluating at 12 fewer bits: a sample with next to no digit left is declined (the tail is truncated there), and the error a kept noisy sample leaves lowers the precision of the result, with `NIntegrate::precw`. The re-evaluations are internal probes: their messages are neither printed nor seen by `Check`, and a node whose raised-precision value is not a number (an endpoint known only to the working precision, a `FindRoot` root, leaves a deep node outside the integrand's domain) is declined at the first such value instead of doubling the precision up to 16384 extra bits -- the SIAM D7 area at 60 digits, `Surd` of `Sqrt[-Log[g[y]]]` between such roots, 0.61 s -> 0.19 s |
 | arbitrary `WorkingPrecision`, finite real, interior non-analytic point (`Log[Abs[x^2 - 2]]`, `Abs[x - 1/3]`, `Sqrt[Abs[x^3 - 2]]`) | the real roots inside the range of every polynomial argument of `Log`, `Abs` and non-integer / negative powers become exact breakpoints (`Sqrt[2]`, `Root` objects) |
 | machine precision, integrand far below 1 in size | the default `AccuracyGoal` floor (`10^-MachinePrecision`) is taken relative to the integrand's scale (max `|f|` over seven interior points × range length) when that scale is below 1, so a 1e-54 integrand is integrated to its `PrecisionGoal` instead of stopping at the first panel; an explicit `AccuracyGoal` is absolute |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh; at `WorkingPrecision` a narrow or off-centre peak on `[a, oo)` takes the recentred double-exponential rule (below) |
@@ -1265,6 +1265,12 @@ is solved separately — well-conditioned — and its roots emitted with the fac
 multiplicity. This keeps high powers such as `(x^2-2)^30` exact and fast, where
 solving the expanded degree-60 polynomial directly would be catastrophically
 ill-conditioned.
+An exact **quadratic** (including one with machine coefficients, which are exact
+dyadic rationals) skips the squarefree / Aberth machinery: its roots come in closed
+form from the exact integer discriminant, the square root taken 64 bits above the
+working precision and the roots formed without cancellation (`q = -(b + sgn(b)
+Sqrt[D])/2`, `q/a`, `c/q`; a complex pair or the double root otherwise), so each
+is certified to the target by construction.
 Rational coefficients are cleared of denominators first, so they take the same
 exact path (the squarefree decomposition is FLINT's when built with it).
 
@@ -2120,6 +2126,16 @@ numbers (`Precision[First[FindMinimum[(t - 1)^2 + 1, {t, 0},
 WorkingPrecision -> 30]]]` is `30.`). The
 display drops trailing zeros of every arbitrary-precision number, so that value
 prints as `1.0`; `N[1, 30]` prints the same way.
+
+At `WorkingPrecision -> p` the objective and each component of its symbolic
+gradient are compiled once at `p` digits (the arbitrary-precision `Compile`
+subset, any number of variables) and every point is evaluated by the register
+machine, not by binding the variables and re-walking the expression (which
+re-numericalized every exact constant, `Cos[Pi (3 - Sqrt[5])]`, at every point).
+A body outside the compilable subset, a point whose compiled value is not
+finite, and any run with an `EvaluationMonitor` use the interpreter. The
+21-variable 12-point Thomson problem at 60 digits: 1.27 s -> 0.22 s; the
+141-variable 72-point one finishes in 43 s (it hit a 120 s cap).
 
 The starting values of `{x, x0}` / `{x, x0, x1}` may be any numeric quantity
 (`{p, -1/10, 1/10}`, `{x, Pi/9, Pi/5}`): a numeric expression is a starting

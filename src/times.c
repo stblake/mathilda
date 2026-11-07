@@ -257,24 +257,24 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
         bool a_is_rat = is_rational(a, &n1, &d1);
         bool b_is_rat = is_rational(b, &n2, &d2);
 
-        mpz_t av, bv, r;
-        if (a_is_rat) mpz_init_set_si(av, n1);
-        else expr_to_mpz(a, av);
+        /* Borrow a BigInt operand's limbs rather than copying them (a
+         * Rational operand's int64 numerator goes through scratch). */
+        mpz_t as, bs, r;
+        mpz_srcptr av, bv;
+        if (a_is_rat) { mpz_init_set_si(as, n1); av = as; }
+        else av = expr_mpz_borrow(a, as);
+        if (b_is_rat) { mpz_init_set_si(bs, n2); bv = bs; }
+        else bv = expr_mpz_borrow(b, bs);
 
-        if (b_is_rat) mpz_init_set_si(bv, n2);
-        else expr_to_mpz(b, bv);
-        
         mpz_init(r);
         mpz_mul(r, av, bv);
-        mpz_clear(av); mpz_clear(bv);
-        
+        if (a_is_rat) mpz_clear(as); else expr_mpz_release(a, as);
+        if (b_is_rat) mpz_clear(bs); else expr_mpz_release(b, bs);
+
         // Now handle the denominators!
         int64_t den = d1 * d2;
-        if (den == 1) {
-            Expr* res = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
-            mpz_clear(r);
-            return res;
-        }
+        if (den == 1)
+            return expr_bigint_normalize(expr_new_bigint_take(r));
         
         // Compute GCD of r and den
         mpz_t m_den, m_gcd;

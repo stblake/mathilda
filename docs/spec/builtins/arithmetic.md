@@ -69,6 +69,16 @@ Numerical evaluation.
   the pair is not threaded over: `N[Pi, {MachinePrecision, MachinePrecision}]`
   is machine `Pi`.
 
+**Exact arrays**: machine `N` of a rectangular `List` (any rank) whose
+elements are all `Integer`s, `Rational`s of machine integers, or machine
+`Real`s, with at least one exact element, is written straight into a packed
+float64 array: each element is the correctly rounded double, bit-identical to
+`Map[N, array, {-1}]`, without the expression walk. A 465 x 465 `Rational`
+transition matrix takes 0.4 ms instead of 13.5 ms, and `MatrixPower`, `Dot`,
+`LinearSolve` downstream receive a buffer rather than repacking a boxed list.
+Below the packing threshold, or with any other element (a `BigInt`, a symbol,
+`Pi`, a ragged row), the general path runs and the result is a plain `List`.
+
 **N-values**: a rule for `N` attached to a symbol or a head is used wherever
 that symbol or call occurs, not only at the top: after `z2 /: N[z2] = 3/2` and
 `h /: N[h[x_]] := 2 x`, `N[2 + z2]` is `3.5` and `N[1 + h[3]]` is `7.`. The
@@ -298,6 +308,21 @@ Symbolic sum.
 - A collected term is a flat `Times`: `2 a b + x` holds `Times[2, a, b]`, never
   `Times[2, Times[a, b]]`. The coefficient is spliced in front of the
   monomial's factors.
+- Exact big-integer sums and products (`Plus`, and `Times` of BigInts with
+  Integers or machine Rationals) read the operands' GMP limbs in place and move
+  the result into its node: one pass over the digits instead of four copies,
+  so an exact recurrence over 4000-digit integers (`Fold[{#1[[2]], 2 #1[[2]] +
+  #2 #1[[1]]} &, {1, 1}, list]`, 10^4 steps) costs ~30 ms instead of ~42 ms.
+  Rationals with denominators past 32 bits reduce with a binary gcd.
+- Two-operand `Plus` / `Times` threaded over flat Lists of machine numbers
+  (`{2, 1} - {0.5, 0.1}`, `p + t v`) are computed in place when every element
+  pair holds a machine Real: no per-element `Plus` call is built and evaluated
+  (2 us -> 0.6 us for two elements). The values are the builtin's own (two
+  operands commute exactly in IEEE arithmetic); an exact `0` summand returns
+  the other operand, and an exact zero factor, an overflow / underflow, or any
+  non-number take the general path. Machine contagion of an Integer or a
+  machine-sized Rational partner converts it directly to the correctly
+  rounded double.
 - Returns `0` if no arguments are provided.
 - Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
 - A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),
@@ -747,6 +772,13 @@ Exponentiation.
 - Simplifies integer powers of integers.
 - `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and the reference does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
 - Returns `Overflow[]` if the result exceeds 64-bit integer limits.
+- Arbitrary-precision (MPFR) real powers: an integer exponent is `mpfr_pow_si`,
+  a half-integer one `k/2` a square root (`mpfr_sqrt` / `mpfr_rec_sqrt`,
+  correctly rounded for `k = ±1`; for `|k| > 1` the root with `8 + bits(k)`
+  guard bits raised to `k`), other exponents `exp(y log x)` with guard bits.
+  `1/Sqrt[r2]` at 60 digits costs a reciprocal square root instead of a log
+  and an exp (~10x). The MPFR binary operations read an operand already at the
+  working precision in place instead of copying it (results unchanged).
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
 - A negative exact coefficient (other than `-1`) in a product under a rational
   power comes out as its magnitude, the sign staying inside:

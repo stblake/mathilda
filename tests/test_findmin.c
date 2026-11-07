@@ -666,11 +666,37 @@ static void test_minimum_value_full_precision(void) {
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
+/* WorkingPrecision FindMinimum serves the objective and its symbolic gradient
+ * from arbitrary-precision programs (fm_mpfr_progs_register), including past
+ * 16 coordinates (21 here, the 12-point Thomson problem in spherical angles,
+ * with exact constants Cos[Pi (3 - Sqrt[5])] in the body). The minimum must be
+ * the same 50 digits; with an EvaluationMonitor the interpreter runs (the
+ * monitor fires per interpreted evaluation) and gives the same value. True
+ * value: the 60-digit reference of benchmarks/208 (hd3.2). */
+static void test_working_precision_compiled_objective(void) {
+    const char* defs =
+        "fmPh1 = Pi (3 - Sqrt[5]); fmPt[0] = {0, 0, 1}; "
+        "fmPt[1] = {Sin[fmTh[1]] Cos[fmPh1], Sin[fmTh[1]] Sin[fmPh1], Cos[fmTh[1]]}; "
+        "fmPt[k_Integer] := {Sin[fmTh[k]] Cos[fmPh[k]], Sin[fmTh[k]] Sin[fmPh[k]], Cos[fmTh[k]]}; "
+        "fmEn = Sum[1/Sqrt[(fmPt[j] - fmPt[k]).(fmPt[j] - fmPt[k])], {j, 0, 10}, {k, j + 1, 11}]; "
+        "fmSt = Join[Table[{fmTh[k], N[ArcCos[1 - 2 k/12], 60]}, {k, 1, 11}], "
+        "Table[{fmPh[k], N[k fmPh1, 60]}, {k, 2, 11}]];";
+    char buf[2048];
+    snprintf(buf, sizeof buf, "%s Abs[First[FindMinimum[fmEn, fmSt, WorkingPrecision -> 60]] - "
+             "49.1652530576288010385543586405536473601005321530668864055873437`70] < 10^-48", defs);
+    check_true(buf);
+    snprintf(buf, sizeof buf, "%s fmCnt = 0; Abs[First[FindMinimum[fmEn, fmSt, WorkingPrecision -> 60, "
+             "EvaluationMonitor :> fmCnt++]] - "
+             "49.1652530576288010385543586405536473601005321530668864055873437`70] < 10^-48 && fmCnt > 0", defs);
+    check_true(buf);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_mpfr_argmin_full_precision);
+    TEST(test_working_precision_compiled_objective);
     TEST(test_small_scale_objective_with_equality);
     TEST(test_minimum_value_full_precision);
 

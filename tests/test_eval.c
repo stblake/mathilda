@@ -1048,6 +1048,27 @@ void test_coefficient_v592() {
                    "{{1, 5}, {3, 0}}", 0);
 }
 
+/* Plus / Times threaded over flat Lists of machine numbers are computed in
+ * place (listable_machine_binary); the answers must be the builtin's own,
+ * element for element, including its exact special cases and the cases it
+ * declines (overflow, an exact zero factor, a symbol, three operands). */
+void test_listable_machine_binary(void) {
+    assert_eval_eq("SeedRandom[7]; lmbV = Join[RandomReal[{-10, 10}, 60], RandomInteger[{-5, 5}, 20], "
+                   "{0, 0., -0., 1, -1, 2^60, 1.*^308, -1.*^308, 1.*^-300, 3.*^-200, 0.1, 0.2}]; "
+                   "And @@ Flatten[Table[{{a, 1.5} + {b, 2} === {Plus[a, b], 3.5}, "
+                   "{a, 1.5} {b, 2} === {Times[a, b], 3.}}, {a, lmbV}, {b, Take[lmbV, 25]}]]",
+                   "True", 0);
+    assert_eval_eq("{2, 1} - {0.5, 0.1}", "{1.5, 0.9}", 0);
+    assert_eval_eq("FullForm[{0, 1} + {-0., 2.}]", "List[0.0, 3.0]", 0);
+    assert_eval_eq("FullForm[{0, 2} {1.5, 0.5}]", "List[0.0, 1.0]", 0);
+    assert_eval_eq("{1.*^308, 1.} + {1.*^308, 1}", "{Overflow[], 2.0}", 0);
+    assert_eval_eq("{1, 2} + {3, 4}", "{4, 6}", 0);
+    assert_eval_eq("{1.5, lmbX} + {2, 3}", "{3.5, 3 + lmbX}", 0);
+    assert_eval_eq("{1.5, 2.5} + {1, 2} + {0.25, 0.5}", "{2.75, 5.0}", 0);
+    assert_eval_eq("0.5 {2, 4}", "{1.0, 2.0}", 0);
+    assert_eval_eq("{1/2, 3} + 0.25", "{0.75, 3.25}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -1066,6 +1087,7 @@ int main() {
     TEST(test_append_prepend_to);
     TEST(test_attributes);
     TEST(test_listable);
+    TEST(test_listable_machine_binary);
     TEST(test_oneidentity);
     TEST(test_list_assignment);
     TEST(test_plus);

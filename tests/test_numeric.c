@@ -26,6 +26,50 @@
  *  Phase 1: machine-precision N[]
  * ---------------------------------------------------------------------- */
 
+/* N of a large exact rectangular array is written straight into a packed
+ * float64 buffer, bit-identical to element-wise N; anything it cannot convert
+ * (ragged rows, a symbol, a bigint leaf) takes the generic path unchanged. */
+static void test_n_exact_array_packs(void) {
+    assert_eval_eq("SeedRandom[3]; q = Table[RandomInteger[{-10^6, 10^6}]/"
+                   "RandomInteger[{1, 10^7}], {60}, {60}]; "
+                   "{Developer`PackedArrayQ[N[q]], N[q] === Map[N, q, {2}]}",
+                   "{True, True}", 0);
+    assert_eval_eq("q2 = Table[(10^17 + 3 i)/(10^18 - 7 i), {i, 300}]; "
+                   "N[q2] === Map[N, q2]", "True", 0);
+    assert_eval_eq("Developer`PackedArrayQ[N[Range[1000]/7]]", "True", 0);
+    assert_eval_eq("N[Join[Range[300]/7, {x}]][[-1]]", "x", 0);
+    assert_eval_eq("Developer`PackedArrayQ[N[Join[Range[300]/7, {x}]]]", "False", 0);
+    assert_eval_eq("N[Table[{i/2, 2^70}, {i, 300}]][[1]]", "{0.5, 1.18059e+21}", 0);
+    assert_eval_eq("N[{{1/2, 1/4}, {1}}]", "{{0.5, 0.25}, {1.0}}", 0);
+    assert_eval_eq("N[{1/3, 2/3}]", "{0.333333, 0.666667}", 0);
+}
+
+/* Surd's root index is an integer label: N keeps it exact, as it keeps an
+ * integer Power exponent (Surd[x, 3.] is an invalid call: Surd::int). */
+static void test_n_keeps_surd_index(void) {
+    assert_eval_eq("N[Surd[x, 3], 30]", "Surd[x, 3]", 0);
+    assert_eval_eq("N[Surd[x, 3]]", "Surd[x, 3]", 0);
+    assert_eval_eq("FullForm[N[Surd[2 + x, 5]]]", "Surd[Plus[2.0, x], 5]", 0);
+    assert_eval_eq("N[Surd[-8, 3]]", "-2.0", 0);
+    assert_eval_eq("Precision[N[Surd[-27, 3], 40]]", "40.0", 0);
+}
+
+/* MPFR x^(k/2) is a square root (correctly rounded for k = +-1, faithful with
+ * guard bits otherwise) and x^n an mpfr_pow_si; MPFR operands at the working
+ * precision are read in place by the binary ops. Values must match the exact
+ * quantity numericalized at the same precision. */
+static void test_mpfr_half_integer_and_integer_powers(void) {
+    assert_eval_eq("With[{x = N[2, 60]}, Abs[x^(1/2) - N[Sqrt[2], 60]] < 10^-59]", "True", 0);
+    assert_eval_eq("With[{x = N[2, 60]}, Abs[x^(-1/2) - N[1/Sqrt[2], 60]] < 10^-59]", "True", 0);
+    assert_eval_eq("With[{x = N[7, 60]}, Abs[x^(5/2) - N[7^(5/2), 60]] < 10^-56]", "True", 0);
+    assert_eval_eq("With[{x = N[7, 60]}, Abs[x^(-7/2) - N[7^(-7/2), 60]] < 10^-62]", "True", 0);
+    assert_eval_eq("With[{x = N[3/10, 60]}, x^2 == N[9/100, 60]]", "True", 0);
+    assert_eval_eq("With[{x = N[3/10, 60]}, Precision[{x^(1/2), x^(-3/2), x^3, x^-2}]]", "60.0", 0);
+    assert_eval_eq("With[{x = N[3/10, 60]}, Abs[x^-3 - N[1000/27, 60]] < 10^-57]", "True", 0);
+    assert_eval_eq("Sqrt[N[-4, 30]]", "2.00000000000000000000000000000*I", 0);
+    assert_eval_eq("N[0, 30]^(1/2)", "0", 0);
+}
+
 static void test_n_integer_leaf(void) {
     assert_eval_eq("N[0]",  "0.0", 0);
     assert_eval_eq("N[5]",  "5.0", 0);
@@ -926,6 +970,9 @@ int main(void) {
     TEST(test_n_bad_precision_arg);
     TEST(test_machineprecision_is_protected);
     TEST(test_inexact_contagion);
+    TEST(test_n_exact_array_packs);
+    TEST(test_n_keeps_surd_index);
+    TEST(test_mpfr_half_integer_and_integer_powers);
 
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);

@@ -4,6 +4,7 @@
 #include "compile.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <stdio.h>
 #include <complex.h>
@@ -249,14 +250,26 @@ bool autocompiled_eval_z(const AutoCompiled* ac, const double _Complex* zs,
 }
 
 Expr* autocompiled_eval_mpfr(const AutoCompiled* ac, const Expr* const* xs) {
-    if (!ac || !CT_IS_MANAGED(ac->arg_type) || ac->nvars > AC_MAX_VARS) return NULL;
-    CompileValue args[AC_MAX_VARS], o;
+    if (!ac || !CT_IS_MANAGED(ac->arg_type)) return NULL;
+    /* Up to AC_MAX_VARS arguments on the stack; more (a WorkingPrecision
+     * FindMinimum over 21..141 coordinates) on the heap. An MPFR evaluation
+     * costs microseconds, so one malloc is noise -- refusing the program
+     * instead sent the whole solve back to the interpreter. */
+    CompileValue stack_args[AC_MAX_VARS], o;
+    CompileValue* args = stack_args;
+    memset(stack_args, 0, sizeof stack_args);   /* quiets -Wmaybe-uninitialized; 16 slots */
+    if (ac->nvars > AC_MAX_VARS) {
+        args = (CompileValue*)malloc(ac->nvars * sizeof(CompileValue));
+        if (!args) return NULL;
+    }
     for (size_t i = 0; i < ac->nvars; i++) {
-        if (!xs[i]) return NULL;
+        if (!xs[i]) { if (args != stack_args) free(args); return NULL; }
         args[i].type = ac->arg_type;
         args[i].v.a = (Expr*)xs[i];   /* borrowed numeric Expr; load_arg sets the container */
     }
-    if (!compiled_eval(ac->prog, args, &o)) return NULL;   /* false ⇒ non-finite / non-numeric */
+    bool ok = compiled_eval(ac->prog, args, &o);
+    if (args != stack_args) free(args);
+    if (!ok) return NULL;   /* false ⇒ non-finite / non-numeric */
     /* A managed result is a NEW Expr (EXPR_MPFR / Complex[MPFR,MPFR]) the caller
      * owns; on any non-managed result the caller should interpret. */
     return CT_IS_MANAGED(o.type) ? o.v.a : NULL;

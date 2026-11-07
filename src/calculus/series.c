@@ -50,6 +50,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <math.h>    /* isfinite, fabs: so_mul_machine */
+#include <float.h>   /* DBL_MIN */
 
 /* ----------------------------------------------------------------------------
  * Tiny Expr helpers
@@ -677,6 +679,59 @@ static SeriesObj* so_sub(SeriesObj* a, SeriesObj* b) {
     return r;
 }
 
+/* Machine-real coefficients: the convolution of so_mul's generic loop, in
+ * doubles. Every coefficient of both factors must be a machine Real or an
+ * exact 0 (the zeros a padded / shifted series carries); the loop below is the
+ * generic one -- same skips (a literal 0 or 0.), same i-outer / j-inner order,
+ * the first contribution replacing the exact 0 -- so each sum is the very
+ * sequence of IEEE products and additions the evaluator's Times / Plus would
+ * perform, without building and evaluating 2 n^2 expressions (Series of
+ * (2.^(z/2 + 1) - 2)^30 to order 30 spent 29 ms there; its SeriesData power
+ * 1 ms). A non-normal result (overflow, underflow, NaN: the evaluator's own
+ * arbitrary-exponent / Overflow[] handling) declines to the generic loop.
+ * Returns false (and writes nothing) on decline. */
+static bool so_coefs_machine(const SeriesObj* a) {
+    for (size_t i = 0; i < a->coef_count; i++) {
+        const Expr* c = a->coefs[i];
+        if (c->type == EXPR_REAL) continue;
+        if (c->type == EXPR_INTEGER && c->data.integer == 0) continue;
+        return false;
+    }
+    return true;
+}
+
+static bool so_mul_machine(const SeriesObj* aa, const SeriesObj* bb, SeriesObj* r,
+                           int64_t result_nmin, int64_t result_order) {
+    if (r->coef_count == 0 || !so_coefs_machine(aa) || !so_coefs_machine(bb)) return false;
+    size_t m = r->coef_count;
+    double* acc = malloc(m * sizeof(double));
+    bool* set = calloc(m, sizeof(bool));
+    if (!acc || !set) { free(acc); free(set); return false; }
+    for (size_t i = 0; i < aa->coef_count; i++) {
+        if (is_lit_zero(aa->coefs[i])) continue;
+        double ai = aa->coefs[i]->data.real;
+        for (size_t j = 0; j < bb->coef_count; j++) {
+            if (is_lit_zero(bb->coefs[j])) continue;
+            int64_t k = aa->nmin + (int64_t)i + bb->nmin + (int64_t)j;
+            if (k < result_nmin || k >= result_order) continue;
+            size_t idx = (size_t)(k - result_nmin);
+            double prod = ai * bb->coefs[j]->data.real;
+            double sum = set[idx] ? acc[idx] + prod : prod;
+            if (!isfinite(prod) || prod == 0.0 || fabs(prod) < DBL_MIN ||
+                !isfinite(sum) || (sum != 0.0 && fabs(sum) < DBL_MIN)) {
+                free(acc); free(set);
+                return false;
+            }
+            acc[idx] = sum;
+            set[idx] = true;
+        }
+    }
+    for (size_t idx = 0; idx < m; idx++)
+        if (set[idx]) so_set_coef(r, idx, expr_new_real(acc[idx]));
+    free(acc); free(set);
+    return true;
+}
+
 static SeriesObj* so_mul(SeriesObj* a, SeriesObj* b) {
     SeriesObj *aa, *bb;
     so_align_den(a, b, &aa, &bb);
@@ -687,6 +742,10 @@ static SeriesObj* so_mul(SeriesObj* a, SeriesObj* b) {
     int64_t ob = bb->order + aa->nmin;
     int64_t result_order = oa < ob ? oa : ob;
     SeriesObj* r = so_alloc(aa->x, aa->x0, result_nmin, result_order, aa->den);
+    if (so_mul_machine(aa, bb, r, result_nmin, result_order)) {
+        so_free(aa); so_free(bb);
+        return r;
+    }
     /* Rational coefficients: one truncated polynomial multiply (FLINT
      * mullow) replaces the O(n^2) evaluator products and sums below.  The
      * product's coefficient i + j lands at index i + j of r, truncated at

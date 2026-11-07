@@ -619,6 +619,22 @@ size_t fm_progs_mark(void);
 void   fm_progs_register(const Expr* e, CompiledProgram* p, size_t nargs);
 void   fm_progs_release(size_t mark);
 
+/* The MPFR twin of the registry above: arbitrary-precision programs
+ * (autocompile_new_prec at the WorkingPrecision) for the objective and the
+ * components of its symbolic gradient, keyed by node identity. When one is
+ * registered for the expression fm_eval_with_bindings is asked to evaluate at
+ * an MPFR spec, the point is served by the register machine -- no expr_copy,
+ * no n OwnValue installs, no interpreter walk re-numericalizing every exact
+ * constant (Cos[Pi (3 - Sqrt[5])] in a Thomson energy) at every point -- and
+ * falls back to the interpreter for that point when the program declines (a
+ * non-finite value). Never consulted with an EvaluationMonitor, which fires
+ * per interpreter evaluation. Programs are borrowed; the same mark / release
+ * discipline as fm_progs_*. */
+struct AutoCompiled;
+size_t fm_mpfr_progs_mark(void);
+void   fm_mpfr_progs_register(const Expr* e, struct AutoCompiled* ac, size_t nargs);
+void   fm_mpfr_progs_release(size_t mark);
+
 /* ============ cross-file function prototypes ============ */
 
 void fm_warn(const char* fn, const char* tag, const char* fmt, ...);

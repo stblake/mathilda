@@ -166,6 +166,26 @@ void test_ecm_semiprime(void) {
 #endif
 }
 
+/* Plus / Times of BigInts borrow the operands' limbs and move the result
+ * into its node (no copies). The values, the int64 demotion of a result that
+ * fits, signs and mixed Integer/Rational partners must be unchanged. */
+static void test_bigint_arith_borrow_move(void) {
+    assert_eval_eq("a = 3^200; b = -3^200; {a + b, Head[a + b]}", "{0, Integer}", 0);
+    assert_eval_eq("(10^30 + 7) + (-10^30)", "7", 0);
+    assert_eval_eq("Head[(10^30 + 7) + (-10^30)]", "Integer", 0);
+    assert_eval_eq("2^100 + 1 - 2^100", "1", 0);
+    assert_eval_eq("2^64 + 2^64 == 2^65", "True", 0);
+    assert_eval_eq("(2^70) (-3) == -3 2^70", "True", 0);
+    assert_eval_eq("(2^70) (1/2^5) == 2^65", "True", 0);
+    assert_eval_eq("(2^70) (3/4)", "885443715538058477568", 0);
+    assert_eval_eq("(2^70 + 1) (2/3)", "2361183241434822606850/3", 0);
+    /* An exact second-order recurrence through Fold agrees with Nest. */
+    assert_eval_eq("Fold[{#1[[2]], 2 #1[[2]] + #2 #1[[1]]} &, {1, 1}, "
+                   "Table[(-1)^k, {k, 2000}]] === "
+                   "Nest[{#[[2]], 2 #[[2]] + #[[3]] #[[1]], -#[[3]]} &, {1, 1, -1}, 2000][[;; 2]]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -182,6 +202,7 @@ int main(void) {
     TEST(test_power_large_exponent);
     TEST(test_abs_bigint);
     TEST(test_plus_rational_with_bigint_parts);
+    TEST(test_bigint_arith_borrow_move);
     TEST(test_squfof);
     TEST(test_ecm_semiprime);
 
