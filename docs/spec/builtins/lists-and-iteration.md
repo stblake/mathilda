@@ -188,6 +188,23 @@ Generates a list of expressions.
   Nested iterators compile too: the outer variables are folded in as the
   constants they currently hold. Calls to a `CompiledFunction` inside the body
   are inlined rather than dispatched per point.
+- **Exact integer iterators take an exact-rational kernel.** When the iterator
+  is an exact `Integer` range and `expr` is built from integer and `Rational`
+  literals, the iterator, symbols already holding exact numbers (an enclosing
+  iterator, a constant), `Plus`, `Times`, `Power`, `Abs`, `Min`, `Max` and
+  `Factorial` — optionally wrapped in `N[...]` or `N[..., MachinePrecision]` —
+  the body is evaluated per element in overflow-checked `int64` rationals
+  instead of through the evaluator, with an element that overflows `int64`
+  redone in GMP rationals. Calls of a pure function the head names by a pure
+  lookup — a symbol whose value is a `Function`, or `f[k]` matching a literal
+  definition `f[k] = Function[...]` when every definition of `f` is literal —
+  are inlined (`Table[N[ent[1][i, j]], ...]`). Exact arithmetic has one answer,
+  so the result is exactly the interpreter's (the `N` form rounds the exact
+  quotient once, as `N` of a `Rational` does). An element the kernel cannot
+  finish (`1/0`, `0^0`, a radical, a result past the double range under `N`)
+  is evaluated by the interpreter on its own, with its usual value and message.
+  `Table[N[1/((i + j - 1) (i + j - 2)/2 + j)], {i, 500}, {j, 500}]` builds in
+  25 ms (was 450 ms) as a packed rank-2 array.
 - **Large machine-number results pack.** A result at or above the packing
   threshold that is a rectangular block of uniformly exact or uniformly inexact
   machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a

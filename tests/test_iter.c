@@ -276,6 +276,50 @@ void test_while_has_docstring() {
  *  the auto-compiled loops (numloop_do_range) increment overflow-safe.
  * ===================================================================== */
 
+/* Table's exact-rational kernel (an integer iterator, a body of Plus / Times /
+ * Power / Abs / Min / Max / Factorial over integer and Rational literals, and
+ * calls of pure functions found by a literal lookup) must give exactly the
+ * interpreter's answer. Identity[...] puts the same body outside the kernel's
+ * subset, so each pair compares kernel to interpreter: values, element heads,
+ * packing, the GMP tier (int64 overflow: 2^-i 3^-j, i! j!), and the
+ * per-element fallbacks (1/0, 0^0, non-integer powers). */
+void test_table_exact_kernel() {
+    static const char* bodies[] = {
+        "1/((i + j - 1) (i + j - 2)/2 + j)", "2^-i 3^-j", "1/(i! j!)", "1/(i + j - 1)!",
+        "1/((i + j - 1) 2^(i + j))", "Min[i, j]/Max[i, j]", "1/(1 + Abs[i - j])^2",
+        "(i - 3)^(j - 4)", "7^(i j)", "(i - j)/(i + j - 10)", "3/7 i - j/11",
+        "Abs[i - 5/2]", "i^(1/2) + j", "(j - 2)^(i - 3)", "kc i + j/kc",
+        /* inlined pure functions: OwnValue, literal DownValue, slot form,
+         * and a pattern DownValue (not a pure lookup: interpreted) */
+        "kfa[i, j]", "kfb[2][i, j]", "kfb[2][j, kfa[i, 2]]", "kfc[1][i, j]",
+    };
+    char buf[512];
+    assert_eval_eq("kc = 5/3", "5/3", 0);
+    assert_eval_eq("kfa = Function[{a, b}, a/b - 1]; kfb[2] = (#1 - #2)^2 &; "
+                   "kfc[n_] := Function[{a, b}, n a + b]; 0", "0", 0);
+    for (size_t k = 0; k < sizeof(bodies) / sizeof(bodies[0]); k++) {
+        snprintf(buf, sizeof buf,
+                 "Quiet[{Table[%s, {i, 25}, {j, 30}] === Table[Identity[%s], {i, 25}, {j, 30}], "
+                 "Table[N[%s], {i, 25}, {j, 30}] === Table[Identity[N[%s]], {i, 25}, {j, 30}]}]",
+                 bodies[k], bodies[k], bodies[k], bodies[k]);
+        assert_eval_eq(buf, "{True, True}", 0);
+    }
+    assert_eval_eq("Clear[kc, kfa, kfb, kfc]", "Null", 0);
+    /* A machine result is packed, like the interpreter's; an exact one keeps
+     * its Rational elements; a declined element keeps its own value. */
+    assert_eval_eq("Developer`PackedArrayQ[Table[N[1/(i + j)], {i, 30}, {j, 30}]]", "True", 0);
+    assert_eval_eq("Quiet[Table[1/(i - 3), {i, 1, 5}]]", "{-1/2, -1, ComplexInfinity, 1, 1/2}", 0);
+    assert_eval_eq("Quiet[Table[N[1/(i - 3), MachinePrecision], {i, 1, 5}]]",
+                   "{-0.5, -1.0, ComplexInfinity, 1.0, 0.5}", 0);
+    assert_eval_eq("Table[2^i, {i, 62, 64}]",
+                   "{4611686018427387904, 9223372036854775808, 18446744073709551616}", 0);
+    assert_eval_eq("Table[i/2, {i, 10, 1, -3}]", "{5, 7/2, 2, 1/2}", 0);
+    assert_eval_eq("Table[Abs[i], {i, -9223372036854775808, -9223372036854775807}]",
+                   "{9223372036854775808, 9223372036854775807}", 0);
+    /* N at a non-machine precision is not the kernel's: still arbitrary precision */
+    assert_eval_eq("Precision[Table[N[1/i, 30], {i, 3}][[2]]] == 30", "True", 0);
+}
+
 /* Table / Sum / Do terminate correctly when the bounds sit at the very top of
  * the int64 range — the exact case in issue #52. */
 void test_iter_int64_boundary_ascending() {
@@ -516,6 +560,7 @@ int main() {
     TEST(test_scoping_count_iterator);
     TEST(test_scoping_capture_avoid);
     TEST(test_iter_packed_list);
+    TEST(test_table_exact_kernel);
 
     printf("All iter tests passed!\n");
     symtab_clear();
