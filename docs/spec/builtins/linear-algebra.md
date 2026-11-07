@@ -2971,8 +2971,26 @@ Out[8]= {6, 4, 5}
   zero background) is solved by a native kernel (`src/sparse/sparse_la_solve.c`)
   without densifying: up to order 128 by a dense LAPACK LU (bit-identical to
   the dense matrix), above that by UMFPACK, or CHOLMOD first for a Hermitian
-  matrix with a positive diagonal, when SuiteSparse is linked; otherwise by
-  the dense LU within the 2^27-element densify cap and by Krylov beyond it.
+  matrix with a positive diagonal, when SuiteSparse is linked. Without
+  SuiteSparse the sparse direct solver is a **band solver**
+  (`src/sparse/sparse_la_band.c`): the matrix is renumbered by Reverse
+  Cuthill-McKee when its natural band is wide, and factored in LAPACK band
+  storage -- band Cholesky (`?pbtrf`) for a Hermitian matrix with a positive
+  diagonal, the band LU with partial pivoting (`?gbtrf`) otherwise or when the
+  Cholesky finds the matrix indefinite -- whenever the band costs at most an
+  eighth of the dense LU and fits the densify cap. That covers tridiagonal and
+  pentadiagonal systems, 2-D and 3-D finite-difference Laplacians and other
+  banded / block-banded matrices in O(n kl^2) (a 10000 x 10000 pentadiagonal
+  system: 5.4 s by the dense LU -> ms; the 7-point Laplacian on a 20^3 grid
+  4.1 s -> 0.16 s; a tridiagonal 20000 x 20000, previously Krylov, now
+  direct). A matrix whose band does not pay (fill spread over the whole
+  matrix) takes the dense LU within the 2^27-element densify cap, and Krylov
+  beyond it; that Krylov default is **iteratively refined** -- residuals in
+  doubled precision (compensated products and sums), corrections by the same
+  BiCGSTAB/ILU0 -- until the correction reaches rounding level, so it is as
+  accurate as a direct solve (SIAM 100-digit problem 7, 20000 x 20000: 12
+  correct digits -> 16). An explicit `Method -> "Krylov"` keeps its own
+  `Tolerance` and is not refined.
   The answer is a packed List (a SparseArray right-hand side gives a dense
   answer too). As in the reference, and unlike the dense matrix, a **singular**
   machine SparseArray gives `LinearSolve::sing` and stays unevaluated (even for

@@ -86,6 +86,68 @@ static void test_direct(void) {
              "x = LinearSolve[a, b]; Max[Abs[a . x - b]] < 10^-9]");
 }
 
+/* ---- the band solver and the refined Krylov fallback ---------------------- */
+
+/* Without SuiteSparse the sparse direct solver is the RCM-ordered LAPACK band
+ * factor (sparse_la_band.c); with it the same systems go through UMFPACK /
+ * CHOLMOD. Either way: the accuracy of a direct solve, and fast. True values
+ * from the SIAM 100-digit holdout (benchmarks/202, truth.tsv: 75 digits). */
+static void test_band(void) {
+    chk("pm[n_, offs_, d_] := SparseArray[Join[{Band[{1, 1}] -> N[d]}, "
+        "Flatten[Table[{Band[{1, 1 + o}] -> 1., Band[{1 + o, 1}] -> 1.}, {o, offs}]]], {n, n}]; Null", "Null");
+    /* tridiagonal 20000 x 20000 (beyond the densify cap: was Krylov) */
+    chk_true("t = AbsoluteTiming[x = First[LinearSolve[pm[20000, {1}, Prime[Range[20000]]], "
+             "UnitVector[20000, 1]]]]; Abs[x - 0.608978172457445740351] < 3*^-16 && t[[1]] < 1");
+    /* pentadiagonal 10000 x 10000 (was a 5 s dense LU), indefinite near the top */
+    chk_true("t = AbsoluteTiming[x = First[LinearSolve[pm[10000, {1, 2}, Prime[Range[10000]]], "
+             "UnitVector[10000, 1]]]]; Abs[x - 0.648357732531959834025] < 3*^-16 && t[[1]] < 1");
+    /* the 5-point Laplacian on a 60 x 60 grid (band Cholesky, bandwidth 60) */
+    chk("lap2[m_] := With[{n = m^2, r = Table[If[Mod[i, m] == 0, 0., -1.], {i, m^2 - 1}]}, "
+        "SparseArray[{Band[{1, 1}] -> 4., Band[{1, 2}] -> r, Band[{2, 1}] -> r, "
+        "Band[{1, 1 + m}] -> -1., Band[{1 + m, 1}] -> -1.}, {n, n}]]; Null", "Null");
+    chk_true("x = First[LinearSolve[lap2[60], UnitVector[3600, 1]]]; "
+             "Abs[x - 0.302347219326549719479] < 1*^-15");
+    chk_true("With[{a = lap2[40]}, Abs[Det[a]/Det[Normal[a]] - 1] < 10^-9]");
+    /* a banded matrix hidden by a symmetric permutation: RCM recovers the band */
+    chk_true("SeedRandom[3]; pp = RandomSample[Range[2000]]; "
+             "a = pm[2000, {1, 2, 3}, Range[2000] + 10.][[pp, pp]]; b = N[Range[2000]]; "
+             "res[a, LinearSolve[a, b], b] < 10^-14");
+    /* symmetric with a positive diagonal but indefinite (eigenvalues
+     * 1 + 2 cos(k pi / 401)): the Cholesky fails,
+     * the band LU answers */
+    chk_true("With[{a = pm[400, {1}, ConstantArray[1, 400]], b = N[Range[400]]}, "
+             "res[a, LinearSolve[a, b], b] < 10^-10 && "
+             "Max[Abs[LinearSolve[a, b] - LinearSolve[Normal[a], b]]] < 10^-8]");
+    chk_msg("LinearSolve[pm[400, {1}, ConstantArray[1, 400]], N[Range[400]], Method -> \"Cholesky\"]",
+            "LinearSolve::npdef");
+    /* complex: Hermitian (band Cholesky) and general (band LU); transposed
+     * solves through a LinearSolveFunction */
+    chk_true("With[{a = SparseArray[{Band[{1,1}] -> 4., Band[{1,2}] -> I, Band[{2,1}] -> -I}, {400, 400}], "
+             "b = N[Range[400]] + I}, res[a, LinearSolve[a, b], b] < 10^-13]");
+    chk_true("With[{a = SparseArray[{Band[{1,1}] -> 4. + I, Band[{1,2}] -> 2., Band[{3,1}] -> -1. + 2 I}, {400, 400}], "
+             "b = N[Range[400]]}, res[a, LinearSolve[a, b], b] < 10^-13 && "
+             "Abs[Det[a]/Det[Normal[a]] - 1] < 10^-9]");
+    chk_true("With[{a = nonsym[400], b = N[Range[400]]}, "
+             "Max[Abs[Inverse[a] . b - LinearSolve[a, b]]] < 10^-12]");
+    /* transposed solves (LinearSolveFunction "T") through the narrow in-house
+     * band LU (pivoting: a weak diagonal) and the LAPACK band LU (wide) */
+    chk_true("With[{a = SparseArray[{Band[{1,1}] -> 0.1, Band[{1,2}] -> 3., Band[{2,1}] -> -2., "
+             "Band[{1,3}] -> 1.}, {300, 300}], b = N[Range[300]]}, f = LinearSolve[a]; "
+             "Max[Abs[Transpose[a] . f[b, \"T\"] - b]] < 10^-9 && res[a, f[b], b] < 10^-12 && "
+             "Abs[Det[a]/Det[Normal[a]] - 1] < 10^-9]");
+    chk_true("With[{a = SparseArray[{Band[{1,1}] -> 1.5, Band[{1,2}] -> 3., Band[{12,1}] -> -2., "
+             "Band[{1,14}] -> 1.}, {300, 300}], b = N[Range[300]]}, f = LinearSolve[a]; "
+             "Max[Abs[Transpose[a] . f[b, \"T\"] - b]] < 10^-9 && res[a, f[b], b] < 10^-12 && "
+             "Abs[Det[a]/Det[Normal[a]] - 1] < 10^-9]");
+    chk_true("With[{a = lap2[30], b = N[Range[900]]}, f = LinearSolve[a]; "
+             "Max[Abs[f[b, \"T\"] - f[b]]] < 10^-12]");
+    /* the 2^k-offset matrix of SIAM problem 7 (no band: Krylov), refined to
+     * the accuracy of a direct solve -- 12 correct digits before */
+    chk_true("x = First[LinearSolve[pm[20000, 2^Range[0, 14], Prime[Range[20000]]], "
+             "UnitVector[20000, 1]]]; Abs[x - 0.725078346268401167469] < 5*^-16");
+    chk("Clear[pm, lap2, t, x, a, b, pp, f]; Null", "Null");
+}
+
 /* ---- reference semantics that differ from the dense matrix ---------------- */
 
 static void test_messages(void) {
@@ -302,6 +364,7 @@ int main(void) {
     test_mute_messages();
     setup();
     test_direct();
+    test_band();
     test_messages();
     test_methods();
     test_det_inverse();

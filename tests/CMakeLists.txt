@@ -419,6 +419,7 @@ set(COMMON_SRC
     ../src/experimental/feyncalc/diractr.c
     ../src/sparse/sparse_la_core.c
     ../src/sparse/sparse_la_factor.c
+    ../src/sparse/sparse_la_band.c
     ../src/sparse/sparse_la_krylov.c
     ../src/sparse/sparse_la_solve.c
     ../src/sparse/sparse_la_func.c

@@ -415,6 +415,22 @@ void ztrevc_(const char* side, const char* howmny, const int* select, const int*
              const int* ldvr, const int* mm, int* m, double* work, double* rwork,
              int* info, size_t side_len, size_t howmny_len);
 
+/* Banded LU / Cholesky (the SparseArray band solver, src/sparse/sparse_la_band.c).
+ * dgbtrf_ / dgbtrs_ are declared above. */
+void zgbtrf_(const int* m, const int* n, const int* kl, const int* ku,
+             double* ab, const int* ldab, int* ipiv, int* info);
+void zgbtrs_(const char* trans, const int* n, const int* kl, const int* ku,
+             const int* nrhs, const double* ab, const int* ldab,
+             const int* ipiv, double* b, const int* ldb, int* info);
+void dpbtrf_(const char* uplo, const int* n, const int* kd, double* ab,
+             const int* ldab, int* info);
+void zpbtrf_(const char* uplo, const int* n, const int* kd, double* ab,
+             const int* ldab, int* info);
+void dpbtrs_(const char* uplo, const int* n, const int* kd, const int* nrhs,
+             const double* ab, const int* ldab, double* b, const int* ldb, int* info);
+void zpbtrs_(const char* uplo, const int* n, const int* kd, const int* nrhs,
+             const double* ab, const int* ldab, double* b, const int* ldb, int* info);
+
 #endif /* !MATHILDA_USE_ACCELERATE */
 
 #endif /* USE_LAPACK */
@@ -503,6 +519,25 @@ int mat_lapack_dgecon(char norm_kind, int n, const double* A_LU,
                       int lda, double anorm, double* rcond);
 int mat_lapack_zgecon(char norm_kind, int n, const double* A_LU,
                       int lda, double anorm, double* rcond);
+
+/* Banded factorisations in LAPACK band storage (column-major, n columns of
+ * ldab doubles; complex: interleaved, 2*ldab doubles a column).
+ *   gbtrf  LU with partial pivoting, ldab >= 2*kl + ku + 1, A(i,j) at row
+ *          kl + ku + i - j of column j (rows 0..kl-1 hold the fill);
+ *   pbtrf  Cholesky A = L L^H of a Hermitian positive-definite matrix,
+ *          lower band: A(i,j), i >= j, at row i - j of column j (ldab >= kd + 1).
+ * The solves take nrhs columns of b (leading dimension ldb). All return
+ * LAPACK info; the stubs of a build without LAPACK return -1. */
+int mat_lapack_dgbtrf(int n, int kl, int ku, double* ab, int ldab, int* ipiv);
+int mat_lapack_zgbtrf(int n, int kl, int ku, double* ab, int ldab, int* ipiv);
+int mat_lapack_dgbtrs(char trans, int n, int kl, int ku, int nrhs, const double* ab,
+                      int ldab, const int* ipiv, double* b, int ldb);
+int mat_lapack_zgbtrs(char trans, int n, int kl, int ku, int nrhs, const double* ab,
+                      int ldab, const int* ipiv, double* b, int ldb);
+int mat_lapack_dpbtrf(int n, int kd, double* ab, int ldab);
+int mat_lapack_zpbtrf(int n, int kd, double* ab, int ldab);
+int mat_lapack_dpbtrs(int n, int kd, int nrhs, const double* ab, int ldab, double* b, int ldb);
+int mat_lapack_zpbtrs(int n, int kd, int nrhs, const double* ab, int ldab, double* b, int ldb);
 
 /* Divide-and-conquer SVD wrappers.  `jobz` is 'A' (full square U/V^T),
  * 'S' (thin), 'N' (no vectors), or 'O' (overwrite A).  A is destroyed

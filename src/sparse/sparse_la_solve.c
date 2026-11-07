@@ -334,6 +334,49 @@ static bool user_prec_cb(void* c, const double* r, double* z) {
     return ok;
 }
 
+/* ---- the Krylov fallback of Automatic, refined ----------------------------- */
+
+static double vnorm_inf(const double* v, int64_t n, bool cplx) {
+    double m = 0.0;
+    for (int64_t i = 0; i < n; i++) {
+        double a = cplx ? hypot(v[2 * i], v[2 * i + 1]) : fabs(v[i]);
+        if (a > m) m = a;
+    }
+    return m;
+}
+
+/* Iterative refinement of a Krylov solution x of A x = b: the residual in
+ * twice the working precision (spla_residual), the correction by the same
+ * Krylov solver, until the correction is at the rounding level of x or stops
+ * contracting.  The iteration's own stopping test (relative residual 1e-12)
+ * bounds the error only by cond(A) 1e-12; with accurate residuals each pass
+ * gains another ~12 digits, so one or two passes reach the accuracy of a
+ * direct solve (C7 of the SIAM 100-digit problems, 20000 x 20000: 12 digits
+ * -> 16). Used only where Automatic chose Krylov, never when the caller set
+ * Method -> "Krylov" (whose Tolerance is the caller's). */
+static void krylov_refine(const SpMat* A, const double* b, double* x, const KryOpts* o) {
+    int w = A->cplx ? 2 : 1;
+    size_t len = (size_t)w * (size_t)A->n;
+    double* r = malloc(sizeof(double) * len);
+    double* d = malloc(sizeof(double) * len);
+    if (!r || !d) { free(r); free(d); return; }
+    double prev = HUGE_VAL;
+    for (int pass = 0; pass < 4; pass++) {
+        spla_residual(A, b, x, r);
+        memset(d, 0, sizeof(double) * len);
+        int64_t it = 0;
+        KryStatus st = kry_solve(A, r, d, o, &it);
+        if (st != KRY_CONVERGED && st != KRY_MAXIT) break;
+        double dn = vnorm_inf(d, A->n, A->cplx);
+        if (!(dn < 0.5 * prev)) break;            /* not contracting: keep x */
+        for (size_t k = 0; k < len; k++) x[k] += d[k];
+        prev = dn;
+        if (dn <= 2.220446049250313e-16 * vnorm_inf(x, A->n, A->cplx)) break;
+    }
+    free(r);
+    free(d);
+}
+
 /* ---- LinearSolve --------------------------------------------------------- */
 
 Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
@@ -419,8 +462,44 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
     double* X = malloc(sizeof(double) * len * (size_t)(b.nrhs > 0 ? b.nrhs : 1));
     if (!X) { rhs_free(&b); spla_view_free(&A); return NULL; }
     Expr* result = NULL;
+    bool auto_krylov = false;       /* Automatic, no direct factor: refine */
 
-    if (o.sel == MS_KRYLOV) {
+    if (o.sel != MS_KRYLOV) {
+        SpfWant want = o.sel == MS_CHOLESKY ? SPF_WANT_CHOL
+                     : o.sel == MS_MULTIFRONTAL ? SPF_WANT_LU
+                     : (A.n <= SPLA_DENSE_N ? SPF_WANT_DENSE : SPF_WANT_AUTO);
+        SpfStatus st;
+        SpFactor* f = spf_factor(&A, want, &st);
+        if (!f && st == SPF_TOOBIG && o.sel == MS_AUTO) {
+            /* no sparse direct solver in this build and the matrix is too
+             * large to densify: the Krylov default, refined */
+            auto_krylov = true;
+        } else if (!f) {
+            free(X); rhs_free(&b); spla_view_free(&A);
+            if (st == SPF_SINGULAR) {
+                if (Ae->type != EXPR_SPARSE) return NULL;     /* dense: its own semantics */
+                msg_with_expr("LinearSolve", "sing", "Matrix %s is singular.", Ae);
+                return expr_copy((Expr*)call);
+            }
+            if (st == SPF_NOTPD) {
+                msg_with_expr("LinearSolve", "npdef", "The matrix %s is not positive definite.", Ae);
+                return expr_copy((Expr*)call);
+            }
+            return NULL;
+        } else {
+            bool ok = spf_solve(f, b.buf, X, b.nrhs, false);
+            bool badly = spf_badly_conditioned(f);
+            spf_free(f);
+            if (!ok) { free(X); rhs_free(&b); spla_view_free(&A); return NULL; }
+            if (badly)
+                msg_with_expr("LinearSolve", "luc",
+                              "Result for LinearSolve of badly conditioned matrix %s may contain significant numerical errors.",
+                              Ae);
+            result = rhs_result(X, &b, cplx, na_result_presentation(Be));
+        }
+    }
+
+    if (o.sel == MS_KRYLOV || auto_krylov) {
         UserPrecCtx uc = { o.user_prec, A.n, cplx };
         if (o.kry.prec == KPC_USER) { o.kry.user = user_prec_cb; o.kry.user_ctx = &uc; }
         double* x0 = NULL;
@@ -442,6 +521,7 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
             if (it > used) used = it;
             if (st == KRY_MAXIT) any_maxit = true;
             else if (st != KRY_CONVERGED) fail = true;
+            else if (auto_krylov) krylov_refine(&A, b.buf + (size_t)r * len, xr, &o.kry);
         }
         free(x0);
         if (fail) {
@@ -455,45 +535,6 @@ Expr* spla_linearsolve_call(const Expr* call, const Expr* Ae, const Expr* Be,
                         "without convergence to a solution within the required tolerance. The currently "
                         "computed solution has been returned.", (long long)lim);
         }
-        result = rhs_result(X, &b, cplx, na_result_presentation(Be));
-    } else {
-        SpfWant want = o.sel == MS_CHOLESKY ? SPF_WANT_CHOL
-                     : o.sel == MS_MULTIFRONTAL ? SPF_WANT_LU
-                     : (A.n <= SPLA_DENSE_N ? SPF_WANT_DENSE : SPF_WANT_AUTO);
-        SpfStatus st;
-        SpFactor* f = spf_factor(&A, want, &st);
-        if (!f && st == SPF_TOOBIG && o.sel == MS_AUTO) {
-            /* no sparse direct solver in this build and the matrix is too
-             * large to densify: the Krylov default */
-            free(X); rhs_free(&b); spla_view_free(&A);
-            Expr* ka[2] = { expr_new_symbol(SYM_Method), expr_new_string("Krylov") };
-            Expr* kopt = expr_new_function(expr_new_symbol(SYM_Rule), ka, 2);
-            const Expr* kops[1] = { kopt };
-            Expr* r = spla_linearsolve_call(call, Ae, Be, kops, 1);
-            expr_free(kopt);
-            return r;
-        }
-        if (!f) {
-            free(X); rhs_free(&b); spla_view_free(&A);
-            if (st == SPF_SINGULAR) {
-                if (Ae->type != EXPR_SPARSE) return NULL;     /* dense: its own semantics */
-                msg_with_expr("LinearSolve", "sing", "Matrix %s is singular.", Ae);
-                return expr_copy((Expr*)call);
-            }
-            if (st == SPF_NOTPD) {
-                msg_with_expr("LinearSolve", "npdef", "The matrix %s is not positive definite.", Ae);
-                return expr_copy((Expr*)call);
-            }
-            return NULL;
-        }
-        bool ok = spf_solve(f, b.buf, X, b.nrhs, false);
-        bool badly = spf_badly_conditioned(f);
-        spf_free(f);
-        if (!ok) { free(X); rhs_free(&b); spla_view_free(&A); return NULL; }
-        if (badly)
-            msg_with_expr("LinearSolve", "luc",
-                          "Result for LinearSolve of badly conditioned matrix %s may contain significant numerical errors.",
-                          Ae);
         result = rhs_result(X, &b, cplx, na_result_presentation(Be));
     }
     free(X);

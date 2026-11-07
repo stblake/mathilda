@@ -10,8 +10,10 @@
  *              SPV_F64 / SPV_C128 array (and an SPV_INT64 one promoted to
  *              double) with a zero background.
  *   SpFactor   a direct factorisation of a square SpMat: UMFPACK (LU),
- *              CHOLMOD (Cholesky) when SuiteSparse is linked, else a dense
- *              LAPACK LU of the densified matrix. Solves A x = b and
+ *              CHOLMOD (Cholesky) when SuiteSparse is linked, else an
+ *              RCM-ordered LAPACK band Cholesky / LU when the band pays
+ *              (sparse_la_band.c), else a dense LAPACK LU of the
+ *              densified matrix. Solves A x = b and
  *              A^T x = b for many right-hand sides; gives Det.
  *   Krylov     CG / BiCGSTAB / GMRES(m) with None / Jacobi / ILU0 / ILUT /
  *              ILUTP / user-function preconditioning, on SpMV.
@@ -60,6 +62,11 @@ bool spla_from_dense(const Expr* e, SpMat* A);
  * transpose). x and y are length n / m (or m / n) and may not alias. */
 void spla_spmv(const SpMat* A, const double* x, double* y, bool trans);
 
+/* r = b - A x for a square A, each component accumulated in twice the
+ * working precision (compensated products and sums), so the residual of an
+ * accurate x is itself accurate: the step of iterative refinement. */
+void spla_residual(const SpMat* A, const double* b, const double* x, double* r);
+
 /* Structural queries. */
 bool spla_is_square(const SpMat* A);
 /* Symmetric (real) or Hermitian (complex) to the exact bit, and every
@@ -101,12 +108,13 @@ bool spf_det(const SpFactor* f, double* re, double* im);
 double spf_rcond(const SpFactor* f);
 /* Should a solve with this factor warn ::luc? The LAPACK factor uses the
  * reference's dense threshold (reciprocal condition < 10^6 eps, its own
- * gecon estimate); UMFPACK's estimate is only the pivot magnitude ratio, so
- * it warns only below 1e-16 (a matrix singular to working precision). */
+ * gecon estimate); the estimate of UMFPACK and of the band factor is only
+ * the pivot magnitude ratio, so they warn only below 1e-16 (a matrix
+ * singular to working precision). */
 bool spf_badly_conditioned(const SpFactor* f);
 int64_t spf_n(const SpFactor* f);
 bool spf_cplx(const SpFactor* f);
-const char* spf_backend(const SpFactor* f);   /* "UMFPACK", "CHOLMOD", "LAPACK" */
+const char* spf_backend(const SpFactor* f);   /* "UMFPACK", "CHOLMOD", "Band", "LAPACK" */
 void spf_free(SpFactor* f);
 
 /* Which optional libraries this build links: for $Version-style reporting and
