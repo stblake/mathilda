@@ -1,3 +1,24 @@
+# SIAM 100-Digit Challenge benchmark + holdouts + fixes (started 2026-11-07)
+
+Plan: ~/.claude/plans/pasted-content-id-9fcd-similar-to-fluttering-bentley.md
+Register: benchmarks/SIAM100.md. Scorer: benchmarks/siam100_table.py.
+Target: on every case, Mathilda's correct digits >= the best of WL / scipy+mpmath /
+Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tiers.
+
+- [x] Phase 0: harness -- FriCAS column in run_all.py (.input halves, VALUE lines kept),
+      siam100_common.{m,py,mac,input}, siam100_cap.lisp, siam100_table.py
+- [x] C1 (exp 166) encoded in all five systems, reference by two methods
+- [ ] Phase 1-2: encode C2-C10, D1-D20 (exps 167-195) with 55+ digit references
+- [ ] Baseline run of 166-195, status table in SIAM100.md
+- [ ] Phase 3: holdout A, 10 per problem (exps 196-225), run once BEFORE fixes
+- [ ] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b, baselines only
+- [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
+- [ ] Phase 6: final run, holdout B once, verdict
+
+Findings so far:
+- C1 wp50: NIntegrate[Cos[Log[x]/x]/x, {x,0,1}, WorkingPrecision->60] returns -1.186 (WRONG) in 13.4 s;
+  WL gets 9 digits in 0.18 s.
+
 # ISSAC '97 Systems Challenge benchmark + fixes (from 2026-11-06, v0.6225)
 
 Plan: ~/.claude/plans/let-s-review-the-mathematica-hazy-bumblebee.md

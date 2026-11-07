@@ -1,0 +1,14 @@
+/* Experiment 166 -- SIAM 100-Digit Challenge, Problem 1 (Maxima column).
+   The integral as written over (0, 1]: QUADPACK quad_qags at machine
+   precision; bromberg (bigfloat Romberg) at fpprec 60.  See twisted_tail.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["quad_qags", "bromberg"])$
+
+vrun("c1.machine",
+     lambda([], first(quad_qags(cos(log(x)/x)/x, x, 0, 1, 'limit = 1000))), 10)$
+vrun("c1.wp50",
+     lambda([], block([fpprec : 60, rombergtol : 1b-50, rombergit : 30],
+       bromberg(cos(log(x)/x)/x, x, 1b-60, 1))), 48)$
+quit()$

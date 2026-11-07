@@ -1,0 +1,56 @@
+/* ==========================================================================
+   benchmarks/siam100_common.mac -- the Maxima twin of siam100_common.m.
+   ==========================================================================
+
+   Loaded by every SIAM 100-digit .mac half, after the shared harness:
+
+       load("../harness.mac")$  load("../siam100_common.mac")$
+
+   vrun(label, f, d)        f a nullary lambda returning the answer (a float
+                            for the machine rows, a bfloat for the 50-digit
+                            rows); one timed run, capped at CAP seconds.
+   vrun(label, f, d, cap)   explicit cap.
+
+   Emits BENCH / CHECK sig(v, d) / VALUE sig(v, all digits) exactly as the .m
+   and .py halves do; a timeout, a Maxima error or a non-numeric result emits
+   only CHECK timeout / failed / unevaluated.
+   ========================================================================== */
+
+load("../siam100_cap.lisp")$
+CAP : 120$
+
+/* {sign * leading d significant digits, decimal exponent} as a string,
+   computed in bigfloat arithmetic wide enough to hold the value exactly. */
+sig(v, d) := block([fpprec : max(fpprec, d + 30), a, e, m, s],
+  if v = 0 then return("{0, 0}"),
+  s : if v < 0 then -1 else 1,
+  a : bfloat(abs(v)),
+  e : floor(log(a) / log(10b0)),
+  if a >= 10b0^(e + 1) then e : e + 1,
+  if a < 10b0^e then e : e - 1,
+  m : round(a / 10b0^(e - d + 1)),
+  if m >= 10^d then (e : e + 1, m : round(a / 10b0^(e - d + 1))),
+  sconcat("{", s * m, ", ", e, "}"))$
+
+availDigits(v) := if bfloatp(v) then bfdigits(v) else 17$
+
+answerOf(r) :=
+  if r = [] then "failed"
+  else block([v : first(r)],
+    if v = 'timeout then "timeout"
+    else if v = 'failed then "failed"
+    else if floatnump(v) or bfloatp(v) or integerp(v) or ratnump(v) then v
+    else if numberp(float(v)) then float(v)
+    else "unevaluated")$
+
+vrun(label, f, d, [opt]) := block([cap, t0, dt, r, v],
+  cap : if opt = [] then CAP else first(opt),
+  t0 : elapsed_real_time(),
+  r : errcatch(capcall(cap, f)),
+  dt : elapsed_real_time() - t0,
+  v : answerOf(r),
+  if stringp(v) then check(label, v)
+  else (
+    printf(true, "BENCH~a~a~a~,3f~%", TAB, label, TAB, 1000.0 * dt),
+    printf(true, "CHECK~a~a~a~a~%", TAB, label, TAB, sig(v, d)),
+    printf(true, "VALUE~a~a~a~a~%", TAB, label, TAB, sig(v, availDigits(v)))))$

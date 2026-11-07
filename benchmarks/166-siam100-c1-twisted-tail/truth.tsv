@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Problem 1: lim_{eps->0} Int_eps^1 x^-1 cos(x^-1 log x) dx
+# label	true value (65 digits)	need	source
+c1.machine	0.32336743167777876139937008795217044665104662572546966168103644343	10	mpmath quadosc on cos(t e^t) over [0,inf) with zeros W((n-1/2)pi), dps 70 == mpmath nsum(alternating) of Gauss-Legendre pieces between zeros, dps 75 (65 digits agree); book App. B first 25 digits agree
+c1.wp50	0.32336743167777876139937008795217044665104662572546966168103644343	48	same

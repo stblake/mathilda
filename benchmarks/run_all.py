@@ -106,6 +106,19 @@ def find_maxima():
 
 MAXIMA = find_maxima()
 
+
+def find_fricas():
+    """FriCAS, the sixth column -- the second open-source CAS baseline, used by
+    the SIAM 100-digit experiments (166-), which carry a .input half.  FriCAS
+    reads its script from stdin (`fricas -nosman -nox < file.input`)."""
+    env = os.environ.get("BENCH_FRICAS")
+    if env:
+        return env if os.path.exists(env) else None
+    return shutil.which("fricas")
+
+
+FRICAS = find_fricas()
+
 # A case is a finding once it is at least this many times the best other system.
 # 1.5 rather than 1.0 because run-to-run spread on large-working-set cases is
 # documented at +-20% in docs/experiments/README.md; 1.5 sits outside that.
@@ -117,8 +130,9 @@ CHECK_RTOL = 1e-6
 
 SYSTEMS = ("mathilda", "wolfram", "python", "pari")
 SYSTEMS = SYSTEMS + ("maxima",)   # the .mac halves
+SYSTEMS = SYSTEMS + ("fricas",)   # the .input halves
 PRETTY = {"mathilda": "Mathilda", "wolfram": "Mathematica", "python": "Python",
-          "pari": "PARI/GP", "maxima": "Maxima"}
+          "pari": "PARI/GP", "maxima": "Maxima", "fricas": "FriCAS"}
 # Every system Mathilda is compared against, in report-column order.
 BASELINES = tuple(s for s in SYSTEMS if s != "mathilda")
 
@@ -142,7 +156,8 @@ STANDALONE = {"97-special-functions", "98-factorinteger-shootout", "98-rational-
 
 
 def discover(only=None):
-    """Every benchmarks/NN-slug/ folder holding at least one .m, .py, .gp or .mac.
+    """Every benchmarks/NN-slug/ folder holding at least one .m, .py, .gp, .mac
+    or .input.
 
     Excludes STANDALONE studies, which carry an NN- name for shelving order but
     are not harness .m/.py pairs (they run their own sweep and write a PDF)."""
@@ -166,10 +181,12 @@ def discover(only=None):
         pyfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".py")), None)
         gpfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".gp")), None)
         macfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".mac")), None)
-        if not mfile and not pyfile and not gpfile and not macfile:
+        frfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".input")), None)
+        if not mfile and not pyfile and not gpfile and not macfile and not frfile:
             continue
         out.append({"num": num, "slug": slug, "name": name, "dir": d,
                     "m": mfile, "py": pyfile, "gp": gpfile, "mac": macfile,
+                    "input": frfile,
                     "group": group_of(int(num)),
                     "timeout": file_timeout(d, mfile)})
     return out
@@ -226,6 +243,17 @@ def group_of(num):
         # meijerint) are group A by subject; the 1-10 block was full when
         # they were added.
         return "A symbolic (sympy)"
+    if 166 <= num <= 195:
+        # The SIAM 100-Digit Challenge (Bornemann, Laurie, Wagon, Waldvogel):
+        # the ten challenge problems (166-175) and the twenty "More Problems"
+        # of Appendix D (176-195), each at machine precision and at 50 digits,
+        # written idiomatically in every system.  Register: SIAM100.md.
+        return "L SIAM 100-digit challenge"
+    if 196 <= num <= 225:
+        # The SIAM 100-digit holdout A: ten generalised problems per
+        # challenge problem, true answers from two independent methods.
+        # Classify with siam100_table.py; register SIAM100_HOLDOUT_A.md.
+        return "M SIAM 100-digit holdout A"
     if 126 <= num <= 135:
         # The ISSAC '97 Systems Challenge, one experiment per problem, every
         # method of the 1997 solution notebook at machine and arbitrary
@@ -276,7 +304,9 @@ def group_of(num):
 # Running one file, in one system
 # --------------------------------------------------------------------------
 
-LINE_RE = re.compile(r"^(BENCH|CHECK|REQUIRE|SKIP)\t([^\t]*)\t(.*)$")
+# VALUE (every digit a SIAM 100-digit result carries) is kept for
+# siam100_table.py; the weekly report itself never reads it.
+LINE_RE = re.compile(r"^(BENCH|CHECK|REQUIRE|SKIP|VALUE)\t([^\t]*)\t(.*)$")
 
 
 def fmt_dur(s):
@@ -532,6 +562,12 @@ def run_one(system, exp, timeout, tick=None):
         # batchload rather than -b: -b echoes every input line and its (%o)
         # result.  The file ends with quit()$; stdin is closed as for gp.
         cmd = [MAXIMA, "--very-quiet", "-r", 'batchload("%s")$' % exp["mac"]]
+    elif system == "fricas":
+        if not exp.get("input") or not FRICAS:
+            return None
+        # FriCAS takes its script on stdin; the file ends with )quit.
+        cmd = [FRICAS, "-nosman", "-nox"]
+        stdin_file = os.path.join(exp["dir"], exp["input"])
     else:
         if not exp["py"]:
             return None
@@ -552,11 +588,14 @@ def run_one(system, exp, timeout, tick=None):
     import time as _time
 
     timed_out = False
+    stdin_src = subprocess.DEVNULL
+    if system == "fricas":
+        stdin_src = open(stdin_file, "r", encoding="utf-8")
     fo = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
     fe = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
     try:
         proc = subprocess.Popen(cmd, cwd=exp["dir"], stdout=fo, stderr=fe,
-                                stdin=subprocess.DEVNULL, text=True)
+                                stdin=stdin_src, text=True)
     except OSError as e:
         fo.close(); fe.close()
         return {"error": str(e), "bench": {}, "check": {}, "require": {},
@@ -576,11 +615,13 @@ def run_one(system, exp, timeout, tick=None):
             tick()
         _time.sleep(TICK_S)
 
+    if stdin_src is not subprocess.DEVNULL:
+        stdin_src.close()
     fo.seek(0); fe.seek(0)
     out, err = fo.read(), fe.read()
     fo.close(); fe.close()
 
-    res = {"bench": {}, "check": {}, "require": {}, "skip": {},
+    res = {"bench": {}, "check": {}, "require": {}, "skip": {}, "value": {},
            "stderr": err.strip(), "timed_out": timed_out, "rc": rc,
            "error": None}
     for line in out.splitlines():
@@ -595,6 +636,8 @@ def run_one(system, exp, timeout, tick=None):
                 pass
         elif tag == "CHECK":
             res["check"][a] = b
+        elif tag == "VALUE":
+            res["value"][a] = b
         elif tag == "REQUIRE":
             res["require"][a] = b
         elif tag == "SKIP":
@@ -743,6 +786,18 @@ def maxima_version():
         return "error: %s" % e
 
 
+def fricas_version():
+    if not FRICAS:
+        return "absent"
+    try:
+        out = subprocess.run([FRICAS, "-nosman", "-nox"], input=")quit\n",
+                             capture_output=True, text=True, timeout=60).stdout
+        m = re.search(r"Version:\s*(FriCAS[^\n]*)", out)
+        return "%s (%s)" % (m.group(1).strip() if m else "unknown", FRICAS)
+    except Exception as e:
+        return "error: %s" % e
+
+
 def host_block():
     def ver(mod):
         try:
@@ -803,6 +858,7 @@ def host_block():
         "wolframscript": WOLFRAM or "absent",
         "gp": gp_version(),
         "maxima": maxima_version(),
+        "fricas": fricas_version(),
         "runner_python": sys.version.split()[0],
         "local_versions": {m: ver(m) for m in
                            ("numpy", "scipy", "sympy", "mpmath", "numba",
@@ -1034,6 +1090,7 @@ def history_record(rows, requires, host, elapsed):
             "median_vs_python": rel(gr, "python"),
             "median_vs_pari": rel(gr, "pari"),
             "median_vs_maxima": rel(gr, "maxima"),
+            "median_vs_fricas": rel(gr, "fricas"),
         }
 
     commit = "unknown"
@@ -1056,6 +1113,7 @@ def history_record(rows, requires, host, elapsed):
         "median_vs_python": rel(rows, "python"),
         "median_vs_pari": rel(rows, "pari"),
         "median_vs_maxima": rel(rows, "maxima"),
+        "median_vs_fricas": rel(rows, "fricas"),
         "groups": groups,
         "wall_min": round(elapsed / 60.0, 2),
         "missing_optional_deps": host.get("missing_optional_deps", []),
@@ -1544,10 +1602,14 @@ def main():
                     all_requires[h] = state
 
         # Label-set agreement between the .m half and each other half.
-        for other in ("python", "pari", "maxima"):
+        # A CHECK line with no BENCH (a timeout / unevaluated / failed case)
+        # is still an emitted case, so it counts toward the label set.
+        for other in ("python", "pari", "maxima", "fricas"):
             if "mathilda" in runs and other in runs:
-                a = set(runs["mathilda"]["bench"]) | set(runs["mathilda"]["skip"])
-                b = set(runs[other]["bench"]) | set(runs[other]["skip"])
+                a = (set(runs["mathilda"]["bench"]) | set(runs["mathilda"]["skip"])
+                     | set(runs["mathilda"]["check"]))
+                b = (set(runs[other]["bench"]) | set(runs[other]["skip"])
+                     | set(runs[other]["check"]))
                 if a != b:
                     label_problems.append((e["name"] + " (.m vs %s)" % other,
                                            sorted(a - b), sorted(b - a)))

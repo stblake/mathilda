@@ -1,0 +1,65 @@
+-- ==========================================================================
+-- benchmarks/siam100_common.input -- the FriCAS twin of siam100_common.m.
+-- ==========================================================================
+--
+-- Read by every SIAM 100-digit .input half as its first line:
+--
+--     )read ../siam100_common.input )quiet
+--
+-- run_all.py feeds the .input file to `fricas -nosman -nox` on stdin, with cwd
+-- set to the experiment folder.  The prompt is switched off so every tagged
+-- line starts in column 0.
+--
+-- A case is three statements, because FriCAS has no held argument to time:
+--
+--     t0 := nowms(); v := <the computation>; vcaseD("c1.machine", v, nowms() - t0, 10)
+--
+-- The elapsed time is an ARGUMENT, evaluated before the call: FriCAS compiles
+-- a workspace function on its first call, and that ~30 ms must not land in
+-- the first case's timing.  nowms itself is compiled by the warm-up call
+-- at the end of this file.
+--
+-- vcaseD (a DoubleFloat answer: a machine row) and vcaseF (a Float answer,
+-- carrying digits()$Float digits) emit BENCH / CHECK sig(v, d) / VALUE sig(v,
+-- all digits) as the other halves do.  Two names rather than one overloaded
+-- vcase: the interpreter resolves an overload by coercion and silently picks
+-- the Float one for a DoubleFloat argument.  A case FriCAS cannot express with a built-in is
+-- vskip("label", "Head").  FriCAS has no per-case time cap (the file-level
+-- runner timeout applies), so only cases it can finish are written.
+-- ==========================================================================
+)set message prompt none
+)set messages type off
+)set message autoload off
+outputSpacing(0)$Float
+TAB := char(9)::String
+emit(tag:String, lab:String, val:String):Void == (WRITE_-LINE(concat [tag, TAB, lab, TAB, val])$Lisp; void())
+nowms():Float == (GET_-INTERNAL_-REAL_-TIME()$Lisp pretend Integer)::Float * 1000.0 / ((INTERNAL_-TIME_-UNITS_-PER_-SECOND$Lisp) pretend Integer)::Float
+-- {sign * leading d significant digits, decimal exponent}, in exact rational
+-- arithmetic on the value's own binary representation.
+sigQ(q:Fraction Integer, d:Integer):String ==
+  q = 0 => "{0, 0}"
+  s:Integer := (q < 0 => -1; 1)
+  a:Fraction Integer := abs q
+  e:Integer := (length(numer a) - length(denom a)) * 30103 quo 100000
+  while a >= 10^(e+1) repeat e := e + 1
+  while a < 10^e repeat e := e - 1
+  sc:Fraction Integer := (e-d+1 >= 0 => a / 10^(e-d+1); a * 10^(d-1-e))
+  m:Integer := floor(sc + 1/2)
+  if m >= 10^d then
+    e := e + 1
+    sc := (e-d+1 >= 0 => a / 10^(e-d+1); a * 10^(d-1-e))
+    m := floor(sc + 1/2)
+  concat ["{", convert(s*m)@String, ", ", convert(e)@String, "}"]
+sigF(v:Float, d:Integer):String == sigQ(retract(v)@Fraction(Integer), d)
+vcaseD(lab:String, v:DoubleFloat, dt:Float, d:Integer):Void ==
+  emit("BENCH", lab, convert(dt)@String)
+  emit("CHECK", lab, sigF(v::Float, d))
+  emit("VALUE", lab, sigF(v::Float, 17))
+vcaseF(lab:String, v:Float, dt:Float, d:Integer):Void ==
+  emit("BENCH", lab, convert(dt)@String)
+  emit("CHECK", lab, sigF(v, d))
+  emit("VALUE", lab, sigF(v, digits()$Float))
+vskip(lab:String, head:String):Void == emit("SKIP", lab, head)
+vfail(lab:String, why:String):Void == emit("CHECK", lab, why)
+nowms()
+sigQ(1/3, 3)
