@@ -186,6 +186,24 @@ static void test_fast_decay(void) {
                  "0.4580868145806731115172877286282238150718731301039713896853592`65", 1e-55);
 }
 
+/* An integer-only summand (BesselJZero has no value off the integers) used to
+ * go to Wynn's epsilon, which fails on partial sums already constant to the
+ * working precision; a saturated sequence now returns its last partial sum. */
+static void test_saturated_sequence(void) {
+    ASSERT_CLOSE("1 - NSum[2/(BesselJZero[0, n] BesselJ[1, BesselJZero[0, n]]) Exp[-BesselJZero[0, n]^2 0.15], "
+                 "{n, 1, Infinity}]",
+                 "0.338165656302720936129493448598455049118926235927033732789354", 1e-13);
+    ASSERT_CLOSE("1 - NSum[2/(BesselJZero[0, n] BesselJ[1, BesselJZero[0, n]]) Exp[-BesselJZero[0, n]^2 15/100], "
+                 "{n, 1, Infinity}, WorkingPrecision -> 40]",
+                 "0.338165656302720936129493448598455049118926235927033732789354`60", 1e-38);
+    ASSERT_CLOSE("NSum[Exp[-k^2], {k, 0, Infinity}, Method -> \"WynnEpsilon\"]",
+                 "1.386318602413326076515625275578929240671693022686123026915795", 1e-14);
+    ASSERT_CLOSE("NSum[Exp[-k^2], {k, 0, Infinity}, Method -> \"WynnEpsilon\", WorkingPrecision -> 30]",
+                 "1.386318602413326076515625275578929240671693022686123026915795`60", 1e-28);
+    ASSERT_CLOSE("NSum[Exp[-k^2], {k, 0, Infinity}, Method -> \"Levin\"]",
+                 "1.386318602413326076515625275578929240671693022686123026915795", 1e-14);
+}
+
 static void test_verify_convergence(void) {
     /* divergent: default verification returns ComplexInfinity */
     char* s = eval_str("NSum[2^i,{i,0,Infinity}]");
@@ -488,6 +506,7 @@ int main(void) {
     TEST(test_large_finite);
     TEST(test_multidim);
     TEST(test_fast_decay);
+    TEST(test_saturated_sequence);
     TEST(test_verify_convergence);
     TEST(test_peaked_summand);
     TEST(test_composite_precision);

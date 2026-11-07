@@ -24,6 +24,8 @@
 #include "../modular.h"
 
 #include <complex.h>
+#include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -595,6 +597,55 @@ static int ns_seq_len(const NsOpts* o) {
  *  Method: WynnEpsilon (partial-sum extrapolation)                    *
  * ------------------------------------------------------------------ */
 
+/* Has the partial-sum sequence already converged?  A summand that decays
+ * super-geometrically (Exp[-k^2], an eigen-series Exp[-BesselJZero[0, n]^2 t])
+ * leaves partial sums that are constant to the working precision well before
+ * the sequence ends.  Every difference in the epsilon / Levin tables is then
+ * zero, the transforms have nothing to divide by and report failure -- for a
+ * sum that is in fact known exactly.  When the last NS_SAT_RUN differences are
+ * all below the target's resolution the last partial sum IS the answer, and
+ * the largest of those differences its error.  Consulted only after the
+ * transform has failed, so a sequence it could extrapolate is not affected. */
+#define NS_SAT_RUN 3
+static bool ns_seq_saturated_d(const double _Complex* P, int L, double* step) {
+    if (L < NS_SAT_RUN + 1) return false;
+    double scale = cabs(P[L - 1]), worst = 0.0;
+    for (int j = L - NS_SAT_RUN; j < L; j++) {
+        double d = cabs(P[j] - P[j - 1]);
+        if (d > worst) worst = d;
+    }
+    if (!(worst <= 4.0 * DBL_EPSILON * scale)) return false;
+    *step = worst;
+    return true;
+}
+
+#ifdef USE_MPFR
+static bool ns_seq_saturated_mpfr(mpfr_t* Pr, mpfr_t* Pi, int L, const NsOpts* o,
+                                  double* step) {
+    if (L < NS_SAT_RUN + 1) return false;
+    long tb = numeric_width_precision_bits(o->target_bits > 0 ? o->target_bits : o->bits);
+    mpfr_t d;
+    mpfr_init2(d, mpfr_get_prec(Pr[0]));
+    double worst = 0.0;
+    bool ok = true;
+    long es = mpfr_zero_p(Pr[L - 1]) ? LONG_MIN : (long)mpfr_get_exp(Pr[L - 1]);
+    if (!mpfr_zero_p(Pi[L - 1]) && (long)mpfr_get_exp(Pi[L - 1]) > es)
+        es = (long)mpfr_get_exp(Pi[L - 1]);
+    for (int j = L - NS_SAT_RUN; j < L && ok; j++) {
+        for (int part = 0; part < 2 && ok; part++) {
+            mpfr_ptr a = part ? Pi[j] : Pr[j];
+            mpfr_ptr b = part ? Pi[j - 1] : Pr[j - 1];
+            mpfr_sub(d, a, b, MPFR_RNDN);
+            if (mpfr_zero_p(d)) continue;
+            if (es == LONG_MIN || (long)mpfr_get_exp(d) > es - (tb + 8)) ok = false;
+            else { double v = fabs(mpfr_get_d(d, MPFR_RNDN)); if (v > worst) worst = v; }
+        }
+    }
+    mpfr_clear(d);
+    if (ok) *step = worst;
+    return ok;
+}
+#endif
 
 /* Machine path. count<0 means infinite; otherwise terms beyond `count` are 0.
  * With err_out non-NULL the extrapolation's own error estimate is stored there
@@ -631,6 +682,10 @@ static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o, double* err_
 
     double _Complex result; double step = 0.0;
     bool got = seqaccel_wynn_machine(P, L, o->wynn, &result, &step);
+    if ((!got || !ns_accept(cabs(result), step, maxsample))
+        && ns_seq_saturated_d(P, L, &step)) {
+        result = P[L - 1]; got = true;
+    }
     free(P);
     if (!got) { ns_warn("ndterm", "not enough terms for WynnEpsilon"); return NULL; }
     if (!ns_accept(cabs(result), step, maxsample)) {
@@ -686,6 +741,11 @@ static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o, double* err_out
         mpfr_t rr, ri; mpfr_init2(rr, p); mpfr_init2(ri, p);
         double step = 0.0; bool finite = false;
         bool got = seqaccel_wynn_mpfr(Pr, Pi, L, o->wynn, bits, rr, ri, &step, &finite);
+        if (!(got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample))
+            && ns_seq_saturated_mpfr(Pr, Pi, L, o, &step)) {
+            mpfr_set(rr, Pr[L - 1], MPFR_RNDN); mpfr_set(ri, Pi[L - 1], MPFR_RNDN);
+            got = finite = true;
+        }
         if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample)) {
             if (err_out) *err_out = step;
             else if (ns_goal_active(o)) {
@@ -744,6 +804,10 @@ static Expr* ns_levin_machine(NsCtx* c, long count, const NsOpts* o) {
 
     double _Complex result; double step = 0.0;
     bool got = seqaccel_levin_machine(P, L, o->levin_variant, 1.0, &result, &step);
+    if ((!got || !ns_accept(cabs(result), step, maxsample))
+        && ns_seq_saturated_d(P, L, &step)) {
+        result = P[L - 1]; got = true;
+    }
     free(P);
     if (!got) { ns_warn("ndterm", "not enough terms for Levin"); return NULL; }
     if (!ns_accept(cabs(result), step, maxsample)) {
@@ -798,6 +862,11 @@ static Expr* ns_levin_mpfr(NsCtx* c, long count, const NsOpts* o) {
         mpfr_t rr, ri; mpfr_init2(rr, p); mpfr_init2(ri, p);
         double step = 0.0; bool finite = false;
         bool got = seqaccel_levin_mpfr(Pr, Pi, L, o->levin_variant, 1.0, bits, rr, ri, &step, &finite);
+        if (!(got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample))
+            && ns_seq_saturated_mpfr(Pr, Pi, L, o, &step)) {
+            mpfr_set(rr, Pr[L - 1], MPFR_RNDN); mpfr_set(ri, Pi[L - 1], MPFR_RNDN);
+            got = finite = true;
+        }
         if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample)) {
             if (ns_goal_active(o)) {
                 double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_l1_d(rr, ri), ns_wp_digits(o));

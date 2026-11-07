@@ -593,6 +593,13 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
 - **`WynnEpsilon`** (alias `SequenceLimit`) -- Wynn's epsilon algorithm applied
   to the partial sums (shared with `NLimit` via `seqaccel.{c,h}`).  General
   fallback; excellent for alternating / geometric tails, weak on monotone ones.
+  A **saturated** sequence -- partial sums already constant to the target
+  precision, as a super-geometric summand leaves them (`Exp[-k^2]`, an
+  integer-only `Exp[-BesselJZero[0, n]^2 t]` eigen-series) -- has nothing for
+  the epsilon (or Levin) table to divide by and made the transform report
+  `NSum::ncvg` for a sum known exactly.  When the transform fails and the last
+  three differences are below the target's resolution, the last partial sum is
+  returned, with the largest of those differences as its error.
 - **`"Levin"`** (`"LevinU"` / `"LevinT"` / `"LevinV"`) -- Levin's nonlinear
   transformation of the partial sums (shared kernel in `seqaccel.{c,h}`), with
   remainder estimates `ω_k` built from the terms `a_k`: u uses `(β+k) a_k`
