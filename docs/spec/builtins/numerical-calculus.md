@@ -2140,7 +2140,11 @@ Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
 | "COBYLA" | "COBYQA" | "NewtonCG" | "Dogleg" | "TrustNCG" | "TrustExact"
 | "TrustKrylov"`.  Brent
 is golden-section search with parabolic interpolation (derivative-free),
-QuasiNewton is BFGS with Armijo backtracking line search, ConjugateGradient
+QuasiNewton is BFGS with Armijo backtracking line search (the sufficient
+decrease `f(x + a d) <= f(x) + 1e-4 a g.d`; only a step the box projection
+actually clipped, no longer along `d`, falls back to a plain decrease of
+`1e-12 |f|` -- applied to every step, as it once was, it ended an unbounded run
+with `FindMinimum::lstol` 12 digits into the minimum value), ConjugateGradient
 is Polak-Ribière+ with a strong-Wolfe line search (`c2 = 0.1`, seeded by the
 Nocedal-Wright initial step) and Powell's orthogonality restart (the
 penalty-wrapped and box-bounded solves keep the projected Armijo search), Newton uses the symbolic Hessian (via

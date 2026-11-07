@@ -646,6 +646,22 @@ static void test_small_scale_objective_with_equality(void) {
                "Abs[First[r] - 10^-3 Total[w/xs]] < 10^-11]");
 }
 
+/* The minimum VALUE to machine precision.  The Armijo line search took the
+ * plain "decrease by 1e-12 |f|" test of a box-clipped step for every step
+ * (the driver allocates an all-unbounded box array for every problem), so a
+ * BFGS run stopped with FindMinimum::lstol once the remaining decrease was
+ * below 1e-12 |f| -- 12 of 15 digits of a minimum value (point energies).
+ * Closed forms: a regular heptagon's Coulomb energy
+ * Sum 1/(2 Sin[Pi (k - j)/7]); 5 at {1, -1/2}.  Check[] also proves silence. */
+static void test_minimum_value_full_precision(void) {
+    check_true("Abs[Check[First[FindMinimum[Sum[1/Sqrt[(Cos[a[j]] - Cos[a[k]])^2 + "
+               "(Sin[a[j]] - Sin[a[k]])^2], {j, 0, 5}, {k, j + 1, 6}] /. a[0] -> 0, "
+               "Table[{a[k], 0.9 k}, {k, 6}]]], 0]/Sum[1/(2 Sin[Pi (k - j)/7]), "
+               "{j, 0, 5}, {k, j + 1, 6}] - 1] < 10^-14");
+    check_true("Abs[Check[First[FindMinimum[3 + Cosh[x - 1] + Cosh[2 y + 1] + "
+               "(x - 1)^2 (y + 1/2)^2, {{x, 4}, {y, -3}}]], 0] - 5] < 10^-14");
+}
+
 /* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
@@ -656,6 +672,7 @@ int main(void) {
 
     TEST(test_mpfr_argmin_full_precision);
     TEST(test_small_scale_objective_with_equality);
+    TEST(test_minimum_value_full_precision);
 
     /* 1. Golden 1D */
     TEST(test_min_parabola);

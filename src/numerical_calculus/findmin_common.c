@@ -1971,18 +1971,29 @@ bool fm_line_search(Expr* f, FmVarBind* binds, size_t n,
     double alpha = (dnorm > 1.0) ? 1.0 / dnorm : 1.0;
     for (int k = 0; k < 30; k++) {
         for (size_t i = 0; i < n; i++) x_out[i] = x[i] + alpha * d[i];
-        if (boxes) fm_project_box(x_out, n, boxes);
+        /* Did the projection move the trial point?  The driver allocates a
+         * box array for every problem (all-unbounded entries for a plain
+         * FindMinimum), so a non-NULL `boxes` says nothing by itself. */
+        bool clipped = false;
+        if (boxes) {
+            for (size_t i = 0; i < n; i++) {
+                double xi = x_out[i];
+                if (boxes[i].has_lo && xi < boxes[i].lo) { xi = boxes[i].lo; clipped = true; }
+                if (boxes[i].has_hi && xi > boxes[i].hi) { xi = boxes[i].hi; clipped = true; }
+                x_out[i] = xi;
+            }
+        }
         double fnew;
         bool ok = (mu > 0.0 && gens)
             ? fm_eval_augmented(f, binds, x_out, n, gens, ngens, mu, opts, &fnew)
             : fm_eval_scalar(f, binds, x_out, n, opts, &fnew);
         if (!ok) { alpha *= 0.5; continue; }
-        /* When projection is in effect the Armijo bound uses g . (x_proj - x). */
-        if (boxes) {
-            double gd = 0.0;
-            for (size_t i = 0; i < n; i++) gd += d[i] * (x_out[i] - x[i]);
-            /* gd is along the projected step; reuse Armijo with g_dot_d scaled */
-            (void)gd; /* Simple acceptance: just need f decrease */
+        if (clipped) {
+            /* A clipped step is no longer along d, so the Armijo bound in
+             * g . d does not apply: accept a plain relative decrease.  Only
+             * here -- applied to every step it stopped an unbounded BFGS run
+             * once f could no longer drop by 1e-12 |f| (12 of 15 digits of a
+             * minimum value, whose Armijo test the step met 5000-fold). */
             if (fnew <= f0 - 1e-12 * fabs(f0) - 1e-300) {
                 *alpha_out = alpha; *f_out = fnew; return true;
             }
