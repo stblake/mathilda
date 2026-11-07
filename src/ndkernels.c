@@ -33,6 +33,7 @@
 #include "logintegral.h"
 #include "elliptic.h"
 #include "symtab.h"
+#include "mth_machine_log.h"                /* the one machine Log (scalar/ND/VM) */
 #include "piecewise.h"                         /* Unitize machine helpers */
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_gamma.h"
@@ -137,7 +138,7 @@ UK_CLOSED(Csch, 1.0 / sinh(x), 1.0 / csinh(z));
 
 /* ---- exp / log ---------------------------------------------------------- */
 UK_CLOSED(Exp, exp(x), cexp(z));
-UK_ESC(Log, clog(z));
+UK_ESC(Log, mth_log_machine_z(z));   /* positive real -> libm log, as the VM */
 
 /* Log10 / Log2: escaping like Log (a negative real lands off the real axis),
  * but a positive real goes through libm's log10 / log2 rather than
@@ -383,14 +384,15 @@ static const NDUnaryKernel NDKU_Ramp = { NULL, ndk_Ramp_r, true, false, NULL, NU
 
 /* ---- binary (scalar-index) ---------------------------------------------- */
 
-/* Log[b, z] = clog(z)/clog(b). Kernel receives (a0, a1) = (base, arg). May
+/* Log[b, z] = Log(z)/Log(b) through mth_log_machine_z, so a positive real
+ * pair is log(z)/log(b) -- what builtin_log and Compile[] compute. Kernel receives (a0, a1) = (base, arg). May
  * escape to complex, so real_closed = false (the engine narrows real results). */
 static bool ndk_LogB_c(double bre, double bim, double zre, double zim,
                        double* rr, double* ri) {
     double complex b = bre + bim * I, z = zre + zim * I;
-    double complex lb = clog(b);
+    double complex lb = mth_log_machine_z(b);
     if (lb == 0.0) return false;
-    double complex w = clog(z) / lb;
+    double complex w = mth_log_machine_z(z) / lb;
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }

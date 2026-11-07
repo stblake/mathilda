@@ -13,6 +13,7 @@
 #include "numeric_complex.h"
 #include "sym_names.h"
 #include "common.h"
+#include "mth_machine_log.h"
 
 /*
  * logexp_init:
@@ -377,7 +378,10 @@ Expr* builtin_log(Expr* res) {
         double complex c;
         bool inexact = false;
     if (get_approx(z, &c, &inexact) && inexact) {
-            double complex s = clog(c);
+            /* The shared machine helper: a positive real takes libm log,
+             * exactly as the ND kernel and the Compile[] VM do (glibc's
+             * clog(x + 0 I) rounds differently from log(x)). */
+            double complex s = mth_log_machine_z(c);
             // Return real result if output is purely real, otherwise return complex
             Expr* ret = NULL;
             if (cimag(c) == 0.0 && creal(c) > 0.0) ret = expr_new_real(creal(s));

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /* Capture stderr while `input` is parsed + evaluated. Returns the
  * collected stderr text as a heap string (caller frees) and writes the
@@ -307,6 +308,97 @@ static void test_e_power_mpfr_is_exp(void) {
                    "True", 0);
 }
 
+/* ---- machine Log: one helper on every surface --------------------------- *
+ * The scalar builtin, the packed and visible-NDArray kernels and the Compile[]
+ * VM must return the bit pattern of the C library's log(x) for a positive
+ * machine real x -- the VM's OP_LOG_R / OP_VLOG_R call libm log directly, so
+ * that is the reference by construction. Before src/mth_machine_log.h the
+ * scalar builtin and the ND kernel took creal(clog(x + 0 I)), which glibc
+ * computes as log1p((x-1)(x+1))/2 for 1 < x < 2: one ulp off log(x) for e.g.
+ * x = 1 + 0.04^2, so Outer[og, ...] (compiled) !== Table[og[u, v], ...]
+ * (interpreted) on Linux only. The inputs cluster in (1, 2), where glibc's
+ * clog takes that path, and also cover (0, 1), x = 1 and large x. */
+#define LOGSURF_N 400
+static double logsurf_x[LOGSURF_N];
+
+static void logsurf_inputs(void) {
+    int k = 0;
+    for (int i = 1; i <= 24; i++) { double t = i / 25.0; logsurf_x[k++] = 1.0 + t * t; }
+    for (int i = 1; i <= 200; i++) logsurf_x[k++] = 1.0 + i / 201.0;           /* (1, 2)  */
+    for (int i = 1; i <= 40; i++)  logsurf_x[k++] = 1.0 + ldexp(1.0, -i);      /* near 1+ */
+    for (int i = 1; i <= 40; i++)  logsurf_x[k++] = 1.0 - ldexp(1.0, -i - 1);  /* near 1- */
+    for (int i = 1; i <= 60; i++)  logsurf_x[k++] = i / 61.0;                  /* (0, 1)  */
+    logsurf_x[k++] = 1.0;
+    while (k < LOGSURF_N) { logsurf_x[k] = 3.0 * (double)k * k; k++; }          /* large   */
+}
+
+static Expr* logsurf_list(void) {
+    Expr** a = malloc(sizeof(Expr*) * LOGSURF_N);
+    for (int i = 0; i < LOGSURF_N; i++) a[i] = expr_new_real(logsurf_x[i]);
+    Expr* l = expr_new_function(expr_new_symbol("List"), a, LOGSURF_N);
+    free(a);
+    return l;
+}
+
+static int same_bits(double a, double b) { return memcmp(&a, &b, sizeof a) == 0; }
+
+/* Evaluate `src` (which reads the inputs from the symbol lsx) and require a
+ * List of LOGSURF_N machine reals, element i bit-identical to libm's log(x_i)
+ * (divided by log(base) when base > 0). */
+static void logsurf_check(const char* src, double base) {
+    Expr* p = parse_expression(src);
+    Expr* e = evaluate(p);
+    expr_free(p);
+    ASSERT_MSG(e->type == EXPR_FUNCTION && e->data.function.arg_count == LOGSURF_N,
+               "%s: not a list of %d", src, LOGSURF_N);
+    for (int i = 0; i < LOGSURF_N; i++) {
+        Expr* r = e->data.function.args[i];
+        double want = base > 0 ? log(logsurf_x[i]) / log(base) : log(logsurf_x[i]);
+        ASSERT_MSG(r->type == EXPR_REAL && same_bits(r->data.real, want),
+                   "%s: element %d (x = %.17g) is %.17g, libm log gives %.17g",
+                   src, i + 1, logsurf_x[i], r->type == EXPR_REAL ? r->data.real : NAN, want);
+    }
+    expr_free(e);
+}
+
+static void test_log_machine_surfaces_bitexact(void) {
+    logsurf_inputs();
+    /* scalar builtin, one call per element (no Table / Map auto-compile) */
+    for (int i = 0; i < LOGSURF_N; i++) {
+        double x = logsurf_x[i];
+        Expr* a[1] = { expr_new_real(x) };
+        Expr* call = expr_new_function(expr_new_symbol("Log"), a, 1);
+        Expr* r = evaluate(call);
+        ASSERT_MSG(r->type == EXPR_REAL && same_bits(r->data.real, log(x)),
+                   "Log[%.17g] = %.17g, libm log gives %.17g", x,
+                   r->type == EXPR_REAL ? r->data.real : NAN, log(x));
+        expr_free(call); expr_free(r);
+        /* two-argument form: log(z)/log(b) */
+        Expr* b[2] = { expr_new_real(2.5), expr_new_real(x) };
+        call = expr_new_function(expr_new_symbol("Log"), b, 2);
+        r = evaluate(call);
+        ASSERT_MSG(r->type == EXPR_REAL && same_bits(r->data.real, log(x) / log(2.5)),
+                   "Log[2.5, %.17g] differs from log/log", x);
+        expr_free(call); expr_free(r);
+    }
+    /* bind lsx to the inputs */
+    Expr* sa[2] = { expr_new_symbol("lsx"), logsurf_list() };
+    Expr* set = expr_new_function(expr_new_symbol("Set"), sa, 2);
+    expr_free(evaluate(set));
+    expr_free(set);
+    logsurf_check("Developer`FromPackedArray[Log[Developer`ToPackedArray[lsx]]]", 0);
+    logsurf_check("Normal[Log[NDArray[lsx]]]", 0);
+    logsurf_check("Developer`FromPackedArray[Compile[{{v, _Real, 1}}, Log[v]][lsx]]", 0);
+    logsurf_check("Developer`FromPackedArray[Map[Compile[{{x, _Real}}, Log[x]], lsx]]", 0);
+    logsurf_check("Developer`FromPackedArray[Map[Compile[{{z, _Complex}}, Re[Log[z]]], lsx + 0. I]]", 0);
+    logsurf_check("Normal[Log[2.5, NDArray[lsx]]]", 2.5);
+    logsurf_check("Developer`FromPackedArray[Log[2.5, Developer`ToPackedArray[lsx]]]", 2.5);
+    /* the cell of tests/test_mp_linalg.c's Outer check, end to end */
+    assert_eval_eq("og[x_, y_] := Sin[x] y - Log[1 + x^2]/(2 + y); "
+                   "op = N[Range[24]/25]; oq = N[Range[17]/7 - 1]; "
+                   "Outer[og, op, oq] === Table[og[u, v], {u, op}, {v, oq}]", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -317,6 +409,7 @@ int main() {
     TEST(test_log10_log2);
     TEST(test_log_base_exact_rational);
     TEST(test_e_power_mpfr_is_exp);
+    TEST(test_log_machine_surfaces_bitexact);
     printf("All logexp tests passed!\n");
 
     return 0;

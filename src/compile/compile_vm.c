@@ -30,6 +30,7 @@
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
 #endif
+#include "../mth_machine_log.h"    /* mth_log_machine_z: the one machine Log */
 #include <math.h>
 #include <complex.h>
 #include <string.h>
@@ -1153,7 +1154,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(EXP_R): RD.r = exp(RA.r); NEXT();
             OP(EXP_C): RD.z = cexp(RA.z); NEXT();
             OP(LOG_R): RD.r = log(RA.r); NEXT();
-            OP(LOG_C): RD.z = clog(RA.z); NEXT();
+            OP(LOG_C): RD.z = mth_log_machine_z(RA.z); NEXT();
             OP(SIN_R): RD.r = sin(RA.r); NEXT();   OP(SIN_C): RD.z = csin(RA.z); NEXT();
             OP(COS_R): RD.r = cos(RA.r); NEXT();   OP(COS_C): RD.z = ccos(RA.z); NEXT();
             OP(TAN_R): RD.r = tan(RA.r); NEXT();   OP(TAN_C): RD.z = ctan(RA.z); NEXT();
@@ -1808,7 +1809,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             VBIN(VATAN2_R, R, double, atan2(b_[k_], a_[k_]));
             VUN(VSQRT_R, R, double, sqrt(a_[k_]));   VUN(VSQRT_C, C, double _Complex, csqrt(a_[k_]));
             VUN(VEXP_R, R, double, exp(a_[k_]));    VUN(VEXP_C, C, double _Complex, cexp(a_[k_]));
-            VUN(VLOG_R, R, double, log(a_[k_]));    VUN(VLOG_C, C, double _Complex, clog(a_[k_]));
+            VUN(VLOG_R, R, double, log(a_[k_]));    VUN(VLOG_C, C, double _Complex, mth_log_machine_z(a_[k_]));
             VUN(VSIN_R, R, double, sin(a_[k_]));    VUN(VSIN_C, C, double _Complex, csin(a_[k_]));
             VUN(VCOS_R, R, double, cos(a_[k_]));    VUN(VCOS_C, C, double _Complex, ccos(a_[k_]));
             VUN(VTAN_R, R, double, tan(a_[k_]));    VUN(VTAN_C, C, double _Complex, ctan(a_[k_]));

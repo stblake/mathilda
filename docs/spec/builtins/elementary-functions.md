@@ -81,6 +81,18 @@ Out[4]= 1/4*Pi
   reference (`Log[10, 0.0081967...] = -2.086359830674748`; v0.6136).
   Otherwise `Log[z]/Log[b]`.
 
+**One machine logarithm on every surface.** At machine precision the scalar
+builtin, the packed / visible-`NDArray` kernels (`Log[z]` and `Log[b, z]`) and
+the `Compile[]` VM (real and complex opcodes, scalar and rank-1) all call
+`mth_log_machine_z` (`src/mth_machine_log.h`): a positive real takes libm
+`log(x)`, anything else `clog(z)`. C99 does not require `creal(clog(x + 0 I))`
+to equal `log(x)`, and glibc's does not (for `1 < x < 2` it rounds
+`log1p((x-1)(x+1))/2`), so before this the interpreter and the ND kernel were
+one ulp off the compiled code on Linux, e.g. at `Log[1.0016]`. The answers now
+agree bit for bit by construction on any libm; `tests/test_logexp.c`
+(`test_log_machine_surfaces_bitexact`) compares every surface against the C
+library's `log` over 400 inputs.
+
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
 inexact zero (ambiguous direction in floating point), matching the reference:
 
