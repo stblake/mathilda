@@ -4537,6 +4537,17 @@ void info_init(void) {
     symtab_set_docstring("DirectoryQ",
         "DirectoryQ[\"name\"]\n"
         "\tgives True if the directory name exists (\"~\" and File[\"name\"] accepted), and False otherwise.");
+    symtab_set_docstring("$BaseDirectory",
+        "$BaseDirectory\n"
+        "\tgives the base directory in which system-wide files to be loaded by Mathilda are\n"
+        "\tconventionally placed (configuration files, packages, kernel init files), as a string:\n"
+        "\t/Library/Mathilda on macOS, /usr/share/Mathilda on Unix, %PROGRAMDATA%\\Mathilda on\n"
+        "\tWindows. The MATHILDA_BASE environment variable overrides it.");
+    symtab_set_docstring("$UserBaseDirectory",
+        "$UserBaseDirectory\n"
+        "\tgives the base directory in which user-specific files to be loaded by Mathilda are\n"
+        "\tconventionally placed, as a string: ~/Library/Mathilda on macOS, ~/.Mathilda on Unix,\n"
+        "\t%APPDATA%\\Mathilda on Windows. The MATHILDA_USERBASE environment variable overrides it.");
     symtab_set_docstring("$TemporaryDirectory",
         "$TemporaryDirectory\n"
         "\tgives the directory for temporary files, from TMPDIR (or TEMP / TMP), else /tmp.");

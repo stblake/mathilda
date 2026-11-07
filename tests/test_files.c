@@ -1188,6 +1188,24 @@ static void test_temporary_directory(void) {
                    "{FileExistsQ[tdp], DeleteFile[tdp], FileExistsQ[tdp]}", "{True, Null, False}", 0);
 }
 
+/* $BaseDirectory / $UserBaseDirectory: Protected System` strings with no
+ * trailing separator; the user base lives under $HomeDirectory (unless
+ * MATHILDA_USERBASE overrides it). */
+static void test_base_directories(void) {
+    assert_eval_eq("{Attributes[$BaseDirectory], Attributes[$UserBaseDirectory], "
+                   "Context[$BaseDirectory], Context[$UserBaseDirectory]}",
+                   "{{Protected}, {Protected}, \"System`\", \"System`\"}", 0);
+    assert_eval_eq("StringQ[$BaseDirectory] && StringQ[$UserBaseDirectory]", "True", 0);
+    assert_eval_eq("StringEndsQ[$BaseDirectory, \"Mathilda\"]", "True", 0);
+    if (!getenv("MATHILDA_USERBASE"))
+        assert_eval_eq("StringStartsQ[$UserBaseDirectory, $HomeDirectory] && "
+                       "StringEndsQ[$UserBaseDirectory, \"Mathilda\"]", "True", 0);
+#if defined(__APPLE__)
+    if (!getenv("MATHILDA_BASE"))
+        assert_eval_eq("$BaseDirectory", "\"/Library/Mathilda\"", 0);
+#endif
+}
+
 /* DirectoryQ: True only for an existing directory; String or File[...],
  * `~` expanded; any other argument (a list included) is False; a wrong
  * argument count is DirectoryQ::argx and unevaluated.  FileType and
@@ -1325,6 +1343,7 @@ int main(void) {
     TEST(test_filenamesplit_protected);
     TEST(test_filenamesplit_options);
     TEST(test_temporary_directory);
+    TEST(test_base_directories);
     TEST(test_directoryq);
 
     printf("All tests passed!\n");

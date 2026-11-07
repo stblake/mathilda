@@ -15,6 +15,9 @@
  *                          — the working directory and its push/pop stack.
  *   $HomeDirectory         — the user's home directory (from the environment).
  *   $TemporaryDirectory    — the host temporary directory (TMPDIR / TEMP / TMP).
+ *   $BaseDirectory, $UserBaseDirectory
+ *                          — system-wide and per-user base directories for
+ *                            configuration files, packages and kernel init files.
  *   Environment["var"]     — an environment variable's value, or $Failed.
  *   ParentDirectory, FileNameTake, AbsoluteFileName, FileType, DirectoryQ, ToFileName,
  *   DeleteFile             — path manipulation and deletion.
@@ -1756,6 +1759,89 @@ static char* tempdir_from_env(void) {
     return r;
 }
 
+/* Join `dir` and `leaf` with the host separator into a fresh string, dropping
+ * any trailing separators of the result.  Caller frees; NULL on OOM. */
+static char* dir_join(const char* dir, const char* leaf) {
+#ifdef _WIN32
+    const char sep = '\\';
+#else
+    const char sep = '/';
+#endif
+    size_t nd = strlen(dir), nl = leaf ? strlen(leaf) : 0;
+    while (nd > 1 && (dir[nd - 1] == '/' || dir[nd - 1] == '\\')) nd--;
+    char* r = malloc(nd + 1 + nl + 1);
+    if (!r) return NULL;
+    memcpy(r, dir, nd);
+    size_t n = nd;
+    if (nl) { r[n++] = sep; memcpy(r + n, leaf, nl); n += nl; }
+    while (n > 1 && (r[n - 1] == '/' || r[n - 1] == '\\')) n--;
+    r[n] = '\0';
+    return r;
+}
+
+/* $BaseDirectory: the system-wide base directory for configuration files,
+ * packages and kernel init files.  MATHILDA_BASE overrides; else
+ *   macOS   /Library/Mathilda
+ *   Windows %PROGRAMDATA%\Mathilda   (C:\ProgramData when unset)
+ *   Unix    /usr/share/Mathilda
+ * The directory need not exist.  Caller frees. */
+static char* basedir_from_env(void) {
+    const char* e = getenv("MATHILDA_BASE");
+    if (e && *e) return dir_join(e, NULL);
+#if defined(__APPLE__)
+    return dir_join("/Library", "Mathilda");
+#elif defined(_WIN32)
+    const char* pd = getenv("PROGRAMDATA");
+    return dir_join((pd && *pd) ? pd : "C:\\ProgramData", "Mathilda");
+#else
+    return dir_join("/usr/share", "Mathilda");
+#endif
+}
+
+/* $UserBaseDirectory: the per-user counterpart.  MATHILDA_USERBASE
+ * overrides; else
+ *   macOS   ~/Library/Mathilda
+ *   Windows %APPDATA%\Mathilda      (<home>\AppData\Roaming when unset)
+ *   Unix    ~/.Mathilda
+ * NULL (left unset) when there is no home directory.  Caller frees. */
+static char* userbasedir_from_env(void) {
+    const char* e = getenv("MATHILDA_USERBASE");
+    if (e && *e) return dir_join(e, NULL);
+#if defined(_WIN32)
+    const char* ad = getenv("APPDATA");
+    if (ad && *ad) return dir_join(ad, "Mathilda");
+#endif
+    char* home = home_from_env();
+    if (!home) return NULL;
+#if defined(__APPLE__)
+    char* lib = dir_join(home, "Library");
+    char* r = lib ? dir_join(lib, "Mathilda") : NULL;
+    free(lib);
+#elif defined(_WIN32)
+    char* roam = dir_join(home, "AppData\\Roaming");
+    char* r = roam ? dir_join(roam, "Mathilda") : NULL;
+    free(roam);
+#else
+    char* r = dir_join(home, ".Mathilda");
+#endif
+    free(home);
+    return r;
+}
+
+/* Install `value` (consumed; may be NULL = leave unset) as the OwnValue of the
+ * Protected system variable `name`. */
+static void set_dir_variable(const char* name, char* value) {
+    if (value) {
+        Expr* sym = expr_new_symbol(name);
+        Expr* val = expr_new_string(value);
+        symtab_add_own_value(name, sym, val);
+        expr_free(sym);
+        expr_free(val);
+        free(value);
+    }
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED;
+}
+
 void files_init(void) {
     /* Docstrings live in info.c alongside the other File-I/O entries.
      * All builtins are Protected with no special evaluation behaviour —
@@ -1838,6 +1924,9 @@ void files_init(void) {
         free(tmpdir);
     }
     symtab_get_def("$TemporaryDirectory")->attributes |= ATTR_PROTECTED;
+
+    set_dir_variable("$BaseDirectory", basedir_from_env());
+    set_dir_variable("$UserBaseDirectory", userbasedir_from_env());
 
     /* $PathnameSeparator: the host separator FileNameJoin uses by default. */
     {

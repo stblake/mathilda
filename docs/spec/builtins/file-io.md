@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$BaseDirectory` / `$UserBaseDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -912,6 +912,37 @@ Environment["NO_SUCH_VAR"]   (* $Failed *)
 The directory for temporary files: `TMPDIR`, else (Windows) `TEMP` or `TMP`,
 else `/tmp`. A trailing separator is dropped, so
 `FileNameJoin[{$TemporaryDirectory, "f"}]` never doubles it. `Protected`.
+
+## $BaseDirectory
+The base directory in which system-wide files to be loaded by Mathilda are
+conventionally placed (configuration files, packages, kernel init files), as a
+string. The directory need not exist; it is a convention, not a guarantee.
+
+| Platform | `$BaseDirectory` |
+|----------|------------------|
+| macOS | `/Library/Mathilda` |
+| Linux / Unix | `/usr/share/Mathilda` |
+| Windows | `%PROGRAMDATA%\Mathilda` (`C:\ProgramData\Mathilda` when unset) |
+
+The `MATHILDA_BASE` environment variable, when set, replaces it (a trailing
+separator is dropped). `Protected`.
+
+## $UserBaseDirectory
+The per-user counterpart of `$BaseDirectory`, as a string.
+
+| Platform | `$UserBaseDirectory` |
+|----------|----------------------|
+| macOS | `~/Library/Mathilda` |
+| Linux / Unix | `~/.Mathilda` |
+| Windows | `%APPDATA%\Mathilda` (else `<home>\AppData\Roaming\Mathilda`) |
+
+`~` is `$HomeDirectory`. The `MATHILDA_USERBASE` environment variable, when set,
+replaces it. Left unset when there is no home directory. `Protected`.
+
+```
+{$BaseDirectory, $UserBaseDirectory}
+(* {"/Library/Mathilda", "/Users/user/Library/Mathilda"} *)
+```
 
 ## $PathnameSeparator
 The separator between directory names in a file name: `"/"`, or `"\\"` on
