@@ -3002,6 +3002,12 @@ Out[8]= {6, 4, 5}
   with every free variable `0` (`LinearSolve[N[{{1, 2, 3}, {4, 5, 6}}, 30], N[{1, 2}, 30]]`
   is `{-1/3, 2/3, 0}` at 30 digits); a 54 x 54 complex system takes
   milliseconds (it took over 10 s).
+- **TimeConstrained** is honoured inside the arbitrary-precision LU of
+  `LinearSolve`, `LUDecomposition` and `Det`: the factorisation (worker
+  threads, no evaluator step) and the loading of the matrix into MPFR arrays
+  poll the deadline and unwind cleanly. A 10000 x 10000 factor at 60 digits
+  ran more than 12 minutes past a 60 s cap; the overrun is now the time to
+  free what was allocated (seconds at that size).
 
 ## LeastSquares
 Finds `x` that solves the linear least-squares problem for `m . x == b`,
