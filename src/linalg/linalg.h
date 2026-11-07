@@ -11,6 +11,8 @@
 Expr* builtin_dot(Expr* res);
 Expr* builtin_det(Expr* res);
 Expr* builtin_cross(Expr* res);
+Expr* builtin_rotationmatrix(Expr* res);
+void  rotationmatrix_init(void);   /* RotationMatrix: registration + docstring */
 Expr* builtin_norm(Expr* res);
 Expr* builtin_normalize(Expr* res);
 Expr* builtin_tr(Expr* res);

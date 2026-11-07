@@ -22,6 +22,7 @@ void linalg_init(void) {
     symtab_get_def("Det")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Cross", builtin_cross);
     symtab_get_def("Cross")->attributes |= ATTR_PROTECTED;
+    rotationmatrix_init();
     symtab_add_builtin("Projection", builtin_projection);
     symtab_get_def("Projection")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("TensorProduct", builtin_tensorproduct);

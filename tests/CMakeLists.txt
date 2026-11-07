@@ -763,6 +763,7 @@ set(COMMON_SRC
     ../src/linalg/det.c
     ../src/linalg/flint_mat_bridge.c
     ../src/linalg/cross.c
+    ../src/linalg/rotationmatrix.c
     ../src/linalg/norm.c
     ../src/linalg/normalize.c
     ../src/linalg/tr.c
@@ -4169,6 +4170,9 @@ target_include_directories(riemannr_tests PRIVATE ../src)
 
 add_executable(cuberoot_tests test_cuberoot.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cuberoot_tests PRIVATE ../src)
+
+add_executable(rotationmatrix_tests test_rotationmatrix.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(rotationmatrix_tests PRIVATE ../src)
 add_executable(elliptic_tests test_elliptic.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(elliptic_tests PRIVATE ../src)
 add_test(NAME elliptic_tests COMMAND elliptic_tests)

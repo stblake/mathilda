@@ -712,6 +712,34 @@ Cross::nonn1: The arguments are expected to be vectors of equal length, and the 
 Out[5]= Cross[{1, 2, 3}, {4, 5}]
 ```
 
+## RotationMatrix
+
+`RotationMatrix` builds 2-D and 3-D rotation matrices (src/linalg/rotationmatrix.c).
+
+- `RotationMatrix[t]`: `{{Cos[t], -Sin[t]}, {Sin[t], Cos[t]}}`.
+- `RotationMatrix[t, w]`: the 3-D rotation by `t` counter-clockwise about the
+  axis `w` (`RotationMatrix[t, {0, 0, 1}]` is the `z` rotation).
+- `RotationMatrix[{u, v}]`: the 2-D or 3-D rotation taking the direction of `u`
+  to that of `v` (in their plane, by the angle between them); parallel 3-D
+  vectors give the identity.
+- `RotationMatrix[t, {u, v}]`: the rotation by `t` in the plane of `u` and `v`,
+  turning `u` toward `v`.
+- Every 3-D form is Rodrigues' formula with the axis left unnormalised,
+  `R = c I + (s/|w|) [w]x + ((1 - c)/w.w) w w^T`, so exact input gives exact
+  entries without radicals it does not need:
+  `RotationMatrix[{{1,2,3},{3,2,1}}]` is all rationals (`16/21`, ...), as in the
+  reference.
+- Messages, as in the reference: `RotationMatrix::inpf` (not a scalar or a pair
+  of vectors), `::v3d` (an axis not of length 3), `::spln` (anti-parallel 3-D
+  vectors, or parallel 2-D ones with an angle: no plane).
+- Deliberate differences: a symbolic axis is taken to be real (the reference's
+  general form carries `Conjugate[]` of each component; for real input the two
+  agree); exact radical entries come out in Mathilda's canonical arithmetic form
+  (`1/3 - 1/Sqrt[3]` where the reference prints `(1 - Sqrt[3])/3`); only 2-D and
+  3-D (n-D stays unevaluated).
+- Attributes: `Protected`. No packed / `NDArray` / `Compile` surface: it builds a
+  small matrix, it is not an element-wise numeric map.
+
 ## Norm
 Gives the norm of a number, vector, or matrix.
 - `Norm[expr]`
