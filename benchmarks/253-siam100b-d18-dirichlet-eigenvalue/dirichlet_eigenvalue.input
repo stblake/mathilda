@@ -1,0 +1,25 @@
+-- Experiment 253 -- SIAM 100-digit SEALED HOLDOUT B, family D18 (FriCAS column).
+-- FriCAS has no PDE / FEM eigensolver on a region: every row is a SKIP.
+-- See dirichlet_eigenvalue.m.
+)read ../siam100_common.input )quiet
+vskip("bd18.1 machine", "NDEigenvalues")
+vskip("bd18.1 wp50", "NDEigenvalues")
+vskip("bd18.2 machine", "NDEigenvalues")
+vskip("bd18.2 wp50", "NDEigenvalues")
+vskip("bd18.3 machine", "NDEigenvalues")
+vskip("bd18.3 wp50", "NDEigenvalues")
+vskip("bd18.4 machine", "NDEigenvalues")
+vskip("bd18.4 wp50", "NDEigenvalues")
+vskip("bd18.5 machine", "NDEigenvalues")
+vskip("bd18.5 wp50", "NDEigenvalues")
+vskip("bd18.6 machine", "NDEigenvalues")
+vskip("bd18.6 wp50", "NDEigenvalues")
+vskip("bd18.7 machine", "NDEigenvalues")
+vskip("bd18.7 wp50", "NDEigenvalues")
+vskip("bd18.8 machine", "NDEigenvalues")
+vskip("bd18.8 wp50", "NDEigenvalues")
+vskip("bd18.9 machine", "NDEigenvalues")
+vskip("bd18.9 wp50", "NDEigenvalues")
+vskip("bd18.10 machine", "NDEigenvalues")
+vskip("bd18.10 wp50", "NDEigenvalues")
+)quit

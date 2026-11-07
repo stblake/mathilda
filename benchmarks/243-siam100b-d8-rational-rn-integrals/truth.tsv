@@ -1,0 +1,22 @@
+# Holdout B for SIAM Appendix D Problem 8: c_m(R^N) and rational integrals over R^N (see rational_rn_integrals.m)
+# label	true value (65 digits)	need	source
+bd8.1 machine	0.53728496591177095977666907835296528856854147692530099377779392544	10	closed form (2 Sqrt[3])^(-1/2) == mpmath residues (siam100_refs/bd8_ref.py) == PARI/gp residues: 66 digits agree
+bd8.1 wp50	0.53728496591177095977666907835296528856854147692530099377779392544	48	same
+bd8.2 machine	0.47263138232907707655272016695798453846388546501707653214287489478	10	mpmath residues of 1/sum_{k<=6} x^(2k), dps 70 (siam100_refs/bd8_ref.py) == PARI/gp residues, realprecision 100 (siam100_refs/bd8_ref.gp): 66 digits agree
+bd8.2 wp50	0.47263138232907707655272016695798453846388546501707653214287489478	48	same
+bd8.3 machine	0.25979368872951442628589662795577286131502567612143674442274530178	10	mpmath dps 70, spherical coordinates, radial integral by residues (polyroots), angle by tanh-sinh (siam100_refs/bd8_ref.py) == PARI/gp realprecision 75 (run; the file now sets 100), Cartesian: x-integral by residues, y by intnum (siam100_refs/bd8_ref.gp): 66 digits agree
+bd8.3 wp50	0.25979368872951442628589662795577286131502567612143674442274530178	48	same
+bd8.4 machine	0.23978779563563834137497361718508239059707185379157283143488492893	10	mpmath dps 70, spherical coordinates, radial integral by residues (polyroots), angle by tanh-sinh (siam100_refs/bd8_ref.py) == PARI/gp realprecision 75 (run; the file now sets 100), Cartesian: x-integral by residues, y by intnum (siam100_refs/bd8_ref.gp): 63 digits agree
+bd8.4 wp50	0.23978779563563834137497361718508239059707185379157283143488492893	48	same
+bd8.5 machine	0.14289236070282099262769480123379522196750532838378157950834458372	10	mpmath dps 70, spherical coordinates, radial integral by residues, octant by Gauss-Legendre in cos(theta) x trapezoid in phi (siam100_refs/bd8_ref.py; resolutions 120x90, 160x120, 220x160 agree to 65 digits) == PARI/gp realprecision 100, spherical with angular intnum, radial by residues: 61 digits agree (gp at realprecision 75 gave only 41: intnum precision)
+bd8.5 wp50	0.14289236070282099262769480123379522196750532838378157950834458372	48	same
+bd8.6 machine	0.23152270673675770285618266025648305924506764956552623782617433545	10	mpmath dps 70, spherical coordinates, radial integral by residues, octant by Gauss-Legendre in cos(theta) x trapezoid in phi (siam100_refs/bd8_ref.py; resolutions 120x90, 160x120, 220x160 agree to 65 digits) == PARI/gp realprecision 100, spherical with angular intnum, radial integral in closed form Pi/(2 sqrt(q) sqrt(1 + 2 sqrt(q))): 66 digits agree (gp Cartesian-residue variant loses ~17 digits to cancellation on the slow tail; not used)
+bd8.6 wp50	0.23152270673675770285618266025648305924506764956552623782617433545	48	same
+bd8.7 machine	5.8247473854168565940494561444250598374094717094092520105005783163	10	closed form Pi EllipticK[1/2] (mpmath ellipk, dps 70) == mpmath polar/residues == PARI/gp x-residues + intnum: 66 digits agree
+bd8.7 wp50	5.8247473854168565940494561444250598374094717094092520105005783163	48	same
+bd8.8 machine	2.4674011002723396547086227499690377838284248518101976566033373441	10	closed form Pi^2/4 == mpmath radial quad == PARI/gp radial intnum: 66 digits agree
+bd8.8 wp50	2.4674011002723396547086227499690377838284248518101976566033373441	48	same
+bd8.9 machine	4.9348022005446793094172454999380755676568497036203953132066746881	10	closed form Pi^2/2 == mpmath radial quad == PARI/gp radial intnum: 66 digits agree
+bd8.9 wp50	4.9348022005446793094172454999380755676568497036203953132066746881	48	same
+bd8.10 machine	5.2959409304656390811455175874344222931807047496888449151845641146	10	closed form Pi EllipticK[1/4] == mpmath polar/residues == PARI/gp x-residues + intnum: 66 digits agree
+bd8.10 wp50	5.2959409304656390811455175874344222931807047496888449151845641146	48	same

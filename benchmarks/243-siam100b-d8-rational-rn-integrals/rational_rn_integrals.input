@@ -1,0 +1,27 @@
+-- Experiment 243 -- holdout B for SIAM Appendix D Problem 8 (FriCAS column).
+-- FriCAS's NumericalQuadrature (romberg/simpson/trapezoidal and the open
+-- variants) is one-dimensional on a FINITE interval; every row integrates
+-- over R^N, so all rows are SKIP rather than a hand-made range truncation
+-- or change of variables.  See rational_rn_integrals.m.
+)read ../siam100_common.input )quiet
+vskip("bd8.1 machine", "infinite-range quadrature")
+vskip("bd8.1 wp50", "infinite-range quadrature")
+vskip("bd8.2 machine", "infinite-range quadrature")
+vskip("bd8.2 wp50", "infinite-range quadrature")
+vskip("bd8.3 machine", "infinite-range quadrature")
+vskip("bd8.3 wp50", "infinite-range quadrature")
+vskip("bd8.4 machine", "infinite-range quadrature")
+vskip("bd8.4 wp50", "infinite-range quadrature")
+vskip("bd8.5 machine", "infinite-range quadrature")
+vskip("bd8.5 wp50", "infinite-range quadrature")
+vskip("bd8.6 machine", "infinite-range quadrature")
+vskip("bd8.6 wp50", "infinite-range quadrature")
+vskip("bd8.7 machine", "infinite-range quadrature")
+vskip("bd8.7 wp50", "infinite-range quadrature")
+vskip("bd8.8 machine", "infinite-range quadrature")
+vskip("bd8.8 wp50", "infinite-range quadrature")
+vskip("bd8.9 machine", "infinite-range quadrature")
+vskip("bd8.9 wp50", "infinite-range quadrature")
+vskip("bd8.10 machine", "infinite-range quadrature")
+vskip("bd8.10 wp50", "infinite-range quadrature")
+)quit

@@ -1,0 +1,22 @@
+# Holdout B for SIAM Appendix D Problem 7: ten region areas in 1-D form (see region_areas.m)
+# label	true value (65 digits)	need	source
+bd7.1 machine	1.0947536086094733537892918920819698264658678248248012168188413085	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 74 digits agree; == closed form 2(sin x0 - x0^3/3)
+bd7.1 wp50	1.0947536086094733537892918920819698264658678248248012168188413085	48	same
+bd7.2 machine	3.6519676287367949225834860148969250279809560120498533004888278735	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 75 digits agree; == closed form [3x - x^3/3 - e^x]_a^b
+bd7.2 wp50	3.6519676287367949225834860148969250279809560120498533004888278735	48	same
+bd7.3 machine	3.6474411922520699740091608167641613984346261076932892081723624388	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 75 digits agree
+bd7.3 wp50	3.6474411922520699740091608167641613984346261076932892081723624388	48	same
+bd7.4 machine	3.817952665251199516459347898696245654278691564977647213774387669	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 75 digits agree
+bd7.4 wp50	3.817952665251199516459347898696245654278691564977647213774387669	48	same
+bd7.5 machine	5.8582638812035847770771883732662261023800567090391987463539807271	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 75 digits agree
+bd7.5 wp50	5.8582638812035847770771883732662261023800567090391987463539807271	48	same
+bd7.6 machine	2.8773959065532462042107328513118829690062087608864841636589847079	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 75 digits agree
+bd7.6 wp50	2.8773959065532462042107328513118829690062087608864841636589847079	48	same
+bd7.7 machine	3.5451544464851340723138574317140879394706487251963421070092176033	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 74 digits agree
+bd7.7 wp50	3.5451544464851340723138574317140879394706487251963421070092176033	48	same
+bd7.8 machine	1.3665504719881332659177164507281551333819071299538881749697198124	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 60 digits agree (gp's intnum loses digits at the |y|^(1/3) point); mpmath at dps 90 and dps 120 agree to 70 digits
+bd7.8 wp50	1.3665504719881332659177164507281551333819071299538881749697198124	48	same
+bd7.9 machine	7.029406773806574526551031864648144072596954730197883570196093308	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 75 digits agree
+bd7.9 wp50	7.029406773806574526551031864648144072596954730197883570196093308	48	same
+bd7.10 machine	2.6302280523349681402993761165391732289051697984170897035315711308	10	mpmath findroot + tanh-sinh with roots/kinks as breakpoints, dps 90 (siam100_refs/bd7_ref.py) == PARI/gp solve() on brackets + intnum, realprecision 90 (siam100_refs/bd7_ref.gp): 74 digits agree
+bd7.10 wp50	2.6302280523349681402993761165391732289051697984170897035315711308	48	same

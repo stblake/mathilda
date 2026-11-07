@@ -1,0 +1,10 @@
+/* Experiment 236 -- SIAM 100-Digit Challenge, holdout B for Appendix D
+   problem 1 (Maxima column).  Maxima has no numerical summation to infinity
+   (sum(..., n, 1, inf) stays symbolic, and an indicator on digits has no
+   closed form): every row is a SKIP.  See digit_restricted_series.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for p : 1 thru 10 do (
+  skip(sconcat("bd1.", p, " machine"), "numerical infinite sum"),
+  skip(sconcat("bd1.", p, " wp50"), "numerical infinite sum"))$
+quit()$

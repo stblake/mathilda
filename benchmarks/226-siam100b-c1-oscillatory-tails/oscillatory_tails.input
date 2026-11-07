@@ -1,0 +1,36 @@
+-- Experiment 226 -- SIAM 100-digit holdout B for Problem 1 (FriCAS column).
+-- FriCAS's numeric quadrature (NumericalQuadrature: romberg) needs a finite
+-- integrand on a closed finite interval.  The x -> 0 problems (bc1.1, 2, 3,
+-- 6) are romberg on [eps, 1] with eps at the bottom of each precision, as in
+-- experiment 166; the infinite-range problems have no FriCAS built-in: SKIP.
+)read ../siam100_common.input )quiet
+f1D(x:DoubleFloat):DoubleFloat == sin(1/x)
+f2D(x:DoubleFloat):DoubleFloat == sin(1/x)/x
+f3D(x:DoubleFloat):DoubleFloat == cos(log(x)/x)
+f6D(x:DoubleFloat):DoubleFloat == sin(1/x)/sqrt(x)
+t0 := nowms(); r := romberg(f1D, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("bc1.1 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f2D, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("bc1.2 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f3D, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("bc1.3 machine", r.value, nowms() - t0, 10)
+vskip("bc1.4 machine", "romberg on [a,oo)")
+vskip("bc1.5 machine", "romberg on [a,oo)")
+t0 := nowms(); r := romberg(f6D, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("bc1.6 machine", r.value, nowms() - t0, 10)
+vskip("bc1.7 machine", "romberg on [a,oo)")
+vskip("bc1.8 machine", "romberg on [a,oo)")
+vskip("bc1.9 machine", "romberg on [a,oo)")
+vskip("bc1.10 machine", "romberg on [a,oo)")
+digits(60)$Float
+f1F(x:Float):Float == sin(1/x)
+f2F(x:Float):Float == sin(1/x)/x
+f3F(x:Float):Float == cos(log(x)/x)
+f6F(x:Float):Float == sin(1/x)/sqrt(x)
+t0 := nowms(); rF := romberg(f1F, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 22); vcaseF("bc1.1 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(f2F, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 22); vcaseF("bc1.2 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(f3F, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 22); vcaseF("bc1.3 wp50", rF.value, nowms() - t0, 48)
+vskip("bc1.4 wp50", "romberg on [a,oo)")
+vskip("bc1.5 wp50", "romberg on [a,oo)")
+t0 := nowms(); rF := romberg(f6F, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 22); vcaseF("bc1.6 wp50", rF.value, nowms() - t0, 48)
+vskip("bc1.7 wp50", "romberg on [a,oo)")
+vskip("bc1.8 wp50", "romberg on [a,oo)")
+vskip("bc1.9 wp50", "romberg on [a,oo)")
+vskip("bc1.10 wp50", "romberg on [a,oo)")
+)quit

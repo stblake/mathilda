@@ -1,0 +1,22 @@
+/* Experiment 239 -- SIAM 100-Digit Challenge, holdout B for Appendix D
+   problem 4 (Maxima column).  bd4.1 is stated: find_root (machine) and
+   bf_find_root at fpprec 60 (wp50) on expintegral_li over the bracket
+   [1.2, 2].  Every other row needs either a numerical infinite sum (Maxima
+   has none: sum/nusum are symbolic) or a head Maxima lacks (Riemann R,
+   Riemann-Siegel Z, prime zeta), so it is a SKIP.  See series_roots.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+vrun("bd4.1 machine", lambda([], find_root(expintegral_li(x), x, 1.2, 2.0)), 10, 60)$
+vrun("bd4.1 wp50", lambda([], block([fpprec : 60],
+     bf_find_root(expintegral_li(x), x, 1.2b0, 2.0b0))), 48, 60)$
+for p in [2, 3, 5, 6, 10] do (
+  skip(sconcat("bd4.", p, " machine"), "nsum"),
+  skip(sconcat("bd4.", p, " wp50"), "nsum"))$
+for p in [4, 9] do (
+  skip(sconcat("bd4.", p, " machine"), "RiemannR"),
+  skip(sconcat("bd4.", p, " wp50"), "RiemannR"))$
+skip("bd4.7 machine", "RiemannSiegelZ")$
+skip("bd4.7 wp50", "RiemannSiegelZ")$
+skip("bd4.8 machine", "PrimeZetaP")$
+skip("bd4.8 wp50", "PrimeZetaP")$
+quit()$

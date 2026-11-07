@@ -1,0 +1,22 @@
+# SIAM 100-digit holdout B, family C1 (experiment 226): ten endpoint-/infinite-range oscillatory integrals (see oscillatory_tails.m)
+# label	true value (70 digits)	need	source
+bc1.1 machine	0.5040670619069283719898561177411482296249850282126391708714331675557801	10	Int_0^1 sin(1/x) dx: closed form sin 1 - Ci(1) (mpmath dps 80; PARI eint1, \p 90) == mpmath quadosc of Int_1^oo sin t/t^2 dt (t = 1/x), dps 80: 80 digits agree
+bc1.1 wp50	0.5040670619069283719898561177411482296249850282126391708714331675557801	48	same
+bc1.2 machine	0.6247132564277136042899683778165717842862467449494411200160175225872212	10	Int_0^1 sin(1/x)/x dx: closed form pi/2 - Si(1) (mpmath; PARI eint1) == mpmath quadosc of Int_1^oo sin t/t dt, dps 80: 80 digits agree
+bc1.2 wp50	0.6247132564277136042899683778165717842862467449494411200160175225872212	48	same
+bc1.3 machine	0.3247340126016549037456422233196829804335344580353569437308979148707539	10	Int_0^1 cos(log(x)/x) dx: no closed form: mpmath quadosc of Int_0^oo cos(t e^t) e^-t dt (x = e^-t) with zeros W((n-1/2)pi), dps 80 == same with zero set W(n pi) (80 digits) == PARI/gp sumalt over intnum pieces between W((n-1/2)pi), \p 90 (siam100_refs/bc1_ref.gp): 70+ digits agree
+bc1.3 wp50	0.3247340126016549037456422233196829804335344580353569437308979148707539	48	same
+bc1.4 machine	0.6266570686577501256039413212027613132517466851524845791574808940855734	10	Int_0^oo sin(x^2) dx: closed form sqrt(pi/8) == mpmath quadosc(sin(x^2), zeros sqrt(n pi)), dps 80: 80 digits agree
+bc1.4 wp50	0.6266570686577501256039413212027613132517466851524845791574808940855734	48	same
+bc1.5 machine	1.253314137315500251207882642405522626503493370304969158314961788171147	10	Int_0^oo cos(x)/sqrt(x) dx: closed form sqrt(pi/2) == mpmath quadosc of Int_0^oo 2 cos(u^2) du (x = u^2), dps 80: 80 digits agree
+bc1.5 wp50	1.253314137315500251207882642405522626503493370304969158314961788171147	48	same
+bc1.6 machine	0.5714732926457051898216164607414146690201455798246734895821468465217961	10	Int_0^1 sin(1/x)/sqrt(x) dx: closed form 2 sin 1 + 2 sqrt(pi/2)(1 - 2 C(sqrt(2/pi))) (Fresnel C, mpmath) == PARI Im(Gamma(-1/2,-i) (-i)^(1/2)) (incgam) == mpmath quadosc of Int_1^oo sin t t^(-3/2) dt: 80 digits agree
+bc1.6 wp50	0.5714732926457051898216164607414146690201455798246734895821468465217961	48	same
+bc1.7 machine	0.6214496242358133576392657282153393238931646769197054169479755316419306	10	Int_0^oo sin(x)/(x+1) dx: closed form Ci(1) sin 1 + (pi/2 - Si(1)) cos 1 (mpmath; PARI eint1) == mpmath quadosc(sin x/(x+1), omega 1), dps 80: 80 digits agree
+bc1.7 wp50	0.6214496242358133576392657282153393238931646769197054169479755316419306	48	same
+bc1.8 machine	0.9559775949722499907276400039902350470192419151502303818722145255888582	10	Int_0^oo J1(x)/sqrt(x) dx: closed form (Weber) Gamma(3/4)/(sqrt 2 Gamma(5/4)) == mpmath quad on [0,1] (x = u^2) + quadosc on [1,oo), dps 80: 80 digits agree
+bc1.8 wp50	0.9559775949722499907276400039902350470192419151502303818722145255888582	48	same
+bc1.9 machine	0.7733429420779898501961016112952173409248068472242156726620319554729766	10	Int_0^oo cos(x^3) dx: closed form Gamma(4/3) cos(pi/6) == mpmath quadosc(cos(x^3), zeros cbrt((n-1/2)pi)), dps 80: 80 digits agree
+bc1.9 wp50	0.7733429420779898501961016112952173409248068472242156726620319554729766	48	same
+bc1.10 machine	-0.09643770492506484527983902009171086648724546067919575248549655893822368	10	Int_2^oo sin(x)/log(x) dx: no closed form: mpmath quadosc(sin x/log x, [2,oo], omega 1), dps 80 == same with zeros n pi (80 digits) == PARI/gp sumalt over intnum pieces [k pi,(k+1) pi], \p 90 (siam100_refs/bc1_ref.gp): 70+ digits agree
+bc1.10 wp50	-0.09643770492506484527983902009171086648724546067919575248549655893822368	48	same

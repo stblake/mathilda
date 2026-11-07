@@ -1,0 +1,38 @@
+/* Experiment 247 -- SIAM 100-Digit Challenge holdout B for App. D Problem 12 (Maxima column).
+   The ten problems of event_time_root.m.  Maxima's ODE integrator rk is
+   fixed-step classical RK4 with no event location, so the idiomatic statement
+   is fixed-time shooting (as in exp. 187): find_root on the event function at
+   the target time (e.g. th'(2; v) = 0) over the NARROW wp50 bracket, rk with
+   step 1/400.  rk works in floats only, so every wp50 row is SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["rk", "find_root"])$
+
+h : 1/400$
+lastrow(r) := last(r)$
+/* each f(p) is the event function at the target time */
+f1(v) := third(lastrow(rk([w, -sin(th)], [th, w], [0.0, v], [t, 0, 2, h])))$
+f2(v) := second(lastrow(rk([w, -1 - w*abs(w)/10], [y, w], [0.0, v], [t, 0, 3, h])))$
+f3(mu) := second(lastrow(rk([w, mu*(1 - x^2)*w - x], [x, w], [2.0, 0.0], [t, 0, 2, h])))$
+f4(a) := second(lastrow(rk([x*(1 - y), y*(x - 1)], [x, y], [a, 1.0], [t, 0, 1, h]))) - 1$
+f5(v) := second(lastrow(rk([vx, vy, -x/(x^2 + y^2)^(3/2), -y/(x^2 + y^2)^(3/2)], [x, y, vx, vy],
+                           [1.0, 0.0, 0.0, v], [t, 0, 13/10, h])))$
+f6(z) := second(lastrow(rk([w, -2*z*w - x], [x, w], [1.0, 0.0], [t, 0, 2, h])))$
+f7(a) := second(lastrow(rk([a + y^2], [y], [0.0], [t, 0, 1, h]))) - 1$
+f8(k) := second(lastrow(rk([vx, vy, -k*(1 - 1/sqrt(x^2 + y^2))*x, -k*(1 - 1/sqrt(x^2 + y^2))*y - 1],
+                           [x, y, vx, vy], [0.66, -0.88, 0.0, 0.0], [t, 0, 2, h])))$
+f9(b) := b*second(lastrow(rk([-b*s*i, b*s*i - i], [s, i], [0.99, 0.01], [t, 0, 5, h]))) - 1$
+f10(v) := second(lastrow(rk([w, -sin(th)], [th, w], [0.0, v], [t, 0, 4, h]))) - 3$
+
+vrun("bd12.1 machine", lambda([], find_root(f1, 1.60, 1.61)), 10)$
+vrun("bd12.2 machine", lambda([], find_root(f2, 1.58, 1.59)), 10)$
+vrun("bd12.3 machine", lambda([], find_root(f3, 0.75, 0.76)), 10)$
+vrun("bd12.4 machine", lambda([], find_root(f4, 2.63, 2.64)), 10)$
+vrun("bd12.5 machine", lambda([], find_root(f5, 0.57, 0.58)), 10)$
+vrun("bd12.6 machine", lambda([], find_root(f6, 0.31, 0.32)), 10)$
+vrun("bd12.7 machine", lambda([], find_root(f7, 0.74, 0.75)), 10)$
+vrun("bd12.8 machine", lambda([], find_root(f8, 3.98, 3.99)), 10)$
+vrun("bd12.9 machine", lambda([], find_root(f9, 1.81, 1.82)), 10)$
+vrun("bd12.10 machine", lambda([], find_root(f10, 1.99499, 1.995)), 10)$
+for k : 1 thru 10 do skip(sconcat("bd12.", k, " wp50"), "rk (float only)")$
+quit()$

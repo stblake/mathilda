@@ -1,0 +1,25 @@
+-- Experiment 249 -- SIAM 100-Digit Challenge holdout B for App. D Problem 14 (FriCAS column).
+-- Every case is a finite-element boundary-value solve; FriCAS has no PDE
+-- solver, so all rows are SKIP (as in exp. 189).  See fem_parameter.m.
+)read ../siam100_common.input )quiet
+vskip("bd14.1 machine", "NDSolveValue (FEM)")
+vskip("bd14.2 machine", "NDSolveValue (FEM)")
+vskip("bd14.3 machine", "NDSolveValue (FEM)")
+vskip("bd14.4 machine", "NDSolveValue (FEM)")
+vskip("bd14.5 machine", "NDSolveValue (FEM)")
+vskip("bd14.6 machine", "NDSolveValue (FEM)")
+vskip("bd14.7 machine", "NDSolveValue (FEM)")
+vskip("bd14.8 machine", "NDSolveValue (FEM)")
+vskip("bd14.9 machine", "NDSolveValue (FEM)")
+vskip("bd14.10 machine", "NDSolveValue (FEM)")
+vskip("bd14.1 wp50", "NDSolveValue (FEM)")
+vskip("bd14.2 wp50", "NDSolveValue (FEM)")
+vskip("bd14.3 wp50", "NDSolveValue (FEM)")
+vskip("bd14.4 wp50", "NDSolveValue (FEM)")
+vskip("bd14.5 wp50", "NDSolveValue (FEM)")
+vskip("bd14.6 wp50", "NDSolveValue (FEM)")
+vskip("bd14.7 wp50", "NDSolveValue (FEM)")
+vskip("bd14.8 wp50", "NDSolveValue (FEM)")
+vskip("bd14.9 wp50", "NDSolveValue (FEM)")
+vskip("bd14.10 wp50", "NDSolveValue (FEM)")
+)quit

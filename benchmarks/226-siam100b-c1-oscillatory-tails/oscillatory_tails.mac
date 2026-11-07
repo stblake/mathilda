@@ -1,0 +1,36 @@
+/* Experiment 226 -- SIAM 100-digit holdout B for Problem 1 (Maxima column).
+   The integrals of oscillatory_tails.m as written.  Machine: QUADPACK --
+   quad_qags on (0, 1], quad_qagi on [a, oo), and quad_qawf (the Fourier
+   integral f(x) sin|cos(x) on [a, oo)) for bc1.5, bc1.7, bc1.10.  wp50:
+   bromberg (bigfloat Romberg, fpprec 60) on [1b-60, 1] for the x -> 0
+   problems, as in experiment 166; Maxima has no bigfloat quadrature on an
+   infinite range, so those wp50 rows SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["quad_qags", "quad_qagi", "quad_qawf", "bromberg"])$
+
+brom(f) := block([fpprec : 60, rombergtol : 1b-50, rombergit : 30],
+  bromberg(f, x, 1b-60, 1))$
+
+vrun("bc1.1 machine", lambda([], first(quad_qags(sin(1/x), x, 0, 1, 'limit = 1000))), 10, 60)$
+vrun("bc1.1 wp50", lambda([], brom(sin(1/x))), 48, 120)$
+vrun("bc1.2 machine", lambda([], first(quad_qags(sin(1/x)/x, x, 0, 1, 'limit = 1000))), 10, 60)$
+vrun("bc1.2 wp50", lambda([], brom(sin(1/x)/x)), 48, 120)$
+vrun("bc1.3 machine", lambda([], first(quad_qags(cos(log(x)/x), x, 0, 1, 'limit = 1000))), 10, 60)$
+vrun("bc1.3 wp50", lambda([], brom(cos(log(x)/x))), 48, 120)$
+vrun("bc1.4 machine", lambda([], first(quad_qagi(sin(x^2), x, 0, inf, 'limit = 1000))), 10, 60)$
+skip("bc1.4 wp50", "bigfloat quadrature on [a,inf)")$
+vrun("bc1.5 machine", lambda([], first(quad_qawf(1/sqrt(x), x, 0, 1, cos, 'limit = 1000))), 10, 60)$
+skip("bc1.5 wp50", "bigfloat quadrature on [a,inf)")$
+vrun("bc1.6 machine", lambda([], first(quad_qags(sin(1/x)/sqrt(x), x, 0, 1, 'limit = 1000))), 10, 60)$
+vrun("bc1.6 wp50", lambda([], brom(sin(1/x)/sqrt(x))), 48, 120)$
+vrun("bc1.7 machine", lambda([], first(quad_qawf(1/(x+1), x, 0, 1, sin, 'limit = 1000))), 10, 60)$
+skip("bc1.7 wp50", "bigfloat quadrature on [a,inf)")$
+vrun("bc1.8 machine", lambda([], first(quad_qagi(bessel_j(1, x)/sqrt(x), x, 0, inf, 'limit = 1000))), 10, 60)$
+skip("bc1.8 wp50", "bigfloat quadrature on [a,inf)")$
+vrun("bc1.9 machine", lambda([], first(quad_qagi(cos(x^3), x, 0, inf, 'limit = 1000))), 10, 60)$
+skip("bc1.9 wp50", "bigfloat quadrature on [a,inf)")$
+vrun("bc1.10 machine", lambda([], first(quad_qawf(1/log(x), x, 2, 1, sin, 'limit = 1000))), 10, 60)$
+skip("bc1.10 wp50", "bigfloat quadrature on [a,inf)")$
+quit()$

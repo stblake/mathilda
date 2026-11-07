@@ -1,0 +1,27 @@
+-- Experiment 246 -- SIAM 100-Digit Challenge holdout B for App. D Problem 11 (FriCAS column).
+-- Every case needs a numeric ODE solver inside a vector root finder for a
+-- non-polynomial system.  FriCAS has fixed/adaptive RK4 integrators but no
+-- numeric root finder for such a system, so all rows are SKIP rather than a
+-- hand-written Newton iteration (as in exp. 186).
+)read ../siam100_common.input )quiet
+vskip("bd11.1 machine", "FindRoot over NDSolve")
+vskip("bd11.2 machine", "FindRoot over NDSolve")
+vskip("bd11.3 machine", "FindRoot over NDSolve")
+vskip("bd11.4 machine", "FindRoot over NDSolve")
+vskip("bd11.5 machine", "FindRoot over NDSolve")
+vskip("bd11.6 machine", "FindRoot over NDSolve")
+vskip("bd11.7 machine", "FindRoot over NDSolve")
+vskip("bd11.8 machine", "FindRoot over NDSolve")
+vskip("bd11.9 machine", "FindRoot over NDSolve")
+vskip("bd11.10 machine", "FindRoot over NDSolve")
+vskip("bd11.1 wp50", "FindRoot over NDSolve")
+vskip("bd11.2 wp50", "FindRoot over NDSolve")
+vskip("bd11.3 wp50", "FindRoot over NDSolve")
+vskip("bd11.4 wp50", "FindRoot over NDSolve")
+vskip("bd11.5 wp50", "FindRoot over NDSolve")
+vskip("bd11.6 wp50", "FindRoot over NDSolve")
+vskip("bd11.7 wp50", "FindRoot over NDSolve")
+vskip("bd11.8 wp50", "FindRoot over NDSolve")
+vskip("bd11.9 wp50", "FindRoot over NDSolve")
+vskip("bd11.10 wp50", "FindRoot over NDSolve")
+)quit

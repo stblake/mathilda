@@ -1,0 +1,40 @@
+-- Experiment 242 -- holdout B for SIAM Appendix D Problem 7 (FriCAS column).
+-- FriCAS has no built-in numeric root finder for a non-polynomial equation
+-- (solve/realSolve are polynomial-only), so every row whose statement needs
+-- FindRoot of a transcendental equation is SKIP rather than a hand-written
+-- Newton iteration.  Stated here:
+--   bd7.3  no root at all: the slice-length integral by rombergo (the OPEN
+--          Romberg rule -- romberg evaluates the endpoints, where
+--          asin(1/(2 sin x)) is "not real" after rounding);
+--   bd7.5  the cubic's roots by solve(p = 0, eps) (FriCAS's polynomial root
+--          finder), then rombergo of 2 sqrt(p).
+-- rombergo triples the point count per level, so nmax is 12 for DoubleFloat
+-- (3^12 points) and 10 at digits(60) (no per-case cap in FriCAS).
+-- See region_areas.m.
+)read ../siam100_common.input )quiet
+vskip("bd7.1 machine", "FindRoot")
+vskip("bd7.1 wp50", "FindRoot")
+vskip("bd7.2 machine", "FindRoot")
+vskip("bd7.2 wp50", "FindRoot")
+f3(x:DoubleFloat):DoubleFloat == pi()$DoubleFloat - 2.0*asin(1.0/(2.0*sin(x)))
+t0 := nowms(); r := rombergo(f3, pi()$DoubleFloat/6.0, 5.0*pi()$DoubleFloat/6.0, 1.0e-13, 1.0e-13, 5, 12); vcaseD("bd7.3 machine", r.value, nowms() - t0, 10)
+p5(x:DoubleFloat):DoubleFloat == 2.0*sqrt(x^3 - 3.0*x + 1.0)
+t0 := nowms(); s5 := solve(x^3 - 3*x + 1 = 0, 1.0e-16); rr := sort([retract(rhs(e))@Float for e in s5]); r := rombergo(p5, rr.1::DoubleFloat, rr.2::DoubleFloat, 1.0e-13, 1.0e-13, 5, 12); vcaseD("bd7.5 machine", r.value, nowms() - t0, 10)
+vskip("bd7.4 machine", "FindRoot")
+vskip("bd7.4 wp50", "FindRoot")
+vskip("bd7.6 machine", "FindRoot")
+vskip("bd7.6 wp50", "FindRoot")
+vskip("bd7.7 machine", "FindRoot")
+vskip("bd7.7 wp50", "FindRoot")
+vskip("bd7.8 machine", "FindRoot")
+vskip("bd7.8 wp50", "FindRoot")
+vskip("bd7.9 machine", "FindRoot")
+vskip("bd7.9 wp50", "FindRoot")
+vskip("bd7.10 machine", "FindRoot")
+vskip("bd7.10 wp50", "FindRoot")
+digits(60)$Float
+g3(x:Float):Float == pi()$Float - 2.0*asin(1.0/(2.0*sin(x)))
+t0 := nowms(); rF := rombergo(g3, pi()$Float/6.0, 5.0*pi()$Float/6.0, 1.0e-50, 1.0e-50, 5, 10); vcaseF("bd7.3 wp50", rF.value, nowms() - t0, 48)
+q5(x:Float):Float == 2.0*sqrt(x^3 - 3.0*x + 1.0)
+t0 := nowms(); s5 := solve(x^3 - 3*x + 1 = 0, 1/10^60); rq := sort([retract(rhs(e))@Fraction(Integer) for e in s5]); rF := rombergo(q5, (numer(rq.1)::Float)/(denom(rq.1)::Float), (numer(rq.2)::Float)/(denom(rq.2)::Float), 1.0e-50, 1.0e-50, 5, 10); vcaseF("bd7.5 wp50", rF.value, nowms() - t0, 48)
+)quit

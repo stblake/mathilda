@@ -1,0 +1,37 @@
+-- Experiment 255 -- SIAM 100-digit SEALED HOLDOUT B, family D20 (FriCAS column).
+-- See functional_roots.m.  Robbins rows: base e solved exactly over Fraction
+-- Integer (solve, as in exp 195); b = 2, sqrt2, 10 by solve(Matrix, Vector)
+-- over DoubleFloat (machine) / Float with digits(60) (wp50).  The root of
+-- slog_n(x) = level by the built-in real-root isolation solve(p = 0, eps)
+-- (for a Float system on the exact rationals of its coefficients), the root
+-- in the bracket kept.  v_1 (bd20.6) is the exact solution component.
+-- Carleman rows (bd20.7-9) need a matrix square root, which FriCAS does not
+-- have: SKIP.
+)read ../siam100_common.input )quiet
+robbinsSol(n:Integer):List Fraction Integer == (vs := [concat("v", string(k))::Symbol for k in 1..n]; eqs := [reduce(+, [(k^j/factorial(j) - (j = k => 1; 0)) * (vs.k)::Polynomial(Fraction Integer) for k in 1..n]) = (j = 0 => 1; 0) for j in 0..(n-1)]; sol := first solve(eqs, vs); [retract(rhs(sol.k))@Fraction(Integer) for k in 1..n])
+slogP(v:List Fraction Integer, lev:Fraction Integer):Polynomial Fraction Integer == reduce(+, [v.k * x^k for k in 1..#v]) - 1 - lev
+rootIn(p:Polynomial Fraction Integer, a:Fraction Integer, b:Fraction Integer, eps:Fraction Integer):Fraction Integer == (rs := [retract(rhs e)@Fraction(Integer) for e in solve(p = 0, eps)]; first [r for r in rs | r > a and r < b])
+robD(n:Integer, L:DoubleFloat):List Fraction Integer == (M : Matrix DoubleFloat := matrix [[(k*L)^j/factorial(j)::DoubleFloat - (j = k => 1; 0) for k in 1..n] for j in 0..(n-1)]; rv : Vector DoubleFloat := vector [(j = 0 => 1; 0) for j in 0..(n-1)]; s := (solve(M, rv)).particular; w := s::Vector(DoubleFloat); [retract(w.k)@Fraction(Integer) for k in 1..n])
+robF(n:Integer, L:Float):List Fraction Integer == (M : Matrix Float := matrix [[(k*L)^j/factorial(j)::Float - (j = k => 1; 0) for k in 1..n] for j in 0..(n-1)]; rv : Vector Float := vector [(j = 0 => 1; 0) for j in 0..(n-1)]; s := (solve(M, rv)).particular; w := s::Vector(Float); [retract(w.k)@Fraction(Integer) for k in 1..n])
+t0 := nowms(); vD := (rootIn(slogP(robbinsSol(10), -1/2), 2/5, 3/5, 1/10^18))::DoubleFloat; vcaseD("bd20.1 machine", vD, nowms() - t0, 10)
+t0 := nowms(); vD := (rootIn(slogP(robD(20, log(2.0::DoubleFloat)), -1/2), 45/100, 65/100, 1/10^18))::DoubleFloat; vcaseD("bd20.2 machine", vD, nowms() - t0, 10)
+t0 := nowms(); vD := (rootIn(slogP(robD(30, log(2.0::DoubleFloat)/2), -1/2), 55/100, 7/10, 1/10^18))::DoubleFloat; vcaseD("bd20.3 machine", vD, nowms() - t0, 10)
+t0 := nowms(); vD := (rootIn(slogP(robD(15, log(10.0::DoubleFloat)), -1/2), 3/10, 1/2, 1/10^18))::DoubleFloat; vcaseD("bd20.4 machine", vD, nowms() - t0, 10)
+t0 := nowms(); vD := (rootIn(slogP(robbinsSol(30), -3/4), 2/10, 35/100, 1/10^18))::DoubleFloat; vcaseD("bd20.5 machine", vD, nowms() - t0, 10)
+t0 := nowms(); vD := (first robbinsSol(24))::DoubleFloat; vcaseD("bd20.6 machine", vD, nowms() - t0, 10)
+vskip("bd20.7 machine", "MatrixSqrt")
+vskip("bd20.8 machine", "MatrixSqrt")
+vskip("bd20.9 machine", "MatrixSqrt")
+t0 := nowms(); vD := (rootIn(slogP(robbinsSol(45), -1/2), 2/5, 3/5, 1/10^18))::DoubleFloat; vcaseD("bd20.10 machine", vD, nowms() - t0, 7)
+digits(60)$Float
+t0 := nowms(); vF := (rootIn(slogP(robbinsSol(10), -1/2), 2/5, 3/5, 1/10^62))::Float; vcaseF("bd20.1 wp50", vF, nowms() - t0, 48)
+t0 := nowms(); vF := (rootIn(slogP(robF(20, log(2.0::Float)), -1/2), 45/100, 65/100, 1/10^62))::Float; vcaseF("bd20.2 wp50", vF, nowms() - t0, 48)
+t0 := nowms(); vF := (rootIn(slogP(robF(30, log(2.0::Float)/2), -1/2), 55/100, 7/10, 1/10^62))::Float; vcaseF("bd20.3 wp50", vF, nowms() - t0, 48)
+t0 := nowms(); vF := (rootIn(slogP(robF(15, log(10.0::Float)), -1/2), 3/10, 1/2, 1/10^62))::Float; vcaseF("bd20.4 wp50", vF, nowms() - t0, 48)
+t0 := nowms(); vF := (rootIn(slogP(robbinsSol(30), -3/4), 2/10, 35/100, 1/10^62))::Float; vcaseF("bd20.5 wp50", vF, nowms() - t0, 48)
+t0 := nowms(); vF := (first robbinsSol(24))::Float; vcaseF("bd20.6 wp50", vF, nowms() - t0, 48)
+vskip("bd20.7 wp50", "MatrixSqrt")
+vskip("bd20.8 wp50", "MatrixSqrt")
+vskip("bd20.9 wp50", "MatrixSqrt")
+t0 := nowms(); vF := (rootIn(slogP(robbinsSol(45), -1/2), 2/5, 3/5, 1/10^62))::Float; vcaseF("bd20.10 wp50", vF, nowms() - t0, 48)
+)quit

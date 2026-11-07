@@ -1,0 +1,25 @@
+-- Experiment 252 -- SIAM 100-digit SEALED HOLDOUT B, family D17 (FriCAS column).
+-- FriCAS has no PDE / FEM eigensolver on a region: every row is a SKIP.
+-- See nodal_lines.m.
+)read ../siam100_common.input )quiet
+vskip("bd17.1 machine", "NDEigensystem")
+vskip("bd17.1 wp50", "NDEigensystem")
+vskip("bd17.2 machine", "NDEigensystem")
+vskip("bd17.2 wp50", "NDEigensystem")
+vskip("bd17.3 machine", "NDEigensystem")
+vskip("bd17.3 wp50", "NDEigensystem")
+vskip("bd17.4 machine", "NDEigensystem")
+vskip("bd17.4 wp50", "NDEigensystem")
+vskip("bd17.5 machine", "NDEigensystem")
+vskip("bd17.5 wp50", "NDEigensystem")
+vskip("bd17.6 machine", "NDEigensystem")
+vskip("bd17.6 wp50", "NDEigensystem")
+vskip("bd17.7 machine", "NDEigensystem")
+vskip("bd17.7 wp50", "NDEigensystem")
+vskip("bd17.8 machine", "NDEigensystem")
+vskip("bd17.8 wp50", "NDEigensystem")
+vskip("bd17.9 machine", "NDEigensystem")
+vskip("bd17.9 wp50", "NDEigensystem")
+vskip("bd17.10 machine", "NDEigensystem")
+vskip("bd17.10 wp50", "NDEigensystem")
+)quit

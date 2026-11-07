@@ -1,0 +1,55 @@
+/* Experiment 244 -- holdout B for SIAM Appendix D Problem 9 (Maxima column).
+   The ten transition matrices of lattice_walks.m.  machine: the matrix power
+   P^^n of the float matrix, start row summed over the targets; wp50: the exact
+   start vector pushed through n exact rational products v . P, then bfloat at
+   fpprec 60 -- as experiment 184.  See lattice_walks.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["matrix ^^", "bfloat"])$
+
+/* grids: vertex p (0-based coordinates) has index 1 + mixed-radix(p) */
+gidx(p, d) := block([i : 0], for t : 1 thru length(d) do i : i*d[t] + p[t], i + 1)$
+gpts(d) := if length(d) = 1 then makelist([i], i, 0, d[1] - 1)
+           else apply(append, makelist(map(lambda([q], cons(i, q)), gpts(rest(d))), i, 0, d[1] - 1))$
+ingrid(q, d) := every(lambda([a, b], 0 <= a and a < b), q, d)$
+gridP(d, mv) := block([n : apply("*", d), P, l],
+  P : zeromatrix(n, n),
+  for p in gpts(d) do (
+    l : sublist(map(lambda([m], p + m), mv), lambda([q], ingrid(q, d))),
+    for q in l do P[gidx(p, d), gidx(q, d)] : 1/length(l)),
+  P)$
+tidx(r, c) := r*(r+1)/2 + c + 1$
+triP(nT) := block([nP : nT*(nT+1)/2, P, l],
+  P : zeromatrix(nP, nP),
+  for r : 0 thru nT-1 do for c : 0 thru r do (
+    l : sublist([[r, c-1], [r, c+1], [r-1, c-1], [r-1, c], [r+1, c], [r+1, c+1]],
+                lambda([p], 0 <= p[2] and p[2] <= p[1] and p[1] < nT)),
+    for p in l do P[tidx(r, c), tidx(p[1], p[2])] : 1/length(l)),
+  P)$
+king : delete([0, 0], create_list([a, b], a, [-1, 0, 1], b, [-1, 0, 1]))$
+knight : [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]]$
+cube : [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]$
+/* W[k] = [P, start, targets, steps] */
+W[1] : [gridP([21], [[1], [-1]]), 1, makelist(i + 1, i, 11, 20), 40]$
+W[2] : [gridP([10, 10], [[1, 0], [-1, 0], [0, 1], [0, -1]]), 1, makelist(gidx([9, j], [10, 10]), j, 0, 9), 30]$
+W[3] : [triP(20), 1, makelist(tidx(19, c), c, 0, 19), 40]$
+W[4] : [gridP([6, 6, 6], cube), 1, map(lambda([p], gidx(p, [6, 6, 6])), sublist(gpts([6, 6, 6]), lambda([p], p[1] = 5))), 24]$
+W[5] : [gridP([8, 8], knight), 1, [gidx([7, 7], [8, 8])], 20]$
+W[6] : [gridP([8, 8], king), 1, makelist(gidx([i, 7], [8, 8]), i, 0, 7), 30]$
+W[7] : [block([P : zeromatrix(1024, 1024)],
+          for v : 0 thru 1023 do for i : 0 thru 9 do P[v + 1, ?logxor(v, 2^i) + 1] : 1/10, P), 1, [1024], 40]$
+W[8] : [block([P : zeromatrix(17, 17)],
+          for v : 0 thru 16 do (P[v + 1, mod(v + 1, 17) + 1] : 1/2, P[v + 1, mod(v - 1, 17) + 1] : 1/2), P), 1, [1], 60]$
+W[9] : [block([P : zeromatrix(31, 31)], P[1, 1] : 1, P[31, 31] : 1,
+          for v : 1 thru 29 do (P[v + 1, v + 2] : 2/5, P[v + 1, v] : 3/5), P), 16, [31], 200]$
+W[10] : [triP(40), 1, makelist(tidx(39, c), c, 0, 39), 100]$
+
+for k : 1 thru 10 do block([P : W[k][1], s : W[k][2], tg : W[k][3], n : W[k][4], Pf],
+  Pf : float(P),
+  vrun(sconcat("bd9.", k, " machine"),
+       lambda([], block([Q : Pf^^n], apply("+", makelist(Q[s, j], j, tg)))), 10, 60),
+  vrun(sconcat("bd9.", k, " wp50"),
+       lambda([], block([v : genmatrix(lambda([i, j], if j = s then 1 else 0), 1, length(P)), fpprec : 60],
+         for t : 1 thru n do v : v . P,
+         bfloat(apply("+", makelist(v[1, j], j, tg))))), 48, 120))$
+quit()$

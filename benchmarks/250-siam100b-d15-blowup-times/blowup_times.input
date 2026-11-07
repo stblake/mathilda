@@ -1,0 +1,26 @@
+-- Experiment 250 -- SIAM 100-Digit Challenge holdout B for App. D Problem 15 (FriCAS column).
+-- Integration to a singularity (PDE or ODE); FriCAS has no PDE solver, no
+-- stiff integrator and no singularity / event detection, so all rows are SKIP
+-- (as in exp. 190).  See blowup_times.m.
+)read ../siam100_common.input )quiet
+vskip("bd15.1 machine", "NDSolve (PDE)")
+vskip("bd15.2 machine", "NDSolve (PDE)")
+vskip("bd15.3 machine", "NDSolve (PDE)")
+vskip("bd15.4 machine", "NDSolve (PDE)")
+vskip("bd15.5 machine", "NDSolve (PDE)")
+vskip("bd15.6 machine", "NDSolve (PDE)")
+vskip("bd15.7 machine", "NDSolve (PDE)")
+vskip("bd15.8 machine", "NDSolve (PDE)")
+vskip("bd15.9 machine", "NDSolve (PDE)")
+vskip("bd15.10 machine", "NDSolve (PDE)")
+vskip("bd15.1 wp50", "NDSolve (PDE)")
+vskip("bd15.2 wp50", "NDSolve (PDE)")
+vskip("bd15.3 wp50", "NDSolve (PDE)")
+vskip("bd15.4 wp50", "NDSolve (PDE)")
+vskip("bd15.5 wp50", "NDSolve (PDE)")
+vskip("bd15.6 wp50", "NDSolve (PDE)")
+vskip("bd15.7 wp50", "NDSolve (PDE)")
+vskip("bd15.8 wp50", "NDSolve (PDE)")
+vskip("bd15.9 wp50", "NDSolve (PDE)")
+vskip("bd15.10 wp50", "NDSolve (PDE)")
+)quit

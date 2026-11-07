@@ -1,0 +1,25 @@
+-- Experiment 254 -- SIAM 100-digit SEALED HOLDOUT B, family D19 (FriCAS column).
+-- The finite design problems need a constrained minimiser (box + equality);
+-- FriCAS has none built in, so every row is a SKIP.  See design.m.
+)read ../siam100_common.input )quiet
+vskip("bd19.1 machine", "ConstrainedMinimize")
+vskip("bd19.1 wp50", "ConstrainedMinimize")
+vskip("bd19.2 machine", "ConstrainedMinimize")
+vskip("bd19.2 wp50", "ConstrainedMinimize")
+vskip("bd19.3 machine", "ConstrainedMinimize")
+vskip("bd19.3 wp50", "ConstrainedMinimize")
+vskip("bd19.4 machine", "ConstrainedMinimize")
+vskip("bd19.4 wp50", "ConstrainedMinimize")
+vskip("bd19.5 machine", "ConstrainedMinimize")
+vskip("bd19.5 wp50", "ConstrainedMinimize")
+vskip("bd19.6 machine", "ConstrainedMinimize")
+vskip("bd19.6 wp50", "ConstrainedMinimize")
+vskip("bd19.7 machine", "ConstrainedMinimize")
+vskip("bd19.7 wp50", "ConstrainedMinimize")
+vskip("bd19.8 machine", "ConstrainedMinimize")
+vskip("bd19.8 wp50", "ConstrainedMinimize")
+vskip("bd19.9 machine", "ConstrainedMinimize")
+vskip("bd19.9 wp50", "ConstrainedMinimize")
+vskip("bd19.10 machine", "ConstrainedMinimize")
+vskip("bd19.10 wp50", "ConstrainedMinimize")
+)quit

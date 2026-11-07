@@ -1,0 +1,25 @@
+-- Experiment 251 -- SIAM 100-digit SEALED HOLDOUT B, family D16 (FriCAS column).
+-- FriCAS has no PDE solver (and no stiff ODE integrator): every row is a SKIP.
+-- See heat_functionals.m.
+)read ../siam100_common.input )quiet
+vskip("bd16.1 machine", "NDSolve (PDE)")
+vskip("bd16.1 wp50", "NDSolve (PDE)")
+vskip("bd16.2 machine", "NDSolve (PDE)")
+vskip("bd16.2 wp50", "NDSolve (PDE)")
+vskip("bd16.3 machine", "NDSolve (PDE)")
+vskip("bd16.3 wp50", "NDSolve (PDE)")
+vskip("bd16.4 machine", "NDSolve (PDE)")
+vskip("bd16.4 wp50", "NDSolve (PDE)")
+vskip("bd16.5 machine", "NDSolve (PDE)")
+vskip("bd16.5 wp50", "NDSolve (PDE)")
+vskip("bd16.6 machine", "NDSolve (PDE)")
+vskip("bd16.6 wp50", "NDSolve (PDE)")
+vskip("bd16.7 machine", "NDSolve (PDE)")
+vskip("bd16.7 wp50", "NDSolve (PDE)")
+vskip("bd16.8 machine", "NDSolve (PDE)")
+vskip("bd16.8 wp50", "NDSolve (PDE)")
+vskip("bd16.9 machine", "NDSolve (PDE)")
+vskip("bd16.9 wp50", "NDSolve (PDE)")
+vskip("bd16.10 machine", "NDSolve (PDE)")
+vskip("bd16.10 wp50", "NDSolve (PDE)")
+)quit

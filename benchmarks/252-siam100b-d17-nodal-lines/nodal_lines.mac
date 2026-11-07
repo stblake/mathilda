@@ -1,0 +1,9 @@
+/* Experiment 252 -- SIAM 100-digit SEALED HOLDOUT B, family D17 (Maxima column).
+   Maxima has no PDE / FEM eigensolver on a region: every row is a SKIP.
+   See nodal_lines.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("bd17.", k, " machine"), "NDEigensystem"),
+  skip(sconcat("bd17.", k, " wp50"), "NDEigensystem"))$
+quit()$

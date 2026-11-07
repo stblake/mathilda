@@ -1,0 +1,7 @@
+/* Experiment 249 -- SIAM 100-Digit Challenge holdout B for App. D Problem 14 (Maxima column).
+   Every case is a finite-element boundary-value solve; Maxima has no PDE
+   solver, so all rows are SKIP (as in exp. 189).  See fem_parameter.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for t in ["machine", "wp50"] do for k : 1 thru 10 do skip(sconcat("bd14.", k, " ", t), "NDSolveValue (FEM)")$
+quit()$

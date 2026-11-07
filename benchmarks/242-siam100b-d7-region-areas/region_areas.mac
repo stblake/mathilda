@@ -1,0 +1,96 @@
+/* Experiment 242 -- holdout B for SIAM Appendix D Problem 7 (Maxima column).
+   The 1-D statements of region_areas.m.  Roots by find_root on brackets read
+   off the same plots (bf_find_root at fpprec 60); slice lengths by QUADPACK
+   quad_qags at machine precision (one call per piece between breakpoints),
+   bromberg (Maxima's only bigfloat quadrature) at fpprec 60 with rombergit
+   22, as in experiment 182 -- Romberg converges only algebraically on the
+   root-type endpoint behaviour.  Real cube root: signum(t) * abs(t)^(1/3).
+   See region_areas.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["find_root", "quad_qags", "bf_find_root", "bromberg"])$
+
+qa(e, a, b) := first(quad_qags(e, x, a, b, 'epsrel = 1d-13, 'limit = 500))$
+rc(t) := signum(t) * abs(t)^(1/3)$
+/* bromberg of an expression in x on [a, b] at fpprec 60 */
+br(e, a, b) := block([fpprec : 60, rombergtol : 1b-50, rombergit : 22],
+  bromberg(e, x, bfloat(a), bfloat(b)))$
+bfr(e, a, b) := block([fpprec : 60], bf_find_root(e, x, bfloat(a), bfloat(b)))$
+
+/* 1 */
+vrun("bd7.1 machine", lambda([], block([x0 : find_root(cos(x) - x^2, x, 0.5, 1.0)],
+  qa(cos(x) - x^2, -x0, x0))), 10, 60)$
+vrun("bd7.1 wp50", lambda([], block([fpprec : 60, x0], x0 : bfr(cos(x) - x^2, 0.5, 1),
+  br(cos(x) - x^2, -x0, x0))), 48, 60)$
+/* 2 */
+vrun("bd7.2 machine", lambda([], block([a : find_root(exp(x) + x^2 - 3, x, -2.0, -1.5),
+                                        b : find_root(exp(x) + x^2 - 3, x, 0.5, 1.0)],
+  qa(3 - x^2 - exp(x), a, b))), 10, 60)$
+vrun("bd7.2 wp50", lambda([], block([fpprec : 60, a, b],
+  a : bfr(exp(x) + x^2 - 3, -2, -1.5b0), b : bfr(exp(x) + x^2 - 3, 0.5b0, 1),
+  br(3 - x^2 - exp(x), a, b))), 48, 60)$
+/* 3 */
+vrun("bd7.3 machine", lambda([], qa(%pi - 2*asin(1/(2*sin(x))), %pi/6, 5*%pi/6)), 10, 60)$
+vrun("bd7.3 wp50", lambda([], br(%pi - 2*asin(1/(2*sin(x))), %pi/6, 5*%pi/6)), 48, 60)$
+/* 4 (variable x stands for y) */
+s4(t) := sqrt(-log(1/2 + t^2/8))$
+vrun("bd7.4 machine", lambda([], block([yA : find_root(-log(1/2 + x^2/8) - x^2, x, -1.0, -0.5),
+                                        yB : find_root(-log(1/2 + x^2/8) - x^2, x, 0.5, 1.0)],
+  qa(2*sqrt(x + s4(x)), yA, 0) + qa(2*sqrt(x + s4(x)), 0, yB)
+  + qa(2*(sqrt(x + s4(x)) - sqrt(x - s4(x))), yB, 2))), 10, 60)$
+vrun("bd7.4 wp50", lambda([], block([fpprec : 60, yA, yB],
+  yA : bfr(-log(1/2 + x^2/8) - x^2, -1, -0.5b0), yB : bfr(-log(1/2 + x^2/8) - x^2, 0.5b0, 1),
+  br(2*sqrt(x + s4(x)), yA, 0) + br(2*sqrt(x + s4(x)), 0, yB)
+  + br(2*(sqrt(x + s4(x)) - sqrt(x - s4(x))), yB, 2))), 48, 60)$
+/* 5 */
+vrun("bd7.5 machine", lambda([], block([r1 : find_root(x^3 - 3*x + 1, x, -2.0, -1.5),
+                                        r2 : find_root(x^3 - 3*x + 1, x, 0.0, 1.0)],
+  qa(2*sqrt(x^3 - 3*x + 1), r1, r2))), 10, 60)$
+vrun("bd7.5 wp50", lambda([], block([fpprec : 60, r1, r2],
+  r1 : bfr(x^3 - 3*x + 1, -2, -1.5b0), r2 : bfr(x^3 - 3*x + 1, 0, 1),
+  br(2*sqrt(x^3 - 3*x + 1), r1, r2))), 48, 60)$
+/* 6 */
+vrun("bd7.6 machine", lambda([], block([x0 : find_root(cos(x) - x^2, x, 0.5, 1.0)],
+  4*qa((cos(x) - x^2)^(1/4), 0, x0))), 10, 60)$
+vrun("bd7.6 wp50", lambda([], block([fpprec : 60, x0], x0 : bfr(cos(x) - x^2, 0.5b0, 1),
+  4*br((cos(x) - x^2)^(1/4), 0, x0))), 48, 60)$
+/* 7 (x stands for u) */
+h7(t) := 1 + sin(sqrt(2)*t) - t^2$
+vrun("bd7.7 machine", lambda([], block([u1 : find_root(h7(x), x, -1.0, 0.0),
+                                        u2 : find_root(h7(x), x, 1.0, 2.0)],
+  qa(2*sqrt(h7(x)), u1, u2))), 10, 60)$
+vrun("bd7.7 wp50", lambda([], block([fpprec : 60, u1, u2],
+  u1 : bfr(h7(x), -1, 0), u2 : bfr(h7(x), 1, 2),
+  br(2*sqrt(h7(x)), u1, u2))), 48, 60)$
+/* 8 (x stands for y) */
+g8(t) := t^2/16 + exp(cos(t) - 1)$
+w8(t) := rc(sqrt(-log(g8(t))) - 2*t) - rc(-sqrt(-log(g8(t))) - 2*t)$
+vrun("bd7.8 machine", lambda([], block([m : find_root(g8(x) - 1, x, -4.0, -3.0),
+                                        p : find_root(g8(x) - 1, x, 3.0, 4.0)],
+  qa(w8(x), m, 0) + qa(w8(x), 0, p))), 10, 60)$
+vrun("bd7.8 wp50", lambda([], block([fpprec : 60, m, p],
+  m : bfr(g8(x) - 1, -4, -3), p : bfr(g8(x) - 1, 3, 4),
+  br(w8(x), m, 0) + br(w8(x), 0, p))), 48, 60)$
+/* 9 */
+c9(t) := sqrt(9/4 - t^2)$
+k9(t) := acos(1 - cos(t))$
+vrun("bd7.9 machine", lambda([], block([x1 : find_root(c9(x) - k9(x), x, 0.6, 1.0),
+                                        x2 : find_root(c9(x) - k9(x), x, 1.1, 1.45)],
+  4*(qa(c9(x), 0, x1) + qa(k9(x), x1, x2) + qa(c9(x), x2, 1.5)))), 10, 60)$
+vrun("bd7.9 wp50", lambda([], block([fpprec : 60, x1, x2],
+  x1 : bfr(c9(x) - k9(x), 0.6b0, 1), x2 : bfr(c9(x) - k9(x), 1.1b0, 1.45b0),
+  4*(br(c9(x), 0, x1) + br(k9(x), x1, x2) + br(c9(x), x2, 3/2)))), 48, 60)$
+/* 10 (x stands for y) */
+g10(t) := t^2/100 + exp(sin(t))$
+w10(t) := rc(-t + sqrt(-log(g10(t)))) - rc(-t - sqrt(-log(g10(t))))$
+B10 : [[-8.2, -7.5], [-7.5, -6.5], [-3.5, -2.5], [3.0, 4.0], [5.5, 6.2]]$
+vrun("bd7.10 machine", lambda([], block([r, yc],
+  r : makelist(find_root(g10(x) - 1, x, b[1], b[2]), b, B10),
+  yc : find_root(-log(g10(x)) - x^2, x, -1.0, -0.7),
+  qa(w10(x), r[1], r[2]) + qa(w10(x), r[3], yc) + qa(w10(x), yc, 0) + qa(w10(x), r[4], r[5]))), 10, 60)$
+vrun("bd7.10 wp50", lambda([], block([fpprec : 60, r, yc],
+  r : makelist(bfr(g10(x) - 1, rationalize(b[1]), rationalize(b[2])), b, B10),
+  yc : bfr(-log(g10(x)) - x^2, -1, -0.7b0),
+  br(w10(x), r[1], r[2]) + br(w10(x), r[3], yc) + br(w10(x), yc, 0) + br(w10(x), r[4], r[5]))), 48, 60)$
+quit()$

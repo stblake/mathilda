@@ -1,0 +1,93 @@
+/* Experiment 254 -- SIAM 100-digit SEALED HOLDOUT B, family D19 (Maxima column).
+   The ten finite convex design problems of design.m, built by the same rules
+   (element lists [dofs, Kloc], dof 0 = a fixed node).  Maxima's only
+   constrained minimiser is fmin_cobyla (derivative-free); the objective is a
+   numeric black box (assembly + linsolve_by_lu), the equality given as two
+   inequalities, as in exp 194.  No bigfloat constrained optimiser: every
+   wp50 row is a SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(fmin_cobyla)$
+require(["fmin_cobyla", "linsolve_by_lu"])$
+
+KQ : matrix([4,-1,-2,-1],[-1,4,-1,-2],[-2,-1,4,-1],[-1,-2,-1,4]) / 6$
+KC : matrix([2,-1,0,-1],[-1,2,-1,0],[0,-1,2,-1],[-1,0,-1,2]) / 2$
+KB : matrix([1,-1],[-1,1])$
+
+/* a problem: [nDof, [[dofs, Kloc], ...], F (list)] */
+loadOf(nd, els, w) := block([F : makelist(0, i, 1, nd)],
+  for el in els do for r : 1 thru length(w) do
+    if el[1][r] > 0 then F[el[1][r]] : F[el[1][r]] + w[r],
+  F)$
+bar(n, clampRight) := block([h : 1/n, nd, dofOf, els],
+  nd : if clampRight then n - 1 else n,
+  dofOf : lambda([i], if i = 0 or (clampRight and i = n) then 0 else i),
+  els : makelist([[dofOf(e), dofOf(e+1)], KB / h], e, 0, n-1),
+  [nd, els, loadOf(nd, els, [h/2, h/2])])$
+/* Q1: cellOk(a,b), nodeFree(i,j); point = false or [i,j] */
+q1(nx, ny, h, cellOk, nodeFree, point) := block([cells : [], used, free, dofOf, els, F, nd],
+  for a : 0 thru nx-1 do for b : 0 thru ny-1 do if cellOk(a, b) then cells : endcons([a, b], cells),
+  used : unique(apply(append, map(lambda([c], [c, c + [1,0], c + [1,1], c + [0,1]]), cells))),
+  free : sublist(used, lambda([v], nodeFree(v[1], v[2]))),
+  nd : length(free),
+  dofOf : lambda([v], block([p : sublist_indices(free, lambda([w], w = v))], if p = [] then 0 else p[1])),
+  els : map(lambda([c], [map(dofOf, [c, c + [1,0], c + [1,1], c + [0,1]]), KQ]), cells),
+  F : if point = false then loadOf(nd, els, makelist(h^2/4, i, 1, 4))
+      else block([G : makelist(0, i, 1, nd)], G[dofOf(point)] : 1, G),
+  [nd, els, F])$
+/* each cell = two P1 right triangles sharing ONE c: the 5-point-stencil cell matrix KC,
+   load h^2 [1/3, 1/6, 1/3, 1/6] on the corners */
+p1cell(n) := block([h : 1/n, dofOf, els : []],
+  dofOf : lambda([v], if v[1] > 0 and v[1] < n and v[2] > 0 and v[2] < n then (v[1]-1)*(n-1) + v[2] else 0),
+  for a : 0 thru n-1 do for b : 0 thru n-1 do
+    els : endcons([map(dofOf, [[a,b], [a+1,b], [a+1,b+1], [a,b+1]]), KC], els),
+  [(n-1)^2, els, loadOf((n-1)^2, els, h^2 * [1/3, 1/6, 1/3, 1/6])])$
+gridGraph(m) := block([dofOf, els : [], F],
+  dofOf : lambda([v], v[1]*m + v[2]),          /* node (0,0) -> 0: grounded */
+  for i : 0 thru m-1 do for j : 0 thru m-1 do (
+    if i + 1 < m then els : endcons([[dofOf([i,j]), dofOf([i+1,j])], KB], els),
+    if j + 1 < m then els : endcons([[dofOf([i,j]), dofOf([i,j+1])], KB], els)),
+  F : makelist(0, i, 1, m^2 - 1), F[dofOf([1, 2])] : 1,      /* unit current in at (1,2) */
+  [m^2 - 1, els, F])$
+allCells(a, b) := true$
+interiorQ(nx, ny) := buildq([nx, ny], lambda([i, j], i > 0 and i < nx and j > 0 and j < ny))$
+lShapeQ(a, b) := not (a >= 3 and b >= 3)$
+lShapeNodeQ(i, j) := every(lambda([ab], ab[1] >= 0 and ab[1] < 6 and ab[2] >= 0 and ab[2] < 6 and lShapeQ(ab[1], ab[2])),
+                           [[i-1, j-1], [i, j-1], [i-1, j], [i, j]])$
+problem(k) :=
+  if k = 1 then bar(8, false) else if k = 2 then bar(12, true)
+  else if k = 3 then q1(4, 4, 1/4, allCells, interiorQ(4, 4), false)
+  else if k = 4 then q1(8, 4, 1/4, allCells, interiorQ(8, 4), false)
+  else if k = 5 then q1(6, 6, 1/6, allCells, interiorQ(6, 6), [3, 3])
+  else if k = 6 then q1(6, 6, 1/6, allCells, lambda([i, j], not (j = 0 and i <= 2)), false)
+  else if k = 7 then gridGraph(4) else if k = 8 then p1cell(4)
+  else if k = 9 then q1(6, 6, 1/6, lShapeQ, lShapeNodeQ, false)
+  else q1(10, 10, 1/10, allCells, interiorQ(10, 10), false)$
+bounds : [[1, 10, 32], [10, 100, 606], [1, 10, 48], [1, 100, 1616], [1, 100, 1818],
+          [1, 100, 360], [1, 10, 60], [1, 100, 808], [1, 100, 1350], [1, 100, 5050]]$
+
+compliance(prob, cl) := block([nd : prob[1], els : prob[2], K, F, idx, Ke, U],
+  K : zeromatrix(nd, nd),
+  for e : 1 thru length(els) do (
+    idx : els[e][1], Ke : els[e][2],
+    for r : 1 thru length(idx) do for s : 1 thru length(idx) do
+      if idx[r] > 0 and idx[s] > 0 then
+        K[idx[r], idx[s]] : K[idx[r], idx[s]] + cl[e] * float(Ke[r, s])),
+  F : transpose(matrix(float(prob[3]))),
+  U : first(linsolve_by_lu(K, F, 'floatfield)),
+  (transpose(F) . U))$
+Jbox(prob, cl) := if every(numberp, cl) then compliance(prob, cl) else 'Jbox(prob, cl)$
+designMin(k) := block([prob : problem(k), lo, hi, vol, m, cv, r],
+  [lo, hi, vol] : bounds[k],
+  m : length(prob[2]),
+  cv : makelist(concat('c, i), i, 1, m),
+  r : fmin_cobyla(Jbox(prob, cv), cv, makelist(float(vol/m), i, 1, m),
+        constraints = append(makelist(cv[i] >= lo, i, 1, m), makelist(cv[i] <= hi, i, 1, m),
+                             [apply("+", cv) >= vol, apply("+", cv) <= vol]),
+        rhobeg = float((hi - lo)/10), rhoend = 1.0e-10, iprint = 0, maxfun = 20000),
+  compliance(prob, subst(r[1], cv)))$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("bd19.", k, " machine"), buildq([k], lambda([], designMin(k))), 10, 90),
+  skip(sconcat("bd19.", k, " wp50"), "ConstrainedMinimize(bfloat)"))$
+quit()$

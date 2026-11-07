@@ -1,0 +1,25 @@
+-- Experiment 240 -- SIAM 100-Digit Challenge, holdout B for Appendix D problem 5 (FriCAS).
+-- FriCAS has no matrix 2-norm (singular values) and no numerical minimiser: every row is
+-- a SKIP.  See matrix_polynomial_norms.m.
+)read ../siam100_common.input )quiet
+vskip("bd5.1 machine", "minimize")
+vskip("bd5.1 wp50", "minimize")
+vskip("bd5.2 machine", "minimize")
+vskip("bd5.2 wp50", "minimize")
+vskip("bd5.3 machine", "minimize")
+vskip("bd5.3 wp50", "minimize")
+vskip("bd5.4 machine", "minimize")
+vskip("bd5.4 wp50", "minimize")
+vskip("bd5.5 machine", "minimize")
+vskip("bd5.5 wp50", "minimize")
+vskip("bd5.6 machine", "minimize")
+vskip("bd5.6 wp50", "minimize")
+vskip("bd5.7 machine", "minimize")
+vskip("bd5.7 wp50", "minimize")
+vskip("bd5.8 machine", "minimize")
+vskip("bd5.8 wp50", "minimize")
+vskip("bd5.9 machine", "minimize")
+vskip("bd5.9 wp50", "minimize")
+vskip("bd5.10 machine", "minimize")
+vskip("bd5.10 wp50", "minimize")
+)quit
