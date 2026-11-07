@@ -1528,6 +1528,13 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
         && e->data.function.head->data.symbol.name == SYM_DirichletL;
     if (dirichlet_l)
         n_label_held = 2;
+    /* SeriesData[x, x0, {c...}, nmin, nmax, den]: the order and denominator
+     * fields are structural integers, not values.  N numericalises the
+     * variable, the point and the coefficients and leaves nmin/nmax/den exact
+     * (as the reference does); a SeriesData with 5.0 as its order is not a
+     * series, and Normal / series arithmetic reject it. */
+    bool series_data = n == 6 && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_SeriesData;
     /* NHoldFirst / NHoldRest: positions N leaves exact (StieltjesGamma's order,
      * Part's indices). DirichletL is NHoldAll yet numericalizes s, so its
      * labels are the explicit rule above. */
@@ -1546,7 +1553,8 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
      * the exponent based on the (already-computed) numericalized base. */
     bool preserve_power_exp = exp_is_int;
     for (size_t i = 0; i < n; ++i) {
-        if (i < n_label_held || (i == 0 && (nhold & ATTR_NHOLDFIRST)) ||
+        if (i < n_label_held || (series_data && i >= 3) ||
+            (i == 0 && (nhold & ATTR_NHOLDFIRST)) ||
             (i > 0 && (nhold & ATTR_NHOLDREST))) {
             new_args[i] = expr_copy(e->data.function.args[i]);
             continue;

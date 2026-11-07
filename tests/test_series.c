@@ -2157,6 +2157,34 @@ static void test_series_plus_real_contagion(void) {
 
 /* Mixed precision: an MPFR (arbitrary-precision) constant likewise folds into
  * a0; the remaining coefficients stay exact. */
+/* Series of an inexact expression: the order and denominator fields of the
+ * SeriesData stay exact integers (N leaves them alone, as the reference does),
+ * and an exact expansion point stays exact.  It used to come back as
+ * SeriesData[x, 0., {...}, 0., 4., 1.], on which Normal gave powers of
+ * (0. + x) and series arithmetic stopped. */
+static void test_series_inexact_fields_exact(void) {
+    setup_full();
+    assert_fullform("Series[Exp[0.5 x], {x, 0, 3}]",
+        "SeriesData[x, 0, List[1.0, 0.5, 0.125, 0.0208333], 0, 4, 1]");
+    assert_fullform("Series[Sqrt[x] Exp[0.5 x], {x, 0, 2}][[4 ;; 6]]",
+        "SeriesData[1, 5, 2]");
+    assert_fullform("Series[Exp[x], {x, 0.5, 2}][[2 ;; 2]]", "SeriesData[0.5]");
+    assert_fullform("Series[Exp[0.5 x], {x, 1, 2}][[{2, 4, 5, 6}]]",
+        "SeriesData[1, 0, 3, 1]");
+    assert_fullform("N[SeriesData[x, 1/2, {1, 1/3}, 1, 5, 2]]",
+        "SeriesData[x, 0.5, List[1.0, 0.333333], 1, 5, 2]");
+    assert_fullform("N[Series[Exp[x], {x, 0, 2}], 20][[{2, 4, 5, 6}]]",
+        "SeriesData[0, 0, 3, 1]");
+    assert_fullform("Normal[Series[Exp[0.5 x], {x, 0, 2}]]",
+        "Plus[1.0, Times[0.5, x], Times[0.125, Power[x, 2]]]");
+    /* combines with an exact series at the same point */
+    assert_fullform("Normal[Series[Exp[0.5 x], {x, 0, 2}] + Series[Sin[x], {x, 0, 2}]]",
+        "Plus[1.0, Times[1.5, x], Times[0.125, Power[x, 2]]]");
+    /* multivariate: the nested series keeps its exact point too */
+    assert_fullform("Cases[Series[Exp[0.5 x y], {x, 0, 1}, {y, 0, 1}], "
+                    "SeriesData[_, p_, ___] :> p, {0, Infinity}]", "List[0, 0]");
+}
+
 static void test_series_plus_mpfr(void) {
     setup_full();
     assert_fullform(
@@ -2872,6 +2900,7 @@ int main(void) {
     TEST(test_series_high_order_pole_precision);
     TEST(test_series_plus_real_contagion);
     TEST(test_series_plus_mpfr);
+    TEST(test_series_inexact_fields_exact);
 
     /* Series-under-Assumptions stress corpus (110 cases). */
     TEST(test_series_stress_00);

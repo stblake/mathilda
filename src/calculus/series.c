@@ -8018,6 +8018,53 @@ static Expr* series_with_compound_vars(Expr* res, Expr* (*self)(Expr*)) {
     return out;
 }
 
+/* Restore the exact expansion points of an inexact Series round trip.
+ *
+ * Series of an inexact expression runs the exact core on a rationalised copy
+ * and numericalises the result.  N leaves a SeriesData's order fields exact
+ * (numeric.c), but it also numericalises the point, and an exact point the
+ * user wrote must stay exact: Series[Exp[0.5 x], {x, 0, 3}] is
+ * SeriesData[x, 0, {1., 0.5, 0.125, 0.0208333}, 0, 4, 1], as in the reference.
+ * A point of 0. made Normal produce powers of (0. + x) and kept the series from
+ * combining with an exact series at the same point.
+ *
+ * For every spec {x, x0, n} (or x -> x0) whose x0 is free of inexact numbers,
+ * each SeriesData in `out` in the variable x -- at the top, threaded over a
+ * List, or nested as a coefficient of a multivariate series -- gets x0 back.
+ * Mutates `out` in place (it is freshly built and owned by the caller). */
+static void series_restore_exact_points_in(Expr* e, const Expr* x, const Expr* x0) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_SeriesData
+        && e->data.function.arg_count == 6
+        && expr_eq(e->data.function.args[0], (Expr*)x)
+        && !expr_eq(e->data.function.args[1], (Expr*)x0)) {
+        expr_free(e->data.function.args[1]);
+        e->data.function.args[1] = expr_copy((Expr*)x0);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        series_restore_exact_points_in(e->data.function.args[i], x, x0);
+}
+
+static Expr* series_restore_exact_points(Expr* out, const Expr* res) {
+    if (!out) return out;
+    for (size_t i = 1; i < res->data.function.arg_count; i++) {
+        Expr* spec = res->data.function.args[i];
+        Expr* x = NULL; Expr* x0 = NULL;
+        if (has_symbol_head(spec, "List") && spec->data.function.arg_count == 3) {
+            x = spec->data.function.args[0]; x0 = spec->data.function.args[1];
+        } else if (has_symbol_head(spec, "Rule") && spec->data.function.arg_count == 2) {
+            x = spec->data.function.args[0]; x0 = spec->data.function.args[1];
+        }
+        if (!x || x->type != EXPR_SYMBOL || internal_contains_inexact(x0)) continue;
+        Expr* x0e = eval_and_free(expr_copy(x0));
+        if (x0e && !internal_contains_inexact(x0e))
+            series_restore_exact_points_in(out, x, x0e);
+        expr_free(x0e);
+    }
+    return out;
+}
+
 Expr* builtin_series(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
@@ -8035,7 +8082,8 @@ Expr* builtin_series(Expr* res) {
      * rational. Convert inexact inputs, run, and numericalise the
      * resulting series back. */
     if (internal_args_contain_inexact(res)) {
-        return internal_rationalize_then_numericalize(res, builtin_series);
+        return series_restore_exact_points(
+            internal_rationalize_then_numericalize(res, builtin_series), res);
     }
 
     Expr* f = res->data.function.args[0];

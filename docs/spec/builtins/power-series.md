@@ -20,6 +20,16 @@ been dropped.
 - `InputForm[...]` switches to the literal `SeriesData[x, x0, {...},
   nmin, nmax, den]` form, which round-trips through the parser.
 - `FullForm[...]` shows the raw tree structure.
+- `N[SeriesData[...]]` numericalises the variable, the point and the
+  coefficients and leaves `nmin`, `nmax` and `den` exact, as the reference
+  does: `N[SeriesData[x, 1/2, {1, 1/3}, 1, 5, 2]]` is
+  `SeriesData[x, 0.5, {1., 0.333333}, 1, 5, 2]`.  A series with `5.` as an
+  order is not a series (`Normal` and series arithmetic reject it).
+- `Series` of an inexact expression keeps those fields exact and also keeps an
+  exact expansion point exact: `Series[Exp[0.5 x], {x, 0, 3}]` is
+  `SeriesData[x, 0, {1., 0.5, 0.125, 0.0208333}, 0, 4, 1]` (it was
+  `SeriesData[x, 0., {...}, 0., 4., 1.]`, whose `Normal` was a polynomial in
+  `0. + x`).  An inexact point (`{x, 0.5, 2}`) stays inexact.
 
 ```mathematica
 In[1]:= SeriesData[x, 0, {1, 1, 1/2, 1/6, 1/24, 1/120}, 0, 6, 1]
