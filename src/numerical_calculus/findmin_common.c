@@ -6,6 +6,7 @@
 #include "../modular.h"
 #include <stdint.h>
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
+#include "compile/autocompile.h"  /* MPFR programs for the WorkingPrecision path */
 
 
 /* ------------------------------------------------------------------ *
@@ -349,10 +350,54 @@ static NumericSpec fm_numeric_spec(const FmOpts* opts) {
  * EvaluationMonitor, and numericalize the result at the requested
  * precision so that Power[E, 1.0]-style residues collapse to numbers.
  * Returns NULL on failure; caller owns the return. */
+typedef struct { const Expr* e; AutoCompiled* ac; size_t nargs; } FmMpfrProg;
+static FmMpfrProg* g_fm_mp = NULL;
+static size_t      g_fm_mp_n = 0, g_fm_mp_cap = 0;
+
+size_t fm_mpfr_progs_mark(void) { return g_fm_mp_n; }
+
+void fm_mpfr_progs_register(const Expr* e, AutoCompiled* ac, size_t nargs) {
+    if (!e || !ac) return;
+    if (g_fm_mp_n == g_fm_mp_cap) {
+        size_t nc = g_fm_mp_cap ? 2 * g_fm_mp_cap : 32;
+        FmMpfrProg* ne = (FmMpfrProg*)realloc(g_fm_mp, nc * sizeof(FmMpfrProg));
+        if (!ne) return;
+        g_fm_mp = ne; g_fm_mp_cap = nc;
+    }
+    g_fm_mp[g_fm_mp_n].e = e;
+    g_fm_mp[g_fm_mp_n].ac = ac;
+    g_fm_mp[g_fm_mp_n].nargs = nargs;
+    g_fm_mp_n++;
+}
+
+void fm_mpfr_progs_release(size_t mark) {
+    if (mark >= g_fm_mp_n) return;
+    g_fm_mp_n = mark;
+    if (g_fm_mp_n == 0) { free(g_fm_mp); g_fm_mp = NULL; g_fm_mp_cap = 0; }
+}
+
+/* The registered program for `e` (latest registration wins), or NULL. A linear
+ * scan: a solve registers its objective and n gradient components, and each
+ * lookup is dwarfed by the MPFR evaluation it replaces. */
+static const AutoCompiled* fm_mpfr_prog_lookup(const Expr* e, size_t nargs) {
+    for (size_t k = g_fm_mp_n; k > 0; k--)
+        if (g_fm_mp[k - 1].e == e && g_fm_mp[k - 1].nargs == nargs) return g_fm_mp[k - 1].ac;
+    return NULL;
+}
+
 Expr* fm_eval_with_bindings(Expr* f, FmVarBind* binds,
                                    Expr* const* values, size_t n,
                                    Expr* eval_monitor,
                                    NumericSpec spec) {
+#ifdef USE_MPFR
+    if (g_fm_mp_n && !eval_monitor && spec.mode == NUMERIC_MODE_MPFR) {
+        const AutoCompiled* ac = fm_mpfr_prog_lookup(f, n);
+        if (ac) {
+            Expr* r = autocompiled_eval_mpfr(ac, (const Expr* const*)values);
+            if (r) return r;
+        }
+    }
+#endif
     for (size_t i = 0; i < n; i++) fm_bind_set(&binds[i], values[i]);
     eval_clock_bump();
     fm_fire_monitor(eval_monitor);

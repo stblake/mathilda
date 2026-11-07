@@ -3,6 +3,7 @@
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
 #include "findmin_internal.h"
+#include "compile/autocompile.h"  /* autocompile_new_prec: WorkingPrecision programs */
 
 
 /* ------------------------------------------------------------------ *
@@ -188,6 +189,8 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     CompiledProgram** grad_progs = NULL;  /* per-component compiled exact gradient */
     CompiledProgram** con_progs = NULL;   /* ngens x (1 + n): each constraint, then its gradient */
     size_t            prog_mark = fm_progs_mark();
+    size_t            mp_mark = fm_mpfr_progs_mark();
+    AutoCompiled**    mp_progs = NULL;   /* MPFR programs: objective, gradient */
     size_t n = 0;
     bool two_start = false;       /* scalar {x, x0, x1} form */
     double two_start_x1 = 0.0;
@@ -443,6 +446,23 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         }
         free(cnames); free(ctypes);
     }
+#ifdef USE_MPFR
+    /* WorkingPrecision: the same idea at the working precision. The MPFR
+     * solvers evaluate the objective and every gradient component through
+     * fm_eval_with_bindings at each point; serve them from MPFR programs
+     * (fm_mpfr_progs_register). A body the arbitrary-precision compiler cannot
+     * lower stays on the interpreter, and so does a point whose compiled value
+     * is not finite. */
+    if (opts.prec_mode == FM_PREC_MPFR && n > 0 && !opts.eval_monitor && opts.wp_bits > 0) {
+        mp_progs = (AutoCompiled**)calloc(n + 1, sizeof(AutoCompiled*));
+        for (size_t i = 0; mp_progs && i <= n; i++) {
+            Expr* e = (i == 0) ? f_raw : (g_exprs ? g_exprs[i - 1] : NULL);
+            if (!e || e->type == EXPR_INTEGER || e->type == EXPR_REAL) continue;
+            mp_progs[i] = autocompile_new_prec(e, (const Expr* const*)vars, n, opts.wp_bits);
+            if (mp_progs[i]) fm_mpfr_progs_register(e, mp_progs[i], n);
+        }
+    }
+#endif
     g_fm_obj_expr = f_raw; g_fm_obj_prog = f_prog; g_fm_obj_nargs = n;
     g_fm_grad_exprs = g_exprs; g_fm_grad_progs = grad_progs; g_fm_grad_n = n;
 
@@ -854,6 +874,11 @@ cleanup:
     g_fm_grad_progs = NULL;
     g_fm_grad_n = 0;
     fm_progs_release(prog_mark);   /* ... and the constraint programs */
+    fm_mpfr_progs_release(mp_mark);
+    if (mp_progs) {
+        for (size_t i = 0; i <= n; i++) if (mp_progs[i]) autocompiled_free(mp_progs[i]);
+        free(mp_progs);
+    }
     if (con_progs) {
         for (size_t k = 0; k < ngens * (1 + n); k++) if (con_progs[k]) compiled_free(con_progs[k]);
         free(con_progs);

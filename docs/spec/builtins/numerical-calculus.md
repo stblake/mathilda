@@ -2121,6 +2121,16 @@ WorkingPrecision -> 30]]]` is `30.`). The
 display drops trailing zeros of every arbitrary-precision number, so that value
 prints as `1.0`; `N[1, 30]` prints the same way.
 
+At `WorkingPrecision -> p` the objective and each component of its symbolic
+gradient are compiled once at `p` digits (the arbitrary-precision `Compile`
+subset, any number of variables) and every point is evaluated by the register
+machine, not by binding the variables and re-walking the expression (which
+re-numericalized every exact constant, `Cos[Pi (3 - Sqrt[5])]`, at every point).
+A body outside the compilable subset, a point whose compiled value is not
+finite, and any run with an `EvaluationMonitor` use the interpreter. The
+21-variable 12-point Thomson problem at 60 digits: 1.27 s -> 0.22 s; the
+141-variable 72-point one finishes in 43 s (it hit a 120 s cap).
+
 The starting values of `{x, x0}` / `{x, x0, x1}` may be any numeric quantity
 (`{p, -1/10, 1/10}`, `{x, Pi/9, Pi/5}`): a numeric expression is a starting
 value, never an indexed variable `v[k]`. (The held `-1/10` is
