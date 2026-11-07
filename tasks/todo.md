@@ -38,7 +38,7 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [ ] Holdout B C6-C10 (231-235): author still writing; then WL check
 - [ ] Holdout B baselines of WL/Py/Maxima/FriCAS (quiet machine), then Mathilda ONCE at the final version
 - [x] v0.6418 #129 Linux startup crash (fortified realpath) + check-c99 rule; v0.6419-21 last digits (QK15 constants, tanh-sinh endpoint panel, FindMinimum Armijo); v0.6422 USE_MPFR=0 + LAPACK-less builds; v0.6423-31 speed (packed N, BigInt borrow, Surd index, NIntegrate quiet guard, MPFR Power, compiled WP FindMinimum, flat Plus/Times, quadratic NRoots, machine Series)
-- [ ] BUG: NIntegrate numericalizes a nested symbolic endpoint (Log[2 + Sqrt[3]]) at machine precision under WorkingPrecision -> 60: NIntegrate[1, {x, -L, L}, WP->60] - 2 N[L,60] = 2.7e-16, result labelled `60 (hd7.8 wp50 31d, pre-existing since v0.6377). Sqrt[2], Log[3] endpoints fine.
+- [x] v0.6432 FIXED: NIntegrate numericalized a nested symbolic endpoint (Log[2 + Sqrt[3]]) at machine precision under WorkingPrecision -> 60: NIntegrate[1, {x, -L, L}, WP->60] - 2 N[L,60] = 2.7e-16, result labelled `60 (hd7.8 wp50 31d, pre-existing since v0.6377). Sqrt[2], Log[3] endpoints fine.
 - [ ] open: C2 machine 1.7-2.5x (2x2 Det via LAPACK, Select/Tuples); D10 wp50 2.2x (interpreted Fold steps); hd20 machine 1.7-6.6x (exact Table/Series before N); N of an exact array now PACKED (reference: unpacked) -- decide
 - [ ] Linux CI: mp_linalg Outer[og] vs Table bit-identity fails on glibc only (diagnostic added, needs a CI run)
 - [ ] Benchmark fairness: C6 (171, 201) and hd15 (220) .py halves request epsrel/rtol 1e-12 while .m uses default goals -- align the formulations (same request in every system) before the final run
