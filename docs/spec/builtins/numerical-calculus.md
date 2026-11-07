@@ -2243,7 +2243,7 @@ constraint tolerance (1e-12).
 | Option              | Default        | Effect |
 |---------------------|----------------|--------|
 | `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, `"LBFGSB"`, `"Powell"` (alias `"PrincipalAxis"`), `"NelderMead"`, `"TNC"` (alias `"TruncatedNewton"`), or `Automatic`. |
-| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
+| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. See *Arbitrary-precision convergence* below. |
 | `MaxIterations`     | `500`          | Iteration limit on the inner loop. Every local method emits `FindMinimum::cvmit` ("Failed to converge to the requested accuracy or precision within n iterations.") when its main loop reaches the limit before meeting the goals, and still returns the best iterate; the message routes through the funnel, so `Quiet` silences it and `Check` sees it.  Inner solves of the penalty wrapper and of `NMinimize`'s polish stay silent. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
 | `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
@@ -2285,6 +2285,44 @@ evaluation.
 | `FindMinimum::lstol`   | Line search could not find a sufficient decrease. |
 | `FindMinimum::dsing`   | Hessian non-positive-definite (Newton). |
 | `FindMinimum::infeas`  | Penalty outer loop could not satisfy all constraints. |
+
+### Arbitrary-precision convergence
+
+At `WorkingPrecision -> p` the MPFR QuasiNewton iteration (also NMinimize's
+refinement and FindMaximum) converges to nearly the working precision in the
+**argmin**, not just in the minimum value:
+
+- **Gradient polish.** After the goals are met (or the line search can no
+  longer resolve a decrease of `f`), up to 8 quasi-Newton steps on the
+  gradient, `x <- x - H g` with BFGS updates, each accepted only when it
+  reduces `|grad|` without raising `f` above its resolution. An `f`-based line
+  search cannot resolve `x` beyond half the digits of `f` (`f(x* + d) - f(x*) ~
+  |d|^2`); the gradient vanishes linearly, so these steps keep converging.
+  Thomson's 5-point energy at `WorkingPrecision -> 60` is now right to 60
+  digits (12 before).
+- **Line search.** The projected Armijo rule `f(P(x + a d)) <= f0 + c1
+  g.(P(x + a d) - x)`; it used to demand a relative decrease of `10^-12`, which
+  no step can give within ~`10^-6` of the minimiser, so every MPFR solve
+  stopped there with `FindMinimum::lstol`.
+- **Curvature.** A BFGS update is skipped only when `s.y <= 2^-p |s| |y|`
+  (it was an absolute `10^-12`, which dropped every update once `|s| < 10^-6`).
+- **Black-box gradients.** Without a symbolic gradient the central difference
+  uses `h = (|x| + 1) 2^(-p/3)` (gradient to `2^(-2p/3)`, was `10^(-p/2)`:
+  half the digits), and the polish a 5-point order-4 difference with
+  `h = 2^(-p/5)`.
+- **NMinimize.** The MPFR refinement differentiated the objective while the
+  variables were still bound to the global search's last point, so the
+  gradient was identically 0 and the machine minimiser came back labelled with
+  60 digits; it now refines (C4 at 60 digits: 15 -> 58 correct digits).
+  Its global search and machine polish run at machine precision (compiled,
+  machine goals) whatever the `WorkingPrecision`; only the refinement is MPFR.
+  They used to evaluate every trial point in MPFR through the interpreter
+  (C4: 1.27 s -> 0.05 s).
+- **1-D (Brent) at MPFR.** Brent's search compares values of `f`, so it
+  locates `x` to half the working digits; it is followed by the gradient
+  polish, seeded with the inverse of a difference second derivative.
+- **Exact starting values.** `{a, 46/100}` starts the MPFR iteration at
+  `46/100` itself, not at the double `0.46000000000000000222`.
 
 ### Examples
 

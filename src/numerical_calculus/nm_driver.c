@@ -93,8 +93,25 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
 #else
         : NUMERIC_MACHINE_PRECISION_DIGITS;
 #endif
+    /* The global search and its local polish always run in doubles (they
+     * produce a double xbest); only the final refinement runs at the working
+     * precision.  Run them with the MACHINE spec and machine goals -- with the
+     * MPFR spec every trial point was evaluated in MPFR through the
+     * interpreter, uncompiled, and rounded to a double anyway: NMinimize of a
+     * 2-variable objective at WorkingPrecision -> 60 took 1.27 s, 0.02 s at
+     * machine precision, for the same global answer. */
+    bool want_mpfr_refine = (opts.prec_mode != FM_PREC_MACHINE);
+    double acc_goal_user = opts.acc_goal_digits, prec_goal_user = opts.prec_goal_digits;
     if (opts.acc_goal_digits  < 0.0) opts.acc_goal_digits  = wp_digits / 2.0;
     if (opts.prec_goal_digits < 0.0) opts.prec_goal_digits = wp_digits / 2.0;
+    double acc_goal_wp = opts.acc_goal_digits, prec_goal_wp = opts.prec_goal_digits;
+    (void)acc_goal_wp; (void)prec_goal_wp;   /* used only by the MPFR refinement */
+    if (want_mpfr_refine) {
+        opts.prec_mode = FM_PREC_MACHINE;
+        double mach = NUMERIC_MACHINE_PRECISION_DIGITS / 2.0;
+        opts.acc_goal_digits  = (acc_goal_user  < 0.0 || acc_goal_user  > mach) ? mach : acc_goal_user;
+        opts.prec_goal_digits = (prec_goal_user < 0.0 || prec_goal_user > mach) ? mach : prec_goal_user;
+    }
 
     /* Parse the variables first — they do not depend on the objective — so a
      * problem passed as a bare symbol (prob = {f, cons}; NMinimize[prob, vars])
@@ -501,6 +518,11 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
      * continuous, general-constraint-free problems (reuses fm_run_bfgs_mpfr). */
 #ifdef USE_MPFR
     bool mpfr_built = false;
+    if (want_mpfr_refine) {                 /* back to the requested spec */
+        opts.prec_mode = FM_PREC_MPFR;
+        opts.acc_goal_digits = acc_goal_wp;
+        opts.prec_goal_digits = prec_goal_wp;
+    }
     bool want_mpfr = (opts.prec_mode == FM_PREC_MPFR);
     bool mpfr_eligible = want_mpfr && do_post && !vs.any_int && ngens == 0;
     mpfr_t* xm = NULL;
@@ -510,6 +532,12 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
                 "WorkingPrecision > MachinePrecision with general constraints or "
                 "integer domains is not supported; using machine precision");
     if (feasible && mpfr_eligible) {
+        /* The global search left the variables bound to its last probe
+         * point: D of the objective must see the symbols.  With them bound
+         * the "gradient" was identically 0, the refinement stopped at its
+         * start, and a WorkingPrecision -> 60 NMinimize returned the machine
+         * minimiser (15 digits) labelled as 60. */
+        for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
         Expr** gm = fm_compute_gradient(f_eff, eff_vars, n);
         xm = fm_mpfr_array(n, opts.wp_bits);
         for (size_t i = 0; i < n; i++) mpfr_set_d(xm[i], xbest[i], MPFR_RNDN);

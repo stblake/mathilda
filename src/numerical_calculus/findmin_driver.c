@@ -198,12 +198,19 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     Expr* f_norm = NULL;          /* owned objective rewritten over fresh symbols */
     Expr* cons_norm = NULL;       /* owned constraints rewritten over fresh syms  */
     Expr* grad_norm = NULL;       /* owned Gradient option rewritten over fresh   */
+    /* The starting values as given (owned copies, NULL when absent), so a
+     * WorkingPrecision run starts from 46/100 itself rather than from the
+     * double 0.46000000000000000222 -- an MPFR start carrying a binary
+     * artefact in its 18th digit (NIntegrate of x^a at such an `a` was
+     * three orders of magnitude slower than at the exact value). */
+    Expr** x0_keep = NULL;
 
     if (is_system) {
         n = var_arg->data.function.arg_count;
         vars = (Expr**)calloc(n, sizeof(Expr*));
         x_vec = (double*)calloc(n, sizeof(double));
         boxes = (FmBox*)calloc(n, sizeof(FmBox));
+        x0_keep = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
             Expr* sub = var_arg->data.function.args[i];
             Expr *u, *x0e = NULL, *x1e = NULL, *xmin = NULL, *xmax = NULL;
@@ -215,6 +222,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
             }
             vars[i] = u;
             if (!x0e || !fm_expr_to_double_real(x0e, &x_vec[i])) x_vec[i] = 0.0;
+            else x0_keep[i] = expr_copy(x0e);
             if (k == FM_SPEC_BRACKET) {
                 double lo, hi;
                 if (fm_expr_to_double_real(xmin, &lo) && fm_expr_to_double_real(xmax, &hi)) {
@@ -229,6 +237,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         vars = (Expr**)calloc(1, sizeof(Expr*));
         x_vec = (double*)calloc(1, sizeof(double));
         boxes = (FmBox*)calloc(1, sizeof(FmBox));
+        x0_keep = (Expr**)calloc(1, sizeof(Expr*));
         Expr *u, *x0e = NULL, *x1e = NULL, *xmin = NULL, *xmax = NULL;
         FmSpecKind k = fm_parse_var_spec(var_arg, &u, &x0e, &x1e, &xmin, &xmax);
         if (k == FM_SPEC_BAD) {
@@ -238,6 +247,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         }
         vars[0] = u;
         if (!x0e || !fm_expr_to_double_real(x0e, &x_vec[0])) x_vec[0] = 0.0;
+        else x0_keep[0] = expr_copy(x0e);
         if (k == FM_SPEC_BRACKET) {
             double lo, hi;
             if (fm_expr_to_double_real(xmin, &lo) && fm_expr_to_double_real(xmax, &hi)) {
@@ -456,7 +466,17 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     if (use_mpfr) {
         mpfr_init2(fx_min_mpfr, opts.wp_bits);
         x_vec_mpfr = fm_mpfr_array(n, opts.wp_bits);
-        for (size_t i = 0; i < n; i++) mpfr_set_d(x_vec_mpfr[i], x_vec[i], MPFR_RNDN);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_set_d(x_vec_mpfr[i], x_vec[i], MPFR_RNDN);
+            /* the given start at the working precision, while x_vec still
+             * holds it unchanged (not projected into a box, not moved) */
+            mpfr_t re, im;
+            mpfr_inits2(opts.wp_bits, re, im, (mpfr_ptr)0);
+            if (x0_keep && x0_keep[i] && get_approx_mpfr(x0_keep[i], re, im, NULL)
+                && mpfr_zero_p(im) && mpfr_get_d(re, MPFR_RNDN) == x_vec[i])
+                mpfr_set(x_vec_mpfr[i], re, MPFR_RNDN);
+            mpfr_clears(re, im, (mpfr_ptr)0);
+        }
         if (method == FM_METHOD_BRENT) {
             if (n != 1) {
                 fm_warn(fn_name, "badmeth", "Method \"Brent\" requires a single variable");
@@ -490,6 +510,10 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                 if (ok) {
                     mpfr_set(x_vec_mpfr[0], xm_m, MPFR_RNDN);
                     mpfr_set(fx_min_mpfr, fmin_m, MPFR_RNDN);
+                    /* Brent compares values of f, so it locates x only to
+                     * half the working digits; polish on the derivative. */
+                    fm_polish_min_mpfr(f_raw, binds, g_exprs, 1, &opts, boxes,
+                                       x_vec_mpfr, fx_min_mpfr);
                 }
                 mpfr_clears(xm_m, fmin_m, (mpfr_ptr)0);
             } else {
@@ -708,6 +732,10 @@ run_done:
 #endif
 
 cleanup:
+    if (x0_keep) {
+        for (size_t i = 0; i < n; i++) expr_free(x0_keep[i]);
+        free(x0_keep);
+    }
     g_fm_obj_expr = NULL;      /* deregister objective + gradient before freeing */
     g_fm_obj_prog = NULL;
     g_fm_obj_nargs = 0;
