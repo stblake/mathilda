@@ -197,6 +197,7 @@ const char* SYM_KelvinBei = NULL;
 const char* SYM_KelvinKer = NULL;
 const char* SYM_KelvinKei = NULL;
 const char* SYM_LogIntegral = NULL;
+const char* SYM_RiemannR = NULL;
 const char* SYM_CubeRoot = NULL;
 const char* SYM_Surd = NULL;
 const char* SYM_SinIntegral = NULL;
@@ -1341,6 +1342,7 @@ void sym_names_init(void) {
     SYM_KelvinKer                  = intern_symbol("KelvinKer");
     SYM_KelvinKei                  = intern_symbol("KelvinKei");
     SYM_LogIntegral                = intern_symbol("LogIntegral");
+    SYM_RiemannR                   = intern_symbol("RiemannR");
     SYM_CubeRoot                   = intern_symbol("CubeRoot");
     SYM_Surd                       = intern_symbol("Surd");
     SYM_SinIntegral                = intern_symbol("SinIntegral");

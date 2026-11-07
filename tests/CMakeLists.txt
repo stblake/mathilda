@@ -506,6 +506,7 @@ set(COMMON_SRC
     ../src/special_functions/sinc.c
     ../src/special_functions/sf_machine_nielsen.c
     ../src/special_functions/surd.c
+    ../src/special_functions/riemannr.c
     ../src/special_functions/kroneckerdelta.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
@@ -4163,6 +4164,8 @@ target_include_directories(expintegralei_tests PRIVATE ../src)
 add_executable(logintegral_tests test_logintegral.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(logintegral_tests PRIVATE ../src)
 
+add_executable(riemannr_tests test_riemannr.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(riemannr_tests PRIVATE ../src)
 
 add_executable(cuberoot_tests test_cuberoot.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(cuberoot_tests PRIVATE ../src)

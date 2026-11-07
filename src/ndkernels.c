@@ -47,6 +47,7 @@
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
 #include "special_functions/surd.h"          /* Surd binary kernel (sf_surd_r), CubeRoot */
+#include "special_functions/riemannr.h"      /* RiemannR unary kernel */
 #include "special_functions/besseljzero.h"   /* BesselJZero binary kernel */
 #include "special_functions/mathieu_char.h"  /* MathieuCharacteristicA/B kernels */
 #include "special_functions/riemann_siegel.h" /* RiemannSiegelZ / Theta unary kernels */
@@ -679,6 +680,11 @@ static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    tru
 static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false, NULL, NULL, false, NULL };
 /* CubeRoot: Surd[x, 3]'s kernel (src/special_functions/surd.c), real-closed;
  * no complex arm (a non-real element is CubeRoot::preal -> the List path). */
+/* RiemannR: the double-double Gram series (src/special_functions/riemannr.c).
+ * Not real-closed (x < 0 is complex); the real arm declines x < 1/e, where the
+ * alternating series cancels, so such a buffer goes to the List path and the
+ * scalar builtin's MPFR route -- the same split the scalar path makes. */
+static const NDUnaryKernel NDKU_RiemannR      = { riemannr_machine_complex, sf_riemannr_r, false, false, NULL, NULL, false, NULL };
 static const NDUnaryKernel NDKU_CubeRoot      = { NULL, sf_cuberoot_r,       true, false, NULL, NULL, false, NULL };
 
 static bool ndk_Erfi_r(double x, double* o)          { return sf_erfi_r(x, o); }
@@ -1159,6 +1165,7 @@ void ndkernels_init(void) {
     REG_B(KelvinKei, NDKB_KelvinKei); REG_U(KelvinKei);
     REG_B(Surd,    NDKB_Surd);      /* declines even roots of x < 0 -> List path */
     REG_U(CubeRoot);                /* Surd[x, 3]: the same sf_surd_r */
+    REG_U(RiemannR);                /* Gram series; declines x < 1/e -> List path */
     REG_B(BesselJZero, NDKB_BesselJZero); /* real n > -1, integer-valued k */
     REG_B(BesselYZero, NDKB_BesselYZero); /* real n >= 0, integer-valued k */
     REG_B(MathieuCharacteristicA, NDKB_MathieuCharacteristicA); /* sf_mathieu_char_r */

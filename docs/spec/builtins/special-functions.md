@@ -4179,6 +4179,50 @@ The sum form has no division by a parameter, so it is the polynomial for every
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
 
+## RiemannR
+
+`RiemannR[x]` is Riemann's prime-counting function
+`R(x) = Sum_k MoebiusMu[k]/k LogIntegral[x^(1/k)]`.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- Exact arguments: `RiemannR[1] = 1`, `RiemannR[Infinity] = Infinity`; every
+  other exact argument stays unevaluated (`RiemannR[2]`, `RiemannR[0]`), as in
+  the reference. `N[RiemannR[2], 30]` evaluates.
+- Method: always the Gram series `1 + Sum_k L^k/(k k! Zeta[k + 1])` in
+  `L = Log x` (principal Log, so `x < 0` and complex `x` are covered: it is
+  entire in `L`). The Moebius sum converges only conditionally.
+- Machine real `x >= 1/e`: `sf_riemannr_r`, the series in double-double with
+  `Log x` itself in double-double (`frexp` + `log1p` + split `ln 2`): a plain
+  `log` costs ~300 ulps at `x = 10^300`, because `dR/R ~ dLog x`. Within an ulp.
+  Machine complex `x` with `|Log x| <= 3/2`: `sf_riemannr_c`. Both are the unary
+  kernel the packed / `NDArray` map and `Compile[]` use (scalar == packed ==
+  `NDArray` == `Compile`, bit for bit); outside those domains the kernel declines
+  and the scalar path computes in MPFR at 53 bits and rounds.
+- `0 < x < 1` cancels: the terms grow to `~e^|L|/|L|^(3/2)` before summing to
+  `R(x)`, which is `O(1)` or smaller (`R(e^-u) ~ 21.9/u^3`). The MPFR path works
+  at `p + guard + log2(largest term)` bits and is adaptive in the guard: an
+  answer below its error budget is recomputed with enough extra bits for `p`
+  correct bits relative to `|R|`. At the largest zero of R (SIAM 100-Digit
+  Challenge D4, `x* = 1.8286...e-14828`, `Log x* = -34142.128...`) the terms reach
+  `10^14820` and the sum is `10^-13`: about 49000 bits, 1.7 s per 60-digit value.
+- `1/Zeta[k + 1]` is never a per-term full-precision zeta: `k < k0` (where the
+  series is short and cheap) uses `mpfr_zeta_ui` at the bits term `k` needs; for
+  `k >= k0` the Dirichlet series `1/Zeta[s] = Sum MoebiusMu[n] n^-s` is run as one
+  recurrence per squarefree `n <= 1024`, each at the precision its own largest
+  term needs, multiplying by the SAME rounded `L` the main recurrence uses (a
+  separately rounded `L/n` would make each stream the tail of a series in another
+  variable, whose truncated head no longer cancels).
+- Derivative: `D[RiemannR[x], x]` is the inert `Derivative[1][RiemannR][x]` (as
+  in the reference), but it has a numeric value at an inexact point --
+  `R'(x) = 1/(x L) Sum L^k/(k! Zeta[k+1])`, from the same pass -- through a
+  `Derivative` SubValue to `Internal`RiemannRPrime`. `FindRoot` sees that the
+  derivative numericalises and takes Newton steps on it instead of finite
+  differences; a one-entry memo makes `R` and `R'` at the same expensive point
+  one pass.
+  `FindRoot[RiemannR[Exp[t]] == 0, {t, -34000}, WorkingPrecision -> 60]` gives
+  `t* = -34142.1281846064649926300460679835405356170611068821899648398` in ~17 s
+  (6 Newton steps).
+
 ## RiemannSiegelTheta and RiemannSiegelZ
 
 `RiemannSiegelTheta[t]` is the Riemann–Siegel theta function

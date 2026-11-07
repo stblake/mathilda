@@ -178,6 +178,7 @@ extern const char* SYM_KelvinBei;
 extern const char* SYM_KelvinKer;
 extern const char* SYM_KelvinKei;
 extern const char* SYM_LogIntegral;
+extern const char* SYM_RiemannR;
 extern const char* SYM_CubeRoot;
 extern const char* SYM_Surd;
 extern const char* SYM_SinIntegral;

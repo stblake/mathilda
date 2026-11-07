@@ -658,17 +658,33 @@ static Expr* fr_compute_derivative(Expr* f, Expr* var) {
     return d;
 }
 
+/* True if Derivative has a SubValue rule for exactly the operator
+ * `dop` = Derivative[n..][f]: Derivative[1][RiemannR][z_?InexactNumberQ] := ...
+ * gives the symbolic Derivative[1][RiemannR][x] a value at every numeric
+ * point, so it is not inert for Newton's purposes. */
+static bool fr_derivative_has_numeric_rule(const Expr* dop) {
+    for (Rule* r = symtab_get_sub_values(SYM_Derivative); r; r = r->next) {
+        const Expr* lhs = r->pattern;
+        if (lhs && lhs->type == EXPR_FUNCTION && expr_eq(lhs->data.function.head, dop))
+            return true;
+    }
+    return false;
+}
+
 /* True if `e` still contains an inert Derivative[...][...] application -- i.e. D
  * could not produce a closed-form derivative (e.g. Zeta', PolyGamma order
  * derivatives, Derivative[1][f]).  Such a derivative never numericalizes, so
- * Newton must fall back to a finite-difference derivative. */
+ * Newton must fall back to a finite-difference derivative.  An application
+ * with a numeric SubValue rule (RiemannR') does numericalize and is not
+ * counted. */
 static bool fr_has_inert_derivative(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     Expr* head = e->data.function.head;
     if (head && head->type == EXPR_FUNCTION &&
         head->data.function.head &&
         head->data.function.head->type == EXPR_SYMBOL &&
-        head->data.function.head->data.symbol.name == SYM_Derivative)
+        head->data.function.head->data.symbol.name == SYM_Derivative &&
+        !fr_derivative_has_numeric_rule(e))
         return true;
     if (fr_has_inert_derivative(head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
