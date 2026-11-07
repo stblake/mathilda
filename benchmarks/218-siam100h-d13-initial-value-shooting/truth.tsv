@@ -1,0 +1,22 @@
+# SIAM 100-Digit Challenge holdout A, family d13 (exp 218): initial value with a condition at the final time (shooting)
+# label	true value (70 digits)	need	source
+hd13.1 machine	0.00004539786870243439450477623276348945509369200472606863178556386871949183	10	exact y0 = 1/(1+e^10) == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.1 wp50	0.00004539786870243439450477623276348945509369200472606863178556386871949183	48	same
+hd13.2 machine	0.1186356187870316574109636930779794401466727958384324452811773342213526	10	exact z0 = e^5/Sqrt[1565001] (u(t) = z0 e^-t (50t^2, 10t, 1)) == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.2 wp50	0.1186356187870316574109636930779794401466727958384324452811773342213526	48	same
+hd13.3 machine	1.025529042270372534443540424592617002020928612492590791341540202808263	10	exact y0 = 1/(1 - e^-3/2) (Bernoulli) == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.3 wp50	1.025529042270372534443540424592617002020928612492590791341540202808263	48	same
+hd13.4 machine	0.9961478392838659944747911159036747126976084789710446354740338154364399	10	th = 2 ArcSin[k sn(t|k^2)], k = v0/2: mpmath ellipfun + findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.4 wp50	0.9961478392838659944747911159036747126976084789710446354740338154364399	48	same
+hd13.5 machine	0.5493527287752708190186831942468168985492835004602547955165785388214047	10	Bratu closed form s = th Tanh[th/4], th = Sqrt[2] Cosh[th/4] (smaller root) == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.5 wp50	0.5493527287752708190186831942468168985492835004602547955165785388214047	48	same
+hd13.6 machine	0.3320573372037024527094809622944692936328391036683949004274100770232985	10	mpmath odefun (Taylor) shooting + secant, dps 80 == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.6 wp50	0.3320573372037024527094809622944692936328391036683949004274100770232985	48	same
+hd13.7 machine	1.183572512056507307768579824293734685224729831907810624001013408398942	10	Kepler's equation (elliptic orbit, periapsis 1): mpmath findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.7 wp50	1.183572512056507307768579824293734685224729831907810624001013408398942	48	same
+hd13.8 machine	0.5699652631816381337418196741574495642322423839304693811761974027121222	10	y = -u'/u, u = 0F1(;3/4;-t^4/16) - y0 t 0F1(;5/4;-t^4/16): y0 = (2u1 + u1')/(u2' + 2u2) at t = 1, exact in hypergeometrics == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.8 wp50	0.5699652631816381337418196741574495642322423839304693811761974027121222	48	same
+hd13.9 machine	0.00648398437870454972328619210890922685629955258906401997993678693076694	10	mpmath odefun (Taylor) dps 80 + secant on |u(30)| - 1 (unique: the needle above the saddle's stable manifold, exp 188's landscape) == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.9 wp50	0.00648398437870454972328619210890922685629955258906401997993678693076694	48	same
+hd13.10 machine	0.5298475516051792352625081165249547662145679880438911104652764667146981	10	x = x0 cn(w t|m), w^2 = 1+x0^2, m = x0^2/(2(1+x0^2)): 10 w = 7 EllipticK[m] (mpmath findroot); smallest root since 10/(Pi/2) = 6.37 < 7 == WL NDSolve Method->Extrapolation WorkingPrecision 80 + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd13_ref.{py,wl}
+hd13.10 wp50	0.5298475516051792352625081165249547662145679880438911104652764667146981	48	same

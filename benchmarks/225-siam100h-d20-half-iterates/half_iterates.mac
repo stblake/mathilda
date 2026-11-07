@@ -1,0 +1,57 @@
+/* Experiment 225 -- SIAM 100-Digit Challenge holdout A, family hd20 (Maxima column).
+   Regular half-iterates by the truncated Schroeder system (see
+   half_iterates.m): A_jk = (coeff(taylor(f^k, z, 0, n), z, j) - lam delta_jk)/lam^j,
+   solved by linsolve_by_lu ('floatfield / 'bigfloatfield at fpprec 60), then
+   find_root / bf_find_root of sigma_n(x) = sqrt(lam) sigma_n(z0) on the
+   bracket [z0, 4 z0] (hd20.9: [-1/2, -1/8]; hd20.10: [0.4, 0.7]).
+   hd20.10 is exp 195's Robbins system for base 2 at n = 16. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["taylor", "linsolve_by_lu", "find_root", "bf_find_root"])$
+
+/* [f, lam, z0, n machine, n wp50, bracket lo, hi, post] */
+probs : [
+  [16*z/(4+3*z), 4, 1/2, 25, 90, 1/2, 2, lambda([v], v)],
+  [(4*z-4*z^3)/(1-6*z^2+z^4), 4, 1/10, 25, 90, 1/10, 4/10, lambda([v], v)],
+  [4*z*(1-z), 4, 1/10, 25, 90, 1/10, 4/10, lambda([v], v)],
+  [4*z*(1+z), 4, 1/10, 25, 90, 1/10, 4/10, lambda([v], v)],
+  [1 - (4*(1-z)^3 - 3*(1-z)), 9, 1/10, 25, 90, 1/10, 4/10, lambda([v], 1 - v)],
+  [2*z/(1+z^2), 2, 1/5, 30, 110, 1/5, 4/5, lambda([v], v)],
+  [2*sin(z), 2, 1/5, 30, 90, 1/5, 4/5, lambda([v], v)],
+  [2*z*exp(z), 2, 1/10, 30, 110, 1/10, 4/10, lambda([v], v)],
+  [sqrt(2)^(z+2) - 2, log(2), -1/2, 30, 110, -1/2, -1/8, lambda([v], 2 + v)]]$
+
+schroederA(f, lam, n) := block([pw],
+  pw : makelist(taylor(f^k, z, 0, n), k, 1, n),
+  genmatrix(lambda([j, k], if j = 1 then (if k = 1 then 1 else 0)
+                          else (coeff(pw[k], z, j) - (if j = k then lam else 0)) / lam^j), n, n))$
+
+halfIter(p) := block([n : p[4], A, b, c, s],
+  A : float(schroederA(p[1], p[2], n)),
+  b : genmatrix(lambda([i, j], if i = 1 then 1.0 else 0.0), n, 1),
+  c : first(linsolve_by_lu(A, b, 'floatfield)),
+  s : lambda([x], sum(c[k, 1] * x^k, k, 1, n)),
+  p[8](find_root(s(x) - float(sqrt(p[2])) * s(float(p[3])), x, float(p[6]), float(p[7]))))$
+
+halfIterWP(p) := block([fpprec : 60, n : p[5], A, b, c, s],
+  A : bfloat(schroederA(p[1], p[2], n)),
+  b : genmatrix(lambda([i, j], if i = 1 then 1b0 else 0b0), n, 1),
+  c : first(linsolve_by_lu(A, b, 'bigfloatfield)),
+  s : lambda([x], sum(c[k, 1] * x^k, k, 1, n)),
+  p[8](bf_find_root(s(x) - bfloat(sqrt(p[2])) * s(bfloat(p[3])), x, bfloat(p[6]), bfloat(p[7]))))$
+
+robbins(n, wp) := block([A, b, v, poly],
+  A : genmatrix(lambda([j, k], (k*log(2))^(j-1)/(j-1)! - (if j-1 = k then 1 else 0)), n, n),
+  if wp then (fpprec : 60, A : bfloat(A), b : genmatrix(lambda([i, j], if i = 1 then 1b0 else 0b0), n, 1),
+              v : first(linsolve_by_lu(A, b, 'bigfloatfield)))
+  else (A : float(A), b : genmatrix(lambda([i, j], if i = 1 then 1.0 else 0.0), n, 1),
+        v : first(linsolve_by_lu(A, b, 'floatfield))),
+  poly : -1/2 + sum(v[k, 1] * x^k, k, 1, n),
+  if wp then bf_find_root(poly, x, 0.4b0, 0.7b0) else find_root(poly, x, 0.4, 0.7))$
+
+for k : 1 thru length(probs) do (
+  vrun(sconcat("hd20.", k, " machine"), buildq([p : probs[k]], lambda([], halfIter(p))), 10, 60),
+  vrun(sconcat("hd20.", k, " wp50"), buildq([p : probs[k]], lambda([], halfIterWP(p))), 48, 120))$
+vrun("hd20.10 machine", lambda([], robbins(16, false)), 10, 60)$
+vrun("hd20.10 wp50", lambda([], block([fpprec : 60], robbins(16, true))), 48, 60)$
+quit()$

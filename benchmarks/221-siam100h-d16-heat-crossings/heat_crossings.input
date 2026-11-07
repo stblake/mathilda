@@ -1,0 +1,6 @@
+-- Experiment 221 -- SIAM 100-Digit Challenge holdout A, family hd16 (FriCAS column).
+-- Heat-equation crossing times: FriCAS has no PDE solver.
+-- Every row is a SKIP.  See heat_crossings.m.
+)read ../siam100_common.input )quiet
+for k in 1..10 repeat (vskip(concat ["hd16.", string(k), " machine"], "PDE solver"); vskip(concat ["hd16.", string(k), " wp50"], "PDE solver"))
+)quit

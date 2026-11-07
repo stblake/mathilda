@@ -1,0 +1,25 @@
+-- Experiment 204 -- SIAM 100-Digit Challenge, holdout A for Problem 9 (FriCAS column).
+-- FriCAS has no numeric optimiser and no root finder for a non-polynomial
+-- function (as in experiment 174): all rows SKIP.  See parametric_extremum.m.
+)read ../siam100_common.input )quiet
+vskip("hc9.1 machine", "numeric optimiser")
+vskip("hc9.1 wp50", "numeric optimiser")
+vskip("hc9.2 machine", "numeric optimiser")
+vskip("hc9.2 wp50", "numeric optimiser")
+vskip("hc9.3 machine", "numeric optimiser")
+vskip("hc9.3 wp50", "numeric optimiser")
+vskip("hc9.4 machine", "numeric optimiser")
+vskip("hc9.4 wp50", "numeric optimiser")
+vskip("hc9.5 machine", "numeric optimiser")
+vskip("hc9.5 wp50", "numeric optimiser")
+vskip("hc9.6 machine", "numeric optimiser")
+vskip("hc9.6 wp50", "numeric optimiser")
+vskip("hc9.7 machine", "numeric optimiser")
+vskip("hc9.7 wp50", "numeric optimiser")
+vskip("hc9.8 machine", "numeric optimiser")
+vskip("hc9.8 wp50", "numeric optimiser")
+vskip("hc9.9 machine", "numeric optimiser")
+vskip("hc9.9 wp50", "numeric optimiser")
+vskip("hc9.10 machine", "numeric optimiser")
+vskip("hc9.10 wp50", "numeric optimiser")
+)quit

@@ -1,0 +1,27 @@
+-- Experiment 198 -- SIAM 100-digit holdout A, family hc3 (FriCAS column).
+-- Every row is the 2-norm (largest singular value) of a section; FriCAS has
+-- no numerical SVD or numerical eigensolver for a Float/DoubleFloat matrix
+-- (realEigenvalues needs the exact characteristic polynomial of a rational
+-- matrix): all rows SKIP.  See matrix_norms.m.
+)read ../siam100_common.input )quiet
+vskip("hc3.1 machine", "Norm")
+vskip("hc3.1 wp50", "Norm")
+vskip("hc3.2 machine", "Norm")
+vskip("hc3.2 wp50", "Norm")
+vskip("hc3.3 machine", "Norm")
+vskip("hc3.3 wp50", "Norm")
+vskip("hc3.4 machine", "Norm")
+vskip("hc3.4 wp50", "Norm")
+vskip("hc3.5 machine", "Norm")
+vskip("hc3.5 wp50", "Norm")
+vskip("hc3.6 machine", "Norm")
+vskip("hc3.6 wp50", "Norm")
+vskip("hc3.7 machine", "Norm")
+vskip("hc3.7 wp50", "Norm")
+vskip("hc3.8 machine", "Norm")
+vskip("hc3.8 wp50", "Norm")
+vskip("hc3.9 machine", "Norm")
+vskip("hc3.9 wp50", "Norm")
+vskip("hc3.10 machine", "Norm")
+vskip("hc3.10 wp50", "Norm")
+)quit

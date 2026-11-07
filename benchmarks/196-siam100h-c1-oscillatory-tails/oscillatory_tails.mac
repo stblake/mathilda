@@ -1,0 +1,26 @@
+/* Experiment 196 -- SIAM 100-digit holdout A, family hc1 (Maxima column).
+   The ten integrals of oscillatory_tails.m: QUADPACK quad_qags at machine
+   precision; bromberg (bigfloat Romberg, rombergit 18) at fpprec 60 on
+   [eps, b] (eps = 1b-60; for hc1.7 eps = 1/1000, where exp(1/x) is still
+   representable and the dropped piece is O(e^-1000); hc1.8 on [1b-55, 1-1b-55];
+   hc1.9 on [0, 2 - 1b-60]).  Both capped at 60 s.  See oscillatory_tails.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["quad_qags", "bromberg"])$
+
+F : [sin(1/x), sin(1/x)/x, cos(x^-2)/x, cos(1/x)/sqrt(x), sin(log(x)/x)/x,
+     cos(log(x)/x), cos(exp(1/x)), sin(1/(x*(1-x))), sin(1/(2-x))/(2-x),
+     cos(log(x)/x)/x^(3/2)]$
+B : [1, 1, 1, 1, 1, 1, 1, 1, 2, 1]$
+LO : [1b-60, 1b-60, 1b-60, 1b-60, 1b-60, 1b-60, 1b-3, 1b-55, 0b0, 1b-60]$
+HI : [1b0, 1b0, 1b0, 1b0, 1b0, 1b0, 1b0, 1b0 - 1b-55, 2b0 - 1b-60, 1b0]$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("hc1.", k, " machine"),
+       buildq([f : F[k], b : B[k]], lambda([], first(quad_qags(f, x, 0, b, 'limit = 1000)))), 10, 60),
+  vrun(sconcat("hc1.", k, " wp50"),
+       buildq([f : F[k], lo : LO[k], hi : HI[k]],
+         lambda([], block([fpprec : 60, rombergtol : 1b-50, rombergit : 18],
+           bromberg(f, x, lo, hi)))), 48, 60))$
+quit()$

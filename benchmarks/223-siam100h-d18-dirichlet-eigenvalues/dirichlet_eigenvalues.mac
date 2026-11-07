@@ -1,0 +1,9 @@
+/* Experiment 223 -- SIAM 100-Digit Challenge holdout A, family hd18 (Maxima column).
+   Dirichlet eigenvalues of -Laplacian on planar regions: Maxima has no PDE
+   eigensolver.  Every row is a SKIP.  See dirichlet_eigenvalues.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hd18.", k, " machine"), "NDEigenvalues (FEM)"),
+  skip(sconcat("hd18.", k, " wp50"), "NDEigenvalues (FEM)"))$
+quit()$

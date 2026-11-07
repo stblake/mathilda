@@ -1,0 +1,26 @@
+-- Experiment 220 -- SIAM 100-Digit Challenge, holdout A, family d15 (FriCAS column).
+-- Blow-up times and a heat-equation crossing time.  FriCAS has fixed-step
+-- RK4 integrators but no blow-up detection, no stiff integrator and no PDE
+-- solver: every row is SKIP, as in experiment 190.  See blowup_times.m.
+)read ../siam100_common.input )quiet
+vskip("hd15.1 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.1 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.2 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.2 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.3 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.3 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.4 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.4 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.5 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.5 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.6 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.6 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.7 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.7 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.8 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.8 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.9 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.9 wp50", "NDSolve (blow-up / PDE)")
+vskip("hd15.10 machine", "NDSolve (blow-up / PDE)")
+vskip("hd15.10 wp50", "NDSolve (blow-up / PDE)")
+)quit

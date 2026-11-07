@@ -1,0 +1,22 @@
+# SIAM 100-digit holdout A, family d5 (exp 210): min over normalised p of ||p(A)|| (see matrix_polynomial_family.m)
+# label	true value (60 digits)	need	source
+hd5.1 machine	0.0078125000000000000000000000000000000000000000000000000000000	10	exact 2^-7: T_8(x)/2^7 equioscillates at the 9 eigenvalues Cos[j Pi/8] (discrete alternation theorem) == siam100_refs/hd5_ref.py (max over 9-point alternation sets, dps 100) == hd5_ref.wl (LinearOptimization at 100 digits)
+hd5.1 wp50	0.0078125000000000000000000000000000000000000000000000000000000	48	same
+hd5.2 machine	48.000000000000000000000000000000000000000000000000000000000000	10	exact 48 (alternation set {1,2,6,9,10}): hd5_ref.py (max over 5-point alternation sets, dps 100, checked |p| <= 48 on the spectrum) == hd5_ref.wl (EXACT rational LinearOptimization: 48)
+hd5.2 wp50	48.000000000000000000000000000000000000000000000000000000000000	48	same
+hd5.3 machine	6785.257002707107011831476438109988209769778860035174139101184142	10	Frobenius: exact least squares, sqrt(rational) from the Gram matrix of vec(A^j): hd5_ref.wl (exact rational LinearSolve, N to 80) == hd5_ref.py (mpmath LU on the exact Gram entries, dps 100); 70 digits agree
+hd5.3 wp50	6785.257002707107011831476438109988209769778860035174139101184142	48	same
+hd5.4 machine	1.836008969255360200903743194770050160199865473502821332902623874	10	discrete Chebyshev on the spectrum 2 - 2 Cos[j Pi/21]: hd5_ref.py (max over 6-point alternation sets, alternation set {1,4,8,13,17,20}, dps 100) == hd5_ref.wl (LinearOptimization at 100 digits; 61 digits); 61 digits agree
+hd5.4 wp50	1.836008969255360200903743194770050160199865473502821332902623874	48	same
+hd5.5 machine	277.7286169025022196239400970139463559872236300862892020503123123	10	KKT Newton on the two-fold crease (M = p(A) J symmetric; lmax(M) = -lmin(M) = t, dual weights 0.107/0.893 in (0,1), third |eig| 276.0): hd5_ref.py (mpmath eigsy, dps 80, forward-difference Jacobian, start from log-sum-exp smoothing) == hd5_ref.wl (Eigensystem at fixed 120 digits, central differences); 75 digits agree
+hd5.5 wp50	277.7286169025022196239400970139463559872236300862892020503123123	48	same
+hd5.6 machine	39.32505898391669771168548271423483245072670037071034490316600862	10	KKT Newton on the two-fold crease (dual weights 0.289/0.711, third |eig| 38.86): hd5_ref.py (dps 80) == hd5_ref.wl (120 digits); 75 digits agree
+hd5.6 wp50	39.32505898391669771168548271423483245072670037071034490316600862	48	same
+hd5.7 machine	0.27272727272727272727272727272727272727272727272727272727272727273	10	exact 3/11 (ideal GMRES, alternation set {1,3,8,10}): hd5_ref.py (max over 4-point alternation sets, dps 100) == hd5_ref.wl (EXACT rational LinearOptimization: 3/11)
+hd5.7 wp50	0.27272727272727272727272727272727272727272727272727272727272727273	48	same
+hd5.8 machine	16.000000000000000000000000000000000000000000000000000000000000	10	exact 16: A = I + 2N with N the nilpotent shift, n = 12 > k = 4; the Chebyshev polynomial of a Jordan block is (z - 1)^k, giving ||(2N)^4||_2 = 16 (hd5_ref.wl checks the norm); hd5_ref.py's log-sum-exp smoothing stage reaches 16.0000000000000 with an 8-fold top singular value
+hd5.8 wp50	16.000000000000000000000000000000000000000000000000000000000000	48	same
+hd5.9 machine	1.029186304627727596857593274550821394985245454286075365897744234	10	KKT Newton on the two-fold crease (dual weights 1/2, 1/2; third |eig| 1.0120): hd5_ref.py (dps 80) == hd5_ref.wl (120 digits); 75 digits agree
+hd5.9 wp50	1.029186304627727596857593274550821394985245454286075365897744234	48	same
+hd5.10 machine	11167.01512936497351900846628743404884706516775701589852892621564	10	KKT Newton on the two-fold crease (dual weights 0.438/0.562, third |eig| 11110.25): hd5_ref.py (dps 80, 877 s) == hd5_ref.wl (120 digits); 70 digits agree
+hd5.10 wp50	11167.01512936497351900846628743404884706516775701589852892621564	48	same

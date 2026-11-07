@@ -1,0 +1,22 @@
+# SIAM 100-Digit Challenge holdout A, family d14 (exp 219): parameter of an elliptic BVP such that a functional of the solution takes a given value
+# label	true value (66 digits)	need	source
+hd14.1 machine	2.55692908552214759021871747804596031087895497723949153090635621107	10	closed form u(1)e^-a = 1/a - (1-e^-a)/a^2 == mpmath odefun shooting (75 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.1 wp50	2.55692908552214759021871747804596031087895497723949153090635621107	48	same
+hd14.2 machine	2.34954997778012313378572161973391132375696173194314277218197958526	10	closed form u(1) = (1 - Sech[Sqrt[a]])/a == mpmath odefun shooting, two IVPs (74 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.2 wp50	2.34954997778012313378572161973391132375696173194314277218197958526	48	same
+hd14.3 machine	2.63490687154250625940830544112327543343856642136280186890390864185	10	closed form l = th^2 e^{-1/2}/2, th = 4 ArcCosh[e^{1/4}] (Bratu, lower branch) == mpmath odefun IVP from u'(0) = th Tanh[th/4] at that l: u(1) = 1e-71, u(1/2) - 1/2 = -5e-72 (hd14_check.py); a WL nested-FindRoot shooting (hd14_ref.wl) agrees to 11 digits only (inner FindRoot::brdig); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.3 wp50	2.63490687154250625940830544112327543343856642136280186890390864185	48	same
+hd14.4 machine	2.21977149710473077874606746231548067636120055616710465362857271222	10	u(0) = Ein(a)/(4a): mpmath ei == the power series Sum a^k/(k k!) (75 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.4 wp50	2.21977149710473077874606746231548067636120055616710465362857271222	48	same (FEM is machine precision only in every system: tier N/A)
+hd14.5 machine	1.20215877097442311626691820598338356244907004280957026207555309969	10	torsion series s/12 - (16/pi^5) Sum_odd tanh(n pi s/2)/n^5 == the series with the roles of the sides swapped (75 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.5 wp50	1.20215877097442311626691820598338356244907004280957026207555309969	48	same (FEM is machine precision only in every system: tier N/A)
+hd14.6 machine	0.493862769077164576873140038385394612000440578463367089027810625201	10	x-mode series Sum_odd 8(1 - Sech[m pi b])/(m^4 pi^4) == y-mode alternating series sin((k+1/2) pi y/b), mpmath nsum (75 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.6 wp50	0.493862769077164576873140038385394612000440578463367089027810625201	48	same (FEM is machine precision only in every system: tier N/A)
+hd14.7 machine	0.655612669744428267193202925801070436110398675048293075247771098394	10	Saint-Venant Int u = Sqrt[3] s^4/320 == WL exact torsion function c y(Sqrt[3]x - y)(Sqrt[3](s-x) - y), symbolic Integrate (hd14_ref.wl) (70 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.7 wp50	0.655612669744428267193202925801070436110398675048293075247771098394	48	same (FEM is machine precision only in every system: tier N/A)
+hd14.8 machine	0.671922849483407967430153845545407457626297175874217540838864089821	10	radial closed form 2 pi rho ((1-rho^2)/4 + (rho^2/2) Log[rho]), larger root == mpmath odefun shooting of the radial ODE (75 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.8 wp50	0.671922849483407967430153845545407457626297175874217540838864089821	48	same (FEM is machine precision only in every system: tier N/A)
+hd14.9 machine	16.0329282511843766774335528684491191374692570904225087704523220117	10	x-mode series Sum_odd 8(1 - 2 Tanh[k/2]/k)/(m^2 pi^2 k^2), k^2 = m^2 pi^2 + a == double eigen-series (nested nsum, Richardson) residual 0 at dps 62 (hd14_check.py); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.9 wp50	16.0329282511843766774335528684491191374692570904225087704523220117	48	same (FEM is machine precision only in every system: tier N/A)
+hd14.10 machine	-0.990814613518776238199017606975480560540255488711168836252192140799	10	y-mode series (closed-form x-ODE, Neumann at x = 1) == x-mode alternating series sin((j+1/2) pi x) (closed-form y-ODE), mpmath nsum (75 digits agree); siam100_refs/hd14_ref.{py,wl}, hd14_check.py
+hd14.10 wp50	-0.990814613518776238199017606975480560540255488711168836252192140799	48	same (FEM is machine precision only in every system: tier N/A)

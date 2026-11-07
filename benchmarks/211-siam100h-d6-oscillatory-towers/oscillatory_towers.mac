@@ -1,0 +1,30 @@
+/* Experiment 211 -- SIAM 100-digit HOLDOUT A, family D6 (Maxima column).
+   The ten integrals of oscillatory_towers.m, as written: QUADPACK quad_qags
+   (epsrel 1d-13, limit 1000) at machine precision; bromberg (bigfloat
+   Romberg, Maxima's only bigfloat quadrature) at fpprec 60, rombergit 22.
+   Caps: 30 s machine, 60 s wp50. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["quad_qags", "bromberg"])$
+
+F : [[cos(exp(x^2)), 0, 2],
+     [exp(x + cos(exp(exp(x)))), -1, 1],
+     [sin(exp(exp(2*x))), 0, 1],
+     [sin(x^3), 0, 3],
+     [exp(sin(exp(x))), 0, %pi],
+     [sin(exp(4*x))/(2 + x), -1, 1],
+     [x*exp(x^2)*sin(exp(x^2)), 0, 2],
+     [exp(x + sin(exp(exp(x + 1/2)))), -1, 1],
+     [cos(x^2 + x), 0, 8],
+     [cos(1/(x + 1/100)), 0, 1]]$
+
+for k : 1 thru 10 do block([f : F[k][1], a : F[k][2], b : F[k][3]],
+  vrun(sconcat("hd6.", k, " machine"),
+       buildq([f, a, b], lambda([], first(quad_qags(f, x, a, b, 'epsrel = 1d-13, 'limit = 1000)))),
+       10, 30),
+  vrun(sconcat("hd6.", k, " wp50"),
+       buildq([f, a, b], lambda([], block([fpprec : 60, rombergtol : 1b-50, rombergit : 22],
+         bromberg(f, x, bfloat(a), bfloat(b))))),
+       48, 60))$
+quit()$

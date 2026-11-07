@@ -1,0 +1,64 @@
+/* Experiment 214 -- SIAM 100-digit HOLDOUT A, family D9 (Maxima column).
+   The ten walks of lattice_walks.m.  machine: the matrix power P^^steps of the
+   float matrix, start row summed over the targets; wp50: the exact start vector
+   pushed through `steps` exact rational products v . P, then bfloat at
+   fpprec 60 (as in 184).  The matrices are built before the timed cases.
+   Caps: 30 s machine, 90 s wp50. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["matrix ^^", "bfloat"])$
+
+/* transition matrix: pts a list, nb(p) the neighbour list, mode plain/lazy/absorbing predicate */
+tmat(pts, nb, mode) := block([n : length(pts), P, l, i],
+  kill(ix),
+  for i : 1 thru n do ix[pts[i]] : i,
+  P : zeromatrix(n, n),
+  for p in pts do (
+    l : nb(p), i : ix[p],
+    if mode = 'lazy then (P[i, i] : 1/2, for q in l do P[i, ix[q]] : P[i, ix[q]] + 1/(2*length(l)))
+    else if mode # 'plain and mode(p) then P[i, i] : 1
+    else for q in l do P[i, ix[q]] : P[i, ix[q]] + 1/length(l)),
+  P)$
+pos(pts, test) := sublist_indices(pts, test)$
+triPts(n) := create_list([r, c], r, 0, n-1, c, 0, r)$
+triNb(n) := buildq([n], lambda([p], sublist([[p[1], p[2]-1], [p[1], p[2]+1], [p[1]-1, p[2]-1], [p[1]-1, p[2]],
+                                             [p[1]+1, p[2]], [p[1]+1, p[2]+1]],
+                                            lambda([q], 0 <= q[2] and q[2] <= q[1] and q[1] < n))))$
+gridPts(n) := create_list([i, j], i, 1, n, j, 1, n)$
+rook : [[1, 0], [-1, 0], [0, 1], [0, -1]]$
+king : append(rook, [[1, 1], [1, -1], [-1, 1], [-1, -1]])$
+gridNb(n, ds) := buildq([n, ds], lambda([p], sublist(map(lambda([d], p + d), ds),
+                                   lambda([q], 1 <= q[1] and q[1] <= n and 1 <= q[2] and q[2] <= n))))$
+cubePts(n) := create_list([i, j, k], i, 1, n, j, 1, n, k, 1, n)$
+cubeNb(n) := buildq([n], lambda([p], sublist(map(lambda([d], p + d),
+                 [[1,0,0], [-1,0,0], [0,1,0], [0,-1,0], [0,0,1], [0,0,-1]]),
+                 lambda([q], lmin(q) >= 1 and lmax(q) <= n))))$
+hypNb(d) := buildq([d], lambda([p], makelist(?logxor(p, 2^i), i, 0, d-1)))$
+
+T10 : triPts(10)$ T20 : triPts(20)$ T30 : triPts(30)$ T40 : triPts(40)$
+G20 : gridPts(20)$ G12 : gridPts(12)$ C6 : cubePts(6)$ H8 : makelist(i, i, 0, 255)$
+prob[1] : [tmat(T10, triNb(10), 'plain), 1, 20, pos(T10, lambda([p], p[1] = 9))]$
+prob[2] : [tmat(T30, triNb(30), 'plain), 1, 60, [1]]$
+prob[3] : [tmat(T20, triNb(20), 'plain), first(pos(T20, lambda([p], p = [12, 6]))), 50,
+           pos(T20, lambda([p], p[2] = 0 or p[2] = p[1] or p[1] = 19))]$
+prob[4] : [tmat(G20, gridNb(20, rook), 'plain), 1, 60, pos(G20, lambda([p], p[1] = 20))]$
+prob[5] : [tmat(G12, gridNb(12, king), 'plain), 1, 30, pos(G12, lambda([p], p[1] = p[2]))]$
+prob[6] : [tmat(C6, cubeNb(6), 'plain), 1, 41, [length(C6)]]$
+prob[7] : [tmat(H8, hypNb(8), 'plain), 1, 30, [256]]$
+prob[8] : [tmat(T30, triNb(30), 'lazy), 1, 60, pos(T30, lambda([p], p[1] = 29))]$
+prob[9] : [tmat(T30, triNb(30), lambda([p], p[1] = 29)), 1, 60, pos(T30, lambda([p], p[1] = 29))]$
+prob[10] : [tmat(T40, triNb(40), 'plain), 1, 80, pos(T40, lambda([p], p[1] = 39))]$
+for k : 1 thru 10 do probF[k] : float(prob[k][1])$
+
+walkM(k) := block([Q : probF[k]^^prob[k][3]],
+  apply("+", makelist(Q[prob[k][2], j], j, prob[k][4])))$
+walk50(k) := block([P : prob[k][1], n, v, fpprec : 60],
+  n : length(P),
+  v : genmatrix(lambda([i, j], if j = prob[k][2] then 1 else 0), 1, n),
+  for s : 1 thru prob[k][3] do v : v . P,
+  bfloat(apply("+", makelist(v[1, j], j, prob[k][4]))))$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("hd9.", k, " machine"), buildq([k], lambda([], walkM(k))), 10, 30),
+  vrun(sconcat("hd9.", k, " wp50"), buildq([k], lambda([], walk50(k))), 48, 90))$
+quit()$

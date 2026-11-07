@@ -1,0 +1,20 @@
+-- Experiment 225 -- SIAM 100-Digit Challenge holdout A, family hd20 (FriCAS column).
+-- Regular half-iterates by the truncated Schroeder system (see half_iterates.m;
+-- equation j divided by lam^j, as there).
+-- Rows 1-5 (f with rational Taylor coefficients, Sqrt[lam] rational): the
+-- coefficients from taylor(f, z = 0) (powers of the series), the n x n system
+-- solved exactly over Fraction Integer, then the real root of
+-- sigma_n(x) = sqrt(lam) sigma_n(z0) in (z0, 4 z0) by solve(p = 0, eps) (exact
+-- real-root isolation to a rational tolerance), converted to DoubleFloat /
+-- Float.  Rows 6-10 need an irrational Sqrt[lam] (or Log 2) inside the
+-- polynomial, which that root isolation does not accept: SKIP.
+)read ../siam100_common.input )quiet
+schA(f:Expression Integer, lam:Fraction Integer, n:Integer):Matrix Fraction Integer == (s := taylor(f, z = 0); A : Matrix Fraction Integer := new(n, n, 0); p := s; for k in 1..n repeat (for j in 2..n repeat A(j, k) := retract(coefficient(p, j::NonNegativeInteger))@Fraction(Integer); p := p * s); A(1, 1) := 1; for j in 2..n repeat A(j, j) := A(j, j) - lam; for j in 2..n repeat for k in 1..n repeat A(j, k) := A(j, k) / lam^j; A)
+sigPoly(f:Expression Integer, lam:Fraction Integer, sl:Fraction Integer, z0:Fraction Integer, n:Integer):Polynomial Fraction Integer == (A := schA(f, lam, n); b : Vector Fraction Integer := new(n, 0); b(1) := 1; c := (solve(A, b).particular)::Vector(Fraction Integer); sz0 := reduce(+, [c(k) * z0^k for k in 1..n]); reduce(+, [c(k) * x^k for k in 1..n]) - sl * sz0)
+rootIn(p:Polynomial Fraction Integer, lo:Fraction Integer, hi:Fraction Integer, eps:Fraction Integer):Fraction Integer == (rs := [retract(rhs e)@Fraction(Integer) for e in solve(p = 0, eps)]; first [v for v in rs | v > lo and v < hi])
+probs := [[16*z/(4+3*z), 4, 2, 1/2, 25, 90], [(4*z-4*z^3)/(1-6*z^2+z^4), 4, 2, 1/10, 25, 90], [4*z*(1-z), 4, 2, 1/10, 25, 90], [4*z*(1+z), 4, 2, 1/10, 25, 90], [1 - (4*(1-z)^3 - 3*(1-z)), 9, 3, 1/10, 25, 90]]
+for ii in 1..5 repeat (pr := probs.ii; t0 := nowms(); r := rootIn(sigPoly(pr.1, retract(pr.2)@Fraction(Integer), retract(pr.3)@Fraction(Integer), retract(pr.4)@Fraction(Integer), retract(pr.5)@Integer), retract(pr.4)@Fraction(Integer), 4*retract(pr.4)@Fraction(Integer), 1/10^18); (if ii = 5 then r := 1 - r); vcaseD(concat ["hd20.", string(ii), " machine"], r::DoubleFloat, nowms() - t0, 10))
+digits(60)$Float
+for ii in 1..5 repeat (pr := probs.ii; t0 := nowms(); r := rootIn(sigPoly(pr.1, retract(pr.2)@Fraction(Integer), retract(pr.3)@Fraction(Integer), retract(pr.4)@Fraction(Integer), retract(pr.6)@Integer), retract(pr.4)@Fraction(Integer), 4*retract(pr.4)@Fraction(Integer), 1/10^62); (if ii = 5 then r := 1 - r); vcaseF(concat ["hd20.", string(ii), " wp50"], r::Float, nowms() - t0, 48))
+for ii in 6..10 repeat (vskip(concat ["hd20.", string(ii), " machine"], "RealRootIsolation(irrational coefficients)"); vskip(concat ["hd20.", string(ii), " wp50"], "RealRootIsolation(irrational coefficients)"))
+)quit

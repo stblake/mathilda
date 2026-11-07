@@ -1,0 +1,28 @@
+/* Experiment 220 -- SIAM 100-Digit Challenge, holdout A, family d15 (Maxima column).
+   Blow-up times and a heat-equation crossing time.  Maxima's only ODE
+   integrator (rk: explicit fixed-step RK4, floats only) cannot locate a
+   blow-up (it runs into overflow at a fixed step) and Maxima has no PDE
+   solver, so every row is SKIP, as in experiment 190.  See blowup_times.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("hd15.1 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.1 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.2 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.2 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.3 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.3 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.4 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.4 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.5 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.5 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.6 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.6 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.7 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.7 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.8 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.8 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.9 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.9 wp50", "NDSolve (blow-up / PDE)")$
+skip("hd15.10 machine", "NDSolve (blow-up / PDE)")$
+skip("hd15.10 wp50", "NDSolve (blow-up / PDE)")$
+quit()$

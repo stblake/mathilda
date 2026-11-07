@@ -1,0 +1,78 @@
+-- Experiment 215 -- SIAM 100-digit HOLDOUT A, family D10 (FriCAS column).
+-- The Monte-Carlo statement of random_recurrences.m: machine: n = 10^6 choices
+-- from random(k)$Integer (seeded by reseed(1) of RandomNumberSource), DoubleFloat
+-- ratio recursion r <- c + s/r, exp(mean log r); wp50: exact Integer (Fraction
+-- Integer for hd10.4) x_n for n = 10^4, then |x_n|^(1/n) as
+-- exp(log(|x_n|)/n) at digits(60).  A uniform choice from {-1, 1} is
+-- 2 random(2) - 1, from {-1, 0, 1} random(3) - 1, from {1, 2} 1 + random(2),
+-- from {1, 2, 3} 1 + random(3); the biased sign (P(+) = 3/4) is -1 when
+-- random(4) = 0, else 1.
+)read ../siam100_common.input )quiet
+pm():Integer == 2*random(2)$Integer - 1
+p3():Integer == random(3)$Integer - 1
+c12():Integer == 1 + random(2)$Integer
+c123():Integer == 1 + random(3)$Integer
+biased():Integer == (random(4)$Integer = 0 => -1; 1)
+lyap1D(n:Integer):DoubleFloat == (acc:DoubleFloat := 0.0; for k in 1..n repeat acc := acc + log(c12()::DoubleFloat); exp(acc/(n::DoubleFloat)))
+lyap1X(n:Integer):Integer == (x:Integer := 1; for k in 1..n repeat x := x*c12(); x)
+lyap2D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := pm()::DoubleFloat; r := 3.0 + e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap2X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := pm(); t := b; b := 3*b + e*a; a := t); b)
+lyap3D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := pm()::DoubleFloat; r := 4.0 + e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap3X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := pm(); t := b; b := 4*b + e*a; a := t); b)
+lyap4D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := pm()::DoubleFloat; r := 2.5 + e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap4X(n:Integer):Fraction Integer == (a:Fraction Integer := 1; b:Fraction Integer := 1; for k in 1..n-1 repeat (e:Integer := pm(); t := b; b := 5/2*b + e*a; a := t); b)
+lyap5D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := pm()::DoubleFloat; r := 3.0 + 2*e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap5X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := pm(); t := b; b := 3*b + 2*e*a; a := t); b)
+lyap6D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := c12()::DoubleFloat; r := e + 1/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap6X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := c12(); t := b; b := e*b + a; a := t); b)
+lyap7D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := p3()::DoubleFloat; r := 3.0 + e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap7X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := p3(); t := b; b := 3*b + e*a; a := t); b)
+lyap8D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := biased()::DoubleFloat; r := 3.0 + e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap8X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := biased(); t := b; b := 3*b + e*a; a := t); b)
+lyap9D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := c123()::DoubleFloat; r := e + 1/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap9X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := c123(); t := b; b := e*b + a; a := t); b)
+lyap10D(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (e:DoubleFloat := biased()::DoubleFloat; r := 2.0 + e/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyap10X(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (e:Integer := biased(); t := b; b := 2*b + e*a; a := t); b)
+toF(q:Fraction Integer):Float == exp((log(abs(numer q)::Float) - log(abs(denom q)::Float))/(10^4)::Float)
+digits(60)$Float
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap1D(10^6); vcaseD("hd10.1 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap1X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.1 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap2D(10^6); vcaseD("hd10.2 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap2X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.2 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap3D(10^6); vcaseD("hd10.3 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap3X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.3 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap4D(10^6); vcaseD("hd10.4 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap4X(10^4); vF := toF(xb); vcaseF("hd10.4 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap5D(10^6); vcaseD("hd10.5 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap5X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.5 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap6D(10^6); vcaseD("hd10.6 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap6X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.6 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap7D(10^6); vcaseD("hd10.7 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap7X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.7 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap8D(10^6); vcaseD("hd10.8 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap8X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.8 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap9D(10^6); vcaseD("hd10.9 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap9X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.9 wp50", vF, nowms() - t0, 1)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyap10D(10^6); vcaseD("hd10.10 machine", vD, nowms() - t0, 2)
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyap10X(10^4); vF := toF(xb::Fraction Integer); vcaseF("hd10.10 wp50", vF, nowms() - t0, 1)
+)quit

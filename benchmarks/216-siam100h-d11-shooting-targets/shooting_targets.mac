@@ -1,0 +1,29 @@
+/* Experiment 216 -- SIAM 100-Digit Challenge, holdout A, family d11 (Maxima column).
+   The two-unknown shooting statement (shooting_targets.m) needs an ODE solve
+   inside a TWO-variable root finder.  Maxima's rk is fixed-step RK4 and its
+   multivariate mnewton needs symbolic derivatives of the equations, which an
+   rk trajectory does not have; find_root is 1-D.  Every row is SKIP, as in
+   experiment 186. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("hd11.1 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.1 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.2 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.2 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.3 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.3 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.4 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.4 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.5 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.5 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.6 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.6 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.7 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.7 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.8 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.8 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.9 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.9 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.10 machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("hd11.10 wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+quit()$

@@ -1,0 +1,43 @@
+/* Experiment 203 -- SIAM 100-Digit Challenge, holdout A for Problem 8 (Maxima column).
+   The same eigen-series as heat_crossing.m.  Maxima has no numerical
+   summation to infinity, so (as in experiment 173) each series is summed to a
+   fixed 40 terms (term k ~ exp(-(2k+1)^2 pi^2 t/4): below 1e-300 by k = 40
+   for every t >= 0.01 the brackets visit; the ball's 40 terms likewise).
+   Root: find_root on a bracket (machine) and bf_find_root at fpprec 60 (wp50).
+   hc8.7 (disk): Maxima has no Bessel-function zeros -- SKIP.
+   See heat_crossing.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["find_root", "bf_find_root"])$
+
+w(t) := 4/%pi*sum((-1)^k/(2*k+1)*exp(-(2*k+1)^2*%pi^2*t/4), k, 0, 39)$
+ww(x, t) := 4/%pi*sum((-1)^k/(2*k+1)*cos((2*k+1)*%pi*x/2)*exp(-(2*k+1)^2*%pi^2*t/4), k, 0, 39)$
+mean(t) := 8/%pi^2*sum(exp(-(2*k+1)^2*%pi^2*t/4)/(2*k+1)^2, k, 0, 39)$
+ball(t) := 1 + 2*sum((-1)^n*exp(-n^2*%pi^2*t), n, 1, 40)$
+
+r1(t) := 5/4*(1 - w(t)^2) - 1/2$
+r2(t) := 1 - w(t)^2 - 1/2$
+r3(t) := w(t) - 1/2$
+r4(t) := mean(t) - 1/2$
+r5(t) := 1 - w(t)^3 - 1/2$
+r6(t) := 1 - w(t/4)*w(t) - 1/2$
+r8(t) := ball(t) - 1/2$
+r9(t) := 1 - ww(1/2, t)*w(t) - 1/2$
+r10(t) := 1 - w(t)^2 - 1/100$
+
+case(i, lo, hi) := block([rfun : concat('r, i)],
+  vrun(sconcat("hc8.", i, " machine"), lambda([], find_root(rfun(t), t, lo, hi)), 10),
+  vrun(sconcat("hc8.", i, " wp50"), lambda([], block([fpprec : 60], bf_find_root(rfun(t), t, bfloat(lo), bfloat(hi)))), 48))$
+
+case(1, 0.05, 1.0)$
+case(2, 0.05, 1.0)$
+case(3, 0.05, 1.0)$
+case(4, 0.05, 1.0)$
+case(5, 0.05, 1.0)$
+case(6, 0.05, 2.0)$
+skip("hc8.7 machine", "Bessel zeros")$
+skip("hc8.7 wp50", "Bessel zeros")$
+case(8, 0.02, 1.0)$
+case(9, 0.05, 1.0)$
+case(10, 0.01, 0.3)$
+quit()$

@@ -1,0 +1,39 @@
+-- Experiment 212 -- SIAM 100-digit HOLDOUT A, family D7 (FriCAS column).
+-- Seven of the ten 1-D statements need the ends of the region as roots of
+-- transcendental equations (FindRoot); FriCAS has no built-in numeric root
+-- finder for a non-polynomial equation (solve/realSolve are polynomial-only),
+-- so those rows are SKIP, as in 182.  The three fixed-end rows (hd7.1, 7, 8)
+-- are NumericalQuadrature romberg: DoubleFloat (eps 1e-13, at most 2^22
+-- points) and Float with digits(60) (eps 1e-50, at most 2^20 points).
+-- (1 - x^4)^(1/4) is spelled sqrt(sqrt(1 - x^4)).
+)read ../siam100_common.input )quiet
+fD1(x:DoubleFloat):DoubleFloat == 2*sqrt(sqrt(1 - x^4))
+t0 := nowms(); r := romberg(fD1, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd7.1 machine", r.value, nowms() - t0, 10)
+vskip("hd7.2 machine", "FindRoot")
+vskip("hd7.3 machine", "FindRoot")
+vskip("hd7.4 machine", "FindRoot")
+vskip("hd7.5 machine", "FindRoot")
+vskip("hd7.6 machine", "FindRoot")
+fD7(x:DoubleFloat):DoubleFloat == pi()$DoubleFloat - 2*asin(1 - sin(x))
+t0 := nowms(); r := romberg(fD7, 0.0, pi()$DoubleFloat, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd7.7 machine", r.value, nowms() - t0, 10)
+fD8(x:DoubleFloat):DoubleFloat == log(4 - exp(x)) + x
+L8D := log(2 + sqrt(3.0))$DoubleFloat
+t0 := nowms(); r := romberg(fD8, -L8D, L8D, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd7.8 machine", r.value, nowms() - t0, 10)
+vskip("hd7.9 machine", "FindRoot")
+vskip("hd7.10 machine", "FindRoot")
+digits(60)$Float
+fF1(x:Float):Float == 2*sqrt(sqrt(1 - x^4))
+t0 := nowms(); rF := romberg(fF1, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd7.1 wp50", rF.value, nowms() - t0, 48)
+vskip("hd7.2 wp50", "FindRoot")
+vskip("hd7.3 wp50", "FindRoot")
+vskip("hd7.4 wp50", "FindRoot")
+vskip("hd7.5 wp50", "FindRoot")
+vskip("hd7.6 wp50", "FindRoot")
+fF7(x:Float):Float == pi()$Float - 2*asin(1 - sin(x))
+t0 := nowms(); rF := romberg(fF7, 0.0, pi()$Float, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd7.7 wp50", rF.value, nowms() - t0, 48)
+fF8(x:Float):Float == log(4 - exp(x)) + x
+L8F := log(2 + sqrt(3.0))$Float
+t0 := nowms(); rF := romberg(fF8, -L8F, L8F, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd7.8 wp50", rF.value, nowms() - t0, 48)
+vskip("hd7.9 wp50", "FindRoot")
+vskip("hd7.10 wp50", "FindRoot")
+)quit

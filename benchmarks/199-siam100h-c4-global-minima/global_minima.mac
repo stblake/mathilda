@@ -1,0 +1,10 @@
+/* Experiment 199 -- SIAM 100-digit holdout A, family hc4 (Maxima column).
+   Maxima has no global minimiser (lbfgs and fmin_cobyla are local and land in
+   whichever basin the start point picks), so every row SKIPs, as in C4.
+   See global_minima.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hc4.", k, " machine"), "NMinimize"),
+  skip(sconcat("hc4.", k, " wp50"), "NMinimize"))$
+quit()$

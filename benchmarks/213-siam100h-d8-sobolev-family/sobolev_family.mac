@@ -1,0 +1,64 @@
+/* Experiment 213 -- SIAM 100-digit HOLDOUT A, family D8 (Maxima column).
+   Maxima's QUADPACK is one-dimensional and machine-precision only:
+     1-D rows: quad_qagi over R;
+     2-D rows: nested quad_qagi (the inner integral a function of the outer
+               variable, called only at numeric points), as in 183;
+     3-D rows (hd8.7, hd8.9): SKIP (a triple nest is not a built-in);
+     wp50 rows: SKIP -- bromberg, the only bigfloat quadrature, needs a finite
+               interval.
+   See sobolev_family.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["quad_qagi"])$
+
+/* hd8.1  c_1(R^1) */
+vrun("hd8.1 machine", lambda([],
+  sqrt(first(quad_qagi(1/(1 + x^2), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi)))), 10, 30)$
+skip("hd8.1 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.2  c_2(R^1) */
+vrun("hd8.2 machine", lambda([],
+  sqrt(first(quad_qagi(1/(1 + x^2 + x^4), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi)))), 10, 30)$
+skip("hd8.2 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.3  c_5(R^1) */
+vrun("hd8.3 machine", lambda([],
+  sqrt(first(quad_qagi(1/(1 + x^2 + x^4 + x^6 + x^8 + x^10), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi)))), 10, 30)$
+skip("hd8.3 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.4  c_10(R^1) */
+vrun("hd8.4 machine", lambda([],
+  sqrt(first(quad_qagi(1/(1 + x^2 + x^4 + x^6 + x^8 + x^10 + x^12 + x^14 + x^16 + x^18 + x^20), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi)))), 10, 30)$
+skip("hd8.4 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.5  c_3(R^2) */
+inner5(y) := if numberp(y) then
+  first(quad_qagi(1/(1 + x^2 + y^2 + x^4 + x^2*y^2 + y^4 + x^6 + x^4*y^2 + x^2*y^4 + y^6), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000))
+  else 'inner5(y)$
+vrun("hd8.5 machine", lambda([],
+  sqrt(first(quad_qagi(inner5(y), y, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi))^2)), 10, 30)$
+skip("hd8.5 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.6  c_4(R^2) */
+inner6(y) := if numberp(y) then
+  first(quad_qagi(1/(1 + x^2 + y^2 + x^4 + x^2*y^2 + y^4 + x^6 + x^4*y^2 + x^2*y^4 + y^6 + x^8 + x^6*y^2 + x^4*y^4 + x^2*y^6 + y^8), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000))
+  else 'inner6(y)$
+vrun("hd8.6 machine", lambda([],
+  sqrt(first(quad_qagi(inner6(y), y, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi))^2)), 10, 30)$
+skip("hd8.6 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.7  c_2(R^3) */
+skip("hd8.7 machine", "3-D quadrature")$
+skip("hd8.7 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.8  Bessel potential (1+|x|^2)^(-3/2) on R^2 */
+inner8(y) := if numberp(y) then
+  first(quad_qagi(1/((1 + x^2 + y^2)^(3/2)), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000))
+  else 'inner8(y)$
+vrun("hd8.8 machine", lambda([],
+  sqrt(first(quad_qagi(inner8(y), y, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi))^2)), 10, 30)$
+skip("hd8.8 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.9  Bessel potential (1+|x|^2)^(-5/2) on R^3 */
+skip("hd8.9 machine", "3-D quadrature")$
+skip("hd8.9 wp50", "bigfloat infinite-range quadrature")$
+/* hd8.10  anisotropic 1/(1+x^2+y^4) on R^2 */
+inner10(y) := if numberp(y) then
+  first(quad_qagi(1/(1 + x^2 + y^4), x, minf, inf, 'epsrel = 1d-13, 'limit = 1000))
+  else 'inner10(y)$
+vrun("hd8.10 machine", lambda([],
+  sqrt(first(quad_qagi(inner10(y), y, minf, inf, 'epsrel = 1d-13, 'limit = 1000)) / (2*float(%pi))^2)), 10, 30)$
+skip("hd8.10 wp50", "bigfloat infinite-range quadrature")$
+quit()$

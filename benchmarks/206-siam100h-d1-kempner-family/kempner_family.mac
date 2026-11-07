@@ -1,0 +1,9 @@
+/* Experiment 206 -- SIAM 100-digit holdout A, family d1 (Maxima column).
+   Maxima has no numerical summation to infinity (sum(..., n, 1, inf) stays
+   symbolic): every row is a SKIP, as in experiment 176.  See kempner_family.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hd1.", k, " machine"), "numerical infinite sum"),
+  skip(sconcat("hd1.", k, " wp50"), "numerical infinite sum"))$
+quit()$

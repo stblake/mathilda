@@ -1,0 +1,28 @@
+-- Experiment 201 -- SIAM 100-Digit Challenge, holdout A for Problem 6 (FriCAS column).
+-- Every case is a 1-, 2- or 3-D integral of a near-singular integrand, most
+-- inside a root solve.  FriCAS has no numeric root finder for a black-box
+-- function and no multi-dimensional quadrature (as in experiment 171); the
+-- three cases without a root (hc6.1, hc6.7, hc6.9) are 2-/3-D integrals.
+-- All rows SKIP.  See lattice_return.m.
+)read ../siam100_common.input )quiet
+vskip("hc6.1 machine", "2-D quadrature")
+vskip("hc6.1 wp50", "2-D quadrature")
+vskip("hc6.2 machine", "FindRoot")
+vskip("hc6.2 wp50", "FindRoot")
+vskip("hc6.3 machine", "FindRoot")
+vskip("hc6.3 wp50", "FindRoot")
+vskip("hc6.4 machine", "FindRoot")
+vskip("hc6.4 wp50", "FindRoot")
+vskip("hc6.5 machine", "FindRoot")
+vskip("hc6.5 wp50", "FindRoot")
+vskip("hc6.6 machine", "FindRoot")
+vskip("hc6.6 wp50", "FindRoot")
+vskip("hc6.7 machine", "3-D quadrature")
+vskip("hc6.7 wp50", "3-D quadrature")
+vskip("hc6.8 machine", "FindRoot")
+vskip("hc6.8 wp50", "FindRoot")
+vskip("hc6.9 machine", "2-D quadrature")
+vskip("hc6.9 wp50", "2-D quadrature")
+vskip("hc6.10 machine", "FindRoot")
+vskip("hc6.10 wp50", "FindRoot")
+)quit

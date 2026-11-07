@@ -1,0 +1,47 @@
+/* Experiment 218 -- SIAM 100-Digit Challenge, holdout A, family d13 (Maxima column).
+   The ten problems of initial_value_shooting.m.  Maxima's ODE integrator rk
+   is fixed-step classical RK4 (floats only, no event location); the
+   statement is the literal one: find_root on (state at T) - target over the
+   bracket of the .m file, rk with step 1/400.  hd13.9 is posed through an
+   event (see the .m header) and its literal fixed-time form is defined only
+   in a narrow window (exp 188): SKIP.  Every 50-digit row is SKIP (rk is
+   float only). */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["rk", "find_root"])$
+
+fin(f, v, u0, T) := rest(last(rk(f, v, u0, [t, 0, T, 1/400])))$
+
+g1(p) := first(fin([y*(1 - y)], [y], [p], 10)) - 0.5$
+g2(p) := block([u : fin([-x + 10*y, -y + 10*z, -z], [x, y, z], [0.0, 0.0, p], 5)],
+               sqrt(u[1]^2 + u[2]^2 + u[3]^2) - 1)$
+g3(p) := first(fin([y^2 - y], [y], [p], 3)) - 2$
+g4(p) := first(fin([w, -sin(th)], [th, w], [0.0, p], 2)) - 1$
+g5(p) := first(fin([w, -exp(y)], [y, w], [0.0, p], 1))$
+g6(p) := second(fin([b1, b2, -b0*b2/2], [b0, b1, b2], [0.0, 0.0, p], 10)) - 1$  /* not f: vrun binds f */
+g7(p) := block([u : fin([vx, vy, -x/(x^2 + y^2)^(3/2), -y/(x^2 + y^2)^(3/2)], [x, y, vx, vy],
+                        [1.0, 0.0, 0.0, p], 2)], sqrt(u[1]^2 + u[2]^2) - 1.5)$
+g8(p) := first(fin([t^2 + y^2], [y], [p], 1)) - 2$
+g10(p) := first(fin([w, -x - x^3], [x, w], [p, 0.0], 10))$
+
+vrun("hd13.1 machine", lambda([], find_root(g1, 1.0e-5, 1.0e-4)), 10)$
+skip("hd13.1 wp50", "rk (float only)")$
+vrun("hd13.2 machine", lambda([], find_root(g2, 0.05, 0.5)), 10)$
+skip("hd13.2 wp50", "rk (float only)")$
+vrun("hd13.3 machine", lambda([], find_root(g3, 1.0, 1.04)), 10)$
+skip("hd13.3 wp50", "rk (float only)")$
+vrun("hd13.4 machine", lambda([], find_root(g4, 0.5, 1.5)), 10)$
+skip("hd13.4 wp50", "rk (float only)")$
+vrun("hd13.5 machine", lambda([], find_root(g5, 0.2, 1.0)), 10)$
+skip("hd13.5 wp50", "rk (float only)")$
+vrun("hd13.6 machine", lambda([], find_root(g6, 0.2, 0.5)), 10)$
+skip("hd13.6 wp50", "rk (float only)")$
+vrun("hd13.7 machine", lambda([], find_root(g7, 1.1, 1.3)), 10)$
+skip("hd13.7 wp50", "rk (float only)")$
+vrun("hd13.8 machine", lambda([], find_root(g8, 0.0, 0.9)), 10)$
+skip("hd13.8 wp50", "rk (float only)")$
+skip("hd13.9 machine", "WhenEvent")$
+skip("hd13.9 wp50", "rk (float only)")$
+vrun("hd13.10 machine", lambda([], find_root(g10, 0.3, 0.6)), 10)$
+skip("hd13.10 wp50", "rk (float only)")$
+quit()$

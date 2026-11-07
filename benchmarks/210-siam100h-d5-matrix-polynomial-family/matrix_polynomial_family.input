@@ -1,0 +1,25 @@
+-- Experiment 210 -- SIAM 100-digit holdout A, family d5 (FriCAS column).
+-- FriCAS has no matrix 2-norm (singular values) and no numerical minimiser,
+-- so every row is a SKIP.  See matrix_polynomial_family.m.
+)read ../siam100_common.input )quiet
+vskip("hd5.1 machine", "minimize")
+vskip("hd5.1 wp50", "minimize")
+vskip("hd5.2 machine", "minimize")
+vskip("hd5.2 wp50", "minimize")
+vskip("hd5.3 machine", "minimize")
+vskip("hd5.3 wp50", "minimize")
+vskip("hd5.4 machine", "minimize")
+vskip("hd5.4 wp50", "minimize")
+vskip("hd5.5 machine", "minimize")
+vskip("hd5.5 wp50", "minimize")
+vskip("hd5.6 machine", "minimize")
+vskip("hd5.6 wp50", "minimize")
+vskip("hd5.7 machine", "minimize")
+vskip("hd5.7 wp50", "minimize")
+vskip("hd5.8 machine", "minimize")
+vskip("hd5.8 wp50", "minimize")
+vskip("hd5.9 machine", "minimize")
+vskip("hd5.9 wp50", "minimize")
+vskip("hd5.10 machine", "minimize")
+vskip("hd5.10 wp50", "minimize")
+)quit

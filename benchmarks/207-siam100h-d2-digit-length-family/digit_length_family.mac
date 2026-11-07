@@ -1,0 +1,10 @@
+/* Experiment 207 -- SIAM 100-digit holdout A, family d2 (Maxima column).
+   Maxima has no numerical infinite-series summation (sum/nusum/simpsum are
+   symbolic), so every row is a SKIP, as in experiment 177.
+   See digit_length_family.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hd2.", k, " machine"), "nsum"),
+  skip(sconcat("hd2.", k, " wp50"), "nsum"))$
+quit()$

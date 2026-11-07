@@ -1,0 +1,48 @@
+-- Experiment 211 -- SIAM 100-digit HOLDOUT A, family D6 (FriCAS column).
+-- The ten integrals of oscillatory_towers.m, as written: NumericalQuadrature
+-- romberg (eps 1e-13, at most 2^22 points) in DoubleFloat for the machine rows,
+-- and romberg (eps 1e-50, at most 2^20 points) in Float with digits(60) for
+-- the 50-digit rows.  1/2 and 1/100 are written as quotients of floats.
+)read ../siam100_common.input )quiet
+fD1(x:DoubleFloat):DoubleFloat == cos(exp(x^2))
+t0 := nowms(); r := romberg(fD1, 0.0, 2.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.1 machine", r.value, nowms() - t0, 10)
+fD2(x:DoubleFloat):DoubleFloat == exp(x + cos(exp(exp(x))))
+t0 := nowms(); r := romberg(fD2, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.2 machine", r.value, nowms() - t0, 10)
+fD3(x:DoubleFloat):DoubleFloat == sin(exp(exp(2*x)))
+t0 := nowms(); r := romberg(fD3, 0.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.3 machine", r.value, nowms() - t0, 10)
+fD4(x:DoubleFloat):DoubleFloat == sin(x^3)
+t0 := nowms(); r := romberg(fD4, 0.0, 3.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.4 machine", r.value, nowms() - t0, 10)
+fD5(x:DoubleFloat):DoubleFloat == exp(sin(exp(x)))
+t0 := nowms(); r := romberg(fD5, 0.0, pi()$DoubleFloat, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.5 machine", r.value, nowms() - t0, 10)
+fD6(x:DoubleFloat):DoubleFloat == sin(exp(4*x))/(2 + x)
+t0 := nowms(); r := romberg(fD6, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.6 machine", r.value, nowms() - t0, 10)
+fD7(x:DoubleFloat):DoubleFloat == x*exp(x^2)*sin(exp(x^2))
+t0 := nowms(); r := romberg(fD7, 0.0, 2.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.7 machine", r.value, nowms() - t0, 10)
+fD8(x:DoubleFloat):DoubleFloat == exp(x + sin(exp(exp(x + 0.5))))
+t0 := nowms(); r := romberg(fD8, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.8 machine", r.value, nowms() - t0, 10)
+fD9(x:DoubleFloat):DoubleFloat == cos(x^2 + x)
+t0 := nowms(); r := romberg(fD9, 0.0, 8.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.9 machine", r.value, nowms() - t0, 10)
+fD10(x:DoubleFloat):DoubleFloat == cos(1/(x + 0.01))
+t0 := nowms(); r := romberg(fD10, 0.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("hd6.10 machine", r.value, nowms() - t0, 10)
+digits(60)$Float
+fF1(x:Float):Float == cos(exp(x^2))
+t0 := nowms(); rF := romberg(fF1, 0.0, 2.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.1 wp50", rF.value, nowms() - t0, 48)
+fF2(x:Float):Float == exp(x + cos(exp(exp(x))))
+t0 := nowms(); rF := romberg(fF2, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.2 wp50", rF.value, nowms() - t0, 48)
+fF3(x:Float):Float == sin(exp(exp(2*x)))
+t0 := nowms(); rF := romberg(fF3, 0.0, 1.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.3 wp50", rF.value, nowms() - t0, 48)
+fF4(x:Float):Float == sin(x^3)
+t0 := nowms(); rF := romberg(fF4, 0.0, 3.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.4 wp50", rF.value, nowms() - t0, 48)
+fF5(x:Float):Float == exp(sin(exp(x)))
+t0 := nowms(); rF := romberg(fF5, 0.0, pi()$Float, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.5 wp50", rF.value, nowms() - t0, 48)
+fF6(x:Float):Float == sin(exp(4*x))/(2 + x)
+t0 := nowms(); rF := romberg(fF6, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.6 wp50", rF.value, nowms() - t0, 48)
+fF7(x:Float):Float == x*exp(x^2)*sin(exp(x^2))
+t0 := nowms(); rF := romberg(fF7, 0.0, 2.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.7 wp50", rF.value, nowms() - t0, 48)
+fF8(x:Float):Float == exp(x + sin(exp(exp(x + 1.0/2.0))))
+t0 := nowms(); rF := romberg(fF8, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.8 wp50", rF.value, nowms() - t0, 48)
+fF9(x:Float):Float == cos(x^2 + x)
+t0 := nowms(); rF := romberg(fF9, 0.0, 8.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.9 wp50", rF.value, nowms() - t0, 48)
+fF10(x:Float):Float == cos(1/(x + 1.0/100.0))
+t0 := nowms(); rF := romberg(fF10, 0.0, 1.0, 1.0e-50, 1.0e-50, 5, 20); vcaseF("hd6.10 wp50", rF.value, nowms() - t0, 48)
+)quit

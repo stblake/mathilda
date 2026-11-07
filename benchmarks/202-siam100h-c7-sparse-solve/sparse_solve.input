@@ -1,0 +1,36 @@
+-- Experiment 202 -- SIAM 100-Digit Challenge, holdout A for Problem 7 (FriCAS column).
+-- FriCAS has no sparse matrix type and no per-case time cap (as in experiment
+-- 172), so only the n = 1000 machine rows (hc7.5, hc7.7, hc7.9) are attempted:
+-- Matrix(DoubleFloat) and the built-in solve(M, b).  The n >= 3000 rows and
+-- every wp50 row SKIP (a dense Float solve at digits(60) has no cap and would
+-- hang the file).  See sparse_solve.m.
+)read ../siam100_common.input )quiet
+vskip("hc7.1 machine", "Matrix DoubleFloat (dense 20000^2)")
+vskip("hc7.1 wp50", "Matrix Float (dense 20000^2)")
+vskip("hc7.2 machine", "Matrix DoubleFloat (dense 10000^2)")
+vskip("hc7.2 wp50", "Matrix Float (dense 10000^2)")
+vskip("hc7.3 machine", "Matrix DoubleFloat (dense 5000^2)")
+vskip("hc7.3 wp50", "Matrix Float (dense 5000^2)")
+vskip("hc7.4 machine", "Matrix DoubleFloat (dense 3000^2)")
+vskip("hc7.4 wp50", "Matrix Float (dense 3000^2)")
+vskip("hc7.6 machine", "Matrix DoubleFloat (dense 3000^2)")
+vskip("hc7.6 wp50", "Matrix Float (dense 3000^2)")
+vskip("hc7.8 machine", "Matrix DoubleFloat (dense 3600^2)")
+vskip("hc7.8 wp50", "Matrix Float (dense 3600^2)")
+vskip("hc7.10 machine", "Matrix DoubleFloat (dense 8000^2)")
+vskip("hc7.10 wp50", "Matrix Float (dense 8000^2)")
+n := 1000
+M5 : Matrix DoubleFloat := new(n, n, 0)
+M7 : Matrix DoubleFloat := new(n, n, 0)
+pp : Integer := 2
+for i in 1..n repeat (M5(i, i) := i::DoubleFloat; M7(i, i) := pp::DoubleFloat; pp := nextPrime(pp))
+for k in 0..9 repeat (o := 2^k; for i in 1..(n - o) repeat (M5(i, i + o) := 1; M5(i + o, i) := 1; M7(i, i + o) := 1; M7(i + o, i) := 1))
+b1 : Vector DoubleFloat := new(n, 0); b1(1) := 1
+b9 : Vector DoubleFloat := new(n, 1)
+t0 := nowms(); r := solve(M5, b1); vcaseD("hc7.5 machine", (r.particular :: Vector DoubleFloat)(1), nowms() - t0, 10)
+vskip("hc7.5 wp50", "Matrix Float solve (dense, no cap)")
+t0 := nowms(); r := solve(M7, b1); vcaseD("hc7.7 machine", (r.particular :: Vector DoubleFloat)(2), nowms() - t0, 10)
+vskip("hc7.7 wp50", "Matrix Float solve (dense, no cap)")
+t0 := nowms(); r := solve(M7, b9); x9 := r.particular :: Vector DoubleFloat; s9 := reduce(+, [x9(i) for i in 1..n]); vcaseD("hc7.9 machine", s9, nowms() - t0, 10)
+vskip("hc7.9 wp50", "Matrix Float solve (dense, no cap)")
+)quit

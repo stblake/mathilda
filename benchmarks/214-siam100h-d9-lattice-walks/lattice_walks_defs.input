@@ -1,0 +1,51 @@
+-- Helper definitions for lattice_walks.input (multi-line FriCAS functions
+-- must be )read from a file, not typed on stdin).
+Q ==> Fraction Integer
+-- triangle with n points per side: point (r, c) has index r(r+1)/2 + c + 1
+triIdx(r:Integer, c:Integer):Integer == r*(r+1) quo 2 + c + 1
+triMat(n:Integer, mode:Integer, absorbRow:Integer):Matrix Q ==
+  m := n*(n+1) quo 2
+  P : Matrix Q := new(m, m, 0)
+  for r in 0..n-1 repeat
+    for c in 0..r repeat
+      l := [[a, b] for a in [r, r, r-1, r-1, r+1, r+1] for b in [c-1, c+1, c-1, c, c, c+1] | 0 <= b and b <= a and a < n]
+      i := triIdx(r, c)
+      if r = absorbRow then P(i, i) := 1
+      else if mode = 1 then
+        P(i, i) := 1/2
+        for p in l repeat P(i, triIdx(p.1, p.2)) := P(i, triIdx(p.1, p.2)) + 1/(2*#l)
+      else
+        for p in l repeat P(i, triIdx(p.1, p.2)) := P(i, triIdx(p.1, p.2)) + 1/(#l)
+  P
+-- n x n grid, (i, j) has index (i-1) n + j; king = 1 for 8 neighbours
+gridMat(n:Integer, king:Integer):Matrix Q ==
+  P : Matrix Q := new(n*n, n*n, 0)
+  ds : List List Integer := (king = 1 => [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]; [[1,0],[-1,0],[0,1],[0,-1]])
+  for i in 1..n repeat
+    for j in 1..n repeat
+      l := [[i + d.1, j + d.2] for d in ds | 1 <= i + d.1 and i + d.1 <= n and 1 <= j + d.2 and j + d.2 <= n]
+      for p in l repeat P((i-1)*n + j, (p.1-1)*n + p.2) := 1/(#l)
+  P
+-- n^3 cube, (i, j, k) has index (i-1) n^2 + (j-1) n + k
+cubeMat(n:Integer):Matrix Q ==
+  P : Matrix Q := new(n^3, n^3, 0)
+  ds : List List Integer := [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]
+  for i in 1..n repeat for j in 1..n repeat for k in 1..n repeat
+    l := [[i + d.1, j + d.2, k + d.3] for d in ds | 1 <= i + d.1 and i + d.1 <= n and 1 <= j + d.2 and j + d.2 <= n and 1 <= k + d.3 and k + d.3 <= n]
+    for p in l repeat P((i-1)*n^2 + (j-1)*n + k, (p.1-1)*n^2 + (p.2-1)*n + p.3) := 1/(#l)
+  P
+-- hypercube Q_d, vertex p in 0..2^d-1 has index p + 1
+hypMat(d:Integer):Matrix Q ==
+  P : Matrix Q := new(2^d, 2^d, 0)
+  for p in 0..2^d-1 repeat for i in 0..d-1 repeat
+    q := (bit?(p, i) => p - 2^i; p + 2^i)
+    P(p + 1, q + 1) := 1/d
+  P
+toD(P:Matrix Q):Matrix DoubleFloat == map(x +-> (numer(x)::DoubleFloat)/(denom(x)::DoubleFloat), P)
+walkD(P:Matrix Q, s:Integer, k:Integer, tg:List Integer):DoubleFloat == (QD := toD(P)^k; reduce(+, [QD(s, j) for j in tg]))
+walkF(P:Matrix Q, s:Integer, k:Integer, tg:List Integer):Float ==
+  v : Matrix Q := new(1, nrows P, 0)
+  v(1, s) := 1
+  for i in 1..k repeat v := v * P
+  q := reduce(+, [v(1, j) for j in tg])
+  (numer(q)::Float)/(denom(q)::Float)

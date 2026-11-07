@@ -1,0 +1,33 @@
+/* Experiment 205 -- SIAM 100-Digit Challenge, holdout A for Problem 10 (Maxima column).
+   The same ten separated series as brownian_hitting.m.  Maxima has no
+   numerical summation to infinity, so (as in experiment 175) each series is
+   summed to a fixed number of terms chosen so the dropped tail is below
+   1e-62 -- in floats (P = float(%pi)) for the machine rows and in bfloats at
+   fpprec 60 (P = bfloat(%pi)) for wp50.  sech is spelled 1/cosh.
+   Term counts: hc10.1,2,6,7 15-25; hc10.3 25; hc10.4,5 100; hc10.8 20x20;
+   hc10.9 95x95; hc10.10 240.  See brownian_hitting.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["sum"])$
+
+rc(c, x, a) := (exp(-c*(a - x)) + exp(-c*(a + x)))/(1 + exp(-2*c*a))$
+p1(P) := 4/P*sum((-1)^k/(2*k+1)/cosh(2*(2*k+1)*P), k, 0, 15)$
+p2(P) := 4/P*sum((-1)^k/(2*k+1)*rc((2*k+1)*P, 3, 5), k, 0, 15)$
+p3(P) := 4/P*sum((-1)^k/(2*k+1)*cos((2*k+1)*P/4)*rc((2*k+1)*P, 4, 5), k, 0, 25)$
+p4(P) := 4/P*sum((-1)^k/(2*k+1)/cosh((2*k+1)*P/4), k, 0, 100)$
+p5(P) := 4/P*sum(sin((2*j+1)*P/2)/(2*j+1)*(exp(-(2*j+1)*P/4) - exp(-7*(2*j+1)*P/4))
+                 /(1 - exp(-2*(2*j+1)*P)), j, 0, 100)$
+p6(P) := 4/P*sum((-1)^k*exp(-(2*k+1)*P)/(2*k+1), k, 0, 25)$
+p7(P) := 1/4 - 8/P^3*sum((-1)^k/(2*k+1)^3/cosh((2*k+1)*P), k, 0, 25)$
+p8(P) := 16/P^2*sum(sum((-1)^(j+k)/((2*j+1)*(2*k+1))
+                        /cosh(3/2*P*nm(sqrt((2*j+1)^2 + (2*k+1)^2))), k, 0, 20), j, 0, 20)$
+nm(x) := if bfloatp(P) then bfloat(x) else float(x)$
+t9(r) := (exp(-r/4) - exp(-7*r/4))/(1 - exp(-2*r))$
+p9(P) := 16/P^2*sum(sum((-1)^(j+k)/((2*j+1)*(2*k+1))*t9(P*nm(sqrt((2*j+1)^2 + (2*k+1)^2))),
+                        k, 0, 95), j, 0, 95)$
+p10(P) := 4/P*sum((-1)^k/(2*k+1)*rc((2*k+1)*P, 19/10, 2), k, 0, 240)$
+
+for i : 1 thru 10 do block([pfun : concat('p, i)],
+  vrun(sconcat("hc10.", i, " machine"), lambda([], apply(pfun, [float(%pi)])), 10),
+  vrun(sconcat("hc10.", i, " wp50"), lambda([], block([fpprec : 60], apply(pfun, [bfloat(%pi)]))), 48))$
+quit()$

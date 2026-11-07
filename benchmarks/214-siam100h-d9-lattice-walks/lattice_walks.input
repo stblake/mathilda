@@ -1,0 +1,42 @@
+-- Experiment 214 -- SIAM 100-digit HOLDOUT A, family D9 (FriCAS column).
+-- The ten walks of lattice_walks.m.  machine: P^steps in Matrix DoubleFloat,
+-- start row summed over the targets; wp50: the exact start vector pushed
+-- through `steps` exact products v * P in Matrix Fraction Integer, converted to
+-- Float at digits(60) (as in 184).  Points are indexed in the same order as
+-- the .m half; the matrices are built before each timed case.
+-- Multi-line helpers live in lattice_walks_defs.input.
+)read ../siam100_common.input )quiet
+)read lattice_walks_defs.input )quiet
+digits(60)$Float
+triBottom(n:Integer):List Integer == [triIdx(n-1, c) for c in 0..n-1]
+P1 := triMat(10, 0, -1); tg1 := triBottom(10)
+t0 := nowms(); v := walkD(P1, 1, 20, tg1); vcaseD("hd9.1 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P1, 1, 20, tg1); vcaseF("hd9.1 wp50", vF, nowms() - t0, 48)
+P2 := triMat(30, 0, -1)
+t0 := nowms(); v := walkD(P2, 1, 60, [1]); vcaseD("hd9.2 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P2, 1, 60, [1]); vcaseF("hd9.2 wp50", vF, nowms() - t0, 48)
+P3 := triMat(20, 0, -1); tg3 := concat [[triIdx(r, 0) for r in 0..19], [triIdx(r, r) for r in 1..19], [triIdx(19, c) for c in 1..18]]
+t0 := nowms(); v := walkD(P3, triIdx(12, 6), 50, tg3); vcaseD("hd9.3 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P3, triIdx(12, 6), 50, tg3); vcaseF("hd9.3 wp50", vF, nowms() - t0, 48)
+P4 := gridMat(20, 0); tg4 := [19*20 + j for j in 1..20]
+t0 := nowms(); v := walkD(P4, 1, 60, tg4); vcaseD("hd9.4 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P4, 1, 60, tg4); vcaseF("hd9.4 wp50", vF, nowms() - t0, 48)
+P5 := gridMat(12, 1); tg5 := [(i-1)*12 + i for i in 1..12]
+t0 := nowms(); v := walkD(P5, 1, 30, tg5); vcaseD("hd9.5 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P5, 1, 30, tg5); vcaseF("hd9.5 wp50", vF, nowms() - t0, 48)
+P6 := cubeMat(6)
+t0 := nowms(); v := walkD(P6, 1, 41, [216]); vcaseD("hd9.6 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P6, 1, 41, [216]); vcaseF("hd9.6 wp50", vF, nowms() - t0, 48)
+P7 := hypMat(8)
+t0 := nowms(); v := walkD(P7, 1, 30, [256]); vcaseD("hd9.7 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P7, 1, 30, [256]); vcaseF("hd9.7 wp50", vF, nowms() - t0, 48)
+P8 := triMat(30, 1, -1); tg30 := triBottom(30)
+t0 := nowms(); v := walkD(P8, 1, 60, tg30); vcaseD("hd9.8 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P8, 1, 60, tg30); vcaseF("hd9.8 wp50", vF, nowms() - t0, 48)
+P9 := triMat(30, 0, 29)
+t0 := nowms(); v := walkD(P9, 1, 60, tg30); vcaseD("hd9.9 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P9, 1, 60, tg30); vcaseF("hd9.9 wp50", vF, nowms() - t0, 48)
+P10 := triMat(40, 0, -1); tg10 := triBottom(40)
+t0 := nowms(); v := walkD(P10, 1, 80, tg10); vcaseD("hd9.10 machine", v, nowms() - t0, 10)
+t0 := nowms(); vF := walkF(P10, 1, 80, tg10); vcaseF("hd9.10 wp50", vF, nowms() - t0, 48)
+)quit

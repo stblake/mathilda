@@ -1,0 +1,22 @@
+# SIAM 100-digit HOLDOUT A, family D8 (exp 213): c = Sqrt[(2 Pi)^-N Int_{R^N} 1/P(x) dx] (Sobolev / Bessel-potential constants)
+# label	true value	need	source
+hd8.1 machine	0.7071067811865475244008443621048490392848359376884740365883398689953662	10	exact 1/Sqrt[2]: mpmath tanh-sinh over R, dps 80 (siam100_refs/hd8_ref.py) == WL exact Integrate (siam100_refs/hd8_ref.wl)
+hd8.1 wp50	0.7071067811865475244008443621048490392848359376884740365883398689953662	48	same
+hd8.2 machine	0.5372849659117709597766690783529652885685414769253009937777939254359994	10	exact (2 Sqrt[3])^(-1/2): mpmath tanh-sinh over R, dps 80 == WL exact Integrate
+hd8.2 wp50	0.5372849659117709597766690783529652885685414769253009937777939254359994	48	same
+hd8.3 machine	0.477148719615530116388872883337996867925604022329451421836799118670975	10	mpmath tanh-sinh over R, dps 80 (siam100_refs/hd8_ref.py) == WL exact Integrate then N (siam100_refs/hd8_ref.wl): 70 digits agree
+hd8.3 wp50	0.477148719615530116388872883337996867925604022329451421836799118670975	48	same
+hd8.4 machine	0.4654156602037577000416805713044335950648370542913073660055767193714526	10	mpmath tanh-sinh over R, dps 80 (siam100_refs/hd8_ref.py) == WL exact Integrate then N (siam100_refs/hd8_ref.wl): 70 digits agree
+hd8.4 wp50	0.4654156602037577000416805713044335950648370542913073660055767193714526	48	same
+hd8.5 machine	0.2597936887295144262858966279557728613150256761214367444227453017842287	10	mpmath polar reduction, radial integral in closed form by residues (checked vs numerical radial quad), theta by tanh-sinh, dps 80 (siam100_refs/hd8_ref.py) == WL nested numerical 1-D NIntegrates in polar (r inner, theta outer), WorkingPrecision 90 (siam100_refs/hd8_ref.wl): 70 digits agree
+hd8.5 wp50	0.2597936887295144262858966279557728613150256761214367444227453017842287	48	same
+hd8.6 machine	0.2397877956356383413749736171850823905970718537915728314348849289337243	10	mpmath polar reduction, radial integral in closed form by residues (checked vs numerical radial quad), theta by tanh-sinh, dps 80 (siam100_refs/hd8_ref.py) == WL nested numerical 1-D NIntegrates in polar (r inner, theta outer), WorkingPrecision 90 (siam100_refs/hd8_ref.wl): 70 digits agree
+hd8.6 wp50	0.2397877956356383413749736171850823905970718537915728314348849289337243	48	same
+hd8.7 machine	0.231522706736757702856182660256483059245067649565526237826174	10	mpmath spherical reduction, radial integral by residues (checked vs numerical radial quad), two angles by 2-D tanh-sinh over an octant, dps 64 (siam100_refs/hd8_ref.py) == WL radial integral by exact symbolic Integrate as a function of q, angles by nested 1-D NIntegrates, WorkingPrecision 80 (siam100_refs/hd8_ref.wl): 62 digits agree, 60 stored
+hd8.7 wp50	0.231522706736757702856182660256483059245067649565526237826174	48	same
+hd8.8 machine	0.3989422804014326779399460599343818684758586311649346576659258296706579	10	exact 1/Sqrt[2 Pi] (Gamma formula pi^(N/2) Gamma(s-N/2)/Gamma(s)) == mpmath numerical radial quad dps 80 == WL exact Integrate
+hd8.8 wp50	0.3989422804014326779399460599343818684758586311649346576659258296706579	48	same
+hd8.9 machine	0.1299494668722793513176446750455427934905778277555322045181641502762021	10	exact 1/(Pi Sqrt[6]) (Gamma formula, s = 5/2, N = 3) == mpmath numerical radial quad dps 75 == WL exact Integrate
+hd8.9 wp50	0.1299494668722793513176446750455427934905778277555322045181641502762021	48	same
+hd8.10 machine	0.5432174056066540072876580607551117285351028536226094429603951579909284	10	exact c^2 = Gamma(1/4)^2/(8 Pi^(3/2)) (x-integral pi/sqrt(1+y^4), then Int_R dy/sqrt(1+y^4) = Gamma(1/4)^2/(2 sqrt pi)) == mpmath numerical quad of pi/sqrt(1+y^4), dps 80 == WL exact iterated Integrate
+hd8.10 wp50	0.5432174056066540072876580607551117285351028536226094429603951579909284	48	same

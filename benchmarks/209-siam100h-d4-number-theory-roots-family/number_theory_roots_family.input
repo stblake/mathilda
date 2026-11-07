@@ -1,0 +1,26 @@
+-- Experiment 209 -- SIAM 100-digit holdout A, family d4 (FriCAS column).
+-- FriCAS has li and moebiusMu but no numerical infinite-series summation, no
+-- Riemann R / Riemann-Siegel Z and no built-in numeric root finder for a
+-- transcendental function, so every row is a SKIP (as experiment 179).
+)read ../siam100_common.input )quiet
+vskip("hd4.1 machine", "root finder")
+vskip("hd4.1 wp50", "root finder")
+vskip("hd4.2 machine", "RiemannR")
+vskip("hd4.2 wp50", "RiemannR")
+vskip("hd4.3 machine", "nsum")
+vskip("hd4.3 wp50", "nsum")
+vskip("hd4.4 machine", "nsum")
+vskip("hd4.4 wp50", "nsum")
+vskip("hd4.5 machine", "nsum")
+vskip("hd4.5 wp50", "nsum")
+vskip("hd4.6 machine", "nsum")
+vskip("hd4.6 wp50", "nsum")
+vskip("hd4.7 machine", "nsum")
+vskip("hd4.7 wp50", "nsum")
+vskip("hd4.8 machine", "RiemannSiegelZ")
+vskip("hd4.8 wp50", "RiemannSiegelZ")
+vskip("hd4.9 machine", "nsum")
+vskip("hd4.9 wp50", "nsum")
+vskip("hd4.10 machine", "RiemannR")
+vskip("hd4.10 wp50", "RiemannR")
+)quit

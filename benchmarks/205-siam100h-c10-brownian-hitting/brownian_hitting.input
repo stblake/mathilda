@@ -1,0 +1,59 @@
+-- Experiment 205 -- SIAM 100-Digit Challenge, holdout A for Problem 10 (FriCAS column).
+-- The same ten separated series as brownian_hitting.m, summed (no numerical
+-- summation to infinity, as in experiment 175) to a fixed number of terms
+-- chosen so the dropped tail is below 1e-62: in DoubleFloat for the machine
+-- rows and in Float at digits(60) for wp50.  sech is spelled 1/cosh; the
+-- off-centre cosh ratio is the overflow-free rc.  See brownian_hitting.m.
+)read ../siam100_common.input )quiet
+sgD(k:Integer):DoubleFloat == (even? k => 1.0; -1.0)
+rcD(c:DoubleFloat, x:DoubleFloat, a:DoubleFloat):DoubleFloat == (exp(-c*(a-x)) + exp(-c*(a+x)))/(1 + exp(-2*c*a))
+PD := pi()$DoubleFloat
+o(k:Integer):DoubleFloat == (2*k+1)::DoubleFloat
+p1D():DoubleFloat == 4/PD*reduce(+, [sgD(k)/o(k)/cosh(2*o(k)*PD) for k in 0..15])
+p2D():DoubleFloat == 4/PD*reduce(+, [sgD(k)/o(k)*rcD(o(k)*PD, 3, 5) for k in 0..15])
+p3D():DoubleFloat == 4/PD*reduce(+, [sgD(k)/o(k)*cos(o(k)*PD/4)*rcD(o(k)*PD, 4, 5) for k in 0..25])
+p4D():DoubleFloat == 4/PD*reduce(+, [sgD(k)/o(k)/cosh(o(k)*PD/4) for k in 0..100])
+p5D():DoubleFloat == 4/PD*reduce(+, [sin(o(j)*PD/2)/o(j)*(exp(-o(j)*PD/4) - exp(-7*o(j)*PD/4))/(1 - exp(-2*o(j)*PD)) for j in 0..100])
+p6D():DoubleFloat == 4/PD*reduce(+, [sgD(k)*exp(-o(k)*PD)/o(k) for k in 0..25])
+p7D():DoubleFloat == 0.25 - 8/PD^3*reduce(+, [sgD(k)/o(k)^3/cosh(o(k)*PD) for k in 0..25])
+p8D():DoubleFloat == 16/PD^2*reduce(+, [reduce(+, [sgD(j+k)/(o(j)*o(k))/cosh(1.5*PD*sqrt(o(j)^2 + o(k)^2)) for k in 0..20]) for j in 0..20])
+t9D(r:DoubleFloat):DoubleFloat == (exp(-r/4) - exp(-7*r/4))/(1 - exp(-2*r))
+p9D():DoubleFloat == 16/PD^2*reduce(+, [reduce(+, [sgD(j+k)/(o(j)*o(k))*t9D(PD*sqrt(o(j)^2 + o(k)^2)) for k in 0..95]) for j in 0..95])
+p10D():DoubleFloat == 4/PD*reduce(+, [sgD(k)/o(k)*rcD(o(k)*PD, 1.9, 2) for k in 0..240])
+t0 := nowms(); v := p1D(); vcaseD("hc10.1 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p2D(); vcaseD("hc10.2 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p3D(); vcaseD("hc10.3 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p4D(); vcaseD("hc10.4 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p5D(); vcaseD("hc10.5 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p6D(); vcaseD("hc10.6 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p7D(); vcaseD("hc10.7 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p8D(); vcaseD("hc10.8 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p9D(); vcaseD("hc10.9 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := p10D(); vcaseD("hc10.10 machine", v, nowms() - t0, 10)
+digits(60)$Float
+sgF(k:Integer):Float == (even? k => 1.0; -1.0)
+rcF(c:Float, x:Float, a:Float):Float == (exp(-c*(a-x)) + exp(-c*(a+x)))/(1 + exp(-2*c*a))
+piF := pi()$Float
+q(k:Integer):Float == (2*k+1)::Float
+p1F():Float == 4/piF*reduce(+, [sgF(k)/q(k)/cosh(2*q(k)*piF) for k in 0..15])
+p2F():Float == 4/piF*reduce(+, [sgF(k)/q(k)*rcF(q(k)*piF, 3, 5) for k in 0..15])
+p3F():Float == 4/piF*reduce(+, [sgF(k)/q(k)*cos(q(k)*piF/4)*rcF(q(k)*piF, 4, 5) for k in 0..25])
+p4F():Float == 4/piF*reduce(+, [sgF(k)/q(k)/cosh(q(k)*piF/4) for k in 0..100])
+p5F():Float == 4/piF*reduce(+, [sin(q(j)*piF/2)/q(j)*(exp(-q(j)*piF/4) - exp(-7*q(j)*piF/4))/(1 - exp(-2*q(j)*piF)) for j in 0..100])
+p6F():Float == 4/piF*reduce(+, [sgF(k)*exp(-q(k)*piF)/q(k) for k in 0..25])
+p7F():Float == 1/4 - 8/piF^3*reduce(+, [sgF(k)/q(k)^3/cosh(q(k)*piF) for k in 0..25])
+p8F():Float == 16/piF^2*reduce(+, [reduce(+, [sgF(j+k)/(q(j)*q(k))/cosh(3/2*piF*sqrt(q(j)^2 + q(k)^2)) for k in 0..20]) for j in 0..20])
+t9F(r:Float):Float == (exp(-r/4) - exp(-7*r/4))/(1 - exp(-2*r))
+p9F():Float == 16/piF^2*reduce(+, [reduce(+, [sgF(j+k)/(q(j)*q(k))*t9F(piF*sqrt(q(j)^2 + q(k)^2)) for k in 0..95]) for j in 0..95])
+p10F():Float == 4/piF*reduce(+, [sgF(k)/q(k)*rcF(q(k)*piF, 19/10, 2) for k in 0..240])
+t0 := nowms(); v := p1F(); vcaseF("hc10.1 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p2F(); vcaseF("hc10.2 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p3F(); vcaseF("hc10.3 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p4F(); vcaseF("hc10.4 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p5F(); vcaseF("hc10.5 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p6F(); vcaseF("hc10.6 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p7F(); vcaseF("hc10.7 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p8F(); vcaseF("hc10.8 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p9F(); vcaseF("hc10.9 wp50", v, nowms() - t0, 48)
+t0 := nowms(); v := p10F(); vcaseF("hc10.10 wp50", v, nowms() - t0, 48)
+)quit

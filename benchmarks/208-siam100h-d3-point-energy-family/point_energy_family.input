@@ -1,0 +1,24 @@
+-- Experiment 208 -- SIAM 100-digit holdout A, family d3 (FriCAS column).
+-- FriCAS has no numerical minimiser, so every row is a SKIP.  See point_energy_family.m.
+)read ../siam100_common.input )quiet
+vskip("hd3.1 machine", "minimize")
+vskip("hd3.1 wp50", "minimize")
+vskip("hd3.2 machine", "minimize")
+vskip("hd3.2 wp50", "minimize")
+vskip("hd3.3 machine", "minimize")
+vskip("hd3.3 wp50", "minimize")
+vskip("hd3.4 machine", "minimize")
+vskip("hd3.4 wp50", "minimize")
+vskip("hd3.5 machine", "minimize")
+vskip("hd3.5 wp50", "minimize")
+vskip("hd3.6 machine", "minimize")
+vskip("hd3.6 wp50", "minimize")
+vskip("hd3.7 machine", "minimize")
+vskip("hd3.7 wp50", "minimize")
+vskip("hd3.8 machine", "minimize")
+vskip("hd3.8 wp50", "minimize")
+vskip("hd3.9 machine", "minimize")
+vskip("hd3.9 wp50", "minimize")
+vskip("hd3.10 machine", "minimize")
+vskip("hd3.10 wp50", "minimize")
+)quit

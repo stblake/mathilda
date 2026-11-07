@@ -1,0 +1,22 @@
+# SIAM 100-Digit Challenge holdout A, family d12 (exp 217): parameter a with the first ODE event at a given time
+# label	true value (70 digits)	need	source
+hd12.1 machine	1.358532876461639137720416598844187812136456381717006583378824389904096	10	closed form atan(2 Sqrt[a])/Sqrt[a] = 1 + mpmath findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.1 wp50	1.358532876461639137720416598844187812136456381717006583378824389904096	48	same
+hd12.2 machine	0.7513068139718130893886306832713437394538704941312767482119144307235736	10	closed form EllipticK[1/(4a)]/Sqrt[a] = 2 + mpmath findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.2 wp50	0.7513068139718130893886306832713437394538704941312767482119144307235736	48	same
+hd12.3 machine	0.9683621803085009687408177250343010627250709150892878351246121160867647	10	closed form EllipticK[a/(2(1+a))]/Sqrt[1+a] = 6/5 + mpmath findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.3 wp50	0.9683621803085009687408177250343010627250709150892878351246121160867647	48	same
+hd12.4 machine	0.6380450482852377171964080585738713826110318145538897172410931815135465	10	closed form (Pi - ArcTan[2w/a])/w = 2, w = Sqrt[1-a^2/4], + mpmath findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.4 wp50	0.6380450482852377171964080585738713826110318145538897172410931815135465	48	same
+hd12.5 machine	1.707052975550922483407340087041443169245180790062689017659247774908021	10	closed form ArcTan[1/Sqrt[a]]/Sqrt[a] = 1/2 + mpmath findroot == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.5 wp50	1.707052975550922483407340087041443169245180790062689017659247774908021	48	same
+hd12.6 machine	0.8261242192327666116464082666560675835031992813981629346972852420453535	10	closed form a = (1/2 + Pi/4)^2/2 == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.6 wp50	0.8261242192327666116464082666560675835031992813981629346972852420453535	48	same
+hd12.7 machine	7.83734743894348388520278545787084668647522013583830220555435723717586	10	closed form a = s1^3, s1 first zero of AiryBiPrime[0] AiryAi[-s] - AiryAiPrime[0] AiryBi[-s] (mpmath airy + findroot) == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.7 wp50	7.83734743894348388520278545787084668647522013583830220555435723717586	48	same
+hd12.8 machine	1.530787402763574450326341686250119234028643350907682069792955300694864	10	mpmath odefun (Taylor) fixed-time shooting y(1;a) = 0, dps 80 == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.8 wp50	1.530787402763574450326341686250119234028643350907682069792955300694864	48	same
+hd12.9 machine	10.57424077521126722157225525755793843755404546957966432116801058141402	10	energy quadrature T(a) = Int_0^{pi/2} dth/Sqrt[2(2-V)] (as exp 187's reference) + secant, dps 80 == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.9 wp50	10.57424077521126722157225525755793843755404546957966432116801058141402	48	same
+hd12.10 machine	0.7520351643319740863675522998989859396091953122759937649881390147206878	10	mpmath odefun (Taylor) fixed-time shooting x(2;a) = 0, dps 80 == WL NDSolve Method->Extrapolation WorkingPrecision 80 + WhenEvent + FindRoot WorkingPrecision 80 (70 digits agree); siam100_refs/hd12_ref.{py,wl}
+hd12.10 wp50	0.7520351643319740863675522998989859396091953122759937649881390147206878	48	same

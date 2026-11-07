@@ -1,0 +1,27 @@
+-- Experiment 216 -- SIAM 100-Digit Challenge, holdout A, family d11 (FriCAS column).
+-- The shooting statement (shooting_targets.m) needs a numeric ODE solver
+-- inside a two-variable root finder; FriCAS has RK4 integrators but no
+-- numeric root finder for a non-polynomial system: every row is SKIP, as in
+-- experiment 186.
+)read ../siam100_common.input )quiet
+vskip("hd11.1 machine", "FindRoot over NDSolve")
+vskip("hd11.1 wp50", "FindRoot over NDSolve")
+vskip("hd11.2 machine", "FindRoot over NDSolve")
+vskip("hd11.2 wp50", "FindRoot over NDSolve")
+vskip("hd11.3 machine", "FindRoot over NDSolve")
+vskip("hd11.3 wp50", "FindRoot over NDSolve")
+vskip("hd11.4 machine", "FindRoot over NDSolve")
+vskip("hd11.4 wp50", "FindRoot over NDSolve")
+vskip("hd11.5 machine", "FindRoot over NDSolve")
+vskip("hd11.5 wp50", "FindRoot over NDSolve")
+vskip("hd11.6 machine", "FindRoot over NDSolve")
+vskip("hd11.6 wp50", "FindRoot over NDSolve")
+vskip("hd11.7 machine", "FindRoot over NDSolve")
+vskip("hd11.7 wp50", "FindRoot over NDSolve")
+vskip("hd11.8 machine", "FindRoot over NDSolve")
+vskip("hd11.8 wp50", "FindRoot over NDSolve")
+vskip("hd11.9 machine", "FindRoot over NDSolve")
+vskip("hd11.9 wp50", "FindRoot over NDSolve")
+vskip("hd11.10 machine", "FindRoot over NDSolve")
+vskip("hd11.10 wp50", "FindRoot over NDSolve")
+)quit

@@ -1,0 +1,27 @@
+-- Experiment 213 -- SIAM 100-digit HOLDOUT A, family D8 (FriCAS column).
+-- FriCAS's NumericalQuadrature (romberg/simpson/trapezoidal) is one-dimensional
+-- on a FINITE interval; every row integrates over R^N, so all twenty rows are
+-- SKIP rather than a hand-made range truncation or a hand-nested cubature
+-- (as in 183).  See sobolev_family.m.
+)read ../siam100_common.input )quiet
+vskip("hd8.1 machine", "infinite-range quadrature")
+vskip("hd8.1 wp50", "infinite-range quadrature")
+vskip("hd8.2 machine", "infinite-range quadrature")
+vskip("hd8.2 wp50", "infinite-range quadrature")
+vskip("hd8.3 machine", "infinite-range quadrature")
+vskip("hd8.3 wp50", "infinite-range quadrature")
+vskip("hd8.4 machine", "infinite-range quadrature")
+vskip("hd8.4 wp50", "infinite-range quadrature")
+vskip("hd8.5 machine", "N-D quadrature")
+vskip("hd8.5 wp50", "N-D quadrature")
+vskip("hd8.6 machine", "N-D quadrature")
+vskip("hd8.6 wp50", "N-D quadrature")
+vskip("hd8.7 machine", "N-D quadrature")
+vskip("hd8.7 wp50", "N-D quadrature")
+vskip("hd8.8 machine", "N-D quadrature")
+vskip("hd8.8 wp50", "N-D quadrature")
+vskip("hd8.9 machine", "N-D quadrature")
+vskip("hd8.9 wp50", "N-D quadrature")
+vskip("hd8.10 machine", "N-D quadrature")
+vskip("hd8.10 wp50", "N-D quadrature")
+)quit

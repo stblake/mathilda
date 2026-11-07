@@ -1,0 +1,26 @@
+-- Experiment 219 -- SIAM 100-Digit Challenge, holdout A, family d14 (FriCAS column).
+-- Elliptic boundary-value problems inside a parameter search.  FriCAS has no
+-- BVP or PDE solver and no root finder for a general real function: every
+-- row is SKIP, as in experiment 189.  See elliptic_parameter.m.
+)read ../siam100_common.input )quiet
+vskip("hd14.1 machine", "NDSolveValue (BVP)")
+vskip("hd14.1 wp50", "NDSolveValue (BVP)")
+vskip("hd14.2 machine", "NDSolveValue (BVP)")
+vskip("hd14.2 wp50", "NDSolveValue (BVP)")
+vskip("hd14.3 machine", "NDSolveValue (BVP)")
+vskip("hd14.3 wp50", "NDSolveValue (BVP)")
+vskip("hd14.4 machine", "NDSolveValue (FEM)")
+vskip("hd14.4 wp50", "NDSolveValue (FEM)")
+vskip("hd14.5 machine", "NDSolveValue (FEM)")
+vskip("hd14.5 wp50", "NDSolveValue (FEM)")
+vskip("hd14.6 machine", "NDSolveValue (FEM)")
+vskip("hd14.6 wp50", "NDSolveValue (FEM)")
+vskip("hd14.7 machine", "NDSolveValue (FEM)")
+vskip("hd14.7 wp50", "NDSolveValue (FEM)")
+vskip("hd14.8 machine", "NDSolveValue (FEM)")
+vskip("hd14.8 wp50", "NDSolveValue (FEM)")
+vskip("hd14.9 machine", "NDSolveValue (FEM)")
+vskip("hd14.9 wp50", "NDSolveValue (FEM)")
+vskip("hd14.10 machine", "NDSolveValue (FEM)")
+vskip("hd14.10 wp50", "NDSolveValue (FEM)")
+)quit

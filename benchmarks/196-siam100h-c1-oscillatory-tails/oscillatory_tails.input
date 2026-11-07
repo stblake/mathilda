@@ -1,0 +1,50 @@
+-- Experiment 196 -- SIAM 100-digit holdout A, family hc1 (FriCAS column).
+-- romberg (NumericalQuadrature) needs a finite integrand on a closed interval:
+-- [eps, b] with eps at the bottom of each precision (hc1.7: eps = 1.5e-3 in
+-- DoubleFloat, 1e-3 in Float, where exp(1/x) is representable and the dropped
+-- piece is O(e^-650); hc1.8:
+-- [eps, 1 - eps]; hc1.9: [0, 2 - eps]).  Levels 5..22 in DoubleFloat, 5..18
+-- in Float (digits 60) to bound the runtime.  See oscillatory_tails.m.
+)read ../siam100_common.input )quiet
+f1(x:DoubleFloat):DoubleFloat == sin(1/x)
+f2(x:DoubleFloat):DoubleFloat == sin(1/x)/x
+f3(x:DoubleFloat):DoubleFloat == cos(1/(x*x))/x
+f4(x:DoubleFloat):DoubleFloat == cos(1/x)/sqrt(x)
+f5(x:DoubleFloat):DoubleFloat == sin(log(x)/x)/x
+f6(x:DoubleFloat):DoubleFloat == cos(log(x)/x)
+f7(x:DoubleFloat):DoubleFloat == cos(exp(1/x))
+f8(x:DoubleFloat):DoubleFloat == sin(1/(x*(1-x)))
+f9(x:DoubleFloat):DoubleFloat == sin(1/(2-x))/(2-x)
+f10(x:DoubleFloat):DoubleFloat == cos(log(x)/x)/(x*sqrt(x))
+t0 := nowms(); r := romberg(f1, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.1 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f2, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.2 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f3, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.3 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f4, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.4 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f5, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.5 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f6, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.6 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f7, 1.5e-3, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.7 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f8, 1.0e-12, 1.0 - 1.0e-12, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.8 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f9, 0.0, 2.0 - 1.0e-12, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.9 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f10, 1.0e-12, 1.0, 1.0e-10, 1.0e-12, 5, 22); vcaseD("hc1.10 machine", r.value, nowms() - t0, 10)
+digits(60)$Float
+g1(x:Float):Float == sin(1/x)
+g2(x:Float):Float == sin(1/x)/x
+g3(x:Float):Float == cos(1/(x*x))/x
+g4(x:Float):Float == cos(1/x)/sqrt(x)
+g5(x:Float):Float == sin(log(x)/x)/x
+g6(x:Float):Float == cos(log(x)/x)
+g7(x:Float):Float == cos(exp(1/x))
+g8(x:Float):Float == sin(1/(x*(1-x)))
+g9(x:Float):Float == sin(1/(2-x))/(2-x)
+g10(x:Float):Float == cos(log(x)/x)/(x*sqrt(x))
+t0 := nowms(); rF := romberg(g1, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.1 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g2, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.2 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g3, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.3 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g4, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.4 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g5, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.5 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g6, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.6 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g7, 1.0e-3, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.7 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g8, 1.0e-55, 1.0 - 1.0e-55, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.8 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g9, 0.0, 2.0 - 1.0e-60, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.9 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g10, 1.0e-60, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("hc1.10 wp50", rF.value, nowms() - t0, 48)
+)quit

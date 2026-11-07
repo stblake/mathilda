@@ -1,0 +1,27 @@
+/* Experiment 219 -- SIAM 100-Digit Challenge, holdout A, family d14 (Maxima column).
+   Elliptic boundary-value problems inside a parameter search.  Maxima has
+   no BVP or PDE/FEM solver (rk is a fixed-step IVP integrator only), so every
+   row is SKIP, as in experiment 189.  See elliptic_parameter.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("hd14.1 machine", "NDSolveValue (BVP)")$
+skip("hd14.1 wp50", "NDSolveValue (BVP)")$
+skip("hd14.2 machine", "NDSolveValue (BVP)")$
+skip("hd14.2 wp50", "NDSolveValue (BVP)")$
+skip("hd14.3 machine", "NDSolveValue (BVP)")$
+skip("hd14.3 wp50", "NDSolveValue (BVP)")$
+skip("hd14.4 machine", "NDSolveValue (FEM)")$
+skip("hd14.4 wp50", "NDSolveValue (FEM)")$
+skip("hd14.5 machine", "NDSolveValue (FEM)")$
+skip("hd14.5 wp50", "NDSolveValue (FEM)")$
+skip("hd14.6 machine", "NDSolveValue (FEM)")$
+skip("hd14.6 wp50", "NDSolveValue (FEM)")$
+skip("hd14.7 machine", "NDSolveValue (FEM)")$
+skip("hd14.7 wp50", "NDSolveValue (FEM)")$
+skip("hd14.8 machine", "NDSolveValue (FEM)")$
+skip("hd14.8 wp50", "NDSolveValue (FEM)")$
+skip("hd14.9 machine", "NDSolveValue (FEM)")$
+skip("hd14.9 wp50", "NDSolveValue (FEM)")$
+skip("hd14.10 machine", "NDSolveValue (FEM)")$
+skip("hd14.10 wp50", "NDSolveValue (FEM)")$
+quit()$

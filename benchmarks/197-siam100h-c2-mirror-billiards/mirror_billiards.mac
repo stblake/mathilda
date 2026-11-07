@@ -1,0 +1,63 @@
+/* Experiment 197 -- SIAM 100-digit holdout A, family hc2 (Maxima column).
+   The statement of mirror_billiards.m (C2's): straight-line flight, the next
+   hit as the smallest positive real root of |p + t v - c|^2 = r^2 from
+   Maxima's polynomial root finder (allroots in floats, bfallroots with
+   fpprec 60), reflection v' = v - 2 (v.n) n, over the same candidate filter. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["allroots", "bfallroots"])$
+
+selok(s, i, j) := if s = "all" then true else if s = "even" then evenp(i + j)
+                  else oddp(i)$
+
+/* prob = [p0x, p0y, v0x, v0y, r, T, sel, qty]; mk converts a rational to the
+   working number type; rts is the root finder */
+photon(prob, mk, rts) := block([px : mk(prob[1]), py : mk(prob[2]),
+    vx : mk(prob[3]), vy : mk(prob[4]), r : mk(prob[5]), left : mk(prob[6]),
+    s : prob[7], qty : prob[8], sx, sy, last : [], hits, xs, ys, dx, dy,
+    t, nx, ny, d, best, done : false],
+  sx : px, sy : py,
+  while not done do (
+    xs : [px, px + left*vx], ys : [py, py + left*vy], hits : [],
+    for i : floor(lmin(xs)) - 1 thru floor(lmax(xs)) + 2 do
+      for j : floor(lmin(ys)) - 1 thru floor(lmax(ys)) + 2 do (
+        dx : i - px, dy : j - py,
+        if selok(s, i, j) and [i, j] # last and dx*vx + dy*vy > 0
+           and abs(vx*dy - vy*dx) < r then
+          for rr in rts((vx^2 + vy^2)*'tt^2 - 2*(dx*vx + dy*vy)*'tt
+                        + (dx^2 + dy^2 - r^2)) do (
+            if imagpart(rhs(rr)) = 0 and realpart(rhs(rr)) > 0 then
+              hits : cons([realpart(rhs(rr)), i, j], hits))),
+    best : if hits = [] then false
+           else first(sort(hits, lambda([a, b], first(a) < first(b)))),
+    if best = false or first(best) >= left then (
+      px : px + left*vx, py : py + left*vy, done : true)
+    else (
+      t : best[1], px : px + t*vx, py : py + t*vy, left : left - t,
+      last : [best[2], best[3]],
+      nx : (px - best[2])/r, ny : (py - best[3])/r, d : vx*nx + vy*ny,
+      vx : vx - 2*d*nx, vy : vy - 2*d*ny)),
+  if qty = "norm" then sqrt(px^2 + py^2)
+  else if qty = "x" then px else if qty = "y" then py
+  else sqrt((px - sx)^2 + (py - sy)^2))$
+
+HC2 : [[1/2, 1/10, 1, 0, 1/3, 1, "all", "norm"],
+       [1/2, 1/10, 1, 0, 1/4, 4, "all", "norm"],
+       [1/2, 1/2, 3/5, 4/5, 1/3, 3, "all", "x"],
+       [0, 1/2, 5/13, 12/13, 2/5, 3, "all", "norm"],
+       [1/2, 1/10, 1, 0, 1/3, 2, "all", "norm"],
+       [1/2, 1/2, 4/5, 3/5, 1/2, 5, "even", "norm"],
+       [1/2, 1/3, 8/17, 15/17, 1/5, 8, "all", "y"],
+       [1/2, 1/7, -7/25, 24/25, 2/5, 3, "all", "fromstart"],
+       [0, 1/2, 12/13, 5/13, 1/3, 6, "oddcol", "norm"],
+       [1/2, 1/10, 1, 0, 1/3, 5, "all", "norm"]]$
+NEEDM : [10, 10, 10, 10, 10, 10, 6, 10, 10, 10]$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("hc2.", k, " machine"),
+       buildq([pr : HC2[k]], lambda([], photon(pr, lambda([x], float(x)), allroots))),
+       NEEDM[k], 60),
+  vrun(sconcat("hc2.", k, " wp50"),
+       buildq([pr : HC2[k]], lambda([], block([fpprec : 60],
+         photon(pr, bfloat, bfallroots)))), 48, 60))$
+quit()$

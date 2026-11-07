@@ -1,0 +1,6 @@
+-- Experiment 224 -- SIAM 100-Digit Challenge holdout A, family hd19 (FriCAS column).
+-- The design problems need a constrained minimiser (box + equality); FriCAS
+-- has none built in, so every row is a SKIP (as in exp 194).  See design_variants.m.
+)read ../siam100_common.input )quiet
+for k in 1..10 repeat (vskip(concat ["hd19.", string(k), " machine"], "ConstrainedMinimize"); vskip(concat ["hd19.", string(k), " wp50"], "ConstrainedMinimize"))
+)quit

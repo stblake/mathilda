@@ -1,0 +1,26 @@
+/* Experiment 210 -- SIAM 100-digit holdout A, family d5 (Maxima column).
+   Maxima has no matrix 2-norm / numerical SVD in the core library and its only
+   minimiser, lbfgs, needs a differentiable expression, so every 2-norm row is a
+   SKIP (as experiment 180).  The Frobenius row hd5.3 is smooth: lbfgs on the
+   symbolic sum of squares of the entries of p(A) (then sqrt), machine precision
+   only; its 50-digit row is a SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(lbfgs)$
+require(["lbfgs"])$
+for k : 1 thru 10 do
+  if k # 3 then (
+    skip(sconcat("hd5.", k, " machine"), "mat_norm(.,2)"),
+    skip(sconcat("hd5.", k, " wp50"), "mat_norm(.,2)"))$
+nG : 48$
+AG : genmatrix(lambda([i, j], if i = j then 1 else if j = i - 1 then -1
+                               else if j - i >= 1 and j - i <= 3 then 1 else 0), nG, nG)$
+PG : [ident(nG)]$
+for j : 1 thru 8 do PG : endcons(last(PG) . AG, PG)$
+BG : PG[9] + sum(a[j] * PG[j + 1], j, 0, 7)$
+FG : expand(sum(sum(BG[i, j]^2, j, 1, nG), i, 1, nG))$
+vrun("hd5.3 machine",
+     lambda([], sqrt(subst(lbfgs(FG, makelist(a[j], j, 0, 7), makelist(0.0, j, 0, 7),
+                                 1e-12, [-1, 0]), FG))), 10, 120)$
+skip("hd5.3 wp50", "lbfgs(bfloat)")$
+quit()$

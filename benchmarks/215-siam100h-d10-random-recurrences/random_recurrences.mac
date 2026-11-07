@@ -1,0 +1,51 @@
+/* Experiment 215 -- SIAM 100-digit HOLDOUT A, family D10 (Maxima column).
+   The Monte-Carlo statement of random_recurrences.m: machine: n = 10^6 choices
+   from random() (state make_random_state(1)), float ratio recursion
+   r <- c + s/r, exp(mean log r); wp50: exact integer / rational x_n for
+   n = 10^4, then bfloat(abs(x_n)^(1/n)) at fpprec 60.  A choice from a list ch
+   is ch[1 + random(length(ch))]; the biased sign (P(+) = 3/4) is
+   if random(4) = 0 then -1 else 1.  Cap 60 s per row. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["random", "bfloat"])$
+
+pick(ch) := ch[1 + random(length(ch))]$
+biased() := if random(4) = 0 then -1 else 1$
+lyapM(f, dr) := block([r : 1.0, acc : 0.0, n : 10^6],
+  set_random_state(make_random_state(1)),
+  for k : 1 thru n - 1 do (r : f(r, dr()), acc : acc + log(r)),
+  exp(acc/n))$
+lyap50(g, dr) := block([a : 1, b : 1, t, n : 10^4, fpprec : 60],
+  set_random_state(make_random_state(1)),
+  for k : 1 thru n - 1 do (t : b, b : g(a, b, dr()), a : t),
+  bfloat(abs(b)^(1/n)))$
+
+vrun("hd10.1 machine", lambda([], block([acc : 0.0, n : 10^6],
+  set_random_state(make_random_state(1)),
+  for k : 1 thru n do acc : acc + log(pick([1.0, 2.0])),
+  exp(acc/n))), 2, 60)$
+vrun("hd10.1 wp50", lambda([], block([x : 1, n : 10^4, fpprec : 60],
+  set_random_state(make_random_state(1)),
+  for k : 1 thru n do x : x * pick([1, 2]),
+  bfloat(x^(1/n)))), 1, 60)$
+pm() := pick([-1, 1])$  p3() := pick([-1, 0, 1])$
+c12() := pick([1, 2])$  c123() := pick([1, 2, 3])$
+vrun("hd10.2 machine", lambda([], lyapM(lambda([r, e], 3.0 + e/r), pm)), 2, 60)$
+vrun("hd10.2 wp50", lambda([], lyap50(lambda([a, b, e], 3*b + e*a), pm)), 1, 60)$
+vrun("hd10.3 machine", lambda([], lyapM(lambda([r, e], 4.0 + e/r), pm)), 2, 60)$
+vrun("hd10.3 wp50", lambda([], lyap50(lambda([a, b, e], 4*b + e*a), pm)), 1, 60)$
+vrun("hd10.4 machine", lambda([], lyapM(lambda([r, e], 2.5 + e/r), pm)), 2, 60)$
+vrun("hd10.4 wp50", lambda([], lyap50(lambda([a, b, e], 5/2*b + e*a), pm)), 1, 60)$
+vrun("hd10.5 machine", lambda([], lyapM(lambda([r, e], 3.0 + 2*e/r), pm)), 2, 60)$
+vrun("hd10.5 wp50", lambda([], lyap50(lambda([a, b, e], 3*b + 2*e*a), pm)), 1, 60)$
+vrun("hd10.6 machine", lambda([], lyapM(lambda([r, e], e + 1/r), c12)), 2, 60)$
+vrun("hd10.6 wp50", lambda([], lyap50(lambda([a, b, e], e*b + a), c12)), 1, 60)$
+vrun("hd10.7 machine", lambda([], lyapM(lambda([r, e], 3.0 + e/r), p3)), 2, 60)$
+vrun("hd10.7 wp50", lambda([], lyap50(lambda([a, b, e], 3*b + e*a), p3)), 1, 60)$
+vrun("hd10.8 machine", lambda([], lyapM(lambda([r, e], 3.0 + e/r), biased)), 2, 60)$
+vrun("hd10.8 wp50", lambda([], lyap50(lambda([a, b, e], 3*b + e*a), biased)), 1, 60)$
+vrun("hd10.9 machine", lambda([], lyapM(lambda([r, e], e + 1/r), c123)), 2, 60)$
+vrun("hd10.9 wp50", lambda([], lyap50(lambda([a, b, e], e*b + a), c123)), 1, 60)$
+vrun("hd10.10 machine", lambda([], lyapM(lambda([r, e], 2.0 + e/r), biased)), 2, 60)$
+vrun("hd10.10 wp50", lambda([], lyap50(lambda([a, b, e], 2*b + e*a), biased)), 1, 60)$
+quit()$

@@ -1,0 +1,26 @@
+-- Experiment 200 -- SIAM 100-digit holdout A, family hc5 (FriCAS column).
+-- The statement is a non-smooth minimisation over the coefficients;
+-- FriCAS has no numerical minimiser, so every row SKIPs, as in C5.
+-- See discrete_minimax.m.
+)read ../siam100_common.input )quiet
+vskip("hc5.1 machine", "NMinimize")
+vskip("hc5.1 wp50", "NMinimize")
+vskip("hc5.2 machine", "NMinimize")
+vskip("hc5.2 wp50", "NMinimize")
+vskip("hc5.3 machine", "NMinimize")
+vskip("hc5.3 wp50", "NMinimize")
+vskip("hc5.4 machine", "NMinimize")
+vskip("hc5.4 wp50", "NMinimize")
+vskip("hc5.5 machine", "NMinimize")
+vskip("hc5.5 wp50", "NMinimize")
+vskip("hc5.6 machine", "NMinimize")
+vskip("hc5.6 wp50", "NMinimize")
+vskip("hc5.7 machine", "NMinimize")
+vskip("hc5.7 wp50", "NMinimize")
+vskip("hc5.8 machine", "NMinimize")
+vskip("hc5.8 wp50", "NMinimize")
+vskip("hc5.9 machine", "NMinimize")
+vskip("hc5.9 wp50", "NMinimize")
+vskip("hc5.10 machine", "NMinimize")
+vskip("hc5.10 wp50", "NMinimize")
+)quit

@@ -55,6 +55,43 @@ Findings so far:
 - D10: FoldList with pure function over 1e6 elements 14x slower than WL; wp50 bignum loop 5x slower than Python.
 - D11: FindRoot rejects vector equation f[th,T]=={4,1} (FindRoot::systno); scalar form diverges (T->58.7) -> nlnum.
 - D8 truth 5d consensus (MC); D9 exact rational; D10 64d consensus; D7/D11 70d+.
+Holdout A findings (dev set):
+- hd20.9: Series of an inexact expression numericalises SeriesData fields (point/orders become 0.0, 5.0) -> Normal fails -> WRONG.
+- hd20.1-9 wp50: FindRoot WorkingPrecision->60 "non-real f" (same as d20) -- unevaluated.
+- hd19: FindMinimum + LinearSolve black box with box+volume constraints wrong on 9/10 machine rows; WP>machine equality constraints unsupported.
+- hd16-18: NDSolveValue(PDE)/NDEigenvalues/NDEigensystem/Annulus/ArcLength ABSENT (WL only, 0-5 digits).
+- LinearSolve badly scaled triangular: spurious "no solution"/badly conditioned warnings, 6-10 digits lost.
+- hd6: wp50 NIntegrate 2.5-10x slower than mpmath; machine typically 14 vs 15 digits.
+- hd7: FindRoot WP60 returns complex roots with tiny Im -> Surd::preal noise; machine 11d vs 13-15; hd7.8 wp50 31d.
+- hd8: 3-D machine NIntegrate timeout (WL 8d).
+- hd9: machine MatrixPower 3-5x slower than numpy.
+- hd10: FoldList pure-function loop 7-12x slower than WL; Exp[Mean[Log[RandomChoice[..,10^6]]]] 47x slower.
+- hc1 (196): wp50 NIntegrate WRONG on hc1.5/.9/.10 (0d, 18-55 s; WL 9/40/3); hc1.6/.8 2/6d vs WL 8-12/13-44; hc1.1-4 best.
+- hc2 (197): all correct, fastest at wp50; machine 1.6-6.1x slower than numpy (per-bounce NSolve overhead).
+- hc3 (198): all digits, fastest at wp50; machine Norm/SVD 5-12.5x slower than numpy (all 10 rows).
+- hc4 (199): machine correct & fastest on all 10; wp50 NMinimize never refines past ~16 digits (mpmath polish 50).
+- hc5 (200): NMinimize of discrete minimax only 6-8d machine (WL 13-15, scipy 11-12); wp50 timeouts.
+- TOOLING: wolframscript whole-file runs of 199/200 drop CHECK lines intermittently (license contention?) -- watch in run_all.
+- hd1 (206): all systems fail (digit-pattern sums); Mathilda wp50 timeouts; IntegerString[n,3] summand unevaluated in NSum.
+- hd2 (207): nobody reaches 10d; Mathilda mostly matches/beats others.
+- hd3 (208): machine global min found on all 10 (11-12d, others 15); FindMinimum WP60 returns only ~12d (WL 50 on 3).
+- hd4 (209): RiemannR ABSENT, MangoldtLambda ABSENT; FindRoot "non-real f" again (hd4.9 machine); NSum Gram series wp50 timeout.
+- hd5 (210): Norm[A, 2] UNEVALUATED on arbitrary-precision matrices (blocks every wp50 row); Frobenius-norm FindMinimum 0d (others 10-13).
+- The earlier baseline kill (exit 144) was an agent's pkill -f "Mathilda -file"; baseline was resumed for 191-195, data complete.
+- hd11-15 (216-220): WhenEvent ABSENT (all hd12 fail); NDSolveValue ABSENT;
+  ** NDSolve two-point BVP {-u''==Exp[2x], u[0]==0, u'[1]==0} returns u(1)=-6.6e-23 SILENTLY (true 2.097) ** -- top-priority silent wrong answer;
+  Bratu BVP NDSolve::underdet; NDSolve[sys, x, ...] with more unknowns than listed -> nrnum (WL accepts);
+  FindRoot[f[th,T]=={a,b}, {{th,..},{T,..}}] opaque NumericQ fn -> systno (all hd11);
+  blow-up endpoint 8d machine (scipy 13), WP60 only 32-33d; hd13 machine/wp excellent & fastest.
+- hc6-10 (201-205):
+  ** WP60 sparse LinearSolve (parallel MPFR LU) IGNORES TimeConstrained (>12 min twice in full-file runs; 60 s alone) ** -- abort-check gap in the parallel LU;
+  hc6 machine 2-D NIntegrate 7-9d vs Py/Maxima 11-13; wp50 all timeout (nobody correct);
+  hc7 machine sparse solve 13-4100x slower (hc7.2 5.4 s vs 1.3 ms pentadiagonal!), wp50 unevaluated (hc7.1) / timeout (5) / ~100x slower (4);
+  hc8 NSum over BesselJZero non-convergent (hc8.7); wp50 NSum eigen-series 73-297x slower than mpmath; machine 2.7-13.5x slower;
+  hc9 FindMaximum WP60 stalls at 32-39d (mpmath findroot 50); NMaximize∘NIntegrate wp50 timeouts;
+  hc10 2-D NSum wp50 no answer (hc10.3/.8); hc10.6 wp50 212x slower than Maxima.
+  Tooling: wolframscript drops later lines after NMaximize overruns TimeConstrained in a file (abort escapes vrun?) -- WL C9 column under-reports;
+  201/202 halves edited after full-file run -> re-run in the holdout-A pass.
 
 # ISSAC '97 Systems Challenge benchmark + fixes (from 2026-11-06, v0.6225)
 

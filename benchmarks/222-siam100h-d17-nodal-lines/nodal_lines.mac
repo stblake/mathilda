@@ -1,0 +1,9 @@
+/* Experiment 222 -- SIAM 100-Digit Challenge holdout A, family hd17 (Maxima column).
+   Nodal-line lengths of Dirichlet eigenfunctions: Maxima has no PDE
+   eigensolver.  Every row is a SKIP.  See nodal_lines.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hd17.", k, " machine"), "NDEigensystem (FEM)"),
+  skip(sconcat("hd17.", k, " wp50"), "NDEigensystem (FEM)"))$
+quit()$

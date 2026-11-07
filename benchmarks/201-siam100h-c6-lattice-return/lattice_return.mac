@@ -1,0 +1,56 @@
+/* Experiment 201 -- SIAM 100-Digit Challenge, holdout A for Problem 6 (Maxima column).
+   The same Brillouin-zone integrals as lattice_return.m.  Maxima has no
+   multi-dimensional quadrature, so (as in experiment 171) the idiomatic form
+   is nested quad_qags (epsrel 1e-12), with find_root on a bracket.  The 3-D
+   cases (hc6.7, hc6.8) are triple-nested quad_qags.  At 50 digits Maxima has
+   only bromberg (1-D Romberg), which cannot converge on the near-singular
+   corner: the wp50 rows SKIP.  Every case capped at 60 s.  See lattice_return.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["quad_qags", "find_root"])$
+
+P : float(%pi)$
+R(c, s) := (1 - c)/((1 - c)^2 + s^2)$
+/* as in experiment 171: the inner integral as an expression in k2, the outer
+   one over a lambda calling it (higher-order lambdas passed through helper
+   functions exhaust SBCL's thread-local storage inside find_root) */
+qa(ex, var, lo, hi) ::= buildq([ex, var, lo, hi], quad_qags(ex, var, lo, hi, 'epsrel = 1d-12, 'limit = 1000)[1])$
+iEW(u, e) := qa(R((cos(u) + cos(k2))/2, 2*e*sin(u)), k2, 0, P)$
+iDiag(u, e) := qa(R((cos(u) + cos(k2))/2, 2*e*(sin(u) + sin(k2))), k2, -P, P)$
+iAni(u, e) := qa(R(2*cos(u)/3 + cos(k2)/3, 2*e*sin(u)), k2, 0, P)$
+iTri(u, e) := qa(R((cos(u) + cos(k2) + cos(u + k2))/3, 2*e*sin(u)), k2, -P, P)$
+i9(u) := qa(R((cos(u) + cos(k2))/2, sin(u)/10 + sin(k2)/5), k2, -P, P)$
+iEW3b(u, w, e) := qa(R((cos(u) + cos(w) + cos(k3))/3, 2*e*sin(u)), k3, 0, P)$
+iEW3(u, e) := quad_qags(lambda([w], iEW3b(u, w, e)), k2, 0, P, 'epsrel = 1d-12, 'limit = 1000)[1]$
+iU3b(u, w) := qa(1/(1 - (cos(u) + cos(w) + cos(k3))/3), k3, 0, P)$
+iU3(u) := quad_qags(lambda([w], iU3b(u, w)), k2, 0, P, 'epsrel = 1d-12, 'limit = 1000)[1]$
+outer(fn, e) := quad_qags(lambda([u], fn(u, e)), k1, 0, P, 'epsrel = 1d-12, 'limit = 1000)[1]$
+gEW(e) := outer(iEW, e)/P^2$
+gDiag(e) := outer(iDiag, e)/(2*P^2)$
+gAni(e) := outer(iAni, e)/P^2$
+gTri(e) := outer(iTri, e)/(2*P^2)$
+gEW3(e) := outer(iEW3, e)/P^3$
+g9() := quad_qags(lambda([u], i9(u)), k1, 0, P, 'epsrel = 1d-12, 'limit = 1000)[1]/(2*P^2)$
+u3() := quad_qags(lambda([u], iU3(u)), k1, 0, P, 'epsrel = 1d-12, 'limit = 1000)[1]/P^3$
+
+vrun("hc6.1 machine", lambda([], 1 - 1/gEW(0.1)), 10, 60)$
+skip("hc6.1 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.2 machine", lambda([], find_root(lambda([e], gEW(e) - 5/3), 0.10, 0.11)), 10, 60)$
+skip("hc6.2 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.3 machine", lambda([], find_root(lambda([e], gEW(e) - 5/2), 0.027, 0.029)), 10, 60)$
+skip("hc6.3 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.4 machine", lambda([], find_root(lambda([e], gDiag(e) - 2), 0.04, 0.05)), 10, 60)$
+skip("hc6.4 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.5 machine", lambda([], find_root(lambda([e], gAni(e) - 2), 0.075, 0.085)), 10, 60)$
+skip("hc6.5 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.6 machine", lambda([], find_root(lambda([e], gEW(e) - 5/4), 0.2, 0.22)), 10, 60)$
+skip("hc6.6 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.7 machine", lambda([], 1 - 1/u3()), 10, 60)$
+skip("hc6.7 wp50", "3-D bigfloat quadrature")$
+vrun("hc6.8 machine", lambda([], find_root(lambda([e], gEW3(e) - 10/7), 0.03, 0.035)), 10, 60)$
+skip("hc6.8 wp50", "3-D bigfloat quadrature")$
+vrun("hc6.9 machine", lambda([], 1 - 1/g9()), 10, 60)$
+skip("hc6.9 wp50", "2-D bigfloat quadrature")$
+vrun("hc6.10 machine", lambda([], find_root(lambda([e], gTri(e) - 2), 0.045, 0.05)), 10, 60)$
+skip("hc6.10 wp50", "2-D bigfloat quadrature")$
+quit()$

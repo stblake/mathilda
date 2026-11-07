@@ -1,0 +1,69 @@
+-- Experiment 197 -- SIAM 100-digit holdout A, family hc2 (FriCAS column).
+-- The statement of mirror_billiards.m (C2's, experiment 167): straight-line
+-- flight, the next hit as the smallest positive real root of
+-- |p + t v - c|^2 = r^2 from solve(p = 0, eps) on a Polynomial Fraction
+-- Integer (coefficients taken exactly from the working values by retract),
+-- reflection v' = v - 2 (v.n) n, over the same candidate filter.
+-- sel: 0 all mirrors, 1 i+j even, 2 i odd.  qty: 0 |p|, 1 x, 2 y, 3 |p - p0|.
+-- (Bodies are one parenthesised statement with _ continuation: piled
+-- multi-line bodies do not parse on stdin.)
+)read ../siam100_common.input )quiet
+rootsQ(a:Fraction Integer, b:Fraction Integer, c:Fraction Integer, eps:Fraction Integer):List Fraction Integer == _
+  [retract(rhs e)@Fraction(Integer) for e in solve((a*t^2 + b*t + c)::Polynomial(Fraction Integer) = 0, eps)]
+selok(s:Integer, i:Integer, j:Integer):Boolean == (s = 0 => true; s = 1 => even?(i + j); odd? i)
+photonD(p0x:Fraction Integer, p0y:Fraction Integer, v0x:Fraction Integer, v0y:Fraction Integer, r0:Fraction Integer, T:Integer, s:Integer, qty:Integer):DoubleFloat == ( _
+  r : DoubleFloat := r0::DoubleFloat; px : DoubleFloat := p0x::DoubleFloat; py : DoubleFloat := p0y::DoubleFloat; _
+  sx : DoubleFloat := px; sy : DoubleFloat := py; vx : DoubleFloat := v0x::DoubleFloat; vy : DoubleFloat := v0y::DoubleFloat; left : DoubleFloat := T::DoubleFloat; _
+  lasti : Integer := 10^6; lastj : Integer := 10^6; done : Boolean := false; _
+  while not done repeat (bt : DoubleFloat := left + 1; bi : Integer := 0; bj : Integer := 0; _
+    for i in (floor(min(px, px + left*vx))::Integer - 1)..(floor(max(px, px + left*vx))::Integer + 2) repeat ( _
+      for j in (floor(min(py, py + left*vy))::Integer - 1)..(floor(max(py, py + left*vy))::Integer + 2) repeat ( _
+        dx : DoubleFloat := i::DoubleFloat - px; dy : DoubleFloat := j::DoubleFloat - py; _
+        if selok(s, i, j) and not (i = lasti and j = lastj) and dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < r then ( _
+          for rq in rootsQ(retract((vx*vx + vy*vy)::Float)@Fraction(Integer), retract((-2*(dx*vx + dy*vy))::Float)@Fraction(Integer), retract((dx*dx + dy*dy - r*r)::Float)@Fraction(Integer), 1/10^17) repeat ( _
+            rt : DoubleFloat := rq::DoubleFloat; _
+            if rt > 0 and rt < bt then (bt := rt; bi := i; bj := j))))); _
+    if bt >= left then (px := px + left*vx; py := py + left*vy; done := true) _
+    else (px := px + bt*vx; py := py + bt*vy; left := left - bt; lasti := bi; lastj := bj; _
+      nx : DoubleFloat := (px - bi::DoubleFloat)/r; ny : DoubleFloat := (py - bj::DoubleFloat)/r; _
+      d : DoubleFloat := vx*nx + vy*ny; vx := vx - 2*d*nx; vy := vy - 2*d*ny)); _
+  qty = 0 => sqrt(px*px + py*py); qty = 1 => px; qty = 2 => py; sqrt((px - sx)^2 + (py - sy)^2))
+photonF(p0x:Fraction Integer, p0y:Fraction Integer, v0x:Fraction Integer, v0y:Fraction Integer, r0:Fraction Integer, T:Integer, s:Integer, qty:Integer):Float == ( _
+  r : Float := r0::Float; px : Float := p0x::Float; py : Float := p0y::Float; _
+  sx : Float := px; sy : Float := py; vx : Float := v0x::Float; vy : Float := v0y::Float; left : Float := T::Float; _
+  lasti : Integer := 10^6; lastj : Integer := 10^6; done : Boolean := false; _
+  while not done repeat (bt : Float := left + 1; bi : Integer := 0; bj : Integer := 0; _
+    for i in (floor(min(px, px + left*vx))::Integer - 1)..(floor(max(px, px + left*vx))::Integer + 2) repeat ( _
+      for j in (floor(min(py, py + left*vy))::Integer - 1)..(floor(max(py, py + left*vy))::Integer + 2) repeat ( _
+        dx : Float := i::Float - px; dy : Float := j::Float - py; _
+        if selok(s, i, j) and not (i = lasti and j = lastj) and dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < r then ( _
+          for rq in rootsQ(retract(vx*vx + vy*vy)@Fraction(Integer), retract(-2*(dx*vx + dy*vy))@Fraction(Integer), retract(dx*dx + dy*dy - r*r)@Fraction(Integer), 1/10^62) repeat ( _
+            rt : Float := rq::Float; _
+            if rt > 0 and rt < bt then (bt := rt; bi := i; bj := j))))); _
+    if bt >= left then (px := px + left*vx; py := py + left*vy; done := true) _
+    else (px := px + bt*vx; py := py + bt*vy; left := left - bt; lasti := bi; lastj := bj; _
+      nx : Float := (px - bi::Float)/r; ny : Float := (py - bj::Float)/r; _
+      d : Float := vx*nx + vy*ny; vx := vx - 2*d*nx; vy := vy - 2*d*ny)); _
+  qty = 0 => sqrt(px*px + py*py); qty = 1 => px; qty = 2 => py; sqrt((px - sx)^2 + (py - sy)^2))
+t0 := nowms(); r := photonD(1/2, 1/10, 1, 0, 1/3, 1, 0, 0); vcaseD("hc2.1 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(1/2, 1/10, 1, 0, 1/4, 4, 0, 0); vcaseD("hc2.2 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(1/2, 1/2, 3/5, 4/5, 1/3, 3, 0, 1); vcaseD("hc2.3 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(0, 1/2, 5/13, 12/13, 2/5, 3, 0, 0); vcaseD("hc2.4 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(1/2, 1/10, 1, 0, 1/3, 2, 0, 0); vcaseD("hc2.5 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(1/2, 1/2, 4/5, 3/5, 1/2, 5, 1, 0); vcaseD("hc2.6 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(1/2, 1/3, 8/17, 15/17, 1/5, 8, 0, 2); vcaseD("hc2.7 machine", r, nowms() - t0, 6)
+t0 := nowms(); r := photonD(1/2, 1/7, -7/25, 24/25, 2/5, 3, 0, 3); vcaseD("hc2.8 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(0, 1/2, 12/13, 5/13, 1/3, 6, 2, 0); vcaseD("hc2.9 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(1/2, 1/10, 1, 0, 1/3, 5, 0, 0); vcaseD("hc2.10 machine", r, nowms() - t0, 10)
+digits(60)$Float
+t0 := nowms(); rF := photonF(1/2, 1/10, 1, 0, 1/3, 1, 0, 0); vcaseF("hc2.1 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/10, 1, 0, 1/4, 4, 0, 0); vcaseF("hc2.2 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/2, 3/5, 4/5, 1/3, 3, 0, 1); vcaseF("hc2.3 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(0, 1/2, 5/13, 12/13, 2/5, 3, 0, 0); vcaseF("hc2.4 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/10, 1, 0, 1/3, 2, 0, 0); vcaseF("hc2.5 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/2, 4/5, 3/5, 1/2, 5, 1, 0); vcaseF("hc2.6 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/3, 8/17, 15/17, 1/5, 8, 0, 2); vcaseF("hc2.7 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/7, -7/25, 24/25, 2/5, 3, 0, 3); vcaseF("hc2.8 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(0, 1/2, 12/13, 5/13, 1/3, 6, 2, 0); vcaseF("hc2.9 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(1/2, 1/10, 1, 0, 1/3, 5, 0, 0); vcaseF("hc2.10 wp50", rF, nowms() - t0, 48)
+)quit

@@ -1,0 +1,28 @@
+-- Experiment 217 -- SIAM 100-Digit Challenge, holdout A, family d12 (FriCAS column).
+-- Each case is a parameter search ("find a such that the first event fires
+-- at time T") around an ODE solve.  FriCAS ships a fixed-step RK4 but no
+-- event location and no root finder for a general real function
+-- (solve/complexSolve are polynomial only; Newton is not a built-in), so
+-- every row is SKIP, as in experiment 187.  See event_parameter.m.
+)read ../siam100_common.input )quiet
+vskip("hd12.1 machine", "FindRoot")
+vskip("hd12.1 wp50", "FindRoot")
+vskip("hd12.2 machine", "FindRoot")
+vskip("hd12.2 wp50", "FindRoot")
+vskip("hd12.3 machine", "FindRoot")
+vskip("hd12.3 wp50", "FindRoot")
+vskip("hd12.4 machine", "FindRoot")
+vskip("hd12.4 wp50", "FindRoot")
+vskip("hd12.5 machine", "FindRoot")
+vskip("hd12.5 wp50", "FindRoot")
+vskip("hd12.6 machine", "FindRoot")
+vskip("hd12.6 wp50", "FindRoot")
+vskip("hd12.7 machine", "FindRoot")
+vskip("hd12.7 wp50", "FindRoot")
+vskip("hd12.8 machine", "FindRoot")
+vskip("hd12.8 wp50", "FindRoot")
+vskip("hd12.9 machine", "FindRoot")
+vskip("hd12.9 wp50", "FindRoot")
+vskip("hd12.10 machine", "FindRoot")
+vskip("hd12.10 wp50", "FindRoot")
+)quit

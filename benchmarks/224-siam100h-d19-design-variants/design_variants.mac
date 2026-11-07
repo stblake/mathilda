@@ -1,0 +1,54 @@
+/* Experiment 224 -- SIAM 100-Digit Challenge holdout A, family hd19 (Maxima column).
+   Finite variable-thickness design problems (see design_variants.m).
+   Maxima's only constrained minimiser is fmin_cobyla (derivative-free); the
+   objective is a numeric black box (assembly + linsolve_by_lu), the equality
+   given as two inequalities, as in exp 194.  No bigfloat constrained
+   optimiser: every wp50 row is a SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(fmin_cobyla)$
+require(["fmin_cobyla", "linsolve_by_lu"])$
+
+KQ : matrix([4,-1,-2,-1],[-1,4,-1,-2],[-2,-1,4,-1],[-1,-2,-1,4]) / 6.0$
+/* [dim, nx, ny, lo, hi, mean, load] */
+probs : [[2,4,4,1,10,11/2,lambda([x],1)], [2,4,4,1,100,103/4,lambda([x],1)],
+         [2,6,6,1,100,101/2,lambda([x],1)], [2,5,5,1,100,101/2,lambda([x],1)],
+         [1,8,0,1,100,101/2,lambda([x],1)], [1,16,0,1,4,5/2,lambda([x],1)],
+         [2,4,4,1,100,101/2,lambda([x],x)], [2,8,4,1,100,101/2,lambda([x],1)],
+         [2,4,4,1,2,3/2,lambda([x],1)], [2,6,6,1,1000,1003/4,lambda([x],1)]]$
+
+meshOf(p) := block([dim : p[1], nx : p[2], ny : p[3], f : p[7], h, idx],
+  if dim = 1 then (
+    h : 1.0 / nx,
+    idx : lambda([i], if i >= 1 and i <= nx-1 then i else 0),
+    [create_list([idx(a), idx(a+1)], a, 0, nx-1), matrix([1,-1],[-1,1]) / h,
+     makelist(h * f(h*i), i, 1, nx-1), nx-1])
+  else (
+    h : 1.0 / ny,
+    idx : lambda([i, j], if i >= 1 and i <= nx-1 and j >= 1 and j <= ny-1 then (i-1)*(ny-1) + j else 0),
+    [create_list([idx(a,b), idx(a+1,b), idx(a+1,b+1), idx(a,b+1)], a, 0, nx-1, b, 0, ny-1), KQ,
+     create_list(h^2 * f(h*i), i, 1, nx-1, j, 1, ny-1), (nx-1)*(ny-1)]))$
+
+compliance(ms, cl) := block([el : ms[1], loc : ms[2], m : ms[4], K, F, U, idx, nl],
+  K : zeromatrix(m, m),
+  for e : 1 thru length(el) do (
+    idx : el[e], nl : length(idx),
+    for r : 1 thru nl do for s : 1 thru nl do
+      if idx[r] > 0 and idx[s] > 0 then
+        K[idx[r], idx[s]] : K[idx[r], idx[s]] + cl[e] * loc[r, s]),
+  F : transpose(matrix(ms[3])),
+  U : first(linsolve_by_lu(K, F, 'floatfield)),
+  (transpose(F) . U))$
+Jbox(ms, cl) := if every(numberp, cl) then compliance(ms, cl) else 'Jbox(ms, cl)$
+designMin(p) := block([ms : meshOf(p), ne, cv, r, lo : p[4], hi : p[5], vol],
+  ne : length(ms[1]), cv : makelist(concat('c, k), k, 1, ne), vol : float(p[6] * ne),
+  r : fmin_cobyla(Jbox(ms, cv), cv, makelist(float(p[6]), k, 1, ne),
+        constraints = append(makelist(cv[k] >= lo, k, 1, ne), makelist(cv[k] <= hi, k, 1, ne),
+                             [apply("+", cv) >= vol, apply("+", cv) <= vol]),
+        rhobeg = float((hi - lo) / 10), rhoend = 1.0e-10, iprint = 0, maxfun = 20000),
+  compliance(ms, subst(r[1], cv)))$
+
+for k : 1 thru length(probs) do (
+  vrun(sconcat("hd19.", k, " machine"), buildq([p : probs[k]], lambda([], designMin(p))), 10, 90),
+  skip(sconcat("hd19.", k, " wp50"), "ConstrainedMinimize(bfloat)"))$
+quit()$

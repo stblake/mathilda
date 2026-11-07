@@ -1,0 +1,58 @@
+/* Experiment 212 -- SIAM 100-digit HOLDOUT A, family D7 (Maxima column).
+   The 1-D statements of region_areas.m: ends by find_root on brackets read off
+   the same plots (bf_find_root at fpprec 60), then the chord length integrated
+   piecewise between ends and kinks: QUADPACK quad_qags at machine precision,
+   bromberg (bigfloat Romberg, Maxima's only bigfloat quadrature; rombergit 22)
+   at fpprec 60.  The real odd root is signum(t) abs(t)^(1/n).
+   Caps: 30 s machine, 60 s wp50. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["find_root", "quad_qags", "bf_find_root", "bromberg"])$
+
+g16(y) := y^2/16 + exp(sin(y))$
+g32(y) := y^2/32 + exp(sin(y))$
+g100(y) := y^2/100 + exp(sin(y))$
+rc3(t) := signum(t) * abs(t)^(1/3)$
+rc5(t) := signum(t) * abs(t)^(1/5)$
+qm(f, a, b) := first(quad_qags(f, x, a, b, 'epsrel = 1d-13, 'limit = 500))$
+qb(f, a, b) := block([rombergtol : 1b-50, rombergit : 22], bromberg(f, x, bfloat(a), bfloat(b)))$
+/* islands: [[lower-end bracket or 0, upper-end bracket or 0, [kink brackets]], ...] */
+fgArea(g, inv, sc, islands, big) := block([tot : 0, a, b, ks, pts, wy, fr],
+  fr(e, br) := if big then bf_find_root(e, y, bfloat(br[1]), bfloat(br[2])) else find_root(e, y, br[1], br[2]),
+  wy : subst(y = x, inv(-y + sqrt(-sc*log(g(y)))) - inv(-y - sqrt(-sc*log(g(y))))),
+  for isl in islands do (
+    a : if isl[1] = 0 then 0 else fr(g(y) - 1, isl[1]),
+    b : if isl[2] = 0 then 0 else fr(g(y) - 1, isl[2]),
+    ks : map(lambda([br], fr(-sc*log(g(y)) - y^2, br)), isl[3]),
+    pts : append([a], ks, [b]),
+    for i : 1 thru length(pts) - 1 do
+      tot : tot + (if big then qb(wy, pts[i], pts[i+1]) else qm(wy, pts[i], pts[i+1]))),
+  tot)$
+I3 : [[[-2.8, -2.4], 0, [[-1.0, -0.6]]]]$
+I4 : [[[-3.0, -2.5], 0, []], [[3.5, 4.0], [4.2, 4.6], []]]$
+I5 : [[[-3.0, -2.5], 0, [[-1.0, -0.5]]], [[3.5, 4.0], [4.2, 4.6], []]]$
+I6 : [[[-3.0, -2.5], 0, [[-1.5, -1.1]]], [[3.5, 4.0], [4.2, 4.6], []]]$
+I10 : [[[-8.2, -7.6], [-7.3, -6.8], []], [[-3.3, -2.8], 0, [[-1.0, -0.7]]], [[3.0, 3.5], [5.6, 6.1], []]]$
+area(k, big) := block([fpprec : if big then 60 else fpprec, a, b],
+  if k = 1 then (if big then qb(2*(1 - x^4)^(1/4), -1, 1) else qm(2*(1 - x^4)^(1/4), -1, 1))
+  else if k = 2 then (
+    a : if big then bf_find_root(cos(x) - x^2, x, 0.5b0, 1b0) else find_root(cos(x) - x^2, x, 0.5, 1.0),
+    if big then qb(cos(x) - x^2, -a, a) else qm(cos(x) - x^2, -a, a))
+  else if k = 3 then fgArea(g16, rc3, 1, I3, big)
+  else if k = 4 then fgArea(g32, asinh, 1, I4, big)
+  else if k = 5 then fgArea(g32, rc5, 1, I5, big)
+  else if k = 6 then fgArea(g32, rc3, 2, I6, big)
+  else if k = 7 then (if big then qb(%pi - 2*asin(1 - sin(x)), 0, %pi) else qm(%pi - 2*asin(1 - sin(x)), 0, %pi))
+  else if k = 8 then (if big then qb(log(4 - exp(x)) + x, -log(2 + sqrt(3)), log(2 + sqrt(3)))
+                      else qm(log(4 - exp(x)) + x, -log(2 + sqrt(3)), log(2 + sqrt(3))))
+  else if k = 9 then (
+    a : if big then bf_find_root(3 - x^2 - exp(x), x, -2b0, -1.5b0) else find_root(3 - x^2 - exp(x), x, -2.0, -1.5),
+    b : if big then bf_find_root(3 - x^2 - exp(x), x, 0.5b0, 1b0) else find_root(3 - x^2 - exp(x), x, 0.5, 1.0),
+    if big then qb(3 - x^2 - exp(x), a, b) else qm(3 - x^2 - exp(x), a, b))
+  else fgArea(g100, rc3, 1, I10, big))$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("hd7.", k, " machine"), buildq([k], lambda([], area(k, false))), 10, 30),
+  vrun(sconcat("hd7.", k, " wp50"), buildq([k], lambda([], area(k, true))), 48, 60))$
+quit()$

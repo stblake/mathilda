@@ -1,0 +1,18 @@
+/* Experiment 209 -- SIAM 100-digit holdout A, family d4 (Maxima column).
+   Maxima has expintegral_li, zeta (bfzeta) and moebius, but no numerical
+   infinite-series summation, no Riemann R, no von Mangoldt function and no
+   Riemann-Siegel Z.  Only hd4.1 (li(x) = 0) can be stated: find_root on
+   expintegral_li for the machine row, bf_find_root with fpprec 60 for wp50.
+   Every other row is a SKIP.  See number_theory_roots_family.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+vrun("hd4.1 machine", lambda([], find_root(expintegral_li(x), x, 1.2, 2.0)), 10, 60)$
+vrun("hd4.1 wp50", lambda([], block([fpprec : 60],
+     bf_find_root(expintegral_li(x), x, 1.2b0, 2.0b0))), 48, 60)$
+skip("hd4.2 machine", "RiemannR")$  skip("hd4.2 wp50", "RiemannR")$
+for k in [3, 4, 5, 6, 7, 9] do (
+  skip(sconcat("hd4.", k, " machine"), "nsum"),
+  skip(sconcat("hd4.", k, " wp50"), "nsum"))$
+skip("hd4.8 machine", "RiemannSiegelZ")$  skip("hd4.8 wp50", "RiemannSiegelZ")$
+skip("hd4.10 machine", "RiemannR")$  skip("hd4.10 wp50", "RiemannR")$
+quit()$

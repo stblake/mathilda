@@ -1,0 +1,24 @@
+-- Experiment 206 -- SIAM 100-digit holdout A, family d1 (FriCAS column).
+-- FriCAS has no numerical summation to infinity: every row is a SKIP.  See kempner_family.m.
+)read ../siam100_common.input )quiet
+vskip("hd1.1 machine", "numerical infinite sum")
+vskip("hd1.1 wp50", "numerical infinite sum")
+vskip("hd1.2 machine", "numerical infinite sum")
+vskip("hd1.2 wp50", "numerical infinite sum")
+vskip("hd1.3 machine", "numerical infinite sum")
+vskip("hd1.3 wp50", "numerical infinite sum")
+vskip("hd1.4 machine", "numerical infinite sum")
+vskip("hd1.4 wp50", "numerical infinite sum")
+vskip("hd1.5 machine", "numerical infinite sum")
+vskip("hd1.5 wp50", "numerical infinite sum")
+vskip("hd1.6 machine", "numerical infinite sum")
+vskip("hd1.6 wp50", "numerical infinite sum")
+vskip("hd1.7 machine", "numerical infinite sum")
+vskip("hd1.7 wp50", "numerical infinite sum")
+vskip("hd1.8 machine", "numerical infinite sum")
+vskip("hd1.8 wp50", "numerical infinite sum")
+vskip("hd1.9 machine", "numerical infinite sum")
+vskip("hd1.9 wp50", "numerical infinite sum")
+vskip("hd1.10 machine", "numerical infinite sum")
+vskip("hd1.10 wp50", "numerical infinite sum")
+)quit

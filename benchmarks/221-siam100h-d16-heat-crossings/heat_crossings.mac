@@ -1,0 +1,9 @@
+/* Experiment 221 -- SIAM 100-Digit Challenge holdout A, family hd16 (Maxima column).
+   Heat-equation crossing times (an initial-boundary-value problem): Maxima has no PDE solver.
+   Every row is a SKIP.  See heat_crossings.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hd16.", k, " machine"), "PDE solver"),
+  skip(sconcat("hd16.", k, " wp50"), "PDE solver"))$
+quit()$

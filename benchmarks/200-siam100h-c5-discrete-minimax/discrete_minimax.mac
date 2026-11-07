@@ -1,0 +1,49 @@
+/* Experiment 200 -- SIAM 100-digit holdout A, family hc5 (Maxima column).
+   The statement of discrete_minimax.m (scored against the discrete minimax
+   value): Maxima has no global minimiser, so the machine rows use its
+   derivative-free minimiser fmin_cobyla (unconstrained, from the zero
+   polynomial, rhoend 1e-12) on the same max of moduli, as in C5.  The sample
+   values come from Maxima's float elementary/gamma functions; 1/gamma(0) = 0
+   (hc5.4) is given directly (Maxima has no reciprocal gamma).  No bigfloat
+   minimiser: wp50 SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(fmin_cobyla)$
+require(["fmin_cobyla", "gamma"])$
+/* fmin_cobyla rationalises floats; its "rat: replaced" chatter (millions of
+   lines) can be cut mid-line by the cap and glued onto a CHECK line */
+ratprint : false$
+
+rg(x) := if x = 0.0 then 0.0 else rectform(float(1/gamma(x)))$
+PROB : [
+  [lambda([x], sqrt(x)), makelist(k/128, k, 0, 128), 1, false],
+  [lambda([x], exp(x)), makelist(cos(k*%pi/64), k, 0, 64), 3, false],
+  [lambda([x], abs(x)), makelist(-1 + k/64, k, 0, 128), 4, false],
+  [lambda([x], rg(x)), makelist(2*k/100, k, 0, 100), 3, false],
+  [lambda([x], atan(5*x)), makelist(cos(k*%pi/100), k, 0, 100), 5, false],
+  [lambda([x], log(1 + x)), makelist(k/64, k, 0, 64), 2, false],
+  [lambda([z], rg(z)), makelist(exp(2*%pi*%i*k/128), k, 0, 127), 2, true],
+  [lambda([z], rectform(float(gamma(z + 2)))), makelist(exp(2*%pi*%i*k/128), k, 0, 127), 2, true],
+  [lambda([z], rectform(float(log(2 + z)))), makelist(exp(2*%pi*%i*k/64), k, 0, 63), 2, true],
+  [lambda([z], rg(z)), makelist(exp(2*%pi*%i*k/128), k, 0, 127), 4, true]]$
+
+hc5(k) := block([f : PROB[k][1], xs, n : PROB[k][3], cplx : PROB[k][4], fs, vars, F, r],
+  xs : map(lambda([x], rectform(float(x))), PROB[k][2]),
+  fs : map(lambda([x], f(x)), xs),
+  if cplx then (
+    vars : append(makelist(concat(a, j), j, 0, n), makelist(concat(b, j), j, 0, n)),
+    F : lmax(makelist(block([z : xs[i], p],
+          p : rectform(expand(sum((concat(a, j) + %i*concat(b, j))*z^j, j, 0, n))),
+          sqrt((realpart(fs[i]) - realpart(p))^2 + (imagpart(fs[i]) - imagpart(p))^2)),
+        i, 1, length(xs))))
+  else (
+    vars : makelist(concat(a, j), j, 0, n),
+    F : lmax(makelist(abs(fs[i] - a0 - sum(concat(a, j)*xs[i]^j, j, 1, n)), i, 1, length(xs)))),
+  r : fmin_cobyla(F, vars, makelist(0.0, length(vars)),
+                  'rhobeg = 0.5, 'rhoend = 1e-12, 'maxfun = 100000, 'iprint = 0),
+  float(subst(r[1], F)))$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("hc5.", k, " machine"), buildq([k], lambda([], hc5(k))), 10, 90),
+  skip(sconcat("hc5.", k, " wp50"), "NMinimize"))$
+quit()$

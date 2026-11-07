@@ -1,0 +1,24 @@
+/* Experiment 198 -- SIAM 100-digit holdout A, family hc3 (Maxima column).
+   The statement of matrix_norms.m: the 2-norm of the n x m section from
+   LAPACK dgesvd (load(lapack); singular values only) in doubles.  Maxima has
+   no bigfloat SVD: the wp50 rows SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(lapack)$
+require(["dgesvd"])$
+
+ENT : [lambda([i, j], 2^-i * 3^-j), lambda([i, j], 1/(i! * j!)),
+       lambda([i, j], 1/(i + j - 1)!), lambda([i, j], 1/((i + j - 1) * 2^(i + j))),
+       lambda([i, j], 1/(i + j - 1)), lambda([i, j], min(i, j)/max(i, j)),
+       lambda([i, j], 1/((i + j - 1)*(i + j - 2)/2 + j)^2), lambda([i, j], 1/(i + j^2)),
+       lambda([i, j], 1/(1 + abs(i - j))^2), lambda([i, j], cos(i*j)/(i + j))]$
+SIZE : [[100, 100], [30, 30], [40, 40], [100, 100], [100, 100], [100, 100],
+        [100, 100], [120, 60], [150, 150], [100, 100]]$
+
+hsec(k) := genmatrix(buildq([f : ENT[k]], lambda([i, j], float(f(i, j)))), SIZE[k][1], SIZE[k][2])$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("hc3.", k, " machine"),
+       buildq([k], lambda([], lmax(first(dgesvd(hsec(k)))))), 10, 60),
+  skip(sconcat("hc3.", k, " wp50"), "bigfloat SVD"))$
+quit()$

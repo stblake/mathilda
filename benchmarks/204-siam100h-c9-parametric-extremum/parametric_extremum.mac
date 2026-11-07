@@ -1,0 +1,12 @@
+/* Experiment 204 -- SIAM 100-Digit Challenge, holdout A for Problem 9 (Maxima column).
+   Every case is the argmax/argmin of a black-box numerical integral.
+   Maxima's only numerical optimiser, lbfgs, differentiates its objective
+   SYMBOLICALLY, so it cannot take a quad_qag* value as the objective, and
+   there is no derivative-free optimiser (as in experiment 174): all rows SKIP.
+   See parametric_extremum.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("hc9.", k, " machine"), "black-box numeric optimiser"),
+  skip(sconcat("hc9.", k, " wp50"), "black-box numeric optimiser"))$
+quit()$

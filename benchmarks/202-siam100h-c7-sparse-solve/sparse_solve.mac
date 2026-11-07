@@ -1,0 +1,40 @@
+/* Experiment 202 -- SIAM 100-Digit Challenge, holdout A for Problem 7 (Maxima column).
+   Maxima has no sparse matrices; the idiomatic solve is linsolve_by_lu on a
+   dense matrix (floatfield / bigfloatfield at fpprec 60), as in experiment 172.
+   Only the n = 1000 cases (hc7.5, hc7.7, hc7.9) are attempted: the dense
+   matrix is built outside the timed call, each solve capped at 60 s.  The
+   n >= 3000 cases SKIP (a dense n^2 Maxima matrix of Lisp objects).
+   See sparse_solve.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["linsolve_by_lu"])$
+
+for k in [1, 2, 3, 4, 6, 8, 10] do (
+  skip(sconcat("hc7.", k, " machine"), "linsolve_by_lu (dense n >= 3000)"),
+  skip(sconcat("hc7.", k, " wp50"), "linsolve_by_lu (dense n >= 3000)"))$
+
+n : 1000$
+pr : makelist(0, n)$
+block([p : 2], for i : 1 thru n do (pr[i] : p, p : next_prime(p)))$
+mk(d) := block([A : zeromatrix(n, n)],
+  for i : 1 thru n do A[i, i] : d[i],
+  for k : 0 thru 9 do block([o : 2^k],
+    for i : 1 thru n - o do (A[i, i + o] : 1, A[i + o, i] : 1)),
+  A)$
+A5 : mk(makelist(i, i, 1, n))$
+A7 : mk(pr)$
+e1 : genmatrix(lambda([i, j], if i = 1 then 1 else 0), n, 1)$
+ones : genmatrix(lambda([i, j], 1), n, 1)$
+A5f : float(A5)$  A7f : float(A7)$
+tot(x) := sum(x[i, 1], i, 1, n)$
+
+vrun("hc7.5 machine", lambda([], first(linsolve_by_lu(A5f, float(e1), 'floatfield))[1, 1]), 10, 60)$
+vrun("hc7.5 wp50", lambda([], block([fpprec : 60],
+       first(linsolve_by_lu(bfloat(A5), bfloat(e1), 'bigfloatfield))[1, 1])), 48, 60)$
+vrun("hc7.7 machine", lambda([], first(linsolve_by_lu(A7f, float(e1), 'floatfield))[2, 1]), 10, 60)$
+vrun("hc7.7 wp50", lambda([], block([fpprec : 60],
+       first(linsolve_by_lu(bfloat(A7), bfloat(e1), 'bigfloatfield))[2, 1])), 48, 60)$
+vrun("hc7.9 machine", lambda([], tot(first(linsolve_by_lu(A7f, float(ones), 'floatfield)))), 10, 60)$
+vrun("hc7.9 wp50", lambda([], block([fpprec : 60],
+       tot(first(linsolve_by_lu(bfloat(A7), bfloat(ones), 'bigfloatfield))))), 48, 60)$
+quit()$
