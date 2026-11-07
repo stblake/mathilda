@@ -45,6 +45,13 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "ArcLength": "structural (src/geometry_curves.c): its is_ndarray branch only "
+    "UNPACKS a point buffer nested inside Line[...] (gc_unpack -> "
+    "ndarray_to_nested_list) so an int64 buffer stays exact, exactly what the "
+    "gate does for a top-level argument; the machine segment sum then reads that "
+    "List. Going AWARE would hand it top-level buffers it has no use for.",
+    "RegionMeasure": "as ArcLength -- the same file and the same gc_unpack; "
+    "it delegates a Line to ArcLength.",
     "Equal": "comparison with no buffer kernel (src/comparisons.c). Its "
     "ndarray_delist_and_reeval branch exists only so a VISIBLE NDArray compares "
     "through its nested List rather than staying unevaluated; for a packed "

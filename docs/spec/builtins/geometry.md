@@ -144,6 +144,64 @@ In[4]:= Area[ConvexHullRegion[{{0, 0}, {2, 0}, {1, 0}, {2, 2}, {0, 2}, {1, 1}}]]
 Out[4]= 4
 ```
 
+## ArcLength
+
+`ArcLength[reg]` / `ArcLength[curve, {t, a, b}]` (src/geometry_curves.c).
+
+- `Line[{p1, ..., pn}]`: the sum of segment lengths, any dimension
+  (`ArcLength[Line[{{0,0},{3,4},{3,5}}]] = 6`); a list of point lists adds the
+  pieces. Exact coordinates give the exact sum of square roots; machine
+  coordinates sum scaled `hypot` over the doubles directly (a 10^5-point contour
+  takes ~50 ms and builds no expression); a packed point list is read through
+  its nested-List form so an int64 buffer stays exact. `WorkingPrecision -> p`
+  gives `N[sum, p]`.
+- `Circle[c, r]`: `2 Pi r`; an ellipse `Circle[c, {a, b}]` gives
+  `4 b EllipticE[1 - a^2/b^2]` with `b` the larger semi-axis
+  (`8 EllipticE[3/4]` for `{1, 2}`); an arc `Circle[c, r, {t1, t2}]` gives
+  `r (t2 - t1)`.
+- A parametrised curve `{x1[t], ..., xn[t]}` integrates `|c'(t)|`; a single
+  function `f[t]` its graph, `Sqrt[1 + f'(t)^2]`. The squared speed is
+  simplified first (`{Cos[t], Sin[t]}` over `{t, 0, 2 Pi}` is `2 Pi`), then
+  integrated exactly (`ArcLength[{t, t^2}, {t, 0, 1}] = (2 Sqrt[5] + ArcSinh[2])/4`).
+  An inexact bound or `WorkingPrecision -> p` integrates by `NIntegrate`.
+- **Deliberate difference:** when `Integrate` finds no closed form over a numeric
+  range, `ArcLength` returns the `NIntegrate` value (machine precision); the
+  reference returns the inert `Integrate[...]`, but `N` of an inert `Integrate`
+  is not a number in Mathilda, so that form would be a dead end. Elliptic cases
+  the reference closes (`ArcLength[Sin[t], {t, 0, Pi}] = 2 Sqrt[2] EllipticE[1/2]`)
+  therefore come back as `3.82019778902771`. A symbolic range keeps the inert
+  integral. (The exact attempt costs whatever `Integrate` takes to give up, a few
+  seconds for `Sqrt[1 + 3 Cos[t]^2]`.)
+- `Point[...]`, `Disk[...]`, `Annulus[...]`: `Undefined`.
+- Attributes: `Protected`.
+
+## RegionMeasure
+
+`RegionMeasure[reg]`: `Area` of a `Polygon`, `Disk` or `Annulus`; `ArcLength`
+of a `Line` or `Circle`. Attributes: `Protected`.
+
+## Annulus and Disk
+
+`Annulus[{x, y}, {rin, rout}]` is the closed annulus, `Annulus[c, {rin, rout},
+{t1, t2}]` the annular sector; `Annulus[]` is `Annulus[{0, 0}, {1/2, 1}]` (and
+`Annulus[c]` uses the same radii). Attributes: `Protected`.
+
+- `Area` / `RegionMeasure`: `Pi (rout^2 - rin^2)` (`3 Pi/4` for `Annulus[]`;
+  `Pi (-r1^2 + r2^2)` symbolically); a sector `(t2 - t1)/2 (rout^2 - rin^2)`.
+  Numeric radii given out of order measure as the ordered annulus
+  (`Area[Annulus[{0,0},{2,1}]] = 3 Pi`), as in the reference.
+- `Perimeter`: `2 Pi (rin + rout)`; a sector `(t2 - t1)(rin + rout) + 2 (rout - rin)`.
+- `RegionCentroid`: the centre (full annulus).
+- `RegionMember[ann, p]`: `rin <= |p - c| <= rout` (closed), plus the angle of
+  `p - c` within `[t1, t2]` for a sector; a symbolic point gives the reference's
+  condition `Element[x | y, Reals] && 1/4 <= x^2 + y^2 <= 1`.
+- `Disk[c, r]` / `Disk[c, {a, b}]` / `Disk[]`: `Area` / `RegionMeasure`
+  `Pi r^2` / `Pi a b` / `Pi`; `Perimeter` the boundary circle's `ArcLength`;
+  `RegionCentroid` the centre.
+- Not implemented: `RegionBounds`, `RegionDimension`, the one-argument
+  `RegionMember[reg]` (`RegionMemberFunction`), and use as an `NDSolve` /
+  `NDEigenvalues` domain.
+
 ## When these heads decline
 
 Declining leaves the expression unevaluated, which is always preferable to a

@@ -913,6 +913,8 @@ const char* SYM_Line = NULL;
 const char* SYM_Rectangle = NULL;
 const char* SYM_Circle = NULL;
 const char* SYM_Disk = NULL;
+const char* SYM_Annulus = NULL;
+const char* SYM_Area = NULL;
 const char* SYM_Polygon = NULL;
 const char* SYM_Text = NULL;
 const char* SYM_Show = NULL;
@@ -2062,6 +2064,8 @@ void sym_names_init(void) {
     SYM_Rectangle                  = intern_symbol("Rectangle");
     SYM_Circle                     = intern_symbol("Circle");
     SYM_Disk                       = intern_symbol("Disk");
+    SYM_Annulus                    = intern_symbol("Annulus");
+    SYM_Area                       = intern_symbol("Area");
     SYM_Polygon                    = intern_symbol("Polygon");
     SYM_Text                       = intern_symbol("Text");
     SYM_Show                       = intern_symbol("Show");

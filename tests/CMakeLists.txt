@@ -599,6 +599,7 @@ set(COMMON_SRC
     ../src/permutations.c
     ../src/tc_unwind_safe.c
     ../src/geometry.c
+    ../src/geometry_curves.c
     ../src/numloop.c
     ../src/boolean.c
     ../src/names.c

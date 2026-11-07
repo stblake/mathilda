@@ -25,4 +25,17 @@ Expr* builtin_region_centroid(Expr* res);
 Expr* builtin_region_member(Expr* res);
 Expr* builtin_convex_hull_region(Expr* res);
 
+/* src/geometry_curves.c: ArcLength, RegionMeasure, Annulus, and the curved
+ * regions (Annulus, Disk, Circle) the heads above also accept.  Each
+ * geom_curved_* returns a fresh result, or NULL when `region` is not one of
+ * the curved regions (the polygon path then runs). */
+void  geometry_curves_init(void);
+Expr* builtin_arclength(Expr* res);
+Expr* builtin_regionmeasure(Expr* res);
+Expr* builtin_annulus(Expr* res);
+Expr* geom_curved_area(const Expr* region);
+Expr* geom_curved_perimeter(const Expr* region);
+Expr* geom_curved_centroid(const Expr* region);
+Expr* geom_curved_member(const Expr* region, const Expr* p);
+
 #endif /* GEOMETRY_H */

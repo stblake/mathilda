@@ -277,6 +277,65 @@ static void test_scale_and_scratch_reuse(void) {
               "{1000000000000000000,1},{0,1}}], {1,2}]", "False");
 }
 
+/* ---- ArcLength / RegionMeasure / Annulus / Disk (geometry_curves.c) ----
+ * Expected values from the reference (ArcLength[Line[...]] = 6, ArcLength of
+ * {t, t^2} = (2 Sqrt[5] + ArcSinh[2])/4, Area[Annulus[]] = 3 Pi/4, the
+ * RegionMember condition form, ...), printed through Mathilda's printer. */
+static void test_arclength(void) {
+    geo_check("ArcLength[Line[{{0, 0}, {3, 4}, {3, 5}}]]", "6");
+    geo_check("ArcLength[Line[{{0, 0, 0}, {1, 2, 2}}]]", "3");
+    geo_check("ArcLength[Line[{{{0, 0}, {1, 0}}, {{0, 0}, {0, 2}}}]]", "3");
+    geo_check("ArcLength[Line[{{0., 0.}, {1., 1.}}]] == Sqrt[2.]", "True");
+    geo_check("ArcLength[Line[{{0, 0}, {1, 1}, {2, 0}}], WorkingPrecision -> 30]",
+              "2.82842712474619009760337744842");
+    geo_check("pts = N[Table[{Cos[t], Sin[t]}, {t, 0, 2 Pi, 2 Pi/1000}]]; "
+              "Abs[ArcLength[Line[Developer`ToPackedArray[pts]]] - 2 Pi] < 10^-4", "True");
+    geo_check("ArcLength[Line[Developer`ToPackedArray[{{0, 0}, {3, 4}}]]]", "5");
+    geo_check("ArcLength[Circle[{0, 0}, r]]", "2 Pi r");
+    geo_check("ArcLength[Circle[]]", "2 Pi");
+    geo_check("ArcLength[Circle[{0, 0}, {1, 2}]]", "8 EllipticE[3/4]");
+    geo_check("ArcLength[Circle[{0, 0}, 2, {0, Pi/2}]]", "Pi");
+    geo_check("ArcLength[{Cos[t], Sin[t]}, {t, 0, 2 Pi}]", "2 Pi");
+    geo_check("ArcLength[{t, t^2}, {t, 0, 1}]", "1/4 (2 Sqrt[5] + ArcSinh[2])");
+    geo_check("ArcLength[t^2, {t, 0, 1}]", "1/4 (2 Sqrt[5] + ArcSinh[2])");
+    geo_check("ArcLength[{Cos[t], Sin[t], t}, {t, 0, 1}]", "Sqrt[2]");
+    geo_check("ArcLength[{x, y}, {t, 0, 1}]", "0");
+    /* inexact bound: numeric; no closed form over a numeric range: numeric */
+    geo_check("Abs[ArcLength[{t, Exp[Sin[t]]}, {t, 0, 1.}] - 1.65786076958585] < 10^-12", "True");
+    geo_check("Abs[ArcLength[Sin[t], {t, 0, Pi}] - 3.82019778902771] < 10^-9", "True");
+    geo_check("Abs[ArcLength[Sin[t], {t, 0, Pi}, WorkingPrecision -> 30] - "
+              "3.82019778902771201790476208217`30] < 10^-25", "True");
+    geo_check("ArcLength[Point[{0, 0}]]", "Undefined");
+    geo_check("ArcLength[Disk[]]", "Undefined");
+}
+
+static void test_annulus_disk(void) {
+    geo_check("Annulus[]", "Annulus[{0, 0}, {1/2, 1}]");
+    geo_check("Area[Annulus[]]", "3/4 Pi");
+    geo_check("RegionMeasure[Annulus[{0, 0}, {1, 2}]]", "3 Pi");
+    geo_check("RegionMeasure[Annulus[{0, 0}, {r1, r2}]]", "Pi (-r1^2 + r2^2)");
+    geo_check("Area[Annulus[{0, 0}, {2, 1}]]", "3 Pi");
+    geo_check("Area[Annulus[{0, 0}, {1., 2}]] == 3. Pi", "True");
+    geo_check("Area[Annulus[{0, 0}, {1, 2}, {0, Pi}]]", "3/2 Pi");
+    geo_check("Perimeter[Annulus[]]", "3 Pi");
+    geo_check("RegionCentroid[Annulus[{1, 2}, {1, 3}]]", "{1, 2}");
+    geo_check("RegionMember[Annulus[], {3/4, 0}]", "True");
+    geo_check("RegionMember[Annulus[], {1, 0}]", "True");
+    geo_check("RegionMember[Annulus[], {1/2, 0}]", "True");
+    geo_check("RegionMember[Annulus[], {0.2, 0}]", "False");
+    geo_check("RegionMember[Annulus[{0, 0}, {1, 2}, {0, Pi/2}], {1, 1}]", "True");
+    geo_check("RegionMember[Annulus[{0, 0}, {1, 2}, {0, Pi/2}], {-1, 1}]", "False");
+    geo_check("RegionMember[Annulus[], {x, y}]",
+              "Element[x | y, Reals] && 1/4 <= x^2 + y^2 <= 1");
+    geo_check("Area[Disk[]]", "Pi");
+    geo_check("Area[Disk[{0, 0}, {2, 3}]]", "6 Pi");
+    geo_check("RegionMeasure[Disk[{1, 1}, 2]]", "4 Pi");
+    geo_check("RegionMeasure[Polygon[{{0, 0}, {1, 0}, {0, 1}}]]", "1/2");
+    geo_check("RegionMeasure[Line[{{0, 0}, {3, 4}}]]", "5");
+    geo_check("Attributes[Annulus]", "{Protected}");
+    geo_check("Attributes[ArcLength]", "{Protected}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -291,6 +350,8 @@ int main(void) {
     TEST(test_review_findings);
     TEST(test_repeated_evaluation);
     TEST(test_scale_and_scratch_reuse);
+    TEST(test_arclength);
+    TEST(test_annulus_disk);
 
     printf("All geometry tests passed!\n");
     return 0;

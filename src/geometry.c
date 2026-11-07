@@ -369,6 +369,10 @@ static const Expr* geom_polygon_points(const Expr* res) {
 /* ------------------------------------------------------------------------- */
 
 Expr* builtin_area(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
+        Expr* c = geom_curved_area(res->data.function.args[0]);
+        if (c) return c;
+    }
     const Expr* pts = geom_polygon_points(res);
     if (!pts) return NULL;
 
@@ -402,6 +406,10 @@ Expr* builtin_area(Expr* res) {
 /* ------------------------------------------------------------------------- */
 
 Expr* builtin_perimeter(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
+        Expr* c = geom_curved_perimeter(res->data.function.args[0]);
+        if (c) return c;
+    }
     const Expr* pts = geom_polygon_points(res);
     if (!pts) return NULL;
 
@@ -463,6 +471,10 @@ Expr* builtin_perimeter(Expr* res) {
 /* ------------------------------------------------------------------------- */
 
 Expr* builtin_region_centroid(Expr* res) {
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
+        Expr* c = geom_curved_centroid(res->data.function.args[0]);
+        if (c) return c;
+    }
     const Expr* pts = geom_polygon_points(res);
     if (!pts) return NULL;
 
@@ -610,6 +622,10 @@ static int geom_member_d(const GeomPoints* p, double px, double py) {
 Expr* builtin_region_member(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     const Expr* poly = res->data.function.args[0];
+    {
+        Expr* c = geom_curved_member(poly, res->data.function.args[1]);
+        if (c) return c;
+    }
     if (!head_is(poly, SYM_Polygon) || poly->data.function.arg_count != 1) return NULL;
 
     GeomPoints p;
@@ -784,6 +800,8 @@ void geometry_init(void) {
     };
     for (size_t i = 0; i < sizeof heads / sizeof heads[0]; i++)
         symtab_get_def(heads[i])->attributes |= (ATTR_PROTECTED);
+
+    geometry_curves_init();
 
     symtab_set_docstring("Area",
         "Area[Polygon[{{x1, y1}, ...}]] gives the area of a simple 2D polygon. "

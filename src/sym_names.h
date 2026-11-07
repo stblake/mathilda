@@ -931,6 +931,8 @@ extern const char* SYM_Line;
 extern const char* SYM_Rectangle;
 extern const char* SYM_Circle;
 extern const char* SYM_Disk;
+extern const char* SYM_Annulus;
+extern const char* SYM_Area;
 extern const char* SYM_Polygon;
 extern const char* SYM_Text;
 extern const char* SYM_Show;
