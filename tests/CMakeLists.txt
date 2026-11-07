@@ -4163,6 +4163,9 @@ target_include_directories(expintegralei_tests PRIVATE ../src)
 add_executable(logintegral_tests test_logintegral.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(logintegral_tests PRIVATE ../src)
 
+
+add_executable(cuberoot_tests test_cuberoot.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(cuberoot_tests PRIVATE ../src)
 add_executable(elliptic_tests test_elliptic.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(elliptic_tests PRIVATE ../src)
 add_test(NAME elliptic_tests COMMAND elliptic_tests)

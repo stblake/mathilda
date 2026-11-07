@@ -15,4 +15,9 @@ void  surd_init(void);
  * which the exact path answers (with its message) instead. */
 bool sf_surd_r(double x, double n, double* out);
 
+/* CubeRoot[x] -- Surd[x, 3] under its own name; sf_cuberoot_r is its machine
+ * kernel (scalar builtin, NDArray / packed map and Compile[] alike). */
+Expr* builtin_cuberoot(Expr* res);
+bool  sf_cuberoot_r(double x, double* out);
+
 #endif /* SURD_H */

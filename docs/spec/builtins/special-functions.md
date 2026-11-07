@@ -4656,6 +4656,21 @@ Abs[x]^(1/n)` for odd `n`, `x^(1/n)` for even `n` and `x ≥ 0` — unlike
   packed kernel receives every operand as a double, so the scalar path accepts it
   too, to keep the surfaces in agreement.
 
+## CubeRoot
+
+`CubeRoot[x]` is the real cube root of a real `x`, the same as `Surd[x, 3]`.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- Exact `x`: `CubeRoot[8] = 2`, `CubeRoot[-8] = -2`, `CubeRoot[-27/8] = -3/2`,
+  `CubeRoot[-2] = -2^(1/3)`, `CubeRoot[16] = 2 2^(1/3)`.
+- Symbolic `x`: `Surd[x, 3]` (as in the reference, `CubeRoot[x^3] = Surd[x^3, 3]`).
+- Machine `x`: `sf_cuberoot_r` (= `sf_surd_r(x, 3)`, `cbrt`), registered as
+  CubeRoot's own unary kernel, so the scalar path, the packed / `NDArray` map and
+  `Compile[]` (scalar and rank-1) agree bit for bit. Arbitrary precision: through
+  `Surd`, at the argument's precision.
+- A non-real number emits `CubeRoot::preal` and stays unevaluated
+  (`CubeRoot[I]`); a packed buffer with such an element goes to the List path.
+
 ## KroneckerDelta
 
 `KroneckerDelta[n1, n2, ...]` is 1 when every `ni` is equal and 0 when any two

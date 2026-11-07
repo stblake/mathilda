@@ -24,7 +24,12 @@
  * packed / NDArray kernel receives every operand as a double and cannot tell 3
  * from 3., and the scalar path must agree with it.
  *
- * Attributes: Listable, NumericFunction, Protected.
+ * CubeRoot[x] is Surd[x, 3] under its own name (the reference rewrites a
+ * symbolic CubeRoot[x] to Surd[x, 3]): machine x takes the same sf_surd_r
+ * kernel, registered as CubeRoot's own unary NDArray / packed / Compile
+ * kernel; everything else is Surd[x, 3]; a non-real number is CubeRoot::preal.
+ *
+ * Attributes: Listable, NumericFunction, Protected (both heads).
  */
 #include "surd.h"
 #include "sym_names.h"
@@ -242,7 +247,38 @@ Expr* builtin_surd(Expr* res) {
     return r;
 }
 
+/* CubeRoot[x]: the real cube root. Machine reals answer through the shared
+ * kernel (bit-identical to the packed / NDArray / Compile surfaces); a
+ * non-real number is CubeRoot::preal and stays unevaluated; anything else
+ * becomes Surd[x, 3] (exact roots, -2^(1/3), symbolic Surd[x, 3]). */
+bool sf_cuberoot_r(double x, double* out) { return sf_surd_r(x, 3.0, out); }
+
+Expr* builtin_cuberoot(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("CubeRoot", argc, 1, 1);
+    Expr* x = res->data.function.args[0];
+
+    SFMachineArgs ma;
+    if (sf_machine_scalar_args(res, &ma) && !ma.any_complex) {
+        double v;
+        if (sf_cuberoot_r(ma.re[0], &v)) return expr_new_real(v);
+    }
+    Expr *re, *im;
+    if (is_complex(x, &re, &im) || (expr_is_numeric_quantity(x) && surd_sign(x) == 2)) {
+        char* t = expr_to_string(x);
+        mth_message("CubeRoot", "preal", "The parameter %s should be real-valued.", t ? t : "");
+        free(t);
+        return NULL;
+    }
+    Expr* a[2] = { expr_copy(x), expr_new_integer(3) };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Surd), a, 2));
+}
+
 void surd_init(void) {
+    symtab_add_builtin("CubeRoot", builtin_cuberoot);
+    symtab_get_def("CubeRoot")->attributes |=
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     symtab_add_builtin("Surd", builtin_surd);
     symtab_get_def("Surd")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);

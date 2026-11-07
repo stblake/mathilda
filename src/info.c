@@ -1060,6 +1060,13 @@ void info_init(void) {
         "negative x is Indeterminate (Surd::noneg), n = 0 is Indeterminate\n"
         "(Surd::indet), a non-real x (Surd::preal) or non-integer n (Surd::int)\n"
         "stays unevaluated. Listable, NumericFunction.");
+    symtab_set_docstring("CubeRoot",
+        "CubeRoot[x]\n"
+        "\tgives the real-valued cube root of a real x, the same as Surd[x, 3]:\n"
+        "\tCubeRoot[-8] = -2, CubeRoot[-2] = -2^(1/3), CubeRoot[-2.] = -1.25992...\n"
+        "A symbolic x gives Surd[x, 3]; a non-real number emits CubeRoot::preal and\n"
+        "stays unevaluated. Machine, packed, NDArray and Compile[] share one kernel.\n"
+        "Listable, NumericFunction.");
     symtab_set_docstring("KroneckerDelta",
         "KroneckerDelta[n1, n2, ...]\n"
         "\tgives 1 when all the ni are equal and 0 when any two are unequal.\n"
