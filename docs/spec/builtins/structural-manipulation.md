@@ -369,11 +369,15 @@ Partitions a list into sublists.
 - `Partition[list, {n1, n2, ...}]`: Multi-level partitioning.
 - `Partition[list, spec, dspec]`: Multi-level partitioning with offsets.
 - `Partition[list, UpTo[n]]`: Allows shorter final sublist.
+- `Partition[list, n, d, {kL, kR}]`: Overhang form: the first element of `list` sits at position `kL` of the first sublist and the last element at or after position `kR` of the last; padding is cyclic from `list` itself. A bare `k` means `{k, k}`; negative `k` counts from the end of a sublist.
+- `Partition[list, n, d, {kL, kR}, x]`: Pads with `x`; `{x1, x2, ...}` pads cyclically with the `xi` (aligned on the absolute index, so `Partition[{a, b, c, d, e, f, g}, 3, 3, 1, {x, y, z}]` ends `{g, y, z}`); `{}` means no padding, so the edge sublists are shorter.
 
 **Features**:
 - `Protected`.
 - Works on any expression with arguments.
-- `Partition[list, n, d]` only includes full sublists of length `n` unless `UpTo` is used.
+- `Partition[list, n, d]` only includes full sublists of length `n` unless `UpTo` is used (equivalent to the alignment `{1, -1}`).
+- The overhang forms take integer `n` and `d` (one level); a packed argument is partitioned as the equivalent List and repacked.
+- `Partition[list, 2, 1, 1]` is the cyclic edge walk of a closed polygon: `{{p1, p2}, ..., {pn, p1}}`.
 
 ```mathematica
 In[1]:= Partition[{a, b, c, d, e}, 2]
@@ -387,6 +391,15 @@ Out[3]= {{a, b}, {c, d}, {e}}
 
 In[4]:= Partition[{{1, 2, 3}, {4, 5, 6}}, {2, 2}]
 Out[4]= {{{{1, 2}, {4, 5}}}}
+
+In[5]:= Partition[{a, b, c, d, e}, 2, 1, 1]
+Out[5]= {{a, b}, {b, c}, {c, d}, {d, e}, {e, a}}
+
+In[6]:= Partition[{a, b, c, d, e}, 3, 1, {-1, 1}, {x, y}]
+Out[6]= {{x, y, a}, {y, a, b}, {a, b, c}, {b, c, d}, {c, d, e}, {d, e, y}, {e, y, x}}
+
+In[7]:= Partition[{a, b, c, d, e}, 3, 3, 1, {}]
+Out[7]= {{a, b, c}, {d, e}}
 ```
 
 ## Split

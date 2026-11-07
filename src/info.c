@@ -2751,7 +2751,13 @@ void info_init(void) {
         "\telements that do not fill a block are discarded.\n"
         "Partition[list, n, d]\n"
         "\tuses offset d between successive sublists; d = 1 gives a moving\n"
-        "\twindow, d = n gives non-overlapping blocks.");
+        "\twindow, d = n gives non-overlapping blocks.\n"
+        "Partition[list, n, d, {kL, kR}]\n"
+        "\tputs the first element of list at position kL of the first sublist and\n"
+        "\tthe last element at or after position kR of the last, padding\n"
+        "\tcyclically with list itself; k alone means {k, k}.\n"
+        "Partition[list, n, d, {kL, kR}, x]\n"
+        "\tpads with x; {x1, x2, ...} pads cyclically with the xi, {} not at all.");
 
     // List Operations
     symtab_set_docstring("Table", "Table[expr, n]\n\tgenerates a list of n copies of expr.\nTable[expr, {i, imax}]\n\tgenerates a list of the values of expr with i running from 1 to imax.");

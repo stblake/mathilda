@@ -444,6 +444,42 @@ void test_partition() {
     expr_free(t2); expr_free(res2);
 }
 
+/* Overhang forms Partition[list, n, d, k | {kL, kR}(, padding)]. Expected
+ * values were taken from wolframscript (all twenty agree). */
+void test_partition_overhang() {
+    static const char* cases[][2] = {
+        {"Partition[{a, b, c, d, e}, 2, 1, 1]", "{{a, b}, {b, c}, {c, d}, {d, e}, {e, a}}"},
+        {"Partition[{a, b, c, d, e}, 2, 1, -1]", "{{e, a}, {a, b}, {b, c}, {c, d}, {d, e}}"},
+        {"Partition[{a, b, c, d, e}, 3, 3, 1]", "{{a, b, c}, {d, e, a}}"},
+        {"Partition[{a, b, c, d, e}, 3, 1, {-1, 1}]",
+         "{{d, e, a}, {e, a, b}, {a, b, c}, {b, c, d}, {c, d, e}, {d, e, a}, {e, a, b}}"},
+        {"Partition[{a, b, c, d, e}, 3, 3, {1, 1}, x]", "{{a, b, c}, {d, e, x}}"},
+        {"Partition[{a, b, c, d, e, f, g}, 3, 3, {1, 1}, {x, y, z}]", "{{a, b, c}, {d, e, f}, {g, y, z}}"},
+        {"Partition[{a, b, c, d, e}, 3, 3, {1, 1}, {}]", "{{a, b, c}, {d, e}}"},
+        {"Partition[{a, b, c, d, e}, 3, 1, {-1, 1}, {x, y}]",
+         "{{x, y, a}, {y, a, b}, {a, b, c}, {b, c, d}, {c, d, e}, {d, e, y}, {e, y, x}}"},
+        {"Partition[{a, b, c, d, e}, 2, 3, {2, 2}]", "{{e, a}, {c, d}}"},
+        {"Partition[{a, b, c, d, e}, 3, 2, {1, -1}]", "{{a, b, c}, {c, d, e}}"},
+        {"Partition[{a, b, c, d, e}, 3, 1, {3, 1}, {}]",
+         "{{a}, {a, b}, {a, b, c}, {b, c, d}, {c, d, e}, {d, e}, {e}}"},
+        {"Partition[{a, b, c, d, e}, 2, 2, {-1, -1}, z]", "{{z, a}, {b, c}, {d, e}}"},
+        {"Partition[{a, b, c, d, e}, 3, 1, {4, 1}]",
+         "{{c, d, e}, {d, e, a}, {e, a, b}, {a, b, c}, {b, c, d}, {c, d, e}, {d, e, a}, {e, a, b}}"},
+        {"Partition[{}, 2, 1, 1]", "{}"},
+        {"Partition[{a, b, c, d, e}, 2, 1, {1, 3}]", "{{a, b}, {b, c}, {c, d}}"},
+        {"Partition[{a, b, c}, 2, 1, 1, {x, y}]", "{{a, b}, {b, c}, {c, y}}"},
+        {"Partition[{a, b, c, d, e}, 3, 1, {-1, -1}, {x, y, z, w}]",
+         "{{z, w, a}, {w, a, b}, {a, b, c}, {b, c, d}, {c, d, e}}"},
+        /* closed-polygon edge walk, then a packed argument (repacked) */
+        {"Function[{p, q}, q - p] @@@ Partition[{{0, 0}, {1, 0}, {0, 1}}, 2, 1, 1]",
+         "{{1, 0}, {-1, 1}, {0, -1}}"},
+        {"Partition[Range[1., 6.], 2, 2, 1] === {{1., 2.}, {3., 4.}, {5., 6.}}", "True"},
+        {"Developer`PackedArrayQ[Partition[Range[1., 300.], 3, 1, 1]]", "True"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+        assert_eval_eq(cases[i][0], cases[i][1], 0);
+}
+
 void test_pick() {
     struct {
         const char* input;
@@ -1650,6 +1686,7 @@ int main() {
     TEST(test_drop);
     TEST(test_flatten);
     TEST(test_partition);
+    TEST(test_partition_overhang);
     TEST(test_pick);
     TEST(test_rotate);
     TEST(test_reverse);
