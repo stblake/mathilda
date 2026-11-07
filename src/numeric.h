@@ -298,6 +298,10 @@ bool numeric_constant_mpfr_value(const char* name, mpfr_t out, long bits);
 bool get_approx_mpfr(const Expr* e,
                      mpfr_t re, mpfr_t im,
                      bool* is_inexact);
+#else
+/* USE_MPFR=0 builds: the same contract with machine Reals as the only
+ * inexact leaves (53 bits), so callers need no guard of their own. */
+long numeric_min_inexact_bits(const Expr* e);
 #endif
 
 /* Mathematica inexact-contagion pre-pass for Plus / Times / other numeric

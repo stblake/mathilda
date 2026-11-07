@@ -61,9 +61,7 @@
 #include "print.h"        /* expr_to_string (::poised message) */
 #include <gmp.h>          /* Modulus path: exact modular linear solve */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
-#ifdef USE_MPFR
-#include "numeric.h"
-#endif
+#include "numeric.h"     /* numericalize, numeric_machine_spec (every build) */
 
 /* Interpolation methods. */
 enum { METHOD_DEFAULT = 0, METHOD_SPLINE = 1, METHOD_HERMITE = 2 };

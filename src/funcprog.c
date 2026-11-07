@@ -2454,7 +2454,7 @@ static Expr* outer_compiled(Expr* f, Expr** tensors, size_t k)
     size_t total = 1;
     /* operand class: 1 = machine reals, 2 = MPFR reals at one precision */
     int cls = 0;
-    mpfr_prec_t bits = 0;
+    long bits = 0;          /* MPFR precision; a plain long so USE_MPFR=0 builds */
     for (size_t t = 0; t < k; t++) {
         const Expr* v = tensors[t];
         if (v->type != EXPR_FUNCTION || v->data.function.head->type != EXPR_SYMBOL ||
@@ -2473,7 +2473,7 @@ static Expr* outer_compiled(Expr* f, Expr** tensors, size_t k)
             cls = c;
 #ifdef USE_MPFR
             if (c == 2) {
-                mpfr_prec_t p = mpfr_get_prec(x->data.mpfr);
+                long p = (long)mpfr_get_prec(x->data.mpfr);
                 if (bits && p != bits) return NULL;
                 bits = p;
             }
@@ -2485,7 +2485,7 @@ static Expr* outer_compiled(Expr* f, Expr** tensors, size_t k)
     if (total < 16 || !outer_fn_body(f, k, &body, vars)) return NULL;
 
     AutoCompiled* ac = cls == 1 ? autocompile_new(body, vars, k)
-                                : autocompile_new_prec(body, vars, k, (long)bits);
+                                : autocompile_new_prec(body, vars, k, bits);
     if (!ac) return NULL;
 
     Expr** cells = (Expr**)malloc(sizeof(Expr*) * total);

@@ -253,6 +253,7 @@ static Expr* ns_index_value(NsCtx* c, long k) {
     return eval_and_free(sumexpr);
 }
 
+#ifdef USE_MPFR
 /* Argument vector for a compiled MPFR program: the index value, then the
  * current values of the outer indices it was compiled over.  False when an
  * outer index has no value (the caller then interprets). */
@@ -267,6 +268,7 @@ static bool ns_ac_args_expr(const NsCtx* c, const AutoCompiled* ac, Expr* value,
     }
     return true;
 }
+#endif
 
 /* Evaluate `e` with the index bound to `value` (consumed). Returns the
  * numericalised result (caller frees) or NULL. */

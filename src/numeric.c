@@ -3644,3 +3644,23 @@ void numeric_init(void) {
         if (cdef) cdef->attributes |= (ATTR_CONSTANT | ATTR_PROTECTED);
     }
 }
+
+#ifndef USE_MPFR
+/* numeric_min_inexact_bits for USE_MPFR=0 builds: a machine Real is the only
+ * inexact leaf (53 bits); Complex[...] descends as in the MPFR build. */
+long numeric_min_inexact_bits(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_REAL) return 53;
+    if (e->type == EXPR_FUNCTION) {
+        Expr *re, *im;
+        if (is_complex((Expr*)e, &re, &im)) {
+            long a = numeric_min_inexact_bits(re);
+            long b = numeric_min_inexact_bits(im);
+            if (a == 0) return b;
+            if (b == 0) return a;
+            return a < b ? a : b;
+        }
+    }
+    return 0;
+}
+#endif

@@ -379,6 +379,12 @@ static bool is_narrow(const SpBand* b) {
 }
 
 static SpfStatus band_factor(const SpMat* A, const int64_t* q, SpBand* b) {
+#ifndef USE_LAPACK
+    /* No LAPACK in this build (the native Windows package): the in-house
+     * narrow-band loops still factor a narrow real band; a wider or complex
+     * one is SPF_TOOBIG, which every caller reads as "use the next method". */
+    if (!is_narrow(b)) return SPF_TOOBIG;
+#endif
     int w = b->cplx ? 2 : 1;
     size_t len = (size_t)w * (size_t)b->ldab * (size_t)b->n;
     free(b->ab);
@@ -427,10 +433,6 @@ SpBand* spb_factor(const SpMat* A, SpbMode mode, SpfStatus* st) {
     *st = SPF_TOOBIG;
     int64_t n = A->n;
     if (A->m != n || n < 2 || n > 0x7fffffff) return NULL;
-#ifndef USE_LAPACK
-    (void)mode;
-    return NULL;                           /* no LAPACK in this build */
-#else
 
     /* the natural order, then RCM when that is wide */
     int64_t kl0, ku0;
@@ -501,7 +503,6 @@ SpBand* spb_factor(const SpMat* A, SpbMode mode, SpfStatus* st) {
     if (s != SPF_OK) { *st = s; spb_free(b); return NULL; }
     *st = SPF_OK;
     return b;
-#endif
 }
 
 /* ---- solve / det ------------------------------------------------------------- */
