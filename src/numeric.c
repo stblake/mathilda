@@ -1553,8 +1553,19 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     /* Numericalize args left-to-right. For Power, decide whether to preserve
      * the exponent based on the (already-computed) numericalized base. */
     bool preserve_power_exp = exp_is_int;
+    /* Surd[x, n]: the root index is an integer by definition (Surd::int on
+     * anything else). N keeps it exact, as the reference does and as it keeps
+     * Power's integer exponent: N[Surd[x, 3], 30] is Surd[x, 3]. Numericalizing
+     * it gave Surd[x, 3.`30] -- an invalid call that stays unevaluated and
+     * emits Surd::int at every evaluation; inside a WorkingPrecision NIntegrate
+     * (whose integrand is numericalized first) that was thousands of messages,
+     * each printing a 60-digit argument, and ~half the run time. */
+    const bool surd_index =
+        n == 2 && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Surd
+        && expr_is_integer_like(e->data.function.args[1]);
     for (size_t i = 0; i < n; ++i) {
-        if (i < n_label_held || (series_data && i >= 3) ||
+        if (i < n_label_held || (series_data && i >= 3) || (surd_index && i == 1) ||
             (i == 0 && (nhold & ATTR_NHOLDFIRST)) ||
             (i > 0 && (nhold & ATTR_NHOLDREST))) {
             new_args[i] = expr_copy(e->data.function.args[i]);

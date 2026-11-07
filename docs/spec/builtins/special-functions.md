@@ -4691,6 +4691,11 @@ Abs[x]^(1/n)` for odd `n`, `x^(1/n)` for even `n` and `x ≥ 0` — unlike
   `Surd[Sqrt[2], 3] = 2^(1/6)`, `Surd[8, -3] = 1/2`; a symbolic `x` stays.
 - Machine `x`: `sf_surd_r` (sqrt / cbrt / pow with a Newton step), shared by the
   scalar path, the packed / `NDArray` map and `Compile`.
+- `N` keeps the integer index exact, as it keeps an integer `Power` exponent:
+  `N[Surd[x, 3], 30]` is `Surd[x, 3]` (it was `Surd[x, 3.`30]`, an invalid
+  call that emitted `Surd::int` at every evaluation -- thousands of times
+  inside a `WorkingPrecision` `NIntegrate`, whose integrand is numericalized
+  first).
 - Messages, as in the reference: `Surd::noneg` (even root of a negative,
   `Indeterminate`), `Surd::indet` (`n = 0`, `Indeterminate`), `Surd::preal` (a
   non-real `x`, unevaluated), `Surd::int` (a non-integer `n`, unevaluated),

@@ -44,6 +44,16 @@ static void test_n_exact_array_packs(void) {
     assert_eval_eq("N[{1/3, 2/3}]", "{0.333333, 0.666667}", 0);
 }
 
+/* Surd's root index is an integer label: N keeps it exact, as it keeps an
+ * integer Power exponent (Surd[x, 3.] is an invalid call: Surd::int). */
+static void test_n_keeps_surd_index(void) {
+    assert_eval_eq("N[Surd[x, 3], 30]", "Surd[x, 3]", 0);
+    assert_eval_eq("N[Surd[x, 3]]", "Surd[x, 3]", 0);
+    assert_eval_eq("FullForm[N[Surd[2 + x, 5]]]", "Surd[Plus[2.0, x], 5]", 0);
+    assert_eval_eq("N[Surd[-8, 3]]", "-2.0", 0);
+    assert_eval_eq("Precision[N[Surd[-27, 3], 40]]", "40.0", 0);
+}
+
 static void test_n_integer_leaf(void) {
     assert_eval_eq("N[0]",  "0.0", 0);
     assert_eval_eq("N[5]",  "5.0", 0);
@@ -945,6 +955,7 @@ int main(void) {
     TEST(test_machineprecision_is_protected);
     TEST(test_inexact_contagion);
     TEST(test_n_exact_array_packs);
+    TEST(test_n_keeps_surd_index);
 
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);
