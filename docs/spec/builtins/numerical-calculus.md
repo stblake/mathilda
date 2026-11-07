@@ -4,7 +4,8 @@ Numerical (as opposed to symbolic) calculus routines: the numerical derivative
 `ND`, numerical integration `NIntegrate`, numerical summation `NSum`, numerical
 products `NProduct`, numerical limits `NLimit`, the numerical series expansion
 `NSeries`, the numerical residue `NResidue`, the numerical differential-
-equation solvers `NDSolve` and `NDSolveValue`, Gauss–Legendre rules `GaussianQuadratureWeights`,
+equation solvers `NDSolve` and `NDSolveValue` (with finite elements for elliptic problems on a region,
+and the eigenvalue solvers `NDEigenvalues` / `NDEigensystem`), Gauss–Legendre rules `GaussianQuadratureWeights`,
 and adaptive sampling into an interpolant, `FunctionInterpolation`. They return machine-precision
 or arbitrary-precision (MPFR) numbers, and several succeed on inputs that the
 symbolic engine cannot close — essential singularities, non-elementary
@@ -1698,6 +1699,9 @@ In[3]:= NDSolve[{y''[t] == -9.8, y[0] == 1, y'[0] == 0,
 
 ### Partial differential equations (method of lines)
 
+(An elliptic problem on a region — `NDSolve[eqns, u, {x, y} ∈ reg]` — is solved by
+finite elements instead; see [Finite elements](#finite-elements-ndeigenvalues-ndeigensystem-ndsolve-over-a-region).)
+
 `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` solves a PDE over a
 rectangular region by the **method of lines**: the spatial operator is
 discretized on a uniform grid (Fornberg finite-difference weights, `ndsolve_stencil.c`),
@@ -1926,6 +1930,106 @@ PDE ranges `{t, ...}, {x, ...}`, and all `NDSolve` options (`Options[NDSolveValu
 is `Options[NDSolve]`). When `NDSolve` stays unevaluated so does `NDSolveValue`;
 equations with no derivative at all are `NDSolveValue::dvnf`. Attributes:
 `Protected`.
+
+## Finite elements: NDEigenvalues, NDEigensystem, NDSolve over a region
+
+Elliptic problems on a planar region are solved by the **finite element
+method** (`src/numerical_calculus/fem.c`, `fem_mesh.c`, `fem_chol.c`):
+
+```mathematica
+NDEigenvalues[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]},
+              u[x, y], {x, y} ∈ reg, n]               (* the n smallest eigenvalues *)
+NDEigensystem[{op, DirichletCondition[...]}, u[x, y], {x, y} ∈ reg, n]
+                                                     (* {{λ1, ..., λn}, {f1, ..., fn}} *)
+NDSolve[{op == f + NeumannValue[g, pred], DirichletCondition[u[x, y] == h, pred]},
+        u, {x, y} ∈ reg, opts]                        (* {{u -> InterpolatingFunction[...]}} *)
+```
+
+**Operator.** Any linear second-order operator
+`op u = -∇·(c ∇u) + b·∇u + d u` with a constant positive definite `c` (from the
+coefficients of `u_xx`, `u_xy`, `u_yy`) and `b`, `d`, the source `f` arbitrary
+functions of `x`, `y`: `-Laplacian[u[x, y], {x, y}] + V[x, y] u[x, y]`,
+`-Laplacian[u] + D[u[x, y], x]`, ... `Laplacian[u[x, y], {x, y}] == f` is read as
+`-Laplacian[u] == -f`. A nonlinear equation, a variable second-order
+coefficient, or a NeumannValue in an eigenvalue operator stays unevaluated with
+`::femfail` naming the reason.
+
+**Regions.** `Rectangle`, `Polygon` (convex or not; a closing repeat of the
+first vertex is ignored), `Triangle`, `Disk[c, r]` and its sectors
+`Disk[c, r, {θ1, θ2}]`, `Annulus[c, {r1, r2}]` and annular sectors. Curved
+boundaries are resolved exactly: the midside nodes of boundary edges lie on the
+circle (isoparametric quadratic elements).
+
+**Boundary conditions.** `DirichletCondition[u[x, y] == h, pred]` fixes `u` at
+every boundary **node** where `pred` (a function of `x`, `y`; `True` for the
+whole boundary) holds; several may be given, the first true one wins.
+`NeumannValue[g, pred]` in the equation contributes the boundary flux
+`n·(c ∇u) = g` on the boundary edges whose midpoint satisfies `pred`; `g` may be
+linear in `u` (a Robin condition, `NeumannValue[2 - u[x, y], x == 1]`). Every
+other boundary edge has the natural zero-flux condition, so an operator with no
+`DirichletCondition` at all gives the Neumann spectrum (`0, π², π², ...` on the
+unit square). An eigenvalue problem needs homogeneous Dirichlet values.
+
+**Mesh.** Delaunay refinement (Ruppert's algorithm with concentric-shell
+segment splitting): the boundary vertices are triangulated, boundary segments
+split until every one is a mesh edge with an empty diametral circle (arcs at
+their mid-angle), and triangles larger than the cell measure or with a
+circumradius/shortest-edge ratio above √2 (every angle ≥ 20.7°) refined at their
+circumcentres. The largest triangle area is `MaxCellMeasure`, given as
+`Method -> {"PDEDiscretization" -> {"FiniteElement", {"MeshOptions" -> {"MaxCellMeasure" -> a}}}}`
+(the reference's form for `NDEigensystem`) or
+`Method -> {"FiniteElement", "MeshOptions" -> {"MaxCellMeasure" -> a}}` (its
+`NDSolve` form); either is found anywhere in the options, as is
+`"MaxBoundaryCellMeasure"` (the longest boundary edge). The default is
+`area/1500`. **Singular corners are graded**: at a re-entrant corner (interior
+angle `ω > π`, solution `~ r^(π/ω)`) and at a corner where a Dirichlet edge meets
+a natural one (`~ r^(π/(2ω))`), the area limit falls as `(r/R)^(2 - λ)` within half
+the shorter adjacent edge, which restores the `h^4` eigenvalue rate of a smooth
+problem (an L-shape's `λ1` converges as `h^(4/3)` on a uniform mesh: 2e-6 against
+4e-3 at `MaxCellMeasure -> 1/1000`).
+
+**Discretization and solvers.** Quadratic (P2) Lagrange triangles; the
+stiffness, mass and load integrals by the degree-6, 12-point Dunavant rule (the
+fields `b`, `d`, `f` are evaluated at all quadrature points in one batch,
+compiled when possible), boundary terms by 5-point Gauss–Legendre. A symmetric
+system is factored by a sparse Cholesky with a geometric **nested-dissection**
+ordering (`fem_chol.c`: `nnz(L) = O(n log n)`, `O(n^1.5)` work — 10^5 unknowns in
+about a second without SuiteSparse); a nonsymmetric one (advection) by the
+sparse LU of `SparseArray` linear algebra. Eigenvalues: shift-and-invert Krylov
+iteration (ARPACK or the native Krylov–Schur) on `(K - σM)⁻¹M` with `σ = 0`
+(`σ < 0` when no node is fixed), each eigenvalue then refined as the Rayleigh
+quotient `x·K·x / x·M·x`; returned in increasing order.
+
+**Results.** Eigenfunctions are normalized to unit `L²` norm with a positive
+mean; `NDEigensystem[..., u[x, y], ...]` gives `InterpolatingFunction[...][x, y]`,
+`NDEigensystem[..., u, ...]` the function objects. The `InterpolatingFunction`
+of a mesh, `InterpolatingFunction[domain, NDSolve`FEM`MeshFunction[mesh, values]]`,
+evaluates by locating the point in its triangle (a bucket grid over the elements,
+the isoparametric map inverted by Newton's method on curved elements); it
+accepts numbers or equal-length vectors of coordinates, `Derivative[i, j]` of
+total order up to 2 (up to 1 on curved elements), and the properties
+`"Domain"`, `"Coordinates"`, `"ValuesOnGrid"`, `"ElementMesh"`. A point outside
+the mesh is extrapolated from the nearest element with
+`InterpolatingFunction::femdmval`.
+
+**Precision.** Machine precision. As in the reference, `WorkingPrecision` is not
+an option of `NDEigenvalues`/`NDEigensystem` (`::woptx`, then computed at machine
+precision); `NDSolve` over a region computes at machine precision whatever its
+`WorkingPrecision`.
+
+**Accuracy and speed** (default mesh, relative errors against closed forms,
+times including the mesh): square `λ1` 4.7e-7 (0.06 s; the reference's default
+8.5e-7 in 0.38 s), disk `λ1` 3e-7 (7e-6), equilateral triangle `λ4` 1e-5 (4.9e-4),
+annulus `1/2 < r < 1` `λ1` 1.1e-5 (5.3e-4), L-shape `λ1` 2.5e-6 (2.4e-3). SIAM
+Problem 14 (pentagon, mixed conditions, `MaxCellMeasure -> 10^-4`):
+`α = -2.462834743`, 9 digits (the reference 3). Koch snowflake level 5: 39.3711
+in 1.4 s, 0.023 from the fractal's 39.34855 (the reference's default: 0.052 in
+2.1 s); the level-5 polygon's own eigenvalue is about 39.370, so the remaining
+gap is the prefractal, not the discretization.
+
+Attributes: `NDEigenvalues`, `NDEigensystem`, `DirichletCondition`,
+`NeumannValue`: `Protected`. `Options[NDEigenvalues]` =
+`{DependentVariables -> Automatic, Method -> Automatic}`.
 
 ## FindMinimum / FindMaximum
 
