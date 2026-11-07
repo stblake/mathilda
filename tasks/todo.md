@@ -11,15 +11,17 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] Phase 1-2: encode C2-C10, D1-D20 (exps 167-195) with references (weak: C3 40d, D8 5d, D14 12d, D15 8d, D18 7d, D20 7d)
 - [x] Baseline run of 166-195, status table in SIAM100.md (benchmarks/siam100_results/baseline_v0.6377.md)
 - [x] Phase 3: holdout A written + committed (e1ad3fd0)
-- [ ] Holdout A pre-fix run (v0.6377 binary, running; 6 holdout-B agents concurrent -> timings approximate)
+- [ ] Holdout A pre-fix run (v0.6377 binary, running; load peaked >30 from holdout-B refs + fix builds -> DIGITS valid, TIMINGS approximate; if speed verdicts matter, re-time from a `git worktree add <dir> v0.6377` build on a quiet machine)
 - [ ] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b (worktree ../Mathilda-holdoutB, exps 226-255, 6 agents writing; WL verify after scratchpad/WL_FREE), baselines only
 - [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
   - [x] v0.6378 NDSolve BVP by shooting (silent wrong answer on two-point conditions)
   - [x] v0.6379 WhenEvent (all integration loops; d12 12d/274ms, d12.wp50 50d, hd12 20/20), v0.6380 NDSolveValue, v0.6381 unlisted unknowns (d13.wp50 50d)
-  - [ ] FindRoot Brent stops on absolute step test (limits d13/hd13 machine to 6-8d) -> FindRoot agent
+  - [x] v0.6382-86 linalg: MPFR LU honours TimeConstrained; sparse band solver (hc7.2 7.3 s -> 2 ms); exact sparse fill-column wrong answer; MPFR sparse by iterative refinement (hc7 wp50 all 50d, fastest); Norm[m,2] MPFR
+  - [x] v0.6387-90 FindRoot vector eqs/MPFR systems/backtracking + get_approx_mpfr bignum Rational (D20/hd20 fixed); minimisers converge to WP (C4 wp50 15->58d); Brent residual test (d13 machine 12d); penalty scaling (D19 no longer returns start)
+  - [ ] open: D19/hd19 488 s (FD gradients x 64 vars); D19 wp50 constraints at MPFR; C5/hc5 minimax (Max[] objective); hd4.9 NSum noise; hd3.3-10 unscored; hd15.7 MOL PDE at WP60; C3 Table/N build 1.5 s (speed agent)
+  - [ ] wave 2 agents: absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
-  - [ ] wave 2: sparse/dense linalg (C7 WP60 LinearSolve + TimeConstrained ignored, hc7 machine 4100x, Norm[A,2] MPFR, SVD speed); NSum wp50; Series inexact; absent heads; FoldList/RandomChoice speed
 - [ ] Phase 6: final run, holdout B once, verdict
 
 Findings so far:
