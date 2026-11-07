@@ -2730,8 +2730,22 @@ static void test_series_special_compositions(void) {
         "Log[2] x - 1/2 Log[2]^2 x^2 + 1/3 Log[2]^3 x^3 + O[x]^4");
 }
 
+/* Products and powers of SeriesData with machine-real coefficients run in
+ * doubles (so_mul_machine); the coefficients must equal the generic loop's,
+ * which multiplies and adds in the same order: compare against the
+ * coefficients of the explicit convolution and Normal-based powers. */
+static void test_series_machine_product(void) {
+    assert_eval_eq("lsS = Series[Exp[0.3 z] - 1., {z, 0, 12}]; lsC = CoefficientList[Normal[lsS], z]; "
+                   "Max[Abs[CoefficientList[Normal[lsS^5], z] - "
+                   "Take[CoefficientList[Expand[Normal[lsS]^5], z], 13]]] < 10^-15", "True", 0);
+    assert_eval_eq("Head[Series[Exp[0.3 z], {z, 0, 6}]^3]", "SeriesData", 0);
+    assert_eval_eq("Series[1.5 + 0.5 z, {z, 0, 2}]^2", "2.25 + 1.5 z + 0.25 z^2 + O[z]^3", 0);
+    assert_eval_eq("Series[1.*^200 + z, {z, 0, 2}]^2", "Overflow[] + 2e+200 z + 1.0 z^2 + O[z]^3", 0);
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
+    TEST(test_series_machine_product);
     TEST(test_series_sin_cos);
     TEST(test_series_symbolic_f);
     TEST(test_series_laurent);
