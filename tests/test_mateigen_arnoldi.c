@@ -29,9 +29,19 @@
 #include "eigen_corpus.h"
 
 /* Convenience: evaluate a string, return the result Expr*. */
+/* Results are walked as boxed Lists; N of the exact-text input matrix now
+ * comes back packed, and so do the eigen results of a packed matrix. */
+static Expr* deep_delist(Expr* r) {
+    r = test_delist(r);
+    if (r && r->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < r->data.function.arg_count; i++)
+            r->data.function.args[i] = deep_delist(r->data.function.args[i]);
+    return r;
+}
+
 static Expr* eval_string(const char* s) {
     Expr* parsed = parse_expression(s);
-    return evaluate(parsed);
+    return deep_delist(evaluate(parsed));
 }
 
 /* Format a row-major real matrix as a Mathilda numeric matrix literal,
