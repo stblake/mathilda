@@ -1716,6 +1716,21 @@ dimension work through the same Block-localized sampler, with no extra machinery
 Because every accepted time node carries the whole spatial vector, the solution
 is a complete tensor grid handed to the multidimensional `Interpolation` builtin.
 
+**Independent variables in any order.** The variables may be written in any
+order, in the ranges and in the unknown's arguments alike:
+`NDSolve[{D[u[x, t], t] == D[u[x, t], {x, 2}], u[x, 0] == f[x], u[0, t] == 0,
+u[1, t] == 0}, u, {x, 0, 1}, {t, 0, 1}]` is the same problem as the `u[t, x]`
+spelling. The **temporal variable** is the one whose conditions are all posed at
+a single value (the initial instant); each spatial variable carries conditions
+at both ends of its interval (or a periodicity pair). When that does not single
+out one variable the first range is temporal. The problem is solved in the
+canonical `(t, x[, y])` order and the answer tabulated back in the user's
+argument order, so the `InterpolatingFunction` is applied — and differentiated,
+`Derivative[1, 0][sol][x, t]` being `d/dx` — exactly as the unknown was written,
+and its `"Domain"` lists the ranges in that order. (Before, any order other
+than `u[t, x]` with the time range first said `NDSolve::pdeic` and stayed
+unevaluated, even for smooth data.)
+
 **Compiled operator (efficiency).** When the discretized system is linear —
 `dU/dt = A·U + s(t)` with a constant matrix — the front-end (`ndsolve_operator.c`)
 compiles the numeric banded `A` and forcing `s(t)`, so the RHS is a

@@ -1269,6 +1269,44 @@ static void test_unsupported_guards(void) {
     check_true("2-D periodic BC stays unevaluated", strcmp(hd, "NDSolve") == 0, hd[0] ? hd : "(null)");
 }
 
+/* ============================================================= *
+ *  Independent variables in any order: u[x, t] with ranges       *
+ *  {x, ..}, {t, ..}.  The temporal variable is the one whose      *
+ *  conditions sit at a single value; the answer is applied (and   *
+ *  differentiated) in the user's argument order.  Before, every   *
+ *  such call said NDSolve::pdeic and stayed unevaluated.          *
+ * ============================================================= */
+static void test_variable_order(void) {
+    char hd[64];
+    run("vo1 = NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], u[t,0]==0, "
+        "u[t,1]==0}, u, {t,0,1/5}, {x,0,1}];");
+    run("vo2 = NDSolve[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, "
+        "u[1,t]==0}, u, {x,0,1}, {t,0,1/5}];");
+    eval_head("vo2", hd, sizeof hd);
+    check_true("u[x,t] with {x},{t} ranges solves", strcmp(hd, "List") == 0, hd[0] ? hd : "(null)");
+    CHECK("u[x,t] order: same answer as u[t,x]",
+          "(u /. First[vo2])[0.3, 0.1] - (u /. First[vo1])[0.1, 0.3]", 0.0, 1e-12);
+    CHECK("u[x,t] order: Domain lists x first", "(u /. First[vo2])[\"Domain\"][[1, 2]]", 1.0, 0.0);
+    /* d/dx of the answer: the first argument of Derivative is x */
+    CHECK("u[x,t] order: Derivative[1,0] is d/dx",
+          "Derivative[1, 0][u /. First[vo2]][0.25, 0.1]",
+          PI * exp(-PI * PI * 0.1) * cos(PI * 0.25), 2e-3);
+    /* NDSolveValue, the applied form u[x, t], and a Neumann problem */
+    CHECK("NDSolveValue u[x,t] applied",
+          "NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Cos[Pi x], "
+          "Derivative[1,0][u][0,t]==0, Derivative[1,0][u][1,t]==0}, u[x,t], {x,0,1}, {t,0,1/5}]"
+          " /. {x -> 0, t -> 1/10}", exp(-PI * PI * 0.1), 2e-4);
+    /* ranges in t-first order but the function written u[x, t] */
+    CHECK("u[x,t] with {t},{x} ranges",
+          "NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, "
+          "u[1,t]==0}, u, {t,0,1/5}, {x,0,1}][0.5, 0.1]", exp(-PI * PI * 0.1), 2e-4);
+    /* two space dimensions, time last */
+    CHECK("u[x,y,t] 2-D, time last",
+          "NDSolveValue[{D[u[x,y,t],t]==D[u[x,y,t],{x,2}]+D[u[x,y,t],{y,2}], "
+          "u[x,y,0]==Sin[Pi x] Sin[Pi y], u[0,y,t]==0, u[1,y,t]==0, u[x,0,t]==0, u[x,1,t]==0}, "
+          "u, {x,0,1}, {y,0,1}, {t,0,1/10}][1/2, 1/2, 1/20]", exp(-2 * PI * PI * 0.05), 5e-3);
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -1313,6 +1351,7 @@ int main(void) {
     test_advection_upwind();
     test_upwind_monotonicity();
     test_unsupported_guards();
+    test_variable_order();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

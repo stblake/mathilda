@@ -1367,7 +1367,7 @@ Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
                     mpfr_set(val, sol.Y[i*d + (gi - 1) * (size_t)g->torder + 0], MPFR_RNDN);
                 }
                 Expr* coord[2] = { expr_new_mpfr_copy(sol.t[i]), expr_new_mpfr_copy(xg) };
-                Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+                Expr* coordL = nd_mol_coord(coord, 2);
                 Expr* pair[2] = { coordL, expr_new_mpfr_copy(val) };
                 entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
             }

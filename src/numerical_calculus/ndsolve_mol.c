@@ -385,7 +385,7 @@ static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
                 val = sol->Ys[i * d + (g - 1) * (size_t)torder + 0];
             }
             Expr* coord[2] = { expr_new_real(ti), expr_new_real(xg) };
-            Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+            Expr* coordL = nd_mol_coord(coord, 2);
             Expr* pair[2] = { coordL, expr_new_real(val) };
             entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
         }
@@ -546,7 +546,7 @@ static Expr* nd_build_cplx_if(NdProblem* P, const char* tvar, double xmin, doubl
                 if (nd_bound_eval_complex(bc, spec, &re, &im)) val = part ? im : re;
             }
             Expr* coord[2] = { expr_new_real(ti), expr_new_real(xg) };
-            Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+            Expr* coordL = nd_mol_coord(coord, 2);
             Expr* pair[2] = { coordL, expr_new_real(val) };
             entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
         }
@@ -1144,7 +1144,7 @@ static Expr* nd_mol_solve_system(Expr* res, const NdOpts* o0, const char* forced
                             val = sol.Ys[i * d + F[fi].base + (g - 1) * (size_t)F[fi].torder + 0];
                         }
                         Expr* coord[2] = { expr_new_real(ti), expr_new_real(xg) };
-                        Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+                        Expr* coordL = nd_mol_coord(coord, 2);
                         Expr* pair[2] = { coordL, expr_new_real(val) };
                         entries[pp++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
                     }
@@ -1212,9 +1212,259 @@ cleanup_early:
 }
 
 /* ------------------------------------------------------------------ *
+ *  Independent-variable order                                         *
+ * ------------------------------------------------------------------ *
+ * The solvers below read the problem in one canonical order: the
+ * temporal variable is the first range and the first argument of the
+ * unknown, u[t, x] / u[t, x, y].  The reference states no such rule --
+ * NDSolve[{u_t == u_xx, u[x, 0] == f, u[0, t] == 0, u[1, t] == 0}, u,
+ * {x, 0, 1}, {t, 0, 1}] is the same problem -- so nd_mol_solve first
+ * recognises the temporal variable from the conditions and, when the
+ * problem is not already canonical, solves the canonical rewrite of it
+ * and tabulates the answer back in the user's argument order (so the
+ * InterpolatingFunction is applied, and differentiated, as u[x, t]).
+ *
+ * The temporal variable is the one whose conditions are posed at a
+ * single value (the initial instant); a spatial variable carries a
+ * condition at each end of its interval (or a periodicity pair).  When
+ * that does not single out one variable the first range is temporal,
+ * as before. */
+
+#define ND_MOL_MAXV 3
+
+/* Active output permutation (set by nd_mol_solve around the canonical
+ * solve): user argument k is canonical coordinate g_mol_q[k]. */
+static int g_mol_q[ND_MOL_MAXV];
+static size_t g_mol_m = 0;          /* 0: identity */
+
+Expr* nd_mol_coord(Expr** c, size_t m) {
+    Expr* out[ND_MOL_MAXV];
+    if (m > ND_MOL_MAXV) return expr_new_function(expr_new_symbol(SYM_List), c, m);
+    for (size_t k = 0; k < m; k++) out[k] = (g_mol_m == m) ? c[g_mol_q[k]] : c[k];
+    return expr_new_function(expr_new_symbol(SYM_List), out, m);
+}
+
+/* Name of the unknown applied in `e` (u[...] or Derivative[..][u][...]),
+ * when it is one of `fn`; NULL otherwise. */
+static const char* nd_mol_app_name(const Expr* e, const char** fn, size_t nf) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    const Expr* h = e->data.function.head;
+    const char* g = NULL;
+    if (h->type == EXPR_SYMBOL) g = h->data.symbol.name;
+    else if (h->type == EXPR_FUNCTION && h->data.function.arg_count == 1
+             && h->data.function.args[0]->type == EXPR_SYMBOL
+             && head_is((Expr*)h->data.function.head, SYM_Derivative))
+        g = h->data.function.args[0]->data.symbol.name;
+    if (!g) return NULL;
+    for (size_t i = 0; i < nf; i++) if (fn[i] == g) return g;
+    return NULL;
+}
+
+static int nd_mol_var_index(const Expr* a, const char** rv, size_t nr) {
+    if (!a || a->type != EXPR_SYMBOL) return -1;
+    for (size_t i = 0; i < nr; i++) if (rv[i] == a->data.symbol.name) return (int)i;
+    return -1;
+}
+
+typedef struct {
+    const char** rv; size_t nr;
+    const char** fn; size_t nf;
+    int argvar[ND_MOL_MAXV];     /* argument position -> range index, -1 unknown */
+    bool conflict;
+    double vals[ND_MOL_MAXV][4]; /* distinct condition values per range var */
+    int nvals[ND_MOL_MAXV];
+} NdMolOrder;
+
+/* Pass 1: the argument order of every interior occurrence u[x, t] (all
+ * arguments distinct range variables). */
+static void nd_mol_scan_argorder(const Expr* e, NdMolOrder* S) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (nd_mol_app_name(e, S->fn, S->nf) && e->data.function.arg_count == S->nr) {
+        int iv[ND_MOL_MAXV]; bool all = true;
+        for (size_t k = 0; k < S->nr && all; k++) {
+            iv[k] = nd_mol_var_index(e->data.function.args[k], S->rv, S->nr);
+            if (iv[k] < 0) all = false;
+            for (size_t j = 0; j < k && all; j++) if (iv[j] == iv[k]) all = false;
+        }
+        if (all) for (size_t k = 0; k < S->nr; k++) {
+            if (S->argvar[k] < 0) S->argvar[k] = iv[k];
+            else if (S->argvar[k] != iv[k]) S->conflict = true;
+        }
+    }
+    nd_mol_scan_argorder(e->data.function.head, S);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nd_mol_scan_argorder(e->data.function.args[i], S);
+}
+
+/* Pass 2: the numeric values at which each variable is fixed in a
+ * condition (u[x, 0], u[0, t], Derivative[1, 0][u][1, t], ...). */
+static void nd_mol_scan_values(const Expr* e, NdMolOrder* S) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (nd_mol_app_name(e, S->fn, S->nf) && e->data.function.arg_count == S->nr) {
+        for (size_t k = 0; k < S->nr; k++) {
+            const Expr* a = e->data.function.args[k];
+            if (nd_mol_var_index(a, S->rv, S->nr) >= 0 || S->argvar[k] < 0) continue;
+            double v;
+            if (!nd_eval_to_double((Expr*)a, numeric_machine_spec(), &v)) continue;
+            int i = S->argvar[k]; bool seen = false;
+            for (int j = 0; j < S->nvals[i]; j++)
+                if (fabs(S->vals[i][j] - v) <= 1e-12 * (1.0 + fabs(v))) seen = true;
+            if (!seen && S->nvals[i] < 4) S->vals[i][S->nvals[i]++] = v;
+        }
+    }
+    nd_mol_scan_values(e->data.function.head, S);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nd_mol_scan_values(e->data.function.args[i], S);
+}
+
+/* Copy of `e` with every application of an unknown reordered to the
+ * canonical argument order: user argument k moves to position q[k], and
+ * a Derivative's k-th order with it. */
+static Expr* nd_mol_permute_apps(const Expr* e, const NdMolOrder* S, const int* q) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    const Expr* h = e->data.function.head;
+    if (nd_mol_app_name(e, S->fn, S->nf) && n == S->nr) {
+        Expr* args[ND_MOL_MAXV];
+        for (size_t k = 0; k < n; k++) args[q[k]] = nd_mol_permute_apps(e->data.function.args[k], S, q);
+        Expr* nh;
+        if (h->type == EXPR_SYMBOL) nh = expr_copy((Expr*)h);
+        else {
+            const Expr* d = h->data.function.head;           /* Derivative[n1, ..] */
+            if (d->type == EXPR_FUNCTION && d->data.function.arg_count == n) {
+                Expr* di[ND_MOL_MAXV];
+                for (size_t k = 0; k < n; k++) di[q[k]] = expr_copy(d->data.function.args[k]);
+                Expr* dn = expr_new_function(expr_copy(d->data.function.head), di, n);
+                Expr* uu[1] = { expr_copy(h->data.function.args[0]) };
+                nh = expr_new_function(dn, uu, 1);
+            } else nh = expr_copy((Expr*)h);
+        }
+        return expr_new_function(nh, args, n);
+    }
+    Expr* nh = nd_mol_permute_apps(h, S, q);
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = nd_mol_permute_apps(e->data.function.args[i], S, q);
+    Expr* r = expr_new_function(nh, args, n);
+    free(args);
+    return r;
+}
+
+/* Result post-pass: an applied side u[t, x] / ifun[t, x] (all arguments
+ * the canonical variables) back to the user's order. */
+static Expr* nd_mol_unpermute_side(Expr* e, const char** canon, size_t nr, const int* q) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != nr) return e;
+    for (size_t k = 0; k < nr; k++) {
+        const Expr* a = e->data.function.args[k];
+        if (a->type != EXPR_SYMBOL || a->data.symbol.name != canon[k]) return e;
+    }
+    Expr* args[ND_MOL_MAXV];
+    for (size_t k = 0; k < nr; k++) args[k] = expr_copy(e->data.function.args[q[k]]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, nr);
+    expr_free(e);
+    return r;
+}
+
+static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* forced_method);
+
+Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
+    Expr** A = res->data.function.args;
+    size_t argc = res->data.function.arg_count;
+    size_t pos_end = 2;
+    while (pos_end < argc && !nd_mol_is_option(A[pos_end])) pos_end++;
+    size_t nr = pos_end >= 2 ? pos_end - 2 : 0;
+
+    const char* rv[ND_MOL_MAXV]; const char* fn[8]; size_t nf = 0;
+    bool usable = nr >= 2 && nr <= ND_MOL_MAXV;
+    for (size_t i = 0; i < nr && usable; i++) {
+        Expr* r = A[2 + i];
+        if (!head_is(r, SYM_List) || r->data.function.arg_count != 3
+            || r->data.function.args[0]->type != EXPR_SYMBOL) usable = false;
+        else rv[i] = r->data.function.args[0]->data.symbol.name;
+    }
+    if (usable) {
+        Expr* F = A[1];
+        size_t nitems = head_is(F, SYM_List) ? F->data.function.arg_count : 1;
+        for (size_t i = 0; i < nitems && nf < 8; i++) {
+            const Expr* it = head_is(F, SYM_List) ? F->data.function.args[i] : F;
+            if (it->type == EXPR_SYMBOL) fn[nf++] = it->data.symbol.name;
+            else if (it->type == EXPR_FUNCTION && it->data.function.head->type == EXPR_SYMBOL)
+                fn[nf++] = it->data.function.head->data.symbol.name;
+        }
+        if (nf == 0) usable = false;
+    }
+
+    NdMolOrder S;
+    int q[ND_MOL_MAXV] = { 0 }; int ci[ND_MOL_MAXV] = { 0 }; bool transform = false;
+    if (usable) {
+        memset(&S, 0, sizeof S);
+        S.rv = rv; S.nr = nr; S.fn = fn; S.nf = nf;
+        for (size_t k = 0; k < nr; k++) S.argvar[k] = -1;
+        nd_mol_scan_argorder(A[0], &S);
+        nd_mol_scan_argorder(A[1], &S);
+        bool complete = !S.conflict;
+        for (size_t k = 0; k < nr && complete; k++) if (S.argvar[k] < 0) complete = false;
+        if (complete) {
+            nd_mol_scan_values(A[0], &S);
+            int tv = 0, ncand = 0;
+            for (size_t i = 0; i < nr; i++) if (S.nvals[i] == 1) { ncand++; tv = (int)i; }
+            if (ncand != 1) tv = 0;
+            /* canonical index of each range variable: t first, then the
+             * others in range order */
+            int next = 1;
+            for (size_t i = 0; i < nr; i++) ci[i] = ((int)i == tv) ? 0 : next++;
+            for (size_t k = 0; k < nr; k++) {
+                q[k] = ci[S.argvar[k]];
+                if (q[k] != (int)k) transform = true;
+            }
+            if (tv != 0) transform = true;
+        }
+    }
+
+    size_t saved_m = g_mol_m; int saved_q[ND_MOL_MAXV];
+    memcpy(saved_q, g_mol_q, sizeof saved_q);
+    Expr* out;
+    if (!transform) {
+        g_mol_m = 0;
+        out = nd_mol_solve_canonical(res, o0, forced_method);
+    } else {
+        /* the canonical rewrite: unknowns' arguments (and Derivative orders)
+         * permuted, ranges in canonical order, options as given */
+        Expr** B = malloc(sizeof(Expr*) * argc);
+        B[0] = nd_mol_permute_apps(A[0], &S, q);
+        B[1] = nd_mol_permute_apps(A[1], &S, q);
+        for (size_t i = 0; i < nr; i++) B[2 + ci[i]] = expr_copy(A[2 + i]);
+        for (size_t i = pos_end; i < argc; i++) B[i] = expr_copy(A[i]);
+        Expr* cres = expr_new_function(expr_copy(res->data.function.head), B, argc);
+        free(B);
+        const char* canon[ND_MOL_MAXV];
+        for (size_t i = 0; i < nr; i++) canon[ci[i]] = rv[i];
+        g_mol_m = nr; memcpy(g_mol_q, q, sizeof(int) * nr);
+        out = nd_mol_solve_canonical(cres, o0, forced_method);
+        expr_free(cres);
+        /* {{u -> ifun, ...}} with applied sides back in the user's order */
+        if (out && head_is(out, SYM_List)) {
+            for (size_t s = 0; s < out->data.function.arg_count; s++) {
+                Expr* rules = out->data.function.args[s];
+                if (!head_is(rules, SYM_List)) continue;
+                for (size_t r = 0; r < rules->data.function.arg_count; r++) {
+                    Expr* rule = rules->data.function.args[r];
+                    if (!head_is(rule, SYM_Rule) || rule->data.function.arg_count != 2) continue;
+                    for (int side = 0; side < 2; side++)
+                        rule->data.function.args[side] =
+                            nd_mol_unpermute_side(rule->data.function.args[side], canon, nr, q);
+                }
+            }
+        }
+    }
+    g_mol_m = saved_m; memcpy(g_mol_q, saved_q, sizeof saved_q);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
  *  Method of Lines solver (Phase 1)                                   *
  * ------------------------------------------------------------------ */
-Expr* nd_mol_solve(Expr* res, const NdOpts* o0, const char* forced_method) {
+static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* forced_method) {
     NdOpts o = *o0;
     if (forced_method && strcmp(forced_method, "MethodOfLines") != 0)
         o.method = intern_symbol(forced_method);
@@ -2258,7 +2508,7 @@ static Expr* nd_mol_solve_2d(Expr* res, const NdOpts* o0, const char* forced_met
                             expr_free(bv);
                         }
                         Expr* coord[3] = { expr_new_real(ti), expr_new_real(xg), expr_new_real(yg) };
-                        Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 3);
+                        Expr* coordL = nd_mol_coord(coord, 3);
                         Expr* pair[2] = { coordL, expr_new_real(val) };
                         entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
                     }
