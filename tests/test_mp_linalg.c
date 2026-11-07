@@ -58,6 +58,37 @@ static void run_silent(const char* input) {
     expr_free(e);
 }
 
+/* Assert two array expressions are identical (===); on a mismatch print the
+ * first differing cell of each in full precision before failing, so a
+ * platform-only bit drift (glibc vs macOS libm) says WHICH value moved. */
+static void run_check_same_arrays(const char* a, const char* b) {
+    char buf[2048];
+    snprintf(buf, sizeof buf, "(%s) === (%s)", a, b);
+    Expr* e = parse_expression(buf);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    char* s = expr_to_string(r);
+    if (strcmp(s, "True") != 0) {
+        snprintf(buf, sizeof buf,
+                 "Module[{fa = Flatten[%s], fb = Flatten[%s], k}, "
+                 "k = SelectFirst[Range[Min[Length[fa], Length[fb]]], fa[[#]] =!= fb[[#]] &, 0]; "
+                 "If[k == 0, {Length[fa], Length[fb]}, "
+                 "{k, InputForm[fa[[k]]], InputForm[fb[[k]]], "
+                 "If[MachineNumberQ[fa[[k]]] && MachineNumberQ[fb[[k]]], (fa[[k]] - fb[[k]])/$MachineEpsilon, None]}]]",
+                 a, b);
+        Expr* de = parse_expression(buf);
+        Expr* dr = de ? evaluate(de) : NULL;
+        char* ds = dr ? expr_to_string(dr) : NULL;
+        printf("FAIL (expected identical): %s === %s\n  first difference {cell, lhs, rhs, ulps}: %.600s\n",
+               a, b, ds ? ds : "(none)");
+        free(ds); expr_free(dr); expr_free(de);
+        free(s); expr_free(r); expr_free(e);
+        ASSERT(0);
+    }
+    printf("PASS: %s === %s\n", a, b);
+    free(s); expr_free(r); expr_free(e);
+}
+
 static void define_helpers(void) {
     run_silent("hilb[n_] := Table[1/(i + j - 1), {i, n}, {j, n}]");
     /* relative max-norm error of an approximate tensor against an exact one */
@@ -345,7 +376,7 @@ static void test_outer_compiled(void) {
         run_silent(buf);
         /* bit-identical to the interpreter evaluating each cell */
         run_check_true("Outer[nyK, op, oq] === Table[nyK[u, v], {u, op}, {v, oq}]");
-        run_check_true("Outer[og, op, oq] === Table[og[u, v], {u, op}, {v, oq}]");
+        run_check_same_arrays("Outer[og, op, oq]", "Table[og[u, v], {u, op}, {v, oq}]");
         run_check_true("Outer[Function[{s, t}, s t + 1], op, oq] === Table[u v + 1, {u, op}, {v, oq}]");
         run_check_true("Outer[oh, op, oq, Take[op, 3]] === "
                        "Table[oh[u, v, w], {u, op}, {v, oq}, {w, Take[op, 3]}]");
