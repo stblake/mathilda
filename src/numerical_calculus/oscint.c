@@ -120,6 +120,23 @@ static bool osc_panel(GkSampleMachine f, void* ctx, double x0, double x1,
     return true;
 }
 
+/* The first lobe of a half line starts at the range's own endpoint a, which
+ * may carry an integrable singularity of its own: the exponential endpoint map
+ * of NIntegrate sends the OTHER end of a finite range to a, so x^a Sin[a/(2-x)]
+ * on [0, 2] puts the branch point of x^0.14 at the start of the first lobe.
+ * Eight bisections of the plain rule leave ~(1/256)^1.14 of that lobe's
+ * singular part unresolved (4e-3 relative, silently, for a = 0.14), so the
+ * first lobe gets the full adaptive rule with QAGS extrapolation, which
+ * converges on an algebraic endpoint singularity and costs one panel more than
+ * the plain rule on a smooth lobe. */
+static bool osc_panel_first(GkSampleMachine f, void* ctx, double x0, double x1,
+                            double reltol, double _Complex* out) {
+    GkResult R = gk_integrate_machine(f, ctx, x0, x1, 0.0, reltol, 200, 0, true);
+    if (R.status == GK_NONNUMERIC) return false;
+    *out = R.value;
+    return true;
+}
+
 /* Sum half-period panels of width `w` across the finite range [a,b].  Writes the
  * total and returns whether every panel was numeric and the range was covered. */
 static bool osc_finite_sum(GkSampleMachine f, void* ctx, double a, double b,
@@ -165,13 +182,15 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
         int n = 0;
         double _Complex total = 0.0, best = 0.0;
         double err = INFINITY, maxS = 0.0;
-        bool conv = false;
+        bool conv = false, have_cand = false;
+        double _Complex cand = 0.0;
         double x = a;
         for (int k = 0; k < max_panels; k++) {
             double z;
             if (!osc_next_zero(f, ctx, comp, x, scale, &z)) break;
             double _Complex p;
-            if (osc_panel(f, ctx, x, z, panel_tol, &p)) total += p;
+            if ((k == 0 ? osc_panel_first : osc_panel)(f, ctx, x, z, panel_tol, &p))
+                total += p;
             scale = z - x;
             x = z;
             S[n++] = total;
@@ -179,14 +198,32 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
             if (n >= 5) {
                 int deg = (n - 1) / 2; if (deg > 6) deg = 6; if (deg < 1) deg = 1;
                 double _Complex acc; double sstep;
-                if (seqaccel_wynn_machine(S, n, deg, &acc, &sstep)
+                bool valid = seqaccel_wynn_machine(S, n, deg, &acc, &sstep)
                     && isfinite(creal(acc)) && isfinite(cimag(acc)) && isfinite(sstep)
-                    /* reject Wynn's singular-denominator blow-ups, and keep the
-                     * best (smallest-error) estimate — late high-degree entries
-                     * degrade as the tableau corner goes singular. */
-                    && cabs(acc) <= 1e3 * maxS + 1.0 && sstep < err) {
+                    /* reject Wynn's singular-denominator blow-ups */
+                    && cabs(acc) <= 1e3 * maxS + 1.0;
+                /* A step at the tolerance is only a CANDIDATE: on a few lobes
+                 * the tableau's last two entries can agree by coincidence (the
+                 * lobe sum of x^3.14 Sin[3.14/(2-x)] jumped from a 2e-2 step to
+                 * 3e-12 at seven lobes, 7e-5 away from the limit, and stopped
+                 * there silently).  The next lobe's extrapolation must
+                 * reproduce it to the tolerance before the sum is declared
+                 * converged; a genuine geometric convergence costs one lobe. */
+                if (valid && have_cand) {
+                    double tol = reltol * cabs(acc) + 1e-14;
+                    double dif = cabs(acc - cand);
+                    if (dif <= tol) {
+                        if (sstep < err) { best = acc; err = sstep; }
+                        if (dif > err) err = dif;
+                        conv = true; break;
+                    }
+                    have_cand = false;
+                }
+                /* keep the best (smallest-error) estimate -- late high-degree
+                 * entries degrade as the tableau corner goes singular */
+                if (valid && sstep < err) {
                     best = acc; err = sstep;
-                    if (sstep <= reltol * cabs(acc) + 1e-14) { conv = true; break; }
+                    if (sstep <= reltol * cabs(acc) + 1e-14) { cand = acc; have_cand = true; }
                 }
             }
         }

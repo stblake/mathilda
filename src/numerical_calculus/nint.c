@@ -1768,6 +1768,21 @@ static NiAtt ni_try_ncr(NiCtx* ctx, double a, double b, const NiOpts* o,
  * the threshold, so a smooth integrand costs ~23 samples an endpoint. */
 #define NI_OSE_POINTS   32
 #define NI_OSE_MIN_SC   10
+/* An unbounded phase sampled on a log grid gives effectively RANDOM signs
+ * (successive phases differ by thousands of radians), so the count of sign
+ * changes over the 31 transitions of a shell is ~Binomial(31, 1/2): below
+ * NI_OSE_MIN_SC with probability ~1.5% per shell, ~3% per endpoint.  That
+ * miss is a silent wrong answer, not a slow one: the endpoint falls through to
+ * Gauss-Kronrod, which settles on an under-sampled value (x^a Sin[a/(2 - x)]
+ * on [0, 2] was wrong by up to 10% at 3.7% of the parameters a in [0, 5],
+ * with no message, and NMaximize over a picked exactly those spurious
+ * peaks).  A shell that ends with at least NI_OSE_AMBIG changes -- a smooth
+ * integrand has 0-2 -- is therefore re-sampled on a grid NI_OSE_REFINE times
+ * finer and accepted at a quarter of its transitions: ~124 transitions with
+ * mean 62 against a threshold of 31, a miss far below 1e-8.  Only the
+ * ambiguous ~3% of genuine oscillations pay for it. */
+#define NI_OSE_AMBIG    3
+#define NI_OSE_REFINE   4
 
 /* 1: signs written; 0: no numeric sample there; -1: stop probing. */
 typedef int (*NiOseSign)(void* ctx, double d, int* sr, int* si);
@@ -1785,34 +1800,54 @@ typedef int (*NiOseSign)(void* ctx, double d, int* sr, int* si);
 #define NI_OSE_COST_MIN   2e-3
 #define NI_OSE_COST_LAG   8
 
-static bool ni_osc_shell(NiOseSign probe, void* pc, double lo, double hi,
-                         double* growth) {
+/* One log-uniform scan of npts distances over [10^lo, 10^hi] (outer edge
+ * first), stopping once `need` sign changes are seen (return 1) or can no
+ * longer be reached (0); -1 when the probe gave up or the cost trend tripped.
+ * *best receives the larger of the Re / Im sign-change counts. */
+static int ni_osc_scan(NiOseSign probe, void* pc, double lo, double hi,
+                       int npts, int need, int* best, double* growth) {
     int scr = 0, sci = 0, pr = 0, pi = 0;
-    double cost[NI_OSE_POINTS];
-    *growth = 1.0;
-    for (int i = 0; i < NI_OSE_POINTS; i++) {
-        int left = NI_OSE_POINTS - i;
-        if ((scr > sci ? scr : sci) + left < NI_OSE_MIN_SC) return false;
-        /* from the outer edge of the shell inwards */
-        double e = hi - (hi - lo) * ((double)i + 0.5) / (double)NI_OSE_POINTS;
+    double cost[NI_OSE_POINTS * NI_OSE_REFINE];
+    double c0 = 0.0;
+    int lag = NI_OSE_COST_LAG * (npts / NI_OSE_POINTS);
+    *best = 0;
+    for (int i = 0; i < npts; i++) {
+        int left = npts - i;
+        if (*best + left < need) return 0;
+        double e = hi - (hi - lo) * ((double)i + 0.5) / (double)npts;
         int sr, si;
         double t0 = mth_mono_seconds();
         int st = probe(pc, pow(10.0, e), &sr, &si);
         double dt = mth_mono_seconds() - t0;
         cost[i] = dt;
-        if (i >= NI_OSE_COST_LAG && dt > NI_OSE_COST_MIN
-            && dt > NI_OSE_COST_RATIO * cost[i - NI_OSE_COST_LAG]) return false;
-        if (st < 0) return false;            /* the probe gave up */
+        if (i == 0) c0 = dt;
+        if (i >= lag && dt > NI_OSE_COST_MIN
+            && dt > NI_OSE_COST_RATIO * cost[i - lag]) return -1;
+        if (st < 0) return -1;               /* the probe gave up */
         if (st == 0) continue;
         if (sr != 0) { if (pr != 0 && sr != pr) scr++; pr = sr; }
         if (si != 0) { if (pi != 0 && si != pi) sci++; pi = si; }
-        if (scr >= NI_OSE_MIN_SC || sci >= NI_OSE_MIN_SC) {
+        *best = scr > sci ? scr : sci;
+        if (*best >= need) {
             /* how much dearer the samples got across the shell */
-            if (dt > NI_OSE_COST_MIN && cost[0] > 0.0) *growth = dt / cost[0];
-            return true;
+            if (dt > NI_OSE_COST_MIN && c0 > 0.0) *growth = dt / c0;
+            return 1;
         }
     }
-    return false;
+    return 0;
+}
+
+static bool ni_osc_shell(NiOseSign probe, void* pc, double lo, double hi,
+                         double* growth) {
+    *growth = 1.0;
+    int best = 0;
+    /* the coarse scan, run to its end only while it can still be ambiguous */
+    int st = ni_osc_scan(probe, pc, lo, hi, NI_OSE_POINTS, NI_OSE_MIN_SC,
+                         &best, growth);
+    if (st != 0) return st > 0;
+    if (best < NI_OSE_AMBIG) return false;
+    int fine = NI_OSE_POINTS * NI_OSE_REFINE;
+    return ni_osc_scan(probe, pc, lo, hi, fine, (fine - 1) / 4, &best, growth) > 0;
 }
 
 static bool ni_osc_endpoint_probe(NiOseSign probe, void* pc) {
@@ -2997,6 +3032,24 @@ static Expr* ni_run_contour(Expr* body, const char* var,
     for (int i = 0; i < nnodes - 1; i++) {
         double _Complex z0 = nodes[i], z1 = nodes[i + 1];
         if (z1 == z0) continue;                 /* zero-length segment */
+        if (cimag(z0) == 0.0 && cimag(z1) == 0.0) {
+            /* A real segment is integrated in x itself, not through the affine
+             * t-map: the cascade's oscillatory-endpoint rule applies only on
+             * the plain real axis, so with the map NIntegrate[x^a Sin[a/(2 - x)],
+             * {x, 0, 1, 2}] lost it on [1, 2] and settled on a Gauss-Kronrod
+             * value 6e-5 off (a = 0.138) that {x, 0, 2} got right. */
+            double ra = creal(z0), rb = creal(z1), sg = 1.0;
+            if (ra > rb) { double t = ra; ra = rb; rb = t; sg = -1.0; }
+            ctx.x_scale = 1.0;
+            ctx.x_shift = 0.0;
+            ctx.ep_lo = ra; ctx.ep_hi = rb;
+            NiAtt a = ni_core_finite(&ctx, ra, rb, o);
+            if (!a.have) { any_fail = true; break; }
+            total += sg * a.val;
+            total_err += a.err;
+            if (!a.conv) all_conv = false;
+            continue;
+        }
         ctx.x_scale = z1 - z0;
         ctx.x_shift = z0;
         ctx.ep_lo = 0.0; ctx.ep_hi = 1.0;

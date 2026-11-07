@@ -956,6 +956,34 @@ static void test_symbolic_swell(void) {
     ASSERT_CLOSE("NIntegrate[D[Sin[x]^2 Cos[x]^30, x], {x, 0, 1}]", "N[Sin[1]^2 Cos[1]^30, 30]", 1e-15);
 }
 
+/* An oscillatory endpoint singularity whose phase scale is a parameter:
+ * x^a Sin[a/(2 - x)] on [0, 2].  Three silent wrong answers, each at a few
+ * percent of the parameters a (found by NMaximize, which climbed exactly onto
+ * the spurious values):
+ *   - the sign-change probe of the endpoint shells saw random signs and missed
+ *     its threshold by chance (~3% of a), so Gauss-Kronrod settled on an
+ *     under-sampled value (a = 0.785..., 2.3956: 2e-3 and 10% off);
+ *   - the first lobe of the exponential-endpoint map starts at x = 0, where
+ *     x^a is itself singular, and eight bisections did not resolve it
+ *     (a = 0.138: 4e-3 off);
+ *   - Wynn's extrapolation of the lobe sums met the tolerance by coincidence
+ *     at seven lobes (a = 3.139: 7e-5 off), now confirmed by the next lobe.
+ * A real breakpoint list {x, 0, 1, 2} runs each piece on the plain real axis,
+ * where the oscillatory-endpoint rule applies.  References: mpmath (t = 1/(2-x),
+ * tanh-sinh + quadosc) at 30 digits. */
+static void test_parametric_oscillatory_endpoint(void) {
+    ASSERT_REL("NIntegrate[x^0.7850486024081051 Sin[0.7850486024081051/(2 - x)], {x, 0, 2}]",
+               "1.011232310036737021329", "10^-9");
+    ASSERT_REL("NIntegrate[x^2.395615544756091 Sin[2.395615544756091/(2 - x)], {x, 0, 2}]",
+               "-0.01866731679544101743162", "10^-8");
+    ASSERT_REL("NIntegrate[x^0.13806243266311857 Sin[0.13806243266311857/(2 - x)], {x, 0, 2}]",
+               "0.4401784246408458778806", "10^-9");
+    ASSERT_REL("NIntegrate[x^3.139242625941186 Sin[3.139242625941186/(2 - x)], {x, 0, 2}]",
+               "-0.302859995551580093191", "10^-9");
+    ASSERT_REL("NIntegrate[x^0.13806243266311857 Sin[0.13806243266311857/(2 - x)], {x, 0, 1, 2}]",
+               "0.4401784246408458778806", "10^-9");
+}
+
 /* Integrable point singularities at a vertex of a box.  The cubature bisects
  * toward the vertex until the integrand can no longer be evaluated in doubles
  * (3 - Cos[x] - Cos[y] - Cos[z] cancels to 0 near the origin); that region is
@@ -1044,6 +1072,7 @@ int main(void) {
     TEST(test_rotated_halfline_wp);
     TEST(test_vertex_singularity);
     TEST(test_prenumericalized_constants_wp);
+    TEST(test_parametric_oscillatory_endpoint);
 
     printf("All nint_tests passed.\n");
     return 0;

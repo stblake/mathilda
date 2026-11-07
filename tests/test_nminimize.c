@@ -1619,6 +1619,20 @@ static void test_neldermead_feasibility(void) {
                "Max[0, 2 - (x + y) /. Last[r]] < 1.*^-9 && Abs[First[r] - 2] < 1.*^-8]");
 }
 
+/* NMaximize of a black-box parametric integral (SIAM 100-digit problem 9):
+ * the objective's NIntegrate must be right at EVERY sampled parameter, or the
+ * global search climbs onto a spurious peak.  It did -- 3.0397 at
+ * a = 0.785049 for the true 3.0337 at 0.785934 (two digits), from oscillatory
+ * endpoint integrals wrong by 1e-3 at a few percent of the a values.
+ * Truth: 0.785933674350371454565 (mpmath, root of the derivative). */
+static void test_nmaximize_parametric_integral(void) {
+    check_true("Module[{f, r}, f[a_?NumericQ] := (2 + Sin[10 a]) "
+               "NIntegrate[x^a Sin[a/(2 - x)], {x, 0, 2}]; "
+               "r = NMaximize[{f[a], 0 <= a <= 5}, a]; "
+               "Abs[(a /. Last[r]) - 0.785933674350371454565] < 10^-8 && "
+               "Abs[First[r] - 3.0337325864854936] < 10^-9]");
+}
+
 static void test_ranges_evaluated_in_table(void) {
     /* NMinimize is not HoldAll, so iterator-bound bounds/ranges evaluate. */
     check_true("With[{r = Table[x /. Last[NMinimize[{(x - a)^2, -5 <= x <= 5}, x]], {a, {1, 2}}]}, "
@@ -1752,6 +1766,7 @@ int main(void) {
     TEST(test_nmaximize_constraint_list);
     TEST(test_neldermead_feasibility);
     TEST(test_ranges_evaluated_in_table);
+    TEST(test_nmaximize_parametric_integral);
 
     printf("All NMinimize tests passed.\n");
     return 0;
