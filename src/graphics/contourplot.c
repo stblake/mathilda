@@ -16,6 +16,7 @@
  *   6. Wrap everything in Graphics[...] with Plot's default options. */
 
 #include "contourplot.h"
+#include "fem.h"                   /* ContourPlot over a region */
 #include "plot_common.h"
 #include "compile/autocompile.h"   /* machine fast path for the grid body */
 #include "show.h"
@@ -425,6 +426,9 @@ static Expr* make_contour_label(double level, Pt2 a, Pt2 b) {
 
 Expr* builtin_contourplot(Expr* res) {
     size_t argc = res->data.function.arg_count;
+    /* ContourPlot[f, {x, y} \[Element] reg, opts]: contours on a mesh of the
+     * region (numerical_calculus/fem.c) */
+    if (argc >= 2 && fem_is_region_spec(res->data.function.args[1])) return fem_contourplot(res);
     if (argc < 3) return NULL;
 
     Expr* body = res->data.function.args[0]; /* f(x,y) — held */

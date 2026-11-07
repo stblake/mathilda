@@ -317,6 +317,30 @@ static void test_nintegrate(void) {
                !eval_double("NIntegrate[sq[x, y], {x, y} \\[Element] Disk[]]", &v), "unevaluated");
 }
 
+/* ---------------- ContourPlot over a region ---------------- */
+static void test_contourplot(void) {
+    check_abs("circle contour length (pieces on the level set)",
+              "Total[ArcLength /@ Cases[Normal[ContourPlot[x^2 + y^2 == 1/4, {x, y} \\[Element] "
+              "Rectangle[{-1, -1}, {1, 1}]]], _Line, Infinity]]", PI, 1e-5);
+    check_abs("straight contour", "Total[ArcLength /@ Cases[Normal[ContourPlot[x + y == 1/2, {x, y} \\[Element] "
+              "Rectangle[]]], _Line, Infinity]]", sqrt(2.0) / 2, 1e-12);
+    /* SIAM 17: the nodal line of the third L-shape eigenfunction, length 2 */
+    run("esL = NDEigensystem[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, u[x, y], "
+        "{x, y} \\[Element] Polygon[{{0, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 2}, {0, 2}}], 3];");
+    check_abs("L-shape third eigenfunction nodal length = 2",
+              "Total[ArcLength /@ Cases[Normal[ContourPlot[Evaluate[esL[[2, 3]] == 0], {x, y} \\[Element] "
+              "Polygon[{{0, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 2}, {0, 2}}]]], _Line, Infinity]]", 2.0, 1e-5);
+    /* the ground state vanishes only on the boundary: no interior contour */
+    check_abs("boundary zero set left out",
+              "Length[Cases[Normal[ContourPlot[Evaluate[esL[[2, 1]] == 0], {x, y} \\[Element] "
+              "Polygon[{{0, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 2}, {0, 2}}]]], _Line, Infinity]]", 0.0, 0.0);
+    /* a disk mode: the nodal circle r = j01/j02 of J0(j02 r) */
+    run("esD = NDEigensystem[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, u[x, y], "
+        "{x, y} \\[Element] Disk[], 6];");
+    check_rel("disk nodal circle", "Total[ArcLength /@ Cases[Normal[ContourPlot[Evaluate[esD[[2, 6]] == 0], "
+              "{x, y} \\[Element] Disk[]]], _Line, Infinity]]", 2 * PI * 2.404825557695773 / 5.520078110286311, 2e-5);
+}
+
 /* ---------------- messages / declines ---------------- */
 static void test_declines(void) {
     double v;
@@ -341,6 +365,7 @@ int main(void) {
     test_eigensystem();
     test_ndsolve();
     test_nintegrate();
+    test_contourplot();
     test_declines();
     if (failures == 0) printf("\nAll FEM tests passed.\n");
     else printf("\n%d FEM test(s) FAILED.\n", failures);

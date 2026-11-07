@@ -1382,6 +1382,403 @@ static bool fem_is_option(const Expr* e) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  ContourPlot over a region                                          */
+/* ------------------------------------------------------------------ */
+
+/* f(x, y) at single points: compiled when possible, else the evaluator
+ * with the variables replaced. */
+typedef struct {
+    Expr* body; Expr* vx; Expr* vy; AutoCompiled* ac;
+    FemLocator* L; const double* V;   /* body is a mesh function at (x, y) */
+} FemFn;
+
+static void femfn_init(FemFn* F, Expr* body, const char* xv, const char* yv) {
+    F->body = body; F->vx = expr_new_symbol(xv); F->vy = expr_new_symbol(yv);
+    F->ac = NULL; F->L = NULL; F->V = NULL;
+    /* InterpolatingFunction[dom, MeshFunction[...]][x, y]: evaluated on the
+     * mesh directly (the eigenfunction of a nodal-line plot) */
+    const Expr* h = body->type == EXPR_FUNCTION ? body->data.function.head : NULL;
+    if (h && body->data.function.arg_count == 2 && head_is((Expr*)h, SYM_InterpolatingFunction)
+        && h->data.function.arg_count == 2 && fem_is_mesh_function(h->data.function.args[1])
+        && body->data.function.args[0]->type == EXPR_SYMBOL && body->data.function.args[0]->data.symbol.name == xv
+        && body->data.function.args[1]->type == EXPR_SYMBOL && body->data.function.args[1]->data.symbol.name == yv) {
+        Expr* table = h->data.function.args[1];
+        F->L = fem_locator(table->data.function.args[0]);
+        F->V = F->L ? fem_buffer(table->data.function.args[1], F->L->nn) : NULL;
+        if (F->V) return;
+        F->L = NULL;
+    }
+    const Expr* vs[2] = { F->vx, F->vy };
+    F->ac = autocompile_new(body, vs, 2);
+}
+static void femfn_free(FemFn* F) {
+    if (F->ac) autocompiled_free(F->ac);
+    expr_free(F->vx); expr_free(F->vy);
+}
+static double femfn_eval(const FemFn* F, double x, double y) {
+    double v;
+    if (F->V) {
+        bool outside;
+        return fem_eval_point(F->L, F->V, 0, 0, x, y, &v, &outside) ? v : NAN;
+    }
+    if (F->ac) {
+        double in[2] = { x, y };
+        if (autocompiled_eval_real(F->ac, in, &v) && isfinite(v)) return v;
+    }
+    Expr* lits[2] = { F->vx, F->vy };
+    Expr* subs[2] = { expr_new_real(x), expr_new_real(y) };
+    Expr* r = nd_replace_all(expr_copy(F->body), lits, subs, 2);
+    bool ok = fem_num(r, &v);
+    expr_free(r); expr_free(subs[0]); expr_free(subs[1]);
+    return ok ? v : NAN;
+}
+
+/* One contour crossing on a mesh edge: the point, and whether it lies on
+ * (or starts at) the region's boundary. */
+typedef struct { double x, y; bool bnd; } FemCross;
+
+/* The crossing of `level` on the edge (a, b), with values fa, fb of opposite
+ * classification: Illinois iteration on the function along the edge. */
+static FemCross fem_edge_cross(const FemFn* F, const double* pa, const double* pb,
+                               double fa, double fb, double level) {
+    FemCross c;
+    double ga = fa - level, gb = fb - level;
+    double t0 = 0, t1 = 1;
+    double t = ga / (ga - gb);
+    if (ga == 0) t = 0;
+    else if (gb == 0) t = 1;
+    else {
+        int side = 0;
+        for (int it = 0; it < 40 && t1 - t0 > 1e-15; it++) {
+            double x = pa[0] + t * (pb[0] - pa[0]), y = pa[1] + t * (pb[1] - pa[1]);
+            double g = femfn_eval(F, x, y) - level;
+            if (!isfinite(g)) break;
+            if (g == 0) break;
+            if ((g > 0) == (ga > 0)) {
+                t0 = t; ga = g;
+                if (side == -1) gb *= 0.5;
+                side = -1;
+            } else {
+                t1 = t; gb = g;
+                if (side == 1) ga *= 0.5;
+                side = 1;
+            }
+            t = t0 + (t1 - t0) * ga / (ga - gb);
+            if (!(t > t0 && t < t1)) t = 0.5 * (t0 + t1);
+        }
+    }
+    c.x = pa[0] + t * (pb[0] - pa[0]);
+    c.y = pa[1] + t * (pb[1] - pa[1]);
+    c.bnd = false;
+    return c;
+}
+
+/* Refine the contour piece (p, q) by midpoints moved onto the contour along
+ * the normal (depth levels), appending the points after p to pts. */
+static void fem_refine_piece(const FemFn* F, double level, double px, double py, double qx, double qy,
+                             int depth, double** pts, int64_t* np, int64_t* cap) {
+    if (depth > 0) {
+        double mx = 0.5 * (px + qx), my = 0.5 * (py + qy);
+        double dx = qx - px, dy = qy - py, L = sqrt(dx * dx + dy * dy);
+        if (L > 0) {
+            double nx = -dy / L, ny = dx / L, h = 0.25 * L;
+            double s0 = 0, g0 = femfn_eval(F, mx, my) - level;
+            double s1 = h, g1 = femfn_eval(F, mx + h * nx, my + h * ny) - level;
+            bool ok = isfinite(g0) && isfinite(g1);
+            for (int it = 0; it < 30 && ok && g0 != 0 && fabs(s1 - s0) > 1e-15 * (1 + L); it++) {
+                if (g1 == g0) { ok = false; break; }
+                double s2 = s1 - g1 * (s1 - s0) / (g1 - g0);
+                if (!isfinite(s2) || fabs(s2) > L) { ok = false; break; }
+                s0 = s1; g0 = g1; s1 = s2;
+                g1 = femfn_eval(F, mx + s1 * nx, my + s1 * ny) - level;
+                if (!isfinite(g1)) { ok = false; break; }
+                if (g1 == 0) { s0 = s1; g0 = 0; break; }
+            }
+            if (ok) {
+                double s = g0 == 0 ? s0 : s1;
+                double cx = mx + s * nx, cy = my + s * ny;
+                fem_refine_piece(F, level, px, py, cx, cy, depth - 1, pts, np, cap);
+                fem_refine_piece(F, level, cx, cy, qx, qy, depth - 1, pts, np, cap);
+                return;
+            }
+        }
+    }
+    if (*np + 1 > *cap) { *cap = 2 * *cap + 16; *pts = realloc(*pts, sizeof(double) * 2 * (size_t)*cap); }
+    (*pts)[2 * *np] = qx; (*pts)[2 * *np + 1] = qy; (*np)++;
+}
+
+/* Marching-triangles state for one ContourPlot over a region. */
+typedef struct {
+    const FemFn* F; double level, snap; int maxrec;
+    Expr** prims; size_t nprim, pcap;
+    double* pts; int64_t ptcap;
+} FemContour;
+
+#define FEM_CONTOUR_DEPTH 24
+
+/* The contour of the level in triangle P (vertex values f; vbd: vertex on
+ * the region boundary; ebd: edge (k, k+1) on the boundary).
+ *
+ * A boundary point where f equals the level -- every boundary point of a
+ * Dirichlet eigenfunction -- is classified by the sign f takes just inside
+ * the triangle, so the boundary itself is never a contour of the interior,
+ * while a contour that meets the boundary is followed to the point where the
+ * inner sign changes (located along the boundary edge, offset inward).
+ *
+ * A triangle whose sign changes around the perimeter through the edge
+ * midpoints disagree with those of its vertices (a saddle, where two contours
+ * cross; a contour dipping between two same-signed vertices) or whose
+ * centroid differs in sign from its three equal-signed vertices is split into
+ * four and treated again, up to FEM_CONTOUR_DEPTH times. */
+static double fem_inner(const FemContour* C, const double* p, double fv, bool onb, const double* c) {
+    if (!(onb && fv == C->level)) return fv;
+    double q[2] = { p[0] + 1e-5 * (c[0] - p[0]), p[1] + 1e-5 * (c[1] - p[1]) };
+    return femfn_eval(C->F, q[0], q[1]);
+}
+
+static void fem_contour_tri(FemContour* C, double P[3][2], const double* f0, const bool* vbd,
+                            const bool* ebd, int depth) {
+    double f[3], e[3]; bool above[3];
+    double c[2] = { (P[0][0] + P[1][0] + P[2][0]) / 3, (P[0][1] + P[1][1] + P[2][1]) / 3 };
+    for (int k = 0; k < 3; k++) {
+        f[k] = f0[k];
+        if (!isfinite(f[k])) return;
+        if (fabs(f[k] - C->level) <= C->snap) f[k] = C->level;
+        e[k] = fem_inner(C, P[k], f[k], vbd[k], c);
+        if (!isfinite(e[k])) return;
+        above[k] = e[k] > C->level;
+    }
+    if (depth < FEM_CONTOUR_DEPTH) {
+        double M[3][2], fm[3]; bool sm[3];
+        for (int k = 0; k < 3; k++) {
+            int j = (k + 1) % 3;
+            M[k][0] = 0.5 * (P[k][0] + P[j][0]); M[k][1] = 0.5 * (P[k][1] + P[j][1]);
+            fm[k] = femfn_eval(C->F, M[k][0], M[k][1]);
+            double g = fabs(fm[k] - C->level) <= C->snap ? C->level : fm[k];
+            g = fem_inner(C, M[k], g, ebd[k], c);
+            sm[k] = g > C->level;
+        }
+        double fc = femfn_eval(C->F, c[0], c[1]);
+        int pc = 0, vc = 0;
+        for (int k = 0; k < 3; k++) {
+            int j = (k + 1) % 3;
+            pc += (above[k] != sm[k]) + (sm[k] != above[j]);
+            vc += above[k] != above[j];
+        }
+        bool split = pc != vc || (vc == 0 && isfinite(fc) && (fc > C->level) != above[0]);
+        if (!split && depth >= 1) {
+            /* near a saddle the linear interpolant is a poor model: its
+             * gradient is small against the deviation of f from it at the
+             * midpoints, and the level is within reach */
+            double x1 = P[1][0] - P[0][0], y1 = P[1][1] - P[0][1];
+            double x2 = P[2][0] - P[0][0], y2 = P[2][1] - P[0][1];
+            double det = x1 * y2 - x2 * y1;
+            double d1 = f[1] - f[0], d2 = f[2] - f[0];
+            double gx = (d1 * y2 - d2 * y1) / det, gy = (x1 * d2 - x2 * d1) / det;
+            double g = sqrt(gx * gx + gy * gy);
+            double hlen = sqrt(fabs(det));
+            double dev = 0, lo = f[0], hi = f[0];
+            for (int k = 0; k < 3; k++) {
+                int j = (k + 1) % 3;
+                double dk = fabs(fm[k] - 0.5 * (f[k] + f[j]));
+                if (dk > dev) dev = dk;
+                if (f[k] < lo) lo = f[k];
+                if (f[k] > hi) hi = f[k];
+                if (fm[k] < lo) lo = fm[k];
+                if (fm[k] > hi) hi = fm[k];
+            }
+            if (C->level >= lo - dev && C->level <= hi + dev && dev > 0.1 * g * hlen) split = true;
+        }
+        if (split) {
+            double Q[3][2]; double fq[3]; bool vq[3], eq[3];
+            for (int k = 0; k < 3; k++) {
+                int km = (k + 2) % 3;
+                Q[0][0] = P[k][0]; Q[0][1] = P[k][1]; fq[0] = f0[k]; vq[0] = vbd[k];
+                Q[1][0] = M[k][0]; Q[1][1] = M[k][1]; fq[1] = fm[k]; vq[1] = ebd[k];
+                Q[2][0] = M[km][0]; Q[2][1] = M[km][1]; fq[2] = fm[km]; vq[2] = ebd[km];
+                eq[0] = ebd[k]; eq[1] = false; eq[2] = ebd[km];
+                fem_contour_tri(C, Q, fq, vq, eq, depth + 1);
+            }
+            for (int k = 0; k < 3; k++) {
+                Q[k][0] = M[k][0]; Q[k][1] = M[k][1]; fq[k] = fm[k]; vq[k] = ebd[k]; eq[k] = false;
+            }
+            fem_contour_tri(C, Q, fq, vq, eq, depth + 1);
+            return;
+        }
+    }
+    if (above[0] == above[1] && above[1] == above[2]) return;
+    FemCross cr[2]; int nc = 0;
+    for (int k = 0; k < 3 && nc < 2; k++) {
+        int i = k, j = (k + 1) % 3;
+        if (above[i] == above[j]) continue;
+        bool li = vbd[i] && f[i] == C->level, lj = vbd[j] && f[j] == C->level;
+        if (li && lj && ebd[k]) {
+            /* along a boundary edge on the level: where the inner sign
+             * changes, found on the edge moved inward */
+            double mx = 0.5 * (P[i][0] + P[j][0]), my = 0.5 * (P[i][1] + P[j][1]);
+            double ox = 1e-5 * (c[0] - mx), oy = 1e-5 * (c[1] - my);
+            double pa[2] = { P[i][0] + ox, P[i][1] + oy }, pb[2] = { P[j][0] + ox, P[j][1] + oy };
+            double ga = femfn_eval(C->F, pa[0], pa[1]), gb = femfn_eval(C->F, pb[0], pb[1]);
+            if ((ga > C->level) == (gb > C->level)) continue;
+            cr[nc] = fem_edge_cross(C->F, pa, pb, ga, gb, C->level);
+            cr[nc].x -= ox; cr[nc].y -= oy;
+            cr[nc].bnd = true;
+        } else if (li || lj) {
+            /* from a boundary point on the level into the triangle: the
+             * root inside the edge, bracketed just off the boundary end */
+            double pa[2], pb[2], ga, gb;
+            const double* bp = li ? P[i] : P[j];
+            const double* ip = li ? P[j] : P[i];
+            pa[0] = bp[0] + 1e-5 * (ip[0] - bp[0]); pa[1] = bp[1] + 1e-5 * (ip[1] - bp[1]);
+            pb[0] = ip[0]; pb[1] = ip[1];
+            ga = femfn_eval(C->F, pa[0], pa[1]); gb = li ? e[j] : e[i];
+            if ((ga > C->level) == (gb > C->level)) {
+                /* no root inside: the contour passes through the boundary
+                 * point itself */
+                cr[nc].x = bp[0]; cr[nc].y = bp[1]; cr[nc].bnd = true;
+            } else cr[nc] = fem_edge_cross(C->F, pa, pb, ga, gb, C->level);
+        } else {
+            cr[nc] = fem_edge_cross(C->F, P[i], P[j], f[i], f[j], C->level);
+        }
+        if (li || lj) cr[nc].bnd = true;
+        nc++;
+    }
+    if (nc < 2) return;
+    double dx = cr[1].x - cr[0].x, dy = cr[1].y - cr[0].y;
+    if (dx * dx + dy * dy == 0) return;
+    if (C->ptcap < 1) { C->ptcap = 64; C->pts = realloc(C->pts, sizeof(double) * 2 * (size_t)C->ptcap); }
+    int64_t np = 1;
+    C->pts[0] = cr[0].x; C->pts[1] = cr[0].y;
+    /* a piece ending on the boundary is not bent (the normal search could
+     * land on the boundary's own zero set) */
+    int rec = (cr[0].bnd || cr[1].bnd) ? 0 : (C->maxrec > depth ? C->maxrec - depth : 0);
+    fem_refine_piece(C->F, C->level, cr[0].x, cr[0].y, cr[1].x, cr[1].y, rec,
+                     &C->pts, &np, &C->ptcap);
+    Expr** pl = malloc(sizeof(Expr*) * (size_t)np);
+    for (int64_t k = 0; k < np; k++) {
+        Expr* xy2[2] = { expr_new_real(C->pts[2 * k]), expr_new_real(C->pts[2 * k + 1]) };
+        pl[k] = fem_list(xy2, 2);
+    }
+    Expr* line = expr_new_function(expr_new_symbol(SYM_Line), (Expr*[]){ fem_list(pl, (size_t)np) }, 1);
+    free(pl);
+    if (C->nprim == C->pcap) { C->pcap = C->pcap ? 2 * C->pcap : 256; C->prims = realloc(C->prims, sizeof(Expr*) * C->pcap); }
+    C->prims[C->nprim++] = line;
+}
+
+/* ContourPlot[f, {x, y} in reg, opts]: marching triangles on a mesh of the
+ * region (PlotPoints^2 triangles), the level crossings located on the
+ * function itself along each edge, every contour piece then refined
+ * MaxRecursion times by points moved onto the contour; contour pieces that
+ * run along the region's boundary (a function vanishing there, as a
+ * Dirichlet eigenfunction does) are not contours of the interior and are
+ * left out. */
+Expr* fem_contourplot(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    Expr* spec = res->data.function.args[1];
+    if (!fem_is_region_spec(spec) || spec->data.function.args[0]->data.function.arg_count != 2) return NULL;
+    Expr* vs = spec->data.function.args[0];
+    if (vs->data.function.args[0]->type != EXPR_SYMBOL || vs->data.function.args[1]->type != EXPR_SYMBOL) return NULL;
+    const char* xv = vs->data.function.args[0]->data.symbol.name;
+    const char* yv = vs->data.function.args[1]->data.symbol.name;
+    int pp = 75, maxrec = 4;
+    double* levels = NULL; int nlev = 0; int ncont = 10;
+    for (size_t i = 2; i < res->data.function.arg_count; i++) {
+        Expr* o = res->data.function.args[i];
+        if (!fem_is_option(o) || o->data.function.args[0]->type != EXPR_SYMBOL) continue;
+        const char* nm = o->data.function.args[0]->data.symbol.name;
+        Expr* v = eval_and_free(expr_copy(o->data.function.args[1]));
+        double d;
+        if (nm == intern_symbol("PlotPoints") && fem_num(v, &d) && d >= 4) pp = (int)d;
+        else if (nm == intern_symbol("MaxRecursion") && fem_num(v, &d) && d >= 0) maxrec = (int)(d > 8 ? 8 : d);
+        else if (nm == intern_symbol("Contours")) {
+            if (head_is(v, SYM_List)) {
+                nlev = (int)v->data.function.arg_count;
+                levels = malloc(sizeof(double) * (size_t)(nlev ? nlev : 1));
+                for (int k = 0; k < nlev; k++)
+                    if (!fem_num(v->data.function.args[k], &levels[k])) levels[k] = NAN;
+            } else if (fem_num(v, &d) && d >= 1) ncont = (int)d;
+        }
+        expr_free(v);
+    }
+    /* the function: lhs - rhs of an equation (level 0) */
+    Expr* body = res->data.function.args[0];
+    Expr* fbody;
+    bool equation = head_is(body, SYM_Equal) && body->data.function.arg_count == 2;
+    Expr* vars[2] = { expr_copy(vs->data.function.args[0]), expr_copy(vs->data.function.args[1]) };
+    void* frame = mth_block_enter(vars, 2);
+    if (equation) fbody = eval_and_free(nd_call2(SYM_Subtract, expr_copy(body->data.function.args[0]),
+                                            expr_copy(body->data.function.args[1])));
+    else fbody = evaluate(body);
+    mth_block_leave(frame);
+    expr_free(vars[0]); expr_free(vars[1]);
+    if (equation && nlev == 0) { levels = malloc(sizeof(double)); levels[0] = 0; nlev = 1; }
+
+    FemGeom g; const char* why;
+    if (!fem_region(spec->data.function.args[1], &g, &why)) { expr_free(fbody); free(levels); return NULL; }
+    FemMeshOpts mo;
+    mo.max_area = fabs(fem_geom_area(&g)) / ((double)pp * pp);
+    mo.max_bedge = -1; mo.max_vertices = 2000000; mo.grade_corners = false;
+    FemMesh m;
+    bool ok = fem_mesh_build(&g, &mo, &m, &why);
+    fem_geom_free(&g);
+    if (!ok) { expr_free(fbody); free(levels); return NULL; }
+
+    FemFn F; femfn_init(&F, fbody, xv, yv);
+    /* values at the mesh vertices */
+    int64_t nv = m.nvert;
+    double* fv = malloc(sizeof(double) * (size_t)nv);
+    double fmin = INFINITY, fmax = -INFINITY;
+    for (int64_t i = 0; i < nv; i++) {
+        fv[i] = femfn_eval(&F, m.x[2 * i], m.x[2 * i + 1]);
+        if (isfinite(fv[i])) { if (fv[i] < fmin) fmin = fv[i]; if (fv[i] > fmax) fmax = fv[i]; }
+    }
+    if (nlev == 0) {
+        nlev = ncont;
+        levels = malloc(sizeof(double) * (size_t)nlev);
+        for (int k = 0; k < nlev; k++) levels[k] = fmin + (k + 1) * (fmax - fmin) / (nlev + 1);
+    }
+    double scale = fmax > -fmin ? fmax : -fmin;
+    if (!(scale > 0)) scale = 1;
+    /* boundary vertices */
+    unsigned char* vb = calloc((size_t)nv, 1);
+    for (int64_t b = 0; b < m.nb; b++) vb[m.bedge[3 * b]] = vb[m.bedge[3 * b + 1]] = 1;
+
+    FemContour C; memset(&C, 0, sizeof C);
+    C.F = &F; C.maxrec = maxrec;
+    for (int li = 0; li < nlev; li++) {
+        C.level = levels[li];
+        if (!isfinite(C.level)) continue;
+        C.snap = 1e-14 * scale;
+        for (int64_t e = 0; e < m.ne; e++) {
+            const int64_t* t = m.tri + 6 * e;
+            double P[3][2], val[3]; bool vbd[3], ebd[3];
+            for (int k = 0; k < 3; k++) {
+                P[k][0] = m.x[2 * t[k]]; P[k][1] = m.x[2 * t[k] + 1];
+                val[k] = fv[t[k]]; vbd[k] = vb[t[k]] != 0;
+            }
+            /* edge k = (k, k+1) is a boundary edge: its midside node is a
+             * boundary node */
+            for (int k = 0; k < 3; k++) ebd[k] = m.bnode[t[3 + k]] && vbd[k] && vbd[(k + 1) % 3];
+            fem_contour_tri(&C, P, val, vbd, ebd, 0);
+        }
+    }
+    Expr** prims = C.prims; size_t nprim = C.nprim;
+    double* pts = C.pts;
+    free(pts); free(vb); free(fv); free(levels);
+    femfn_free(&F);
+    expr_free(fbody);
+    Expr* r0[2] = { expr_new_real(m.bbox[0]), expr_new_real(m.bbox[1]) };
+    Expr* r1[2] = { expr_new_real(m.bbox[2]), expr_new_real(m.bbox[3]) };
+    Expr* pr[2] = { fem_list(r0, 2), fem_list(r1, 2) };
+    fem_mesh_free(&m);
+    Expr* ga[3] = { fem_list(prims, nprim),
+                    nd_call2(SYM_Rule, expr_new_symbol(intern_symbol("PlotRange")), fem_list(pr, 2)),
+                    nd_call2(SYM_Rule, expr_new_symbol(intern_symbol("Frame")), expr_new_symbol(SYM_True)) };
+    free(prims);
+    return expr_new_function(expr_new_symbol(intern_symbol("Graphics")), ga, 3);
+}
+
+/* ------------------------------------------------------------------ */
 /*  NDSolve                                                            */
 /* ------------------------------------------------------------------ */
 

@@ -43,4 +43,8 @@ Expr* fem_interp_apply(Expr* ifun, Expr** call_args, size_t argc);
  * that same region: the integral element by element. NULL otherwise. */
 Expr* fem_nintegrate(Expr* body, Expr** specs, size_t nspec);
 
+/* ContourPlot[f, {x, y} in reg, opts]: contours on a mesh of the region
+ * (Graphics), or NULL. `res` is the held call. */
+Expr* fem_contourplot(Expr* res);
+
 #endif /* MATHILDA_FEM_H */
