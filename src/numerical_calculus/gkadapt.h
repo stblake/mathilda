@@ -59,4 +59,19 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
                               int max_subdiv, long max_eval,
                               bool extrapolate);
 
+/* gk_integrate_machine with an endpoint singularity handler: when bisection
+ * has narrowed a panel touching a or b to (b-a) 2^-sing_depth, that panel is
+ * integrated by tanh-sinh (accepted only when it converges and agrees with
+ * the Kronrod value within the panel's error estimate) instead of being halved
+ * again -- the analogue of a SingularityHandler applied after SingularityDepth
+ * bisections.  An integrable algebraic/log endpoint singularity then costs one
+ * double-exponential panel, and the result carries close to machine precision
+ * where bisection to the goal left only ~3 digits beyond it.  sing_depth <= 0
+ * disables the handler (gk_integrate_machine). */
+GkResult gk_integrate_machine_ex(GkSampleMachine f, void* ctx,
+                                 double a, double b,
+                                 double abstol, double reltol,
+                                 int max_subdiv, long max_eval,
+                                 bool extrapolate, int sing_depth);
+
 #endif /* MATHILDA_GKADAPT_H */

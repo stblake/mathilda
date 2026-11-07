@@ -892,14 +892,30 @@ static void test_tiny_integrand_scale(void) {
 }
 
 /* Machine-precision NIntegrate delivers the digits the machine can, not just
- * PrecisionGoal (true values: mpmath at 40 digits, or closed forms).  QK15
- * carried its nodes and weights to 15 significant digits; the Kronrod weights
- * summed to 2 - 6e-15, a 3e-15 relative error in EVERY integral: Sin[x^3] on
- * [0, 3] had 14 digits (3.3e-15), now 1 ulp. */
+ * PrecisionGoal (true values: mpmath tanh-sinh at 40 digits, or closed forms).
+ *  - QK15 carried its nodes and weights to 15 significant digits; the Kronrod
+ *    weights summed to 2 - 6e-15, a 3e-15 relative error in EVERY integral:
+ *    Sin[x^3] on [0, 3] had 14 digits (3.3e-15), now 1 ulp.
+ *  - An integrable endpoint singularity was bisected until the error estimate
+ *    met the 1e-8 goal, leaving ~11 digits: (1-x^4)^(1/4) 4.4e-12, Sqrt[x]
+ *    3.4e-12, Pi - 2 ArcSin[1 - Sin[x]] 3.5e-12 (a hidden sqrt at both ends).
+ *    The endpoint panel is now settled by tanh-sinh after 4 halvings. */
 static void test_machine_last_digits(void) {
     ASSERT_REL("NIntegrate[Sin[x^3], {x, 0, 3}]",
                "0.4564240461870738388407399501352734962993`40", "1*^-15");
     ASSERT_REL("NIntegrate[Exp[x], {x, 0, 1}]", "E - 1", "5*^-16");
+    ASSERT_REL("NIntegrate[2 (1 - x^4)^(1/4), {x, -1, 1}]",
+               "3.708149354602743836867700694390520092435`40", "1*^-15");
+    ASSERT_REL("NIntegrate[Pi - 2 ArcSin[1 - Sin[x]], {x, 0, Pi}]",
+               "7.294882384504139948018321633528322796869`40", "1*^-15");
+    ASSERT_REL("NIntegrate[Sqrt[x], {x, 0, 1}]", "2/3", "1*^-15");
+    ASSERT_REL("NIntegrate[Sqrt[1 - x^2], {x, -1, 1}]", "Pi/2", "1*^-15");
+    ASSERT_REL("NIntegrate[Sqrt[x] Log[x], {x, 0, 1}]", "-4/9", "1*^-15");
+    ASSERT_REL("NIntegrate[x^(-3/4), {x, 0, 1}]", "4", "1*^-15");
+    /* a fast oscillation running into the upper end (SIAM problem 6 of
+     * appendix D) also takes the tanh-sinh end panel: 13 digits -> 15 */
+    ASSERT_REL("NIntegrate[Exp[x + Sin[Exp[Exp[x + 1/3]]]], {x, -1, 1}]",
+               "3.070993788451709547418076196696115317568`40", "1*^-14");
 }
 
 /* Oscillatory half lines at WorkingPrecision with several frequencies or a

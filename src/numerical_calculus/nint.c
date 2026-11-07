@@ -1345,12 +1345,19 @@ static void ni_consider(NiAtt* best, NiAtt a) {
         *best = a;
 }
 
+#define NI_GK_SING_DEPTH 4   /* halvings at an endpoint before tanh-sinh */
+
 static NiAtt ni_try_gk(NiCtx* ctx, double a, double b, const NiOpts* o,
                        double reltol, double abstol) {
     int max_subdiv; long max_eval;
     ni_gk_budget(o, &max_subdiv, &max_eval);
-    GkResult R = gk_integrate_machine(ni_sample_machine, ctx, a, b,
-                                      abstol, reltol, max_subdiv, max_eval, true);
+    /* Endpoint singularity handler after NI_GK_SING_DEPTH halvings at an end
+     * (gkadapt.h): an integrable x^alpha / Log endpoint is then settled by one
+     * tanh-sinh panel, where bisecting it to the goal left ~3 digits beyond
+     * PrecisionGoal (11 of 15 on (1-x^4)^(1/4)). */
+    GkResult R = gk_integrate_machine_ex(ni_sample_machine, ctx, a, b,
+                                         abstol, reltol, max_subdiv, max_eval, true,
+                                         NI_GK_SING_DEPTH);
     NiAtt out;
     out.have = (R.status != GK_NONNUMERIC);
     out.conv = (R.status == GK_OK);

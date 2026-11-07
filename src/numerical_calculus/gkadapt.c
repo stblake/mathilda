@@ -11,6 +11,7 @@
 
 #include "gkadapt.h"
 #include "seqaccel.h"
+#include "denint.h"   /* tanh-sinh: the endpoint singularity handler */
 
 #include <float.h>
 #include <math.h>
@@ -111,6 +112,7 @@ typedef struct {
     double a, b;
     double _Complex result;
     double err;
+    double perr;   /* error estimate of the parent panel (INFINITY at the root) */
 } Panel;
 
 typedef struct { Panel* v; int n, cap; } Heap;
@@ -145,11 +147,65 @@ static bool heap_push(Heap* h, Panel p) {
 }
 static Panel heap_pop(Heap* h) { Panel top = h->v[0]; h->n--; h->v[0] = h->v[h->n]; heap_down(h, 0); return top; }
 
+/* ---- endpoint singularity handler ---- */
+
+/* Counting thunk: the tanh-sinh panel rule samples through this so its
+ * evaluations are charged to the run's n_eval / max_eval budget. */
+typedef struct { GkSampleMachine f; void* ctx; long n; } GkCount;
+static bool gk_count_sample(void* v, double x, double _Complex* out) {
+    GkCount* c = (GkCount*)v;
+    c->n++;
+    return c->f(c->ctx, x, out);
+}
+
+/* Tanh-sinh levels for one endpoint panel: level L costs ~9 * 2^L samples and
+ * the levels are not nested, so 6 bounds a panel at ~1100 samples.  An
+ * algebraic or logarithmic endpoint singularity converges by level 3-5. */
+#define GK_SING_DE_LEVELS 6
+
+/* Integrate an endpoint panel [pa,pb] by tanh-sinh, whose double-exponential
+ * clustering resolves an integrable endpoint singularity that bisection only
+ * approaches algebraically (x^-1/2, (1-x)^1/4, Log[x], ...).  The rule is
+ * asked for the run's relative tolerance on the panel; the level difference it
+ * converges on is the error of the level BEFORE the last, so the returned
+ * value is accurate to roughly the square of that tolerance.  Accepted only
+ * when it converged and agrees with the Kronrod value to within the panel's
+ * own error estimate (+ the new one): a panel the rule cannot resolve, or a
+ * near-endpoint feature it misjudges, is left to ordinary bisection. */
+static bool gk_sing_panel(GkSampleMachine f, void* ctx, const Panel* p,
+                          double reltol, long* nev,
+                          double _Complex* val, double* err) {
+    GkCount cc = { f, ctx, 0 };
+    double _Complex v; double e;
+    double rt = reltol > 1e-14 ? reltol : 1e-14;
+    bool conv = denint_tanhsinh_machine(gk_count_sample, &cc, p->a, p->b, rt,
+                                        GK_SING_DE_LEVELS, &v, &e);
+    *nev += cc.n;
+    if (!conv || !isfinite(creal(v)) || !isfinite(cimag(v)) || !isfinite(e))
+        return false;
+    if (cabs(v - p->result) > p->err + e + 50.0 * DBL_EPSILON * cabs(v))
+        return false;
+    /* roundoff floor, as qk15's */
+    double floor_err = 50.0 * DBL_EPSILON * cabs(v);
+    *val = v;
+    *err = e > floor_err ? e : floor_err;
+    return true;
+}
+
 GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
                               double a, double b,
                               double abstol, double reltol,
                               int max_subdiv, long max_eval,
                               bool extrapolate) {
+    return gk_integrate_machine_ex(f, ctx, a, b, abstol, reltol, max_subdiv,
+                                   max_eval, extrapolate, 0);
+}
+
+GkResult gk_integrate_machine_ex(GkSampleMachine f, void* ctx,
+                                 double a, double b,
+                                 double abstol, double reltol,
+                                 int max_subdiv, long max_eval,
+                                 bool extrapolate, int sing_depth) {
     GkResult R;
     R.value = 0.0; R.abs_err = 0.0; R.status = GK_NONNUMERIC;
     R.n_eval = 0; R.n_subdiv = 0;
@@ -160,7 +216,7 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
     if (reltol < 0.0) reltol = 0.0;
 
     Panel p0;
-    p0.a = a; p0.b = b;
+    p0.a = a; p0.b = b; p0.perr = INFINITY;
     if (!qk15(f, ctx, a, b, &p0.result, &p0.err, NULL, NULL, &R.n_eval))
         return R;   /* non-numeric on the whole interval */
 
@@ -169,6 +225,16 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
 
     double _Complex total = p0.result;
     double total_err = p0.err;
+
+    /* Endpoint singularity handler (sing_depth > 0): a panel touching a or b
+     * that bisection has already narrowed to (b-a) 2^-sing_depth is settled by
+     * tanh-sinh (gk_sing_panel) instead of being halved again, and leaves the
+     * heap.  One attempt per endpoint: a decline returns that end to plain
+     * bisection for the rest of the run. */
+    double sing_w = (sing_depth > 0 && sing_depth < 60)
+                  ? (b - a) * ldexp(1.0, -sing_depth) : -1.0;
+    bool sing_tried_lo = false, sing_tried_hi = false;
+    double _Complex settled = 0.0;   /* sum of the settled panels' values */
 
     /* Extrapolation: feed the running total after each bisection to Wynn. */
     double _Complex* seq = NULL;
@@ -180,6 +246,36 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
         if (total_err <= tol) { R.status = GK_OK; break; }
 
         Panel worst = heap_pop(&h);
+        bool at_lo = (worst.a == a), at_hi = (worst.b == b);
+        /* Singular signature: still the worst panel after sing_depth halvings,
+         * and the last halving bought less than a factor 20 (an analytic panel
+         * gains ~2^-20 a halving once resolved; x^alpha only 2^-(1+alpha)).
+         * An under-resolved oscillation running into the end (Sin[Exp[Exp[x]]]
+         * at the upper limit) passes too, deliberately: tanh-sinh resolves that
+         * panel as well, and the run ends at 15 digits where bisecting it to
+         * the goal ended at 13, for ~40% more samples. */
+        if (sing_w > 0.0 && (worst.b - worst.a) <= sing_w
+            && worst.err > 0.05 * worst.perr
+            && ((at_lo && !sing_tried_lo) || (at_hi && !sing_tried_hi))) {
+            if (at_lo) sing_tried_lo = true; else sing_tried_hi = true;
+            double _Complex sv; double se;
+            if (gk_sing_panel(f, ctx, &worst, reltol, &R.n_eval, &sv, &se)) {
+                /* settled: out of the heap, its value and error kept in the
+                 * running totals; the extrapolation sequence restarts, since
+                 * the running sum just jumped */
+                total += sv - worst.result;
+                settled += sv;
+                total_err += se - worst.err;
+                if (total_err < 0.0) total_err = 0.0;
+                seq_n = 0;
+                if (h.n == 0) {
+                    R.status = (total_err <= fmax(abstol, reltol * cabs(total)))
+                             ? GK_OK : GK_NOCONV;
+                    break;
+                }
+                continue;
+            }
+        }
         double mid = 0.5 * (worst.a + worst.b);
         if (!(mid > worst.a && mid < worst.b)) {
             /* Interval too narrow to bisect (floating-point underflow toward an
@@ -191,6 +287,7 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
         Panel left, right;
         left.a = worst.a; left.b = mid;
         right.a = mid; right.b = worst.b;
+        left.perr = right.perr = worst.err;
         bool okl = qk15(f, ctx, left.a, left.b, &left.result, &left.err, NULL, NULL, &R.n_eval);
         bool okr = qk15(f, ctx, right.a, right.b, &right.result, &right.err, NULL, NULL, &R.n_eval);
         if (!okl || !okr) {
@@ -225,7 +322,7 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
      * final panels with Neumaier's compensated sum: O(panels), and the value
      * is then as accurate as the panel results themselves. */
     if (R.n_subdiv > 0) {
-        double sr = 0.0, si = 0.0, cr = 0.0, ci = 0.0;
+        double sr = creal(settled), si = cimag(settled), cr = 0.0, ci = 0.0;
         for (int i = 0; i < h.n; i++) {
             double xr = creal(h.v[i].result), xi = cimag(h.v[i].result);
             double tr = sr + xr, ti = si + xi;
