@@ -5,6 +5,7 @@
 # first). Runs `make install` into a scratch prefix, then, using ONLY the
 # installed files (never the source tree):
 #
+#   0. CLI     — the installed executable starts and loads bootstrap modules;
 #   1. shared  — a C host linked with -lmathilda evaluates through the shared
 #                library with no $MATHILDA_HOME and from a CWD outside the repo,
 #                so the library must locate share/mathilda/internal itself
@@ -53,6 +54,23 @@ for f in include/mathilda_ffi.h lib/libmathilda.a lib/pkgconfig/mathilda.pc \
          share/mathilda/internal/init.m; do
     [ -f "$PREFIX/$f" ] || bad files "missing $PREFIX/$f"
 done
+
+cat >"$WORK/startup.m" <<'EOF'
+Print[2 + 2];
+Print[HeavisideTheta[0]];
+Print[$InstallationDirectory];
+EOF
+if out=$(cd "$WORK" && env -u MATHILDA_HOME \
+         "$PREFIX/bin/Mathilda" -file "$WORK/startup.m" 2>&1); then
+    expected=$(printf '4\n0\n%s' "$(cd "$PREFIX" && pwd -P)")
+    if [ "$out" = "$expected" ]; then
+        say CLI "ok (startup, bootstrap, installation directory)"
+    else
+        bad CLI "unexpected output: $out"
+    fi
+else
+    bad CLI "startup failed: $out"
+fi
 
 # Host program: optional argv[1] = module-tree directory (static case).
 cat >"$WORK/host.c" <<'EOF'
