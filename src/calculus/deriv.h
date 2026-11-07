@@ -18,6 +18,25 @@
  * multiple times; idempotent with respect to attributes. */
 void deriv_init(void);
 
+/* Numeric values of derivatives that stay symbolically inert.
+ *
+ * D[RiemannR[x], x] is the inert Derivative[1][RiemannR][x] (as in the
+ * reference), yet Derivative[1][RiemannR][2.] should be a number, so that
+ * FindRoot and friends can Newton on it.  A special-function module
+ * registers a C evaluator for its function name; the evaluator calls it for
+ * every application Derivative[n..][f][args..] whose innermost head is f.
+ * The evaluator gets the whole application (borrowed) and returns a new
+ * value, or NULL to leave it inert (symbolic or exact arguments, an order it
+ * does not provide).  This is a system rule, not a user SubValue: it does
+ * not appear in SubValues[Derivative].  fname must be interned. */
+typedef Expr* (*DerivNumericFn)(const Expr* call);
+void deriv_register_numeric(const char* fname, DerivNumericFn fn);
+/* The registered evaluator for dop = Derivative[n..][f], or NULL. */
+DerivNumericFn deriv_numeric_for(const Expr* dop);
+/* Apply the registered evaluator to call = Derivative[n..][f][args..]:
+ * a new value, or NULL. */
+Expr* deriv_apply_numeric(const Expr* call);
+
 /* Public built-ins. The semantics follow Mathematica:
  *   D[f, x]              -- partial derivative of f with respect to x.
  *   D[f, {x, n}]         -- n-th partial derivative (n >= 0).

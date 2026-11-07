@@ -3506,6 +3506,17 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     }
                 }
 #endif
+                /* Derivative[n..][f][args]: a numeric value registered by
+                 * f's module (deriv.h) -- a system rule, not a SubValue. */
+                if (inner->type == EXPR_SYMBOL &&
+                    inner->data.symbol.name == SYM_Derivative) {
+                    Expr* dv = deriv_apply_numeric(res);
+                    if (dv) {
+                        expr_free(res);
+                        *changed = true;
+                        return dv;
+                    }
+                }
                 if (sdef && sdef->sub_values) {
                     Expr* sub = apply_sub_values(sdef, res);
                     if (sub) {

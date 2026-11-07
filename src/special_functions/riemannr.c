@@ -52,6 +52,15 @@
 #include "riemannr.h"
 
 #include <math.h>
+#ifndef M_E
+#define M_E 2.71828182845904523536
+#endif
+#ifndef M_LN2
+#define M_LN2 0.693147180559945309417
+#endif
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdbool.h>
 #include <limits.h>
 #include <stdint.h>
@@ -68,7 +77,8 @@
 #include "sf_scalar.h"
 #include "sym_names.h"
 #include "symtab.h"
-#include "parse.h"          /* the Derivative[1][RiemannR] SubValue */
+#include "sym_intern.h"     /* intern_symbol */
+#include "deriv.h"            /* deriv_register_numeric */
 #ifdef MATHILDA_THREADS
 #include <pthread.h>
 #endif
@@ -839,6 +849,26 @@ Expr* builtin_riemannr_prime(Expr* res) {
 #endif
 }
 
+/* Derivative[1][RiemannR][z] for an inexact number z (else NULL: inert). */
+static Expr* rr_derivative_value(const Expr* call) {
+    const Expr* dop = call->data.function.head;
+    const Expr* d = dop->data.function.head;          /* Derivative[n] */
+    if (d->data.function.arg_count != 1 || d->data.function.args[0]->type != EXPR_INTEGER ||
+        d->data.function.args[0]->data.integer != 1 || call->data.function.arg_count != 1)
+        return NULL;
+    Expr* z = call->data.function.args[0];
+    /* an inexact number: a Real / MPFR leaf or a Complex of them */
+    bool num = z->type == EXPR_REAL
+#ifdef USE_MPFR
+               || z->type == EXPR_MPFR
+#endif
+               || (z->type == EXPR_FUNCTION && z->data.function.head->type == EXPR_SYMBOL &&
+                   z->data.function.head->data.symbol.name == SYM_Complex);
+    if (!num || !arg_is_inexact(z)) return NULL;
+    Expr* a[1] = { expr_copy(z) };
+    return eval_and_free(expr_new_function(expr_new_symbol(intern_symbol("Internal`RiemannRPrime")), a, 1));
+}
+
 void riemannr_init(void) {
 #ifdef USE_MPFR
     rr_mu_sieve();
@@ -847,20 +877,15 @@ void riemannr_init(void) {
     symtab_get_def("RiemannR")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
     symtab_add_builtin("Internal`RiemannRPrime", builtin_riemannr_prime);
-    symtab_get_def("Internal`RiemannRPrime")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
-    /* Derivative[1][RiemannR][z_?InexactNumberQ] :> Internal`RiemannRPrime[z]:
-     * D[RiemannR[x], x] stays the inert Derivative[1][RiemannR][x] (as in the
-     * reference), but it has a VALUE at an inexact point, so FindRoot and
-     * friends Newton on it instead of differencing.  The pattern variable
-     * lives in Internal` so no user symbol can capture it. */
-    {
-        Expr* lhs = parse_expression(
-            "Derivative[1][RiemannR][Internal`rrz_?InexactNumberQ]");
-        Expr* rhs = parse_expression("Internal`RiemannRPrime[Internal`rrz]");
-        if (lhs && rhs) symtab_add_sub_value("Derivative", lhs, rhs, true);  /* copies */
-        expr_free(lhs); expr_free(rhs);
-    }
+    /* An implementation detail reached only through the derivative registry,
+     * not a user numeric head: no NumericFunction (so no Compile surface is
+     * owed; Compile of Derivative[1][RiemannR] is the inert derivative). */
+    symtab_get_def("Internal`RiemannRPrime")->attributes |= ATTR_PROTECTED;
+    /* Derivative[1][RiemannR][z] at an inexact z has a value (R'(z)), while
+     * D[RiemannR[x], x] stays the inert Derivative[1][RiemannR][x], as in the
+     * reference.  Registered with the derivative registry (deriv.h), so it is
+     * a system rule and SubValues[Derivative] stays empty. */
+    deriv_register_numeric(intern_symbol("RiemannR"), rr_derivative_value);
     symtab_set_docstring("RiemannR",
         "RiemannR[x]\n"
         "\tRiemann's prime-counting function R(x) = Sum_k MoebiusMu[k]/k LogIntegral[x^(1/k)],\n"
