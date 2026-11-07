@@ -28,7 +28,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [ ] open: hc1.7 Cos[Exp[1/x]] (needs u=e^(1/x)); hc6 machine 1-2d short of scipy, hc6.7 3-D; hc6 wp50 MPFR cubature; NIntegrate::accgl prints ~1e-13 for Automatic goals; hd4.7 NSum of Lambda(k)/k^s; d16 NDSolveValue heat PDE (pdeic); NDEigen*/FEM (192,193,219,222,223)
   - [x] v0.6408-11 NIntegrate parametric oscillatory correctness (C9 machine 2->10d), SQP for linear constraints + MPFR linear constraints (D19 488->22.5 s, wp50 50d), cbrt(eps) central step, minimax epigraph (C5 7.6->14d, wp50 50d; hc5 all correct)
   - [ ] open (optimiser): hc9 machine 6-9d (NIntegrate default-goal accuracy); hd19.10 wp50 18d; nonlinear constraints at WP
-  - [ ] FEM agent: d16 pdeic, hd15.7 MOL WP60, NDEigenvalues/NDEigensystem/Poisson on polygons (D14/D17/D18 + holdouts)
+  - [x] v0.6412-17 NDSolve PDE variable order (d16 pdeic), exact MOL at WP (hd15.7 32d), FEM: NDEigenvalues/NDEigensystem/NDSolve on planar regions (P2, Delaunay, graded), NIntegrate over a mesh, ContourPlot over a region; d14 8d (WL 3), d18 Koch 0.024 off (WL 0.052), d17 5.2d (WL 0)
+  - [ ] open (FEM): 10-digit FEM targets need P3+/Richardson; 191 Daubechies data (25-pt default grid vs t~5e-7); hd16 rough data 1-3d (grid from initial data); FEM is machine-only; hd14.6/.10 corner predicate; hd17 crossing nodal lines ~3d
   - [x] wave 2 agents (done): absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
