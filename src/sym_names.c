@@ -915,6 +915,8 @@ const char* SYM_Circle = NULL;
 const char* SYM_Disk = NULL;
 const char* SYM_Annulus = NULL;
 const char* SYM_Area = NULL;
+const char* SYM_HaarWavelet = NULL;
+const char* SYM_DaubechiesWavelet = NULL;
 const char* SYM_Polygon = NULL;
 const char* SYM_Text = NULL;
 const char* SYM_Show = NULL;
@@ -2066,6 +2068,8 @@ void sym_names_init(void) {
     SYM_Disk                       = intern_symbol("Disk");
     SYM_Annulus                    = intern_symbol("Annulus");
     SYM_Area                       = intern_symbol("Area");
+    SYM_HaarWavelet                = intern_symbol("HaarWavelet");
+    SYM_DaubechiesWavelet          = intern_symbol("DaubechiesWavelet");
     SYM_Polygon                    = intern_symbol("Polygon");
     SYM_Text                       = intern_symbol("Text");
     SYM_Show                       = intern_symbol("Show");

@@ -600,6 +600,7 @@ set(COMMON_SRC
     ../src/tc_unwind_safe.c
     ../src/geometry.c
     ../src/geometry_curves.c
+    ../src/wavelets.c
     ../src/numloop.c
     ../src/boolean.c
     ../src/names.c
@@ -4174,6 +4175,10 @@ target_include_directories(cuberoot_tests PRIVATE ../src)
 
 add_executable(rotationmatrix_tests test_rotationmatrix.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(rotationmatrix_tests PRIVATE ../src)
+
+add_executable(wavelets_tests test_wavelets.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(wavelets_tests PRIVATE ../src)
+
 add_executable(elliptic_tests test_elliptic.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(elliptic_tests PRIVATE ../src)
 add_test(NAME elliptic_tests COMMAND elliptic_tests)

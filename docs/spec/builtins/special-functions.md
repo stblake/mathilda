@@ -4715,6 +4715,43 @@ Abs[x]^(1/n)` for odd `n`, `x^(1/n)` for even `n` and `x ≥ 0` — unlike
 - A non-real number emits `CubeRoot::preal` and stays unevaluated
   (`CubeRoot[I]`); a packed buffer with such an element goes to the List path.
 
+## HaarWavelet, DaubechiesWavelet, WaveletPhi, WaveletPsi, WaveletFilterCoefficients
+
+`WaveletPhi[wave, x]` / `WaveletPsi[wave, x]`: the scaling and wavelet function
+of `HaarWavelet[]` or `DaubechiesWavelet[n]` (`n` vanishing moments, `2n` taps;
+`DaubechiesWavelet[] = DaubechiesWavelet[2]`). Options `MaxRecursion ->
+Automatic` (= 8) and `WorkingPrecision -> MachinePrecision`. src/wavelets.c.
+
+- Haar: the exact step functions -- `phi = 1` on `[0, 1)`; `psi = 1` on
+  `(0, 1/2)`, `-1` on `(1/2, 1)`, else 0 (`psi(0) = psi(1/2) = 0`), returned as
+  Reals; a symbolic `x` gives the reference's `Piecewise`.
+- Daubechies: the cascade's exact values on the dyadic grid of spacing
+  `2^-MaxRecursion` -- `phi` at the integers from the two-scale eigenproblem
+  (normalised `Sum phi(k) = 1`), each finer level from `phi(x) = 2 Sum h_k
+  phi(2x - k)`, and `psi(x) = 2 Sum g_k phi(2x - k)`, `g_k = (-1)^k h_(1-k)`
+  (support `[1 - n, n]`) -- LINEARLY interpolated between grid points, which is
+  what the reference returns: `WaveletPhi[DaubechiesWavelet[2], 1.3] =
+  0.34067377391167836263936642769158893255...` (40 digits agree). A symbolic `x`
+  gives `Piecewise[{{InterpolatingFunction[..][x], 0 <= x <= 2n - 1}}, 0]` (an
+  order-1 `Interpolation` of the grid), so it can serve as an `NDSolve` initial
+  condition.
+- The filter: spectral factorisation of `P(y) = Sum_(k<n) Binomial[n-1+k, k] y^k`
+  -- its roots by Durand-Kerner in MPFR complex, `z + 1/z = 2 - 4y`, the root
+  with `|z| < 1` kept, `h` the reversed, normalised (`Sum h = 1`) coefficients of
+  `(1 + z)^n Prod (z - z_j)`. This reproduces the reference's ordering
+  (`{0.3415, 0.5915, 0.1585, -0.0915}` for `n = 2`; `n = 3` to 25 digits).
+  `WaveletFilterCoefficients[wave, "PrimalLowpass" | "PrimalHighpass"]` returns
+  it as `{{k, h_k}, ...}` (highpass indices `2 - 2n .. 1`).
+- Precision: the smaller of `WorkingPrecision` and the precision of `x`; an exact
+  `x` takes the `WorkingPrecision`, so the default is a machine number
+  (`WaveletPhi[w, 1/3]` is a Real), as in the reference.
+- The grid is memoised per `(n, MaxRecursion, precision)`; `NIntegrate` and
+  `NDSolve` sample `phi` thousands of times.
+- Deliberate difference: a List `x` is mapped element-wise (the reference
+  returns a `Piecewise` over the whole list).
+- Attributes: `Protected` (all five heads). No packed / `NDArray` / `Compile`
+  surface: the first argument is a wavelet object, not a number.
+
 ## KroneckerDelta
 
 `KroneckerDelta[n1, n2, ...]` is 1 when every `ni` is equal and 0 when any two

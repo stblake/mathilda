@@ -174,6 +174,7 @@
 #include "parfrac.h"
 #include "contfrac.h"
 #include "geometry.h"
+#include "wavelets.h"
 #include "random.h"
 #include "picostrings.h"
 #include "series.h"
@@ -399,6 +400,7 @@ void core_init(void) {
     contfrac_init();
     modular_init();
     geometry_init();
+    wavelets_init();
     symtab_add_builtin("AtomQ", builtin_atomq);
     symtab_add_builtin("Identity", builtin_identity);
     symtab_get_def("Identity")->attributes |= ATTR_PROTECTED;
