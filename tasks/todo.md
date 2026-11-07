@@ -23,7 +23,11 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [ ] open (NSum agent): MPFR compiler lacks With[] and Sech (hc10.9 wp50 903 ms); hd20.9 wp50 Series 59 s; hd4.4 Moebius-li series ~4d; hc8.7-10 machine 1d short in FindRoot
   - [x] v0.6394-97 FoldList compiled over exact elements (d10 1677 -> 62 ms), packed RandomChoice (hd10 330 -> 13 ms), Partition overhang forms (d18 105 s -> 0.46 s), Table exact-rational kernel (c3 447 -> 70 ms); full unit tier 620/620 at v0.6397
   - [ ] open (speed agent): hc3.10 transcendental Table body 34 ms; d10.wp50 bignum loop 3.7x slower, 2d vs 3d
-  - [ ] wave 2 agents: absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
+  - [x] v0.6398-6400 NIntegrate: oscillatory endpoint rule at WP (C1 wp50 0->50d/0.36 s; hc1 wp50 50d), 2-D point singularities (c6 7->11d, hc6 10-12d), MPFR lobes with inexact params (c9 wp50 timeout -> 48d)
+  - [x] v0.6401-6407 MangoldtLambda, CubeRoot, RiemannR (+ derivative registry deriv.h, v0.6407), RotationMatrix, ArcLength/RegionMeasure/Annulus, WaveletPhi/Psi; full tier 625/625
+  - [ ] open: hc1.7 Cos[Exp[1/x]] (needs u=e^(1/x)); hc6 machine 1-2d short of scipy, hc6.7 3-D; hc6 wp50 MPFR cubature; NIntegrate::accgl prints ~1e-13 for Automatic goals; hd4.7 NSum of Lambda(k)/k^s; d16 NDSolveValue heat PDE (pdeic); NDEigen*/FEM (192,193,219,222,223)
+  - [ ] optimiser follow-up agent: C9 NMaximize wrong peak, D19 speed + MPFR constraints, C5 minimax
+  - [x] wave 2 agents (done): absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
 - [ ] Phase 6: final run, holdout B once, verdict
