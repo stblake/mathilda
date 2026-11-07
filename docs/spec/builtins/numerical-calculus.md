@@ -1825,10 +1825,25 @@ semi-discrete Schrödinger eigenmode and by norm conservation (`Σ|ψ|²` drifts
 
 **Arbitrary precision.** `WorkingPrecision -> p` (p > machine) runs the MPFR
 integrator on the discretized system, giving an MPFR-valued 2-D
-`InterpolatingFunction` (1-D PDEs). Explicit methods handle non-stiff PDEs (wave,
-advection); **stiff diffusion uses the MPFR variable-order BDF** (`Method -> "BDF"`,
-the auto-selection for parabolic problems), so stiff PDEs now run at arbitrary
-precision too. Achievable precision at interior query points is bounded by the
+`InterpolatingFunction` (1-D PDEs). The semi-discrete system is then **exact**:
+the grid spacing `(xmax - xmin)/(n - 1)`, the node coordinates and the
+finite-difference weights are exact rationals (the weights on integer offsets
+are recovered exactly from their double values), and the initial values are
+the initial condition at the exact nodes, numericalized at the working
+precision — so the only errors are the spatial truncation and the time
+integration. (With double weights the stencil of a constant vector was
+`~1e-13/h^2` rather than 0: a spatially uniform blow-up came out 13 digits right
+at any precision.) With the Automatic method the time integrator is the
+**Taylor-series** method whenever the right-hand side is in its vocabulary
+(polynomial and elementary nonlinearities), else explicit Runge-Kutta or the
+MPFR variable-order BDF (`Method -> "BDF"`); the BDF, formerly the default for
+parabolic problems at arbitrary precision, ran for minutes at
+`WorkingPrecision -> 30` and returned nothing at 50 and above. A run that ends
+early says `NDSolve::ndsz` / `NDSolve::mxst` as at machine precision. Example:
+`u_t = u_xx + u + u^2`, `u(0, x) = 1`, zero Neumann ends, is spatially constant
+and blows up at `Log[2]`; at `WorkingPrecision -> 60` the solution's domain ends
+within `5e-33` of it (the default `PrecisionGoal` is half the working
+precision). Achievable precision at interior query points is bounded by the
 cubic-Hermite interpolation (query at MPFR node abscissae for full precision).
 
 Adaptive-implicit stepping (variable-step variable-order BDF with Newton-failure

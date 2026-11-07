@@ -262,6 +262,54 @@ static Expr* nd_node_value(int g, int nx, bool periodic, int torder,
 }
 
 /* ------------------------------------------------------------------ *
+ *  Exact stencils at arbitrary precision                               *
+ * ------------------------------------------------------------------ *
+ * At WorkingPrecision above machine precision the grid spacing and the
+ * Fornberg weights are exact rationals (the weights on integer offsets are
+ * rationals with small denominators: computed in double for h = 1 and
+ * recovered exactly by a continued fraction), so the semi-discrete system
+ * is the same at any precision.  With double weights the stencil of a
+ * constant vector is ~1e-13 / h^2 instead of 0, which perturbs every
+ * solution at the 13th digit whatever the precision (a spatially constant
+ * blow-up at WorkingPrecision 60 came out 13 digits right). */
+static Expr* g_mol_hexact = NULL;   /* exact h while an MPFR MoL is built */
+
+static bool nd_rationalize(double w, int64_t* num, int64_t* den) {
+    if (!isfinite(w)) return false;
+    double x = fabs(w);
+    int64_t p0 = 0, q0 = 1, p1 = 1, q1 = 0;
+    double r = x;
+    for (int it = 0; it < 40; it++) {
+        double a = floor(r);
+        if (a > 1e12) break;
+        int64_t ai = (int64_t)a;
+        int64_t p2 = ai * p1 + p0, q2 = ai * q1 + q0;
+        if (q2 > INT64_C(100000000)) break;
+        p0 = p1; q0 = q1; p1 = p2; q1 = q2;
+        if (fabs((double)p1 / (double)q1 - x) <= 1e-12 * (x > 1.0 ? x : 1.0)) {
+            *num = w < 0 ? -p1 : p1; *den = q1;
+            return true;
+        }
+        double f = r - a;
+        if (f < 1e-300) break;
+        r = 1.0 / f;
+    }
+    return false;
+}
+
+/* The stencil coefficient w (for unit spacing) / h^deriv: an exact number
+ * when g_mol_hexact is set, else the double w (already divided by h^deriv
+ * by the caller). */
+static Expr* nd_wcoef(double w, int deriv) {
+    int64_t num, den;
+    if (!g_mol_hexact || !nd_rationalize(w, &num, &den)) return expr_new_real(w);
+    Expr* q = nd_call2(SYM_Times, expr_new_integer(num),
+                       nd_call2(SYM_Power, expr_new_integer(den), expr_new_integer(-1)));
+    Expr* hp = nd_call2(SYM_Power, expr_copy(g_mol_hexact), expr_new_integer(-deriv));
+    return eval_and_free(nd_call2(SYM_Times, q, hp));
+}
+
+/* ------------------------------------------------------------------ *
  *  Spatial-derivative stencil at grid node `jgrid` (Fornberg weights)  *
  *  as a symbolic combination of neighbouring node values.  Central and *
  *  boundary-shifted for Dirichlet/Neumann/Robin; symmetric and wrapped *
@@ -281,18 +329,18 @@ static Expr* nd_mol_stencil_expr(int jgrid, int nx, bool periodic, int deriv, in
         double xs[64] = { 0 };
         for (int k = 0; k < p; k++) { idx[k] = jgrid - half + k; xs[k] = (double)(idx[k] - jgrid); }
         nd_fornberg_weights(deriv, xs, p, 0.0, w);
-        double hd = pow(h, (double)deriv);
+        double hd = g_mol_hexact ? 1.0 : pow(h, (double)deriv);
         for (int k = 0; k < p; k++) w[k] /= hd;
         npts = p;
     } else {
-        nd_stencil_build(jgrid, nx, deriv, order, h, idx, w, &npts);
+        nd_stencil_build(jgrid, nx, deriv, order, g_mol_hexact ? 1.0 : h, idx, w, &npts);
     }
     Expr** terms = malloc(sizeof(Expr*) * (size_t)npts);
     int nt = 0;
     for (int k = 0; k < npts; k++) {
         if (w[k] == 0.0) continue;
         Expr* val = nd_node_value(idx[k], nx, periodic, torder, ysym, bc_left, bc_right);
-        terms[nt++] = nd_scaled(w[k], val);
+        terms[nt++] = nd_call2(SYM_Times, nd_wcoef(w[k], deriv), val);
     }
     Expr* r;
     if (nt == 0) { free(terms); r = expr_new_integer(0); }
@@ -311,7 +359,7 @@ static Expr* nd_mol_stencil_expr(int jgrid, int nx, bool periodic, int deriv, in
 static Expr* nd_bc_make_value(Expr* a, Expr* b, Expr* r, int jbound, int nx,
                               int dord, double h, int torder, Expr** ysym) {
     int idx[64]; double w[64]; int npts;
-    nd_stencil_build(jbound, nx, 1, dord, h, idx, w, &npts);
+    nd_stencil_build(jbound, nx, 1, dord, g_mol_hexact ? 1.0 : h, idx, w, &npts);
     double w0 = 0.0;
     Expr** terms = malloc(sizeof(Expr*) * (size_t)npts);
     int nt = 0;
@@ -320,15 +368,16 @@ static Expr* nd_bc_make_value(Expr* a, Expr* b, Expr* r, int jbound, int nx,
         if (w[k] == 0.0) continue;
         int gi = idx[k];
         if (gi < 1 || gi > nx - 2) continue;      /* only interior states  */
-        terms[nt++] = nd_scaled(w[k], expr_copy(ysym[(size_t)(gi - 1) * (size_t)torder + 0]));
+        terms[nt++] = nd_call2(SYM_Times, nd_wcoef(w[k], 1),
+                               expr_copy(ysym[(size_t)(gi - 1) * (size_t)torder + 0]));
     }
     Expr* ux_rest;
     if (nt == 0) { free(terms); ux_rest = expr_new_integer(0); }
     else if (nt == 1) { ux_rest = terms[0]; free(terms); }
     else { ux_rest = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)nt); free(terms); }
 
-    Expr* denom = nd_plus2any(expr_copy(a), nd_scaled(w0, expr_copy(b)));
-    Expr* numer = nd_scaled(-1.0, nd_plus2any(expr_copy(r),
+    Expr* denom = nd_plus2any(expr_copy(a), nd_call2(SYM_Times, nd_wcoef(w0, 1), expr_copy(b)));
+    Expr* numer = nd_call2(SYM_Times, expr_new_integer(-1), nd_plus2any(expr_copy(r),
                             expr_new_function(expr_new_symbol(SYM_Times),
                                 (Expr*[]){ expr_copy(b), ux_rest }, 2)));
     Expr* inv = nd_call2(SYM_Power, denom, expr_new_integer(-1));
@@ -1741,6 +1790,18 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         ysym[idx] = expr_new_symbol(intern_symbol(buf));
     }
 
+    /* arbitrary precision: exact spacing and node coordinates (see nd_wcoef) */
+    Expr* saved_hexact = g_mol_hexact;
+    Expr* hexact = NULL;
+    if (use_mpfr && !cplx) {
+        hexact = eval_and_free(nd_call2(SYM_Times,
+            nd_call2(SYM_Subtract, expr_copy(rx->data.function.args[2]), expr_copy(rx->data.function.args[1])),
+            nd_call2(SYM_Power, expr_new_integer((int64_t)(nx - 1)), expr_new_integer(-1))));
+        if (!hexact || !(hexact->type == EXPR_INTEGER || hexact->type == EXPR_BIGINT
+                         || head_is(hexact, SYM_Rational))) { expr_free(hexact); hexact = NULL; }
+    }
+    g_mol_hexact = hexact;
+
     /* ---- eliminate boundary nodes into value expressions (non-periodic) ---- */
     Expr* bc_left = NULL; Expr* bc_right = NULL;
     if (!periodic) {
@@ -1789,6 +1850,9 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         size_t base = u * (size_t)torder;
         int jgrid = (int)u + gbase;
         double xj = xmin + (double)jgrid * h;
+        Expr* xj_e = hexact ? eval_and_free(nd_call2(SYM_Plus, expr_copy(rx->data.function.args[1]),
+                                  nd_call2(SYM_Times, expr_new_integer(jgrid), expr_copy(hexact))))
+                            : expr_new_real(xj);
         /* chain: dU^(m)/dt = U^(m+1) */
         for (int m = 0; m + 1 < torder; m++)
             P.f[base + (size_t)m] = expr_copy(ysym[base + (size_t)m + 1]);
@@ -1815,7 +1879,7 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         for (int m = 1; m < torder; m++) {
             lits[cnt] = lit_ut[m]; subs[cnt] = expr_copy(ysym[base + (size_t)m]); cnt++;
         }
-        lits[cnt] = lit_xv; subs[cnt] = expr_new_real(xj); cnt++;
+        lits[cnt] = lit_xv; subs[cnt] = xj_e; cnt++;
         Expr* rhs = nd_replace_all(expr_copy(G), lits, subs, cnt);
         for (size_t s = 0; s < cnt; s++) expr_free(subs[s]);   /* lits are shared */
         if (lf_nu > 0.0 && rhs) {
@@ -1847,10 +1911,25 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
                 double v;
                 if (!nd_eval_at(ic[m], xvar, xj, spec, &v)) { build_ok = false; break; }
                 P.Y0[u * (size_t)torder + (size_t)m] = v;
+                if (hexact) {
+                    /* the exact initial value at the exact node, numericalized
+                     * at the working precision by the MPFR integrator */
+                    if (!P.Y0_expr) { P.Y0_expr = calloc(d, sizeof(Expr*)); P.y0_expr_n = d; }
+                    Expr* xl = expr_new_symbol(xvar);
+                    Expr* xe = eval_and_free(nd_call2(SYM_Plus, expr_copy(rx->data.function.args[1]),
+                                   nd_call2(SYM_Times, expr_new_integer((int)u + gbase), expr_copy(hexact))));
+                    P.Y0_expr[u * (size_t)torder + (size_t)m] = nd_replace_all(expr_copy(ic[m]), &xl, &xe, 1);
+                    expr_free(xl); expr_free(xe);
+                }
             }
         }
     }
     P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
+    if (hexact) {
+        P.tmin_expr = expr_copy(rt->data.function.args[1]);
+        P.tmax_expr = expr_copy(rt->data.function.args[2]);
+        if (t0 == tmin) P.t0_expr = expr_copy(rt->data.function.args[1]);
+    }
 
     /* ---- realify a complex system into interleaved (Re, Im) real unknowns ---- */
     if (build_ok && cplx) {
@@ -1883,7 +1962,7 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
             /* Arbitrary precision: integrate at MPFR precision (explicit) and
              * assemble the MPFR 2-D InterpolatingFunction. */
             NdMolGrid grid = { fname, applied, tvar, xvar, xmin, h, nx, torder,
-                               periodic, bc_left, bc_right };
+                               periodic, bc_left, bc_right, xmax };
             result = nd_solve_mpfr_mol(&P, &o, S, &grid);
         } else
 #endif
@@ -1915,6 +1994,10 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
     nd_ac_prec_free(&P);
     for (size_t i = 0; i < d; i++) { expr_free(P.f[i]); expr_free(P.ysym[i]); }
     free(P.f); free(P.ysym); free(P.Y0); free(P.bind_y);
+    if (P.Y0_expr) { for (size_t i = 0; i < P.y0_expr_n; i++) expr_free(P.Y0_expr[i]); free(P.Y0_expr); }
+    expr_free(P.t0_expr); expr_free(P.tmin_expr); expr_free(P.tmax_expr);
+    g_mol_hexact = saved_hexact;
+    expr_free(hexact);
     (void)ysym;
     if (P.jac) {
         for (size_t i = 0; i < d; i++) {

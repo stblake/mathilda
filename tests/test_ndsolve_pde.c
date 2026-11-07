@@ -1307,6 +1307,32 @@ static void test_variable_order(void) {
           "u, {x,0,1}, {y,0,1}, {t,0,1/10}][1/2, 1/2, 1/20]", exp(-2 * PI * PI * 0.05), 5e-3);
 }
 
+/* ============================================================= *
+ *  Arbitrary precision: the semi-discrete system is exact.       *
+ *  u_t = u_xx + u + u^2, u(0,x) = 1, Neumann ends: the solution  *
+ *  is x-independent and blows up at t = Log[2].  With double     *
+ *  stencil weights the stencil of a constant was ~1e-13/h^2, not *
+ *  0, and the blow-up came out 13 digits right at any precision; *
+ *  WorkingPrecision -> 60 returned nothing at all.               *
+ * ============================================================= */
+static void test_mpfr_exact_mol(void) {
+    double dv;
+    bool ok = eval_double("N[(u /. First[NDSolve[{D[u[t,x],t]==D[u[t,x],x,x]+u[t,x]+u[t,x]^2, "
+        "u[0,x]==1, Derivative[0,1][u][t,0]==0, Derivative[0,1][u][t,1]==0}, u, {t,0,2}, {x,0,1}, "
+        "WorkingPrecision->40]])[\"Domain\"][[1,2]] - Log[2], 20]", &dv);
+    check_true("MPFR MoL blow-up time to ~20 digits", ok && fabs(dv) < 1e-18,
+               ok ? "|T - Log[2]| < 1e-18" : "not numeric");
+    ok = eval_double("N[(u /. First[NDSolve[{D[u[t,x],t]==D[u[t,x],x,x]+u[t,x]+u[t,x]^2, "
+        "u[0,x]==1, Derivative[0,1][u][t,0]==0, Derivative[0,1][u][t,1]==0}, u, {t,0,2}, {x,0,1}, "
+        "WorkingPrecision->60]])[\"Domain\"][[1,2]] - Log[2], 20]", &dv);
+    check_true("MPFR MoL at WorkingPrecision 60 (PrecisionGoal 30)", ok && fabs(dv) < 1e-28,
+               ok ? "|T - Log[2]| < 1e-28" : "not numeric");
+    /* the spatial grid ends exactly at xmax */
+    ok = eval_double("(u /. First[NDSolve[{D[u[t,x],t]==D[u[t,x],{x,2}], u[0,x]==Sin[Pi x], "
+        "u[t,0]==0, u[t,1]==0}, u, {t,0,1/10}, {x,0,1}, WorkingPrecision->30]])[\"Domain\"][[2,2]] - 1", &dv);
+    check_true("MPFR MoL x grid ends at xmax", ok && fabs(dv) < 1e-25, "Domain x end - 1 = 0");
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -1352,6 +1378,7 @@ int main(void) {
     test_upwind_monotonicity();
     test_unsupported_guards();
     test_variable_order();
+    test_mpfr_exact_mol();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

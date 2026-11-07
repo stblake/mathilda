@@ -446,6 +446,7 @@ typedef struct {
     bool        periodic;
     Expr*       bc_left;    /* boundary value exprs (in t, and states for       */
     Expr*       bc_right;   /* Neumann/Robin), or NULL when periodic             */
+    double      xmax;       /* node gi is xmin + gi (xmax - xmin) / (nx - 1)     */
 } NdMolGrid;
 
 /* Integrate a 1-D MoL NdProblem at MPFR precision and assemble the 2-D MPFR
