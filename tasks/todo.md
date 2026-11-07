@@ -41,7 +41,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] v0.6432 FIXED: NIntegrate numericalized a nested symbolic endpoint (Log[2 + Sqrt[3]]) at machine precision under WorkingPrecision -> 60: NIntegrate[1, {x, -L, L}, WP->60] - 2 N[L,60] = 2.7e-16, result labelled `60 (hd7.8 wp50 31d, pre-existing since v0.6377). Sqrt[2], Log[3] endpoints fine.
 - [ ] open: C2 machine 1.7-2.5x (2x2 Det via LAPACK, Select/Tuples); D10 wp50 2.2x (interpreted Fold steps); hd20 machine 1.7-6.6x (exact Table/Series before N); N of an exact array now PACKED (reference: unpacked) -- decide
 - [ ] Linux CI: mp_linalg Outer[og] vs Table bit-identity fails on glibc only (diagnostic added, needs a CI run)
-- [ ] Benchmark fairness: C6 (171, 201) and hd15 (220) .py halves request epsrel/rtol 1e-12 while .m uses default goals -- align the formulations (same request in every system) before the final run
+- [x] Benchmark fairness: C6/hc6/hd15 .m machine tiers now ask PrecisionGoal 12 (PDE 10) like .py/.mac (5e6147e9); WL+Mathilda must be re-run on 171, 201, 220
+- [ ] exposed gap: c6.machine at PG 12 = 19.5 s vs scipy 0.84 s (2-D vertex singularity) -> fix agent running
 - [ ] Phase 6: final run, holdout B once, verdict
 
 Findings so far:
