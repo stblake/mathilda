@@ -1048,6 +1048,32 @@ Out[6]= -1
 > so an array containing `0` takes the ordinary path and leaves that element
 > unevaluated exactly as the scalar does.
 
+## MangoldtLambda
+
+- `MangoldtLambda[n]`: the von Mangoldt function -- `Log[p]` when `n = p^k` is a
+  power of a prime `p` (`k >= 1`), and `0` otherwise.
+
+**Features**:
+- `Listable`, `Protected`.
+- The result is exact: `MangoldtLambda[8] = Log[2]`, `N[MangoldtLambda[9]] =
+  1.09861`. `MangoldtLambda[1] = 0`, and every `n <= 0` gives `0`, as in the
+  reference.
+- The prime-power test is the shared `mth_prime_power_base_{u64,mpz}` (the one
+  `PrimePowerQ` uses): no full factorisation, so `MangoldtLambda[(10^20+39)^3]`
+  is immediate.
+- An inexact argument emits `MangoldtLambda::exact` and stays unevaluated; the
+  message is gated on the arithmetic-probe mute, so `NSum`'s continuity probe at
+  non-integer points stays silent (and invisible to `Check`). Rationals,
+  symbols and Gaussian integers stay unevaluated silently.
+- No packed / `NDArray` / `Compile` surface, deliberately: the answer is an exact
+  `Log[p]`, which no machine dtype holds, and an inexact argument is an error,
+  not a value.
+
+```mathematica
+In[1]:= Table[MangoldtLambda[n], {n, 1, 10}]
+Out[1]= {0, Log[2], Log[3], Log[2], Log[5], 0, Log[7], Log[2], Log[3], 0}
+```
+
 ## LiouvilleLambda
 
 - `LiouvilleLambda[n]`: the Liouville function `lambda(n) = (-1)^Omega(n)`, where

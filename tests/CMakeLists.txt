@@ -471,6 +471,7 @@ set(COMMON_SRC
     ../src/numbertheory/divisorsigma.c
     ../src/numbertheory/moebiusmu.c
     ../src/numbertheory/liouvillelambda.c
+    ../src/numbertheory/mangoldtlambda.c
     ../src/numbertheory/primeomega.c
     ../src/numbertheory/primenu.c
     ../src/numbertheory/jacobisymbol.c
@@ -1610,6 +1611,10 @@ add_test(NAME factorinteger_tests COMMAND factorinteger_tests)
 add_executable(liouvillelambda_tests test_liouvillelambda.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(liouvillelambda_tests PRIVATE ../src)
 add_test(NAME liouvillelambda_tests COMMAND liouvillelambda_tests)
+
+add_executable(mangoldtlambda_tests test_mangoldtlambda.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mangoldtlambda_tests PRIVATE ../src)
+add_test(NAME mangoldtlambda_tests COMMAND mangoldtlambda_tests)
 
 add_executable(primeomega_tests test_primeomega.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(primeomega_tests PRIVATE ../src)

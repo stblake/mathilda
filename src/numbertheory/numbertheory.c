@@ -65,4 +65,5 @@ void numbertheory_init(void) {
     symtab_get_def("PrimeNu")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("Prime")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("PrimePi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
+    mangoldtlambda_init();
 }

@@ -51,6 +51,8 @@ Expr* builtin_divisors(Expr* res);
 Expr* builtin_divisorsigma(Expr* res);
 Expr* builtin_moebiusmu(Expr* res);
 Expr* builtin_liouvillelambda(Expr* res);
+Expr* builtin_mangoldtlambda(Expr* res);
+void  mangoldtlambda_init(void);   /* registration, attributes, docstring */
 Expr* builtin_prime(Expr* res);
 Expr* builtin_primepi(Expr* res);
 Expr* builtin_primeomega(Expr* res);
