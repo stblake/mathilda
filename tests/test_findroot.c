@@ -424,6 +424,22 @@ static void test_brent_mpfr_precision(void) {
                "Abs[r - Sqrt[2]] < 10^-5 && Abs[r - Sqrt[2]] > 10^-30]");
 }
 
+/* Brent on a steep function whose root sits 4.7e-9 from a log singularity:
+ * the bracket-width goal (absolute 10^-8) is larger than the root's own
+ * scale, so it must not stop on the width alone with |f| ~ 1 (it returned
+ * g = 49.1 for g == 50 after 13 evaluations).  Machine and MPFR. */
+static void test_brent_steep_root_needs_residual(void) {
+    mute_stderr_once();
+    check_true("Module[{g, z0 = 0.0064823961, r}, "
+               "g[z_?NumericQ] := If[z <= z0, 100., Min[100., -Log[z - z0]/0.3 - 13.9]]; "
+               "r = z /. FindRoot[g[z] == 50, {z, 0.0064, 0.0065}, Method -> \"Brent\"]; "
+               "Abs[g[r] - 50] < 10^-6]");
+    check_true("Module[{g, z0 = 64823961/10^10, r}, "
+               "g[z_?NumericQ] := If[z <= z0, 100, Min[100, -Log[z - z0]*10/3 - 139/10]]; "
+               "r = z /. FindRoot[g[z] == 50, {z, 64/10^4, 65/10^4}, Method -> \"Brent\", "
+               "WorkingPrecision -> 30]; Abs[g[r] - 50] < 10^-12]");
+}
+
 /* The compiled fast path must not swallow EvaluationMonitor. */
 static void test_evaluation_monitor_compiled_path(void) {
     mute_stderr_once();
@@ -714,6 +730,7 @@ int main(void) {
     TEST(test_secant_bracket_safeguard);
     TEST(test_secant_bracketed_root_is_kept);
     TEST(test_brent_mpfr_precision);
+    TEST(test_brent_steep_root_needs_residual);
     TEST(test_evaluation_monitor_compiled_path);
     TEST(test_real_valued_options);
     TEST(test_option_values_evaluated);

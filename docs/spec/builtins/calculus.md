@@ -5026,7 +5026,11 @@ is an MPFR number, so a function far outside the double range (`L_1000` is
 `|f(b)| <= 10^-AccuracyGoal` and the next interpolation step is shorter than
 `10^-AccuracyGoal + |b| 10^-PrecisionGoal` (that step is taken, and lands at
 superlinear accuracy: full working precision under the default goals), or
-when the bracket has shrunk to the goal or to the working precision.
+when the bracket has shrunk to the goal **with** `|f(b)| <= 10^-AccuracyGoal`,
+or to the working precision's resolution. The width goal alone no longer
+stops it: for a steep function whose root lies closer to a singularity than
+the absolute tolerance (`-Log[z - z0]` with the root 5e-9 above `z0`) it used
+to return a point with `|f| ~ 1`.
 
 **Machine overflow.** A machine-precision real solve whose function or
 derivative value leaves the double range is rerun at 106 bits of MPFR and the

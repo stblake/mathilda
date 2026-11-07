@@ -1095,7 +1095,11 @@ static Expr* fr_brent_real_core(Expr* f, FrVarBind* bind,
         double goal = tol_acc + fabs(b) * tol_prec;
         double tol1 = 2.0 * DBL_EPSILON * fabs(b);
         double xm = 0.5 * (c - b);
-        if (fb == 0.0 || fabs(xm) <= tol1 + 0.5 * goal) return expr_new_real(b);
+        /* The bracket-width goal stops only with the residual goal met too
+         * (see fr_brent_mpfr_core); the resolution test always stops. */
+        if (fb == 0.0 || fabs(xm) <= tol1
+            || (fabs(xm) <= tol1 + 0.5 * goal && fabs(fb) <= tol_acc))
+            return expr_new_real(b);
         if (k >= iters) {
             fr_warn("cvmit", "failed to converge within %lld iterations",
                     (long long)opts->max_iter);
@@ -1466,10 +1470,14 @@ static bool fr_eval_mpfr_real(Expr* f, FrVarBind* bind, const mpfr_t x,
  *     phase, so that point is far more accurate than tol (a bracket-width test
  *     alone stops at ~tol: half the working precision under the default
  *     goals);
- *   - when the bracket half-width falls under 2^(1-bits) |b| + tol/2, at the
- *     goal or at the working precision, whichever comes first -- an
- *     absolute-only test never terminates for an AccuracyGoal beyond what the
- *     working precision can resolve at |b|.
+ *   - when the bracket half-width falls under 2^(1-bits) |b| + tol/2 AND
+ *     |f(b)| is under 10^-AccuracyGoal, or under 2^(1-bits) |b| alone (the
+ *     working precision's resolution) -- an absolute-only test never
+ *     terminates for an AccuracyGoal beyond what the working precision can
+ *     resolve at |b|.  The width test alone used to stop a bracket of a
+ *     steep function (a root 5e-9 from a log singularity, bracket
+ *     [0.0064, 0.0065]) once it was 1e-8 wide, with |f| still ~1: the
+ *     absolute tolerance was larger than the root's own scale.
  * `iters` caps the evaluations.  Returns the best iterate, or NULL (with a
  * message) on failure. */
 static Expr* fr_brent_mpfr_core(Expr* f, FrVarBind* bind,
@@ -1512,7 +1520,8 @@ static Expr* fr_brent_mpfr_core(Expr* f, FrVarBind* bind,
         mpfr_div_2ui(xm, xm, 1, MPFR_RNDN);
         mpfr_div_2ui(t2, goal, 1, MPFR_RNDN);
         mpfr_add(t2, t2, tol1, MPFR_RNDN);               /* tol1 + goal / 2 */
-        if (mpfr_zero_p(fb) || mpfr_cmpabs(xm, t2) <= 0) {
+        if (mpfr_zero_p(fb) || mpfr_cmpabs(xm, tol1) <= 0
+            || (mpfr_cmpabs(xm, t2) <= 0 && mpfr_cmpabs(fb, tol_acc) <= 0)) {
             result = expr_new_mpfr_copy(b);
             break;
         }
