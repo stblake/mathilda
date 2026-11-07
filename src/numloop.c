@@ -1797,15 +1797,25 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
     }
     if (!ok) { free(elems); prog_free(&p); return NULL; }
 
-    /* Elements must be inexact throughout, not merely somewhere: a body that
-     * returns its second argument (#2 &) hands each element back untouched, so
-     * Fold[#2 &, 1., {1, 2, 3}] is the exact Integer 3.
+    /* Every computed iterate must be inexact. A body that returns its second
+     * argument (#2 &) hands each element back untouched, so
+     * Fold[#2 &, 1., {1, 2, 3}] is the exact Integer 3 -- with exact elements
+     * that is only excluded when the body carries a Real literal, which makes
+     * every value the body COMPUTES a Real whatever its inputs (numloop.h:
+     * "computed" positions). That is the licence numloop_map already uses for
+     * exact elements, and it is what lets the common recurrence
+     * FoldList[2. + #2/#1 &, 1., RandomChoice[{-1, 1}, n]] -- exact +-1 steps
+     * driving a Real accumulator -- run in doubles: the interpreter coerces
+     * each exact element to a double at the first mixed operation, which is
+     * the same conversion the register load performs here.
      *
      * Given that, the accumulator is inexact if the seed is, or if the body
      * carries a Real literal -- except for FoldList, which emits the seed itself
      * as out[[1]] and so needs it Real however inexact the body is. */
     bool seed_ok = value_is_inexact(x0) || (!as_list && body_inexact);
-    if (!elems_inexact || !seed_ok) { free(elems); prog_free(&p); return NULL; }
+    if (!(elems_inexact || body_inexact) || !seed_ok) {
+        free(elems); prog_free(&p); return NULL;
+    }
 
     double* stack = malloc(p.max_stack * sizeof(double));
     if (!stack) { free(elems); prog_free(&p); return NULL; }

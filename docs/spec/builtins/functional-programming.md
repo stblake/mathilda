@@ -1049,6 +1049,14 @@ Produces the list of intermediate fold values.
 - The head of the third argument is preserved in the output: `FoldList[f, x, p[a, b]]` gives `p[x, f[x, a], f[f[x, a], b]]`.
 - `FoldList[f, {}]` returns `{}` (an empty list with the input head); `FoldList[f, x, {}]` returns `{x}`.
 - `Fold[f, x, list]` is equivalent to `Last[FoldList[f, x, list]]`.
+- **Automatic machine loop.** A numeric pure function (`Plus`/`Times`/`Power` and
+  the elementary functions) folded from a `Real` seed over machine numbers runs in
+  compiled doubles, with no per-step evaluation. The elements may be exact integers
+  when the body carries a `Real` literal, since every value such a body computes is
+  then a `Real` and the interpreter would coerce each element to a double anyway:
+  `FoldList[2. + #2/#1 &, 1., RandomChoice[{-1, 1}, 10^6]]` takes 56 ms (was 1.3 s),
+  bit-identical to the interpreted result. A body that can hand an element back
+  unchanged (`#2 &`) keeps the interpreter, so exact elements stay exact.
 
 ```mathematica
 In[1]:= FoldList[f, x, {a, b, c, d}]

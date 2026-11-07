@@ -420,6 +420,14 @@ static void test_diff_foldlist(void) {
     diff_list("FoldList[#1 + #2&, 0., Table[N[i]/50, {i, 1, 50}]]");
     diff_list("FoldList[#1 + Sin[#2]&, 0., Table[N[i], {i, 1, 40}]]");
     diff_list("FoldList[#1 #2&, 1., {1.5, 2.5, 0.5, 3.5}]");
+    /* Exact elements, Real-literal body: every computed iterate is Real, so the
+     * compiled run is licensed (the SIAM D10 random recurrence shape). */
+    diff_list("FoldList[2. + #2/#1&, 1., {1, -1, -1, 1, 1, -1, 1, -1, -1}]");
+    diff_list("FoldList[3. + 2 #2/#1&, 1., {1, 0, -1, 1, 0, -1}]");
+    diff_list("FoldList[#1 + 0.5 #2^2&, 1., Range[300]]");
+    diff_list("SeedRandom[7]; FoldList[2.5 + #2/#1&, 1., RandomInteger[{-1, 1}, 5000]]");
+    diff("Fold[3. + #2/#1&, 1, {1, -1, 1, 1, -1}]");    /* exact seed, scalar */
+    expect_full("FoldList[#2 + 0. #1&, 1., {1, 2}]", "List[1.0, 1.0, 2.0]");
 }
 static void test_diff_nestwhilelist(void) {
     diff_list("NestWhileList[# + 1.&, 0., # < 50.&]");
