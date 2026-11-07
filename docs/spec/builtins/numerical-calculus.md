@@ -2225,7 +2225,13 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
   exactly to the classical quadratic penalty, so an unconstrained or
   linear-only problem is unchanged.  A drift rescue returns the best
   feasible iterate seen across the schedule if the final round drifts
-  infeasible.
+  infeasible.  **Objective scaling:** the rounds minimise `s f + ...` with
+  `s = 1/|∇f(x0)|_∞` (capped at 1e8) when that gradient is below 1e-2, so the
+  μ = 1 start and the absolute gradient goal see an O(1) objective.  A
+  small-scale objective under an equality, from a feasible start (the D19
+  compliance, ~6e-4 over designs of size 50), was dominated by the penalty
+  from the first round, barely moved, looked "stabilised and feasible", and
+  came back as the start point.
 - `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
   reference's constraint surface are not yet implemented -- they emit
   `FindMinimum::nimpl`.

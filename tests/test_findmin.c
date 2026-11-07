@@ -626,6 +626,26 @@ static void test_mpfr_argmin_full_precision(void) {
                "Abs[(x /. Last[r]) - 1/3] < 10^-50]");
 }
 
+/* A small-scale objective (|grad f| ~ 1e-6) under an equality constraint,
+ * from a feasible start: the penalty used to dominate from the first round,
+ * the inner solve barely moved, and the loop stopped at the start point
+ * (0.0002 instead of 0.000188883).  Optimum x_i ~ Sqrt[w_i]; also as an opaque
+ * NumericQ-guarded black box (finite-difference gradient). */
+static void test_small_scale_objective_with_equality(void) {
+    check_true("Module[{w = {1, 2, 3, 4}, xs, r}, xs = 200 Sqrt[w]/Total[Sqrt[w]]; "
+               "r = FindMinimum[{10^-3 Total[w/{a, b, c, d}], 1 <= a <= 100 && 1 <= b <= 100 && "
+               "1 <= c <= 100 && 1 <= d <= 100 && a + b + c + d == 200}, "
+               "{{a, 50}, {b, 50}, {c, 50}, {d, 50}}]; "
+               "Abs[First[r] - 10^-3 Total[w/xs]] < 10^-12 && "
+               "Max[Abs[({a, b, c, d} /. Last[r]) - xs]] < 10^-3]");
+    check_true("Module[{w = {1, 2, 3, 4}, g, xs, r}, xs = 200 Sqrt[w]/Total[Sqrt[w]]; "
+               "g[v_ /; VectorQ[v, NumericQ]] := 10^-3 Total[w/v]; "
+               "r = FindMinimum[{g[{a, b, c, d}], 1 <= a <= 100 && 1 <= b <= 100 && "
+               "1 <= c <= 100 && 1 <= d <= 100 && a + b + c + d == 200}, "
+               "{{a, 50}, {b, 50}, {c, 50}, {d, 50}}]; "
+               "Abs[First[r] - 10^-3 Total[w/xs]] < 10^-11]");
+}
+
 /* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
@@ -635,6 +655,7 @@ int main(void) {
     core_init();
 
     TEST(test_mpfr_argmin_full_precision);
+    TEST(test_small_scale_objective_with_equality);
 
     /* 1. Golden 1D */
     TEST(test_min_parabola);

@@ -33,6 +33,10 @@ bool g_fm_quiet = false;
  * bit-for-bit unchanged. The gens-pointer identity guard keeps a nested solver
  * call on a different constraint set from mis-indexing this array. */
 const double* g_fm_al_lambda = NULL;
+/* Objective scale of the augmented Lagrangian (with g_fm_al_lambda): the
+ * penalty loop minimises s f + sum(lam c + mu c^2), s set from the size of
+ * the objective's gradient at the start (fm_run_penalty). */
+double g_fm_al_fscale = 1.0;
 const FmGenCon* g_fm_al_gens = NULL;
 
 void fm_warn(const char* fn, const char* tag, const char* fmt, ...) {
@@ -1864,7 +1868,7 @@ bool fm_eval_augmented(Expr* f, FmVarBind* binds,
                 else         aug += -lam * lam / (4.0 * mu);
             }
         }
-        *out = fv + aug;
+        *out = g_fm_al_fscale * fv + aug;
         return true;
     }
     double pen;
@@ -1895,6 +1899,8 @@ bool fm_eval_aug_gradient(Expr* f, Expr** g_exprs,
     if (mu <= 0.0 || !gens || ngens == 0) return true;
 
     bool use_al = (g_fm_al_lambda && gens == g_fm_al_gens);
+    if (use_al && g_fm_al_fscale != 1.0)
+        for (size_t i = 0; i < n; i++) g_out[i] *= g_fm_al_fscale;
     double* gk_grad = (double*)malloc(sizeof(double) * n);
     if (!gk_grad) return false;
     for (size_t k = 0; k < ngens; k++) {

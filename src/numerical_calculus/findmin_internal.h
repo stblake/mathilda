@@ -592,6 +592,7 @@ typedef struct {
 #define NM_BH_NITER          100       /* default hop count (== scipy niter)        */
 
 /* ===== file-static global registries (defined in findmin_common.c) ===== */
+extern double g_fm_al_fscale;
 extern bool g_fm_quiet;
 extern const char* g_fm_name;
 extern const double* g_fm_al_lambda;
