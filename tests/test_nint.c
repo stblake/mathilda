@@ -1050,6 +1050,25 @@ static void test_vertex_singularity(void) {
                   "True");
 }
 
+/* Endpoint guard at an endpoint known only to the working precision: the
+ * ends of each chord interval are FindRoot roots, so a deep tanh-sinh node,
+ * carried exactly at raised precision, can fall outside the domain (Surd of a
+ * complex number). The probe is declined at its first non-number instead of
+ * doubling the precision eight times, and its messages are probe noise: not
+ * printed, not seen by Check. True value: mpmath tanh-sinh (SIAM D7). */
+static void test_guard_probe_outside_domain(void) {
+    ASSERT_REL("gA[y_] := y^2/32 + Exp[Sin[y]]; "
+               "wA[y_] := Surd[-y + Sqrt[-Log[gA[y]]], 3] - Surd[-y - Sqrt[-Log[gA[y]]], 3]; "
+               "y1 = y /. FindRoot[gA[y] == 1, {y, -28/10}, WorkingPrecision -> 60]; "
+               "yc = y /. FindRoot[-Log[gA[y]] == y^2, {y, -8/10}, WorkingPrecision -> 60]; "
+               "y2 = y /. FindRoot[gA[y] == 1, {y, 38/10}, WorkingPrecision -> 60]; "
+               "y3 = y /. FindRoot[gA[y] == 1, {y, 445/100}, WorkingPrecision -> 60]; "
+               "Quiet[NIntegrate[wA[y], {y, y1, yc, 0}, WorkingPrecision -> 60, PrecisionGoal -> 50] + "
+               "NIntegrate[wA[y], {y, y2, y3}, WorkingPrecision -> 60, PrecisionGoal -> 50]]",
+               "2.11502988094614658580840342658669512126535126194010611388164",
+               "10^-48");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1101,6 +1120,7 @@ int main(void) {
     TEST(test_prenumericalized_constants_wp);
     TEST(test_parametric_oscillatory_endpoint);
     TEST(test_machine_last_digits);
+    TEST(test_guard_probe_outside_domain);
 
     printf("All nint_tests passed.\n");
     return 0;

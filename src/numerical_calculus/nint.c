@@ -574,7 +574,19 @@ static bool ni_eval_mpfr_at_prec(NiCtx* c, const mpfr_t xm, long prec, mpfr_t re
     if (c->gd_exact) c->body = c->gd_exact;
     long sbits = g_ni_sample_bits;
     g_ni_sample_bits = 0;
+    /* A raised-precision re-evaluation is an internal probe: the user asked for
+     * f at the working precision, not at p + 16384 bits, so what it reports is
+     * sampling noise -- neither printed nor seen by Check[]. A node a tanh-sinh
+     * rule placed 2^-200 inside an endpoint known only to the working
+     * precision (a FindRoot root) can lie OUTSIDE the integrand's domain once
+     * the abscissa is carried exactly: Surd[-y + Sqrt[-Log[g[y]]], 3] then
+     * meets a complex argument and said Surd::preal, with a 160-digit number,
+     * on every probe -- thousands of lines, half the run time. */
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
     Expr* num = ni_eval_at(c, xe);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
     if (delivered) *delivered = g_ni_sample_bits;   /* 0: not an MPFR value */
     if (g_ni_sample_bits == 0 || (sbits && sbits < g_ni_sample_bits)) g_ni_sample_bits = sbits;
     c->spec = saved;
@@ -711,7 +723,15 @@ static bool ni_sample_mpfr_guarded(NiCtx* c, const mpfr_t xm, mpfr_t out_re, mpf
         mpfr_set_prec(ci, (mpfr_prec_t)(p + extra));
         long dbi = 0;
         bool got = ni_eval_mpfr_at_prec(c, xm, p + extra, cr, ci, &dbi);
-        if (got) { db = dbi; asked = p + extra; }
+        /* No number at a raised precision: the carried-exactly abscissa is
+         * outside the integrand's domain (or past what it can evaluate), and
+         * doubling the precision again -- up to NI_GD_MAX_EXTRA bits, eight
+         * times -- resolves nothing; it only re-confirms the same non-number.
+         * Decline the node now, as the loop would after its last doubling
+         * (the rules truncate that side's tail at an unevaluable endpoint
+         * node). */
+        if (!got) break;
+        db = dbi; asked = p + extra;
         /* held below the asked precision: raising it further cannot help */
         if (got && db > 0 && db < asked - 8) { capped = true; break; }
         if (got && have_prev && ni_mpfr_rel_log2(pr, pi, cr, ci) <= agree_l2) { ok = true; break; }
