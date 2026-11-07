@@ -197,6 +197,38 @@ static void test_oscillatory_singularity(void) {
     /* The named method also handles a plain algebraic endpoint singularity. */
     ASSERT_CLOSE("NIntegrate[1/Sqrt[x],{x,0,1},"
                  "Method->\"OscillatorySingularity\"]", "2", 1e-5);
+    /* Bounded amplitude: no magnitude blow-up to detect, only the unbounded
+     * phase (Gauss-Kronrod used to settle on 0.32397, silently). */
+    ASSERT_CLOSE("NIntegrate[Cos[Log[x]/x],{x,0,1}]", "0.32473401260165490375", 1e-7);
+    /* Oscillatory singularities at BOTH ends: split at the midpoint, each
+     * half mapped at its own end (one map over the whole range gave -0.41956). */
+    ASSERT_CLOSE("NIntegrate[Sin[1/(x (1-x))],{x,0,1}]", "-0.42056493771992560235", 1e-7);
+}
+
+/* The same integrals at WorkingPrecision: the MPFR counterpart of the
+ * exponential endpoint map, lobes between MPFR-refined zeros, Wynn's epsilon.
+ * The cascade of non-oscillatory rules returned -0.1186 for C1 at
+ * WorkingPrecision -> 60 (true 0.3234), and the shortfall warning was
+ * withheld. */
+static void test_oscillatory_singularity_wp(void) {
+    ASSERT_CLOSE("NIntegrate[Cos[Log[x]/x]/x,{x,0,1},WorkingPrecision->60,PrecisionGoal->50]",
+                 "0.32336743167777876139937008795217044665104662572546966168103644343",
+                 1e-48);
+    /* at the upper endpoint, on another interval: Pi/2 - Si(1/2) */
+    ASSERT_CLOSE("NIntegrate[Sin[1/(2-x)]/(2-x),{x,0,2},WorkingPrecision->40]",
+                 "Pi/2 - SinIntegral[1/2]", 1e-28);
+    /* both endpoints at WorkingPrecision */
+    ASSERT_CLOSE("NIntegrate[Sin[1/(x (1-x))],{x,0,1},WorkingPrecision->40]",
+                 "-0.420564937719925602353566105440624804841397291901640261734259",
+                 1e-28);
+    /* a fast oscillation of FIXED frequency is no endpoint singularity: the
+     * ordinary rules keep it (and agree with the closed form) */
+    ASSERT_CLOSE("NIntegrate[Sin[1000 x],{x,0,1},WorkingPrecision->40]",
+                 "(1 - Cos[1000])/1000", 1e-30);
+    /* a removable singularity whose machine samples cancel to noise next to
+     * the endpoint is not mistaken for an oscillation */
+    ASSERT_CLOSE("NIntegrate[(Exp[x]-1-x)/x^2,{x,0,1},WorkingPrecision->40]",
+                 "2 - E + ExpIntegralEi[1] - EulerGamma", 1e-30);
 }
 
 static void test_montecarlo(void) {
@@ -954,6 +986,7 @@ int main(void) {
     TEST(test_vector_integrand);
     TEST(test_oscillatory);
     TEST(test_oscillatory_singularity);
+    TEST(test_oscillatory_singularity_wp);
     TEST(test_montecarlo);
     TEST(test_exclusions_pv);
     TEST(test_high_precision);

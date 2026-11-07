@@ -186,9 +186,9 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
             }
         }
         free(S);
-        /* If the extrapolation never reached the tolerance, the raw partial sum
-         * over many half-periods is itself a (slowly-)convergent estimate. */
-        *result = conv ? best : total;
+        /* The best extrapolation, converged or not (*abserr is its step); the
+         * raw partial sum over the half-periods only when none was accepted. */
+        *result = isfinite(err) ? best : total;
         *abserr = err;
         return conv;
     }
@@ -214,6 +214,47 @@ static double osc_mpfr_mag(const mpfr_t re, const mpfr_t im) {
     return hypot(mpfr_get_d(re, MPFR_RNDN), mpfr_get_d(im, MPFR_RNDN));
 }
 
+/* Refine the double zero z (in/out) of component `comp` of f to the working
+ * precision by the secant method in MPFR.  The partial sum up to a zero that
+ * is off by d differs from the true one by ~f'(z) d^2 / 2: with d at double
+ * precision that is ~1e-32 f', a floor under every partial sum that Wynn's
+ * epsilon then amplifies (the 50-digit lobe sum of Cos[t E^t] stalled at
+ * 33 digits).  Three or four MPFR samples a zero; `half` bounds how far the
+ * refined zero may move (half the lobe), and on any failure z keeps its
+ * double value (the lobes still tile the range exactly). */
+static void osc_refine_zero_mpfr(DeQuadSampleMPFR f, void* ctx, int comp,
+                                 mpfr_t z, double half, long bits) {
+    mpfr_prec_t p = (mpfr_prec_t)bits;
+    mpfr_t z0, z1, f0, f1, vr, vi, d, t;
+    mpfr_inits2(p, z0, z1, f0, f1, vr, vi, d, t, (mpfr_ptr)0);
+    mpfr_set(z0, z, MPFR_RNDN);
+    double h = fabs(mpfr_get_d(z, MPFR_RNDN)) * 1e-13 + fabs(half) * 1e-12;
+    bool ok = h > 0.0 && f(ctx, z0, vr, vi);
+    if (ok) mpfr_set(f0, comp ? vi : vr, MPFR_RNDN);
+    mpfr_add_d(z1, z0, h, MPFR_RNDN);
+    ok = ok && f(ctx, z1, vr, vi);
+    if (ok) mpfr_set(f1, comp ? vi : vr, MPFR_RNDN);
+    double lstop = -(double)bits * 0.75;   /* d^2 below the working precision */
+    for (int it = 0; ok && it < 6; it++) {
+        mpfr_sub(t, f1, f0, MPFR_RNDN);
+        if (mpfr_zero_p(t) || mpfr_zero_p(f1)) break;
+        mpfr_sub(d, z1, z0, MPFR_RNDN);
+        mpfr_mul(d, d, f1, MPFR_RNDN);
+        mpfr_div(d, d, t, MPFR_RNDN);              /* step = f1 (z1-z0)/(f1-f0) */
+        mpfr_set(z0, z1, MPFR_RNDN); mpfr_set(f0, f1, MPFR_RNDN);
+        mpfr_sub(z1, z1, d, MPFR_RNDN);
+        mpfr_sub(t, z1, z, MPFR_RNDN);
+        if (!mpfr_number_p(z1) || fabs(mpfr_get_d(t, MPFR_RNDN)) > fabs(half)) { ok = false; break; }
+        double ld = mpfr_zero_p(d) ? -INFINITY
+                  : (double)mpfr_get_exp(d) - log2(fabs(half) + 1e-300);
+        if (ld < lstop) break;
+        if (!f(ctx, z1, vr, vi)) { ok = false; break; }
+        mpfr_set(f1, comp ? vi : vr, MPFR_RNDN);
+    }
+    if (ok && mpfr_number_p(z1)) mpfr_set(z, z1, MPFR_RNDN);
+    mpfr_clears(z0, z1, f0, f1, vr, vi, d, t, (mpfr_ptr)0);
+}
+
 bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
                         DeQuadSampleMPFR fmp, void* mpctx,
                         double a, long bits, double reltol,
@@ -229,11 +270,19 @@ bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
     if (!osc_halfperiod_comp(fgeo, geoctx, a, 0.0, true, &hp, &comp) || !(hp > 0.0))
         return false;
 
-    /* Each lobe is integrated to (a little tighter than) the target tolerance so
-     * per-panel error does not accumulate across the hundreds of cancelling
-     * lobes.  Its endpoints are zeros of the oscillation, so a lobe is smooth
-     * and single-signed — exactly what tanh-sinh resolves quickly. */
-    double panel_tol = reltol;
+    /* Each lobe is integrated to nearly the working precision, not just the
+     * target tolerance: Wynn's high-degree corner amplifies the noise of the
+     * partial sums by many orders (lobes good to the 1e-50 goal floored the
+     * 50-digit extrapolation of Cos[t E^t] at 1e-35), and the guard bits
+     * above the target are there to absorb it.  A lobe runs between zeros of
+     * the oscillation, so it is analytic and single-signed: Clenshaw-Curtis
+     * resolves it in 33-129 nested points, where tanh-sinh (built for
+     * endpoint singularities) pays several hundred; tanh-sinh stays the rule
+     * for a lobe that is not smooth (a singular first lobe at a). */
+    double panel_tol = ldexp(1.0, -(int)(bits - 24));
+    if (panel_tol > reltol) panel_tol = reltol;
+    if (!(panel_tol > 0.0)) panel_tol = reltol;
+    CcCache* cc = ccquad_cache_new(bits);
 
     mpfr_t* Sr = malloc((size_t)max_panels * sizeof(mpfr_t));
     mpfr_t* Si = malloc((size_t)max_panels * sizeof(mpfr_t));
@@ -250,8 +299,12 @@ bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
      * extrapolation error far above a high-precision tolerance and never
      * converge — exhausting every panel.  In MPFR's wide working precision the
      * high-degree tableau corner is numerically safe, so scale the cap to the
-     * requested digits (~one Wynn degree per four digits). */
-    int dcap = (int)(-log10(reltol) / 4.0) + 6;
+     * requested digits.  A degree buys about 2.5 digits on a lobe sum whose
+     * terms decay like 1/n (an oscillatory endpoint singularity spread onto a
+     * half line, or Sin[x]/x): one degree per two digits, so the cap is never
+     * what stops a 50-digit extrapolation (one per four floored the 50-digit
+     * lobe sum of Cos[t E^t] near 1e-46). */
+    int dcap = (int)(-log10(reltol) / 2.0) + 6;
     if (dcap < 6) dcap = 6;
     if (dcap > 80) dcap = 80;
 
@@ -259,20 +312,25 @@ bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
     double err = INFINITY, maxS = 0.0;
     bool conv = false;
     double scale = hp, x = a;
+    mpfr_set_d(x0m, a, MPFR_RNDN);
     for (int k = 0; k < max_panels; k++) {
         double z;
         if (!osc_next_zero(fgeo, geoctx, comp, x, scale, &z)) break;
-        mpfr_set_d(x0m, x, MPFR_RNDN);
+        /* x0m holds the previous (refined) zero, so the lobes tile exactly */
         mpfr_set_d(x1m, z, MPFR_RNDN);
+        osc_refine_zero_mpfr(fmp, mpctx, comp, x1m, 0.5 * (z - x), bits);
         double perr;
-        denint_tanhsinh_mpfr(fmp, mpctx, x0m, x1m, bits, panel_tol,
-                             panel_levels, pr, pi, &perr);
+        if (!ccquad_mpfr_upto(fmp, mpctx, x0m, x1m, bits, panel_tol, NULL, cc, 4,
+                              pr, pi, &perr))
+            denint_tanhsinh_mpfr(fmp, mpctx, x0m, x1m, bits, panel_tol,
+                                 panel_levels, pr, pi, &perr);
         /* Accept the panel's best estimate whenever it is a finite number
          * (mirrors the machine osc_panel, which keeps a non-converged panel). */
         if (mpfr_number_p(pr) && mpfr_number_p(pi)) {
             mpfr_add(total_r, total_r, pr, MPFR_RNDN);
             mpfr_add(total_i, total_i, pi, MPFR_RNDN);
         }
+        mpfr_set(x0m, x1m, MPFR_RNDN);
         scale = z - x;
         x = z;
 
@@ -284,8 +342,11 @@ bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
 
         if (n >= 5) {
             int deg = (n - 1) / 2; if (deg > dcap) deg = dcap; if (deg < 1) deg = 1;
+            /* the extrapolation reads the most recent partial sums: a window
+             * of 4 deg + 8 keeps each call O(deg^2) however many lobes */
+            int w = n; if (w > 4 * deg + 8) w = 4 * deg + 8;
             double sstep; bool fin;
-            if (seqaccel_wynn_mpfr((const mpfr_t*)Sr, (const mpfr_t*)Si, n, deg,
+            if (seqaccel_wynn_mpfr((const mpfr_t*)Sr + (n - w), (const mpfr_t*)Si + (n - w), w, deg,
                                    bits, accr, acci, &sstep, &fin)
                 && fin && isfinite(sstep)) {
                 double amag = osc_mpfr_mag(accr, acci);
@@ -303,10 +364,14 @@ bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
         }
     }
 
-    /* Fall back to the raw partial sum if extrapolation never met tolerance. */
-    if (conv) { mpfr_set(out_re, bestr,   MPFR_RNDN); mpfr_set(out_im, besti,   MPFR_RNDN); }
-    else      { mpfr_set(out_re, total_r, MPFR_RNDN); mpfr_set(out_im, total_i, MPFR_RNDN); }
+    /* The best extrapolation, converged or not: *abserr is its step, so the
+     * value it describes is that one (the raw partial sum of a 1/n lobe
+     * series is far worse: 4 digits where the extrapolation held 30).  The
+     * raw sum only when no extrapolation was ever accepted. */
+    if (isfinite(err)) { mpfr_set(out_re, bestr,   MPFR_RNDN); mpfr_set(out_im, besti,   MPFR_RNDN); }
+    else               { mpfr_set(out_re, total_r, MPFR_RNDN); mpfr_set(out_im, total_i, MPFR_RNDN); }
     *abserr = err;
+    ccquad_cache_free(cc);
 
     for (int i = 0; i < n; i++) { mpfr_clear(Sr[i]); mpfr_clear(Si[i]); }
     free(Sr); free(Si);

@@ -243,9 +243,13 @@ bool seqaccel_wynn_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
     if (degree < 1) degree = 1;
 
     mpfr_prec_t p = (mpfr_prec_t)bits;
-    int cols = terms + 1;
-    size_t stride = (size_t)cols;
-    size_t cells = stride * stride;
+    /* Only the columns up to the one read, rc = 2 degree + 1, are built: the
+     * full triangle cost O(terms^2) MPFR cells and operations a call, and a
+     * caller that extrapolates after every new term (oscint's lobe sums, up
+     * to thousands of them) paid O(terms^3) for columns it never looked at. */
+    int ncol = 2 * degree + 2;               /* columns 0 .. rc */
+    size_t stride = (size_t)(terms + 1);
+    size_t cells = stride * (size_t)ncol;
     mpfr_t* er = malloc(sizeof(mpfr_t) * cells);
     mpfr_t* ei = malloc(sizeof(mpfr_t) * cells);
     if (!er || !ei) { free(er); free(ei); return false; }
@@ -263,7 +267,7 @@ bool seqaccel_wynn_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
         mpfr_set(SA_ER(1, n), Sr[n], MPFR_RNDN);
         mpfr_set(SA_EI(1, n), Si[n], MPFR_RNDN);
     }
-    for (int c = 2; c <= terms; c++) {
+    for (int c = 2; c < ncol; c++) {
         int len = terms + 1 - c;
         for (int n = 0; n < len; n++) {
             mpfr_sub(dr, SA_ER(c - 1, n + 1), SA_ER(c - 1, n), MPFR_RNDN);

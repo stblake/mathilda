@@ -47,6 +47,7 @@
 #include "core.h"     /* leaf_count_internal */
 #include "common.h"   /* common_scan_inexact */
 #include "message.h"  /* mth_msg_suppress_push, mth_msg_fired_count */
+#include "mtime.h"    /* mth_mono_seconds: the oscillatory-endpoint probe budget */
 #include "eval.h"
 #include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
@@ -1258,7 +1259,10 @@ static double ni_wp_digits(const NiOpts* o) {
  * noise never reaches the user.  The caller keeps returning its best estimate. */
 static void ni_warn_goal(const NiOpts* o, double achieved_err, double result_mag) {
     if (arith_warnings_muted()) return;
-    if (g_ni_beyond && !g_ni_escalated) return;   /* pass is re-run in MPFR */
+    /* a machine pass that left the double range is re-run in MPFR, which
+     * gives its own verdict; an MPFR pass (any sample of a machine-precision
+     * geometry probe may have set the flag) is the final one and warns */
+    if (!o->prec_mpfr && g_ni_beyond && !g_ni_escalated) return;
     double tol = nc_combined_tol(o->acc_goal, o->prec_goal, result_mag,
                                  ni_wp_digits(o));
     if (achieved_err > tol) nc_warn_goal("NIntegrate", achieved_err, tol);
@@ -1750,6 +1754,92 @@ static NiAtt ni_try_ncr(NiCtx* ctx, double a, double b, const NiOpts* o,
  * envelope of an algebraic / one-over-x or oscillatory singularity.  Requiring a
  * large absolute magnitude keeps a merely large relative swing of a bounded
  * oscillation (whose outer probe happened to land near a zero) from registering. */
+/* An oscillatory endpoint singularity -- a phase that grows without bound at
+ * the endpoint (Cos[Log[x]/x], Sin[1/(x (1 - x))]) -- detected numerically,
+ * so no particular form of the integrand is needed: the real or imaginary
+ * part changes sign many times on a log-uniform grid of distances in two
+ * shells next to the endpoint, 10^-11..10^-9 and 10^-6..10^-4 of the span.
+ * An oscillation of fixed frequency, however fast (Sin[10^6 x]), is smooth
+ * on the deep shell; only an unbounded phase still changes sign there.  The
+ * shallow shell rejects rounding noise: a cancelling expression
+ * ((E^x - 1 - x)/x^2 at machine precision) has random signs at 10^-10 but
+ * none at 10^-5.  `probe` reports the signs of Re and Im of f at distance
+ * d span from the endpoint; a shell stops early once it can no longer reach
+ * the threshold, so a smooth integrand costs ~23 samples an endpoint. */
+#define NI_OSE_POINTS   32
+#define NI_OSE_MIN_SC   10
+
+/* 1: signs written; 0: no numeric sample there; -1: stop probing. */
+typedef int (*NiOseSign)(void* ctx, double d, int* sr, int* si);
+
+/* A sample costing over NI_OSE_COST_RATIO times the first one (and over
+ * NI_OSE_COST_MIN seconds) stops the probe: an integrand whose evaluation
+ * cost grows without bound toward the endpoint (Cos[Exp[1/x]], whose huge
+ * phase is still a valid double cosine) is not one the lobe rule can follow
+ * there anyway, and the deep shell would cost hours. */
+#define NI_OSE_COST_RATIO 30.0
+#define NI_OSE_COST_MIN   2e-3
+
+static bool ni_osc_shell(NiOseSign probe, void* pc, double lo, double hi, double* t_first) {
+    int scr = 0, sci = 0, pr = 0, pi = 0;
+    for (int i = 0; i < NI_OSE_POINTS; i++) {
+        int left = NI_OSE_POINTS - i;
+        if ((scr > sci ? scr : sci) + left < NI_OSE_MIN_SC) return false;
+        /* from the outer edge of the shell inwards */
+        double e = hi - (hi - lo) * ((double)i + 0.5) / (double)NI_OSE_POINTS;
+        int sr, si;
+        double t0 = mth_mono_seconds();
+        int st = probe(pc, pow(10.0, e), &sr, &si);
+        double dt = mth_mono_seconds() - t0;
+        if (*t_first < 0.0) *t_first = dt;
+        else if (dt > NI_OSE_COST_MIN && dt > NI_OSE_COST_RATIO * *t_first) return false;
+        if (st < 0) return false;            /* the probe gave up */
+        if (st == 0) continue;
+        if (sr != 0) { if (pr != 0 && sr != pr) scr++; pr = sr; }
+        if (si != 0) { if (pi != 0 && si != pi) sci++; pi = si; }
+        if (scr >= NI_OSE_MIN_SC || sci >= NI_OSE_MIN_SC) return true;
+    }
+    return false;
+}
+
+static bool ni_osc_endpoint_probe(NiOseSign probe, void* pc) {
+    double t_first = -1.0;
+    return ni_osc_shell(probe, pc, -6.0, -4.0, &t_first)
+        && ni_osc_shell(probe, pc, -11.0, -9.0, &t_first);
+}
+
+typedef struct { NiCtx* c; double a, b; int side; } NiOseMachProbe;
+
+/* A sample that leaves the double range stops the probe: the samples are
+ * taken from the outside in, and one nearer the endpoint can cost without
+ * bound (Cos[Exp[1/x]] at x = 10^-11 is the cosine of a number with 10^11
+ * integer bits).  The flag stays set, so a machine pass is still re-run in
+ * MPFR as any other out-of-range sample asks. */
+static int ni_ose_machine_sign(void* vp, double d, int* sr, int* si) {
+    NiOseMachProbe* q = (NiOseMachProbe*)vp;
+    double span = q->b - q->a;
+    double x = (q->side > 0) ? q->a + span * d : q->b - span * d;
+    if (x == q->a || x == q->b) return 0;
+    bool saved = g_ni_beyond;
+    if (saved && !g_ni_escalated) return -1;   /* the pass is already void */
+    g_ni_beyond = false;
+    double _Complex v;
+    bool ok = ni_sample_machine(q->c, x, &v);
+    bool beyond = g_ni_beyond;
+    g_ni_beyond = saved || beyond;
+    if (beyond) return -1;
+    if (!ok) return 0;
+    *sr = (creal(v) > 0) - (creal(v) < 0);
+    *si = (cimag(v) > 0) - (cimag(v) < 0);
+    return 1;
+}
+
+/* The machine-precision test of one endpoint (side +1: a, -1: b). */
+static bool ni_osc_endpoint_machine(NiCtx* c, double a, double b, int side) {
+    NiOseMachProbe q = { c, a, b, side };
+    return ni_osc_endpoint_probe(ni_ose_machine_sign, &q);
+}
+
 static bool ni_endpoint_singular(NiCtx* c, double a, double b, int side) {
     double span = b - a;
     double mref = 0.0, mmax = 0.0;
@@ -1774,6 +1864,30 @@ static bool ni_endpoint_singular(NiCtx* c, double a, double b, int side) {
  * the engine behind Method -> "OscillatorySingularity".  When `force` is false
  * only endpoints detected singular are transformed; when true (explicit method)
  * both endpoints are tried and the better-converged result kept. */
+/* One exponential-endpoint piece: x = end_a +- span e^-z on z in [0, oo),
+ * exp-sinh first, then between the zeros + Wynn. */
+static NiAtt ni_endpoint_piece(NiCtx* ctx, NiMapMode mode, double end, double span,
+                               const NiOpts* o, double reltol) {
+    ctx->span = span; ctx->map_mode = mode; ctx->end_a = end;
+    double _Complex v; double err;
+    bool conv = dequad_halfline_machine(ni_sample_machine, ctx, 0.0, reltol,
+                                        ni_de_levels(o), &v, &err);
+    if (!conv) {
+        double _Complex ov; double oerr;
+        if (osc_integrate_machine(ni_sample_machine, ctx, 0.0, 0.0, true,
+                                  reltol, 600, &ov, &oerr)) {
+            v = ov; err = oerr; conv = true;
+        } else if (isfinite(oerr) && isfinite(creal(ov)) && isfinite(cimag(ov))) {
+            v = ov; err = oerr;     /* the extrapolation, unconverged */
+        }
+    }
+    ctx->map_mode = NI_MAP_AFFINE;
+    NiAtt at;
+    at.have = isfinite(creal(v)) && isfinite(cimag(v));
+    at.conv = conv; at.val = v; at.err = err;
+    return at;
+}
+
 static NiAtt ni_try_endpoint_sing(NiCtx* ctx, double a, double b,
                                   const NiOpts* o, bool force) {
     NiAtt best = { false, false, 0.0, INFINITY };
@@ -1784,35 +1898,31 @@ static NiAtt ni_try_endpoint_sing(NiCtx* ctx, double a, double b,
 
     double reltol, abstol;
     ni_machine_tols(o, &reltol, &abstol);
-    /* Transform only an endpoint detected singular: the exponential map damps a
-     * singularity at the z → ∞ end only, so applying it to a regular endpoint
-     * (the wrong mirror) would instead sample the *other*, singular end at z = 0
-     * and converge to the wrong value.  With an explicit method (`force`) and no
-     * endpoint detected singular, fall back to trying both mirrors. */
-    int sides[2]; int ns = 0;
-    if (ni_endpoint_singular(ctx, a, b, +1)) sides[ns++] = +1;
-    if (ni_endpoint_singular(ctx, a, b, -1)) sides[ns++] = -1;
-    if (ns == 0 && force) { sides[ns++] = +1; sides[ns++] = -1; }
-
-    for (int s = 0; s < ns; s++) {
-        ctx->span = b - a;
-        if (sides[s] > 0) { ctx->map_mode = NI_MAP_EXP_LO; ctx->end_a = a; }
-        else              { ctx->map_mode = NI_MAP_EXP_HI; ctx->end_a = b; }
-        double _Complex v; double err;
-        bool conv = dequad_halfline_machine(ni_sample_machine, ctx, 0.0, reltol,
-                                            ni_de_levels(o), &v, &err);
-        if (!conv) {
-            double _Complex ov; double oerr;
-            if (osc_integrate_machine(ni_sample_machine, ctx, 0.0, 0.0, true,
-                                      reltol, 600, &ov, &oerr)) {
-                v = ov; err = oerr; conv = true;
-            }
-        }
-        ctx->map_mode = NI_MAP_AFFINE;
-        NiAtt at;
-        at.have = isfinite(creal(v)) && isfinite(cimag(v));
-        at.conv = conv; at.val = v; at.err = err;
-        ni_consider(&best, at);
+    /* Transform only an endpoint detected singular -- by magnitude, or as an
+     * oscillatory singularity of bounded amplitude (Cos[Log[x]/x]): the
+     * exponential map damps a singularity at the z -> oo end only, so applying
+     * it to a regular endpoint (the wrong mirror) would instead sample the
+     * *other*, singular end at z = 0 and converge to the wrong value.  Both
+     * ends singular (Sin[1/(x (1 - x))]): the range is split at its midpoint
+     * and each half mapped at its own end.  With an explicit method (`force`)
+     * and no endpoint detected singular, fall back to trying both mirrors. */
+    bool lo = ni_endpoint_singular(ctx, a, b, +1) || ni_osc_endpoint_machine(ctx, a, b, +1);
+    bool hi = ni_endpoint_singular(ctx, a, b, -1) || ni_osc_endpoint_machine(ctx, a, b, -1);
+    if (lo && hi) {
+        double m = a + 0.5 * (b - a);
+        NiAtt p1 = ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, m - a, o, reltol);
+        NiAtt p2 = ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - m, o, reltol);
+        best.have = p1.have && p2.have;
+        best.conv = p1.conv && p2.conv;
+        best.val = p1.val + p2.val;
+        best.err = p1.err + p2.err;
+        return best;
+    }
+    if (lo) return ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, b - a, o, reltol);
+    if (hi) return ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - a, o, reltol);
+    if (force) {
+        ni_consider(&best, ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, b - a, o, reltol));
+        ni_consider(&best, ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - a, o, reltol));
     }
     return best;
 }
@@ -1850,6 +1960,18 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
                || o->method == NI_NEWTONCOTES) {
         ni_consider(&best, ni_try_ncr(ctx, a, b, o, reltol, abstol));
     } else {
+        /* An oscillatory endpoint singularity first, and its rule's verdict
+         * is final: Gauss-Kronrod and tanh-sinh under-sample the ever-faster
+         * oscillation and can settle on a wrong value (Cos[Log[x]/x] on
+         * [0, 1]: 0.32397 for 0.32473, with no warning). */
+        if (o->method == NI_AUTO && ctx->map_mode == NI_MAP_AFFINE
+            && creal(ctx->x_scale) == 1.0 && cimag(ctx->x_scale) == 0.0
+            && ctx->x_shift == 0.0 && b > a
+            && (ni_osc_endpoint_machine(ctx, a, b, +1)
+                || ni_osc_endpoint_machine(ctx, a, b, -1))) {
+            NiAtt os = ni_try_endpoint_sing(ctx, a, b, o, false);
+            if (os.have) return os;
+        }
         ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
         if (!best.conv && (o->method == NI_AUTO || !best.have))
             ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
@@ -2180,6 +2302,193 @@ static bool ni_mpfr_powsing(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
 }
 
 /* ------------------------------------------------------------------ *
+ *  Oscillatory endpoint singularities at WorkingPrecision              *
+ * ------------------------------------------------------------------ *
+ *
+ * x^-1 Cos[Log[x]/x] on [0, 1] oscillates infinitely often as x -> 0 (with a
+ * growing amplitude; the integral converges only conditionally).  No rule
+ * that samples x resolves that: tanh-sinh, Clenshaw-Curtis and the graded
+ * pieces each see an under-sampled oscillation, and the cascade returned
+ * -0.1186 for the true 0.3234 at WorkingPrecision -> 60.  The machine path
+ * has the right rule (ni_try_endpoint_sing): the exponential map
+ * x = a + span e^-t spreads the singular endpoint over a half line, where the
+ * oscillation becomes a sequence of lobes between successive zeros, each
+ * integrated on its own and the partial sums extrapolated by Wynn's epsilon.
+ * This is its MPFR counterpart (osc_integrate_mpfr): the zeros are located
+ * with the machine sampler (a lobe boundary needs only a few digits, and
+ * consecutive lobes share it, so the lobes tile the half line exactly), each
+ * lobe is integrated at the working precision, and the extrapolated sum
+ * decides convergence.  Once such an endpoint is detected this rule's result
+ * is the answer: a rule that cannot see the oscillation cannot certify a
+ * value either, so an extrapolation that does not settle is returned
+ * unconverged (NIntegrate::accgl), never replaced by one of theirs.
+ *
+ * Detection (ni_osc_endpoint_probe) samples the guarded MPFR integrand, so
+ * cancellation noise next to a removable singularity is not mistaken for an
+ * oscillation. */
+#define NI_OSE_PANELS   2000
+
+typedef struct {
+    NiCtx*      c;
+    mpfr_srcptr end, span;
+    int         side;
+    mpfr_t      x, vr, vi;
+} NiOseMpfrProbe;
+
+static int ni_ose_mpfr_sign(void* vp, double d, int* sr, int* si) {
+    NiOseMpfrProbe* q = (NiOseMpfrProbe*)vp;
+    mpfr_set_d(q->x, d, MPFR_RNDN);
+    mpfr_mul(q->x, q->x, q->span, MPFR_RNDN);
+    if (q->side > 0) mpfr_add(q->x, q->end, q->x, MPFR_RNDN);
+    else             mpfr_sub(q->x, q->end, q->x, MPFR_RNDN);
+    if (!ni_sample_mpfr(q->c, q->x, q->vr, q->vi)) return 0;
+    *sr = mpfr_sgn(q->vr); *si = mpfr_sgn(q->vi);
+    return 1;
+}
+
+static bool ni_mpfr_osc_endpoint(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
+                                 int side, long bits) {
+    /* the deep shell must stay representable next to a non-zero endpoint */
+    if (!mpfr_zero_p(end)
+        && (long)mpfr_get_exp(end) - (long)mpfr_get_exp(span) > bits - 48)
+        return false;
+    /* Machine samples first, MPFR to confirm: an MPFR sample next to the
+     * endpoint can cost without bound (Cos[Exp[1/x]] at x = 10^-11 asks for
+     * the cosine of a number with 10^11 integer bits), where the double
+     * overflows at once and declines. */
+    NiCtx gm = *ctx;
+    ni_ctx_rebody(&gm, ctx->body);
+    gm.spec = numeric_machine_spec();
+    gm.gd_on = false;
+    double ed = mpfr_get_d(end, MPFR_RNDN), sd = mpfr_get_d(span, MPFR_RNDN);
+    if (!(side > 0 ? ni_osc_endpoint_machine(&gm, ed, ed + sd, +1)
+                   : ni_osc_endpoint_machine(&gm, ed - sd, ed, -1)))
+        return false;
+    NiOseMpfrProbe q;
+    q.c = ctx; q.end = end; q.span = span; q.side = side;
+    mpfr_inits2(bits, q.x, q.vr, q.vi, (mpfr_ptr)0);
+    bool hit = ni_osc_endpoint_probe(ni_ose_mpfr_sign, &q);
+    mpfr_clears(q.x, q.vr, q.vi, (mpfr_ptr)0);
+    return hit;
+}
+
+/* The exponential endpoint map in MPFR: t >= 0 -> x = end + side span e^-t,
+ * dx = span e^-t dt in both orientations (see ni_try_endpoint_sing). */
+typedef struct {
+    NiCtx*      c;
+    mpfr_srcptr end, span;
+    int         side;
+    mpfr_t      off, x;   /* scratch */
+} NiExpMap;
+
+static bool ni_sample_expmap(void* vctx, const mpfr_t t, mpfr_t out_re, mpfr_t out_im) {
+    NiExpMap* m = (NiExpMap*)vctx;
+    if (mpfr_sgn(t) < 0) return false;
+    mpfr_neg(m->off, t, MPFR_RNDN);
+    mpfr_exp(m->off, m->off, MPFR_RNDN);
+    mpfr_mul(m->off, m->off, m->span, MPFR_RNDN);          /* span e^-t */
+    if (!mpfr_regular_p(m->off)) return false;
+    /* as ni_sample_powmap: extra bits keep the distance to a non-zero
+     * endpoint exact, capped at 8x the working precision */
+    mpfr_prec_t wp = mpfr_get_prec(m->off), xp = wp;
+    if (!mpfr_zero_p(m->end)) {
+        long gap = (long)mpfr_get_exp(m->end) - (long)mpfr_get_exp(m->off);
+        if (gap > 0) xp += (mpfr_prec_t)gap + 8;
+        if (xp > 8 * wp) xp = 8 * wp;
+    }
+    mpfr_set_prec(m->x, xp);
+    if (m->side > 0) mpfr_add(m->x, m->end, m->off, MPFR_RNDN);
+    else             mpfr_sub(m->x, m->end, m->off, MPFR_RNDN);
+    if (mpfr_equal_p(m->x, m->end)) return false;
+    if (!ni_sample_mpfr(m->c, m->x, out_re, out_im)) return false;
+    mpfr_mul(out_re, out_re, m->off, MPFR_RNDN);
+    mpfr_mul(out_im, out_im, m->off, MPFR_RNDN);
+    return true;
+}
+
+/* One piece [end, end + span] (side > 0) or [end - span, end] (side < 0)
+ * whose endpoint `end` is the oscillatory singularity, added to (re, im).
+ * Returns whether the extrapolation settled; *any whether a lobe was
+ * integrated at all (no oscillation geometry found: nothing is added). */
+static bool ni_mpfr_oscsing_piece(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
+                                  int side, const NiOpts* o, mpfr_t re, mpfr_t im,
+                                  double* abserr, bool* any) {
+    long bits = o->bits;
+    NiCtx g = *ctx;                     /* geometry: machine samples, same map */
+    ni_ctx_rebody(&g, ctx->body);
+    g.spec = numeric_machine_spec();
+    g.gd_on = false;
+    g.map_mode = side > 0 ? NI_MAP_EXP_LO : NI_MAP_EXP_HI;
+    g.end_a = mpfr_get_d(end, MPFR_RNDN);
+    g.span = mpfr_get_d(span, MPFR_RNDN);
+    NiExpMap m;
+    m.c = ctx; m.end = end; m.span = span; m.side = side;
+    mpfr_inits2(bits, m.off, m.x, (mpfr_ptr)0);
+    mpfr_t pr, pi;
+    mpfr_inits2(bits, pr, pi, (mpfr_ptr)0);
+    double perr = INFINITY;
+    bool conv = osc_integrate_mpfr(ni_sample_machine, &g, ni_sample_expmap, &m,
+                                   0.0, bits, ni_mpfr_reltol(o), NI_OSE_PANELS,
+                                   ni_mpfr_levels(o), pr, pi, &perr);
+    *any = (isfinite(perr) || !mpfr_zero_p(pr) || !mpfr_zero_p(pi))
+        && mpfr_number_p(pr) && mpfr_number_p(pi);
+    if (*any) {
+        mpfr_add(re, re, pr, MPFR_RNDN);
+        mpfr_add(im, im, pi, MPFR_RNDN);
+        *abserr += perr;
+    } else {
+        conv = false;
+    }
+    mpfr_clears(pr, pi, m.off, m.x, (mpfr_ptr)0);
+    return conv;
+}
+
+/* Returns -1 when neither endpoint is an oscillatory singularity (nothing
+ * written), 0 when one is but no lobe could be integrated (nothing written;
+ * the caller runs its cascade but must not trust its verdict), else 1 with
+ * the result in (re, im) and the extrapolation's verdict in *conv.  With both
+ * endpoints singular the range is split at its midpoint. */
+static int ni_mpfr_oscsing(NiCtx* ctx, mpfr_srcptr am, mpfr_srcptr bm,
+                           const NiOpts* o, mpfr_t re, mpfr_t im,
+                           double* abserr, bool* conv) {
+    long bits = o->bits;
+    mpfr_t span, half;
+    mpfr_inits2(bits, span, half, (mpfr_ptr)0);
+    mpfr_sub(span, bm, am, MPFR_RNDN);
+    bool lo = ni_mpfr_osc_endpoint(ctx, am, span, +1, bits);
+    bool hi = ni_mpfr_osc_endpoint(ctx, bm, span, -1, bits);
+    int out = -1;
+    if (lo || hi) {
+        mpfr_t sr, si;
+        mpfr_inits2(bits, sr, si, (mpfr_ptr)0);
+        mpfr_set_zero(sr, 1); mpfr_set_zero(si, 1);
+        double err = 0.0;
+        bool ok, any;
+        if (lo && hi) {
+            mpfr_div_2ui(half, span, 1, MPFR_RNDN);
+            bool a2 = false;
+            ok = ni_mpfr_oscsing_piece(ctx, am, half, +1, o, sr, si, &err, &any);
+            if (any) ok = ni_mpfr_oscsing_piece(ctx, bm, half, -1, o, sr, si, &err, &a2) && ok;
+            any = any && a2;
+        } else if (lo) {
+            ok = ni_mpfr_oscsing_piece(ctx, am, span, +1, o, sr, si, &err, &any);
+        } else {
+            ok = ni_mpfr_oscsing_piece(ctx, bm, span, -1, o, sr, si, &err, &any);
+        }
+        if (any) {
+            mpfr_set(re, sr, MPFR_RNDN); mpfr_set(im, si, MPFR_RNDN);
+            *abserr = err; *conv = ok;
+            out = 1;
+        } else {
+            out = 0;
+        }
+        mpfr_clears(sr, si, (mpfr_ptr)0);
+    }
+    mpfr_clears(span, half, (mpfr_ptr)0);
+    return out;
+}
+
+/* ------------------------------------------------------------------ *
  *  Narrow features at WorkingPrecision: the recentred DE rule          *
  * ------------------------------------------------------------------ *
  *
@@ -2330,6 +2639,15 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
          * only if they do not converge. */
         const double strong = 8.0 * M_PI;
         bool weak = false;
+        /* An oscillatory endpoint singularity first: once one is found, no
+         * later rule's convergence verdict can be trusted (see
+         * ni_mpfr_oscsing). */
+        bool untrusted = false;
+        if (o->method == NI_AUTO || o->method == NI_OSCSING) {
+            int os = ni_mpfr_oscsing(ctx, am, bm, o, re, im, abserr, &conv);
+            if (os == 1) got = true;
+            else if (os == 0) untrusted = true;
+        }
         if (!got && (o->method == NI_LEVIN || o->method == NI_AUTO)) {
             bool lconv = false;
             if (ni_try_levin_collocation_mpfr(ctx, a, b, o,
@@ -2388,6 +2706,7 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
             }
             mpfr_clears(lre, lim, (mpfr_ptr)0);
         }
+        if (untrusted) conv = false;
     }
     ctx->gd_on = gd_saved; ctx->gd_a = gda_saved; ctx->gd_b = gdb_saved;
     ctx->gd_exact = gde_saved;
