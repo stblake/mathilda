@@ -1103,6 +1103,7 @@ static bool hermite_1d_eval(const IFun* g, const int* cpath, int vrank, int k,
 /* --- value-array shape + result assembly ------------------------------ */
 
 static Expr* make_list(Expr** items, size_t n);   /* defined below */
+static Expr* make_pair(Expr* a, Expr* b);        /* defined below */
 
 /* Shape of the value array `e` (from the first node): vshape[0..*vrank-1].
  * A scalar gives rank 0.  Caller provides space for up to 16 axes. */
@@ -1767,6 +1768,74 @@ static Expr* interp_property(Expr* ifun, const char* name) {
 
 /* --- public entry points ---------------------------------------------- */
 
+/* A 1-D table with a repeated abscissa {..., {{t}, left...}, {{t}, right...},
+ * ...} has a jump at t: an NDSolve solution through a WhenEvent state reset
+ * (the reference stores it the same way).  The interpolant is then evaluated
+ * on the piece between consecutive jumps that contains x, right-continuous at
+ * a jump (the last piece is closed at the end).  Returns false when the table
+ * has no jump (the caller evaluates as usual); otherwise *out is the value, or
+ * NULL to leave the application unevaluated. */
+static bool interp_apply_jump(Expr* ifun, Expr* arg, Expr** out) {
+    Expr* table = ifun->data.function.args[1];
+    size_t n = table->data.function.arg_count;
+    *out = NULL;
+    size_t first_jump = 0;
+    for (size_t i = 1; i < n && !first_jump; i++) {
+        Expr* a = table->data.function.args[i - 1];
+        Expr* b = table->data.function.args[i];
+        if (!interp_is_list(a) || !interp_is_list(b)) return false;
+        Expr* ca = entry_coord(a, 1, 0);
+        Expr* cb = entry_coord(b, 1, 0);
+        if (ca && cb && expr_eq(ca, cb)) first_jump = i;
+    }
+    if (!first_jump) return false;
+    if (interp_is_list(arg)) {             /* a list of points: one at a time */
+        size_t na = arg->data.function.arg_count;
+        Expr** vals = malloc(sizeof(Expr*) * (na ? na : 1));
+        for (size_t j = 0; j < na; j++) {
+            Expr* v = NULL;
+            Expr* aj = arg->data.function.args[j];
+            if (!interp_apply_jump(ifun, aj, &v) || !v) {
+                for (size_t q = 0; q < j; q++) expr_free(vals[q]);
+                free(vals);
+                return true;
+            }
+            vals[j] = v;
+        }
+        *out = make_list(vals, na);
+        free(vals);
+        return true;
+    }
+    double x;
+    if (!node_to_double(arg, &x)) return true;
+    /* the piece [lo, hi] (entry indices) containing x */
+    size_t lo = 0, hi = n - 1;
+    for (size_t i = first_jump; i < n; i++) {
+        Expr* ca = entry_coord(table->data.function.args[i - 1], 1, 0);
+        Expr* cb = entry_coord(table->data.function.args[i], 1, 0);
+        double tj;
+        if (!ca || !cb || !expr_eq(ca, cb) || !node_to_double(cb, &tj)) continue;
+        if (x < tj) { hi = i - 1; break; }
+        lo = i;
+    }
+    if (hi <= lo) return true;
+    size_t pn = hi - lo + 1;
+    Expr** rows = malloc(sizeof(Expr*) * pn);
+    for (size_t i = 0; i < pn; i++) rows[i] = expr_copy(table->data.function.args[lo + i]);
+    Expr* dom = make_list((Expr*[]){ make_pair(expr_copy(entry_coord(rows[0], 1, 0)),
+                                               expr_copy(entry_coord(rows[pn - 1], 1, 0))) }, 1);
+    size_t oa = ifun->data.function.arg_count;
+    Expr** sargs = malloc(sizeof(Expr*) * oa);
+    sargs[0] = dom;
+    sargs[1] = make_list(rows, pn);
+    for (size_t i = 2; i < oa; i++) sargs[i] = expr_copy(ifun->data.function.args[i]);
+    Expr* sub = expr_new_function(expr_copy(ifun->data.function.head), sargs, oa);
+    free(sargs); free(rows);
+    *out = interp_apply(sub, &arg, 1);
+    expr_free(sub);
+    return true;
+}
+
 Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     if (ifun->type != EXPR_FUNCTION) return NULL;
     size_t obj_argc = ifun->data.function.arg_count;
@@ -1779,6 +1848,11 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
 
     size_t m = parse_domain_dim(domain);
     if (m == 0 || argc != m) return NULL;
+
+    if (m == 1 && !is_ndarray(table) && interp_is_list(table)) {
+        Expr* jr;
+        if (interp_apply_jump(ifun, call_args[0], &jr)) return jr;
+    }
 
     int* ders = calloc(m, sizeof(int));
     bool any_der = false;

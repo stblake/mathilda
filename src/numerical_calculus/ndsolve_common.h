@@ -183,12 +183,21 @@ struct NdProblem {
     size_t*  fun_state0;    /* array[nfun] reduced index of each function's y  */
     bool     fun_applied;   /* NDSolve[..,u[x],..] -> return u[x] -> IF form   */
     bool     realified;     /* complex system split into Re/Im (dim doubled)   */
+    /* WhenEvent events (ndsolve_events.{c,h}), or NULL when there are none
+     * (owned; freed with nd_events_free). */
+    struct NdEvents* events;
     size_t   d_complex;     /* original complex dimension when realified       */
 };
 
 /* Evaluate the reduced RHS at (t, Y): writes out[0..d-1] = f(t, Y).
  * Returns false if any component fails to numericalize to a finite double. */
 bool nd_rhs_real(NdProblem* P, double t, const double* Y, double* out);
+
+/* Bind t and every reduced-state symbol to the numeric point (t, Y), and
+ * evaluate a bound expression to a finite machine double (false otherwise).
+ * Shared by the RHS sampler and the event layer (ndsolve_events.c). */
+void nd_bind_point(NdProblem* P, double t, const double* Y);
+bool nd_eval_bound(NdProblem* P, Expr* e, double* out);
 
 /* Free the MPFR RHS compiled fast path (P->ac_prec[0..d-1]).  Safe on NULL and
  * idempotent; called from every NdProblem teardown site (ndsolve.c + MoL). */
@@ -335,6 +344,11 @@ void nd_solution_init(NdSolution* s, size_t d);
 void nd_solution_free(NdSolution* s);
 /* Append an accepted node (t, Y[d], Y'[d]).  Used by the multistep drivers. */
 void nd_solution_push(NdSolution* s, double t, const double* Y, const double* dY);
+/* Append the post-event node of a WhenEvent state reset at the abscissa of the
+ * node just pushed; `dir` < 0 (integrating backward) orders it before that
+ * node, so the table reads left value then right value in ascending time. */
+void nd_solution_push_jump(NdSolution* s, double t, const double* Y, const double* dY,
+                           double dir);
 
 typedef enum {
     ND_OK = 0,

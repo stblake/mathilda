@@ -5,6 +5,7 @@
 #include "ndsolve.h"
 #include "ndsolve_common.h"
 #include "ndsolve_compile.h"
+#include "ndsolve_events.h"
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../eval.h"
@@ -193,6 +194,7 @@ static void nd_problem_free(NdProblem* P) {
     free(P->bind_y);
     free(P->fun_names);
     free(P->fun_state0);
+    nd_events_free(P->events);
 }
 
 /* ------------------------------------------------------------------ *
@@ -409,6 +411,10 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     double tmin, tmax;
     if (!nd_eval_to_double(range->data.function.args[1], o.spec, &tmin)) return NULL;
     if (!nd_eval_to_double(range->data.function.args[2], o.spec, &tmax)) return NULL;
+    /* {x, a, b} with a > b is the interval [b, a] (integrated backward from a
+     * initial condition at its top); it was left unevaluated */
+    bool range_rev = tmin > tmax;
+    if (range_rev) { double sw = tmin; tmin = tmax; tmax = sw; }
 
     /* ---- dependent functions ---- */
     Expr* funcs = A[1];
@@ -431,9 +437,17 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
 
     /* ---- normalize equations to a flat list ---- */
     Expr* eqns = A[0];
-    Expr** eqitems; size_t neq;
-    if (head_is(eqns, SYM_List)) { neq = eqns->data.function.arg_count; eqitems = eqns->data.function.args; }
-    else { neq = 1; eqitems = &eqns; }
+    Expr** eqall; size_t nall;
+    if (head_is(eqns, SYM_List)) { nall = eqns->data.function.arg_count; eqall = eqns->data.function.args; }
+    else { nall = 1; eqall = &eqns; }
+    /* WhenEvent[...] items are events, not equations: set them aside (borrowed). */
+    Expr** eqitems = malloc(sizeof(Expr*) * (nall ? nall : 1));
+    Expr** evitems = malloc(sizeof(Expr*) * (nall ? nall : 1));
+    size_t neq = 0, nev = 0;
+    for (size_t e = 0; e < nall; e++) {
+        if (nd_is_when_event(eqall[e])) evitems[nev++] = eqall[e];
+        else eqitems[neq++] = eqall[e];
+    }
 
     /* ---- classify + orders ---- */
     int* maxorder = calloc(nfun, sizeof(int));
@@ -452,15 +466,19 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         d += (size_t)(maxorder[k] < 1 ? 1 : maxorder[k]);
     }
     if (!order_ok || d == 0) {
-        free(maxorder); free(is_ode); free(base); free(fnames);
+        free(maxorder); free(is_ode); free(base); free(fnames); free(eqitems); free(evitems);
         nd_warn("nodeqs", "could not identify a well-posed ODE system");
         return NULL;
     }
 
     /* ---- boundary-value problem?  Hand off to the shooting solver. ---- */
     if (nd_is_bvp(eqitems, neq, is_ode, fnames, nfun, maxorder, o.spec)) {
-        Expr* r = nd_solve_bvp(A, argc, eqitems, neq, is_ode, fnames, nfun, maxorder);
-        free(maxorder); free(is_ode); free(base); free(fnames);
+        Expr* r = NULL;
+        if (nev > 0)
+            nd_warn("bvev", "WhenEvent is not supported for boundary-value problems");
+        else
+            r = nd_solve_bvp(A, argc, eqitems, neq, is_ode, fnames, nfun, maxorder);
+        free(maxorder); free(is_ode); free(base); free(fnames); free(eqitems); free(evitems);
         return r;
     }
 
@@ -548,8 +566,8 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     P.Y0 = calloc(d, sizeof(double));
     P.Y0_expr = calloc(d, sizeof(Expr*));
     P.y0_expr_n = d;
-    P.tmin_expr = expr_copy(range->data.function.args[1]);
-    P.tmax_expr = expr_copy(range->data.function.args[2]);
+    P.tmin_expr = expr_copy(range->data.function.args[range_rev ? 2 : 1]);
+    P.tmax_expr = expr_copy(range->data.function.args[range_rev ? 1 : 2]);
     double* Y0im = calloc(d, sizeof(double));
     bool* have_ic = calloc(d, sizeof(bool));
     double t0 = tmin; bool t0_set = false;
@@ -606,8 +624,31 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     }
     free(Y0im);
 
+    /* ---- events: WhenEvent[event, action] in terms of the reduced state ---- */
+    bool ev_ok = true;
+    if (nev > 0 && build_ok && ic_ok) {
+        if (cplx) {
+            nd_warn("cev", "WhenEvent is not supported for complex-valued ODEs");
+            ev_ok = false;
+        } else {
+            /* u^(m)[x] -> reduced symbol (m below the order), and the top
+             * derivative u^(n)[x] -> its right-hand side */
+            size_t nsub = d + nfun;
+            Expr** el = malloc(sizeof(Expr*) * nsub);
+            Expr** es = malloc(sizeof(Expr*) * nsub);
+            for (size_t i = 0; i < d; i++) { el[i] = lits[i]; es[i] = subs[i]; }
+            for (size_t k = 0; k < nfun; k++) {
+                el[d + k] = nd_make_funcapp(fnames[k], maxorder[k], xvar);
+                es[d + k] = P.f[base[k] + (size_t)maxorder[k] - 1];
+            }
+            ev_ok = nd_events_build(&P, evitems, nev, el, es, nsub, fnames, base, maxorder, nfun);
+            for (size_t k = 0; k < nfun; k++) expr_free(el[d + k]);
+            free(el); free(es);
+        }
+    }
+
     Expr* result = NULL;
-    if (build_ok && ic_ok) {
+    if (build_ok && ic_ok && ev_ok) {
         const NdStepper* S = nd_lookup_stepper(o.method);
         if (!S) { nd_warn("method", "unknown Method; using Automatic"); S = nd_default_stepper(); }
 #ifdef USE_MPFR
@@ -652,7 +693,7 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     /* cleanup */
     for (size_t i = 0; i < d; i++) { expr_free(lits[i]); expr_free(subs[i]); }
     free(lits); free(subs); free(ysym_name);
-    free(maxorder); free(is_ode); free(base);
+    free(maxorder); free(is_ode); free(base); free(eqitems); free(evitems);
     nd_problem_free(&P);
     return result;   /* NULL leaves NDSolve[...] unevaluated */
 }
@@ -727,6 +768,7 @@ void ndsolve_init(void) {
         "\tConditions at two or more points (u[0] == 0, u'[1] == 0), or coupling\n"
         "\tvalues (u[0] + u'[0] == 1, u[0] == u[1]), pose a boundary-value\n"
         "\tproblem, solved by shooting with Newton's method.\n"
+        "\tWhenEvent[event, action] items among eqns are events (see WhenEvent).\n"
         "NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}] solves a partial\n"
         "\tdifferential equation over a rectangular region by the method of lines,\n"
         "\tgiving a 2-D InterpolatingFunction applied as u[t, x].\n"
@@ -736,6 +778,22 @@ void ndsolve_init(void) {
         "\tOptions: Method, WorkingPrecision, AccuracyGoal, PrecisionGoal,\n"
         "\tMaxSteps, MaxStepSize, MaxStepFraction, StartingStepSize,\n"
         "\tInterpolationOrder, StepMonitor, EvaluationMonitor.");
+
+    /* WhenEvent[event, action]: an inert, held event specification read by
+     * NDSolve (ndsolve_events.c). */
+    symtab_get_def("WhenEvent")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("WhenEvent",
+        "WhenEvent[event, action]\n"
+        "\tgiven among the equations of NDSolve, runs action whenever event\n"
+        "\toccurs during the integration.  event is lhs == rhs (a zero crossing\n"
+        "\tin either direction), an inequality (fires when it becomes True), any\n"
+        "\tother condition (fires when it becomes True), or a list of events.\n"
+        "\tThe event time is located to the integrator's accuracy.  action is\n"
+        "\t\"StopIntegration\" (the solution's domain ends at the event),\n"
+        "\t\"RemoveEvent\", a state reset u'[t] -> expr or a list of resets\n"
+        "\t(integration restarts from the event with the new state), any\n"
+        "\texpression (evaluated at the event with t and the state bound, e.g.\n"
+        "\tSow[t]), or a list of actions.  WhenEvent holds its arguments.");
 
     /* Register one builtin per stepper as NDSolve`Name. */
     char buf[64];

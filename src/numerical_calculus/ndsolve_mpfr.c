@@ -18,6 +18,7 @@
 #include "../sym_intern.h"            /* expr_new_symbol for the independent variable */
 #include "../interp.h"                /* INTERP_MAX_SUPPLIED */
 #include "ndsolve_taylor.h"
+#include "ndsolve_events.h"
 #include "../message.h"                /* mth_message: Quiet/Check funnel */
 #include <math.h>
 #include <float.h>
@@ -327,7 +328,16 @@ static void mpsol_push_taylor(MpSol* s, const mpfr_t t, mpfr_t* C) {
     mpfr_clear(fact);
     s->n++;
 }
-/* insertion sort by ascending t */
+/* After pushing the post-event node of a state reset (same abscissa as the
+ * node before it): integrating backward it belongs before that node. */
+static void mpsol_order_jump(MpSol* s, int dir) {
+    if (dir >= 0 || s->n < 2) return;
+    size_t d = s->d, nh = mpsol_nhd(s), a = s->n - 2, b = s->n - 1;
+    for (size_t c = 0; c < d; c++) { mpfr_swap(s->Y[a*d+c], s->Y[b*d+c]); mpfr_swap(s->dY[a*d+c], s->dY[b*d+c]); }
+    for (size_t c = 0; c < nh; c++) mpfr_swap(s->hd[a*nh+c], s->hd[b*nh+c]);
+}
+/* insertion sort by ascending t (stable: a repeated event abscissa keeps its
+ * left-value, right-value order) */
 static void mpsol_sort(MpSol* s) {
     size_t d = s->d, nh = mpsol_nhd(s);
     for (size_t i = 1; i < s->n; i++) {
@@ -491,6 +501,15 @@ static bool mp_newton_bdf(NdProblem* P, const mpfr_t t1, mpfr_t* Ybase, const mp
     return conv;
 }
 
+/* Event advance for the MPFR BDF: the corrector polynomial through the new
+ * node and the q history nodes it used (the method's dense output). */
+typedef struct { mpfr_t* th2; mpfr_t* yh2; int q; size_t d; long bits; } MpBdfEvAdv;
+static bool mp_bdf_ev_advance(void* ctx, const mpfr_t s, mpfr_t* Ys) {
+    MpBdfEvAdv* c = (MpBdfEvAdv*)ctx;
+    mp_predict(s, c->th2, c->yh2, c->q, c->d, Ys, c->bits);
+    return true;
+}
+
 /* Variable-step variable-order MPFR BDF in one direction (mirrors the machine
  * bdf_dir: MPFR state + double control). */
 static NdStatus mpfr_bdf_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
@@ -517,6 +536,14 @@ static NdStatus mpfr_bdf_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol to
     mpfr_init2(acc, bits); mpfr_init2(tmp, bits);
     double* y0d    = malloc(sizeof(double) * d);
     double* fcur_d = malloc(sizeof(double) * d);
+    long ubits = mp_resolution_bits(bits);
+    MpBdfEvAdv eva; eva.d = d; eva.bits = bits; eva.q = 1;
+    eva.th2 = P->events ? mp_vec((size_t)CAP + 1, bits) : NULL;
+    eva.yh2 = P->events ? mp_vec((size_t)(CAP + 1) * d, bits) : NULL;
+    mpfr_t* Ye = P->events ? mp_vec(d, bits) : NULL;
+    mpfr_t* Yr = P->events ? mp_vec(d, bits) : NULL;
+    mpfr_t te; mpfr_init2(te, bits);
+    if (P->events) nd_events_begin_mp(P, t0m, Y0, bits);
 
     mpfr_set(t, t0m, MPFR_RNDN);
     mpfr_set(th[0], t, MPFR_RNDN);
@@ -583,10 +610,43 @@ static NdStatus mpfr_bdf_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol to
         double qexp = (double)q + 1.0;
 
         if (err <= 1.0) {
+            int ev = -1;
+            if (P->events) {
+                eva.q = q; mpfr_set(eva.th2[0], t1m, MPFR_RNDN);
+                for (size_t i = 0; i < d; i++) mpfr_set(eva.yh2[i], ynext[i], MPFR_RNDN);
+                for (int j = 0; j < q; j++) {
+                    mpfr_set(eva.th2[j + 1], th[j], MPFR_RNDN);
+                    for (size_t i = 0; i < d; i++)
+                        mpfr_set(eva.yh2[(size_t)(j + 1) * d + i], yh[(size_t)j * d + i], MPFR_RNDN);
+                }
+                ev = nd_events_locate_mp(P, t, yh, t1m, ynext, mp_bdf_ev_advance, &eva, te, Ye, bits, ubits);
+                if (ev >= 0) {
+                    mpfr_set(t1m, te, MPFR_RNDN);
+                    for (size_t i = 0; i < d; i++) mpfr_set(ynext[i], Ye[i], MPFR_RNDN);
+                }
+            }
             mpfr_set(t, t1m, MPFR_RNDN);
             if (!nd_rhs_mpfr(P, t, ynext, fnext, bits)) { st = ND_ERR_SAMPLE; break; }
             mpsol_push(sol, t, ynext, fnext);
             if (o->step_monitor) { Expr* mo = eval_and_free(expr_copy(o->step_monitor)); expr_free(mo); }
+            if (ev >= 0) {
+                unsigned fl = nd_events_fire_mp(P, ev, t, ynext, Yr, bits);
+                if (fl & ND_EVF_STOP) break;
+                if (fl & ND_EVF_RESET) {
+                    for (size_t i = 0; i < d; i++) mpfr_set(ynext[i], Yr[i], MPFR_RNDN);
+                    if (!nd_rhs_mpfr(P, t, ynext, fnext, bits)) { st = ND_ERR_SAMPLE; break; }
+                    mpsol_push(sol, t, ynext, fnext);
+                    mpsol_order_jump(sol, (int)dir);
+                }
+                /* restart the history at the event (order 1, fresh step) */
+                mpfr_set(th[0], t, MPFR_RNDN);
+                for (size_t i = 0; i < d; i++) { mpfr_set(yh[i], ynext[i], MPFR_RNDN); y0d[i] = mpfr_get_d(ynext[i], MPFR_RNDN); }
+                double tdn = mpfr_get_d(t, MPFR_RNDN);
+                if (!nd_rhs_real(P, tdn, y0d, fcur_d)) { st = ND_ERR_SAMPLE; break; }
+                m = 1; qtarget = 1; hold = 0; no_grow = false;
+                h = nd_initial_step(P, o, tol, tdn, y0d, fcur_d, 1, dir);
+                continue;
+            }
             int qnew = q; double fac = 1.0;
             if (no_grow) { fac = 1.0; hold = q + 1; }
             else if (hold > 0) { fac = 1.0; hold--; }
@@ -632,7 +692,28 @@ done:
     mp_vec_free(predm, d); mp_vec_free(predm2, d); mp_vec_free(diffm, d);
     mpfr_clear(t); mpfr_clear(t1m); mpfr_clear(coef); mpfr_clear(acc); mpfr_clear(tmp);
     free(y0d); free(fcur_d);
+    if (eva.th2) mp_vec_free(eva.th2, (size_t)CAP + 1);
+    if (eva.yh2) mp_vec_free(eva.yh2, (size_t)(CAP + 1) * d);
+    if (Ye) mp_vec_free(Ye, d);
+    if (Yr) mp_vec_free(Yr, d);
+    mpfr_clear(te);
     return st;
+}
+
+/* Event advance for the explicit MPFR methods: one step of the method from
+ * the accepted step's start, of length s - ta. */
+typedef struct { NdProblem* P; const MpDopri* T; mpfr_ptr ta; mpfr_t* Ya; mpfr_t* k;
+                 bool adaptive; long bits; } MpRkEvAdv;
+static bool mp_rk_ev_advance(void* ctx, const mpfr_t s, mpfr_t* Ys) {
+    MpRkEvAdv* c = (MpRkEvAdv*)ctx;
+    mpfr_t h; mpfr_init2(h, c->bits);
+    mpfr_sub(h, s, c->ta, MPFR_RNDN);
+    bool ok;
+    if (mpfr_zero_p(h)) { for (size_t i = 0; i < c->P->d; i++) mpfr_set(Ys[i], c->Ya[i], MPFR_RNDN); ok = true; }
+    else if (c->adaptive) ok = dopri5_mpfr(c->P, c->T, c->ta, c->Ya, h, Ys, NULL, c->k, c->bits);
+    else ok = rk4_mpfr(c->P, c->ta, c->Ya, h, Ys, c->k, c->bits);
+    mpfr_clear(h);
+    return ok;
 }
 
 /* Integrate one direction from (t0, Y0) toward `target` with the chosen
@@ -657,7 +738,7 @@ static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
 
     mpfr_t* Y  = mp_vec(d, bits);
     mpfr_t* Yn = mp_vec(d, bits);
-    mpfr_t* Ye = mp_vec(d, bits);
+    mpfr_t* Ye_err = mp_vec(d, bits);
     mpfr_t* fn = mp_vec(d, bits);
     mpfr_t* k  = mp_vec(7 * d, bits);
     for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Y0[i], MPFR_RNDN);
@@ -667,6 +748,10 @@ static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
     NdStatus st = ND_OK;
+    mpfr_t* Ye = P->events ? mp_vec(d, bits) : NULL;
+    mpfr_t* Yr = P->events ? mp_vec(d, bits) : NULL;
+    mpfr_t te, tb; mpfr_inits2(bits, te, tb, (mpfr_ptr)0);
+    if (P->events) nd_events_begin_mp(P, t0, Y0, bits);
 
     for (;;) {
         mpfr_sub(rem, target, t, MPFR_RNDN);
@@ -683,19 +768,40 @@ static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
         else      mpfr_set_d(h, dir * hm, MPFR_RNDN);
 
         bool ok; double err = 0.0;
-        if (adaptive) ok = dopri5_mpfr(P, &T, t, Y, h, Yn, Ye, k, bits);
+        if (adaptive) ok = dopri5_mpfr(P, &T, t, Y, h, Yn, Ye_err, k, bits);
         else          ok = rk4_mpfr(P, t, Y, h, Yn, k, bits);
         if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
         if (!ok) { hcur = 0.5 * fabs(mpfr_get_d(h, MPFR_RNDN)); continue; }
-        if (adaptive) err = mp_wrms(d, Ye, Y, Yn, tol);
+        if (adaptive) err = mp_wrms(d, Ye_err, Y, Yn, tol);
         const int q = 5;
         if (!adaptive || err <= 1.0) {
-            if (last) mpfr_set(t, target, MPFR_RNDN);
-            else      mpfr_add(t, t, h, MPFR_RNDN);
+            if (last) mpfr_set(tb, target, MPFR_RNDN);
+            else      mpfr_add(tb, t, h, MPFR_RNDN);
+            int ev = -1;
+            if (P->events) {
+                MpRkEvAdv ac = { P, &T, t, Y, k, adaptive, bits };
+                ev = nd_events_locate_mp(P, t, Y, tb, Yn, mp_rk_ev_advance, &ac, te, Ye, bits, ubits);
+                if (ev >= 0) {
+                    mpfr_set(tb, te, MPFR_RNDN);
+                    for (size_t i = 0; i < d; i++) mpfr_set(Yn[i], Ye[i], MPFR_RNDN);
+                }
+            }
+            mpfr_set(t, tb, MPFR_RNDN);
             for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yn[i], MPFR_RNDN);
             if (!nd_rhs_mpfr(P, t, Y, fn, bits)) { st = ND_ERR_SAMPLE; break; }
             mpsol_push(sol, t, Y, fn);
             if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+            if (ev >= 0) {
+                unsigned fl = nd_events_fire_mp(P, ev, t, Y, Yr, bits);
+                if (fl & ND_EVF_STOP) break;
+                if (fl & ND_EVF_RESET) {
+                    for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yr[i], MPFR_RNDN);
+                    if (!nd_rhs_mpfr(P, t, Y, fn, bits)) { st = ND_ERR_SAMPLE; break; }
+                    mpsol_push(sol, t, Y, fn);
+                    mpsol_order_jump(sol, (int)dir);
+                }
+                continue;   /* keep the step size the controller had */
+            }
             double fac = adaptive ? (err > 0.0 ? 0.9 * pow(1.0/err, 1.0/q) : 5.0) : 1.0;
             if (fac < 0.2) fac = 0.2;
             if (fac > 5.0) fac = 5.0;
@@ -710,8 +816,10 @@ static NdStatus mpfr_dir(NdProblem* P, const NdOpts* o, MpSol* sol, NdTol tol,
         }
     }
     mp_dopri_clear(&T);
-    mp_vec_free(Y, d); mp_vec_free(Yn, d); mp_vec_free(Ye, d); mp_vec_free(fn, d); mp_vec_free(k, 7*d);
-    mpfr_clears(t, h, rem, (mpfr_ptr)0);
+    mp_vec_free(Y, d); mp_vec_free(Yn, d); mp_vec_free(Ye_err, d); mp_vec_free(fn, d); mp_vec_free(k, 7*d);
+    if (Ye) mp_vec_free(Ye, d);
+    if (Yr) mp_vec_free(Yr, d);
+    mpfr_clears(t, h, rem, te, tb, (mpfr_ptr)0);
     return st;
 }
 
@@ -945,12 +1053,37 @@ static NdStatus mp_cross_singular(NdProblem* P, const NdOpts* o, NdTaylorTape* T
         double fac = err > 0.0 ? 0.9 * pow(1.0 / err, 0.2) : 5.0;
         if (err > 1.0) { hcur = hd * (fac < 0.2 ? 0.2 : fac); continue; }
         if (last) mpfr_set(tn, target, MPFR_RNDN); else mpfr_add(tn, t, h, MPFR_RNDN);
-        mpfr_set(t, tn, MPFR_RNDN);
-        for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yn[i], MPFR_RNDN);
-        if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
         if (fac > 5.0) fac = 5.0;
         if (fac < 0.2) fac = 0.2;
         hcur = hd * fac;
+        if (P->events) {
+            /* an event inside the Runge-Kutta crossing step ends it there */
+            MpRkEvAdv ac = { P, &T, t, Y, k, true, bits };
+            mpfr_t te; mpfr_init2(te, bits);
+            mpfr_t* Yev = mp_vec(d, bits);
+            int ev = nd_events_locate_mp(P, t, Y, tn, Yn, mp_rk_ev_advance, &ac, te, Yev, bits, ubits);
+            if (ev >= 0) {
+                mpfr_set(t, te, MPFR_RNDN);
+                for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yev[i], MPFR_RNDN);
+                unsigned fl = nd_events_fire_mp(P, ev, t, Y, Yev, bits);
+                bool fail = !nd_taylor_coeffs(TT, t, Y, p, C);
+                if (!fail) mpsol_push_taylor(sol, t, C);
+                if (!fail && (fl & ND_EVF_RESET)) {
+                    for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yev[i], MPFR_RNDN);
+                    fail = !nd_taylor_coeffs(TT, t, Y, p, C);
+                    if (!fail) { mpsol_push_taylor(sol, t, C); mpsol_order_jump(sol, dir); }
+                }
+                mpfr_clear(te); mp_vec_free(Yev, d);
+                if (fail) { st = ND_ERR_SAMPLE; break; }
+                if (fl & ND_EVF_STOP) { *done = true; break; }
+                if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+                continue;
+            }
+            mpfr_clear(te); mp_vec_free(Yev, d);
+        }
+        mpfr_set(t, tn, MPFR_RNDN);
+        for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yn[i], MPFR_RNDN);
+        if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
         if (last) {
             mpsol_push_taylor(sol, t, C);
             *done = true;
@@ -964,6 +1097,24 @@ static NdStatus mp_cross_singular(NdProblem* P, const NdOpts* o, NdTaylorTape* T
     mp_vec_free(Yn, d); mp_vec_free(Ye, d); mp_vec_free(k, 7 * d);
     mpfr_clears(h, rem, tn, (mpfr_ptr)0);
     return st;
+}
+
+/* Event advance for the Taylor integrator: the step's own series about its
+ * start, Y(s) = sum_k C_k (s - ta)^k. */
+typedef struct { mpfr_ptr ta; mpfr_t* C; int p; size_t d; long bits; } MpTaylorEvAdv;
+static bool mp_taylor_ev_advance(void* ctx, const mpfr_t s, mpfr_t* Ys) {
+    MpTaylorEvAdv* c = (MpTaylorEvAdv*)ctx;
+    mpfr_t h; mpfr_init2(h, c->bits);
+    mpfr_sub(h, s, c->ta, MPFR_RNDN);
+    bool ok = true;
+    for (size_t i = 0; i < c->d; i++) {
+        mpfr_set(Ys[i], c->C[(size_t)c->p * c->d + i], MPFR_RNDN);
+        for (int k = c->p - 1; k >= 0; k--)
+            mpfr_fma(Ys[i], Ys[i], h, c->C[(size_t)k * c->d + i], MPFR_RNDN);
+        if (!mpfr_number_p(Ys[i])) ok = false;
+    }
+    mpfr_clear(h);
+    return ok;
 }
 
 /* Integrate from (t0, Y0) to `target` (either direction), pushing a node with
@@ -997,6 +1148,10 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
     mpfr_t* Cl = mp_vec((size_t)(p + 1) * d, bits);
     bool at_kink = false;
     for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Y0[i], MPFR_RNDN);
+    mpfr_t* Ye = P->events ? mp_vec(d, bits) : NULL;
+    mpfr_t* Yr = P->events ? mp_vec(d, bits) : NULL;
+    mpfr_t te, tb; mpfr_inits2(bits, te, tb, (mpfr_ptr)0);
+    if (P->events) nd_events_begin_mp(P, t0, Y0, bits);
 
     NdStatus st = ND_OK;
     bool first_node = true;
@@ -1061,6 +1216,34 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
             if (!mpfr_number_p(Y[i])) st = ND_ERR_SAMPLE;
         }
         if (st != ND_OK) break;
+        if (P->events) {
+            /* the first event inside the step ends it there (located on the
+             * step's own series, so to the full working precision) */
+            if (last) mpfr_set(tb, target, MPFR_RNDN); else mpfr_add(tb, t, h, MPFR_RNDN);
+            MpTaylorEvAdv ac = { t, C, p, d, bits };
+            int ev = nd_events_locate_mp(P, t, C, tb, Y, mp_taylor_ev_advance, &ac, te, Ye, bits, ubits);
+            if (ev >= 0) {
+                mpfr_set(t, te, MPFR_RNDN);
+                for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Ye[i], MPFR_RNDN);
+                unsigned fl = nd_events_fire_mp(P, ev, t, Y, Yr, bits);
+                at_kink = false;
+                hprev = fabs(mpfr_get_d(h, MPFR_RNDN));
+                if (fl & (ND_EVF_STOP | ND_EVF_RESET)) {
+                    /* the event node, on the series it was reached by */
+                    if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
+                    mpsol_push_taylor(sol, t, C);
+                    if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+                    if (fl & ND_EVF_STOP) break;
+                    /* the reset state is pushed (a repeated abscissa) at the top */
+                    for (size_t i = 0; i < d; i++) mpfr_set(Y[i], Yr[i], MPFR_RNDN);
+                    if (!nd_taylor_coeffs(TT, t, Y, p, C)) { st = ND_ERR_SAMPLE; break; }
+                    mpsol_push_taylor(sol, t, C);
+                    mpsol_order_jump(sol, (int)dir);
+                    first_node = true; push_first = false;
+                }
+                continue;
+            }
+        }
         if (kink >= 0) {
             /* Taylor shift of the step's series to its end, Cl_j = sum_k C_k
              * binom(k, j) h^(k - j): the data of the branch behind the kink */
@@ -1079,7 +1262,9 @@ static NdStatus mpfr_taylor_dir(NdProblem* P, const NdOpts* o, NdTaylorTape* TT,
         if (kink >= 0) nd_taylor_force_kink_zero(TT, kink);
     }
     mp_vec_free(Y, d); mp_vec_free(C, (size_t)(p + 1) * d); mp_vec_free(Cl, (size_t)(p + 1) * d);
-    mpfr_clears(t, h, rem, root, (mpfr_ptr)0);
+    if (Ye) mp_vec_free(Ye, d);
+    if (Yr) mp_vec_free(Yr, d);
+    mpfr_clears(t, h, rem, root, te, tb, (mpfr_ptr)0);
     return st;
 }
 

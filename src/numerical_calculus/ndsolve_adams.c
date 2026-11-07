@@ -4,6 +4,7 @@
  * estimate driving accept/reject.  Adams is an explicit multistep family;
  * higher orders are the documented extension. */
 #include "ndsolve_common.h"
+#include "ndsolve_events.h"
 #include <math.h>
 #include <float.h>
 #include <string.h>
@@ -24,6 +25,54 @@ static bool adams_rk4(NdProblem* P, double t, const double* Y, double h, double*
     if (ok) for (size_t i = 0; i < d; i++) Ynew[i] = Y[i] + (h/6.0)*(k1[i]+2.0*k2[i]+2.0*k3[i]+k4[i]);
     free(k1); free(k2); free(k3); free(k4); free(tmp);
     return ok;
+}
+
+/* Event advance for Adams: the cubic Hermite interpolant of the step
+ * (ya, fa) -> (yb, fb), one order above the method's own. */
+typedef struct { double ta, tb; const double *ya, *fa, *yb, *fb; size_t d; } AdamsEvAdv;
+
+static bool adams_ev_advance(void* ctx, double s, double* Ys) {
+    AdamsEvAdv* c = (AdamsEvAdv*)ctx;
+    double h = c->tb - c->ta, u = (s - c->ta) / h;
+    double h00 = (1.0 + 2.0*u) * (1.0 - u) * (1.0 - u), h10 = u * (1.0 - u) * (1.0 - u);
+    double h01 = u * u * (3.0 - 2.0*u),               h11 = u * u * (u - 1.0);
+    for (size_t i = 0; i < c->d; i++)
+        Ys[i] = h00*c->ya[i] + h*h10*c->fa[i] + h01*c->yb[i] + h*h11*c->fb[i];
+    return true;
+}
+
+/* Handle an accepted Adams step (t, ycur, fcur) -> (t + hs, ynext): locate an
+ * event in it, push the node, run the actions.  Returns 0 to go on, 1 to stop,
+ * 2 when the state was reset or the step truncated (restart the history), -1
+ * on a sampling failure.  *tnew receives the node time. */
+static int adams_accept(NdProblem* P, const NdOpts* o, NdSolution* sol, double t, double hs,
+                        double* ycur, double* fcur, double* ynext, double* fnext,
+                        double* Ye, double* Yr, double* tnew) {
+    size_t d = P->d;
+    double tb = t + hs;
+    if (!nd_rhs_real(P, tb, ynext, fnext)) return -1;
+    int ev = -1;
+    if (P->events) {
+        AdamsEvAdv c = { t, tb, ycur, fcur, ynext, fnext, d };
+        double te;
+        ev = nd_events_locate(P, t, ycur, tb, ynext, adams_ev_advance, &c, &te, Ye);
+        if (ev >= 0) {
+            tb = te; memcpy(ynext, Ye, sizeof(double) * d);
+            if (!nd_rhs_real(P, tb, ynext, fnext)) return -1;
+        }
+    }
+    *tnew = tb;
+    nd_solution_push(sol, tb, ynext, fnext);
+    if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+    if (ev < 0) return 0;
+    unsigned fl = nd_events_fire(P, ev, tb, ynext, Yr);
+    if (fl & ND_EVF_STOP) return 1;
+    if (fl & ND_EVF_RESET) {
+        memcpy(ynext, Yr, sizeof(double) * d);
+        if (!nd_rhs_real(P, tb, ynext, fnext)) return -1;
+        nd_solution_push_jump(sol, tb, ynext, fnext, hs);
+    }
+    return 2;
 }
 
 /* Adaptive PECE loop.  Once history exists, the AB2 predictor and trapezoidal
@@ -49,7 +98,10 @@ static NdStatus adams_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol 
     NdStatus st = ND_OK;
     bool have_hist = false;
 
+    double* Ye = P->events ? malloc(sizeof(double) * d) : NULL;
+    double* Yr = P->events ? malloc(sizeof(double) * d) : NULL;
     if (!nd_rhs_real(P, t, ycur, fcur)) { st = ND_ERR_SAMPLE; goto done; }
+    if (P->events) nd_events_begin(P, t, ycur);
 
     double h = (o->starting_step > 0.0) ? dir * o->starting_step
                                         : nd_initial_step(P, o, tol, t, ycur, fcur, 4, dir);
@@ -71,11 +123,17 @@ static NdStatus adams_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol 
         if (!have_hist) {
             /* RK4 self-start for the very first step (accepted unconditionally). */
             if (!adams_rk4(P, t, ycur, hs, ynext)) { st = ND_ERR_SAMPLE; break; }
-            t += hs;
             double* fnext = fp;
-            if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
-            nd_solution_push(sol, t, ynext, fnext);
-            if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+            double tn;
+            int r = adams_accept(P, o, sol, t, hs, ycur, fcur, ynext, fnext, Ye, Yr, &tn);
+            if (r < 0) { st = ND_ERR_SAMPLE; break; }
+            if (r == 1) break;
+            t = tn;
+            if (r == 2) {   /* restart from the event with a fresh RK4 step */
+                memcpy(ycur, ynext, sizeof(double) * d);
+                memcpy(fcur, fnext, sizeof(double) * d);
+                continue;
+            }
             memcpy(fprev, fcur, sizeof(double) * d);
             memcpy(fcur, fnext, sizeof(double) * d);
             memcpy(ycur, ynext, sizeof(double) * d);
@@ -108,11 +166,18 @@ static NdStatus adams_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol 
         }
 
         /* accept */
-        t += hs;
         double* fnext = fp;
-        if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
-        nd_solution_push(sol, t, ynext, fnext);
-        if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+        double tn;
+        int r = adams_accept(P, o, sol, t, hs, ycur, fcur, ynext, fnext, Ye, Yr, &tn);
+        if (r < 0) { st = ND_ERR_SAMPLE; break; }
+        if (r == 1) break;
+        t = tn;
+        if (r == 2) {
+            memcpy(ycur, ynext, sizeof(double) * d);
+            memcpy(fcur, fnext, sizeof(double) * d);
+            have_hist = false; no_grow = false;
+            continue;
+        }
         memcpy(fprev, fcur, sizeof(double) * d);
         memcpy(fcur, fnext, sizeof(double) * d);
         memcpy(ycur, ynext, sizeof(double) * d);
@@ -125,6 +190,7 @@ static NdStatus adams_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol 
     }
 done:
     free(ycur); free(ynext); free(fprev); free(fcur); free(pred); free(fp);
+    free(Ye); free(Yr);
     return st;
 }
 

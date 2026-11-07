@@ -210,6 +210,75 @@ static void test_bvp(void) {
                 -sin(1.0), 1e-7);
 }
 
+/* WhenEvent: located event times, every integration loop, both directions,
+ * state resets, side-effect actions.  Before WhenEvent existed NDSolve
+ * silently ignored the item and integrated to the end of the range. */
+#define EV_GROW "{y'[t] == y[t], y[0] == 1, WhenEvent[y[t] == 2, \"StopIntegration\"]}"
+#define EV_DOM(opts) "(y /. First[NDSolve[" EV_GROW ", y, {t, 0, 5}" opts "]])[\"Domain\"][[1, 2]]"
+#define EV_BALL "{y''[t] == -9.8, y[0] == 1, y'[0] == 0, WhenEvent[y[t] == 0, y'[t] -> -0.9 y'[t]]}"
+static void test_events(void) {
+    /* machine one-step (DOPRI5, RK4 step doubling), BDF, Adams */
+    check_close(EV_DOM(", PrecisionGoal -> 12, AccuracyGoal -> 12"), log(2.0), 1e-12);
+    check_close(EV_DOM(", Method -> \"RK4\""), log(2.0), 1e-7);
+    check_close(EV_DOM(", Method -> \"BDF\""), log(2.0), 1e-5);
+    check_close(EV_DOM(", Method -> \"Adams\""), log(2.0), 1e-5);
+    /* the solution stops AT the event: y there is 2 */
+    check_close("y[Log[2.]] /. First[NDSolve[" EV_GROW ", y, {t, 0, 5}]]", 2.0, 1e-6);
+    /* backward integration */
+    check_close("(y /. First[NDSolve[{y'[t] == -y[t], y[0] == 1, WhenEvent[y[t] == 2, "
+                "\"StopIntegration\"]}, y, {t, 0, -5}]])[\"Domain\"][[1, 1]]", -log(2.0), 1e-7);
+    /* an inequality fires when it becomes true; an event on a derivative */
+    check_close("(y /. First[NDSolve[{y'[t] == 1, y[0] == 0, WhenEvent[y[t] > 1/2, "
+                "\"StopIntegration\"]}, y, {t, 0, 5}]])[\"Domain\"][[1, 2]]", 0.5, 1e-10);
+    check_close("(y /. First[NDSolve[{y''[t] == -1, y[0] == 0, y'[0] == 2, WhenEvent[y'[t] == 0, "
+                "\"StopIntegration\"]}, y, {t, 0, 5}]])[\"Domain\"][[1, 2]]", 2.0, 1e-8);
+    /* side-effect actions: every zero of cos t on [0, 10], then RemoveEvent */
+    check_close("Length[Reap[NDSolve[{y''[t] == -y[t], y[0] == 1, y'[0] == 0, "
+                "WhenEvent[y[t] == 0, Sow[t]]}, y, {t, 0, 10}]][[2, 1]]]", 3.0, 0.0);
+    check_close("Reap[NDSolve[{y''[t] == -y[t], y[0] == 1, y'[0] == 0, "
+                "WhenEvent[y[t] == 0, Sow[t]]}, y, {t, 0, 10}, PrecisionGoal -> 12, "
+                "AccuracyGoal -> 12]][[2, 1, 3]]", 2.5 * 3.14159265358979323846, 1e-10);
+    check_close("Length[Reap[NDSolve[{y''[t] == -y[t], y[0] == 1, y'[0] == 0, "
+                "WhenEvent[y[t] == 0, {Sow[t], \"RemoveEvent\"}]}, y, {t, 0, 10}]][[2, 1]]]", 1.0, 0.0);
+    /* a state reset (bouncing ball): y(1) after one bounce at restitution 0.9 */
+    {
+        double t1 = sqrt(2.0 / 9.8), v = 0.9 * 9.8 * t1, u = 1.0 - t1;
+        double y1 = v * u - 4.9 * u * u;
+        check_close("y[1.] /. First[NDSolve[" EV_BALL ", y, {t, 0, 2}]]", y1, 1e-6);
+        /* the whole range is still covered; the bounce stays above the floor */
+        check_close("(y /. First[NDSolve[" EV_BALL ", y, {t, 0, 2}]])[\"Domain\"][[1, 2]]", 2.0, 0.0);
+        check_ge("Min[Table[y[s], {s, 0, 2, 1/64}] /. First[NDSolve[" EV_BALL ", y, {t, 0, 2}]]]", -1e-6);
+        /* the jump is a repeated abscissa: the velocity just before the bounce
+         * is the falling one, just after it the reflected one */
+        check_close("y'[Sqrt[2/9.8] - 10^-9] /. First[NDSolve[" EV_BALL ", y, {t, 0, 2}]]",
+                    -9.8 * t1, 1e-6);
+        check_close("y'[Sqrt[2/9.8] + 10^-9] /. First[NDSolve[" EV_BALL ", y, {t, 0, 2}]]",
+                    v, 1e-6);
+        check_close("y'[-Sqrt[2/9.8] - 10^-9] /. First[NDSolve[{y''[t] == -9.8, y[0] == 1, y'[0] == 0, "
+                    "WhenEvent[y[t] == 0, y'[t] -> -0.9 y'[t]]}, y, {t, 0, -2}]]", -v, 1e-6);
+    }
+    check_head("Attributes[WhenEvent]", "List[HoldAll, Protected]");
+#ifdef USE_MPFR
+    /* arbitrary precision: Taylor (Automatic), explicit Runge-Kutta, BDF */
+    check_ge("-Log[10, Abs[(y /. First[NDSolve[" EV_GROW ", y, {t, 0, 5}, WorkingPrecision -> 40, PrecisionGoal -> 35, AccuracyGoal -> 35]])"
+             "[\"Domain\"][[1, 2]] - Log[2]]]", 30.0);
+    check_ge("-Log[10, Abs[(y /. First[NDSolve[" EV_GROW ", y, {t, 0, 5}, WorkingPrecision -> 30, "
+             "Method -> \"ExplicitRungeKutta\"]])[\"Domain\"][[1, 2]] - Log[2]]]", 13.0);
+    check_ge("-Log[10, Abs[(y /. First[NDSolve[" EV_GROW ", y, {t, 0, 5}, WorkingPrecision -> 30, "
+             "Method -> \"BDF\"]])[\"Domain\"][[1, 2]] - Log[2]]]", 6.0);
+    check_ge("-Log[10, Abs[(y /. First[NDSolve[{y'[t] == -y[t], y[0] == 1, WhenEvent[y[t] == 2, "
+             "\"StopIntegration\"]}, y, {t, 0, -5}, WorkingPrecision -> 40, PrecisionGoal -> 35, AccuracyGoal -> 35]])[\"Domain\"][[1, 1]] "
+             "+ Log[2]]]", 30.0);
+    {
+        double t1 = sqrt(2.0 / 9.8), v = 0.9 * 9.8 * t1, u = 1.0 - t1;
+        double y1 = v * u - 4.9 * u * u;
+        check_close("y[1] /. First[NDSolve[{y''[t] == -98/10, y[0] == 1, y'[0] == 0, "
+                    "WhenEvent[y[t] == 0, y'[t] -> -9/10 y'[t]]}, y, {t, 0, 2}, WorkingPrecision -> 30]]",
+                    y1, 1e-12);
+    }
+#endif
+}
+
 int main(void) {
     mute_stderr_once();
     symtab_init();
@@ -227,6 +296,7 @@ int main(void) {
     TEST(test_mpfr);
     TEST(test_result_shape);
     TEST(test_bvp);
+    TEST(test_events);
 
     if (failures == 0) printf("\nAll NDSolve tests passed.\n");
     else printf("\n%d NDSolve checks FAILED.\n", failures);

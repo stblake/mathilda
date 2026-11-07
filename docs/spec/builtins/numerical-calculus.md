@@ -1416,6 +1416,10 @@ on `xmin ≤ x ≤ xmax`, returning a list of rules
   branch). Until v0.6378 such a system was silently read as an IVP at the last
   condition's point with every condition taken as an initial value there
   (`-u'' == E^(2x), u[0] == 0, u'[1] == 0` gave `u(1) = 0`, not `2.0973`).
+- **Events.** `WhenEvent[event, action]` items among `eqns` are events; see
+  *Events (WhenEvent)* below.
+- A range `{x, a, b}` with `a > b` is the interval `[b, a]` (it used to be left
+  unevaluated).
 - `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` — a partial differential
   equation over a rectangular region (method of lines); see below.
 - `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}, {y, ymin, ymax}]` — a PDE
@@ -1588,6 +1592,64 @@ that accuracy at the achieved node values is bounded by `PrecisionGoal` (default
 interpolation order — query at an MPFR abscissa (`u[N[t, p]]`) to read a
 high-precision node. High precision needs a larger `MaxSteps`.
 
+### Events (WhenEvent)
+
+`WhenEvent[event, action]` (attributes `HoldAll`, `Protected`; inert on its
+own) given among the equations of an ODE initial-value problem runs `action`
+whenever `event` occurs during the integration.
+
+- **Events.** `lhs == rhs` fires on a zero crossing of `lhs - rhs` in either
+  direction; an inequality (`a > b`, `a >= b`, `a < b`, `a <= b`) fires when it
+  becomes `True`; any other condition fires when it becomes `True` (located by
+  bisection); a list of events adds one event per element with the same
+  actions. The state forms `u[t]`, `u'[t]`, … and the highest derivative (via
+  its equation) may appear. An event that holds at the initial point does not
+  fire there; a condition that is not numeric at the initial point is
+  `NDSolve::evnum` (the event is then inactive).
+- **Actions.** `"StopIntegration"` ends the solution's domain at the event
+  (`ifun["Domain"]` reports the truncated interval); `"RemoveEvent"` disarms
+  the event; a state reset `u'[t] -> expr` (or a list of resets; every
+  right-hand side sees the pre-event state) restarts the integration from the
+  event with the new state, and the `InterpolatingFunction` carries the jump as
+  a repeated abscissa (left value, then right value), as in the reference; any
+  other expression is evaluated at the event with `t` and the state bound
+  (`Sow[t]`, `a = u[t]`, `Print[...]`); `{action, ...}` runs several.
+  `"CrossDiscontinuity"` / `"RestartIntegration"` are accepted (every event
+  already restarts the step). A malformed reset is `NDSolve::wevrs`.
+- **Location accuracy.** After every accepted step the event functions are
+  evaluated at the new node; when one changes, the event time is found by a
+  safeguarded Illinois (modified regula falsi) iteration on the event function
+  along the step, where the state at an interior time `s` comes from the
+  integrator itself: a one-step re-integration of the method from the step's
+  start (DOPRI5, RK4, the other one-step methods, MPFR DOPRI5/RK4 — local
+  error below the accepted step's), the step's own Taylor series (MPFR Taylor
+  integrator), the corrector polynomial (BDF, machine and MPFR) or the step's
+  Hermite cubic (Adams). The event time is therefore as accurate as the
+  solution: `y' == y, y[0] == 1, WhenEvent[y[t] == 2, "StopIntegration"]` ends
+  at `Log[2]` to `2e-13` at `PrecisionGoal -> 12`, and to `1e-38` at
+  `WorkingPrecision -> 40, PrecisionGoal -> 35`. Every integration loop (one-
+  step, BDF, Adams; MPFR DOPRI5/RK4, BDF, Taylor and its Runge–Kutta crossing
+  of a series singularity) runs it, forward and backward. Event functions are
+  compiled (`autocompile`, machine and MPFR) when possible.
+- **Not supported:** events in PDEs, boundary-value problems
+  (`NDSolve::bvev`) and complex-valued ODEs (`NDSolve::cev`), discrete
+  variables, `WhenEvent` options (`DetectionMethod`, `LocationMethod`, …).
+
+Before `WhenEvent` was implemented such an item was silently ignored and the solution ran to
+the end of the range: a wrong answer for every first-passage time (SIAM
+100-digit problems D12/D13, experiments 187/188/217/218).
+
+```mathematica
+In[1]:= (y /. First[NDSolve[{y'[t] == y[t], y[0] == 1,
+           WhenEvent[y[t] == 2, "StopIntegration"]}, y, {t, 0, 5}]])["Domain"]
+Out[1]= {{0., 0.693147}}
+In[2]:= Reap[NDSolve[{y''[t] == -y[t], y[0] == 1, y'[0] == 0,
+           WhenEvent[y[t] == 0, Sow[t]]}, y, {t, 0, 10}]][[2]]
+Out[2]= {{1.5708, 4.71239, 7.85398}}
+In[3]:= NDSolve[{y''[t] == -9.8, y[0] == 1, y'[0] == 0,
+           WhenEvent[y[t] == 0, y'[t] -> -0.9 y'[t]]}, y, {t, 0, 2}]  (* bouncing ball *)
+```
+
 ### Partial differential equations (method of lines)
 
 `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` solves a PDE over a
@@ -1723,9 +1785,9 @@ split into interleaved Re/Im real unknowns and the solution recombines to
 initial conditions posed at an **interior** point `x0 != xmin` (the driver
 integrates both forward to `xmax` and backward to `xmin`) — plus 1-D and 2-D
 evolution PDEs by the method of lines (above), at machine (PDEs) or arbitrary
-(ODEs) precision, and ODE boundary-value problems by shooting (above). Not yet
-handled (deferred, with the `NdProblem`/`NdStepper` seams in place): DAEs, event location
-(`"EventLocator"`), and the controller methods (`"Projection"`, `"Splitting"`,
+(ODEs) precision, and ODE boundary-value problems by shooting (above). Event location is
+`WhenEvent` (above). Not yet handled (deferred, with the `NdProblem`/`NdStepper`
+seams in place): DAEs, and the controller methods (`"Projection"`, `"Splitting"`,
 `"Composition"`, `"Extrapolation"`, symplectic integrators).
 `"StiffnessSwitching"` currently maps to `"BDF"`. BDF is adaptive variable-step
 variable-order (1–5); Adams is adaptive variable-step but capped at order 2. When

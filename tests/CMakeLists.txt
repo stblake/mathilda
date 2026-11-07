@@ -1189,6 +1189,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/ndsolve_stencil.c
     ../src/numerical_calculus/ndsolve_operator.c
     ../src/numerical_calculus/ndsolve_compile.c
+    ../src/numerical_calculus/ndsolve_events.c
     ../src/compile/compile.c
     ../src/compile/compile_ndtables.c
     ../src/compile/compile_mgd.c

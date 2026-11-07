@@ -4,6 +4,7 @@
  * coefficients, local error control, order ramping and Newton-failure step/order
  * recovery; self-started at order 1). */
 #include "ndsolve_common.h"
+#include "ndsolve_events.h"
 #include <math.h>
 #include <float.h>
 #include <string.h>
@@ -129,6 +130,20 @@ static double bdf_grow_cap(int q) {
     }
 }
 
+/* Event advance for BDF: the method's own dense output, the corrector
+ * polynomial through the new node (t1, y1) and the q history nodes it used. */
+typedef struct {
+    double th2[BDF_QMAX + 2];
+    double* yh2;           /* (q+1) rows of d */
+    int q; size_t d;
+} BdfEvAdv;
+
+static bool bdf_ev_advance(void* ctx, double s, double* Ys) {
+    BdfEvAdv* c = (BdfEvAdv*)ctx;
+    lagrange_predict(s, c->th2, c->yh2, c->q, c->d, Ys);
+    return true;
+}
+
 static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol tol,
                         double target, int64_t* budget) {
     size_t d = P->d;
@@ -146,6 +161,11 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
     double* pred  = malloc(sizeof(double) * d);
     double* fcur  = malloc(sizeof(double) * d);   /* f(t_n, y_n) (order-1 start) */
     double* fnext = malloc(sizeof(double) * d);
+    BdfEvAdv eva; eva.d = d; eva.q = 1;
+    eva.yh2 = P->events ? malloc(sizeof(double) * (size_t)(CAP + 1) * d) : NULL;
+    double* Ye = P->events ? malloc(sizeof(double) * d) : NULL;
+    double* Yr = P->events ? malloc(sizeof(double) * d) : NULL;
+    if (P->events) nd_events_begin(P, P->t0, P->Y0);
 
     th[0] = P->t0;
     memcpy(yh, P->Y0, sizeof(double) * d);
@@ -213,11 +233,39 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
         double qexp = (double)q + 1.0;
 
         if (err <= 1.0) {
-            /* --- accept --- */
+            /* --- accept (truncated at the first event inside the step) --- */
+            int ev = -1;
+            if (P->events) {
+                eva.q = q; eva.th2[0] = t1;
+                memcpy(eva.yh2, ynext, sizeof(double) * d);
+                for (int j = 0; j < q; j++) {
+                    eva.th2[j + 1] = th[j];
+                    memcpy(&eva.yh2[(size_t)(j + 1) * d], &yh[(size_t)j * d], sizeof(double) * d);
+                }
+                double te;
+                ev = nd_events_locate(P, t, yh, t1, ynext, bdf_ev_advance, &eva, &te, Ye);
+                if (ev >= 0) { t1 = te; memcpy(ynext, Ye, sizeof(double) * d); }
+            }
             t = t1;
             if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
             nd_solution_push(sol, t, ynext, fnext);
             if (o->step_monitor) { Expr* mo = eval_and_free(expr_copy(o->step_monitor)); expr_free(mo); }
+            if (ev >= 0) {
+                unsigned fl = nd_events_fire(P, ev, t, ynext, Yr);
+                if (fl & ND_EVF_STOP) break;
+                if (fl & ND_EVF_RESET) {
+                    memcpy(ynext, Yr, sizeof(double) * d);
+                    if (!nd_rhs_real(P, t, ynext, fnext)) { st = ND_ERR_SAMPLE; break; }
+                    nd_solution_push_jump(sol, t, ynext, fnext, dir);
+                }
+                /* restart the history at the event (order 1, fresh step) */
+                th[0] = t;
+                memcpy(yh, ynext, sizeof(double) * d);
+                memcpy(fcur, fnext, sizeof(double) * d);
+                m = 1; qtarget = 1; hold = 0; no_grow = false;
+                h = nd_initial_step(P, o, tol, t, yh, fcur, 1, dir);
+                continue;
+            }
 
             /* Decide the next (order, step).  Between reassessments the step and
              * order are HELD constant for a run of q+1 steps: a uniform mesh makes
@@ -278,6 +326,7 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
     }
 done:
     free(yh); free(ynext); free(base); free(pred); free(fcur); free(fnext);
+    free(eva.yh2); free(Ye); free(Yr);
     return st;
 }
 

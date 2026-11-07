@@ -189,6 +189,11 @@ left unevaluated.
   per-dimension grids (a full tensor grid). Points may be given in any order;
   they are sorted by abscissa internally.
 - `InterpolatingFunction[...][x1, ..., xm]` returns the interpolated value.
+- **Jumps (1-D).** A repeated abscissa in a 1-D table, `{..., {{t}, left...},
+  {{t}, right...}, ...}`, is a discontinuity at `t`: the object is evaluated on
+  the piece between consecutive jumps that contains `x`, right-continuous at
+  the jump (the last piece is closed at the domain end). An `NDSolve` solution
+  through a `WhenEvent` state reset is stored this way, as in the reference.
 - `InterpolatingFunction[domain, table, {d1, ..., dm}]` is the optional
   derivative-annotated form (see **Derivatives**).
 

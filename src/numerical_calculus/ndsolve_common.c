@@ -10,6 +10,7 @@
 #include <string.h>
 #include "ndsolve_compile.h"    /* nonlinear RHS bytecode compiler */
 #include "ndsolve_taylor.h"     /* node derivatives for the dense output */
+#include "ndsolve_events.h"     /* WhenEvent location + actions */
 #ifdef USE_LAPACK
 #include "../linalg/lapack.h"   /* dgbtrf_/dgbtrs_/dgetrf_/dgetrs_ */
 #endif
@@ -124,7 +125,7 @@ Expr* nd_replace_all(Expr* body, Expr** lits, Expr** subs, size_t n) {
  * ------------------------------------------------------------------ */
 
 /* Bind t and every reduced-state symbol to the current numeric point. */
-static void nd_bind_point(NdProblem* P, double t, const double* Y) {
+void nd_bind_point(NdProblem* P, double t, const double* Y) {
     nd_bind_set(&P->bind_t, expr_new_real(t));
     for (size_t i = 0; i < P->d; i++)
         nd_bind_set(&P->bind_y[i], expr_new_real(Y[i]));
@@ -132,7 +133,7 @@ static void nd_bind_point(NdProblem* P, double t, const double* Y) {
 }
 
 /* Evaluate a bound expression to a finite double. */
-static bool nd_eval_bound(NdProblem* P, Expr* e, double* out) {
+bool nd_eval_bound(NdProblem* P, Expr* e, double* out) {
     arith_warnings_mute_push();
     Expr* raw = eval_and_free(expr_copy(e));
     arith_warnings_mute_pop();
@@ -660,6 +661,39 @@ static bool nd_take_step(const NdStepper* S, NdProblem* P, NdTol tol,
     return ok;
 }
 
+/* Event advance for the one-step driver: the state at s is one step of the
+ * method itself from the accepted step's start (ta, Ya), of length s - ta.
+ * Its local error is below the accepted step's, so the event is located to
+ * the integrator's accuracy.  For an FSAL method P->fsal_cur still holds
+ * f(ta, Ya), and each call leaves f(s, Y(s)) in P->fsal_pending. */
+typedef struct {
+    const NdStepper* S; NdProblem* P; NdTol tol;
+    double ta; const double* Ya; bool adaptive; double* K;
+} NdOneStepAdv;
+
+static bool nd_onestep_advance(void* ctx, double s, double* Ys) {
+    NdOneStepAdv* c = (NdOneStepAdv*)ctx;
+    double err; int q;
+    if (s == c->ta) { memcpy(Ys, c->Ya, sizeof(double) * c->P->d); return true; }
+    return nd_take_step(c->S, c->P, c->tol, c->ta, c->Ya, s - c->ta, c->adaptive,
+                        Ys, c->K, &err, &q);
+}
+
+/* Record a post-event discontinuity: the node (t, Y) duplicates the abscissa
+ * of the node just pushed, and must come on the far side of it in time --
+ * after it integrating forward, before it integrating backward. */
+void nd_solution_push_jump(NdSolution* s, double t, const double* Y, const double* dY,
+                           double dir) {
+    nd_solution_push(s, t, Y, dY);
+    if (dir < 0.0 && s->n >= 2) {
+        size_t d = s->d, a = (s->n - 2) * d, b = (s->n - 1) * d;
+        for (size_t i = 0; i < d; i++) {
+            double y = s->Ys[a + i];  s->Ys[a + i]  = s->Ys[b + i];  s->Ys[b + i]  = y;
+            double f = s->dYs[a + i]; s->dYs[a + i] = s->dYs[b + i]; s->dYs[b + i] = f;
+        }
+    }
+}
+
 /* Integrate in one direction from (start_t, start_Y) toward `target`.
  * The starting node is assumed already recorded by the caller. */
 static NdStatus nd_integrate_dir(NdProblem* P, const NdStepper* S, const NdOpts* o,
@@ -699,6 +733,9 @@ static NdStatus nd_integrate_dir(NdProblem* P, const NdStepper* S, const NdOpts*
     int64_t steps = 0;
     double h_cap = (o->max_step_size > 0.0) ? o->max_step_size : HUGE_VAL;
     double frac_cap = (o->max_step_fraction > 0.0) ? o->max_step_fraction * span : HUGE_VAL;
+    double* Ye = P->events ? malloc(sizeof(double) * d) : NULL;
+    double* Yr = P->events ? malloc(sizeof(double) * d) : NULL;
+    if (P->events) nd_events_begin(P, start_t, start_Y);
 
     while ((target - t) * dir > 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) {
         /* clamp step magnitude */
@@ -728,8 +765,14 @@ static NdStatus nd_integrate_dir(NdProblem* P, const NdStepper* S, const NdOpts*
             continue;
         }
         if (err <= 1.0) {
-            /* accept */
-            t += h;
+            /* accept -- truncated at the first event inside the step, if any */
+            int ev = -1; double te = t + h;
+            if (P->events) {
+                NdOneStepAdv ac = { S, P, tol, t, Y, adaptive, K };
+                ev = nd_events_locate(P, t, Y, t + h, Yn, nd_onestep_advance, &ac, &te, Ye);
+                if (ev >= 0) { h = te - t; memcpy(Yn, Ye, sizeof(double) * d); }
+            }
+            t = (ev >= 0) ? te : t + h;
             memcpy(Y, Yn, sizeof(double) * d);
             if (use_fsal) {
                 /* the stepper's last stage IS f(t+h, Ynew): reuse it as the node
@@ -739,6 +782,17 @@ static NdStatus nd_integrate_dir(NdProblem* P, const NdStepper* S, const NdOpts*
             } else if (!nd_rhs_real(P, t, Y, fn)) { status = ND_ERR_SAMPLE; break; }
             nd_solution_push(sol, t, Y, fn);
             if (o->step_monitor) { Expr* m = eval_and_free(expr_copy(o->step_monitor)); expr_free(m); }
+            if (ev >= 0) {
+                unsigned fl = nd_events_fire(P, ev, t, Y, Yr);
+                if (fl & ND_EVF_STOP) break;
+                if (fl & ND_EVF_RESET) {
+                    /* restart from the reset state; the jump is a repeated node */
+                    memcpy(Y, Yr, sizeof(double) * d);
+                    if (!nd_rhs_real(P, t, Y, fn)) { status = ND_ERR_SAMPLE; break; }
+                    nd_solution_push_jump(sol, t, Y, fn, dir);
+                    if (use_fsal) memcpy(P->fsal_cur, fn, sizeof(double) * d);
+                }
+            }
             double fac = (err > 0.0) ? 0.9 * pow(1.0 / err, 1.0 / q) : 5.0;
             if (fac < 0.2) fac = 0.2;
             if (fac > 5.0) fac = 5.0;
@@ -751,7 +805,7 @@ static NdStatus nd_integrate_dir(NdProblem* P, const NdStepper* S, const NdOpts*
             h *= fac;
         }
     }
-    free(Y); free(Yn); free(fn); free(K);
+    free(Y); free(Yn); free(fn); free(K); free(Ye); free(Yr);
     if (use_fsal) { free(P->fsal_cur); free(P->fsal_pending);
                     P->fsal_cur = P->fsal_pending = NULL; P->fsal = false; }
     return status;
@@ -782,7 +836,14 @@ static void nd_solution_sort(NdSolution* s) {
     /* drop duplicates in t */
     size_t w = 0;
     for (size_t i = 0; i < s->n; i++) {
-        if (w > 0 && fabs(s->ts[i] - s->ts[w-1]) <= 1e-14 * (fabs(s->ts[i]) + 1.0)) continue;
+        if (w > 0 && fabs(s->ts[i] - s->ts[w-1]) <= 1e-14 * (fabs(s->ts[i]) + 1.0)) {
+            /* an event reset: the same abscissa twice with different states is
+             * a discontinuity, kept as a repeated node (left value, then right) */
+            bool jump = s->ts[i] == s->ts[w-1]
+                && memcmp(&s->Ys[i*d], &s->Ys[(w-1)*d], sizeof(double) * d) != 0
+                && !(w > 1 && s->ts[w-2] == s->ts[w-1]);
+            if (!jump) continue;
+        }
         if (i != w) {
             s->ts[w] = s->ts[i];
             memcpy(&s->Ys[w*d],  &s->Ys[i*d],  sizeof(double) * d);
