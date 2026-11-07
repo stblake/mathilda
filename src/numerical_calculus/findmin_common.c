@@ -379,11 +379,13 @@ void fm_mpfr_progs_release(size_t mark) {
 /* The registered program for `e` (latest registration wins), or NULL. A linear
  * scan: a solve registers its objective and n gradient components, and each
  * lookup is dwarfed by the MPFR evaluation it replaces. */
+#ifdef USE_MPFR   /* its only caller is the MPFR branch below */
 static const AutoCompiled* fm_mpfr_prog_lookup(const Expr* e, size_t nargs) {
     for (size_t k = g_fm_mp_n; k > 0; k--)
         if (g_fm_mp[k - 1].e == e && g_fm_mp[k - 1].nargs == nargs) return g_fm_mp[k - 1].ac;
     return NULL;
 }
+#endif
 
 Expr* fm_eval_with_bindings(Expr* f, FmVarBind* binds,
                                    Expr* const* values, size_t n,
