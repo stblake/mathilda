@@ -1,0 +1,8 @@
+-- Experiment 171 -- SIAM 100-Digit Challenge, Problem 6 (FriCAS column).
+-- The statement is a root solve G(eps) = 2 around a 2-D integral.  FriCAS has
+-- no numeric root finder for a black-box function (solve(p, eps) needs a
+-- polynomial) and no 2-D quadrature, so both rows SKIP.  See biased_flea.m.
+)read ../siam100_common.input )quiet
+vskip("c6.machine", "FindRoot")
+vskip("c6.wp50", "FindRoot")
+)quit

@@ -1,0 +1,5 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 4: largest positive zero of Riemann's R(x) = Sum mu(k)/k li(x^(1/k))
+# label	true value (65 digits)	need	source
+d4.machine	1.8286432697525226104097325273180693200086529181101986323920277912e-14828	10	wolframscript FindRoot on the built-in RiemannR[Exp[t]] at WP 110 (siam100_refs/d4_ref.wl) == mpmath findroot on the zeta-zero (Mellin-Barnes residue) expansion R(e^-u) = sum_n (-1)^(n+1) 2(2pi)^(2n)/((2n+1)zeta(2n+1)u^(2n+1)) - 2 Re sum_rho Gamma(1-rho)u^(rho-1)/((1-rho)zeta'(rho)), 70 zeros, dps 110 (siam100_refs/d4_ref.py); 75 digits of x* (80 of t* = -34142.12818460646499263...) agree. A double cannot hold x* (underflow): the machine row is scored as is and is expected to fail everywhere
+d4.wp50	1.8286432697525226104097325273180693200086529181101986323920277912e-14828	48	same
+d4.wp50-builtin	1.8286432697525226104097325273180693200086529181101986323920277912e-14828	48	same

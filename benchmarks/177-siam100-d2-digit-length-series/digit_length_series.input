@@ -1,0 +1,7 @@
+-- Experiment 177 -- SIAM 100-Digit Challenge, Appendix D Problem 2 (FriCAS column).
+-- FriCAS has no numerical infinite-series summation, so both rows are
+-- SKIPs.  See digit_length_series.m.
+)read ../siam100_common.input )quiet
+vskip("d2.machine", "nsum")
+vskip("d2.wp50", "nsum")
+)quit

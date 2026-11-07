@@ -1,0 +1,37 @@
+/* Experiment 182 -- SIAM 100-Digit Challenge, Appendix D Problem 7 (Maxima column).
+   The 1-D statement of region_area.m: island ends y1, y2, y3 (g(y) = 1) and the
+   interior kink yc (-log g(y) = y^2) by find_root on brackets read off the same
+   plot (bf_find_root at fpprec 60), then the x-interval length
+   w(y) = cbrt(-y + s) - cbrt(-y - s), s = sqrt(-log g(y)), integrated over
+   [y1, yc], [yc, 0], [y2, y3]: QUADPACK quad_qags at machine precision,
+   bromberg (bigfloat Romberg, Maxima's only bigfloat quadrature) at fpprec 60 --
+   Romberg converges only algebraically on the square-root endpoint
+   singularities, so the wp50 row is capped (rombergit 22).
+   The real cube root is written sign(t) * abs(t)^(1/3).  See region_area.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["find_root", "quad_qags", "bf_find_root", "bromberg"])$
+
+g(y) := y^2/32 + exp(sin(y))$
+rc(t) := signum(t) * abs(t)^(1/3)$
+w(y) := block([s : sqrt(-log(g(y)))], rc(-y + s) - rc(-y - s))$
+
+vrun("d7.machine", lambda([], block([y1, yc, y2, y3],
+  y1 : find_root(g(y) - 1, y, -3.0, -2.5),
+  yc : find_root(-log(g(y)) - y^2, y, -1.0, -0.5),
+  y2 : find_root(g(y) - 1, y, 3.5, 4.0),
+  y3 : find_root(g(y) - 1, y, 4.2, 4.6),
+  first(quad_qags(w(y), y, y1, yc, 'epsrel = 1d-13, 'limit = 500))
+  + first(quad_qags(w(y), y, yc, 0, 'epsrel = 1d-13, 'limit = 500))
+  + first(quad_qags(w(y), y, y2, y3, 'epsrel = 1d-13, 'limit = 500)))), 10)$
+
+vrun("d7.wp50", lambda([], block([fpprec : 60, rombergtol : 1b-50, rombergit : 22,
+                                  y1, yc, y2, y3, wb],
+  y1 : bf_find_root(g(y) - 1, y, -3b0, -2.5b0),
+  yc : bf_find_root(-log(g(y)) - y^2, y, -1b0, -0.5b0),
+  y2 : bf_find_root(g(y) - 1, y, 3.5b0, 4b0),
+  y3 : bf_find_root(g(y) - 1, y, 4.2b0, 4.6b0),
+  wb(y) := bfloat(w(y)),
+  bromberg(wb, y1, yc) + bromberg(wb, yc, 0b0) + bromberg(wb, y2, y3))), 48)$
+quit()$

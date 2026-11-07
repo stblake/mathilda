@@ -1,0 +1,39 @@
+/* Experiment 167 -- SIAM 100-Digit Challenge, Problem 2 (Maxima column).
+   The same statement as photon_mirrors.m: straight-line flight, the next hit
+   as the smallest positive real root of |p + t v - c|^2 = 1/9 from Maxima's
+   polynomial root finder (allroots in floats, bfallroots with fpprec 60),
+   reflection v' = v - 2 (v.n) n, over the same candidate filter. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["allroots", "bfallroots"])$
+
+/* mk converts a rational to the working number type; rts is the root finder */
+photon(T, mk, rts) := block([third : mk(1/3), px : mk(1/2), py : mk(1/10),
+    vx : mk(1), vy : mk(0), left : mk(T), last : [], hits, xs, ys, dx, dy,
+    t, nx, ny, d, best, done : false, res],
+  while not done do (
+    xs : [px, px + left*vx], ys : [py, py + left*vy], hits : [],
+    for i : floor(lmin(xs)) - 1 thru floor(lmax(xs)) + 2 do
+      for j : floor(lmin(ys)) - 1 thru floor(lmax(ys)) + 2 do (
+        dx : i - px, dy : j - py,
+        if [i, j] # last and dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < third then
+          for r in rts((vx^2 + vy^2)*'tt^2 - 2*(dx*vx + dy*vy)*'tt
+                       + (dx^2 + dy^2 - third^2)) do (
+            if imagpart(rhs(r)) = 0 and realpart(rhs(r)) > 0 then
+              hits : cons([realpart(rhs(r)), i, j], hits))),
+    best : if hits = [] then false
+           else first(sort(hits, lambda([a, b], first(a) < first(b)))),
+    if best = false or first(best) >= left then (
+      px : px + left*vx, py : py + left*vy, done : true)
+    else (
+      t : best[1], px : px + t*vx, py : py + t*vy, left : left - t,
+      last : [best[2], best[3]],
+      nx : 3*(px - best[2]), ny : 3*(py - best[3]), d : vx*nx + vy*ny,
+      vx : vx - 2*d*nx, vy : vy - 2*d*ny)),
+  sqrt(px^2 + py^2))$
+
+vrun("c2.machine", lambda([], photon(10, lambda([x], float(x)), allroots)), 3)$
+vrun("c2.machine-t3", lambda([], photon(3, lambda([x], float(x)), allroots)), 10)$
+vrun("c2.wp50", lambda([], block([fpprec : 60],
+     photon(10, bfloat, bfallroots))), 45)$
+quit()$

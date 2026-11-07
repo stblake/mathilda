@@ -1,0 +1,9 @@
+-- Experiment 188 -- SIAM 100-Digit Challenge, App. D Problem 13 (FriCAS column).
+-- A parameter search (find z0 with |u(50)| = 1) around an ODE solve.  FriCAS
+-- has a fixed-step rk4 but no event location and no root finder for a general
+-- real function (solve/complexSolve are polynomial only; Newton is not a
+-- built-in), so both rows are SKIP.  See nonlinear_ode_z0.m.
+)read ../siam100_common.input )quiet
+vskip("d13.machine", "FindRoot")
+vskip("d13.wp50", "FindRoot")
+)quit

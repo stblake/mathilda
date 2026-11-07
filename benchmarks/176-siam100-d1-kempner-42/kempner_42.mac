@@ -1,0 +1,9 @@
+/* Experiment 176 -- SIAM 100-Digit Challenge, Appendix D problem 1 (Maxima).
+   Maxima has no numerical summation to infinity (sum(..., n, 1, inf) stays
+   symbolic, and an indicator on decimal digits has no closed form): SKIP.
+   See kempner_42.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d1.machine", "numerical infinite sum")$
+skip("d1.wp50", "numerical infinite sum")$
+quit()$

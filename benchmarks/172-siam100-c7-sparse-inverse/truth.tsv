@@ -1,0 +1,6 @@
+# SIAM 100-Digit Challenge, Problem 7: (A^-1)_11, A = diag(primes) + 1 at |i-j| = 2^k
+# label	true value (70 digits)	need	source
+c7.machine	0.7250783462684011674686877192511609688691805944795089578781647692077732	10	siam100_refs/c7_ref.py: exact fixed-point (2^300) Jacobi-PCG in Python integers == mixed-precision iterative refinement (exact integer residual, scipy cg correction); 70 digits agree; book App. B first 25 digits agree
+c7.wp50	0.7250783462684011674686877192511609688691805944795089578781647692077732	48	same
+c7.machine n=2000	0.7250188326252590340692495431047236166604049907115168119516087747890811	10	siam100_refs/c7_ref.py: exact fixed-point (2^300) Jacobi-PCG in Python integers == mixed-precision iterative refinement (exact integer residual, scipy cg correction); 70 digits agree (n=2000); wolframscript LinearSolve WorkingPrecision 60 agrees to 60 digits
+c7.wp50 n=2000	0.7250188326252590340692495431047236166604049907115168119516087747890811	48	same

@@ -1,0 +1,10 @@
+/* Experiment 190 -- SIAM 100-Digit Challenge, App. D Problem 15 (Maxima column).
+   A 2-D parabolic PDE integrated to blow-up.  Maxima has no PDE solver, and
+   its only ODE integrator (rk: explicit fixed-step RK4) cannot integrate the
+   stiff method-of-lines system to a blow-up time, so both rows are SKIP.
+   See blowup_time.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d15.machine", "NDSolve (PDE)")$
+skip("d15.wp50", "NDSolve (PDE)")$
+quit()$

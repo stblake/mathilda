@@ -1,0 +1,15 @@
+/* Experiment 188 -- SIAM 100-Digit Challenge, App. D Problem 13 (Maxima column).
+   Both rows SKIP.  Maxima's only numeric ODE integrator is rk (fixed-step
+   RK4, floats only, no event location).  Without an event the statement is
+   the literal find_root on |u(50)| - 1, and that map is only defined on a
+   relative window ~1e-12 wide around the answer (below it the orbit decays,
+   above it it overflows before t = 50, see nonlinear_ode_z0.m), so any
+   find_root bracket would have to contain the answer to ~11 digits already --
+   that would test the bracket, not Maxima.  rk is float-only, so wp50 is
+   SKIP regardless. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["rk", "find_root"])$
+skip("d13.machine", "WhenEvent")$
+skip("d13.wp50", "rk (float only)")$
+quit()$

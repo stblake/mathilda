@@ -8,7 +8,7 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] Phase 0: harness -- FriCAS column in run_all.py (.input halves, VALUE lines kept),
       siam100_common.{m,py,mac,input}, siam100_cap.lisp, siam100_table.py
 - [x] C1 (exp 166) encoded in all five systems, reference by two methods
-- [ ] Phase 1-2: encode C2-C10, D1-D20 (exps 167-195) with 55+ digit references
+- [x] Phase 1-2: encode C2-C10, D1-D20 (exps 167-195) with references (weak: C3 40d, D8 5d, D14 12d, D15 8d, D18 7d, D20 7d)
 - [ ] Baseline run of 166-195, status table in SIAM100.md
 - [ ] Phase 3: holdout A, 10 per problem (exps 196-225), run once BEFORE fixes
 - [ ] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b, baselines only
@@ -18,6 +18,43 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 Findings so far:
 - C1 wp50: NIntegrate[Cos[Log[x]/x]/x, {x,0,1}, WorkingPrecision->60] returns -1.186 (WRONG) in 13.4 s;
   WL gets 9 digits in 0.18 s.
+- C2: machine rows 1.8-2.2x slower than numpy (NSolve per bounce); wp50 best (47d).
+- C3: dense SVD/Norm 3.1x slower than numpy at n=4096, 12x at n=500; wp50-n100 best.
+- C4 wp50: NMinimize[..., WorkingPrecision->60] returns only machine digits (15 vs mpmath 50).
+- C5 machine: 7d vs scipy 11d (NMinimize of a minimax); wp50 timeout (all).
+- C6 machine: 2-D NIntegrate around corner singularity only ~7d (scipy 12d); wp50 timeout (WL 7d).
+- C3 truth only 40 digits (Strebel via Trefethen page); c3.wp50 need 38.
+- D16: Mathilda ABSENT WaveletPhi/DaubechiesWavelet (WL has them; others skip).
+- D17: Mathilda ABSENT NDEigensystem/NDEigenvalues/ArcLength (WL only).
+- D18: Mathilda ABSENT NDEigenvalues, RotationMatrix; ~105 s burned building a symbolic polygon before "unevaluated".
+- D19: FindMinimum with constraints + black-box objective makes no progress (WRONG, returns ~start);
+  wp50: "general constraints at WP > Machine not supported" (WL 10d, Maxima cobyla 14d machine, scipy 11d).
+- D20: FindRoot::nlnum "non-real f during iteration" on an exact-rational real polynomial at wp50 (WRONG/fail; WL/Maxima/FriCAS 50d).
+  machine robbins row 14d vs 15d best, 4.5x slower than scipy.
+- D18 truth 7 digits (Banjai), D20 truth 7 digits consensus, D16/D17/D19 well defined (D17 exact = 2).
+- D12/D13: NDSolve SILENTLY IGNORES WhenEvent (integrates to tmax, no message) -> wrong answers; D13 NDSolve::nrnum.
+  NDSolveValue ABSENT. (Highest priority: silent wrong answer.)
+- D15: NDSolve PDE ignores WorkingPrecision silently (machine result); machine 3.5x slower than WL (both 3d).
+- D14: no FEM (DirichletCondition/NeumannValue ABSENT) -- WL only, 2-3 digits.
+- D12 truth 70d, D13 68d, D14 12d consensus, D15 8d consensus.
+- C7: wp50 LinearSolve on 20000x20000 SparseArray at 60 digits UNEVALUATED (WL 72 s); n=2000 wp50 97x slower than WL;
+  machine 12d vs 16d (but 250x faster than WL).
+- C8: NSum-in-FindRoot fine (2x slower than Maxima machine, 24x at wp50); inline NSum with symbolic t inside FindRoot HANGS;
+  NDSolve cannot take a PDE (unevaluated).
+- C9: NMaximize of NIntegrate: 3d vs WL 7d; wp50 FindMaximum TIMEOUT (WL 26d).
+- C10: NSum sech series wp50 TIMEOUT (mpmath 1.7 ms); machine 10x slower than mpmath.
+- D1: everyone wrong (digit-indicator NSum).
+- D2: everyone wrong (slow series); Mathilda warns accgl but returns 60-digit wrong value.
+- D3: machine 11d correct (WL wrong local min) but 29 s; wp50 FindMinimum 197 vars TIMEOUT (600 s).
+- D4: RiemannR ABSENT (WL 55d builtin); FindRoot machine returns start point silently (no warning).
+- D5: all optimisers stall at the nonsmooth kink (everyone 0d); wp50 Mathilda timeout.
+- D6: machine 13d vs 16d (scipy/Maxima); 0.09 ms timing suspicious (warm-up cache?).
+- D7: machine 11d vs 15d; wp50 6.5x slower than mpmath; hundreds of spurious Surd::int messages; CubeRoot ABSENT.
+- D8: 10-D NIntegrate unevaluated ("Monte-Carlo requires constant finite real bounds"); c2R2 1.65x slower than scipy.
+- D9: machine MatrixPower 465x465 3.1x slower than numpy.
+- D10: FoldList with pure function over 1e6 elements 14x slower than WL; wp50 bignum loop 5x slower than Python.
+- D11: FindRoot rejects vector equation f[th,T]=={4,1} (FindRoot::systno); scalar form diverges (T->58.7) -> nlnum.
+- D8 truth 5d consensus (MC); D9 exact rational; D10 64d consensus; D7/D11 70d+.
 
 # ISSAC '97 Systems Challenge benchmark + fixes (from 2026-11-06, v0.6225)
 

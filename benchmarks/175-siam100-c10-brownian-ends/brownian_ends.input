@@ -1,0 +1,12 @@
+-- Experiment 175 -- SIAM 100-Digit Challenge, Problem 10 (FriCAS column).
+-- No numerical summation to infinity: the separated series is summed to a
+-- fixed 15 terms (term 15 would overflow cosh in DoubleFloat; far below 60 digits after 5) in DoubleFloat and in Float
+-- at digits(60).  No PDE solver: c10.machine pde is SKIP.  See brownian_ends.m.
+)read ../siam100_common.input )quiet
+tD(k:Integer):DoubleFloat == (even? k => 1.0::DoubleFloat; -1.0::DoubleFloat) / (2*k+1)::DoubleFloat / cosh(5*(2*k+1)*pi()$DoubleFloat)
+t0 := nowms(); vD := 4/pi()$DoubleFloat * reduce(+, [tD(k) for k in 0..14]); vcaseD("c10.machine", vD, nowms() - t0, 10)
+digits(60)$Float
+tF(k:Integer):Float == (even? k => 1.0::Float; -1.0::Float) / (2*k+1)::Float / cosh(5*(2*k+1)*pi()$Float)
+t0 := nowms(); vF := 4/pi()$Float * reduce(+, [tF(k) for k in 0..14]); vcaseF("c10.wp50", vF, nowms() - t0, 48)
+vskip("c10.machine pde", "PDE solver")
+)quit

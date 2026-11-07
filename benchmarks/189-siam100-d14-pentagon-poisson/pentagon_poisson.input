@@ -1,0 +1,7 @@
+-- Experiment 189 -- SIAM 100-Digit Challenge, App. D Problem 14 (FriCAS column).
+-- A finite-element boundary-value problem on a pentagon; FriCAS has no PDE
+-- solver, so both rows are SKIP.  See pentagon_poisson.m.
+)read ../siam100_common.input )quiet
+vskip("d14.machine", "NDSolveValue (FEM)")
+vskip("d14.wp50", "NDSolveValue (FEM)")
+)quit

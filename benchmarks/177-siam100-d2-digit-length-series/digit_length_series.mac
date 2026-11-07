@@ -1,0 +1,9 @@
+/* Experiment 177 -- SIAM 100-Digit Challenge, Appendix D Problem 2 (Maxima column).
+   Maxima has no numerical infinite-series summation (sum/nusum/simpsum are
+   symbolic and leave this sum unevaluated), so both rows are SKIPs.
+   See digit_length_series.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d2.machine", "nsum")$
+skip("d2.wp50", "nsum")$
+quit()$

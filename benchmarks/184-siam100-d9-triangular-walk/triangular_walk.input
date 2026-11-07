@@ -1,0 +1,21 @@
+-- Experiment 184 -- SIAM 100-Digit Challenge, Appendix D Problem 9 (FriCAS column).
+-- The 465 x 465 transition matrix P of the walk.  machine: P^60 in
+-- Matrix DoubleFloat, first row summed over the bottom row; wp50: the exact
+-- start vector pushed through 60 exact products v * P in
+-- Matrix Fraction Integer, converted to Float at digits(60).
+-- See triangular_walk.m.
+)read ../siam100_common.input )quiet
+nT := 30
+idx(r:Integer, c:Integer):Integer == r*(r+1) quo 2 + c + 1
+nP := nT*(nT+1) quo 2
+inT(a:Integer, b:Integer):Boolean == 0 <= b and b <= a and a < nT
+PQ : Matrix Fraction Integer := new(nP, nP, 0)
+for r in 0..nT-1 repeat for c in 0..r repeat (l := [[a, b] for a in [r, r, r-1, r-1, r+1, r+1] for b in [c-1, c+1, c-1, c, c, c+1] | inT(a, b)]; for p in l repeat PQ(idx(r, c), idx(p.1, p.2)) := 1/(#l))
+PD : Matrix DoubleFloat := map(x +-> (numer(x)::DoubleFloat)/(denom(x)::DoubleFloat), PQ)
+bottom := [idx(nT-1, c) for c in 0..nT-1]
+t0 := nowms(); QD := PD^60; vD := reduce(+, [QD(1, j) for j in bottom]); vcaseD("d9.machine", vD, nowms() - t0, 10)
+digits(60)$Float
+v0 : Matrix Fraction Integer := new(1, nP, 0)
+v0(1, 1) := 1
+t0 := nowms(); v := v0; for k in 1..60 repeat v := v * PQ; q := reduce(+, [v(1, j) for j in bottom]); vF := (numer(q)::Float)/(denom(q)::Float); vcaseF("d9.wp50", vF, nowms() - t0, 48)
+)quit

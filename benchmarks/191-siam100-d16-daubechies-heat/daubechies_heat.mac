@@ -1,0 +1,9 @@
+/* Experiment 191 -- SIAM 100-Digit Challenge, App. D Problem 16 (Maxima column).
+   Maxima has no Daubechies scaling function (no wavelet package in the
+   distribution): every row is a SKIP.  See daubechies_heat.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d16.machine", "DaubechiesScalingFunction")$
+skip("d16.machine-reduced", "DaubechiesScalingFunction")$
+skip("d16.wp50", "DaubechiesScalingFunction")$
+quit()$

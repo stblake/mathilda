@@ -1,0 +1,8 @@
+-- Experiment 191 -- SIAM 100-Digit Challenge, App. D Problem 16 (FriCAS column).
+-- FriCAS has no Daubechies scaling function: every row is a SKIP.
+-- See daubechies_heat.m.
+)read ../siam100_common.input )quiet
+vskip("d16.machine", "DaubechiesScalingFunction")
+vskip("d16.machine-reduced", "DaubechiesScalingFunction")
+vskip("d16.wp50", "DaubechiesScalingFunction")
+)quit

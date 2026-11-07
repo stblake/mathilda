@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 7: area of {(x,y): exp(-(y+x^3)^2) > y^2/32 + exp(sin y)}
+# label	true value (65 digits)	need	source
+d7.machine	2.11502988094614658580840342658669512126535126194010611388164198869	10	mpmath tanh-sinh quad of the explicit x-interval length over the two islands, breakpoints at band ends and the cube-root kink, dps 90 (siam100_refs/d7_ref.py) == WL NIntegrate (Gauss-Kronrod) of the same, WorkingPrecision 100 (siam100_refs/d7_ref.wl): 79 digits agree; == D. Smith's published 50 digits (book web page, AppendixD/9.txt)
+d7.wp50	2.11502988094614658580840342658669512126535126194010611388164198869	48	same

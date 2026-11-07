@@ -1,0 +1,5 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 17: length of the zero set of the 3rd Dirichlet eigenfunction on the L-shape of three unit squares
+# label	true value	need	source
+d17.machine	2	10	exact: Sin[Pi x] Sin[Pi y] is a Dirichlet eigenfunction with eigenvalue 2 Pi^2 (checked symbolically, siam100_refs/d17_ref.wl); interior zero set = segments x=1 (0<y<1) and y=1 (0<x<1), length 2 (boundary excluded; 10 if the perimeter 8 is counted) == numeric: fine-mesh FEM (2nd order, MaxCellMeasure 5e-4) gives lambda_1..5 = 9.64286, 15.19727, 19.73921, 29.52150, 31.92029, so 2 Pi^2 is the 3rd and simple (published 9.6397238, 15.1972519, 19.7392088, 29.5214811: Fox-Henrici-Moler 1967, Betcke-Trefethen 2005), and the FEM u_3 is < 2e-5 of its max on both segments
+d17.machine-reduced	19.7392088021787172376689819997523022706273988144815812528266987524	10	lambda_3 = 2 Pi^2 exactly (same provenance); value = 2 Pi^2 to 66 digits (mpmath)
+d17.wp50	2	48	same as d17.machine

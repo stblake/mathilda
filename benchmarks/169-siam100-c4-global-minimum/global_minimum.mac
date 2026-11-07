@@ -1,0 +1,9 @@
+/* Experiment 169 -- SIAM 100-Digit Challenge, Problem 4 (Maxima column).
+   Maxima has no global minimiser (lbfgs and fmin_cobyla are local and land in
+   whichever of the ~2700 basins the start point picks), so both rows SKIP.
+   See global_minimum.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("c4.machine", "NMinimize")$
+skip("c4.wp50", "NMinimize")$
+quit()$

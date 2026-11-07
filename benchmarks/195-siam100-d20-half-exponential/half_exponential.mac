@@ -1,0 +1,21 @@
+/* Experiment 195 -- SIAM 100-Digit Challenge, App. D Problem 20 (Maxima column).
+   No built-in Kneser half-iterate: d20.machine / d20.wp50 SKIP.  The finite
+   proxy (Robbins' truncated Abel system, see half_exponential.m): the n x n
+   system solved EXACTLY by linsolve, then find_root (machine) / bf_find_root
+   (fpprec 60) for slog_n(x) = -1/2 on [0.4, 0.6]. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["linsolve", "find_root", "bf_find_root"])$
+skip("d20.machine", "KneserHalfIterate")$
+skip("d20.wp50", "KneserHalfIterate")$
+
+robbinsPoly(n) := block([vs : makelist(concat('v, k), k, 1, n), eqs, sol],
+  eqs : makelist(sum(vs[k] * (k^j / j! - (if j = k then 1 else 0)), k, 1, n) = (if j = 0 then 1 else 0),
+                 j, 0, n - 1),
+  sol : linsolve(eqs, vs),
+  subst(sol, -1/2 + sum(vs[k] * x^k, k, 1, n)))$
+
+vrun("d20.machine robbins n=20", lambda([], find_root(robbinsPoly(20), x, 0.4, 0.6)), 10)$
+vrun("d20.wp50 robbins n=60",
+     lambda([], block([fpprec : 60], bf_find_root(robbinsPoly(60), x, 0.4b0, 0.6b0))), 48)$
+quit()$

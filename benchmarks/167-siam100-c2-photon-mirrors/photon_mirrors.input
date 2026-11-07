@@ -1,0 +1,48 @@
+-- Experiment 167 -- SIAM 100-Digit Challenge, Problem 2 (FriCAS column).
+-- The same statement as photon_mirrors.m: straight-line flight, the next hit
+-- as the smallest positive real root of |p + t v - c|^2 = 1/9, reflection
+-- v' = v - 2 (v.n) n, over the same candidate filter.  FriCAS's numeric
+-- polynomial root finder is solve(p = 0, eps) on a Polynomial Fraction Integer
+-- (real-root isolation + refinement, returning rationals), so each quadratic's
+-- coefficients are taken exactly (retract) from the DoubleFloat / Float
+-- working values and the roots converted back; eps is 1e-17 resp. 1e-62.
+-- (Function bodies are parenthesised one-statement blocks with _ line
+-- continuation: piled multi-line bodies do not parse on stdin.)
+)read ../siam100_common.input )quiet
+rootsQ(a:Fraction Integer, b:Fraction Integer, c:Fraction Integer, eps:Fraction Integer):List Fraction Integer == _
+  [retract(rhs e)@Fraction(Integer) for e in solve((a*t^2 + b*t + c)::Polynomial(Fraction Integer) = 0, eps)]
+photonD(T:DoubleFloat):DoubleFloat == (third : DoubleFloat := 1/3; px : DoubleFloat := 1/2; py : DoubleFloat := 1/10; vx : DoubleFloat := 1; vy : DoubleFloat := 0; left : DoubleFloat := T; _
+  lasti : Integer := 10^6; lastj : Integer := 10^6; done : Boolean := false; _
+  while not done repeat (bt : DoubleFloat := left + 1; bi : Integer := 0; bj : Integer := 0; _
+    for i in (floor(min(px, px + left*vx))::Integer - 1)..(floor(max(px, px + left*vx))::Integer + 2) repeat ( _
+      for j in (floor(min(py, py + left*vy))::Integer - 1)..(floor(max(py, py + left*vy))::Integer + 2) repeat ( _
+        dx : DoubleFloat := i::DoubleFloat - px; dy : DoubleFloat := j::DoubleFloat - py; _
+        if not (i = lasti and j = lastj) and dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < third then ( _
+          for r in rootsQ(retract((vx*vx + vy*vy)::Float)@Fraction(Integer), retract((-2*(dx*vx + dy*vy))::Float)@Fraction(Integer), retract((dx*dx + dy*dy - third*third)::Float)@Fraction(Integer), 1/10^17) repeat ( _
+            rt : DoubleFloat := r::DoubleFloat; _
+            if rt > 0 and rt < bt then (bt := rt; bi := i; bj := j))))); _
+    if bt >= left then (px := px + left*vx; py := py + left*vy; done := true) _
+    else (px := px + bt*vx; py := py + bt*vy; left := left - bt; lasti := bi; lastj := bj; _
+      nx : DoubleFloat := 3*(px - bi::DoubleFloat); ny : DoubleFloat := 3*(py - bj::DoubleFloat); _
+      d : DoubleFloat := vx*nx + vy*ny; vx := vx - 2*d*nx; vy := vy - 2*d*ny)); _
+  sqrt(px*px + py*py))
+photonF(T:Float):Float == (third : Float := 1/3; px : Float := 1/2; py : Float := 1/10; vx : Float := 1; vy : Float := 0; left : Float := T; _
+  lasti : Integer := 10^6; lastj : Integer := 10^6; done : Boolean := false; _
+  while not done repeat (bt : Float := left + 1; bi : Integer := 0; bj : Integer := 0; _
+    for i in (floor(min(px, px + left*vx))::Integer - 1)..(floor(max(px, px + left*vx))::Integer + 2) repeat ( _
+      for j in (floor(min(py, py + left*vy))::Integer - 1)..(floor(max(py, py + left*vy))::Integer + 2) repeat ( _
+        dx : Float := i::Float - px; dy : Float := j::Float - py; _
+        if not (i = lasti and j = lastj) and dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < third then ( _
+          for r in rootsQ(retract(vx*vx + vy*vy)@Fraction(Integer), retract(-2*(dx*vx + dy*vy))@Fraction(Integer), retract(dx*dx + dy*dy - third*third)@Fraction(Integer), 1/10^62) repeat ( _
+            rt : Float := r::Float; _
+            if rt > 0 and rt < bt then (bt := rt; bi := i; bj := j))))); _
+    if bt >= left then (px := px + left*vx; py := py + left*vy; done := true) _
+    else (px := px + bt*vx; py := py + bt*vy; left := left - bt; lasti := bi; lastj := bj; _
+      nx : Float := 3*(px - bi::Float); ny : Float := 3*(py - bj::Float); _
+      d : Float := vx*nx + vy*ny; vx := vx - 2*d*nx; vy := vy - 2*d*ny)); _
+  sqrt(px*px + py*py))
+t0 := nowms(); r := photonD(10); vcaseD("c2.machine", r, nowms() - t0, 3)
+t0 := nowms(); r := photonD(3); vcaseD("c2.machine-t3", r, nowms() - t0, 10)
+digits(60)$Float
+t0 := nowms(); rF := photonF(10); vcaseF("c2.wp50", rF, nowms() - t0, 45)
+)quit

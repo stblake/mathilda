@@ -1,0 +1,8 @@
+-- Experiment 194 -- SIAM 100-Digit Challenge, App. D Problem 19 (FriCAS column).
+-- The finite proxy needs a constrained minimiser (box + equality); FriCAS has
+-- none built in, so every row is a SKIP.  See optimal_design.m.
+)read ../siam100_common.input )quiet
+vskip("d19.machine", "ConstrainedMinimize")
+vskip("d19.machine-reduced", "ConstrainedMinimize")
+vskip("d19.wp50", "ConstrainedMinimize")
+)quit

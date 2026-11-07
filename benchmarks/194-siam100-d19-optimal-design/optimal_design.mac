@@ -1,0 +1,37 @@
+/* Experiment 194 -- SIAM 100-Digit Challenge, App. D Problem 19 (Maxima column).
+   The finite proxy (see optimal_design.m): n = 8 (n = 4 reduced), Q1 elements, minimise the
+   compliance over 1 <= c_e <= 100, sum c_e = 50.5 n^2.  Maxima's only
+   constrained minimiser is fmin_cobyla (derivative-free); the objective is a
+   numeric black box (matrix assembly + linsolve_by_lu).  The equality is
+   given as two inequalities.  No bigfloat constrained optimiser: wp50 SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(fmin_cobyla)$
+require(["fmin_cobyla", "linsolve_by_lu"])$
+
+KQ : matrix([4,-1,-2,-1],[-1,4,-1,-2],[-2,-1,4,-1],[-1,-2,-1,4]) / 6.0$
+nodeIdx(nC, i, j) := if i >= 1 and i <= nC-1 and j >= 1 and j <= nC-1 then (i-1)*(nC-1) + j else 0$
+elemsOf(nC) := create_list([nodeIdx(nC,a,b), nodeIdx(nC,a+1,b), nodeIdx(nC,a+1,b+1), nodeIdx(nC,a,b+1)],
+                           a, 0, nC-1, b, 0, nC-1)$
+compliance(nC, cl) := block([nInt : (nC-1)^2, K, F, U, idx, el : elemsOf(nC)],
+  K : zeromatrix(nInt, nInt),
+  for e : 1 thru length(el) do (
+    idx : el[e],
+    for r : 1 thru 4 do for s : 1 thru 4 do
+      if idx[r] > 0 and idx[s] > 0 then
+        K[idx[r], idx[s]] : K[idx[r], idx[s]] + cl[e] * KQ[r, s]),
+  F : genmatrix(lambda([i, j], 1.0 / nC^2), nInt, 1),
+  U : first(linsolve_by_lu(K, F, 'floatfield)),
+  (transpose(F) . U))$
+Jbox(nC, cl) := if every(numberp, cl) then compliance(nC, cl) else 'Jbox(nC, cl)$
+designMin(nC) := block([cv : makelist(concat('c, k), k, 1, nC^2), r],
+  r : fmin_cobyla(Jbox(nC, cv), cv, makelist(50.5, k, 1, nC^2),
+        constraints = append(makelist(cv[k] >= 1, k, 1, nC^2), makelist(cv[k] <= 100, k, 1, nC^2),
+                             [apply("+", cv) >= 50.5 * nC^2, apply("+", cv) <= 50.5 * nC^2]),
+        rhobeg = 10.0, rhoend = 1.0e-10, iprint = 0, maxfun = 20000),
+  compliance(nC, subst(r[1], cv)))$
+
+vrun("d19.machine", lambda([], designMin(8)), 10)$
+vrun("d19.machine-reduced", lambda([], designMin(4)), 10)$
+skip("d19.wp50", "ConstrainedMinimize(bfloat)")$
+quit()$

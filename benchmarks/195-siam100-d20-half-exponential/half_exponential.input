@@ -1,0 +1,16 @@
+-- Experiment 195 -- SIAM 100-Digit Challenge, App. D Problem 20 (FriCAS column).
+-- No built-in Kneser half-iterate: d20.machine / d20.wp50 SKIP.  The finite
+-- proxy (Robbins' truncated Abel system, see half_exponential.m): the n x n
+-- linear system solved exactly over Fraction Integer (solve), then the real
+-- root of slog_n(x) = -1/2 in (0.4, 0.6) by solve(p = 0, eps) (exact
+-- real-root isolation to a rational tolerance), converted to DoubleFloat /
+-- Float.
+)read ../siam100_common.input )quiet
+vskip("d20.machine", "KneserHalfIterate")
+vskip("d20.wp50", "KneserHalfIterate")
+robbinsPoly(n:Integer):Polynomial Fraction Integer == (vs := [concat("v", string(k))::Symbol for k in 1..n]; eqs := [reduce(+, [(k^j/factorial(j) - (j = k => 1; 0)) * (vs.k)::Polynomial(Fraction Integer) for k in 1..n]) = (j = 0 => 1; 0) for j in 0..(n-1)]; sol := first solve(eqs, vs); reduce(+, [rhs(sol.k) * x^k for k in 1..n]) - 1/2)
+rootIn(p:Polynomial Fraction Integer, eps:Fraction Integer):Fraction Integer == (rs := [retract(rhs e)@Fraction(Integer) for e in solve(p = 0, eps)]; first [v for v in rs | v > 2/5 and v < 3/5])
+t0 := nowms(); vD := (rootIn(robbinsPoly(20), 1/10^18))::DoubleFloat; vcaseD("d20.machine robbins n=20", vD, nowms() - t0, 10)
+digits(60)$Float
+t0 := nowms(); vF := (rootIn(robbinsPoly(60), 1/10^62))::Float; vcaseF("d20.wp50 robbins n=60", vF, nowms() - t0, 48)
+)quit

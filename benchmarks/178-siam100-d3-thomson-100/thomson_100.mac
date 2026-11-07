@@ -1,0 +1,23 @@
+/* Experiment 178 -- SIAM 100-Digit Challenge, Appendix D Problem 3 (Maxima column).
+   lbfgs (the only general minimiser in Maxima) on the same symbolic energy,
+   197 spherical coordinates, Fibonacci start, as thomson_100.m; lbfgs
+   differentiates the 4950-term expression symbolically.  lbfgs works in
+   double precision only, so the 50-digit row is a SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(lbfgs)$
+require(["lbfgs"])$
+
+npts : 100$
+ph1 : float(%pi*(3 - sqrt(5)))$
+pt(k) := if k = 0 then [0, 0, 1]
+         else if k = 1 then [sin(th[1])*cos(ph1), sin(th[1])*sin(ph1), cos(th[1])]
+         else [sin(th[k])*cos(ph[k]), sin(th[k])*sin(ph[k]), cos(th[k])]$
+energy : sum(sum(1/sqrt((pt(j) - pt(k)) . (pt(j) - pt(k))), k, j + 1, npts - 1), j, 0, npts - 2)$
+vars : append(makelist(th[k], k, 1, npts - 1), makelist(ph[k], k, 2, npts - 1))$
+x0 : append(makelist(float(acos(1 - 2*k/npts)), k, 1, npts - 1),
+            makelist(float(k*ph1), k, 2, npts - 1))$
+vrun("d3.machine",
+     lambda([], subst(lbfgs(energy, vars, x0, 1e-10, [-1, 0]), energy)), 10, 600)$
+skip("d3.wp50", "lbfgs(bfloat)")$
+quit()$

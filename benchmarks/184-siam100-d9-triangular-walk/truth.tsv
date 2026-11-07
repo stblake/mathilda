@@ -1,0 +1,5 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 9: P(bottom row after 60 uniform-neighbour steps from the top of the 30-per-side triangular lattice)
+# exact = 3722200777884626618385530906788866022689096963173522895529 / 391302183008102676318141068027642364938466415279908207464546304
+# label	true value (65 digits)	need	source
+d9.machine	9.5123435020743320973531347375383316350767310071736964457110195316e-6	10	exact rational: Python fractions 60-step vector propagation (siam100_refs/d9_ref.py) == WL exact MatrixPower[P,60] (siam100_refs/d9_ref.wl), identical n/d; == D. Smith's published exact n/d (book web page, AppendixD/11.txt)
+d9.wp50	9.5123435020743320973531347375383316350767310071736964457110195316e-6	48	same

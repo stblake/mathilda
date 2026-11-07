@@ -1,0 +1,8 @@
+/* Experiment 189 -- SIAM 100-Digit Challenge, App. D Problem 14 (Maxima column).
+   A finite-element boundary-value problem on a pentagon; Maxima has no PDE
+   solver, so both rows are SKIP.  See pentagon_poisson.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d14.machine", "NDSolveValue (FEM)")$
+skip("d14.wp50", "NDSolveValue (FEM)")$
+quit()$

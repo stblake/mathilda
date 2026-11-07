@@ -1,0 +1,11 @@
+-- Experiment 168 -- SIAM 100-Digit Challenge, Problem 3 (FriCAS column).
+-- Every row is the 2-norm (largest singular value) of an n x n section;
+-- FriCAS has no numerical SVD or numerical eigensolver for a Float/DoubleFloat
+-- matrix (realEigenvalues needs the exact characteristic polynomial of a
+-- rational matrix, hopeless at n = 100..4096): all rows SKIP.  See operator_norm.m.
+)read ../siam100_common.input )quiet
+vskip("c3.machine", "Norm")
+vskip("c3.wp50", "Norm")
+vskip("c3.machine-n500", "Norm")
+vskip("c3.wp50-n100", "Norm")
+)quit

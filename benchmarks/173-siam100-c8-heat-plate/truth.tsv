@@ -1,0 +1,5 @@
+# SIAM 100-Digit Challenge, Problem 8: time at which the centre of the plate reaches u = 1
+# label	true value (70 digits)	need	source
+c8.machine	0.4240113870336883637974336685932564512477620906642747621971124959133102	10	siam100_refs/c8_ref.py: mpmath findroot of w(t) = 1/sqrt5 with w the eigen-series (4/pi) sum (-1)^k/(2k+1) exp(-(2k+1)^2 pi^2 t/4) == with w the image (theta-transformed) series 1 - 2 sum (-1)^n erfc((2n+1)/(2 sqrt t)), dps 80, 70 digits agree; book App. B first 25 digits agree
+c8.wp50	0.4240113870336883637974336685932564512477620906642747621971124959133102	48	same
+c8.machine pde	0.4240113870336883637974336685932564512477620906642747621971124959133102	4	same value (the PDE's exact answer); need 4 = what a default method-of-lines grid can resolve with the discontinuous boundary data

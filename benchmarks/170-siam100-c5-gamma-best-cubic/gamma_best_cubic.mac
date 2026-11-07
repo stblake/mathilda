@@ -1,0 +1,29 @@
+/* Experiment 170 -- SIAM 100-Digit Challenge, Problem 5 (Maxima column).
+   The same statement as gamma_best_cubic.m (scored against the discrete
+   minimax value E_128): Maxima has no global minimiser, so the machine row
+   uses its derivative-free minimiser fmin_cobyla (unconstrained, from the zero
+   polynomial, rhoend 1e-12) on the same max of 128 moduli; 1/Gamma at the
+   sample points from Maxima's complex float gamma.  No bigfloat minimiser:
+   wp50 SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(fmin_cobyla)$
+require(["fmin_cobyla", "gamma"])$
+
+c5obj() := block([zs, fs, w, re, im],
+  zs : makelist(rectform(float(exp(2*%pi*%i*k/128))), k, 0, 127),
+  /* z_64 = -1 is a pole of gamma, where 1/gamma = 0; Maxima has no
+     reciprocal gamma, so that one sample is given its value directly */
+  fs : map(lambda([z], if z = -1.0 then 0.0 else rectform(float(1/gamma(z)))), zs),
+  lmax(makelist(block([z : zs[k], p],
+      p : rectform(expand((a0 + %i*b0) + (a1 + %i*b1)*z + (a2 + %i*b2)*z^2
+                          + (a3 + %i*b3)*z^3)),
+      sqrt((realpart(fs[k]) - realpart(p))^2 + (imagpart(fs[k]) - imagpart(p))^2)),
+    k, 1, 128)))$
+
+vrun("c5.machine", lambda([], block([F : c5obj(), r],
+  r : fmin_cobyla(F, [a0, a1, a2, a3, b0, b1, b2, b3], makelist(0.0, 8),
+                  'rhobeg = 0.5, 'rhoend = 1e-12, 'maxfun = 100000, 'iprint = 0),
+  float(subst(r[1], F)))), 10)$
+skip("c5.wp50", "NMinimize")$
+quit()$

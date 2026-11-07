@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 5: min over monic degree-8 p of ||p(A)||_2, A the 48x48 Toeplitz matrix
+# label	true value (65 digits)	need	source
+d5.machine	1766.3135312822592048134655314961967376203538625727307134678794252	10	KKT/Newton on the crease of the convex min-max: with J the exchange matrix M(c) = p(A) J is symmetric (A Toeplitz) and at the minimiser its extreme eigenvalues satisfy lmax = -lmin = ||p(A)||_2 (double top singular value; third 1756.80); 9x9 system lmax+lmin=0, w grad lmax + (1-w) grad(-lmin) = 0, dual weight w = 0.4802903956 in (0,1). wolframscript Eigensystem, central-difference Jacobian, fixed 250 digits, |F| 1e-215 (siam100_refs/d5_ref.wl) == mpmath eigsy, forward-difference Jacobian, dps 100 (siam100_refs/d5_ref.py); start from a numpy log-sum-exp smoothing continuation (7 digits). 80 digits agree
+d5.wp50	1766.3135312822592048134655314961967376203538625727307134678794252	48	same

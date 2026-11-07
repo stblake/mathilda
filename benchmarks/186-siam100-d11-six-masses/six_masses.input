@@ -1,0 +1,10 @@
+-- Experiment 186 -- SIAM 100-Digit Challenge, Appendix D Problem 11 (FriCAS column).
+-- The shooting statement (six_masses.m) needs a numeric ODE solver inside a
+-- two-variable root finder.  FriCAS has fixed/adaptive RK4 integrators
+-- (NumericalOrdinaryDifferentialEquations) but no numeric root finder for a
+-- non-polynomial system, so both rows are SKIP rather than a hand-written
+-- Newton iteration.
+)read ../siam100_common.input )quiet
+vskip("d11.machine", "FindRoot over NDSolve")
+vskip("d11.wp50", "FindRoot over NDSolve")
+)quit

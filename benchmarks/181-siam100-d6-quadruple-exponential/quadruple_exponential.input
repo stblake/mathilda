@@ -1,0 +1,11 @@
+-- Experiment 181 -- SIAM 100-Digit Challenge, Appendix D Problem 6 (FriCAS column).
+-- FriCAS's numeric quadrature (NumericalQuadrature: romberg) on [-1, 1],
+-- DoubleFloat for the machine row and Float with digits(60) for the 50-digit
+-- row.  See quadruple_exponential.m.
+)read ../siam100_common.input )quiet
+fD(x:DoubleFloat):DoubleFloat == exp(x + sin(exp(exp(x + 1.0/3.0))))
+t0 := nowms(); r := romberg(fD, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("d6.machine", r.value, nowms() - t0, 10)
+digits(60)$Float
+fF(x:Float):Float == exp(x + sin(exp(exp(x + 1.0/3.0))))
+t0 := nowms(); rF := romberg(fF, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 22); vcaseF("d6.wp50", rF.value, nowms() - t0, 48)
+)quit

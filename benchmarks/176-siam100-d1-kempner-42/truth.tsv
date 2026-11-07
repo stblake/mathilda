@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Appendix D problem 1: sum of 1/n over n whose decimal digits avoid "42"
+# label	true value (79 digits)	need	source
+d1.machine	228.4463041592308132541480861262505895781629275398303611859134600004528607686502	10	Schmelzer-Baillie power-sum recursion with the tail summed in closed form e.(I-M)^-1 M psi: siam100_refs/d1_ref.py (mpmath, K0=5 explicit digits, J=45 moments, dps 100; K0=4/5, J=30/45 agree to 80 digits) == siam100_refs/d1_ref.wl (wolframscript, K0=3, J=45, 150-digit LinearSolve; 75 digits agree); literature: Schmelzer & Baillie, Amer. Math. Monthly 115 (2008), 228.44630415923081325415 (22 digits) agrees
+d1.wp50	228.4463041592308132541480861262505895781629275398303611859134600004528607686502	48	same

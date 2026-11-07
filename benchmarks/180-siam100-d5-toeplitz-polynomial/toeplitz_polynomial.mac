@@ -1,0 +1,10 @@
+/* Experiment 180 -- SIAM 100-Digit Challenge, Appendix D Problem 5 (Maxima column).
+   Maxima has no matrix 2-norm / numerical SVD in the core library
+   (linearalgebra's mat_norm offers 1, inf and frobenius) and its only
+   minimiser, lbfgs, needs a differentiable expression, so both rows are SKIPs.
+   See toeplitz_polynomial.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d5.machine", "mat_norm(.,2)")$
+skip("d5.wp50", "mat_norm(.,2)")$
+quit()$

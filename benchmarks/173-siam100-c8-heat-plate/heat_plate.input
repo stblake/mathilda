@@ -1,0 +1,9 @@
+-- Experiment 173 -- SIAM 100-Digit Challenge, Problem 8 (FriCAS column).
+-- The case is a root of a transcendental function of t (see heat_plate.m);
+-- FriCAS has no numeric root finder for a non-polynomial function (its
+-- solve/realSolve are polynomial-only), and no PDE solver: all rows SKIP.
+)read ../siam100_common.input )quiet
+vskip("c8.machine", "numeric root finder (non-polynomial)")
+vskip("c8.wp50", "numeric root finder (non-polynomial)")
+vskip("c8.machine pde", "PDE solver")
+)quit

@@ -1,0 +1,21 @@
+/* Experiment 185 -- SIAM 100-Digit Challenge, Appendix D Problem 10 (Maxima column).
+   The Monte-Carlo statement of random_recurrence.m: machine: n = 10^6 signs
+   from random(2) (state make_random_state(1)), float ratio recursion
+   r <- 2 +- 1/r, exp(mean log r); wp50: exact integer x_n for n = 10^4, then
+   bfloat(abs(x_n)^(1/n)) at fpprec 60. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["random", "bfloat"])$
+
+vrun("d10.machine", lambda([], block([r : 1.0, acc : 0.0, n : 10^6],
+  set_random_state(make_random_state(1)),
+  for k : 1 thru n - 1 do (
+    r : 2.0 + (2*random(2) - 1)/r,
+    acc : acc + log(r)),
+  exp(acc/n))), 2)$
+
+vrun("d10.wp50", lambda([], block([a : 1, b : 1, t, n : 10^4, fpprec : 60],
+  set_random_state(make_random_state(1)),
+  for k : 1 thru n - 1 do (t : b, b : 2*b + (2*random(2) - 1)*a, a : t),
+  bfloat(abs(b)^(1/n)))), 1)$
+quit()$

@@ -1,0 +1,19 @@
+/* Experiment 187 -- SIAM 100-Digit Challenge, App. D Problem 12 (Maxima column).
+   The eps -> 0 limiting ODE on the unit circle (derivation: constrained_particle.m).
+   Maxima's ODE integrator rk is fixed-step classical RK4 with no event
+   location, so the idiomatic statement is fixed-time shooting: find_root on
+   sin(th(10; alpha)) = 0 over the bracket [10.6234, 10.62347] (both sides of
+   the root, inside the window where the first hit is the only one), rk with
+   step 1/400.  rk works in floats only, so the 50-digit row is a SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["rk", "find_root"])$
+
+y10(a) := block([r],
+  r : rk([w, -cos(th) + a*sin(th)*cos(th)/(2*sqrt(1 + a*cos(th)^2))],
+         [th, w], [float(%pi/2), -1.0], [t, 0, 10, 1/400]),
+  sin(second(last(r))))$
+
+vrun("d12.machine", lambda([], find_root(y10, 10.6234, 10.62347)), 10)$
+skip("d12.wp50", "rk (float only)")$
+quit()$

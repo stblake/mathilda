@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Problem 9: argmax over a in [0,5] of (2+sin 10a) Int_0^2 x^a sin(a/(2-x)) dx
+# label	true value (68 digits)	need	source
+c9.machine	0.78593367435037145456524398632754558296239545906186681758123180709891	10	siam100_refs/c9_ref.py: mpmath findroot of F'(a), F' by differentiation under the integral, integrals after t = 1/(2-x) by tanh-sinh on [1/2,1] + quadosc on [1,inf), dps 75 == siam100_refs/c9_ref_meijer.py: book Sec. 9.6 Meijer-G closed form via mpmath.meijerg + numerical diff, dps 90; 68 digits agree; book App. B first 25 digits agree
+c9.wp50	0.78593367435037145456524398632754558296239545906186681758123180709891	48	same

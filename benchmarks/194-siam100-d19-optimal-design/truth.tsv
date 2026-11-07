@@ -1,0 +1,6 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 19 (optimal design; research problem, no digit of the continuum infimum is known).
+# The rows score the FINITE PROXY (relaxed variable-thickness problem, n x n cells, Q1 elements; see optimal_design.m), not the continuum answer.
+# label	true value	need	source
+d19.machine	0.000538244792399511293370464160567068494900342333316087515366931750487	10	n = 8 proxy. A: scipy SLSQP locates the active set (12 cells c=1, 8 cells c=100, 44 interior in 6 D4-orbits), mpmath findroot solves the KKT system at 80 digits (residual 1e-79) and verifies all KKT sign conditions (siam100_refs/d19_ref.py 8) == B: independent Wolfram duality certificate: UB = J(c_star) by exact-assembly LinearSolve at 90 digits, LB = 2F.U - max_c sum c_e e_e(U) (fractional knapsack) at U = U(c_star); UB - LB = 5e-83 (siam100_refs/d19_ref.wl 8). Convex problem => unique minimum value; 70 digits stored
+d19.machine-reduced	0.000506260062697087536671917123931485364570222343602175914443894769580	10	n = 4 proxy: same two methods (d19_ref.py 4: 4 cells c=1, 12 interior in 2 orbits; d19_ref.wl 4: UB - LB = 7e-82)
+d19.wp50	0.000506260062697087536671917123931485364570222343602175914443894769580	48	n = 4 proxy at 60 digits (same as d19.machine-reduced)

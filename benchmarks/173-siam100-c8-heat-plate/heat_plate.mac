@@ -1,0 +1,16 @@
+/* Experiment 173 -- SIAM 100-Digit Challenge, Problem 8 (Maxima column).
+   The separated solution u(0,0,t) = (5/4)(1 - w(t)^2) (see heat_plate.m).
+   Maxima has no numerical summation to infinity, so w is summed to a fixed
+   20 terms (term k is exp(-(2k+1)^2 pi^2 t/4): below 1e-300 by k = 20 at
+   t = 0.4).  Root: find_root on [0.1, 1] (machine) and bf_find_root at
+   fpprec 60 (wp50).  No PDE solver: c8.machine pde is SKIP.  See heat_plate.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["find_root", "bf_find_root"])$
+
+w(t) := 4/%pi*sum((-1)^k/(2*k+1)*exp(-(2*k+1)^2*%pi^2*t/4), k, 0, 19)$
+vrun("c8.machine", lambda([], find_root(5/4*(1 - w(t)^2) - 1, t, 0.1, 1.0)), 10)$
+vrun("c8.wp50", lambda([], block([fpprec : 60],
+       bf_find_root(5/4*(1 - w(t)^2) - 1, t, 1b-1, 1b0))), 48)$
+skip("c8.machine pde", "PDE solver")$
+quit()$

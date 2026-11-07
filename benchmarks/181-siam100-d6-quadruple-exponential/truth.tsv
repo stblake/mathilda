@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 6: Int_{-1}^{1} exp(x + sin(exp(exp(x+1/3)))) dx
+# label	true value (65 digits)	need	source
+d6.machine	3.0709937884517095474180761966961153175676046382294170338346796820	10	mpmath tanh-sinh, split at the sine's zeros exp(exp(x+1/3))=k pi, dps 80 == mpmath Gauss-Legendre on the same split, dps 80 == wolframscript NIntegrate GaussKronrodRule WorkingPrecision 90 (70 digits agree); reading of the formula: book p.288 (PDF p.298) typesets sin e^{e^{x+1/3}}, i.e. sin(exp(exp(x+1/3)))
+d6.wp50	3.0709937884517095474180761966961153175676046382294170338346796820	48	same

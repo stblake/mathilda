@@ -1,0 +1,5 @@
+# SIAM 100-Digit Challenge, Problem 10: P(Brownian particle from the centre of a 10x1 rectangle hits an end)
+# label	true value (70 digits)	need	source
+c10.machine	3.837587979251226103407133186204839100793005594072509569030022799173437e-7	10	siam100_refs/c10_ref.py: book closed form (2/pi) arcsin((3-2sqrt2)^2(2+sqrt5)^2(sqrt10-3)^2(5^(1/4)-sqrt2)^4) == separated series (4/pi) sum (-1)^k/(2k+1) sech(5(2k+1)pi), mpmath dps 80, 79 digits agree; book App. B first 25 digits agree
+c10.wp50	3.837587979251226103407133186204839100793005594072509569030022799173437e-7	48	same
+c10.machine pde	3.837587979251226103407133186204839100793005594072509569030022799173437e-7	3	same value (the PDE's exact solution); need 3 = what a default-mesh FEM solve reaches (wolframscript NDSolveValue gives 3.83708e-7)

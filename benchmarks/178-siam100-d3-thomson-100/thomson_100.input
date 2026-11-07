@@ -1,0 +1,7 @@
+-- Experiment 178 -- SIAM 100-Digit Challenge, Appendix D Problem 3 (FriCAS column).
+-- FriCAS has no numerical minimiser, so both rows are SKIPs.
+-- See thomson_100.m.
+)read ../siam100_common.input )quiet
+vskip("d3.machine", "minimize")
+vskip("d3.wp50", "minimize")
+)quit

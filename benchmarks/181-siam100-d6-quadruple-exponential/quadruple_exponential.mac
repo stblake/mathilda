@@ -1,0 +1,16 @@
+/* Experiment 181 -- SIAM 100-Digit Challenge, Appendix D Problem 6 (Maxima column).
+   The integral as written over [-1, 1]: QUADPACK quad_qags at machine
+   precision; bromberg (bigfloat Romberg) at fpprec 60.
+   See quadruple_exponential.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(brmbrg)$
+require(["quad_qags", "bromberg"])$
+
+vrun("d6.machine",
+     lambda([], first(quad_qags(exp(x + sin(exp(exp(x + 1/3)))), x, -1, 1,
+                                'epsrel = 1d-13, 'limit = 1000))), 10)$
+vrun("d6.wp50",
+     lambda([], block([fpprec : 60, rombergtol : 1b-50, rombergit : 30],
+       bromberg(exp(x + sin(exp(exp(x + 1/3)))), x, -1b0, 1b0))), 48)$
+quit()$

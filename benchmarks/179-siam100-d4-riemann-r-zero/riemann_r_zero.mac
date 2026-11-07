@@ -1,0 +1,10 @@
+/* Experiment 179 -- SIAM 100-Digit Challenge, Appendix D Problem 4 (Maxima column).
+   Maxima has moebius and expintegral_li but no numerical infinite-series
+   summation (sum/nusum are symbolic) and no Riemann R, so every row is a SKIP.
+   See riemann_r_zero.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d4.machine", "nsum")$
+skip("d4.wp50", "nsum")$
+skip("d4.wp50-builtin", "RiemannR")$
+quit()$

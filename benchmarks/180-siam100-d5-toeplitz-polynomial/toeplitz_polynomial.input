@@ -1,0 +1,7 @@
+-- Experiment 180 -- SIAM 100-Digit Challenge, Appendix D Problem 5 (FriCAS column).
+-- FriCAS has no matrix 2-norm (singular values) and no numerical minimiser,
+-- so both rows are SKIPs.  See toeplitz_polynomial.m.
+)read ../siam100_common.input )quiet
+vskip("d5.machine", "minimize")
+vskip("d5.wp50", "minimize")
+)quit

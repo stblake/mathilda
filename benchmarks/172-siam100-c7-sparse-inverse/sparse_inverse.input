@@ -1,0 +1,21 @@
+-- Experiment 172 -- SIAM 100-Digit Challenge, Problem 7 (FriCAS column).
+-- FriCAS has no sparse matrix type and no per-case time cap, so only the
+-- dense n = 2000 machine row is attempted: Matrix(DoubleFloat) and the
+-- built-in linear solver solve(M, b) (LinearSystemMatrixPackage).
+--   c7.machine / c7.wp50 (n = 20000): a dense 20000 x 20000 matrix is 3.2 GB
+--     of DoubleFloat and an O(n^3) solve -- SKIP.
+--   c7.wp50 n=2000: a dense Float solve at digits(60) runs for tens of
+--     minutes and FriCAS has no cap -- SKIP (would hang the file).
+-- See sparse_inverse.m.
+)read ../siam100_common.input )quiet
+vskip("c7.machine", "Matrix DoubleFloat (dense 20000^2)")
+vskip("c7.wp50", "Matrix Float (dense 20000^2)")
+n := 2000
+M : Matrix DoubleFloat := new(n, n, 0)
+p : Integer := 2
+for i in 1..n repeat (M(i, i) := p::DoubleFloat; p := nextPrime(p))
+for k in 0..10 repeat (o := 2^k; for i in 1..(n - o) repeat (M(i, i + o) := 1; M(i + o, i) := 1))
+b : Vector DoubleFloat := new(n, 0); b(1) := 1
+t0 := nowms(); r := solve(M, b); vcaseD("c7.machine n=2000", (r.particular :: Vector DoubleFloat)(1), nowms() - t0, 10)
+vskip("c7.wp50 n=2000", "Matrix Float solve (dense, no cap)")
+)quit

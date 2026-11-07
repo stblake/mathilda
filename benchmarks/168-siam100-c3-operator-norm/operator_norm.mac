@@ -1,0 +1,16 @@
+/* Experiment 168 -- SIAM 100-Digit Challenge, Problem 3 (Maxima column).
+   The same statement as operator_norm.m: the 2-norm of the n x n section,
+   from LAPACK dgesvd (load(lapack); singular values only) in doubles.
+   Maxima has no bigfloat SVD: the wp50 rows SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(lapack)$
+require(["dgesvd"])$
+
+secA(n) := genmatrix(lambda([i, j], float(1/((i + j - 1)*(i + j - 2)/2 + j))), n, n)$
+
+vrun("c3.machine", lambda([], lmax(first(dgesvd(secA(4096))))), 10)$
+skip("c3.wp50", "bigfloat SVD")$
+vrun("c3.machine-n500", lambda([], lmax(first(dgesvd(secA(500))))), 10)$
+skip("c3.wp50-n100", "bigfloat SVD")$
+quit()$

@@ -1,0 +1,10 @@
+-- Experiment 187 -- SIAM 100-Digit Challenge, App. D Problem 12 (FriCAS column).
+-- The case is a parameter search ("find alpha such that the first hitting time
+-- is 10") around an ODE solve.  FriCAS ships a fixed-step RK4 (rk4) but no
+-- root finder for a general real function (solve/complexSolve are polynomial
+-- only, and Newton is not a built-in), so both rows are SKIP rather than a
+-- hand-written bisection.  See constrained_particle.m.
+)read ../siam100_common.input )quiet
+vskip("d12.machine", "FindRoot")
+vskip("d12.wp50", "FindRoot")
+)quit

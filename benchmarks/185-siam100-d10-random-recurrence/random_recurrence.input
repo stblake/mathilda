@@ -1,0 +1,14 @@
+-- Experiment 185 -- SIAM 100-Digit Challenge, Appendix D Problem 10 (FriCAS column).
+-- The Monte-Carlo statement of random_recurrence.m: machine: n = 10^6 signs
+-- from random(2)$Integer (seeded by reseed(1) of RandomNumberSource), DoubleFloat
+-- ratio recursion r <- 2 +- 1/r, exp(mean log r); wp50: exact Integer x_n for
+-- n = 10^4, then |x_n|^(1/n) as exp(log(x_n::Float)/n) at digits(60).
+)read ../siam100_common.input )quiet
+lyapD(n:Integer):DoubleFloat == (r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (r := 2.0 + ((2*random(2)$Integer - 1)::DoubleFloat)/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyapX(n:Integer):Integer == (a:Integer := 1; b:Integer := 1; for k in 1..n-1 repeat (t := b; b := 2*b + (2*random(2)$Integer - 1)*a; a := t); b)
+reseed(1)$RandomNumberSource
+t0 := nowms(); vD := lyapD(10^6); vcaseD("d10.machine", vD, nowms() - t0, 2)
+digits(60)$Float
+reseed(1)$RandomNumberSource
+t0 := nowms(); xb := lyapX(10^4); vF := exp(log(abs(xb)::Float)/(10^4)::Float); vcaseF("d10.wp50", vF, nowms() - t0, 1)
+)quit

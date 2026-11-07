@@ -1,0 +1,30 @@
+/* Experiment 172 -- SIAM 100-Digit Challenge, Problem 7 (Maxima column).
+   Maxima has no sparse matrices; the idiomatic solve is linsolve_by_lu on a
+   dense matrix (floatfield at machine precision, bigfloatfield at fpprec 60).
+     c7.machine / c7.wp50 (n = 20000): a dense 20000 x 20000 Maxima matrix
+       (400M Lisp objects) does not fit -- SKIP.
+     n = 2000 rows: the dense matrix is built outside the timed call (glue),
+       then linsolve_by_lu, capped as every case is.
+   See sparse_inverse.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["linsolve_by_lu"])$
+
+skip("c7.machine", "linsolve_by_lu (dense 20000^2)")$
+skip("c7.wp50", "linsolve_by_lu (dense 20000^2)")$
+
+n : 2000$
+pr : makelist(0, n)$
+block([p : 2], for i : 1 thru n do (pr[i] : p, p : next_prime(p)))$
+A : zeromatrix(n, n)$
+for i : 1 thru n do A[i, i] : pr[i]$
+for k : 0 thru 10 do block([o : 2^k],
+  for i : 1 thru n - o do (A[i, i + o] : 1, A[i + o, i] : 1))$
+Af : float(A)$
+b : genmatrix(lambda([i, j], if i = 1 then 1 else 0), n, 1)$
+vrun("c7.machine n=2000",
+     lambda([], first(linsolve_by_lu(Af, float(b), 'floatfield))[1, 1]), 10)$
+vrun("c7.wp50 n=2000",
+     lambda([], block([fpprec : 60],
+       first(linsolve_by_lu(bfloat(A), bfloat(b), 'bigfloatfield))[1, 1])), 48)$
+quit()$

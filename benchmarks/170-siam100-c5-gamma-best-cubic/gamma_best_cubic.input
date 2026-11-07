@@ -1,0 +1,7 @@
+-- Experiment 170 -- SIAM 100-Digit Challenge, Problem 5 (FriCAS column).
+-- The statement is a minimax over 8 real coefficients; FriCAS has no numerical
+-- minimiser, so both rows SKIP.  See gamma_best_cubic.m.
+)read ../siam100_common.input )quiet
+vskip("c5.machine", "NMinimize")
+vskip("c5.wp50", "NMinimize")
+)quit

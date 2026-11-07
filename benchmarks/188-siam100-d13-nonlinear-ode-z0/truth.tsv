@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, App. D Problem 13: z0 >= 0 with |u(50)| = 1 (unique: a hair above the stable manifold of the saddle |u*| = 0.21523)
+# label	true value (70 digits)	need	source
+d13.machine	0.0064823961796229860902161222873367326385399186858717086387234435331326	10	mpmath odefun (Taylor) dps 85 + secant on |u(50)|-1 == WL NDSolve WorkingPrecision 90 (Extrapolation) + FindRoot (72 digits agree); uniqueness from a DOP853 scan z0 in [1e-7, 100] + the saddle analysis; siam100_refs/d13_ref.{py,wl}, d13_landscape.py
+d13.wp50	0.0064823961796229860902161222873367326385399186858717086387234435331326	48	mpmath odefun (Taylor) dps 85 + secant on |u(50)|-1 == WL NDSolve WorkingPrecision 90 (Extrapolation) + FindRoot (72 digits agree); uniqueness from a DOP853 scan z0 in [1e-7, 100] + the saddle analysis; siam100_refs/d13_ref.{py,wl}, d13_landscape.py

@@ -1,0 +1,7 @@
+-- Experiment 190 -- SIAM 100-Digit Challenge, App. D Problem 15 (FriCAS column).
+-- A 2-D parabolic PDE integrated to blow-up; FriCAS has no PDE solver (and no
+-- stiff ODE integrator), so both rows are SKIP.  See blowup_time.m.
+)read ../siam100_common.input )quiet
+vskip("d15.machine", "NDSolve (PDE)")
+vskip("d15.wp50", "NDSolve (PDE)")
+)quit

@@ -1,0 +1,12 @@
+/* Experiment 186 -- SIAM 100-Digit Challenge, Appendix D Problem 11 (Maxima column).
+   The shooting statement (six_masses.m) solves {x(T), y(T)} = {4, 1} for
+   (theta, T), with an ODE solve inside a TWO-variable root finder.  Maxima's
+   numeric ODE solver is rk (fixed-step RK4, no error control, no events) and
+   its multivariate root finder mnewton needs symbolic derivatives of the
+   equations, which an rk trajectory does not have; find_root is 1-D.  Both
+   rows are SKIP rather than a hand-written Newton/secant iteration. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d11.machine", "NDSolve-shooting (rk + 2-D root finder)")$
+skip("d11.wp50", "NDSolve-shooting (rk + 2-D root finder)")$
+quit()$

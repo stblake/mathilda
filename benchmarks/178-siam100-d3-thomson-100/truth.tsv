@@ -1,0 +1,4 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 3: E_100, the minimal Coulomb energy of 100 points on the unit sphere
+# label	true value (65 digits)	need	source
+d3.machine	4448.3506343312728733930972353284543661751592294772000244472676135	10	the global minimum (Cambridge Cluster Database / Wales et al.: 4448.350634331; best of 300 random-start BFGS runs = the same 4448.350634331272), refined at the minimiser reached by scipy BFGS from the Fibonacci start: mpmath Newton (analytic gradient, central-difference Hessian, dps 130, |grad| 6e-127, Hessian positive definite; siam100_refs/d3_ref.py) == wolframscript FindMinimum Method->Newton at WP 130, PrecisionGoal 60, from the same double minimiser (siam100_refs/d3_ref.wl, d3_start.py); 80 digits agree. A run that ends in another local minimum (e.g. 4448.4394, 4448.5069) is wrong
+d3.wp50	4448.3506343312728733930972353284543661751592294772000244472676135	48	same

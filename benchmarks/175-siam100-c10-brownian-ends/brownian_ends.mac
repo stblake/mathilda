@@ -1,0 +1,17 @@
+/* Experiment 175 -- SIAM 100-Digit Challenge, Problem 10 (Maxima column).
+   Maxima has no numerical summation to infinity, so the separated series is
+   summed to a fixed 15 terms (term k is ~exp(-10 k pi) relative to the first:
+   far below 60 digits after 5 terms) -- in floats for the machine row and in
+   bfloats at fpprec 60 for wp50.  No PDE solver: c10.machine pde is SKIP.
+   See brownian_ends.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["sum"])$
+
+vrun("c10.machine",
+     lambda([], float(4/%pi*sum((-1)^k/(2*k+1)*sech(5*(2*k+1)*%pi), k, 0, 14))), 10)$
+vrun("c10.wp50",
+     lambda([], block([fpprec : 60],
+       bfloat(4/%pi*sum((-1)^k/(2*k+1)*sech(5*(2*k+1)*%pi), k, 0, 14)))), 48)$
+skip("c10.machine pde", "PDE solver")$
+quit()$

@@ -1,0 +1,5 @@
+# SIAM 100-Digit Challenge, Appendix D Problem 11: shortest time to reach (4,1) from (0,0) at speed 1 among six fixed unit masses
+# shortest branch theta = -0.27488125402627671550962921655842649796785863053731 (next: theta 0.55129, T 1.917629)
+# label	true value (66 digits)	need	source
+d11.machine	1.91609691833200491030746069472543637475221806158823056426465035288	10	mpmath odefun (Taylor) shot in (theta,T) by mpmath.findroot at dps 75, residual 0 (siam100_refs/d11_ref.py) == WL NDSolve Method->"Extrapolation" WorkingPrecision 80 + FindRoot WorkingPrecision 80 (siam100_refs/d11_ref.wl), 70 digits agree == D. Smith's published 50 digits (14th-order RK, book web page AppendixD/13.txt); shortest of all branches by a 40001-angle scan (siam100_refs/d11_scan.py)
+d11.wp50	1.91609691833200491030746069472543637475221806158823056426465035288	48	same

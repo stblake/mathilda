@@ -1,0 +1,9 @@
+-- Experiment 179 -- SIAM 100-Digit Challenge, Appendix D Problem 4 (FriCAS column).
+-- FriCAS has moebiusMu and li but no numerical infinite-series summation, no
+-- Riemann R and no built-in numeric root finder for a transcendental
+-- function, so every row is a SKIP.  See riemann_r_zero.m.
+)read ../siam100_common.input )quiet
+vskip("d4.machine", "nsum")
+vskip("d4.wp50", "nsum")
+vskip("d4.wp50-builtin", "RiemannR")
+)quit

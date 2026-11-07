@@ -1,0 +1,19 @@
+/* Experiment 171 -- SIAM 100-Digit Challenge, Problem 6 (Maxima column).
+   The same statement as biased_flea.m: G(eps) as the 2-D integral over
+   [0,pi]^2 -- Maxima has no 2-D quadrature, so the idiomatic form is nested
+   quad_qags -- and find_root on G(eps) = 2 over [0.06, 0.07].  At 50 digits
+   Maxima has only bromberg (1-D Romberg), which cannot converge on the
+   corner singularity in nested form: SKIP.  See biased_flea.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["quad_qags", "find_root"])$
+
+inner6(u, e) := quad_qags((1 - (cos(u) + cos(k2))/2)
+                           / ((1 - (cos(u) + cos(k2))/2)^2 + (2*e*sin(u))^2),
+                           k2, 0, float(%pi), 'epsrel = 1d-12, 'limit = 1000)[1]$
+G6(e) := quad_qags(lambda([u], inner6(u, e)), k1, 0, float(%pi),
+                   'epsrel = 1d-12, 'limit = 1000)[1] / float(%pi)^2$
+
+vrun("c6.machine", lambda([], find_root(lambda([e], G6(e) - 2), 0.06, 0.07)), 10)$
+skip("c6.wp50", "2-D bigfloat quadrature")$
+quit()$

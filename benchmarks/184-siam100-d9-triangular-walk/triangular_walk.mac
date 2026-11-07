@@ -1,0 +1,28 @@
+/* Experiment 184 -- SIAM 100-Digit Challenge, Appendix D Problem 9 (Maxima column).
+   The 465 x 465 transition matrix P of the walk.  machine: the matrix power
+   P^^60 of the float matrix, first row summed over the bottom row; wp50: the
+   exact start vector pushed through 60 exact rational products v . P, then
+   bfloat at fpprec 60.  See triangular_walk.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["matrix ^^", "bfloat"])$
+
+nT : 30$
+idx(r, c) := r*(r+1)/2 + c + 1$
+nbrs(r, c) := sublist([[r, c-1], [r, c+1], [r-1, c-1], [r-1, c], [r+1, c], [r+1, c+1]],
+                      lambda([p], 0 <= p[2] and p[2] <= p[1] and p[1] < nT))$
+nP : nT*(nT+1)/2$
+P : zeromatrix(nP, nP)$
+for r : 0 thru nT-1 do for c : 0 thru r do
+  block([l : nbrs(r, c)],
+    for p in l do P[idx(r, c), idx(p[1], p[2])] : 1/length(l))$
+bottom : makelist(idx(nT-1, c), c, 0, nT-1)$
+Pf : float(P)$
+
+vrun("d9.machine",
+     lambda([], block([Q : Pf^^60], apply("+", makelist(Q[1, j], j, bottom)))), 10)$
+vrun("d9.wp50",
+     lambda([], block([v : genmatrix(lambda([i, j], if j = 1 then 1 else 0), 1, nP), fpprec : 60],
+       for k : 1 thru 60 do v : v . P,
+       bfloat(apply("+", makelist(v[1, j], j, bottom))))), 48)$
+quit()$

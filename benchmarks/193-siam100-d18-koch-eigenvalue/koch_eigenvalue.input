@@ -1,0 +1,8 @@
+-- Experiment 193 -- SIAM 100-Digit Challenge, App. D Problem 18 (FriCAS column).
+-- FriCAS has no PDE eigensolver on a planar region: every row is a SKIP.
+-- See koch_eigenvalue.m.
+)read ../siam100_common.input )quiet
+vskip("d18.machine", "NDEigenvalues")
+vskip("d18.machine level=0", "NDEigenvalues")
+vskip("d18.wp50", "NDEigenvalues")
+)quit

@@ -1,0 +1,11 @@
+-- Experiment 182 -- SIAM 100-Digit Challenge, Appendix D Problem 7 (FriCAS column).
+-- The 1-D statement (region_area.m) needs the island ends y1, y2, y3 and the
+-- kink yc as roots of transcendental equations (g(y) = 1, -log g(y) = y^2).
+-- FriCAS has no built-in numeric root finder for a non-polynomial equation
+-- (solve/realSolve are polynomial-only), so both rows are SKIP rather than a
+-- hand-written Newton iteration.  Its quadrature (romberg) would otherwise
+-- state the integrals.
+)read ../siam100_common.input )quiet
+vskip("d7.machine", "FindRoot")
+vskip("d7.wp50", "FindRoot")
+)quit

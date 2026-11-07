@@ -1,0 +1,9 @@
+/* Experiment 193 -- SIAM 100-Digit Challenge, App. D Problem 18 (Maxima column).
+   Maxima has no PDE eigensolver on a planar region: every row is a SKIP.
+   See koch_eigenvalue.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("d18.machine", "NDEigenvalues")$
+skip("d18.machine level=0", "NDEigenvalues")$
+skip("d18.wp50", "NDEigenvalues")$
+quit()$

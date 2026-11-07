@@ -1,0 +1,19 @@
+/* Experiment 183 -- SIAM 100-Digit Challenge, Appendix D Problem 8 (Maxima column).
+   Maxima's QUADPACK is one-dimensional: the 10-D rows (machine and wp50) are
+   SKIP.  Sanity row c_3(R^1): quad_qagi over R.  Reduced row c_2(R^2): nested
+   quad_qagi (the inner integral a function of the outer variable, called only
+   at numeric points).  See sobolev_constant.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["quad_qagi"])$
+
+skip("d8.machine", "N-D quadrature")$
+skip("d8.wp50", "N-D quadrature")$
+vrun("d8.machine c3R1", lambda([],
+  sqrt(first(quad_qagi(1/(1 + x^2 + x^4 + x^6), x, minf, inf, 'epsrel = 1d-13)) / (2*float(%pi)))), 10)$
+inner(y) := if numberp(y) then
+  first(quad_qagi(1/(1 + x^2 + y^2 + x^4 + x^2*y^2 + y^4), x, minf, inf, 'epsrel = 1d-13))
+  else 'inner(y)$
+vrun("d8.machine c2R2", lambda([],
+  sqrt(first(quad_qagi(inner(y), y, minf, inf, 'epsrel = 1d-13)) / (2*float(%pi))^2)), 10)$
+quit()$
