@@ -721,6 +721,10 @@ Gives the norm of a number, vector, or matrix.
 - For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
 - For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
+- `Norm[m]` and `Norm[m, 2]` of a matrix are the spectral norm, the largest
+  singular value: LAPACK for machine numbers, the MPFR SVD at the input
+  precision for arbitrary-precision entries (an explicit `2` used to leave an
+  arbitrary-precision matrix unevaluated).
 - **Packed/NDArray fast path**: an inexact vector or matrix routes through the
   LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
   matrix 2-norm); `Norm` is on the packed-array `AWARE` list. A machine-precision

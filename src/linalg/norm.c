@@ -177,7 +177,11 @@ Expr* builtin_norm(Expr* res) {
 #ifdef USE_MPFR
     /* Arbitrary precision: the largest singular value at the input precision
      * (packing to float64 below would silently drop it to machine). */
-    if (rank == 2 && !p && dims[0] > 0 && dims[1] > 0 && la_all_numeric(expr)) {
+    /* Norm[m] and Norm[m, 2] alike: the spectral norm (an explicit 2 used to
+     * fall through to the float64 packing below, which refuses MPFR entries,
+     * and the call stayed unevaluated) */
+    bool spectral = !p || (p->type == EXPR_INTEGER && p->data.integer == 2);
+    if (rank == 2 && spectral && dims[0] > 0 && dims[1] > 0 && la_all_numeric(expr)) {
         CommonInexactInfo info = common_scan_inexact(expr);
         if (info.has_inexact && info.min_bits > 53) {
             int n = (int)dims[0], q = (int)dims[1];
