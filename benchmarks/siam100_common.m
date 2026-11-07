@@ -60,8 +60,12 @@ vrun[label_String, expr_, d_Integer, reps_Integer] :=
   vrun[label, expr, d, reps, $cap];
 vrun[label_String, expr_, d_Integer, reps_Integer, cap_] :=
   Module[{r, ts = {}, v},
-    If[reps > 1, TimeConstrained[expr, cap, "TIMEOUT"]];        (* warm-up *)
-    Do[r = AbsoluteTiming[TimeConstrained[expr, cap, "TIMEOUT"]];
+    (* CheckAbort: an abort that escapes TimeConstrained (seen in
+       wolframscript when NMaximize overruns its cap) must end this case
+       only, not silence every later case in the file. *)
+    If[reps > 1, CheckAbort[TimeConstrained[expr, cap, "TIMEOUT"], "TIMEOUT"]];
+    Do[r = AbsoluteTiming[CheckAbort[TimeConstrained[expr, cap, "TIMEOUT"],
+                                     "TIMEOUT"]];
        AppendTo[ts, First[r]], {reps}];
     v = If[Last[r] === "TIMEOUT", "timeout", realOf[Last[r]]];
     If[StringQ[v],
