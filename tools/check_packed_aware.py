@@ -45,6 +45,12 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "NDEigenvalues": "finite elements (src/numerical_calculus/fem.c): its "
+    "EXPR_NDARRAY uses are the mesh function's own storage (coordinates, "
+    "elements, nodal values) and reading the batch-evaluated coefficient fields, "
+    "never an argument path -- the head takes an operator, a region and a count, "
+    "so the gate's materialisation of a packed Polygon vertex list is all it needs.",
+    "NDEigensystem": "as NDEigenvalues -- the same file and the same mesh storage.",
     "ArcLength": "structural (src/geometry_curves.c): its is_ndarray branch only "
     "UNPACKS a point buffer nested inside Line[...] (gc_unpack -> "
     "ndarray_to_nested_list) so an int64 buffer stays exact, exactly what the "
