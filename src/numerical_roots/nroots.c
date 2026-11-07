@@ -637,10 +637,78 @@ static NrPoly* nr_zupoly_to_nrpoly(const ZUPoly* z, mpfr_prec_t wp) {
  * certify (best values are still returned) and *certified is false when any
  * factor fell back to a fixed-precision engine (other methods, or a decline).
  * Returns 0 on success, -1 to request the numeric fallback. */
+/* The roots of an exact integer quadratic a x^2 + b x + c (c != 0), in closed
+ * form. The discriminant D = b^2 - 4 a c is exact (mpz); its square root is
+ * taken at wp + 64 bits and the roots formed without cancellation -- q =
+ * -(b + sgn(b) Sqrt[D])/2, x1 = q/a, x2 = c/q for D > 0; -b/(2a) +- i
+ * Sqrt[-D]/(2a) for D < 0; the double root -b/(2a) for D = 0 -- so each has a
+ * relative error of a few 2^-(wp+64) before its rounding to wp bits: certified
+ * to target_bits (< wp) by construction. This is the common case of a
+ * machine-coefficient quadratic (a circle-line intersection per photon
+ * bounce), whose exact path otherwise ran FLINT's squarefree factorisation and
+ * the adaptive Aberth engine for two roots. */
+static void nr_quadratic_exact(const ZUPoly* zp, mpfr_prec_t wp, ncpx* roots) {
+    const mpz_t* c = (const mpz_t*)zp->c;
+    mpfr_prec_t hp = wp + 64;
+    mpz_t D;
+    mpz_init(D);
+    mpz_mul(D, c[1], c[1]);
+    mpz_submul(D, c[2], c[0]);
+    mpz_submul(D, c[2], c[0]);
+    mpz_submul(D, c[2], c[0]);
+    mpz_submul(D, c[2], c[0]);                  /* D = b^2 - 4 a c, exact */
+    mpfr_t s, t, u;
+    mpfr_inits2(hp, s, t, u, (mpfr_ptr)0);
+    int sg = mpz_sgn(D);
+    if (sg >= 0) {
+        mpfr_set_z(s, D, MPFR_RNDN);
+        mpfr_sqrt(s, s, MPFR_RNDN);
+        /* q = -(b + sgn(b) s) / 2 */
+        mpfr_set_z(t, c[1], MPFR_RNDN);
+        if (mpz_sgn(c[1]) < 0) mpfr_sub(t, t, s, MPFR_RNDN);
+        else                   mpfr_add(t, t, s, MPFR_RNDN);
+        mpfr_div_si(t, t, -2, MPFR_RNDN);       /* t = q (nonzero: c != 0) */
+        mpfr_set_z(u, c[2], MPFR_RNDN);
+        mpfr_div(u, t, u, MPFR_RNDN);           /* q / a */
+        mpfr_set(roots[0].re, u, MPFR_RNDN);
+        mpfr_set_zero(roots[0].im, 1);
+        if (sg == 0) {
+            mpfr_set(roots[1].re, u, MPFR_RNDN); /* the double root -b/(2a) */
+        } else {
+            mpfr_set_z(u, c[0], MPFR_RNDN);
+            mpfr_div(u, u, t, MPFR_RNDN);       /* c / q */
+            mpfr_set(roots[1].re, u, MPFR_RNDN);
+        }
+        mpfr_set_zero(roots[1].im, 1);
+    } else {
+        mpz_neg(D, D);
+        mpfr_set_z(s, D, MPFR_RNDN);
+        mpfr_sqrt(s, s, MPFR_RNDN);
+        mpfr_set_z(u, c[2], MPFR_RNDN);
+        mpfr_mul_2ui(u, u, 1, MPFR_RNDN);       /* 2a, exact */
+        mpfr_div(s, s, u, MPFR_RNDN);           /* Sqrt[-D] / (2a) */
+        mpfr_set_z(t, c[1], MPFR_RNDN);
+        mpfr_div(t, t, u, MPFR_RNDN);
+        mpfr_neg(t, t, MPFR_RNDN);              /* -b / (2a) */
+        mpfr_set(roots[0].re, t, MPFR_RNDN);
+        mpfr_set(roots[0].im, s, MPFR_RNDN);
+        mpfr_set(roots[1].re, t, MPFR_RNDN);
+        mpfr_neg(roots[1].im, s, MPFR_RNDN);
+    }
+    mpfr_clears(s, t, u, (mpfr_ptr)0);
+    mpz_clear(D);
+}
+
 static int nr_solve_exact(const ZUPoly* zp, NrMethod method, int max_iter,
                           mpfr_prec_t wp, long target_bits, ncpx* roots,
                           bool want_machine, int* uncertified, bool* certified) {
     int d = zp->deg;
+    if (d == 2 && (method == NR_AUTO || method == NR_ABERTH) && mpz_sgn(zp->c[0]) != 0) {
+        *uncertified = 0;
+        *certified = true;
+        nr_quadratic_exact(zp, wp, roots);
+        return 0;
+    }
     ZUPoly** facs = NULL; int* mults = NULL; int nf = 0;
     *uncertified = 0;
     *certified = true;

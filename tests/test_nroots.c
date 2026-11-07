@@ -408,11 +408,32 @@ static void test_mixed_high_degree(void) {
                 "Max[Abs[r^100 - 1]] < 10^-10 && Count[r, _Real] == 2]");
 }
 
+/* An exact quadratic (machine coefficients are exact dyadic rationals) is
+ * solved in closed form from the exact discriminant, without the squarefree /
+ * Aberth engine: two real roots (both signs of b, b = 0), a double root, a
+ * complex pair, at machine precision and at 40 digits, against the roots
+ * computed at 100 digits; a root's relative error must be below the target. */
+static void test_quadratic_closed_form(void) {
+    ASSERT_TRUE("Module[{r = (List @@ NRoots[0.04 + 1.2 x + x^2 == 1/9, x])[[All, 2]], "
+                "e = (List @@ NRoots[Rationalize[0.04, 0] + Rationalize[1.2, 0] x + x^2 == 1/9, x, "
+                "PrecisionGoal -> 100])[[All, 2]]}, Max[Abs[r - e]/Abs[e]] < 2.3*^-16]");
+    ASSERT_TRUE("Module[{r = (List @@ NRoots[3 x^2 - 7 x - 11 == 0, x, PrecisionGoal -> 40])[[All, 2]]}, "
+                "Max[Abs[r - {(7 - Sqrt[181])/6, (7 + Sqrt[181])/6}]] < 10^-39]");
+    ASSERT_TRUE("Module[{r = (List @@ NRoots[x^2 + 2 x + 5 == 0, x])[[All, 2]]}, "
+                "Sort[r] == Sort[{-1. - 2. I, -1. + 2. I}]]");
+    ASSERT_TRUE("Module[{r = (List @@ NRoots[4 x^2 - 4 x + 1 == 0, x])[[All, 2]]}, r == {0.5, 0.5}]");
+    ASSERT_TRUE("Module[{r = (List @@ NRoots[x^2 - 2 == 0, x])[[All, 2]]}, r == {-Sqrt[2.], Sqrt[2.]}]");
+    ASSERT_TRUE("Module[{r = (List @@ NRoots[10^-20 x^2 - x + 1 == 0, x, PrecisionGoal -> 30])[[All, 2]]}, "
+                "Abs[Min[r] - (1 - Sqrt[1 - 4/10^20])/(2/10^20)] < 10^-29]");
+    ASSERT_TRUE("Length[NSolve[(0.5 + t 0.6 - 1)^2 + (0.1 + t 0.8 - 1)^2 == 1/9, t, Reals]] == 2");
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_real_roots);
+    TEST(test_quadratic_closed_form);
     TEST(test_cubic_example);
     TEST(test_complex_roots);
     TEST(test_complex_coefficients);

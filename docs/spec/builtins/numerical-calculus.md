@@ -1265,6 +1265,12 @@ is solved separately — well-conditioned — and its roots emitted with the fac
 multiplicity. This keeps high powers such as `(x^2-2)^30` exact and fast, where
 solving the expanded degree-60 polynomial directly would be catastrophically
 ill-conditioned.
+An exact **quadratic** (including one with machine coefficients, which are exact
+dyadic rationals) skips the squarefree / Aberth machinery: its roots come in closed
+form from the exact integer discriminant, the square root taken 64 bits above the
+working precision and the roots formed without cancellation (`q = -(b + sgn(b)
+Sqrt[D])/2`, `q/a`, `c/q`; a complex pair or the double root otherwise), so each
+is certified to the target by construction.
 Rational coefficients are cleared of denominators first, so they take the same
 exact path (the squarefree decomposition is FLINT's when built with it).
 
