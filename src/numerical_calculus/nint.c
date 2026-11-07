@@ -3456,6 +3456,13 @@ static bool ni_body_has_region(const Expr* e) {
     return false;
 }
 
+/* Box vertex cancellation guard (see ni_mc_vertex_guard). */
+#define NI_VG_MAX_DIM   3
+#define NI_VG_MAX_VERTS 8                /* 2^NI_VG_MAX_DIM */
+#define NI_VG_ZONE      0x1p-17          /* relative distance of the vertex zone */
+#define NI_VG_PROBE     0x1p-26          /* relative depth of the probe point */
+#define NI_VG_BITS      128
+
 typedef struct {
     Expr* body;
     NiBind* binds;
@@ -3463,6 +3470,15 @@ typedef struct {
     NumericSpec spec;
     AutoCompiled* ac;   /* compiled body f(v_1..v_d); NULL = interpreter */
     AutoCompiled* ac_prec;  /* MPFR-compiled body (spec.mode MPFR), or NULL */
+    /* Vertex cancellation guard of the machine box rules (ni_mc_vertex_guard):
+     * the box (borrowed), and per vertex whether it is unprobed (0), found
+     * clean (1) or cancelling (2).  vg_on is false for every other caller. */
+    bool          vg_on;
+    const double* vg_a;
+    const double* vg_b;
+    signed char   vg_state[NI_VG_MAX_VERTS];
+    AutoCompiled* vg_ac;    /* body compiled at NI_VG_BITS, or NULL */
+    bool          vg_ac_tried;
 } NiMcCtx;
 
 /* Compile `body` as a function of the d bound variables (machine reals).  NULL
@@ -3484,26 +3500,36 @@ static AutoCompiled* ni_mc_compile(Expr* body, NiBind* binds, size_t d) {
  * rounded to a double.  That is what an integrand which cancels near a
  * singular vertex needs: 3 - Cos[x] - Cos[y] - Cos[z] at r = 1e-8 is 1.5e-16,
  * all rounding error in doubles and exact to the working precision here. */
+static bool ni_mc_sample_mpfr_at(NiMcCtx* c, const double* x, size_t d,
+                                 NumericSpec spec, AutoCompiled* prog,
+                                 double _Complex* out);
+
 static bool ni_mc_sample_mpfr(NiMcCtx* c, const double* x, size_t d,
                               double _Complex* out) {
+    return ni_mc_sample_mpfr_at(c, x, d, c->spec, c->ac_prec, out);
+}
+
+static bool ni_mc_sample_mpfr_at(NiMcCtx* c, const double* x, size_t d,
+                                 NumericSpec spec, AutoCompiled* prog,
+                                 double _Complex* out) {
     Expr* xs[24];
     if (d > 24) return false;
     mpfr_t t;
-    mpfr_init2(t, (mpfr_prec_t)c->spec.bits);
+    mpfr_init2(t, (mpfr_prec_t)spec.bits);
     for (size_t j = 0; j < d; j++) {
         mpfr_set_d(t, x[j], MPFR_RNDN);
         xs[j] = expr_new_mpfr_copy(t);
     }
     mpfr_clear(t);
     Expr* num = NULL;
-    if (c->ac_prec) num = autocompiled_eval_mpfr(c->ac_prec, (const Expr* const*)xs);
+    if (prog) num = autocompiled_eval_mpfr(prog, (const Expr* const*)xs);
     if (!num) {
         for (size_t j = 0; j < d; j++) ni_bind_set(&c->binds[j], xs[j]);
         eval_clock_bump();
         arith_warnings_mute_push();
         Expr* raw = eval_and_free(expr_copy(c->body));
         arith_warnings_mute_pop();
-        num = raw ? numericalize(raw, c->spec) : NULL;
+        num = raw ? numericalize(raw, spec) : NULL;
         expr_free(raw);
     }
     for (size_t j = 0; j < d; j++) expr_free(xs[j]);
@@ -3514,11 +3540,83 @@ static bool ni_mc_sample_mpfr(NiMcCtx* c, const double* x, size_t d,
 }
 #endif
 
+static bool ni_mc_sample_double(NiMcCtx* c, const double* x, size_t d,
+                                double _Complex* out);
+
+#ifdef USE_MPFR
+/* The sample at NI_VG_BITS (the guard's re-evaluation). */
+static bool ni_mc_sample_guard(NiMcCtx* c, const double* x, size_t d,
+                               double _Complex* out) {
+    NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = NI_VG_BITS;
+    if (!c->vg_ac_tried) {
+        c->vg_ac_tried = true;
+        const Expr* syms[NI_VG_MAX_DIM] = { NULL, NULL, NULL };
+        Expr* owned[NI_VG_MAX_DIM] = { NULL, NULL, NULL };
+        if (d > NI_VG_MAX_DIM) return false;
+        for (size_t j = 0; j < d; j++) {
+            owned[j] = expr_new_symbol(c->binds[j].name); syms[j] = owned[j];
+        }
+        c->vg_ac = autocompile_new_prec(c->body, syms, d, NI_VG_BITS);
+        for (size_t j = 0; j < d; j++) expr_free(owned[j]);
+    }
+    return ni_mc_sample_mpfr_at(c, x, d, sp, c->vg_ac, out);
+}
+
+/* Box vertex cancellation guard.  An integrable singularity at a vertex of
+ * the box is where an integrand formula cancels: the lattice Green's function
+ * (1 - c)/((1 - c)^2 + s^2), c = (Cos[k1] + Cos[k2])/2, has 1 - c ~ k^2/4
+ * against an absolute rounding error of 1e-16, so within 1e-8 of the corner
+ * it is exactly 0 in doubles instead of ~4/k^2, and the integral the rules
+ * converge to is 1e-8 off (8 digits whatever the goal; scipy's nested
+ * QUADPACK lands right only because its extrapolation never samples there).
+ * A sample within NI_VG_ZONE of a vertex in every coordinate is re-evaluated
+ * at NI_VG_BITS when that vertex cancels; whether it does is probed once per
+ * vertex, at depth NI_VG_PROBE on the diagonal, by comparing the double sample
+ * with the MPFR one.  A vertex where they agree is never checked again, so a
+ * smooth corner costs two samples.  Returns true when it produced *out. */
+static bool ni_mc_vertex_guard(NiMcCtx* c, const double* x, size_t d,
+                               double _Complex* out, bool* ok) {
+    int v = 0;
+    for (size_t j = 0; j < d; j++) {
+        double span = c->vg_b[j] - c->vg_a[j];
+        if (!(span > 0.0)) return false;
+        double lo = (x[j] - c->vg_a[j]) / span, hi = (c->vg_b[j] - x[j]) / span;
+        if (lo < NI_VG_ZONE) continue;
+        if (hi < NI_VG_ZONE) { v |= 1 << j; continue; }
+        return false;
+    }
+    if (c->vg_state[v] == 0) {
+        double p[NI_VG_MAX_DIM];
+        for (size_t j = 0; j < d; j++) {
+            double span = c->vg_b[j] - c->vg_a[j];
+            p[j] = ((v >> j) & 1) ? c->vg_b[j] - NI_VG_PROBE * span
+                                  : c->vg_a[j] + NI_VG_PROBE * span;
+        }
+        double _Complex fd = 0.0, fm = 0.0;
+        bool okd = ni_mc_sample_double(c, p, d, &fd);
+        bool okm = ni_mc_sample_guard(c, p, d, &fm);
+        c->vg_state[v] = (okm && (!okd || cabs(fd - fm) > 1e-8 * cabs(fm))) ? 2 : 1;
+    }
+    if (c->vg_state[v] != 2) return false;
+    *ok = ni_mc_sample_guard(c, x, d, out);
+    return true;
+}
+#endif
+
 static bool ni_mc_sample(void* vctx, const double* x, size_t d, double _Complex* out) {
     NiMcCtx* c = (NiMcCtx*)vctx;
 #ifdef USE_MPFR
     if (c->spec.mode == NUMERIC_MODE_MPFR) return ni_mc_sample_mpfr(c, x, d, out);
+    if (c->vg_on && d <= NI_VG_MAX_DIM) {
+        bool ok = false;
+        if (ni_mc_vertex_guard(c, x, d, out, &ok)) return ok;
+    }
 #endif
+    return ni_mc_sample_double(c, x, d, out);
+}
+
+static bool ni_mc_sample_double(NiMcCtx* c, const double* x, size_t d,
+                                double _Complex* out) {
     /* Compiled fast path: evaluate over the d machine abscissae directly.  A
      * non-finite / non-real compiled result (e.g. the interpreter would return a
      * complex value here) falls through to the interpreter for this point. */
@@ -3579,6 +3677,9 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
     ctx.spec = numeric_machine_spec();
     ctx.ac = ni_mc_compile(body, binds, d);
     ctx.ac_prec = NULL;
+    ctx.vg_on = false; ctx.vg_a = ctx.vg_b = NULL;
+    memset(ctx.vg_state, 0, sizeof ctx.vg_state);
+    ctx.vg_ac = NULL; ctx.vg_ac_tried = false;
 
     /* Monte-Carlo precision goal defaults low (≈2 digits), per Mathematica. */
     double reltol = (o->prec_goal > 0.0) ? pow(10.0, -o->prec_goal) : 1e-2;
@@ -3618,6 +3719,155 @@ static bool ni_cub_mpfr_goal_ok(const NiOpts* o) {
 #endif
 }
 
+/* Iterated adaptive Gauss-Kronrod over a constant 2-D box (machine
+ * precision): the fallback of the cubature for an integrable point or edge
+ * singularity that Genz-Malik bisection cannot resolve.  A lattice Green's
+ * function (1 - c)/((1 - c)^2 + s^2), c = (Cos[k1] + Cos[k2])/2,
+ * s = 2 e Sin[k1], is singular at k = 0 inside a parabolic cusp
+ * |k1| < k2^2/(8 e); the cubature's regions shrink onto the corner, its
+ * samples there cancel to 0/0, the frozen parents keep their error, and the
+ * result stalls at 4-8 digits.  Integrated one axis at a time, the inner
+ * integral at fixed k2 has a peak of width ~k2^2 at its endpoint, which the
+ * adaptive rule (with QAGS's epsilon extrapolation) bisects onto, and the
+ * outer integrand is then only logarithmically singular.  Both levels run in
+ * C on the same compiled sampler, so the cost is that of the samples alone
+ * (the iterated path of the evaluator re-enters NIntegrate per outer node).
+ * The inner tolerance is a tenth of the outer, absolute against the
+ * integral's scale (the cubature's estimate) spread over the outer range. */
+typedef struct {
+    NiMcCtx* mc;
+    double   x[2];
+    double   ia, ib;               /* inner range (axis 1)          */
+    double   in_abstol, in_reltol;
+    int      max_subdiv;
+    bool     inner_ok;             /* every inner integral converged */
+} NiNest2;
+
+static bool ni_nest2_inner(void* v, double y, double _Complex* out) {
+    NiNest2* c = (NiNest2*)v;
+    c->x[1] = y;
+    return ni_mc_sample(c->mc, c->x, 2, out);
+}
+
+static bool ni_nest2_outer(void* v, double x, double _Complex* out) {
+    NiNest2* c = (NiNest2*)v;
+    c->x[0] = x;
+    GkResult R = gk_integrate_machine(ni_nest2_inner, c, c->ia, c->ib,
+                                      c->in_abstol, c->in_reltol,
+                                      c->max_subdiv, 0, true);
+    if (R.status == GK_NONNUMERIC) return false;
+    if (R.status != GK_OK) c->inner_ok = false;
+    *out = R.value;
+    return isfinite(creal(R.value)) && isfinite(cimag(R.value));
+}
+
+static CubStatus ni_nest2_machine(NiMcCtx* mc, const double* a, const double* b,
+                                  double abstol, double reltol, double scale,
+                                  double _Complex* val, double* abserr) {
+    NiNest2 c;
+    c.mc = mc;
+    c.ia = a[1]; c.ib = b[1];
+    c.in_reltol = 0.1 * reltol;
+    c.in_abstol = fmax(0.1 * abstol, 0.1 * reltol * scale / (b[0] - a[0]));
+    c.max_subdiv = 200;
+    c.inner_ok = true;
+    GkResult R = gk_integrate_machine(ni_nest2_outer, &c, a[0], b[0],
+                                      abstol, reltol, 200, 0, true);
+    if (R.status == GK_NONNUMERIC) return CUB_NONNUMERIC;
+    *val = R.value;
+    *abserr = R.abs_err;
+    return (R.status == GK_OK && c.inner_ok) ? CUB_OK : CUB_NOCONV;
+}
+
+/* One box of the singular retry: the cubature (with the vertex guard on this
+ * box), then for d = 2 the iterated rule when it does not converge. */
+static CubStatus ni_cub_box(NiMcCtx* ctx, const double* a, const double* b, size_t d,
+                            double abstol, double reltol, long max_eval,
+                            double _Complex* val, double* abserr) {
+    ctx->vg_a = a; ctx->vg_b = b;
+    memset(ctx->vg_state, 0, sizeof ctx->vg_state);
+    CubStatus st = cub_integrate_machine(ni_mc_sample, ctx, a, b, d, abstol, reltol,
+                                         max_eval, val, abserr);
+    if (st == CUB_NOCONV && d == 2) {
+        double _Complex v2; double e2;
+        CubStatus s2 = ni_nest2_machine(ctx, a, b, abstol, reltol, cabs(*val), &v2, &e2);
+        if (s2 == CUB_OK || (s2 == CUB_NOCONV && e2 < *abserr)) {
+            st = s2; *val = v2; *abserr = e2;
+        }
+    }
+    return st;
+}
+
+/* A machine-precision box the cubature did not resolve.  The refinement piles
+ * up at an integrable point singularity; when that point lies inside the box
+ * (on the k1 = 0 face of [0, Pi] x [-Pi, Pi], where the lattice Green's
+ * function of a walk biased across both axes is singular) the box is split
+ * there, so that it is a VERTEX of every piece: the vertex guard then
+ * re-evaluates its cancelling samples, and the iterated rule's inner and
+ * outer integrals see it at an endpoint, where their bisection goes.  A point
+ * already at a vertex of the box needs no split (the guard has it).  Each
+ * piece is asked for the relative goal and for its share of the absolute one
+ * (a small piece must not chase digits the total does not need); the result
+ * replaces the first run's when it converged or has the smaller error. */
+static void ni_cub_singular_retry(NiMcCtx* ctx, const double* a, const double* b,
+                                  size_t d, double abstol, double reltol,
+                                  long max_eval, const double* hot, CubStatus* st,
+                                  double _Complex* val, double* abserr) {
+    int axes[NI_VG_MAX_DIM]; int k = 0;
+    double sp[NI_VG_MAX_DIM];
+    if (hot)
+        for (size_t j = 0; j < d; j++) {
+            double span = b[j] - a[j];
+            /* The pile-up sits NEXT to the singular point, not on it (along
+             * the ridge s = 0 that leaves it, in the walk biased on both
+             * axes: 1e-5 off the 0 of [-Pi, Pi]), so the point is snapped to
+             * the coarsest dyadic point of the range within 1e-4 of it --
+             * where a singularity of a symmetric range sits. */
+            double t = (hot[j] - a[j]) / span;
+            sp[j] = hot[j];
+            for (int L = 1; L <= 30; L++) {
+                double m = floor(t * ldexp(1.0, L) + 0.5);
+                if (fabs(t - ldexp(m, -L)) <= 1e-4) { sp[j] = a[j] + span * ldexp(m, -L); break; }
+            }
+            if (sp[j] - a[j] > 1e-9 * span && b[j] - sp[j] > 1e-9 * span) axes[k++] = (int)j;
+        }
+    hot = sp;
+    if (k == 0) {
+        /* the point is a vertex (or unknown): the iterated rule on the box */
+        if (d == 2) {
+            double _Complex v2; double e2;
+            CubStatus s2 = ni_nest2_machine(ctx, a, b, abstol, reltol, cabs(*val), &v2, &e2);
+            if (s2 == CUB_OK || (s2 == CUB_NOCONV && e2 < *abserr)) {
+                *st = s2; *val = v2; *abserr = e2;
+            }
+        }
+        return;
+    }
+    int npieces = 1 << k;
+    double share = fmax(abstol, reltol * cabs(*val)) / (double)npieces;
+    double _Complex sum = 0.0; double err = 0.0;
+    bool all_ok = true;
+    for (int m = 0; m < npieces; m++) {
+        double pa[NI_VG_MAX_DIM], pb[NI_VG_MAX_DIM];
+        for (size_t j = 0; j < d; j++) { pa[j] = a[j]; pb[j] = b[j]; }
+        for (int q = 0; q < k; q++) {
+            int j = axes[q];
+            if ((m >> q) & 1) pa[j] = hot[j]; else pb[j] = hot[j];
+        }
+        double _Complex v; double e;
+        CubStatus sp = ni_cub_box(ctx, pa, pb, d, fmax(abstol, share), reltol,
+                                  max_eval, &v, &e);
+        if (sp == CUB_NONNUMERIC) { ctx->vg_a = a; ctx->vg_b = b; return; }
+        if (sp != CUB_OK) all_ok = false;
+        sum += v; err += e;
+    }
+    ctx->vg_a = a; ctx->vg_b = b;
+    if (all_ok || err < *abserr) {
+        *st = all_ok ? CUB_OK : CUB_NOCONV;
+        *val = sum; *abserr = err;
+    }
+}
+
 /* Try adaptive cubature over the box defined by `specs` (each {v, vmin, vmax}
  * with constant finite real bounds).  Returns NULL — so the caller falls back
  * to iterated 1-D quadrature — when the box is not a constant finite real
@@ -3649,8 +3899,15 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
     ctx.body = body; ctx.binds = binds; ctx.d = d;
     ctx.spec = numeric_machine_spec();
     ctx.ac = NULL; ctx.ac_prec = NULL;
+    /* the vertex guard: machine samples only (an MPFR run computes at the
+     * working precision already) */
+    ctx.vg_on = !o->prec_mpfr && d <= NI_VG_MAX_DIM;
+    ctx.vg_a = a; ctx.vg_b = b;
+    memset(ctx.vg_state, 0, sizeof ctx.vg_state);
+    ctx.vg_ac = NULL; ctx.vg_ac_tried = false;
     double reltol, abstol;
     ni_machine_tols(o, &reltol, &abstol);
+    double reltol_deep = -1.0;          /* set below; < 0: as reltol */
 #ifdef USE_MPFR
     if (o->prec_mpfr) {
         ctx.spec.mode = NUMERIC_MODE_MPFR;
@@ -3669,16 +3926,36 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
         abstol = 0.0;
     } else
 #endif
-    ctx.ac = ni_mc_compile(body, binds, d);
+    {
+        ctx.ac = ni_mc_compile(body, binds, d);
+        /* The Automatic goal, 10^-8, is the goal of the RESULT.  The 1-D rules
+         * overshoot it by far (Gauss-Kronrod converges geometrically), and so
+         * does the cubature on a smooth integrand, but at a singularity the
+         * Genz-Malik estimate tracks the true error closely: asked for 10^-8
+         * it delivered 10^-8 and no more, 7-8 digits of a lattice Green's
+         * function where nested QUADPACK gives 10-13.  Two digits of headroom
+         * once the refinement goes deep (reltol_deep, see cubature.h), and
+         * for the singular retries, which only run there. */
+        if (!(o->prec_goal > 0.0)) reltol_deep = reltol * 1e-2;
+    }
     long max_eval = (o->max_points > 0) ? o->max_points : 0;
 
     double _Complex val; double abserr;
-    CubStatus st = cub_integrate_machine(ni_mc_sample, &ctx, a, b, d,
-                                         abstol, reltol, max_eval, &val, &abserr);
+    double hot[NI_VG_MAX_DIM] = { 0.0, 0.0, 0.0 };
+    bool hot_ok = false;
+    bool mach = !o->prec_mpfr && o->max_points <= 0 && d <= NI_VG_MAX_DIM;
+    if (!(reltol_deep >= 0.0)) reltol_deep = reltol;
+    CubStatus st = cub_integrate_machine_hot(ni_mc_sample, &ctx, a, b, d,
+                                             abstol, reltol, reltol_deep, max_eval,
+                                             &val, &abserr, mach ? hot : NULL, &hot_ok);
+    if (st == CUB_NOCONV && mach)
+        ni_cub_singular_retry(&ctx, a, b, d, abstol, reltol_deep, max_eval,
+                              hot_ok ? hot : NULL, &st, &val, &abserr);
 
     for (size_t j = 0; j < d; j++) ni_bind_restore(&binds[j]);
     autocompiled_free(ctx.ac);
     autocompiled_free(ctx.ac_prec);
+    autocompiled_free(ctx.vg_ac);
     free(a); free(b); free(binds);
 
     if (st == CUB_NONNUMERIC) return NULL;   /* fall back to iterated quadrature */

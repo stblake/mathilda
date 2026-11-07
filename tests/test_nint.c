@@ -967,6 +967,20 @@ static void test_vertex_singularity(void) {
                "3/2 Log[2 + Sqrt[3]] - Pi/4", "10^-7");
     ASSERT_REL("NIntegrate[1/Sqrt[x^2 + y^2 + z^2], {x, 0, 1}, {y, 0, 1}, {z, 0, 1}, "
                "WorkingPrecision -> 20, PrecisionGoal -> 8]", "3/2 Log[2 + Sqrt[3]] - Pi/4", "10^-8");
+    /* Lattice Green's functions (SIAM 100-digit problem 6 and relatives):
+     * singular at k = 0 inside a parabolic cusp, and the formula cancels
+     * there (1 - c is exactly 0 in doubles within 1e-8 of the corner).  The
+     * vertex guard re-evaluates those samples in MPFR; the Automatic goal
+     * keeps two digits of headroom; 8 digits before, whatever the goal. */
+    ASSERT_REL("1 - Pi^2/NIntegrate[With[{c = (Cos[k1] + Cos[k2])/2, s = Sin[k1]/5}, "
+               "(1 - c)/((1 - c)^2 + s^2)], {k1, 0, Pi}, {k2, 0, Pi}]",
+               "0.412749950715419796784923382261052434492", "10^-10");
+    /* singular point on a FACE, at the 0 of [-Pi, Pi]: the box is split
+     * there so it becomes a vertex of every piece (4-5 digits before) */
+    ASSERT_REL("1 - 2 Pi^2/NIntegrate[With[{c = (Cos[k1] + Cos[k2])/2, "
+               "s = Sin[k1]/10 + Sin[k2]/5}, (1 - c)/((1 - c)^2 + s^2)], "
+               "{k1, 0, Pi}, {k2, -Pi, Pi}]",
+               "0.389798040363126905621467224292308950758", "10^-10");
     /* a WorkingPrecision cubature result keeps the requested precision */
     ASSERT_EQ_STR("Precision[NIntegrate[x y, {x, 0, 1}, {y, 0, 1}, WorkingPrecision -> 20]] >= 19",
                   "True");

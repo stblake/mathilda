@@ -164,6 +164,47 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
                                 const double* a, const double* b, size_t d,
                                 double abstol, double reltol, long max_eval,
                                 double _Complex* result, double* abserr) {
+    return cub_integrate_machine_hot(f, ctx, a, b, d, abstol, reltol, reltol,
+                                     max_eval, result, abserr, NULL, NULL);
+}
+
+/* The refinement's concentration point (see cubature.h). */
+static bool cub_hot_point(const Heap* hp, size_t d, double* hot) {
+    if (hp->n <= 0) return false;
+    /* the CUB_HOT_REGIONS smallest regions, by volume (log sum of h) */
+    int idx[CUB_HOT_REGIONS]; double key[CUB_HOT_REGIONS]; int k = 0;
+    for (int r = 0; r < hp->n; r++) {
+        double lv = 0.0;
+        for (size_t i = 0; i < d; i++) lv += log(hp->v[r].h[i]);
+        if (k < CUB_HOT_REGIONS) { idx[k] = r; key[k] = lv; k++; }
+        else {
+            int w = 0;
+            for (int q = 1; q < k; q++) if (key[q] > key[w]) w = q;
+            if (lv < key[w]) { idx[w] = r; key[w] = lv; }
+        }
+    }
+    int s = 0;
+    for (int q = 1; q < k; q++) if (key[q] < key[s]) s = q;
+    const Region* R = &hp->v[idx[s]];
+    for (size_t i = 0; i < d; i++) {
+        double m = 0.0;
+        for (int q = 0; q < k; q++) m += hp->v[idx[q]].c[i];
+        m /= (double)k;
+        double lo = R->c[i] - R->h[i], hi = R->c[i] + R->h[i];
+        hot[i] = (fabs(m - lo) <= fabs(m - hi)) ? lo : hi;
+    }
+    return true;
+}
+
+CubStatus cub_integrate_machine_hot(McSampleMachine f, void* ctx,
+                                    const double* a, const double* b, size_t d,
+                                    double abstol, double reltol, double reltol_deep,
+                                    long max_eval,
+                                    double _Complex* result, double* abserr,
+                                    double* hot, bool* hot_ok) {
+    if (hot_ok) *hot_ok = false;
+    if (!(reltol_deep >= 0.0) || reltol_deep > reltol) reltol_deep = reltol;
+    bool deep = false;      /* a region narrower than CUB_DEEP_REL of the box */
     if (d < 2 || d > 15) return CUB_NONNUMERIC;
     if (max_eval <= 0) max_eval = 1000000;
     if (abstol < 0.0) abstol = 0.0;
@@ -201,7 +242,9 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
     if (total_err <= fmax(abstol, reltol * total_absval)) status = CUB_OK;
 
     while (status != CUB_OK && n_eval + 2 * per <= max_eval) {
-        if (total_err <= fmax(abstol, reltol * total_absval)) { status = CUB_OK; break; }
+        if (total_err <= fmax(abstol, (deep ? reltol_deep : reltol) * total_absval)) {
+            status = CUB_OK; break;
+        }
 
         Region worst = heap_pop(&hp);
         int ax = worst.split;
@@ -219,6 +262,7 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
         memcpy(right.c, worst.c, d * sizeof(double));
         memcpy(right.h, worst.h, d * sizeof(double));
         double hh = 0.5 * worst.h[ax];
+        if (hh < CUB_DEEP_REL * 0.5 * (b[ax] - a[ax])) deep = true;
         left.h[ax] = hh;  left.c[ax]  = worst.c[ax] - hh;
         right.h[ax] = hh; right.c[ax] = worst.c[ax] + hh;
 
@@ -253,11 +297,13 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
         if (!heap_push(&hp, left) || !heap_push(&hp, right)) break;
     }
 
-    if (status != CUB_NONNUMERIC && total_err <= fmax(abstol, reltol * total_absval))
+    if (status != CUB_NONNUMERIC
+        && total_err <= fmax(abstol, (deep ? reltol_deep : reltol) * total_absval))
         status = CUB_OK;
 
     *result = total;
     *abserr = total_err;
+    if (hot && hot_ok && status == CUB_NOCONV) *hot_ok = cub_hot_point(&hp, d, hot);
     heap_free(&hp);
     free(p);
     return status;
