@@ -2870,7 +2870,7 @@ Recognised sub-options:
 
 | Sub-option | Applies to | Meaning |
 |------------|-----------|---------|
-| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains), BasinHopping (independent multi-start runs) | population / restart / start / sample / chain / run count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n) under an explicit `"DifferentialEvolution"`, and the larger `Clip[15·d, {20, 300}]` (scipy's `popsize·d`) under `Method -> Automatic`; SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain and BasinHopping `1` run (scipy's single-run defaults) |
+| `"SearchPoints" -> n` | DE, NelderMead (restarts), RandomSearch (starts), SimulatedAnnealing (restarts), SHGO (sampling points), DualAnnealing (independent chains), BasinHopping (independent multi-start runs) | population / restart / start / sample / chain / run count, honored verbatim (NelderMead and RandomSearch were silently capped at 20 / 40 before; an explicit value is now always run). Automatic defaults: DE population `Clip[10·d, {15, 200}]` (Storn & Price's 10n) under an explicit `"DifferentialEvolution"`, and the larger `Clip[15·d, {20, 300}]` (scipy's `popsize·d`) under `Method -> Automatic`; SimulatedAnnealing `Min[Max[2·d, 12], 50]` annealing chains; NelderMead `Min[2·d, 20]` simplex restarts; RandomSearch `Clip[8·d, {4, 40}]` starts; SHGO `100` sample points (scipy's `n`); DualAnnealing `1` chain (scipy's single-run default) and BasinHopping `2` independent chains (scipy runs 1; see the BasinHopping reliability note) |
 | `"SamplingMethod" -> m` | SHGO | `"Simplicial"` (default), `"Sobol"`, or `"Halton"` — how the box is sampled and its connectivity graph built (see below). An unknown value warns (`NMinimize::sopt`) and keeps `"Simplicial"` |
 | `"Iterations" -> k` | SHGO | sampling/refinement rounds (scipy's `iters`, default 1); each round grows the complex and re-pools, stopping early once no new local minimum appears. A positive integer, or `Automatic`/`None` for the default; an invalid value warns (`NMinimize::sopt`) |
 | `"VisitingParameter" -> qv` | DualAnnealing | Tsallis visiting-distribution shape `q_v` (scipy's `visit`, default 2.62); `q_v → 1` is Gaussian (classical SA), 2 is Cauchy (fast SA), `> 2` gives the heavy tails of GSA. A real in `(1, 3]`; an out-of-range or non-real value warns (`NMinimize::sopt`) and keeps 2.62 |
@@ -3259,9 +3259,14 @@ multimodal problems. One step:
    high the step grows (`s /= "StepFactor"`, default 0.9 — escape a basin), else it
    shrinks.
 
+5. **Return to the best.** After 5 consecutive hops that did not improve the
+   best minimum, the walk restarts from that best minimum (Wales' GMIN "reset";
+   at `T -> 0` it is Leary's monotonic basin hopping). The walk still explores
+   uphill between resets. scipy has no reset.
+
 The lowest quenched point ever seen (by Deb's feasibility rules) is reported.
 `"SearchPoints" -> K` runs `K` independent multi-start hops and keeps the Deb-best
-(default `1`, matching scipy's single run); `MaxIterations` is the hop count
+(default `2`; scipy runs one); `MaxIterations` is the hop count
 (default 100 = scipy's `niter`); `"SuccessIterations" -> m` stops a run once the
 best stalls for `m` hops (scipy's `niter_success`). The quench reuses the same exact
 local optimizer as the other engines (BFGS for continuous/box problems, the
@@ -3271,9 +3276,20 @@ work with no Basin-Hopping-specific code. Requires a bounded box; unbounded
 coordinates use the default `±10` region. The walk is deterministic for a fixed
 `"RandomSeed"`.
 
+> **Reliability note.** With scipy's defaults alone (one chain, no reset), 3-D
+> Rastrigin reached its global minimum for only ~91% of seeds (918 / 1000; scipy's
+> own `basinhopping` with BFGS: 86 / 100), and *which* seeds failed depended on
+> the last bits of libm's `cos`: at T = 1 the walk accepts a unit rise with
+> probability `e^-1`, drifts uphill and spends the 100-hop budget re-descending,
+> so a pinned `"RandomSeed"` ended one basin short (`f = 0.995`) on glibc and not
+> on macOS. With the return-to-best restart and two default chains it is 999 /
+> 1000 seeds (5-D: 68 / 100 -> 99 / 100), unchanged under a 1e-13 perturbation of
+> the objective; the default run costs twice the hops.
+>
 > **Fidelity note.** The perturbation, the adaptive step size, and the Metropolis
-> rule reproduce scipy's algorithm exactly. The one deliberate difference is the
-> quench: where scipy calls L-BFGS-B, Mathilda reuses its own BFGS /
+> rule reproduce scipy's algorithm exactly; the return-to-best restart and the
+> two default chains are the deliberate additions above. The other deliberate
+> difference is the quench: where scipy calls L-BFGS-B, Mathilda reuses its own BFGS /
 > augmented-Lagrangian / integer-descent polish. Because that polish is a
 > well-behaved *local* minimizer — it does not overshoot across a basin boundary on
 > its first step, as L-BFGS-B sometimes does — a single Mathilda run crosses

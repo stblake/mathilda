@@ -155,6 +155,27 @@ static void test_rastrigin_3d(void) {
                "Method->{\"BasinHopping\",\"RandomSeed\"->1}]]] < 1.*^-3");
 }
 
+/* Reliability, not one lucky seed. With scipy's defaults alone (one chain, no
+ * return-to-best) 3-D Rastrigin reached the global minimum for ~91% of seeds
+ * (918 / 1000 at v0.6418, 90 / 100 at v0.6433) and WHICH seeds failed was set
+ * by the last bits of libm's cos: RandomSeed -> 1 passed on macOS and returned
+ * 0.995 (one basin short) on glibc. The return-to-best restart plus two default
+ * chains find it for 999 / 1000 seeds, so every seed below -- and the same
+ * seeds with the objective perturbed far below its own resolution, the stand-in
+ * for a different libm -- must succeed. 5-D: 68% -> 99% over 100 seeds. */
+static void test_rastrigin_seed_sweep(void) {
+    check_true("ras3[e_] := 30 + Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 3}] + e x[1]; "
+               "And @@ Flatten[Table[First[NMinimize[{ras3[e], Table[-5.12 <= x[i] <= 5.12, {i, 1, 3}]}, "
+               "Table[x[i], {i, 1, 3}], Method -> {\"BasinHopping\", \"RandomSeed\" -> s}]] < 1.*^-3, "
+               "{e, {0, 1.*^-13, 1.*^-9}}, {s, 1, 40}]]");
+    check_true("Count[Table[First[NMinimize[{50 + Sum[x[i]^2 - 10 Cos[2 Pi x[i]], {i, 1, 5}], "
+               "Table[-5.12 <= x[i] <= 5.12, {i, 1, 5}]}, Table[x[i], {i, 1, 5}], "
+               "Method -> {\"BasinHopping\", \"RandomSeed\" -> s}]] < 1.*^-3, {s, 1, 40}], True] >= 37");
+    /* an explicit SearchPoints -> 1 is still a single chain (and still lands) */
+    check_true("Abs[First[NMinimize[{(x - 1)^2 + (y + 2)^2, -5 <= x <= 5 && -5 <= y <= 5}, {x, y}, "
+               "Method -> {\"BasinHopping\", \"SearchPoints\" -> 1, \"RandomSeed\" -> 3}]]] < 1.*^-8");
+}
+
 static void test_ackley_2d(void) {
     check_true("Abs[First[NMinimize[{-20 Exp[-0.2 Sqrt[(x^2+y^2)/2]] "
                "- Exp[(Cos[2 Pi x]+Cos[2 Pi y])/2] + 20 + E, "
@@ -368,6 +389,7 @@ int main(void) {
     TEST(test_rosenbrock);
     TEST(test_rastrigin_2d);
     TEST(test_rastrigin_3d);
+    TEST(test_rastrigin_seed_sweep);
     TEST(test_ackley_2d);
     TEST(test_ackley_4d);
     TEST(test_six_hump_camel);

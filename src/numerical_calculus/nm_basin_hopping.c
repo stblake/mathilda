@@ -83,6 +83,21 @@ static void bh_run(NmDriver* D, NmRng* rng, double T, double step0, int interval
             since_improve++;
         }
         if (niter_success > 0 && since_improve >= niter_success) break;
+
+        /* Return to the best minimum after NM_BH_RESET consecutive hops that
+         * did not improve it (the "reset to the lowest minimum" of Wales'
+         * GMIN; with T -> 0 it is Leary's monotonic basin hopping). scipy has
+         * no reset: at its T = 1 the walk drifts uphill (exp(-1) acceptance of
+         * a unit rise) and spends the 100-hop budget re-descending, which on
+         * 3-D Rastrigin left ~10% of seeds one basin short of the global
+         * minimum (f = 0.995) -- and WHICH seeds is decided by the last bits of
+         * libm's cos, so a pinned RandomSeed passed on one platform and failed
+         * on another. The walk still explores uphill between resets. */
+        if (since_improve > 0 && since_improve % NM_BH_RESET == 0 && *have) {
+            for (size_t j = 0; j < n; j++) xcur[j] = xbest[j];
+            fcur = *fbest; pcur = *penbest;
+            Ecur = fcur + NM_PENALTY_MU * pcur;
+        }
     }
 }
 
@@ -113,7 +128,12 @@ void nm_basin_hopping(NmDriver* D, const NmConfig* nc, NmRng* rng,
      * DA-style budget special-casing is needed here. */
     int64_t niter = D->opts->max_iter > 0 ? D->opts->max_iter : NM_BH_NITER;
     int64_t niter_success = nc->bh_niter_success > 0 ? nc->bh_niter_success : 0;
-    int64_t K = nc->search_points > 0 ? (int64_t)nc->search_points : 1;
+    /* Independent chains: an explicit "SearchPoints" wins; the default is
+     * NM_BH_RUNS = 2 (scipy runs one). A chain from a random start reaches a
+     * deep funnel's bottom with probability p < 1 inside its hop budget;
+     * two chains take that to 1 - (1 - p)^2 (3-D Rastrigin: ~98% -> 100%,
+     * 5-D: ~88% -> 99% over 100 seeds) for twice the hops. */
+    int64_t K = nc->search_points > 0 ? (int64_t)nc->search_points : NM_BH_RUNS;
 
     double* xcur   = (double*)malloc(sizeof(double) * n);
     double* xtrial = (double*)malloc(sizeof(double) * n);

@@ -576,10 +576,11 @@ typedef struct {
  *  The lowest quenched point ever seen (by Deb's rules, nm_better) is reported,
  *  so box + general + integer constraints work through the shared nm_local_polish
  *  with no Basin-Hopping-specific code. "SearchPoints" -> K runs K independent
- *  multi-start hops and keeps the Deb-best (default 1, scipy's single run);
+ *  multi-start hops and keeps the Deb-best (default NM_BH_RUNS = 2; scipy runs 1);
  *  MaxIterations is the hop count (default 100 == scipy niter). The one
- *  deliberate difference from scipy is the local minimizer: Mathilda's
- *  BFGS / augmented-Lagrangian / integer-descent polish, not L-BFGS-B/SLSQP.
+ *  differences from scipy are the local minimizer (Mathilda's BFGS /
+ *  augmented-Lagrangian / integer-descent polish, not L-BFGS-B/SLSQP), the
+ *  return-to-best restart (NM_BH_RESET) and the two default chains.
  * ========================================================================== */
 
 /* Basin Hopping defaults, matching scipy.optimize.basinhopping. See
@@ -590,6 +591,12 @@ typedef struct {
 #define NM_BH_TARGET_ACCEPT  0.5       /* target acceptance rate for the adaptation */
 #define NM_BH_STEP_FACTOR    0.9       /* multiplicative step-size adjustment factor*/
 #define NM_BH_NITER          100       /* default hop count (== scipy niter)        */
+/* The two deliberate departures from scipy's defaults (see nm_basin_hopping):
+ * restart the walk from the best minimum after NM_BH_RESET consecutive hops
+ * that did not improve it, and run NM_BH_RUNS independent chains unless
+ * "SearchPoints" says otherwise. */
+#define NM_BH_RESET          5         /* non-improving hops before return-to-best  */
+#define NM_BH_RUNS           2         /* default independent chains (SearchPoints) */
 
 /* ===== file-static global registries (defined in findmin_common.c) ===== */
 extern double g_fm_al_fscale;
