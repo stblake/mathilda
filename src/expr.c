@@ -373,6 +373,18 @@ Expr* expr_new_bigint_from_mpz(const mpz_t val) {
     return e;
 }
 
+Expr* expr_new_bigint_take(mpz_t val) {
+    Expr* e = expr_alloc_node();
+    if (!e) { mpz_clear(val); return NULL; }
+    e->type = EXPR_BIGINT;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    /* mpz_t is __mpz_struct[1]: moving the header moves ownership of the
+     * limbs, as mpz_swap does. */
+    memcpy(e->data.bigint, val, sizeof(e->data.bigint));
+    return e;
+}
+
 Expr* expr_new_bigint_from_int64(int64_t val) {
     Expr* e = expr_alloc_node();
     if (!e) return NULL;
@@ -509,6 +521,16 @@ void expr_to_mpz(const Expr* e, mpz_t out) {
     } else { // EXPR_BIGINT
         mpz_init_set(out, e->data.bigint);
     }
+}
+
+mpz_srcptr expr_mpz_borrow(const Expr* e, mpz_t scratch) {
+    if (e->type == EXPR_BIGINT) return e->data.bigint;
+    mpz_init_set_si(scratch, e->data.integer);
+    return scratch;
+}
+
+void expr_mpz_release(const Expr* e, mpz_t scratch) {
+    if (e->type != EXPR_BIGINT) mpz_clear(scratch);
 }
 
 bool expr_is_integer_like(const Expr* e) {

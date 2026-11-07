@@ -210,15 +210,16 @@ static Expr* add_numbers(Expr* a, Expr* b) {
      * to fall through to the generic GMP block at the bottom. */
     if ((a->type == EXPR_BIGINT || b->type == EXPR_BIGINT) &&
         expr_is_integer_like(a) && expr_is_integer_like(b)) {
-        mpz_t av, bv, r;
-        expr_to_mpz(a, av);
-        expr_to_mpz(b, bv);
+        /* Borrow the operands' limbs and move the sum into the node: one
+         * pass over the digits instead of four copies (two operands, the
+         * result, and its node). */
+        mpz_t as, bs, r;
+        mpz_srcptr av = expr_mpz_borrow(a, as);
+        mpz_srcptr bv = expr_mpz_borrow(b, bs);
         mpz_init(r);
         mpz_add(r, av, bv);
-        mpz_clear(av); mpz_clear(bv);
-        Expr* res = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
-        mpz_clear(r);
-        return res;
+        expr_mpz_release(a, as); expr_mpz_release(b, bs);
+        return expr_bigint_normalize(expr_new_bigint_take(r));
     }
 
     if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {

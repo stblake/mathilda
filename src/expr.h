@@ -282,6 +282,10 @@ static inline void expr_invalidate_hash(Expr* e) {
 Expr* expr_new_bigint_from_mpz(const mpz_t val);
 Expr* expr_new_bigint_from_int64(int64_t val);
 Expr* expr_new_bigint_from_str(const char* str);
+/* Move constructor: the node takes over `val`'s limbs (no copy). `val` is
+ * consumed -- the caller must neither mpz_clear nor reuse it. The result is
+ * NOT normalised; wrap in expr_bigint_normalize for a value that may fit. */
+Expr* expr_new_bigint_take(mpz_t val);
 
 /* NDArray constructor. Takes ownership of `dims` (copied internally, caller
  * keeps its own copy) and `data` (moved, not copied — caller must not free
@@ -352,6 +356,13 @@ char* mathilda_strdup(const char* s);
 
 /* Helpers used by arithmetic modules */
 void  expr_to_mpz(const Expr* e, mpz_t out);
+/* Read-only mpz view of an integer-like `e` WITHOUT copying a BigInt's limbs:
+ * returns e's own mpz for a BigInt, or `scratch` initialised from an Integer.
+ * Pair every call with expr_mpz_release(e, scratch). expr_to_mpz copies the
+ * whole number, which for a several-thousand-digit operand of a + b costs
+ * more than the addition itself. */
+mpz_srcptr expr_mpz_borrow(const Expr* e, mpz_t scratch);
+void  expr_mpz_release(const Expr* e, mpz_t scratch);
 bool  expr_is_integer_like(const Expr* e);
 /* True if `e` represents any concrete number: Integer, BigInt, Real,
  * Rational[n,d], Complex with numeric parts, or (with USE_MPFR) MPFR. */

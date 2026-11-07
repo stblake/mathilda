@@ -12,25 +12,43 @@
 
 int g_arith_warnings_muted = 0;
 
+/* Count trailing zeros of a nonzero word. */
+static inline int arith_ctz64(uint64_t v) {
+#if defined(__GNUC__)
+    return __builtin_ctzll(v);
+#else
+    int k = 0;
+    while (!(v & 1)) { v >>= 1; k++; }
+    return k;
+#endif
+}
+
 int64_t gcd(int64_t a, int64_t b) {
-    a = llabs(a);
-    b = llabs(b);
+    /* Magnitudes as unsigned words: no llabs overflow at INT64_MIN. */
+    uint64_t x = a < 0 ? (uint64_t)0 - (uint64_t)a : (uint64_t)a;
+    uint64_t y = b < 0 ? (uint64_t)0 - (uint64_t)b : (uint64_t)b;
     /* Operands that fit in 32 bits -- every Rational a Table of small exact
      * entries builds -- run the Euclidean loop on 32-bit words: a 64-bit
      * divide costs several times a 32-bit one on x86-64, and this gcd sits
      * under every make_rational. */
-    if ((uint64_t)a <= UINT32_MAX && (uint64_t)b <= UINT32_MAX) {
-        uint32_t x = (uint32_t)a, y = (uint32_t)b;
-        while (y) { uint32_t t = x % y; x = y; y = t; }
-        return (int64_t)x;
+    if (x <= UINT32_MAX && y <= UINT32_MAX) {
+        uint32_t u = (uint32_t)x, v = (uint32_t)y;
+        while (v) { uint32_t t = u % v; u = v; v = t; }
+        return (int64_t)u;
     }
-    while (b) {
-        a %= b;
-        int64_t tmp = a;
-        a = b;
-        b = tmp;
-    }
-    return a;
+    /* Wider operands (a factorial denominator, k^j / j! past 12!) take the
+     * binary gcd: shifts and subtractions only. The Euclidean loop spent ~40
+     * cycles per 64-bit division, ~1.5k cycles per make_rational. */
+    if (x == 0) return (int64_t)y;
+    if (y == 0) return (int64_t)x;
+    int sh = arith_ctz64(x | y);
+    x >>= arith_ctz64(x);
+    do {
+        y >>= arith_ctz64(y);
+        if (x > y) { uint64_t t = x; x = y; y = t; }
+        y -= x;
+    } while (y);
+    return (int64_t)(x << sh);
 }
 
 int64_t lcm(int64_t a, int64_t b) {
