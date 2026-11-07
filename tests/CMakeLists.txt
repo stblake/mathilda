@@ -1111,6 +1111,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/findmin_tnc.c
     ../src/numerical_calculus/findmin_trust.c
     ../src/numerical_calculus/findmin_slsqp.c
+    ../src/numerical_calculus/findmin_minimax.c
     ../src/numerical_calculus/findmin_powell.c
     ../src/numerical_calculus/findmin_neldermead.c
     ../src/numerical_calculus/findmin_cobyla.c

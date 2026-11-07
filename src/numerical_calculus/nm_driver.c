@@ -514,6 +514,32 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
      * result honestly is the fix. */
     bool feasible = !infeasible_box && !infeasible_pre && (penbest <= NM_FEAS_RETURN);
 
+    /* A minimax objective Max[p_1, ..., p_m]: the global search and its
+     * quasi-Newton polish both stall a few digits short at the kink where the
+     * pieces tie (the SIAM problem 5 discrete minimax: 7.6 digits).  Solve the
+     * smooth epigraph form min t s.t. p_k <= t from the best point by SQP and
+     * keep it when better (fm_minimax_solve); at WorkingPrecision the active
+     * set it finds is then refined by Newton in MPFR below. */
+    FmMinimax mmx;
+    bool have_mmx = false;
+    if (feasible && do_post && !vs.any_int && ngens == 0 && ndisj == 0) {
+        for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+        have_mmx = fm_minimax_detect(f_eff, eff_vars, n, &mmx);
+        if (have_mmx) {
+            double* xt = (double*)malloc(sizeof(double) * n);
+            double ft = 0.0;
+            if (xt) {
+                for (size_t i = 0; i < n; i++) xt[i] = xbest[i];
+                if (fm_minimax_solve(&mmx, f_eff, eff_vars, n, binds, boxes, &opts, xt, &ft)
+                    && ft < fbest) {
+                    for (size_t i = 0; i < n; i++) xbest[i] = xt[i];
+                    fbest = ft;
+                }
+                free(xt);
+            }
+        }
+    }
+
     /* Optional MPFR refinement for WorkingPrecision > MachinePrecision on
      * continuous, general-constraint-free problems (reuses fm_run_bfgs_mpfr). */
 #ifdef USE_MPFR
@@ -538,13 +564,18 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
          * start, and a WorkingPrecision -> 60 NMinimize returned the machine
          * minimiser (15 digits) labelled as 60. */
         for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
-        Expr** gm = fm_compute_gradient(f_eff, eff_vars, n);
         xm = fm_mpfr_array(n, opts.wp_bits);
         for (size_t i = 0; i < n; i++) mpfr_set_d(xm[i], xbest[i], MPFR_RNDN);
         mpfr_init2(fmv, opts.wp_bits);
         bool saved_quiet = g_fm_quiet;
         g_fm_quiet = true;
-        bool mok = fm_run_bfgs_mpfr(f_eff, eff_vars, n, binds, gm, xm, boxes, &opts, fmv);
+        /* a minimax objective: Newton on the machine point's active set; the
+         * quasi-Newton below (which assumes a gradient) only when that fails */
+        bool mok = have_mmx
+                && fm_minimax_refine_mpfr(&mmx, f_eff, eff_vars, n, boxes, &opts,
+                                          xbest, xm, fmv);
+        Expr** gm = mok ? NULL : fm_compute_gradient(f_eff, eff_vars, n);
+        if (!mok) mok = fm_run_bfgs_mpfr(f_eff, eff_vars, n, binds, gm, xm, boxes, &opts, fmv);
         g_fm_quiet = saved_quiet;
         if (mok)
             mpfr_built = true;
@@ -552,6 +583,8 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         if (gm) { for (size_t i = 0; i < n; i++) expr_free(gm[i]); free(gm); }
     }
 #endif
+
+    if (have_mmx) fm_minimax_free(&mmx);
 
     /* Free the temporary bindings so the variable symbols are unbound while
      * we build the result rules (Rule[x, v] must not re-evaluate x). */

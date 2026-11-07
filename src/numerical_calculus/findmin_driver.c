@@ -562,8 +562,34 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                         "Method \"%s\" at WorkingPrecision > MachinePrecision is not yet "
                         "supported; falling back to QuasiNewton", mname);
             }
-            ok = fm_run_bfgs_mpfr(f_raw, vars, n, binds, g_exprs,
-                                  x_vec_mpfr, boxes, &opts, fx_min_mpfr);
+            /* a minimax objective: the machine epigraph solve, then Newton
+             * on its active set at the working precision */
+            bool mm_ok = false;
+            if (!has_general_cons && (method == FM_METHOD_QUASINEWTON)
+                && opts.method == FM_METHOD_AUTOMATIC) {
+                FmMinimax mmx;
+                for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+                Expr* fev = eval_and_free(expr_copy(f_raw));   /* held objective */
+                if (fev && fm_minimax_detect(fev, vars, n, &mmx)) {
+                    FmOpts mo = opts;
+                    mo.prec_mode = FM_PREC_MACHINE;
+                    if (mo.acc_goal_digits  > 8.0) mo.acc_goal_digits  = 8.0;
+                    if (mo.prec_goal_digits > 8.0) mo.prec_goal_digits = 8.0;
+                    double fv;
+                    double* xs = (double*)malloc(sizeof(double) * n);
+                    if (xs) {
+                        for (size_t i = 0; i < n; i++) xs[i] = x_vec[i];
+                        if (fm_minimax_solve(&mmx, fev, vars, n, binds, boxes, &mo, xs, &fv))
+                            mm_ok = fm_minimax_refine_mpfr(&mmx, fev, vars, n, boxes, &opts,
+                                                           xs, x_vec_mpfr, fx_min_mpfr);
+                        free(xs);
+                    }
+                    fm_minimax_free(&mmx);
+                }
+                expr_free(fev);
+            }
+            ok = mm_ok || fm_run_bfgs_mpfr(f_raw, vars, n, binds, g_exprs,
+                                           x_vec_mpfr, boxes, &opts, fx_min_mpfr);
         }
         mpfr_result = ok;
     } else {
@@ -627,6 +653,24 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                 }
                 free(x0s);
             }
+        }
+        /* Automatic on a minimax objective Max[p_1, ..., p_m]: the smooth
+         * epigraph form by SQP (fm_minimax_solve); BFGS, whose model assumes
+         * a gradient, stalls at the kink where the pieces tie. */
+        if (!done_sqp && !has_general_cons && opts.method == FM_METHOD_AUTOMATIC) {
+            FmMinimax mmx;
+            for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+            /* FindMinimum holds its objective: Max[Abs[Table[...]]] becomes
+             * Max[p_1, ...] only once evaluated (variables unbound) */
+            Expr* fev = eval_and_free(expr_copy(f_raw));
+            if (fev && fm_minimax_detect(fev, vars, n, &mmx)) {
+                double fv;
+                if (fm_minimax_solve(&mmx, fev, vars, n, binds, boxes, &opts, x_vec, &fv)) {
+                    fx_min = fv; ok = true; done_sqp = true;
+                }
+                fm_minimax_free(&mmx);
+            }
+            expr_free(fev);
         }
         if (done_sqp) {
             /* solved by SQP above */

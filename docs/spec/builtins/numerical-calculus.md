@@ -2457,6 +2457,42 @@ Where `FindMinimum` descends from a single start point to the nearest local
 minimum, `NMinimize` runs a stochastic global search over a bounded region and
 then polishes the best point with the exact local solver.
 
+### Minimax objectives (`Max[p_1, ..., p_m]`)
+
+An objective that evaluates to `Max` of two or more smooth pieces -- a discrete
+best-approximation problem `Max[Abs[f(x_k) - p(x_k; c)]]`, or `Norm[v,
+Infinity]` (which evaluates to that form) -- is non-smooth exactly at its
+minimum, where several pieces tie; the quasi-Newton polish stalls there a few
+digits short (the SIAM problem 5 discrete minimax, 128 complex moduli over 8
+coefficients: 7.6 digits).  After the global search (no general constraints,
+continuous variables) the best point is re-solved in **epigraph form**
+`min t s.t. p_k <= t` by the SQP solver (`"SLSQP"`), with every constraint and
+gradient compiled: a real `Abs[e]` piece (`ComplexExpand[Im[e]] == 0`) becomes
+`±e - t <= 0`, a complex one `Sqrt[Re[e]^2 + Im[e]^2] - t <= 0` (convex for `e`
+affine; the squared form `q - t^2` puts negative curvature on `t` and the SQP
+zig-zagged), any other smooth piece `p - t <= 0`.  The pieces within a relative
+gap of the maximum then form an **active set**, and Newton's method (Gauss-Newton
+when more pieces tie than there are unknowns `n + 1`) on `piece_k = t` (`q_k =
+t^2` for a modulus) solves it -- in 53-bit MPFR for a machine result, at the
+working precision for `WorkingPrecision > MachinePrecision`.  When FEWER pieces
+tie than there are unknowns -- a real function on a conjugate-symmetric point
+set fitted with complex coefficients -- those equations are under-determined,
+and Newton runs on the full KKT system in `(x, t, λ)` instead
+(`Σ λ_a ∇F_a = 0`, `1 + Σ λ_a ∂F_a/∂t = 0`, `F_a = 0`; the Hessians of the
+active pieces differentiated on first use).  The gap is widened
+over `1e-10 .. 1e-4` until a set solves; an over-full set is retried with one or
+two pieces dropped (the Remez exchange).  The answer is **certified**, never
+trusted: zero residual on the set, no piece above `t` at the refined point, and
+in the square case non-negative KKT multipliers (`J^T λ = -e_t`); otherwise the
+previous answer (BFGS, or the MPFR quasi-Newton) stands.  The variables are
+taken real.  Results: SIAM C5 14 digits / 1.5 s (scipy differential_evolution
+11 digits / 19 s), at 60 digits 50 / 1.8 s (was a timeout); the ten holdout
+discrete-minimax problems 13-15 digits at machine precision and 50 at 60
+digits (scipy 11-12; was 7-10 digits, and 3 of the 60-digit rows timed out).
+`FindMinimum` (`Method -> Automatic`, no general constraints) takes the
+same epigraph solve from its start point, and the same Newton refinement at
+`WorkingPrecision`.
+
 ### Forms
 
 - `NMinimize[f, x]` -- global minimum with respect to one variable.

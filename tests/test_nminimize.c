@@ -1644,6 +1644,37 @@ static void test_nmaximize_blackbox_gradient_step(void) {
                "Abs[(a /. Last[r]) - 1.61363272808328247] < 10^-8]");
 }
 
+/* Minimax objectives Max[Abs[...]] by their epigraph (findmin_minimax.c).
+ * Best line to x^2 on {0, 1/8, ..., 1}: x - 1/8, error 1/8 at 0, 1/2, 1
+ * (equioscillation), the real-Abs pieces; best constant to z^2 on the 8th
+ * roots of unity: c = 0, error 1 at all 8 points, the complex modulus pieces
+ * and an over-determined active set.  Each machine result to ~rounding (the
+ * BFGS polish stopped 2-3 digits short at the kink) and at WorkingPrecision
+ * by Newton on the active set. */
+static void test_minimax_epigraph(void) {
+    check_true("Module[{c0, c1, r}, r = NMinimize[Max[Abs[Table[x^2 - c0 - c1 x, {x, 0, 1, 1/8}]]], "
+               "{c0, c1}]; Abs[First[r] - 1/8] < 10^-13 && Abs[(c1 /. Last[r]) - 1] < 10^-10]");
+    check_true("Module[{c0, c1, r}, r = NMinimize[Max[Abs[Table[x^2 - c0 - c1 x, {x, 0, 1, 1/8}]]], "
+               "{c0, c1}, WorkingPrecision -> 30]; Precision[First[r]] >= 25 && "
+               "Abs[First[r] - 1/8] < 10^-27 && Abs[(c0 /. Last[r]) + 1/8] < 10^-25]");
+    check_true("Module[{a, b, r}, r = NMinimize[Max[Abs[Table[N[Exp[2 Pi I k/8]]^2 - (a + I b), "
+               "{k, 0, 7}]]], {a, b}]; Abs[First[r] - 1] < 10^-13 && Abs[a /. Last[r]] < 10^-10]");
+    check_true("Module[{a, b, r}, r = NMinimize[Max[Abs[Table[N[Exp[2 Pi I k/8], 40]^2 - (a + I b), "
+               "{k, 0, 7}]]], {a, b}, WorkingPrecision -> 30]; Abs[First[r] - 1] < 10^-27]");
+    /* fewer ties than unknowns (a real function on conjugate-symmetric
+     * points, complex coefficients): KKT Newton with the multipliers.
+     * Reference 0.048808007998344754803 (the discrete minimax of
+     * log(2 + z) on the 64th roots of unity by a quadratic, hc5_ref). */
+    check_true("Module[{a0, a1, a2, b0, b1, b2, z, r}, z = N[Table[Exp[2 Pi I k/64], {k, 0, 63}]]; "
+               "r = NMinimize[Max[Abs[Log[2 + z] - (a0 + I b0) - (a1 + I b1) z - (a2 + I b2) z^2]], "
+               "{a0, a1, a2, b0, b1, b2}]; Abs[First[r]/0.048808007998344754803 - 1] < 10^-12]");
+    /* FindMinimum (Automatic) takes the same epigraph solve */
+    check_true("Module[{c0, c1, r}, r = FindMinimum[Max[Abs[Table[x^2 - c0 - c1 x, {x, 0, 1, 1/8}]]], "
+               "{{c0, 0}, {c1, 0}}]; Abs[First[r] - 1/8] < 10^-13]");
+    check_true("Module[{c0, c1, r}, r = FindMinimum[Max[Abs[Table[x^2 - c0 - c1 x, {x, 0, 1, 1/8}]]], "
+               "{{c0, 0}, {c1, 0}}, WorkingPrecision -> 30]; Abs[First[r] - 1/8] < 10^-27]");
+}
+
 static void test_ranges_evaluated_in_table(void) {
     /* NMinimize is not HoldAll, so iterator-bound bounds/ranges evaluate. */
     check_true("With[{r = Table[x /. Last[NMinimize[{(x - a)^2, -5 <= x <= 5}, x]], {a, {1, 2}}]}, "
@@ -1779,6 +1810,7 @@ int main(void) {
     TEST(test_ranges_evaluated_in_table);
     TEST(test_nmaximize_parametric_integral);
     TEST(test_nmaximize_blackbox_gradient_step);
+    TEST(test_minimax_epigraph);
 
     printf("All NMinimize tests passed.\n");
     return 0;

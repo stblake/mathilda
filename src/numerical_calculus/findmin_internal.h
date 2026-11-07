@@ -835,6 +835,32 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
  * every run; read by a caller that ran it quietly and must still report
  * FindMinimum::cvmit for a result it keeps). */
 extern bool g_fm_slsqp_hit_maxit;
+/* A minimax objective Max[p_1, ..., p_m] in epigraph form (findmin_minimax.c):
+ * each piece smooth, an Abs piece as its real part (FM_MM_REAL_ABS) or its
+ * squared modulus Re^2 + Im^2 (FM_MM_COMPLEX_ABS) for real variables. */
+enum { FM_MM_SMOOTH = 0, FM_MM_REAL_ABS = 1, FM_MM_COMPLEX_ABS = 2 };
+typedef struct {
+    size_t  n;        /* variables                                   */
+    size_t  np;       /* pieces                                      */
+    Expr**  piece;    /* owned: p_k, Re[e_k], or Re[e_k]^2 + Im[e_k]^2 */
+    int*    kind;
+    Expr*** grad;     /* owned: grad[k][i] = d piece_k / d vars_i    */
+} FmMinimax;
+/* Recognise f (evaluated) as Max of >= 2 smooth pieces in vars; false (mm
+ * empty) otherwise. */
+bool fm_minimax_detect(Expr* f, Expr** vars, size_t n, FmMinimax* mm);
+void fm_minimax_free(FmMinimax* mm);
+/* min t s.t. piece_k <= t by SQP from x (in/out, machine); *fx_out = f(x). */
+bool fm_minimax_solve(const FmMinimax* mm, Expr* f, Expr** vars, size_t n,
+                      FmVarBind* binds, const FmBox* boxes, const FmOpts* opts,
+                      double* x, double* fx_out);
+#ifdef USE_MPFR
+/* Newton on the active set of the machine minimax point xm, certified (every
+ * piece <= t, non-negative multipliers); x_out (n) and fx_out pre-initialised. */
+bool fm_minimax_refine_mpfr(const FmMinimax* mm, Expr* f, Expr** vars, size_t n,
+                            const FmBox* boxes, const FmOpts* opts,
+                            const double* xm, mpfr_t* x_out, mpfr_t fx_out);
+#endif
 /* Every general constraint is linear in vars (its gradient is free of them). */
 bool fm_gens_all_linear(const FmGenCon* gens, size_t ngens, Expr** vars, size_t n);
 #ifdef USE_MPFR
