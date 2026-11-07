@@ -35,6 +35,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <limits.h>
+#include <float.h>   /* DBL_MIN: listable_machine_binary */
+#include <math.h>    /* isfinite, fabs */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
@@ -1394,6 +1396,92 @@ static bool has_list_arg(Expr* e) {
     return false;
 }
 
+/* One operand of listable_machine_binary at position j: a machine Real or an
+ * Integer; false for anything else. `is_real` says which. */
+static inline bool lmb_operand(const Expr* a, size_t j, double* v, bool* is_real,
+                               int64_t* iv) {
+    const Expr* x = a;
+    if (a->type == EXPR_FUNCTION) x = a->data.function.args[j];   /* a List */
+    if (x->type == EXPR_REAL) { *v = x->data.real; *is_real = true; return true; }
+    if (x->type == EXPR_INTEGER) {
+        *iv = x->data.integer; *v = (double)x->data.integer; *is_real = false;
+        return true;
+    }
+    return false;
+}
+
+/*
+ * listable_machine_binary:
+ * Plus[a, b] / Times[a, b] threaded over flat Lists of machine numbers -- the
+ * {2, 1} - {0.5, 0.1}, p + t v of every small-vector loop -- computed in place
+ * instead of building and evaluating one Plus / Times call per element (an
+ * evaluation, a contagion pass and a re-evaluation of the result each: ~1.7 us
+ * for two elements). Only when EVERY element pair holds at least one machine
+ * Real and both values are Real or Integer, so the result is the machine
+ * double the builtin produces: two operands, so IEEE commutativity makes the
+ * order irrelevant; an Integer is converted exactly as contagion converts it
+ * ((double)v). The builtin's exact special cases are kept: Plus with an exact
+ * 0 is the other operand itself (keeps -0.); Times with an exact 0 declines
+ * to the builtin. A result that is not a normal finite double (overflow, underflow,
+ * NaN), which the builtin turns into an arbitrary-exponent machine number or a
+ * message, declines the whole call to the general path. NULL: not this case.
+ */
+static Expr* listable_machine_binary(const Expr* e, size_t len) {
+    if (e->data.function.arg_count != 2) return NULL;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return NULL;
+    const bool plus = h->data.symbol.name == SYM_Plus;
+    if (!plus && h->data.symbol.name != SYM_Times) return NULL;
+    const Expr* a = e->data.function.args[0];
+    const Expr* b = e->data.function.args[1];
+    /* Each operand is a flat List of the threaded length or a scalar number
+     * (apply_listable has checked the List lengths). */
+    for (int k = 0; k < 2; k++) {
+        const Expr* x = k ? b : a;
+        if (x->type == EXPR_FUNCTION) {
+            if (x->data.function.head->type != EXPR_SYMBOL ||
+                x->data.function.head->data.symbol.name != SYM_List) return NULL;
+        } else if (x->type != EXPR_REAL && x->type != EXPR_INTEGER) {
+            return NULL;
+        }
+    }
+    Expr** out = malloc(sizeof(Expr*) * len);
+    if (!out) return NULL;
+    for (size_t j = 0; j < len; j++) {
+        double va, vb;
+        bool ra, rb;
+        int64_t ia = 0, ib = 0;
+        if (!lmb_operand(a, j, &va, &ra, &ia) || !lmb_operand(b, j, &vb, &rb, &ib) ||
+            !(ra || rb)) {
+            for (size_t k = 0; k < j; k++) expr_free(out[k]);
+            free(out);
+            return NULL;
+        }
+        if (plus) {
+            if (!ra && ia == 0) { out[j] = expr_new_real(vb); continue; }
+            if (!rb && ib == 0) { out[j] = expr_new_real(va); continue; }
+        } else if ((!ra && ia == 0) || (!rb && ib == 0)) {
+            /* an exact-zero factor: the builtin's rule (its sign, its zero) */
+            for (size_t k = 0; k < j; k++) expr_free(out[k]);
+            free(out);
+            return NULL;
+        }
+        double r = plus ? va + vb : va * vb;
+        if (!isfinite(r) || (r != 0.0 && fabs(r) < DBL_MIN) ||
+            (r == 0.0 && !plus)) {
+            /* overflow / underflow / NaN, or a product of nonzero numbers
+             * underflowing to 0: the builtin's own handling */
+            for (size_t k = 0; k < j; k++) expr_free(out[k]);
+            free(out);
+            return NULL;
+        }
+        out[j] = expr_new_real(r);
+    }
+    Expr* res = expr_new_function(expr_new_symbol(SYM_List), out, len);
+    free(out);
+    return res;
+}
+
 /*
  * apply_listable:
  * Implements automatic threading of functions over lists.
@@ -1430,6 +1518,11 @@ static Expr* apply_listable(Expr* e) {
     /* Empty list: thread to an empty list without per-element work. */
     if (list_len == 0) {
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    }
+
+    {
+        Expr* fast = listable_machine_binary(e, list_len);
+        if (fast) return fast;
     }
 
     /* Construct a new List containing the threaded evaluations */

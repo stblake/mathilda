@@ -3093,8 +3093,33 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
      * 1.5 - 1.0 a), 1.5 + a - a is 1.5, and 1.5 (2 + a) and 1.5 + Sqrt[2] a
      * keep their exact parts. */
     for (size_t i = 0; i < n; i++) {
-        out[i] = expr_is_numeric_quantity(args[i]) ? numericalize_contagion(args[i], spec)
-                                                   : expr_copy(args[i]);
+        const Expr* a = args[i];
+        /* Machine contagion of a plain number has one answer, the correctly
+         * rounded double, and needs none of numericalize's machinery (exact-
+         * leaf scan, working-precision plan, memo push): {2, 1} - {0.5, 0.1}
+         * spent most of its 1.8 us there, per element. An Integer is (double)v
+         * (round to nearest, as leaf_from_integer); p/q with |p|, |q| <= 2^53
+         * is one IEEE division of exact operands, i.e. correctly rounded, as
+         * the planned path's MPFR quotient rounded to a double is. */
+        if (spec.mode == NUMERIC_MODE_MACHINE) {
+            if (a->type == EXPR_REAL) { out[i] = expr_copy((Expr*)a); continue; }
+            if (a->type == EXPR_INTEGER) { out[i] = expr_new_real((double)a->data.integer); continue; }
+            if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2 &&
+                a->data.function.head->type == EXPR_SYMBOL &&
+                a->data.function.head->data.symbol.name == SYM_Rational &&
+                a->data.function.args[0]->type == EXPR_INTEGER &&
+                a->data.function.args[1]->type == EXPR_INTEGER) {
+                const int64_t p = a->data.function.args[0]->data.integer;
+                const int64_t q = a->data.function.args[1]->data.integer;
+                const int64_t lim = INT64_C(1) << 53;
+                if (q != 0 && p >= -lim && p <= lim && q >= -lim && q <= lim) {
+                    out[i] = expr_new_real((double)p / (double)q);
+                    continue;
+                }
+            }
+        }
+        out[i] = expr_is_numeric_quantity(a) ? numericalize_contagion(a, spec)
+                                             : expr_copy((Expr*)a);
     }
     return true;
 }

@@ -314,6 +314,15 @@ Symbolic sum.
   so an exact recurrence over 4000-digit integers (`Fold[{#1[[2]], 2 #1[[2]] +
   #2 #1[[1]]} &, {1, 1}, list]`, 10^4 steps) costs ~30 ms instead of ~42 ms.
   Rationals with denominators past 32 bits reduce with a binary gcd.
+- Two-operand `Plus` / `Times` threaded over flat Lists of machine numbers
+  (`{2, 1} - {0.5, 0.1}`, `p + t v`) are computed in place when every element
+  pair holds a machine Real: no per-element `Plus` call is built and evaluated
+  (2 us -> 0.6 us for two elements). The values are the builtin's own (two
+  operands commute exactly in IEEE arithmetic); an exact `0` summand returns
+  the other operand, and an exact zero factor, an overflow / underflow, or any
+  non-number take the general path. Machine contagion of an Integer or a
+  machine-sized Rational partner converts it directly to the correctly
+  rounded double.
 - Returns `0` if no arguments are provided.
 - Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
 - A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),
