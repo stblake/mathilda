@@ -152,6 +152,40 @@ static void test_multidim(void) {
     ASSERT_CLOSE("NSum[(-1)^n (2/n)^k/k^2,{n,2,Infinity},{k,1,n}]", "0.770188", 1e-4);
 }
 
+/* Rapidly decaying summands are summed directly (ns_fast_decay): no
+ * extrapolation, no phase split.  Each case was either wrong in method choice
+ * or orders of magnitude slow before (values: mpmath at 70 digits). */
+static void test_fast_decay(void) {
+    /* Alternating with terms ~1e-14k: the adjacent-sign product underflowed,
+     * so the series was not seen as alternating; the Euler-Maclaurin far probe
+     * then evaluated (-1)^x at x = 2^(2^29) and never returned. */
+    ASSERT_CLOSE("4/Pi NSum[(-1)^k/(2 k + 1) Sech[5 (2 k + 1) Pi], {k, 0, Infinity}, "
+                 "WorkingPrecision -> 60]",
+                 "3.837587979251226103407133186204839100793005594072509569030023`65*^-7", 1e-63);
+    ASSERT_CLOSE("4/Pi NSum[(-1)^k/(2 k + 1) Sech[5 (2 k + 1) Pi], {k, 0, Infinity}]",
+                 "3.837587979251226103407133186204839100793005594072509569030023`65*^-7", 1e-20);
+    /* heat eigen-series (super-geometric decay) */
+    ASSERT_CLOSE("4/Pi NSum[(-1)^k/(2 k + 1) Exp[-(2 k + 1)^2 Pi^2 (42/100)/4], {k, 0, Infinity}, "
+                 "WorkingPrecision -> 60]",
+                 "0.451659083985231656057607964274935125243134852153997739921580122`65", 1e-57);
+    /* a summand peaking at k = 10 before it decays */
+    ASSERT_CLOSE("NSum[10^k/k!, {k, 0, Infinity}, WorkingPrecision -> 40]/N[E^10, 50]", "1", 1e-38);
+    /* a fast head hiding a slow tail: the route abandons when the decay slows */
+    ASSERT_CLOSE("NSum[2^-k + 10^-30/k^2, {k, 1, Infinity}, WorkingPrecision -> 60]",
+                 "1 + 10^-30 Pi^2/6", 1e-55);
+    /* isolated zero terms (Sin[j Pi/2] vanishes at every even j) */
+    ASSERT_CLOSE("NSum[Sin[j Pi/2] Exp[-j], {j, 0, Infinity}]", "E/(1 + E^2)", 1e-14);
+    /* two-dimensional, the inner summand compiled with the outer index as a
+     * parameter */
+    ASSERT_CLOSE("NSum[(-1)^(j + k)/((2 j + 1) (2 k + 1)) Sech[3/2 Pi Sqrt[(2 j + 1)^2 + (2 k + 1)^2]], "
+                 "{j, 0, Infinity}, {k, 0, Infinity}, WorkingPrecision -> 60]",
+                 "0.002550782687931167381813295907469973865484160198991840612034191`65", 1e-58);
+    ASSERT_CLOSE("16/Pi^2 NSum[(-1)^(j + k)/((2 j + 1) (2 k + 1)) (Exp[-Pi Sqrt[(2 j + 1)^2 + (2 k + 1)^2]/4]"
+                 " - Exp[-7 Pi Sqrt[(2 j + 1)^2 + (2 k + 1)^2]/4])/(1 - Exp[-2 Pi Sqrt[(2 j + 1)^2 + (2 k + 1)^2]]), "
+                 "{j, 0, Infinity}, {k, 0, Infinity}, WorkingPrecision -> 60]",
+                 "0.4580868145806731115172877286282238150718731301039713896853592`65", 1e-55);
+}
+
 static void test_verify_convergence(void) {
     /* divergent: default verification returns ComplexInfinity */
     char* s = eval_str("NSum[2^i,{i,0,Infinity}]");
@@ -453,6 +487,7 @@ int main(void) {
     TEST(test_complex_summand);
     TEST(test_large_finite);
     TEST(test_multidim);
+    TEST(test_fast_decay);
     TEST(test_verify_convergence);
     TEST(test_peaked_summand);
     TEST(test_composite_precision);

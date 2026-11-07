@@ -63,6 +63,7 @@
 #define NS_DIVERGE_FACTOR  1e6    /* lenient accept gate (Shanks may sum series) */
 #define NS_LADDER_MAX       16    /* geometric far-tail rungs: 4,8,…,4·2^15≈131k */
 #define NS_EM_MAX_HEAD    4096    /* cap on the adaptive Euler–Maclaurin base    */
+#define NS_MAX_OUTER         4    /* outer indices a compiled inner summand takes */
 
 /* ------------------------------------------------------------------ *
  *  Diagnostics                                                        *
@@ -142,8 +143,20 @@ typedef struct {
     bool        valid;
 } NsBind;
 
+/* The indices of the NSum calls now running, innermost last.  An inner NSum of
+ * a multidimensional sum sees an outer index only as a symbol bound (here) to
+ * the outer term's value; the inner summand is compiled with the active outer
+ * indices it mentions as extra parameters (ns_ctx_compile), so it is not
+ * left to the interpreter for want of a value known at compile time.  A
+ * TimeConstrained unwind resets the depth (tc_register_unwind_counter). */
+#define NS_MAX_ACTIVE 16
+static const char* g_ns_active[NS_MAX_ACTIVE];
+static int g_ns_nactive = 0;
+
 static void ns_bind_snapshot(NsBind* b, const char* name) {
     b->name = name;
+    if (g_ns_nactive < 0) g_ns_nactive = 0;
+    if (g_ns_nactive < NS_MAX_ACTIVE) g_ns_active[g_ns_nactive++] = name;
     /* Unwind-safe: a TimeConstrained timeout drains the frame. */
     b->token = mth_bind_push_name(name, MTH_BIND_ATTRS);
     b->valid = true;
@@ -171,6 +184,12 @@ static void ns_bind_set(NsBind* b, Expr* value) {
 
 static void ns_bind_restore(NsBind* b) {
     if (!b->valid) return;
+    for (int i = g_ns_nactive - 1; i >= 0; i--) {          /* LIFO in practice */
+        if (g_ns_active[i] != b->name) continue;
+        for (int j = i + 1; j < g_ns_nactive; j++) g_ns_active[j - 1] = g_ns_active[j];
+        g_ns_nactive--;
+        break;
+    }
     mth_bind_pop(b->token);   /* frees the temporary value */
     b->valid = false;
     eval_clock_bump();
@@ -201,7 +220,19 @@ typedef struct {
     /* Complex-input variant, for the Euler–Maclaurin derivative step, which
      * evaluates the summand on a Cauchy contour (Complex[MPFR,MPFR] points). */
     AutoCompiled* ac_prec_z;
+    /* Active outer NSum indices the compiled programs take as parameters 2..,
+     * after the index itself (see g_ns_active).  A program's own arity
+     * (autocompiled_num_vars) says how many it takes: one compiled without
+     * them, by a helper that copies this context, takes the index alone. */
+    const char* outer[NS_MAX_OUTER];
+    int         nouter;
 } NsCtx;
+
+/* The current value of an outer index (its temporary OwnValue), borrowed. */
+static Expr* ns_outer_value(const char* name) {
+    SymbolDef* def = symtab_get_def(name);
+    return (def && def->own_values) ? def->own_values->replacement : NULL;
+}
 
 /* The actual index value x_k = imin + k·di as a fresh evaluated number. */
 static Expr* ns_index_value(NsCtx* c, long k) {
@@ -218,6 +249,21 @@ static Expr* ns_index_value(NsCtx* c, long k) {
     Expr* sumexpr = expr_new_function(expr_new_symbol(SYM_Plus), v, 2);
     free(v);
     return eval_and_free(sumexpr);
+}
+
+/* Argument vector for a compiled MPFR program: the index value, then the
+ * current values of the outer indices it was compiled over.  False when an
+ * outer index has no value (the caller then interprets). */
+static bool ns_ac_args_expr(const NsCtx* c, const AutoCompiled* ac, Expr* value,
+                            const Expr** xs) {
+    xs[0] = value;
+    size_t nv = autocompiled_num_vars(ac);
+    for (size_t i = 1; i < nv; i++) {
+        Expr* ov = (int)i <= c->nouter ? ns_outer_value(c->outer[i - 1]) : NULL;
+        if (!ov) return false;
+        xs[i] = ov;
+    }
+    return true;
 }
 
 /* Evaluate `e` with the index bound to `value` (consumed). Returns the
@@ -248,8 +294,11 @@ static Expr* ns_eval_at(NsCtx* c, Expr* value) {
      * compiled body returns the summand at the working precision, or NULL to
      * interpret this term. */
     if (c->ac_prec && c->spec.mode == NUMERIC_MODE_MPFR) {
-        Expr* r = autocompiled_eval_mpfr(c->ac_prec, (const Expr* const*)&value);
-        if (r) { expr_free(value); return r; }
+        const Expr* xs[1 + NS_MAX_OUTER];
+        if (ns_ac_args_expr(c, c->ac_prec, value, xs)) {
+            Expr* r = autocompiled_eval_mpfr(c->ac_prec, xs);
+            if (r) { expr_free(value); return r; }
+        }
     }
 #endif
     return ns_eval_expr_at(c, c->body, value);
@@ -263,7 +312,14 @@ static Expr* ns_eval_at(NsCtx* c, Expr* value) {
 static bool ns_compiled_at(const NsCtx* c, double x, double _Complex* out) {
     if (!c->ac) return false;
     double _Complex v;
-    if (!autocompiled_eval_complex(c->ac, &x, &v)) return false;
+    double xs[1 + NS_MAX_OUTER];
+    xs[0] = x;
+    size_t nv = autocompiled_num_vars(c->ac);
+    for (size_t i = 1; i < nv; i++) {
+        Expr* ov = (int)i <= c->nouter ? ns_outer_value(c->outer[i - 1]) : NULL;
+        if (!ov || !ns_to_double_real(ov, &xs[i])) return false;
+    }
+    if (!autocompiled_eval_complex(c->ac, xs, &v)) return false;
     if (!isfinite(creal(v)) || !isfinite(cimag(v))) return false;
     *out = v;
     return true;
@@ -538,6 +594,7 @@ static int ns_seq_len(const NsOpts* o) {
 /* ------------------------------------------------------------------ *
  *  Method: WynnEpsilon (partial-sum extrapolation)                    *
  * ------------------------------------------------------------------ */
+
 
 /* Machine path. count<0 means infinite; otherwise terms beyond `count` are 0.
  * With err_out non-NULL the extrapolation's own error estimate is stored there
@@ -1331,7 +1388,8 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
      * magnitude around the contour circle and the circle-DFT is ill-conditioned.
      * Detect it from the last two head terms' signs (no extra evaluation) and
      * keep to symbolic derivatives only — the original behaviour for such sums. */
-    bool oscillatory = (m >= 2 && creal(tprev) * creal(tlast) < 0.0);
+    bool oscillatory = (m >= 2 && creal(tprev) != 0.0 && creal(tlast) != 0.0
+                        && signbit(creal(tprev)) != signbit(creal(tlast)));
 
     Expr* Nval = ns_index_value(c, m);
     double Nd, ddi;
@@ -1484,7 +1542,9 @@ static bool ns_eval_complex_mpfr(NsCtx* c, Expr* e, Expr* value, mpfr_t re, mpfr
      * contour point `value` is a Complex[MPFR,MPFR] (or real); the compiled body
      * returns f[value] at the working precision, or NULL to interpret. */
     if (c->ac_prec_z && e == c->body && c->spec.mode == NUMERIC_MODE_MPFR) {
-        Expr* r = autocompiled_eval_mpfr(c->ac_prec_z, (const Expr* const*)&value);
+        const Expr* xs[1 + NS_MAX_OUTER];
+        Expr* r = ns_ac_args_expr(c, c->ac_prec_z, value, xs)
+                  ? autocompiled_eval_mpfr(c->ac_prec_z, xs) : NULL;
         if (r) {
             bool inexact, ok = get_approx_mpfr(r, re, im, &inexact);
             if (ok && (!mpfr_number_p(re) || !mpfr_number_p(im))) ok = false;
@@ -1673,10 +1733,14 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
     double abserr = INFINITY; bool integ = false;
     double tail_err = 0.0;      /* certified-by-ladder tail error (log route) */
     bool logsub = false;
-    if (ok) {
+    if (ok && !oscillatory) {
         /* A summand still carrying mass at x = 2^(2^29) has a logarithmically
          * slow tail (1/(x Log[x]^2)): exp-sinh would refine without end on it.
-         * Integrate it in log-substituted variables instead. */
+         * Integrate it in log-substituted variables instead.  Not for a
+         * sign-alternating summand: its continuous extension carries a phase
+         * ((-1)^x = Cos[Pi x] + I Sin[Pi x]) whose value at 2^(2^29) needs Pi
+         * to 2^29 bits -- the probe alone ran for minutes -- and such a
+         * summand has no slow monotone tail for the probe to find. */
         mpfr_t xf, fr, fi;
         mpfr_inits2(p, xf, fr, fi, (mpfr_ptr)0);
         mpfr_set_ui_2exp(xf, 1, (mpfr_exp_t)1 << 29, MPFR_RNDN);
@@ -2013,8 +2077,12 @@ static bool ns_is_alternating(const NsProbe* pr) {
         if (fabs(im) > 1e-9 * (fabs(re) + 1e-300)) return false;
         if (re == 0.0) return false;
     }
+    /* Compare the signs, not the sign of the product: on a fast-decaying
+     * series the product of two adjacent terms underflows (1e-227 * 1e-240
+     * is -0.0, which tests >= 0), so an alternating series of exponentially
+     * small terms was taken for a non-alternating one. */
     for (int k = 1; k < pr->n; k++)
-        if (creal(pr->t[k]) * creal(pr->t[k - 1]) >= 0.0) return false;
+        if (signbit(creal(pr->t[k])) == signbit(creal(pr->t[k - 1]))) return false;
     return true;
 }
 
@@ -2214,6 +2282,54 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
     return out;
 }
 
+/* Does `e` mention the symbol `name` (interned)? */
+static bool ns_mentions(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ns_mentions(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ns_mentions(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* Compile the summand for the context's precision: machine (`ac`) or MPFR
+ * (`ac_prec`, and with `with_z` the complex-input `ac_prec_z`).  Parameters:
+ * the index `var`, then every active outer NSum index the body mentions — the
+ * inner summand of NSum[f, {j, ...}, {k, ...}] depends on j, which is fixed
+ * for the whole inner sum but is only a symbol at compile time, and without
+ * it as a parameter the whole body went to the interpreter (25 ms per inner
+ * sum at WorkingPrecision 60 against 5 ms compiled).  A failed compile leaves
+ * the program NULL and the interpreter serves every term, as before. */
+static void ns_ctx_compile(NsCtx* c, Expr* body, const char* var, const NsOpts* o,
+                           bool with_z) {
+    c->nouter = 0;
+    for (int i = g_ns_nactive - 1; i >= 0 && c->nouter < NS_MAX_OUTER; i--) {
+        const char* nm = g_ns_active[i];
+        if (nm == var) continue;
+        bool dup = false;
+        for (int j = 0; j < c->nouter; j++) if (c->outer[j] == nm) dup = true;
+        if (dup || !ns_mentions(body, nm) || !ns_outer_value(nm)) continue;
+        c->outer[c->nouter++] = nm;
+    }
+    Expr* syms[1 + NS_MAX_OUTER];
+    const Expr* vs[1 + NS_MAX_OUTER];
+    syms[0] = expr_new_symbol(var);
+    for (int i = 0; i < c->nouter; i++) syms[i + 1] = expr_new_symbol(c->outer[i]);
+    size_t nv = (size_t)(1 + c->nouter);
+    for (size_t i = 0; i < nv; i++) vs[i] = syms[i];
+    if (!o->prec_mpfr) {
+        c->ac = autocompile_new(body, vs, nv);
+    }
+#ifdef USE_MPFR
+    else if (o->bits > 0) {
+        c->ac_prec = autocompile_new_prec(body, vs, nv, (long)o->bits);
+        if (with_z) c->ac_prec_z = autocompile_new_prec_z(body, vs, nv, (long)o->bits);
+    }
+#endif
+    for (size_t i = 0; i < nv; i++) expr_free(syms[i]);
+}
+
 /* Run NSum over one iterator spec already split into (var, imin, imax, di),
  * with imin/imax/di evaluated to numbers and `infinite`/`count` describing the
  * range.  A large finite sum is computed as the difference of two infinite
@@ -2223,7 +2339,7 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     NsBind bind; ns_bind_snapshot(&bind, var);
     NsCtx ctx;
     ctx.body = body; ctx.imin = imin; ctx.di = di; ctx.bind = &bind;
-    ctx.ac = NULL; ctx.ac_prec = NULL; ctx.ac_prec_z = NULL;
+    ctx.ac = NULL; ctx.ac_prec = NULL; ctx.ac_prec_z = NULL; ctx.nouter = 0;
 #ifdef USE_MPFR
     if (o->prec_mpfr) { ctx.spec.mode = NUMERIC_MODE_MPFR; ctx.spec.bits = o->bits; }
     else ctx.spec = numeric_machine_spec();
@@ -2231,26 +2347,10 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     ctx.spec = numeric_machine_spec();
 #endif
 
-    /* Compile the summand once, as a function of the index.  Skipped for an
-     * MPFR request, where every term needs more than a double can hold.  The
-     * index is bound here through the symbol table, so an inner NSum's body
-     * (which sees the outer index only as a symbol) is left to the interpreter
-     * by the usual bail — no special case needed. */
-    {
-        Expr* vsym = expr_new_symbol(var);
-        const Expr* vs[1] = { vsym };
-        if (!o->prec_mpfr) {
-            ctx.ac = autocompile_new(body, vs, 1);
-        }
-#ifdef USE_MPFR
-        else if (o->bits > 0) {
-            ctx.ac_prec   = autocompile_new_prec(body, vs, 1, (long)o->bits);
-            /* Complex-input variant for the Euler–Maclaurin contour derivative. */
-            ctx.ac_prec_z = autocompile_new_prec_z(body, vs, 1, (long)o->bits);
-        }
-#endif
-        expr_free(vsym);
-    }
+    /* Compile the summand once, as a function of the index (and of the outer
+     * indices of an enclosing NSum, see ns_ctx_compile), with the
+     * complex-input variant the Euler–Maclaurin contour derivative needs. */
+    ns_ctx_compile(&ctx, body, var, o, true);
 
     Expr* out = NULL;
     if (infinite) {
@@ -2361,22 +2461,14 @@ static Expr* ns_add_expr(Expr* acc, Expr* t) {
 static void ns_ctx_setup(NsCtx* c, Expr* body, Expr* n0, Expr* di, NsBind* bind,
                          const NsOpts* o, const char* var, bool compile) {
     c->body = body; c->imin = n0; c->di = di; c->bind = bind;
-    c->ac = NULL; c->ac_prec = NULL; c->ac_prec_z = NULL;
+    c->ac = NULL; c->ac_prec = NULL; c->ac_prec_z = NULL; c->nouter = 0;
 #ifdef USE_MPFR
     if (o->prec_mpfr) { c->spec.mode = NUMERIC_MODE_MPFR; c->spec.bits = o->bits; }
     else c->spec = numeric_machine_spec();
 #else
     c->spec = numeric_machine_spec();
 #endif
-    if (compile) {
-        Expr* vsym = expr_new_symbol(var);
-        const Expr* vs[1] = { vsym };
-        if (!o->prec_mpfr) c->ac = autocompile_new(body, vs, 1);
-#ifdef USE_MPFR
-        else if (o->bits > 0) c->ac_prec = autocompile_new_prec(body, vs, 1, (long)o->bits);
-#endif
-        expr_free(vsym);
-    }
+    if (compile) ns_ctx_compile(c, body, var, o, false);
 }
 
 static void ns_ctx_teardown(NsCtx* c) {
@@ -2877,6 +2969,169 @@ static Expr* ns_dirichlet(Expr* body, const char* var, Expr* imin, Expr* di,
  *  Iterator-spec parsing                                              *
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ *  Rapidly decaying summands: direct summation, no acceleration       *
+ *                                                                     *
+ *  A summand whose terms fall at least geometrically — a Fourier      *
+ *  eigen-series Exp[-(2k+1)^2 Pi^2 t], a Sech[(2k+1) Pi a] series,     *
+ *  x^k/k! once past its peak — needs no series model at all: the sum   *
+ *  is the partial sum once the terms drop below the precision goal,    *
+ *  and the tail is bounded by the geometric series of the observed      *
+ *  decay rate.  Every model-based method is both slower here (CVZ       *
+ *  spends 2.54 bits per term where the terms themselves give 10-30;     *
+ *  the phase split of a (-1)^k summand runs TrigToExp/Expand and two    *
+ *  CVZ passes) and, for Euler–Maclaurin, needlessly fragile.            *
+ *                                                                     *
+ *  The route is a trial, not a classifier: the terms are summed at the  *
+ *  working precision while the decay rate is watched on a two-term       *
+ *  envelope (so an isolated zero term, Sin[(2j+1) Pi/2]-style, does not  *
+ *  read as infinite decay).  A summand may rise to a peak first (at most *
+ *  NS_FD_RISE_MAX terms) and then settle (2 peak + 16 terms) before its  *
+ *  decay must reach NS_FD_MIN_RATE bits per term (a ratio <= 2^-1/2,     *
+ *  so the tail is reached in at most 2 (B + 8) terms at B bits); once    *
+ *  reached, the rate must hold, so a fast head hiding a slow tail        *
+ *  (2^-k + c/k^2) is abandoned the moment the slow part surfaces.  On any abandonment —    *
+ *  slow decay, a non-numeric term, a run of zeros, the term cap — the    *
+ *  route returns NULL silently and the ordinary dispatch runs.           *
+ * ------------------------------------------------------------------ */
+
+#define NS_FD_RISE_MAX   64     /* terms a summand may rise before its peak   */
+#define NS_FD_MIN_RATE   0.5    /* bits of decay per term (ratio <= 0.71)     */
+#define NS_FD_WIN        4      /* terms over which the decay rate is taken    */
+
+/* log2 of a magnitude; -INFINITY for zero. */
+static double ns_fd_log2_d(double _Complex t) {
+    double a = cabs(t);
+    return a > 0.0 ? log2(a) : -INFINITY;
+}
+
+#ifdef USE_MPFR
+static double ns_fd_log2_mpfr1(const mpfr_t x) {
+    if (mpfr_zero_p(x)) return -INFINITY;
+    long e;
+    double d = mpfr_get_d_2exp(&e, x, MPFR_RNDN);
+    return (double)e + log2(fabs(d));
+}
+
+static double ns_fd_log2_mpfr(const mpfr_t re, const mpfr_t im) {
+    double a = ns_fd_log2_mpfr1(re), b = ns_fd_log2_mpfr1(im);
+    return a > b ? a : b;               /* within half a bit of log2|z| */
+}
+#endif
+
+/* The trial state shared by the machine and MPFR loops.  `lm` holds log2|t_k|. */
+typedef struct {
+    double* lm;
+    long    cap;
+    long    peak_k;
+    double  peak_lm;
+    bool    locked;        /* decay has reached NS_FD_MIN_RATE */
+    double  need;          /* bits the tail must sit below |S| */
+} NsFd;
+
+/* Feed term k's log-magnitude; with the current log2|S|.
+ * Returns 1 = converged (stop), 0 = continue, -1 = abandon. */
+static int ns_fd_step(NsFd* f, long k, double lmk, double lS) {
+    f->lm[k] = lmk;
+    if (k >= 1 && isinf(lmk) && isinf(f->lm[k - 1])) return -1;   /* zero run */
+    if (lmk > f->peak_lm) {
+        f->peak_lm = lmk; f->peak_k = k;
+        f->locked = false;
+        return (k >= NS_FD_RISE_MAX) ? -1 : 0;
+    }
+    if (k - f->peak_k < NS_FD_WIN + 1) return 0;
+    double e_now  = fmax(f->lm[k], f->lm[k - 1]);
+    double e_then = fmax(f->lm[k - NS_FD_WIN], f->lm[k - NS_FD_WIN - 1]);
+    double rate = (e_then - e_now) / (double)NS_FD_WIN;
+    if (!(rate >= NS_FD_MIN_RATE)) {
+        if (f->locked) return -1;                    /* decay slowed: abandon */
+        long settle = 2 * f->peak_k + 16;
+        return (k - f->peak_k > settle) ? -1 : 0;
+    }
+    f->locked = true;
+    if (isinf(lS)) return 0;                         /* S == 0 so far */
+    /* tail <= 2·2^e_now · r/(1-r), r = 2^-rate (two-term envelope). */
+    double r = exp2(-rate);
+    double tail = e_now + 1.0 + log2(r / (1.0 - r));
+    return (tail < lS - f->need) ? 1 : 0;
+}
+
+/* Try the direct route on Σ_{k>=0} body(imin + k di).  NULL: not applicable. */
+static Expr* ns_fast_decay(Expr* body, const char* var, Expr* imin, Expr* di,
+                           const NsOpts* o) {
+    double dlo, ddi;
+    if (!ns_to_double_real(imin, &dlo) || !ns_to_double_real(di, &ddi)) return NULL;
+    long B = 53;
+#ifdef USE_MPFR
+    if (o->prec_mpfr) B = numeric_width_precision_bits(o->target_bits > 0 ? o->target_bits
+                                                                          : o->bits);
+#endif
+    NsFd f;
+    f.need = (double)B + 8.0;
+    f.cap = NS_FD_RISE_MAX + (long)ceil(2.0 * (double)(B + 8) / NS_FD_MIN_RATE) + 128;
+    f.lm = malloc(sizeof(double) * (size_t)f.cap);
+    if (!f.lm) return NULL;
+    f.peak_k = -1; f.peak_lm = -INFINITY; f.locked = false;
+
+    NsBind bind; ns_bind_snapshot(&bind, var);
+    Expr* out = NULL;
+    g_ns_quiet++;                        /* a trial: its failures are not the user's */
+#ifdef USE_MPFR
+    if (o->prec_mpfr) {
+        /* The terms are evaluated at the target plus a 48-bit guard, not at
+         * the doubled working precision the extrapolators need: a plain sum
+         * loses only what its cancellation costs, log2(max|t_k| / |S|), and
+         * that is measured — when it exceeds half the guard the sum is redone
+         * at the full working precision.  (The exponentials of an
+         * eigen-series cost twice as much at 432 bits as at 248.) */
+        long tries[2] = { (long)B + 48, o->bits };
+        int ntry = (tries[0] < tries[1]) ? 2 : 1;
+        if (ntry == 1) tries[0] = o->bits;
+        for (int a = 0; a < ntry && !out; a++) {
+            NsOpts oa = *o;
+            oa.bits = tries[a];
+            NsCtx c;
+            ns_ctx_setup(&c, body, imin, di, &bind, &oa, var, true);
+            f.peak_k = -1; f.peak_lm = -INFINITY; f.locked = false;
+            mpfr_prec_t p = (mpfr_prec_t)oa.bits;
+            mpfr_t sr, si, tr, ti;
+            mpfr_inits2(p, sr, si, tr, ti, (mpfr_ptr)0);
+            mpfr_set_ui(sr, 0, MPFR_RNDN); mpfr_set_ui(si, 0, MPFR_RNDN);
+            int st = 0;
+            for (long k = 0; k < f.cap && st == 0; k++) {
+                if (!ns_term_mpfr(&c, k, tr, ti)) { st = -1; break; }
+                mpfr_add(sr, sr, tr, MPFR_RNDN); mpfr_add(si, si, ti, MPFR_RNDN);
+                st = ns_fd_step(&f, k, ns_fd_log2_mpfr(tr, ti), ns_fd_log2_mpfr(sr, si));
+            }
+            bool cancelled = st == 1 && a + 1 < ntry
+                && f.peak_lm - ns_fd_log2_mpfr(sr, si) > 24.0;
+            if (st == 1 && !cancelled) out = ns_from_complex_mpfr(sr, si);
+            mpfr_clears(sr, si, tr, ti, (mpfr_ptr)0);
+            ns_ctx_teardown(&c);
+            if (st != 1) break;                      /* not this route at all */
+        }
+    } else
+#endif
+    {
+        NsCtx c;
+        ns_ctx_setup(&c, body, imin, di, &bind, o, var, true);
+        double _Complex s = 0.0;
+        int st = 0;
+        for (long k = 0; k < f.cap && st == 0; k++) {
+            double _Complex t;
+            if (!ns_term_machine(&c, k, &t)) { st = -1; break; }
+            s += t;
+            st = ns_fd_step(&f, k, ns_fd_log2_d(t), ns_fd_log2_d(s));
+        }
+        if (st == 1) out = ns_from_complex_d(s);
+        ns_ctx_teardown(&c);
+    }
+    g_ns_quiet--;
+    ns_bind_restore(&bind);
+    free(f.lm);
+    return out;
+}
+
 /* A spec is a List {var, imax} | {var, imin, imax} | {var, imin, imax, di}. */
 static bool ns_is_spec(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
@@ -2988,6 +3243,10 @@ Expr* builtin_nsum(Expr* res) {
      * no smooth tail model (see ns_dirichlet). */
     if (!bad && infinite && o.method == SYM_Automatic && nspecs == 1)
         out = ns_dirichlet(eff_body, var, imin, di, &o);
+    /* A summand decaying at least geometrically is summed directly, no
+     * acceleration and no phase split (see ns_fast_decay). */
+    if (!out && !bad && infinite && o.method == SYM_Automatic)
+        out = ns_fast_decay(eff_body, var, imin, di, &o);
     /* Linear-phase summands (Sin[n]/n, (-1)^n Log[n]/n) are split by frequency
      * before the ordinary dispatch, which cannot sum them (see ns_phase_split). */
     if (!out && !bad && infinite && o.method == SYM_Automatic && nspecs == 1)
@@ -3022,4 +3281,5 @@ void nsum_init(void) {
     symtab_get_def("NSum")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     /* a timeout inside the muted second estimate must not leave NSum silent */
     tc_register_unwind_counter(&g_ns_quiet);
+    tc_register_unwind_counter(&g_ns_nactive);
 }

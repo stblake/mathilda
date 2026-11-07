@@ -573,7 +573,9 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   that `x` may reach `2^(2^30)`, and the same power-law split applied in `t` on a
   ladder until two successive splits agree; their difference is the error
   estimate.  The `WorkingPrecision` path takes this route when the summand still
-  carries mass at `x = 2^(2^29)` (it used to refine exp-sinh without end).  When
+  carries mass at `x = 2^(2^29)` (it used to refine exp-sinh without end); that
+  far probe is skipped for a sign-alternating summand, whose continuous extension
+  `(-1)^x` would need `Pi` to `2^29` bits there.  When
   no depth settles, the remaining mass enters the error estimate and
   `NSum::accgl` is issued (e.g. `1/Log[n] - 1/Log[n+1]`, whose continuous
   extension cancels to nothing at the huge `x` the tail needs).  The
@@ -627,10 +629,39 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   `Σ σ_a(n)/n^s = ζ(s)ζ(s−a)`, ...) is taken from `Sum` at the working precision,
   less the head terms below the lower bound; the identity is used only where the
   series converges absolutely (`Re s > σ_a`).
+- **Direct summation of rapidly decaying summands** (part of `Automatic`, any
+  infinite iterator, tried before the phase split and the method probe) -- a
+  summand whose terms fall at least geometrically (an eigen-series
+  `Exp[-(2k+1)^2 Pi^2 t]`, `Sech[(2k+1) Pi a]`, `x^k/k!` past its peak) needs no
+  series model: the terms are summed at the working precision until the
+  geometric bound on the tail, from the observed decay rate, is below
+  `2^-(B+8) |S|` at the target's `B` bits.  It is a trial, not a classifier:
+  the decay rate is read on a two-term envelope over a 4-term window (an
+  isolated zero term, `Sin[j Pi/2]`, does not read as infinite decay); a
+  summand may rise to a peak (at most 64 terms) and settle (`2 peak + 16`
+  terms) before the rate must reach 0.5 bits per term (ratio `<= 2^-1/2`), and
+  once reached it must hold, so a fast head over a slow tail
+  (`2^-k + 10^-30/k^2`) is abandoned when the slow part surfaces.  Any
+  abandonment -- slow decay, a non-numeric term, two consecutive zeros, the term
+  cap -- falls through silently to the methods below.  At `WorkingPrecision`
+  the terms are evaluated at the target plus 48 guard bits (the extrapolators
+  need the doubled working precision; a plain sum loses only its measured
+  cancellation `log2(max|t_k|/|S|)`, and is redone at the full working
+  precision when that exceeds 24 bits).  This took the SIAM eigen-series
+  `NSum[..., WorkingPrecision -> 60]` from 0.12 s (C8, through the phase split
+  and two CVZ passes) and a timeout (C10) to 0.1-1 ms.
+- **Inner sums of a multidimensional `NSum`** are compiled with the active outer
+  indices they mention as extra parameters: the inner summand of
+  `NSum[f, {j, ...}, {k, ...}]` depends on `j`, which is fixed for a whole inner
+  sum but only a symbol when the inner summand is compiled, and the arbitrary
+  precision compiler does not fold globals -- the inner sums were interpreted.
 - **`Automatic`** (default) -- probes the first terms, and (when the head is not
   already monotone) a geometric far-tail ladder that locates a late peak or
   sustained growth far beyond the head window.  Chooses `AlternatingSigns` for a
-  strictly alternating decreasing summand, `EulerMaclaurin` for a monotone /
+  strictly alternating decreasing summand (the sign test compares signs, not the
+  sign of the product of adjacent terms, which underflows to `-0.` on a series of
+  exponentially small terms and made `(-1)^k Sech[5 (2k+1) Pi]` look
+  non-alternating), `EulerMaclaurin` for a monotone /
   late-settling tail, else `WynnEpsilon` -- with Levin's u-transform as a purely
   additive last resort when Wynn does not converge (an existing Wynn result is
   never replaced).  The far-tail ladder also drives convergence verification, so
