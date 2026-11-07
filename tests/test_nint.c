@@ -891,6 +891,17 @@ static void test_tiny_integrand_scale(void) {
     ASSERT_CLOSE("NIntegrate[Sin[x], {x, 0, 2 Pi}]", "0", 1e-12);
 }
 
+/* Machine-precision NIntegrate delivers the digits the machine can, not just
+ * PrecisionGoal (true values: mpmath at 40 digits, or closed forms).  QK15
+ * carried its nodes and weights to 15 significant digits; the Kronrod weights
+ * summed to 2 - 6e-15, a 3e-15 relative error in EVERY integral: Sin[x^3] on
+ * [0, 3] had 14 digits (3.3e-15), now 1 ulp. */
+static void test_machine_last_digits(void) {
+    ASSERT_REL("NIntegrate[Sin[x^3], {x, 0, 3}]",
+               "0.4564240461870738388407399501352734962993`40", "1*^-15");
+    ASSERT_REL("NIntegrate[Exp[x], {x, 0, 1}]", "E - 1", "5*^-16");
+}
+
 /* Oscillatory half lines at WorkingPrecision with several frequencies or a
  * Bessel factor: each linear-phase group is rotated off the real axis.
  * Closed forms (Weber / Sonine): int_0^oo J_0(x) cos(b x) = (1 - b^2)^(-1/2)
@@ -1073,6 +1084,7 @@ int main(void) {
     TEST(test_vertex_singularity);
     TEST(test_prenumericalized_constants_wp);
     TEST(test_parametric_oscillatory_endpoint);
+    TEST(test_machine_last_digits);
 
     printf("All nint_tests passed.\n");
     return 0;

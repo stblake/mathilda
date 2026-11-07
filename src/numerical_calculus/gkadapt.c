@@ -19,20 +19,24 @@
 /* ---- QK15: 7-point Gauss embedded in a 15-point Kronrod rule ---- */
 /* Abscissae of the 15-point Kronrod rule (nonnegative half; xgk[7] = centre). */
 static const double XGK[8] = {
-    0.991455371120813, 0.949107912342759, 0.864864423359769,
-    0.741531185599394, 0.586087235467691, 0.405845151377397,
-    0.207784955007898, 0.000000000000000
+    0.991455371120812639206854697526329, 0.949107912342758524526189684047851,
+    0.864864423359769072789712788640926, 0.741531185599394439863864773280788,
+    0.586087235467691130294144845693013, 0.405845151377397166906606412076961,
+    0.207784955007898467600689403773245, 0.000000000000000000000000000000000
 };
-/* Weights of the 15-point Kronrod rule. */
+/* Weights of the 15-point Kronrod rule.  Full QUADPACK precision: at 15
+ * significant digits they summed to 2 - 6e-15, a 3e-15 relative error in
+ * every integral (the last digit of a smooth machine integrand). */
 static const double WGK[8] = {
-    0.022935322010529, 0.063092092629979, 0.104790010322250,
-    0.140653259715525, 0.169004726639267, 0.190350578064785,
-    0.204432940075298, 0.209482141084728
+    0.022935322010529224963732008058970, 0.063092092629978553290700663189204,
+    0.104790010322250183839876322541518, 0.140653259715525918745189590510238,
+    0.169004726639267902826583426598550, 0.190350578064785409913256402421014,
+    0.204432940075298892414161999234649, 0.209482141084727828012999174891714
 };
 /* Weights of the 7-point Gauss rule (wg[3] is the centre weight). */
 static const double WG[4] = {
-    0.129484966168870, 0.279705391489277, 0.381830050505119,
-    0.417959183673469
+    0.129484966168869693270611432679082, 0.279705391489276667901467771423780,
+    0.381830050505118944950369775488975, 0.417959183673469387755102040816327
 };
 
 /* One QK15 panel on [a,b].  Returns false if any sample is non-numeric. */
@@ -215,6 +219,22 @@ GkResult gk_integrate_machine(GkSampleMachine f, void* ctx,
         }
     }
 
+    /* The running total was updated by one add/subtract per bisection, so
+     * it carries ~n_subdiv roundings of |total| -- on a cancelling integrand
+     * (|f| integrating to ~40x the result) the last 1-2 digits.  Re-sum the
+     * final panels with Neumaier's compensated sum: O(panels), and the value
+     * is then as accurate as the panel results themselves. */
+    if (R.n_subdiv > 0) {
+        double sr = 0.0, si = 0.0, cr = 0.0, ci = 0.0;
+        for (int i = 0; i < h.n; i++) {
+            double xr = creal(h.v[i].result), xi = cimag(h.v[i].result);
+            double tr = sr + xr, ti = si + xi;
+            cr += (fabs(sr) >= fabs(xr)) ? (sr - tr) + xr : (xr - tr) + sr;
+            ci += (fabs(si) >= fabs(xi)) ? (si - ti) + xi : (xi - ti) + si;
+            sr = tr; si = ti;
+        }
+        total = (sr + cr) + (si + ci) * I;
+    }
     R.value = total;
     R.abs_err = total_err;
 

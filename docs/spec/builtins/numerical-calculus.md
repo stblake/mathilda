@@ -883,7 +883,7 @@ A held `D[...]` has no value at a number, so its evaluated form is used.
 
 | Region / integrand | Engine |
 |--------------------|--------|
-| finite real, smooth | globally-adaptive Gauss-Kronrod (G7-K15) with QAGS Wynn extrapolation |
+| finite real, smooth | globally-adaptive Gauss-Kronrod (G7-K15, QUADPACK nodes and weights at full double precision — at 15 significant digits the Kronrod weights summed to `2 - 6e-15`, a `3e-15` relative error in every integral) with QAGS Wynn extrapolation; the final value is re-summed over the panels with Neumaier's compensated sum (the running total had taken one rounding per bisection) |
 | finite real, endpoint singularity | tanh-sinh double-exponential |
 | arbitrary `WorkingPrecision` (> machine), finite real | at the target precision + guard bits (MPFR): a power-law endpoint is mapped away, a boundary layer is split into graded Clenshaw-Curtis pieces, an integrand analytic on the interval is taken by a bounded Clenshaw-Curtis probe (N <= 128, kept only when converged to every target digit), Levin collocation goes first only over at least 4 periods, a narrow peak, near-pole or endpoint scale feature takes the recentred double-exponential rule (below), else tanh-sinh |
 | machine precision, integrand leaves the double range in the bulk of the interval (e.g. `x^x^x` on `[1, 6]` reaches 2.7e36305; a Laurent polynomial on the unit circle whose powers give `Overflow[]`) | the machine pass is discarded and the integral re-run on the MPFR path at machine-equivalent precision (53 bits + guard); the result is a 53-bit Real, the representation machine arithmetic itself uses beyond 1.8e308.  A sample within 1e-10 of the span from an endpoint (an endpoint singularity) does not trigger this. |
