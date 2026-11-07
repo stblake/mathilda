@@ -11,7 +11,9 @@
  *   - the argument form declines, rather than ignoring what it was passed.
  */
 #include <stdio.h>
+#include <limits.h>
 #include "test_utils.h"
+#include "meminfo.h"
 
 extern void symtab_init(void);
 extern void core_init(void);
@@ -102,6 +104,39 @@ static void test_session_constants(void) {
     assert_eval_eq("Quiet[$KernelCount = 4]; $KernelCount", "0", 0);
 }
 
+static void test_system_identity(void) {
+    assert_eval_eq("{StringQ[$System], StringQ[$SystemID]}", "{True, True}", 0);
+    /* $SystemID: alphanumerics and dashes only. */
+    assert_eval_eq("StringMatchQ[$SystemID, RegularExpression[\"[A-Za-z0-9-]+\"]]", "True", 0);
+    assert_eval_eq("{Attributes[$System], Attributes[$SystemID]}", "{{Protected}, {Protected}}", 0);
+    assert_eval_eq("Quiet[$System = \"x\"]; $System === \"x\"", "False", 0);
+    assert_eval_eq("Quiet[$SystemID = \"x\"]; $SystemID === \"x\"", "False", 0);
+    /* $SystemWordLength: pointer width in bits. */
+    {
+        char want[8];
+        snprintf(want, sizeof want, "%d", (int)(CHAR_BIT * sizeof(void*)));
+        assert_eval_eq("$SystemWordLength", want, 0);
+    }
+    assert_eval_eq("MemberQ[{32, 64}, $SystemWordLength]", "True", 0);
+    /* $ProcessorCount: a positive integer, the count meminfo reports. */
+    assert_eval_eq("IntegerQ[$ProcessorCount] && $ProcessorCount >= 1", "True", 0);
+    {
+        char want[16];
+        snprintf(want, sizeof want, "%d", meminfo_processor_count());
+        assert_eval_eq("$ProcessorCount", want, 0);
+    }
+    assert_eval_eq("{Attributes[$SystemWordLength], Attributes[$ProcessorCount]}",
+                   "{{Protected}, {Protected}}", 0);
+    assert_eval_eq("Quiet[$ProcessorCount = 0]; $ProcessorCount >= 1", "True", 0);
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
+    assert_eval_eq("{$System, $SystemID}", "{\"Mac OS X ARM (64-bit)\", \"MacOSX-ARM64\"}", 0);
+#elif defined(__APPLE__) && defined(__x86_64__)
+    assert_eval_eq("{$System, $SystemID}", "{\"Mac OS X x86 (64-bit)\", \"MacOSX-x86-64\"}", 0);
+#elif defined(__linux__) && defined(__x86_64__)
+    assert_eval_eq("{$System, $SystemID}", "{\"Linux x86 (64-bit)\", \"Linux-x86-64\"}", 0);
+#endif
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -113,6 +148,7 @@ int main(void) {
     TEST(test_both_are_protected);
     TEST(test_system_memory);
     TEST(test_session_constants);
+    TEST(test_system_identity);
 
     printf("All meminfo tests passed.\n");
     return 0;

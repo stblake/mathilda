@@ -1,4 +1,4 @@
-/* meminfo.c -- MemoryInUse, MaxMemoryUsed and $SystemMemory.
+/* meminfo.c -- MemoryInUse, MaxMemoryUsed, $SystemMemory and $ProcessorCount.
  *
  * WHAT THESE MEASURE, AND HOW IT DIFFERS FROM MATHEMATICA. Wolfram's MemoryInUse[] reports
  * the bytes used to store the data of the current session -- expressions, definitions,
@@ -181,6 +181,31 @@ bool meminfo_physical(uint64_t* bytes) {
 #endif
 }
 
+/* meminfo_processor_count -- logical processors online.
+ *
+ * Logical (hardware threads), not physical cores: it is the count the
+ * in-tree parallel kernels (src/linalg/mp_parallel.c, fi_par.c, gmet_core.c)
+ * already size their thread pools by via sysconf(_SC_NPROCESSORS_ONLN), so
+ * $ProcessorCount and the work those kernels actually schedule agree.  It is
+ * read once at startup; the result is clamped to >= 1. */
+int meminfo_processor_count(void) {
+    long n = 0;
+#if defined(__APPLE__)
+    int v = 0;
+    size_t len = sizeof v;
+    if (sysctlbyname("hw.logicalcpu", &v, &len, NULL, 0) == 0) n = v;
+#elif defined(__linux__)
+    n = sysconf(_SC_NPROCESSORS_ONLN);   /* exposed by _DEFAULT_SOURCE above */
+#elif defined(_WIN32)
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    n = (long)si.dwNumberOfProcessors;
+#endif
+    if (n < 1) n = 1;
+    if (n > 1048576) n = 1048576;
+    return (int)n;
+}
+
 /* MemoryInUse[] -- current resident bytes.
  *
  * Takes no arguments. Mathematica's one-argument form reports a subkernel's usage, and there
@@ -231,6 +256,20 @@ void meminfo_init(void) {
     symtab_get_def("$SystemMemory")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("$SystemMemory",
         "$SystemMemory\n\tgives the total number of bytes of physical memory on the computer.");
+
+    /* $ProcessorCount -- logical processors online, fixed for the session. */
+    {
+        Expr* sym = expr_new_symbol("$ProcessorCount");
+        Expr* val = expr_new_integer((int64_t)meminfo_processor_count());
+        symtab_add_own_value("$ProcessorCount", sym, val);
+        expr_free(sym);
+        expr_free(val);
+    }
+    symtab_get_def("$ProcessorCount")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("$ProcessorCount",
+        "$ProcessorCount\n\tgives the number of processor cores available on the computer system on "
+        "which Mathilda is being run (logical processors online, as the parallel kernels count them). "
+        "It is used by Parallelize and other parallel functions.");
 
     symtab_add_builtin("MaxMemoryUsed", builtin_maxmemoryused);
     symtab_get_def("MaxMemoryUsed")->attributes |= ATTR_PROTECTED;

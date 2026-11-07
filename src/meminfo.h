@@ -18,4 +18,8 @@ bool meminfo_peak(uint64_t* bytes);
  * offers no way to ask. */
 bool meminfo_physical(uint64_t* bytes);
 
+/* Number of logical processors online (backs $ProcessorCount).  Always >= 1:
+ * a platform that cannot answer reports 1, the safe serial value. */
+int meminfo_processor_count(void);
+
 #endif /* MATHILDA_MEMINFO_H */
