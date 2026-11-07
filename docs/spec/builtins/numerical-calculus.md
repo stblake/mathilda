@@ -1398,6 +1398,24 @@ on `xmin ≤ x ≤ xmax`, returning a list of rules
 
 - `NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}]` — a coupled system.
 - `NDSolve[eqns, u[x], {x, xmin, xmax}]` — gives `u[x] -> InterpolatingFunction[...][x]`.
+- **Boundary-value problems.** When the conditions are not all plain initial
+  values `f^(k)[a] == v` at one point — they sit at two or more points
+  (`u[0] == 0, u'[1] == 0`), couple state entries (`u[0] + u'[0] == 1`,
+  `u[0] == u[1]`), or give one entry twice — the problem is solved by
+  **shooting** (`src/internal/NDSolveBVP.m`, loaded on first use): the state at
+  `xmin` not fixed by a plain condition there is unknown; each trial value is
+  integrated as an IVP by NDSolve itself (so `WorkingPrecision`, `PrecisionGoal`
+  and `Method` apply to every shot), and Newton's method with a forward-difference
+  Jacobian and step halving drives the remaining conditions to zero. A linear
+  problem converges in one step. Newton aims at the working precision; if the
+  relative residual misses the square root of the `PrecisionGoal` tolerance the
+  solution is still returned with `NDSolve::berr`. A condition count that does not
+  match the system's order is `NDSolve::bvdim`; a failed shot or singular Jacobian
+  is `NDSolve::bvfail` (both unevaluated). A nonlinear problem with several
+  solutions gives the one reached from the zero initial guess (Bratu: the lower
+  branch). Until v0.6378 such a system was silently read as an IVP at the last
+  condition's point with every condition taken as an initial value there
+  (`-u'' == E^(2x), u[0] == 0, u'[1] == 0` gave `u(1) = 0`, not `2.0973`).
 - `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]` — a partial differential
   equation over a rectangular region (method of lines); see below.
 - `NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}, {y, ymin, ymax}]` — a PDE
@@ -1705,8 +1723,8 @@ split into interleaved Re/Im real unknowns and the solution recombines to
 initial conditions posed at an **interior** point `x0 != xmin` (the driver
 integrates both forward to `xmax` and backward to `xmin`) — plus 1-D and 2-D
 evolution PDEs by the method of lines (above), at machine (PDEs) or arbitrary
-(ODEs) precision. Not yet handled (deferred, with the `NdProblem`/`NdStepper`
-seams in place): DAEs, boundary-value problems, event location
+(ODEs) precision, and ODE boundary-value problems by shooting (above). Not yet
+handled (deferred, with the `NdProblem`/`NdStepper` seams in place): DAEs, event location
 (`"EventLocator"`), and the controller methods (`"Projection"`, `"Splitting"`,
 `"Composition"`, `"Extrapolation"`, symplectic integrators).
 `"StiffnessSwitching"` currently maps to `"BDF"`. BDF is adaptive variable-step

@@ -12,6 +12,9 @@
  *   - InterpolatingFunction derivative: y'[t] == -y[t].
  *   - MPFR: WorkingPrecision -> 30 yields a high-precision node value.
  *   - Result shape and left-value handling (u vs u[x]).
+ *   - Boundary-value problems (shooting, src/internal/NDSolveBVP.m):
+ *     conditions at two points, Robin and periodic conditions, a nonlinear
+ *     (Bratu) problem, WorkingPrecision, a count mismatch left unevaluated.
  *
  * Numeric tests are soft (print FAIL, keep going); run: ./ndsolve_tests */
 #include "expr.h"
@@ -168,6 +171,45 @@ static void test_result_shape(void) {
                "List[List[Rule[y[x], InterpolatingFunction");
 }
 
+static void test_bvp(void) {
+    /* -u'' = e^(2x), u(0) = 0, u'(1) = 0: u(1) = (1 + e^2)/4.  This was read
+     * as an IVP at x = 1 (u(1) = 0) -- a silent wrong answer. */
+    check_close("u[1] /. First[NDSolve[{-u''[x] == Exp[2 x], u[0] == 0, u'[1] == 0}, u, {x, 0, 1}]]",
+                (1.0 + exp(2.0)) / 4.0, 1e-7);
+    check_close("(u[x] /. First[NDSolve[{-u''[x] == Exp[2 x], u[0] == 0, u'[1] == 0}, u[x], {x, 0, 1}]]) /. x -> 1",
+                (1.0 + exp(2.0)) / 4.0, 1e-7);
+    /* Dirichlet: u = (1 - e^(2x))/4 + (e^2 - 1) x/4, u'(0) = (e^2 - 1)/2 - 1/2 */
+    check_close("u'[0] /. First[NDSolve[{-u''[x] == Exp[2 x], u[0] == 0, u[1] == 0}, u, {x, 0, 1}]]",
+                (exp(2.0) - 1.0) / 4.0 - 0.5, 1e-7);
+    /* u'' + u = 0, u(0) = 0, u'(1) = 1: u = sin(x)/cos(1) */
+    check_close("u[1] /. First[NDSolve[{u''[x] + u[x] == 0, u[0] == 0, u'[1] == 1}, u, {x, 0, 1}]]",
+                tan(1.0), 1e-7);
+    /* Robin at 0: u'' = u, u(0) + u'(0) = 1, u(1) = 0 */
+    check_close("u[0] /. First[NDSolve[{u''[x] == u[x], u[0] + u'[0] == 1, u[1] == 0}, u, {x, 0, 1}]]",
+                sinh(1.0) / (sinh(1.0) - cosh(1.0)), 1e-7);
+    /* system with conditions at both ends: y' = z, z' = -y, y(0) = 0, y(1) = 1 */
+    check_close("z[0] /. First[NDSolve[{y'[x] == z[x], z'[x] == -y[x], y[0] == 0, y[1] == 1}, {y, z}, {x, 0, 1}]]",
+                1.0 / sin(1.0), 1e-7);
+    /* nonlinear (Bratu, lower branch from the zero guess) */
+    check_close("u'[0] /. First[NDSolve[{u''[x] + Exp[u[x]] == 0, u[0] == 0, u[1] == 0}, u, {x, 0, 1}]]",
+                0.549352728775270819, 1e-7);
+    /* start point given as the inexact 0. */
+    check_close("u'[0] /. First[NDSolve[{u''[x] == u[x], u[0.] == 1, u[1] == 0}, u, {x, 0, 1}]]",
+                -cosh(1.0) / sinh(1.0), 1e-7);
+#ifdef USE_MPFR
+    /* the shots run at the working precision (a machine difference step
+     * once dropped them to 17 digits) */
+    check_ge("-Log[10, Abs[(u[1] /. First[NDSolve[{-u''[x] == Exp[2 x], u[0] == 0, u'[1] == 0}, u, "
+             "{x, 0, 1}, WorkingPrecision -> 50]]) - N[(1 + E^2)/4, 60]] + 10^-70]", 45.0);
+#endif
+    /* three conditions for a second-order equation: unevaluated (NDSolve::bvdim) */
+    check_head("NDSolve[{u''[x] == u[x], u[0] == 1, u[1] == 0, u[1/2] == 3}, u, {x, 0, 1}]",
+               "NDSolve[");
+    /* plain IVP at the right end of the range is still an IVP */
+    check_close("u[0] /. First[NDSolve[{u''[x] == -u[x], u[1] == 0, u'[1] == 1}, u, {x, 0, 1}]]",
+                -sin(1.0), 1e-7);
+}
+
 int main(void) {
     mute_stderr_once();
     symtab_init();
@@ -184,6 +226,7 @@ int main(void) {
     TEST(test_if_derivative);
     TEST(test_mpfr);
     TEST(test_result_shape);
+    TEST(test_bvp);
 
     if (failures == 0) printf("\nAll NDSolve tests passed.\n");
     else printf("\n%d NDSolve checks FAILED.\n", failures);

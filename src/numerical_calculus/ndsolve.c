@@ -9,6 +9,7 @@
 #include "../sym_intern.h"
 #include "../eval.h"
 #include "../symtab.h"
+#include "../loadmodule.h"
 #include "../attr.h"
 #include "../common.h"
 #include "../numeric.h"
@@ -201,6 +202,163 @@ static void nd_warn(const char* tag, const char* msg) {
     mth_message("NDSolve", tag, "%s", msg);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Boundary-value problems                                            *
+ * ------------------------------------------------------------------ */
+
+/* Every dependent-function application in e at a numeric point: appends the
+ * point to pts (deduplicated, |p - q| <= 1e-12 (1 + |p|) is one point). */
+static void nd_collect_points(const Expr* e, const char** fnames, size_t nfun,
+                              NumericSpec spec, double* pts, size_t* npts, size_t cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    const char* fn; int ord; const Expr* arg;
+    if (nd_match_funcapp(e, &fn, &ord, &arg)) {
+        for (size_t k = 0; k < nfun; k++) if (fn == fnames[k]) {
+            double p;
+            if (nd_eval_to_double((Expr*)arg, spec, &p)) {
+                bool seen = false;
+                for (size_t i = 0; i < *npts; i++)
+                    if (fabs(pts[i] - p) <= 1e-12 * (1.0 + fabs(p))) seen = true;
+                if (!seen && *npts < cap) pts[(*npts)++] = p;
+            }
+            return;
+        }
+    }
+    nd_collect_points(e->data.function.head, fnames, nfun, spec, pts, npts, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nd_collect_points(e->data.function.args[i], fnames, nfun, spec, pts, npts, cap);
+}
+
+/* Is the condition the plain initial value  f^(k)[p] == v  (k below f's
+ * order, v numeric, possibly complex)? */
+static bool nd_plain_ic(const Expr* c, const char** fnames, size_t nfun,
+                        const int* maxorder, NumericSpec spec) {
+    if (!head_is((Expr*)c, SYM_Equal) || c->data.function.arg_count != 2) return false;
+    for (int side = 0; side < 2; side++) {
+        const Expr* fa = c->data.function.args[side];
+        Expr* val = c->data.function.args[1 - side];
+        const char* fn; int ord; const Expr* arg;
+        if (!nd_match_funcapp(fa, &fn, &ord, &arg)) continue;
+        for (size_t k = 0; k < nfun; k++) if (fn == fnames[k]) {
+            double p, re, im;
+            if (ord >= maxorder[k] || !nd_eval_to_double((Expr*)arg, spec, &p)) return false;
+            return nd_eval_to_double(val, spec, &re) || nd_split_reim(val, spec, &re, &im);
+        }
+    }
+    return false;
+}
+
+/* The conditions of an ODE system pose an initial-value problem when every
+ * one is a plain initial value, all at ONE point, and no state entry is given
+ * twice.  Anything else -- conditions at two or more points (u[0] == 0,
+ * u'[1] == 0), a condition that couples entries (u[0] + u'[0] == 1,
+ * u[0] == u[1]) -- is a boundary-value problem.  Before this test such a
+ * system was read as an IVP whose start point was the LAST condition's point,
+ * with every condition's value taken as an initial value there: a silent
+ * wrong answer (-u'' == E^(2x), u[0] == 0, u'[1] == 0 gave u(1) = 0, not
+ * 2.0973). */
+static bool nd_is_bvp(Expr** eqitems, size_t neq, const bool* is_ode,
+                      const char** fnames, size_t nfun, const int* maxorder,
+                      NumericSpec spec) {
+    double pts[8]; size_t npts = 0;
+    size_t nplain = 0, ncond = 0;
+    for (size_t e = 0; e < neq; e++) {
+        if (is_ode[e]) continue;
+        ncond++;
+        if (nd_plain_ic(eqitems[e], fnames, nfun, maxorder, spec)) nplain++;
+        nd_collect_points(eqitems[e], fnames, nfun, spec, pts, &npts, 8);
+    }
+    if (ncond == 0) return false;
+    if (npts > 1 || nplain < ncond) return true;
+    /* one point, all plain: a repeated entry (u[0] == 1, u[0] == 2) */
+    for (size_t e = 0; e < neq; e++) {
+        if (is_ode[e]) continue;
+        for (size_t f = e + 1; f < neq; f++) {
+            if (is_ode[f]) continue;
+            const Expr* ce = eqitems[e]; const Expr* cf = eqitems[f];
+            for (int se = 0; se < 2; se++) for (int sf = 0; sf < 2; sf++) {
+                const char* n1; const char* n2; int o1, o2; const Expr* a1; const Expr* a2;
+                if (nd_match_funcapp(ce->data.function.args[se], &n1, &o1, &a1)
+                    && nd_match_funcapp(cf->data.function.args[sf], &n2, &o2, &a2)
+                    && n1 == n2 && o1 == o2) {
+                    bool known = false;
+                    for (size_t k = 0; k < nfun; k++) if (n1 == fnames[k]) known = true;
+                    if (known) return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static unsigned bvp_load_gen = 0;      /* symtab_generation() of the attempt */
+static bool bvp_load_succeeded = false;
+
+/* Solve the boundary-value problem by shooting (src/internal/NDSolveBVP.m).
+ * Returns the NDSolve result, or NULL (unevaluated) after a message. */
+static Expr* nd_solve_bvp(Expr** A, size_t argc, Expr** eqitems, size_t neq,
+                          const bool* is_ode, const char** fnames, size_t nfun,
+                          const int* maxorder) {
+    if (bvp_load_gen != symtab_generation()) {
+        bvp_load_gen = symtab_generation();
+        mth_msg_suppress_push();
+        bvp_load_succeeded = mathilda_load_module("NDSolveBVP.m") != 0;
+        mth_msg_suppress_pop();
+    }
+    if (!bvp_load_succeeded) {
+        nd_warn("bvnf", "cannot locate src/internal/NDSolveBVP.m for the boundary-value solver");
+        return NULL;
+    }
+    size_t nodes = 0;
+    for (size_t e = 0; e < neq; e++) if (is_ode[e]) nodes++;
+    Expr** odes = malloc(sizeof(Expr*) * (nodes ? nodes : 1));
+    Expr** conds = malloc(sizeof(Expr*) * (neq - nodes ? neq - nodes : 1));
+    size_t io = 0, ic = 0;
+    for (size_t e = 0; e < neq; e++) {
+        if (is_ode[e]) odes[io++] = expr_copy(eqitems[e]);
+        else conds[ic++] = expr_copy(eqitems[e]);
+    }
+    Expr** heads = malloc(sizeof(Expr*) * nfun);
+    Expr** ords = malloc(sizeof(Expr*) * nfun);
+    for (size_t k = 0; k < nfun; k++) {
+        heads[k] = expr_new_symbol(fnames[k]);
+        ords[k] = expr_new_integer(maxorder[k]);
+    }
+    size_t nargs = 6 + (argc - 3);
+    Expr** args = malloc(sizeof(Expr*) * nargs);
+    args[0] = expr_new_function(expr_new_symbol(SYM_List), odes, io);
+    args[1] = expr_new_function(expr_new_symbol(SYM_List), conds, ic);
+    args[2] = expr_copy(A[1]);
+    args[3] = expr_copy(A[2]);
+    args[4] = expr_new_function(expr_new_symbol(SYM_List), heads, nfun);
+    args[5] = expr_new_function(expr_new_symbol(SYM_List), ords, nfun);
+    for (size_t i = 3; i < argc; i++) args[6 + i - 3] = expr_copy(A[i]);
+    free(odes); free(conds); free(heads); free(ords);
+    Expr* call = expr_new_function(expr_new_symbol(intern_symbol("NDSolveBVP`Shoot")),
+                                   args, nargs);
+    free(args);
+    Expr* r = eval_and_free(call);
+    Expr* out = NULL;
+    const char* tag = NULL;
+    if (r && head_is(r, SYM_List) && r->data.function.arg_count >= 1
+        && r->data.function.args[0]->type == EXPR_STRING)
+        tag = r->data.function.args[0]->data.string;
+    if (tag && (strcmp(tag, "ok") == 0 || strcmp(tag, "berr") == 0)
+        && r->data.function.arg_count >= 2 && head_is(r->data.function.args[1], SYM_List)) {
+        if (strcmp(tag, "berr") == 0)
+            nd_warn("berr", "the boundary-value residual did not reach the precision goal; "
+                            "the returned solution may be inaccurate");
+        out = r->data.function.args[1];
+        r->data.function.args[1] = NULL;
+    } else if (tag && strcmp(tag, "bvdim") == 0) {
+        nd_warn("bvdim", "the number of boundary conditions does not match the order of the system");
+    } else {
+        nd_warn("bvfail", "the shooting method for the boundary-value problem failed");
+    }
+    expr_free(r);
+    return out;
+}
+
 static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
     Expr** A = res->data.function.args;
@@ -297,6 +455,13 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
         free(maxorder); free(is_ode); free(base); free(fnames);
         nd_warn("nodeqs", "could not identify a well-posed ODE system");
         return NULL;
+    }
+
+    /* ---- boundary-value problem?  Hand off to the shooting solver. ---- */
+    if (nd_is_bvp(eqitems, neq, is_ode, fnames, nfun, maxorder, o.spec)) {
+        Expr* r = nd_solve_bvp(A, argc, eqitems, neq, is_ode, fnames, nfun, maxorder);
+        free(maxorder); free(is_ode); free(base); free(fnames);
+        return r;
     }
 
     /* ---- reduced-state symbols + substitution pairs ---- */
@@ -559,6 +724,9 @@ void ndsolve_init(void) {
         "NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}] solves a system.\n"
         "NDSolve[eqns, u[x], {x, xmin, xmax}] gives u[x] -> InterpolatingFunction[...][x].\n"
         "\tHigher-order equations (u''[x] == ...) are reduced to first order.\n"
+        "\tConditions at two or more points (u[0] == 0, u'[1] == 0), or coupling\n"
+        "\tvalues (u[0] + u'[0] == 1, u[0] == u[1]), pose a boundary-value\n"
+        "\tproblem, solved by shooting with Newton's method.\n"
         "NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}] solves a partial\n"
         "\tdifferential equation over a rectangular region by the method of lines,\n"
         "\tgiving a 2-D InterpolatingFunction applied as u[t, x].\n"
