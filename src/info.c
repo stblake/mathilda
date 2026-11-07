@@ -4548,6 +4548,14 @@ void info_init(void) {
         "\tgives the base directory in which user-specific files to be loaded by Mathilda are\n"
         "\tconventionally placed, as a string: ~/Library/Mathilda on macOS, ~/.Mathilda on Unix,\n"
         "\t%APPDATA%\\Mathilda on Windows. The MATHILDA_USERBASE environment variable overrides it.");
+    symtab_set_docstring("$PreferencesDirectory",
+        "$PreferencesDirectory\n"
+        "\tgives the directory in which user preferences for Mathilda are stored, as a string:\n"
+        "\tthe per-user base directory ($UserBaseDirectory), e.g. ~/Library/Mathilda on macOS.");
+    symtab_set_docstring("$UserDocumentsDirectory",
+        "$UserDocumentsDirectory\n"
+        "\tgives the user's default directory for documents, as a string: ~/Documents (or\n"
+        "\tXDG_DOCUMENTS_DIR on Unix), else the home directory when there is no Documents folder.");
     symtab_set_docstring("$TemporaryDirectory",
         "$TemporaryDirectory\n"
         "\tgives the directory for temporary files, from TMPDIR (or TEMP / TMP), else /tmp.");

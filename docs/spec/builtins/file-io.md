@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$BaseDirectory` / `$UserBaseDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$BaseDirectory` / `$UserBaseDirectory` / `$PreferencesDirectory` / `$UserDocumentsDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -942,6 +942,27 @@ replaces it. Left unset when there is no home directory. `Protected`.
 ```
 {$BaseDirectory, $UserBaseDirectory}
 (* {"/Library/Mathilda", "/Users/user/Library/Mathilda"} *)
+```
+
+## $PreferencesDirectory
+The directory in which user preferences are stored, as a string. As on the
+reference system on every platform, it is the per-user base directory, so it
+equals `$UserBaseDirectory` (`~/Library/Mathilda` on macOS, `~/.Mathilda` on
+Unix, `%APPDATA%\Mathilda` on Windows) and follows `MATHILDA_USERBASE`.
+`Protected`.
+
+## $UserDocumentsDirectory
+The user's default directory for documents, as a string:
+- `XDG_DOCUMENTS_DIR`, when set (Linux / Unix only, the freedesktop user-dirs
+  convention);
+- else `~/Documents` (`<home>\Documents` on Windows), when that directory exists;
+- else `$HomeDirectory`.
+
+Left unset when there is no home directory. `Protected`.
+
+```
+{$PreferencesDirectory, $UserDocumentsDirectory}
+(* {"/Users/user/Library/Mathilda", "/Users/user/Documents"} *)
 ```
 
 ## $PathnameSeparator

@@ -18,6 +18,8 @@
  *   $BaseDirectory, $UserBaseDirectory
  *                          — system-wide and per-user base directories for
  *                            configuration files, packages and kernel init files.
+ *   $PreferencesDirectory  — where user preferences are kept (the user base).
+ *   $UserDocumentsDirectory — the user's documents directory (~/Documents).
  *   Environment["var"]     — an environment variable's value, or $Failed.
  *   ParentDirectory, FileNameTake, AbsoluteFileName, FileType, DirectoryQ, ToFileName,
  *   DeleteFile             — path manipulation and deletion.
@@ -1828,6 +1830,31 @@ static char* userbasedir_from_env(void) {
     return r;
 }
 
+/* $UserDocumentsDirectory: the directory in which the user's documents are
+ * conventionally kept.  XDG_DOCUMENTS_DIR (freedesktop user dirs, as exported
+ * by xdg-user-dirs) wins when set; else <home>/Documents (<home>\Documents on
+ * Windows) when that directory exists; else the home directory itself, which
+ * is what a minimal Unix account without a Documents folder offers.  NULL
+ * (left unset) when there is no home directory.  Caller frees. */
+static char* documentsdir_from_env(void) {
+#if !defined(__APPLE__) && !defined(_WIN32)
+    const char* x = getenv("XDG_DOCUMENTS_DIR");
+    if (x && *x) return dir_join(x, NULL);
+#endif
+    char* home = home_from_env();
+    if (!home) return NULL;
+    char* docs = dir_join(home, "Documents");
+    struct stat st;
+    if (docs && stat(docs, &st) == 0 && S_ISDIR(st.st_mode)) {
+        free(home);
+        return docs;
+    }
+    free(docs);
+    char* r = dir_join(home, NULL);
+    free(home);
+    return r;
+}
+
 /* Install `value` (consumed; may be NULL = leave unset) as the OwnValue of the
  * Protected system variable `name`. */
 static void set_dir_variable(const char* name, char* value) {
@@ -1927,6 +1954,10 @@ void files_init(void) {
 
     set_dir_variable("$BaseDirectory", basedir_from_env());
     set_dir_variable("$UserBaseDirectory", userbasedir_from_env());
+    /* Preferences live in the per-user base directory, as on the reference
+     * system on every platform; MATHILDA_USERBASE therefore moves both. */
+    set_dir_variable("$PreferencesDirectory", userbasedir_from_env());
+    set_dir_variable("$UserDocumentsDirectory", documentsdir_from_env());
 
     /* $PathnameSeparator: the host separator FileNameJoin uses by default. */
     {

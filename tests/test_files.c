@@ -1200,6 +1200,16 @@ static void test_base_directories(void) {
     if (!getenv("MATHILDA_USERBASE"))
         assert_eval_eq("StringStartsQ[$UserBaseDirectory, $HomeDirectory] && "
                        "StringEndsQ[$UserBaseDirectory, \"Mathilda\"]", "True", 0);
+    /* $PreferencesDirectory is the user base; $UserDocumentsDirectory is an
+     * existing directory at or under $HomeDirectory (or XDG_DOCUMENTS_DIR). */
+    assert_eval_eq("{Attributes[$PreferencesDirectory], Attributes[$UserDocumentsDirectory]}",
+                   "{{Protected}, {Protected}}", 0);
+    assert_eval_eq("$PreferencesDirectory === $UserBaseDirectory", "True", 0);
+    assert_eval_eq("StringQ[$UserDocumentsDirectory] && "
+                   "StringTake[$UserDocumentsDirectory, -1] =!= \"/\"", "True", 0);
+    if (!getenv("XDG_DOCUMENTS_DIR"))
+        assert_eval_eq("DirectoryQ[$UserDocumentsDirectory] && "
+                       "StringStartsQ[$UserDocumentsDirectory, $HomeDirectory]", "True", 0);
 #if defined(__APPLE__)
     if (!getenv("MATHILDA_BASE"))
         assert_eval_eq("$BaseDirectory", "\"/Library/Mathilda\"", 0);
