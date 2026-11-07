@@ -320,6 +320,17 @@ static void test_exact(void) {
              "LinearSolve[Normal[ea], Transpose[{Range[100], 2 Range[100]}]]");
     chk_true("With[{p = SparseArray[Table[{i, Mod[3 i, 100] + 1} -> i, {i, 100}], {100, 100}]}, "
              "Det[p] === Det[Normal[p]] && LinearSolve[p, Range[100]] === LinearSolve[Normal[p], Range[100]]]");
+    /* fill with exact cancellation: a fill column must be indexed even when
+     * the row comes out no longer than before (the 400 x 400 grid-like
+     * matrix answered a wrong solution, A . x != b), and random sparsity */
+    chk_true("With[{g = SparseArray[{Band[{1,1}] -> 4, Band[{1,2}] -> -1, Band[{2,1}] -> -1, "
+             "Band[{1,21}] -> -1, Band[{21,1}] -> -1}, {400, 400}]}, "
+             "x = LinearSolve[g, Range[400]]; g . x == Range[400] && x === LinearSolve[Normal[g], Range[400]] && "
+             "Det[g] === Det[Normal[g]]]");
+    chk_true("SeedRandom[11]; With[{r = SparseArray[Join[Table[{i, i} -> RandomInteger[{1, 9}], {i, 300}], "
+             "Table[RandomInteger[{1, 300}, 2] -> RandomInteger[{-3, 3}], {900}]], {300, 300}]}, "
+             "x = LinearSolve[r, Range[300]]; r . x == Range[300] && Det[r] === Det[Normal[r]] && "
+             "MatrixRank[r] === MatrixRank[Normal[r]]]");
     /* singular (an explicit stored zero on the diagonal): rank, Det 0, a
      * particular solution of a consistent system, ::nosol otherwise */
     chk("{MatrixRank[es], Det[es]}", "{99, 0}");
