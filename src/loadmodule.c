@@ -430,18 +430,28 @@ int mathilda_installation_directory(char* out, size_t outsz) {
         return 0;
     }
 
-    /* Canonicalise: absolute, symlink-free, no trailing separator. */
-    char abs[LM_PATH_MAX];
+    /* Canonicalise: absolute, symlink-free, no trailing separator.
+     *
+     * Let the library allocate the result.  realpath(top, buf) into a fixed
+     * buffer requires buf to hold PATH_MAX bytes, and glibc's fortified
+     * realpath (_FORTIFY_SOURCE, on by default in distribution gcc at -O2)
+     * aborts with "*** buffer overflow detected ***" when the destination is
+     * smaller -- whatever the actual path length.  LM_PATH_MAX (2048) is
+     * below Linux's PATH_MAX (4096), so every Linux build crashed at startup
+     * while $InstallationDirectory was being set (issue #129).  macOS has
+     * PATH_MAX 1024 and never saw it. */
 #if defined(_WIN32)
-    if (!_fullpath(abs, top, sizeof(abs))) return 0;
+    char* abs = _fullpath(NULL, top, 0);
 #else
-    if (!realpath(top, abs)) return 0;
+    char* abs = realpath(top, NULL);
 #endif
+    if (!abs) return 0;
     size_t n = strlen(abs);
     while (n > 1 && (abs[n - 1] == '/' || abs[n - 1] == '\\')) abs[--n] = '\0';
-    if (n >= outsz) return 0;
-    memcpy(out, abs, n + 1);
-    return 1;
+    int ok = n < outsz;
+    if (ok) memcpy(out, abs, n + 1);
+    free(abs);
+    return ok;
 }
 
 int mathilda_load_module(const char* relpath) {
