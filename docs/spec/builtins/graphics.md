@@ -1209,6 +1209,32 @@ ContourPlot[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
 
 `HoldAll`, `Protected`. Uses marching squares with bilinear saddle-cell disambiguation. Options: see **Feature summary** above. Defaults: `Axes -> True`, `AspectRatio -> 1`.
 
+**Over a region.** `ContourPlot[f, {x, y} ∈ reg]` (`reg` a `Rectangle`, `Polygon`,
+`Triangle`, `Disk` or sector, `Annulus`) draws the contours of `f` inside the
+region by **marching triangles** on a Delaunay mesh of it (`PlotPoints^2`
+triangles, `PlotPoints` default 75; the code is `fem_contourplot` in
+`src/numerical_calculus/fem.c`). Each level crossing is located on the function
+itself along the triangle edge (Illinois iteration, not the linear
+interpolant), and each contour piece is then refined `MaxRecursion` times
+(default 4) by midpoints moved onto the contour along its normal, so the
+polylines lie on the true level set and their length converges as the square
+of the final spacing (the circle `x^2 + y^2 == 1/4`: length error 9e-7).
+A boundary point where `f` equals the level is classified by the sign `f` takes
+just inside, so a function that vanishes on the whole boundary (a Dirichlet
+eigenfunction) has no contour **along** the boundary, while a contour that
+meets the boundary is followed to the point where that inner sign changes
+(found along the boundary edge moved inward) — `ContourPlot[u == 0, {x, y} ∈ reg]`
+of an eigenfunction draws its nodal set in the open region. A triangle whose
+sign pattern around the perimeter (vertices and edge midpoints) disagrees with
+its vertices', or whose linear interpolant is a poor model near the level (a
+saddle, where two contours cross), is split into four and treated again, up
+to 24 times. A mesh function (`NDEigensystem`, `NDSolve` over a region) is
+evaluated on its own mesh directly. Equations give level 0; `Contours -> {c1, ...}` or `n`
+otherwise (default 10 levels). The result is `Graphics[{Line[...], ...},
+PlotRange -> bounds, Frame -> True]` (lines only: no shading in this form).
+SIAM Problem 17's L-shape (nodal line of the third eigenfunction, length 2):
+2.0000012 in 0.08 s with the default `NDEigensystem` mesh.
+
 ```mathematica
 (* --- Basic contour plots --- *)
 In[1]:= ContourPlot[Sin[x] + Cos[y], {x, -3, 3}, {y, -3, 3}]

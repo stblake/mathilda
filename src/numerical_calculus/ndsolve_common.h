@@ -417,6 +417,15 @@ bool nd_realify(NdProblem* P, size_t nunk, const double* Y0re, const double* Y0i
  * call unevaluated. */
 Expr* nd_mol_solve(Expr* res, const NdOpts* o, const char* forced_method);
 
+/* The coordinate list {c[0], ..., c[m-1]} of one tabulated solution point, the
+ * method-of-lines builders' coordinates being (t, x[, y]) in that canonical
+ * order.  nd_mol_solve accepts the independent variables in any order (u[x, t]
+ * with {x, ..}, {t, ..}): it solves the canonical (t-first) problem and sets
+ * the active output permutation, so the InterpolatingFunction is tabulated --
+ * and so applied, and differentiated -- in the user's argument order.  The
+ * entries of c are consumed. */
+Expr* nd_mol_coord(Expr** c, size_t m);
+
 #ifdef USE_MPFR
 /* Arbitrary-precision integrator (state, time and step size all MPFR).  Used
  * when WorkingPrecision exceeds MachinePrecision.  Runs the adaptive DOPRI5
@@ -437,6 +446,7 @@ typedef struct {
     bool        periodic;
     Expr*       bc_left;    /* boundary value exprs (in t, and states for       */
     Expr*       bc_right;   /* Neumann/Robin), or NULL when periodic             */
+    double      xmax;       /* node gi is xmin + gi (xmax - xmin) / (nx - 1)     */
 } NdMolGrid;
 
 /* Integrate a 1-D MoL NdProblem at MPFR precision and assemble the 2-D MPFR

@@ -15,6 +15,7 @@
  */
 
 #include "nint.h"
+#include "fem.h"
 #include "modular.h"   /* mth_block_enter/leave, mth_bind_push/pop: unwind-safe localisation */
 #include "gkadapt.h"
 #include "denint.h"
@@ -5281,7 +5282,11 @@ Expr* builtin_nintegrate(Expr* res) {
     while (pos_end > 0 && ni_is_option_arg(res->data.function.args[pos_end - 1])) pos_end--;
     if (pos_end < 2) return NULL;                      /* need f + >= 1 spec */
     Expr* body = res->data.function.args[0];
-    for (size_t i = 1; i < pos_end; i++)
+
+    /* {x, y} \[Element] reg is accepted only for the finite element path
+     * below (a mesh function integrated over its own region) */
+    bool region_spec = pos_end == 2 && fem_is_region_spec(res->data.function.args[1]);
+    for (size_t i = 1; i < pos_end && !region_spec; i++)
         if (!ni_is_spec(res->data.function.args[i])) return NULL;
 
     /* Localise the integration variables and evaluate the integrand
@@ -5299,6 +5304,10 @@ Expr* builtin_nintegrate(Expr* res) {
             if (sp->type == EXPR_FUNCTION && sp->data.function.arg_count >= 1 &&
                 sp->data.function.args[0]->type == EXPR_SYMBOL)
                 vars[nv++] = expr_copy(sp->data.function.args[0]);
+            else if (region_spec)
+                for (size_t k = 0; k < sp->data.function.args[0]->data.function.arg_count && nv < 16; k++)
+                    if (sp->data.function.args[0]->data.function.args[k]->type == EXPR_SYMBOL)
+                        vars[nv++] = expr_copy(sp->data.function.args[0]->data.function.args[k]);
         }
         /* A Block frame without Block's re-evaluation on exit: the integrand
          * is evaluated with the variables unbound, and the result is used as
@@ -5308,6 +5317,13 @@ Expr* builtin_nintegrate(Expr* res) {
         Expr* eb = evaluate(body);
         mth_block_leave(frame);
         for (size_t i = 0; i < nv; i++) expr_free(vars[i]);
+        /* a function on a finite element mesh integrated over its own
+         * region: element by element (fem.c) */
+        if (eb && pos_end <= 3) {
+            Expr* r = fem_nintegrate(eb, res->data.function.args + 1, pos_end - 1);
+            if (r) { expr_free(eb); return r; }
+        }
+        if (region_spec) { expr_free(eb); return NULL; }
         /* an expansion that swells the integrand is not used when the held
          * integrand samples numerically (ni_symbolic_swell) */
         if (eb && ni_symbolic_swell(body, eb) &&

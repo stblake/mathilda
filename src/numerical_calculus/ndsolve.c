@@ -4,6 +4,7 @@
  * modules; see ndsolve_common.h. */
 #include "ndsolve.h"
 #include "ndsolve_common.h"
+#include "fem.h"
 #include "ndsolve_compile.h"
 #include "ndsolve_events.h"
 #include "../sym_names.h"
@@ -367,6 +368,9 @@ static Expr* ndsolve_core(Expr* res, const char* forced_method) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
     Expr** A = res->data.function.args;
     size_t argc = res->data.function.arg_count;
+
+    /* ---- an elliptic PDE on a region, {x, y} \[Element] reg: finite elements ---- */
+    if (fem_is_region_spec(A[2])) return fem_ndsolve(res);
 
     /* ---- options (trailing) ---- */
     NdOpts o; nd_opts_default(&o);

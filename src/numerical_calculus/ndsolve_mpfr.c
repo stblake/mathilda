@@ -1339,8 +1339,17 @@ Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
     long out_bits = o->wp_bits > 53 ? o->wp_bits : 53;
     long bits = out_bits + 64;
     MpSol sol; mpsol_init(&sol, P->d, bits);
-    NdStatus st = mpfr_integrate(P, o, S, &sol, bits, false);   /* MoL: Runge-Kutta / BDF */
-    (void)st;
+    /* The Automatic method is the Taylor-series integrator when the semi-
+     * discrete right-hand side is in its vocabulary (it is for polynomial
+     * and elementary nonlinearities): its step is limited by the stiff
+     * diffusion spectrum only through the series' radius.  The MPFR BDF it
+     * replaces as the default here ran for minutes at WorkingPrecision 30 and
+     * returned nothing at 50 or more (its step control is in double). */
+    NdStatus st = mpfr_integrate(P, o, S, &sol, bits, true);
+    if (st == ND_ERR_STEPSIZE)
+        mth_message("NDSolve", "ndsz", "step size effectively zero; singularity or stiffness suspected");
+    else if (st == ND_ERR_MAXSTEPS)
+        mth_message("NDSolve", "mxst", "maximum number of steps reached; returning partial solution");
     size_t n = sol.n, d = sol.d, nx = g->nx;
     Expr* result = NULL;
     if (n >= 2) {
@@ -1348,7 +1357,11 @@ Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
         Expr** entries = malloc(sizeof(Expr*) * npts);
         size_t p = 0;
         mpfr_t xg, val, hb; mpfr_init2(xg, out_bits); mpfr_init2(val, out_bits); mpfr_init2(hb, out_bits);
-        mpfr_set_d(hb, g->h, MPFR_RNDN);
+        /* the exact spacing (xmax - xmin) / (nx - 1), not the rounded double h,
+         * so the last node is xmax itself */
+        mpfr_set_d(hb, g->xmax, MPFR_RNDN);
+        mpfr_sub_d(hb, hb, g->xmin, MPFR_RNDN);
+        mpfr_div_ui(hb, hb, (unsigned long)(nx - 1), MPFR_RNDN);
         for (size_t i = 0; i < n; i++) {
             /* bind t and all states for boundary-value evaluation */
             nd_bind_set(&P->bind_t, expr_new_mpfr_copy(sol.t[i]));
@@ -1367,7 +1380,7 @@ Expr* nd_solve_mpfr_mol(NdProblem* P, const NdOpts* o, const NdStepper* S,
                     mpfr_set(val, sol.Y[i*d + (gi - 1) * (size_t)g->torder + 0], MPFR_RNDN);
                 }
                 Expr* coord[2] = { expr_new_mpfr_copy(sol.t[i]), expr_new_mpfr_copy(xg) };
-                Expr* coordL = expr_new_function(expr_new_symbol(SYM_List), coord, 2);
+                Expr* coordL = nd_mol_coord(coord, 2);
                 Expr* pair[2] = { coordL, expr_new_mpfr_copy(val) };
                 entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
             }

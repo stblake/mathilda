@@ -290,6 +290,14 @@ In[6]:= Derivative[0, 1][f][1.5, 2.5]
 Out[6]= 18.75
 ```
 
+**Mesh functions.** The solutions of `NDSolve` over a region and the
+eigenfunctions of `NDEigensystem` are `InterpolatingFunction[domain,
+NDSolve`FEM`MeshFunction[mesh, values]]`: a quadratic function on a triangular
+mesh, evaluated in the triangle containing the point (vectors of points
+accepted), with `Derivative` up to total order 2 and the properties `"Domain"`,
+`"Coordinates"`, `"ValuesOnGrid"`, `"ElementMesh"`; see
+[numerical-calculus.md](numerical-calculus.md#finite-elements-ndeigenvalues-ndeigensystem-ndsolve-over-a-region).
+
 ## Interpolation
 `Interpolation[data]` constructs an [`InterpolatingFunction`](#interpolatingfunction)
 object that agrees with `data` at every supplied point. The data may be given as:

@@ -1152,6 +1152,8 @@ void core_init(void) {
     nintegrate_init();
     void ndsolve_init(void);
     ndsolve_init();
+    void fem_init(void);
+    fem_init();
     void nroots_init(void);
     nroots_init();
     void nsolve_init(void);

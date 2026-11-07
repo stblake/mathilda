@@ -48,6 +48,7 @@
 #include <math.h>
 
 #include "interp.h"
+#include "fem.h"          /* finite element mesh functions */
 #include "expr.h"
 #include "ndarray.h"
 #include "symtab.h"
@@ -1842,6 +1843,10 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     if (obj_argc < 2 || obj_argc > 6) return NULL;
     Expr* domain = ifun->data.function.args[0];
     Expr* table  = ifun->data.function.args[1];
+
+    /* a function over a finite element mesh (NDSolve / NDEigensystem on a
+     * region): evaluated on its triangles, see numerical_calculus/fem.c */
+    if (fem_is_mesh_function(table)) return fem_interp_apply(ifun, call_args, argc);
 
     if (argc == 1 && call_args[0]->type == EXPR_STRING && call_args[0]->data.string)
         return interp_property(ifun, call_args[0]->data.string);
