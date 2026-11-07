@@ -166,6 +166,14 @@ Gives pseudorandom choices from a list of elements.
 - RandomChoice gives a different sequence of pseudorandom choices whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Weighted selection uses cumulative weight binary search for efficient O(log n) per choice.
 - Weights must be non-negative real numbers with a positive total.
+- **Packed result.** When every choice is a machine `Real` (or every one a machine
+  `Integer`), `RandomChoice[list, n]` and `RandomChoice[list, {n1, ...}]` (uniform or
+  weighted) write their answer straight into a packed array, so a pipeline such as
+  `Exp[Mean[Log[RandomChoice[{1., 2.}, 10^6]]]]` stays on the buffer path end to end
+  (17 ms, from 330 ms when the result was 10^6 boxed copies). The draws are the same
+  sequence, in row-major order, as the boxed path, so a seeded call gives identical
+  values either way. Mixed or symbolic choices (`{1, 2.}`, `{a, b}`) build an
+  ordinary List.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomChoice[{a, b, c, d, e}]

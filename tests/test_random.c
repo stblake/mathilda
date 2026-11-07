@@ -828,6 +828,33 @@ void test_randomchoice_flat_list(void) {
     free(s);
 }
 
+/* Machine-number choices produce a PACKED result, through the same draw
+ * sequence as the boxed path: a seeded call equals the same number of seeded
+ * scalar draws, element for element, for uniform and weighted, rank 1 and rank 2.
+ * Mixed Integer/Real choices stay a boxed List (packing must be lossless). */
+void test_randomchoice_machine_packed(void) {
+    const char* cases[][2] = {
+        { "Developer`PackedArrayQ[RandomChoice[{1., 2.}, 1000]]", "True" },
+        { "Developer`PackedArrayQ[RandomChoice[{-1, 0, 1}, {20, 30}]]", "True" },
+        { "Developer`PackedArrayQ[RandomChoice[{1, 3} -> {-1., 1.}, 500]]", "True" },
+        { "Developer`PackedArrayQ[RandomChoice[{1, 2.}, 1000]]", "False" },
+        { "Developer`PackedArrayQ[RandomChoice[{a, b}, 1000]]", "False" },
+        { "SeedRandom[11]; rcpk = RandomChoice[{1., 2., 5.}, 600]; SeedRandom[11]; "
+          "rcpk === Table[RandomChoice[{1., 2., 5.}], {600}]", "True" },
+        { "SeedRandom[12]; rcpk = RandomChoice[{-1, 1}, {30, 20}]; SeedRandom[12]; "
+          "Flatten[rcpk] === Table[RandomChoice[{-1, 1}], {600}]", "True" },
+        { "SeedRandom[13]; rcpk = RandomChoice[{1, 3} -> {-1, 1}, 700]; SeedRandom[13]; "
+          "rcpk === Table[RandomChoice[{1, 3} -> {-1, 1}], {700}]", "True" },
+        { "Dimensions[RandomChoice[{1., 2.}, {3, 0}]]", "{3, 0}" },
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        char* s = eval_to_str(cases[i][0]);
+        ASSERT_MSG(strcmp(s, cases[i][1]) == 0, "%s: expected %s, got %s",
+                   cases[i][0], cases[i][1], s);
+        free(s);
+    }
+}
+
 void test_randomchoice_multidim(void) {
     /* RandomChoice[{a, b, c}, {3, 4}] should give a 3x4 matrix */
     char* s = eval_to_str("Dimensions[RandomChoice[{a, b, c}, {3, 4}]]");
@@ -1456,6 +1483,7 @@ int main(void) {
     TEST(test_randomchoice_integers);
     TEST(test_randomchoice_weighted_coverage);
     TEST(test_randomchoice_single_dim_list);
+    TEST(test_randomchoice_machine_packed);
 
     /* RandomSample tests */
     TEST(test_randomsample_permutation);

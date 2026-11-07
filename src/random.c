@@ -1774,6 +1774,87 @@ static bool is_nonempty_list(Expr* e, Expr*** args, size_t* count) {
 }
 
 /*
+ * Direct packed build for RandomChoice over a plain List of machine numbers.
+ *
+ * The choice list itself is almost always tiny ({1., 2.}, {-1, 1}) -- far under
+ * the packing threshold, so it arrives as a plain List and never reaches
+ * nd_random_choice. The RESULT, though, is as long as the user asks, and
+ * building it as n boxed copies left every consumer off the buffer path:
+ * Log[RandomChoice[{1., 2.}, 10^6]] cost 320 ms against 7 ms for the same
+ * values packed. When every choice is a machine Real (or every one a machine
+ * Integer) the answer is a uniform machine array, so it is written straight
+ * into a buffer of `dims` (row-major).
+ *
+ * The draws are the SAME sequence the boxed builders make -- one
+ * random_index / weighted_random_index call per element, in row-major order,
+ * which is the order random_choice_array's depth-first recursion visits the
+ * leaves -- so a seeded run gives the same values whichever path it takes.
+ * Returns NULL, having drawn nothing, when the choices are mixed or non-machine,
+ * the shape is degenerate, or the result is under the packing threshold
+ * (ndbuild_open declines); the caller then builds the List as before.
+ * `cum_weights` NULL means uniform.
+ */
+static Expr* choice_buffer(Expr** choices, size_t choice_count,
+                           const int64_t* dims, int rank,
+                           double* cum_weights, double total) {
+    if (rank < 1 || choice_count == 0) return NULL;
+    ExprType t0 = choices[0]->type;
+    if (t0 != EXPR_REAL && t0 != EXPR_INTEGER) return NULL;
+    for (size_t i = 1; i < choice_count; i++)
+        if (choices[i]->type != t0) return NULL;   /* lossless: one head only */
+    size_t n = 1;
+    for (int d = 0; d < rank; d++) {
+        if (dims[d] < 1) return NULL;
+        if ((uint64_t)dims[d] > (uint64_t)(SIZE_MAX / 8) / n) return NULL;
+        n *= (size_t)dims[d];
+    }
+    NDType dt = (t0 == EXPR_REAL) ? NDT_FLOAT64 : NDT_INT64;
+    void* buf = NULL;
+    Expr* out = ndbuild_open(rank, dims, dt, &buf);
+    if (!out) return NULL;
+    if (dt == NDT_FLOAT64) {
+        double* b = (double*)buf;
+        for (size_t i = 0; i < n; i++) {
+            size_t k = cum_weights
+                ? weighted_random_index(cum_weights, choice_count, total)
+                : random_index(choice_count);
+            b[i] = choices[k]->data.real;
+        }
+    } else {
+        int64_t* b = (int64_t*)buf;
+        for (size_t i = 0; i < n; i++) {
+            size_t k = cum_weights
+                ? weighted_random_index(cum_weights, choice_count, total)
+                : random_index(choice_count);
+            b[i] = choices[k]->data.integer;
+        }
+    }
+    return out;
+}
+
+/* Read a RandomChoice shape argument (n or {n1, ..., nk}, all machine
+ * non-negative integers) into dims. False for any other shape. */
+static bool choice_dims(const Expr* dim_arg, int64_t* dims, int* rank) {
+    if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
+        dims[0] = dim_arg->data.integer;
+        *rank = 1;
+        return true;
+    }
+    if (dim_arg->type != EXPR_FUNCTION ||
+        dim_arg->data.function.head->type != EXPR_SYMBOL ||
+        dim_arg->data.function.head->data.symbol.name != SYM_List) return false;
+    size_t k = dim_arg->data.function.arg_count;
+    if (k < 1 || k >= NDARRAY_MAX_RANK) return false;
+    for (size_t i = 0; i < k; i++) {
+        const Expr* d = dim_arg->data.function.args[i];
+        if (d->type != EXPR_INTEGER || d->data.integer < 0) return false;
+        dims[i] = d->data.integer;
+    }
+    *rank = (int)k;
+    return true;
+}
+
+/*
  * builtin_randomchoice - implements RandomChoice[...]
  *
  * Forms:
@@ -1843,6 +1924,16 @@ Expr* builtin_randomchoice(Expr* res) {
         /* argc == 2 */
         Expr* dim_arg = res->data.function.args[1];
 
+        {   /* machine-number choices: write the buffer directly */
+            int64_t cdims[NDARRAY_MAX_RANK];
+            int crank = 0;
+            if (choice_dims(dim_arg, cdims, &crank)) {
+                Expr* packed = choice_buffer(elems_args, elems_count, cdims, crank,
+                                             cum_weights, total);
+                if (packed) { free(cum_weights); return packed; }
+            }
+        }
+
         if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
             size_t n = (size_t)dim_arg->data.integer;
             Expr** result_elems = malloc(sizeof(Expr*) * n);
@@ -1893,6 +1984,15 @@ Expr* builtin_randomchoice(Expr* res) {
 
     /* argc == 2 */
     Expr* dim_arg = res->data.function.args[1];
+
+    {   /* machine-number choices: write the buffer directly */
+        int64_t cdims[NDARRAY_MAX_RANK];
+        int crank = 0;
+        if (choice_dims(dim_arg, cdims, &crank)) {
+            Expr* packed = choice_buffer(choices, choice_count, cdims, crank, NULL, 0.0);
+            if (packed) return packed;
+        }
+    }
 
     if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
         size_t n = (size_t)dim_arg->data.integer;

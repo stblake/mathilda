@@ -386,6 +386,9 @@ uniform buffer holds that, so the result is an ordinary list. `Append[{1., 2.},
 `RandomSample` and `RandomChoice` draw from the same generator sequence the
 ordinary path uses, so `SeedRandom[n]` gives the same answer whether the
 argument is packed or not.
+`RandomChoice` also *produces* a packed array from a plain choice list of
+machine numbers (all `Real` or all `Integer`): the choice list is nearly always
+under the threshold, but the result is as long as asked for.
 
 `Mod` and `Quotient` are worth naming explicitly because until 2026-08-01 they
 were the break in the chain for integer work: both had a kernel that computed in
