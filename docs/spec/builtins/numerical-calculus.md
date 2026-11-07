@@ -856,6 +856,17 @@ and `mcint` (Monte-Carlo).  Attributes:
 `HoldAll, Protected`.  The integration variable is `Block`-localised and the
 integrand evaluated/numericalised at each sample point.
 
+**Mesh functions over their region.** When the evaluated integrand involves
+finite element solutions (`InterpolatingFunction`s over one mesh, from `NDSolve`
+over a region or `NDEigensystem`) and the integration domain is that mesh's
+region — `NIntegrate[f, {x, y} ∈ reg]`, or `{x, a, b}, {y, c, d}` when the region is
+that rectangle — the integral is taken element by element with the degree-6
+triangle rule on the (isoparametric) elements, the integrand evaluated at all
+quadrature points in one batch: exact for the quadratic function itself. The
+adaptive cubature otherwise spends its budget on the kinks between elements
+(6.8 s and `::accgl` against 0.16 s on a 30 000-element mesh). `{x, y} ∈ reg` is
+accepted only in that case; another region specification stays unevaluated.
+
 The integrand is first evaluated symbolically, with the variables unbound, and
 the evaluated form is integrated — except when that evaluation swells it (more
 than 16 times the leaves of the integrand as written, and over 256) while the
@@ -2010,7 +2021,11 @@ accepts numbers or equal-length vectors of coordinates, `Derivative[i, j]` of
 total order up to 2 (up to 1 on curved elements), and the properties
 `"Domain"`, `"Coordinates"`, `"ValuesOnGrid"`, `"ElementMesh"`. A point outside
 the mesh is extrapolated from the nearest element with
-`InterpolatingFunction::femdmval`.
+`InterpolatingFunction::femdmval`. `NIntegrate` of an expression in such
+functions over their own region (`{x, y} ∈ reg`, or the ranges of a rectangle)
+integrates element by element with the same rule — exact for the quadratic
+function itself, where the adaptive cubature fought the kinks between elements
+(0.16 s against 6.8 s on a 30 000-element mesh).
 
 **Precision.** Machine precision. As in the reference, `WorkingPrecision` is not
 an option of `NDEigenvalues`/`NDEigensystem` (`::woptx`, then computed at machine

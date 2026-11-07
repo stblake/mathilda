@@ -293,6 +293,30 @@ static void test_ndsolve(void) {
               "NIntegrate[s[x, N[-Cos[Pi/5]]], {x, -Sin[Pi/5], Sin[Pi/5]}]]", 0.085256341, 3e-8);
 }
 
+/* ---------------- NIntegrate of mesh functions over their region ---------------- */
+static void test_nintegrate(void) {
+    /* Saint-Venant torsion: Int u over the equilateral triangle of side 1 = Sqrt[3]/320 */
+    run("tri = Triangle[{{0, 0}, {1, 0}, {1/2, Sqrt[3]/2}}]; "
+        "st = NDSolveValue[{-Laplacian[u[x, y], {x, y}] == 1, DirichletCondition[u[x, y] == 0, True]}, u, "
+        "{x, y} \\[Element] tri];");
+    check_rel("NIntegrate over the mesh's region (default mesh)",
+              "NIntegrate[st[x, y], {x, y} \\[Element] tri]", sqrt(3.0) / 320, 1e-6);
+    check_rel("NIntegrate of u^2 over the region",
+              "NIntegrate[st[x, y]^2, {x, y} \\[Element] tri] / NIntegrate[st[x, y]^2, {x, y} \\[Element] tri]", 1.0, 1e-15);
+    /* rectangle by ranges: torsion of the unit square = 0.0351442... */
+    run("sq = NDSolveValue[{-Laplacian[u[x, y], {x, y}] == 1, DirichletCondition[u[x, y] == 0, True]}, u, "
+        "{x, y} \\[Element] Rectangle[]];");
+    check_rel("NIntegrate by ranges over the rectangle", "NIntegrate[sq[x, y], {x, 0, 1}, {y, 0, 1}]",
+              0.035144253738653, 5e-6);
+    /* eigenfunction L2 norm by the region form */
+    run("ed = NDEigensystem[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, u[x, y], "
+        "{x, y} \\[Element] Disk[], 1];");
+    check_abs("eigenfunction norm over the disk", "NIntegrate[ed[[2, 1]]^2, {x, y} \\[Element] Disk[]]", 1.0, 1e-12);
+    double v;
+    check_true("another region stays unevaluated",
+               !eval_double("NIntegrate[sq[x, y], {x, y} \\[Element] Disk[]]", &v), "unevaluated");
+}
+
 /* ---------------- messages / declines ---------------- */
 static void test_declines(void) {
     double v;
@@ -316,6 +340,7 @@ int main(void) {
     test_eigenvalues();
     test_eigensystem();
     test_ndsolve();
+    test_nintegrate();
     test_declines();
     if (failures == 0) printf("\nAll FEM tests passed.\n");
     else printf("\n%d FEM test(s) FAILED.\n", failures);

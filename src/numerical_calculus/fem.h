@@ -38,4 +38,9 @@ bool fem_is_region_spec(const Expr* e);
 bool fem_is_mesh_function(const Expr* table);
 Expr* fem_interp_apply(Expr* ifun, Expr** call_args, size_t argc);
 
+/* NIntegrate[f, {x, y} in reg] (or {x, a, b}, {y, c, d} over a rectangle)
+ * where the evaluated integrand f involves mesh functions on one mesh over
+ * that same region: the integral element by element. NULL otherwise. */
+Expr* fem_nintegrate(Expr* body, Expr** specs, size_t nspec);
+
 #endif /* MATHILDA_FEM_H */

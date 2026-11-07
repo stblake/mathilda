@@ -1196,6 +1196,108 @@ Expr* fem_interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  NIntegrate of mesh functions over their region                     */
+/* ------------------------------------------------------------------ */
+
+/* The mesh shared by every mesh function applied in e (NULL: none, or two
+ * different meshes). */
+static Expr* fem_find_mesh(const Expr* e, Expr* found, bool* clash) {
+    if (!e || e->type != EXPR_FUNCTION) return found;
+    const Expr* h = e->data.function.head;
+    if (head_is((Expr*)h, SYM_InterpolatingFunction) && h->data.function.arg_count >= 2
+        && fem_is_mesh_function(h->data.function.args[1])) {
+        Expr* m = h->data.function.args[1]->data.function.args[0];
+        if (found && found != m && !expr_eq(found, m)) *clash = true;
+        if (!found) found = m;
+    }
+    found = fem_find_mesh(h, found, clash);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        found = fem_find_mesh(e->data.function.args[i], found, clash);
+    return found;
+}
+
+static bool fem_close(double a, double b) { return fabs(a - b) <= 1e-12 * (1.0 + fabs(a) + fabs(b)); }
+
+/* NIntegrate[f, {x, y} in reg] or NIntegrate[f, {x, a, b}, {y, c, d}] when f
+ * involves mesh functions on one mesh whose region is reg (or the rectangle
+ * [a, b] x [c, d]): the integral over the mesh, element by element, with the
+ * degree-6 rule on the (isoparametric) elements -- exact for a quadratic
+ * mesh function, and free of the adaptive cubature's struggle with the
+ * kinks between elements. NULL when not applicable. `body` is the
+ * evaluated integrand. */
+Expr* fem_nintegrate(Expr* body, Expr** specs, size_t nspec) {
+    bool clash = false;
+    Expr* meshE = fem_find_mesh(body, NULL, &clash);
+    if (!meshE || clash) return NULL;
+    Expr* region = meshE->data.function.args[3];
+    const char* xv = NULL; const char* yv = NULL;
+    if (nspec == 1 && fem_is_region_spec(specs[0])) {
+        Expr* vs = specs[0]->data.function.args[0];
+        if (vs->data.function.arg_count != 2 || vs->data.function.args[0]->type != EXPR_SYMBOL
+            || vs->data.function.args[1]->type != EXPR_SYMBOL) return NULL;
+        Expr* reg = eval_and_free(expr_copy(specs[0]->data.function.args[1]));
+        bool same = expr_eq(reg, region);
+        expr_free(reg);
+        if (!same) return NULL;
+        xv = vs->data.function.args[0]->data.symbol.name;
+        yv = vs->data.function.args[1]->data.symbol.name;
+    } else if (nspec == 2 && head_is(specs[0], SYM_List) && head_is(specs[1], SYM_List)
+               && specs[0]->data.function.arg_count == 3 && specs[1]->data.function.arg_count == 3
+               && specs[0]->data.function.args[0]->type == EXPR_SYMBOL
+               && specs[1]->data.function.args[0]->type == EXPR_SYMBOL) {
+        double a, b, c, d, x0 = 0, y0 = 0, x1 = 1, y1 = 1;
+        if (!fem_num(specs[0]->data.function.args[1], &a) || !fem_num(specs[0]->data.function.args[2], &b)
+            || !fem_num(specs[1]->data.function.args[1], &c) || !fem_num(specs[1]->data.function.args[2], &d))
+            return NULL;
+        if (!head_is(region, SYM_Rectangle)) return NULL;
+        size_t na = region->data.function.arg_count;
+        if (na >= 1 && !fem_point(region->data.function.args[0], &x0, &y0)) return NULL;
+        if (na >= 2) { if (!fem_point(region->data.function.args[1], &x1, &y1)) return NULL; }
+        else if (na == 1) { x1 = x0 + 1; y1 = y0 + 1; }
+        if (!fem_close(a, x0) || !fem_close(b, x1) || !fem_close(c, y0) || !fem_close(d, y1)) return NULL;
+        xv = specs[0]->data.function.args[0]->data.symbol.name;
+        yv = specs[1]->data.function.args[0]->data.symbol.name;
+    } else return NULL;
+
+    const Expr* ce = meshE->data.function.args[0];
+    const Expr* te = meshE->data.function.args[1];
+    int64_t nn = ce->data.ndarray.dims[0], ne = te->data.ndarray.dims[0];
+    const double* X = fem_buffer(ce, 2 * nn);
+    const double* T = fem_buffer(te, 6 * ne);
+    if (!X || !T) return NULL;
+    double Nq[NQ][6], Nxq[NQ][6], Neq[NQ][6];
+    for (int q = 0; q < NQ; q++) p2_shape(DQ[q][0], DQ[q][1], Nq[q], Nxq[q], Neq[q]);
+    int64_t nqp = ne * NQ;
+    double* QX = malloc(sizeof(double) * (size_t)nqp);
+    double* QY = malloc(sizeof(double) * (size_t)nqp);
+    double* W = malloc(sizeof(double) * (size_t)nqp);
+    for (int64_t e = 0; e < ne; e++) {
+        double ex[6], ey[6];
+        for (int k = 0; k < 6; k++) { int64_t v = (int64_t)T[6 * e + k]; ex[k] = X[2 * v]; ey[k] = X[2 * v + 1]; }
+        for (int q = 0; q < NQ; q++) {
+            double x = 0, y = 0;
+            for (int k = 0; k < 6; k++) { x += Nq[q][k] * ex[k]; y += Nq[q][k] * ey[k]; }
+            QX[e * NQ + q] = x; QY[e * NQ + q] = y;
+            W[e * NQ + q] = 0.5 * DQ[q][2] * p2_jac(ex, ey, Nxq[q], Neq[q], NULL, NULL);
+        }
+    }
+    double* V = malloc(sizeof(double) * (size_t)nqp);
+    bool ok = fem_field(body, xv, yv, QX, QY, nqp, V);
+    Expr* out = NULL;
+    if (ok) {
+        /* compensated sum */
+        double sum = 0, comp = 0;
+        for (int64_t i = 0; i < nqp; i++) {
+            double t = W[i] * V[i] - comp, s2 = sum + t;
+            comp = (s2 - sum) - t; sum = s2;
+        }
+        out = expr_new_real(sum);
+    }
+    free(QX); free(QY); free(W); free(V);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Problem setup shared by NDSolve and NDEigensystem                  */
 /* ------------------------------------------------------------------ */
 
