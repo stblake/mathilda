@@ -561,7 +561,10 @@ Gives products of vectors, matrices, and tensors.
   An exact zero in the other operand is an MPFR zero at its partner's
   precision (as `0 x` is), so `m . DiagonalMatrix[w]` of an MPFR `m` is the
   fused path too: 64 x 64 at 20 digits 7 ms, was 1.4 s through `Times` /
-  `Plus`.
+  `Plus`. An exact `Rational` with a BigInt numerator or denominator is
+  converted correctly rounded (through `mpq`); it used to be read as NaN, so
+  `v . x^Range[60]` with `LinearSolve`'s 1370-digit rational coefficients and
+  an MPFR `x` was `Indeterminate`.
 - **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
   auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the
   `vector·vector` inner product to a scalar (`V_NDFN2`), real and complex.

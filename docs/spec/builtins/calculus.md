@@ -4949,7 +4949,7 @@ Engages on symbolic-power bodies; `PowerExpand[Log[f]]` is summed by the shipped
 ## FindRoot
 
 Iterative numerical root finder.  Implemented natively in C in
-`src/findroot.c`.  Has `HoldAll, Protected` attributes and uses
+`src/numerical_roots/findroot.c`.  Has `HoldAll, Protected` attributes and uses
 `Block`-style local binding of the search variables so the user's
 global symbol table is not perturbed during iteration.
 
@@ -4968,9 +4968,37 @@ global symbol table is not perturbed during iteration.
 - `FindRoot[{f1, ..., fn}, {{x, x0}, {y, y0}, ...}]` -- multivariate
   Newton with a symbolically computed Jacobian, solved per step via
   in-place Gaussian elimination with partial pivoting.
+- `FindRoot[F[x, y] == {a, b}, {{x, x0}, {y, y0}}]` -- a **vector
+  equation**: `F` may be an opaque, `NumericQ`-guarded function returning a
+  vector (a shooting function with an `NDSolve` inside).  When the number of
+  equations differs from the number of variables, each equation's value at
+  the start point gives its width (a List of `k` numbers is `k` scalar
+  residuals); the widths must add up to the variable count
+  (`FindRoot::systno` otherwise).  Equations and vector equations mix
+  freely: `{F[x, y] == {0, 0}, z^2 == 2}` in `{x, y, z}`.
 
 Each `f_i` may be either an expression (treated as `f_i == 0`) or an
 explicit equation `lhs_i == rhs_i`.
+
+**System Jacobian.** A scalar equation with a usable derivative gets its row
+from `D`; a vector equation, or one whose derivative is an inert
+`Derivative[..][f][..]` (an opaque function `D` cannot see into), is
+**forward-differenced**: one evaluation of its components per unknown, with
+increment `(|x_j| + 1) sqrt(eps)` -- `sqrt(2^-53)` at machine precision,
+`2^(-p/2)` at `p` bits.  Before, such a system failed on its first step.
+
+**System line search.** Each Newton step is backtracked on the residual
+max-norm: a full step that increases it, or lands where the function is not
+real (an ODE that blows up, a `Log` of a negative intermediate), is halved up
+to 10 times, keeping the best trial.  At **WorkingPrecision -> p** a system
+runs entirely in MPFR (values, Jacobian, elimination) and, once both goals
+hold, polishes like the scalar Newton below, so it returns the working
+precision rather than half of it; it used to ignore the option and return
+machine numbers.
+
+**Real values.** A real search reads `x + 0. I`, or any complex value whose
+imaginary part is round-off of its real part (`|im| <= 2^-(p-8) (|re| + 1)`),
+as the real `x`; a genuinely complex value is still `FindRoot::nlnum`.
 
 ### Output
 
@@ -5036,6 +5064,11 @@ four scalar Newton kernels (real / complex × machine / MPFR), so e.g.
 `FindRoot[2^(-s)(Zeta[s] - Zeta[s, 3/2]) == 0, {s, 20 I}]` →
 `{s -> 0.948962 + 20.3778 I}`.
 
+**Stepping out of the domain.** A real Newton step (machine or MPFR) that
+lands where `f` is not real -- `Log[x] - 1 + x/100` from `x = 20` overshoots to
+`x < 0` -- is halved back from the last good iterate, up to 10 times, instead
+of ending the solve with `FindRoot::nlnum`.
+
 ### Complex roots
 
 `FindRoot` automatically engages a complex Newton inner loop when the
@@ -5071,7 +5104,8 @@ monitors stay held.
 |-------------|----------------|
 | `FindRoot::argt`    | Wrong arg count. |
 | `FindRoot::ivar`    | Malformed variable spec. |
-| `FindRoot::nlnum`   | `f` or its derivative did not evaluate to a number. |
+| `FindRoot::nlnum`   | `f` or its derivative did not evaluate to a number (after the step backtracking above). |
+| `FindRoot::systno`  | The equations' widths do not add up to the number of variables. |
 | `FindRoot::cvmit`   | `MaxIterations` exhausted (the last iterate is still returned). |
 | `FindRoot::noconv`  | Divergence (non-finite step), or a horizontal secant. |
 | `FindRoot::jacsh`   | A `Jacobian` that is not an `n x n` matrix for `n` equations. |
@@ -5092,6 +5126,10 @@ Out[2]= {x -> 0.739085}
 
 In[3]:= FindRoot[{y == Exp[x], x + y == 2}, {{x, 1}, {y, 1}}]
 Out[3]= {x -> 0.442854, y -> 1.55715}
+
+In[3b]:= g[a_?NumericQ, b_?NumericQ] := {a^2 + b - 3, a - b^2 + 1};
+          FindRoot[g[a, b] == {0, 0}, {{a, 1.2}, {b, 1.1}}]
+Out[3b]= {a -> 1.22777, b -> 1.49257}
 
 In[4]:= FindRoot[Sin[x], {x, 3}, WorkingPrecision -> 50]
 Out[4]= {x -> 3.1415926535897932384626433832795028841971693993751}
