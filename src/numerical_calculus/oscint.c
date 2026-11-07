@@ -16,6 +16,7 @@
 #  include "denint.h"   /* denint_tanhsinh_mpfr — full-precision lobe panels */
 #endif
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -90,6 +91,10 @@ static bool osc_next_zero(GkSampleMachine f, void* ctx, int comp,
         if ((f0 <= 0 && f1 >= 0) || (f0 >= 0 && f1 <= 0)) {
             double lo = pos, hi = nx, flo = f0;
             for (int bj = 0; bj < 60; bj++) {
+                /* at double resolution: further halvings cost a sample each
+                 * and move nothing (60 a zero was a third of the cost of a
+                 * machine lobe sum) */
+                if (hi - lo <= 4.0 * DBL_EPSILON * fmax(fabs(lo), fabs(hi))) break;
                 double m = 0.5 * (lo + hi);
                 double _Complex vm;
                 if (!f(ctx, m, &vm)) return false;
@@ -225,17 +230,25 @@ static double osc_mpfr_mag(const mpfr_t re, const mpfr_t im) {
 static void osc_refine_zero_mpfr(DeQuadSampleMPFR f, void* ctx, int comp,
                                  mpfr_t z, double half, long bits) {
     mpfr_prec_t p = (mpfr_prec_t)bits;
-    mpfr_t z0, z1, f0, f1, vr, vi, d, t;
-    mpfr_inits2(p, z0, z1, f0, f1, vr, vi, d, t, (mpfr_ptr)0);
+    mpfr_t z0, z1, f0, f1, vr, vi, d, t, zb, fb;
+    mpfr_inits2(p, z0, z1, f0, f1, vr, vi, d, t, zb, fb, (mpfr_ptr)0);
     mpfr_set(z0, z, MPFR_RNDN);
     double h = fabs(mpfr_get_d(z, MPFR_RNDN)) * 1e-13 + fabs(half) * 1e-12;
     bool ok = h > 0.0 && f(ctx, z0, vr, vi);
     if (ok) mpfr_set(f0, comp ? vi : vr, MPFR_RNDN);
+    /* the best point so far, by |f|: the iteration stops at the noise floor
+     * of the samples (an integrand with a 60-digit parameter carries fewer
+     * bits than the working precision), where a further secant step is
+     * garbage -- the best iterate is kept, not the double zero */
+    bool have_best = ok;
+    if (ok) { mpfr_set(zb, z0, MPFR_RNDN); mpfr_abs(fb, f0, MPFR_RNDN); }
     mpfr_add_d(z1, z0, h, MPFR_RNDN);
     ok = ok && f(ctx, z1, vr, vi);
     if (ok) mpfr_set(f1, comp ? vi : vr, MPFR_RNDN);
     double lstop = -(double)bits * 0.75;   /* d^2 below the working precision */
-    for (int it = 0; ok && it < 6; it++) {
+    for (int it = 0; ok && it < 8; it++) {
+        mpfr_abs(t, f1, MPFR_RNDN);
+        if (mpfr_less_p(t, fb)) { mpfr_set(zb, z1, MPFR_RNDN); mpfr_set(fb, t, MPFR_RNDN); }
         mpfr_sub(t, f1, f0, MPFR_RNDN);
         if (mpfr_zero_p(t) || mpfr_zero_p(f1)) break;
         mpfr_sub(d, z1, z0, MPFR_RNDN);
@@ -244,15 +257,18 @@ static void osc_refine_zero_mpfr(DeQuadSampleMPFR f, void* ctx, int comp,
         mpfr_set(z0, z1, MPFR_RNDN); mpfr_set(f0, f1, MPFR_RNDN);
         mpfr_sub(z1, z1, d, MPFR_RNDN);
         mpfr_sub(t, z1, z, MPFR_RNDN);
-        if (!mpfr_number_p(z1) || fabs(mpfr_get_d(t, MPFR_RNDN)) > fabs(half)) { ok = false; break; }
+        if (!mpfr_number_p(z1) || fabs(mpfr_get_d(t, MPFR_RNDN)) > fabs(half)) break;
         double ld = mpfr_zero_p(d) ? -INFINITY
                   : (double)mpfr_get_exp(d) - log2(fabs(half) + 1e-300);
-        if (ld < lstop) break;
-        if (!f(ctx, z1, vr, vi)) { ok = false; break; }
+        if (ld < lstop) {                          /* converged: z1 is the zero */
+            mpfr_set(zb, z1, MPFR_RNDN); mpfr_set_zero(fb, 1);
+            break;
+        }
+        if (!f(ctx, z1, vr, vi)) break;
         mpfr_set(f1, comp ? vi : vr, MPFR_RNDN);
     }
-    if (ok && mpfr_number_p(z1)) mpfr_set(z, z1, MPFR_RNDN);
-    mpfr_clears(z0, z1, f0, f1, vr, vi, d, t, (mpfr_ptr)0);
+    if (have_best && mpfr_number_p(zb)) mpfr_set(z, zb, MPFR_RNDN);
+    mpfr_clears(z0, z1, f0, f1, vr, vi, d, t, zb, fb, (mpfr_ptr)0);
 }
 
 bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
@@ -320,8 +336,9 @@ bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
         mpfr_set_d(x1m, z, MPFR_RNDN);
         osc_refine_zero_mpfr(fmp, mpctx, comp, x1m, 0.5 * (z - x), bits);
         double perr;
-        if (!ccquad_mpfr_upto(fmp, mpctx, x0m, x1m, bits, panel_tol, NULL, cc, 4,
-                              pr, pi, &perr))
+        bool ccok = ccquad_mpfr_upto(fmp, mpctx, x0m, x1m, bits, panel_tol, NULL, cc, 4,
+                              pr, pi, &perr);
+        if (!ccok)
             denint_tanhsinh_mpfr(fmp, mpctx, x0m, x1m, bits, panel_tol,
                                  panel_levels, pr, pi, &perr);
         /* Accept the panel's best estimate whenever it is a finite number

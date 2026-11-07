@@ -221,6 +221,15 @@ static void test_oscillatory_singularity_wp(void) {
     ASSERT_CLOSE("NIntegrate[Sin[1/(x (1-x))],{x,0,1},WorkingPrecision->40]",
                  "-0.420564937719925602353566105440624804841397291901640261734259",
                  1e-28);
+    /* an inexact 60-digit parameter (an optimiser's iterate started from a
+     * double): the samples carry fewer bits than the working precision.  The
+     * zero refinement keeps its best iterate at that noise floor (it fell
+     * back to the double zero, flooring the extrapolation at 1e-33 for all
+     * 2000 lobes: 28 s), and the geometry samples run on the compiled
+     * machine twin of the integrand.  Under a second now. */
+    ASSERT_CLOSE("With[{a = SetPrecision[0.64, 60]}, TimeConstrained["
+                 "NIntegrate[x^a Sin[a/(2 - x)], {x, 0, 2}, WorkingPrecision -> 60], 20]]",
+                 "0.987080936877956809184028586034308987522867390394703303662265", 1e-45);
     /* a fast oscillation of FIXED frequency is no endpoint singularity: the
      * ordinary rules keep it (and agree with the closed form) */
     ASSERT_CLOSE("NIntegrate[Sin[1000 x],{x,0,1},WorkingPrecision->40]",

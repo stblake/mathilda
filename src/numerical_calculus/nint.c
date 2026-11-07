@@ -1772,16 +1772,24 @@ static NiAtt ni_try_ncr(NiCtx* ctx, double a, double b, const NiOpts* o,
 /* 1: signs written; 0: no numeric sample there; -1: stop probing. */
 typedef int (*NiOseSign)(void* ctx, double d, int* sr, int* si);
 
-/* A sample costing over NI_OSE_COST_RATIO times the first one (and over
- * NI_OSE_COST_MIN seconds) stops the probe: an integrand whose evaluation
- * cost grows without bound toward the endpoint (Cos[Exp[1/x]], whose huge
- * phase is still a valid double cosine) is not one the lobe rule can follow
- * there anyway, and the deep shell would cost hours. */
-#define NI_OSE_COST_RATIO 30.0
+/* Sample cost that keeps growing toward the endpoint stops the probe: an
+ * integrand whose evaluation cost grows without bound there (Cos[Exp[1/x]],
+ * whose huge phase is still a valid double cosine, computed through an MPFR
+ * argument reduction of 10^4 .. 10^11 bits) is not one the lobe rule can
+ * follow anyway, and the deep shell would cost hours.  The test is the TREND
+ * -- a sample over NI_OSE_COST_MIN seconds costing NI_OSE_COST_RATIO times
+ * the one NI_OSE_COST_LAG samples further out -- not the level: an
+ * MPFR-valued parameter (a 60-digit a in x^a Sin[a/(2 - x)]) makes every
+ * sample cost milliseconds, flatly, and must still be probed. */
+#define NI_OSE_COST_RATIO 6.0
 #define NI_OSE_COST_MIN   2e-3
+#define NI_OSE_COST_LAG   8
 
-static bool ni_osc_shell(NiOseSign probe, void* pc, double lo, double hi, double* t_first) {
+static bool ni_osc_shell(NiOseSign probe, void* pc, double lo, double hi,
+                         double* growth) {
     int scr = 0, sci = 0, pr = 0, pi = 0;
+    double cost[NI_OSE_POINTS];
+    *growth = 1.0;
     for (int i = 0; i < NI_OSE_POINTS; i++) {
         int left = NI_OSE_POINTS - i;
         if ((scr > sci ? scr : sci) + left < NI_OSE_MIN_SC) return false;
@@ -1791,21 +1799,29 @@ static bool ni_osc_shell(NiOseSign probe, void* pc, double lo, double hi, double
         double t0 = mth_mono_seconds();
         int st = probe(pc, pow(10.0, e), &sr, &si);
         double dt = mth_mono_seconds() - t0;
-        if (*t_first < 0.0) *t_first = dt;
-        else if (dt > NI_OSE_COST_MIN && dt > NI_OSE_COST_RATIO * *t_first) return false;
+        cost[i] = dt;
+        if (i >= NI_OSE_COST_LAG && dt > NI_OSE_COST_MIN
+            && dt > NI_OSE_COST_RATIO * cost[i - NI_OSE_COST_LAG]) return false;
         if (st < 0) return false;            /* the probe gave up */
         if (st == 0) continue;
         if (sr != 0) { if (pr != 0 && sr != pr) scr++; pr = sr; }
         if (si != 0) { if (pi != 0 && si != pi) sci++; pi = si; }
-        if (scr >= NI_OSE_MIN_SC || sci >= NI_OSE_MIN_SC) return true;
+        if (scr >= NI_OSE_MIN_SC || sci >= NI_OSE_MIN_SC) {
+            /* how much dearer the samples got across the shell */
+            if (dt > NI_OSE_COST_MIN && cost[0] > 0.0) *growth = dt / cost[0];
+            return true;
+        }
     }
     return false;
 }
 
 static bool ni_osc_endpoint_probe(NiOseSign probe, void* pc) {
-    double t_first = -1.0;
-    return ni_osc_shell(probe, pc, -6.0, -4.0, &t_first)
-        && ni_osc_shell(probe, pc, -11.0, -9.0, &t_first);
+    /* the deep shell is 10^5 times nearer: not entered when the samples of
+     * the shallow one already grew dearer toward the endpoint */
+    double g1, g2;
+    if (!ni_osc_shell(probe, pc, -6.0, -4.0, &g1)) return false;
+    if (g1 > NI_OSE_COST_RATIO) return false;
+    return ni_osc_shell(probe, pc, -11.0, -9.0, &g2);
 }
 
 typedef struct { NiCtx* c; double a, b; int side; } NiOseMachProbe;
@@ -1867,15 +1883,25 @@ static bool ni_endpoint_singular(NiCtx* c, double a, double b, int side) {
 /* One exponential-endpoint piece: x = end_a +- span e^-z on z in [0, oo),
  * exp-sinh first, then between the zeros + Wynn. */
 static NiAtt ni_endpoint_piece(NiCtx* ctx, NiMapMode mode, double end, double span,
-                               const NiOpts* o, double reltol) {
+                               const NiOpts* o, double reltol, bool osc) {
     ctx->span = span; ctx->map_mode = mode; ctx->end_a = end;
-    double _Complex v; double err;
-    bool conv = dequad_halfline_machine(ni_sample_machine, ctx, 0.0, reltol,
-                                        ni_de_levels(o), &v, &err);
+    double _Complex v = NAN; double err = INFINITY;
+    /* exp-sinh only when the endpoint is not known to oscillate: on the
+     * non-decaying oscillation the map makes of an oscillatory singularity
+     * it spends every level and declines (two thirds of the cost of an
+     * x^a Sin[a/(2 - x)] inside an optimiser) */
+    bool conv = !osc && dequad_halfline_machine(ni_sample_machine, ctx, 0.0, reltol,
+                                                ni_de_levels(o), &v, &err);
     if (!conv) {
         double _Complex ov; double oerr;
+        /* the lobe extrapolation is asked for three digits beyond the goal
+         * (to at most 1e-13): it converges geometrically, so this costs a few
+         * lobes, and it met an Automatic 1e-8 with 8 digits where the rules
+         * of the other paths overshoot to 11-12 */
+        double ort = fmax(reltol * 1e-3, 1e-13);
+        if (ort > reltol) ort = reltol;
         if (osc_integrate_machine(ni_sample_machine, ctx, 0.0, 0.0, true,
-                                  reltol, 600, &ov, &oerr)) {
+                                  ort, 600, &ov, &oerr)) {
             v = ov; err = oerr; conv = true;
         } else if (isfinite(oerr) && isfinite(creal(ov)) && isfinite(cimag(ov))) {
             v = ov; err = oerr;     /* the extrapolation, unconverged */
@@ -1889,7 +1915,7 @@ static NiAtt ni_endpoint_piece(NiCtx* ctx, NiMapMode mode, double end, double sp
 }
 
 static NiAtt ni_try_endpoint_sing(NiCtx* ctx, double a, double b,
-                                  const NiOpts* o, bool force) {
+                                  const NiOpts* o, bool force, int osc_lo, int osc_hi) {
     NiAtt best = { false, false, 0.0, INFINITY };
     /* Only meaningful on the plain real axis (not an affine contour segment). */
     if (!(b > a) || ctx->map_mode != NI_MAP_AFFINE
@@ -1906,23 +1932,26 @@ static NiAtt ni_try_endpoint_sing(NiCtx* ctx, double a, double b,
      * ends singular (Sin[1/(x (1 - x))]): the range is split at its midpoint
      * and each half mapped at its own end.  With an explicit method (`force`)
      * and no endpoint detected singular, fall back to trying both mirrors. */
-    bool lo = ni_endpoint_singular(ctx, a, b, +1) || ni_osc_endpoint_machine(ctx, a, b, +1);
-    bool hi = ni_endpoint_singular(ctx, a, b, -1) || ni_osc_endpoint_machine(ctx, a, b, -1);
+    /* osc_lo / osc_hi: the caller's oscillation verdict (1/0), or -1 */
+    bool olo = osc_lo >= 0 ? osc_lo > 0 : ni_osc_endpoint_machine(ctx, a, b, +1);
+    bool ohi = osc_hi >= 0 ? osc_hi > 0 : ni_osc_endpoint_machine(ctx, a, b, -1);
+    bool lo = olo || ni_endpoint_singular(ctx, a, b, +1);
+    bool hi = ohi || ni_endpoint_singular(ctx, a, b, -1);
     if (lo && hi) {
         double m = a + 0.5 * (b - a);
-        NiAtt p1 = ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, m - a, o, reltol);
-        NiAtt p2 = ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - m, o, reltol);
+        NiAtt p1 = ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, m - a, o, reltol, olo);
+        NiAtt p2 = ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - m, o, reltol, ohi);
         best.have = p1.have && p2.have;
         best.conv = p1.conv && p2.conv;
         best.val = p1.val + p2.val;
         best.err = p1.err + p2.err;
         return best;
     }
-    if (lo) return ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, b - a, o, reltol);
-    if (hi) return ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - a, o, reltol);
+    if (lo) return ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, b - a, o, reltol, olo);
+    if (hi) return ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - a, o, reltol, ohi);
     if (force) {
-        ni_consider(&best, ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, b - a, o, reltol));
-        ni_consider(&best, ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - a, o, reltol));
+        ni_consider(&best, ni_endpoint_piece(ctx, NI_MAP_EXP_LO, a, b - a, o, reltol, false));
+        ni_consider(&best, ni_endpoint_piece(ctx, NI_MAP_EXP_HI, b, b - a, o, reltol, false));
     }
     return best;
 }
@@ -1950,12 +1979,12 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
         ni_consider(&best, ni_try_levin_collocation(ctx, a, b, o, reltol));
         if (!best.conv) ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
         if (!best.conv) ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
-        if (!best.conv) ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, false));
+        if (!best.conv) ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, false, -1, -1));
         if (!best.conv) ni_consider(&best, ni_try_osc(ctx, a, b, reltol));
     } else if (o->method == NI_DE) {
         ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
     } else if (o->method == NI_OSCSING) {
-        ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, true));
+        ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, true, -1, -1));
     } else if (o->method == NI_TRAP || o->method == NI_RIEMANN
                || o->method == NI_NEWTONCOTES) {
         ni_consider(&best, ni_try_ncr(ctx, a, b, o, reltol, abstol));
@@ -1966,11 +1995,13 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
          * [0, 1]: 0.32397 for 0.32473, with no warning). */
         if (o->method == NI_AUTO && ctx->map_mode == NI_MAP_AFFINE
             && creal(ctx->x_scale) == 1.0 && cimag(ctx->x_scale) == 0.0
-            && ctx->x_shift == 0.0 && b > a
-            && (ni_osc_endpoint_machine(ctx, a, b, +1)
-                || ni_osc_endpoint_machine(ctx, a, b, -1))) {
-            NiAtt os = ni_try_endpoint_sing(ctx, a, b, o, false);
-            if (os.have) return os;
+            && ctx->x_shift == 0.0 && b > a) {
+            int olo = ni_osc_endpoint_machine(ctx, a, b, +1);
+            int ohi = ni_osc_endpoint_machine(ctx, a, b, -1);
+            if (olo || ohi) {
+                NiAtt os = ni_try_endpoint_sing(ctx, a, b, o, false, olo, ohi);
+                if (os.have) return os;
+            }
         }
         ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
         if (!best.conv && (o->method == NI_AUTO || !best.have))
@@ -1984,7 +2015,7 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
         /* Oscillatory endpoint singularity: spread the singular endpoint onto a
          * half line by the exponential map and integrate between the zeros. */
         if (!best.conv && o->method == NI_AUTO)
-            ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, false));
+            ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, false, -1, -1));
         /* Oscillatory fallback: neither GK (a subdivision per half-period) nor
          * tanh-sinh (assumes endpoint decay) converges on a many-period
          * integrand; integrate between the zeros instead. */
@@ -2301,6 +2332,59 @@ static bool ni_mpfr_powsing(NiCtx* ctx, const mpfr_t am, const mpfr_t bm,
     return done;
 }
 
+/* The integrand as the machine-precision geometry samplers of the MPFR
+ * rules see it: every arbitrary-precision number replaced by its double (a
+ * new tree; NULL when there is none, and `e` itself serves).  The zero
+ * finder and the endpoint probe need a few digits, but a 60-digit parameter
+ * (a = SetPrecision[0.64, 60] in x^a Sin[a/(2 - x)], an optimiser's
+ * iterate) made each of their samples an MPFR evaluation through the
+ * interpreter, and the 50-digit integral 70 times slower than with a = 16/25.
+ * Nothing under a holding head is touched. */
+static Expr* ni_machine_twin(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type == EXPR_MPFR) return expr_new_real(mpfr_get_d(e->data.mpfr, MPFR_RNDN));
+    if (e->type != EXPR_FUNCTION) return NULL;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        uint32_t at = symtab_get_def(h->data.symbol.name)->attributes;
+        if (at & (ATTR_HOLDALL | ATTR_HOLDFIRST | ATTR_HOLDREST | ATTR_HOLDALLCOMPLETE))
+            return NULL;
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* y = ni_machine_twin(e->data.function.args[i]);
+        if (y && !a) {
+            a = malloc(sizeof(Expr*) * n);
+            for (size_t k = 0; k < i; k++) a[k] = expr_copy((Expr*)e->data.function.args[k]);
+        }
+        if (a) a[i] = y ? y : expr_copy((Expr*)e->data.function.args[i]);
+    }
+    if (!a) return NULL;
+    Expr* out = expr_new_function(expr_copy((Expr*)h), a, n);
+    free(a);
+    return out;
+}
+
+/* A machine geometry context for an MPFR rule: the machine spec, no endpoint
+ * guard, the machine twin of the body (held in *twin, freed by the caller
+ * with ni_geom_done) and the compiled fast path. */
+static void ni_geom_ctx(NiCtx* g, const NiCtx* ctx, Expr** twin) {
+    *g = *ctx;
+    *twin = ni_machine_twin(ctx->body);
+    ni_ctx_rebody(g, *twin ? *twin : ctx->body);
+    g->spec = numeric_machine_spec();
+    g->gd_on = false;
+    g->ac_enabled = true;
+}
+
+static void ni_geom_done(NiCtx* g, Expr* twin) {
+    autocompiled_free(g->ac);
+    autocompiled_free(g->ac_prec);
+    g->ac = NULL; g->ac_prec = NULL;
+    expr_free(twin);
+}
+
 /* ------------------------------------------------------------------ *
  *  Oscillatory endpoint singularities at WorkingPrecision              *
  * ------------------------------------------------------------------ *
@@ -2356,14 +2440,13 @@ static bool ni_mpfr_osc_endpoint(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
      * endpoint can cost without bound (Cos[Exp[1/x]] at x = 10^-11 asks for
      * the cosine of a number with 10^11 integer bits), where the double
      * overflows at once and declines. */
-    NiCtx gm = *ctx;
-    ni_ctx_rebody(&gm, ctx->body);
-    gm.spec = numeric_machine_spec();
-    gm.gd_on = false;
+    NiCtx gm; Expr* twin;
+    ni_geom_ctx(&gm, ctx, &twin);
     double ed = mpfr_get_d(end, MPFR_RNDN), sd = mpfr_get_d(span, MPFR_RNDN);
-    if (!(side > 0 ? ni_osc_endpoint_machine(&gm, ed, ed + sd, +1)
-                   : ni_osc_endpoint_machine(&gm, ed - sd, ed, -1)))
-        return false;
+    bool mhit = side > 0 ? ni_osc_endpoint_machine(&gm, ed, ed + sd, +1)
+                         : ni_osc_endpoint_machine(&gm, ed - sd, ed, -1);
+    ni_geom_done(&gm, twin);
+    if (!mhit) return false;
     NiOseMpfrProbe q;
     q.c = ctx; q.end = end; q.span = span; q.side = side;
     mpfr_inits2(bits, q.x, q.vr, q.vi, (mpfr_ptr)0);
@@ -2414,15 +2497,21 @@ static bool ni_mpfr_oscsing_piece(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
                                   int side, const NiOpts* o, mpfr_t re, mpfr_t im,
                                   double* abserr, bool* any) {
     long bits = o->bits;
-    NiCtx g = *ctx;                     /* geometry: machine samples, same map */
-    ni_ctx_rebody(&g, ctx->body);
-    g.spec = numeric_machine_spec();
-    g.gd_on = false;
+    NiCtx g; Expr* twin;                /* geometry: machine samples, same map */
+    ni_geom_ctx(&g, ctx, &twin);
     g.map_mode = side > 0 ? NI_MAP_EXP_LO : NI_MAP_EXP_HI;
     g.end_a = mpfr_get_d(end, MPFR_RNDN);
     g.span = mpfr_get_d(span, MPFR_RNDN);
     NiExpMap m;
-    m.c = ctx; m.end = end; m.span = span; m.side = side;
+    /* The lobe samples bypass the endpoint cancellation guard: the map keeps
+     * the distance to the endpoint exact by construction (the abscissa
+     * carries the extra bits), and the guard, built for the affine nodes,
+     * declined samples of an integrand with an inexact parameter there
+     * (x^a Sin[a/(2 - x)] with a 60-digit a), leaving their zeros at double
+     * precision and the extrapolation floored at 1e-33 for all 2000 lobes. */
+    NiCtx cl = *ctx;
+    cl.gd_on = false;
+    m.c = &cl; m.end = end; m.span = span; m.side = side;
     mpfr_inits2(bits, m.off, m.x, (mpfr_ptr)0);
     mpfr_t pr, pi;
     mpfr_inits2(bits, pr, pi, (mpfr_ptr)0);
@@ -2440,6 +2529,7 @@ static bool ni_mpfr_oscsing_piece(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
         conv = false;
     }
     mpfr_clears(pr, pi, m.off, m.x, (mpfr_ptr)0);
+    ni_geom_done(&g, twin);
     return conv;
 }
 
