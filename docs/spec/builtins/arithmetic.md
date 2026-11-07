@@ -69,6 +69,16 @@ Numerical evaluation.
   the pair is not threaded over: `N[Pi, {MachinePrecision, MachinePrecision}]`
   is machine `Pi`.
 
+**Exact arrays**: machine `N` of a rectangular `List` (any rank) whose
+elements are all `Integer`s, `Rational`s of machine integers, or machine
+`Real`s, with at least one exact element, is written straight into a packed
+float64 array: each element is the correctly rounded double, bit-identical to
+`Map[N, array, {-1}]`, without the expression walk. A 465 x 465 `Rational`
+transition matrix takes 0.4 ms instead of 13.5 ms, and `MatrixPower`, `Dot`,
+`LinearSolve` downstream receive a buffer rather than repacking a boxed list.
+Below the packing threshold, or with any other element (a `BigInt`, a symbol,
+`Pi`, a ragged row), the general path runs and the result is a plain `List`.
+
 **N-values**: a rule for `N` attached to a symbol or a head is used wherever
 that symbol or call occurs, not only at the top: after `z2 /: N[z2] = 3/2` and
 `h /: N[h[x_]] := 2 x`, `N[2 + z2]` is `3.5` and `N[1 + h[3]]` is `7.`. The

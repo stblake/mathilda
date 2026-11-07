@@ -26,6 +26,24 @@
  *  Phase 1: machine-precision N[]
  * ---------------------------------------------------------------------- */
 
+/* N of a large exact rectangular array is written straight into a packed
+ * float64 buffer, bit-identical to element-wise N; anything it cannot convert
+ * (ragged rows, a symbol, a bigint leaf) takes the generic path unchanged. */
+static void test_n_exact_array_packs(void) {
+    assert_eval_eq("SeedRandom[3]; q = Table[RandomInteger[{-10^6, 10^6}]/"
+                   "RandomInteger[{1, 10^7}], {60}, {60}]; "
+                   "{Developer`PackedArrayQ[N[q]], N[q] === Map[N, q, {2}]}",
+                   "{True, True}", 0);
+    assert_eval_eq("q2 = Table[(10^17 + 3 i)/(10^18 - 7 i), {i, 300}]; "
+                   "N[q2] === Map[N, q2]", "True", 0);
+    assert_eval_eq("Developer`PackedArrayQ[N[Range[1000]/7]]", "True", 0);
+    assert_eval_eq("N[Join[Range[300]/7, {x}]][[-1]]", "x", 0);
+    assert_eval_eq("Developer`PackedArrayQ[N[Join[Range[300]/7, {x}]]]", "False", 0);
+    assert_eval_eq("N[Table[{i/2, 2^70}, {i, 300}]][[1]]", "{0.5, 1.18059e+21}", 0);
+    assert_eval_eq("N[{{1/2, 1/4}, {1}}]", "{{0.5, 0.25}, {1.0}}", 0);
+    assert_eval_eq("N[{1/3, 2/3}]", "{0.333333, 0.666667}", 0);
+}
+
 static void test_n_integer_leaf(void) {
     assert_eval_eq("N[0]",  "0.0", 0);
     assert_eval_eq("N[5]",  "5.0", 0);
@@ -926,6 +944,7 @@ int main(void) {
     TEST(test_n_bad_precision_arg);
     TEST(test_machineprecision_is_protected);
     TEST(test_inexact_contagion);
+    TEST(test_n_exact_array_packs);
 
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);

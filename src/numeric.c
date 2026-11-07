@@ -32,6 +32,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "pack.h"      /* ndbuild_open: N[exact array] straight into a buffer */
 #include "print.h"     /* expr_to_string: N::meprec text */
 #include "stieltjesgamma.h" /* numeric_stieltjes_n: N of an NHoldFirst constant */
 #if defined(USE_FLINT) && defined(USE_MPFR)
@@ -3278,6 +3279,114 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
 /* ------------------------------------------------------------------------
  *  Builtin: N
  * ---------------------------------------------------------------------- */
+/* ------------------------------------------------------------------------
+ *  N[array] -> packed float64, directly.
+ *
+ * N of a large exact rectangular array (a transition matrix of Rationals, an
+ * Integer table) is the common first step of every numeric linear-algebra
+ * workload: N[P] then MatrixPower / Dot / LinearSolve. The generic path walks
+ * it as an expression -- the exact-leaf scan, the working-precision plan, one
+ * boxed Real per element -- and hands back an UNPACKED List, so every consumer
+ * then repacks it (216k elements: 13.5 ms for N, ~3 ms more per repack).
+ *
+ * A rectangular List whose leaves are all machine-convertible numbers --
+ * Integer, Rational of two int64s, machine Real -- has exactly one answer per
+ * element, the correctly rounded double, and needs no plan: write it straight
+ * into a float64 buffer. The doubles are bit-identical to the scalar path's
+ * (an int64 -> double conversion rounds to nearest; p/q with |p|, |q| <= 2^53
+ * is one correctly rounded IEEE division of exact operands; anything wider goes
+ * through the same mpq rounding the scalar Rational branch uses). Any other leaf
+ * (a bigint, Pi, a symbol, an MPFR number, a ragged row) declines, and so does
+ * an array under the packing threshold (ndbuild_open returns NULL): the generic
+ * path then runs unchanged.
+ * ---------------------------------------------------------------------- */
+#define N_PACK_MAX_RANK 16
+
+/* Shape of a rectangular nested List, read off its first elements; 0 if `e`
+ * is not a List. Full rectangularity is checked while filling. */
+static int n_pack_shape(const Expr* e, int64_t* dims) {
+    int rank = 0;
+    while (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List) {
+        if (rank == N_PACK_MAX_RANK || e->data.function.arg_count == 0) return 0;
+        dims[rank++] = (int64_t)e->data.function.arg_count;
+        e = e->data.function.args[0];
+    }
+    return rank;
+}
+
+/* One leaf to its correctly rounded double; false declines. */
+static bool n_pack_leaf(const Expr* x, double* out, bool* exact) {
+    if (x->type == EXPR_INTEGER) { *out = (double)x->data.integer; *exact = true; return true; }
+    if (x->type == EXPR_REAL)    { *out = x->data.real; return true; }
+    if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol.name == SYM_Rational &&
+        x->data.function.arg_count == 2 &&
+        x->data.function.args[0]->type == EXPR_INTEGER &&
+        x->data.function.args[1]->type == EXPR_INTEGER) {
+        const int64_t p = x->data.function.args[0]->data.integer;
+        const int64_t q = x->data.function.args[1]->data.integer;
+        const int64_t lim = INT64_C(1) << 53;
+        if (q == 0) return false;
+        if (p >= -lim && p <= lim && q >= -lim && q <= lim) {
+            *out = (double)p / (double)q;
+        } else {
+            mpq_t r;
+            /* No mpq_init: expr_to_mpz initialises its target (as in the
+             * scalar Rational branch). */
+            expr_to_mpz(x->data.function.args[0], mpq_numref(r));
+            expr_to_mpz(x->data.function.args[1], mpq_denref(r));
+            mpq_canonicalize(r);
+            *out = numeric_mpq_to_double(r);
+            mpq_clear(r);
+        }
+        *exact = true;
+        return true;
+    }
+    return false;
+}
+
+static bool n_pack_fill(const Expr* e, int level, int rank, const int64_t* dims,
+                        double* buf, size_t* pos, bool* exact) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List ||
+        (int64_t)e->data.function.arg_count != dims[level])
+        return false;
+    Expr* const* a = e->data.function.args;
+    const size_t n = e->data.function.arg_count;
+    if (level == rank - 1) {
+        for (size_t i = 0; i < n; i++)
+            if (!n_pack_leaf(a[i], &buf[(*pos)++], exact)) return false;
+        return true;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (!n_pack_fill(a[i], level + 1, rank, dims, buf, pos, exact)) return false;
+    return true;
+}
+
+/* The packed float64 N of `e`, or NULL (not a convertible rectangular array,
+ * nothing exact in it, or under the packing threshold). */
+static Expr* n_pack_exact_array(const Expr* e) {
+    int64_t dims[N_PACK_MAX_RANK];
+    const int rank = n_pack_shape(e, dims);
+    if (rank == 0) return NULL;
+    /* The leaf level must hold numbers, not more Lists of a ragged depth:
+     * n_pack_fill checks each one, so only the shape is needed here. */
+    void* raw = NULL;
+    Expr* node = ndbuild_open(rank, dims, NDT_FLOAT64, &raw);
+    if (!node) return NULL;
+    size_t pos = 0;
+    bool exact = false;
+    if (!n_pack_fill(e, 0, rank, dims, (double*)raw, &pos, &exact) || !exact) {
+        /* Partially (or fully, all-Real) written: this node never escapes.
+         * An all-machine-Real List is already N's answer -- the generic path
+         * returns it as it stands rather than re-presenting it. */
+        expr_free(node);
+        return NULL;
+    }
+    return node;
+}
+
 Expr* builtin_n(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     const size_t argc = res->data.function.arg_count;
@@ -3311,6 +3420,10 @@ Expr* builtin_n(Expr* res) {
      * (see eval.c around the builtin dispatch site), so we must NOT free
      * it ourselves. Returning NULL means "keep `res` unevaluated" — the
      * evaluator retains ownership in that path. */
+    if (spec.mode == NUMERIC_MODE_MACHINE) {
+        Expr* packed = n_pack_exact_array(res->data.function.args[0]);
+        if (packed) return packed;
+    }
     g_numeric_from_n = true;
     Expr* out = numericalize(res->data.function.args[0], spec);
     g_numeric_from_n = false;
