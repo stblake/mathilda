@@ -38,23 +38,29 @@ Get["../harness.m"]; Get["../siam100_common.m"];
 
 require[{"FindRoot", "NIntegrate"}];
 
+(* Same request in every system: a machine row (no options) asks for 12
+   digits, as the .py (dblquad/tplquad epsrel 1e-12) and .mac (quad_qags
+   epsrel 1e-12) halves do; a wp50 row passes its own options unchanged. *)
+goal6[] := PrecisionGoal -> 12;
+goal6[o__] := Sequence[o];
+
 (* square lattice, phi even in each k_i: [0,pi]^2 *)
 gsq[cc_, ss_, o___] := NIntegrate[With[{c = cc[k1, k2], s = ss[k1, k2]}, (1 - c)/((1 - c)^2 + s^2)],
-   {k1, 0, Pi}, {k2, 0, Pi}, o]/Pi^2;
+   {k1, 0, Pi}, {k2, 0, Pi}, Evaluate[goal6[o]]]/Pi^2;
 (* bias coupling the axes: [0,pi] x [-pi,pi] *)
 gsq2[cc_, ss_, o___] := NIntegrate[With[{c = cc[k1, k2], s = ss[k1, k2]}, (1 - c)/((1 - c)^2 + s^2)],
-   {k1, 0, Pi}, {k2, -Pi, Pi}, o]/(2 Pi^2);
+   {k1, 0, Pi}, {k2, -Pi, Pi}, Evaluate[goal6[o]]]/(2 Pi^2);
 
 cSq[k1_, k2_] := (Cos[k1] + Cos[k2])/2;
-gEW[e_?NumericQ, o___]    := gsq[cSq, Function[{k1, k2}, 2 e Sin[k1]], o];
-gDiag[e_?NumericQ, o___]  := gsq2[cSq, Function[{k1, k2}, 2 e (Sin[k1] + Sin[k2])], o];
-gAni[e_?NumericQ, o___]   := gsq[Function[{k1, k2}, 2 Cos[k1]/3 + Cos[k2]/3], Function[{k1, k2}, 2 e Sin[k1]], o];
+gEW[e_?NumericQ, o___]    := gsq[cSq, Function[{k1, k2}, 2 e Sin[k1]], Evaluate[goal6[o]]];
+gDiag[e_?NumericQ, o___]  := gsq2[cSq, Function[{k1, k2}, 2 e (Sin[k1] + Sin[k2])], Evaluate[goal6[o]]];
+gAni[e_?NumericQ, o___]   := gsq[Function[{k1, k2}, 2 Cos[k1]/3 + Cos[k2]/3], Function[{k1, k2}, 2 e Sin[k1]], Evaluate[goal6[o]]];
 gEW3[e_?NumericQ, o___]   := NIntegrate[With[{c = (Cos[k1] + Cos[k2] + Cos[k3])/3},
-     (1 - c)/((1 - c)^2 + (2 e Sin[k1])^2)], {k1, 0, Pi}, {k2, 0, Pi}, {k3, 0, Pi}, o]/Pi^3;
+     (1 - c)/((1 - c)^2 + (2 e Sin[k1])^2)], {k1, 0, Pi}, {k2, 0, Pi}, {k3, 0, Pi}, Evaluate[goal6[o]]]/Pi^3;
 gTri[e_?NumericQ, o___]   := gsq2[Function[{k1, k2}, (Cos[k1] + Cos[k2] + Cos[k1 + k2])/3],
-     Function[{k1, k2}, 2 e Sin[k1]], o];
+     Function[{k1, k2}, 2 e Sin[k1]], Evaluate[goal6[o]]];
 s9[k1_, k2_] := Sin[k1]/10 + Sin[k2]/5;
-u3[o___] := NIntegrate[1/(1 - (Cos[k1] + Cos[k2] + Cos[k3])/3), {k1, 0, Pi}, {k2, 0, Pi}, {k3, 0, Pi}, o]/Pi^3;
+u3[o___] := NIntegrate[1/(1 - (Cos[k1] + Cos[k2] + Cos[k3])/3), {k1, 0, Pi}, {k2, 0, Pi}, {k3, 0, Pi}, Evaluate[goal6[o]]]/Pi^3;
 
 vrun["hc6.1 machine", 1 - 1/gEW[1/10], 10, 1, 60];
 vrun["hc6.1 wp50", 1 - 1/gEW[1/10, WorkingPrecision -> 60], 48, 1, 60];

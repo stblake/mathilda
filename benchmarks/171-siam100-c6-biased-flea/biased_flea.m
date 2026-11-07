@@ -27,9 +27,15 @@ Get["../harness.m"]; Get["../siam100_common.m"];
 
 require[{"FindRoot", "NIntegrate"}];
 
+(* Same request in every system: the machine tier asks for 12 digits, as the
+   .py (dblquad epsrel 1e-12) and .mac (quad_qags epsrel 1e-12) halves do;
+   the wp50 tier keeps NIntegrate's working-precision defaults. *)
+goal6[MachinePrecision] := PrecisionGoal -> 12;
+goal6[_] := Sequence[];
+
 g6[e_?NumericQ, wp_] := NIntegrate[
    With[{c = (Cos[k1] + Cos[k2])/2}, (1 - c)/((1 - c)^2 + (2 e Sin[k1])^2)],
-   {k1, 0, Pi}, {k2, 0, Pi}, WorkingPrecision -> wp]/Pi^2;
+   {k1, 0, Pi}, {k2, 0, Pi}, WorkingPrecision -> wp, Evaluate[goal6[wp]]]/Pi^2;
 
 vrun["c6.machine", e /. FindRoot[g6[e, MachinePrecision] == 2, {e, 0.06, 0.07}], 10, 3];
 vrun["c6.wp50", e /. FindRoot[g6[e, 60] == 2, {e, 6/100, 7/100},

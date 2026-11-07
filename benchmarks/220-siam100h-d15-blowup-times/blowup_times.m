@@ -36,7 +36,15 @@ Get["../harness.m"]; Get["../siam100_common.m"];
 require[{"NDSolve", "FindRoot"}];
 
 dom[sol_] := sol["Domain"][[1, 2]];
-tinf[eqs_, f_, tmax_, wp_] := dom[f /. First[NDSolve[eqs, f, {t, 0, tmax}, WorkingPrecision -> wp]]];
+(* Same request in every system: the machine tier asks for the tolerances the
+   .py half gives solve_ivp -- rtol = atol = 1e-12 for the ODE rows, 1e-10 for
+   the method-of-lines PDE rows; the wp50 tier keeps NDSolve's defaults. *)
+ode12[MachinePrecision] := Sequence[PrecisionGoal -> 12, AccuracyGoal -> 12];
+ode12[_] := Sequence[];
+pde10[MachinePrecision] := Sequence[PrecisionGoal -> 10, AccuracyGoal -> 10];
+pde10[_] := Sequence[];
+
+tinf[eqs_, f_, tmax_, wp_] := dom[f /. First[NDSolve[eqs, f, {t, 0, tmax}, WorkingPrecision -> wp, Evaluate[ode12[wp]]]]];
 
 e[1] := {{y'[t] == 1 + y[t]^2, y[0] == 0}, y, 3};
 e[2] := {{y'[t] == t^2 + y[t]^2, y[0] == 0}, y, 3};
@@ -48,14 +56,14 @@ e[10] := {{y''[t] == Exp[y[t]], y[0] == 0, y'[0] == 0}, y, 4};
 
 pde7[wp_] := dom[u /. First[NDSolve[{D[u[t, x], t] == D[u[t, x], x, x] + u[t, x] + u[t, x]^2,
     u[0, x] == 1, Derivative[0, 1][u][t, 0] == 0, Derivative[0, 1][u][t, 1] == 0},
-    u, {t, 0, 2}, {x, 0, 1}, WorkingPrecision -> wp]]];
+    u, {t, 0, 2}, {x, 0, 1}, WorkingPrecision -> wp, Evaluate[pde10[wp]]]]];
 pde8[wp_] := dom[u /. First[NDSolve[{D[u[t, x, y], t] == D[u[t, x, y], x, x] + D[u[t, x, y], y, y] + Exp[u[t, x, y]],
     u[0, x, y] == 0, Derivative[0, 1, 0][u][t, 0, y] == 0, Derivative[0, 1, 0][u][t, 3, y] == 0,
     Derivative[0, 0, 1][u][t, x, 0] == 0, Derivative[0, 0, 1][u][t, x, 3] == 0},
-    u, {t, 0, 2}, {x, 0, 3}, {y, 0, 3}, WorkingPrecision -> wp]]];
+    u, {t, 0, 2}, {x, 0, 3}, {y, 0, 3}, WorkingPrecision -> wp, Evaluate[pde10[wp]]]]];
 cross9[wp_] := Module[{s},
   s = u /. First[NDSolve[{D[u[t, x], t] == D[u[t, x], x, x], u[0, x] == 4 x (1 - x), u[t, 0] == 0, u[t, 1] == 0},
-    u, {t, 0, 1}, {x, 0, 1}, WorkingPrecision -> wp]];
+    u, {t, 0, 1}, {x, 0, 1}, WorkingPrecision -> wp, Evaluate[pde10[wp]]]];
   ruleVal[FindRoot[s[tt, 1/2] == 1/2, {tt, 1/100, 1/5}, Method -> "Brent", WorkingPrecision -> wp], tt]];
 
 Do[With[{k = k},
