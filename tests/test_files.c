@@ -941,6 +941,18 @@ void test_directory_stack(void) {
     assert_eval_eq("{Attributes[SetDirectory], Attributes[ResetDirectory], "
                    "Attributes[Directory], Attributes[DirectoryStack]}",
                    "{{Protected}, {Protected}, {Protected}, {Protected}}", 0);
+    /* $HomeDirectory / $InstallationDirectory: Protected strings; the
+     * installation root is absolute and actually holds the bootstrap tree
+     * (from tests/build it is reached through the relative CWD ladder). */
+    assert_eval_eq("{Attributes[$HomeDirectory], Attributes[$InstallationDirectory]}",
+                   "{{Protected}, {Protected}}", 0);
+    assert_eval_eq("StringQ[$InstallationDirectory] && "
+                   "(FileExistsQ[FileNameJoin[{$InstallationDirectory, \"src\", \"internal\", \"init.m\"}]] || "
+                   "FileExistsQ[FileNameJoin[{$InstallationDirectory, \"share\", \"mathilda\", \"internal\", \"init.m\"}]])",
+                   "True", 0);
+#ifndef _WIN32
+    assert_eval_eq("StringTake[$InstallationDirectory, 1]", "\"/\"", 0);
+#endif
     fn_tree_rm(root);
 }
 

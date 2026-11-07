@@ -868,8 +868,31 @@ SetDirectory["src"]; FileNames["*.c"]; ResetDirectory[]
 ```
 
 ## $HomeDirectory
-The user's home directory. It is read from `HOME` at startup; on Windows from
-`USERPROFILE`, or else `HOMEDRIVE` + `HOMEPATH`. `Protected`.
+Your "home" directory, as the full name of the directory as a string; on
+multi-user systems, the main directory of the current user. It is read from
+`HOME` at startup; on Windows from `USERPROFILE`, or else `HOMEDRIVE` +
+`HOMEPATH`. `Protected`.
+
+```
+$HomeDirectory   (* "/Users/user" *)
+```
+
+## $InstallationDirectory
+The top-level directory in which the Mathilda installation resides, as the full
+(absolute, symlink-resolved) name of the directory as a string. Implemented in
+`src/loadmodule.c` (`mathilda_installation_directory`) and fixed at startup.
+It is read off the directory that actually serves the bootstrap `init.m`, so it
+always names the tree the running process uses, whatever the current directory
+or `$MATHILDA_HOME`:
+- `<root>/src/internal/` → `<root>` (a binary run from its source tree);
+- `<prefix>/share/mathilda/internal/` → `<prefix>` (an installed build);
+- `<dir>/internal/` → `<dir>`; with nothing resolvable, the executable's directory.
+
+`Protected`.
+
+```
+$InstallationDirectory   (* "/Users/user/Mathilda_dev/Mathilda" *)
+```
 
 ## Environment
 The value of an operating-system environment variable.

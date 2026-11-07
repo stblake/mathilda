@@ -62,6 +62,16 @@ void  mth_input_file_leave(Expr* prev);
 int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz);
 
 /*
+ * Write the absolute top-level directory of the running Mathilda installation
+ * (backs $InstallationDirectory) into `out`, with no trailing separator. It is
+ * derived from the base directory that serves init.m: <root>/src/internal/ ->
+ * <root> (source tree), <prefix>/share/mathilda/internal/ -> <prefix>
+ * (installed), <dir>/internal/ -> <dir>; else the executable's directory.
+ * Returns 1 on success, 0 if nothing resolves or `out` is too small.
+ */
+int mathilda_installation_directory(char* out, size_t outsz);
+
+/*
  * Locate (via mathilda_resolve_internal) and load the internal module named by
  * `relpath` exactly once. Repeat calls with the same `relpath` are no-ops (the
  * module is loaded only once, preventing duplicate rule registration). Returns

@@ -398,6 +398,52 @@ int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz) {
     return 0;
 }
 
+/* Ends `s` with `suffix`? Returns the length of the prefix before it, or -1. */
+static long lm_strip_suffix(const char* s, const char* suffix) {
+    size_t n = strlen(s), m = strlen(suffix);
+    if (m > n || strcmp(s + n - m, suffix) != 0) return -1;
+    return (long)(n - m);
+}
+
+int mathilda_installation_directory(char* out, size_t outsz) {
+    if (!out || outsz == 0) return 0;
+
+    /* The top-level directory is read off the base that actually serves the
+     * bootstrap tree, so $InstallationDirectory always names the tree this
+     * process is running from (whichever resolution rule found it). */
+    char top[LM_PATH_MAX];
+    char probe[LM_PATH_MAX];
+    if (mathilda_resolve_internal("init.m", probe, sizeof(probe)) && lm_base_known) {
+        static const char* const suffixes[] = {
+            "src/internal/",            /* source tree: <root>/src/internal/  */
+            "share/mathilda/internal/", /* installed:   <prefix>/share/...    */
+            "internal/",                /* $MATHILDA_HOME/<dir>/internal/     */
+            NULL
+        };
+        snprintf(top, sizeof(top), "%s", lm_base);
+        for (int i = 0; suffixes[i]; i++) {
+            long k = lm_strip_suffix(lm_base, suffixes[i]);
+            if (k >= 0) { top[k] = '\0'; break; }
+        }
+        if (!top[0]) snprintf(top, sizeof(top), "./"); /* CWD-relative base */
+    } else if (!lm_exe_dir(top, sizeof(top))) {
+        return 0;
+    }
+
+    /* Canonicalise: absolute, symlink-free, no trailing separator. */
+    char abs[LM_PATH_MAX];
+#if defined(_WIN32)
+    if (!_fullpath(abs, top, sizeof(abs))) return 0;
+#else
+    if (!realpath(top, abs)) return 0;
+#endif
+    size_t n = strlen(abs);
+    while (n > 1 && (abs[n - 1] == '/' || abs[n - 1] == '\\')) abs[--n] = '\0';
+    if (n >= outsz) return 0;
+    memcpy(out, abs, n + 1);
+    return 1;
+}
+
 int mathilda_load_module(const char* relpath) {
     if (!relpath || !*relpath) return 0;
     if (lm_already_loaded(relpath)) return 1;
@@ -436,4 +482,21 @@ void loadmodule_init(void) {
         "\tsrc/internal), resolving the location independently of the current\n"
         "\tworking directory. Each module is loaded at most once. Returns True\n"
         "\tif the module was located and loaded, False otherwise.");
+
+    /* $InstallationDirectory -- fixed for the session (see
+     * mathilda_installation_directory). Left unset if nothing resolves. */
+    char dir[LM_PATH_MAX];
+    if (mathilda_installation_directory(dir, sizeof(dir))) {
+        Expr* sym = expr_new_symbol("$InstallationDirectory");
+        Expr* val = expr_new_string(dir);
+        symtab_add_own_value("$InstallationDirectory", sym, val);
+        expr_free(sym);
+        expr_free(val);
+    }
+    symtab_get_def("$InstallationDirectory")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("$InstallationDirectory",
+        "$InstallationDirectory\n"
+        "\tgives the top-level directory in which your Mathilda installation resides, as the full\n"
+        "\tname of the directory as a string: the source-tree root for a binary run from its tree,\n"
+        "\tor the install prefix (containing share/mathilda) for an installed build.");
 }

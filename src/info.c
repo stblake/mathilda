@@ -4531,7 +4531,9 @@ void info_init(void) {
         "\tgives the separator between directory names in a file name: \"/\", or \"\\\\\" on Windows.");
     symtab_set_docstring("$HomeDirectory",
         "$HomeDirectory\n"
-        "\tgives your home directory, from the HOME (or USERPROFILE) environment variable.");
+        "\tgives your \"home\" directory, as the full name of the directory as a string.\n"
+        "\tOn multi-user operating systems it gives the main directory for the current user\n"
+        "\t(read from HOME; on Windows USERPROFILE, or HOMEDRIVE + HOMEPATH).");
     symtab_set_docstring("DirectoryQ",
         "DirectoryQ[\"name\"]\n"
         "\tgives True if the directory name exists (\"~\" and File[\"name\"] accepted), and False otherwise.");
