@@ -19,6 +19,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [x] v0.6382-86 linalg: MPFR LU honours TimeConstrained; sparse band solver (hc7.2 7.3 s -> 2 ms); exact sparse fill-column wrong answer; MPFR sparse by iterative refinement (hc7 wp50 all 50d, fastest); Norm[m,2] MPFR
   - [x] v0.6387-90 FindRoot vector eqs/MPFR systems/backtracking + get_approx_mpfr bignum Rational (D20/hd20 fixed); minimisers converge to WP (C4 wp50 15->58d); Brent residual test (d13 machine 12d); penalty scaling (D19 no longer returns start)
   - [ ] open: D19/hd19 488 s (FD gradients x 64 vars); D19 wp50 constraints at MPFR; C5/hc5 minimax (Max[] objective); hd4.9 NSum noise; hd3.3-10 unscored; hd15.7 MOL PDE at WP60; C3 Table/N build 1.5 s (speed agent)
+  - [x] v0.6391-93 NSum direct summation of fast-decaying series + alternating underflow + EM far-probe hang (c10.wp50 timeout -> 0.33 ms; c8.wp50 2354 -> 1.4 ms), saturated partial sums (hc8.7), Series keeps SeriesData fields exact (hd20.9)
+  - [ ] open (NSum agent): MPFR compiler lacks With[] and Sech (hc10.9 wp50 903 ms); hd20.9 wp50 Series 59 s; hd4.4 Moebius-li series ~4d; hc8.7-10 machine 1d short in FindRoot
   - [ ] wave 2 agents: absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
