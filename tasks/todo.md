@@ -21,6 +21,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [ ] open: D19/hd19 488 s (FD gradients x 64 vars); D19 wp50 constraints at MPFR; C5/hc5 minimax (Max[] objective); hd4.9 NSum noise; hd3.3-10 unscored; hd15.7 MOL PDE at WP60; C3 Table/N build 1.5 s (speed agent)
   - [x] v0.6391-93 NSum direct summation of fast-decaying series + alternating underflow + EM far-probe hang (c10.wp50 timeout -> 0.33 ms; c8.wp50 2354 -> 1.4 ms), saturated partial sums (hc8.7), Series keeps SeriesData fields exact (hd20.9)
   - [ ] open (NSum agent): MPFR compiler lacks With[] and Sech (hc10.9 wp50 903 ms); hd20.9 wp50 Series 59 s; hd4.4 Moebius-li series ~4d; hc8.7-10 machine 1d short in FindRoot
+  - [x] v0.6394-97 FoldList compiled over exact elements (d10 1677 -> 62 ms), packed RandomChoice (hd10 330 -> 13 ms), Partition overhang forms (d18 105 s -> 0.46 s), Table exact-rational kernel (c3 447 -> 70 ms); full unit tier 620/620 at v0.6397
+  - [ ] open (speed agent): hc3.10 transcendental Table body 34 ms; d10.wp50 bignum loop 3.7x slower, 2d vs 3d
   - [ ] wave 2 agents: absent heads (RiemannR, MangoldtLambda, CubeRoot, RotationMatrix, ArcLength, Annulus, WaveletPhi/Psi); evaluator speed (Table/N, FoldList, RandomChoice pipelines, D18 polygon build)
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
