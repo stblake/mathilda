@@ -3678,9 +3678,18 @@ static bool ni_body_has_region(const Expr* e) {
 /* Box vertex cancellation guard (see ni_mc_vertex_guard). */
 #define NI_VG_MAX_DIM   3
 #define NI_VG_MAX_VERTS 8                /* 2^NI_VG_MAX_DIM */
-#define NI_VG_ZONE      0x1p-17          /* relative distance of the vertex zone */
-#define NI_VG_PROBE     0x1p-26          /* relative depth of the probe point */
+#define NI_VG_ZONE_MIN  0x1p-17          /* smallest vertex zone (relative)      */
+#define NI_VG_ZONE_MAX  0x1p-4           /* largest vertex zone (relative)       */
+#define NI_VG_PROBE     0x1p-26          /* relative depth of the cancellation probe */
+#define NI_VG_TRIGGER   0x1p-8           /* a sample this close probes the vertex */
 #define NI_VG_BITS      128
+/* vg_tau, the pointwise relative accuracy the zone is sized for, as a
+ * multiple of the run's relative tolerance: the cubature's regions average a
+ * sample's error over their volume, and at the default goal its 2^-17 zone
+ * (rounding error ~4e-7 at the edge) is what this gives; the nested rule asks
+ * every inner integral for the goal, so its samples need it pointwise. */
+#define NI_VG_TAU_CUB   1e4
+#define NI_VG_TAU_NEST  10.0
 
 typedef struct {
     Expr* body;
@@ -3691,11 +3700,15 @@ typedef struct {
     AutoCompiled* ac_prec;  /* MPFR-compiled body (spec.mode MPFR), or NULL */
     /* Vertex cancellation guard of the machine box rules (ni_mc_vertex_guard):
      * the box (borrowed), and per vertex whether it is unprobed (0), found
-     * clean (1) or cancelling (2).  vg_on is false for every other caller. */
+     * clean (1) or cancelling (2), with the zone of a cancelling one (its
+     * relative size), and vg_tau, the pointwise relative accuracy the zone is
+     * sized for.  vg_on is false for every other caller. */
     bool          vg_on;
     const double* vg_a;
     const double* vg_b;
+    double        vg_tau;
     signed char   vg_state[NI_VG_MAX_VERTS];
+    double        vg_zone[NI_VG_MAX_VERTS];
     AutoCompiled* vg_ac;    /* body compiled at NI_VG_BITS, or NULL */
     bool          vg_ac_tried;
 } NiMcCtx;
@@ -3781,42 +3794,88 @@ static bool ni_mc_sample_guard(NiMcCtx* c, const double* x, size_t d,
     return ni_mc_sample_mpfr_at(c, x, d, sp, c->vg_ac, out);
 }
 
+/* Relative discrepancy of the double sample at p against the NI_VG_BITS one
+ * (infinite when the double sample fails); false when the MPFR one fails. */
+static bool ni_vg_discrepancy(NiMcCtx* c, const double* p, size_t d, double* rel) {
+    double _Complex fd = 0.0, fm = 0.0;
+    bool okd = ni_mc_sample_double(c, p, d, &fd);
+    if (!ni_mc_sample_guard(c, p, d, &fm)) return false;
+    double m = cabs(fm);
+    *rel = !okd ? INFINITY : (m > 0.0 ? cabs(fd - fm) / m : (cabs(fd) > 0.0 ? INFINITY : 0.0));
+    return true;
+}
+
+/* The point of the box at relative depth t from vertex v, along the
+ * direction `dir` (each coordinate's share of t). */
+static void ni_vg_point(const NiMcCtx* c, int v, size_t d, double t,
+                        const double* dir, double* p) {
+    for (size_t j = 0; j < d; j++) {
+        double span = c->vg_b[j] - c->vg_a[j];
+        p[j] = ((v >> j) & 1) ? c->vg_b[j] - t * dir[j] * span
+                              : c->vg_a[j] + t * dir[j] * span;
+    }
+}
+
 /* Box vertex cancellation guard.  An integrable singularity at a vertex of
  * the box is where an integrand formula cancels: the lattice Green's function
  * (1 - c)/((1 - c)^2 + s^2), c = (Cos[k1] + Cos[k2])/2, has 1 - c ~ k^2/4
  * against an absolute rounding error of 1e-16, so within 1e-8 of the corner
  * it is exactly 0 in doubles instead of ~4/k^2, and the integral the rules
- * converge to is 1e-8 off (8 digits whatever the goal; scipy's nested
- * QUADPACK lands right only because its extrapolation never samples there).
- * A sample within NI_VG_ZONE of a vertex in every coordinate is re-evaluated
- * at NI_VG_BITS when that vertex cancels; whether it does is probed once per
- * vertex, at depth NI_VG_PROBE on the diagonal, by comparing the double sample
- * with the MPFR one.  A vertex where they agree is never checked again, so a
- * smooth corner costs two samples.  Returns true when it produced *out. */
+ * converge to is 1e-8 off (8 digits whatever the goal).  A sample within the
+ * vertex's zone in every coordinate is re-evaluated at NI_VG_BITS when that
+ * vertex cancels.  Whether it does is probed once per vertex, at depth
+ * NI_VG_PROBE on the diagonal, by comparing the double sample with the MPFR
+ * one; a vertex where they agree is never checked again, so a smooth corner
+ * costs two samples.
+ *
+ * The zone of a cancelling vertex is sized to the accuracy asked for
+ * (vg_tau): the double sample's relative error grows toward the vertex
+ * (as 1e-16/k^2 here), and the zone is where it exceeds vg_tau, found by
+ * probing outward-in at depths 2^-4 .. 2^-17 (two directions each, for a
+ * rounding error that happens to be small at one point), and never smaller
+ * than NI_VG_ZONE_MIN.  A 12-digit nested rule needs it: its inner integrals
+ * at outer nodes near the vertex are asked for 12 digits each, and rounding
+ * noise of 1e-9 just outside a 2^-17 zone cost the 3-D Watson integral its
+ * convergence and the 2-D Green's function its 13th digit.
+ * Returns true when it produced *out. */
 static bool ni_mc_vertex_guard(NiMcCtx* c, const double* x, size_t d,
                                double _Complex* out, bool* ok) {
     int v = 0;
+    double dist = 0.0;      /* relative distance to vertex v (max over coordinates) */
     for (size_t j = 0; j < d; j++) {
         double span = c->vg_b[j] - c->vg_a[j];
         if (!(span > 0.0)) return false;
         double lo = (x[j] - c->vg_a[j]) / span, hi = (c->vg_b[j] - x[j]) / span;
-        if (lo < NI_VG_ZONE) continue;
-        if (hi < NI_VG_ZONE) { v |= 1 << j; continue; }
-        return false;
+        double r = lo;
+        if (hi < lo) { v |= 1 << j; r = hi; }
+        if (!(r < NI_VG_ZONE_MAX)) return false;
+        if (r > dist) dist = r;
     }
     if (c->vg_state[v] == 0) {
-        double p[NI_VG_MAX_DIM];
-        for (size_t j = 0; j < d; j++) {
-            double span = c->vg_b[j] - c->vg_a[j];
-            p[j] = ((v >> j) & 1) ? c->vg_b[j] - NI_VG_PROBE * span
-                                  : c->vg_a[j] + NI_VG_PROBE * span;
+        /* probe once the samples come close: a vertex the rule never
+         * approaches costs nothing (not even the MPFR compilation) */
+        if (!(dist < NI_VG_TRIGGER)) return false;
+        const double diag[NI_VG_MAX_DIM] = { 1.0, 1.0, 1.0 };
+        const double skew[NI_VG_MAX_DIM] = { 1.0, 0.71, 0.53 };
+        double p[NI_VG_MAX_DIM], rel = 0.0;
+        ni_vg_point(c, v, d, NI_VG_PROBE, diag, p);
+        c->vg_state[v] = (ni_vg_discrepancy(c, p, d, &rel) && rel > 1e-8) ? 2 : 1;
+        c->vg_zone[v] = NI_VG_ZONE_MIN;
+        if (c->vg_state[v] == 2) {
+            for (double t = NI_VG_ZONE_MAX * 0.5; t > NI_VG_ZONE_MIN; t *= 0.5) {
+                double r1 = 0.0, r2 = 0.0;
+                ni_vg_point(c, v, d, t, diag, p);
+                bool o1 = ni_vg_discrepancy(c, p, d, &r1);
+                ni_vg_point(c, v, d, t, skew, p);
+                bool o2 = ni_vg_discrepancy(c, p, d, &r2);
+                if ((o1 && r1 > c->vg_tau) || (o2 && r2 > c->vg_tau)) {
+                    c->vg_zone[v] = fmin(2.0 * t, NI_VG_ZONE_MAX);
+                    break;
+                }
+            }
         }
-        double _Complex fd = 0.0, fm = 0.0;
-        bool okd = ni_mc_sample_double(c, p, d, &fd);
-        bool okm = ni_mc_sample_guard(c, p, d, &fm);
-        c->vg_state[v] = (okm && (!okd || cabs(fd - fm) > 1e-8 * cabs(fm))) ? 2 : 1;
     }
-    if (c->vg_state[v] != 2) return false;
+    if (c->vg_state[v] != 2 || !(dist < c->vg_zone[v])) return false;
     *ok = ni_mc_sample_guard(c, x, d, out);
     return true;
 }
@@ -3896,7 +3955,7 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
     ctx.spec = numeric_machine_spec();
     ctx.ac = ni_mc_compile(body, binds, d);
     ctx.ac_prec = NULL;
-    ctx.vg_on = false; ctx.vg_a = ctx.vg_b = NULL;
+    ctx.vg_on = false; ctx.vg_a = ctx.vg_b = NULL; ctx.vg_tau = 0.0;
     memset(ctx.vg_state, 0, sizeof ctx.vg_state);
     ctx.vg_ac = NULL; ctx.vg_ac_tried = false;
 
@@ -3938,80 +3997,164 @@ static bool ni_cub_mpfr_goal_ok(const NiOpts* o) {
 #endif
 }
 
-/* Iterated adaptive Gauss-Kronrod over a constant 2-D box (machine
+/* Iterated adaptive quadrature over a constant 2-D or 3-D box (machine
  * precision): the fallback of the cubature for an integrable point or edge
- * singularity that Genz-Malik bisection cannot resolve.  A lattice Green's
- * function (1 - c)/((1 - c)^2 + s^2), c = (Cos[k1] + Cos[k2])/2,
- * s = 2 e Sin[k1], is singular at k = 0 inside a parabolic cusp
- * |k1| < k2^2/(8 e); the cubature's regions shrink onto the corner, its
- * samples there cancel to 0/0, the frozen parents keep their error, and the
- * result stalls at 4-8 digits.  Integrated one axis at a time, the inner
- * integral at fixed k2 has a peak of width ~k2^2 at its endpoint, which the
- * adaptive rule (with QAGS's epsilon extrapolation) bisects onto, and the
- * outer integrand is then only logarithmically singular.  Both levels run in
- * C on the same compiled sampler, so the cost is that of the samples alone
- * (the iterated path of the evaluator re-enters NIntegrate per outer node).
- * The inner tolerance is a tenth of the outer, absolute against the
- * integral's scale (the cubature's estimate) spread over the outer range. */
-typedef struct {
-    NiMcCtx* mc;
-    double   x[2];
-    double   ia, ib;               /* inner range (axis 1)          */
-    double   in_abstol, in_reltol;
-    int      max_subdiv;
-    bool     inner_ok;             /* every inner integral converged */
-} NiNest2;
+ * singularity that Genz-Malik bisection cannot resolve to the goal.  A
+ * lattice Green's function (1 - c)/((1 - c)^2 + s^2), c = (Cos[k1] +
+ * Cos[k2])/2, s = 2 e Sin[k1], is singular at k = 0 inside a parabolic cusp
+ * |k1| < k2^2/(8 e); the cubature's regions shrink onto the corner and its
+ * error falls only algebraically (x8 per doubling of the samples in 2-D, x4
+ * in 3-D), so 12 digits would take millions of samples.  Integrated one axis
+ * at a time, each inner integral is a peak at (or near) its endpoint and the
+ * outer integrand is algebraically singular there (~ k1^-1/2): QUADPACK's
+ * QAGS (gk_qags_machine) settles both with its epsilon extrapolation in tens
+ * of QK21 panels, and its bisection stops at the extrapolated level instead
+ * of going onto the singular point -- which keeps the vertex guard's MPFR
+ * re-evaluations few.  This is what nested QUADPACK (scipy's dblquad /
+ * tplquad) does.  Every level runs in C on the same compiled sampler, so the
+ * cost is that of the samples alone (the iterated path of the evaluator
+ * re-enters NIntegrate per outer node).
+ *
+ * Tolerances: every level is asked for NI_NEST_HEADROOM of the goal (the
+ * outer QAGS estimate does not see the inner errors, and its truncation error
+ * at the goal left the 2-D Green's function at the edge of 12 digits; the
+ * extrapolation makes the extra digit cheap); an inner level is also given an
+ * absolute floor, that goal times the integral's scale (the cubature's
+ * estimate) over the outer ranges, so an inner integral that cancels to ~0
+ * does not chase relative digits the total cannot see.  An inner integral
+ * that misses the requested goal (not the headroom) counts against the
+ * result by its excess error times the outer volume it stands for (an upper
+ * bound on its weight): inner integrals at outer nodes deep in the singular
+ * corner need not resolve to their own relative goal.  The result converged
+ * when that total error meets the requested goal. */
+#define NI_NEST_LIMIT 100      /* QAGS subintervals per 1-D integral */
+#define NI_NEST_HEADROOM 0.1   /* the 1-D rules' goal, relative to the box's */
+#define NI_NEST_ADAPT_SUBDIV 200  /* bisections of the plain rule behind a QAGS miss */
+#define NI_NEST_MAX_DIM NI_VG_MAX_DIM
 
-static bool ni_nest2_inner(void* v, double y, double _Complex* out) {
-    NiNest2* c = (NiNest2*)v;
-    c->x[1] = y;
-    return ni_mc_sample(c->mc, c->x, 2, out);
-}
+typedef struct NiNest NiNest;
+typedef struct { NiNest* n; size_t axis; } NiNestLevel;
+struct NiNest {
+    NiMcCtx*    mc;
+    size_t      d;
+    double      x[NI_NEST_MAX_DIM];
+    const double* a;
+    const double* b;
+    double      abstol[NI_NEST_MAX_DIM], reltol;
+    double      miss;            /* largest inner error x outer range over the tolerance */
+    double      miss_cap;        /* the box's tolerance: a larger miss ends the run */
+    bool        aborted;
+    NiNestLevel lev[NI_NEST_MAX_DIM];
+};
 
-static bool ni_nest2_outer(void* v, double x, double _Complex* out) {
-    NiNest2* c = (NiNest2*)v;
-    c->x[0] = x;
-    GkResult R = gk_integrate_machine(ni_nest2_inner, c, c->ia, c->ib,
-                                      c->in_abstol, c->in_reltol,
-                                      c->max_subdiv, 0, true);
+/* The integrand of level `axis`: the sample itself at the last axis, else the
+ * integral over the next axis at the current coordinates. */
+static bool ni_nest_level(void* v, double t, double _Complex* out) {
+    NiNestLevel* L = (NiNestLevel*)v;
+    NiNest* n = L->n;
+    if (n->aborted) return false;
+    n->x[L->axis] = t;
+    if (L->axis + 1 == n->d) return ni_mc_sample(n->mc, n->x, n->d, out);
+    size_t j = L->axis + 1;
+    GkResult R = gk_qags_machine(ni_nest_level, &n->lev[j], n->a[j], n->b[j],
+                                 n->abstol[j], n->reltol, NI_NEST_LIMIT);
     if (R.status == GK_NONNUMERIC) return false;
-    if (R.status != GK_OK) c->inner_ok = false;
+    if (R.status != GK_OK) {
+        /* QAGS reads bisections that change neither value nor error as
+         * roundoff and stops (ier = 2) -- which is also what an interior peak
+         * narrower than its nodes looks like (the ridge s = 0 leaving the
+         * singular point into the box: a Lorentzian of width ~k1^2 at
+         * k2 = -k1/2).  The plain adaptive rule keeps bisecting until it
+         * finds it; it is asked only for an integral QAGS missed. */
+        GkResult R2 = gk_integrate_machine(ni_nest_level, &n->lev[j], n->a[j], n->b[j],
+                                           n->abstol[j], n->reltol, NI_NEST_ADAPT_SUBDIV,
+                                           0, true);
+        if (R2.status == GK_OK || (R2.status == GK_NOCONV && R2.abs_err < R.abs_err)) R = R2;
+    }
+    if (R.status != GK_OK) {
+        /* how much this miss could move the total: its excess error spread
+         * over the outer box (the product of the outer ranges) */
+        double tol = fmax(n->abstol[j], n->reltol * cabs(R.value)) / NI_NEST_HEADROOM;
+        double w = 1.0;
+        for (size_t q = 0; q < j; q++) w *= n->b[q] - n->a[q];
+        double m = (R.abs_err - tol) * w;
+        if (m > n->miss) n->miss = m;
+        /* a miss the goal cannot absorb: this rule cannot meet it, so stop
+         * paying for it */
+        if (n->miss > n->miss_cap) { n->aborted = true; return false; }
+    }
     *out = R.value;
     return isfinite(creal(R.value)) && isfinite(cimag(R.value));
 }
 
-static CubStatus ni_nest2_machine(NiMcCtx* mc, const double* a, const double* b,
-                                  double abstol, double reltol, double scale,
-                                  double _Complex* val, double* abserr) {
-    NiNest2 c;
-    c.mc = mc;
-    c.ia = a[1]; c.ib = b[1];
-    c.in_reltol = 0.1 * reltol;
-    c.in_abstol = fmax(0.1 * abstol, 0.1 * reltol * scale / (b[0] - a[0]));
-    c.max_subdiv = 200;
-    c.inner_ok = true;
-    GkResult R = gk_integrate_machine(ni_nest2_outer, &c, a[0], b[0],
-                                      abstol, reltol, 200, 0, true);
+static CubStatus ni_nest_machine(NiMcCtx* mc, const double* a, const double* b,
+                                 size_t d, double abstol, double reltol, double scale,
+                                 double _Complex* val, double* abserr) {
+    if (d < 2 || d > NI_NEST_MAX_DIM) return CUB_NONNUMERIC;
+    NiNest n;
+    n.mc = mc; n.d = d; n.a = a; n.b = b;
+    /* the 1-D rules are asked for NI_NEST_HEADROOM of the goal (see above) */
+    double rq = NI_NEST_HEADROOM * reltol, aq = NI_NEST_HEADROOM * abstol;
+    n.reltol = rq;
+    n.miss = 0.0;
+    n.miss_cap = fmax(abstol, reltol * scale);
+    n.aborted = false;
+    /* the guard re-probes this box, its zones sized for the inner goals */
+    mc->vg_a = a; mc->vg_b = b;
+    mc->vg_tau = NI_VG_TAU_NEST * reltol;
+    memset(mc->vg_state, 0, sizeof mc->vg_state);
+    double outer = 1.0;
+    for (size_t j = 0; j < d; j++) {
+        n.x[j] = a[j];
+        n.lev[j].n = &n; n.lev[j].axis = j;
+        /* the absolute floor of level j: the goal over the ranges outside it */
+        n.abstol[j] = (j == 0) ? aq : 0.1 * fmax(aq, rq * scale) / outer;
+        outer *= b[j] - a[j];
+    }
+    NiNestLevel top = { &n, 0 };
+    GkResult R = gk_qags_machine(ni_nest_level, &top, a[0], b[0], aq, rq,
+                                 NI_NEST_LIMIT);
+    if (n.aborted) { *val = R.value; *abserr = INFINITY; return CUB_NOCONV; }
     if (R.status == GK_NONNUMERIC) return CUB_NONNUMERIC;
     *val = R.value;
-    *abserr = R.abs_err;
-    return (R.status == GK_OK && c.inner_ok) ? CUB_OK : CUB_NOCONV;
+    double tol = fmax(abstol, reltol * cabs(R.value));
+    *abserr = R.abs_err + (n.miss > 0.0 ? n.miss : 0.0);
+    return (*abserr <= tol) ? CUB_OK : CUB_NOCONV;
 }
 
+
 /* One box of the singular retry: the cubature (with the vertex guard on this
- * box), then for d = 2 the iterated rule when it does not converge. */
+ * box), then for d <= 3 the iterated rule when it does not converge.  With
+ * `forecast` the cubature may stop early for the iterated rule; when that
+ * does not converge either (a ridge leaving the singular point into the box,
+ * which the inner integrals of the iterated rule cannot see, where the
+ * cubature's regions follow it) the cubature is run again to its budget. */
 static CubStatus ni_cub_box(NiMcCtx* ctx, const double* a, const double* b, size_t d,
-                            double abstol, double reltol, long max_eval,
+                            double abstol, double reltol, long max_eval, bool forecast,
                             double _Complex* val, double* abserr) {
     ctx->vg_a = a; ctx->vg_b = b;
+    ctx->vg_tau = NI_VG_TAU_CUB * reltol;
     memset(ctx->vg_state, 0, sizeof ctx->vg_state);
-    CubStatus st = cub_integrate_machine(ni_mc_sample, ctx, a, b, d, abstol, reltol,
-                                         max_eval, val, abserr);
-    if (st == CUB_NOCONV && d == 2) {
+    bool cut = forecast && d <= NI_NEST_MAX_DIM;
+    CubStatus st = cub_integrate_machine_hot(ni_mc_sample, ctx, a, b, d, abstol, reltol,
+                                             reltol, max_eval, val, abserr, NULL, NULL, NULL,
+                                             &cut);
+    if (st == CUB_NOCONV && d <= NI_NEST_MAX_DIM) {
         double _Complex v2; double e2;
-        CubStatus s2 = ni_nest2_machine(ctx, a, b, abstol, reltol, cabs(*val), &v2, &e2);
+        CubStatus s2 = ni_nest_machine(ctx, a, b, d, abstol, reltol, cabs(*val), &v2, &e2);
         if (s2 == CUB_OK || (s2 == CUB_NOCONV && e2 < *abserr)) {
             st = s2; *val = v2; *abserr = e2;
+        }
+    }
+    if (st == CUB_NOCONV && cut) {
+        double _Complex v3; double e3;
+        ctx->vg_a = a; ctx->vg_b = b;
+        ctx->vg_tau = NI_VG_TAU_CUB * reltol;
+        memset(ctx->vg_state, 0, sizeof ctx->vg_state);
+        CubStatus s3 = cub_integrate_machine(ni_mc_sample, ctx, a, b, d, abstol, reltol,
+                                             max_eval, &v3, &e3);
+        if (s3 == CUB_OK || (s3 == CUB_NOCONV && e3 < *abserr)) {
+            st = s3; *val = v3; *abserr = e3;
         }
     }
     return st;
@@ -4030,8 +4173,9 @@ static CubStatus ni_cub_box(NiMcCtx* ctx, const double* a, const double* b, size
  * replaces the first run's when it converged or has the smaller error. */
 static void ni_cub_singular_retry(NiMcCtx* ctx, const double* a, const double* b,
                                   size_t d, double abstol, double reltol,
-                                  long max_eval, const double* hot, CubStatus* st,
-                                  double _Complex* val, double* abserr) {
+                                  long max_eval, bool forecast,
+                                  const double* hot, const double* hot_w,
+                                  CubStatus* st, double _Complex* val, double* abserr) {
     int axes[NI_VG_MAX_DIM]; int k = 0;
     double sp[NI_VG_MAX_DIM];
     if (hot)
@@ -4040,22 +4184,31 @@ static void ni_cub_singular_retry(NiMcCtx* ctx, const double* a, const double* b
             /* The pile-up sits NEXT to the singular point, not on it (along
              * the ridge s = 0 that leaves it, in the walk biased on both
              * axes: 1e-5 off the 0 of [-Pi, Pi]), so the point is snapped to
-             * the coarsest dyadic point of the range within 1e-4 of it --
-             * where a singularity of a symmetric range sits. */
+             * the coarsest dyadic point of the range (the ends and the middle
+             * first) near it -- where a singularity of a symmetric range sits.
+             * "Near" is 1e-4, four widths of the smallest region when that is
+             * wider, and 2^-(L+8) for a point of level L: a run the forecast
+             * stopped early has piled up farther from the point (2.4e-4 off
+             * the k1 = 0 face, next to the regions frozen at its cancelling
+             * samples), and a coarse dyadic point is the likelier site. */
             double t = (hot[j] - a[j]) / span;
+            double near = hot_w ? fmax(1e-4, 4.0 * hot_w[j] / span) : 1e-4;
             sp[j] = hot[j];
             for (int L = 1; L <= 30; L++) {
                 double m = floor(t * ldexp(1.0, L) + 0.5);
-                if (fabs(t - ldexp(m, -L)) <= 1e-4) { sp[j] = a[j] + span * ldexp(m, -L); break; }
+                if (fabs(t - ldexp(m, -L)) <= fmax(near, ldexp(1.0, -(L + 8)))) {
+                    sp[j] = a[j] + span * ldexp(m, -L);
+                    break;
+                }
             }
             if (sp[j] - a[j] > 1e-9 * span && b[j] - sp[j] > 1e-9 * span) axes[k++] = (int)j;
         }
     hot = sp;
     if (k == 0) {
         /* the point is a vertex (or unknown): the iterated rule on the box */
-        if (d == 2) {
+        if (d <= NI_NEST_MAX_DIM) {
             double _Complex v2; double e2;
-            CubStatus s2 = ni_nest2_machine(ctx, a, b, abstol, reltol, cabs(*val), &v2, &e2);
+            CubStatus s2 = ni_nest_machine(ctx, a, b, d, abstol, reltol, cabs(*val), &v2, &e2);
             if (s2 == CUB_OK || (s2 == CUB_NOCONV && e2 < *abserr)) {
                 *st = s2; *val = v2; *abserr = e2;
             }
@@ -4075,7 +4228,7 @@ static void ni_cub_singular_retry(NiMcCtx* ctx, const double* a, const double* b
         }
         double _Complex v; double e;
         CubStatus sp = ni_cub_box(ctx, pa, pb, d, fmax(abstol, share), reltol,
-                                  max_eval, &v, &e);
+                                  max_eval, forecast, &v, &e);
         if (sp == CUB_NONNUMERIC) { ctx->vg_a = a; ctx->vg_b = b; return; }
         if (sp != CUB_OK) all_ok = false;
         sum += v; err += e;
@@ -4161,15 +4314,39 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
 
     double _Complex val; double abserr;
     double hot[NI_VG_MAX_DIM] = { 0.0, 0.0, 0.0 };
+    double hot_w[NI_VG_MAX_DIM] = { 0.0, 0.0, 0.0 };
     bool hot_ok = false;
     bool mach = !o->prec_mpfr && o->max_points <= 0 && d <= NI_VG_MAX_DIM;
     if (!(reltol_deep >= 0.0)) reltol_deep = reltol;
+    ctx.vg_tau = NI_VG_TAU_CUB * reltol_deep;
+    /* mach: the singular retry (face split, iterated rule) follows a run that
+     * does not converge, so the cubature may stop early when it cannot
+     * finish (cubature.h); when the retry does not converge either, the
+     * whole unhurried path -- the cubature to its budget, whose pile-up then
+     * locates the singular point closely, and the retry -- runs after it,
+     * and the better of the two results is kept. */
+    bool cut = mach;
     CubStatus st = cub_integrate_machine_hot(ni_mc_sample, &ctx, a, b, d,
                                              abstol, reltol, reltol_deep, max_eval,
-                                             &val, &abserr, mach ? hot : NULL, &hot_ok);
+                                             &val, &abserr, mach ? hot : NULL, hot_w, &hot_ok,
+                                             &cut);
     if (st == CUB_NOCONV && mach)
-        ni_cub_singular_retry(&ctx, a, b, d, abstol, reltol_deep, max_eval,
-                              hot_ok ? hot : NULL, &st, &val, &abserr);
+        ni_cub_singular_retry(&ctx, a, b, d, abstol, reltol_deep, max_eval, true,
+                              hot_ok ? hot : NULL, hot_w, &st, &val, &abserr);
+    if (st == CUB_NOCONV && cut) {
+        double _Complex v2; double e2;
+        ctx.vg_a = a; ctx.vg_b = b;
+        ctx.vg_tau = NI_VG_TAU_CUB * reltol_deep;
+        memset(ctx.vg_state, 0, sizeof ctx.vg_state);
+        CubStatus s2 = cub_integrate_machine_hot(ni_mc_sample, &ctx, a, b, d,
+                                                 abstol, reltol, reltol_deep, max_eval,
+                                                 &v2, &e2, hot, hot_w, &hot_ok, NULL);
+        if (s2 == CUB_NOCONV)
+            ni_cub_singular_retry(&ctx, a, b, d, abstol, reltol_deep, max_eval, false,
+                                  hot_ok ? hot : NULL, hot_w, &s2, &v2, &e2);
+        if (s2 == CUB_NONNUMERIC) st = s2;
+        else if (s2 == CUB_OK || e2 < abserr) { st = s2; val = v2; abserr = e2; }
+    }
 
     for (size_t j = 0; j < d; j++) ni_bind_restore(&binds[j]);
     autocompiled_free(ctx.ac);

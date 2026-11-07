@@ -20,6 +20,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "test_utils.h"
+#include "gkadapt.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -1050,6 +1051,58 @@ static void test_vertex_singularity(void) {
                   "True");
 }
 
+/* QUADPACK QAGS (gk_qags_machine), the 1-D rule of the iterated fallback:
+ * QUADPACK's own test integrals, which its epsilon extrapolation settles in
+ * a few hundred samples without sampling the singular endpoint. */
+static bool qags_logsqrt(void* ctx, double x, double _Complex* out) {
+    (void)ctx; *out = log(x) / sqrt(x); return true;
+}
+static bool qags_xalpha(void* ctx, double x, double _Complex* out) {
+    (void)ctx; *out = pow(x, -0.9); return true;     /* integral 10 */
+}
+static void test_qags_rule(void) {
+    GkResult R = gk_qags_machine(qags_logsqrt, NULL, 0.0, 1.0, 0.0, 1e-12, 50);
+    ASSERT(R.status == GK_OK);
+    ASSERT_MSG(fabs(creal(R.value) + 4.0) < 1e-12, "QAGS log/sqrt: %.17g", creal(R.value));
+    ASSERT_MSG(R.abs_err >= fabs(creal(R.value) + 4.0), "QAGS error estimate %g", R.abs_err);
+    ASSERT_MSG(R.n_eval < 600, "QAGS log/sqrt took %ld samples", R.n_eval);
+    R = gk_qags_machine(qags_xalpha, NULL, 0.0, 1.0, 0.0, 1e-10, 50);
+    ASSERT(R.status == GK_OK);
+    ASSERT_MSG(fabs(creal(R.value) - 10.0) < 1e-9, "QAGS x^-0.9: %.17g", creal(R.value));
+}
+
+/* A 12-digit goal over a box with an integrable vertex singularity (the
+ * lattice Green's functions of SIAM problem 6, Watson's integral).  The
+ * cubature's error falls only algebraically there, so it stops as soon as its
+ * forecast says it cannot finish, and the iterated QAGS rule (with the vertex
+ * guard's zone sized to the goal) gives the digits: 3.4 s and a 12-digit
+ * answer at the edge of the goal for the 2-D one before, ~30 ms now; the 3-D
+ * one missed the goal (10 digits, with a warning).  Truth: hc6 / c6 truth
+ * tables (mpmath), Watson's Gamma product. */
+static void test_vertex_singularity_high_goal(void) {
+    /* corner singularity, [0, Pi]^2 */
+    ASSERT_REL("1 - Pi^2/NIntegrate[With[{c = (Cos[k1] + Cos[k2])/2, s = Sin[k1]/5}, "
+               "(1 - c)/((1 - c)^2 + s^2)], {k1, 0, Pi}, {k2, 0, Pi}, PrecisionGoal -> 12]",
+               "0.412749950715419796784923382261052434492", "3*10^-12");
+    /* the same, near the root of SIAM problem 6 (eps = 0.0619...: G = 2) */
+    ASSERT_REL("NIntegrate[With[{c = (Cos[k1] + Cos[k2])/2}, (1 - c)/((1 - c)^2 + "
+               "(2 6191395447399094/10^17 Sin[k1])^2)], {k1, 0, Pi}, {k2, 0, Pi}, "
+               "PrecisionGoal -> 12]/Pi^2", "2", "3*10^-12");
+    /* singular point on a face: the box is split there first */
+    ASSERT_REL("1 - 2 Pi^2/NIntegrate[With[{c = (Cos[k1] + Cos[k2])/2, "
+               "s = Sin[k1]/10 + Sin[k2]/5}, (1 - c)/((1 - c)^2 + s^2)], "
+               "{k1, 0, Pi}, {k2, -Pi, Pi}, PrecisionGoal -> 12]",
+               "0.389798040363126905621467224292308950758", "3*10^-12");
+    /* 3-D: Watson's integral, converged (no NIntegrate::accgl) */
+    ASSERT_EQ_STR("Check[w = NIntegrate[1/(3 - Cos[x] - Cos[y] - Cos[z]), {x, 0, Pi}, "
+                  "{y, 0, Pi}, {z, 0, Pi}, PrecisionGoal -> 12]; True, False]", "True");
+    ASSERT_REL("w", "Sqrt[6]/96 Gamma[1/24] Gamma[5/24] Gamma[7/24] Gamma[11/24]", "10^-12");
+    /* and fast: the cubature no longer burns its 10^6 samples first */
+    ASSERT_EQ_STR("First[AbsoluteTiming[NIntegrate[With[{c = (Cos[k1] + Cos[k2])/2}, "
+                  "(1 - c)/((1 - c)^2 + (Sin[k1]/5)^2)], {k1, 0, Pi}, {k2, 0, Pi}, "
+                  "PrecisionGoal -> 12]]] < 1", "True");
+}
+
 /* Endpoint guard at an endpoint known only to the working precision: the
  * ends of each chord interval are FindRoot roots, so a deep tanh-sinh node,
  * carried exactly at raised precision, can fall outside the domain (Surd of a
@@ -1183,6 +1236,8 @@ int main(void) {
     TEST(test_tiny_integrand_scale);
     TEST(test_rotated_halfline_wp);
     TEST(test_vertex_singularity);
+    TEST(test_qags_rule);
+    TEST(test_vertex_singularity_high_goal);
     TEST(test_prenumericalized_constants_wp);
     TEST(test_parametric_oscillatory_endpoint);
     TEST(test_machine_last_digits);

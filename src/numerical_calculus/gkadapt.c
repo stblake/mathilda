@@ -354,3 +354,382 @@ GkResult gk_integrate_machine_ex(GkSampleMachine f, void* ctx,
     free(h.v);
     return R;
 }
+
+/* ================================================================== *
+ *  QAGS (QUADPACK dqagse + dqk21 + dqelg)                             *
+ * ================================================================== */
+
+/* QK21 abscissae (nonnegative half; XGK21[10] = centre) and weights; the
+ * 10-point Gauss rule uses the odd-indexed abscissae.  QUADPACK constants. */
+static const double XGK21[11] = {
+    0.995657163025808080735527280689003, 0.973906528517171720077964012084452,
+    0.930157491355708226001207180059508, 0.865063366688984510732096688423493,
+    0.780817726586416897063717578345042, 0.679409568299024406234327365114874,
+    0.562757134668604683339000099272694, 0.433395394129247190799265943165784,
+    0.294392862701460198131126603103866, 0.148874338981631210884826001129720,
+    0.000000000000000000000000000000000
+};
+static const double WGK21[11] = {
+    0.011694638867371874278064396062192, 0.032558162307964727478818972459390,
+    0.054755896574351996031381300244580, 0.075039674810919952767043140916190,
+    0.093125454583697605535065465083366, 0.109387158802297641899210590325805,
+    0.123491976262065851077208977235800, 0.134709217311473325928054001771707,
+    0.142775938577060080797094273138717, 0.147739104901338491374841515972068,
+    0.149445554002916905664936468389821
+};
+static const double WG10[5] = {
+    0.066671344308688137593568809893332, 0.149451349150580593145776339657697,
+    0.219086362515982043995534934228163, 0.269266719309996355091226921569469,
+    0.295524224714752870173892994651338
+};
+
+/* One QK21 panel (dqk21): *resabs = the rule applied to |f|, *resasc = to
+ * |f - mean| (the smoothness gauge of the error estimate). */
+static bool qk21(GkSampleMachine f, void* ctx, double a, double b,
+                 double _Complex* result, double* abserr,
+                 double* resabs, double* resasc, long* nev) {
+    const double epmach = DBL_EPSILON, uflow = DBL_MIN;
+    double centr = 0.5 * (a + b), hlgth = 0.5 * (b - a), dhlgth = fabs(hlgth);
+    double _Complex fv1[10], fv2[10], fc;
+    if (!f(ctx, centr, &fc)) return false;
+    (*nev)++;
+    double _Complex resg = 0.0, resk = WGK21[10] * fc;
+    double rabs = cabs(resk);
+    for (int j = 0; j < 5; j++) {                 /* Gauss and Kronrod nodes */
+        int jt = 2 * j + 1;
+        double absc = hlgth * XGK21[jt];
+        double _Complex f1, f2;
+        if (!f(ctx, centr - absc, &f1) || !f(ctx, centr + absc, &f2)) return false;
+        *nev += 2;
+        fv1[jt] = f1; fv2[jt] = f2;
+        resg += WG10[j] * (f1 + f2);
+        resk += WGK21[jt] * (f1 + f2);
+        rabs += WGK21[jt] * (cabs(f1) + cabs(f2));
+    }
+    for (int j = 0; j < 5; j++) {                 /* Kronrod-only nodes */
+        int jt = 2 * j;
+        double absc = hlgth * XGK21[jt];
+        double _Complex f1, f2;
+        if (!f(ctx, centr - absc, &f1) || !f(ctx, centr + absc, &f2)) return false;
+        *nev += 2;
+        fv1[jt] = f1; fv2[jt] = f2;
+        resk += WGK21[jt] * (f1 + f2);
+        rabs += WGK21[jt] * (cabs(f1) + cabs(f2));
+    }
+    double _Complex reskh = 0.5 * resk;
+    double rasc = WGK21[10] * cabs(fc - reskh);
+    for (int j = 0; j < 10; j++)
+        rasc += WGK21[j] * (cabs(fv1[j] - reskh) + cabs(fv2[j] - reskh));
+    *result = resk * hlgth;
+    rabs *= dhlgth; rasc *= dhlgth;
+    double err = cabs((resk - resg) * hlgth);
+    if (rasc != 0.0 && err != 0.0) err = rasc * fmin(1.0, pow(200.0 * err / rasc, 1.5));
+    if (rabs > uflow / (50.0 * epmach)) err = fmax(epmach * 50.0 * rabs, err);
+    *abserr = err; *resabs = rabs; *resasc = rasc;
+    return true;
+}
+
+/* dqelg: the epsilon algorithm on epstab[0 .. *n-1] (capacity
+ * QAGS_LIMEXP + 2), with QUADPACK's error estimate from the last three
+ * extrapolated results (res3la).  *n may be reduced (table truncation). */
+#define QAGS_LIMEXP 50
+static void qags_qelg(int* n, double _Complex* epstab, double _Complex* result,
+                      double* abserr, double _Complex* res3la, int* nres) {
+    const double epmach = DBL_EPSILON, oflow = DBL_MAX;
+    (*nres)++;
+    *abserr = oflow;
+    *result = epstab[*n - 1];
+    if (*n < 3) { *abserr = fmax(*abserr, 5.0 * epmach * cabs(*result)); return; }
+    /* 1-based indices below, as in QUADPACK */
+    epstab[*n + 1] = epstab[*n - 1];
+    int newelm = (*n - 1) / 2;
+    epstab[*n - 1] = oflow;
+    int num = *n, k1 = *n;
+    for (int i = 1; i <= newelm; i++) {
+        int k2 = k1 - 1, k3 = k1 - 2;
+        double _Complex res = epstab[k1 + 1];
+        double _Complex e0 = epstab[k3 - 1], e1 = epstab[k2 - 1], e2 = res;
+        double e1abs = cabs(e1);
+        double _Complex delta2 = e2 - e1, delta3 = e1 - e0;
+        double err2 = cabs(delta2), err3 = cabs(delta3);
+        double tol2 = fmax(cabs(e2), e1abs) * epmach;
+        double tol3 = fmax(e1abs, cabs(e0)) * epmach;
+        if (err2 <= tol2 && err3 <= tol3) {
+            /* e0, e1 and e2 agree to machine accuracy: convergence assumed */
+            *result = res;
+            *abserr = fmax(err2 + err3, 5.0 * epmach * cabs(*result));
+            return;
+        }
+        double _Complex e3 = epstab[k1 - 1];
+        epstab[k1 - 1] = e1;
+        double _Complex delta1 = e1 - e3;
+        double err1 = cabs(delta1);
+        double tol1 = fmax(e1abs, cabs(e3)) * epmach;
+        bool irregular = (err1 <= tol1 || err2 <= tol2 || err3 <= tol3);
+        double _Complex ss = 0.0;
+        if (!irregular) {
+            ss = 1.0 / delta1 + 1.0 / delta2 - 1.0 / delta3;
+            irregular = !(cabs(ss * e1) > 1e-4);
+        }
+        if (irregular) { *n = i + i - 1; break; }   /* omit part of the table */
+        res = e1 + 1.0 / ss;
+        epstab[k1 - 1] = res;
+        k1 -= 2;
+        double error = err2 + cabs(res - e2) + err3;
+        if (error <= *abserr) { *abserr = error; *result = res; }
+    }
+    /* shift the table */
+    if (*n == QAGS_LIMEXP) *n = 2 * (QAGS_LIMEXP / 2) - 1;
+    int ib = ((num / 2) * 2 == num) ? 2 : 1;
+    for (int i = 1; i <= newelm + 1; i++) { epstab[ib - 1] = epstab[ib + 1]; ib += 2; }
+    if (num != *n) {
+        int indx = num - *n + 1;
+        for (int i = 1; i <= *n; i++) { epstab[i - 1] = epstab[indx - 1]; indx++; }
+    }
+    if (*nres < 4) {
+        res3la[*nres - 1] = *result;
+        *abserr = oflow;
+    } else {
+        *abserr = cabs(*result - res3la[2]) + cabs(*result - res3la[1])
+                + cabs(*result - res3la[0]);
+        res3la[0] = res3la[1]; res3la[1] = res3la[2]; res3la[2] = *result;
+    }
+    *abserr = fmax(*abserr, 5.0 * epmach * cabs(*result));
+}
+
+/* The QAGS subinterval list, and iord: the interval indices in decreasing
+ * order of error (kept fully sorted, which dqpsrt approximates to save work
+ * on a long list; limit is small here). */
+typedef struct {
+    double *alist, *blist, *elist;
+    double _Complex* rlist;
+    int* iord;
+} QagsList;
+
+/* dqpsrt: after the interval at iord[nrmax-1] was bisected (its first half
+ * kept at index *maxerr, the second appended at index last-1), restore the
+ * ordering and return the interval to bisect next, iord[nrmax-1].  During
+ * extrapolation the nrmax-1 entries above are small intervals being skipped;
+ * a half whose error exceeds some of them moves above them, and nrmax drops
+ * with it, as in QUADPACK. */
+static void qags_sort(QagsList* L, int last, int* nrmax, int* maxerr, double* errmax) {
+    int mi = *maxerr;
+    double e_mi = L->elist[mi];
+    while (*nrmax > 1 && e_mi > L->elist[L->iord[*nrmax - 2]]) (*nrmax)--;
+    /* remove mi, then insert mi and the new interval in order */
+    int cnt = last - 1, w = 0;
+    for (int i = 0; i < cnt; i++) if (L->iord[i] != mi) L->iord[w++] = L->iord[i];
+    int ins[2] = { mi, last - 1 };
+    for (int q = 0; q < 2; q++) {
+        int id = ins[q], i = w;
+        double e = L->elist[id];
+        while (i > 0 && L->elist[L->iord[i - 1]] < e) { L->iord[i] = L->iord[i - 1]; i--; }
+        L->iord[i] = id;
+        w++;
+    }
+    *maxerr = L->iord[*nrmax - 1];
+    *errmax = L->elist[*maxerr];
+}
+
+GkResult gk_qags_machine(GkSampleMachine f, void* ctx, double a, double b,
+                         double abstol, double reltol, int limit) {
+    const double epmach = DBL_EPSILON, uflow = DBL_MIN, oflow = DBL_MAX;
+    GkResult R;
+    R.value = 0.0; R.abs_err = 0.0; R.status = GK_NONNUMERIC;
+    R.n_eval = 0; R.n_subdiv = 0;
+    if (limit <= 0) limit = 50;
+    if (abstol < 0.0) abstol = 0.0;
+    if (reltol < 0.0) reltol = 0.0;
+    if (abstol <= 0.0 && reltol < fmax(50.0 * epmach, 0.5e-28))
+        reltol = fmax(50.0 * epmach, 0.5e-28);   /* dqagse's ier = 6 bound */
+
+    double _Complex result, area1, area2;
+    double abserr, defabs, resasc, error1, error2, defab1, defab2, rabs1, rabs2;
+    if (!qk21(f, ctx, a, b, &result, &abserr, &defabs, &resasc, &R.n_eval))
+        return R;
+    double dres = cabs(result);
+    double errbnd = fmax(abstol, reltol * dres);
+    int ier = 0;
+    if (abserr <= 100.0 * epmach * defabs && abserr > errbnd) ier = 2;
+    if (limit == 1) ier = 1;
+    if (ier != 0 || (abserr <= errbnd && abserr != resasc) || abserr == 0.0) {
+        R.value = result; R.abs_err = abserr;
+        R.status = (ier == 0) ? GK_OK : GK_NOCONV;
+        return R;
+    }
+
+    QagsList L;
+    L.alist = malloc((size_t)limit * sizeof(double));
+    L.blist = malloc((size_t)limit * sizeof(double));
+    L.elist = malloc((size_t)limit * sizeof(double));
+    L.rlist = malloc((size_t)limit * sizeof(double _Complex));
+    L.iord  = malloc((size_t)limit * sizeof(int));
+    if (!L.alist || !L.blist || !L.elist || !L.rlist || !L.iord) {
+        free(L.alist); free(L.blist); free(L.elist); free(L.rlist); free(L.iord);
+        R.value = result; R.abs_err = abserr; R.status = GK_NOCONV;
+        return R;
+    }
+    L.alist[0] = a; L.blist[0] = b; L.rlist[0] = result; L.elist[0] = abserr;
+    L.iord[0] = 0;
+
+    double _Complex rlist2[QAGS_LIMEXP + 2], res3la[3] = { 0.0, 0.0, 0.0 };
+    rlist2[0] = result;
+    double errmax = abserr, errsum = abserr, erlarg = 0.0, ertest = 0.0;
+    double correc = 0.0, small = 0.0, erlast;
+    double _Complex area = result;
+    int maxerr = 0, nrmax = 1, nres = 0, numrl2 = 2, ktmin = 0, ierro = 0;
+    int iroff1 = 0, iroff2 = 0, iroff3 = 0;
+    bool extrap = false, noext = false;
+    abserr = oflow;
+    int ksgn = (dres >= (1.0 - 50.0 * epmach) * defabs) ? 1 : -1;
+    int last;
+    bool sample_fail = false;
+    bool sum_up = false;          /* dqagse's label 115: result = sum of rlist */
+
+    for (last = 2; last <= limit; last++) {
+        /* bisect the subinterval with the nrmax-th largest error estimate */
+        double a1 = L.alist[maxerr], b1 = 0.5 * (L.alist[maxerr] + L.blist[maxerr]);
+        double a2 = b1, b2 = L.blist[maxerr];
+        erlast = errmax;
+        if (!qk21(f, ctx, a1, b1, &area1, &error1, &rabs1, &defab1, &R.n_eval)
+            || !qk21(f, ctx, a2, b2, &area2, &error2, &rabs2, &defab2, &R.n_eval)) {
+            /* a sample of a half failed (a point the integrand cannot be
+             * evaluated at): the list is intact, keep the best so far */
+            sample_fail = true; last--; break;
+        }
+        R.n_subdiv++;
+        double _Complex area12 = area1 + area2;
+        double erro12 = error1 + error2;
+        errsum = errsum + erro12 - errmax;
+        area = area + area12 - L.rlist[maxerr];
+        if (!(defab1 == error1 || defab2 == error2)) {
+            if (cabs(L.rlist[maxerr] - area12) <= 1e-5 * cabs(area12)
+                && erro12 >= 0.99 * errmax) {
+                if (extrap) iroff2++; else iroff1++;
+            }
+            if (last > 10 && erro12 > errmax) iroff3++;
+        }
+        L.rlist[maxerr] = area1;
+        L.rlist[last - 1] = area2;
+        errbnd = fmax(abstol, reltol * cabs(area));
+        /* roundoff, the limit, or a too narrow interval */
+        if (iroff1 + iroff2 >= 10 || iroff3 >= 20) ier = 2;
+        if (iroff2 >= 5) ierro = 3;
+        if (last == limit) ier = 1;
+        if (fmax(fabs(a1), fabs(b2)) <= (1.0 + 100.0 * epmach) * (fabs(a2) + 1000.0 * uflow))
+            ier = 4;
+        if (error2 > error1) {
+            L.alist[maxerr] = a2; L.alist[last - 1] = a1; L.blist[last - 1] = b1;
+            L.rlist[maxerr] = area2; L.rlist[last - 1] = area1;
+            L.elist[maxerr] = error2; L.elist[last - 1] = error1;
+        } else {
+            L.alist[last - 1] = a2; L.blist[maxerr] = b1; L.blist[last - 1] = b2;
+            L.elist[maxerr] = error1; L.elist[last - 1] = error2;
+        }
+        qags_sort(&L, last, &nrmax, &maxerr, &errmax);
+        if (errsum <= errbnd) { sum_up = true; break; }
+        if (ier != 0) break;
+        if (last == 2) {
+            small = fabs(b - a) * 0.375;
+            erlarg = errsum;
+            ertest = errbnd;
+            rlist2[1] = area;
+            continue;
+        }
+        if (noext) continue;
+        erlarg -= erlast;
+        if (fabs(b1 - a1) > small) erlarg += erro12;
+        if (!extrap) {
+            /* is the interval to be bisected next the smallest one? */
+            if (fabs(L.blist[maxerr] - L.alist[maxerr]) > small) continue;
+            extrap = true;
+            nrmax = 2;
+        }
+        if (ierro != 3 && erlarg > ertest) {
+            /* the smallest interval has the largest error: before
+             * extrapolating, bisect the large intervals first */
+            bool large = false;
+            int jupbnd = (last > 2 + limit / 2) ? limit + 3 - last : last;
+            for (int k = nrmax; k <= jupbnd && nrmax <= last; k++) {
+                maxerr = L.iord[nrmax - 1];
+                errmax = L.elist[maxerr];
+                if (fabs(L.blist[maxerr] - L.alist[maxerr]) > small) { large = true; break; }
+                nrmax++;
+            }
+            if (large) continue;
+            if (nrmax > last) { nrmax = last; maxerr = L.iord[nrmax - 1]; errmax = L.elist[maxerr]; }
+        }
+        /* perform extrapolation */
+        numrl2++;
+        rlist2[numrl2 - 1] = area;
+        double _Complex reseps; double abseps;
+        qags_qelg(&numrl2, rlist2, &reseps, &abseps, res3la, &nres);
+        ktmin++;
+        if (ktmin > 5 && abserr < 1e-3 * errsum) ier = 5;
+        if (abseps < abserr) {
+            ktmin = 0;
+            abserr = abseps;
+            result = reseps;
+            correc = erlarg;
+            ertest = fmax(abstol, reltol * cabs(reseps));
+            if (abserr <= ertest) break;
+        }
+        /* prepare bisection of the smallest interval */
+        if (numrl2 == 1) noext = true;
+        if (ier == 5) break;
+        maxerr = L.iord[0];
+        errmax = L.elist[maxerr];
+        nrmax = 1;
+        extrap = false;
+        small *= 0.5;
+        erlarg = errsum;
+    }
+    if (last > limit) last = limit;
+
+    /* final result and error estimate (dqagse's labels 100-130) */
+    if (!sum_up) {
+        if (abserr == oflow) {
+            sum_up = true;
+        } else {
+            bool test_div = true;
+            if (ier + ierro != 0 || sample_fail) {
+                if (ierro == 3) abserr += correc;
+                if (ier == 0) ier = 3;
+                if (cabs(result) != 0.0 && cabs(area) != 0.0) {
+                    if (abserr / cabs(result) > errsum / cabs(area)) sum_up = true;
+                } else if (abserr > errsum) {
+                    sum_up = true;
+                } else if (cabs(area) == 0.0) {
+                    test_div = false;
+                }
+            }
+            if (!sum_up && test_div
+                && !(ksgn == -1 && fmax(cabs(result), cabs(area)) <= defabs * 0.01)) {
+                /* test on divergence */
+                double _Complex q = result / area;
+                double rat = (cimag(q) == 0.0) ? creal(q) : cabs(q);
+                if (0.01 > rat || rat > 100.0 || errsum > cabs(area)) ier = 6;
+            }
+        }
+    }
+    if (sum_up) {
+        /* the sum of the subinterval results, compensated */
+        double sr = 0.0, si = 0.0, cr = 0.0, ci = 0.0;
+        for (int k = 0; k < last; k++) {
+            double xr = creal(L.rlist[k]), xi = cimag(L.rlist[k]);
+            double tr = sr + xr, ti = si + xi;
+            cr += (fabs(sr) >= fabs(xr)) ? (sr - tr) + xr : (xr - tr) + sr;
+            ci += (fabs(si) >= fabs(xi)) ? (si - ti) + xi : (xi - ti) + si;
+            sr = tr; si = ti;
+        }
+        result = (sr + cr) + (si + ci) * I;
+        abserr = errsum;
+        if (sample_fail && ier == 0) ier = 3;
+    }
+    if (ier > 2) ier--;
+    R.value = result;
+    R.abs_err = abserr;
+    R.status = (ier == 0) ? GK_OK : GK_NOCONV;
+    free(L.alist); free(L.blist); free(L.elist); free(L.rlist); free(L.iord);
+    return R;
+}

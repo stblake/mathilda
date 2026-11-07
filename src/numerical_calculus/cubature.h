@@ -58,14 +58,27 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
  * CUB_HOT_REGIONS smallest regions.  An integrable point singularity is where
  * the bisection piles up, and with it at a dyadic point of the box (the 0 of
  * [-Pi, Pi]) that vertex is the singular point exactly.  *hot_ok says whether
- * a point was written. */
-#define CUB_HOT_REGIONS 8
-#define CUB_DEEP_REL    0x1p-12
+ * a point was written; hot_w (length d, or NULL) receives that region's
+ * widths, the scale on which the point is known.
+ *
+ * `*forecast` true on entry (for a caller with a better fallback, the
+ * iterated rule; NULL or false: off) ends the run early with CUB_NOCONV when
+ * it cannot finish within max_eval, and says on return whether it did: at
+ * each doubling of the samples once the refinement is deep (and past
+ * CUB_FORECAST_MIN samples), the error's reduction exponent over the last two
+ * doublings is extrapolated to the tolerance.  At an integrable vertex
+ * singularity the Genz-Malik error falls only algebraically (x8 per doubling
+ * in 2-D, x4 in 3-D), so a 12-digit goal would take millions of samples that
+ * are then thrown away; a run on course to converge is not affected. */
+#define CUB_HOT_REGIONS  8
+#define CUB_DEEP_REL     0x1p-12
+#define CUB_FORECAST_MIN 20000
 CubStatus cub_integrate_machine_hot(McSampleMachine f, void* ctx,
                                     const double* a, const double* b, size_t d,
                                     double abstol, double reltol, double reltol_deep,
                                     long max_eval,
                                     double _Complex* result, double* abserr,
-                                    double* hot, bool* hot_ok);
+                                    double* hot, double* hot_w, bool* hot_ok,
+                                    bool* forecast);
 
 #endif /* MATHILDA_CUBATURE_H */

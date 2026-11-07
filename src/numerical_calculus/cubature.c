@@ -165,11 +165,11 @@ CubStatus cub_integrate_machine(McSampleMachine f, void* ctx,
                                 double abstol, double reltol, long max_eval,
                                 double _Complex* result, double* abserr) {
     return cub_integrate_machine_hot(f, ctx, a, b, d, abstol, reltol, reltol,
-                                     max_eval, result, abserr, NULL, NULL);
+                                     max_eval, result, abserr, NULL, NULL, NULL, NULL);
 }
 
 /* The refinement's concentration point (see cubature.h). */
-static bool cub_hot_point(const Heap* hp, size_t d, double* hot) {
+static bool cub_hot_point(const Heap* hp, size_t d, double* hot, double* hot_w) {
     if (hp->n <= 0) return false;
     /* the CUB_HOT_REGIONS smallest regions, by volume (log sum of h) */
     int idx[CUB_HOT_REGIONS]; double key[CUB_HOT_REGIONS]; int k = 0;
@@ -192,6 +192,7 @@ static bool cub_hot_point(const Heap* hp, size_t d, double* hot) {
         m /= (double)k;
         double lo = R->c[i] - R->h[i], hi = R->c[i] + R->h[i];
         hot[i] = (fabs(m - lo) <= fabs(m - hi)) ? lo : hi;
+        if (hot_w) hot_w[i] = 2.0 * R->h[i];
     }
     return true;
 }
@@ -201,8 +202,11 @@ CubStatus cub_integrate_machine_hot(McSampleMachine f, void* ctx,
                                     double abstol, double reltol, double reltol_deep,
                                     long max_eval,
                                     double _Complex* result, double* abserr,
-                                    double* hot, bool* hot_ok) {
+                                    double* hot, double* hot_w, bool* hot_ok,
+                                    bool* forecast) {
     if (hot_ok) *hot_ok = false;
+    bool fc = forecast && *forecast;
+    if (forecast) *forecast = false;
     if (!(reltol_deep >= 0.0) || reltol_deep > reltol) reltol_deep = reltol;
     bool deep = false;      /* a region narrower than CUB_DEEP_REL of the box */
     if (d < 2 || d > 15) return CUB_NONNUMERIC;
@@ -213,6 +217,10 @@ CubStatus cub_integrate_machine_hot(McSampleMachine f, void* ctx,
     double* p = malloc(d * sizeof(double));   /* shared scratch eval point */
     if (!p) return CUB_NONNUMERIC;
     long per = gm_npoints(d);
+    /* forecast checkpoints: the error at the last three doublings */
+    long next_ckpt = 64 * per;
+    double ck_err[3] = { 0.0, 0.0, 0.0 };
+    int ck_n = 0;
 
     Region r0;
     r0.c = malloc(d * sizeof(double));
@@ -295,6 +303,27 @@ CubStatus cub_integrate_machine_hot(McSampleMachine f, void* ctx,
         free(worst.c); free(worst.h);
 
         if (!heap_push(&hp, left) || !heap_push(&hp, right)) break;
+
+        /* Forecast (see cubature.h): at each doubling of the samples, once
+         * deep, extrapolate the error's rate over the last two doublings. */
+        if (fc && n_eval >= next_ckpt) {
+            next_ckpt *= 2;
+            if (deep) {
+                ck_err[0] = ck_err[1]; ck_err[1] = ck_err[2]; ck_err[2] = total_err;
+                if (ck_n < 3) ck_n++;
+                double tol = fmax(abstol, reltol_deep * total_absval);
+                if (ck_n == 3 && n_eval >= CUB_FORECAST_MIN && total_err > tol) {
+                    /* error-reduction exponent per doubling of the samples */
+                    double rate = 0.5 * log2(ck_err[0] / total_err);
+                    double need = (rate > 0.0) ? (double)n_eval * exp2(log2(total_err / tol) / rate)
+                                            : INFINITY;
+                    if (!(need <= (double)max_eval)) {        /* cannot finish */
+                        *forecast = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     if (status != CUB_NONNUMERIC
@@ -303,7 +332,7 @@ CubStatus cub_integrate_machine_hot(McSampleMachine f, void* ctx,
 
     *result = total;
     *abserr = total_err;
-    if (hot && hot_ok && status == CUB_NOCONV) *hot_ok = cub_hot_point(&hp, d, hot);
+    if (hot && hot_ok && status == CUB_NOCONV) *hot_ok = cub_hot_point(&hp, d, hot, hot_w);
     heap_free(&hp);
     free(p);
     return status;
