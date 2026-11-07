@@ -596,6 +596,28 @@ def suggest(alternatives):
             % (macro, macro, (" " + value) if value else ""))
 
 
+# ---------------------------------------------------------------------------
+# Check 7: realpath into a caller buffer (issue #129)
+# ---------------------------------------------------------------------------
+#
+# realpath(path, buf) requires buf to hold PATH_MAX bytes. glibc's fortified
+# realpath (_FORTIFY_SOURCE, on by default in distribution gcc at -O2) aborts
+# with "*** buffer overflow detected ***" when the destination object is
+# smaller -- at the call, whatever the path's length. PATH_MAX is 4096 on Linux
+# and 1024 on macOS, so a 2048-byte buffer is fine here and fatal there: every
+# Linux binary crashed at startup in v0.6375-v0.6417. Pass NULL and free the
+# result instead (POSIX.1-2008).
+
+REALPATH_BUF_RE = re.compile(
+    r"\brealpath\s*\(\s*(?:[^,()]|\([^()]*\))+,(?!\s*NULL\s*\))")
+
+
+def scan_realpath_buf(text):
+    """Return the 1-based lines calling realpath with a non-NULL buffer."""
+    return sorted(set(text.count("\n", 0, m.start()) + 1
+                      for m in REALPATH_BUF_RE.finditer(text)))
+
+
 def main():
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -605,6 +627,7 @@ def main():
     mingw_offenders = []
     llp64_offenders = []
     bool_offenders = []
+    realpath_offenders = []
     hdr_index = header_index(repo_root)
     bool_memo = {}
 
@@ -641,6 +664,10 @@ def main():
             if mingw:
                 mingw_offenders.append((path, mingw))
 
+            rp = scan_realpath_buf(text)
+            if rp:
+                realpath_offenders.append((path, rp))
+
             llp64 = scan_llp64(text)
             if llp64:
                 llp64_offenders.append((path, llp64))
@@ -653,7 +680,7 @@ def main():
 
     if not (const_offenders or func_offenders or late_offenders
             or wide_offenders or stream_offenders or mingw_offenders
-            or llp64_offenders or bool_offenders):
+            or llp64_offenders or bool_offenders or realpath_offenders):
         return 0
 
     if const_offenders:
@@ -763,10 +790,22 @@ def main():
             sys.stderr.write("  %s\n" % path)
         sys.stderr.write("\n")
 
+    if realpath_offenders:
+        sys.stderr.write(
+            "error: realpath() into a caller-supplied buffer. glibc's fortified\n"
+            "       realpath aborts (\"*** buffer overflow detected ***\") unless\n"
+            "       the buffer holds PATH_MAX (4096 on Linux, 1024 on macOS), so\n"
+            "       this crashes only on Linux (issue #129). Use\n"
+            "       `char* p = realpath(path, NULL); ... free(p);` at:\n\n"
+        )
+        for path, lines in realpath_offenders:
+            sys.stderr.write("  %s:%s\n" % (path, ",".join(map(str, lines))))
+        sys.stderr.write("\n")
+
     total = len(set(bool_offenders) | set(p for p, _ in
                     const_offenders + func_offenders + late_offenders
                     + wide_offenders + stream_offenders + mingw_offenders
-                    + llp64_offenders))
+                    + llp64_offenders + realpath_offenders))
     sys.stderr.write("%d file(s) affected.\n" % total)
     return 1
 
