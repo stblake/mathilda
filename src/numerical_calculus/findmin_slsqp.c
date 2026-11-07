@@ -31,14 +31,47 @@
  * Kraft 1988; Powell 1978; Nocedal & Wright 2nd ed. ch. 18; Goldfarb &
  * Idnani 1983 (the dual active-set QP). */
 
-/* Objective gradient at x: exact symbolic (compiled) with a
- * central-difference fallback -- the pattern the other gradient runners use. */
+/* Objective gradient at x: exact symbolic (compiled) when available, else
+ * finite differences.  A black-box objective (a ?NumericQ helper, a
+ * LinearSolve inside a Module) has no symbolic gradient, and its differences
+ * ARE the cost of the method: n + 1 samples an iteration forward, 2n central.
+ * Far from the solution the forward difference (step sqrt(eps)|x|, error
+ * ~1e-8 relative) is as good a search direction as the central one at half
+ * the price -- the choice scipy's SLSQP makes throughout.  Once the QP steps
+ * shrink (`central`, set by the caller and never cleared) the final
+ * iterations switch to central differences, whose ~1e-11 accuracy is what the
+ * stationarity test then needs.  A forward step that would leave a box bound
+ * is taken backwards instead.  fx is f(x), unscaled. */
 static bool fm_slsqp_objgrad(Expr* f, Expr** g_exprs, FmVarBind* binds,
                              const double* x, size_t n, const FmOpts* opts,
-                             double* g) {
-    bool ok = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
-    if (!ok) ok = fm_grad_finite_diff(f, binds, x, n, opts, g);
+                             double* g, double fx, const FmBox* boxes,
+                             bool central, bool* had_exact) {
+    *had_exact = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+    if (*had_exact) return true;
+    if (central) return fm_grad_finite_diff(f, binds, x, n, opts, g);
+    double* xp = (double*)malloc(sizeof(double) * (n ? n : 1));
+    if (!xp) return false;
+    for (size_t i = 0; i < n; i++) xp[i] = x[i];
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++) {
+        double xi = x[i];
+        double h = 1.4901161193847656e-08 * (fabs(xi) > 1.0 ? fabs(xi) : 1.0);
+        if (boxes && boxes[i].has_hi && xi + h > boxes[i].hi) h = -h;
+        xp[i] = xi + h;
+        h = xp[i] - xi;                      /* the step actually represented */
+        double f1;
+        ok = fm_eval_scalar(f, binds, xp, n, opts, &f1) && isfinite(f1);
+        if (ok) g[i] = (f1 - fx) / h;
+        xp[i] = xi;
+    }
+    free(xp);
     return ok;
+}
+
+static double fm_slsqp_infnorm(const double* v, size_t n) {
+    double m = 0.0;
+    for (size_t i = 0; i < n; i++) if (fabs(v[i]) > m) m = fabs(v[i]);
+    return m;
 }
 
 /* One constraint's Jacobian row ∇c_k at x: exact-then-FD, mirroring
@@ -277,6 +310,21 @@ bool fm_slsqp_qp(const double* L, size_t n, const double* g,
     return true;
 }
 
+bool g_fm_slsqp_hit_maxit = false;
+
+bool fm_gens_all_linear(const FmGenCon* gens, size_t ngens, Expr** vars, size_t n) {
+    for (size_t k = 0; k < ngens; k++) {
+        if (!gens[k].grad_exprs) return false;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* gi = gens[k].grad_exprs[i];
+            if (!gi) return false;
+            for (size_t j = 0; j < n; j++)
+                if (nm_expr_contains_symbol(gi, vars[j]->data.symbol.name)) return false;
+        }
+    }
+    return true;
+}
+
 /* Consecutive non-improving infeasible iterations before SLSQP reports
  * FindMinimum::infeas and stops (see the stall test in the main loop). */
 #define FM_SLSQP_STALL 30
@@ -309,6 +357,7 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
     bool ok = false;
     double fx = 0.0;
     bool have_best = false; double best_f = 0.0;
+    g_fm_slsqp_hit_maxit = false;
     if (!B || !L || !g || !g_new || !d || !x_new || !svec || !yvec || !Bs
         || !xbest || !lam || !pen || !c || !c_new || !Jac || !Jac_new)
         goto cleanup;
@@ -320,7 +369,9 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
         fm_warn(g_fm_name, "nlnum", "objective evaluation failed at start point");
         goto cleanup;
     }
-    if (!fm_slsqp_objgrad(f, g_exprs, binds, x, n, opts, g)) {
+    bool central = false, exact_grad = false;
+    if (!fm_slsqp_objgrad(f, g_exprs, binds, x, n, opts, g, fx, boxes,
+                          central, &exact_grad)) {
         fm_warn(g_fm_name, "nlnum", "gradient evaluation failed at start point");
         goto cleanup;
     }
@@ -331,6 +382,22 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
             goto cleanup;
         }
     }
+    /* Objective scaling.  B starts at the identity and the stationarity test
+     * is absolute, both of which assume an objective whose gradient is O(1).
+     * A small-scale objective (a compliance of 6e-4 over 64 cell values of
+     * size 50: |grad f| ~ 1e-6) made every QP step a 1e-6 nudge, the merit
+     * descent test fail by rounding, and 500 iterations end where they began.
+     * SLSQP therefore minimises fs f with fs = 1/|grad f(x0)|_inf (capped at
+     * 1e8), the scaling fm_run_penalty applies, and reports f unscaled. */
+    double fs = 1.0;
+    {
+        double gmax = 0.0;
+        for (size_t i = 0; i < n; i++) if (fabs(g[i]) > gmax) gmax = fabs(g[i]);
+        if (gmax > 0.0 && gmax < 1e-2 && isfinite(gmax))
+            fs = (1.0 / gmax < 1e8) ? 1.0 / gmax : 1e8;
+    }
+    fx *= fs;
+    for (size_t i = 0; i < n; i++) g[i] *= fs;
 
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
@@ -392,12 +459,13 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
         }
 
         /* Armijo backtracking on the merit; track the best trial step. */
-        double alpha = 1.0, best_alpha = 0.0, best_phi = phi0;
+        double alpha = 1.0, best_alpha = 0.0, best_phi = phi0, best_ft = fx;
         bool ls_ok = false;
         for (int bt = 0; bt < 40; bt++) {
             double ft;
             for (size_t i = 0; i < n; i++) x_new[i] = x[i] + alpha * d[i];
             bool eok = fm_eval_scalar(f, binds, x_new, n, opts, &ft);
+            ft *= fs;
             bool cok = eok && isfinite(ft);
             double phit = ft;
             for (size_t k = 0; cok && k < ngens; k++) {
@@ -407,9 +475,9 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
             }
             if (cok) {
                 if (phit <= phi0 + 1e-4 * alpha * dphi) {
-                    best_alpha = alpha; best_phi = phit; ls_ok = true; break;
+                    best_alpha = alpha; best_phi = phit; best_ft = ft; ls_ok = true; break;
                 }
-                if (phit < best_phi) { best_phi = phit; best_alpha = alpha; }
+                if (phit < best_phi) { best_phi = phit; best_alpha = alpha; best_ft = ft; }
             }
             alpha *= 0.5;
             if (alpha < 1e-12) break;
@@ -427,12 +495,17 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
         zero_streak = 0;
         alpha = best_alpha;
         for (size_t i = 0; i < n; i++) x_new[i] = x[i] + alpha * d[i];
-        double fx_new;
-        if (!fm_eval_scalar(f, binds, x_new, n, opts, &fx_new)) goto cleanup;
+        double fx_new = best_ft;     /* the line search's (scaled) value there */
         fm_fire_monitor(opts->step_monitor);
 
         /* Gradient + Jacobian at x_new (needed for the Lagrangian BFGS pair). */
-        bool grads_ok = fm_slsqp_objgrad(f, g_exprs, binds, x_new, n, opts, g_new);
+        /* switch the differences to central once the steps are small */
+        if (!central && !exact_grad
+            && alpha * dnorm < 1e-4 * (fm_slsqp_infnorm(x, n) + 1.0))
+            central = true;
+        bool grads_ok = fm_slsqp_objgrad(f, g_exprs, binds, x_new, n, opts, g_new,
+                                         fx_new / fs, boxes, central, &exact_grad);
+        for (size_t i = 0; grads_ok && i < n; i++) g_new[i] *= fs;
         for (size_t k = 0; grads_ok && k < ngens; k++) {
             if (!fm_eval_scalar(gens[k].expr, binds, x_new, n, opts, &c_new[k])
                 || !fm_slsqp_congrad(&gens[k], binds, x_new, n, opts, &Jac_new[k * n]))
@@ -522,6 +595,7 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
         } else { infeas_streak = 0; if (viol < best_viol) best_viol = viol; }
     }
     /* Loop exhausted without meeting the goals: say so (cvmit). */
+    g_fm_slsqp_hit_maxit = (it >= opts->max_iter);
     if (it >= opts->max_iter) fm_warn_maxit(opts);
 
     /* If we ended infeasible but saw a feasible iterate, return the best. */
@@ -536,7 +610,7 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
             fx = best_f;
         }
     }
-    *fx_out = fx;
+    *fx_out = fx / fs;
     ok = true;
 cleanup:
     free(B); free(L); free(g); free(g_new); free(d); free(x_new);
@@ -544,3 +618,235 @@ cleanup:
     free(c); free(c_new); free(Jac); free(Jac_new);
     return ok;
 }
+
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  Linear constraints at WorkingPrecision                              *
+ * ------------------------------------------------------------------ *
+ * The machine SQP above locates the solution and, with it, the ACTIVE SET:
+ * which box bounds hold with equality and which linear inequalities are
+ * tight.  On that set the problem is an equality-constrained one, and linear
+ * equalities can be eliminated exactly: each independent active row solves
+ * (by Solve, over its exact coefficients) for one pivot variable, the bound
+ * variables are pinned to their bounds, and what is left is an UNCONSTRAINED
+ * problem in the remaining variables -- the objective with the pivots
+ * substituted -- which the MPFR quasi-Newton (fm_run_bfgs_mpfr) solves to the
+ * working precision.  The pivots are then recovered from their exact
+ * expressions.  The refined point is accepted only if it keeps every pivot
+ * inside its box and every inactive inequality satisfied; a wrong active set
+ * fails that test and the caller falls back to the machine solution with the
+ * FindMinimum::nimpl warning.  A pinned bound is the double the box parser
+ * stored, taken exactly (an integer, else that double in MPFR): exact for the
+ * integer and dyadic bounds such problems carry. */
+
+static bool fm_lin_num(const Expr* e, double* out) {
+    Expr* ev = eval_and_free(expr_copy((Expr*)e));
+    Expr* nv = ev ? numericalize(ev, numeric_machine_spec()) : NULL;
+    bool ok = nv && fm_expr_to_double_real(nv, out);
+    expr_free(ev); expr_free(nv);
+    return ok;
+}
+
+/* lhs -> rhs (lhs copied, rhs adopted) */
+static Expr* fm_lin_rule(Expr* lhs, Expr* rhs) {
+    Expr* a[2] = { expr_copy(lhs), rhs };
+    return expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+}
+
+/* e /. rules, evaluated (both borrowed) */
+static Expr* fm_lin_subst(Expr* e, Expr* rules) {
+    Expr* a[2] = { expr_copy(e), expr_copy(rules) };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll), a, 2));
+}
+
+bool fm_linear_refine_mpfr(Expr* f, Expr** vars, size_t n, FmVarBind* binds,
+                           const FmGenCon* gens, size_t ngens,
+                           const FmBox* boxes, const FmOpts* opts,
+                           const double* xm, mpfr_t* x_out, mpfr_t fx_out) {
+    long bits = opts->wp_bits;
+    bool ok = false;
+    for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+    size_t n1 = n ? n : 1, g1 = ngens ? ngens : 1;
+    int*    role = (int*)calloc(n1, sizeof(int));     /* 0 free, 1 lo, 2 hi, 3 pivot */
+    double* A    = (double*)calloc(g1 * n1, sizeof(double));
+    int*    act  = (int*)calloc(g1, sizeof(int));
+    Expr**  sub  = (Expr**)malloc(sizeof(Expr*) * n1);
+    FmVarBind* sb = (FmVarBind*)malloc(sizeof(FmVarBind) * n1);
+    FmBox*  sbox = (FmBox*)malloc(sizeof(FmBox) * n1);
+    size_t* sidx = (size_t*)malloc(sizeof(size_t) * n1);
+    Expr *fixed = NULL, *sol = NULL, *allr = NULL, *fred = NULL;
+    Expr** gm = NULL;
+    mpfr_t* xs = NULL;
+    size_t m = 0, np = 0;
+    if (!role || !A || !act || !sub || !sb || !sbox || !sidx) goto done;
+
+    /* 1. bounds active at the machine solution */
+    for (size_t i = 0; i < n; i++) {
+        if (boxes[i].has_lo && fabs(xm[i] - boxes[i].lo) <= 1e-7 * (1.0 + fabs(boxes[i].lo)))
+            role[i] = 1;
+        else if (boxes[i].has_hi && fabs(xm[i] - boxes[i].hi) <= 1e-7 * (1.0 + fabs(boxes[i].hi)))
+            role[i] = 2;
+    }
+    /* 2. active rows (every equality, the tight inequalities) and their
+     *    machine coefficients */
+    for (size_t k = 0; k < ngens; k++) {
+        double scale = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            if (!fm_lin_num(gens[k].grad_exprs[i], &A[k * n + i])) goto done;
+            scale += fabs(A[k * n + i] * xm[i]);
+        }
+        double c;
+        if (!fm_eval_scalar(gens[k].expr, binds, xm, n, opts, &c)) goto done;
+        for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+        if (gens[k].equality || fabs(c) <= 1e-7 * (1.0 + scale)) act[k] = 1;
+    }
+    /* 3. one pivot per independent active row, by elimination with the
+     *    largest free coefficient; a dependent row (pivot ~ 0) is dropped */
+    {
+        double* R = (double*)malloc(sizeof(double) * g1 * n1);
+        if (!R) goto done;
+        for (size_t t = 0; t < ngens * n; t++) R[t] = A[t];
+        double amax = 0.0;
+        for (size_t t = 0; t < ngens * n; t++) if (fabs(R[t]) > amax) amax = fabs(R[t]);
+        for (size_t k = 0; k < ngens; k++) {
+            if (!act[k]) continue;
+            size_t pc = n; double pv = 0.0;
+            for (size_t i = 0; i < n; i++)
+                if (role[i] == 0 && fabs(R[k * n + i]) > pv) { pv = fabs(R[k * n + i]); pc = i; }
+            if (pc == n || pv <= 1e-12 * amax) { act[k] = 0; continue; }
+            role[pc] = 3;
+            for (size_t l = k + 1; l < ngens; l++) {
+                if (!act[l] || R[l * n + pc] == 0.0) continue;
+                double fct = R[l * n + pc] / R[k * n + pc];
+                for (size_t i = 0; i < n; i++) R[l * n + i] -= fct * R[k * n + i];
+            }
+        }
+        free(R);
+    }
+    /* 4. exact rules: the pinned bounds, then the pivots by Solve */
+    {
+        size_t nf = 0;
+        Expr** fr = (Expr**)malloc(sizeof(Expr*) * n1);
+        for (size_t i = 0; i < n; i++)
+            if (role[i] == 1 || role[i] == 2) {
+                double d = role[i] == 1 ? boxes[i].lo : boxes[i].hi;
+                Expr* bx;
+                if (d == floor(d) && fabs(d) < 9.0e15) {
+                    bx = expr_new_integer((int64_t)d);
+                } else {                     /* the double, exactly, in MPFR */
+                    mpfr_t b; mpfr_init2(b, bits > 64 ? bits : 64);
+                    mpfr_set_d(b, d, MPFR_RNDN);
+                    bx = expr_new_mpfr_copy(b);
+                    mpfr_clear(b);
+                }
+                fr[nf++] = fm_lin_rule(vars[i], bx);
+            }
+        fixed = expr_new_function(expr_new_symbol(SYM_List), fr, nf);
+        free(fr);
+    }
+    {
+        size_t ne = 0;
+        Expr** eqs = (Expr**)malloc(sizeof(Expr*) * g1);
+        Expr** pv  = (Expr**)malloc(sizeof(Expr*) * n1);
+        for (size_t k = 0; k < ngens; k++) if (act[k]) {
+            Expr* ea[2] = { fm_lin_subst(gens[k].expr, fixed), expr_new_integer(0) };
+            eqs[ne++] = expr_new_function(expr_new_symbol(SYM_Equal), ea, 2);
+        }
+        for (size_t i = 0; i < n; i++) if (role[i] == 3) pv[np++] = expr_copy(vars[i]);
+        if (ne > 0) {
+            Expr* sa[2] = { expr_new_function(expr_new_symbol(SYM_List), eqs, ne),
+                            expr_new_function(expr_new_symbol(SYM_List), pv, np) };
+            sol = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve), sa, 2));
+        } else {
+            for (size_t i = 0; i < np; i++) expr_free(pv[i]);
+        }
+        free(eqs); free(pv);
+        /* {{p1 -> e1, ...}}: one solution, one rule per pivot */
+        if (ne > 0) {
+            if (!sol || sol->type != EXPR_FUNCTION || sol->data.function.arg_count != 1)
+                goto done;
+            Expr* s0 = sol->data.function.args[0];
+            if (s0->type != EXPR_FUNCTION || s0->data.function.arg_count != np) goto done;
+        }
+        size_t nfx = fixed->data.function.arg_count;
+        size_t nr = nfx + (sol ? np : 0);
+        Expr** ar = (Expr**)malloc(sizeof(Expr*) * (nr ? nr : 1));
+        size_t q = 0;
+        for (size_t i = 0; i < nfx; i++) ar[q++] = expr_copy(fixed->data.function.args[i]);
+        if (sol) for (size_t i = 0; i < np; i++)
+            ar[q++] = expr_copy(sol->data.function.args[0]->data.function.args[i]);
+        allr = expr_new_function(expr_new_symbol(SYM_List), ar, q);
+        free(ar);
+    }
+    /* 5. the reduced, unconstrained problem in the remaining variables */
+    fred = fm_lin_subst(f, allr);
+    for (size_t i = 0; i < n; i++) if (role[i] == 0) {
+        sub[m] = vars[i]; sb[m] = binds[i]; sidx[m] = i;
+        sbox[m].has_lo = sbox[m].has_hi = false;   /* interior at the solution */
+        m++;
+    }
+    xs = fm_mpfr_array(m ? m : 1, bits);
+    for (size_t j = 0; j < m; j++) mpfr_set_d(xs[j], xm[sidx[j]], MPFR_RNDN);
+    if (m > 0) {
+        gm = fm_compute_gradient(fred, sub, m);
+        if (!fm_run_bfgs_mpfr(fred, sub, m, sb, gm, xs, sbox, opts, fx_out)) goto done;
+        for (size_t j = 0; j < m; j++) fm_bind_clear_temp(&sb[j]);
+    }
+    /* 6. every coordinate at the working precision, the pivots in their box */
+    {
+        Expr** vr = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+        for (size_t j = 0; j < m; j++) vr[j] = fm_lin_rule(sub[j], expr_new_mpfr_copy(xs[j]));
+        Expr* vals = expr_new_function(expr_new_symbol(SYM_List), vr, m);
+        free(vr);
+        NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = bits;
+        bool good = true;
+        for (size_t i = 0; i < n && good; i++) {
+            Expr* xi = fm_lin_subst(vars[i], allr);
+            Expr* xv = xi ? fm_lin_subst(xi, vals) : NULL;
+            Expr* xn = xv ? numericalize(xv, sp) : NULL;
+            mpfr_t im; mpfr_init2(im, bits);
+            good = xn && get_approx_mpfr(xn, x_out[i], im, NULL) && mpfr_zero_p(im);
+            mpfr_clear(im);
+            expr_free(xi); expr_free(xv); expr_free(xn);
+            if (good && role[i] == 3) {
+                double d = mpfr_get_d(x_out[i], MPFR_RNDN);
+                double tol = 1e-12 * (1.0 + fabs(d));
+                if ((boxes[i].has_lo && d < boxes[i].lo - tol)
+                    || (boxes[i].has_hi && d > boxes[i].hi + tol)) good = false;
+            }
+        }
+        if (m == 0 && good) {
+            Expr* fv = fm_lin_subst(fred, vals);
+            Expr* fn = fv ? numericalize(fv, sp) : NULL;
+            mpfr_t im; mpfr_init2(im, bits);
+            good = fn && get_approx_mpfr(fn, fx_out, im, NULL);
+            mpfr_clear(im);
+            expr_free(fv); expr_free(fn);
+        }
+        expr_free(vals);
+        if (!good) goto done;
+    }
+    /* 7. the inactive inequalities still hold */
+    {
+        double* xd = (double*)malloc(sizeof(double) * n1);
+        bool good = xd != NULL;
+        for (size_t i = 0; good && i < n; i++) xd[i] = mpfr_get_d(x_out[i], MPFR_RNDN);
+        for (size_t k = 0; k < ngens && good; k++) {
+            if (gens[k].equality) continue;
+            double c;
+            if (!fm_eval_scalar(gens[k].expr, binds, xd, n, opts, &c) || c > 1e-9) good = false;
+        }
+        for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+        free(xd);
+        if (!good) goto done;
+    }
+    ok = true;
+done:
+    for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+    if (gm) { for (size_t j = 0; j < m; j++) expr_free(gm[j]); free(gm); }
+    if (xs) fm_mpfr_array_free(xs, m ? m : 1);
+    expr_free(fixed); expr_free(sol); expr_free(allr); expr_free(fred);
+    free(role); free(A); free(act); free(sub); free(sb); free(sbox); free(sidx);
+    return ok;
+}
+#endif /* USE_MPFR */

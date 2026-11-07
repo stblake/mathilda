@@ -831,6 +831,23 @@ bool fm_run_slsqp(Expr* f, Expr** vars, size_t n,
                          const FmBox* boxes,
                          const FmOpts* opts,
                          double* fx_out);
+/* Whether the last fm_run_slsqp stopped on its MaxIterations budget (set by
+ * every run; read by a caller that ran it quietly and must still report
+ * FindMinimum::cvmit for a result it keeps). */
+extern bool g_fm_slsqp_hit_maxit;
+/* Every general constraint is linear in vars (its gradient is free of them). */
+bool fm_gens_all_linear(const FmGenCon* gens, size_t ngens, Expr** vars, size_t n);
+#ifdef USE_MPFR
+/* Refine the machine solution xm of a problem with LINEAR general constraints
+ * and box bounds to the working precision: its active bounds pinned, its active
+ * rows eliminated exactly, the reduced unconstrained problem solved by the MPFR
+ * quasi-Newton.  x_out (n entries) and fx_out pre-initialised by the caller.
+ * False (outputs unspecified) when the active set does not survive. */
+bool fm_linear_refine_mpfr(Expr* f, Expr** vars, size_t n, FmVarBind* binds,
+                           const FmGenCon* gens, size_t ngens,
+                           const FmBox* boxes, const FmOpts* opts,
+                           const double* xm, mpfr_t* x_out, mpfr_t fx_out);
+#endif
 bool fm_run_powell(Expr* f, Expr** vars, size_t n,
                           FmVarBind* binds, Expr** g_exprs,
                           double* x, /* in/out */

@@ -457,9 +457,23 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     bool use_mpfr = (opts.prec_mode == FM_PREC_MPFR);
     /* Penalty path is not lifted to MPFR yet — fall back to machine
      * precision in that case rather than silently dropping the constraint. */
-    if (use_mpfr && has_general_cons) {
+    /* Linear general constraints at WorkingPrecision: solve at machine
+     * precision (which finds the active set), then refine on that active set
+     * in MPFR (fm_linear_refine_mpfr, after the dispatch below).  The machine
+     * phase runs with machine numerics and machine goals -- the MPFR goals
+     * (30 digits by default) would keep a machine solver iterating to its
+     * MaxIterations. */
+    bool lin_refine = false;
+    FmOpts mpfr_opts = opts;
+    if (use_mpfr && has_general_cons && fm_gens_all_linear(gens, ngens, vars, n)) {
+        lin_refine = true;
+        use_mpfr = false;
+        opts.prec_mode = FM_PREC_MACHINE;
+        if (opts.acc_goal_digits  > 8.0) opts.acc_goal_digits  = 8.0;
+        if (opts.prec_goal_digits > 8.0) opts.prec_goal_digits = 8.0;
+    } else if (use_mpfr && has_general_cons) {
         fm_warn(fn_name, "nimpl",
-                "general (non-box) constraints at WorkingPrecision > MachinePrecision "
+                "nonlinear general constraints at WorkingPrecision > MachinePrecision "
                 "are not yet supported; falling back to machine precision");
         use_mpfr = false;
     }
@@ -582,7 +596,41 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         ok = fm_brent_min(f_raw, binds, &opts, a, b, c, &boxes[0], &xm, &fm);
         if (ok) { x_vec[0] = xm; fx_min = fm; }
     } else if (method == FM_METHOD_QUASINEWTON) {
-        if (has_general_cons) {
+        bool done_sqp = false;
+        if (has_general_cons && opts.method == FM_METHOD_AUTOMATIC
+            && fm_gens_all_linear(gens, ngens, vars, n)) {
+            /* Automatic with LINEAR general constraints: SQP.  The linearised
+             * constraints of the QP are then the constraints themselves, so
+             * every iterate stays on them and one quasi-Newton solve replaces
+             * the augmented-Lagrangian outer loop (nine BFGS solves of an
+             * ever-stiffer penalty).  The 64-cell optimal-design compliance
+             * (box bounds and one sum constraint, a LinearSolve black box) took
+             * ~56000 evaluations that way; SQP needs ~1/20 of them.  A run
+             * that fails or ends infeasible is discarded silently and the
+             * penalty path runs from the original start, as before. */
+            double* x0s = (double*)malloc(sizeof(double) * (n ? n : 1));
+            if (x0s) {
+                for (size_t i = 0; i < n; i++) x0s[i] = x_vec[i];
+                bool saved_quiet = g_fm_quiet;
+                g_fm_quiet = true;
+                double fsq = 0.0, pen_sq = INFINITY;
+                bool sok = fm_run_slsqp(f_raw, vars, n, binds, g_exprs, x_vec,
+                                        gens, ngens, 0.0, boxes, &opts, &fsq);
+                g_fm_quiet = saved_quiet;
+                if (sok && isfinite(fsq)
+                    && fm_eval_penalty(gens, ngens, binds, x_vec, n, &opts, &pen_sq)
+                    && pen_sq <= 1e-12) {
+                    fx_min = fsq; ok = true; done_sqp = true;
+                    if (g_fm_slsqp_hit_maxit) fm_warn_maxit(&opts);
+                } else {
+                    for (size_t i = 0; i < n; i++) x_vec[i] = x0s[i];
+                }
+                free(x0s);
+            }
+        }
+        if (done_sqp) {
+            /* solved by SQP above */
+        } else if (has_general_cons) {
             ok = fm_run_penalty(f_raw, vars, n, binds, FM_METHOD_QUASINEWTON,
                                 g_exprs, NULL, x_vec, gens, ngens, boxes, &opts, &fx_min);
         } else {
@@ -705,6 +753,25 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         ok = false;
     }
 #ifdef USE_MPFR
+    }
+    if (lin_refine) {
+        opts = mpfr_opts;
+        if (ok) {
+            use_mpfr = true;           /* fx_min_mpfr is now live (cleared below) */
+            mpfr_init2(fx_min_mpfr, opts.wp_bits);
+            x_vec_mpfr = fm_mpfr_array(n, opts.wp_bits);
+            bool saved_quiet = g_fm_quiet;
+            g_fm_quiet = true;
+            mpfr_result = fm_linear_refine_mpfr(f_raw, vars, n, binds, gens, ngens,
+                                                boxes, &opts, x_vec, x_vec_mpfr,
+                                                fx_min_mpfr);
+            g_fm_quiet = saved_quiet;
+            if (!mpfr_result)
+                fm_warn(fn_name, "nimpl",
+                        "the constrained solution could not be refined at "
+                        "WorkingPrecision > MachinePrecision; returning the "
+                        "machine-precision solution");
+        }
     }
 #endif
 run_done:

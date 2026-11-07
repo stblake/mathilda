@@ -290,6 +290,38 @@ static void test_hanging_chain(void) {
         " Max[Abs[(cons /. Equal -> Subtract) /. Last[r]]] < 1.*^-8]");
 }
 
+/* S9 a small-scale black-box objective (|grad f| ~ 1e-5) under box bounds and
+ * a linear sum constraint -- the shape of an optimal-design compliance.
+ * SLSQP made no progress on it (500 iterations, unscaled B = I); it now
+ * scales the objective by 1/|grad f(x0)|.  Automatic takes SQP for linear
+ * constraints, and at WorkingPrecision refines the active set in MPFR
+ * (d pinned at its bound 1, one pivot eliminated).  Exact minimum:
+ * v ~ sqrt(w) on the free cells, a = 11/6, b = 11/3, c = 11/2, d = 1,
+ * f = 10^-4 (36/11 + 1/100) = 3611/11000000. */
+#define DESIGN_OBJ "obj[v_ /; VectorQ[v, NumericQ]] := " \
+    "10^-4 (1/v[[1]] + 4/v[[2]] + 9/v[[3]] + 1/100/v[[4]]); "
+#define DESIGN_CALL(opts) "FindMinimum[{obj[{a, b, c, d}], 1 <= a <= 100 && 1 <= b <= 100 && " \
+    "1 <= c <= 100 && 1 <= d <= 100 && a + b + c + d == 12}, " \
+    "{{a, 3}, {b, 3}, {c, 3}, {d, 3}}" opts "]"
+static void test_small_scale_blackbox_design(void) {
+    check_true("Module[{obj, a, b, c, d, r}, " DESIGN_OBJ
+               "r = " DESIGN_CALL(", Method -> \"SLSQP\"") "; "
+               "Abs[First[r]/(3611/11000000) - 1] < 10^-12 && "
+               "Abs[(a /. Last[r]) - 11/6] < 10^-6 && Abs[(d /. Last[r]) - 1] < 10^-9]");
+    check_true("Module[{obj, a, b, c, d, r}, " DESIGN_OBJ
+               "r = " DESIGN_CALL("") "; "
+               "Abs[First[r]/(3611/11000000) - 1] < 10^-12]");
+    /* WorkingPrecision with linear constraints: no machine fallback */
+    check_true("Module[{obj, a, b, c, d, r}, " DESIGN_OBJ
+               "r = Check[" DESIGN_CALL(", WorkingPrecision -> 40") ", $Failed]; "
+               "r =!= $Failed && Precision[First[r]] >= 30 && "
+               "Abs[First[r]/(3611/11000000) - 1] < 10^-30 && "
+               "Abs[(c /. Last[r]) - 11/2] < 10^-15]");
+    check_true("Module[{x, y, r}, r = Check[FindMinimum[{x^2 + y^2, x + y >= 1 && x - y == 0}, "
+               "{x, y}, WorkingPrecision -> 30], $Failed]; "
+               "r =!= $Failed && Precision[First[r]] >= 25 && Abs[First[r] - 1/2] < 10^-25]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -336,6 +368,9 @@ int main(void) {
 
     /* S8 coupled equalities, infeasible start */
     TEST(test_hanging_chain);
+
+    /* S9 small-scale black box, linear constraints, WorkingPrecision */
+    TEST(test_small_scale_blackbox_design);
 
     printf("All SLSQP tests passed!\n");
     return 0;

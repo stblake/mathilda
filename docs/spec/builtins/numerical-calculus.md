@@ -2118,7 +2118,13 @@ stops once merely feasible, and HS71 reaches `17.014`.  With no constraints it
 degrades gracefully to a damped-BFGS line-search solve; equalities, box bounds
 and inequalities may be mixed freely.  The objective and its exact gradient
 ride the compiled fast path; `WorkingPrecision > MachinePrecision` falls back to
-`QuasiNewton`.  Matches SciPy's `minimize(method="SLSQP")` on the optimiser to
+`QuasiNewton`.  The objective is **scaled** by `1/|∇f(x0)|_∞` (when that is
+below `10^-2`, capped at `10^8`) so `B = I` and the stationarity test see an O(1)
+gradient -- unscaled, a compliance of `6·10^-4` over 64 design cells made no
+progress in 500 iterations.  A **black-box** objective (no symbolic gradient)
+is differenced **forward** (step `sqrt(eps)·max(1, |x|)`, backwards at an upper
+bound; `n + 1` samples an iteration) until the steps shrink below `10^-4` of
+`|x|`, then **central** for the final iterations.  Matches SciPy's `minimize(method="SLSQP")` on the optimiser to
 rounding (experiment `68-slsqp-constrained`), winning on the harder constrained
 problems where the compiled gradient pays off (HS71 ~17×) and losing on large
 trivial-objective QPs where the dense active-set QP linear algebra dominates
@@ -2250,6 +2256,25 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
 - `Less / LessEqual / Greater / GreaterEqual` between a bare iteration
   variable and a numeric constant become **box constraints** (enforced
   by per-step projection).
+- With `Method -> Automatic` and **every general constraint linear** (its
+  gradient free of the variables), the problem goes to the **SQP** solver
+  (`"SLSQP"`): the QP's linearised constraints are then the constraints
+  themselves, so one quasi-Newton solve replaces the penalty rounds below
+  (the 64-cell optimal-design compliance, a `LinearSolve` black box under box
+  bounds and a sum constraint: 6000 evaluations, 24 s, 13 digits, where the
+  penalty path took ~56000 and 488 s).  A run that fails or ends infeasible
+  is discarded silently and the penalty path runs from the original start.
+- At `WorkingPrecision > MachinePrecision`, **linear** general constraints
+  (with box bounds) are supported: the machine solve finds the active set
+  (bounds within `10^-7` of the solution, every equality, the tight
+  inequalities), each independent active row is solved exactly (`Solve`) for
+  one pivot variable, the bound variables are pinned, and the reduced
+  unconstrained problem is minimised by the MPFR quasi-Newton; the refined
+  point must keep every pivot in its box and every inactive inequality
+  satisfied, else the machine solution is returned with
+  `FindMinimum::nimpl`.  The optimal-design proxy at 60 digits: 50 digits in
+  4.6 s (was the machine answer, 6 digits, in 62 s).  Nonlinear general
+  constraints at `WorkingPrecision` still fall back to machine precision.
 - Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
   **PHR augmented-Lagrangian** wrapper around the inner solver.  Each
   outer round minimises `f + Σ_k [λ_k·c_k + μ·c_k²]` (with the standard
