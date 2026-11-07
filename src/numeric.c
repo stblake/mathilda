@@ -723,6 +723,32 @@ bool get_approx_mpfr(const Expr* e, mpfr_t re, mpfr_t im, bool* is_inexact) {
                 mpfr_set_zero(im, +1);
                 return true;
             }
+            /* A Rational with a BigInt numerator or denominator: correctly
+             * rounded through mpq.  This used to fall through to `false`, and
+             * callers that take the conversion of an exact leaf for granted
+             * (the fused MPFR Dot) then read an uninitialised NaN: the
+             * Robbins polynomial v . x^Range[60], whose LinearSolve
+             * coefficients have 1370-digit numerators, evaluated to
+             * Indeterminate at every MPFR x, and FindRoot reported a
+             * non-real f. */
+            if (e->data.function.head->type == EXPR_SYMBOL
+                && e->data.function.head->data.symbol.name == SYM_Rational
+                && e->data.function.arg_count == 2
+                && expr_is_integer_like(e->data.function.args[0])
+                && expr_is_integer_like(e->data.function.args[1])) {
+                mpq_t q;
+                mpq_init(q);
+                expr_to_mpz(e->data.function.args[0], mpq_numref(q));
+                expr_to_mpz(e->data.function.args[1], mpq_denref(q));
+                bool okq = mpz_sgn(mpq_denref(q)) != 0;
+                if (okq) {
+                    mpq_canonicalize(q);
+                    mpfr_set_q(re, q, MPFR_RNDN);
+                    mpfr_set_zero(im, +1);
+                }
+                mpq_clear(q);
+                return okq;
+            }
             Expr *rpart, *ipart;
             if (is_complex((Expr*)e, &rpart, &ipart)) {
                 /* Allocate scratch MPFRs at the requested precision. */

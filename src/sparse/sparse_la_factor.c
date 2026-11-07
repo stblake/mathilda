@@ -7,9 +7,13 @@
  *            (USE_UMFPACK).
  *   CHOLMOD  supernodal Cholesky for Hermitian positive-definite matrices
  *            (cholmod_l_*). Present with USE_CHOLMOD.
+ *   BAND     without SuiteSparse: the RCM-renumbered matrix in LAPACK band
+ *            storage, factored with pbtrf (Cholesky) or gbtrf (LU) when the
+ *            band costs at most an eighth of the dense LU
+ *            (sparse_la_band.c).
  *   LAPACK   the matrix densified (column-major) and factored with getrf;
- *            used when SuiteSparse is absent, or asked for, and the dense
- *            form fits the densify cap.
+ *            used when SuiteSparse is absent and the band does not pay, or
+ *            asked for, and the dense form fits the densify cap.
  *
  * The CSR arrays of an SpMat, read as a compressed-COLUMN matrix, describe
  * M = A^T. Rather than transposing, the library factors M and every solve
@@ -19,6 +23,7 @@
  * A x = b is solved as M conj(x) = conj(b).
  */
 #include "sparse_la.h"
+#include "sparse_la_band.h"
 #include "lapack.h"
 #include <math.h>
 #include <stdlib.h>
@@ -34,7 +39,7 @@
 /* Densify cap of the LAPACK backend (elements), the same as the gate's. */
 #define SPF_DENSE_MAX ((int64_t)1 << 27)
 
-typedef enum { BK_UMFPACK, BK_CHOLMOD, BK_LAPACK } Backend;
+typedef enum { BK_UMFPACK, BK_CHOLMOD, BK_LAPACK, BK_BAND } Backend;
 
 struct SpFactor {
     Backend bk;
@@ -54,6 +59,8 @@ struct SpFactor {
     /* LAPACK: column-major LU and its pivots */
     double* lu;
     int* ipiv;
+    /* BAND */
+    SpBand* band;
 };
 
 int64_t spf_n(const SpFactor* f) { return f->n; }
@@ -69,6 +76,7 @@ const char* spf_backend(const SpFactor* f) {
     switch (f->bk) {
         case BK_UMFPACK: return "UMFPACK";
         case BK_CHOLMOD: return "CHOLMOD";
+        case BK_BAND:    return "Band";
         default:         return "LAPACK";
     }
 }
@@ -92,6 +100,7 @@ void spf_free(SpFactor* f) {
     free(f->ax);
     free(f->lu);
     free(f->ipiv);
+    spb_free(f->band);
     free(f);
 }
 
@@ -430,8 +439,9 @@ SpFactor* spf_factor(const SpMat* A, SpfWant want, SpfStatus* st) {
     f->rcond = -1.0;
     f->bk = BK_LAPACK;
     SpfStatus s = SPF_FAILED;
+    bool hpd = want == SPF_WANT_AUTO && spla_hermitian_posdiag(A);   /* tested once */
 
-    if (want == SPF_WANT_CHOL || (want == SPF_WANT_AUTO && spla_hermitian_posdiag(A))) {
+    if (want == SPF_WANT_CHOL || hpd) {
 #ifdef USE_CHOLMOD
         s = factor_cholmod(A, f);
         if (s == SPF_OK) return f;
@@ -443,7 +453,17 @@ SpFactor* spf_factor(const SpMat* A, SpfWant want, SpfStatus* st) {
         f->n = A->n; f->cplx = A->cplx; f->rcond = -1.0; f->bk = BK_LAPACK;
 #else
         if (want == SPF_WANT_CHOL) {
-            /* Cholesky without CHOLMOD: positive definiteness via the dense
+            /* Cholesky without CHOLMOD.  A matrix that is not Hermitian with
+             * a positive diagonal is not positive definite: no factor needed
+             * (PositiveDefiniteMatrixQ of a 10^5 x 10^5 negative definite
+             * matrix stayed unevaluated at the densify cap) */
+            if (!spla_hermitian_posdiag(A)) { *st = SPF_NOTPD; spf_free(f); return NULL; }
+            /* the band Cholesky when it pays */
+            SpfStatus bs;
+            f->band = spb_factor(A, SPB_CHOL, &bs);
+            if (f->band) { f->bk = BK_BAND; f->rcond = spb_rcond(f->band); return f; }
+            if (bs != SPF_TOOBIG) { *st = bs; spf_free(f); return NULL; }
+            /* else positive definiteness via the dense
              * potrf test, then the LU (a Hermitian PD matrix needs no
              * pivoting, so the LU is as stable as the Cholesky) */
             int64_t n = A->n;
@@ -460,7 +480,7 @@ SpFactor* spf_factor(const SpMat* A, SpfWant want, SpfStatus* st) {
             int info = A->cplx ? mat_lapack_zpotrf('L', (int)n, d, (int)n)
                                : mat_lapack_dpotrf('L', (int)n, d, (int)n);
             free(d);
-            if (info > 0 || !spla_hermitian_posdiag(A)) { *st = SPF_NOTPD; spf_free(f); return NULL; }
+            if (info > 0) { *st = SPF_NOTPD; spf_free(f); return NULL; }
             if (info < 0) { *st = SPF_FAILED; spf_free(f); return NULL; }
         }
 #endif
@@ -472,6 +492,17 @@ SpFactor* spf_factor(const SpMat* A, SpfWant want, SpfStatus* st) {
         *st = s;
         spf_free(f);
         return NULL;
+    }
+#endif
+#ifndef USE_UMFPACK
+    if (want != SPF_WANT_DENSE) {
+        /* no sparse LU in this build: the band LU when it pays (a Hermitian
+         * matrix asked for Cholesky was settled above; Automatic tries the
+         * band Cholesky first) */
+        SpfStatus bs;
+        f->band = spb_factor(A, hpd ? SPB_CHOL_LU : SPB_LU, &bs);
+        if (f->band) { f->bk = BK_BAND; f->rcond = spb_rcond(f->band); return f; }
+        if (bs != SPF_TOOBIG) { *st = bs; spf_free(f); return NULL; }
     }
 #endif
     s = factor_lapack(A, f);
@@ -489,6 +520,7 @@ bool spf_solve(const SpFactor* f, const double* B, double* X, int64_t nrhs, bool
 #ifdef USE_CHOLMOD
         case BK_CHOLMOD: return solve_cholmod(f, B, X, nrhs, trans);
 #endif
+        case BK_BAND: return spb_solve(f->band, B, X, nrhs, trans);
         case BK_LAPACK: {
             int w = f->cplx ? 2 : 1;
             size_t len = (size_t)w * (size_t)f->n;
@@ -507,6 +539,7 @@ bool spf_det(const SpFactor* f, double* re, double* im) {
         case BK_UMFPACK: return det_umfpack(f, re, im);
 #endif
         case BK_LAPACK: return det_lapack(f, re, im);
+        case BK_BAND: return spb_det(f->band, re, im);
         default: return false;
     }
 }

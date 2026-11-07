@@ -13,6 +13,8 @@
  *   FindRoot[f,        {x, x0, x1}]           secant from two starts
  *   FindRoot[f,        {x, xstart, xmin, xmax}]  Brent bracket
  *   FindRoot[{f1,...}, {{x, x0}, {y, y0}, ...}] system Newton
+ *   FindRoot[F[x, y] == {a, b}, {{x, x0}, {y, y0}}] vector equation (F may be
+ *                                             an opaque vector-valued function)
  *
  * Options (Rule[…] in the trailing positions, in any order):
  *   Method            -> Automatic | "Newton" | "Secant" | "Brent"
@@ -217,6 +219,43 @@ static bool fr_expr_to_complex(Expr* e, double complex* out) {
     return false;
 }
 
+/* A real value read leniently: an exact or inexact real, or a Complex whose
+ * imaginary part is round-off of the real part (|im| <= 2^-(p-8) (|re| + 1) at
+ * p bits).  A real problem routinely evaluates to `x + 0. I` -- a fractional
+ * power of a negative intermediate, a Log of a value that round-off pushed
+ * across the cut -- and refusing that as "non-real" ended solves the reference
+ * finishes.  A genuinely complex value is still refused. */
+static bool fr_value_real_d(Expr* e, double* out) {
+    if (fr_expr_to_double_real(e, out)) return true;
+    Expr *re, *im;
+    double r, i;
+    if (e && is_complex(e, &re, &im)
+        && fr_expr_to_double_real(re, &r) && fr_expr_to_double_real(im, &i)
+        && fabs(i) <= 256.0 * DBL_EPSILON * (fabs(r) + 1.0)) {
+        *out = r;
+        return true;
+    }
+    return false;
+}
+
+#ifdef USE_MPFR
+/* fr_value_real_d at `bits` bits into the pre-init2'd `out`. */
+static bool fr_value_real_m(const Expr* e, long bits, mpfr_t out) {
+    mpfr_t im, lim;
+    mpfr_inits2(bits, im, lim, (mpfr_ptr)0);
+    bool dummy;
+    bool ok = e && get_approx_mpfr(e, out, im, &dummy) && mpfr_number_p(out);
+    if (ok && !mpfr_zero_p(im)) {
+        mpfr_abs(lim, out, MPFR_RNDN);
+        mpfr_add_ui(lim, lim, 1, MPFR_RNDN);
+        mpfr_mul_2si(lim, lim, -(numeric_width_precision_bits(bits) - 8), MPFR_RNDN);
+        ok = mpfr_number_p(im) && mpfr_cmpabs(im, lim) <= 0;
+    }
+    mpfr_clears(im, lim, (mpfr_ptr)0);
+    return ok;
+}
+#endif
+
 /* True iff e represents a non-trivially complex value (im != 0). */
 static bool fr_is_complex_value(Expr* e) {
     Expr *re, *im;
@@ -409,12 +448,9 @@ static void fr_bind_snapshot(FrVarBind* b, const char* name) {
     b->valid = true;
 }
 
-/* Replace the symbol's current single OwnValue (if any) with one that
- * binds `name -> value`. Deep-copies `value` (symtab does this); the
- * caller still owns the input. */
-static void fr_bind_set(FrVarBind* b, Expr* value) {
+/* Free the temporary OwnValues installed on the variable. */
+static void fr_bind_drop_values(FrVarBind* b) {
     SymbolDef* def = symtab_get_def(b->name);
-    /* Free whatever temp OwnValue we may have installed previously. */
     Rule* curr = def->own_values;
     while (curr) {
         Rule* next = curr->next;
@@ -424,9 +460,25 @@ static void fr_bind_set(FrVarBind* b, Expr* value) {
         curr = next;
     }
     def->own_values = NULL;
+}
+
+/* Replace the symbol's current single OwnValue (if any) with one that
+ * binds `name -> value`. Deep-copies `value` (symtab does this); the
+ * caller still owns the input. */
+static void fr_bind_set(FrVarBind* b, Expr* value) {
+    /* Free whatever temp OwnValue we may have installed previously. */
+    fr_bind_drop_values(b);
     Expr* sym = expr_new_symbol(b->name);
     symtab_add_own_value(b->name, sym, (Expr*)value);
     expr_free(sym);
+}
+
+/* Drop the temporary value fr_bind_set installed, leaving the variable
+ * unbound (as after fr_bind_snapshot) so a symbolic step that follows -- D of
+ * an equation -- sees the symbol, not the last probe point. */
+static void fr_bind_clear(FrVarBind* b) {
+    fr_bind_drop_values(b);
+    eval_clock_bump();
 }
 
 /* Free any temp OwnValue we installed and restore the saved chain. */
@@ -822,6 +874,9 @@ static bool fr_overflowed(double v, const FrOpts* opts) {
  * convergent solve passes both tests one step after the step test first
  * passes, so the rule costs one extra evaluation of f. */
 #define FR_NOISE_ULPS 16
+/* Halvings a Newton step may take when it lands where f is not real or (for
+ * systems) does not reduce the residual. */
+#define FR_LS_MAX 10
 #define FR_POLISH_MAX 8
 
 /* True when a polishing step should end the iteration (see above): `step` and
@@ -841,17 +896,29 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
     int polished = -1;          /* < 0: the step test has not passed yet */
     double prev_step = INFINITY;
+    double x_prev = x, last_step = 0.0;   /* for backing off a step (below) */
+    int backs = 0;
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_real(x);
         Expr* arr[1] = { xv };
         Expr* fv_expr = fr_eval_with_bindings(f, bind, arr, 1, opts);
         expr_free(xv);
-        if (!fv_expr) { fr_warn("nlnum", "could not evaluate f"); return NULL; }
-        double fv;
-        bool ok_f = fr_expr_to_double_real(fv_expr, &fv);
+        double fv = 0.0;
+        bool ok_f = fv_expr && fr_value_real_d(fv_expr, &fv);
         expr_free(fv_expr);
+        if (!ok_f && k > 0 && backs < FR_LS_MAX) {
+            /* The step left the domain where f is real (a Log or a
+             * fractional power of an argument Newton overshot past zero):
+             * halve it from the last good point instead of giving up. */
+            backs++;
+            last_step *= 0.5;
+            x = x_prev - last_step;
+            prev_step = fabs(last_step);
+            continue;
+        }
         if (!ok_f) { fr_warn("nlnum", "non-real f during iteration"); return NULL; }
+        backs = 0;
         if (fr_overflowed(fv, opts)) return NULL;
         resid = fabs(fv);
         /* Both tests at x (see above); prev_step is the step that arrived. */
@@ -866,7 +933,7 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
             Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1, opts);
             expr_free(xv);
             if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
-            bool ok_d = fr_expr_to_double_real(dv_expr, &dv);
+            bool ok_d = fr_value_real_d(dv_expr, &dv);
             expr_free(dv_expr);
             if (!ok_d) { fr_warn("nlnum", "non-real derivative"); return NULL; }
         } else if (!fr_fd_deriv_real(f, bind, x, fr_fd_increment(fabs(x), prev_step),
@@ -884,6 +951,8 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
             if (polished >= 0 || resid_ok) return expr_new_real(x);
             fr_warn("noconv", "divergence (non-finite step)"); return NULL;
         }
+        x_prev = x;
+        last_step = step;
         x -= step;
         if (opts->step_monitor) {
             Expr* xv_new = expr_new_real(x);
@@ -1026,7 +1095,11 @@ static Expr* fr_brent_real_core(Expr* f, FrVarBind* bind,
         double goal = tol_acc + fabs(b) * tol_prec;
         double tol1 = 2.0 * DBL_EPSILON * fabs(b);
         double xm = 0.5 * (c - b);
-        if (fb == 0.0 || fabs(xm) <= tol1 + 0.5 * goal) return expr_new_real(b);
+        /* The bracket-width goal stops only with the residual goal met too
+         * (see fr_brent_mpfr_core); the resolution test always stops. */
+        if (fb == 0.0 || fabs(xm) <= tol1
+            || (fabs(xm) <= tol1 + 0.5 * goal && fabs(fb) <= tol_acc))
+            return expr_new_real(b);
         if (k >= iters) {
             fr_warn("cvmit", "failed to converge within %lld iterations",
                     (long long)opts->max_iter);
@@ -1223,24 +1296,29 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         if (fd_ok && !sym_ok) df = NULL;
     }
 
+    mpfr_t x_prev, last_step;          /* backing off a step: see the machine twin */
+    mpfr_inits2(bits, x_prev, last_step, (mpfr_ptr)0);
+    mpfr_set(x_prev, x, MPFR_RNDN);
+    mpfr_set_zero(last_step, +1);
+    int backs = 0;
     for (int64_t k = 0; k < opts->max_iter; k++) {
         Expr* xv = expr_new_mpfr_copy(x);
         Expr* a0[1] = { xv };
         Expr* fv_e = fr_eval_with_bindings(f, bind, a0, 1, opts);
         expr_free(xv);
-        if (!fv_e) {
-            fr_warn("nlnum", "could not evaluate f at MPFR precision");
-            goto cleanup;
-        }
-        mpfr_t im_f;
-        mpfr_init2(im_f, bits);
-        bool ok_f = get_approx_mpfr(fv_e, fv, im_f, &inexact_dummy);
-        bool fim_zero = mpfr_zero_p(im_f);
-        mpfr_clear(im_f);
+        bool ok_f = fr_value_real_m(fv_e, bits, fv);
         expr_free(fv_e);
-        if (!ok_f || !fim_zero) {
+        if (!ok_f && k > 0 && backs < FR_LS_MAX) {
+            backs++;
+            mpfr_mul_2si(last_step, last_step, -1, MPFR_RNDN);
+            mpfr_sub(x, x_prev, last_step, MPFR_RNDN);
+            mpfr_abs(prev_step, last_step, MPFR_RNDN);
+            continue;
+        }
+        if (!ok_f) {
             fr_warn("nlnum", "non-real f during iteration"); goto cleanup;
         }
+        backs = 0;
         /* Both tests at x (see fr_polish_done); prev_step arrived here. */
         mpfr_abs(tmp, fv, MPFR_RNDN);
         resid = mpfr_get_d(tmp, MPFR_RNDN);
@@ -1292,6 +1370,8 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
             }
             fr_warn("noconv", "divergence (non-finite step)"); goto cleanup;
         }
+        mpfr_set(x_prev, x, MPFR_RNDN);
+        mpfr_set(last_step, step, MPFR_RNDN);
         mpfr_sub(x, x, step, MPFR_RNDN);
         mpfr_abs(tmp, step, MPFR_RNDN);
         mpfr_t scale; mpfr_init2(scale, bits);
@@ -1336,7 +1416,8 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
         fr_warn_goal(opts, resid, mpfr_get_d(tmp, MPFR_RNDN));
     }
 cleanup:
-    mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, prev_step, (mpfr_ptr)0);
+    mpfr_clears(x, fv, dv, step, tmp, tol_acc, tol_prec, prev_step,
+                x_prev, last_step, (mpfr_ptr)0);
     return result;
 }
 
@@ -1389,10 +1470,14 @@ static bool fr_eval_mpfr_real(Expr* f, FrVarBind* bind, const mpfr_t x,
  *     phase, so that point is far more accurate than tol (a bracket-width test
  *     alone stops at ~tol: half the working precision under the default
  *     goals);
- *   - when the bracket half-width falls under 2^(1-bits) |b| + tol/2, at the
- *     goal or at the working precision, whichever comes first -- an
- *     absolute-only test never terminates for an AccuracyGoal beyond what the
- *     working precision can resolve at |b|.
+ *   - when the bracket half-width falls under 2^(1-bits) |b| + tol/2 AND
+ *     |f(b)| is under 10^-AccuracyGoal, or under 2^(1-bits) |b| alone (the
+ *     working precision's resolution) -- an absolute-only test never
+ *     terminates for an AccuracyGoal beyond what the working precision can
+ *     resolve at |b|.  The width test alone used to stop a bracket of a
+ *     steep function (a root 5e-9 from a log singularity, bracket
+ *     [0.0064, 0.0065]) once it was 1e-8 wide, with |f| still ~1: the
+ *     absolute tolerance was larger than the root's own scale.
  * `iters` caps the evaluations.  Returns the best iterate, or NULL (with a
  * message) on failure. */
 static Expr* fr_brent_mpfr_core(Expr* f, FrVarBind* bind,
@@ -1435,7 +1520,8 @@ static Expr* fr_brent_mpfr_core(Expr* f, FrVarBind* bind,
         mpfr_div_2ui(xm, xm, 1, MPFR_RNDN);
         mpfr_div_2ui(t2, goal, 1, MPFR_RNDN);
         mpfr_add(t2, t2, tol1, MPFR_RNDN);               /* tol1 + goal / 2 */
-        if (mpfr_zero_p(fb) || mpfr_cmpabs(xm, t2) <= 0) {
+        if (mpfr_zero_p(fb) || mpfr_cmpabs(xm, tol1) <= 0
+            || (mpfr_cmpabs(xm, t2) <= 0 && mpfr_cmpabs(fb, tol_acc) <= 0)) {
             result = expr_new_mpfr_copy(b);
             break;
         }
@@ -1822,14 +1908,21 @@ cleanup:
 #endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------ *
- *  System of equations Newton (machine precision)                     *
+ *  Systems: residual components, widths, Jacobian rows                *
  * ------------------------------------------------------------------ */
 
-/* Build a List[Subtract[lhs, rhs] | f_i] from args[0]. Caller owns. */
+/* Build a List[Subtract[lhs, rhs] | f_i] from args[0].  A bare equation or
+ * expression (not a List) is one component: FindRoot[F[x, y] == {a, b}, ...]
+ * with a vector-valued F.  Caller owns. */
 static Expr* fr_normalize_eqn_list(Expr* eqlist) {
-    if (!eqlist || eqlist->type != EXPR_FUNCTION) return NULL;
-    if (eqlist->data.function.head->type != EXPR_SYMBOL) return NULL;
-    if (eqlist->data.function.head->data.symbol.name != SYM_List) return NULL;
+    if (!eqlist) return NULL;
+    bool is_list = eqlist->type == EXPR_FUNCTION
+        && eqlist->data.function.head->type == EXPR_SYMBOL
+        && eqlist->data.function.head->data.symbol.name == SYM_List;
+    if (!is_list) {
+        Expr* one[1] = { fr_normalize_eqn(eqlist) };
+        return expr_new_function(expr_new_symbol(SYM_List), one, 1);
+    }
     size_t n = eqlist->data.function.arg_count;
     Expr** items = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
@@ -1846,6 +1939,12 @@ static bool fr_is_list_n(const Expr* e, size_t n) {
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_List
         && e->data.function.arg_count == n;
+}
+
+static bool fr_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
 }
 
 /* A user Jacobian for n equations in n unknowns is an n x n matrix (a List of
@@ -1877,233 +1976,650 @@ static Expr* fr_scalar_jacobian(const Expr* J) {
     return expr_copy((Expr*)J);
 }
 
-static Expr* fr_run_newton_system_real(Expr* flist_normalized,
-                                       Expr** vars, size_t n,
-                                       FrVarBind* binds,
-                                       double* x_vec,
-                                       const FrOpts* opts) {
+/* A system as the Newton solvers see it.  The m residual COMPONENTS are the
+ * normalised equations; component i contributes w[i] scalar residuals --
+ * one for a scalar equation, k for a vector equation F[x, y] == {a, b} whose
+ * left side is an opaque (NumericQ-guarded) function returning a k-vector.
+ * The scalar residuals, n in all, are numbered row by row (component i's start
+ * at off[i]).
+ *
+ * Each residual ROW has either a symbolic Jacobian row (jac[r][0..n-1]; the
+ * D of a scalar component, or the user's Jacobian) or none (jac[r] == NULL):
+ * a vector component, or a scalar one whose derivative came back as an inert
+ * Derivative[..][f][..] -- the opaque function D cannot see into.  Those rows
+ * are forward-differenced, one extra evaluation of their components per
+ * unknown, which is what made FindRoot of a shooting function (an NDSolve
+ * behind f[th_?NumericQ, T_?NumericQ]) possible at all: before, the inert
+ * derivative could not be evaluated and the solve failed on its first step,
+ * and a vector equation was rejected as a size mismatch (FindRoot::systno). */
+typedef struct {
+    Expr*         comps;     /* borrowed: List of m normalised components   */
+    size_t        m, n;
+    size_t*       w;         /* owned: width of each component              */
+    size_t*       off;       /* owned: first row of each component          */
+    size_t*       row_comp;  /* owned: component of each row                */
+    Expr**        vars;      /* borrowed                                    */
+    FrVarBind*    binds;     /* borrowed                                    */
+    const FrOpts* opts;
+    Expr***       jac;       /* owned: jac[r] (n entries) or NULL (FD row)  */
+    bool*         jz;        /* owned: structurally-zero symbolic entries   */
+    bool*         fd_comp;   /* owned: component has a differenced row      */
+    bool          any_fd;
+    AutoCompiled**  ac_f;    /* owned (machine): per component, or NULL     */
+    AutoCompiled*** ac_jac;  /* owned (machine): per row/entry, or NULL     */
+} FrSys;
+
+static void fr_sys_free(FrSys* S) {
+    for (size_t r = 0; S->jac && r < S->n; r++) {
+        if (!S->jac[r]) continue;
+        for (size_t j = 0; j < S->n; j++) expr_free(S->jac[r][j]);
+        free(S->jac[r]);
+    }
+    for (size_t r = 0; S->ac_jac && r < S->n; r++) {
+        if (!S->ac_jac[r]) continue;
+        for (size_t j = 0; j < S->n; j++) autocompiled_free(S->ac_jac[r][j]);
+        free(S->ac_jac[r]);
+    }
+    for (size_t i = 0; S->ac_f && i < S->m; i++) autocompiled_free(S->ac_f[i]);
+    free(S->jac); free(S->ac_jac); free(S->ac_f);
+    free(S->jz); free(S->fd_comp);
+    free(S->w); free(S->off); free(S->row_comp);
+}
+
+/* Evaluate component i at the point `xv` (n numeric Exprs) through the
+ * interpreter.  Returns the value (caller owns) or NULL. */
+static Expr* fr_sys_comp_value(const FrSys* S, size_t i, Expr* const* xv) {
+    return fr_eval_with_bindings(S->comps->data.function.args[i], S->binds,
+                                 xv, S->n, S->opts);
+}
+
+/* Measure the component widths by evaluating every component at the start
+ * point `xv`: a List value of length k is a k-vector component, anything
+ * else a scalar.  Only called when the equation count differs from the
+ * variable count, so a scalar system never pays for the extra evaluations.
+ * False (after FindRoot::systno) when the widths do not add up to n. */
+static bool fr_sys_measure(FrSys* S, Expr* const* xv) {
+    size_t total = 0;
+    for (size_t i = 0; i < S->m; i++) {
+        Expr* v = fr_sys_comp_value(S, i, xv);
+        S->w[i] = fr_is_list(v) ? v->data.function.arg_count : 1;
+        expr_free(v);
+        total += S->w[i];
+    }
+    if (total != S->n) {
+        fr_warn("systno", "system size %zu does not match %zu variables",
+                total, S->n);
+        return false;
+    }
+    return true;
+}
+
+/* Lay out rows, then build the symbolic Jacobian rows wherever a scalar
+ * component has a usable derivative (or the user supplied the matrix).
+ * `machine` additionally compiles each scalar component and Jacobian entry.
+ * False after a message (jacsh). */
+static bool fr_sys_setup(FrSys* S, bool machine) {
+    size_t n = S->n, m = S->m;
+    S->off = malloc(sizeof(size_t) * (m + 1));
+    S->row_comp = malloc(sizeof(size_t) * (n > 0 ? n : 1));
+    size_t r = 0;
+    for (size_t i = 0; i < m; i++) {
+        S->off[i] = r;
+        for (size_t q = 0; q < S->w[i]; q++) S->row_comp[r++] = i;
+    }
+    S->off[m] = r;
+    bool all_scalar = (m == n);
+    const Expr* J = S->opts->jacobian;
+    if (J && (!all_scalar || !fr_jacobian_shape_ok(J, n))) {
+        if (!all_scalar)
+            fr_warn("jacsh", "a Jacobian needs one scalar equation per variable");
+        return false;
+    }
+    S->jac = calloc(n > 0 ? n : 1, sizeof(Expr**));
+    S->jz = calloc(n * n > 0 ? n * n : 1, sizeof(bool));
+    S->fd_comp = calloc(m > 0 ? m : 1, sizeof(bool));
+    for (size_t i = 0; i < m; i++) {
+        size_t row = S->off[i];
+        if (S->w[i] != 1) { S->fd_comp[i] = true; continue; }
+        Expr* fi = S->comps->data.function.args[i];
+        Expr** jr = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+        bool usable = true;
+        for (size_t j = 0; j < n; j++) {
+            jr[j] = J ? expr_copy(J->data.function.args[row]->data.function.args[j])
+                      : fr_compute_derivative(fi, S->vars[j]);
+            if (!jr[j] || (!J && fr_has_inert_derivative(jr[j]))) usable = false;
+        }
+        if (!usable) {
+            for (size_t j = 0; j < n; j++) expr_free(jr[j]);
+            free(jr);
+            S->fd_comp[i] = true;
+            continue;
+        }
+        S->jac[row] = jr;
+        for (size_t j = 0; j < n; j++) {
+            Expr* je = jr[j];
+            S->jz[row * n + j] =
+                (je->type == EXPR_INTEGER && je->data.integer == 0) ||
+                (je->type == EXPR_REAL && je->data.real == 0.0);
+        }
+    }
+    for (size_t i = 0; i < m; i++) if (S->fd_comp[i]) S->any_fd = true;
+
+    if (machine) {
+        /* Compile each scalar component and Jacobian entry as a function of all
+         * n variables; structurally-zero entries are never compiled. */
+        S->ac_f = calloc(m > 0 ? m : 1, sizeof(AutoCompiled*));
+        S->ac_jac = calloc(n > 0 ? n : 1, sizeof(AutoCompiled**));
+        for (size_t i = 0; i < m; i++) {
+            if (S->w[i] != 1) continue;
+            S->ac_f[i] = autocompile_new(S->comps->data.function.args[i],
+                                         (const Expr* const*)S->vars, n);
+        }
+        for (size_t row = 0; row < n; row++) {
+            if (!S->jac[row]) continue;
+            S->ac_jac[row] = calloc(n > 0 ? n : 1, sizeof(AutoCompiled*));
+            for (size_t j = 0; j < n; j++)
+                if (!S->jz[row * n + j])
+                    S->ac_jac[row][j] = autocompile_new(S->jac[row][j],
+                                                        (const Expr* const*)S->vars, n);
+        }
+    }
+    return true;
+}
+
+/* Max-norm of an n-vector. */
+static double fr_maxabs_d(const double* v, size_t n) {
+    double m = 0.0;
+    for (size_t i = 0; i < n; i++) if (fabs(v[i]) > m) m = fabs(v[i]);
+    return m;
+}
+
+/* Machine residuals at x into F (n rows).  `only_fd` evaluates only the
+ * components with a differenced row (their rows are the only ones a
+ * finite-difference column needs).  False when some value is not a finite
+ * real; the message, if any, is the caller's. */
+static bool fr_sys_resid_d(const FrSys* S, const double* x, double* F, bool only_fd) {
+    size_t n = S->n;
+    Expr** xv = NULL;
+    bool ok = true;
+    for (size_t i = 0; i < S->m && ok; i++) {
+        if (only_fd && !S->fd_comp[i]) continue;
+        size_t row = S->off[i];
+        if (S->w[i] == 1 && S->ac_f && fr_eval_compiled_double(S->ac_f[i], x, n, &F[row]))
+            continue;
+        if (!xv) {
+            xv = malloc(sizeof(Expr*) * n);
+            for (size_t q = 0; q < n; q++) xv[q] = expr_new_real(x[q]);
+        }
+        Expr* v = fr_sys_comp_value(S, i, xv);
+        if (S->w[i] == 1 && !fr_is_list(v)) {
+            ok = v && fr_value_real_d(v, &F[row]) && isfinite(F[row]);
+        } else if (fr_is_list_n(v, S->w[i])) {
+            for (size_t q = 0; q < S->w[i] && ok; q++)
+                ok = fr_value_real_d(v->data.function.args[q], &F[row + q])
+                     && isfinite(F[row + q]);
+        } else {
+            ok = false;
+        }
+        expr_free(v);
+    }
+    if (xv) { for (size_t q = 0; q < n; q++) expr_free(xv[q]); free(xv); }
+    return ok;
+}
+
+/* Machine Jacobian at x (residuals F already known there) into Jm (n x n,
+ * row-major).  Symbolic rows evaluate their entries; differenced rows take a
+ * forward difference with increment (|x_j| + 1) sqrt(eps) per unknown --
+ * forward rather than central because each column costs a full evaluation of
+ * the differenced components, typically an ODE solve, and Newton's iteration
+ * only needs the Jacobian to a few digits.  False on a non-real entry. */
+static bool fr_sys_jacobian_d(const FrSys* S, const double* x, const double* F,
+                              double* Jm) {
+    size_t n = S->n;
+    Expr** xv = NULL;
+    bool ok = true;
+    for (size_t r = 0; r < n && ok; r++) {
+        if (!S->jac[r]) continue;
+        for (size_t j = 0; j < n && ok; j++) {
+            if (S->jz[r * n + j]) { Jm[r * n + j] = 0.0; continue; }
+            if (S->ac_jac && S->ac_jac[r]
+                && fr_eval_compiled_double(S->ac_jac[r][j], x, n, &Jm[r * n + j]))
+                continue;
+            if (!xv) {
+                xv = malloc(sizeof(Expr*) * n);
+                for (size_t q = 0; q < n; q++) xv[q] = expr_new_real(x[q]);
+            }
+            Expr* dv = fr_eval_with_bindings(S->jac[r][j], S->binds, xv, n, S->opts);
+            ok = dv && fr_value_real_d(dv, &Jm[r * n + j]) && isfinite(Jm[r * n + j]);
+            expr_free(dv);
+        }
+    }
+    if (xv) { for (size_t q = 0; q < n; q++) expr_free(xv[q]); free(xv); }
+    if (!ok || !S->any_fd) return ok;
+    double* xp = malloc(sizeof(double) * n);
+    double* Fp = malloc(sizeof(double) * n);
+    memcpy(xp, x, sizeof(double) * n);
+    for (size_t j = 0; j < n && ok; j++) {
+        double h = (fabs(x[j]) + 1.0) * 1.4901161193847656e-8;
+        xp[j] = x[j] + h;
+        h = xp[j] - x[j];                       /* the increment actually taken */
+        ok = fr_sys_resid_d(S, xp, Fp, true);
+        for (size_t r = 0; r < n && ok; r++)
+            if (!S->jac[r]) Jm[r * n + j] = (Fp[r] - F[r]) / h;
+        xp[j] = x[j];
+    }
+    free(xp); free(Fp);
+    return ok;
+}
+
+/* Solve J dx = F (n x n, row-major, both overwritten) by Gaussian elimination
+ * with partial pivoting.  False when J is singular. */
+static bool fr_lu_solve_d(double* J, double* F, double* dx, size_t n) {
+    for (size_t col = 0; col < n; col++) {
+        size_t piv = col;
+        double maxv = fabs(J[col * n + col]);
+        for (size_t r = col + 1; r < n; r++) {
+            double v = fabs(J[r * n + col]);
+            if (v > maxv) { maxv = v; piv = r; }
+        }
+        if (maxv == 0.0) return false;
+        if (piv != col) {
+            for (size_t j = col; j < n; j++) {
+                double t = J[col * n + j]; J[col * n + j] = J[piv * n + j]; J[piv * n + j] = t;
+            }
+            double t = F[col]; F[col] = F[piv]; F[piv] = t;
+        }
+        for (size_t r = col + 1; r < n; r++) {
+            double mlt = J[r * n + col] / J[col * n + col];
+            if (mlt == 0.0) continue;
+            for (size_t j = col; j < n; j++) J[r * n + j] -= mlt * J[col * n + j];
+            F[r] -= mlt * F[col];
+        }
+    }
+    for (size_t i = n; i-- > 0; ) {
+        double s = F[i];
+        for (size_t j = i + 1; j < n; j++) s -= J[i * n + j] * dx[j];
+        dx[i] = s / J[i * n + i];
+    }
+    return true;
+}
+
+/* Newton's iteration for a system at machine precision, with a backtracking
+ * line search on the residual max-norm: a full step that increases the
+ * residual, or lands where the function is not real (an ODE that blows up, a
+ * Log of a negative intermediate), is halved -- up to FR_LS_MAX times, keeping
+ * the best trial -- instead of being taken blindly, which is what sent a
+ * shooting solve from a good start off to a far branch or a failed evaluation.
+ * Converged when the residual and the step are within the AccuracyGoal, or the
+ * step is within the PrecisionGoal relative to x. */
+static Expr* fr_run_newton_system_real(FrSys* S, double* x_vec) {
+    const FrOpts* opts = S->opts;
+    size_t n = S->n;
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
-    if (opts->jacobian && !fr_jacobian_shape_ok(opts->jacobian, n)) return NULL;
-
-    /* Pre-compute Jacobian symbolically: matrix[i][j] = D[f_i, var_j].
-     * jz[i*n+j] flags the STRUCTURALLY-ZERO entries: for a sparse system (a
-     * tridiagonal Broyden field has 3 non-zeros per row, not n) that is the
-     * overwhelming majority, and skipping their compile + per-iteration eval is
-     * the difference between O(n^2) and O(nnz) work. */
-    Expr*** jac = malloc(sizeof(Expr**) * n);
-    bool* jz = malloc(sizeof(bool) * n * n);
-    for (size_t i = 0; i < n; i++) {
-        jac[i] = malloc(sizeof(Expr*) * n);
-        Expr* fi = flist_normalized->data.function.args[i];
-        for (size_t j = 0; j < n; j++) {
-            if (opts->jacobian) {
-                /* User-supplied Jacobian must be an n×n nested list. */
-                Expr* row = opts->jacobian->data.function.args[i];
-                jac[i][j] = expr_copy(row->data.function.args[j]);
-            } else {
-                jac[i][j] = fr_compute_derivative(fi, vars[j]);
-            }
-            Expr* je = jac[i][j];
-            jz[i * n + j] = je &&
-                ((je->type == EXPR_INTEGER && je->data.integer == 0) ||
-                 (je->type == EXPR_REAL && je->data.real == 0.0));
-        }
-    }
-
-    /* Compile each component f_i and Jacobian entry J_ij as a function of all n
-     * variables (machine fast path); a NULL entry falls back to the interpreter.
-     * Structurally-zero entries are never compiled. Systems are
-     * machine-precision, so the spec is fixed here. */
-    AutoCompiled**  ac_f   = malloc(sizeof(*ac_f) * n);
-    AutoCompiled*** ac_jac = malloc(sizeof(*ac_jac) * n);
-    for (size_t i = 0; i < n; i++) {
-        ac_f[i] = autocompile_new(flist_normalized->data.function.args[i],
-                                  (const Expr* const*)vars, n);
-        ac_jac[i] = malloc(sizeof(**ac_jac) * n);
-        for (size_t j = 0; j < n; j++)
-            ac_jac[i][j] = jz[i * n + j]
-                ? NULL
-                : autocompile_new(jac[i][j], (const Expr* const*)vars, n);
-    }
-
+    double* F  = malloc(sizeof(double) * n);
+    double* Ft = malloc(sizeof(double) * n);
+    double* Fb = malloc(sizeof(double) * n);
+    double* Jm = malloc(sizeof(double) * (n * n > 0 ? n * n : 1));
+    double* dx = malloc(sizeof(double) * n);
+    double* xt = malloc(sizeof(double) * n);
+    double* xb = malloc(sizeof(double) * n);
     Expr* result = NULL;
     bool converged = false;
-    double resid = INFINITY;    /* last residual norm max_i |f_i|, goal estimate */
-    double xmag  = 0.0;         /* last max_i |x_i|, for the relative tolerance   */
+    double resid = INFINITY, xmag = 0.0;
+
+    if (!fr_sys_resid_d(S, x_vec, F, false)) {
+        fr_warn("nlnum", "the function is not a list of real numbers at the start point");
+        goto done;
+    }
+    resid = fr_maxabs_d(F, n);
+    xmag = fr_maxabs_d(x_vec, n);
+    /* Already at the root: avoids a Jacobian that may be singular there. */
+    if (resid < tol_acc) { converged = true; goto build; }
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
-        Expr** xv = malloc(sizeof(Expr*) * n);
-        for (size_t i = 0; i < n; i++) xv[i] = expr_new_real(x_vec[i]);
-
-        /* fvec[i] = numeric f_i at current point */
-        double* fvec = malloc(sizeof(double) * n);
-        double max_f_pre = 0.0;
+        if (!fr_sys_jacobian_d(S, x_vec, F, Jm)) {
+            fr_warn("nlnum", "non-real Jacobian during iteration");
+            goto done;
+        }
+        memcpy(Ft, F, sizeof(double) * n);
+        if (!fr_lu_solve_d(Jm, Ft, dx, n)) {
+            fr_warn("dsing", "Jacobian is singular at iteration %lld", (long long)k);
+            goto done;
+        }
         for (size_t i = 0; i < n; i++) {
-            Expr* fi = flist_normalized->data.function.args[i];
-            if (!fr_eval_compiled_double(ac_f[i], x_vec, n, &fvec[i])) {
-                Expr* fv_e = fr_eval_with_bindings(fi, binds, xv, n, opts);
-                if (!fv_e || !fr_expr_to_double_real(fv_e, &fvec[i])) {
-                    expr_free(fv_e);
-                    fr_warn("nlnum", "non-real f_%zu during iteration", i);
-                    free(fvec);
-                    for (size_t q = 0; q < n; q++) expr_free(xv[q]);
-                    free(xv);
-                    goto cleanup;
-                }
-                expr_free(fv_e);
-            }
-            if (fabs(fvec[i]) > max_f_pre) max_f_pre = fabs(fvec[i]);
-        }
-        /* Pre-step convergence check on residual norm.  Avoids touching the
-         * Jacobian when we're already at the root (which would otherwise
-         * trigger a "singular Jacobian" error for systems with f'(x*) = 0). */
-        if (max_f_pre < tol_acc) {
-            free(fvec);
-            for (size_t q = 0; q < n; q++) expr_free(xv[q]);
-            free(xv);
-            converged = true;
-            break;
-        }
-        /* Jmat[i][j] = D[f_i, var_j] evaluated at current point. */
-        double* J = malloc(sizeof(double) * n * n);
-        for (size_t i = 0; i < n; i++) {
-            for (size_t j = 0; j < n; j++) {
-                if (jz[i*n + j]) { J[i*n + j] = 0.0; continue; }
-                if (!fr_eval_compiled_double(ac_jac[i][j], x_vec, n, &J[i*n + j])) {
-                    Expr* dv_e = fr_eval_with_bindings(jac[i][j], binds, xv, n, opts);
-                    if (!dv_e || !fr_expr_to_double_real(dv_e, &J[i*n + j])) {
-                        expr_free(dv_e);
-                        fr_warn("nlnum", "non-real Jacobian[%zu,%zu]", i, j);
-                        free(J); free(fvec);
-                        for (size_t q = 0; q < n; q++) expr_free(xv[q]);
-                        free(xv);
-                        goto cleanup;
-                    }
-                    expr_free(dv_e);
-                }
-            }
-        }
-        for (size_t q = 0; q < n; q++) expr_free(xv[q]);
-        free(xv);
-
-        /* Solve J · dx = fvec via Gaussian elimination with partial pivoting.
-         * Then x := x - damping * dx. */
-        double* A = malloc(sizeof(double) * n * (n + 1));
-        for (size_t i = 0; i < n; i++) {
-            for (size_t j = 0; j < n; j++) A[i*(n+1) + j] = J[i*n + j];
-            A[i*(n+1) + n] = fvec[i];
-        }
-        free(J); free(fvec);
-        for (size_t col = 0; col < n; col++) {
-            size_t piv = col;
-            double maxv = fabs(A[col*(n+1) + col]);
-            for (size_t r = col+1; r < n; r++) {
-                double v = fabs(A[r*(n+1) + col]);
-                if (v > maxv) { maxv = v; piv = r; }
-            }
-            if (maxv == 0.0) {
-                free(A);
-                fr_warn("dsing", "Jacobian is singular at iteration %lld", (long long)k);
-                goto cleanup;
-            }
-            if (piv != col) {
-                for (size_t j = col; j <= n; j++) {
-                    double t = A[col*(n+1)+j];
-                    A[col*(n+1)+j] = A[piv*(n+1)+j];
-                    A[piv*(n+1)+j] = t;
-                }
-            }
-            for (size_t r = col+1; r < n; r++) {
-                double m = A[r*(n+1)+col] / A[col*(n+1)+col];
-                for (size_t j = col; j <= n; j++)
-                    A[r*(n+1)+j] -= m * A[col*(n+1)+j];
-            }
-        }
-        double* dx = malloc(sizeof(double) * n);
-        for (size_t i = n; i-- > 0; ) {
-            double s = A[i*(n+1)+n];
-            for (size_t j = i+1; j < n; j++) s -= A[i*(n+1)+j] * dx[j];
-            dx[i] = s / A[i*(n+1)+i];
-        }
-        free(A);
-
-        double max_step = 0.0, max_x = 0.0, max_f = 0.0;
-        for (size_t i = 0; i < n; i++) {
-            double step = opts->damping * dx[i];
-            if (!isfinite(step)) {
-                free(dx);
+            dx[i] *= opts->damping;
+            if (!isfinite(dx[i])) {
                 fr_warn("noconv", "divergence during system Newton");
-                goto cleanup;
+                goto done;
             }
-            x_vec[i] -= step;
-            if (fabs(step) > max_step) max_step = fabs(step);
-            if (fabs(x_vec[i]) > max_x) max_x = fabs(x_vec[i]);
         }
-        /* Compute residual norm at new x.  Compiled components evaluate
-         * straight to a double; xv2 is built only if some component needs
-         * the interpreter (never, for a fully-compiled system). */
-        Expr** xv2 = NULL;
-        for (size_t i = 0; i < n; i++) {
-            Expr* fi = flist_normalized->data.function.args[i];
-            double v;
-            if (fr_eval_compiled_double(ac_f[i], x_vec, n, &v)) {
-                if (fabs(v) > max_f) max_f = fabs(v);
-                continue;
+        /* Backtracking: accept the first trial that reduces the residual. */
+        double lam = 1.0, best = INFINITY, best_lam = 0.0;
+        bool have = false;
+        for (int ls = 0; ls <= FR_LS_MAX; ls++, lam *= 0.5) {
+            for (size_t i = 0; i < n; i++) xt[i] = x_vec[i] - lam * dx[i];
+            if (!fr_sys_resid_d(S, xt, Ft, false)) continue;
+            double rt = fr_maxabs_d(Ft, n);
+            if (rt < best) {
+                best = rt; best_lam = lam; have = true;
+                memcpy(xb, xt, sizeof(double) * n);
+                memcpy(Fb, Ft, sizeof(double) * n);
             }
-            if (!xv2) {
-                xv2 = malloc(sizeof(Expr*) * n);
-                for (size_t q = 0; q < n; q++) xv2[q] = expr_new_real(x_vec[q]);
-            }
-            Expr* fv_e = fr_eval_with_bindings(fi, binds, xv2, n, opts);
-            if (fv_e && fr_expr_to_double_real(fv_e, &v) && fabs(v) > max_f) {
-                max_f = fabs(v);
-            }
-            expr_free(fv_e);
+            /* A decrease, or a step already within the precision goal (the
+             * residual is then in the noise of f, where it need not fall). */
+            if (rt < resid || lam * fr_maxabs_d(dx, n) < (xmag + 1e-300) * tol_prec)
+                break;
         }
-        if (xv2) {
-            for (size_t q = 0; q < n; q++) expr_free(xv2[q]);
-            free(xv2);
+        if (!have) {
+            fr_warn("nlnum", "the function is not a list of real numbers near the iterate");
+            goto done;
         }
-        free(dx);
-
+        double max_step = best_lam * fr_maxabs_d(dx, n);
+        memcpy(x_vec, xb, sizeof(double) * n);
+        memcpy(F, Fb, sizeof(double) * n);
         fr_fire_monitor(opts->step_monitor);
-        resid = max_f;
-        xmag  = max_x;
-        bool acc_ok = (max_f < tol_acc) && (max_step < tol_acc);
-        bool prec_ok = (max_step < (max_x + 1e-300) * tol_prec);
-        if (acc_ok || prec_ok) {
-            converged = true;
-            break;
-        }
+        resid = best;
+        xmag = fr_maxabs_d(x_vec, n);
+        bool acc_ok = (resid < tol_acc) && (max_step < tol_acc);
+        bool prec_ok = (max_step < (xmag + 1e-300) * tol_prec);
+        if (acc_ok || prec_ok) { converged = true; break; }
     }
     if (!converged) {
         fr_warn("cvmit", "failed to converge within %lld iterations",
                 (long long)opts->max_iter);
         fr_warn_goal(opts, resid, xmag);
     }
-    /* Build the result list of Rules (own the new value Exprs). */
-    Expr** vals = malloc(sizeof(Expr*) * n);
-    for (size_t i = 0; i < n; i++) vals[i] = expr_new_real(x_vec[i]);
-    result = fr_build_rule_list(vars, vals, n);
-    free(vals);
-
-cleanup:
-    for (size_t i = 0; i < n; i++) {
-        for (size_t j = 0; j < n; j++) {
-            expr_free(jac[i][j]);
-            autocompiled_free(ac_jac[i][j]);
-        }
-        free(jac[i]);
-        free(ac_jac[i]);
-        autocompiled_free(ac_f[i]);
+build: {
+        Expr** vals = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) vals[i] = expr_new_real(x_vec[i]);
+        result = fr_build_rule_list(S->vars, vals, n);
+        free(vals);
     }
-    free(jac);
-    free(ac_jac);
-    free(ac_f);
-    free(jz);
+done:
+    free(F); free(Ft); free(Fb); free(Jm); free(dx); free(xt); free(xb);
     return result;
 }
+
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  System Newton at arbitrary precision                               *
+ * ------------------------------------------------------------------ */
+
+/* `count` MPFR scalars at `bits` bits (count 0 allocates a placeholder). */
+static mpfr_t* fr_mpfr_alloc(size_t count, long bits) {
+    mpfr_t* a = malloc(sizeof(mpfr_t) * (count > 0 ? count : 1));
+    for (size_t i = 0; i < count; i++) mpfr_init2(a[i], bits);
+    return a;
+}
+
+static void fr_mpfr_release(mpfr_t* a, size_t count) {
+    if (!a) return;
+    for (size_t i = 0; i < count; i++) mpfr_clear(a[i]);
+    free(a);
+}
+
+/* MPFR residuals at x (n mpfr values) into F; `only_fd` as in the machine
+ * twin.  The point is handed to the interpreter as MPFR Exprs, so every
+ * component -- including an NDSolve or NIntegrate behind an opaque function --
+ * runs at the working precision. */
+static bool fr_sys_resid_m(const FrSys* S, mpfr_t* x, mpfr_t* F, bool only_fd) {
+    size_t n = S->n;
+    long bits = S->opts->wp_bits;
+    Expr** xv = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t q = 0; q < n; q++) xv[q] = expr_new_mpfr_copy(x[q]);
+    bool ok = true;
+    for (size_t i = 0; i < S->m && ok; i++) {
+        if (only_fd && !S->fd_comp[i]) continue;
+        size_t row = S->off[i];
+        Expr* v = fr_sys_comp_value(S, i, xv);
+        if (S->w[i] == 1 && !fr_is_list(v)) {
+            ok = fr_value_real_m(v, bits, F[row]);
+        } else if (fr_is_list_n(v, S->w[i])) {
+            for (size_t q = 0; q < S->w[i] && ok; q++)
+                ok = fr_value_real_m(v->data.function.args[q], bits, F[row + q]);
+        } else {
+            ok = false;
+        }
+        expr_free(v);
+    }
+    for (size_t q = 0; q < n; q++) expr_free(xv[q]);
+    free(xv);
+    return ok;
+}
+
+/* MPFR Jacobian (Jm: n*n mpfr, row-major).  Differenced rows use a forward
+ * difference with increment (|x_j| + 1) 2^(-p/2), p the working precision in
+ * bits: half the digits of the Jacobian, which Newton turns into a linear rate
+ * of 10^-(WorkingPrecision/2) per step once it is close -- two steps past the
+ * quadratic phase. */
+static bool fr_sys_jacobian_m(const FrSys* S, mpfr_t* x, mpfr_t* F, mpfr_t* Jm) {
+    size_t n = S->n;
+    long bits = S->opts->wp_bits;
+    bool ok = true;
+    Expr** xv = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t q = 0; q < n; q++) xv[q] = expr_new_mpfr_copy(x[q]);
+    for (size_t r = 0; r < n && ok; r++) {
+        if (!S->jac[r]) continue;
+        for (size_t j = 0; j < n && ok; j++) {
+            if (S->jz[r * n + j]) { mpfr_set_zero(Jm[r * n + j], +1); continue; }
+            Expr* dv = fr_eval_with_bindings(S->jac[r][j], S->binds, xv, n, S->opts);
+            ok = fr_value_real_m(dv, bits, Jm[r * n + j]);
+            expr_free(dv);
+        }
+    }
+    for (size_t q = 0; q < n; q++) expr_free(xv[q]);
+    free(xv);
+    if (!ok || !S->any_fd) return ok;
+    mpfr_t* xp = fr_mpfr_alloc(n, bits);
+    mpfr_t* Fp = fr_mpfr_alloc(n, bits);
+    mpfr_t h;
+    mpfr_init2(h, bits);
+    for (size_t q = 0; q < n; q++) mpfr_set(xp[q], x[q], MPFR_RNDN);
+    for (size_t j = 0; j < n && ok; j++) {
+        mpfr_abs(h, x[j], MPFR_RNDN);
+        mpfr_add_ui(h, h, 1, MPFR_RNDN);
+        mpfr_mul_2si(h, h, -(numeric_width_precision_bits(bits) / 2), MPFR_RNDN);
+        mpfr_add(xp[j], x[j], h, MPFR_RNDN);
+        mpfr_sub(h, xp[j], x[j], MPFR_RNDN);
+        ok = fr_sys_resid_m(S, xp, Fp, true);
+        for (size_t r = 0; r < n && ok; r++) {
+            if (S->jac[r]) continue;
+            mpfr_sub(Jm[r * n + j], Fp[r], F[r], MPFR_RNDN);
+            mpfr_div(Jm[r * n + j], Jm[r * n + j], h, MPFR_RNDN);
+        }
+        mpfr_set(xp[j], x[j], MPFR_RNDN);
+    }
+    mpfr_clear(h);
+    fr_mpfr_release(xp, n);
+    fr_mpfr_release(Fp, n);
+    return ok;
+}
+
+/* fr_lu_solve_d in MPFR: J (n*n) and F overwritten, dx out. */
+static bool fr_lu_solve_m(mpfr_t* J, mpfr_t* F, mpfr_t* dx, size_t n, long bits) {
+    mpfr_t t, mlt;
+    mpfr_inits2(bits, t, mlt, (mpfr_ptr)0);
+    bool ok = true;
+    for (size_t col = 0; col < n && ok; col++) {
+        size_t piv = col;
+        for (size_t r = col + 1; r < n; r++)
+            if (mpfr_cmpabs(J[r * n + col], J[piv * n + col]) > 0) piv = r;
+        if (mpfr_zero_p(J[piv * n + col])) { ok = false; break; }
+        if (piv != col) {
+            for (size_t j = col; j < n; j++) mpfr_swap(J[col * n + j], J[piv * n + j]);
+            mpfr_swap(F[col], F[piv]);
+        }
+        for (size_t r = col + 1; r < n; r++) {
+            if (mpfr_zero_p(J[r * n + col])) continue;
+            mpfr_div(mlt, J[r * n + col], J[col * n + col], MPFR_RNDN);
+            for (size_t j = col; j < n; j++) {
+                mpfr_mul(t, mlt, J[col * n + j], MPFR_RNDN);
+                mpfr_sub(J[r * n + j], J[r * n + j], t, MPFR_RNDN);
+            }
+            mpfr_mul(t, mlt, F[col], MPFR_RNDN);
+            mpfr_sub(F[r], F[r], t, MPFR_RNDN);
+        }
+    }
+    for (size_t i = n; ok && i-- > 0; ) {
+        mpfr_set(dx[i], F[i], MPFR_RNDN);
+        for (size_t j = i + 1; j < n; j++) {
+            mpfr_mul(t, J[i * n + j], dx[j], MPFR_RNDN);
+            mpfr_sub(dx[i], dx[i], t, MPFR_RNDN);
+        }
+        mpfr_div(dx[i], dx[i], J[i * n + i], MPFR_RNDN);
+    }
+    mpfr_clears(t, mlt, (mpfr_ptr)0);
+    return ok;
+}
+
+/* Max-norm of an MPFR n-vector into out. */
+static void fr_maxabs_m(mpfr_t out, mpfr_t* v, size_t n) {
+    mpfr_set_zero(out, +1);
+    for (size_t i = 0; i < n; i++)
+        if (mpfr_cmpabs(v[i], out) > 0) mpfr_abs(out, v[i], MPFR_RNDN);
+}
+
+/* Newton for a system at WorkingPrecision -> p: the machine solver's
+ * iteration (backtracking included) with every value, the Jacobian and the
+ * elimination in MPFR at p bits.  Before it existed a system ignored the
+ * option and returned machine numbers.  Stopping follows the scalar MPFR
+ * Newton (fr_polish_done): once the residual is within the AccuracyGoal and
+ * the arriving step within the goals, POLISH -- keep stepping until the step
+ * reaches the working precision's resolution, stops halving, or FR_POLISH_MAX
+ * steps -- so the answer carries the working precision, not half of it. */
+static Expr* fr_run_newton_system_mpfr(FrSys* S, Expr* const* x0s) {
+    const FrOpts* opts = S->opts;
+    size_t n = S->n;
+    long bits = opts->wp_bits;
+    mpfr_t* x  = fr_mpfr_alloc(n, bits);
+    mpfr_t* F  = fr_mpfr_alloc(n, bits);
+    mpfr_t* Ft = fr_mpfr_alloc(n, bits);
+    mpfr_t* Fb = fr_mpfr_alloc(n, bits);
+    mpfr_t* xt = fr_mpfr_alloc(n, bits);
+    mpfr_t* xb = fr_mpfr_alloc(n, bits);
+    mpfr_t* dx = fr_mpfr_alloc(n, bits);
+    mpfr_t* Jm = fr_mpfr_alloc(n * n, bits);
+    mpfr_t tol_acc, tol_prec, resid, rt, best, dmax, step, prev_step, xmag, lim, im;
+    mpfr_inits2(bits, tol_acc, tol_prec, resid, rt, best, dmax, step, prev_step,
+                xmag, lim, im, (mpfr_ptr)0);
+    fr_mpfr_goal_tols(opts, tol_acc, tol_prec);
+    Expr* result = NULL;
+    bool converged = false;
+    int polished = -1;
+    mpfr_set_inf(prev_step, +1);
+
+    for (size_t i = 0; i < n; i++) {
+        bool dummy;
+        if (!get_approx_mpfr(x0s[i], x[i], im, &dummy) || !mpfr_zero_p(im)) {
+            fr_warn("nlnum", "start value %zu is not a real number", i);
+            goto done;
+        }
+    }
+    if (!fr_sys_resid_m(S, x, F, false)) {
+        fr_warn("nlnum", "the function is not a list of real numbers at the start point");
+        goto done;
+    }
+    fr_maxabs_m(resid, F, n);
+    if (mpfr_zero_p(resid)) { converged = true; goto build; }
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        if (!fr_sys_jacobian_m(S, x, F, Jm)) {
+            fr_warn("nlnum", "non-real Jacobian during iteration");
+            goto done;
+        }
+        for (size_t i = 0; i < n; i++) mpfr_set(Ft[i], F[i], MPFR_RNDN);
+        if (!fr_lu_solve_m(Jm, Ft, dx, n, bits)) {
+            if (polished >= 0) { converged = true; break; }
+            fr_warn("dsing", "Jacobian is singular at iteration %lld", (long long)k);
+            goto done;
+        }
+        for (size_t i = 0; i < n; i++) {
+            mpfr_mul_d(dx[i], dx[i], opts->damping, MPFR_RNDN);
+            if (!mpfr_number_p(dx[i])) {
+                if (polished >= 0) { converged = true; break; }
+                fr_warn("noconv", "divergence during system Newton");
+                goto done;
+            }
+        }
+        if (converged) break;
+        fr_maxabs_m(dmax, dx, n);
+        fr_maxabs_m(xmag, x, n);
+        /* step-goal tolerance at the current point: tol_acc + |x| tol_prec */
+        mpfr_mul(lim, xmag, tol_prec, MPFR_RNDN);
+        mpfr_add(lim, lim, tol_acc, MPFR_RNDN);
+        mpfr_set_inf(best, +1);
+        bool have = false;
+        long best_shift = 0;
+        for (long ls = 0; ls <= FR_LS_MAX; ls++) {
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul_2si(xt[i], dx[i], -ls, MPFR_RNDN);
+                mpfr_sub(xt[i], x[i], xt[i], MPFR_RNDN);
+            }
+            if (!fr_sys_resid_m(S, xt, Ft, false)) continue;
+            fr_maxabs_m(rt, Ft, n);
+            if (mpfr_cmp(rt, best) < 0) {
+                mpfr_set(best, rt, MPFR_RNDN);
+                best_shift = ls; have = true;
+                for (size_t i = 0; i < n; i++) {
+                    mpfr_set(xb[i], xt[i], MPFR_RNDN);
+                    mpfr_set(Fb[i], Ft[i], MPFR_RNDN);
+                }
+            }
+            mpfr_mul_2si(step, dmax, -ls, MPFR_RNDN);
+            if (mpfr_cmp(rt, resid) < 0 || mpfr_cmp(step, lim) < 0) break;
+        }
+        if (!have) {
+            if (polished >= 0) { converged = true; break; }
+            fr_warn("nlnum", "the function is not a list of real numbers near the iterate");
+            goto done;
+        }
+        mpfr_mul_2si(step, dmax, -best_shift, MPFR_RNDN);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_set(x[i], xb[i], MPFR_RNDN);
+            mpfr_set(F[i], Fb[i], MPFR_RNDN);
+        }
+        mpfr_set(resid, best, MPFR_RNDN);
+        fr_fire_monitor(opts->step_monitor);
+        if (mpfr_zero_p(resid)) { converged = true; break; }
+        fr_maxabs_m(xmag, x, n);
+        if (polished >= 0) {
+            /* fr_polish_done: at the resolution, stalled, or capped. */
+            polished++;
+            mpfr_mul_2si(lim, xmag, 4 - numeric_width_precision_bits(bits), MPFR_RNDN);
+            mpfr_mul_2si(prev_step, prev_step, -1, MPFR_RNDN);
+            if (mpfr_cmp(step, lim) <= 0 || mpfr_cmp(step, prev_step) > 0
+                || polished >= FR_POLISH_MAX) { converged = true; break; }
+        } else {
+            mpfr_mul(lim, xmag, tol_prec, MPFR_RNDN);
+            mpfr_add(lim, lim, tol_acc, MPFR_RNDN);
+            if (mpfr_cmp(step, lim) < 0 && mpfr_cmp(resid, tol_acc) < 0) polished = 0;
+        }
+        mpfr_set(prev_step, step, MPFR_RNDN);
+    }
+    if (!converged && polished >= 0) converged = true;
+    if (!converged) {
+        fr_warn("cvmit", "failed to converge within %lld iterations",
+                (long long)opts->max_iter);
+        fr_maxabs_m(xmag, x, n);
+        fr_warn_goal(opts, mpfr_get_d(resid, MPFR_RNDN), mpfr_get_d(xmag, MPFR_RNDN));
+    }
+build: {
+        Expr** vals = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+        for (size_t i = 0; i < n; i++) vals[i] = expr_new_mpfr_copy(x[i]);
+        result = fr_build_rule_list(S->vars, vals, n);
+        free(vals);
+    }
+done:
+    fr_mpfr_release(x, n); fr_mpfr_release(F, n); fr_mpfr_release(Ft, n);
+    fr_mpfr_release(Fb, n); fr_mpfr_release(xt, n); fr_mpfr_release(xb, n);
+    fr_mpfr_release(dx, n); fr_mpfr_release(Jm, n * n);
+    mpfr_clears(tol_acc, tol_prec, resid, rt, best, dmax, step, prev_step,
+                xmag, lim, im, (mpfr_ptr)0);
+    return result;
+}
+#endif /* USE_MPFR */
+
 
 /* ------------------------------------------------------------------ *
  *  Entry point                                                        *
@@ -2282,6 +2798,8 @@ Expr* builtin_findroot(Expr* res) {
         Expr* fnorm = NULL;
         Expr* out = NULL;
         double* xvec = NULL;
+        FrSys sys;
+        memset(&sys, 0, sizeof sys);
 
         for (size_t i = 0; i < nvars; i++) {
             Expr* sub = var_spec->data.function.args[i];
@@ -2302,13 +2820,6 @@ Expr* builtin_findroot(Expr* res) {
         }
 
         fnorm = fr_normalize_eqn_list(f_raw);
-        if (!fnorm
-            || fnorm->data.function.arg_count != nvars) {
-            fr_warn("systno", "system size %zu does not match %zu variables",
-                    fnorm ? fnorm->data.function.arg_count : 0, nvars);
-            goto sys_cleanup;
-        }
-
         /* Check for complex starts (system complex path not in v1). */
         for (size_t i = 0; i < nvars; i++) {
             if (fr_is_complex_value(x0s[i])) {
@@ -2316,7 +2827,7 @@ Expr* builtin_findroot(Expr* res) {
                 goto sys_cleanup;
             }
         }
-
+        bool machine = (opts.prec_mode == FR_PREC_MACHINE);
         xvec = malloc(sizeof(double) * nvars);
         for (size_t i = 0; i < nvars; i++) {
             if (!fr_expr_to_double_real(x0s[i], &xvec[i])) {
@@ -2324,7 +2835,48 @@ Expr* builtin_findroot(Expr* res) {
                 goto sys_cleanup;
             }
         }
-        out = fr_run_newton_system_real(fnorm, vars, nvars, binds, xvec, &opts);
+        sys.comps = fnorm;
+        sys.m = fnorm->data.function.arg_count;
+        sys.n = nvars;
+        sys.vars = vars;
+        sys.binds = binds;
+        sys.opts = &opts;
+        sys.w = malloc(sizeof(size_t) * (sys.m > 0 ? sys.m : 1));
+        for (size_t i = 0; i < sys.m; i++) sys.w[i] = 1;
+        if (sys.m != nvars) {
+            /* Fewer equations than unknowns: some are vector equations
+             * F[x, y] == {a, b}.  Their widths are read off the values at the
+             * start point, at the working precision. */
+            Expr** xs = malloc(sizeof(Expr*) * nvars);
+            for (size_t i = 0; i < nvars; i++) {
+#ifdef USE_MPFR
+                if (!machine) {
+                    mpfr_t re, im;
+                    bool dummy;
+                    mpfr_inits2(opts.wp_bits, re, im, (mpfr_ptr)0);
+                    get_approx_mpfr(x0s[i], re, im, &dummy);
+                    xs[i] = expr_new_mpfr_copy(re);
+                    mpfr_clears(re, im, (mpfr_ptr)0);
+                    continue;
+                }
+#endif
+                xs[i] = expr_new_real(xvec[i]);
+            }
+            bool wok = fr_sys_measure(&sys, xs);
+            /* the probe left the variables bound to the start point */
+            for (size_t i = 0; i < nvars; i++) fr_bind_clear(&binds[i]);
+            for (size_t i = 0; i < nvars; i++) expr_free(xs[i]);
+            free(xs);
+            if (!wok) goto sys_cleanup;
+        }
+        if (!fr_sys_setup(&sys, machine)) goto sys_cleanup;
+#ifdef USE_MPFR
+        if (!machine) {
+            out = fr_run_newton_system_mpfr(&sys, x0s);
+            goto sys_cleanup;
+        }
+#endif
+        out = fr_run_newton_system_real(&sys, xvec);
 
     sys_cleanup:
         for (size_t i = 0; i < nvars; i++) fr_bind_restore(&binds[i]);
@@ -2333,6 +2885,7 @@ Expr* builtin_findroot(Expr* res) {
         free(vars);
         free(binds);
         free(xvec);
+        fr_sys_free(&sys);
         expr_free(fnorm);
         return out;
     }

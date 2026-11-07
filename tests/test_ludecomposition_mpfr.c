@@ -42,6 +42,7 @@
 #include "core.h"
 #include "print.h"
 #include "test_utils.h"
+#include "mtime.h"
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -340,6 +341,38 @@ static void test_lu_mpfr_badly_conditioned(void) {
     expr_free(res);
 }
 
+/* TimeConstrained is honoured inside the arbitrary-precision LU: the
+ * factorisation (worker threads, no evaluator step) polls the deadline.
+ * Before, a 10000 x 10000 factor at 60 digits ran > 12 min past a 60 s cap.
+ * A 1000 x 1000 factor at 60 digits takes several seconds; capped at 0.5 s
+ * each call must come back as the TimeConstrained failure value within a
+ * small multiple of the cap, and the session must still compute. */
+static void test_lu_mpfr_timeconstrained(void) {
+    Expr* setup = run("SeedRandom[7]; tcm = N[RandomInteger[{-9, 9}, {1000, 1000}], 60]; "
+                      "tcb = RandomInteger[9, 1000];");
+    expr_free(setup);
+    const char* calls[] = {
+        "TimeConstrained[LinearSolve[tcm, tcb], 0.5, \"TO\"]",
+        "TimeConstrained[Det[tcm], 0.5, \"TO\"]",
+        "TimeConstrained[LUDecomposition[tcm], 0.5, \"TO\"]",
+    };
+    for (int i = 0; i < 3; i++) {
+        double t0 = mth_mono_seconds();
+        Expr* res = run(calls[i]);
+        double dt = mth_mono_seconds() - t0;
+        ASSERT(res && res->type == EXPR_STRING && strcmp(res->data.string, "TO") == 0);
+        ASSERT(dt < 3.0);
+        printf("  PASS: %s -> \"TO\" in %.2f s\n", calls[i], dt);
+        expr_free(res);
+    }
+    Expr* after = run("Det[N[{{2, 1}, {1, 3}}, 30]]");
+    double v;
+    ASSERT(leaf_to_double(after, &v) && fabs(v - 5.0) < 1e-12);
+    expr_free(after);
+    Expr* clr = run("Clear[tcm, tcb]");
+    expr_free(clr);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -366,6 +399,9 @@ int main(void) {
 
     /* Badly-conditioned warning */
     TEST(test_lu_mpfr_badly_conditioned);
+
+    /* TimeConstrained inside the factorisation */
+    TEST(test_lu_mpfr_timeconstrained);
 
     printf("All LUDecomposition (MPFR) tests passed.\n");
     return 0;

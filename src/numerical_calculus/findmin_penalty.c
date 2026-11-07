@@ -71,6 +71,28 @@ bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
     const FmGenCon* al_saved_gens = g_fm_al_gens;
     g_fm_al_lambda = al_lambda;      /* NULL when ngens==0 → AL branch inert */
     g_fm_al_gens   = gens;
+    /* Objective scaling.  mu = 1 and the absolute gradient goal assume an
+     * objective whose gradient is O(1).  A small-scale objective (a
+     * compliance of 6e-4 over designs of size 50: |grad f| ~ 1e-6) was
+     * dominated by the penalty from the first round, so the inner solve from
+     * a feasible start barely moved, the round looked "stabilised and
+     * feasible", and the loop stopped at the start point.  Minimise
+     * s f with s = 1/|grad f(x0)|_inf (capped at 1e8) instead; f itself is
+     * reported unscaled. */
+    double fscale_saved = g_fm_al_fscale;
+    g_fm_al_fscale = 1.0;
+    if (al_lambda) {
+        double* g0 = (double*)malloc(sizeof(double) * (n ? n : 1));
+        bool got = g0 && g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g0);
+        if (g0 && !got) got = fm_grad_finite_diff(f, binds, x, n, opts, g0);
+        if (got) {
+            double gmax = 0.0;
+            for (size_t i = 0; i < n; i++) if (fabs(g0[i]) > gmax) gmax = fabs(g0[i]);
+            if (gmax > 0.0 && gmax < 1e-2 && isfinite(gmax))
+                g_fm_al_fscale = (1.0 / gmax < 1e8) ? 1.0 / gmax : 1e8;
+        }
+        free(g0);
+    }
     const double LAM_MAX = 1.0e12;
     for (int round = 0; round < 9; round++) {
         for (size_t i = 0; i < n; i++) x_prev[i] = x[i];
@@ -96,10 +118,12 @@ bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
         }
         if (!ok) {
             g_fm_al_lambda = al_saved_lambda; g_fm_al_gens = al_saved_gens;
+            g_fm_al_fscale = fscale_saved;
             free(al_lambda); free(x_prev); free(best_feas_x); return false;
         }
         if (!fm_eval_penalty(gens, ngens, binds, x, n, opts, &pen)) {
             g_fm_al_lambda = al_saved_lambda; g_fm_al_gens = al_saved_gens;
+            g_fm_al_fscale = fscale_saved;
             free(al_lambda); free(x_prev); free(best_feas_x); return false;
         }
         if (pen <= feas_eps) {
@@ -149,6 +173,7 @@ bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
     }
     g_fm_al_lambda = al_saved_lambda;
     g_fm_al_gens   = al_saved_gens;
+    g_fm_al_fscale = fscale_saved;
     free(al_lambda);
     free(x_prev);
     free(best_feas_x);

@@ -424,6 +424,22 @@ static void test_brent_mpfr_precision(void) {
                "Abs[r - Sqrt[2]] < 10^-5 && Abs[r - Sqrt[2]] > 10^-30]");
 }
 
+/* Brent on a steep function whose root sits 4.7e-9 from a log singularity:
+ * the bracket-width goal (absolute 10^-8) is larger than the root's own
+ * scale, so it must not stop on the width alone with |f| ~ 1 (it returned
+ * g = 49.1 for g == 50 after 13 evaluations).  Machine and MPFR. */
+static void test_brent_steep_root_needs_residual(void) {
+    mute_stderr_once();
+    check_true("Module[{g, z0 = 0.0064823961, r}, "
+               "g[z_?NumericQ] := If[z <= z0, 100., Min[100., -Log[z - z0]/0.3 - 13.9]]; "
+               "r = z /. FindRoot[g[z] == 50, {z, 0.0064, 0.0065}, Method -> \"Brent\"]; "
+               "Abs[g[r] - 50] < 10^-6]");
+    check_true("Module[{g, z0 = 64823961/10^10, r}, "
+               "g[z_?NumericQ] := If[z <= z0, 100, Min[100, -Log[z - z0]*10/3 - 139/10]]; "
+               "r = z /. FindRoot[g[z] == 50, {z, 64/10^4, 65/10^4}, Method -> \"Brent\", "
+               "WorkingPrecision -> 30]; Abs[g[r] - 50] < 10^-12]");
+}
+
 /* The compiled fast path must not swallow EvaluationMonitor. */
 static void test_evaluation_monitor_compiled_path(void) {
     mute_stderr_once();
@@ -516,6 +532,105 @@ static void test_jacobian_matrix_forms(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 18. Systems: vector equations, opaque functions, WorkingPrecision   */
+/* ------------------------------------------------------------------ */
+
+/* A vector equation F[a, b] == {0, 0} whose F is an opaque NumericQ-guarded
+ * function: the widths come from the value at the start, the Jacobian from
+ * forward differences (D of an opaque F is an inert Derivative).  The same
+ * system as a list of opaque scalar equations, and as plain expressions. */
+static void test_system_vector_opaque(void) {
+    mute_stderr_once();
+    const char* root = "{1.227773304303994085117098256488137476416507977664297054566109, "
+                       "1.492572713238451939346233689691658447861638507574043131233776}";
+    char buf[1024];
+    snprintf(buf, sizeof buf,
+             "Module[{g}, g[a_?NumericQ, b_?NumericQ] := {a^2 + b - 3, a - b^2 + 1}; "
+             "Max[Abs[({a, b} /. FindRoot[g[a, b] == {0, 0}, {{a, 1.2}, {b, 1.1}}]) - %s]] < 10^-12]",
+             root);
+    check_true(buf);
+    snprintf(buf, sizeof buf,
+             "Module[{h, k}, h[a_?NumericQ, b_?NumericQ] := a^2 + b - 3; "
+             "k[a_?NumericQ, b_?NumericQ] := a - b^2 + 1; "
+             "Max[Abs[({a, b} /. FindRoot[{h[a, b] == 0, k[a, b] == 0}, {{a, 1.2}, {b, 1.1}}]) - %s]] < 10^-12]",
+             root);
+    check_true(buf);
+    /* a bare vector-valued expression, and a mixed scalar + vector system */
+    snprintf(buf, sizeof buf,
+             "Module[{g}, g[a_?NumericQ, b_?NumericQ] := {a^2 + b - 3, a - b^2 + 1}; "
+             "Max[Abs[({a, b} /. FindRoot[g[a, b], {{a, 1.2}, {b, 1.1}}]) - %s]] < 10^-12]",
+             root);
+    check_true(buf);
+    check_true("Module[{g}, g[a_?NumericQ, b_?NumericQ] := {a + b - 3, a - b + 1}; "
+               "Max[Abs[({a, b, c} /. FindRoot[{g[a, b] == {0, 0}, c^2 == 2}, "
+               "{{a, 0.}, {b, 0.}, {c, 1.}}]) - {1, 2, Sqrt[2]}]] < 10^-10]");
+    /* widths that do not add up stay a systno error */
+    check_eq("Module[{g}, g[a_?NumericQ, b_?NumericQ] := {a, b, a b}; "
+             "Head[FindRoot[g[a, b] == {1, 2, 3}, {{a, 1.}, {b, 1.}}]]]", "FindRoot");
+}
+
+/* WorkingPrecision -> 60 runs the system in MPFR and returns the full
+ * working precision (it used to be ignored: machine numbers came back), for
+ * symbolic and for opaque vector systems alike. */
+static void test_system_working_precision(void) {
+    mute_stderr_once();
+    const char* root = "{1.227773304303994085117098256488137476416507977664297054566109076, "
+                       "1.492572713238451939346233689691658447861638507574043131233776482}";
+    char buf[1024];
+    snprintf(buf, sizeof buf,
+             "With[{r = {a, b} /. FindRoot[{a^2 + b - 3, a - b^2 + 1}, {{a, 12/10}, {b, 11/10}}, "
+             "WorkingPrecision -> 60]}, Max[Abs[r - %s]] < 10^-57 && Min[Precision /@ r] > 59]",
+             root);
+    check_true(buf);
+    snprintf(buf, sizeof buf,
+             "Module[{g}, g[a_?NumericQ, b_?NumericQ] := {a^2 + b - 3, a - b^2 + 1}; "
+             "With[{r = {a, b} /. FindRoot[g[a, b] == {0, 0}, {{a, 12/10}, {b, 11/10}}, "
+             "WorkingPrecision -> 60]}, Max[Abs[r - %s]] < 10^-55 && Min[Precision /@ r] > 59]]",
+             root);
+    check_true(buf);
+}
+
+/* A shooting problem: an NDSolve behind a NumericQ-guarded function of the
+ * launch angle and the arrival time, solved for the time to reach (1, 1/2)
+ * under constant gravity (closed form T = Sqrt[7 - 2 Sqrt[11]] for speed 2). */
+static void test_system_shooting_ndsolve(void) {
+    mute_stderr_once();
+    check_true("Module[{pos, x, y, t}, "
+               "pos[th_?NumericQ, T_?NumericQ] := {x[T], y[T]} /. First[NDSolve[{x''[t] == 0, "
+               "y''[t] == -1, x[0] == 0, y[0] == 0, x'[0] == 2 Cos[th], y'[0] == 2 Sin[th]}, "
+               "{x, y}, {t, 0, T}, PrecisionGoal -> 13, AccuracyGoal -> 13]]; "
+               "Abs[(T /. FindRoot[pos[th, T] == {1, 1/2}, {{th, 0.6}, {T, 0.6}}]) "
+               "- Sqrt[7 - 2 Sqrt[11]]] < 10^-9]");
+}
+
+/* A Newton step that lands where f is not real (Log of a negative argument)
+ * is halved back into the domain instead of ending the solve, at machine and
+ * at arbitrary precision; and a system's step is backtracked likewise. */
+static void test_newton_backtracks_into_domain(void) {
+    mute_stderr_once();
+    /* from x = 20, Newton on Log[x] - 1 + x/100 overshoots to x < 0 */
+    check_true("Module[{f}, f[x_?NumericQ] := Log[x] - 1 + x/100; "
+               "With[{r = x /. FindRoot[f[x], {x, 20}]}, Abs[Log[r] - 1 + r/100] < 10^-12]]");
+    check_true("Module[{f}, f[x_?NumericQ] := Log[x] - 1 + x/100; "
+               "With[{r = x /. FindRoot[f[x], {x, 20}, WorkingPrecision -> 40]}, "
+               "Abs[Log[r] - 1 + r/100] < 10^-35]]");
+    check_true("With[{r = {x, y} /. FindRoot[{Log[x] - 1 + x/100, y - x}, {{x, 20.}, {y, 1.}}]}, "
+               "Abs[Log[r[[1]]] - 1 + r[[1]]/100] < 10^-12 && Abs[r[[2]] - r[[1]]] < 10^-12]");
+}
+
+/* A polynomial with exact rational coefficients whose numerators and
+ * denominators are BigInts, at WorkingPrecision: v . x^Range[n] with an MPFR
+ * x used to evaluate to Indeterminate (the fused Dot read the bignum
+ * Rationals as NaN), so FindRoot reported a non-real f. */
+static void test_bigint_rational_coefficients(void) {
+    mute_stderr_once();
+    check_true("Module[{v = {(3^80 + 1)/(2^130), (5^60)/(7^40 + 2)}, r}, "
+               "r = x /. FindRoot[v . {x, x^2} == 1/10, {x, 1/1000}, WorkingPrecision -> 40]; "
+               "Abs[v . {r, r^2} - 1/10] < 10^-35]");
+    check_true("NumberQ[{(3^80 + 1)/(2^130), 2} . {N[1/3, 30], N[1/7, 30]}]");
+}
+
+/* ------------------------------------------------------------------ */
 /* 13. Memory: many calls in a row (smoke test for leaks)              */
 /* ------------------------------------------------------------------ */
 
@@ -555,6 +670,11 @@ int main(void) {
     core_init();
 
     TEST(test_root_compiled_derivative);
+    TEST(test_system_vector_opaque);
+    TEST(test_system_working_precision);
+    TEST(test_system_shooting_ndsolve);
+    TEST(test_newton_backtracks_into_domain);
+    TEST(test_bigint_rational_coefficients);
 
     TEST(test_root_quadratic);
     TEST(test_root_sin);
@@ -610,6 +730,7 @@ int main(void) {
     TEST(test_secant_bracket_safeguard);
     TEST(test_secant_bracketed_root_is_kept);
     TEST(test_brent_mpfr_precision);
+    TEST(test_brent_steep_root_needs_residual);
     TEST(test_evaluation_monitor_compiled_path);
     TEST(test_real_valued_options);
     TEST(test_option_values_evaluated);

@@ -592,6 +592,7 @@ typedef struct {
 #define NM_BH_NITER          100       /* default hop count (== scipy niter)        */
 
 /* ===== file-static global registries (defined in findmin_common.c) ===== */
+extern double g_fm_al_fscale;
 extern bool g_fm_quiet;
 extern const char* g_fm_name;
 extern const double* g_fm_al_lambda;
@@ -664,6 +665,14 @@ bool fm_run_bfgs_mpfr(Expr* f, Expr** vars, size_t n,
                              const FmBox* boxes,
                              const FmOpts* opts,
                              mpfr_t fx_out);
+/* Gradient polish of an MPFR minimiser found without curvature information
+ * (Brent's 1-D search): seeds the inverse Hessian from a difference Hessian of
+ * the gradient, then runs fm_run_bfgs_mpfr's final polish.  x, fx in/out; a
+ * point on a box bound, or a Hessian that is not positive definite, is left
+ * unchanged. */
+void fm_polish_min_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs, size_t n,
+                        const FmOpts* opts, const FmBox* boxes,
+                        mpfr_t* x, mpfr_t fx);
 #endif /* USE_MPFR */
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,

@@ -597,6 +597,55 @@ static void test_hs071_default_method(void) {
                "Abs[(x /. Last[r]) - 1] + Abs[y /. Last[r]] < 1.*^-6]");
 }
 
+/* WorkingPrecision -> 60 converges to (nearly) the working precision in the
+ * ARGMIN, not to the ~WorkingPrecision/2 digits an f-based line search can
+ * resolve: the final gradient polish (fm_bfgs_polish_mpfr).  Symbolic
+ * gradient, black-box objective (order-4 difference gradient), a smooth
+ * 12-variable energy, and NMinimize's MPFR refinement. */
+static void test_mpfr_argmin_full_precision(void) {
+    mute_stderr_once();
+    check_true("With[{r = FindMinimum[Cosh[x - 1/3] + (y - x^2)^2, {{x, 0}, {y, 0}}, "
+               "WorkingPrecision -> 60]}, Abs[(x /. Last[r]) - 1/3] < 10^-50 && "
+               "Abs[(y /. Last[r]) - 1/9] < 10^-50 && Abs[First[r] - 1] < 10^-58]");
+    check_true("Module[{g, a0, r}, g[a_?NumericQ] := Sin[a] + a^2/10; "
+               "a0 = a /. FindRoot[Cos[a] + a/5, {a, -1.3}, WorkingPrecision -> 80]; "
+               "r = FindMinimum[g[a], {a, -1}, WorkingPrecision -> 60]; "
+               "Abs[(a /. Last[r]) - a0] < 10^-45]");
+    /* Thomson's problem for 5 points, energy 6.4746914946881624399325... */
+    check_true("Module[{pt, e, r, ph1 = Pi (3 - Sqrt[5])}, pt[0] = {0, 0, 1}; "
+               "pt[1] = {Sin[t[1]] Cos[ph1], Sin[t[1]] Sin[ph1], Cos[t[1]]}; "
+               "pt[k_] := {Sin[t[k]] Cos[p[k]], Sin[t[k]] Sin[p[k]], Cos[t[k]]}; "
+               "e = Sum[1/Sqrt[(pt[j] - pt[k]).(pt[j] - pt[k])], {j, 0, 3}, {k, j + 1, 4}]; "
+               "r = FindMinimum[e, Join[Table[{t[k], N[ArcCos[1 - 2 k/5], 60]}, {k, 4}], "
+               "Table[{p[k], N[k ph1, 60]}, {k, 2, 4}]], WorkingPrecision -> 60]; "
+               "Abs[First[r] - 6474691494688162439932512514134966602651820879941224847586/10^57] < 10^-55]");
+    check_true("With[{r = NMinimize[{Cosh[x - 1/3] + (y - 1/2)^2, -1 <= x <= 1, -1 <= y <= 1}, "
+               "{x, y}, WorkingPrecision -> 40]}, Abs[(x /. Last[r]) - 1/3] < 10^-35]");
+    /* FindMaximum takes the same path (it minimises -f) */
+    check_true("With[{r = FindMaximum[-Cosh[x - 1/3], {x, 0}, WorkingPrecision -> 60]}, "
+               "Abs[(x /. Last[r]) - 1/3] < 10^-50]");
+}
+
+/* A small-scale objective (|grad f| ~ 1e-6) under an equality constraint,
+ * from a feasible start: the penalty used to dominate from the first round,
+ * the inner solve barely moved, and the loop stopped at the start point
+ * (0.0002 instead of 0.000188883).  Optimum x_i ~ Sqrt[w_i]; also as an opaque
+ * NumericQ-guarded black box (finite-difference gradient). */
+static void test_small_scale_objective_with_equality(void) {
+    check_true("Module[{w = {1, 2, 3, 4}, xs, r}, xs = 200 Sqrt[w]/Total[Sqrt[w]]; "
+               "r = FindMinimum[{10^-3 Total[w/{a, b, c, d}], 1 <= a <= 100 && 1 <= b <= 100 && "
+               "1 <= c <= 100 && 1 <= d <= 100 && a + b + c + d == 200}, "
+               "{{a, 50}, {b, 50}, {c, 50}, {d, 50}}]; "
+               "Abs[First[r] - 10^-3 Total[w/xs]] < 10^-12 && "
+               "Max[Abs[({a, b, c, d} /. Last[r]) - xs]] < 10^-3]");
+    check_true("Module[{w = {1, 2, 3, 4}, g, xs, r}, xs = 200 Sqrt[w]/Total[Sqrt[w]]; "
+               "g[v_ /; VectorQ[v, NumericQ]] := 10^-3 Total[w/v]; "
+               "r = FindMinimum[{g[{a, b, c, d}], 1 <= a <= 100 && 1 <= b <= 100 && "
+               "1 <= c <= 100 && 1 <= d <= 100 && a + b + c + d == 200}, "
+               "{{a, 50}, {b, 50}, {c, 50}, {d, 50}}]; "
+               "Abs[First[r] - 10^-3 Total[w/xs]] < 10^-11]");
+}
+
 /* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
@@ -604,6 +653,9 @@ static void test_hs071_default_method(void) {
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_mpfr_argmin_full_precision);
+    TEST(test_small_scale_objective_with_equality);
 
     /* 1. Golden 1D */
     TEST(test_min_parabola);

@@ -561,7 +561,10 @@ Gives products of vectors, matrices, and tensors.
   An exact zero in the other operand is an MPFR zero at its partner's
   precision (as `0 x` is), so `m . DiagonalMatrix[w]` of an MPFR `m` is the
   fused path too: 64 x 64 at 20 digits 7 ms, was 1.4 s through `Times` /
-  `Plus`.
+  `Plus`. An exact `Rational` with a BigInt numerator or denominator is
+  converted correctly rounded (through `mpq`); it used to be read as NaN, so
+  `v . x^Range[60]` with `LinearSolve`'s 1370-digit rational coefficients and
+  an MPFR `x` was `Indeterminate`.
 - **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
   auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the
   `vector·vector` inner product to a scalar (`V_NDFN2`), real and complex.
@@ -721,6 +724,10 @@ Gives the norm of a number, vector, or matrix.
 - For vectors, `Norm[v, p]` is `Total[Abs[v]^p]^(1/p)`.
 - For vectors, `Norm[v, Infinity]` is the $\infty$-norm given by `Max[Abs[v]]`.
 - `Norm[m, "Frobenius"]` gives the Frobenius norm of a matrix `m`.
+- `Norm[m]` and `Norm[m, 2]` of a matrix are the spectral norm, the largest
+  singular value: LAPACK for machine numbers, the MPFR SVD at the input
+  precision for arbitrary-precision entries (an explicit `2` used to leave an
+  arbitrary-precision matrix unevaluated).
 - **Packed/NDArray fast path**: an inexact vector or matrix routes through the
   LAPACK-backed `ndla_norm` (`dlange`/`zlange`, and an SVD for the induced
   matrix 2-norm); `Norm` is on the packed-array `AWARE` list. A machine-precision
@@ -2971,19 +2978,58 @@ Out[8]= {6, 4, 5}
   zero background) is solved by a native kernel (`src/sparse/sparse_la_solve.c`)
   without densifying: up to order 128 by a dense LAPACK LU (bit-identical to
   the dense matrix), above that by UMFPACK, or CHOLMOD first for a Hermitian
-  matrix with a positive diagonal, when SuiteSparse is linked; otherwise by
-  the dense LU within the 2^27-element densify cap and by Krylov beyond it.
+  matrix with a positive diagonal, when SuiteSparse is linked. Without
+  SuiteSparse the sparse direct solver is a **band solver**
+  (`src/sparse/sparse_la_band.c`): the matrix is renumbered by Reverse
+  Cuthill-McKee when its natural band is wide, and factored in LAPACK band
+  storage -- band Cholesky (`?pbtrf`) for a Hermitian matrix with a positive
+  diagonal, the band LU with partial pivoting (`?gbtrf`) otherwise or when the
+  Cholesky finds the matrix indefinite -- whenever the band costs at most an
+  eighth of the dense LU and fits the densify cap. That covers tridiagonal and
+  pentadiagonal systems, 2-D and 3-D finite-difference Laplacians and other
+  banded / block-banded matrices in O(n kl^2) (a 10000 x 10000 pentadiagonal
+  system: 5.4 s by the dense LU -> ms; the 7-point Laplacian on a 20^3 grid
+  4.1 s -> 0.16 s; a tridiagonal 20000 x 20000, previously Krylov, now
+  direct). A matrix whose band does not pay (fill spread over the whole
+  matrix) takes the dense LU within the 2^27-element densify cap, and Krylov
+  beyond it; that Krylov default is **iteratively refined** -- residuals in
+  doubled precision (compensated products and sums), corrections by the same
+  BiCGSTAB/ILU0 -- until the correction reaches rounding level, so it is as
+  accurate as a direct solve (SIAM 100-digit problem 7, 20000 x 20000: 12
+  correct digits -> 16). An explicit `Method -> "Krylov"` keeps its own
+  `Tolerance` and is not refined.
   The answer is a packed List (a SparseArray right-hand side gives a dense
   answer too). As in the reference, and unlike the dense matrix, a **singular**
   machine SparseArray gives `LinearSolve::sing` and stays unevaluated (even for
   a consistent b), and a **rectangular** one gives `LinearSolve::sqmat`. Exact,
   MPFR and symbolic SparseArrays behave exactly like the dense matrix
-  (particular solutions, `::nosol`). An **exact rational** SparseArray of
+  (particular solutions, `::nosol`). An **arbitrary-precision** square real
+  SparseArray (exact or MPFR entries, zero background) with a vector b is
+  solved first by **mixed-precision iterative refinement**
+  (`src/sparse/sparse_la_mpsolve.c`): the matrix rounded to machine numbers
+  is factored once by the machine sparse backend above (band / dense LU,
+  UMFPACK / CHOLMOD when linked; the Krylov solver when no direct factor
+  fits), then `r = b - A x` is formed over the nonzeros in MPFR at the
+  working precision + 64 bits, scaled to O(1), solved in machine arithmetic
+  and added back, until the correction is below `2^-(p+4) |x|`. The
+  corrections must contract geometrically (each at most half the last), which
+  certifies the result: the error left is at most the last correction. Each
+  pass gains about `-log10(cond(A) eps)` digits for one machine solve and one
+  sparse MPFR product, so 60 digits of a 20000 x 20000 tridiagonal system
+  take 0.08 s (it was `SparseArray::dense`, unevaluated) and of a 10000 x
+  10000 pentadiagonal one 0.05 s (an hours-long dense MPFR LU); the answer
+  carries the working precision, as the dense MPFR LU's does. A complex
+  matrix, a matrix right-hand side, a matrix singular in machine arithmetic,
+  or corrections that do not contract (`cond(A) eps` near 1) go to the dense
+  path as before. An **exact rational** SparseArray of
   order >= 64 that is sparse (density < 10%), or that exceeds the densify cap,
   is solved by an exact sparse LU over FLINT `fmpq` with Markowitz-style
   pivoting (`src/sparse/sparse_la_exact.c`, v0.6191): fill-free systems cost
   O(nnz) rational operations (the exact 20000 x 20000 tridiagonal solves in
-  0.04 s; it was refused at the cap), a singular system gets the reference's
+  0.04 s; it was refused at the cap; every fill entry is tracked -- a row
+  whose fill was offset by exact cancellation used to miss its new columns,
+  and a 400 x 400 grid-like system answered a wrong solution), a singular
+  system gets the reference's
   particular solution (free unknowns 0) or `::nosol`; `Det` and `MatrixRank`
   of such matrices come from the same elimination. `Det` and `Inverse` of a machine
   SparseArray above order 128 use the same factorisation (`Inverse::sing`
@@ -3002,6 +3048,12 @@ Out[8]= {6, 4, 5}
   with every free variable `0` (`LinearSolve[N[{{1, 2, 3}, {4, 5, 6}}, 30], N[{1, 2}, 30]]`
   is `{-1/3, 2/3, 0}` at 30 digits); a 54 x 54 complex system takes
   milliseconds (it took over 10 s).
+- **TimeConstrained** is honoured inside the arbitrary-precision LU of
+  `LinearSolve`, `LUDecomposition` and `Det`: the factorisation (worker
+  threads, no evaluator step) and the loading of the matrix into MPFR arrays
+  poll the deadline and unwind cleanly. A 10000 x 10000 factor at 60 digits
+  ran more than 12 minutes past a 60 s cap; the overrun is now the time to
+  free what was allocated (seconds at that size).
 
 ## LeastSquares
 Finds `x` that solves the linear least-squares problem for `m . x == b`,

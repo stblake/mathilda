@@ -1333,7 +1333,84 @@ int mat_lapack_zgebak(char job, char side, int n, int ilo, int ihi,
     return info;
 }
 
+
+/* ---------------------------------------------------------------------
+ * Banded LU / Cholesky (see lapack.h).
+ * ------------------------------------------------------------------- */
+int mat_lapack_dgbtrf(int n, int kl, int ku, double* ab, int ldab, int* ipiv)
+{
+    int info = 0;
+    dgbtrf_(&n, &n, &kl, &ku, ab, &ldab, ipiv, &info);
+    return info;
+}
+int mat_lapack_zgbtrf(int n, int kl, int ku, double* ab, int ldab, int* ipiv)
+{
+    int info = 0;
+    zgbtrf_(&n, &n, &kl, &ku, lapack_zptr(ab), &ldab, ipiv, &info);
+    return info;
+}
+int mat_lapack_dgbtrs(char trans, int n, int kl, int ku, int nrhs, const double* ab,
+                      int ldab, const int* ipiv, double* b, int ldb)
+{
+    int info = 0;
+    char t[2] = { trans, 0 };
+    dgbtrs_(t, &n, &kl, &ku, &nrhs, (double*)ab, &ldab, (int*)ipiv, b, &ldb, &info);
+    return info;
+}
+int mat_lapack_zgbtrs(char trans, int n, int kl, int ku, int nrhs, const double* ab,
+                      int ldab, const int* ipiv, double* b, int ldb)
+{
+    int info = 0;
+    char t[2] = { trans, 0 };
+    zgbtrs_(t, &n, &kl, &ku, &nrhs, lapack_zptr((double*)ab), &ldab, (int*)ipiv,
+            lapack_zptr(b), &ldb, &info);
+    return info;
+}
+int mat_lapack_dpbtrf(int n, int kd, double* ab, int ldab)
+{
+    int info = 0;
+    dpbtrf_("L", &n, &kd, ab, &ldab, &info);
+    return info;
+}
+int mat_lapack_zpbtrf(int n, int kd, double* ab, int ldab)
+{
+    int info = 0;
+    zpbtrf_("L", &n, &kd, lapack_zptr(ab), &ldab, &info);
+    return info;
+}
+int mat_lapack_dpbtrs(int n, int kd, int nrhs, const double* ab, int ldab, double* b, int ldb)
+{
+    int info = 0;
+    dpbtrs_("L", &n, &kd, &nrhs, (double*)ab, &ldab, b, &ldb, &info);
+    return info;
+}
+int mat_lapack_zpbtrs(int n, int kd, int nrhs, const double* ab, int ldab, double* b, int ldb)
+{
+    int info = 0;
+    zpbtrs_("L", &n, &kd, &nrhs, lapack_zptr((double*)ab), &ldab, lapack_zptr(b), &ldb, &info);
+    return info;
+}
+
 #else  /* !USE_LAPACK */
+int mat_lapack_dgbtrf(int n, int kl, int ku, double* ab, int ldab, int* ipiv)
+{ (void)n; (void)kl; (void)ku; (void)ab; (void)ldab; (void)ipiv; return -1; }
+int mat_lapack_zgbtrf(int n, int kl, int ku, double* ab, int ldab, int* ipiv)
+{ (void)n; (void)kl; (void)ku; (void)ab; (void)ldab; (void)ipiv; return -1; }
+int mat_lapack_dgbtrs(char trans, int n, int kl, int ku, int nrhs, const double* ab,
+                      int ldab, const int* ipiv, double* b, int ldb)
+{ (void)trans; (void)n; (void)kl; (void)ku; (void)nrhs; (void)ab; (void)ldab; (void)ipiv; (void)b; (void)ldb; return -1; }
+int mat_lapack_zgbtrs(char trans, int n, int kl, int ku, int nrhs, const double* ab,
+                      int ldab, const int* ipiv, double* b, int ldb)
+{ (void)trans; (void)n; (void)kl; (void)ku; (void)nrhs; (void)ab; (void)ldab; (void)ipiv; (void)b; (void)ldb; return -1; }
+int mat_lapack_dpbtrf(int n, int kd, double* ab, int ldab)
+{ (void)n; (void)kd; (void)ab; (void)ldab; return -1; }
+int mat_lapack_zpbtrf(int n, int kd, double* ab, int ldab)
+{ (void)n; (void)kd; (void)ab; (void)ldab; return -1; }
+int mat_lapack_dpbtrs(int n, int kd, int nrhs, const double* ab, int ldab, double* b, int ldb)
+{ (void)n; (void)kd; (void)nrhs; (void)ab; (void)ldab; (void)b; (void)ldb; return -1; }
+int mat_lapack_zpbtrs(int n, int kd, int nrhs, const double* ab, int ldab, double* b, int ldb)
+{ (void)n; (void)kd; (void)nrhs; (void)ab; (void)ldab; (void)b; (void)ldb; return -1; }
+
 
 /* Stubs so call sites link cleanly when LAPACK isn't available.  Each
  * returns a negative info code; the kernel interprets any negative

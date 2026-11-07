@@ -125,8 +125,11 @@ static bool elim_load(const SparseArray* sa, Elim* E) {
     return true;
 }
 
-/* dst = dst - m * src over the columns not yet pivoted (both sorted). */
-static bool row_axpy(Row* dst, const fmpq_t m, const Row* src, int64_t* colcnt, const char* pivoted) {
+/* dst = dst - m * src over the columns not yet pivoted (both sorted). The
+ * columns that are new to dst (fill) are written to fill[0 .. *nfill) --
+ * room for src->n. */
+static bool row_axpy(Row* dst, const fmpq_t m, const Row* src, int64_t* colcnt, const char* pivoted,
+                     int64_t* fill, int64_t* nfill) {
     Ent* out = malloc(sizeof(Ent) * (size_t)(dst->n + src->n + 1));
     if (!out) return false;
     int64_t a = 0, b = 0, o = 0;
@@ -144,6 +147,7 @@ static bool row_axpy(Row* dst, const fmpq_t m, const Row* src, int64_t* colcnt, 
             fmpq_neg(&out[o].v, &out[o].v);
             out[o].col = cb;
             colcnt[cb]++;
+            fill[(*nfill)++] = cb;
             o++;
             b++;
         } else {
@@ -198,6 +202,8 @@ static bool elim_run(Elim* E, fmpq* rhs, int64_t nrhs, int64_t* piv_row, int64_t
     fmpq_init(m);
     int64_t r = 0;
     *sign = 1;
+    int64_t* fill = NULL;            /* the fill columns of one row update */
+    int64_t fill_cap = 0;
     /* permutation parity: count inversions of the pivot sequences at the end */
     while (ok) {
         /* the shortest nonempty active row */
@@ -227,9 +233,14 @@ static bool elim_run(Elim* E, fmpq* rhs, int64_t nrhs, int64_t* piv_row, int64_t
             for (int64_t k = 0; k < R->n; k++) if (R->e[k].col == pc) { at = k; break; }
             if (at < 0) continue;               /* stale */
             fmpq_div(m, &R->e[at].v, &P->e[best].v);
-            int64_t before = R->n;
-            /* remember the columns that are new to row i, for the column lists */
-            ok = row_axpy(R, m, P, E->colcnt, pivoted);
+            if (fill_cap < P->n) {
+                int64_t* nf = realloc(fill, sizeof(int64_t) * (size_t)P->n);
+                if (!nf) { ok = false; break; }
+                fill = nf;
+                fill_cap = P->n;
+            }
+            int64_t nfill = 0;
+            ok = row_axpy(R, m, P, E->colcnt, pivoted, fill, &nfill);
             if (!ok) break;
             /* drop the eliminated pc entry (row_axpy skipped pc from P since it
              * is pivoted; R's own pc entry is now dst - m*piv = 0) */
@@ -240,22 +251,23 @@ static bool elim_run(Elim* E, fmpq* rhs, int64_t nrhs, int64_t* piv_row, int64_t
                     R->n--;
                     break;
                 }
-            /* fill: index the row's columns (a duplicate or stale index entry is
-             * harmless: a visit re-checks that the row still holds the column) */
-            if (R->n >= before)
-                for (int64_t k = 0; k < R->n && ok; k++) {
-                    IdxList* C = &col[R->e[k].col];
-                    bool have = false;
-                    for (int64_t q = C->n; q-- > 0 && q >= C->n - 8;) if (C->rows[q] == i) { have = true; break; }
-                    if (have) continue;
-                    if (C->n == C->cap) {
-                        int64_t nc = C->cap ? 2 * C->cap : 4;
-                        int64_t* nr = realloc(C->rows, sizeof(int64_t) * (size_t)nc);
-                        if (!nr) { ok = false; break; }
-                        C->rows = nr; C->cap = nc;
-                    }
-                    C->rows[C->n++] = i;
+            /* fill: index row i under every column new to it.  Every one --
+             * the row's length is no guide: fill and cancellation can leave it
+             * as long as before (or shorter) with new columns in it, and a
+             * column whose list misses the row is never eliminated from it,
+             * so the back-substitution read a not-yet-solved unknown as 0 (a
+             * wrong answer: a 400 x 400 grid Laplacian).  A stale index entry
+             * is harmless: a visit re-checks that the row holds the column. */
+            for (int64_t f = 0; f < nfill && ok; f++) {
+                IdxList* C = &col[fill[f]];
+                if (C->n == C->cap) {
+                    int64_t nc = C->cap ? 2 * C->cap : 4;
+                    int64_t* nr = realloc(C->rows, sizeof(int64_t) * (size_t)nc);
+                    if (!nr) { ok = false; break; }
+                    C->rows = nr; C->cap = nc;
                 }
+                C->rows[C->n++] = i;
+            }
             if (rhs)
                 for (int64_t q = 0; q < nrhs; q++) {
                     fmpq_t t2;
@@ -271,6 +283,7 @@ static bool elim_run(Elim* E, fmpq* rhs, int64_t nrhs, int64_t* piv_row, int64_t
          * frozen from here on */
     }
     fmpq_clear(m);
+    free(fill);
     for (int64_t j = 0; j < n; j++) free(col[j].rows);
     free(col);
     free(pivoted);

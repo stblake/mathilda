@@ -188,6 +188,43 @@ void spla_spmv(const SpMat* A, const double* x, double* y, bool trans) {
     }
 }
 
+/* Error-free accumulation (Ogita, Rump & Oishi, "Accurate sum and dot
+ * product", SIAM J. Sci. Comput. 26, 2005: Dot2): s + c carries the running
+ * sum to about twice the working precision. */
+static void acc_add(double* s, double* c, double v) {
+    double t = *s + v;
+    double z = t - *s;
+    *c += (*s - (t - z)) + (v - z);
+    *s = t;
+}
+static void acc_mul(double* s, double* c, double a, double b) {
+    double p = a * b;
+    acc_add(s, c, p);
+    *c += fma(a, b, -p);
+}
+
+void spla_residual(const SpMat* A, const double* b, const double* x, double* r) {
+    for (int64_t i = 0; i < A->m; i++) {
+        if (!A->cplx) {
+            double s = b[i], c = 0.0;
+            for (int64_t k = A->rp[i]; k < A->rp[i + 1]; k++) acc_mul(&s, &c, -A->x[k], x[A->ci[k]]);
+            r[i] = s + c;
+        } else {
+            double sr = b[2 * i], cr = 0.0, si = b[2 * i + 1], ci = 0.0;
+            for (int64_t k = A->rp[i]; k < A->rp[i + 1]; k++) {
+                double ar = A->x[2 * k], ai = A->x[2 * k + 1];
+                const double* xv = x + 2 * A->ci[k];
+                acc_mul(&sr, &cr, -ar, xv[0]);
+                acc_mul(&sr, &cr, ai, xv[1]);
+                acc_mul(&si, &ci, -ar, xv[1]);
+                acc_mul(&si, &ci, -ai, xv[0]);
+            }
+            r[2 * i] = sr + cr;
+            r[2 * i + 1] = si + ci;
+        }
+    }
+}
+
 bool spla_is_square(const SpMat* A) { return A->m == A->n; }
 
 /* Binary search for column j in row i; index into ci/x or -1. */

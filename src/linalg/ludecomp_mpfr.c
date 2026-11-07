@@ -38,6 +38,7 @@
 #include "common.h"
 #include "numeric.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "core.h"      /* tc_deadline_passed / tc_check_deadline */
 
 #include "mp_parallel.h"
 
@@ -92,11 +93,22 @@ void  mpfr_lu_free(MpfrLU* f) { (void)f; }
  *  Allocation helpers.  Duplicated from qrdecomp_mpfr.c so this        *
  *  translation unit stays self-contained.                              *
  * ------------------------------------------------------------------ */
+/* NULL also when a TimeConstrained deadline passes while the entries are
+ * initialised (polled every 2^16): an n = 10^4 matrix is 10^8 limb blocks,
+ * tens of seconds of allocation with no evaluator step in between. */
 static mpfr_t* lum_array_alloc(size_t count, mpfr_prec_t bits)
 {
     if (count == 0) return NULL;
     mpfr_t* a = (mpfr_t*)malloc(sizeof(mpfr_t) * count);
-    for (size_t i = 0; i < count; i++) mpfr_init2(a[i], bits);
+    if (!a) return NULL;
+    for (size_t i = 0; i < count; i++) {
+        if ((i & 0xffff) == 0 && i > 0 && tc_deadline_passed()) {
+            while (i-- > 0) mpfr_clear(a[i]);
+            free(a);
+            return NULL;
+        }
+        mpfr_init2(a[i], bits);
+    }
     return a;
 }
 
@@ -145,11 +157,22 @@ static bool lum_load_matrix(Expr* m, int rows, int cols, mpfr_prec_t bits,
     size_t total = (size_t)rows * (size_t)cols;
     mpfr_t* A_re = lum_array_alloc(total, bits);
     mpfr_t* A_im = is_complex ? lum_array_alloc(total, bits) : NULL;
+    if (!A_re || (is_complex && !A_im)) {        /* no memory, or a timeout */
+        lum_array_free(A_re, A_re ? total : 0);
+        lum_array_free(A_im, A_im ? total : 0);
+        return false;
+    }
 
     mpfr_t tmp_im;
     mpfr_init2(tmp_im, bits);
     for (int i = 0; i < rows; i++) {
         Expr* row = m->data.function.args[i];
+        if (tc_deadline_passed()) {
+            mpfr_clear(tmp_im);
+            lum_array_free(A_re, total);
+            lum_array_free(A_im, A_im ? total : 0);
+            return false;
+        }
         for (int j = 0; j < cols; j++) {
             size_t off = (size_t)i * (size_t)cols + (size_t)j;
             bool is_inexact = false;
@@ -305,7 +328,7 @@ static void lum_crout_row(void* p, int64_t lo, int64_t hi, int chunk)
     }
 }
 
-static void lum_factor_crout(mpfr_t* A, int rows, int cols, mpfr_prec_t bits,
+static bool lum_factor_crout(mpfr_t* A, int rows, int cols, mpfr_prec_t bits,
                              int* perm, bool* out_singular)
 {
     int steps = rows < cols ? rows : cols;
@@ -318,7 +341,10 @@ static void lum_factor_crout(mpfr_t* A, int rows, int cols, mpfr_prec_t bits,
     for (size_t i = 0; i < total; i++) arf_set_mpfr(arb_midref(c.F + i), A[i]);
     double limbs = (double)bits / 64.0;
     *out_singular = false;
+    bool timed_out = false;
     for (int k = 0; k < steps; k++) {
+        /* the TimeConstrained poll (see lum_factor) */
+        if (tc_deadline_passed()) { timed_out = true; break; }
         c.k = k;
         if (k > 0)
             mp_parallel_for(lum_crout_col, &c, rows - k,
@@ -350,21 +376,30 @@ static void lum_factor_crout(mpfr_t* A, int rows, int cols, mpfr_prec_t bits,
             mag_zero(arb_radref(x));
         }
     }
-    for (size_t i = 0; i < total; i++) arf_get_mpfr(A[i], arb_midref(c.F + i), MPFR_RNDN);
+    if (!timed_out)
+        for (size_t i = 0; i < total; i++) arf_get_mpfr(A[i], arb_midref(c.F + i), MPFR_RNDN);
     for (int i = 0; i < MP_PAR_MAX; i++) { arb_clear(c.tmp[i]); flint_free(c.tmp[i]); }
     _arb_vec_clear(c.F, (slong)total);
+    return !timed_out;
 }
 #endif /* USE_FLINT */
 
+/* Returns false -- the matrix half-factored, to be discarded -- when an
+ * active TimeConstrained deadline passes.  The factorisation is the one long
+ * C loop of an arbitrary-precision LinearSolve / LUDecomposition / Det with
+ * no evaluator step inside it, and most of its time is spent in worker
+ * threads (mp_parallel_for), inside a tc_async_defer region where the
+ * SIGPROF timeout may not unwind; without this poll a 10000 x 10000 factor
+ * at 60 digits ran > 12 min past a 60 s cap.  The step loop polls the
+ * deadline (non-jumping) on the main thread; callers free their arrays and
+ * then take the timeout jump with tc_check_deadline(). */
 static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int rows, int cols,
                         mpfr_prec_t bits, bool is_complex,
                         int* perm, bool* out_singular)
 {
 #ifdef USE_FLINT
-    if (!is_complex) {
-        lum_factor_crout(A_re, rows, cols, bits, perm, out_singular);
-        return true;
-    }
+    if (!is_complex)
+        return lum_factor_crout(A_re, rows, cols, bits, perm, out_singular);
 #endif
     int steps = (rows < cols) ? rows : cols;
     mpfr_t mag, best;
@@ -373,8 +408,10 @@ static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int rows, int cols,
     mpfr_t prod;
     mpfr_init2(prod, bits);
     *out_singular = false;
+    bool timed_out = false;
 
     for (int k = 0; k < steps; k++) {
+        if (tc_deadline_passed()) { timed_out = true; break; }
         /* Pivot: largest |A[i, k]| over i in [k, rows). */
         int pivot_row = k;
         lum_abs(A_re, A_im, (size_t)k * cols + k, is_complex, best);
@@ -421,7 +458,7 @@ static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int rows, int cols,
     mpfr_clear(prod);
     mpfr_clear(mag);
     mpfr_clear(best);
-    return true;
+    return !timed_out;
 }
 
 /* ------------------------------------------------------------------ *
@@ -885,6 +922,7 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
     mpfr_t* A_im = NULL;
     bool is_complex = false;
     if (!lum_load_matrix(m, rows, cols, bits, &A_re, &A_im, &is_complex)) {
+        tc_check_deadline();          /* a timeout while loading: nothing held */
         return NULL;
     }
 
@@ -912,6 +950,7 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
         lum_array_free(A_re, total);
         lum_array_free(A_im, is_complex ? total : 0);
         free(perm);
+        tc_check_deadline();          /* a timeout: everything is freed */
         return NULL;
     }
 
@@ -1037,8 +1076,10 @@ Expr* mpfr_det_dispatch(Expr* m, int n)
     mpfr_t* A_re = NULL;
     mpfr_t* A_im = NULL;
     bool is_complex = false;
-    if (!lum_load_matrix(m, n, n, bits, &A_re, &A_im, &is_complex))
+    if (!lum_load_matrix(m, n, n, bits, &A_re, &A_im, &is_complex)) {
+        tc_check_deadline();                    /* a timeout while loading */
         return NULL;                            /* symbolic leaf: caller falls back */
+    }
 
     int* perm = (int*)malloc((size_t)n * sizeof(int));
     for (int i = 0; i < n; i++) perm[i] = i + 1;
@@ -1048,6 +1089,7 @@ Expr* mpfr_det_dispatch(Expr* m, int n)
         lum_array_free(A_re, total);
         lum_array_free(A_im, is_complex ? total : 0);
         free(perm);
+        tc_check_deadline();          /* a timeout: everything is freed */
         return NULL;
     }
 
@@ -1130,6 +1172,7 @@ MpfrLU* mpfr_lu_factor(const Expr* m, int n, long bits, bool* singular)
     f->bits = (mpfr_prec_t)bits;
     if (!lum_load_matrix((Expr*)m, n, n, f->bits, &f->re, &f->im, &f->cplx)) {
         free(f);
+        tc_check_deadline();          /* a timeout while loading: nothing held */
         return NULL;
     }
     f->perm = (int*)malloc((size_t)n * sizeof(int));
@@ -1144,7 +1187,13 @@ MpfrLU* mpfr_lu_factor(const Expr* m, int n, long bits, bool* singular)
         if (mpfr_cmp(mag, maxabs) > 0) mpfr_set(maxabs, mag, MPFR_RNDN);
     }
     bool zero_pivot = false;
-    lum_factor(f->re, f->im, n, n, f->bits, f->cplx, f->perm, &zero_pivot);
+    if (!lum_factor(f->re, f->im, n, n, f->bits, f->cplx, f->perm, &zero_pivot)) {
+        mpfr_clear(maxabs);
+        mpfr_clear(mag);
+        mpfr_lu_free(f);
+        tc_check_deadline();          /* a timeout: everything is freed */
+        return NULL;
+    }
     /* A pivot at or below 64 n 2^(1 - bits) max|m| is the roundoff left by
      * eliminating a singular matrix, not a value: the same zero tolerance
      * the numeric row reduction (rref_numeric.c) applies.  It is relative to
@@ -1171,6 +1220,7 @@ MpfrLU* mpfr_lu_from_parts(const Expr* lu, const int* perm, int n, long bits)
     f->bits = (mpfr_prec_t)bits;
     if (!lum_load_matrix((Expr*)lu, n, n, f->bits, &f->re, &f->im, &f->cplx)) {
         free(f);
+        tc_check_deadline();          /* a timeout while loading: nothing held */
         return NULL;
     }
     f->perm = (int*)malloc((size_t)n * sizeof(int));
