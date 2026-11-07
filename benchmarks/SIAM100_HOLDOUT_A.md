@@ -36,5 +36,19 @@ Files: `siam100_results/holdoutA_v0.6377.md` (full per-case table),
 `siam100_results/raw_v0.6377.tar.xz` (the raw per-system JSONs of the
 baseline 166-195 and of this run, for `siam100_table.py --from`).
 
+## After the fixes (training data from here on)
+
+Mathilda re-run alone (other systems from the archived runs):
+
+| version | holdout A on target | originals (166-195) on target | Mathilda correct / inexact / wrong / none (676 cases) |
+|---|---|---|---|
+| v0.6377 (pre-fix) | 262 / 600 | 48 / 76 | -- |
+| v0.6411 | 403 / 600 | 63 / 76 | 455 / 70 / 26 / 125 |
+| v0.6417 (+ FEM) | 438 / 600 | 64 / 76 | 455 / 146 / 29 / 46 |
+
+(WL 278 / 189 / 70 / 139, scipy+mpmath 363 / 64 / 51 / 198 on the same 676.)
+These numbers are no longer out of sample; sealed holdout B measures that.
+Tables: `siam100_results/post_v0.6411.md`, `siam100_results/post_v0.6417.md`.
+
 The per-family findings (the fix queue) are in `tasks/todo.md`, section
 "SIAM 100-Digit Challenge".
