@@ -148,6 +148,43 @@ static void test_band(void) {
     chk("Clear[pm, lap2, t, x, a, b, pp, f]; Null", "Null");
 }
 
+/* ---- arbitrary precision: mixed-precision iterative refinement ------------- */
+
+/* sparse_la_mpsolve.c: a machine factor of the SparseArray, residuals in
+ * MPFR. Each answer is checked against an exact rational solve or a
+ * 75-digit truth (benchmarks/202 truth.tsv). */
+static void test_mpsolve(void) {
+    chk("pe[n_, offs_, d_] := SparseArray[Join[{Band[{1, 1}] -> d}, "
+        "Flatten[Table[{Band[{1, 1 + o}] -> 1, Band[{1 + o, 1}] -> 1}, {o, offs}]]], {n, n}]; Null", "Null");
+    /* 20000 x 20000 tridiagonal at 60 digits: was SparseArray::dense, unevaluated */
+    chk_true("x = First[LinearSolve[N[pe[20000, {1}, Prime[Range[20000]]], 60], UnitVector[20000, 1]]]; "
+             "Precision[x] >= 59 && Abs[x - 0.608978172457445740351364767768399653994707493429771615746667998835697`75] < 10^-57");
+    /* exact references: pentadiagonal, an indefinite 2^k-offset matrix, a
+     * 2-D Laplacian; MPFR, exact and SparseArray right-hand sides */
+    chk_true("a = pe[300, {1, 2}, Prime[Range[300]]]; b = Range[300]; xe = LinearSolve[a, b]; "
+             "x = LinearSolve[N[a, 50], b]; Max[Abs[x - xe]] < 10^-45 && Min[Precision /@ x] >= 49");
+    chk_true("a = pe[400, 2^Range[0, 8], Range[400]]; b = UnitVector[400, 1]; xe = LinearSolve[a, b]; "
+             "x = LinearSolve[N[a, 40], N[b, 40]]; Max[Abs[x - xe]] < 10^-34");
+    chk_true("a = pe[400, 2^Range[0, 8], Range[400]]; xe = LinearSolve[a, UnitVector[400, 7]]; "
+             "x = LinearSolve[N[a, 40], SparseArray[{7 -> 1}, 400]]; Max[Abs[x - xe]] < 10^-34");
+    chk_true("a = SparseArray[{Band[{1,1}] -> 4, Band[{1,2}] -> -1, Band[{2,1}] -> -1, "
+             "Band[{1,21}] -> -1, Band[{21,1}] -> -1}, {400, 400}]; xe = LinearSolve[a, Range[400]]; "
+             "x = LinearSolve[N[a, 100], Range[400]]; Max[Abs[x - xe]/Abs[xe]] < 10^-95");
+    /* a nonsymmetric real matrix with fractional 30-digit entries */
+    chk_true("a = SparseArray[{Band[{1,1}] -> 3, Band[{1,2}] -> 1/3, Band[{3,1}] -> -2/7}, {300, 300}]; "
+             "xe = LinearSolve[a, Range[300]]; x = LinearSolve[N[a, 30], N[Range[300], 30]]; "
+             "Max[Abs[x - xe]] < 10^-25");
+    /* declines -- the dense arbitrary-precision path answers as before:
+     * singular, too ill-conditioned for machine corrections, complex */
+    chk_true("a = N[SparseArray[{{1,1} -> 1, {2,2} -> 1, {1,2} -> 1, {2,1} -> 1, {3,3} -> 2}, {3, 3}], 30]; "
+             "Quiet[LinearSolve[a, N[{1, 1, 1}, 30]] == LinearSolve[Normal[a], N[{1, 1, 1}, 30]]]");
+    chk_true("a = SparseArray[HilbertMatrix[16]]; xe = LinearSolve[HilbertMatrix[16], Range[16]]; "
+             "x = Quiet[LinearSolve[N[a, 60], Range[16]]]; Max[Abs[x - xe]/Max[Abs[xe]]] < 10^-30");
+    chk_true("a = N[SparseArray[{Band[{1,1}] -> 4 + I, Band[{1,2}] -> 1}, {200, 200}], 30]; "
+             "x = LinearSolve[a, N[Range[200], 30]]; Max[Abs[a . x - Range[200]]] < 10^-25");
+    chk("Clear[pe, a, b, x, xe]; Null", "Null");
+}
+
 /* ---- reference semantics that differ from the dense matrix ---------------- */
 
 static void test_messages(void) {
@@ -376,6 +413,7 @@ int main(void) {
     setup();
     test_direct();
     test_band();
+    test_mpsolve();
     test_messages();
     test_methods();
     test_det_inverse();

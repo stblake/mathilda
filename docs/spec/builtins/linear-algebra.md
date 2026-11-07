@@ -2996,7 +2996,25 @@ Out[8]= {6, 4, 5}
   machine SparseArray gives `LinearSolve::sing` and stays unevaluated (even for
   a consistent b), and a **rectangular** one gives `LinearSolve::sqmat`. Exact,
   MPFR and symbolic SparseArrays behave exactly like the dense matrix
-  (particular solutions, `::nosol`). An **exact rational** SparseArray of
+  (particular solutions, `::nosol`). An **arbitrary-precision** square real
+  SparseArray (exact or MPFR entries, zero background) with a vector b is
+  solved first by **mixed-precision iterative refinement**
+  (`src/sparse/sparse_la_mpsolve.c`): the matrix rounded to machine numbers
+  is factored once by the machine sparse backend above (band / dense LU,
+  UMFPACK / CHOLMOD when linked; the Krylov solver when no direct factor
+  fits), then `r = b - A x` is formed over the nonzeros in MPFR at the
+  working precision + 64 bits, scaled to O(1), solved in machine arithmetic
+  and added back, until the correction is below `2^-(p+4) |x|`. The
+  corrections must contract geometrically (each at most half the last), which
+  certifies the result: the error left is at most the last correction. Each
+  pass gains about `-log10(cond(A) eps)` digits for one machine solve and one
+  sparse MPFR product, so 60 digits of a 20000 x 20000 tridiagonal system
+  take 0.08 s (it was `SparseArray::dense`, unevaluated) and of a 10000 x
+  10000 pentadiagonal one 0.05 s (an hours-long dense MPFR LU); the answer
+  carries the working precision, as the dense MPFR LU's does. A complex
+  matrix, a matrix right-hand side, a matrix singular in machine arithmetic,
+  or corrections that do not contract (`cond(A) eps` near 1) go to the dense
+  path as before. An **exact rational** SparseArray of
   order >= 64 that is sparse (density < 10%), or that exceeds the densify cap,
   is solved by an exact sparse LU over FLINT `fmpq` with Markowitz-style
   pivoting (`src/sparse/sparse_la_exact.c`, v0.6191): fill-free systems cost

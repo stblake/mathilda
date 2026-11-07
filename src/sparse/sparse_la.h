@@ -164,6 +164,14 @@ Expr* spla_exact_solve(const Expr* call, const Expr* A, const Expr* B);
 Expr* spla_exact_det(const Expr* A);
 Expr* spla_exact_rank(const Expr* A);
 
+/* LinearSolve[A, b] for a square real SparseArray A (zero background) and a
+ * vector b of exact / arbitrary-precision reals, at `bits` (> 53) of working
+ * precision: mixed-precision iterative refinement over a machine factor of A
+ * (sparse_la_mpsolve.c), certified by contracting corrections. NULL to
+ * decline (complex, a matrix b, no machine factor, no contraction), and the
+ * dense arbitrary-precision path answers. */
+Expr* spla_mp_solve(const Expr* A, const Expr* B, long bits);
+
 /* Solve A x = B for a machine SparseArray A with the LinearSolve options in
  * `opts` (Method -> ...). Used by the LinearSolve native handler and by
  * LinearSolve[m, b, Method -> "Krylov" | ...] on a dense matrix. Returns the

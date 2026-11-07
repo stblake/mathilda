@@ -86,11 +86,13 @@ static bool view_to_complex(SpMat* A) {
  * machine right-hand side is solved, and fails, like a machine matrix. */
 typedef enum { NC_EXACT = 0, NC_MACHINE, NC_BIGNUM } NumClass;
 
-static NumClass num_class(const Expr* e) {
-    if (e->type == EXPR_NDARRAY) return NC_MACHINE;
+/* The least precision (bits) of an inexact number in the operand: 0 when it
+ * is exact, 53 for machine numbers. */
+static long num_bits(const Expr* e) {
+    if (e->type == EXPR_NDARRAY) return 53;
     if (e->type == EXPR_SPARSE) {
         const SparseArray* sa = sp_of(e);
-        if (sa->kind == SPV_F64 || sa->kind == SPV_C128) return NC_MACHINE;
+        if (sa->kind == SPV_F64 || sa->kind == SPV_C128) return 53;
         CommonInexactInfo bi = common_scan_inexact(sa->bg);
         long bits = bi.has_inexact ? bi.min_bits : 0;
         if (sa->kind == SPV_EXPR) {
@@ -100,11 +102,15 @@ static NumClass num_class(const Expr* e) {
                 if (vi.has_inexact && (bits == 0 || vi.min_bits < bits)) bits = vi.min_bits;
             }
         }
-        return bits == 0 ? NC_EXACT : bits <= 53 ? NC_MACHINE : NC_BIGNUM;
+        return bits;
     }
     CommonInexactInfo inf = common_scan_inexact(e);
-    if (!inf.has_inexact) return NC_EXACT;
-    return inf.min_bits <= 53 ? NC_MACHINE : NC_BIGNUM;
+    return inf.has_inexact ? inf.min_bits : 0;
+}
+
+static NumClass num_class(const Expr* e) {
+    long bits = num_bits(e);
+    return bits == 0 ? NC_EXACT : bits <= 53 ? NC_MACHINE : NC_BIGNUM;
 }
 
 /* A machine view of the coefficient operand: a SparseArray (zero background;
@@ -553,9 +559,18 @@ static Expr* native_linearsolve(const Expr* call) {
     }
     for (size_t i = 2; i < n; i++)
         if (!is_rule(a[i])) return NULL;
-    if (n == 2 && num_class(a[0]) == NC_EXACT && num_class(a[1]) == NC_EXACT) {
-        Expr* r = spla_exact_solve(call, a[0], a[1]);
-        if (r) return r;
+    if (n == 2) {
+        long ba = num_bits(a[0]), bb = num_bits(a[1]);
+        if (ba == 0 && bb == 0) {
+            Expr* r = spla_exact_solve(call, a[0], a[1]);
+            if (r) return r;
+        } else if (!(ba > 0 && ba <= 53) && !(bb > 0 && bb <= 53)) {
+            /* arbitrary precision: mixed-precision iterative refinement on
+             * the sparse matrix (sparse_la_mpsolve.c), else the dense path */
+            long bits = ba == 0 ? bb : bb == 0 ? ba : (ba < bb ? ba : bb);
+            Expr* r = spla_mp_solve(a[0], a[1], bits);
+            if (r) return r;
+        }
     }
     return spla_linearsolve_call(call, a[0], a[1], (const Expr* const*)a + 2, n - 2);
 }
