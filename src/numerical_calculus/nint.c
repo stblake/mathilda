@@ -47,6 +47,7 @@
 #include "attr.h"
 #include "core.h"     /* leaf_count_internal */
 #include "common.h"   /* common_scan_inexact */
+#include "rationalize.h"  /* internal_contains_inexact: exact range endpoints */
 #include "message.h"  /* mth_msg_suppress_push, mth_msg_fired_count */
 #include "mtime.h"    /* mth_mono_seconds: the oscillatory-endpoint probe budget */
 #include "eval.h"
@@ -150,6 +151,16 @@ static bool g_ni_escalated = false;
  * result to what that error leaves (precw).  Saved and restored like
  * g_ni_sample_bits. */
 static double g_ni_guard_noise_l2 = -INFINITY;   /* log2 of the sum */
+/* Fewest bits an EXACT range endpoint numericalised to inside a
+ * WorkingPrecision pass (0: every endpoint reached the working precision).
+ * Set by ni_endpoint_mpfr for an exact spec node whose numerical value at the
+ * working precision came back with fewer bits (a head with only a machine
+ * implementation); builtin_nintegrate then rounds the result to those bits and
+ * reports it (precw), rather than labelling an integral over a machine
+ * endpoint with the working precision.  An endpoint given inexact (1.1) is
+ * taken as its binary value, as N takes it, and is not counted.  Saved and
+ * restored like g_ni_sample_bits. */
+static long g_ni_endpoint_bits = 0;
 
 /* True when the numericalised sample `e` is a number outside the double range
  * (an MPFR value beyond 2^1024) or carries Overflow[] anywhere. */
@@ -855,7 +866,8 @@ static bool ni_sample_mpfr(void* vctx, const mpfr_t x, mpfr_t out_re, mpfr_t out
  * 2^noise_l2 leaves, when that is below target_bits: a real or complex MPFR
  * number is rounded to those bits and NIntegrate::precw reports it.  Any
  * other result is returned as it is. */
-static Expr* ni_cap_precision(Expr* out, double noise_l2, long target_bits) {
+static Expr* ni_cap_precision(Expr* out, double noise_l2, long target_bits,
+                               bool endpoint) {
     Expr *re = NULL, *im = NULL;
     bool cpx = is_complex(out, &re, &im);
     if (!cpx) re = out;
@@ -866,9 +878,14 @@ static Expr* ni_cap_precision(Expr* out, double noise_l2, long target_bits) {
     double acc = mag - noise_l2;
     if (!(acc < (double)target_bits)) return out;
     long nb = acc > 2.0 ? (long)floor(acc) : 2;
-    ni_warn("precw", "an endpoint cancellation in the integrand could not be resolved "
-            "past the precision of its inexact constants; the result has about "
-            "%.3g digits.", numeric_bits_to_digits(nb));
+    if (endpoint)
+        ni_warn("precw", "an endpoint of the integration range could not be "
+                "evaluated to the WorkingPrecision; the result has about %.3g "
+                "digits.", numeric_bits_to_digits(nb));
+    else
+        ni_warn("precw", "an endpoint cancellation in the integrand could not be "
+                "resolved past the precision of its inexact constants; the result "
+                "has about %.3g digits.", numeric_bits_to_digits(nb));
     mpfr_t r, i;
     mpfr_init2(r, (mpfr_prec_t)nb);
     mpfr_set(r, re->data.mpfr, MPFR_RNDN);
@@ -2093,7 +2110,18 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
  * spec node that rounds to d, numericalised at o->bits, else d itself (an
  * endpoint the driver made, such as an Exclusions split point).  Taking 2 Pi
  * as its double cut ~2.4e-16 off the period, a 5e-15 relative error in a
- * periodic integral at any WorkingPrecision. */
+ * periodic integral at any WorkingPrecision.
+ *
+ * A node matches d when EITHER of its doubles does: the correctly rounded one
+ * (mpfr_get_d of the working-precision value; the convention of the exact
+ * interior singular points, ni_interior_singular_points) or its machine
+ * numericalisation, which is how the driver made d from the spec in the first
+ * place (ni_num_endpoint).  The two differ whenever the machine evaluation of
+ * a nested exact constant is not correctly rounded -- Log[2 + Sqrt[3]] rounds
+ * 2 + Sqrt[3] before the Log and lands one ulp off -- and matching on the
+ * correctly rounded double alone then fell through to d itself: the range was
+ * integrated over a machine endpoint (16 digits) while the result carried the
+ * working precision. */
 static void ni_endpoint_mpfr(const NiOpts* o, double d, mpfr_t out) {
     mpfr_set_d(out, d, MPFR_RNDN);
     if (!o->spec_nodes) return;
@@ -2106,10 +2134,30 @@ static void ni_endpoint_mpfr(const NiOpts* o, double d, mpfr_t out) {
         bool inexact, hit = false;
         if (num && get_approx_mpfr(num, re, im, &inexact) && mpfr_zero_p(im)
             && mpfr_number_p(re)) {
-            if (mpfr_get_d(re, MPFR_RNDN) == d) {
+            double cr = mpfr_get_d(re, MPFR_RNDN), md = NAN;
+            Expr* mn = numericalize(ev, numeric_machine_spec());
+            if (mn && !ni_to_double_real(mn, &md)) md = NAN;
+            expr_free(mn);
+            if (cr == d || md == d) {
                 mpfr_set(out, re, MPFR_RNDN); hit = true;
-            } else if (mpfr_get_d(re, MPFR_RNDN) == -d) {   /* reflected range */
+            } else if (cr == -d || md == -d) {              /* reflected range */
                 mpfr_neg(out, re, MPFR_RNDN); hit = true;
+            }
+            /* An exact endpoint that came back short of the working precision
+             * must not let the result claim it.  Short either visibly (fewer
+             * bits) or as a machine double padded to the working precision
+             * (a head whose N rule only has a machine value): an exact
+             * irrational never has a working-precision value that is exactly
+             * a double, so a non-rational exact node whose value fits in 53
+             * bits was rounded to one on the way. */
+            if (hit && !internal_contains_inexact(ev)) {
+                long nb = numeric_min_inexact_bits(num);
+                if (!is_rational_like(ev) && !mpfr_zero_p(re)
+                    && mpfr_min_prec(re) <= 53)
+                    nb = 53;
+                if (nb > 0 && nb < o->target_bits
+                    && (g_ni_endpoint_bits == 0 || nb < g_ni_endpoint_bits))
+                    g_ni_endpoint_bits = nb;
             }
         }
         expr_free(num);
@@ -5415,7 +5463,9 @@ Expr* builtin_nintegrate(Expr* res) {
      * by an MPFR pass at machine-equivalent precision (see g_ni_beyond). */
     bool saved_beyond = g_ni_beyond, saved_escalated = g_ni_escalated;
     long saved_sbits = g_ni_sample_bits;
+    long saved_ebits = g_ni_endpoint_bits;
     double saved_gnoise = g_ni_guard_noise_l2;
+    g_ni_endpoint_bits = 0;
     g_ni_beyond = false;
     g_ni_escalated = false;
     g_ni_sample_bits = 0;
@@ -5452,11 +5502,25 @@ Expr* builtin_nintegrate(Expr* res) {
      * g_ni_guard_noise_l2): the result carries only the digits that error
      * leaves, never the WorkingPrecision it did not reach. */
     if (out && o.prec_mpfr && isfinite(g_ni_guard_noise_l2))
-        out = ni_cap_precision(out, g_ni_guard_noise_l2, o.target_bits);
+        out = ni_cap_precision(out, g_ni_guard_noise_l2, o.target_bits, false);
+    /* An exact endpoint that numericalised short of the working precision:
+     * the result carries the endpoint's relative precision at most. */
+    if (out && o.prec_mpfr && g_ni_endpoint_bits > 0
+        && g_ni_endpoint_bits < o.target_bits) {
+        Expr *cre = NULL, *cim = NULL;
+        Expr* mag = is_complex(out, &cre, &cim) ? cre : out;
+        if (mag->type == EXPR_MPFR && mpfr_number_p(mag->data.mpfr)
+            && !mpfr_zero_p(mag->data.mpfr))
+            out = ni_cap_precision(out,
+                                   de_mpfr_log2_abs(mag->data.mpfr)
+                                       - (double)g_ni_endpoint_bits,
+                                   o.target_bits, true);
+    }
 #endif
     g_ni_beyond = saved_beyond;
     g_ni_escalated = saved_escalated;
     g_ni_sample_bits = saved_sbits;
+    g_ni_endpoint_bits = saved_ebits;
     g_ni_guard_noise_l2 = saved_gnoise;
     return out;
 }

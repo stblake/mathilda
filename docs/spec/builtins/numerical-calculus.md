@@ -1010,6 +1010,17 @@ that starts at a deep zero and climbs (`(1 + Cos[x])^2000` on `[0, 2 Pi]`, zero 
 order 4000 at the centre) is not cut before its own bulk.  Endpoints are taken
 at the working precision from the iterator as written (`2 Pi`, not its double),
 and a `{x, x0, x1, …}` list of real nodes runs each segment on the MPFR path.
+This holds for a nested exact endpoint too (`Log[2 + Sqrt[3]]`, `Sqrt[2 +
+Sqrt[2]]`, `Pi/Sqrt[3]`, `E^(1/3)`), for intermediate breakpoints, reflected
+ranges and the finite end of an infinite range: the node is recognised by
+either its correctly rounded double or its machine value, which for a nested
+constant can differ by an ulp (the machine `Log[2 + Sqrt[3]]` rounds `2 +
+Sqrt[3]` first) -- missing it used to integrate over the machine endpoint and
+label the 16-digit result with the working precision.  An exact endpoint that
+has no value at the working precision (an `N` rule giving only a machine
+number) rounds the result to the endpoint's precision, with
+`NIntegrate::precw`; an inexact endpoint (`1.1`) is taken as its binary value,
+as `N` takes it, without a message.
 
 The tanh-sinh levels are nested (each halving evaluates only the new odd
 nodes) and a level is accepted on the quadratic-convergence estimate

@@ -1069,6 +1069,72 @@ static void test_guard_probe_outside_domain(void) {
                "10^-48");
 }
 
+/* Nested exact endpoints at WorkingPrecision.  The machine evaluation of
+ * Log[2 + Sqrt[3]] is not the correctly rounded double of its value (2 +
+ * Sqrt[3] is rounded before the Log), so the endpoint lookup that recovers
+ * the working-precision value of a range endpoint from its double missed it,
+ * and the range was integrated over a machine endpoint: 16 digits labelled 60.
+ * Truths: mpmath at 75 digits. */
+static void test_nested_exact_endpoints_wp(void) {
+    ASSERT_REL("With[{L = Log[2 + Sqrt[3]]}, NIntegrate[1, {x, -L, L}, WorkingPrecision -> 60]]",
+               "2.6339157938496334172500926946159368880539639429350329595369445138",
+               "10^-56");
+    ASSERT_REL("With[{L = Log[2 + Sqrt[3]]}, NIntegrate[Log[4 - Exp[x]] + x, {x, -L, L}, "
+               "WorkingPrecision -> 60, PrecisionGoal -> 50]]",
+               "2.3301701728850429909428440792847316044229378153969491194146380214",
+               "10^-49");
+    static const char* const ends[][3] = {
+        { "Log[2 + Sqrt[3]]",
+          "0.92135342654514780173556525438019796436893051038251230947655283228",
+          "0.83080378398920202654098973214708350262868510109094301827506405817" },
+        { "Sqrt[2 + Sqrt[2]]",
+          "1.0747374656441173711015082201414248872833265455331395831139171884",
+          "0.87827585368019038267881716391579222280612426402738659371107121604" },
+        { "Pi/Sqrt[3]",
+          "1.0669334232178860175140896465385058803133071111753523567879800224",
+          "0.87708583378558952082206773773527168208344280438557651945628917106" },
+        { "ArcCosh[2]",
+          "0.92135342654514780173556525438019796436893051038251230947655283228",
+          "0.83080378398920202654098973214708350262868510109094301827506405817" },
+        { "E^(1/3)",
+          "0.94906147063328688027389299713641144418995169333600690325364279631",
+          "0.8433188790813059725333647064625167354293439722331574439061217275" },
+    };
+    char in[512];
+    for (size_t i = 0; i < sizeof ends / sizeof ends[0]; i++) {
+        snprintf(in, sizeof in, "NIntegrate[1/(1 + x^2), {x, 0, %s}, WorkingPrecision -> 60]",
+                 ends[i][0]);
+        ASSERT_REL(in, ends[i][1], "10^-55");
+        snprintf(in, sizeof in, "NIntegrate[Exp[-x^2], {x, 0, %s}, WorkingPrecision -> 60]",
+                 ends[i][0]);
+        ASSERT_REL(in, ends[i][2], "10^-55");
+    }
+    /* an intermediate breakpoint, a reflected range and an infinite range */
+    ASSERT_REL("NIntegrate[1/(1 + x^2), {x, 0, Sqrt[2 + Sqrt[2]], Pi/Sqrt[3]}, "
+               "WorkingPrecision -> 60]",
+               "1.0669334232178860175140896465385058803133071111753523567879800224", "10^-55");
+    ASSERT_REL("NIntegrate[1/(1 + x^2), {x, Log[2 + Sqrt[3]], 0}, WorkingPrecision -> 60]",
+               "-0.92135342654514780173556525438019796436893051038251230947655283228",
+               "10^-55");
+    ASSERT_REL("NIntegrate[1/(1 + x^2), {x, Sqrt[2 + Sqrt[2]], Infinity}, WorkingPrecision -> 60]",
+               "0.49605886115077924812981347149832655481525815415441332737355510772", "10^-55");
+    ASSERT_REL("NIntegrate[1, {x, 0, Log[2 + Sqrt[3]]}, {y, 0, Pi/Sqrt[3]}, WorkingPrecision -> 60]",
+               "N[Log[2 + Sqrt[3]] Pi/Sqrt[3], 80]", "10^-55");
+    /* the machine path is unchanged */
+    ASSERT_EQ_STR("With[{L = Log[2 + Sqrt[3]]}, r = NIntegrate[Log[4 - Exp[x]] + x, {x, -L, L}]; "
+                  "{MachineNumberQ[r], Abs[r - 2.330170172885043] < 10^-13}]",
+                  "{True, True}");
+    ASSERT_EQ_STR("MachineNumberQ[NIntegrate[1/(1 + x^2), {x, 0, Log[2 + Sqrt[3]]}]]", "True");
+    /* an exact endpoint with only a machine value: the result claims 16
+     * digits, never the working precision (precw); an inexact endpoint is
+     * taken as its binary value, silently, as N takes it */
+    ASSERT_EQ_STR("Module[{g}, N[g[x_], ___] := N[Sqrt[x]]; SetAttributes[g, NumericFunction]; "
+                  "r = Quiet[NIntegrate[1, {x, 0, g[2]}, WorkingPrecision -> 60]]; "
+                  "Precision[r] < 17 && Abs[r - Sqrt[2]] < 10^-15]",
+                  "True");
+    ASSERT_EQ_STR("Precision[NIntegrate[1, {x, 0, 1.1}, WorkingPrecision -> 60]] == 60", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1121,6 +1187,7 @@ int main(void) {
     TEST(test_parametric_oscillatory_endpoint);
     TEST(test_machine_last_digits);
     TEST(test_guard_probe_outside_domain);
+    TEST(test_nested_exact_endpoints_wp);
 
     printf("All nint_tests passed.\n");
     return 0;
