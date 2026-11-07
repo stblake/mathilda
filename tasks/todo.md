@@ -34,7 +34,10 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - note: D15 blow-up digits = default PrecisionGoal semantics (not a defect; reference worse); hd15.7 MOL PDE at WP60 returns nothing (open)
   - [ ] wave 1 agents: NDSolve events/NDSolveValue/unknowns/blow-up; NIntegrate WP60 wrong + 2-D digits + MPFR speed; FindRoot systno/non-real + optimiser MPFR stall
 - [ ] Post-fix Mathilda run of 166-225 at v0.6411 (scratchpad/s100post, other systems from archived JSONs) -> next fix queue
-- [ ] Holdout B: WL verification of .m halves (agent; C6-C10 author still writing), then baselines of WL/Py/Maxima/FriCAS on a quiet machine
+- [x] Holdout B 25/30 families committed on siam100-holdout-b (3f7fa420), .m halves WL-verified (8 coding fixes; no truth disputed). Note: WL C4 (229) column untrustworthy (NMinimize under TimeConstrained returns box corners after earlier calls); run wolframscript output through a pipe, not `> file` (corrupts)
+- [ ] Holdout B C6-C10 (231-235): author still writing; then WL check
+- [ ] Holdout B baselines of WL/Py/Maxima/FriCAS (quiet machine), then Mathilda ONCE at the final version
+- [ ] Benchmark fairness: C6 (171, 201) and hd15 (220) .py halves request epsrel/rtol 1e-12 while .m uses default goals -- align the formulations (same request in every system) before the final run
 - [ ] Phase 6: final run, holdout B once, verdict
 
 Findings so far:
