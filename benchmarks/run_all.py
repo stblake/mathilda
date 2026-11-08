@@ -548,7 +548,12 @@ def run_one(system, exp, timeout, tick=None):
     elif system == "wolfram":
         if not exp["m"] or not WOLFRAM:
             return None
-        cmd = [WOLFRAM, "-file", exp["m"]]
+        # wolframscript loses lines when its stdout is a regular file (16 of
+        # 20 CHECK lines of experiment 234 vanished with a clean exit), but
+        # not when it is a pipe. So its stdout goes through `cat`, which
+        # writes the file. It runs in its own process group so a timeout
+        # kill reaches the kernel, not just the shell.
+        cmd = ["/bin/sh", "-c", '"$0" "$@" | cat', WOLFRAM, "-file", exp["m"]]
     elif system == "pari":
         if not exp.get("gp") or not GP:
             return None
@@ -595,7 +600,8 @@ def run_one(system, exp, timeout, tick=None):
     fe = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
     try:
         proc = subprocess.Popen(cmd, cwd=exp["dir"], stdout=fo, stderr=fe,
-                                stdin=stdin_src, text=True)
+                                stdin=stdin_src, text=True,
+                                start_new_session=(system == "wolfram"))
     except OSError as e:
         fo.close(); fe.close()
         return {"error": str(e), "bench": {}, "check": {}, "require": {},
@@ -607,7 +613,14 @@ def run_one(system, exp, timeout, tick=None):
         if rc is not None:
             break
         if _time.time() - t0 > timeout:
-            proc.kill()
+            if system == "wolfram":
+                import signal
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except OSError:
+                    proc.kill()
+            else:
+                proc.kill()
             proc.wait()
             rc, timed_out = None, True
             break
