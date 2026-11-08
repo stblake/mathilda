@@ -1065,6 +1065,26 @@ Produces the list of intermediate fold values.
   `FoldList[2. + #2/#1 &, 1., RandomChoice[{-1, 1}, 10^6]]` takes 56 ms (was 1.3 s),
   bit-identical to the interpreted result. A body that can hand an element back
   unchanged (`#2 &`) keeps the interpreter, so exact elements stay exact.
+- **Rows, vector states and exact folds** (v0.6464). The compiled loop also
+  covers four more shapes. The result is always bit-identical to the
+  interpreter's; any other shape is left to the interpreter.
+  - **Elements that are rows** of k ≤ 7 machine numbers, read through constant
+    parts `#2[[j]]` (a packed rank-2 buffer or the boxed equivalent).
+    Example: `FoldList[#2[[1]] + #2[[2]]/#1 &, 1., pairs]`.
+  - **Exact rows with a `Real` accumulator.** A body every value of which
+    carries the inexact accumulator, by contagion through `Plus`/`Times`, a
+    non-zero literal power, or an elementary function, runs in doubles. The D10
+    recurrence over 10⁶ pairs takes 34 ms (was 1.33 s).
+  - **A vector accumulator**: a seed `{x1, ..., xA}` and a body returning
+    `{c1, ..., cA}` in `#1[[i]]` and the element. In doubles there is one
+    compiled program per component, all reading the old state. The history
+    comes back as a packed `(n+1) × A` array.
+  - **Exact integers**: an integer seed (scalar or vector), integer elements,
+    and a body built from `Plus`, `Times`, integer constants and positive
+    integer powers. This runs in GMP and is exact, so it equals the
+    interpreter's value. `Fold[{#1[[2]], #2[[1]] #1[[2]] + #2[[2]] #1[[1]]} &,
+    {1, 1}, pairs]` over 10⁴ pairs, reaching 4,739 digits, takes 3.1 ms (was
+    33 ms).
 
 ```mathematica
 In[1]:= FoldList[f, x, {a, b, c, d}]

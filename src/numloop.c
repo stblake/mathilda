@@ -13,12 +13,14 @@
 #include "numeric.h"
 #include "arithmetic.h"
 #include "pack.h"
+#include "core.h"   /* tc_deadline_passed */
 #include "ndarray.h"   /* is_packed_list — Map over a packed List */
 #include "checked_int.h"  /* ci_*_i64: overflow-checked int64 for exact loops */
 #include "mth_machine_pow.h"  /* mth_pow_machine: the one machine Power */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <gmp.h>
 
 /* Master enable switch. Defaults on; the env var MATHILDA_NO_NUMLOOP (read
  * once) or numloop_set_enabled() force every entry point to fall through to
@@ -1744,6 +1746,204 @@ Expr* numloop_while(const Expr* test, const Expr* body) {
     return expr_new_symbol(SYM_Null);
 }
 
+
+/* ------------------------------------------------------------------------
+ *  Fold[f, x0, rows] with rows of k machine numbers: #2[[j]] -> slot 1 + j
+ * ----------------------------------------------------------------------
+ * A recurrence driven by a sequence of k-tuples -- FoldList[#2[[1]] +
+ * #2[[2]]/#1 &, 1., RandomChoice[w -> {{a, b}, ...}, n]] -- reads the element
+ * only through constant parts.  Rewriting each #2[[j]] to its own slot turns
+ * the body into an ordinary (k+1)-ary scalar function, which compile_function
+ * already lowers; the element rows are then k consecutive registers.  Any
+ * other use of #2 (the whole row, a computed index, a nested Function whose
+ * slots are its own) declines, and the interpreter runs the call. */
+
+#define FOLD_ROW_MAX 7          /* compile_function: arity <= 8 = acc + 7 */
+
+static bool is_slot_n(const Expr* e, int64_t n) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Slot &&
+           e->data.function.arg_count == 1 &&
+           e->data.function.args[0]->type == EXPR_INTEGER &&
+           e->data.function.args[0]->data.integer == n;
+}
+
+static bool is_named(const Expr* e, const char* name) {
+    return name && e && e->type == EXPR_SYMBOL && e->data.symbol.name == name;
+}
+
+static Expr* mk_slot(int64_t n) {
+    Expr* a[1] = { expr_new_integer(n) };
+    return expr_new_function(expr_new_symbol(SYM_Slot), a, 1);
+}
+
+/* The fold body in slot form for an accumulator of width A and elements of
+ * width E (0 = a scalar).  The accumulator occupies slots 1..Aw (Aw = max(A,1)),
+ * the element slots Aw+1..Aw+Ew:
+ *   acc        -> Slot[1]          (A = 0)        acc[[i]]  -> Slot[i]       (A > 0)
+ *   elem       -> Slot[Aw + 1]     (E = 0)        elem[[j]] -> Slot[Aw + j]  (E > 0)
+ * acc / elem are Slot[1] / Slot[2], or the symbols acc_name / el_name of a
+ * Function[{a, b}, body].  NULL when either is used any other way (a whole
+ * vector, a computed index, a nested Function whose slots are its own). */
+static Expr* fold_rewrite(const Expr* e, const char* acc_name, const char* el_name,
+                          int64_t A, int64_t E) {
+    bool slots = (acc_name == NULL);
+    int64_t Aw = A ? A : 1;
+    if (e->type != EXPR_FUNCTION) {
+        if (!slots && is_named(e, acc_name)) return A ? NULL : mk_slot(1);
+        if (!slots && is_named(e, el_name))  return E ? NULL : mk_slot(Aw + 1);
+        return expr_copy((Expr*)e);
+    }
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Function)
+        return NULL;                                   /* inner slots: decline */
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Slot) {
+        if (!slots) return NULL;
+        if (is_slot_n(e, 1)) return A ? NULL : mk_slot(1);
+        if (is_slot_n(e, 2)) return E ? NULL : mk_slot(Aw + 1);
+        return NULL;                                   /* #0, ##, #3 ... */
+    }
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Part &&
+        e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* j = e->data.function.args[1];
+        bool is_acc = slots ? is_slot_n(b, 1) : is_named(b, acc_name);
+        bool is_el  = slots ? is_slot_n(b, 2) : is_named(b, el_name);
+        int64_t w = is_acc ? A : is_el ? E : 0;
+        if (w > 0) {
+            if (j->type != EXPR_INTEGER) return NULL;
+            int64_t jj = j->data.integer;
+            if (jj < 0) jj += w + 1;
+            if (jj < 1 || jj > w) return NULL;
+            return mk_slot(is_acc ? jj : Aw + jj);
+        }
+    }
+    Expr* nh = fold_rewrite(h, acc_name, el_name, A, E);
+    if (!nh) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** na = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        na[i] = fold_rewrite(e->data.function.args[i], acc_name, el_name, A, E);
+        if (!na[i]) {
+            for (size_t q = 0; q < i; q++) expr_free(na[q]);
+            free(na); expr_free(nh);
+            return NULL;
+        }
+    }
+    Expr* out = expr_new_function(nh, na, n);
+    free(na);
+    return out;
+}
+
+/* The rewritten body of the fold function f (slot or two-name form), or NULL. */
+static Expr* fold_rewrite_body(const Expr* f, int64_t A, int64_t E) {
+    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL ||
+        f->data.function.head->data.symbol.name != SYM_Function)
+        return NULL;
+    size_t fargc = f->data.function.arg_count;
+    const Expr* body = NULL;
+    const char* acc = NULL; const char* el = NULL;
+    if (fargc == 1) body = f->data.function.args[0];
+    else if (fargc == 2 && f->data.function.args[0]->type == EXPR_FUNCTION &&
+             f->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+             f->data.function.args[0]->data.function.head->data.symbol.name == SYM_List &&
+             f->data.function.args[0]->data.function.arg_count == 2 &&
+             f->data.function.args[0]->data.function.args[0]->type == EXPR_SYMBOL &&
+             f->data.function.args[0]->data.function.args[1]->type == EXPR_SYMBOL) {
+        acc = f->data.function.args[0]->data.function.args[0]->data.symbol.name;
+        el  = f->data.function.args[0]->data.function.args[1]->data.symbol.name;
+        if (acc == el) return NULL;
+        body = f->data.function.args[1];
+    } else return NULL;
+    return fold_rewrite(body, acc, el, A, E);
+}
+
+static Expr* mk_function1(Expr* body) {
+    Expr* a[1] = { body };
+    return expr_new_function(expr_new_symbol(SYM_Function), a, 1);
+}
+
+/* f as a (k+1)-slot Function (scalar accumulator, rows of k), or NULL. */
+static Expr* fold_row_function(const Expr* f, int64_t k) {
+    Expr* nb = fold_rewrite_body(f, 0, k);
+    return nb ? mk_function1(nb) : NULL;
+}
+
+/* True when every value of the slot-form body e is inexact, given that Slot[1]
+ * (the fold accumulator) is: a Real literal or Slot[1] is; Plus / Times with an
+ * inexact argument is (contagion; 0 * 1.5 is the Real 0.); Power with an
+ * inexact base and a non-zero literal exponent is (x^0 is the exact 1); a
+ * numeric unary head of an inexact argument is.  Sufficient, not necessary. */
+static bool slot_in(const Expr* e, int64_t lo, int64_t hi) {
+    if (!(e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+          e->data.function.head->data.symbol.name == SYM_Slot &&
+          e->data.function.arg_count == 1 &&
+          e->data.function.args[0]->type == EXPR_INTEGER)) return false;
+    int64_t i = e->data.function.args[0]->data.integer;
+    return i >= lo && i <= hi;
+}
+
+/* As below, with the accumulator in slots 1..Aw (all inexact). */
+static bool fold_body_acc_inexact_w(const Expr* e, int64_t Aw) {
+    if (e->type == EXPR_REAL) return true;
+    if (slot_in(e, 1, Aw)) return true;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Plus || h == SYM_Times) {
+        for (size_t i = 0; i < n; i++)
+            if (fold_body_acc_inexact_w(e->data.function.args[i], Aw)) return true;
+        return false;
+    }
+    if (h == SYM_Power && n == 2) {
+        const Expr* x = e->data.function.args[1];
+        bool lit_nonzero = (x->type == EXPR_INTEGER && x->data.integer != 0) ||
+                           (x->type == EXPR_REAL) ||
+                           (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+                            x->data.function.head->data.symbol.name == SYM_Rational);
+        return lit_nonzero && fold_body_acc_inexact_w(e->data.function.args[0], Aw);
+    }
+    if (n == 1 && unary_op_for(h) != (NumOp)255)
+        return fold_body_acc_inexact_w(e->data.function.args[0], Aw);
+    return false;
+}
+
+static bool fold_body_acc_inexact(const Expr* e) {
+    return fold_body_acc_inexact_w(e, 1);
+}
+
+/* The slot-form body of f (Function[body] or Function[Null, body, ...]). */
+static const Expr* fold_slot_body(const Expr* f) {
+    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL ||
+        f->data.function.head->data.symbol.name != SYM_Function) return NULL;
+    if (f->data.function.arg_count == 1) return f->data.function.args[0];
+    if (f->data.function.arg_count >= 2 && f->data.function.args[0]->type == EXPR_SYMBOL &&
+        f->data.function.args[0]->data.symbol.name == SYM_Null)
+        return f->data.function.args[1];
+    return NULL;
+}
+
+/* The row width k of a fold argument whose elements are equal-length lists of
+ * machine numbers (a rank-2 real/int buffer, or the boxed equivalent); 0 when
+ * it is not one, or k is out of range. */
+static int64_t fold_row_width(const Expr* list) {
+    if (is_ndarray(list)) {
+        if (list->data.ndarray.rank != 2 || ndt_is_complex(list->data.ndarray.dtype))
+            return 0;
+        int64_t k = list->data.ndarray.dims[1];
+        return (k >= 1 && k <= FOLD_ROW_MAX) ? k : 0;
+    }
+    if (list->type != EXPR_FUNCTION || list->data.function.arg_count == 0) return 0;
+    const Expr* r0 = list->data.function.args[0];
+    if (r0->type != EXPR_FUNCTION || r0->data.function.head->type != EXPR_SYMBOL ||
+        r0->data.function.head->data.symbol.name != SYM_List)
+        return 0;
+    int64_t k = (int64_t)r0->data.function.arg_count;
+    return (k >= 1 && k <= FOLD_ROW_MAX) ? k : 0;
+}
+
 /* ------------------------------------------------------------------------
  *  Fold[f, x0, list]
  * ---------------------------------------------------------------------- */
@@ -1758,24 +1958,42 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
      * contiguous double array; read it. */
     bool packed = is_ndarray(list);
     if (!packed && list->type != EXPR_FUNCTION) return NULL;
-    if (packed && (list->data.ndarray.rank != 1 ||
-                   ndt_is_complex(list->data.ndarray.dtype))) return NULL;
+    /* k = 1: scalar elements.  k > 1: each element a row of k machine numbers
+     * that the body reads through constant parts (fold_row_function). */
+    int64_t k = 1;
+    Expr* frow = NULL;
+    if (packed && list->data.ndarray.rank == 2) {
+        k = fold_row_width(list);
+        if (!k || !(frow = fold_row_function(f, k))) return NULL;
+    } else if (!packed && (k = fold_row_width(list)) > 0) {
+        if (!(frow = fold_row_function(f, k))) return NULL;
+    } else {
+        k = 1;
+        if (packed && (list->data.ndarray.rank != 1 ||
+                       ndt_is_complex(list->data.ndarray.dtype))) return NULL;
+    }
     size_t m = packed ? (size_t)list->data.ndarray.dims[0]
                       : list->data.function.arg_count;
-    if (m == 0) return NULL;   /* Fold[f,x0,{}] = x0 (possibly exact); let interp */
+    if (m == 0) { expr_free(frow); return NULL; }   /* Fold[f,x0,{}] = x0: interp */
 
     double acc;
-    if (!to_machine_double(x0, &acc)) return NULL;
+    if (!to_machine_double(x0, &acc)) { expr_free(frow); return NULL; }
 
-    /* f is binary: Slot[1]=accumulator, Slot[2]=list element. */
+    /* f is binary: Slot[1]=accumulator, Slot[2]=list element (or, for rows,
+     * Slot[1 + j] = the element's j-th entry). */
     NumProg p;
     bool body_inexact;
-    if (!compile_function(&p, f, 2, &body_inexact)) return NULL;
+    bool compiled = compile_function(&p, frow ? frow : f, (size_t)k + 1, &body_inexact);
+    const Expr* sb = fold_slot_body(frow ? frow : f);
+    bool acc_carries = sb && fold_body_acc_inexact(sb);
+    expr_free(frow);
+    if (!compiled) return NULL;
+    size_t mk = m * (size_t)k;
 
     /* Every list element must already be a machine number; gather them and note
      * whether they are ALL inexact. An int64 buffer holds exact Integers, so it
      * fails the same inexactness test the boxed walk applies below. */
-    double* elems = malloc(m * sizeof(double));
+    double* elems = malloc(mk * sizeof(double));
     if (!elems) { prog_free(&p); return NULL; }
     bool elems_inexact = true;
     bool ok = true;
@@ -1783,17 +2001,29 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
         NDType dt = list->data.ndarray.dtype;
         elems_inexact = (dt != NDT_INT64);
         if (dt == NDT_FLOAT64)
-            memcpy(elems, list->data.ndarray.data, m * sizeof(double));
+            memcpy(elems, list->data.ndarray.data, mk * sizeof(double));
         else
-            for (size_t i = 0; i < m; i++) {
+            for (size_t i = 0; i < mk; i++) {
                 double im;
                 ndt_get(list->data.ndarray.data, i, dt, &elems[i], &im);
             }
-    } else {
+    } else if (k == 1) {
         for (size_t i = 0; i < m; i++) {
             const Expr* el = list->data.function.args[i];
             if (!to_machine_double(el, &elems[i])) { ok = false; break; }
             if (!value_is_inexact(el)) elems_inexact = false;
+        }
+    } else {
+        for (size_t i = 0; i < m && ok; i++) {
+            const Expr* row = list->data.function.args[i];
+            if (row->type != EXPR_FUNCTION || row->data.function.head->type != EXPR_SYMBOL ||
+                row->data.function.head->data.symbol.name != SYM_List ||
+                (int64_t)row->data.function.arg_count != k) { ok = false; break; }
+            for (int64_t j = 0; j < k; j++) {
+                const Expr* el = row->data.function.args[j];
+                if (!to_machine_double(el, &elems[i * (size_t)k + (size_t)j])) { ok = false; break; }
+                if (!value_is_inexact(el)) elems_inexact = false;
+            }
         }
     }
     if (!ok) { free(elems); prog_free(&p); return NULL; }
@@ -1814,7 +2044,10 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
      * carries a Real literal -- except for FoldList, which emits the seed itself
      * as out[[1]] and so needs it Real however inexact the body is. */
     bool seed_ok = value_is_inexact(x0) || (!as_list && body_inexact);
-    if (!(elems_inexact || body_inexact) || !seed_ok) {
+    /* A body every value of which carries the (inexact) accumulator is inexact
+     * whatever the elements are: FoldList[#2[[1]] + #2[[2]]/#1 &, 1., pairs]. */
+    bool carried = acc_carries && value_is_inexact(x0);
+    if (!(elems_inexact || body_inexact || carried) || !seed_ok) {
         free(elems); prog_free(&p); return NULL;
     }
 
@@ -1826,11 +2059,22 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
 
     bool bail = false;
     if (as_list) out[0] = acc;
-    for (size_t i = 0; i < m; i++) {
-        double regs[2] = { acc, elems[i] };
-        acc = numprog_run(&p, regs, stack);
-        if (!isfinite(acc)) { bail = true; break; }
-        if (as_list) out[i + 1] = acc;
+    if (k == 1) {
+        for (size_t i = 0; i < m; i++) {
+            double regs[2] = { acc, elems[i] };
+            acc = numprog_run(&p, regs, stack);
+            if (!isfinite(acc)) { bail = true; break; }
+            if (as_list) out[i + 1] = acc;
+        }
+    } else {
+        double regs[FOLD_ROW_MAX + 1];
+        for (size_t i = 0; i < m; i++) {
+            regs[0] = acc;
+            memcpy(regs + 1, elems + i * (size_t)k, (size_t)k * sizeof(double));
+            acc = numprog_run(&p, regs, stack);
+            if (!isfinite(acc)) { bail = true; break; }
+            if (as_list) out[i + 1] = acc;
+        }
     }
     free(stack);
     free(elems);
@@ -1857,12 +2101,377 @@ static Expr* numloop_fold_impl(const Expr* f, const Expr* x0, const Expr* list,
     return r;
 }
 
+
+/* ------------------------------------------------------------------------
+ *  Fold / FoldList with a VECTOR accumulator, and exact-integer folds
+ * ----------------------------------------------------------------------
+ * Fold[{#1[[2]], #2[[1]] #1[[2]] + #2[[2]] #1[[1]]} &, {1, 1}, pairs] -- a
+ * linear recurrence carried as a state vector -- ran through the interpreter
+ * at ~2 us a step (application, Part, List per step), and an exact-integer
+ * fold of ANY shape did too.  The body is a List of A components (A = 0: a
+ * scalar accumulator) over the slots fold_rewrite assigns, and runs:
+ *   - in doubles: one NumProg per component, all reading the old state, then
+ *     committed together -- under the same inexactness licence as the scalar
+ *     path (inexact elements, a Real literal in the component, or a
+ *     component every value of which carries the inexact accumulator);
+ *   - in exact integers: a GMP tree over Plus / Times / integer constants /
+ *     non-negative integer powers.  Integer ring arithmetic is exact, so the
+ *     result is the interpreter's by construction.
+ * Anything else declines to the interpreter. */
+
+#define FOLD_VEC_MAX 7
+
+typedef enum { FX_CONST, FX_SLOT, FX_ADD, FX_MUL, FX_POW } FxKind;
+typedef struct FxNode {
+    FxKind kind;
+    int slot;                 /* FX_SLOT: 0-based register */
+    unsigned long pw;         /* FX_POW: exponent */
+    struct FxNode** kid; size_t nk;
+    mpz_t val;                /* FX_CONST: the constant; otherwise the result */
+} FxNode;
+
+static void fx_free(FxNode* n) {
+    if (!n) return;
+    for (size_t i = 0; i < n->nk; i++) fx_free(n->kid[i]);
+    free(n->kid);
+    mpz_clear(n->val);
+    free(n);
+}
+
+static FxNode* fx_build(const Expr* e, int nslots) {
+    FxNode* n = calloc(1, sizeof(FxNode));
+    if (!n) return NULL;
+    mpz_init(n->val);
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        n->kind = FX_CONST; expr_to_mpz(e, n->val); return n;
+    }
+    if (slot_in(e, 1, nslots)) {
+        n->kind = FX_SLOT; n->slot = (int)e->data.function.args[0]->data.integer - 1;
+        return n;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        size_t na = e->data.function.arg_count;
+        if (h == SYM_Power && na == 2 && e->data.function.args[1]->type == EXPR_INTEGER &&
+            e->data.function.args[1]->data.integer >= 1 &&   /* 0^0 is Indeterminate */
+            e->data.function.args[1]->data.integer <= 4096) {
+            n->kind = FX_POW; n->pw = (unsigned long)e->data.function.args[1]->data.integer;
+            n->kid = malloc(sizeof(FxNode*)); n->nk = 1;
+            n->kid[0] = fx_build(e->data.function.args[0], nslots);
+            if (!n->kid[0]) { fx_free(n); return NULL; }
+            return n;
+        }
+        if ((h == SYM_Plus || h == SYM_Times) && na >= 1) {
+            n->kind = (h == SYM_Plus) ? FX_ADD : FX_MUL;
+            n->kid = calloc(na, sizeof(FxNode*)); n->nk = na;
+            for (size_t i = 0; i < na; i++)
+                if (!(n->kid[i] = fx_build(e->data.function.args[i], nslots))) {
+                    fx_free(n); return NULL;
+                }
+            return n;
+        }
+    }
+    fx_free(n);
+    return NULL;
+}
+
+/* The value of n (a pointer to its mpz: a constant's, a register's, or the
+ * node's own result). */
+static mpz_srcptr fx_eval(FxNode* n, mpz_t* regs) {
+    switch (n->kind) {
+        case FX_CONST: return n->val;
+        case FX_SLOT:  return regs[n->slot];
+        case FX_POW:   mpz_pow_ui(n->val, fx_eval(n->kid[0], regs), n->pw); return n->val;
+        case FX_ADD:
+        case FX_MUL: {
+            mpz_set(n->val, fx_eval(n->kid[0], regs));
+            for (size_t i = 1; i < n->nk; i++) {
+                mpz_srcptr v = fx_eval(n->kid[i], regs);
+                if (n->kind == FX_ADD) mpz_add(n->val, n->val, v);
+                else                   mpz_mul(n->val, n->val, v);
+            }
+            return n->val;
+        }
+    }
+    return n->val;
+}
+
+static Expr* fx_mpz_expr(mpz_srcptr z) {
+    if (mpz_fits_slong_p(z)) return expr_new_integer((int64_t)mpz_get_si(z));
+    mpz_t t; mpz_init_set(t, z);
+    Expr* e = expr_bigint_normalize(expr_new_bigint_from_mpz(t));
+    mpz_clear(t);
+    return e;
+}
+
+static Expr* fold_list_of(Expr** v, size_t n) {
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), v, n);
+    return l;
+}
+
+/* The fold's components (A of them; one when A = 0), rewritten, or false. */
+static bool fold_components(const Expr* f, int64_t A, int64_t E, Expr** comp, size_t* nc) {
+    Expr* body = fold_rewrite_body(f, A, E);
+    if (!body) return false;
+    if (A == 0) { comp[0] = body; *nc = 1; return true; }
+    if (!(body->type == EXPR_FUNCTION && body->data.function.head->type == EXPR_SYMBOL &&
+          body->data.function.head->data.symbol.name == SYM_List &&
+          (int64_t)body->data.function.arg_count == A)) { expr_free(body); return false; }
+    for (int64_t i = 0; i < A; i++) comp[i] = expr_copy(body->data.function.args[i]);
+    expr_free(body);
+    *nc = (size_t)A;
+    return true;
+}
+
+/* Exact elements: m x Ew machine integers (boxed Integers or an int64 buffer). */
+static bool fold_int_elems(const Expr* list, size_t m, int64_t E, int64_t* out) {
+    size_t Ew = E ? (size_t)E : 1;
+    if (is_ndarray(list)) {
+        if (list->data.ndarray.dtype != NDT_INT64) return false;
+        memcpy(out, list->data.ndarray.data, sizeof(int64_t) * m * Ew);
+        return true;
+    }
+    for (size_t i = 0; i < m; i++) {
+        const Expr* r = list->data.function.args[i];
+        if (E == 0) {
+            if (r->type != EXPR_INTEGER) return false;
+            out[i] = r->data.integer;
+            continue;
+        }
+        if (!(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+              r->data.function.head->data.symbol.name == SYM_List &&
+              (int64_t)r->data.function.arg_count == E)) return false;
+        for (int64_t j = 0; j < E; j++) {
+            const Expr* x = r->data.function.args[j];
+            if (x->type != EXPR_INTEGER) return false;
+            out[i * Ew + (size_t)j] = x->data.integer;
+        }
+    }
+    return true;
+}
+
+static Expr* numloop_fold_exact(const Expr* f, const Expr* x0, const Expr* list,
+                                bool as_list, int64_t A, int64_t E) {
+    size_t m = is_ndarray(list) ? (size_t)list->data.ndarray.dims[0]
+                                : list->data.function.arg_count;
+    if (m == 0) return NULL;
+    int64_t Aw = A ? A : 1, Ew = E ? E : 1;
+    if (Aw + Ew > 16) return NULL;
+    /* the seed: exact integers */
+    for (int64_t i = 0; i < Aw; i++) {
+        const Expr* c = A ? x0->data.function.args[i] : x0;
+        if (c->type != EXPR_INTEGER && c->type != EXPR_BIGINT) return NULL;
+    }
+    Expr* comp[FOLD_VEC_MAX]; size_t nc = 0;
+    if (!fold_components(f, A, E, comp, &nc)) return NULL;
+    FxNode* prog[FOLD_VEC_MAX] = {0};
+    bool ok = true;
+    for (size_t i = 0; i < nc; i++) {
+        prog[i] = fx_build(comp[i], (int)(Aw + Ew));
+        if (!prog[i]) ok = false;
+        expr_free(comp[i]);
+    }
+    int64_t* el = ok ? malloc(sizeof(int64_t) * m * (size_t)Ew) : NULL;
+    if (ok && (!el || !fold_int_elems(list, m, E, el))) ok = false;
+    if (!ok) {
+        for (size_t i = 0; i < nc; i++) fx_free(prog[i]);
+        free(el);
+        return NULL;
+    }
+    mpz_t regs[16], nxt[FOLD_VEC_MAX];
+    for (int64_t i = 0; i < Aw + Ew; i++) mpz_init(regs[i]);
+    for (size_t i = 0; i < nc; i++) mpz_init(nxt[i]);
+    for (int64_t i = 0; i < Aw; i++)
+        expr_to_mpz(A ? x0->data.function.args[i] : x0, regs[i]);
+    Expr** hist = as_list ? malloc(sizeof(Expr*) * (m + 1)) : NULL;
+    size_t nh = 0;
+    bool bail = as_list && !hist;
+    for (size_t step = 0; !bail && step <= m; step++) {
+        if (as_list) {
+            if (A) {
+                Expr* v[FOLD_VEC_MAX];
+                for (int64_t i = 0; i < A; i++) v[i] = fx_mpz_expr(regs[i]);
+                hist[nh++] = fold_list_of(v, (size_t)A);
+            } else hist[nh++] = fx_mpz_expr(regs[0]);
+        }
+        if (step == m) break;
+        if ((step & 1023) == 1023 && tc_deadline_passed()) { bail = true; break; }
+        for (int64_t j = 0; j < Ew; j++)
+            mpz_set_si(regs[Aw + j], (long)el[step * (size_t)Ew + (size_t)j]);
+        for (size_t i = 0; i < nc; i++) mpz_set(nxt[i], fx_eval(prog[i], regs));
+        for (size_t i = 0; i < nc; i++) mpz_swap(regs[i], nxt[i]);
+    }
+    Expr* out = NULL;
+    if (!bail) {
+        if (as_list) { out = pack_offer(fold_list_of(hist, nh)); }
+        else if (A) {
+            Expr* v[FOLD_VEC_MAX];
+            for (int64_t i = 0; i < A; i++) v[i] = fx_mpz_expr(regs[i]);
+            out = fold_list_of(v, (size_t)A);
+        } else out = fx_mpz_expr(regs[0]);
+    } else if (hist) {
+        for (size_t i = 0; i < nh; i++) expr_free(hist[i]);
+    }
+    free(hist);
+    for (int64_t i = 0; i < Aw + Ew; i++) mpz_clear(regs[i]);
+    for (size_t i = 0; i < nc; i++) { mpz_clear(nxt[i]); fx_free(prog[i]); }
+    free(el);
+    return out;
+}
+
+/* Machine vector accumulator: x0 a List of A machine numbers. */
+static Expr* numloop_fold_vec_machine(const Expr* f, const Expr* x0, const Expr* list,
+                                      bool as_list, int64_t A, int64_t E) {
+    bool packed = is_ndarray(list);
+    size_t m = packed ? (size_t)list->data.ndarray.dims[0] : list->data.function.arg_count;
+    if (m == 0) return NULL;
+    int64_t Ew = E ? E : 1;
+    if (A + Ew > 8) return NULL;                       /* compile_function arity */
+    double acc[FOLD_VEC_MAX];
+    bool seed_inexact = true;
+    for (int64_t i = 0; i < A; i++) {
+        const Expr* c = x0->data.function.args[i];
+        if (!to_machine_double(c, &acc[i])) return NULL;
+        if (!value_is_inexact(c)) seed_inexact = false;
+    }
+    if (!seed_inexact) return NULL;           /* the history emits the seed itself */
+    Expr* comp[FOLD_VEC_MAX]; size_t nc = 0;
+    if (!fold_components(f, A, E, comp, &nc)) return NULL;
+    NumProg prog[FOLD_VEC_MAX];
+    bool binx[FOLD_VEC_MAX], carried[FOLD_VEC_MAX];
+    size_t ncomp = 0; bool ok = true;
+    for (size_t i = 0; i < nc; i++) {
+        carried[i] = fold_body_acc_inexact_w(comp[i], A);
+        Expr* fn = mk_function1(comp[i]);              /* takes comp[i] */
+        if (ok && compile_function(&prog[ncomp], fn, (size_t)(A + Ew), &binx[i])) ncomp++;
+        else ok = false;
+        expr_free(fn);
+    }
+    if (!ok) { for (size_t i = 0; i < ncomp; i++) prog_free(&prog[i]); return NULL; }
+    size_t mk = m * (size_t)Ew;
+    double* el = malloc(sizeof(double) * mk);
+    bool el_inexact = true;
+    if (!el) ok = false;
+    else if (packed) {
+        NDType dt = list->data.ndarray.dtype;
+        if (ndt_is_complex(dt) || list->data.ndarray.rank != (E ? 2 : 1)) ok = false;
+        else {
+            el_inexact = (dt != NDT_INT64);
+            for (size_t i = 0; i < mk; i++) { double im; ndt_get(list->data.ndarray.data, i, dt, &el[i], &im); }
+        }
+    } else {
+        for (size_t i = 0; i < m && ok; i++) {
+            const Expr* r = list->data.function.args[i];
+            if (E == 0) {
+                if (!to_machine_double(r, &el[i])) ok = false;
+                else if (!value_is_inexact(r)) el_inexact = false;
+                continue;
+            }
+            if (!(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+                  r->data.function.head->data.symbol.name == SYM_List &&
+                  (int64_t)r->data.function.arg_count == E)) { ok = false; break; }
+            for (int64_t j = 0; j < E; j++) {
+                const Expr* x = r->data.function.args[j];
+                if (!to_machine_double(x, &el[i * (size_t)Ew + (size_t)j])) { ok = false; break; }
+                if (!value_is_inexact(x)) el_inexact = false;
+            }
+        }
+    }
+    for (size_t i = 0; ok && i < nc; i++)
+        if (!(el_inexact || binx[i] || carried[i])) ok = false;
+    size_t ms = 1;
+    for (size_t i = 0; i < nc; i++) if (prog[i].max_stack > ms) ms = prog[i].max_stack;
+    double* stack = ok ? malloc(sizeof(double) * ms) : NULL;
+    double* hist = (ok && as_list) ? malloc(sizeof(double) * (m + 1) * (size_t)A) : NULL;
+    if (ok && (!stack || (as_list && !hist))) ok = false;
+    if (ok) {
+        double regs[8], nxt[FOLD_VEC_MAX];
+        if (as_list) memcpy(hist, acc, sizeof(double) * (size_t)A);
+        for (size_t s = 0; s < m && ok; s++) {
+            memcpy(regs, acc, sizeof(double) * (size_t)A);
+            memcpy(regs + A, el + s * (size_t)Ew, sizeof(double) * (size_t)Ew);
+            for (size_t i = 0; i < nc; i++) {
+                nxt[i] = numprog_run(&prog[i], regs, stack);
+                if (!isfinite(nxt[i])) { ok = false; break; }
+            }
+            memcpy(acc, nxt, sizeof(double) * (size_t)A);
+            if (as_list) memcpy(hist + (s + 1) * (size_t)A, acc, sizeof(double) * (size_t)A);
+        }
+    }
+    for (size_t i = 0; i < nc; i++) prog_free(&prog[i]);
+    free(stack); free(el);
+    if (!ok) { free(hist); return NULL; }
+    if (!as_list) {
+        Expr* v[FOLD_VEC_MAX];
+        for (int64_t i = 0; i < A; i++) v[i] = expr_new_real(acc[i]);
+        return fold_list_of(v, (size_t)A);
+    }
+    int64_t dims[2] = { (int64_t)m + 1, A };
+    void* buf = NULL;
+    Expr* nd = ndbuild_open(2, dims, NDT_FLOAT64, &buf);
+    if (nd) {
+        memcpy(buf, hist, sizeof(double) * (m + 1) * (size_t)A);
+        free(hist);
+        return nd;
+    }
+    Expr** rows = malloc(sizeof(Expr*) * (m + 1));
+    for (size_t s = 0; s <= m; s++) {
+        Expr* v[FOLD_VEC_MAX];
+        for (int64_t i = 0; i < A; i++) v[i] = expr_new_real(hist[s * (size_t)A + (size_t)i]);
+        rows[s] = fold_list_of(v, (size_t)A);
+    }
+    free(hist);
+    Expr* out = fold_list_of(rows, m + 1);
+    free(rows);
+    return out;
+}
+
+/* The width of a vector seed (a plain List of 1..FOLD_VEC_MAX elements), 0
+ * for a scalar seed, -1 for anything else. */
+static int64_t fold_seed_width(const Expr* x0) {
+    if (x0->type == EXPR_FUNCTION && x0->data.function.head->type == EXPR_SYMBOL &&
+        x0->data.function.head->data.symbol.name == SYM_List) {
+        size_t n = x0->data.function.arg_count;
+        return (n >= 1 && n <= FOLD_VEC_MAX) ? (int64_t)n : -1;
+    }
+    return 0;
+}
+
+/* The element width of a fold list: 0 scalar, k rows, -1 neither. */
+static int64_t fold_elem_width(const Expr* list) {
+    if (is_ndarray(list)) {
+        if (list->data.ndarray.rank == 1) return 0;
+        int64_t k = fold_row_width(list);
+        return k ? k : -1;
+    }
+    if (list->type != EXPR_FUNCTION || list->data.function.arg_count == 0) return -1;
+    int64_t k = fold_row_width(list);
+    return k ? k : 0;
+}
+
+/* Fold/FoldList beyond the scalar machine path: a vector accumulator (machine
+ * or exact) or an exact-integer scalar fold.  NULL declines. */
+static Expr* numloop_fold_general(const Expr* f, const Expr* x0, const Expr* list,
+                                  bool as_list) {
+    if (numloop_off()) return NULL;
+    int64_t A = fold_seed_width(x0);
+    int64_t E = fold_elem_width(list);
+    if (A < 0 || E < 0) return NULL;
+    if (A > 0) {
+        Expr* r = numloop_fold_vec_machine(f, x0, list, as_list, A, E);
+        if (r) return r;
+    }
+    return numloop_fold_exact(f, x0, list, as_list, A, E);
+}
+
 Expr* numloop_fold(const Expr* f, const Expr* x0, const Expr* list) {
-    return numloop_fold_impl(f, x0, list, false);
+    Expr* r = numloop_fold_impl(f, x0, list, false);
+    return r ? r : numloop_fold_general(f, x0, list, false);
 }
 
 Expr* numloop_foldlist(const Expr* f, const Expr* x0, const Expr* list) {
-    return numloop_fold_impl(f, x0, list, true);
+    Expr* r = numloop_fold_impl(f, x0, list, true);
+    return r ? r : numloop_fold_general(f, x0, list, true);
 }
 
 /* ------------------------------------------------------------------------

@@ -544,11 +544,63 @@ static void test_int64_exact_loops(void) {
     expect_full("Module[{s = 0}, Do[s = s + a, {5}]; s]", "Times[5, a]");
 }
 
+
+/* ---------------- Fold over rows / vector accumulator / exact ----------------
+ * The fast path and the interpreter must agree EXACTLY (FullForm), including
+ * which calls decline. */
+static void same_full(const char* input) {
+    numloop_set_enabled(true);
+    Expr* e1 = parse_expression(input); Expr* r1 = evaluate(e1);
+    char* s1 = expr_to_string_fullform(r1);
+    numloop_set_enabled(false);
+    Expr* e2 = parse_expression(input); Expr* r2 = evaluate(e2);
+    char* s2 = expr_to_string_fullform(r2);
+    numloop_set_enabled(true);
+    ASSERT_MSG(strcmp(s1, s2) == 0, "%s: fast %s vs interp %s", input, s1, s2);
+    free(s1); free(s2);
+    expr_free(e1); expr_free(r1); expr_free(e2); expr_free(r2);
+}
+
+static void test_fold_rows_and_vectors(void) {
+    const char* r = "{{3, 1}, {3, -1}, {1, 2}, {4, 0}, {2, -3}}";
+    char buf[512];
+    const char* bodies[] = {
+        "FoldList[#2[[1]] + #2[[2]]/#1 &, 1., %s]",          /* exact rows, Real acc */
+        "Fold[#2[[-1]] + #1 #2[[1]] &, 0.5, %s]",
+        "FoldList[Function[{a, b}, b[[1]] - Sin[a] b[[2]]], 1., %s]",
+        "FoldList[#1 + #2 &, 1., %s]",                        /* whole row: decline */
+        "FoldList[#1 + #2[[3]] &, 1., %s]",                   /* out of range */
+        "FoldList[#2[[1]] &, 1., %s]",                        /* exact passthrough */
+        "Fold[{#1[[2]], #2[[1]] #1[[2]] + #2[[2]] #1[[1]]} &, {1, 1}, %s]",
+        "FoldList[{#1[[2]], #2[[1]] #1[[2]] + #2[[2]] #1[[1]]} &, {1, 1}, %s]",
+        "FoldList[{#1[[2]], #2[[1]] #1[[2]] + #2[[2]] #1[[1]]} &, {1., 1.}, %s]",
+        "FoldList[{#2[[1]], #1[[1]]} &, {1., 2.}, %s]",       /* exact component: decline */
+        "FoldList[{#1[[2]], #1[[1]] + #2[[1]]} &, {1, 2.}, %s]", /* mixed seed */
+        "Fold[#1^0 + #2[[1]] &, 0, %s]",                      /* 0^0 */
+        "Fold[#1/2 + #2[[1]] &, 0, %s]",                      /* rational body */
+    };
+    for (size_t i = 0; i < sizeof bodies / sizeof bodies[0]; i++) {
+        snprintf(buf, sizeof buf, bodies[i], r);
+        same_full(buf);
+    }
+    same_full("Fold[#1 + #2^2 &, 0, Range[-50, 50]]");
+    same_full("FoldList[#1 #2 + 1 &, 1, Range[-6, 6]]");
+    same_full("Fold[{#1[[1]] + #2, #1[[2]] #2} &, {0, 1}, Range[1, 30]]");
+    /* exact growth past int64: GMP, still the interpreter's value */
+    same_full("Last[Fold[{#1[[2]], 3 #1[[2]] + #1[[1]]} &, {1, 1}, Range[400]]]");
+    /* a packed row buffer gives a packed history */
+    expect_full("PackedArrayQ[FoldList[#2[[1]] + #2[[2]]/#1 &, 1., "
+                "RandomChoice[{1, 1} -> {{3, 1}, {3, -1}}, 10^4]]]", "True");
+    expect_full("PackedArrayQ[FoldList[{#1[[2]], 0.5 #1[[1]] + #2} &, {1., 1.}, "
+                "RandomReal[1, 10^4]]]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     /* Differential (bit-identical fast vs interpreted) */
+    TEST(test_fold_rows_and_vectors);
     TEST(test_diff_nest_logistic);
     TEST(test_diff_nest_cos);
     TEST(test_diff_nest_real_seed_pow);
