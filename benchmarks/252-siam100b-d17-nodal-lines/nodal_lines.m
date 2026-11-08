@@ -47,7 +47,10 @@ nodalLength[reg_, k_, dirichletWhere_, opts___] := Module[{es, cp, segs, bd},
     cp = ContourPlot[Evaluate[es[[2, k]] == 0], {x, y} \[Element] reg];
     segs = Flatten[Partition[#, 2, 1] & /@ Cases[Normal[cp], Line[pts_] :> pts, Infinity], 1];
     bd = RegionBoundary[reg];
-    Total[EuclideanDistance @@@ Select[segs, Max[RegionDistance[bd, #] & /@ #] > 10^-4 &]]]];
+    (* an unevaluated RegionBoundary / RegionDistance must not score as a
+       length: Select[..., unevaluated > 10^-4 &] keeps nothing, Total[{}] = 0 *)
+    If[!NumericQ[RegionDistance[bd, {0., 0.}]], "unevaluated",
+      Total[EuclideanDistance @@@ Select[segs, Max[RegionDistance[bd, #] & /@ #] > 10^-4 &]]]]];
 
 Do[With[{lab = p[[1]], reg = p[[2]], k = p[[3]], dw = p[[4]]},
     vrun[lab <> " machine", nodalLength[reg, k, dw], 10, 1, 90];
