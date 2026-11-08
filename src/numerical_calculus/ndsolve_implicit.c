@@ -144,6 +144,17 @@ static bool bdf_ev_advance(void* ctx, double s, double* Ys) {
     return true;
 }
 
+/* The smallest step BDF takes at time t before reporting a step size that is
+ * effectively zero: a few ulps of t, and near t = 0 a millionth of the
+ * interval's ulps -- not an absolute 16 eps.  A stiff semi-discretisation
+ * started from rough data (a method-of-lines grid of 10^3 points on a jump:
+ * eigenvalues 10^7, an initial layer resolved to an absolute tolerance of
+ * 10^-8 at the nodes where u0 = 0) legitimately opens with a step of 10^-15,
+ * which the absolute floor rejected outright. */
+static double bdf_hfloor(double t, double span) {
+    return 16.0 * DBL_EPSILON * (fabs(t) + 1e-6 * span);
+}
+
 static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol tol,
                         double target, int64_t* budget) {
     size_t d = P->d;
@@ -190,7 +201,7 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
         if (hmag > frac_cap) hmag = frac_cap;
         double hs = dir * hmag;
         if ((t + hs - target) * dir > 0.0) hs = target - t;
-        if (fabs(hs) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) { st = ND_ERR_STEPSIZE; break; }
+        if (fabs(hs) < bdf_hfloor(t, span)) { st = ND_ERR_STEPSIZE; break; }
         if (--(*budget) < 0) { st = ND_ERR_MAXSTEPS; break; }
 
         double t1 = t + hs;
@@ -223,7 +234,7 @@ static NdStatus bdf_dir(NdProblem* P, const NdOpts* o, NdSolution* sol, NdTol to
             no_grow = true;
             if (qtarget > 1) qtarget--;
             h = 0.5 * hs;
-            if (fabs(h) < 16.0 * DBL_EPSILON * (fabs(t) + 1.0)) { st = ND_ERR_NONCONV; break; }
+            if (fabs(h) < bdf_hfloor(t, span)) { st = ND_ERR_NONCONV; break; }
             continue;
         }
 

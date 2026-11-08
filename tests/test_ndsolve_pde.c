@@ -1333,6 +1333,20 @@ static void test_mpfr_exact_mol(void) {
     check_true("MPFR MoL x grid ends at xmax", ok && fabs(dv) < 1e-25, "Domain x end - 1 = 0");
 }
 
+/* ============================================================= *
+ *  BDF from rough data on a fine grid: the heat equation on a     *
+ *  jump with 801 points opens with a 3e-15 step, which the        *
+ *  absolute floor 16 eps (|t| + 1) refused (NDSolve::ndsz).       *
+ * ============================================================= */
+static void test_bdf_rough_start(void) {
+    run("ajmp = NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Piecewise[{{1, 0.2501 <= x <= 3/4}}, 0], "
+        "u[0,t]==0, u[1,t]==0}, u, {x,0,1}, {t,0,1/5}, Method -> {\"MethodOfLines\", "
+        "\"SpatialDiscretization\" -> {\"TensorProductGrid\", \"MinPoints\" -> 801}}];");
+    double v;
+    check_true("fine grid on a jump integrates (BDF opens with a 1e-15 step)",
+               eval_double("ajmp[1/2, 0.06]", &v) && fabs(v - 0.5) < 0.01, "u(1/2, 0.06) ~ 1/2");
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -1379,6 +1393,7 @@ int main(void) {
     test_unsupported_guards();
     test_variable_order();
     test_mpfr_exact_mol();
+    test_bdf_rough_start();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);
