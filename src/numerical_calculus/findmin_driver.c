@@ -816,6 +816,14 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         fm_warn(fn_name, "nimpl", "method not implemented");
         ok = false;
     }
+    /* Final gradient polish of a smooth unconstrained / box-interior minimum
+     * (fm_polish_min) for the methods the reference's FindMinimum offers:
+     * their stopping tests compare values of f, which resolve the minimiser
+     * only to ~sqrt(eps).  Never worsens f or |grad f|. */
+    if (ok && !has_general_cons
+        && (method == FM_METHOD_QUASINEWTON || method == FM_METHOD_NEWTON
+            || method == FM_METHOD_CONJGRAD || method == FM_METHOD_BRENT))
+        (void)fm_polish_min(f_raw, binds, g_exprs, n, &opts, boxes, x_vec, &fx_min);
 #ifdef USE_MPFR
     }
     if (wp_refine) {

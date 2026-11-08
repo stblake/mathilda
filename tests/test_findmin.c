@@ -600,7 +600,7 @@ static void test_hs071_default_method(void) {
 /* WorkingPrecision -> 60 converges to (nearly) the working precision in the
  * ARGMIN, not to the ~WorkingPrecision/2 digits an f-based line search can
  * resolve: the final gradient polish (fm_bfgs_polish_mpfr).  Symbolic
- * gradient, black-box objective (order-4 difference gradient), a smooth
+ * gradient, black-box objective (order-8 difference gradient), a smooth
  * 12-variable energy, and NMinimize's MPFR refinement. */
 static void test_mpfr_argmin_full_precision(void) {
     mute_stderr_once();
@@ -624,6 +624,23 @@ static void test_mpfr_argmin_full_precision(void) {
     /* FindMaximum takes the same path (it minimises -f) */
     check_true("With[{r = FindMaximum[-Cosh[x - 1/3], {x, 0}, WorkingPrecision -> 60]}, "
                "Abs[(x /. Last[r]) - 1/3] < 10^-50]");
+}
+
+/* The argmin to ~eps^(4/5) at machine precision and to nearly the working
+ * precision of a black box (no symbolic gradient): fm_polish_min's Newton
+ * steps on the order-4 difference gradient (machine), the order-8 difference
+ * with a measured step (WorkingPrecision).  The machine solvers stopped on
+ * value tests, ~1e-8 from the minimiser; the WorkingPrecision -> 60 argmax of
+ * (2 + Sin[3a])/(2 (1/4 + a^2)), whose poles at +-i/2 spoil the unit-scale
+ * difference step, came back with 49 digits. */
+static void test_blackbox_argmin_polish(void) {
+    check_true("Module[{g, r, a0}, g[a_?NumericQ] := Exp[-a] + Sin[a]/3 + a^2/7; "
+               "a0 = a /. FindRoot[-Exp[-a] + Cos[a]/3 + 2 a/7, {a, 1}, WorkingPrecision -> 40]; "
+               "r = FindMinimum[g[a], {a, 1}]; Abs[(a /. Last[r]) - a0] < 10^-12]");
+    check_true("Module[{g, r}, g[a_?NumericQ] := (2 + Sin[3 a]) (1/2)/(1/4 + a^2); "
+               "r = FindMaximum[g[a], {a, 15/100}, WorkingPrecision -> 60]; "
+               "Abs[(a /. Last[r]) - "
+               "0.150946644582212834220774161538559775728332909677100837197972980021`70] < 10^-54]");
 }
 
 /* A small-scale objective (|grad f| ~ 1e-6) under an equality constraint,
@@ -696,6 +713,7 @@ int main(void) {
     core_init();
 
     TEST(test_mpfr_argmin_full_precision);
+    TEST(test_blackbox_argmin_polish);
     TEST(test_working_precision_compiled_objective);
     TEST(test_small_scale_objective_with_equality);
     TEST(test_minimum_value_full_precision);

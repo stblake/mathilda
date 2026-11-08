@@ -677,6 +677,24 @@ bool fm_eval_hessian(Expr*** H_exprs, FmVarBind* binds,
                             const FmOpts* opts, double* H_out /* n*n */);
 Expr* fm_build_result(double fmin, Expr** vars, const double* vals,
                              size_t n);
+/* Final gradient polish of a machine-precision local minimiser of a smooth
+ * objective (unconstrained or box-interior).
+ *
+ * Every solver stops on tests that compare VALUES of f (line search, step
+ * size, simplex spread) or on a central-difference gradient, and near a
+ * minimum f(x* + d) - f(x*) ~ |d|^2: with f known to eps the minimiser is
+ * resolved only to ~sqrt(eps) -- the argmin of a smooth 1-D objective came
+ * back 5e-8 off while its values agreed to the last digit.  The gradient
+ * vanishes linearly in d, so Newton steps on an accurate gradient (symbolic,
+ * else the order-4 difference) seeded with a difference Hessian keep
+ * converging to ~eps^(4/5).  A step is accepted only when it stays strictly
+ * inside the box, reduces |g| and does not raise f above its resolution, so
+ * the result is never worse than the input.  Declines (returns false, x and
+ * fx unchanged) when x is on a box bound, n > FM_POLISH_MAX_DIM, the Hessian
+ * is not positive definite, or no step was accepted.  x, fx in/out. */
+#define FM_POLISH_MAX_DIM 10
+bool fm_polish_min(Expr* f, FmVarBind* binds, Expr** g_exprs, size_t n,
+                   const FmOpts* opts, const FmBox* boxes, double* x, double* fx);
 #ifdef USE_MPFR
 Expr* fm_build_result_mpfr(const mpfr_t fmin, Expr** vars,
                                   mpfr_t const* vals, size_t n);

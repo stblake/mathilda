@@ -1649,6 +1649,20 @@ static void test_nmaximize_blackbox_gradient_step(void) {
                "Abs[(a /. Last[r]) - 1.61363272808328247] < 10^-8]");
 }
 
+/* The final gradient polish (fm_polish_min) of a smooth box-interior optimum:
+ * a black-box objective's argmin to ~1e-14 instead of the ~1e-8 the value
+ * tests of the local solver stop at; an optimum ON a bound is left alone. */
+static void test_blackbox_argmin_polish(void) {
+    check_true("Module[{g, r, a0}, g[a_?NumericQ] := Exp[-a] + Sin[a]/3 + a^2/7; "
+               "a0 = a /. FindRoot[-Exp[-a] + Cos[a]/3 + 2 a/7, {a, 1}, WorkingPrecision -> 40]; "
+               "r = NMinimize[{g[a], 0 <= a <= 5}, a]; Abs[(a /. Last[r]) - a0] < 10^-12]");
+    check_true("Module[{g, r, a0}, g[a_?NumericQ] := Exp[-a] + Sin[a]/3 + a^2/7; "
+               "a0 = a /. FindRoot[-Exp[-a] + Cos[a]/3 + 2 a/7, {a, 1}, WorkingPrecision -> 40]; "
+               "r = NMaximize[{-g[a], 0 <= a <= 5}, a]; Abs[(a /. Last[r]) - a0] < 10^-12]");
+    check_true("Module[{g}, g[a_?NumericQ] := Exp[-a] + Sin[a]/3 + a^2/7; "
+               "(a /. Last[NMinimize[{g[a], 1 <= a <= 5}, a]]) == 1]");
+}
+
 /* Minimax objectives Max[Abs[...]] by their epigraph (findmin_minimax.c).
  * Best line to x^2 on {0, 1/8, ..., 1}: x - 1/8, error 1/8 at 0, 1/2, 1
  * (equioscillation), the real-Abs pieces; best constant to z^2 on the 8th
@@ -1816,6 +1830,7 @@ int main(void) {
     TEST(test_nmaximize_parametric_integral);
     TEST(test_nmaximize_blackbox_gradient_step);
     TEST(test_minimax_epigraph);
+    TEST(test_blackbox_argmin_polish);
 
     printf("All NMinimize tests passed.\n");
     return 0;

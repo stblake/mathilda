@@ -2682,8 +2682,28 @@ refinement and FindMaximum) converges to nearly the working precision in the
   (it was an absolute `10^-12`, which dropped every update once `|s| < 10^-6`).
 - **Black-box gradients.** Without a symbolic gradient the central difference
   uses `h = (|x| + 1) 2^(-p/3)` (gradient to `2^(-2p/3)`, was `10^(-p/2)`:
-  half the digits), and the polish a 5-point order-4 difference with
-  `h = 2^(-p/5)`.
+  half the digits), and the polish a 9-point order-8 difference (gradient to
+  `2^(-8p/9)`; the former order-4 difference, `2^(-4p/5)`, held the argmax of a
+  `WorkingPrecision -> 60` black box to 46-49 digits with every value good to
+  60).  Its step `max(|x_i|, 1) 2^(-p/9)` assumes a unit scale; the polish
+  measures the truncation error from the differences at `h` and `h/2` and
+  shrinks the step per coordinate to balance it against rounding (a function
+  with poles at distance 1/2 went from 49 to 56 digits).  The difference
+  Hessian that seeds the 1-D polish uses central differences (its error only
+  slows the Newton steps), and the polish stops without a further trial once
+  `|grad|` is at the rounding level of the differences.
+- **Machine precision.** The same final polish (`fm_polish_min`, Newton steps
+  on the symbolic gradient or a 5-point order-4 difference, seeded with a
+  central-difference Hessian, each step kept only when it stays strictly
+  inside the box, lowers `|grad|` and does not raise `f`) runs after
+  `"QuasiNewton"`, `"Newton"`, `"ConjugateGradient"`, `"Brent"` and every
+  `NMinimize` method on an unconstrained or box-interior optimum of up to 10
+  variables.  Their stopping tests compare values of `f`, which resolve the
+  minimiser only to ~`Sqrt[$MachineEpsilon]`: the argmin of
+  `NIntegrate[Exp[-x] Cos[a Sqrt[x]], {x, 0, Infinity}]` came back `5e-8` off
+  (7 digits); now 12.  An optimum on a bound, a general constraint, an integer
+  variable or a non-smooth objective (`Max[...]`, where no step lowers
+  `|grad|`) is returned as the solver left it.
 - **NMinimize.** The MPFR refinement differentiated the objective while the
   variables were still bound to the global search's last point, so the
   gradient was identically 0 and the machine minimiser came back labelled with

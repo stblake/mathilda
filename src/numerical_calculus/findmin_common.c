@@ -830,6 +830,162 @@ bool fm_eval_hessian(Expr*** H_exprs, FmVarBind* binds,
     return ok;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Final gradient polish of a machine-precision minimiser              *
+ * ------------------------------------------------------------------ */
+
+/* The polish gradient: symbolic when it evaluates, else the 5-point
+ * (order-4) difference with increment max(|x_i|, 1) eps^(1/5).  Its error is
+ * ~eps^(4/5) |f| -- a hundred times below the central difference's eps^(2/3)
+ * that the BFGS iteration runs on -- and the error of the polished argmin is
+ * that gradient error over the curvature. */
+static bool fm_polish_gradient(Expr* f, FmVarBind* binds, Expr** g_exprs,
+                               const double* x, size_t n, const FmOpts* opts,
+                               double* g_out) {
+    if (g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g_out)) {
+        bool fin = true;
+        for (size_t i = 0; i < n; i++) if (!isfinite(g_out[i])) fin = false;
+        if (fin) return true;
+    }
+    const double h = 7.4009597974140505e-04;   /* DBL_EPSILON^(1/5) */
+    double* xp = (double*)malloc(sizeof(double) * (n ? n : 1));
+    if (!xp) return false;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) xp[i] = x[i];
+    for (size_t i = 0; i < n && ok; i++) {
+        double xi = x[i];
+        double s = (fabs(xi) > 1.0 ? fabs(xi) : 1.0) * h;
+        double fv[4];
+        const double off[4] = { 1.0, -1.0, 2.0, -2.0 };
+        for (int k = 0; k < 4 && ok; k++) {
+            xp[i] = xi + off[k] * s;
+            ok = fm_eval_scalar(f, binds, xp, n, opts, &fv[k]) && isfinite(fv[k]);
+        }
+        if (ok) g_out[i] = (8.0 * (fv[0] - fv[1]) - (fv[2] - fv[3])) / (12.0 * s);
+        xp[i] = xi;
+    }
+    free(xp);
+    return ok;
+}
+
+/* See findmin_internal.h. */
+bool fm_polish_min(Expr* f, FmVarBind* binds, Expr** g_exprs, size_t n,
+                   const FmOpts* opts, const FmBox* boxes, double* x, double* fx) {
+    if (n == 0 || n > FM_POLISH_MAX_DIM || !isfinite(*fx)) return false;
+    for (size_t i = 0; i < n; i++) {
+        if (!isfinite(x[i])) return false;
+        if (boxes && boxes[i].has_lo && x[i] <= boxes[i].lo) return false;
+        if (boxes && boxes[i].has_hi && x[i] >= boxes[i].hi) return false;
+    }
+    double* g  = (double*)malloc(sizeof(double) * n);
+    double* gt = (double*)malloc(sizeof(double) * n);
+    double* gp = (double*)malloc(sizeof(double) * n);
+    double* xt = (double*)malloc(sizeof(double) * n);
+    double* d  = (double*)malloc(sizeof(double) * n);
+    double* y  = (double*)malloc(sizeof(double) * n);
+    double* Hy = (double*)malloc(sizeof(double) * n);
+    double* A  = (double*)malloc(sizeof(double) * n * n);
+    double* H  = (double*)malloc(sizeof(double) * n * n);
+    bool any = false;
+    bool saved_quiet = g_fm_quiet;
+    g_fm_quiet = true;                  /* probes: no messages of their own */
+    if (!g || !gt || !gp || !xt || !d || !y || !Hy || !A || !H) goto done;
+    if (!fm_polish_gradient(f, binds, g_exprs, x, n, opts, g)) goto done;
+
+    /* Inverse of a forward-difference Hessian of the polish gradient,
+     * symmetrised; Gauss-Jordan without pivoting (a positive-definite matrix
+     * has positive pivots; anything else declines -- not a minimum). */
+    for (size_t i = 0; i < n; i++) xt[i] = x[i];
+    for (size_t j = 0; j < n; j++) {
+        double hj = (fabs(x[j]) + 1.0) * 6.0554544523933395e-06;  /* eps^(1/3) */
+        xt[j] = x[j] + hj;
+        hj = xt[j] - x[j];
+        if (!fm_polish_gradient(f, binds, g_exprs, xt, n, opts, gp)) goto done;
+        for (size_t i = 0; i < n; i++) A[i * n + j] = (gp[i] - g[i]) / hj;
+        xt[j] = x[j];
+    }
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++) {
+            double t = 0.5 * (A[i * n + j] + A[j * n + i]);
+            A[i * n + j] = A[j * n + i] = t;
+        }
+    for (size_t i = 0; i < n * n; i++) H[i] = 0.0;
+    for (size_t i = 0; i < n; i++) H[i * n + i] = 1.0;
+    for (size_t c = 0; c < n; c++) {
+        double piv = A[c * n + c];
+        if (!(piv > 0.0) || !isfinite(piv)) goto done;
+        for (size_t j = 0; j < n; j++) { A[c * n + j] /= piv; H[c * n + j] /= piv; }
+        for (size_t r = 0; r < n; r++) {
+            double m = A[r * n + c];
+            if (r == c || m == 0.0) continue;
+            for (size_t j = 0; j < n; j++) {
+                A[r * n + j] -= m * A[c * n + j];
+                H[r * n + j] -= m * H[c * n + j];
+            }
+        }
+    }
+
+    /* Newton/BFGS steps on the gradient: x <- x - H g, each accepted only when
+     * the trial stays in the box, |g| falls, and f does not rise above its
+     * resolution 2^-42 (|f| + 1).  A rejected step ends the polish with the
+     * last accepted point, so the polished answer is never worse than the
+     * solver's by either measure. */
+    double gn = 0.0;
+    for (size_t i = 0; i < n; i++) gn += g[i] * g[i];
+    gn = sqrt(gn);
+    for (int it = 0; it < 8 && gn > 0.0; it++) {
+        bool inside = true;
+        for (size_t i = 0; i < n; i++) {
+            double s_ = 0.0;
+            for (size_t j = 0; j < n; j++) s_ += H[i * n + j] * g[j];
+            d[i] = -s_;
+            xt[i] = x[i] + d[i];
+            if (!isfinite(xt[i])
+                || (boxes && boxes[i].has_lo && xt[i] <= boxes[i].lo)
+                || (boxes && boxes[i].has_hi && xt[i] >= boxes[i].hi))
+                inside = false;
+        }
+        if (!inside) break;
+        if (!fm_polish_gradient(f, binds, g_exprs, xt, n, opts, gt)) break;
+        double gtn = 0.0;
+        for (size_t i = 0; i < n; i++) gtn += gt[i] * gt[i];
+        gtn = sqrt(gtn);
+        if (!(gtn < gn)) break;
+        double ft;
+        if (!fm_eval_scalar(f, binds, xt, n, opts, &ft) || !isfinite(ft)) break;
+        if (ft > *fx + ldexp(fabs(*fx) + 1.0, -42)) break;
+        /* accept; BFGS update of H with s = d, y = gt - g */
+        double sy = 0.0, sn = 0.0, yn = 0.0;
+        for (size_t i = 0; i < n; i++) {
+            y[i] = gt[i] - g[i];
+            sy += d[i] * y[i]; sn += d[i] * d[i]; yn += y[i] * y[i];
+        }
+        if (sy > ldexp(sqrt(sn * yn), -52)) {
+            double rho = 1.0 / sy, yHy = 0.0;
+            for (size_t i = 0; i < n; i++) {
+                double t = 0.0;
+                for (size_t j = 0; j < n; j++) t += H[i * n + j] * y[j];
+                Hy[i] = t;
+                yHy += y[i] * t;
+            }
+            double coef = (sy + yHy) * rho * rho;
+            for (size_t i = 0; i < n; i++)
+                for (size_t j = 0; j < n; j++)
+                    H[i * n + j] += coef * d[i] * d[j] - rho * (Hy[i] * d[j] + d[i] * Hy[j]);
+        }
+        for (size_t i = 0; i < n; i++) { x[i] = xt[i]; g[i] = gt[i]; }
+        *fx = ft;
+        any = true;
+        bool stalled = 2.0 * gtn > gn;          /* |g| fell by less than 2 */
+        gn = gtn;
+        if (stalled) break;
+    }
+done:
+    g_fm_quiet = saved_quiet;
+    free(g); free(gt); free(gp); free(xt); free(d); free(y); free(Hy); free(A); free(H);
+    return any;
+}
+
 /* Build the final result list  { fmin, { x->v1, y->v2, ... } } . The vars
  * are borrowed; vals_doubles is consumed. */
 Expr* fm_build_result(double fmin, Expr** vars, const double* vals,
@@ -881,63 +1037,63 @@ void fm_mpfr_array_free(mpfr_t* arr, size_t count) {
  * h has error ~ h^q (truncation) + eps/h (cancellation), least at
  * h ~ eps^(1/(q+1)):
  *   order 2 (central, 2 evaluations):  h = eps^(1/3), gradient to eps^(2/3);
- *   order 4 (5-point,  4 evaluations): h = eps^(1/5), gradient to eps^(4/5).
+ *   order 4 (5-point,  4 evaluations): h = eps^(1/5), gradient to eps^(4/5);
+ *   order 8 (9-point,  8 evaluations): h = eps^(1/9), gradient to eps^(8/9).
  * The increment used to be 10^-(WorkingPrecision/2) with the central formula
  * -- the order-1 optimum -- so the gradient, and with it the minimiser, had
  * only half the working digits: FindMaximum of an NIntegrate at
  * WorkingPrecision -> 60 stopped at 30-odd correct digits of the argmax.  The
  * BFGS iteration runs on order 2; the final polish (fm_run_bfgs_mpfr) uses
- * order 4. */
+ * order 8 (fm_polish_gradient_mpfr). */
 static bool fm_grad_finite_diff_mpfr_ord(Expr* f, FmVarBind* binds,
                                          mpfr_t const* x, size_t n,
                                          const FmOpts* opts, int order,
-                                         mpfr_t* g_out) {
+                                         const long* hadj, mpfr_t* g_out) {
+    /* Central-difference weights c_k of f(x + k h) - f(x - k h), k = 1..m,
+     * over the common denominator den h:  f'(x) ~ sum c_k (f_k - f_-k) / (den h). */
+    static const long w2[] = { 1 },               d2 = 2;
+    static const long w4[] = { 8, -1 },           d4 = 12;
+    static const long w8[] = { 672, -168, 32, -3 }, d8 = 840;
+    const long* w = (order >= 8) ? w8 : (order >= 4) ? w4 : w2;
+    long den      = (order >= 8) ? d8 : (order >= 4) ? d4 : d2;
+    int m         = (order >= 8) ? 4  : (order >= 4) ? 2  : 1;
     long bits = opts->wp_bits;
     long p = numeric_width_precision_bits(bits);
     mpfr_t* xp = fm_mpfr_array(n, bits);
     for (size_t i = 0; i < n; i++) mpfr_set(xp[i], x[i], MPFR_RNDN);
-    mpfr_t step, f0, f1, f2, f3, t;
-    mpfr_inits2(bits, step, f0, f1, f2, f3, t, (mpfr_ptr)0);
-    long hexp = (order >= 4) ? p / 5 : p / 3;
+    mpfr_t step, fp, fm, t;
+    mpfr_inits2(bits, step, fp, fm, t, (mpfr_ptr)0);
+    long hexp = p / (2 * m + 1);
     bool ok = true;
     for (size_t i = 0; i < n && ok; i++) {
         mpfr_abs(step, x[i], MPFR_RNDN);
         if (mpfr_cmp_ui(step, 1) < 0) mpfr_set_ui(step, 1, MPFR_RNDN);
-        mpfr_mul_2si(step, step, -hexp, MPFR_RNDN);
-        /* f1 = f(x + h), f0 = f(x - h) */
-        mpfr_add(xp[i], x[i], step, MPFR_RNDN);
-        if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, f1)) { ok = false; break; }
-        mpfr_sub(xp[i], x[i], step, MPFR_RNDN);
-        if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, f0)) { ok = false; break; }
-        if (order >= 4) {
-            /* (-f(x+2h) + 8 f(x+h) - 8 f(x-h) + f(x-2h)) / (12 h) */
-            mpfr_mul_2ui(t, step, 1, MPFR_RNDN);
+        mpfr_mul_2si(step, step, -hexp - (hadj ? hadj[i] : 0), MPFR_RNDN);
+        mpfr_set_zero(g_out[i], +1);
+        for (int k = 1; k <= m && ok; k++) {
+            mpfr_mul_ui(t, step, (unsigned long)k, MPFR_RNDN);
             mpfr_add(xp[i], x[i], t, MPFR_RNDN);
-            if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, f2)) { ok = false; break; }
+            if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, fp)) { ok = false; break; }
             mpfr_sub(xp[i], x[i], t, MPFR_RNDN);
-            if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, f3)) { ok = false; break; }
-            mpfr_sub(g_out[i], f1, f0, MPFR_RNDN);
-            mpfr_mul_ui(g_out[i], g_out[i], 8, MPFR_RNDN);
-            mpfr_sub(g_out[i], g_out[i], f2, MPFR_RNDN);
-            mpfr_add(g_out[i], g_out[i], f3, MPFR_RNDN);
-            mpfr_mul_ui(t, step, 12, MPFR_RNDN);
-            mpfr_div(g_out[i], g_out[i], t, MPFR_RNDN);
-        } else {
-            mpfr_sub(g_out[i], f1, f0, MPFR_RNDN);
-            mpfr_mul_2ui(t, step, 1, MPFR_RNDN);
-            mpfr_div(g_out[i], g_out[i], t, MPFR_RNDN);
+            if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, fm)) { ok = false; break; }
+            mpfr_sub(t, fp, fm, MPFR_RNDN);
+            mpfr_mul_si(t, t, w[k - 1], MPFR_RNDN);
+            mpfr_add(g_out[i], g_out[i], t, MPFR_RNDN);
         }
+        if (!ok) break;
+        mpfr_mul_si(t, step, den, MPFR_RNDN);
+        mpfr_div(g_out[i], g_out[i], t, MPFR_RNDN);
         mpfr_set(xp[i], x[i], MPFR_RNDN);
     }
     fm_mpfr_array_free(xp, n);
-    mpfr_clears(step, f0, f1, f2, f3, t, (mpfr_ptr)0);
+    mpfr_clears(step, fp, fm, t, (mpfr_ptr)0);
     return ok;
 }
 
 static bool fm_grad_finite_diff_mpfr(Expr* f, FmVarBind* binds,
                                      mpfr_t const* x, size_t n,
                                      const FmOpts* opts, mpfr_t* g_out) {
-    return fm_grad_finite_diff_mpfr_ord(f, binds, x, n, opts, 2, g_out);
+    return fm_grad_finite_diff_mpfr_ord(f, binds, x, n, opts, 2, NULL, g_out);
 }
 
 /* MPFR symbolic gradient evaluator. */
@@ -1157,13 +1313,97 @@ static bool fm_box_touched_mpfr(mpfr_t* x, size_t n, const FmBox* boxes) {
 }
 
 /* The MPFR gradient at the polish's accuracy: symbolic when available, else
- * the order-4 difference (fm_grad_finite_diff_mpfr_ord). */
+ * the order-8 difference (fm_grad_finite_diff_mpfr_ord), accurate to
+ * eps^(8/9), with the per-coordinate step shifts hadj of
+ * fm_polish_calibrate_mpfr.  The polished argmin carries the gradient's error
+ * over the curvature, and order 4's eps^(4/5) is 48 of 60 digits: FindMaximum
+ * of an NIntegrate at WorkingPrecision -> 60 stopped at 46-49 correct digits
+ * of the argmax with every value of f good to 60. */
 static bool fm_polish_gradient_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
                                     mpfr_t* x, size_t n, const FmOpts* opts,
-                                    mpfr_t* g_out) {
+                                    const long* hadj, mpfr_t* g_out) {
     if (g_exprs && fm_eval_gradient_mpfr(g_exprs, binds, (mpfr_t const*)x, n, opts, g_out))
         return true;
-    return fm_grad_finite_diff_mpfr_ord(f, binds, (mpfr_t const*)x, n, opts, 4, g_out);
+    return fm_grad_finite_diff_mpfr_ord(f, binds, (mpfr_t const*)x, n, opts, 8, hadj, g_out);
+}
+
+/* The polish gradient at x, choosing the difference step on the way.
+ *
+ * The order-8 step h = max(|x_i|, 1) 2^(-p/9) balances truncation against
+ * rounding for a function whose scale is 1.  A function with a singularity at
+ * distance rho has truncation error ~ (h/rho)^8, so its best step is ~rho
+ * times smaller: the argmax of (2 + sin 3a)/(1/4 + a^2) (poles at +-i/2) came
+ * out at 49 digits of 60 with every value good to 64.  Measure it: the order-8
+ * differences D(h) and D(h/2) differ by ~ D(h)'s truncation error T; with the
+ * rounding error N ~ 2^-p S / h (S the scale of f: |f| + |g_i| max(|x_i|, 1)),
+ * the total T (h'/h)^8 + N h/h' is least at h' = h (N / 8T)^(1/9), a shift of
+ * ceil(log2(8T/N)/9) bits (none when T is already at the noise).  One extra
+ * gradient per polish, plus one more when some coordinate shifts by two or
+ * more bits.  A symbolic gradient needs none of it (*fd_out false, hadj 0).
+ * On return hadj holds the shifts for the polish's later gradients and floor_g
+ * the norm of the rounding error of the chosen differences, below which |g|
+ * is noise. */
+static bool fm_polish_calibrate_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
+                                     mpfr_t* x, size_t n, const FmOpts* opts,
+                                     mpfr_t fx, long* hadj, mpfr_t* g_out,
+                                     bool* fd_out, mpfr_t floor_g) {
+    for (size_t i = 0; i < n; i++) hadj[i] = 0;
+    *fd_out = false;
+    mpfr_set_zero(floor_g, +1);
+    if (g_exprs && fm_eval_gradient_mpfr(g_exprs, binds, (mpfr_t const*)x, n, opts, g_out))
+        return true;
+    *fd_out = true;
+    long bits = opts->wp_bits;
+    long p = numeric_width_precision_bits(bits);
+    long hexp = p / 9;
+    mpfr_t* g2 = fm_mpfr_array(n, bits);
+    long* half = (long*)malloc(sizeof(long) * (n ? n : 1));
+    if (half) for (size_t i = 0; i < (n ? n : 1); i++) half[i] = 1;   /* h/2 */
+    mpfr_t T, N, sc, t;
+    mpfr_inits2(bits, T, N, sc, t, (mpfr_ptr)0);
+    bool ok = half != NULL
+           && fm_grad_finite_diff_mpfr_ord(f, binds, (mpfr_t const*)x, n, opts, 8, NULL, g_out)
+           && fm_grad_finite_diff_mpfr_ord(f, binds, (mpfr_t const*)x, n, opts, 8, half, g2);
+    bool redo = false;
+    for (size_t i = 0; i < n && ok; i++) {
+        mpfr_abs(sc, x[i], MPFR_RNDN);                 /* max(|x_i|, 1) */
+        if (mpfr_cmp_ui(sc, 1) < 0) mpfr_set_ui(sc, 1, MPFR_RNDN);
+        mpfr_abs(t, g_out[i], MPFR_RNDN);              /* S = |f| + |g_i| sc */
+        mpfr_mul(t, t, sc, MPFR_RNDN);
+        mpfr_abs(N, fx, MPFR_RNDN);
+        mpfr_add(N, N, t, MPFR_RNDN);
+        mpfr_mul_2si(N, N, 1 - p + hexp, MPFR_RNDN);   /* N = 2 S 2^-p / h */
+        mpfr_div(N, N, sc, MPFR_RNDN);
+        mpfr_sub(T, g_out[i], g2[i], MPFR_RNDN);
+        mpfr_abs(T, T, MPFR_RNDN);
+        long sh = 0;
+        if (!mpfr_zero_p(N) && mpfr_number_p(T) && mpfr_cmp(T, N) > 0) {
+            mpfr_mul_ui(t, T, 8, MPFR_RNDN);
+            mpfr_div(t, t, N, MPFR_RNDN);
+            mpfr_log2(t, t, MPFR_RNDN);
+            double l = mpfr_get_d(t, MPFR_RNDN) / 9.0;
+            sh = (l > 0.0) ? (long)ceil(l) : 0;
+            if (sh > hexp - 1) sh = hexp - 1;
+            if (sh < 0) sh = 0;
+        }
+        hadj[i] = sh;
+        if (sh == 1) mpfr_set(g_out[i], g2[i], MPFR_RNDN);
+        else if (sh >= 2) redo = true;
+        /* floor_g^2 += (N 2^sh)^2 */
+        mpfr_mul_2si(N, N, sh, MPFR_RNDN);
+        mpfr_sqr(N, N, MPFR_RNDN);
+        mpfr_add(floor_g, floor_g, N, MPFR_RNDN);
+    }
+    if (ok) mpfr_sqrt(floor_g, floor_g, MPFR_RNDN);
+    if (ok && redo) {
+        ok = fm_grad_finite_diff_mpfr_ord(f, binds, (mpfr_t const*)x, n, opts, 8, hadj, g2);
+        for (size_t i = 0; i < n && ok; i++)
+            if (hadj[i] >= 2) mpfr_set(g_out[i], g2[i], MPFR_RNDN);
+    }
+    mpfr_clears(T, N, sc, t, (mpfr_ptr)0);
+    fm_mpfr_array_free(g2, n);
+    free(half);
+    return ok;
 }
 
 #define FM_POLISH_MAX 8
@@ -1189,15 +1429,27 @@ static bool fm_bfgs_polish_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
                                 mpfr_t* s_v, mpfr_t* y_v, mpfr_t* Hy) {
     long bits = opts->wp_bits;
     long p = numeric_width_precision_bits(bits);
-    mpfr_t gn, gtn, ft, slack, sy, thr, tmp;
-    mpfr_inits2(bits, gn, gtn, ft, slack, sy, thr, tmp, (mpfr_ptr)0);
+    mpfr_t gn, gtn, ft, slack, sy, thr, tmp, floor_g;
+    mpfr_inits2(bits, gn, gtn, ft, slack, sy, thr, tmp, floor_g, (mpfr_ptr)0);
     bool any = false;
+    bool fd = false;
+    long* hadj = (long*)malloc(sizeof(long) * (n ? n : 1));
     bool saved_quiet = g_fm_quiet;
     g_fm_quiet = true;                  /* probes: no messages of their own */
-    if (!g_exprs && !fm_polish_gradient_mpfr(f, binds, g_exprs, x, n, opts, g))
+    /* g must be the POLISH gradient: the iteration's (a central difference
+     * when the symbolic gradient of a black box does not evaluate) is a
+     * different function, and |g| is compared across steps. */
+    if (!hadj || !fm_polish_calibrate_mpfr(f, binds, g_exprs, x, n, opts, fx, hadj, g,
+                                           &fd, floor_g))
         goto done;
     fm_mpfr_norm2(gn, g, n);
     for (int it = 0; it < FM_POLISH_MAX && !mpfr_zero_p(gn); it++) {
+        /* A difference gradient at its rounding level is noise: another step
+         * cannot gain, so stop without paying for the trial. */
+        if (fd) {
+            mpfr_mul_2ui(tmp, floor_g, 1, MPFR_RNDN);
+            if (mpfr_cmp(gn, tmp) <= 0) break;
+        }
         for (size_t i = 0; i < n; i++) {           /* d = -H g */
             mpfr_set_zero(d[i], +1);
             for (size_t j = 0; j < n; j++) {
@@ -1206,7 +1458,7 @@ static bool fm_bfgs_polish_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
             }
             mpfr_add(xt[i], x[i], d[i], MPFR_RNDN);
         }
-        if (!fm_polish_gradient_mpfr(f, binds, g_exprs, xt, n, opts, gt)) break;
+        if (!fm_polish_gradient_mpfr(f, binds, g_exprs, xt, n, opts, hadj, gt)) break;
         fm_mpfr_norm2(gtn, gt, n);
         if (!mpfr_number_p(gtn) || mpfr_cmp(gtn, gn) >= 0) break;
         if (!fm_eval_scalar_mpfr(f, binds, xt, n, opts, ft)) break;
@@ -1245,28 +1497,42 @@ static bool fm_bfgs_polish_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
     }
 done:
     g_fm_quiet = saved_quiet;
-    mpfr_clears(gn, gtn, ft, slack, sy, thr, tmp, (mpfr_ptr)0);
+    mpfr_clears(gn, gtn, ft, slack, sy, thr, tmp, floor_g, (mpfr_ptr)0);
+    free(hadj);
     return any;
 }
 
+/* A gradient for the difference Hessian: symbolic when available, else the
+ * central difference.  The Hessian only steers the Newton steps of the polish,
+ * so its relative error 2^(-p/3) (a central-difference gradient to 2^(-2p/3)
+ * differenced over 2^(-p/3)) costs nothing in the polished digits -- at a
+ * quarter of the evaluations of the order-8 polish gradient. */
+static bool fm_curvature_gradient_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
+                                       mpfr_t* x, size_t n, const FmOpts* opts,
+                                       mpfr_t* g_out) {
+    if (g_exprs && fm_eval_gradient_mpfr(g_exprs, binds, (mpfr_t const*)x, n, opts, g_out))
+        return true;
+    return fm_grad_finite_diff_mpfr_ord(f, binds, (mpfr_t const*)x, n, opts, 2, NULL, g_out);
+}
+
 /* The inverse of a difference Hessian at x into H (n*n): forward differences
- * of the polish gradient (symbolic, else order 4) with increment
- * (|x_j| + 1) 2^(-p/3), symmetrised, inverted by Gauss-Jordan.  g is the
- * gradient at x (computed here).  n + 1 gradient evaluations.  False when a
- * gradient fails or the Hessian is not positive definite (a pivot <= 0). */
+ * of fm_curvature_gradient_mpfr with increment (|x_j| + 1) 2^(-p/3),
+ * symmetrised, inverted by Gauss-Jordan.  False when a gradient fails or the
+ * Hessian is not positive definite (a pivot <= 0). */
 static bool fm_inverse_fd_hessian_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs,
                                        mpfr_t* x, size_t n, const FmOpts* opts,
-                                       mpfr_t* g, mpfr_t* H) {
+                                       mpfr_t* H) {
     long bits = opts->wp_bits;
     long p = numeric_width_precision_bits(bits);
     mpfr_t* gp = fm_mpfr_array(n, bits);
     mpfr_t* xp = fm_mpfr_array(n, bits);
     mpfr_t* A  = fm_mpfr_array(n * n, bits);
+    mpfr_t* gc = fm_mpfr_array(n, bits);
     mpfr_t h, t, piv;
     mpfr_inits2(bits, h, t, piv, (mpfr_ptr)0);
     bool saved_quiet = g_fm_quiet;
     g_fm_quiet = true;
-    bool ok = fm_polish_gradient_mpfr(f, binds, g_exprs, x, n, opts, g);
+    bool ok = fm_curvature_gradient_mpfr(f, binds, g_exprs, x, n, opts, gc);
     for (size_t i = 0; i < n; i++) mpfr_set(xp[i], x[i], MPFR_RNDN);
     for (size_t j = 0; j < n && ok; j++) {
         mpfr_abs(h, x[j], MPFR_RNDN);
@@ -1274,9 +1540,9 @@ static bool fm_inverse_fd_hessian_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs
         mpfr_mul_2si(h, h, -(p / 3), MPFR_RNDN);
         mpfr_add(xp[j], x[j], h, MPFR_RNDN);
         mpfr_sub(h, xp[j], x[j], MPFR_RNDN);
-        ok = fm_polish_gradient_mpfr(f, binds, g_exprs, xp, n, opts, gp);
+        ok = fm_curvature_gradient_mpfr(f, binds, g_exprs, xp, n, opts, gp);
         for (size_t i = 0; i < n && ok; i++) {
-            mpfr_sub(A[i * n + j], gp[i], g[i], MPFR_RNDN);
+            mpfr_sub(A[i * n + j], gp[i], gc[i], MPFR_RNDN);
             mpfr_div(A[i * n + j], A[i * n + j], h, MPFR_RNDN);
         }
         mpfr_set(xp[j], x[j], MPFR_RNDN);
@@ -1315,6 +1581,7 @@ static bool fm_inverse_fd_hessian_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs
     }
     mpfr_clears(h, t, piv, (mpfr_ptr)0);
     fm_mpfr_array_free(gp, n); fm_mpfr_array_free(xp, n); fm_mpfr_array_free(A, n * n);
+    fm_mpfr_array_free(gc, n);
     return ok;
 }
 
@@ -1332,7 +1599,7 @@ void fm_polish_min_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs, size_t n,
     mpfr_t* s4 = fm_mpfr_array(n, bits);
     mpfr_t* s5 = fm_mpfr_array(n, bits);
     mpfr_t* s6 = fm_mpfr_array(n, bits);
-    if (fm_inverse_fd_hessian_mpfr(f, binds, g_exprs, x, n, opts, g, H))
+    if (fm_inverse_fd_hessian_mpfr(f, binds, g_exprs, x, n, opts, H))
         fm_bfgs_polish_mpfr(f, binds, g_exprs, n, opts, x, g, fx, H,
                             s1, s2, s3, s4, s5, s6);
     fm_mpfr_array_free(g, n); fm_mpfr_array_free(H, n * n);

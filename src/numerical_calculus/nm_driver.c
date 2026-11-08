@@ -540,6 +540,23 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         }
     }
 
+    /* Final gradient polish of a smooth, unconstrained or box-interior optimum
+     * (fm_polish_min): the local solvers stop on value comparisons, which
+     * resolve the minimiser only to ~sqrt(eps).  Accepted steps never worsen
+     * f or |grad f|, so a nonsmooth objective simply declines. */
+    if (feasible && do_post && !vs.any_int && ngens == 0 && ndisj == 0 && !have_mmx) {
+        double ft = fbest;
+        double* xt = (double*)malloc(sizeof(double) * n);
+        if (xt) {
+            for (size_t i = 0; i < n; i++) xt[i] = xbest[i];
+            if (fm_polish_min(f_eff, binds, g_exprs, n, &opts, boxes, xt, &ft)) {
+                for (size_t i = 0; i < n; i++) xbest[i] = xt[i];
+                fbest = ft;
+            }
+            free(xt);
+        }
+    }
+
     /* Optional MPFR refinement for WorkingPrecision > MachinePrecision on
      * continuous problems: the quasi-Newton (fm_run_bfgs_mpfr) without general
      * constraints, Newton on the KKT system of the machine point's active set
