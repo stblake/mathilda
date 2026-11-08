@@ -1794,41 +1794,95 @@ static bool is_nonempty_list(Expr* e, Expr*** args, size_t* count) {
  * (ndbuild_open declines); the caller then builds the List as before.
  * `cum_weights` NULL means uniform.
  */
+/* The shape of a rectangular nest of Lists whose leaves are all machine
+ * numbers of ONE type (*t, EXPR_REAL or EXPR_INTEGER; set from the first leaf
+ * when *tset is false).  A non-List is a rank-0 leaf.  False on ragged, mixed, or
+ * non-machine leaves, or a nest deeper than max_rank. */
+static bool choice_cell_shape(const Expr* e, int64_t* shp, int* r, int max_rank,
+                              ExprType* t, bool* tset) {
+    if (e->type == EXPR_REAL || e->type == EXPR_INTEGER) {
+        if (!*tset) { *t = e->type; *tset = true; }
+        *r = 0;
+        return e->type == *t;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List ||
+        e->data.function.arg_count == 0 || max_rank < 1)
+        return false;
+    int64_t sub[NDARRAY_MAX_RANK]; int sr = 0;
+    if (!choice_cell_shape(e->data.function.args[0], sub, &sr, max_rank - 1, t, tset)) return false;
+    for (size_t i = 1; i < e->data.function.arg_count; i++) {
+        int64_t s2[NDARRAY_MAX_RANK]; int r2 = 0;
+        if (!choice_cell_shape(e->data.function.args[i], s2, &r2, max_rank - 1, t, tset) ||
+            r2 != sr || memcmp(s2, sub, sizeof(int64_t) * (size_t)sr) != 0)
+            return false;
+    }
+    shp[0] = (int64_t)e->data.function.arg_count;
+    memcpy(shp + 1, sub, sizeof(int64_t) * (size_t)sr);
+    *r = sr + 1;
+    return true;
+}
+
+/* Row-major leaves of a nest that choice_cell_shape accepted. */
+static void choice_cell_flatten(const Expr* e, double* d, int64_t* z, size_t* at) {
+    if (e->type == EXPR_REAL)    { d[(*at)++] = e->data.real; return; }
+    if (e->type == EXPR_INTEGER) { z[(*at)++] = e->data.integer; return; }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        choice_cell_flatten(e->data.function.args[i], d, z, at);
+}
+
 static Expr* choice_buffer(Expr** choices, size_t choice_count,
                            const int64_t* dims, int rank,
                            double* cum_weights, double total) {
     if (rank < 1 || choice_count == 0) return NULL;
-    ExprType t0 = choices[0]->type;
-    if (t0 != EXPR_REAL && t0 != EXPR_INTEGER) return NULL;
-    for (size_t i = 1; i < choice_count; i++)
-        if (choices[i]->type != t0) return NULL;   /* lossless: one head only */
+    /* Every choice a machine number, or every one a rectangular array of them
+     * of one shape (RandomChoice[w -> {{3, 1}, {3, -1}}, n] is an n x 2
+     * array): one element type, one cell shape. */
+    ExprType t0 = EXPR_INTEGER; bool tset = false;
+    int64_t cshape[NDARRAY_MAX_RANK]; int crank = 0;
+    if (!choice_cell_shape(choices[0], cshape, &crank, NDARRAY_MAX_RANK - 1 - rank, &t0, &tset))
+        return NULL;
+    for (size_t i = 1; i < choice_count; i++) {
+        int64_t s2[NDARRAY_MAX_RANK]; int r2 = 0;
+        if (!choice_cell_shape(choices[i], s2, &r2, NDARRAY_MAX_RANK - 1 - rank, &t0, &tset) ||
+            r2 != crank || memcmp(s2, cshape, sizeof(int64_t) * (size_t)crank) != 0)
+            return NULL;                                /* lossless: one head, one shape */
+    }
+    size_t cell = 1;
+    for (int d = 0; d < crank; d++) cell *= (size_t)cshape[d];
     size_t n = 1;
     for (int d = 0; d < rank; d++) {
         if (dims[d] < 1) return NULL;
         if ((uint64_t)dims[d] > (uint64_t)(SIZE_MAX / 8) / n) return NULL;
         n *= (size_t)dims[d];
     }
+    if (cell > 1 && n > (SIZE_MAX / 8) / cell) return NULL;
+    int64_t odims[NDARRAY_MAX_RANK];
+    memcpy(odims, dims, sizeof(int64_t) * (size_t)rank);
+    memcpy(odims + rank, cshape, sizeof(int64_t) * (size_t)crank);
     NDType dt = (t0 == EXPR_REAL) ? NDT_FLOAT64 : NDT_INT64;
     void* buf = NULL;
-    Expr* out = ndbuild_open(rank, dims, dt, &buf);
+    Expr* out = ndbuild_open(rank + crank, odims, dt, &buf);
     if (!out) return NULL;
-    if (dt == NDT_FLOAT64) {
-        double* b = (double*)buf;
-        for (size_t i = 0; i < n; i++) {
-            size_t k = cum_weights
-                ? weighted_random_index(cum_weights, choice_count, total)
-                : random_index(choice_count);
-            b[i] = choices[k]->data.real;
-        }
-    } else {
-        int64_t* b = (int64_t*)buf;
-        for (size_t i = 0; i < n; i++) {
-            size_t k = cum_weights
-                ? weighted_random_index(cum_weights, choice_count, total)
-                : random_index(choice_count);
-            b[i] = choices[k]->data.integer;
-        }
+    /* The choices' leaves, flattened once: cell values per choice. */
+    double* cd = NULL; int64_t* cz = NULL;
+    if (dt == NDT_FLOAT64) cd = malloc(sizeof(double) * choice_count * cell);
+    else                   cz = malloc(sizeof(int64_t) * choice_count * cell);
+    if (!cd && !cz) { expr_free(out); return NULL; }
+    for (size_t i = 0; i < choice_count; i++) {
+        size_t at = i * cell;
+        choice_cell_flatten(choices[i], cd, cz, &at);
     }
+    for (size_t i = 0; i < n; i++) {
+        size_t k = cum_weights
+            ? weighted_random_index(cum_weights, choice_count, total)
+            : random_index(choice_count);
+        if (dt == NDT_FLOAT64)
+            memcpy((double*)buf + i * cell, cd + k * cell, sizeof(double) * cell);
+        else
+            memcpy((int64_t*)buf + i * cell, cz + k * cell, sizeof(int64_t) * cell);
+    }
+    free(cd); free(cz);
     return out;
 }
 

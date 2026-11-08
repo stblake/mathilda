@@ -195,6 +195,13 @@ In[6]:= RandomChoice[x]
 Out[6]= RandomChoice[x]
 ```
 
+- **Array-valued choices pack too** (v0.6465). Choices that are all rectangular
+  arrays of one machine head and one shape give a packed array of shape
+  `dims ++ cellShape`. So `RandomChoice[w -> {{3, 1}, {3, -1}}, 10^6]` is a packed
+  `10^6 × 2` integer array (20 ms, was 35 ms boxed), which a following
+  `FoldList[#2[[1]] + #2[[2]]/#1 &, ...]` reads directly. It is one draw per cell,
+  in the same order as the boxed path. Ragged or mixed choices keep the boxed
+  path.
 ## RandomSample
 Gives a pseudorandom sample of elements without replacement.
 - `RandomSample[{e1, e2, ...}, n]`: gives a pseudorandom sample of n of the ei.

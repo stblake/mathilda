@@ -1386,6 +1386,21 @@ void test_randomprime_primality_helper(void) {
              "{True, False, False, True, False, False, True, True, False}");
 }
 
+
+/* RandomChoice over array-valued choices of one machine head and shape writes
+ * a buffer of dims ++ cell shape, with the boxed path's draw sequence. */
+static void test_randomchoice_rows_packed(void) {
+    assert_eval_eq("PackedArrayQ[RandomChoice[{1, 1} -> {{3, 1}, {3, -1}}, 10^4]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[RandomChoice[{{3, 1}, {3, -1}}, 10^4]]", "True", 0);
+    assert_eval_eq("Dimensions[RandomChoice[{1., 2.} -> {{1.5, 2.5}, {0., 1.}}, {10, 100}]]",
+                   "{10, 100, 2}", 0);
+    assert_eval_eq("PackedArrayQ[RandomChoice[{{1, 2}, {3}}, 10^4]]", "False", 0);
+    assert_eval_eq("PackedArrayQ[RandomChoice[{{1, 2}, {3., 4}}, 10^4]]", "False", 0);
+    assert_eval_eq("SeedRandom[7]; a = RandomChoice[{1, 2} -> {{3, 1}, {3, -1}}, 300]; "
+                   "SeedRandom[7]; a === Table[RandomChoice[{1, 2} -> {{3, 1}, {3, -1}}], 300]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1505,6 +1520,7 @@ int main(void) {
     TEST(test_randomsample_n_exceeds_length);
     TEST(test_randomsample_empty_list_upto);
     TEST(test_randomsample_sample_zero);
+    TEST(test_randomchoice_rows_packed);
 
     printf("All random tests passed!\n");
     return 0;
