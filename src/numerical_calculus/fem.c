@@ -1032,6 +1032,7 @@ static double fem_local(const FemLocator* L, int64_t e, double px, double py, do
     double s = ( a22 * rx - a12 * ry) / det;
     double r = (-a21 * rx + a11 * ry) / det;
     if (L->C[e] != 0.0) {
+        double s0 = s, r0 = r, res = INFINITY;
         for (int it = 0; it < 12; it++) {
             double N[6], Nx[6], Ne[6];
             p2_shape(s, r, N, Nx, Ne);
@@ -1040,12 +1041,18 @@ static double fem_local(const FemLocator* L, int64_t e, double px, double py, do
                 fx += N[k] * X[k]; fy += N[k] * Y[k];
                 j11 += Nx[k] * X[k]; j12 += Ne[k] * X[k]; j21 += Nx[k] * Y[k]; j22 += Ne[k] * Y[k];
             }
+            res = fabs(fx) + fabs(fy);
             double dj = j11 * j22 - j12 * j21;
             if (dj == 0) break;
             double ds = ( j22 * fx - j12 * fy) / dj, dr = (-j21 * fx + j11 * fy) / dj;
             s -= ds; r -= dr;
-            if (fabs(ds) + fabs(dr) < 1e-15) break;
+            if (fabs(ds) + fabs(dr) < 1e-15) { res = 0; break; }
         }
+        /* Newton that has not converged (a point several elements away, where
+         * the quadratic map folds) can stop at "inside" coordinates: keep the
+         * affine estimate then, which places such a point outside */
+        double size = fabs(a11) + fabs(a12) + fabs(a21) + fabs(a22);
+        if (!(res <= 1e-10 * size)) { s = s0; r = r0; }
     }
     *xi = s; *eta = r;
     double l0 = 1 - s - r, mn = l0;
@@ -1054,9 +1061,11 @@ static double fem_local(const FemLocator* L, int64_t e, double px, double py, do
     return mn;
 }
 
-/* Value (dx, dy derivative orders) of the mesh function at (px, py). */
-static bool fem_eval_point(const FemLocator* L, const double* V, int dx, int dy,
-                           double px, double py, double* out, bool* outside) {
+/* The element holding (px, py) (the nearest one when the point is outside the
+ * mesh; -1 for an empty mesh), with the point's reference coordinates and its
+ * smallest barycentric coordinate (>= 0 inside, within rounding). */
+static int64_t fem_locate(const FemLocator* L, double px, double py,
+                          double* xi_out, double* eta_out, double* minbary) {
     int i = (int)floor((px - L->x0) / L->dx), j = (int)floor((py - L->y0) / L->dy);
     int64_t best = -1; double bestm = -INFINITY, bxi = 0, beta = 0;
     for (int ring = 0; ring <= 2 && bestm < -1e-10; ring++) {
@@ -1081,8 +1090,17 @@ found:
             double xi, eta, mn = fem_local(L, e, px, py, &xi, &eta);
             if (mn > bestm) { bestm = mn; best = e; bxi = xi; beta = eta; }
         }
-        if (best < 0) return false;
     }
+    *xi_out = bxi; *eta_out = beta; *minbary = bestm;
+    return best;
+}
+
+/* Value (dx, dy derivative orders) of the mesh function at (px, py). */
+static bool fem_eval_point(const FemLocator* L, const double* V, int dx, int dy,
+                           double px, double py, double* out, bool* outside) {
+    double bxi, beta, bestm;
+    int64_t best = fem_locate(L, px, py, &bxi, &beta, &bestm);
+    if (best < 0) return false;
     *outside = bestm < -1e-8;
     const double* t = L->T + 6 * best;
     double N[6], Nx[6], Ne[6];
@@ -1172,15 +1190,23 @@ Expr* fem_interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
                         "function. Extrapolation will be used.", px, py);
         return expr_new_real(v);
     }
-    /* vectors of points (packed or plain numeric Lists of equal length) */
+    /* vectors of points (packed or plain numeric Lists of equal length); a
+     * scalar coordinate is broadcast against a vector one (f[1, {y1, y2}]) */
     Expr* a = call_args[0]; Expr* b = call_args[1];
     int64_t n = -1;
     if (a->type == EXPR_NDARRAY && a->data.ndarray.rank == 1) n = a->data.ndarray.dims[0];
     else if (head_is(a, SYM_List)) n = (int64_t)a->data.function.arg_count;
+    else if (b->type == EXPR_NDARRAY && b->data.ndarray.rank == 1) n = b->data.ndarray.dims[0];
+    else if (head_is(b, SYM_List)) n = (int64_t)b->data.function.arg_count;
     if (n < 1) return NULL;
     double* xs = malloc(sizeof(double) * (size_t)n);
     double* ys = malloc(sizeof(double) * (size_t)n);
-    if (!fem_read_reals(a, n, xs) || !fem_read_reals(b, n, ys)) { free(xs); free(ys); return NULL; }
+    bool rd = true;
+    if (nd_to_double(a, &px)) { if (!isfinite(px)) rd = false; for (int64_t i = 0; i < n; i++) xs[i] = px; }
+    else rd = fem_read_reals(a, n, xs);
+    if (rd && nd_to_double(b, &py)) { if (!isfinite(py)) rd = false; for (int64_t i = 0; i < n; i++) ys[i] = py; }
+    else if (rd) rd = fem_read_reals(b, n, ys);
+    if (!rd) { free(xs); free(ys); return NULL; }
     double* out = malloc(sizeof(double) * (size_t)n);
     bool any_out = false;
     for (int64_t i = 0; i < n; i++) {
@@ -1218,17 +1244,261 @@ static Expr* fem_find_mesh(const Expr* e, Expr* found, bool* clash) {
 
 static bool fem_close(double a, double b) { return fabs(a - b) <= 1e-12 * (1.0 + fabs(a) + fabs(b)); }
 
+/* The applications f[X, Y] of mesh functions in e (borrowed pointers). */
+#define FEM_MAXCALLS 16
+static int fem_collect_calls(const Expr* e, const Expr** calls, int n) {
+    if (!e || e->type != EXPR_FUNCTION) return n;
+    const Expr* h = e->data.function.head;
+    if (head_is((Expr*)h, SYM_InterpolatingFunction) && h->data.function.arg_count >= 2
+        && fem_is_mesh_function(h->data.function.args[1]) && e->data.function.arg_count == 2) {
+        for (int k = 0; k < n; k++) if (expr_eq(calls[k], e)) return n;
+        if (n < FEM_MAXCALLS) calls[n++] = e;
+        else return FEM_MAXCALLS + 1;
+        return n;
+    }
+    n = fem_collect_calls(h, calls, n);
+    for (size_t i = 0; i < e->data.function.arg_count && n <= FEM_MAXCALLS; i++)
+        n = fem_collect_calls(e->data.function.args[i], calls, n);
+    return n;
+}
+
+/* A coordinate g(t) of a path: a constant, a compiled program, or (outside
+ * the compilable subset) the evaluator. */
+typedef struct { Expr* e; const char* tv; bool konst; double c; AutoCompiled* ac; } FemCoord;
+
+static bool fem_coord_init(FemCoord* g, Expr* e, const char* tv) {
+    memset(g, 0, sizeof *g);
+    g->e = e; g->tv = tv;
+    if (!fem_contains_symbol(e, tv)) { g->konst = true; return fem_num(e, &g->c); }
+    Expr* v = expr_new_symbol(tv);
+    const Expr* vs[1] = { v };
+    g->ac = autocompile_new(e, vs, 1);
+    expr_free(v);
+    return true;
+}
+static bool fem_coord_eval(const FemCoord* g, double t, double* out) {
+    if (g->konst) { *out = g->c; return true; }
+    if (g->ac && autocompiled_eval_real(g->ac, &t, out) && isfinite(*out)) return true;
+    Expr* lit = expr_new_symbol(g->tv); Expr* sub = expr_new_real(t);
+    Expr* r = nd_replace_all(expr_copy(g->e), &lit, &sub, 1);
+    bool ok = fem_num(r, out);
+    expr_free(r); expr_free(lit); expr_free(sub);
+    return ok;
+}
+static void fem_coord_free(FemCoord* g) { if (g->ac) autocompiled_free(g->ac); g->ac = NULL; }
+
+/* One-dimensional path through the mesh: the points (X_c(t), Y_c(t)) of the
+ * mesh-function calls c at parameter t. */
+typedef struct {
+    const FemLocator* L;
+    int nc;
+    FemCoord gx[FEM_MAXCALLS], gy[FEM_MAXCALLS];
+    const char* tv; const char* dummy;
+    int64_t evals;
+    int64_t last[FEM_MAXCALLS];  /* elements of the previous kink-free piece */
+    bool have_last;
+    bool outside;
+} FemPath;
+
+/* The element of every call at t (elem[nc]); false when a coordinate is not
+ * numeric. A point off the mesh sets P->outside. */
+static bool fem_path_elems(FemPath* P, double t, int64_t* elem, double* pts) {
+    P->evals++;
+    for (int c = 0; c < P->nc; c++) {
+        double px, py, xi, eta, mb;
+        if (!fem_coord_eval(&P->gx[c], t, &px) || !fem_coord_eval(&P->gy[c], t, &py)) return false;
+        elem[c] = fem_locate(P->L, px, py, &xi, &eta, &mb);
+        /* a point a sliver off the mesh (a path on a curved side, which the
+         * quadratic elements only approximate) is still on it */
+        if (elem[c] < 0 || mb < -1e-3) P->outside = true;
+        pts[2 * c] = px; pts[2 * c + 1] = py;
+    }
+    return true;
+}
+
+/* True when the points of t_l and t_r share an element for every call: the
+ * (locally straight) path between them then stays in that convex element and
+ * the integrand has no inter-element kink there. */
+static bool fem_in_elem(const FemLocator* L, int64_t e, double px, double py) {
+    /* the bounding box first: on a curved element the inverse isoparametric
+     * map can converge to a fold preimage, with "inside" coordinates, for a
+     * point several elements away */
+    const double* t = L->T + 6 * e;
+    double x0 = INFINITY, x1 = -INFINITY, y0 = INFINITY, y1 = -INFINITY;
+    for (int k = 0; k < 6; k++) {
+        int64_t v = (int64_t)t[k];
+        double x = L->X[2 * v], y = L->X[2 * v + 1];
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+    }
+    double m = 1e-6 * ((x1 - x0) + (y1 - y0));
+    if (px < x0 - m || px > x1 + m || py < y0 - m || py > y1 + m) return false;
+    double xi, eta;
+    return fem_local(L, e, px, py, &xi, &eta) >= -1e-6;   /* a sliver off a curved side is on it */
+}
+
+/* True when, for every call, the element holding the middle point also holds
+ * both ends: the (locally straight) path then stays in that convex element,
+ * and the integrand has no inter-element kink on the piece.  Pairwise
+ * sharing is not enough -- three points on mesh vertices share elements
+ * pairwise around fans while the path between them crosses several. */
+static bool fem_path_inside(const FemPath* P, const int64_t* em, const double* pl, const double* pr) {
+    for (int c = 0; c < P->nc; c++)
+        if (!fem_in_elem(P->L, em[c], pl[2 * c], pl[2 * c + 1])
+            || !fem_in_elem(P->L, em[c], pr[2 * c], pr[2 * c + 1])) return false;
+    return true;
+}
+
+typedef struct { double* t; int64_t n, cap; } FemBreaks;
+static void fem_breaks_add(FemBreaks* B, double t) {
+    if (B->n == B->cap) { B->cap = B->cap ? 2 * B->cap : 256; B->t = realloc(B->t, sizeof(double) * (size_t)B->cap); }
+    B->t[B->n++] = t;
+}
+
+/* The element crossings in [l, r], left to right: [l, r] is split until each
+ * piece is kink-free -- the element of a point inside it holds both ends
+ * (fem_path_inside; the inner point also catches a curved path bulging out
+ * of an element) -- and a breakpoint goes where the element of one such
+ * piece differs from the previous one's.  The split is off-centre
+ * (0.4859 : 0.5141) so that it does not land on mesh vertices, which a
+ * mesher refining an arc by halving puts at exactly the dyadic points of a
+ * uniform parametrisation. */
+static bool fem_path_split(FemPath* P, double l, const double* pl, double r, const double* pr,
+                           double tol, int depth, FemBreaks* B) {
+    double m = l + 0.48590163 * (r - l);
+    int64_t em[FEM_MAXCALLS]; double pm[2 * FEM_MAXCALLS];
+    if (!fem_path_elems(P, m, em, pm)) return false;
+    if (fem_path_inside(P, em, pl, pr)) {
+        bool change = !P->have_last;
+        for (int c = 0; c < P->nc && !change; c++) change = P->last[c] != em[c];
+        if (change) fem_breaks_add(B, l);
+        memcpy(P->last, em, sizeof(int64_t) * (size_t)P->nc);
+        P->have_last = true;
+        return true;
+    }
+    if (r - l <= tol || depth > 80 || P->evals > 2000000) {
+        fem_breaks_add(B, m);
+        P->have_last = false;
+        return true;
+    }
+    if (!fem_path_split(P, l, pl, m, pm, tol, depth + 1, B)) return false;
+    return fem_path_split(P, m, pm, r, pr, tol, depth + 1, B);
+}
+
+static int fem_cmp_double(const void* a, const void* b) {
+    double x = *(const double*)a, y = *(const double*)b;
+    return x < y ? -1 : x > y;
+}
+
+/* NIntegrate[f, {t, a, b}] when f applies mesh functions at points that move
+ * with t (along a side, a radius, a circle, ...): the parameter interval is
+ * cut where the path crosses an element edge -- found by bisection on the
+ * element that holds the point -- and each piece, on which the integrand is
+ * smooth, gets a 10-point Gauss-Legendre rule. Exact up to rounding for a
+ * quadratic mesh function on a straight path; the adaptive rule would instead
+ * chase the kinks between elements. NULL when not applicable (no call depends
+ * on t, the path leaves the mesh, a coordinate is not numeric). */
+static Expr* fem_nintegrate_path(Expr* body, Expr* spec) {
+    static const double GX[10] = {
+        -0.9739065285171717, -0.8650633666889845, -0.6794095682990244, -0.4333953941292472,
+        -0.1488743389816312,  0.1488743389816312,  0.4333953941292472,  0.6794095682990244,
+         0.8650633666889845,  0.9739065285171717 };
+    static const double GW[10] = {
+        0.0666713443086881, 0.1494513491505806, 0.2190863625159820, 0.2692667193099963,
+        0.2955242247147529, 0.2955242247147529, 0.2692667193099963, 0.2190863625159820,
+        0.1494513491505806, 0.0666713443086881 };
+    double a, b;
+    if (!fem_num(spec->data.function.args[1], &a) || !fem_num(spec->data.function.args[2], &b)
+        || !(b > a)) return NULL;
+    const Expr* calls[FEM_MAXCALLS + 1];
+    int nc = fem_collect_calls(body, calls, 0);
+    if (nc < 1 || nc > FEM_MAXCALLS) return NULL;
+    FemPath P; memset(&P, 0, sizeof P);
+    P.tv = spec->data.function.args[0]->data.symbol.name;
+    P.dummy = intern_symbol("NDSolve`FEM`$none");
+    bool moves = false, okc = true;
+    for (int c = 0; c < nc; c++) {
+        const Expr* h = calls[c]->data.function.head;
+        Expr* meshE = h->data.function.args[1]->data.function.args[0];
+        const FemLocator* L = fem_locator(meshE);
+        if (!L || (P.L && P.L != L)) { okc = false; break; }
+        P.L = L;
+        Expr* cx = calls[c]->data.function.args[0];
+        Expr* cy = calls[c]->data.function.args[1];
+        bool ix = fem_coord_init(&P.gx[c], cx, P.tv);
+        bool iy = fem_coord_init(&P.gy[c], cy, P.tv);
+        P.nc = c + 1;
+        if (!ix || !iy) { okc = false; break; }
+        if (!P.gx[c].konst || !P.gy[c].konst) moves = true;
+    }
+    if (!okc || !moves) {
+        for (int c = 0; c < P.nc; c++) { fem_coord_free(&P.gx[c]); fem_coord_free(&P.gy[c]); }
+        return NULL;
+    }
+    /* breakpoints: a coarse uniform sampling, then bisection of every sample
+     * interval not inside one element (fem_path_split) */
+    FemBreaks B; memset(&B, 0, sizeof B);
+    const int NS = 61;
+    double tol = 1e-14 * (fabs(a) + fabs(b) + (b - a));
+    int64_t el[FEM_MAXCALLS], er[FEM_MAXCALLS];
+    double pl[2 * FEM_MAXCALLS], pr[2 * FEM_MAXCALLS];
+    bool ok = fem_path_elems(&P, a, el, pl);
+    fem_breaks_add(&B, a);
+    for (int k = 1; k <= NS && ok; k++) {
+        double tr = k == NS ? b : a + (b - a) * k / NS, tl = a + (b - a) * (k - 1) / NS;
+        ok = fem_path_elems(&P, tr, er, pr);
+        if (ok) ok = fem_path_split(&P, tl, pl, tr, pr, tol, 0, &B);
+        fem_breaks_add(&B, tr);
+        memcpy(el, er, sizeof el); memcpy(pl, pr, sizeof pl);
+    }
+    for (int c = 0; c < P.nc; c++) { fem_coord_free(&P.gx[c]); fem_coord_free(&P.gy[c]); }
+    if (!ok || P.outside) { free(B.t); return NULL; }
+    qsort(B.t, (size_t)B.n, sizeof(double), fem_cmp_double);
+    /* Gauss-Legendre on every piece, one batch evaluation of the integrand */
+    int64_t np = 0;
+    for (int64_t k = 0; k + 1 < B.n; k++) if (B.t[k + 1] - B.t[k] > tol) np++;
+    double* T = malloc(sizeof(double) * (size_t)(10 * np + 1));
+    double* W = malloc(sizeof(double) * (size_t)(10 * np + 1));
+    double* Z = calloc((size_t)(10 * np + 1), sizeof(double));
+    int64_t q = 0;
+    for (int64_t k = 0; k + 1 < B.n; k++) {
+        double l = B.t[k], r = B.t[k + 1];
+        if (r - l <= tol) continue;
+        double c = 0.5 * (l + r), hw = 0.5 * (r - l);
+        for (int g = 0; g < 10; g++) { T[q] = c + hw * GX[g]; W[q] = hw * GW[g]; q++; }
+    }
+    free(B.t);
+    double* V = malloc(sizeof(double) * (size_t)(q + 1));
+    Expr* out = NULL;
+    if (fem_field(body, P.tv, P.dummy, T, Z, q, V)) {
+        double sum = 0, comp = 0;
+        for (int64_t i = 0; i < q; i++) {
+            double t = W[i] * V[i] - comp, s2 = sum + t;
+            comp = (s2 - sum) - t; sum = s2;
+        }
+        if (isfinite(sum)) out = expr_new_real(sum);
+    }
+    free(T); free(W); free(Z); free(V);
+    return out;
+}
+
 /* NIntegrate[f, {x, y} in reg] or NIntegrate[f, {x, a, b}, {y, c, d}] when f
  * involves mesh functions on one mesh whose region is reg (or the rectangle
  * [a, b] x [c, d]): the integral over the mesh, element by element, with the
  * degree-6 rule on the (isoparametric) elements -- exact for a quadratic
  * mesh function, and free of the adaptive cubature's struggle with the
  * kinks between elements. NULL when not applicable. `body` is the
- * evaluated integrand. */
+ * evaluated integrand. A single range {t, a, b} goes to the path rule
+ * (fem_nintegrate_path). */
 Expr* fem_nintegrate(Expr* body, Expr** specs, size_t nspec) {
     bool clash = false;
     Expr* meshE = fem_find_mesh(body, NULL, &clash);
     if (!meshE || clash) return NULL;
+    if (nspec == 1 && head_is(specs[0], SYM_List) && specs[0]->data.function.arg_count == 3
+        && specs[0]->data.function.args[0]->type == EXPR_SYMBOL)
+        return fem_nintegrate_path(body, specs[0]);
     Expr* region = meshE->data.function.args[3];
     const char* xv = NULL; const char* yv = NULL;
     if (nspec == 1 && fem_is_region_spec(specs[0])) {

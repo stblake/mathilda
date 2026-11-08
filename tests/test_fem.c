@@ -341,6 +341,23 @@ static void test_contourplot(void) {
               "{x, y} \\[Element] Disk[]]], _Line, Infinity]]", 2 * PI * 2.404825557695773 / 5.520078110286311, 2e-5);
 }
 
+/* ---------------- 1-D NIntegrate along a path through a mesh ---------------- */
+static void test_nintegrate_path(void) {
+    /* u = x (2 - x) exactly (natural condition at x = 1): Int_0^1 u(1, y) dy = 1 */
+    run("snat = NDSolveValue[{-Laplacian[u[x, y], {x, y}] == 2, DirichletCondition[u[x, y] == 0, x == 0]}, u, "
+        "{x, y} \\[Element] Rectangle[]];");
+    check_abs("NIntegrate along a side (piecewise exact)", "NIntegrate[snat[1, y], {y, 0, 1}]", 1.0, 1e-12);
+    check_abs("NIntegrate along a diagonal", "NIntegrate[snat[t, t], {t, 0, 1}]", 2.0 / 3.0, 1e-12);
+    /* a circle of radius 1/2 in the disk: u = (1 - r^2)/4, Int_0^2Pi u dp = 2 Pi 3/16 */
+    run("sdisk = NDSolveValue[{-Laplacian[u[x, y], {x, y}] == 1, DirichletCondition[u[x, y] == 0, True]}, u, "
+        "{x, y} \\[Element] Disk[]];");
+    check_abs("NIntegrate around a circle", "NIntegrate[sdisk[Cos[p]/2, Sin[p]/2], {p, 0, 2 Pi}]",
+              2 * PI * 3.0 / 16.0, 1e-7);
+    /* WorkingPrecision does not send it to the adaptive rule (which chased the kinks for minutes) */
+    check_abs("NIntegrate along a side, WorkingPrecision -> 30",
+              "NIntegrate[snat[1, y], {y, 0, 1}, WorkingPrecision -> 30]", 1.0, 1e-12);
+}
+
 /* ---------------- messages / declines ---------------- */
 static void test_declines(void) {
     double v;
@@ -366,6 +383,7 @@ int main(void) {
     test_ndsolve();
     test_nintegrate();
     test_contourplot();
+    test_nintegrate_path();
     test_declines();
     if (failures == 0) printf("\nAll FEM tests passed.\n");
     else printf("\n%d FEM test(s) FAILED.\n", failures);

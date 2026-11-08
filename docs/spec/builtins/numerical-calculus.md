@@ -873,6 +873,10 @@ quadrature points in one batch: exact for the quadratic function itself. The
 adaptive cubature otherwise spends its budget on the kinks between elements
 (6.8 s and `::accgl` against 0.16 s on a 30 000-element mesh). `{x, y} ∈ reg` is
 accepted only in that case; another region specification stays unevaluated.
+A one-dimensional `NIntegrate[f, {t, a, b}]` of such functions applied along a
+path (`s[1, y]`, `s[r Cos[p], r Sin[p]]`) is cut at the path's element crossings
+and integrated piece by piece with Gauss–Legendre (see
+[Finite elements](#finite-elements-ndeigenvalues-ndeigensystem-ndsolve-over-a-region)).
 
 The integrand is first evaluated symbolically, with the variables unbound, and
 the evaluated form is integrated — except when that evaluation swells it (more

@@ -40,7 +40,9 @@ Expr* fem_interp_apply(Expr* ifun, Expr** call_args, size_t argc);
 
 /* NIntegrate[f, {x, y} in reg] (or {x, a, b}, {y, c, d} over a rectangle)
  * where the evaluated integrand f involves mesh functions on one mesh over
- * that same region: the integral element by element. NULL otherwise. */
+ * that same region: the integral element by element; NIntegrate[f, {t, a, b}]
+ * where f applies mesh functions along a path in t: Gauss-Legendre between
+ * the path's element crossings. NULL otherwise. */
 Expr* fem_nintegrate(Expr* body, Expr** specs, size_t nspec);
 
 /* ContourPlot[f, {x, y} in reg, opts]: contours on a mesh of the region
