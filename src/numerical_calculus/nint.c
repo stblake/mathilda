@@ -2817,6 +2817,37 @@ static Expr* ni_machine_twin(const Expr* e) {
     if (e->type == EXPR_MPFR) return expr_new_real(mpfr_get_d(e->data.mpfr, MPFR_RNDN));
     if (e->type != EXPR_FUNCTION) return NULL;
     const Expr* h = e->data.function.head;
+    /* The inner integral of an iterated integral at WorkingPrecision: its
+     * machine twin is the same integral at machine precision (the precision
+     * options dropped).  A geometry sample needs only a few digits, and each
+     * one used to be a whole inner integral at the working precision: the
+     * outer rule's oscillation and feature probes alone cost hundreds of
+     * 60-digit inner integrals of a 2-D lattice Green's function. */
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_NIntegrate) {
+        size_t n = e->data.function.arg_count, m = 0;
+        Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+        if (!a) return NULL;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* r = e->data.function.args[i];
+            bool prec_opt = i > 0 && r->type == EXPR_FUNCTION && r->data.function.arg_count == 2
+                && r->data.function.head->type == EXPR_SYMBOL
+                && (r->data.function.head->data.symbol.name == SYM_Rule
+                    || r->data.function.head->data.symbol.name == SYM_RuleDelayed)
+                && r->data.function.args[0]->type == EXPR_SYMBOL
+                && (r->data.function.args[0]->data.symbol.name == SYM_WorkingPrecision
+                    || r->data.function.args[0]->data.symbol.name == SYM_PrecisionGoal
+                    || r->data.function.args[0]->data.symbol.name == SYM_AccuracyGoal);
+            if (!prec_opt) a[m++] = expr_copy((Expr*)r);
+        }
+        if (m == n) {
+            for (size_t i = 0; i < m; i++) expr_free(a[i]);
+            free(a);
+            return NULL;
+        }
+        Expr* out = expr_new_function(expr_copy((Expr*)h), a, m);
+        free(a);
+        return out;
+    }
     if (h->type == EXPR_SYMBOL) {
         uint32_t at = symtab_get_def(h->data.symbol.name)->attributes;
         if (at & (ATTR_HOLDALL | ATTR_HOLDFIRST | ATTR_HOLDREST | ATTR_HOLDALLCOMPLETE))

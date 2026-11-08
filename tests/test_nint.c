@@ -1239,6 +1239,17 @@ static void test_accgl_states_goal(void) {
                "accgl tolerance is not the goal's: %s", buf);
 }
 
+/* The machine geometry twin of an iterated integral at WorkingPrecision is
+ * its inner integral at machine precision: the outer rule's probes (an
+ * oscillation probe alone takes ~46 samples) each used to run a whole inner
+ * integral at the working precision -- 27% of the time of a 2-D lattice
+ * Green's function at WorkingPrecision -> 30 (81 s -> 59 s).  The values are
+ * unchanged.  True value: mpmath. */
+static void test_iterated_wp_machine_twin(void) {
+    ASSERT_REL("NIntegrate[Exp[-x y] Sin[x + y], {x, 0, 1}, {y, 0, 2}, WorkingPrecision -> 40]",
+               "1.05541194957058443667825859745073286821672065", "10^-35");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1296,6 +1307,7 @@ int main(void) {
     TEST(test_nested_exact_endpoints_wp);
     TEST(test_phase_coordinate_endpoint);
     TEST(test_accgl_states_goal);
+    TEST(test_iterated_wp_machine_twin);
 
     printf("All nint_tests passed.\n");
     return 0;
