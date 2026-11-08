@@ -1,0 +1,26 @@
+-- Experiment 228 -- SIAM 100-digit holdout B for Problem 3 (FriCAS column).
+-- Every row is the 2-norm (largest singular value) of a dense section;
+-- FriCAS has no numerical SVD or numerical eigensolver for a Float/DoubleFloat
+-- matrix (as in experiment 168): every row SKIPs.  See matrix_norms.m.
+)read ../siam100_common.input )quiet
+vskip("bc3.1 machine", "Norm")
+vskip("bc3.1 wp50", "Norm")
+vskip("bc3.2 machine", "Norm")
+vskip("bc3.2 wp50", "Norm")
+vskip("bc3.3 machine", "Norm")
+vskip("bc3.3 wp50", "Norm")
+vskip("bc3.4 machine", "Norm")
+vskip("bc3.4 wp50", "Norm")
+vskip("bc3.5 machine", "Norm")
+vskip("bc3.5 wp50", "Norm")
+vskip("bc3.6 machine", "Norm")
+vskip("bc3.6 wp50", "Norm")
+vskip("bc3.7 machine", "Norm")
+vskip("bc3.7 wp50", "Norm")
+vskip("bc3.8 machine", "Norm")
+vskip("bc3.8 wp50", "Norm")
+vskip("bc3.9 machine", "Norm")
+vskip("bc3.9 wp50", "Norm")
+vskip("bc3.10 machine", "Norm")
+vskip("bc3.10 wp50", "Norm")
+)quit

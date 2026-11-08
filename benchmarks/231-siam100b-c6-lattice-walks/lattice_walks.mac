@@ -1,0 +1,52 @@
+/* Experiment 231 -- SIAM 100-digit HOLDOUT B for Problem 6 (Maxima column).
+   The same statements as lattice_walks.m.  Maxima has no multi-dimensional
+   quadrature, so the idiomatic form is nested quad_qags (epsrel 1d-12) over
+   [0,pi]^2 (or [0,pi]^3), and find_root on the bracket the .m half uses.
+   At 50 digits Maxima has only bromberg (1-D Romberg), which cannot converge
+   on the k = 0 singularity in nested form: every wp50 row SKIPs.
+   See lattice_walks.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["quad_qags", "find_root"])$
+
+MC : 90$
+fpi : float(%pi)$
+re2(c, s) := (1 - c)/((1 - c)^2 + s^2)$
+/* 2-D: G(f, e) = (1/norm) Int_0^pi Int_0^pi f(k1, k2, e) */
+in2(f, u, e) := quad_qags(f(u, k2, e), k2, 0, fpi, 'epsrel = 1d-12, 'limit = 1000)[1]$
+G2(f, e, norm) := quad_qags(lambda([u], in2(f, u, e)), k1, 0, fpi, 'epsrel = 1d-12, 'limit = 1000)[1] / norm$
+in3b(f, u, v, e) := quad_qags(f(u, v, k3, e), k3, 0, fpi, 'epsrel = 1d-12, 'limit = 1000)[1]$
+in3a(f, u, e) := quad_qags(lambda([v], in3b(f, u, v, e)), k2, 0, fpi, 'epsrel = 1d-12, 'limit = 1000)[1]$
+G3(f, e) := quad_qags(lambda([u], in3a(f, u, e)), k1, 0, fpi, 'epsrel = 1d-12, 'limit = 1000)[1] / fpi^3$
+
+f1(a, b, e) := re2((cos(a) + cos(b))/2, 2*e*sin(a))$
+f2(a, b, e) := re2((cos(a) + cos(b))/2, 2*e*(sin(a) + sin(b))) + re2((cos(a) + cos(b))/2, 2*e*(sin(a) - sin(b)))$
+f3(a, b, e) := re2((2*cos(a) + cos(b))/3, 2*e*sin(a))$
+f4(a, b, e) := re2((cos(a) + cos(b) + cos(a + b))/3, 2*e*sin(a)) + re2((cos(a) + cos(b) + cos(a - b))/3, 2*e*sin(a))$
+f5(a, b, c, e) := 1/(1 - (cos(a) + cos(b) + cos(c))/3)$
+f6(a, b, e) := re2((cos(a) + cos(b) + 2*cos(a)*cos(b))/4, 2*e*sin(a))$
+f8(a, b, c, e) := re2((cos(a) + cos(b) + cos(c))/3, 2*e*sin(a))$
+h9(a, b, e) := block([c : (cos(a) + cos(b))/2, s : 2*e*sin(a)], (cos(a)*(1 - c) + s*sin(a))/((1 - c)^2 + s^2))$
+f10(a, b, e) := re2(cos(a)*cos(b), 2*e*sin(a + b)) + re2(cos(a)*cos(b), 2*e*sin(a - b))$
+
+vrun("bc6.1 machine", lambda([], find_root(lambda([e], G2(f1, e, fpi^2) - 2.5), 0.02, 0.04)), 10, MC)$
+skip("bc6.1 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.2 machine", lambda([], find_root(lambda([e], G2(f2, e, 2*fpi^2) - 2), 0.03, 0.06)), 10, MC)$
+skip("bc6.2 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.3 machine", lambda([], find_root(lambda([e], G2(f3, e, fpi^2) - 2), 0.06, 0.1)), 10, MC)$
+skip("bc6.3 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.4 machine", lambda([], find_root(lambda([e], G2(f4, e, 2*fpi^2) - 2), 0.03, 0.06)), 10, MC)$
+skip("bc6.4 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.5 machine", lambda([], 1 - 1/G3(f5, 0)), 10, MC)$
+skip("bc6.5 wp50", "3-D bigfloat quadrature")$
+vrun("bc6.6 machine", lambda([], find_root(lambda([e], G2(f6, e, fpi^2) - 2), 0.02, 0.05)), 10, MC)$
+skip("bc6.6 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.7 machine", lambda([], 1 - 1/G2(f1, 0.1, fpi^2)), 10, MC)$
+skip("bc6.7 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.8 machine", lambda([], find_root(lambda([e], G3(f8, e) - 4/3), 0.05, 0.1)), 10, MC)$
+skip("bc6.8 wp50", "3-D bigfloat quadrature")$
+vrun("bc6.9 machine", lambda([], G2(h9, 0.05, fpi^2)/G2(f1, 0.05, fpi^2)), 10, MC)$
+skip("bc6.9 wp50", "2-D bigfloat quadrature")$
+vrun("bc6.10 machine", lambda([], find_root(lambda([e], G2(f10, e, 2*fpi^2) - 5/3), 0.08, 0.13)), 10, MC)$
+skip("bc6.10 wp50", "2-D bigfloat quadrature")$
+quit()$

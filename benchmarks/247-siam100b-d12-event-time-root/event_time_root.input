@@ -1,0 +1,27 @@
+-- Experiment 247 -- SIAM 100-Digit Challenge holdout B for App. D Problem 12 (FriCAS column).
+-- Every case is a parameter search ("find p such that the first event time
+-- is T*") around an ODE solve.  FriCAS ships a fixed-step RK4 but no root
+-- finder for a general real function (solve/complexSolve are polynomial only,
+-- Newton is not a built-in), so all rows are SKIP (as in exp. 187).
+)read ../siam100_common.input )quiet
+vskip("bd12.1 machine", "FindRoot")
+vskip("bd12.2 machine", "FindRoot")
+vskip("bd12.3 machine", "FindRoot")
+vskip("bd12.4 machine", "FindRoot")
+vskip("bd12.5 machine", "FindRoot")
+vskip("bd12.6 machine", "FindRoot")
+vskip("bd12.7 machine", "FindRoot")
+vskip("bd12.8 machine", "FindRoot")
+vskip("bd12.9 machine", "FindRoot")
+vskip("bd12.10 machine", "FindRoot")
+vskip("bd12.1 wp50", "FindRoot")
+vskip("bd12.2 wp50", "FindRoot")
+vskip("bd12.3 wp50", "FindRoot")
+vskip("bd12.4 wp50", "FindRoot")
+vskip("bd12.5 wp50", "FindRoot")
+vskip("bd12.6 wp50", "FindRoot")
+vskip("bd12.7 wp50", "FindRoot")
+vskip("bd12.8 wp50", "FindRoot")
+vskip("bd12.9 wp50", "FindRoot")
+vskip("bd12.10 wp50", "FindRoot")
+)quit

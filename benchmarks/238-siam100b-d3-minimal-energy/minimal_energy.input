@@ -1,0 +1,24 @@
+-- Experiment 238 -- SIAM 100-Digit Challenge, holdout B for Appendix D problem 3 (FriCAS).
+-- FriCAS has no numerical minimiser: every row is a SKIP.  See minimal_energy.m.
+)read ../siam100_common.input )quiet
+vskip("bd3.1 machine", "minimize")
+vskip("bd3.1 wp50", "minimize")
+vskip("bd3.2 machine", "minimize")
+vskip("bd3.2 wp50", "minimize")
+vskip("bd3.3 machine", "minimize")
+vskip("bd3.3 wp50", "minimize")
+vskip("bd3.4 machine", "minimize")
+vskip("bd3.4 wp50", "minimize")
+vskip("bd3.5 machine", "minimize")
+vskip("bd3.5 wp50", "minimize")
+vskip("bd3.6 machine", "minimize")
+vskip("bd3.6 wp50", "minimize")
+vskip("bd3.7 machine", "minimize")
+vskip("bd3.7 wp50", "minimize")
+vskip("bd3.8 machine", "minimize")
+vskip("bd3.8 wp50", "minimize")
+vskip("bd3.9 machine", "minimize")
+vskip("bd3.9 wp50", "minimize")
+vskip("bd3.10 machine", "minimize")
+vskip("bd3.10 wp50", "minimize")
+)quit

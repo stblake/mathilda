@@ -1,0 +1,86 @@
+/* Experiment 227 -- SIAM 100-digit holdout B for Problem 2 (Maxima column).
+   The same statement as billiards.m: straight flight, the next hit as the
+   smallest positive real root of the intersection polynomial from Maxima's
+   polynomial root finder (allroots in floats, bfallroots with fpprec 60),
+   reflection v' = v - 2 (v.n) n, the same candidate filter. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["allroots", "bfallroots"])$
+
+/* scene(k, mk): [lattice, mirrors, p0, v0, T, nmax]; mk converts an exact
+   number to the working type; lattice = [] or [kind, r]; T, nmax = false if absent */
+box2(x0, x1, y0, y1, mk) := [["line", mk(1), mk(0), mk(x1)], ["line", mk(-1), mk(0), mk(-x0)],
+                             ["line", mk(0), mk(1), mk(y1)], ["line", mk(0), mk(-1), mk(-y0)]]$
+scene(k, mk) := block([h : mk(1/2), s3 : mk(sqrt(3)), sinai],
+  sinai : append(box2(-1, 1, -1, 1, mk), [["disk", mk(0), mk(0), h]]),
+  if k = 1 then [["sq", mk(1/3)], [], [h, mk(1/10)], [mk(3/5), mk(4/5)], 6, false]
+  else if k = 2 then [["sq", mk(1/4)], [], [h, h], [mk(4/5), mk(3/5)], 5, false]
+  else if k = 3 then [["tri", mk(1/3)], [], [h, mk(1/5)], [mk(1), mk(0)], 4, false]
+  else if k = 4 then [[], sinai, [mk(3/4), mk(0)], [mk(3/5), mk(4/5)], 12, false]
+  else if k = 5 then [[], append(box2(0, 2, 0, 1, mk), [["disk", h, h, mk(1/4)], ["disk", mk(3/2), h, mk(1/4)]]),
+                      [mk(1), mk(1/10)], [mk(3/5), mk(4/5)], 6, false]
+  else if k = 6 then [[], [["disk", mk(0), mk(6/5), mk(1)], ["disk", -3*s3/5, mk(-3/5), mk(1)], ["disk", 3*s3/5, mk(-3/5), mk(1)]],
+                      [mk(0), mk(0)], [mk(12/13), mk(-5/13)], 20, false]
+  else if k = 7 then [[], sinai, [-h, mk(-3/4)], [mk(5/13), mk(12/13)], false, 16]
+  else if k = 8 then [[], box2(0, 3, 0, 2, mk), [mk(1/3), mk(1/7)], [mk(12/13), mk(5/13)], 100, false]
+  else if k = 9 then [["sq", mk(9/20)], [], [h, h], [mk(3/5), mk(4/5)], 3, false]
+  else [[], sinai, [mk(3/4), mk(0)], [mk(3/5), mk(4/5)], 25, false])$
+
+/* lattice disks [[kind, a, b, c], id] in the box around the segment */
+latd(lat, p, q, mk) := block([xs : [p[1], q[1]], ys : [p[2], q[2]], r, out : [], hh],
+  if lat = [] then return([]),
+  r : lat[2],
+  if lat[1] = "sq" then
+    (for i : floor(lmin(xs)) - 1 thru floor(lmax(xs)) + 2 do
+       for j : floor(lmin(ys)) - 1 thru floor(lmax(ys)) + 2 do
+         out : cons([["disk", mk(i), mk(j), r], [i, j]], out))
+  else
+    (hh : mk(sqrt(3)/2),
+     for j : floor(lmin(ys)/hh) - 1 thru floor(lmax(ys)/hh) + 2 do
+       for i : floor(lmin(xs) - j/2) - 1 thru floor(lmax(xs) - j/2) + 2 do
+         out : cons([["disk", mk(i + j/2), j*hh, r], [i, j]], out)),
+  out)$
+
+photon(k, mk, rts) := block([sc, fin, px, py, vx, vy, left, nmax, last : [], clock, nb : 0,
+    res, done : false, cands, hits, span, m, dx, dy, pol, best, t, nx, ny, d],
+  sc : scene(k, mk),
+  fin : makelist([sc[2][i], ["w", i]], i, 1, length(sc[2])),
+  px : sc[3][1], py : sc[3][2], vx : sc[4][1], vy : sc[4][2],
+  left : if sc[5] = false then false else mk(sc[5]), nmax : sc[6], clock : mk(0),
+  while not done do (
+    span : if left = false then mk(50) else min(left, mk(50)),
+    cands : append(fin, latd(sc[1], [px, py], [px + span*vx, py + span*vy], mk)),
+    hits : [],
+    for cd in cands do (
+      m : cd[1],
+      if cd[2] # last then (
+        pol : false,
+        if m[1] = "disk" then (
+          dx : m[2] - px, dy : m[3] - py,
+          if dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < m[4] then
+            pol : (vx^2 + vy^2)*'tt^2 - 2*(dx*vx + dy*vy)*'tt + (dx^2 + dy^2 - m[4]^2))
+        else if m[2]*vx + m[3]*vy # 0 then
+          pol : (m[2]*vx + m[3]*vy)*'tt + (m[2]*px + m[3]*py - m[4]),
+        if pol # false then
+          for r in rts(pol) do
+            if imagpart(rhs(r)) = 0 and realpart(rhs(r)) > 0 then
+              hits : cons([realpart(rhs(r)), cd], hits))),
+    best : if hits = [] then false else first(sort(hits, lambda([a, b], first(a) < first(b)))),
+    if best = false or (left # false and first(best) >= left) then (
+      px : px + left*vx, py : py + left*vy, res : sqrt(px^2 + py^2), done : true)
+    else (
+      t : best[1], m : best[2][1],
+      px : px + t*vx, py : py + t*vy, clock : clock + t, nb : nb + 1, last : best[2][2],
+      if left # false then left : left - t,
+      if m[1] = "disk" then (nx : (px - m[2])/m[4], ny : (py - m[3])/m[4])
+      else (nx : m[2], ny : m[3]),
+      d : vx*nx + vy*ny, vx : vx - 2*d*nx, vy : vy - 2*d*ny,
+      if nmax # false and nb = nmax then (res : clock, done : true))),
+  res)$
+
+for k : 1 thru 10 do (
+  vrun(sconcat("bc2.", k, " machine"),
+       buildq([k], lambda([], photon(k, lambda([x], float(x)), allroots))), 10, 60),
+  vrun(sconcat("bc2.", k, " wp50"),
+       buildq([k], lambda([], block([fpprec : 60], photon(k, bfloat, bfallroots)))), 48, 120))$
+quit()$

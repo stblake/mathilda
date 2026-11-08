@@ -1,0 +1,61 @@
+-- Experiment 244 -- holdout B for SIAM Appendix D Problem 9 (FriCAS column).
+-- The ten transition matrices of lattice_walks.m, as experiment 184:
+-- machine: P^n in Matrix DoubleFloat, start row summed over the targets;
+-- wp50: the exact start vector pushed through n exact products v * P in
+-- Matrix Fraction Integer, converted to Float at digits(60).
+-- FriCAS has no per-case cap and a dense DoubleFloat power of a 465x465
+-- matrix already costs ~50 s (experiment 184), so the machine rows of the two
+-- big chains (bd9.7, 1024 states; bd9.10, 820 states) are SKIP.
+-- Vertices are 1-based; grid point p has index 1 + mixed-radix(p).
+)read ../siam100_common.input )quiet
+MF ==> Matrix Fraction Integer
+LI ==> List Integer
+inR(q:LI, d:LI):Boolean == (ok := true; for a in q for b in d repeat (if a < 0 or a >= b then ok := false); ok)
+gix(p:LI, d:LI):Integer == (i := 0; for a in p for b in d repeat i := i*b + a; i + 1)
+gpts(d:LI):List LI == (#d = 1 => [[i] for i in 0..first(d)-1]; concat [[cons(i, q) for q in gpts(rest d)] for i in 0..first(d)-1])
+gridP(d:LI, mv:List LI):MF == (n := reduce(*, d); P : MF := new(n::PositiveInteger, n::PositiveInteger, 0); for p in gpts(d) repeat (l := [[a + b for a in p for b in m] for m in mv]; l := [q for q in l | inR(q, d)]; for q in l repeat P(gix(p, d), gix(q, d)) := 1/(#l)); P)
+tix(r:Integer, c:Integer):Integer == r*(r+1) quo 2 + c + 1
+inT(a:Integer, b:Integer, nT:Integer):Boolean == 0 <= b and b <= a and a < nT
+triP(nT:Integer):MF == (nP := nT*(nT+1) quo 2; P : MF := new(nP::PositiveInteger, nP::PositiveInteger, 0); for r in 0..nT-1 repeat for c in 0..r repeat (l := [[a, b] for a in [r, r, r-1, r-1, r+1, r+1] for b in [c-1, c+1, c-1, c, c, c+1] | inT(a, b, nT)]; for p in l repeat P(tix(r, c), tix(p.1, p.2)) := 1/(#l)); P)
+toD(P:MF):Matrix DoubleFloat == map(x +-> (numer(x)::DoubleFloat)/(denom(x)::DoubleFloat), P)
+mach(lab:String, P:MF, s:Integer, tg:LI, n:Integer):Void == (PD := toD(P); t0 := nowms(); QD := PD^(n::PositiveInteger); vD := reduce(+, [QD(s, j) for j in tg]); vcaseD(lab, vD, nowms() - t0, 10))
+exact(lab:String, P:MF, s:Integer, tg:LI, n:Integer):Void == (v0 : MF := new(1, ncols(P), 0); v0(1, s) := 1; t0 := nowms(); v := v0; for k in 1..n repeat v := v * P; q := reduce(+, [v(1, j) for j in tg]); vF := (numer(q)::Float)/(denom(q)::Float); vcaseF(lab, vF, nowms() - t0, 48))
+king : List LI := [[a, b] for a in [-1, -1, -1, 0, 0, 1, 1, 1] for b in [-1, 0, 1, -1, 1, -1, 0, 1]]
+knight : List LI := [[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]]
+cube : List LI := [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]
+P1 := gridP([21], [[1], [-1]]); T1 := [i + 1 for i in 11..20]
+P2 := gridP([10, 10], [[1, 0], [-1, 0], [0, 1], [0, -1]]); T2 := [gix([9, j], [10, 10]) for j in 0..9]
+P3 := triP(20); T3 := [tix(19, c) for c in 0..19]
+P4 := gridP([6, 6, 6], cube); T4 := [gix(p, [6, 6, 6]) for p in gpts([6, 6, 6]) | first(p) = 5]
+P5 := gridP([8, 8], knight); T5 := [gix([7, 7], [8, 8])]
+P6 := gridP([8, 8], king); T6 := [gix([i, 7], [8, 8]) for i in 0..7]
+P7 : MF := new(1024, 1024, 0)
+for v in 0..1023 repeat for i in 0..9 repeat (w := (odd?(v quo 2^i) => v - 2^i; v + 2^i); P7(v + 1, w + 1) := 1/10)
+P8 : MF := new(17, 17, 0)
+for v in 0..16 repeat (P8(v + 1, (v + 1) rem 17 + 1) := 1/2; P8(v + 1, (v + 16) rem 17 + 1) := 1/2)
+P9 : MF := new(31, 31, 0)
+P9(1, 1) := 1; P9(31, 31) := 1
+for v in 1..29 repeat (P9(v + 1, v + 2) := 2/5; P9(v + 1, v) := 3/5)
+P10 := triP(40); T10 := [tix(39, c) for c in 0..39]
+mach("bd9.1 machine", P1, 1, T1, 40)
+mach("bd9.2 machine", P2, 1, T2, 30)
+mach("bd9.3 machine", P3, 1, T3, 40)
+mach("bd9.4 machine", P4, 1, T4, 24)
+mach("bd9.5 machine", P5, 1, T5, 20)
+mach("bd9.6 machine", P6, 1, T6, 30)
+vskip("bd9.7 machine", "MatrixPower (1024x1024 DoubleFloat power exceeds the file budget)")
+mach("bd9.8 machine", P8, 1, [1], 60)
+mach("bd9.9 machine", P9, 16, [31], 200)
+vskip("bd9.10 machine", "MatrixPower (820x820 DoubleFloat power exceeds the file budget)")
+digits(60)$Float
+exact("bd9.1 wp50", P1, 1, T1, 40)
+exact("bd9.2 wp50", P2, 1, T2, 30)
+exact("bd9.3 wp50", P3, 1, T3, 40)
+exact("bd9.4 wp50", P4, 1, T4, 24)
+exact("bd9.5 wp50", P5, 1, T5, 20)
+exact("bd9.6 wp50", P6, 1, T6, 30)
+exact("bd9.7 wp50", P7, 1, [1024], 40)
+exact("bd9.8 wp50", P8, 1, [1], 60)
+exact("bd9.9 wp50", P9, 16, [31], 200)
+exact("bd9.10 wp50", P10, 1, T10, 100)
+)quit

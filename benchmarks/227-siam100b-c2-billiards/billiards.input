@@ -1,0 +1,124 @@
+-- Experiment 227 -- SIAM 100-digit holdout B for Problem 2 (FriCAS column).
+-- The same statement as billiards.m: straight flight, the next hit as the
+-- smallest positive real root of the intersection polynomial (quadratic for a
+-- disk, linear for a wall) from FriCAS's numeric polynomial root finder
+-- solve(p = 0, eps) on a Polynomial Fraction Integer, as in experiment 167:
+-- coefficients taken exactly (retract) from the DoubleFloat / Float working
+-- values, eps 1e-17 resp. 1e-62; reflection v' = v - 2 (v.n) n; the same
+-- candidate filter.  A mirror is [kind (0 disk, 1 wall), a, b, c, id]:
+-- disk centre (a, b) radius c; wall a x + b y = c.  (Generated: the
+-- DoubleFloat and Float copies are the same text with the type swapped.)
+)read ../siam100_common.input )quiet
+rootsQ(a:Fraction Integer, b:Fraction Integer, c:Fraction Integer, eps:Fraction Integer):List Fraction Integer == _
+  [retract(rhs e)@Fraction(Integer) for e in solve((a*t^2 + b*t + c)::Polynomial(Fraction Integer) = 0, eps)]
+qD(x:DoubleFloat):Fraction Integer == retract(x::Float)@Fraction(Integer)
+qF(x:Float):Fraction Integer == retract(x)@Fraction(Integer)
+bxD(x0:Integer, x1:Integer, y0:Integer, y1:Integer):List List DoubleFloat == [[1,1,0,x1::DoubleFloat],[1,-1,0,-x0::DoubleFloat],[1,0,1,y1::DoubleFloat],[1,0,-1,-y0::DoubleFloat]]
+mirD(k:Integer):List List DoubleFloat == (s3 : DoubleFloat := sqrt(3::DoubleFloat); h : DoubleFloat := 1/2; q : DoubleFloat := 1/4; _
+  k = 4 or k = 7 or k = 10 => concat(bxD(-1,1,-1,1), [[0,0,0,h]]); _
+  k = 5 => concat(bxD(0,2,0,1), [[0,h,h,q],[0,3*h,h,q]]); _
+  k = 6 => [[0,0,6/5,1],[0,-3*s3/5,-3/5,1],[0,3*s3/5,-3/5,1]]; _
+  k = 8 => bxD(0,3,0,2); [])
+latK(k:Integer):Integer == (k = 1 or k = 2 or k = 9 => 1; k = 3 => 2; 0)
+latRD(k:Integer):DoubleFloat == (k = 1 or k = 3 => 1/3; k = 2 => 1/4; k = 9 => 9/20; 0)
+startD(k:Integer):List DoubleFloat == (h : DoubleFloat := 1/2; _
+  k = 1 => [h, 1/10, 3/5, 4/5]; k = 2 => [h, h, 4/5, 3/5]; k = 3 => [h, 1/5, 1, 0]; _
+  k = 4 or k = 10 => [3/4, 0, 3/5, 4/5]; k = 5 => [1, 1/10, 3/5, 4/5]; k = 6 => [0, 0, 12/13, -5/13]; _
+  k = 7 => [-h, -3/4, 5/13, 12/13]; k = 8 => [1/3, 1/7, 12/13, 5/13]; [h, h, 3/5, 4/5])
+tEnd(k:Integer):Integer == (k = 1 => 6; k = 2 => 5; k = 3 => 4; k = 4 => 12; k = 5 => 6; k = 6 => 20; k = 8 => 100; k = 9 => 3; k = 10 => 25; -1)
+nEnd(k:Integer):Integer == (k = 7 => 16; -1)
+latdD(k:Integer, x0:DoubleFloat, x1:DoubleFloat, y0:DoubleFloat, y1:DoubleFloat):List List DoubleFloat == (r : DoubleFloat := latRD(k); hh : DoubleFloat := sqrt(3::DoubleFloat)/2; out : List List DoubleFloat := []; _
+  if latK(k) = 1 then (for i in (floor(min(x0,x1))::Integer - 1)..(floor(max(x0,x1))::Integer + 2) repeat ( _
+      for j in (floor(min(y0,y1))::Integer - 1)..(floor(max(y0,y1))::Integer + 2) repeat ( _
+        out := cons([0, i::DoubleFloat, j::DoubleFloat, r, (1000000*(i+5000) + (j+5000))::DoubleFloat], out)))); _
+  if latK(k) = 2 then (for j in (floor(min(y0,y1)/hh)::Integer - 1)..(floor(max(y0,y1)/hh)::Integer + 2) repeat ( _
+      for i in (floor(min(x0,x1) - j::DoubleFloat/2)::Integer - 1)..(floor(max(x0,x1) - j::DoubleFloat/2)::Integer + 2) repeat ( _
+        out := cons([0, i::DoubleFloat + j::DoubleFloat/2, j::DoubleFloat * hh, r, (1000000*(i+5000) + (j+5000))::DoubleFloat], out)))); _
+  out)
+photonD(k:Integer):DoubleFloat == (st : List DoubleFloat := startD(k); px : DoubleFloat := st.1; py : DoubleFloat := st.2; vx : DoubleFloat := st.3; vy : DoubleFloat := st.4; _
+  fin : List List DoubleFloat := [concat(mirD(k).i, [-(i::DoubleFloat)]) for i in 1..#mirD(k)]; _
+  hasT : Boolean := tEnd(k) >= 0; left : DoubleFloat := (hasT => tEnd(k)::DoubleFloat; 0); nmax : Integer := nEnd(k); _
+  last : DoubleFloat := 0; clock : DoubleFloat := 0; nb : Integer := 0; done : Boolean := false; res : DoubleFloat := 0; _
+  while not done repeat (span : DoubleFloat := (hasT => min(left, 50); 50); _
+    cands : List List DoubleFloat := concat(fin, latdD(k, px, px + span*vx, py, py + span*vy)); _
+    bt : DoubleFloat := -1; bm : List DoubleFloat := []; _
+    for m in cands repeat (if m.5 ~= last then ( _
+      if m.1 = 0 then (dx : DoubleFloat := m.2 - px; dy : DoubleFloat := m.3 - py; _
+        if dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < m.4 then ( _
+          for r in rootsQ(qD(vx*vx + vy*vy), qD(-2*(dx*vx + dy*vy)), qD(dx*dx + dy*dy - m.4*m.4), 1/10^17) repeat ( _
+            rt : DoubleFloat := r::DoubleFloat; if rt > 0 and (bt < 0 or rt < bt) then (bt := rt; bm := m)))) _
+      else (den : DoubleFloat := m.2*vx + m.3*vy; _
+        if den ~= 0 then ( _
+          for r in rootsQ(0, qD(den), qD(m.2*px + m.3*py - m.4), 1/10^17) repeat ( _
+            rt : DoubleFloat := r::DoubleFloat; if rt > 0 and (bt < 0 or rt < bt) then (bt := rt; bm := m)))))); _
+    if bt < 0 or (hasT and bt >= left) then (px := px + left*vx; py := py + left*vy; res := sqrt(px*px + py*py); done := true) _
+    else (px := px + bt*vx; py := py + bt*vy; clock := clock + bt; nb := nb + 1; last := bm.5; _
+      if hasT then left := left - bt; _
+      if bm.1 = 0 then (nx : DoubleFloat := (px - bm.2)/bm.4; ny : DoubleFloat := (py - bm.3)/bm.4) else (nx := bm.2; ny := bm.3); _
+      d : DoubleFloat := vx*nx + vy*ny; vx := vx - 2*d*nx; vy := vy - 2*d*ny; _
+      if nb = nmax then (res := clock; done := true))); _
+  res)
+t0 := nowms(); r := photonD(1); vcaseD("bc2.1 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(2); vcaseD("bc2.2 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(3); vcaseD("bc2.3 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(4); vcaseD("bc2.4 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(5); vcaseD("bc2.5 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(6); vcaseD("bc2.6 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(7); vcaseD("bc2.7 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(8); vcaseD("bc2.8 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(9); vcaseD("bc2.9 machine", r, nowms() - t0, 10)
+t0 := nowms(); r := photonD(10); vcaseD("bc2.10 machine", r, nowms() - t0, 10)
+digits(60)$Float
+bxF(x0:Integer, x1:Integer, y0:Integer, y1:Integer):List List Float == [[1,1,0,x1::Float],[1,-1,0,-x0::Float],[1,0,1,y1::Float],[1,0,-1,-y0::Float]]
+mirF(k:Integer):List List Float == (s3 : Float := sqrt(3::Float); h : Float := 1/2; q : Float := 1/4; _
+  k = 4 or k = 7 or k = 10 => concat(bxF(-1,1,-1,1), [[0,0,0,h]]); _
+  k = 5 => concat(bxF(0,2,0,1), [[0,h,h,q],[0,3*h,h,q]]); _
+  k = 6 => [[0,0,6/5,1],[0,-3*s3/5,-3/5,1],[0,3*s3/5,-3/5,1]]; _
+  k = 8 => bxF(0,3,0,2); [])
+latRF(k:Integer):Float == (k = 1 or k = 3 => 1/3; k = 2 => 1/4; k = 9 => 9/20; 0)
+startF(k:Integer):List Float == (h : Float := 1/2; _
+  k = 1 => [h, 1/10, 3/5, 4/5]; k = 2 => [h, h, 4/5, 3/5]; k = 3 => [h, 1/5, 1, 0]; _
+  k = 4 or k = 10 => [3/4, 0, 3/5, 4/5]; k = 5 => [1, 1/10, 3/5, 4/5]; k = 6 => [0, 0, 12/13, -5/13]; _
+  k = 7 => [-h, -3/4, 5/13, 12/13]; k = 8 => [1/3, 1/7, 12/13, 5/13]; [h, h, 3/5, 4/5])
+latdF(k:Integer, x0:Float, x1:Float, y0:Float, y1:Float):List List Float == (r : Float := latRF(k); hh : Float := sqrt(3::Float)/2; out : List List Float := []; _
+  if latK(k) = 1 then (for i in (floor(min(x0,x1))::Integer - 1)..(floor(max(x0,x1))::Integer + 2) repeat ( _
+      for j in (floor(min(y0,y1))::Integer - 1)..(floor(max(y0,y1))::Integer + 2) repeat ( _
+        out := cons([0, i::Float, j::Float, r, (1000000*(i+5000) + (j+5000))::Float], out)))); _
+  if latK(k) = 2 then (for j in (floor(min(y0,y1)/hh)::Integer - 1)..(floor(max(y0,y1)/hh)::Integer + 2) repeat ( _
+      for i in (floor(min(x0,x1) - j::Float/2)::Integer - 1)..(floor(max(x0,x1) - j::Float/2)::Integer + 2) repeat ( _
+        out := cons([0, i::Float + j::Float/2, j::Float * hh, r, (1000000*(i+5000) + (j+5000))::Float], out)))); _
+  out)
+photonF(k:Integer):Float == (st : List Float := startF(k); px : Float := st.1; py : Float := st.2; vx : Float := st.3; vy : Float := st.4; _
+  fin : List List Float := [concat(mirF(k).i, [-(i::Float)]) for i in 1..#mirF(k)]; _
+  hasT : Boolean := tEnd(k) >= 0; left : Float := (hasT => tEnd(k)::Float; 0); nmax : Integer := nEnd(k); _
+  last : Float := 0; clock : Float := 0; nb : Integer := 0; done : Boolean := false; res : Float := 0; _
+  while not done repeat (span : Float := (hasT => min(left, 50); 50); _
+    cands : List List Float := concat(fin, latdF(k, px, px + span*vx, py, py + span*vy)); _
+    bt : Float := -1; bm : List Float := []; _
+    for m in cands repeat (if m.5 ~= last then ( _
+      if m.1 = 0 then (dx : Float := m.2 - px; dy : Float := m.3 - py; _
+        if dx*vx + dy*vy > 0 and abs(vx*dy - vy*dx) < m.4 then ( _
+          for r in rootsQ(qF(vx*vx + vy*vy), qF(-2*(dx*vx + dy*vy)), qF(dx*dx + dy*dy - m.4*m.4), 1/10^62) repeat ( _
+            rt : Float := r::Float; if rt > 0 and (bt < 0 or rt < bt) then (bt := rt; bm := m)))) _
+      else (den : Float := m.2*vx + m.3*vy; _
+        if den ~= 0 then ( _
+          for r in rootsQ(0, qF(den), qF(m.2*px + m.3*py - m.4), 1/10^62) repeat ( _
+            rt : Float := r::Float; if rt > 0 and (bt < 0 or rt < bt) then (bt := rt; bm := m)))))); _
+    if bt < 0 or (hasT and bt >= left) then (px := px + left*vx; py := py + left*vy; res := sqrt(px*px + py*py); done := true) _
+    else (px := px + bt*vx; py := py + bt*vy; clock := clock + bt; nb := nb + 1; last := bm.5; _
+      if hasT then left := left - bt; _
+      if bm.1 = 0 then (nx : Float := (px - bm.2)/bm.4; ny : Float := (py - bm.3)/bm.4) else (nx := bm.2; ny := bm.3); _
+      d : Float := vx*nx + vy*ny; vx := vx - 2*d*nx; vy := vy - 2*d*ny; _
+      if nb = nmax then (res := clock; done := true))); _
+  res)
+t0 := nowms(); rF := photonF(1); vcaseF("bc2.1 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(2); vcaseF("bc2.2 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(3); vcaseF("bc2.3 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(4); vcaseF("bc2.4 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(5); vcaseF("bc2.5 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(6); vcaseF("bc2.6 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(7); vcaseF("bc2.7 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(8); vcaseF("bc2.8 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(9); vcaseF("bc2.9 wp50", rF, nowms() - t0, 48)
+t0 := nowms(); rF := photonF(10); vcaseF("bc2.10 wp50", rF, nowms() - t0, 48)
+)quit

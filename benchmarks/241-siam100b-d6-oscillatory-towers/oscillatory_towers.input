@@ -1,0 +1,50 @@
+-- Experiment 241 -- holdout B for SIAM Appendix D Problem 6 (FriCAS column).
+-- NumericalQuadrature romberg on each interval as written: DoubleFloat for
+-- the machine rows (nmax 22, as in experiment 181) and Float with digits(60)
+-- for the 50-digit rows.  FriCAS has no per-case cap, and a 60-digit Romberg
+-- to nmax 22 costs ~150 s per integral (experiment 181), so the wp50 rows are
+-- capped at nmax 18 (2^18 points, ~10 s) to keep the file inside its timeout;
+-- romberg then returns its best estimate.  See oscillatory_towers.m.
+)read ../siam100_common.input )quiet
+f1(x:DoubleFloat):DoubleFloat == exp(sin(exp(x)))
+f2(x:DoubleFloat):DoubleFloat == cos(x + exp(exp(x + 0.5)))
+f3(x:DoubleFloat):DoubleFloat == exp(cos(x^3 + exp(x)))
+f4(x:DoubleFloat):DoubleFloat == log(2.0 + sin(exp(exp(x))))
+f5(x:DoubleFloat):DoubleFloat == 1.0/(1.25 + cos(exp(4.0*x)))
+f6(x:DoubleFloat):DoubleFloat == sin(exp(exp(2.0*x)))
+f7(x:DoubleFloat):DoubleFloat == cos(50.0*sin(x) - 3.0*x)
+f8(x:DoubleFloat):DoubleFloat == exp(x)*cos(sinh(exp(x + 0.5)))
+f9(x:DoubleFloat):DoubleFloat == cos(exp(exp(exp(x))))
+f10(x:DoubleFloat):DoubleFloat == exp(x + sin(exp(exp(x + 0.5))))
+t0 := nowms(); r := romberg(f1, 0.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.1 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f2, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.2 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f3, 0.0, 2.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.3 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f4, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.4 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f5, 0.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.5 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f6, 0.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.6 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f7, 0.0, pi()$DoubleFloat, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.7 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f8, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.8 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f9, -1.0, 0.5, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.9 machine", r.value, nowms() - t0, 10)
+t0 := nowms(); r := romberg(f10, -1.0, 1.0, 1.0e-13, 1.0e-13, 5, 22); vcaseD("bd6.10 machine", r.value, nowms() - t0, 10)
+digits(60)$Float
+g1(x:Float):Float == exp(sin(exp(x)))
+g2(x:Float):Float == cos(x + exp(exp(x + 0.5)))
+g3(x:Float):Float == exp(cos(x^3 + exp(x)))
+g4(x:Float):Float == log(2.0 + sin(exp(exp(x))))
+g5(x:Float):Float == 1.0/(1.25 + cos(exp(4.0*x)))
+g6(x:Float):Float == sin(exp(exp(2.0*x)))
+g7(x:Float):Float == cos(50.0*sin(x) - 3.0*x)
+g8(x:Float):Float == exp(x)*cos(sinh(exp(x + 0.5)))
+g9(x:Float):Float == cos(exp(exp(exp(x))))
+g10(x:Float):Float == exp(x + sin(exp(exp(x + 0.5))))
+t0 := nowms(); rF := romberg(g1, 0.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.1 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g2, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.2 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g3, 0.0, 2.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.3 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g4, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.4 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g5, 0.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.5 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g6, 0.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.6 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g7, 0.0, pi()$Float, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.7 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g8, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.8 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g9, -1.0, 0.5, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.9 wp50", rF.value, nowms() - t0, 48)
+t0 := nowms(); rF := romberg(g10, -1.0, 1.0, 1.0e-50, 1.0e-50, 5, 18); vcaseF("bd6.10 wp50", rF.value, nowms() - t0, 48)
+)quit

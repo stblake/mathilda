@@ -1,0 +1,25 @@
+-- Experiment 230 -- SIAM 100-digit holdout B for Problem 5 (FriCAS column).
+-- Every row is a minimax over the polynomial's coefficients; FriCAS has no
+-- numerical minimiser, so every row SKIPs.  See discrete_minimax.m.
+)read ../siam100_common.input )quiet
+vskip("bc5.1 machine", "NMinimize")
+vskip("bc5.1 wp50", "NMinimize")
+vskip("bc5.2 machine", "NMinimize")
+vskip("bc5.2 wp50", "NMinimize")
+vskip("bc5.3 machine", "NMinimize")
+vskip("bc5.3 wp50", "NMinimize")
+vskip("bc5.4 machine", "NMinimize")
+vskip("bc5.4 wp50", "NMinimize")
+vskip("bc5.5 machine", "NMinimize")
+vskip("bc5.5 wp50", "NMinimize")
+vskip("bc5.6 machine", "NMinimize")
+vskip("bc5.6 wp50", "NMinimize")
+vskip("bc5.7 machine", "NMinimize")
+vskip("bc5.7 wp50", "NMinimize")
+vskip("bc5.8 machine", "NMinimize")
+vskip("bc5.8 wp50", "NMinimize")
+vskip("bc5.9 machine", "NMinimize")
+vskip("bc5.9 wp50", "NMinimize")
+vskip("bc5.10 machine", "NMinimize")
+vskip("bc5.10 wp50", "NMinimize")
+)quit

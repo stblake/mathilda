@@ -1,0 +1,24 @@
+-- Experiment 236 -- SIAM 100-Digit Challenge, holdout B for Appendix D problem 1 (FriCAS).
+-- FriCAS has no numerical summation to infinity: every row is a SKIP.  See digit_restricted_series.m.
+)read ../siam100_common.input )quiet
+vskip("bd1.1 machine", "numerical infinite sum")
+vskip("bd1.1 wp50", "numerical infinite sum")
+vskip("bd1.2 machine", "numerical infinite sum")
+vskip("bd1.2 wp50", "numerical infinite sum")
+vskip("bd1.3 machine", "numerical infinite sum")
+vskip("bd1.3 wp50", "numerical infinite sum")
+vskip("bd1.4 machine", "numerical infinite sum")
+vskip("bd1.4 wp50", "numerical infinite sum")
+vskip("bd1.5 machine", "numerical infinite sum")
+vskip("bd1.5 wp50", "numerical infinite sum")
+vskip("bd1.6 machine", "numerical infinite sum")
+vskip("bd1.6 wp50", "numerical infinite sum")
+vskip("bd1.7 machine", "numerical infinite sum")
+vskip("bd1.7 wp50", "numerical infinite sum")
+vskip("bd1.8 machine", "numerical infinite sum")
+vskip("bd1.8 wp50", "numerical infinite sum")
+vskip("bd1.9 machine", "numerical infinite sum")
+vskip("bd1.9 wp50", "numerical infinite sum")
+vskip("bd1.10 machine", "numerical infinite sum")
+vskip("bd1.10 wp50", "numerical infinite sum")
+)quit

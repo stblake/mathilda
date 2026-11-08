@@ -1,0 +1,11 @@
+/* Experiment 250 -- SIAM 100-Digit Challenge holdout B for App. D Problem 15 (Maxima column).
+   Every case is an integration to a singularity, reported as the time where
+   the integrator stops.  Maxima has no PDE solver, and its only ODE
+   integrator (rk: explicit fixed-step RK4 to a fixed end time, no error
+   control, no events) can neither integrate the stiff method-of-lines systems
+   nor detect a blow-up time, so all rows are SKIP (as in exp. 190).
+   See blowup_times.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for t in ["machine", "wp50"] do for k : 1 thru 10 do skip(sconcat("bd15.", k, " ", t), "NDSolve (singularity detection)")$
+quit()$

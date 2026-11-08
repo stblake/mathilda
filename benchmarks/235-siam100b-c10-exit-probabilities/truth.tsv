@@ -1,0 +1,22 @@
+# SIAM 100-digit HOLDOUT B, family C10: Brownian exit probabilities (see exit_probabilities.m); refs siam100_refs/bc10_ref.py (dps 120)
+# label	true value (70 digits)	need	source
+bc10.1 machine	4.755381755518700587318090612344256036959990784859498695263302576201741e-3	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.1 wp50	4.755381755518700587318090612344256036959990784859498695263302576201741e-3	48	same
+bc10.2 machine	2.377699185075618035663660224023766780064701066803888179020512746480739e-3	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.2 wp50	2.377699185075618035663660224023766780064701066803888179020512746480739e-3	48	same
+bc10.3 machine	1.094333622612328695194005621912571303394999766821587655747576867368364e-2	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.3 wp50	1.094333622612328695194005621912571303394999766821587655747576867368364e-2	48	same
+bc10.4 machine	1.648022030410861259301553268552374812345403276224137051547475943112743e-2	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.4 wp50	1.648022030410861259301553268552374812345403276224137051547475943112743e-2	48	same
+bc10.5 machine	4.765013045627050118645554290858987643110793688322019361728634900288281e-2	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == closed form (2/pi) arctan(sin(pi/3)/sinh(pi)); >= 110 digits agree
+bc10.5 wp50	4.765013045627050118645554290858987643110793688322019361728634900288281e-2	48	same
+bc10.6 machine	1.309956318187203767559308853922396493428715173704925943390808859512623e-5	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.6 wp50	1.309956318187203767559308853922396493428715173704925943390808859512623e-5	48	same
+bc10.7 machine	1.583336966422621680434066853601521055344922048057938628365023373896187e-1	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == closed form (2/pi) arctan(16/63); >= 110 digits agree
+bc10.7 wp50	1.583336966422621680434066853601521055344922048057938628365023373896187e-1	48	same
+bc10.8 machine	1.152553121676578916292823415895715397427695514456371574295303286791654e-10	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.8 wp50	1.152553121676578916292823415895715397427695514456371574295303286791654e-10	48	same
+bc10.9 machine	9.798535900287400683578794003141513607453044920303542338858527057558121e-1	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.9 wp50	9.798535900287400683578794003141513607453044920303542338858527057558121e-1	48	same
+bc10.10 machine	7.298817657048526088878589666558551379102819136830933313177832672247471e-10	10	siam100_refs/bc10_ref.py: the stated series (mpmath nsum / direct sum) == 1 - P(other exits) from the complementary separation (series in the other coordinate, summed at dps 120); >= 110 digits agree
+bc10.10 wp50	7.298817657048526088878589666558551379102819136830933313177832672247471e-10	48	same

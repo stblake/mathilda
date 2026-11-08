@@ -1,0 +1,25 @@
+/* Experiment 240 -- SIAM 100-Digit Challenge, holdout B for Appendix D
+   problem 5 (Maxima column).  Maxima has no matrix 2-norm / numerical SVD in
+   the core library (linearalgebra's mat_norm offers 1, inf and frobenius), so
+   every 2-norm row is a SKIP.  bd5.2 (Frobenius norm) IS stated: lbfgs (which
+   differentiates symbolically) on mat_norm(p(A), frobenius) over the 8 lower
+   coefficients from c = 0, the powers precomputed; lbfgs is double precision
+   only, so its 50-digit row is a SKIP.  See matrix_polynomial_norms.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(lbfgs)$
+load(linearalgebra)$
+require(["lbfgs", "mat_norm"])$
+gr : genmatrix(lambda([i, j], if i = j or (j - i >= 1 and j - i <= 3) then 1
+                              else if j = i - 1 then -1 else 0), 48, 48)$
+pw : makelist(gr^^j, j, 0, 8)$
+cv : makelist(c[j], j, 0, 7)$
+pF : pw[9] + sum(c[j] * pw[j + 1], j, 0, 7)$
+objF : sqrt(lsum(lsum(x^2, x, r), r, args(pF)))$
+for p in [1, 3, 4, 5, 6, 7, 8, 9, 10] do (
+  skip(sconcat("bd5.", p, " machine"), "mat_norm(.,2)"),
+  skip(sconcat("bd5.", p, " wp50"), "mat_norm(.,2)"))$
+vrun("bd5.2 machine", lambda([], subst(lbfgs(objF, cv, makelist(0.0, j, 0, 7), 1e-10, [-1, 0]), objF)),
+     10, 120)$
+skip("bd5.2 wp50", "lbfgs(bfloat)")$
+quit()$

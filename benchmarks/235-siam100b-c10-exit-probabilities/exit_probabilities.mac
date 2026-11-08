@@ -1,0 +1,45 @@
+/* Experiment 235 -- SIAM 100-digit HOLDOUT B for Problem 10 (Maxima column).
+   Maxima has no numerical summation to infinity, so each series is summed
+   to a fixed number of terms (glue, as in experiment 175), enough for 62
+   digits relative to the value -- 15 terms (bc10.1, 2), 20 (bc10.3), 40 x 40
+   (bc10.4: the n index enters as (2n+1)/2), 30 (bc10.5), 10 (bc10.6), 40 (bc10.7), 10 x 10 (bc10.10) --
+   in floats for the machine row and in bfloats at fpprec 60 for wp50.
+   bc10.9: 60 digits need ~2300 terms (the terms decay like
+   exp(-(2k+1) pi/100)); in floats sinh((2k+1) pi) overflows beyond k = 112,
+   so the machine row sums the 112 terms a double can represent (a
+   truncation error ~1e-3: the finding) and the wp50 row 2400 bfloat terms.
+   bc10.8 needs the zeros of J0 (no built-in): SKIP.  See
+   exit_probabilities.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["sum"])$
+
+e1() := 4/%pi*sum((-1)^k/(2*k+1)*sech(2*(2*k+1)*%pi), k, 0, 14)$
+e2() := 4/%pi*sum((-1)^k/(2*k+1)*cosh(3*(2*k+1)*%pi)/cosh(5*(2*k+1)*%pi), k, 0, 14)$
+e3() := 4/%pi*sum((-1)^k/(2*k+1)*sinh((2*k+1)*%pi/2)/sinh(2*(2*k+1)*%pi), k, 0, 19)$
+e4() := 16/%pi^2*sum(sum((-1)^(m+n)/((2*m+1)*(2*n+1))*sech(3/2*%pi*sqrt((2*m+1)^2 + ((2*n+1)/2)^2)), n, 0, 39), m, 0, 39)$
+e5() := 4/%pi*sum(sin((2*k+1)*%pi/3)/(2*k+1)*exp(-(2*k+1)*%pi), k, 0, 29)$
+e6() := 4/%pi*sum((-1)^k/(2*k+1)*cosh(5)/cosh(5*sqrt(1 + ((2*k+1)*%pi)^2)), k, 0, 9)$
+e7() := 4/%pi*sum((-1)^k/(2*k+1)*8^-(2*k+1), k, 0, 39)$
+e9(N) := 4/%pi*sum((-1)^k/(2*k+1)*sinh((2*k+1)*%pi*99/100)/sinh((2*k+1)*%pi), k, 0, N - 1)$
+e10() := 16/%pi^2*sum(sum((-1)^(m+n)/((2*m+1)*(2*n+1))*sech(5*%pi*sqrt((2*m+1)^2 + (2*n+1)^2)), n, 0, 9), m, 0, 9)$
+
+/* the series is built AND evaluated inside the timed call, as in experiment 175 */
+two(lab, em, ew) := (
+  vrun(sconcat(lab, " machine"), lambda([], float(apply(em, []))), 10, 75),
+  vrun(sconcat(lab, " wp50"), lambda([], block([fpprec : 60], bfloat(apply(ew, [])))), 48, 75))$
+
+two("bc10.1", e1, e1)$
+two("bc10.2", e2, e2)$
+two("bc10.3", e3, e3)$
+two("bc10.4", e4, e4)$
+two("bc10.5", e5, e5)$
+two("bc10.6", e6, e6)$
+two("bc10.7", e7, e7)$
+skip("bc10.8 machine", "BesselJZero")$
+skip("bc10.8 wp50", "BesselJZero")$
+e9m() := e9(112)$
+e9w() := e9(2400)$
+two("bc10.9", e9m, e9w)$
+two("bc10.10", e10, e10)$
+quit()$

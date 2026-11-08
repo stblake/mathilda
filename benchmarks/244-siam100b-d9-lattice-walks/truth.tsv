@@ -1,0 +1,22 @@
+# Holdout B for SIAM Appendix D Problem 9: ten n-step Markov-chain probabilities (see lattice_walks.m); every value is an exact rational
+# label	true value (65 digits)	need	source
+bd9.1 machine	0.080689085139965754933655261993408203125	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits; exact 44359293673/549755813888 (= 2^-39 x integer; terminating decimal)
+bd9.1 wp50	0.080689085139965754933655261993408203125	48	same
+bd9.2 machine	0.018484111084605222970643299163493882710760671854861943893583123784	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.2 wp50	0.018484111084605222970643299163493882710760671854861943893583123784	48	same
+bd9.3 machine	0.00057025042891942837000291927345687557090596773415023881589462694739	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.3 wp50	0.00057025042891942837000291927345687557090596773415023881589462694739	48	same
+bd9.4 machine	0.080715318350010304790780658636625983667263202280488998512835398757	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.4 wp50	0.080715318350010304790780658636625983667263202280488998512835398757	48	same
+bd9.5 machine	0.011827662799821645031296185574731052703912836234995982620836555704	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.5 wp50	0.011827662799821645031296185574731052703912836234995982620836555704	48	same
+bd9.6 machine	0.066723240419103663905989991933958507721757000999346190194990784929	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.6 wp50	0.066723240419103663905989991933958507721757000999346190194990784929	48	same
+bd9.7 machine	0.0019505289690584492222930940346761216	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits; == closed form 2^-10 Sum_k (-1)^k C(10,k) (1 - k/5)^40 (Krawtchouk/Fourier on Q_10); exact 141919661041061715680778/72759576141834259033203125
+bd9.7 wp50	0.0019505289690584492222930940346761216	48	same
+bd9.8 machine	0.10258713608785453852423330545207136310636997222900390625	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits; == closed form (C(60,30) + 2 C(60,47))/2^60 (net displacement 0 or +-34); exact 7392182205732289/72057594037927936
+bd9.8 wp50	0.10258713608785453852423330545207136310636997222900390625	48	same
+bd9.9 machine	0.0022421200747566863014385107176750560244581663188683564776814168156	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.9 wp50	0.0022421200747566863014385107176750560244581663188683564776814168156	48	same
+bd9.10 machine	3.3582557828197766027129227921499292480432032152808440566533414155e-6	10	exact rational: Python Fraction sparse propagation of the start distribution (siam100_refs/bd9_ref.py, graphs from bd9_common.py) == PARI/gp exact propagation with independently built graphs (siam100_refs/bd9_ref.gp): identical to 66 digits
+bd9.10 wp50	3.3582557828197766027129227921499292480432032152808440566533414155e-6	48	same

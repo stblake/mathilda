@@ -1,0 +1,30 @@
+/* Experiment 246 -- SIAM 100-Digit Challenge holdout B for App. D Problem 11 (Maxima column).
+   Every case is shooting: an ODE solve to an unknown final time inside a
+   TWO- or THREE-variable root finder (vector_shooting.m).  Maxima's numeric
+   ODE solver is rk (fixed-step RK4, no error control, fixed end time) and its
+   multivariate root finder mnewton needs symbolic derivatives of the
+   equations, which an rk trajectory does not have; find_root is 1-D.  All rows
+   are SKIP rather than a hand-written Newton/secant iteration (as in exp. 186). */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+skip("bd11.1 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.2 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.3 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.4 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.5 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.6 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.7 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.8 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.9 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.10 machine", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.1 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.2 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.3 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.4 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.5 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.6 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.7 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.8 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.9 wp50", "NDSolve-shooting (rk + vector root finder)")$
+skip("bd11.10 wp50", "NDSolve-shooting (rk + vector root finder)")$
+quit()$

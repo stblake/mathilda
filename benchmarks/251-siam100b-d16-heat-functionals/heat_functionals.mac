@@ -1,0 +1,11 @@
+/* Experiment 251 -- SIAM 100-digit SEALED HOLDOUT B, family D16 (Maxima column).
+   The heat equation from rough data, then a functional of u(., t) solved for
+   t.  Maxima has no PDE solver (its only ODE integrator, rk, is explicit
+   fixed-step RK4 and cannot integrate the stiff method-of-lines system with
+   an event), so every row is a SKIP.  See heat_functionals.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+for k : 1 thru 10 do (
+  skip(sconcat("bd16.", k, " machine"), "NDSolve (PDE)"),
+  skip(sconcat("bd16.", k, " wp50"), "NDSolve (PDE)"))$
+quit()$

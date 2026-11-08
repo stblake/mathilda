@@ -1,0 +1,22 @@
+# Holdout B for SIAM Appendix D Problem 6: ten oscillatory exponential-tower integrals (see oscillatory_towers.m)
+# label	true value (65 digits)	need	source
+bd6.1 machine	2.422222497012766434723808159891220605442169739029081215683123435	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp): 70 digits agree
+bd6.1 wp50	2.422222497012766434723808159891220605442169739029081215683123435	48	same
+bd6.2 machine	-0.17635766755792900074843652539313363389250647129258231805045629665	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp): 69 digits agree
+bd6.2 wp50	-0.17635766755792900074843652539313363389250647129258231805045629665	48	same
+bd6.3 machine	2.2266132271466512707722309710613378742316981291700350099139223933	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp) (phase inverse by root-finding in both): 69 digits agree
+bd6.3 wp50	2.2266132271466512707722309710613378742316981291700350099139223933	48	same
+bd6.4 machine	1.6059235507138408488468403229099813125821407784673802530185277892	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp): 70 digits agree
+bd6.4 wp50	1.6059235507138408488468403229099813125821407784673802530185277892	48	same
+bd6.5 machine	1.3943527450354195551543009496449174685841840569300087432826538	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp); gp split 8x finer (phase/8 steps) because of near-poles at exp(4x) = (2j+1) pi +- 0.69i; mpmath also Gauss-Legendre on a pi/8 split: 70 digits agree
+bd6.5 wp50	1.3943527450354195551543009496449174685841840569300087432826538	48	same
+bd6.6 machine	-0.089709547766270507265150888861584980445370900560881242967417638109	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp) (517 subintervals): 70 digits agree
+bd6.6 wp50	-0.089709547766270507265150888861584980445370900560881242967417638109	48	same
+bd6.7 machine	0.29133497917211965121333636664511499221483608845764146127725650451	10	closed form Pi BesselJ[3, 50] (mpmath besselj dps 80 and PARI besselj) == mpmath tanh-sinh on 40 equal pieces == gp intnum split at 50 sin(x/2) = k pi + pi/2: 69 digits agree
+bd6.7 wp50	0.29133497917211965121333636664511499221483608845764146127725650451	48	same
+bd6.8 machine	-0.086256012149217971883987030213969634072997661851820559218713073243	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp): 70 digits agree
+bd6.8 wp50	-0.086256012149217971883987030213969634072997661851820559218713073243	48	same
+bd6.9 machine	0.18196866810548858632946528860808968801183729165429785811377465197	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp): 69 digits agree
+bd6.9 wp50	0.18196866810548858632946528860808968801183729165429785811377465197	48	same
+bd6.10 machine	2.9846761815510755255643013247175235426316471397351741625584905937	10	mpmath tanh-sinh dps 80, split at phase = k pi (siam100_refs/bd6_ref.py) == PARI/gp intnum realprecision 80, split at phase = k pi + pi/2 (siam100_refs/bd6_ref.gp): 70 digits agree
+bd6.10 wp50	2.9846761815510755255643013247175235426316471397351741625584905937	48	same

@@ -1,0 +1,48 @@
+/* Experiment 238 -- SIAM 100-Digit Challenge, holdout B for Appendix D
+   problem 3 (Maxima column).  lbfgs (Maxima's only general minimiser) on the
+   same symbolic energy, coordinates and deterministic starts as
+   minimal_energy.m; lbfgs differentiates the expression symbolically.
+   bd3.10 maximises: lbfgs on the negated sum, reported negated.  lbfgs works
+   in double precision only, so every 50-digit row is a SKIP. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(lbfgs)$
+require(["lbfgs"])$
+
+ph1 : float(%pi*(3 - sqrt(5)))$
+spt(k) := if k = 0 then [0, 0, 1]
+          else if k = 1 then [sin(th[1])*cos(ph1), sin(th[1])*sin(ph1), cos(th[1])]
+          else [sin(th[k])*cos(ph[k]), sin(th[k])*sin(ph[k]), cos(th[k])]$
+kern(kd, q) := if kd = coul then 1/sqrt(q) else if kd = lg then -log(q)/2
+               else if kd = r2 then 1/q else -sqrt(q)$
+sphereCase(p, n, kd) := block([e, vars, x0, sg],
+  e : sum(sum(kern(kd, (spt(j) - spt(k)) . (spt(j) - spt(k))), k, j + 1, n - 1), j, 0, n - 2),
+  vars : append(makelist(th[k], k, 1, n - 1), makelist(ph[k], k, 2, n - 1)),
+  x0 : append(makelist(float(acos(1 - 2*k/n)), k, 1, n - 1), makelist(float(k*ph1), k, 2, n - 1)),
+  sg : if kd = dist then -1 else 1,
+  vrun(sconcat("bd3.", p, " machine"),
+       lambda([], sg * subst(lbfgs(e, vars, x0, 1e-10, [-1, 0]), e)), 10, 120),
+  skip(sconcat("bd3.", p, " wp50"), "lbfgs(bfloat)"))$
+sphereCase(1, 5, coul)$
+sphereCase(2, 12, coul)$
+cpt(k) := if k = 0 then [1, 0] else [cos(al[k]), sin(al[k])]$
+ce : sum(sum(1/sqrt((cpt(j) - cpt(k)) . (cpt(j) - cpt(k))), k, j + 1, 29), j, 0, 28)$
+cv : makelist(al[k], k, 1, 29)$
+c0 : makelist(float(2*%pi*(k/30)^2), k, 1, 29)$
+vrun("bd3.3 machine", lambda([], subst(lbfgs(ce, cv, c0, 1e-10, [-1, 0]), ce)), 10, 120)$
+skip("bd3.3 wp50", "lbfgs(bfloat)")$
+sphereCase(4, 24, coul)$
+sphereCase(5, 32, coul)$
+sphereCase(6, 20, lg)$
+sphereCase(7, 20, r2)$
+lj(i) := [x[i], y[i], z[i]]$
+le : sum(sum(block([q : (lj(i) - lj(j)) . (lj(i) - lj(j))], 4*(q^-6 - q^-3)), j, i + 1, 12), i, 0, 11)$
+lv : flatten(makelist(lj(i), i, 0, 12))$
+ljp(k) := block([t : acos(1 - (2*k + 1)/12), f : k*ph1],
+                float(1.1*[sin(t)*cos(f), sin(t)*sin(f), cos(t)]))$
+l0 : flatten(append([[0.0, 0.0, 0.0]], makelist(ljp(k), k, 0, 11)))$
+vrun("bd3.8 machine", lambda([], subst(lbfgs(le, lv, l0, 1e-10, [-1, 0]), le)), 10, 120)$
+skip("bd3.8 wp50", "lbfgs(bfloat)")$
+sphereCase(9, 60, coul)$
+sphereCase(10, 30, dist)$
+quit()$

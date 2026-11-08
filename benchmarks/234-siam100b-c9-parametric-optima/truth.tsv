@@ -1,0 +1,22 @@
+# SIAM 100-digit HOLDOUT B, family C9: optimal parameter of a parametric integral (see parametric_optima.m); refs siam100_refs/bc9_ref.py (dps 70)
+# label	true value (64 digits)	need	source
+bc9.1 machine	6.165054856207162337971104041001727475394958981816653305721207211e-1	10	siam100_refs/bc9_ref.py: first zero of Ci (F' = -Ci) == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.1 wp50	6.165054856207162337971104041001727475394958981816653305721207211e-1	48	same
+bc9.2 machine	2.046444558115256598950443812102246522042166478221441308275955960e-1	10	siam100_refs/bc9_ref.py: Meijer-G closed form (book Sec. 9.6 form generalised; checked vs quad to 1e-72) + diff == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.2 wp50	2.046444558115256598950443812102246522042166478221441308275955960e-1	48	same
+bc9.3 machine	9.297449903433997506179973880388505738014629395911769203129753898e-1	10	siam100_refs/bc9_ref.py: Gamma(1-a) cos(pi a/2) closed form == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.3 wp50	9.297449903433997506179973880388505738014629395911769203129753898e-1	48	same
+bc9.4 machine	2.144377455779283061221755766101974457037770871600643371705449470e+0	10	siam100_refs/bc9_ref.py: mpmath.angerj (hypergeometric) == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.4 wp50	2.144377455779283061221755766101974457037770871600643371705449470e+0	48	same
+bc9.5 machine	1.848277746009183534025646543008691951392583119870327835195621060e+0	10	siam100_refs/bc9_ref.py: Dawson D'(b)=1-2bD(b)=0 via erfi, a = 2b == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.5 wp50	1.848277746009183534025646543008691951392583119870327835195621060e+0	48	same
+bc9.6 machine	4.299505417229205199796967267850329826337786766465757795971091403e+0	10	siam100_refs/bc9_ref.py: residue closed form (3 poles of 1/(1+x^6)) == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.6 wp50	4.299505417229205199796967267850329826337786766465757795971091403e+0	48	same
+bc9.7 machine	3.831705970207512315614435886308160766564545274287801928762298990e+0	10	siam100_refs/bc9_ref.py: besseljzero(1,1) (F = (pi/2) J0) == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.7 wp50	3.831705970207512315614435886308160766564545274287801928762298990e+0	48	same
+bc9.8 machine	2.584943334328382752482415278901357782052755839637840380211188484e+0	10	siam100_refs/bc9_ref.py: Fresnel S closed form == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.8 wp50	2.584943334328382752482415278901357782052755839637840380211188484e+0	48	same
+bc9.9 machine	-1.018792971647471089017324783399743824218205441254434563870861414e+0	10	siam100_refs/bc9_ref.py: airyaizero(1, derivative=1) == Ai'(-z) = (z/3)(J_{2/3}(zeta) - J_{-2/3}(zeta)) zero; >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.9 wp50	-1.018792971647471089017324783399743824218205441254434563870861414e+0	48	same
+bc9.10 machine	1.996199486661701224912650903318732218066448005236339944224770027e-1	10	siam100_refs/bc9_ref.py: besselyzero(0,1)^2/4 (F = -pi sqrt(b) Y1(2 sqrt b), checked vs quad) == findroot of d/da of the integral by direct quadrature (tanh-sinh / quadosc); >= 70 digits agree; grid scan confirms the global optimum on the interval
+bc9.10 wp50	1.996199486661701224912650903318732218066448005236339944224770027e-1	48	same

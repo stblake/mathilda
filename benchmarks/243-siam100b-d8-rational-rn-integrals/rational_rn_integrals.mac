@@ -1,0 +1,41 @@
+/* Experiment 243 -- holdout B for SIAM Appendix D Problem 8 (Maxima column).
+   QUADPACK is one-dimensional: N = 1 is quad_qagi over R; N = 2 is nested
+   quad_qagi (the inner integral a function of the outer variable, called
+   only at numeric points), as experiment 183's c2R2 row.  A THIRD level of
+   nesting exhausts SBCL's control stack (tested both as a noun-guarded
+   function and as lambdas: "Control stack exhausted", the whole file dies),
+   so the 3-D rows (bd8.5, bd8.6, bd8.8) and the 4-D row are SKIP.  Maxima has no bigfloat quadrature on an infinite range (bromberg
+   needs a finite interval), so every wp50 row is SKIP.
+   See rational_rn_integrals.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["quad_qagi"])$
+
+qi(e, v) := first(quad_qagi(e, v, minf, inf, 'epsrel = 1d-13))$
+p1(m) := sum(x^(2*i), i, 0, m)$
+p2(m) := sum(sum(x^(2*i)*y^(2*j), j, 0, m - i), i, 0, m)$
+/* nested: f an expression in x, y */
+in2(f, b) := if numberp(b) then qi(subst(y = b, f), x) else 'in2(f, b)$
+n2(f) := qi(in2(f, y), y)$
+
+vrun("bd8.1 machine", lambda([], sqrt(qi(1/p1(2), x)/(2*float(%pi)))), 10, 60)$
+skip("bd8.1 wp50", "bigfloat infinite-range quadrature")$
+vrun("bd8.2 machine", lambda([], sqrt(qi(1/p1(6), x)/(2*float(%pi)))), 10, 60)$
+skip("bd8.2 wp50", "bigfloat infinite-range quadrature")$
+vrun("bd8.3 machine", lambda([], sqrt(n2(1/p2(3))/(2*float(%pi))^2)), 10, 60)$
+skip("bd8.3 wp50", "bigfloat infinite-range quadrature")$
+vrun("bd8.4 machine", lambda([], sqrt(n2(1/p2(4))/(2*float(%pi))^2)), 10, 60)$
+skip("bd8.4 wp50", "bigfloat infinite-range quadrature")$
+skip("bd8.5 machine", "N-D quadrature (3-D nested quad_qagi: control stack exhausted)")$
+skip("bd8.5 wp50", "bigfloat infinite-range quadrature")$
+skip("bd8.6 machine", "N-D quadrature (3-D nested quad_qagi: control stack exhausted)")$
+skip("bd8.6 wp50", "bigfloat infinite-range quadrature")$
+vrun("bd8.7 machine", lambda([], n2(1/(1 + x^4 + y^4))), 10, 60)$
+skip("bd8.7 wp50", "bigfloat infinite-range quadrature")$
+skip("bd8.8 machine", "N-D quadrature (3-D nested quad_qagi: control stack exhausted)")$
+skip("bd8.8 wp50", "bigfloat infinite-range quadrature")$
+skip("bd8.9 machine", "N-D quadrature (4-D)")$
+skip("bd8.9 wp50", "bigfloat infinite-range quadrature")$
+vrun("bd8.10 machine", lambda([], n2(1/(1 + x^4 + x^2*y^2 + y^4))), 10, 60)$
+skip("bd8.10 wp50", "bigfloat infinite-range quadrature")$
+quit()$

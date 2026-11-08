@@ -1,0 +1,26 @@
+-- Experiment 234 -- SIAM 100-digit HOLDOUT B for Problem 9 (FriCAS column).
+-- FriCAS has no numeric optimiser and no root finder for a non-polynomial
+-- function (and romberg/simpson cannot handle the infinitely oscillating
+-- integrands): all rows SKIP, as in experiment 174.  See parametric_optima.m.
+)read ../siam100_common.input )quiet
+vskip("bc9.1 machine", "numeric optimiser")
+vskip("bc9.1 wp50", "numeric optimiser")
+vskip("bc9.2 machine", "numeric optimiser")
+vskip("bc9.2 wp50", "numeric optimiser")
+vskip("bc9.3 machine", "numeric optimiser")
+vskip("bc9.3 wp50", "numeric optimiser")
+vskip("bc9.4 machine", "numeric optimiser")
+vskip("bc9.4 wp50", "numeric optimiser")
+vskip("bc9.5 machine", "numeric optimiser")
+vskip("bc9.5 wp50", "numeric optimiser")
+vskip("bc9.6 machine", "numeric optimiser")
+vskip("bc9.6 wp50", "numeric optimiser")
+vskip("bc9.7 machine", "numeric optimiser")
+vskip("bc9.7 wp50", "numeric optimiser")
+vskip("bc9.8 machine", "numeric optimiser")
+vskip("bc9.8 wp50", "numeric optimiser")
+vskip("bc9.9 machine", "numeric optimiser")
+vskip("bc9.9 wp50", "numeric optimiser")
+vskip("bc9.10 machine", "numeric optimiser")
+vskip("bc9.10 wp50", "numeric optimiser")
+)quit

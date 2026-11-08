@@ -1,0 +1,18 @@
+-- Experiment 245 -- holdout B for SIAM Appendix D Problem 10 (FriCAS column).
+-- The Monte-Carlo statements of random_recurrences.m: the pair index from
+-- random(W)$Integer (seeded by reseed(1) of RandomNumberSource; W = total
+-- weight) through the weight table; machine: n = 10^6, DoubleFloat ratio
+-- recursion r <- a + b/r, exp(mean log r); wp50: exact Integer x_n for
+-- n = 10^4, then exp(log(x_n::Float)/n) at digits(60).  As experiment 185.
+)read ../siam100_common.input )quiet
+lyapD(A:List Integer, B:List Integer, n:Integer):DoubleFloat == (W := #A; r:DoubleFloat := 1.0; acc:DoubleFloat := 0.0; for k in 1..n-1 repeat (u := random(W)$Integer + 1; r := (A.u)::DoubleFloat + (B.u)::DoubleFloat/r; acc := acc + log(r)); exp(acc/(n::DoubleFloat)))
+lyapX(A:List Integer, B:List Integer, n:Integer):Integer == (W := #A; x0:Integer := 1; x1:Integer := 1; for k in 1..n-1 repeat (u := random(W)$Integer + 1; t := x1; x1 := A.u*x1 + B.u*x0; x0 := t); x1)
+-- weight tables, one entry per unit of weight: A = the a's, B = the b's
+TA : List List Integer := [[1,2,3,4], [3,3], [3,3,3], [1,1], [3,3,3], [4,4], [1,2], [5,5], [3,1], [1,2,3]]
+TB : List List Integer := [[0,0,0,0], [1,-1], [1,-1,-1], [1,2], [-1,0,1], [2,-2], [1,1], [3,-3], [2,2], [1,1,1]]
+NM : List Integer := [2,3,3,3,3,3,3,3,2,2]
+NW : List Integer := [1,2,2,2,2,2,2,2,1,1]
+for k in 1..10 repeat (reseed(1)$RandomNumberSource; t0 := nowms(); vD := lyapD(TA.k, TB.k, 10^6); vcaseD(concat ["bd10.", string(k), " machine"], vD, nowms() - t0, NM.k))
+digits(60)$Float
+for k in 1..10 repeat (reseed(1)$RandomNumberSource; t0 := nowms(); xb := lyapX(TA.k, TB.k, 10^4); vF := exp(log(abs(xb)::Float)/(10^4)::Float); vcaseF(concat ["bd10.", string(k), " wp50"], vF, nowms() - t0, NW.k))
+)quit

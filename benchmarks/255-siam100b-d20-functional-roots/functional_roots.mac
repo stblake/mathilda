@@ -1,0 +1,64 @@
+/* Experiment 255 -- SIAM 100-digit SEALED HOLDOUT B, family D20 (Maxima column).
+   See functional_roots.m.  Robbins rows: for base e the system is solved
+   EXACTLY by linsolve (as in exp 195); for b = 2, sqrt2, 10 by
+   linsolve_by_lu over floatfield (machine) / bigfloatfield (fpprec 60); the
+   root by find_root / bf_find_root on a bracket.  Carleman rows: the exact
+   principal square root mat_function(sqrt, C) (package diag, Jordan form),
+   then float / bfloat of the first row at x0. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+load(diag)$
+require(["linsolve", "linsolve_by_lu", "find_root", "bf_find_root", "mat_function"])$
+
+robbinsExact(n) := block([vs : makelist(concat('v, k), k, 1, n), eqs, sol],
+  eqs : makelist(sum(vs[k] * (k^j / j! - (if j = k then 1 else 0)), k, 1, n) = (if j = 0 then 1 else 0),
+                 j, 0, n - 1),
+  sol : linsolve(eqs, vs),
+  makelist(rhs(sol[k]), k, 1, n))$
+robbinsLU(n, L, fld) := block([A, b],
+  A : genmatrix(lambda([j, k], (k*L)^(j-1)/(j-1)! - (if j-1 = k then 1 else 0)), n, n),
+  b : genmatrix(lambda([j, k], if j = 1 then 1 else 0), n, 1),
+  A : if fld = 'floatfield then float(A) else bfloat(A),
+  b : if fld = 'floatfield then float(b) else bfloat(b),
+  makelist(first(linsolve_by_lu(A, b, fld))[k, 1], k, 1, n))$
+slogPoly(v, level) := -1 - level + sum(v[k] * x^k, k, 1, length(v))$
+rootM(v, level, a, b) := find_root(slogPoly(v, level), x, a, b)$
+rootB(v, level, a, b) := bf_find_root(slogPoly(v, level), x, bfloat(a), bfloat(b))$
+
+c7(j, k) := if k >= j and k <= 2*j then binomial(j, k-j) * 2^(2*j-k) else 0$
+c8(j, k) := if k >= j then j! * stirling2(k, j) / k! else 0$
+c9(j, k) := if k >= j and evenp(k-j) then 2^j * binomial(j + (k-j)/2 - 1, (k-j)/2) else 0$
+halfRow(cf, n, x0) := block([S : mat_function(sqrt, genmatrix(cf, n, n))],
+  sum(S[1, k] * x0^k, k, 1, n))$
+
+/* machine (float) and wp50 (bfloat, fpprec 60) */
+rob(n, tag, level, a, b, wp) := block([fpprec : 60, v],
+  if tag = 'e then (v : robbinsExact(n),
+                    if wp then rootB(v, level, a, b) else rootM(v, level, a, b))
+  else block([L : (if tag = 'two then log(2) else if tag = 'sqrt2 then log(2)/2 else log(10))],
+    if wp then rootB(robbinsLU(n, L, 'bigfloatfield), level, a, b)
+    else rootM(robbinsLU(n, L, 'floatfield), level, a, b)))$
+v1(n, wp) := block([fpprec : 60], if wp then bfloat(first(robbinsExact(n))) else float(first(robbinsExact(n))))$
+half(cf, n, x0, wp) := block([fpprec : 60], if wp then bfloat(halfRow(cf, n, x0)) else float(halfRow(cf, n, x0)))$
+
+vrun("bd20.1 machine", lambda([], rob(10, 'e, -1/2, 0.4, 0.6, false)), 10, 60)$
+vrun("bd20.1 wp50", lambda([], rob(10, 'e, -1/2, 0.4, 0.6, true)), 48, 90)$
+vrun("bd20.2 machine", lambda([], rob(20, 'two, -1/2, 0.45, 0.65, false)), 10, 60)$
+vrun("bd20.2 wp50", lambda([], rob(20, 'two, -1/2, 0.45, 0.65, true)), 48, 90)$
+vrun("bd20.3 machine", lambda([], rob(30, 'sqrt2, -1/2, 0.55, 0.7, false)), 10, 60)$
+vrun("bd20.3 wp50", lambda([], rob(30, 'sqrt2, -1/2, 0.55, 0.7, true)), 48, 90)$
+vrun("bd20.4 machine", lambda([], rob(15, 'ten, -1/2, 0.3, 0.5, false)), 10, 60)$
+vrun("bd20.4 wp50", lambda([], rob(15, 'ten, -1/2, 0.3, 0.5, true)), 48, 90)$
+vrun("bd20.5 machine", lambda([], rob(30, 'e, -3/4, 0.2, 0.35, false)), 10, 60)$
+vrun("bd20.5 wp50", lambda([], rob(30, 'e, -3/4, 0.2, 0.35, true)), 48, 90)$
+vrun("bd20.6 machine", lambda([], v1(24, false)), 10, 60)$
+vrun("bd20.6 wp50", lambda([], v1(24, true)), 48, 90)$
+vrun("bd20.7 machine", lambda([], half(c7, 20, 1/2, false)), 10, 60)$
+vrun("bd20.7 wp50", lambda([], half(c7, 20, 1/2, true)), 48, 90)$
+vrun("bd20.8 machine", lambda([], half(c8, 15, 1/2, false)), 10, 60)$
+vrun("bd20.8 wp50", lambda([], half(c8, 15, 1/2, true)), 48, 90)$
+vrun("bd20.9 machine", lambda([], half(c9, 25, 3/10, false)), 10, 60)$
+vrun("bd20.9 wp50", lambda([], half(c9, 25, 3/10, true)), 48, 90)$
+vrun("bd20.10 machine", lambda([], rob(45, 'e, -1/2, 0.4, 0.6, false)), 7, 60)$
+vrun("bd20.10 wp50", lambda([], rob(45, 'e, -1/2, 0.4, 0.6, true)), 48, 90)$
+quit()$

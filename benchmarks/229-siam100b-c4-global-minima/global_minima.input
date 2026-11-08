@@ -1,0 +1,24 @@
+-- Experiment 229 -- SIAM 100-digit holdout B for Problem 4 (FriCAS column).
+-- FriCAS has no numerical minimiser at all: every row SKIPs.  See global_minima.m.
+)read ../siam100_common.input )quiet
+vskip("bc4.1 machine", "NMinimize")
+vskip("bc4.1 wp50", "NMinimize")
+vskip("bc4.2 machine", "NMinimize")
+vskip("bc4.2 wp50", "NMinimize")
+vskip("bc4.3 machine", "NMinimize")
+vskip("bc4.3 wp50", "NMinimize")
+vskip("bc4.4 machine", "NMinimize")
+vskip("bc4.4 wp50", "NMinimize")
+vskip("bc4.5 machine", "NMinimize")
+vskip("bc4.5 wp50", "NMinimize")
+vskip("bc4.6 machine", "NMinimize")
+vskip("bc4.6 wp50", "NMinimize")
+vskip("bc4.7 machine", "NMinimize")
+vskip("bc4.7 wp50", "NMinimize")
+vskip("bc4.8 machine", "NMinimize")
+vskip("bc4.8 wp50", "NMinimize")
+vskip("bc4.9 machine", "NMinimize")
+vskip("bc4.9 wp50", "NMinimize")
+vskip("bc4.10 machine", "NMinimize")
+vskip("bc4.10 wp50", "NMinimize")
+)quit

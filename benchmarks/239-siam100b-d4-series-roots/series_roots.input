@@ -1,0 +1,26 @@
+-- Experiment 239 -- SIAM 100-Digit Challenge, holdout B for Appendix D problem 4 (FriCAS).
+-- FriCAS has no numerical root finder for a transcendental equation (solve/complexSolve
+-- are polynomial), no numerical infinite sum, and no Riemann R / Z / prime zeta: every
+-- row is a SKIP.  See series_roots.m.
+)read ../siam100_common.input )quiet
+vskip("bd4.1 machine", "numeric root finder")
+vskip("bd4.1 wp50", "numeric root finder")
+vskip("bd4.2 machine", "numeric root finder")
+vskip("bd4.2 wp50", "numeric root finder")
+vskip("bd4.3 machine", "numeric root finder")
+vskip("bd4.3 wp50", "numeric root finder")
+vskip("bd4.4 machine", "numeric root finder")
+vskip("bd4.4 wp50", "numeric root finder")
+vskip("bd4.5 machine", "numeric root finder")
+vskip("bd4.5 wp50", "numeric root finder")
+vskip("bd4.6 machine", "numeric root finder")
+vskip("bd4.6 wp50", "numeric root finder")
+vskip("bd4.7 machine", "numeric root finder")
+vskip("bd4.7 wp50", "numeric root finder")
+vskip("bd4.8 machine", "numeric root finder")
+vskip("bd4.8 wp50", "numeric root finder")
+vskip("bd4.9 machine", "numeric root finder")
+vskip("bd4.9 wp50", "numeric root finder")
+vskip("bd4.10 machine", "numeric root finder")
+vskip("bd4.10 wp50", "numeric root finder")
+)quit
