@@ -11,6 +11,7 @@
 #include "common.h"
 #include "arithmetic.h"   /* arith_warnings_muted() */
 #include "eval.h"         /* eval_clock_get() — dedup warnings within one eval */
+#include "mth_machine_pow.h"   /* the one machine Power, shared with the scalar builtin and the VM */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1222,37 +1223,14 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
 static void cpow_pair(double ar, double ai, double er, double ei,
                       double* outr, double* outi) {
     if (ai == 0.0 && ei == 0.0 && (ar >= 0.0 || er == floor(er))) {
-        /* Stays real. Small integer powers (the common x^2, x^3, 1/x, ...) are
-         * a few multiplies — far cheaper than a libm pow() call per element. */
-        if (er == 2.0)       { *outr = ar * ar;           *outi = 0.0; return; }
-        if (er == 3.0)       { *outr = ar * ar * ar;      *outi = 0.0; return; }
-        if (er == 0.5 && ar >= 0.0) { *outr = sqrt(ar);   *outi = 0.0; return; }
-        if (er == 1.0)       { *outr = ar;                *outi = 0.0; return; }
-        if (er == -1.0)      { *outr = 1.0 / ar;          *outi = 0.0; return; }
-        if (er == 0.0)       { *outr = 1.0;               *outi = 0.0; return; }
-        *outr = pow(ar, er); *outi = 0.0; return;
+        /* Stays real: the shared machine Power (src/mth_machine_pow.h), so a
+         * buffer element is the scalar builtin's answer bit for bit. */
+        *outr = mth_pow_machine(ar, er); *outi = 0.0; return;
     }
-    /* Complex base with an integer exponent: binary exponentiation gives an
-     * exact result (e.g. I^2 == -1 + 0 I) without polar-form round-off. */
-    if (ei == 0.0 && er == floor(er) && fabs(er) <= 1024.0) {
-        long p = (long)er;
-        unsigned long m = (p < 0) ? (unsigned long)(-p) : (unsigned long)p;
-        double rr = 1.0, ri = 0.0, br = ar, bi = ai;
-        while (m) {
-            if (m & 1ul) {
-                double nr = rr * br - ri * bi;
-                double ni = rr * bi + ri * br;
-                rr = nr; ri = ni;
-            }
-            double sr = br * br - bi * bi;
-            double si = 2.0 * br * bi;
-            br = sr; bi = si;
-            m >>= 1;
-        }
-        if (p < 0) {
-            double d = rr * rr + ri * ri;
-            *outr = rr / d; *outi = -ri / d;
-        } else { *outr = rr; *outi = ri; }
+    /* Complex base with an integer exponent: the shared binary powering, exact
+     * for Gaussian-integer powers (I^2 == -1 + 0 I) without polar round-off. */
+    if (ei == 0.0 && er == floor(er) && fabs(er) <= 0x1p62) {
+        mth_powi_machine_c(ar, ai, (int64_t)er, outr, outi);
         return;
     }
     if (ar == 0.0 && ai == 0.0) { *outr = 0.0; *outi = 0.0; return; }
@@ -1297,6 +1275,15 @@ typedef struct { const double* in; double* out; } nd_sqrt_ctx;
 static bool nd_sqrt_chunk(void* c, size_t lo, size_t hi) {
     const nd_sqrt_ctx* x = (const nd_sqrt_ctx*)c;
     for (size_t k = lo; k < hi; k++) x->out[k] = sqrt(x->in[k]);
+    return true;
+}
+
+/* x^n over a float64 range, n an integer: the shared machine Power's buffer
+ * form, split across threads. */
+typedef struct { const double* in; double* out; int64_t n; } nd_powi_ctx;
+static bool nd_powi_chunk(void* c, size_t lo, size_t hi) {
+    const nd_powi_ctx* x = (const nd_powi_ctx*)c;
+    mth_powi_machine_array(x->in + lo, x->out + lo, hi - lo, x->n);
     return true;
 }
 
@@ -1428,22 +1415,18 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
 
     void* out = malloc(ndt_elem_size(dtc) * sz);
     if (dta == NDT_FLOAT64 && dtc == NDT_FLOAT64 && ei == 0.0 &&
-        (er == 2.0 || er == 3.0 || er == 0.5 || er == 1.0 || er == -1.0 || er == 0.0)) {
-        /* A real buffer that stays on the real axis, with one of cpow_pair's
-         * cheap exponents: the same formula, hoisted out of the element loop
-         * (no per-element dtype switches), so the result is bit-identical and
-         * the loop vectorises -- x^0.5 over 10^6 elements went from ~4 ms to
-         * the cost of the sqrt itself. */
+        (er == 0.5 || (er == floor(er) && fabs(er) <= 0x1p62))) {
+        /* A real buffer that stays on the real axis under x^0.5 or an integer
+         * power: cpow_pair's formula (mth_pow_machine) hoisted out of the
+         * element loop -- no per-element dtype switches, and
+         * mth_powi_machine_array's blocks vectorise -- so the result is bit
+         * identical to the scalar builtin and to Compile[]. */
         const double* p = (const double*)a->data.ndarray.data;
         double* o = (double*)out;
         if (er == 0.0)                           /* 0^0: see nd_pow_chunk */
             for (size_t k = 0; k < sz; k++) if (p[k] == 0.0) { free(out); return NULL; }
-        if (er == 2.0)       for (size_t k = 0; k < sz; k++) o[k] = p[k] * p[k];
-        else if (er == 3.0)  for (size_t k = 0; k < sz; k++) o[k] = p[k] * p[k] * p[k];
-        else if (er == 0.5) { nd_sqrt_ctx sc = { p, o }; nd_parallel_for(sz, nd_sqrt_chunk, &sc); }
-        else if (er == 1.0)  memcpy(o, p, sizeof(double) * sz);
-        else if (er == -1.0) for (size_t k = 0; k < sz; k++) o[k] = 1.0 / p[k];
-        else                 for (size_t k = 0; k < sz; k++) o[k] = 1.0;
+        if (er == 0.5) { nd_sqrt_ctx sc = { p, o }; nd_parallel_for(sz, nd_sqrt_chunk, &sc); }
+        else { nd_powi_ctx pc = { p, o, (int64_t)er }; nd_parallel_for(sz, nd_powi_chunk, &pc); }
         return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
     }
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,

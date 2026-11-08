@@ -37,11 +37,25 @@
 #include "symtab.h"
 #include "core.h"
 
+#include "mth_machine_pow.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* Bug 3: pure-imaginary times positive base, rational exponent. */
+/* A machine complex power that overflows a double is Overflow[], not the
+ * Indeterminate an inf*0 inside binary powering would give (NIntegrate of a
+ * 10^1426-sized contour integrand relies on it). */
+static void test_complex_power_overflow(void) {
+    assert_eval_eq("(1. + 0.9 I)^20000", "Overflow[]", 0);
+    assert_eval_eq("Head[(1. + 0.9 I)^20]", "Complex", 0);
+}
+
 static void test_bug3_imag_times_positive(void) {
     assert_eval_eq("(I*Pi)^(1/2)",
                    "(-1)^(1/4) Sqrt[Pi]", 0);
@@ -263,6 +277,215 @@ void test_const_cpow_fold(void) {
     assert_eval_eq("Simplify[(-8)^(1/3)]", "2 (-1)^(1/3)", 0);
 }
 
+/* ---- machine Power: one helper on every surface ------------------------- *
+ * A machine real (or complex) raised to an integer must be the SAME double on
+ * every surface: the scalar builtin, Power with an integer-valued Real
+ * exponent, a plain List, a packed List, a visible NDArray, Compile[] at rank 1
+ * and at scalar shape, and an auto-compiled Table body. Before
+ * src/mth_machine_pow.h the interpreter took libm pow, the VM binary powering
+ * and the ND kernel x*x*x / pow, so x^3 differed in the last bit for ~26% of
+ * random reals (x^5 ~51%; x^2 ~0.1%, Apple's pow(x, 2) not being x*x). The
+ * reference is the helper itself; its accuracy is checked against MPFR. */
+#define PWS_N 640
+static double pws_x[PWS_N];
+
+static uint64_t pws_lcg(uint64_t* s) {
+    *s = *s * 6364136223846793005ull + 1442695040888963407ull;
+    return *s;
+}
+static double pws_unit(uint64_t* s) {             /* uniform in [-2, 2) */
+    return ((double)(pws_lcg(s) >> 11) * 0x1p-53) * 4.0 - 2.0;
+}
+
+static void pws_inputs(void) {
+    uint64_t s = 0x9E3779B97F4A7C15ull;
+    int k = 0;
+    for (; k < 520; k++) pws_x[k] = pws_unit(&s);
+    for (int i = 0; i < 40; i++) pws_x[k++] = ldexp(1.0 + i / 41.0, 4 * i - 80);  /* 2^-80 .. 2^76 */
+    for (int i = 0; i < 20; i++) pws_x[k++] = -ldexp(1.5 + i / 50.0, 15 * i - 150);
+    /* straddle the double-double range bounds of |n| = 3, 5, 32 */
+    const double b[3] = { 0x1p313, 0x1p188, 0x1p29 };
+    for (int j = 0; j < 3; j++) {
+        pws_x[k++] = b[j];        pws_x[k++] = b[j] * (1 + 0x1p-52);
+        pws_x[k++] = 1.0 / b[j];  pws_x[k++] = (1.0 / b[j]) * (1 - 0x1p-53);
+    }
+    while (k < PWS_N) { pws_x[k] = 1.0 + 1e-3 * k; k++; }
+}
+
+static int pws_same_bits(double a, double b) { return memcmp(&a, &b, sizeof a) == 0; }
+
+static Expr* pws_eval(const char* src) {
+    Expr* p = parse_expression(src);
+    Expr* e = evaluate(p);
+    expr_free(p);
+    return e;
+}
+
+/* Bind the symbol `name` to List[elems...] (the elements are consumed). */
+static void pws_bind(const char* name, Expr** elems, int n) {
+    Expr* l = expr_new_function(expr_new_symbol("List"), elems, (size_t)n);
+    Expr* sa[2] = { expr_new_symbol(name), l };
+    Expr* set = expr_new_function(expr_new_symbol("Set"), sa, 2);
+    expr_free(evaluate(set));
+    expr_free(set);
+}
+
+/* `src` must be a List of PWS_N machine reals equal bit for bit to want[]. */
+static void pws_check_real(const char* src, const double* want) {
+    Expr* e = pws_eval(src);
+    ASSERT_MSG(e->type == EXPR_FUNCTION && e->data.function.arg_count == PWS_N,
+               "%s: not a list of %d", src, PWS_N);
+    for (int i = 0; i < PWS_N; i++) {
+        if (!isnormal(want[i])) continue;          /* overflow/underflow: see below */
+        Expr* r = e->data.function.args[i];
+        ASSERT_MSG(r->type == EXPR_REAL && pws_same_bits(r->data.real, want[i]),
+                   "%s: element %d (x = %.17g) is %.17g, helper gives %.17g",
+                   src, i + 1, pws_x[i], r->type == EXPR_REAL ? r->data.real : NAN, want[i]);
+    }
+    expr_free(e);
+}
+
+static void test_power_machine_surfaces_bitexact(void) {
+    static const int64_t ns[] = { 2, 3, 4, 5, 7, 10, 16, 32, 33, -1, -2, -3, -5, -32, -40 };
+    static const char* surf[] = {
+        "Developer`FromPackedArray[pwx]^%lld",
+        "Developer`FromPackedArray[Developer`ToPackedArray[pwx]^%lld]",
+        "Developer`FromPackedArray[Developer`ToPackedArray[pwx]^(%lld.)]",
+        "Normal[NDArray[pwx]^%lld]",
+        "Developer`FromPackedArray[Compile[{{v, _Real, 1}}, v^%lld][pwx]]",
+        "Developer`FromPackedArray[Compile[{{v, _Real, 1}}, 0. + v^%lld][pwx]]",
+        "Developer`FromPackedArray[Map[Compile[{{u, _Real}}, u^%lld], pwx]]",
+        "Developer`FromPackedArray[Map[Compile[{{u, _Real}, {e, _Real}}, u^e][#, %lld.] &, pwx]]",
+        "Developer`FromPackedArray[Table[pwx[[i]]^%lld, {i, Length[pwx]}]]",
+    };
+    double want[PWS_N];
+    char src[512];
+    pws_inputs();
+    Expr* el[PWS_N];
+    for (int i = 0; i < PWS_N; i++) el[i] = expr_new_real(pws_x[i]);
+    pws_bind("pwx", el, PWS_N);
+    for (size_t j = 0; j < sizeof ns / sizeof *ns; j++) {
+        int64_t n = ns[j];
+        for (int i = 0; i < PWS_N; i++) want[i] = mth_powi_machine(pws_x[i], n);
+        /* the scalar builtin, one call per element: Integer and Real exponent.
+         * A power that overflows or underflows a double is no machine number
+         * on the scalar surface (it promotes to an extended-exponent real), so
+         * those cells are skipped here and in pws_check_real. */
+        for (int i = 0; i < PWS_N; i++) {
+            if (!isnormal(want[i])) continue;
+            for (int realexp = 0; realexp < 2; realexp++) {
+                Expr* a[2] = { expr_new_real(pws_x[i]),
+                               realexp ? expr_new_real((double)n) : expr_new_integer(n) };
+                Expr* call = expr_new_function(expr_new_symbol("Power"), a, 2);
+                Expr* r = evaluate(call);
+                ASSERT_MSG(r->type == EXPR_REAL && pws_same_bits(r->data.real, want[i]),
+                           "Power[%.17g, %lld%s] = %.17g, helper gives %.17g", pws_x[i],
+                           (long long)n, realexp ? "." : "",
+                           r->type == EXPR_REAL ? r->data.real : NAN, want[i]);
+                expr_free(call); expr_free(r);
+            }
+        }
+        for (size_t q = 0; q < sizeof surf / sizeof *surf; q++) {
+            snprintf(src, sizeof src, surf[q], (long long)n);
+            pws_check_real(src, want);
+        }
+    }
+    /* constant-folded inside Compile[] (the optimiser's OP_POWI_R fold) */
+    for (int i = 0; i < 40; i++) {
+        snprintf(src, sizeof src, "Compile[{{u, _Real}}, u + %.17g^5][0.]", pws_x[i]);
+        Expr* r = pws_eval(src);
+        double w = mth_powi_machine(pws_x[i], 5);
+        ASSERT_MSG(r->type == EXPR_REAL && pws_same_bits(r->data.real, w),
+                   "%s = %.17g, helper %.17g", src, r->type == EXPR_REAL ? r->data.real : NAN, w);
+        expr_free(r);
+    }
+}
+
+/* Complex base, integer exponent: Re and Im bit for bit on every surface. The
+ * scalar builtin answers a Real when the imaginary part is exactly 0. */
+#define PWC_N 160
+static void test_power_machine_complex_surfaces_bitexact(void) {
+    static const int64_t ns[] = { 2, 3, 5, 7, 16, -1, -2, -3, -6 };
+    static const char* surf[] = {
+        "Developer`FromPackedArray[Table[Apply[Power, {pwz[[i]], %lld}], {i, Length[pwz]}]]",
+        "Developer`FromPackedArray[pwz]^%lld",
+        "Developer`FromPackedArray[Developer`ToPackedArray[pwz]^%lld]",
+        "Normal[NDArray[pwz]^%lld]",
+        "Developer`FromPackedArray[Compile[{{v, _Complex, 1}}, v^%lld][pwz]]",
+        "Developer`FromPackedArray[Map[Compile[{{u, _Complex}}, u^%lld], pwz]]",
+    };
+    double zr[PWC_N], zi[PWC_N], wr[PWC_N], wi[PWC_N];
+    uint64_t s = 12345;
+    for (int k = 0; k < PWC_N; k++) { zr[k] = pws_unit(&s); zi[k] = pws_unit(&s); }
+    zr[0] = 0.0;   zi[0] = 1.0;                    /* I^n exactly */
+    zr[1] = 1e200; zi[1] = 3e199;                  /* Smith's inversion: |z|^2 overflows */
+    Expr* el[PWC_N];
+    for (int k = 0; k < PWC_N; k++) {
+        Expr* c[2] = { expr_new_real(zr[k]), expr_new_real(zi[k]) };
+        el[k] = expr_new_function(expr_new_symbol("Complex"), c, 2);
+    }
+    pws_bind("pwz", el, PWC_N);
+    for (size_t j = 0; j < sizeof ns / sizeof *ns; j++) {
+        for (int k = 0; k < PWC_N; k++) mth_powi_machine_c(zr[k], zi[k], ns[j], &wr[k], &wi[k]);
+        for (size_t q = 0; q < sizeof surf / sizeof *surf; q++) {
+            char src[256];
+            snprintf(src, sizeof src, surf[q], (long long)ns[j]);
+            Expr* e = pws_eval(src);
+            ASSERT_MSG(e->type == EXPR_FUNCTION && e->data.function.arg_count == PWC_N,
+                       "%s: not a list of %d", src, PWC_N);
+            for (int k = 0; k < PWC_N; k++) {
+                /* z = 1e200 overflows every power but z^-1 (which is the point
+                 * of it: Smith's 1/z never forms |z|^2) */
+                if (!isfinite(wr[k]) || !isfinite(wi[k])) continue;
+                Expr* r = e->data.function.args[k];
+                double re = NAN, im = NAN;
+                if (r->type == EXPR_REAL) { re = r->data.real; im = 0.0; }
+                else if (r->type == EXPR_FUNCTION && r->data.function.arg_count == 2 &&
+                         r->data.function.args[0]->type == EXPR_REAL &&
+                         r->data.function.args[1]->type == EXPR_REAL) {
+                    re = r->data.function.args[0]->data.real;
+                    im = r->data.function.args[1]->data.real;
+                }
+                ASSERT_MSG(pws_same_bits(re, wr[k]) &&
+                           (pws_same_bits(im, wi[k]) || (r->type == EXPR_REAL && wi[k] == 0.0)),
+                           "%s: element %d (z = %.17g + %.17g I) is %.17g + %.17g I, helper %.17g + %.17g I",
+                           src, k + 1, zr[k], zi[k], re, im, wr[k], wi[k]);
+            }
+            expr_free(e);
+        }
+    }
+}
+
+/* The helper's accuracy, which is why it was chosen over libm pow and over
+ * plain binary powering: correctly rounded against MPFR on random inputs
+ * wherever its double-double arm applies. */
+static void test_power_machine_helper_accuracy(void) {
+#ifdef USE_MPFR
+    static const int64_t ns[] = { 2, 3, 4, 5, 6, 7, 8, 11, 16, 25, 32, -1, -2, -3, -5, -9, -32 };
+    mpfr_t x, r;
+    mpfr_init2(x, 53); mpfr_init2(r, 53);
+    uint64_t s = 777;
+    for (size_t j = 0; j < sizeof ns / sizeof *ns; j++) {
+        int64_t n = ns[j];
+        unsigned m = (unsigned)(n < 0 ? -n : n);
+        int miss = 0, tried = 0;
+        for (int i = 0; i < 4000; i++) {
+            double xv = pws_unit(&s);
+            if (m >= 2 && n != 2 && (fabs(xv) > MTH_POWI_BOUND[m] || fabs(xv) * MTH_POWI_BOUND[m] < 1.0))
+                continue;                            /* libm pow's range */
+            if (xv == 0.0) continue;
+            mpfr_set_d(x, xv, MPFR_RNDN);
+            mpfr_pow_si(r, x, (long)n, MPFR_RNDN);  /* correctly rounded */
+            tried++;
+            if (!pws_same_bits(mth_powi_machine(xv, n), mpfr_get_d(r, MPFR_RNDN))) miss++;
+        }
+        ASSERT_MSG(tried > 3900 && miss == 0, "x^%lld: %d of %d not correctly rounded",
+                   (long long)n, miss, tried);
+    }
+    mpfr_clear(x); mpfr_clear(r);
+#endif
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -277,6 +500,10 @@ int main(void) {
     TEST(test_power_nested_symbolic_compose);
     TEST(test_bigint_perfect_root);
     TEST(test_const_cpow_fold);
+    TEST(test_power_machine_surfaces_bitexact);
+    TEST(test_power_machine_complex_surfaces_bitexact);
+    TEST(test_power_machine_helper_accuracy);
+    TEST(test_complex_power_overflow);
 
     printf("All power_corpus tests passed!\n");
     return 0;
