@@ -1827,7 +1827,18 @@ parabolic problem grows as the cube of the points). Smooth data stop
 early (`Sin[π x]`: 193 points); a kink, a jump or boundary-incompatible data run to
 `MaxPoints`, and data the finest grid still misses by more than 10× the tolerance
 get `NDSolve::eerr` (the scaled spatial error estimate and the point count, in
-the reference's wording). A node next to a **jump** of the initial data (a cell whose change
+the reference's wording). For a parabolic problem whose data the automatic grid
+gave up on, the solution at the end of the interval is checked too (each odd node
+against the cubic through its even neighbours): if diffusion has not smoothed it
+onto the grid by then (estimate above 1000× the tolerance), the whole solution is
+the grid's, not the equation's, and `NDSolve` returns unevaluated after a second
+`NDSolve::eerr` at the final time instead of a solution a `FindRoot` downstream
+would turn into a wrong number. SIAM D16 (Daubechies data, the crossing at
+`t ≈ 5·10⁻⁷`, a diffusion length of a third of the spacing) had returned a
+crossing time 2× wrong; the grid length of the discrete solution there converges
+to the true 5.4 only slowly (5.474, 5.452, 5.439 at 769, 1537, 3073 points), so
+it is a genuine resolution limit. `MinPoints` or `MaxPoints` given by the user
+skip the check. A node next to a **jump** of the initial data (a cell whose change
 dominates its neighbours' and survives bisection to a few ulps) takes the data's
 mean over its cell, with the jump located inside it, instead of the point value —
 point sampling knows a jump's position only to a cell, an `O(h)` error in every

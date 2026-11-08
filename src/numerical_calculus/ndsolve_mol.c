@@ -582,6 +582,22 @@ static bool* nd_mol_bound_states(Expr* bc_left, Expr* bc_right, size_t d) {
     return seen;
 }
 
+/* The spatial error of a grid function (interior values U[k*stride]) at
+ * the grid's scale: each odd node against the cubic through its even
+ * neighbours two spacings apart, relative to max|U|. */
+static double nd_mol_final_spatial_error(const double* Y, size_t nunk, int stride) {
+    double e = 0.0, sc = 0.0;
+    for (size_t k = 0; k < nunk; k++) if (fabs(Y[k * (size_t)stride]) > sc) sc = fabs(Y[k * (size_t)stride]);
+    for (size_t k = 3; k + 3 < nunk; k += 2) {
+        const double* v = Y;
+        double p = (-v[(k - 3) * (size_t)stride] + 9 * v[(k - 1) * (size_t)stride]
+                    + 9 * v[(k + 1) * (size_t)stride] - v[(k + 3) * (size_t)stride]) / 16.0;
+        double d = fabs(v[k * (size_t)stride] - p);
+        if (d > e) e = d;
+    }
+    return sc > 0 ? e / sc : 0.0;
+}
+
 static void nd_mol_coord_d(const double* c, size_t m, double* out);
 
 static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
@@ -1931,6 +1947,7 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
     }
 
     /* ---- the spatial grid from the initial data (no MinPoints given) ---- */
+    double grid_excess = 0.0;          /* > 0: the automatic grid hit MaxPoints unresolved */
     if (!nx_user) {
         /* the data are sampled in double precision: a tolerance below its
          * rounding would never be met */
@@ -1941,6 +1958,7 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
                                      rt, at, nx_l, nx_max, &excess);
         /* the finest grid allowed still misses the initial data (a jump, a
          * kink, data rougher than the grid): say so, as the reference does */
+        if (!maxpts_user) grid_excess = excess;   /* a MaxPoints given takes the grid as asked */
         if (excess > 10.0)
             mth_message("NDSolve", "eerr",
                         "Warning: scaled local spatial error estimate of %.6g at %s = %.6g in the "
@@ -2212,9 +2230,34 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         else if (st == ND_ERR_STEPSIZE) nd_mol_warn("ndsz", "step size effectively zero; stiffness suspected (try Method->\"BDF\")");
         else if (st == ND_ERR_NONCONV) nd_mol_warn("ndcf", "corrector failed to converge");
         else if (st == ND_ERR_SAMPLE) nd_mol_warn("nrnum", "spatial operator did not evaluate to a number");
+        /* The automatic grid gave up on the initial data (MaxPoints reached,
+         * NDSolve::eerr above) and a diffusion did not smooth the solution
+         * onto the grid by the end of the interval either: then the whole
+         * solution is the grid's, not the equation's (SIAM D16 asks for the
+         * heat flow at t ~ 5e-7, a diffusion length of a third of the
+         * spacing, and got a crossing time 2x wrong).  Rather than hand that
+         * to a FindRoot downstream, the solution is not returned; MinPoints
+         * or MaxPoints given by the user take the grid as asked. */
+        bool unresolved = false;
+        if (grid_excess > 10.0 && parabolic && !cplx && sol.n > 0) {
+            NdTol tl = nd_resolve_tol(&o);
+            double tolr = tl.rtol > 1e-13 ? tl.rtol : 1e-13;
+            double e = nd_mol_final_spatial_error(sol.Ys + (sol.n - 1) * d, nunk, torder);
+            if (e > 1e3 * tolr) {
+                unresolved = true;
+                mth_message("NDSolve", "eerr",
+                            "Warning: scaled local spatial error estimate of %.6g at %s = %.6g in the "
+                            "direction of independent variable %s is much greater than the prescribed "
+                            "error tolerance. Grid spacing with %zu points may be too large to achieve "
+                            "the desired accuracy or precision. A singularity may have formed or a "
+                            "smaller grid spacing can be specified using the MaxStepSize or MinPoints "
+                            "method options.", e / tolr, tvar, sol.ts[sol.n - 1], xvar, nx);
+            }
+        }
         /* build the result while the bindings are still live (boundary/periodic
          * node values may depend on the reduced-state symbols). */
-        if (cplx)
+        if (unresolved) result = NULL;
+        else if (cplx)
             result = nd_mol_build_result_complex(&P, fname, applied, tvar, xvar, xmin, h,
                                                  nx, nunk, gbase, periodic, bc_left, bc_right,
                                                  &sol, spec);

@@ -1378,6 +1378,20 @@ static void test_auto_grid(void) {
     CHECK("resolved data -> no message",
           "Check[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, u[1,t]==0}, "
           "u, {x,0,1}, {t,0,1/5}][1/2, 0.05]; 0, 1]", 0.0, 0.0);
+    /* still unresolved at the end of the interval (a jump diffused over a
+     * third of the finest spacing): no solution rather than the grid's; with
+     * MinPoints the grid is taken as asked; a longer interval resolves */
+    char hd[64];
+    eval_head("NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Piecewise[{{1, 1/4 <= x <= 3/4}}, 0], "
+              "u[0,t]==0, u[1,t]==0}, u, {x,0,1}, {t,0,10^-7}]", hd, sizeof hd);
+    check_true("unresolved over the whole interval: not returned", strcmp(hd, "NDSolveValue") == 0, hd);
+    eval_head("NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Piecewise[{{1, 1/4 <= x <= 3/4}}, 0], "
+              "u[0,t]==0, u[1,t]==0}, u, {x,0,1}, {t,0,10^-7}, Method -> {\"MethodOfLines\", "
+              "\"SpatialDiscretization\" -> {\"TensorProductGrid\", \"MinPoints\" -> 101}}]", hd, sizeof hd);
+    check_true("... with MinPoints: returned", strcmp(hd, "InterpolatingFunction") == 0, hd);
+    eval_head("NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Piecewise[{{1, 1/4 <= x <= 3/4}}, 0], "
+              "u[0,t]==0, u[1,t]==0}, u, {x,0,1}, {t,0,10^-3}]", hd, sizeof hd);
+    check_true("... smoothed onto the grid by the end: returned", strcmp(hd, "InterpolatingFunction") == 0, hd);
     /* MinPoints is honoured as given */
     CHECK("MinPoints -> 25 keeps the 25-point grid",
           "Length[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, u[1,t]==0}, "
