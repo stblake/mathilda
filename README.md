@@ -6,6 +6,7 @@
 [![Tests](https://github.com/stblake/mathilda/actions/workflows/tests.yml/badge.svg)](https://github.com/stblake/mathilda/actions/workflows/tests.yml)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-stblake.github.io%2Fmathilda-informational)](https://stblake.github.io/mathilda/)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstblake%2Fmathilda%2Ftraffic-stats%2Fclones-badge.json&cacheSeconds=3600)](.github/workflows/traffic.yml)
 
 Mathilda is built around a small, general core: a recursive expression model,
 infinite (fixed-point) evaluation driven by attributes, structural pattern

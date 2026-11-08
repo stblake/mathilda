@@ -1,0 +1,60 @@
+# Accumulates the repository's clone count for the README "downloads" badge.
+#
+# GitHub's traffic API only keeps 14 days, so this samples it daily and merges
+# each response into clones.json on the orphan branch `traffic-stats`
+# (tools/traffic_clones.py). The badge reads clones-badge.json from that branch
+# through shields.io's endpoint badge.
+#
+# The traffic API needs repository Administration (read) access, which the
+# workflow GITHUB_TOKEN cannot be granted, so it reads with the TRAFFIC_TOKEN
+# secret: a fine-grained personal access token for this repository with
+# "Administration: Read-only". GITHUB_TOKEN is used only to push the branch.
+name: Traffic
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily; anything under 14 days loses nothing
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: traffic
+  cancel-in-progress: false
+
+jobs:
+  clones:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the traffic-stats branch
+        run: |
+          if git ls-remote --exit-code --heads origin traffic-stats >/dev/null; then
+            git fetch --depth=1 origin traffic-stats
+            git worktree add stats FETCH_HEAD
+            git -C stats checkout -B traffic-stats
+          else
+            git worktree add --orphan -b traffic-stats stats
+          fi
+
+      - name: Fetch clone counts
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::TRAFFIC_TOKEN secret is not set"; exit 1; }
+          gh api "repos/${{ github.repository }}/traffic/clones" > "$RUNNER_TEMP/clones.json"
+
+      - name: Merge into history
+        run: python3 tools/traffic_clones.py "$RUNNER_TEMP/clones.json" stats
+
+      - name: Push
+        working-directory: stats
+        run: |
+          git add clones.json clones-badge.json
+          git diff --cached --quiet && { echo "no change"; exit 0; }
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898283+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "traffic: clone counts $(date -u +%F)"
+          git push origin traffic-stats
