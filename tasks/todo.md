@@ -14,6 +14,15 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] Holdout A pre-fix run DONE: Mathilda 262/600 on target (benchmarks/SIAM100_HOLDOUT_A.md, siam100_results/holdoutA_v0.6377.md) (v0.6377 binary, running; load peaked >30 from holdout-B refs + fix builds -> DIGITS valid, TIMINGS approximate; if speed verdicts matter, re-time from a `git worktree add <dir> v0.6377` build on a quiet machine)
 - [x] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b (worktree ../Mathilda-holdoutB, exps 226-255, 6 agents writing; WL verify after scratchpad/WL_FREE), baselines only
 - [x] Phase 6 (2026-11-09): final run v0.6460. Originals 69/76, holdout A 506/600, **holdout B 395/600 (single run; now spent)**. Verdict and queue in benchmarks/SIAM100.md; details in benchmarks/SIAM100_HOLDOUT_B_RESULTS_v0.6460.md. Next queue: D17 {0,0} wrong (20), D10 FoldList speed, C6/D8 multi-D NIntegrate timeouts, D14 FEM operator forms, D2 NSum accgl, D18/D19/D20 unevaluated, C3/C5 speed. Any fix needs a holdout C to re-measure.
+- [x] Post-verdict trivial fixes v0.6461-67 (pushed 2026-11-09): Element of exact constants, Lookup[a, {Key[k], ...}], GroebnerBasis Method -> "F4"/"Buchberger", Fold/FoldList compiled rows/vectors/exact folds (D10 1684 -> 60 ms), RandomChoice packed array cells, NSum step/digit-length summands (D2 bd2.1/.2/.8/.9 15/50 d)
+- [ ] Follow-up queue (non-trivial; holdout B is spent, so these are measured on 166-255 as training data and need a holdout C):
+  - [ ] D17: RegionBoundary and RegionDistance absent (252 guarded to "unevaluated")
+  - [ ] D14/D18: 3-D and nonlinear FEM (NDSolve/NDEigenvalues on 3-D regions; nonlinear operators)
+  - [ ] C6/D8: multi-dimensional NIntegrate timeouts (MPFR cubature; >3-D deterministic rules)
+  - [ ] hd10.1: RandomChoice / Log element pipelines slower than numpy (machine kernels)
+  - [ ] Packed arrays inside a plain List materialise when ragged/mixed (transparency-gate design; needs a redesign decision)
+  - [ ] D2: bd2.7 nested digit sums 0 d; nested cases ending at 0-1 d now ~300-450 ms (original D2 1.6 -> 303 ms) -- honest but slow
+  - [ ] C3/C5 speed; D19/D20 remainder (see Phase 5 open lines)
 - [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
   - [x] v0.6378 NDSolve BVP by shooting (silent wrong answer on two-point conditions)
   - [x] v0.6379 WhenEvent (all integration loops; d12 12d/274ms, d12.wp50 50d, hd12 20/20), v0.6380 NDSolveValue, v0.6381 unlisted unknowns (d13.wp50 50d)
@@ -48,7 +57,7 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] Wave 2026-11-08 (v0.6436-v0.6458): x^n surfaces; KKT refinement for constraints at WP (hd19.10 18 -> 50 d); MPFR compiler With + Sech etc. (hc10.9 OK); Zeta' numeric + NSum MangoldtLambda Dirichlet (hd4.7 1 -> 15/50 d); FindRoot extra Newton step (hc8 +1 d); NIntegrate phase-coordinate endpoint (hc1.7 12/50 d), accgl goal, iterated WP; FEM path integrals, Dirichlet closure, NDEigenvalues Richardson, MOL auto grid + no unresolved answer; Det/Dot small, Table trig kernel (hc3.10 43 -> 2 ms); Together inexact exponents opaque (was silently exact); one numeric inexact Series path (hd20.9 wp50 56 s -> 0.3 s)
 - [ ] open after wave: C2 machine ~2x Py (Select over vector tuples: compiled-predicate path is scalar-only); D10 wp50 (bignum loop compiler); hd20.1-8 machine 2-4x Py (exact Series by design); hc6 wp50 timeouts (needs 2-D MPFR method; hc6.1 48 d in 173 s); hd4.4 Moebius-li tail asymptotics; hd19.5/.7 machine 1-2 d (8-digit goals); FEM functionals 7-9 d (P3 elements); hd14.8 9 -> 7 d; hd17 crossing nodal lines; hd16.3/.9 boundary-incompatible data; wp50 MOL rows 25-point grid (explicit MPFR integrator); koch[4] mesher "boundary vertex could not be inserted"; Together[x^2.0 + 1/x] = (1.0 + x^3)/x (reference keeps x^3.) and Cancel[(x^2.0-1)/(x-1)] = 1.0 + x (reference leaves it); hc9 wp50 46-49 d + hc9.8 machine (optimiser agent running)
 - [x] Holdout B 30/30 families committed (568b39a1 C6-C10), all .m halves WL-verified, no truth disputes; run_all pipes wolframscript stdout (lost 16/20 lines of 234 to a file)
-- [ ] Phase 6: final run, holdout B once, verdict
+- [x] Phase 6: final run, holdout B once, verdict (v0.6460; see line above)
 
 Findings so far:
 - C1 wp50: NIntegrate[Cos[Log[x]/x]/x, {x,0,1}, WorkingPrecision->60] returns -1.186 (WRONG) in 13.4 s;
