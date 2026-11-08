@@ -44,7 +44,16 @@ jobs:
           GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
         run: |
           test -n "$GH_TOKEN" || { echo "::error::TRAFFIC_TOKEN secret is not set"; exit 1; }
-          gh api "repos/${{ github.repository }}/traffic/clones" > "$RUNNER_TEMP/clones.json"
+          repo="${{ github.repository }}"
+          if ! gh api "repos/$repo/traffic/clones" > "$RUNNER_TEMP/clones.json"; then
+            # Say why: the permission GitHub wanted, and whether the token can
+            # see the repository at all (404 = not in its repository access).
+            echo "--- permission GitHub asked for:"
+            gh api -i "repos/$repo/traffic/clones" 2>/dev/null | grep -i '^x-accepted-github-permissions' || echo "(none reported)"
+            echo "--- can the token read the repository?"
+            gh api "repos/$repo" -q '"yes: " + .full_name + ", permissions " + (.permissions | tostring)' 2>&1 || true
+            exit 1
+          fi
 
       - name: Merge into history
         run: python3 tools/traffic_clones.py "$RUNNER_TEMP/clones.json" stats
