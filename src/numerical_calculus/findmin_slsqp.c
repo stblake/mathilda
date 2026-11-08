@@ -849,4 +849,677 @@ done:
     free(role); free(A); free(act); free(sub); free(sb); free(sbox); free(sidx);
     return ok;
 }
+
+/* ------------------------------------------------------------------ *
+ *  General constraints at WorkingPrecision: Newton on the KKT system   *
+ * ------------------------------------------------------------------ *
+ * fm_linear_refine_mpfr eliminates LINEAR active rows exactly; a nonlinear
+ * constraint has no such elimination, and used to send the whole solve back
+ * to machine precision (FindMinimum::nimpl).  This routine refines any
+ * smooth problem the same way an interior-free SQP finishes: the machine SQP
+ * supplies the point and its active set, and at the working precision the
+ * first-order conditions on that set,
+ *     d/dx_j f + sum_k lam_k d/dx_j c_k = 0   (j free)
+ *                                  c_k = 0   (k active)
+ * are solved by Newton's method in (x_free, lam).  Its Jacobian
+ * [[H, J^T], [J, 0]] needs the Hessian H of the Lagrangian on the free
+ * coordinates.  H is taken ONCE per active set, by second differences of
+ * Lagrangian VALUES (m(m+1)/2 + m + 1 evaluations, increment
+ * (|x|+1) 2^(-p/3), accurate to ~2^(-p/3)): a Hessian that good contracts
+ * the Newton error by ~2^(-p/3) a step, so the ~10^-8 machine point reaches
+ * the working precision in three or four steps, at a fraction of the
+ * (m+1) gradient differences a gradient-difference Hessian costs a black-box
+ * objective.  Gradients are symbolic where the driver has them, else 5-point
+ * differences (accurate to ~2^(-4p/5)).
+ *
+ * The machine active set is a guess -- a coordinate 10^-6 off its bound looks
+ * free -- so the KKT point found is then CHECKED: a free coordinate outside
+ * its box is pinned, an inactive inequality that is violated is activated,
+ * an active inequality or pinned bound with a multiplier of the wrong sign is
+ * released, and the solve is repeated (FM_KKT_ROUNDS at most). */
+
+#define FM_KKT_ROUNDS 8
+#define FM_KKT_NEWTON 12
+/* rank tolerances of the Newton solve, 2^(-p/k) of the Hessian's size:
+ * the first is well above the ~2^(-p/3) difference error */
+#define FM_KKT_NTDIV 6
+static const int fm_kkt_tdiv[FM_KKT_NTDIV] = { 4, 6, 8, 12, 16, 24 };
+
+typedef struct {
+    FmVarBind*      binds;
+    Expr*           f;
+    Expr**          g_exprs;     /* objective gradient, or NULL           */
+    const FmGenCon* gens;
+    const FmOpts*   opts;
+    size_t          n;
+    long            bits, p;
+} FmKkt;
+
+/* d e / d x_i at x: the symbolic component when ge has one, else the 5-point
+ * difference (-e(x+2h) + 8 e(x+h) - 8 e(x-h) + e(x-2h)) / 12h,
+ * h = max(|x_i|, 1) 2^(-p/5).  xs: scratch, equal to x on entry and exit. */
+static bool fm_kkt_partial(const FmKkt* K, Expr* e, Expr** ge, size_t i,
+                           mpfr_t* x, mpfr_t* xs, mpfr_t out) {
+    if (ge && ge[i] && fm_eval_at_mpfr(ge[i], K->binds, x, K->n, K->opts, out))
+        return true;
+    mpfr_t h, t, f1, f2, f3, f4;
+    mpfr_inits2(K->bits, h, t, f1, f2, f3, f4, (mpfr_ptr)0);
+    mpfr_abs(h, x[i], MPFR_RNDN);
+    if (mpfr_cmp_ui(h, 1) < 0) mpfr_set_ui(h, 1, MPFR_RNDN);
+    mpfr_mul_2si(h, h, -(K->p / 5), MPFR_RNDN);
+    bool ok = true;
+    mpfr_add(xs[i], x[i], h, MPFR_RNDN);
+    ok = ok && fm_eval_at_mpfr(e, K->binds, xs, K->n, K->opts, f1);
+    mpfr_sub(xs[i], x[i], h, MPFR_RNDN);
+    ok = ok && fm_eval_at_mpfr(e, K->binds, xs, K->n, K->opts, f2);
+    mpfr_mul_2ui(t, h, 1, MPFR_RNDN);
+    mpfr_add(xs[i], x[i], t, MPFR_RNDN);
+    ok = ok && fm_eval_at_mpfr(e, K->binds, xs, K->n, K->opts, f3);
+    mpfr_sub(xs[i], x[i], t, MPFR_RNDN);
+    ok = ok && fm_eval_at_mpfr(e, K->binds, xs, K->n, K->opts, f4);
+    mpfr_set(xs[i], x[i], MPFR_RNDN);
+    if (ok) {
+        mpfr_sub(out, f1, f2, MPFR_RNDN);
+        mpfr_mul_ui(out, out, 8, MPFR_RNDN);
+        mpfr_sub(out, out, f3, MPFR_RNDN);
+        mpfr_add(out, out, f4, MPFR_RNDN);
+        mpfr_mul_ui(t, h, 12, MPFR_RNDN);
+        mpfr_div(out, out, t, MPFR_RNDN);
+    }
+    mpfr_clears(h, t, f1, f2, f3, f4, (mpfr_ptr)0);
+    return ok;
+}
+
+/* d e / d x_i at x by a ONE-SIDED difference into the box (dir = +1 from a
+ * lower bound, -1 from an upper): (-3 e(x) + 4 e(x + s) - e(x + 2s)) / 2s,
+ * s = dir (|x_i| + 1) 2^(-p/3) -- a pinned coordinate's multiplier, where
+ * the objective may be undefined beyond the bound.  The symbolic component
+ * when ge has one. */
+static bool fm_kkt_partial_inward(const FmKkt* K, Expr* e, Expr** ge, size_t i, int dir,
+                                  mpfr_t* x, mpfr_t* xs, mpfr_t out) {
+    if (ge && ge[i] && fm_eval_at_mpfr(ge[i], K->binds, x, K->n, K->opts, out))
+        return true;
+    mpfr_t h, f0, f1, f2;
+    mpfr_inits2(K->bits, h, f0, f1, f2, (mpfr_ptr)0);
+    mpfr_abs(h, x[i], MPFR_RNDN);
+    mpfr_add_ui(h, h, 1, MPFR_RNDN);
+    mpfr_mul_2si(h, h, -(K->p / 3), MPFR_RNDN);
+    if (dir < 0) mpfr_neg(h, h, MPFR_RNDN);
+    bool ok = fm_eval_at_mpfr(e, K->binds, x, K->n, K->opts, f0);
+    mpfr_add(xs[i], x[i], h, MPFR_RNDN);
+    ok = ok && fm_eval_at_mpfr(e, K->binds, xs, K->n, K->opts, f1);
+    mpfr_add(xs[i], xs[i], h, MPFR_RNDN);
+    ok = ok && fm_eval_at_mpfr(e, K->binds, xs, K->n, K->opts, f2);
+    mpfr_set(xs[i], x[i], MPFR_RNDN);
+    if (ok) {
+        mpfr_mul_ui(out, f1, 4, MPFR_RNDN);
+        mpfr_sub(out, out, f2, MPFR_RNDN);
+        mpfr_mul_ui(f0, f0, 3, MPFR_RNDN);
+        mpfr_sub(out, out, f0, MPFR_RNDN);
+        mpfr_mul_2ui(h, h, 1, MPFR_RNDN);
+        mpfr_div(out, out, h, MPFR_RNDN);
+    }
+    mpfr_clears(h, f0, f1, f2, (mpfr_ptr)0);
+    return ok;
+}
+
+/* The Lagrangian f + sum_k lam_k c_k (k over the na active rows aidx) at x. */
+static bool fm_kkt_lagrangian(const FmKkt* K, const size_t* aidx, size_t na,
+                              mpfr_t* lam, mpfr_t* x, mpfr_t out) {
+    if (!fm_eval_at_mpfr(K->f, K->binds, x, K->n, K->opts, out)) return false;
+    mpfr_t c; mpfr_init2(c, K->bits);
+    bool ok = true;
+    for (size_t a = 0; a < na && ok; a++) {
+        ok = fm_eval_at_mpfr(K->gens[aidx[a]].expr, K->binds, x, K->n, K->opts, c);
+        if (ok) { mpfr_mul(c, c, lam[a], MPFR_RNDN); mpfr_add(out, out, c, MPFR_RNDN); }
+    }
+    mpfr_clear(c);
+    return ok;
+}
+
+/* Assemble the KKT residual from the derivatives: r[0..m) = gf + J^T lam
+ * (r[m..m+na) already holds the active constraint values).  rn: the
+ * normalised max-norm, each stationarity component relative to gscale, each
+ * constraint to its cscale. */
+static bool fm_kkt_assemble(size_t m, size_t na, mpfr_t* lam, mpfr_t* gf, mpfr_t* J,
+                            mpfr_t* r, const mpfr_t gscale, mpfr_t const* cscale,
+                            mpfr_t rn, long bits) {
+    mpfr_t t; mpfr_init2(t, bits);
+    mpfr_set_zero(rn, +1);
+    for (size_t j = 0; j < m; j++) {
+        mpfr_set(r[j], gf[j], MPFR_RNDN);
+        for (size_t a = 0; a < na; a++) {
+            mpfr_mul(t, lam[a], J[a * m + j], MPFR_RNDN);
+            mpfr_add(r[j], r[j], t, MPFR_RNDN);
+        }
+        mpfr_abs(t, r[j], MPFR_RNDN);
+        mpfr_div(t, t, gscale, MPFR_RNDN);
+        if (mpfr_cmp(t, rn) > 0) mpfr_set(rn, t, MPFR_RNDN);
+    }
+    for (size_t a = 0; a < na; a++) {
+        mpfr_abs(t, r[m + a], MPFR_RNDN);
+        mpfr_div(t, t, cscale[a], MPFR_RNDN);
+        if (mpfr_cmp(t, rn) > 0) mpfr_set(rn, t, MPFR_RNDN);
+    }
+    mpfr_clear(t);
+    return mpfr_number_p(rn) != 0;
+}
+
+/* The KKT residual at (x, lam): r[0..m) = dL/dx_free, r[m..m+na) = c_active,
+ * with the free objective gradient gf (m) and the active Jacobian
+ * J (na x m, row-major) on the way; see fm_kkt_assemble for rn. */
+static bool fm_kkt_residual(const FmKkt* K, const size_t* fidx, size_t m,
+                            const size_t* aidx, size_t na, mpfr_t* x, mpfr_t* xs,
+                            mpfr_t* lam, mpfr_t* gf, mpfr_t* J, mpfr_t* r,
+                            const mpfr_t gscale, mpfr_t const* cscale, mpfr_t rn) {
+    bool ok = true;
+    for (size_t j = 0; j < m && ok; j++)
+        ok = fm_kkt_partial(K, K->f, K->g_exprs, fidx[j], x, xs, gf[j]);
+    for (size_t a = 0; a < na && ok; a++) {
+        const FmGenCon* g = &K->gens[aidx[a]];
+        for (size_t j = 0; j < m && ok; j++)
+            ok = fm_kkt_partial(K, g->expr, g->grad_exprs, fidx[j], x, xs, J[a * m + j]);
+        ok = ok && fm_eval_at_mpfr(g->expr, K->binds, x, K->n, K->opts, r[m + a]);
+    }
+    return ok && fm_kkt_assemble(m, na, lam, gf, J, r, gscale, cscale, rn, K->bits);
+}
+
+/* Solve A z = b (N x N, row-major; A and b destroyed, z into b) by Gaussian
+ * elimination with COMPLETE pivoting, truncated at rank: once every remaining
+ * pivot is at most tol in magnitude, the system is treated as rank r and the
+ * MINIMUM-NORM solution of its leading r rows is returned.  A KKT matrix is
+ * singular whenever the minimiser is not unique -- an optimal-design
+ * compliance F.K(c)^-1.F has a Hessian of rank <= #nodes < #cells, so its
+ * minimisers form a manifold and only the minimum VALUE is unique.  A plain
+ * solve then returns a step of 10^8 along the flat directions; a basic
+ * solution of the truncated system a bounded one that still drifts along
+ * the manifold (a cell inside [1, 100] at the machine solution left at 499);
+ * the minimum-norm step moves only across the manifold.  tol = 0 truncates
+ * only at an exact zero.  False when no pivot exceeds tol (or a pivot is not
+ * a number). */
+static bool fm_kkt_solve(mpfr_t* A, mpfr_t* b, size_t N, long bits, const mpfr_t tol) {
+    mpfr_t t, f; mpfr_inits2(bits, t, f, (mpfr_ptr)0);
+    size_t* cp = (size_t*)malloc(sizeof(size_t) * (N ? N : 1));   /* column order */
+    bool ok = cp != NULL;
+    size_t rank = N;
+    for (size_t j = 0; ok && j < N; j++) cp[j] = j;
+    for (size_t c = 0; c < N && ok; c++) {
+        size_t pr = c, pc = c;
+        for (size_t r = c; r < N; r++)
+            for (size_t j = c; j < N; j++)
+                if (mpfr_cmpabs(A[r * N + j], A[pr * N + pc]) > 0) { pr = r; pc = j; }
+        if (!mpfr_number_p(A[pr * N + pc])) { ok = false; break; }
+        if (mpfr_zero_p(A[pr * N + pc]) || mpfr_cmpabs(A[pr * N + pc], tol) <= 0) {
+            rank = c; break;
+        }
+        if (pr != c) {
+            for (size_t j = 0; j < N; j++) mpfr_swap(A[pr * N + j], A[c * N + j]);
+            mpfr_swap(b[pr], b[c]);
+        }
+        if (pc != c) {
+            for (size_t r = 0; r < N; r++) mpfr_swap(A[r * N + pc], A[r * N + c]);
+            size_t s = cp[pc]; cp[pc] = cp[c]; cp[c] = s;
+        }
+        for (size_t r = c + 1; r < N; r++) {
+            if (mpfr_zero_p(A[r * N + c])) continue;
+            mpfr_div(f, A[r * N + c], A[c * N + c], MPFR_RNDN);
+            for (size_t j = c; j < N; j++) {
+                mpfr_mul(t, f, A[c * N + j], MPFR_RNDN);
+                mpfr_sub(A[r * N + j], A[r * N + j], t, MPFR_RNDN);
+            }
+            mpfr_mul(t, f, b[c], MPFR_RNDN);
+            mpfr_sub(b[r], b[r], t, MPFR_RNDN);
+        }
+    }
+    if (ok && rank == 0 && N > 0) ok = false;
+    if (ok) {
+        /* the basic solution y (y[rank..N) = 0), then the null space of the
+         * leading rows, V[:, k] = e_{rank+k} - U11^-1 U12[:, k], and the
+         * minimum-norm y - V (V^T V)^-1 V^T y */
+        size_t q = N - rank;
+        for (size_t c = rank; c < N; c++) mpfr_set_zero(b[c], +1);
+        for (size_t c = rank; c-- > 0;) {
+            for (size_t j = c + 1; j < rank; j++) {
+                mpfr_mul(t, A[c * N + j], b[j], MPFR_RNDN);
+                mpfr_sub(b[c], b[c], t, MPFR_RNDN);
+            }
+            mpfr_div(b[c], b[c], A[c * N + c], MPFR_RNDN);
+        }
+        if (q > 0) {
+            mpfr_t* V = fm_mpfr_array(N * q, bits);
+            mpfr_t* G = fm_mpfr_array(q * q, bits);
+            mpfr_t* w = fm_mpfr_array(q, bits);
+            for (size_t k = 0; k < q; k++) {
+                for (size_t c = rank; c < N; c++)
+                    mpfr_set_ui(V[c * q + k], c == rank + k ? 1 : 0, MPFR_RNDN);
+                for (size_t c = rank; c-- > 0;) {
+                    mpfr_neg(V[c * q + k], A[c * N + rank + k], MPFR_RNDN);
+                    for (size_t j = c + 1; j < rank; j++) {
+                        mpfr_mul(t, A[c * N + j], V[j * q + k], MPFR_RNDN);
+                        mpfr_sub(V[c * q + k], V[c * q + k], t, MPFR_RNDN);
+                    }
+                    mpfr_div(V[c * q + k], V[c * q + k], A[c * N + c], MPFR_RNDN);
+                }
+            }
+            for (size_t k = 0; k < q; k++) {
+                mpfr_set_zero(w[k], +1);
+                for (size_t c = 0; c < N; c++) {
+                    mpfr_mul(t, V[c * q + k], b[c], MPFR_RNDN);
+                    mpfr_add(w[k], w[k], t, MPFR_RNDN);
+                }
+                for (size_t l = 0; l < q; l++) {
+                    mpfr_set_zero(G[k * q + l], +1);
+                    for (size_t c = 0; c < N; c++) {
+                        mpfr_mul(t, V[c * q + k], V[c * q + l], MPFR_RNDN);
+                        mpfr_add(G[k * q + l], G[k * q + l], t, MPFR_RNDN);
+                    }
+                }
+            }
+            mpfr_set_zero(f, +1);
+            if (fm_kkt_solve(G, w, q, bits, f))          /* G is positive definite */
+                for (size_t c = 0; c < N; c++)
+                    for (size_t k = 0; k < q; k++) {
+                        mpfr_mul(t, V[c * q + k], w[k], MPFR_RNDN);
+                        mpfr_sub(b[c], b[c], t, MPFR_RNDN);
+                    }
+            fm_mpfr_array_free(V, N * q); fm_mpfr_array_free(G, q * q);
+            fm_mpfr_array_free(w, q);
+        }
+        /* undo the column permutation: z[cp[c]] = y[c] */
+        for (size_t c = 0; c < N; c++)
+            while (cp[c] != c) {
+                size_t d = cp[c];
+                mpfr_swap(b[c], b[d]);
+                cp[c] = cp[d]; cp[d] = d;
+            }
+    }
+    free(cp);
+    mpfr_clears(t, f, (mpfr_ptr)0);
+    return ok;
+}
+
+/* The Hessian of the Lagrangian on the free coordinates into H (m x m) by
+ * second differences of values:
+ *   H_ij = (L(x + h_i e_i + h_j e_j) - L(x + h_i e_i) - L(x + h_j e_j) + L(x))
+ *          / (h_i h_j),   h_i = (|x_i| + 1) 2^(-p/3). */
+static bool fm_kkt_hessian(const FmKkt* K, const size_t* fidx, size_t m,
+                           const size_t* aidx, size_t na, mpfr_t* lam,
+                           mpfr_t* x, mpfr_t* xs, mpfr_t* H) {
+    long bits = K->bits;
+    mpfr_t* h  = fm_mpfr_array(m, bits);
+    mpfr_t* Li = fm_mpfr_array(m, bits);
+    mpfr_t L0, Lij, t;
+    mpfr_inits2(bits, L0, Lij, t, (mpfr_ptr)0);
+    bool ok = fm_kkt_lagrangian(K, aidx, na, lam, x, L0);
+    for (size_t i = 0; i < m && ok; i++) {
+        size_t xi = fidx[i];
+        mpfr_abs(t, x[xi], MPFR_RNDN);
+        mpfr_add_ui(t, t, 1, MPFR_RNDN);
+        mpfr_mul_2si(t, t, -(K->p / 3), MPFR_RNDN);
+        mpfr_add(xs[xi], x[xi], t, MPFR_RNDN);
+        mpfr_sub(h[i], xs[xi], x[xi], MPFR_RNDN);    /* the step represented */
+        ok = fm_kkt_lagrangian(K, aidx, na, lam, xs, Li[i]);
+        mpfr_set(xs[xi], x[xi], MPFR_RNDN);
+    }
+    for (size_t i = 0; i < m && ok; i++) {
+        size_t xi = fidx[i];
+        mpfr_add(xs[xi], x[xi], h[i], MPFR_RNDN);
+        for (size_t j = i; j < m && ok; j++) {
+            size_t xj = fidx[j];
+            if (j == i) mpfr_add(xs[xi], xs[xi], h[i], MPFR_RNDN);   /* x + 2h_i */
+            else        mpfr_add(xs[xj], x[xj], h[j], MPFR_RNDN);
+            ok = fm_kkt_lagrangian(K, aidx, na, lam, xs, Lij);
+            if (j == i) mpfr_add(xs[xi], x[xi], h[i], MPFR_RNDN);
+            else        mpfr_set(xs[xj], x[xj], MPFR_RNDN);
+            if (!ok) break;
+            mpfr_sub(Lij, Lij, Li[i], MPFR_RNDN);
+            mpfr_sub(Lij, Lij, Li[j], MPFR_RNDN);
+            mpfr_add(Lij, Lij, L0, MPFR_RNDN);
+            mpfr_mul(t, h[i], h[j], MPFR_RNDN);
+            mpfr_div(H[i * m + j], Lij, t, MPFR_RNDN);
+            mpfr_set(H[j * m + i], H[i * m + j], MPFR_RNDN);
+        }
+        mpfr_set(xs[xi], x[xi], MPFR_RNDN);
+    }
+    mpfr_clears(L0, Lij, t, (mpfr_ptr)0);
+    fm_mpfr_array_free(h, m); fm_mpfr_array_free(Li, m);
+    return ok;
+}
+
+/* Every free coordinate of x within its box, up to 10^-6 (1 + |bound|). */
+static bool fm_kkt_in_box(const FmBox* boxes, const size_t* fidx, size_t m, mpfr_t* x) {
+    for (size_t j = 0; j < m; j++) {
+        size_t i = fidx[j];
+        double xd = mpfr_get_d(x[i], MPFR_RNDN);
+        if (boxes[i].has_lo && xd < boxes[i].lo - 1e-6 * (1.0 + fabs(boxes[i].lo))) return false;
+        if (boxes[i].has_hi && xd > boxes[i].hi + 1e-6 * (1.0 + fabs(boxes[i].hi))) return false;
+    }
+    return true;
+}
+
+/* The multipliers minimising |gf + J^T lam| (normal equations), into lam. */
+static bool fm_kkt_lsq_multipliers(const mpfr_t* gf, const mpfr_t* J, size_t m,
+                                   size_t na, mpfr_t* lam, long bits) {
+    mpfr_t* M = fm_mpfr_array(na * na, bits);
+    mpfr_t t; mpfr_init2(t, bits);
+    for (size_t a = 0; a < na; a++) {
+        for (size_t b = 0; b < na; b++) {
+            mpfr_set_zero(M[a * na + b], +1);
+            for (size_t j = 0; j < m; j++) {
+                mpfr_mul(t, J[a * m + j], J[b * m + j], MPFR_RNDN);
+                mpfr_add(M[a * na + b], M[a * na + b], t, MPFR_RNDN);
+            }
+        }
+        mpfr_set_zero(lam[a], +1);
+        for (size_t j = 0; j < m; j++) {
+            mpfr_mul(t, J[a * m + j], gf[j], MPFR_RNDN);
+            mpfr_sub(lam[a], lam[a], t, MPFR_RNDN);
+        }
+    }
+    mpfr_set_zero(t, +1);
+    bool ok = fm_kkt_solve(M, lam, na, bits, t);
+    mpfr_clear(t);
+    fm_mpfr_array_free(M, na * na);
+    return ok;
+}
+
+bool fm_kkt_refine_mpfr(Expr* f, size_t n, FmVarBind* binds, Expr** g_exprs,
+                        const FmGenCon* gens, size_t ngens,
+                        const FmBox* boxes, const FmOpts* opts,
+                        const double* xm, mpfr_t* x_out, mpfr_t fx_out) {
+    long bits = opts->wp_bits;
+    FmKkt K;
+    K.binds = binds; K.f = f; K.g_exprs = g_exprs; K.gens = gens; K.opts = opts;
+    K.n = n; K.bits = bits; K.p = numeric_width_precision_bits(bits);
+    long p = K.p;
+    size_t n1 = n ? n : 1, g1 = ngens ? ngens : 1;
+    bool ok = false;
+    int*    role = (int*)calloc(n1, sizeof(int));   /* 0 free, 1 at lo, 2 at hi */
+    int*    act  = (int*)calloc(g1, sizeof(int));
+    size_t* fidx = (size_t*)malloc(sizeof(size_t) * n1);
+    size_t* aidx = (size_t*)malloc(sizeof(size_t) * g1);
+    double* row  = (double*)malloc(sizeof(double) * n1);
+    mpfr_t* x    = fm_mpfr_array(n1, bits);
+    mpfr_t* xs   = fm_mpfr_array(n1, bits);
+    mpfr_t* lamk = fm_mpfr_array(g1, bits);        /* multiplier per constraint */
+    mpfr_t gscale, rn, rn_t, rn_b, t, tol, stol, hmax;
+    mpfr_inits2(bits, gscale, rn, rn_t, rn_b, t, tol, stol, hmax, (mpfr_ptr)0);
+    if (!role || !act || !fidx || !aidx || !row) goto done;
+    for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+
+    /* the machine active set */
+    for (size_t i = 0; i < n; i++) {
+        mpfr_set_d(x[i], xm[i], MPFR_RNDN);
+        if (boxes[i].has_lo && fabs(xm[i] - boxes[i].lo) <= 1e-7 * (1.0 + fabs(boxes[i].lo)))
+            role[i] = 1;
+        else if (boxes[i].has_hi && fabs(xm[i] - boxes[i].hi) <= 1e-7 * (1.0 + fabs(boxes[i].hi)))
+            role[i] = 2;
+    }
+    for (size_t k = 0; k < ngens; k++) {
+        double c, scale = 0.0;
+        if (gens[k].equality) { act[k] = 1; continue; }
+        if (!fm_eval_scalar(gens[k].expr, binds, xm, n, opts, &c)
+            || !fm_slsqp_congrad(&gens[k], binds, xm, n, opts, row)) goto done;
+        for (size_t i = 0; i < n; i++) scale += fabs(row[i] * xm[i]);
+        for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+        if (c >= -1e-7 * (1.0 + scale)) act[k] = 1;
+    }
+    for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+
+    for (int round = 0; round < FM_KKT_ROUNDS; round++) {
+        /* every round starts from the machine point (a rejected round's KKT
+         * point of the wrong active set can be far from it), the pinned
+         * coordinates exactly on their bounds */
+        size_t m = 0, na = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (role[i] == 1) mpfr_set_d(x[i], boxes[i].lo, MPFR_RNDN);
+            else if (role[i] == 2) mpfr_set_d(x[i], boxes[i].hi, MPFR_RNDN);
+            else { mpfr_set_d(x[i], xm[i], MPFR_RNDN); fidx[m++] = i; }
+            mpfr_set(xs[i], x[i], MPFR_RNDN);
+        }
+        for (size_t k = 0; k < ngens; k++) if (act[k]) aidx[na++] = k;
+        if (na > m) goto done;                  /* over-determined: give up */
+        size_t N = m + na, N1 = N ? N : 1, m1 = m ? m : 1, a1 = na ? na : 1;
+        mpfr_t* gf  = fm_mpfr_array(m1, bits);
+        mpfr_t* J   = fm_mpfr_array(a1 * m1, bits);
+        mpfr_t* r   = fm_mpfr_array(N1, bits);
+        mpfr_t* lam = fm_mpfr_array(a1, bits);
+        mpfr_t* cs  = fm_mpfr_array(a1, bits);
+        mpfr_t* H   = fm_mpfr_array(m1 * m1, bits);
+        mpfr_t* KM  = fm_mpfr_array(N1 * N1, bits);
+        mpfr_t* d   = fm_mpfr_array(N1, bits);
+        mpfr_t* xt  = fm_mpfr_array(n1, bits);
+        mpfr_t* lt  = fm_mpfr_array(a1, bits);
+        mpfr_t* gft = fm_mpfr_array(m1, bits);
+        mpfr_t* Jt  = fm_mpfr_array(a1 * m1, bits);
+        mpfr_t* rt  = fm_mpfr_array(N1, bits);
+        mpfr_t* xb  = fm_mpfr_array(n1, bits);           /* the best trial */
+        mpfr_t* lb  = fm_mpfr_array(a1, bits);
+        mpfr_t* gfb = fm_mpfr_array(m1, bits);
+        mpfr_t* Jb  = fm_mpfr_array(a1 * m1, bits);
+        mpfr_t* rb  = fm_mpfr_array(N1, bits);
+        bool conv = false, fail = false;
+        for (size_t a = 0; a < na; a++) mpfr_set_zero(lam[a], +1);
+
+        /* scales: the objective gradient for stationarity, 1 + sum|dc x| for
+         * each constraint; provisional ones for the first residual */
+        mpfr_set_ui(gscale, 1, MPFR_RNDN);
+        for (size_t a = 0; a < na; a++) mpfr_set_ui(cs[a], 1, MPFR_RNDN);
+        if (!fm_kkt_residual(&K, fidx, m, aidx, na, x, xs, lam, gf, J, r,
+                             gscale, (mpfr_t const*)cs, rn)) { fail = true; goto round_end; }
+        mpfr_set_zero(gscale, +1);
+        for (size_t j = 0; j < m; j++)
+            if (mpfr_cmpabs(gf[j], gscale) > 0) mpfr_abs(gscale, gf[j], MPFR_RNDN);
+        if (mpfr_zero_p(gscale)) {
+            if (!fm_eval_at_mpfr(f, binds, x, n, opts, t)) { fail = true; goto round_end; }
+            mpfr_abs(gscale, t, MPFR_RNDN);
+            mpfr_add_ui(gscale, gscale, 1, MPFR_RNDN);
+            mpfr_mul_2si(gscale, gscale, -(p / 2), MPFR_RNDN);
+        }
+        for (size_t a = 0; a < na; a++) {
+            mpfr_set_ui(cs[a], 1, MPFR_RNDN);
+            for (size_t j = 0; j < m; j++) {
+                mpfr_mul(t, J[a * m + j], x[fidx[j]], MPFR_RNDN);
+                mpfr_abs(t, t, MPFR_RNDN);
+                mpfr_add(cs[a], cs[a], t, MPFR_RNDN);
+            }
+            mpfr_mul_2si(cs[a], cs[a], -p / 8, MPFR_RNDN);
+        }
+        if (na > 0 && !fm_kkt_lsq_multipliers((mpfr_t const*)gf, (mpfr_t const*)J,
+                                              m, na, lam, bits)) { fail = true; goto round_end; }
+        if (!fm_kkt_assemble(m, na, lam, gf, J, r, gscale, (mpfr_t const*)cs, rn, bits)) {
+            fail = true; goto round_end;
+        }
+        if (m > 0 && !fm_kkt_hessian(&K, fidx, m, aidx, na, lam, x, xs, H)) {
+            fail = true; goto round_end;
+        }
+        mpfr_set_zero(hmax, +1);
+        for (size_t u = 0; u < m * m; u++)
+            if (mpfr_cmpabs(H[u], hmax) > 0) mpfr_abs(hmax, H[u], MPFR_RNDN);
+        /* converged at 2^(-3p/4) (the 5-point gradient is good to ~2^(-4p/5)):
+         * stationarity to that, the constraints -- weighted 2^(p/8) in rn, as
+         * the minimum VALUE errs to first order in them -- to 2^(-7p/8) */
+        mpfr_set_ui(tol, 1, MPFR_RNDN);
+        mpfr_mul_2si(tol, tol, -(3 * p) / 4, MPFR_RNDN);
+        int t0 = 0;
+        for (int it = 0; it < FM_KKT_NEWTON; it++) {
+            if (mpfr_cmp(rn, tol) <= 0) { conv = true; break; }
+            /* The Newton step at a rising rank tolerance (fm_kkt_tdiv): the
+             * first whose residual falls fourfold is taken, else the best that
+             * fell at all.  Near a manifold of minimisers the Hessian has
+             * eigenvalues far below its size that are no difference error yet
+             * useless to a Newton model -- third-order terms dominate along
+             * them -- so a step resolving them barely moves the residual,
+             * while the step that leaves them out converges at once. */
+            bool have_b = false;
+            int tb = t0;
+            mpfr_set(rn_b, rn, MPFR_RNDN);
+            for (int ti = t0; ti < FM_KKT_NTDIV; ti++) {
+                mpfr_mul_2si(stol, hmax, -p / fm_kkt_tdiv[ti], MPFR_RNDN);
+                for (size_t u = 0; u < N; u++) {
+                    for (size_t v = 0; v < N; v++) {
+                        mpfr_ptr e = KM[u * N + v];
+                        if (u < m && v < m)       mpfr_set(e, H[u * m + v], MPFR_RNDN);
+                        else if (u < m)           mpfr_set(e, J[(v - m) * m + u], MPFR_RNDN);
+                        else if (v < m)           mpfr_set(e, J[(u - m) * m + v], MPFR_RNDN);
+                        else                      mpfr_set_zero(e, +1);
+                    }
+                    mpfr_neg(d[u], r[u], MPFR_RNDN);
+                }
+                if (!fm_kkt_solve(KM, d, N, bits, stol)) continue;
+                for (size_t i = 0; i < n; i++) mpfr_set(xt[i], x[i], MPFR_RNDN);
+                for (size_t j = 0; j < m; j++)
+                    mpfr_add(xt[fidx[j]], x[fidx[j]], d[j], MPFR_RNDN);
+                for (size_t a = 0; a < na; a++) mpfr_add(lt[a], lam[a], d[m + a], MPFR_RNDN);
+                /* a step that leaves the box by more than the active-set
+                 * resolution is not a refinement: a weak but nonzero
+                 * curvature sent a cell inside [1, 100] to 499 */
+                if (!fm_kkt_in_box(boxes, fidx, m, xt)) continue;
+                for (size_t i = 0; i < n; i++) mpfr_set(xs[i], xt[i], MPFR_RNDN);
+                bool tok = fm_kkt_residual(&K, fidx, m, aidx, na, xt, xs, lt, gft, Jt, rt,
+                                           gscale, (mpfr_t const*)cs, rn_t);
+                for (size_t i = 0; i < n; i++) mpfr_set(xs[i], x[i], MPFR_RNDN);
+                if (tok && mpfr_cmp(rn_t, rn_b) < 0) {
+                    for (size_t i = 0; i < n; i++) mpfr_set(xb[i], xt[i], MPFR_RNDN);
+                    for (size_t a = 0; a < na; a++) mpfr_set(lb[a], lt[a], MPFR_RNDN);
+                    for (size_t j = 0; j < m; j++) mpfr_set(gfb[j], gft[j], MPFR_RNDN);
+                    for (size_t u = 0; u < na * m; u++) mpfr_set(Jb[u], Jt[u], MPFR_RNDN);
+                    for (size_t u = 0; u < N; u++) mpfr_set(rb[u], rt[u], MPFR_RNDN);
+                    mpfr_set(rn_b, rn_t, MPFR_RNDN);
+                    have_b = true; tb = ti;
+                }
+                mpfr_mul_2si(t, rn_b, 2, MPFR_RNDN);
+                if (have_b && mpfr_cmp(t, rn) <= 0) break;
+            }
+            if (!have_b) break;
+            t0 = tb;
+            for (size_t i = 0; i < n; i++) { mpfr_set(x[i], xb[i], MPFR_RNDN); mpfr_set(xs[i], xb[i], MPFR_RNDN); }
+            for (size_t a = 0; a < na; a++) mpfr_set(lam[a], lb[a], MPFR_RNDN);
+            for (size_t j = 0; j < m; j++) mpfr_set(gf[j], gfb[j], MPFR_RNDN);
+            for (size_t u = 0; u < na * m; u++) mpfr_set(J[u], Jb[u], MPFR_RNDN);
+            for (size_t u = 0; u < N; u++) mpfr_set(r[u], rb[u], MPFR_RNDN);
+            /* A step that cut the residual less than 2^10-fold means the
+             * Hessian taken at the start no longer models the curvature (the
+             * start was outside the quadratic region): take it again here. */
+            mpfr_mul_2si(t, rn_b, 10, MPFR_RNDN);
+            bool slow = mpfr_cmp(t, rn) > 0;
+            mpfr_set(rn, rn_b, MPFR_RNDN);
+            if (slow && m > 0 && mpfr_cmp(rn, tol) > 0) {
+                if (!fm_kkt_hessian(&K, fidx, m, aidx, na, lam, x, xs, H)) break;
+                mpfr_set_zero(hmax, +1);
+                for (size_t u = 0; u < m * m; u++)
+                    if (mpfr_cmpabs(H[u], hmax) > 0) mpfr_abs(hmax, H[u], MPFR_RNDN);
+                t0 = 0;
+            }
+        }
+        /* a stalled iteration still counts when it reached 2^(-p/2) */
+        if (!conv) {
+            mpfr_set_ui(tol, 1, MPFR_RNDN);
+            mpfr_mul_2si(tol, tol, -p / 2, MPFR_RNDN);
+            conv = mpfr_cmp(rn, tol) <= 0;
+        }
+        if (!conv) { fail = true; goto round_end; }
+        for (size_t k = 0; k < ngens; k++) mpfr_set_zero(lamk[k], +1);
+        for (size_t a = 0; a < na; a++) mpfr_set(lamk[aidx[a]], lam[a], MPFR_RNDN);
+
+        /* check the active set at the KKT point */
+        {
+            bool changed = false;
+            /* multiplier tolerance: 2^(-p/4) of the gradient scale */
+            mpfr_mul_2si(tol, gscale, -p / 4, MPFR_RNDN);
+            /* (1) a free coordinate outside its box: pin the worst */
+            size_t worst = n; double wv = 0.0;
+            for (size_t j = 0; j < m; j++) {
+                size_t i = fidx[j];
+                double xd = mpfr_get_d(x[i], MPFR_RNDN);
+                double tl = 1e-12 * (1.0 + fabs(xd));
+                if (boxes[i].has_lo && xd < boxes[i].lo - tl && boxes[i].lo - xd > wv) {
+                    wv = boxes[i].lo - xd; worst = i;
+                }
+                if (boxes[i].has_hi && xd > boxes[i].hi + tl && xd - boxes[i].hi > wv) {
+                    wv = xd - boxes[i].hi; worst = i;
+                }
+            }
+            if (worst < n) {
+                double xd = mpfr_get_d(x[worst], MPFR_RNDN);
+                role[worst] = (boxes[worst].has_lo && xd < boxes[worst].lo) ? 1 : 2;
+                changed = true;
+            }
+            /* (2) a violated inactive inequality: activate */
+            for (size_t k = 0; k < ngens && !changed; k++) {
+                if (act[k] || gens[k].equality) continue;
+                if (!fm_eval_at_mpfr(gens[k].expr, binds, x, n, opts, t)) { fail = true; break; }
+                double cd = mpfr_get_d(t, MPFR_RNDN);
+                if (cd > 1e-12) { act[k] = 1; changed = true; }
+            }
+            if (fail) goto round_end;
+            /* (3) an active inequality with a negative multiplier: release
+             *     the most negative */
+            if (!changed) {
+                size_t wk = ngens;
+                for (size_t a = 0; a < na; a++) {
+                    size_t k = aidx[a];
+                    if (gens[k].equality) continue;
+                    mpfr_neg(t, lam[a], MPFR_RNDN);
+                    if (mpfr_cmp(t, tol) > 0
+                        && (wk == ngens || mpfr_cmp(lamk[k], lamk[wk]) < 0)) wk = k;
+                }
+                if (wk < ngens) { act[wk] = 0; changed = true; }
+            }
+            /* (4) a pinned bound whose multiplier dL/dx_i pushes outward:
+             *     release the worst */
+            if (!changed) {
+                size_t wi = n;
+                mpfr_t best, gi; mpfr_inits2(bits, best, gi, (mpfr_ptr)0);
+                mpfr_set_zero(best, +1);
+                for (size_t i = 0; i < n && !fail; i++) {
+                    if (role[i] == 0) continue;
+                    int dir = role[i] == 1 ? 1 : -1;
+                    if (!fm_kkt_partial_inward(&K, f, g_exprs, i, dir, x, xs, gi)) { fail = true; break; }
+                    for (size_t a = 0; a < na; a++) {
+                        const FmGenCon* g = &gens[aidx[a]];
+                        if (!fm_kkt_partial_inward(&K, g->expr, g->grad_exprs, i, dir, x, xs, t)) {
+                            fail = true; break;
+                        }
+                        mpfr_mul(t, t, lam[a], MPFR_RNDN);
+                        mpfr_add(gi, gi, t, MPFR_RNDN);
+                    }
+                    if (fail) break;
+                    /* at lo the Lagrangian must not fall inward: dL/dx >= 0 */
+                    if (role[i] == 2) mpfr_neg(gi, gi, MPFR_RNDN);
+                    mpfr_neg(gi, gi, MPFR_RNDN);               /* the violation */
+                    if (mpfr_cmp(gi, tol) > 0 && mpfr_cmp(gi, best) > 0) {
+                        mpfr_set(best, gi, MPFR_RNDN); wi = i;
+                    }
+                }
+                mpfr_clears(best, gi, (mpfr_ptr)0);
+                if (fail) goto round_end;
+                if (wi < n) { role[wi] = 0; changed = true; }
+            }
+            if (!changed) {
+                ok = fm_eval_at_mpfr(f, binds, x, n, opts, fx_out);
+                for (size_t i = 0; i < n && ok; i++) mpfr_set(x_out[i], x[i], MPFR_RNDN);
+            }
+            if (!changed) fail = true;    /* done (ok says how): leave the loop */
+        }
+round_end:
+        fm_mpfr_array_free(gf, m1); fm_mpfr_array_free(J, a1 * m1);
+        fm_mpfr_array_free(r, N1); fm_mpfr_array_free(lam, a1);
+        fm_mpfr_array_free(cs, a1); fm_mpfr_array_free(H, m1 * m1);
+        fm_mpfr_array_free(KM, N1 * N1); fm_mpfr_array_free(d, N1);
+        fm_mpfr_array_free(xt, n1); fm_mpfr_array_free(lt, a1);
+        fm_mpfr_array_free(gft, m1); fm_mpfr_array_free(Jt, a1 * m1);
+        fm_mpfr_array_free(rt, N1);
+        fm_mpfr_array_free(xb, n1); fm_mpfr_array_free(lb, a1);
+        fm_mpfr_array_free(gfb, m1); fm_mpfr_array_free(Jb, a1 * m1);
+        fm_mpfr_array_free(rb, N1);
+        if (fail) break;
+    }
+done:
+    for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
+    mpfr_clears(gscale, rn, rn_t, rn_b, t, tol, stol, hmax, (mpfr_ptr)0);
+    fm_mpfr_array_free(x, n1); fm_mpfr_array_free(xs, n1); fm_mpfr_array_free(lamk, g1);
+    free(role); free(act); free(fidx); free(aidx); free(row);
+    return ok;
+}
 #endif /* USE_MPFR */

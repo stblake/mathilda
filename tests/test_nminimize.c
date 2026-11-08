@@ -751,6 +751,11 @@ static void test_options_nonempty(void) {
 static void test_working_precision_mpfr(void) {
     /* WorkingPrecision refines the continuous unconstrained result. */
     check_true("Abs[(x /. Last[NMinimize[(x-2)^2, x, WorkingPrecision -> 30]]) - 2] < 1.*^-10");
+    /* ... and a nonlinearly constrained one by Newton on the KKT system of
+     * the machine point's active set (was NMinimize::nimpl, machine digits) */
+    check_true("Module[{r = Check[NMinimize[{x + 2 y, x^2 + y^2 <= 1}, {x, y}, "
+               "WorkingPrecision -> 40], $Failed]}, r =!= $Failed && "
+               "Precision[First[r]] >= 35 && Abs[First[r] + Sqrt[5]] < 10^-35]");
 }
 
 static void test_max_iterations_accepted(void) {

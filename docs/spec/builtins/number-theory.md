@@ -1068,6 +1068,12 @@ Out[6]= -1
 - No packed / `NDArray` / `Compile` surface, deliberately: the answer is an exact
   `Log[p]`, which no machine dtype holds, and an inexact argument is an error,
   not a value.
+- Its Dirichlet series closes: `Sum[MangoldtLambda[k]/k^s, {k, 1, Infinity}]` is
+  `-Zeta'[s]/Zeta[s]` (for `Re s > 1` at a numeric `s`; `s = 1` diverges and
+  stays), and `NSum` takes the same closed form at the working precision, as it
+  does for the other arithmetic functions: the terms `log p/p^s` live on prime
+  powers only and the tail falls like `N^(1-s)`, so no direct or extrapolated
+  sum got past ~1 digit at `s = 1.68`.
 
 ```mathematica
 In[1]:= Table[MangoldtLambda[n], {n, 1, 10}]

@@ -541,7 +541,10 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     }
 
     /* Optional MPFR refinement for WorkingPrecision > MachinePrecision on
-     * continuous, general-constraint-free problems (reuses fm_run_bfgs_mpfr). */
+     * continuous problems: the quasi-Newton (fm_run_bfgs_mpfr) without general
+     * constraints, Newton on the KKT system of the machine point's active set
+     * (fm_kkt_refine_mpfr) with them.  A disjunction has no smooth active
+     * set and stays at machine precision. */
 #ifdef USE_MPFR
     bool mpfr_built = false;
     if (want_mpfr_refine) {                 /* back to the requested spec */
@@ -550,12 +553,12 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
         opts.prec_goal_digits = prec_goal_wp;
     }
     bool want_mpfr = (opts.prec_mode == FM_PREC_MPFR);
-    bool mpfr_eligible = want_mpfr && do_post && !vs.any_int && ngens == 0;
+    bool mpfr_eligible = want_mpfr && do_post && !vs.any_int && ndisj == 0;
     mpfr_t* xm = NULL;
     mpfr_t fmv;
     if (want_mpfr && !mpfr_eligible && do_post)
         fm_warn(fn_name, "nimpl",
-                "WorkingPrecision > MachinePrecision with general constraints or "
+                "WorkingPrecision > MachinePrecision with disjunctive constraints or "
                 "integer domains is not supported; using machine precision");
     if (feasible && mpfr_eligible) {
         /* The global search left the variables bound to its last probe
@@ -575,8 +578,16 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
                 && fm_minimax_refine_mpfr(&mmx, f_eff, eff_vars, n, boxes, &opts,
                                           xbest, xm, fmv);
         Expr** gm = mok ? NULL : fm_compute_gradient(f_eff, eff_vars, n);
-        if (!mok) mok = fm_run_bfgs_mpfr(f_eff, eff_vars, n, binds, gm, xm, boxes, &opts, fmv);
+        if (!mok && ngens > 0)
+            mok = fm_kkt_refine_mpfr(f_eff, n, binds, gm, gens, ngens, boxes, &opts,
+                                     xbest, xm, fmv);
+        else if (!mok)
+            mok = fm_run_bfgs_mpfr(f_eff, eff_vars, n, binds, gm, xm, boxes, &opts, fmv);
         g_fm_quiet = saved_quiet;
+        if (!mok && ngens > 0)
+            fm_warn(fn_name, "nimpl",
+                    "the constrained solution could not be refined at "
+                    "WorkingPrecision > MachinePrecision; using machine precision");
         if (mok)
             mpfr_built = true;
         else { fm_mpfr_array_free(xm, n); xm = NULL; mpfr_clear(fmv); }

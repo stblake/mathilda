@@ -27,6 +27,7 @@ extern "C" {
 
 Expr* flint_num_zeta(const Expr* s);                       /* Zeta[s]            */
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a);/* HurwitzZeta[s, a]  */
+Expr* flint_num_zeta_deriv(long n, const Expr* s);         /* Derivative[n][Zeta][s] */
 Expr* flint_num_polygamma(const Expr* n, const Expr* z);   /* PolyGamma[n, z]    */
 Expr* flint_num_polygamma_frac(const Expr* nu, const Expr* z); /* non-integer order */
 Expr* flint_num_polylog(const Expr* s, const Expr* z);     /* PolyLog[s, z]      */

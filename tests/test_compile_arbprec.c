@@ -128,6 +128,30 @@ int main(void) {
     run("x3 = N[6/5, 40]");
     check_true("Abs[rT[x3]/(Csc[x3] + Sec[x3] + Cot[x3]) - 1] < 10^-35", "mpfr real: Csc/Sec/Cot @ 40");
 
+    /* the reciprocal / inverse hyperbolic functions and With (lowered as the
+     * substituted body, the shared binding evaluated once) */
+    run("hY = Compile[{{x, _Real}}, Sech[x] + Csch[x]^2 + Coth[x] + ArcSinh[x] + ArcTanh[x/3] "
+        "+ ArcCosh[x + 1], WorkingPrecision -> 45]");
+    run("xh = N[6/5, 45]");
+    check_true("Abs[hY[xh]/(Sech[xh] + Csch[xh]^2 + Coth[xh] + ArcSinh[xh] + ArcTanh[xh/3] "
+               "+ ArcCosh[xh + 1]) - 1] < 10^-40", "mpfr real: Sech/Csch/Coth/ArcSinh/ArcTanh/ArcCosh @ 45");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Sech[x] + ArcTanh[x], "
+               "WorkingPrecision -> 40]) === True", "diag: real hyperbolic reciprocals lower");
+    run("wW = Compile[{{j, _Real}, {k, _Real}}, With[{r = Pi Sqrt[j^2 + k^2], q = j}, "
+        "(Exp[-r/4] - Exp[-7 r/4])/(1 - Exp[-2 r]) + q], WorkingPrecision -> 50]");
+    run("j0 = N[3, 50]; k0 = N[5, 50]; r0 = Pi Sqrt[j0^2 + k0^2]");
+    check_true("Abs[wW[j0, k0]/((Exp[-r0/4] - Exp[-7 r0/4])/(1 - Exp[-2 r0]) + j0) - 1] < 10^-45",
+               "mpfr real: With binding @ 50");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{j, _Real}}, With[{r = Sqrt[j]}, r + r^2], "
+               "WorkingPrecision -> 40]) === True", "diag: With lowers on the managed path");
+    /* a With local shadowing an argument is the local */
+    run("wS = Compile[{{x, _Real}}, With[{x = 2}, x + 1], WorkingPrecision -> 30]");
+    check_true("wS[N[7, 30]] == 3", "mpfr real: With local shadows the argument");
+    /* ArcCosh below 1 is complex: the managed real kernel declines, the
+     * interpreter answers */
+    run("aC = Compile[{{x, _Real}}, ArcCosh[x], WorkingPrecision -> 30]");
+    check_true("Abs[aC[N[1/2, 30]] - ArcCosh[N[1/2, 30]]] < 10^-25", "mpfr real: ArcCosh[1/2] complex");
+
     /* Interpreter fallback on an unsupported head, still correct at precision. */
     run("gF = Compile[{{x, _Real}}, Gamma[x], WorkingPrecision -> 30]");
     run("xg = N[7/2, 30]");

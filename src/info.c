@@ -1158,7 +1158,8 @@ void info_init(void) {
         "\tpower sum when the shifted value has a closed form (Zeta[2, -1/2] = 4 + Pi^2/2), and\n"
         "\tZeta[s, 1/2] = (2^s - 1) Zeta[s], Zeta[0, a] = 1/2 - a.\n"
         "\tMachine, arbitrary-precision and complex arguments evaluate numerically; packed arrays,\n"
-        "\tNDArray and Compile share the machine kernel.\n"
+        "\tNDArray and Compile share the machine kernel. Derivative[n][Zeta][s] (Zeta'[s]) is\n"
+        "\tinert symbolically and evaluates at an inexact s.\n"
         "\tOption: IncludeSingularTerm -> False (default) | True. Listable, NumericFunction.");
     symtab_set_docstring("HurwitzZeta",
         "HurwitzZeta[s, a]\n"

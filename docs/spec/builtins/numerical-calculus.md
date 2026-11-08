@@ -631,7 +631,8 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   cancellation): `Σ_{n≥1} BesselJ[0, n] = 1/2`, `Σ BesselJ[1, n]/n = 3/4`.
 - **Dirichlet series** (part of `Automatic`, infinite iterator, unit step, lower
   bound a positive integer) -- a summand `g(n)/n^s` with `g` an arithmetic
-  function (`DivisorSigma`, `EulerPhi`, `MoebiusMu`, `LiouvilleLambda`, and the
+  function (`DivisorSigma`, `EulerPhi`, `MoebiusMu`, `LiouvilleLambda`,
+  `MangoldtLambda` (`-ζ'(s)/ζ(s)`), and the
   powers/`Abs` `Sum` knows) is not smooth in `n`, so no tail model applies; its
   Dirichlet generating function (`Σ d(n)/n^s = ζ(s)²`, `Σ φ(n)/n^s = ζ(s−1)/ζ(s)`,
   `Σ σ_a(n)/n^s = ζ(s)ζ(s−a)`, ...) is taken from `Sum` at the working precision,
@@ -2445,17 +2446,38 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
   bounds and a sum constraint: 6000 evaluations, 24 s, 13 digits, where the
   penalty path took ~56000 and 488 s).  A run that fails or ends infeasible
   is discarded silently and the penalty path runs from the original start.
-- At `WorkingPrecision > MachinePrecision`, **linear** general constraints
-  (with box bounds) are supported: the machine solve finds the active set
-  (bounds within `10^-7` of the solution, every equality, the tight
-  inequalities), each independent active row is solved exactly (`Solve`) for
-  one pivot variable, the bound variables are pinned, and the reduced
-  unconstrained problem is minimised by the MPFR quasi-Newton; the refined
-  point must keep every pivot in its box and every inactive inequality
-  satisfied, else the machine solution is returned with
-  `FindMinimum::nimpl`.  The optimal-design proxy at 60 digits: 50 digits in
-  4.6 s (was the machine answer, 6 digits, in 62 s).  Nonlinear general
-  constraints at `WorkingPrecision` still fall back to machine precision.
+- At `WorkingPrecision > MachinePrecision`, general constraints -- **linear
+  or nonlinear** -- with box bounds are supported in two phases.  The machine
+  solve (SQP for linear constraints, the penalty wrapper below otherwise, at
+  8-digit goals) finds the point and its active set: bounds within `10^-7` of
+  the solution, every equality, the tight inequalities.  At the working
+  precision **Newton's method on the KKT system** of that set then solves
+  `∇f + Σ λ_k ∇c_k = 0` on the free coordinates together with `c_k = 0` on
+  the active rows, in the free coordinates and one multiplier per row.  The
+  Lagrangian Hessian is a difference Hessian of *values*, taken once
+  (`m(m+1)/2 + m + 1` evaluations, increment `(|x|+1) 2^(-p/3)`) and again
+  only after a step that cut the residual less than `2^10`-fold; gradients
+  are symbolic or 5-point differences.  The Newton system is solved with
+  complete pivoting, truncated at rank, minimum-norm: a compliance
+  `F.K(c)^-1.F` has a Hessian of rank at most the node count, so its
+  minimisers form a manifold, only the minimum value is unique, and an
+  untruncated step runs `10^8` along the flat directions.  Each iteration
+  takes the first of a rising ladder of rank tolerances
+  (`2^(-p/4)` ... `2^(-p/24)` of the Hessian's size) whose step cuts the
+  residual fourfold, rejecting a step that leaves the box.  The KKT point is
+  then checked -- a free coordinate outside its box is pinned, a violated
+  inactive inequality activated, an active inequality or pinned bound whose
+  multiplier has the wrong sign released (pinned multipliers by one-sided
+  differences into the box) -- and the solve repeated from the machine point.
+  Where that fails (a vertex solution, every coordinate on a bound, leaves
+  the multipliers to sign conditions alone) linear constraints fall back to
+  exact elimination: each independent active row is solved (`Solve`) for one
+  pivot variable, the bound variables pinned, and the reduced problem
+  minimised by the MPFR quasi-Newton.  Only when both fail is the machine
+  solution returned, with `FindMinimum::nimpl`.  The 36-cell high-contrast
+  design at 60 digits: all 60 digits in 9 s (the elimination path: 19 digits
+  in 85 s); `x + y` over the unit disc, `x y` on a circle, HS071 at
+  `WorkingPrecision -> 40`: the working precision.
 - Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
   **PHR augmented-Lagrangian** wrapper around the inner solver.  Each
   outer round minimises `f + Σ_k [λ_k·c_k + μ·c_k²]` (with the standard
@@ -2498,7 +2520,7 @@ constraint tolerance (1e-12).
 | Option              | Default        | Effect |
 |---------------------|----------------|--------|
 | `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, `"LBFGSB"`, `"Powell"` (alias `"PrincipalAxis"`), `"NelderMead"`, `"TNC"` (alias `"TruncatedNewton"`), or `Automatic`. |
-| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. See *Arbitrary-precision convergence* below. |
+| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints, linear or nonlinear, are solved at machine precision and refined at the working precision by Newton on the KKT system of the active set (see *Constraints*). See *Arbitrary-precision convergence* below. |
 | `MaxIterations`     | `500`          | Iteration limit on the inner loop. Every local method emits `FindMinimum::cvmit` ("Failed to converge to the requested accuracy or precision within n iterations.") when its main loop reaches the limit before meeting the goals, and still returns the best iterate; the message routes through the funnel, so `Quiet` silences it and `Check` sees it.  Inner solves of the penalty wrapper and of `NMinimize`'s polish stay silent. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
 | `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
@@ -2792,7 +2814,7 @@ textbook physical optimum until the standard bounds
 Not yet supported (emit `NMinimize::nimpl` and abstain / fall back): vector and
 matrix variables (`Vectors[n, dom]`, `Matrices`), geometric-region domains,
 `VectorGreaterEqual`, domains other than
-`Integers`/`Reals`, and general (non-box) constraints at
+`Integers`/`Reals`, and disjunctive (`Or`) constraints or integer domains at
 `WorkingPrecision > MachinePrecision`.
 
 ### Methods
@@ -3335,7 +3357,7 @@ calls back into Python for every evaluation.
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `Method` | `Automatic` | global-search selector (see above) |
-| `WorkingPrecision` | `MachinePrecision` | MPFR refinement of continuous, general-constraint-free problems |
+| `WorkingPrecision` | `MachinePrecision` | MPFR refinement of continuous problems: the quasi-Newton without general constraints; with them (linear or nonlinear, not `Or`), Newton on the KKT system of the machine point's active set, as `FindMinimum` does (`NMinimize::nimpl` and the machine answer when it fails) |
 | `MaxIterations` | `Automatic` | DE generation cap: `150·d` under `Method -> Automatic`, `100` under explicit `"DifferentialEvolution"`; an explicit value overrides both |
 | `AccuracyGoal` / `PrecisionGoal` | `Automatic` | convergence tolerances |
 | `EvaluationMonitor` | `None` | `:> body` run on every objective evaluation |

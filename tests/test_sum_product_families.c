@@ -67,6 +67,8 @@ int main(void) {
     check("Sum[EulerPhi[k]/k^s, {k, 1, Infinity}]", "Zeta[-1 + s]/Zeta[s]");
     check("Sum[MoebiusMu[k]^2/k^s, {k, 1, Infinity}]", "Zeta[s]/Zeta[2 s]");
     same("Sum[DivisorSigma[0, k]^2/k^3, {k, 1, Infinity}]", "945 Zeta[3]^4/Pi^6");
+    same("Sum[MangoldtLambda[k]/k^s, {k, 1, Infinity}]", "-Zeta'[s]/Zeta[s]");
+    same("Sum[MangoldtLambda[k]/k^3, {k, 1, Infinity}]", "-Zeta'[3]/Zeta[3]");
     /* not a Dirichlet series -> falls through, stays a plain zeta/rational sum */
     check("Sum[1/k^s, {k, 1, Infinity}]", "Sum[1/k^s, {k, 1, Infinity}]");
 

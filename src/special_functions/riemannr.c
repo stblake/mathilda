@@ -885,7 +885,7 @@ void riemannr_init(void) {
      * D[RiemannR[x], x] stays the inert Derivative[1][RiemannR][x], as in the
      * reference.  Registered with the derivative registry (deriv.h), so it is
      * a system rule and SubValues[Derivative] stays empty. */
-    deriv_register_numeric(intern_symbol("RiemannR"), rr_derivative_value);
+    deriv_register_numeric(intern_symbol("RiemannR"), rr_derivative_value, 1);
     symtab_set_docstring("RiemannR",
         "RiemannR[x]\n"
         "\tRiemann's prime-counting function R(x) = Sum_k MoebiusMu[k]/k LogIntegral[x^(1/k)],\n"

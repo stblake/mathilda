@@ -30,6 +30,18 @@ been dropped.
   `SeriesData[x, 0, {1., 0.5, 0.125, 0.0208333}, 0, 4, 1]` (it was
   `SeriesData[x, 0., {...}, 0., 4., 1.]`, whose `Normal` was a polynomial in
   `0. + x`).  An inexact point (`{x, 0.5, 2}`) stays inexact.
+- `Series` of an inexact expression is in general computed by rationalising it,
+  expanding exactly and numericalising back at the input's precision (the
+  leading-term zero tests need exact coefficients).  An expression built only
+  from `Plus`, `Times`, non-negative integer powers, a constant base raised to
+  such an expression (`c^g`), and `Exp`/`Sin`/`Cos`/`Sinh`/`Cosh` of one, at an
+  exact rational point, is expanded with its inexact coefficients directly:
+  those operations never divide by a leading coefficient, so an inexact
+  coefficient (an inexact zero `0``a` included) only rounds.  The round trip
+  turned `N[Sqrt[2]^(z + 2) - 2, 60]^k` into an exact series over `Q(Log[2])`
+  whose coefficient polynomials grow with the order (~0.3 s per power at order
+  110); it is now ~10 ms, and MPFR coefficients multiply in MPFR at the
+  smallest input precision rather than through the evaluator.
 
 ```mathematica
 In[1]:= SeriesData[x, 0, {1, 1, 1/2, 1/6, 1/24, 1/120}, 0, 6, 1]

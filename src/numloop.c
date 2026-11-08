@@ -15,6 +15,7 @@
 #include "pack.h"
 #include "ndarray.h"   /* is_packed_list — Map over a packed List */
 #include "checked_int.h"  /* ci_*_i64: overflow-checked int64 for exact loops */
+#include "mth_machine_pow.h"  /* mth_pow_machine: the one machine Power */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -38,7 +39,7 @@ typedef enum {
     OP_CONST,   /* push consts[a]            */
     OP_VAR,     /* push regs[a]              */
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_NEG,
-    OP_POW,     /* pop e,b -> push pow(b,e)  */
+    OP_POW,     /* pop e,b -> push b^e (mth_pow_machine) */
     OP_SIN, OP_COS, OP_TAN,
     OP_SINH, OP_COSH, OP_TANH,
     OP_EXP, OP_LOG, OP_SQRT, OP_ABS, OP_ARCTAN,
@@ -531,7 +532,7 @@ static double numprog_run_ac(const NumProg* p, const double* regs,
             case OP_SUB:   stack[sp-2] = stack[sp-2] - stack[sp-1]; sp--; break;
             case OP_MUL:   stack[sp-2] = stack[sp-2] * stack[sp-1]; sp--; break;
             case OP_DIV:   stack[sp-2] = stack[sp-2] / stack[sp-1]; sp--; break;
-            case OP_POW:   stack[sp-2] = pow(stack[sp-2], stack[sp-1]); sp--; break;
+            case OP_POW:   stack[sp-2] = mth_pow_machine(stack[sp-2], stack[sp-1]); sp--; break;
             case OP_NEG:   stack[sp-1] = -stack[sp-1];      break;
             case OP_SIN:   stack[sp-1] = sin(stack[sp-1]);  break;
             case OP_COS:   stack[sp-1] = cos(stack[sp-1]);  break;

@@ -24,6 +24,7 @@
  *     operation the VM would have run.
  */
 #include "compile_internal.h"
+#include "../mth_machine_pow.h"   /* mth_powi_machine: OP_POWI_R folds as the VM computes it */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -404,14 +405,9 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_LE_IK: r.i = a.i <= imm.i; break;
         case OP_GT_IK: r.i = a.i >  imm.i; break;
         case OP_GE_IK: r.i = a.i >= imm.i; break;
-        case OP_POWI_R: {                    /* mirrors the VM's ipow_r exactly */
-            long long e = imm.i;
-            unsigned long long m = (unsigned long long)(e < 0 ? -e : e);
-            double base = a.r, acc = 1.0;
-            while (m) { if (m & 1u) acc *= base; base *= base; m >>= 1; }
-            r.r = (e < 0) ? 1.0 / acc : acc;
+        case OP_POWI_R:                      /* exactly the VM's OP_POWI_R */
+            r.r = mth_powi_machine(a.r, (int64_t)imm.i);
             break;
-        }
         default: return false;
     }
     *out = r;

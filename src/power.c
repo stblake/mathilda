@@ -12,6 +12,7 @@
 #include "series.h"
 #include "ndarray.h"
 #include "flint_qqbar.h"
+#include "mth_machine_pow.h"   /* mth_pow_machine / mth_powi_machine_c: the one machine Power */
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -1366,7 +1367,25 @@ Expr* builtin_power(Expr* res) {
                     /* 2.^2000 overflows a double, 2.^-2000 underflows to 0;
                      * promote a degenerate result to an extended-exponent real. */
                     return numeric_promote_result_if_degenerate(
-                        expr_new_real(pow(vbase_re, vexp_re)), res);
+                        expr_new_real(mth_pow_machine(vbase_re, vexp_re)), res);
+                }
+
+                /* A complex base under an integer exponent: the shared binary
+                 * powering, so the scalar answer is the packed / NDArray /
+                 * Compile[] one bit for bit (and I^2 is exactly -1, where cpow
+                 * leaves a 1e-16 imaginary residue). No cleanup threshold: the
+                 * imaginary part is real arithmetic, not cpow round-off. */
+                if (vexp_im == 0.0 && floor(vexp_re) == vexp_re && fabs(vexp_re) <= 0x1p62) {
+                    double r_re, r_im;
+                    mth_powi_machine_c(vbase_re, vbase_im, (int64_t)vexp_re, &r_re, &r_im);
+                    /* An overflowed square turns into inf*0 = NaN. Leave such
+                     * a power to cpow below, whose infinity the caller already
+                     * reports as Overflow[] (and NIntegrate's MPFR fallback
+                     * picks up), instead of returning Indeterminate. */
+                    if (isfinite(r_re) && isfinite(r_im)) {
+                        if (r_im == 0.0) return expr_new_real(r_re);
+                        return make_complex(expr_new_real(r_re), expr_new_real(r_im));
+                    }
                 }
 
                 double complex result = cpow(z, w);

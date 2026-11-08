@@ -185,6 +185,21 @@ void test_zeta_derivatives() {
     assert_eval_eq("Table[D[Zeta[s, a], {a, k}], {k, 1, 3}]",
                    "{-s Zeta[1 + s, a], s (1 + s) Zeta[2 + s, a], "
                    "-s (1 + s) (2 + s) Zeta[3 + s, a]}", 0);
+    /* The inert derivative has a value at an inexact point (arb's Taylor jet;
+     * mpmath values): machine in machine out, MPFR at its precision, complex,
+     * higher orders; exact points and the pole stay inert. */
+    assert_close("Zeta'[2.]", -0.937548254315843753702574094567864977897860289, 1e-14);
+    assert_close("Derivative[2][Zeta][3.]", 0.239746917305387184244176549838881299550927296, 1e-14);
+    assert_close("Zeta'[-1.]", -0.16542114370045092921391966024278064276403638, 1e-14);
+    assert_eval_eq("Head[Zeta'[2.]]", "Real", 0);
+    assert_complex_close("Zeta'[0.5 + 1. I]", 0.558982477475463149657783829223505066417134034,
+                         -0.648808213692399450987449931765358250934321978, 1e-13);
+    assert_eval_eq("Abs[Zeta'[N[2, 40]] + 0.937548254315843753702574094567864977897860289`45] < 10^-38",
+                   "True", 0);
+    assert_eval_eq("Precision[Zeta'[N[2, 40]]] >= 39", "True", 0);
+    assert_eval_eq("Zeta'[2]", "Derivative[1][Zeta][2]", 0);
+    assert_eval_eq("Head[Zeta'[1.]]", "Derivative[1][Zeta]", 0);
+    assert_eval_eq("SubValues[Derivative]", "{}", 0);
 }
 
 /* ---- Series expansions ---------------------------------------------- */

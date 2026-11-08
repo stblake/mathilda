@@ -414,6 +414,31 @@ static void test_series_approximate_numbers(void) {
     expr_free(r);
 }
 
+/* 13b. Inexact input built from Plus/Times/non-negative integer powers, c^g and
+ * the entire functions expands with its inexact coefficients directly (no
+ * rationalise-expand-numericalise round trip, which turned N[f, 60]^k into an
+ * exact series over Q(Log[2]) at ~0.3 s per power at order 110).  The values
+ * agree with the exact series to the working precision, an inexact-zero
+ * constant term (0``a) included, and a quotient still takes the round trip. */
+static void test_series_inexact_direct(void) {
+    setup_full();
+    assert_eval_eq("Module[{f = N[Sqrt[2]^(z + 2) - 2, 60], c, e}, "
+                   "c = CoefficientList[Normal[Series[f^7, {z, 0, 30}]], z]; "
+                   "e = N[CoefficientList[Normal[Series[(Sqrt[2]^(z + 2) - 2)^7, {z, 0, 30}]], z], 80]; "
+                   "Length[c] == 31 && Max[Abs[c[[8 ;;]]/e[[8 ;;]] - 1]] < 10^-55 && "
+                   "Max[Abs[c[[;; 7]]]] < 10^-50 && Precision[c[[8 ;;]]] >= 58]", "True", 0);
+    assert_eval_eq("Module[{c, e}, "
+                   "c = CoefficientList[Normal[Series[(Exp[0.5 x] Sin[x] + 2.)^3, {x, 0, 12}]], x]; "
+                   "e = N[CoefficientList[Normal[Series[(Exp[x/2] Sin[x] + 2)^3, {x, 0, 12}]], x]]; "
+                   "Max[Abs[c - e]/Abs[e]] < 10^-13 && MachineNumberQ[c[[5]]]]", "True", 0);
+    /* a quotient (leading coefficient zero-tested): the round trip, unchanged */
+    assert_eval_eq("Normal[Series[Sin[2. x]/x, {x, 0, 2}]] - (2. - 1.3333333333333333 x^2) // Chop",
+                   "0", 0);
+    /* the hd20.9 shape at order 110 is fast (it took ~40 s for 110 powers) */
+    assert_eval_eq("Module[{f = N[Sqrt[2]^(z + 2) - 2, 60]}, "
+                   "First[AbsoluteTiming[Do[Series[f^k, {z, 0, 110}], {k, 40, 50}]]] < 2]", "True", 0);
+}
+
 /* 14. Normal drops the O-term and returns an ordinary expression. */
 static void test_normal_converts(void) {
     setup_full();
@@ -2764,6 +2789,7 @@ int main(void) {
     TEST(test_series_bivariate);
     TEST(test_series_list_threading);
     TEST(test_series_approximate_numbers);
+    TEST(test_series_inexact_direct);
     TEST(test_series_arctan);
     TEST(test_series_arctan_at_infinity);
     TEST(test_series_arctanh);

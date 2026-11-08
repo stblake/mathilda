@@ -977,8 +977,11 @@ path (and its speed) is unchanged when neither is given.
   containers warm). `MachinePrecision` (the default) is the ordinary machine
   path. The compilable subset here is straight-line arithmetic —
   `Plus`/`Times`/`Subtract`/`Divide`/`Power` and the unary elementary functions
-  (`Sin`, `Cos`, `Tan`, `Exp`, `Log`, `Sqrt`, `Sinh`, …) — over `_Real`,
-  `_Complex` and `_Integer` (integers lift to reals); anything else (control
+  (`Sin`, `Cos`, `Tan`, `Exp`, `Log`, `Sqrt`, `Sinh`, `Sech`, `Csch`, `Coth`,
+  `ArcSinh`, `ArcCosh`, `ArcTanh`, …) — over `_Real`, `_Complex` and
+  `_Integer` (integers lift to reals), plus `With[{v = e, …}, body]`, lowered
+  as the substituted body with each shared `e` evaluated once (value
+  numbering); anything else (control
   flow, arrays, an unsupported head like `Gamma`) transparently falls back to
   the interpreter *at that precision*, so the answer is always what
   `N[expr, n]` of the substituted body would give.

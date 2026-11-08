@@ -779,6 +779,24 @@ Exponentiation.
   `1/Sqrt[r2]` at 60 digits costs a reciprocal square root instead of a log
   and an exp (~10x). The MPFR binary operations read an operand already at the
   working precision in place instead of copying it (results unchanged).
+- Machine-precision powers are ONE computation on every surface -- the scalar
+  builtin, a plain or packed List, a visible `NDArray`, `Compile[]` (scalar and
+  rank-1, constant folding included), auto-compiled `Table`/`Sum` bodies and the
+  numeric loop path all call `src/mth_machine_pow.h`, so they agree bit for bit.
+  A real `x^n` with an integer `n` (or an integer-valued Real exponent, `x^3.`):
+  `n = 0, 1, 2, -1` are `1, x, x*x, 1/x`; `n = -2` and `3 <= |n| <= 32` are double-double
+  binary powering (Dekker products, or the hardware FMA where `FP_FAST_FMA`,
+  which yields the same bits) rounded once -- correctly rounded against MPFR on
+  every random input tried, where libm `pow` is 0.51 ulp and plain binary
+  powering 1.25 ulp at `n = 3`, 11 ulp at `n = 16` -- whenever `|x|^n` stays in
+  `[2^-940, 2^940]`; anything else is libm `pow`. `x^0.5` for `x >= 0` is
+  `sqrt`. A machine complex base under an integer exponent is binary powering
+  in doubles (`I^2` is exactly `-1`) with a negative exponent inverted at the
+  end by Smith's division; a real integer-valued exponent of a complex base in
+  `Compile[]` takes the same route. Before the shared helper the interpreter used `pow` /
+  `cpow`, `Compile[]` plain binary powering and the packed kernel `x*x*x`, so
+  `x^3` differed in the last bit between them for ~26% of random reals
+  (`x^5` ~51%, complex powers ~90%).
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
 - A negative exact coefficient (other than `-1`) in a product under a rational
   power comes out as its magnitude, the sign staying inside:

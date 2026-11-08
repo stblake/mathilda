@@ -2964,7 +2964,7 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
  * ------------------------------------------------------------------ *
  *
  * A summand g(n)/n^s with g an arithmetic function (DivisorSigma, EulerPhi,
- * MoebiusMu, LiouvilleLambda) is not a smooth function of n: d(n) is 2 at
+ * MoebiusMu, LiouvilleLambda, MangoldtLambda) is not a smooth function of n: d(n) is 2 at
  * every prime and large at highly composite n, phi(n)/n swings between 0 and 1.
  * Nothing that models the tail as smooth (Euler-Maclaurin's integral, the
  * partial-sum transforms) applies, and the tail of such a sum decays only like
@@ -2973,7 +2973,8 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
  * is still off by ~1e-5).  These series are exactly the Dirichlet generating
  * functions of the multiplicative functions, which Sum`Dirichlet closes in
  * zeta values -- d -> Zeta[s]^2, phi -> Zeta[s - 1]/Zeta[s], sigma_a ->
- * Zeta[s] Zeta[s - a], mu -> 1/Zeta[s], lambda -> Zeta[2 s]/Zeta[s], ... --
+ * Zeta[s] Zeta[s - a], mu -> 1/Zeta[s], lambda -> Zeta[2 s]/Zeta[s],
+ * Lambda -> -Zeta'[s]/Zeta[s], ... --
  * declining outside the half-plane of convergence.  The identity is exact, so
  * the sum is that closed form at the working precision, less the head terms
  * below the lower bound. */
@@ -2982,7 +2983,7 @@ static bool ns_has_arith_head(const Expr* e) {
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
         if (h == SYM_DivisorSigma || h == SYM_EulerPhi || h == SYM_MoebiusMu
-            || h == SYM_LiouvilleLambda)
+            || h == SYM_LiouvilleLambda || h == SYM_MangoldtLambda)
             return true;
     }
     if (ns_has_arith_head(e->data.function.head)) return true;

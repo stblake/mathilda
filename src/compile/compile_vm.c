@@ -31,6 +31,7 @@
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
 #endif
 #include "../mth_machine_log.h"    /* mth_log_machine_z: the one machine Log */
+#include "../mth_machine_pow.h"    /* mth_powi_machine & co: the one machine Power */
 #include <math.h>
 #include <complex.h>
 #include <string.h>
@@ -50,9 +51,10 @@ static inline double vm_erfc_r(double x) { double v = x; (void)sf_erfc_r(x, &v);
 #define M_E 2.7182818284590452354
 #endif
 
-/* The integer form is `ci_powi` in compile_internal.h: same binary exponentiation,
- * overflow-checked at every step, and shared with the optimiser's folding. */
-static double    ipow_r(double b, long long n) { if (n < 0) { b = 1.0 / b; n = -n; } double r = 1; while (n) { if (n & 1) r *= b; b *= b; n >>= 1; } return r; }
+/* The real power is mth_powi_machine (src/mth_machine_pow.h), shared with the
+ * interpreter, the ND kernels and the optimiser's folding. The integer form is
+ * `ci_powi` in compile_internal.h: binary exponentiation, overflow-checked at
+ * every step. */
 
 /* ------------------------------------------------------------------ *
  *  Exact integer kernels for the integer-closed heads                 *
@@ -308,7 +310,29 @@ static bool int_powmod(long long a, long long e, long long m, long long* out) {
     *out = r;
     return false;
 }
-static double _Complex ipow_c(double _Complex b, long long n) { if (n < 0) { b = 1.0 / b; n = -n; } double _Complex r = 1; while (n) { if (n & 1) r *= b; b *= b; n >>= 1; } return r; }
+/* Machine complex powers through the shared helper (src/mth_machine_pow.h),
+ * so a compiled z^n is the interpreter's and the ND kernel's bit for bit. The
+ * result is assembled through its two-double layout (C99 6.2.5p13): building
+ * it as re + im*I would multiply an infinite part by I's zero. */
+static double _Complex vm_mk_c(double re, double im) {
+    double parts[2] = { re, im };
+    double _Complex z;
+    memcpy(&z, parts, sizeof z);
+    return z;
+}
+static double _Complex ipow_c(double _Complex b, long long n) {
+    double re, im;
+    mth_powi_machine_c(creal(b), cimag(b), (int64_t)n, &re, &im);
+    return vm_mk_c(re, im);
+}
+/* z^w: an integer-valued real w takes ipow_c, as the interpreter and the ND
+ * kernel do for the same operands; anything else is cpow. */
+static double _Complex vm_cpow(double _Complex z, double _Complex w) {
+    double wr = creal(w);
+    if (cimag(w) == 0.0 && wr == floor(wr) && fabs(wr) <= 0x1p62)
+        return ipow_c(z, (long long)wr);
+    return cpow(z, w);
+}
 
 /* ------------------------------------------------------------------ *
  *  Array opcodes (M3a): delegation to the NDArray subsystem           *
@@ -1145,10 +1169,10 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(INV_R): RD.r = 1.0 / RA.r; NEXT();
             OP(INV_C): RD.z = 1.0 / RA.z; NEXT();
             OP(POWI_I): IOP(ci_powi(RA.i, c->imm.i, &RD.i));
-            OP(POWI_R): RD.r = ipow_r(RA.r, c->imm.i); NEXT();
+            OP(POWI_R): RD.r = mth_powi_machine(RA.r, (int64_t)c->imm.i); NEXT();
             OP(POWI_C): RD.z = ipow_c(RA.z, c->imm.i); NEXT();
-            OP(POW_R): RD.r = pow(RA.r, RB.r); NEXT();
-            OP(POW_C): RD.z = cpow(RA.z, RB.z); NEXT();
+            OP(POW_R): RD.r = mth_pow_machine(RA.r, RB.r); NEXT();
+            OP(POW_C): RD.z = vm_cpow(RA.z, RB.z); NEXT();
             OP(SQRT_R): RD.r = sqrt(RA.r); NEXT();
             OP(SQRT_C): RD.z = csqrt(RA.z); NEXT();
             OP(EXP_R): RD.r = exp(RA.r); NEXT();
@@ -1787,25 +1811,15 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             VBIN(VDIV_C, C, double _Complex, a_[k_] / b_[k_]);
             VUN(VNEG_C, C, double _Complex, -a_[k_]);
             VUN(VINV_C, C, double _Complex, 1.0 / a_[k_]);
-            /* Small exponents are unrolled with EXACTLY the association
-             * ipow_* uses (x^2 = x*x, x^3 = x*(x*x), x^4 = (x*x)*(x*x)), so the
-             * result is bitwise identical to the general path while the tile
-             * loop becomes a vectorisable multiply instead of a per-element
-             * function call with a loop inside it. */
-            OP(VPOWI_R): { double* d_ = TD_R; const double* a_ = TA_R; long long e_ = c->imm.i;
-                if (e_ == 2)      for (int k_ = 0; k_ < VBLOCK; k_++) { double t_ = a_[k_]; d_[k_] = t_ * t_; }
-                else if (e_ == 3) for (int k_ = 0; k_ < VBLOCK; k_++) { double t_ = a_[k_]; d_[k_] = t_ * (t_ * t_); }
-                else if (e_ == 4) for (int k_ = 0; k_ < VBLOCK; k_++) { double t_ = a_[k_], s_ = t_ * t_; d_[k_] = s_ * s_; }
-                else              for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = ipow_r(a_[k_], e_);
-            } NEXT();
+            /* The shared machine Power over the whole tile: its double-double
+             * blocks are straight-line and vectorise, and every element is
+             * bit for bit mth_powi_machine -- the scalar opcode's answer. */
+            OP(VPOWI_R): mth_powi_machine_array(TA_R, TD_R, VBLOCK, (int64_t)c->imm.i); NEXT();
             OP(VPOWI_C): { double _Complex* d_ = TD_C; const double _Complex* a_ = TA_C; long long e_ = c->imm.i;
-                if (e_ == 2)      for (int k_ = 0; k_ < VBLOCK; k_++) { double _Complex t_ = a_[k_]; d_[k_] = t_ * t_; }
-                else if (e_ == 3) for (int k_ = 0; k_ < VBLOCK; k_++) { double _Complex t_ = a_[k_]; d_[k_] = t_ * (t_ * t_); }
-                else if (e_ == 4) for (int k_ = 0; k_ < VBLOCK; k_++) { double _Complex t_ = a_[k_], s_ = t_ * t_; d_[k_] = s_ * s_; }
-                else              for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = ipow_c(a_[k_], e_);
+                for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = ipow_c(a_[k_], e_);
             } NEXT();
-            VBIN(VPOW_R, R, double, pow(a_[k_], b_[k_]));
-            VBIN(VPOW_C, C, double _Complex, cpow(a_[k_], b_[k_]));
+            VBIN(VPOW_R, R, double, mth_pow_machine(a_[k_], b_[k_]));
+            VBIN(VPOW_C, C, double _Complex, vm_cpow(a_[k_], b_[k_]));
             VBIN(VATAN2_R, R, double, atan2(b_[k_], a_[k_]));
             VUN(VSQRT_R, R, double, sqrt(a_[k_]));   VUN(VSQRT_C, C, double _Complex, csqrt(a_[k_]));
             VUN(VEXP_R, R, double, exp(a_[k_]));    VUN(VEXP_C, C, double _Complex, cexp(a_[k_]));

@@ -4098,15 +4098,19 @@ Expr* builtin_derivative(Expr* res) {
 /* Registry of numeric evaluators for inert derivatives (see deriv.h).  A
  * handful of entries at most, so a linear scan of interned pointers. */
 #define DERIV_NUMERIC_MAX 32
-static struct { const char* fname; DerivNumericFn fn; } deriv_numeric_tab[DERIV_NUMERIC_MAX];
+static struct { const char* fname; DerivNumericFn fn; size_t nargs; } deriv_numeric_tab[DERIV_NUMERIC_MAX];
 static size_t deriv_numeric_n = 0;
 
-void deriv_register_numeric(const char* fname, DerivNumericFn fn) {
+void deriv_register_numeric(const char* fname, DerivNumericFn fn, size_t nargs) {
     for (size_t i = 0; i < deriv_numeric_n; i++)
-        if (deriv_numeric_tab[i].fname == fname) { deriv_numeric_tab[i].fn = fn; return; }
+        if (deriv_numeric_tab[i].fname == fname && deriv_numeric_tab[i].nargs == nargs) {
+            deriv_numeric_tab[i].fn = fn;
+            return;
+        }
     if (deriv_numeric_n < DERIV_NUMERIC_MAX) {
         deriv_numeric_tab[deriv_numeric_n].fname = fname;
         deriv_numeric_tab[deriv_numeric_n].fn = fn;
+        deriv_numeric_tab[deriv_numeric_n].nargs = nargs;
         deriv_numeric_n++;
     }
 }
@@ -4121,7 +4125,9 @@ DerivNumericFn deriv_numeric_for(const Expr* dop) {
         d->data.function.head->data.symbol.name != SYM_Derivative ||
         f->type != EXPR_SYMBOL) return NULL;
     for (size_t i = 0; i < deriv_numeric_n; i++)
-        if (deriv_numeric_tab[i].fname == f->data.symbol.name) return deriv_numeric_tab[i].fn;
+        if (deriv_numeric_tab[i].fname == f->data.symbol.name
+            && deriv_numeric_tab[i].nargs == d->data.function.arg_count)
+            return deriv_numeric_tab[i].fn;
     return NULL;
 }
 
