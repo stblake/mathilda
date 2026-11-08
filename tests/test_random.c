@@ -1401,6 +1401,25 @@ static void test_randomchoice_rows_packed(void) {
                    "True", 0);
 }
 
+/* The batched draw loop (xs_below_fill / xs_u01_fill) must be the stream of n
+ * single draws, element for element, and leave the generator where n single
+ * draws would: uniform (non-power-of-two and power-of-two counts), weighted,
+ * and the draw that follows. */
+static void test_randomchoice_batch_stream(void) {
+    assert_eval_eq("SeedRandom[3]; a = Table[RandomChoice[{1., 2., 3.}], {3000}]; ra = RandomReal[]; "
+                   "SeedRandom[3]; b = RandomChoice[{1., 2., 3.}, 3000]; rb = RandomReal[]; "
+                   "{a === Normal[b], ra === rb, PackedArrayQ[b]}",
+                   "{True, True, True}", 0);
+    assert_eval_eq("SeedRandom[3]; a = Table[RandomChoice[Range[8]], {3000}]; "
+                   "SeedRandom[3]; a === Normal[RandomChoice[Range[8], 3000]]",
+                   "True", 0);
+    assert_eval_eq("SeedRandom[3]; a = Table[RandomChoice[{1, 2, 5} -> {7, 8, 9}], {3000}]; ra = RandomReal[]; "
+                   "SeedRandom[3]; b = RandomChoice[{1, 2, 5} -> {7, 8, 9}, 3000]; rb = RandomReal[]; "
+                   "{a === Normal[b], ra === rb}",
+                   "{True, True}", 0);
+    assert_eval_eq("SeedRandom[3]; RandomChoice[{5}, 4]", "{5, 5, 5, 5}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1521,6 +1540,7 @@ int main(void) {
     TEST(test_randomsample_empty_list_upto);
     TEST(test_randomsample_sample_zero);
     TEST(test_randomchoice_rows_packed);
+    TEST(test_randomchoice_batch_stream);
 
     printf("All random tests passed!\n");
     return 0;

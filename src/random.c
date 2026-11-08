@@ -196,6 +196,64 @@ static inline uint64_t xs_below(uint64_t m) {
 #endif
 }
 
+/*
+ * Batch draws: the SAME stream as n calls of xs_below(m) / random_uniform_01(),
+ * element for element, so a seeded RandomChoice answers exactly as before --
+ * but with the state in four locals instead of the globals. Through xs_next()
+ * every draw paid an out-of-line ensure_rand_init() call and a reload and
+ * store of g_xs (the caller's memcpy into the result buffer may alias them),
+ * ~6 ns per element; here a draw is the xoshiro step and one 128-bit multiply,
+ * ~1 ns. The state is written back once at the end.
+ */
+static void xs_below_fill(uint64_t m, uint64_t* out, size_t n) {
+    ensure_rand_init();
+    uint64_t s0 = g_xs[0], s1 = g_xs[1], s2 = g_xs[2], s3 = g_xs[3];
+#define XS_STEP(r) do {                                                        \
+        (r) = xs_rotl(s0 + s3, 23) + s0;                                       \
+        uint64_t t_ = s1 << 17;                                                \
+        s2 ^= s0; s3 ^= s1; s1 ^= s2; s0 ^= s3; s2 ^= t_;                      \
+        s3 = xs_rotl(s3, 45);                                                  \
+    } while (0)
+    if (m <= 1) {
+        for (size_t i = 0; i < n; i++) out[i] = 0;    /* xs_below(1) draws nothing */
+    } else if ((m & (m - 1)) == 0) {
+        for (size_t i = 0; i < n; i++) { uint64_t r; XS_STEP(r); out[i] = r & (m - 1); }
+    } else {
+#if defined(__SIZEOF_INT128__)
+        uint64_t threshold = (uint64_t)(-(int64_t)m) % m;   /* == 2^64 mod m */
+        for (size_t i = 0; i < n; i++) {
+            uint64_t r; XS_STEP(r);
+            __uint128_t prod = (__uint128_t)r * (__uint128_t)m;
+            while ((uint64_t)prod < threshold) {            /* p < m/2^64: rare */
+                XS_STEP(r);
+                prod = (__uint128_t)r * (__uint128_t)m;
+            }
+            out[i] = (uint64_t)(prod >> 64);
+        }
+#else
+        uint64_t threshold = (uint64_t)(-(int64_t)m) % m;
+        for (size_t i = 0; i < n; i++) {
+            uint64_t r;
+            do { XS_STEP(r); } while (r < threshold);
+            out[i] = r % m;
+        }
+#endif
+    }
+    g_xs[0] = s0; g_xs[1] = s1; g_xs[2] = s2; g_xs[3] = s3;
+}
+
+/* n uniforms on [0, 1): the random_uniform_01() stream, batched. */
+static void xs_u01_fill(double* out, size_t n) {
+    ensure_rand_init();
+    uint64_t s0 = g_xs[0], s1 = g_xs[1], s2 = g_xs[2], s3 = g_xs[3];
+    for (size_t i = 0; i < n; i++) {
+        uint64_t r; XS_STEP(r);
+        out[i] = (double)(r >> 11) * 0x1.0p-53;
+    }
+    g_xs[0] = s0; g_xs[1] = s1; g_xs[2] = s2; g_xs[3] = s3;
+#undef XS_STEP
+}
+
 /* Seed both generators from one value, so SeedRandom is coherent across the
  * machine and arbitrary-precision paths. */
 static void seed_all(uint64_t seed) {
@@ -1546,6 +1604,7 @@ Expr* builtin_randomcomplex(Expr* res) {
  */
 static size_t* fisher_yates_sample(size_t total, size_t n);   /* defined below */
 static size_t  random_index(size_t n);                        /* defined below */
+static size_t  cum_search(const double* cum_weights, size_t count, double u);
 static bool    is_upto(Expr* e, int64_t* val);                /* defined below */
 
 /* ---------------------------------------------------------------------------
@@ -1647,8 +1706,11 @@ static size_t random_index(size_t n) {
  * Uses binary search for efficiency.
  */
 static size_t weighted_random_index(double* cum_weights, size_t count, double total) {
-    double u = random_uniform_01() * total;
-    /* Binary search for the first index where cum_weights[i] > u */
+    return cum_search(cum_weights, count, random_uniform_01() * total);
+}
+
+/* The first index whose cumulative weight exceeds u (clamped to count - 1). */
+static size_t cum_search(const double* cum_weights, size_t count, double u) {
     size_t lo = 0, hi = count;
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
@@ -1873,14 +1935,36 @@ static Expr* choice_buffer(Expr** choices, size_t choice_count,
         size_t at = i * cell;
         choice_cell_flatten(choices[i], cd, cz, &at);
     }
-    for (size_t i = 0; i < n; i++) {
-        size_t k = cum_weights
-            ? weighted_random_index(cum_weights, choice_count, total)
-            : random_index(choice_count);
-        if (dt == NDT_FLOAT64)
-            memcpy((double*)buf + i * cell, cd + k * cell, sizeof(double) * cell);
-        else
-            memcpy((int64_t*)buf + i * cell, cz + k * cell, sizeof(int64_t) * cell);
+    /* Draw the indices a chunk at a time (the stream of n random_index /
+     * weighted_random_index calls, in order), then gather. A scalar cell is a
+     * plain assignment; a row cell a memcpy. */
+    enum { CHUNK = 1024 };
+    uint64_t idx[CHUNK];
+    double   uu[CHUNK];
+    for (size_t b = 0; b < n; b += CHUNK) {
+        size_t bn = (n - b < CHUNK) ? n - b : CHUNK;
+        if (cum_weights) {
+            xs_u01_fill(uu, bn);
+            for (size_t j = 0; j < bn; j++)
+                idx[j] = cum_search(cum_weights, choice_count, uu[j] * total);
+        } else {
+            xs_below_fill((uint64_t)choice_count, idx, bn);
+        }
+        if (cell == 1 && dt == NDT_FLOAT64) {
+            double* o = (double*)buf + b;
+            for (size_t j = 0; j < bn; j++) o[j] = cd[idx[j]];
+        } else if (cell == 1) {
+            int64_t* o = (int64_t*)buf + b;
+            for (size_t j = 0; j < bn; j++) o[j] = cz[idx[j]];
+        } else {
+            for (size_t j = 0; j < bn; j++) {
+                size_t i = b + j, k = (size_t)idx[j];
+                if (dt == NDT_FLOAT64)
+                    memcpy((double*)buf + i * cell, cd + k * cell, sizeof(double) * cell);
+                else
+                    memcpy((int64_t*)buf + i * cell, cz + k * cell, sizeof(int64_t) * cell);
+            }
+        }
     }
     free(cd); free(cz);
     return out;

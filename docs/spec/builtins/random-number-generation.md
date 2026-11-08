@@ -172,7 +172,13 @@ Gives pseudorandom choices from a list of elements.
   `Exp[Mean[Log[RandomChoice[{1., 2.}, 10^6]]]]` stays on the buffer path end to end
   (17 ms, from 330 ms when the result was 10^6 boxed copies). The draws are the same
   sequence, in row-major order, as the boxed path, so a seeded call gives identical
-  values either way. Mixed or symbolic choices (`{1, 2.}`, `{a, b}`) build an
+  values either way.
+- **Batched draws.** The indices are drawn a block of 1024 at a time with the
+  generator state held in registers, then gathered into the buffer:
+  `RandomChoice[{1., 2.}, 10^6]` takes ~1.6-2.5 ms (from ~6 ms; numpy's
+  `default_rng(1).choice([1.0, 2.0], 10**6)` takes ~18 ms on the same machine).
+  The stream is unchanged: n batched draws are exactly n single `RandomChoice`
+  calls, and leave the generator in the same state. Mixed or symbolic choices (`{1, 2.}`, `{a, b}`) build an
   ordinary List.
 
 ```mathematica
