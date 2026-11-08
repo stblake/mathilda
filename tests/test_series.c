@@ -2810,10 +2810,26 @@ static void test_series_inexact_numeric(void) {
                    "SeriesData[x, 0, {1.0, 0.0 + 2.0*I, -2.0}, 0, 3, 1]", 0);
 }
 
+/* A rational kernel composed with a rational monomial c t^e is the kernel
+ * rescaled (K_k c^k at t^(k e)), without a FLINT compose_series. */
+static void test_series_monomial_compose(void) {
+    assert_eval_eq("InputForm[Series[Exp[z/3], {z, 0, 6}]]",
+                   "SeriesData[z, 0, {1, 1/3, 1/18, 1/162, 1/1944, 1/29160, 1/524880}, 0, 7, 1]", 0);
+    assert_eval_eq("InputForm[Series[Cos[2 z^2], {z, 0, 10}]]",
+                   "SeriesData[z, 0, {1, 0, 0, 0, -2, 0, 0, 0, 2/3, 0, 0}, 0, 11, 1]", 0);
+    assert_eval_eq("InputForm[Series[Sinh[-3 z], {z, 0, 7}]]",
+                   "SeriesData[z, 0, {0, -3, 0, -9/2, 0, -81/40, 0, -243/560}, 0, 8, 1]", 0);
+    assert_eval_eq("InputForm[Series[Log[1 + z^3/2], {z, 0, 10}]]",
+                   "SeriesData[z, 0, {0, 0, 0, 1/2, 0, 0, -1/8, 0, 0, 1/24, 0}, 0, 11, 1]", 0);
+    assert_eval_eq("InputForm[Series[(2 Sin[z])^5, {z, 0, 12}]]",
+                   "SeriesData[z, 0, {0, 0, 0, 0, 0, 32, 0, -80/3, 0, 92/9, 0, -454/189, 0}, 0, 13, 1]", 0);
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_machine_product);
     TEST(test_series_inexact_numeric);
+    TEST(test_series_monomial_compose);
     TEST(test_series_sin_cos);
     TEST(test_series_symbolic_f);
     TEST(test_series_laurent);

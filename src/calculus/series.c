@@ -1681,6 +1681,40 @@ static SeriesObj* so_compose_scalar_kernel(Expr** kernel, size_t N, SeriesObj* u
     /* Normalize u's own coefficients so radicals introduced upstream (e.g.
      * by so_inv of a shifted radical at infinity) don't seed the nesting. */
     so_normalize_radical_coefs(u);
+    /* Rational kernel and a rational MONOMIAL u = c t^e (e >= 1): the
+     * composition is the kernel itself, rescaled -- K(u) = sum_k K_k c^k t^(k e)
+     * -- which is what compose_series computes, at the cost of a Brent-Kung
+     * composition and two Expr <-> fmpq conversions of every coefficient.  The
+     * inner series of Sin[z], Exp[z/3], Cos[2 z^2] is a monomial, and the
+     * composition was a quarter of an exact Series[(2 Sin[z])^20, {z, 0, 30}].
+     * Exact rationals, so the coefficients are the compose_series ones. */
+    if (u->nmin >= 1 && u->order > u->nmin) {
+        size_t nz = 0, at = 0;
+        bool rational = true;
+        for (size_t i = 0; i < u->coef_count && rational; i++) {
+            if (is_lit_zero(u->coefs[i])) continue;
+            if (!srp_is_rational(u->coefs[i])) rational = false;
+            nz++; at = i;
+        }
+        for (size_t k = 0; k < N && rational; k++)
+            if (!srp_is_rational(kernel[k])) rational = false;
+        if (rational && nz == 1) {
+            int64_t e = u->nmin + (int64_t)at;
+            Expr* c = u->coefs[at];
+            bool unit = c->type == EXPR_INTEGER && c->data.integer == 1;
+            SeriesObj* r = so_alloc(u->x, u->x0, 0, u->order, u->den);
+            Expr* cpow = expr_new_integer(1);
+            for (size_t k = 0; k < N && (int64_t)k * e < u->order; k++) {
+                if (k > 0 && !unit) cpow = simp(mk_times(cpow, expr_copy(c)));
+                if (is_lit_zero(kernel[k])) continue;
+                Expr* v = unit ? expr_copy(kernel[k])
+                               : simp(mk_times(expr_copy(kernel[k]), expr_copy(cpow)));
+                so_set_coef(r, (size_t)((int64_t)k * e), v);
+            }
+            expr_free(cpow);
+            return r;
+        }
+    }
     /* Rational kernel and rational u with u(x0) = 0 (nmin >= 1): one FLINT
      * compose_series in t = (x - x0)^(1/den), the Horner loop below done in
      * quasi-linear arithmetic.  The result is known to O(t^order), as the

@@ -151,6 +151,12 @@ Produces the power-series expansion of an expression about a point.
   `Times` and a `Plus` per coefficient pair: `s^30` of a 30-term machine series
   1 ms -> 0.04 ms. A non-normal intermediate (overflow, underflow) takes the
   general path.
+- An elementary kernel (`Sin`, `Exp`, `Log`, ...) of a rational monomial
+  argument `c (x - x0)^e` is the kernel's own coefficient list rescaled,
+  `K_k c^k` at `(x - x0)^(k e)`. It is built that way rather than through
+  FLINT's `compose_series` and the two coefficient conversions around it. The
+  coefficients are the same exact rationals: an exact
+  `Series[(2 Sin[z])^20, {z, 0, 30}]` went from 0.51 ms to 0.33 ms.
 - **Inexact analytic input is expanded numerically.** `Series` of an
   expression carrying machine or MPFR numbers rationalizes it as before (so
   `0.1` still means `1/10`). When the expansion is a plain Taylor series of
