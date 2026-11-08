@@ -37,6 +37,7 @@
 #include "../eval.h"
 #include "../common.h"
 #include "../numeric.h"
+#include "../interp.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <math.h>
 #include <string.h>
@@ -401,6 +402,38 @@ static bool nd_bound_eval(Expr* bc, NumericSpec spec, double* out) {
     return ok;
 }
 
+/* Mark (seen[k]) the reduced-state symbols NDSolve`w<k> that e involves. */
+static void nd_mol_mark_states(const Expr* e, size_t d, bool* seen) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (nm && strncmp(nm, "NDSolve`w", 9) == 0) {
+            char* end = NULL;
+            long k = strtol(nm + 9, &end, 10);
+            if (end && *end == '\0' && k >= 0 && (size_t)k < d) seen[(size_t)k] = true;
+        }
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    nd_mol_mark_states(e->data.function.head, d, seen);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nd_mol_mark_states(e->data.function.args[i], d, seen);
+}
+
+/* The states the boundary-value expressions depend on (a Neumann or Robin
+ * end is eliminated into its interior neighbours): only those need binding
+ * while the result is assembled -- binding all d of them at every one of
+ * the n accepted steps cost n*d symbol-table updates, seconds on a fine
+ * grid. */
+static bool* nd_mol_bound_states(Expr* bc_left, Expr* bc_right, size_t d) {
+    bool* seen = calloc(d ? d : 1, sizeof(bool));
+    nd_mol_mark_states(bc_left, d, seen);
+    nd_mol_mark_states(bc_right, d, seen);
+    return seen;
+}
+
+static void nd_mol_coord_d(const double* c, size_t m, double* out);
+
 static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
                                  const char* tvar, const char* xvar,
                                  double xmin, double h, size_t nx, int torder,
@@ -409,16 +442,20 @@ static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
     size_t n = sol->n, d = sol->d;
     if (n < 2) return NULL;
     size_t npts = n * nx;
-    Expr** entries = malloc(sizeof(Expr*) * npts);
+    /* the samples go straight into the packed (t, x, u) table Interpolation
+     * would build from the boxed {{t, x}, u} list (interp_from_packed) */
+    double* buf = malloc(sizeof(double) * 3 * npts);
+    if (!buf) return NULL;
     size_t p = 0;
+    bool* need = periodic ? NULL : nd_mol_bound_states(bc_left, bc_right, d);
     for (size_t i = 0; i < n; i++) {
         double ti = sol->ts[i];
-        /* Bind t and all reduced-state symbols so that boundary-value
-         * expressions (Neumann/Robin depend on interior states) evaluate. */
+        /* Bind t and the reduced-state symbols the boundary-value
+         * expressions (Neumann/Robin depend on interior states) involve. */
         if (!periodic) {
             nd_bind_set(&P->bind_t, expr_new_real(ti));
             for (size_t k = 0; k < d; k++)
-                nd_bind_set(&P->bind_y[k], expr_new_real(sol->Ys[i * d + k]));
+                if (need[k]) nd_bind_set(&P->bind_y[k], expr_new_real(sol->Ys[i * d + k]));
         }
         for (size_t g = 0; g < nx; g++) {
             double xg = xmin + (double)g * h;
@@ -433,15 +470,14 @@ static Expr* nd_mol_build_result(NdProblem* P, const char* fname, bool applied,
             } else {
                 val = sol->Ys[i * d + (g - 1) * (size_t)torder + 0];
             }
-            Expr* coord[2] = { expr_new_real(ti), expr_new_real(xg) };
-            Expr* coordL = nd_mol_coord(coord, 2);
-            Expr* pair[2] = { coordL, expr_new_real(val) };
-            entries[p++] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
+            double c[2] = { ti, xg };
+            nd_mol_coord_d(c, 2, buf + 3 * p);
+            buf[3 * p + 2] = val;
+            p++;
         }
     }
-    Expr* data = expr_new_function(expr_new_symbol(SYM_List), entries, npts);
-    free(entries);
-    Expr* ifun = eval_and_free(expr_new_function(expr_new_symbol(SYM_Interpolation), &data, 1));
+    free(need);
+    Expr* ifun = interp_from_packed(buf, npts, 2);
     if (!head_is(ifun, SYM_InterpolatingFunction)) { expr_free(ifun); return NULL; }
 
     Expr* lhs;
@@ -1291,6 +1327,11 @@ Expr* nd_mol_coord(Expr** c, size_t m) {
     if (m > ND_MOL_MAXV) return expr_new_function(expr_new_symbol(SYM_List), c, m);
     for (size_t k = 0; k < m; k++) out[k] = (g_mol_m == m) ? c[g_mol_q[k]] : c[k];
     return expr_new_function(expr_new_symbol(SYM_List), out, m);
+}
+
+/* nd_mol_coord on doubles: the canonical coordinates c in user order. */
+static void nd_mol_coord_d(const double* c, size_t m, double* out) {
+    for (size_t k = 0; k < m; k++) out[k] = (g_mol_m == m && m <= ND_MOL_MAXV) ? c[g_mol_q[k]] : c[k];
 }
 
 /* Name of the unknown applied in `e` (u[...] or Derivative[..][u][...]),

@@ -55,4 +55,15 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc);
  */
 Expr* interp_make_derivative(Expr* deriv_head, Expr* ifun);
 
+/*
+ * interp_from_packed --- the InterpolatingFunction that
+ *   Interpolation[{{{c1, ..., cm}, v}, ...}] builds from machine-real data,
+ *   straight from a row-major npts x (m + 1) buffer of rows (c1, ..., cm, v)
+ *   (ownership of `buf` passes to the result; freed on failure). For a
+ *   producer that already holds the samples as doubles (a method-of-lines
+ *   solution: steps x grid nodes), skipping the ~4 boxed nodes per sample the
+ *   List form costs. NULL when npts < 2 or m is 0 or above 64.
+ */
+Expr* interp_from_packed(double* buf, size_t npts, size_t m);
+
 #endif /* INTERP_H */

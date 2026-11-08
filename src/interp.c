@@ -2237,6 +2237,24 @@ static Expr* interp_try_pack_data(Expr* data, size_t npts, size_t m,
     return interp_packed_table(buf, npts, m);   /* moves buf */
 }
 
+Expr* interp_from_packed(double* buf, size_t npts, size_t m) {
+    if (!buf || m == 0 || m > 64 || npts < 2) { free(buf); return NULL; }
+    Expr* dom_items[64];
+    for (size_t k = 0; k < m; k++) {
+        double lo = buf[k], hi = buf[k];
+        for (size_t i = 1; i < npts; i++) {
+            double c = buf[i * (m + 1) + k];
+            if (c < lo) lo = c;
+            if (c > hi) hi = c;
+        }
+        dom_items[k] = make_pair(expr_new_real(lo), expr_new_real(hi));
+    }
+    Expr* domain = make_list(dom_items, m);
+    Expr* table = interp_packed_table(buf, npts, m);          /* moves buf */
+    Expr* oargs[2] = { domain, table };
+    return expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 2);
+}
+
 /* Assemble the InterpolatingFunction[...] object from a built (domain, table)
  * pair and, if an immediate evaluation point was given, evaluate it there.
  * Takes ownership of `domain`, `table`, and `periodic` (all freed / consumed
