@@ -320,6 +320,35 @@ void test_table_exact_kernel() {
     assert_eval_eq("Precision[Table[N[1/i, 30], {i, 3}][[2]]] == 30", "True", 0);
 }
 
+/* Under N the kernel also takes Sin / Cos / Tan / Sinh / Cosh of an exact
+ * integer, as a deferred coefficient * machine value (SIAM holdout hc3.10,
+ * Table[N[Cos[i j]/(i + j)], ...]).  Bit for bit the interpreter's, over
+ * negative / zero / large arguments, the per-element declines (two inexact
+ * operands, a transcendental of a non-integer, Power / Abs of one), and the
+ * elements N itself raises to MPFR (a lossy surviving leaf: -12/7, 2^60 + 1). */
+void test_table_exact_kernel_transcendental() {
+    static const char* bodies[] = {
+        "Cos[i j]/(i + j)", "Cos[i j]/(i + j + 100)", "Sin[i] + j", "2 (Sin[i - j] + 1/3)",
+        "-Cos[i]/7", "(i + 1/2) Tan[j] - 3", "Sinh[i]/(1 + j^2) + i/7", "Cosh[i - j] i",
+        "Sin[i] Cos[j]", "Sin[i] + Cos[j]", "Sin[i]^2", "Sin[i/2]", "Sin[Cos[i]]",
+        "Abs[Sin[i]]", "Max[i, j] Sin[i j] + Min[i, j]", "3 (2 Sin[i]) / 5",
+        "Sin[i j] - Sin[j i]", "Sinh[100 i]", "1/(Sin[i] + 2)", "-(1 + Sin[i j])",
+        "Sinh[i] 13/(1 + j^2) + i 9/7", "(2^60 + 1) Sin[i] + j", "Sin[i] (i + 22/7)",
+        "Cosh[i]/(3 + j) - 100/7", "Cos[i] 2^70 + 1/3", "Sin[10^15 i + j]",
+    };
+    char buf[512];
+    for (size_t k = 0; k < sizeof(bodies) / sizeof(bodies[0]); k++) {
+        snprintf(buf, sizeof buf,
+                 "Quiet[Table[N[%s], {i, -12, 30}, {j, -7, 25}] === "
+                 "Table[Identity[N[%s]], {i, -12, 30}, {j, -7, 25}]]",
+                 bodies[k], bodies[k]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    assert_eval_eq("Developer`PackedArrayQ[Table[N[Cos[i j]/(i + j)], {i, 30}, {j, 30}]]", "True", 0);
+    /* exact (no N): the transcendental stays symbolic, as before */
+    assert_eval_eq("Table[Cos[i]/2, {i, 0, 1}]", "{1/2, 1/2 Cos[1]}", 0);
+}
+
 /* Table / Sum / Do terminate correctly when the bounds sit at the very top of
  * the int64 range — the exact case in issue #52. */
 void test_iter_int64_boundary_ascending() {
@@ -561,6 +590,7 @@ int main() {
     TEST(test_scoping_capture_avoid);
     TEST(test_iter_packed_list);
     TEST(test_table_exact_kernel);
+    TEST(test_table_exact_kernel_transcendental);
 
     printf("All iter tests passed!\n");
     symtab_clear();

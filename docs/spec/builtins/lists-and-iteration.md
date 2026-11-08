@@ -205,6 +205,26 @@ Generates a list of expressions.
   is evaluated by the interpreter on its own, with its usual value and message.
   `Table[N[1/((i + j - 1) (i + j - 2)/2 + j)], {i, 500}, {j, 500}]` builds in
   25 ms (was 450 ms) as a packed rank-2 array.
+- **Under `N`, the kernel also takes `Sin`, `Cos`, `Tan`, `Sinh` and `Cosh`
+  of an exact integer.** The interpreter keeps `Cos[6]` symbolic, folds the
+  exact factors of a product and the exact terms of a sum into one number each,
+  and `N` then numericalizes the leaves and combines the machine numbers. The
+  kernel carries an inexact value the same way, as an exact coefficient times
+  the machine value of its one transcendental factor. That value is the
+  builtin's own formula, `Re[f[k + 0. I]]`, and `f[0]` stays exact. The
+  coefficient is multiplied in or added where `N` would do it. So
+  `Table[N[Cos[i j]/(i + j)], {i, 100}, {j, 100}]` is bit for bit the
+  interpreter's answer, packed, ~20× faster (47 → 2.2 ms on a loaded machine).
+  The interpreter evaluates an element on its own when its rounding could
+  depend on something the kernel does not model:
+  - a product or sum with two inexact operands, where term merging could
+    change the order of the roundings;
+  - a transcendental of a non-integer;
+  - `Power`, `Abs`, `Min` or `Max` of an inexact value;
+  - a non-normal result;
+  - an element `N` itself raises to MPFR, because a lossy exact leaf survives
+    beside a call. `-12/7 + Sinh[12]/50` is one: `-12/7` has more numerator
+    than denominator bits. An integer past 2^53 is another.
 - **Large machine-number results pack.** A result at or above the packing
   threshold that is a rectangular block of uniformly exact or uniformly inexact
   machine numbers is returned as a [packed list](packed-arrays.md): an ordinary `List` held as a

@@ -6,6 +6,9 @@
 #include "numeric.h"       /* numeric_mpq_to_double */
 #include "checked_int.h"   /* ci_*_i64 */
 #include <gmp.h>
+#include <complex.h>   /* csin & co.: the builtins' machine formula */
+#include <float.h>     /* DBL_MIN */
+
 
 /* Element backstop for a finite Table range, matching Sum's SUM_MAX_FINITE_TERMS
  * and Product's PRODUCT_MAX_FINITE_TERMS. Reaching it returns Table[...]
@@ -40,15 +43,34 @@
  * symbol whose OwnValue is already an exact int64 number (an enclosing
  * iterator, a constant n), combined by Plus, Times, Power, Abs, Min, Max and
  * Factorial. Nothing else -- no user rule ever runs, so skipping the evaluator
- * is not observable. Compiled once per Table call (a nested Table recompiles
+ * is not observable.
+ *
+ * Under a top-level N, also Sin, Cos, Tan, Sinh and Cosh of an exact INTEGER
+ * (Table[N[Cos[i j]/(i + j)], ...]).  The interpreter keeps Cos[6] symbolic,
+ * folds every exact factor of a product into one Rational (Times is Flat) and
+ * every exact term of a sum into one number, and N then numericalises the
+ * leaves and multiplies / adds the machine numbers.  So an inexact value is
+ * carried as a DEFERRED product coef * atom -- coef the exact Rational, atom
+ * the machine value of the one transcendental factor -- and materialised
+ * exactly where N would form it: as N[coef] * atom, or N[c] + N[coef] * atom
+ * inside a sum.  A product or sum with two inexact operands, a transcendental
+ * of a non-integer, a power or Abs/Min/Max of an inexact value, or a
+ * non-normal result hands that ELEMENT to the interpreter: there the exact
+ * evaluator's term merging or a different numericalisation could change the
+ * rounding.  The machine value of f[k] is the builtin's own formula,
+ * creal(f(k + 0 I)) (csin, ccos, ctan, csinh, ccosh), and f[0] is the exact
+ * 0 or 1 the builtin returns. Compiled once per Table call (a nested Table recompiles
  * its inner body per outer value, which is what folds the outer iterator in
  * as a constant).
  * ======================================================================== */
 typedef struct { int64_t n, d; } TxRat;          /* d > 0, gcd(|n|, d) = 1 */
 
 typedef enum {
-    TX_CONST, TX_VAR, TX_PLUS, TX_TIMES, TX_POWER, TX_ABS, TX_MIN, TX_MAX, TX_FACT
+    TX_CONST, TX_VAR, TX_PLUS, TX_TIMES, TX_POWER, TX_ABS, TX_MIN, TX_MAX, TX_FACT,
+    TX_FN                       /* machine mode only: a = TxFn */
 } TxOp;
+
+typedef enum { TXF_SIN, TXF_COS, TXF_TAN, TXF_SINH, TXF_COSH } TxFn;
 
 typedef struct { uint8_t op; int32_t a; } TxInsn;
 
@@ -58,6 +80,7 @@ typedef struct {
     long    depth, max_depth;
     bool    ok;
     bool    machine;            /* body was N[g]: answer the rounded double */
+    bool    has_fn;             /* contains TX_FN: run by tx_run_machine */
     const char* var;            /* interned iterator name */
 } TxProg;
 
@@ -228,6 +251,17 @@ static void tx_walk(TxProg* p, const Expr* e, const TxEnv* env, int depth) {
     if (is_rational(e, &rn, &rd)) { tx_const(p, rn, rd); return; }
     TxOp op = TX_CONST;
     bool known = false;
+    if (head->type == EXPR_SYMBOL && argc == 1 && p->machine) {
+        const char* h = head->data.symbol.name;
+        int fn = h == SYM_Sin ? TXF_SIN : h == SYM_Cos ? TXF_COS : h == SYM_Tan ? TXF_TAN :
+                 h == SYM_Sinh ? TXF_SINH : h == SYM_Cosh ? TXF_COSH : -1;
+        if (fn >= 0) {
+            tx_walk(p, e->data.function.args[0], env, depth);
+            tx_emit(p, TX_FN, fn, 0);
+            p->has_fn = true;
+            return;
+        }
+    }
     if (head->type == EXPR_SYMBOL) {
         const char* h = head->data.symbol.name;
         known = true;
@@ -398,6 +432,7 @@ static bool tx_run(const TxProg* p, int64_t x, TxRat* stack, TxRat* out) {
                 stack[sp - 1].n = TX_FACTORIALS[a.n];
                 break;
             }
+            case TX_FN: return false;               /* tx_run_machine's */
         }
     }
     *out = stack[0];
@@ -428,6 +463,149 @@ static double tx_to_double(TxRat r) {
     double v = numeric_mpq_to_double(q);
     mpq_clear(q);
     return v;
+}
+
+
+/* ---- machine tier: transcendental leaves under N -----------------------
+ * A stack value is exact (r) or the deferred product r * atom (see the kernel
+ * comment above).  Mirrors the interpreter's exact phase -- Flat products and
+ * sums fold their exact parts -- and then N's numericalisation of the result. */
+typedef struct { TxRat r; double atom; bool inexact; } TxM;
+
+/* N of a deferred product: N[coef] * atom, or atom itself for coef 1. */
+static double txm_value(TxM v) {
+    if (!v.inexact) return tx_to_double(v.r);
+    if (v.r.n == 1 && v.r.d == 1) return v.atom;
+    return tx_to_double(v.r) * v.atom;
+}
+
+static bool txm_normal(double v) { return isfinite(v) && (v == 0.0 || fabs(v) >= DBL_MIN); }
+
+static int tx_bitlen(uint64_t a) { int b = 0; for (; a; a >>= 1) b++; return b; }
+
+/* Would this exact leaf, left in the expression N sees, make N raise the
+ * evaluation to MPFR?  numeric_plan_working_spec does that when the expression
+ * has a call and an exact leaf whose double is not its value with error worse
+ * than the output can absorb: an integer beyond 53 bits that is no double, or
+ * a non-dyadic rational with more numerator than denominator bits (N[-12/7 +
+ * Sinh[12]/50] is evaluated at 128 bits and rounded, not leaf by leaf).  Such
+ * an element is the interpreter's. */
+static bool tx_leaf_raises(TxRat r) {
+    if (r.n == 0) return false;
+    uint64_t a = r.n < 0 ? (uint64_t)0 - (uint64_t)r.n : (uint64_t)r.n;
+    uint64_t b = (uint64_t)r.d;
+    int la = tx_bitlen(a);
+    bool a_exact = la <= 53 || (a & ((((uint64_t)1) << (la - 53)) - 1u)) == 0;
+    if (b == 1) return !a_exact;
+    if ((b & (b - 1)) == 0 && a_exact) return false;      /* dyadic: its own double */
+    return la - tx_bitlen(b) > 0;
+}
+
+/* Scratch for tx_run_machine's exact ops, each sized max_depth + 1. */
+typedef struct { TxInsn* code; TxRat* consts; TxRat* stack; } TxScratch;
+
+static bool tx_run_machine(const TxProg* p, int64_t x, TxM* st, const TxScratch* sc,
+                           double* out) {
+    size_t sp = 0;
+    for (size_t i = 0; i < p->ncode; i++) {
+        const TxInsn* in = &p->code[i];
+        switch ((TxOp)in->op) {
+            case TX_CONST: st[sp].r = p->consts[in->a]; st[sp].inexact = false; sp++; break;
+            case TX_VAR:
+                if (x == INT64_MIN) return false;
+                st[sp].r.n = x; st[sp].r.d = 1; st[sp].inexact = false; sp++;
+                break;
+            case TX_PLUS: case TX_TIMES: {
+                size_t k = (size_t)in->a, base = sp - k;
+                bool plus = in->op == TX_PLUS;
+                TxRat c = { plus ? 0 : 1, 1 };
+                const TxM* one = NULL;               /* the single inexact operand */
+                for (size_t j = 0; j < k; j++) {
+                    const TxM* v = &st[base + j];
+                    if (v->inexact) {
+                        if (one) return false;       /* two inexact operands */
+                        one = v;
+                        continue;
+                    }
+                    if (!(plus ? tx_add(c, v->r, &c) : tx_mul(c, v->r, &c))) return false;
+                }
+                TxM res;
+                if (!one) {
+                    res.r = c; res.inexact = false;
+                } else if (plus) {
+                    if (c.n == 0) res = *one;        /* Plus[0, t] is t */
+                    else {
+                        if (tx_leaf_raises(c) || tx_leaf_raises(one->r)) return false;
+                        res.atom = tx_to_double(c) + txm_value(*one);
+                        if (!txm_normal(res.atom)) return false;
+                        res.r.n = 1; res.r.d = 1; res.inexact = true;
+                    }
+                } else {
+                    TxRat cr;
+                    if (!tx_mul(c, one->r, &cr)) return false;
+                    if (cr.n == 0) { res.r = cr; res.inexact = false; }   /* 0 * t */
+                    else { res.r = cr; res.atom = one->atom; res.inexact = true; }
+                }
+                sp = base;
+                st[sp++] = res;
+                break;
+            }
+            case TX_FN: {
+                TxM a = st[sp - 1];
+                if (a.inexact || a.r.d != 1) return false;     /* integer argument only */
+                const int64_t lim = INT64_C(1) << 53;
+                if (a.r.n > lim || a.r.n < -lim) return false;
+                if (a.r.n == 0) {                              /* the builtins' exact f[0] */
+                    st[sp - 1].r.n = (in->a == TXF_COS || in->a == TXF_COSH) ? 1 : 0;
+                    st[sp - 1].r.d = 1;
+                    break;
+                }
+                double complex z = (double)a.r.n;
+                double complex w;
+                switch ((TxFn)in->a) {
+                    case TXF_SIN:  w = csin(z);  break;
+                    case TXF_COS:  w = ccos(z);  break;
+                    case TXF_TAN:  w = ctan(z);  break;
+                    case TXF_SINH: w = csinh(z); break;
+                    default:       w = ccosh(z); break;
+                }
+                double v = creal(w);
+                if (!txm_normal(v) || v == 0.0) return false;
+                st[sp - 1].r.n = 1; st[sp - 1].r.d = 1;
+                st[sp - 1].atom = v; st[sp - 1].inexact = true;
+                break;
+            }
+            default: {
+                /* Power, Abs, Min, Max, Factorial: exact operands only, run by
+                 * tx_run itself as a program that loads the k operands as
+                 * constants and applies this one instruction -- the exact
+                 * kernel's own arithmetic, with no second copy of it. */
+                size_t k = (in->op == TX_POWER) ? 2
+                         : (in->op == TX_ABS || in->op == TX_FACT) ? 1 : (size_t)in->a;
+                size_t base = sp - k;
+                for (size_t j = 0; j < k; j++) {
+                    if (st[base + j].inexact) return false;
+                    sc->consts[j] = st[base + j].r;
+                    sc->code[j].op = (uint8_t)TX_CONST;
+                    sc->code[j].a = (int32_t)j;
+                }
+                sc->code[k] = *in;
+                TxProg one = *p;
+                one.code = sc->code;   one.ncode = k + 1;
+                one.consts = sc->consts; one.nconst = k;
+                TxRat r;
+                if (!tx_run(&one, x, sc->stack, &r)) return false;
+                sp = base;
+                st[sp].r = r; st[sp].inexact = false; sp++;
+                break;
+            }
+        }
+    }
+    if (st[0].inexact && tx_leaf_raises(st[0].r)) return false;
+    double v = txm_value(st[0]);
+    if (!txm_normal(v)) return false;
+    *out = v;
+    return true;
 }
 
 /* ---- GMP tier ---------------------------------------------------------
@@ -518,6 +696,7 @@ static bool tx_run_mpq(const TxProg* p, int64_t x, TxMpqStack* st, mpq_ptr out) 
                 mpz_fac_ui(mpq_numref(a), mpz_get_ui(mpq_numref(a)));
                 break;
             }
+            case TX_FN: return false;               /* tx_run_machine's */
         }
     }
     mpq_set(out, S[0]);
@@ -529,6 +708,62 @@ static void tx_mpq_stack_free(TxMpqStack* st) {
         for (size_t i = 0; i < st->n; i++) mpq_clear(st->s[i]);
         free(st->s);
     }
+}
+
+/* The element loop of table_exact_int for a program with transcendental
+ * leaves (tx_run_machine), kept apart so the exact loop stays exactly as it
+ * was: sharing one loop cost the plain exact kernel ~10%.  Takes ownership of
+ * *p.  Every result is a machine number under N, so the list is built packed;
+ * an element the machine tier declines is the interpreter's, as in the exact
+ * loop. */
+static Expr* table_exact_int_fn(TxProg* p, Expr* body, Expr* var, int64_t imin,
+                                int64_t di, size_t n) {
+    size_t depth = (size_t)p->max_depth + 1;
+    TxM* mstack = malloc(depth * sizeof(TxM));
+    TxScratch sc = { malloc((depth + 1) * sizeof(TxInsn)), malloc(depth * sizeof(TxRat)),
+                     malloc(depth * sizeof(TxRat)) };
+    double* dbuf = NULL;
+    bool alloc_ok = mstack && sc.code && sc.consts && sc.stack;
+    Expr* packed = alloc_ok ? ndbuild_open_f64((int64_t)n, &dbuf) : NULL;
+    if (!packed) {
+        free(mstack); free(sc.code); free(sc.consts); free(sc.stack); tx_free(p);
+        return NULL;
+    }
+    Expr** results = NULL;
+    for (size_t i = 0; i < n; i++) {
+        int64_t x = (int64_t)((uint64_t)imin + (uint64_t)i * (uint64_t)di);
+        double dv;
+        if (tx_run_machine(p, x, mstack, &sc, &dv)) {
+            if (packed) dbuf[i] = dv;
+            else        results[i] = expr_new_real(dv);
+            continue;
+        }
+        /* This element is the interpreter's: bind and evaluate it. */
+        Expr* xv = expr_new_integer(x);
+        iter_bind(var, xv);
+        expr_free(xv);
+        Expr* v = evaluate(body);
+        if (packed) {
+            if (v && v->type == EXPR_REAL) { dbuf[i] = v->data.real; expr_free(v); continue; }
+            /* Not a machine real: finish as a boxed List. */
+            results = malloc(sizeof(Expr*) * n);
+            if (!results) {
+                expr_free(v); expr_free(packed); free(mstack);
+                free(sc.code); free(sc.consts); free(sc.stack); tx_free(p);
+                return NULL;
+            }
+            ndbuild_abandon(packed, i, results);
+            packed = NULL;
+        }
+        results[i] = v;
+    }
+    free(mstack);
+    free(sc.code); free(sc.consts); free(sc.stack);
+    tx_free(p);
+    if (packed) return packed;
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, n);
+    free(results);
+    return pack_offer(list);
 }
 
 /* Table[body, {var, imin, imax, di}] over exact int64 imin/imax/di through the
@@ -549,6 +784,7 @@ static Expr* table_exact_int(Expr* body, Expr* var, int64_t imin, int64_t imax, 
 
     TxProg p;
     if (!tx_compile(&p, body, var)) return NULL;
+    if (p.has_fn) return table_exact_int_fn(&p, body, var, imin, di, (size_t)total);
     TxRat* stack = malloc((size_t)(p.max_depth + 1) * sizeof(TxRat));
     if (!stack) { tx_free(&p); return NULL; }
 
