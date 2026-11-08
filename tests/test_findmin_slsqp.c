@@ -322,6 +322,38 @@ static void test_small_scale_blackbox_design(void) {
                "r =!= $Failed && Precision[First[r]] >= 25 && Abs[First[r] - 1/2] < 10^-25]");
 }
 
+/* S10 NONLINEAR constraints at WorkingPrecision: the machine solve finds the
+ * active set, Newton on its KKT system (fm_kkt_refine_mpfr) refines it to the
+ * working precision -- no FindMinimum::nimpl machine fallback.  Exact
+ * answers: an active disc (-Sqrt[2] at x = y = -1/Sqrt[2]); a disc and a
+ * pinned bound (x = 1, y = Sqrt[3]); an equality circle (x y = -1 at
+ * (1, -1)); a black-box objective projected onto the unit disc
+ * ((Sqrt[5] - 1)^2 at (1, 2)/Sqrt[5]); an inactive nonlinear inequality. */
+static void test_nonlinear_constraints_wp(void) {
+    check_true("Module[{x, y, r}, r = Check[FindMinimum[{x + y, x^2 + y^2 <= 1}, "
+               "{{x, 0}, {y, 0}}, WorkingPrecision -> 40], $Failed]; "
+               "r =!= $Failed && Precision[First[r]] >= 35 && "
+               "Abs[First[r] + Sqrt[2]] < 10^-35 && Abs[(x /. Last[r]) + 1/Sqrt[2]] < 10^-30]");
+    check_true("Module[{x, y, r}, r = Check[FindMinimum[{(x - 3)^2 + (y - 3)^2, "
+               "x^2 + y^2 <= 4 && 0 <= x <= 1}, {{x, 0.5}, {y, 0.5}}, "
+               "WorkingPrecision -> 40], $Failed]; "
+               "r =!= $Failed && Abs[First[r] - (4 + (3 - Sqrt[3])^2)] < 10^-35 && "
+               "Abs[(y /. Last[r]) - Sqrt[3]] < 10^-30 && (x /. Last[r]) == 1]");
+    check_true("Module[{x, y, r}, r = Check[FindMinimum[{x y, x^2 + y^2 == 2}, "
+               "{{x, 1.2}, {y, -0.8}}, WorkingPrecision -> 50], $Failed]; "
+               "r =!= $Failed && Precision[First[r]] >= 45 && Abs[First[r] + 1] < 10^-45 && "
+               "Abs[(x /. Last[r]) - 1] < 10^-40]");
+    check_true("Module[{bb, a, b, r}, bb[p_?NumericQ, q_?NumericQ] := (p - 1)^2 + (q - 2)^2; "
+               "r = Check[FindMinimum[{bb[a, b], a^2 + b^2 <= 1}, {{a, 0}, {b, 0}}, "
+               "WorkingPrecision -> 40], $Failed]; "
+               "r =!= $Failed && Abs[First[r] - (Sqrt[5] - 1)^2] < 10^-30 && "
+               "Abs[(b /. Last[r]) - 2/Sqrt[5]] < 10^-25]");
+    check_true("Module[{x, y, r}, r = Check[FindMinimum[{(x - 1/3)^2 + (y - 1/4)^2, "
+               "x^2 + y^2 <= 4}, {{x, 1}, {y, 1}}, WorkingPrecision -> 40], $Failed]; "
+               "r =!= $Failed && Abs[(x /. Last[r]) - 1/3] < 10^-30 && "
+               "Abs[(y /. Last[r]) - 1/4] < 10^-30]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -371,6 +403,9 @@ int main(void) {
 
     /* S9 small-scale black box, linear constraints, WorkingPrecision */
     TEST(test_small_scale_blackbox_design);
+
+    /* S10 nonlinear constraints at WorkingPrecision */
+    TEST(test_nonlinear_constraints_wp);
 
     printf("All SLSQP tests passed!\n");
     return 0;

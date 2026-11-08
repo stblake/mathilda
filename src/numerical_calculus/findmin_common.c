@@ -1340,6 +1340,12 @@ void fm_polish_min_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs, size_t n,
     fm_mpfr_array_free(s4, n); fm_mpfr_array_free(s5, n); fm_mpfr_array_free(s6, n);
 }
 
+/* See findmin_internal.h. */
+bool fm_eval_at_mpfr(Expr* f, FmVarBind* binds, mpfr_t* x, size_t n,
+                     const FmOpts* opts, mpfr_t out) {
+    return fm_eval_scalar_mpfr(f, binds, x, n, opts, out);
+}
+
 /* BFGS at MPFR precision. Constraints / penalty paths are NOT supported
  * yet at MPFR (a follow-up will lift the existing penalty machinery
  * to mpfr_t when there's user demand); callers must route through the

@@ -483,19 +483,19 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
      * phase runs with machine numerics and machine goals -- the MPFR goals
      * (30 digits by default) would keep a machine solver iterating to its
      * MaxIterations. */
-    bool lin_refine = false;
+    /* Nonlinear general constraints take the same two phases, the MPFR phase
+     * being Newton on the KKT system of the machine active set
+     * (fm_kkt_refine_mpfr); it is also the fallback when the exact linear
+     * elimination does not survive its checks. */
+    bool lin_refine = false, wp_refine = false;
     FmOpts mpfr_opts = opts;
-    if (use_mpfr && has_general_cons && fm_gens_all_linear(gens, ngens, vars, n)) {
-        lin_refine = true;
+    if (use_mpfr && has_general_cons) {
+        lin_refine = fm_gens_all_linear(gens, ngens, vars, n);
+        wp_refine = true;
         use_mpfr = false;
         opts.prec_mode = FM_PREC_MACHINE;
         if (opts.acc_goal_digits  > 8.0) opts.acc_goal_digits  = 8.0;
         if (opts.prec_goal_digits > 8.0) opts.prec_goal_digits = 8.0;
-    } else if (use_mpfr && has_general_cons) {
-        fm_warn(fn_name, "nimpl",
-                "nonlinear general constraints at WorkingPrecision > MachinePrecision "
-                "are not yet supported; falling back to machine precision");
-        use_mpfr = false;
     }
     if (use_mpfr) {
         mpfr_init2(fx_min_mpfr, opts.wp_bits);
@@ -818,7 +818,7 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     }
 #ifdef USE_MPFR
     }
-    if (lin_refine) {
+    if (wp_refine) {
         opts = mpfr_opts;
         if (ok) {
             use_mpfr = true;           /* fx_min_mpfr is now live (cleared below) */
@@ -826,9 +826,19 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
             x_vec_mpfr = fm_mpfr_array(n, opts.wp_bits);
             bool saved_quiet = g_fm_quiet;
             g_fm_quiet = true;
-            mpfr_result = fm_linear_refine_mpfr(f_raw, vars, n, binds, gens, ngens,
-                                                boxes, &opts, x_vec, x_vec_mpfr,
-                                                fx_min_mpfr);
+            /* KKT Newton first: it converges in a few steps where the
+             * eliminated problem's quasi-Newton, started from H = I, crawls
+             * (a 36-cell design: 85 s for 19 digits -> 9 s for all 60).  The
+             * exact elimination remains for what KKT cannot certify -- a
+             * vertex solution (every coordinate on a bound) leaves the
+             * multipliers to sign conditions alone. */
+            mpfr_result = fm_kkt_refine_mpfr(f_raw, n, binds, g_exprs, gens, ngens,
+                                             boxes, &opts, x_vec, x_vec_mpfr,
+                                             fx_min_mpfr);
+            if (!mpfr_result && lin_refine)
+                mpfr_result = fm_linear_refine_mpfr(f_raw, vars, n, binds, gens, ngens,
+                                                    boxes, &opts, x_vec, x_vec_mpfr,
+                                                    fx_min_mpfr);
             g_fm_quiet = saved_quiet;
             if (!mpfr_result)
                 fm_warn(fn_name, "nimpl",

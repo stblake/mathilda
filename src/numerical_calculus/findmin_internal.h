@@ -696,6 +696,10 @@ bool fm_run_bfgs_mpfr(Expr* f, Expr** vars, size_t n,
 void fm_polish_min_mpfr(Expr* f, FmVarBind* binds, Expr** g_exprs, size_t n,
                         const FmOpts* opts, const FmBox* boxes,
                         mpfr_t* x, mpfr_t fx);
+/* f at the MPFR point x (n coordinates) into out, at opts->wp_bits; false
+ * when f is not real-valued there. */
+bool fm_eval_at_mpfr(Expr* f, FmVarBind* binds, mpfr_t* x, size_t n,
+                     const FmOpts* opts, mpfr_t out);
 #endif /* USE_MPFR */
 FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
                                     Expr** x0_out, Expr** x1_out,
@@ -896,6 +900,20 @@ bool fm_linear_refine_mpfr(Expr* f, Expr** vars, size_t n, FmVarBind* binds,
                            const FmGenCon* gens, size_t ngens,
                            const FmBox* boxes, const FmOpts* opts,
                            const double* xm, mpfr_t* x_out, mpfr_t fx_out);
+/* Refine the machine solution xm of a problem with general constraints
+ * (linear or NONLINEAR) and box bounds to the working precision by Newton's
+ * method on the KKT system of its active set: the active bounds pinned,
+ * unknowns the free coordinates and one multiplier per active constraint, the
+ * Lagrangian Hessian a difference Hessian of VALUES.  The active set is
+ * corrected (a free coordinate leaving its box is pinned, a violated inactive
+ * inequality activated, a wrong-signed multiplier released) and the solve
+ * repeated.  g_exprs: the objective's symbolic gradient, or NULL.  x_out (n)
+ * and fx_out pre-initialised by the caller; false (outputs unspecified) when
+ * the iteration does not converge to a KKT point. */
+bool fm_kkt_refine_mpfr(Expr* f, size_t n, FmVarBind* binds, Expr** g_exprs,
+                        const FmGenCon* gens, size_t ngens,
+                        const FmBox* boxes, const FmOpts* opts,
+                        const double* xm, mpfr_t* x_out, mpfr_t fx_out);
 #endif
 bool fm_run_powell(Expr* f, Expr** vars, size_t n,
                           FmVarBind* binds, Expr** g_exprs,
