@@ -222,6 +222,15 @@ static const void* mgd_real_unary_fn(const char* h) {
     if (h == SYM_Sinh) return (const void*)mpfr_sinh;
     if (h == SYM_Cosh) return (const void*)mpfr_cosh;
     if (h == SYM_Tanh) return (const void*)mpfr_tanh;
+    /* the reciprocal hyperbolic functions: a separated (Fourier) series such as
+     * Sum (-1)^k/(2k+1) Sech[(2k+1) Pi/2] was interpreted per term without them */
+    if (h == SYM_Sech) return (const void*)mpfr_sech;
+    if (h == SYM_Csch) return (const void*)mpfr_csch;
+    if (h == SYM_Coth) return (const void*)mpfr_coth;
+    /* NaN outside the real domain (ArcCosh x < 1, ArcTanh |x| > 1): declined */
+    if (h == SYM_ArcSinh) return (const void*)mpfr_asinh;
+    if (h == SYM_ArcCosh) return (const void*)mpfr_acosh;
+    if (h == SYM_ArcTanh) return (const void*)mpfr_atanh;
     if (h == SYM_ArcSin) return (const void*)mpfr_asin;
     if (h == SYM_ArcCos) return (const void*)mpfr_acos;
     if (h == SYM_ArcTan) return (const void*)mpfr_atan;
@@ -364,6 +373,71 @@ static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {
     return true;
 }
 
+/* Copy of e with each symbol names[i] replaced by vals[i] (copied).  With is
+ * substitution, so this IS its semantics; an inner construct that rebinds one
+ * of the names gets a non-symbol in its binding position, which no managed
+ * lowering accepts, so it bails rather than being mis-scoped. */
+static Expr* mgd_subst(const Expr* e, const char* const* names, Expr* const* vals,
+                       size_t n) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < n; i++)
+            if (e->data.symbol.name == names[i]) return expr_copy(vals[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t na = e->data.function.arg_count;
+    Expr** av = malloc((na ? na : 1) * sizeof *av);
+    if (!av) return NULL;
+    Expr* hd = mgd_subst(e->data.function.head, names, vals, n);
+    bool ok = hd != NULL;
+    for (size_t i = 0; i < na; i++) {
+        av[i] = ok ? mgd_subst(e->data.function.args[i], names, vals, n) : NULL;
+        if (!av[i]) ok = false;
+    }
+    if (!ok) {
+        expr_free(hd);
+        for (size_t i = 0; i < na; i++) expr_free(av[i]);
+        free(av);
+        return NULL;
+    }
+    Expr* r = expr_new_function(hd, av, na);
+    free(av);
+    return r;
+}
+
+/* With[{v1 = e1, ...}, body]: lowered as the substituted body.  Value numbering
+ * (emit_mgd_real's memo) then evaluates each e_i once however often v_i occurs,
+ * which is exactly what a register-bound local would give, without a managed
+ * scope table that the memo would have to be keyed on.  Returns -1 when e is
+ * not a With, else the lowering result (0/1). */
+static int emit_mgd_with(Ctx* c, const Expr* e, Val* out) {
+    if (e->data.function.arg_count != 2) return -1;
+    const Expr* L = e->data.function.args[0];
+    if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
+        || L->data.function.head->data.symbol.name != SYM_List) return 0;
+    size_t nl = L->data.function.arg_count;
+    if (nl == 0 || nl > 32) return 0;
+    const char* names[32];
+    Expr* vals[32];
+    for (size_t i = 0; i < nl; i++) {
+        const Expr* sp = L->data.function.args[i];
+        if (sp->type != EXPR_FUNCTION || sp->data.function.head->type != EXPR_SYMBOL
+            || sp->data.function.arg_count != 2
+            || (sp->data.function.head->data.symbol.name != SYM_Set
+                && sp->data.function.head->data.symbol.name != SYM_SetDelayed)
+            || sp->data.function.args[0]->type != EXPR_SYMBOL) return 0;
+        names[i] = sp->data.function.args[0]->data.symbol.name;
+        vals[i] = sp->data.function.args[1];
+        /* a local shadowing a declared argument is still substitution: the
+         * body's occurrences are the local, the argument is unreachable */
+    }
+    Expr* body = mgd_subst(e->data.function.args[1], names, vals, nl);
+    if (!body) { c->ok = false; return 0; }
+    bool ok = emit_mgd_real(c, body, out);
+    expr_free(body);
+    return (ok && c->ok) ? 1 : 0;
+}
+
 static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
     if (!c->ok) return false;
     /* leaf: declared argument */
@@ -408,6 +482,10 @@ static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
         Val v = { cst, true, CT_BIGREAL, false }; *out = v; return true;
     }
 
+    if (h == SYM_With) {
+        int w = emit_mgd_with(c, e, out);
+        if (w >= 0) return w == 1;
+    }
     if (h == SYM_Plus && n >= 1) {
         Val acc; if (!emit_mgd_real(c, a[0], &acc)) return false;
         for (size_t i = 1; i < n; i++) {
