@@ -125,6 +125,15 @@ static void test_kernel_arguments_opaque(void) {
     run_true("Together[1/a + 1/b -> 1/c + 1/d] === ((a + b)/(a b) -> (c + d)/(c d))");
 }
 
+/* A rational exponent with a large denominator q: the power's generator
+ * relation g^q - x is raised by repeated squaring, not q multiplications
+ * (Together[x^(1 + 2^-40)] and an inexact exponent at WorkingPrecision,
+ * p/2^52, hung -- NIntegrate of x^a e^-x at WorkingPrecision with it). */
+static void test_large_denominator_exponent(void) {
+    run_true("TimeConstrained[Together[x^(1 + 2^-40)], 10] === x^(1 + 2^-40)");
+    run_true("TimeConstrained[Head[Together[x^SetPrecision[1.515, 60] y]], 10] === Times");
+}
+
 int main(void) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -136,6 +145,7 @@ int main(void) {
     TEST(test_field_reduced);
     TEST(test_indexed_variables);
     TEST(test_kernel_arguments_opaque);
+    TEST(test_large_denominator_exponent);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

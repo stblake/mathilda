@@ -3875,14 +3875,23 @@ static int expr_to_mpolyq(const Expr* e, fmpz_mpoly_q_t out,
                 const Expr* base = e->data.function.args[0];
                 const Expr* exp  = e->data.function.args[1];
                 if (exp->type != EXPR_INTEGER) return 0;
-                long m = (long)exp->data.integer;
+                int64_t m = exp->data.integer;
                 fmpz_mpoly_q_t bq; fmpz_mpoly_q_init(bq, mctx);
                 int ok = expr_to_mpolyq(base, bq, mctx, fvars);
                 if (ok) {
-                    fmpz_mpoly_q_one(out, mctx);
-                    long am = m < 0 ? -m : m;
-                    for (long i = 0; i < am; i++)
-                        fmpz_mpoly_q_mul(out, out, bq, mctx);
+                    /* num^|m| / den^|m| by FLINT's repeated squaring (a
+                     * reduced fraction stays reduced).  The former loop of |m|
+                     * multiplications hung on a radical relation g^q - x of a
+                     * large q: Together[x^(1 + 2^-40)], and every inexact
+                     * exponent at WorkingPrecision (1.515`60 = p/2^52). */
+                    ulong am = m < 0 ? (ulong)0 - (ulong)m : (ulong)m;
+                    if (!fmpz_mpoly_pow_ui(fmpz_mpoly_q_numref(out),
+                                           fmpz_mpoly_q_numref(bq), am, mctx)
+                        || !fmpz_mpoly_pow_ui(fmpz_mpoly_q_denref(out),
+                                              fmpz_mpoly_q_denref(bq), am, mctx)) {
+                        fmpz_mpoly_q_clear(bq, mctx);
+                        return 0;
+                    }
                     /* base^(negative) with base == 0 is a division by zero:
                      * fmpz_mpoly_q_inv hard-ABORTS FLINT on a zero operand
                      * (SIGABRT), so decline here and let the caller fall back
