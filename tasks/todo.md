@@ -12,7 +12,8 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
 - [x] Baseline run of 166-195, status table in SIAM100.md (benchmarks/siam100_results/baseline_v0.6377.md)
 - [x] Phase 3: holdout A written + committed (e1ad3fd0)
 - [x] Holdout A pre-fix run DONE: Mathilda 262/600 on target (benchmarks/SIAM100_HOLDOUT_A.md, siam100_results/holdoutA_v0.6377.md) (v0.6377 binary, running; load peaked >30 from holdout-B refs + fix builds -> DIGITS valid, TIMINGS approximate; if speed verdicts matter, re-time from a `git worktree add <dir> v0.6377` build on a quiet machine)
-- [ ] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b (worktree ../Mathilda-holdoutB, exps 226-255, 6 agents writing; WL verify after scratchpad/WL_FREE), baselines only
+- [x] Phase 4: sealed holdout B, 10 per problem, branch siam100-holdout-b (worktree ../Mathilda-holdoutB, exps 226-255, 6 agents writing; WL verify after scratchpad/WL_FREE), baselines only
+- [x] Phase 6 (2026-11-09): final run v0.6460. Originals 69/76, holdout A 506/600, **holdout B 395/600 (single run; now spent)**. Verdict and queue in benchmarks/SIAM100.md; details in benchmarks/SIAM100_HOLDOUT_B_RESULTS_v0.6460.md. Next queue: D17 {0,0} wrong (20), D10 FoldList speed, C6/D8 multi-D NIntegrate timeouts, D14 FEM operator forms, D2 NSum accgl, D18/D19/D20 unevaluated, C3/C5 speed. Any fix needs a holdout C to re-measure.
 - [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
   - [x] v0.6378 NDSolve BVP by shooting (silent wrong answer on two-point conditions)
   - [x] v0.6379 WhenEvent (all integration loops; d12 12d/274ms, d12.wp50 50d, hd12 20/20), v0.6380 NDSolveValue, v0.6381 unlisted unknowns (d13.wp50 50d)

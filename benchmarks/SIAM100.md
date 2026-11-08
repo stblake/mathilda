@@ -177,3 +177,54 @@ Off target, grouped by cause (the work queue; see tasks/todo.md):
   - d10 `FoldList` (9×);
   - c2 `NSolve` per bounce (2.6–2.9×);
   - d20 (3.9×).
+
+### Final, v0.6460 (2026-11-09)
+
+Full tables:
+- `siam100_results/final_v0.6460.md`: experiments 166–225 (the originals and holdout A);
+- `siam100_results/holdoutB_v0.6460.md`: holdout B.
+
+Raw JSONs are in `raw_v0.6460.tar.xz`. Both runs were serial, on a quiet machine. WL was re-run for 171, 201 and 220 after their precision was aligned.
+
+Originals plus holdout A, 676 cases:
+
+| system | correct | inexact | wrong | none |
+|---|---|---|---|---|
+| **Mathilda 0.6460** | **484** | 127 | 26 | 39 |
+| Python (scipy/mpmath) | 363 | 64 | 51 | 198 |
+| wolframscript | 286 | 185 | 70 | 135 |
+| Maxima | 214 | 25 | 6 | 431 |
+| FriCAS | 127 | 14 | 14 | 521 |
+
+On target:
+- originals: 48/76 (v0.6377), then 64/76 (v0.6417), then **69/76**;
+- holdout A: 262/600 (v0.6377, out of sample), then 438/600 (v0.6417), then **506/600**.
+
+## Verdict
+
+**Does the improvement generalise? Partly, and the improvement is substantial.** On the sealed holdout B (`SIAM100_HOLDOUT_B_RESULTS_v0.6460.md`), run once at v0.6460:
+- Mathilda is on target in **395/600 (65.8 %)**. The out-of-sample figure before any fix was 262/600 (43.7 %, holdout A at v0.6377).
+- Holdout A, now training data, stands at 506/600 (84.3 %).
+
+So 133 of the 244 cases gained in sample carried over to unseen problems.
+
+**Correctness.** On holdout B, Mathilda has the most correct answers of the five systems: 395, against 318 for Python, 275 for WL, 185 for Maxima and 108 for FriCAS. It gives 45 wrong answers, against 44 for Python and 61 for WL. 20 of those 45 come from one defect in D17 (every nodal-line length comes out `{0, 0}`).
+
+**Speed.** Where Mathilda is correct, it is mostly also the fastest. The exceptions are:
+- the D10 `FoldList` recurrences: 3–13× slower;
+- C5 minimax: 10–20× slower;
+- C3 SVD: 2–4× slower.
+
+**The goal is not met.** The goal was "at least as good as every other system on every case". Mathilda meets it on two thirds of unseen cases.
+
+**Next queue.** It is ranked by cases at stake, and the details are in the holdout-B results file. Fixing any of these makes holdout B training data, so the next measurement needs a holdout C.
+
+| # | family | problem | cases |
+|---|---|---|---|
+| 1 | D17 | nodal length `{0, 0}`: one wrong-answer defect | 20 |
+| 2 | D10 | `FoldList` random-recurrence speed | 20 + 14 in holdout A |
+| 3 | C6, D8 | multi-dimensional `NIntegrate`: 50-digit 2-D/3-D integrals and infinite-range rational integrands time out | 18 + 7 in holdout A |
+| 4 | D14 | FEM accepts only some linear operator forms (`femfail`/`femspec`) | 8 |
+| 5 | D2 | `NSum` digit-length weights stop with `accgl` | 10 |
+| 6 | D18, D19, D20 | unevaluated `NDEigenvalues` region forms, constrained design, functional roots | 18 |
+| 7 | C3, C5 | SVD and minimax speed | — |
