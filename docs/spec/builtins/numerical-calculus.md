@@ -631,7 +631,8 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   cancellation): `Σ_{n≥1} BesselJ[0, n] = 1/2`, `Σ BesselJ[1, n]/n = 3/4`.
 - **Dirichlet series** (part of `Automatic`, infinite iterator, unit step, lower
   bound a positive integer) -- a summand `g(n)/n^s` with `g` an arithmetic
-  function (`DivisorSigma`, `EulerPhi`, `MoebiusMu`, `LiouvilleLambda`, and the
+  function (`DivisorSigma`, `EulerPhi`, `MoebiusMu`, `LiouvilleLambda`,
+  `MangoldtLambda` (`-ζ'(s)/ζ(s)`), and the
   powers/`Abs` `Sum` knows) is not smooth in `n`, so no tail model applies; its
   Dirichlet generating function (`Σ d(n)/n^s = ζ(s)²`, `Σ φ(n)/n^s = ζ(s−1)/ζ(s)`,
   `Σ σ_a(n)/n^s = ζ(s)ζ(s−a)`, ...) is taken from `Sum` at the working precision,

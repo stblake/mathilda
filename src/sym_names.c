@@ -395,6 +395,7 @@ const char* SYM_Lexicographic = NULL;
 const char* SYM_LatticeReduce = NULL;
 const char* SYM_LinearSolve = NULL;
 const char* SYM_LiouvilleLambda = NULL;
+const char* SYM_MangoldtLambda = NULL;
 const char* SYM_PrimeOmega = NULL;
 const char* SYM_PrimeNu = NULL;
 const char* SYM_PrimePowerQ = NULL;
@@ -1546,6 +1547,7 @@ void sym_names_init(void) {
     SYM_LatticeReduce              = intern_symbol("LatticeReduce");
     SYM_LinearSolve                = intern_symbol("LinearSolve");
     SYM_LiouvilleLambda            = intern_symbol("LiouvilleLambda");
+    SYM_MangoldtLambda             = intern_symbol("MangoldtLambda");
     SYM_PrimeOmega                 = intern_symbol("PrimeOmega");
     SYM_PrimeNu                    = intern_symbol("PrimeNu");
     SYM_PrimePowerQ                = intern_symbol("PrimePowerQ");

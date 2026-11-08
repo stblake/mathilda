@@ -347,6 +347,18 @@ static void test_dirichlet_series(void) {
     s = eval_str("Head[Sum[DivisorSigma[2, n]/n^3, {n, 1, Infinity}]]");
     ASSERT_MSG(strcmp(s, "Sum") == 0, "divergent sigma_2 series closed: %s", s);
     free(s);
+    /* von Mangoldt: sum Lambda(n)/n^s = -zeta'(s)/zeta(s) (mpmath values); the
+     * terms log p/p^s on prime powers only, the tail ~ N^(1-s), so no direct
+     * or extrapolated sum gets past a few digits at s = 3/2 */
+    ASSERT_CLOSE("NSum[MangoldtLambda[n]/n^2, {n, 1, Infinity}]",
+                 "0.5699609930945328063998643600197300024035", 1e-13);
+    ASSERT_CLOSE("NSum[MangoldtLambda[n]/n^(3/2), {n, 1, Infinity}, WorkingPrecision -> 35]",
+                 "1.50523535578826791942204360303927497104`38", 1e-32);
+    ASSERT_CLOSE("NSum[MangoldtLambda[n]/n^2, {n, 3, Infinity}]",
+                 "0.5699609930945328063998643600197300024035 - Log[2]/4", 1e-13);
+    s = eval_str("Head[Sum[MangoldtLambda[n]/n, {n, 1, Infinity}]]");
+    ASSERT_MSG(strcmp(s, "Sum") == 0, "divergent Lambda(n)/n series closed: %s", s);
+    free(s);
     /* the conditionally convergent boundary s = 1 of mu is kept: sum mu(n)/n = 0 */
     s = eval_str("Sum[MoebiusMu[n]/n, {n, 1, Infinity}]");
     ASSERT_MSG(strcmp(s, "0") == 0, "sum mu(n)/n: %s", s);

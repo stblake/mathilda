@@ -8,6 +8,8 @@
  *     MoebiusMu[k]            -> 1/Zeta[s]
  *     MoebiusMu[k]^2 / |mu|   -> Zeta[s]/Zeta[2 s]
  *     LiouvilleLambda[k]      -> Zeta[2 s]/Zeta[s]
+ *     MangoldtLambda[k]       -> -Zeta'[s]/Zeta[s]   (log-derivative of the
+ *                                Euler product; not multiplicative itself)
  *     EulerPhi[k]             -> Zeta[s-1]/Zeta[s]
  *     DivisorSigma[0,k] (d)   -> Zeta[s]^2
  *     DivisorSigma[0,k]^2     -> Zeta[s]^4/Zeta[2 s]
@@ -20,7 +22,7 @@
  *
  * Convergence.  Each identity holds only where the series converges.  For a
  * numeric s the series is required to converge absolutely, Re s > sigma_a:
- * sigma_a = 1 for mu, |mu|, mu^2, lambda, d and d^2; 2 for phi; 1 + max(0, Re a)
+ * sigma_a = 1 for mu, |mu|, mu^2, lambda, Lambda, d and d^2; 2 for phi; 1 + max(0, Re a)
  * for sigma_a.  Outside that half-plane the zeta ratio is the analytic
  * continuation, not the sum (EulerPhi[k]/k^(3/2) diverges, while
  * Zeta[1/2]/Zeta[3/2] is a finite negative number), so the stage declines.  The
@@ -119,6 +121,14 @@ static Expr* d_closed_form(Expr* g_base, int g_pow, bool abs_flag,
     /* LiouvilleLambda:  Zeta[2 s]/Zeta[s]. */
     if (g_pow == 1 && !abs_flag && d_is_call1(g_base, SYM_LiouvilleLambda, var)) {
         return d_times2(d_zeta(d_two_s(s)), d_pow(d_zeta(expr_copy(s)), -1));
+    }
+    /* MangoldtLambda:  -Zeta'[s]/Zeta[s]. */
+    if (g_pow == 1 && !abs_flag && d_is_call1(g_base, SYM_MangoldtLambda, var)) {
+        Expr* dz = expr_new_function(
+            expr_new_function(expr_new_symbol(SYM_Derivative), (Expr*[]){ sum_int(1) }, 1),
+            (Expr*[]){ expr_new_symbol(SYM_Zeta) }, 1);
+        Expr* dzs = expr_new_function(dz, (Expr*[]){ expr_copy(s) }, 1);
+        return d_times2(sum_int(-1), d_times2(dzs, d_pow(d_zeta(expr_copy(s)), -1)));
     }
     /* EulerPhi:  Zeta[s-1]/Zeta[s]. */
     if (g_pow == 1 && !abs_flag && d_is_eulerphi(g_base, var)) {
@@ -299,6 +309,6 @@ void sum_dirichlet_init(void) {
     symtab_get_def("Sum`Dirichlet")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Sum`Dirichlet",
         "Sum`Dirichlet[f, i, 1, Infinity] evaluates Dirichlet series Sum[g[i]/i^s] "
-        "for arithmetic functions g (MoebiusMu, LiouvilleLambda, EulerPhi, "
+        "for arithmetic functions g (MoebiusMu, LiouvilleLambda, MangoldtLambda, EulerPhi, "
         "DivisorSigma) as ratios of Riemann zeta values.");
 }
