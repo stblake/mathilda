@@ -29,8 +29,10 @@
  *
  * Accuracy: P2 elements converge as h^3 in the solution and h^4 in the
  * eigenvalues on a smooth problem; a re-entrant corner of angle pi/alpha caps
- * both at h^(2 alpha). The default mesh (MaxCellMeasure -> area/1500, about
- * 3000 quadratic nodes) gives about 7 digits for a smooth eigenvalue.
+ * both at h^(2 alpha). The default NDSolve mesh (MaxCellMeasure -> area/1500,
+ * about 3000 quadratic nodes) gives about 7 digits for a smooth eigenvalue;
+ * NDEigenvalues extrapolates over three nested levels (fem_richardson, finest
+ * area/6000) to about 10.
  *
  * Coefficient and source fields are evaluated at the quadrature points in
  * one batch: compiled (autocompile) when they are in the compilable subset,
@@ -375,6 +377,23 @@ static bool fem_find_opt(const Expr* e, const char* key, double* out) {
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (fem_find_opt(e->data.function.args[i], key, out)) return true;
     return false;
+}
+
+/* The value (borrowed) of the first key -> value inside an option, or NULL. */
+static Expr* fem_find_subopt(Expr* e, const char* key) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if ((head_is(e, SYM_Rule) || head_is(e, SYM_RuleDelayed)) && e->data.function.arg_count == 2) {
+        const Expr* l = e->data.function.args[0];
+        bool hit = (l->type == EXPR_STRING && strcmp(l->data.string, key) == 0)
+                || (l->type == EXPR_SYMBOL && strcmp(l->data.symbol.name, key) == 0);
+        if (hit) return e->data.function.args[1];
+        return fem_find_subopt(e->data.function.args[1], key);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* r = fem_find_subopt(e->data.function.args[i], key);
+        if (r) return r;
+    }
+    return NULL;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1672,6 +1691,21 @@ static bool fem_build_mesh(const FemSpec* F, const FemPde* P, FemMesh* mesh, con
     return ok;
 }
 
+/* The largest cell area of the mesh fem_build_mesh makes for F: the
+ * MaxCellMeasure given, else the region's area / 1500 (-1: no region). */
+static double fem_region_area(const FemSpec* F) {
+    FemGeom g; const char* why = NULL;
+    if (!fem_region(F->region, &g, &why)) return -1;
+    double area = fabs(fem_geom_area(&g));
+    fem_geom_free(&g);
+    return area;
+}
+static double fem_default_area(const FemSpec* F) {
+    if (F->max_area > 0) return F->max_area;
+    double area = fem_region_area(F);
+    return area > 0 ? area / 1500.0 : -1;
+}
+
 static bool fem_is_option(const Expr* e) {
     return (head_is((Expr*)e, SYM_Rule) || head_is((Expr*)e, SYM_RuleDelayed)) && e->data.function.arg_count == 2;
 }
@@ -2164,6 +2198,141 @@ static bool fem_op(void* ctx, const double* x, double* y) {
     return fem_solver_solve(o->F, o->tmp, y);
 }
 
+/* The nev smallest eigenvalues of the assembled pencil K x = lambda M x on
+ * S (ascending, in lam[0 .. nev-1]; plus up to `extra` more beyond them when
+ * converged, count in *nlam), and -- when vec is not NULL -- their
+ * M-normalised eigenvectors over the free nodes (vec[k*nfree + i]). */
+static bool fem_eigen_solve(FemSystem* S, int nev, double** lam_out, int* nlam,
+                            double** vec_out, const char** why) {
+    int64_t n = S->nfree;
+    Csr K, M, Asig;
+    csr_from_coo(&S->K, 0.0, NULL, &K);
+    csr_from_coo(&S->M, 0.0, NULL, &M);
+    /* shift: 0 when K is definite (Dirichlet somewhere), else a small
+     * negative multiple of the spectrum's scale */
+    double sigma = 0.0;
+    FemSolver fsol; memset(&fsol, 0, sizeof fsol);
+    bool fac = false, ok = true;
+    double* xyf = fem_free_xy(S);
+    /* no Dirichlet node: K is singular (the constants), so shift away
+     * from 0 at once -- a factor of the singular K can succeed in
+     * rounding and swamps the Krylov tolerance with a huge 1/theta */
+    bool any_fixed = S->nfree < S->mesh.nn;
+    for (int attempt = any_fixed ? 0 : 1; attempt < 2 && !fac; attempt++) {
+        if (attempt == 1) {
+            double dk = 0, dm = 0;
+            for (int64_t i = 0; i < n; i++)
+                for (int64_t p = K.rp[i]; p < K.rp[i + 1]; p++)
+                    if (K.ci[p] == i) { dk += fabs(K.x[p]); }
+            for (int64_t i = 0; i < n; i++)
+                for (int64_t p = M.rp[i]; p < M.rp[i + 1]; p++)
+                    if (M.ci[p] == i) { dm += fabs(M.x[p]); }
+            /* trace(K)/trace(M)/n: of the order of the smallest
+             * nonzero eigenvalue */
+            sigma = -(dk / (dm > 0 ? dm : 1)) / (double)n;
+            if (sigma == 0.0) sigma = -1.0;
+        }
+        csr_from_coo(&S->K, -sigma, &S->M, &Asig);
+        fac = fem_solver_factor(&fsol, &Asig, S->symmetric, xyf);
+        if (fac && fsol.F && spf_badly_conditioned(fsol.F) && attempt == 0) { fem_solver_free(&fsol); fac = false; }
+        csr_free(&Asig);
+    }
+    free(xyf);
+    if (!fac) { ok = false; *why = "the shifted operator could not be factored"; }
+    KsResult kr; memset(&kr, 0, sizeof kr);
+    if (ok) {
+        FemOp o = { &fsol, &M, malloc(sizeof(double) * (size_t)n) };
+        KsProblem kp; memset(&kp, 0, sizeof kp);
+        kp.n = n; kp.cplx = false; kp.hermitian = false; kp.op = fem_op; kp.ctx = &o;
+        int want = nev + (nev < 4 ? 2 : 3);       /* guard pairs for clusters */
+        if (want > n) want = (int)n;
+        kp.nev = want; kp.which = KS_LM; kp.ncv = 0; kp.maxit = 0; kp.tol = 1e-13;
+        kp.v0 = NULL; kp.want_vectors = true;
+        KsStatus ks = ks_solve(&kp, &kr);
+        free(o.tmp);
+        if ((ks != KS_OK && ks != KS_MAXIT) || kr.nconv < nev) {
+            ok = false; *why = "the eigensolver did not converge";
+        }
+    }
+    fem_solver_free(&fsol);
+    if (ok) {
+        int nc = kr.nconv;
+        double* lam = malloc(sizeof(double) * (size_t)nc);
+        double* vec = malloc(sizeof(double) * (size_t)nc * (size_t)n);
+        double* Kx = malloc(sizeof(double) * (size_t)n);
+        double* Mx = malloc(sizeof(double) * (size_t)n);
+        for (int k = 0; k < nc; k++) {
+            double* v = vec + (size_t)k * (size_t)n;
+            for (int64_t i = 0; i < n; i++)
+                v[i] = kr.vec_cplx ? kr.vec[2 * ((size_t)k * (size_t)n + (size_t)i)] : kr.vec[(size_t)k * (size_t)n + (size_t)i];
+            csr_mv(&K, v, Kx); csr_mv(&M, v, Mx);
+            double num = 0, den = 0, sum = 0;
+            for (int64_t i = 0; i < n; i++) { num += v[i] * Kx[i]; den += v[i] * Mx[i]; sum += Mx[i]; }
+            lam[k] = den > 0 ? num / den : sigma + 1.0 / kr.re[k];
+            double sc = den > 0 ? 1.0 / sqrt(den) : 1.0;
+            if (sum < 0) sc = -sc;
+            for (int64_t i = 0; i < n; i++) v[i] *= sc;
+        }
+        /* ascending order */
+        int* ord = malloc(sizeof(int) * (size_t)nc);
+        for (int k = 0; k < nc; k++) ord[k] = k;
+        for (int a = 1; a < nc; a++) {
+            int t = ord[a], b = a - 1;
+            while (b >= 0 && lam[ord[b]] > lam[t]) { ord[b + 1] = ord[b]; b--; }
+            ord[b + 1] = t;
+        }
+        double* ls = malloc(sizeof(double) * (size_t)nc);
+        for (int k = 0; k < nc; k++) ls[k] = lam[ord[k]];
+        *lam_out = ls; *nlam = nc;
+        if (vec_out) {
+            double* vs = malloc(sizeof(double) * (size_t)nev * (size_t)(n ? n : 1));
+            for (int k = 0; k < nev; k++)
+                memcpy(vs + (size_t)k * (size_t)n, vec + (size_t)ord[k] * (size_t)n, sizeof(double) * (size_t)n);
+            *vec_out = vs;
+        }
+        free(ord); free(lam); free(vec); free(Kx); free(Mx);
+    }
+    ks_result_free(&kr);
+    csr_free(&K); csr_free(&M);
+    return ok;
+}
+
+/* Richardson extrapolation of the eigenvalues over a nested hierarchy of
+ * meshes: lv[0] from a Delaunay mesh, lv[l] from its l-th uniform refinement
+ * (h halved in every element at each level), lv[nlev-1] the finest.  On a
+ * smooth problem the P2 eigenvalue error expands as c4 h^4 + c5 h^5 + ...
+ * (measured: successive error ratios 15.25, 15.63, 15.82 -> 16, the gap
+ * halving with h); the Romberg table on the exponents 4, 5 cancels both
+ * terms, taking the square's lambda_1 from 5e-7 to 3e-12 relative at
+ * MaxCellMeasure 2e-4.  Conforming nested spaces give lv[l] >= lv[l+1] >=
+ * lambda index by index (min-max), so the sorted lists pair; only the finest
+ * levels whose values decrease, each within 5% of the next (in the
+ * asymptotic range), enter the table, and an eigenvalue with no such pair
+ * keeps its finest value.  At a singular corner (error C h^p, p < 4) the
+ * same table still shrinks the error. The result replaces lv[nlev-1][k]. */
+#define FEM_EXTRAP_MAX 4
+#define FEM_EXTRAP_LEVELS 3
+static void fem_richardson(double** lv, int nlev, int n) {
+    for (int k = 0; k < n; k++) {
+        double T[FEM_EXTRAP_MAX];
+        int f = nlev - 1, lo = f;
+        /* the finest levels whose values decrease monotonically, each
+         * within 5% of the next */
+        while (lo > 0) {
+            double d = lv[lo - 1][k] - lv[lo][k];
+            if (!(d >= -1e-12 * fabs(lv[lo][k])) || !(fabs(d) <= 0.05 * fabs(lv[lo][k]))) break;
+            lo--;
+        }
+        int m = f - lo + 1;
+        for (int l = 0; l < m; l++) T[l] = lv[lo + l][k];
+        for (int j = 1; j < m; j++) {
+            double r = ldexp(1.0, 4 + (j - 1)) - 1.0;
+            for (int l = m - 1; l >= j; l--) T[l] += (T[l] - T[l - 1]) / r;
+        }
+        lv[f][k] = T[m - 1];
+    }
+}
+
 static Expr* fem_eigen(Expr* res, bool want_vectors) {
     const char* head = want_vectors ? "NDEigensystem" : "NDEigenvalues";
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 4) return NULL;
@@ -2209,119 +2378,101 @@ static Expr* fem_eigen(Expr* res, bool want_vectors) {
         double z;
         if (!(fem_num(P.dc_val[k], &z) && z == 0.0)) { ok = false; why = "an eigenvalue problem needs homogeneous DirichletConditions (u == 0)"; }
     }
+    /* The mesh: the requested one (MaxCellMeasure; by default area/6000) is
+     * the twice-refined Delaunay mesh sixteen times coarser, the eigenvalues
+     * are extrapolated over the three levels (fem_richardson), and the
+     * eigenfunctions are those of the finest level.
+     * Method -> {"FiniteElement", "Extrapolation" -> False} solves on the
+     * Delaunay mesh of the requested size alone (default area/1500). */
+    bool extrap = true;
+    for (size_t i = 4; i < argc; i++) {
+        Expr* v = fem_is_option(A[i]) ? fem_find_subopt(A[i], "Extrapolation") : NULL;
+        if (v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False) extrap = false;
+    }
     FemSystem S; memset(&S, 0, sizeof S);
-    if (ok) ok = fem_build_mesh(&F, &P, &S.mesh, &why);
+    /* the coarser levels of the hierarchy, coarsest first */
+    FemSystem Sl[FEM_EXTRAP_MAX]; memset(Sl, 0, sizeof Sl);
+    int nlev = extrap ? FEM_EXTRAP_LEVELS : 1;
+    if (ok && nlev > 1) {
+        FemSpec Fc = F;
+        double scale = 1.0;
+        for (int l = 1; l < nlev; l++) scale *= 4.0;
+        /* the finest level: the MaxCellMeasure given, else a quarter of the
+         * plain default (area/6000), so the coarsest level is no coarser
+         * than area/375 and still in the asymptotic range */
+        double afine = F.max_area > 0 ? F.max_area : fem_default_area(&F) / 4.0;
+        Fc.max_area = afine * scale;
+        if (Fc.max_bedge > 0) Fc.max_bedge *= sqrt(scale);
+        ok = fem_build_mesh(&Fc, &P, &Sl[0].mesh, &why);
+        /* A boundary with many short sides (a Koch polygon) forces the
+         * coarse mesh far below the requested size, and each refinement
+         * quadruples it: keep the finest level within 4x the elements of a
+         * plain mesh of the requested size (estimated: the larger of the
+         * coarse mesh and 2 area / afine). */
+        if (ok) {
+            double area = fem_region_area(&F);
+            double ne_c = (double)Sl[0].mesh.ne, est = 2.0 * area / afine;
+            if (ne_c > est) est = ne_c;
+            while (nlev > 1 && ne_c * pow(4.0, nlev - 1) > 4.0 * est) nlev--;
+            if (nlev == 1) { S.mesh = Sl[0].mesh; memset(&Sl[0].mesh, 0, sizeof Sl[0].mesh); }
+        }
+        for (int l = 1; l < nlev && ok; l++) {
+            FemMesh* dst = l == nlev - 1 ? &S.mesh : &Sl[l].mesh;
+            if (!fem_mesh_refine(l == 1 ? &Sl[0].mesh : &Sl[l - 1].mesh, dst)) {
+                ok = false; why = "the mesh could not be refined";
+            }
+        }
+    } else if (ok) ok = fem_build_mesh(&F, &P, &S.mesh, &why);
     if (ok) ok = fem_assemble(&P, &S, true, false, &why);
     if (ok && nev > S.nfree) { ok = false; why = "more eigenvalues were requested than the discretization has"; }
     Expr* out = NULL;
+    double* lam = NULL; double* vec = NULL; int nlam = 0;
+    if (ok) ok = fem_eigen_solve(&S, nev, &lam, &nlam, want_vectors ? &vec : NULL, &why);
+    if (ok && nlev > 1) {
+        /* the coarse partners; when one cannot be solved the fine values stand */
+        double* lv[FEM_EXTRAP_MAX] = { NULL };
+        bool all = true;
+        for (int l = 0; l + 1 < nlev && all; l++) {
+            const char* why_c = NULL; int nlc = 0;
+            all = fem_assemble(&P, &Sl[l], true, false, &why_c) && nev <= Sl[l].nfree
+                  && fem_eigen_solve(&Sl[l], nev, &lv[l], &nlc, NULL, &why_c);
+        }
+        if (all) {
+            lv[nlev - 1] = lam;
+            fem_richardson(lv, nlev, nev);
+        }
+        for (int l = 0; l + 1 < nlev; l++) free(lv[l]);
+    }
     if (ok) {
         int64_t n = S.nfree;
-        Csr K, M, Asig;
-        csr_from_coo(&S.K, 0.0, NULL, &K);
-        csr_from_coo(&S.M, 0.0, NULL, &M);
-        /* shift: 0 when K is definite (Dirichlet somewhere), else a small
-         * negative multiple of the spectrum's scale */
-        double sigma = 0.0;
-        FemSolver fsol; memset(&fsol, 0, sizeof fsol);
-        bool fac = false;
-        double* xyf = fem_free_xy(&S);
-        /* no Dirichlet node: K is singular (the constants), so shift away
-         * from 0 at once -- a factor of the singular K can succeed in
-         * rounding and swamps the Krylov tolerance with a huge 1/theta */
-        bool any_fixed = S.nfree < S.mesh.nn;
-        for (int attempt = any_fixed ? 0 : 1; attempt < 2 && !fac; attempt++) {
-            if (attempt == 1) {
-                double dk = 0, dm = 0;
-                for (int64_t i = 0; i < n; i++)
-                    for (int64_t p = K.rp[i]; p < K.rp[i + 1]; p++)
-                        if (K.ci[p] == i) { dk += fabs(K.x[p]); }
-                for (int64_t i = 0; i < n; i++)
-                    for (int64_t p = M.rp[i]; p < M.rp[i + 1]; p++)
-                        if (M.ci[p] == i) { dm += fabs(M.x[p]); }
-                /* trace(K)/trace(M)/n: of the order of the smallest
-                 * nonzero eigenvalue */
-                sigma = -(dk / (dm > 0 ? dm : 1)) / (double)n;
-                if (sigma == 0.0) sigma = -1.0;
-            }
-            csr_from_coo(&S.K, -sigma, &S.M, &Asig);
-            fac = fem_solver_factor(&fsol, &Asig, S.symmetric, xyf);
-            if (fac && fsol.F && spf_badly_conditioned(fsol.F) && attempt == 0) { fem_solver_free(&fsol); fac = false; }
-            csr_free(&Asig);
-        }
-        free(xyf);
-        if (!fac) { ok = false; why = "the shifted operator could not be factored"; }
-        KsResult kr; memset(&kr, 0, sizeof kr);
-        if (ok) {
-            FemOp o = { &fsol, &M, malloc(sizeof(double) * (size_t)n) };
-            KsProblem kp; memset(&kp, 0, sizeof kp);
-            kp.n = n; kp.cplx = false; kp.hermitian = false; kp.op = fem_op; kp.ctx = &o;
-            int want = nev + (nev < 4 ? 2 : 3);       /* guard pairs for clusters */
-            if (want > n) want = (int)n;
-            kp.nev = want; kp.which = KS_LM; kp.ncv = 0; kp.maxit = 0; kp.tol = 1e-13;
-            kp.v0 = NULL; kp.want_vectors = true;
-            KsStatus ks = ks_solve(&kp, &kr);
-            free(o.tmp);
-            if ((ks != KS_OK && ks != KS_MAXIT) || kr.nconv < nev) {
-                ok = false; why = "the eigensolver did not converge";
-            }
-        }
-        fem_solver_free(&fsol);
-        if (ok) {
-            int nc = kr.nconv;
-            double* lam = malloc(sizeof(double) * (size_t)nc);
-            double* vec = malloc(sizeof(double) * (size_t)nc * (size_t)n);
-            double* Kx = malloc(sizeof(double) * (size_t)n);
-            double* Mx = malloc(sizeof(double) * (size_t)n);
-            for (int k = 0; k < nc; k++) {
-                double* v = vec + (size_t)k * (size_t)n;
-                for (int64_t i = 0; i < n; i++)
-                    v[i] = kr.vec_cplx ? kr.vec[2 * ((size_t)k * (size_t)n + (size_t)i)] : kr.vec[(size_t)k * (size_t)n + (size_t)i];
-                csr_mv(&K, v, Kx); csr_mv(&M, v, Mx);
-                double num = 0, den = 0, sum = 0;
-                for (int64_t i = 0; i < n; i++) { num += v[i] * Kx[i]; den += v[i] * Mx[i]; sum += Mx[i]; }
-                lam[k] = den > 0 ? num / den : sigma + 1.0 / kr.re[k];
-                double sc = den > 0 ? 1.0 / sqrt(den) : 1.0;
-                if (sum < 0) sc = -sc;
-                for (int64_t i = 0; i < n; i++) v[i] *= sc;
-            }
-            /* ascending order */
-            int* ord = malloc(sizeof(int) * (size_t)nc);
-            for (int k = 0; k < nc; k++) ord[k] = k;
-            for (int a = 1; a < nc; a++) {
-                int t = ord[a], b = a - 1;
-                while (b >= 0 && lam[ord[b]] > lam[t]) { ord[b + 1] = ord[b]; b--; }
-                ord[b + 1] = t;
-            }
-            Expr** vals = malloc(sizeof(Expr*) * (size_t)nev);
-            for (int k = 0; k < nev; k++) vals[k] = expr_new_real(lam[ord[k]]);
-            Expr* vlist = fem_list(vals, (size_t)nev);
-            free(vals);
-            if (!want_vectors) out = vlist;
-            else {
-                Expr* meshE = fem_mesh_expr(&S.mesh, F.region);
-                Expr** fs = malloc(sizeof(Expr*) * (size_t)nev);
-                double* U = malloc(sizeof(double) * (size_t)S.mesh.nn);
-                for (int k = 0; k < nev; k++) {
-                    const double* v = vec + (size_t)ord[k] * (size_t)n;
-                    for (int64_t i = 0; i < S.mesh.nn; i++) U[i] = S.map[i] >= 0 ? v[S.map[i]] : 0.0;
-                    Expr* ifun = fem_function_expr(meshE, &S.mesh, U);
-                    if (F.applied) {
-                        Expr* ar[2] = { expr_new_symbol(F.xv), expr_new_symbol(F.yv) };
-                        ifun = expr_new_function(ifun, ar, 2);
-                    }
-                    fs[k] = ifun;
+        Expr** vals = malloc(sizeof(Expr*) * (size_t)nev);
+        for (int k = 0; k < nev; k++) vals[k] = expr_new_real(lam[k]);
+        Expr* vlist = fem_list(vals, (size_t)nev);
+        free(vals);
+        if (!want_vectors) out = vlist;
+        else {
+            Expr* meshE = fem_mesh_expr(&S.mesh, F.region);
+            Expr** fs = malloc(sizeof(Expr*) * (size_t)nev);
+            double* U = malloc(sizeof(double) * (size_t)S.mesh.nn);
+            for (int k = 0; k < nev; k++) {
+                const double* v = vec + (size_t)k * (size_t)n;
+                for (int64_t i = 0; i < S.mesh.nn; i++) U[i] = S.map[i] >= 0 ? v[S.map[i]] : 0.0;
+                Expr* ifun = fem_function_expr(meshE, &S.mesh, U);
+                if (F.applied) {
+                    Expr* ar[2] = { expr_new_symbol(F.xv), expr_new_symbol(F.yv) };
+                    ifun = expr_new_function(ifun, ar, 2);
                 }
-                free(U);
-                expr_free(meshE);
-                Expr* pair[2] = { vlist, fem_list(fs, (size_t)nev) };
-                free(fs);
-                out = fem_list(pair, 2);
+                fs[k] = ifun;
             }
-            free(ord); free(lam); free(vec); free(Kx); free(Mx);
+            free(U);
+            expr_free(meshE);
+            Expr* pair[2] = { vlist, fem_list(fs, (size_t)nev) };
+            free(fs);
+            out = fem_list(pair, 2);
         }
-        ks_result_free(&kr);
-        csr_free(&K); csr_free(&M);
     }
+    free(lam); free(vec);
+    for (int l = 0; l < FEM_EXTRAP_MAX; l++) fem_system_free(&Sl[l]);
     if (!ok && why) mth_message(head, "femfail", "%s.", why);
     fem_system_free(&S);
     fem_pde_free(&P);
@@ -2363,7 +2514,9 @@ void fem_init(void) {
         "\ton the region reg (Rectangle, Polygon, Triangle, Disk or a sector, Annulus), by quadratic\n"
         "\tfinite elements. Edges without a DirichletCondition have the natural (zero Neumann)\n"
         "\tcondition. Method -> {\"PDEDiscretization\" -> {\"FiniteElement\", {\"MeshOptions\" ->\n"
-        "\t{\"MaxCellMeasure\" -> a}}}} sets the largest triangle area.");
+        "\t{\"MaxCellMeasure\" -> a}}}} sets the largest triangle area. The eigenvalues are\n"
+        "\tRichardson-extrapolated over the mesh and its two uniform coarsenings; the sub-option\n"
+        "\t\"Extrapolation\" -> False solves on the one mesh.");
     symtab_set_docstring("NDEigensystem",
         "NDEigensystem[{op, DirichletCondition[...]}, u[x, y], {x, y} ∈ reg, n] gives\n"
         "\t{{lambda1, ..., lambdan}, {f1, ..., fn}}: the n smallest eigenvalues of op on reg and their\n"

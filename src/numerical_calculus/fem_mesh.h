@@ -97,6 +97,14 @@ typedef struct {
 bool fem_mesh_build(const FemGeom* g, const FemMeshOpts* o, FemMesh* m, const char** why);
 void fem_mesh_free(FemMesh* m);
 
+/* Uniform refinement: every element split into four through its six P2
+ * nodes (which become the refined mesh's vertices, same indices), the new
+ * midside nodes by the parent's quadratic map -- on a curved boundary edge,
+ * on the circle through that edge's three nodes. The refined mesh is nested
+ * in the parent, so h is exactly halved element by element (what Richardson
+ * extrapolation in h needs). False on allocation failure. */
+bool fem_mesh_refine(const FemMesh* in, FemMesh* out);
+
 /* Signed area of the region described by g (holes subtract). */
 double fem_geom_area(const FemGeom* g);
 

@@ -341,6 +341,41 @@ static void test_contourplot(void) {
               "{x, y} \\[Element] Disk[]]], _Line, Infinity]]", 2 * PI * 2.404825557695773 / 5.520078110286311, 2e-5);
 }
 
+/* ---------------- Richardson extrapolation of the eigenvalues ---------------- */
+static void test_extrapolation(void) {
+    /* three nested levels (a Delaunay mesh refined twice), Romberg on h^4, h^5:
+     * the plain default mesh gives 5e-7 .. 1e-5 */
+    check_rel("extrapolated square lambda1", "First[" EIG("Rectangle[]", "1") "]", 2 * PI * PI, 3e-9);
+    check_rel("extrapolated square lambda4", "Last[" EIG("Rectangle[]", "4") "]", 8 * PI * PI, 3e-9);
+    check_rel("extrapolated equilateral triangle lambda4 = 64 pi^2/3",
+              "Last[" EIG("Polygon[{{0, 0}, {1, 0}, {1/2, Sqrt[3]/2}}]", "4") "]", 64 * PI * PI / 3, 3e-9);
+    check_rel("extrapolated disk lambda1 = j01^2 (curved boundary)", "First[" EIG("Disk[]", "1") "]",
+              5.783185962946784, 3e-9);
+    check_rel("extrapolated quarter disk lambda1 = j21^2",
+              "First[" EIG("Disk[{0, 0}, 1, {0, Pi/2}]", "1") "]", 26.374616427163390770, 3e-9);
+    check_rel("extrapolated annulus lambda1", "First[" EIG("Annulus[{0, 0}, {1/2, 1}]", "1") "]",
+              39.013288499002859643, 3e-8);
+    check_rel("extrapolated L-shape lambda3 = 2 pi^2",
+              "Last[" EIG("Polygon[{{0, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 2}, {0, 2}}]", "3") "]", 2 * PI * PI, 3e-9);
+    /* a re-entrant corner: still no worse than the plain mesh */
+    check_rel("extrapolated L-shape lambda1 (singular corner)",
+              "First[" EIG("Polygon[{{0, 0}, {2, 0}, {2, 1}, {1, 1}, {1, 2}, {0, 2}}]", "1") "]",
+              9.6397238440219410527, 1e-6);
+    /* the plain single mesh on request */
+    double v;
+    bool ok = eval_double("First[NDEigenvalues[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, "
+                          "u[x, y], {x, y} \\[Element] Rectangle[], 1, "
+                          "Method -> {\"FiniteElement\", \"Extrapolation\" -> False}]]", &v);
+    double err = ok ? fabs(v / (2 * PI * PI) - 1) : 1;
+    check_true("\"Extrapolation\" -> False: one mesh (error ~5e-7, not ~1e-10)", ok && err > 1e-8 && err < 2e-6,
+               "plain P2 error");
+    /* NDEigensystem: extrapolated values, eigenfunctions of the finest mesh */
+    run("esx = NDEigensystem[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, "
+        "u[x, y], {x, y} \\[Element] Rectangle[], 1];");
+    check_rel("NDEigensystem extrapolated value", "esx[[1, 1]]", 2 * PI * PI, 3e-9);
+    check_abs("NDEigensystem eigenfunction on the finest mesh", "esx[[2, 1]] /. {x -> 0.5, y -> 0.5}", 2.0, 2e-6);
+}
+
 /* ---------------- 1-D NIntegrate along a path through a mesh ---------------- */
 static void test_nintegrate_path(void) {
     /* u = x (2 - x) exactly (natural condition at x = 1): Int_0^1 u(1, y) dy = 1 */
@@ -398,6 +433,7 @@ int main(void) {
     test_ndsolve();
     test_nintegrate();
     test_contourplot();
+    test_extrapolation();
     test_nintegrate_path();
     test_dirichlet_closure();
     test_declines();

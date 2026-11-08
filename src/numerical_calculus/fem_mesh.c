@@ -736,6 +736,147 @@ void fem_mesh_free(FemMesh* m) {
     memset(m, 0, sizeof *m);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Uniform refinement                                                 */
+/* ------------------------------------------------------------------ */
+
+/* The parent element's quadratic map at reference point (s, r). */
+static void p2_map(const double* X, const double* Y, double s, double r, double* x, double* y) {
+    double l0 = 1.0 - s - r, l1 = s, l2 = r;
+    double N[6] = { l0 * (2 * l0 - 1), l1 * (2 * l1 - 1), l2 * (2 * l2 - 1),
+                    4 * l0 * l1, 4 * l1 * l2, 4 * l2 * l0 };
+    *x = 0; *y = 0;
+    for (int k = 0; k < 6; k++) { *x += N[k] * X[k]; *y += N[k] * Y[k]; }
+}
+
+/* The point of the circle through a, m, b (a boundary edge of the mesh with
+ * its midside node m) halfway in angle between a and m; false when the three
+ * are collinear (a straight edge). */
+static bool arc_mid(double ax, double ay, double mx, double my, double bx, double by,
+                    double* x, double* y) {
+    double d = 2.0 * (ax * (my - by) + mx * (by - ay) + bx * (ay - my));
+    double L2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+    double dev = fabs((mx - ax) * (by - ay) - (my - ay) * (bx - ax));   /* |cross| */
+    if (!(L2 > 0) || dev <= 1e-12 * L2) return false;
+    double a2 = ax * ax + ay * ay, m2 = mx * mx + my * my, b2 = bx * bx + by * by;
+    double cx = (a2 * (my - by) + m2 * (by - ay) + b2 * (ay - my)) / d;
+    double cy = (a2 * (bx - mx) + m2 * (ax - bx) + b2 * (mx - ax)) / d;
+    double r = sqrt((ax - cx) * (ax - cx) + (ay - cy) * (ay - cy));
+    double ta = atan2(ay - cy, ax - cx), tm = atan2(my - cy, mx - cx);
+    double dt = tm - ta;
+    while (dt > M_PI) dt -= 2 * M_PI;
+    while (dt <= -M_PI) dt += 2 * M_PI;
+    *x = cx + r * cos(ta + 0.5 * dt);
+    *y = cy + r * sin(ta + 0.5 * dt);
+    return true;
+}
+
+bool fem_mesh_refine(const FemMesh* in, FemMesh* out) {
+    memset(out, 0, sizeof *out);
+    int64_t ne = 4 * in->ne, nvert = in->nn;
+    int64_t cap = nvert + 3 * ne;
+    double* X = malloc(sizeof(double) * 2 * (size_t)cap);
+    int64_t* tri = malloc(sizeof(int64_t) * 6 * (size_t)ne);
+    unsigned char* curved = calloc((size_t)ne, 1);
+    int64_t* bedge = malloc(sizeof(int64_t) * 3 * (size_t)(2 * in->nb + 1));
+    if (!X || !tri || !curved || !bedge) { free(X); free(tri); free(curved); free(bedge); return false; }
+    memcpy(X, in->x, sizeof(double) * 2 * (size_t)in->nn);
+    /* boundary edges of the parent: their child edges' midside nodes go on
+     * the circle through the parent edge's three nodes */
+    int64_t bcap = 1; while (bcap < 4 * in->nb + 4) bcap <<= 1;
+    int64_t* bk = malloc(sizeof(int64_t) * (size_t)bcap);
+    for (int64_t i = 0; i < bcap; i++) bk[i] = -1;
+    for (int64_t b = 0; b < in->nb; b++) {
+        int64_t key = ekey((int)in->bedge[3 * b], (int)in->bedge[3 * b + 1]);
+        uint64_t h = hmix(key) & (uint64_t)(bcap - 1);
+        while (bk[h] != -1 && bk[h] != key) h = (h + 1) & (uint64_t)(bcap - 1);
+        bk[h] = key;
+    }
+    int64_t ecap = 1; while (ecap < 4 * (3 * ne)) ecap <<= 1;
+    int64_t* ek = malloc(sizeof(int64_t) * (size_t)ecap);
+    int64_t* ev = malloc(sizeof(int64_t) * (size_t)ecap);
+    for (int64_t i = 0; i < ecap; i++) ek[i] = -1;
+    /* reference coordinates of the parent's six nodes */
+    static const double RS[6][2] = { {0, 0}, {1, 0}, {0, 1}, {0.5, 0}, {0.5, 0.5}, {0, 0.5} };
+    /* children as parent-node indices, counter-clockwise */
+    static const int CH[4][3] = { {0, 3, 5}, {3, 1, 4}, {5, 4, 2}, {3, 4, 5} };
+    /* the parent edge (vertex pair) a half-edge lies on, -1 interior */
+    int64_t nn = nvert, e2 = 0;
+    for (int64_t e = 0; e < in->ne; e++) {
+        const int64_t* t = in->tri + 6 * e;
+        double PX[6], PY[6];
+        for (int k = 0; k < 6; k++) { PX[k] = in->x[2 * t[k]]; PY[k] = in->x[2 * t[k] + 1]; }
+        for (int c = 0; c < 4; c++, e2++) {
+            int64_t* ct = tri + 6 * e2;
+            for (int k = 0; k < 3; k++) ct[k] = t[CH[c][k]];
+            bool cv = false;
+            for (int k = 0; k < 3; k++) {
+                int pa = CH[c][k], pb = CH[c][(k + 1) % 3];
+                int64_t a = t[pa], b = t[pb];
+                int64_t key = ekey((int)a, (int)b);
+                uint64_t h = hmix(key) & (uint64_t)(ecap - 1);
+                while (ek[h] != -1 && ek[h] != key) h = (h + 1) & (uint64_t)(ecap - 1);
+                int64_t node;
+                if (ek[h] == key) node = ev[h];
+                else {
+                    node = nn++;
+                    ek[h] = key; ev[h] = node;
+                    double x, y;
+                    p2_map(PX, PY, 0.5 * (RS[pa][0] + RS[pb][0]), 0.5 * (RS[pa][1] + RS[pb][1]), &x, &y);
+                    /* a half of a parent boundary edge: (vertex, midside) */
+                    int pv = pa < 3 ? pa : pb, pm = pa < 3 ? pb : pa;
+                    if (pv < 3 && pm >= 3) {
+                        int q = pm - 3;                    /* parent edge (q, q+1) */
+                        int64_t va = t[q], vb = t[(q + 1) % 3];
+                        int64_t pk = ekey((int)va, (int)vb);
+                        uint64_t hb = hmix(pk) & (uint64_t)(bcap - 1);
+                        while (bk[hb] != -1 && bk[hb] != pk) hb = (hb + 1) & (uint64_t)(bcap - 1);
+                        if (bk[hb] == pk) {
+                            /* the circle through the edge's three nodes, from vertex pv */
+                            int64_t vo = t[pv] == va ? vb : va;
+                            double ax = in->x[2 * t[pv]], ay = in->x[2 * t[pv] + 1];
+                            double mx = in->x[2 * t[pm]], my = in->x[2 * t[pm] + 1];
+                            double bx = in->x[2 * vo], by = in->x[2 * vo + 1];
+                            double qx, qy;
+                            if (arc_mid(ax, ay, mx, my, bx, by, &qx, &qy)) { x = qx; y = qy; }
+                        }
+                    }
+                    X[2 * node] = x; X[2 * node + 1] = y;
+                }
+                ct[3 + k] = node;
+                double ax = X[2 * a], ay = X[2 * a + 1], bx = X[2 * b], by = X[2 * b + 1];
+                double dx = X[2 * node] - 0.5 * (ax + bx), dy = X[2 * node + 1] - 0.5 * (ay + by);
+                double L2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+                if (dx * dx + dy * dy > 1e-24 * L2) cv = true;
+            }
+            curved[e2] = cv;
+        }
+    }
+    /* boundary edges: each parent edge (a, b, m) -> (a, m) and (m, b) */
+    int64_t nb = 0;
+    for (int64_t b = 0; b < in->nb; b++) {
+        int64_t va = in->bedge[3 * b], vb = in->bedge[3 * b + 1], vm = in->bedge[3 * b + 2];
+        int64_t pr[2][2] = { { va, vm }, { vm, vb } };
+        for (int j = 0; j < 2; j++) {
+            int64_t key = ekey((int)pr[j][0], (int)pr[j][1]);
+            uint64_t h = hmix(key) & (uint64_t)(ecap - 1);
+            while (ek[h] != -1 && ek[h] != key) h = (h + 1) & (uint64_t)(ecap - 1);
+            if (ek[h] != key) continue;
+            bedge[3 * nb] = pr[j][0]; bedge[3 * nb + 1] = pr[j][1]; bedge[3 * nb + 2] = ev[h];
+            nb++;
+        }
+    }
+    free(ek); free(ev); free(bk);
+    out->nn = nn; out->ne = ne; out->nb = nb; out->nvert = nvert;
+    out->x = realloc(X, sizeof(double) * 2 * (size_t)nn);
+    out->tri = tri; out->curved = curved; out->bedge = bedge;
+    out->bnode = calloc((size_t)nn, 1);
+    for (int64_t b = 0; b < nb; b++)
+        for (int k = 0; k < 3; k++) out->bnode[bedge[3 * b + k]] = 1;
+    memcpy(out->bbox, in->bbox, sizeof out->bbox);
+    return true;
+}
+
 bool fem_mesh_build(const FemGeom* g, const FemMeshOpts* o, FemMesh* out, const char** why) {
     memset(out, 0, sizeof *out);
     *why = NULL;

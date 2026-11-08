@@ -2048,12 +2048,34 @@ iteration (ARPACK or the native Krylov–Schur) on `(K - σM)⁻¹M` with `σ = 
 (`σ < 0` when no node is fixed), each eigenvalue then refined as the Rayleigh
 quotient `x·K·x / x·M·x`; returned in increasing order.
 
+**Richardson extrapolation of the eigenvalues.** `NDEigenvalues` and
+`NDEigensystem` solve on a hierarchy of three nested meshes — a Delaunay mesh of
+cell measure `16a` and its two uniform refinements (every quadratic triangle split
+into four through its six nodes, the new midside nodes by the parent's quadratic
+map, on a curved side on the circle through the side's three nodes;
+`fem_mesh_refine`), the finest of measure `a` (`MaxCellMeasure`, by default
+`area/6000`) — and Romberg-extrapolate each eigenvalue on the error exponents 4
+and 5. Measured on the square, the error ratios of successive levels are 15.25,
+15.63, 15.82 → 16 (the `h⁵` term halving), and the table takes `λ₁` from 5e-7 to
+3e-12 relative at `MaxCellMeasure -> 2·10⁻⁴`. Conforming nested spaces give
+`λ_coarse ≥ λ_fine ≥ λ` index by index (min-max), so the sorted lists pair; only
+the finest levels whose values decrease, each within 5% of the next, enter the
+table, and an eigenvalue without such a pair keeps its finest value. At a
+singular corner (`C h^p`, `p < 4`) the table still shrinks the error. A boundary
+with many short sides (the Koch prefractal) forces the coarse mesh below the
+requested size; the refinements are then cut so the finest level stays within 4×
+the elements of a plain mesh. The eigenfunctions are those of the finest level.
+`Method -> {"FiniteElement", "Extrapolation" -> False}` solves on one Delaunay mesh
+of the requested size (default `area/1500`), as before.
+
 **Results.** Eigenfunctions are normalized to unit `L²` norm with a positive
 mean; `NDEigensystem[..., u[x, y], ...]` gives `InterpolatingFunction[...][x, y]`,
 `NDEigensystem[..., u, ...]` the function objects. The `InterpolatingFunction`
 of a mesh, `InterpolatingFunction[domain, NDSolve`FEM`MeshFunction[mesh, values]]`,
 evaluates by locating the point in its triangle (a bucket grid over the elements,
-the isoparametric map inverted by Newton's method on curved elements); it
+the isoparametric map inverted by Newton's method on curved elements; a Newton
+that has not converged — a point several elements away, where the quadratic map
+folds — falls back to the affine estimate instead of claiming the point); it
 accepts numbers or equal-length vectors of coordinates, `Derivative[i, j]` of
 total order up to 2 (up to 1 on curved elements), and the properties
 `"Domain"`, `"Coordinates"`, `"ValuesOnGrid"`, `"ElementMesh"`. A point outside
@@ -2062,22 +2084,42 @@ the mesh is extrapolated from the nearest element with
 functions over their own region (`{x, y} ∈ reg`, or the ranges of a rectangle)
 integrates element by element with the same rule — exact for the quadratic
 function itself, where the adaptive cubature fought the kinks between elements
-(0.16 s against 6.8 s on a 30 000-element mesh).
+(0.16 s against 6.8 s on a 30 000-element mesh). A **one-dimensional**
+`NIntegrate[f, {t, a, b}]` whose integrand applies such functions at points that
+move with `t` — along a side (`s[1, y]`), a diagonal, a circle
+(`s[r Cos[p], r Sin[p]]`) — cuts `[a, b]` where the path crosses an element edge
+and applies 10-point Gauss–Legendre on each piece. A piece is kink-free when the
+element of an inner point holds both its ends (pairwise sharing is not enough:
+points on mesh vertices share elements pairwise around fans); pieces are split
+off-centre, so the splits do not land on vertices (a mesher halving an arc puts
+them at the dyadic points of a uniform parametrisation), and a breakpoint goes
+where the element changes between consecutive kink-free pieces. Exact to
+rounding for a quadratic function on a straight path (4.7e-14 against 1 for
+`∫₀¹ s(1, y) dy`); on the inner boundary circle of an annulus it agrees with the
+adaptive rule and a 400 000-point trapezoid sum to 1e-15; 1–6 ms, and the same at any
+`WorkingPrecision` — where the adaptive rule had chased the kinks until the
+benchmark's 90 s timeout (SIAM holdout hd14.6/hd14.10 at `WorkingPrecision -> 60`).
+A mesh function applied to a scalar and a vector coordinate broadcasts the scalar.
 
 **Precision.** Machine precision. As in the reference, `WorkingPrecision` is not
 an option of `NDEigenvalues`/`NDEigensystem` (`::woptx`, then computed at machine
 precision); `NDSolve` over a region computes at machine precision whatever its
 `WorkingPrecision`.
 
-**Accuracy and speed** (default mesh, relative errors against closed forms,
-times including the mesh): square `λ1` 4.7e-7 (0.06 s; the reference's default
+**Accuracy and speed** (default settings, relative errors against closed forms,
+times including the meshes): extrapolated, square `λ₄` 1.1e-10 (0.43 s), disk
+`λ₁` 1.1e-10 (0.37 s), quarter disk `λ₁` 1.2e-10, equilateral triangle `λ₄` 5e-12,
+annulus `1/2 < r < 1` `λ₁` 3e-9, L-shape `λ₃` 6e-10 and its singular `λ₁` 3.9e-7
+(1.4 s); on the SIAM holdout eigenvalue family 4–6 digits → 7–11. With
+`"Extrapolation" -> False`: square `λ1` 4.7e-7 (0.06 s; the reference's default
 8.5e-7 in 0.38 s), disk `λ1` 3e-7 (7e-6), equilateral triangle `λ4` 1e-5 (4.9e-4),
 annulus `1/2 < r < 1` `λ1` 1.1e-5 (5.3e-4), L-shape `λ1` 8.3e-7 (2.4e-3). SIAM
 Problem 14 (pentagon, mixed conditions, `MaxCellMeasure -> 10^-4`):
-`α = -2.46283472` (truth -2.46283475604), about 8 digits in 12 s (the reference 3 digits in 16 s). Koch snowflake level 5: 39.3724
-in 1.5 s, 0.024 from the fractal's 39.34855 (the reference's default: 0.052 in
-2.1 s); the level-5 polygon's own eigenvalue is about 39.370, so the remaining
-gap is the prefractal, not the discretization.
+`α = -2.46283472` (truth -2.46283475604), about 8 digits in 12 s (the reference 3 digits in 16 s). Koch snowflake level 5: 39.3700
+in 16 s (two levels: its 3072 sides force the coarse mesh; 39.3724 in 1.5 s
+without extrapolation), 0.021 from the fractal's 39.34855 (the reference's
+default: 0.052 in 2.1 s); the level-5 polygon's own eigenvalue is about 39.370,
+so the remaining gap is the prefractal, not the discretization.
 
 Attributes: `NDEigenvalues`, `NDEigensystem`, `DirichletCondition`,
 `NeumannValue`: `Protected`. `Options[NDEigenvalues]` =
