@@ -11,10 +11,9 @@ event semantics as the sidecar's NDJSON pipe mode (`make check-pipe-protocol`).
 ```bash
 # from the repo root
 make libmathilda.a
-LDF=$(make --dry-run --always-make Mathilda 2>/dev/null \
-      | grep -E '\-o Mathilda' | head -1 | grep -oE '([^ ]+\.o )(.*)$' | sed -E 's/^.*\.o //')
-gcc-16 -std=c99 -g -I./src kernel/test/ffi_cell_test.c libmathilda.a $LDF -o /tmp/ffi_cell_test
-MATHILDA_NO_WINDOW=1 /tmp/ffi_cell_test ./src
+gcc-16 -std=c99 -g -I./src -I./src/ffi kernel/test/ffi_cell_test.c libmathilda.a \
+    $(make -s --no-print-directory print-libs) -o /tmp/ffi_cell_test
+MATHILDA_NO_WINDOW=1 /tmp/ffi_cell_test ./src/internal
 ```
 
 ## 2. `kernel_test.py` — the full Jupyter kernel (needs the xeus env)

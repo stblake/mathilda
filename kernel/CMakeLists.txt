@@ -69,25 +69,55 @@ add_custom_target(mathilda_lib
     VERBATIM)
 
 # --- Transitive C dependencies of libmathilda.a ----------------------------
-# Which of these are actually referenced depends on the USE_* flags the archive
-# was built with. find_library is tolerant: a missing optional lib is simply
-# not linked. Override MATHILDA_EXTRA_LIBS to pin an exact set.
-set(_mth_libs "")
-foreach(_name gmp mpfr flint pcre2-8 fftw3 ecm readline raylib)
-    find_library(_lib_${_name} NAMES ${_name})
-    if(_lib_${_name})
-        list(APPEND _mth_libs ${_lib_${_name}})
+# The makefile, not CMake, knows them: it probes for SuiteSparse, ARPACK,
+# LAPACKE and its BLAS provider (FlexiBLAS on Fedora/RHEL), FLINT, PCRE2, ...
+# with the same USE_* flags the archive is built with. So ask it — `make
+# print-libs` prints the archive's exact link line, the words the installed
+# mathilda.pc records as Libs.private. Guessing the set here with find_library
+# missed every library the makefile autodetected beyond the core few, and the
+# link failed with undefined references to umfpack_*, cholmod_*, dsaupd_c,
+# LAPACKE_* (issue #131, Fedora).
+#
+# Set MATHILDA_EXTRA_LIBS to pin an exact list instead (a ;-list of -l/-L
+# flags, library names or full paths). Empty (the default) means "query the
+# makefile on every configure", so changing MATHILDA_MAKE_FLAGS re-derives it.
+set(MATHILDA_EXTRA_LIBS "" CACHE STRING
+    "Transitive libs for libmathilda.a (empty: ask `make print-libs`)")
+
+if(MATHILDA_EXTRA_LIBS)
+    set(_mth_libs ${MATHILDA_EXTRA_LIBS})
+    message(STATUS "xmathilda: MATHILDA_EXTRA_LIBS pinned: ${_mth_libs}")
+else()
+    execute_process(
+        COMMAND make -s --no-print-directory -C "${MATHILDA_ROOT}"
+                print-libs ${MATHILDA_MAKE_FLAGS}
+        OUTPUT_VARIABLE _mth_line
+        ERROR_QUIET
+        RESULT_VARIABLE _mth_rc
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _mth_rc EQUAL 0 OR _mth_line STREQUAL "")
+        message(FATAL_ERROR
+            "xmathilda: `make -C ${MATHILDA_ROOT} print-libs` failed (exit "
+            "${_mth_rc}); cannot determine libmathilda.a's link libraries. "
+            "Pass them explicitly with -DMATHILDA_EXTRA_LIBS=\"gmp;mpfr;...\".")
     endif()
-endforeach()
-if(APPLE)
-    # LAPACK/BLAS via Accelerate; CoreGraphics/CoreFoundation for the raylib
-    # offscreen path. On Linux use -DMATHILDA_EXTRA_LIBS="lapacke;lapack;blas;gfortran"
-    # (Fedora/RHEL: "lapacke;lapack;flexiblas", whose libblas has no CBLAS).
-    list(APPEND _mth_libs "-framework Accelerate"
-                          "-framework CoreGraphics"
-                          "-framework CoreFoundation")
+    # Split the shell words, then rejoin each two-word `-framework X` into one
+    # item: CMake would otherwise read a bare `X` as a library name (-lX).
+    separate_arguments(_mth_words UNIX_COMMAND "${_mth_line}")
+    set(_mth_libs "")
+    set(_mth_pending "")
+    foreach(_w IN LISTS _mth_words)
+        if(_mth_pending)
+            list(APPEND _mth_libs "-framework ${_w}")
+            set(_mth_pending "")
+        elseif(_w STREQUAL "-framework")
+            set(_mth_pending 1)
+        else()
+            list(APPEND _mth_libs "${_w}")
+        endif()
+    endforeach()
+    message(STATUS "xmathilda: libmathilda.a links: ${_mth_line}")
 endif()
-set(MATHILDA_EXTRA_LIBS "${_mth_libs}" CACHE STRING "Transitive libs for libmathilda.a")
 
 # --- The kernel executable -------------------------------------------------
 add_executable(xmathilda
@@ -102,7 +132,7 @@ target_include_directories(xmathilda PRIVATE
 target_link_libraries(xmathilda PRIVATE
     xeus xeus-zmq nlohmann_json::nlohmann_json
     "${MATHILDA_LIB}"
-    ${MATHILDA_EXTRA_LIBS}
+    ${_mth_libs}
     Threads::Threads
     m)
 

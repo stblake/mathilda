@@ -143,6 +143,20 @@ jobs:
       - name: Installed embedding API (make check-install)
         run: make -j"$(nproc)" check-install
 
+      # Issue #131: the xeus kernel's CMake takes libmathilda.a's link line from
+      # `make print-libs` rather than guessing it with find_library (which missed
+      # SuiteSparse, ARPACK and LAPACKE/FlexiBLAS on Fedora). Link a C host
+      # against the archive with exactly that output, so the line a CMake
+      # embedder receives is proven sufficient on glibc.
+      - name: Archive link line (make print-libs)
+        run: |
+          libs=$(make -s --no-print-directory print-libs)
+          echo "print-libs: $libs"
+          cc=$(make -s --no-print-directory print-cc | sed -n 's/^CC = //p')
+          $cc -std=c99 -I src -I src/ffi kernel/test/ffi_cell_test.c \
+              libmathilda.a $libs -o ffi_cell_test
+          MATHILDA_NO_WINDOW=1 ./ffi_cell_test ./src/internal
+
   # MPFR is on by default (USE_MPFR=1) and arbitrary-precision reals (EXPR_MPFR)
   # are used across ~130 files, so the `make USE_MPFR=0` graceful-degrade config
   # rots easily: a new unguarded EXPR_MPFR case or *_dispatch_mpfr branch builds

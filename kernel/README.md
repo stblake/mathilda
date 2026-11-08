@@ -63,13 +63,15 @@ cmake -S kernel -B kernel/build \
 Plotly output still works with `USE_GRAPHICS=0` (the `Graphics → Plotly JSON`
 serializer is compiled regardless; only the on-screen/GL raster paths drop).
 
-On Linux, if `libmathilda.a` was built against reference LAPACK, pass its link
-libraries: `-DMATHILDA_EXTRA_LIBS="lapacke;lapack;blas;gfortran"`.
-
-The exact transitive link line of an *installed* kernel is recorded in its
-pkg-config file (`make install`, issue #88): `pkg-config --static --libs mathilda`
-prints it, which is what `MATHILDA_EXTRA_LIBS` otherwise approximates via
-`find_library`.
+libmathilda.a's transitive link libraries (GMP, MPFR, FLINT, PCRE2, LAPACKE and
+its BLAS provider, SuiteSparse, ARPACK, ...) are taken from the makefile at
+configure time — `make print-libs` with the same `MATHILDA_MAKE_FLAGS` — so they
+always match what the makefile actually detected and linked (issue #131). The
+same line is recorded in an installed kernel's pkg-config file
+(`pkg-config --static --libs mathilda`, issue #88). To pin an exact set instead,
+pass `-DMATHILDA_EXTRA_LIBS="gmp;mpfr;..."`. A build directory configured
+before this change caches the old guessed list: reconfigure with
+`-DMATHILDA_EXTRA_LIBS=` (empty) or start from a fresh build directory.
 
 ## Use
 

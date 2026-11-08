@@ -1124,11 +1124,20 @@ print-flags:
 	@echo "CFLAGS = $(CFLAGS)"
 	@echo "LDFLAGS = $(LDFLAGS)"
 
+# Print the exact transitive link line of libmathilda.a — the same words the
+# installed mathilda.pc records as Libs.private — on ONE stdout line, nothing
+# else (probe notices go to stderr). Pass the same USE_* flags the archive is
+# built with. The xeus kernel (kernel/CMakeLists.txt) runs this at configure
+# time, so an embedder links exactly what the makefile detected (SuiteSparse,
+# ARPACK, LAPACKE + FlexiBLAS, ...) instead of re-guessing it (issue #131).
+print-libs:
+	@echo "$(PC_LIBS_PRIVATE)"
+
 .PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \
-        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc print-flags
+        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc print-flags print-libs
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first
