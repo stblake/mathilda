@@ -16,6 +16,11 @@
 #include <gmp.h>
 #include "groebner.h"
 
+/* GroebnerBasis Method -> "F4": > 0 makes the Q routes skip the direct
+ * fraction-free run and take the multi-modular ones (F4 at each prime).
+ * A nesting counter; register it for TimeConstrained unwind. */
+int* gb_flint_force_modular_counter(void);
+
 /* Over Q: F rational GBPolys sharing one order. */
 int gb_flint_buchberger(GBPoly* const* F, size_t n, GBPoly*** out, size_t* out_n);
 

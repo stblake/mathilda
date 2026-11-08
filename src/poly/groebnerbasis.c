@@ -10,7 +10,8 @@
  *                       | DegreeReverseLexicographic
  *                       | EliminationOrder         (forced by the 3-arg form)
  *   CoefficientDomain  -> Rationals | Automatic    (default)
- *   Method             -> "Buchberger" | Automatic (default)
+ *   Method             -> Automatic (default) | "F4" | "Buchberger"
+ *                       | "GroebnerWalk"
  */
 
 #include "groebnerbasis.h"
@@ -23,7 +24,9 @@
 #include "attr.h"
 #include "eval.h"
 #include "gbmod.h"
-#include "gb_flint.h"  /* gb_flint_lex_inexact */
+#include "gb_flint.h"  /* gb_flint_lex_inexact, gb_flint_force_modular_counter */
+#include "gb_f4.h"     /* gb_f4_off_counter, gb_f4_hits */
+#include "core.h"      /* tc_register_unwind_counter */
 #include "groebner.h"
 #include "internal.h"
 #include "rationalize.h"
@@ -73,7 +76,11 @@ static bool is_equal(const Expr* e) {
 
 /* Selectable Gröbner engine (Method -> ...). */
 typedef enum {
-    GB_METHOD_BUCHBERGER = 0,       /* "Buchberger" / Automatic (default) */
+    GB_METHOD_AUTOMATIC = 0,        /* Automatic (default): F4 at each prime of
+                                       the GF(p) and multi-modular routes,
+                                       Buchberger elsewhere */
+    GB_METHOD_BUCHBERGER,           /* "Buchberger": F4 switched off */
+    GB_METHOD_F4,                   /* "F4": the modular routes forced */
     GB_METHOD_WALK                  /* "GroebnerWalk" */
 } GBMethod;
 
@@ -131,7 +138,7 @@ static void extract_options(const Expr* res, size_t* n_pos,
     opt->matrix_order = NULL;
     opt->named_matrix_req = false;
     opt->named_ds = opt->named_rev = opt->named_neg = 0;
-    opt->method = GB_METHOD_BUCHBERGER;
+    opt->method = GB_METHOD_AUTOMATIC;
     opt->sort_desc = false;
     opt->parameter_vars_given = false;
     opt->parameter_vars = NULL;
@@ -240,15 +247,21 @@ static void extract_options(const Expr* res, size_t* n_pos,
                 opt->method = GB_METHOD_WALK; ok = true;
             }
             if (val->type == EXPR_STRING && val->data.string
-                && strcmp(val->data.string, "Buchberger") == 0) ok = true;
+                && strcmp(val->data.string, "Buchberger") == 0) {
+                opt->method = GB_METHOD_BUCHBERGER; ok = true;
+            }
+            if (val->type == EXPR_STRING && val->data.string
+                && strcmp(val->data.string, "F4") == 0) {
+                opt->method = GB_METHOD_F4; ok = true;
+            }
             if (val->type == EXPR_STRING && val->data.string
                 && strcmp(val->data.string, "GroebnerWalk") == 0) {
                 opt->method = GB_METHOD_WALK; ok = true;
             }
             if (!ok) {
-                warn_once("nimpl", "only Method -> \"Buchberger\" or "
-                                   "\"GroebnerWalk\" is implemented; "
-                                   "falling back");
+                warn_once("nimpl", "only Method -> Automatic, \"F4\", "
+                                   "\"Buchberger\" or \"GroebnerWalk\" is "
+                                   "implemented; falling back to Automatic");
             }
         } else if (key->data.symbol.name == SYM_Modulus) {
             /* Modulus -> p computes the Gröbner basis over the prime field
@@ -944,6 +957,13 @@ Expr* builtin_groebner_basis(Expr* res) {
      * directly (the reduced basis is identical either way). */
     size_t out_n = 0;
     GBPoly** G;
+    /* Method -> "Buchberger" switches F4 off for this call; "F4" forces the
+     * multi-modular routes over Q (F4 at every prime) and reports when F4
+     * produced no basis at all (an order, domain or form it does not cover).
+     * Both are nesting counters the TimeConstrained unwind restores. */
+    long f4_hits0 = gb_f4_hits();
+    if (opt.method == GB_METHOD_BUCHBERGER) (*gb_f4_off_counter())++;
+    if (opt.method == GB_METHOD_F4) (*gb_flint_force_modular_counter())++;
     if (opt.modulus != 0 && n_elim == 0 && n_params == 0) {
         /* Gröbner basis over the prime field GF(p): reduce each rational
          * generator into GF(p), run the modular Buchberger engine (gbmod.c),
@@ -992,6 +1012,14 @@ Expr* builtin_groebner_basis(Expr* res) {
         G = gb_groebner_walk(F, nF, use_order, wmat_ptr, &out_n);
     } else {
         G = gb_buchberger(F, nF, &out_n);
+    }
+    if (opt.method == GB_METHOD_BUCHBERGER) (*gb_f4_off_counter())--;
+    if (opt.method == GB_METHOD_F4) {
+        (*gb_flint_force_modular_counter())--;
+        if (gb_f4_hits() == f4_hits0)
+            warn_once("f4na", "F4 does not cover this order, coefficient "
+                              "domain or form; the basis was computed by "
+                              "Buchberger's algorithm.");
     }
 
     /* The weight matrix is still read by the RationalFunctions reduction
@@ -1150,6 +1178,8 @@ Expr* builtin_groebner_basis(Expr* res) {
 
 void groebner_init(void) {
     symtab_add_builtin("GroebnerBasis", builtin_groebner_basis);
+    tc_register_unwind_counter(gb_f4_off_counter());
+    tc_register_unwind_counter(gb_flint_force_modular_counter());
     SymbolDef* def = symtab_get_def("GroebnerBasis");
     if (def) def->attributes |= ATTR_PROTECTED;
 }

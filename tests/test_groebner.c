@@ -290,6 +290,42 @@ static void test_argt_one(void) {
              "GroebnerBasis[List[Plus[-1, Power[x, 2]]]]");
 }
 
+/* Method -> Automatic | "F4" | "Buchberger": one reduced basis, three
+ * engines.  "F4" on a form F4 does not cover (CoefficientDomain -> Integers) notes
+ * GroebnerBasis::f4na; the F4-off and force-modular counters survive a
+ * TimeConstrained abort (a stuck F4-off counter would make the later "F4"
+ * call note f4na). */
+static void test_method_f4_buchberger(void) {
+    const char* sys = "{x^2 + y^2 + z^2 - 1, x y z - 1/3, x + y - z^2}";
+    char buf[1024];
+    const char* ords[] = {"Lexicographic", "DegreeReverseLexicographic"};
+    for (int o = 0; o < 2; o++) {
+        snprintf(buf, sizeof buf,
+                 "With[{g = GroebnerBasis[%s, {x, y, z}, MonomialOrder -> %s]}, "
+                 "g === GroebnerBasis[%s, {x, y, z}, MonomialOrder -> %s, Method -> \"F4\"] && "
+                 "g === GroebnerBasis[%s, {x, y, z}, MonomialOrder -> %s, Method -> \"Buchberger\"]]",
+                 sys, ords[o], sys, ords[o], sys, ords[o]);
+        check_true(buf);
+        snprintf(buf, sizeof buf,
+                 "With[{g = GroebnerBasis[%s, {x, y, z}, MonomialOrder -> %s, Modulus -> 32003]}, "
+                 "g === GroebnerBasis[%s, {x, y, z}, MonomialOrder -> %s, Modulus -> 32003, Method -> \"F4\"] && "
+                 "g === GroebnerBasis[%s, {x, y, z}, MonomialOrder -> %s, Modulus -> 32003, Method -> \"Buchberger\"]]",
+                 sys, ords[o], sys, ords[o], sys, ords[o]);
+        check_true(buf);
+    }
+    check_eq("Check[GroebnerBasis[{x^2 + y^2 + z^2 - 1, x y z - 1/3, x + y - z^2}, {x, y, z}, "
+             "CoefficientDomain -> Integers, Method -> \"F4\"]; ok, f4na]", "f4na");
+    /* the 3-argument elimination form is a Lex basis over Q: F4 covers it */
+    check_eq("Check[GroebnerBasis[{x^2 + y^2 + z^2 - 1, x y z - 1/3, x + y - z^2}, {x, y}, {z}, "
+             "Method -> \"F4\"]; ok, f4na]", "ok");
+    check_eq("Check[GroebnerBasis[{x^2 + y^2 + z^2 - 1, x y z - 1/3, x + y - z^2}, {x, y, z}, "
+             "Method -> \"F4\"]; ok, f4na]", "ok");
+    check_eq("TimeConstrained[GroebnerBasis[{a + b + c + d + e, a b + b c + c d + d e + e a, "
+             "a b c + b c d + c d e + d e a + e a b, a b c d + b c d e + c d e a + d e a b + e a b c, "
+             "a b c d e - 1}, {a, b, c, d, e}, Method -> \"Buchberger\"]; done, 0.005]; "
+             "Check[GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}, Method -> \"F4\"]; ok, f4na]", "ok");
+}
+
 static void test_groebner_walk_matches_buchberger(void) {
     /* Method -> "GroebnerWalk" now computes the basis via the Gröbner walk;
      * by reduced-GB uniqueness the result is identical to Buchberger. */
@@ -1102,6 +1138,7 @@ int main(void) {
     TEST(test_modular_route_unlucky_and_positive_dim);
     TEST(test_modular_route_lex);
     TEST(test_lex_modulus_by_fglm);
+    TEST(test_method_f4_buchberger);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");

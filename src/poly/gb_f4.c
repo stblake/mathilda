@@ -51,12 +51,20 @@ int gb_f4_enable(int on) {
     f4_on = on;
     return was;
 }
+/* GroebnerBasis[..., Method -> "Buchberger"]: > 0 while a call runs that must
+ * not use F4.  A nesting counter (not a flag) registered with the
+ * TimeConstrained unwind registry, so a timeout restores it. */
+static int f4_off_depth = 0;
+int* gb_f4_off_counter(void) { return &f4_off_depth; }
+/* Bases F4 has produced: Method -> "F4" compares it across a call. */
+static long f4_hits = 0;
+long gb_f4_hits(void) { return f4_hits; }
 static int f4_enabled(void) {
     if (f4_on < 0) {
         const char* e = getenv("MATHILDA_GB_F4");
         f4_on = !(e && strcmp(e, "off") == 0);
     }
-    return f4_on;
+    return f4_on && f4_off_depth == 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -787,7 +795,14 @@ int gb_f4_nmod(const nmod_mpoly_struct* F, slong n, const nmod_mpoly_ctx_t ctx,
     flint_free(S.B); flint_free(S.sugar); flint_free(S.active); flint_free(S.P);
     flint_free(S.tmp); flint_free(ex);
     fm_clear(&S.M);
+    if (ok) f4_hits++;
     return ok;
 }
 
 #endif /* USE_FLINT */
+
+#ifndef USE_FLINT
+static int f4_off_depth_stub = 0;
+int* gb_f4_off_counter(void) { return &f4_off_depth_stub; }
+long gb_f4_hits(void) { return 0; }
+#endif

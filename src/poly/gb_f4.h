@@ -24,4 +24,10 @@ int gb_f4_nmod(const nmod_mpoly_struct* F, slong n, const nmod_mpoly_ctx_t ctx,
 int gb_f4_enable(int on);
 #endif
 
+/* GroebnerBasis Method support (stubs without FLINT): the F4-off nesting
+ * counter (> 0: gb_f4_nmod declines; register it for TimeConstrained unwind)
+ * and the count of bases F4 has produced. */
+int* gb_f4_off_counter(void);
+long gb_f4_hits(void);
+
 #endif /* GB_F4_H */

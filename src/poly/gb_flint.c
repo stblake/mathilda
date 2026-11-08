@@ -2921,6 +2921,12 @@ static int gf_verify_member(const Gf* Dm, const fmpz_mpoly_struct* C, slong nc, 
 }
 
 static int gf_modular_on = 1;
+/* GroebnerBasis[..., Method -> "F4"]: > 0 while a call runs that must take
+ * the multi-modular routes (F4 at every prime) instead of the direct
+ * fraction-free run over Q -- as gf_modular_on == 2, but a nesting counter
+ * registered with the TimeConstrained unwind registry. */
+static int gf_force_modular_depth = 0;
+int* gb_flint_force_modular_counter(void) { return &gf_force_modular_depth; }
 static long gf_modular_hits = 0;
 long gb_flint_modular_route(int on) { gf_modular_on = on; return gf_modular_hits; }
 
@@ -3355,7 +3361,8 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
     /* a degree order over Q: a small system directly (the fraction-free run
      * under a work budget: a few dozen pairs, small coefficients), else
      * multi-modular, certified */
-    if (!p && (ord == ORD_DEGREVLEX || ord == ORD_DEGLEX) && gf_modular_on != 2) {
+    if (!p && (ord == ORD_DEGREVLEX || ord == ORD_DEGLEX) && gf_modular_on != 2
+        && gf_force_modular_depth == 0) {
         Gf L; gf_init(&L, 0, 0, f0->n_vars, ord);
         L.budget_pairs = GF_DEG_BUDGET_PAIRS; L.budget_bits = GF_DEG_BUDGET_BITS;
         L.budget_seconds = GF_DEG_BUDGET_SECONDS;
@@ -3393,7 +3400,8 @@ static int gf_basis(GBPoly* const* F, size_t n, ulong p, GBPoly*** out, size_t* 
         if (ok) { *out = R; *out_n = ns; return 1; }
         R = NULL;
     }
-    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF") && gf_modular_on != 2) {
+    if (!p && ord == ORD_LEX && f0->n_vars >= 2 && !getenv("MATHILDA_GB_FGLM_OFF") && gf_modular_on != 2
+        && gf_force_modular_depth == 0) {
         Gf L; gf_init(&L, 0, 0, f0->n_vars, ORD_LEX);
         L.budget_pairs = GF_LEX_BUDGET_PAIRS; L.budget_bits = GF_LEX_BUDGET_BITS;
         slong* idx = NULL;
@@ -3593,6 +3601,8 @@ int gb_flint_buchberger_mod(GBPoly* const* F, size_t n, uint64_t p,
 
 long gb_flint_shape_route(int on) { (void)on; return 0; }
 long gb_flint_modular_route(int on) { (void)on; return 0; }
+static int gf_force_modular_depth_stub = 0;
+int* gb_flint_force_modular_counter(void) { return &gf_force_modular_depth_stub; }
 
 int gb_flint_quotient(GBPoly* const* F, size_t n, int maxd,
                       int** B_out, int* d_out, mpq_t** M_out) {
