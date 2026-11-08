@@ -32,16 +32,12 @@ been dropped.
   `0. + x`).  An inexact point (`{x, 0.5, 2}`) stays inexact.
 - `Series` of an inexact expression is in general computed by rationalising it,
   expanding exactly and numericalising back at the input's precision (the
-  leading-term zero tests need exact coefficients).  An expression built only
-  from `Plus`, `Times`, non-negative integer powers, a constant base raised to
-  such an expression (`c^g`), and `Exp`/`Sin`/`Cos`/`Sinh`/`Cosh` of one, at an
-  exact rational point, is expanded with its inexact coefficients directly:
-  those operations never divide by a leading coefficient, so an inexact
-  coefficient (an inexact zero `0``a` included) only rounds.  The round trip
-  turned `N[Sqrt[2]^(z + 2) - 2, 60]^k` into an exact series over `Q(Log[2])`
-  whose coefficient polynomials grow with the order (~0.3 s per power at order
-  110); it is now ~10 ms, and MPFR coefficients multiply in MPFR at the
-  smallest input precision rather than through the evaluator.
+  leading-term zero tests need exact coefficients). A plain Taylor expansion
+  of real analytic operations is instead computed numerically on the same
+  rationalised input (see *Inexact analytic input is expanded numerically*
+  below). Products of series whose coefficients are all MPFR reals convolve in
+  MPFR at the smallest input precision, the twin of the machine-real
+  convolution, rather than with two evaluator calls per term.
 
 ```mathematica
 In[1]:= SeriesData[x, 0, {1, 1, 1/2, 1/6, 1/24, 1/120}, 0, 6, 1]
@@ -154,9 +150,33 @@ Produces the power-series expansion of an expression about a point.
   general coefficient loop (so with the same values), instead of evaluating a
   `Times` and a `Plus` per coefficient pair: `s^30` of a 30-term machine series
   1 ms -> 0.04 ms. A non-normal intermediate (overflow, underflow) takes the
-  general path. (`Series` of an expression with machine numbers still
-  rationalizes it and expands exactly: `Series[(2.^(z/2 + 1) - 2)^30, {z, 0,
-  30}]` builds `Log[2]` polynomials, ~20 ms.)
+  general path.
+- **Inexact analytic input is expanded numerically.** `Series` of an
+  expression carrying machine or MPFR numbers rationalizes it as before (so
+  `0.1` still means `1/10`). When the expansion is a plain Taylor series of
+  `Plus`, `Times`, `Power`, `Exp`, `Log`, `Sin`, `Cos`, `Sinh` and `Cosh`, it is
+  then computed in MPFR at the answer's precision plus guard bits, rather than
+  exactly and numericalized afterwards. Each coefficient carries a bound on the
+  size of the terms summed into it. A coefficient below that bound's rounding
+  level is the exact expansion's zero (`Cos[x]^2 + Sin[x]^2 - 1.` gives
+  `0.` coefficients, not rounding noise). If a coefficient cannot be resolved
+  to the answer's precision, or the expansion has a pole, a branch point, a
+  symbolic parameter or a complex constant, the call takes the exact round
+  trip. The result has the same form as before: full coefficient list, `nmin`
+  0, numericalized zeros, input precision kept. At arbitrary precision the
+  series is numericalized as a whole, exact zeros included, as the round trip
+  does. Its zeros then carry the guard accuracy (`0``49.` for 30-digit input),
+  not that of a bare `N[0, 30]`. Accuracy-30 zeros cost a 110 × 110
+  Schroeder solve 10 of its 60 digits through significance arithmetic. The values are now correctly
+  rounded. The old route evaluated the symbolic coefficient in doubles, so
+  `Series[(2.^(z/2 + 1) - 2)^3, {z, 0, 5}]` gave
+  `0.33302465198892944` at `z^3` where `Log[2]^3 = 0.333024651988929479...`.
+  The exact route spelled `2^(z/2 + 1)` with `Log[2]^k` symbolically, which is
+  where the time went. `Series[(2.^(z/2 + 1) - 2)^30, {z, 0, 30}]` went from
+  30 ms to 0.1 ms. The same at 60 digits and order 110 went from ~0.6 s to
+  under 1 ms per power. Powers use Miller's recurrence, which is O(n^2) for any
+  exponent. A small integer power whose high-order coefficients cancel in that
+  recurrence is recomputed by convolution.
 - Threaded over lists: `Series[{f1, f2, ...}, spec]` becomes `{Series[f1, spec], Series[f2, spec], ...}`.
 - Handles Taylor expansions for smooth functions, Laurent expansions where the function has a pole at `x0`, Puiseux expansions for fractional-power cases such as `Sqrt[Sin[x]]`, and logarithmic expansions for cases like `x^x` where `Log[x]` survives as a symbolic coefficient.
 - `Gamma`, `PolyGamma` and `Beta` expand at their **poles** (an argument whose

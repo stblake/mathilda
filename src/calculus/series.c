@@ -25,6 +25,7 @@
 
 #include "series.h"
 #include "series_ratpoly.h" /* FLINT truncated-series arithmetic over Q */
+#include "series_numeric.h" /* numeric Taylor expansion of inexact input */
 #include "../poly/flint_bridge.h" /* packed expansion of the recurrence coefficients */
 #include "../special_functions/meijer_g.h" /* meijerg_series_terms */
 #include "../sparse/sparse.h"
@@ -8211,105 +8212,6 @@ static Expr* series_restore_exact_points(Expr* out, const Expr* res) {
     return out;
 }
 
-/* Is f, as a function of x, built only from operations whose series never
- * divide by a leading coefficient: Plus, Times, Power to a non-negative
- * integer, a constant base raised to such an f (c^g = Exp[g Log c]), and the
- * entire functions Exp, Sin, Cos, Sinh, Cosh of such an f?  Their Taylor
- * coefficients are sums of products of the input's coefficients, so an
- * inexact coefficient (even an inexact zero, 0``a, the constant term of
- * N[2^(z/2 + 1) - 2]) only rounds, it never decides a valuation. */
-static bool series_inexact_valuation_safe(Expr* f, Expr* x, int depth) {
-    if (depth > 64) return false;
-    if (expr_free_of(f, x)) return true;
-    if (f->type == EXPR_SYMBOL) return expr_eq(f, x);
-    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL) return false;
-    const char* h = f->data.function.head->data.symbol.name;
-    size_t n = f->data.function.arg_count;
-    Expr* const* a = f->data.function.args;
-    if (h == SYM_Plus || h == SYM_Times) {
-        for (size_t i = 0; i < n; i++)
-            if (!series_inexact_valuation_safe(a[i], x, depth + 1)) return false;
-        return true;
-    }
-    if (h == SYM_Power && n == 2) {
-        if (a[1]->type == EXPR_INTEGER && a[1]->data.integer >= 0)
-            return series_inexact_valuation_safe(a[0], x, depth + 1);
-        return expr_free_of(a[0], x) && series_inexact_valuation_safe(a[1], x, depth + 1);
-    }
-    if ((h == SYM_Exp || h == SYM_Sin || h == SYM_Cos || h == SYM_Sinh || h == SYM_Cosh)
-        && n == 1)
-        return series_inexact_valuation_safe(a[0], x, depth + 1);
-    return false;
-}
-
-/* Smallest precision in bits over the inexact leaves of e (a machine Real is
- * 53; an inexact zero, whose precision is an accuracy, does not count); 0 when
- * there is none. */
-static long series_min_inexact_bits(const Expr* e) {
-    if (e->type == EXPR_REAL) return 53;
-#ifdef USE_MPFR
-    if (e->type == EXPR_MPFR)
-        return mpfr_zero_p(e->data.mpfr) ? 0 : (long)mpfr_get_prec(e->data.mpfr);
-#endif
-    if (e->type != EXPR_FUNCTION) return 0;
-    long best = series_min_inexact_bits(e->data.function.head);
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        long b = series_min_inexact_bits(e->data.function.args[i]);
-        if (b > 0 && (best == 0 || b < best)) best = b;
-    }
-    return best;
-}
-
-/* Series[f, {x, x0, n}] with inexact numbers in f only, f valuation-safe in x
- * (above) and x0 a finite exact point: expand with the inexact coefficients
- * directly.  The general route rationalises f, expands exactly and
- * numericalises back, which is right where a leading coefficient must be
- * zero-tested, but turns N[Sqrt[2]^(z + 2) - 2, 60]^k into an exact series
- * over Q(Log[2]) whose coefficient polynomials grow with the order (a cost
- * ~n^4: 0.3 s per power at order 110).  NULL to take the general route. */
-static Expr* series_inexact_direct(Expr* res) {
-    if (res->data.function.arg_count != 2) return NULL;
-    Expr* f = res->data.function.args[0];
-    Expr* spec = res->data.function.args[1];
-    if (!has_symbol_head(spec, "List") || spec->data.function.arg_count != 3) return NULL;
-    Expr* x = spec->data.function.args[0];
-    Expr* x0 = spec->data.function.args[1];
-    Expr* ne = spec->data.function.args[2];
-    if (x->type != EXPR_SYMBOL || ne->type != EXPR_INTEGER || ne->data.integer < 0
-        || ne->data.integer > 100000)
-        return NULL;
-    int64_t pn, pd;
-    if (!is_rational(x0, &pn, &pd)) return NULL;     /* an exact rational point */
-    if (!internal_contains_inexact(f) || !series_inexact_valuation_safe(f, x, 0)) return NULL;
-    Expr* out = do_series_single(f, x, x0, ne->data.integer, false, NULL);
-    if (!out) return NULL;
-    /* inexact in, inexact out, at the input's precision: an exact coefficient
-     * (the 1 of 1.5 + z) is numericalised as the round trip numericalises it;
-     * the inexact ones already are (numericalising the whole SeriesData would
-     * cost more than the expansion) */
-    long bits = series_min_inexact_bits(f);
-    NumericSpec nspec = numeric_machine_spec();
-#ifdef USE_MPFR
-    if (bits > 53) { nspec.mode = NUMERIC_MODE_MPFR; nspec.bits = bits; }
-#endif
-    if (has_symbol_head(out, "SeriesData") && out->data.function.arg_count == 6
-        && has_symbol_head(out->data.function.args[2], "List")) {
-        Expr* cl = out->data.function.args[2];
-        for (size_t i = 0; i < cl->data.function.arg_count; i++) {
-            Expr* c = cl->data.function.args[i];
-            if (c->type == EXPR_REAL || c->type == EXPR_MPFR) continue;
-            Expr* nc = numericalize(c, nspec);
-            if (!nc) continue;
-            expr_free(c);
-            cl->data.function.args[i] = nc;
-        }
-        return out;
-    }
-    Expr* num = numericalize(out, nspec);
-    expr_free(out);
-    return num;
-}
-
 Expr* builtin_series(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
@@ -8327,8 +8229,14 @@ Expr* builtin_series(Expr* res) {
      * rational. Convert inexact inputs, run, and numericalise the
      * resulting series back. */
     if (internal_args_contain_inexact(res)) {
-        Expr* direct = series_inexact_direct(res);
-        if (direct) return series_restore_exact_points(direct, res);
+        /* A plain Taylor expansion of real analytic operations is computed
+         * numerically, on the same rationalised input (series_numeric.h): the
+         * exact expansion of 2^(z/2 + 1) carries Log[2]^k symbolically, and
+         * its 30th power cost ~30 ms of symbolic convolution for coefficients
+         * the round trip then rounds to doubles.  Anything else (a pole, a
+         * branch point, a symbolic parameter) declines to the exact path. */
+        Expr* fast = series_inexact_taylor(res);
+        if (fast) return fast;
         return series_restore_exact_points(
             internal_rationalize_then_numericalize(res, builtin_series), res);
     }

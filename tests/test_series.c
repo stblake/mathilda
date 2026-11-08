@@ -2768,9 +2768,52 @@ static void test_series_machine_product(void) {
     assert_eval_eq("Series[1.*^200 + z, {z, 0, 2}]^2", "Overflow[] + 2e+200 z + 1.0 z^2 + O[z]^3", 0);
 }
 
+/* An inexact analytic input is expanded numerically (series_numeric.c) on the
+ * rationalised input, not through the exact round trip: same answer, correctly
+ * rounded, without the symbolic Log[2]^k arithmetic the exact path paid. */
+static void test_series_inexact_numeric(void) {
+    /* correctly rounded: (Log 2)^3 = 0.33302465198892947971..., the exact
+     * round trip's N gave 0.33302465198892944 */
+    assert_eval_eq("ToString[Series[N[Sqrt[2]^(z + 2) - 2]^3, {z, 0, 5}][[3, 4]], InputForm] == "
+                   "\"0.3330246519889295\"", "True", 0);
+    assert_eval_eq("ToString[Series[2.^x, {x, 1, 3}][[3, 3]], InputForm] == \"0.48045301391820144\"",
+                   "True", 0);
+    /* the Schroeder-matrix power: Log[2]^30 at z^30, leading zeros kept as 0. */
+    assert_eval_eq("snS = Series[N[Sqrt[2]^(z + 2) - 2]^30, {z, 0, 30}]; "
+                   "{Length[snS[[3]]], snS[[3, 1]], Abs[snS[[3, 31]]/Log[2.]^30 - 1] < 10^-14}",
+                   "{31, 0.0, True}", 0);
+    /* 60-digit input stays at 60 digits; small powers cancel in Miller's
+     * recurrence and are recomputed by convolution */
+    assert_eval_eq("snW = Series[N[Sqrt[2]^(z + 2) - 2, 60]^2, {z, 0, 110}]; "
+                   "{Precision[snW[[3, 3]]], Abs[snW[[3, 111]] - SeriesCoefficient[Series[(Sqrt[2]^(z + 2) - 2)^2, {z, 0, 110}], 110]] < 10^-250}",
+                   "{60.0, True}", 0);
+    /* an arbitrary-precision zero carries the round trip's guard accuracy (its
+     * exact zero numericalised inside the series), not a bare N[0, 30]: with
+     * accuracy 30 the hd20.9 Schroeder solve kept 49 of 60 digits */
+    assert_eval_eq("snZ = Series[N[x^2 Exp[x], 30], {x, 0, 4}]; "
+                   "{Accuracy[snZ[[3, 1]]] > 45, Precision[snZ[[3, 3]]]}", "{True, 30.0}", 0);
+    /* the format of the round trip: full list, nmin 0, zeros numericalised */
+    assert_eval_eq("InputForm[Series[Sin[0.5 x] Cos[x], {x, 0, 4}]]",
+                   "SeriesData[x, 0, {0.0, 0.5, 0.0, -0.2708333333333333, 0.0}, 0, 5, 1]", 0);
+    assert_eval_eq("InputForm[Series[Exp[x], {x, 0.5, 2}]]",
+                   "SeriesData[x, 0.5, {1.6487212707001282, 1.6487212707001282, 0.8243606353500641}, 0, 3, 1]", 0);
+    /* a cancellation to zero is an exact-path zero, not rounding noise */
+    assert_eval_eq("InputForm[Series[Cos[x]^2 + Sin[x]^2 - 1., {x, 0, 3}]]",
+                   "SeriesData[x, 0, {0.0, 0.0, 0.0, 0.0}, 0, 4, 1]", 0);
+    assert_eval_eq("InputForm[Series[(1. + x)^0.5, {x, 0, 3}]]",
+                   "SeriesData[x, 0, {1.0, 0.5, -0.125, 0.0625}, 0, 4, 1]", 0);
+    /* poles, branch points, symbolic and complex constants keep the exact path */
+    assert_eval_eq("InputForm[Series[1/Sin[0.5 x], {x, 0, 1}]]",
+                   "SeriesData[x, 0, {2.0, 0.0, 0.08333333333333333}, -1, 2, 1]", 0);
+    assert_eval_eq("InputForm[Series[a x + 1., {x, 0, 2}]]", "SeriesData[x, 0, {1.0, a, 0.0}, 0, 3, 1]", 0);
+    assert_eval_eq("InputForm[Series[Exp[2. I x], {x, 0, 2}]]",
+                   "SeriesData[x, 0, {1.0, 0.0 + 2.0*I, -2.0}, 0, 3, 1]", 0);
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_machine_product);
+    TEST(test_series_inexact_numeric);
     TEST(test_series_sin_cos);
     TEST(test_series_symbolic_f);
     TEST(test_series_laurent);
