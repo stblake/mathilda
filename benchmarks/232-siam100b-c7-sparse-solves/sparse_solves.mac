@@ -1,0 +1,54 @@
+/* Experiment 232 -- SIAM 100-digit HOLDOUT B for Problem 7 (Maxima column).
+   Maxima has no sparse matrices; the idiomatic solve is linsolve_by_lu on a
+   dense matrix (floatfield at machine precision, bigfloatfield at fpprec 60),
+   as in experiment 172.  The dense matrix is built outside the timed call
+   (glue).  The bigfloat (wp50) solve is attempted only for n = 1000: a
+   dense 2000^2 bfloat matrix exhausts SBCL's 1 GB heap and kills the whole
+   file (seen), so those wp50 rows SKIP.  Only the matrices with n <= 2047 are attempted (bc7.1, 4, 5, 7,
+   10); for the others (n = 5000 ... 27000) a dense Maxima matrix does not
+   fit / cannot finish: SKIP.  See sparse_solves.m. */
+load("../harness.mac")$
+load("../siam100_common.mac")$
+require(["linsolve_by_lu"])$
+
+primeBands(n, offs, sup, sub) := block([M : zeromatrix(n, n), p : 2],
+  for i : 1 thru n do (M[i, i] : p, p : next_prime(p)),
+  for o in offs do for i : 1 thru n - o do (M[i, i + o] : sup, M[i + o, i] : sub),
+  M)$
+cayley(p) := block([M : zeromatrix(p, p), w],
+  for i : 1 thru p do M[i, i] : 7,
+  for v : 1 thru p - 1 do for g in [2, 3, 5] do (w : mod(g*v, p), M[v + 1, w + 1] : 1, M[w + 1, v + 1] : 1),
+  M)$
+tree(n) := block([M : zeromatrix(n, n)],
+  for i : 1 thru n do M[i, i] : (if i = 1 then 3 else if 2*i <= n then 4 else 2),
+  for i : 1 thru (n - 1)/2 do for c in [2*i, 2*i + 1] do (M[i, c] : -1, M[c, i] : -1),
+  M)$
+unitv(n, j) := genmatrix(lambda([i, k], if i = j then 1 else 0), n, 1)$
+
+/* one problem: machine row and wp50 row on the same dense matrix */
+case(k, M, j, wp) := block([n : length(M), Mf, b],
+  Mf : float(M), b : unitv(n, j),
+  vrun(sconcat("bc7.", k, " machine"),
+       lambda([], first(linsolve_by_lu(Mf, float(b), 'floatfield))[j, 1]), 10, 90),
+  if wp then vrun(sconcat("bc7.", k, " wp50"),
+       lambda([], block([fpprec : 60],
+         first(linsolve_by_lu(bfloat(M), bfloat(b), 'bigfloatfield))[j, 1])), 48, 75)
+  else skip(sconcat("bc7.", k, " wp50"), "linsolve_by_lu bigfloat (dense n^2 bfloats exceed the 1 GB Lisp heap)"),
+  Mf : 0, b : 0, M : 0, garbage_collect())$
+
+case(1, primeBands(1000, [1], 1, 1), 1, true)$
+skip("bc7.2 machine", "linsolve_by_lu (dense 10000^2)")$
+skip("bc7.2 wp50", "linsolve_by_lu (dense 10000^2)")$
+skip("bc7.3 machine", "linsolve_by_lu (dense 20000^2)")$
+skip("bc7.3 wp50", "linsolve_by_lu (dense 20000^2)")$
+case(4, primeBands(2000, makelist(j^2, j, 1, 44), 1, 1), 1, false)$
+case(5, primeBands(2000, makelist(2^j, j, 0, 10), 1, -1), 1, false)$
+skip("bc7.6 machine", "linsolve_by_lu (dense 5000^2)")$
+skip("bc7.6 wp50", "linsolve_by_lu (dense 5000^2)")$
+case(7, cayley(2003), 2, false)$
+skip("bc7.8 machine", "linsolve_by_lu (dense 27000^2)")$
+skip("bc7.8 wp50", "linsolve_by_lu (dense 27000^2)")$
+skip("bc7.9 machine", "linsolve_by_lu (dense 22500^2)")$
+skip("bc7.9 wp50", "linsolve_by_lu (dense 22500^2)")$
+case(10, tree(2047), 1, false)$
+quit()$

@@ -1,0 +1,52 @@
+-- Experiment 235 -- SIAM 100-digit HOLDOUT B for Problem 10 (FriCAS column).
+-- No numerical summation to infinity: each series is summed to the same
+-- fixed number of terms as the Maxima half (double sums nested, 40 x 40 for bc10.4) (see exit_probabilities.mac), in
+-- DoubleFloat (vcaseD) and in Float at digits(60) (vcaseF).  bc10.9 machine:
+-- sinh((2k+1) pi) overflows a DoubleFloat beyond k = 112, so 112 terms (a
+-- truncation error ~1e-3); wp50: 2400 Float terms.  bc10.8 needs the zeros
+-- of J0 (no built-in): SKIP.  See exit_probabilities.m.
+)read ../siam100_common.input )quiet
+sgD(k:Integer):DoubleFloat == (even? k => 1.0::DoubleFloat; -1.0::DoubleFloat)
+sgF(k:Integer):Float == (even? k => 1.0::Float; -1.0::Float)
+pD := pi()$DoubleFloat
+d1():DoubleFloat == 4/pD * reduce(+, [sgD(k)/(2*k+1)::DoubleFloat/cosh(2*(2*k+1)*pD) for k in 0..14])
+d2():DoubleFloat == 4/pD * reduce(+, [sgD(k)/(2*k+1)::DoubleFloat*cosh(3*(2*k+1)*pD)/cosh(5*(2*k+1)*pD) for k in 0..14])
+d3():DoubleFloat == 4/pD * reduce(+, [sgD(k)/(2*k+1)::DoubleFloat*sinh((2*k+1)*pD/2)/sinh(2*(2*k+1)*pD) for k in 0..19])
+d4():DoubleFloat == 16/pD^2 * reduce(+, [reduce(+, [sgD(m+n)/((2*m+1)*(2*n+1))::DoubleFloat/cosh(3/2*pD*sqrt(((2*m+1)^2)::DoubleFloat + (((2*n+1)::DoubleFloat)/2)^2)) for n in 0..39]) for m in 0..39])
+d5():DoubleFloat == 4/pD * reduce(+, [sin((2*k+1)*pD/3)/(2*k+1)::DoubleFloat*exp(-(2*k+1)*pD) for k in 0..29])
+d6():DoubleFloat == 4/pD * reduce(+, [sgD(k)/(2*k+1)::DoubleFloat*cosh(5::DoubleFloat)/cosh(5*sqrt(1 + ((2*k+1)*pD)^2)) for k in 0..9])
+d7():DoubleFloat == 4/pD * reduce(+, [sgD(k)/(2*k+1)::DoubleFloat*(8::DoubleFloat)^(-(2*k+1)) for k in 0..39])
+d9():DoubleFloat == 4/pD * reduce(+, [sgD(k)/(2*k+1)::DoubleFloat*sinh((2*k+1)*pD*99/100)/sinh((2*k+1)*pD) for k in 0..111])
+d10():DoubleFloat == 16/pD^2 * reduce(+, [reduce(+, [sgD(m+n)/((2*m+1)*(2*n+1))::DoubleFloat/cosh(5*pD*sqrt(((2*m+1)^2 + (2*n+1)^2)::DoubleFloat)) for n in 0..9]) for m in 0..9])
+t0 := nowms(); v := d1(); vcaseD("bc10.1 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d2(); vcaseD("bc10.2 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d3(); vcaseD("bc10.3 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d4(); vcaseD("bc10.4 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d5(); vcaseD("bc10.5 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d6(); vcaseD("bc10.6 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d7(); vcaseD("bc10.7 machine", v, nowms() - t0, 10)
+vskip("bc10.8 machine", "BesselJZero")
+t0 := nowms(); v := d9(); vcaseD("bc10.9 machine", v, nowms() - t0, 10)
+t0 := nowms(); v := d10(); vcaseD("bc10.10 machine", v, nowms() - t0, 10)
+digits(60)$Float
+pF := pi()$Float
+f1():Float == 4/pF * reduce(+, [sgF(k)/(2*k+1)::Float/cosh(2*(2*k+1)*pF) for k in 0..14])
+f2():Float == 4/pF * reduce(+, [sgF(k)/(2*k+1)::Float*cosh(3*(2*k+1)*pF)/cosh(5*(2*k+1)*pF) for k in 0..14])
+f3():Float == 4/pF * reduce(+, [sgF(k)/(2*k+1)::Float*sinh((2*k+1)*pF/2)/sinh(2*(2*k+1)*pF) for k in 0..19])
+f4():Float == 16/pF^2 * reduce(+, [reduce(+, [sgF(m+n)/((2*m+1)*(2*n+1))::Float/cosh(3/2*pF*sqrt(((2*m+1)^2)::Float + (((2*n+1)::Float)/2)^2)) for n in 0..39]) for m in 0..39])
+f5():Float == 4/pF * reduce(+, [sin((2*k+1)*pF/3)/(2*k+1)::Float*exp(-(2*k+1)*pF) for k in 0..29])
+f6():Float == 4/pF * reduce(+, [sgF(k)/(2*k+1)::Float*cosh(5::Float)/cosh(5*sqrt(1 + ((2*k+1)*pF)^2)) for k in 0..9])
+f7():Float == 4/pF * reduce(+, [sgF(k)/(2*k+1)::Float*(8::Float)^(-(2*k+1)) for k in 0..39])
+f9():Float == 4/pF * reduce(+, [sgF(k)/(2*k+1)::Float*sinh((2*k+1)*pF*99/100)/sinh((2*k+1)*pF) for k in 0..2399])
+f10():Float == 16/pF^2 * reduce(+, [reduce(+, [sgF(m+n)/((2*m+1)*(2*n+1))::Float/cosh(5*pF*sqrt(((2*m+1)^2 + (2*n+1)^2)::Float)) for n in 0..9]) for m in 0..9])
+t0 := nowms(); vf := f1(); vcaseF("bc10.1 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f2(); vcaseF("bc10.2 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f3(); vcaseF("bc10.3 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f4(); vcaseF("bc10.4 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f5(); vcaseF("bc10.5 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f6(); vcaseF("bc10.6 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f7(); vcaseF("bc10.7 wp50", vf, nowms() - t0, 48)
+vskip("bc10.8 wp50", "BesselJZero")
+t0 := nowms(); vf := f9(); vcaseF("bc10.9 wp50", vf, nowms() - t0, 48)
+t0 := nowms(); vf := f10(); vcaseF("bc10.10 wp50", vf, nowms() - t0, 48)
+)quit

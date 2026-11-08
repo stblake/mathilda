@@ -1,0 +1,28 @@
+-- Experiment 231 -- SIAM 100-digit HOLDOUT B for Problem 6 (FriCAS column).
+-- Every case is a 2-D or 3-D Fourier integral with a k = 0 singularity,
+-- mostly inside a root solve.  FriCAS has no multi-dimensional quadrature
+-- (romberg/simpson are 1-D and cannot converge on the singularity when
+-- nested) and no numeric root finder for a black-box function: all rows
+-- SKIP, as in experiment 171.  See lattice_walks.m.
+)read ../siam100_common.input )quiet
+vskip("bc6.1 machine", "FindRoot")
+vskip("bc6.1 wp50", "FindRoot")
+vskip("bc6.2 machine", "FindRoot")
+vskip("bc6.2 wp50", "FindRoot")
+vskip("bc6.3 machine", "FindRoot")
+vskip("bc6.3 wp50", "FindRoot")
+vskip("bc6.4 machine", "FindRoot")
+vskip("bc6.4 wp50", "FindRoot")
+vskip("bc6.5 machine", "3-D quadrature")
+vskip("bc6.5 wp50", "3-D quadrature")
+vskip("bc6.6 machine", "FindRoot")
+vskip("bc6.6 wp50", "FindRoot")
+vskip("bc6.7 machine", "2-D quadrature")
+vskip("bc6.7 wp50", "2-D quadrature")
+vskip("bc6.8 machine", "FindRoot")
+vskip("bc6.8 wp50", "FindRoot")
+vskip("bc6.9 machine", "2-D quadrature")
+vskip("bc6.9 wp50", "2-D quadrature")
+vskip("bc6.10 machine", "FindRoot")
+vskip("bc6.10 wp50", "FindRoot")
+)quit

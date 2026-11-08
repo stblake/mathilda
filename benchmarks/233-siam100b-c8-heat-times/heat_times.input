@@ -1,0 +1,27 @@
+-- Experiment 233 -- SIAM 100-digit HOLDOUT B for Problem 8 (FriCAS column).
+-- Every case is a root of a transcendental function of t (see
+-- heat_times.m); FriCAS has no numeric root finder for a non-polynomial
+-- function (its solve/realSolve are polynomial-only): all rows SKIP, as in
+-- experiment 173.
+)read ../siam100_common.input )quiet
+vskip("bc8.1 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.1 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.2 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.2 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.3 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.3 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.4 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.4 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.5 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.5 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.6 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.6 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.7 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.7 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.8 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.8 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.9 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.9 wp50", "numeric root finder (non-polynomial)")
+vskip("bc8.10 machine", "numeric root finder (non-polynomial)")
+vskip("bc8.10 wp50", "numeric root finder (non-polynomial)")
+)quit
