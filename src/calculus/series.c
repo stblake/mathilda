@@ -732,6 +732,92 @@ static bool so_mul_machine(const SeriesObj* aa, const SeriesObj* bb, SeriesObj* 
     return true;
 }
 
+#ifdef USE_MPFR
+/* Smallest MPFR precision over a's coefficients when every one is an MPFR
+ * real (an inexact zero 0``a included) or an exact integer 0; 0 otherwise. */
+static mpfr_prec_t so_coefs_mpfr_bits(const SeriesObj* a) {
+    mpfr_prec_t bits = 0;
+    for (size_t i = 0; i < a->coef_count; i++) {
+        const Expr* c = a->coefs[i];
+        if (c->type == EXPR_INTEGER && c->data.integer == 0) continue;
+        if (c->type != EXPR_MPFR || !mpfr_number_p(c->data.mpfr)) return 0;
+        if (mpfr_zero_p(c->data.mpfr)) continue;   /* its precision is an accuracy */
+        mpfr_prec_t p = mpfr_get_prec(c->data.mpfr);
+        if (bits == 0 || p < bits) bits = p;
+    }
+    return bits;
+}
+#endif
+
+/* The arbitrary-precision twin of so_mul_machine: every coefficient an MPFR
+ * real (or an exact 0), the convolution in MPFR at the smallest input
+ * precision -- the fixed-precision arithmetic Times and Plus of those numbers
+ * perform, without the two evaluator calls per product the generic loop
+ * below pays (Series[N[f, 60]^k, {z, 0, 110}] spent ~0.3 s per k there).
+ * An inexact zero coefficient (0``a, the constant term of N[2^(z/2+1) - 2])
+ * contributes nothing to a sum that has a nonzero term; a coefficient made of
+ * such products alone is formed by the evaluator, exactly as the generic
+ * loop forms it, so its accuracy is the evaluator's.  A product or sum that
+ * leaves MPFR's exponent range or cancels to zero declines. */
+static bool so_mul_mpfr(const SeriesObj* aa, const SeriesObj* bb, SeriesObj* r,
+                        int64_t result_nmin, int64_t result_order) {
+#ifdef USE_MPFR
+    if (r->coef_count == 0) return false;
+    mpfr_prec_t pa = so_coefs_mpfr_bits(aa), pb = so_coefs_mpfr_bits(bb);
+    if (pa == 0 || pb == 0) return false;
+    mpfr_prec_t bits = pa < pb ? pa : pb;
+    size_t m = r->coef_count;
+    mpfr_t* acc = malloc(m * sizeof(mpfr_t));
+    bool* set = calloc(m, sizeof(bool));
+    bool* zhit = calloc(m, sizeof(bool));     /* an inexact-zero product landed */
+    if (!acc || !set || !zhit) { free(acc); free(set); free(zhit); return false; }
+    for (size_t idx = 0; idx < m; idx++) mpfr_init2(acc[idx], bits);
+    mpfr_t prod; mpfr_init2(prod, bits);
+    bool ok = true;
+    for (size_t i = 0; ok && i < aa->coef_count; i++) {
+        if (is_lit_zero(aa->coefs[i])) continue;
+        for (size_t j = 0; j < bb->coef_count; j++) {
+            if (is_lit_zero(bb->coefs[j])) continue;
+            int64_t k = aa->nmin + (int64_t)i + bb->nmin + (int64_t)j;
+            if (k < result_nmin || k >= result_order) continue;
+            size_t idx = (size_t)(k - result_nmin);
+            if (mpfr_zero_p(aa->coefs[i]->data.mpfr) || mpfr_zero_p(bb->coefs[j]->data.mpfr)) {
+                zhit[idx] = true;
+                continue;
+            }
+            mpfr_mul(prod, aa->coefs[i]->data.mpfr, bb->coefs[j]->data.mpfr, MPFR_RNDN);
+            if (!mpfr_regular_p(prod)) { ok = false; break; }
+            if (set[idx]) mpfr_add(acc[idx], acc[idx], prod, MPFR_RNDN);
+            else { mpfr_set(acc[idx], prod, MPFR_RNDN); set[idx] = true; }
+            if (!mpfr_regular_p(acc[idx])) { ok = false; break; }
+        }
+    }
+    mpfr_clear(prod);
+    if (ok)
+        for (size_t idx = 0; idx < m; idx++) {
+            if (set[idx]) { so_set_coef(r, idx, expr_new_mpfr_copy(acc[idx])); continue; }
+            if (!zhit[idx]) continue;
+            /* zero products only: the evaluator's sum of them (its accuracy) */
+            Expr* sum = expr_new_integer(0);
+            int64_t k = result_nmin + (int64_t)idx;
+            for (size_t i = 0; i < aa->coef_count; i++) {
+                int64_t j = k - aa->nmin - (int64_t)i - bb->nmin;
+                if (j < 0 || (size_t)j >= bb->coef_count) continue;
+                if (is_lit_zero(aa->coefs[i]) || is_lit_zero(bb->coefs[j])) continue;
+                Expr* p = simp(mk_times(expr_copy(aa->coefs[i]), expr_copy(bb->coefs[j])));
+                sum = simp(mk_plus(sum, p));
+            }
+            so_set_coef(r, idx, sum);
+        }
+    for (size_t idx = 0; idx < m; idx++) mpfr_clear(acc[idx]);
+    free(acc); free(set); free(zhit);
+    return ok;
+#else
+    (void)aa; (void)bb; (void)r; (void)result_nmin; (void)result_order;
+    return false;
+#endif
+}
+
 static SeriesObj* so_mul(SeriesObj* a, SeriesObj* b) {
     SeriesObj *aa, *bb;
     so_align_den(a, b, &aa, &bb);
@@ -742,7 +828,8 @@ static SeriesObj* so_mul(SeriesObj* a, SeriesObj* b) {
     int64_t ob = bb->order + aa->nmin;
     int64_t result_order = oa < ob ? oa : ob;
     SeriesObj* r = so_alloc(aa->x, aa->x0, result_nmin, result_order, aa->den);
-    if (so_mul_machine(aa, bb, r, result_nmin, result_order)) {
+    if (so_mul_machine(aa, bb, r, result_nmin, result_order)
+        || so_mul_mpfr(aa, bb, r, result_nmin, result_order)) {
         so_free(aa); so_free(bb);
         return r;
     }
@@ -8124,6 +8211,105 @@ static Expr* series_restore_exact_points(Expr* out, const Expr* res) {
     return out;
 }
 
+/* Is f, as a function of x, built only from operations whose series never
+ * divide by a leading coefficient: Plus, Times, Power to a non-negative
+ * integer, a constant base raised to such an f (c^g = Exp[g Log c]), and the
+ * entire functions Exp, Sin, Cos, Sinh, Cosh of such an f?  Their Taylor
+ * coefficients are sums of products of the input's coefficients, so an
+ * inexact coefficient (even an inexact zero, 0``a, the constant term of
+ * N[2^(z/2 + 1) - 2]) only rounds, it never decides a valuation. */
+static bool series_inexact_valuation_safe(Expr* f, Expr* x, int depth) {
+    if (depth > 64) return false;
+    if (expr_free_of(f, x)) return true;
+    if (f->type == EXPR_SYMBOL) return expr_eq(f, x);
+    if (f->type != EXPR_FUNCTION || f->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = f->data.function.head->data.symbol.name;
+    size_t n = f->data.function.arg_count;
+    Expr* const* a = f->data.function.args;
+    if (h == SYM_Plus || h == SYM_Times) {
+        for (size_t i = 0; i < n; i++)
+            if (!series_inexact_valuation_safe(a[i], x, depth + 1)) return false;
+        return true;
+    }
+    if (h == SYM_Power && n == 2) {
+        if (a[1]->type == EXPR_INTEGER && a[1]->data.integer >= 0)
+            return series_inexact_valuation_safe(a[0], x, depth + 1);
+        return expr_free_of(a[0], x) && series_inexact_valuation_safe(a[1], x, depth + 1);
+    }
+    if ((h == SYM_Exp || h == SYM_Sin || h == SYM_Cos || h == SYM_Sinh || h == SYM_Cosh)
+        && n == 1)
+        return series_inexact_valuation_safe(a[0], x, depth + 1);
+    return false;
+}
+
+/* Smallest precision in bits over the inexact leaves of e (a machine Real is
+ * 53; an inexact zero, whose precision is an accuracy, does not count); 0 when
+ * there is none. */
+static long series_min_inexact_bits(const Expr* e) {
+    if (e->type == EXPR_REAL) return 53;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)
+        return mpfr_zero_p(e->data.mpfr) ? 0 : (long)mpfr_get_prec(e->data.mpfr);
+#endif
+    if (e->type != EXPR_FUNCTION) return 0;
+    long best = series_min_inexact_bits(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        long b = series_min_inexact_bits(e->data.function.args[i]);
+        if (b > 0 && (best == 0 || b < best)) best = b;
+    }
+    return best;
+}
+
+/* Series[f, {x, x0, n}] with inexact numbers in f only, f valuation-safe in x
+ * (above) and x0 a finite exact point: expand with the inexact coefficients
+ * directly.  The general route rationalises f, expands exactly and
+ * numericalises back, which is right where a leading coefficient must be
+ * zero-tested, but turns N[Sqrt[2]^(z + 2) - 2, 60]^k into an exact series
+ * over Q(Log[2]) whose coefficient polynomials grow with the order (a cost
+ * ~n^4: 0.3 s per power at order 110).  NULL to take the general route. */
+static Expr* series_inexact_direct(Expr* res) {
+    if (res->data.function.arg_count != 2) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+    if (!has_symbol_head(spec, "List") || spec->data.function.arg_count != 3) return NULL;
+    Expr* x = spec->data.function.args[0];
+    Expr* x0 = spec->data.function.args[1];
+    Expr* ne = spec->data.function.args[2];
+    if (x->type != EXPR_SYMBOL || ne->type != EXPR_INTEGER || ne->data.integer < 0
+        || ne->data.integer > 100000)
+        return NULL;
+    int64_t pn, pd;
+    if (!is_rational(x0, &pn, &pd)) return NULL;     /* an exact rational point */
+    if (!internal_contains_inexact(f) || !series_inexact_valuation_safe(f, x, 0)) return NULL;
+    Expr* out = do_series_single(f, x, x0, ne->data.integer, false, NULL);
+    if (!out) return NULL;
+    /* inexact in, inexact out, at the input's precision: an exact coefficient
+     * (the 1 of 1.5 + z) is numericalised as the round trip numericalises it;
+     * the inexact ones already are (numericalising the whole SeriesData would
+     * cost more than the expansion) */
+    long bits = series_min_inexact_bits(f);
+    NumericSpec nspec = numeric_machine_spec();
+#ifdef USE_MPFR
+    if (bits > 53) { nspec.mode = NUMERIC_MODE_MPFR; nspec.bits = bits; }
+#endif
+    if (has_symbol_head(out, "SeriesData") && out->data.function.arg_count == 6
+        && has_symbol_head(out->data.function.args[2], "List")) {
+        Expr* cl = out->data.function.args[2];
+        for (size_t i = 0; i < cl->data.function.arg_count; i++) {
+            Expr* c = cl->data.function.args[i];
+            if (c->type == EXPR_REAL || c->type == EXPR_MPFR) continue;
+            Expr* nc = numericalize(c, nspec);
+            if (!nc) continue;
+            expr_free(c);
+            cl->data.function.args[i] = nc;
+        }
+        return out;
+    }
+    Expr* num = numericalize(out, nspec);
+    expr_free(out);
+    return num;
+}
+
 Expr* builtin_series(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
 
@@ -8141,6 +8327,8 @@ Expr* builtin_series(Expr* res) {
      * rational. Convert inexact inputs, run, and numericalise the
      * resulting series back. */
     if (internal_args_contain_inexact(res)) {
+        Expr* direct = series_inexact_direct(res);
+        if (direct) return series_restore_exact_points(direct, res);
         return series_restore_exact_points(
             internal_rationalize_then_numericalize(res, builtin_series), res);
     }
