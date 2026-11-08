@@ -427,11 +427,46 @@ static void test_schur_mpfr_rank_deficient(void) {
              "Max[Abs[q . t . Transpose[q] - d]] < 10^-45");
 }
 
+/* ---- Det of a small machine matrix: in-line LU, no LAPACK ----------------- */
+
+static void test_det_small_direct(void) {
+    chk("Det[{{1., 2.}, {3., 4.}}]", "-2.0");
+    chk("Det[{{2., 0.}, {0., 3.}}]", "6.0");
+    chk("Det[{{1., 1.}, {1., 1.}}]", "0.0");
+    /* every order up to the in-line limit and past it, against the exact
+     * determinant of the same (dyadic) entries */
+    chk_true("And @@ Table[SeedRandom[n]; dm = RandomReal[{-1, 1}, {n, n}]; "
+             "Abs[Det[dm] - Det[Rationalize[dm, 0]]] <= 10^-13 Max[1, Abs[Det[dm]]], {n, 1, 10}]");
+    /* scalar, packed and Compile surfaces agree bit for bit */
+    chk_true("SeedRandom[7]; dm = RandomReal[{-1, 1}, {4, 4}]; "
+             "dc = Compile[{{a, _Real, 2}}, Det[a]]; "
+             "Det[dm] === Det[Developer`ToPackedArray[dm]] === dc[dm]");
+}
+
+/* ---- Dot of two short machine-real vectors: in-line, no packing ----------- */
+
+static void test_dot_small_real(void) {
+    chk("{1., 2.} . {3., 4.}", "11.0");
+    chk("{1, 2} . {3, 4}", "11");                 /* exact stays exact */
+    chk("{1, 2} . {3., 4.}", "11.0");             /* mixed: the packed path */
+    chk("{a, 2.} . {3., 4.}", "8.0 + 3.0 a");
+    /* the same bits as the packed kernel (a vectorised ddot under LAPACK), at
+     * every length up to and past 16, on mixed magnitudes that expose a
+     * different summation order */
+    chk_true("And @@ Flatten[Table[SeedRandom[100 n + s]; "
+             "dv = RandomReal[{-1, 1}, n] 10.^RandomInteger[{-6, 6}, n]; "
+             "dw = RandomReal[{-1, 1}, n] 10.^RandomInteger[{-6, 6}, n]; "
+             "dv . dw === Developer`ToPackedArray[dv] . Developer`ToPackedArray[dw], "
+             "{n, 1, 20}, {s, 1, 40}]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
     test_mute_messages();
     setup();
+    test_det_small_direct();
+    test_dot_small_real();
     test_mpfr_svd_wide();
     test_mpfr_precision();
     test_numeric_rref();

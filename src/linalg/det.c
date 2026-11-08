@@ -126,6 +126,13 @@ Expr* builtin_det(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     if (linalg_call_has_ndarray(res)) return ndla_det(res);
 
+    /* A small all-machine-real matrix: factored in place, without first being
+     * packed into an NDArray (an allocation and a new call, for a 2x2). */
+    {
+        Expr* small = nd_det_small_list(res->data.function.args[0]);
+        if (small) return small;
+    }
+
     /* A machine-real matrix too small to have been packed reaches the same fast
      * path here. Without it a 6x6 Det runs the generic path: 1.28 s over 5000
      * repeats against 0.0012 s packed, for the identical value. */

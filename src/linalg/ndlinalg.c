@@ -317,6 +317,88 @@ bool nd_machine_rcond(const Expr* m, char norm, double* rcond)
 /*  Det                                                                */
 /* ------------------------------------------------------------------ */
 
+/* Largest order factored in-line rather than through LAPACK.  For a small
+ * matrix the LAPACK route is all overhead: ilaenv/workspace queries in dgetrf,
+ * and dgecon's iterative norm estimate (two triangular solves per sweep, up to
+ * five sweeps).  The chaotic-billiard benchmark takes a 2x2 Det for every
+ * candidate mirror, and Det (dgecon above all) was 22% of its run; with the
+ * in-line LU plus an EXACT inverse norm it is under 2%.  Up to this order the
+ * exact ||A^-1|| (n triangular solves, O(n^3) = 512 flops at n = 8) is cheaper
+ * than the estimator's set-up and is never smaller than its estimate's
+ * reciprocal, so the ::luc test is at least as sharp. */
+#define ND_DET_SMALL 8
+
+/* rcond of a small column-major real matrix in the infinity norm, from its
+ * nd_lu_real factors: 1 / (||A||_inf ||A^-1||_inf), the inverse formed column
+ * by column.  0 for a singular factorisation. */
+static double nd_small_rcond_inf(const double* LU, int n, const int* piv,
+                                 double anorm)
+{
+    if (!(anorm > 0.0)) return 0.0;
+    for (int k = 0; k < n; k++)
+        if (LU[k + (size_t)k * n] == 0.0) return 0.0;
+    double rows[ND_DET_SMALL] = { 0 }, col[ND_DET_SMALL];
+    for (int j = 0; j < n; j++) {
+        for (int i = 0; i < n; i++) col[i] = (i == j) ? 1.0 : 0.0;
+        nd_lu_solve_col(LU, n, piv, col);
+        for (int i = 0; i < n; i++) rows[i] += fabs(col[i]);
+    }
+    double inorm = 0.0;
+    for (int i = 0; i < n; i++) if (rows[i] > inorm) inorm = rows[i];
+    if (!(inorm > 0.0) || !isfinite(inorm)) return 0.0;
+    return 1.0 / (anorm * inorm);
+}
+
+/* ||A||_inf of a column-major real n x n matrix (max absolute row sum). */
+static double nd_small_norm_inf(const double* A, int n)
+{
+    double mx = 0.0;
+    for (int i = 0; i < n; i++) {
+        double s = 0.0;
+        for (int j = 0; j < n; j++) s += fabs(A[i + (size_t)j * n]);
+        if (s > mx || s != s) mx = s;
+    }
+    return mx;
+}
+
+
+/* Det of a small (n <= ND_DET_SMALL) real column-major matrix A, overwritten
+ * by its factors: in-line partial-pivot LU, the ::luc test on the exact
+ * infinity-norm rcond (same threshold as the LAPACK route), and the pivot
+ * product by nd_real_det_result.  `m` is the matrix as the message names it. */
+static Expr* nd_real_det_result(const double* LU, int n, int sign);
+static Expr* nd_det_small_real(double* A, int n, const Expr* m)
+{
+    int piv[ND_DET_SMALL];
+    int sign = 1;
+    double anorm = nd_small_norm_inf(A, n);
+    int rank = nd_lu_real(A, n, piv, &sign);
+    if (rank == n && nd_small_rcond_inf(A, n, piv, anorm) < ND_LUC_RCOND)
+        nd_warn_luc("Det", m);
+    return nd_real_det_result(A, n, sign);
+}
+
+Expr* nd_det_small_list(const Expr* m)
+{
+    if (!m || m->type != EXPR_FUNCTION || m->data.function.head->type != EXPR_SYMBOL ||
+        m->data.function.head->data.symbol.name != SYM_List) return NULL;
+    int n = (int)m->data.function.arg_count;
+    if (n < 1 || n > ND_DET_SMALL) return NULL;
+    double A[ND_DET_SMALL * ND_DET_SMALL];
+    for (int i = 0; i < n; i++) {
+        const Expr* row = m->data.function.args[i];
+        if (row->type != EXPR_FUNCTION || row->data.function.head->type != EXPR_SYMBOL ||
+            row->data.function.head->data.symbol.name != SYM_List ||
+            (int)row->data.function.arg_count != n) return NULL;
+        for (int j = 0; j < n; j++) {
+            const Expr* x = row->data.function.args[j];
+            if (x->type != EXPR_REAL) return NULL;
+            A[i + (size_t)j * n] = x->data.real;          /* column-major, as na_load_matrix */
+        }
+    }
+    return nd_det_small_real(A, n, m);
+}
+
 /* Build a REAL determinant from the LU U-diagonal.
  *
  * det = sign * prod(U[k,k]).  Accumulating that product in a raw double
@@ -427,7 +509,11 @@ Expr* ndla_det(Expr* res)
             return linalg_delist_and_reeval(res);
         int* piv = (int*)malloc(sizeof(int) * (size_t)n);
         int sign = 1;
-        if (mathilda_lapack_probe()) {
+        if (n <= ND_DET_SMALL) {
+            Expr* out = nd_det_small_real(A, n, arg);
+            free(piv); free(A);
+            return out;
+        } else if (mathilda_lapack_probe()) {
             /* LAPACK dgetrf (blocked, vectorized) — det = sign * prod(diag U).
              * The product itself is formed by nd_real_det_result, which keeps a
              * finite answer when the raw double product would over/underflow. */

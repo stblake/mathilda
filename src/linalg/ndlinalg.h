@@ -102,6 +102,10 @@ double nd_lu_rcond(char norm, const double* LU, int n, bool cplx, double anorm);
 double nd_mat_norm(char norm, const double* A, int n, bool cplx);
 /* Emit head::luc for matrix m (routed through mth_message). */
 void nd_warn_luc(const char* head, const Expr* m);
+/* Det of a plain List-of-Lists n x n machine-real matrix, n <= 8, without
+ * packing it first: the same in-line LU, ::luc test and pivot product as the
+ * packed fast path (so the same bits).  NULL for any other shape. */
+Expr* nd_det_small_list(const Expr* m);
 /* rcond of a square machine matrix m (a machine List, packed or NDArray), in
  * `norm`; 0 for a singular one.  False when m is not a square machine matrix
  * or LAPACK is unavailable. */

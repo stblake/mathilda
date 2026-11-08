@@ -186,7 +186,48 @@ static Expr* dot_pack_operand(Expr* list) {
     return linalg_pack_machine_operand(list);
 }
 
+/* Longest vector contracted in-line by dot_small_real. */
+#define DOT_SMALL_REAL 16
+
+/* v . w for two plain Lists of machine Reals of the same length n <= 16, with
+ * the packed path's own inner product on the List elements copied to the
+ * stack: nd_ddot_threaded (one serial cblas_ddot chunk at this size) under
+ * LAPACK, else ndarray_dot2's float64 loop (sum = 0.0; sum += v[k] w[k], in
+ * order).  dot2 would otherwise pack both operands into NDArrays -- two
+ * allocations and a sniff each -- to reach that same kernel, and for a
+ * 2-vector that was most of the cost of the call (a chaotic billiard takes
+ * (c - p) . v for every candidate mirror).  The same kernel on the same
+ * values, so the same bits as the packed path (the vectorised ddot's
+ * summation order is not the serial loop's).  NULL when the shape is not
+ * that. */
+static Expr* dot_small_real(const Expr* a, const Expr* b) {
+    if (a->type != EXPR_FUNCTION || b->type != EXPR_FUNCTION) return NULL;
+    if (a->data.function.head->type != EXPR_SYMBOL || b->data.function.head->type != EXPR_SYMBOL ||
+        a->data.function.head->data.symbol.name != SYM_List ||
+        b->data.function.head->data.symbol.name != SYM_List) return NULL;
+    size_t n = a->data.function.arg_count;
+    if (n == 0 || n > DOT_SMALL_REAL || b->data.function.arg_count != n) return NULL;
+    double x[DOT_SMALL_REAL], y[DOT_SMALL_REAL];
+    for (size_t k = 0; k < n; k++) {
+        if (a->data.function.args[k]->type != EXPR_REAL ||
+            b->data.function.args[k]->type != EXPR_REAL) return NULL;
+        x[k] = a->data.function.args[k]->data.real;
+        y[k] = b->data.function.args[k]->data.real;
+    }
+#ifdef USE_LAPACK
+    return expr_new_real(nd_ddot_threaded(x, y, n));
+#else
+    double sum = 0.0;
+    for (size_t k = 0; k < n; k++) sum += x[k] * y[k];
+    return expr_new_real(sum);
+#endif
+}
+
 Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
+    {
+        Expr* small = dot_small_real(a, b);
+        if (small) return small;
+    }
     /* One operand packed and the other an ordinary List: pack the plain one and
      * let the pair take the buffer path.
      *
