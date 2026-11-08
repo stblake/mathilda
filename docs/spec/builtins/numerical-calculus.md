@@ -2002,7 +2002,14 @@ circle (isoparametric quadratic elements).
 
 **Boundary conditions.** `DirichletCondition[u[x, y] == h, pred]` fixes `u` at
 every boundary **node** where `pred` (a function of `x`, `y`; `True` for the
-whole boundary) holds; several may be given, the first true one wins.
+whole boundary) holds, **and at the end vertices of every boundary edge whose
+midside node satisfies it** — the condition holds on the closure of the boundary
+part, so a strict predicate such as `y < b - 10^-9` (every side but `y = b`) still
+fixes the corners `(0, b)`, `(1, b)` of the Dirichlet sides. Fixing only the nodes
+where `pred` holds left those corners free, a sliver of natural boundary on each
+Dirichlet side that cost the SIAM holdout problems hd14.6/hd14.10 all but 2–3
+digits. Several conditions may be given; the first true one wins (nodes first,
+then edge closures in the order the conditions are given).
 `NeumannValue[g, pred]` in the equation contributes the boundary flux
 `n·(c ∇u) = g` on the boundary edges whose midpoint satisfies `pred`; `g` may be
 linear in `u` (a Robin condition, `NeumannValue[2 - u[x, y], x == 1]`). Every

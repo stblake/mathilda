@@ -751,6 +751,31 @@ static bool fem_assemble(const FemPde* P, FemSystem* S, bool want_mass, bool wan
             }
         }
     }
+    /* The condition holds on the closure of the boundary part where its
+     * predicate is True: an end vertex of a boundary edge whose interior
+     * (midside node) satisfies the predicate is fixed too, even when the
+     * predicate itself is False at that vertex.  Without this a strict
+     * predicate (y < b - 1e-9 for "every side but y = b") leaves the corner
+     * vertices free, which turns a sliver of each Dirichlet side next to the
+     * corner into a natural boundary and costs the solution all but a few
+     * digits.  The first matching condition wins, as for the nodes. */
+    for (int k = 0; k < P->ndc; k++) {
+        for (int64_t b = 0; b < m->nb; b++) {
+            int64_t va = m->bedge[3 * b], vb = m->bedge[3 * b + 1], vm = m->bedge[3 * b + 2];
+            if (S->map[va] != -2 && S->map[vb] != -2) continue;
+            if (fem_pred(P->dc_pred[k], P->xv, P->yv, m->x[2 * vm], m->x[2 * vm + 1]) != 1) continue;
+            int64_t ends[2] = { va, vb };
+            for (int j = 0; j < 2; j++) {
+                int64_t i = ends[j];
+                if (S->map[i] != -2) continue;
+                double x = m->x[2 * i], y = m->x[2 * i + 1], v;
+                if (!fem_field(P->dc_val[k], P->xv, P->yv, &x, &y, 1, &v)) {
+                    *why = "a Dirichlet value is not numeric"; return false;
+                }
+                S->map[i] = -1; S->ufix[i] = v;
+            }
+        }
+    }
     for (int64_t i = 0; i < nn; i++) if (S->map[i] == -2) S->map[i] = nf++;
     S->nfree = nf;
     S->K.n = nf; S->M.n = nf;
@@ -2346,7 +2371,8 @@ void fem_init(void) {
         "\tquadratic finite elements; options as for NDEigenvalues.");
     symtab_set_docstring("DirichletCondition",
         "DirichletCondition[u[x, y] == h, pred] represents the boundary condition u = h on the parts\n"
-        "\tof the boundary where pred is True, in NDSolve, NDEigenvalues and NDEigensystem over a region.");
+        "\tof the boundary where pred is True (and their end points), in NDSolve, NDEigenvalues and\n"
+        "\tNDEigensystem over a region.");
     symtab_set_docstring("NeumannValue",
         "NeumannValue[g, pred] represents the flux n . (c grad u) = g on the parts of the boundary\n"
         "\twhere pred is True: op u == f + NeumannValue[g, pred] in NDSolve over a region. g may be\n"

@@ -358,6 +358,21 @@ static void test_nintegrate_path(void) {
               "NIntegrate[snat[1, y], {y, 0, 1}, WorkingPrecision -> 30]", 1.0, 1e-12);
 }
 
+/* ---------------- DirichletCondition on the closure of its boundary part ---------------- */
+static void test_dirichlet_closure(void) {
+    /* u = x (2 - x) y (1 - y): u = 0 on x = 0, y = 0, y = 1, u_x = 0 on x = 1;
+     * -Lap u = 2 y (1 - y) + 2 x (2 - x).  The strict predicate x < 1 - 1e-9
+     * is False at the corners (1, 0) and (1, 1), which still belong to the
+     * Dirichlet sides: Int_0^1 u(1, y) dy = 1/6. */
+    check_abs("strict predicate: corners of a Dirichlet side are fixed",
+              "With[{s = NDSolveValue[{-Laplacian[u[x, y], {x, y}] == 2 y (1 - y) + 2 x (2 - x), "
+              "DirichletCondition[u[x, y] == 0, x < 1 - 10.^-9]}, u, {x, y} \\[Element] Rectangle[], "
+              "Method -> {\"FiniteElement\", \"MeshOptions\" -> {\"MaxCellMeasure\" -> 10.^-3}}]}, "
+              "NIntegrate[s[1, y], {y, 0, 1}]]", 1.0 / 6.0, 2e-7);
+    check_abs("corner value 0", "NDSolveValue[{-Laplacian[u[x, y], {x, y}] == 2 y (1 - y) + 2 x (2 - x), "
+              "DirichletCondition[u[x, y] == 0, x < 1 - 10.^-9]}, u, {x, y} \\[Element] Rectangle[]][1, 1]", 0.0, 1e-15);
+}
+
 /* ---------------- messages / declines ---------------- */
 static void test_declines(void) {
     double v;
@@ -384,6 +399,7 @@ int main(void) {
     test_nintegrate();
     test_contourplot();
     test_nintegrate_path();
+    test_dirichlet_closure();
     test_declines();
     if (failures == 0) printf("\nAll FEM tests passed.\n");
     else printf("\n%d FEM test(s) FAILED.\n", failures);
