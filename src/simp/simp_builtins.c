@@ -79,6 +79,131 @@ static bool real_is_integer(double r) {
     return (double)i == r;
 }
 
+/* ---- exact numeric constants: algebraic vs certified transcendental ----
+ *
+ * The literal arms of element_decide below see only Integer / Rational /
+ * Real / Complex; an exact constant such as Sqrt[2], Log[2] or Pi was left
+ * undecided in Rationals, Algebraics and Integers.  Two sound tests close the
+ * common cases and leave everything else (Pi + E, EulerGamma, ...) open:
+ *
+ *  - ALGEBRAIC: a symbol-free expression the qqbar converter accepts
+ *    (rationals, radicals, I, roots of unity, Root, GoldenRatio) is algebraic.
+ *    Its canonical qqbar form is a rational literal exactly when it is
+ *    rational, which decides Rationals and Integers too.
+ *  - TRANSCENDENTAL: c0 + c1 T^k with c0 algebraic, c1 a certified non-zero
+ *    algebraic, k a non-zero rational and T one of Pi, E, Log[r] or E^r (r
+ *    rational, r != 1 for Log, r != 0 for E^r).  T is transcendental by
+ *    Lindemann / Hermite-Lindemann, and were c0 + c1 T^k algebraic then T^k,
+ *    hence T, would be.  Only that one-atom shape is certified. */
+
+static bool is_exact_rational_atom(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
+                 is_rational_literal(e));
+}
+
+static bool is_zero_int(const Expr* e) {
+    return e && e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
+static bool is_one_int(const Expr* e) {
+    return e && e->type == EXPR_INTEGER && e->data.integer == 1;
+}
+
+/* T in {Pi, E, Log[r] (r rational, r > 0, r != 1), E^r (r rational != 0)}. */
+static bool is_transcendental_atom(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_Pi || e->data.symbol.name == SYM_E;
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
+        const Expr* r = e->data.function.args[0];
+        if (!is_exact_rational_atom(r) || is_one_int(r) || is_zero_int(r)) return false;
+        if (r->type == EXPR_INTEGER) return r->data.integer > 0;
+        if (r->type == EXPR_BIGINT) return mpz_sgn(r->data.bigint) > 0;
+        const Expr* num = r->data.function.args[0];      /* Rational[p, q], q > 0 */
+        return (num->type == EXPR_INTEGER) ? num->data.integer > 0
+             : (num->type == EXPR_BIGINT && mpz_sgn(num->data.bigint) > 0);
+    }
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* x = e->data.function.args[1];
+        return b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E &&
+               is_exact_rational_atom(x) && !is_zero_int(x);
+    }
+    return false;
+}
+
+/* A factor certified non-zero and algebraic: a non-zero rational, a Complex
+ * with rational parts (canonical Complex has a non-zero imaginary part), I,
+ * or a power of a non-zero rational with a rational exponent. */
+static bool is_certified_nonzero_algebraic(const Expr* e) {
+    if (is_exact_rational_atom(e)) return !is_zero_int(e);
+    if (is_complex_literal(e))
+        return is_exact_rational_atom(e->data.function.args[0]) &&
+               is_exact_rational_atom(e->data.function.args[1]);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2)
+        return is_exact_rational_atom(e->data.function.args[0]) &&
+               !is_zero_int(e->data.function.args[0]) &&
+               is_exact_rational_atom(e->data.function.args[1]);
+    return false;
+}
+
+/* T^k (k a non-zero rational) or T itself. */
+static bool is_transcendental_power(const Expr* e) {
+    if (is_transcendental_atom(e)) return true;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2)
+        return is_transcendental_atom(e->data.function.args[0]) &&
+               is_exact_rational_atom(e->data.function.args[1]) &&
+               !is_zero_int(e->data.function.args[1]);
+    return false;
+}
+
+/* c1 T^k: exactly one transcendental power, every other factor certified. */
+static bool is_transcendental_term(const Expr* e) {
+    if (is_transcendental_power(e)) return true;
+    if (!head_is(e, SYM_Times)) return false;
+    int nt = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* f = e->data.function.args[i];
+        if (is_transcendental_power(f)) nt++;
+        else if (!is_certified_nonzero_algebraic(f)) return false;
+    }
+    return nt == 1;
+}
+
+/* 1 = certified transcendental, 0 = algebraic, -1 = neither known. */
+static int exact_constant_class(const Expr* x) {
+    if (flint_qqbar_is_constant_algebraic(x)) return 0;
+    if (is_transcendental_term(x)) return 1;
+    if (head_is(x, SYM_Plus)) {
+        int nt = 0;
+        for (size_t i = 0; i < x->data.function.arg_count; i++) {
+            const Expr* t = x->data.function.args[i];
+            if (is_transcendental_term(t)) nt++;
+            else if (!flint_qqbar_is_constant_algebraic(t)) return -1;
+        }
+        if (nt == 1) return 1;
+    }
+    return -1;
+}
+
+/* Membership of an exact constant in Algebraics / Rationals / Integers:
+ * 1, 0, or -1 (undecided). */
+static int exact_constant_in(const Expr* x, const char* dom) {
+    if (!x || (x->type != EXPR_FUNCTION && x->type != EXPR_SYMBOL)) return -1;
+    int cls = exact_constant_class(x);
+    if (cls == 1) return 0;                     /* transcendental: in none */
+    if (cls != 0) return -1;
+    if (strcmp(dom, "Algebraics") == 0) return 1;
+    Expr* c = flint_qqbar_canonical(x, QQBAR_METHOD_AUTOMATIC);
+    if (!c) return -1;
+    int ans;
+    if (c->type == EXPR_INTEGER || c->type == EXPR_BIGINT) ans = 1;
+    else if (is_rational_literal(c)) ans = strcmp(dom, "Rationals") == 0 ? 1 : 0;
+    else ans = 0;                               /* canonical irrational form */
+    expr_free(c);
+    return ans;
+}
+
 /* Element[x, dom] decision: 1 = True, 0 = False, -1 = undetermined. Exported
  * (declared in simp_internal.h) so Refine can decide Element statements under
  * its own assumption context. */
@@ -98,7 +223,7 @@ int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
         if (is_rational_literal(x)) return 0;
         if (is_complex_literal(x)) return 0;
         if (prov_int(ctx, x)) return 1;
-        return -1;
+        return exact_constant_in(x, dom);
     }
 
     if (strcmp(dom, "Rationals") == 0) {
@@ -107,7 +232,7 @@ int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
         if (x->type == EXPR_REAL) return 1;             /* every double is dyadic */
         if (is_complex_literal(x)) return 0;
         if (prov_int(ctx, x)) return 1;
-        return -1;
+        return exact_constant_in(x, dom);
     }
 
     if (strcmp(dom, "Algebraics") == 0) {
@@ -116,7 +241,7 @@ int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) {
         if (x->type == EXPR_REAL) return 1;
         if (is_complex_literal(x)) return 1;            /* canonical Complex parts are rational */
         if (prov_int(ctx, x)) return 1;
-        return -1;
+        return exact_constant_in(x, dom);
     }
 
     if (strcmp(dom, "Reals") == 0) {

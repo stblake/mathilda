@@ -891,6 +891,18 @@ Tests domain membership, consulting the current assumptions.
 - Numeric and structural literals decide directly. Symbolic queries consult
   `$Assumptions`, honouring the `Integer ⊆ Rational ⊆ Algebraic ⊆ Real ⊆ Complex`
   lattice.
+- Exact constants in `Integers`, `Rationals` and `Algebraics` (v0.6461):
+  - A symbol-free algebraic number decides from its canonical algebraic form.
+    Algebraic numbers include rationals, radicals, `I`, roots of unity, `Root`
+    and `GoldenRatio`. `Element[Sqrt[2], Rationals]` is `False`;
+    `Element[(1 + Sqrt[2])^2 - 2 Sqrt[2], Integers]` is `True`.
+  - `c0 + c1 T^k` is `False` in all three domains, by Lindemann and
+    Hermite–Lindemann. Here `c0` and `c1` are algebraic, `c1` is certified
+    non-zero, `k` is a non-zero rational, and `T` is one of `Pi`, `E`,
+    `Log[r]` or `E^r` with `r` rational. Examples: `Element[Log[2], Rationals]`,
+    `Element[1 + 3 Pi^2, Algebraics]`.
+  - Any other constant stays unevaluated, since its status is unknown or not
+    certified: `Pi + E`, `E Pi`, `EulerGamma`, `Catalan`.
 - `Element[{x1, ..., xN}, dom]` and `Element[x1 | ... | xN, dom]` are shorthand
   for the conjunction `Element[x1, dom] && ... && Element[xN, dom]`: `True` /
   `False` if every component decides, otherwise unevaluated (and treated as a

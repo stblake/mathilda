@@ -113,6 +113,29 @@ void test_element_direct_compound_fact(void) {
                    "True", 0);
 }
 
+/* Exact constants: algebraic numbers decide via their qqbar canonical form,
+ * a one-atom transcendental (Pi, E, Log[r], E^r) is in none of Integers,
+ * Rationals, Algebraics; anything else stays open. */
+void test_element_exact_constants(void) {
+    assert_eval_eq("Element[Log[2], Rationals]", "False", 0);
+    assert_eval_eq("Element[Log[2]/2, Rationals]", "False", 0);
+    assert_eval_eq("Element[Log[10], Integers]", "False", 0);
+    assert_eval_eq("Element[Pi, Rationals]", "False", 0);
+    assert_eval_eq("Element[E, Algebraics]", "False", 0);
+    assert_eval_eq("Element[1 + 3 Pi^2, Algebraics]", "False", 0);
+    assert_eval_eq("Element[Sqrt[2] + Pi, Rationals]", "False", 0);
+    assert_eval_eq("Element[Sqrt[2], Rationals]", "False", 0);
+    assert_eval_eq("Element[Sqrt[2], Algebraics]", "True", 0);
+    assert_eval_eq("Element[(1 + Sqrt[2])^2 - 2 Sqrt[2], Integers]", "True", 0);
+    assert_eval_eq("Element[GoldenRatio, Rationals]", "False", 0);
+    assert_eval_eq("Element[I, Rationals]", "False", 0);
+    assert_eval_eq("Element[Root[#^5 - # - 1 &, 1], Algebraics]", "True", 0);
+    /* not certified: stay unevaluated */
+    assert_eval_eq("Element[Pi + E, Rationals]", "Element[E + Pi, Rationals]", 0);
+    assert_eval_eq("Element[E Pi, Algebraics]", "Element[E Pi, Algebraics]", 0);
+    assert_eval_eq("Element[EulerGamma, Rationals]", "Element[EulerGamma, Rationals]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -143,6 +166,7 @@ int main(void) {
     TEST(test_element_dollar_assumptions_restored);
     TEST(test_element_threads_over_list);
     TEST(test_element_direct_compound_fact);
+    TEST(test_element_exact_constants);
 
     printf("All Element tests passed!\n");
     return 0;
