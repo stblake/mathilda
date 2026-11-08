@@ -431,6 +431,11 @@ static Expr* lookup_core(Expr* res) {
         Expr** out = malloc(sizeof(Expr*) * (nk ? nk : 1));
         for (size_t j = 0; j < nk; j++) {
             Expr* qk = key->data.function.args[j];
+            /* Key[k] inside the list is the literal key k, as in the
+             * single-key form above: Lookup[a, {Key[{1,0}], Key[{2,1}]}]
+             * looks up the two list-valued keys {1,0} and {2,1}. */
+            if (head_is(qk, SYM_Key) && qk->data.function.arg_count == 1)
+                qk = qk->data.function.args[0];
             size_t slot, idx = ki_lookup(&ki, akeys, qk, &slot);
             if (idx != SIZE_MAX)
                 out[j] = expr_copy(rule_val(assoc->data.function.args[idx]));

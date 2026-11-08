@@ -242,6 +242,14 @@ static void test_lookup_lazy_default(void) {
     check("Lookup[{x -> 1}, z]", "Missing[\"KeyAbsent\", z]");
 }
 
+/* Key[k] inside a list of keys is the literal key k (list-valued keys). */
+static void test_lookup_key_list(void) {
+    check("Lookup[<|{1, 1} -> 1, {2, 1} -> 3|>, Key /@ {{1, 1}, {2, 1}, {0, 0}}, 0]", "{1, 3, 0}");
+    check("Lookup[<|{1, 0} -> a|>, {Key[{1, 0}], Key[{9}]}]",
+          "{a, Missing[\"KeyAbsent\", {9}]}");
+    check("Lookup[{x -> 1}, {Key[x], y}, 0]", "{1, 0}");
+}
+
 static void test_keymemberq_patterns(void) {
     check("KeyMemberQ[<|x -> 1, y -> 2|>, _]", "True");
     check("KeyFreeQ[<|x -> 1, y -> 2|>, _]", "False");
@@ -271,6 +279,7 @@ int main(void) {
     TEST(test_opform_register_api);
     TEST(test_opform_assoc_ops_heads);
     TEST(test_lookup_lazy_default);
+    TEST(test_lookup_key_list);
     TEST(test_keymemberq_patterns);
 
     printf("All assoc-forms tests passed (%d assertions).\n", g_checks);

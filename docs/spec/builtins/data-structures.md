@@ -228,6 +228,9 @@ Looks up the value stored under a key.
 - `Lookup[assoc, key, default]` uses `default` when the key is absent.
 - `Lookup[assoc, {k1, k2, ...}]` looks up several keys with a single hash-index
   build (`O(n + m)`).
+  An element `Key[k]` of the key list is the literal key `k`, as in the
+  single-key form. So `Lookup[a, Key /@ {{1, 1}, {2, 1}}, 0]` looks up the two
+  list-valued keys (v0.6462).
 - `Lookup[{a1, a2, ...}, key]` threads over a list of associations, extracting
   the key from each (a key/default thread through) — handy for pulling one field
   out of a column of records. The list may mix associations and lists of rules:
