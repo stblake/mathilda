@@ -1816,6 +1816,28 @@ order 1 (parabolic — heat, advection–diffusion, reaction–diffusion, Burger
 one-sided finite-difference of the same order; periodic domains use cyclic
 stencils. The grid and stencil are set with
 `Method -> {"MethodOfLines", "SpatialDiscretization" -> {"TensorProductGrid", "MinPoints" -> n, "DifferenceOrder" -> q}}`.
+**Without `MinPoints` the 1-D grid is chosen from the initial data**: the coarsest
+of the nested grids `24·2^k + 1` (from 25 points) on which the degree-`q - 1`
+interpolant of each initial function, from the `q` nodes around every cell
+midpoint, matches the function there to the time tolerance
+(`10^-PrecisionGoal · max|u0| + 10^-AccuracyGoal`, floored at `10^-13`), up to
+`"MaxPoints"` (by default 1537 at machine precision; above it 25, the default
+grid, since the arbitrary-precision integrator is explicit and its cost on a
+parabolic problem grows as the cube of the points). Smooth data stop
+early (`Sin[π x]`: 193 points); a kink, a jump or boundary-incompatible data run to
+`MaxPoints`, and data the finest grid still misses by more than 10× the tolerance
+get `NDSolve::eerr` (the scaled spatial error estimate and the point count, in
+the reference's wording). A node next to a **jump** of the initial data (a cell whose change
+dominates its neighbours' and survives bisection to a few ulps) takes the data's
+mean over its cell, with the jump located inside it, instead of the point value —
+point sampling knows a jump's position only to a cell, an `O(h)` error in every
+mode, the cell mean makes it `O(h²)` as for a kink (machine precision; the
+arbitrary-precision path samples exact data at exact nodes). On the SIAM holdout
+heat family (crossing times of `u(1/2, t)` or of the graph length): hat data
+2 → 6 digits, a jump 0 → 6, the Daubechies `φ₂` problem at `t ≈ 5·10⁻³` 0 → 3. The
+solution's `InterpolatingFunction` is assembled straight from the packed samples
+(5× faster on a 1537 × 2000 solution). BDF steps down to `16 ε (|t| + 10⁻⁶ span)`,
+not an absolute `16 ε`: a fine grid on a jump opens with steps of `10⁻¹⁵`.
 Diffusion-dominated (stiff) problems should use `Method -> "BDF"` (auto-selected
 for parabolic problems). **Two spatial dimensions** are also supported on a
 rectangle — `NDSolve[eqns, u, {t,..}, {x,..}, {y,..}]` — with general linear

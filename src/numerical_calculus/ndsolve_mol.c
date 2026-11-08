@@ -40,11 +40,19 @@
 #include "../interp.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <math.h>
+#include <float.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 #define ND_MAX_SORDER 8    /* highest spatial derivative order handled */
+/* Finest automatic 1-D grid (MaxPoints Automatic) at machine precision.  The
+ * arbitrary-precision integrator is explicit, so its cost on a parabolic
+ * problem grows as the cube of the points (steps ~ 1/h^2): above machine
+ * precision the grid stays at the default 25 unless MaxPoints asks for more
+ * (97 points took a 0.3 s blow-up problem to 73 s). */
+#define ND_MOL_AUTO_MAX      1537
+#define ND_MOL_AUTO_MAX_MPFR 25
 
 static void nd_mol_warn(const char* tag, const char* msg) {
     mth_message("NDSolve", tag, "%s", msg);
@@ -213,6 +221,148 @@ static bool nd_eval_at(const Expr* e, const char* var, double value,
     bool ok = r && nd_eval_to_double(r, spec, out);
     expr_free(r);
     return ok;
+}
+
+/* The number of points of the uniform spatial grid, chosen from the initial
+ * data when the user gave no MinPoints: the coarsest grid 24*2^k + 1 (nested,
+ * from the default 25) on which the degree-(order-1) interpolant of every
+ * initial function, from the `order` nodes nearest each cell midpoint, matches
+ * the function there to the time tolerance (rtol * max|u0| + atol).  The
+ * grid is what limits a method-of-lines answer whenever the initial data has
+ * structure the default 25 points cannot see (a narrow bump, a steep front);
+ * data that never resolves (a kink, a jump, an incompatible boundary value)
+ * runs to max_points, the finest grid the caller affords.  Returns n_default
+ * when the data does not sample numerically. */
+static long nd_mol_auto_points(Expr* const* ic, int nic, const char* xvar,
+                               double xmin, double xmax, NumericSpec spec, int order,
+                               double rtol, double atol, long n_default, long max_points,
+                               double* excess) {
+    *excess = 0.0;
+    if (order < 2) order = 2;
+    if (order > 8) order = 8;
+    long n = n_default;
+    for (;;) {
+        double h = (xmax - xmin) / (double)(n - 1);
+        double* f = malloc(sizeof(double) * (size_t)n);
+        double err = 0.0, scale = 0.0;
+        bool ok = true;
+        for (int m = 0; m < nic && ok; m++) {
+            for (long j = 0; j < n && ok; j++) {
+                ok = nd_eval_at(ic[m], xvar, xmin + (double)j * h, spec, &f[j]) && isfinite(f[j]);
+                if (ok && fabs(f[j]) > scale) scale = fabs(f[j]);
+            }
+            for (long j = 0; j + 1 < n && ok; j++) {
+                double xm = xmin + ((double)j + 0.5) * h, fm;
+                ok = nd_eval_at(ic[m], xvar, xm, spec, &fm) && isfinite(fm);
+                if (!ok) break;
+                /* the `order` nodes nearest the midpoint, inside the grid */
+                long lo = j + 1 - order / 2;
+                if (lo < 0) lo = 0;
+                if (lo + order > n) lo = n - order;
+                if (lo < 0) lo = 0;
+                double p = 0.0;
+                for (long a = lo; a < lo + order && a < n; a++) {
+                    double w = 1.0;
+                    for (long b = lo; b < lo + order && b < n; b++)
+                        if (b != a) w *= ((double)j + 0.5 - (double)b) / (double)(a - b);
+                    p += w * f[a];
+                }
+                double e = fabs(fm - p);
+                if (e > err) err = e;
+            }
+        }
+        free(f);
+        if (!ok) return n_default;
+        if (err <= rtol * scale + atol) return n;
+        long n2 = 2 * (n - 1) + 1;
+        if (n2 > max_points) {
+            *excess = err / (rtol * scale + atol);
+            return n < max_points ? max_points : n;
+        }
+        n = n2;
+    }
+}
+
+/* The mean of e over [a, b], split at s when a < s < b (a jump of e there):
+ * 8-point Gauss-Legendre on four panels of each piece. */
+static bool nd_mol_mean(const Expr* e, const char* xvar, double a, double s, double b,
+                        NumericSpec spec, double* out) {
+    static const double GX[8] = { -0.9602898564975363, -0.7966664774136267, -0.5255324099163290,
+                                  -0.1834346424956498,  0.1834346424956498,  0.5255324099163290,
+                                   0.7966664774136267,  0.9602898564975363 };
+    static const double GW[8] = { 0.1012285362903763, 0.2223810344533745, 0.3137066458778873,
+                                  0.3626837833783620, 0.3626837833783620, 0.3137066458778873,
+                                  0.2223810344533745, 0.1012285362903763 };
+    double cuts[3] = { a, s, b };
+    int ncut = (s > a && s < b) ? 3 : 2;
+    if (ncut == 2) cuts[1] = b;
+    double sum = 0.0;
+    for (int c = 0; c + 1 < ncut; c++) {
+        double l = cuts[c], r = cuts[c + 1];
+        for (int p = 0; p < 4; p++) {
+            double pl = l + (r - l) * p / 4, pr = l + (r - l) * (p + 1) / 4;
+            double cm = 0.5 * (pl + pr), hw = 0.5 * (pr - pl);
+            for (int g = 0; g < 8; g++) {
+                double v;
+                if (!nd_eval_at(e, xvar, cm + hw * GX[g], spec, &v) || !isfinite(v)) return false;
+                sum += hw * GW[g] * v;
+            }
+        }
+    }
+    *out = sum / (b - a);
+    return true;
+}
+
+/* Initial values for the grid nodes next to a jump of the initial function.
+ *
+ * Point values put the position of a jump only to within a cell, an O(h)
+ * error in every mode of the semi-discrete solution (the jump at a node is
+ * sampled as one of its two sides); the mean of the function over the node's
+ * cell -- with the jump located in it -- makes it O(h^2), as for a kink,
+ * which point sampling already handles at that order.  A cell whose change
+ * dominates its neighbours' (4x) is bisected, keeping the half with the
+ * larger change; when the change is still there in a bracket of a few ulps,
+ * the function jumps at that point, and the node whose cell [x - h/2, x + h/2]
+ * holds it takes the cell mean.  Smooth data -- however steep -- never pass
+ * the bisection, kinks never pass the dominance test, so their nodes keep
+ * point values.  Returns a vector of n values with NaN where the point value
+ * stands, or NULL when there is no jump. */
+static double* nd_mol_jump_values(const Expr* e, const char* xvar, double xmin, double xmax,
+                                  long n, NumericSpec spec, double atol) {
+    double h = (xmax - xmin) / (double)(n - 1);
+    double* f = malloc(sizeof(double) * (size_t)n);
+    for (long j = 0; j < n; j++)
+        if (!nd_eval_at(e, xvar, xmin + (double)j * h, spec, &f[j]) || !isfinite(f[j])) { free(f); return NULL; }
+    double* out = NULL;
+    for (long j = 0; j + 1 < n; j++) {
+        double D = fabs(f[j + 1] - f[j]);
+        double nb = 0.0;
+        if (j > 0 && fabs(f[j] - f[j - 1]) > nb) nb = fabs(f[j] - f[j - 1]);
+        if (j + 2 < n && fabs(f[j + 2] - f[j + 1]) > nb) nb = fabs(f[j + 2] - f[j + 1]);
+        if (!(D > 4.0 * nb && D > atol)) continue;
+        double lo = xmin + (double)j * h, hi = xmin + (double)(j + 1) * h;
+        double flo = f[j], fhi = f[j + 1];
+        bool ok = true;
+        for (int it = 0; it < 64 && hi - lo > 4 * DBL_EPSILON * (fabs(lo) + fabs(hi)); it++) {
+            double m = 0.5 * (lo + hi), fm;
+            if (!nd_eval_at(e, xvar, m, spec, &fm) || !isfinite(fm)) { ok = false; break; }
+            if (fabs(fm - flo) > fabs(fhi - fm)) { hi = m; fhi = fm; } else { lo = m; flo = fm; }
+        }
+        if (!ok || !(fabs(fhi - flo) > 0.5 * D)) continue;       /* steep, not a jump */
+        double s = 0.5 * (lo + hi);
+        long k = (s - (xmin + (double)j * h) <= 0.5 * h) ? j : j + 1;
+        double xk = xmin + (double)k * h, a = xk - 0.5 * h, b = xk + 0.5 * h, v;
+        if (a < xmin) a = xmin;
+        if (b > xmax) b = xmax;
+        if (!nd_mol_mean(e, xvar, a, s, b, spec, &v)) continue;
+        if (!out) {
+            out = malloc(sizeof(double) * (size_t)n);
+            for (long i = 0; i < n; i++) out[i] = NAN;
+        }
+        out[k] = v;
+    }
+    free(f);
+    return out;
 }
 
 static bool nd_mol_is_option(const Expr* e) {
@@ -1613,6 +1763,9 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
 
     /* ---- grid resolution + finite-difference order + Compiled ---- */
     long nx_l = 25;
+    bool nx_user = false;              /* MinPoints given: no automatic grid */
+    long nx_max = use_mpfr ? ND_MOL_AUTO_MAX_MPFR : ND_MOL_AUTO_MAX;
+    bool maxpts_user = false;
     long dord_l = 4;                   /* DifferenceOrder default (WL-faithful) */
     bool compiled = true;              /* Compiled -> False forces symbolic RHS */
     NdScheme scheme = ND_SCHEME_CENTERED;   /* opt-in upwinding for advective terms */
@@ -1621,7 +1774,8 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         if (!nd_mol_is_option(A[i])) continue;
         const char* opt = A[i]->data.function.args[0]->data.symbol.name;
         if (opt == SYM_Method) {
-            nd_scan_int_subopt(A[i], "MinPoints", &nx_l);
+            if (nd_scan_int_subopt(A[i], "MinPoints", &nx_l)) nx_user = true;
+            if (nd_scan_int_subopt(A[i], "MaxPoints", &nx_max)) maxpts_user = true;
             long dv = dord_l;
             if (nd_scan_int_subopt(A[i], "DifferenceOrder", &dv)) {
                 dord_l = dv;
@@ -1640,6 +1794,9 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
     }
     if (nx_l < 5) nx_l = 5;
     if (nx_l > 20000) nx_l = 20000;
+    if (nx_max < 5) nx_max = 5;
+    if (nx_max > 20000) nx_max = 20000;
+    if (maxpts_user && nx_l > nx_max) nx_l = nx_max;
     size_t nx = (size_t)nx_l;
     double h = (xmax - xmin) / (double)(nx - 1);
     if (dord_l < 1) dord_l = 1;
@@ -1771,6 +1928,32 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         for (size_t e = 0; e < neq; e++) expr_free(eqitems[e]);
         free(eqitems);
         return NULL;
+    }
+
+    /* ---- the spatial grid from the initial data (no MinPoints given) ---- */
+    if (!nx_user) {
+        /* the data are sampled in double precision: a tolerance below its
+         * rounding would never be met */
+        NdTol tl = nd_resolve_tol(&o);
+        double rt = tl.rtol > 1e-13 ? tl.rtol : 1e-13, at = tl.atol > 1e-13 ? tl.atol : 1e-13;
+        double excess = 0.0;
+        long na = nd_mol_auto_points(ic, torder, xvar, xmin, xmax, spec, dord_l,
+                                     rt, at, nx_l, nx_max, &excess);
+        /* the finest grid allowed still misses the initial data (a jump, a
+         * kink, data rougher than the grid): say so, as the reference does */
+        if (excess > 10.0)
+            mth_message("NDSolve", "eerr",
+                        "Warning: scaled local spatial error estimate of %.6g at %s = %.6g in the "
+                        "direction of independent variable %s is much greater than the prescribed "
+                        "error tolerance. Grid spacing with %ld points may be too large to achieve "
+                        "the desired accuracy or precision. A singularity may have formed or a "
+                        "smaller grid spacing can be specified using the MaxStepSize or MinPoints "
+                        "method options.", excess, tvar, t0, xvar, na);
+        if (na != nx_l) {
+            nx_l = na; nx = (size_t)na;
+            h = (xmax - xmin) / (double)(nx - 1);
+            if (dord > (long)nx - 1) dord = (int)nx - 1;
+        }
     }
 
     /* ---- solve the PDE for its top temporal derivative -> G ---- */
@@ -1943,6 +2126,15 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
     /* ---- initial data ---- */
     double* Y0re = NULL; double* Y0im = NULL;   /* complex path */
     if (cplx) { Y0re = malloc(sizeof(double) * nunk); Y0im = malloc(sizeof(double) * nunk); }
+    /* A node next to a jump of the initial data takes the data's mean over
+     * its cell (nd_mol_jump_values).  Machine precision; the arbitrary-
+     * precision path samples the exact data at the exact nodes. */
+    double* jumpv[2] = { NULL, NULL };
+    if (!cplx && !hexact) {
+        NdTol tl = nd_resolve_tol(&o);
+        for (int m = 0; m < torder && m < 2; m++)
+            jumpv[m] = nd_mol_jump_values(ic[m], xvar, xmin, xmax, (long)nx, spec, tl.atol);
+    }
     for (size_t u = 0; u < nunk && build_ok; u++) {
         double xj = xmin + (double)((int)u + gbase) * h;
         if (cplx) {
@@ -1950,6 +2142,11 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
         } else {
             for (int m = 0; m < torder; m++) {
                 double v;
+                size_t jg = u + (size_t)gbase;
+                if (m < 2 && jumpv[m] && !isnan(jumpv[m][jg])) {
+                    P.Y0[u * (size_t)torder + (size_t)m] = jumpv[m][jg];
+                    continue;
+                }
                 if (!nd_eval_at(ic[m], xvar, xj, spec, &v)) { build_ok = false; break; }
                 P.Y0[u * (size_t)torder + (size_t)m] = v;
                 if (hexact) {
@@ -1965,6 +2162,7 @@ static Expr* nd_mol_solve_canonical(Expr* res, const NdOpts* o0, const char* for
             }
         }
     }
+    free(jumpv[0]); free(jumpv[1]);
     P.t0 = t0; P.tmin = tmin; P.tmax = tmax;
     if (hexact) {
         P.tmin_expr = expr_copy(rt->data.function.args[1]);

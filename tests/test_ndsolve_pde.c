@@ -1347,6 +1347,49 @@ static void test_bdf_rough_start(void) {
                eval_double("ajmp[1/2, 0.06]", &v) && fabs(v - 0.5) < 0.01, "u(1/2, 0.06) ~ 1/2");
 }
 
+/* ============================================================= *
+ *  The grid from the initial data (no MinPoints).  Heat crossing *
+ *  times from the holdout family hd16 (series truths, 60 digits): *
+ *  the fixed 25-point grid gave 2 digits on a hat, 0 on a jump,  *
+ *  and the jump sampled at the nodes converged only as O(h).     *
+ * ============================================================= */
+static void test_auto_grid(void) {
+    /* smooth data: Sin[Pi x] is resolved -- the exact solution e^(-Pi^2 t) Sin[Pi x] */
+    CHECK("auto grid, smooth data (exact mode)",
+          "NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, u[1,t]==0}, "
+          "u, {x,0,1}, {t,0,1/5}][0.3, 0.1]", exp(-PI * PI * 0.1) * sin(0.3 * PI), 5e-8);
+    double ng = 0;
+    check_true("auto grid: smooth data refines past 25 points (to the time tolerance)",
+               eval_double("Length[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], "
+                           "u[0,t]==0, u[1,t]==0}, u, {x,0,1}, {t,0,1/5}][\"Grid\"]]", &ng) && ng > 25,
+               "more than 25 nodes");
+    /* a kink: hat data, u(1/2, t*) = 1/2 at t* = 0.04918268488092625710 */
+    CHECK("auto grid, hat data: u(1/2, t*) = 1/2",
+          "NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==1-Abs[2x-1], u[0,t]==0, u[1,t]==0}, "
+          "u, {x,0,1}, {t,0,1/5}][1/2, 0.04918268488092625710]", 0.5, 1e-6);
+    /* a jump at the nodes 1/4, 3/4: u(1/2, t*) = 1/2 at t* = 0.05988890122173093082 */
+    CHECK("auto grid, jump data (cell means at the jumps)",
+          "NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Piecewise[{{1, 1/4 <= x <= 3/4}}, 0], "
+          "u[0,t]==0, u[1,t]==0}, u, {x,0,1}, {t,0,1/5}][1/2, 0.05988890122173093082]", 0.5, 1e-6);
+    /* data the finest grid still misses: NDSolve::eerr (Check sees it); smooth data: no message */
+    CHECK("unresolved data -> NDSolve::eerr",
+          "Check[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==1-Abs[2x-1], u[0,t]==0, u[1,t]==0}, "
+          "u, {x,0,1}, {t,0,1/5}][1/2, 0.05]; 0, 1, NDSolve::eerr]", 1.0, 0.0);
+    CHECK("resolved data -> no message",
+          "Check[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, u[1,t]==0}, "
+          "u, {x,0,1}, {t,0,1/5}][1/2, 0.05]; 0, 1]", 0.0, 0.0);
+    /* MinPoints is honoured as given */
+    CHECK("MinPoints -> 25 keeps the 25-point grid",
+          "Length[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==Sin[Pi x], u[0,t]==0, u[1,t]==0}, "
+          "u, {x,0,1}, {t,0,1/5}, Method -> {\"MethodOfLines\", \"SpatialDiscretization\" -> "
+          "{\"TensorProductGrid\", \"MinPoints\" -> 25}}][\"Grid\"]]", 25.0, 0.0);
+    /* MaxPoints caps the automatic choice */
+    CHECK("MaxPoints caps the automatic grid",
+          "Length[NDSolveValue[{D[u[x,t],t]==D[u[x,t],{x,2}], u[x,0]==1-Abs[2x-1], u[0,t]==0, u[1,t]==0}, "
+          "u, {x,0,1}, {t,0,1/5}, Method -> {\"MethodOfLines\", \"SpatialDiscretization\" -> "
+          "{\"TensorProductGrid\", \"MaxPoints\" -> 101}}][\"Grid\"]]", 101.0, 0.0);
+}
+
 int main(void) {
     mute_stderr_once();
     core_init();
@@ -1394,6 +1437,7 @@ int main(void) {
     test_variable_order();
     test_mpfr_exact_mol();
     test_bdf_rough_start();
+    test_auto_grid();
 
     if (failures == 0) printf("\nAll NDSolve PDE tests passed.\n");
     else printf("\n%d NDSolve PDE test(s) FAILED.\n", failures);

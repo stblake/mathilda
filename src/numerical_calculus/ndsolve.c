@@ -921,5 +921,7 @@ void ndsolve_init(void) {
         "\tspatial operator is discretized on a uniform grid (central finite\n"
         "\tdifferences) reducing the PDE to an ODE system integrated in time.\n"
         "\tThe grid resolution is set via Method -> {\"MethodOfLines\",\n"
-        "\t\"SpatialDiscretization\" -> {\"TensorProductGrid\", \"MinPoints\" -> n}}.");
+        "\t\"SpatialDiscretization\" -> {\"TensorProductGrid\", \"MinPoints\" -> n}};\n"
+        "\twithout MinPoints a 1-D grid is refined until it resolves the initial\n"
+        "\tdata, up to \"MaxPoints\" (1537 at machine precision).");
 }
