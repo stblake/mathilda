@@ -64,6 +64,7 @@
 #include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
 #include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
 #include "sf_machine_zeta.h" /* sf_zeta_r/_c, sf_zeta2_r/_c: the shared kernels */
+#include "deriv.h"           /* deriv_register_numeric */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -1118,7 +1119,39 @@ Expr* builtin_zeta(Expr* res) {
 /* Registration                                                       */
 /* ------------------------------------------------------------------ */
 
+/* Derivative[n][Zeta][s] at an inexact real or complex s: zeta^(n)(s) from
+ * arb's Taylor jet (flint_num_zeta_deriv).  D[Zeta[s], s] stays the inert
+ * Derivative[1][Zeta][s], as in the reference; this gives it a value, so
+ * -Zeta'[s]/Zeta[s] (Sum of MangoldtLambda[k]/k^s), Exp[-Zeta'[2]] and a
+ * Newton step on Zeta are numbers.  A machine argument answers a machine
+ * number (the jet is computed at 53 bits plus guard bits).  Registered with
+ * the derivative registry (deriv.h): a system rule, not a SubValue. */
+static Expr* zeta_derivative_value(const Expr* call) {
+    const Expr* d = call->data.function.head->data.function.head;   /* Derivative[n] */
+    if (d->data.function.arg_count != 1 || d->data.function.args[0]->type != EXPR_INTEGER
+        || call->data.function.arg_count != 1)
+        return NULL;
+    int64_t n = d->data.function.args[0]->data.integer;
+    Expr* s = call->data.function.args[0];
+    Expr *cre, *cim;
+    bool num = s->type == EXPR_REAL
+#ifdef USE_MPFR
+               || s->type == EXPR_MPFR
+#endif
+               || (is_complex(s, &cre, &cim) && arg_is_inexact(s));
+    if (!num || n < 1 || n > 64) return NULL;
+    Expr* v = flint_num_zeta_deriv((long)n, s);
+    if (!v) return NULL;
+    if (numeric_min_inexact_bits(s) <= 53) {              /* machine in, machine out */
+        Expr* m = numericalize(v, numeric_machine_spec());
+        expr_free(v);
+        v = m;
+    }
+    return v;
+}
+
 void zeta_init(void) {
+    deriv_register_numeric(SYM_Zeta, zeta_derivative_value, 1);
     symtab_add_builtin("Zeta", builtin_zeta);
     symtab_get_def("Zeta")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);

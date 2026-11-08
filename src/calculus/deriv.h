@@ -28,10 +28,15 @@ void deriv_init(void);
  * The evaluator gets the whole application (borrowed) and returns a new
  * value, or NULL to leave it inert (symbolic or exact arguments, an order it
  * does not provide).  This is a system rule, not a user SubValue: it does
- * not appear in SubValues[Derivative].  fname must be interned. */
+ * not appear in SubValues[Derivative].  fname must be interned.  `nargs` is
+ * the number of derivative orders the evaluator handles (Derivative[n][f] of
+ * a one-argument f: 1), so Derivative[1, 0][Zeta] of the two-argument Zeta,
+ * which the one-argument evaluator leaves inert, is not reported as having a
+ * value (FindRoot falls back to a difference quotient on an inert one). */
 typedef Expr* (*DerivNumericFn)(const Expr* call);
-void deriv_register_numeric(const char* fname, DerivNumericFn fn);
-/* The registered evaluator for dop = Derivative[n..][f], or NULL. */
+void deriv_register_numeric(const char* fname, DerivNumericFn fn, size_t nargs);
+/* The registered evaluator for dop = Derivative[n..][f] with that many
+ * orders, or NULL. */
 DerivNumericFn deriv_numeric_for(const Expr* dop);
 /* Apply the registered evaluator to call = Derivative[n..][f][args..]:
  * a new value, or NULL. */

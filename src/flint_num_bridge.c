@@ -301,6 +301,35 @@ Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) {
     return nb_eval2(s, a, acb_dirichlet_hurwitz);
 }
 
+/* Derivative[n][Zeta][s] = zeta^(n)(s), 1 <= n <= 64, from arb's Taylor jet
+ * of zeta at s (coefficient n times n!).  s = 1 (the pole) gives a
+ * non-finite ball and declines. */
+Expr* flint_num_zeta_deriv(long n, const Expr* s) {
+    if (n < 1 || n > 64) return NULL;
+    const Expr* args[1] = { s };
+    slong outb = pick_out_bits(args, 1);
+    acb_t S, R; acb_init(S); acb_init(R);
+    acb_ptr J = _acb_vec_init(n + 1);
+    Expr* out = NULL;
+    slong wp = outb + NB_GUARD;
+    for (int attempt = 0; ; attempt++) {
+        if (!expr_to_acb(s, S, wp)) break;
+        acb_dirichlet_zeta_jet(J, S, 0, n + 1, wp);
+        acb_set(R, J + n);
+        arb_t f; arb_init(f);
+        arb_fac_ui(f, (ulong)n, wp);
+        acb_mul_arb(R, R, f, wp);
+        arb_clear(f);
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
+    }
+    _acb_vec_clear(J, n + 1);
+    acb_clear(S); acb_clear(R);
+    return out;
+}
+
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) {
     return nb_eval2(n, z, acb_polygamma);
 }
@@ -2573,6 +2602,7 @@ bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
 
 Expr* flint_num_zeta(const Expr* s) { (void)s; return NULL; }
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) { (void)s; (void)a; return NULL; }
+Expr* flint_num_zeta_deriv(long n, const Expr* s) { (void)n; (void)s; return NULL; }
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) { (void)n; (void)z; return NULL; }
 Expr* flint_num_polygamma_frac(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
 Expr* flint_num_polylog(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }

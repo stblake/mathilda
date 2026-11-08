@@ -1742,6 +1742,13 @@ Attributes: `Listable`, `NumericFunction`, `Protected`. Options:
   `Zeta[3, -1.5] = 16.7107` while `HurwitzZeta[3, -1.5] = 0.118102`.
 - **Derivatives.** `D[Zeta[s, a], a] = -s Zeta[1+s, a]` (the `s`-derivative is the
   generic `Derivative[1,0][Zeta][s, a]`); `D[Zeta[s], s] = Derivative[1][Zeta][s]`.
+  That inert derivative, and `Derivative[n][Zeta]` for `1 <= n <= 64`, has a
+  value at an inexact real or complex point (arb's Taylor jet of ζ, a system
+  rule through the derivative registry, not a `SubValue`): `Zeta'[2.]` is
+  `-0.937548`, a machine argument answers a machine number and an MPFR one a
+  number at its precision. An exact point and the pole `s = 1` stay inert.
+  `-Zeta'[s]/Zeta[s]` (the Dirichlet series of `MangoldtLambda`) and a Newton
+  step on `Zeta` are therefore numbers.
 - **Series.** `Series[Zeta[x], {x, 1, n}]` gives the Laurent expansion that
   defines the Stieltjes constants,
   `1/(x-1) + EulerGamma - StieltjesGamma[1](x-1) + ½ StieltjesGamma[2](x-1)² + …`,
