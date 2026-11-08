@@ -110,6 +110,14 @@ static void test_root_finite_difference_zeta(void) {
     /* Complex start: a zeta-difference root near 0.948962 + 20.3778 I. */
     check_true("Abs[(s /. First[FindRoot[2^(-s) (Zeta[s] - Zeta[s, 3/2]) == 0, "
                "{s, 20 I}]]) - (0.948962 + 20.3778 I)] < 1.*^-3");
+    /* A black-box f (NSum) has a finite-difference derivative, ~1e-8 relative
+     * error: the point after the step that first passes the half-precision
+     * goals is still ~1e-16 off, so one more step is taken.  The root of
+     * 1 + 2 Sum (-1)^n e^(-n^2 Pi^2 t) == 1/2 (mpmath, 70 digits) came back
+     * 8 ulps (1.8e-15) away; it is now within 2 ulps. */
+    check_true("Module[{b, r}, b[t_?NumericQ] := 1 + 2 NSum[(-1)^n Exp[-n^2 Pi^2 t], {n, 1, Infinity}]; "
+               "r = t /. First[FindRoot[b[t] == 1/2, {t, 0.1}]]; "
+               "Abs[r/0.13878529704272031607350852120475374215531987436939`50 - 1] < 4.*^-16]");
     /* Finite-difference fallback also works at arbitrary precision. */
     check_true("Abs[(s /. First[FindRoot[Zeta[s] == 1.05, {s, 5}, "
                "WorkingPrecision -> 30]]) - 4.612973128439312] < 1.*^-6");

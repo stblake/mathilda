@@ -883,12 +883,30 @@ static bool fr_overflowed(double v, const FrOpts* opts) {
  * as it is for |L_1000| ~ 1e867, whose residual never reaches any absolute
  * goal), or FR_POLISH_MAX steps have been taken.  An ordinary quadratically
  * convergent solve passes both tests one step after the step test first
- * passes, so the rule costs one extra evaluation of f. */
+ * passes, so the rule costs one extra evaluation of f.  At machine precision
+ * the point that passes both is returned only when its arriving step was in
+ * the noise or followed the step-test pass (fr_accept_arrival), one more
+ * evaluation that the finite-difference derivative of a black-box f needs. */
 #define FR_NOISE_ULPS 16
 /* Halvings a Newton step may take when it lands where f is not real or (for
  * systems) does not reduce the residual. */
 #define FR_LS_MAX 10
 #define FR_POLISH_MAX 8
+
+/* Machine Newton: may a point whose residual and arriving step both pass be
+ * returned?  Only when that step was already in the noise of x, or a step has
+ * been taken since the step test first passed.  The goals are half the working
+ * precision, so the step that first passes them can still be ~1e-8 long, and
+ * x after it is exact only for a quadratically convergent iteration with a
+ * modest error constant.  A finite-difference derivative (the ?NumericQ black
+ * box: f an NSum, an NIntegrate) has relative error ~1e-8, so x after such a
+ * step was ~1e-16 off -- the root of 1 + 2 Sum (-1)^n e^(-n^2 Pi^2 t) == 1/2
+ * came back 8 ulps (1.8e-15) from the double nearest it.  One more step costs
+ * an evaluation of f (two with the difference quotient) and reaches the
+ * noise. */
+static bool fr_accept_arrival(double prev_step, double noise, int polished) {
+    return prev_step <= noise || polished >= 1;
+}
 
 /* True when a polishing step should end the iteration (see above): `step` and
  * `prev` are |dx| now and before, `noise` the resolution |x| * ulp. */
@@ -934,7 +952,9 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
         resid = fabs(fv);
         /* Both tests at x (see above); prev_step is the step that arrived. */
         bool resid_ok = fabs(fv) < tol_acc;
-        if (fv == 0.0 || (resid_ok && prev_step < tol_acc + fabs(x) * tol_prec))
+        if (fv == 0.0 || (resid_ok && prev_step < tol_acc + fabs(x) * tol_prec
+                          && fr_accept_arrival(prev_step, FR_NOISE_ULPS * DBL_EPSILON * fabs(x),
+                                               polished)))
             return expr_new_real(x);
 
         double dv;
@@ -1015,7 +1035,9 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
         if (!ok_f) { fr_warn("nlnum", "non-numeric value"); return NULL; }
         resid = cabs(fv);
         bool resid_ok = cabs(fv) < tol_acc;       /* both tests, as in the real case */
-        if (fv == 0.0 || (resid_ok && prev_step < tol_acc + cabs(z) * tol_prec))
+        if (fv == 0.0 || (resid_ok && prev_step < tol_acc + cabs(z) * tol_prec
+                          && fr_accept_arrival(prev_step, FR_NOISE_ULPS * DBL_EPSILON * cabs(z),
+                                               polished)))
             return fr_expr_from_complex_d(z);
 
         double complex dv;

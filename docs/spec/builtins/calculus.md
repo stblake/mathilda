@@ -5053,6 +5053,14 @@ taken. The step test alone used to stop a start that was already within the
 step tolerance after one step: `1 - x` at the largest zero of
 `ChebyshevT[2001, x]` (`1 - Cos[Pi/4002] = 3.0811692774e-7`) came out as
 `3.07990e-7`; it is now right to all the digits a double holds.
+At machine precision a point that passes both tests is returned only when its
+arriving step was already in the noise of `x` (16 ulps) or a step has been
+taken since the step test first passed: the goals are half the working
+precision, so that step can be ~`1e-8` long, and with a finite-difference
+derivative (relative error ~`1e-8`, the `?NumericQ` black box around an `NSum`
+or `NIntegrate`) `x` after it is still ~`1e-16` off. The root of
+`1 + 2 NSum[(-1)^n Exp[-n^2 Pi^2 t], {n, 1, Infinity}] == 1/2` came back 8 ulps
+(`1.8e-15`) from the double nearest it; one more evaluation pair now reaches it.
 
 When the symbolic derivative `D[f, x]` cannot be reduced to a
 numericalizable form — `D` returns an inert `Derivative[..]` head, as for
