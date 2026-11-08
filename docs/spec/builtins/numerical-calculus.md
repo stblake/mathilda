@@ -695,6 +695,48 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   accuracy-goal test sees their difference, so an inaccurate result comes with a
   truthful `NSum::accgl`.  Per-sample messages from these internal trial
   evaluations are muted throughout.
+- **Step functions of the index and digit-length summands** (`nsum_blocks.c`).
+  A summand written through `Round[n]` (or `Floor`, `Ceiling`) passes the
+  continuity probe but is a staircase off the integers, so Euler–Maclaurin
+  summed the jumps: `1/Round[n]^2` gave 1.62533 (π²/6 = 1.64493) and
+  `Σ 1/(n IntegerLength[n]^2)` 3.32572 (4.32597), with no warning.  A summand
+  equal to its integer value at `k ± 1/4` and `k ± 2/5` for three `k` is now
+  treated as integer-only.  An integer-only summand with an integer lower bound
+  and unit step (Automatic method) goes first to an **integer-series engine**
+  that reads the structure of the head (128 terms, widened to 1100 when it shows
+  breakpoints or the terms are cheap) from the cubic extrapolation of
+  `log|a_n|` from each side:
+  - *smooth* (one law, constant or strictly alternating sign): Levin's
+    u-transform from the best of several starts (a direct head below the start;
+    several degrees per start; error = the larger of the transform's last step
+    and its stability factor `Σ|w_j/ω_j| / |Σ w_j/ω_j|` times the data error,
+    widened to any irreconcilable disagreement between starts).  `1/Round[n]^2`
+    and `Σ 1/BesselJZero[0, n]^2 = 1/4` come out to machine precision;
+  - *blocked* (smooth on `[b^(k-1)+c, b^k+c)`, jumps — or a sign flip — exactly
+    at every resolvable `b^j + c`, integer `b ≥ 2`, `|c| ≤ 2`, at least two
+    breakpoints): the sum becomes the series of block sums, each by
+    Euler–Maclaurin on the block (integral in `log n` by Gauss–Legendre over a
+    local Lagrange interpolant of the integer samples, widths chosen from the
+    `((q/2)!)²/x^q` bound; endpoint derivatives from finite differences), so a
+    block of 10^40 terms costs a few dozen samples.  The block series is summed
+    by the same engine, recursively (a level may itself be blocked); its terms
+    carry the Levin guard bits (`tb + L + 16`) because the transform amplifies
+    their errors, and its first start is placed past the block sums' `b^-k`
+    Euler–Maclaurin transient.  Indices are bounded at 60000 bits; a level the
+    budget cuts short is closed by a geometric tail (charged in full) or a
+    power-law bound — unbounded when the decay exponent is ≤ 1.2, in which case
+    the value is returned claiming no digits (error = |value|).  A verified block
+    structure is never overridden by the Wynn estimate;
+  - *rough* (prime gaps, divisor counts, a sign change off the breakpoints such
+    as `(-1)^n/f(BitLength[n])`): declined, and the two-length Wynn estimate
+    above stands (when both run, the smaller honest error wins).
+
+  Σ `1/(n IntegerLength[n]^2)`, `1/(n BitLength[n]^2)`, `1/(n IntegerLength[n]!)`,
+  `(-1)^BitLength[n]/(n BitLength[n])` are exact to the target at machine
+  precision and `WorkingPrecision -> 60`; `1/f(n)` with `f(n) = n f(d(n))^2` gets
+  7 digits with a bracketing `NSum::accgl`.  Self-similar summands nested past
+  any reachable index (Putnam 2002 A6, `f(n) = n f(BitLength[n])`) return with
+  an `NSum::accgl` error that brackets the true sum.
 
 A **large finite** sum is evaluated as the difference of two infinite tails,
 `Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.

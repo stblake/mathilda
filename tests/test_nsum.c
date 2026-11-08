@@ -383,6 +383,58 @@ static void test_nonsmooth_honest(void) {
     free(s);
 }
 
+/* Step-function and digit-length summands (nsum_blocks.c).  A summand defined
+ * through Round[n] has values off the integers but is a staircase there, so
+ * Euler–Maclaurin saw the jumps: 1/Round[n]^2 came back 1.62533 (Pi^2/6 =
+ * 1.64493) and Sum 1/(n IntegerLength[n]^2) as 3.32572 (4.32597), with no
+ * warning.  Now: the step is detected, smooth integer-only heads go to Levin u
+ * from the best start, and heads smooth on blocks [b^(k-1), b^k) are summed
+ * block by block (Euler–Maclaurin in log n per block, the block series by the
+ * same routine).  Reference values: grouped by digit length, mpmath dps 90
+ * (benchmarks/237, truth.tsv). */
+static void test_step_and_block_summands(void) {
+    char* s = eval_str("h1[n_?NumericQ] := 1/Round[n]^2; SetAttributes[h1, NHoldAll];"
+                       " d1[n_?NumericQ] := 1/(Round[n] IntegerLength[Round[n]]^2);"
+                       " SetAttributes[d1, NHoldAll];"
+                       " d2[n_?NumericQ] := 1/(Round[n] BitLength[Round[n]]^2);"
+                       " SetAttributes[d2, NHoldAll];"
+                       " d9[n_?NumericQ] := (-1)^BitLength[Round[n]]/(Round[n] BitLength[Round[n]]);"
+                       " SetAttributes[d9, NHoldAll];"
+                       " g1[n_Integer] := 1/(n IntegerLength[n]^2); ok");
+    free(s);
+    /* smooth on the integers: Levin u, to machine precision, no warning */
+    s = eval_str("Check[If[Abs[NSum[h1[n], {n, 1, Infinity}] - Pi^2/6] < 10^-13, ok, bad], warned]");
+    ASSERT_MSG(strcmp(s, "ok") == 0, "1/Round[n]^2: %s", s);
+    free(s);
+    ASSERT_CLOSE("NSum[h1[n], {n, 1, Infinity}, WorkingPrecision -> 30]", "Pi^2/6", 1e-27);
+    /* blocked: base 10, base 2, alternating by block, integer-only head */
+    s = eval_str("Check[If[Abs[NSum[d1[n], {n, 1, Infinity}]"
+                 " - 4.32597084672048487201066701504] < 10^-13, ok, bad], warned]");
+    ASSERT_MSG(strcmp(s, "ok") == 0, "1/(n IntegerLength[n]^2): %s", s);
+    free(s);
+    ASSERT_CLOSE("NSum[d2[n], {n, 1, Infinity}]", "1.49245452678426373572652175665", 1e-12);
+    ASSERT_CLOSE("NSum[d9[n], {n, 1, Infinity}]", "-0.73353427573011417741968544586", 1e-13);
+    ASSERT_CLOSE("NSum[g1[n], {n, 1, Infinity}]", "4.32597084672048487201066701504", 1e-13);
+    ASSERT_CLOSE("NSum[d1[n], {n, 1, Infinity}, WorkingPrecision -> 60]",
+                 "4.3259708467204848720106670150410465454229605594715427602057521256", 1e-48);
+    /* a sum from a later start takes the partial first block */
+    ASSERT_CLOSE("NSum[d1[n], {n, 7, Infinity}] + Sum[1/n, {n, 1, 6}]",
+                 "4.32597084672048487201066701504", 1e-12);
+    free(eval_str("ClearAll[h1, d1, d2, d9, g1]"));
+}
+
+/* A self-similar summand nested past any reachable index (Putnam 2002 A6:
+ * f(n) = n f(BitLength[n])): the block series is followed as far as the
+ * index budget allows and the unbounded remainder is reported, not hidden —
+ * the value carries NSum::accgl with an error that brackets the true sum. */
+static void test_block_unbounded_honest(void) {
+    char* s = eval_str("f177[n_Integer] := If[n <= 2, n, n f177[BitLength[n]]];"
+                       " Quiet[Check[NSum[1/f177[n], {n, 1, Infinity}]; ok, warned]]");
+    ASSERT_MSG(strcmp(s, "warned") == 0, "nested f(BitLength): no accgl: %s", s);
+    free(s);
+    free(eval_str("ClearAll[f177]"));
+}
+
 /* Bessel summands: J_nu(c n), Y_nu(c n) oscillate like e^(+-i c n), a phase the
  * symbolic split finds only through the Hankel decomposition.  Closed forms
  * from Poisson summation: sum_{n>=1} J_0(n x) = -1/2 + (1/x)(1 + 2 sum_{m >= 1,
@@ -490,6 +542,7 @@ static void test_memory_loop(void) {
         "NSum[Sin[n]/n,{n,1,Infinity}]",        /* phase split, Abel–Plana */
         "NSum[(-1)^n Log[n]/n,{n,1,Infinity}]", /* phase split, CVZ */
         "NSum[1/(n Log[n]^2),{n,2,Infinity}]",  /* log-substituted tail */
+        "NSum[1/(n IntegerLength[n]^2),{n,1,Infinity}]",  /* digit blocks */
     };
     /* 3 passes suffice for leak detection; the complex Log[x]/x^(2+2I) summand
      * is the slowest path (oscillatory Euler–Maclaurin), so keep the count low. */
@@ -528,6 +581,8 @@ int main(void) {
     TEST(test_trig_oscillatory);
     TEST(test_dirichlet_series);
     TEST(test_nonsmooth_honest);
+    TEST(test_step_and_block_summands);
+    TEST(test_block_unbounded_honest);
     TEST(test_bessel_oscillatory);
     TEST(test_alternating_log);
     TEST(test_slow_log_tails);

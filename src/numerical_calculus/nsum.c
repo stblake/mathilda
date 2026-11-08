@@ -47,6 +47,7 @@
 #include "nc_accuracy.h"  /* shared AccuracyGoal/PrecisionGoal handling */
 #include "numeric.h"
 #include "seqaccel.h"
+#include "nsum_blocks.h"
 #include "dequad.h"
 #include "denint.h"
 #include "gkadapt.h"
@@ -2078,6 +2079,46 @@ static bool ns_summand_is_continuous(NsCtx* c) {
     return ns_summand_numeric_at(c, lo + 0.5) || ns_summand_numeric_at(c, lo + 0.3);
 }
 
+/* The summand at a real machine point through the interpreter, or false. */
+static bool ns_summand_real_at(NsCtx* c, double x, double* out) {
+    Expr* num = ns_eval_expr_at(c, c->body, expr_new_real(x));
+    if (!num) return false;
+    bool ok = ns_to_double_real(num, out) && isfinite(*out);
+    expr_free(num);
+    return ok;
+}
+
+/* Is the summand a step function of the index — t(Round[n]), t(Floor[n]),
+ * anything constant on a neighbourhood of each integer — rather than a smooth
+ * function that merely has values off the integers?  Such a summand passes the
+ * continuity probe (it is numeric at n + 1/2), but its continuous extension is
+ * a staircase: Euler–Maclaurin's contour derivatives and tail integral see the
+ * jumps, not the series, and returned 3.32572 for Sum 1/(n IntegerLength[n]^2)
+ * (true value 4.32597) with a confident error.  The test is exact equality of
+ * the value at k with the values at k + 1/4 and k + 2/5 (or on the left side),
+ * at three integers, with the summand not constant: no smooth function does
+ * that.  The summand is then treated as integer-only. */
+static bool ns_summand_is_step(NsCtx* c) {
+    double lo, di;
+    if (!ns_to_double_real(c->imin, &lo) || !ns_to_double_real(c->di, &di) || di != 1.0)
+        return false;
+    static const double ks[3] = { 2.0, 3.0, 5.0 };
+    double first = 0.0;
+    bool varies = false;
+    for (int i = 0; i < 3; i++) {
+        double k = lo + ks[i], v0, v1, v2;
+        if (!ns_summand_real_at(c, k, &v0)) return false;
+        if (i == 0) first = v0; else if (v0 != first) varies = true;
+        bool right = ns_summand_real_at(c, k + 0.25, &v1) && v1 == v0
+                  && ns_summand_real_at(c, k + 0.4, &v2) && v2 == v0;
+        bool left = !right
+                  && ns_summand_real_at(c, k - 0.25, &v1) && v1 == v0
+                  && ns_summand_real_at(c, k - 0.4, &v2) && v2 == v0;
+        if (!right && !left) return false;
+    }
+    return varies;
+}
+
 /* Sample the first few terms at machine precision (used to classify the sum). */
 static NsProbe ns_probe(NsCtx* c, long count) {
     NsProbe pr; pr.n = 0; pr.ok = true;
@@ -2109,6 +2150,7 @@ static void ns_build_profile(NsCtx* c, long count, NsProfile* p) {
      * from Euler–Maclaurin (1/Prime[n], …) are exactly the monotone-decreasing
      * ones that would otherwise take it. */
     p->continuous = ns_summand_is_continuous(c);
+    if (p->continuous && ns_summand_is_step(c)) p->continuous = false;
     /* If the head probe already shows a monotone-decreasing tail the summand has
      * settled (no late peak, not divergent), so skip the far-tail ladder — this
      * avoids ~16 extra summand evaluations per profile on the common case (and,
@@ -2231,7 +2273,7 @@ static double ns_expr_mag(const Expr* e);
  * better one honestly, and that (not the step) is what the accuracy-goal test
  * sees.  A summand with a genuine closed form never reaches here (see
  * ns_dirichlet); one that does gets the best value and a truthful warning. */
-static Expr* ns_wynn_nonsmooth(NsCtx* c, const NsOpts* o) {
+static Expr* ns_wynn_nonsmooth(NsCtx* c, const NsOpts* o, double* err_out) {
     double e1 = INFINITY, e2 = INFINITY;
 #ifdef USE_MPFR
     Expr* w1 = o->prec_mpfr ? ns_wynn_mpfr(c, -1, o, &e1) : ns_wynn_machine(c, -1, o, &e1);
@@ -2262,9 +2304,108 @@ static Expr* ns_wynn_nonsmooth(NsCtx* c, const NsOpts* o) {
         out = w1;
         err = e1;
     }
+    if (err_out) { *err_out = err; return out; }
     if (ns_goal_active(o)) {
         double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out),
                                      ns_wp_digits(o));
+        if (err > tol) nc_warn_goal("NSum", err, tol);
+    }
+    return out;
+}
+
+#ifdef USE_MPFR
+/* The summand at an exact integer index, for the integer-series engine
+ * (nsum_blocks.c).  `ctx` is a copy of the caller's context at the engine's
+ * MPFR precision, interpreter only (the indices run far past a double). */
+typedef struct { NsCtx ctx; } NsIntSeq;
+
+static bool ns_intseq_term(void* ud, const mpz_t n, mpfr_t out) {
+    NsIntSeq* s = (NsIntSeq*)ud;
+    Expr* v = mpz_fits_slong_p(n) ? expr_new_integer((int64_t)mpz_get_si(n))
+                                  : expr_new_bigint_from_mpz(n);
+    Expr* num = ns_eval_expr_at(&s->ctx, s->ctx.body, v);
+    if (!num) return false;
+    mpfr_t im;
+    mpfr_init2(im, mpfr_get_prec(out));
+    bool inexact;
+    bool ok = get_approx_mpfr(num, out, im, &inexact) && mpfr_zero_p(im)
+              && mpfr_number_p(out);
+    mpfr_clear(im);
+    expr_free(num);
+    return ok;
+}
+#endif
+
+/* Sum an integer-only summand (no smooth extension off the integers: 1/Prime[n]
+ * or a step function t(Round[n])) from its integer samples.  The integer-series
+ * engine (nsum_blocks.c) handles a head that follows one smooth law (Levin u)
+ * or is smooth on geometric blocks b^(k-1) <= n < b^k (digit/bit-length
+ * summands, summed block by block); anything rougher it declines and the
+ * two-length Wynn estimate (ns_wynn_nonsmooth) stands.  When both run, the one
+ * with the smaller honest error is returned, with NSum::accgl if it still
+ * misses the goal.  Before this route, Sum 1/(n IntegerLength[n]^2) came back
+ * as 3.32572 (true 4.32597) and 1/Round[n]^2 as 1.62533 (Pi^2/6 = 1.64493). */
+static Expr* ns_integer_only(NsCtx* c, const NsOpts* o) {
+    Expr* ob = NULL;
+    double eb = INFINITY;
+    int levels = 0;
+#ifdef USE_MPFR
+    double di;
+    if (c->imin->type == EXPR_INTEGER && c->imin->data.integer >= 1
+        && ns_to_double_real(c->di, &di) && di == 1.0) {
+        NsIntSeq s;
+        s.ctx = *c;
+        s.ctx.ac = NULL; s.ctx.ac_prec = NULL; s.ctx.ac_prec_z = NULL;
+        NsbParams prm;
+        prm.target_bits = o->prec_mpfr ? (o->target_bits > 0 ? o->target_bits : o->bits) : 53;
+        prm.work_bits = o->prec_mpfr ? o->bits : 160;
+        prm.budget_s = o->prec_mpfr ? 8.0 : 3.0;
+        s.ctx.spec.mode = NUMERIC_MODE_MPFR;
+        s.ctx.spec.bits = prm.work_bits;
+        mpz_t n0;
+        mpz_init_set_si(n0, (long)c->imin->data.integer);
+        mpfr_t v, zero;
+        mpfr_init2(v, (mpfr_prec_t)prm.work_bits);
+        mpfr_init2(zero, (mpfr_prec_t)prm.work_bits);
+        mpfr_set_ui(zero, 0, MPFR_RNDN);
+        double e = INFINITY;
+        if (nsb_sum(ns_intseq_term, &s, n0, &prm, v, &e, &levels)
+            && (isfinite(e) || levels > 0)) {
+            ob = o->prec_mpfr ? ns_from_complex_mpfr(v, zero)
+                              : expr_new_real(mpfr_get_d(v, MPFR_RNDN));
+            /* A block series whose remainder the reachable terms cannot bound
+             * (it decays like 1/k or slower that far out): the value stands,
+             * claiming no digits. */
+            eb = isfinite(e) ? e : ns_expr_mag(ob);
+        }
+        mpfr_clears(v, zero, (mpfr_ptr)0);
+        mpz_clear(n0);
+    }
+#endif
+    double tol = 0.0;
+    if (ob) {
+        tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(ob), ns_wp_digits(o));
+        if (!ns_goal_active(o) || eb <= tol) return ob;
+        /* A verified block structure is exactly what Wynn has no model for: its
+         * estimate (and its error) would be a guess against a measurement. */
+        if (levels > 0) {
+            nc_warn_goal("NSum", eb, tol);
+            return ob;
+        }
+    }
+    /* The Wynn estimate: the only one when the engine declined, otherwise a
+     * second opinion that wins only with a smaller error. */
+    double ew = INFINITY;
+    if (ob) g_ns_quiet++;
+    Expr* ow = ns_wynn_nonsmooth(c, o, &ew);
+    if (ob) g_ns_quiet--;
+    Expr* out;
+    double err;
+    if (ow && (!ob || ew < eb)) { out = ow; err = ew; expr_free(ob); }
+    else if (ob)                { out = ob; err = eb; expr_free(ow); }
+    else return NULL;
+    if (ns_goal_active(o)) {
+        tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out), ns_wp_digits(o));
         if (err > tol) nc_warn_goal("NSum", err, tol);
     }
     return out;
@@ -2329,7 +2470,7 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
         used = (out != NULL);                           /* else fall back to Wynn */
     }
     if (!used && is_auto && !continuous) {
-        out = ns_wynn_nonsmooth(c, o);
+        out = ns_integer_only(c, o);
         used = (out != NULL);
     }
     if (!used) {

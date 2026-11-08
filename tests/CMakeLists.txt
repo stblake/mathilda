@@ -1175,6 +1175,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/nseries.c
     ../src/numerical_calculus/nlimit.c
     ../src/numerical_calculus/nsum.c
+    ../src/numerical_calculus/nsum_blocks.c
     ../src/numerical_calculus/nc_phase.c
     ../src/numerical_calculus/nprod.c
     ../src/numerical_calculus/gkadapt.c
