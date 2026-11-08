@@ -32,7 +32,13 @@ tolerance `10^-AccuracyGoal + |x|·10^-PrecisionGoal`. `MachinePrecision` and
 `Infinity` disables the corresponding term. Refinement grows adaptively up to
 each routine's resource cap; if the goal still cannot be met a `Head::accgl`
 warning is written to stderr and the best approximation is returned (never
-`$Failed` or an unevaluated form). `NDSolve` uses the same two options but
+`$Failed` or an unevaluated form). `NIntegrate`'s `accgl` tests (and states)
+the goal its rules were actually asked for: an `Automatic` `PrecisionGoal` is
+half the machine digits (`10^-7.98`) at machine precision and
+`WorkingPrecision - 10` at arbitrary precision, and an `Automatic`
+`AccuracyGoal` adds no absolute term (the warning used to test an unconverged
+run against `WorkingPrecision - 2`: it fired on results that had met their
+goal and printed a tolerance of `~1e-14 |I|`). `NDSolve` uses the same two options but
 resolves `Automatic` to `WorkingPrecision/2` (see its section).
 
 ## NResidue

@@ -1295,6 +1295,35 @@ static double ni_wp_digits(const NiOpts* o) {
     return NUMERIC_MACHINE_PRECISION_DIGITS;
 }
 
+#ifdef USE_MPFR
+static double ni_mpfr_reltol(const NiOpts* o);
+#endif
+
+/* The goals the rules were actually asked to meet, in digits, for the
+ * shortfall test of ni_warn_goal.  An Automatic PrecisionGoal resolves exactly
+ * as the rules resolve it -- half the machine digits (ni_machine_tols, capped at
+ * 14) at machine precision, WorkingPrecision - 10 under MPFR (ni_mpfr_reltol)
+ * -- and an Automatic AccuracyGoal adds no absolute term, as in ni_machine_tols.
+ * The shared nc_resolve_goal reads Automatic as WorkingPrecision - 2 (~14
+ * digits at machine precision): testing the 8-digit Automatic run against that
+ * both warned on results that had met their goal and stated a tolerance
+ * (~1e-14 |I|) the run had never been asked for. */
+static void ni_effective_goals(const NiOpts* o, double* acc_digits,
+                               double* prec_digits) {
+    double rt;
+#ifdef USE_MPFR
+    if (o->prec_mpfr) rt = ni_mpfr_reltol(o);
+    else
+#endif
+    {
+        double at;
+        ni_machine_tols(o, &rt, &at);
+    }
+    *prec_digits = (o->prec_goal > 0.0) ? o->prec_goal
+                 : (rt > 0.0 ? -log10(rt) : INFINITY);
+    *acc_digits = (o->acc_goal > 0.0) ? o->acc_goal : INFINITY;
+}
+
 /* Standard AccuracyGoal/PrecisionGoal shortfall warning (nc_accuracy.h).  Warns
  * only when the achieved error estimate actually exceeds the combined tolerance
  * 10^-a + |result| 10^-p, and stays silent under an enclosing numeric probe's
@@ -1306,8 +1335,9 @@ static void ni_warn_goal(const NiOpts* o, double achieved_err, double result_mag
      * gives its own verdict; an MPFR pass (any sample of a machine-precision
      * geometry probe may have set the flag) is the final one and warns */
     if (!o->prec_mpfr && g_ni_beyond && !g_ni_escalated) return;
-    double tol = nc_combined_tol(o->acc_goal, o->prec_goal, result_mag,
-                                 ni_wp_digits(o));
+    double a_dig, p_dig;
+    ni_effective_goals(o, &a_dig, &p_dig);
+    double tol = nc_combined_tol(a_dig, p_dig, result_mag, ni_wp_digits(o));
     if (achieved_err > tol) nc_warn_goal("NIntegrate", achieved_err, tol);
 }
 

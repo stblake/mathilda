@@ -1212,6 +1212,33 @@ static void test_phase_coordinate_endpoint(void) {
                "10^-48");
 }
 
+/* NIntegrate::accgl states the tolerance the run was asked for: an Automatic
+ * PrecisionGoal is 8 digits at machine precision (the goal the rules use),
+ * not the ~14 digits the warning used to test against, which both warned on
+ * results that had met their goal and printed a tolerance of ~1e-14 |I|. */
+static void test_accgl_states_goal(void) {
+    const char* path = "/tmp/mathilda_nint_accgl_stderr.log";
+    fflush(stderr);
+    int saved = dup(STDERR_FILENO);
+    FILE* sink = freopen(path, "w+", stderr);
+    ASSERT(sink != NULL);
+    char* r = eval_str("NIntegrate[Abs[Sin[1000 x]], {x, 0, 1}, MaxRecursion -> 2]");
+    fflush(stderr);
+    if (saved != -1) { dup2(saved, STDERR_FILENO); close(saved); }
+    free(r);
+    FILE* f = fopen(path, "r");
+    ASSERT(f != NULL);
+    char buf[2048];
+    size_t n = fread(buf, 1, sizeof buf - 1, f);
+    buf[n] = '\0';
+    fclose(f);
+    remove(path);
+    ASSERT_MSG(strstr(buf, "NIntegrate::accgl") != NULL, "no accgl: %s", buf);
+    /* 10^-7.98 x 0.6487 */
+    ASSERT_MSG(strstr(buf, "tolerance 6.8") != NULL && strstr(buf, "e-09") != NULL,
+               "accgl tolerance is not the goal's: %s", buf);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1268,6 +1295,7 @@ int main(void) {
     TEST(test_guard_probe_outside_domain);
     TEST(test_nested_exact_endpoints_wp);
     TEST(test_phase_coordinate_endpoint);
+    TEST(test_accgl_states_goal);
 
     printf("All nint_tests passed.\n");
     return 0;
