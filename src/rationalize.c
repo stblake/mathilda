@@ -977,17 +977,52 @@ static bool rn_is_structural_head(const char* h) {
         || h == SYM_And || h == SYM_Or || h == SYM_Not;
 }
 
+/* ------------------------------------------------------------------------
+ *  Powers with an inexact exponent are opaque generators.
+ *
+ *  x^0.4616 is not a polynomial power: its exponent is an approximate number
+ *  and it has no exact meaning.  Rationalising the exponent made it one --
+ *  Together[x^0.4616] came back as x^(577/1250), an exact answer to a
+ *  question nobody asked, because the numericalise step that follows leaves
+ *  exponents alone.  And for a high-precision exponent (1.515000...`60) the
+ *  rational has a 60-digit denominator, and the exact core worked over that
+ *  radical until the caller ran out of time.  So, as the reference does, such a
+ *  power is an indeterminate: the polynomial-algebra round trip
+ *  (internal_rationalize_then_numericalize_algebraic) parks it behind a placeholder
+ *  symbol before rationalising, the exact core treats it as a variable, and
+ *  it is put back verbatim.  An integer-valued exponent (x^2.0) is still a
+ *  polynomial power and is rationalised as before.
+ * ---------------------------------------------------------------------- */
+static bool rn_is_inexact_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Power) return false;
+    const Expr* p = e->data.function.args[1];
+    if (!internal_contains_inexact(p)) return false;
+    if (p->type == EXPR_REAL)
+        return !(isfinite(p->data.real) && p->data.real == floor(p->data.real)
+                 && fabs(p->data.real) < 9007199254740992.0);
+#ifdef USE_MPFR
+    if (p->type == EXPR_MPFR) return !mpfr_integer_p(p->data.mpfr);
+#endif
+    return true;   /* complex, or symbolic with an inexact coefficient */
+}
+
 /* Does `e` carry an inexact number as a *coefficient* -- outside every
  * kernel?  The walk descends the same structural heads as the kernel
  * collector; a numeric quantity (Sin[2.], 1.5) is a coefficient and is
  * scanned whole, while any other compound (f[1.], x[0.5]) is an
- * indeterminate whose inner numbers the exact core never computes with. */
+ * indeterminate whose inner numbers the exact core never computes with.
+ * A power with an inexact exponent also answers true: it is an opaque
+ * generator, but only the round trip knows to park it (see above), and the
+ * exact core must never see it. */
 static bool rn_coefficient_inexact(const Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return internal_contains_inexact(e);
     const Expr* h = e->data.function.head;
     if (h->type != EXPR_SYMBOL || is_hold_head_sym(h))
         return internal_contains_inexact(e);
+    if (rn_is_inexact_power(e)) return true;
     if (rn_is_structural_head(h->data.symbol.name)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (rn_coefficient_inexact(e->data.function.args[i])) return true;
@@ -1083,7 +1118,7 @@ static Expr* rn_swap(const Expr* e, Expr** from, Expr** to, size_t n, bool* hit)
  * they were written (see the block comment above).  `bits` is the round
  * trip's working precision: 0 for machine, else the MPFR precision. */
 static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Expr* res,
-                                             long bits) {
+                                             long bits, bool numeric) {
     NumericSpec spec = numeric_machine_spec();
 #ifdef USE_MPFR
     if (bits > 0) { spec.mode = NUMERIC_MODE_MPFR; spec.bits = bits; }
@@ -1093,6 +1128,15 @@ static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Exp
         rn_collect_kernels(res->data.function.args[i], &k, bits);
 
     Expr* out = NULL;
+    if (!numeric) {
+        /* No inexact coefficient to give back: only the kernels' own
+         * inexact arguments (f[0.5] for the f[1/2] the core saw). */
+        bool hit = false;
+        out = k.n > 0 ? eval_and_free(rn_swap(exact_result, k.exact, k.orig, k.n, &hit))
+                      : expr_copy((Expr*)exact_result);
+        rn_kernels_free(&k);
+        return out;
+    }
     if (k.n > 0 && !rn_mentions_placeholder(exact_result, &k)) {
         bool hit = false;
         Expr* parked = rn_swap(exact_result, k.exact, k.ph, k.n, &hit);
@@ -1106,6 +1150,53 @@ static Expr* rn_numericalize_keeping_kernels(const Expr* exact_result, const Exp
     }
     rn_kernels_free(&k);
     return out ? out : numericalize((Expr*)exact_result, spec);
+}
+
+/* Park every power with an inexact exponent (rn_is_inexact_power) that `e`
+ * reaches through the structural heads behind a placeholder symbol, recording
+ * it in `p` (orig = the power, ph = its placeholder; one placeholder per
+ * distinct power).  Structural rebuild only; the rationalisation that follows
+ * evaluates. */
+static Expr* rn_park_powers(const Expr* e, RnKernels* p) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL || is_hold_head_sym(h)) return expr_copy((Expr*)e);
+    if (rn_is_inexact_power(e)) {
+        for (size_t i = 0; i < p->n; i++)
+            if (expr_eq((Expr*)e, p->orig[i])) return expr_copy(p->ph[i]);
+        if (p->n == p->cap) {
+            p->cap = p->cap ? 2 * p->cap : 8;
+            p->orig  = realloc(p->orig,  sizeof(Expr*) * p->cap);
+            p->exact = realloc(p->exact, sizeof(Expr*) * p->cap);
+            p->ph    = realloc(p->ph,    sizeof(Expr*) * p->cap);
+        }
+        char buf[48];
+        snprintf(buf, sizeof buf, "RationalizePower$%zu", p->n);
+        p->orig[p->n]  = expr_copy((Expr*)e);
+        p->exact[p->n] = NULL;
+        p->ph[p->n]    = expr_new_symbol(buf);
+        return expr_copy(p->ph[p->n++]);
+    }
+    if (!rn_is_structural_head(h->data.symbol.name)) return expr_copy((Expr*)e);
+    size_t m = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) args[i] = rn_park_powers(e->data.function.args[i], p);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), args, m);
+    free(args);
+    return r;
+}
+
+/* Does `e` mention a "RationalizePower$k" symbol?  Then parking would be
+ * ambiguous, and no power is parked. */
+static bool rn_mentions_power_placeholder(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return strncmp(e->data.symbol.name, "RationalizePower$", 17) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (rn_mentions_power_placeholder(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rn_mentions_power_placeholder(e->data.function.args[i])) return true;
+    return false;
 }
 
 /* Smallest precision, in bits, over the inexact leaves of `e`'s arguments
@@ -1130,8 +1221,13 @@ static long rn_round_trip_bits(const Expr* e) {
     return best;
 }
 
-Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*),
-                                                  Expr* (*post)(Expr*)) {
+/* The round trip.  `park_powers` parks every power with an inexact exponent
+ * as an opaque generator before rationalising (the polynomial-algebra heads);
+ * without it such an exponent is rationalised with everything else, which is
+ * what a head that differentiates or expands in the power's variable (Series,
+ * Limit) needs: a parked x^0.5 would be a constant to it. */
+static Expr* rn_round_trip(Expr* res, Expr* (*core)(Expr*), Expr* (*post)(Expr*),
+                           bool park_powers) {
     if (!res || res->type != EXPR_FUNCTION || !core) return NULL;
 
     /* Working precision of the round trip: the input's own, when it is
@@ -1148,15 +1244,26 @@ Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*
     /* Build a clone of `res` with every argument force-rationalised.
      * The head is structurally copied (the symbol is the dispatch key
      * for the inner builtin call). */
+    /* Powers with an inexact exponent are opaque generators: park each
+     * behind a placeholder symbol first, so the exact core never sees a
+     * rationalised exponent (see rn_is_inexact_power). */
     const size_t n = res->data.function.arg_count;
+    RnKernels parked = {0};
+    bool park = park_powers && !rn_mentions_power_placeholder(res);
+    bool numeric = false;   /* an inexact coefficient outside the parked powers? */
     Expr** new_args = NULL;
     if (n > 0) {
         new_args = (Expr**)malloc(sizeof(Expr*) * n);
         if (!new_args) return NULL;
         for (size_t i = 0; i < n; i++) {
-            new_args[i] = internal_force_rationalize_bits(res->data.function.args[i], bits);
+            const Expr* a = res->data.function.args[i];
+            Expr* pa = park ? rn_park_powers(a, &parked) : NULL;
+            if (rn_coefficient_inexact(pa ? pa : a)) numeric = true;
+            new_args[i] = internal_force_rationalize_bits(pa ? pa : a, bits);
+            expr_free(pa);
         }
     }
+    if (parked.n == 0) numeric = true;   /* the legacy round trip */
     Expr* clone = expr_new_function(expr_copy(res->data.function.head),
                                     new_args, n);
     free(new_args);
@@ -1165,6 +1272,7 @@ Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*
      * here with the same input: decline instead of recursing without end. */
     if (internal_args_contain_inexact(clone)) {
         expr_free(clone);
+        rn_kernels_free(&parked);
         return NULL;
     }
 
@@ -1178,19 +1286,38 @@ Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*
      * also leave `res` untouched so the outer evaluator can free it. */
     Expr* exact_result = core(clone);
     expr_free(clone);
-    if (!exact_result) return NULL;
-    if (post) exact_result = post(exact_result);
+    if (!exact_result) { rn_kernels_free(&parked); return NULL; }
+    /* The post pass shapes an approximate answer; with every inexact number
+     * parked inside an opaque power the answer is an exact one. */
+    if (post && numeric) exact_result = post(exact_result);
 
     /* Round-trip the exact result back to numeric so callers see
-     * inexact-in / inexact-out. */
-    Expr* numeric = rn_numericalize_keeping_kernels(exact_result, res, bits);
+     * inexact-in / inexact-out, then put the parked powers back. */
+    Expr* out = rn_numericalize_keeping_kernels(exact_result, res, bits, numeric);
     expr_free(exact_result);
-    return numeric;
+    if (parked.n > 0) {
+        bool hit = false;
+        Expr* back = rn_swap(out, parked.ph, parked.orig, parked.n, &hit);
+        expr_free(out);
+        out = eval_and_free(back);
+    }
+    rn_kernels_free(&parked);
+    return out;
+}
+
+Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*),
+                                                  Expr* (*post)(Expr*)) {
+    return rn_round_trip(res, core, post, false);
 }
 
 Expr* internal_rationalize_then_numericalize(Expr* res,
                                              Expr* (*core)(Expr*)) {
-    return internal_rationalize_then_numericalize_post(res, core, NULL);
+    return rn_round_trip(res, core, NULL, false);
+}
+
+Expr* internal_rationalize_then_numericalize_algebraic(Expr* res, Expr* (*core)(Expr*),
+                                                       Expr* (*post)(Expr*)) {
+    return rn_round_trip(res, core, post, true);
 }
 
 /* ------------------------------------------------------------------------

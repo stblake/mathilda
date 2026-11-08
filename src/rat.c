@@ -1945,7 +1945,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
      * machinery (e.g. (x^2/9 - y^2/25.) — the 25. defeats Polynomial GCD).
      * Force-rationalise on the way in, numericalise on the way out. */
     if (internal_args_contain_inexact_coefficient(res)) {
-        return internal_rationalize_then_numericalize(res, builtin_cancel);
+        return internal_rationalize_then_numericalize_algebraic(res, builtin_cancel, NULL);
     }
 
     /* Algebraic-generator pass: if the input contains a sub-expression
@@ -2550,7 +2550,7 @@ static Expr* builtin_together_compute(Expr* res) {
     /* Inexact coefficients can't be combined by exact polynomial-LCM
      * machinery; rationalise inputs, run, then re-numericalise. */
     if (internal_args_contain_inexact_coefficient(res)) {
-        return internal_rationalize_then_numericalize(res, builtin_together);
+        return internal_rationalize_then_numericalize_algebraic(res, builtin_together, NULL);
     }
 
     /* Algebraic-generator pass (see builtin_cancel for the rationale). */

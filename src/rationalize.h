@@ -175,6 +175,17 @@ Expr* internal_rationalize_then_numericalize(Expr* res,
 Expr* internal_rationalize_then_numericalize_post(Expr* res, Expr* (*core)(Expr*),
                                                   Expr* (*post)(Expr*));
 
+/* The round trip of the polynomial-algebra heads (Together, Cancel, Apart,
+ * Factor, FactorSquareFree, PolynomialGCD, PolynomialLCM), gated by
+ * internal_args_contain_inexact_coefficient.  As _post, except that a power
+ * with an inexact non-integer exponent (x^0.4616, x^(0.5 + 0.2 I),
+ * E^(0.5 x)) is an opaque generator: it is parked behind a placeholder
+ * symbol, never rationalised, and put back verbatim, so Together[x^0.4616]
+ * is x^0.4616 (not x^(577/1250)).  The result is numericalised only when an
+ * inexact coefficient remains outside the parked powers. */
+Expr* internal_rationalize_then_numericalize_algebraic(Expr* res, Expr* (*core)(Expr*),
+                                                       Expr* (*post)(Expr*));
+
 /* Register the Rationalize symbol with the global symbol table. Called
  * from core_init. */
 void rationalize_init(void);

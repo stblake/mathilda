@@ -298,7 +298,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     /* Apart relies on PolynomialQuotient/Remainder and partial-fraction
      * decomposition over rationals — inexact coefficients break both. */
     if (internal_args_contain_inexact_coefficient(res)) {
-        return internal_rationalize_then_numericalize(res, builtin_apart);
+        return internal_rationalize_then_numericalize_algebraic(res, builtin_apart, NULL);
     }
 
     Expr* expr = res->data.function.args[0];

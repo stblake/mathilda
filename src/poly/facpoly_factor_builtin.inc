@@ -1040,8 +1040,8 @@ static Expr* builtin_factor_core(Expr* res) {
      * inexact results -- they go through their own evaluation path. */
     if (internal_args_contain_inexact_coefficient(res)) {
         if (memo_key) expr_free(memo_key);
-        return internal_rationalize_then_numericalize_post(res, builtin_factor,
-                                                           factor_inexact_monic);
+        return internal_rationalize_then_numericalize_algebraic(res, builtin_factor,
+                                                                factor_inexact_monic);
     }
 
 

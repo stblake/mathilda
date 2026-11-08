@@ -58,7 +58,7 @@ static void assert_eval_excludes(const char* input, const char* forbidden) {
                 input, forbidden, s);
         free(s);
         expr_free(evaluated);
-        assert(0);
+        abort();   /* not assert(): -DNDEBUG would make a failed check pass */
     }
     free(s);
     expr_free(evaluated);
@@ -75,7 +75,7 @@ static void assert_eval_contains_real(const char* input) {
         fprintf(stderr, "FAIL (no inexact leaf): %s\n  Got: %s\n", input, s);
         free(s);
         expr_free(evaluated);
-        assert(0);
+        abort();   /* not assert(): -DNDEBUG would make a failed check pass */
     }
     expr_free(evaluated);
 }
@@ -284,6 +284,45 @@ static void test_kernel_inexact_args_restored(void) {
     assert_eval_eq("Factor[x f[0.5] + 2.0 x]", "x (2.0 + f[0.5])", 0);
 }
 
+/* ------------------------------------------------------------------------
+ *  A power with an inexact, non-integer exponent is an opaque generator.
+ *
+ *  Its exponent used to be rationalised with everything else: Together
+ *  [x^0.4616] came back as the exact x^(577/1250), and a 60-digit exponent
+ *  (NIntegrate's contour rotation of x^a e^-x sin x, a = 1.515...`60) gave a
+ *  rational with a 60-digit denominator that the exact core never finished
+ *  with.  The round trip now parks such a power and puts it back verbatim.
+ * ---------------------------------------------------------------------- */
+static void test_inexact_exponent_stays_inexact(void) {
+    assert_eval_eq("Together[x^0.4616]", "x^0.4616", 0);
+    assert_eval_eq("Together[x^0.4616 + 1/x]", "(1 + x^1.4616)/x", 0);
+    assert_eval_eq("Cancel[x^0.4616 + 1/x]", "1/x + x^0.4616", 0);
+    assert_eval_eq("Apart[x^0.4616 + 1/(x (x + 1))]",
+                   "1/x + x^0.4616 - 1/(1 + x)", 0);
+    assert_eval_excludes("Factor[x^0.4616 + x^2]", "/1250");
+    assert_eval_eq("Together[x^(0.5 + 0.2 I) + 1/x]", "(1 + x^(1.5 + 0.2*I))/x", 0);
+    assert_eval_eq("Together[x^(0.5 a) + 1/x]", "(1 + x^(1 + 0.5 a))/x", 0);
+    assert_eval_eq("Together[E^(0.5 x) + 1/x]", "(1 + E^(0.5 x) x)/x", 0);
+    /* an inexact coefficient elsewhere is still numericalised */
+    assert_eval_eq("Together[1.5 x^0.3 + 1/x]", "(0.5 (2.0 + 3.0 x^1.3))/x", 0);
+    assert_eval_eq("Together[f[0.5] + x^0.3]", "x^0.3 + f[0.5]", 0);
+    /* an integer-valued exponent is still a polynomial power */
+    assert_eval_eq("Cancel[(x^2.0 - 1)/(x - 1)]", "1.0 + x", 0);
+}
+
+static void test_inexact_exponent_mpfr_no_hang(void) {
+    /* Each came back with an exact exponent over a 60-digit denominator. */
+    assert_eval_startswith("Together[x^N[1/3, 30] + 1/x]", "(1 + x^1.3333333333333");
+    assert_eval_excludes("Together[x^N[1/3, 30] + 1/x]", "/3)");
+    assert_eval_excludes(
+        "Together[x^1.515000000000000000312837201945128840379323345732107`60 "
+        "(1 + x)/(x^2 - 1)]", "285911173");
+    assert_eval_excludes(
+        "Together[(x^1.515000000000000000312837201945128840379323345732107`60 - "
+        "1.0`60 x^2.515000000000000000312837201945128840379323345732107`60)/x]",
+        "285911173");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -320,6 +359,8 @@ int main(void) {
     TEST(test_exact_inputs_stay_exact);
     TEST(test_kernel_args_not_numericalised);
     TEST(test_kernel_inexact_args_restored);
+    TEST(test_inexact_exponent_stays_inexact);
+    TEST(test_inexact_exponent_mpfr_no_hang);
 
     printf("All inexact_dispatch tests passed.\n");
     return 0;

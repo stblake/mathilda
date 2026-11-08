@@ -3602,7 +3602,7 @@ Expr* builtin_polynomialgcd(Expr* res) {
      * numericalise the result so the caller observes inexact-in /
      * inexact-out semantics. */
     if (internal_args_contain_inexact_coefficient(res)) {
-        return internal_rationalize_then_numericalize(res, builtin_polynomialgcd);
+        return internal_rationalize_then_numericalize_algebraic(res, builtin_polynomialgcd, NULL);
     }
 
     size_t count = res->data.function.arg_count;
@@ -4176,7 +4176,7 @@ static Expr* polynomiallcm_core(Expr* res) {
      * applies; numericalise the final result. See builtin_polynomialgcd
      * above for the rationale. */
     if (internal_args_contain_inexact(res)) {
-        return internal_rationalize_then_numericalize(res, builtin_polynomiallcm);
+        return internal_rationalize_then_numericalize_algebraic(res, builtin_polynomiallcm, NULL);
     }
 
     size_t count = res->data.function.arg_count;
