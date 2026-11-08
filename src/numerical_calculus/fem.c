@@ -2404,17 +2404,30 @@ static Expr* fem_eigen(Expr* res, bool want_vectors) {
         Fc.max_area = afine * scale;
         if (Fc.max_bedge > 0) Fc.max_bedge *= sqrt(scale);
         ok = fem_build_mesh(&Fc, &P, &Sl[0].mesh, &why);
-        /* A boundary with many short sides (a Koch polygon) forces the
-         * coarse mesh far below the requested size, and each refinement
-         * quadruples it: keep the finest level within 4x the elements of a
-         * plain mesh of the requested size (estimated: the larger of the
-         * coarse mesh and 2 area / afine). */
+        /* A boundary with many short sides (a Koch prefractal) forces the
+         * coarse mesh far below the requested size.  Its eigenvalues are then
+         * not in the asymptotic range of the h^4 expansion either: the error
+         * is set by the many re-entrant corners at every scale, and the
+         * refinements only multiply the cost (Koch level 5: 6x the time,
+         * no digit gained).  A coarse mesh with more than 8x the elements
+         * the cell measure asks for (a graded L-shape has 2x) means a plain
+         * mesh of the requested size, unextrapolated; otherwise the finest
+         * level is kept
+         * within 4x the elements of a plain mesh of the requested size. */
         if (ok) {
             double area = fem_region_area(&F);
             double ne_c = (double)Sl[0].mesh.ne, est = 2.0 * area / afine;
-            if (ne_c > est) est = ne_c;
-            while (nlev > 1 && ne_c * pow(4.0, nlev - 1) > 4.0 * est) nlev--;
-            if (nlev == 1) { S.mesh = Sl[0].mesh; memset(&Sl[0].mesh, 0, sizeof Sl[0].mesh); }
+            double want_c = area / (8.0 * afine);          /* 2 area / (16 afine) */
+            if (ne_c > 8.0 * want_c) {
+                /* the plain mesh of the requested size (default area/1500) */
+                fem_mesh_free(&Sl[0].mesh);
+                nlev = 1;
+                ok = fem_build_mesh(&F, &P, &S.mesh, &why);
+            } else {
+                if (ne_c > est) est = ne_c;
+                while (nlev > 1 && ne_c * pow(4.0, nlev - 1) > 4.0 * est) nlev--;
+                if (nlev == 1) { S.mesh = Sl[0].mesh; memset(&Sl[0].mesh, 0, sizeof Sl[0].mesh); }
+            }
         }
         for (int l = 1; l < nlev && ok; l++) {
             FemMesh* dst = l == nlev - 1 ? &S.mesh : &Sl[l].mesh;

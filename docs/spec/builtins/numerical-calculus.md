@@ -2084,9 +2084,14 @@ and 5. Measured on the square, the error ratios of successive levels are 15.25,
 the finest levels whose values decrease, each within 5% of the next, enter the
 table, and an eigenvalue without such a pair keeps its finest value. At a
 singular corner (`C h^p`, `p < 4`) the table still shrinks the error. A boundary
-with many short sides (the Koch prefractal) forces the coarse mesh below the
-requested size; the refinements are then cut so the finest level stays within 4×
-the elements of a plain mesh. The eigenfunctions are those of the finest level.
+with many short sides (the Koch prefractal) forces the coarse mesh far below the
+requested size, and there the eigenvalue is not in the asymptotic range either
+(the error is set by re-entrant corners at every scale): a coarse mesh with more
+than 8× the elements its cell measure asks for (a graded L-shape has 2×, Koch
+level 5 84×) gives way to the plain mesh of the requested size, unextrapolated —
+the extrapolated hierarchy had cost Koch level 5 6× the time (16 s) for no digit.
+Otherwise the refinements are cut so the finest level stays within 4× the
+elements of a plain mesh. The eigenfunctions are those of the finest level.
 `Method -> {"FiniteElement", "Extrapolation" -> False}` solves on one Delaunay mesh
 of the requested size (default `area/1500`), as before.
 
@@ -2137,9 +2142,8 @@ annulus `1/2 < r < 1` `λ₁` 3e-9, L-shape `λ₃` 6e-10 and its singular `λ�
 8.5e-7 in 0.38 s), disk `λ1` 3e-7 (7e-6), equilateral triangle `λ4` 1e-5 (4.9e-4),
 annulus `1/2 < r < 1` `λ1` 1.1e-5 (5.3e-4), L-shape `λ1` 8.3e-7 (2.4e-3). SIAM
 Problem 14 (pentagon, mixed conditions, `MaxCellMeasure -> 10^-4`):
-`α = -2.46283472` (truth -2.46283475604), about 8 digits in 12 s (the reference 3 digits in 16 s). Koch snowflake level 5: 39.3700
-in 16 s (two levels: its 3072 sides force the coarse mesh; 39.3724 in 1.5 s
-without extrapolation), 0.021 from the fractal's 39.34855 (the reference's
+`α = -2.46283472` (truth -2.46283475604), about 8 digits in 12 s (the reference 3 digits in 16 s). Koch snowflake level 5: 39.3724
+in 1.8 s (its 3072 sides force the mesh: plain, unextrapolated), 0.024 from the fractal's 39.34855 (the reference's
 default: 0.052 in 2.1 s); the level-5 polygon's own eigenvalue is about 39.370,
 so the remaining gap is the prefractal, not the discretization.
 

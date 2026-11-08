@@ -369,6 +369,14 @@ static void test_extrapolation(void) {
     double err = ok ? fabs(v / (2 * PI * PI) - 1) : 1;
     check_true("\"Extrapolation\" -> False: one mesh (error ~5e-7, not ~1e-10)", ok && err > 1e-8 && err < 2e-6,
                "plain P2 error");
+    /* a boundary of many short sides forces the coarse mesh far below the
+     * requested size (a Koch prefractal): no extrapolation, the plain mesh */
+    check_abs("boundary-dominated mesh: plain mesh, unextrapolated",
+              "With[{reg = Polygon[N[Table[{Cos[2 Pi k/3000], Sin[2 Pi k/3000]}, {k, 0, 2999}]]]}, "
+              "First[NDEigenvalues[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, "
+              "u[x, y], {x, y} \\[Element] reg, 1]] - First[NDEigenvalues[{-Laplacian[u[x, y], {x, y}], "
+              "DirichletCondition[u[x, y] == 0, True]}, u[x, y], {x, y} \\[Element] reg, 1, "
+              "Method -> {\"FiniteElement\", \"Extrapolation\" -> False}]]]", 0.0, 1e-13);
     /* NDEigensystem: extrapolated values, eigenfunctions of the finest mesh */
     run("esx = NDEigensystem[{-Laplacian[u[x, y], {x, y}], DirichletCondition[u[x, y] == 0, True]}, "
         "u[x, y], {x, y} \\[Element] Rectangle[], 1];");
