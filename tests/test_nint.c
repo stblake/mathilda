@@ -1188,6 +1188,30 @@ static void test_nested_exact_endpoints_wp(void) {
     ASSERT_EQ_STR("Precision[NIntegrate[1, {x, 0, 1.1}, WorkingPrecision -> 60]] == 60", "True");
 }
 
+/* An oscillatory endpoint whose phase outgrows the double range: in the phase
+ * coordinate v = g(x) the integral is a Fourier integral on a half line
+ * (Cos[Exp[1/x]] on [0, 1] is Cos[u]/(u Log[u]^2) on [E, oo)).  Before, the
+ * machine pass spent 8 s on samples of cosines of 10^1000-sized numbers and
+ * returned 1 digit; WorkingPrecision -> 60 did not finish.  True values:
+ * mpmath quadosc of the substituted integrals. */
+static void test_phase_coordinate_endpoint(void) {
+    ASSERT_REL("NIntegrate[Cos[Exp[1/x]], {x, 0, 1}]",
+               "-0.216061756334172478596923174411721720448", "10^-11");
+    /* the upper endpoint, an amplitude, a faster phase */
+    ASSERT_REL("NIntegrate[Cos[Exp[1/(1 - x)]], {x, 0, 1}]",
+               "-0.216061756334172478596923174411721720448", "10^-11");
+    ASSERT_REL("NIntegrate[Sin[Exp[1/x]]/x, {x, 0, 1}]",
+               "-0.17949998145734447352", "10^-11");
+    ASSERT_REL("NIntegrate[x Cos[Exp[1/x^2]], {x, 0, 1}]",
+               "-0.108030878167086239298461587205860860224", "10^-11");
+    ASSERT_EQ_STR("First[AbsoluteTiming[NIntegrate[Cos[Exp[1/x]], {x, 0, 1}]]] < 1",
+                  "True");
+    ASSERT_REL("NIntegrate[Cos[Exp[1/x]], {x, 0, 1}, WorkingPrecision -> 60, "
+               "PrecisionGoal -> 50]",
+               "-0.216061756334172478596923174411721720447946726377356852789162913963",
+               "10^-48");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1243,6 +1267,7 @@ int main(void) {
     TEST(test_machine_last_digits);
     TEST(test_guard_probe_outside_domain);
     TEST(test_nested_exact_endpoints_wp);
+    TEST(test_phase_coordinate_endpoint);
 
     printf("All nint_tests passed.\n");
     return 0;

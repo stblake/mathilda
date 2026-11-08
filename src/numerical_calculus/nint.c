@@ -30,6 +30,7 @@
 #include "compile/autocompile.h"
 
 #include <complex.h>
+#include <fenv.h>
 #include <float.h>
 #include <math.h>
 #include <stdarg.h>
@@ -341,13 +342,7 @@ static double ni_exp_abscissa(const NiCtx* c, double z) {
 
 /* Evaluate the integrand with the variable bound to `value` (consumed).
  * Returns the numericalised result (caller frees) or NULL. */
-static Expr* ni_eval_at(NiCtx* c, Expr* value) {
-    /* Compiled fast path (opt-in, machine precision only — the MPFR sampler also
-     * routes through here and must keep full precision).  Compiled lazily so the
-     * spec.mode is already settled.  Only a REAL abscissa uses it; a complex
-     * (contour) abscissa or a non-finite compiled result — e.g. the interpreter
-     * would produce a complex value from Sqrt of a negative — falls through to
-     * the interpreter, which supplies that contribution. */
+static void ni_ac_prepare(NiCtx* c) {
     if (c->ac_enabled && !c->ac_tried) {
         c->ac_tried = true;
         Expr* vsym = expr_new_symbol(c->bind->name);
@@ -366,6 +361,16 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
 #endif
         expr_free(vsym);
     }
+}
+
+static Expr* ni_eval_at(NiCtx* c, Expr* value) {
+    /* Compiled fast path (opt-in, machine precision only — the MPFR sampler also
+     * routes through here and must keep full precision).  Compiled lazily so the
+     * spec.mode is already settled.  Only a REAL abscissa uses it; a complex
+     * (contour) abscissa or a non-finite compiled result — e.g. the interpreter
+     * would produce a complex value from Sqrt of a negative — falls through to
+     * the interpreter, which supplies that contribution. */
+    ni_ac_prepare(c);
 #ifdef USE_MPFR
     /* Compiled MPFR fast path: the abscissa `value` is already an EXPR_MPFR, and
      * the compiled body returns f[value] at the working precision — or NULL to
@@ -1372,6 +1377,35 @@ static void ni_gk_budget(const NiOpts* o, int* max_subdiv, long* max_eval) {
 
 /* Best-of-attempts accumulator: prefer a converged estimate, else the one with
  * the smaller error estimate. */
+/* A probe sample (the endpoint probes: oscillation, power law below the
+ * double range).  The probes sample ever nearer an endpoint, where the
+ * interpreter's fallback can cost without bound: Cos[Exp[1/x^2]] at 2^-12 has
+ * a compiled value of NaN (e^(1.7e7) overflows), and the interpreter, which
+ * carries the overflow on as an arbitrary-precision number, then needs a
+ * 2^24-bit argument reduction for the cosine -- 15 s for one sample, and
+ * minutes for the next.  So when the integrand compiled and its compiled value
+ * is not finite because an intermediate overflowed (FE_OVERFLOW; a value that
+ * merely goes complex -- the real program's Sqrt of a negative -- raises only
+ * FE_INVALID and is still asked of the interpreter), the probe is told the
+ * sample left the double range (-1) without evaluating it.  1: *v written;
+ * 0: no numeric value there. */
+static int ni_probe_machine(NiCtx* c, double x, double _Complex* v) {
+    if (c->spec.mode == NUMERIC_MODE_MACHINE && c->map_mode == NI_MAP_AFFINE
+        && creal(c->x_scale) == 1.0 && cimag(c->x_scale) == 0.0 && c->x_shift == 0.0) {
+        ni_ac_prepare(c);
+        if (c->ac) {
+            feclearexcept(FE_OVERFLOW);
+            double _Complex z;
+            bool ok = autocompiled_eval_complex(c->ac, &x, &z)
+                      && isfinite(creal(z)) && isfinite(cimag(z));
+            bool over = fetestexcept(FE_OVERFLOW) != 0;
+            if (ok) { *v = z; return 1; }
+            if (over) return -1;
+        }
+    }
+    return ni_sample_machine(c, x, v) ? 1 : 0;
+}
+
 typedef struct { bool have, conv; double _Complex val; double err; } NiAtt;
 
 static void ni_consider(NiAtt* best, NiAtt a) {
@@ -1845,6 +1879,12 @@ typedef int (*NiOseSign)(void* ctx, double d, int* sr, int* si);
 #define NI_OSE_COST_MIN   2e-3
 #define NI_OSE_COST_LAG   8
 
+/* Set by ni_osc_scan when the probe gave up (a sample left the double range,
+ * or the cost trend tripped) rather than reaching a verdict: the endpoint may
+ * then still oscillate, beyond what can be sampled there (ni_try_phase_coord).
+ * Read by the caller right after ni_osc_endpoint_machine. */
+static bool s_ni_ose_gaveup = false;
+
 /* One log-uniform scan of npts distances over [10^lo, 10^hi] (outer edge
  * first), stopping once `need` sign changes are seen (return 1) or can no
  * longer be reached (0); -1 when the probe gave up or the cost trend tripped.
@@ -1867,8 +1907,8 @@ static int ni_osc_scan(NiOseSign probe, void* pc, double lo, double hi,
         cost[i] = dt;
         if (i == 0) c0 = dt;
         if (i >= lag && dt > NI_OSE_COST_MIN
-            && dt > NI_OSE_COST_RATIO * cost[i - lag]) return -1;
-        if (st < 0) return -1;               /* the probe gave up */
+            && dt > NI_OSE_COST_RATIO * cost[i - lag]) { s_ni_ose_gaveup = true; return -1; }
+        if (st < 0) { s_ni_ose_gaveup = true; return -1; }   /* the probe gave up */
         if (st == 0) continue;
         if (sr != 0) { if (pr != 0 && sr != pr) scr++; pr = sr; }
         if (si != 0) { if (pi != 0 && si != pi) sci++; pi = si; }
@@ -1899,6 +1939,7 @@ static bool ni_osc_endpoint_probe(NiOseSign probe, void* pc) {
     /* the deep shell is 10^5 times nearer: not entered when the samples of
      * the shallow one already grew dearer toward the endpoint */
     double g1, g2;
+    s_ni_ose_gaveup = false;
     if (!ni_osc_shell(probe, pc, -6.0, -4.0, &g1)) return false;
     if (g1 > NI_OSE_COST_RATIO) return false;
     return ni_osc_shell(probe, pc, -11.0, -9.0, &g2);
@@ -1920,11 +1961,11 @@ static int ni_ose_machine_sign(void* vp, double d, int* sr, int* si) {
     if (saved && !g_ni_escalated) return -1;   /* the pass is already void */
     g_ni_beyond = false;
     double _Complex v;
-    bool ok = ni_sample_machine(q->c, x, &v);
+    int st = ni_probe_machine(q->c, x, &v);
     bool beyond = g_ni_beyond;
     g_ni_beyond = saved || beyond;
-    if (beyond) return -1;
-    if (!ok) return 0;
+    if (beyond || st < 0) return -1;
+    if (st == 0) return 0;
     *sr = (creal(v) > 0) - (creal(v) < 0);
     *si = (cimag(v) > 0) - (cimag(v) < 0);
     return 1;
@@ -2036,6 +2077,276 @@ static NiAtt ni_try_endpoint_sing(NiCtx* ctx, double a, double b,
     return best;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Phase coordinate at an oscillatory endpoint                        *
+ * ------------------------------------------------------------------ */
+
+/* An integrand amp(x) K(g(x)) -- K one of cos, sin, e^{i .} -- whose phase g
+ * is monotone near an endpoint and unbounded there is, in the phase itself as
+ * the coordinate, a Fourier integral on a half line:
+ *
+ *     Int_end^{x0} amp K(g) dx  =  Int_{v0}^{oo} amp(x(v)) K(s v) / |g'(x(v))| dv,
+ *
+ * s = +-1 the sign that sends v = s g to +oo at the endpoint and x(v) the
+ * inverse of the phase.  The zeros of K are then equally spaced, and the
+ * between-the-zeros + Wynn rule (oscint.c) needs a few dozen lobes.  It is the
+ * rule for a phase that grows faster than any power of 1/distance --
+ * Cos[Exp[1/x]] on [0, 1], whose phase overflows a double inside x < 1/709:
+ * the exponential endpoint map turns that phase into e^(e^z), whose lobes the
+ * zero finder cannot follow, and the integrand cannot even be sampled near the
+ * endpoint (the oscillation probe gives up there).  In the phase coordinate the
+ * same integral is cos(v)/(v Log[v]^2) on [e^2, oo): every sample stays in the
+ * double range.  The inverse x(v) is computed numerically, by Newton's method
+ * on the distance to the endpoint safeguarded by a bracket, so no particular
+ * form of the phase is needed beyond a closed-form derivative. */
+typedef struct {
+    NiCtx cg, cgp;          /* the phase and its derivative (machine)       */
+    NiCtx camp;             /* the amplitude                                 */
+    LevinKernel kind;
+    double end;             /* the oscillatory endpoint                      */
+    int side;               /* +1: the lower endpoint, -1: the upper one     */
+    double s;               /* v = s g -> +oo at the endpoint                */
+    double d0;              /* distance of the split point from `end`        */
+    double dlast;           /* the previous inverse (warm start)             */
+    Expr *g, *gp, *amp;     /* owned bodies of cg, cgp, camp                 */
+} NiPhaseMap;
+
+/* v(d) = s g(end + side d); false when not a finite real.  *over is set
+ * when the phase left the double range (it is then larger than any finite v:
+ * the endpoint side of the bracket). */
+static bool ni_pm_v(NiPhaseMap* pm, double d, double* v, bool* over) {
+    *over = false;
+    double x = pm->end + pm->side * d;
+    bool saved = g_ni_beyond;
+    g_ni_beyond = false;
+    double _Complex z;
+    bool ok = ni_sample_machine(&pm->cg, x, &z);
+    bool beyond = g_ni_beyond;
+    g_ni_beyond = saved;
+    if (!ok) { *over = beyond; return false; }
+    if (fabs(cimag(z)) > 1e-12 * (1.0 + fabs(creal(z)))) return false;
+    *v = pm->s * creal(z);
+    return isfinite(*v);
+}
+
+/* dv/dd at distance d (finite real), else false (*over as in ni_pm_v). */
+static bool ni_pm_dv2(NiPhaseMap* pm, double d, double* dv, bool* over) {
+    double _Complex z;
+    bool saved = g_ni_beyond;
+    g_ni_beyond = false;
+    bool ok = ni_sample_machine(&pm->cgp, pm->end + pm->side * d, &z);
+    *over = g_ni_beyond;
+    g_ni_beyond = saved;
+    if (!ok) return false;
+    if (fabs(cimag(z)) > 1e-12 * (1.0 + fabs(creal(z)))) return false;
+    *dv = pm->s * pm->side * creal(z);
+    return isfinite(*dv) && *dv != 0.0;
+}
+static bool ni_pm_dv(NiPhaseMap* pm, double d, double* dv) {
+    bool over;
+    return ni_pm_dv2(pm, d, dv, &over);
+}
+
+/* The distance d in (0, d0] with v(d) = v (v >= v(d0)): Newton on d inside a
+ * bracket [dlo, dhi] with v(dlo) >= v >= v(dhi), bisection (geometric, the
+ * distances span many decades) whenever a step leaves it. */
+static bool ni_pm_invert(NiPhaseMap* pm, double v, double* dout) {
+    double dhi = pm->d0, dlo = pm->dlast;
+    double vlo; bool over;
+    /* walk the near side of the bracket toward the endpoint */
+    for (int k = 0; ; k++) {
+        if (k > 2100 || !(dlo > 0.0)) return false;
+        if (ni_pm_v(pm, dlo, &vlo, &over)) {
+            if (vlo >= v) break;
+            dhi = dlo;
+        } else if (!over) return false;
+        else break;
+        dlo *= 0.5;
+    }
+    double d = sqrt(dlo * dhi);
+    for (int it = 0; it < 200; it++) {
+        double vd, dv;
+        if (!ni_pm_v(pm, d, &vd, &over)) {
+            if (!over) return false;
+            dlo = d;
+        } else {
+            if (vd == v) break;
+            if (vd > v) dlo = d; else dhi = d;
+            if (ni_pm_dv(pm, d, &dv)) {
+                double dn = d - (vd - v) / dv;
+                if (dn > dlo && dn < dhi) {
+                    bool done = fabs(dn - d) <= 4e-16 * d;
+                    d = dn;
+                    if (done) break;
+                    continue;
+                }
+            }
+        }
+        if (dhi - dlo <= 4e-16 * dhi) break;
+        d = sqrt(dlo * dhi);
+        if (!(d > dlo && d < dhi)) d = 0.5 * (dlo + dhi);
+    }
+    pm->dlast = d;
+    *dout = d;
+    return true;
+}
+
+/* The integrand in the phase coordinate. */
+static bool ni_pm_sample(void* vp, double v, double _Complex* out) {
+    NiPhaseMap* pm = (NiPhaseMap*)vp;
+    double d, dv;
+    if (!ni_pm_invert(pm, v, &d) || !ni_pm_dv(pm, d, &dv)) return false;
+    double _Complex amp;
+    if (!ni_sample_machine(&pm->camp, pm->end + pm->side * d, &amp)) return false;
+    double u = pm->s * v;
+    /* e^{iu} is integrated as its cosine and sine parts (pm->kind is COS or
+     * SIN by then), so each half-line integrand has a real lobe structure */
+    double _Complex k = (pm->kind == LEVIN_KERNEL_COS) ? cos(u) : sin(u);
+    *out = amp * k / fabs(dv);
+    return isfinite(creal(*out)) && isfinite(cimag(*out));
+}
+
+static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o);
+
+/* amp K(g) with K = cos | sin | e^{i .}: the kernel, the phase g, its closed
+ * form derivative g' and the amplitude (all owned on success).  An amplitude
+ * that oscillates on its own would leave a second phase: no. */
+static bool ni_pm_detect(const Expr* body, const char* var, LevinKernel* kind,
+                         Expr** g, Expr** gp, Expr** amp) {
+    Expr* fb = expr_copy((Expr*)body);
+    if (levin_is_head(fb, SYM_Times)) {
+        fb = expr_unshare(fb);
+        eval_flatten_args(fb, SYM_Times);
+    }
+    bool ok = levin_detect_kernel(fb, var, kind, g, amp);
+    expr_free(fb);
+    if (!ok) return false;
+    if (nc_has_phase(*amp, var)) { expr_free(*g); expr_free(*amp); return false; }
+    *gp = levin_phase_derivative(*g, var);
+    if (!*gp) { expr_free(*g); expr_free(*amp); return false; }
+    return true;
+}
+
+static void ni_pm_teardown(NiPhaseMap* pm) {
+    NiCtx* cs[3] = { &pm->cg, &pm->cgp, &pm->camp };
+    for (int i = 0; i < 3; i++) {
+        autocompiled_free(cs[i]->ac);
+        autocompiled_free(cs[i]->ac_prec);
+        cs[i]->ac = NULL; cs[i]->ac_prec = NULL;
+    }
+    expr_free(pm->g); expr_free(pm->gp); expr_free(pm->amp);
+    pm->g = pm->gp = pm->amp = NULL;
+}
+
+/* The machine phase map of the integrand of `ctx` (machine precision, plain
+ * real axis) at endpoint `side` of [a, b]: false (nothing to tear down) when
+ * the integrand is not amp K(g) with a phase monotone and unbounded there.
+ * The split point x0 = end + side d0 is where the phase is monotone on
+ * (end, x0] -- dv/dd of one sign at 48 distances, halving from x0 -- and
+ * unbounded at the end (it leaves the double range, or grows past 10^4
+ * lobes); tried at half, an eighth and a sixty-fourth of the span. */
+static bool ni_pm_setup(NiCtx* ctx, double a, double b, int side, NiPhaseMap* pm) {
+    if (!(b > a) || ctx->map_mode != NI_MAP_AFFINE
+        || creal(ctx->x_scale) != 1.0 || cimag(ctx->x_scale) != 0.0
+        || ctx->x_shift != 0.0) return false;
+    if (!ni_pm_detect(ctx->body, ctx->bind->name, &pm->kind, &pm->g, &pm->gp, &pm->amp))
+        return false;
+    /* each derived body compiles on its own (freed by ni_pm_teardown) */
+    pm->cg = *ctx;   ni_ctx_rebody(&pm->cg, pm->g);
+    pm->cgp = *ctx;  ni_ctx_rebody(&pm->cgp, pm->gp);
+    pm->camp = *ctx; ni_ctx_rebody(&pm->camp, pm->amp);
+    pm->cg.ac_enabled = pm->cgp.ac_enabled = pm->camp.ac_enabled = true;
+    pm->end = side > 0 ? a : b;
+    pm->side = side;
+    pm->s = 1.0;
+    double span = b - a;
+    static const double fr[3] = { 0.5, 0.125, 1.0 / 64.0 };
+    for (int t = 0; t < 3; t++) {
+        double d0 = fr[t] * span, v0, dv;
+        bool over;
+        pm->s = 1.0;
+        if (!ni_pm_v(pm, d0, &v0, &over) || !ni_pm_dv(pm, d0, &dv)) continue;
+        /* v must grow toward the endpoint: dv/dd < 0 */
+        if (dv > 0.0) { pm->s = -1.0; v0 = -v0; }
+        bool mono = true, unbounded = false;
+        double vprev = v0, dd = d0;
+        for (int j = 1; j <= 48 && mono; j++) {
+            dd *= 0.5;
+            double vj, dvj;
+            if (!ni_pm_v(pm, dd, &vj, &over)) {
+                if (over) unbounded = true;
+                else mono = false;
+                break;
+            }
+            if (!ni_pm_dv2(pm, dd, &dvj, &over)) {
+                if (over) unbounded = true;
+                else mono = false;
+                break;
+            }
+            if (!(dvj < 0.0) || !(vj > vprev)) mono = false;
+            vprev = vj;
+            if (vj - v0 > 2e4 * M_PI) { unbounded = true; break; }
+        }
+        if (mono && unbounded) {
+            pm->d0 = d0;
+            pm->dlast = d0;
+            return true;
+        }
+    }
+    ni_pm_teardown(pm);
+    return false;
+}
+
+/* The phase-coordinate rule at endpoint `side` of [a, b]; have=false when the
+ * integrand is not amp K(g) with a phase monotone and unbounded there. */
+static NiAtt ni_try_phase_coord(NiCtx* ctx, double a, double b, const NiOpts* o,
+                                int side) {
+    NiAtt out = { false, false, 0.0, INFINITY };
+    NiPhaseMap pm;
+    if (!ni_pm_setup(ctx, a, b, side, &pm)) return out;
+    double v0; bool over;
+    if (ni_pm_v(&pm, pm.d0, &v0, &over)) {
+        double reltol, abstol;
+        ni_machine_tols(o, &reltol, &abstol);
+        /* as the exponential-map lobes (ni_endpoint_piece): three digits
+         * beyond the goal, to at most 1e-13 */
+        double ort = fmax(reltol * 1e-3, 1e-13);
+        if (ort > reltol) ort = reltol;
+        double _Complex ov; double oerr;
+        bool conv;
+        if (pm.kind == LEVIN_KERNEL_EXP) {
+            /* amp e^{iu} = amp cos u + i amp sin u */
+            double _Complex oc, os; double ec, es;
+            pm.kind = LEVIN_KERNEL_COS;
+            bool cc = osc_integrate_machine(ni_pm_sample, &pm, v0, 0.0, true,
+                                            ort, 2000, &oc, &ec);
+            pm.kind = LEVIN_KERNEL_SIN;
+            pm.dlast = pm.d0;
+            bool cs = osc_integrate_machine(ni_pm_sample, &pm, v0, 0.0, true,
+                                            ort, 2000, &os, &es);
+            conv = cc && cs;
+            ov = oc + I * os;
+            oerr = ec + es;
+        } else {
+            conv = osc_integrate_machine(ni_pm_sample, &pm, v0, 0.0, true,
+                                         ort, 2000, &ov, &oerr);
+        }
+        if (isfinite(creal(ov)) && isfinite(cimag(ov)) && isfinite(oerr)) {
+            double x0 = pm.end + side * pm.d0;
+            NiAtt rest = side > 0 ? ni_core_finite(ctx, x0, b, o)
+                                  : ni_core_finite(ctx, a, x0, o);
+            if (rest.have) {
+                out.have = true;
+                out.conv = conv && rest.conv;
+                out.val = ov + rest.val;
+                out.err = oerr + rest.err;
+            }
+        }
+    }
+    ni_pm_teardown(&pm);
+    return out;
+}
+
 /* Integrate over the finite real parameter interval [a,b] with the variable
  * already configured in `ctx` (directly, or through an affine abscissa map for
  * a complex segment).  Gauss-Kronrod samples strictly interior abscissae, so it
@@ -2076,8 +2387,28 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
         if (o->method == NI_AUTO && ctx->map_mode == NI_MAP_AFFINE
             && creal(ctx->x_scale) == 1.0 && cimag(ctx->x_scale) == 0.0
             && ctx->x_shift == 0.0 && b > a) {
+            /* A probe that gave up at an endpoint the phase-coordinate rule
+             * can take (a phase unbounded there, of closed-form derivative)
+             * settles that end; the probe's out-of-range samples are then no
+             * reason to discard the machine pass. */
+            bool beyond0 = g_ni_beyond;
             int olo = ni_osc_endpoint_machine(ctx, a, b, +1);
+            if (s_ni_ose_gaveup && !beyond0) {
+                bool b1 = g_ni_beyond;
+                g_ni_beyond = false;
+                NiAtt pc = ni_try_phase_coord(ctx, a, b, o, +1);
+                if (pc.have && !g_ni_beyond) return pc;
+                g_ni_beyond = b1 || g_ni_beyond;
+            }
+            beyond0 = g_ni_beyond;
             int ohi = ni_osc_endpoint_machine(ctx, a, b, -1);
+            if (s_ni_ose_gaveup && !beyond0) {
+                bool b1 = g_ni_beyond;
+                g_ni_beyond = false;
+                NiAtt pc = ni_try_phase_coord(ctx, a, b, o, -1);
+                if (pc.have && !g_ni_beyond) return pc;
+                g_ni_beyond = b1 || g_ni_beyond;
+            }
             if (olo || ohi) {
                 NiAtt os = ni_try_endpoint_sing(ctx, a, b, o, false, olo, ohi);
                 if (os.have) return os;
@@ -2644,6 +2975,144 @@ static bool ni_mpfr_oscsing_piece(NiCtx* ctx, mpfr_srcptr end, mpfr_srcptr span,
     return conv;
 }
 
+/* The phase-coordinate rule at WorkingPrecision (see ni_try_phase_coord).
+ * The half line runs in w = v - v0 >= 0, v0 = s g(x0) taken at the working
+ * precision, so w = 0 is the split point x0 (a double) exactly and the rest
+ * [x0, other end] is an ordinary finite piece.  The lobe geometry is the
+ * machine phase map's, on the integrand's machine twin; a lobe sample inverts
+ * the phase at the working precision by Newton's method from the machine
+ * inverse (16 digits, doubling per step). */
+typedef struct {
+    NiPhaseMap* pm;          /* machine phase map (geometry, start points)  */
+    double v0d;              /* v0 as a double, for the geometry samples    */
+    NiCtx cg, cgp, camp;     /* MPFR contexts: phase, derivative, amplitude */
+    mpfr_srcptr v0;
+    long bits;
+    mpfr_t v, x, step, gr, gi, dr, di, ar, ai, k;
+} NiPhaseMapMp;
+
+static bool ni_pmm_geo(void* vp, double w, double _Complex* out) {
+    NiPhaseMapMp* q = (NiPhaseMapMp*)vp;
+    return ni_pm_sample(q->pm, q->v0d + w, out);
+}
+
+static bool ni_pmm_sample(void* vp, const mpfr_t w, mpfr_t out_re, mpfr_t out_im) {
+    NiPhaseMapMp* q = (NiPhaseMapMp*)vp;
+    NiPhaseMap* pm = q->pm;
+    if (mpfr_sgn(w) < 0) return false;
+    mpfr_add(q->v, q->v0, w, MPFR_RNDN);
+    double d;
+    if (!ni_pm_invert(pm, mpfr_get_d(q->v, MPFR_RNDN), &d)) return false;
+    mpfr_set_d(q->x, pm->end + pm->side * d, MPFR_RNDN);
+    /* Newton on s g(x) = v: x -= (s g - v) / (s g') */
+    bool done = false;
+    for (int it = 0; it < 12 && !done; it++) {
+        if (!ni_sample_mpfr(&q->cg, q->x, q->gr, q->gi)
+            || !ni_sample_mpfr(&q->cgp, q->x, q->dr, q->di)
+            || mpfr_zero_p(q->dr)) return false;
+        if (pm->s < 0) { mpfr_neg(q->gr, q->gr, MPFR_RNDN); mpfr_neg(q->dr, q->dr, MPFR_RNDN); }
+        mpfr_sub(q->step, q->gr, q->v, MPFR_RNDN);
+        mpfr_div(q->step, q->step, q->dr, MPFR_RNDN);
+        mpfr_sub(q->x, q->x, q->step, MPFR_RNDN);
+        done = mpfr_zero_p(q->step) || mpfr_zero_p(q->x)
+            || (long)mpfr_get_exp(q->x) - (long)mpfr_get_exp(q->step) > q->bits - 4;
+    }
+    if (!done) return false;
+    if (!ni_sample_mpfr(&q->cgp, q->x, q->dr, q->di) || mpfr_zero_p(q->dr)
+        || !ni_sample_mpfr(&q->camp, q->x, q->ar, q->ai)) return false;
+    mpfr_abs(q->dr, q->dr, MPFR_RNDN);
+    /* K(u), u = s v */
+    if (pm->kind == LEVIN_KERNEL_COS) mpfr_cos(q->k, q->v, MPFR_RNDN);
+    else {
+        mpfr_sin(q->k, q->v, MPFR_RNDN);
+        if (pm->s < 0) mpfr_neg(q->k, q->k, MPFR_RNDN);
+    }
+    mpfr_mul(out_re, q->ar, q->k, MPFR_RNDN);
+    mpfr_mul(out_im, q->ai, q->k, MPFR_RNDN);
+    mpfr_div(out_re, out_re, q->dr, MPFR_RNDN);
+    mpfr_div(out_im, out_im, q->dr, MPFR_RNDN);
+    return mpfr_number_p(out_re) && mpfr_number_p(out_im);
+}
+
+static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
+                           mpfr_t re, mpfr_t im, double* abserr);
+
+/* Returns 1 with the result in (re, im) (*conv the verdict), else 0 (the
+ * rule does not apply; nothing written).  `side` as ni_try_phase_coord; a, b
+ * the doubles of the range. */
+static int ni_mpfr_phase_coord(NiCtx* ctx, double a, double b, int side,
+                               const NiOpts* o, mpfr_t re, mpfr_t im,
+                               double* abserr, bool* conv) {
+    if (o->method != NI_AUTO || !(b > a) || ctx->map_mode != NI_MAP_AFFINE
+        || creal(ctx->x_scale) != 1.0 || cimag(ctx->x_scale) != 0.0
+        || ctx->x_shift != 0.0) return 0;
+    long bits = o->bits;
+    NiCtx gm; Expr* twin;
+    ni_geom_ctx(&gm, ctx, &twin);
+    NiPhaseMap pm;
+    int out = 0;
+    if (!ni_pm_setup(&gm, a, b, side, &pm)) { ni_geom_done(&gm, twin); return 0; }
+    LevinKernel kmp; Expr *gmp = NULL, *gpmp = NULL, *ampmp = NULL;
+    if ((pm.kind == LEVIN_KERNEL_COS || pm.kind == LEVIN_KERNEL_SIN)
+        && ni_pm_detect(ctx->body, ctx->bind->name, &kmp, &gmp, &gpmp, &ampmp)) {
+        if (kmp == pm.kind) {
+            NiPhaseMapMp q;
+            q.pm = &pm; q.bits = bits;
+            q.cg = *ctx;   ni_ctx_rebody(&q.cg, gmp);
+            q.cgp = *ctx;  ni_ctx_rebody(&q.cgp, gpmp);
+            q.camp = *ctx; ni_ctx_rebody(&q.camp, ampmp);
+            q.cg.gd_on = q.cgp.gd_on = q.camp.gd_on = false;
+            q.cg.ac_enabled = q.cgp.ac_enabled = q.camp.ac_enabled = true;
+            mpfr_inits2(bits, q.v, q.x, q.step, q.gr, q.gi, q.dr, q.di, q.ar, q.ai,
+                        q.k, (mpfr_ptr)0);
+            mpfr_t v0;
+            mpfr_init2(v0, bits);
+            double x0 = pm.end + side * pm.d0;
+            mpfr_set_d(q.x, x0, MPFR_RNDN);
+            if (ni_sample_mpfr(&q.cg, q.x, v0, q.gi) && mpfr_number_p(v0)) {
+                if (pm.s < 0) mpfr_neg(v0, v0, MPFR_RNDN);
+                q.v0 = v0;
+                q.v0d = mpfr_get_d(v0, MPFR_RNDN);
+                mpfr_t pr, pi;
+                mpfr_inits2(bits, pr, pi, (mpfr_ptr)0);
+                double perr = INFINITY;
+                pm.dlast = pm.d0;
+                bool c1 = osc_integrate_mpfr(ni_pmm_geo, &q, ni_pmm_sample, &q, 0.0,
+                                             bits, ni_mpfr_reltol(o), NI_OSE_PANELS,
+                                             ni_mpfr_levels(o), pr, pi, &perr);
+                if (isfinite(perr) && mpfr_number_p(pr) && mpfr_number_p(pi)) {
+                    mpfr_t rr, ri;
+                    mpfr_inits2(bits, rr, ri, (mpfr_ptr)0);
+                    double rerr = 0.0;
+                    bool c2 = side > 0 ? ni_mpfr_finite(ctx, x0, b, o, rr, ri, &rerr)
+                                       : ni_mpfr_finite(ctx, a, x0, o, rr, ri, &rerr);
+                    if (mpfr_number_p(rr) && mpfr_number_p(ri)) {
+                        mpfr_add(re, pr, rr, MPFR_RNDN);
+                        mpfr_add(im, pi, ri, MPFR_RNDN);
+                        *abserr = perr + rerr;
+                        *conv = c1 && c2;
+                        out = 1;
+                    }
+                    mpfr_clears(rr, ri, (mpfr_ptr)0);
+                }
+                mpfr_clears(pr, pi, (mpfr_ptr)0);
+            }
+            mpfr_clear(v0);
+            mpfr_clears(q.v, q.x, q.step, q.gr, q.gi, q.dr, q.di, q.ar, q.ai, q.k,
+                        (mpfr_ptr)0);
+            NiCtx* cs[3] = { &q.cg, &q.cgp, &q.camp };
+            for (int i = 0; i < 3; i++) {
+                autocompiled_free(cs[i]->ac);
+                autocompiled_free(cs[i]->ac_prec);
+            }
+        }
+        expr_free(gmp); expr_free(gpmp); expr_free(ampmp);
+    }
+    ni_pm_teardown(&pm);
+    ni_geom_done(&gm, twin);
+    return out;
+}
+
 /* Returns -1 when neither endpoint is an oscillatory singularity (nothing
  * written), 0 when one is but no lobe could be integrated (nothing written;
  * the caller runs its cascade but must not trust its verdict), else 1 with
@@ -2656,9 +3125,21 @@ static int ni_mpfr_oscsing(NiCtx* ctx, mpfr_srcptr am, mpfr_srcptr bm,
     mpfr_t span, half;
     mpfr_inits2(bits, span, half, (mpfr_ptr)0);
     mpfr_sub(span, bm, am, MPFR_RNDN);
+    s_ni_ose_gaveup = false;
     bool lo = ni_mpfr_osc_endpoint(ctx, am, span, +1, bits);
+    bool glo = s_ni_ose_gaveup;
+    s_ni_ose_gaveup = false;
     bool hi = ni_mpfr_osc_endpoint(ctx, bm, span, -1, bits);
+    bool ghi = s_ni_ose_gaveup;
     int out = -1;
+    /* the machine probe gave up at an end (its samples left the double
+     * range): the phase-coordinate rule, when the phase is unbounded there */
+    if (!lo && !hi && (glo || ghi)
+        && ni_mpfr_phase_coord(ctx, mpfr_get_d(am, MPFR_RNDN), mpfr_get_d(bm, MPFR_RNDN),
+                               glo ? +1 : -1, o, re, im, abserr, conv)) {
+        mpfr_clears(span, half, (mpfr_ptr)0);
+        return 1;
+    }
     if (lo || hi) {
         mpfr_t sr, si;
         mpfr_inits2(bits, sr, si, (mpfr_ptr)0);
@@ -2931,7 +3412,15 @@ static bool ni_mpfr_finite(NiCtx* ctx, double a, double b, const NiOpts* o,
  * power substitution takes the singular factor exactly. */
 static bool ni_machine_power_below_range(NiCtx* c, double a, double b) {
     double span = b - a;
-    for (int side = 1; side >= -1; side -= 2) {
+    /* A probe sample that leaves the double range is no verdict on the
+     * integral: the rules that sample there themselves raise g_ni_beyond, but
+     * the probe must not -- 2^-12 from 0 is already past the double range of
+     * Cos[Exp[1/x]], which the phase-coordinate rule integrates at machine
+     * precision without sampling there (the flag sent it to an MPFR pass that
+     * took the cosine of 10^1000-sized phases, 8 s for 1 digit). */
+    bool beyond0 = g_ni_beyond;
+    bool hit = false;
+    for (int side = 1; side >= -1 && !hit; side -= 2) {
         double end = side > 0 ? a : b;
         double l[3];
         const int ks[3] = { 12, 24, 36 };
@@ -2939,16 +3428,19 @@ static bool ni_machine_power_below_range(NiCtx* c, double a, double b) {
         for (int i = 0; i < 3 && ok; i++) {
             double x = end + side * ldexp(span, -ks[i]);
             double _Complex v;
-            if (x == end || !ni_sample_machine(c, x, &v) || !(cabs(v) > 0.0)) ok = false;
+            /* an intermediate past the double range (ni_probe_machine) is no
+             * power law, and the deeper samples would only cost more */
+            if (x == end || ni_probe_machine(c, x, &v) <= 0 || !(cabs(v) > 0.0)) ok = false;
             else l[i] = log2(cabs(v));
         }
         if (!ok) continue;
         double p1 = -(l[1] - l[0]) / 12.0, p2 = -(l[2] - l[1]) / 12.0;
         if (!(fabs(p1 - p2) <= 1e-3 * (1.0 + fabs(p2)))) continue;
         double q = 1.0 + p2;
-        if (q > 0.0 && 1022.0 * q < 60.0) return true;
+        if (q > 0.0 && 1022.0 * q < 60.0) hit = true;
     }
-    return false;
+    g_ni_beyond = beyond0;
+    return hit;
 }
 #endif
 
