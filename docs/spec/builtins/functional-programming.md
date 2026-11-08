@@ -1085,6 +1085,14 @@ Produces the list of intermediate fold values.
     interpreter's value. `Fold[{#1[[2]], #2[[1]] #1[[2]] + #2[[2]] #1[[1]]} &,
     {1, 1}, pairs]` over 10⁴ pairs, reaching 4,739 digits, takes 3.1 ms (was
     33 ms).
+  - **Exact rationals** (v0.6466): a rational constant, seed or negative
+    integer power gives an exact `mpq` fold. A zero denominator declines, so
+    the interpreter's `ComplexInfinity` and its message are unchanged. With a
+    `5/2` coefficient, the same pair recurrence takes 23 ms (was 261 ms).
+  - **An inner pure function applied in the body** (v0.6466), such as
+    `{#1[[2]], g[#1, #2]} &` where `g` is a `Function`, is beta-reduced
+    first, so it compiles like the spelled-out body. `##`, `#0`, or a slot
+    beyond the arguments supplied declines.
 
 ```mathematica
 In[1]:= FoldList[f, x, {a, b, c, d}]

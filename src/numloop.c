@@ -1778,6 +1778,70 @@ static Expr* mk_slot(int64_t n) {
     return expr_new_function(expr_new_symbol(SYM_Slot), a, 1);
 }
 
+
+/* (body &)[a1, ..., an] -> body with #k replaced by ak (and the two-name or
+ * symbol-list form likewise): what applying the inner pure function does, done
+ * once at compile time.  NULL when the inner body uses ##, #0, a slot beyond n,
+ * or nests a Function of its own. */
+static Expr* fold_beta_subst(const Expr* e, const char* const* names, size_t nn,
+                             Expr* const* args, size_t na) {
+    if (e->type == EXPR_SYMBOL && names) {
+        for (size_t i = 0; i < nn; i++)
+            if (e->data.symbol.name == names[i]) return expr_copy(args[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Function) return NULL;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_SlotSequence) return NULL;
+    if (!names && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Slot) {
+        if (e->data.function.arg_count != 1 ||
+            e->data.function.args[0]->type != EXPR_INTEGER) return NULL;
+        int64_t k = e->data.function.args[0]->data.integer;
+        if (k < 1 || (size_t)k > na) return NULL;
+        return expr_copy(args[k - 1]);
+    }
+    Expr* nh = fold_beta_subst(h, names, nn, args, na);
+    if (!nh) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** nv = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        nv[i] = fold_beta_subst(e->data.function.args[i], names, nn, args, na);
+        if (!nv[i]) {
+            for (size_t q = 0; q < i; q++) expr_free(nv[q]);
+            free(nv); expr_free(nh); return NULL;
+        }
+    }
+    Expr* out = expr_new_function(nh, nv, n);
+    free(nv);
+    return out;
+}
+
+/* e = F[a1, ..., an] with F a pure Function: the beta-reduced body, or NULL. */
+static Expr* fold_beta(const Expr* e) {
+    const Expr* F = e->data.function.head;
+    size_t fa = F->data.function.arg_count;
+    Expr* const* args = e->data.function.args;
+    size_t na = e->data.function.arg_count;
+    if (fa == 1) return fold_beta_subst(F->data.function.args[0], NULL, 0, args, na);
+    const Expr* params = F->data.function.args[0];
+    if (fa != 2) return NULL;
+    const char* names[8]; size_t nn = 0;
+    if (params->type == EXPR_SYMBOL) {
+        if (params->data.symbol.name == SYM_Null) return NULL;
+        names[nn++] = params->data.symbol.name;
+    } else if (params->type == EXPR_FUNCTION && params->data.function.head->type == EXPR_SYMBOL &&
+               params->data.function.head->data.symbol.name == SYM_List &&
+               params->data.function.arg_count <= 8) {
+        for (size_t i = 0; i < params->data.function.arg_count; i++) {
+            if (params->data.function.args[i]->type != EXPR_SYMBOL) return NULL;
+            names[nn++] = params->data.function.args[i]->data.symbol.name;
+        }
+    } else return NULL;
+    if (nn != na) return NULL;
+    return fold_beta_subst(F->data.function.args[1], names, nn, args, na);
+}
+
 /* The fold body in slot form for an accumulator of width A and elements of
  * width E (0 = a scalar).  The accumulator occupies slots 1..Aw (Aw = max(A,1)),
  * the element slots Aw+1..Aw+Ew:
@@ -1818,6 +1882,15 @@ static Expr* fold_rewrite(const Expr* e, const char* acc_name, const char* el_na
             if (jj < 1 || jj > w) return NULL;
             return mk_slot(is_acc ? jj : Aw + jj);
         }
+    }
+    /* an inner pure function applied in the body: reduce it, then rewrite */
+    if (h->type == EXPR_FUNCTION && h->data.function.head->type == EXPR_SYMBOL &&
+        h->data.function.head->data.symbol.name == SYM_Function) {
+        Expr* red = fold_beta(e);
+        if (!red) return NULL;
+        Expr* out = fold_rewrite(red, acc_name, el_name, A, E);
+        expr_free(red);
+        return out;
     }
     Expr* nh = fold_rewrite(h, acc_name, el_name, A, E);
     if (!nh) return NULL;
@@ -2125,25 +2198,53 @@ typedef enum { FX_CONST, FX_SLOT, FX_ADD, FX_MUL, FX_POW } FxKind;
 typedef struct FxNode {
     FxKind kind;
     int slot;                 /* FX_SLOT: 0-based register */
-    unsigned long pw;         /* FX_POW: exponent */
+    long pw;                  /* FX_POW: exponent (negative only in mpq mode) */
     struct FxNode** kid; size_t nk;
     mpz_t val;                /* FX_CONST: the constant; otherwise the result */
+    mpq_t qv;                 /* the same in mpq (rational) mode */
 } FxNode;
+
+/* Does the (rewritten) body need rational arithmetic: a Rational constant or
+ * a negative integer power? */
+static bool fx_needs_q(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Rational) return true;
+    if (h == SYM_Power && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER &&
+        e->data.function.args[1]->data.integer < 0) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (fx_needs_q(e->data.function.args[i])) return true;
+    return false;
+}
 
 static void fx_free(FxNode* n) {
     if (!n) return;
     for (size_t i = 0; i < n->nk; i++) fx_free(n->kid[i]);
     free(n->kid);
     mpz_clear(n->val);
+    mpq_clear(n->qv);
     free(n);
 }
 
-static FxNode* fx_build(const Expr* e, int nslots) {
+static FxNode* fx_build(const Expr* e, int nslots, bool q) {
     FxNode* n = calloc(1, sizeof(FxNode));
     if (!n) return NULL;
     mpz_init(n->val);
+    mpq_init(n->qv);
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
-        n->kind = FX_CONST; expr_to_mpz(e, n->val); return n;
+        n->kind = FX_CONST; expr_to_mpz(e, n->val); mpq_set_z(n->qv, n->val); return n;
+    }
+    if (q && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        mpz_t a, b; mpz_init(a); mpz_init(b);
+        expr_to_mpz(e->data.function.args[0], a);
+        expr_to_mpz(e->data.function.args[1], b);
+        n->kind = FX_CONST;
+        mpq_set_num(n->qv, a); mpq_set_den(n->qv, b); mpq_canonicalize(n->qv);
+        mpz_clear(a); mpz_clear(b);
+        return n;
     }
     if (slot_in(e, 1, nslots)) {
         n->kind = FX_SLOT; n->slot = (int)e->data.function.args[0]->data.integer - 1;
@@ -2153,11 +2254,12 @@ static FxNode* fx_build(const Expr* e, int nslots) {
         const char* h = e->data.function.head->data.symbol.name;
         size_t na = e->data.function.arg_count;
         if (h == SYM_Power && na == 2 && e->data.function.args[1]->type == EXPR_INTEGER &&
-            e->data.function.args[1]->data.integer >= 1 &&   /* 0^0 is Indeterminate */
-            e->data.function.args[1]->data.integer <= 4096) {
-            n->kind = FX_POW; n->pw = (unsigned long)e->data.function.args[1]->data.integer;
+            e->data.function.args[1]->data.integer != 0 &&   /* 0^0 is Indeterminate */
+            e->data.function.args[1]->data.integer <= 4096 &&
+            e->data.function.args[1]->data.integer >= (q ? -4096 : 1)) {
+            n->kind = FX_POW; n->pw = (long)e->data.function.args[1]->data.integer;
             n->kid = malloc(sizeof(FxNode*)); n->nk = 1;
-            n->kid[0] = fx_build(e->data.function.args[0], nslots);
+            n->kid[0] = fx_build(e->data.function.args[0], nslots, q);
             if (!n->kid[0]) { fx_free(n); return NULL; }
             return n;
         }
@@ -2165,7 +2267,7 @@ static FxNode* fx_build(const Expr* e, int nslots) {
             n->kind = (h == SYM_Plus) ? FX_ADD : FX_MUL;
             n->kid = calloc(na, sizeof(FxNode*)); n->nk = na;
             for (size_t i = 0; i < na; i++)
-                if (!(n->kid[i] = fx_build(e->data.function.args[i], nslots))) {
+                if (!(n->kid[i] = fx_build(e->data.function.args[i], nslots, q))) {
                     fx_free(n); return NULL;
                 }
             return n;
@@ -2181,7 +2283,7 @@ static mpz_srcptr fx_eval(FxNode* n, mpz_t* regs) {
     switch (n->kind) {
         case FX_CONST: return n->val;
         case FX_SLOT:  return regs[n->slot];
-        case FX_POW:   mpz_pow_ui(n->val, fx_eval(n->kid[0], regs), n->pw); return n->val;
+        case FX_POW:   mpz_pow_ui(n->val, fx_eval(n->kid[0], regs), (unsigned long)n->pw); return n->val;
         case FX_ADD:
         case FX_MUL: {
             mpz_set(n->val, fx_eval(n->kid[0], regs));
@@ -2194,6 +2296,40 @@ static mpz_srcptr fx_eval(FxNode* n, mpz_t* regs) {
         }
     }
     return n->val;
+}
+
+/* mpq mode.  *zero_div is set (and the value is garbage) when a negative
+ * power meets 0: the interpreter's ComplexInfinity, with its message, is
+ * then reproduced by declining. */
+static mpq_srcptr fxq_eval(FxNode* n, mpq_t* regs, bool* zero_div) {
+    switch (n->kind) {
+        case FX_CONST: return n->qv;
+        case FX_SLOT:  return regs[n->slot];
+        case FX_POW: {
+            mpq_srcptr b = fxq_eval(n->kid[0], regs, zero_div);
+            unsigned long k = (unsigned long)(n->pw < 0 ? -n->pw : n->pw);
+            if (n->pw < 0 && mpq_sgn(b) == 0) { *zero_div = true; return n->qv; }
+            mpz_pow_ui(mpq_numref(n->qv), mpq_numref(b), k);   /* coprime stays coprime */
+            mpz_pow_ui(mpq_denref(n->qv), mpq_denref(b), k);
+            if (n->pw < 0) mpq_inv(n->qv, n->qv);
+            return n->qv;
+        }
+        case FX_ADD:
+        case FX_MUL: {
+            mpq_set(n->qv, fxq_eval(n->kid[0], regs, zero_div));
+            for (size_t i = 1; i < n->nk; i++) {
+                mpq_srcptr v = fxq_eval(n->kid[i], regs, zero_div);
+                if (n->kind == FX_ADD) mpq_add(n->qv, n->qv, v);
+                else                   mpq_mul(n->qv, n->qv, v);
+            }
+            return n->qv;
+        }
+    }
+    return n->qv;
+}
+
+static Expr* fxq_expr(mpq_srcptr q) {
+    return make_rational_mpz(mpq_numref(q), mpq_denref(q));
 }
 
 static Expr* fx_mpz_expr(mpz_srcptr z) {
@@ -2250,6 +2386,12 @@ static bool fold_int_elems(const Expr* list, size_t m, int64_t E, int64_t* out) 
     return true;
 }
 
+static bool fx_is_rational_lit(const Expr* c) {
+    return c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+           c->data.function.head->data.symbol.name == SYM_Rational &&
+           c->data.function.arg_count == 2;
+}
+
 static Expr* numloop_fold_exact(const Expr* f, const Expr* x0, const Expr* list,
                                 bool as_list, int64_t A, int64_t E) {
     size_t m = is_ndarray(list) ? (size_t)list->data.ndarray.dims[0]
@@ -2257,17 +2399,20 @@ static Expr* numloop_fold_exact(const Expr* f, const Expr* x0, const Expr* list,
     if (m == 0) return NULL;
     int64_t Aw = A ? A : 1, Ew = E ? E : 1;
     if (Aw + Ew > 16) return NULL;
-    /* the seed: exact integers */
+    /* the seed: exact integers, or rationals (then mpq mode) */
+    bool q = false;
     for (int64_t i = 0; i < Aw; i++) {
         const Expr* c = A ? x0->data.function.args[i] : x0;
-        if (c->type != EXPR_INTEGER && c->type != EXPR_BIGINT) return NULL;
+        if (fx_is_rational_lit(c)) q = true;
+        else if (c->type != EXPR_INTEGER && c->type != EXPR_BIGINT) return NULL;
     }
     Expr* comp[FOLD_VEC_MAX]; size_t nc = 0;
     if (!fold_components(f, A, E, comp, &nc)) return NULL;
+    for (size_t i = 0; i < nc && !q; i++) q = fx_needs_q(comp[i]);
     FxNode* prog[FOLD_VEC_MAX] = {0};
     bool ok = true;
     for (size_t i = 0; i < nc; i++) {
-        prog[i] = fx_build(comp[i], (int)(Aw + Ew));
+        prog[i] = fx_build(comp[i], (int)(Aw + Ew), q);
         if (!prog[i]) ok = false;
         expr_free(comp[i]);
     }
@@ -2279,42 +2424,65 @@ static Expr* numloop_fold_exact(const Expr* f, const Expr* x0, const Expr* list,
         return NULL;
     }
     mpz_t regs[16], nxt[FOLD_VEC_MAX];
-    for (int64_t i = 0; i < Aw + Ew; i++) mpz_init(regs[i]);
-    for (size_t i = 0; i < nc; i++) mpz_init(nxt[i]);
-    for (int64_t i = 0; i < Aw; i++)
-        expr_to_mpz(A ? x0->data.function.args[i] : x0, regs[i]);
+    mpq_t qregs[16], qnxt[FOLD_VEC_MAX];
+    for (int64_t i = 0; i < Aw + Ew; i++) { mpz_init(regs[i]); mpq_init(qregs[i]); }
+    for (size_t i = 0; i < nc; i++) { mpz_init(nxt[i]); mpq_init(qnxt[i]); }
+    for (int64_t i = 0; i < Aw; i++) {
+        const Expr* c = A ? x0->data.function.args[i] : x0;
+        if (fx_is_rational_lit(c)) {
+            mpz_t a, b; mpz_init(a); mpz_init(b);
+            expr_to_mpz(c->data.function.args[0], a);
+            expr_to_mpz(c->data.function.args[1], b);
+            mpq_set_num(qregs[i], a); mpq_set_den(qregs[i], b); mpq_canonicalize(qregs[i]);
+            mpz_clear(a); mpz_clear(b);
+        } else {
+            expr_to_mpz(c, regs[i]);
+            mpq_set_z(qregs[i], regs[i]);
+        }
+    }
     Expr** hist = as_list ? malloc(sizeof(Expr*) * (m + 1)) : NULL;
     size_t nh = 0;
     bool bail = as_list && !hist;
+    bool zero_div = false;
     for (size_t step = 0; !bail && step <= m; step++) {
         if (as_list) {
             if (A) {
                 Expr* v[FOLD_VEC_MAX];
-                for (int64_t i = 0; i < A; i++) v[i] = fx_mpz_expr(regs[i]);
+                for (int64_t i = 0; i < A; i++)
+                    v[i] = q ? fxq_expr(qregs[i]) : fx_mpz_expr(regs[i]);
                 hist[nh++] = fold_list_of(v, (size_t)A);
-            } else hist[nh++] = fx_mpz_expr(regs[0]);
+            } else hist[nh++] = q ? fxq_expr(qregs[0]) : fx_mpz_expr(regs[0]);
         }
         if (step == m) break;
         if ((step & 1023) == 1023 && tc_deadline_passed()) { bail = true; break; }
-        for (int64_t j = 0; j < Ew; j++)
-            mpz_set_si(regs[Aw + j], (long)el[step * (size_t)Ew + (size_t)j]);
-        for (size_t i = 0; i < nc; i++) mpz_set(nxt[i], fx_eval(prog[i], regs));
-        for (size_t i = 0; i < nc; i++) mpz_swap(regs[i], nxt[i]);
+        if (q) {
+            for (int64_t j = 0; j < Ew; j++)
+                mpq_set_si(qregs[Aw + j], (long)el[step * (size_t)Ew + (size_t)j], 1);
+            for (size_t i = 0; i < nc; i++) mpq_set(qnxt[i], fxq_eval(prog[i], qregs, &zero_div));
+            if (zero_div) { bail = true; break; }
+            for (size_t i = 0; i < nc; i++) mpq_swap(qregs[i], qnxt[i]);
+        } else {
+            for (int64_t j = 0; j < Ew; j++)
+                mpz_set_si(regs[Aw + j], (long)el[step * (size_t)Ew + (size_t)j]);
+            for (size_t i = 0; i < nc; i++) mpz_set(nxt[i], fx_eval(prog[i], regs));
+            for (size_t i = 0; i < nc; i++) mpz_swap(regs[i], nxt[i]);
+        }
     }
     Expr* out = NULL;
     if (!bail) {
         if (as_list) { out = pack_offer(fold_list_of(hist, nh)); }
         else if (A) {
             Expr* v[FOLD_VEC_MAX];
-            for (int64_t i = 0; i < A; i++) v[i] = fx_mpz_expr(regs[i]);
+            for (int64_t i = 0; i < A; i++)
+                v[i] = q ? fxq_expr(qregs[i]) : fx_mpz_expr(regs[i]);
             out = fold_list_of(v, (size_t)A);
-        } else out = fx_mpz_expr(regs[0]);
+        } else out = q ? fxq_expr(qregs[0]) : fx_mpz_expr(regs[0]);
     } else if (hist) {
         for (size_t i = 0; i < nh; i++) expr_free(hist[i]);
     }
     free(hist);
-    for (int64_t i = 0; i < Aw + Ew; i++) mpz_clear(regs[i]);
-    for (size_t i = 0; i < nc; i++) { mpz_clear(nxt[i]); fx_free(prog[i]); }
+    for (int64_t i = 0; i < Aw + Ew; i++) { mpz_clear(regs[i]); mpq_clear(qregs[i]); }
+    for (size_t i = 0; i < nc; i++) { mpz_clear(nxt[i]); mpq_clear(qnxt[i]); fx_free(prog[i]); }
     free(el);
     return out;
 }

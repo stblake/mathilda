@@ -588,6 +588,18 @@ static void test_fold_rows_and_vectors(void) {
     same_full("Fold[{#1[[1]] + #2, #1[[2]] #2} &, {0, 1}, Range[1, 30]]");
     /* exact growth past int64: GMP, still the interpreter's value */
     same_full("Last[Fold[{#1[[2]], 3 #1[[2]] + #1[[1]]} &, {1, 1}, Range[400]]]");
+    /* an inner pure function applied in the body is beta-reduced */
+    same_full("Fold[{#1[[2]], (5/2 #1[[2]] + #2 #1[[1]] &)[#1, #2]} &, {1, 1}, "
+              "{1, -1, -1, 1, 1, 1, -1, 1}]");
+    same_full("Fold[{#1[[2]], Function[{u, v}, u[[2]] v - u[[1]]][#1, #2]} &, {1, 1}, "
+              "{1, -1, -1, 1, 1}]");
+    same_full("FoldList[(#1 + ## &)[#1, #2] &, 1., Range[5]]");        /* ##: decline */
+    same_full("FoldList[(#1 + #3 &)[#1, #2] &, 1., Range[3]]");        /* #3: decline */
+    /* rationals: exact mpq, a zero denominator declines (message, as interpreted) */
+    same_full("Fold[#1/3 + #2 &, 1/2, Range[30]]");
+    same_full("FoldList[{#1[[2]], #1[[1]]/(#1[[2]] + #2)} &, {1, 2}, {1, 1, -3, 2}]");
+    same_full("Fold[#1^-2 + #2 &, 1, {1, 2}]");
+    same_full("Quiet[Fold[1/(#1 - 1) + #2 &, 2, {0, 0, 1}]]");
     /* a packed row buffer gives a packed history */
     expect_full("PackedArrayQ[FoldList[#2[[1]] + #2[[2]]/#1 &, 1., "
                 "RandomChoice[{1, 1} -> {{3, 1}, {3, -1}}, 10^4]]]", "True");
