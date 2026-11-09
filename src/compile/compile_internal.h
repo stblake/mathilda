@@ -427,6 +427,12 @@ enum {
      * imaginary part).  MG_CPOWI is an integer power. */                        \
     X(MG_CCONST, K_CONST) X(MG_CMOV, K_MOVE)  X(MG_CFROM_R, K_UN)          \
     X(MG_CUN, K_UN)       X(MG_CBIN, K_BIN)   X(MG_CPOWI, K_POWI)          \
+    /* An arbitrary-precision special function (Erf, BesselK, MathieuC, ...):   \
+     * operands are the `flags` consecutive managed registers from `a` (K_NARY  \
+     * shape), imm.p a program-owned MgdSpecialCall that names the head and its \
+     * literal parameters; the head's own arbitrary-precision evaluator runs.   \
+     * See compile_mgd_special.h. */                                            \
+    X(MG_SPECIAL, K_NARY)                                                       \
     X(RET, K_RET)
 
 /* The opcode enum, generated from OPLIST so the two cannot drift apart. */
@@ -596,8 +602,10 @@ typedef struct {
 typedef struct { int reg; CompileType type; } MgdSlot;
 
 /* A program-owned arbitrary-precision literal container, pointed at from an
- * instruction immediate (MG_*CONST).  `kind`: 0 = mpfr_t, 1 = mpz_t, 2 = ncpx.
+ * instruction immediate (MG_*CONST).  `kind`: 0 = mpfr_t, 1 = mpz_t, 2 = ncpx,
+ * 3 = an MG_SPECIAL call descriptor.
  * Freed at compiled_free. */
+#define MGD_CONST_SPECIAL 3   /* kind: an MgdSpecialCall (compile_mgd_special.h) */
 typedef struct { int kind; void* ptr; } MgdConst;
 
 struct CompiledProgram {

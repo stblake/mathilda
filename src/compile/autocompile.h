@@ -144,4 +144,10 @@ Expr* autocompile_eval_closed(const Expr* expr);
 
 void autocompiled_free(AutoCompiled* ac);
 
+/* Diagnostic counters since startup, for tests and the coverage audit: bodies
+ * whose arbitrary-precision (autocompile_new_prec / _prec_z) compilation bailed
+ * to the interpreter, and autocompiled_eval_mpfr calls that declined a point
+ * (so the caller interpreted it).  Plain globals: diagnostic only. */
+void autocompile_prec_stats(long* compile_bails, long* eval_declines);
+
 #endif /* MATHILDA_AUTOCOMPILE_H */

@@ -152,10 +152,11 @@ int main(void) {
     run("aC = Compile[{{x, _Real}}, ArcCosh[x], WorkingPrecision -> 30]");
     check_true("Abs[aC[N[1/2, 30]] - ArcCosh[N[1/2, 30]]] < 10^-25", "mpfr real: ArcCosh[1/2] complex");
 
-    /* Interpreter fallback on an unsupported head, still correct at precision. */
+    /* A special function (Gamma: compiled through MG_SPECIAL since v0.6482), still
+     * the interpreter's value at precision. */
     run("gF = Compile[{{x, _Real}}, Gamma[x], WorkingPrecision -> 30]");
     run("xg = N[7/2, 30]");
-    check_true("gF[xg] == N[Gamma[7/2], 30]", "fallback: Gamma bails to interpreter");
+    check_true("gF[xg] == N[Gamma[7/2], 30]", "special function: Gamma at precision");
 
     /* Machine path unchanged: no option, and WorkingPrecision -> MachinePrecision. */
     run("mA = Compile[{{x, _Real}}, x*x + x]");
@@ -176,7 +177,11 @@ int main(void) {
                "diag: managed complex subset lowers");
     check_true("(\"Compiled\" /. CompileDiagnostics[{{n, _Integer}}, n^4 - 2 n, \"BigIntegers\" -> True]) === True",
                "diag: bignum subset lowers");
-    check_true("(\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Gamma[x], WorkingPrecision -> 40]) === False",
+    /* Gamma lowers since the special-function registry (MG_SPECIAL); an
+     * integer-valued head such as Floor is still outside the managed subset */
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Gamma[x], WorkingPrecision -> 40]) === True",
+               "diag: special function (Gamma) lowers");
+    check_true("(\"Compiled\" /. CompileDiagnostics[{{x, _Real}}, Floor[x], WorkingPrecision -> 40]) === False",
                "diag: unsupported head reports the bail");
 
     /* Phase 3 substrate: precision-aware auto-compilation (the entry a sampler

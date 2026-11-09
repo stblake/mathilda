@@ -23,6 +23,7 @@
 #include "../eval.h"           /* evaluate / eval_and_free */
 #include "../print.h"          /* expr_to_string — Thread::tdlen diagnostic */
 #include "../message.h"        /* mth_message — Thread::tdlen through Quiet/Check */
+#include "compile_mgd_special.h" /* compile_mgd_special_init */
 
 struct CompiledFunction {
     unsigned         refcount;   /* Expr copies share the payload */
@@ -1169,7 +1170,9 @@ void compiled_function_init(void) {
         "machine-integer range; the default True never does. "
         "WorkingPrecision -> n compiles real/complex arithmetic in MPFR at n "
         "decimal digits (one fixed precision for the whole function), for the "
-        "straight-line arithmetic + elementary-function subset; MachinePrecision "
+        "straight-line arithmetic, the elementary functions and the special "
+        "functions (each through its own arbitrary-precision evaluator; see "
+        "Internal`CompileArbitraryPrecisionHeads[]); MachinePrecision "
         "(the default) keeps the machine path unchanged. \"BigIntegers\" -> True "
         "makes integer arithmetic exact (GMP) instead of int64.");
     /* The head of the object Compile returns (an atom here: EXPR_COMPILED).
@@ -1195,6 +1198,8 @@ void compiled_function_init(void) {
         "For a compiled body it also "
         "gives the result type and the instruction count with and without the "
         "optimiser.");
+
+    compile_mgd_special_init();
 
     symtab_add_builtin("CompilePrint", builtin_compile_print);
     SymbolDef* dp = symtab_get_def("CompilePrint");

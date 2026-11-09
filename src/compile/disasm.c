@@ -310,6 +310,8 @@ static ImmKind imm_kind(uint16_t op) {
         case OP_ASSOC_LOOKUP_DYN: case OP_ASSOC_KEYSEL: case OP_ASSOC_SET:  return IMM_ASSOC;
         case OP_A_AXIS: case OP_A_NEW: case OP_V_EW: return IMM_INT;
         case OP_V_KERN: case OP_V_KERN2:  return IMM_KERNEL;
+        /* a program-owned call descriptor, not a machine kernel pointer */
+        case OP_MG_SPECIAL:               return IMM_NONE;
         default: break;
     }
     switch (compile_op_kind[op]) {

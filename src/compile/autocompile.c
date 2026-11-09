@@ -59,6 +59,13 @@ bool autocompile_enabled(void) {
 
 void autocompile_set_enabled(bool on) { g_autocompile_enabled = on ? 1 : 0; }
 
+static long g_prec_bails = 0, g_prec_declines = 0;
+
+void autocompile_prec_stats(long* compile_bails, long* eval_declines) {
+    if (compile_bails) *compile_bails = g_prec_bails;
+    if (eval_declines) *eval_declines = g_prec_declines;
+}
+
 static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t nvars,
                              CompileType argt, long prec_bits) {
     if (!body || nvars == 0) return NULL;
@@ -95,7 +102,11 @@ static AutoCompiled* ac_make(const Expr* body, const Expr* const* vars, size_t n
     unsigned ac_flags = COMPILE_FOLD_GLOBALS & ~COMPILE_WRAP_INT;
     CompiledProgram* prog = compile_expr_prec(body, names, types, nvars, ac_flags, prec_bits);
     free(names); free(types);
-    if (!prog) { ac_report_bail(body); return NULL; }
+    if (!prog) {
+        if (prec_bits > 0) g_prec_bails++;
+        ac_report_bail(body);
+        return NULL;
+    }
 
     AutoCompiled* ac = calloc(1, sizeof *ac);
     if (!ac) { compiled_free(prog); return NULL; }
@@ -269,10 +280,11 @@ Expr* autocompiled_eval_mpfr(const AutoCompiled* ac, const Expr* const* xs) {
     }
     bool ok = compiled_eval(ac->prog, args, &o);
     if (args != stack_args) free(args);
-    if (!ok) return NULL;   /* false ⇒ non-finite / non-numeric */
+    if (!ok) { g_prec_declines++; return NULL; }   /* non-finite / non-numeric */
     /* A managed result is a NEW Expr (EXPR_MPFR / Complex[MPFR,MPFR]) the caller
      * owns; on any non-managed result the caller should interpret. */
-    return CT_IS_MANAGED(o.type) ? o.v.a : NULL;
+    if (!CT_IS_MANAGED(o.type)) { g_prec_declines++; return NULL; }
+    return o.v.a;
 }
 
 void autocompiled_free(AutoCompiled* ac) {

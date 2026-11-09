@@ -15,7 +15,11 @@
 #include "../numeric_complex.h"  /* ncpx, numeric_mpfr_* — the managed containers */
 #include "../numeric.h"          /* numeric_mpfr_pow_fast */
 #include "../special_functions/productlog.h"   /* productlog_mpfr_real */
+#include "../symtab.h"           /* attributes: NumericFunction (constant folding) */
+#include "../attr.h"
+#include "../eval.h"
 #endif
+#include "compile_mgd_special.h"  /* MG_SPECIAL: the special-function registry */
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -66,6 +70,10 @@ void mgd_const_free(MgdConst* mc) {
         case 0: mpfr_clear((mpfr_ptr)mc->ptr); break;
         case 2: ncpx_clear((ncpx*)mc->ptr); break;
 #endif
+        case MGD_CONST_SPECIAL:   /* owns its literals; frees itself */
+            mgd_special_call_free((MgdSpecialCall*)mc->ptr);
+            mc->ptr = NULL;
+            return;
         default: break;
     }
     free(mc->ptr);
@@ -438,6 +446,129 @@ static int emit_mgd_with(Ctx* c, const Expr* e, Val* out) {
     return (ok && c->ok) ? 1 : 0;
 }
 
+/* ---- special functions (MG_SPECIAL) and closed constants ---- */
+
+/* A named constant numericalize knows (the literal-parameter test below). */
+static bool mgd_named_constant(const char* nm) {
+    double d;
+    return nm == SYM_Pi || nm == SYM_E || nm == SYM_EulerGamma || nm == SYM_Catalan
+        || nm == SYM_Degree || numeric_constant_machine_value(nm, &d);
+}
+
+/* Is `e` CLOSED — free of every declared argument and built only from numbers,
+ * named constants, Lists and NumericFunction heads — so that its value is the
+ * same at every call?  Such a subtree is a literal parameter of a special
+ * function (the 2 of BesselJ[2, x], the {1/3} of HypergeometricPFQ[{1/3}, ...])
+ * or, as a whole call, a constant.  The NumericFunction requirement is what
+ * keeps RandomReal[] or a user function with side effects out. */
+static bool mgd_closed(Ctx* c, const Expr* e) {
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        case EXPR_SYMBOL:
+            return arg_find(c, e->data.symbol.name) < 0
+                && mgd_named_constant(e->data.symbol.name);
+        case EXPR_FUNCTION: {
+            const Expr* hd = e->data.function.head;
+            if (hd->type != EXPR_SYMBOL) return false;
+            const char* nm = hd->data.symbol.name;
+            if (nm != SYM_List && nm != SYM_Rational && nm != SYM_Complex) {
+                SymbolDef* d = symtab_lookup(nm);
+                if (!d || !(d->attributes & ATTR_NUMERICFUNCTION)) return false;
+            }
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                if (!mgd_closed(c, e->data.function.args[i])) return false;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+/* A closed call as a managed constant: N[e] at the working precision, once, at
+ * compile time — what the interpreter computes at every sample. */
+static bool mgd_fold_const(Ctx* c, const Expr* e, Val* out) {
+    NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = c->prec_bits;
+    Expr* v = numericalize(e, sp);
+    if (!v) return false;
+    Expr *re, *im;
+    int cst = -1;
+    CompileType t = CT_BIGREAL;
+    if (v->type == EXPR_MPFR) cst = mgd_new_mpfr_const_expr(c, v);
+    else if (is_complex(v, &re, &im) && (re->type == EXPR_MPFR || im->type == EXPR_MPFR)) {
+        cst = mgd_new_ncpx_const(c, re, im);
+        t = CT_BIGCOMPLEX;
+    }
+    expr_free(v);
+    if (cst < 0) return false;
+    Val r = { cst, true, t, false }; *out = r;
+    return c->ok;
+}
+
+/* Lower f[args] for a head in the special-function registry: every closed
+ * argument becomes a literal parameter (evaluated once, passed exactly as the
+ * interpreter sees it — the integer order of BesselJ[2, x] stays an integer),
+ * every other argument a managed register, moved into one consecutive operand
+ * range.  The result is complex when any operand is; a real program meeting a
+ * complex value at run time declines that point. */
+static bool emit_mgd_special(Ctx* c, const Expr* e, const char* h,
+                             Expr* const* a, size_t n, Val* out) {
+    (void)e;
+    const MgdSpecialEntry* ent = mgd_special_lookup(h, n);
+    if (!ent || n > 16) return false;
+    Val ops[16];
+    size_t nreg = 0;
+    bool any_cplx = false;
+    MgdSpecialCall* sc = calloc(1, sizeof *sc);
+    if (!sc) { c->ok = false; return false; }
+    sc->head = h; sc->nargs = n;
+    sc->lit = calloc(n ? n : 1, sizeof *sc->lit);
+    sc->cplx = calloc(n ? n : 1, 1);
+    if (!sc->lit || !sc->cplx) { mgd_special_call_free(sc); c->ok = false; return false; }
+    for (size_t i = 0; i < n; i++) {
+        if (mgd_closed(c, a[i])) {
+            Expr* cp = expr_copy(a[i]);
+            sc->lit[i] = evaluate(cp);
+            expr_free(cp);
+            if (!sc->lit[i]) { mgd_special_call_free(sc); return false; }
+            continue;
+        }
+        if (!emit_mgd_real(c, a[i], &ops[nreg])) { mgd_special_call_free(sc); return false; }
+        sc->cplx[i] = ops[nreg].type == CT_BIGCOMPLEX;
+        any_cplx = any_cplx || sc->cplx[i];
+        nreg++;
+    }
+    if (nreg == 0 || (any_cplx && !(ent->flags & MGS_CPLX))
+        || !ctx_add_mgd_const(c, MGD_CONST_SPECIAL, sc)) {
+        mgd_special_call_free(sc);
+        return false;
+    }
+    /* ownership of sc is the program's from here (freed with the consts) */
+    int first = -1;
+    int regs[16];
+    for (size_t j = 0; j < nreg; j++) {
+        regs[j] = alloc_mgd(c, ops[j].type);
+        if (j == 0) first = regs[j];
+    }
+    Slot z; memset(&z, 0, sizeof z);
+    for (size_t j = 0; j < nreg; j++)
+        ins(c, ops[j].type == CT_BIGCOMPLEX ? OP_MG_CMOV : OP_MG_RMOV,
+            (uint32_t)regs[j], (uint32_t)ops[j].reg, 0, z);
+    /* complex when an operand is, or when the head is complex-valued on the
+     * real line (HankelH1 = J + I Y) */
+    bool cout = any_cplx || (ent->flags & MGS_COUT);
+    CompileType rt = cout ? CT_BIGCOMPLEX : CT_BIGREAL;
+    sc->out_cplx = cout;
+    int dst = alloc_mgd(c, rt);
+    Slot k; memset(&k, 0, sizeof k); k.p = sc;
+    ins_f(c, OP_MG_SPECIAL, (uint16_t)nreg, (uint32_t)dst, (uint32_t)first, 0, k);
+    Val r = { dst, true, rt, false }; *out = r;
+    return c->ok;
+}
+
 static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
     if (!c->ok) return false;
     /* leaf: declared argument */
@@ -583,26 +714,37 @@ static bool emit_mgd_real_node(Ctx* c, const Expr* e, Val* out) {
         ins(c, OP_MG_RUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
         Val r = { dst, true, CT_BIGREAL, false }; *out = r; return c->ok;
     }
-    /* unary elementary functions */
-    if (n == 1) {
+    /* unary elementary functions: a direct mpfr_* / ncpx_* opcode where one
+     * exists for the operand's domain; otherwise (Sinh of a complex, Erf, ...)
+     * fall through to the special-function registry below.  The operand is
+     * value-numbered, so lowering it here and again there emits it once. */
+    bool tr_;
+    if (n == 1 && (mgd_real_unary_fn(h) || mgd_complex_unary_sel(h, &tr_) >= 0)) {
         Val x; if (!emit_mgd_real(c, a[0], &x)) return false;
         if (x.type == CT_BIGCOMPLEX) {
             bool to_real; int sel = mgd_complex_unary_sel(h, &to_real);
-            if (sel < 0) return false;
-            Slot k; memset(&k, 0, sizeof k); k.i = sel;
-            CompileType rt = to_real ? CT_BIGREAL : CT_BIGCOMPLEX;
-            int dst = alloc_mgd(c, rt);
-            ins(c, OP_MG_CUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
-            Val r = { dst, true, rt, false }; *out = r; return c->ok;
+            if (sel >= 0) {
+                Slot k; memset(&k, 0, sizeof k); k.i = sel;
+                CompileType rt = to_real ? CT_BIGREAL : CT_BIGCOMPLEX;
+                int dst = alloc_mgd(c, rt);
+                ins(c, OP_MG_CUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
+                Val r = { dst, true, rt, false }; *out = r; return c->ok;
+            }
+        } else {
+            const void* fn = mgd_real_unary_fn(h);
+            if (fn) {
+                Slot k; memset(&k, 0, sizeof k); k.p = fn;
+                int dst = alloc_mgd(c, CT_BIGREAL);
+                ins(c, OP_MG_RUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
+                Val r = { dst, true, CT_BIGREAL, false }; *out = r; return c->ok;
+            }
         }
-        const void* fn = mgd_real_unary_fn(h);
-        if (!fn) return false;
-        Slot k; memset(&k, 0, sizeof k); k.p = fn;
-        int dst = alloc_mgd(c, CT_BIGREAL);
-        ins(c, OP_MG_RUN, (uint32_t)dst, (uint32_t)x.reg, 0, k);
-        Val r = { dst, true, CT_BIGREAL, false }; *out = r; return c->ok;
     }
-    return false;
+    /* a closed numeric call (BesselJZero[0, 3], Gamma[1/3]) is a constant at
+     * the working precision; anything else of a registered head is lowered to
+     * its own arbitrary-precision evaluator */
+    if (mgd_closed(c, e)) return mgd_fold_const(c, e, out);
+    return emit_mgd_special(c, e, h, a, n, out);
 }
 #else
 static bool emit_mgd_real(Ctx* c, const Expr* e, Val* out) {

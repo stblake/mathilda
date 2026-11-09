@@ -1247,6 +1247,7 @@ set(COMMON_SRC
     ../src/compile/compile.c
     ../src/compile/compile_ndtables.c
     ../src/compile/compile_mgd.c
+    ../src/compile/compile_mgd_special.c
     ../src/compile/compile_assoc.c
     ../src/compile/compile_vm.c
     ../src/compile/compile_infer.c
@@ -1974,6 +1975,8 @@ target_include_directories(autocompile_tests PRIVATE ../src ../src/compile)
 
 add_executable(compile_arbprec_tests test_compile_arbprec.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(compile_arbprec_tests PRIVATE ../src ../src/compile)
+add_executable(compile_mpfr_special_tests test_compile_mpfr_special.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(compile_mpfr_special_tests PRIVATE ../src ../src/compile)
 
 add_executable(levincoll_tests test_levincoll.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(levincoll_tests PRIVATE ../src ../src/numerical_calculus)

@@ -981,10 +981,23 @@ path (and its speed) is unchanged when neither is given.
   `ArcSinh`, `ArcCosh`, `ArcTanh`, …) — over `_Real`, `_Complex` and
   `_Integer` (integers lift to reals), plus `With[{v = e, …}, body]`, lowered
   as the substituted body with each shared `e` evaluated once (value
-  numbering); anything else (control
-  flow, arrays, an unsupported head like `Gamma`) transparently falls back to
-  the interpreter *at that precision*, so the answer is always what
-  `N[expr, n]` of the substituted body would give.
+  numbering). **Every special function** lowers too — `Erf`, `Gamma`,
+  `BesselK`, `AiryAi`, `Hypergeometric1F1`/`2F1`/`PFQ`/`U`, `EllipticK`/`E`/`F`/
+  `Pi`, the Jacobi and Weierstrass families, `MathieuC`/`S`, `Zeta`, `PolyLog`,
+  `LerchPhi`, `MeijerG`, the orthogonal polynomials, … (142 heads; the list is
+  ``Internal`CompileArbitraryPrecisionHeads[]``), for real and complex
+  arguments — as one instruction that hands its operands to the head's **own**
+  arbitrary-precision evaluator, the routine `N[f[...], n]` runs, so the
+  compiled value is the interpreted one. Closed parameters stay exact (the `2`
+  of `BesselJ[2, x]`, the parameter Lists of `HypergeometricPFQ`/`MeijerG`/
+  `WeierstrassP`), and a closed call (`BesselJZero[0, 3]`, `Gamma[1/3]`) is
+  folded to a constant at the working precision. A head that is complex-valued
+  on the real line (`HankelH1`, `SphericalHankelH1/H2`, `DirichletL` with a
+  complex character) compiles to an `"MPFRComplex"` result. Anything else
+  (control flow, arrays, an integer-valued head like `Floor`) transparently
+  falls back to the interpreter *at that precision*, so the answer is always
+  what `N[expr, n]` of the substituted body would give; so does a point where a
+  real-typed function meets a complex value.
 - **`"BigIntegers" -> True`** — integer arithmetic (`Plus`/`Times`/`Subtract`/
   non-negative `Power`) is exact GMP instead of int64, so a result past the
   machine-integer range is computed exactly rather than routed to the
@@ -1000,12 +1013,20 @@ Out[2]= 8179069375972308708891986605443361898001
 
 In[3]:= Compile[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 45][N[1/2 + I/3, 45]]
 Out[3]= 1.696859506173835946311071541529964410492750645 + 0.8727861896014286091867555415942467494395774456*I
+
+In[4]:= Compile[{{x, _Real}}, Erf[x] + BesselK[2, x] Sin[x], WorkingPrecision -> 30][N[7/10, 30]]
+Out[4]= 3.03649471340395693927736515763
 ```
 
+The same lowering serves auto-compilation: `NIntegrate`, `NSum`, `FindRoot`,
+and `NDSolve` at `WorkingPrecision -> n` compile a special-function body in MPFR instead of
+interpreting it at every sample. ``Internal`CompileArbitraryPrecisionStats[]``
+counts the compiled special-function calls, the calls that declined to the
+interpreter, and the auto-compilations that bailed.
+
 Deferred (see [`docs/design/compile-arbitrary-precision.md`](../../design/compile-arbitrary-precision.md)):
-arbitrary-precision *arrays*, control flow / procedural constructs in a managed
-body, and the warm thread-local container arena (a speed follow-up; correctness
-and the machine-path guarantee do not depend on it).
+arbitrary-precision *arrays*, and control flow / procedural constructs in a
+managed body.
 
 ## CompileDiagnostics
 

@@ -29,6 +29,7 @@
 #include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
+#include "compile_mgd_special.h"  /* MG_SPECIAL: arbitrary-precision special functions */
 #endif
 #include "../mth_machine_log.h"    /* mth_log_machine_z: the one machine Log */
 #include "../mth_machine_pow.h"    /* mth_powi_machine & co: the one machine Power */
@@ -1484,6 +1485,22 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 goto vm_fail;
 #endif
                 NEXT();
+            OP(MG_SPECIAL):
+#ifdef USE_MPFR
+                {
+                    /* the head's own arbitrary-precision evaluator (it may
+                     * re-enter the evaluator, and so this VM, on its own frame) */
+                    void* ops_[16];
+                    unsigned nr_ = c->flags;
+                    if (nr_ > 16) goto vm_fail;
+                    for (unsigned j = 0; j < nr_; j++) ops_[j] = (void*)R[c->a + j].p;
+                    const MgdSpecialCall* sc_ = (const MgdSpecialCall*)c->imm.p;
+                    if (!mgd_special_invoke(sc_, ops_, (void*)RD.p, sc_->out_cplx)) goto vm_fail;
+                }
+#else
+                goto vm_fail;
+#endif
+                NEXT();
             /* Array ops are out of line: they allocate, they can fail, and
              * keeping them out of the scalar cases costs the scalar path
              * nothing. */
@@ -2152,6 +2169,12 @@ static void mgd_cell_reprec(int kind, void* ptr, long prec) {
 #endif
 }
 
+/* Arbitrary-precision calls that declined (a NaN, a complex value where a real
+ * was compiled, a special function that did not evaluate): the caller then
+ * interprets.  Diagnostic only, for the coverage audit and tests. */
+static long g_mgd_eval_fails = 0;
+long compiled_managed_eval_failures(void) { return g_mgd_eval_fails; }
+
 static void managed_frame_exit(const CompiledProgram* p, Slot* R) {
     /* Retreat the arena stack pointer; the containers stay warm for the next
      * call.  Null the frame slots so a stale pointer into the arena is never read
@@ -2299,6 +2322,7 @@ bool compiled_eval(const CompiledProgram* p, const CompileValue* args, CompileVa
      * Expr before the containers are cleared; the caller owns it, as for arrays. */
     if (CT_IS_MANAGED(p->result_type)) {
         Expr* rv = failed ? NULL : managed_result_expr(p, r);
+        if (!rv) g_mgd_eval_fails++;
         out->v.a = rv;
         arr_sweep(p, R);
         managed_frame_exit(p, R);
