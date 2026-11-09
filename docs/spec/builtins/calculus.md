@@ -22,6 +22,11 @@ Partial derivative.
   non-negative integer.
 - `D[f, x, y, ...]` -- mixed partial derivative, equivalent to
   `D[D[f, x], y, ...]`.
+- **Sums and products**: `D[Sum[f, {k, a, b}, ...], x]` is
+  `Sum[D[f, x], {k, a, b}, ...]` and `D[Product[f, ...], x]` is
+  `Product[f, ...] Sum[D[f, x]/f, ...]` when every index is a symbol other than
+  `x` and every limit is free of `x`; with an `x`-dependent limit the `D` stays
+  unevaluated (the bound index is never leaked into the result).
 - `D[f, {x, n}, {y, m}, ...]` -- mixed multiple partial derivative.
 - **Products that are not `Times`** (v0.6134). `Dot`, `NonCommutativeMultiply` and `Cross`
   are differentiated by the product rule with the factor order kept, as in the reference:
@@ -200,6 +205,17 @@ Out[5]= 2
 Higher-order derivative operator; represents the symbolic object
 `Derivative[n1, ..., nk][f]` (the mixed `(n1, ..., nk)`-th partial
 of a `k`-argument function `f`).
+
+**Applied derivatives of built-in functions**: `Derivative[n1, ..., nk][f][a1, ..., ak]`
+with `f` a built-in `NumericFunction` evaluates to what `D` gives for
+`f[t1, ..., tk]` at `ti = ai`, when that is a closed form:
+`Derivative[1][Sin][x]` is `Cos[x]`, `Derivative[0, 1][BesselJ][n, z]` is
+`(BesselJ[n - 1, z] - BesselJ[n + 1, z])/2`, `Derivative[1][Gamma][0.5]` is a
+number. A derivative with no closed form (`Derivative[1, 0][BesselJ][n, z]`)
+and any derivative of a user symbol stay inert. The order derivative
+`Derivative[1, 0]` of `BesselJ` / `BesselI` (any order) and `BesselY` /
+`BesselK` (non-integer order) has a numeric value at inexact arguments, from
+arb's power series in the order (`flint_num_bessel_order_deriv`).
 
 **Features**:
 - `Protected`.

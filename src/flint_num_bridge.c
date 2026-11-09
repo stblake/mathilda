@@ -1424,6 +1424,111 @@ static void nb_struve_l(acb_t r, const acb_t nu, const acb_t z, slong prec) {
     nb_struve_hl(r, nu, z, 1, prec);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Order derivatives of the Bessel functions, d/dnu                   */
+/* ------------------------------------------------------------------ */
+/* The Taylor jet in t of C_{s(nu+t)}(z), s = +-1, to first order, for
+ * C = J (modified = 0) or I (modified = 1), from
+ *     J_mu(z) = (z/2)^mu 0F1~(; mu + 1; -z^2/4),   I: +z^2/4,
+ * with the regularized 0F1 summed as a power series in its parameter
+ * (acb_hypgeom_pfq_series_direct, automatic truncation with a rigorous tail
+ * bound; arb's series has no 1/k!, so the lower parameters are {mu + 1, 1}) and (z/2)^mu = exp(mu log(z/2)) as a series.  out has length 2. */
+static void nb_bessel_order_jet(acb_poly_t out, const acb_t nu, int sgn,
+                                const acb_t z, int modified, slong prec) {
+    acb_poly_t o, b, w, F, E;
+    acb_poly_init(o); acb_poly_init(b); acb_poly_init(w);
+    acb_poly_init(F); acb_poly_init(E);
+    acb_t c, L;
+    acb_init(c); acb_init(L);
+    /* o(t) = s (nu + t) */
+    acb_set(c, nu);
+    if (sgn < 0) acb_neg(c, c);
+    acb_poly_set_coeff_acb(o, 0, c);
+    acb_set_si(c, sgn);
+    acb_poly_set_coeff_acb(o, 1, c);
+    /* b(t) = o(t) + 1 */
+    acb_poly_set(b, o);
+    acb_one(c);
+    acb_poly_get_coeff_acb(L, b, 0);
+    acb_add(L, L, c, prec);
+    acb_poly_set_coeff_acb(b, 0, L);
+    /* w = -+ (z/2)^2 */
+    acb_mul_2exp_si(c, z, -1);
+    acb_mul(L, c, c, prec);
+    if (!modified) acb_neg(L, L);
+    acb_poly_set_acb(w, L);
+    /* arb's pFq series omits the 1/k!: it is supplied by a lower parameter 1
+     * (and the regularization of that parameter is 1/Gamma(1) = 1). */
+    {
+        acb_poly_struct bs[2];
+        acb_poly_init(bs + 0); acb_poly_init(bs + 1);
+        acb_poly_set(bs + 0, b);
+        acb_poly_one(bs + 1);
+        acb_hypgeom_pfq_series_direct(F, NULL, 0, bs, 2, w, 1, -1, 2, prec);
+        acb_poly_clear(bs + 0); acb_poly_clear(bs + 1);
+    }
+    /* E = exp(o(t) log(z/2)) */
+    acb_log(L, c, prec);
+    acb_poly_scalar_mul(E, o, L, prec);
+    acb_poly_exp_series(E, E, 2, prec);
+    acb_poly_mullow(out, E, F, 2, prec);
+    acb_clear(c); acb_clear(L);
+    acb_poly_clear(o); acb_poly_clear(b); acb_poly_clear(w);
+    acb_poly_clear(F); acb_poly_clear(E);
+}
+
+/* d/dnu of J (kind 'J'), I ('I'), Y ('Y'), K ('K') at (nu, z).  Y and K use
+ * the connection formulas over the J / I jets at +-nu,
+ *     Y_mu = (J_mu cos(mu pi) - J_{-mu}) / sin(mu pi),
+ *     K_mu = (pi/2) (I_{-mu} - I_mu) / sin(mu pi),
+ * differentiated as series in mu = nu + t, so they need a non-integer nu (a
+ * ball for sin(nu pi) containing zero gives a non-finite result: declined). */
+static void nb_bessel_dnu(acb_t r, const acb_t nu, const acb_t z, slong prec, char kind) {
+    int modified = (kind == 'I' || kind == 'K');
+    acb_poly_t P, M, h, sn, cs, num;
+    acb_poly_init(P); acb_poly_init(M); acb_poly_init(h);
+    acb_poly_init(sn); acb_poly_init(cs); acb_poly_init(num);
+    nb_bessel_order_jet(P, nu, +1, z, modified, prec);
+    if (kind == 'J' || kind == 'I') {
+        acb_poly_get_coeff_acb(r, P, 1);
+    } else {
+        nb_bessel_order_jet(M, nu, -1, z, modified, prec);
+        acb_t one; acb_init(one); acb_one(one);
+        acb_poly_set_coeff_acb(h, 0, nu);
+        acb_poly_set_coeff_acb(h, 1, one);
+        acb_clear(one);
+        acb_poly_sin_cos_pi_series(sn, cs, h, 2, prec);
+        if (kind == 'Y') {
+            acb_poly_mullow(num, P, cs, 2, prec);
+            acb_poly_sub(num, num, M, prec);
+        } else {
+            acb_poly_sub(num, M, P, prec);
+        }
+        acb_poly_div_series(num, num, sn, 2, prec);
+        acb_poly_get_coeff_acb(r, num, 1);
+        if (kind == 'K') {
+            arb_t pi2; arb_init(pi2);
+            arb_const_pi(pi2, prec);
+            arb_mul_2exp_si(pi2, pi2, -1);
+            acb_mul_arb(r, r, pi2, prec);
+            arb_clear(pi2);
+        }
+    }
+    acb_poly_clear(P); acb_poly_clear(M); acb_poly_clear(h);
+    acb_poly_clear(sn); acb_poly_clear(cs); acb_poly_clear(num);
+}
+static void nb_bessel_dnu_j(acb_t r, const acb_t n, const acb_t z, slong p) { nb_bessel_dnu(r, n, z, p, 'J'); }
+static void nb_bessel_dnu_y(acb_t r, const acb_t n, const acb_t z, slong p) { nb_bessel_dnu(r, n, z, p, 'Y'); }
+static void nb_bessel_dnu_i(acb_t r, const acb_t n, const acb_t z, slong p) { nb_bessel_dnu(r, n, z, p, 'I'); }
+static void nb_bessel_dnu_k(acb_t r, const acb_t n, const acb_t z, slong p) { nb_bessel_dnu(r, n, z, p, 'K'); }
+
+Expr* flint_num_bessel_order_deriv(char kind, const Expr* nu, const Expr* z) {
+    nb_fn2 f = kind == 'J' ? nb_bessel_dnu_j : kind == 'Y' ? nb_bessel_dnu_y
+             : kind == 'I' ? nb_bessel_dnu_i : kind == 'K' ? nb_bessel_dnu_k : NULL;
+    if (!f) return NULL;
+    return nb_eval2(nu, z, f);
+}
+
 /* The two-argument ladder with a cancellation allowance for kernels built on a
  * convergent power series in z^2 (Struve, Anger-Weber): read |z| once at a
  * cheap precision and add ~1.45 bits per unit of |z| to the starting working
@@ -2635,6 +2740,9 @@ Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
 }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
+}
+Expr* flint_num_bessel_order_deriv(char kind, const Expr* nu, const Expr* z) {
+    (void)kind; (void)nu; (void)z; return NULL;
 }
 Expr* flint_num_struveh(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
 Expr* flint_num_struvel(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }

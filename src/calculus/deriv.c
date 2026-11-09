@@ -52,6 +52,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "sym_intern.h"
 #include "print.h"
 #include "series.h"
 
@@ -909,6 +910,64 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             }
             /* Unrecognised body form: leave RootSum unevaluated. */
             return NULL;
+        }
+
+        /* --- Differentiation through an (unevaluated) Sum / Product:
+         *   D[Sum[f, s1, ..., sm], x]     = Sum[D[f, x], s1, ..., sm]
+         *   D[Product[f, s1, ..., sm], x] = Product[f, s..] Sum[D[f, x]/f, s..]
+         * valid when every iterator spec is {k, ...} with a symbol index
+         * k != x (and not a NonConstant) and the rest of the spec (limits,
+         * step, or explicit value list) free of x.  Without this rule the
+         * generic chain rule treated Sum as an opaque two-argument function
+         * and emitted Derivative[1, 0][Sum][f, {k, 1, n}] D[f, x] -- with the
+         * bound index k leaked into the outer factor, a meaningless result. */
+        if (x && !g_dt_total_mode && (h == SYM_Sum || h == SYM_Product) &&
+            n >= 2) {
+            bool ok = true;
+            for (size_t s = 1; s < n && ok; s++) {
+                const Expr* sp = args[s];
+                const Expr* idx = sp;          /* indefinite form: a bare index */
+                if (sp->type == EXPR_FUNCTION) {
+                    if (sp->data.function.head->type != EXPR_SYMBOL ||
+                        sp->data.function.head->data.symbol.name != SYM_List ||
+                        sp->data.function.arg_count < 1 ||
+                        sp->data.function.arg_count > 4) {
+                        ok = false;
+                        break;
+                    }
+                    idx = sp->data.function.args[0];
+                    for (size_t j = 1; j < sp->data.function.arg_count; j++) {
+                        const Expr* lim = sp->data.function.args[j];
+                        if (!expr_free_of(lim, x) ||
+                            expr_contains_nonconst(lim, nonconsts)) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                }
+                if (idx->type != EXPR_SYMBOL || expr_eq(idx, x) ||
+                    nonconsts_contains(nonconsts, idx))
+                    ok = false;
+            }
+            /* A limit (or the index itself) depending on x: no term-wise
+             * rule applies, and the generic chain rule would leak the bound
+             * index -- leave D[Sum[...], x] unevaluated instead. */
+            if (!ok) return NULL;
+            /* Sum and Product are HoldAll: the term-wise derivative must be
+             * evaluated here, or it would stay as a raw, unsimplified tree
+             * (0 x^k + k x^(k - 1) 1 ...) inside the held sum. */
+            Expr* dterm = eval_and_free(deriv_of(args[0], x, nonconsts));
+            Expr** items = malloc(n * sizeof(Expr*));
+            if (h == SYM_Sum) {
+                items[0] = dterm;
+            } else {
+                items[0] = eval_and_free(mk_fn2("Times", dterm,
+                                  mk_fn2("Power", expr_copy(args[0]), mk_int(-1))));
+            }
+            for (size_t s = 1; s < n; s++) items[s] = expr_copy(args[s]);
+            Expr* dsum = mk_fnN_adopt(SYM_Sum, items, n);
+            if (h == SYM_Sum) return dsum;
+            return mk_fn2("Times", expr_copy(f), dsum);
         }
 
         /* --- Fundamental theorem of calculus: D[Integrate[f, x], x] = f. ---
@@ -4131,8 +4190,138 @@ DerivNumericFn deriv_numeric_for(const Expr* dop) {
     return NULL;
 }
 
+/* True when e mentions an inert derivative of the symbol fname
+ * (Derivative[..][fname]) or an unevaluated D[...]: the closed form below is
+ * then not a closed form. */
+static bool deriv_mentions_inert(const Expr* e, const char* fname) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type == EXPR_SYMBOL && hd->data.symbol.name == SYM_D) return true;
+    if (hd->type == EXPR_FUNCTION && hd->data.function.arg_count == 1
+        && hd->data.function.head->type == EXPR_FUNCTION
+        && hd->data.function.head->data.function.head->type == EXPR_SYMBOL
+        && hd->data.function.head->data.function.head->data.symbol.name == SYM_Derivative
+        && hd->data.function.args[0]->type == EXPR_SYMBOL
+        && hd->data.function.args[0]->data.symbol.name == fname)
+        return true;
+    if (deriv_mentions_inert(hd, fname)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (deriv_mentions_inert(e->data.function.args[i], fname)) return true;
+    return false;
+}
+
+/* Closed forms of Derivative[n1..nm][f] for a built-in numeric function f,
+ * memoised per operator: the derivative of f[t1..tm] in placeholder slots, or
+ * NULL when D has no closed form for it (D[BesselJ[n, z], n] stays inert). */
+#define DERIV_CF_MEMO 64
+static struct { Expr* dop; Expr* body; } deriv_cf_memo[DERIV_CF_MEMO];
+static int deriv_cf_memo_n = 0, deriv_cf_memo_next = 0;
+#define DERIV_CF_MAXARGS 8
+
+/* Derivative[n1..nm][f][a1..am] for a built-in NumericFunction f (Sin, Gamma,
+ * BesselJ, ...): the value D gives, Derivative[1][Sin][x] -> Cos[x] and
+ * Derivative[0, 1][BesselJ][n, z] -> (BesselJ[-1 + n, z] - BesselJ[1 + n, z])/2,
+ * as in the reference.  Without it every applied derivative of a built-in
+ * stayed inert -- N[Derivative[0, 1][BesselJ][3/8, 5/8]] and
+ * Derivative[1][Gamma][0.5] were left unevaluated.  Declines (NULL) for a
+ * user symbol (no builtin: the inert form is the answer DSolve and friends
+ * build on), a non-numeric builtin (evaluating f[t] could have side effects),
+ * and a derivative with no closed form. */
+static Expr* deriv_closed_form(const Expr* call) {
+    const Expr* dop = call->data.function.head;
+    if (dop->type != EXPR_FUNCTION || dop->data.function.arg_count != 1) return NULL;
+    const Expr* d = dop->data.function.head;
+    const Expr* f = dop->data.function.args[0];
+    if (d->type != EXPR_FUNCTION || d->data.function.head->type != EXPR_SYMBOL
+        || d->data.function.head->data.symbol.name != SYM_Derivative
+        || f->type != EXPR_SYMBOL) return NULL;
+    size_t m = d->data.function.arg_count;
+    if (m == 0 || m > DERIV_CF_MAXARGS || call->data.function.arg_count != m) return NULL;
+    int64_t total = 0;
+    for (size_t i = 0; i < m; i++) {
+        const Expr* oi = d->data.function.args[i];
+        if (oi->type != EXPR_INTEGER || oi->data.integer < 0) return NULL;
+        total += oi->data.integer;
+    }
+    if (total <= 0 || total > 16) return NULL;
+    SymbolDef* def = f->data.symbol.def ? f->data.symbol.def
+                                        : symtab_lookup(f->data.symbol.name);
+    if (!def || !def->builtin_func || !(def->attributes & ATTR_NUMERICFUNCTION))
+        return NULL;
+
+    static const char* slot[DERIV_CF_MAXARGS];
+    if (!slot[0])
+        for (int i = 0; i < DERIV_CF_MAXARGS; i++) {
+            char nb[32];
+            snprintf(nb, sizeof nb, "Derivative$Slot%d", i + 1);
+            slot[i] = intern_symbol(nb);
+        }
+
+    Expr* body = NULL;
+    int hit = -1;
+    for (int i = 0; i < deriv_cf_memo_n; i++)
+        if (expr_eq(deriv_cf_memo[i].dop, dop)) { hit = i; break; }
+    if (hit >= 0) {
+        body = deriv_cf_memo[hit].body;
+    } else {
+        /* Reserve the entry as a decline BEFORE differentiating: D of f[t..]
+         * may itself produce Derivative[..][f][t..] (no closed form), whose
+         * evaluation re-enters here and must find "no closed form" rather
+         * than recurse without bound. */
+        int at;
+        if (deriv_cf_memo_n < DERIV_CF_MEMO) at = deriv_cf_memo_n++;
+        else {
+            at = deriv_cf_memo_next;
+            deriv_cf_memo_next = (deriv_cf_memo_next + 1) % DERIV_CF_MEMO;
+            expr_free(deriv_cf_memo[at].dop);
+            expr_free(deriv_cf_memo[at].body);
+        }
+        Expr* key = expr_copy((Expr*)dop);
+        deriv_cf_memo[at].dop = key;
+        deriv_cf_memo[at].body = NULL;
+        Expr** fa = malloc(m * sizeof(Expr*));
+        for (size_t i = 0; i < m; i++) fa[i] = expr_new_symbol(slot[i]);
+        Expr* g = expr_new_function(expr_copy((Expr*)f), fa, m);
+        free(fa);
+        size_t nspec = 0;
+        Expr** da = malloc((m + 1) * sizeof(Expr*));
+        da[nspec++] = g;
+        for (size_t i = 0; i < m; i++) {
+            int64_t k = d->data.function.args[i]->data.integer;
+            if (k == 0) continue;
+            da[nspec++] = mk_fn2("List", expr_new_symbol(slot[i]), mk_int(k));
+        }
+        Expr* r = eval_and_free(expr_new_function(mk_sym("D"), da, nspec));
+        free(da);
+        if (r && deriv_mentions_inert(r, f->data.symbol.name)) { expr_free(r); r = NULL; }
+        body = r;
+        /* The slot may have been recycled by a nested insertion meanwhile. */
+        if (deriv_cf_memo[at].dop == key && !deriv_cf_memo[at].body)
+            deriv_cf_memo[at].body = body ? expr_copy(body) : NULL;
+        if (body) {
+            Expr** rules0 = malloc(m * sizeof(Expr*));
+            for (size_t i = 0; i < m; i++)
+                rules0[i] = mk_fn2("Rule", expr_new_symbol(slot[i]),
+                                   expr_copy(call->data.function.args[i]));
+            Expr* rl0 = mk_fnN_adopt("List", rules0, m);
+            return eval_and_free(mk_fn2("ReplaceAll", body, rl0));
+        }
+        return NULL;
+    }
+    if (!body) return NULL;
+    Expr** rules = malloc(m * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++)
+        rules[i] = mk_fn2("Rule", expr_new_symbol(slot[i]),
+                          expr_copy(call->data.function.args[i]));
+    Expr* rl = mk_fnN_adopt("List", rules, m);
+    return eval_and_free(mk_fn2("ReplaceAll", expr_copy(body), rl));
+}
+
 Expr* deriv_apply_numeric(const Expr* call) {
-    if (deriv_numeric_n == 0 || !call || call->type != EXPR_FUNCTION) return NULL;
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    Expr* cf = deriv_closed_form(call);
+    if (cf) return cf;
+    if (deriv_numeric_n == 0) return NULL;
     DerivNumericFn fn = deriv_numeric_for(call->data.function.head);
     return fn ? fn(call) : NULL;
 }

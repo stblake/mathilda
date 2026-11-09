@@ -126,6 +126,9 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
  * nu (no poles) and valid over the whole complex plane. A cancellation
  * allowance (~1.44*|z| bits) is pre-added to the working precision so a large
  * |z| gets its bits up front rather than by blind doubling. */
+/* Derivative[1, 0][BesselJ|Y|I|K][nu, z]: d/dnu, kind 'J', 'Y', 'I' or 'K'
+ * (Y, K: non-integer nu only). */
+Expr* flint_num_bessel_order_deriv(char kind, const Expr* nu, const Expr* z);
 Expr* flint_num_struveh(const Expr* nu, const Expr* z);     /* StruveH[nu, z]    */
 /* StruveL[nu, z] -- the modified Struve function, the same regularized 1F2
  * with +z^2/4: L_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; z^2/4). */

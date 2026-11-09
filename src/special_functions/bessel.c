@@ -69,6 +69,8 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sf_scalar.h"          /* sf_machine_scalar_args: the machine gate */
 #include "sf_machine_bessel.h"  /* raw-double J/Y/I/K, shared with ND/Compile */
+#include "deriv.h"              /* deriv_register_numeric */
+#include "flint_num_bridge.h"   /* flint_num_bessel_order_deriv */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -2278,7 +2280,46 @@ Expr* builtin_bessely(Expr* res) {
 /* Registration                                                       */
 /* ------------------------------------------------------------------ */
 
+/* Derivative[1, 0][BesselJ|BesselY|BesselI|BesselK][nu, z] at numeric
+ * arguments, one of them inexact: the derivative in the ORDER, which has no
+ * closed form in the Bessel functions (D[BesselJ[nu, z], nu] stays inert, as
+ * in the reference), from arb's power series in the order
+ * (flint_num_bessel_order_deriv).  A machine argument answers a machine
+ * number.  The z-derivatives Derivative[0, k] have closed forms and are
+ * evaluated symbolically by the derivative registry's caller. */
+static Expr* bessel_order_derivative_value(const Expr* call) {
+    const Expr* d = call->data.function.head->data.function.head;   /* Derivative[a, b] */
+    const Expr* f = call->data.function.head->data.function.args[0];
+    if (d->data.function.arg_count != 2 || call->data.function.arg_count != 2) return NULL;
+    const Expr* a = d->data.function.args[0];
+    const Expr* b = d->data.function.args[1];
+    if (a->type != EXPR_INTEGER || a->data.integer != 1 ||
+        b->type != EXPR_INTEGER || b->data.integer != 0) return NULL;
+    const Expr* nu = call->data.function.args[0];
+    const Expr* z = call->data.function.args[1];
+    if (!(arg_is_inexact(nu) || arg_is_inexact(z))) return NULL;
+    if (!expr_is_numeric_like(nu) || !expr_is_numeric_like(z)) return NULL;
+    const char* h = f->data.symbol.name;
+    char kind = h == SYM_BesselJ ? 'J' : h == SYM_BesselY ? 'Y'
+              : h == SYM_BesselI ? 'I' : h == SYM_BesselK ? 'K' : 0;
+    if (!kind) return NULL;
+    Expr* v = flint_num_bessel_order_deriv(kind, nu, z);
+    if (!v) return NULL;
+    long bn = numeric_min_inexact_bits(nu), bz = numeric_min_inexact_bits(z);
+    long bits = (bn > 0 && (bz <= 0 || bn < bz)) ? bn : bz;
+    if (bits > 0 && bits <= 53) {                       /* machine in, machine out */
+        Expr* m = numericalize(v, numeric_machine_spec());
+        expr_free(v);
+        v = m;
+    }
+    return v;
+}
+
 void bessel_init(void) {
+    deriv_register_numeric(SYM_BesselJ, bessel_order_derivative_value, 2);
+    deriv_register_numeric(SYM_BesselY, bessel_order_derivative_value, 2);
+    deriv_register_numeric(SYM_BesselI, bessel_order_derivative_value, 2);
+    deriv_register_numeric(SYM_BesselK, bessel_order_derivative_value, 2);
     symtab_add_builtin("BesselJ", builtin_besselj);
     symtab_get_def("BesselJ")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);

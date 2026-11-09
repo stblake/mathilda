@@ -331,6 +331,53 @@ static void test_compound_head(void) {
           "D[Inactive[Integrate][f[u], List[u, Power[x, Rational[1, 2]]]], x]");
 }
 
+/* --- D through an unevaluated Sum / Product ---------------------------- */
+/* The bound index must not leak: D[Sum[x^k/k, {k, 1, n}], x] used to give
+ * x^(-1 + k) Derivative[1, 0][Sum][x^k/k, {k, 1, n}]. */
+static void test_d_through_sum(void) {
+    /* sum_{k=1}^n x^(k-1) = (x^n - 1)/(x - 1) */
+    check_zero("D[Sum[x^k/k, {k, 1, n}], x] - (x^n - 1)/(x - 1)");
+    check("D[Sum[Sin[k x]/k^2, {k, 1, n}], {x, 2}]",
+          "Sum[Times[-1, Sin[Times[k, x]]], List[k, 1, n]]");
+    check("D[Sum[a[k] x^k, {k, 0, n}], x]",
+          "Sum[Times[k, Power[x, Plus[-1, k]], a[k]], List[k, 0, n]]");
+    /* index in two iterators, inner limit free of x */
+    check("D[Sum[a[k] x^k, {k, 0, n}, {j, 1, m}], x]",
+          "Sum[Times[k, m, Power[x, Plus[-1, k]], a[k]], List[k, 0, n]]");
+    /* a limit depending on x: no term-wise rule -- stays an inert D */
+    check("D[Sum[x^k/k, {k, 1, x}], x]",
+          "D[Sum[Times[Power[x, k], Power[k, -1]], List[k, 1, x]], x]");
+    /* Product: Product[f] Sum[D[f]/f] */
+    check("D[Product[f[k] x, {k, 1, n}], x]",
+          "Times[n, Power[x, -1], Product[Times[f[k], x], List[k, 1, n]]]");
+}
+
+/* --- Applied derivatives of built-in numeric functions ------------------ */
+/* Derivative[..][f][args] with f a built-in NumericFunction takes the value D
+ * gives; an order derivative of a Bessel function (no closed form) has a
+ * numeric value at inexact arguments.  Expected values from mpmath:
+ *   mp.diff(lambda v: besselj(v, 0.625), 0.375) = -0.691633765976691104...
+ *   besseli -0.877960260054631376, bessely -0.922112965352250710,
+ *   besselk 0.310128368665707364;  d/dz J_{3/8}(5/8) = 0.247419323528419. */
+static void test_builtin_applied_derivative(void) {
+    check("Derivative[1][Sin][x]", "Cos[x]");
+    check("Derivative[0, 1][BesselJ][n, z]",
+          "Times[Rational[1, 2], Plus[BesselJ[Plus[-1, n], z], Times[-1, BesselJ[Plus[1, n], z]]]]");
+    /* no closed form in the order: stays inert, and does not recurse */
+    check("Derivative[1, 0][BesselJ][n, z]", "Derivative[1, 0][BesselJ][n, z]");
+    check("Derivative[1][f][x]", "Derivative[1][f][x]");
+    check("Abs[N[Derivative[0, 1][BesselJ][3/8, 5/8]] - 0.247419323528419] < 1*^-13", "True");
+    check("Abs[Derivative[1][Gamma][0.5] - (-3.4802309069132620)] < 1*^-12", "True");
+    check("Abs[N[Derivative[1, 0][BesselJ][3/8, 5/8]] - (-0.69163376597669110428)] < 1*^-14", "True");
+    check("Abs[Derivative[1, 0][BesselJ][N[3/8, 30], N[5/8, 30]] - "
+          "(-0.691633765976691104277513251373`30)] < 1*^-27", "True");
+    check("Abs[Derivative[1, 0][BesselI][0.375, 0.625] - (-0.87796026005463137604)] < 1*^-14", "True");
+    check("Abs[Derivative[1, 0][BesselY][0.375, 0.625] - (-0.92211296535225071044)] < 1*^-14", "True");
+    check("Abs[Derivative[1, 0][BesselK][0.375, 0.625] - 0.31012836866570736393] < 1*^-14", "True");
+    /* integer order: Y and K need a non-integer order -- stays inert */
+    check("Head[Derivative[1, 0][BesselY][1.0, 0.625]]", "Derivative[1, 0][BesselY]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -349,6 +396,8 @@ int main(void) {
     TEST(test_equal_distribution);
     TEST(test_nonconstants);
     TEST(test_undifferentiable_subexpression);
+    TEST(test_d_through_sum);
+    TEST(test_builtin_applied_derivative);
 
     printf("All derivative tests passed.\n");
     return 0;
