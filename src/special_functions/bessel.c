@@ -278,9 +278,15 @@ static void bj_series(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
  * operations, negligible beside the MPFR sums it schedules. */
 static bool bessel_hankel_plan(const ncpx* nu, double rz, mpfr_prec_t P,
                                unsigned long* kmax) {
-    if (!(rz > 0.0) || !isfinite(rz)) return false;
+    if (!(rz > 0.0)) return false;
     double nr = mpfr_get_d(nu->re, BRND), ni = mpfr_get_d(nu->im, BRND);
     if (!isfinite(nr) || !isfinite(ni)) return false;
+    /* |z| beyond the double range (an MPFR argument such as an exp-sinh node
+     * far out on a quadrature ray): every correction term a_k / z^k is far
+     * below 2^-P, so the leading term alone is exact to working precision.
+     * Rejecting it used to send K (and I, J, Y) to the power series with a
+     * 300000-bit guard -- minutes per sample. */
+    if (isinf(rz)) { *kmax = 1; return true; }
     double mur = 4.0 * (nr * nr - ni * ni);       /* mu = 4 nu^2 */
     double mui = 8.0 * nr * ni;
     double target = -((double)P + 16.0);          /* log2 of the stopping term */

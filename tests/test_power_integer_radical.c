@@ -159,6 +159,29 @@ static void test_large_cube_roots_are_not_trial_divided(void) {
     printf("  12 large cube roots in %.3f s\n", secs);
 }
 
+/* (+-I)^(n/2) = e^(+-i Pi n/4) has period 8 in n.  The symbolic branch reduced
+ * n mod 4, so I^(5/2) came out as I^(1/2) and I^(-9/2) as I^(3/2) -- a sign
+ * error in every product of fractional I powers (the Hankel split inside
+ * NIntegrate[BesselJ[7/4, x] BesselJ[3/4, x], ...] then returned a complex
+ * value).  Checked against the principal value Exp[I Pi n/4] for every
+ * residue, and numerically. */
+static void test_i_half_integer_powers(void) {
+    check("I^(1/2)", "(1 + I)/Sqrt[2]");
+    check("I^(3/2)", "(-1 + I)/Sqrt[2]");
+    check("I^(5/2)", "(-1 - I)/Sqrt[2]");
+    check("I^(7/2)", "(1 - I)/Sqrt[2]");
+    check("I^(-1/2)", "(1 - I)/Sqrt[2]");
+    check("I^(-9/2)", "(1 - I)/Sqrt[2]");
+    check("(-I)^(1/2)", "(1 - I)/Sqrt[2]");
+    check("(-I)^(5/2)", "(-1 + I)/Sqrt[2]");
+    check("(-I)^(-3/2)", "(-1 + I)/Sqrt[2]");
+    check("I^(-11/4) I^(-7/4)", "(1 - I)/Sqrt[2]");
+    check("Table[Chop[N[I^(n/2) - Exp[I Pi n/4]]], {n, -9, 9, 2}]",
+          "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}");
+    check("Table[Chop[N[(-I)^(n/2) - Exp[-I Pi n/4]]], {n, -9, 9, 2}]",
+          "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -168,6 +191,7 @@ int main(void) {
     TEST(test_round_trip);
     TEST(test_large_radicands_are_not_trial_divided);
     TEST(test_large_cube_roots_are_not_trial_divided);
+    TEST(test_i_half_integer_powers);
 
     printf("All power integer-radical tests passed!\n");
     return 0;

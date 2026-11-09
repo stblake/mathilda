@@ -891,6 +891,19 @@ Out[3]= 3.67608
 
 ## NIntegrate
 
+**Bessel and multi-frequency integrands on a half line (machine precision)**:
+an integrand on `[a, Infinity)` with a `BesselJ` / `BesselY` factor of a
+linear argument -- typically a product such as `BesselJ[mu, a x] BesselJ[nu, b x]`,
+which carries several frequencies at once -- is integrated by rotating each
+Hankel group off the real axis at ~24-digit MPFR precision (the
+WorkingPrecision contour rotation), before exp-sinh; a product of circular
+functions of several frequencies takes the same route after exp-sinh fails.
+`BesselI` of a real-linear argument is accepted in the rotated amplitude
+(`BesselI[nu, x/5] BesselK[nu, x/5] BesselJ[...]`). The zero-to-zero + Wynn
+fallback summed these mixtures to wrong limits:
+`NIntegrate[BesselJ[7/4, 7/4 x] BesselJ[3/4, 7/4 x], {x, 0, Infinity}]` was
+`0.6305` (true `2/7`).
+
 Numerical integration.  `NIntegrate[f, {x, xmin, xmax}]` approximates
 ∫ f dx; `NIntegrate[f, {x,…}, {y,…}, …]` is multidimensional — adaptive
 Genz-Malik cubature over a constant rectangular box, or iterated 1D quadrature

@@ -1250,6 +1250,40 @@ static void test_iterated_wp_machine_twin(void) {
                "1.05541194957058443667825859745073286821672065", "10^-35");
 }
 
+/* Products of Bessel functions on [0, oo) at machine precision: several
+ * frequencies at once (J_mu J_nu: e^(+-2ix) and a non-oscillating part), which
+ * the zero-to-zero + Wynn fallback summed to the wrong limit with no message
+ * (J_{7/4} J_{3/4} of 7x/4: 0.6305 for 2/7).  Now the Hankel groups are rotated
+ * off the axis.  Exact values: Int J_nu J_{nu-1}(a x) = 1/(2a) (G&R 6.512.3),
+ * Weber-Schafheitlin Int J_1(x) J_1(3x)/x = 1/6, Int J_3 J_0 = -1/2,
+ * Int e^-x Y_0 = -(2/Pi) ArcSinh[1]/Sqrt[2]; the I K J product (which used to
+ * segfault in the machine I kernel) checked by mpmath to 30 digits by summing
+ * between the zeros of J with Levin acceleration. */
+static void test_bessel_products_halfline(void) {
+    ASSERT_CLOSE("NIntegrate[BesselJ[7/4, 7/4 x] BesselJ[3/4, 7/4 x], {x, 0, Infinity}]", "2/7", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, x] BesselJ[1, x], {x, 0, Infinity}]", "1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[2, x] BesselJ[1, x], {x, 0, Infinity}]", "1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[3, x] BesselJ[0, x], {x, 0, Infinity}]", "-1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1, 2 x] BesselJ[0, x], {x, 0, Infinity}]", "1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[0, 2 x] BesselJ[1, x], {x, 0, Infinity}]", "0", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1, x]^2/x, {x, 0, Infinity}]", "1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1, x] BesselJ[1, 3 x]/x, {x, 0, Infinity}]", "1/6", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1/2, x] BesselJ[3/2, x], {x, 0, Infinity}]", "1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1/4, x] BesselY[1/4, x], {x, 0, Infinity}]", "-1/2", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselY[0, x] Exp[-x], {x, 0, Infinity}]",
+                 "-(2/Pi) ArcSinh[1]/Sqrt[2]", 1e-10);
+    ASSERT_CLOSE("NIntegrate[BesselI[5/6, x/5] BesselJ[3/8, 5/8 x] BesselK[5/6, x/5], {x, 0, Infinity}]",
+                 "0.928235622639061296138394194801", 1e-10);
+    ASSERT_CLOSE("NIntegrate[Exp[-x] BesselI[0, x/2] BesselJ[0, x], {x, 0, Infinity}]",
+                 "0.716422624011983478558791448141", 1e-10);
+    /* the same at WorkingPrecision: fractional orders went through the I^(n/2)
+     * sign error of Power (I^(-9/2) was (-1 + I)/Sqrt[2]) to a complex value */
+    ASSERT_CLOSE("NIntegrate[BesselJ[5/4, x] BesselJ[1/4, x], {x, 0, Infinity}, WorkingPrecision -> 20]",
+                 "1/2", 1e-17);
+    ASSERT_CLOSE("NIntegrate[BesselJ[1, x] BesselJ[1, 3 x]/x, {x, 0, Infinity}, WorkingPrecision -> 20]",
+                 "1/6", 1e-17);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1308,6 +1342,7 @@ int main(void) {
     TEST(test_phase_coordinate_endpoint);
     TEST(test_accgl_states_goal);
     TEST(test_iterated_wp_machine_twin);
+    TEST(test_bessel_products_halfline);
 
     printf("All nint_tests passed.\n");
     return 0;

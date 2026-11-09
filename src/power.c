@@ -1230,14 +1230,19 @@ Expr* builtin_power(Expr* res) {
             (exp->type == EXPR_INTEGER) ? (en = exp->data.integer, ed = 1, true)
             : is_rational(exp, &en, &ed);
         if (exp_is_rational && ed == 2 && im_b->data.integer == 1) {
-            /* I^(n/2):  reduce n mod 4. n=1: (1+I)/Sqrt[2]; n=3: (-1+I)/Sqrt[2];
-             * n=-1: (1-I)/Sqrt[2]; n=-3: (-1-I)/Sqrt[2].  Even n folds to
+            /* I^(n/2) = e^(i Pi n/4), so n is reduced mod 8 (NOT mod 4: the
+             * period of I^(n/2) in n is 8, and a mod-4 reduction made
+             * I^(5/2) = I^(1/2) and I^(-9/2) = I^(3/2), both off by a sign
+             * -- which silently corrupted every product of fractional I
+             * powers, e.g. the Hankel split of BesselJ[7/4, x] BesselJ[3/4, x]
+             * inside NIntegrate).  Odd n: n = 1: (1+I)/Sqrt[2]; 3: (-1+I)/Sqrt[2];
+             * 5: (-1-I)/Sqrt[2]; 7 (= -1): (1-I)/Sqrt[2].  Even n folds to
              * I^(n/2) = (I^n)^(1/1) which the integer path already
              * handles. */
-            int64_t r = ((en % 4) + 4) % 4;  /* normalise to {0, 1, 2, 3} */
-            if (r == 1 || r == 3) {
-                Expr* sgn_re = expr_new_integer((r == 1) ? 1 : -1);
-                Expr* sgn_im = expr_new_integer(1);
+            int64_t r = ((en % 8) + 8) % 8;  /* normalise to {0, ..., 7} */
+            if (r & 1) {
+                Expr* sgn_re = expr_new_integer((r == 1 || r == 7) ? 1 : -1);
+                Expr* sgn_im = expr_new_integer((r == 1 || r == 3) ? 1 : -1);
                 Expr* sqrt2_inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_new_integer(2),
                               expr_new_function(expr_new_symbol(SYM_Rational),
@@ -1250,12 +1255,12 @@ Expr* builtin_power(Expr* res) {
             }
         }
         if (exp_is_rational && ed == 2 && im_b->data.integer == -1) {
-            /* (-I)^(n/2) = conjugate(I^(n/2)) for real coefficients —
-             * mirrors the I case with imaginary sign flipped. */
-            int64_t r = ((en % 4) + 4) % 4;
-            if (r == 1 || r == 3) {
-                Expr* sgn_re = expr_new_integer((r == 1) ? 1 : -1);
-                Expr* sgn_im = expr_new_integer(-1);
+            /* (-I)^(n/2) = e^(-i Pi n/4) = conjugate(I^(n/2)) — mirrors the
+             * I case (n mod 8) with the imaginary sign flipped. */
+            int64_t r = ((en % 8) + 8) % 8;
+            if (r & 1) {
+                Expr* sgn_re = expr_new_integer((r == 1 || r == 7) ? 1 : -1);
+                Expr* sgn_im = expr_new_integer((r == 1 || r == 3) ? -1 : 1);
                 Expr* sqrt2_inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_new_integer(2),
                               expr_new_function(expr_new_symbol(SYM_Rational),

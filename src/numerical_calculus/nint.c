@@ -3877,6 +3877,22 @@ static void ni_rot_scan(Expr* e, NiRotScan* sc, double a) {
         ni_rot_poly_roots(e->data.function.args[1], sc, a);
         return;
     }
+    /* I_nu(c x + d) with c REAL: entire apart from the branch point at its zero,
+     * and |I| ~ e^(c Re x) / Sqrt[x] does not grow along the vertical rays, so
+     * an I factor whose real-axis growth the rest of the amplitude cancels
+     * (I_nu(x/5) K_nu(x/5), e^-x I_0(x/2)) is sub-exponential on the whole
+     * quarter plane.  (A complex slope would grow along the rays: declined.) */
+    if (h == SYM_BesselI && n == 2 && ni_free_of_var(e->data.function.args[0], sc->var)
+        && ni_numeric_poly_degree(e->data.function.args[1], sc->var) == 1) {
+        Expr* c = ni_ev2(SYM_D, expr_copy(e->data.function.args[1]),
+                         expr_new_symbol(sc->var), sc->var);
+        Expr* cn = c ? numericalize(c, numeric_machine_spec()) : NULL;
+        bool real_slope = cn && (cn->type == EXPR_REAL || cn->type == EXPR_INTEGER);
+        expr_free(c); expr_free(cn);
+        if (!real_slope) { sc->ok = false; return; }
+        ni_rot_poly_roots(e->data.function.args[1], sc, a);
+        return;
+    }
     sc->ok = false;
 }
 
@@ -4010,6 +4026,88 @@ static bool ni_try_rotated_halfline_mpfr(NiCtx* ctx, NiBind* bind, Expr* body, c
     for (int j = 0; j < ng; j++) { expr_free(lams[j]); expr_free(amps[j]); }
     return done;
 }
+
+/* True when e contains a BesselJ / BesselY whose argument depends on var: the
+ * oscillation is hidden inside the function, so the machine path's
+ * integrate-between-the-zeros + Wynn fallback has no model for it. */
+static bool ni_has_bessel_phase(const Expr* e, const char* var) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type == EXPR_SYMBOL
+        && (hd->data.symbol.name == SYM_BesselJ || hd->data.symbol.name == SYM_BesselY)
+        && e->data.function.arg_count == 2
+        && !ni_free_of_var(e->data.function.args[1], var))
+        return true;
+    if (ni_has_bessel_phase(hd, var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ni_has_bessel_phase(e->data.function.args[i], var)) return true;
+    return false;
+}
+
+/* Machine-precision entry to the contour rotation above, for an integrand on
+ * [a, oo) with a Bessel J / Y factor of a linear argument.
+ *
+ * Products of Bessel functions carry several frequencies at once
+ * (J_mu(x) J_nu(x) has e^(+-2ix) and a non-oscillating part; J(ax) J(bx) has
+ * a+b and |a-b|): the zero-to-zero partial sums of the machine fallback mix
+ * them and Wynn's epsilon then converges to the wrong limit or not at all --
+ * Int J_{7/4}(7x/4) J_{3/4}(7x/4) came out 0.630 for 2/7, J_0 J_1 0.5205 for
+ * 1/2, J_3 J_0 -0.49947 for -1/2 with no message.  The rotation integrates
+ * each Hankel group on its own ray, where it decays exponentially; it runs at
+ * a modest MPFR precision (~24 digits) and the result is rounded to machine
+ * precision.  The same holds for a product of circular functions of several
+ * frequencies (J_{1/2} J_{3/2} evaluates to one: 0.49989 for 1/2, silently),
+ * which is tried (bessel_only false) only once exp-sinh has failed, so the
+ * integrands exp-sinh already handles keep their path.  A real integrand's
+ * value is real: the rotated rays leave a rounding-level imaginary part,
+ * dropped when it is below the error estimate.  Declines (false, nothing
+ * written) when the integrand is not of the supported form, leaving the
+ * machine cascade unchanged. */
+/* The integrand is real on the half line, judged at a few sample points (the
+ * machine context `rc`, real abscissae).  Used only to drop a rounding-level
+ * imaginary part, so a false "complex" merely keeps it. */
+static bool ni_samples_real(NiCtx* rc, double a) {
+    static const double off[3] = { 0.613, 2.297, 7.91 };
+    for (int i = 0; i < 3; i++) {
+        double _Complex v;
+        if (!ni_sample_machine(rc, a + off[i], &v) || cimag(v) != 0.0) return false;
+    }
+    return true;
+}
+
+static bool ni_try_rotated_halfline_machine(NiCtx* rc, NiBind* bind, Expr* body,
+                                            const char* var,
+                                            double a, const NiOpts* o, bool bessel_only,
+                                            double _Complex* val, double* abserr) {
+    if (bessel_only ? !ni_has_bessel_phase(body, var) : !nc_has_phase(body, var))
+        return false;
+    NiOpts mo = *o;
+    mo.prec_mpfr = true;
+    mo.target_bits = 80;     /* ~24 digits: reltol ~1e-14 (ni_mpfr_reltol) */
+    mo.bits = 112;
+    mo.pre_body = NULL;
+    mo.exact_body = NULL;
+    NumericSpec sp; sp.mode = NUMERIC_MODE_MPFR; sp.bits = mo.bits;
+    NiCtx mctx;
+    ni_ctx_init(&mctx, body, bind, sp);
+    mctx.ac_enabled = true;
+    mpfr_t re, im;
+    mpfr_inits2(mo.bits, re, im, (mpfr_ptr)0);
+    double err = INFINITY;
+    bool conv = ni_try_rotated_halfline_mpfr(&mctx, bind, body, var, a, &mo, re, im, &err);
+    if (conv) {
+        double vr = mpfr_get_d(re, MPFR_RNDN), vi = mpfr_get_d(im, MPFR_RNDN);
+        conv = isfinite(vr) && isfinite(vi) && isfinite(err);
+        if (conv && vi != 0.0 && fabs(vi) <= err + 1e-15 * fabs(vr)
+            && ni_samples_real(rc, a))
+            vi = 0.0;
+        if (conv) { *val = vr + I * vi; *abserr = err; }
+    }
+    mpfr_clears(re, im, (mpfr_ptr)0);
+    autocompiled_free(mctx.ac);
+    autocompiled_free(mctx.ac_prec);
+    return conv;
+}
 #endif /* USE_MPFR */
 
 static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
@@ -4115,6 +4213,12 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
             conv = oscde_fourier_machine(ni_sample_machine, &ctx, fomega, fkind,
                                          reltol, 12, 200000, &val, &abserr);
     }
+#ifdef USE_MPFR
+    /* A Bessel J / Y factor (often a product of several): rotate each Hankel
+     * group off the real axis (see ni_try_rotated_halfline_machine). */
+    if (!conv && o->method == NI_AUTO && !reflect)
+        conv = ni_try_rotated_halfline_machine(&ctx, &bind, body, var, a, o, true, &val, &abserr);
+#endif
     if (conv) {
         /* done */
     } else if (o->method == NI_LEVIN) {
@@ -4126,6 +4230,16 @@ static Expr* ni_run_1d_halfline(Expr* body, const char* var, double a,
         /* Oscillatory fallback: a slowly-decaying oscillatory tail (Sin[x]/x,
          * Bessel functions, …) defeats exp-sinh; integrate between the zeros
          * and accelerate the partial sums with Wynn's epsilon. */
+#ifdef USE_MPFR
+        /* Several circular frequencies at once: the rotation, before the
+         * zero-to-zero fallback that has no model for a mixture. */
+        if (!conv && o->method == NI_AUTO && !reflect) {
+            double _Complex rv; double rerr;
+            if (ni_try_rotated_halfline_machine(&ctx, &bind, body, var, a, o, false, &rv, &rerr)) {
+                val = rv; abserr = rerr; conv = true;
+            }
+        }
+#endif
         if (!conv && o->method == NI_AUTO) {
             double _Complex ov; double oerr;
             if (osc_integrate_machine(ni_sample_machine, &ctx, a, 0.0, true,

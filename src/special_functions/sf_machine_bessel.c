@@ -534,9 +534,16 @@ static bool i_miller(double nu, cx z, double r, cx* Iv, cx* I1) {
      * and an integer order uses the order-0 weights, the constants 1, 2, 2, ...
      * and 1, 0, -2, 0, 2, ... */
     double base = (nu >= 0.0) ? nu - floor(nu) : nu;  /* the fractional part */
+    /* Bound the start index in double BEFORE converting: for a huge |z| (the
+     * Hankel branch above declines when e^z overflows, e.g. an exp-sinh node
+     * of NIntegrate far out on the half line) nu + r + ... exceeds INT_MAX,
+     * and the out-of-range conversion gave N = INT_MIN, which passed the
+     * MAXN test and walked w[] from a negative index -- a segfault. */
+    double Nd = nu + r + 20.0 + 4.0 * cbrt(r);
+    if (!(Nd <= (double)MILLER_MAXN)) return false;
     int off = (int)(nu - base);
-    int N = (int)(nu + r + 20.0 + 4.0 * cbrt(r));
-    if (N > MILLER_MAXN || off > N - 2) return false;
+    int N = (int)Nd;
+    if (off > N - 2) return false;
     double w[MILLER_MAXN + 1], v[MILLER_MAXN + 1];
     if (base != 0.0) {
         double pk = 1.0, qm = 1.0;           /* (2b)_k/k!,  (b)_m/m! */
