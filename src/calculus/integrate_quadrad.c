@@ -831,11 +831,28 @@ static Expr* qr_core(Expr* f, Expr* x) {
      * antiderivative of Sqrt[(a x + c)^2 - 1]) or a bogus RootSum.  The u-integral
      * is exact for every value of sq, so sq -> PowerExpand[Sqrt[Factor[a]]] (any
      * square root of a) afterwards is exact too: a^2 -> a, 4 a^2 b^6 -> 2 a b^3. */
-    if (branch == 1 && expr_numeric_sign(a) == 0) {
+    /* The same holds for a NUMERIC a that is not a perfect square: Sqrt[3/8] =
+     * Sqrt[3/2]/2 is a number-field generator the rational integrator reads as
+     * an indeterminate, so the Hermite gcd missed the repeated factor (the
+     * exquo "failed to produce a zero remainder" warnings) and the log part
+     * divided by zero -- Integrate[(5/6 + 7 x/4 + 3 x^2/8)^(-5/2), x] and the
+     * x^-3 (a + b x + c x^2)^(+-3/2) family answered Indeterminate.  The opaque
+     * sq keeps the u-integral rational over Q; Sqrt[a] is put back at the end. */
+    bool irrational_root = false;
+    if (branch == 1 && expr_numeric_sign(a) > 0) {
+        Expr* r = eval_take(mk_sqrt(expr_copy(a)));
+        int64_t rn, rd;
+        irrational_root = r && !is_rational(r, &rn, &rd) &&
+                          !(r->type == EXPR_INTEGER || r->type == EXPR_BIGINT);
+        if (r) expr_free(r);
+    }
+    if (branch == 1 && (expr_numeric_sign(a) == 0 || irrational_root)) {
         char sname[96];
         snprintf(sname, sizeof sname, "Integrate`QuadraticRadicals`s$%lu", qr_sym_counter++);
         sq = expr_new_symbol(sname);
-        sqval = eval_take(mk_fn1("PowerExpand", mk_sqrt(eval_take(mk_fn1("Factor", expr_copy(a))))));
+        sqval = irrational_root
+              ? eval_take(mk_sqrt(expr_copy(a)))
+              : eval_take(mk_fn1("PowerExpand", mk_sqrt(eval_take(mk_fn1("Factor", expr_copy(a))))));
         if (!sqval) goto done;
     }
 

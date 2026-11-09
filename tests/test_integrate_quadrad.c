@@ -137,6 +137,29 @@ static void test_symbolic_leading_coefficient(void) {
         "Log[b + 2 a x + 2 Sqrt[a] Sqrt[c + b x + a x^2]])/(8 a^(3/2))", 0);
 }
 
+/* A numeric leading coefficient that is not a perfect square (c = 3/8, Sqrt[c]
+ * = Sqrt[3/2]/2) enters the Euler substitution opaquely, like a symbolic one:
+ * as a number-field generator it made the rational integrator miss a repeated
+ * factor and answer Indeterminate for G&R 2.26x instances.  Each result must
+ * differentiate back at the corpus check points. */
+static void test_irrational_numeric_leading_coefficient(void) {
+    const char* fs[] = {
+        "(5/6 + 7/4 x + 3/8 x^2)^(3/2)/x^3",
+        "(7/4 x + 3/8 x^2)^(3/2)/x^3",
+        "1/(x^3 (5/6 + 7/4 x + 3/8 x^2)^(3/2))",
+        "1/(x^3 (7/4 x + 3/8 x^2)^(3/2))",
+        "(5/6 + 7/4 x + 3/8 x^2)^(-5/2)",
+    };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof buf,
+            "Module[{g = Integrate[%s, x]}, FreeQ[g, Integrate | RootSum | Indeterminate] && "
+            "Max[Abs[N[Table[(D[g, x] - (%s)) /. x -> t, {t, {31/100, 77/100, 143/100}}]]]] < 10^-10]",
+            fs[i], fs[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+}
+
 void test_integrate_quadrad(void) {
     symtab_init();
     core_init();
@@ -146,6 +169,7 @@ void test_integrate_quadrad(void) {
     TEST(test_symbolic_coefficient);
     TEST(test_strict_no_match);
     TEST(test_symbolic_leading_coefficient);
+    TEST(test_irrational_numeric_leading_coefficient);
 
     printf("All Integrate QuadraticRadicals tests passed!\n");
 }
