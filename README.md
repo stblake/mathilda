@@ -100,8 +100,10 @@ recommended for the REPL. FLINT, GMP-ECM, LAPACK, SuiteSparse (UMFPACK,
 CHOLMOD), ARPACK, FFTW, PCRE2 and Raylib are optional and auto-detected.
 
 ```bash
-# macOS
+# macOS (Homebrew)
 brew install gcc gmp mpfr readline flint gmp-ecm suite-sparse arpack
+# macOS (MacPorts)
+sudo port install gcc14 gmp mpfr readline pkgconfig flint ecm SuiteSparse arpack
 # Debian / Ubuntu
 sudo apt install build-essential libgmp-dev libmpfr-dev libreadline-dev libflint-dev libecm-dev \
                  libsuitesparse-dev libarpack2-dev

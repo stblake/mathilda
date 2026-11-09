@@ -161,6 +161,33 @@ if(HOMEBREW AND EXISTS "${HOMEBREW}/lib/pkgconfig")
     set(ENV{PKG_CONFIG_PATH} "${HOMEBREW}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 endif()
 
+# MacPorts prefix discovery, mirroring the makefile. An explicit MACPORTS
+# (-DMACPORTS=... or environment) always wins; MACPORTS= (empty) is the opt-out.
+# Otherwise, on macOS only and only when no real Homebrew (a brew binary under
+# the prefix) was found -- so the two trees are never mixed by default -- use
+# the prefix of the `port` command on PATH, falling back to /opt/local.
+if(DEFINED MACPORTS)
+    # cache / -D override (possibly empty) wins as-is
+elseif(DEFINED ENV{MACPORTS})
+    set(MACPORTS "$ENV{MACPORTS}")
+elseif(APPLE AND NOT (HOMEBREW AND EXISTS "${HOMEBREW}/bin/brew"))
+    find_program(_MTH_PORT port)
+    if(_MTH_PORT)
+        get_filename_component(MACPORTS "${_MTH_PORT}" DIRECTORY)
+        get_filename_component(MACPORTS "${MACPORTS}" DIRECTORY)
+    elseif(EXISTS "/opt/local/bin/port")
+        set(MACPORTS "/opt/local")
+    endif()
+endif()
+if(MACPORTS AND EXISTS "${MACPORTS}/lib/pkgconfig")
+    set(ENV{PKG_CONFIG_PATH} "${MACPORTS}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+endif()
+# Also a find_path/find_library root, so the SuiteSparse/ARPACK probes below
+# (which use no pkg-config) search <prefix>/include and <prefix>/lib.
+if(MACPORTS AND EXISTS "${MACPORTS}")
+    list(APPEND CMAKE_PREFIX_PATH "${MACPORTS}")
+endif()
+
 # Raylib autodetection for the graphics engine.  Mirrors the makefile's
 # pkg-config probe; degrades to USE_GRAPHICS=OFF (sampling.c and the
 # symbolic Graphics[]/Plot[] construction path are still fully testable —
@@ -355,12 +382,18 @@ link_directories(/usr/local/lib)
 if(HOMEBREW AND EXISTS "${HOMEBREW}/lib")
     link_directories(${HOMEBREW}/lib)
 endif()
+if(MACPORTS AND EXISTS "${MACPORTS}/include")
+    include_directories(${MACPORTS}/include)
+endif()
+if(MACPORTS AND EXISTS "${MACPORTS}/lib")
+    link_directories(${MACPORTS}/lib)
+endif()
 
 # GMP-ECM is a system library (brew install gmp-ecm / apt install libecm-dev),
 # no longer vendored. Detect the public header + shared lib and link -lecm.
 if(USE_ECM)
-    find_path(ECM_INCLUDE_DIR ecm.h PATHS /usr/local/include ${HOMEBREW}/include)
-    find_library(ECM_LIBRARY NAMES ecm PATHS /usr/local/lib ${HOMEBREW}/lib)
+    find_path(ECM_INCLUDE_DIR ecm.h PATHS /usr/local/include ${HOMEBREW}/include ${MACPORTS}/include)
+    find_library(ECM_LIBRARY NAMES ecm PATHS /usr/local/lib ${HOMEBREW}/lib ${MACPORTS}/lib)
     if(ECM_INCLUDE_DIR AND ECM_LIBRARY)
         include_directories(${ECM_INCLUDE_DIR})
         set(ECM_LIB ${ECM_LIBRARY})

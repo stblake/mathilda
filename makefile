@@ -8,6 +8,8 @@ USE_FFTW ?= 1
 USE_SUITESPARSE ?= 1
 USE_ARPACK ?= 1
 comma := ,
+empty :=
+space := $(empty) $(empty)
 
 # Platform detection — used for readline and other OS-specific choices.
 # On Windows under MSYS2/MinGW, uname returns "MINGW64_NT-*" or similar;
@@ -65,6 +67,60 @@ ifneq ($(strip $(HOMEBREW)),)
   endif
 endif
 
+# MacPorts prefix, the other macOS package manager. MacPorts installs every port
+# under one prefix (default /opt/local) that is on NEITHER the compiler's nor a
+# Homebrew/system pkg-config's search path, so without this a MacPorts-only Mac
+# finds none of gmp/mpfr/readline/flint/... . Resolved like HOMEBREW:
+#
+#   1. An explicit MACPORTS=... (command line or environment) always wins;
+#      MACPORTS= (empty) or MACPORTS=/nonexisting is the opt-out.
+#   2. Otherwise, on macOS only and only when NO Homebrew prefix was found, the
+#      prefix of the `port` command on PATH (<prefix>/bin/port), which also
+#      covers a custom --prefix install.
+#   3. Otherwise /opt/local, if MacPorts is installed there but not on PATH.
+#
+# Auto-detection is Darwin-only: MacPorts is a macOS package manager, and an
+# unrelated `port` binary on Linux must not inject search paths. It also yields
+# to Homebrew: on a machine with both, silently adding the second tree would mix
+# two builds of gmp/mpfr/flint (ABI-incompatible duplicates) into one link, and
+# would change an existing Homebrew build. With both installed, pick one
+# explicitly: `make HOMEBREW=` builds against MacPorts only, and
+# `make MACPORTS=/opt/local` adds MacPorts behind Homebrew.
+ifeq ($(origin MACPORTS),undefined)
+  MACPORTS :=
+  # "Homebrew found" means a real brew binary under the prefix, not merely an
+  # existing directory: the Darwin fallback above resolves HOMEBREW to
+  # /usr/local, which exists on most Macs whether or not Homebrew is installed.
+  ifeq ($(BUILD_PLATFORM)$(wildcard $(HOMEBREW)/bin/brew),Darwin)
+    MACPORTS := $(patsubst %/bin/port,%,$(shell command -v port 2>/dev/null))
+    ifeq ($(strip $(MACPORTS)),)
+      MACPORTS := $(patsubst %/bin/port,%,$(wildcard /opt/local/bin/port))
+    endif
+  endif
+endif
+
+MACPORTS_CFLAGS  :=
+MACPORTS_LDFLAGS :=
+MACPORTS_PC_PATH :=
+ifneq ($(strip $(MACPORTS)),)
+  ifneq ($(wildcard $(MACPORTS)/include),)
+    MACPORTS_CFLAGS := -I$(MACPORTS)/include
+  endif
+  ifneq ($(wildcard $(MACPORTS)/lib),)
+    MACPORTS_LDFLAGS := -L$(MACPORTS)/lib
+  endif
+  ifneq ($(wildcard $(MACPORTS)/lib/pkgconfig),)
+    MACPORTS_PC_PATH := $(MACPORTS)/lib/pkgconfig
+  endif
+endif
+
+# Combined package-manager search paths: what every probe and the final
+# compile/link lines consume. Normally only one of the two is non-empty; when
+# both are set explicitly, Homebrew's directories are searched first.
+PKGMGR_CFLAGS  := $(strip $(HOMEBREW_CFLAGS) $(MACPORTS_CFLAGS))
+PKGMGR_LDFLAGS := $(strip $(HOMEBREW_LDFLAGS) $(MACPORTS_LDFLAGS))
+PKGMGR_PC_PATH := $(subst $(space),:,$(strip $(HOMEBREW_PC_PATH) $(MACPORTS_PC_PATH)))
+
 # Conventional Unix site prefix (/usr/local), searched for headers and libraries
 # by the compile/link lines and the ECM/LAPACK probes below. Unix hosts only: on
 # MSYS2 `/usr` is the MSYS (Cygwin) runtime root, so `-I/usr/include` or
@@ -99,22 +155,23 @@ endif
 # "GCC only, never clang" is a HARD rule for this project — enforced below as an
 # error, not a warning.
 #
-# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN` first and falling
-# back to a plain `gcc` (which IS real GCC on most Linux distros). We only pick a
+# Auto-detect a genuine GCC by trying the newest Homebrew `gcc-NN`, then the
+# MacPorts `gcc-mp-NN`, and falling back to a plain `gcc` (which IS real GCC on most Linux distros). We only pick a
 # name when CC was not set explicitly, so `make CC=gcc-14` (or any other override on
 # the command line / in the environment) is still honoured. A versioned name is fine
 # here because it is *tried*, not hardcoded — hosts without it fall through.
 # Platform-specific advice for the two compiler errors below. CLANG64/CLANGARM64
 # on MSYS2 are deliberately unsupported: there is no GCC in those environments.
 ifeq ($(BUILD_PLATFORM),Darwin)
-  GCC_HINT := Install Homebrew GCC (brew install gcc) and use the default CC or CC=gcc-16
+  GCC_HINT := Install GCC via Homebrew (brew install gcc) or MacPorts (sudo port install gcc14) and use the default CC, or CC=gcc-16 / CC=gcc-mp-14
 else ifeq ($(BUILD_PLATFORM),Linux)
   GCC_HINT := Install your distribution's gcc package and use the default CC or CC=gcc
 else
   GCC_HINT := On Windows build in the MSYS2 UCRT64 (or MINGW64) environment with mingw-w64-ucrt-x86_64-gcc; the CLANG64/CLANGARM64 environments are not supported
 endif
 ifeq ($(origin CC),default)
-  CC := $(shell for c in gcc-16 gcc-15 gcc-14 gcc-13 gcc; do \
+  CC := $(shell for c in gcc-16 gcc-15 gcc-14 gcc-13 \
+                         gcc-mp-16 gcc-mp-15 gcc-mp-14 gcc-mp-13 gcc; do \
                   command -v $$c >/dev/null 2>&1 && { echo $$c; break; }; \
                 done)
   ifeq ($(strip $(CC)),)
@@ -190,7 +247,7 @@ else
   # (rl_bind_keyseq, ...) and, more importantly, cannot do the in-buffer
   # multi-line editing the REPL's completeness-driven Return relies on:
   # rebinding RET there is silently ignored. Prefer a real Homebrew GNU Readline
-  # when one is installed. It is keg-only, so its include/lib dirs are NOT on the
+  # (or MacPorts) when one is installed. Homebrew's is keg-only, so its include/lib dirs are NOT on the
   # default search paths and must be added explicitly; when none is found the
   # build falls back to the shim (single-line editing only). Linux resolves GNU
   # Readline through -lreadline already, so this probe is Darwin-only.
@@ -199,8 +256,12 @@ else
     # resolved prefix locates it without a second `brew` call. An empty /
     # non-existent HOMEBREW (the opt-out) finds nothing and falls back to the
     # libedit shim (single-line editing only).
-    READLINE_PREFIX := $(patsubst %/include/readline/readline.h,%,\
-                         $(wildcard $(HOMEBREW)/opt/readline/include/readline/readline.h))
+    # MacPorts' readline port is GNU Readline installed straight into the
+    # prefix (not keg-only), so $(MACPORTS)/include/readline/readline.h is the
+    # second candidate. Homebrew's wins when both exist.
+    READLINE_PREFIX := $(firstword $(patsubst %/include/readline/readline.h,%,\
+                         $(wildcard $(HOMEBREW)/opt/readline/include/readline/readline.h \
+                                    $(MACPORTS)/include/readline/readline.h)))
     ifneq ($(READLINE_PREFIX),)
       CFLAGS        += -I$(READLINE_PREFIX)/include
       READLINE_LIBS := -L$(READLINE_PREFIX)/lib -lreadline
@@ -310,14 +371,15 @@ endif
 ifeq ($(USE_ECM), 1)
   ECM_PROBE := $(shell f=/tmp/mathilda_ecmprobe_$$$$; \
     printf '\043include <stdio.h>\n\043include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > $$f.c 2>/dev/null && \
-    $(CC) $$f.c -o $$f $(SYSPREFIX_CFLAGS) $(HOMEBREW_CFLAGS) \
-      $(SYSPREFIX_LDFLAGS) $(HOMEBREW_LDFLAGS) -lecm -lgmp 2>/dev/null && echo y; \
+    $(CC) $$f.c -o $$f $(SYSPREFIX_CFLAGS) $(PKGMGR_CFLAGS) \
+      $(SYSPREFIX_LDFLAGS) $(PKGMGR_LDFLAGS) -lecm -lgmp 2>/dev/null && echo y; \
     rm -f $$f.c $$f)
   ifeq ($(ECM_PROBE), y)
     LDFLAGS += -lecm
   else
     $(warning GMP-ECM not detected; building with USE_ECM=0 (advanced factorisation disabled))
     $(warning   macOS (Homebrew): brew install gmp-ecm)
+    $(warning   macOS (MacPorts): sudo port install ecm)
     $(warning   Ubuntu/Debian:    sudo apt install libecm-dev)
     override USE_ECM := 0
   endif
@@ -339,22 +401,22 @@ CFLAGS  += -DUSE_MPFR
 LDFLAGS += -lmpfr
 endif
 
-# Homebrew include/lib dirs (resolved above; empty when HOMEBREW is opted out or
-# absent). SYSTEM_PREFIX (/usr/local on Unix) is already on CFLAGS/LDFLAGS, so
-# on an Intel-prefix install these may duplicate it harmlessly.
-CFLAGS  += $(HOMEBREW_CFLAGS)
-LDFLAGS += $(HOMEBREW_LDFLAGS)
+# Homebrew and MacPorts include/lib dirs (resolved above; empty when opted out
+# or absent). SYSTEM_PREFIX (/usr/local on Unix) is already on CFLAGS/LDFLAGS, so
+# on an Intel-prefix Homebrew install these may duplicate it harmlessly.
+CFLAGS  += $(PKGMGR_CFLAGS)
+LDFLAGS += $(PKGMGR_LDFLAGS)
 
-# pkg-config wrapper. On macOS, Homebrew installs its .pc files outside the
-# search path used by a MacPorts/system pkg-config, so `pkg-config --exists
-# raylib` (below) fails on a stock shell even when raylib is installed. Prepend
-# the resolved Homebrew prefix's pkgconfig dir (HOMEBREW_PC_PATH, computed above)
-# so plain `make` detects raylib — and graphics is built by default — without a
-# manual PKG_CONFIG_PATH override. Empty when Homebrew is opted out or absent
+# pkg-config wrapper. On macOS, Homebrew and MacPorts each install their .pc
+# files outside the search path of the other's (or the system's) pkg-config, so
+# `pkg-config --exists raylib` (below) fails on a stock shell even when raylib is
+# installed. Prepend the resolved prefixes' pkgconfig dirs (PKGMGR_PC_PATH,
+# computed above) so plain `make` detects raylib/flint/pcre2/fftw without a
+# manual PKG_CONFIG_PATH override. Empty when both are opted out or absent
 # (Linux, Windows), so this collapses to plain pkg-config there; respects any
 # PKG_CONFIG_PATH the user already exported.
-ifneq ($(HOMEBREW_PC_PATH),)
-  PKG_CONFIG = PKG_CONFIG_PATH="$(HOMEBREW_PC_PATH):$$PKG_CONFIG_PATH" pkg-config
+ifneq ($(PKGMGR_PC_PATH),)
+  PKG_CONFIG = PKG_CONFIG_PATH="$(PKGMGR_PC_PATH):$$PKG_CONFIG_PATH" pkg-config
 else
   PKG_CONFIG = pkg-config
 endif
@@ -456,7 +518,7 @@ endif
 # SUITESPARSE_PREFIX=<dir> (and ARPACK_PREFIX=<dir>) point at a non-standard
 # install, e.g. a source build: make SUITESPARSE_PREFIX=$HOME/.local/suitesparse
 # Its lib/ is added to the link path and, for the shared libraries, the rpath.
-SUITESPARSE_INC_DIRS := $(foreach d,$(SUITESPARSE_PREFIX) $(HOMEBREW) $(SYSTEM_PREFIX) /usr /mingw64 /ucrt64,$(wildcard $(d)/include/suitesparse))
+SUITESPARSE_INC_DIRS := $(foreach d,$(SUITESPARSE_PREFIX) $(HOMEBREW) $(MACPORTS) $(SYSTEM_PREFIX) /usr /mingw64 /ucrt64,$(wildcard $(d)/include/suitesparse))
 SUITESPARSE_CFLAGS   := $(addprefix -I,$(firstword $(SUITESPARSE_INC_DIRS)))
 SUITESPARSE_LDDIR    := $(if $(SUITESPARSE_PREFIX),-L$(SUITESPARSE_PREFIX)/lib -Wl$(comma)-rpath$(comma)$(SUITESPARSE_PREFIX)/lib,)
 ARPACK_CFLAGS        := $(if $(ARPACK_PREFIX),-I$(ARPACK_PREFIX)/include,)
@@ -464,8 +526,8 @@ ARPACK_LDDIR         := $(if $(ARPACK_PREFIX),-L$(ARPACK_PREFIX)/lib -Wl$(comma)
 ifeq ($(USE_SUITESPARSE), 1)
   SUITESPARSE_PROBE := $(shell f=/tmp/mathilda_ssprobe_$$$$; \
     printf '\043include <umfpack.h>\n\043include <cholmod.h>\nint main(void){double c[UMFPACK_CONTROL];cholmod_common cc;umfpack_dl_defaults(c);cholmod_l_start(&cc);cholmod_l_finish(&cc);return 0;}\n' > $$f.c 2>/dev/null && \
-    $(CC) $$f.c -o $$f $(SUITESPARSE_CFLAGS) $(SYSPREFIX_CFLAGS) $(HOMEBREW_CFLAGS) \
-      $(SUITESPARSE_LDDIR) $(SYSPREFIX_LDFLAGS) $(HOMEBREW_LDFLAGS) -lumfpack -lcholmod -lamd -lcolamd -lsuitesparseconfig 2>/dev/null && echo y; \
+    $(CC) $$f.c -o $$f $(SUITESPARSE_CFLAGS) $(SYSPREFIX_CFLAGS) $(PKGMGR_CFLAGS) \
+      $(SUITESPARSE_LDDIR) $(SYSPREFIX_LDFLAGS) $(PKGMGR_LDFLAGS) -lumfpack -lcholmod -lamd -lcolamd -lsuitesparseconfig 2>/dev/null && echo y; \
     rm -f $$f.c $$f)
   ifeq ($(SUITESPARSE_PROBE), y)
     CFLAGS  += -DUSE_UMFPACK -DUSE_CHOLMOD $(SUITESPARSE_CFLAGS)
@@ -473,6 +535,7 @@ ifeq ($(USE_SUITESPARSE), 1)
   else
     $(warning SuiteSparse (UMFPACK/CHOLMOD) not detected; building with USE_SUITESPARSE=0 (sparse direct solves use a dense LU within the densify cap, else Krylov))
     $(warning   macOS (Homebrew): brew install suite-sparse)
+    $(warning   macOS (MacPorts): sudo port install SuiteSparse)
     $(warning   Ubuntu/Debian:    sudo apt install libsuitesparse-dev)
     override USE_SUITESPARSE := 0
   endif
@@ -480,8 +543,8 @@ endif
 ifeq ($(USE_ARPACK), 1)
   ARPACK_PROBE := $(shell f=/tmp/mathilda_arprobe_$$$$; \
     printf '\043include <arpack/arpack.h>\nint main(void){a_int ido=0,info=0,ip[11]={0},pp[11]={0};double r[1],v[1],wd[3],wl[1];dsaupd_c(&ido,"I",1,"LM",1,0.0,r,1,v,1,ip,pp,wd,wl,1,&info);return 0;}\n' > $$f.c 2>/dev/null && \
-    $(CC) $$f.c -o $$f $(ARPACK_CFLAGS) $(SYSPREFIX_CFLAGS) $(HOMEBREW_CFLAGS) \
-      $(ARPACK_LDDIR) $(SYSPREFIX_LDFLAGS) $(HOMEBREW_LDFLAGS) -larpack 2>/dev/null && echo y; \
+    $(CC) $$f.c -o $$f $(ARPACK_CFLAGS) $(SYSPREFIX_CFLAGS) $(PKGMGR_CFLAGS) \
+      $(ARPACK_LDDIR) $(SYSPREFIX_LDFLAGS) $(PKGMGR_LDFLAGS) -larpack 2>/dev/null && echo y; \
     rm -f $$f.c $$f)
   ifeq ($(ARPACK_PROBE), y)
     CFLAGS  += -DUSE_ARPACK $(ARPACK_CFLAGS)
@@ -489,6 +552,7 @@ ifeq ($(USE_ARPACK), 1)
   else
     $(warning ARPACK (arpack-ng >= 3.8, ISO C binding) not detected; building with USE_ARPACK=0 (sparse eigensolvers use the native Arnoldi))
     $(warning   macOS (Homebrew): brew install arpack)
+    $(warning   macOS (MacPorts): sudo port install arpack)
     $(warning   Ubuntu/Debian:    sudo apt install libarpack2-dev)
     override USE_ARPACK := 0
   endif
@@ -518,6 +582,7 @@ ifeq ($(USE_GRAPHICS), 1)
   else
     $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
     $(warning   macOS (Homebrew): brew install raylib)
+    $(warning   macOS (MacPorts): sudo port install raylib)
     $(warning   Ubuntu/Debian:    sudo apt install libraylib-dev)
     override USE_GRAPHICS := 0
   endif
@@ -551,6 +616,7 @@ ifeq ($(USE_FLINT), 1)
   else
     $(warning FLINT >= 3.0 not detected; building with USE_FLINT=0 (algebraic-extension GCD/Factor use the classical fallback))
     $(warning   macOS (Homebrew):      brew install flint)
+    $(warning   macOS (MacPorts):      sudo port install flint)
     $(warning   Ubuntu 24.04+/Debian:  sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
     $(warning   Ubuntu 22.04 (apt has 2.x): ./tools/install-flint.sh   (builds 3.x from source; see docs/building.md))
     override USE_FLINT := 0
@@ -572,6 +638,7 @@ ifeq ($(USE_REGEX), 1)
   else
     $(warning PCRE2 not detected; building with USE_REGEX=0 (RegularExpression/StringMatchQ/StringCases/StringReplace/StringSplit warn and stay unevaluated))
     $(warning   macOS (Homebrew): brew install pcre2)
+    $(warning   macOS (MacPorts): sudo port install pcre2)
     $(warning   Ubuntu/Debian:    sudo apt install libpcre2-dev)
     override USE_REGEX := 0
   endif
@@ -591,6 +658,7 @@ ifeq ($(USE_FFTW), 1)
   else
     $(warning FFTW not detected; building with USE_FFTW=0 (Fourier uses a naive O(n^2) fallback))
     $(warning   macOS (Homebrew): brew install fftw)
+    $(warning   macOS (MacPorts): sudo port install fftw-3)
     $(warning   Ubuntu/Debian:    sudo apt install libfftw3-dev)
     override USE_FFTW := 0
   endif
