@@ -51,11 +51,13 @@ sudo port install SuiteSparse arpack               # optional: sparse linear alg
 The makefile finds the MacPorts prefix from the `port` command on `PATH`
 (normally `/opt/local`), picks up the MacPorts compiler `gcc-mp-NN`, and adds the
 prefix's `include`, `lib` and `lib/pkgconfig` directories to every probe. On a
-Mac that has **both** Homebrew and MacPorts, Homebrew wins and MacPorts is
-ignored, so two builds of gmp/mpfr/flint never end up in one link. To build
-against MacPorts there, use `make HOMEBREW=` (and `-DHOMEBREW=` for the CMake
-test build). On an Intel Mac, Homebrew's `/usr/local` is also `SYSTEM_PREFIX`,
-so pass `HOMEBREW= SYSTEM_PREFIX=` to exclude it completely.
+Mac that has **both** Homebrew and MacPorts, the one that provides GMP owns the
+build, so two GMPs never end up in one link. If Homebrew has `gmp`, MacPorts is
+ignored. Otherwise MacPorts is added, and whatever else Homebrew has (fftw,
+pcre2, …) is still used. To force MacPorts alone, use `make HOMEBREW=` (and
+`-DHOMEBREW=` for the CMake test build). On an Intel Mac, Homebrew's
+`/usr/local` is also `SYSTEM_PREFIX`, so pass `HOMEBREW= SYSTEM_PREFIX=` to
+exclude it completely.
 
 LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
 **Accelerate** framework.
@@ -149,7 +151,7 @@ make -j4 USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
 | `USE_GRAPHICS` | `1` | Interactive 2D/3D plot windows via Raylib, auto-detected via `pkg-config raylib`. Without it, `Plot`/`Show`/… print a text placeholder. |
 | `USE_READLINE` | `1` | GNU Readline for the REPL. Auto-detected; off on Windows. On macOS the makefile prefers Homebrew's (or MacPorts') GNU Readline over Apple's libedit shim, which cannot edit multi-line input. |
 | `HOMEBREW=<prefix>` | auto (`brew --prefix`) | Homebrew prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths for the optional dependencies above. Auto-detected with `brew --prefix`, so the Apple-Silicon `/opt/homebrew`, the Intel `/usr/local`, a Linuxbrew prefix, and any custom install all work without editing the makefile. Pass it explicitly to force a prefix, or **opt out of all Homebrew discovery** with `HOMEBREW=` (empty) or `HOMEBREW=/nonexisting`. Honoured identically by the makefile and the CMake test build. |
-| `MACPORTS=<prefix>` | auto (`port` on `PATH`, else `/opt/local`; macOS only, and only when no Homebrew `brew` is found) | MacPorts prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths, the same way as `HOMEBREW`. MacPorts' GNU Readline is preferred over Apple's libedit shim. Pass it explicitly to force a prefix (or to add MacPorts behind Homebrew), or opt out with `MACPORTS=` (empty). Honoured identically by the makefile and the CMake test build (`-DMACPORTS=...`). |
+| `MACPORTS=<prefix>` | auto (`port` on `PATH`, else `/opt/local`; macOS only, and only when Homebrew does not provide GMP) | MacPorts prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths, the same way as `HOMEBREW`. MacPorts' GNU Readline is preferred over Apple's libedit shim. Pass it explicitly to force a prefix (or to add MacPorts behind Homebrew), or opt out with `MACPORTS=` (empty). Honoured identically by the makefile and the CMake test build (`-DMACPORTS=...`). |
 | `SYSTEM_PREFIX=<prefix>` | `/usr/local` (empty on Windows) | Conventional site prefix whose `include` and `lib` directories (when they exist) are added to the compile/link lines and to the GMP-ECM and LAPACK probes. Empty by default on native Windows, where MSYS2's `/usr` is the Cygwin runtime tree. Opt out with `SYSTEM_PREFIX=` (empty). `/usr/include` itself is never added. |
 | `EXTRA_LIBS="…"` | empty | Extra link libraries, e.g. a BLAS the probe does not know. |
 

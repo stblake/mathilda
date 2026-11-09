@@ -74,24 +74,28 @@ endif
 #
 #   1. An explicit MACPORTS=... (command line or environment) always wins;
 #      MACPORTS= (empty) or MACPORTS=/nonexisting is the opt-out.
-#   2. Otherwise, on macOS only and only when NO Homebrew prefix was found, the
-#      prefix of the `port` command on PATH (<prefix>/bin/port), which also
-#      covers a custom --prefix install.
+#   2. Otherwise, on macOS only and only when Homebrew does not provide GMP
+#      (see below), the prefix of the `port` command on PATH
+#      (<prefix>/bin/port), which also covers a custom --prefix install.
 #   3. Otherwise /opt/local, if MacPorts is installed there but not on PATH.
 #
 # Auto-detection is Darwin-only: MacPorts is a macOS package manager, and an
-# unrelated `port` binary on Linux must not inject search paths. It also yields
-# to Homebrew: on a machine with both, silently adding the second tree would mix
-# two builds of gmp/mpfr/flint (ABI-incompatible duplicates) into one link, and
-# would change an existing Homebrew build. With both installed, pick one
-# explicitly: `make HOMEBREW=` builds against MacPorts only, and
-# `make MACPORTS=/opt/local` adds MacPorts behind Homebrew.
+# unrelated `port` binary on Linux must not inject search paths.
+#
+# Coexistence rule: the tree that provides GMP owns the build. GMP is the one
+# required library, and mpfr/flint/ecm all link against it, so two GMPs in one
+# process (Homebrew's and MacPorts') is the real hazard of mixing the trees.
+#   - Homebrew has gmp.h          -> MacPorts is NOT auto-added (an existing
+#                                    Homebrew build is unchanged).
+#   - Homebrew lacks gmp.h, or no -> MacPorts is added. A Homebrew without gmp
+#     Homebrew at all                cannot hold mpfr/flint/ecm either (they
+#                                    depend on it), so whatever else it has
+#                                    (fftw, pcre2, ...) cannot bring a 2nd GMP.
+# Override either way: `make HOMEBREW=` (MacPorts only) or
+# `make MACPORTS=/opt/local` (MacPorts behind Homebrew).
 ifeq ($(origin MACPORTS),undefined)
   MACPORTS :=
-  # "Homebrew found" means a real brew binary under the prefix, not merely an
-  # existing directory: the Darwin fallback above resolves HOMEBREW to
-  # /usr/local, which exists on most Macs whether or not Homebrew is installed.
-  ifeq ($(BUILD_PLATFORM)$(wildcard $(HOMEBREW)/bin/brew),Darwin)
+  ifeq ($(BUILD_PLATFORM)$(wildcard $(HOMEBREW)/include/gmp.h),Darwin)
     MACPORTS := $(patsubst %/bin/port,%,$(shell command -v port 2>/dev/null))
     ifeq ($(strip $(MACPORTS)),)
       MACPORTS := $(patsubst %/bin/port,%,$(wildcard /opt/local/bin/port))
@@ -115,8 +119,8 @@ ifneq ($(strip $(MACPORTS)),)
 endif
 
 # Combined package-manager search paths: what every probe and the final
-# compile/link lines consume. Normally only one of the two is non-empty; when
-# both are set explicitly, Homebrew's directories are searched first.
+# compile/link lines consume. Homebrew's directories are searched first when
+# both are set.
 PKGMGR_CFLAGS  := $(strip $(HOMEBREW_CFLAGS) $(MACPORTS_CFLAGS))
 PKGMGR_LDFLAGS := $(strip $(HOMEBREW_LDFLAGS) $(MACPORTS_LDFLAGS))
 PKGMGR_PC_PATH := $(subst $(space),:,$(strip $(HOMEBREW_PC_PATH) $(MACPORTS_PC_PATH)))

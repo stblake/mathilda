@@ -163,14 +163,15 @@ endif()
 
 # MacPorts prefix discovery, mirroring the makefile. An explicit MACPORTS
 # (-DMACPORTS=... or environment) always wins; MACPORTS= (empty) is the opt-out.
-# Otherwise, on macOS only and only when no real Homebrew (a brew binary under
-# the prefix) was found -- so the two trees are never mixed by default -- use
-# the prefix of the `port` command on PATH, falling back to /opt/local.
+# Otherwise, on macOS only and only when Homebrew does not provide GMP (the
+# tree that provides GMP owns the build, so two GMPs never meet in one link;
+# see the makefile), use the prefix of the `port` command on PATH, falling back
+# to /opt/local.
 if(DEFINED MACPORTS)
     # cache / -D override (possibly empty) wins as-is
 elseif(DEFINED ENV{MACPORTS})
     set(MACPORTS "$ENV{MACPORTS}")
-elseif(APPLE AND NOT (HOMEBREW AND EXISTS "${HOMEBREW}/bin/brew"))
+elseif(APPLE AND NOT (HOMEBREW AND EXISTS "${HOMEBREW}/include/gmp.h"))
     find_program(_MTH_PORT port)
     if(_MTH_PORT)
         get_filename_component(MACPORTS "${_MTH_PORT}" DIRECTORY)
