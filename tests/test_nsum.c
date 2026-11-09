@@ -556,6 +556,22 @@ static void test_memory_loop(void) {
         }
 }
 
+/* N of an unevaluated definite Sum / Product / Integrate falls back to NSum /
+ * NProduct / NIntegrate (it used to come back as 2.0 Sum[...]).  Expected:
+ * mpmath 2 nsum(besselj(5/8 + 2k + 1, 7/4), [0, inf]) = 0.892429323529416225329596,
+ * Prod (1 + 1/k^3) = Cosh[Sqrt[3] Pi/2]/Pi.  A free parameter keeps it symbolic. */
+static void test_n_of_unevaluated_sum(void) {
+    ASSERT_CLOSE("N[2 Sum[BesselJ[5/8 + 2 k + 1, 7/4], {k, 0, Infinity}]]",
+                 "0.892429323529416225329596", 1e-12);
+    ASSERT_CLOSE("N[2 Sum[BesselJ[5/8 + 2 k + 1, 7/4], {k, 0, Infinity}], 20]",
+                 "0.892429323529416225329596", 1e-18);
+    ASSERT_CLOSE("N[Product[1 + 1/k^3, {k, 1, Infinity}]]", "Cosh[Sqrt[3] Pi/2]/Pi", 1e-9);
+    ASSERT_CLOSE("N[Integrate[BesselJ[0, x] Cos[x/2], {x, 0, Infinity}]]", "2/Sqrt[3]", 1e-9);
+    char* s = eval_str("Head[N[Sum[f[k], {k, 1, Infinity}]]]");
+    ASSERT_MSG(strcmp(s, "Sum") == 0, "symbolic summand must stay a Sum, got %s", s);
+    free(s);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -589,6 +605,7 @@ int main(void) {
     TEST(test_unevaluated_forms);
     TEST(test_attributes);
     TEST(test_memory_loop);
+    TEST(test_n_of_unevaluated_sum);
 
     printf("All nsum_tests passed.\n");
     return 0;

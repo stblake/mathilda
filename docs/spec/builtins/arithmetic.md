@@ -69,6 +69,15 @@ Numerical evaluation.
   the pair is not threaded over: `N[Pi, {MachinePrecision, MachinePrecision}]`
   is machine `Pi`.
 
+**Unevaluated definite sums, products and integrals**: a `Sum`, `Product` or
+`Integrate` that stayed unevaluated (no closed form) over numeric limits, with
+a body that is a numeric function of its iterator variables, is handed to
+`NSum` / `NProduct` / `NIntegrate` (with `WorkingPrecision -> p` for
+`N[expr, p]`): `N[2 Sum[BesselJ[5/8 + 2 k + 1, 7/4], {k, 0, Infinity}]]` is
+`0.892429`. A free parameter in the body keeps the call symbolic, and a
+numerical routine that does not produce a number leaves `N`'s ordinary
+argument-wise result.
+
 **Exact arrays**: machine `N` of a rectangular `List` (any rank) whose
 elements are all `Integer`s, `Rational`s of machine integers, or machine
 `Real`s, with at least one exact element, is written straight into a packed

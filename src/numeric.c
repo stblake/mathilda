@@ -1289,11 +1289,120 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     return r;
 }
 
+/* ------------------------------------------------------------------------
+ *  N of an unevaluated definite Sum / Product / Integrate
+ *
+ *  A Sum, Product or Integrate that stayed unevaluated (no closed form) with
+ *  numeric limits is a number; N falls back to NSum / NProduct / NIntegrate
+ *  on it, as the reference does.  Before this N[2 Sum[BesselJ[5/8 + 2 k + 1,
+ *  7/4], {k, 0, Infinity}]] came back as 2.0 Sum[...], and
+ *  N[Integrate[E^(-x^3 Sin[x]^2), {x, 0, 1}]] as an Integrate.
+ * ---------------------------------------------------------------------- */
+
+/* The body is a numeric function of the iterator variables `vars`: numbers,
+ * numeric constants, the variables, and NumericFunction heads (or Rational /
+ * Complex).  A free symbol (a parameter) keeps the call symbolic. */
+static bool n_numeric_body(const Expr* e, const Expr* const* vars, size_t nv) {
+    switch (e->type) {
+    case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
+#ifdef USE_MPFR
+    case EXPR_MPFR:
+#endif
+        return true;
+    case EXPR_SYMBOL: {
+        for (size_t i = 0; i < nv; i++)
+            if (vars[i]->data.symbol.name == e->data.symbol.name) return true;
+        if (find_constant(e->data.symbol.name)) return true;
+        return (get_attributes(e->data.symbol.name) & ATTR_CONSTANT) != 0;
+    }
+    case EXPR_FUNCTION: {
+        const Expr* h = e->data.function.head;
+        if (h->type != EXPR_SYMBOL) return false;
+        const char* hn = h->data.symbol.name;
+        if (hn != SYM_Rational && hn != SYM_Complex &&
+            !(get_attributes(hn) & ATTR_NUMERICFUNCTION)) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!n_numeric_body(e->data.function.args[i], vars, nv)) return false;
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+/* A limit N can hand to the numerical routine: a number or +-Infinity. */
+static bool n_limit_ok(const Expr* lim, NumericSpec spec) {
+    if (lim->type == EXPR_SYMBOL && lim->data.symbol.name == SYM_Infinity) return true;
+    if (lim->type == EXPR_FUNCTION && lim->data.function.head->type == EXPR_SYMBOL) {
+        const char* hn = lim->data.function.head->data.symbol.name;
+        if (hn == SYM_DirectedInfinity) return true;
+        if (hn == SYM_Times && lim->data.function.arg_count == 2
+            && lim->data.function.args[1]->type == EXPR_SYMBOL
+            && lim->data.function.args[1]->data.symbol.name == SYM_Infinity
+            && expr_is_numeric_like(lim->data.function.args[0])) return true;
+    }
+    Expr* v = numericalize_rec(lim, spec);
+    Expr *re, *im;
+    bool ok = v && (expr_is_numeric_like(v) || is_complex(v, &re, &im));
+    expr_free(v);
+    return ok;
+}
+
+static Expr* n_definite_fallback(const Expr* e, NumericSpec spec) {
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return NULL;
+    const char* hn = h->data.symbol.name;
+    const char* nh = hn == SYM_Sum ? SYM_NSum : hn == SYM_Product ? SYM_NProduct
+                   : hn == SYM_Integrate ? SYM_NIntegrate : NULL;
+    size_t n = e->data.function.arg_count;
+    if (!nh || n < 2 || n > 9) return NULL;
+    const Expr* vars[8];
+    for (size_t i = 1; i < n; i++) {
+        const Expr* sp = e->data.function.args[i];
+        if (sp->type != EXPR_FUNCTION || sp->data.function.head->type != EXPR_SYMBOL
+            || sp->data.function.head->data.symbol.name != SYM_List
+            || sp->data.function.arg_count != 3
+            || sp->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
+        vars[i - 1] = sp->data.function.args[0];
+    }
+    if (!n_numeric_body(e->data.function.args[0], vars, n - 1)) return NULL;
+    /* The outermost iterator's limits must be numeric (inner ones may
+     * depend on the outer variables; the numerical routine judges those). */
+    {
+        const Expr* sp = e->data.function.args[1];
+        if (!n_limit_ok(sp->data.function.args[1], spec)
+            || !n_limit_ok(sp->data.function.args[2], spec)) return NULL;
+    }
+    bool mp = spec.mode != NUMERIC_MODE_MACHINE;
+    size_t na = n + (mp ? 1 : 0);
+    Expr** a = malloc(na * sizeof(Expr*));
+    if (!a) return NULL;
+    for (size_t i = 0; i < n; i++) a[i] = expr_copy(e->data.function.args[i]);
+    if (mp) {
+        a[n] = expr_new_function(expr_new_symbol(SYM_Rule),
+                   (Expr*[]){ expr_new_symbol(SYM_WorkingPrecision),
+                              expr_new_integer((int64_t)floor(numeric_bits_to_digits(spec.bits) + 0.5)) }, 2);
+    }
+    Expr* call = expr_new_function(expr_new_symbol(nh), a, na);
+    free(a);
+    Expr* v = eval_and_free(call);
+    Expr *re, *im;
+    if (v && (expr_is_numeric_like(v) || is_complex(v, &re, &im))) return v;
+    expr_free(v);
+    return NULL;
+}
+
 static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     /* An N rule on the head (h /: N[h[x_]] := ...) gives the whole call's value. */
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
         Expr* nv = n_value(e, e->data.function.head->data.symbol.name, spec);
         if (nv) return nv;
+    }
+    /* An unevaluated definite Sum / Product / Integrate: NSum / NProduct /
+     * NIntegrate (n_definite_fallback). */
+    if (g_n_held_depth == 0) {
+        Expr* nf = n_definite_fallback(e, spec);
+        if (nf) return nf;
     }
     /* Root[Function[p_in_slot1], k] → companion-matrix all-roots backend,
      * canonical sort, Newton refinement.  Runs first because Root is
