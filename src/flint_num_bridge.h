@@ -145,6 +145,14 @@ Expr* flint_num_jacobi(int which, const Expr* u, const Expr* m);
 bool flint_jacobi_d(int which, double ur, double ui, double mr, double mi,
                     double* rr, double* ri);
 
+/* HankelH1/H2 and the spherical Bessel family at (order, z): code in the HS_*
+ * order of special_functions/hankel_spherical.h (0 H1, 1 H2, 2 j, 3 y, 4 h1,
+ * 5 h2); the Hankel forms through K where J +- i Y would cancel. And its
+ * machine twin. */
+Expr* flint_num_hankel_sph(int code, const Expr* n, const Expr* z);
+bool flint_hankel_sph_d(int code, double nr, double ni, double zr, double zi,
+                        double* rr, double* ri);
+
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
  * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The

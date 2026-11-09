@@ -2465,6 +2465,47 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- HankelH1/H2 and the spherical Bessel family f[N, Z] (DLMF 10.6.1,
+         * 10.51.2): H' = (H_{N-1} - H_{N+1})/2, f' = -f/(2Z) + (f_{N-1} - f_{N+1})/2;
+         * the order derivative stays inert. */
+        if (n == 2 && h && (strcmp(h, "HankelH1") == 0 || strcmp(h, "HankelH2") == 0 ||
+                            strcmp(h, "SphericalBesselJ") == 0 || strcmp(h, "SphericalBesselY") == 0 ||
+                            strcmp(h, "SphericalHankelH1") == 0 || strcmp(h, "SphericalHankelH2") == 0)) {
+            bool sph = h[0] == 'S';
+            {
+                char tpl[256];
+                if (sph)
+                    snprintf(tpl, sizeof tpl, "(-%s[#1, #2]/(2 #2) + (%s[#1 - 1, #2] - %s[#1 + 1, #2])/2)&", h, h, h);
+                else
+                    snprintf(tpl, sizeof tpl, "((%s[#1 - 1, #2] - %s[#1 + 1, #2])/2)&", h, h);
+                Expr* N = args[0];
+                Expr* Z = args[1];
+                Expr* dN = deriv_of(N, x, nonconsts);
+                Expr* dZ = deriv_of(Z, x, nonconsts);
+                Expr* terms[2];
+                size_t nt = 0;
+                if (!is_lit_zero(dZ)) {
+                    Expr* f = parse_expression(tpl);
+                    Expr* g = expr_new_function(f, (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                    terms[nt++] = mk_fn2("Times", g, dZ);
+                } else {
+                    expr_free(dZ);
+                }
+                if (!is_lit_zero(dN)) {
+                    Expr* op = expr_new_function(mk_sym("Derivative"),
+                                  (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                    Expr* op_g = mk_fn_head1(op, mk_sym(h));
+                    Expr* applied = expr_new_function(op_g,
+                                  (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                    terms[nt++] = mk_fn2("Times", applied, dN);
+                } else {
+                    expr_free(dN);
+                }
+                if (nt == 0) return mk_int(0);
+                if (nt == 1) return terms[0];
+                return mk_fn2("Plus", terms[0], terms[1]);
+            }
+        }
         /* --- The Jacobi elliptic family, f[U, M]: d/dU from DLMF 22.13 (and the
          * EllipticF integrands for the inverses), as pure-function templates in
          * (U, M); d/dM stays the inert Derivative[0, 1][f][U, M]. */

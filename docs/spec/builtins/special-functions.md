@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3627,6 +3627,57 @@ Out[2]= (-1 + m) JacobiND[u, m] JacobiSD[u, m]
 
 In[3]:= JacobiAmplitude[10., 1.7]
 Out[3]= 11.7593
+```
+
+## HankelH1, HankelH2 and the spherical Bessel functions
+
+`HankelH1[nu, z] = BesselJ[nu, z] + I BesselY[nu, z]` and `HankelH2[nu, z] =
+BesselJ[nu, z] - I BesselY[nu, z]`; `SphericalBesselJ[n, z]`,
+`SphericalBesselY[n, z]` are `Sqrt[Pi]/Sqrt[2 z]` times `BesselJ[n + 1/2, z]`,
+`BesselY[n + 1/2, z]` (principal `Sqrt[2 z]`, the reference's form), and
+`SphericalHankelH1/H2[n, z] = SphericalBesselJ[n, z] +- I SphericalBesselY[n, z]`.
+Principal branches, cut along the negative real axis.
+
+- **Exact rules** (as the reference system): exact calls stay unevaluated except
+  at `z = 0` -- `HankelH1[0, 0] = ComplexInfinity`, `SphericalBesselJ[0, 0] = 1`,
+  `SphericalBesselJ[n, 0] = 0` (integer `n > 0`), `SphericalBesselY[n, 0] =
+  ComplexInfinity`. Integer order on the negative axis uses the parity relations,
+  so `SphericalBesselY[3, -2.] = -1.48437` is real.
+- **Numerics.** Machine kernel `sf_machine_hankel_sph` (scalar, packed /
+  `NDArray`, `Compile[]`) over the shared machine Bessel kernels: where `J + I Y`
+  would cancel (H1 in the upper half plane, H2 in the lower) the Hankel function
+  is `(2/Pi) e^(-+ I Pi (nu+1)/2) K_nu(-+ I z)` (DLMF 10.27.8), elsewhere `J +- I Y`
+  (on the real axis just the real and imaginary parts). Spherical functions of
+  integer order `n <= 200` and real `z > 0` use the upward recurrence from
+  `j_0, j_1, y_0, y_1` (always for `y`; for `j` where `z > n`). Complex orders and
+  declined points: arb at 53 bits in the kernel. Arbitrary precision: arb, with
+  the same `K` route. Accuracy against mpmath (2400 points): real `z` median
+  0.2-1.5 ulp, max 101 ulp (near a zero of `j`); complex `z` median 1.7-2.5 ulp,
+  p99 51 ulp, max 1483 ulp (the shared complex Bessel kernel, rare).
+- **Derivatives.** `D[HankelH1[nu, z], z] = (HankelH1[nu - 1, z] - HankelH1[nu + 1,
+  z])/2`; `D[SphericalBesselJ[n, z], z] = -SphericalBesselJ[n, z]/(2 z) +
+  (SphericalBesselJ[n - 1, z] - SphericalBesselJ[n + 1, z])/2` (likewise for the
+  other three); the order derivative stays inert.
+- **Performance** (2.2 GHz Intel; the machine was shared during these runs):
+  `SphericalBesselJ[3, x]` over 10^6 packed reals 0.038 s (SciPy `spherical_jn`
+  0.056 s, wolframscript ~42 s); `HankelH1[1.5, x]` 0.32 s (SciPy `hankel1`
+  0.15 s -- both evaluate J and Y; ours run the general half-integer Bessel
+  kernels at full accuracy, wolframscript ~22 s); scalar `HankelH1[2.5, 3.]`
+  1.3-2.7 µs (SciPy 1.6 µs, wolframscript 26 µs), `SphericalBesselJ[3, 2.5]`
+  0.7-1.4 µs (SciPy 45 µs, wolframscript 32 µs); 50 digits 55-140 µs (mpmath
+  281 µs, wolframscript 14 µs).
+
+Attributes: `Listable`, `NumericFunction`, `Protected` (all six).
+
+```mathematica
+In[1]:= HankelH1[2.5, 3.]
+Out[1]= 0.41271 - 0.369041 I
+
+In[2]:= SphericalBesselJ[2.5, -2.]
+Out[2]= 0. + 0.114273 I
+
+In[3]:= D[SphericalBesselJ[n, z], z]
+Out[3]= -SphericalBesselJ[n, z]/(2 z) + 1/2 (SphericalBesselJ[-1 + n, z] - SphericalBesselJ[1 + n, z])
 ```
 
 ## MathieuC and MathieuCPrime

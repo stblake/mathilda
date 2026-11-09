@@ -1628,6 +1628,95 @@ bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, d
 }
 
 /* ------------------------------------------------------------------ */
+/*  Hankel and spherical Bessel functions                              */
+/* ------------------------------------------------------------------ */
+/* code (passed as the exact integer W): 0 H1, 1 H2, 2 j, 3 y, 4 h1, 5 h2 --
+ * the HS_* order of special_functions/hankel_spherical.h. The Hankel functions
+ * use K where J +- i Y would cancel (DLMF 10.27.8; see hankel_spherical.c). */
+static void nb_hankel(acb_t res, int kind, const acb_t nu, const acb_t z, slong prec) {
+    bool use_k = (kind == 1) ? arb_is_positive(acb_imagref(z)) : arb_is_negative(acb_imagref(z));
+    acb_t w, t, e;
+    acb_init(w); acb_init(t); acb_init(e);
+    if (use_k) {
+        if (kind == 1) acb_div_onei(w, z); else acb_mul_onei(w, z);    /* -i z | i z */
+        acb_hypgeom_bessel_k(t, nu, w, prec);
+        acb_add_ui(e, nu, 1, prec);
+        acb_mul_2exp_si(e, e, -1);                                     /* (nu+1)/2 */
+        if (kind == 1) acb_neg(e, e);
+        acb_exp_pi_i(e, e, prec);                                      /* e^(-+ i pi (nu+1)/2) */
+        acb_mul(t, t, e, prec);
+        acb_const_pi(e, prec);
+        acb_div(t, t, e, prec);
+        acb_mul_2exp_si(res, t, 1);                                    /* 2/pi */
+    } else {
+        acb_hypgeom_bessel_j(t, nu, z, prec);
+        acb_hypgeom_bessel_y(w, nu, z, prec);
+        acb_mul_onei(w, w);
+        if (kind == 1) acb_add(res, t, w, prec); else acb_sub(res, t, w, prec);
+    }
+    acb_clear(w); acb_clear(t); acb_clear(e);
+}
+
+static void nb_hankel_sph(acb_t res, const acb_t n, const acb_t z, const acb_t W, slong prec) {
+    slong code = arf_get_si(arb_midref(acb_realref(W)), ARF_RND_NEAR);
+    if (code <= 1) { nb_hankel(res, (int)code + 1, n, z, prec); return; }
+    /* integer order on the negative real axis: the parity relations */
+    if (acb_is_int(n) && arb_is_zero(acb_imagref(z)) && arb_is_negative(acb_realref(z))) {
+        acb_t mz; acb_init(mz);
+        acb_neg(mz, z);
+        int even = arf_is_int_2exp_si(arb_midref(acb_realref(n)), 1);
+        acb_t c; acb_init(c);
+        acb_set_si(c, code == 4 ? 5 : code == 5 ? 4 : code);
+        nb_hankel_sph(res, n, mz, c, prec);
+        if (code == 3) even = !even;                 /* y_n(-x) = (-1)^(n+1) y_n(x) */
+        if (!even) acb_neg(res, res);
+        acb_clear(c); acb_clear(mz);
+        return;
+    }
+    acb_t nu, c, p;
+    acb_init(nu); acb_init(c); acb_init(p);
+    acb_set_d(nu, 0.5);
+    acb_add(nu, nu, n, prec);
+    if (code == 2) acb_hypgeom_bessel_j(c, nu, z, prec);
+    else if (code == 3) acb_hypgeom_bessel_y(c, nu, z, prec);
+    else nb_hankel(c, code == 4 ? 1 : 2, nu, z, prec);
+    acb_mul_2exp_si(p, z, 1);
+    acb_sqrt(p, p, prec);                            /* principal Sqrt[2 z] */
+    acb_div(res, c, p, prec);
+    acb_const_pi(p, prec);
+    acb_sqrt(p, p, prec);
+    acb_mul(res, res, p, prec);                      /* Sqrt[Pi]/Sqrt[2 z] C */
+    acb_clear(nu); acb_clear(c); acb_clear(p);
+}
+
+Expr* flint_num_hankel_sph(int code, const Expr* n, const Expr* z) {
+    Expr* W = expr_new_integer(code);
+    const Expr* args[2] = { n, z };
+    nb_ex3 ctx = { n, z, W };
+    acb_t R; acb_init(R);
+    slong bits = nb_ladder3(R, nb_hankel_sph, nb_load3_expr, &ctx, pick_out_bits(args, 2));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    expr_free(W);
+    return out;
+}
+
+bool flint_hankel_sph_d(int code, double nr, double ni, double zr, double zi,
+                        double* rr, double* ri) {
+    nb_d6 ctx = { { nr, ni, zr, zi, (double)code, 0.0 } };
+    for (int i = 0; i < 4; i++) if (!isfinite(ctx.v[i])) return false;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_ladder3(R, nb_hankel_sph, nb_load3_d, &ctx, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Jacobi elliptic functions (parameter m)                            */
 /* ------------------------------------------------------------------ */
 /* sn, cn, dn by theta quotients (DLMF 22.2.4), for m off (-inf, 0] u [1, inf):
@@ -3179,6 +3268,14 @@ Expr* flint_num_jacobi(int which, const Expr* u, const Expr* m) {
 bool flint_jacobi_d(int which, double ur, double ui, double mr, double mi,
                     double* rr, double* ri) {
     (void)which; (void)ur; (void)ui; (void)mr; (void)mi; (void)rr; (void)ri;
+    return false;
+}
+Expr* flint_num_hankel_sph(int code, const Expr* n, const Expr* z) {
+    (void)code; (void)n; (void)z; return NULL;
+}
+bool flint_hankel_sph_d(int code, double nr, double ni, double zr, double zi,
+                        double* rr, double* ri) {
+    (void)code; (void)nr; (void)ni; (void)zr; (void)zi; (void)rr; (void)ri;
     return false;
 }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {

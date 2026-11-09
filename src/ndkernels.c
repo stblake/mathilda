@@ -47,6 +47,7 @@
 #include "special_functions/parabolic_cylinder.h" /* sf_machine_pcfd[_c] */
 #include "special_functions/gegenbauer.h"         /* sf_machine_gegenbauer[2]_c */
 #include "special_functions/jacobi_elliptic.h"    /* sf_machine_jacobi */
+#include "special_functions/hankel_spherical.h"   /* sf_machine_hankel_sph */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -969,6 +970,30 @@ NDK_JAC(JacobiNS, JAC_NS) NDK_JAC(JacobiSC, JAC_SC) NDK_JAC(JacobiSD, JAC_SD)
 NDK_JAC(JacobiAmplitude, JAC_AM) NDK_JAC(InverseJacobiSN, JAC_ISN)
 NDK_JAC(InverseJacobiCN, JAC_ICN) NDK_JAC(InverseJacobiDN, JAC_IDN)
 
+/* HankelH1/H2 and the spherical Bessel family, (order, z) with real or complex
+ * parts, through sf_machine_hankel_sph -- the scalar builtins' helper. The
+ * Hankel functions are complex for real input, and j, y go complex for a
+ * non-integer order below 0, so none is real-closed. */
+#define NDK_HS(NAME, CODE)                                                        \
+    static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,    \
+                               double* ore, double* oim) {                        \
+        return sf_machine_hankel_sph(CODE, are, aim, bre, bim, ore, oim);          \
+    }                                                                             \
+    static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, false, NULL, NULL, false, NULL, NULL };
+NDK_HS(HankelH1, HS_H1) NDK_HS(HankelH2, HS_H2)
+NDK_HS(SphericalHankelH1, HS_SH1) NDK_HS(SphericalHankelH2, HS_SH2)
+/* j and y are real on real input except for a non-integer order below 0: real-
+ * closed (so the threaded real lane runs), declining such an element -- the
+ * List path then answers it complex. */
+#define NDK_HSR(NAME, CODE)                                                       \
+    static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,    \
+                               double* ore, double* oim) {                        \
+        if (!sf_machine_hankel_sph(CODE, are, aim, bre, bim, ore, oim)) return false; \
+        return !(aim == 0.0 && bim == 0.0 && *oim != 0.0);                        \
+    }                                                                             \
+    static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL, NULL };
+NDK_HSR(SphericalBesselJ, HS_SJ) NDK_HSR(SphericalBesselY, HS_SY)
+
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
  * polynomial degree n) must be a real integer, but the argument `b` = x may be
@@ -1260,6 +1285,9 @@ void ndkernels_init(void) {
     REG_B(JacobiAmplitude, NDKB_JacobiAmplitude);
     REG_B(InverseJacobiSN, NDKB_InverseJacobiSN); REG_B(InverseJacobiCN, NDKB_InverseJacobiCN);
     REG_B(InverseJacobiDN, NDKB_InverseJacobiDN);
+    REG_B(HankelH1, NDKB_HankelH1); REG_B(HankelH2, NDKB_HankelH2);
+    REG_B(SphericalBesselJ, NDKB_SphericalBesselJ); REG_B(SphericalBesselY, NDKB_SphericalBesselY);
+    REG_B(SphericalHankelH1, NDKB_SphericalHankelH1); REG_B(SphericalHankelH2, NDKB_SphericalHankelH2);
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

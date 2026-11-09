@@ -1973,15 +1973,19 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
      * to real dtype iff every element is real, else promote. */
     NDType dtcplx = ndt_as_complex(dta);
     void* tmp = malloc(ndt_elem_size(dtcplx) * sz);
+    if (!tmp) return NULL;
+    /* the same chunked (threaded) map as the complex branch above, then one
+     * scan for an imaginary part: an expensive kernel (HankelH1 over 10^6 reals)
+     * otherwise ran on one core here */
+    {
+        ndb_ctx ctx = { in, tmp, dta, dtcplx, k, sre, 0.0, arr_first };
+        if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(tmp); return NULL; }
+    }
     bool any_imag = false;
-    for (size_t j = 0; j < sz; j++) {
-        double re, im, orr, oii;
-        ndt_get(in, j, dta, &re, &im);
-        bool ok = arr_first ? k->cplx(re, 0.0, sre, 0.0, &orr, &oii)
-                            : k->cplx(sre, 0.0, re, 0.0, &orr, &oii);
-        if (!ok) { free(tmp); return NULL; }
-        if (oii != 0.0) any_imag = true;
-        ndt_set(tmp, j, dtcplx, orr, oii);
+    for (size_t j = 0; j < sz && !any_imag; j++) {
+        double re, im;
+        ndt_get(tmp, j, dtcplx, &re, &im);
+        if (im != 0.0) any_imag = true;
     }
     if (any_imag) return expr_new_ndarray_like(arr, rank, dims, tmp, dtcplx);
     void* out = malloc(ndt_elem_size(dta) * sz);
