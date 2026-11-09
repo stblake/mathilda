@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3424,6 +3424,83 @@ Out[3]= 1/Gamma[1 - k]
 
 In[4]:= WhittakerW[2, 1/2, 1.]  (* -E^(-1/2): the U polynomial case *)
 Out[4]= -0.606531
+```
+
+## ParabolicCylinderD
+
+`ParabolicCylinderD[nu, z]` gives Whittaker's parabolic cylinder function
+`D_nu(z)`, the solution of `w'' + (nu + 1/2 - z²/4) w = 0` that decays as
+`z -> +Infinity`. It is entire in both `nu` and `z`, and is related to the
+confluent functions by `D_nu(z) = 2^(nu/2) e^(-z²/4) HypergeometricU[-nu/2, 1/2,
+z²/2]` (`Re z > 0`, DLMF 12.7.14) and by the two-term `Hypergeometric1F1` form
+valid everywhere.
+
+- **Exact values.** `ParabolicCylinderD[nu, 0] = 2^(nu/2) Sqrt[Pi]/Gamma[(1-nu)/2]`
+  for every order, symbolic included (`ParabolicCylinderD[1, 0] = 0`,
+  `ParabolicCylinderD[2, 0] = -1`). Any other exact call stays unevaluated, as in
+  the reference system — `ParabolicCylinderD[2, z]` and `ParabolicCylinderD[1, 2]`
+  are returned as they are; `N` evaluates them, and `NumericQ` is `True` for
+  numeric arguments.
+- **FunctionExpand** rewrites an exact integer order `|n| <= 200`: `n >= 0` to the
+  Hermite form `2^(-n/2) E^(-z²/4) HermiteH[n, z/Sqrt[2]]` (DLMF 12.7.2), `n < 0`
+  through `D_-1 = E^(z²/4) Sqrt[Pi/2] Erfc[z/Sqrt[2]]` and the recurrence
+  `D_{k-1} = (z D_k - D_{k+1})/k`.
+- **Numerics.** With an inexact argument, at machine or arbitrary precision, real
+  or complex order and argument: `ParabolicCylinderD[2.5, 3.] = 1.29848`,
+  `ParabolicCylinderD[2.5, -3.] = -0.942235`, `ParabolicCylinderD[2.5, 3. + 2. I]
+  = 1.21695 - 6.63911 I`, `N[ParabolicCylinderD[1/3, 2], 30] =
+  0.474092755602535213964624995771`. Values outside the double range come back as
+  extended-range reals, never `0.` or `Overflow[]`:
+  `ParabolicCylinderD[2.5, 60.] = 3.80293*10^-387`.
+  - *Machine kernel* (real order `|nu| <= 40`, real `z`; shared bit-for-bit by the
+    scalar call, packed / `NDArray` buffers and `Compile[]`): the Poincaré
+    expansion for `z >= 9`; for `1.5 < z < 9` the recessive solution integrated
+    backward by Taylor steps of the ODE from a point where the expansion holds
+    (stable, since the recessive solution grows towards the origin; steps land on
+    exactly representable points and `z²/4 - nu - 1/2` is carried in
+    double-double); for `-12 <= z <= 1.5` the Maclaurin form summed in double, or
+    double-double when the series cancels; for `z < -12` the connection formula
+    `D_nu(-t) = cos(pi nu) D_nu(t) + Sqrt[2 Pi]/Gamma[-nu] t^(-nu-1) e^(t²/4) Σ
+    (nu+1)_{2s}/(s! (2t²)^s)`. Every exponential is applied through an exactly
+    reduced exponent. Complex `z` uses the machine `HypergeometricU` /
+    `Hypergeometric1F1` kernels. Whatever the double algorithms decline (a point
+    near a zero on the negative axis, `|nu| > 40`, a complex order) is answered
+    inside the kernel by arb at 53 bits, so a buffer never leaves its fast path.
+    Against mpmath over 2300 random points: real median 0.7 ulp, 99th percentile
+    13 ulp; complex median 2.8 ulp, max 31 ulp.
+  - *Arbitrary precision:* FLINT/arb, `acb_hypgeom_u` for `Re z > 0` and the
+    `acb_hypgeom_m` / `acb_rgamma` form elsewhere, inside a precision ladder that
+    also climbs past a confluent kernel that cannot bound its expansion at low
+    precision.
+- **Derivative.** `D[ParabolicCylinderD[nu, z], z] = z/2 ParabolicCylinderD[nu, z]
+  - ParabolicCylinderD[nu + 1, z]` (DLMF 12.8.2); the order derivative stays the
+  inert `Derivative[1, 0][ParabolicCylinderD][nu, z]`. `Series` about `z = 0`
+  follows from it.
+- **Listable**, threads over packed arrays and visible `NDArray`s (real and
+  complex buffers, buffers in either slot), and compiles at scalar and rank-1
+  shapes (`CompileDiagnostics` reports `Compiled -> True`).
+- **Performance** (2.2 GHz Intel, 2026-11-09). Machine scalar ~1.7 µs per call
+  in a `Do` loop (wolframscript 1.6 ms; SciPy `pbdv` 12.6 µs from Python); a
+  10^6-element packed buffer `ParabolicCylinderD[2.5, x]`, `x` uniform on
+  [-5, 5], 1.1 s wall (threaded) where SciPy `pbdv` takes 8.4 s; at 50 digits
+  0.14 ms per value (mpmath 0.78 ms); machine complex order 0.12 ms (mpmath
+  1.6 ms). The reference system's complex-order values are wrong in the 13th
+  digit (`ParabolicCylinderD[2.5 + I, -3. + 2 I]`); Mathilda agrees with mpmath.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= ParabolicCylinderD[2.5, 3.]
+Out[1]= 1.29848
+
+In[2]:= ParabolicCylinderD[nu, 0]
+Out[2]= (2^(nu/2) Sqrt[Pi])/Gamma[1/2 - nu/2]
+
+In[3]:= D[ParabolicCylinderD[nu, z], z]
+Out[3]= 1/2 z ParabolicCylinderD[nu, z] - ParabolicCylinderD[1 + nu, z]
+
+In[4]:= FunctionExpand[ParabolicCylinderD[-2, z]]
+Out[4]= E^(-1/4 z^2) - E^(1/4 z^2) Sqrt[1/2 Pi] z Erfc[z/Sqrt[2]]
 ```
 
 ## MathieuC and MathieuCPrime

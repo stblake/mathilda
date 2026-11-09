@@ -1358,6 +1358,132 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Parabolic cylinder function D_nu(z)                                */
+/* ------------------------------------------------------------------ */
+/* Arb has no parabolic cylinder kernel, so compose it from the confluent
+ * functions, each on the side where it does not cancel (see
+ * special_functions/parabolic_cylinder.c for the analysis), x = z^2/2:
+ *
+ *   Re z > 0:  D = 2^(nu/2) e^(-x/2) U(-nu/2, 1/2, x)
+ *   else:      D = 2^(nu/2) Sqrt[Pi] e^(-x/2) [ M(-nu/2, 1/2, x) / Gamma((1-nu)/2)
+ *                                   - Sqrt[2] z M((1-nu)/2, 3/2, x) / Gamma(-nu/2) ]
+ *
+ * acb_rgamma is entire (zero at the poles), so the second form is valid for any
+ * complex nu, and x stays off U's cut whenever Re z > 0. */
+static void nb_pcfd(acb_t res, const acb_t nu, const acb_t z, slong prec) {
+    acb_t x, a, b, t, u, g, e;
+    acb_init(x); acb_init(a); acb_init(b); acb_init(t);
+    acb_init(u); acb_init(g); acb_init(e);
+
+    acb_mul(x, z, z, prec);
+    acb_mul_2exp_si(x, x, -1);                     /* x = z^2/2            */
+    acb_mul_2exp_si(a, nu, -1);                    /* nu/2                 */
+
+    if (arb_is_positive(acb_realref(z))) {
+        acb_neg(t, a);                             /* -nu/2                */
+        acb_set_d(b, 0.5);
+        acb_hypgeom_u(u, t, b, x, prec);
+    } else {
+        /* first term: M(-nu/2, 1/2, x) / Gamma((1 - nu)/2) */
+        acb_neg(t, a);
+        acb_set_d(b, 0.5);
+        acb_hypgeom_m(u, t, b, x, 0, prec);
+        acb_add(t, t, b, prec);                    /* (1 - nu)/2           */
+        acb_rgamma(g, t, prec);
+        acb_mul(u, u, g, prec);
+        /* second term: Sqrt[2] z M((1-nu)/2, 3/2, x) / Gamma(-nu/2) */
+        acb_set_d(b, 1.5);
+        acb_hypgeom_m(e, t, b, x, 0, prec);
+        acb_neg(t, a);
+        acb_rgamma(g, t, prec);
+        acb_mul(e, e, g, prec);
+        acb_mul(e, e, z, prec);
+        acb_set_ui(t, 2);
+        acb_sqrt(t, t, prec);
+        acb_mul(e, e, t, prec);
+        acb_sub(u, u, e, prec);
+        acb_const_pi(t, prec);
+        acb_sqrt(t, t, prec);
+        acb_mul(u, u, t, prec);                    /* * Sqrt[Pi]           */
+    }
+    /* * 2^(nu/2) e^(-x/2) = exp(nu/2 log 2 - x/2) */
+    acb_set_ui(t, 2);
+    acb_log(t, t, prec);
+    acb_mul(t, t, a, prec);
+    acb_mul_2exp_si(e, x, -1);
+    acb_sub(t, t, e, prec);
+    acb_exp(t, t, prec);
+    acb_mul(res, u, t, prec);
+
+    acb_clear(x); acb_clear(a); acb_clear(b); acb_clear(t);
+    acb_clear(u); acb_clear(g); acb_clear(e);
+}
+
+/* The precision ladder for an ENTIRE function: a non-finite ball is never a
+ * pole here, only a confluent kernel that could not bound its expansion at this
+ * working precision (acb_hypgeom_m at large parameters and 53 + 32 bits), so it
+ * climbs instead of giving up. Returns the bits worth emitting (<= 0: none);
+ * NU and Z are (re)loaded by `load` at each working precision. */
+typedef int (*nb_load2)(acb_t NU, acb_t Z, const void* ctx, slong wp);
+static slong nb_pcfd_ladder(acb_t R, nb_load2 load, const void* ctx, slong outb) {
+    acb_t NU, Z;
+    acb_init(NU); acb_init(Z);
+    slong wp = outb + NB_GUARD, bits = -1;
+    for (int attempt = 0; ; attempt++) {
+        if (!load(NU, Z, ctx, wp)) break;
+        nb_pcfd(R, NU, Z, wp);
+        if (!acb_is_finite(R)) {
+            if (attempt >= NB_MAX_DOUBLINGS + 2) break;
+            wp *= 2;
+            continue;
+        }
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
+        bits = nb_emit_bits(R, outb);
+        break;
+    }
+    acb_clear(NU); acb_clear(Z);
+    return bits;
+}
+
+typedef struct { const Expr* nu; const Expr* z; } nb_pcfd_ex;
+static int nb_pcfd_load_expr(acb_t NU, acb_t Z, const void* ctx, slong wp) {
+    const nb_pcfd_ex* c = (const nb_pcfd_ex*)ctx;
+    return expr_to_acb(c->nu, NU, wp) && expr_to_acb(c->z, Z, wp);
+}
+typedef struct { double nr, ni, zr, zi; } nb_pcfd_d4;
+static int nb_pcfd_load_d(acb_t NU, acb_t Z, const void* ctx, slong wp) {
+    const nb_pcfd_d4* c = (const nb_pcfd_d4*)ctx;
+    (void)wp;
+    arb_set_d(acb_realref(NU), c->nr); arb_set_d(acb_imagref(NU), c->ni);
+    arb_set_d(acb_realref(Z), c->zr);  arb_set_d(acb_imagref(Z), c->zi);
+    return 1;
+}
+
+Expr* flint_num_pcfd(const Expr* nu, const Expr* z) {
+    const Expr* args[2] = { nu, z };
+    nb_pcfd_ex ctx = { nu, z };
+    acb_t R; acb_init(R);
+    slong bits = nb_pcfd_ladder(R, nb_pcfd_load_expr, &ctx, pick_out_bits(args, 2));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    return out;
+}
+
+bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double* ri) {
+    if (!isfinite(nr) || !isfinite(ni) || !isfinite(zr) || !isfinite(zi)) return false;
+    nb_pcfd_d4 ctx = { nr, ni, zr, zi };
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_pcfd_ladder(R, nb_pcfd_load_d, &ctx, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Struve function H_nu(z)                                            */
 /* ------------------------------------------------------------------ */
 /* FLINT/arb has no Struve kernel, so compose it from the regularized generalized
@@ -2737,6 +2863,10 @@ Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) { (void)phi; (voi
 Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) { (void)n; (void)m; return NULL; }
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
     (void)n; (void)phi; (void)m; return NULL;
+}
+Expr* flint_num_pcfd(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
+bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double* ri) {
+    (void)nr; (void)ni; (void)zr; (void)zi; (void)rr; (void)ri; return false;
 }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;

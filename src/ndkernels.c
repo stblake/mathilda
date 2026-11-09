@@ -44,6 +44,7 @@
 #include "special_functions/sf_machine_hyper.h"  /* complex hypergeometric-family kernels */
 #include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
 #include "special_functions/sf_machine_bessel.h"
+#include "special_functions/parabolic_cylinder.h" /* sf_machine_pcfd[_c] */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -924,6 +925,21 @@ static bool ndk_HermiteH_c(double are, double aim, double bre, double bim,
 }
 static const NDBinaryKernel NDKB_HermiteH = { ndk_HermiteH_c, true, NULL, NULL, false, NULL, NULL };
 
+/* ParabolicCylinderD[nu, z], real or complex order and argument, through
+ * sf_machine_pcfd / sf_machine_pcfd_cc -- the scalar builtin's machine helpers,
+ * so the surfaces agree bit for bit. Declines only a value outside the normal
+ * double range (the buffer is then delisted and the MPFR path answers). */
+static bool ndk_ParabolicCylinderD_c(double are, double aim, double bre, double bim,
+                                     double* ore, double* oim) {
+    if (aim != 0.0) return sf_machine_pcfd_cc(are, aim, bre, bim, ore, oim);
+    if (bim == 0.0) {
+        double v; if (!sf_machine_pcfd(are, bre, &v)) return false;
+        *ore = v; *oim = 0.0; return true;
+    }
+    return sf_machine_pcfd_c(are, bre, bim, ore, oim);
+}
+static const NDBinaryKernel NDKB_ParabolicCylinderD = { ndk_ParabolicCylinderD_c, true, NULL, NULL, false, NULL, NULL };
+
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
  * polynomial degree n) must be a real integer, but the argument `b` = x may be
@@ -1196,6 +1212,7 @@ void ndkernels_init(void) {
     REG_B(ChebyshevU,  NDKB_ChebyshevU);
     REG_B(LaguerreL,   NDKB_LaguerreL);   /* LaguerreL[n, x] (array x) */
     REG_B(HermiteH,    NDKB_HermiteH);    /* HermiteH[n, x] (array x) */
+    REG_B(ParabolicCylinderD, NDKB_ParabolicCylinderD); /* D_nu(z), real nu */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

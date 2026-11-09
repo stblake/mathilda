@@ -119,6 +119,17 @@ Expr* flint_num_hardy(const Expr* t, int theta);
 bool  flint_hardy_d(int theta, double tr, double ti, double* rr, double* ri);
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
 
+/* ParabolicCylinderD[nu, z], D_nu(z), through acb_hypgeom_u (Re z > 0) or the
+ * two-term acb_hypgeom_m / acb_rgamma form (Re z <= 0); entire in nu and z. */
+Expr* flint_num_pcfd(const Expr* nu, const Expr* z);
+/* Its machine twin at nu = nr + i ni, z = zr + i zi, correctly rounded from a
+ * certified 53-bit ball: the last resort of the machine kernel
+ * (sf_machine_pcfd*), so the scalar, packed, NDArray and Compile surfaces all
+ * answer -- and agree -- where the double algorithms decline. False without
+ * FLINT or when the value is not a finite double. */
+bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double* ri);
+
+
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
  * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The

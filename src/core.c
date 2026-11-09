@@ -73,6 +73,7 @@
 #include "riemann_siegel.h"
 #include "hermite_h.h"
 #include "whittaker.h"
+#include "parabolic_cylinder.h"
 #include "mathieu.h"
 #include "hypergeometricu.h"
 #include "airyai.h"
@@ -1014,6 +1015,7 @@ void core_init(void) {
     riemann_siegel_init();
     hermite_h_init();
     whittaker_init();
+    parabolic_cylinder_init();
     mathieu_init();
     hypergeometricu_init();
     airyai_init();

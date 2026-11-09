@@ -507,6 +507,25 @@ static Expr* fe_pfq_together(const Expr* e) {
         (Expr*[]){ lists[0], lists[1], expr_copy(e->data.function.args[2]) }, 3));
 }
 
+/* ParabolicCylinderD[n, z] at an exact integer order (|n| <= 200):
+ *   n >= 0:  2^(-n/2) E^(-z^2/4) HermiteH[n, z/Sqrt[2]]            (DLMF 12.7.2)
+ *   n <  0:  D_0 = E^(-z^2/4), D_-1 = E^(z^2/4) Sqrt[Pi/2] Erfc[z/Sqrt[2]]
+ *            (DLMF 12.7.5) and D_{k-1} = (z D_k - D_{k+1})/k downwards
+ *            (the recurrence 12.8.1). NULL for any other node. */
+static Expr* fe_pcfd_integer(const Expr* e) {
+    if (!fe_is_head(e, SYM_ParabolicCylinderD) || e->data.function.arg_count != 2) return NULL;
+    const Expr* nu = e->data.function.args[0];
+    if (nu->type != EXPR_INTEGER || nu->data.integer > 200 || nu->data.integer < -200)
+        return NULL;
+    Expr* const* args = e->data.function.args;
+    if (nu->data.integer >= 0)
+        return fe_apply("(2^(-#1/2) Exp[-#2^2/4] HermiteH[#1, #2/Sqrt[2]])&", args, 2);
+    return fe_apply(
+        "Module[{d0 = Exp[-#2^2/4], d1 = Exp[#2^2/4] Sqrt[Pi/2] Erfc[#2/Sqrt[2]], t},"
+        " Do[t = Expand[(#2 d1 - d0)/k]; d0 = d1; d1 = t, {k, -1, #1 + 1, -1}]; d1]&",
+        args, 2);
+}
+
 /* A copy of e with every expandable node replaced, bottom-up; sets *changed
  * when anything was rewritten. `which` selects the rule families. Returns an
  * owned Expr. */
@@ -555,6 +574,7 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
         if (!s) s = fe_polylog_two(node);
         if (!s) s = fe_polylog2_anharmonic(node);
         if (!s) s = fe_log_root(node);
+        if (!s) s = fe_pcfd_integer(node);
     }
     if (!s && (which & (FE_ROOTS | FE_PGAMMA))) s = fe_polygamma_closed(node);
     if (s) { expr_free(node); node = s; *changed = true; }

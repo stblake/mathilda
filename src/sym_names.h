@@ -312,6 +312,7 @@ extern const char* SYM_MathieuCPrime;
 extern const char* SYM_MathieuS;
 extern const char* SYM_MathieuSPrime;
 extern const char* SYM_WhittakerW;
+extern const char* SYM_ParabolicCylinderD;
 extern const char* SYM_HeavisideTheta;
 extern const char* SYM_HermitianMatrixQ;
 extern const char* SYM_Hessian;

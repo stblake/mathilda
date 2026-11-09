@@ -591,6 +591,7 @@ set(COMMON_SRC
     ../src/special_functions/riemann_siegel.c
     ../src/special_functions/hermite_h.c
     ../src/special_functions/whittaker.c
+    ../src/special_functions/parabolic_cylinder.c
     ../src/special_functions/hypergeometricu.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
@@ -4346,6 +4347,10 @@ add_test(NAME hermite_h_tests COMMAND hermite_h_tests)
 add_executable(whittaker_tests test_whittaker.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(whittaker_tests PRIVATE ../src)
 add_test(NAME whittaker_tests COMMAND whittaker_tests)
+
+add_executable(parabolic_cylinder_tests test_parabolic_cylinder.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(parabolic_cylinder_tests PRIVATE ../src)
+add_test(NAME parabolic_cylinder_tests COMMAND parabolic_cylinder_tests)
 
 add_executable(mathieu_tests test_mathieu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mathieu_tests PRIVATE ../src)
