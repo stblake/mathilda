@@ -61,6 +61,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "parse.h"   /* parse_expression: the Jacobi derivative templates */
 
 /* ---------------------------------------------------------------------- */
 /* Tiny expression builders                                                */
@@ -2464,6 +2465,58 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- The Jacobi elliptic family, f[U, M]: d/dU from DLMF 22.13 (and the
+         * EllipticF integrands for the inverses), as pure-function templates in
+         * (U, M); d/dM stays the inert Derivative[0, 1][f][U, M]. */
+        if (n == 2 && h && (strncmp(h, "Jacobi", 6) == 0 || strncmp(h, "InverseJacobi", 13) == 0)) {
+            static const char* const JD[][2] = {
+                { "JacobiSN", "(JacobiCN[#1, #2] JacobiDN[#1, #2])&" },
+                { "JacobiCN", "(-JacobiSN[#1, #2] JacobiDN[#1, #2])&" },
+                { "JacobiDN", "(-#2 JacobiSN[#1, #2] JacobiCN[#1, #2])&" },
+                { "JacobiCD", "((-1 + #2) JacobiND[#1, #2] JacobiSD[#1, #2])&" },
+                { "JacobiCS", "(-JacobiDS[#1, #2] JacobiNS[#1, #2])&" },
+                { "JacobiDC", "((1 - #2) JacobiNC[#1, #2] JacobiSC[#1, #2])&" },
+                { "JacobiDS", "(-JacobiCS[#1, #2] JacobiNS[#1, #2])&" },
+                { "JacobiNC", "(JacobiDC[#1, #2] JacobiSC[#1, #2])&" },
+                { "JacobiND", "(#2 JacobiCD[#1, #2] JacobiSD[#1, #2])&" },
+                { "JacobiNS", "(-JacobiCS[#1, #2] JacobiDS[#1, #2])&" },
+                { "JacobiSC", "(JacobiDC[#1, #2] JacobiNC[#1, #2])&" },
+                { "JacobiSD", "(JacobiCD[#1, #2] JacobiND[#1, #2])&" },
+                { "JacobiAmplitude", "JacobiDN[#1, #2]&" },
+                { "InverseJacobiSN", "(JacobiCD[InverseJacobiSN[#1, #2], #2]/(1 - #1^2))&" },
+                { "InverseJacobiCN", "(-JacobiDS[InverseJacobiCN[#1, #2], #2]/(1 - #2 + #2 #1^2))&" },
+                { "InverseJacobiDN", "(-JacobiCS[InverseJacobiDN[#1, #2], #2]/(-1 + #2 + #1^2))&" },
+            };
+            for (size_t j = 0; j < sizeof(JD) / sizeof(JD[0]); j++) {
+                if (strcmp(h, JD[j][0]) != 0) continue;
+                Expr* U = args[0];
+                Expr* M = args[1];
+                Expr* dU = deriv_of(U, x, nonconsts);
+                Expr* dM = deriv_of(M, x, nonconsts);
+                Expr* terms[2];
+                size_t nt = 0;
+                if (!is_lit_zero(dU)) {
+                    Expr* f = parse_expression(JD[j][1]);
+                    Expr* g = expr_new_function(f, (Expr*[]){ expr_copy(U), expr_copy(M) }, 2);
+                    terms[nt++] = mk_fn2("Times", g, dU);
+                } else {
+                    expr_free(dU);
+                }
+                if (!is_lit_zero(dM)) {
+                    Expr* op = expr_new_function(mk_sym("Derivative"),
+                                  (Expr*[]){ mk_int(0), mk_int(1) }, 2);
+                    Expr* op_g = mk_fn_head1(op, mk_sym(JD[j][0]));
+                    Expr* applied = expr_new_function(op_g,
+                                  (Expr*[]){ expr_copy(U), expr_copy(M) }, 2);
+                    terms[nt++] = mk_fn2("Times", applied, dM);
+                } else {
+                    expr_free(dM);
+                }
+                if (nt == 0) return mk_int(0);
+                if (nt == 1) return terms[0];
+                return mk_fn2("Plus", terms[0], terms[1]);
+            }
+        }
         /* --- GegenbauerC[N, L, Z] (DLMF 18.9.19):
          *   d/dZ C_N^L(Z) = 2 L C_{N-1}^{L+1}(Z);
          *   d/dN, d/dL are inert Derivative[1,0,0] / Derivative[0,1,0] forms.

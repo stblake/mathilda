@@ -137,6 +137,14 @@ Expr* flint_num_gegenbauer(const Expr* n, const Expr* lam, const Expr* z);
 bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, double zi,
                         double* rr, double* ri);
 
+/* The Jacobi elliptic family at (u, m): which = 0..11 the ratios pq in the
+ * JAC_* order of special_functions/jacobi_elliptic.h, 12 the amplitude. Theta
+ * quotients at tau = i K(1-m)/K(m) after the real-m transformations. And its
+ * machine twin. */
+Expr* flint_num_jacobi(int which, const Expr* u, const Expr* m);
+bool flint_jacobi_d(int which, double ur, double ui, double mr, double mi,
+                    double* rr, double* ri);
+
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
  * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The

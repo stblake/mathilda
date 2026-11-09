@@ -75,6 +75,7 @@
 #include "whittaker.h"
 #include "parabolic_cylinder.h"
 #include "gegenbauer.h"
+#include "jacobi_elliptic.h"
 #include "mathieu.h"
 #include "hypergeometricu.h"
 #include "airyai.h"
@@ -1018,6 +1019,7 @@ void core_init(void) {
     whittaker_init();
     parabolic_cylinder_init();
     gegenbauer_init();
+    jacobi_elliptic_init();
     mathieu_init();
     hypergeometricu_init();
     airyai_init();

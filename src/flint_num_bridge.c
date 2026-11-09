@@ -32,6 +32,7 @@
 #include <flint/dirichlet.h>
 #include <flint/ulong_extras.h>
 #include <flint/acb_elliptic.h>
+#include <flint/acb_modular.h>
 #include <flint/acb_hypgeom.h>
 #include <flint/arb_hypgeom.h>
 #include <flint/acb_poly.h>
@@ -1541,8 +1542,8 @@ static void nb_gegenbauer(acb_t res, const acb_t n, const acb_t lam, const acb_t
     acb_add(b, b, n, prec);                         /* n + 2l */
     acb_set_d(c, 0.5);
     acb_add(c, c, lam, prec);                       /* l + 1/2 */
-    acb_sub_ui(t, z, 1, prec);
-    acb_neg(t, t);
+    acb_one(t);
+    acb_sub(t, t, z, prec);
     acb_mul_2exp_si(t, t, -1);                      /* (1 - z)/2 */
     acb_hypgeom_2f1(f, a, b, c, t, ACB_HYPGEOM_2F1_REGULARIZED, prec);
     acb_gamma(g, b, prec);
@@ -1618,6 +1619,159 @@ bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, d
     acb_t R; acb_init(R);
     bool ok = false;
     if (nb_ladder3(R, nb_gegenbauer, nb_load3_d, &ctx, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Jacobi elliptic functions (parameter m)                            */
+/* ------------------------------------------------------------------ */
+/* sn, cn, dn by theta quotients (DLMF 22.2.4), for m off (-inf, 0] u [1, inf):
+ *   tau = i K(1-m)/K(m), z = u/(2K) (arb's theta takes pi z),
+ *   sn = th3(0) th1(z) / (th2(0) th4(z)), cn = th4(0) th2(z) / (th2(0) th4(z)),
+ *   dn = th4(0) th3(z) / (th3(0) th4(z)).
+ * Real m outside [0, 1] -- on a cut of K or K' -- goes through the reciprocal
+ * (m > 1) or imaginary-modulus (m < 0) transformation first, exactly as the
+ * machine kernel does. */
+static void nb_jac_theta(acb_t S, acb_t C, acb_t D, const acb_t u, const acb_t m, slong prec) {
+    acb_t K, Kp, tau, z, t1, t2, t3, t4, a1, a2, a3, a4, w;
+    acb_init(K); acb_init(Kp); acb_init(tau); acb_init(z); acb_init(w);
+    acb_init(t1); acb_init(t2); acb_init(t3); acb_init(t4);
+    acb_init(a1); acb_init(a2); acb_init(a3); acb_init(a4);
+    acb_elliptic_k(K, m, prec);
+    acb_one(w);
+    acb_sub(w, w, m, prec);
+    acb_elliptic_k(Kp, w, prec);
+    acb_div(tau, Kp, K, prec);
+    acb_mul_onei(tau, tau);
+    acb_mul_2exp_si(w, K, 1);
+    acb_div(z, u, w, prec);
+    acb_modular_theta(t1, t2, t3, t4, z, tau, prec);
+    acb_zero(w);
+    acb_modular_theta(a1, a2, a3, a4, w, tau, prec);
+    acb_mul(S, a3, t1, prec); acb_mul(w, a2, t4, prec); acb_div(S, S, w, prec);
+    acb_mul(C, a4, t2, prec); acb_div(C, C, w, prec);
+    acb_mul(D, a4, t3, prec); acb_mul(w, a3, t4, prec); acb_div(D, D, w, prec);
+    acb_clear(K); acb_clear(Kp); acb_clear(tau); acb_clear(z); acb_clear(w);
+    acb_clear(t1); acb_clear(t2); acb_clear(t3); acb_clear(t4);
+    acb_clear(a1); acb_clear(a2); acb_clear(a3); acb_clear(a4);
+}
+
+static void nb_jac_scd(acb_t S, acb_t C, acb_t D, const acb_t u, const acb_t m, slong prec) {
+    if (acb_is_zero(m)) {
+        acb_sin_cos(S, C, u, prec);
+        acb_one(D);
+        return;
+    }
+    if (acb_is_one(m)) {
+        acb_tanh(S, u, prec);
+        acb_sech(C, u, prec);
+        acb_set(D, C);
+        return;
+    }
+    if (arb_is_zero(acb_imagref(m))) {
+        const arb_struct* mr = acb_realref(m);
+        acb_t v, mm, r, s, c, d;
+        acb_init(v); acb_init(mm); acb_init(r); acb_init(s); acb_init(c); acb_init(d);
+        if (arf_cmp_si(arb_midref(mr), 1) > 0) {
+            acb_sqrt(r, m, prec);
+            acb_mul(v, u, r, prec);
+            acb_inv(mm, m, prec);
+            nb_jac_theta(s, c, d, v, mm, prec);
+            acb_div(S, s, r, prec); acb_set(C, d); acb_set(D, c);
+        } else if (arf_sgn(arb_midref(mr)) < 0) {
+            acb_one(r);
+            acb_sub(r, r, m, prec);                 /* 1 - m */
+            acb_div(mm, m, r, prec);
+            acb_neg(mm, mm);                        /* -m/(1-m) */
+            acb_sqrt(r, r, prec);
+            acb_mul(v, u, r, prec);
+            nb_jac_theta(s, c, d, v, mm, prec);
+            acb_div(S, s, d, prec); acb_div(S, S, r, prec);
+            acb_div(C, c, d, prec);
+            acb_inv(D, d, prec);
+        } else {
+            nb_jac_theta(S, C, D, u, m, prec);
+        }
+        acb_clear(v); acb_clear(mm); acb_clear(r); acb_clear(s); acb_clear(c); acb_clear(d);
+        return;
+    }
+    nb_jac_theta(S, C, D, u, m, prec);
+}
+
+/* code: 0..11 the pq ratios (JAC_* order of jacobi_elliptic.h), 12 the
+ * amplitude; passed in as the exact integer W so this fits the nb_fn3 shape. */
+static void nb_jacobi(acb_t res, const acb_t u, const acb_t m, const acb_t W, slong prec) {
+    static const int P[12] = { 0, 1, 2, 1, 1, 2, 2, 3, 3, 3, 0, 0 };
+    static const int Q[12] = { 3, 3, 3, 2, 0, 1, 0, 1, 2, 0, 1, 2 };
+    slong which = arf_get_si(arb_midref(acb_realref(W)), ARF_RND_NEAR);
+    acb_t v[4];
+    for (int i = 0; i < 4; i++) acb_init(v[i]);
+    nb_jac_scd(v[0], v[1], v[2], u, m, prec);
+    acb_one(v[3]);
+    if (which < 12) {
+        acb_div(res, v[P[which]], v[Q[which]], prec);
+    } else {
+        /* am = -i log(cn + i sn) + 2 pi k, k = round((pi Re u/(2 Re K) - Re)/(2 pi)) */
+        acb_t w, K;
+        acb_init(w); acb_init(K);
+        acb_mul_onei(w, v[0]);
+        acb_add(w, w, v[1], prec);
+        acb_log(w, w, prec);
+        acb_div_onei(res, w);
+        double ur = arf_get_d(arb_midref(acb_realref(u)), ARF_RND_NEAR);
+        double mr = arf_get_d(arb_midref(acb_realref(m)), ARF_RND_NEAR);
+        double Kr = 0.0;
+        if (arb_is_zero(acb_imagref(m)) && mr > 1.0) {
+            acb_inv(K, m, 53); acb_elliptic_k(K, K, 53);
+            Kr = arf_get_d(arb_midref(acb_realref(K)), ARF_RND_NEAR) / sqrt(mr);
+        } else if (!acb_is_zero(m)) {
+            acb_elliptic_k(K, m, 53);
+            Kr = arf_get_d(arb_midref(acb_realref(K)), ARF_RND_NEAR);
+        }
+        if (Kr > 0.0 && isfinite(Kr)) {
+            double pr = arf_get_d(arb_midref(acb_realref(res)), ARF_RND_NEAR);
+            double k = floor((3.14159265358979323846 * ur / (2.0 * Kr) - pr)
+                             / (2.0 * 3.14159265358979323846) + 0.5);
+            if (k != 0.0 && fabs(k) < 1e15) {
+                arb_t t; arb_init(t);
+                arb_const_pi(t, prec);
+                arb_mul_si(t, t, (slong)(2 * k), prec);
+                arb_add(acb_realref(res), acb_realref(res), t, prec);
+                arb_clear(t);
+            }
+        }
+        /* real u and m: the value is real */
+        if (arb_is_zero(acb_imagref(u)) && arb_is_zero(acb_imagref(m)))
+            arb_zero(acb_imagref(res));
+        acb_clear(w); acb_clear(K);
+    }
+    for (int i = 0; i < 4; i++) acb_clear(v[i]);
+}
+
+Expr* flint_num_jacobi(int which, const Expr* u, const Expr* m) {
+    Expr* W = expr_new_integer(which);
+    const Expr* args[2] = { u, m };
+    nb_ex3 ctx = { u, m, W };
+    acb_t R; acb_init(R);
+    slong bits = nb_ladder3(R, nb_jacobi, nb_load3_expr, &ctx, pick_out_bits(args, 2));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    expr_free(W);
+    return out;
+}
+
+bool flint_jacobi_d(int which, double ur, double ui, double mr, double mi,
+                    double* rr, double* ri) {
+    nb_d6 ctx = { { ur, ui, mr, mi, (double)which, 0.0 } };
+    for (int i = 0; i < 4; i++) if (!isfinite(ctx.v[i])) return false;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_ladder3(R, nb_jacobi, nb_load3_d, &ctx, 53) > 0) {
         *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
         *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
         ok = isfinite(*rr) && isfinite(*ri);
@@ -3017,6 +3171,14 @@ Expr* flint_num_gegenbauer(const Expr* n, const Expr* lam, const Expr* z) {
 bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, double zi,
                         double* rr, double* ri) {
     (void)nr; (void)ni; (void)lr; (void)li; (void)zr; (void)zi; (void)rr; (void)ri;
+    return false;
+}
+Expr* flint_num_jacobi(int which, const Expr* u, const Expr* m) {
+    (void)which; (void)u; (void)m; return NULL;
+}
+bool flint_jacobi_d(int which, double ur, double ui, double mr, double mi,
+                    double* rr, double* ri) {
+    (void)which; (void)ur; (void)ui; (void)mr; (void)mi; (void)rr; (void)ri;
     return false;
 }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {

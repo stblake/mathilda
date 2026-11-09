@@ -593,6 +593,7 @@ set(COMMON_SRC
     ../src/special_functions/whittaker.c
     ../src/special_functions/parabolic_cylinder.c
     ../src/special_functions/gegenbauer.c
+    ../src/special_functions/jacobi_elliptic.c
     ../src/special_functions/hypergeometricu.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
@@ -4356,6 +4357,10 @@ add_test(NAME parabolic_cylinder_tests COMMAND parabolic_cylinder_tests)
 add_executable(gegenbauer_tests test_gegenbauer.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(gegenbauer_tests PRIVATE ../src)
 add_test(NAME gegenbauer_tests COMMAND gegenbauer_tests)
+
+add_executable(jacobi_elliptic_tests test_jacobi_elliptic.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(jacobi_elliptic_tests PRIVATE ../src)
+add_test(NAME jacobi_elliptic_tests COMMAND jacobi_elliptic_tests)
 
 add_executable(mathieu_tests test_mathieu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mathieu_tests PRIVATE ../src)

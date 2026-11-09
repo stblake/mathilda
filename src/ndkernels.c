@@ -46,6 +46,7 @@
 #include "special_functions/sf_machine_bessel.h"
 #include "special_functions/parabolic_cylinder.h" /* sf_machine_pcfd[_c] */
 #include "special_functions/gegenbauer.h"         /* sf_machine_gegenbauer[2]_c */
+#include "special_functions/jacobi_elliptic.h"    /* sf_machine_jacobi */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -950,6 +951,24 @@ static bool ndk_GegenbauerC_c(double are, double aim, double bre, double bim,
 }
 static const NDBinaryKernel NDKB_GegenbauerC = { ndk_GegenbauerC_c, false, NULL, NULL, false, NULL, NULL };
 
+/* The Jacobi elliptic family (JacobiSN ... JacobiSD, JacobiAmplitude,
+ * InverseJacobiSN / CN / DN): (u, m) with real or complex parts, through
+ * sf_machine_jacobi -- the scalar builtins' helper, so the surfaces agree bit
+ * for bit. Real u and m give a real value (the inverses decline where theirs is
+ * complex, and the List path answers). */
+#define NDK_JAC(NAME, CODE)                                                       \
+    static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,    \
+                               double* ore, double* oim) {                        \
+        return sf_machine_jacobi(CODE, are, aim, bre, bim, ore, oim);              \
+    }                                                                             \
+    static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL, NULL };
+NDK_JAC(JacobiSN, JAC_SN) NDK_JAC(JacobiCN, JAC_CN) NDK_JAC(JacobiDN, JAC_DN)
+NDK_JAC(JacobiCD, JAC_CD) NDK_JAC(JacobiCS, JAC_CS) NDK_JAC(JacobiDC, JAC_DC)
+NDK_JAC(JacobiDS, JAC_DS) NDK_JAC(JacobiNC, JAC_NC) NDK_JAC(JacobiND, JAC_ND)
+NDK_JAC(JacobiNS, JAC_NS) NDK_JAC(JacobiSC, JAC_SC) NDK_JAC(JacobiSD, JAC_SD)
+NDK_JAC(JacobiAmplitude, JAC_AM) NDK_JAC(InverseJacobiSN, JAC_ISN)
+NDK_JAC(InverseJacobiCN, JAC_ICN) NDK_JAC(InverseJacobiDN, JAC_IDN)
+
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
  * polynomial degree n) must be a real integer, but the argument `b` = x may be
@@ -1234,6 +1253,13 @@ void ndkernels_init(void) {
     REG_B(ParabolicCylinderD, NDKB_ParabolicCylinderD); /* D_nu(z), real nu */
     REG_B(GegenbauerC, NDKB_GegenbauerC);   /* GegenbauerC[n, z] = 2 T_n(z)/n */
     REG_N(GegenbauerC);                     /* GegenbauerC[n, l, z] */
+    REG_B(JacobiSN, NDKB_JacobiSN); REG_B(JacobiCN, NDKB_JacobiCN); REG_B(JacobiDN, NDKB_JacobiDN);
+    REG_B(JacobiCD, NDKB_JacobiCD); REG_B(JacobiCS, NDKB_JacobiCS); REG_B(JacobiDC, NDKB_JacobiDC);
+    REG_B(JacobiDS, NDKB_JacobiDS); REG_B(JacobiNC, NDKB_JacobiNC); REG_B(JacobiND, NDKB_JacobiND);
+    REG_B(JacobiNS, NDKB_JacobiNS); REG_B(JacobiSC, NDKB_JacobiSC); REG_B(JacobiSD, NDKB_JacobiSD);
+    REG_B(JacobiAmplitude, NDKB_JacobiAmplitude);
+    REG_B(InverseJacobiSN, NDKB_InverseJacobiSN); REG_B(InverseJacobiCN, NDKB_InverseJacobiCN);
+    REG_B(InverseJacobiDN, NDKB_InverseJacobiDN);
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

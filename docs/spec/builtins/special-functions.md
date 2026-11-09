@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3563,6 +3563,70 @@ Out[2]= -1.58217
 
 In[3]:= D[GegenbauerC[n, a, x], x]
 Out[3]= 2 a GegenbauerC[-1 + n, 1 + a, x]
+```
+
+## JacobiSN, JacobiCN, JacobiDN and the Jacobi ratios
+
+`JacobiSN[u, m]`, `JacobiCN[u, m]`, `JacobiDN[u, m]` give the Jacobi elliptic
+functions `sn(u|m)`, `cn(u|m)`, `dn(u|m)` in the **parameter** convention
+`m = k^2` (as `EllipticK`, `EllipticF`). The nine ratios `JacobiCD`, `JacobiCS`,
+`JacobiDC`, `JacobiDS`, `JacobiNC`, `JacobiND`, `JacobiNS`, `JacobiSC`,
+`JacobiSD` are `pq = p/q` with `n = 1` (`JacobiCD = cn/dn`, `JacobiNS = 1/sn`, ...).
+`JacobiAmplitude[u, m]` gives `am(u|m)`, with `Sin[am] = sn`, `Cos[am] = cn`,
+continuous in `u`; `InverseJacobiSN[v, m] = EllipticF[ArcSin[v], m]`,
+`InverseJacobiCN[v, m] = EllipticF[ArcCos[v], m]`, `InverseJacobiDN[v, m]` the
+inverse of `dn`.
+
+- **Exact rules.** `u = 0` (`sn = 0`, `cn = dn = 1`, a ratio over `sn` is
+  `ComplexInfinity`), `m = 0` (circular: `JacobiCS[u, 0] = Cot[u]`), `m = 1`
+  (hyperbolic: `JacobiCS[u, 1] = Csch[u]`), parity (`JacobiSN[-u, m] =
+  -JacobiSN[u, m]`; a ratio with one `s` is odd, the rest even);
+  `JacobiAmplitude[u, 0] = u`, `JacobiAmplitude[u, 1] = 2 ArcTan[Tanh[u/2]]` (the
+  Gudermannian), `JacobiAmplitude[0, m] = 0`; `InverseJacobiSN[1, m] =
+  InverseJacobiCN[0, m] = EllipticK[m]`, `InverseJacobiSN[v, 0] = ArcSin[v]`,
+  `InverseJacobiSN[v, 1] = ArcTanh[v]`, `InverseJacobiCN[v, 0] = ArcCos[v]`,
+  `InverseJacobiDN[v, 1] = ArcSech[v]`.
+- **Branches** (the reference system's). The amplitude winds by `2 Pi` per
+  `4K` for every real `m`: `JacobiAmplitude[10., 1.7] = 11.7593`,
+  `JacobiAmplitude[10., -2.3] = 13.6764` -- the principal `-I Log[cn + I sn]` plus
+  `2 Pi Round[(Pi Re[u]/(2 Re[K]) - Re[phi])/(2 Pi)]`. `InverseJacobiDN[v, m]` for
+  `0 <= v < Sqrt[1 - m]` is `K + I y` (`InverseJacobiDN[0.4, 0.3] = 1.71389 +
+  1.56202 I`; the plain `EllipticF` form gives the conjugate there).
+- **Numerics.** Machine kernel `sf_machine_jacobi`, shared by the scalar call,
+  packed / `NDArray` buffers (any slot) and `Compile[]`: for real `u` and
+  `0 <= m <= 1`, `u` is reduced modulo `4K` and then to the nearest quarter
+  period with `4K = 2 Pi/AGM(1, Sqrt[1-m])` in double-double, and the
+  arithmetic-geometric-mean method (DLMF 22.20) runs on the small residual (so
+  values near the zeros of `sn`, `cn` keep full relative accuracy). Complex `u`
+  uses the addition formulas over `(x|m)` and `(y|1-m)`; real `m > 1` and
+  `m < 0` the reciprocal and imaginary-modulus transformations, carried in
+  double-double. Complex `m` and anything declined is answered by arb at 53 bits
+  inside the kernel. Arbitrary precision: arb theta quotients at
+  `tau = I K(1-m)/K(m)`, `z = u/(2K)`. The inverses use `EllipticF`'s machine
+  Carlson kernel where real, and `EllipticF[ArcSin[...]]` elsewhere. Accuracy
+  against mpmath (2550 points; |u| up to 40, every m regime): real median 0.4
+  ulp, max 19 ulp; complex median 0.7 ulp, max 7 ulp; amplitude max 2.6 ulp;
+  inverses max 3.6 ulp.
+- **Derivatives** in `u` (DLMF 22.13): `D[JacobiSN[u, m], u] = JacobiCN[u, m]
+  JacobiDN[u, m]`, ..., `D[JacobiAmplitude[u, m], u] = JacobiDN[u, m]`,
+  `D[InverseJacobiSN[v, m], v] = JacobiCD[InverseJacobiSN[v, m], m]/(1 - v^2)`;
+  the `m` derivative stays inert.
+- **Performance** (2.2 GHz Intel): machine scalar 1.1 µs (wolframscript 6.9 µs,
+  SciPy `ellipj` 3.9 µs from Python); 10^6 packed `JacobiSN[x, 0.3]` 0.13 s
+  (wolframscript ~13 s, SciPy `ellipj` 0.34 s); 50 digits 56 µs (wolframscript
+  74 µs, mpmath 336 µs); machine complex `m` 53 µs (mpmath 1.0 ms).
+
+Attributes: `Listable`, `NumericFunction`, `Protected` (all sixteen).
+
+```mathematica
+In[1]:= JacobiSN[0.7, 0.3]
+Out[1]= 0.632305
+
+In[2]:= D[JacobiCD[u, m], u]
+Out[2]= (-1 + m) JacobiND[u, m] JacobiSD[u, m]
+
+In[3]:= JacobiAmplitude[10., 1.7]
+Out[3]= 11.7593
 ```
 
 ## MathieuC and MathieuCPrime
