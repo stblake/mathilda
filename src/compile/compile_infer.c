@@ -371,6 +371,28 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         }
         *out = cx ? CT_COMPLEX : CT_REAL; return true;
     }
+    /* WeierstrassP / PPrime / Zeta / Sigma [u, {g2, g3}]: a literal two-element
+     * List of scalar invariants, u a scalar or an ARRAY (the head threads over
+     * u; the fused loop feeds it as a tile). Real invariants at real u give a
+     * real value; complex anywhere -> complex. */
+    if ((h == SYM_WeierstrassP || h == SYM_WeierstrassPPrime || h == SYM_WeierstrassZeta ||
+         h == SYM_WeierstrassSigma) && na == 2) {
+        const Expr* L = A[1];
+        if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL ||
+            L->data.function.head->data.symbol.name != SYM_List || L->data.function.arg_count != 2)
+            return false;
+        CompileType t2, t3, tu;
+        if (!infer_type(c, L->data.function.args[0], &t2) ||
+            !infer_type(c, L->data.function.args[1], &t3)) return false;
+        if (CT_IS_ARRAY(t2) || CT_IS_ARRAY(t3) || t2 == CT_BOOL || t3 == CT_BOOL) return false;
+        IT(0, tu);
+        CompileType eu = CT_IS_ARRAY(tu) ? CT_ELEM(tu) : tu;
+        if (eu == CT_BOOL) return false;
+        bool cx = eu == CT_COMPLEX || t2 == CT_COMPLEX || t3 == CT_COMPLEX;
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
+        *out = CT_IS_ARRAY(tu) ? CT_ARRAY(et, CT_RANK(tu)) : et;
+        return true;
+    }
     /* DirichletL[k, j, s]: scalar integer labels k, j; s a scalar or an ARRAY
      * (DirichletL is Listable; the fused loop feeds s as a tile). The value is
      * real only for a real character at real s -- decidable at compile time

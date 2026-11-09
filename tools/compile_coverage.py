@@ -149,6 +149,11 @@ HEAD_SHAPES = {
         ("mg_v",  "array",  "{{v, _Real, 1}}",
          "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, v]"),
     ],
+    # The Weierstrass functions [u, {g2, g3}]: a literal invariant List, u a
+    # scalar or a tile.
+    **{h: [(h[11:15].lower() + "_s", "scalar", "{{x, _Real}}", h + "[x, {1., 2.}]"),
+           (h[11:15].lower() + "_v", "array", "{{v, _Real, 1}}", h + "[v, {1., 2.}]")]
+       for h in ("WeierstrassP", "WeierstrassPPrime", "WeierstrassZeta", "WeierstrassSigma")},
 }
 
 FAMILIES = ["scalar", "array"]

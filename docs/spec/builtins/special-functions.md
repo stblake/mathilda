@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the Weierstrass elliptic functions `WeierstrassP`, `WeierstrassPPrime`, `WeierstrassZeta`, `WeierstrassSigma` (with `WeierstrassHalfPeriods` and `WeierstrassInvariants`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3724,6 +3724,90 @@ Out[2]= ConditionalExpression[0, Abs[q] < 1]
 
 In[3]:= D[EllipticTheta[3, u, q], u]
 Out[3]= EllipticThetaPrime[3, u, q]
+```
+
+## WeierstrassP, WeierstrassPPrime, WeierstrassZeta, WeierstrassSigma, WeierstrassHalfPeriods, WeierstrassInvariants
+
+`WeierstrassP[u, {g2, g3}]` gives the Weierstrass elliptic function `wp(u)` with
+invariants `g2`, `g3`: the solution of `wp'^2 = 4 wp^3 - g2 wp - g3` with a double
+pole at `u = 0`. `WeierstrassPPrime` is its `u`-derivative, `WeierstrassZeta` the
+zeta function (`zeta' = -wp`, `zeta ~ 1/u`) and `WeierstrassSigma` the sigma
+function (`sigma'/sigma = zeta`, `sigma ~ u`). `WeierstrassHalfPeriods[{g2, g3}]`
+gives the half-periods `{w1, w3}` of the period lattice, and
+`WeierstrassInvariants[{w1, w3}]` the invariants of the lattice with those
+half-periods.
+
+- **Half-period convention** (the reference system's, recovered from its outputs
+  on 380 sampled invariants and reproduced on all of them): the basis with
+  `tau = w3/w1` in the closed fundamental domain `|Re tau| <= 1/2`, `|tau| >= 1`;
+  on its boundary `Re tau = +1/2` (not `-1/2`) and `Re tau >= 0` on `|tau| = 1`;
+  then `Re w1 > 0` (`Im w1 < 0` when `w1` is imaginary). Real invariants with
+  `g2^3 - 27 g3^2 < 0` therefore give `{w1, w1/2 + I y}` (`w1 > 0`), and with a
+  positive discriminant a real and an imaginary half-period. The square lattice
+  (`g3 = 0`) takes `arg w1` in `[-Pi/4, Pi/4)` with `w3 = I w1`; the hexagonal one
+  (`g2 = 0`) `arg w1` in `[-Pi/6, Pi/6)` and `arg w3` in `[Pi/3, 2 Pi/3)`. Function
+  values do not depend on the choice.
+- **Exact rules.** `{g2, g3} = {0, 0}`: `1/u^2`, `-2/u^3`, `1/u`, `u`. A double root
+  (`g2^3 = 27 g3^2`, `e = -3 g3/(2 g2)`): `e + 3e Csch[Sqrt[3 e] u]^2` (and its
+  derivative, `-e u + Sqrt[3 e] Coth[..]`, `E^(-e u^2/2) u Sinc[I Sqrt[3 e] u]`) for
+  `e > 0`, the `Cot` / `Csc` / `Sinc` forms for `e < 0` (`WeierstrassP[u, {3, 1}] =
+  1 + 3/2 Cot[Sqrt[3/2] u]^2`). `u = 0` is a pole (`Power::infy`, `ComplexInfinity`;
+  `sigma(0) = 0`). Parity: `wp` even, the others odd. Exact half-periods of a
+  double root (`{Pi/Sqrt[6], DirectedInfinity[I]}`, `{-I Pi/(2 Sqrt[3]), Infinity}`)
+  and of `{0, 0}`; the exact invariants of the square (`{Gamma[1/4]^8/(256 Pi^2
+  w1^4), 0}`) and hexagonal (`{0, Gamma[1/3]^18/(4096 Pi^6 w1^6)}`) lattices.
+  `WeierstrassInvariants` of dependent half-periods emits
+  `EllipticReducedHalfPeriods::nind`. The four functions thread over a List `u`.
+- **Machine kernel** `sf_machine_weierstrass` (scalar, packed / `NDArray` `u`,
+  `Compile[]` at scalar and rank 1; `CompileDiagnostics` reports `Compiled ->
+  True`), one plan per `(g2, g3)` (an 8-slot memo): roots of `4t^3 - g2 t - g3`
+  (Cardano + Newton), a basis `w1 = K(m)/Sqrt[e1 - e3]`, `w3 = I K(1-m)/Sqrt[e1 - e3]`
+  (complex AGM), the normalisation above, and a **certificate** -- the invariants
+  recomputed from the theta constants of the reduced `tau` must reproduce
+  `(g2, g3)` to `1e-11`, else the next root ordering is tried. The basis, `tau`,
+  `1/(2 w1)`, the nome and `eta = zeta(1/2)` are then refined in double-double, so
+  `z = u/(2 w1)` is reduced modulo the lattice to `~1e-32 |z|`. With `|q| <= 0.066`
+  every theta series has at most 6 terms; the rounding of `v = Pi z0` to a double
+  is restored to first order. `wp` and `wp'` come from the theta quotients, `zeta`
+  from `2 eta z + Pi theta1'/theta1 - 2 Pi I n`, `sigma` from `theta1` times an
+  exponential whose exponent is formed in double-double. A value that cancels by
+  more than `2^2` (near a zero of the function) is recomputed by arb from the plan's
+  double-double `z` and `tau` (`flint_wp_unit_d`, ~10 µs); a plan the double route
+  cannot certify goes to arb whole. Real invariants and real `u` give a `Real`.
+- **Arbitrary precision** `flint_num_weierstrass`: the lattice in ball arithmetic
+  (`acb_poly_find_roots`, `acb_elliptic_k`, the same integer normalisation, the
+  certificate by `acb_elliptic_invariants`), then `acb_elliptic_p` / `p_jet` /
+  `zeta` / `sigma` on `(1, tau)`, on the shared precision ladder.
+- **Derivatives.** `D` in `u`: `wp'`, `6 wp^2 - g2/2`, `-wp`, `sigma zeta`; in `g2`
+  and `g3` the closed forms through `wp`, `wp'`, `zeta`, `sigma` over `g2^3 - 27
+  g3^2` (all eight checked against central differences at 40 digits).
+- **Accuracy** against mpmath at 50-60 digits (400 random points: real and complex
+  invariants of magnitude `10^-6 .. 10^6`, `u` up to 45 periods out): median 2.7 /
+  2.6 / 0.7 / 1.1 ulp (`wp`, `wp'`, `zeta`, `sigma`), max 22 / 33 / 11 / 32. The
+  reference system on the same points: median 37 / 61 / 4.8 / 17 ulp, and wrong
+  (100% error) on about 1%.
+- **Performance** (2.2 GHz Intel; wolframscript 14.0): scalar 0.9 µs with the
+  plan memoised, 20 µs for new invariants (wolframscript 97 µs / 365 µs); 10^6
+  packed real `u` 0.15 s, complex 1.0 s (wolframscript 98 s / 100 s);
+  `WeierstrassHalfPeriods` 20 µs (wolframscript 255 µs); 50 digits 0.22 ms
+  (wolframscript 0.34 ms; an mpmath theta-function composition 4.1 ms). SciPy and
+  mpmath have no Weierstrass functions.
+
+Attributes: `NumericFunction`, `Protected` (`WeierstrassHalfPeriods`,
+`WeierstrassInvariants`: `Protected`).
+
+```mathematica
+In[1]:= WeierstrassP[0.3, {1., 2.}]
+Out[1]= 11.1162
+
+In[2]:= WeierstrassHalfPeriods[{2., 3.}]
+Out[2]= {1.19722, 0.59861 + 1.17514 I}
+
+In[3]:= WeierstrassP[u, {12, -8}]
+Out[3]= 1 + 3 Csch[Sqrt[3] u]^2
+
+In[4]:= D[WeierstrassZeta[u, {g2, g3}], u]
+Out[4]= -WeierstrassP[u, {g2, g3}]
 ```
 
 ## MathieuC and MathieuCPrime

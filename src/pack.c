@@ -944,6 +944,11 @@ static void pack_mark_aware_heads(void) {
          * the Slater plan once and threads sf_mg_eval over the buffer (in
          * parallel via nd_parallel_for). Not int64_ok: the sum runs in double. */
         "MeijerG",
+        /* WeierstrassP / PPrime / Zeta / Sigma [u, {g2, g3}] hold the buffer u:
+         * the builtin builds the lattice plan once and threads
+         * sf_wp_eval_plan over the buffer (nd_parallel_for). Not int64_ok:
+         * the value is a machine real or complex. */
+        "WeierstrassP", "WeierstrassPPrime", "WeierstrassZeta", "WeierstrassSigma",
         /* FunctionExpand[expr] rewrites special-function NODES; a packed /
          * NDArray buffer is a leaf it hands back untouched (no MeijerG can live
          * inside one), so there is nothing to gain from materialising it. */

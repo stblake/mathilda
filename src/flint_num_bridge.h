@@ -160,6 +160,20 @@ Expr* flint_num_theta(int a, int prime, const Expr* u, const Expr* q);
 bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
                    double* rr, double* ri);
 
+/* The Weierstrass functions (kind = WP_P / WP_PPRIME / WP_ZETA / WP_SIGMA of
+ * special_functions/weierstrass.h) at u over invariants (g2, g3): arb's
+ * acb_elliptic_* on the lattice (1, tau) of the normalised half-periods; the
+ * machine twin; the half-periods {w1, w3}; the invariants {g2, g3}. */
+Expr* flint_num_weierstrass(int kind, const Expr* u, const Expr* g2, const Expr* g3);
+bool flint_weierstrass_d(int kind, double ur, double ui, double g2r, double g2i,
+                         double g3r, double g3i, double* rr, double* ri);
+Expr* flint_num_wp_halfperiods(const Expr* g2, const Expr* g3);
+/* the function of the lattice (1, tau) at z, both double-double {re hi, re lo,
+ * im hi, im lo}: the machine kernel's second chance near a zero */
+bool flint_wp_unit_d(int kind, const double z[4], const double tau[4], double* rr, double* ri);
+Expr* flint_num_wp_invariants(const Expr* w1, const Expr* w3);
+
+
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
  * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The

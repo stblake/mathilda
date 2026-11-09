@@ -49,6 +49,7 @@
 #include "special_functions/jacobi_elliptic.h"    /* sf_machine_jacobi */
 #include "special_functions/hankel_spherical.h"   /* sf_machine_hankel_sph */
 #include "special_functions/elliptic_theta.h"     /* sf_machine_theta */
+#include "special_functions/weierstrass.h"        /* sf_machine_weierstrass */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -1198,6 +1199,31 @@ static bool ndk_EllipticThetaPrime_n(const double* re, const double* im, size_t 
     return ndk_theta_n(1, re, im, n, rr, ri);
 }
 static const NDNaryKernel NDKN_EllipticTheta      = { ndk_EllipticTheta_n, 3, false };
+/* WeierstrassP / PPrime / Zeta / Sigma [u, {g2, g3}] arrive from the compiler's
+ * lowering flattened as the run [g2, g3, u] (u last, so a strip-mined loop
+ * feeds it as the tile), through sf_machine_weierstrass -- the scalar
+ * builtins' helper. Real invariants and real u give a real value. */
+static bool ndk_wp_n(int kind, const double* re, const double* im, size_t n,
+                     double* rr, double* ri) {
+    if (n != 3) return false;
+    return sf_machine_weierstrass(kind, re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+}
+static bool ndk_WeierstrassP_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return ndk_wp_n(WP_P, re, im, n, rr, ri);
+}
+static bool ndk_WeierstrassPPrime_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return ndk_wp_n(WP_PPRIME, re, im, n, rr, ri);
+}
+static bool ndk_WeierstrassZeta_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return ndk_wp_n(WP_ZETA, re, im, n, rr, ri);
+}
+static bool ndk_WeierstrassSigma_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return ndk_wp_n(WP_SIGMA, re, im, n, rr, ri);
+}
+static const NDNaryKernel NDKN_WeierstrassP       = { ndk_WeierstrassP_n, 3, true };
+static const NDNaryKernel NDKN_WeierstrassPPrime  = { ndk_WeierstrassPPrime_n, 3, true };
+static const NDNaryKernel NDKN_WeierstrassZeta    = { ndk_WeierstrassZeta_n, 3, true };
+static const NDNaryKernel NDKN_WeierstrassSigma   = { ndk_WeierstrassSigma_n, 3, true };
 static const NDNaryKernel NDKN_EllipticThetaPrime = { ndk_EllipticThetaPrime_n, 3, false };
 static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true };
 static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true };
@@ -1309,6 +1335,8 @@ void ndkernels_init(void) {
     REG_B(SphericalBesselJ, NDKB_SphericalBesselJ); REG_B(SphericalBesselY, NDKB_SphericalBesselY);
     REG_B(SphericalHankelH1, NDKB_SphericalHankelH1); REG_B(SphericalHankelH2, NDKB_SphericalHankelH2);
     REG_N(EllipticTheta); REG_N(EllipticThetaPrime);   /* [a, u, q], a = 1..4 */
+    REG_N(WeierstrassP); REG_N(WeierstrassPPrime);     /* [g2, g3, u] for Compile[]; the */
+    REG_N(WeierstrassZeta); REG_N(WeierstrassSigma);   /* builtins thread buffers u     */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

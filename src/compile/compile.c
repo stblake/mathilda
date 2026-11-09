@@ -1528,6 +1528,13 @@ int fuse_listable(Ctx* c, const Expr* e) {
             if (fuse_listable(c, e->data.function.args[i]) != 0) return -1;
         return 1;
     }
+    /* The Weierstrass functions [u, {g2, g3}] are not Listable but thread over
+     * u (as the interpreter does): fusible when u is the only array. */
+    if ((h == SYM_WeierstrassP || h == SYM_WeierstrassPPrime || h == SYM_WeierstrassZeta ||
+         h == SYM_WeierstrassSigma) && e->data.function.arg_count == 2) {
+        if (fuse_listable(c, e->data.function.args[1]) != 0) return -1;
+        return 1;
+    }
     /* MeijerG is not Listable (its parameters ARE lists) but threads over z,
      * its third argument: fusible when z is the only array-valued argument. */
     if (h == SYM_MeijerG

@@ -228,6 +228,67 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
      * a strip-mined loop s is a TILE: the run stops before s and VKERNN_* reads
      * s per element, the labels broadcast. Typed as compile_infer.c decides:
      * Real only for literal labels of a real character at real s. */
+    /* WeierstrassP / PPrime / Zeta / Sigma [u, {g2, g3}] -- the literal List of
+     * invariants destructured into the run [g2, g3, u] the n-ary kernel
+     * (ndk_Weierstrass*_n, sf_machine_weierstrass: the scalar builtins' helper)
+     * reads. Inside a strip-mined loop u is a TILE: the run stops before u and
+     * VKERNN_* reads it per element, the invariants broadcast (the kernel's
+     * plan memo then builds the lattice once). */
+    if ((strcmp(h, "WeierstrassP") == 0 || strcmp(h, "WeierstrassPPrime") == 0 ||
+         strcmp(h, "WeierstrassZeta") == 0 || strcmp(h, "WeierstrassSigma") == 0) && na == 2) {
+        const Expr* L = A[1];
+        if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL ||
+            L->data.function.head->data.symbol.name != SYM_List || L->data.function.arg_count != 2)
+            { c->ok = false; return -1; }
+        CompileType t2, t3, tu;
+        if (!infer_type(c, L->data.function.args[0], &t2) ||
+            !infer_type(c, L->data.function.args[1], &t3) || !infer_type(c, A[0], &tu))
+            { c->ok = false; return -1; }
+        CompileType eu = CT_IS_ARRAY(tu) ? CT_ELEM(tu) : tu;
+        if (CT_IS_ARRAY(t2) || CT_IS_ARRAY(t3) || t2 == CT_BOOL || t3 == CT_BOOL || eu == CT_BOOL)
+            { c->ok = false; return -1; }
+        bool cx = eu == CT_COMPLEX || t2 == CT_COMPLEX || t3 == CT_COMPLEX;
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_nary_kernel) { c->ok = false; return -1; }
+        const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
+        if (!k->cplx) { c->ok = false; return -1; }
+        Slot z0; memset(&z0, 0, sizeof z0);
+        int base = alloc_temp(c);
+        (void)alloc_temp(c); (void)alloc_temp(c);
+        int after = c->temp_top;
+        for (int i = 0; i < 2 && c->ok; i++) {
+            Val v;
+            if (!emit(c, L->data.function.args[i], &v)) return -1;
+            if (val_is_tile(v)) { c->ok = false; return -1; }   /* invariants broadcast only */
+            coerce(c, &v, et);
+            if (!c->ok) return -1;
+            ins(c, OP_MOVE, (uint32_t)(base + i), (uint32_t)v.reg, 0, z0);
+            c->temp_top = after;
+        }
+        if (!c->ok) return -1;
+        Val vu;
+        if (!emit(c, A[0], &vu)) return -1;
+        Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
+        if (val_is_tile(vu)) {
+            coerce(c, &vu, et);
+            if (!c->ok) return -1;
+            int dst = alloc_tile(c);
+            ins_f(c, cx ? OP_VKERNN_C : OP_VKERNN_R, 2, (uint32_t)dst,
+                  (uint32_t)base, (uint32_t)vu.reg, kp);
+            c->temp_top = (base - c->nlocals);
+            out->reg = dst; out->tmp = true; out->type = et;
+            return c->ok ? 1 : -1;
+        }
+        coerce(c, &vu, et);
+        if (!c->ok) return -1;
+        ins(c, OP_MOVE, (uint32_t)(base + 2), (uint32_t)vu.reg, 0, z0);
+        c->temp_top = (base - c->nlocals) + 1;
+        ins_f(c, cx ? OP_KERNN_C : OP_KERNN, 3, (uint32_t)base, (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = et;
+        return c->ok ? 1 : -1;
+    }
+
     if (strcmp(h, "DirichletL") == 0 && na == 3) {
         CompileType tk, tj, ts;
         if (!infer_type(c, A[0], &tk) || !infer_type(c, A[1], &tj) || !infer_type(c, A[2], &ts)

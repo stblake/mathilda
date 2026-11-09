@@ -29,6 +29,7 @@
 #include <flint/acb.h>
 #include <flint/acb_dirichlet.h>
 #include "special_functions/mathieu_arb.h"   /* mathieu_acb */
+#include "special_functions/weierstrass.h"   /* sf_wp_normalize */
 #include <flint/dirichlet.h>
 #include <flint/ulong_extras.h>
 #include <flint/acb_elliptic.h>
@@ -1693,6 +1694,309 @@ bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
     return ok;
 }
 
+
+/* ------------------------------------------------------------------ */
+/*  Weierstrass elliptic functions                                     */
+/* ------------------------------------------------------------------ */
+/* The lattice of invariants (g2, g3) in ball arithmetic: the roots of
+ * 4t^3 - g2 t - g3 (acb_poly_find_roots), a basis w1 = K(m)/sqrt(e1 - e3),
+ * w3 = i K(1 - m)/sqrt(e1 - e3) for the first root ordering that is finite,
+ * normalised by sf_wp_normalize (the same integer decisions as the machine
+ * plan, made on the midpoints scaled to unit size) and certified: arb's
+ * invariants of the reduced (1, tau), scaled by (2 w1)^-4 and (2 w1)^-6, must
+ * overlap the input. For real invariants a part whose ball contains zero is
+ * set to zero (a rectangular / rhombic lattice). */
+static int nb_wp_lattice(acb_t w1, acb_t w3, const acb_t g2, const acb_t g3, slong prec) {
+    if (acb_is_zero(g2) && acb_is_zero(g3)) return 0;
+    acb_poly_t P;
+    acb_poly_init(P);
+    acb_t c; acb_init(c);
+    acb_neg(c, g3); acb_poly_set_coeff_acb(P, 0, c);
+    acb_neg(c, g2); acb_poly_set_coeff_acb(P, 1, c);
+    acb_set_ui(c, 4); acb_poly_set_coeff_acb(P, 3, c);
+    acb_ptr r = _acb_vec_init(3);
+    int ok = 0;
+    if (acb_poly_find_roots(r, P, NULL, 0, prec) == 3) {
+        static const int PERM[6][3] = { {0,1,2}, {0,2,1}, {1,0,2}, {1,2,0}, {2,0,1}, {2,1,0} };
+        acb_t d, s, m, k1, k2, a1, a3, t, G2, G3;
+        acb_init(d); acb_init(s); acb_init(m); acb_init(k1); acb_init(k2);
+        acb_init(a1); acb_init(a3); acb_init(t); acb_init(G2); acb_init(G3);
+        arb_t ab; arb_init(ab);
+        bool sq = acb_is_zero(g3), hex = acb_is_zero(g2);
+        bool real = acb_is_real(g2) && acb_is_real(g3);
+        for (int p = 0; p < 6 && !ok; p++) {
+            acb_srcptr e1 = r + PERM[p][0], e2 = r + PERM[p][1], e3 = r + PERM[p][2];
+            acb_sub(d, e1, e3, prec);
+            if (acb_contains_zero(d)) continue;
+            acb_sqrt(s, d, prec);
+            acb_sub(m, e2, e3, prec);
+            acb_div(m, m, d, prec);
+            acb_elliptic_k(k1, m, prec);
+            acb_sub_ui(t, m, 1, prec);
+            acb_neg(t, t);
+            acb_elliptic_k(k2, t, prec);
+            acb_div(a1, k1, s, prec);
+            acb_div(a3, k2, s, prec);
+            acb_mul_onei(a3, a3);
+            if (!acb_is_finite(a1) || !acb_is_finite(a3)) continue;
+            /* the decisions, on midpoints scaled by 1/|w1| */
+            acb_abs(ab, a1, prec);
+            double sc[4];
+            acb_div_arb(t, a1, ab, prec);
+            sc[0] = arf_get_d(arb_midref(acb_realref(t)), ARF_RND_NEAR);
+            sc[1] = arf_get_d(arb_midref(acb_imagref(t)), ARF_RND_NEAR);
+            acb_div_arb(t, a3, ab, prec);
+            sc[2] = arf_get_d(arb_midref(acb_realref(t)), ARF_RND_NEAR);
+            sc[3] = arf_get_d(arb_midref(acb_imagref(t)), ARF_RND_NEAR);
+            double M[4];
+            if (!sf_wp_normalize(sc[0], sc[1], sc[2], sc[3], sq, hex, M)) continue;
+            acb_mul_si(w1, a1, (slong)M[0], prec);
+            acb_mul_si(t, a3, (slong)M[1], prec);
+            acb_add(w1, w1, t, prec);
+            acb_mul_si(w3, a1, (slong)M[2], prec);
+            acb_mul_si(t, a3, (slong)M[3], prec);
+            acb_add(w3, w3, t, prec);
+            if (real) {
+                if (arb_contains_zero(acb_realref(w1))) arb_zero(acb_realref(w1));
+                if (arb_contains_zero(acb_imagref(w1))) arb_zero(acb_imagref(w1));
+                if (arb_contains_zero(acb_realref(w3))) arb_zero(acb_realref(w3));
+                if (arb_contains_zero(acb_imagref(w3))) arb_zero(acb_imagref(w3));
+            }
+            /* the certificate */
+            acb_div(t, w3, w1, prec);
+            if (!arb_is_positive(acb_imagref(t))) continue;
+            acb_elliptic_invariants(G2, G3, t, prec);
+            acb_mul_2exp_si(t, w1, 1);
+            acb_pow_ui(s, t, 4, prec);
+            acb_div(G2, G2, s, prec);
+            acb_pow_ui(s, t, 6, prec);
+            acb_div(G3, G3, s, prec);
+            if (acb_is_finite(G2) && acb_is_finite(G3) &&
+                acb_overlaps(G2, g2) && acb_overlaps(G3, g3))
+                ok = 1;
+        }
+        acb_clear(d); acb_clear(s); acb_clear(m); acb_clear(k1); acb_clear(k2);
+        acb_clear(a1); acb_clear(a3); acb_clear(t); acb_clear(G2); acb_clear(G3);
+        arb_clear(ab);
+    }
+    _acb_vec_clear(r, 3);
+    acb_clear(c);
+    acb_poly_clear(P);
+    return ok;
+}
+
+/* kind (WP_* of weierstrass.h) at u over (g2, g3); res non-finite on failure */
+static void nb_wp_value(acb_t res, int kind, const acb_t u, const acb_t g2, const acb_t g3,
+                        slong prec) {
+    acb_t w1, w3, tau, z, tw;
+    acb_init(w1); acb_init(w3); acb_init(tau); acb_init(z); acb_init(tw);
+    acb_indeterminate(res);
+    if (acb_is_zero(g2) && acb_is_zero(g3)) {
+        acb_t iu; acb_init(iu);
+        acb_inv(iu, u, prec);
+        if (kind == 0)      acb_mul(res, iu, iu, prec);
+        else if (kind == 1) { acb_pow_ui(res, iu, 3, prec); acb_mul_si(res, res, -2, prec); }
+        else if (kind == 2) acb_set(res, iu);
+        else                acb_set(res, u);
+        acb_clear(iu);
+    } else if (nb_wp_lattice(w1, w3, g2, g3, prec)) {
+        acb_div(tau, w3, w1, prec);
+        acb_mul_2exp_si(tw, w1, 1);                        /* 2 w1 */
+        acb_div(z, u, tw, prec);
+        switch (kind) {
+            case 0:
+                acb_elliptic_p(res, z, tau, prec);
+                acb_div(res, res, tw, prec); acb_div(res, res, tw, prec);
+                break;
+            case 1: {
+                acb_ptr j = _acb_vec_init(2);
+                acb_elliptic_p_jet(j, z, tau, 2, prec);
+                acb_set(res, j + 1);
+                _acb_vec_clear(j, 2);
+                acb_div(res, res, tw, prec); acb_div(res, res, tw, prec);
+                acb_div(res, res, tw, prec);
+                break;
+            }
+            case 2:
+                acb_elliptic_zeta(res, z, tau, prec);
+                acb_div(res, res, tw, prec);
+                break;
+            default:
+                acb_elliptic_sigma(res, z, tau, prec);
+                acb_mul(res, res, tw, prec);
+                break;
+        }
+    }
+    if (acb_is_real(u) && acb_is_real(g2) && acb_is_real(g3) && acb_is_finite(res))
+        arb_zero(acb_imagref(res));
+    acb_clear(w1); acb_clear(w3); acb_clear(tau); acb_clear(z); acb_clear(tw);
+}
+
+/* the ladder of nb_ladder3 over (u, g2, g3) with the function code in ctx */
+typedef struct { int kind; const Expr* e[3]; const double* d; } nb_wpctx;
+static int nb_wp_load(acb_t A, acb_t B, acb_t C, const nb_wpctx* x, slong wp) {
+    if (x->d) {
+        arb_set_d(acb_realref(A), x->d[0]); arb_set_d(acb_imagref(A), x->d[1]);
+        arb_set_d(acb_realref(B), x->d[2]); arb_set_d(acb_imagref(B), x->d[3]);
+        arb_set_d(acb_realref(C), x->d[4]); arb_set_d(acb_imagref(C), x->d[5]);
+        return 1;
+    }
+    return expr_to_acb(x->e[0], A, wp) && expr_to_acb(x->e[1], B, wp) &&
+           expr_to_acb(x->e[2], C, wp);
+}
+static slong nb_wp_ladder(acb_t R, const nb_wpctx* x, slong outb) {
+    acb_t A, B, C;
+    acb_init(A); acb_init(B); acb_init(C);
+    slong wp = outb + NB_GUARD, bits = -1;
+    for (int attempt = 0; ; attempt++) {
+        if (!nb_wp_load(A, B, C, x, wp)) break;
+        nb_wp_value(R, x->kind, A, B, C, wp);
+        if (!acb_is_finite(R)) {
+            if (attempt >= NB_MAX_DOUBLINGS) break;
+            wp *= 2;
+            continue;
+        }
+        bool exact0 = acb_is_exact(R) && acb_is_zero(R);
+        if (!exact0 && acb_rel_accuracy_bits(R) < outb && attempt < NB_MAX_DOUBLINGS + 2) {
+            wp = nb_next_wp(R, wp, outb);
+            continue;
+        }
+        bits = exact0 ? outb : nb_emit_bits(R, outb);
+        break;
+    }
+    acb_clear(A); acb_clear(B); acb_clear(C);
+    return bits;
+}
+
+Expr* flint_num_weierstrass(int kind, const Expr* u, const Expr* g2, const Expr* g3) {
+    const Expr* args[3] = { u, g2, g3 };
+    nb_wpctx x = { kind, { u, g2, g3 }, NULL };
+    acb_t R; acb_init(R);
+    slong bits = nb_wp_ladder(R, &x, pick_out_bits(args, 3));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    return out;
+}
+
+bool flint_weierstrass_d(int kind, double ur, double ui, double g2r, double g2i,
+                         double g3r, double g3i, double* rr, double* ri) {
+    double d[6] = { ur, ui, g2r, g2i, g3r, g3i };
+    for (int i = 0; i < 6; i++) if (!isfinite(d[i])) return false;
+    nb_wpctx x = { kind, { NULL, NULL, NULL }, d };
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_wp_ladder(R, &x, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* an exact ball hi + lo */
+static void nb_set_dd(arb_t x, double hi, double lo) {
+    arb_set_d(x, hi);
+    arf_t t; arf_init(t);
+    arf_set_d(t, lo);
+    arf_add(arb_midref(x), arb_midref(x), t, ARF_PREC_EXACT, ARF_RND_DOWN);
+    arf_clear(t);
+}
+
+/* The machine kernel's second chance: the function of the lattice (1, tau) at
+ * z, both given in double-double (from the plan; exact as balls), by arb at a
+ * working precision that climbs until the value has 60 good bits. The caller
+ * scales by 1/(2 w1)^k. kind: WP_* (0 P, 1 P', 2 zeta, 3 sigma). */
+bool flint_wp_unit_d(int kind, const double z[4], const double tau[4], double* rr, double* ri) {
+    acb_t Z, T, R;
+    acb_init(Z); acb_init(T); acb_init(R);
+    bool ok = false;
+    for (slong prec = 128; prec <= 1024 && !ok; prec *= 2) {
+        nb_set_dd(acb_realref(Z), z[0], z[1]);
+        nb_set_dd(acb_imagref(Z), z[2], z[3]);
+        nb_set_dd(acb_realref(T), tau[0], tau[1]);
+        nb_set_dd(acb_imagref(T), tau[2], tau[3]);
+        switch (kind) {
+            case 0: acb_elliptic_p(R, Z, T, prec); break;
+            case 1: acb_elliptic_p_prime(R, Z, T, prec); break;
+            case 2: acb_elliptic_zeta(R, Z, T, prec); break;
+            default: acb_elliptic_sigma(R, Z, T, prec); break;
+        }
+        if (acb_is_finite(R) && acb_rel_accuracy_bits(R) >= 60) {
+            *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+            *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+            ok = isfinite(*rr) && isfinite(*ri);
+            if (!ok) break;
+        }
+    }
+    acb_clear(Z); acb_clear(T); acb_clear(R);
+    return ok;
+}
+
+/* {w1, w3} at the arguments' precision */
+Expr* flint_num_wp_halfperiods(const Expr* g2, const Expr* g3) {
+    const Expr* args[2] = { g2, g3 };
+    slong outb = pick_out_bits(args, 2), wp = outb + NB_GUARD;
+    acb_t A, B, w1, w3;
+    acb_init(A); acb_init(B); acb_init(w1); acb_init(w3);
+    Expr* out = NULL;
+    for (int attempt = 0; attempt <= NB_MAX_DOUBLINGS; attempt++) {
+        if (!expr_to_acb(g2, A, wp) || !expr_to_acb(g3, B, wp)) break;
+        if (nb_wp_lattice(w1, w3, A, B, wp) &&
+            (acb_is_zero(w1) || acb_rel_accuracy_bits(w1) >= outb) &&
+            (acb_is_zero(w3) || acb_rel_accuracy_bits(w3) >= outb)) {
+            Expr* a = acb_to_expr(w1, outb);
+            Expr* b = acb_to_expr(w3, outb);
+            if (a && b) {
+                out = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ a, b }, 2);
+            } else {
+                if (a) expr_free(a);
+                if (b) expr_free(b);
+            }
+            break;
+        }
+        wp *= 2;
+    }
+    acb_clear(A); acb_clear(B); acb_clear(w1); acb_clear(w3);
+    return out;
+}
+
+/* {g2, g3} of the half-periods (w1, w3): arb's invariants of (1, tau),
+ * tau = w3/w1 (or -w3/w1 when that is the upper one), scaled. */
+Expr* flint_num_wp_invariants(const Expr* e1, const Expr* e3) {
+    const Expr* args[2] = { e1, e3 };
+    slong outb = pick_out_bits(args, 2), wp = outb + NB_GUARD;
+    acb_t w1, w3, tau, G2, G3, t, s;
+    acb_init(w1); acb_init(w3); acb_init(tau); acb_init(G2); acb_init(G3);
+    acb_init(t); acb_init(s);
+    Expr* out = NULL;
+    for (int attempt = 0; attempt <= NB_MAX_DOUBLINGS; attempt++) {
+        if (!expr_to_acb(e1, w1, wp) || !expr_to_acb(e3, w3, wp)) break;
+        acb_div(tau, w3, w1, wp);
+        if (arb_contains_zero(acb_imagref(tau))) break;
+        if (arb_is_negative(acb_imagref(tau))) acb_neg(tau, tau);
+        acb_elliptic_invariants(G2, G3, tau, wp);
+        acb_mul_2exp_si(t, w1, 1);
+        acb_pow_ui(s, t, 4, wp);
+        acb_div(G2, G2, s, wp);
+        acb_pow_ui(s, t, 6, wp);
+        acb_div(G3, G3, s, wp);
+        if (acb_is_finite(G2) && acb_is_finite(G3) &&
+            (acb_contains_zero(G2) || acb_rel_accuracy_bits(G2) >= outb) &&
+            (acb_contains_zero(G3) || acb_rel_accuracy_bits(G3) >= outb)) {
+            Expr* a = acb_to_expr(G2, outb);
+            Expr* b = acb_to_expr(G3, outb);
+            if (a && b) out = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ a, b }, 2);
+            else { if (a) expr_free(a); if (b) expr_free(b); }
+            break;
+        }
+        wp *= 2;
+    }
+    acb_clear(w1); acb_clear(w3); acb_clear(tau); acb_clear(G2); acb_clear(G3);
+    acb_clear(t); acb_clear(s);
+    return out;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Hankel and spherical Bessel functions                              */
 /* ------------------------------------------------------------------ */
@@ -3352,6 +3656,19 @@ bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
     (void)a; (void)prime; (void)ur; (void)ui; (void)qr; (void)qi; (void)rr; (void)ri;
     return false;
 }
+Expr* flint_num_weierstrass(int kind, const Expr* u, const Expr* g2, const Expr* g3) {
+    (void)kind; (void)u; (void)g2; (void)g3; return NULL;
+}
+bool flint_weierstrass_d(int kind, double ur, double ui, double g2r, double g2i,
+                         double g3r, double g3i, double* rr, double* ri) {
+    (void)kind; (void)ur; (void)ui; (void)g2r; (void)g2i; (void)g3r; (void)g3i;
+    (void)rr; (void)ri; return false;
+}
+Expr* flint_num_wp_halfperiods(const Expr* g2, const Expr* g3) { (void)g2; (void)g3; return NULL; }
+bool flint_wp_unit_d(int kind, const double z[4], const double tau[4], double* rr, double* ri) {
+    (void)kind; (void)z; (void)tau; (void)rr; (void)ri; return false;
+}
+Expr* flint_num_wp_invariants(const Expr* w1, const Expr* w3) { (void)w1; (void)w3; return NULL; }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
 }

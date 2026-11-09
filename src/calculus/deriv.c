@@ -2465,6 +2465,59 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- WeierstrassP / PPrime / Zeta / Sigma [U, {G2, G3}] (DLMF 23.3.10,
+         * 23.2.8-9; the invariant derivatives from the homogeneity relations
+         * of wp in (u, g2, g3), DLMF 23.10), templates in #1 = u, #2 = g2,
+         * #3 = g3. */
+        if (n == 2 && h && strncmp(h, "Weierstrass", 11) == 0 &&
+            args[1]->type == EXPR_FUNCTION && args[1]->data.function.head->type == EXPR_SYMBOL &&
+            strcmp(args[1]->data.function.head->data.symbol.name, "List") == 0 &&
+            args[1]->data.function.arg_count == 2) {
+            int k = strcmp(h, "WeierstrassP") == 0 ? 0 : strcmp(h, "WeierstrassPPrime") == 0 ? 1
+                  : strcmp(h, "WeierstrassZeta") == 0 ? 2 : strcmp(h, "WeierstrassSigma") == 0 ? 3 : -1;
+            if (k >= 0) {
+                #define WPP "WeierstrassP[#1, {#2, #3}]"
+                #define WPD "WeierstrassPPrime[#1, {#2, #3}]"
+                #define WPZ "WeierstrassZeta[#1, {#2, #3}]"
+                #define WPS "WeierstrassSigma[#1, {#2, #3}]"
+                #define WPDEL "(#2^3 - 27 #3^2)"
+                static const char* const T[4][3] = {
+                    { "(" WPD ")&",
+                      "((6 #2 #3 + 2 #2^2 " WPP " - 36 #3 " WPP "^2 + " WPD " (#2^2 #1 - 18 #3 " WPZ "))/(4 " WPDEL "))&",
+                      "((-2 #2^2 - 18 #3 " WPP " + 12 #2 " WPP "^2 + " WPD " (-9 #3 #1 + 6 #2 " WPZ "))/(2 " WPDEL "))&" },
+                    { "(6 " WPP "^2 - #2/2)&",
+                      "((-(#2^3 #1) + 12 #2^2 #1 " WPP "^2 + 6 (#2^2 - 18 #3 " WPP ") " WPD " + 18 #3 (#2 - 12 " WPP "^2) " WPZ ")/(8 " WPDEL "))&",
+                      "((9 #2 #3 #1 - 108 #3 #1 " WPP "^2 + (-54 #3 + 36 #2 " WPP ") " WPD " + (-6 #2^2 + 72 #2 " WPP "^2) " WPZ ")/(4 " WPDEL "))&" },
+                    { "(-" WPP ")&",
+                      "((-(#2 #1 (3 #3 + 2 #2 " WPP ")) + 18 #3 " WPD " + 2 (#2^2 + 18 #3 " WPP ") " WPZ ")/(8 " WPDEL "))&",
+                      "((#1 (#2^2 + 18 #3 " WPP ") - 6 #2 " WPD " - 6 (3 #3 + 2 #2 " WPP ") " WPZ ")/(4 " WPDEL "))&" },
+                    { "(" WPS " " WPZ ")&",
+                      "((" WPS " (-3 #2 #3 #1^2 + 4 #2^2 (-1 + #1 " WPZ ") + 36 #3 (" WPP " - " WPZ "^2)))/(16 " WPDEL "))&",
+                      "((" WPS " (#2^2 #1^2 - 12 #2 " WPP " + 12 #2 " WPZ "^2 - 36 #3 (-1 + #1 " WPZ ")))/(8 " WPDEL "))&" } };
+                #undef WPP
+                #undef WPD
+                #undef WPZ
+                #undef WPS
+                #undef WPDEL
+                Expr* U = args[0];
+                Expr* G2 = args[1]->data.function.args[0];
+                Expr* G3 = args[1]->data.function.args[1];
+                Expr* d[3] = { deriv_of(U, x, nonconsts), deriv_of(G2, x, nonconsts),
+                               deriv_of(G3, x, nonconsts) };
+                Expr* terms[3];
+                size_t nt = 0;
+                for (int j = 0; j < 3; j++) {
+                    if (is_lit_zero(d[j])) { expr_free(d[j]); continue; }
+                    Expr* f = parse_expression(T[k][j]);
+                    Expr* g = expr_new_function(f, (Expr*[]){ expr_copy(U), expr_copy(G2),
+                                                              expr_copy(G3) }, 3);
+                    terms[nt++] = mk_fn2("Times", g, d[j]);
+                }
+                if (nt == 0) return mk_int(0);
+                if (nt == 1) return terms[0];
+                return expr_new_function(mk_sym("Plus"), terms, nt);
+            }
+        }
         /* --- EllipticTheta[A, U, Q] / EllipticThetaPrime[A, U, Q]:
          *   d/dU EllipticTheta = EllipticThetaPrime; every other partial is the
          *   inert Derivative form (the reference's). A is a discrete index. */
