@@ -1019,7 +1019,8 @@ Out[4]= 3.03649471340395693927736515763
 ```
 
 The same lowering serves auto-compilation: `NIntegrate`, `NSum`, `FindRoot`,
-and `NDSolve` at `WorkingPrecision -> n` compile a special-function body in MPFR instead of
+`NDSolve` and `Table` (over a List, or a range, of arbitrary-precision reals)
+at `WorkingPrecision -> n` compile a special-function body in MPFR instead of
 interpreting it at every sample. ``Internal`CompileArbitraryPrecisionStats[]``
 counts the compiled special-function calls, the calls that declined to the
 interpreter, and the auto-compilations that bailed.

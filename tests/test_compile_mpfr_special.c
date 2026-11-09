@@ -352,6 +352,24 @@ int main(void) {
                "(\"SpecialCalls\" /. a1) > (\"SpecialCalls\" /. a0)",
                "NDSolve WorkingPrecision -> 30: special-function RHS compiled");
 
+    /* Table over a List, and over a range, of arbitrary-precision reals */
+    run("xs = Table[N[1/10 + k/100, 30], {k, 50}]");
+    run("a0 = Internal`CompileArbitraryPrecisionStats[]");
+    run("tl = Table[Erf[x]^2 + BesselK[0, x] Sin[x], {x, xs}]");
+    run("tr = Table[Erf[x]^2 + BesselK[0, x] Sin[x], {x, N[1/10, 30], N[6/10, 30], N[1/100, 30]}]");
+    run("a1 = Internal`CompileArbitraryPrecisionStats[]");
+    check_true("(\"SpecialCalls\" /. a1) - (\"SpecialCalls\" /. a0) == 2 (50 + 51) "
+               "&& (\"AutoCompileBails\" /. a1) == (\"AutoCompileBails\" /. a0)",
+               "Table over MPFR List and range: compiled, no bail");
+    autocompile_set_enabled(false);
+    run("tl0 = Table[Erf[x]^2 + BesselK[0, x] Sin[x], {x, xs}]");
+    run("tr0 = Table[Erf[x]^2 + BesselK[0, x] Sin[x], {x, N[1/10, 30], N[6/10, 30], N[1/100, 30]}]");
+    autocompile_set_enabled(true);
+    check_true("Length[tl] == 50 && Max[Abs[tl - tl0]] < 10^-27 && Precision[tl[[7]]] >= 29",
+               "Table over MPFR List: compiled == uncompiled, precision kept");
+    check_true("Length[tr] == Length[tr0] == 51 && Max[Abs[tr - tr0]] < 10^-27",
+               "Table over MPFR range: compiled == uncompiled");
+
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
 }

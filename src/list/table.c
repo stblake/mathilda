@@ -853,6 +853,24 @@ static Expr* table_exact_int(Expr* body, Expr* var, int64_t imin, int64_t imax, 
     return pack_offer(list);
 }
 
+#ifdef USE_MPFR
+/* The common MPFR precision of a List whose elements are ALL arbitrary-precision
+ * reals at one precision, and long enough to repay a compilation; else 0. */
+static long table_mpfr_list_bits(const Expr* list) {
+    size_t n = list->data.function.arg_count;
+    if (n < 8) return 0;
+    long bits = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* x = list->data.function.args[i];
+        if (x->type != EXPR_MPFR) return 0;
+        long p = (long)mpfr_get_prec(x->data.mpfr);
+        if (bits && p != bits) return 0;
+        bits = p;
+    }
+    return bits;
+}
+#endif
+
 Expr* builtin_table(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     
@@ -961,12 +979,33 @@ Expr* builtin_table(Expr* res) {
             results[results_count++] = eval_expr;
         }
     } else if (is_list_iter) {
-        for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
-            iter_bind(var_sym, list_e->data.function.args[i]);
-            Expr* eval_expr = evaluate(expr);
+        /* A list of arbitrary-precision reals at one precision (the abscissae
+         * of a high-precision sweep): the body is compiled once in MPFR at that
+         * precision and each element runs through it; any element the program
+         * declines (another type or precision, a value outside its real
+         * domain) is interpreted, exactly as before. */
+        size_t nl = list_e->data.function.arg_count;
+        AutoCompiled* acp = NULL;
+#ifdef USE_MPFR
+        long lbits = table_mpfr_list_bits(list_e);
+        if (lbits > 0 && var_sym->type == EXPR_SYMBOL)
+            acp = autocompile_new_prec(expr, (const Expr* const*)&var_sym, 1, lbits);
+#endif
+        for (size_t i = 0; i < nl; i++) {
+            const Expr* xe = list_e->data.function.args[i];
+            Expr* eval_expr = NULL;
+#ifdef USE_MPFR
+            if (acp && xe->type == EXPR_MPFR && (long)mpfr_get_prec(xe->data.mpfr) == lbits)
+                eval_expr = autocompiled_eval_mpfr(acp, &xe);
+#endif
+            if (!eval_expr) {
+                iter_bind(var_sym, (Expr*)xe);
+                eval_expr = evaluate(expr);
+            }
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }
             results[results_count++] = eval_expr;
         }
+        autocompiled_free(acp);
     } else {
         /* Auto-compile fast path — ONLY for an inexact (machine-real) iterator,
          * where the interpreter already produces machine reals, so exactness is
@@ -980,6 +1019,19 @@ Expr* builtin_table(Expr* res) {
                                ? autocompile_new(expr, (const Expr* const*)&var_sym, 1) : NULL;
         double val = min_val;
         Expr* curr_e = ac ? NULL : expr_copy(imin_e);
+        /* An arbitrary-precision range ({x, 1/10`30, 1, 1/400`30}): the running
+         * value stays the interpreter's own (curr_e, advanced below exactly as
+         * before), and each one at the program's precision is evaluated through
+         * the body compiled in MPFR. */
+        AutoCompiled* acp = NULL;
+        long rbits = 0;
+#ifdef USE_MPFR
+        if (!ac && !is_real && var_sym->type == EXPR_SYMBOL && curr_e
+            && curr_e->type == EXPR_MPFR) {
+            rbits = (long)mpfr_get_prec(curr_e->data.mpfr);
+            acp = autocompile_new_prec(expr, (const Expr* const*)&var_sym, 1, rbits);
+        }
+#endif
 
         /* Packed fast path: a compiled body whose result type is CT_REAL emits
          * nothing but machine reals, so the whole list can be written straight
@@ -1034,6 +1086,13 @@ Expr* builtin_table(Expr* res) {
             /* Boxed (not _eval_real) so an integer-valued body stays an Integer
              * — the element type is user-visible in the returned list. */
             Expr* eval_expr = ac ? autocompiled_eval_boxed(ac, &val) : NULL;
+#ifdef USE_MPFR
+            if (acp && curr_e->type == EXPR_MPFR
+                && (long)mpfr_get_prec(curr_e->data.mpfr) == rbits) {
+                const Expr* xe = curr_e;
+                eval_expr = autocompiled_eval_mpfr(acp, &xe);
+            }
+#endif
             if (!eval_expr) {   /* interpreter path (and per-element fallback) */
                 Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
                 iter_bind(var_sym, i_val);
@@ -1059,6 +1118,7 @@ Expr* builtin_table(Expr* res) {
         }
         if (curr_e) expr_free(curr_e);
         autocompiled_free(ac);
+        autocompiled_free(acp);
     }
 
     /* A finite range whose element count exceeded the backstop: free what was
