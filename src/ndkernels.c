@@ -51,6 +51,7 @@
 #include "special_functions/elliptic_theta.h"     /* sf_machine_theta */
 #include "special_functions/weierstrass.h"        /* sf_machine_weierstrass */
 #include "special_functions/betaregularized.h"    /* sf_machine_betareg[4] */
+#include "special_functions/appell.h"             /* sf_machine_appell */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -1232,6 +1233,25 @@ static bool ndk_BetaRegularized_n(const double* re, const double* im, size_t n,
     return false;
 }
 static const NDNaryKernel NDKN_BetaRegularized    = { ndk_BetaRegularized_n, 3, false, 4 };
+/* AppellF1..F4 [params..., x, y] through sf_machine_appell -- the scalar
+ * builtins' helper. Complex for real arguments beyond the cuts, so not
+ * real-closed. */
+static bool ndk_AppellF1_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return n == 6 && sf_machine_appell(1, re, im, rr, ri);
+}
+static bool ndk_AppellF2_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return n == 7 && sf_machine_appell(2, re, im, rr, ri);
+}
+static bool ndk_AppellF3_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return n == 7 && sf_machine_appell(3, re, im, rr, ri);
+}
+static bool ndk_AppellF4_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
+    return n == 6 && sf_machine_appell(4, re, im, rr, ri);
+}
+static const NDNaryKernel NDKN_AppellF1 = { ndk_AppellF1_n, 6, false, 0 };
+static const NDNaryKernel NDKN_AppellF2 = { ndk_AppellF2_n, 7, false, 0 };
+static const NDNaryKernel NDKN_AppellF3 = { ndk_AppellF3_n, 7, false, 0 };
+static const NDNaryKernel NDKN_AppellF4 = { ndk_AppellF4_n, 6, false, 0 };
 static const NDNaryKernel NDKN_WeierstrassP       = { ndk_WeierstrassP_n, 3, true, 0 };
 static const NDNaryKernel NDKN_WeierstrassPPrime  = { ndk_WeierstrassPPrime_n, 3, true, 0 };
 static const NDNaryKernel NDKN_WeierstrassZeta    = { ndk_WeierstrassZeta_n, 3, true, 0 };
@@ -1348,6 +1368,7 @@ void ndkernels_init(void) {
     REG_B(SphericalHankelH1, NDKB_SphericalHankelH1); REG_B(SphericalHankelH2, NDKB_SphericalHankelH2);
     REG_N(EllipticTheta); REG_N(EllipticThetaPrime);   /* [a, u, q], a = 1..4 */
     REG_N(BetaRegularized);                            /* [z, a, b] and [z0, z1, a, b] */
+    REG_N(AppellF1); REG_N(AppellF2); REG_N(AppellF3); REG_N(AppellF4);
     REG_N(WeierstrassP); REG_N(WeierstrassPPrime);     /* [g2, g3, u] for Compile[]; the */
     REG_N(WeierstrassZeta); REG_N(WeierstrassSigma);   /* builtins thread buffers u     */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);

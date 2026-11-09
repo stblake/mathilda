@@ -183,6 +183,11 @@ Expr* flint_num_betareg4(const Expr* z0, const Expr* z1, const Expr* a, const Ex
 bool flint_betareg4_d(double z0r, double z0i, double z1r, double z1i, double ar, double ai,
                       double br, double bi, double* rr, double* ri);
 
+/* AppellF1..F4 (kind 1..4, n = 6 or 7 arguments in the head's order): appell_acb
+ * on the precision ladder; and the 53-bit twin behind the machine kernel. */
+Expr* flint_num_appell(int kind, const Expr* const* args, int n);
+bool flint_appell_d(int kind, const double* re, const double* im, double* rr, double* ri);
+
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
  * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The

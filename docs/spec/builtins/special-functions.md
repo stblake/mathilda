@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the regularized incomplete beta function `BetaRegularized`, the Weierstrass elliptic functions `WeierstrassP`, `WeierstrassPPrime`, `WeierstrassZeta`, `WeierstrassSigma` (with `WeierstrassHalfPeriods` and `WeierstrassInvariants`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the regularized incomplete beta function `BetaRegularized`, the Appell hypergeometric functions of two variables `AppellF1`, `AppellF2`, `AppellF3`, `AppellF4`, the Weierstrass elliptic functions `WeierstrassP`, `WeierstrassPPrime`, `WeierstrassZeta`, `WeierstrassSigma` (with `WeierstrassHalfPeriods` and `WeierstrassInvariants`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3737,6 +3737,105 @@ Out[2]= 11/16
 
 In[3]:= BetaRegularized[z, a, 1]
 Out[3]= -0^a + z^a
+```
+
+## AppellF1, AppellF2, AppellF3 and AppellF4
+
+The Appell hypergeometric functions of two variables (DLMF 16.13), in the
+reference system's argument order:
+
+- `AppellF1[a, b1, b2, c, x, y]` = Σ (a)_(m+n) (b1)_m (b2)_n / ((c)_(m+n) m! n!) x^m y^n (|x|, |y| < 1)
+- `AppellF2[a, b1, b2, c1, c2, x, y]` = Σ (a)_(m+n) (b1)_m (b2)_n / ((c1)_m (c2)_n m! n!) x^m y^n (|x| + |y| < 1)
+- `AppellF3[a1, a2, b1, b2, c, x, y]` = Σ (a1)_m (a2)_n (b1)_m (b2)_n / ((c)_(m+n) m! n!) x^m y^n (|x|, |y| < 1)
+- `AppellF4[a, b, c1, c2, x, y]` = Σ (a)_(m+n) (b)_(m+n) / ((c1)_m (c2)_n m! n!) x^m y^n (√|x| + √|y| < 1)
+
+each continued analytically; the cuts `x, y` real `> 1` are taken from below
+(`x - i0`, the convention of `Hypergeometric2F1`).
+
+- **Exact rules** (the reference system's): `x = 0`, `y = 0` and a vanishing
+  numerator parameter reduce to `Hypergeometric2F1`, `a = 0` (F1, F2, F4) gives
+  `1`; F1 also `x = y` -> `2F1(a, b1 + b2; c; x)`, `a = c` -> `(1-x)^-b1
+  (1-y)^-b2`, `c = b1 + b2` -> `(1-y)^-a 2F1(a, b1; b1 + b2; (x-y)/(1-y))`, `x = 1`
+  -> `2F1(a, b1; c; 1) 2F1(a, b2; c - b1; y)` (and `y = 1`), and a negative integer
+  `a` the terminating polynomial (`AppellF1[-1, 1, 2, 3, 1/2, 1/3] = 11/18`).
+  Other exact calls stay unevaluated; a pole (`c` a non-positive integer) stays
+  unevaluated at every precision. Not done: the reference system's elementary
+  closed forms for integer parameters (`AppellF1[1, 2, 3, 4, x, y]`).
+- **Method.** One outer series Σ_m T_m G_m whose terms carry a Gauss function of
+  the other variable, continued analytically: F1 `x^m 2F1(a+m, b2; c+m; y)`, F2
+  `2F1(a+m, b2; c2; y)`, F3 `2F1(a2, b2; c+m; y)`, F4 `2F1(a+m, b+m; c2; y)`. The
+  outer series converges for `|x| < 1` (F1, F3), `|x| < min(1, |1-y|)` (F2) and
+  `|x| < min |1 ∓ √y|^2` (F4) for any `y` off its cut, so either variable can be
+  outer. F1 adds the five Euler-integral substitutions mapping `[0, 1]` onto itself
+  (DLMF 16.16; two of them valid only on one side of an extra ray, tested), F2 the
+  three Pfaff-type ones; the planner takes the smallest outer ratio. The `G_m`
+  come from two Gauss values and a three-term recurrence in `m` run in its stable
+  direction (backward from directly summed start values when `G_m` is the minimal
+  solution: F1 with `|y| < 1`, F3 with `|1 - 1/y| > 1`), or one by one when the
+  recurrence's roots are within a factor 1.5. Where no expansion converges (F1
+  with both variables large and `|1 - y/x|, |1 - x/y| >= 1`), F1 is its Euler
+  integral (`Re c > Re a > 0`): series at the singular endpoints (`0`, `1`, `1/x`
+  for an `x` on its cut), `acb_calc_integrate` between. F2, F3, F4 there stay
+  unevaluated (open).
+- **Machine kernel** `sf_machine_appell` (scalar, packed / `NDArray` through the
+  n-ary map, `Compile[]` at scalar and rank 1, real and complex; bit-identical on
+  every surface): the plan in double complex. A sum with cancellation (Σ|terms| >
+  4 |sum|), an outer ratio above 0.97, a denominator parameter left of 1/2, F3 with
+  an inner variable beyond 0.6, complex parameters beyond the machine 2F1, and the
+  Euler region go to arb at 53 bits inside the kernel.
+- **Arbitrary precision**: the same plan in ball arithmetic on the shared
+  precision ladder -- the outer coefficients and the direct Gauss series on
+  midpoints with an explicit error bound (a complex ball product overestimates by
+  up to √2 a step), the recurrence on midpoints with `8 log2 M` guard bits, the
+  start values' radii carried; the truncation bound is asymptotic in the growth of
+  `G_m`. Inside `|z| < 0.99` the start values are the direct Gauss series (FLINT
+  3.6's `acb_hypgeom_2f1` returns an indeterminate ball for, e.g., `2F1(-0.0721,
+  1.15; 102.33; 0.514 - 0.614 i)`), beyond it Pfaff when `|z/(z-1)| < 0.99`.
+- **Arbitrary-precision Compile[]**: one row per head in the special-function
+  registry (`compile_mgd_special.c`), real and complex.
+- **Derivatives.** `D` in `x` and `y` by the contiguous-parameter formulas:
+  `∂x F1 = a b1/c F1(a+1, b1+1, b2, c+1)`, `∂y F1 = a b2/c F1(a+1, b1, b2+1, c+1)`;
+  `∂x F2 = a b1/c1 F2(a+1, b1+1, b2, c1+1, c2)`; `∂x F3 = a1 b1/c F3(a1+1, a2, b1+1, b2, c+1)`;
+  `∂x F4 = a b/c1 F4(a+1, b+1, c1+1, c2)` (and the `y` twins). A parameter derivative
+  is the inert `Derivative[...][AppellFk][...]`.
+- **Accuracy** against mpmath (100 random points per function, parameters in
+  `[-1.5, 3]`, real and complex variables inside the double-series regions, mpmath
+  at 40 and 80 digits): machine median / max — F1 1.0 / 24 ulp, F2 0.5 / 36 ulp,
+  F3 0.5 / 45 ulp, F4 0.4 / 5 ulp; 30 digits: all within `1.5*10^-35` relative.
+  mpmath itself is unreliable near the region boundaries (`appellf4` at `(0.2, 0.3)`
+  returns 1.1075 at 60 digits; the value is 1.0248673980162395192, confirmed by the
+  direct outer sum), and has no continuation for F1 with both variables large. The
+  reference system prints `AppellF1[0.3, 0.2, 0.5, 1.7, 10., -20.]` as `0.661148 -
+  0.097611 I` (and `0.6611582714...` at 20 digits); the value is
+  `0.66115898412418623440 - 0.09761940125683091707 I`. At `(0.5 + 2 I, 2.)`,
+  `(2., 0.5 + 2 I)` and `(2., 3.)` its values disagree with the Euler integral
+  entirely (a different continuation).
+- **Performance** (2.2 GHz Intel): scalar F1 5 µs, complex 10-300 µs (one-by-one
+  Gauss values), outside the series region (`(3., -2.)`) 35 µs, the Euler region
+  1.8 ms; F2 2.6-46 µs, F3 2.9 µs (arb route 0.12-8 ms), F4 3.2 µs (9 ms at
+  `√x + √y = 0.995`). wolframscript: F1 6.2 ms, complex 10 ms, `(3., -2.)` 75 ms,
+  F2 6.3 ms, F3 0.88 ms, F4 6.8 ms (at `(0.2, 0.3)` no answer within an hour);
+  mpmath 1.5-6 ms. 10^6 packed: F1 5.4 s, F2 2.1 s, F4 1.3 s, F3 38 s (the arb
+  route for `|x| > 0.6`). 50 digits: F1 0.78 ms, F2 0.74 ms, F3 0.53 ms, F4 1.1 ms
+  (wolframscript 4.4 / 3.4 / 1.5 / 5.2 ms; mpmath 17 / 18 / 7.7 / 23 ms). Open:
+  the hard F3 arb route (8 ms against wolframscript's 0.9 ms) and the F4 boundary.
+
+Attributes: `Listable`, `NumericFunction`, `Protected` (the reference system
+gives these heads neither `Listable` nor `NumericFunction`; both are needed for
+the packed and `Compile[]` surfaces).
+
+```mathematica
+In[1]:= AppellF1[0.3, 0.2, 0.5, 1.7, 0.4, 0.3]
+Out[1]= 1.04745
+
+In[2]:= AppellF1[a, b1, b2, c, x, x]
+Out[2]= Hypergeometric2F1[a, b1 + b2, c, x]
+
+In[3]:= D[AppellF4[a, b, c1, c2, x, y], x]
+Out[3]= (a b AppellF4[1 + a, 1 + b, 1 + c1, c2, x, y])/c1
+
+In[4]:= N[AppellF1[3/10, 1/5, 1/2, 17/10, 10, -20], 20]
+Out[4]= 0.66115898412418623440 - 0.097619401256830917067 I
 ```
 
 ## EllipticTheta and EllipticThetaPrime

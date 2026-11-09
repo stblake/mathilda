@@ -160,6 +160,23 @@ HEAD_SHAPES = {
         ("br_s4", "scalar", "{{x, _Real}}",    "BetaRegularized[0.1, x, 2.5, 3.5]"),
         ("br_v",  "array",  "{{v, _Real, 1}}", "BetaRegularized[v, 2.5, 3.5]"),
     ],
+    # The Appell functions: six / seven arguments, the variable in x or y.
+    "AppellF1": [
+        ("a1_s", "scalar", "{{x, _Real}}",    "AppellF1[0.3, 0.2, 0.5, 1.7, x, 0.3]"),
+        ("a1_v", "array",  "{{v, _Real, 1}}", "AppellF1[0.3, 0.2, 0.5, 1.7, v, 0.3]"),
+    ],
+    "AppellF2": [
+        ("a2_s", "scalar", "{{x, _Real}}",    "AppellF2[0.3, 0.2, 0.5, 1.5, 1.7, x, 0.2]"),
+        ("a2_v", "array",  "{{v, _Real, 1}}", "AppellF2[0.3, 0.2, 0.5, 1.5, 1.7, v, 0.2]"),
+    ],
+    "AppellF3": [
+        ("a3_s", "scalar", "{{x, _Real}}",    "AppellF3[0.3, 0.2, 0.5, 0.4, 1.7, x, 0.3]"),
+        ("a3_v", "array",  "{{v, _Real, 1}}", "AppellF3[0.3, 0.2, 0.5, 0.4, 1.7, v, 0.3]"),
+    ],
+    "AppellF4": [
+        ("a4_s", "scalar", "{{x, _Real}}",    "AppellF4[0.3, 0.2, 1.5, 1.7, x, 0.1]"),
+        ("a4_v", "array",  "{{v, _Real, 1}}", "AppellF4[0.3, 0.2, 1.5, 1.7, v, 0.1]"),
+    ],
 }
 
 FAMILIES = ["scalar", "array"]
@@ -489,6 +506,10 @@ PREC_BODIES = {
     "ArcCsc": ["ArcCsc[x + 1]"],
     "ArcCoth": ["ArcCoth[x + 1]"],
     "InverseJacobiDN": ["InverseJacobiDN[x + 1/5, 1/3]"],
+    "AppellF1": ["AppellF1[1/3, 2/5, 3/7, 7/4, x/3, 1/4]"],
+    "AppellF2": ["AppellF2[1/3, 2/5, 3/7, 3/2, 7/4, x/4, 1/5]"],
+    "AppellF3": ["AppellF3[1/3, 2/5, 3/7, 1/4, 7/4, x/3, 1/4]"],
+    "AppellF4": ["AppellF4[1/3, 2/5, 3/2, 7/4, x/10, 1/10]"],
     **{h: [h + "[x, {1, 2}]"] for h in ("WeierstrassP", "WeierstrassPPrime",
                                          "WeierstrassZeta", "WeierstrassSigma")},
 }

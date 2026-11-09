@@ -2465,6 +2465,52 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- AppellF1..F4: the x- and y-derivatives by the contiguous-parameter
+         * formulas (DLMF 16.14 differentiated term by term), e.g.
+         *   D[F1(a; b1, b2; c; x, y), x] = a b1/c F1(a+1; b1+1, b2; c+1; x, y);
+         * a parameter derivative stays the inert Derivative[..][AppellFk][..]. */
+        if (h && (((n == 6) && (strcmp(h, "AppellF1") == 0 || strcmp(h, "AppellF4") == 0)) ||
+                  ((n == 7) && (strcmp(h, "AppellF2") == 0 || strcmp(h, "AppellF3") == 0)))) {
+            /* templates in #1..#n, for the x and the y derivative */
+            const char* TX; const char* TY;
+            if (strcmp(h, "AppellF1") == 0) {
+                TX = "(#1 #2/#4 AppellF1[#1 + 1, #2 + 1, #3, #4 + 1, #5, #6])&";
+                TY = "(#1 #3/#4 AppellF1[#1 + 1, #2, #3 + 1, #4 + 1, #5, #6])&";
+            } else if (strcmp(h, "AppellF2") == 0) {
+                TX = "(#1 #2/#4 AppellF2[#1 + 1, #2 + 1, #3, #4 + 1, #5, #6, #7])&";
+                TY = "(#1 #3/#5 AppellF2[#1 + 1, #2, #3 + 1, #4, #5 + 1, #6, #7])&";
+            } else if (strcmp(h, "AppellF3") == 0) {
+                TX = "(#1 #3/#5 AppellF3[#1 + 1, #2, #3 + 1, #4, #5 + 1, #6, #7])&";
+                TY = "(#2 #4/#5 AppellF3[#1, #2 + 1, #3, #4 + 1, #5 + 1, #6, #7])&";
+            } else {
+                TX = "(#1 #2/#3 AppellF4[#1 + 1, #2 + 1, #3 + 1, #4, #5, #6])&";
+                TY = "(#1 #2/#4 AppellF4[#1 + 1, #2 + 1, #3, #4 + 1, #5, #6])&";
+            }
+            Expr* terms[7];
+            size_t nt = 0;
+            for (size_t k = 0; k < n; k++) {
+                Expr* dk = deriv_of(args[k], x, nonconsts);
+                if (is_lit_zero(dk)) { expr_free(dk); continue; }
+                Expr* g;
+                if (k + 2 >= n) {
+                    Expr* f = parse_expression(k + 2 == n ? TX : TY);
+                    Expr* av[7];
+                    for (size_t j = 0; j < n; j++) av[j] = expr_copy(args[j]);
+                    g = expr_new_function(f, av, n);
+                } else {
+                    Expr* idx[7];
+                    for (size_t j = 0; j < n; j++) idx[j] = mk_int(j == k ? 1 : 0);
+                    Expr* op = expr_new_function(mk_sym("Derivative"), idx, n);
+                    Expr* av[7];
+                    for (size_t j = 0; j < n; j++) av[j] = expr_copy(args[j]);
+                    g = expr_new_function(mk_fn_head1(op, mk_sym(h)), av, n);
+                }
+                terms[nt++] = mk_fn2("Times", g, dk);
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
         /* --- BetaRegularized[Z, A, B] and [Z0, Z1, A, B] (DLMF 8.17.1): the
          * z-derivative z^(a-1) (1-z)^(b-1)/Beta[a, b]; the a-derivative
          *   -z^a 3F2(a, a, 1-b; a+1, a+1; z)/(a^2 Beta[a, b])

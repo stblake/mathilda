@@ -30,6 +30,7 @@
 #include <flint/acb_dirichlet.h>
 #include "special_functions/mathieu_arb.h"   /* mathieu_acb */
 #include "special_functions/weierstrass.h"   /* sf_wp_normalize */
+#include "special_functions/appell.h"        /* appell_acb */
 #include <flint/dirichlet.h>
 #include <flint/ulong_extras.h>
 #include <flint/acb_elliptic.h>
@@ -1789,6 +1790,59 @@ bool flint_betareg4_d(double z0r, double z0i, double z1r, double z1i, double ar,
     acb_t R; acb_init(R);
     bool ok = false;
     if (nb_betareg4_ladder(R, NULL, d, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Appell F1..F4                                                      */
+/* ------------------------------------------------------------------ */
+/* appell_acb (special_functions/appell_arb.c) on the precision ladder; the
+ * arguments come from Exprs (e) or from re/im double pairs (d). */
+static slong nb_appell_ladder(acb_t R, int kind, const Expr* const* e, const double* re,
+                              const double* im, slong outb) {
+    int n = APPELL_NARGS(kind);
+    acb_ptr P = _acb_vec_init(n);
+    slong wp = outb + NB_GUARD, bits = -1;
+    for (int attempt = 0; ; attempt++) {
+        int ok = 1;
+        for (int k = 0; k < n && ok; k++) {
+            if (e) ok = expr_to_acb(e[k], P + k, wp);
+            else acb_set_d_d(P + k, re[k], im[k]);
+        }
+        if (!ok) break;
+        appell_acb(R, kind, P, wp);
+        if (!acb_is_finite(R)) {
+            if (attempt >= 2) break;      /* no method / a pole: doubling rarely helps */
+            wp *= 2;
+            continue;
+        }
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
+        bits = nb_emit_bits(R, outb);
+        break;
+    }
+    _acb_vec_clear(P, n);
+    return bits;
+}
+
+Expr* flint_num_appell(int kind, const Expr* const* args, int n) {
+    if (kind < 1 || kind > 4 || n != APPELL_NARGS(kind)) return NULL;
+    acb_t R; acb_init(R);
+    slong bits = nb_appell_ladder(R, kind, args, NULL, NULL, pick_out_bits(args, n));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    return out;
+}
+
+bool flint_appell_d(int kind, const double* re, const double* im, double* rr, double* ri) {
+    if (kind < 1 || kind > 4) return false;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_appell_ladder(R, kind, NULL, re, im, 53) > 0) {
         *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
         *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
         ok = isfinite(*rr) && isfinite(*ri);
@@ -3839,6 +3893,13 @@ bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
 }
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 
+
+Expr* flint_num_appell(int kind, const Expr* const* args, int n) {
+    (void)kind; (void)args; (void)n; return NULL;
+}
+bool flint_appell_d(int kind, const double* re, const double* im, double* rr, double* ri) {
+    (void)kind; (void)re; (void)im; (void)rr; (void)ri; return false;
+}
 #endif
 
 /* ------------------------------------------------------------------ */

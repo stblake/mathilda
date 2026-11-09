@@ -80,6 +80,7 @@
 #include "elliptic_theta.h"
 #include "weierstrass.h"
 #include "betaregularized.h"
+#include "appell.h"
 #include "mathieu.h"
 #include "hypergeometricu.h"
 #include "airyai.h"
@@ -1028,6 +1029,7 @@ void core_init(void) {
     elliptic_theta_init();
     weierstrass_init();
     betaregularized_init();
+    appell_init();
     mathieu_init();
     hypergeometricu_init();
     airyai_init();

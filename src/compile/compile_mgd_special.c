@@ -46,6 +46,10 @@ static const MgdSpecialEntry g_table[] = {
     { "AiryBi",                 1, 1, RC_ },
     { "AiryBiPrime",            1, 1, RC_ },
     { "AngerJ",                 2, 3, RC_ },
+    { "AppellF1",               6, 6, RC_ },
+    { "AppellF2",               7, 7, RC_ },
+    { "AppellF3",               7, 7, RC_ },
+    { "AppellF4",               6, 6, RC_ },
     { "ArcCos",                 1, 1, RC_ },   /* complex: elementary rows   */
     { "ArcCosh",                1, 1, RC_ },   /* are only reached where the */
     { "ArcCot",                 1, 1, RC_ },   /* mpfr / ncpx opcode set has */

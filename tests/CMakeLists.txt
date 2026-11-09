@@ -598,6 +598,8 @@ set(COMMON_SRC
     ../src/special_functions/elliptic_theta.c
     ../src/special_functions/weierstrass.c
     ../src/special_functions/betaregularized.c
+    ../src/special_functions/appell.c
+    ../src/special_functions/appell_arb.c
     ../src/special_functions/hypergeometricu.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
@@ -4380,6 +4382,10 @@ add_test(NAME elliptic_theta_tests COMMAND elliptic_theta_tests)
 add_executable(betaregularized_tests test_betaregularized.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(betaregularized_tests PRIVATE ../src)
 add_test(NAME betaregularized_tests COMMAND betaregularized_tests)
+
+add_executable(appell_tests test_appell.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(appell_tests PRIVATE ../src)
+add_test(NAME appell_tests COMMAND appell_tests)
 
 add_executable(weierstrass_tests test_weierstrass.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(weierstrass_tests PRIVATE ../src)
