@@ -1484,6 +1484,149 @@ bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double
 }
 
 /* ------------------------------------------------------------------ */
+/*  Gegenbauer function C_n^lambda(z)                                  */
+/* ------------------------------------------------------------------ */
+/* The degree above which an integer order leaves the three-term recurrence for
+ * acb_hypgeom_gegenbauer_c. */
+#define NB_GEG_REC_MAX 100000
+
+/* C_n^lambda(z). A non-negative integer n runs the three-term recurrence
+ *   (k+1) C_{k+1} = 2 (k + lambda) z C_k - (k + 2 lambda - 1) C_{k-1},
+ *   C_0 = 1, C_1 = 2 lambda z,
+ * which is the explicit polynomial sum_k (-1)^k (lambda)_{n-k} (2z)^{n-2k} /
+ * (k! (n-2k)!) for EVERY lambda -- the reference system's convention, finite
+ * where the 2F1 form 0 * infinity is not (lambda = -1/2, -1, ...). Any other
+ * order goes to arb's Gamma(n+2l)/(Gamma(2l) Gamma(n+1)) 2F1(-n, n+2l; l+1/2;
+ * (1-z)/2). lambda = 0 is identically 0 (also for n = 0), as in the reference
+ * system. */
+static void nb_gegenbauer(acb_t res, const acb_t n, const acb_t lam, const acb_t z, slong prec) {
+    if (acb_is_zero(lam)) { acb_zero(res); return; }
+    if (acb_is_int(n) && arf_sgn(arb_midref(acb_realref(n))) >= 0
+            && arf_cmpabs_ui(arb_midref(acb_realref(n)), NB_GEG_REC_MAX) <= 0) {
+        slong N = arf_get_si(arb_midref(acb_realref(n)), ARF_RND_NEAR);
+        if (N == 0) { acb_one(res); return; }
+        acb_t c0, c1, c2, t, u;
+        acb_init(c0); acb_init(c1); acb_init(c2); acb_init(t); acb_init(u);
+        acb_one(c0);
+        acb_mul(c1, lam, z, prec);
+        acb_mul_2exp_si(c1, c1, 1);                 /* C_1 = 2 l z */
+        for (slong k = 1; k < N; k++) {
+            acb_add_si(t, lam, k, prec);            /* k + l          */
+            acb_mul(t, t, z, prec);
+            acb_mul_2exp_si(t, t, 1);
+            acb_mul(t, t, c1, prec);                /* 2 (k + l) z C_k */
+            acb_mul_2exp_si(u, lam, 1);
+            acb_add_si(u, u, k - 1, prec);          /* k + 2 l - 1    */
+            acb_mul(u, u, c0, prec);
+            acb_sub(c2, t, u, prec);
+            acb_div_si(c2, c2, k + 1, prec);
+            acb_swap(c0, c1);
+            acb_swap(c1, c2);
+        }
+        acb_set(res, c1);
+        acb_clear(c0); acb_clear(c1); acb_clear(c2); acb_clear(t); acb_clear(u);
+        return;
+    }
+    /* Gamma(n+2l)/(Gamma(2l) Gamma(n+1)) 2F1(...; l+1/2; t), with Gamma(l+1/2)
+     * absorbed into the REGULARIZED 2F1 and Gamma(l+1/2)/Gamma(2l) =
+     * Sqrt[Pi] 2^(1-2l)/Gamma(l) (duplication): every factor but Gamma(n+2l)
+     * is then entire, so l = -1/2, -3/2, ... (a pole of the plain 2F1 at its
+     * c, times the zero 1/Gamma(2l)) has its finite value -- the reference's
+     * GegenbauerC[2.5, -1.5, 0.3] = 0.666651... -- where
+     * acb_hypgeom_gegenbauer_c returns a non-finite ball. */
+    acb_t a, b, c, t, f, g;
+    acb_init(a); acb_init(b); acb_init(c); acb_init(t); acb_init(f); acb_init(g);
+    acb_neg(a, n);
+    acb_mul_2exp_si(b, lam, 1);
+    acb_add(b, b, n, prec);                         /* n + 2l */
+    acb_set_d(c, 0.5);
+    acb_add(c, c, lam, prec);                       /* l + 1/2 */
+    acb_sub_ui(t, z, 1, prec);
+    acb_neg(t, t);
+    acb_mul_2exp_si(t, t, -1);                      /* (1 - z)/2 */
+    acb_hypgeom_2f1(f, a, b, c, t, ACB_HYPGEOM_2F1_REGULARIZED, prec);
+    acb_gamma(g, b, prec);
+    acb_mul(f, f, g, prec);
+    acb_add_ui(g, n, 1, prec);
+    acb_rgamma(g, g, prec);
+    acb_mul(f, f, g, prec);
+    acb_rgamma(g, lam, prec);
+    acb_mul(f, f, g, prec);
+    acb_mul_2exp_si(g, lam, 1);
+    acb_neg(g, g);
+    acb_add_ui(g, g, 1, prec);                      /* 1 - 2l */
+    acb_set_ui(t, 2);
+    acb_pow(g, t, g, prec);
+    acb_mul(f, f, g, prec);
+    acb_const_pi(g, prec);
+    acb_sqrt(g, g, prec);
+    acb_mul(res, f, g, prec);
+    acb_clear(a); acb_clear(b); acb_clear(c); acb_clear(t); acb_clear(f); acb_clear(g);
+}
+
+/* The entire-function ladder of nb_pcfd_ladder, for three arguments (a
+ * non-finite ball climbs rather than being read as a pole). */
+typedef int (*nb_load3)(acb_t A, acb_t B, acb_t C, const void* ctx, slong wp);
+static slong nb_ladder3(acb_t R, nb_fn3 f, nb_load3 load, const void* ctx, slong outb) {
+    acb_t A, B, C;
+    acb_init(A); acb_init(B); acb_init(C);
+    slong wp = outb + NB_GUARD, bits = -1;
+    for (int attempt = 0; ; attempt++) {
+        if (!load(A, B, C, ctx, wp)) break;
+        f(R, A, B, C, wp);
+        if (!acb_is_finite(R)) {
+            if (attempt >= NB_MAX_DOUBLINGS) break;
+            wp *= 2;
+            continue;
+        }
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
+        bits = nb_emit_bits(R, outb);
+        break;
+    }
+    acb_clear(A); acb_clear(B); acb_clear(C);
+    return bits;
+}
+typedef struct { const Expr* a; const Expr* b; const Expr* c; } nb_ex3;
+static int nb_load3_expr(acb_t A, acb_t B, acb_t C, const void* ctx, slong wp) {
+    const nb_ex3* e = (const nb_ex3*)ctx;
+    return expr_to_acb(e->a, A, wp) && expr_to_acb(e->b, B, wp) && expr_to_acb(e->c, C, wp);
+}
+typedef struct { double v[6]; } nb_d6;
+static int nb_load3_d(acb_t A, acb_t B, acb_t C, const void* ctx, slong wp) {
+    const nb_d6* d = (const nb_d6*)ctx;
+    (void)wp;
+    arb_set_d(acb_realref(A), d->v[0]); arb_set_d(acb_imagref(A), d->v[1]);
+    arb_set_d(acb_realref(B), d->v[2]); arb_set_d(acb_imagref(B), d->v[3]);
+    arb_set_d(acb_realref(C), d->v[4]); arb_set_d(acb_imagref(C), d->v[5]);
+    return 1;
+}
+
+Expr* flint_num_gegenbauer(const Expr* n, const Expr* lam, const Expr* z) {
+    const Expr* args[3] = { n, lam, z };
+    nb_ex3 ctx = { n, lam, z };
+    acb_t R; acb_init(R);
+    slong bits = nb_ladder3(R, nb_gegenbauer, nb_load3_expr, &ctx, pick_out_bits(args, 3));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    return out;
+}
+
+bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, double zi,
+                        double* rr, double* ri) {
+    nb_d6 ctx = { { nr, ni, lr, li, zr, zi } };
+    for (int i = 0; i < 6; i++) if (!isfinite(ctx.v[i])) return false;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_ladder3(R, nb_gegenbauer, nb_load3_d, &ctx, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Struve function H_nu(z)                                            */
 /* ------------------------------------------------------------------ */
 /* FLINT/arb has no Struve kernel, so compose it from the regularized generalized
@@ -2867,6 +3010,14 @@ Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
 Expr* flint_num_pcfd(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
 bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double* ri) {
     (void)nr; (void)ni; (void)zr; (void)zi; (void)rr; (void)ri; return false;
+}
+Expr* flint_num_gegenbauer(const Expr* n, const Expr* lam, const Expr* z) {
+    (void)n; (void)lam; (void)z; return NULL;
+}
+bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, double zi,
+                        double* rr, double* ri) {
+    (void)nr; (void)ni; (void)lr; (void)li; (void)zr; (void)zi; (void)rr; (void)ri;
+    return false;
 }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;

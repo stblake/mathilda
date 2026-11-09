@@ -2464,6 +2464,45 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- GegenbauerC[N, L, Z] (DLMF 18.9.19):
+         *   d/dZ C_N^L(Z) = 2 L C_{N-1}^{L+1}(Z);
+         *   d/dN, d/dL are inert Derivative[1,0,0] / Derivative[0,1,0] forms.
+         * (The two-argument form rewrites to ChebyshevT on evaluation.) */
+        if (h == SYM_GegenbauerC && n == 3) {
+            Expr* N = args[0];
+            Expr* L = args[1];
+            Expr* Z = args[2];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dL = deriv_of(L, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+            if (!is_lit_zero(dZ)) {
+                Expr* c = expr_new_function(mk_sym("GegenbauerC"),
+                    (Expr*[]){ mk_fn2("Plus", expr_copy(N), mk_int(-1)),
+                               mk_fn2("Plus", expr_copy(L), mk_int(1)),
+                               expr_copy(Z) }, 3);
+                Expr* d = expr_new_function(mk_sym("Times"),
+                    (Expr*[]){ mk_int(2), expr_copy(L), c }, 3);
+                terms[nt++] = mk_fn2("Times", d, dZ);
+            } else {
+                expr_free(dZ);
+            }
+            Expr* dd[2] = { dN, dL };
+            for (int s = 0; s < 2; s++) {
+                if (is_lit_zero(dd[s])) { expr_free(dd[s]); continue; }
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                    (Expr*[]){ mk_int(s == 0), mk_int(s == 1), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("GegenbauerC"));
+                Expr* applied = expr_new_function(op_g,
+                    (Expr*[]){ expr_copy(N), expr_copy(L), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dd[s]);
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
+
         if (h == SYM_HermiteH && n == 2) {
             Expr* N = args[0];
             Expr* Z = args[1];

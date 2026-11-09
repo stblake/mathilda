@@ -309,6 +309,7 @@ const char* SYM_MathieuS = NULL;
 const char* SYM_MathieuSPrime = NULL;
 const char* SYM_WhittakerW = NULL;
 const char* SYM_ParabolicCylinderD = NULL;
+const char* SYM_GegenbauerC = NULL;
 const char* SYM_HeavisideTheta = NULL;
 const char* SYM_HermitianMatrixQ = NULL;
 const char* SYM_Hessian = NULL;
@@ -1462,6 +1463,7 @@ void sym_names_init(void) {
     SYM_MathieuSPrime              = intern_symbol("MathieuSPrime");
     SYM_WhittakerW                 = intern_symbol("WhittakerW");
     SYM_ParabolicCylinderD         = intern_symbol("ParabolicCylinderD");
+    SYM_GegenbauerC                = intern_symbol("GegenbauerC");
     SYM_HeavisideTheta             = intern_symbol("HeavisideTheta");
     SYM_HermitianMatrixQ           = intern_symbol("HermitianMatrixQ");
     SYM_Hessian                    = intern_symbol("Hessian");

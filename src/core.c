@@ -74,6 +74,7 @@
 #include "hermite_h.h"
 #include "whittaker.h"
 #include "parabolic_cylinder.h"
+#include "gegenbauer.h"
 #include "mathieu.h"
 #include "hypergeometricu.h"
 #include "airyai.h"
@@ -1016,6 +1017,7 @@ void core_init(void) {
     hermite_h_init();
     whittaker_init();
     parabolic_cylinder_init();
+    gegenbauer_init();
     mathieu_init();
     hypergeometricu_init();
     airyai_init();

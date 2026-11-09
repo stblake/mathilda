@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3501,6 +3501,68 @@ Out[3]= 1/2 z ParabolicCylinderD[nu, z] - ParabolicCylinderD[1 + nu, z]
 
 In[4]:= FunctionExpand[ParabolicCylinderD[-2, z]]
 Out[4]= E^(-1/4 z^2) - E^(1/4 z^2) Sqrt[1/2 Pi] z Erfc[z/Sqrt[2]]
+```
+
+## GegenbauerC
+
+`GegenbauerC[n, lambda, z]` gives the Gegenbauer (ultraspherical) polynomial
+`C_n^lambda(z)` and, for any `n`, its continuation
+`Gamma[n+2lambda]/(Gamma[2lambda] Gamma[n+1]) Hypergeometric2F1[-n, n+2lambda,
+lambda+1/2, (1-z)/2]` (DLMF 18.5.9). `GegenbauerC[n, z]` is `2 ChebyshevT[n,
+z]/n`, the `lambda -> 0` limit of `C_n^lambda(z)/lambda`.
+
+- **Exact rules.** An integer `0 <= n <= 400` expands to the explicit polynomial
+  `Σ_k (-1)^k (lambda)_{n-k} (2z)^{n-2k}/(k! (n-2k)!)` for every `lambda`
+  (`GegenbauerC[3, a, x] = -2 a (1 + a) x + 4/3 a (1 + a) (2 + a) x^3`,
+  `GegenbauerC[2, -1/2, x] = 1/2 - x^2/2`, `GegenbauerC[5, -3, x] = -6 x`).
+  `GegenbauerC[n, 0, z] = 0` (also for `n = 0`), `GegenbauerC[0, lambda, z] = 1`,
+  `GegenbauerC[n, 1, z] = ChebyshevU[n, z]`, `GegenbauerC[n, 1/2, z] =
+  LegendreP[n, z]`; a negative integer or non-integer exact degree stays
+  unevaluated, as in the reference system. The two-argument form always rewrites
+  (`GegenbauerC[n, x] = 2 ChebyshevT[n, x]/n`; `GegenbauerC[0, x]` is
+  `ComplexInfinity` with `Power::infy`).
+- **Numerics** (machine and arbitrary precision, real and complex in every
+  slot). For real `z < -1` and a non-integer degree the value is complex, taken
+  above the cut (`GegenbauerC[2.5, 1.5, -3.] = 0.00031844 + 173.394 I`).
+  - *Machine kernel* (`sf_machine_gegenbauer_c`, shared bit-for-bit by the
+    scalar call, packed / `NDArray` buffers and `Compile[]` at both arities):
+    integer degree -- the three-term recurrence in double when no step cancels,
+    else in double-double (max 6 ulp against mpmath over 620 points, n up to
+    3000); non-integer degree -- the `2F1` series with double-double parameters
+    for `z >= -0.2`, Taylor stepping of the Gegenbauer ODE from `z = 0` for
+    `-1 < z < -0.2` (where the `2F1` converges slowly), the general machine `2F1`
+    otherwise; arb at 53 bits answers whatever these decline (complex
+    parameters, Gamma poles, `lambda + 1/2` a non-positive integer). Two-argument
+    form: double-double Chebyshev recurrence (integer `n`), `cos(n acos z)` /
+    `cosh(n acosh z)` / the exactly reduced `cos(n pi) cosh(n t) + i sin(n pi)
+    sinh(n t)` otherwise. Accuracy against mpmath (2000 points): integer degree
+    median 0.2 ulp; non-integer degree median 1.9 ulp, p99 110 ulp (the ODE
+    stretch near -1); complex median 2 ulp.
+  - *Arbitrary precision:* arb -- the recurrence for an integer degree, else
+    the regularized `2F1` with `Gamma(lambda+1/2)/Gamma(2lambda)` folded by the
+    duplication formula, so `lambda = -1/2, -3/2, ...` has its finite limit
+    (`GegenbauerC[2.5, -1.5, 0.3] = 0.666651...`, which `acb_hypgeom_gegenbauer_c`
+    and mpmath at the exact parameter both miss).
+- **Derivative.** `D[GegenbauerC[n, l, z], z] = 2 l GegenbauerC[n - 1, l + 1, z]`
+  (DLMF 18.9.19); `D[GegenbauerC[n, z], z] = 2 ChebyshevU[n - 1, z]` through the
+  rewrite; the `n` and `l` derivatives stay inert.
+- **Performance** (2.2 GHz Intel). Machine scalar 6.7 µs (wolframscript 52 µs,
+  SciPy `eval_gegenbauer` 2.9 µs from Python); 10^6 packed, `n = 20`: 0.27 s
+  (wolframscript ~14 s, SciPy 0.11 s); `n = 7.3`: 3.7 s (wolframscript ~146 s,
+  SciPy 1.4 s -- SciPy's double recurrences are faster but lose up to ~10^3 ulp
+  near zeros); 50 digits 0.33 ms (wolframscript 0.88 ms, mpmath 0.37 ms).
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= GegenbauerC[3, a, x]
+Out[1]= -2 a (1 + a) x + 4/3 a (1 + a) (2 + a) x^3
+
+In[2]:= GegenbauerC[2.5, 1.5, 0.3]
+Out[2]= -1.58217
+
+In[3]:= D[GegenbauerC[n, a, x], x]
+Out[3]= 2 a GegenbauerC[-1 + n, 1 + a, x]
 ```
 
 ## MathieuC and MathieuCPrime

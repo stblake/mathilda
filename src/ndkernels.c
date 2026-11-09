@@ -45,6 +45,7 @@
 #include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
 #include "special_functions/sf_machine_bessel.h"
 #include "special_functions/parabolic_cylinder.h" /* sf_machine_pcfd[_c] */
+#include "special_functions/gegenbauer.h"         /* sf_machine_gegenbauer[2]_c */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -940,6 +941,15 @@ static bool ndk_ParabolicCylinderD_c(double are, double aim, double bre, double 
 }
 static const NDBinaryKernel NDKB_ParabolicCylinderD = { ndk_ParabolicCylinderD_c, true, NULL, NULL, false, NULL, NULL };
 
+/* GegenbauerC[n, z] = 2 ChebyshevT[n, z]/n: sf_machine_gegenbauer2_c, the
+ * scalar builtin's helper. Complex beyond z = -1 for a non-integer n, so not
+ * real-closed. */
+static bool ndk_GegenbauerC_c(double are, double aim, double bre, double bim,
+                              double* ore, double* oim) {
+    return sf_machine_gegenbauer2_c(are, aim, bre, bim, ore, oim);
+}
+static const NDBinaryKernel NDKB_GegenbauerC = { ndk_GegenbauerC_c, false, NULL, NULL, false, NULL, NULL };
+
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
  * polynomial degree n) must be a real integer, but the argument `b` = x may be
@@ -1116,6 +1126,15 @@ static const NDNaryKernel NDKN_JacobiP             = { ndk_JacobiP_n, 4, true };
 static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true };
 static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
 static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
+/* GegenbauerC[n, l, z]: complex in every slot, through sf_machine_gegenbauer_c
+ * (the scalar builtin's helper). A real call can be complex (z < -1 with a
+ * non-integer n), so not real-closed. */
+static bool ndk_GegenbauerC_n(const double* re, const double* im, size_t n,
+                              double* rr, double* ri) {
+    if (n != 3) return false;
+    return sf_machine_gegenbauer_c(re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+}
+static const NDNaryKernel NDKN_GegenbauerC         = { ndk_GegenbauerC_n, 3, false };
 static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true };
 static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true };
 static const NDNaryKernel NDKN_MathieuS            = { ndk_MathieuS_n, 3, true };
@@ -1213,6 +1232,8 @@ void ndkernels_init(void) {
     REG_B(LaguerreL,   NDKB_LaguerreL);   /* LaguerreL[n, x] (array x) */
     REG_B(HermiteH,    NDKB_HermiteH);    /* HermiteH[n, x] (array x) */
     REG_B(ParabolicCylinderD, NDKB_ParabolicCylinderD); /* D_nu(z), real nu */
+    REG_B(GegenbauerC, NDKB_GegenbauerC);   /* GegenbauerC[n, z] = 2 T_n(z)/n */
+    REG_N(GegenbauerC);                     /* GegenbauerC[n, l, z] */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

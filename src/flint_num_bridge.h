@@ -129,6 +129,13 @@ Expr* flint_num_pcfd(const Expr* nu, const Expr* z);
  * FLINT or when the value is not a finite double. */
 bool flint_pcfd_d(double nr, double ni, double zr, double zi, double* rr, double* ri);
 
+/* GegenbauerC[n, lambda, z]: the three-term recurrence for a non-negative
+ * integer n (<= 10^5; the explicit-polynomial convention, finite for every
+ * lambda), acb_hypgeom_gegenbauer_c otherwise; 0 at lambda = 0. And its machine
+ * twin (parts of n, lambda, z), correctly rounded from a 53-bit ball. */
+Expr* flint_num_gegenbauer(const Expr* n, const Expr* lam, const Expr* z);
+bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, double zi,
+                        double* rr, double* ri);
 
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
