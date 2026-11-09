@@ -381,6 +381,7 @@ typedef struct {
                  double* ore, double* oim);
     size_t nargs;            /* exact arity this kernel accepts */
     bool real_closed;
+    size_t nargs_alt;        /* a second accepted arity (0: none) -- BetaRegularized 3 / 4 */
 } NDNaryKernel;
 
 /* Map unary kernel `k` over NDArray `a`, returning a new EXPR_NDARRAY of the

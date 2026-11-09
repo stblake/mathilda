@@ -173,6 +173,15 @@ Expr* flint_num_wp_halfperiods(const Expr* g2, const Expr* g3);
 bool flint_wp_unit_d(int kind, const double z[4], const double tau[4], double* rr, double* ri);
 Expr* flint_num_wp_invariants(const Expr* w1, const Expr* w3);
 
+/* BetaRegularized[z, a, b] / [z0, z1, a, b]: arb's regularized lower
+ * incomplete beta (acb_hypgeom_beta_lower) on the precision ladder; and the
+ * machine twins. */
+Expr* flint_num_betareg(const Expr* z, const Expr* a, const Expr* b);
+bool flint_betareg_d(double zr, double zi, double ar, double ai, double br, double bi,
+                     double* rr, double* ri);
+Expr* flint_num_betareg4(const Expr* z0, const Expr* z1, const Expr* a, const Expr* b);
+bool flint_betareg4_d(double z0r, double z0i, double z1r, double z1i, double ar, double ai,
+                      double br, double bi, double* rr, double* ri);
 
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized

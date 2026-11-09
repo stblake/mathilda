@@ -2576,7 +2576,8 @@ static bool ndn_map_chunk(void* c, size_t lo, size_t hi) {
 }
 
 Expr* ndarray_map_nary(Expr* const* args, size_t n, const NDNaryKernel* k) {
-    if (!k || !k->cplx || n != k->nargs || n > NDN_MAX_ARGS) return NULL;
+    if (!k || !k->cplx || (n != k->nargs && (k->nargs_alt == 0 || n != k->nargs_alt)) ||
+        n > NDN_MAX_ARGS) return NULL;
     ndn_ctx x;
     memset(&x, 0, sizeof x);
     x.k = k; x.n = n;

@@ -79,6 +79,7 @@
 #include "hankel_spherical.h"
 #include "elliptic_theta.h"
 #include "weierstrass.h"
+#include "betaregularized.h"
 #include "mathieu.h"
 #include "hypergeometricu.h"
 #include "airyai.h"
@@ -1026,6 +1027,7 @@ void core_init(void) {
     hankel_spherical_init();
     elliptic_theta_init();
     weierstrass_init();
+    betaregularized_init();
     mathieu_init();
     hypergeometricu_init();
     airyai_init();

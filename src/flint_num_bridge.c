@@ -1696,6 +1696,108 @@ bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
 
 
 /* ------------------------------------------------------------------ */
+/*  BetaRegularized                                                    */
+/* ------------------------------------------------------------------ */
+/* I_z(a, b) = acb_hypgeom_beta_lower(a, b, z, regularized); real inputs with
+ * 0 <= z <= 1 give a real value (a ball around a zero imaginary part is set to
+ * zero). The four-argument form is the difference, on its own ladder so a
+ * cancelling pair climbs. */
+static void nb_betareg(acb_t res, const acb_t z, const acb_t a, const acb_t b, slong prec) {
+    if (acb_is_real(z) && acb_is_real(a) && acb_is_real(b) && arb_is_positive(acb_realref(a)) &&
+        arb_is_positive(acb_realref(b)) && arb_is_nonnegative(acb_realref(z))) {
+        arb_t one; arb_init(one); arb_one(one);
+        int in01 = arb_le(acb_realref(z), one);
+        arb_clear(one);
+        if (in01) {
+            /* the real function, faster than the complex one */
+            arb_hypgeom_beta_lower(acb_realref(res), acb_realref(a), acb_realref(b),
+                                   acb_realref(z), 1, prec);
+            arb_zero(acb_imagref(res));
+            return;
+        }
+    }
+    acb_hypgeom_beta_lower(res, a, b, z, 1, prec);
+    if (acb_is_real(z) && acb_is_real(a) && acb_is_real(b) && acb_is_finite(res) &&
+        arb_contains_zero(acb_imagref(res)))
+        arb_zero(acb_imagref(res));
+}
+
+Expr* flint_num_betareg(const Expr* z, const Expr* a, const Expr* b) {
+    const Expr* args[3] = { z, a, b };
+    nb_ex3 ctx = { z, a, b };
+    acb_t R; acb_init(R);
+    slong bits = nb_ladder3(R, nb_betareg, nb_load3_expr, &ctx, pick_out_bits(args, 3));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    return out;
+}
+
+bool flint_betareg_d(double zr, double zi, double ar, double ai, double br, double bi,
+                     double* rr, double* ri) {
+    nb_d6 ctx = { { zr, zi, ar, ai, br, bi } };
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_ladder3(R, nb_betareg, nb_load3_d, &ctx, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* the four-argument ladder: e (Exprs) or d (8 doubles) */
+static slong nb_betareg4_ladder(acb_t R, const Expr* const* e, const double* d, slong outb) {
+    acb_t Z0, Z1, A, B, T;
+    acb_init(Z0); acb_init(Z1); acb_init(A); acb_init(B); acb_init(T);
+    slong wp = outb + NB_GUARD, bits = -1;
+    for (int attempt = 0; ; attempt++) {
+        if (d) {
+            acb_set_d_d(Z0, d[0], d[1]); acb_set_d_d(Z1, d[2], d[3]);
+            acb_set_d_d(A, d[4], d[5]);  acb_set_d_d(B, d[6], d[7]);
+        } else if (!expr_to_acb(e[0], Z0, wp) || !expr_to_acb(e[1], Z1, wp) ||
+                   !expr_to_acb(e[2], A, wp) || !expr_to_acb(e[3], B, wp)) break;
+        nb_betareg(R, Z1, A, B, wp);
+        nb_betareg(T, Z0, A, B, wp);
+        acb_sub(R, R, T, wp);
+        if (!acb_is_finite(R)) {
+            if (attempt >= NB_MAX_DOUBLINGS) break;
+            wp *= 2;
+            continue;
+        }
+        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
+        bits = nb_emit_bits(R, outb);
+        break;
+    }
+    acb_clear(Z0); acb_clear(Z1); acb_clear(A); acb_clear(B); acb_clear(T);
+    return bits;
+}
+
+Expr* flint_num_betareg4(const Expr* z0, const Expr* z1, const Expr* a, const Expr* b) {
+    const Expr* args[4] = { z0, z1, a, b };
+    acb_t R; acb_init(R);
+    slong bits = nb_betareg4_ladder(R, args, NULL, pick_out_bits(args, 4));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    return out;
+}
+
+bool flint_betareg4_d(double z0r, double z0i, double z1r, double z1i, double ar, double ai,
+                      double br, double bi, double* rr, double* ri) {
+    double d[8] = { z0r, z0i, z1r, z1i, ar, ai, br, bi };
+    for (int i = 0; i < 8; i++) if (!isfinite(d[i])) return false;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_betareg4_ladder(R, NULL, d, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Weierstrass elliptic functions                                     */
 /* ------------------------------------------------------------------ */
 /* The lattice of invariants (g2, g3) in ball arithmetic: the roots of
@@ -3669,6 +3771,19 @@ bool flint_wp_unit_d(int kind, const double z[4], const double tau[4], double* r
     (void)kind; (void)z; (void)tau; (void)rr; (void)ri; return false;
 }
 Expr* flint_num_wp_invariants(const Expr* w1, const Expr* w3) { (void)w1; (void)w3; return NULL; }
+Expr* flint_num_betareg(const Expr* z, const Expr* a, const Expr* b) { (void)z; (void)a; (void)b; return NULL; }
+bool flint_betareg_d(double zr, double zi, double ar, double ai, double br, double bi,
+                     double* rr, double* ri) {
+    (void)zr; (void)zi; (void)ar; (void)ai; (void)br; (void)bi; (void)rr; (void)ri; return false;
+}
+Expr* flint_num_betareg4(const Expr* z0, const Expr* z1, const Expr* a, const Expr* b) {
+    (void)z0; (void)z1; (void)a; (void)b; return NULL;
+}
+bool flint_betareg4_d(double z0r, double z0i, double z1r, double z1i, double ar, double ai,
+                      double br, double bi, double* rr, double* ri) {
+    (void)z0r; (void)z0i; (void)z1r; (void)z1i; (void)ar; (void)ai; (void)br; (void)bi;
+    (void)rr; (void)ri; return false;
+}
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
 }

@@ -50,6 +50,7 @@
 #include "special_functions/hankel_spherical.h"   /* sf_machine_hankel_sph */
 #include "special_functions/elliptic_theta.h"     /* sf_machine_theta */
 #include "special_functions/weierstrass.h"        /* sf_machine_weierstrass */
+#include "special_functions/betaregularized.h"    /* sf_machine_betareg[4] */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -658,7 +659,7 @@ static bool ndk_EllipticPiInc_n(const double* re, const double* im, size_t n,
     if (!elliptic_machine_pi_inc(re[0], re[1], re[2], rr)) return false;
     *ri = 0.0; return isfinite(*rr);
 }
-static const NDNaryKernel NDKN_EllipticPi = { ndk_EllipticPiInc_n, 3, true };
+static const NDNaryKernel NDKN_EllipticPi = { ndk_EllipticPiInc_n, 3, true, 0 };
 
 /* Exponential-integral family and friends.  The kernels (sf_machine_expint.c)
  * are the ones the scalar builtins call, so the surfaces agree bit for bit.
@@ -1136,7 +1137,7 @@ static bool ndk_HypergeometricPFQ_n(const double* re, const double* im, size_t n
     if (!sf_machine_pfq(re + 1, p, re + 1 + p, q, re[n - 1], &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
-static const NDNaryKernel NDKN_HypergeometricPFQ = { ndk_HypergeometricPFQ_n, 0, true };
+static const NDNaryKernel NDKN_HypergeometricPFQ = { ndk_HypergeometricPFQ_n, 0, true, 0 };
 /* MeijerG arrives flattened by the compiler's lowering in the layout
  * sf_mg_eval_flat documents: [shape code, r, a_1..a_p, b_1..b_q, z]. The
  * helper is the one behind the scalar builtin and the buffer path (it falls
@@ -1145,8 +1146,8 @@ static bool ndk_MeijerG_n(const double* re, const double* im, size_t n,
                           double* rr, double* ri) {
     return sf_mg_eval_flat(re, im, n, rr, ri);
 }
-static const NDNaryKernel NDKN_MeijerG = { ndk_MeijerG_n, 0, true };
-static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true };
+static const NDNaryKernel NDKN_MeijerG = { ndk_MeijerG_n, 0, true, 0 };
+static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true, 0 };
 /* PolyLog[n, p, z], Nielsen's S_{n,p}(z): sf_nielsen_c, the scalar builtin's
  * helper. Complex beyond z = 1 even for real arguments, so not real-closed. */
 static bool ndk_PolyLog_n(const double* re, const double* im, size_t n,
@@ -1154,7 +1155,7 @@ static bool ndk_PolyLog_n(const double* re, const double* im, size_t n,
     if (n != 3) return false;
     return sf_nielsen_c(re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
 }
-static const NDNaryKernel NDKN_PolyLog              = { ndk_PolyLog_n, 3, false };
+static const NDNaryKernel NDKN_PolyLog              = { ndk_PolyLog_n, 3, false, 0 };
 /* DirichletL[k, j, s]: k, j integer labels (an imaginary part, or a
  * non-integer / out-of-range label, declines), s complex. The helper is the one
  * behind the scalar builtin and its buffer loop; a complex character makes the
@@ -1164,14 +1165,14 @@ static bool ndk_DirichletL_n(const double* re, const double* im, size_t n,
     if (n != 3 || im[0] != 0.0 || im[1] != 0.0) return false;
     return sf_dirichlet_l_c(re[0], re[1], re[2], im[2], rr, ri);
 }
-static const NDNaryKernel NDKN_DirichletL          = { ndk_DirichletL_n, 3, false };
-static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
-static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
-static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true };
-static const NDNaryKernel NDKN_JacobiP             = { ndk_JacobiP_n, 4, true };
-static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true };
-static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
-static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
+static const NDNaryKernel NDKN_DirichletL          = { ndk_DirichletL_n, 3, false, 0 };
+static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true, 0 };
+static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true, 0 };
+static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true, 0 };
+static const NDNaryKernel NDKN_JacobiP             = { ndk_JacobiP_n, 4, true, 0 };
+static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true, 0 };
+static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true, 0 };
+static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true, 0 };
 /* GegenbauerC[n, l, z]: complex in every slot, through sf_machine_gegenbauer_c
  * (the scalar builtin's helper). A real call can be complex (z < -1 with a
  * non-integer n), so not real-closed. */
@@ -1180,7 +1181,7 @@ static bool ndk_GegenbauerC_n(const double* re, const double* im, size_t n,
     if (n != 3) return false;
     return sf_machine_gegenbauer_c(re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
 }
-static const NDNaryKernel NDKN_GegenbauerC         = { ndk_GegenbauerC_n, 3, false };
+static const NDNaryKernel NDKN_GegenbauerC         = { ndk_GegenbauerC_n, 3, false, 0 };
 /* EllipticTheta / EllipticThetaPrime [a, u, q]: re[0] = a (1..4, exact), then u
  * and q real or complex, through sf_machine_theta -- the scalar builtins'
  * helper. Complex for a real negative q (theta_1, theta_2), so not real-closed. */
@@ -1198,7 +1199,7 @@ static bool ndk_EllipticThetaPrime_n(const double* re, const double* im, size_t 
                                      double* rr, double* ri) {
     return ndk_theta_n(1, re, im, n, rr, ri);
 }
-static const NDNaryKernel NDKN_EllipticTheta      = { ndk_EllipticTheta_n, 3, false };
+static const NDNaryKernel NDKN_EllipticTheta      = { ndk_EllipticTheta_n, 3, false, 0 };
 /* WeierstrassP / PPrime / Zeta / Sigma [u, {g2, g3}] arrive from the compiler's
  * lowering flattened as the run [g2, g3, u] (u last, so a strip-mined loop
  * feeds it as the tile), through sf_machine_weierstrass -- the scalar
@@ -1220,15 +1221,26 @@ static bool ndk_WeierstrassZeta_n(const double* re, const double* im, size_t n, 
 static bool ndk_WeierstrassSigma_n(const double* re, const double* im, size_t n, double* rr, double* ri) {
     return ndk_wp_n(WP_SIGMA, re, im, n, rr, ri);
 }
-static const NDNaryKernel NDKN_WeierstrassP       = { ndk_WeierstrassP_n, 3, true };
-static const NDNaryKernel NDKN_WeierstrassPPrime  = { ndk_WeierstrassPPrime_n, 3, true };
-static const NDNaryKernel NDKN_WeierstrassZeta    = { ndk_WeierstrassZeta_n, 3, true };
-static const NDNaryKernel NDKN_WeierstrassSigma   = { ndk_WeierstrassSigma_n, 3, true };
-static const NDNaryKernel NDKN_EllipticThetaPrime = { ndk_EllipticThetaPrime_n, 3, false };
-static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true };
-static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true };
-static const NDNaryKernel NDKN_MathieuS            = { ndk_MathieuS_n, 3, true };
-static const NDNaryKernel NDKN_MathieuSPrime       = { ndk_MathieuSPrime_n, 3, true };
+/* BetaRegularized[z, a, b] and [z0, z1, a, b] -- one kernel, both arities,
+ * through the scalar builtin's helpers. Complex for z outside [0, 1] with a
+ * non-integer b, so not real-closed. */
+static bool ndk_BetaRegularized_n(const double* re, const double* im, size_t n,
+                                  double* rr, double* ri) {
+    if (n == 3) return sf_machine_betareg(re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+    if (n == 4) return sf_machine_betareg4(re[0], im[0], re[1], im[1], re[2], im[2],
+                                           re[3], im[3], rr, ri);
+    return false;
+}
+static const NDNaryKernel NDKN_BetaRegularized    = { ndk_BetaRegularized_n, 3, false, 4 };
+static const NDNaryKernel NDKN_WeierstrassP       = { ndk_WeierstrassP_n, 3, true, 0 };
+static const NDNaryKernel NDKN_WeierstrassPPrime  = { ndk_WeierstrassPPrime_n, 3, true, 0 };
+static const NDNaryKernel NDKN_WeierstrassZeta    = { ndk_WeierstrassZeta_n, 3, true, 0 };
+static const NDNaryKernel NDKN_WeierstrassSigma   = { ndk_WeierstrassSigma_n, 3, true, 0 };
+static const NDNaryKernel NDKN_EllipticThetaPrime = { ndk_EllipticThetaPrime_n, 3, false, 0 };
+static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true, 0 };
+static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true, 0 };
+static const NDNaryKernel NDKN_MathieuS            = { ndk_MathieuS_n, 3, true, 0 };
+static const NDNaryKernel NDKN_MathieuSPrime       = { ndk_MathieuSPrime_n, 3, true, 0 };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL, NULL };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL, NULL };
@@ -1335,6 +1347,7 @@ void ndkernels_init(void) {
     REG_B(SphericalBesselJ, NDKB_SphericalBesselJ); REG_B(SphericalBesselY, NDKB_SphericalBesselY);
     REG_B(SphericalHankelH1, NDKB_SphericalHankelH1); REG_B(SphericalHankelH2, NDKB_SphericalHankelH2);
     REG_N(EllipticTheta); REG_N(EllipticThetaPrime);   /* [a, u, q], a = 1..4 */
+    REG_N(BetaRegularized);                            /* [z, a, b] and [z0, z1, a, b] */
     REG_N(WeierstrassP); REG_N(WeierstrassPPrime);     /* [g2, g3, u] for Compile[]; the */
     REG_N(WeierstrassZeta); REG_N(WeierstrassSigma);   /* builtins thread buffers u     */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);

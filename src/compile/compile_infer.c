@@ -931,7 +931,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         SymbolDef* d = symtab_lookup(h);
         if (d && d->ndarray_nary_kernel) {
             const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
-            if (k->cplx && k->nargs == na) {
+            if (k->cplx && (k->nargs == na || (k->nargs_alt != 0 && k->nargs_alt == na))) {
                 /* Scalar arguments, except that ONE of them -- any one: the z of
                  * WhittakerM/W, HypergeometricU, 1F1, 2F1, or LerchPhi's z, s or a
                  * -- may be an ARRAY, over which the Listable head threads; the

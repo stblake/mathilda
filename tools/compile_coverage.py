@@ -154,6 +154,12 @@ HEAD_SHAPES = {
     **{h: [(h[11:15].lower() + "_s", "scalar", "{{x, _Real}}", h + "[x, {1., 2.}]"),
            (h[11:15].lower() + "_v", "array", "{{v, _Real, 1}}", h + "[v, {1., 2.}]")]
        for h in ("WeierstrassP", "WeierstrassPPrime", "WeierstrassZeta", "WeierstrassSigma")},
+    # BetaRegularized[z, a, b] and [z0, z1, a, b]: ternary / quaternary.
+    "BetaRegularized": [
+        ("br_s",  "scalar", "{{x, _Real}}",    "BetaRegularized[x, 2.5, 3.5]"),
+        ("br_s4", "scalar", "{{x, _Real}}",    "BetaRegularized[0.1, x, 2.5, 3.5]"),
+        ("br_v",  "array",  "{{v, _Real, 1}}", "BetaRegularized[v, 2.5, 3.5]"),
+    ],
 }
 
 FAMILIES = ["scalar", "array"]

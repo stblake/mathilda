@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the Weierstrass elliptic functions `WeierstrassP`, `WeierstrassPPrime`, `WeierstrassZeta`, `WeierstrassSigma` (with `WeierstrassHalfPeriods` and `WeierstrassInvariants`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the regularized incomplete beta function `BetaRegularized`, the Weierstrass elliptic functions `WeierstrassP`, `WeierstrassPPrime`, `WeierstrassZeta`, `WeierstrassSigma` (with `WeierstrassHalfPeriods` and `WeierstrassInvariants`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3678,6 +3678,65 @@ Out[2]= 0. + 0.114273 I
 
 In[3]:= D[SphericalBesselJ[n, z], z]
 Out[3]= -SphericalBesselJ[n, z]/(2 z) + 1/2 (SphericalBesselJ[-1 + n, z] - SphericalBesselJ[1 + n, z])
+```
+
+## BetaRegularized
+
+`BetaRegularized[z, a, b]` gives the regularized incomplete beta function
+`I_z(a, b) = Beta[z, a, b]/Beta[a, b]`, with `Beta[z, a, b] = z^a/a
+Hypergeometric2F1[a, 1 - b, a + 1, z]` (its analytic continuation to complex
+arguments and `z` outside `[0, 1]`). `BetaRegularized[z0, z1, a, b]` gives
+`I_z1(a, b) - I_z0(a, b)`.
+
+- **Exact rules** (the reference system's): a non-positive integer `a` gives `1`, a
+  non-positive integer `b` gives `0` (also for machine `0.`); `a = 1` gives
+  `1 - (1 - z)^b`, `b = 1` gives `z^a - 0^a`; an exact numeric `z` with positive
+  integer `a`, `b` the terminating binomial sum (`BetaRegularized[1/2, 2, 3] =
+  11/16`, `BetaRegularized[1/5, 1/2, 2, 3] = 5067/10000`); other exact calls
+  stay unevaluated. At `z = 1.` the value is the machine `1.` (the reference
+  prints an exact `1`, which would make a packed result two-headed).
+- **Machine kernel** `sf_machine_betareg` (scalar, packed / `NDArray` through the
+  n-ary map -- one kernel for both arities, `nargs_alt` -- and `Compile[]` at scalar
+  and rank 1 for both forms): for `0 <= z <= 1`, `a, b > 0` the continued fraction
+  (modified Lentz, DLMF 8.17.22) on `I_z(a, b)` or `1 - I_(1-z)(b, a)`, times the
+  prefactor `z^a (1-z)^b/(a Beta[a, b])` -- `pow` and the shared machine `Beta` for
+  small parameters, the Stirling form with a `log1p(u) - u` exponent (whose linear
+  parts cancel exactly) for `a, b >= 10` -- with `1 - z` as a double-double. A
+  complement below `1/8`, an exponent beyond 64, a non-converging fraction, and
+  every complex, out-of-range or negative-parameter call go to arb
+  (`acb_hypgeom_beta_lower`, regularized) inside the kernel.
+- **Arbitrary precision**: `arb_hypgeom_beta_lower` (real `z` in `[0, 1]`) /
+  `acb_hypgeom_beta_lower` on the shared precision ladder; the four-argument form
+  on its own ladder, so a cancelling difference climbs.
+- **Derivatives.** `D` in `z`: `(1 - z)^(b - 1) z^(a - 1)/Beta[a, b]`; in `a`:
+  `-z^a HypergeometricPFQ[{a, a, 1 - b}, {a + 1, a + 1}, z]/(a^2 Beta[a, b]) +
+  BetaRegularized[z, a, b] (Log[z] - PolyGamma[0, a] + PolyGamma[0, a + b])`; in
+  `b` the same through `I_z(a, b) = 1 - I_(1-z)(b, a)` (checked against central
+  differences at 30 digits); the four-argument form as the difference.
+- **Accuracy** against mpmath at 40 digits (600 points): `0 <= z <= 1`, `a, b` in
+  `[0.01, 100]` median 0.9 ulp, max 59 ulp; complex / out-of-range / negative
+  parameters (arb) max 0.9 ulp. The reference system prints
+  `BetaRegularized[0.3, 200., 300.] = 1.0496985243291939*10^-6` (true
+  `1.04969852432929467*10^-6`).
+- **Performance** (2.2 GHz Intel): scalar 0.44 µs (wolframscript 1.5 µs; SciPy
+  `betainc` 2.2 µs per Python call, mpmath 156 µs); 10^6 packed 0.049 s (SciPy
+  0.36 s, wolframscript 1.8 s); `a, b = 200, 300` over 10^5 points 0.058 s (SciPy
+  0.037 s); complex 68 µs (wolframscript 95 µs, mpmath 247 µs); 50 digits 130 µs
+  (wolframscript 15 µs, mpmath 235 µs). Open: the 50-digit case is arb-bound, and
+  far tails at large parameters (`a, b ~ 10^3`, values below `e^-64`) fall back to
+  arb at milliseconds per point, where SciPy answers in double.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= BetaRegularized[0.3, 2.5, 3.7]
+Out[1]= 0.319003
+
+In[2]:= BetaRegularized[1/2, 2, 3]
+Out[2]= 11/16
+
+In[3]:= BetaRegularized[z, a, 1]
+Out[3]= -0^a + z^a
 ```
 
 ## EllipticTheta and EllipticThetaPrime

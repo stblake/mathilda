@@ -1311,7 +1311,7 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         SymbolDef* d = symtab_lookup(h);
         if (!d || !d->ndarray_nary_kernel) return false;
         const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
-        if (!k->cplx || k->nargs != na) return false;
+        if (!k->cplx || (k->nargs != na && (k->nargs_alt == 0 || k->nargs_alt != na))) return false;
         /* Any complex argument selects the complex form KERNN_C: every
          * argument travels as a complex register and the result is complex
          * (the kernel's own complex arm, e.g. LerchPhi[z, s, a] for complex z). */

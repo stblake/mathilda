@@ -2465,6 +2465,43 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- BetaRegularized[Z, A, B] and [Z0, Z1, A, B] (DLMF 8.17.1): the
+         * z-derivative z^(a-1) (1-z)^(b-1)/Beta[a, b]; the a-derivative
+         *   -z^a 3F2(a, a, 1-b; a+1, a+1; z)/(a^2 Beta[a, b])
+         *     + I_z(a, b) (Log[z] - PolyGamma[a] + PolyGamma[a + b]),
+         * and the b-derivative from I_z(a, b) = 1 - I_(1-z)(b, a). The
+         * four-argument form differentiates as I_z1 - I_z0. */
+        if ((n == 3 || n == 4) && h && strcmp(h, "BetaRegularized") == 0) {
+            static const char* const TB[3] = {
+                "((1 - #1)^(#3 - 1) #1^(#2 - 1)/Beta[#2, #3])&",
+                "(-#1^#2 HypergeometricPFQ[{#2, #2, 1 - #3}, {1 + #2, 1 + #2}, #1]/(#2^2 Beta[#2, #3]) + "
+                    "BetaRegularized[#1, #2, #3] (Log[#1] - PolyGamma[0, #2] + PolyGamma[0, #2 + #3]))&",
+                "((1 - #1)^#3 HypergeometricPFQ[{#3, #3, 1 - #2}, {1 + #3, 1 + #3}, 1 - #1]/(#3^2 Beta[#2, #3]) - "
+                    "(1 - BetaRegularized[#1, #2, #3]) (Log[1 - #1] - PolyGamma[0, #3] + PolyGamma[0, #2 + #3]))&" };
+            Expr* A = args[n - 2];
+            Expr* B = args[n - 1];
+            Expr* terms[6];
+            size_t nt = 0;
+            for (int end = (n == 4 ? 0 : 1); end < 2; end++) {
+                /* end 1: the upper (or only) endpoint, + ; end 0: Z0, - */
+                Expr* Z = (n == 4) ? args[end] : args[0];
+                double sg = end == 1 ? 1.0 : -1.0;
+                Expr* d[3] = { deriv_of(Z, x, nonconsts), deriv_of(A, x, nonconsts),
+                               deriv_of(B, x, nonconsts) };
+                for (int j = 0; j < 3; j++) {
+                    if (is_lit_zero(d[j])) { expr_free(d[j]); continue; }
+                    Expr* f = parse_expression(TB[j]);
+                    Expr* g = expr_new_function(f, (Expr*[]){ expr_copy(Z), expr_copy(A),
+                                                              expr_copy(B) }, 3);
+                    Expr* t = mk_fn2("Times", g, d[j]);
+                    if (sg < 0) t = mk_fn2("Times", mk_int(-1), t);
+                    terms[nt++] = t;
+                }
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
         /* --- WeierstrassP / PPrime / Zeta / Sigma [U, {G2, G3}] (DLMF 23.3.10,
          * 23.2.8-9; the invariant derivatives from the homogeneity relations
          * of wp in (u, g2, g3), DLMF 23.10), templates in #1 = u, #2 = g2,
