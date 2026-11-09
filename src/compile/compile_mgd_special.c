@@ -18,6 +18,7 @@
  * is listed here, at an arity it lists, with complex operands only where its
  * evaluator takes them.  Anything else bails at emit time exactly as before. */
 #include "compile_mgd_special.h"
+#include "compile_internal.h"      /* mgd_mpfr_from_expr */
 #include "../eval.h"
 #include "../sym_intern.h"
 #include "../arithmetic.h"        /* is_complex, is_rational */
@@ -234,19 +235,8 @@ void mgd_special_stats(long* calls, long* declines) {
  * downstream arithmetic would then run at machine precision too, which the
  * fixed-precision program cannot mirror. */
 static bool part_to_mpfr(mpfr_ptr d, const Expr* e) {
-    int64_t p, q;
-    switch (e->type) {
-        case EXPR_MPFR:    mpfr_set(d, e->data.mpfr, MPFR_RNDN); return true;
-        case EXPR_INTEGER: mpfr_set_si(d, (long)e->data.integer, MPFR_RNDN); return true;
-        case EXPR_BIGINT:  mpfr_set_z(d, e->data.bigint, MPFR_RNDN); return true;
-        default: break;
-    }
-    if (is_rational((Expr*)e, &p, &q) && q != 0) {
-        mpfr_set_si(d, (long)p, MPFR_RNDN);
-        mpfr_div_si(d, d, (long)q, MPFR_RNDN);
-        return true;
-    }
-    return false;
+    if (e->type == EXPR_REAL) return false;
+    return mgd_mpfr_from_expr(d, e);   /* MPFR, Integer, BigInt, Rational */
 }
 
 bool mgd_special_invoke(const MgdSpecialCall* sc, void* const* ops,

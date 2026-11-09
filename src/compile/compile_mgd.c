@@ -21,6 +21,7 @@
 #endif
 #include "compile_mgd_special.h"  /* MG_SPECIAL: the special-function registry */
 #include <math.h>
+#include <limits.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -107,8 +108,16 @@ static bool mgd_small_int(const Expr* e, long* n) {
 static bool emit_mgd_int(Ctx* c, const Expr* e, Val* out);
 
 /* ---- GMP (bignum) constant materialisation ---- */
+/* z = v for any int64 v.  mpz_set_si takes a `long`, which is 32 bits on LLP64
+ * Windows, so a value outside it goes through mpz_import of its magnitude. */
+static void mgd_mpz_set_i64(mpz_ptr z, int64_t v) {
+    if (v >= LONG_MIN && v <= LONG_MAX) { mpz_set_si(z, (long)v); return; }
+    uint64_t mag = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+    mpz_import(z, 1, 1, sizeof mag, 0, 0, &mag);
+    if (v < 0) mpz_neg(z, z);
+}
 bool mgd_mpz_from_expr(mpz_ptr z, const Expr* e) {
-    if (e->type == EXPR_INTEGER) { mpz_set_si(z, (long)e->data.integer); return true; }
+    if (e->type == EXPR_INTEGER) { mgd_mpz_set_i64(z, e->data.integer); return true; }
     if (e->type == EXPR_BIGINT)  { mpz_set(z, e->data.bigint); return true; }
     return false;   /* Real / Rational are not exact integers */
 }
@@ -138,7 +147,17 @@ static bool mgd_is_exact_rational(const Expr* e) {
 /* ---- MPFR (real) constant materialisation ---- */
 bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e) {
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(m, (long)e->data.integer, MPFR_RNDN); return true;
+        case EXPR_INTEGER:
+            if (e->data.integer >= LONG_MIN && e->data.integer <= LONG_MAX) {
+                mpfr_set_si(m, (long)e->data.integer, MPFR_RNDN);
+            } else {               /* `long` is 32 bits on LLP64 Windows */
+                mpz_t z;
+                mpz_init(z);
+                mgd_mpz_set_i64(z, e->data.integer);
+                mpfr_set_z(m, z, MPFR_RNDN);
+                mpz_clear(z);
+            }
+            return true;
         case EXPR_REAL:    mpfr_set_d (m, e->data.real,          MPFR_RNDN); return true;
         case EXPR_BIGINT:  mpfr_set_z (m, e->data.bigint,        MPFR_RNDN); return true;
         case EXPR_MPFR:    mpfr_set   (m, e->data.mpfr,          MPFR_RNDN); return true;
