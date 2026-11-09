@@ -401,7 +401,8 @@ make check-messages          # does every diagnostic support Quiet[] and Check[]
 make check-packed-aware      # does every head with a buffer path opt in?
 make check-array-exactness   # does any head return a two-headed array?
 make check-nd-surfaces       # do the packed and NDArray surfaces agree?
-make check-compile-coverage  # does every numeric fast path also COMPILE?
+make check-compile-coverage  # does every numeric fast path also COMPILE? every special
+                             # function at WorkingPrecision -> n too?
 make check-image-packing     # does every image head hand back a packed buffer?
 make check-fastpath-sweep    # measured: is each head really on the buffer?
 make check-corpus-indvar     # does every DSolve corpus record ask the book's question?
@@ -507,7 +508,17 @@ at the REPL and unlowerable inside `Compile[]` is a contradiction. Not merely a
 missed speedup: the compilable subset is a **cliff**, so one unlowered head
 sends the whole body to the interpreter and takes every other head with it. It
 joins the kernel registry and `AWARE` against the binary's own
-`CompileDiagnostics`.
+`CompileDiagnostics`. Its second pass, `--precision`, asks the same question
+one level up: every special function (every head with a machine kernel or the
+`NumericFunction` attribute, less an `EXEMPT` of exact-integer and
+piecewise-integer heads) must lower at `WorkingPrecision -> 30` for a real and
+a complex argument — `Compiled -> True`, no run-time decline
+(``Internal`CompileArbitraryPrecisionStats[]``), and the interpreter's value to
+24 digits — because one unlowered special function sends a whole
+high-precision `NIntegrate`/`NSum`/`FindRoot`/`NDSolve` body to the interpreter
+at every sample. The lowering is one table-driven opcode that dispatches to each
+head's own arbitrary-precision evaluator
+([`docs/design/compile-arbitrary-precision.md`](docs/design/compile-arbitrary-precision.md) §19).
 
 Both of the new checks **ratchet** rather than assert emptiness. Each carries a
 checked-in list of what is known to be missing — `OFF_BUFFER` and `BASELINE` —

@@ -427,15 +427,307 @@ BASELINE = {
 }
 
 
+# ---------------------------------------------------------------------------
+# --precision: the ARBITRARY-PRECISION audit.
+#
+# The machine audit above asks "does every head with a machine fast path
+# compile?".  This one asks the same question one level up: every special
+# function has an arbitrary-precision evaluator (the routine N[f[x], 30] runs),
+# and NIntegrate / NSum / FindRoot / NDSolve at WorkingPrecision -> n compile
+# their body in MPFR (docs/design/compile-arbitrary-precision.md).  The subset
+# is a CLIFF there too: one special function the managed emitter cannot lower
+# sends the WHOLE high-precision body back to the interpreter at every sample.
+#
+# The universe is every head that has a machine kernel or the NumericFunction
+# attribute (asked of the binary), less PREC_EXEMPT.  Each is probed at
+# WorkingPrecision -> 30 with a REAL and a COMPLEX argument, and passes a
+# family only when (1) CompileDiagnostics says Compiled -> True, (2) the
+# compiled function ran without falling back to the interpreter
+# ("EvalDeclines" of Internal`CompileArbitraryPrecisionStats), and (3) its value agrees with the
+# interpreter's to 24 digits.  (1) alone is not enough: a lowered head whose
+# evaluator declines every point would look covered and run interpreted.
+# ---------------------------------------------------------------------------
+
+PREC_DIGITS = 30
+
+# Literal parameters for the positions before the variable.  The variable takes
+# the LAST argument unless a head's override says otherwise.
+PREC_PARAMS = ["1/3", "2/5", "3/7"]
+
+# Heads whose argument conventions the default f[1/3, 2/5, ..., x] cannot
+# spell (an integer index, a parameter List, the variable first).  Each value
+# is a list of bodies in x; a family passes if ANY body passes.
+PREC_BODIES = {
+    "AngerJ": ["AngerJ[1/3, x]"],
+    "WeberE": ["WeberE[1/3, x]"],
+    "ArcTan": ["ArcTan[x]", "ArcTan[1/3, x]"],
+    "BernoulliB": ["BernoulliB[3, x]"],
+    "EulerE": ["EulerE[3, x]"],
+    "DirichletL": ["DirichletL[5, 3, x]", "DirichletL[5, 2, x]"],
+    "EllipticTheta": ["EllipticTheta[2, x, 1/3]"],
+    "EllipticThetaPrime": ["EllipticThetaPrime[2, x, 1/3]"],
+    "LegendreP": ["LegendreP[2, x]", "LegendreP[1/3, 2/5, x]"],
+    "LegendreQ": ["LegendreQ[2, x]", "LegendreQ[1/3, 2/5, x]"],
+    "PolyLog": ["PolyLog[1/3, x]", "PolyLog[2, 1, x]"],
+    "ProductLog": ["ProductLog[x]", "ProductLog[-1, -x/3]"],
+    "StieltjesGamma": ["StieltjesGamma[1, x]"],
+    "MathieuC": ["MathieuC[2/5, 1/3, x]"],
+    "MathieuS": ["MathieuS[2/5, 1/3, x]"],
+    "MathieuCPrime": ["MathieuCPrime[2/5, 1/3, x]"],
+    "MathieuSPrime": ["MathieuSPrime[2/5, 1/3, x]"],
+    "MeijerG": ["MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, x]",
+                "MeijerG[{{1/3}, {}}, {{1/2}, {1}}, x, 1/2]"],
+    "HypergeometricPFQ": ["HypergeometricPFQ[{1/3, 1/4}, {1/5}, x]"],
+    "Surd": ["Surd[x, 3]"],
+    "QPochhammer": ["QPochhammer[1/3, x]", "QPochhammer[1/3, x, 3]"],
+    "Log": ["Log[x]", "Log[2, x]"],
+    "Multinomial": ["Multinomial[1/3, x]"],
+    # real-valued only off (-1, 1) / inside the modulus range: the probe moves
+    # the argument there (the complex probe covers the rest of the plane)
+    "ArcSec": ["ArcSec[x + 1]"],
+    "ArcCosh": ["ArcCosh[x + 1]"],
+    "ArcCsc": ["ArcCsc[x + 1]"],
+    "ArcCoth": ["ArcCoth[x + 1]"],
+    "InverseJacobiDN": ["InverseJacobiDN[x + 1/5, 1/3]"],
+    **{h: [h + "[x, {1, 2}]"] for h in ("WeierstrassP", "WeierstrassPPrime",
+                                         "WeierstrassZeta", "WeierstrassSigma")},
+}
+
+# Heads outside the arbitrary-precision special-function surface, with the
+# reason.  Exact-integer and piecewise-integer heads return an Integer, which no
+# MPFR register holds (lowering one would change the type everything downstream
+# sees); the zero tables take an integer index, never a working-precision real.
+_INT = "exact-integer function: the answer is an Integer, not an MPFR value"
+_PW = ("integer- or piecewise-valued: the exact Integer result has no MPFR "
+       "register, and lowering it would change the type downstream")
+_ZERO = ("indexed zero table: the argument is an integer index, never a "
+         "working-precision real (a closed call is folded to a constant)")
+PREC_EXEMPT = {
+    **{h: _INT for h in ("BitAnd", "BitGet", "BitLength", "BitNot", "BitOr",
+                         "BitSet", "BitShiftLeft", "BitShiftRight", "BitXor",
+                         "DivisorSigma", "EulerPhi", "GCD", "LCM",
+                         "IntegerExponent", "IntegerLength", "JacobiSymbol",
+                         "MoebiusMu", "PartitionsP", "PartitionsQ", "Quotient",
+                         "QuotientRemainder", "DigitSum", "KroneckerDelta", "Mod")},
+    **{h: _PW for h in ("Ceiling", "Floor", "Round", "IntegerPart",
+                        "FractionalPart", "Sign", "UnitStep", "UnitBox", "Ramp",
+                        "Unitize", "Clip", "Max", "Min", "Rescale", "ReIm")},
+    **{h: _ZERO for h in ("AiryAiZero", "AiryBiZero", "AiryAiPrimeZero",
+                          "AiryBiPrimeZero", "BesselJZero", "BesselYZero",
+                          "ZetaZero")},
+    "Plus": "arithmetic: lowered natively (MG_RBIN / MG_CBIN)",
+    "Times": "arithmetic: lowered natively",
+    "Power": "arithmetic: lowered natively",
+    "Subtract": "arithmetic: lowered natively",
+    "Divide": "arithmetic: lowered natively",
+    "Minus": "arithmetic: lowered natively",
+    "NAME": "a macro parameter in src/ndkernels.c, not a head",
+}
+
+# Heads that lower for real arguments only, with the reason: their
+# arbitrary-precision evaluator leaves a complex argument unevaluated, so there
+# is nothing for a complex lowering to dispatch to.  Ratchet: a head that starts
+# lowering complex is reported so the line can be deleted.
+PREC_REAL_ONLY = {
+    "InverseErf": "the arb evaluator is real-only (N[InverseErf[z], 30] stays "
+                  "unevaluated for complex z)",
+    "InverseErfc": "the arb evaluator is real-only",
+    "MathieuCharacteristicA": "characteristic values are computed for real q only",
+    "MathieuCharacteristicB": "characteristic values are computed for real q only",
+    "Surd": "the real root by definition; a complex argument is outside its domain",
+    "CubeRoot": "the real cube root by definition; a complex argument is outside "
+                "its domain",
+}
+
+PREC_PROBE = """
+d = CompileDiagnostics[%(spec)s, %(body)s, WorkingPrecision -> %(prec)d];
+cf = Quiet[Compile[%(spec)s, %(body)s, WorkingPrecision -> %(prec)d]];
+s0 = "EvalDeclines" /. Internal`CompileArbitraryPrecisionStats[];
+v = Quiet[cf[%(val)s]];
+s1 = "EvalDeclines" /. Internal`CompileArbitraryPrecisionStats[];
+ref = Quiet[Block[{x = %(val)s}, %(body)s]];
+ok = NumberQ[v] && NumberQ[ref] && Abs[v - ref] <= 10^-24 Max[1, Abs[ref]];
+Print["@", "%(id)s", "\\t", Lookup[d, "Compiled", False], "\\t", s1 - s0, "\\t", ok,
+      "\\t", Lookup[d, "Subexpression", ""]];
+"""
+
+
+def prec_universe():
+    """Heads with a machine kernel or the NumericFunction attribute, and the
+    registry as the binary reports it."""
+    fd, path = tempfile.mkstemp(suffix=".m")
+    with os.fdopen(fd, "w") as fh:
+        fh.write('Print["@NF\\t", StringRiffle[Select[Names["System`*"], '
+                 'MemberQ[Attributes[#], NumericFunction] &], " "]];\n'
+                 'Print["@REG\\t", StringRiffle[(#[[1]] <> ":" <> ToString[#[[2]]]) & /@ '
+                 'Internal`CompileArbitraryPrecisionHeads[], " "]];\n')
+    try:
+        out = subprocess.run([MATHILDA, "-file", path], capture_output=True,
+                             text=True, timeout=120).stdout
+    finally:
+        os.unlink(path)
+    nf, reg = set(), set()
+    for line in out.splitlines():
+        if line.startswith("@NF\t"):
+            nf = set(line[4:].split())
+        elif line.startswith("@REG\t"):
+            reg = dict((t.split(":")[0], int(t.split(":")[1]))
+                       for t in line[5:].split()
+                       if re.fullmatch(r"[A-Za-z0-9]+:[0-9]+", t))
+    builtins = nc.all_builtins()
+    kern = {h for h in nc.kernel_heads() if h in builtins}
+    return sorted(kern | nf | set(reg)), reg
+
+
+def prec_bodies(head, kernels, reg):
+    """The probe bodies: an override, else f[1/3, 2/5, ..., x] at the
+    registry's smallest arity (or the machine kernel's)."""
+    if head in PREC_BODIES:
+        return PREC_BODIES[head]
+    if head in reg:
+        n = reg[head]
+    else:
+        ar = kernels.get(head, ["unary"])
+        n = {"unary": 1, "binary": 2, "nary": 3}[ar[0]]
+    return [f"{head}[{', '.join(PREC_PARAMS[:n - 1] + ['x'])}]"]
+
+
+def prec_run(items, batch=20, timeout=300):
+    got = {}
+    with tempfile.TemporaryDirectory() as td:
+        for i in range(0, len(items), batch):
+            chunk = items[i:i + batch]
+            fd, path = tempfile.mkstemp(suffix=".m", dir=td)
+            with os.fdopen(fd, "w") as fh:
+                fh.write("\n".join(PREC_PROBE % {"spec": s, "body": b, "val": v,
+                                                 "prec": PREC_DIGITS, "id": k}
+                                   for k, s, b, v in chunk))
+            try:
+                p = subprocess.run([MATHILDA, "-file", path], capture_output=True,
+                                   text=True, timeout=timeout)
+                for line in p.stdout.splitlines():
+                    if not line.startswith("@"):
+                        continue
+                    parts = line[1:].split("\t")
+                    if len(parts) >= 4:
+                        got[parts[0].strip()] = (
+                            parts[1].strip() == "True", parts[2].strip() == "0",
+                            parts[3].strip() == "True",
+                            parts[4].strip() if len(parts) > 4 else "")
+            except subprocess.TimeoutExpired:
+                pass
+            sys.stderr.write(f"\r  probing {min(i + batch, len(items))}/{len(items)}   ")
+            sys.stderr.flush()
+    sys.stderr.write("\n")
+    return got
+
+
+def prec_main(args):
+    heads, reg = prec_universe()
+    if args.only:
+        want = {h.strip() for h in args.only.split(",") if h.strip()}
+        heads = [h for h in heads if h in want]
+    kernels = nc.kernel_heads()
+    items = []
+    for h in heads:
+        if h in PREC_EXEMPT:
+            continue
+        for j, body in enumerate(prec_bodies(h, kernels, reg)):
+            for fam, spec, val in (
+                    ("real", "{{x, _Real}}", f"N[7/10, {PREC_DIGITS}]"),
+                    ("complex", "{{x, _Complex}}", f"N[7/10 + I/5, {PREC_DIGITS}]")):
+                items.append((f"{h}/{j}/{fam}", spec, body, val))
+    sys.stderr.write(f"asking {len(items)} arbitrary-precision questions over "
+                     f"{len(heads)} heads\n")
+    got = prec_run(items)
+
+    rows = []
+    for h in heads:
+        if h in PREC_EXEMPT:
+            rows.append(dict(head=h, real=None, complex=None, why={},
+                             exempt=PREC_EXEMPT[h]))
+            continue
+        fam_ok = {"real": False, "complex": False}
+        why = {}
+        for j, _ in enumerate(prec_bodies(h, kernels, reg)):
+            for fam in ("real", "complex"):
+                r = got.get(f"{h}/{j}/{fam}")
+                if r and all(r[:3]):
+                    fam_ok[fam] = True
+                elif fam not in why:
+                    why[fam] = ("probe timed out or crashed" if not r else
+                                "not lowered: " + r[3] if not r[0] else
+                                "declined at run time" if not r[1] else
+                                "value disagrees with the interpreter")
+        rows.append(dict(head=h, real=fam_ok["real"], complex=fam_ok["complex"],
+                         why=why, exempt=""))
+
+    print(f"\n{'head':<26} {'real':>5} {'cplx':>5}  reason")
+    print("-" * 90)
+    gaps = []
+    for r in rows:
+        if r["exempt"]:
+            if args.all:
+                print(f"{r['head']:<26} {'.':>5} {'.':>5}  [{r['exempt']}]")
+            continue
+        g = []
+        if not r["real"]:
+            g.append("real")
+        if not r["complex"] and r["head"] not in PREC_REAL_ONLY:
+            g.append("complex")
+        if g:
+            gaps.append((r["head"], g))
+        if g or args.all:
+            note = "; ".join(f"{f}: {r['why'].get(f, '')}" for f in g)
+            if not g and r["head"] in PREC_REAL_ONLY and not r["complex"]:
+                note = "[real only: " + PREC_REAL_ONLY[r["head"]] + "]"
+            print(f"{r['head']:<26} {'y' if r['real'] else '-':>5} "
+                  f"{'y' if r['complex'] else '-':>5}  {note}")
+    probed = [r for r in rows if not r["exempt"]]
+    nr = sum(1 for r in probed if r["real"])
+    nz = sum(1 for r in probed if r["complex"])
+    print(f"\n{len(probed)} heads probed at WorkingPrecision -> {PREC_DIGITS} "
+          f"({len(rows) - len(probed)} exempt): {nr} lower for real arguments, "
+          f"{nz} for complex; {len(reg)} heads in the special-function registry")
+    if args.json:
+        with open(args.json, "w") as fh:
+            json.dump(rows, fh, indent=1)
+        print(f"wrote {args.json}")
+    if gaps:
+        print("\nGAP: these heads do not lower at arbitrary precision:")
+        for h, g in gaps:
+            print(f"  {h}: {', '.join(g)}")
+        print("Add the head to the registry in src/compile/compile_mgd_special.c, "
+              "or to PREC_EXEMPT / PREC_REAL_ONLY in "
+              f"{os.path.relpath(__file__, ROOT)} with the reason.")
+        return 1
+    if not args.only:
+        fixed = sorted(r["head"] for r in rows
+                       if r["head"] in PREC_REAL_ONLY and r["complex"])
+        if fixed:
+            print("\nNow lower for complex arguments too -- delete from "
+                  "PREC_REAL_ONLY:")
+            for h in fixed:
+                print(f"  {h}")
+    print("\nOK: every special function lowers at arbitrary precision "
+          "(real and complex).")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--only", default="")
     ap.add_argument("--json", default="")
+    ap.add_argument("--precision", action="store_true",
+                    help="audit the arbitrary-precision (WorkingPrecision -> n) "
+                         "lowering of every special function instead")
     args = ap.parse_args()
 
     if not os.path.exists(MATHILDA):
         sys.exit(f"no binary at {MATHILDA}; run make first")
+    if args.precision:
+        return prec_main(args)
 
     inv = fastpath_inventory()
     if args.only:

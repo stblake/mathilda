@@ -1121,8 +1121,15 @@ check-nd-surfaces:
 # CompileDiagnostics over every typed argument shape. Exits non-zero while any
 # head is unlowered without a recorded exemption, so the gap list is a work
 # queue that cannot quietly grow. Needs ./Mathilda built.
+#
+# The second pass (--precision) asks the same question one level up: every
+# special function must also lower at WorkingPrecision -> n (real and complex),
+# or a high-precision NIntegrate / NSum / FindRoot / NDSolve body containing it
+# is interpreted at every sample. See docs/design/compile-arbitrary-precision.md
+# §19.
 check-compile-coverage:
 	python3 tools/compile_coverage.py
+	python3 tools/compile_coverage.py --precision
 
 # `make check-refine-stress` — the Refine assumption-engine stress suite.
 #

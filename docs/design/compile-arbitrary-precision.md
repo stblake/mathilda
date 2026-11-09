@@ -20,6 +20,15 @@ Remaining (out of Phase 3 scope): managed arrays and managed control flow. The
 lowering-coverage guard is in place (§13: `CompileDiagnostics` is precision-aware
 and `test_compile_arbprec.c` asserts the managed subset lowers).
 
+**P4 — special functions (§19).** Every special function (142 heads: Erf, the
+Bessel/Airy/Kelvin/Struve families, Gamma and its relatives, the hypergeometric
+and Meijer functions, the elliptic, Jacobi, theta, Weierstrass and Mathieu
+families, Zeta/PolyLog/LerchPhi, the orthogonal polynomials, ...) lowers at
+arbitrary precision, real and complex, through ONE table-driven opcode that
+dispatches to the head's own arbitrary-precision evaluator.
+`make check-compile-coverage` runs a `--precision` audit that fails for any
+special function lacking the lowering.
+
 Supersedes the non-goal in [`compile.md`](compile.md) §2 ("Arbitrary precision
 (MPFR) inside compiled code — compiled code is machine precision by definition;
 MPFR paths stay interpreted"). This document lifts precisely that deferral, and
@@ -400,6 +409,13 @@ asserts the managed real/complex/bignum subset lowers and an unsupported head
 (`Gamma`) reports the bail. That is the anti-rot guard, in the test suite rather
 than in the machine coverage tool.
 
+**Update (P4, §19).** The narrow-subset argument above held while the managed
+subset was arithmetic plus the elementary functions. Once the special functions
+became lowerable through a registry, a head-enumeration family stopped being
+noise and became the right guard: the subset is again "every head of a class",
+so a missing one is a gap, exactly as in the machine audit. That family is
+`tools/compile_coverage.py --precision` (§19.4).
+
 ## 14. Memory management and leaks
 
 The arena is the primary leak surface. Contract:
@@ -503,3 +519,98 @@ and load-bearing piece is the per-call TLS precision-keyed arena (§7), which is
 also what determines whether the headline speedup is real. Build and measure that
 first (P1), hold the machine path to bytecode identity (§11), and only then add
 bignum and complex (P2) and the samplers (P3).
+
+## 19. Special functions at arbitrary precision (P4)
+
+### 19.1 The gap
+
+Through P3 the managed emitter lowered arithmetic and the elementary functions
+only. Every other numeric head — `Erf`, `AiryAi`, `Hypergeometric1F1`,
+`EllipticK`, `MathieuC`, ... — bailed, and because the compilable subset is a
+cliff, `NIntegrate[f[x], {x, a, b}, WorkingPrecision -> 30]` with any special
+function in `f` interpreted the WHOLE body at every sample point
+(`MATHILDA_COMPILE_DIAG=1` printed `no machine lowering for this head at these
+argument types`). Measured on v0.6481 with the audit of §19.4: of 151 numeric
+heads, 23 lowered for a real argument and 11 for a complex one.
+
+### 19.2 Mechanism: one opcode, one registry, the head's own evaluator
+
+Every one of those heads already has a careful arbitrary-precision evaluator
+behind its builtin (arb, MPFR, or an expression template), and that evaluator is
+what the interpreter runs at a `WorkingPrecision` sample. Rebinding each to a
+raw C signature would mean ~140 hand-written dispatchers, and — worse — a
+compiled value that drifts from the interpreted one whenever an evaluator is
+improved. So the lowering does not call new numerics at all:
+
+- **`OP_MG_SPECIAL`** (K_NARY shape: `flags` consecutive managed operand
+  registers from `a`) carries a program-owned **`MgdSpecialCall`** in `imm.p`
+  (an `MgdConst` of kind `MGD_CONST_SPECIAL`, freed with the program): the
+  interned head, and for each argument either a literal or "the next operand
+  register" plus whether that register is an `ncpx`.
+- At run time `mgd_special_invoke` boxes each operand container into an
+  `EXPR_MPFR` / `Complex[MPFR, MPFR]` at the program precision, builds `f[args]`,
+  and evaluates it with the ordinary `evaluate()` — not the builtin pointer,
+  because the dispatch around the builtin is part of what `N[f[...], n]` does
+  (the exact-parameter retry `numeric_mixed_args_call`, DownValues, the numeric
+  call memo, and the dependency bookkeeping that keeps an enclosing fixed point
+  honest); calling the builtin directly measured only ~8% faster on a lone call.
+  The value is copied into the destination
+  container; a machine `Real`, a non-finite value, an unevaluated call, or a
+  genuinely complex value in a real-typed register DECLINES, and the VM fails
+  the call so the caller interprets that point — the contract every managed
+  opcode already has.
+- **The registry** (`src/compile/compile_mgd_special.c`, `g_table`) is the only
+  thing that decides what lowers: head, arity range, and flags `MGS_REAL`,
+  `MGS_CPLX` (the evaluator takes a complex argument), `MGS_COUT` (complex-valued
+  on the real line — `HankelH1/H2`, `SphericalHankelH1/H2`, `DirichletL` — so the
+  result register is an `ncpx` even for real operands). A head may have one row
+  per arity range (`ArcTan[x]` takes complex, `ArcTan[x, y]` does not). This
+  mirrors the machine kernel registry: adding a head is one row.
+
+**Closed arguments stay exact.** An argument free of every declared variable,
+built only from numbers, named constants, Lists and NumericFunction heads, is
+evaluated once at compile time and passed as the literal the interpreter would
+see: the order `2` of `BesselJ[2, x]` stays an Integer (so the integer-order
+path runs, not a real-order one), the parameter Lists of `HypergeometricPFQ`,
+`MeijerG`, `WeierstrassP` pass through untouched. A whole closed call
+(`BesselJZero[0, 3]`, `Gamma[1/3]`) is folded to an MPFR constant with
+`numericalize` at the working precision. The NumericFunction requirement keeps
+`RandomReal[]` and user functions out of the fold.
+
+**Elementary heads.** The direct `mpfr_*` / `ncpx_*` opcodes keep priority; the
+registry catches the domains they lack (`Sinh`, `ArcSin`, `Log2`, ... of a
+complex operand; `ArcSec`, `Log[b, x]`, `ArcTan[x, y]` of a real one). The
+operand is value-numbered, so trying the direct lowering first and the registry
+second emits it once.
+
+### 19.3 Correctness and cost
+
+Compiled == uncompiled by construction: the same builtin computes the same value
+from the same arguments at the same precision. `tests/test_compile_mpfr_special.c`
+asserts it for every registry head (real, and complex where registered) at 30 and
+50 digits — `Compiled -> True`, no run-time decline, agreement with the
+interpreter to the requested precision — plus mpmath reference values, composite
+bodies, and NIntegrate / NSum / FindRoot / NDSolve / Table end to end (no
+auto-compile bail, compiled == uncompiled, mpmath agreement).
+
+The boxing is two or three small allocations per call against an arb evaluation
+of microseconds at 30+ digits, so a body that is ONE special function runs at the
+interpreter's speed (measured within ±10%); the gain is everything around it —
+the arithmetic and elementary functions of the rest of the body — and, above
+all, that one special function no longer drags the whole body back to the
+interpreter. Measured numbers are in the 2026-11-09 changelog.
+
+### 19.4 The gate
+
+`tools/compile_coverage.py --precision` (run by `make check-compile-coverage`
+after the machine audit) enumerates every head with a machine kernel or the
+`NumericFunction` attribute, and probes each at `WorkingPrecision -> 30` with a
+real and a complex argument. A family passes only if `CompileDiagnostics` says
+`Compiled -> True`, the compiled call did not decline at run time
+(``Internal`CompileArbitraryPrecisionStats[]`` `"EvalDeclines"`), and its value
+agrees with the interpreter's to 24 digits — `Compiled -> True` alone would pass
+a head whose evaluator declines every point. `PREC_EXEMPT` carries the
+exact-integer, piecewise-integer and indexed-zero heads with a one-line reason;
+`PREC_REAL_ONLY` the heads whose evaluator has no complex arm (`InverseErf`,
+`InverseErfc`, `MathieuCharacteristicA/B`, `Surd`, `CubeRoot`), ratcheted so one
+that gains a complex lowering is reported. A gap fails the build.
